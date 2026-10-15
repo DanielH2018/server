@@ -10,7 +10,8 @@ name: promote
 # push or move a tag:
 #   render   contents: read, checks: read. Checks out the triggering commit, or the dispatched
 #            `sha`, refuses one that is not on master, re-reads a dispatched commit's CI,
-#            renders the bundle, runs the publish census and scans it, and hands `out/` on.
+#            renders the bundle, runs the publish census and gates and scans it, and hands
+#            `out/` on.
 #   publish  packages: write, id-token: write. Checks out nothing. Pushes `sha-<X>` and signs
 #            it with cosign keyless under this workflow's identity. A `verify_drill` dispatch
 #            instead pushes an annotated bundle to `verify-drill` unsigned, and fails unless
@@ -146,7 +147,8 @@ jobs:
           fi
 
       # The publish census: flux/ holds exactly the published tags' files, and the root lists
-      # every one. A refusal fails the job before any push, so `prod` stays where it was.
+      # every one. Beside it run three gates: source, host and no-stub (bundle_gates.py). A
+      # refusal fails the job before any push, so `prod` stays where it was.
       - name: Check the bundle
         id: check-bundle
         run: uv run python scripts/deploy_tools/promote.py check-bundle out
@@ -404,7 +406,8 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           ref: ${{ github.sha }}
-          fetch-depth: 0  # the walk reads master back to prod's commit
+          # The walk, and decide's Removes-Object lines, read master back to prod's commit.
+          fetch-depth: 0
           persist-credentials: false
 
       - uses: ./.github/actions/setup  # zizmor: ignore[self-repository] -- see the action's header

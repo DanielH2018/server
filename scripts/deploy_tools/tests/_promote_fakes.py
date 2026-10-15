@@ -275,6 +275,13 @@ class World:
         # The pause before each package delete, recorded rather than slept.
         self.pauses: list[float] = []
 
+    def commit(self, message: str) -> str:
+        """Add an empty commit to master with `message`, append it to `commits`, return it."""
+        _git(self.repo, "commit", "-q", "--allow-empty", "-m", message)
+        sha = _git(self.repo, "rev-parse", "HEAD")
+        self.commits.append(sha)
+        return sha
+
     def branch_commit(self) -> str:
         """A commit off master's root, on no path master's history takes."""
         _git(self.repo, "checkout", "-q", "-b", "side", self.commits[0])

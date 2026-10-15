@@ -230,12 +230,13 @@ move changes nothing in the cluster but the commit Flux reports. The workflow ha
 
 1. `render` checks out the triggering commit and refuses one that is not on master. It builds
    the bundle (*The bundle*), runs `promote.py check-bundle` over it, and scans it with
-   gitleaks. It holds read access only, and a refusal at any step pushes nothing.
+   gitleaks in its step `Scan the bundle for secrets`. It holds read access only, and a refusal at any step pushes nothing.
 1. `publish` checks out no repository code. It pushes the bundle as `sha-<commit>` and signs
    it with cosign, under a certificate that names the workflow's own identity.
 1. `promote` runs `promote.py decide`, read-only. `decide` walks master from its tip back to
-   `prod`'s commit and takes the first commit that is published, signed and green in CI. It
-   prints one line, `trigger=<sha> verdict=<verdict> target=<sha>`, where the verdict is
+   `prod`'s commit and takes the first commit that is published, signed and green in CI, and
+   that loses no object without a declaration (*Removing an object on purpose*). It prints
+   one line, `trigger=<sha> verdict=<verdict> target=<sha>`, where the verdict is
    `promote`, `held`, `current` or `error`. On `promote` it pulls `prod`'s bundle and the
    target's before anything moves, and hands both to `verify`.
 1. `tag` checks out no repository code. On the verdict `promote` it moves `prod` to
@@ -428,6 +429,59 @@ renderer bug cannot widen it. It fails when:
   `./cluster/<name>`;
 - a published tag has no `cluster/<tag>/`;
 - `digests.json` is missing or names another set.
+
+### The publish gates
+
+`check-bundle` runs three gates beside the census, in
+`scripts/deploy_tools/bundle_gates.py`. Each refusal prints one line that opens with the
+gate's name.
+
+- **source**: a tag whose `flux/<tag>.yaml` has no `postBuild` holds no `${K}` whose `K` is
+  a key name of `ansible/vars/secrets.yml`. Flux would not substitute such a reference.
+  The gate pairs each `$$` first, as Flux does, so `$${K}` and a shell `${HOME}` pass. A tag
+  with `postBuild` may name in `substituteFrom` only a Secret that a `secretGenerator` in
+  the bundle makes. No shared kind generates one until D3.3a adds `cluster-vars`, so the gate
+  refuses every substituting tag until then. The gate also fails a published tag whose
+  directory it could not read.
+- **host**: every `Host(...)` in an IngressRoute ends in `.<domain>`, the literal that
+  `ansible/inventory/group_vars/all.yml` defines. A `${domain}`, a `stub-domain` and a
+  hand-written host each fail. While bento-pdf is published, its `.local.` route is the
+  gate's named member, and the gate fails when that route holds no matching Host rule.
+- **no-stub**: no file in the bundle holds an R1 stub value, `stub-<key>` for a key name of
+  `secrets.yml`. The gate decodes each Secret's `data` before it searches.
+
+## Removing an object on purpose
+
+A render that drops a NetworkPolicy, an IngressRoute, a CronJob, a Service or an RBAC object
+gets it pruned, and its Kustomization stays Ready, so `verify` passes. `promote.py decide`
+therefore compares the objects in a candidate's `cluster/` with those in `prod`'s bundle. A
+candidate that loses an object is eligible only when a commit in (`prod`, candidate] declares
+it with a line of this form:
+
+```text
+Removes-Object: <kind>/<namespace>/<name>
+```
+
+- `<kind>` is the object's `kind`, such as `IngressRoute`.
+- A cluster-scoped object leaves the namespace empty: `Removes-Object: ClusterRole//<name>`.
+- The key is case-insensitive, and the line may sit anywhere in the commit message. The
+  repository's squash merge keeps every PR commit's message in the squash commit's body, so
+  a line on any commit of the PR reaches master. A merge that replaces that body, such as
+  `gh pr merge --body`, drops it.
+- A commit outside the range does not count, including `prod`'s own commit.
+
+`decide` skips an ineligible candidate with one stderr line per candidate, naming each
+undeclared object, and weighs older ones. When every candidate loses an object, it prints
+`current`, and D2.6d's `PromotionStalled` alert pages after 2 hours. A later commit that carries the line
+releases the walk.
+
+An object whose whole Kustomization leaves the bundle is exempt. That happens when a service
+is handed back and its entry reads `owner: released` (*Handing a service back*).
+`deletionPolicy: Orphan` prunes none of its objects. The exemption holds only while that
+policy does, and D6.7's switch away from Orphan must remove it.
+
+The promote job checks out master with `fetch-depth: 0`, because `decide` reads these lines
+with `git log` back to `prod`'s commit.
 
 ## Retention of old artifact versions
 
