@@ -19,10 +19,10 @@ THE VERDICTS.
   error    A read failed or answered something no rule covers. Nothing moves.
 
 VERIFICATION (contract C2). While `prod` and `last-good` name different digests, a run's
-`verify` is still waiting, so `decide` waits too (`verify_promotion.wait_settled`). Once T is
+`verify` is still waiting, so `decide` waits too (`promote_lib/verify_promotion.py:wait_settled`). Once T is
 chosen, it pulls `prod`'s bundle and `sha-<T>`'s before `prod` moves, and writes them under
 `--bundle-dir` for `verify`; a failed pull is `error`. The revert rule stays off while
-REVERT_RULE is False. `verify_promotion.py`'s docstring states all three.
+REVERT_RULE is False. `promote_lib/verify_promotion.py`'s docstring states all three.
 
 Each read has three outcomes: a value, absent, or an error. Any error is the verdict `error`.
 The rules for each read are in docs/target-architecture/deploy/d1-flux-installed.md,
@@ -48,13 +48,13 @@ moves anything; `reset_digest`, where a failed verification resets `prod` to; `s
 when `tag` must tag `prior_digest` as `last-good` first; and `clears_hold`.
 
 PRUNE. `prune` deletes old artifact versions, once a day from `prune-artifacts.yml`.
-`artifact_prune.py` holds it, and its docstring states what it reads.
+`promote_lib/prune.py` holds it, and its docstring states what it reads.
 
-VERIFY. `verify T` prints `good` or `failed` for the `settle` job (`verify_promotion.py`).
+VERIFY. `verify T` prints `good` or `failed` for the `settle` job (`promote_lib/verify_promotion.py`).
 `ci-verdict SHA` prints a commit's CI verdict, for the render job's re-check of a dispatched sha.
 
 LAND-WAIT. `land-wait M` waits until a promotion covers merge commit M, for `land.sh`
-(`promote_wait.py`, whose docstring states the three outcomes and what each reads).
+(`promote_lib/wait.py`, whose docstring states the three outcomes and what each reads).
 
 CHECK-BUNDLE. `check-bundle DIR` runs the publish census and the source, host and no-stub gates
 before any push, and `published-tags` prints the render step's `--role` list. Both read the
@@ -103,10 +103,9 @@ from lib.repo_paths import GITOPS_DEPLOY_FILES, REPO
 import bundle_census
 import forge
 import object_loss
-import promote_wait
-import verify_promotion
-from artifact_prune import READ_ERRORS, ReadError, prune
 from artifact_retention import PROD_TAG
+from deploy_tools.promote_lib import verify_promotion as verify, wait
+from deploy_tools.promote_lib.prune import READ_ERRORS, ReadError, prune
 
 # The deployer's own CI reduction, so a promotion and a tick agree on what green means.
 # deploy_git imports nothing, unlike deploy_logic, which re-exports the whole deployer.
@@ -217,7 +216,7 @@ def decide(reads: Reads, revert_rule: bool = REVERT_RULE) -> Decision:
     passes every other rule, for the object-loss check.
     """
     try:
-        settled = verify_promotion.wait_settled(
+        settled = verify.wait_settled(
             reads.hold, reads.digest, reads.sleep, reads.clock, revert_rule
         )
         if settled.stop is not None:
@@ -255,9 +254,7 @@ def decide(reads: Reads, revert_rule: bool = REVERT_RULE) -> Decision:
                 if last_good_bundle is None and last_good is not None:
                     last_good_bundle = reads.bundle(last_good)
                 target_bundle = reads.bundle(digest)
-                if not verify_promotion.footprints_match(
-                    target_bundle, last_good_bundle, names
-                ):
+                if not verify.footprints_match(target_bundle, last_good_bundle, names):
                     continue
             reads.verify(digest)
             # The walk only yields descendants. This holds the rule that prod never moves
@@ -475,7 +472,7 @@ def hand_off(decision: Decision, bundle_dir: Path | None) -> Decision:
         target = decision.bundles.get("target")
         if target is None:
             raise ValueError("decide pulled no bundle for T")
-        verify_promotion.write_handoff(bundle_dir, decision.bundles.get("prod"), target)
+        verify.write_handoff(bundle_dir, decision.bundles.get("prod"), target)
     except (OSError, ValueError) as err:
         return Decision("error", reason=f"--bundle-dir {bundle_dir}: {err}")
     return decision
@@ -559,8 +556,8 @@ def main(
             default=REPO,
             help="the checkout to read git and the contexts from",
         )
-    verify_promotion.add_parser(commands)
-    promote_wait.add_parser(commands, REPO)
+    verify.add_parser(commands)
+    wait.add_parser(commands, REPO)
     bundle_census.add_parsers(commands)
     args = parser.parse_args(argv)
     if args.command in bundle_census.COMMANDS:
@@ -569,9 +566,9 @@ def main(
         f = forge.connect(os.environ)
     if args.command == "land-wait":
         services = [tag for tag in args.services.split(",") if tag]
-        reads = promote_wait.live_wait_reads(f, args.repo)
-        result = promote_wait.land_wait(reads, args.merge, services, args.timeout)
-        return promote_wait.report_wait(args.merge, result)
+        reads = wait.live_wait_reads(f, args.repo)
+        result = wait.land_wait(reads, args.merge, services, args.timeout)
+        return wait.report_wait(args.merge, result)
     if args.command == "prune":
         return prune(
             f,
@@ -583,7 +580,7 @@ def main(
         return ci_check(f, args.repo, args.sha)
     output = os.environ.get("GITHUB_OUTPUT")
     if args.command == "verify":
-        return verify_promotion.run(f, args, output)
+        return verify.run(f, args, output)
     try:
         decision = hand_off(
             decide(live_reads(f, args.repo, args.master_ref)), args.bundle_dir

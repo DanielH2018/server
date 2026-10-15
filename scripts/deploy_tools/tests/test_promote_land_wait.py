@@ -15,7 +15,7 @@ from dataclasses import dataclass, field, replace
 import pytest
 
 import forge
-import promote_wait
+from deploy_tools.promote_lib import wait as promote_wait
 from flux_host import FluxHost
 from _promote_fakes import FakeTransport, digest_of
 

@@ -40,7 +40,9 @@ from pathlib import Path
 import sys as _sys
 from pathlib import Path as _Path
 
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))  # scripts/
+_sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
+# `forge`, `changed_set` and `flux_host` import bare, from scripts/deploy_tools.
+_sys.path.insert(1, str(_Path(__file__).resolve().parents[1]))
 from lib.exit_codes import FAILED, LAND_GAVE_UP, OK
 from lib.git import git
 

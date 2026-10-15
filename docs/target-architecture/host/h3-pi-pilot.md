@@ -1244,7 +1244,7 @@ says otherwise.
 4. **H3.4a Place the `homelab_builder` role. This PR parks the GitOps deployer.**
     - Add the `initial_setup.yml` entry `{ role: homelab_builder, tags: ["homelab_builder"],
       when: has_gitops }` after `gitops_deploy`. `has_gitops` is already resolvable by
-      `scripts/deploy_tools/setup_gates.py`, so no inventory change is needed.
+      `scripts/deploy_tools/setup_lib/setup_gates.py`, so no inventory change is needed.
     - Add the role skeleton:
         - `defaults/main.yml` with `homelab_builder_enabled: false`;
         - `tasks/main.yml` dispatching to `install.yml` or `teardown.yml` on that flag, both
