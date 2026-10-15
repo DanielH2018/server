@@ -185,13 +185,18 @@ The operator accepted it on 2026-10-14, and the session merges D2.8 itself (Open
         - `deploy_inventory.py:declared_k8s_services` parses host_vars without YAML.
     4. **`land.sh`.** `scripts/deploy_tools/land_lib/deploy.py:deploy_by_host` runs
        `deploy.sh` once per host.
-    5. **Three more `deploy.sh` callers.**
-        - `scripts/deploy_tools/render_targets.py` lists the tags for the hourly
-          `render_records` dry run. `deploy.sh` refuses the whole tag list when one tag is
-          refused.
-        - `scripts/secrets_mgmt/secret_rotation.py:cmd_rotate` runs `--deploy` from the
-          weekly cron, which reverts the tree when that deploy fails.
+    5. **Two more `deploy.sh` callers, and one more caller of the playbook.**
+        - `ansible/roles/setup/render_records/files/render_records.py` runs
+          `./scripts/deploy.sh --dry-run --skip-staleness-check --tags <list>` for the hourly
+          record run. `scripts/deploy_tools/render_targets.py` only prints that list.
+          `deploy.sh` refuses the whole tag list when one tag is refused.
         - `ansible/roles/setup/deploy_ui/` starts `land.sh` and `deploy.sh`.
+        - `scripts/secrets_mgmt/secret_rotation.py:cmd_rotate` runs `--deploy` from the
+          weekly cron, which reverts the tree when that deploy fails. It does not run
+          `deploy.sh`. `scripts/secrets_mgmt/rotation_tools.py:run_deploy` runs
+          `uv run --frozen ansible-playbook ansible/deploy.yml --tags <list>` itself, so it
+          meets neither `deploy.sh`'s exit 5 nor its locks. The play's `ansible_owned` batch
+          loop (D2.1d) is what keeps a non-Ansible-owned tag out of that run.
 - **Readers that would raise false alarms once Flux owns a role:**
     - `scripts/diagnostics/probe_lib/health.py:release_expected_restarts` reads the last
       Ansible release record and fails a workload as NOT ROLLED when its `restartedAt` is
@@ -221,8 +226,13 @@ The operator accepted it on 2026-10-14, and the session merges D2.8 itself (Open
 - **R2 decides the render mode by one flag.** With `--secret-stubs FILE` the render is R1's
   stub mode. Without it, the render is in placeholder mode, and each secret variable `K` renders
   as `${K}` (R2 *Mode selection*). Stub mode writes R1's `homelab_secret_stub` form,
-  `stub-` plus the key with underscores turned to hyphens, so `domain` becomes
-  `stub-domain`.
+  `stub-` plus the key with underscores turned to hyphens. At the baseline a stub-mode
+  render therefore wrote `domain` as `stub-domain`.
+    - **HISTORY —** R2's domain PR 2b (#5007) added `domain` to `PUBLISHED` in
+      `ansible/filter_plugins/secret_stubs.py`, so `homelab_stub_keys` leaves it out. Stub
+      mode now writes the inventory value of `domain`, and placeholder mode writes it as a
+      literal, never as `${domain}`. The D2.6c gate tests below still use `stub-domain` and
+      `${domain}`, as fixture inputs a gate must refuse.
 - **bento-pdf's render names one variable that the baseline holds as a secret, `domain`.**
     - `ansible/templates/ingressroute.yml.j2:ingressroute` builds the `.local.` object's Host
       match as `hostname ~ '.local.' ~ domain`, and the `-public` object's as
@@ -414,7 +424,7 @@ applies nothing and says so. No site ever hands an empty `--tags` value on.
 | `land.sh` | Splits the PR's tags before `deploy_by_host`. T waits on promotion (below), and `deploy.sh` runs only when an Ansible-owned tag remains. Before it merges, it refuses a PR that makes T Ansible-owned while T's Kustomization exists (*Rollback*). |
 | `smoke_caller` | Leaves T out of the candidates. `land.sh` would drop T from its `deploy.sh` call, so a flux-owned smoke caller would exercise nothing. |
 | `render_targets.py` CLI | `main` prints a new `render_record_targets(host)`, which leaves T out of the hourly record list. `render_targets()` stays the full universe for the renderer, R1's `compare` and R2. |
-| `secret_rotation.py --deploy` | Leaves T out of its redeploy and runs no `deploy.sh` when nothing remains. D3 gives a rotated cluster secret its path. |
+| `secret_rotation.py --deploy` | `cmd_rotate` drops T before it calls `rotation_tools.run_deploy`, which runs `ansible-playbook ansible/deploy.yml` without `deploy.sh`. It runs no playbook when nothing remains. D3 gives a rotated cluster secret its path. |
 | `probe.py health T` | Ignores the release record when T is not Ansible-owned in the tree (`tag_owners`). |
 | `probe.py releases --stale-only` | Skips T, read the same way. |
 | `manifest-prune-check.sh` | Skips an object labelled `kustomize.toolkit.fluxcd.io/name=<n>` only while a Kustomization `<n>` exists in `flux-system`. It reads that list once per run with the read-only kubeconfig. |
@@ -650,12 +660,22 @@ D1 builds the split. D2 adds its steps to the render job, and it adds the `verif
     - D5 generalises its PR-time `Removes-Workload` check to `Removes-Object` in parallel,
       with the same trailer grammar. The PR-time check stops the PR, and `decide` stops a
       commit that reaches master without one.
-    - A squash merge keeps only the message it is given, so `land.sh` copies every
-      `Removes-Object:` trailer from the PR's commits into the squash commit's body. D2.6c
-      adds the copy, with a test whose red half drops one trailer. A merge that bypasses
-      `land.sh`, such as Renovate's automerge, carries no trailers. Such a bump that drops
-      an object therefore stalls at `decide`, and `PromotionStalled` pages. That is the
-      intended direction (D5.1f).
+    - `decide` matches a `Removes-Object:` line anywhere in a commit message, not only in
+      git's final-paragraph trailer block (`scripts/lib/removes_object.py`). The
+      repository's squash default, `COMMIT_MESSAGES`, already writes every PR commit's
+      message into the squash body as a `* <subject>` paragraph, so the line usually
+      reaches master without help. A settings change could turn that default into the PR
+      description or nothing. `land.sh` therefore sends the body itself when a PR commit
+      carries the line: `scripts/deploy_tools/land_lib/merge.py:squash_body` writes every
+      commit's message, then each line again as a final trailer paragraph. With no line,
+      it sends no body. D2.6c added the copy, with the pair
+      `scripts/deploy_tools/tests/test_land_merge_past_review.py::test_a_merge_copies_every_removes_object_line_into_the_body`
+      and
+      `scripts/deploy_tools/tests/test_land_merge_past_review.py::test_a_merge_with_no_removes_object_line_sends_no_body`.
+      A merge that bypasses
+      `land.sh` and replaces the body, such as `gh pr merge --body`, can drop the line.
+      Such a merge that drops an object therefore stalls at `decide`, and
+      `PromotionStalled` pages. That is the intended direction (D5.1f).
 - **The hold names what failed.** `verify` writes `<T> failed=<names>` (C2), where `<names>`
   comma-joins the expected names that read `failure` or had no status at the timeout. At the
   drill that is `<T> failed=bento-pdf`.
@@ -1392,9 +1412,14 @@ later slices size against:
 **Each new check can go red.**
 
 - Every skip in D2.1a to D2.4b is tested as an `_is_clean` and `_is_flagged` pair against a
-  fixture entry. The C4 census also names each of the six entry points as a member it must
-  find, so a renamed entry point fails the census instead of passing vacuously (failure
-  class 4).
+  fixture entry. Those pairs import the reader, not the entry point, so they still pass when
+  an entry point is renamed or stops calling the reader (failure class 4).
+  `ansible/tests/repo/test_owner_entry_points_census.py` therefore names each row of the
+  entry-point table as a member it must find, as `file:symbol`, and follows its calls down
+  to `tag_owners`, `ansible_owned` or `service_owners`. The two host checks and `deploy_ui`
+  read no tree reader, and the census names the reason for each. A table row with no
+  member fails it, and so does a member whose row is gone. The red halves rename an entry
+  point, drop a reader call, and add an unmapped row.
 - The narrowing pair in D2.1a fails if an `owner`-only edit reaches any of its five fixture
   whole-entry readers, and its other half fails if a `hostname` edit stops reaching them.
 - D2.1c's render census fails when a role whose render an added entry moves maps to a tag
@@ -1511,10 +1536,11 @@ later slices size against:
 ## Risks
 
 - **An entry point outside the census** (failure class 4). A path that applies a k8s role and
-  is missing from the table writes bento-pdf behind Flux's back. Mitigation: the census names
-  its six members. A `Census` row in `ansible/tests/repo/test_census_rows_text.py` selects
-  every tracked file that invokes `deploy.sh` and fails on one that is neither in the table
-  nor exempt with a reason.
+  is missing from the table writes bento-pdf behind Flux's back. Mitigation: two censuses.
+  A `Census` row in `ansible/tests/repo/test_census_rows_text.py` selects every tracked
+  file that invokes `deploy.sh` and fails on one that is neither in the table nor exempt
+  with a reason. `ansible/tests/repo/test_owner_entry_points_census.py` names every row of
+  the table as a member and fails when one stops reading ownership (*Verification*).
 - **A tick in flight at the flip.** A tick that started before D2.7 merged works from the
   older SHA. If its range holds a bento-pdf image bump, it deploys bento-pdf through Ansible
   once more. Mitigation: the D2.7 preconditions require no open bento-pdf Renovate PR and no
