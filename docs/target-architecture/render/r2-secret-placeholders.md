@@ -34,6 +34,9 @@ the operator removed the prefix with `sops`
 ([#5030](https://github.com/DanielH2018/server/pull/5030)), and both services' digests then
 matched.
 
+PR 4b, the comment follow-up: [#5037](https://github.com/DanielH2018/server/pull/5037). It
+changes only rendered comments. Its landing settled at `6798e883f`.
+
 Domain PR 1, `domain` as an inventory variable read without SOPS:
 [#4994](https://github.com/DanielH2018/server/pull/4994).
 

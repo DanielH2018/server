@@ -30,6 +30,11 @@ D2.6b, the bundle writer, `digests.json`, its census and the reserved names:
 [#5010](https://github.com/DanielH2018/server/pull/5010). The first `promote` run after it
 reported 0 published tags, and `flux/homelab` read `success` on `6c26fb6f5`.
 
+D2.6c, the publish gates and the object-loss check:
+[#5044](https://github.com/DanielH2018/server/pull/5044). Its first `promote` run,
+38669383075, passed all six jobs on `a5abf8581`. `flux/homelab` read `success`, `last-good`
+moved to prod's digest `sha256:23bfc8e1854c`, and both holds read `none`.
+
 Depends on: [D1](d1-flux-installed.md), [R1](../render/r1-shadow-render.md),
 [R2](../render/r2-secret-placeholders.md) (its PR 1, placeholder mode, and its PR 2, the five
 rules). PR D2.7 also waits on PR D4.0 of [D4](d4-ordering.md) (D4 Open question 3), on
