@@ -52,7 +52,8 @@ def _problems(rules: list[dict]) -> list[str]:
     if _recipients(rules, CLUSTER_MANIFEST) != cluster_file:
         out.append(
             f"{CLUSTER_MANIFEST} resolves to a rule whose recipients differ from "
-            f"{CLUSTER_FILE}'s; is a cluster rule below the generic rule?"
+            f"{CLUSTER_FILE}'s; is a cluster rule below the generic rule, or do the two "
+            "cluster rules list different keys?"
         )
     if (
         _rule_for(rules, CLUSTER_MANIFEST).get("encrypted_regex")

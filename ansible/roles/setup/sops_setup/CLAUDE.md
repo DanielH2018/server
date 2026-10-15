@@ -60,11 +60,12 @@ dotfiles repo's `home/dot_bashrc` on the chezmoi hosts, and [[config_files]]' tr
   holds the full runbook.
 - **Every `sops` command runs from `ansible/`, or with `--config ansible/.sops.yaml`.** SOPS
   resolves `.sops.yaml` from the working directory, so from the repo root it finds no
-  creation rule.
+  creation rule. `--config` is a global flag and goes before the subcommand (`sops --config
+  ansible/.sops.yaml updatekeys <file>`).
 - **Onboarding an Nth host is NOT this role** — `.sops.yaml` is tracked, so every checkout
   already has it and step 4 self-skips. Adding a host = run `ansible/bootstrap.yml` on it,
   append its pubkey to the `age:` string of all three rules, then from `ansible/` run `sops
-  updatekeys -y` on `secrets.yml`, the cluster file and each cluster manifest that exists,
+  updatekeys` on `secrets.yml`, the cluster file and each cluster manifest that exists,
   and commit/pull. Removing one deletes its key from all three rules and runs `sops rotate -i
   --rm-age <key>` on the same files, not `updatekeys`; `.sops.yaml`'s header says why. See
   `bootstrap.yml` header; [[gitops_deploy]] only consumes secrets after this is in place.

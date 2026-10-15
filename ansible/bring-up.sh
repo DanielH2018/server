@@ -188,10 +188,12 @@ cat <<EOF
 ============================================================
 The "Your Public Key is: age1..." line above is THIS host's age key.
 
- 1. Add that age1... pubkey to ansible/.sops.yaml under 'age:'.
- 2. On a host that can already decrypt (e.g. daniel-server):
-        sops updatekeys ansible/vars/secrets.yml
- 3. Commit + push the re-encrypted secrets.yml + ansible/.sops.yaml.
+ 1. Add that age1... pubkey to the 'age:' string of ALL THREE
+    creation rules in ansible/.sops.yaml.
+ 2. On a host that can already decrypt (e.g. daniel-server), from ansible/:
+        sops updatekeys vars/secrets.yml
+    and the same for each cluster file the .sops.yaml header lists.
+ 3. Commit + push the re-encrypted files + ansible/.sops.yaml.
  4. Back here:  git pull
 
  First host ever? bootstrap already seeded ansible/.sops.yaml from

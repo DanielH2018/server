@@ -7,6 +7,8 @@
 # SOPS finds this file from the WORKING DIRECTORY, searching upward, not from the file it
 # encrypts. Run every `sops` command below from ansible/, or pass `--config ansible/.sops.yaml`
 # from the repo root. From the repo root without --config, SOPS finds no creation rule.
+# --config is a global flag and goes before the subcommand:
+#   sops --config ansible/.sops.yaml updatekeys ansible/vars/cluster-vars.sops.env
 #
 # Multi-recipient is OR: ANY listed key decrypts the WHOLE file. Only a host Ansible drives
 # locally (`ansible_connection=local`) decrypts, because pre_tasks/load_secrets.yml decrypts on
@@ -31,10 +33,11 @@
 #   2. Append the printed pubkey to the comma-separated `age:` string of ALL THREE rules
 #      below. Each is ONE quoted scalar, not a YAML list, so a per-key trailing comment is
 #      impossible; extend the position->host note above the generic rule instead.
-#   3. On a host that can already decrypt (daniel-server), from ansible/, once per file:
-#        sops updatekeys -y vars/secrets.yml
-#        sops updatekeys -y vars/cluster-vars.sops.env
-#        sops updatekeys -y vars/cluster-manifests/<name>.sops.yaml   (each manifest)
+#   3. On a host that can already decrypt (daniel-server), from ansible/, once per file.
+#      Each command shows the recipient change and asks before writing:
+#        sops updatekeys vars/secrets.yml
+#        sops updatekeys vars/cluster-vars.sops.env
+#        sops updatekeys vars/cluster-manifests/<name>.sops.yaml   (each manifest)
 #      then commit the re-encrypted files + this file, and `git pull` on the host.
 # Remove a host's access: delete its key from all three rules, then from ansible/, once per
 # file:
