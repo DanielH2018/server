@@ -55,20 +55,21 @@ HOST_BIN_PREFIXES = ("/usr/local/bin", "/opt/homelab")
 # `ignore` tier instead, because it is an address rather than a credential — it renders as an
 # ACME contact, a git commit author, an Authelia user's email and an SMTP username, and the
 # value that authenticates that SMTP session is `smtp_notify_app_password`, tracked
-# separately. That is the `domain` precedent NON_SECRET_TIERS below already states: when the
-# registry can say a name is not a credential, it says it, and this derivation reads it.
+# separately. That is the precedent NON_SECRET_TIERS below states: when the registry can
+# say a name is not a credential, it says it, and this derivation reads it.
 # GENERIC_NAMES stays for the case the registry CANNOT express — a name that really is a
 # credential but whose word is too common to match on. A registry comment could not have
 # carried this: `rotation_tools.save_registry` rewrites the file with `yaml.safe_dump`, so the
 # weekly rotate cron drops any comment added there.
 GENERIC_NAMES = frozenset()
 
-# The registry's own word for "tracked, but not a value anyone rotates". `domain` carries it,
-# and reading the tier is what keeps this derivation honest: matching on `domain` would flag
-# host scripts (disk-health, etcd-snapshot-offbox, registry-gc, fake-remux-health) that embed no
-# credential at all. A guard that fires on those is one that gets switched off. Derived from the
-# registry rather than hand-listed in GENERIC_NAMES, because the registry already states the
-# fact.
+# The registry's own word for "tracked, but not a value anyone rotates". `email`, `r2_bucket`
+# and the `*_username` keys carry it. Reading the tier is what keeps this derivation honest:
+# `domain` carried it until it left the store on 2026-10-15, and matching on it had flagged
+# host scripts (disk-health, etcd-snapshot-offbox, registry-gc, fake-remux-health) that embed
+# no credential at all. A guard that fires on those is one that gets switched off. Derived from
+# the registry rather than hand-listed in GENERIC_NAMES, because the registry already states
+# the fact.
 NON_SECRET_TIERS = frozenset({"ignore"})
 
 

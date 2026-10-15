@@ -6,6 +6,6 @@
 | `external` | 365 d | 13 |
 | `external-90d` | 90 d | 1 |
 | `pinned` | 730 d | 2 |
-| `ignore` | — | 11 |
+| `ignore` | — | 10 |
 
-194 secrets are registered. The weekly `auto` rotation takes anything due within `ROTATE_LEAD_DAYS` = 8 days.
+193 secrets are registered. The weekly `auto` rotation takes anything due within `ROTATE_LEAD_DAYS` = 8 days.

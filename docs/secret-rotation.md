@@ -67,7 +67,8 @@ fails on the undefined variable.
 - `external-90d` — provider-managed like `external`, minted with a 90-day expiry, such as
   the promote workflow's `PROMOTE_TOKEN`. The audit flags the copy before the token expires.
 - `pinned` — **must not be naively swapped**. The special procedure, below.
-- `ignore` — not a secret: the domain, usernames, static addresses.
+- `ignore` — not a secret: usernames, the R2 bucket name, static addresses. `domain` left
+  the store on 2026-10-15 and is an inventory variable in `ansible/inventory/group_vars/all.yml`.
 
 `sync` gives a newly registered key its tier from two name rules in
 `scripts/secrets_mgmt/secrets_lib/secret_classify.py`: `*_push_token` is `auto`, `*_user` and

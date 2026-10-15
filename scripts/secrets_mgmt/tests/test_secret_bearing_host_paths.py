@@ -102,12 +102,14 @@ def test_the_hooks_prefix_gate_matches_the_modules():
 
 
 def test_the_ignore_tier_is_excluded_from_the_tracked_names():
-    """`domain` is the registry's tracked-but-not-a-credential entry (tier: ignore).
+    """`r2_bucket` is one of the registry's tracked-but-not-a-credential entries (tier: ignore).
 
-    Matching on it flagged five host scripts that embed no credential at all, which is how a
-    guard gets switched off. Pinned by name so a tier change to `domain` fails here.
+    `domain` held that place until it left the store on 2026-10-15 (R2 domain PR 3); matching
+    on it had flagged five host scripts that embed no credential at all, which is how a guard
+    gets switched off. `r2_bucket` is a name no `*_user` rule excludes, so only its tier keeps
+    it out. Pinned by name so a tier change to `r2_bucket` fails here.
     """
-    assert "domain" not in secret_names()
+    assert "r2_bucket" not in secret_names()
     assert "secret_rotation_push_token" in secret_names()
 
 
