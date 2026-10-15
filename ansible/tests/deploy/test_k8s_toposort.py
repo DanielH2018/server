@@ -294,8 +294,8 @@ DOCUMENTED_ORDERINGS = {
     ("jellyfin", "janitorr"): "host_vars/daniel-box.yml (janitorr comment)",
     ("sonarr", "configarr"): "host_vars/daniel-box.yml (configarr comment)",
     ("radarr", "configarr"): "host_vars/daniel-box.yml (configarr comment)",
-    ("dri-device-plugin", "jellyfin"): "roles/k8s/dri-device-plugin/CLAUDE.md",
-    ("dri-device-plugin", "tdarr"): "roles/k8s/dri-device-plugin/CLAUDE.md",
+    ("dri-device-plugin", "jellyfin"): "host_vars/daniel-box.yml (jellyfin comment)",
+    ("dri-device-plugin", "tdarr"): "host_vars/daniel-box.yml (tdarr comment)",
     ("pihole", "pihole-exporter"): "roles/k8s/pihole-exporter/CLAUDE.md",
 }
 
