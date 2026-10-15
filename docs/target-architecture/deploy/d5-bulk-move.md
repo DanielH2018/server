@@ -1065,7 +1065,9 @@ bullet).
     - **The write moves `prod` only while it still names the digest the read job read**,
       the same compare-and-move that `tag` performs. It moves `prod` to the `last-good`
       digest that the read job read, then records it in `PROD_DIGEST`. A mismatch moves
-      nothing and exits non-zero naming both digests. The write runs only in the refusal's
+      nothing. When the live digest is already `last-good`'s, as after `settle`'s own reset
+      lands first, the write succeeds and says so. Any other mismatch exits non-zero naming
+      both digests. The write runs only in the refusal's
       pass case, where `prod` differs from `last-good`. In that state every `decide` either
       returns `held` or sits in its in-flight wait, so no `tag` runs, and the two
       compare-and-moves cannot interleave in different groups. One case escapes that
@@ -4472,6 +4474,9 @@ round covers it.
   `promote` would sit behind, `decide`'s in-flight wait. The new bullet *It must hold C2's
   two in-flight checks* states the hazard a reset during a verification creates, and D5.2b2
   carries it. The design that answers it is open in #5079.
+
+### Reset design fold (2026-10-15)
+
 - **The reset's answer to C2's two checks (#5079).** *A reset input* now refuses while
   `prod` differs from `last-good`, unless `DEPLOY_HOLD` names a SHA whose `sha-<X>` digest
   equals `prod`'s. That form of hold means `prod`'s run has settled and left `prod` in
