@@ -22,9 +22,7 @@ Run: uv run python scripts/renderer/standalone_map.py           # rewrite the ma
      uv run python scripts/renderer/standalone_map.py --check   # exit 1 when it is stale
 """
 
-import os
 import sys
-import tempfile
 
 import sys as _sys
 from pathlib import Path as _Path
@@ -35,7 +33,7 @@ import json
 
 from lib.cli_help import ArgumentParser
 from lib.exit_codes import FAILED, OK
-from renderer.homelab_render import secret_keys
+from renderer.homelab_render import ansible_local_temp, secret_keys
 from renderer.renderer_lib.cluster import DEFERRED_SUFFIX, select_tags
 from renderer.renderer_lib.environment import RenderError
 from renderer.renderer_lib.placeholders import (
@@ -118,10 +116,9 @@ def main(argv: list[str] | None = None) -> int:
         help="write nothing; exit 1 when the committed map differs from the render",
     )
     args = parser.parse_args(argv)
-    # As homelab_render.py does: keep ansible-core's local temp directory out of the home.
-    os.environ.setdefault("ANSIBLE_LOCAL_TEMP", tempfile.gettempdir())
     try:
-        text = map_text(guard_map(fleet_render()))
+        with ansible_local_temp():
+            text = map_text(guard_map(fleet_render()))
     except (RenderError, ValueError) as exc:
         print(f"standalone_map: {exc}. Nothing was written.", file=sys.stderr)
         return FAILED

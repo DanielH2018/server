@@ -5,6 +5,7 @@ Run: uv run pytest scripts/renderer/tests/test_renderer_homelab_render.py
 
 import os
 import sys
+import tempfile
 
 import pytest
 
@@ -117,6 +118,29 @@ def test_the_cli_writes_nothing_under_the_home_directory(out, tmp_path):
     written = sorted(p.relative_to(home).as_posix() for p in home.rglob("*"))
     assert len(written) == 1, written
     assert written == ["sentinel"]
+
+
+def test_ansible_local_temp_is_set_only_inside_the_block(monkeypatch):
+    monkeypatch.delenv("ANSIBLE_LOCAL_TEMP", raising=False)
+    with homelab_render.ansible_local_temp():
+        assert os.environ["ANSIBLE_LOCAL_TEMP"] == tempfile.gettempdir()
+    assert "ANSIBLE_LOCAL_TEMP" not in os.environ
+
+
+def test_ansible_local_temp_keeps_a_value_the_caller_set(tmp_path, monkeypatch):
+    monkeypatch.setenv("ANSIBLE_LOCAL_TEMP", str(tmp_path))
+    with homelab_render.ansible_local_temp():
+        assert os.environ["ANSIBLE_LOCAL_TEMP"] == str(tmp_path)
+    assert os.environ["ANSIBLE_LOCAL_TEMP"] == str(tmp_path)
+
+
+def test_main_leaves_no_ansible_local_temp_in_its_caller(tmp_path, monkeypatch):
+    # An in-process call must not leave the variable in the pytest worker (#5002). The
+    # missing host refuses before any render, which keeps this test cheap.
+    monkeypatch.delenv("ANSIBLE_LOCAL_TEMP", raising=False)
+    argv = ["host", "--host", "no-such-host", "--out", str(tmp_path / "out")]
+    assert homelab_render.main(argv) == 2
+    assert "ANSIBLE_LOCAL_TEMP" not in os.environ
 
 
 def _host_vars(tmp_path, entries):

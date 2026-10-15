@@ -46,7 +46,8 @@ Run: uv run python scripts/renderer/homelab_render.py cluster --out /tmp/r2-rend
 import os
 import sys
 import tempfile
-from collections.abc import Callable
+from collections.abc import Callable, Generator
+from contextlib import contextmanager
 from pathlib import Path
 
 import sys as _sys
@@ -279,6 +280,27 @@ def packages(out: Path, host: str | None, name: str | None) -> int:
     return RENDER_OK
 
 
+@contextmanager
+def ansible_local_temp() -> Generator[None]:
+    """Point ansible-core's local temp directory at the system temp directory for the block.
+
+    ansible-core creates its local temp directory when the render first imports its
+    constants, under `~/.ansible/tmp` by default. The system temp directory keeps the home
+    directory untouched, and ansible-core removes its own subdirectory at exit. A value the
+    caller already set is left alone. The block restores the environment on exit, so an
+    in-process caller such as a pytest worker does not hand the variable to every later
+    test and subprocess (#5002).
+    """
+    if "ANSIBLE_LOCAL_TEMP" in os.environ:
+        yield
+        return
+    os.environ["ANSIBLE_LOCAL_TEMP"] = tempfile.gettempdir()
+    try:
+        yield
+    finally:
+        os.environ.pop("ANSIBLE_LOCAL_TEMP", None)
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = ArgumentParser(description=__doc__.splitlines()[0])
     commands = parser.add_subparsers(dest="command", required=True)
@@ -323,15 +345,12 @@ def main(argv: list[str] | None = None) -> int:
         "--out", type=Path, required=True, metavar="DIR", help="the directory to write"
     )
     args = parser.parse_args(argv)
-    # ansible-core creates its local temp directory when the render first imports its
-    # constants, under `~/.ansible/tmp` by default. The system temp directory keeps the home
-    # directory untouched, and ansible-core removes its own subdirectory at exit.
-    os.environ.setdefault("ANSIBLE_LOCAL_TEMP", tempfile.gettempdir())
-    if args.command != "cluster":
-        return packages(
-            args.out, getattr(args, "host", None), getattr(args, "name", None)
-        )
-    return cluster(args.out, args.roles, args.secret_stubs)
+    with ansible_local_temp():
+        if args.command != "cluster":
+            return packages(
+                args.out, getattr(args, "host", None), getattr(args, "name", None)
+            )
+        return cluster(args.out, args.roles, args.secret_stubs)
 
 
 if __name__ == "__main__":
