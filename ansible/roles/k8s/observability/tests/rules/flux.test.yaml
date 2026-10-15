@@ -65,6 +65,9 @@ tests:
       - eval_time: 25h
         alertname: FluxSuspended
         exp_alerts: []
+      - eval_time: 31m
+        alertname: FluxWorkersSaturated
+        exp_alerts: []
 
   # A failed scrape. source-controller's scrape fails from 6m, so the shadowed rule fires at
   # 11m and not at 10m, after 4 minutes down. A failed scrape stale-marks the target's series,
@@ -373,6 +376,12 @@ tests:
         values: '1x30'
       - series: 'gotk_resource_info{job="kube-state-metrics", instance="kube-state-metrics:8080", customresource_group="source.toolkit.fluxcd.io", customresource_kind="OCIRepository", customresource_version="v1", exported_namespace="flux-system", name="homelab", ready="True", revision="prod@sha256:6d922645e7f2cc91a50eec3f617aa220f084ebf322dd99a6d586d9456f309c63", url="oci://ghcr.io/danielh2018/homelab-manifests"}'
         values: '1x30'
+      - series: &active_workers 'controller_runtime_active_workers{job="flux", app="kustomize-controller", instance="10.42.1.207:8080", pod="kustomize-controller-5d94ff85cc-bfhww", controller="kustomization"}'
+        values: '0x30'
+      - series: &max_reconciles 'controller_runtime_max_concurrent_reconciles{job="flux", app="kustomize-controller", instance="10.42.1.207:8080", pod="kustomize-controller-5d94ff85cc-bfhww", controller="kustomization"}'
+        values: '4x30'
+      - series: &queue_depth 'workqueue_depth{job="flux", app="kustomize-controller", instance="10.42.1.207:8080", pod="kustomize-controller-5d94ff85cc-bfhww", controller="kustomization", name="kustomization", priority="0"}'
+        values: '0x30'
     alert_rule_test:
       - eval_time: 30m
         alertname: FluxControllerDown
@@ -383,3 +392,106 @@ tests:
       - eval_time: 30m
         alertname: FluxSuspended
         exp_alerts: []
+      - eval_time: 30m
+        alertname: FluxWorkersSaturated
+        exp_alerts: []
+
+  # Every kustomize-controller worker busy with a non-empty queue, the label sets as the live
+  # scrape gives them on 2026-10-15. The queue's series carries `name` and `priority`, which
+  # the worker gauges lack, so a join that matched on every label would return nothing here.
+  # It fires at 30m and not at 29m.
+  - interval: 1m
+    input_series:
+      - series: *active_workers
+        values: '4x40'
+      - series: *max_reconciles
+        values: '4x40'
+      - series: *queue_depth
+        values: '3x40'
+    alert_rule_test:
+      - eval_time: 29m
+        alertname: FluxWorkersSaturated
+        exp_alerts: []
+      - eval_time: 30m
+        alertname: FluxWorkersSaturated
+        exp_alerts:
+          - exp_labels: &saturated_labels
+              job: flux
+              app: kustomize-controller
+              instance: 10.42.1.207:8080
+              pod: kustomize-controller-5d94ff85cc-bfhww
+              controller: kustomization
+              severity: warning
+              service: flux
+            exp_annotations:
+              summary: Every kustomize-controller reconcile worker has been busy for 30 minutes.
+              description: >-
+                All 4 of kustomize-controller-5d94ff85cc-bfhww's reconcile workers have been
+                busy for 30 minutes with Kustomizations still queued, so a changed
+                Kustomization waits for a free worker. Unhealthy Kustomizations that each hold
+                a worker for their timeout are the usual cause. List them with kubectl get
+                kustomizations -A; suspending one frees its worker once its current wait ends.
+
+  # One worker below the maximum, with the queue still full, never fires.
+  - interval: 1m
+    input_series:
+      - series: *active_workers
+        values: '3x40'
+      - series: *max_reconciles
+        values: '4x40'
+      - series: *queue_depth
+        values: '3x40'
+    alert_rule_test:
+      - eval_time: 40m
+        alertname: FluxWorkersSaturated
+        exp_alerts: []
+
+  # Every worker busy with an empty queue never fires: nothing is waiting for a worker.
+  - interval: 1m
+    input_series:
+      - series: *active_workers
+        values: '4x40'
+      - series: *max_reconciles
+        values: '4x40'
+      - series: *queue_depth
+        values: '0x40'
+    alert_rule_test:
+      - eval_time: 40m
+        alertname: FluxWorkersSaturated
+        exp_alerts: []
+
+  # The maximum comes from its gauge, never a literal 4. At a maximum of 5, four busy workers
+  # never fire, and five fire at 30m.
+  - interval: 1m
+    input_series:
+      - series: *active_workers
+        values: '4x40'
+      - series: *max_reconciles
+        values: '5x40'
+      - series: *queue_depth
+        values: '3x40'
+    alert_rule_test:
+      - eval_time: 40m
+        alertname: FluxWorkersSaturated
+        exp_alerts: []
+  - interval: 1m
+    input_series:
+      - series: *active_workers
+        values: '5x40'
+      - series: *max_reconciles
+        values: '5x40'
+      - series: *queue_depth
+        values: '3x40'
+    alert_rule_test:
+      - eval_time: 30m
+        alertname: FluxWorkersSaturated
+        exp_alerts:
+          - exp_labels: *saturated_labels
+            exp_annotations:
+              summary: Every kustomize-controller reconcile worker has been busy for 30 minutes.
+              description: >-
+                All 5 of kustomize-controller-5d94ff85cc-bfhww's reconcile workers have been
+                busy for 30 minutes with Kustomizations still queued, so a changed
+                Kustomization waits for a free worker. Unhealthy Kustomizations that each hold
+                a worker for their timeout are the usual cause. List them with kubectl get
+                kustomizations -A; suspending one frees its worker once its current wait ends.
