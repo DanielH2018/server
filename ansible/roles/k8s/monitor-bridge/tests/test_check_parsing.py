@@ -151,6 +151,7 @@ _SECRET_ENV = {
     "RADARR_API_KEY": "sentinel-radarr-key",
     "BAZARR_API_KEY": "sentinel-bazarr-key",
     "PROWLARR_API_KEY": "sentinel-prowlarr-key",
+    "DEPLOY_PIPELINE_GITHUB_TOKEN": "sentinel-deploy-pipeline-token",
 }
 
 

@@ -41,6 +41,9 @@ spec:
         - name: monitor-bridge
           image: {{ monitor_bridge_k8s_image }}
           command: ["python", "/app/cli.py"]
+          ports:
+            - name: metrics
+              containerPort: {{ monitor_bridge_deploy_pipeline_port }}
 {{ hardened_security_context(read_only=true) }}
           envFrom:
             - secretRef:

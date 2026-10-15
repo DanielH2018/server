@@ -15,9 +15,11 @@ import pytest
 import bridge.common
 from bridge.config import load_config
 import cli
+import deploy_pipeline
 from _bridge_env import bridge_env
 from _check_gate_helpers import mk
 from _fake_sources import FakeSink, FakeSources
+from test_deploy_pipeline import github
 from bridge.types import Check
 from gates import Gates
 
@@ -25,7 +27,8 @@ from gates import Gates
 def _silence(pushes, ran, names=("disk",), probe_prometheus=None, **env):
     """STATE the registry, the I/O and the environment, so main() runs touching nothing live.
 
-    Returns the `checks=` / `gate_config=` / `sources=` / `sink=` / `env=` keyword arguments to hand
+    Returns the `checks=` / `gate_config=` / `sources=` / `sink=` / `env=` / `exposition=` keyword
+    arguments to hand
     `cli.main`, which is how a test says which checks exist and what they read without mutating
     a module. `env` is the rendered env-secret, the environment the pod's `main()` reads, with
     `HEARTBEAT_FILE` pointed at the null device so a cycle's heartbeat writes nowhere.
@@ -48,6 +51,9 @@ def _silence(pushes, ran, names=("disk",), probe_prometheus=None, **env):
         # No exporter is down, so the exporter probe suppresses nothing.
         "sources": FakeSources(prom_vector=lambda q: []),
         "sink": sink,
+        # Unserved, so a looping main() binds no port. The rendered token is blank, so the
+        # family reads nothing either.
+        "exposition": deploy_pipeline.Exposition(),
         "gate_config": Gates(
             probe_prometheus=probe_prometheus or (lambda _cfg, _src: (True, "prom ok")),
             probe_loki=lambda _cfg, _src: (True, "loki ok"),
@@ -84,6 +90,34 @@ def test_no_arguments_means_loop_forever_and_push(cfg):
         cli.main([], sleep=_sleep, **wired)
     assert ran == ["disk"]
     assert ("tok_disk", True, "disk ok") in pushes
+
+
+def test_the_loop_publishes_the_deploy_pipeline_gauges_after_the_checks_push():
+    """The family runs in the looping pod, after the cycle's pushes, on the one `Sources`."""
+    pushes, ran = [], []
+    wired = _silence(pushes, ran, DEPLOY_PIPELINE_GITHUB_TOKEN="read-only-token")
+    wired["sources"] = github(prom_vector=lambda q: [])
+
+    class _Slept(Exception):
+        pass
+
+    def _sleep(seconds):
+        assert ("tok_disk", True, "disk ok") in pushes
+        raise _Slept
+
+    with pytest.raises(_Slept):
+        cli.main([], sleep=_sleep, **wired)
+    body = wired["exposition"].body().decode()
+    assert "homelab_deploy_hold_active 0.0" in body
+    assert "homelab_deploy_prod_digest_match 1.0" in body
+
+
+def test_once_publishes_nothing_and_reads_no_github():
+    """`--once` is the hand-run beside the pod, so it neither serves nor reads the family."""
+    wired = _silence([], [], DEPLOY_PIPELINE_GITHUB_TOKEN="read-only-token")
+    assert cli.main(["--once"], **wired) == 0
+    assert wired["exposition"].body() == b""
+    assert wired["sources"].queries("get_json") == []
 
 
 def test_every_cycle_reads_the_one_state_main_built():

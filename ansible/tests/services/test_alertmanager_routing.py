@@ -40,6 +40,9 @@ INGRESS_RULES = (
     ROLES / "k8s" / "observability" / "files" / "rules" / "ingress-probes.yaml"
 )
 HOST_RULES = ROLES / "k8s" / "observability" / "files" / "rules" / "host-checks.yaml"
+DEPLOY_PIPELINE_RULES = (
+    ROLES / "k8s" / "observability" / "files" / "rules" / "deploy-pipeline.yaml"
+)
 # A per-target ingress alert takes `service` from its probe target, so a probed service
 # stands in for it.
 INGRESS_STAND_IN_SERVICE = "homepage"
@@ -58,6 +61,17 @@ def ingress_set(alert: str) -> dict[str, str]:
         "service": INGRESS_STAND_IN_SERVICE,
         **rule["labels"],
     }
+
+
+def deploy_pipeline_set(alert: str) -> dict[str, str]:
+    """The labels `alert` reaches Alertmanager with, read from the shipped deploy-pipeline rule.
+
+    Every rule there carries the literal `service="deploy-pipeline"`, so the rule's own labels
+    are the whole set, and a changed `severity` or `service` moves it to another route.
+    """
+    [group] = yaml_fast.safe_load(DEPLOY_PIPELINE_RULES.read_text())["groups"]
+    [rule] = [r for r in group["rules"] if r["alert"] == alert]
+    return {"alertname": alert, **rule["labels"]}
 
 
 def host_sets() -> dict[str, dict[str, str]]:
@@ -95,13 +109,14 @@ PAGING = {
         ["discord", "email"],
     ),
     "ingress-probes-missing": (ingress_set("IngressProbesMissing"), ["discord"]),
-    # D2.6d's rule, with the labels D2's plan gives it.
-    "deploy-hold-active": (
-        {
-            "alertname": "DeployHoldActive",
-            "severity": "warning",
-            "service": "deploy-pipeline",
-        },
+    "deploy-hold-active": (deploy_pipeline_set("DeployHoldActive"), ["discord"]),
+    "promotion-stalled": (deploy_pipeline_set("PromotionStalled"), ["discord"]),
+    "prod-moved-outside-promote": (
+        deploy_pipeline_set("ProdMovedOutsidePromote"),
+        ["discord", "email"],
+    ),
+    "deploy-pipeline-exporter-absent": (
+        deploy_pipeline_set("DeployPipelineExporterAbsent"),
         ["discord"],
     ),
 }
@@ -187,6 +202,13 @@ def test_every_ingress_rule_has_an_expected_outcome():
     [group] = yaml_fast.safe_load(INGRESS_RULES.read_text())["groups"]
     covered = {labels["alertname"] for labels in SHADOW.values()}
     covered |= {labels["alertname"] for labels, _ in PAGING.values()}
+    assert {rule["alert"] for rule in group["rules"]} <= covered
+
+
+def test_every_deploy_pipeline_rule_has_an_expected_outcome():
+    """A rule added to deploy-pipeline.yaml without a set here would never be routed."""
+    [group] = yaml_fast.safe_load(DEPLOY_PIPELINE_RULES.read_text())["groups"]
+    covered = {labels["alertname"] for labels, _ in PAGING.values()}
     assert {rule["alert"] for rule in group["rules"]} <= covered
 
 

@@ -1,0 +1,6 @@
+{% from 'service.yml.j2' import service with context %}
+---
+# Scrape target only, for observability's deploy-pipeline job: the four homelab_deploy_* gauges
+# files/deploy_pipeline.py serves. Every check still pushes to Kuma, so nothing else reaches
+# this port.
+{{ service('monitor-bridge', monitor_bridge_deploy_pipeline_port, port_name='metrics') -}}

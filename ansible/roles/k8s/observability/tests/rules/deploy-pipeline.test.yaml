@@ -1,0 +1,182 @@
+# promtool unit tests for files/rules/deploy-pipeline.yaml. Run with
+# `scripts/validate/alert_tools.sh promtool test rules <this file>`; the validate-alert-rules
+# hook runs it on every commit that touches the rules.
+#
+# Each alert has a case that fires it and a case that keeps it silent, as D2's item 12 lists
+# them. The series carry the labels the deploy-pipeline scrape job gives them: `job` and the
+# static target as `instance`.
+rule_files:
+  - ../../files/rules/deploy-pipeline.yaml
+evaluation_interval: 1m
+tests:
+  # The zero-series case: no input at all, so the deploy-pipeline job is missing from the
+  # config. DeployPipelineExporterAbsent fires after its 15m hold, and not before. The other
+  # three read gauges that do not exist, so they stay quiet.
+  - interval: 1m
+    input_series: []
+    alert_rule_test:
+      - eval_time: 14m
+        alertname: DeployPipelineExporterAbsent
+        exp_alerts: []
+      - eval_time: 15m
+        alertname: DeployPipelineExporterAbsent
+        exp_alerts:
+          - exp_labels:
+              job: deploy-pipeline
+              severity: warning
+              service: deploy-pipeline
+            exp_annotations: &absent
+              summary: Prometheus has lost the deploy-pipeline job or one of its four gauges.
+              description: >-
+                Either no up{job="deploy-pipeline"} series exists, so the job is gone from
+                prometheus.yml, or monitor-bridge is scraped without one of the four
+                homelab_deploy_* gauges. Its log has a deploy-pipeline line each cycle naming
+                the read that failed. Until the gauges are back, DeployHoldActive,
+                PromotionStalled and ProdMovedOutsidePromote cannot fire.
+      - eval_time: 30m
+        alertname: DeployHoldActive
+        exp_alerts: []
+      - eval_time: 30m
+        alertname: ProdMovedOutsidePromote
+        exp_alerts: []
+
+  # A scrape that works but lacks one gauge, as when the PROD_DIGEST read fails: the second
+  # arm fires. The same gap while the scrape fails stays quiet, because Kuma's tile pages that.
+  - interval: 1m
+    input_series:
+      - series: 'up{job="deploy-pipeline", instance="monitor-bridge.homelab.svc:9180"}'
+        values: '1x30'
+      - series: 'homelab_deploy_hold_active{job="deploy-pipeline", instance="monitor-bridge.homelab.svc:9180"}'
+        values: '0x30'
+      - series: 'homelab_deploy_hold_age_seconds{job="deploy-pipeline", instance="monitor-bridge.homelab.svc:9180"}'
+        values: '0x30'
+      - series: 'homelab_deploy_unpromoted_age_seconds{job="deploy-pipeline", instance="monitor-bridge.homelab.svc:9180"}'
+        values: '0x30'
+    alert_rule_test:
+      - eval_time: 15m
+        alertname: DeployPipelineExporterAbsent
+        exp_alerts:
+          - exp_labels:
+              job: deploy-pipeline
+              severity: warning
+              service: deploy-pipeline
+            exp_annotations: *absent
+  - interval: 1m
+    input_series:
+      - series: 'up{job="deploy-pipeline", instance="monitor-bridge.homelab.svc:9180"}'
+        values: '0x30'
+    alert_rule_test:
+      - eval_time: 30m
+        alertname: DeployPipelineExporterAbsent
+        exp_alerts: []
+
+  # All four gauges present and healthy: nothing fires, the Absent rule included.
+  - interval: 1m
+    input_series:
+      - series: 'up{job="deploy-pipeline", instance="monitor-bridge.homelab.svc:9180"}'
+        values: '1x30'
+      - series: 'homelab_deploy_hold_active{job="deploy-pipeline", instance="monitor-bridge.homelab.svc:9180"}'
+        values: '0x30'
+      - series: 'homelab_deploy_hold_age_seconds{job="deploy-pipeline", instance="monitor-bridge.homelab.svc:9180"}'
+        values: '0x30'
+      - series: 'homelab_deploy_unpromoted_age_seconds{job="deploy-pipeline", instance="monitor-bridge.homelab.svc:9180"}'
+        values: '0x30'
+      - series: 'homelab_deploy_prod_digest_match{job="deploy-pipeline", instance="monitor-bridge.homelab.svc:9180"}'
+        values: '1x30'
+    alert_rule_test:
+      - eval_time: 30m
+        alertname: DeployPipelineExporterAbsent
+        exp_alerts: []
+      - eval_time: 30m
+        alertname: DeployHoldActive
+        exp_alerts: []
+      - eval_time: 30m
+        alertname: ProdMovedOutsidePromote
+        exp_alerts: []
+
+  # DeployHoldActive fires after 15 minutes at 1, and not at 14. The red case for a shortened
+  # `for:` is the 14m evaluation.
+  - interval: 1m
+    input_series:
+      - series: 'homelab_deploy_hold_active{job="deploy-pipeline", instance="monitor-bridge.homelab.svc:9180"}'
+        values: '1x30'
+    alert_rule_test:
+      - eval_time: 14m
+        alertname: DeployHoldActive
+        exp_alerts: []
+      - eval_time: 15m
+        alertname: DeployHoldActive
+        exp_alerts:
+          - exp_labels:
+              job: deploy-pipeline
+              instance: monitor-bridge.homelab.svc:9180
+              severity: warning
+              service: deploy-pipeline
+            exp_annotations:
+              summary: The repository variable DEPLOY_HOLD has held promotion for 15 minutes.
+              description: >-
+                DEPLOY_HOLD reads something other than none, so promote moves prod nowhere.
+                Read it with gh variable get DEPLOY_HOLD and run probe.py landing;
+                docs/flux-deploy-plane.md says how to clear each form of hold.
+
+  # PromotionStalled fires at 3 hours with the hold gauge at 0, and stays silent at 3 hours
+  # with the hold gauge at 1. The age climbs 60s a minute from 0, so it passes 7200 at 2h.
+  - interval: 1m
+    input_series:
+      - series: 'homelab_deploy_unpromoted_age_seconds{job="deploy-pipeline", instance="monitor-bridge.homelab.svc:9180"}'
+        values: '0+60x180'
+      - series: 'homelab_deploy_hold_active{job="deploy-pipeline", instance="monitor-bridge.homelab.svc:9180"}'
+        values: '0x180'
+    alert_rule_test:
+      - eval_time: 1h55m
+        alertname: PromotionStalled
+        exp_alerts: []
+      - eval_time: 3h
+        alertname: PromotionStalled
+        exp_alerts:
+          - exp_labels:
+              job: deploy-pipeline
+              instance: monitor-bridge.homelab.svc:9180
+              severity: warning
+              service: deploy-pipeline
+            exp_annotations:
+              summary: A green master commit has waited more than 2 hours for promotion.
+              description: >-
+                The oldest green master commit that prod lacks went green 3h 0m 0s ago, and
+                no hold stands. Read the promote workflow's recent runs with gh run list
+                --workflow promote.yml; a run that never settles stalls promotion as current.
+  - interval: 1m
+    input_series:
+      - series: 'homelab_deploy_unpromoted_age_seconds{job="deploy-pipeline", instance="monitor-bridge.homelab.svc:9180"}'
+        values: '0+60x180'
+      - series: 'homelab_deploy_hold_active{job="deploy-pipeline", instance="monitor-bridge.homelab.svc:9180"}'
+        values: '1x180'
+    alert_rule_test:
+      - eval_time: 3h
+        alertname: PromotionStalled
+        exp_alerts: []
+
+  # ProdMovedOutsidePromote fires after 15 minutes at 0, and stays silent after 10.
+  - interval: 1m
+    input_series:
+      - series: 'homelab_deploy_prod_digest_match{job="deploy-pipeline", instance="monitor-bridge.homelab.svc:9180"}'
+        values: '0x30'
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: ProdMovedOutsidePromote
+        exp_alerts: []
+      - eval_time: 15m
+        alertname: ProdMovedOutsidePromote
+        exp_alerts:
+          - exp_labels:
+              job: deploy-pipeline
+              instance: monitor-bridge.homelab.svc:9180
+              severity: critical
+              service: deploy-pipeline
+            exp_annotations:
+              summary: The prod tag's digest has differed from PROD_DIGEST for 15 minutes.
+              description: >-
+                prod in GHCR names a digest that promote did not record, so something other
+                than promote moved it, or promote moved it and failed to write PROD_DIGEST.
+                Compare probe.py landing's prod line with gh variable get PROD_DIGEST, and
+                read the package's version history for who pushed the tag.
