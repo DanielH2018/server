@@ -40,8 +40,10 @@ mint NEW digests. Exactly the class of defect a green deploy and a healthy pod c
 
 import copy
 import json
+import re
 
 import pytest
+import yaml
 from _helpers import REPO, image_tag
 from _k8s_render import rendered_docs
 from lib import yaml_fast
@@ -72,22 +74,32 @@ def validator(schema):
     return jsonschema.Draft202012Validator(schema)
 
 
-@pytest.fixture(scope="module")
-def rendered_config():
-    """The `configuration.yml` Authelia actually receives, parsed from the rendered Secret."""
+def _authelia_doc(kind: str, name: str) -> dict:
     for role, _tpl, doc in rendered_docs():
-        if role != "authelia" or doc.get("kind") != "Secret":
+        if role != "authelia" or doc.get("kind") != kind:
             continue
-        if (doc.get("metadata") or {}).get("name") != "authelia-config":
-            continue
-        raw = (doc.get("stringData") or {}).get("configuration.yml")
-        parsed = yaml_fast.safe_load(raw or "")
-        assert parsed, (
-            "the rendered authelia-config Secret carries no configuration.yml, so every "
-            "assertion below would validate an empty document and pass"
-        )
-        return parsed
-    pytest.fail("no rendered authelia-config Secret")
+        if (doc.get("metadata") or {}).get("name") == name:
+            return doc
+    pytest.fail(f"no rendered authelia {kind}/{name}")
+
+
+@pytest.fixture(scope="module")
+def raw_config():
+    """The `configuration.yml` text Authelia reads, before its template filter runs."""
+    return (_authelia_doc("Secret", "authelia-config").get("stringData") or {}).get(
+        "configuration.yml"
+    ) or ""
+
+
+@pytest.fixture(scope="module")
+def rendered_config(raw_config):
+    """The `configuration.yml` Authelia actually receives, parsed from the rendered Secret."""
+    parsed = yaml_fast.safe_load(raw_config)
+    assert parsed, (
+        "the rendered authelia-config Secret carries no configuration.yml, so every "
+        "assertion below would validate an empty document and pass"
+    )
+    return parsed
 
 
 # --- the rule, as a predicate -------------------------------------------------------
@@ -311,3 +323,74 @@ def test_the_vendored_schema_matches_the_pinned_image():
         f"Bump AUTHELIA_SCHEMA_MINOR in scripts/validate/refresh_vendored_schemas.py, re-run it, "
         f"and update SCHEMA_MINOR here"
     )
+
+
+# --- the OIDC signing key, read through Authelia's template filter ------------------------
+#
+# The key lives in Secret authelia-oidc-jwk (target slice R2, PR 7), and `jwks[].key` reads it
+# with `{{- secret "<path>" | nindent 10 }}` inside its block scalar. Authelia's `template`
+# filter runs Go templating over the whole file, so the expression's path, the Deployment's
+# mount and the filter variable must agree, and the file must hold no other action. The two
+# functions below restate `FuncSecret` and `FuncNewlineIndent` from
+# internal/templates/funcs.go at the pinned v4.39.28: `secret` returns the file with its
+# trailing newlines trimmed, and `nindent n` returns a newline then each line indented n.
+
+_JWK_EXPRESSION = re.compile(
+    r'(?P<lead>[ \t\n]*)\{\{- secret "(?P<path>[^"]+)" \| nindent (?P<n>\d+) \}\}'
+)
+_FIXTURE_PEM = (
+    "-----BEGIN FIXTURE KEY-----\n"
+    "Zml4dHVyZSBsaW5lIG9uZQ==\n"
+    "fixture+line/two==\n"
+    "-----END FIXTURE KEY-----\n"
+)
+
+
+def _resolve_jwk_expression(raw: str, pem: str) -> str:
+    """`raw` with its jwks expression replaced as Authelia's template filter would."""
+    match = _JWK_EXPRESSION.search(raw)
+    assert match, "the rendered config holds no jwks `secret` expression"
+    padding = " " * int(match["n"])
+    value = pem.rstrip("\n")
+    indented = "\n" + padding + value.replace("\n", "\n" + padding)
+    # `{{-` deletes the whitespace before the action, back to the block scalar's `|`.
+    return raw[: match.start()] + indented + raw[match.end() :]
+
+
+def test_the_filter_expression_reads_the_mounted_key(raw_config):
+    match = _JWK_EXPRESSION.search(raw_config)
+    assert match, "the rendered config holds no jwks `secret` expression"
+    pod = _authelia_doc("Deployment", "authelia")["spec"]["template"]["spec"]
+    (container,) = [c for c in pod["containers"] if c["name"] == "authelia"]
+    env = {e["name"]: e.get("value") for e in container["env"]}
+    assert env["X_AUTHELIA_CONFIG_FILTERS"] == "template"
+    (volume,) = [
+        v
+        for v in pod["volumes"]
+        if v.get("secret", {}).get("secretName") == "authelia-oidc-jwk"
+    ]
+    (mount,) = [m for m in container["volumeMounts"] if m["name"] == volume["name"]]
+    assert mount.get("readOnly") is True
+    secret = _authelia_doc("Secret", "authelia-oidc-jwk")
+    (key,) = secret["stringData"]
+    assert match["path"] == f"{mount['mountPath']}/{key}"
+
+
+def test_the_config_holds_no_template_action_but_the_jwks_expression(raw_config):
+    assert raw_config.count("{{") == 1
+    assert len(_JWK_EXPRESSION.findall(raw_config)) == 1
+
+
+def test_the_resolved_expression_yields_the_key_byte_for_byte(raw_config):
+    resolved = yaml_fast.safe_load(_resolve_jwk_expression(raw_config, _FIXTURE_PEM))
+    (jwk,) = resolved["identity_providers"]["oidc"]["jwks"]
+    assert jwk["key"] == _FIXTURE_PEM
+    assert jwk["algorithm"] == "RS256"
+
+
+def test_an_expression_indented_short_of_the_block_is_flagged(raw_config):
+    """Red proof: `nindent 8` puts the PEM at the `key:` column, outside its block scalar."""
+    shallow = raw_config.replace("| nindent 10 }}", "| nindent 8 }}")
+    assert shallow != raw_config
+    with pytest.raises(yaml.YAMLError):
+        yaml_fast.safe_load(_resolve_jwk_expression(shallow, _FIXTURE_PEM))

@@ -111,6 +111,14 @@ spec:
           env:
             - name: TZ
               value: "{{ tz }}"
+{% if authelia_k8s_manage_oidc %}
+            # Runs Go templating over the config at start, so `jwks[].key` in
+            # config-secret.yaml.j2 can read the signing key from the authelia-oidc-jwk mount.
+            # Gated with the mount and the Secret: with OIDC off the config holds no template
+            # expression, and a value holding a template action stays plain text.
+            - name: X_AUTHELIA_CONFIG_FILTERS
+              value: template
+{% endif %}
           # NO readOnlyRootFilesystem, unlike traefik and bento-pdf. With it on, Authelia
           # dies during provider construction — before a single startup check runs — and
           # logs only an aggregate with no detail, at every level including trace:
@@ -131,6 +139,13 @@ spec:
             - name: authelia-secrets
               mountPath: /secrets
               readOnly: true
+{% if authelia_k8s_manage_oidc %}
+            # The OIDC signing key, read by the config's `secret` filter expression. A
+            # top-level path of its own: /secrets is a read-only Secret mount.
+            - name: authelia-oidc-jwk
+              mountPath: /oidc-jwk
+              readOnly: true
+{% endif %}
             - name: authelia-config
               mountPath: /config
             # Kept even though the root filesystem is writable again: as uid 1000 the process
@@ -166,6 +181,13 @@ spec:
             # 0440, not 0400: secret files are owned root:fsGroup, so a non-root container
             # reads them via the group bit. 0400 leaves the group nothing.
             defaultMode: 0440
+{% if authelia_k8s_manage_oidc %}
+        - name: authelia-oidc-jwk
+          secret:
+            secretName: authelia-oidc-jwk
+            # 0440 for the reason authelia-secrets above gives.
+            defaultMode: 0440
+{% endif %}
         - name: authelia-config
           persistentVolumeClaim:
             claimName: authelia-config

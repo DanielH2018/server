@@ -178,6 +178,15 @@ not rotated again by the weekly cron. Examples:
   one small Secret, and `--tags pi-peer-backup` redeploys it and authorizes the new public half
   on the Pi. The role's `authorized_key` task adds the new line and leaves the old one, so
   remove the old key from the Pi's `authorized_keys` after the next nightly run succeeds.
+- `authelia_oidc_rsa_key_content`: generate a new RSA private key in PEM form, such as with
+  `openssl genrsa 4096`, and store it with `sops set`. The value is multi-line, so it has a
+  Secret of its own, `authelia-oidc-jwk`, rendered from
+  `ansible/roles/k8s/authelia/templates/oidc-jwk-secret.yaml.j2`. A rotation changes that one
+  small Secret, and `--tags authelia` redeploys it. Authelia reads the key from the mounted
+  file through its `template` config filter, so the deploy must roll the pod, which the
+  central rollout-restart does because the rendered Secret changed. The key's `kid` changes
+  with it: each relying party re-fetches the JWKS, and tokens signed with the old key stop
+  verifying, so users sign in again. Rotate in an SSO window.
 - `authelia_secret` / `authelia_jwt`: rotating forces all users to re-login (not breaking).
 - `authelia_oidc_hmac_secret` / `*_password_hash`: re-issues OIDC — re-pair jellyfin (the
   live OIDC client; beszel's client is provisioned but parked in `archive/`, re-pair only

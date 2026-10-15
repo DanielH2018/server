@@ -757,7 +757,7 @@ jobs:
           [ "$rc" = 1 ]
 
       # The green run builds every tag outside PLACEHOLDER_DEFERRED, in both passes, so it
-      # covers home-assistant, pi-peer-backup and qbittorrent, which carry the
+      # covers home-assistant, pi-peer-backup, qbittorrent and authelia, which carry the
       # render_sops_manifests entries: each pass also asserts it dropped exactly one document
       # for each. The red half stays on three tags: it only has to show that one changed byte
       # is seen.

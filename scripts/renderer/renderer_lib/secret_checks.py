@@ -137,33 +137,12 @@ class Violation(NamedTuple):
 _ROLE_TEMPLATES = "ansible/roles/k8s/{}/templates/{}"
 
 
-def _rule5(role: str, template: str, form: str, name: str) -> Violation:
-    """A rule 5 entry for `template` under `role`'s `templates/` directory."""
-    path = _ROLE_TEMPLATES.format(role, template)
-    return Violation(NO_SECRET_EXPRESSION, role, path, form, name)
-
-
-def _rule4(tag: str, file: str, site: str, name: str) -> Violation:
-    return Violation(NO_SOPS_MANIFEST_KEY, tag, file, site, name)
-
-
-_AUTHELIA_KEY = "authelia_oidc_rsa_key_content"
-
 # Every violation the first fleet render finds. Each entry leaves through the PR that fixes
 # its source, and an entry that no longer matches fails the check, so the set shrinks only
-# through a fix. R2's exit criterion requires it empty.
-KNOWN_VIOLATIONS = frozenset(
-    {
-        # Rule 4: the one multi-line key still interpolated with `indent`. R2's PR 7 moves it
-        # into a dedicated Secret. home-assistant's and pi-peer-backup's keys already sit in
-        # Secrets of their own, listed in `render_sops_manifests` (R2's PRs 5 and 6).
-        _rule4(
-            "authelia", "config-secret.yaml", "Secret/authelia-config", _AUTHELIA_KEY
-        ),
-        # Rule 5, the indent on that key, at the same site.
-        _rule5("authelia", "config-secret.yaml.j2", "filter indent", _AUTHELIA_KEY),
-    }
-)
+# through a fix. R2's exit criterion requires it empty. R2's PR 7 removed its last two entries,
+# rule 4 and rule 5 on authelia's OIDC key, by moving that key into a Secret of its own listed
+# in `render_sops_manifests`.
+KNOWN_VIOLATIONS: frozenset[Violation] = frozenset()
 
 
 # The fewest in-scope templates whose syntax tree names a secret key: 59 at `70591c307`, and

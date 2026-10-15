@@ -39,6 +39,14 @@ authelia_k8s_manage_crowdsec: true
 # every Authelia-fronted IngressRoute depends on.
 authelia_k8s_manage_oidc: true
 
+# The manifest whose Secret holds the OIDC signing key, a multi-line PEM block that no Flux
+# placeholder can carry. A placeholder render (scripts/renderer, target slice R2) leaves it
+# out, and D3 ships it as a SOPS-encrypted manifest instead. Ansible renders and applies it,
+# when authelia_k8s_manage_oidc is true, like any other secret file. `sops-manifest-entries`
+# in scripts/renderer/renderer_lib/sops_entries.py holds the entry to one Secret of
+# `SOPS_MANIFEST_KEYS` keys.
+render_sops_manifests: [oidc-jwk-secret.yaml]  # noqa var-naming[no-role-prefix]
+
 # Deliver identity-verification codes by email rather than to a file inside the pod. False
 # falls back to the filesystem notifier. Leave it true; false is the break-glass path for a
 # cluster with no usable `smtp_notify_app_password`.

@@ -44,6 +44,13 @@ headless `-m ui` browser on a TOTP prompt no test can answer. **Headlamp's relyi
 issuers must be trusted there. Each client's secret is stored hashed, so one that needs the
 plaintext too takes two SOPS keys that rotate together.
 
+The signing key has a Secret of its own, `authelia-oidc-jwk` from
+`templates/oidc-jwk-secret.yaml.j2`, because Flux strips the newlines from a placeholder's value
+(target slice R2, PR 7). The role lists that file in `render_sops_manifests`, so a placeholder
+render leaves it out. The Deployment mounts it at `/oidc-jwk`, and `jwks[].key` reads it with a
+`secret` expression under Authelia's `template` config filter, which `X_AUTHELIA_CONFIG_FILTERS`
+turns on. All three sit behind the lever.
+
 ## Sessions live in redis
 
 `session.redis` in `templates/config-secret.yaml.j2` points at the `authelia-redis` Deployment this
@@ -69,6 +76,13 @@ session, remember-me included.
   boot. Authelia probes SMTP at boot and refuses to start when that fails, which under `Recreate`
   takes SSO down for the fleet. The `DECIDED:` marker sits at the line. ENFORCED:
   `ansible/tests/services/test_smtp_wiring.py`.
+- **With OIDC on, the config file is a Go template, so it may hold one `{{` only.** A secret value
+  holding `{{` would stop Authelia starting. "Fail unless the jwks key expression is the
+  configuration's only template action" counts them in the real render and stops the deploy
+  before the apply. `oidc-jwk-secret.yaml` must stay in the `manifests_secret_files` expression,
+  because a passed list wins whole. Log level `trace` writes each filtered config, the key
+  included, to the log as base64. ENFORCED:
+  `ansible/tests/services/test_authelia_oidc_jwk_secret.py`.
 - **`authelia_session*` is a cookie name, not a secret name.** The session secret is
   `authelia_secret`, tracked in `ansible/secret_rotation.yml` at tier `assisted`; the
   `authelia_session*` strings are cookie names
