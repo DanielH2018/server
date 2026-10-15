@@ -159,7 +159,7 @@ class DeployTools:
     digest_diff: Callable[[str], dict[str, list[str]]] = deploy_release.digest_diff
     # The tags whose deploy runs a shared role (#2643), which has no record of its own.
     # A subprocess that parses YAML, so a field for the reason `narrow_setup_role` is one.
-    shared_role_callers: Callable[..., dict[str, set[str]]] = (
+    shared_role_callers: Callable[..., deploy_narrow.SharedCallers] = (
         deploy_narrow.shared_role_callers
     )
     # The roles whose own render digest may discharge their line (#3110). A YAML-parsing

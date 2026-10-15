@@ -20,6 +20,7 @@ import pytest
 
 import shared_role_callers
 from deployer_lib import deploy_k8s_owed
+from deployer_lib.deploy_narrow import SharedCallers
 from deployer_lib.deploy_toolbox import DeployTools
 from gitops_ledger import OWED_K8S_UNAPPLIED
 from lib.git_testing import commit, init_repo
@@ -62,12 +63,16 @@ def _owned_caller_checkout(root: pathlib.Path) -> None:
     commit(root, "four callers of both shared roles", **files)
 
 
-def _callers_from_main(repo, roles) -> dict[str, set[str]]:
+def _callers_from_main(repo, roles) -> SharedCallers:
     """`deploy_narrow.shared_role_callers`'s decode of `main`, run in-process, not over uv."""
     out = io.StringIO()
     with contextlib.redirect_stdout(out):
         assert shared_role_callers.main([*sorted(roles), "--repo", repo]) == 0
-    return {role: set(tags) for role, tags in json.loads(out.getvalue()).items()}
+    printed = json.loads(out.getvalue())
+    return SharedCallers(
+        {role: set(tags) for role, tags in printed["callers"].items()},
+        set(printed["owned_only"]),
+    )
 
 
 @pytest.mark.parametrize("role", SHARED_ROLES)
