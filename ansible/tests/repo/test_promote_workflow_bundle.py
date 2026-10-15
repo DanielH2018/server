@@ -23,6 +23,7 @@ from lib import yaml_fast
 WORKFLOW = REPO / ".github" / "workflows" / "promote.yml"
 CENSUS = "promote.py check-bundle out"
 SHARED_ONLY = "homelab_render.py cluster --out out --shared-only"
+NO_TAG = 'if [ -z "$listed" ]; then'
 CIPHERTEXT = "cluster_vars.py check --ciphertext-only"
 
 
@@ -34,6 +35,28 @@ def _index(wf: dict, step_id: str) -> int | None:
     return next(
         (i for i, s in enumerate(_render_steps(wf)) if s.get("id") == step_id), None
     )
+
+
+def _step(wf: dict, step_id: str) -> int:
+    """The index of the render step `step_id`, for a mutation. Raises when it is absent, so a
+    red case cannot pass by mutating nothing."""
+    index = _index(wf, step_id)
+    if index is None:
+        raise AssertionError(
+            f"render has no step with id {step_id}; the mutation is a no-op"
+        )
+    return index
+
+
+def _no_tag_branch(script: str) -> list[str]:
+    """The stripped lines of the build script's `if [ -z "$listed" ]` branch, up to its `else`."""
+    _, found, rest = script.partition(NO_TAG)
+    lines = []
+    for line in rest.splitlines() if found else []:
+        if line.strip() in ("else", "fi"):
+            break
+        lines.append(line.strip())
+    return lines
 
 
 def _handoff(wf: dict) -> int | None:
@@ -92,7 +115,7 @@ def problems(wf: dict) -> list[str]:
             "promote: does not fetch the history decide reads trailers from "
             f"(fetch-depth {depths})"
         )
-    if SHARED_ONLY not in script:
+    if f"uv run python scripts/renderer/{SHARED_ONLY}" not in _no_tag_branch(script):
         found.append(
             f"render: the build step's no-tag branch does not run `{SHARED_ONLY}`"
         )
@@ -110,8 +133,8 @@ def test_the_render_job_builds_and_censuses_the_bundle_is_clean(workflow):
 
 def _census_after_gitleaks(wf):
     steps = _render_steps(wf)
-    check = steps.pop(_index(wf, "check-bundle") or 0)
-    steps.insert((_index(wf, "gitleaks") or 0) + 1, check)
+    check = steps.pop(_step(wf, "check-bundle"))
+    steps.insert(_step(wf, "gitleaks") + 1, check)
 
 
 def _without_the_census(wf):
@@ -120,19 +143,29 @@ def _without_the_census(wf):
 
 
 def _build_script(wf, old, new):
-    step = _render_steps(wf)[_index(wf, "build") or 0]
+    step = _render_steps(wf)[_step(wf, "build")]
+    assert old in step["run"], (
+        f"the build script holds no {old!r}; the mutation is a no-op"
+    )
     step["run"] = step["run"].replace(old, new)
 
 
 def _ciphertext_after_gitleaks(wf):
     steps = _render_steps(wf)
-    step = steps.pop(_index(wf, "ciphertext") or 0)
-    steps.insert((_index(wf, "gitleaks") or 0) + 1, step)
+    step = steps.pop(_step(wf, "ciphertext"))
+    steps.insert(_step(wf, "gitleaks") + 1, step)
+
+
+def _shared_only_in_the_tag_branch(wf):
+    _build_script(wf, '"${roles[@]}"', '"${roles[@]}" --shared-only')
+    _build_script(
+        wf, "cluster --out out --shared-only\n", "cluster --out out --role x\n"
+    )
 
 
 def _gitleaks_after_handoff(wf):
     steps = _render_steps(wf)
-    scan = steps.pop(_index(wf, "gitleaks") or 0)
+    scan = steps.pop(_step(wf, "gitleaks"))
     steps.append(scan)
 
 
@@ -168,12 +201,16 @@ RED = {
         lambda wf: _build_script(wf, " --shared-only", ""),
         "the build step's no-tag branch does not run",
     ),
+    "--shared-only only in the branch that publishes tags": (
+        _shared_only_in_the_tag_branch,
+        "the build step's no-tag branch does not run",
+    ),
     "the ciphertext check after gitleaks": (
         _ciphertext_after_gitleaks,
         "render: does not check the SOPS copies after the build and before gitleaks",
     ),
     "no ciphertext check": (
-        lambda wf: _render_steps(wf).pop(_index(wf, "ciphertext") or 0),
+        lambda wf: _render_steps(wf).pop(_step(wf, "ciphertext")),
         "render: runs no `cluster_vars.py check --ciphertext-only` step",
     ),
 }
