@@ -97,7 +97,10 @@ otherwise; none of the values below are secrets themselves, only names and locat
    home, so a disarm keeps the key. The password manager holds the copy, which the operator
    exports after the first apply that generates the key:
    `sudo -u homelab-signer gpg --homedir /var/lib/homelab-signer/gnupg --armor
-   --export-secret-keys`.
+   --export-secret-keys`. Then stop the agent that the export starts, with
+   `sudo -u homelab-signer gpgconf --homedir /var/lib/homelab-signer/gnupg --kill gpg-agent`.
+   Left running, it is another uid's process in the operator's login slice. The worktree
+   tools cannot read such a process's cwd, so they treat every worktree as in use.
     - **To restore it** onto a rebuilt daniel-box, run `initial_setup.yml --tags
       homelab_builder` once with the flag armed. That apply creates the users and
       directories and generates a fresh key. As `homelab-signer`, import the copy with

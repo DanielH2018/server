@@ -1286,7 +1286,11 @@ says otherwise.
       and before H3.5a, so the builder never renders `homelab-updater` without it.
         - **Operator-only**, because the signer's GnuPG home is 0700: export the public key
           with `sudo -u homelab-signer gpg --homedir /var/lib/homelab-signer/gnupg --export`
-          into `hosts/keys/homelab-archive-keyring.gpg` in a worktree, and commit it.
+          into `hosts/keys/homelab-archive-keyring.gpg` in a worktree, and commit it. Then
+          stop the gpg-agent the export starts:
+          `sudo -u homelab-signer gpgconf --homedir /var/lib/homelab-signer/gnupg --kill gpg-agent`.
+          On 2026-10-15 the agent outlived the export, and the worktree tools then read
+          every worktree as in use.
         - Add the keyring to `hosts/packages/homelab-updater/package.yml`, installed at
           `/usr/share/keyrings/homelab-archive-keyring.gpg`.
         - The shared-package render test names that path as a member of `homelab-updater`'s
