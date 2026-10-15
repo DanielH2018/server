@@ -243,7 +243,8 @@ H4 to H7 use these names unchanged. A slice that needs a different value says so
 - **Installed paths.**
     - Scripts go in `/usr/lib/homelab/`.
     - Units go in `/usr/lib/systemd/system/`, and enable links in
-      `/usr/lib/systemd/system/<target>.wants/`.
+      `/usr/lib/systemd/system/<target>.wants/`. An enable link is a symlink to `../<unit>`,
+      as `systemctl enable` writes it: systemd adds a `Wants=` only for a symlinked unit.
     - A drop-in for another package's unit goes in `/usr/lib/systemd/system/<unit>.d/50-homelab.conf`.
     - The rendered manifest goes in `/usr/lib/homelab/manifest.json`.
 - **Unit naming.** Every unit a homelab package ships is named `homelab-*`. The reconcile

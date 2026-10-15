@@ -118,3 +118,20 @@ def test_the_nfpm_spec_keeps_the_version_string_as_given(hosts, where):
     assert spec["version"] == "${HOMELAB_VERSION}"
     # `semver`, nfpm's default, builds `0.5513+gc9db6da8cdee` as `0.5513.0+gc9db6da8cdee`.
     assert spec.get("version_schema") == "none"
+
+
+def test_a_shared_package_s_enable_link_is_flagged(hosts):
+    # No manifest lists it, so reconcile would never start the unit it arms.
+    root = hosts(
+        {"enable": {"homelab-updater.timer": "timers.target"}},
+        where="packages/homelab-updater",
+    )
+    with pytest.raises(RenderRefused, match="a shared package lists no enable link"):
+        host_mode.render_package("homelab-updater", root)
+
+
+def test_two_specs_declaring_one_enable_link_are_flagged(hosts):
+    link = {"enable": {"homelab-u.timer": "timers.target"}}
+    root = hosts({"components": ["beat"], **link}, {"beat": link})
+    with pytest.raises(RenderRefused, match="two specs install"):
+        host_mode.render_host("daniel-pi", root)

@@ -160,14 +160,22 @@ def _packages(out: Path) -> dict[str, dict[str, tuple[bytes, int]]]:
     for spec in sorted(out.rglob("nfpm.yaml")):
         directory = spec.parent
         packages[str(directory.relative_to(out))] = {
-            str(path.relative_to(directory)): (
-                path.read_bytes(),
-                path.stat().st_mode & 0o7777,
-            )
+            str(path.relative_to(directory)): _entry(path)
             for path in sorted(directory.rglob("*"))
-            if path.is_file()
+            if path.is_file() or path.is_symlink()
         }
     return packages
+
+
+def _entry(path: Path) -> tuple[bytes, int]:
+    """A file's bytes and mode, or for an enable link, its target and its own mode.
+
+    A host package's link to the updater's timer dangles in its render, so a link is never
+    followed.
+    """
+    if path.is_symlink():
+        return f"-> {path.readlink()}".encode(), path.lstat().st_mode & 0o7777
+    return path.read_bytes(), path.stat().st_mode & 0o7777
 
 
 def diff(base: Path, head: Path) -> list[str]:

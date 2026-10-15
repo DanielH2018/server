@@ -137,6 +137,10 @@ def test_a_static_file_is_copied_without_rendering(hosts):
         ({"files": [], "reconcilers": []}, "unknown keys"),
         ({"units": {"homelab-u.timer": {"policy": "never"}}}, "is not a unit name"),
         ({"units": {"u.conf": {"policy": "manual"}}}, "is not a unit name"),
+        ({"enable": ["homelab-u.timer"]}, "is not a map"),
+        # The link path is derived from both names, so neither may leave its directory.
+        ({"enable": {"../x.timer": "timers.target"}}, "is not a unit name"),
+        ({"enable": {"homelab-u.timer": "../x"}}, "is not a unit name"),
         ({"legacy": [{"cron": "x"}]}, "is not one of"),
         ({"legacy": [{"path": "/etc/../x"}]}, "is malformed"),
         ({"legacy": [{"cron_file": "../x"}]}, "is malformed"),
@@ -377,10 +381,6 @@ def test_a_maintainer_script_is_written_outside_root_and_named_in_the_spec(
     units = [
         {"src": "u", "dst": "/usr/lib/systemd/system/homelab-u.timer"},
         {"src": "u", "dst": "/usr/lib/systemd/system/homelab-u.service"},
-        {
-            "src": "u",
-            "dst": "/usr/lib/systemd/system/timers.target.wants/homelab-u.timer",
-        },
         {"src": "u", "dst": "/usr/lib/systemd/system/k3s.service.d/50-homelab.conf"},
     ]
     root = hosts(
@@ -395,7 +395,7 @@ def test_a_maintainer_script_is_written_outside_root_and_named_in_the_spec(
 
     base = out / "packages" / "homelab-updater"
     script = base / "scripts" / "prerm"
-    # Only the package's own units: no enable link, no drop-in.
+    # Only the package's own units: no drop-in.
     assert script.read_text() == "#!/bin/sh\nhomelab-u.service homelab-u.timer\n"
     assert stat.S_IMODE(script.stat().st_mode) == 0o755
     assert not (base / "root" / "scripts").exists()
