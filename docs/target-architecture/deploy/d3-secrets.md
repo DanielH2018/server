@@ -1,6 +1,14 @@
 # D3 — Secrets through Flux
 
-Status: PLANNED
+Status: IN PROGRESS
+
+D3.0, the cluster key: the operator generated it on 2026-10-15, stored the private half in the
+password manager, and created `flux-system/sops-age` from it. Deriving the public key from the
+stored Secret printed `age1wf2js7pakyty3qgn3mxwuz8gc277jdgd3guy283cmphgxdj62qeqk6tmnc`.
+
+D3.1, recipients, runbooks and the ADR: [#5121](https://github.com/DanielH2018/server/pull/5121).
+The operator accepted [ADR-0022](../../adr/0022-the-cluster-decrypts-its-own-file-with-its-own-key.md)
+and the cluster recipient in its review on 2026-10-15.
 
 Depends on: [D2](d2-first-leaf.md), [R2](../render/r2-secret-placeholders.md). D3.0 to D3.3c
 need only D2.1 to D2.6c, which include D2.6b's empty `SHARED_KINDS` and census, as the slice
