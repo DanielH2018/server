@@ -8,6 +8,7 @@ against a tree in `tmp_path`, and reads the resulting array.
 Run: uv run pytest ansible/tests/setup/test_secret_rotate_tracks_cluster_files.py
 """
 
+import re
 from pathlib import Path
 
 from _shell_render import rendered_shell_function, rendered_shell_text
@@ -51,10 +52,15 @@ def test_tracked_is_unchanged_while_the_cluster_file_is_absent(tmp_path):
     assert tracked_after(_function(), tmp_path) == BASE
 
 
-def test_an_unconditional_append_is_flagged(tmp_path):
-    """The red half: a function without the existence check fails the absent-file case."""
-    unconditional = f"track_cluster_files() {{\n  TRACKED+=({' '.join(CLUSTER)})\n}}"
-    assert tracked_after(unconditional, tmp_path) != BASE
+def test_the_rendered_function_without_its_guard_is_flagged(tmp_path):
+    """The red half: the rendered function with its existence check removed is flagged.
+
+    It mutates the RENDERED function, so it stops passing if the guard leaves the template.
+    """
+    function = _function()
+    unguarded, count = re.subn(r"if \[ -f [^]]*\]; then", "if true; then", function)
+    assert count == 1, f"the existence check is gone from:\n{function}"
+    assert tracked_after(unguarded, tmp_path) != BASE
 
 
 def test_the_call_runs_after_the_pull_and_before_rotate():
