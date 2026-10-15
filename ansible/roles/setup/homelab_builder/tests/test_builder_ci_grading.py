@@ -23,6 +23,7 @@ def test_every_reason_is_a_plan_value_and_none_is_trust():
         "keyring",
         "ci",
         "no-green",
+        "token",
         "tools",
         "canary",
         "ok",
