@@ -19,8 +19,10 @@ import pytest
 from ansible.parsing.dataloader import DataLoader
 from ansible.template import Templar, trust_as_template
 from lib import yaml_fast
+from renderer.renderer_lib.placeholders import Sentinels, placeholder_vars
 
 from _helpers import ROLES
+from _k8s_render import render_role_template
 
 _TASKS = ROLES / "k8s" / "authelia" / "tasks" / "main.yml"
 _NAME = "Fail if a stored Authelia digest is malformed"
@@ -157,3 +159,38 @@ def test_the_sentinel_guard_is_clean():
 )
 def test_a_widened_or_missing_guard_is_flagged(when):
     assert not _guarded_by_the_sentinel_alone(when)
+
+
+_DIGEST_KEYS = {
+    "authelia_password_argon2",
+    "authelia_claude_password_argon2",
+    "authelia_agent_password_argon2",
+}
+
+
+@pytest.mark.parametrize(
+    ("manage_claude", "manage_agent"),
+    [(True, True), (False, True), (True, False), (False, False)],
+)
+def test_the_placeholder_render_places_the_digests_the_assert_checks(
+    manage_claude, manage_agent
+):
+    """`cluster_vars.py write` checks a digest only when the placeholder render places it.
+
+    That stands in for the assert's manage flags only while the template names each managed
+    user's digest under the same flag, so the render is held to the assert's list here.
+    """
+    flags = {
+        "authelia_k8s_manage_claude_user": manage_claude,
+        "authelia_k8s_manage_agent_user": manage_agent,
+    }
+    text = render_role_template(
+        "authelia",
+        "config-secret.yaml.j2",
+        {**placeholder_vars(_DIGEST_KEYS), **flags},
+    )
+    placed = Sentinels(_DIGEST_KEYS).key_set({"config-secret.yaml": text})
+    checked = {"authelia_password_argon2"}
+    checked |= {"authelia_claude_password_argon2"} if manage_claude else set()
+    checked |= {"authelia_agent_password_argon2"} if manage_agent else set()
+    assert placed == checked

@@ -10,7 +10,8 @@ the digest of its ciphertext in `secrets.yml`, so CI can prove the files fresh w
 Two modes:
 
   write  — OPERATOR-ONLY, because it decrypts. It decrypts `secrets.yml` and the existing
-           cluster files into memory, refuses a value Flux cannot carry, then changes only
+           cluster files into memory, refuses a value Flux cannot carry or that a role's
+           deploy-time assert would refuse (`successor_refusals`), then changes only
            what moved: `sops set` for a changed key, `sops unset` for a dropped one, a fresh
            encrypt for a manifest whose plaintext changed. A no-change run leaves every file
            byte-identical. It prints key names, never a value. A refusal adds and changes no
@@ -38,6 +39,7 @@ Run: uv run python scripts/secrets_mgmt/cluster_vars.py check --no-render --base
 """
 
 import json
+import re
 import subprocess
 import sys
 from collections.abc import Callable
@@ -92,6 +94,22 @@ _FORBIDDEN = (
     # A line break Unicode defines beyond \n and \r. U+0085 is a C1 control and caught above.
     ("a Unicode line break", lambda v: "\u2028" in v or "\u2029" in v),
     ("the run `{{`", lambda v: "{{" in v),
+)
+
+
+# R3's hashing parameters, the `m=`, `t=` and `p=` of every stored Authelia digest.
+# `ansible/tests/services/test_authelia_argon2_parameters_agree.py` holds them equal to the
+# rendered hashing block in `roles/k8s/authelia/templates/config-secret.yaml.j2`.
+ARGON2_PARAMETERS = {"memory": 65536, "iterations": 3, "parallelism": 4}
+
+# R3's PHC pattern: a 16-byte salt is 22 base64 characters and a 32-byte key 43. It is the
+# successor of the authelia deploy's "Fail if a stored Authelia digest is malformed" assert,
+# which stops running once D5 moves authelia to Flux.
+ARGON2_DIGEST = re.compile(
+    r"\$argon2id\$v=19\$m={memory},t={iterations},p={parallelism}".format(
+        **ARGON2_PARAMETERS
+    )
+    + r"\$[A-Za-z0-9+/]{22}\$[A-Za-z0-9+/]{43}"
 )
 
 
@@ -222,6 +240,45 @@ def value_refusals(values: dict, expected: Expected) -> list[str]:
     for entry in expected.manifests:
         for key in sorted(entry.keys - values.keys()):
             out.append(f"{key}: named by {entry.name} and absent from secrets.yml")
+    placed = expected.keys.union(*(entry.keys for entry in expected.manifests))
+    return out + successor_refusals(values, placed)
+
+
+def successor_refusals(values: dict, placed: frozenset[str]) -> list[str]:
+    """The per-key refusals that succeed a deploy-time assert once D5 moves its role to Flux.
+
+    Only a key `write` places is checked. authelia's template names the claude-ui and
+    claude-agent digests only behind `authelia_k8s_manage_claude_user` and
+    `authelia_k8s_manage_agent_user`, so the render places them under the same conditions the
+    deploy's digest assert checks them. An absent or non-scalar key is left to
+    `value_refusals`, which already refuses it. Each line names keys and never a value.
+    """
+    held = {
+        key: str(values[key])
+        for key in placed
+        if key in values
+        and values[key] is not None
+        and not isinstance(values[key], (dict, list))
+    }
+    out = []
+    digests = {k: v for k, v in sorted(held.items()) if k.endswith("_argon2")}
+    for key, value in digests.items():
+        if not ARGON2_DIGEST.fullmatch(value):
+            out.append(
+                f"{key}: not an argon2id digest with R3's parameters and lengths; mint it "
+                "again with the procedure in docs/secret-rotation.md"
+            )
+        same = [k for k, v in digests.items() if v == value and k != key]
+        if same:
+            out.append(
+                f"{key}: holds the same digest as {', '.join(same)}, so the users share "
+                "one password"
+            )
+    if ":" in held.get("mqtt_password_hash", ""):
+        out.append(
+            "mqtt_password_hash: holds a `:`, so it is a whole mosquitto_passwd line; store "
+            "only the part after the first `:`"
+        )
     return out
 
 
