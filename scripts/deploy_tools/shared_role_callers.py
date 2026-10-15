@@ -12,8 +12,9 @@ shared role's callers instead of reporting `needs-manual-apply`. The deployer ru
 and the unit runs under `uv run --no-project` — the boundary `narrow_setup.py` sits behind for
 the same reason. It prints one JSON object, role to sorted `caller_tags`, and
 `deploy_k8s_owed.discharge_k8s_unapplied` drops a shared role's `k8s_unapplied` line once every
-one of those tags carries the change. How a tag proves that, by its release record or
-by a matching render, is the deployer's question; this module only names the tags.
+one of those tags carries the change. A tag whose entry sets `owner` is not in that object,
+because no Ansible deploy can prove it carries anything. How a tag proves that, by its release
+record or by a matching render, is the deployer's question; this module only names the tags.
 
 THE THREE READERS DIFFER, and `smoke_caller` is why. The deployer's discharge needs every
 caller, because the question it asks is whether the change is applied everywhere. A
@@ -33,6 +34,7 @@ import json
 from collections.abc import Collection
 from pathlib import Path
 
+from deploy_tools.deploy_lib.owners import flux_owned
 from deploy_tools.narrow_lib.broad import context_for
 from deploy_tools.render_targets import render_record_targets
 from lib.cli_help import ArgumentParser
@@ -213,6 +215,13 @@ def expand_shared_tags(
 # clears them, which names the gap rather than discharging past a caller nothing proved.
 # `grep -rL k8s/manifests ansible/roles/k8s/*/tasks/main.yml` against the declared entries
 # re-derives whether one has.
+#
+# The exception is a caller whose entry sets `owner` (#4986). `deploy.sh` refuses its tag with
+# exit 5 and the play skips it, so no release record names it, and
+# `render_targets.render_record_targets` leaves it out of the render records too. Nothing can
+# ever prove it carries the change, so waiting on it would keep the line forever. Flux applies
+# what that caller renders, so its own promotion carries the change there. Ownership is read
+# at HEAD, the commit the caller graph is read at.
 def main(argv: list[str] | None = None) -> int:
     parser = ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("roles", nargs="+", help="role directories under roles/k8s/")
@@ -221,10 +230,13 @@ def main(argv: list[str] | None = None) -> int:
     )
     args = parser.parse_args(argv)
     ctx = context_for("HEAD", args.repo)
+    owned = flux_owned(Path(args.repo), "HEAD")
     print(
         json.dumps(
             {
-                role: sorted(caller_tags(role, ctx.declared, ctx.callers))
+                role: sorted(
+                    caller_tags(role, ctx.declared, ctx.callers) - owned.keys()
+                )
                 for role in args.roles
             },
             sort_keys=True,
