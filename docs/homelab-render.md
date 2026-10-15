@@ -380,6 +380,7 @@ applies it like any other secret file.
 | Role | Entry | Secret | Key |
 |---|---|---|---|
 | `home-assistant` | `google-sa-secret.yaml` | `home-assistant-google-sa` | `google_assistant_service_account` |
+| `pi-peer-backup` | `ssh-key-secret.yaml` | `pi-peer-backup-ssh-key` | `pi_peer_backup_ssh_key` |
 
 A wrong entry would hide a whole Secret from the publish and from the round trip, so the
 `sops-manifest-entries` check in `renderer_lib/sops_entries.py` holds the lists on every
@@ -445,9 +446,9 @@ It runs two passes:
 
 Two things are left out of the comparison, by name and by count, and nothing else:
 
-- **The documents a `KNOWN_VIOLATIONS` entry of rules 1 to 4 names.** These are authelia's
-  `Secret/authelia-config` and pi-peer-backup's `Secret/pi-peer-backup-ssh`, which still
-  carry a multi-line key. Each entry whose directory was built must drop exactly one object.
+- **The documents a `KNOWN_VIOLATIONS` entry of rules 1 to 4 names.** The one left is
+  authelia's `Secret/authelia-config`, which still carries a multi-line key. Each entry whose
+  directory was built must drop exactly one object.
 - **The files a role's `render_sops_manifests` names.** Placeholder mode emits no document for
   them, and each stub render drops the same files. Each pass counts the documents it dropped
   and fails unless the count equals the number of entries in the tags it built.
@@ -458,7 +459,7 @@ held `${domain}`. No hashed config holds a placeholder since `domain` was publis
 placeholder that reaches one is a difference.
 
 Each pass prints a summary line, such as `roundtrip: 58 tags, 4 deferred directories, 47
-substituting, 450 objects, 2 documents in KNOWN_VIOLATIONS left out, 0 differences, 1
+substituting, 450 objects, 1 documents in KNOWN_VIOLATIONS left out, 0 differences, 2
 documents in render_sops_manifests, with each key's R1 stub`. `roundtrip` exits 0 only when both passes find no difference and each
 exclusion count holds.
 
