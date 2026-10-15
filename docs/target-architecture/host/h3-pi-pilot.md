@@ -15,6 +15,9 @@ PR H3.4b, the repository half: [#5029](https://github.com/DanielH2018/server/pul
 The tick applied it on 2026-10-15, and daniel-server reads `10.0.0.215:8791`.
 PR H3.4c, the archive key in `homelab-updater`: [#5032](https://github.com/DanielH2018/server/pull/5032).
 The key's fingerprint is `83B57416B342DDE1CBA0752D435D139ADFD6F016`.
+PR H3.5a, the builder half, staging only: [#5046](https://github.com/DanielH2018/server/pull/5046).
+The operator landed it on 2026-10-15, and the tick applied it at `b7d8f0ef5`. The builder's
+first run ended at 12:39:05 UTC with `reason="ok"` for `a594ad662e68` and nothing unbuilt.
 
 Depends on: R1
 Unblocks: H4, H5

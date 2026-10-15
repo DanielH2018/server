@@ -8,13 +8,19 @@ PR 3, the rules pipeline and three meta rules: [#4740](https://github.com/Daniel
 PR 4, the Watchdog to Healthchecks.io: [#4752](https://github.com/DanielH2018/server/pull/4752).
 PR 5, one Secret, one restart: [#4771](https://github.com/DanielH2018/server/pull/4771).
 
-Every PR has merged. The slice stays IN PROGRESS until the operator-only exit checks run.
-On 2026-10-15 the session read the parts it can reach:
+Every PR has merged. Criteria 1 to 3 hold, read on 2026-10-15. The slice stays IN PROGRESS
+until criterion 4 is observed live:
 
-- Criterion 1, the metric half, holds. `ALERTS{alertname="Watchdog"}` returned one firing
-  series, and the webhook notification counter rose from 1463 to 1464 between two reads.
-  The Healthchecks.io console read is operator-only and not yet recorded.
-- Criterion 2, the scale-to-zero drill, is operator-only and not yet recorded.
+- Criterion 1 holds. `ALERTS{alertname="Watchdog"}` returned one firing series, and the
+  webhook notification counter rose from 1463 to 1464 between two reads. The operator read
+  the `alertmanager-watchdog` check as up in the Healthchecks.io console.
+- Criterion 2 holds. The operator ran the drill on 2026-10-15. Alertmanager was scaled to 0 at
+  12:57:14 UTC with the deployer's timer stopped. Kuma's `Cluster Scrape Targets` tile paged
+  by 13:12. Healthchecks.io went late about 10 minutes in, then down, and its email alert
+  reached the operator inside the 30-minute bound. `up{origin!="daniel-server"} == 0` named
+  only `alertmanager` at 13:12:51 and at 13:31:05. `deploy.sh --tags observability` restored
+  the replica at 13:31:13, and `up{job="alertmanager"}` read 1 at 13:33:05. The webhook
+  counter rose again, the console cleared, and the Kuma tile cleared at 13:37:50.
 - Criterion 3 holds. Master's CI run 38669132676, on `a5abf8581`, passed "Prove each alert
   tool rejects its bad fixture".
 - Criterion 4 is not yet observed live. The newest `observability` release record comes from
