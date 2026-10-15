@@ -516,6 +516,15 @@ which answers from either node. It sets `required = true`, so an unreachable Pro
 the run instead of printing a warning. pint reports a metric Prometheus has never held as a
 `promql/series` bug, which also fails it.
 
+Some selectors match nothing in a healthy cluster, and the rule carrying one names it in a
+comment above its `- alert:` line. `FluxSuspended` in `flux.yaml` carries
+`# pint disable promql/series(<selector>)`, because kube-state-metrics exports the `suspended`
+label only while a Kustomization is suspended. The comment exempts that exact selector, so a
+misspelled metric name still fails the run. pint reports a disable comment that matches no
+selector as an `invalid comment` warning. `WorkloadServiceUnmapped` in `k8s-workloads.yaml`
+uses `# pint rule/set promql/series ignore/label-value service` instead, for a label value
+that a healthy cluster never holds.
+
 ## The deck mod (`.claude/plugins/deck/`)
 
 The deck is a Claude Code mod: a plugin of function hooks, which needs Claude Code 2.1.287 or

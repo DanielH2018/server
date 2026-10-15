@@ -111,6 +111,13 @@ groups:
       # kube-state-metrics' scrape, as in FluxNotReady. Without it, a 24h hold would fire only
       # after a whole day with no failed scrape and no roll of that pod. The `unless` drops a
       # Kustomization once it reads as resumed.
+      #
+      # The same label drop means Prometheus holds no series with a `suspended` label at all
+      # while nothing is suspended, so pint's live promql/series check reports the first
+      # selector as a query on a series that does not exist. The next line exempts that one
+      # selector only: a misspelled gotk_resource_info, or a changed customresource_kind,
+      # no longer matches it and still fails the run.
+      # pint disable promql/series(gotk_resource_info{customresource_kind="Kustomization", suspended="true"})
       - alert: FluxSuspended
         expr: >-
           max by (customresource_kind, exported_namespace, name) (
