@@ -125,7 +125,7 @@ start waits for a signer still running and never rewrites `staged/` under it.
 - **The refusal rule.** The signer reads every `staged/` entry without following a symlink,
   and checks all of them before it copies anything. It accepts `chosen`, holding a 12-hex SHA,
   and `.deb` files whose `Package` starts with `homelab-` and whose `Version` ends in `+g` and
-  that SHA. Anything else is a refusal: the signer copies the set into
+  that SHA, in the builder's `0.<count>+g<sha>` form exactly. Anything else is a refusal: the signer copies the set into
   `/var/lib/homelab-signer/refused/<UTC time>/`, empties `staged/`, publishes nothing and exits
   1. It names each pool file from the package's control fields, never from the builder's file
   name. A copy, never a rename, because `staged/` and the signer's directory are separate
@@ -153,9 +153,10 @@ start waits for a signer still running and never rewrites `staged/` under it.
 - **The sandbox.** The plan's *Sandboxing* list plus `PrivateNetwork=yes`, writing only
   `/var/lib/homelab-signer` and `staged/`.
 
-A failure other than a refusal exits 1 once per reason (`key`, `index` or `sign`), then 0 on a
-repeat, so `OnFailure=homelab-repo-sign-alert.service` pages once. It keeps `staged/`, and the
-next successful builder run starts the signer again. `docs/host-packages.md` has each page's
+A failure other than a refusal exits 1 once per reason (`key`, `index`, `sign`, or `io` for a
+filesystem or tool error), then 0 on a repeat, so `OnFailure=homelab-repo-sign-alert.service`
+pages once. A refusal pages once per refused set. A failure keeps `staged/` and removes the
+pool files that run added, and the next successful builder run starts the signer again. `docs/host-packages.md` has each page's
 clear.
 
 ## Autonomous-role contract (the builder and the signer publish host packages with no human in the loop)

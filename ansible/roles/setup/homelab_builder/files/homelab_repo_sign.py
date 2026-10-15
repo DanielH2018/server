@@ -13,10 +13,12 @@ What a run does:
     nothing new. The daily re-sign below still runs, so a hold never lets `Valid-Until`
     lapse on every host.
   * With `staged/` holding packages, it checks every entry first (step 1). Anything other
-    than `chosen` and `homelab-*` `.deb` files whose version ends in `+g<chosen>` is a
+    than `chosen` and `homelab-*` `.deb` files whose version is `0.<count>+g<chosen>` is a
     refusal: it copies the whole of `staged/` into `refused/<UTC time>/`, empties `staged/`,
     publishes nothing and exits 1. Otherwise it copies the packages into `repo/pool/main/`
     under names it derives from their control fields (step 2), then publishes (steps 3 to 5).
+    A publish that fails removes the pool files this run added, so no later re-sign indexes
+    them.
   * With `staged/` empty, it re-signs the unchanged tree when the published `Release` is
     more than 24 hours old, or was signed by a key other than the one `archive-key.fpr` names.
 
@@ -37,8 +39,9 @@ State, all under `SIGNER_DIR` (`/var/lib/homelab-signer`):
     the node-exporter textfile directory through `publish-textfile`.
 
 Exit codes: 0 when the run published, re-signed, had nothing to do, was held, or failed for
-the same reason as the run before it; 1 on a refusal or a new failure, which
-`OnFailure=homelab-repo-sign-alert.service` pages once.
+the same reason as the run before it; 1 on a new refusal or a new failure, which
+`OnFailure=homelab-repo-sign-alert.service` pages once. The reasons are `refused` (keyed by
+the set's chosen SHA), `key`, `index`, `sign` and `io`, a filesystem or tool error.
 
 It runs under the host's `/usr/bin/python3`, Ubuntu 24.04's 3.12, with the standard library
 only, so pyproject.toml formats it for 3.12.
@@ -186,33 +189,64 @@ class Signer:
             )
 
     def _run(self) -> int:
+        self.new_in_pool: list[Path] = []
         try:
             fingerprint = self.read_fingerprint()
             accepted: list[Path] = []
+            # DECIDED: the hold stops publishing, never the re-sign. The plan has the builder's
+            # OnSuccess= start the signer after a held run so the daily re-sign continues;
+            # stopping it too would let Valid-Until lapse on every host a week into a hold.
             if os.path.lexists(self.hold_path):
                 log(f"held by {self.hold_path}; staged/ left as it is")
             else:
                 accepted = self.take_staged()
-            if accepted:
-                self.publish(fingerprint)
-                self.empty_staged()
-                log(f"published {', '.join(p.name for p in accepted)}")
-            elif self.resign_due(fingerprint):
-                self.publish(fingerprint)
-                log("re-signed the published tree")
+            try:
+                if accepted:
+                    self.publish(fingerprint)
+                    self.empty_staged()
+                    log(f"published {', '.join(p.name for p in accepted)}")
+                elif self.resign_due(fingerprint):
+                    self.publish(fingerprint)
+                    log("re-signed the published tree")
+            except BaseException:
+                # A package copied into the pool but never indexed would otherwise be indexed
+                # by the next re-sign, a held one included.
+                for path in self.new_in_pool:
+                    path.unlink(missing_ok=True)
+                raise
         except Refusal as exc:
-            where = self.refuse()
-            log(f"refused staged/, nothing published: {exc}; the set is in {where}")
-            self.state["failure"] = {"reason": "refused"}
-            return 1
+            return self._refused(exc)
         except Failure as exc:
-            log(f"{exc.reason}: {exc}")
-            record = {"reason": exc.reason}
-            repeat = self.state.get("failure") == record
-            self.state["failure"] = record
-            return 0 if repeat else 1
+            return self._failed({"reason": exc.reason}, str(exc))
+        except (OSError, subprocess.SubprocessError) as exc:
+            # A filesystem or tool error. Left uncaught it would exit 1 on every run, and every
+            # successful builder run starts the signer, so OnFailure= would page every 2 minutes.
+            return self._failed({"reason": "io"}, f"{type(exc).__name__}: {exc}")
         self.state.pop("failure", None)
         return 0
+
+    def _failed(self, record: dict[str, str], message: str) -> int:
+        """Record a failure; return 1 for a new one, 0 for a repeat of the last run's."""
+        log(f"{record['reason']}: {message}")
+        repeat = self.state.get("failure") == record
+        self.state["failure"] = record
+        return 0 if repeat else 1
+
+    def _refused(self, exc: Refusal) -> int:
+        try:
+            chosen = read_no_follow(self.staged / "chosen").decode(errors="replace")
+        except (OSError, Refusal):
+            chosen = ""
+        try:
+            where = f"the set is in {self.refuse()}"
+        except OSError as err:
+            where = f"the set stays in staged/, because copying it failed: {err}"
+        # Keyed by the set's chosen SHA, so a set the signer could not move pages once, and
+        # the next refused set, at another commit, pages again.
+        return self._failed(
+            {"reason": "refused", "chosen": chosen.strip()},
+            f"refused staged/, nothing published: {exc}; {where}",
+        )
 
     def _load_state(self) -> dict:
         try:
@@ -278,8 +312,10 @@ class Signer:
             package, version = fields["Package"], fields["Version"]
             if not _PACKAGE.fullmatch(package):
                 raise Refusal(f"{package} is not a homelab-* package")
-            if not version.endswith(f"+g{chosen}"):
-                raise Refusal(f"{package} {version} does not name {chosen}")
+            # The builder's own format, in full: the version reaches a pool file name and a
+            # metric label, so a `/` or a `"` in it must never get that far.
+            if not re.fullmatch(rf"0\.[0-9]+\+g{chosen}", version):
+                raise Refusal(f"{package} {version!r} is not 0.<count>+g{chosen}")
             if fields["Architecture"] not in ("all", *ARCHITECTURES):
                 raise Refusal(f"{package} is built for {fields['Architecture']}")
             if package in seen:
@@ -293,6 +329,10 @@ class Signer:
                 pool
                 / f"{fields['Package']}_{fields['Version']}_{fields['Architecture']}.deb"
             )
+            if target.parent != pool:
+                raise Refusal(f"{target.name} would land outside the pool")
+            if not target.exists():
+                self.new_in_pool.append(target)
             write_file(target, copy.read_bytes())
             written.append(target)
         return written

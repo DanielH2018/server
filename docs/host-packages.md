@@ -323,9 +323,12 @@ repeat every 2 minutes. Read `journalctl -u homelab-repo-sign` for the reason:
   /var/lib/homelab-signer/gnupg --list-keys` with the file. The break-glass doc restores the
   key.
 - **`index`.** `apt-ftparchive` failed. The journal line carries its stderr.
+- **`io`.** A filesystem error, or a tool that would not start. The journal line names the
+  path or the tool.
 
 A signer failure other than a refusal keeps `staged/`, and the next successful builder run
-starts the signer again.
+starts the signer again. A publish that fails removes the pool files it had added, so no later
+re-sign indexes them.
 
 ## The builder's pages
 

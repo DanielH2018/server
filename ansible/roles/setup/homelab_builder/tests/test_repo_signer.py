@@ -21,6 +21,7 @@ from pathlib import Path
 import pytest
 
 import homelab_repo_sign as rs
+from host_package_builder import version
 
 SCRIPT = Path(rs.__file__)
 CHOSEN = "a594ad662e68"
@@ -60,12 +61,17 @@ class Lab:
         self.staged.mkdir(parents=True)
         self.signer_dir = root / "signer"
         (self.signer_dir / "repo").mkdir(parents=True)
-        shutil.copytree(home, self.signer_dir / "gnupg")
+        # Without /run/user/<uid>, gpg-agent puts its sockets in the home, and a socket
+        # cannot be copied.
+        shutil.copytree(
+            home, self.signer_dir / "gnupg", ignore=shutil.ignore_patterns("S.*")
+        )
         self.etc = root / "etc"
         self.etc.mkdir()
         self.hold = self.etc / "hold"
         (self.etc / "archive-key.fpr").write_text(self.fingerprint + "\n")
         self.clock = 1_800_000_000.0
+        self.builds = 0
 
     def signer(self) -> rs.Signer:
         return rs.Signer(
@@ -78,7 +84,8 @@ class Lab:
 
     def deb(self, package: str, version: str, name: str | None = None) -> Path:
         """Build a minimal `.deb` with dpkg-deb and stage it under `name`."""
-        tree = self.root / "build" / f"{package}-{version}"
+        self.builds += 1
+        tree = self.root / "build" / str(self.builds)
         (tree / "DEBIAN").mkdir(parents=True)
         (tree / "DEBIAN" / "control").write_text(
             f"Package: {package}\nVersion: {version}\nArchitecture: all\n"
@@ -98,9 +105,10 @@ class Lab:
         return target
 
     def stage(self, *packages: str, sha: str = CHOSEN, count: int = 5) -> None:
+        # The builder's own version(), so a change to its format fails here first.
         (self.staged / "chosen").write_text(sha + "\n")
         for package in packages:
-            self.deb(package, f"0.{count}+g{sha}")
+            self.deb(package, version(count, sha))
 
     @property
     def suite(self) -> Path:
@@ -204,6 +212,19 @@ def test_every_published_file_is_world_readable(lab):
         ),
         pytest.param(
             lambda lab: (lab.staged / "chosen").write_text("main\n"), id="bad-chosen"
+        ),
+        # A version reaches a pool file name and a metric label.
+        pytest.param(
+            lambda lab: lab.deb(
+                "homelab-updater", f"0.5/../../x+g{CHOSEN}", name="homelab-updater.deb"
+            ),
+            id="slash-in-version",
+        ),
+        pytest.param(
+            lambda lab: lab.deb(
+                "homelab-updater", f'0.5"}}x+g{CHOSEN}', name="homelab-updater.deb"
+            ),
+            id="quote-in-version",
         ),
     ],
 )
@@ -315,3 +336,42 @@ def test_a_missing_fingerprint_pages_once_then_stays_quiet(lab):
     assert "chosen" in os.listdir(lab.staged), (
         "a failed run must keep the set for the next"
     )
+
+
+def test_a_tool_that_will_not_run_pages_once_and_leaves_the_pool_as_it_was(lab):
+    # Every successful builder run starts the signer, so an error that escaped as a
+    # traceback would page every 2 minutes.
+    lab.stage("homelab-daniel-pi")
+    signer = lab.signer()
+    signer.apt_ftparchive = str(lab.root / "absent-apt-ftparchive")
+    assert signer.main() == 1
+    assert json.loads((lab.signer_dir / "state.json").read_text())["failure"] == {
+        "reason": "io"
+    }
+    signer = lab.signer()
+    signer.apt_ftparchive = str(lab.root / "absent-apt-ftparchive")
+    assert signer.main() == 0
+    assert list((lab.signer_dir / "repo" / "pool" / "main").iterdir()) == []
+
+
+def test_a_failed_publish_never_rides_along_on_a_later_held_re_sign(lab):
+    lab.stage("homelab-daniel-pi")
+    assert lab.signer().main() == 0
+    lab.stage("homelab-daniel-pi", count=6)
+    # gpg cannot sign with a key the home does not hold, so this publish fails at `sign`.
+    (lab.etc / "archive-key.fpr").write_text("F" * 40 + "\n")
+    assert lab.signer().main() == 1
+    pool = lab.signer_dir / "repo" / "pool" / "main"
+    assert [p.name for p in pool.iterdir()] == [
+        f"homelab-daniel-pi_0.5+g{CHOSEN}_all.deb"
+    ]
+    # A held re-sign once the key is back indexes the pool as it then is.
+    (lab.etc / "archive-key.fpr").write_text(lab.fingerprint + "\n")
+    lab.hold.touch()
+    lab.clock = (
+        email.utils.parsedate_to_datetime(lab.release()["Date"]).timestamp() + 25 * 3600
+    )
+    assert lab.signer().main() == 0
+    index = (lab.suite / "main" / "binary-amd64" / "Packages").read_text()
+    assert f"Version: 0.5+g{CHOSEN}" in index
+    assert "Version: 0.6" not in index
