@@ -257,8 +257,8 @@ def render_component(name: str, hosts_root: Path, scratch: Path) -> host_mode.Pa
     """Component `name` rendered through a package of its own, built under `scratch`.
 
     A component no host package lists yet still ships, in the host package that later lists
-    it, so its units are verified now. The scratch tree links the real component and
-    `hosts/lib/`; the renderer resolves links before its containment checks.
+    it, so its units are verified now. The scratch tree links the real component,
+    `hosts/lib/` and `hosts/keys/`; the renderer resolves links before its containment checks.
     """
     root = scratch / "hosts"
     (root / "components").mkdir(parents=True)
@@ -266,6 +266,7 @@ def render_component(name: str, hosts_root: Path, scratch: Path) -> host_mode.Pa
         (hosts_root / "components" / name).resolve()
     )
     (root / "lib").symlink_to((hosts_root / "lib").resolve())
+    (root / "keys").symlink_to((hosts_root / "keys").resolve())
     package = f"component-{name}"
     spec = root / "packages" / package / "package.yml"
     spec.parent.mkdir(parents=True)

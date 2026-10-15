@@ -25,7 +25,8 @@ tag was rendered. Rule 5 scans the whole tree, so its floor, its named members a
 entries hold on every run.
 
 `sops-manifest-entries`, the check on each role's `render_sops_manifests` list, lives in
-`sops_entries.py` and is importable from here.
+`sops_entries.py` and is importable from here. `check` runs its third clause, which reads
+rule 5's result and the ratchet.
 
 `docs/homelab-render.md` is the operator's page, and
 `docs/target-architecture/render/r2-secret-placeholders.md` the plan.
@@ -69,12 +70,14 @@ from renderer.renderer_lib.var_aliases import (
 from renderer.renderer_lib.sops_entries import (
     SOPS_MANIFEST_KEYS,
     sops_manifest_entries as sops_manifest_entries,
+    unlisted_namers,
 )
 from renderer.renderer_lib.placeholders import (
     SENTINEL_PREFIX,
     PlaceholderRender,
     documents,
     references,
+    sops_manifests,
     substitution_disabled,
 )
 
@@ -144,34 +147,21 @@ def _rule4(tag: str, file: str, site: str, name: str) -> Violation:
     return Violation(NO_SOPS_MANIFEST_KEY, tag, file, site, name)
 
 
-_AUTHELIA_KEY, _PPB_KEY = "authelia_oidc_rsa_key_content", "pi_peer_backup_ssh_key"
+_AUTHELIA_KEY = "authelia_oidc_rsa_key_content"
 
 # Every violation the first fleet render finds. Each entry leaves through the PR that fixes
 # its source, and an entry that no longer matches fails the check, so the set shrinks only
 # through a fix. R2's exit criterion requires it empty.
 KNOWN_VIOLATIONS = frozenset(
     {
-        # Rule 4: the two multi-line keys still interpolated with `indent`. R2's PRs 6 and 7
-        # move each into a dedicated Secret. home-assistant's key already sits in its own
-        # Secret, listed in `render_sops_manifests` (R2's PR 5).
+        # Rule 4: the one multi-line key still interpolated with `indent`. R2's PR 7 moves it
+        # into a dedicated Secret. home-assistant's and pi-peer-backup's keys already sit in
+        # Secrets of their own, listed in `render_sops_manifests` (R2's PRs 5 and 6).
         _rule4(
             "authelia", "config-secret.yaml", "Secret/authelia-config", _AUTHELIA_KEY
         ),
-        _rule4("pi-peer-backup", "secret.yaml", "Secret/pi-peer-backup-ssh", _PPB_KEY),
-        # Rule 5, the indent on each multi-line key, at the same two sites.
+        # Rule 5, the indent on that key, at the same site.
         _rule5("authelia", "config-secret.yaml.j2", "filter indent", _AUTHELIA_KEY),
-        _rule5("pi-peer-backup", "secret.yaml.j2", "filter indent", _PPB_KEY),
-        # Rule 5: the two trims in qbittorrent and mosquitto's split. R2's PR 4 drops them.
-        _rule5("qbittorrent", "secret.yaml.j2", "filter trim", "mullvad_account"),
-        _rule5(
-            "qbittorrent",
-            "secret.yaml.j2",
-            "filter trim",
-            "wireguard_interface_private_key",
-        ),
-        _rule5(
-            "mosquitto", "config-secret.yaml.j2", "filter string", "mqtt_password_hash"
-        ),
     }
 )
 
@@ -344,6 +334,8 @@ class Rule5:
         accepted: Each accepted use, with its template's path from the repository root.
         lookup_sites: `(template, argument)` for every non-literal `vars` lookup.
         bindings: `(template, name, is an alias)` for each name a template binds.
+        sops_namers: `(tag, template, key)` for each `SOPS_MANIFEST_KEYS` key a template
+            names, itself or through an alias.
     """
 
     violations: list[Violation] = field(default_factory=list)
@@ -351,6 +343,7 @@ class Rule5:
     accepted: list[tuple[str, Use]] = field(default_factory=list)
     lookup_sites: set[tuple[str, str]] = field(default_factory=set)
     bindings: set[tuple[str, str, bool]] = field(default_factory=set)
+    sops_namers: list[tuple[str, str, str]] = field(default_factory=list)
 
 
 def rule5(
@@ -387,6 +380,10 @@ def rule5(
         result.bindings.update((rel, name, alias) for name, alias in scan.bindings)
         if scan.names_key:
             result.naming.append(rel)
+        result.sops_namers.extend(
+            (template_tag(path), rel, key)
+            for key in sorted(scan.keys & SOPS_MANIFEST_KEYS)
+        )
         result.lookup_sites.update((rel, arg) for arg in scan.lookup_sites)
         refused = [(path, u.key, u.forms[-1]) for u in scan.uses if u.refused]
         result.violations.extend(_rule5_violation(*r, root) for r in refused)
@@ -446,6 +443,40 @@ def rule5_members(
     return problems
 
 
+def sops_manifest_namers(
+    result: Rule5,
+    live: Iterable[Violation],
+    entries: Callable[[str], list[str]] = sops_manifests,
+) -> list[str]:
+    """The third clause of `sops-manifest-entries` over the whole tree, one line apiece.
+
+    A template that names a `SOPS_MANIFEST_KEYS` key is one of its role's
+    `render_sops_manifests` entries, or carries a live `KNOWN_VIOLATIONS` entry for that key.
+    The lists are read for every naming role, not only the rendered tags, so a `--role`
+    render does not read another role's entry as an unlisted template.
+
+    Args:
+        result: Rule 5's result over the whole tree.
+        live: The `KNOWN_VIOLATIONS` entries this run found.
+        entries: A role's `render_sops_manifests` basenames.
+    """
+    roles = {tag for tag, _template, _key in result.sops_namers}
+    listed = [
+        _ROLE_TEMPLATES.format(role, f"{entry}.j2")
+        for role in roles
+        for entry in entries(role)
+    ]
+    # DECIDED: only a rule 5 entry makes a template's key live. The third clause scans the
+    # whole tree on every run, so it may count only an entry that is found whatever the
+    # render's tags, and rule 5 scans every template source. A rule 4 entry is found only
+    # when its tag is rendered, so counting one would flag that template under a `--role`
+    # render of another tag, a failure with nothing wrong (r2-secret-placeholders.md, the
+    # `sops-manifest-entries` clauses).
+    found = [(v.file, v.key) for v in live if v.rule == NO_SECRET_EXPRESSION]
+    namers = [(template, key) for _tag, template, key in result.sops_namers]
+    return unlisted_namers(namers, listed, found)
+
+
 # -- the check -------------------------------------------------------------------------------
 
 
@@ -457,7 +488,8 @@ class Report:
         violations: Every violation found, known ones included.
         unknown: The violations `KNOWN_VIOLATIONS` does not hold.
         stale: The `KNOWN_VIOLATIONS` entries that no longer match.
-        missing: Each named member, floor or allowlist entry that failed, one line apiece.
+        missing: Each named member, floor or allowlist entry that failed, and each template
+            the third clause of `sops-manifest-entries` flags, one line apiece.
     """
 
     violations: list[Violation]
@@ -504,4 +536,5 @@ def check(
     )
     unknown = sorted({v for v in violations if v not in known_violations})
     missing = output_members(render, keys) + rule5_members(result, keys)
+    missing += sops_manifest_namers(result, found & known_violations)
     return Report(violations, unknown, stale, missing)

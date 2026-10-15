@@ -20,9 +20,6 @@ import tempfile
 from email.utils import formatdate
 from pathlib import Path
 
-import yaml
-
-from lib import yaml_fast
 from lib.repo_paths import REPO
 from renderer.renderer_lib import host as host_mode
 
@@ -54,7 +51,8 @@ def box_address(render: Path) -> str:
 def render_fixture(variant: str, out: Path, payload_bytes: int = PAYLOAD_BYTES) -> Path:
     """Render fixture `variant` as homelab-daniel-pi under `out`; return its directory.
 
-    The scratch tree links the repo's real `hosts/lib`, components and shared packages, and
+    The scratch tree links the repo's real `hosts/lib`, `hosts/keys`, components and shared
+    packages, and
     holds the fixture's units and files as `hosts/daniel-pi/`, with the variant's spec as its
     `package.yml`. The payload variant gets `payload_bytes` of random data, which compresses
     to no less.
@@ -62,7 +60,7 @@ def render_fixture(variant: str, out: Path, payload_bytes: int = PAYLOAD_BYTES) 
     with tempfile.TemporaryDirectory() as scratch:
         hosts = Path(scratch) / "hosts"
         hosts.mkdir()
-        for name in ("lib", "components", "packages"):
+        for name in ("lib", "keys", "components", "packages"):
             (hosts / name).symlink_to(REPO / "hosts" / name)
         package_dir = hosts / HOST
         shutil.copytree(FIXTURE, package_dir, ignore=shutil.ignore_patterns("*.yml"))
@@ -79,21 +77,12 @@ def render_fixture(variant: str, out: Path, payload_bytes: int = PAYLOAD_BYTES) 
 def updater_variant(head: Path, out: Path) -> Path:
     """Copy the head render of homelab-updater under `out`, its unit changed; return it.
 
-    The copy also ships a keyring-shaped file at the path H3.4c gives the archive keyring.
+    The copy keeps the head render's archive keyring, which every version ships since H3.4c.
     """
     directory = out / "packages" / UPDATER
     shutil.copytree(head / "packages" / UPDATER, directory)
     unit = directory / f"root{UNIT_DIR}/{UPDATER}.service"
     unit.write_text(unit.read_text() + UNIT_CHANGE + "\n")
-    keyring = directory / f"root{KEYRING}"
-    keyring.parent.mkdir(parents=True, exist_ok=True)
-    keyring.write_bytes(b"Fixture keyring: the test source names no Signed-By.\n")
-    spec_path = directory / "nfpm.yaml"
-    spec = yaml_fast.safe_load(spec_path.read_text())
-    spec["contents"].append(
-        {"src": f"root{KEYRING}", "dst": KEYRING, "file_info": {"mode": 0o644}}
-    )
-    spec_path.write_text(yaml.safe_dump(spec, sort_keys=False))
     return directory
 
 

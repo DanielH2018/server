@@ -118,6 +118,9 @@ not rotated again by the weekly cron. Examples:
   Missing this on 2026-08-29 left Bazarr reconnecting in a loop that leaked 173 MiB → its 1Gi cap
   in 90 minutes and OOM-killed it; the only visible signal was the "k3s Container OOM" monitor,
   which self-clears one hour after the kill while subtitle fetching stays silently broken.
+- `mqtt_password_hash`: `mosquitto_passwd` writes a `username:hash` line. Store only the part
+  after the first `:`, because the template prepends `mqtt_username` itself. The mosquitto
+  deploy refuses a stored hash that holds a colon, before the apply.
 - **CrowdSec bouncer keys** (`crowdsec_k8s_bouncer_api_key`, the cluster edge's — the only
   bouncer since E7 retired the Docker edge and its `dockertraefik` key) and the agent password
   (`crowdsec_k8s_agent_password`, shared by all four agents). Since slice-6 B2 the single
@@ -166,6 +169,14 @@ not rotated again by the weekly cron. Examples:
   that one small Secret, and `--tags home-assistant` redeploys it. Delete the old key in the
   console only after HA has restarted on the new one. `google_assistant_project_id` changes
   only with a new Google project.
+- `pi_peer_backup_ssh_key`: generate a new ed25519 keypair, store the private half with
+  `sops set`, and commit the public half over
+  `ansible/roles/k8s/pi-peer-backup/files/pi-peer-backup.pub`. The private key is multi-line,
+  so it has a Secret of its own, `pi-peer-backup-ssh-key`, rendered from
+  `ansible/roles/k8s/pi-peer-backup/templates/ssh-key-secret.yaml.j2`. A rotation changes that
+  one small Secret, and `--tags pi-peer-backup` redeploys it and authorizes the new public half
+  on the Pi. The role's `authorized_key` task adds the new line and leaves the old one, so
+  remove the old key from the Pi's `authorized_keys` after the next nightly run succeeds.
 - `authelia_secret` / `authelia_jwt`: rotating forces all users to re-login (not breaking).
 - `authelia_oidc_hmac_secret` / `*_password_hash`: re-issues OIDC — re-pair jellyfin (the
   live OIDC client; beszel's client is provisioned but parked in `archive/`, re-pair only
@@ -212,7 +223,17 @@ Mint a new value in the provider, then `sops set` + redeploy the consumer:
 - `cloudflare_dns_token`: Cloudflare dashboard → API Tokens (keep it **zone-scoped**: DNS
   edit + Zone read for the one zone — audit this scope when rotating).
 - `*_discord_webhook*`: Discord → channel → Integrations → Webhooks → regenerate.
-- `mullvad_account`, `wireguard_peer_*`: Mullvad account panel / regenerate the WG key.
+- `mullvad_account`: Mullvad account panel. The value is all digits, so it has a Secret of its
+  own, `qbittorrent-mullvad-account`, rendered from
+  `ansible/roles/k8s/qbittorrent/templates/mullvad-account-secret.yaml.j2`. A rotation changes
+  that one small Secret, and `--tags qbittorrent` redeploys it.
+- `wireguard_peer_*`: Mullvad account panel / regenerate the WG key.
+- `homelab_builder_github_token`: GitHub → Settings → Developer settings → Fine-grained
+  tokens, owner DanielH2018, *Public repositories (read-only)*, no permissions. The
+  host-package builder reads CI check runs with it, because its system user has no gh login
+  and an anonymous read shares one quota per source IP with the deployer's CI gate. A leaked
+  copy reads only public data. Redeploy with `initial_setup.yml --tags homelab_builder`,
+  which the setup-plane tick runs.
 
 ## `pinned` — DANGER, never `sops set` blindly
 

@@ -1,5 +1,5 @@
-# The shared package every host installs (H3, *The updater*). Its keyring entry joins in H3.4c,
-# with the key itself, so no render or build before then names a missing file.
+# The shared package every host installs (H3, *The updater*). It ships the archive keyring
+# that `homelab.sources` names in `Signed-By:`, so apt on every host trusts the signer's key.
 description: Installs the newest homelab packages and runs reconcile
 # The updater reads reconcile's record with python3.
 depends:
@@ -10,3 +10,4 @@ files:
   - {src: units/homelab-updater.service, dst: /usr/lib/systemd/system/homelab-updater.service}
   - {src: units/homelab-updater.timer, dst: /usr/lib/systemd/system/homelab-updater.timer}
   - {src: templates/homelab.sources.j2, dst: /etc/apt/sources.list.d/homelab.sources}
+  - {key: homelab-archive-keyring, dst: /usr/share/keyrings/homelab-archive-keyring.gpg}

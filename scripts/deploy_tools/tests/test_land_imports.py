@@ -54,7 +54,7 @@ ALLOWED = {
     "pr_json": set(),
     "landing": {"outcome", "options", "tools", "ledger", "pr_json", "land_tags"},
     # The landing policy's checks run inside --arm-merge, before any merge call.
-    "merge": {"landing", "outcome", "policy"},
+    "merge": {"landing", "outcome", "policy", "pr_json"},
     "policy": {"landing", "outcome", "pr_json"},
     "classify": {"landing", "outcome", "land_tags"},
     "ci": {"landing", "outcome"},
@@ -78,7 +78,7 @@ ALLOWED = {
     "land_tags_cli": {"land_tags", "land_reach"},
     "land_platform": {"land_tags"},
     "land_reach": set(),
-    # The boundaries for a tag Flux applies. It imports promote_wait, outside land_lib.
+    # The boundaries for a tag Flux applies. It imports promote_lib.wait, outside land_lib.
     "land_flux": set(),
     "land_rerolls": set(),
     "land_shared": set(),

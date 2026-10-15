@@ -50,7 +50,7 @@
     # triggered) run is the proof.
     manifests_rollout: ''
     # The prune k8s/manifests arms by default (its manifests_prune DECIDED comment). The
-    # render stamps homelab/role on the CronJob, the Secret and the k8s_claims claim; the fixed
+    # render stamps homelab/role on the CronJob, both Secrets and the k8s_claims claim; the fixed
     # allowlist names neither Secret nor PersistentVolumeClaim, so those two are applied but
     # never pruned. The deploy-gate Job k8s/cronjob-gate creates is made with
     # `kubectl create job --from=cronjob` and never staged here, and batch/v1 Job is not in the

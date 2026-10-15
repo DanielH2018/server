@@ -6,10 +6,9 @@ one tag is applied by Flux, so each caller has to say what it does with such a t
 sits in its own module because `test_census_rows_text.py`, which imports it into `ROWS`, is
 near the cap for a test module.
 
-Baseline item 5 of the plan names `render_targets.py` and `secret_rotation.py:cmd_rotate` as
-callers. Neither runs the wrapper: `render_records.py` runs it over `render_targets.py`'s
-list, and `rotation_tools.run_deploy` runs `ansible-playbook ansible/deploy.yml` itself, which
-D2.1d's `ansible_owned` batch loop governs instead (#4960).
+`secret_rotation.py --deploy` has a row in that table but no entry here.
+`rotation_tools.run_deploy` runs `ansible-playbook ansible/deploy.yml` itself, never the
+wrapper, so D2.1d's `ansible_owned` batch loop governs it instead (#4960).
 """
 
 import re

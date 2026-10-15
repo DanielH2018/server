@@ -1020,9 +1020,16 @@ bullet).
       so the write never waits in the group `promote`. The `promote` and `verify` jobs stay
       read-only, and any other tag move D5 adds follows the same split.
     - **It runs in its own concurrency group, `promote-reset`.** In the group `promote`, a
-      reset dispatched while a run verifies would wait up to that run's derived timeout, as
-      much as 5.5 hours (D4), and the next merge's run would cancel it while it was pending
-      (Baseline).
+      reset dispatched while a later run's `decide` waits on a verification in flight would
+      wait up to that wait's end, as much as 6 hours (D4 *The cap*), and the next merge's run
+      would cancel it while it was pending (Baseline). D2.5's `verify` and `settle` join no
+      group, so `promote-reset` serialises the reset against nothing of D2's.
+    - **It must hold C2's two in-flight checks.** A reset dispatched while another run
+      verifies moves `prod` to `last-good`. That releases `decide`'s wait, and the in-flight
+      run's `settle` still acts on its own verdict. It writes its own hold over the
+      operator's, or it moves `last-good` to a T that `prod` no longer names. How the reset
+      avoids both is open (#5079). Refusing while `prod` and `last-good` differ is one
+      option, and `settle` re-reading `prod` before it writes is another.
     - **It ignores the reboot window.** A reset moves `prod` back to a revision the cluster
       already ran, and the operator dispatches it on purpose.
     - **It refuses unless a hold is set**, and exits non-zero naming the reason. It reads
@@ -1967,7 +1974,9 @@ sizes its batch of roles against that projection.
     the window and refuses when `DEPLOY_HOLD` reads `none`, is empty or is missing; the derived no-promotion window in
     `decide` and `land-wait`, read with T's own derived timeout; the `deferred` result and
     `promote.yml`'s derived `schedule:` trigger at the window's end, so no run waits in the
-    job that runs `verify`; and the four tests, as *The stateful hold* describes.
+    `promote` job, whose 6 hours also hold `decide`'s in-flight wait (D4 *The cap*); the
+    reset's answer to C2's two in-flight checks (#5079); and the four tests, as *The stateful
+    hold* describes.
 14. **D5.2c — The revert entry point** (about 150 lines). `ansible/volume-revert.yml`, the
     runbook with its two branch-choosing reads and its three branches in
     `docs/volume-snapshot-drills.md`, and the edits to
@@ -4382,3 +4391,12 @@ round covers it.
 - **Coordinator notes.** `FluxControllerDown` in the soak's scope, the reset input's
   decide-then-write split, the shed's worker timing, two Wave D readings for D4, tdarr's
   pre-pull (Open question 21) and D2's burst projection in *Waves and windows*.
+
+### D2.5 verification fold (2026-10-15)
+
+- **The reset's group was justified by a `verify` inside the group `promote`.** Confirmed
+  against `.github/workflows/promote.yml`: D2.5 runs `verify` and `settle` in no group.
+  Fixed: *It runs in its own concurrency group* now names the wait that a reset in the group
+  `promote` would sit behind, `decide`'s in-flight wait. The new bullet *It must hold C2's
+  two in-flight checks* states the hazard a reset during a verification creates, and D5.2b2
+  carries it. The design that answers it is open in #5079.

@@ -17,7 +17,11 @@ import promote
 from _promote_fakes import World, digest_of
 
 PROMOTE = Path(promote.__file__)
-PROMOTE_WAIT = PROMOTE.with_name("promote_wait.py")
+# The modules split out of promote.py, read from disk so a fourth is held to the boundary too.
+PROMOTE_LIB = sorted(PROMOTE.with_name("promote_lib").glob("*.py"))
+# The members the glob must find, so a rename or a move out of the package fails by name
+# rather than leaving the census over fewer modules.
+PROMOTE_LIB_MEMBERS = frozenset({"wait.py", "verify_promotion.py", "prune.py"})
 
 # The modules that would let promote.py make a forge call without the adapter. `subprocess`
 # and `pty` are here because `gh` and `cosign` are forge calls too.
@@ -36,7 +40,14 @@ FORBIDDEN = (
 # `lib` modules start subprocesses of their own (`lib.gh` runs `gh`, `lib.kubectl` and `lib.b2`
 # reach other services), and a new one would pass a denylist unseen. `lib.git` runs only git.
 ALLOWED_LIB = frozenset(
-    {"lib.cli_help", "lib.exit_codes", "lib.git", "lib.repo_paths", "lib.yaml_fast"}
+    {
+        "lib.cli_help",
+        "lib.exit_codes",
+        "lib.git",
+        "lib.removes_object",
+        "lib.repo_paths",
+        "lib.yaml_fast",
+    }
 )
 
 # The `deployer_lib` modules promote.py may import, for the same reason: `deploy_git` is pure,
@@ -111,10 +122,19 @@ def forbidden_imports(source: str) -> set[str]:
     )
 
 
-@pytest.mark.parametrize("module", [PROMOTE, PROMOTE_WAIT], ids=lambda p: p.name)
+def test_the_census_finds_every_promote_lib_member():
+    assert PROMOTE_LIB_MEMBERS <= {path.name for path in PROMOTE_LIB}
+
+
+@pytest.mark.parametrize(
+    "module",
+    [PROMOTE, *PROMOTE_LIB],
+    ids=lambda p: p.relative_to(PROMOTE.parent).as_posix(),
+)
 def test_promote_imports_the_adapter_and_no_http_library_is_clean(module):
-    """`promote_wait.py` is `land-wait`, split out of promote.py, and holds the same boundary:
-    its kubectl and logger go through `flux_host.py` as its GitHub calls go through forge."""
+    """Each module split out of promote.py holds the same boundary: `promote_lib/wait.py`
+    (`land-wait`), whose kubectl and logger go through `flux_host.py`; `promote_lib/verify_promotion.py`
+    (`verify`), whose status reads go through forge; and `promote_lib/prune.py` (`prune`)."""
     source = module.read_text(encoding="utf-8")
     assert ADAPTER in imported_modules(source)
     assert forbidden_imports(source) == set()
@@ -184,10 +204,24 @@ def _world_with_3000_tags(tmp_path) -> World:
 
 
 def _registry_requests_within_budget(world: World, examined: list[str]) -> bool:
-    """Exactly one token request, one `prod` fetch and one `HEAD` per examined candidate."""
-    repository = f"/v2/{forge.ARTIFACT}/manifests"
-    expected = [("GET", "/token"), ("GET", f"{repository}/prod")]
-    expected += [("HEAD", f"{repository}/sha-{sha}") for sha in examined]
+    """One token request, the in-flight HEADs, one `prod` fetch, one `HEAD` per examined
+    candidate, then the two bundle pulls `verify` reuses, T's and `prod`'s.
+    """
+    repository = f"/v2/{forge.ARTIFACT}"
+    manifests = f"{repository}/manifests"
+    expected = [
+        ("GET", "/token"),
+        ("HEAD", f"{manifests}/prod"),
+        ("HEAD", f"{manifests}/last-good"),
+        ("GET", f"{manifests}/prod"),
+    ]
+    expected += [("HEAD", f"{manifests}/sha-{sha}") for sha in examined]
+    for sha in (examined[-1], world.commits[0]):
+        manifest = world.transport.manifests[digest_of(sha)]
+        expected += [
+            ("GET", f"{manifests}/{digest_of(sha)}"),
+            ("GET", f"{repository}/blobs/{manifest['layers'][0]['digest']}"),
+        ]
     return world.transport.registry_requests() == expected
 
 

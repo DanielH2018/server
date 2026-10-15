@@ -12,26 +12,30 @@ component's are. A component directory under `hosts/components/` holds a `compon
     files:
       - {src: templates/x.sh.j2, dst: /usr/lib/homelab/x, mode: "0755"}
       - {lib: homelab-updater, dst: /usr/lib/homelab/homelab-updater, mode: "0755"}
+      - {key: homelab-archive-keyring, dst: /usr/share/keyrings/homelab-archive-keyring.gpg}
 
 A `src` ending `.j2` renders through the renderer's strict environment. Any other `src` is
 copied byte for byte. A `lib` entry copies `hosts/lib/<name>`, a script several packages ship,
-byte for byte; it is the one source outside the component a file entry may name.
+byte for byte. A `key` entry copies `hosts/keys/<name>.gpg`, a public keyring hosts trust, byte
+for byte. Those two are the only sources outside the component a file entry may name.
 
 A package or component may also carry `units`, a policy for each unit reconcile must not
-restart on a change, and `legacy`, the Ansible-era entries reconcile retires (H3, *The host
-handoff rule*)::
+restart on a change, `enable`, the enable links it installs, and `legacy`, the Ansible-era
+entries reconcile retires (H3, *The host handoff rule*)::
 
     units: {homelab-x.service: {policy: manual}}    # or windowed
+    enable: {homelab-x.timer: timers.target}        # see host_manifest.add_enable_links
     legacy:
       - {path: /usr/local/bin/x.sh}
       - {cron: "X heartbeat", user: "{{ sys_user }}"}
       - {cron_file: x}
       - {unit: x.service}
 
-Each legacy value renders with the host's context. A host package installs
+Each legacy value renders with the host's context. Each enable link ships as an nfpm
+`type: symlink` entry. A host package installs
 `/usr/lib/homelab/manifest.json`, which `host_manifest` builds from these keys and the units and
 enable links the packages install. A shared package installs no manifest, and lists no legacy
-entry.
+entry and no enable link.
 
 A package spec may also list `maintainer_scripts`, each rendered from
 `hosts/lib/maintainer-scripts/<name>.j2` into the package's `scripts/`, outside `root/`, and
@@ -73,10 +77,13 @@ from renderer.renderer_lib.cluster import RenderRefused
 from renderer.renderer_lib.environment import RenderError, render_file, renderer_env
 from renderer.renderer_lib.host_manifest import (
     DROPIN,
+    UNIT_DIR,
     UPDATER,
+    add_enable_links,
     add_manifest,
     add_policies,
     legacy_entry,
+    refuse_wants_file,
 )
 
 HOSTS = REPO / "hosts"
@@ -90,13 +97,14 @@ PACKAGE_KEYS = frozenset(
         "defaults",
         "depends",
         "description",
+        "enable",
         "files",
         "legacy",
         "maintainer_scripts",
         "units",
     }
 )
-COMPONENT_KEYS = frozenset({"defaults", "files", "legacy", "units"})
+COMPONENT_KEYS = frozenset({"defaults", "enable", "files", "legacy", "units"})
 # The builder exports the version (H3, *Package rules*). Kept out of the render, so a render
 # changes only when the package's content does, and nfpm expands it at build time.
 VERSION_FIELD = "${HOMELAB_VERSION}"
@@ -114,7 +122,6 @@ MAINTAINER_SCRIPTS = {
     "postinst": "postinstall",
     "prerm": "preremove",
 }
-UNIT_DIR = PurePosixPath("/usr/lib/systemd/system")
 UNIT_SUFFIXES = (".service", ".timer", ".socket", ".path")
 
 
@@ -126,6 +133,7 @@ class Package:
         name: The Debian package name.
         directory: `hosts/<host>` or `packages/<pkg>`, relative to `--out`.
         files: Each installed path mapped to its bytes and its octal mode.
+        links: Each installed symlink's path mapped to its target, relative to its directory.
         depends: The `Depends` entries, in the order the spec lists them.
         description: The package description.
         scripts: Each maintainer script's name, such as `postinst`, mapped to its bytes.
@@ -136,6 +144,7 @@ class Package:
     name: str
     directory: str
     files: dict[str, tuple[bytes, int]] = field(default_factory=dict)
+    links: dict[str, str] = field(default_factory=dict)
     depends: list[str] = field(default_factory=list)
     description: str = ""
     scripts: dict[str, bytes] = field(default_factory=dict)
@@ -163,26 +172,30 @@ class Package:
 
     def enable_links(self) -> list[str]:
         """The units whose enable link, under `<target>.wants/`, the package installs."""
-        return sorted(
-            path.name
-            for path in map(PurePosixPath, self.files)
-            if path.parent.parent == UNIT_DIR and path.parent.name.endswith(".wants")
-        )
+        return sorted({PurePosixPath(dst).name for dst in self.links})
 
     def nfpm_spec(self) -> str:
         """The `nfpm.yaml` the builder runs `nfpm package` on, from the package directory."""
+        contents = {
+            dst: {"src": f"root{dst}", "dst": dst, "file_info": {"mode": mode}}
+            for dst, (_, mode) in self.files.items()
+        }
+        # nfpm reads a symlink entry's `src` as the link's target.
+        contents |= {
+            dst: {"src": target, "dst": dst, "type": "symlink"}
+            for dst, target in self.links.items()
+        }
         spec = {
             "name": self.name,
             "arch": "all",
             "platform": "linux",
             "version": VERSION_FIELD,
+            # nfpm's default, `semver`, would build `0.<count>+g<sha>` as `0.<count>.0+g<sha>`.
+            "version_schema": "none",
             "maintainer": "homelab",
             "description": self.description or self.name,
             "depends": self.depends,
-            "contents": [
-                {"src": f"root{dst}", "dst": dst, "file_info": {"mode": mode}}
-                for dst, (_, mode) in sorted(self.files.items())
-            ],
+            "contents": [contents[dst] for dst in sorted(contents)],
         }
         if self.scripts:
             spec["scripts"] = {
@@ -236,10 +249,14 @@ def render_package(
     spec = hosts_root / "packages" / _plain_name(name, "package") / "package.yml"
     package = Package(name=name, directory=f"packages/{name}")
     _render(package, spec, None, hosts_root, inventory, secret_names(secrets))
+    # Reconcile reads only the host package's manifest, so a shared one's would be dropped.
     if package.legacy:
-        # Reconcile reads only the host package's manifest, so a shared one's would be dropped.
         raise RenderRefused(
             f"{name}: a shared package lists no legacy entry; its host package does"
+        )
+    if package.links:
+        raise RenderRefused(
+            f"{name}: a shared package lists no enable link; its host package does"
         )
     return package
 
@@ -263,6 +280,12 @@ def write_packages(packages: list[Package], out: Path) -> list[Path]:
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_bytes(content)
             path.chmod(mode)
+            written.append(path)
+        for dst, target in sorted(package.links.items()):
+            path = base / "root" / dst.lstrip("/")
+            path.parent.mkdir(parents=True, exist_ok=True)
+            # A host package's link may point at the updater's unit, absent from this root.
+            path.symlink_to(target)
             written.append(path)
         for name, content in sorted(package.scripts.items()):
             path = base / "scripts" / name
@@ -371,10 +394,11 @@ def _render_unit(
 ) -> None:
     """Render the files, policies and legacy entries `spec` lists into `package`.
 
-    Files come from `directory`, or from `lib`.
+    Files come from `directory`, from `lib`, or from the `keys` directory beside `lib`.
     """
     files = spec.get("files") or []
     add_policies(package, directory, spec.get("units") or {})
+    add_enable_links(package, directory, spec.get("enable") or {})
     legacy = spec.get("legacy") or []
     if not files and not legacy:
         return
@@ -389,13 +413,14 @@ def _render_unit(
                 lambda text: _render_string(env, text, ctx, reasons, directory),
             )
         )
+    keys = lib.parent / "keys"
     for entry in files:
-        sources = {"src", "lib"} & set(entry)
+        sources = {"src", "lib", "key"} & set(entry)
         if "dst" not in entry or not sources:
             raise RenderRefused(f"{directory}: file entry {entry} lacks src or dst")
         if len(sources) > 1:
             raise RenderRefused(
-                f"{directory}: file entry {entry} names both src and lib"
+                f"{directory}: file entry {entry} names more than one of src, lib and key"
             )
         dst = str(entry["dst"])
         destination = PurePosixPath(dst)
@@ -403,12 +428,18 @@ def _render_unit(
             raise RenderRefused(
                 f"{directory}: dst {dst!r} is not a plain absolute path"
             )
+        refuse_wants_file(directory, destination)
         if dst in package.files:
             raise RenderRefused(f"{package.name}: two files install {dst}")
         mode = _mode(entry.get("mode", "0644"), directory, dst)
         if "lib" in entry:
             # A plain name has no `.j2` suffix, so a lib script is copied, never rendered.
             source = _confined(lib, _plain_name(entry["lib"], "lib script"))
+            package.files[dst] = (source.read_bytes(), mode)
+            continue
+        if "key" in entry:
+            # The name carries no suffix, so the plain-name rule holds and `.gpg` is fixed here.
+            source = _confined(keys, f"{_plain_name(entry['key'], 'key')}.gpg")
             package.files[dst] = (source.read_bytes(), mode)
             continue
         src = str(entry["src"])

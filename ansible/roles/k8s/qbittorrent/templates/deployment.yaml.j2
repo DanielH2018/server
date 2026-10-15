@@ -177,10 +177,18 @@ spec:
         - name: media
           persistentVolumeClaim:
             claimName: {{ qbittorrent_k8s_media_claim }}
+        # Both Secrets at qbittorrent_k8s_secret_mount: the WireGuard key from
+        # qbittorrent-mullvad, and the account number, which has a Secret of its own because its
+        # all-digit value cannot pass through a Flux placeholder
+        # (templates/mullvad-account-secret.yaml.j2).
         - name: qbittorrent-mullvad
-          secret:
-            secretName: qbittorrent-mullvad
+          projected:
             defaultMode: 0400
+            sources:
+              - secret:
+                  name: qbittorrent-mullvad
+              - secret:
+                  name: qbittorrent-mullvad-account
         - name: netns-reset
           configMap:
             name: qbittorrent-netns-reset

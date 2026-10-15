@@ -22,16 +22,33 @@ _DECLARED_ENTRY = re.compile(
 )
 # `platform: <value>` at the sub-key indent (4 spaces) within one entry's block.
 _ENTRY_PLATFORM = re.compile(r"^    platform:\s*(\S+)", re.MULTILINE)
+# The `containers_list:` key, and the first column-0 line after it that is not a comment, which
+# ends the list. Without the end, the last entry's block runs on through the host's later
+# top-level keys, and a later list of `- name:` items reads as more entries.
+_LIST_START = re.compile(r"^containers_list:[ \t]*(?:#.*)?$", re.MULTILINE)
+_LIST_END = re.compile(r"^[^\s#]", re.MULTILINE)
+
+
+def _listing(hostvars_text: str) -> str:
+    """The text of the `containers_list:` block alone, or "" when the file has no such key.
+
+    Both readers run `_DECLARED_ENTRY` over this rather than the whole file, so a top-level
+    list before or after `containers_list` never reads as entries (#4964).
+    """
+    start = _LIST_START.search(hostvars_text)
+    if start is None:
+        return ""
+    return _LIST_END.split(hostvars_text[start.end() :], maxsplit=1)[0]
 
 
 def declared_k8s_services(hostvars_text: str) -> set[str]:
-    """The `platform: k8s` service names declared in a host's containers_list.
+    """The `platform: k8s` service names declared in a host's containers_list block.
 
     `deploy_k8s_owed.alert_and_record_deferred` reads it to name the k8s roles a tick merged
     and will not apply. An entry with no `platform:` key is Docker, and is not returned.
     """
     out: set[str] = set()
-    for m in _DECLARED_ENTRY.finditer(hostvars_text):
+    for m in _DECLARED_ENTRY.finditer(_listing(hostvars_text)):
         name, block = m.group(1), m.group(2)
         pm = _ENTRY_PLATFORM.search(block)
         platform = pm.group(1) if pm else "docker"
@@ -51,11 +68,6 @@ OWNER_VALUES = frozenset({"flux", "released"})
 # `owner:` and `tags:` at the sub-key indent, each with the rest of its line.
 _ENTRY_OWNER = re.compile(r"^    owner:(.*)$", re.MULTILINE)
 _ENTRY_TAGS = re.compile(r"^    tags:(.*)$", re.MULTILINE)
-# The `containers_list:` key, and the first column-0 line after it that is not a comment, which
-# ends the list. Without the end, the last entry's block runs on through the host's later
-# top-level keys, and a later list of `- name:` items reads as more entries.
-_LIST_START = re.compile(r"^containers_list:[ \t]*(?:#.*)?$", re.MULTILINE)
-_LIST_END = re.compile(r"^[^\s#]", re.MULTILINE)
 
 
 def _scalar(raw: str) -> str:
@@ -106,12 +118,8 @@ def service_owners(hostvars_text: str) -> dict[str, str]:
             and the deployer applies only a green master, so a raise here means CI was
             bypassed: the tick crashes and pages rather than guess an owner.
     """
-    start = _LIST_START.search(hostvars_text)
-    if start is None:
-        return {}
-    listing = _LIST_END.split(hostvars_text[start.end() :], maxsplit=1)[0]
     owners: dict[str, str] = {}
-    for m in _DECLARED_ENTRY.finditer(listing):
+    for m in _DECLARED_ENTRY.finditer(_listing(hostvars_text)):
         name, block = m.group(1), m.group(2)
         om = _ENTRY_OWNER.search(block)
         pm = _ENTRY_PLATFORM.search(block)

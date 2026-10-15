@@ -11,6 +11,10 @@ PR H3.3a, the `host_packages` CI job skeleton: [#4974](https://github.com/Daniel
 PR H3.3b, the updater cases in systemd containers: [#5009](https://github.com/DanielH2018/server/pull/5009).
 PR H3.4a, the `homelab_builder` role behind a disarmed flag: [#5016](https://github.com/DanielH2018/server/pull/5016).
 The operator cleared its park on 2026-10-14, and the apply changed nothing.
+PR H3.4b, the repository half: [#5029](https://github.com/DanielH2018/server/pull/5029).
+The tick applied it on 2026-10-15, and daniel-server reads `10.0.0.215:8791`.
+PR H3.4c, the archive key in `homelab-updater`: [#5032](https://github.com/DanielH2018/server/pull/5032).
+The key's fingerprint is `83B57416B342DDE1CBA0752D435D139ADFD6F016`.
 
 Depends on: R1
 Unblocks: H4, H5
@@ -229,6 +233,9 @@ H4 to H7 use these names unchanged. A slice that needs a different value says so
     - `hosts/keys/` holds the public keys hosts trust. PR H3.4c commits the first,
       `homelab-archive-keyring.gpg`. The builder's anchor reads no key ([ADR-0021](../../adr/0021-the-host-package-builder-trusts-master-plus-green-ci.md)), so
       nothing a candidate commit puts there can move it.
+    - A package ships a key with a `key:` file entry, which names `hosts/keys/<name>.gpg`
+      without its suffix, the way a `lib:` entry names `hosts/lib/<name>`. Both are copied
+      byte for byte, and they are the only sources outside a component's own directory.
 - **Packages and the slice that creates each.** `homelab-updater`, `homelab-daniel-pi` and
   `homelab-tools` in H3, `homelab-daniel-server` in H4, `homelab-daniel-box` in H6, and
   `homelab-repos` in H7. `homelab-tools` is the one architecture-specific package (C5,
@@ -236,7 +243,8 @@ H4 to H7 use these names unchanged. A slice that needs a different value says so
 - **Installed paths.**
     - Scripts go in `/usr/lib/homelab/`.
     - Units go in `/usr/lib/systemd/system/`, and enable links in
-      `/usr/lib/systemd/system/<target>.wants/`.
+      `/usr/lib/systemd/system/<target>.wants/`. An enable link is a symlink to `../<unit>`,
+      as `systemctl enable` writes it: systemd adds a `Wants=` only for a symlinked unit.
     - A drop-in for another package's unit goes in `/usr/lib/systemd/system/<unit>.d/50-homelab.conf`.
     - The rendered manifest goes in `/usr/lib/homelab/manifest.json`.
 - **Unit naming.** Every unit a homelab package ships is named `homelab-*`. The reconcile
@@ -420,7 +428,11 @@ and every host slice applies it.
 
 - **Plain files only.** No nfpm content has `type: config*`. The renderer emits no such
   type, and the CI lint fails the build if one appears. A file under `/etc`, such as
-  `/etc/logrotate.d/pi-health`, is a plain file too.
+  `/etc/logrotate.d/pi-health`, is a plain file too. An enable link is the one entry that is
+  not a file: it ships as `type: symlink`, for the reason *Installed paths* gives.
+- **Version schema.** Every `nfpm.yaml` sets `version_schema: none`, so the built package
+  carries the *Version* string below unchanged. nfpm's default, `semver`, would build
+  `0.<count>+g<sha>` as `0.<count>.0+g<sha>`.
 - **Maintainer scripts.**
     - `postinst` holds only `systemctl daemon-reload || true`,
       `systemctl --no-block start homelab-reconcile.service || true` and `exit 0`.
@@ -1232,7 +1244,7 @@ says otherwise.
 4. **H3.4a Place the `homelab_builder` role. This PR parks the GitOps deployer.**
     - Add the `initial_setup.yml` entry `{ role: homelab_builder, tags: ["homelab_builder"],
       when: has_gitops }` after `gitops_deploy`. `has_gitops` is already resolvable by
-      `scripts/deploy_tools/setup_gates.py`, so no inventory change is needed.
+      `scripts/deploy_tools/setup_lib/setup_gates.py`, so no inventory change is needed.
     - Add the role skeleton:
         - `defaults/main.yml` with `homelab_builder_enabled: false`;
         - `tasks/main.yml` dispatching to `install.yml` or `teardown.yml` on that flag, both
@@ -1283,7 +1295,11 @@ says otherwise.
       and before H3.5a, so the builder never renders `homelab-updater` without it.
         - **Operator-only**, because the signer's GnuPG home is 0700: export the public key
           with `sudo -u homelab-signer gpg --homedir /var/lib/homelab-signer/gnupg --export`
-          into `hosts/keys/homelab-archive-keyring.gpg` in a worktree, and commit it.
+          into `hosts/keys/homelab-archive-keyring.gpg` in a worktree, and commit it. Then
+          stop the gpg-agent the export starts:
+          `sudo -u homelab-signer gpgconf --homedir /var/lib/homelab-signer/gnupg --kill gpg-agent`.
+          On 2026-10-15 the agent outlived the export, and the worktree tools then read
+          every worktree as in use.
         - Add the keyring to `hosts/packages/homelab-updater/package.yml`, installed at
           `/usr/share/keyrings/homelab-archive-keyring.gpg`.
         - The shared-package render test names that path as a member of `homelab-updater`'s
@@ -1294,11 +1310,12 @@ says otherwise.
    also waits on three gates:
     - the operator's ADR for *Open questions* 1 is merged: [ADR-0021](../../adr/0021-the-host-package-builder-trusts-master-plus-green-ci.md), accepted
       2026-10-14;
-    - the C5 *Version* row (*Open questions* 7) is amended, or listed under *Requested
-      amendments not yet applied* with this gate;
-    - **operator-only:** the signing-key reach check in *Verification* has run for every
-      account an agent session runs as and for `homelab-builder`, and its output is in the
-      PR body. A check that finds any route stops the PR until that route is closed.
+    - the C5 *Version* row (*Open questions* 7) is amended: contracts.md's *Applied requests
+      (2026-10-15)* records it;
+    - **operator-only:** the signing-key reach check in *Verification* has run for `claude`
+      and for `homelab-builder`, and its output is in the PR body. A check that finds any
+      route for either account stops the PR until that route is closed. `ubuntu` is out of
+      scope by the operator's ruling of 2026-10-15 (*Risks*, the `ubuntu` bullet).
     - Add `homelab-builder.service` and `homelab-builder.timer`, the builder script, the
       pinned nfpm and `apt-utils`, and `/etc/homelab-builder/config.env` carrying the token,
       `CI_CONTEXTS` and the walk bound (builder step 4).
@@ -1687,7 +1704,7 @@ ssh daniel-pi 'dpkg-query -W homelab-tools:arm64; dpkg --verify homelab-tools'
 
 ```bash
 # Operator, on daniel-box, before H3.5a merges: the signing-key reach check. Run it once
-# for each account an agent session runs as, and once for homelab-builder.
+# for claude, the agent user, and once for homelab-builder. ubuntu is out of scope (Risks).
 sudo -l -U <account>
 id <account>
 sudo -u <account> -- test -r /var/lib/homelab-signer/gnupg && echo READABLE
@@ -1712,9 +1729,9 @@ The expected results are:
 - at H3.11, `dpkg-query` prints one `arm64` line and `dpkg --verify` prints nothing;
 - the reach check passes for an account when `sudo -l` lists no rule that runs a command
   as root or as `homelab-signer`, `id` names none of `homelab-signer`, `sudo`, `docker`,
-  `lxd` or `disk`, the `test` line prints nothing, and `gpg` fails. The check covers every
-  route that skips master. A route through a merged change is the anchor itself (*Open
-  questions* 1).
+  `lxd` or `disk`, the `test` line prints nothing, and `gpg` fails. For the two accounts it
+  runs for, the check covers every route that skips master. A route through a merged change
+  is the anchor itself (*Open questions* 1).
 
 **The recovery disarm (H3.8b).** The container suite proves it, so production never loses
 its recovery timer for a test. It installs the Pi package rendered with
@@ -2075,6 +2092,13 @@ follow-up and H3.8b each publish a new Pi version before H3.9b arms the timer.
       between the two users, is what keeps that commit honest.
     - H3.5a's reach check is the gate on every other route to the key. The operator runs
       it before the builder first runs, and the PR body carries its output.
+    - **`ubuntu` reaches the key, and the check does not cover it.** The operator ruled on
+      2026-10-15 that the check runs for `claude` and `homelab-builder` only. `ubuntu` is the
+      operator's administrative account, and it already holds root on all three hosts
+      without going through master, so the signing key adds nothing to its reach. While
+      agent sessions still run as `ubuntu`, only the session hooks keep them from the key,
+      as they do from root. Retiring those sessions is slice 6 of the move to the `claude`
+      user (`docs/claude-agent-user.md`).
 - **daniel-box holds the builder, the signer and the repository.** A daniel-box outage
   stops publishing, every host keeps its installed version, and `HostUpdateStale` fires
   for each host once its limit passes. The break-glass copy of the key is the off-box
@@ -2417,10 +2441,9 @@ follow-up and H3.8b each publish a new Pi version before H3.9b arms the timer.
    which can be older than the tip. A count taken from the tip gives a parent and its tip
    equal numbers, and dpkg then orders them by SHA. This plan counts the built commit:
    `0.<git rev-list --count --first-parent <chosen>>+g<12-hex sha of <chosen>>`
-   (*Package rules*). Resolution: amend the C5 *Version* row, and list it under contracts.md's
-   *Requested amendments not yet applied*, gated before H3.5a merges. Not applied: the C5
-   row still counts `origin/master`, and the register does not list it. H3.5a's step names
-   the gate, and this round's cross-slice notes request the row.
+   (*Package rules*). Resolution: applied on 2026-10-15. The C5 *Version* row counts the
+   built commit, and contracts.md's *Applied requests (2026-10-15)* records it, which clears
+   H3.5a's gate.
 8. **Which form does H3.5c take, and how does M6 learn of it?** H3 waits only on R1, and M6
    on M2 to M5, so the slice index orders neither against the other. H3.5c's row, tile and
    token are outside M6's baseline counts. Two fixes were weighed:

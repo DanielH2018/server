@@ -134,3 +134,21 @@ def test_each_file_change_is_listed(tmp_path):
         "- `packages/a/root/edited`: content changed",
         "- `packages/gone`: dropped",
     ]
+
+
+def test_an_enable_link_is_diffed_by_its_target_even_when_it_dangles(tmp_path):
+    # H3.9b's shape: the host package links the updater's timer, absent from its own root.
+    wants = "root/usr/lib/systemd/system/timers.target.wants"
+    for side in ("base", "head"):
+        _write(tmp_path / side / "hosts" / "p", {"nfpm.yaml": ("name: p\n", 0o644)})
+        (tmp_path / side / "hosts" / "p" / wants).mkdir(parents=True)
+    (tmp_path / "base/hosts/p" / wants / "a.timer").symlink_to("../a.timer")
+    (tmp_path / "base/hosts/p" / wants / "b.timer").symlink_to("../a.timer")
+    (tmp_path / "head/hosts/p" / wants / "b.timer").symlink_to("../b.timer")
+    (tmp_path / "head/hosts/p" / wants / "c.timer").symlink_to("../c.timer")
+
+    assert host_packages.diff(tmp_path / "base", tmp_path / "head") == [
+        f"- `hosts/p/{wants}/a.timer`: removed",
+        f"- `hosts/p/{wants}/b.timer`: content changed",
+        f"- `hosts/p/{wants}/c.timer`: added",
+    ]

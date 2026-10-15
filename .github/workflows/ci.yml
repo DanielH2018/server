@@ -736,8 +736,8 @@ jobs:
       # The renderer imports no Galaxy collection, so no Galaxy cache.
       - uses: ./.github/actions/setup  # zizmor: ignore[self-repository] -- see the action's header
 
-      # Equal to flux_version in ansible/roles/k8s/flux/defaults/main.yml, as both steps in
-      # .github/workflows/promote.yml are, so the CLI that checks the round trip is the CLI
+      # Equal to flux_version in ansible/roles/k8s/flux/defaults/main.yml, as every flux
+      # step in .github/workflows/promote.yml is, so the CLI that checks the round trip is the CLI
       # that publishes and the controllers' release. The `# renovate:` comment puts this input
       # in the one flux PR with them, and scripts/tests/test_renovate_flux_cli.py fails a drift.
       - uses: fluxcd/flux2/action@b9c17924adb533d3617ec7de97a7b0f4acc07b39 # v2.9.6
@@ -757,9 +757,10 @@ jobs:
           [ "$rc" = 1 ]
 
       # The green run builds every tag outside PLACEHOLDER_DEFERRED, in both passes, so it
-      # covers home-assistant, which carries the first render_sops_manifests entry: each pass
-      # also asserts it dropped exactly one document for it. The red half stays on three
-      # tags: it only has to show that one changed byte is seen.
+      # covers home-assistant, pi-peer-backup and qbittorrent, which carry the
+      # render_sops_manifests entries: each pass also asserts it dropped exactly one document
+      # for each. The red half stays on three tags: it only has to show that one changed byte
+      # is seen.
       - name: Round-trip every tag through flux build
         run: |
           set -euo pipefail

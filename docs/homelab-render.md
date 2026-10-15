@@ -297,7 +297,7 @@ rule, the tag, the file, the document as `Kind/name` or the refused form, and th
 | `known-key` | the output of a directory that substitutes | a `${NAME}` whose name is not a key of `ansible/vars/secrets.yml` |
 | `no-bare-dollar-brace` | the output, read as Flux reads it, each `$$` paired first | a `${` that is not a placeholder of pass 3, and a sentinel fragment in any directory |
 | `confined-to-secret` | the kind of each rendered document | a placeholder outside `kind: Secret`, except `email` (`PLACEHOLDER_ANYWHERE`) |
-| `no-sops-manifest-key` | the output | a placeholder of a key in `SOPS_MANIFEST_KEYS`, the multi-line keys Flux cannot substitute |
+| `no-sops-manifest-key` | the output | a placeholder of a key in `SOPS_MANIFEST_KEYS`, the multi-line or all-digit standalone keys Flux cannot substitute as written |
 | `no-secret-expression` | the syntax tree of every `.j2` under the k8s roles' `templates/` and `ansible/templates/`, but `*.sh.j2` | any form of a secret key that could change its value |
 
 Rule 5 allows a key only bare, under `default`, `to_json` or `indent` (not for a
@@ -345,9 +345,11 @@ part, so a reviewer reads any new `{% for %}` over a part of a container alias a
 transform.
 
 `KNOWN_VIOLATIONS` holds every violation the first fleet render found and the tree still has:
-rule 4 on authelia's and pi-peer-backup's Secrets, and rule 5's five entries. Those are the two
-`indent`s on those keys, two `trim`s and mosquitto's `string`. R2's PRs 4 to 7 remove them, and an entry that no longer matches fails the check, so the set shrinks
-only through a fix. R2's PR 5 removed Home Assistant's two entries, the `from_json` parse and
+rule 4 on authelia's and pi-peer-backup's Secrets, and rule 5's two entries, the `indent`s on
+those keys. R2's PRs 6 and 7 remove them, and an entry that no longer matches fails the check,
+so the set shrinks only through a fix. R2's PR 4 removed qbittorrent's two `trim`s and
+mosquitto's `string`, and mosquitto's deploy refuses a stored hash that holds a colon.
+R2's PR 5 removed Home Assistant's two entries, the `from_json` parse and
 the Secret that embedded its output through `indent`. R2's PR 3 removed the 24 truthiness
 tests, each now `{% if K is defined %}`. Domain PR 2b removed the `hash('sha1')` on
 Prometheus's config block, which output `domain`
@@ -368,8 +370,10 @@ members.
 ### Manifests placeholder mode leaves out
 
 A multi-line key cannot pass through a placeholder, because Flux deletes every newline from a
-substituted value. Each such key moves into a small Secret of its own, which D3 ships as a
-SOPS-encrypted manifest. The role lists that Secret's manifest in the defaults variable
+substituted value. An all-digit key that stands alone in its field cannot either, because Flux
+drops the template's quotes and types the value as a number. Each such key moves into a small
+Secret of its own, which D3 ships as a SOPS-encrypted manifest. The role lists that Secret's
+manifest in the defaults variable
 `render_sops_manifests`, and placeholder mode emits no document for it. It drops the file
 before pass 2 and rebuilds the directory's `kustomization.yaml` without it, so its key counts
 in no key set and in no standalone set. Stub mode still renders it, and Ansible renders and
@@ -378,6 +382,8 @@ applies it like any other secret file.
 | Role | Entry | Secret | Key |
 |---|---|---|---|
 | `home-assistant` | `google-sa-secret.yaml` | `home-assistant-google-sa` | `google_assistant_service_account` |
+| `pi-peer-backup` | `ssh-key-secret.yaml` | `pi-peer-backup-ssh-key` | `pi_peer_backup_ssh_key` |
+| `qbittorrent` | `mullvad-account-secret.yaml` | `qbittorrent-mullvad-account` | `mullvad_account` |
 
 A wrong entry would hide a whole Secret from the publish and from the round trip, so the
 `sops-manifest-entries` check in `renderer_lib/sops_entries.py` holds the lists on every
@@ -388,9 +394,16 @@ placeholder render. `cluster` exits 1 and writes nothing when an entry:
 - names a secret key outside `SOPS_MANIFEST_KEYS`, or no key in it.
 
 The check reads the keys from the entry's sentinel render, so a key reached through an alias
-counts. A `--role` render checks only the tags it rendered. R2's plan adds a third clause once
-PR 2's `KNOWN_VIOLATIONS` ratchet exists: every template outside the lists that names a
-`SOPS_MANIFEST_KEYS` key must carry a live entry there.
+counts. A `--role` render checks only the tags it rendered.
+
+A third clause holds the templates outside the lists. Every template that names a
+`SOPS_MANIFEST_KEYS` key, and is in no role's `render_sops_manifests`, must carry a live rule 5
+entry in `KNOWN_VIOLATIONS` for that key. Rule 5's walk supplies the names, so an alias counts. The
+clause reads template sources, so it scans the whole tree on every run, `--role` renders included.
+`secret_checks.check` runs it beside the five rules, so a failure prints `secret check:
+sops-manifest-entries: <template> names <key>, ...` and `cluster` exits 1. Authelia's
+`config-secret.yaml.j2` passes it through its `filter indent` entry until R2's PR 7 moves
+`authelia_oidc_rsa_key_content` into a Secret of its own.
 
 ### Filters that only interpolate a secret
 
@@ -443,9 +456,9 @@ It runs two passes:
 
 Two things are left out of the comparison, by name and by count, and nothing else:
 
-- **The documents a `KNOWN_VIOLATIONS` entry of rules 1 to 4 names.** These are authelia's
-  `Secret/authelia-config` and pi-peer-backup's `Secret/pi-peer-backup-ssh`, which still
-  carry a multi-line key. Each entry whose directory was built must drop exactly one object.
+- **The documents a `KNOWN_VIOLATIONS` entry of rules 1 to 4 names.** The one left is
+  authelia's `Secret/authelia-config`, which still carries a multi-line key. Each entry whose
+  directory was built must drop exactly one object.
 - **The files a role's `render_sops_manifests` names.** Placeholder mode emits no document for
   them, and each stub render drops the same files. Each pass counts the documents it dropped
   and fails unless the count equals the number of entries in the tags it built.
@@ -456,7 +469,7 @@ held `${domain}`. No hashed config holds a placeholder since `domain` was publis
 placeholder that reaches one is a difference.
 
 Each pass prints a summary line, such as `roundtrip: 58 tags, 4 deferred directories, 47
-substituting, 450 objects, 2 documents in KNOWN_VIOLATIONS left out, 0 differences, 1
+substituting, 450 objects, 1 documents in KNOWN_VIOLATIONS left out, 0 differences, 3
 documents in render_sops_manifests, with each key's R1 stub`. `roundtrip` exits 0 only when both passes find no difference and each
 exclusion count holds.
 
@@ -473,7 +486,8 @@ uv run python scripts/renderer/shadow_diff.py roundtrip --out /tmp/r2-roundtrip 
 ```
 
 The CI job round-trips every tag outside `PLACEHOLDER_DEFERRED` in both passes, with no
-`--role`. That covers `home-assistant`, which carries the first `render_sops_manifests` entry.
+`--role`. That covers `home-assistant`, `pi-peer-backup` and `qbittorrent`, which carry the
+three `render_sops_manifests` entries.
 Its red half runs on `configarr`, `janitorr` and `home-assistant` only, because one changed byte
 is all it has to show. The job also round-trips `traefik` with `email` dropped from the guard's
 map under every tag, and fails unless that run exits 1 and names `Deployment/homelab/traefik`.
@@ -560,19 +574,21 @@ template shape fixes it, so the guard checks the values where they are decrypted
   `1e3`, `08`, `0o17` and `y`, which PyYAML reads as strings. The flux probe holds both to
   the pinned CLI. D3's `cluster_vars.py write` imports the same function.
 - **`GUARD_DEFERRED`** in `placeholders.py` names the keys with a standalone use that the
-  guard does not check, each with its reason. It holds `mullvad_account`, whose one use is
-  qbittorrent's Secret and whose real value is all digits. R2's PR 7b moves it into a
-  dedicated SOPS-encrypted Secret and empties the set.
+  guard does not check, each with its reason. It is empty. Its last member was
+  `mullvad_account`, whose real value is all digits. R2's PR 7b moved that key into the
+  dedicated SOPS-encrypted Secret `qbittorrent-mullvad-account`, which placeholder mode
+  leaves out.
 - **The coverage test**, `scripts/renderer/tests/test_renderer_standalone_map.py`, renders the
   fleet in placeholder mode and holds the committed map equal to it. It also fails on a key
   in both the map and `GUARD_DEFERRED`, on a `GUARD_DEFERRED` member that stands alone
   nowhere, and on a mapped key absent from `ansible/vars/secrets.yml`. Its named members are
-  `email` under `traefik` and `mullvad_account` in `GUARD_DEFERRED`.
+  `email` and `wireguard_interface_private_key`, mapped under `traefik` and `qbittorrent`, and
+  an empty `GUARD_DEFERRED`.
 
 When the assert refuses a key, the deploy stops before anything renders or applies, so the
 live objects keep their old values. R2's Open question 13 records the operator's ruling of
 2026-10-13: rotate the value to one that stays a string (**operator-only**), or move the key
-into a dedicated SOPS-encrypted Secret, as PR 7b does for `mullvad_account`. Then deploy
+into a dedicated SOPS-encrypted Secret, as PR 7b did for `mullvad_account`. Then deploy
 again.
 
 ## Pinned live-read facts
@@ -903,7 +919,8 @@ outside `root/`, and `nfpm.yaml`'s `scripts:` names it. Only a host package may 
 `hosts/lib/tests/test_maintainer_scripts.py` holds each rendered script to the line shapes H3's
 *Package rules* allow.
 
-A package spec or a component may also carry `units:` and `legacy:`, which feed the manifest.
+A package spec or a component may also carry `units:`, `enable:` and `legacy:`, which feed
+the manifest.
 
 - `units:` maps a unit to `{policy: manual}` or `{policy: windowed}`. Reconcile does not
   restart a unit with a policy when its file changes. The unit must be one the host package
@@ -912,12 +929,19 @@ A package spec or a component may also carry `units:` and `legacy:`, which feed 
   user: USER}`, `{cron_file: NAME}` or `{unit: NAME}`. Each value renders with the
   package's context, so `user: "{{ sys_user }}"` becomes the user's name. A shared package
   refuses a legacy entry, because reconcile reads only the host package's manifest.
+- `enable:` maps a unit to the target that wants it, such as
+  `{homelab-updater.timer: timers.target}`. The render ships the link `systemctl enable`
+  writes: a symlink at `/usr/lib/systemd/system/<target>.wants/<unit>` pointing at
+  `../<unit>`, as an `nfpm` `type: symlink` entry. systemd adds a `Wants=` only for a unit
+  symlinked from a `.wants/` directory, so the render refuses a file entry there. The unit
+  may be one `homelab-updater` installs, which is how a host arms the updater's timer. A
+  shared package refuses an enable link, for the same reason it refuses a legacy entry.
 
 Host mode writes `/usr/lib/homelab/manifest.json`, mode 0644, into every host package. It is
 the manifest `hosts/lib/homelab-reconcile` reads, in the schema that script's docstring
 documents. `units` lists every unit the host package and `homelab-updater` install, and every
 unit the host package drops a `50-homelab.conf` into, each with its policy or `{}`.
-`enable_links` lists each unit the host package installs under a
+`enable_links` lists each unit the host package's `enable:` maps link from a
 `/usr/lib/systemd/system/<target>.wants/` directory. `legacy` holds the rendered entries, and
 `reconcilers` is empty until H4. A spec file entry may not install the manifest's path.
 The render refuses any manifest that `homelab-reconcile:parse_manifest` would refuse: an enable
@@ -935,7 +959,9 @@ an inventory variable.
 Every host package's `nfpm.yaml` carries `Depends: python3 (>= 3.12)`, because reconcile runs
 under `/usr/bin/python3`. Its `version` is `${HOMELAB_VERSION}`, which `nfpm` expands from the
 builder's environment, so two commits with the same tree render the same spec. Every package
-is `arch: all`.
+is `arch: all`. The spec sets `version_schema: none`, so `nfpm` keeps the version as
+given. Its default, `semver`, builds `0.5513+gc9db6da8cdee` as `0.5513.0+gc9db6da8cdee`, which
+differs from the form H3's *Package rules* states.
 
 ### Host mode renders no secret
 

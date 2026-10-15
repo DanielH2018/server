@@ -120,11 +120,33 @@ M1's Alertmanager. Every rule carries `service="flux"`.
   points at the kube-state-metrics log.
 - **`FluxSuspended`, warning.** A Kustomization has been suspended for more than 24 hours.
   `flux_sync_suspend` and a hand suspend both count.
+- **`FluxWorkersSaturated`, warning.** For 30 minutes, every `kustomize-controller` reconcile
+  worker has been busy and its work queue has not been empty, so applies are queueing.
+    - The rule compares `controller_runtime_active_workers` with
+      `controller_runtime_max_concurrent_reconciles` for `controller="kustomization"`, and
+      reads `workqueue_depth` for the queue. It reads the maximum from its gauge, never a
+      literal, because `--concurrent` is 4 until D5.1 changes it. The three series come from
+      the `flux` scrape job, so the rule adds no series.
+    - A broad revision fills the workers for hours while it progresses. The rule therefore
+      reports queueing, not a failed deploy. It is a warning without `verify="true"`, so
+      the promotion soak, which reads only alerts carrying `severity="critical"` or
+      `verify="true"` ([contracts.md C7](target-architecture/contracts.md)), never reads it.
+    - **The gap `verify`'s timeout cannot see.** A revision queues a reconcile of every
+      Kustomization on the source, changed or not. An unchanged Kustomization that is
+      unhealthy holds a worker for its whole `timeout`, retries after its `retryInterval`,
+      and holds one again. The bundle does not say which Kustomizations are unhealthy, so
+      the timeout leaves them out. When as many of them fail at once as there are workers,
+      every apply queues, the fix included, and `verify` times out on a changed name that
+      never applied. This rule is what reports that state.
+    - **The shed bound is one `timeout`.** Suspending an unhealthy Kustomization needs no
+      worker, because a suspend is an API write. Nothing shows that a suspend ends a
+      health-check wait already in progress, so each held worker frees when its current wait
+      ends. The suspended Kustomization then does not retry.
 
 notification-controller's Discord alerts stay as a second channel beside these.
 `ansible/roles/k8s/observability/tests/rules/flux.test.yaml` fires each rule and holds a
-case one evaluation short of each hold. A lost `gotk_resource_info` leaves the last two rules
-quiet ([#4809](https://github.com/DanielH2018/server/issues/4809)).
+case one evaluation short of each hold. A lost `gotk_resource_info` leaves `FluxNotReady`'s
+readiness arms and `FluxSuspended` quiet ([#4809](https://github.com/DanielH2018/server/issues/4809)).
 
 ## A `containers_list` change reaches Flux
 
@@ -226,19 +248,26 @@ of CI on master. It publishes the commit as the OCI artifact
 `ghcr.io/danielh2018/homelab-manifests:sha-<commit>` and moves the tag `prod` to the newest
 published master commit. The `OCIRepository` `homelab` follows `prod`. While no
 `containers_list` entry carries `owner: flux`, the bundle's root Kustomization is empty, so a
-move changes nothing in the cluster but the commit Flux reports. The workflow has four jobs:
+move changes nothing in the cluster but the commit Flux reports. The workflow has six jobs:
 
 1. `render` checks out the triggering commit and refuses one that is not on master. It builds
    the bundle (*The bundle*), runs `promote.py check-bundle` over it, and scans it with
-   gitleaks. It holds read access only, and a refusal at any step pushes nothing.
+   gitleaks in its step `Scan the bundle for secrets`. It holds read access only, and a refusal at any step pushes nothing.
 1. `publish` checks out no repository code. It pushes the bundle as `sha-<commit>` and signs
    it with cosign, under a certificate that names the workflow's own identity.
 1. `promote` runs `promote.py decide`, read-only. `decide` walks master from its tip back to
-   `prod`'s commit and takes the first commit that is published, signed and green in CI. It
-   prints one line, `trigger=<sha> verdict=<verdict> target=<sha>`, where the verdict is
-   `promote`, `held`, `current` or `error`.
+   `prod`'s commit and takes the first commit that is published, signed and green in CI, and
+   that loses no object without a declaration (*Removing an object on purpose*). It prints
+   one line, `trigger=<sha> verdict=<verdict> target=<sha>`, where the verdict is
+   `promote`, `held`, `current` or `error`. On `promote` it pulls `prod`'s bundle and the
+   target's before anything moves, and hands both to `verify`.
 1. `tag` checks out no repository code. On the verdict `promote` it moves `prod` to
-   `sha-<target>` and writes that digest to the repository variable `PROD_DIGEST`.
+   `sha-<target>` and writes that digest to the repository variable `PROD_DIGEST`. When
+   `last-good` does not exist yet, it first tags `prod`'s old digest `last-good`.
+1. `verify` runs `promote.py verify <target>` with `contents: read` and `statuses: read`, and
+   prints `good` or `failed` (*Verification*).
+1. `settle` checks out no repository code. It moves `last-good` on `good`, and otherwise
+   writes the hold and resets `prod`.
 
 The repository variable `DEPLOY_HOLD` stops promotion. The value `none` means no hold, and any
 other value holds, so a mistyped hold still holds. An empty or missing variable makes `decide`
@@ -252,6 +281,15 @@ An agent session cannot run that command, nor write `PROD_DIGEST` or move a tag:
 `block-footguns` hook denies them (`.claude/hooks/_deploy_plane_rule.py`). Reading either
 variable with `gh variable get` stays allowed.
 
+A dispatch from master with the input `sha` publishes and promotes from that commit rather
+than master's tip. `render` refuses it unless it descends from `origin/master`, then re-reads
+its CI through the check-runs API with `promote.py ci-verdict`, and refuses anything but
+green. This is how a run resumes after a hold is cleared:
+
+```bash
+gh workflow run promote.yml --ref master -f sha=<master tip>
+```
+
 A dispatch of the workflow from master with the input `verify_drill` pushes the bundle
 unsigned to the tag `verify-drill`, for the flux role's signature drill. It skips `promote`
 and `tag`, so it never moves `prod`. The drill push carries the annotation
@@ -259,6 +297,91 @@ and `tag`, so it never moves `prod`. The drill push carries the annotation
 the same commit. Without it, the drill tag pointed at a signed digest and verified. The
 dispatch then runs `cosign verify` on the drill digest under `promote`'s identity, and the
 run fails if the verification succeeds.
+
+## Verification
+
+Contract C2 *Verification* is the rule, and `scripts/deploy_tools/promote_lib/verify_promotion.py`
+holds it. After `tag` moves `prod` to T, `verify` waits on the commit statuses that
+notification-controller posts on T:
+
+- **What it expects.** `flux/homelab`, plus `flux/<name>` for every name in T's changed set.
+  `changed_set.changed_set` computes the set from T's `digests.json` and `prod`'s, as it does
+  for `land.sh`'s wait. The set holds each name whose `footprint` moved, and every
+  Kustomization whose `dependsOn` chain reaches one, such as a tag's `-deferred`. A suspended
+  Kustomization is left out. A change under `_unclassified`, or a bundle with no
+  `digests.json`, expects every name, and an empty set expects `flux/homelab` alone.
+- **What it never expects.** A Kustomization outside the set, so a failure that T did not
+  cause never holds; the Flux alerts page it instead. A dependent whose status on `prod`'s
+  commit already read `failure` is reported in the log and not expected.
+- **T, not the trigger.** `decide` may pick a commit newer than the one whose CI started the
+  run, and Flux posts statuses only on the commit `prod` names. `verify` reads T's own bundle,
+  which `decide` pulled, never the render job's `out/`.
+- **Only this promotion's statuses count.** `tag` stamps the time just before it moves
+  `prod`, and `verify` ignores any status on T updated more than a minute before that. A
+  commit promoted a second time, after a hold on it was cleared, still carries the first
+  promotion's statuses, and an old `failure` would otherwise hold it again at the first read.
+- **The verdict.** Every expected status `success` is `good`. Any `failure` or `error` is
+  `failed`. A missing or `pending` status keeps the wait going and never reads as success, so
+  the timeout ends it as `failed`, naming each name that had no `success`. The timeout is the
+  largest Kustomization `timeout` in T's bundle, plus the `OCIRepository`'s interval, plus the
+  largest `retryInterval`: 13 minutes for a tag at the manifests role's default.
+
+`settle` applies the verdict:
+
+- **`good`** tags `sha-<T>` as `last-good`.
+- **Anything else** writes `<T> failed=<names>` to `DEPLOY_HOLD`, then resets `prod` to the
+  digest `decide` read for `last-good`, then writes that digest to `PROD_DIGEST`. The hold
+  comes first, the order `deploy_handlers.py:_rollback_k8s` uses for `hold_sha`, so a reset
+  that fails still stops the next promotion. A hold write that fails still attempts the
+  reset, and the step names both results. A `verify` that ended with no verdict, because it
+  crashed, timed out as a job or was cancelled, holds as `<T> unverified`.
+
+**Every move of `prod` writes `PROD_DIGEST`**: `tag` on a promotion, and `settle` on a reset.
+A failed write fails the job after the move. Slice D2.6d's deploy-pipeline exporter compares
+the variable with `prod`'s live digest and pages on a mismatch.
+
+**The first verified run seeds `last-good`.** When the tag is absent, `tag` points it at
+`prod`'s digest before it moves `prod`, so a failed verification has somewhere to reset to.
+
+**A verification in flight blocks the next one.** Two checks enforce it:
+
+- `prod` and `last-good` name the same digest except between a run's `tag` and its `settle`.
+  While they differ, `decide` waits, re-reading `DEPLOY_HOLD` each 30 seconds, and gives up as
+  `current` after 40 minutes.
+- `tag` moves `prod` only while it still names the digest `decide` read. Two runs can decide on
+  the same `prod` when the second run's `promote` job runs while the first run's `tag` waits
+  on the group. The first `tag` moves `prod`, and the second finds it moved, logs a warning,
+  and moves and verifies nothing. Its commit waits for the next run.
+
+`verify` and `settle` join no concurrency group: GitHub keeps one pending job per group and a
+newer one cancels it, so a pending `settle` could be dropped with its hold unwritten. Without
+the two checks, a second run could move `prod` past a T that `verify` still waits on, Flux
+would never post T's statuses, and the timeout would write a false hold. A run that never
+settles leaves `prod` and `last-good` apart, and every later run reports `current`. Slice
+D2.6d's `PromotionStalled` alert pages that stall.
+
+**Clearing a hold** is **operator-only**: set `DEPLOY_HOLD` back to `none` (*Publishing and
+promotion*), then dispatch `promote` with `-f sha=<master tip>`. `decide` promotes the newest
+eligible commit.
+
+**The revert rule is off.** `promote.REVERT_RULE` is `False`. Turning it on is an
+**operator-only** ruling (D2 Open question 11), made in a PR of its own. With it on, a
+`failed=` hold would let `decide` promote a descendant of the held commit whose `footprint`
+for every failed name equals `last-good`'s, and `settle` would set `DEPLOY_HOLD` to `none` once
+it verifies. A hold in any other form, and a `failed=` hold that names `soak`, never qualify.
+
+**`probe.py landing` shows both holds** while the deployer and `promote` coexist:
+
+```text
+hold_sha (GitOps deployer, Ansible-owned tags): none
+DEPLOY_HOLD (promote workflow, Flux-owned tags): none
+prod: 3cf44936 sha256:4e55da43005e   last-good: the same digest as prod
+```
+
+It reads `DEPLOY_HOLD` with one `gh variable get`, `prod` from the `OCIRepository`
+`homelab`'s `status.artifact` with the read-only `kubectl`, and `last-good` with one GHCR
+manifest fetch. Each read has a 5-second timeout. A read that fails prints `unknown` on its own
+line, and `prod` is reported equal to `last-good` only when both digests were read.
 
 ## The bundle
 
@@ -328,6 +451,60 @@ renderer bug cannot widen it. It fails when:
   `./cluster/<name>`;
 - a published tag has no `cluster/<tag>/`;
 - `digests.json` is missing or names another set.
+
+### The publish gates
+
+`check-bundle` runs three gates beside the census, in
+`scripts/deploy_tools/bundle_gates.py`. Each refusal prints one line that opens with the
+gate's name.
+
+- **source**: a tag whose `flux/<tag>.yaml` has no `postBuild` holds no `${K}` whose `K` is
+  a key name of `ansible/vars/secrets.yml`. Flux would not substitute such a reference.
+  The gate pairs each `$$` first, as Flux does, so `$${K}` and a shell `${HOME}` pass. A tag
+  with `postBuild` may name in `substituteFrom` only a Secret that a `secretGenerator` in
+  the bundle makes. No shared kind generates one until D3.3a adds `cluster-vars`, so the gate
+  refuses every substituting tag until then. The gate also fails a published tag whose
+  directory it could not read.
+- **host**: every `Host(...)` in an IngressRoute ends in `.<domain>`, the literal that
+  `ansible/inventory/group_vars/all.yml` defines. A `${domain}`, a `stub-domain` and a
+  hand-written host each fail. While bento-pdf is published, its `.local.` route is the
+  gate's named member, and the gate fails when that route holds no matching Host rule.
+- **no-stub**: no file in the bundle holds an R1 stub value, `stub-<key>` for a key name of
+  `secrets.yml`. The gate decodes each Secret's `data` before it searches.
+
+## Removing an object on purpose
+
+A render that drops a NetworkPolicy, an IngressRoute, a CronJob, a Service or an RBAC object
+gets it pruned, and its Kustomization stays Ready, so `verify` passes. `promote.py decide`
+therefore compares the objects in a candidate's `cluster/` with those in `prod`'s bundle. A
+candidate that loses an object is eligible only when a commit in (`prod`, candidate] declares
+it with a line of this form:
+
+```text
+Removes-Object: <kind>/<namespace>/<name>
+```
+
+- `<kind>` is the object's `kind`, such as `IngressRoute`.
+- A cluster-scoped object leaves the namespace empty: `Removes-Object: ClusterRole//<name>`.
+- The key is case-insensitive, and the line may sit anywhere in the commit message.
+- Put the line on any commit of the PR. When one does, `land.sh` sends the squash commit's
+  body itself: every commit's message, then each line again as a trailer. The line therefore
+  reaches master whatever the repository's squash default says. A merge outside `land.sh`
+  that replaces the body, such as `gh pr merge --body`, drops it.
+- A commit outside the range does not count, including `prod`'s own commit.
+
+`decide` skips an ineligible candidate with one stderr line per candidate, naming each
+undeclared object, and weighs older ones. When every candidate loses an object, it prints
+`current`, and D2.6d's `PromotionStalled` alert pages after 2 hours. A later commit that carries the line
+releases the walk.
+
+An object whose whole Kustomization leaves the bundle is exempt. That happens when a service
+is handed back and its entry reads `owner: released` (*Handing a service back*).
+`deletionPolicy: Orphan` prunes none of its objects. The exemption holds only while that
+policy does, and D6.7's switch away from Orphan must remove it.
+
+The promote job checks out master with `fetch-depth: 0`, because `decide` reads these lines
+with `git log` back to `prod`'s commit.
 
 ## Retention of old artifact versions
 

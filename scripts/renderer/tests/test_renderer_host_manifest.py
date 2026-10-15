@@ -39,9 +39,9 @@ def test_a_host_manifest_lists_units_links_policies_and_legacy_entries(hosts):
         "files": [
             {"src": "u", "dst": f"{UNITS}/homelab-beat.service"},
             {"src": "u", "dst": f"{UNITS}/homelab-beat.timer"},
-            {"src": "u", "dst": f"{UNITS}/timers.target.wants/homelab-beat.timer"},
             {"src": "u", "dst": f"{UNITS}/homelab-updater.timer.d/50-homelab.conf"},
         ],
+        "enable": {"homelab-beat.timer": "timers.target"},
         "units": {"homelab-beat.service": {"policy": "manual"}},
         "legacy": [
             {"path": "/usr/local/bin/beat.sh"},
@@ -89,6 +89,7 @@ def test_the_real_updater_s_units_join_a_host_manifest(tmp_path):
     (hosts / "components").mkdir()
     (hosts / "components" / "reconcile").symlink_to(REPO / "hosts/components/reconcile")
     (hosts / "lib").symlink_to(REPO / "hosts/lib")
+    (hosts / "keys").symlink_to(REPO / "hosts/keys")
     (hosts / "daniel-pi").mkdir()
     (hosts / "daniel-pi" / "package.yml").write_text("components: [reconcile]\n")
 
@@ -120,11 +121,7 @@ def test_a_shared_package_ships_no_manifest(hosts):
             "no package installs them",
         ),
         (
-            {
-                "files": [
-                    {"src": "u", "dst": f"{UNITS}/multi-user.target.wants/ssh.service"}
-                ]
-            },
+            {"enable": {"ssh.service": "multi-user.target"}},
             "daniel-pi",
             r"enable links name \['ssh.service'\]",
         ),

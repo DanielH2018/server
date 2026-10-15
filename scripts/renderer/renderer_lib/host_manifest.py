@@ -1,16 +1,16 @@
-"""The manifest `homelab-reconcile` reads, and the two spec keys that feed it.
+"""The manifest `homelab-reconcile` reads, and the three spec keys that feed it.
 
 A host package installs `/usr/lib/homelab/manifest.json` (H3, *Shared names*), in the schema
 `hosts/lib/homelab-reconcile`'s docstring documents:
 
 - `units` lists every unit the host package and `homelab-updater` install, and every unit the
   host package drops a `50-homelab.conf` into, each mapped to its policy or `{}`;
-- `enable_links` lists each unit the host package installs under a `<target>.wants/`
+- `enable_links` lists each unit the host package links from a `<target>.wants/`
   directory;
 - `legacy` holds the host package's legacy entries, each value rendered;
 - `reconcilers` is empty until H4.
 
-`units:` and `legacy:` in a `package.yml` or `component.yml` feed it. The version and SHA stay
+`units:`, `enable:` and `legacy:` in a `package.yml` or `component.yml` feed it. The version and SHA stay
 out of it, so a render changes only when the package's content does (H3, *Package rules*).
 """
 
@@ -22,12 +22,13 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 import json
 import re
 from collections.abc import Callable
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Protocol
 
 from renderer.renderer_lib.cluster import RenderRefused
 
 
+UNIT_DIR = PurePosixPath("/usr/lib/systemd/system")
 DROPIN = "50-homelab.conf"
 # The manifest `homelab-reconcile` reads (H3, *Shared names*). Only a host package installs it.
 MANIFEST = "/usr/lib/homelab/manifest.json"
@@ -43,6 +44,7 @@ LEGACY_KINDS = (
     frozenset({"unit"}),
 )
 _UNIT_NAME = re.compile(r"[A-Za-z0-9@_.:-]+\.(service|timer|socket|path)")
+_TARGET_NAME = re.compile(r"[A-Za-z0-9@_.:-]+\.target")
 _CRON_FILE = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]*")
 
 
@@ -51,6 +53,7 @@ class Package(Protocol):
 
     name: str
     files: dict[str, tuple[bytes, int]]
+    links: dict[str, str]
     policies: dict[str, str]
     legacy: list[dict[str, str]]
 
@@ -135,6 +138,50 @@ def add_policies(package: Package, directory: Path, units: object) -> None:
         if unit in package.policies:
             raise RenderRefused(f"{package.name}: two specs give {unit} a policy")
         package.policies[unit] = policy
+
+
+def add_enable_links(package: Package, directory: Path, enable: object) -> None:
+    """Record in `package` each enable link a spec's `enable:` map declares.
+
+    `{unit: target}` becomes the symlink `systemctl enable` writes:
+    `/usr/lib/systemd/system/<target>.wants/<unit>`, pointing at `../<unit>`. systemd adds a
+    `Wants=` only for a unit symlinked from a `.wants/` directory, so a copied file there would
+    leave the unit unstarted at boot.
+
+    Raises:
+        RenderRefused: The map is malformed, or a second spec declares the same link.
+    """
+    if not isinstance(enable, dict):
+        raise RenderRefused(f"{directory}: enable {enable!r} is not a map")
+    for unit, target in enable.items():
+        if not (
+            isinstance(unit, str)
+            and _UNIT_NAME.fullmatch(unit)
+            and isinstance(target, str)
+            and _TARGET_NAME.fullmatch(target)
+        ):
+            raise RenderRefused(
+                f"{directory}: enable entry {unit!r}: {target!r} is not a unit name "
+                "mapped to a .target"
+            )
+        dst = str(UNIT_DIR / f"{target}.wants" / unit)
+        if dst in package.links:
+            raise RenderRefused(f"{package.name}: two specs install {dst}")
+        package.links[dst] = f"../{unit}"
+
+
+def refuse_wants_file(directory: Path, dst: PurePosixPath) -> None:
+    """Refuse a file entry under a `<target>.wants/` directory, which `enable:` declares.
+
+    Raises:
+        RenderRefused: `dst` is one.
+    """
+    if dst.parent.parent == UNIT_DIR and dst.parent.name.endswith(".wants"):
+        target = dst.parent.name.removesuffix(".wants")
+        raise RenderRefused(
+            f"{directory}: {dst} is a file under a .wants/ directory, where systemd reads "
+            f"symlinks; declare it as enable: {{{dst.name}: {target}}}"
+        )
 
 
 def legacy_entry(
