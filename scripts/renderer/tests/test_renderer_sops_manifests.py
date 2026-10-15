@@ -1,4 +1,4 @@
-"""`render_sops_manifests` and the `sops-manifest-entries` check (target slice R2, PRs 5, 6).
+"""`render_sops_manifests` and the `sops-manifest-entries` check (target slice R2, PRs 5 to 7b).
 
 A placeholder render leaves out each file a role lists in `render_sops_manifests`, and the
 check holds every entry to one Secret of `SOPS_MANIFEST_KEYS` keys. The fixtures build a
@@ -10,10 +10,12 @@ Run: uv run pytest scripts/renderer/tests/test_renderer_sops_manifests.py
 import pytest
 
 from renderer import homelab_render, shadow_diff
+from renderer.renderer_lib.cluster import select_tags
 from renderer.renderer_lib.placeholders import (
     PlaceholderRender,
     render_placeholders,
     sentinel,
+    sops_manifests,
 )
 from renderer.renderer_lib.secret_checks import (
     SOPS_MANIFEST_KEYS,
@@ -28,6 +30,7 @@ GA = "google_assistant_service_account"
 ENTRIES = {
     HA: (ENTRY, GA),
     "pi-peer-backup": ("ssh-key-secret.yaml", "pi_peer_backup_ssh_key"),
+    "qbittorrent": ("mullvad-account-secret.yaml", "mullvad_account"),
 }
 
 
@@ -41,6 +44,13 @@ def _secret(*keys: str) -> str:
 def _check(entries: dict[str, str | None]) -> list[str]:
     render = PlaceholderRender([], {}, {}, [], {"fixture": entries})
     return sops_manifest_entries(render, [GA, "domain", "fixture_token"])
+
+
+def test_the_real_tree_holds_three_entries_is_clean():
+    entries = {tag: sops_manifests(tag) for tag in select_tags(None)}
+    assert {tag: names for tag, names in entries.items() if names} == {
+        role: [entry] for role, (entry, _key) in ENTRIES.items()
+    }
 
 
 @pytest.mark.parametrize("role", sorted(ENTRIES))

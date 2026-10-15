@@ -28,10 +28,13 @@ from renderer.renderer_lib.placeholders import PlaceholderRender, Sentinels
 SOPS_MANIFEST_ENTRIES = "sops-manifest-entries"
 
 # The keys no placeholder may carry. Flux deletes every newline from a substitution value, so
-# a multi-line value cannot pass through a placeholder at all. R2's PRs 5 to 7 move each into
+# a multi-line value cannot pass through a placeholder at all, and Flux types a standalone
+# value by its text, so an all-digit one stops being a string. R2's PRs 5 to 7b move each into
 # a dedicated Secret that D3 ships as a SOPS-encrypted manifest.
 SOPS_MANIFEST_KEYS = frozenset(
     {
+        # qbittorrent's Mullvad account number, all digits and standalone in its field.
+        "mullvad_account",
         # pi-peer-backup's SSH private key, a PEM block.
         "pi_peer_backup_ssh_key",
         # Authelia's OIDC signing key, a PEM block under `jwks`.
