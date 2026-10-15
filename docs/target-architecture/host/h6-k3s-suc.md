@@ -933,13 +933,16 @@ running node, so its verification ends with `gitops_state.py clear-owed manual_p
       `K3sUpgradeJobFailed` to `k3s-upgrade.yaml` with its promtool test (*Alerts*). This
       lands before H6.1c, so one drill proves the Flux red path and the alert together.
       How the observability half deploys follows the narrow output below. While
-      `observability` is Ansible-owned it reads `containers_list`, so the landing's
-      deploy-plane apply includes it, and `k8s_autodeploy: false` does not stop that plane
-      (D1.2, *Landing*). If the narrow output does not list `observability`, the session
-      runs `./scripts/deploy.sh --tags observability` after landing. That is the expected
-      branch: an entry without `hostname`, `port`, `tier` or `metrics` reaches no
-      observability template (D2 Open question 10). If that role is
-      Flux-owned by then, promotion applies it. After landing, a Prometheus query must
+      `observability` is Ansible-owned, the narrow output names it through
+      `scripts/deploy_tools/narrow_lib/broad.py:_changed_half`, which maps these edits
+      under `ansible/roles/k8s/observability/` to the role's tag. The added entry is not
+      the cause, because an entry without `hostname`, `port`, `tier` or `metrics` reaches
+      no observability template (D2 Open question 10). The landing's deploy-plane apply
+      therefore includes observability, and `k8s_autodeploy: false` does not stop that
+      plane (D1.2, *Landing*). If the narrow output does not list `observability`, the
+      session stops until it knows why, then runs `./scripts/deploy.sh --tags
+      observability` after landing. If that role is Flux-owned by then, promotion applies
+      it. After landing, a Prometheus query must
       list `kube_job_failed` series for namespace `homelab`, which held 17 Jobs on
       2026-10-11. A missing `homelab` series means the flag or the grant did not take
       effect. H6.1c starts only after this query passes, so the drill never runs against a
@@ -2382,6 +2385,6 @@ Folded from the 2026-10-12 pillar review; not adversarially reviewed. The pre-st
   Confirmed. D2.1c landed and records an added `owner: flux` entry by its fields, and D2
   refuses the own-tag mapping. Fixed: H6.1b, *Rollback*, *Risks* and *Open questions* 11
   name the four readers that D2 Open question 10 gives an entry carrying `name`, `platform`
-  and `owner`, and drop the own-tag branch. H6.1b names the `deploy.sh --tags
-  observability` fallback as the expected branch, because such an entry reaches no
-  observability template.
+  and `owner`, and drop the own-tag branch. H6.1b says its narrow output names
+  observability through `broad.py:_changed_half`, because the PR edits that role's
+  templates, and not through the added entry, which reaches no observability template.
