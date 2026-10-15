@@ -22,12 +22,13 @@ holds right up until someone appends a service in the obvious place. Two rules a
       middleware references at request time, not apply time -- so the deploy is green and
       the route 500s later, at whatever hour someone first opens it.
 
-A fourth rule is derived from no template either: each K8S_SORTS_LAST role (netpol-baseline)
+A third rule is derived from no template: each K8S_APPLIES_LAST role (netpol-baseline)
 depends on every other entry, so it deploys last wherever the list puts it.
 
-A third edge is declared data, not derived: traefik `depends_on: [crowdsec]` in host_vars,
-because the LAPI machine-credential constraint isn't something a template carries. It is
-also the reverse of the first rule for crowdsec specifically -- crowdsec renders its own
+Every other edge is declared data, not derived: a `depends_on:` list on the entry in
+host_vars. traefik `depends_on: [crowdsec]` is one, because the LAPI machine-credential
+constraint isn't something a template carries. DOCUMENTED_ORDERINGS lists the rest. The
+crowdsec edge is also the reverse of the first rule for crowdsec specifically -- crowdsec renders its own
 Traefik CRD (an IngressRoute) -- which is why K8S_CRD_EDGE_EXEMPT in toposort.py excludes
 crowdsec from the auto-derived traefik edge; without that exemption the two edges would
 cycle and toposort_containers would raise on every deploy.
@@ -40,6 +41,7 @@ wrong way.
 Run: uv run pytest ansible/tests/deploy/test_k8s_toposort.py
 """
 
+import functools
 import random
 from pathlib import Path
 
@@ -50,7 +52,7 @@ from _helpers import ANSIBLE, HOST_VARS
 from _k8s_render import rendered_docs
 from toposort import (
     K8S_CRD_EDGE_EXEMPT,
-    K8S_SORTS_LAST,
+    K8S_APPLIES_LAST,
     build_k8s_dep_map,
     toposort_containers,
 )
@@ -120,14 +122,14 @@ def _derived_traefik_edge(entries: list[dict]) -> set[str]:
 
     Read off the map the deploy builds rather than by re-asking its predicates: a test that
     reimplemented `_entry_is_routed or _role_renders_traefik_crd` would keep agreeing with
-    itself after the derivation changed. A K8S_SORTS_LAST role depends on every entry,
+    itself after the derivation changed. A K8S_APPLIES_LAST role depends on every entry,
     traefik included, for a reason that is not a route, so it is left out.
     """
     dep_map = build_k8s_dep_map(entries, str(ANSIBLE))
     return {
         name
         for name, deps in dep_map.items()
-        if "traefik" in deps and name not in K8S_SORTS_LAST
+        if "traefik" in deps and name not in K8S_APPLIES_LAST
     }
 
 
@@ -275,7 +277,8 @@ def test_shuffled_list_still_sorts_to_respect_every_edge(host):
 # which the stable sort preserves and nothing checks: dropping the edge, or moving the entry,
 # would pass every test above. The value names where the prose lives, so a reader of a red
 # failure knows which doc to reconcile. netpol-baseline's "after everything" is no pair, and
-# no entry declares it: test_a_sorts_last_role_listed_first_still_sorts_last guards it.
+# no entry declares it: test_every_entry_sorts_ahead_of_an_applies_last_role_listed_first
+# guards it.
 DOCUMENTED_ORDERINGS = {
     ("mosquitto", "zigbee2mqtt"): "roles/k8s/mosquitto/CLAUDE.md",
     ("media-volume", "sonarr"): "roles/k8s/media-volume/CLAUDE.md",
@@ -289,6 +292,11 @@ DOCUMENTED_ORDERINGS = {
     ("sonarr", "janitorr"): "host_vars/daniel-box.yml (janitorr comment)",
     ("radarr", "janitorr"): "host_vars/daniel-box.yml (janitorr comment)",
     ("jellyfin", "janitorr"): "host_vars/daniel-box.yml (janitorr comment)",
+    ("sonarr", "configarr"): "host_vars/daniel-box.yml (configarr comment)",
+    ("radarr", "configarr"): "host_vars/daniel-box.yml (configarr comment)",
+    ("dri-device-plugin", "jellyfin"): "host_vars/daniel-box.yml (jellyfin comment)",
+    ("dri-device-plugin", "tdarr"): "host_vars/daniel-box.yml (tdarr comment)",
+    ("pihole", "pihole-exporter"): "roles/k8s/pihole-exporter/CLAUDE.md",
 }
 
 
@@ -326,30 +334,95 @@ def test_documented_pairwise_ordering_survives_an_adversarial_list(host, before,
     )
 
 
-def test_a_sorts_last_role_listed_first_still_sorts_last(host):
-    """A K8S_SORTS_LAST role at the head of the list, and a new entry after it, still sort it last.
+def test_an_applies_last_role_listed_first_still_sorts_after_a_new_entry(host):
+    """A K8S_APPLIES_LAST role at the head of the list, and a new entry after it, still sort it last.
 
     The scaffolder appends a new role after the list's last item, which was netpol-baseline
     (#4833). The hand-ordered list already ends with it and the sort is stable, so only the
     derived edge can move it back from the head past an entry appended after it.
     """
     _path, entries, idx = host
-    last = [name for name in K8S_SORTS_LAST if name in idx]
+    last = [name for name in K8S_APPLIES_LAST if name in idx]
     if not last:
-        pytest.skip("host deploys no K8S_SORTS_LAST role")
+        pytest.skip("host deploys no K8S_APPLIES_LAST role")
     by_name = {c["name"]: c for c in entries}
-    others = [c for c in entries if c["name"] not in K8S_SORTS_LAST]
+    others = [c for c in entries if c["name"] not in K8S_APPLIES_LAST]
     scaffolded = {"name": "widget", "platform": "k8s", "port": 8080}
     adversarial = [*(by_name[n] for n in last), *others, scaffolded]
 
     order = _sorted_names(adversarial)
     assert order[-len(last) :] == last, (
         f"{last} did not sort last: the order ends {order[-3:]}. build_k8s_dep_map must give "
-        f"each K8S_SORTS_LAST role an edge onto every other entry; the reason is in toposort.py."
+        f"each K8S_APPLIES_LAST role an edge onto every other entry; the reason is in toposort.py."
     )
 
 
-def test_every_sorts_last_role_says_why():
-    assert "netpol-baseline" in K8S_SORTS_LAST
-    for name, reason in K8S_SORTS_LAST.items():
-        assert reason.strip(), f"{name} sorts last with no reason given"
+def test_every_applies_last_role_says_why():
+    assert "netpol-baseline" in K8S_APPLIES_LAST
+    for name, reason in K8S_APPLIES_LAST.items():
+        assert reason.strip(), f"{name} applies last with no reason given"
+
+
+@functools.cache
+def _host_dep_map(path: Path) -> dict[str, list[str]]:
+    """The host's dep map, built once: it reads no list order, and each build scans every role."""
+    return build_k8s_dep_map(_k8s_entries(path), str(ANSIBLE))
+
+
+def _applies_last_ahead_of(
+    entries: list[dict], dep_map: dict[str, list[str]], name: str
+) -> list[str]:
+    """The K8S_APPLIES_LAST roles that still sort ahead of `name` on an adversarial list.
+
+    The list puts every applies-last role first and `name` last. The hand-ordered list already
+    has the opposite order and the sort is stable, so only an edge in `dep_map` can move them.
+    """
+    by_name = {c["name"]: c for c in entries}
+    first = [by_name[n] for n in sorted(K8S_APPLIES_LAST) if n in by_name]
+    middle = [
+        c for c in entries if c["name"] not in K8S_APPLIES_LAST and c["name"] != name
+    ]
+    order = [
+        c["name"]
+        for c in toposort_containers([*first, *middle, by_name[name]], dep_map)
+    ]
+    return [c["name"] for c in first if order.index(c["name"]) < order.index(name)]
+
+
+APPLIES_LAST_PAIRS: list[tuple[Path, str]] = [
+    (path, c["name"])
+    for path in HOSTS_WITH_K8S
+    if any(c["name"] in K8S_APPLIES_LAST for c in _k8s_entries(path))
+    for c in _k8s_entries(path)
+    if c["name"] not in K8S_APPLIES_LAST
+]
+
+
+def test_the_applies_last_cases_name_netpol_baseline_and_every_workload():
+    """Non-vacuity: an empty case list would pass the parametrized test below unrun."""
+    names = {name for _path, name in APPLIES_LAST_PAIRS}
+    assert {"traefik", "jellyfin", "configarr", "flux"} <= names
+    assert "netpol-baseline" not in names
+
+
+@pytest.mark.parametrize(
+    ("path", "name"),
+    APPLIES_LAST_PAIRS,
+    ids=[f"{path.stem}-{name}" for path, name in APPLIES_LAST_PAIRS],
+)
+def test_every_entry_sorts_ahead_of_an_applies_last_role_listed_first(path, name):
+    """No k8s entry relies on its list position to deploy before netpol-baseline."""
+    ahead = _applies_last_ahead_of(_k8s_entries(path), _host_dep_map(path), name)
+    assert not ahead, (
+        f"{ahead} sorted ahead of {name} on a list that puts {name} last. build_k8s_dep_map "
+        "must give each K8S_APPLIES_LAST role an edge onto every other entry; the reason is "
+        "in toposort.py."
+    )
+
+
+def test_an_emptied_applies_last_lets_netpol_baseline_listed_first_stay_first():
+    """The red half: without the dict, the adversarial list keeps netpol-baseline first."""
+    path, name = APPLIES_LAST_PAIRS[0]
+    entries = _k8s_entries(path)
+    dep_map = build_k8s_dep_map(entries, str(ANSIBLE), applies_last={})
+    assert _applies_last_ahead_of(entries, dep_map, name) == ["netpol-baseline"]

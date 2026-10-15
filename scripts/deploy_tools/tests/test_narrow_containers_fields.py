@@ -404,11 +404,15 @@ def _narrow_with_whole_entry_readers(tmp_path, replacement: str) -> set[str]:
     return narrow_broad.narrow(*_refs(t), cwd=t.root, declared=declared, callers={})
 
 
-def test_an_owner_only_edit_maps_to_the_entrys_own_tag_alone_is_clean(tmp_path):
-    """`owner` is a deploy-mechanics field, so no template reader moves (D2.1a)."""
-    edited = _narrow_with_whole_entry_readers(
-        tmp_path, "image: sonarr:1\n    owner: flux"
-    )
+@pytest.mark.parametrize(
+    "field", ["owner: flux", "depends_on: [radarr]"], ids=["owner", "depends_on"]
+)
+def test_a_mechanics_only_edit_maps_to_the_entrys_own_tag_alone_is_clean(
+    tmp_path, field
+):
+    """`owner` (D2.1a) and `depends_on` (D4.1) are deploy-mechanics fields, so no template
+    reader moves."""
+    edited = _narrow_with_whole_entry_readers(tmp_path, f"image: sonarr:1\n    {field}")
     assert edited == {"sonarr"}
 
 
