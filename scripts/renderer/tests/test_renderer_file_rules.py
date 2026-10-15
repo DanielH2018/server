@@ -21,7 +21,6 @@ from renderer.renderer_lib.context import load_stubs
 from lib.render_guard import SHARED_TPL
 from renderer.renderer_lib.task_inputs import (
     BUILT_IMAGE_TAGS,
-    PINNED_LIVE_FACTS,
     SET_FACTS,
     TASK_COMPUTED,
     _tasks,
@@ -152,8 +151,8 @@ def _set_fact_names() -> set[str]:
 def test_task_computed_names_every_fact_a_template_or_default_reads():
     """`==`, so a fact a template starts reading fails here rather than in a render.
 
-    The live-read facts have their stand-ins in `PINNED_LIVE_FACTS` instead. A line that opens
-    with `#` is a comment, in YAML and in a Dockerfile alike, and reads nothing.
+    No template reads a live fact, so every name here is one the renderer computes. A line
+    that opens with `#` is a comment, in YAML and in a Dockerfile alike, and reads nothing.
     """
     files = [*SHARED_TPL.glob("**/*.j2")]
     for tag in render_targets(K8S_HOST):
@@ -172,7 +171,7 @@ def test_task_computed_names_every_fact_a_template_or_default_reads():
         if re.search(rf"(?<!\w){re.escape(name)}(?!\w)", text)
     }
     assert "kuma_declarations" in read
-    assert read - set(PINNED_LIVE_FACTS) == TASK_COMPUTED
+    assert read == TASK_COMPUTED
 
 
 def test_every_reader_of_a_set_fact_value_derives_it():

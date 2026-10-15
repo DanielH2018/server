@@ -91,7 +91,6 @@ def fleet_render() -> PlaceholderRender:
 
     Raises:
         RenderError: A template fails to render.
-        ValueError: A pinned fact shares a name with a secret key.
     """
     return render_placeholders(select_tags(None), secret_keys())
 

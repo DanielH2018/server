@@ -4,6 +4,9 @@ server_ip: 10.0.0.215
 # starts when the gateway's DHCP server is down (#3882). Confirm the gateway keeps server_ip
 # out of its DHCP pool before applying it: with DHCPv4 off, nothing renews a lease on it.
 k3s_node_static_link: eno1
+# The MediaTek MT7922, the fallback uplink while eno1 has no carrier (setup/k3s,
+# tasks/static-address.yml).
+k3s_node_wifi_link: wlp4s0
 # daniel-server's node-to-node traffic (6443/8472/10250, k3s_join_server_ports) is
 # UFW-allowed here via the k3s role's join-firewall tag. Derived from daniel-server's one
 # literal (#4063).

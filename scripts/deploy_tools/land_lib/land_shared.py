@@ -189,6 +189,8 @@ def narrowed_roles(files, declared: set[str] | None = None) -> frozenset[str]:
 
 # The standalone-value guard's map (#4932). `manifests/tasks/main.yml` reads only the row keyed
 # by `manifests_service`, so a row that changed can change no other caller's deploy.
+# `deploy_k8s_owed.STANDALONE_GUARD_MAP` is the same path, held equal by
+# `test_land_shared_guard_map.py`: importing it here would pull `host_lib` into `land.py`.
 GUARD_MAP = "ansible/roles/k8s/manifests/files/standalone_secret_keys.json"
 
 
@@ -222,11 +224,12 @@ def guard_map_rows(files, pr_range: str, git) -> frozenset[str] | None:
     Not a `Classifier`, because it reads git, and never passed to `plane_note`: an empty set
     there would read as a role a hand must apply.
 
-    The callers left undeployed owe the deployer nothing. The map renders into no manifest,
-    so each one's render still matches its applied digests, and `manifests` is a
-    render-proof role (`gitops_markers.RENDER_PROOF_SHARED_ROLES`): the tick's
-    `k8s_unapplied` line for it discharges on that match, as it does for a smoke-narrowed
-    change (`shared_role_callers.smoke_caller`).
+    The callers left undeployed owe the deployer nothing. The tick's `k8s_unapplied` line for
+    `manifests` asks the same question per caller (`deploy_k8s_owed._guard_row_carries`,
+    #5106). A caller whose row did not move carries the change from its release record or its
+    matching render, provided no other `manifests` change lands between that commit and the
+    line's. The line then drops once the callers deployed here carry it, and does not wait for
+    the untouched callers' render to reach the map change.
 
     Args:
         files: the PR's changed paths, the list the landing's caller expansion reads.
