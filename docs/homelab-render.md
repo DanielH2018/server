@@ -394,9 +394,16 @@ placeholder render. `cluster` exits 1 and writes nothing when an entry:
 - names a secret key outside `SOPS_MANIFEST_KEYS`, or no key in it.
 
 The check reads the keys from the entry's sentinel render, so a key reached through an alias
-counts. A `--role` render checks only the tags it rendered. R2's plan adds a third clause once
-PR 2's `KNOWN_VIOLATIONS` ratchet exists: every template outside the lists that names a
-`SOPS_MANIFEST_KEYS` key must carry a live entry there.
+counts. A `--role` render checks only the tags it rendered.
+
+A third clause holds the templates outside the lists. Every template that names a
+`SOPS_MANIFEST_KEYS` key, and is in no role's `render_sops_manifests`, must carry a live rule
+5 entry in `KNOWN_VIOLATIONS` for that key. Rule 5's walk supplies the names, so an alias
+counts. The clause reads template sources, so it scans the whole tree on every run, `--role`
+renders included. `secret_checks.check` runs it beside the five rules, and its lines start
+`sops-manifest-entries:`. Authelia's `config-secret.yaml.j2` passes it through its
+`filter indent` entry until R2's PR 7 moves `authelia_oidc_rsa_key_content` into a Secret of
+its own.
 
 ### Filters that only interpolate a secret
 

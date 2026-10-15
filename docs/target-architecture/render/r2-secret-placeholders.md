@@ -13,8 +13,10 @@ PR 2, the five rules and the round trip over every tag:
 
 PR 5, Home Assistant's service account: [#4933](https://github.com/DanielH2018/server/pull/4933).
 It landed ahead of PR 2 ([#4918](https://github.com/DanielH2018/server/issues/4918)), so its
-`sops-manifest-entries` check carries the first two clauses only. The third clause, which
-reads `KNOWN_VIOLATIONS`, is [#4930](https://github.com/DanielH2018/server/issues/4930).
+`sops-manifest-entries` check carried the first two clauses only. The third clause, which
+reads `KNOWN_VIOLATIONS`, landed later under
+[#4930](https://github.com/DanielH2018/server/issues/4930). It counts only a rule 5 entry as
+live, because a rule 4 entry goes unchecked under a `--role` render of another tag.
 
 PR 2b, rule 5's aliases: [#4953](https://github.com/DanielH2018/server/pull/4953). The
 census found one entry, the `hash('sha1')` on `observability_prometheus_config`, which has
