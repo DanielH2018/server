@@ -216,6 +216,12 @@ Mint a new value in the provider, then `sops set` + redeploy the consumer:
   edit + Zone read for the one zone — audit this scope when rotating).
 - `*_discord_webhook*`: Discord → channel → Integrations → Webhooks → regenerate.
 - `mullvad_account`, `wireguard_peer_*`: Mullvad account panel / regenerate the WG key.
+- `homelab_builder_github_token`: GitHub → Settings → Developer settings → Fine-grained
+  tokens, owner DanielH2018, *Public repositories (read-only)*, no permissions. The
+  host-package builder reads CI check runs with it, because its system user has no gh login
+  and an anonymous read shares one quota per source IP with the deployer's CI gate. A leaked
+  copy reads only public data. Redeploy with `initial_setup.yml --tags homelab_builder`,
+  which the setup-plane tick runs.
 
 ## `pinned` — DANGER, never `sops set` blindly
 
