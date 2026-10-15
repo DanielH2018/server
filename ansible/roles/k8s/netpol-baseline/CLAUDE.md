@@ -58,7 +58,7 @@ tighter or looser allow-list than the baseline. Deploys no workload of its own.
   earlier in this role's batch can still be rolling when the role runs. The drain waits for
   those rollouts first. That keeps the exempt-set reads, the policy applies and the probe off
   a shared end-of-batch drain, whatever batch the role lands in. It cannot wait for a role
-  deployed after this one, so the role sorts last: `K8S_SORTS_LAST` in
+  deployed after this one, so the role applies last: `K8S_APPLIES_LAST` in
   `ansible/filter_plugins/toposort.py` gives it an edge onto every other k8s entry, whatever
   its position in `containers_list`. In a run of
   `--tags netpol-baseline` alone the queue is empty and the drain does nothing.
@@ -107,6 +107,7 @@ needs, decides which one.
 
 **A hand `--tags <svc>` deploy does not apply that service's policy when the policy lives
 here.** When a change needs a policy change and a workload change together, deploy both
-tags, workload role first and netpol-baseline last. `docs/networkpolicy-slice-answers.md`
+tags in one run, and `K8S_APPLIES_LAST` applies netpol-baseline after the workload role. In
+two separate runs, deploy the workload role first. `docs/networkpolicy-slice-answers.md`
 records why that order matters. A new backend the pod waits on goes in the workload's role
 instead, so one tag carries both.

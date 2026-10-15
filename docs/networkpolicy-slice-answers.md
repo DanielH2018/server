@@ -353,8 +353,9 @@ it pass with nothing else changed.
 
 **Deploy order: workload roles first, netpol-baseline last — but a partial run is the hazard.**
 A per-workload policy alone does not admit traefik, so applying policies before labels fences every
-UI off from the front door. The natural `containers_list` order already puts netpol-baseline last,
-which is correct. What is NOT safe is treating one combined run as atomic: this deploy aborted at a
+UI off from the front door. `K8S_APPLIES_LAST` in `ansible/filter_plugins/toposort.py` gives
+netpol-baseline an edge onto every other k8s entry, so the deploy runs it last whatever its
+`containers_list` position, which is correct. What is NOT safe is treating one combined run as atomic: this deploy aborted at a
 300s rollout wait, 11 roles never received their labels, and netpol-baseline then applied ALL their
 policies — producing exactly the policies-first state the ordering exists to avoid. The Home
 Assistant, Uptime Kuma, Scrutiny and Loki routes returned 5xx for roughly 17 minutes until the

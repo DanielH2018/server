@@ -100,8 +100,10 @@ NAMED_ENTRY = frozenset(
 NAMED_JOB = frozenset({"metrics_port"})
 # The entry fields that steer the deploy and render into no template, so `changed_fields` leaves
 # them out. `owner` hands an entry's tag to Flux (docs/target-architecture/deploy/d2-first-leaf.md).
+# `depends_on` orders the k8s play through `ansible/filter_plugins/toposort.py`, a play-called
+# filter (docs/target-architecture/deploy/d4-ordering.md, D4.1).
 # `test_census_rows_roles.py` holds every member out of the templates' Jinja code.
-DEPLOY_MECHANICS_FIELDS = frozenset({"owner"})
+DEPLOY_MECHANICS_FIELDS = frozenset({"owner", "depends_on"})
 # The filters whose output holds an item for every entry, whatever fields it carries, so an added
 # or removed entry moves them though it carries no field their row names but `name`. Every other
 # row's filter skips an entry without its other fields, and reads `name` only to look an entry
