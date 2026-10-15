@@ -46,10 +46,13 @@ autofix_fake_remux_policy:
 
 # The k8s play (ansible/deploy.yml) toposorts this list with build_k8s_dep_map /
 # toposort_containers (ansible/filter_plugins/toposort.py) rather than deploying it in list
-# order. The traefik-CRD and authelia-middleware edges below are derived automatically, from
-# each role's own templates and its `use_authelia` flag — a new entry gets them for free and
-# does not need to be positioned by hand. List order is kept only as the toposort's tiebreak,
-# so today's order stays the sorted order and a diff here still reads as "nothing moved".
+# order. Three edges are derived automatically: traefik-CRD and authelia-middleware from each
+# role's own templates and its `use_authelia` flag, and netpol-baseline after every other entry
+# from K8S_APPLIES_LAST in toposort.py. A new entry gets them for free and does not need to be
+# positioned by hand. Every other constraint is an entry's own `depends_on:` (crowdsec before
+# traefik, sonarr and radarr before configarr, dri-device-plugin before jellyfin and tdarr), so
+# no order rests on list position. List order is kept only as the toposort's tiebreak, so
+# today's order stays the sorted order and a diff here still reads as "nothing moved".
 #
 # Every `use_authelia: true` entry also declares `auth_tier: one_factor | two_factor` — the
 # Authelia policy its LAN name (`<hostname>.local.<domain>`) gets. The authelia role renders
@@ -205,7 +208,8 @@ containers_list:
     use_authelia: true
     auth_tier: two_factor
   # Makes /dev/dri/renderD128 schedulable as `devic.es/dri` so jellyfin and tdarr can
-  # request it without being privileged. No port/hostname — nothing routes to it.
+  # request it without being privileged; both declare it in `depends_on`. No port/hostname —
+  # nothing routes to it.
   - name: dri-device-plugin
     platform: k8s
   # The shared /data volume the nine media workloads mount. Storage, not a service.
@@ -345,7 +349,8 @@ containers_list:
   - name: jellyfin
     platform: k8s
     weekly_backup_claims: {jellyfin-config: 1}  # Mon
-    depends_on: [media-volume]
+    # dri-device-plugin advertises the `devic.es/dri` resource this pod requests.
+    depends_on: [media-volume, dri-device-plugin]
     hostname: "jellyfin"
     # A hand-written tile in uptime-kuma's static-monitors.yaml.j2 covers it: jellyfin-lan-vip, a port check on the LAN VIP.
     kuma: false
@@ -358,17 +363,19 @@ containers_list:
   - name: tdarr
     platform: k8s
     weekly_backup_claims: {tdarr-server: 1, tdarr-configs: 2}  # Mon, Tue
-    depends_on: [media-volume]
+    # dri-device-plugin advertises the `devic.es/dri` resource this pod requests.
+    depends_on: [media-volume, dri-device-plugin]
     hostname: "tdarr"
     port: 8265
     use_authelia: true
     auth_tier: one_factor
 
   # A nightly reconcile that reads the two *arrs and exits, so it is a CronJob with no
-  # Service and nothing to route to. Must follow sonarr and radarr: it addresses them by
-  # bare Service name.
+  # Service and nothing to route to. Follows sonarr and radarr by the edge below: it
+  # addresses them by bare Service name.
   - name: configarr
     platform: k8s
+    depends_on: [sonarr, radarr]
 
   # No web UI, so no route. Must follow sonarr, radarr AND jellyfin: it addresses all three
   # by bare Service name, and its verify step reads a symlink from inside the jellyfin pod.
@@ -908,8 +915,8 @@ containers_list:
     platform: k8s
     port: 9115
   # Deploys LAST: every workload role must finish before this role fences the namespace
-  # (docs/networkpolicy-slice-answers.md). K8S_SORTS_LAST in filter_plugins/toposort.py gives
-  # it an edge onto every other entry, so it sorts last wherever it sits in this list, and an
+  # (docs/networkpolicy-slice-answers.md). K8S_APPLIES_LAST in filter_plugins/toposort.py gives
+  # it an edge onto every other entry, so it applies last wherever it sits in this list, and an
   # entry appended after it still deploys before it (#4833).
   #
   # Not for the usual "after traefik" reason — this role renders no Traefik CRDs, and a
@@ -920,7 +927,7 @@ containers_list:
   # batch, so a role sharing this role's batch may still be rolling when it runs. The role's
   # first task drains them itself, so its exempt-set reads, its policy applies and its probe
   # all run against settled workloads, never against a shared end-of-batch drain. That drain
-  # waits only for roles deployed BEFORE this one, which is why it sorts last.
+  # waits only for roles deployed BEFORE this one, which is why it applies last.
   - name: netpol-baseline
     platform: k8s
 # False until this host's first manual initial_setup.yml + deploy.yml run finishes green

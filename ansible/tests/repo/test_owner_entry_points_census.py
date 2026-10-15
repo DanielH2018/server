@@ -96,7 +96,14 @@ ENTRY_POINTS: dict[str, tuple[Link, ...]] = {
     ),
     "`land.sh`": (
         Link("scripts/deploy_tools/land_lib/deploy.py", "deploy_phase", "split_owned"),
-        Link("scripts/deploy_tools/land_lib/promotion.py", "split_owned", "owners_at"),
+        Link(
+            "scripts/deploy_tools/land_lib/promotion.py",
+            "split_owned",
+            "owners_at_merge",
+        ),
+        Link(
+            "scripts/deploy_tools/land_lib/promotion.py", "owners_at_merge", "owners_at"
+        ),
         Link("scripts/deploy_tools/land_lib/land_flux.py", "owners_at", "flux_owned"),
         Link(OWNERS, "flux_owned", "tag_owners"),
     ),

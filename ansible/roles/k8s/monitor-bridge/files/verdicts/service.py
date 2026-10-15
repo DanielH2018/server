@@ -127,6 +127,62 @@ def gitops_alive(age_s: float, max_age_s: float) -> tuple[bool, str]:
     return False, "deployer last ran %.0fm ago (> %.0fm)" % (age_s / 60, max_age_s / 60)
 
 
+def host_packages(
+    fetch_ts: float | None,
+    unbuilt: list[tuple[dict[str, str], float]],
+    now: float,
+    max_fetch_age_s: float,
+    max_lag_s: float,
+) -> tuple[bool, str]:
+    """Pure: is the host-package builder fetching, and is master getting built?
+
+    `fetch_ts` is `homelab_builder_fetch_timestamp_seconds`. `unbuilt` is every series of
+    `homelab_builder_unbuilt_since_timestamp_seconds`, whose value is the committer time of the
+    oldest unbuilt first-parent commit, and 0 when the builder has caught up. Its `reason` label
+    says why a commit stays unbuilt and its `sha` label names that commit.
+
+    Two arms, either of which pages:
+
+    - The fetch is older than `max_fetch_age_s`, or absent. A dead builder timer, a missing
+      token and a fetch that keeps failing all end here, because a failed fetch writes nothing.
+    - The oldest unbuilt commit is older than `max_lag_s`. In each of those cases the builder
+      runs and exits 0 while no host receives a change, so no unit failure reports it.
+
+    An absent unbuilt-since series pages too: the builder writes both series in one file, so a
+    fetch without it is a file the builder did not write. A label-set change can leave two
+    unbuilt series for one scrape; the oldest non-zero one is judged. Every message that has a
+    series to quote names its `reason` and `sha`.
+    """
+    nonzero = [(labels, v) for labels, v in unbuilt if v]
+    oldest = min(nonzero, key=lambda lv: lv[1]) if nonzero else None
+    shown = oldest[0] if oldest else (unbuilt[0][0] if unbuilt else None)
+    which = (
+        " (reason=%s sha=%s)" % (shown.get("reason", "?"), shown.get("sha", "?"))
+        if shown is not None
+        else ""
+    )
+    problems = []
+    if not fetch_ts:
+        problems.append("builder fetch series absent or 0 (timer dead, token missing?)")
+    elif now - fetch_ts > max_fetch_age_s:
+        problems.append(
+            "builder last fetched %.0fm ago (> %.0fm)"
+            % ((now - fetch_ts) / 60, max_fetch_age_s / 60)
+        )
+    if not unbuilt:
+        problems.append("builder unbuilt-since series absent")
+    elif oldest and now - oldest[1] > max_lag_s:
+        problems.append(
+            "master unbuilt for %.0fm (> %.0fm)"
+            % ((now - oldest[1]) / 60, max_lag_s / 60)
+        )
+    if problems:
+        return False, "%s%s" % ("; ".join(problems), which)
+    if oldest:
+        return True, "unbuilt for %.0fm%s" % ((now - oldest[1]) / 60, which)
+    return True, "builder caught up%s" % which
+
+
 # Sonarr's two self-clearing title holds, verbatim from
 # NzbDrone.Core/MediaFiles/EpisodeImport/Specifications/EpisodeTitleSpecification.cs
 # (ImportRejectionReason.TitleTba and .TitleMissing). Sonarr applies them itself and clears them
