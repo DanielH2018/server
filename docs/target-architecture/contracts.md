@@ -216,7 +216,10 @@ which needs a drill exclusion in C7 that no slice has requested, the edge goes.
     - `prod` and `last-good` name the same digest except between a run's `tag` and its
       `settle`. While they differ, `decide` waits, polling every 30 seconds, and gives up as
       `current` after 40 minutes. That wait outlasts `verify`'s and `settle`'s
-      `timeout-minutes` together.
+      `timeout-minutes` together, which D2.5 sizes for bento-pdf's 13-minute timeout. A
+      longer derived timeout raises `verify`'s `timeout-minutes`, this wait and the `promote`
+      job's `timeout-minutes` together, all inside GitHub's 6-hour job limit (D4 *The
+      cap*).
     - `tag` moves `prod` only while `prod` still names the digest `decide` read. A second
       run that decided on the same `prod` finds it moved, and it moves and verifies nothing.
 
@@ -642,6 +645,12 @@ request leaves this list and the round's *Review log* entry names it.
   long `verify` job up to the 5.5-hour cap, and no other promotion runs meanwhile. If that
   measurement shows it, *Verification* changes `verify` into a short job that re-enters, or
   a scheduled poller. No gate is named until the measurement exists.
+    - Under D2.5, `verify` runs in no group, so the next run's `decide` waits on it inside its
+      own `promote` job and holds a second runner. D4.3 raises `verify`'s
+      `timeout-minutes`, `decide`'s in-flight wait and the `promote` job's
+      `timeout-minutes` with the derived timeout. Otherwise D2.5's 25-minute
+      `timeout-minutes` stops a longer `verify` first, and `settle` writes a false
+      `<T> unverified` hold (D4 *The cap*).
 
 ### Requests on C3
 
@@ -1029,7 +1038,8 @@ Applied to this page:
     - The bullet *A verification in flight blocks the next promotion* records why `verify`
       and `settle` join no concurrency group, and the two checks that replace one.
       *Promotion target* now places the group `promote` on the `promote` and `tag` jobs, not
-      on the workflow. The D5 row in *Requests on C2* gains the constraint on its reset.
+      on the workflow. The D5 row in *Requests on C2* gains the constraint on its reset, and
+      the row on the shape of `verify` gains D4.3's three limits.
     - *Jobs that run repository code hold no write permission* gives `render` `checks: read`
       and `verify` `statuses: read`.
 
