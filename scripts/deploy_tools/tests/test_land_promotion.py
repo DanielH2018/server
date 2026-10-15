@@ -152,10 +152,41 @@ def test_a_narrowed_ansible_owned_tag_settles_on_the_tick(land_run):
     assert "land_wait" not in _names(calls) and "deploy" not in _names(calls)
 
 
-def test_a_refused_narrowing_settles_on_the_tick_as_before(land_run):
-    rc, out, _, calls, _ = land_run([], _flip(narrowed="", narrowed_rc=3))
+def test_a_narrowing_that_fails_settles_on_the_tick_as_before(land_run):
+    rc, out, _, calls, _ = land_run([], _flip(narrowed="", narrowed_rc=1))
     assert rc == 0 and "VERDICT: settled" in out
     assert "land_wait" not in _names(calls) and "owners_at" not in _names(calls)
+
+
+def test_a_refused_bulk_flip_still_waits_on_the_tags_it_reached(land_run):
+    """`narrow` refuses a list covering most of the fleet, as D5's bulk move would, and still
+    prints the tags it reached."""
+    rc, _, _, calls, _ = land_run([], _flip(narrowed_rc=3))
+    assert rc == 0
+    assert [c[1][:2] for c in calls if c[0] == "land_wait"] == [
+        (MERGE_SHA, ["bento-pdf"])
+    ]
+
+
+def test_a_service_pr_that_also_flips_a_tag_waits_on_that_tag(land_run):
+    fakes = _flip(
+        derived=(["sonarr"], "pr"),
+        gh_views={
+            "files,changedFiles": {
+                "files": [
+                    {"path": "ansible/roles/k8s/sonarr/defaults/main.yml"},
+                    {"path": "ansible/inventory/host_vars/daniel-box.yml"},
+                ],
+                "changedFiles": 2,
+            }
+        },
+    )
+    rc, _, _, calls, _ = land_run([], fakes)
+    assert rc == 0
+    assert [c[1][1] for c in calls if c[0] == "deploy"] == [["sonarr"]]
+    assert [c[1][:2] for c in calls if c[0] == "land_wait"] == [
+        (MERGE_SHA, ["bento-pdf"])
+    ]
 
 
 # -- the handback refusal --------------------------------------------------------------------

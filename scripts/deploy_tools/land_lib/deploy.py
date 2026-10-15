@@ -444,17 +444,16 @@ def deploy_phase(ln: Landing) -> None:
 
     The split comes before any deploy.sh (`promotion.split_owned`): a tag Flux applies leaves
     `resolved_tags`, and deploy.sh runs only when an Ansible-owned tag remains. A PR holding
-    such a tag then waits on promotion, after deploy.sh for a PR that holds both kinds. A PR
-    that derived no tag looks for such a tag in the deployer's narrowing of its deploy-plane
-    paths (`promotion.owned_by_narrowing`), so an inventory-only flip to `owner: flux` waits on
-    promotion too rather than settling on the tick alone.
+    such a tag then waits on promotion, after deploy.sh for a PR that holds both kinds. A
+    deploy-plane path derives no tag, so such a tag is also read from the deployer's narrowing
+    of the PR's range (`promotion.owned_by_narrowing`), and an inventory-only flip to
+    `owner: flux` waits on promotion rather than settling on the tick alone.
     """
     t = ln.tools
     if ln.needs_diff:
         derive_from_diff(ln)
     promotion.split_owned(ln)
-    if not ln.resolved_tags:
-        promotion.owned_by_narrowing(ln)
+    promotion.owned_by_narrowing(ln)
     if not ln.resolved_tags and not ln.owned_tags:
         no_tag_outcome(ln)
     ln.ledger.tags_label = ",".join(ln.resolved_tags + list(ln.owned_tags))
