@@ -509,8 +509,9 @@ The renderer generates every `dependsOn` from the play's own dependency map, and
 writes one. The `no-template-hand-writes-depends-on` row of
 `ansible/tests/repo/test_census_rows_text.py` fails a template that does.
 `scripts/renderer/renderer_lib/cluster.py:bundle_ordering` builds the map with `build_k8s_dep_map` over the full k8s
-`containers_list`, so a `--role` render gives a tag the same edges as a full one. The edges
-are:
+`containers_list` and reads ownership from the inventory, so a `--role` render gives a tag
+the same toposort edges as a full one. The `<tag>-deferred` edges come from the tags the
+render publishes, and the publish job renders every published tag. The edges are:
 
 - **A tag's toposort edges, kept when flux-owned.** `<tag>` depends on each member of its
   `build_k8s_dep_map` edges that the inventory marks `owner: flux`. Any other edge is
