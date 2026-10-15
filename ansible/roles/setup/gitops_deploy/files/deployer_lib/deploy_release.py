@@ -121,6 +121,16 @@ def digest_verdict(
     return CURRENT, ""
 
 
+def render_commit(service: str, render_dir: str = K8S_RENDER_DIR) -> str | None:
+    """The commit of `service`'s newest render record, whether or not it matches, or None.
+
+    `deploy_k8s_owed` reads it for a caller the proof did not carry, to say whether the
+    producer has rendered the change yet (#5118).
+    """
+    render = _record(service, render_dir)
+    return (render.get("commit") or None) if render else None
+
+
 def render_proof(
     service: str,
     release_dir: str = K8S_RELEASE_DIR,

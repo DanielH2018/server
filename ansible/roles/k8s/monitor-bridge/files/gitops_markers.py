@@ -251,9 +251,11 @@ def k8s_unapplied_remedy(subject: str) -> str:
     if subject in RENDER_PROOF_SHARED_ROLES:
         return (
             f"nothing to deploy: `{subject}` is a shared role, and a later tick discharges "
-            f"this line once each caller's render matches what it applied. Clear the line "
-            f"by hand if no caller can be proven. The alternative, `{cmd}`, redeploys every "
-            f"service that runs the role"
+            f"this line once each caller's render matches what it applied. The hourly "
+            f"render producer reaches a change only once its CI is green, so clear the "
+            f"line by hand only once a render at or after it still fails to prove a "
+            f"caller: the journal's `k8s_unapplied: {subject} waits` line names them. The "
+            f"alternative, `{cmd}`, redeploys every service that runs the role"
         )
     if subject in SHARED_K8S_ROLES:
         return (

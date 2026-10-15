@@ -35,7 +35,7 @@ Reach `deploy_alerts` qualified, never by from-import.
 import json
 import time
 
-from deployer_lib import deploy_alerts
+from deployer_lib import deploy_alerts, deploy_render_bases
 from deployer_lib.deploy_changes import _is_test_only_path, is_doc
 from deployer_lib.deploy_config import WARNING, Config, log
 from deployer_lib.deploy_k8s import k8s_roles_listed
@@ -266,14 +266,18 @@ def discharge_k8s_unapplied(
     The guard task reads only `.get(manifests_service, [])` of `STANDALONE_GUARD_MAP`. A caller
     whose last proven carry B precedes the line's origin therefore carries it when `B..origin`
     changes no other applied `manifests` path and leaves that caller's row equal
-    (`_guard_row_carries`). B is the caller's release record or its matching render, whichever
+    (`_guard_row_carries`). B is the caller's release record, its matching render, or the
+    newest matching render the line itself stored (`deploy_render_bases`, #5122), whichever
     passes: an earlier role change a render already proved for that caller does not hold the
-    line. That is `land_shared.guard_map_rows`'s narrowing, asked per caller from its own proof
-    because a line keeps only its newest origin. A map-only line then waits on the callers
-    whose row moved, the ones `land.sh` deploys.
+    line, even after the producer has overwritten that render. That is
+    `land_shared.guard_map_rows`'s narrowing, asked per caller from its own proof because a line
+    keeps only its newest origin. A map-only line then waits on the callers whose row moved,
+    the ones `land.sh` deploys, and the journal names every caller it still waits on (#5118).
     """
     pending = state.owed_pending(OWED_K8S_UNAPPLIED)
     records = {e.service: tools.release_commit(e.service) for e in pending}
+    bases = deploy_render_bases.stored_bases(state.read("owed"), "manifests")
+    waits: dict[str, list[str]] = {}
     callers, owned_only = _shared_callers(
         tools, config, {s for s, c in records.items() if not c}
     )
@@ -293,11 +297,22 @@ def discharge_k8s_unapplied(
         if descends(records[tag], origin):
             return True
         render = tools.render_proof(tag)
+        release = records[tag]
+        if service == "manifests" and render and release:
+            bases[tag] = [render, release]
         if not descends(render, origin):
-            return service == "manifests" and any(
+            if service != "manifests":
+                return False
+            stored = deploy_render_bases.base_for(bases, tag, records[tag])
+            if any(
                 _guard_row_carries(tools, config, tag, base, origin)
-                for base in (records[tag], render)
-            )
+                for base in dict.fromkeys((records[tag], render, stored))
+            ):
+                return True
+            newest = tools.render_commit(tag)
+            reason = deploy_render_bases.wait_reason(newest, descends(newest, origin))
+            waits.setdefault(reason, []).append(tag)
+            return False
         if by_digest:
             return True
         return f"{service}:{records[tag]}:{render}" if records[tag] else False
@@ -329,6 +344,15 @@ def discharge_k8s_unapplied(
     discharged = [s for s, ranges in waiting.items() if ranges <= covered]
     if discharged:
         state.clear_owed(OWED_K8S_UNAPPLIED, discharged)
+    for entry in pending:
+        if entry.service == "manifests" and "manifests" not in discharged:
+            deploy_render_bases.log_waits("manifests", entry.origin, waits)
+            # Read again: `clear_owed` above may have rewritten the ledger.
+            text = deploy_render_bases.with_bases(
+                state.read("owed"), "manifests", bases
+            )
+            if text is not None:
+                state.write("owed", text)
     if proved := sorted(set(discharged) - owned_only):
         log(
             f"k8s_unapplied: discharged for {', '.join(proved)}: a release "

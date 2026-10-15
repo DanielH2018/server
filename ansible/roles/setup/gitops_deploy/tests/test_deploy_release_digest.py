@@ -102,6 +102,13 @@ def test_a_render_that_does_not_match_proves_nothing(tmp_path, render):
     )
 
 
+def test_the_render_commit_is_read_whether_or_not_the_render_matches(tmp_path):
+    """#5118: a kept line needs the newest render's commit even when it proves nothing."""
+    _write(tmp_path / "ren", {**RENDER, "manifests_digest": "d2"})
+    assert deploy_release.render_commit("web", tmp_path / "ren") == REF
+    assert deploy_release.render_commit("absent", tmp_path / "ren") is None
+
+
 def test_the_digest_diff_groups_every_service_by_verdict(tmp_path):
     _write(tmp_path / "rel", RELEASE)
     _write(tmp_path / "ren", RENDER)

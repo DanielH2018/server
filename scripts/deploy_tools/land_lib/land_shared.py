@@ -226,9 +226,9 @@ def guard_map_rows(files, pr_range: str, git) -> frozenset[str] | None:
 
     The callers left undeployed owe the deployer nothing. The tick's `k8s_unapplied` line for
     `manifests` asks the same question per caller (`deploy_k8s_owed._guard_row_carries`,
-    #5106). A caller whose row did not move carries the change from its release record or its
-    matching render, provided no other `manifests` change lands between that commit and the
-    line's. The line then drops once the callers deployed here carry it, and does not wait for
+    #5106). A caller whose row did not move carries the change from its release record, its
+    matching render, or the matching render the line stored before the producer overwrote it
+    (#5122), provided no other `manifests` change lands between that commit and the line's. The line then drops once the callers deployed here carry it, and does not wait for
     the untouched callers' render to reach the map change.
 
     Args:

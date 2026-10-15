@@ -45,6 +45,7 @@
     - deployer_lib/deploy_narrow.py
     - deployer_lib/deploy_phases.py
     - deployer_lib/deploy_release.py
+    - deployer_lib/deploy_render_bases.py
     - deployer_lib/deploy_remediation.py
     - deployer_lib/deploy_setup_roles.py
     - deployer_lib/deploy_state.py
@@ -86,6 +87,7 @@
     - deploy_narrow.py
     - deploy_phases.py
     - deploy_release.py
+    - deploy_render_bases.py
     - deploy_remediation.py
     - deploy_setup_roles.py
     - deploy_state.py
@@ -172,6 +174,8 @@
         src: ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_k8s_owed.py
       - live: /opt/gitops-deploy/deployer_lib/deploy_release.py
         src: ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_release.py
+      - live: /opt/gitops-deploy/deployer_lib/deploy_render_bases.py
+        src: ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_render_bases.py
       - live: /opt/gitops-deploy/deployer_lib/deploy_broad_k8s.py
         src: ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_broad_k8s.py
       - live: /opt/gitops-deploy/deployer_lib/deploy_narrow.py

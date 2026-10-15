@@ -155,6 +155,9 @@ class DeployTools:
     # The commit a matching render proves a service's applied bytes for (#3057), read from the
     # render record an hourly producer writes. A field for the reason `release_commit` is one.
     render_proof: Callable[[str], str | None] = deploy_release.render_proof
+    # The commit of that render record whether or not it matches, so a kept line can say
+    # whether the producer has reached the change (#5118).
+    render_commit: Callable[[str], str | None] = deploy_release.render_commit
     # The render-digest verdicts at one commit, for the deploy-plane shadow log (#3045).
     digest_diff: Callable[[str], dict[str, list[str]]] = deploy_release.digest_diff
     # The tags whose deploy runs a shared role (#2643), which has no record of its own.
