@@ -14,6 +14,13 @@ changed the SOPS ciphertext. PR 4's base therefore carries the three `_argon2` k
 commits no SOPS change of its own. The operator's checks read each stored value as matching
 the assert's PHC pattern and the three as distinct.
 
+PR 4, authelia's digests from SOPS: [#5104](https://github.com/DanielH2018/server/pull/5104).
+Before the merge, the operator's base and head render records both read `secret_digest`
+`554df31b…adef42`, and the head's dry run ran the digest assert `ok`. It deployed at
+`4d29bc7e5` in an operator-attended window on 2026-10-15. `probe.py health authelia` passed,
+fresh first-factor logins as the operator and as `claude-ui` succeeded, the operator logged in
+from a browser, and `pytest -m ui -k grafana` read `6 passed`.
+
 PRs 1 and 3 landed without their operator-only pre-merge checks under *Verification*. The orchestrator's briefs omitted them, and each check's property was read after the deploy instead. PR 3's assert ran unstubbed in the real deploy and returned `ok` on the live digests at 2026-10-13 18:12:00. PR 1's release records show the same `secret_digest`, `54b03051…`, before (`8a28ede4`) and after (`d98d8752`), so the Secret's bytes did not move. PR 4's checks stay pre-merge.
 
 Depends on: [R1](r1-shadow-render.md)
