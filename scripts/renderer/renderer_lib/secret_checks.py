@@ -144,23 +144,21 @@ def _rule4(tag: str, file: str, site: str, name: str) -> Violation:
     return Violation(NO_SOPS_MANIFEST_KEY, tag, file, site, name)
 
 
-_AUTHELIA_KEY, _PPB_KEY = "authelia_oidc_rsa_key_content", "pi_peer_backup_ssh_key"
+_AUTHELIA_KEY = "authelia_oidc_rsa_key_content"
 
 # Every violation the first fleet render finds. Each entry leaves through the PR that fixes
 # its source, and an entry that no longer matches fails the check, so the set shrinks only
 # through a fix. R2's exit criterion requires it empty.
 KNOWN_VIOLATIONS = frozenset(
     {
-        # Rule 4: the two multi-line keys still interpolated with `indent`. R2's PRs 6 and 7
-        # move each into a dedicated Secret. home-assistant's key already sits in its own
-        # Secret, listed in `render_sops_manifests` (R2's PR 5).
+        # Rule 4: the one multi-line key still interpolated with `indent`. R2's PR 7 moves it
+        # into a dedicated Secret. home-assistant's and pi-peer-backup's keys already sit in
+        # Secrets of their own, listed in `render_sops_manifests` (R2's PRs 5 and 6).
         _rule4(
             "authelia", "config-secret.yaml", "Secret/authelia-config", _AUTHELIA_KEY
         ),
-        _rule4("pi-peer-backup", "secret.yaml", "Secret/pi-peer-backup-ssh", _PPB_KEY),
-        # Rule 5, the indent on each multi-line key, at the same two sites.
+        # Rule 5, the indent on that key, at the same site.
         _rule5("authelia", "config-secret.yaml.j2", "filter indent", _AUTHELIA_KEY),
-        _rule5("pi-peer-backup", "secret.yaml.j2", "filter indent", _PPB_KEY),
     }
 )
 

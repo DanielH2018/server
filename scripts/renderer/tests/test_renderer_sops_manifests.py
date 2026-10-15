@@ -1,4 +1,4 @@
-"""`render_sops_manifests` and the `sops-manifest-entries` check (target slice R2, PR 5).
+"""`render_sops_manifests` and the `sops-manifest-entries` check (target slice R2, PRs 5, 6).
 
 A placeholder render leaves out each file a role lists in `render_sops_manifests`, and the
 check holds every entry to one Secret of `SOPS_MANIFEST_KEYS` keys. The fixtures build a
@@ -24,6 +24,12 @@ HA = "home-assistant"
 ENTRY = "google-sa-secret.yaml"
 GA = "google_assistant_service_account"
 
+# Each role's one entry and the SOPS_MANIFEST_KEYS key its Secret holds.
+ENTRIES = {
+    HA: (ENTRY, GA),
+    "pi-peer-backup": ("ssh-key-secret.yaml", "pi_peer_backup_ssh_key"),
+}
+
 
 def _secret(*keys: str) -> str:
     data = "".join(f"  k{i}: {sentinel(key)}\n" for i, key in enumerate(keys))
@@ -37,30 +43,30 @@ def _check(entries: dict[str, str | None]) -> list[str]:
     return sops_manifest_entries(render, [GA, "domain", "fixture_token"])
 
 
-@pytest.fixture(scope="module")
-def ha_render():
-    return render_placeholders([HA], homelab_render.secret_keys())
-
-
-def test_home_assistant_leaves_its_service_account_secret_out_is_clean(ha_render):
-    (tag,) = ha_render.tags
-    assert ENTRY not in tag.files
-    assert ENTRY not in tag.files["kustomization.yaml"]
+@pytest.mark.parametrize("role", sorted(ENTRIES))
+def test_a_role_leaves_its_sops_manifest_secret_out_is_clean(role):
+    entry, key = ENTRIES[role]
+    render = render_placeholders([role], homelab_render.secret_keys())
+    (tag,) = render.tags
+    assert entry not in tag.files
+    assert entry not in tag.files["kustomization.yaml"]
     assert "secret.yaml" in tag.files["kustomization.yaml"]
-    assert GA not in ha_render.key_sets[HA]
-    assert GA not in ha_render.standalone[HA]
-    assert sops_manifest_entries(ha_render, homelab_render.secret_keys()) == []
-    # The named member: the check must have read HA's entry, not an empty list.
-    assert sentinel(GA) in (ha_render.sops_manifests[HA][ENTRY] or "")
+    assert key not in render.key_sets[role]
+    assert key not in render.standalone[role]
+    assert sops_manifest_entries(render, homelab_render.secret_keys()) == []
+    # The named member: the check must have read the role's entry, not an empty list.
+    assert sentinel(key) in (render.sops_manifests[role][entry] or "")
 
 
-def test_a_stub_render_keeps_the_entry(tmp_path):
+def test_a_stub_render_keeps_the_entries(tmp_path):
     stubs = tmp_path / "stubs.yml"
     assert shadow_diff.main(["stubs", "--out", str(stubs)]) == 0
     out = tmp_path / "out"
-    args = ["cluster", "--out", str(out), "--role", HA, "--secret-stubs", str(stubs)]
+    roles = [arg for role in sorted(ENTRIES) for arg in ("--role", role)]
+    args = ["cluster", "--out", str(out), *roles, "--secret-stubs", str(stubs)]
     assert homelab_render.main(args) == 0
-    assert (out / "cluster" / HA / ENTRY).is_file()
+    for role, (entry, _key) in ENTRIES.items():
+        assert (out / "cluster" / role / entry).is_file()
 
 
 def test_an_entry_of_one_secret_of_a_sops_manifest_key_is_clean():
