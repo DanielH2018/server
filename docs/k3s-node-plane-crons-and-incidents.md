@@ -231,14 +231,24 @@ win with no carrier, and traffic goes nowhere. With it, both nodes keep their ad
 on WiFi, because `arp_ignore` is 0. A peer that re-resolves the address reaches the node over
 WiFi. flannel's VXLAN device records the wired link as `dev`, but its per-peer forwarding
 entries carry no interface. The kernel therefore routes the encapsulated packets through the
-main table, which picks WiFi once the wired routes are skipped.
+main table, which picks WiFi once the wired routes are skipped. This paragraph is read from
+the routing tables and the forwarding entries on 2026-10-15; no unplug test has confirmed it.
+
+The same ARP behaviour has a cost with the cable in. Both links answer a broadcast ARP
+request, so a client can learn the WiFi MAC for an address the wired link carries. MetalLB's
+speaker builds an ARP responder on every link that is up, `wlo1` included, so on daniel-box
+this covers the VIPs as well as `server_ip`. daniel-server shows no such flux: the Pi and
+daniel-box both held the `enp88s0` MAC for 10.0.0.161 on 2026-10-15. Adding
+`interfaces: [eno1]` to the `homelab-l2` L2Advertisement stops the flux for the VIPs, at the
+price of the VIPs not failing over.
 
 The fallback covers a failed cable, NIC or switch port on one node. It does not cover a dead
 gateway, which is also the access point. A WiFi link carries a fraction of the wired
 bandwidth: daniel-server's `wlo1` read a signal level of `-71 dBm` on 2026-10-15, so Longhorn replication and
 media streaming slow down while it carries them.
 
-To apply it, add both keys with `sops ansible/vars/secrets.yml`, then run
+To apply it, add both keys with `sops ansible/vars/secrets.yml`, which opens an editor and
+keeps the password out of shell history. Then run
 `uv run python scripts/secrets_mgmt/secret_rotation.py sync` and commit. Then run the
 `node-address` tag on each node, the same two commands as the pin. The run refuses to start
 while either key is missing. To back it out, empty `k3s_node_wifi_link` and run the same tag.
@@ -246,9 +256,15 @@ while either key is missing. To back it out, empty `k3s_node_wifi_link` and run 
 To check the fallback, unplug the node's cable and confirm three things. First, `ip route get
 1.1.1.1` names the WiFi link. Second, the other node reaches `server_ip`, by `ping` and by
 `kubectl get nodes` reading both `Ready`. Third, a pod on one node reaches a pod on the other.
-On daniel-box, also check that a LAN client reaches the Traefik VIP. No unplug test has shown
-that MetalLB's speaker answers ARP for the VIPs on `wlp4s0`. A client's cached ethernet MAC can
-also take minutes to expire.
+On daniel-box, also check that a LAN client reaches the Traefik VIP. A client's cached
+ethernet MAC can take minutes to expire.
+
+After the first apply on daniel-box, check for flux with the cable in. On daniel-pi,
+`ip neigh show` for 10.0.0.215, the Traefik VIP and the Pi-hole VIP must each name
+`c8:ff:bf:0d:2c:c4`, the `eno1` MAC, and not `4c:23:38:b6:e0:43`, the `wlp4s0` MAC. A day
+later, `ip -s link show wlp4s0` should show only a few hundred MB, as `wlo1` does on
+daniel-server. If either check fails, empty `k3s_node_wifi_link` for daniel-box and run the
+tag again.
 
 ## Two smaller traps
 
