@@ -18,6 +18,10 @@ The key's fingerprint is `83B57416B342DDE1CBA0752D435D139ADFD6F016`.
 PR H3.5a, the builder half, staging only: [#5046](https://github.com/DanielH2018/server/pull/5046).
 The operator landed it on 2026-10-15, and the tick applied it at `b7d8f0ef5`. The builder's
 first run ended at 12:39:05 UTC with `reason="ok"` for `a594ad662e68` and nothing unbuilt.
+PR H3.5d, the host rules: [#5112](https://github.com/DanielH2018/server/pull/5112). It
+deployed `observability` at `de380735e`. Prometheus loaded the `host-checks` group with 7
+rules, and neither `HostReconcileFailed` nor `HostUpdateStale` has a series, because the
+expected-host map is empty until H3.9c.
 
 Depends on: R1
 Unblocks: H4, H5
