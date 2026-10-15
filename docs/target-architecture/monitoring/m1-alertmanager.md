@@ -528,6 +528,9 @@ route:
       repeat_interval: 60s     # observability_alertmanager_watchdog_repeat_seconds
     - matchers: [shadow="true"]
       receiver: blackhole
+    - matchers: [alertname="DeployHoldActive"]
+      receiver: discord
+      repeat_interval: 24h     # D2.6d's hold page: a standing hold repeats daily
     - matchers: [severity="critical"]
       receiver: discord
       continue: true

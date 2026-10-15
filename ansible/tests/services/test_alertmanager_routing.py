@@ -95,7 +95,17 @@ PAGING = {
         ["discord", "email"],
     ),
     "ingress-probes-missing": (ingress_set("IngressProbesMissing"), ["discord"]),
+    # D2.6d's rule, with the labels D2's plan gives it.
+    "deploy-hold-active": (
+        {
+            "alertname": "DeployHoldActive",
+            "severity": "warning",
+            "service": "deploy-pipeline",
+        },
+        ["discord"],
+    ),
 }
+DEPLOY_HOLD, _ = PAGING["deploy-hold-active"]
 # The shadow sets, as M4's ingress-probes rules and M3's host-checks rules ship them.
 SHADOW = {
     "ingress-probe-failed": ingress_set("IngressProbeFailed"),
@@ -197,6 +207,30 @@ def test_a_paging_route_without_the_mute_is_flagged():
     del catch_all["mute_time_intervals"]
     labels, _ = PAGING["warning"]
     assert unmuted(labels, tree) == ["discord"]
+
+
+def repeat_intervals(labels: dict[str, str], tree: dict | None = None) -> list[str]:
+    """The `repeat_interval` of each route `labels` reaches in `tree`, the root's when the route
+    sets none. The tree nests one level, so the root is the only parent a route inherits from."""
+    tree = tree or route_tree()
+    return [
+        route.get("repeat_interval", tree["repeat_interval"])
+        for route in reached(tree, labels)
+    ]
+
+
+def test_a_standing_deploy_hold_repeats_daily():
+    assert repeat_intervals(DEPLOY_HOLD) == ["24h"]
+
+
+def test_a_deploy_hold_without_its_route_is_flagged():
+    tree = route_tree()
+    tree["routes"] = [
+        r
+        for r in tree["routes"]
+        if 'alertname="DeployHoldActive"' not in r.get("matchers", [])
+    ]
+    assert repeat_intervals(DEPLOY_HOLD, tree) == ["6h"]
 
 
 def test_the_watchdog_reaching_an_unmuted_route_is_flagged():
