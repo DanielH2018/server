@@ -131,13 +131,13 @@ M1's Alertmanager. Every rule carries `service="flux"`.
       reports queueing, not a failed deploy. It is a warning without `verify="true"`, so
       the promotion soak, which reads only alerts carrying `severity="critical"` or
       `verify="true"` ([contracts.md C7](target-architecture/contracts.md)), never reads it.
-    - **The gap `verify`'s timeout cannot see.** A revision queues a reconcile of every Kustomization on
-      the source, changed or not. An unchanged Kustomization that is unhealthy holds a worker
-      for its whole `timeout`, retries after its `retryInterval`, and holds one again. The
-      bundle does not say which Kustomizations are unhealthy, so the timeout leaves them out.
-      When as many of them fail at once as there are workers, every apply queues, the fix
-      included, and `verify` times out on a changed name that never applied. This rule is
-      what reports that state.
+    - **The gap `verify`'s timeout cannot see.** A revision queues a reconcile of every
+      Kustomization on the source, changed or not. An unchanged Kustomization that is
+      unhealthy holds a worker for its whole `timeout`, retries after its `retryInterval`,
+      and holds one again. The bundle does not say which Kustomizations are unhealthy, so
+      the timeout leaves them out. When as many of them fail at once as there are workers,
+      every apply queues, the fix included, and `verify` times out on a changed name that
+      never applied. This rule is what reports that state.
     - **The shed bound is one `timeout`.** Suspending an unhealthy Kustomization needs no
       worker, because a suspend is an API write. Nothing shows that a suspend ends a
       health-check wait already in progress, so each held worker frees when its current wait
