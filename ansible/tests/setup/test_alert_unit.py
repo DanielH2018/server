@@ -46,6 +46,7 @@ KNOWN_ALERTS = frozenset(
         # so the OnFailure= scan below does not find it.
         "fanout",
         "gitops-deploy",
+        "homelab-builder",
         "renovate-agent",
         "renovate-notify",
     }

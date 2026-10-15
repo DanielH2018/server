@@ -1,0 +1,39 @@
+[Unit]
+Description=Homelab host-package builder (stages packages from the newest green master commit)
+After=network-online.target
+Wants=network-online.target
+OnFailure=homelab-builder-alert.service
+
+[Service]
+Type=oneshot
+User=homelab-builder
+Group=homelab-builder
+# staged/ is setgid homelab-signer, so 0027 leaves each staged file readable by the signer.
+UMask=0027
+# Sandboxing (h3-pi-pilot.md, *The builder and the repository*, Sandboxing). The run executes the
+# chosen commit's renderer, so it may write its own state directory and nothing else.
+# ansible/roles/setup/homelab_builder/tests/test_builder_units.py holds each directive.
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+CapabilityBoundingSet=
+ReadWritePaths={{ homelab_builder_state_dir }}
+Environment=HOME={{ homelab_builder_state_dir }}
+Environment=PYTHONDONTWRITEBYTECODE=1
+# The interpreter and the cache the install arm fills, so a run never downloads Python.
+Environment=UV_CACHE_DIR={{ homelab_builder_uv_cache_dir }}
+Environment=UV_PYTHON_INSTALL_DIR={{ homelab_builder_python_dir }}
+Environment=UV_PYTHON_DOWNLOADS=never
+Environment=HOMELAB_UV={{ homelab_builder_code_dir }}/bin/uv
+Environment=HOMELAB_PYTHON={{ host_python_version }}
+Environment=HOMELAB_NFPM={{ homelab_builder_nfpm_dir }}/nfpm
+TimeoutStartSec=20min
+ExecStart={{ homelab_builder_code_dir }}/bin/uv run --no-project --no-python-downloads --python {{ host_python_version }} {{ homelab_builder_code_dir }}/host_package_builder.py
+# `+` runs the copy as root outside the sandbox, `-` keeps a failed copy from failing the unit.
+ExecStopPost=-+/bin/sh {{ homelab_builder_code_dir }}/publish-textfile homelab_builder_ {{ homelab_builder_state_dir }}/homelab_builder.prom

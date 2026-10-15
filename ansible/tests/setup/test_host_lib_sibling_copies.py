@@ -52,6 +52,7 @@ EXPECTED_CONSUMERS = frozenset(
         "configarr",
         "fake_remux",
         "gitops_deploy",
+        "homelab_builder",
         "janitorr",
         "k3s",
         "renovate_agent",

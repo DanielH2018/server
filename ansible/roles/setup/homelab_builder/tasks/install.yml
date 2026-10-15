@@ -1,7 +1,7 @@
 ---
 # The armed half, H3.4b: the repository half (docs/target-architecture/host/h3-pi-pilot.md,
-# *Shared names*, Repository and Builder state, and *The builder and the repository*). The
-# builder units, its script and config.env are H3.5a's.
+# *Shared names*, Repository and Builder state, and *The builder and the repository*), then the
+# builder half, H3.5a, which builder.yml carries.
 #
 # Every task carries homelab-builder-install and no initial_setup-wide tag such as `firewall`,
 # so narrow_setup narrows a change here to this arm alone.
@@ -87,6 +87,62 @@
     creates: "{{ homelab_builder_signer_dir }}/gnupg/openpgp-revocs.d"
   become: true
 
+# /etc/homelab-builder/ is root's, and the builder reads it through its group: config.env (0640)
+# carries the token, archive-key.fpr (0644) the fingerprint. The builder cannot read the
+# signer's 0700 GnuPG home, so the role writes the fingerprint from it on every apply, and builder
+# step 6 compares the rendered keyring with it.
+- name: Create the builder's configuration directory
+  tags: [homelab-builder-install]
+  ansible.builtin.file:
+    path: /etc/homelab-builder
+    state: directory
+    owner: root
+    group: homelab-builder
+    mode: "0750"
+  become: true
+
+# --list-keys reads the public keyring only, so it needs no gpg-agent. check_mode: false, because
+# the write below reads this register, and a skipped read would fail it under --check.
+- name: Read the archive signing key's fingerprint
+  tags: [homelab-builder-install]
+  ansible.builtin.command:
+    argv:
+      - runuser
+      - -u
+      - homelab-signer
+      - --
+      - gpg
+      - --homedir
+      - "{{ homelab_builder_signer_dir }}/gnupg"
+      - --batch
+      - --with-colons
+      - --list-keys
+  register: homelab_builder_key_listing
+  changed_when: false
+  check_mode: false
+  become: true
+
+- name: Refuse a signer home holding other than one key
+  tags: [homelab-builder-install]
+  ansible.builtin.assert:
+    that:
+      - homelab_builder_key_listing.stdout_lines | select('match', '^pub:') | list | length == 1
+    fail_msg: >-
+      {{ homelab_builder_signer_dir }}/gnupg holds
+      {{ homelab_builder_key_listing.stdout_lines | select('match', '^pub:') | list | length }}
+      keys; archive-key.fpr names exactly one. docs/break-glass.md has the key procedures.
+
+# The first fpr line follows the pub line, so it is the primary key's fingerprint.
+- name: Write the archive signing key's fingerprint for the builder
+  tags: [homelab-builder-install]
+  ansible.builtin.copy:
+    content: "{{ (homelab_builder_key_listing.stdout_lines | select('match', '^fpr:') | first).split(':')[9] }}\n"
+    dest: /etc/homelab-builder/archive-key.fpr
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+
 # Key generation starts a gpg-agent under the signer's home. Nothing else uses it until the
 # signer unit runs, so stop it rather than leave a stray process behind the apply. With no
 # agent running, `--kill` is a no-op, so the task runs on every apply.
@@ -139,3 +195,7 @@
     comment: homelab apt repository
   loop: "{{ homelab_builder_repo_clients }}"
   become: true
+
+- name: Install the builder, its tools and its timer
+  tags: [homelab-builder-install]
+  ansible.builtin.import_tasks: builder.yml

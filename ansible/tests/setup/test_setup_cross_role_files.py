@@ -63,6 +63,7 @@ KNOWN_EDGES = {
     "ansible/roles/setup/common/tasks/install_host_lib.yml": {
         "fake_remux",
         "gitops_deploy",
+        "homelab_builder",
         "k3s",
         "renovate_agent",
         "renovate_notify",
@@ -70,6 +71,7 @@ KNOWN_EDGES = {
     "ansible/roles/setup/common/files/host_lib.py": {
         "fake_remux",
         "gitops_deploy",
+        "homelab_builder",
         "k3s",
         "renovate_agent",
         "renovate_notify",
