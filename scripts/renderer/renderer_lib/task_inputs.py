@@ -8,14 +8,9 @@ image-builder's expression, the script checksums, `kuma_declarations` and `janit
 `playbook_dir` and `role_path` resolve as Ansible resolves them, so a lookup reads the same
 file a deploy reads.
 
-Target slice R1 started this module with the facts a role task reads from live state. The
-renderer reads the git tree alone, so until target slice R3 removes those reads, each one
-takes a fixed stand-in that both halves of the shadow render share: `shadow_diff.py stubs`
-writes them into the stub file next to the secret stubs.
-
-A string stand-in carries the secret stubs' marker, `stub-` plus the fact name with
-underscores turned to hyphens. A render holding one is a stub render for that tag, and a
-publish census that refuses stub tokens refuses it too.
+Target slice R1 started this module with the facts a role task reads from live state, each
+with a fixed stand-in that both halves of the shadow render share. Target slice R3 removed
+those reads, so `PINNED_LIVE_FACTS` is empty, and R3's PR 5 deletes it with its readers.
 """
 
 import sys as _sys
@@ -47,18 +42,8 @@ class PinnedFact:
     readers: frozenset[str]
 
 
-PINNED_LIVE_FACTS = {
-    # Read from the live users Secret, or hashed by a `kubectl run` pod.
-    "authelia_password_hash": PinnedFact(
-        "stub-authelia-password-hash", frozenset({"authelia"})
-    ),
-    "authelia_claude_password_hash": PinnedFact(
-        "stub-authelia-claude-password-hash", frozenset({"authelia"})
-    ),
-    "authelia_agent_password_hash": PinnedFact(
-        "stub-authelia-agent-password-hash", frozenset({"authelia"})
-    ),
-}
+# Empty since R3's PR 4 moved authelia's digests into SOPS. R3's PR 5 deletes it.
+PINNED_LIVE_FACTS: dict[str, PinnedFact] = {}
 
 
 IMAGE_BUILDER = K8S_ROLES / "image-builder"

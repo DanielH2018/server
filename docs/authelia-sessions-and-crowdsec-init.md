@@ -192,15 +192,12 @@ registrations in its SQLite database whatever the authentication backend is, so 
 seeds it with `authelia storage user totp generate --force` against the running pod, from
 `authelia_claude_totp_secret`. The secret is fixed, so re-seeding writes an identical row.
 
-**Rotating either password needs `-e authelia_k8s_rehash_passwords=true`.** The role reads each
-user's existing argon2 digest back out of the live Secret and reuses it — that is what stops a
-fresh random salt rewriting the Secret and rolling the pod on every deploy, and it is also why
-`sops set authelia_password` followed by an ordinary deploy changes nothing. The recap is green
-and the portal goes on accepting the old password:
-
-```
-./scripts/deploy.sh --tags authelia -e authelia_k8s_rehash_passwords=true
-```
+**Rotating a password means minting its digest too.** Each user's argon2 digest is its own SOPS
+key, `authelia_password_argon2` and its two siblings, and the role renders those, never the
+plaintext. So `sops set authelia_password` followed by an ordinary deploy changes nothing: the
+recap is green and the portal goes on accepting the old password. The operator-only procedure,
+*Authelia user passwords* in `docs/secret-rotation.md`, mints and validates the new digest and
+stores it beside the plaintext.
 
 Rotating `authelia_claude_totp_secret` needs no flag — the seeding task re-seeds every deploy.
 
@@ -210,7 +207,8 @@ Authelia uses to MINT digests — a portal password reset, nothing else. Verific
 algorithm off the stored `$argon2id$` PHC prefix instead (`crypt.Decode` in
 `internal/authentication/file_user_provider_database.go`, reached from `CheckUserPassword`), so
 changing that block cannot break an existing login. The digests in the Secret are minted by the
-`authelia crypto hash generate argon2` task with its own explicit flags, which is the other copy.
+`authelia crypto hash generate argon2` command in the rotation procedure in
+`docs/secret-rotation.md`, with its own explicit flags, which is the other copy.
 
 **That block renders the canonical nested form, and the legacy flat form is a trap.** It said
 `algorithm: argon2id` with `iterations`/`memory`/… as siblings until #1621. `argon2id` is a

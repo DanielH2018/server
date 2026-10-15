@@ -1,4 +1,4 @@
-"""The five secret rules and the pinned-fact refusal against the real tree (target slice R2).
+"""The five secret rules against the real tree (target slice R2).
 
 A fleet render in placeholder mode must pass the rules with exactly `KNOWN_VIOLATIONS`, and
 each rule must find its named members, so a rule that stops matching cannot pass. A `--role`
@@ -13,10 +13,6 @@ import dataclasses
 import pytest
 
 from renderer import homelab_render
-from renderer.renderer_lib.cluster import flux_owned_tags, select_tags
-from renderer.renderer_lib.placeholders import (
-    pinned_fact_refusals,
-)
 from renderer.renderer_lib.secret_checks import (
     KNOWN_VIOLATIONS,
     NO_SECRET_EXPRESSION,
@@ -27,7 +23,6 @@ from renderer.renderer_lib.secret_checks import (
     rule5,
     rule5_members,
 )
-from renderer.renderer_lib.task_inputs import PINNED_LIVE_FACTS, PinnedFact
 from renderer.standalone_map import fleet_render
 
 
@@ -103,22 +98,6 @@ def test_a_role_render_without_the_named_members_is_clean(tmp_path, capsys):
     assert "the five secret rules pass" in capsys.readouterr().out
 
 
-def test_no_render_target_is_a_flux_owned_reader_of_a_pinned_fact_is_clean():
-    # CI's pytest job runs this, so the commit that marks a reader `owner: flux` goes red
-    # before any publish job could run.
-    assert pinned_fact_refusals(select_tags(None), flux_owned_tags()) == []
-
-
-def test_the_refusal_refuses_every_reader_pinned_live_facts_records():
-    # With every render target marked flux-owned, the refusal names each tag that reads a
-    # pinned fact. R1's reader test holds PINNED_LIVE_FACTS to the templates.
-    targets = select_tags(None)
-    refused = {tag for tag, _ in pinned_fact_refusals(targets, targets)}
-    assert refused == {tag for f in PINNED_LIVE_FACTS.values() for tag in f.readers}
-    # The member at this commit. R3's PRs retire each reader as they drop its facts.
-    assert refused == {"authelia"}
-
-
 def test_a_render_that_breaks_the_ratchet_exits_1_and_writes_nothing(tmp_path, capsys):
     stale = Violation(
         NO_SECRET_EXPRESSION, "shared", "gone.yaml.j2", "filter trim", "k"
@@ -131,31 +110,3 @@ def test_a_render_that_breaks_the_ratchet_exits_1_and_writes_nothing(tmp_path, c
     assert f"stale KNOWN_VIOLATIONS entry, remove it: {stale.line()}" in err
     assert "the secret checks failed. Nothing was written." in err
     assert not (out / "cluster").exists()
-
-
-FIXTURE_FACTS = {
-    "fixture_fact": PinnedFact("stub-fixture-fact", frozenset({"bento-pdf"}))
-}
-
-
-def _cluster(tmp_path, owned: set[str], facts: dict) -> int:
-    out = tmp_path / "out"
-    return homelab_render.cluster(
-        out, ["bento-pdf"], None, flux_owned=lambda: owned, pinned=facts
-    )
-
-
-def test_a_flux_owned_tag_reading_a_pinned_fact_is_flagged(tmp_path, capsys):
-    assert _cluster(tmp_path, {"bento-pdf"}, FIXTURE_FACTS) == 1
-    err = capsys.readouterr().err
-    assert "bento-pdf is marked owner: flux" in err and "fixture_fact" in err
-    assert not (tmp_path / "out").exists()
-
-
-@pytest.mark.parametrize(
-    ("owned", "facts"),
-    [(set(), FIXTURE_FACTS), ({"bento-pdf"}, {})],
-    ids=["tag-not-flux-owned", "fact-not-pinned"],
-)
-def test_a_pinned_fact_refusal_without_both_halves_is_clean(tmp_path, owned, facts):
-    assert _cluster(tmp_path, owned, facts) == 0

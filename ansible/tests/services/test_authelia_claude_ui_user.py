@@ -1,26 +1,23 @@
 """Authelia's users database holds three users, and one bug would make them the same account.
 
 `claude-ui` is the identity the headless UI tier logs in as, so it can reach the
-`two_factor` services (code-server, n8n, longhorn) without a code typed off a phone. The
-role reads each user's existing argon2 digest back out of the live Secret before deciding
-whether to mint a new one. A read-back that anchors on the hash itself —
-`regex_search('\\$argon2[^\\s\\']+')` over the whole decoded file — is exact with one user.
-With two it returns the FIRST digest whichever user is being resolved, which hands
-both users one password — and nothing about that presents as a failure. Both accounts log
-in, both render their UIs, and the operator's password silently opens the tier that exists
-to be revocable on its own.
+`two_factor` services (code-server, n8n, longhorn) without a code typed off a phone. Each
+user's argon2 digest is its own SOPS key, `authelia_password_argon2` and its two siblings. A
+template line that reads the wrong key hands two users one password, and nothing about that
+presents as a failure. Both accounts log in, both render their UIs, and the operator's
+password silently opens the tier that exists to be revocable on its own. An earlier
+read-back of the live Secret had exactly that bug, anchoring on the first `$argon2` run in
+the file whichever user it was resolving.
 
-So the rules here are about the two users staying distinct. Each is a
+So the rules here are about the users staying distinct. Each is a
 `..._is_clean` / `..._is_flagged` pair over a predicate, applied afterwards to the real
 rendered manifests, with a non-vacuity assertion that the users database was found at all.
 """
 
-import jinja2
 import pytest
 from lib import yaml_fast
-from _helpers import K8S_ROLES, load_tasks
+from _helpers import K8S_ROLES
 from _k8s_render import render_role_template, rendered_docs
-from lib.ansible_jinja_env import make_ansible_env
 from lib.render_context import render_context
 
 OPERATOR_PLACEHOLDER = "$argon2id$v=19$m=65536,t=3,p=4$operator"
@@ -71,7 +68,7 @@ def test_distinct_digests_is_clean():
 
 
 def test_a_shared_digest_is_flagged():
-    """The read-back bug's exact signature: both users resolved to one hash."""
+    """The cross-wiring bug's exact signature: both users resolved to one hash."""
     assert not digests_are_distinct(
         {
             "operator": {"password": OPERATOR_PLACEHOLDER},
@@ -118,7 +115,7 @@ def live_users():
     The render harness stubs every SOPS value to the literal `STUB`, so this fixture can
     say who is in the database and what groups they carry, but nothing about their password
     digests — both render as the same stub. The digest rules render the template again with
-    a distinct value in each user's hash variable instead.
+    a distinct value in each user's digest key instead.
     """
     found = users_database(list(rendered_docs()))
     assert len(found) >= 2, (
@@ -169,8 +166,8 @@ def test_the_claude_ui_user_carries_groups(live_users):
 def test_each_user_renders_the_digest_resolved_for_that_user():
     """Whether one hash fills both accounts, which the stubbed render cannot show.
 
-    The role resolves each user's digest into its own variable. Rendering with a different
-    placeholder in each says which variable reaches which account: a block reading the
+    Each user's digest is its own SOPS key. Rendering with a different placeholder in each
+    says which key reaches which account: a block reading the
     operator's variable gives both users one password, and a swap gives each the other's.
     """
     operator = "operator"
@@ -188,9 +185,9 @@ def test_each_user_renders_the_digest_resolved_for_that_user():
                 "authelia_user": operator,
                 "authelia_k8s_manage_claude_user": True,
                 "authelia_k8s_manage_agent_user": True,
-                "authelia_password_hash": OPERATOR_PLACEHOLDER,
-                "authelia_claude_password_hash": CLAUDE_PLACEHOLDER,
-                "authelia_agent_password_hash": AGENT_PLACEHOLDER,
+                "authelia_password_argon2": OPERATOR_PLACEHOLDER,
+                "authelia_claude_password_argon2": CLAUDE_PLACEHOLDER,
+                "authelia_agent_password_argon2": AGENT_PLACEHOLDER,
             },
         )
     )
@@ -209,7 +206,7 @@ def test_each_user_renders_the_digest_resolved_for_that_user():
 
 
 def test_a_cluster_that_does_not_manage_the_agent_user_renders_no_such_account():
-    """Staging holds no `authelia_agent_password`, so a rendered account would carry no hash."""
+    """A cluster without the agent user holds no digest for it, so the account must not render."""
     agent = render_context(K8S_ROLES / "authelia", strict=True)[
         "authelia_k8s_agent_user"
     ]
@@ -219,59 +216,10 @@ def test_a_cluster_that_does_not_manage_the_agent_user_renders_no_such_account()
             "config-secret.yaml.j2",
             {
                 "authelia_k8s_manage_agent_user": False,
-                "authelia_password_hash": OPERATOR_PLACEHOLDER,
-                "authelia_claude_password_hash": CLAUDE_PLACEHOLDER,
+                "authelia_password_argon2": OPERATOR_PLACEHOLDER,
+                "authelia_claude_password_argon2": CLAUDE_PLACEHOLDER,
             },
         )
     )
     users = users_database([("authelia", "config-secret.yaml.j2", secret)])
     assert agent not in users and len(users) == 2, sorted(users)
-
-
-def test_the_hash_read_back_is_keyed_by_username():
-    """The regression this file's docstring describes, at its source.
-
-    A read-back that anchors on `$argon2` rather than on the username returns the first
-    digest in the file for whichever user it is resolving. Both accounts then work, so only
-    a source check catches it.
-    """
-    tasks = (ROLE / "tasks" / "main.yml").read_text()
-    assert "regex_search('\\$argon2[^\\s\\']+')" not in tasks, (
-        "the users-database read-back is matching the first $argon2 run in the file again; "
-        "it must be keyed by username, or both users get one password"
-    )
-    assert "authelia_k8s_existing_users.get(authelia_user" in tasks
-    assert "authelia_k8s_existing_users.get(authelia_k8s_claude_user" in tasks
-    assert "authelia_k8s_existing_users.get(authelia_k8s_agent_user" in tasks
-
-
-def test_a_dry_run_with_no_digest_stands_in_a_placeholder_before_the_digest_assert():
-    """A no-mutation run skips the hash pods (#4569), so a missing digest gets a placeholder.
-
-    Failing the assert stopped the hourly render-records dry run at authelia, leaving every
-    later service unrecorded, whenever a user was newly managed or a rehash was asked for.
-    `test_authelia_digest_assert.py` holds that the digest assert passes the placeholders.
-    """
-    tasks = load_tasks(ROLE / "tasks" / "main.yml")
-    names = [str(t.get("name", "")) for t in tasks]
-    stand_in = names.index(
-        "Stand in a placeholder digest for each user a dry run could not hash"
-    )
-    assert stand_in < names.index("Fail if a stored Authelia digest is malformed")
-    task = tasks[stand_in]
-    assert task["when"] == "k8s_no_mutate | bool"
-
-    facts = task["ansible.builtin.set_fact"]
-    env = make_ansible_env(undefined_cls=jinja2.Undefined)
-    missing = {k: env.from_string(v).render() for k, v in facts.items()}
-    assert all("dryrunplaceholder" in v for v in missing.values()), missing
-    assert len(set(missing.values())) == len(missing), (
-        "users must not share a placeholder"
-    )
-
-    known = {
-        k: env.from_string(v).render(**{k: "$argon2id$live"}) for k, v in facts.items()
-    }
-    assert set(known.values()) == {"$argon2id$live"}, (
-        "a read-back digest was overwritten"
-    )

@@ -106,12 +106,13 @@ headless UI tier logs in as to reach the `two_factor` services without a code of
 lives in Authelia's SQLite database rather than the rendered `users_database.yml`, re-seeded from
 the fixed `authelia_claude_totp_secret` every deploy.
 
-- **Rotating either password needs `-e authelia_k8s_rehash_passwords=true`.** The role reuses each
-  user's existing argon2 digest from the live Secret, so `sops set authelia_password` plus an
-  ordinary deploy changes nothing while the recap reads green.
+- **Rotating a password means minting its digest too.** The template reads each user's digest
+  from SOPS, `authelia_password_argon2` and its two siblings, never the plaintext. So
+  `sops set authelia_password` plus an ordinary deploy changes nothing while the recap reads
+  green. The operator-only procedure is *Authelia user passwords* in `docs/secret-rotation.md`.
 - **"Fail if a stored Authelia digest is malformed" stops the deploy before the apply.** It
   requires each managed user's digest to be the hashing block's argon2id PHC form, and no two to
-  be equal. Only a stubbed shadow run skips it, so an ordinary dry run checks the live digests.
+  be equal. Only a stubbed shadow run skips it, so an ordinary dry run checks the stored digests.
   ENFORCED: `ansible/tests/services/test_authelia_digest_assert.py`.
 - **The hashing block must render the nested form with `variant: argon2id`** — the legacy flat form
   multiplied `memory` by 1024 and passed validation silently (#1621). ENFORCED:

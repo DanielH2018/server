@@ -19,7 +19,7 @@ steps, and this page describes each piece once its PR has merged.
 - `scripts/renderer/shadow_diff.py stubs` writes the stub file both halves of the shadow
   render take.
 - `scripts/renderer/renderer_lib/task_inputs.py` holds `PINNED_LIVE_FACTS`, the stand-ins for
-  facts a role task reads from live state.
+  facts a role task reads from live state. It is empty, and target slice R3's PR 5 deletes it.
 - `scripts/renderer/homelab_render.py cluster` renders in stub mode into the C1 layout. It
   applies the manifests role's file rules (*The file rules*), and renders every k8s render
   target of daniel-box.
@@ -247,8 +247,8 @@ would also escape a placeholder emitted before it:
    written. A literal `${HOME}` renders as `$${HOME}`, and a bare `$$` as `$$$`.
 3. In a directory that substitutes, every sentinel becomes `${K}`.
 
-The four pinned live-read facts keep the values the stub file gives them (*Pinned live-read
-facts*), so a round trip sees one value on both sides.
+Any pinned live-read fact would keep the value the stub file gives it (*Pinned live-read
+facts*), so a round trip sees one value on both sides. None is pinned.
 
 ### Which directories substitute
 
@@ -594,22 +594,11 @@ again.
 
 ## Pinned live-read facts
 
-Three facts come from live state in a real run, so the renderer cannot compute them from the
-tree. Target slice R3 removes those reads. Until then, each one takes a fixed stand-in in
-both halves: `authelia_password_hash`, `authelia_claude_password_hash` and
-`authelia_agent_password_hash`, read by the `authelia` templates.
-
-A string stand-in carries the secret stubs' marker, such as `stub-authelia-password-hash`.
-Each entry also names its reader tags. A test in `scripts/renderer/tests/` holds those tags
-equal to a word grep of the templates, so a new reader fails the suite.
-
-**A placeholder render refuses a flux-owned reader.** A pinned value renders a valid object
-that fails logins or backups, and only a tag marked `owner: flux` (C4) is published. So
-`cluster` without `--secret-stubs` exits 1, before it renders, when a requested tag is marked
-`owner: flux` and reads a pinned fact. The message names the tag and the fact.
-`placeholders.py:pinned_fact_refusals` reads the reader tags `PINNED_LIVE_FACTS` records and
-derives them nowhere else, so R3's PRs shrink the refusal as they drop facts. The one reader is
-`authelia`. R3's PR 5 deletes the refusal with the constant.
+A fact that a role task reads from live state cannot be computed from the tree, so the
+renderer would give it a fixed stand-in in both halves. `PINNED_LIVE_FACTS` holds those
+stand-ins, and it is empty. Target slice R3 removed the last live reads: authelia's three
+password digests are SOPS keys, `authelia_password_argon2` and its two siblings, which take
+the ordinary secret stubs. R3's PR 5 deletes the constant and the code that reads it.
 
 ## Stub output is never published
 
@@ -629,8 +618,7 @@ SOPS leaves in plaintext, and decrypts nothing.
 uv run python scripts/renderer/shadow_diff.py stubs --out /tmp/r1-stubs.yml
 ```
 
-The file holds every stub, the sentinel `homelab_secret_stubs: true` and the four pinned
-facts. Pass it only to a k8s dry run or to the renderer, never to a run that applies
+The file holds every stub and the sentinel `homelab_secret_stubs: true`. Pass it only to a k8s dry run or to the renderer, never to a run that applies
 anything.
 
 A stub file goes stale when a secret key is added or removed, so write a fresh one for each
@@ -861,13 +849,12 @@ The `diff` must print nothing, and both files must hold one line per directory.
 ## What the render does not cover
 
 Zero diff covers what the manifests role renders: each role's applied directory, its deferred
-directory and its claim files. Four channels stay outside it:
+directory and its claim files. Three channels stay outside it:
 
 - objects that role tasks apply, create, patch, run or write through `exec` themselves, such
   as `--from-file` ConfigMaps, probe and gate Jobs and `kubectl run` pods;
 - files that nine roles write to hosts, which belong to the host plane;
-- the `homelab` Namespace and its LimitRange, which `ansible/deploy.yml` builds inline;
-- the values of the four pinned live-read facts, which target slice R3 removes.
+- the `homelab` Namespace and its LimitRange, which `ansible/deploy.yml` builds inline.
 
 The first channel is a census. The `render-does-not-cover-role-writes` row of
 `ansible/tests/repo/test_census_rows_roles.py` reads every task file under

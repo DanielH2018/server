@@ -33,9 +33,6 @@ _KUBECTL_RUN = re.compile(
 KNOWN_RUNS = frozenset(
     {
         ("qbittorrent", "qbittorrent-reach-probe"),
-        ("authelia", "authelia-hash"),
-        ("authelia", "authelia-hash-claude"),
-        ("authelia", "authelia-hash-agent"),
     }
 )
 
