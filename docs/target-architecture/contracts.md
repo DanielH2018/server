@@ -579,9 +579,6 @@ request leaves this list and the round's *Review log* entry names it.
 
 ### Requests on C1
 
-- **A shared-only mode** (D3 Open question 6). *Modes* gains `cluster --out DIR
-  --shared-only`, which writes the shared kinds and the root and no tag, for a publish with
-  no flux-owned tag. Gate: before D3.3a merges.
 - **The commit input** (R4 Open question 10). *Modes* names `homelab-render cluster --commit
   SHA`. The publish job passes the commit it publishes, and the render-diff job passes the PR
   head's SHA to both renders. Gate: before R4's PR 1 merges. D6.1 no longer renders twice
@@ -1041,6 +1038,11 @@ Applied to this page:
 
 ### Applied requests (2026-10-15)
 
+- **A shared-only mode** (D3 Open question 6). C1 *Modes* now states `homelab-render cluster
+  --out DIR --shared-only`, which writes the shared kinds and the root and no tag, for a
+  publish with no flux-owned tag. D3.3a (#5145) implements it and the promote workflow's
+  no-tag branch calls it. The request leaves *Requests on C1*, which clears the gate before
+  D3.3a merges.
 - **D2.5's verification choices** (#5023). D2.5 (#5003) implemented *Verification* with
   three choices the contract did not record, and C2 now states each of them:
     - *On failure* and *The revert rule* name `settle` as the writer, and *On failure* adds the `<T> unverified` hold for a

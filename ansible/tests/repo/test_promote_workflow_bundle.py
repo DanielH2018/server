@@ -139,7 +139,11 @@ def _census_after_gitleaks(wf):
 
 def _without_the_census(wf):
     steps = _render_steps(wf)
-    steps[:] = [s for s in steps if s.get("id") != "check-bundle"]
+    kept = [s for s in steps if s.get("id") != "check-bundle"]
+    assert len(kept) == len(steps) - 1, (
+        "render has no single step with id check-bundle; the mutation is a no-op"
+    )
+    steps[:] = kept
 
 
 def _build_script(wf, old, new):
@@ -157,10 +161,31 @@ def _ciphertext_after_gitleaks(wf):
 
 
 def _shared_only_in_the_tag_branch(wf):
-    _build_script(wf, '"${roles[@]}"', '"${roles[@]}" --shared-only')
+    """`--shared-only` stays in the script, on the line that publishes tags. An unscoped
+    `SHARED_ONLY in script` check finds it there, so only the branch-scoped check reports."""
+    _build_script(wf, 'out "${roles[@]}"', 'out --shared-only "${roles[@]}"')
     _build_script(
         wf, "cluster --out out --shared-only\n", "cluster --out out --role x\n"
     )
+
+
+def _shared_only_line_outside_the_no_tag_branch(where):
+    """The exact `SHARED_ONLY` command line stays in the script, but `where` holds it, not the
+    no-tag branch. A check that searches the whole script finds it; the scoped one does not."""
+    literal = f"uv run python scripts/renderer/{SHARED_ONLY}"
+
+    def mutate(wf):
+        _build_script(
+            wf, "cluster --out out --shared-only\n", "cluster --out out --role x\n"
+        )
+        if where == "else":
+            _build_script(
+                wf, 'out "${roles[@]}"\n', f'out "${{roles[@]}}"\n{literal}\n'
+            )
+        else:
+            _build_script(wf, "\nfi", f"\nfi\n{literal}")
+
+    return mutate
 
 
 def _gitleaks_after_handoff(wf):
@@ -170,9 +195,12 @@ def _gitleaks_after_handoff(wf):
 
 
 def _shallow_promote(wf):
+    shallowed = 0
     for step in wf["jobs"]["promote"]["steps"]:
         if str(step.get("uses", "")).startswith("actions/checkout@"):
             step["with"]["fetch-depth"] = 1
+            shallowed += 1
+    assert shallowed, "promote has no actions/checkout step; the mutation is a no-op"
 
 
 RED = {
@@ -203,6 +231,14 @@ RED = {
     ),
     "--shared-only only in the branch that publishes tags": (
         _shared_only_in_the_tag_branch,
+        "the build step's no-tag branch does not run",
+    ),
+    "the --shared-only line in the else branch": (
+        _shared_only_line_outside_the_no_tag_branch("else"),
+        "the build step's no-tag branch does not run",
+    ),
+    "the --shared-only line after the if block": (
+        _shared_only_line_outside_the_no_tag_branch("after"),
         "the build step's no-tag branch does not run",
     ),
     "the ciphertext check after gitleaks": (

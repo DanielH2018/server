@@ -487,7 +487,9 @@ census fails a bundle that lacks either. Each member needs a footprint rule in
   Flux decrypts the copy with that key in the cluster. CI holds no key, so the bundle stays
   ciphertext until it reaches the cluster.
 - Membership does not depend on any tag. A render that cannot read the cluster file refuses
-  and writes nothing, so deleting the file fails CI rather than narrowing the census.
+  and writes nothing, so the census never narrows. No PR-time render reads the file, so
+  deleting it fails CI through `cluster_vars.py check` ("does not exist"), which
+  `scripts/secrets_mgmt/tests/test_cluster_vars_tree.py` runs in the `pytest` job (D3.2c).
 - Its footprint rule counts its files for every substituting tag, so an edit to the cluster
   file moves each such tag's `footprint` and no other tag's.
 - `promote.py verify` expects `flux/cluster-vars` like a tag's status whenever the kind's
