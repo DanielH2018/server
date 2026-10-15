@@ -1768,8 +1768,9 @@ later slices size against:
    clear-owed k8s_unapplied <svc>" if you give me the command". The alternative, a full
    deploy under D1.2's stop rule, is not taken. D2.1d's PR body quotes the ruling. The
    same ruling covers a revert of D2.1d.
-10. **What narrow output should H1, H2 and H6 expect for a Flux-born entry?** Their steps
-    still branch on an own-tag-only outcome and expect 23 reader tags. D2.1c changes both
+10. **What narrow output should H1, H2 and H6 expect for a Flux-born entry?** *Applied on
+    2026-10-15 by [#5055](https://github.com/DanielH2018/server/pull/5055).* Their steps
+    branched on an own-tag-only outcome and expected 23 reader tags. D2.1c changes both
     for an added entry that carries `owner`:
     - **A bare entry** (`name`, `platform`, `owner`, and `depends_on` until D4.1 makes it a
       deploy-mechanics field). `deploy_tags.py narrow` names the entry's own tag plus the
