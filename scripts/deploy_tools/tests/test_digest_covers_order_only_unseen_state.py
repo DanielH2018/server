@@ -214,3 +214,25 @@ def test_a_change_to_object_attributes_or_timers_keeps_the_line(tree, imports, c
     """
     reason = _reason_for_head_call(tree, imports, call)
     assert reason and "every deploy runs" in reason
+
+
+@pytest.mark.parametrize(
+    "imports, call",
+    [
+        (
+            "import codecs",
+            "codecs.register_error('order-only-5081', codecs.strict_errors)",
+        ),
+        ("import faulthandler\nimport signal", "faulthandler.register(signal.SIGUSR1)"),
+        ("import faulthandler", "faulthandler.dump_traceback_later(3600)"),
+    ],
+    ids=["codecs-register-error", "faulthandler-register", "faulthandler-watchdog"],
+)
+def test_a_call_the_runner_counts_keeps_the_line(tree, imports, call):  # noqa: F811
+    """A codec error handler or a faulthandler handler or watchdog keeps the line (#5081).
+
+    No function reads these back, so the runner counts the calls instead. A watchdog left
+    pending would dump every thread's traceback into a deploy an hour in.
+    """
+    reason = _reason_for_head_call(tree, imports, call)
+    assert reason and "every deploy runs" in reason
