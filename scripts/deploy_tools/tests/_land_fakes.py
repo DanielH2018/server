@@ -255,6 +255,7 @@ def build_tools(f: Fakes) -> tuple[Tools, list]:
         k: (list(v) if isinstance(v, list) else [v]) for k, v in f.gh_views.items()
     }
     views.setdefault("mergeCommit", [{"mergeCommit": {"oid": MERGE_SHA}}])
+    views.setdefault("commits", [{"commits": []}])
     views.setdefault(
         "files,changedFiles",
         [

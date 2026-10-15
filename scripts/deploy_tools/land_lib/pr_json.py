@@ -33,6 +33,11 @@ class Commit(TypedDict, total=False):
     oid: str
 
 
+class CommitMessage(TypedDict, total=False):
+    messageHeadline: str
+    messageBody: str
+
+
 class ChangedFile(TypedDict, total=False):
     path: str
 
@@ -44,6 +49,7 @@ class PrView(TypedDict, total=False):
     baseRefName: str
     body: str
     changedFiles: int
+    commits: list[CommitMessage]
     files: list[ChangedFile]
     headRefName: str
     headRefOid: str
@@ -112,6 +118,16 @@ def parse_view(obj: JsonObject) -> PrView:
         if not isinstance(count, int) or isinstance(count, bool):
             raise ValueError(f"changedFiles: expected an integer, got {count!r}")
         view["changedFiles"] = count
+    if "commits" in obj:
+        view["commits"] = [
+            {
+                "messageHeadline": _str(
+                    c.get("messageHeadline"), f"commits[{i}].messageHeadline"
+                ),
+                "messageBody": _str(c.get("messageBody"), f"commits[{i}].messageBody"),
+            }
+            for i, c in enumerate(as_object_list(obj["commits"], "commits"))
+        ]
     if "files" in obj:
         view["files"] = [
             {"path": _str(f.get("path"), f"files[{i}].path")}

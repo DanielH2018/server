@@ -17,6 +17,9 @@ def test_a_view_keeps_the_fields_the_lander_reads():
             "isCrossRepository": False,
             "mergeCommit": None,
             "body": None,
+            "commits": [
+                {"oid": "a1", "messageHeadline": "Drop it", "messageBody": None}
+            ],
         }
     )
     assert view == {
@@ -26,6 +29,7 @@ def test_a_view_keeps_the_fields_the_lander_reads():
         "isCrossRepository": False,
         "mergeCommit": None,
         "body": "",
+        "commits": [{"messageHeadline": "Drop it", "messageBody": ""}],
     }
 
 

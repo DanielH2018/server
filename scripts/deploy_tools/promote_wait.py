@@ -424,3 +424,28 @@ def report_wait(merge: str, result: WaitResult) -> int:
     if result.verdict == "settled":
         return OK
     return LAND_GAVE_UP if result.verdict == "gave-up" else FAILED
+
+
+def add_parser(commands, repo: Path) -> None:
+    """Add the `land-wait` subcommand to `promote.py`'s subparsers, `repo` its default checkout."""
+    waiter = commands.add_parser(
+        "land-wait", help="wait until a promotion covers a merge commit (land.sh)"
+    )
+    waiter.add_argument("merge", help="M, the merge commit to wait on")
+    waiter.add_argument(
+        "--services",
+        default="",
+        help="the PR's published tags, comma-separated, named in the settled annotation",
+    )
+    waiter.add_argument(
+        "--repo",
+        type=Path,
+        default=repo,
+        help="the checkout whose history answers each ancestry read",
+    )
+    waiter.add_argument(
+        "--timeout",
+        type=int,
+        default=LAND_WAIT_TIMEOUT_S,
+        help="seconds before it gives up (default: twice the promote timeout)",
+    )

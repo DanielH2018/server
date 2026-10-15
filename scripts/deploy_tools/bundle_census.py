@@ -1,7 +1,8 @@
 """`promote.py check-bundle`'s census: the bundle's `flux/` holds exactly what its inputs allow.
 
 The render job runs it on `out/` before gitleaks and before any push, so a refusal publishes
-nothing and `prod` stays where it was. Contract C3 *Publish census* defines it:
+nothing and `prod` stays where it was. `report` runs the source, host and no-stub gates of
+`bundle_gates.py` beside it. Contract C3 *Publish census* defines the census:
 
 - `flux/` holds `kustomization.yaml` plus one `<name>.yaml` for each published tag and each
   `SHARED_KINDS` member, and nothing else;
@@ -15,13 +16,13 @@ cannot widen it: the tags the inventory marks `owner: flux` (`published_tags`) a
 `SHARED_KINDS`. A tag marked `owner: released` is left out of both the bundle and the
 allowlist (C4).
 
-D2.6c adds the source, host and no-stub gates beside the census. The plan is
-docs/target-architecture/deploy/d2-first-leaf.md, *Publication and verification*.
+The plan is docs/target-architecture/deploy/d2-first-leaf.md, *Publication and verification*.
 
 Run: uv run python scripts/deploy_tools/promote.py check-bundle out
      uv run python scripts/deploy_tools/promote.py published-tags
 """
 
+import argparse
 import json
 import sys
 from collections.abc import Iterable
@@ -37,6 +38,7 @@ from lib import yaml_fast
 from lib.exit_codes import FAILED, OK
 from lib.ansible_inventory import K8S_HOST_VARS
 from lib.k8s_roles import tag_owners
+import bundle_gates
 from renderer.renderer_lib.bundle import (
     CLUSTER_DIR,
     DIGESTS,
@@ -164,8 +166,11 @@ def census(
 
 
 def report(out: Path, published: list[str]) -> int:
-    """Print the census's problems, or one line saying it passed, and return the exit code."""
-    problems = census(out, published)
+    """Print the census's and the gates' problems, or one line saying both passed.
+
+    Returns the exit code.
+    """
+    problems = census(out, published) + bundle_gates.gates(out, published)
     for line in problems:
         print(f"check-bundle: {line}", file=sys.stderr)
     if problems:
@@ -175,7 +180,43 @@ def report(out: Path, published: list[str]) -> int:
         )
         return FAILED
     print(
-        f"check-bundle: the census passes: {len(published)} published tags "
+        f"check-bundle: the census and the source, host and no-stub gates pass: "
+        f"{len(published)} published tags "
         f"({', '.join(published) or 'none'}), {len(SHARED_KINDS)} shared kinds"
     )
     return OK
+
+
+# The subcommands `promote.py` hands to `run`. Both read the checkout alone, in the render
+# job, which holds no token.
+COMMANDS = ("check-bundle", "published-tags")
+
+
+def add_parsers(commands) -> None:
+    """Add the `check-bundle` and `published-tags` subcommands to `promote.py`'s subparsers."""
+    checker = commands.add_parser(
+        "check-bundle",
+        help="run the publish census and gates over a rendered bundle",
+    )
+    checker.add_argument("out", type=Path, help="the bundle root the render job built")
+    lister = commands.add_parser(
+        "published-tags",
+        help="print the deploy tags the bundle publishes, one per line",
+    )
+    for sub in (checker, lister):
+        sub.add_argument(
+            "--host-vars",
+            type=Path,
+            default=K8S_HOST_VARS,
+            help="the inventory file whose owner: flux entries the bundle publishes",
+        )
+
+
+def run(args: argparse.Namespace) -> int:
+    """Run `check-bundle` or `published-tags`, and return the exit code."""
+    published = published_tags(args.host_vars)
+    if args.command == "published-tags":
+        for tag in published:
+            print(tag)
+        return OK
+    return report(args.out, published)
