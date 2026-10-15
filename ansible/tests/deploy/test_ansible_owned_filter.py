@@ -186,8 +186,9 @@ def test_a_filter_dropping_an_entry_without_owner_is_flagged():
 
 
 def test_a_batch_loop_dropping_an_entry_without_owner_is_flagged():
-    # The live list carries no `owner` yet, so this loop is the play half's only red case: it
-    # skips the last Ansible-owned role, which the clean half must catch on the same list.
+    # The live list holds one owned entry (bento-pdf), which the loop must skip and this loop
+    # does. The loop drops the last Ansible-owned entry instead, so this is the play half's red
+    # case: the same visit check that the clean half runs on the live list must flag it.
     loop = "{{ (containers_list | ansible_owned)[:-1] | batch(2) | list }}"
     assert _play_visit_mismatch(_containers(HOST_VARS / "daniel-box.yml"), loop) != ""
 
