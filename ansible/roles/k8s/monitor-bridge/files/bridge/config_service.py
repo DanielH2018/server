@@ -50,6 +50,8 @@ class ServiceConfig:
     ETCD_DRILL_MAX_AGE_S: float
     GITOPS_BEHIND_MAX_S: float
     GITOPS_CONTENTION_MAX_S: float
+    BUILDER_MAX_LAG_S: float
+    BUILDER_MAX_FETCH_AGE_S: float
     HA_URL: str
     HA_TOKEN: str = field(repr=False)
     HA_HEARTBEAT_MAX_AGE_S: float
@@ -248,6 +250,13 @@ def service_config(
         # the SessionStart banner names a streak at, so the banner and this page cannot
         # disagree about a lock; ansible/tests/deploy/test_gitops_markers_copies.py pins it.
         GITOPS_CONTENTION_MAX_S=_num("GITOPS_CONTENTION_MAX_MIN") * 60,
+        # The host-package builder's two page bounds, in seconds, rendered from the role defaults
+        # `monitor_bridge_builder_max_lag_s` and `monitor_bridge_builder_max_fetch_age_s`. The
+        # lag bound is how long master may sit unbuilt: it exceeds the ~103 s master CI run many
+        # times over, so a normal landing never trips it. The fetch bound is 15 builder runs
+        # (the timer fires every 2 minutes), so one slow `git fetch` never trips it either.
+        BUILDER_MAX_LAG_S=_num("BUILDER_MAX_LAG_S"),
+        BUILDER_MAX_FETCH_AGE_S=_num("BUILDER_MAX_FETCH_AGE_S"),
         # HA automation-engine heartbeat: an HA time_pattern automation stamps
         # input_datetime.ha_heartbeat with now() every minute, so its last_changed is fresh ONLY
         # while HA's automation scheduler is executing. We poll HA's /api/states over the apps

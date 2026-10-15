@@ -155,6 +155,14 @@ CHECKS: tuple[PushCheck, ...] = (
         kuma_id="gitops-deploy-status", display="GitOps Deploy — Status", status_group="Automation & Drift",
         description="The deployer is parked or owes an apply: a held SHA after a failed health gate, a diverged tree, a busy service lock, a tree behind origin for 6h, a setup role only a hand can apply, or an image bump a broad tick deferred for lack of budget. The message names which. `gitops_state.py` clears a marker once the cause is fixed.",
     ),
+    # A row of its own, not an arm of gitops_status: that check reads the deployer's state
+    # directory outside the Prometheus gate, and an arm reading Prometheus there would page on
+    # every Prometheus outage. Under EXPORTER_DEPENDENT["node"] in gates.py as well.
+    PushCheck(
+        name="host_packages", fn=gitops.check_host_packages, token="monitor_bridge_host_packages_push_token",
+        kuma_id="host-packages-status", display="Host Packages — Status", status_group="Automation & Drift", gate="prometheus",
+        description="The host-package builder on daniel-box has not fetched master in 30 min, or has left a commit unbuilt for 2 h. The message names the builder's `reason` and `sha`: a hold, a refusal, a rewritten master, an open rollout gate or a walk with no green commit. `docs/host-packages.md`, The builder's pages, has the fix for each.",
+    ),
     # Reads the weekly drill's stamp off a hostPath, fail-closed, every cycle; the staleness window
     # is ETCD_DRILL_MAX_AGE_S, so the tile's interval is the bridge's.
     PushCheck(

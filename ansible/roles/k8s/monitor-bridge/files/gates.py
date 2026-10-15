@@ -63,6 +63,10 @@ PROM_DEPENDENT = _members("prometheus")
 # one root cause would page twice — Scrape Targets plus a coverage complaint naming the same
 # host. Same reason disk and memory are here.
 #
+# host_packages joined with H3.5c. Its builder arms read the series daniel-box's node exporter
+# publishes from its textfile directory, so a dead exporter makes the series absent, and the row
+# pages on an absent series. Scrape Targets already names the dead exporter.
+#
 # The Pi scrapes under its OWN job — measured 2026-08-29, `count by (job, origin)
 # (node_hwmon_temp_celsius)` returns job=node for daniel-server (12) and daniel-box (7) but
 # job=node-pi for daniel-pi (2). This map is keyed by the Prometheus job, so a `node` entry alone
@@ -72,7 +76,7 @@ PROM_DEPENDENT = _members("prometheus")
 # suppress there, while the hwmon floor counts all three hosts and pi_pressure reads the Pi's
 # node_* series directly (since 2026-09-18, #2004) and pages when they are absent.
 EXPORTER_DEPENDENT = {
-    "node": frozenset({"disk", "memory", "host_temp"}),
+    "node": frozenset({"disk", "memory", "host_temp", "host_packages"}),
     "node-pi": frozenset({"host_temp", "pi_pressure"}),
 }
 
