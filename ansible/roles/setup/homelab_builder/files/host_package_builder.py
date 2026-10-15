@@ -156,13 +156,15 @@ def token_refused(exc: urllib.error.HTTPError) -> bool:
     """Whether GitHub refused the token, rather than rate-limiting it.
 
     GitHub answers a revoked or expired token 401, and a token without access 403. It also
-    answers a spent rate limit 403, with `X-RateLimit-Remaining: 0`; that one clears on its
-    own, so it stays a pending verdict rather than a page.
+    answers a rate limit 403: the primary limit with `X-RateLimit-Remaining: 0`, the
+    secondary one with `Retry-After`. A rate limit clears on its own, so it stays a pending
+    verdict rather than a page.
     """
     if exc.code == 401:
         return True
-    remaining = exc.headers.get("X-RateLimit-Remaining") if exc.headers else None
-    return exc.code == 403 and remaining != "0"
+    headers = exc.headers or {}
+    limited = headers.get("X-RateLimit-Remaining") == "0" or "Retry-After" in headers
+    return exc.code == 403 and not limited
 
 
 class Failure(Exception):
@@ -380,7 +382,7 @@ class Builder:
             # reads as reason=build (#5090). The next run's prune clears what it left.
             try:
                 self._remove_tree(tree)
-            except RuntimeError as exc:
+            except (RuntimeError, OSError) as exc:
                 log(f"worktree cleanup failed as well, kept the first error: {exc}")
             raise
         self._remove_tree(tree)
