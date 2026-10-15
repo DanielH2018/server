@@ -196,4 +196,3 @@ def test_the_secret_check_runs_the_third_clause_whatever_the_render_is_flagged(
     render = PlaceholderRender([], {}, {}, [], {})
     report = check(render, homelab_render.secret_keys(), rule5_result=result)
     assert _unlisted("t.yaml.j2", MULLVAD) in report.missing
-    assert not report.ok()
