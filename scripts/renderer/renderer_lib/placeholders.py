@@ -62,7 +62,6 @@ from renderer.renderer_lib.cluster import (
     render_tag,
 )
 from renderer.renderer_lib.environment import RenderError
-from renderer.renderer_lib.task_inputs import PINNED_LIVE_FACTS
 
 SENTINEL_PREFIX = "HOMELAB_SECRET__"
 SENTINEL_SUFFIX = "__END"
@@ -129,21 +128,11 @@ def sentinel(key: str) -> str:
 
 
 def placeholder_vars(keys: Iterable[str]) -> dict[str, object]:
-    """The overrides of a placeholder render: each key's sentinel and the pinned facts.
+    """The overrides of a placeholder render: each key's sentinel.
 
-    The pinned live-read facts take the values the stub file holds, so a round trip sees the
-    same value on both sides. R3 emptied `PINNED_LIVE_FACTS`, and its PR 5 deletes it.
-
-    Raises:
-        ValueError: a pinned fact shares a name with a secret key, so one value would
-            silently replace the other.
+    No template reads a live fact, so a placeholder render, like the stub file, pins none.
     """
-    overrides: dict[str, object] = {key: sentinel(key) for key in keys}
-    clashes = sorted(PINNED_LIVE_FACTS.keys() & overrides.keys())
-    if clashes:
-        raise ValueError(f"{clashes} are both secret keys and pinned live-read facts")
-    overrides.update({name: fact.value for name, fact in PINNED_LIVE_FACTS.items()})
-    return overrides
+    return {key: sentinel(key) for key in keys}
 
 
 def references(text: str) -> Iterator[str]:
@@ -351,7 +340,6 @@ def render_placeholders(
 
     Raises:
         RenderError: A template fails to render.
-        ValueError: A pinned fact shares a name with a secret key.
     """
     overrides = placeholder_vars(keys)
     rendered, sops = [], {}
