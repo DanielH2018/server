@@ -20,10 +20,22 @@ def world(tmp_path):
     return World(tmp_path)
 
 
+# The outputs a run that moves nothing writes beside its verdict.
+NOTHING_MOVES = {
+    "target": "",
+    "digest": "",
+    "prior": "",
+    "prior_digest": "",
+    "reset_digest": "",
+    "seed": "false",
+    "clears_hold": "false",
+}
+
+
 def _assert_promoted(result, target: str) -> None:
     assert result.exit_code == 0
     assert result.line.endswith(f" verdict=promote target={target}")
-    assert result.outputs == {
+    assert {k: result.outputs[k] for k in ("verdict", "target", "digest")} == {
         "verdict": "promote",
         "target": target,
         "digest": digest_of(target),
@@ -33,7 +45,7 @@ def _assert_promoted(result, target: str) -> None:
 def _assert_refused(result, verdict: str, reason: str) -> None:
     assert result.exit_code == (1 if verdict == "error" else 0)
     assert result.line.endswith(f" verdict={verdict} target=")
-    assert result.outputs == {"verdict": verdict, "target": "", "digest": ""}
+    assert result.outputs == {"verdict": verdict, **NOTHING_MOVES}
     assert reason in result.stderr
 
 
@@ -76,7 +88,9 @@ def test_a_tip_whose_tag_is_not_published_is_skipped_and_the_next_is_promoted(
     world.publish(c2)
     _assert_promoted(world.decide(monkeypatch, capsys, trigger=tip), c2)
     heads = [
-        path for method, path in world.transport.registry_requests() if method == "HEAD"
+        path
+        for method, path in world.transport.registry_requests()
+        if method == "HEAD" and "/sha-" in path
     ]
     assert [path.rsplit("/", 1)[1] for path in heads] == [f"sha-{tip}", f"sha-{c2}"]
 
@@ -116,9 +130,7 @@ def test_an_unreadable_or_empty_hold_is_refused(
 def test_a_prod_fetch_that_returns_500_is_refused(world, monkeypatch, capsys):
     world.publish(world.commits[-1])
     world.transport.forced["prod"] = 500
-    _assert_refused(
-        world.decide(monkeypatch, capsys), "error", "manifest prod: HTTP 500"
-    )
+    _assert_refused(world.decide(monkeypatch, capsys), "error", "HEAD prod: HTTP 500")
 
 
 def test_a_prod_manifest_without_the_revision_annotation_is_refused(
@@ -202,7 +214,9 @@ def test_a_first_run_stops_its_walk_at_the_limit_and_is_refused(
         f"no commit among master's newest {limit}, the first run's limit, is published",
     )
     heads = [
-        path for method, path in world.transport.registry_requests() if method == "HEAD"
+        path
+        for method, path in world.transport.registry_requests()
+        if method == "HEAD" and "/sha-" in path
     ]
     assert [path.rsplit("/", 1)[1] for path in heads] == [
         f"sha-{sha}" for sha in reversed(world.commits[1:])
