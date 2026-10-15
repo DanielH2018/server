@@ -49,7 +49,8 @@ from pathlib import Path
 
 from lib import yaml_fast
 from lib.k8s_roles import resolved_manifest_files
-from _helpers import K8S_ROLES
+from lib.render_context import render_context
+from _helpers import K8S_ROLES, render_expr
 from _k8s_render import rendered_texts
 from _role_census import manifests_service_of, role_task_files
 
@@ -86,6 +87,19 @@ def _include_vars(role_tasks: Path) -> list[dict]:
         if service is not None:
             out.append({**(task.get("vars") or {}), "manifests_service": service})
     return out
+
+
+def _extra_rollout_names(variables: dict, role_dir: Path) -> set[str]:
+    """The names in an include's `manifests_extra_rollouts`, resolved when it is an expression.
+
+    authelia builds its list with a Jinja expression gated on a role default, so the value
+    arrives as a string. It resolves against the role's defaults and inventory vars, as the
+    deploy resolves it.
+    """
+    extras = variables.get("manifests_extra_rollouts") or []
+    if isinstance(extras, str):
+        extras = render_expr(extras, **render_context(role_dir)) or []
+    return {entry["name"] for entry in extras}
 
 
 def _renders_a_secret(role_dir: Path) -> bool:
@@ -184,9 +198,7 @@ def uncovered_env_secret_workloads(role_dir: Path) -> list[tuple[str, str]]:
         covered = {
             variables.get("manifests_rollout", variables.get("manifests_service"))
         }
-        covered |= {
-            entry["name"] for entry in variables.get("manifests_extra_rollouts") or []
-        }
+        covered |= _extra_rollout_names(variables, role_dir)
         uncovered += [
             (role_dir.name, name)
             for name in _env_secret_workloads(role_dir)
@@ -342,6 +354,21 @@ def test_a_second_workload_named_in_extra_rollouts_is_clean(tmp_path):
         "    manifests_extra_rollouts:\n"
         "      - name: widget-agent\n"
         "        kind: daemonset\n"
+    )
+    role = _write_role(
+        tmp_path,
+        "widget",
+        tasks=_TASKS.format(name="widget", extras=extras),
+        templates={"daemonset.yaml.j2": _DAEMONSET.format(name="widget")},
+    )
+    assert uncovered_env_secret_workloads(role) == []
+
+
+def test_a_second_workload_named_by_an_extra_rollouts_expression_is_clean(tmp_path):
+    """A Jinja-built list, as authelia passes, resolves rather than being indexed as text."""
+    extras = (
+        "    manifests_extra_rollouts: >-\n"
+        "      {{ [{'name': 'widget-agent', 'kind': 'daemonset'}] if true else [] }}\n"
     )
     role = _write_role(
         tmp_path,
