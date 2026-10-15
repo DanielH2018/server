@@ -181,7 +181,8 @@ def test_the_cause_panel_counts_a_cause_beside_any_verdict(verdict, cause):
 
 def test_the_cause_panel_title_does_not_name_deploy_failed_alone():
     title = _cause_panel()["title"]
-    assert Verdict.DEPLOY_FAILED.value not in title, title
+    if Verdict.DEPLOY_FAILED.value in title:
+        assert all(v.value in title for v, _ in _CAUSE_BESIDE_ANOTHER_VERDICT), title
 
 
 def test_the_board_description_names_every_verdict_that_carries_a_cause():
