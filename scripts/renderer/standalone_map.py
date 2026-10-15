@@ -7,11 +7,10 @@ A standalone use is a placeholder that is the whole scalar of a field, such as
 would type as anything but the same string. The deploy path never runs the renderer, so it
 reads the renderer's standalone key sets through this projection: the committed file
 `ansible/roles/k8s/manifests/files/standalone_secret_keys.json`, which maps each deploy tag
-to the sorted keys that stand alone in its directories, less `GUARD_DEFERRED`. A tag with no
+to the sorted keys that stand alone in its directories, every one of them. A tag with no
 such key is left out.
 
-The tags in `PLACEHOLDER_DEFERRED` do not render in placeholder mode, so the map holds none
-of them. `scripts/renderer/tests/test_renderer_standalone_map.py` holds the committed map
+`scripts/renderer/tests/test_renderer_standalone_map.py` holds the committed map
 equal to the render, so CI fails a template change that adds a standalone use until the map
 is regenerated. `docs/homelab-render.md` is the operator's page.
 
@@ -37,7 +36,6 @@ from renderer.homelab_render import ansible_local_temp, secret_keys
 from renderer.renderer_lib.cluster import DEFERRED_SUFFIX, select_tags
 from renderer.renderer_lib.environment import RenderError
 from renderer.renderer_lib.placeholders import (
-    GUARD_DEFERRED,
     GUARD_MAP,
     PlaceholderRender,
     render_placeholders,
@@ -46,18 +44,16 @@ from renderer.renderer_lib.placeholders import (
 REGENERATE = "uv run python scripts/renderer/standalone_map.py"
 
 
-def guard_map(
-    render: PlaceholderRender, deferred: frozenset[str] = GUARD_DEFERRED
-) -> dict[str, list[str]]:
+def guard_map(render: PlaceholderRender) -> dict[str, list[str]]:
     """Each rendered tag mapped to the sorted keys standing alone in its directories.
 
     A tag's `-deferred` directory counts as the tag's, because one deploy of the tag renders
-    both. Keys in `deferred` are left out, and so is a tag left with no key.
+    both. A tag with no such key is left out.
     """
     keys: dict[str, set[str]] = {}
     for name, standalone in render.standalone.items():
         tag = name.removesuffix(DEFERRED_SUFFIX)
-        keys.setdefault(tag, set()).update(standalone - deferred)
+        keys.setdefault(tag, set()).update(standalone)
     return {tag: sorted(found) for tag, found in sorted(keys.items()) if found}
 
 
@@ -65,16 +61,13 @@ def coverage_problems(
     committed: dict[str, list[str]],
     render: PlaceholderRender,
     known_keys: set[str],
-    deferred: frozenset[str] = GUARD_DEFERRED,
 ) -> list[str]:
     """Each way `committed` fails to guard the standalone uses of `render`, one line apiece.
 
-    The map must equal the render's projection, hold no key that `deferred` also holds, and
-    name only keys in `known_keys`. Each member of `deferred` must still stand alone
-    somewhere, or it is stale.
+    The map must equal the render's projection and name only keys in `known_keys`.
     """
     problems = []
-    expected = guard_map(render, deferred)
+    expected = guard_map(render)
     for tag in sorted(committed.keys() | expected.keys()):
         have, want = set(committed.get(tag, [])), set(expected.get(tag, []))
         if have != want:
@@ -83,13 +76,8 @@ def coverage_problems(
                 f"{sorted(want)}. Run `{REGENERATE}` and commit the map."
             )
     mapped = {key for keys in committed.values() for key in keys}
-    for key in sorted(mapped & deferred):
-        problems.append(f"{key} is both in the map and in GUARD_DEFERRED")
     for key in sorted(mapped - known_keys):
         problems.append(f"{key} is in the map and not in ansible/vars/secrets.yml")
-    standing = set().union(*render.standalone.values())
-    for key in sorted(deferred - standing):
-        problems.append(f"{key} is in GUARD_DEFERRED and stands alone nowhere")
     return problems
 
 

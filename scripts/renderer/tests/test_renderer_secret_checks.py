@@ -445,29 +445,28 @@ def test_a_non_secret_vars_lookup_entry_whose_site_has_gone_is_flagged(tmp_path)
     assert "stale NON_SECRET_VARS_LOOKUPS entry" in problem
 
 
-# -- the ratchet ----------------------------------------------------------------------------
+# -- no exemption ---------------------------------------------------------------------------
 
-ENTRY = Violation(CONFINED_TO_SECRET, "t", "f.yaml", "ConfigMap/c", KEY)
+VIOLATION = Violation(CONFINED_TO_SECRET, "t", "f.yaml", "ConfigMap/c", KEY)
 
 
-def _check_over(text: str, known: frozenset[Violation]):
-    # A stand-in rule 5 result, so the ratchet is read over rules 1 to 4 alone.
+def _check_over(text: str):
+    # A stand-in rule 5 result, so the check is read over rules 1 to 4 alone.
     rule5_result = Rule5(naming=["t.yaml.j2"] * RULE5_FLOOR)
-    return check(_render(text), FIXTURE_KEYS, known, rule5_result)
+    return check(_render(text), FIXTURE_KEYS, rule5_result)
 
 
-def test_a_known_violation_is_clean():
-    report = _check_over(CONFIGMAP_DOC.format(sentinel(KEY)), frozenset({ENTRY}))
-    assert (report.unknown, report.stale) == ([], [])
+def _violation_lines(report) -> list[str]:
+    return [line for line in report.lines() if "violation:" in line]
 
 
-def test_a_known_violation_that_no_longer_matches_is_flagged():
-    report = _check_over(SECRET_DOC.format(sentinel(KEY)), frozenset({ENTRY}))
-    assert report.stale == [ENTRY]
+def test_a_render_with_no_violation_passes_the_check_is_clean():
+    report = _check_over(SECRET_DOC.format(sentinel(KEY)))
+    assert (report.violations, _violation_lines(report)) == ([], [])
+
+
+def test_any_violation_fails_the_check_is_flagged():
+    report = _check_over(CONFIGMAP_DOC.format(sentinel(KEY)))
+    assert report.violations == [VIOLATION]
+    assert _violation_lines(report) == [f"secret check: violation: {VIOLATION.line()}"]
     assert not report.ok()
-
-
-def test_a_known_violation_of_a_tag_not_rendered_is_not_stale():
-    entry = ENTRY._replace(tag="other")
-    report = _check_over(SECRET_DOC.format(sentinel(KEY)), frozenset({entry}))
-    assert report.stale == []

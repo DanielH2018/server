@@ -15,7 +15,6 @@ from lib.proc_testing import run
 from lib.repo_paths import ALL_VARS, REPO
 from renderer import homelab_render, shadow_diff
 from renderer.renderer_lib import cluster as cluster_mod
-from renderer.renderer_lib.placeholders import render_placeholders
 
 
 @pytest.fixture
@@ -49,16 +48,6 @@ def test_cluster_without_secret_stubs_renders_placeholders(out, capsys):
     # A secret key renders as its placeholder, not its stub.
     assert "APP_KEY: ${speedtest_app_key}\n" in text
     assert "stub-" not in text and "HOMELAB_SECRET" not in text
-
-
-def test_a_placeholder_render_of_a_deferred_tag_alone_is_flagged(out, capsys):
-    # PLACEHOLDER_DEFERRED is empty since R2's PR 5, so a fixture member stands in.
-    def render(tags, keys):
-        return render_placeholders(tags, keys, deferred=frozenset({"littlelink"}))
-
-    assert homelab_render.cluster(out, ["littlelink"], None, render) == 2
-    assert "PLACEHOLDER_DEFERRED" in capsys.readouterr().err
-    assert list(out.iterdir()) == []
 
 
 def test_cluster_renders_littlelink_in_the_c1_layout(out, stub_file):

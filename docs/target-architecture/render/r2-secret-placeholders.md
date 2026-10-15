@@ -123,9 +123,10 @@ writer to the cluster throughout.
    dedicated Secrets* holds that list to exactly the four templates that name a
    `SOPS_MANIFEST_KEYS` key, and `roundtrip` fails unless it excluded exactly one document
    per entry.
-2. **The five rules hold with no ratchet entries.** `renderer_lib/secret_checks.py` reports
-   zero violations. Its `KNOWN_VIOLATIONS` set and the renderer's `PLACEHOLDER_DEFERRED` set
-   are both empty. Rule 3's `PLACEHOLDER_ANYWHERE` is part of the rule, not an exemption
+2. **The five rules hold with no ratchet.** `renderer_lib/secret_checks.py` reports zero
+   violations, and any violation fails the render. PR 9 deleted its `KNOWN_VIOLATIONS` set
+   and the renderer's `PLACEHOLDER_DEFERRED` set, so admitting a violation or skipping a tag
+   means changing the check itself. Rule 3's `PLACEHOLDER_ANYWHERE` is part of the rule, not an exemption
    from it, and so is the `(key, kind)` set that H1 adds later (Open question 10). Rule 5's
    `PASSTHROUGH_FILTERS` is part of its rule too, and each member passes its membership
    test.
@@ -134,7 +135,7 @@ writer to the cluster throughout.
    `home-assistant`, `pi-peer-backup` and `authelia` are deployed. Each passes the check
    listed for it under Verification.
 5. **The standalone-value guard covers every standalone key.** The coverage test is green
-   and `GUARD_DEFERRED` is empty. In CI's flux probe, the guard's resolver refuses every
+   and the guard has no exemption set: PR 9 deleted `GUARD_DEFERRED`. In CI's flux probe, the guard's resolver refuses every
    corpus value that the pinned CLI does not return as the identical string. It passes every
    other one except the members of `FLUX_KEEPS_BUT_REFUSED`, which the probe holds to the
    values the CLI keeps and the YAML 1.1 reader types, such as `1:20`.
@@ -644,6 +645,8 @@ it empty.
 
 `KNOWN_VIOLATIONS` starts with every violation PR 2 measures and shrinks to empty as PRs 3 to
 8 land. An entry that no longer matches fails too, so the set shrinks only through a fix.
+PR 9 deletes the empty set and the code that reads it, so from PR 9 the five rules are
+enforced with no exemption.
 Each rule also asserts that it read something, so a rule that stops matching cannot pass
 vacuously:
 
@@ -682,9 +685,10 @@ named member in another tag must not fail it.
 
 - Rules 1 to 4 read the rendered output. Each asserts a named member only when that member's
   tag is in the render.
-- A `KNOWN_VIOLATIONS` entry for rules 1 to 4 counts as stale only when its tag was rendered.
-- Rule 5 reads template sources, so it always scans the whole tree. Its 59-file floor, its
-  named members and its stale-entry check hold on every run.
+- Until PR 9, a `KNOWN_VIOLATIONS` entry for rules 1 to 4 counted as stale only when its tag
+  was rendered.
+- Rule 5 reads template sources, so it always scans the whole tree. Its floor and its named
+  members hold on every run, and until PR 9 its stale-entry check did too.
 
 The unfiltered render, in CI and in `scripts/renderer/tests/`, asserts every named member.
 
@@ -725,9 +729,11 @@ placeholder render and fails it with exit 1, like the five rules:
   drops them, so it needs no stub file.
 - Each entry's template names no secret key outside `SOPS_MANIFEST_KEYS`. Rule 5's syntax
   tree walk supplies the names, so an alias counts.
-- Every entry names a `SOPS_MANIFEST_KEYS` key. Every template outside the list that names one
-  carries a live rule 5 entry in `KNOWN_VIOLATIONS` for that key. From PR 9, with the ratchet
-  empty, the entries are exactly the templates that name such a key.
+- Every entry names a `SOPS_MANIFEST_KEYS` key. Until PR 9, every template outside the list
+  that names one carried a live rule 5 entry in `KNOWN_VIOLATIONS` for that key. From PR 9
+  the clause is an equality over every role's list: the entries are exactly the templates
+  that name such a key. A template that names one with no entry fails, and so does an entry
+  whose template names none.
 
 A `--role` render applies the first two bullets only to the tags it rendered. The third
 reads template sources, so it scans the whole tree on every run, like rule 5.
@@ -783,8 +789,8 @@ config in a Secret, is not standalone, because Flux types only the outer scalar.
   so the renderer's standalone sets reach it as a projection. `standalone_map.py` under
   `scripts/renderer/` writes the committed file
   `ansible/roles/k8s/manifests/files/standalone_secret_keys.json`. That file maps each
-  deploy tag to the sorted keys that stand alone in its directories, less `GUARD_DEFERRED`.
-  The script adds no flag to C1's `cluster` call. The shared `k8s/manifests` role gains two
+  deploy tag to the sorted keys that stand alone in its directories, less `GUARD_DEFERRED`
+  until PR 9 deletes that set. The script adds no flag to C1's `cluster` call. The shared `k8s/manifests` role gains two
   tasks before it renders:
     - The first, under `no_log`, sets as a fact the names of the role's mapped keys whose
       value the resolver refuses, or which the loaded secrets do not define.
@@ -831,7 +837,8 @@ C3 value rule because `mullvad_account`'s real value is all digits, so a rule ov
 value would refuse it. Scoped to standalone uses, the rule meets `mullvad_account` at one
 site only, qbittorrent's Secret. PR 7b removes that site by moving the key to a dedicated
 SOPS Secret. Until then, the frozenset `GUARD_DEFERRED` holds `mullvad_account`, and its
-comment gives that reason. The operator ruled on 2026-10-13 for this pairing (Open
+comment gives that reason. PR 9 deletes the emptied set, so from PR 9 the guard checks every
+standalone key. The operator ruled on 2026-10-13 for this pairing (Open
 question 13), and contracts.md C3 *Secrets* states the rule.
 
 **The coverage test.** A test in `scripts/renderer/tests/` renders the fleet in placeholder
@@ -839,8 +846,8 @@ mode and holds the committed map equal to each tag's standalone keys less `GUARD
 It fails on three more conditions: a key in both the map and `GUARD_DEFERRED`, a
 `GUARD_DEFERRED` member with no standalone use left, and a mapped key absent from
 `secrets.yml`. Its named members are `email`, mapped under `traefik`, and, until PR 7b,
-`mullvad_account` in `GUARD_DEFERRED`. On a mismatch it prints the command that regenerates
-the map. CI's `pytest` job runs it, so the map cannot go stale on master.
+`mullvad_account` in `GUARD_DEFERRED`. PR 9 drops the two `GUARD_DEFERRED` conditions with
+the set. On a mismatch it prints the command that regenerates the map. CI's `pytest` job runs it, so the map cannot go stale on master.
 
 **The `0123` pass narrows.** PR 1's second pass sets every key to `0123`, so it flags every
 standalone use, `${domain}`'s 74 among them. From PR 1c it sets to `0123` only the keys that
@@ -912,8 +919,8 @@ held `${domain}` (*Risks*, *Restart triggers lose sight of secrets*). It runs tw
 each with its own summary line:
 
 1. Every key takes its R1 stub.
-2. Every key that is neither in the guard's map, under any tag, nor in `GUARD_DEFERRED`
-   takes `0123`, and every other key its R1 stub. Jinja writes the template's quotes around
+2. Every key that is neither in the guard's map, under any tag, nor, until PR 9, in
+   `GUARD_DEFERRED` takes `0123`, and every other key its R1 stub. Jinja writes the template's quotes around
    `0123` on the stub side, and Flux drops them on the placeholder side. A difference
    therefore marks a key with a standalone use that the guard does not cover anywhere
    (*The standalone-value guard*). PR 1
@@ -1298,10 +1305,13 @@ PR 4 deletes it.
       Domain PR 2b made this item moot: with `domain` published, the block names no key,
       and that PR removed the entry and restored the member.
 9. **Close the ratchet** (about 40 lines). `KNOWN_VIOLATIONS`, `PLACEHOLDER_DEFERRED` and
-   `GUARD_DEFERRED` are empty, the round-trip step covers every tag in both passes, and the
-   docs state the five rules and the guard as enforced. With the ratchet empty, the
-   `sops-manifest-entries` check reads as equality: the four entries are exactly the
-   templates that name a `SOPS_MANIFEST_KEYS` key.
+   `GUARD_DEFERRED` are deleted, with every code path that read them, so a new entry cannot
+   be added without changing the check itself. The round-trip step covers every tag in both
+   passes, and the docs state the five rules and the guard as enforced. With the ratchet
+   gone, the `sops-manifest-entries` check reads as equality over every role's list: the
+   four entries are exactly the templates that name a `SOPS_MANIFEST_KEYS` key. A fixture
+   template that names such a key with no entry fails, and so does an entry whose template
+   names none.
 10. **Publish `domain` (operator ruling 2026-10-14)** (four PRs). This item calls them domain
     PR 1, 2a, 2b and 3, so they stay distinct from PRs 1 to 9. The operator ruled: "domain is
     not secret, it's a var for flexibility just in case of future changes." The renderer
@@ -1376,8 +1386,8 @@ uv run python scripts/renderer/homelab_render.py cluster --out /tmp/r2
 uv run pytest scripts/renderer/tests
 ```
 
-`homelab_render.py` exits 0 only when all five rules pass, and its summary line must name no
-deferred tag. The round trip runs in CI only, because daniel-box has no flux CLI. Read its
+`homelab_render.py` exits 0 only when all five rules pass, and it renders every requested
+tag. The round trip runs in CI only, because daniel-box has no flux CLI. Read its
 summary line from the CI run for the commit:
 
 ```bash
@@ -1988,9 +1998,10 @@ remains the gate.
    *What a refusal means.* A refused key fails its role's deploy before the apply, by
    name. The operator then either rotates the value to one the resolver passes
    (**operator-only**), or, for a value that cannot change, moves the key to a dedicated
-   SOPS Secret as PR 7b does. Neither choice keeps the value under a placeholder. A key
-   joins `GUARD_DEFERRED` only in the PR that plans its move, and only until that move
-   lands.
+   SOPS Secret as PR 7b does. Neither choice keeps the value under a placeholder. PR 9
+   deleted `GUARD_DEFERRED`, so the guard checks every standalone key. A key that cannot
+   wait for its move brings back the deferral set and the code that reads it, in the PR
+   that plans the move, and only until that move lands.
 
 ## Review log
 
