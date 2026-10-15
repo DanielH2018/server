@@ -2,125 +2,32 @@
 
 D2's item 12 names the pairs: DEPLOY_HOLD `none` against a `failed=` hold, PROD_DIGEST equal
 to and different from `prod`'s digest, a green run `prod` contains against one it lacks, and a
-missing variable that exports no series rather than a 0. The fixtures answer each GET by URL,
-as GitHub and GHCR answered on 2026-10-15.
+missing variable that exports no series rather than a 0. The fixtures in
+`_deploy_pipeline_fakes.py` answer each GET by URL, as GitHub and GHCR answered on 2026-10-15.
 """
 
-import hashlib
-import io
 import json
 import urllib.error
 import urllib.request
-from collections.abc import Callable
 from dataclasses import replace
-from datetime import datetime, timezone
-from email.message import Message
 
 import pytest
 
 import deploy_pipeline
 import forge
+from _deploy_pipeline_fakes import (
+    NEWER,
+    NOW,
+    OLDER,
+    PROD,
+    PROD_DIGEST,
+    manifest_bytes,
+    green_run,
+    stamp,
+    github,
+)
 from _fake_sources import FakeSources
 from bridge.sources import Sources
-
-NOW = datetime(2026, 10, 15, 15, 0, tzinfo=timezone.utc).timestamp()
-PROD = "c" * 40
-NEWER = "d" * 40
-OLDER = "b" * 40
-
-
-def _stamp(seconds_ago: float) -> str:
-    return datetime.fromtimestamp(NOW - seconds_ago, timezone.utc).strftime(
-        "%Y-%m-%dT%H:%M:%SZ"
-    )
-
-
-def _manifest(commit: str = PROD) -> bytes:
-    return json.dumps(
-        {
-            "schemaVersion": 2,
-            "annotations": {
-                "org.opencontainers.image.revision": "master@sha1:" + commit
-            },
-        }
-    ).encode()
-
-
-PROD_DIGEST = "sha256:" + hashlib.sha256(_manifest()).hexdigest()
-
-
-def _run(sha: str, pushed_ago: float, green_ago: float) -> dict:
-    return {
-        "head_sha": sha,
-        "created_at": _stamp(pushed_ago),
-        "updated_at": _stamp(green_ago),
-    }
-
-
-def github(
-    hold: str | None = "none",
-    hold_ago: float = 3600,
-    digest: str | None = PROD_DIGEST,
-    runs: list[dict] | None = None,
-    compare: str = "behind",
-    manifest: bytes | None = _manifest(),
-    fail: str = "",
-    prom_vector: Callable[[str], list] | None = None,
-) -> FakeSources:
-    """A `FakeSources` answering the family's five GETs.
-
-    Args:
-      hold: DEPLOY_HOLD's value, or None for a variable that does not exist.
-      hold_ago: Seconds since DEPLOY_HOLD was written.
-      digest: PROD_DIGEST's value, or None for a variable that does not exist.
-      runs: master's green CI runs, newest first. None is `prod`'s own run alone.
-      compare: The compare call's `status`.
-      manifest: `prod`'s manifest bytes, or None for a registry with no `prod` tag.
-      fail: A URL fragment whose GET raises, as an unreachable source does.
-      prom_vector: The Prometheus answer, for a test that runs whole cycles.
-    """
-    variables = []
-    if hold is not None:
-        variables.append(
-            {"name": "DEPLOY_HOLD", "value": hold, "updated_at": _stamp(hold_ago)}
-        )
-    if digest is not None:
-        variables.append(
-            {"name": "PROD_DIGEST", "value": digest, "updated_at": _stamp(60)}
-        )
-    listed = [_run(PROD, 7200, 7000)] if runs is None else runs
-
-    def get_json(url, headers=None):
-        if fail and fail in url:
-            raise RuntimeError("GET %s: timed out" % url)
-        if url.startswith("https://ghcr.io/token"):
-            return {"token": "anonymous-pull"}
-        assert headers is not None
-        assert headers["Authorization"] == "Bearer read-only-token"
-        if url.endswith("/actions/variables"):
-            return {"total_count": len(variables), "variables": variables}
-        if "/actions/workflows/ci.yml/runs?" in url:
-            return {"total_count": len(listed), "workflow_runs": listed}
-        if "/compare/" in url:
-            return {"status": compare}
-        raise AssertionError("unexpected GET %s" % url)
-
-    def get_bytes(url, headers=None):
-        if fail and fail in url:
-            raise RuntimeError("GET %s: timed out" % url)
-        assert url == "https://ghcr.io/v2/danielh2018/homelab-manifests/manifests/prod"
-        if manifest is None:
-            missing = urllib.error.HTTPError(
-                url, 404, "MANIFEST_UNKNOWN", Message(), io.BytesIO()
-            )
-            # The live `bridge.net._get` reads and closes the error before re-raising it.
-            missing.close()
-            raise missing
-        return manifest
-
-    if prom_vector is None:
-        return FakeSources(get_json=get_json, get_bytes=get_bytes)
-    return FakeSources(get_json=get_json, get_bytes=get_bytes, prom_vector=prom_vector)
 
 
 @pytest.fixture
@@ -166,7 +73,7 @@ def test_a_prod_tag_with_prod_digest_still_none_does_not_match(piped):
 def test_a_green_run_prod_contains_is_not_unpromoted(piped):
     # OLDER was pushed after prod's run, so it is the candidate, and the compare says prod
     # holds it.
-    runs = [_run(OLDER, 3000, 2900), _run(PROD, 7200, 7000)]
+    runs = [green_run(OLDER, 3000, 2900), green_run(PROD, 7200, 7000)]
     src = github(runs=runs, compare="ahead")
     assert gauges(piped, src)["homelab_deploy_unpromoted_age_seconds"] == 0
     assert src.queries("get_json")[-1].endswith(
@@ -176,9 +83,9 @@ def test_a_green_run_prod_contains_is_not_unpromoted(piped):
 
 def test_a_green_run_prod_lacks_sets_the_age_from_when_it_went_green(piped):
     runs = [
-        _run(NEWER, 1800, 1700),
-        _run(OLDER, 9000, 8800),
-        _run(PROD, 10800, 10600),
+        green_run(NEWER, 1800, 1700),
+        green_run(OLDER, 9000, 8800),
+        green_run(PROD, 10800, 10600),
     ]
     src = github(runs=runs, compare="behind")
     assert gauges(piped, src)["homelab_deploy_unpromoted_age_seconds"] == 8800
@@ -186,7 +93,7 @@ def test_a_green_run_prod_lacks_sets_the_age_from_when_it_went_green(piped):
 
 
 def test_nothing_pushed_after_prod_reads_zero_without_a_compare(piped):
-    src = github(runs=[_run(PROD, 7200, 7000), _run(OLDER, 9000, 8800)])
+    src = github(runs=[green_run(PROD, 7200, 7000), green_run(OLDER, 9000, 8800)])
     assert gauges(piped, src)["homelab_deploy_unpromoted_age_seconds"] == 0
     assert not any("/compare/" in q for q in src.queries("get_json"))
 
@@ -238,12 +145,12 @@ class _Response:
 
 def test_a_cycle_sends_three_gets_to_github_and_nothing_else(piped):
     """The transport the live `Sources` sends, through a fake opener: GETs only, and three."""
-    runs = [_run(NEWER, 600, 500), _run(PROD, 7200, 7000)]
+    runs = [green_run(NEWER, 600, 500), green_run(PROD, 7200, 7000)]
     answers = {
         "/actions/variables": {
             "variables": [
-                {"name": "DEPLOY_HOLD", "value": "none", "updated_at": _stamp(60)},
-                {"name": "PROD_DIGEST", "value": PROD_DIGEST, "updated_at": _stamp(60)},
+                {"name": "DEPLOY_HOLD", "value": "none", "updated_at": stamp(60)},
+                {"name": "PROD_DIGEST", "value": PROD_DIGEST, "updated_at": stamp(60)},
             ]
         },
         "/actions/workflows/ci.yml/runs": {"workflow_runs": runs},
@@ -255,7 +162,7 @@ def test_a_cycle_sends_three_gets_to_github_and_nothing_else(piped):
     def opener(request, timeout):
         sent.append(request)
         if request.full_url.endswith("/manifests/prod"):
-            return _Response(_manifest())
+            return _Response(manifest_bytes())
         [body] = [b for frag, b in answers.items() if frag in request.full_url]
         return _Response(json.dumps(body).encode())
 

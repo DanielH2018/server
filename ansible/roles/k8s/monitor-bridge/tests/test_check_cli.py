@@ -19,7 +19,7 @@ import deploy_pipeline
 from _bridge_env import bridge_env
 from _check_gate_helpers import mk
 from _fake_sources import FakeSink, FakeSources
-from test_deploy_pipeline import github
+from _deploy_pipeline_fakes import github
 from bridge.types import Check
 from gates import Gates
 
