@@ -40,6 +40,9 @@ INGRESS_RULES = (
     ROLES / "k8s" / "observability" / "files" / "rules" / "ingress-probes.yaml"
 )
 HOST_RULES = ROLES / "k8s" / "observability" / "files" / "rules" / "host-checks.yaml"
+DEPLOY_PIPELINE_RULES = (
+    ROLES / "k8s" / "observability" / "files" / "rules" / "deploy-pipeline.yaml"
+)
 # A per-target ingress alert takes `service` from its probe target, so a probed service
 # stands in for it.
 INGRESS_STAND_IN_SERVICE = "homepage"
@@ -58,6 +61,17 @@ def ingress_set(alert: str) -> dict[str, str]:
         "service": INGRESS_STAND_IN_SERVICE,
         **rule["labels"],
     }
+
+
+def deploy_pipeline_set(alert: str) -> dict[str, str]:
+    """The labels `alert` reaches Alertmanager with, read from the shipped deploy-pipeline rule.
+
+    Every rule there carries the literal `service="deploy-pipeline"`, so the rule's own labels
+    are the whole set, and a changed `severity` or `service` moves it to another route.
+    """
+    [group] = yaml_fast.safe_load(DEPLOY_PIPELINE_RULES.read_text())["groups"]
+    [rule] = [r for r in group["rules"] if r["alert"] == alert]
+    return {"alertname": alert, **rule["labels"]}
 
 
 def host_sets() -> dict[str, dict[str, str]]:
@@ -95,7 +109,18 @@ PAGING = {
         ["discord", "email"],
     ),
     "ingress-probes-missing": (ingress_set("IngressProbesMissing"), ["discord"]),
+    "deploy-hold-active": (deploy_pipeline_set("DeployHoldActive"), ["discord"]),
+    "promotion-stalled": (deploy_pipeline_set("PromotionStalled"), ["discord"]),
+    "prod-moved-outside-promote": (
+        deploy_pipeline_set("ProdMovedOutsidePromote"),
+        ["discord", "email"],
+    ),
+    "deploy-pipeline-exporter-absent": (
+        deploy_pipeline_set("DeployPipelineExporterAbsent"),
+        ["discord"],
+    ),
 }
+DEPLOY_HOLD, _ = PAGING["deploy-hold-active"]
 # The shadow sets, as M4's ingress-probes rules and M3's host-checks rules ship them.
 SHADOW = {
     "ingress-probe-failed": ingress_set("IngressProbeFailed"),
@@ -180,6 +205,13 @@ def test_every_ingress_rule_has_an_expected_outcome():
     assert {rule["alert"] for rule in group["rules"]} <= covered
 
 
+def test_every_deploy_pipeline_rule_has_an_expected_outcome():
+    """A rule added to deploy-pipeline.yaml without a set here would never be routed."""
+    [group] = yaml_fast.safe_load(DEPLOY_PIPELINE_RULES.read_text())["groups"]
+    covered = {labels["alertname"] for labels, _ in PAGING.values()}
+    assert {rule["alert"] for rule in group["rules"]} <= covered
+
+
 def test_host_sets_names_every_host_check_rule():
     """Non-vacuity for `host_sets`: the four rules M3's PR 3 ships, each keyed by its service."""
     assert set(host_sets()) == {
@@ -197,6 +229,30 @@ def test_a_paging_route_without_the_mute_is_flagged():
     del catch_all["mute_time_intervals"]
     labels, _ = PAGING["warning"]
     assert unmuted(labels, tree) == ["discord"]
+
+
+def repeat_intervals(labels: dict[str, str], tree: dict | None = None) -> list[str]:
+    """The `repeat_interval` of each route `labels` reaches in `tree`, the root's when the route
+    sets none. The tree nests one level, so the root is the only parent a route inherits from."""
+    tree = tree or route_tree()
+    return [
+        route.get("repeat_interval", tree["repeat_interval"])
+        for route in reached(tree, labels)
+    ]
+
+
+def test_a_standing_deploy_hold_repeats_daily():
+    assert repeat_intervals(DEPLOY_HOLD) == ["24h"]
+
+
+def test_a_deploy_hold_without_its_route_is_flagged():
+    tree = route_tree()
+    tree["routes"] = [
+        r
+        for r in tree["routes"]
+        if 'alertname="DeployHoldActive"' not in r.get("matchers", [])
+    ]
+    assert repeat_intervals(DEPLOY_HOLD, tree) == ["6h"]
 
 
 def test_the_watchdog_reaching_an_unmuted_route_is_flagged():

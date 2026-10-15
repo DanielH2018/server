@@ -17,6 +17,7 @@ from collections.abc import Callable, Mapping
 
 import bridge.common
 import check
+import deploy_pipeline
 import gates
 import registry
 from bridge.config import load_config
@@ -80,6 +81,7 @@ def main(
     sources: Sources | None = None,
     sink: Sink | None = None,
     sleep: Callable[[float], None] | None = None,
+    exposition: deploy_pipeline.Exposition | None = None,
 ) -> int:
     """Validates the configuration and the check filter, then runs the check loop.
 
@@ -108,6 +110,10 @@ def main(
         Kuma; a test passes a `FakeSink` that records the pushes.
       sleep: Waits out the INTERVAL between cycles. None is `time.sleep`; a test passes one that
         raises, to stop the loop at its first sleep.
+      exposition: What the deploy-pipeline family publishes its gauges to after each cycle.
+        None in the looping pod builds one and serves it on DEPLOY_PIPELINE_PORT. `--once`,
+        `--dry-run` and `--check` serve nothing and read nothing, so a hand-run beside the pod
+        never contends for its port. A test passes an unserved `Exposition` and reads its body.
 
     Returns:
       The process exit code: 0 after a completed --once run, 2 on a configuration fault.
@@ -160,6 +166,11 @@ def main(
         "monitor-bridge starting (interval=%ss, once=%s, dry_run=%s, checks=%d/%d)"
         % (cfg.INTERVAL, args.once, args.dry_run, len(enabled), len(checks))
     )
+    if args.once or args.dry_run or args.checks:
+        exposition = None
+    elif exposition is None:
+        exposition = deploy_pipeline.Exposition()
+        exposition.serve(cfg.DEPLOY_PIPELINE_PORT)
     while True:
         check.run_once(
             cfg,
@@ -170,6 +181,8 @@ def main(
             dry_run=args.dry_run,
             only=only,
         )
+        if exposition is not None:
+            deploy_pipeline.refresh(cfg, sources, exposition, now=time.time())
         # A --dry-run hand-run must touch nothing live, including the liveness-probe file — see
         # build_parser()'s --dry-run help.
         if not args.dry_run:

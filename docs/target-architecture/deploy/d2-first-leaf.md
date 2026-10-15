@@ -41,6 +41,10 @@ Secret as `DEPLOY_PIPELINE_GITHUB_TOKEN`. The precondition's compare call printe
 its variables call listed `DEPLOY_HOLD` and `PROD_DIGEST`, so the token needs no Contents
 scope.
 
+D2.6d's 24-hour `DeployHoldActive` route: [#5098](https://github.com/DanielH2018/server/pull/5098).
+It landed ahead of the rest of D2.6d because it changes the Alertmanager Secret alone, and its
+deploy at `cfaadb4a` was M1's exit criterion 4.
+
 Depends on: [D1](d1-flux-installed.md), [R1](../render/r1-shadow-render.md),
 [R2](../render/r2-secret-placeholders.md) (its PR 1, placeholder mode, and its PR 2, the five
 rules). PR D2.7 also waits on PR D4.0 of [D4](d4-ordering.md) (D4 Open question 3), on

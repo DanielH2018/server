@@ -27,7 +27,7 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
-from typing import Any
+from typing import Any, TypeVar
 
 import bridge.common
 
@@ -41,6 +41,8 @@ from bridge.types import JsonObject, JsonValue, as_list, as_object, as_object_li
 # `urllib.request.urlopen`'s shape: called with a Request and `timeout=`, it returns a response
 # usable as a context manager. Each request function takes one as `opener`; None is the real one.
 Opener = Callable[..., Any]
+# What `_get`'s `read` makes of the response: parsed JSON, or the raw bytes.
+_Body = TypeVar("_Body")
 
 
 def origin_sel(cfg: Config, *matchers: str) -> str:
@@ -122,6 +124,23 @@ def _origin_name(labels: dict) -> str:
 def _get_json(
     url: str, headers: dict[str, str] | None = None, opener: Opener | None = None
 ) -> JsonValue:
+    return _get(url, headers, opener, json.load)
+
+
+def _get_bytes(
+    url: str, headers: dict[str, str] | None = None, opener: Opener | None = None
+) -> bytes:
+    # The raw body, for a caller that hashes it: an OCI manifest's digest is the sha256 of the
+    # exact bytes the registry serves, which a JSON round trip does not preserve.
+    return _get(url, headers, opener, lambda resp: resp.read())
+
+
+def _get(
+    url: str,
+    headers: dict[str, str] | None,
+    opener: Opener | None,
+    read: Callable[[Any], _Body],
+) -> _Body:
     # The explicit User-Agent is REQUIRED, not decoration. Discord sits behind Cloudflare, which
     # 403s the default python-urllib UA with error 1010 — so `check_discord`'s webhook GETs would
     # read as revoked webhooks on every cycle without it. host_lib.discord_post carries the same
@@ -134,7 +153,7 @@ def _get_json(
     req = urllib.request.Request(url, headers=hdrs)
     try:
         with (opener or urllib.request.urlopen)(req, timeout=HTTP_TIMEOUT) as resp:
-            return json.load(resp)
+            return read(resp)
     except urllib.error.HTTPError as e:
         # Re-raise the SAME type: check_discord branches on `e.code`, so wrapping this would
         # silently turn a decisive 404 (webhook revoked) into a generic "unreachable" that

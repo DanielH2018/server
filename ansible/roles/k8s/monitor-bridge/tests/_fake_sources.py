@@ -36,6 +36,7 @@ _METHODS = (
     "loki_vector",
     "loki_lines",
     "get_json",
+    "get_bytes",
     "post_json",
 )
 
@@ -94,6 +95,11 @@ class FakeSources(Sources):
         if headers is None:
             return self._answer("get_json", url)
         return self._answer("get_json", url, headers=headers)
+
+    def get_bytes(self, url, headers=None):
+        if headers is None:
+            return self._answer("get_bytes", url)
+        return self._answer("get_bytes", url, headers=headers)
 
     def post_json(self, url, payload, headers=None):
         if headers is None:

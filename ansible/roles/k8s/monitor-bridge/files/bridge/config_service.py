@@ -1,7 +1,7 @@
 """The app-facing half of monitor-bridge's configuration.
 
 Traefik, n8n, the *arr stack, the deployer's own state files, the etcd restore drill, the
-staging-gate backfill and Home Assistant — every threshold read by a check in
+staging-gate backfill, Home Assistant and the deploy-pipeline exporter — every threshold read by a check in
 `checks/service.py`, plus the Traefik latency and error-rate bounds `checks/cluster.py` reads.
 
 Field justifications sit beside the declarations, env var names beside the reads, and the values
@@ -57,6 +57,8 @@ class ServiceConfig:
     HA_CONSECUTIVE: int
     HA_BAN_WINDOW: str
     HA_BAN_SELECTOR: str
+    DEPLOY_PIPELINE_GITHUB_TOKEN: str = field(repr=False)
+    DEPLOY_PIPELINE_PORT: int
 
 
 def service_config(
@@ -298,4 +300,10 @@ def service_config(
         # CLAUDE.md — a fail-open arm cannot tell "nothing to report" from "I asked the wrong
         # question".
         HA_BAN_SELECTOR='{namespace="homelab",container="home-assistant"} |~ "Banned IP"',
+        # The deploy-pipeline exporter (`deploy_pipeline.py`). The token is read-only, Actions
+        # read and Variables read on this repository, so the env-secret carries it rather than a
+        # file mount. Empty disables the family's reads: the listener still serves, with no
+        # series, and DeployPipelineExporterAbsent pages that.
+        DEPLOY_PIPELINE_GITHUB_TOKEN=_env("DEPLOY_PIPELINE_GITHUB_TOKEN"),
+        DEPLOY_PIPELINE_PORT=_int("DEPLOY_PIPELINE_PORT"),
     )

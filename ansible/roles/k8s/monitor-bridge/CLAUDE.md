@@ -64,6 +64,25 @@ prove its selector against a live source first (checks page's *Traps*). **A new 
 Kuma tile renders from the row, and landing it deploys uptime-kuma too. The liveness probe,
 the credentials and the prerequisites are on the internals page.
 
+## The deploy-pipeline family
+
+One family is served rather than pushed. `files/deploy_pipeline.py` reads the `promote`
+workflow's state each cycle, after every check has pushed, and serves four `homelab_deploy_*`
+gauges on `monitor_bridge_deploy_pipeline_port` through `templates/service.yaml.j2`.
+observability's `deploy-pipeline` scrape job collects them, and its `deploy-pipeline` rule
+group pages on them. `docs/flux-deploy-plane.md` says what each alert means.
+
+- **Its token is `DEPLOY_PIPELINE_GITHUB_TOKEN`**, from the SOPS key
+  `monitor_bridge_deploy_pipeline_github_token`. It holds Actions read and Variables read on
+  this repository and nothing else, so the family can neither clear a hold nor move a tag. An
+  empty token reads nothing and serves no series, which `DeployPipelineExporterAbsent` pages.
+- **A failed read exports no series for the gauges it feeds, never a 0.** Each cycle logs one
+  `deploy-pipeline:` line with the values and any failed read.
+- **`--once`, `--dry-run` and `--check` neither serve nor read it**, so a hand-run beside the
+  pod never contends for the port.
+- **The scrape target's port is a literal in `prometheus.yaml.j2`.**
+  `ansible/tests/services/test_deploy_pipeline_scrape.py` holds it to this role's default.
+
 ## Module layout — and the one rule that governs it
 
 `files/` holds its flat modules and three packages: `bridge/` (shared plumbing), `checks/` (one

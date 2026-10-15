@@ -1,6 +1,6 @@
 # M1 — Alertmanager and its watcher
 
-Status: IN PROGRESS
+Status: DONE
 
 PR 1, the promtool and amtool provisioning and its red proof: [#4703](https://github.com/DanielH2018/server/pull/4703).
 PR 2, Alertmanager with its receivers: [#4728](https://github.com/DanielH2018/server/pull/4728).
@@ -8,8 +8,7 @@ PR 3, the rules pipeline and three meta rules: [#4740](https://github.com/Daniel
 PR 4, the Watchdog to Healthchecks.io: [#4752](https://github.com/DanielH2018/server/pull/4752).
 PR 5, one Secret, one restart: [#4771](https://github.com/DanielH2018/server/pull/4771).
 
-Every PR has merged. Criteria 1 to 3 hold, read on 2026-10-15. The slice stays IN PROGRESS
-until criterion 4 is observed live:
+Every PR has merged, and all four criteria hold, read on 2026-10-15:
 
 - Criterion 1 holds. `ALERTS{alertname="Watchdog"}` returned one firing series, and the
   webhook notification counter rose from 1463 to 1464 between two reads. The operator read
@@ -23,9 +22,13 @@ until criterion 4 is observed live:
   counter rose again, the console cleared, and the Kuma tile cleared at 13:37:50.
 - Criterion 3 holds. Master's CI run 38669132676, on `a5abf8581`, passed "Prove each alert
   tool rejects its bad fixture".
-- Criterion 4 is not yet observed live. The newest `observability` release record comes from
-  domain PR 2b's deploy of every tag at `3cf449368`, which changed no Secret and restarted
-  nothing. The first deploy that changes `alertmanager-secret.yaml` alone is the check.
+- Criterion 4 holds. [#5098](https://github.com/DanielH2018/server/pull/5098), D2.6d's
+  24-hour `DeployHoldActive` route, changed `alertmanager-secret.yaml` alone, and its
+  deploy at `cfaadb4a` restarted Alertmanager alone. `kube_pod_start_time` moved for the
+  Alertmanager pod, from 13:32:01 to 14:35:26 UTC, and stayed at 2026-10-13 for Prometheus
+  and 2026-10-12 for Grafana. `probe.py releases observability` reads `restart: true` for
+  `alertmanager` and `false` for the six other workloads. `alertmanager_config_hash` moved
+  and `alertmanager_config_last_reload_successful` read 1.
 
 Depends on: —
 
@@ -528,6 +531,9 @@ route:
       repeat_interval: 60s     # observability_alertmanager_watchdog_repeat_seconds
     - matchers: [shadow="true"]
       receiver: blackhole
+    - matchers: [alertname="DeployHoldActive"]
+      receiver: discord
+      repeat_interval: 24h     # D2.6d's hold page: a standing hold repeats daily
     - matchers: [severity="critical"]
       receiver: discord
       continue: true
