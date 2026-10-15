@@ -912,7 +912,12 @@ concurrency group on push. It needs no secrets, and it does these steps:
    every `validate` module the cases script imports (#5004). An edit to the
    `host_packages` job itself counts too, because its steps invoke the cases.
    `host_packages.py job-changed` compares the job as parsed YAML, so an edit to a comment
-   alone does not count. Such a PR runs steps 3 to 5.
+   alone does not count. A renderer change that alters only the cases' fixture counts too,
+   because the fixture exercises renderer paths no real package does until H3.6.
+   `host_packages.py fixture-changed` renders the fixture in each tree with that tree's own
+   renderer and compares the output, so an edit to the renderer's files alone does not count
+   (#5066). Such a PR runs steps 3 to 5. Each of these verdicts fails the step when it cannot
+   be computed, rather than reading as no change (#5071).
 3. It builds both renders with nfpm pinned by version and sha256, and runs the
    maintainer-script lint and the `type: config` lint.
 4. It builds the test image from `hosts/lib/tests/container/Dockerfile`. The job does not

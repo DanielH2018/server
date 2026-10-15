@@ -1,4 +1,4 @@
-"""The host-package checks CI's `host_packages` job runs: render, diff and the two lints.
+"""The host-package checks CI's `host_packages` job runs: render, diff, lints and triggers.
 
 The maintainer-script lint's line cases live beside the scripts it reads, in
 `hosts/lib/tests/test_maintainer_scripts.py`. The `.deb` cases here build their packages with
@@ -185,3 +185,16 @@ def test_a_comment_or_another_job_is_not_a_job_change(edited):
 
 def test_a_base_without_the_workflow_is_a_job_change():
     assert host_packages.job_differs(None, _WORKFLOW, "host_packages")
+
+
+def test_the_same_tree_renders_the_same_fixture(tmp_path):
+    """The payload variant's random payload would make every pair of renders differ."""
+    assert host_packages.render_fixtures(REPO, tmp_path)
+    # Named member: two empty renders would also compare equal.
+    dropin = "root/usr/lib/systemd/system/homelab-updater.timer.d/50-homelab.conf"
+    assert (tmp_path / "dropin" / "hosts" / "daniel-pi" / dropin).is_file()
+    assert not host_packages.fixture_changed(REPO, REPO)
+
+
+def test_a_base_without_the_fixture_module_is_a_fixture_change(tmp_path):
+    assert host_packages.fixture_changed(tmp_path, REPO)
