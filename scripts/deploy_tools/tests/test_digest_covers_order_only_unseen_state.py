@@ -1,7 +1,7 @@
 """The order-only rows for state the module-state comparison does not see (#5060, #5063).
 
-`test_digest_covers_order_only.py` holds the order-only rows and is at the test-module cap,
-so these extend it here. Each row's base end already imports what the head end uses. Loading
+`test_digest_covers_order_only.py` holds the order-only rows, and these would take it past
+the 500-line test-module cap, so they extend it here. Each row's base end already imports what the head end uses. Loading
 a module only the head loads already keeps the line, so that shared import keeps each row to
 the one shape the issue names.
 
