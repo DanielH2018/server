@@ -132,12 +132,17 @@ def _install(exit_, write_flags, allowed, modules):
         except BaseException:
             exit_(86)
 
-    def refuse(*args, **kwargs):
-        exit_(86)
+    # The stubs sit on `os`, where the plugin can read their closure, so each gets a cell of
+    # its own. Sharing the hook's `exit_` cell would let a write to it disarm the hook.
+    def stub(exit_stub):
+        def refuse(*args, **kwargs):
+            exit_stub(86)
+
+        return refuse
 
     sys.addaudithook(audit)
     for module in (os, posix):
-        module.mkfifo = module.mknod = refuse
+        module.mkfifo = module.mknod = stub(exit_)
 
 
 _install(

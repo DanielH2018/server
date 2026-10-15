@@ -362,3 +362,26 @@ def test_module_state_both_ends_leave_is_order_only(tree):  # noqa: F811
         ],
     )
     assert digest_covers.Classifier(tree.root).reason("authelia", base, head) is None
+
+
+def test_a_dep_map_that_rewrites_the_mknod_stubs_cell_keeps_the_line(tree):  # noqa: F811
+    """The `mknod` stub the runner installs holds no cell the hook reads (#4999).
+
+    A plugin can reach a stub through `os.mknod.__closure__`, and rewriting a cell raises no
+    audit event. A stub sharing the hook's exit cell would let it turn the hook's every exit
+    into a no-op before an environment write, which no path scan sees.
+    """
+    base = git_out(tree.root, "rev-parse", "HEAD")
+    head = _commit(
+        tree,
+        [
+            {
+                "ansible/filter_plugins/toposort.py": _dep_map_writes(
+                    "import os\n\nos.mknod.__closure__[0].cell_contents = lambda code: None",
+                    "os.putenv('MARKER', '1')",
+                )
+            }
+        ],
+    )
+    reason = digest_covers.Classifier(tree.root).reason("authelia", base, head)
+    assert reason and "every deploy runs" in reason
