@@ -5,7 +5,9 @@ A placeholder render with `--role` writes, for each tag it names:
 - `DIR/flux/<tag>.yaml`, the Kustomization `<tag>` (C3 *Per-tag Kustomizations*). It carries
   `spec.postBuild`, naming `homelab-cluster-vars`, and a `dependsOn` entry for `cluster-vars`
   exactly when the placeholder key set of the directory `<tag>` is not empty (C1 *The
-  projection*, D3.3b);
+  projection*, D3.3b). It carries `decryption` exactly when the tag's role lists
+  `render_sops_manifests`, whose SOPS manifests the renderer copies into `cluster/<tag>/`
+  (C3 *Per-role fields*, D3.3c);
 - `DIR/flux/<kind>.yaml` and `DIR/cluster/<kind>/` for each `SHARED_KINDS` member;
 - `DIR/flux/kustomization.yaml`, which lists every other file in `DIR/flux/`, so the root
   Kustomization `homelab` applies each of them;
@@ -43,6 +45,8 @@ from pathlib import Path
 
 import yaml
 
+from lib import yaml_fast
+
 KUSTOMIZATION = "kustomization.yaml"
 DEFERRED_SUFFIX = "-deferred"
 DIGESTS = "digests.json"
@@ -68,6 +72,11 @@ CLUSTER_VARS = "cluster-vars"
 CLUSTER_VARS_FILE = "cluster-vars.sops.env"
 # The Secret in `flux-system` that holds the cluster's age key (D3.0, operator-only).
 SOPS_AGE_SECRET = "sops-age"
+DECRYPTION = {"provider": "sops", "secretRef": {"name": SOPS_AGE_SECRET}}
+# kustomize-controller substitutes nothing in a resource carrying this annotation as
+# `disabled`, so a `${` inside a decrypted value stays literal. Every SOPS manifest carries
+# it in its plaintext metadata, written before encryption (C3 *Secrets*).
+SUBSTITUTE_OPT_OUT = "kustomize.toolkit.fluxcd.io/substitute"
 
 # Every shared kind, a closed literal set (C3 *Shared kinds*). D3.3a adds `cluster-vars`,
 # D5.3b2 `soak` and D5's namespace PR `homelab-namespace`, each in the PR that renders it.
@@ -130,7 +139,9 @@ def kustomization_text(files: Iterable[str]) -> str:
     )
 
 
-def tag_kustomization(tag: str, substitutes: bool, timeout: str) -> dict:
+def tag_kustomization(
+    tag: str, substitutes: bool, timeout: str, decrypts: bool = False
+) -> dict:
     """The Kustomization `tag`, as D2's *The per-tag Kustomization* shows it.
 
     Args:
@@ -139,6 +150,8 @@ def tag_kustomization(tag: str, substitutes: bool, timeout: str) -> dict:
             decides `postBuild` (C1 *The projection*) and the `cluster-vars` edge. The edge
             makes Flux wait for `homelab-cluster-vars` before it substitutes from it (D3.3b).
         timeout: `manifests_rollout_timeout_default`, the manifests role's rollout timeout.
+        decrypts: Whether the tag's role lists `render_sops_manifests`, which alone decides
+            `decryption`. kustomize-controller decrypts nothing without it (D3.3c).
     """
     spec: dict = {
         "sourceRef": {"kind": "OCIRepository", "name": ROOT},
@@ -157,6 +170,8 @@ def tag_kustomization(tag: str, substitutes: bool, timeout: str) -> dict:
             "substituteFrom": [{"kind": "Secret", "name": CLUSTER_VARS_SECRET}]
         }
         spec["dependsOn"] = [{"name": CLUSTER_VARS}]
+    if decrypts:
+        spec["decryption"] = dict(DECRYPTION)
     return {
         "apiVersion": FLUX_API_VERSION,
         "kind": "Kustomization",
@@ -172,12 +187,7 @@ def cluster_vars_kustomization(timeout: str) -> dict:
 
     `deletionPolicy: Orphan` keeps the Secret serving if the Kustomization is ever deleted.
     """
-    doc = tag_kustomization(CLUSTER_VARS, False, timeout)
-    doc["spec"]["decryption"] = {
-        "provider": "sops",
-        "secretRef": {"name": SOPS_AGE_SECRET},
-    }
-    return doc
+    return tag_kustomization(CLUSTER_VARS, False, timeout, decrypts=True)
 
 
 def cluster_vars_files(dotenv: str, timeout: str) -> dict[str, str]:
@@ -209,6 +219,7 @@ def flux_files(
     substitutes: Mapping[str, bool],
     timeout: str,
     shared: Mapping[str, str] | None = None,
+    decrypting: Iterable[str] = (),
 ) -> dict[str, str]:
     """Each `flux/` file of a bundle publishing the tags in `substitutes`, by bundle path.
 
@@ -217,10 +228,12 @@ def flux_files(
         timeout: The `timeout` every tag's Kustomization sets.
         shared: The shared kinds' `flux/` files by bundle path, which the root lists beside
             the tags' files.
+        decrypting: The published tags whose role lists `render_sops_manifests`.
     """
+    decrypting = frozenset(decrypting)
     files = {
         f"{FLUX_DIR}/{tag}.yaml": yaml.safe_dump(
-            tag_kustomization(tag, wants, timeout), sort_keys=False
+            tag_kustomization(tag, wants, timeout, tag in decrypting), sort_keys=False
         )
         for tag, wants in sorted(substitutes.items())
     }
@@ -364,6 +377,7 @@ def bundle_files(
     tags: Iterable[str],
     timeout: str,
     cluster_vars: str,
+    decrypting: Iterable[str] = (),
 ) -> dict[str, str]:
     """The files a bundle holds beside its tags' `cluster/` directories, by bundle path.
 
@@ -377,6 +391,8 @@ def bundle_files(
         tags: The published tags, one Kustomization each.
         timeout: The `timeout` every Kustomization sets.
         cluster_vars: The cluster file's text, which the `cluster-vars` kind copies.
+        decrypting: The published tags whose role lists `render_sops_manifests`, each of
+            which gets `decryption` (C3 *Per-role fields*).
 
     Raises:
         ValueError: A published tag has a `-deferred` directory. Its Kustomization is
@@ -393,7 +409,10 @@ def bundle_files(
     shared = cluster_vars_files(cluster_vars, timeout)
     flux = {p: t for p, t in shared.items() if p.startswith(f"{FLUX_DIR}/")}
     files = flux_files(
-        {tag: per_directory.get(tag, False) for tag in tags}, timeout, flux
+        {tag: per_directory.get(tag, False) for tag in tags},
+        timeout,
+        flux,
+        set(decrypting) & set(tags),
     )
     files |= shared
     cluster = {
@@ -404,6 +423,26 @@ def bundle_files(
     everything = {path: text.encode() for path, text in {**cluster, **files}.items()}
     files[DIGESTS] = digests_text(digests(everything, tags, substituting))
     return files
+
+
+def sops_manifest_problem(name: str, text: str) -> str | None:
+    """Why the SOPS manifest `name` cannot be copied into a tag's directory, or None.
+
+    The copy is byte for byte, because SOPS's MAC covers the plaintext fields too, so the
+    renderer cannot add the substitute opt-out itself; it refuses a manifest without it.
+    """
+    try:
+        obj = yaml_fast.safe_load(text)
+    except yaml.YAMLError as exc:
+        return f"the SOPS manifest {name} does not parse: {exc}"
+    meta = (obj.get("metadata") if isinstance(obj, dict) else None) or {}
+    if (meta.get("annotations") or {}).get(SUBSTITUTE_OPT_OUT) != "disabled":
+        return (
+            f"the SOPS manifest {name} lacks the annotation {SUBSTITUTE_OPT_OUT}: disabled "
+            "in its plaintext metadata, so Flux would substitute into its decrypted values. "
+            "cluster_vars.py write (operator-only) writes it before encrypting"
+        )
+    return None
 
 
 def write_bundle(files: Mapping[str, str], out: Path) -> list[Path]:

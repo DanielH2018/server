@@ -457,7 +457,8 @@ workflow when the step is missing or runs after gitleaks.
 
 The bundle holds:
 
-- `cluster/<tag>/`, each published tag's manifests and their `kustomization.yaml`.
+- `cluster/<tag>/`, each published tag's manifests and their `kustomization.yaml`, with a
+  byte copy of each SOPS manifest its role lists (*SOPS manifests* below).
 - `flux/<tag>.yaml`, the Kustomization `<tag>` in `flux-system`. It applies
   `./cluster/<tag>` from the `OCIRepository` `homelab` with `prune: true`, `wait: true`,
   `deletionPolicy: Orphan` and the manifests role's `manifests_rollout_timeout_default`.
@@ -498,6 +499,77 @@ escaping*).
 
 `scripts/renderer/tests/test_renderer_bundle.py` holds the predicate: a fixture with a
 placeholder gets both fields, one without gets neither and keeps `${HOME}` as written.
+
+### Restart triggers: `checksum/restart`
+
+Ansible's shared `rollout restart` does not run for a flux-owned tag. The renderer therefore
+stamps the annotation `checksum/restart` on the pod template of each restart target of a
+flux-owned tag, and Kubernetes rolls the pod when the value moves.
+`scripts/renderer/renderer_lib/restart.py` holds the rule.
+
+- **The targets** are the workloads the shared `k8s/manifests` role restarts on a render
+  change, read from the role's include of `k8s/manifests`. They are the `manifests_rollout`
+  workload when it is non-empty, and each `manifests_extra_rollouts` entry whose
+  `restart_on` names `config` or `secret`. An entry with `restart_on: []`, such as Scrutiny's
+  InfluxDB, is one Ansible waits on and never restarts, so it gets no annotation.
+- **`restart_on` also narrows the inputs.** `config` admits the workload's ConfigMaps into its
+  value and `secret` its Secrets, as the same list narrows Ansible's restart.
+- **The value is per workload.** It is one SHA-256 over the admitted ConfigMaps and Secrets
+  that the workload's own pod template names through `envFrom`, `env[].valueFrom` or
+  `volumes`, each re-serialised in canonical form. It also covers the `.source` digest of
+  every secret key those objects reference, a ConfigMap's included: traefik's static
+  ConfigMap holds `${email}`, whose text does not move when the key rotates. A YAML comment
+  edit moves nothing, and a rotated key moves the value of each workload that reads it, in
+  the revision that carries its new ciphertext.
+- **Secrets are hashed in placeholder form,** so the annotation exposes no plaintext. A
+  Secret shipped as a SOPS manifest contributes its key's `.source` digest, never its
+  ciphertext.
+- **A stub render stamps the same value.** It hashes the placeholder-form documents too,
+  never its own stub output.
+- **A target that names no ConfigMap or Secret gets no annotation.** bento-pdf is one, so its
+  render does not change.
+- **The render refuses** a target that names no rendered Deployment, DaemonSet or
+  StatefulSet, and a Secret key that `.source` does not record. Either would leave a workload
+  that a rotation never rolls.
+
+The stamp inserts one block of lines at the place the YAML parser marks, and keeps every other
+byte of the file. A re-serialised document would drop the quotes around a `"${key}"` and change
+the type Flux substitutes into it.
+
+Two tests in `scripts/renderer/tests/test_renderer_restart.py` keep the annotation honest:
+
+- **The outside-role reference test** fails when a flux-owned pod template names a Secret or
+  ConfigMap that its own role does not render. The annotation sees only the role's own
+  render, so such a reference would roll nothing. peanut is its named member.
+- **The self-rollouts census** fails when an `owner: flux` entry's role passes a non-empty
+  `manifests_self_rollouts`, because nothing restarts pihole's or observability's own
+  workloads under Flux until D5.1e.
+
+### SOPS manifests
+
+R2's multi-line keys, `SOPS_MANIFEST_KEYS`, reach the cluster as SOPS-encrypted Secret
+manifests rather than as placeholders. `cluster_vars.py write` (operator-only) keeps one per
+`render_sops_manifests` entry under `ansible/vars/cluster-manifests/`, named
+`<tag>.<entry stem>.sops.yaml`.
+
+- **The copy is byte for byte.** For a published tag whose role lists
+  `render_sops_manifests`, the renderer copies each manifest into `cluster/<tag>/` under its
+  own name and lists it in that directory's `kustomization.yaml`. SOPS's MAC covers the
+  plaintext fields too, so nothing may edit the file after encryption.
+- **The tag's Kustomization gets `decryption`**, provider `sops` with the Secret `sops-age`,
+  exactly when its role lists `render_sops_manifests`. `kustomize-controller` decrypts
+  nothing without it (contract C3, *Per-role fields*).
+- **Each manifest carries `kustomize.toolkit.fluxcd.io/substitute: disabled`** in its
+  plaintext metadata, written before encryption. `kustomize-controller` decrypts before it
+  substitutes, so without the annotation a `${` inside a decrypted value would be read as a
+  reference. The render refuses a manifest without it and writes nothing. A missing manifest
+  is refused too.
+- **The publish job's `ciphertext` step covers the copies**, because each ends in
+  `.sops.yaml` under `out/cluster/`.
+
+`scripts/renderer/tests/test_renderer_bundle.py` holds the pair: pi-peer-backup with a fixture
+manifest gets the copy and `decryption`, bento-pdf beside it gets neither, and a manifest
+without the annotation fails the render.
 
 ### Shared kinds and reserved names
 

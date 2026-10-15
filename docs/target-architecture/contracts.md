@@ -286,9 +286,12 @@ which needs a drill exclusion in C7 that no slice has requested, the edge goes.
   - A verifying Job lives in `<tag>-verify`, which depends on the tag's last Kustomization
     and sets `wait: true` (R4, D5).
   - D5.1a1 adds `<tag>-snapshot` for a role that declares snapshot claims.
-- **Per-role fields.** A role may set three fields of its own Kustomization from its defaults:
-  `prune: false`, for H1's vendored CRDs; its own `timeout` (H1, H6); and `healthCheckExprs`
-  for its own custom resources (H6). No other field varies by role.
+- **Per-role fields.** Four fields of a role's own Kustomization vary by role. A role may set
+  three of them from its defaults: `prune: false`, for H1's vendored CRDs; its own `timeout`
+  (H1, H6); and `healthCheckExprs` for its own custom resources (H6). The fourth, `decryption:
+  {provider: sops, secretRef: {name: sops-age}}`, is derived from a non-empty
+  `render_sops_manifests` and never set by hand (D3.3c). The shared kind `cluster-vars` also
+  sets it. No other field varies by role.
 - **Shared kinds.** A Kustomization that belongs to no deploy tag is a shared kind. The
   renderer names every shared kind in a closed literal set, `SHARED_KINDS`. D2.6b adds the
   set empty, D3.3a adds `cluster-vars`, D5.3b2 adds `soak`, and D5's namespace PR adds
@@ -326,9 +329,12 @@ which needs a drill exclusion in C7 that no slice has requested, the edge goes.
     D3's operator-only `cluster_vars.py write` refuses each, naming the key and never the
     value.
   - The keys in `SOPS_MANIFEST_KEYS` ship as SOPS-encrypted Secret manifests, one per
-    `render_sops_manifests` entry, which kustomize-controller decrypts (R2, D3).
+    `render_sops_manifests` entry, which kustomize-controller decrypts (R2, D3). Each SOPS
+    manifest carries `kustomize.toolkit.fluxcd.io/substitute: disabled` in its plaintext
+    metadata, written before encryption, and the renderer copies it byte for byte.
 
-  Any step in either path that needs plaintext is **operator-only**.
+  Any step in either path that needs plaintext is **operator-only**. `sops-age` is the only
+  Secret made by hand.
 
   **Standalone values.** A *standalone use* is a placeholder that is the whole scalar of a
   field. A key with a standalone use holds a value that both a YAML 1.1 resolver and the
@@ -680,14 +686,6 @@ request leaves this list and the round's *Review log* entry names it.
   role that passes `manifests_deferred_files` gets `<tag>-deferred` once it is flux-owned",
   because D1 adds the flux role as a fourth caller, and *Reserved names* says that D4.2
   reserves the suffix. No gate is named.
-- **SOPS manifests and the decryption field** (D3 Open question 6).
-    - *Per-role fields* gains a fourth field, `decryption: {provider: sops, secretRef: {name:
-      sops-age}}`, derived from a non-empty `render_sops_manifests` and never set by hand.
-      The shared kind `cluster-vars` sets it too. Gate: before D3.3c merges.
-    - Each SOPS manifest carries `kustomize.toolkit.fluxcd.io/substitute: disabled` in its
-      plaintext metadata, written before encryption, and the renderer copies it byte for
-      byte. Gate: before D3.3c merges.
-    - *Secrets* gains "`sops-age` is the only Secret made by hand." Gate: before D3.3a merges.
 - **Suspension and hand writes** (D5 Open question 5). `spec.suspend` through
   `flux_suspend`, rendered only when true. Edges to a suspended Kustomization are dropped. A
   hand write to a Flux object uses the field manager `homelab-operator`. `<tag>-snapshot`
@@ -1043,6 +1041,19 @@ Applied to this page:
   publish with no flux-owned tag. D3.3a (#5145) implements it and the promote workflow's
   no-tag branch calls it. The request leaves *Requests on C1*, which clears the gate before
   D3.3a merges.
+- **SOPS manifests and the decryption field** (D3 Open question 6). D3.3c implements both
+  rows below, and the request leaves *Requests on C3*, which clears its gates.
+    - C3 *Per-role fields* now names a fourth field, `decryption: {provider: sops,
+      secretRef: {name: sops-age}}`, derived from a non-empty `render_sops_manifests` and
+      never set by hand. The shared kind `cluster-vars` also sets it. That clears the gate
+      before D3.3c merges.
+    - C3 *Secrets* now states that each SOPS manifest carries
+      `kustomize.toolkit.fluxcd.io/substitute: disabled` in its plaintext metadata, written
+      before encryption, and that the renderer copies it byte for byte. That clears the gate
+      before D3.3c merges.
+    - C3 *Secrets* now states that `sops-age` is the only Secret made by hand. Its gate was
+      before D3.3a merges, and D3.3a (#5145) merged without applying it, so D3.3c applies it
+      late.
 - **D2.5's verification choices** (#5023). D2.5 (#5003) implemented *Verification* with
   three choices the contract did not record, and C2 now states each of them:
     - *On failure* and *The revert rule* name `settle` as the writer, and *On failure* adds the `<T> unverified` hold for a

@@ -13,7 +13,7 @@ import pytest
 
 from changed_set import changed_set
 from lib import yaml_fast
-from lib.exit_codes import RENDER_BAD_ARGS, RENDER_OK, RENDER_REFUSED
+from lib.exit_codes import RENDER_BAD_ARGS, RENDER_FAILED, RENDER_OK, RENDER_REFUSED
 from renderer import homelab_render
 from renderer.renderer_lib import cluster as cluster_mod
 from renderer.renderer_lib.bundle import (
@@ -409,3 +409,73 @@ def test_shared_only_beside_role_is_a_usage_error(tmp_path):
     with pytest.raises(SystemExit) as exc:
         homelab_render.main(argv)
     assert exc.value.code == RENDER_BAD_ARGS
+
+
+SOPS_NAME = "pi-peer-backup.ssh-key-secret.sops.yaml"
+SOPS_MANIFEST = (
+    "apiVersion: v1\nkind: Secret\nmetadata:\n  name: pi-peer-backup-ssh-key\n"
+    "  annotations:\n    kustomize.toolkit.fluxcd.io/substitute: disabled\n"
+    "stringData:\n    value: ENC[AES256_GCM,data:eA==,iv:aQ==,tag:dA==,type:str]\n"
+    "sops:\n    mac: ENC[AES256_GCM,data:bQ==,iv:aQ==,tag:dA==,type:str]\n"
+)
+
+
+def _sops_render(tmp_path, cluster_file, manifest: str | None):
+    """Publish pi-peer-backup, whose role lists a SOPS manifest, beside bento-pdf."""
+    manifests = tmp_path / "cluster-manifests"
+    manifests.mkdir()
+    if manifest is not None:
+        (manifests / SOPS_NAME).write_text(manifest)
+    out = tmp_path / "out"
+    code = homelab_render.cluster(
+        out,
+        ["pi-peer-backup", "bento-pdf"],
+        None,
+        flux_owned=lambda: {"pi-peer-backup", "bento-pdf"},
+        cluster_file=cluster_file,
+        manifests_dir=manifests,
+    )
+    return code, out
+
+
+def test_a_role_with_render_sops_manifests_gets_the_copy_and_decryption(
+    tmp_path, cluster_file
+):
+    code, out = _sops_render(tmp_path, cluster_file, SOPS_MANIFEST)
+    assert code == RENDER_OK
+    directory = out / "cluster" / "pi-peer-backup"
+    assert (directory / SOPS_NAME).read_bytes() == SOPS_MANIFEST.encode()
+    listed = yaml_fast.safe_load((directory / KUSTOMIZATION).read_text())["resources"]
+    assert SOPS_NAME in listed
+    flux = yaml_fast.safe_load((out / "flux" / "pi-peer-backup.yaml").read_text())
+    assert flux["spec"]["decryption"] == {
+        "provider": "sops",
+        "secretRef": {"name": "sops-age"},
+    }
+
+
+def test_a_role_without_render_sops_manifests_gets_neither(tmp_path, cluster_file):
+    code, out = _sops_render(tmp_path, cluster_file, SOPS_MANIFEST)
+    assert code == RENDER_OK
+    flux = yaml_fast.safe_load((out / "flux" / "bento-pdf.yaml").read_text())
+    assert "decryption" not in flux["spec"]
+    assert not list((out / "cluster" / "bento-pdf").glob("*.sops.*"))
+
+
+def test_a_sops_manifest_without_the_substitute_annotation_is_flagged(
+    tmp_path, capsys, cluster_file
+):
+    bare = SOPS_MANIFEST.replace(
+        "  annotations:\n    kustomize.toolkit.fluxcd.io/substitute: disabled\n", ""
+    )
+    code, out = _sops_render(tmp_path, cluster_file, bare)
+    assert code == RENDER_FAILED
+    assert "lacks the annotation" in capsys.readouterr().err
+    assert not out.exists()
+
+
+def test_a_missing_sops_manifest_is_refused(tmp_path, capsys, cluster_file):
+    code, out = _sops_render(tmp_path, cluster_file, None)
+    assert code == RENDER_REFUSED
+    assert "cannot copy its SOPS manifest" in capsys.readouterr().err
+    assert not out.exists()

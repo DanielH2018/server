@@ -26,6 +26,13 @@ writer, `SHARED_KINDS` and the footprint rules. Every `cluster` render refuses a
 named `homelab` or after a `SHARED_KINDS` member, the names of Kustomizations that are no
 deploy tag's (C3 *Reserved names*).
 
+A published tag whose role lists `render_sops_manifests` gets a byte copy of each SOPS manifest
+under `ansible/vars/cluster-manifests/` in `DIR/cluster/<tag>/`, and `decryption` on its
+Kustomization (D3.3c); a manifest without the substitute-disabled annotation fails the render.
+In both modes, every flux-owned tag's restart targets get `checksum/restart`, hashed from the
+placeholder-form documents and `ansible/vars/cluster-vars.source`
+(`renderer_lib/restart.py`).
+
 `host --host NAME` renders `hosts/NAME/package.yml` into `DIR/hosts/NAME/`, and `package --name
 PKG` renders the shared package `hosts/packages/PKG/` into `DIR/packages/PKG/`. Each writes
 `root/`, the tree the package installs, and `nfpm.yaml`. Host and package modes render no
@@ -62,26 +69,33 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 from lib import yaml_fast
 from lib.cli_help import ArgumentParser
 from lib.exit_codes import RENDER_FAILED, RENDER_OK, RENDER_REFUSED
-from lib.repo_paths import ANSIBLE, FILTER_PLUGINS
+from lib.repo_paths import ANSIBLE, FILTER_PLUGINS, K8S_ROLES
 from renderer.renderer_lib import secret_checks
 from renderer.renderer_lib.bundle import (
     CLUSTER_DIR,
     CLUSTER_VARS_FILE,
     DIGESTS,
     FLUX_DIR,
+    KUSTOMIZATION,
     SHARED_KINDS,
     bundle_files,
+    kustomization_text,
+    sops_manifest_problem,
     write_bundle,
 )
 from renderer.renderer_lib.cluster import (
+    RenderedTag,
     RenderError,
     RenderRefused,
     flux_owned_tags,
     render_tag,
     rollout_timeout_default,
     select_tags,
+    tag_context,
     write_cluster,
 )
+from renderer.renderer_lib.restart import restart_targets, restart_values, stamp
+from secrets_mgmt.cluster_vars_check import ManifestEntry, parse_source
 from renderer.renderer_lib.context import load_stubs
 from renderer.renderer_lib.host import render_host, render_package, write_packages
 from renderer.renderer_lib.sops_entries import sops_manifest_entries
@@ -101,6 +115,10 @@ from secret_stubs import homelab_stub_keys, homelab_unstubbed_keys
 SECRETS = ANSIBLE / "vars" / "secrets.yml"
 # The cluster file `cluster_vars.py write` keeps. The bundle's copy keeps its basename.
 CLUSTER_FILE = ANSIBLE / "vars" / CLUSTER_VARS_FILE
+# Each cluster key's ciphertext digest, which `checksum/restart` hashes in place of a value.
+SOURCE_FILE = ANSIBLE / "vars" / "cluster-vars.source"
+# The SOPS manifests `cluster_vars.py write` keeps, one per `render_sops_manifests` entry.
+MANIFESTS_DIR = ANSIBLE / "vars" / "cluster-manifests"
 
 
 def secret_keys(secrets: Path = SECRETS) -> list[str]:
@@ -125,6 +143,8 @@ def cluster(
     kinds: frozenset[str] = SHARED_KINDS,
     cluster_file: Path = CLUSTER_FILE,
     shared_only: bool = False,
+    source_file: Path = SOURCE_FILE,
+    manifests_dir: Path = MANIFESTS_DIR,
 ) -> int:
     """Render `roles`, or every renderable tag, into `out`; return the exit code.
 
@@ -139,16 +159,138 @@ def cluster(
             fixture.
         shared_only: Write the shared kinds and the root alone, and render no tag. The
             caller rejects it beside `roles` or `secret_stubs`.
+        source_file: `cluster-vars.source`, whose digests `checksum/restart` hashes; a test
+            passes a fixture.
+        manifests_dir: The SOPS manifests a published tag's directory copies; a test passes
+            a fixture directory.
     """
     if shared_only:
         return _shared_cluster(out, cluster_file)
     if select_mode(secret_stubs) is Mode.STUB and secret_stubs is not None:
-        return _stub_cluster(out, roles, secret_stubs, kinds)
-    return _placeholder_cluster(out, roles, render, flux_owned, kinds, cluster_file)
+        return _stub_cluster(
+            out, roles, secret_stubs, kinds, render, flux_owned, source_file
+        )
+    return _placeholder_cluster(
+        out,
+        roles,
+        render,
+        flux_owned,
+        kinds,
+        cluster_file,
+        source_file,
+        manifests_dir,
+    )
+
+
+def source_digests(source_file: Path = SOURCE_FILE) -> dict[str, str]:
+    """Each key `.source` records mapped to its digest; empty when the file is absent."""
+    if not source_file.exists():
+        return {}
+    return {
+        key: line.digest for key, line in parse_source(source_file.read_text()).items()
+    }
+
+
+def stamp_restarts(
+    rendered: list[RenderedTag],
+    placeholder: PlaceholderRender,
+    owned: set[str],
+    keys: list[str],
+    source: dict[str, str],
+) -> list[RenderedTag]:
+    """`rendered` with `checksum/restart` stamped on each flux-owned tag's restart targets.
+
+    Args:
+        rendered: The tags to stamp, in either render mode.
+        placeholder: A placeholder render holding every flux-owned tag of `rendered`. The
+            value is hashed from it, so both modes stamp the same value.
+        owned: The flux-owned tags.
+        keys: The key names of `ansible/vars/secrets.yml`.
+        source: `source_digests`.
+
+    Raises:
+        RenderError: A tag's restart targets do not resolve or name no workload, or a
+            Secret a target reads holds a key `.source` does not record.
+    """
+    forms = {t.tag: t for t in placeholder.tags}
+    stamped = []
+    for tag in rendered:
+        if tag.tag not in owned:
+            stamped.append(tag)
+            continue
+        try:
+            context = tag_context(K8S_ROLES / tag.tag, tag.tag, {})
+        except ValueError as exc:
+            raise RenderError(f"{tag.tag}: {exc}") from exc
+        values = restart_values(
+            tag.tag,
+            forms[tag.tag].directories(),
+            restart_targets(tag.tag, context),
+            keys,
+            source,
+            placeholder.sops_manifests.get(tag.tag),
+        )
+        dirs = {
+            name: {
+                file: stamp(text, values, f"{name}/{file}")
+                for file, text in files.items()
+            }
+            for name, files in tag.directories().items()
+        }
+        stamped.append(
+            RenderedTag(tag.tag, dirs[tag.tag], dirs.get(f"{tag.tag}-deferred", {}))
+        )
+    return stamped
+
+
+def copy_sops_manifests(
+    rendered: list[RenderedTag],
+    entries: dict[str, dict[str, str | None]],
+    published: list[str],
+    manifests_dir: Path = MANIFESTS_DIR,
+) -> list[RenderedTag]:
+    """`rendered` with each published tag's SOPS manifests copied byte for byte into it.
+
+    The copy keeps the name `cluster_vars.py write` gives it, `<tag>.<entry>.sops.yaml`,
+    and the tag's `kustomization.yaml` lists it.
+
+    Raises:
+        RenderRefused: A manifest cannot be read.
+        RenderError: A manifest lacks the substitute-disabled annotation.
+    """
+    copied = []
+    for tag in rendered:
+        names = sorted(entries.get(tag.tag) or {}) if tag.tag in published else []
+        if not names:
+            copied.append(tag)
+            continue
+        files = {k: v for k, v in tag.files.items() if k != KUSTOMIZATION}
+        for entry in names:
+            name = ManifestEntry(tag.tag, entry, "", frozenset()).name
+            try:
+                text = (manifests_dir / name).read_text()
+            except OSError as exc:
+                raise RenderRefused(
+                    f"{tag.tag} cannot copy its SOPS manifest: {exc}. cluster_vars.py "
+                    "write (operator-only) writes it"
+                ) from exc
+            problem = sops_manifest_problem(name, text)
+            if problem:
+                raise RenderError(f"{tag.tag}: {problem}")
+            files[name] = text
+        files[KUSTOMIZATION] = kustomization_text(list(files))
+        copied.append(RenderedTag(tag.tag, files, tag.deferred))
+    return copied
 
 
 def _stub_cluster(
-    out: Path, roles: list[str] | None, secret_stubs: Path, kinds: frozenset[str]
+    out: Path,
+    roles: list[str] | None,
+    secret_stubs: Path,
+    kinds: frozenset[str],
+    render: Callable[[list[str], list[str]], PlaceholderRender],
+    flux_owned: Callable[[], set[str]],
+    source_file: Path,
 ) -> int:
     stubs = load_stubs(secret_stubs)
     missing = unstubbed(stubs)
@@ -162,6 +304,18 @@ def _stub_cluster(
     try:
         tags = select_tags(roles, kinds=kinds)
         rendered = [render_tag(tag, stubs) for tag in tags]
+        # The stamp hashes the placeholder form, never the stub render, so the value equals
+        # the placeholder render's.
+        owned = set(tags) & flux_owned()
+        if owned:
+            keys = secret_keys()
+            rendered = stamp_restarts(
+                rendered,
+                render(sorted(owned), keys),
+                owned,
+                keys,
+                source_digests(source_file),
+            )
         written = write_cluster(rendered, out)
     except RenderRefused as exc:
         print(f"homelab-render: {exc}. Nothing was written.", file=sys.stderr)
@@ -182,6 +336,8 @@ def _placeholder_cluster(
     flux_owned: Callable[[], set[str]],
     kinds: frozenset[str],
     cluster_file: Path,
+    source_file: Path,
+    manifests_dir: Path,
 ) -> int:
     try:
         tags = select_tags(roles, kinds=kinds)
@@ -202,8 +358,16 @@ def _placeholder_cluster(
         # Only a flux-owned tag is published, so only one gets a Kustomization. A --role
         # render of any other tag, a deferring one included, writes its cluster/ alone.
         published = [t.tag for t in result.tags if t.tag in owned] if roles else []
-        bundle = _bundle(result, out, published, cluster_file) if published else {}
-        written = write_cluster(result.tags, out)
+        tags = stamp_restarts(
+            result.tags, result, owned, keys, source_digests(source_file)
+        )
+        tags = copy_sops_manifests(
+            tags, result.sops_manifests, published, manifests_dir
+        )
+        bundle = (
+            _bundle(tags, result, out, published, cluster_file) if published else {}
+        )
+        written = write_cluster(tags, out)
         written += write_bundle(bundle, out)
     except RenderRefused as exc:
         print(f"homelab-render: {exc}. Nothing was written.", file=sys.stderr)
@@ -223,12 +387,18 @@ def _placeholder_cluster(
 
 
 def _bundle(
-    result: PlaceholderRender, out: Path, published: list[str], cluster_file: Path
+    tags: list[RenderedTag],
+    result: PlaceholderRender,
+    out: Path,
+    published: list[str],
+    cluster_file: Path,
 ) -> dict[str, str]:
-    """The bundle files publishing the tags `published` of `result` and every shared kind.
+    """The bundle files publishing the tags `published` of `tags` and every shared kind.
 
-    Computed from the render in this process, before anything is written (C1). A rendered
-    directory of a tag outside `published` counts under `_unclassified`.
+    Computed from the render in this process, before anything is written (C1). `tags` is
+    `result`'s tags as written, stamped and with their SOPS manifest copies. A rendered
+    directory of a tag outside `published` counts under `_unclassified`. A published tag
+    whose role lists `render_sops_manifests` gets `decryption`.
 
     Raises:
         RenderRefused: `out` already holds a bundle file, the cluster file cannot be read,
@@ -236,9 +406,12 @@ def _bundle(
             applies before D4.2.
     """
     directories = {
-        name: files for tag in result.tags for name, files in tag.directories().items()
+        name: files for tag in tags for name, files in tag.directories().items()
     }
-    return _shared_bundle(out, directories, result.key_sets, published, cluster_file)
+    decrypting = [tag for tag in published if result.sops_manifests.get(tag)]
+    return _shared_bundle(
+        out, directories, result.key_sets, published, cluster_file, decrypting
+    )
 
 
 def _shared_bundle(
@@ -247,6 +420,7 @@ def _shared_bundle(
     key_sets: dict[str, frozenset[str]],
     published: list[str],
     cluster_file: Path,
+    decrypting: list[str] | None = None,
 ) -> dict[str, str]:
     """`bundle_files` for `published`, once `out` holds no bundle file to overwrite.
 
@@ -273,7 +447,12 @@ def _shared_bundle(
         ) from exc
     try:
         return bundle_files(
-            directories, key_sets, published, rollout_timeout_default(), dotenv
+            directories,
+            key_sets,
+            published,
+            rollout_timeout_default(),
+            dotenv,
+            decrypting or [],
         )
     except ValueError as exc:
         raise RenderRefused(str(exc)) from exc
