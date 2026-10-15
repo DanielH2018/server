@@ -146,10 +146,11 @@ which needs a drill exclusion in C7 that no slice has requested, the edge goes.
   keyless under the `promote` workflow's identity (D1).
 - **Jobs that run repository code hold no write permission.**
     - The `render` job checks out the commit, renders it, and runs the publish checks: the
-      census, the no-stub check, and gitleaks over `out/`. It holds read-only permissions
-      and passes the bundle on as a workflow artifact.
+      census, the no-stub check, and gitleaks over `out/`. It holds read-only permissions,
+      `contents: read` and `checks: read`, and passes the bundle on as a workflow artifact.
+      `checks: read` serves the CI re-check of a dispatched `sha` (D2.5).
     - The `promote` and `verify` jobs run `promote.py` read-only and print a verdict (D1,
-      D2).
+      D2). `verify` holds `contents: read` and `statuses: read`, for T's commit statuses.
     - Only jobs that check out no repository code hold `packages: write`. Those are
       `publish`, which pushes and signs; `tag`, which moves `prod`; and `settle`, which
       moves `last-good` or writes the hold and resets `prod`. Each runs only pinned
@@ -165,8 +166,9 @@ which needs a drill exclusion in C7 that no slice has requested, the edge goes.
   - `sha-<40-hex>` for every green master commit;
   - `prod`, the revision Flux follows;
   - `last-good`, the newest revision whose statuses all passed.
-- **Promotion target.** `promote` is a GitHub Actions workflow with `concurrency: promote`. It
-  runs after each green CI run on master. GitHub may evict a queued run, so a run is not tied
+- **Promotion target.** `promote` is a GitHub Actions workflow. Its `promote` and `tag` jobs
+  share the job-level concurrency group `promote`, with `cancel-in-progress: false`. It runs
+  after each green CI run on master. GitHub may evict a queued run, so a run is not tied
   to one commit. Each run promotes the newest published master commit: `promote.py decide`
   walks `origin/master` from its tip back to `prod`'s commit and takes the first commit T with
   a published `sha-<T>` tag, a signature that verifies and a green CI verdict. It prints
@@ -194,12 +196,37 @@ which needs a drill exclusion in C7 that no slice has requested, the edge goes.
 
   A missing expected status keeps `verify` waiting and never reads as success. When every
   expected status is `success`, `last-good` moves to `sha-<T>`.
-- **On failure**, meaning a `failure` status or a timeout, `verify` writes
-  `<T> failed=<names>` to `DEPLOY_HOLD`, then resets `prod` to `last-good`. `<names>`
-  comma-joins the expected names that read `failure` or had no status at the timeout. The
-  hold is written first, so a failed reset still stops the next promotion. Other writers of
-  `DEPLOY_HOLD` keep their own values (H1, D5, H6), and none of them uses the `failed=`
-  form.
+- **On failure**, the `settle` job writes a hold to `DEPLOY_HOLD`, then resets `prod` to
+  `last-good`. The hold is written first, so a failed reset still stops the next promotion.
+  The hold takes one of two forms (D2.5):
+    - `<T> failed=<names>` when `verify` printed `failed`, meaning a `failure` status or
+      `promote.py`'s own derived timeout. `<names>` comma-joins the expected names that read
+      `failure` or had no status at the timeout.
+    - `<T> unverified` when `verify` ended with no verdict: the job crashed, hit its
+      `timeout-minutes`, or was cancelled. A `failed` verdict whose names are not a
+      comma-joined list of lowercase names also holds in this form.
+
+  `<T> unverified` is a hold under *`DEPLOY_HOLD`'s values*, because it is neither `none`
+  nor empty. Other writers of `DEPLOY_HOLD` keep their own values (H1, D5, H6), and none of
+  them uses the `failed=` or the `unverified` form.
+- **A verification in flight blocks the next promotion.** `verify` and `settle` join no
+  concurrency group. GitHub keeps one pending job per group, and a newer one cancels it, so
+  a pending `settle` in the group `promote` could be evicted with its hold unwritten. Two
+  checks guard the gap instead (D2.5):
+    - `prod` and `last-good` name the same digest except between a run's `tag` and its
+      `settle`. While they differ, `decide` waits, polling every 30 seconds, and gives up as
+      `current` after 40 minutes. That wait outlasts `verify`'s and `settle`'s
+      `timeout-minutes` together.
+    - `tag` moves `prod` only while `prod` still names the digest `decide` read. A second
+      run that decided on the same `prod` finds it moved, and it moves and verifies nothing.
+
+  Unguarded, a second run could move `prod` past a T that `verify` still waits on. Flux
+  would then never post T's statuses, and the timeout would write a false hold. A run that
+  never settles stalls promotion as `current`, and D2.6d's `PromotionStalled` alert pages it.
+  `scripts/deploy_tools/promote_lib/verify_promotion.py` carries the decision as the marker
+  `DECIDED: a verification in flight is guarded by two checks`. Any other job that moves
+  `prod` or `last-good`, such as D5's `reset_to_last_good` dispatch, must hold both checks
+  true or state why it may break them.
 - **Clearing a hold.** Clearing `DEPLOY_HOLD` means setting it back to `none` with
   `gh variable set DEPLOY_HOLD --body none -R DanielH2018/server`. Clearing by hand is
   **operator-only**, and an agent hook denies that command (D1). There is one proposed
@@ -209,11 +236,11 @@ which needs a drill exclusion in C7 that no slice has requested, the edge goes.
     - While `DEPLOY_HOLD` reads `<T> failed=<names>`, `decide` may promote a candidate U that
       descends from T. For every name in `<names>`, U's `footprint` digest must equal
       `last-good`'s.
-    - When U verifies, `verify` sets `DEPLOY_HOLD` to `none`. So a merged revert of the
+    - When U verifies, `settle` sets `DEPLOY_HOLD` to `none`. So a merged revert of the
       failing change clears its own hold, and the operator need not act.
-    - A hold in any other form clears only by hand. So does a `failed=` hold whose names
-      include `soak`. The soak's verdict covers every service in the changed set, so no
-      single footprint can show that the failure was reverted.
+    - A hold in any other form clears only by hand, `<T> unverified` included. So does a
+      `failed=` hold whose names include `soak`. The soak's verdict covers every service in
+      the changed set, so no single footprint can show that the failure was reverted.
     - Until the operator rules, every hold clears only by hand, and `decide` treats a
       `failed=` hold like any other hold.
 - **A `prod` move outside `promote`.** Each time `promote` moves `prod`, it writes the new
@@ -597,6 +624,12 @@ request leaves this list and the round's *Review log* entry names it.
     - A `reset_to_last_good` dispatch input runs in its own concurrency group,
       `promote-reset`. It ignores the reboot window, and it refuses unless `DEPLOY_HOLD`
       holds a hold: `none`, an empty value and a missing variable each refuse.
+    - The reset must be designed against *A verification in flight blocks the next
+      promotion*. D2.5's `verify` and `settle` join no group, so `promote-reset` serialises
+      the reset against nothing of D2's. A reset that moves `prod` to `last-good` while
+      another run verifies releases `decide`'s wait. That run's `settle` then still writes
+      its own hold over the operator's, or moves `last-good` to a T that `prod` no longer
+      names.
     - The hold posts to Discord, with a command block per changed snapshot role. A revision
       that changes a suspended tag holds with `suspended-changed`.
     - No promotion moves `prod` inside the derived reboot window. A run inside it ends
@@ -988,6 +1021,17 @@ Applied to this page:
   request is applied, and the gates before D2.5 and D2.6b are clear.
 
 ### Applied requests (2026-10-15)
+
+- **D2.5's verification choices** (#5023). D2.5 (#5003) implemented *Verification* with
+  three choices the contract did not record, and C2 now states each of them:
+    - *On failure* and *The revert rule* name `settle` as the writer, and *On failure* adds the `<T> unverified` hold for a
+      `verify` that ended with no verdict. The revert rule never passes that form.
+    - The bullet *A verification in flight blocks the next promotion* records why `verify`
+      and `settle` join no concurrency group, and the two checks that replace one.
+      *Promotion target* now places the group `promote` on the `promote` and `tag` jobs, not
+      on the workflow. The D5 row in *Requests on C2* gains the constraint on its reset.
+    - *Jobs that run repository code hold no write permission* gives `render` `checks: read`
+      and `verify` `statuses: read`.
 
 - **The version counts the built commit** (H3 Open question 7). C5 *Version* now reads
   `0.<git rev-list --count --first-parent <chosen>>+g<12-hex sha of <chosen>>`, where

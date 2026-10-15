@@ -290,10 +290,10 @@ The operator accepted it on 2026-10-14, and the session merges D2.8 itself (Open
       `promote.py verify T` and prints a verdict.
     - A `settle` job applies that verdict. It checks out no repository code, holds
       `packages: write` and sets `PROMOTE_TOKEN`. It moves `last-good`, or it writes the
-      hold and then resets `prod`. With the revert rule on, it also clears the hold. Its
-      concurrency group is set by an expression: `promote` on a promote run, and
-      `promote-reset` on D5's `reset_to_last_good` dispatch. One job then serves both
-      without serialising a reset behind a waiting promotion.
+      hold and then resets `prod`. With the revert rule on, it also clears the hold.
+      Neither `verify` nor `settle` joins a concurrency group. *Publication and
+      verification* gives the reason and the two checks that guard a verification in flight
+      instead.
     - The D1.4 workflow test asserts each job's permission map exactly. D1's registry client speaks the OCI distribution API to
   `ghcr.io` with a token from GHCR's token endpoint (D1 *Decisions*).
 - **`DEPLOY_HOLD` has no empty value.** D1 creates the variable as `none`, because `gh`
@@ -505,7 +505,8 @@ section calls domain PR 1, 2a, 2b and 3.
 ### Publication and verification
 
 ```text
-render job (one run per green master commit X; a dispatched sha passes D1's ancestry check first):
+render job (one run per green master commit X; a dispatched sha passes D1's ancestry check first;
+            contents: read, checks: read):
   published tags (owner: flux), none ─▶ write out/flux/kustomization.yaml, resources: []
   published tags, some ─▶ homelab_render.py cluster --out out --role <tag> ...
                           placeholder mode, selected by passing no --secret-stubs;
@@ -528,17 +529,20 @@ promote job (concurrency: promote):
                      ─▶ promote T | held | current | error
   promote T ─▶ a pull error exits non-zero, nothing moves
   held or current ─▶ nothing moves;   error ─▶ exit non-zero, nothing moves
-tag job (no checkout; packages: write): tag prod = sha-T, write PROD_DIGEST
-verify job (read-only, statuses: read): promote.py verify T
+tag job (concurrency: promote; no checkout; packages: write):
+     only while prod still names the digest decide read ─▶ tag prod = sha-T, write PROD_DIGEST
+verify job (no concurrency group; contents: read, statuses: read): promote.py verify T
      expected statuses = flux/homelab + flux/<name> for every name in T's changed set:
        footprint differs from prod's digests.json, plus dependsOn dependents,
        minus suspended; a dependent already failing on prod's commit is reported only
      every one success                ─▶ verdict good
      any failure, or timeout          ─▶ verdict failed=<names>
-settle job (no checkout; packages: write; PROMOTE_TOKEN):
-     good   ─▶ tag last-good = sha-T
-     failed ─▶ set DEPLOY_HOLD = "<T> failed=<names>",
-               then tag prod = last-good, write PROD_DIGEST
+settle job (no concurrency group; no checkout; packages: write; PROMOTE_TOKEN):
+     good       ─▶ tag last-good = sha-T
+     failed     ─▶ set DEPLOY_HOLD = "<T> failed=<names>",
+                   then tag prod = last-good, write PROD_DIGEST
+     no verdict ─▶ set DEPLOY_HOLD = "<T> unverified",
+                   then tag prod = last-good, write PROD_DIGEST
 ```
 
 C2 splits the render from the signing, and the decisions from the writes.
@@ -687,6 +691,31 @@ D1 builds the split. D2 adds its steps to the render job, and it adds the `verif
 - **The hold names what failed.** `verify` writes `<T> failed=<names>` (C2), where `<names>`
   comma-joins the expected names that read `failure` or had no status at the timeout. At the
   drill that is `<T> failed=bento-pdf`.
+- **A `verify` with no verdict holds as `<T> unverified` (C2).** The `verify` job can end
+  without printing a verdict: it crashes, it hits its `timeout-minutes`, or it is cancelled.
+  `settle` runs on `always()`, so it still weighs that run, and once `prod` has moved,
+  anything but `good` holds. With no names to report, it writes `<T> unverified`. A `failed`
+  verdict whose names are not a comma-joined list of lowercase names holds in the same form.
+  The value is a hold under C2's rule that any value but `none` holds. The revert rule never
+  passes it, so it clears only by hand.
+- **A verification in flight blocks the next promotion (C2).** `verify` and `settle` join no
+  concurrency group. GitHub keeps one pending job per group, and a newer one cancels it, so a
+  pending `settle` in the group `promote` could be evicted with its hold unwritten. Two checks
+  guard the gap instead:
+    - `decide` waits while `prod` and `last-good` name different digests, which they do only
+      between a run's `tag` and its `settle`. It polls every 30 seconds and gives up as
+      `current` after 40 minutes, longer than `verify`'s and `settle`'s `timeout-minutes`
+      together, with ten minutes for runner queueing;
+    - `tag` moves `prod` only while `prod` still names the digest `decide` read. Two runs can
+      decide on the same `prod` when the second run's `promote` job runs while the first
+      run's `tag` waits on the group. The second `tag` finds `prod` moved and moves nothing.
+
+  The decision is the marker `DECIDED: a verification in flight is guarded by two checks` in
+  `scripts/deploy_tools/promote_lib/verify_promotion.py`, and
+  `ansible/tests/repo/test_promote_workflow_verify.py` fails a `verify` or `settle` job that
+  joins a group. A run that never settles stalls promotion as `current`, which D2.6d's
+  `PromotionStalled` alert pages. D5's `reset_to_last_good` dispatch moves `prod` outside
+  this group as well, so D5 must design it against both checks (C2 *Requests on C2*).
 - **The revert rule is code behind a flag that stays off (C2).** D2.5 writes the rule and a
   module constant in `promote.py` that disables it. Turning it on is an **operator-only**
   ruling (Open question 11), made in a PR of its own. While the flag is off, `decide` treats
@@ -695,24 +724,27 @@ D1 builds the split. D2 adds its steps to the render job, and it adds the `verif
     - `decide` may promote a candidate U that descends from the held T when, for every name
       in `<names>`, U's `footprint` digest equals `last-good`'s. Reading `last-good`'s
       `digests.json` costs one more pull, made only while a `failed=` hold stands;
-    - when U verifies, `verify` sets `DEPLOY_HOLD` to `none`;
-    - a hold in any other form, and a bundle with no `digests.json`, never qualify.
+    - when U verifies, `settle` sets `DEPLOY_HOLD` to `none`;
+    - a hold in any other form, `<T> unverified` included, and a bundle with no
+      `digests.json`, never qualify.
 - **`PROD_DIGEST` records each move of `prod` (C2).** Each time `promote.py` moves `prod`,
   on a promotion or a reset, it writes the digest it moved to into the repo variable
   `PROD_DIGEST` with `PROMOTE_TOKEN`. The deploy-pipeline exporter (D2.6d) compares it with `prod`'s live
   digest. The first move after D2.5 creates the variable.
 - **The hold is written before the reset**, the order `deploy_handlers.py:_rollback_k8s`
   uses for `hold_sha`. If the reset fails, the hold still stops the next promotion. If the
-  hold write fails, `verify` still attempts the reset and then exits non-zero, naming both
+  hold write fails, `settle` still attempts the reset and then exits non-zero, naming both
   results. The reset puts `prod` back on a verified revision. Without a hold, the next run
   may promote T again, which fails `verify` again and retries the hold. That costs one more
   failed rollout per run while the old pod serves. Skipping the reset instead would leave
   Flux retrying T, and the next run could build newer commits on it.
-- **The verify step's permissions and token.** D2.5 adds `statuses: read` to the `promote`
-  job, for the commit-status read with `GITHUB_TOKEN`. The `last-good` and `prod` tag moves
-  use `GITHUB_TOKEN` logged in to `ghcr.io`, as D1's tag moves do. `PROMOTE_TOKEN` is set as
-  `GH_TOKEN` on the verify step as well, because only that token writes `DEPLOY_HOLD`
-  (D1 *Decisions*).
+- **The verification jobs' permissions and tokens.** The `verify` job holds
+  `contents: read` and `statuses: read`, for the commit-status read with `GITHUB_TOKEN`, and
+  it carries no `PROMOTE_TOKEN`. The `promote` job holds no `statuses: read`. The `last-good` and
+  `prod` tag moves in `settle` use `GITHUB_TOKEN` logged in to `ghcr.io`, as D1's tag moves
+  do. `settle` sets `PROMOTE_TOKEN` as `GH_TOKEN`, because only that token writes
+  `DEPLOY_HOLD` and `PROD_DIGEST` (D1 *Decisions*). The `render` job gains `checks: read`
+  beside `contents: read`, for D1's CI re-check of a dispatched `sha`.
 - **The timeout is derived, not chosen.** It is the largest Kustomization `timeout` in the
   bundle, plus the OCIRepository interval, plus the Kustomization `retryInterval`.
 - **The first verified run seeds `last-good`.** When `last-good` is absent, `promote.py`
@@ -922,7 +954,8 @@ through Alertmanager from the first real flip.
                                                            with its footprint rules
   .github/workflows/promote.yml                          render, check-bundle, gitleaks, verify T,
                                                            dispatch with the ancestry check;
-                                                           statuses: read
+                                                           verify: statuses: read;
+                                                           render: checks: read
   ansible/roles/k8s/monitor-bridge/                      + deploy-pipeline family, scrape
                                                            endpoint, read-only token (D2.6d)
   ansible/roles/k8s/observability/                       + scrape job, deploy-pipeline rule
@@ -1136,12 +1169,14 @@ that D2.6d adds.
       set. One function computes the changed set. `verify`, `land-wait` and D4.3's timeout
       derivation all call it, and none of them derives the set a second time.
     - Add the `last-good` seeding and the hold-then-reset order with the
-      `<T> failed=<names>` value. Add the `PROD_DIGEST` write on every `prod` move, the
+      `<T> failed=<names>` value, and `<T> unverified` for a `verify` with no verdict. Add the `PROD_DIGEST` write on every `prod` move, the
       revert rule behind its disabled flag, and `decide`'s pull of `prod`'s artifact. Add
       the `workflow_dispatch` input `sha` behind D1's ancestry check, and the
       `probe.py landing` lines for both holds.
     - Add a read-only `verify` job with `statuses: read`. Add a `settle` job that checks out
       no repository code, holds `packages: write`, and sets `PROMOTE_TOKEN` as `GH_TOKEN`.
+      Neither joins a concurrency group (*A verification in flight blocks the next
+      promotion*). The `render` job gains `checks: read`.
     - The D1.4 workflow test's expected permission map gains both jobs. It has a red fixture
       in which `settle` checks out code, and one in which `verify` holds `packages: write`.
     - **Preconditions, quoted in the PR body:** the three reads under *What `probe.py
@@ -2128,6 +2163,19 @@ The operator ruled that `domain` is published, and that the production drill is 
   *Values of `owner`* now state what Open questions 6 and 7 requested.
 
 ### Reader-set follow-up (2026-10-15)
+
+- **#5023: D2.5 made three choices that *Design* did not record.** Confirmed against
+  `.github/workflows/promote.yml` at `9b19ce841`. Fixed in *Design* and in C2 together:
+    - *Publication and verification* adds the `<T> unverified` hold that `settle` writes for
+      a `verify` with no verdict, with its diagram branch. The revert rule never passes it.
+    - *Baseline* gave `settle` a concurrency group set by an expression, `promote` or
+      `promote-reset`. D2.5 puts neither `verify` nor `settle` in a group, and the bullet *A
+      verification in flight blocks the next promotion* records the two checks that guard
+      the gap instead. D5's reset must be designed against them.
+    - *The verification jobs' permissions and tokens* moves `statuses: read` from `promote`
+      to `verify`, moves `PROMOTE_TOKEN` from the verify step to `settle`, and gives
+      `render` `checks: read`. Two bullets that named `verify` as the job that resets `prod`
+      or clears the hold now name `settle`.
 
 - **#4955: the design counted five whole-entry readers that 8e79e95d6 had moved onto named
   filters.** Confirmed. The D2.1c PR (#4977) already restated *The ownership flag and its
