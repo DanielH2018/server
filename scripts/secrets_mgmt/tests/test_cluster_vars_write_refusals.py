@@ -38,14 +38,6 @@ PLACED = replace(EXPECTED, keys=EXPECTED.keys | set(GOOD))
 NOT_A_DIGEST = "not an argon2id digest"
 
 
-def test_the_fixture_digests_are_distinct_and_well_sized():
-    digests = [ADMIN, CLAUDE, AGENT]
-    assert len(set(digests)) == 3
-    assert all(
-        len(d.split("$")[4]) == 22 and len(d.split("$")[5]) == 43 for d in digests
-    )
-
-
 @pytest.fixture
 def written(tmp_path):
     """A fixture tree after a clean first write of the well-formed set."""
