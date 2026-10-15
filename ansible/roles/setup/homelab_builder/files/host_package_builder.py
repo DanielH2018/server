@@ -260,6 +260,10 @@ class Builder:
             self.build(chosen)
         except Failure as exc:
             return self._fail(exc.reason, tip, str(exc), last)
+        except (RuntimeError, OSError) as exc:
+            # A git, worktree or filesystem error. Left uncaught it would exit 1 on every run,
+            # and OnFailure= would page every 2 minutes for one condition.
+            return self._fail("build", tip, f"{type(exc).__name__}: {exc}", last)
         self.state["last_built"] = chosen
         return self._finish("ok", tip, chosen)
 

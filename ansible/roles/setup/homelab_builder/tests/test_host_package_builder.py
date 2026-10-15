@@ -163,9 +163,9 @@ def config(etc: Path, **overrides: str) -> Path:
     return path
 
 
-def builder(lab, **config_overrides: str) -> FixtureBuilder:
+def builder(lab, cls=None, **config_overrides: str) -> FixtureBuilder:
     origin, state, etc, github = lab
-    return FixtureBuilder(
+    return (cls or FixtureBuilder)(
         config_path=config(etc, **config_overrides),
         fingerprint_path=etc / "archive-key.fpr",
         hold_path=etc / "hold",
@@ -391,6 +391,23 @@ def test_a_render_failure_reads_build_and_pages_once(lab):
         b = builder(lab)
         b.render_exit = 2
         return b.main()
+
+    assert run() == 1
+    assert run() == 0
+    assert metric(state)[0] == "build"
+
+
+def test_an_unexpected_os_error_reads_build_and_pages_once(lab):
+    origin, state, _, github = lab
+    tip = origin.commit("a")
+    github.runs[tip] = GREEN
+
+    class NoNfpm(FixtureBuilder):
+        def package(self, directory, target, ver):
+            raise FileNotFoundError("nfpm")
+
+    def run() -> int:
+        return builder(lab, cls=NoNfpm).main()
 
     assert run() == 1
     assert run() == 0
