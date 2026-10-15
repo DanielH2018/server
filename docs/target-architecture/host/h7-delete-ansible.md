@@ -1300,10 +1300,17 @@ steps are:
    them, before the updater's first run writes into it. daniel-box serves the repo it installs from, so it cannot bootstrap
    from `http://10.0.0.215:8791`, and it uses `--local-build <clone>` instead. That flag
    builds every package daniel-box needs from the clone:
-    - It verifies no signature on the clone's `HEAD`, because the builder checks none
-      ([ADR-0021](../../adr/0021-the-host-package-builder-trusts-master-plus-green-ci.md)).
-      Which check it runs on a hand-supplied clone instead is open:
-      [#5011](https://github.com/DanielH2018/server/issues/5011).
+    - It checks the clone's `HEAD` against C5's anchor, the rule the builder applies
+      ([ADR-0021](../../adr/0021-the-host-package-builder-trusts-master-plus-green-ci.md)):
+      `HEAD` must be on `origin/master`'s first-parent chain, and its CI verdict must be
+      green. It verifies no signature, because the builder checks none. It reads both
+      halves from GitHub, which daniel-box reaches because it already fetches `origin`. A
+      `HEAD` that fails either half is refused, and the refusal names the half. The operator
+      ruled this on 2026-10-15
+      ([#5011](https://github.com/DanielH2018/server/issues/5011)).
+    - Under `--offline`, GitHub is unreachable, so the script makes neither read. It prints
+      that the clone is unchecked, and the operator who chose the clone is its trust root,
+      as for any hand-run bring-up.
     - It fetches nfpm and uv at the versions pinned in the script and checks each sha256.
     - It renders and builds `homelab-repos`, `homelab-tools`, `homelab-updater` and
       `homelab-daniel-box` from the clone, with `uv run --frozen` and
@@ -2346,11 +2353,13 @@ progress.
   `--local-build` on the CI checkout builds the four packages, and `apt-get install
   --simulate` resolves them with no homelab repo configured. Its red fixture gives
   `homelab-daniel-box` a `Depends` on a package that only the homelab repo would carry and
-  the local build does not produce, and the simulation fails. A clone whose `HEAD` fails
-  the trust check is refused.
+  the local build does not produce, and the simulation fails. The container case stubs the
+  anchor check's two GitHub reads. A `HEAD` off `origin/master`'s first-parent chain is
+  refused, a `HEAD` with a red CI verdict is refused, and a green first-parent `HEAD`
+  builds.
 - *Offline bring-up (H7.15a).* The container runs `--local-build --offline <fixture kit>`
   with GitHub's and GHCR's hostnames unresolvable, as far as `apt-get install --simulate`,
-  so a fetch the branch missed fails it. A fixture kit with no k3s binary refuses and names the file, and a kit whose
+  so a fetch the branch missed fails it. Its output says the clone is unchecked. A fixture kit with no k3s binary refuses and names the file, and a kit whose
   nfpm differs from its pin refuses.
 - *Adding a host (H7.15d).* The container renders and builds a fixture host made from the
   walkthrough's file list. A fixture host with no creation rule, or missing from one named
