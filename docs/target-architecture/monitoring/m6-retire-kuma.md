@@ -1629,8 +1629,26 @@ this applies to, with what the rules predict:
 - **C-2b** removes the entry. Expected: every reader that iterates the list, possibly the
   fleet-coverage refusal. The entry renders nothing by then, so the operator may apply the
   recorded tags in a quiet window.
-- **C-4a** renames a key on many entries and adds a plugin. Expected: the probe job's role and
-  every whole-entry reader.
+- **C-4a** renames the `kuma:` key to `probe:` on 16 entries and adds a plugin. Expected, as
+  `deploy_tags.py narrow` named it for a scratch commit of the rename, the plugin, the probe
+  job's switch and the `FILTER_FIELDS` row at `19dee151c`:
+    - Each renamed entry's own tag, because `entry_change_tags` compares whole entries. At
+      `19dee151c` those are authelia, bento-pdf, crowdsec, freshrss, headlamp, home-assistant,
+      ical-proxy, jellyfin, livesync, loki-homelab, navidrome, observability, pihole,
+      scrutiny, uptime-kuma and zigbee2mqtt.
+    - The readers of the renamed field, as the line
+      `containers_list readers of kuma,probe on 16 entries -> observability,uptime-kuma`.
+      `observability` reads `kuma` through the probe job's `kuma_ingress_monitors` call.
+      `uptime-kuma` reads it through `static-monitors.yaml.j2`, which C-1 deletes, so after
+      C-1 it is reached only while its entry still carries the key.
+    - The added plugin's callers, as `ingress_probes.py -> observability`. The plugin reaches
+      only the templates that call `ingress_probe_targets`. Committed with no caller, it
+      narrows to `-> (nothing)`.
+
+  No template reads a whole entry since `8e79e95d6` (#4955), so no other reader is expected.
+  The `FILTER_FIELDS` row keeps it that way. A template calling a filter with no row reads
+  every field (`narrow_lib/containers.py:reader_reads`), so without the row the probe job
+  would become a whole-entry reader again.
 - **C-4b** deletes a plugin, which `narrow_lib/filters.py` always refuses, so it waits for D6.
 
 **Phase B and Phase C:**
