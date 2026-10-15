@@ -8,6 +8,19 @@ PR 3, the rules pipeline and three meta rules: [#4740](https://github.com/Daniel
 PR 4, the Watchdog to Healthchecks.io: [#4752](https://github.com/DanielH2018/server/pull/4752).
 PR 5, one Secret, one restart: [#4771](https://github.com/DanielH2018/server/pull/4771).
 
+Every PR has merged. The slice stays IN PROGRESS until the operator-only exit checks run.
+On 2026-10-15 the session read the parts it can reach:
+
+- Criterion 1, the metric half, holds. `ALERTS{alertname="Watchdog"}` returned one firing
+  series, and the webhook notification counter rose from 1463 to 1464 between two reads.
+  The Healthchecks.io console read is operator-only and not yet recorded.
+- Criterion 2, the scale-to-zero drill, is operator-only and not yet recorded.
+- Criterion 3 holds. Master's CI run 38669132676, on `a5abf8581`, passed "Prove each alert
+  tool rejects its bad fixture".
+- Criterion 4 is not yet observed live. The newest `observability` release record comes from
+  domain PR 2b's deploy of every tag at `3cf449368`, which changed no Secret and restarted
+  nothing. The first deploy that changes `alertmanager-secret.yaml` alone is the check.
+
 Depends on: —
 
 Unblocks: M2, M3, M4, M5, and D5 (through M2)
