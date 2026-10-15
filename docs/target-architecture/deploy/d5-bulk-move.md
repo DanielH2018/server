@@ -1044,14 +1044,27 @@ bullet).
       `<T> stateful=<names>`, H1's forward-only hold `<T>`, or C2's `<T> failed=<names>` and
       `<T> unverified` after `settle`'s own reset failed. Any other difference means a run
       is between its `tag` and its `settle`. The reset then exits non-zero and names that
-      run's commit. The message tells the operator to wait for that run's `settle`, to read
-      `last-good` again, and then to dispatch again. A `good` verdict moves `last-good` to
-      that commit, and a failure resets `prod` itself. Either way the second dispatch finds
-      `prod` equal to `last-good` and moves nothing.
+      run's commit and the in-progress `promote` run, read with `gh run list --workflow
+      promote.yml --status in_progress`. The message tells the operator to wait for that
+      run's `settle` or to cancel the run (below), to read `last-good` again, and then to
+      dispatch again. A `good` verdict moves `last-good` to that commit, and a failure
+      resets `prod` itself. Either way the second dispatch finds `prod` equal to `last-good`
+      and moves nothing.
     - **Why it refuses rather than waits.** A refusal leaves the next step to the operator
       once `last-good` is final. A reset that waited in its job would reset to whatever
       `last-good` became, which may be the very revision the operator meant to leave. It
-      would also need a timeout sized to `decide`'s in-flight wait.
+      would also need a timeout sized to `decide`'s in-flight wait. The cost is that the
+      in-flight revision stays live until its run settles.
+    - **Cancelling the run bounds that cost.** A broken Flux posts no `flux/<name>`
+      statuses, so in the runbooks for a broken controller upgrade and a broken sync object
+      the in-flight `verify` runs to its derived timeout. That is 13 minutes at D2.5 and up
+      to hours under D4 *The cap*, with the broken revision live throughout. The operator
+      need not wait it out. `gh run cancel <run-id> -R DanielH2018/server` cancels the run
+      the refusal names (**operator-only**). `settle`'s condition is `always()` and the
+      `tag` job's `moved` output, so it still runs after a cancelled `verify`. It writes
+      `<T> unverified`, a form the revert rule never passes, and resets `prod` to
+      `last-good` (C2 *On failure*). The second dispatch then finds `prod` on `last-good`
+      and moves nothing.
     - **Why not have `settle` re-read `prod` before it writes.** That changes D2's `settle`,
       and the re-read and the write still race the reset, because no group serialises the
       two without exposing a pending `settle` to eviction. A `settle` that skipped its hold
@@ -1074,9 +1087,14 @@ bullet).
       argument. Under C2's revert rule, a `<T> failed=<names>` hold lets `decide` wait
       rather than return `held`. If `settle`'s own reset of `prod` lands between the
       write's HEAD and its move, then a `decide` poll and a `tag` must also fit inside that
-      gap of a second or two. The result is safe: the write puts `prod` back on
-      `last-good`, the revert candidate's `verify` times out, and its `settle` holds as
-      `<U> unverified`.
+      gap of a second or two. The write then puts `prod` back on `last-good`, and the
+      revert candidate U's `verify` reaches `promote.py`'s derived timeout, because Flux
+      posts no statuses for U. That prints `failed`, so U's `settle` writes
+      `<U> failed=<names>` over T's hold. `prod` stays on `last-good` and a hold stays set,
+      but the hold now names U, in the form the revert rule passes. T's failure survives
+      only in its run's log. A candidate the rule passes against U's hold descends from U,
+      which already reverted T's failed names. The cost of this residual is the lost
+      record of T, not a moved `prod`.
     - **It ignores the reboot window.** A reset moves `prod` back to a revision the cluster
       already ran, and the operator dispatches it on purpose.
     - **It refuses unless a hold is set**, and exits non-zero naming the reason. It reads
@@ -2562,8 +2580,10 @@ sizes its batch of roles against that projection.
                reset, so without the suspend the restored kustomize-controller could apply
                R's components again.
             3. Dispatch `reset_to_last_good`. If it refuses because a verification is in
-               flight, wait for that run's `settle`, which resets `prod` itself when the
-               revision fails and writes its own hold over the reason from step 1. Read
+               flight, cancel the run it names with `gh run cancel <run-id> -R
+               DanielH2018/server`. A broken Flux posts no statuses, so waiting would last
+               the whole derived verify timeout. That run's `settle` still runs: it writes
+               `<T> unverified` over the reason from step 1 and resets `prod` itself. Read
                `last-good` again, then dispatch again (*A reset input*).
             4. Apply the components rendered at `last-good` with `sudo k3s kubectl apply
                --server-side --force-conflicts --field-manager=kubectl -f <file>`, for the
@@ -2584,7 +2604,7 @@ sizes its batch of roles against that projection.
           with `gh variable set DEPLOY_HOLD --body <reason> -R DanielH2018/server`, so no
           promotion moves `prod` past the reset, then suspend `flux-deferred`, which applies
           the sync objects, and dispatch `reset_to_last_good`. A refusal that names a
-          verification in flight takes step 3's wait in the branch above. Then apply the
+          verification in flight takes step 3's cancel in the branch above. Then apply the
           sync objects rendered at `last-good` with `sudo k3s kubectl apply --server-side
           --force-conflicts --field-manager=kubectl -f <file>`. Wait until the OCIRepository
           is Ready and its `org.opencontainers.image.revision` key reads
@@ -4485,4 +4505,13 @@ round covers it.
   them differing by design and Branch 1 would always refuse. Also rejected: `settle`
   re-reading `prod` before it writes, because it changes D2 and still races the reset
   across groups. The runbooks for a broken controller upgrade and a broken sync object
-  gain the wait for an in-flight `settle`, and C2's D5 row records the answer.
+  gain a cancel of the in-flight run, whose `settle` still resets `prod`, and C2's D5 row
+  records the answer.
+- **The residual race's hold form was wrong.** Confirmed against C2 *On failure*: a
+  derived timeout prints `failed`, so the revert candidate's `settle` writes
+  `<U> failed=<names>`, not `<U> unverified`. Fixed: *A reset input* names that hold, the
+  lost record of T, and why a candidate the rule then passes still carries T's revert.
+- **The wait for an in-flight `settle` had no bound when Flux is broken.** Confirmed: a
+  broken Flux posts no statuses, so `verify` runs to its derived timeout. Fixed: the
+  refusal names the in-progress run, and the two runbooks cancel it. `settle` runs under
+  `always()`, so it still writes `<T> unverified` and resets `prod`.
