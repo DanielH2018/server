@@ -138,7 +138,12 @@ def test_the_batch_loop_skips_owned_entries_that_templates_still_see():
         "the containers_list fact lost an owned entry, so a template reading it would stop "
         "seeing a service Flux applies"
     )
-    assert visited == [n for n in _names(fact) if not n.startswith("fixture-")]
+    # bento-pdf has carried `owner: flux` since D2.7, so the live list holds an owned entry too.
+    owned = {"fixture-flux", "fixture-released"} | {
+        c["name"] for c in live if "owner" in c
+    }
+    assert "bento-pdf" in owned
+    assert visited == [n for n in _names(fact) if n not in owned]
 
 
 # ── On every host's live containers_list ────────────────────────────────────────────────────

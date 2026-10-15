@@ -460,5 +460,5 @@ def test_an_ansible_owned_role_glance_is_clean(tmp_path):
 def test_a_flux_owned_role_glance_is_flagged(tmp_path):
     block = _littlelink_block(tmp_path, "flux")
     assert "- **Applied by:** Flux, through `promote`" in block
-    assert "exit 5" in block
+    assert "`deploy.sh` refuses `--tags=littlelink` with exit 5" in block
     assert "Deploy tag" not in block and "Auto-deploy" not in block

@@ -33,7 +33,7 @@ roles:
   lists, never typed), and the `k8s_autodeploy` stance with the role's own
   `k8s_autodeploy_reason`. For an entry that carries `owner` (`lib.k8s_roles.tag_owners`), an
   **Applied by** line replaces both the deploy tag and the stance: it names Flux and
-  `promote`, or the handback, and says `deploy.sh` refuses the tag with exit 5;
+  `promote`, or the handback, and says `deploy.sh` refuses `--tags=<tag>` with exit 5;
 - a setup role (`roles/setup/<name>/`, every directory but the include-only `common`): the
   playbook and tag that apply it, with the `when:` that restricts it to a host, read from the
   `roles:` lists and `include_role` tasks of the bring-up playbooks; every cron it installs,
@@ -205,10 +205,11 @@ def glance_lines(
     """
     name = entry["name"]
     defaults = role_defaults(role_dir)
+    tags = ",".join(entry_tags(entry))
     if owner is not None:
-        lines = [f"- **Applied by:** {owner_stance(owner)}"]
+        lines = [f"- **Applied by:** {owner_stance(owner, tags)}"]
     else:
-        lines = [f'- **Deploy tag:** `--tags "{",".join(entry_tags(entry))}"`']
+        lines = [f'- **Deploy tag:** `--tags "{tags}"`']
 
     images = image_vars(name, defaults, group_vars)
     if images:
