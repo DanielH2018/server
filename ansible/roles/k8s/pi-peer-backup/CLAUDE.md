@@ -17,10 +17,15 @@ replaced the retired Kopia scope for the Pi.
 - **Shape:** CronJob 23:00 (America/Chicago), built image (alpine + rsync/ssh/curl + the
   script), any node (post-re-plumb registry pulls work everywhere).
 - **Auth:** dedicated ed25519 key (`pi_peer_backup_ssh_key` in SOPS; public half
-  authorized on the Pi by this role). The Pi's host key is pinned from the committed
-  `files/daniel-pi-ssh-host-ed25519.pub`, so the Secret renders from git alone (target slice
-  R3); the job runs `StrictHostKeyChecking=yes` — never TOFU. To re-pin after the Pi is
-  re-keyed, read the key over the operator's trusted connection with
+  authorized on the Pi by this role). The private key has a Secret of its own,
+  `pi-peer-backup-ssh-key`, rendered from `templates/ssh-key-secret.yaml.j2`, because Flux
+  strips the newlines from a placeholder's value (target slice R2, PR 6). The role lists that
+  file in `render_sops_manifests`, so a placeholder render leaves it out. The CronJob projects
+  it and `pi-peer-backup-ssh` into one volume at `/ssh`, so the script still reads `/ssh/id`.
+  The Pi's host key is pinned from the committed `files/daniel-pi-ssh-host-ed25519.pub`, so
+  `pi-peer-backup-ssh` renders from git alone (target slice R3); the job runs
+  `StrictHostKeyChecking=yes` — never TOFU. To re-pin after the Pi is re-keyed, read the key
+  over the operator's trusted connection with
   `ssh daniel-pi cat /etc/ssh/ssh_host_ed25519_key.pub`, commit it, and deploy.
 - **The key is pinned to one operation.** sshd authorizes it with
   `restrict,command="/usr/local/bin/pi-peer-backup-shell <src dir>"`; the wrapper

@@ -11,10 +11,13 @@ PR 1c, the standalone-value guard: [#4914](https://github.com/DanielH2018/server
 PR 2, the five rules and the round trip over every tag:
 [#4928](https://github.com/DanielH2018/server/pull/4928).
 
-PR 5, Home Assistant's service account: [#4933](https://github.com/DanielH2018/server/pull/4933).
-It landed ahead of PR 2 ([#4918](https://github.com/DanielH2018/server/issues/4918)), so its
-`sops-manifest-entries` check carries the first two clauses only. The third clause, which
-reads `KNOWN_VIOLATIONS`, is [#4930](https://github.com/DanielH2018/server/issues/4930).
+PR 5, Home Assistant's service account:
+[#4933](https://github.com/DanielH2018/server/pull/4933). It landed ahead of PR 2
+([#4918](https://github.com/DanielH2018/server/issues/4918)), so its `sops-manifest-entries`
+check carried the first two clauses only. The third clause, which reads `KNOWN_VIOLATIONS`,
+landed later under [#4930](https://github.com/DanielH2018/server/issues/4930). It counts only a
+rule 5 entry as live, because the clause scans the whole tree and a rule 4 entry is found only
+when its tag renders.
 
 PR 2b, rule 5's aliases: [#4953](https://github.com/DanielH2018/server/pull/4953). The
 census found one entry, the `hash('sha1')` on `observability_prometheus_config`, which has
@@ -33,6 +36,22 @@ first head dry run stopped at the new colon-count assert, because the stored
 the operator removed the prefix with `sops`
 ([#5030](https://github.com/DanielH2018/server/pull/5030)), and both services' digests then
 matched.
+
+PR 4b, the comment follow-up: [#5037](https://github.com/DanielH2018/server/pull/5037). It
+changes only rendered comments. Its landing settled at `6798e883f`.
+
+PR 6, pi-peer-backup's SSH key: [#5043](https://github.com/DanielH2018/server/pull/5043). The
+first scheduled run after it, `pi-peer-backup-29867280` at 04:00 UTC on 2026-10-15, mounted
+the projected volume `pi-peer-backup-ssh` over both Secrets. It logged `status=up pulled 2
+peer file(s) from daniel-pi`, so the key in `pi-peer-backup-ssh-key` authenticates as
+stored.
+
+PR 7b, `mullvad_account`'s dedicated Secret:
+[#5050](https://github.com/DanielH2018/server/pull/5050). PR 7 has not merged, so the real
+tree holds three `render_sops_manifests` entries, not the four the plan counts after both. It
+deployed at `4e70b0c18`. The new pod projects `qbittorrent-mullvad` and
+`qbittorrent-mullvad-account` into one volume, and its wireguard sidecar fetched a tunnel
+address from the Mullvad API with the account read from that volume.
 
 Domain PR 1, `domain` as an inventory variable read without SOPS:
 [#4994](https://github.com/DanielH2018/server/pull/4994).
@@ -693,8 +712,8 @@ placeholder render and fails it with exit 1, like the five rules:
   drops them, so it needs no stub file.
 - Each entry's template names no secret key outside `SOPS_MANIFEST_KEYS`. Rule 5's syntax
   tree walk supplies the names, so an alias counts.
-- Every entry names a `SOPS_MANIFEST_KEYS` key. Every template outside the list that names
-  one carries a live `KNOWN_VIOLATIONS` entry for that key. From PR 9, with the ratchet
+- Every entry names a `SOPS_MANIFEST_KEYS` key. Every template outside the list that names one
+  carries a live rule 5 entry in `KNOWN_VIOLATIONS` for that key. From PR 9, with the ratchet
   empty, the entries are exactly the templates that name such a key.
 
 A `--role` render applies the first two bullets only to the tags it rendered. The third

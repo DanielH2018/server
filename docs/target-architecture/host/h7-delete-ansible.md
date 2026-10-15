@@ -532,7 +532,7 @@ to parse, so deleting a role would force that edit.
 
 - **Emptying.** The PR that moves a role's last component reduces its `tasks/main.yml` to one
   `ansible.builtin.meta: end_role` task with no `when:`, under a `# DECIDED` marker that
-  names H7.20a and the park. H4.3b2's reader in `scripts/deploy_tools/setup_gates.py`
+  names H7.20a and the park. H4.3b2's reader in `scripts/deploy_tools/setup_lib/setup_gates.py`
   evaluates a leading `end_role` guard per host, and an unconditional one applies to no host,
   so H3.2's two-writer census and H7.2f's setup census both read the role as empty. The
   playbook line stays, and the tick applies the emptied role on daniel-box as a no-op.
@@ -1566,7 +1566,7 @@ any of those named sets or has no creation rule, and it names the set.
   importers of deployer modules*).
 - **Removed in H7.20a with the setup tree:** `deploy_cross_role.py` and the rest of
   `deployer_lib/`, after the deployer-import census shows no reader outside it.
-- **Kept until H7.20a:** `scripts/deploy_tools/setup_gates.py`. Its guard reader evaluates
+- **Kept until H7.20a:** `scripts/deploy_tools/setup_lib/setup_gates.py`. Its guard reader evaluates
   the emptied roles' `end_role` guards and every `<role>_packaged_hosts` guard for H3.2's
   census, the ufw and line-arm censuses, H7.19c's strict setup census and
   `glance_facts.py:setup_glance_lines`. H7.20a deletes it with those censuses, whose subject
@@ -1632,7 +1632,7 @@ any of those named sets or has no creation rule, and it names the set.
 - ansible.cfg  .ansible-lint
 - scripts/deploy.sh  scripts/deploy_tools/{deploy_cli,narrow_setup,setup_routing,
     setup_role_chains,gitops_state}.py  scripts/deploy_tools/gitops_tick.sh
-- scripts/deploy_tools/setup_gates.py                          (H7.20a, after its last
+- scripts/deploy_tools/setup_lib/setup_gates.py                (H7.20a, after its last
                                                                   census reader)
 - scripts/deploy_tools/deploy_lib/
 - scripts/deploy_tools/narrow_lib/                             (the seven setup modules
@@ -2070,7 +2070,7 @@ for each new key, then commits `docs/facts.lock`. 57 rows key on setup-role docs
       `ansible/roles/setup/` and `ansible/roles/containers/`, and the runbook roles' tasks,
       with every test whose subject it deletes, `test_pi_escalation_timeout.py` and the
       remaining modules under `ansible/tests/setup/` that test only Ansible mechanics among
-      them. It also deletes `scripts/deploy_tools/setup_gates.py` with the censuses that
+      them. It also deletes `scripts/deploy_tools/setup_lib/setup_gates.py` with the censuses that
       read it, H3.2's two-writer census and its ufw and line-arm rows and the setup census,
       whose subject the PR deletes. It merges only after daniel-box shows the version from
       H7.19b's deleting PR and

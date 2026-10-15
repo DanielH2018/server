@@ -243,7 +243,8 @@ H4 to H7 use these names unchanged. A slice that needs a different value says so
 - **Installed paths.**
     - Scripts go in `/usr/lib/homelab/`.
     - Units go in `/usr/lib/systemd/system/`, and enable links in
-      `/usr/lib/systemd/system/<target>.wants/`.
+      `/usr/lib/systemd/system/<target>.wants/`. An enable link is a symlink to `../<unit>`,
+      as `systemctl enable` writes it: systemd adds a `Wants=` only for a symlinked unit.
     - A drop-in for another package's unit goes in `/usr/lib/systemd/system/<unit>.d/50-homelab.conf`.
     - The rendered manifest goes in `/usr/lib/homelab/manifest.json`.
 - **Unit naming.** Every unit a homelab package ships is named `homelab-*`. The reconcile
@@ -427,7 +428,11 @@ and every host slice applies it.
 
 - **Plain files only.** No nfpm content has `type: config*`. The renderer emits no such
   type, and the CI lint fails the build if one appears. A file under `/etc`, such as
-  `/etc/logrotate.d/pi-health`, is a plain file too.
+  `/etc/logrotate.d/pi-health`, is a plain file too. An enable link is the one entry that is
+  not a file: it ships as `type: symlink`, for the reason *Installed paths* gives.
+- **Version schema.** Every `nfpm.yaml` sets `version_schema: none`, so the built package
+  carries the *Version* string below unchanged. nfpm's default, `semver`, would build
+  `0.<count>+g<sha>` as `0.<count>.0+g<sha>`.
 - **Maintainer scripts.**
     - `postinst` holds only `systemctl daemon-reload || true`,
       `systemctl --no-block start homelab-reconcile.service || true` and `exit 0`.
@@ -899,7 +904,20 @@ concurrency group on push. It needs no secrets, and it does these steps:
 1. It renders every package at the PR head and at its merge base, on every run. A path filter
    would miss a `group_vars` change that alters a render, such as a `containers_list` edit that
    changes the Pi's recovery script.
-2. If no rendered tree differs, the job ends green here.
+2. If no rendered tree differs, the job ends green here, unless the PR changes an input of
+   the container cases. Those inputs change no render: the test image's build context
+   `hosts/lib/tests/container/`, which holds the fixture specs, and the cases' own scripts.
+   `CASE_INPUTS` on the render step lists them, and
+   `ansible/tests/repo/test_host_package_case_inputs_census.py` holds that list to
+   every `validate` module the cases script imports (#5004). An edit to the
+   `host_packages` job itself counts too, because its steps invoke the cases.
+   `host_packages.py job-changed` compares the job as parsed YAML, so an edit to a comment
+   alone does not count. A renderer change that alters only the cases' fixture counts too,
+   because the fixture exercises renderer paths no real package does until H3.6.
+   `host_packages.py fixture-changed` renders the fixture in each tree with that tree's own
+   renderer and compares the output, so an edit to the renderer's files alone does not count
+   (#5066). Such a PR runs steps 3 to 5. Each of these verdicts fails the step when it cannot
+   be computed, rather than reading as no change (#5071).
 3. It builds both renders with nfpm pinned by version and sha256, and runs the
    maintainer-script lint and the `type: config` lint.
 4. It builds the test image from `hosts/lib/tests/container/Dockerfile`. The job does not
@@ -1239,7 +1257,7 @@ says otherwise.
 4. **H3.4a Place the `homelab_builder` role. This PR parks the GitOps deployer.**
     - Add the `initial_setup.yml` entry `{ role: homelab_builder, tags: ["homelab_builder"],
       when: has_gitops }` after `gitops_deploy`. `has_gitops` is already resolvable by
-      `scripts/deploy_tools/setup_gates.py`, so no inventory change is needed.
+      `scripts/deploy_tools/setup_lib/setup_gates.py`, so no inventory change is needed.
     - Add the role skeleton:
         - `defaults/main.yml` with `homelab_builder_enabled: false`;
         - `tasks/main.yml` dispatching to `install.yml` or `teardown.yml` on that flag, both
@@ -1307,9 +1325,10 @@ says otherwise.
       2026-10-14;
     - the C5 *Version* row (*Open questions* 7) is amended: contracts.md's *Applied requests
       (2026-10-15)* records it;
-    - **operator-only:** the signing-key reach check in *Verification* has run for every
-      account an agent session runs as and for `homelab-builder`, and its output is in the
-      PR body. A check that finds any route stops the PR until that route is closed.
+    - **operator-only:** the signing-key reach check in *Verification* has run for `claude`
+      and for `homelab-builder`, and its output is in the PR body. A check that finds any
+      route for either account stops the PR until that route is closed. `ubuntu` is out of
+      scope by the operator's ruling of 2026-10-15 (*Risks*, the `ubuntu` bullet).
     - Add `homelab-builder.service` and `homelab-builder.timer`, the builder script, the
       pinned nfpm and `apt-utils`, and `/etc/homelab-builder/config.env` carrying the token,
       `CI_CONTEXTS` and the walk bound (builder step 4).
@@ -1698,7 +1717,7 @@ ssh daniel-pi 'dpkg-query -W homelab-tools:arm64; dpkg --verify homelab-tools'
 
 ```bash
 # Operator, on daniel-box, before H3.5a merges: the signing-key reach check. Run it once
-# for each account an agent session runs as, and once for homelab-builder.
+# for claude, the agent user, and once for homelab-builder. ubuntu is out of scope (Risks).
 sudo -l -U <account>
 id <account>
 sudo -u <account> -- test -r /var/lib/homelab-signer/gnupg && echo READABLE
@@ -1723,9 +1742,9 @@ The expected results are:
 - at H3.11, `dpkg-query` prints one `arm64` line and `dpkg --verify` prints nothing;
 - the reach check passes for an account when `sudo -l` lists no rule that runs a command
   as root or as `homelab-signer`, `id` names none of `homelab-signer`, `sudo`, `docker`,
-  `lxd` or `disk`, the `test` line prints nothing, and `gpg` fails. The check covers every
-  route that skips master. A route through a merged change is the anchor itself (*Open
-  questions* 1).
+  `lxd` or `disk`, the `test` line prints nothing, and `gpg` fails. For the two accounts it
+  runs for, the check covers every route that skips master. A route through a merged change
+  is the anchor itself (*Open questions* 1).
 
 **The recovery disarm (H3.8b).** The container suite proves it, so production never loses
 its recovery timer for a test. It installs the Pi package rendered with
@@ -2086,6 +2105,13 @@ follow-up and H3.8b each publish a new Pi version before H3.9b arms the timer.
       between the two users, is what keeps that commit honest.
     - H3.5a's reach check is the gate on every other route to the key. The operator runs
       it before the builder first runs, and the PR body carries its output.
+    - **`ubuntu` reaches the key, and the check does not cover it.** The operator ruled on
+      2026-10-15 that the check runs for `claude` and `homelab-builder` only. `ubuntu` is the
+      operator's administrative account, and it already holds root on all three hosts
+      without going through master, so the signing key adds nothing to its reach. While
+      agent sessions still run as `ubuntu`, only the session hooks keep them from the key,
+      as they do from root. Retiring those sessions is slice 6 of the move to the `claude`
+      user (`docs/claude-agent-user.md`).
 - **daniel-box holds the builder, the signer and the repository.** A daniel-box outage
   stops publishing, every host keeps its installed version, and `HostUpdateStale` fires
   for each host once its limit passes. The break-glass copy of the key is the off-box

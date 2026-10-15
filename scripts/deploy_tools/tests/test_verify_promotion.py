@@ -16,7 +16,7 @@ from _promote_fakes import bundle_files
 from renderer.renderer_lib.bundle import tag_kustomization
 
 import forge
-import verify_promotion as vp
+from deploy_tools.promote_lib import verify_promotion as vp
 from lib import yaml_fast
 from lib.repo_paths import REPO
 

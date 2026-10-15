@@ -1303,7 +1303,7 @@ moves the Pi's entries from the first key to the second. The removal of the Pi's
   the guard-map rows of the writer tasks it deletes (H1.1h). The rows live in
   `tasks/stale-checkout-guard.yml`. A PR whose deletion leaves a guard instance with no row
   deletes that instance too.
-- **An added entry reaches every reader of the list until D6.1.** H1.2, H1.3, H1.4, H1.5a,
+- **An added entry reaches readers of the list until D6.1.** H1.2, H1.3, H1.4, H1.5a,
   H1.6 and H1.7b each add one entry to `containers_list` in
   `ansible/inventory/host_vars/daniel-box.yml`, and the tick applies that file as a
   deploy-plane change.
@@ -1312,13 +1312,18 @@ moves the Pi's entries from the first key to the second. The removal of the Pi's
       entry names differ, and `scripts/deploy_tools/narrow_lib/broad.py:_list_reader_tags`
       then adds every role that renders the list: 23 tags of 59 (D1 *Baseline*).
     - **After D2.1c, which merges before H1.2.** D2.1c records an added entry that is not
-      Ansible-owned by its fields. A bare Flux-born entry then applies five reader tags:
-      artifacts, monitor-bridge, netpol-baseline, pihole and uptime-kuma. An entry that
-      carries a field of a `FILTER_FIELDS` row in `narrow_lib/containers.py` adds that row's
-      readers, `hostname` among them. H1's six entries carry `name`, `platform`, `owner` and
-      at most `depends_on`. D2.1c leaves `name` out, and no row names the other three, so
-      each entry reaches the five.
-    - **Why the rule stays.** Three of the five, pihole, uptime-kuma and monitor-bridge,
+      Ansible-owned by its fields, so the entry reaches only the readers of the fields it
+      carries (D2 Open question 10). H1's six entries carry `name`, `platform`, `owner` and
+      at most `depends_on`. At `a5abf8581` such an entry applies four reader
+      tags. artifacts reads it through `entry_names`, which lists every entry.
+      blackbox-exporter, pihole and uptime-kuma read its `platform` through
+      `lan_hostnames`. No reader reads `depends_on`, and `owner` is a deploy-mechanics
+      field. The D2.1c render census,
+      `ansible/tests/k8s/test_flux_born_entry_reader_census.py`, holds that every render the
+      entry moves belongs to a tag the narrowing names. An entry that gains `hostname`,
+      `port`, `tier` or `metrics` adds that field's readers, so each PR expects its own
+      narrow output rather than a fixed list.
+    - **Why the rule stays.** Three of the four, blackbox-exporter, pihole and uptime-kuma,
       set `k8s_autodeploy: false` in their defaults. The deploy plane ignores that flag, and
       its apply is forward-only, so it would also apply any change of theirs that is on
       master and not yet applied. The entry's own tag is `owner: flux`, which the deployer
@@ -2206,10 +2211,12 @@ subject's tests.
   instance carries `node-address`, `node-dns`, `longhorn_host`, `backup-health` or any other
   host-only tag, so these applies select none and run as they do at `70591c307`. The
   `--tags node-address` selection case fails if an instance gains that tag or `always`.
-- **A takeover PR re-applies five readers of `containers_list`.** Until D6.1, an added or
-  removed Flux-born entry narrows the deploy plane to D2.1c's five whole-entry readers,
-  applied unattended and forward-only. Three of them, pihole, uptime-kuma and
-  monitor-bridge, set `k8s_autodeploy: false`. Each of the six PRs and each revert quotes
+- **A takeover PR re-applies readers of `containers_list`.** Until D6.1, an added or
+  removed Flux-born entry narrows the deploy plane to the readers of the fields it carries,
+  applied unattended and forward-only. For H1's entries that is artifacts,
+  blackbox-exporter, pihole and uptime-kuma at `a5abf8581` (D2 Open question
+  10). Three of them, blackbox-exporter, pihole and uptime-kuma, set
+  `k8s_autodeploy: false`. Each of the six PRs and each revert quotes
   the narrow output and runs D1.2's stop rule, so no reader carries another session's
   unlanded change into that apply. The cost ends at D6.1, because no narrowing can drop
   artifacts, whose `known_services.json` names every entry (D2.1c).
@@ -2518,8 +2525,8 @@ subject's tests.
       restores between them, and the `dr-restore` hold from step 7 to step 12;
     - a mirrored pair of identity keys and a mirrored pair of R2 region keys, each with the
       test that holds it equal;
-    - the narrow output and D1.2's stop rule over D2.1c's five readers on each PR that adds
-      or removes an entry, until D6.1;
+    - the narrow output and D1.2's stop rule over the reader tags it names on each PR that
+      adds or removes an entry, until D6.1;
     - a commit-to-PR lookup in `promote`'s gate check;
     - a break-glass check in the backup-health reader and an annotation listing in
       `probe.py landing`;
@@ -3286,7 +3293,10 @@ None was refuted.
       readers. It shows that H1's entries carry no `FILTER_FIELDS` field, because no row of
       `narrow_lib/containers.py:FILTER_FIELDS` names `owner`, `platform` or `depends_on`.
       It names pihole, uptime-kuma and monitor-bridge as the `k8s_autodeploy: false`
-      readers, as their defaults read.
+      readers, as their defaults read. (Corrected on 2026-10-15, #4975: 8e79e95d6 moved
+      the five readers onto named filters, and `lan_hostnames` reads `platform`. The rule
+      now names artifacts, blackbox-exporter, pihole and uptime-kuma, as D2 Open question
+      10 does, with blackbox-exporter, pihole and uptime-kuma denylisted.)
     - The "own tag only" branch, its D2.1a or D4.1 citation and its cross-slice note are
       gone. *Risks* and *Complexity delta* follow, and the cost now ends at D6.1.
 - **H1-I1-03 (medium)** Bring-up step 7's "A hold comes first" contradicted steps 6 and 12.

@@ -1,4 +1,4 @@
-"""The host-package checks CI's `host_packages` job runs: render, diff and the two lints.
+"""The host-package checks CI's `host_packages` job runs: render, diff, lints and triggers.
 
 The maintainer-script lint's line cases live beside the scripts it reads, in
 `hosts/lib/tests/test_maintainer_scripts.py`. The `.deb` cases here build their packages with
@@ -134,3 +134,67 @@ def test_each_file_change_is_listed(tmp_path):
         "- `packages/a/root/edited`: content changed",
         "- `packages/gone`: dropped",
     ]
+
+
+def test_an_enable_link_is_diffed_by_its_target_even_when_it_dangles(tmp_path):
+    # H3.9b's shape: the host package links the updater's timer, absent from its own root.
+    wants = "root/usr/lib/systemd/system/timers.target.wants"
+    for side in ("base", "head"):
+        _write(tmp_path / side / "hosts" / "p", {"nfpm.yaml": ("name: p\n", 0o644)})
+        (tmp_path / side / "hosts" / "p" / wants).mkdir(parents=True)
+    (tmp_path / "base/hosts/p" / wants / "a.timer").symlink_to("../a.timer")
+    (tmp_path / "base/hosts/p" / wants / "b.timer").symlink_to("../a.timer")
+    (tmp_path / "head/hosts/p" / wants / "b.timer").symlink_to("../b.timer")
+    (tmp_path / "head/hosts/p" / wants / "c.timer").symlink_to("../c.timer")
+
+    assert host_packages.diff(tmp_path / "base", tmp_path / "head") == [
+        f"- `hosts/p/{wants}/a.timer`: removed",
+        f"- `hosts/p/{wants}/b.timer`: content changed",
+        f"- `hosts/p/{wants}/c.timer`: added",
+    ]
+
+
+_WORKFLOW = """\
+jobs:
+  host_packages:
+    steps:
+      - name: cases  # step 5
+        run: host_package_cases.py --work /tmp/cases
+  hooks:
+    steps:
+      - run: prek run
+"""
+
+
+def test_an_edit_to_the_job_steps_is_a_job_change():
+    edited = _WORKFLOW.replace("--work /tmp/cases", "--work /tmp/other")
+    assert host_packages.job_differs(_WORKFLOW, edited, "host_packages")
+
+
+@pytest.mark.parametrize(
+    "edited",
+    [
+        _WORKFLOW.replace("# step 5", "# step five"),
+        _WORKFLOW.replace("prek run", "prek run --all-files"),
+    ],
+    ids=["comment-only", "another-job"],
+)
+def test_a_comment_or_another_job_is_not_a_job_change(edited):
+    assert not host_packages.job_differs(_WORKFLOW, edited, "host_packages")
+
+
+def test_a_base_without_the_workflow_is_a_job_change():
+    assert host_packages.job_differs(None, _WORKFLOW, "host_packages")
+
+
+def test_the_same_tree_renders_the_same_fixture(tmp_path):
+    """The payload variant's random payload would make every pair of renders differ."""
+    assert host_packages.render_fixtures(REPO, tmp_path)
+    # Named member: two empty renders would also compare equal.
+    dropin = "root/usr/lib/systemd/system/homelab-updater.timer.d/50-homelab.conf"
+    assert (tmp_path / "dropin" / "hosts" / "daniel-pi" / dropin).is_file()
+    assert not host_packages.fixture_changed(REPO, REPO)
+
+
+def test_a_base_without_the_fixture_module_is_a_fixture_change(tmp_path):
+    assert host_packages.fixture_changed(tmp_path, REPO)

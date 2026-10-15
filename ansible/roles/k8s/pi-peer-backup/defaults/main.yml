@@ -32,6 +32,13 @@ pi_peer_backup_k8s_schedule: "0 23 * * *"
 # refuses any other path).
 pi_peer_backup_src_dir: "/home/{{ sys_user }}/server/containers/wg-easy/config/"
 
+# The manifest whose Secret holds the multi-line private key, which no Flux placeholder can
+# carry. A placeholder render (scripts/renderer, target slice R2) leaves it out, and D3 ships
+# it as a SOPS-encrypted manifest instead. Ansible renders and applies it like any other
+# secret file. `sops-manifest-entries` in scripts/renderer/renderer_lib/secret_checks.py holds
+# the entry to one Secret of `SOPS_MANIFEST_KEYS` keys.
+render_sops_manifests: [ssh-key-secret.yaml]  # noqa var-naming[no-role-prefix]
+
 # The claim k8s/manifests renders and applies for this role, ahead of the CronJob (#3387).
 k8s_claims:  # noqa var-naming[no-role-prefix]
   - name: "{{ pi_peer_backup_k8s_claim }}"

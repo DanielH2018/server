@@ -13,6 +13,7 @@ Run: uv run pytest ansible/roles/setup/gitops_deploy/tests/test_k8s_unapplied_di
 import pytest
 
 from deployer_lib import deploy_k8s_owed
+from deployer_lib.deploy_narrow import SharedCallers
 from deployer_lib.deploy_toolbox import DeployTools
 from gitops_ledger import OWED_K8S_UNAPPLIED
 
@@ -109,9 +110,9 @@ def test_a_shared_role_judges_each_callers_own_range(gitops_deploy, settings, st
         release_commit=lambda svc: None if svc == "image-builder" else APPLIED + svc,
         is_ancestor=lambda _repo, _origin, commit: commit.startswith(RENDER),
         render_proof=lambda svc: RENDER + svc,
-        shared_role_callers=lambda _repo, roles: {
-            r: {"n8n", "terraria"} for r in roles
-        },
+        shared_role_callers=lambda _repo, roles: SharedCallers(
+            {r: {"n8n", "terraria"} for r in roles}, set()
+        ),
         digest_provable=lambda _repo, _roles: set(),
         digest_covers=lambda _repo, items: asked.append(set(items)) or set(items),
     )

@@ -230,7 +230,7 @@ def test_the_flux_crds_that_opt_out_of_substitution_are_clean(
 
 def test_a_known_violation_document_left_out_is_clean(flux_on_path, tmp_path, capsys):
     out = tmp_path / "rt"
-    assert _main("roundtrip", "--out", str(out), "--role", "pi-peer-backup") == 0
+    assert _main("roundtrip", "--out", str(out), "--role", "authelia") == 0
     for summary in capsys.readouterr().out.splitlines():
         assert " 1 documents in KNOWN_VIOLATIONS left out, 0 differences" in summary
 
@@ -241,14 +241,13 @@ def _report(**fields) -> roundtrip.Report:
 
 def test_exclusions_that_match_what_they_name_are_clean():
     report = _report(
-        directories=["pi-peer-backup"],
-        documents=["pi-peer-backup: Secret/pi-peer-backup-ssh"],
+        directories=["authelia"], documents=["authelia: Secret/authelia-config"]
     )
     assert roundtrip.exclusion_problems(report, KNOWN_VIOLATIONS) == []
 
 
 def test_exclusions_that_miss_what_they_name_are_flagged():
-    report = _report(directories=["pi-peer-backup"])
+    report = _report(directories=["authelia"])
     (problem,) = roundtrip.exclusion_problems(report, KNOWN_VIOLATIONS)
     assert "left out the documents [], where KNOWN_VIOLATIONS names" in problem
 
@@ -330,15 +329,28 @@ def test_fluxprobe_where_the_resolver_and_the_cli_disagree_is_flagged(
 def test_roundtrip_drops_one_document_per_sops_manifest_entry_is_clean(
     flux_on_path, tmp_path, capsys
 ):
-    # home-assistant's render_sops_manifests names google-sa-secret.yaml, which placeholder
-    # mode never emits, so the stub side drops it too and counts its one Secret.
+    # home-assistant's render_sops_manifests names google-sa-secret.yaml, pi-peer-backup's
+    # names ssh-key-secret.yaml and qbittorrent's names mullvad-account-secret.yaml.
+    # Placeholder mode emits none of them, so the stub side drops all three too and counts one
+    # Secret for each. Each key left its role's secret.yaml with it, so no KNOWN_VIOLATIONS
+    # document is left out.
     out = tmp_path / "rt"
-    assert _main("roundtrip", "--out", str(out), "--role", "home-assistant") == 0
+    entries = {
+        "home-assistant": "google-sa-secret.yaml",
+        "pi-peer-backup": "ssh-key-secret.yaml",
+        "qbittorrent": "mullvad-account-secret.yaml",
+    }
+    roles = [arg for role in entries for arg in ("--role", role)]
+    assert _main("roundtrip", "--out", str(out), *roles) == 0
     printed = capsys.readouterr().out
-    assert printed.count(" 0 differences, 1 documents in render_sops_manifests, ") == 2
-    assert not (
-        out / "stub" / "cluster" / "home-assistant" / "google-sa-secret.yaml"
-    ).exists()
+    summary = (
+        " 0 documents in KNOWN_VIOLATIONS left out, 0 differences, 3 documents in "
+        "render_sops_manifests, "
+    )
+    assert printed.count(summary) == 2
+    stub = out / "stub" / "cluster"
+    for role, entry in entries.items():
+        assert not (stub / role / entry).exists()
 
 
 def test_roundtrip_dropping_a_document_more_than_the_entries_is_flagged(

@@ -113,20 +113,19 @@ def _host_package_units() -> list[Subject]:
     """One subject per unit a host spec ships: its name as `rel`, the spec's path as `text`.
 
     A unit is a file directly under `UNIT_DIR` with a unit suffix, as `Package.units()` reads
-    it, or an enable link under a `<target>.wants/` directory. A drop-in under `<unit>.d/` is
-    not one: it may extend another package's unit, which keeps its own name.
+    it, or a unit an `enable:` map links from a `<target>.wants/` directory. A drop-in under
+    `<unit>.d/` is not one: it may extend another package's unit, which keeps its own name.
     """
     units = []
     for rel in tracked("hosts/*package.yml", "hosts/*component.yml"):
         spec = yaml_fast.safe_load((REPO / rel).read_text()) or {}
+        units.extend(Subject(str(unit), rel) for unit in spec.get("enable") or {})
         for entry in spec.get("files") or []:
             dst = PurePosixPath(str(entry.get("dst", "")))
-            if dst.parent == host_mode.UNIT_DIR or (
-                dst.parent.parent == host_mode.UNIT_DIR
-                and dst.parent.name.endswith(".wants")
+            if dst.parent == host_mode.UNIT_DIR and dst.name.endswith(
+                host_mode.UNIT_SUFFIXES
             ):
-                if dst.name.endswith(host_mode.UNIT_SUFFIXES):
-                    units.append(Subject(dst.name, rel))
+                units.append(Subject(dst.name, rel))
     return units
 
 

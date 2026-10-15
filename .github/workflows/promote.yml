@@ -10,7 +10,8 @@ name: promote
 # push or move a tag:
 #   render   contents: read, checks: read. Checks out the triggering commit, or the dispatched
 #            `sha`, refuses one that is not on master, re-reads a dispatched commit's CI,
-#            renders the bundle, runs the publish census and scans it, and hands `out/` on.
+#            renders the bundle, runs the publish census and gates and scans it, and hands
+#            `out/` on.
 #   publish  packages: write, id-token: write. Checks out nothing. Pushes `sha-<X>` and signs
 #            it with cosign keyless under this workflow's identity. A `verify_drill` dispatch
 #            instead pushes an annotated bundle to `verify-drill` unsigned, and fails unless
@@ -146,7 +147,8 @@ jobs:
           fi
 
       # The publish census: flux/ holds exactly the published tags' files, and the root lists
-      # every one. A refusal fails the job before any push, so `prod` stays where it was.
+      # every one. Beside it run three gates: source, host and no-stub (bundle_gates.py). A
+      # refusal fails the job before any push, so `prod` stays where it was.
       - name: Check the bundle
         id: check-bundle
         run: uv run python scripts/deploy_tools/promote.py check-bundle out
@@ -377,7 +379,7 @@ jobs:
       github.event.workflow_run.head_repository.full_name == github.repository))
     runs-on: ubuntu-26.04
     # `decide` waits up to 40 minutes on a verification in flight
-    # (verify_promotion.IN_FLIGHT_WAIT_S), and the walk and the pulls take a few more.
+    # (promote_lib/verify_promotion.py:IN_FLIGHT_WAIT_S), and the walk and the pulls take a few more.
     timeout-minutes: 50
     # GitHub keeps one pending job per group and a newer one evicts it. `decide` walks master
     # from its tip rather than reading the trigger, so the last job to run promotes the newest
@@ -404,7 +406,8 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           ref: ${{ github.sha }}
-          fetch-depth: 0  # the walk reads master back to prod's commit
+          # The walk, and decide's Removes-Object lines, read master back to prod's commit.
+          fetch-depth: 0
           persist-credentials: false
 
       - uses: ./.github/actions/setup  # zizmor: ignore[self-repository] -- see the action's header
@@ -481,8 +484,8 @@ jobs:
       # same `prod`. The first `tag` moves it; the second finds it moved, moves nothing, and
       # verifies nothing, rather than moving `prod` past a T that the first run's `verify`
       # still waits on. `tag` jobs share the `promote` group, so the read and the move are
-      # never interleaved with another run's. The DECIDED marker in verify_promotion.py has
-      # the other half, `decide`'s wait.
+      # never interleaved with another run's. The DECIDED marker in promote_lib/verify_promotion.py
+      # has the other half, `decide`'s wait.
       #
       # The first verified run seeds `last-good`: when `decide` read no `last-good`, the step
       # tags `prod`'s digest with it before `prod` moves, so a failed verification has a
@@ -563,12 +566,13 @@ jobs:
       github.event.workflow_run.head_branch == 'master' &&
       github.event.workflow_run.head_repository.full_name == github.repository))
     runs-on: ubuntu-26.04
-    # Above the largest derived timeout (verify_promotion.promote_timeout, 13 minutes for a
-    # tag at manifests_rollout_timeout_default), and with settle's below decide's in-flight
-    # wait. A job killed at this limit leaves no verdict, which settle holds as unverified.
+    # Above the largest derived timeout (promote_lib/verify_promotion.py:promote_timeout, 13 minutes
+    # for a tag at manifests_rollout_timeout_default), and with settle's below decide's
+    # in-flight wait. A job killed at this limit leaves no verdict, which settle holds as
+    # unverified.
     timeout-minutes: 25
     # No concurrency group: a pending job in `promote` can be evicted. `decide` waits while
-    # `prod` differs from `last-good` instead (the DECIDED marker in verify_promotion.py).
+    # `prod` differs from `last-good` instead (the DECIDED marker in promote_lib/verify_promotion.py).
     permissions:
       contents: read
       statuses: read
