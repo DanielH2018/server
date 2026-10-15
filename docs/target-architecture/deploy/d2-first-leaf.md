@@ -35,6 +35,12 @@ D2.6c, the publish gates and the object-loss check:
 38669383075, passed all six jobs on `a5abf8581`. `flux/homelab` read `success`, `last-good`
 moved to prod's digest `sha256:23bfc8e1854c`, and both holds read `none`.
 
+D2.6d's token: [#5096](https://github.com/DanielH2018/server/pull/5096). The operator minted
+it on 2026-10-15 with no expiry, at tier `external`, and it renders into monitor-bridge's env
+Secret as `DEPLOY_PIPELINE_GITHUB_TOKEN`. The precondition's compare call printed `ahead`, and
+its variables call listed `DEPLOY_HOLD` and `PROD_DIGEST`, so the token needs no Contents
+scope.
+
 Depends on: [D1](d1-flux-installed.md), [R1](../render/r1-shadow-render.md),
 [R2](../render/r2-secret-placeholders.md) (its PR 1, placeholder mode, and its PR 2, the five
 rules). PR D2.7 also waits on PR D4.0 of [D4](d4-ordering.md) (D4 Open question 3), on
