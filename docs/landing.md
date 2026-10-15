@@ -287,7 +287,10 @@ markers rather than deployed. `--tags` overrides the scope entirely.
 **A tag whose `containers_list` entry sets `owner` never reaches `deploy.sh`.** Step 5 reads
 ownership at the merge commit (`land_lib/promotion.py:split_owned`) and takes every such tag out
 of the list before `deploy_by_host` sees it. `deploy.sh` runs only for the Ansible-owned tags
-that remain. A PR whose only tag is flux-owned runs no `deploy.sh` at all. The gate then renders
+that remain. A PR whose only tag is flux-owned runs no `deploy.sh` at all. A deploy-plane PR
+that derives no tag, such as an inventory edit setting `owner: flux`, finds its tags in the
+deployer's narrowing of the PR's own range (`land_lib/promotion.py:owned_by_narrowing`) and
+waits on promotion for the ones that are not Ansible-owned. The gate then renders
 the merge commit from a snapshot, and `land.sh` kicks the tick to converge the primary checkout.
 
 For those tags `land.sh` runs `promote.py land-wait <merge commit>`. The wait never follows one
@@ -308,7 +311,7 @@ Instead it reads the cluster every 30 seconds:
   **operator-only**. `promote`'s `settle` job writes a `failed=` hold when a promotion fails
   its verification (`docs/flux-deploy-plane.md`, *Verification*).
 - **`deferred`, cause `promote-timeout`, exit 75.** No promotion covered the merge commit
-  within twice the promote timeout (24 minutes,
+  within twice the promote timeout (47 minutes,
   `scripts/deploy_tools/promote_lib/wait.py:LAND_WAIT_TIMEOUT_S`). Look first at the
   `promote` workflow's failed `publish` jobs: a publish refusal leaves no `sha-<commit>` tag
   to promote. The next promotion may still cover the merge commit.

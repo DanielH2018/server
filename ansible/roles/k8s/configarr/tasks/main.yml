@@ -18,10 +18,11 @@
     # creates is a Job made with `kubectl create job --from=cronjob`, never staged here, and
     # batch/v1 Job is not in the allowlist, so the prune cannot reach it.
 
-# THE ONE CONSUMER-SIDE BARRIER IN THE k8s PLAY. The reconcile below runs against sonarr and radarr
-# over HTTP, and both are listed BEFORE configarr in containers_list. That ordering does not
-# guarantee they are live, because roles/k8s/manifests defers its rollout wait to the end of the
-# batch. Without this drain the Job
+# ONE OF TWO CONSUMER-SIDE BARRIERS IN THE k8s PLAY; netpol-baseline's first task is the other.
+# The reconcile below runs against sonarr and radarr over HTTP, and configarr's
+# `depends_on: [sonarr, radarr]` sorts both BEFORE it. That ordering does not guarantee they are
+# live, because roles/k8s/manifests defers its rollout wait to the end of the batch. Without
+# this drain the Job
 # fires into sonarr's ~5-minute startup (its unpinned striptracks DOCKER_MODS reinstalls on every
 # boot, which is why it carries manifests_rollout_timeout: 660s) and reconciles against a dead API.
 #

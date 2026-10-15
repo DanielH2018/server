@@ -120,19 +120,22 @@ the sources it reads.
 
 The scaffolder appends the entry to `containers_list` in
 `ansible/inventory/host_vars/daniel-box.yml` with `platform: k8s`, at the end of the list
-but ahead of netpol-baseline. That role is in `K8S_SORTS_LAST`, so the deploy sorts it last
-anyway, and `test_derived_order_matches_todays_hand_ordered_list` holds the list to the
-sorted order. Otherwise, where in the list doesn't matter: the k8s play toposorts on
-`build_k8s_dep_map` / `toposort_containers` (`ansible/filter_plugins/toposort.py`), and the
-two edges that used to require hand positioning are derived automatically —
+but ahead of netpol-baseline. netpol-baseline is ordered after every other entry, because it
+is in `K8S_APPLIES_LAST`, and `test_derived_order_matches_todays_hand_ordered_list` holds the
+list to the sorted order. Otherwise, where in the list doesn't matter: the k8s play toposorts
+on `build_k8s_dep_map` / `toposort_containers` (`ansible/filter_plugins/toposort.py`), and
+three edges are derived automatically —
 
 - a routed entry — one carrying a `hostname` — gets an edge onto `traefik`, as does a role
-  whose own templates render a Traefik CRD without declaring a host, and
-- an entry with `use_authelia: true` gets one onto `authelia`.
+  whose own templates render a Traefik CRD without declaring a host,
+- an entry with `use_authelia: true` gets one onto `authelia`, and
+- each `K8S_APPLIES_LAST` role gets one onto the new entry.
 
-If the new entry needs an ordering constraint no template carries — something like
-crowdsec's LAPI-credential edge onto traefik — declare it with `depends_on: [<name>]` on the
-entry rather than moving it in the list.
+If the new entry needs an ordering constraint no template carries — crowdsec before traefik,
+sonarr and radarr before configarr, dri-device-plugin before jellyfin and tdarr — declare it
+with `depends_on: [<name>]` on the entry rather than moving it in the list. No template may
+read `depends_on`: a deploy narrowing leaves it out of an entry edit
+(`DEPLOY_MECHANICS_FIELDS` in `scripts/deploy_tools/narrow_lib/containers.py`).
 
 `use_authelia: true` needs `auth_tier: one_factor | two_factor` beside it — the Authelia
 policy for the service's LAN name, which the authelia role renders into its access_control

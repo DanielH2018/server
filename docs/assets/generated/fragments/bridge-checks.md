@@ -18,6 +18,7 @@
 | Prowlarr Indexers | `prowlarr_indexers` | `startup_grace` |  | Media Automation |  |
 | GitOps Deploy — Alive | `gitops_alive` | none |  | Automation & Drift |  |
 | GitOps Deploy — Status | `gitops_status` | none |  | Automation & Drift |  |
+| Host Packages — Status | `host_packages` | `prometheus` |  | Automation & Drift |  |
 | etcd Restore Drill | `etcd_restore_drill` | none |  | Backups & Storage | `k3s-etcd-restore` |
 | etcd DB Size | `etcd_db_size` | `prometheus` | yes | Backups & Storage | `k3s-etcd-restore` |
 | SMART Data / Health | `scrutiny` | `startup_grace` | yes | Hosts & Power |  |

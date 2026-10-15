@@ -24,8 +24,8 @@ The rules below shaped those memberships.
 - **`WAN_DEPENDENT`**: the gate reads two provider URLs by hostname and is DOWN only when
   NEITHER answers, so one provider's outage cannot silence a dependent reading the other. It
   never probes a shared-anycast IP, because the 2026-09-18 outage included DNS failure.
-- **`EXPORTER_DEPENDENT`** — `node` → disk, memory, `host_temp`; `node-pi` → `host_temp`,
-  `pi_pressure`. `pvc_fullness` gets no entry keyed on the kubelet job on purpose: its claim-count
+- **`EXPORTER_DEPENDENT`** — `node` → disk, memory, `host_temp`, `host_packages`; `node-pi` →
+  `host_temp`, `pi_pressure`. `pvc_fullness` gets no entry keyed on the kubelet job on purpose: its claim-count
   floor exists to page on exactly that partial outage.
 - **`STARTUP_GRACE`** is disjoint from every skip set, so a check that gains a gate leaves
   this set; a test holds both.

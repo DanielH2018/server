@@ -273,6 +273,25 @@ checks each gate suppresses.
   clears the line itself. The arm reads the `owed` ledger's `k8s_deferred` class (#3392). Pure
   `gitops_status()` and its parsers are unit-tested, and an unparseable marker reads as not-behind
   rather than paging forever on garbage.)
+- **Host Packages — Status** (`host_packages`, reads the host-package builder's two textfile series
+  through daniel-box's node exporter, the `node` job. It is a row of its own, because
+  `gitops_status` reads the deployer's state directory outside the Prometheus gate, and a
+  Prometheus-sourced arm there would page on every Prometheus outage. The row is `gate="prometheus"`
+  and sits under `EXPORTER_DEPENDENT["node"]`, so a dead exporter pages once through Scrape Targets
+  instead of also as an absent builder series. It goes `down` on either arm. The **fetch arm**:
+  `homelab_builder_fetch_timestamp_seconds` is older than `BUILDER_MAX_FETCH_AGE_S` (1800 s,
+  `monitor_bridge_builder_max_fetch_age_s`) or absent, which covers a dead builder timer, a missing
+  token and a fetch that keeps failing, because a failed fetch writes nothing. The **lag arm**:
+  `homelab_builder_unbuilt_since_timestamp_seconds` is non-zero and older than `BUILDER_MAX_LAG_S`
+  (7200 s, `monitor_bridge_builder_max_lag_s`), which covers a trust, keyring or tools refusal, a
+  rewritten master, an empty CI context list, a CI context that no longer matches, a builder hold,
+  a rollout gate the canary never closes and a master that stays red. In each lag case the builder
+  runs and exits 0 while no host receives a change, so no unit failure reports it. The bound
+  exceeds the ~103 s master CI run many times over. An absent unbuilt-since series pages too, and
+  the oldest non-zero series is judged when a label change leaves two. Every message names the
+  series' `reason` and `sha` labels, and `docs/host-packages.md`, *The builder's pages*, has the
+  fix for each reason. The query carries no `origin` matcher: `origin_sel()` pins daniel-server,
+  and only daniel-box runs the builder. Pure `host_packages()` and the arm pairs are unit-tested.)
 - **B2 Reachable** (authenticates against B2's native API (`b2_authorize_account`, Basic auth with
   `B2_PROBE_KEY_ID` + the file-mounted `B2_PROBE_APPLICATION_KEY_FILE`), because Longhorn's own
   B2-backed backups need it. The gate comes from the 2026-08-02 transaction-cap incident

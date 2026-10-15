@@ -1,13 +1,18 @@
-"""The census row that no template reads a deploy-mechanics field, such as `owner`.
+"""The census row that no template reads a deploy-mechanics field: `owner` or `depends_on`.
 
-Target slice D2's PR D2.1a (docs/target-architecture/deploy/d2-first-leaf.md).
+Target slice D2's PR D2.1a (docs/target-architecture/deploy/d2-first-leaf.md), widened to
+`depends_on` by D4's PR D4.1 (docs/target-architecture/deploy/d4-ordering.md).
 `narrow_lib/containers.py:changed_fields` leaves `DEPLOY_MECHANICS_FIELDS` out of a
 `containers_list` entry edit, and this row keeps that sound. It sits in its own module because
 `test_census_rows_roles.py`, which imports it into `ROWS`, is near the cap for a test module.
 
 The predicate reads Jinja code only, inside `{{ }}` or `{% %}` with `{# #}` stripped. When the
 row landed, 13 template files used the word `owner` in YAML comments or JSON, and none inside
-a Jinja expression.
+a Jinja expression. When D4.1 widened it, six used `depends_on` in YAML comments, and none
+inside a Jinja expression.
+
+Each member has a red subject that reads it, so a set that loses a member fails that subject
+rather than passing vacuously.
 """
 
 import re
@@ -18,7 +23,8 @@ from lib.jinja_comments import strip_jinja_comments
 
 _JINJA_CODE = re.compile(r"\{\{.*?\}\}|\{%.*?%\}", re.DOTALL)
 # A member as a whole word. Inside Jinja code `owner-1` is a subtraction, so `-` ends a word.
-# An empty set matches nothing, so losing `owner` from it fails the red `entry.owner` subject.
+# An empty set matches nothing, so losing `owner` from it fails the red `entry.owner` subject,
+# and losing `depends_on` fails the red `entry.depends_on` one.
 _MECHANICS_READ = re.compile(
     r"(?<!\w)(" + ("|".join(sorted(DEPLOY_MECHANICS_FIELDS)) or r"(?!)") + r")(?!\w)"
 )
@@ -38,11 +44,12 @@ DEPLOY_MECHANICS = Census(
     name="no-template-reads-a-deploy-mechanics-field",
     reason=(
         "`narrow_lib/containers.py:changed_fields` leaves `DEPLOY_MECHANICS_FIELDS` out of "
-        "an entry edit, so an edit to `owner` alone reaches no template reader and deploys "
-        "the entry's own tag only (D2.1a, docs/target-architecture/deploy/d2-first-leaf.md). "
+        "an entry edit, so an edit to `owner` or `depends_on` alone reaches no template "
+        "reader and deploys the entry's own tag only (D2.1a, "
+        "docs/target-architecture/deploy/d2-first-leaf.md; D4.1, d4-ordering.md). "
         "A template that read one would render differently behind a narrowing that never "
         "applied it. Read the field in a script or a filter plugin, never in a template. "
-        "Only Jinja code counts: a YAML comment, a JSON key or a `{# #}` naming `owner` is "
+        "Only Jinja code counts: a YAML comment, a JSON key or a `{# #}` naming a member is "
         "prose."
     ),
     files=lambda: tracked("ansible/roles/k8s/*/templates/*", "ansible/templates/*"),
@@ -51,12 +58,14 @@ DEPLOY_MECHANICS = Census(
         Subject("deployment.yaml.j2", "{% if entry.owner == 'flux' %}x{% endif %}\n"),
         Subject("configmap.yaml.j2", "a: {{ entry['owner'] }}\n"),
         Subject("service.yaml.j2", "{{ x | selectattr('owner', 'defined') }}\n"),
+        Subject("pvc.yaml.j2", "{% for d in entry.depends_on %}{{ d }}{% endfor %}\n"),
     ),
     green=(
         Subject("a.yaml.j2", "# owner: the role that applies this\n"),
         Subject("b.json.j2", '{"owner": "{{ name }}"}\n'),
         Subject("c.yaml.j2", "{# entry.owner is read by scripts only #}\n"),
         Subject("d.yaml.j2", "{{ owner_ref }} {{ x.owners }}\n"),
+        Subject("e.yaml.j2", "# depends_on: [sonarr] orders the play, not this file\n"),
     ),
     # 308 templates when the row landed (2026-10-14).
     min_matches=250,

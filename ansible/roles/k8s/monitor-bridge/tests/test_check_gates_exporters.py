@@ -14,6 +14,7 @@ from dataclasses import replace
 import pytest
 
 import checks.cluster
+import checks.gitops
 import check
 import gates
 import registry
@@ -376,3 +377,38 @@ def test_an_origin_pinned_probe_would_see_no_dead_exporter():
     pinned = [(m, v) for m, v in _THREE_ORIGIN_UP if m["origin"] == "daniel-server"]
     assert gates.down_exporters(pinned) == set()
     assert gates.down_exporters(_THREE_ORIGIN_UP) == {"node-pi"}
+
+
+def _run_host_packages_with_node_up(cfg, node_up):
+    """run_once with the REAL host_packages body, Prometheus up and the builder series absent."""
+    sink = FakeSink()
+    check.run_once(
+        cfg,
+        FakeSources(
+            prom_vector=lambda q: [({"job": "node"}, node_up)] if q == "up" else [],
+            prom_scalar=lambda q: None,
+        ),
+        [Check("host_packages", "tok_hp", checks.gitops.check_host_packages)],
+        gates=Gates(
+            prom_dependent=frozenset({"host_packages"}),
+            probe_prometheus=lambda _cfg, _src: (True, "prom ok"),
+            probe_loki=lambda _cfg, _src: (True, "loki ok"),
+            probe_wan=lambda _cfg, _src: (True, "wan ok"),
+        ),
+        sink=sink,
+    )
+    return {tok: (ok, msg) for tok, ok, msg in sink.pushes}["tok_hp"]
+
+
+def test_host_packages_is_suppressed_while_the_node_exporter_is_down(cfg):
+    # The builder series are absent because the exporter that publishes them is dead, and Scrape
+    # Targets already names that exporter: the row pushes up instead of paging a second time.
+    ok, msg = _run_host_packages_with_node_up(cfg, 0.0)
+    assert ok is True
+    assert "exporter" in msg.lower()
+
+
+def test_host_packages_pages_on_an_absent_series_once_the_exporter_is_up(cfg):
+    ok, msg = _run_host_packages_with_node_up(cfg, 1.0)
+    assert ok is False
+    assert "fetch series absent" in msg
