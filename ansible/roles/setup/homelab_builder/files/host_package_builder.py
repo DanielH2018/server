@@ -56,8 +56,11 @@ KEYRING = "packages/homelab-updater/root/usr/share/keyrings/homelab-archive-keyr
 # The `reason` label of the unbuilt-since series (*Shared names*, Metrics), less the two values
 # later PRs add: `tools` (H3.11) and `canary` (H3.12). ADR-0021 removed `trust` from the plan.
 # `build` is this PR's: a render or an nfpm run that failed at the chosen commit, which the
-# plan's list does not name.
-REASONS = frozenset({"ok", "hold", "ancestry", "keyring", "ci", "no-green", "build"})
+# plan's list does not name. `token` is a missing token, or one the check-runs read refused
+# (#5089).
+REASONS = frozenset(
+    {"ok", "hold", "ancestry", "keyring", "ci", "no-green", "token", "build"}
+)
 
 # deploy_git.py's two conclusion sets, which `ci_verdict` below grades by. A test holds the
 # two copies equal, because this script cannot import the deployer's module.
@@ -147,6 +150,19 @@ def tree_files(directory: Path) -> dict[str, tuple[bytes, int]]:
         for path in sorted(directory.rglob("*"))
         if path.is_file()
     }
+
+
+def token_refused(exc: urllib.error.HTTPError) -> bool:
+    """Whether GitHub refused the token, rather than rate-limiting it.
+
+    GitHub answers a revoked or expired token 401, and a token without access 403. It also
+    answers a spent rate limit 403, with `X-RateLimit-Remaining: 0`; that one clears on its
+    own, so it stays a pending verdict rather than a page.
+    """
+    if exc.code == 401:
+        return True
+    remaining = exc.headers.get("X-RateLimit-Remaining") if exc.headers else None
+    return exc.code == 403 and remaining != "0"
 
 
 class Failure(Exception):
@@ -322,6 +338,16 @@ class Builder:
                 opener=self.opener,
             )
             runs = payload["check_runs"]
+        except urllib.error.HTTPError as exc:
+            if token_refused(exc):
+                # The fetch is anonymous and keeps succeeding, so this read is the only one
+                # that sees a revoked or expired token. Read as pending, it ended every run
+                # `no-green` with exit 0, a reason that blames master's CI (#5089).
+                raise Failure(
+                    "token", f"the check-runs read for {sha[:12]} was refused: {exc}"
+                ) from exc
+            log(f"ci: {sha[:12]} unreadable, read as pending: {exc}")
+            return "pending"
         except (
             urllib.error.URLError,
             TimeoutError,
@@ -349,8 +375,20 @@ class Builder:
             self.check_keyring(out)
             count = int(self.git("rev-list", "--count", "--first-parent", chosen))
             self.stage(chosen, out, debs, version(count, chosen))
-        finally:
+        except BaseException:
+            # A cleanup that fails must not replace the error in flight, or a keyring refusal
+            # reads as reason=build (#5090). The next run's prune clears what it left.
+            try:
+                self._remove_tree(tree)
+            except RuntimeError as exc:
+                log(f"worktree cleanup failed as well, kept the first error: {exc}")
+            raise
+        self._remove_tree(tree)
+
+    def _remove_tree(self, tree: Path) -> None:
+        try:
             self.git("worktree", "remove", "--force", str(tree))
+        finally:
             shutil.rmtree(self.work, ignore_errors=True)
 
     def render(self, tree: Path, out: Path) -> None:
