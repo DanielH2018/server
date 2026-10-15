@@ -140,3 +140,25 @@ def test_every_replaced_unaudited_call_keeps_the_line(tree, imports, call):  # n
     """
     reason = _reason_for_head_call(tree, imports, call)
     assert reason and "every deploy runs" in reason
+
+
+@pytest.mark.parametrize(
+    "imports, call",
+    [
+        ("import logging", "logging.root.setLevel(1)"),
+        ("import logging", "logging.disable(50)"),
+        ("import signal", "signal.alarm(3600)"),
+        ("import signal", "signal.pthread_sigmask(signal.SIG_BLOCK, [signal.SIGTERM])"),
+        ("import atexit", "atexit.register(print)"),
+    ],
+    ids=["logger-level", "logging-disable", "alarm", "signal-mask", "atexit"],
+)
+def test_a_change_to_object_attributes_or_timers_keeps_the_line(tree, imports, call):  # noqa: F811
+    """A write to an object a module holds, or to a timer or mask, keeps the line too.
+
+    `logging.disable` writes an attribute of the manager the root logger holds, two levels
+    below the module. A pending alarm would kill the controller mid-deploy, and a blocked
+    SIGTERM would make it ignore a stop.
+    """
+    reason = _reason_for_head_call(tree, imports, call)
+    assert reason and "every deploy runs" in reason
