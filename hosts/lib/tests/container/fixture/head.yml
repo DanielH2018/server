@@ -6,5 +6,6 @@ maintainer_scripts: [preinst, postinst, prerm]
 depends: [tree]
 files:
   - {src: units/homelab-fixture-kept.service, dst: /usr/lib/systemd/system/homelab-fixture-kept.service}
-  - {src: units/homelab-fixture-kept.service, dst: /usr/lib/systemd/system/multi-user.target.wants/homelab-fixture-kept.service}
   - {src: units/updater-timer.conf, dst: /usr/lib/systemd/system/homelab-updater.timer.d/50-homelab.conf}
+enable:
+  homelab-fixture-kept.service: multi-user.target
