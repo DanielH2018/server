@@ -14,6 +14,11 @@ Authelia digest is malformed". Its PHC pattern spells `m`, `t` and `p`, and its 
 and key sizes, so a parameter change that misses it fails every deploy before the apply. The
 pattern is compared with the rendered block too.
 
+A fourth copy is `ARGON2_PARAMETERS` in `scripts/secrets_mgmt/cluster_vars.py`, from which
+`write` builds the same pattern to refuse a malformed digest once D5 moves authelia to Flux
+(slice D3, PR D3.2d). Its `memory`, `iterations` and `parallelism` are compared with the
+rendered block, and the pattern built from it is compared like the assert's.
+
 The flag-to-key mapping is NOT identity — `--salt-size` is `salt_length` and `--key-size` is
 `key_length` — which is itself the reason it is pinned here rather than left to a reader.
 
@@ -32,6 +37,7 @@ import pytest
 from _helpers import REPO, ROLES
 from _k8s_render import rendered_docs
 from lib import yaml_fast
+from secrets_mgmt.cluster_vars import ARGON2_DIGEST, ARGON2_PARAMETERS
 
 TASKS = ROLES / "k8s/authelia/tasks/main.yml"
 ROTATION_DOC = REPO / "docs" / "secret-rotation.md"
@@ -106,6 +112,15 @@ def mismatches(config_argon2: dict, flags: dict[str, str]) -> list[str]:
         elif str(config_argon2[key]) != flags[flag]:
             out.append(f"{key}={config_argon2[key]!r} but {flag}={flags[flag]!r}")
     return out
+
+
+def constant_mismatches(config_argon2: dict, constant: dict) -> list[str]:
+    """The `cluster_vars.py` parameters that disagree with the config block, or that it lacks."""
+    return [
+        f"{key}={config_argon2.get(key)!r} but cluster_vars.py has {constant.get(key)!r}"
+        for key in PHC_TO_CONFIG_KEY.values()
+        if key not in constant or str(constant[key]) != str(config_argon2.get(key))
+    ]
 
 
 def b64_length(n_bytes: int) -> int:
@@ -354,3 +369,17 @@ def test_a_mutated_real_pattern_is_flagged(rendered_argon2, digest_pattern):
         "the digest assert's pattern carries no m=65536 to mutate"
     )
     assert pattern_mismatches(rendered_argon2, mutated)
+
+
+def test_the_cluster_vars_constant_agrees_with_the_rendered_config(rendered_argon2):
+    bad = constant_mismatches(rendered_argon2, ARGON2_PARAMETERS)
+    bad += pattern_mismatches(rendered_argon2, ARGON2_DIGEST.pattern)
+    assert bad == [], (
+        f"cluster_vars.py's argon2 parameters disagree with the rendered config block: {bad}. "
+        f"`write` would then refuse every digest the hashing block mints"
+    )
+
+
+def test_a_changed_cluster_vars_iteration_count_is_flagged(rendered_argon2):
+    """Red proof on the real rendered block: the constant's `t=` moved alone."""
+    assert constant_mismatches(rendered_argon2, {**ARGON2_PARAMETERS, "iterations": 2})

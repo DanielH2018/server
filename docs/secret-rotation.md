@@ -200,7 +200,9 @@ Each Authelia user has two SOPS keys: the plaintext password and its argon2 dige
 `ansible/roles/k8s/authelia/templates/config-secret.yaml.j2` reads only the digests. A changed
 plaintext alone therefore changes no login. The deploy asserts each digest's form before the
 apply ("Fail if a stored Authelia digest is malformed"), but it cannot check that a digest
-matches its plaintext. This procedure does.
+matches its plaintext. This procedure does. `scripts/secrets_mgmt/cluster_vars.py write`
+refuses a malformed or duplicated `_argon2` digest and a `:` in `mqtt_password_hash`, and names
+the key only.
 
 Each step handles a plaintext password, so the whole procedure is **operator-only**. Run it in a
 worktree on a branch, never in the primary checkout. Below, `KEY` stands for the plaintext's
