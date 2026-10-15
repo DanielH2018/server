@@ -336,12 +336,13 @@ reader fails on any other value, and the census holds a fixture for that.
 adds `depends_on` to the same set. Two changes keep such an edit away from every template
 reader:
 
-- `reader_paths` returns no hit when `changed` holds no entry. That also drops the five
-  whole-entry readers under *Baseline*.
+- `reader_paths` returns no hit when `changed` holds no entry. At `70591c307` that also
+  dropped the five whole-entry readers under *Baseline*. Since 8e79e95d6 no template reads
+  every field, so D2.1a's tests prove this with fixture readers in those shapes.
 - The entry's own tag still comes from `entry_change_tags`, which compares whole entries, so
   an `owner`-only edit maps to that tag alone.
 
-The first change also drops those five readers for an edit that changes no field at all,
+The first change also drops any whole-entry reader for an edit that changes no field at all,
 such as a comment in the list. `changed_fields` compares every field of every entry, so such
 an edit changes no reader's output, and the redeploy it triggers today buys nothing.
 
@@ -360,8 +361,9 @@ tags today. D2.1c records such an entry by its fields instead of returning None:
 - `changed_fields` records the entry under its name, with every field it carries other than
   `name` and the `DEPLOY_MECHANICS_FIELDS` members, even when that set is empty. It adds the
   marker `PRESENCE` to that set.
-- `reader_paths` then keeps the five whole-entry readers, whose reads are None, because
-  `changed` holds an entry. It keeps a `FILTER_FIELDS` reader only when the entry carries a
+- `reader_paths` then keeps every whole-entry reader, whose read is None, because
+  `changed` holds an entry. *Baseline* names five at `70591c307`, and the tree has none
+  since 8e79e95d6. It keeps a `FILTER_FIELDS` reader only when the entry carries a
   field that the reader reads, or when the reader's filter is in `EVERY_ENTRY`.
 - `changed_fields` still returns None for an added or removed Ansible-owned entry, for a
   repeated name, and when the entries that both lists hold change their relative order.
@@ -919,9 +921,11 @@ that D2.6d adds.
       its members out of `changed_fields`, and make `reader_paths` return no hit when
       `changed` holds no entry. The Ansible filter is D2.1d's, so that no other change
       shares its landing.
-    - Tests in `scripts/deploy_tools/tests/`, an `_is_clean` and `_is_flagged` pair with the
-      five whole-entry readers present. An `owner`-only edit maps to the entry's own tag
-      alone. A `hostname` edit on the same entry still reaches all five readers.
+    - Tests in `scripts/deploy_tools/tests/`, an `_is_clean` and `_is_flagged` pair with
+      five fixture readers in the *Baseline* whole-entry shapes present
+      (`_narrow_fixtures.py:WHOLE_ENTRY_READERS`). No live template has that shape since
+      8e79e95d6. An `owner`-only edit maps to the entry's own tag alone. A `hostname` edit on
+      the same entry still reaches all five fixture readers.
     - The `owner` census row, reading `DEPLOY_MECHANICS_FIELDS`.
 2. **D2.1b — `deploy.sh` refuses, drops and marks** (about 150 lines).
     - Add the `tags.py` and `run.py` behaviour from the table, and the drop in
@@ -944,11 +948,12 @@ that D2.6d adds.
       *The ownership flag and its three readers* says. Log one `narrow:` line naming the
       entry and the fields it counted. The `changed_fields` docstring states the new case
       beside the cases that still return None.
-    - Tests in `scripts/deploy_tools/tests/`, an `_is_clean` and `_is_flagged` pair with the
-      five whole-entry readers present:
+    - Tests in `scripts/deploy_tools/tests/`, an `_is_clean` and `_is_flagged` pair with
+      D2.1a's five fixture whole-entry readers present:
         - an added `owner: flux` entry that carries only `name` and `platform` reaches its
-          own tag and the five whole-entry readers, and no reader of `port`, `tier` or
-          `metrics`. Its removal reaches the five and no own tag;
+          own tag and the five fixture readers, and no reader of `port`, `tier` or
+          `metrics`. Its removal reaches the five and no own tag. On the live tree the same
+          entry reaches the four readers that Open question 10 names;
         - the same entry with `hostname` also reaches the readers of `hostname`;
         - an added Ansible-owned entry with the same fields still returns None, and so does
           a bare `owner: flux` entry added in an edit that swaps two other entries.
@@ -1261,7 +1266,7 @@ that D2.6d adds.
         - the three-reader census passing;
         - `render_targets.py daniel-box` omitting bento-pdf;
         - `uv run python scripts/deploy_tools/deploy_tags.py narrow origin/master HEAD`
-          naming bento-pdf alone, with none of the five whole-entry readers;
+          naming bento-pdf alone, with no reader tag of `containers_list`;
         - the publish job's render and `promote.py check-bundle` passing on that tree.
 
       After the merge, the deployer's journal for that SHA must log bento-pdf dropped as
@@ -1390,7 +1395,7 @@ later slices size against:
   fixture entry. The C4 census also names each of the six entry points as a member it must
   find, so a renamed entry point fails the census instead of passing vacuously (failure
   class 4).
-- The narrowing pair in D2.1a fails if an `owner`-only edit reaches any of the five
+- The narrowing pair in D2.1a fails if an `owner`-only edit reaches any of its five fixture
   whole-entry readers, and its other half fails if a `hostname` edit stops reaching them.
 - D2.1c's render census fails when a role whose render an added entry moves maps to a tag
   that `_list_reader_tags` does not return for that entry. Its red half, an own-tag-only
@@ -1739,8 +1744,12 @@ later slices size against:
       applies those four, because D2.2 drops the own tag.
     - **An entry with `hostname`**, or with `port`, `tier` or `metrics`. The output adds
       every `FILTER_FIELDS` reader of each field the entry carries. For `hostname` on the
-      same tree that is authelia's access rules and observability's Prometheus config. The PR
-      measures that set; D2 does not fix a count for it.
+      same tree that is authelia's access rules and observability's Prometheus config. At
+      `a5abf8581`, `port` adds netpol-baseline and observability, and `tier`
+      adds observability. The PR measures that set; D2 does not fix a count for it.
+    - **A field edit to an entry that exists**, such as a `netpol_from` label, names the
+      entry's own tag and the readers of that field. At `a5abf8581` a
+      `netpol_from` edit reaches netpol-baseline alone.
     - **An added Ansible-owned entry** still makes `changed_fields` return None, so it
       reaches the full reader set, 23 tags at `70591c307`. D1.2's 24-tag expectation is
       for the `flux` entry, which carries no `owner`.
@@ -2082,3 +2091,18 @@ The operator ruled that `domain` is published, and that the production drill is 
 - **The drill is accepted.** Open question 1 is resolved. The session merges D2.8 itself.
 - **Three contract amendments are applied.** C1 *Cluster output*, C3 *Reserved names* and C4
   *Values of `owner`* now state what Open questions 6 and 7 requested.
+
+### Reader-set follow-up (2026-10-15)
+
+- **#4955: the design counted five whole-entry readers that 8e79e95d6 had moved onto named
+  filters.** Confirmed. The D2.1c PR (#4977) already restated *The ownership flag and its
+  three readers* and Open question 10 against the tree after 8e79e95d6. Six sites still
+  relied on the five as live readers: the two `reader_paths` bullets and the sentence on
+  an edit that changes no field, the D2.1a and D2.1c test steps, D2.7's two-writer check
+  and *Verification*. Re-measured at `a5abf8581` with
+  `deploy_tags.py narrow` over a scratch commit adding an `owner: flux` entry with
+  `platform` and `depends_on`. It printed
+  `artifacts,blackbox-exporter,longhorn-restore-drill,pihole,uptime-kuma`. Fixed: those
+  sentences now name the five as `70591c307` readers and D2.1a's fixture readers in their
+  shapes. Open question 10 gains the `port`, `tier` and `netpol_from` sets measured on the
+  same tree.

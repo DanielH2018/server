@@ -906,7 +906,8 @@ outside `root/`, and `nfpm.yaml`'s `scripts:` names it. Only a host package may 
 `hosts/lib/tests/test_maintainer_scripts.py` holds each rendered script to the line shapes H3's
 *Package rules* allow.
 
-A package spec or a component may also carry `units:` and `legacy:`, which feed the manifest.
+A package spec or a component may also carry `units:`, `enable:` and `legacy:`, which feed
+the manifest.
 
 - `units:` maps a unit to `{policy: manual}` or `{policy: windowed}`. Reconcile does not
   restart a unit with a policy when its file changes. The unit must be one the host package
@@ -915,12 +916,19 @@ A package spec or a component may also carry `units:` and `legacy:`, which feed 
   user: USER}`, `{cron_file: NAME}` or `{unit: NAME}`. Each value renders with the
   package's context, so `user: "{{ sys_user }}"` becomes the user's name. A shared package
   refuses a legacy entry, because reconcile reads only the host package's manifest.
+- `enable:` maps a unit to the target that wants it, such as
+  `{homelab-updater.timer: timers.target}`. The render ships the link `systemctl enable`
+  writes: a symlink at `/usr/lib/systemd/system/<target>.wants/<unit>` pointing at
+  `../<unit>`, as an `nfpm` `type: symlink` entry. systemd adds a `Wants=` only for a unit
+  symlinked from a `.wants/` directory, so the render refuses a file entry there. The unit
+  may be one `homelab-updater` installs, which is how a host arms the updater's timer. A
+  shared package refuses an enable link, for the same reason it refuses a legacy entry.
 
 Host mode writes `/usr/lib/homelab/manifest.json`, mode 0644, into every host package. It is
 the manifest `hosts/lib/homelab-reconcile` reads, in the schema that script's docstring
 documents. `units` lists every unit the host package and `homelab-updater` install, and every
 unit the host package drops a `50-homelab.conf` into, each with its policy or `{}`.
-`enable_links` lists each unit the host package installs under a
+`enable_links` lists each unit the host package's `enable:` maps link from a
 `/usr/lib/systemd/system/<target>.wants/` directory. `legacy` holds the rendered entries, and
 `reconcilers` is empty until H4. A spec file entry may not install the manifest's path.
 The render refuses any manifest that `homelab-reconcile:parse_manifest` would refuse: an enable
@@ -938,7 +946,9 @@ an inventory variable.
 Every host package's `nfpm.yaml` carries `Depends: python3 (>= 3.12)`, because reconcile runs
 under `/usr/bin/python3`. Its `version` is `${HOMELAB_VERSION}`, which `nfpm` expands from the
 builder's environment, so two commits with the same tree render the same spec. Every package
-is `arch: all`.
+is `arch: all`. The spec sets `version_schema: none`, so `nfpm` keeps the version as
+given. Its default, `semver`, builds `0.5513+gc9db6da8cdee` as `0.5513.0+gc9db6da8cdee`, which
+differs from the form H3's *Package rules* states.
 
 ### Host mode renders no secret
 
