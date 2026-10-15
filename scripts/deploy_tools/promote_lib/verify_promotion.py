@@ -280,7 +280,8 @@ def expected_set(target: dict[str, bytes], prod: dict[str, bytes] | None) -> Exp
     and so does a first run with no `prod`.
 
     Raises:
-        ValueError: a Kustomization's duration is unreadable.
+        ValueError: a Kustomization's duration is unreadable, or a Kustomization
+            substitutes in a bundle that holds no `cluster-vars`.
         yaml.YAMLError: a file under `flux/` is not YAML.
     """
     docs = flux_kustomizations(target)
