@@ -16,9 +16,10 @@ that commits one edit to one input. It then walks the job's steps in order, up t
 - The `render` step computes `changed` (the render diff) and `cases` (the trigger under test),
   so it runs in full except for its two slow calls, `host_packages.py render` and `diff`. A
   `uv` shim on its PATH answers those: `render` creates its `--out` directory and `diff` prints
-  `changed=false`. Every other `uv` call, `job-changed` included, reaches the real `uv`. The
-  simulation fails unless the step makes exactly two `render` calls and one `diff` call, so a
-  renamed subcommand cannot turn the stub into a silent no-op.
+  `changed=false`. Every other `uv` call, `job-changed` and `fixture-changed` included, reaches
+  the real `uv`, unless the test names one in `crash`; the shim then fails it as a traceback
+  would. The simulation fails unless the step makes exactly two `render` calls and one `diff`
+  call, so a renamed subcommand cannot turn the stub into a silent no-op.
 - Every other step is not run: the nfpm fetch, the builds and the cases themselves.
 
 The render is stubbed as unchanged because no input this module edits is a render input, so the
@@ -41,6 +42,7 @@ import sys
 from pathlib import Path
 
 import pytest
+from _actions_expressions import condition, interpolate, read_outputs
 from _helpers import REPO
 from lib import yaml_fast
 from lib.git_testing import git, git_out, scrubbed_env
@@ -86,165 +88,6 @@ def _case_inputs() -> list[str]:
     return list(paths)
 
 
-# A small GitHub Actions expression evaluator: literals, context paths, `! == != && ||`,
-# parentheses and the status functions.
-
-_TOKEN = re.compile(
-    r"\s*(?:(?P<str>'(?:[^']|'')*')|(?P<num>\d+(?:\.\d+)?)"
-    r"|(?P<op>==|!=|&&|\|\||!|\(|\)|,)|(?P<name>[A-Za-z_][A-Za-z0-9_.\-*]*))"
-)
-_STATUS = {"always": True, "success": True, "failure": False, "cancelled": False}
-_STRING_FUNCTIONS = {
-    "contains": lambda haystack, needle: str(needle).lower() in str(haystack).lower(),
-    "startsWith": lambda text, prefix: (
-        str(text).lower().startswith(str(prefix).lower())
-    ),
-    "endsWith": lambda text, suffix: str(text).lower().endswith(str(suffix).lower()),
-}
-
-
-def _tokens(text: str) -> list[tuple[str, str]]:
-    tokens, pos = [], 0
-    text = text.strip()
-    while pos < len(text):
-        match = _TOKEN.match(text, pos)
-        if not match or match.end() == pos:
-            raise ValueError(f"cannot tokenise {text[pos:]!r} in {text!r}")
-        kind = match.lastgroup
-        assert kind is not None
-        tokens.append((kind, match.group(kind)))
-        pos = match.end()
-    return tokens
-
-
-def _truthy(value: object) -> bool:
-    return value not in (None, False, "", 0)
-
-
-def evaluate(expression: str, context: dict) -> object:
-    """Evaluate a GitHub expression against `context`; raise on any form outside the subset."""
-    tokens = _tokens(expression)
-    pos = 0
-
-    def peek() -> tuple[str, str] | None:
-        return tokens[pos] if pos < len(tokens) else None
-
-    def take() -> tuple[str, str]:
-        nonlocal pos
-        pos += 1
-        return tokens[pos - 1]
-
-    def lookup(path: str) -> object:
-        root, *rest = path.split(".")
-        if root not in context:
-            raise ValueError(f"unknown context {root!r} in {expression!r}")
-        value: object = context[root]
-        for key in rest:
-            value = value.get(key, "") if isinstance(value, dict) else ""
-        return value
-
-    def primary() -> object:
-        kind, text = take()
-        if kind == "op" and text == "!":
-            return not _truthy(primary())
-        if kind == "op" and text == "(":
-            value = disjunction()
-            assert take() == ("op", ")"), expression
-            return value
-        if kind == "str":
-            return text[1:-1].replace("''", "'")
-        if kind == "num":
-            return float(text)
-        if kind == "name":
-            if text in ("true", "false"):
-                return text == "true"
-            if text == "null":
-                return None
-            if peek() == ("op", "("):
-                take()
-                args = []
-                while peek() != ("op", ")"):
-                    args.append(disjunction())
-                    if peek() == ("op", ","):
-                        take()
-                take()
-                if text in _STATUS and not args:
-                    return _STATUS[text]
-                if text in _STRING_FUNCTIONS and len(args) == 2:
-                    return _STRING_FUNCTIONS[text](*args)
-                raise ValueError(f"unsupported function {text}() in {expression!r}")
-            return lookup(text)
-        raise ValueError(f"unexpected {text!r} in {expression!r}")
-
-    def comparison() -> object:
-        left = primary()
-        while peek() in (("op", "=="), ("op", "!=")):
-            _, op = take()
-            right = primary()
-            same = str(left).lower() == str(right).lower()
-            left = same if op == "==" else not same
-        return left
-
-    def conjunction() -> object:
-        left = comparison()
-        while peek() == ("op", "&&"):
-            take()
-            right = comparison()
-            left = right if _truthy(left) else left
-        return left
-
-    def disjunction() -> object:
-        left = conjunction()
-        while peek() == ("op", "||"):
-            take()
-            right = conjunction()
-            left = left if _truthy(left) else right
-        return left
-
-    value = disjunction()
-    if pos != len(tokens):
-        raise ValueError(f"trailing tokens in {expression!r}")
-    return value
-
-
-def _condition(step: dict, context: dict) -> bool:
-    if "if" not in step:
-        return True
-    text = str(step["if"]).strip()
-    if text.startswith("${{") and text.endswith("}}"):
-        text = text[3:-2]
-    return _truthy(evaluate(text, context))
-
-
-def _interpolate(value: object, context: dict) -> str:
-    def one(match: re.Match[str]) -> str:
-        result = evaluate(match.group(1), context)
-        if isinstance(result, bool):
-            return "true" if result else "false"
-        return "" if result is None else str(result)
-
-    return re.sub(r"\$\{\{(.*?)\}\}", one, str(value))
-
-
-def _read_outputs(text: str) -> dict[str, str]:
-    """`$GITHUB_OUTPUT` as the runner parses it: `k=v` lines and `k<<DELIM` blocks."""
-    outputs: dict[str, str] = {}
-    lines = iter(text.splitlines())
-    for line in lines:
-        if "<<" in line and ("=" not in line or line.index("<<") < line.index("=")):
-            key, delimiter = line.split("<<", 1)
-            body = []
-            for inner in lines:
-                if inner == delimiter:
-                    break
-                body.append(inner)
-            outputs[key] = "\n".join(body)
-        elif "=" in line:
-            key, value = line.split("=", 1)
-            outputs[key] = value
-    return outputs
-
-
 @pytest.fixture(scope="module")
 def clone(tmp_path_factory: pytest.TempPathFactory) -> Path:
     """A clone of this repository's HEAD, sharing its object store.
@@ -277,9 +120,13 @@ def _pr_merge_ref(clone: Path, path: str) -> None:
     git(clone, "merge", "-q", "--no-ff", "--no-edit", branch)
 
 
-# Answers `uv run python scripts/validate/host_packages.py render|diff`; any other call goes on to uv.
+# Answers `uv run python scripts/validate/host_packages.py render|diff`, and fails the subcommand
+# named in $SHIM_CRASH; any other call goes on to uv.
 _UV_SHIM = """#!/bin/bash
 if [ "$1 $2 $3" = "run python scripts/validate/host_packages.py" ]; then
+  if [ "$4" = "$SHIM_CRASH" ]; then
+    echo "Traceback (most recent call last): $4 crashed in the #5071 test" >&2; exit 1
+  fi
   case "$4" in
     render) echo render >> "$SHIM_CALLS"; mkdir -p "${@: -1}"; exit 0 ;;
     diff) echo diff >> "$SHIM_CALLS"; echo changed=false; exit 0 ;;
@@ -289,12 +136,33 @@ exec "$REAL_UV" "$@"
 """
 
 
+class StepFailed(AssertionError):
+    """A simulated step exited non-zero.
+
+    Attributes:
+        outputs: what the step had written to `$GITHUB_OUTPUT` when it exited.
+    """
+
+    def __init__(self, message: str, outputs: dict[str, str]) -> None:
+        super().__init__(message)
+        self.outputs = outputs
+
+
 def _simulate(
-    clone: Path, tmp_path: Path, leg: dict, *, stub_render: bool = True
+    clone: Path,
+    tmp_path: Path,
+    leg: dict,
+    *,
+    stub_render: bool = True,
+    crash: str = "",
 ) -> tuple[dict[str, bool], dict]:
     """Run the job's output-producing steps on one leg; return each step's verdict and the context.
 
-    `stub_render` answers the render step's two slow calls with the `uv` shim (see the docstring).
+    `stub_render` answers the render step's two slow calls with the `uv` shim (see the docstring),
+    and `crash` names a `host_packages.py` subcommand the shim fails.
+
+    Raises:
+        StepFailed: a step exited non-zero.
     """
     workflow = yaml_fast.safe_load(CI_WORKFLOW.read_text())
     job = workflow["jobs"][JOB]
@@ -330,16 +198,16 @@ def _simulate(
         "inputs": {},
     }
     for scope in (workflow.get("env") or {}, job.get("env") or {}):
-        context["env"].update({k: _interpolate(v, context) for k, v in scope.items()})
+        context["env"].update({k: interpolate(v, context) for k, v in scope.items()})
 
     verdicts: dict[str, bool] = {}
     for index, step in enumerate(job["steps"]):
         name = step.get("name", step.get("uses", f"step {index}"))
-        holds = _condition(step, context)
+        holds = condition(step, context)
         verdicts[name] = holds
         if name == CASES_STEP:
             context["cases_env"] = {
-                k: _interpolate(v, context) for k, v in (step.get("env") or {}).items()
+                k: interpolate(v, context) for k, v in (step.get("env") or {}).items()
             }
             return verdicts, context
         if not (holds and "id" in step and "run" in step):
@@ -351,7 +219,7 @@ def _simulate(
         calls.write_text("")
         env = scrubbed_env(
             **context["env"],
-            **{k: _interpolate(v, context) for k, v in (step.get("env") or {}).items()},
+            **{k: interpolate(v, context) for k, v in (step.get("env") or {}).items()},
             RUNNER_TEMP=str(runner_temp),
             GITHUB_OUTPUT=str(output),
             GITHUB_ENV=str(runner_temp / "env"),
@@ -364,8 +232,9 @@ def _simulate(
             UV_NO_SYNC="1",
             REAL_UV=shutil.which("uv") or "",
             SHIM_CALLS=str(calls),
+            SHIM_CRASH=crash,
         )
-        script = _interpolate(step["run"], context)
+        script = interpolate(step["run"], context)
         proc = run(
             ["bash", "--noprofile", "--norc", "-eo", "pipefail", "-c", script],
             cwd=clone,
@@ -373,15 +242,17 @@ def _simulate(
             stub_bin=fake_bin(runner_temp / "shim", uv=_UV_SHIM) if stub else None,
             timeout=300,
         )
-        assert proc.returncode == 0, (
-            f"step {name!r} failed on the simulated PR:\n{proc.stdout}\n{proc.stderr}"
-        )
+        if proc.returncode != 0:
+            raise StepFailed(
+                f"step {name!r} failed on the simulated PR:\n{proc.stdout}\n{proc.stderr}",
+                read_outputs(output.read_text()),
+            )
         if stub:
             assert calls.read_text().split() == ["render", "render", "diff"], (
                 "the render step no longer makes the two render calls and one diff call stubbed"
             )
         context["steps"][step["id"]] = {
-            "outputs": _read_outputs(output.read_text()),
+            "outputs": read_outputs(output.read_text()),
             "outcome": "success",
             "conclusion": "success",
         }
@@ -496,4 +367,63 @@ def test_a_pr_editing_only_the_cases_step_runs_the_cases(
         assert verdicts[CASES_STEP], (
             f"a PR editing only the cases step skips it on leg {leg} "
             f"(render outputs {context['steps']['render']['outputs']})"
+        )
+
+
+@pytest.mark.parametrize("subcommand", ["job-changed", "fixture-changed"])
+def test_a_crashing_verdict_fails_the_render_step(
+    clone: Path, tmp_path: Path, subcommand: str
+) -> None:
+    """#5071's Verify-by: a verdict that cannot be computed fails the step, never reads false.
+
+    The README PR fires no other trigger, so a step that swallowed the crash would write
+    `cases=false` and succeed.
+    """
+    _pr_merge_ref(clone, UNRELATED)
+    with pytest.raises(StepFailed, match="Render every host package") as failed:
+        _simulate(clone, tmp_path, _legs()[0], crash=subcommand)
+    assert "cases" not in failed.value.outputs, (
+        f"the render step wrote cases={failed.value.outputs['cases']} although "
+        f"{subcommand} crashed"
+    )
+
+
+RENDERER = "scripts/renderer/renderer_lib/host.py"
+RENDERER_ANCHOR = "        package.files[dst] = (content, mode)\n"
+
+
+def test_a_renderer_change_seen_only_in_the_fixture_runs_the_cases(
+    clone: Path, tmp_path: Path
+) -> None:
+    """#5066's Verify-by: the renderer changes only how it renders a systemd drop-in.
+
+    No real package ships a drop-in, so the stubbed `changed=false` is what the real diff
+    reports; only the fixture's render differs. The comment-only edit after it is the control:
+    the trigger is the fixture's render, not every edit to the renderer's files.
+    """
+    git(clone, "checkout", "-q", "--detach", "master")
+    git(clone, "checkout", "-q", "-B", "pr-renderer-dropin")
+    target = clone / RENDERER
+    text = target.read_text()
+    assert text.count(RENDERER_ANCHOR) == 1, f"{RENDERER} lost {RENDERER_ANCHOR!r}"
+    edited = (
+        "        if PurePosixPath(dst).name == DROPIN:\n"
+        '            content += b"# rendered differently by the #5066 test\\n"\n'
+    )
+    target.write_text(text.replace(RENDERER_ANCHOR, edited + RENDERER_ANCHOR))
+    git(clone, "commit", "-q", "-am", "render a drop-in differently")
+    git(clone, "checkout", "-q", "--detach", "master")
+    git(clone, "merge", "-q", "--no-ff", "--no-edit", "pr-renderer-dropin")
+    for number, leg in enumerate(_legs()):
+        verdicts, context = _simulate(clone, tmp_path / f"leg-{number}", leg)
+        assert verdicts[CASES_STEP], (
+            f"a PR changing only how {RENDERER} renders a drop-in skips the cases on leg "
+            f"{leg} (render outputs {context['steps']['render']['outputs']})"
+        )
+        assert context["cases_env"].get("UPGRADE") == "true", context["cases_env"]
+
+    for leg, verdicts, _context in _runs_per_leg(clone, tmp_path / "control", RENDERER):
+        assert not verdicts[CASES_STEP], (
+            f"a comment-only edit to {RENDERER} runs the cases on leg {leg}; the trigger has "
+            f"to be the fixture's render, not the renderer's files"
         )

@@ -25,18 +25,26 @@ working tree. The job's own steps invoke the container cases, so a PR that edits
 cases (#5004). The comparison is of the parsed YAML, so an edit to a comment alone does not
 count.
 
+`fixture-changed` says whether the container cases' fixture `homelab-daniel-pi` renders
+differently in two trees, each with the renderer and the fixture that tree holds. The fixture
+exercises renderer paths no real host package does yet, such as a drop-in and a dropped unit,
+so a renderer change can alter the fixture and no real render. Such a PR runs the cases too
+(#5066).
+
 Usage:
     uv run python scripts/validate/host_packages.py render --tree . --out /tmp/head
     uv run python scripts/validate/host_packages.py diff /tmp/base /tmp/head --summary FILE
     uv run python scripts/validate/host_packages.py lint /tmp/head /tmp/debs
     uv run python scripts/validate/host_packages.py job-changed BASE_SHA \
         --workflow .github/workflows/ci.yml --job host_packages
+    uv run python scripts/validate/host_packages.py fixture-changed /tmp/base-tree .
 
 Exit codes: 0 the render, diff or lint succeeded and the lint found nothing; 1 the lint found a
 problem (each `[FAIL]` line on stderr names it), or nothing to lint, or a render failed; 64 a
 usage error. `diff` exits 0 whether or not the renders differ, and prints `changed=true` or
-`changed=false` on stdout for `$GITHUB_OUTPUT`. `job-changed` exits 0 either way and prints
-`true` or `false` on stdout.
+`changed=false` on stdout for `$GITHUB_OUTPUT`. `job-changed` and `fixture-changed` exit 0 either way
+and print `true` or `false` on stdout. Either exits non-zero when it cannot decide, and CI's
+render step fails on that rather than reading it as `false` (#5071).
 """
 
 import sys as _sys
@@ -238,6 +246,62 @@ def job_changed(base: str, workflow: Path, job: str) -> bool:
     return job_differs(before, workflow.read_text(), job)
 
 
+# Run by `tree`'s own interpreter in isolated mode, so that tree's `validate_lib` and renderer
+# are the ones imported. The payload variant's payload is random bytes; an empty one keeps the
+# render the same from run to run.
+_RENDER_FIXTURES = """
+import sys
+from pathlib import Path
+
+sys.path.insert(0, sys.argv[1])
+from validate_lib import host_fixtures
+
+for variant in host_fixtures.VARIANTS:
+    host_fixtures.render_fixture(variant, Path(sys.argv[2]) / variant, payload_bytes=0)
+"""
+
+
+def render_fixtures(tree: Path, out: Path) -> bool:
+    """Render every variant of the cases' fixture in `tree` into `out`, with `tree`'s code.
+
+    Returns False when `tree` holds no fixture module, so it renders nothing.
+
+    Raises:
+        subprocess.CalledProcessError: the render failed.
+    """
+    validate = tree / "scripts" / "validate"
+    if not (validate / "validate_lib" / "host_fixtures.py").is_file():
+        # stderr, because CI reads this command's stdout as the verdict.
+        print(
+            f"{tree} has no host_fixtures module, so it renders no fixture",
+            file=sys.stderr,
+        )
+        return False
+    subprocess.run(
+        [sys.executable, "-I", "-c", _RENDER_FIXTURES, str(validate), str(out)],
+        cwd=tree,
+        check=True,
+        stdout=subprocess.DEVNULL,
+    )
+    return True
+
+
+def fixture_changed(base: Path, head: Path) -> bool:
+    """Whether the cases' fixture renders differently in tree `base` than in tree `head`.
+
+    A side with no fixture module counts as a change, so a doubt runs the cases.
+    """
+    with tempfile.TemporaryDirectory() as scratch:
+        before, after = Path(scratch) / "base", Path(scratch) / "head"
+        rendered = [render_fixtures(base, before), render_fixtures(head, after)]
+        if not all(rendered):
+            return True
+        lines = diff(before, after)
+    for line in lines:
+        print(line, file=sys.stderr)
+    return bool(lines)
+
+
 def lint(paths: list[Path]) -> list[str]:
     """Every problem in each `nfpm.yaml` and `.deb` under `paths`, as `[FAIL]` lines."""
     problems, checked = [], 0
@@ -281,6 +345,12 @@ def main(argv: list[str] | None = None) -> int:
     job_cmd.add_argument("base", metavar="BASE")
     job_cmd.add_argument("--workflow", type=Path, required=True)
     job_cmd.add_argument("--job", required=True)
+    fixture_cmd = commands.add_parser(
+        "fixture-changed",
+        help="whether the cases' fixture renders differently in BASE_TREE and HEAD_TREE",
+    )
+    fixture_cmd.add_argument("base_tree", type=Path, metavar="BASE_TREE")
+    fixture_cmd.add_argument("head_tree", type=Path, metavar="HEAD_TREE")
     args = parser.parse_args(argv)
 
     if args.command == "render":
@@ -299,6 +369,10 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     if args.command == "job-changed":
         changed = job_changed(args.base, args.workflow, args.job)
+        print("true" if changed else "false")
+        return 0
+    if args.command == "fixture-changed":
+        changed = fixture_changed(args.base_tree.resolve(), args.head_tree.resolve())
         print("true" if changed else "false")
         return 0
     problems = lint(args.paths)
