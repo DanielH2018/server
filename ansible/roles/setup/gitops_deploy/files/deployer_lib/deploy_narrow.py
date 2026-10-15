@@ -224,7 +224,21 @@ def shared_callers_argv(roles) -> list[str]:
     return ["uv", "run", "--frozen", "python", SHARED_CALLERS_SCRIPT, *sorted(roles)]
 
 
-def shared_role_callers(repo: str, roles) -> dict[str, set[str]]:
+class SharedCallers(NamedTuple):
+    """The tags whose deploys run each shared role, as `shared_role_callers.py` prints them.
+
+    Attributes:
+        tags: each role's caller tags, less any whose entry sets `owner`. An empty set is a
+            role whose line nothing can discharge yet.
+        owned_only: the roles some tag runs and only owned tags run (#5052). Ansible has
+            nothing left to apply for these, so their lines drop.
+    """
+
+    tags: dict[str, set[str]]
+    owned_only: set[str]
+
+
+def shared_role_callers(repo: str, roles) -> SharedCallers:
     """Ask `shared_role_callers.py` which tags' deploys run each shared role.
 
     A subprocess for the reason `narrow_deploy_plane` is one. The one reader,
@@ -233,10 +247,19 @@ def shared_role_callers(repo: str, roles) -> dict[str, set[str]]:
     Raises:
         subprocess.CalledProcessError: the child exited non-zero.
         subprocess.TimeoutExpired: the child outlived `SHARED_CALLERS_TIMEOUT_S`.
-        ValueError: its stdout was not the JSON object it prints.
+        ValueError: its stdout was not the JSON object it prints. That includes the flat
+            role-to-tags object a checkout from before #5052 prints, so a deployer that runs
+            ahead of the checkout keeps the line rather than reading a role as owned.
     """
     out = _role_json(repo, shared_callers_argv(roles))
-    return {role: set(tags) for role, tags in out.items()}
+    callers, owned_only = out.get("callers"), out.get("owned_only")
+    if not isinstance(callers, dict) or not isinstance(owned_only, list):
+        raise ValueError(
+            f"{SHARED_CALLERS_SCRIPT} printed no `callers` object and `owned_only` list"
+        )
+    return SharedCallers(
+        {role: set(tags) for role, tags in callers.items()}, set(owned_only)
+    )
 
 
 def digest_provable(repo: str, roles) -> set[str]:
