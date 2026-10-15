@@ -96,7 +96,8 @@ def test_a_plaintext_value_under_a_sops_name_sops_never_writes_is_flagged():
         "sops_version=hunter2",
         "sops_lastmodified=hunter2",
         "sops_unencrypted_suffix=hunter2",
-        "sops_shamir_threshold=hunter2",
+        "sops_shamir_threshold=1",
+        "sops_unencrypted_suffix=_note",
         "sops_age__list_0__map_recipient=hunter2",
         "sops_age__list_0__map_enc=hunter2",
         "sops_mac=hunter2",
@@ -119,7 +120,7 @@ def test_a_sops_metadata_line_with_the_value_shape_sops_writes_is_clean():
         "-----END AGE ENCRYPTED FILE-----\\n"
     )
     text = _dotenv({"a": ENC}) + "sops_unencrypted_suffix=_unencrypted\n"
-    text += f"sops_age__list_1__map_enc={armor}\nsops_shamir_threshold=1\n"
+    text += f"sops_age__list_1__map_enc={armor}\n"
     assert ciphertext_problems("f", text, dotenv=True) == []
 
 
@@ -128,6 +129,23 @@ def test_a_sops_named_line_edited_since_the_base_is_flagged_by_the_mac_proxy():
     now = _dotenv({"a": ENC}) + "sops_note=two\n"
     found = mac_proxy_problems("f", now, base, dotenv=True)
     assert found and "MAC and lastmodified did not" in found[0]
+
+
+def test_distinct_dotenv_keys_are_clean_and_a_repeated_key_is_flagged_by_line_number():
+    assert ciphertext_problems("f", _dotenv({"a": ENC, "b": ENC}), dotenv=True) == []
+    text = "a=hunter2\n" + _dotenv({"a": ENC})
+    found = ciphertext_problems("f", text, dotenv=True)
+    assert "f: line 2 repeats the key of line 1" in found
+    assert all("hunter2" not in problem for problem in found)
+
+
+def test_a_repeated_manifest_key_is_flagged_by_line_number():
+    assert ciphertext_problems("m", _manifest(), dotenv=False) == []
+    dup = _manifest().replace(
+        "  blob: " + ENC + "\n", "  blob: hunter2\n  blob: " + ENC + "\n"
+    )
+    found = ciphertext_problems("m", dup, dotenv=False)
+    assert found == ["m: line 11 repeats the key of line 10"]
 
 
 def test_a_blank_key_line_in_a_dotenv_is_flagged():

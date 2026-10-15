@@ -180,11 +180,9 @@ def is_dotenv(path: Path | str) -> bool:
     return str(path).endswith(".env")
 
 
-# The metadata lines SOPS writes into a dotenv file, each with the shape of its value. The set
-# is what the pinned SOPS (`sops_setup`) writes for a cluster creation rule, taken from a real
-# encrypt in `test_cluster_vars_write.py`, which names the members. A `sops_` name outside it,
-# or a member whose value has another shape, is a value line in disguise; `write` refuses to
-# place a key named `sops_*`.
+# The metadata lines the pinned SOPS writes into a dotenv for a cluster creation rule, each with
+# its value's shape; `test_cluster_vars_write.py` names the members from a real encrypt. Any
+# other `sops_` line, or a member in another shape, is a value line in disguise.
 _AGE_ARMOR = (
     r"-----BEGIN AGE ENCRYPTED FILE-----(\\n[A-Za-z0-9+/=_-]+(?: [A-Za-z0-9+/=_-]+)*)+"
     r"\\n-----END AGE ENCRYPTED FILE-----(\\n)?"
@@ -193,20 +191,14 @@ _SOPS_METADATA: dict[str, re.Pattern[str]] = {
     r"sops_mac": re.compile(r"ENC\[AES256_GCM,[^\]]*\]"),
     r"sops_lastmodified": re.compile(r"\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ"),
     r"sops_version": re.compile(r"\d+\.\d+\.\d+"),
-    r"sops_unencrypted_suffix": re.compile(r"_[A-Za-z0-9_]+"),
-    r"sops_shamir_threshold": re.compile(r"\d+"),
+    r"sops_unencrypted_suffix": re.compile(r"_unencrypted"),
     r"sops_age__list_\d+__map_recipient": re.compile(r"age1[a-z0-9]+"),
     r"sops_age__list_\d+__map_enc": re.compile(_AGE_ARMOR),
 }
 
 
 def is_sops_metadata(name: str, value: str | None = None) -> bool:
-    """Whether `name` is a line SOPS writes into a dotenv, and `value` has the shape it writes.
-
-    Args:
-        name: The dotenv key.
-        value: The line's value, or None to test the name alone.
-    """
+    """Whether `name` is a line SOPS writes into a dotenv, with `value` (if given) in its shape."""
     for pattern, shape in _SOPS_METADATA.items():
         if re.fullmatch(pattern, name):
             return value is None or shape.fullmatch(value) is not None
@@ -221,13 +213,42 @@ def _stray_lines(label: str, text: str, dotenv: bool) -> list[str]:
     pass them all.
     """
     out = []
+    first: dict[str, int] = {}
     for number, line in enumerate(text.splitlines(), 1):
-        stripped = line.strip()
-        if stripped.startswith("#") or (not dotenv and re.search(r"\s#", line)):
+        if line.strip().startswith("#") or (not dotenv and re.search(r"\s#", line)):
             out.append(f"{label}: line {number} is a comment, which sops never writes")
         elif dotenv and not (line.partition("=")[0].strip() and "=" in line):
             out.append(f"{label}: line {number} is not a `key=value` line")
-    return out
+        elif dotenv:
+            earlier = first.setdefault(line.partition("=")[0], number)
+            if earlier != number:
+                out.append(f"{label}: line {number} repeats the key of line {earlier}")
+    return out + ([] if dotenv else _repeated_yaml_keys(label, text))
+
+
+def _repeated_yaml_keys(label: str, text: str) -> list[str]:
+    """Each mapping key a manifest repeats, by line number; the loader keeps only the last."""
+    try:
+        root = yaml.compose(text, Loader=yaml.SafeLoader)
+    except yaml.YAMLError:
+        return []  # `_load_manifest` reports it.
+    out, stack = [], [root]
+    while stack:
+        node = stack.pop()
+        if isinstance(node, yaml.SequenceNode):
+            stack.extend(node.value)
+        elif isinstance(node, yaml.MappingNode):
+            seen: dict[object, int] = {}
+            for key, value in node.value:
+                stack.append(value)
+                if not isinstance(key, yaml.ScalarNode):
+                    continue
+                line = key.start_mark.line + 1
+                if seen.setdefault(key.value, line) != line:
+                    out.append(
+                        f"{label}: line {line} repeats the key of line {seen[key.value]}"
+                    )
+    return sorted(out)
 
 
 def ciphertext_problems(label: str, text: str, dotenv: bool) -> list[str]:
@@ -363,23 +384,13 @@ def _source_fields(text: str) -> Iterable[tuple[int, list[str]]]:
 
 
 def parse_source(text: str) -> dict[str, SourceLine]:
-    """The `.source` file's lines, keyed by key name; comments and malformed lines skipped.
-
-    `source_problems` reports a malformed line, so a caller runs both.
-    """
-    return {
-        key: SourceLine(hashed, rest[0] if rest else None)
-        for _, (key, hashed, *rest) in (
-            (n, f) for n, f in _source_fields(text) if len(f) in (2, 3)
-        )
-    }
+    """The `.source` lines by key; comments and malformed lines (`source_problems`) skipped."""
+    fields = (f for _, f in _source_fields(text) if len(f) in (2, 3))
+    return {key: SourceLine(hashed, *rest) for key, hashed, *rest in fields}
 
 
 def source_problems(text: str) -> list[str]:
-    """Each `.source` line that is not `<key> <sha256 hex> [<manifest>]`, by line number.
-
-    The line's text is never quoted, because a hand edit may have put a value there.
-    """
+    """Each `.source` line not `<key> <sha256> [<manifest>]`, by number, never quoted."""
     return [
         f".source line {number} is not `<key> <sha256> [<manifest>]`"
         for number, fields in _source_fields(text)
