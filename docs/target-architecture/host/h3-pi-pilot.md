@@ -1305,8 +1305,8 @@ says otherwise.
    also waits on three gates:
     - the operator's ADR for *Open questions* 1 is merged: [ADR-0021](../../adr/0021-the-host-package-builder-trusts-master-plus-green-ci.md), accepted
       2026-10-14;
-    - the C5 *Version* row (*Open questions* 7) is amended, or listed under *Requested
-      amendments not yet applied* with this gate;
+    - the C5 *Version* row (*Open questions* 7) is amended: contracts.md's *Applied requests
+      (2026-10-15)* records it;
     - **operator-only:** the signing-key reach check in *Verification* has run for every
       account an agent session runs as and for `homelab-builder`, and its output is in the
       PR body. A check that finds any route stops the PR until that route is closed.
@@ -2428,10 +2428,9 @@ follow-up and H3.8b each publish a new Pi version before H3.9b arms the timer.
    which can be older than the tip. A count taken from the tip gives a parent and its tip
    equal numbers, and dpkg then orders them by SHA. This plan counts the built commit:
    `0.<git rev-list --count --first-parent <chosen>>+g<12-hex sha of <chosen>>`
-   (*Package rules*). Resolution: amend the C5 *Version* row, and list it under contracts.md's
-   *Requested amendments not yet applied*, gated before H3.5a merges. Not applied: the C5
-   row still counts `origin/master`, and the register does not list it. H3.5a's step names
-   the gate, and this round's cross-slice notes request the row.
+   (*Package rules*). Resolution: applied on 2026-10-15. The C5 *Version* row counts the
+   built commit, and contracts.md's *Applied requests (2026-10-15)* records it, which clears
+   H3.5a's gate.
 8. **Which form does H3.5c take, and how does M6 learn of it?** H3 waits only on R1, and M6
    on M2 to M5, so the slice index orders neither against the other. H3.5c's row, tile and
    token are outside M6's baseline counts. Two fixes were weighed:
