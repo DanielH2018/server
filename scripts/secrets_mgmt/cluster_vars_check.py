@@ -133,10 +133,14 @@ class Expected:
 
 
 def dotenv_pairs(text: str) -> dict[str, str]:
-    """Each `key=value` line of a dotenv file, comments and blank lines skipped."""
+    """Each `key=value` line of a dotenv file; any other line is skipped.
+
+    A skipped line is never named by its text, which could be a value: `ciphertext_problems`
+    reports it by line number instead.
+    """
     pairs = {}
     for line in text.splitlines():
-        if not line.strip() or line.lstrip().startswith("#"):
+        if "=" not in line or line.lstrip().startswith("#"):
             continue
         key, _, value = line.partition("=")
         pairs[key] = value
@@ -176,22 +180,62 @@ def is_dotenv(path: Path | str) -> bool:
     return str(path).endswith(".env")
 
 
+# The metadata lines SOPS writes into a dotenv file (`stores/metadata.go` and the key groups'
+# `__list_N__map_` flattening). Every other `sops_` name is a value line in disguise, and
+# `write` refuses to place a key so named.
+_SOPS_METADATA = re.compile(
+    r"sops_(mac|lastmodified|version|mac_only_encrypted|shamir_threshold"
+    r"|(un)?encrypted_(suffix|regex|comment_regex)"
+    r"|(age|pgp|kms|gcp_kms|azure_kv|hc_vault|hckms)__list_\d+__map_[a-z_]+)"
+)
+
+
+def _stray_lines(label: str, text: str, dotenv: bool) -> list[str]:
+    """Lines a cluster file holds that no `write` produces, by line number, never quoted.
+
+    SOPS writes no comment into either kind, and no blank line or bare word into a dotenv. A
+    comment is invisible to every parsed check, so a value pasted into one would otherwise
+    pass them all.
+    """
+    out = []
+    for number, line in enumerate(text.splitlines(), 1):
+        stripped = line.strip()
+        if stripped.startswith("#") or (not dotenv and " #" in line):
+            out.append(f"{label}: line {number} is a comment, which sops never writes")
+        elif dotenv and "=" not in line:
+            out.append(f"{label}: line {number} is not a `key=value` line")
+    return out
+
+
 def ciphertext_problems(label: str, text: str, dotenv: bool) -> list[str]:
-    """The values of one cluster file that are not `ENC[...]` strings, named never quoted."""
+    """The values of one cluster file that are not `ENC[...]` strings, named never quoted.
+
+    A dotenv `sops_` line passes only when its name is SOPS's own metadata, and a comment or
+    a line that is no `key=value` fails in either kind.
+    """
+    out = _stray_lines(label, text, dotenv)
     if dotenv:
+        pairs = dotenv_pairs(text)
         bad = sorted(
             k
-            for k, v in dotenv_pairs(text).items()
+            for k, v in pairs.items()
             if not k.startswith(SOPS_PREFIX) and not _is_ciphertext(v)
         )
+        out += [
+            f"{label}: {k} is a `sops_` line SOPS does not write"
+            for k in sorted(pairs)
+            if k.startswith(SOPS_PREFIX) and not _SOPS_METADATA.fullmatch(k)
+        ]
+        if "sops_mac" in pairs and not _is_ciphertext(pairs["sops_mac"]):
+            out.append(f"{label}: sops_mac is not SOPS ciphertext")
     else:
         obj, problems = _load_manifest(label, text)
         if obj is None:
-            return problems
+            return out + problems
         bad = sorted(
             k for k, v in _manifest_values(obj).items() if not _is_ciphertext(v)
         )
-    return [f"{label}: {key} is not SOPS ciphertext" for key in bad]
+    return out + [f"{label}: {key} is not SOPS ciphertext" for key in bad]
 
 
 def _mac_fields(text: str, dotenv: bool) -> tuple[object, object, object]:

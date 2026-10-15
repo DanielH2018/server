@@ -82,6 +82,30 @@ def test_a_plaintext_manifest_value_is_flagged():
     assert found == ["m: stringData.blob is not SOPS ciphertext"]
 
 
+def test_a_plaintext_value_under_a_sops_name_sops_never_writes_is_flagged():
+    text = _dotenv({"a": ENC}) + "sops_note=hunter2\n"
+    found = ciphertext_problems("f", text, dotenv=True)
+    assert found == ["f: sops_note is a `sops_` line SOPS does not write"]
+
+
+def test_a_comment_in_a_dotenv_is_flagged_by_line_number_alone():
+    text = _dotenv({"a": ENC}) + "# a_key=hunter2\n"
+    found = ciphertext_problems("f", text, dotenv=True)
+    assert found == ["f: line 6 is a comment, which sops never writes"]
+
+
+def test_a_bare_word_line_in_a_dotenv_is_flagged():
+    found = ciphertext_problems("f", _dotenv({"a": ENC}) + "hunter2\n", dotenv=True)
+    assert found == ["f: line 6 is not a `key=value` line"]
+
+
+def test_a_comment_in_a_manifest_is_flagged():
+    for comment in ("# a_key: hunter2\n", "kind2: x  # hunter2\n"):
+        found = ciphertext_problems("m", _manifest() + comment, dotenv=False)
+        assert len(found) == 1 and "is a comment" in found[0]
+        assert "hunter2" not in found[0]
+
+
 def test_a_dropped_line_with_both_mac_lines_moved_is_clean():
     base = _dotenv({"a": ENC, "b": ENC})
     now = _dotenv({"a": ENC}, mac=ENC_INT, stamp="T2")
