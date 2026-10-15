@@ -108,7 +108,14 @@ A placeholder render with `--role` also writes the publish bundle, `DIR/flux/` a
 `DIR/digests.json`, for the tags it names that carry `owner: flux`, plus each shared kind's
 `DIR/flux/<kind>.yaml` and `DIR/cluster/<kind>/`. `docs/flux-deploy-plane.md`'s *The bundle*
 describes them. A stub render, a render without `--role` and a render that names no
-flux-owned tag write none of them.
+flux-owned tag write none of them. A published tag whose role lists `render_sops_manifests`
+also gets a byte copy of each of its SOPS manifests from `ansible/vars/cluster-manifests/`
+in `DIR/cluster/<tag>/`, and `decryption` on its Kustomization.
+
+Every render, in either mode, stamps `checksum/restart` on the pod template of each restart
+target of a flux-owned tag that names a ConfigMap or Secret. Both modes hash the
+placeholder-form documents and the digests in `ansible/vars/cluster-vars.source`, so they
+stamp the same value. `docs/flux-deploy-plane.md`'s *Restart triggers* has the rule.
 
 `cluster --out DIR --shared-only` writes the shared kinds, a root listing them and
 `digests.json`, and renders no tag. The publish job calls it when no tag is flux-owned. It
@@ -116,7 +123,7 @@ takes neither `--role` nor `--secret-stubs`, and either beside it is a usage err
 `cluster-vars` kind copies the cluster file, `ansible/vars/cluster-vars.sops.env`, byte for
 byte.
 
-`cluster` exits 2 and writes nothing in six cases:
+`cluster` exits 2 and writes nothing in seven cases:
 
 - In stub mode, the stub file does not stub every key of `ansible/vars/secrets.yml`. The
   message names the keys, never a value. Write a fresh stub file for the commit.
@@ -125,13 +132,18 @@ byte.
   render, or `DIR/flux/` or `DIR/digests.json` does.
 - A render that writes the bundle cannot read the cluster file. The bundle always carries
   the `cluster-vars` kind, so the render refuses rather than publish without it.
+- A render that writes the bundle cannot read a SOPS manifest that a published tag's role
+  lists.
 - A tag to render is named `homelab`, the root Kustomization's name, or after a member of
   `SHARED_KINDS` (C3 *Reserved names*). An all-tag render refuses it too.
 - A placeholder render with `--role` names a flux-owned tag that defers files. No
   Kustomization applies `<tag>-deferred` until D4.2 adds it. A tag Flux does not own renders
   as before.
 
-It exits 1 when a template fails to render, and it writes nothing then either. It exits 64
+It exits 1 when a template fails to render, and it writes nothing then either. It also exits
+1 when a SOPS manifest lacks `kustomize.toolkit.fluxcd.io/substitute: disabled`, and when a
+flux-owned tag's restart target names no rendered workload or reads a secret key that
+`cluster-vars.source` does not record. It exits 64
 on a usage error. `scripts/lib/exit_codes.py` holds the four codes as its `RENDER_*` family.
 
 ### The play-time context
