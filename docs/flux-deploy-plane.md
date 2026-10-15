@@ -371,6 +371,11 @@ notification-controller posts on T:
   the timeout ends it as `failed`, naming each name that had no `success`. The timeout is the
   largest Kustomization `timeout` in T's bundle, plus the `OCIRepository`'s interval, plus the
   largest `retryInterval`: 13 minutes for a tag at the manifests role's default.
+- **The `cluster-vars` hop.** When T's bundle holds a substituting Kustomization, the timeout
+  also adds `cluster-vars`'s own `timeout` and one `--requeue-dependency` interval, whose
+  default in Flux's Kustomize controller is 30 seconds. A Kustomization that waits on a
+  dependency that is not Ready requeues after that interval and no sooner. At the default
+  that makes 23.5 minutes. D4.3's chained timeout replaces this term with one hop per `dependsOn` edge.
 
 `settle` applies the verdict:
 
@@ -456,8 +461,8 @@ The bundle holds:
 - `flux/<tag>.yaml`, the Kustomization `<tag>` in `flux-system`. It applies
   `./cluster/<tag>` from the `OCIRepository` `homelab` with `prune: true`, `wait: true`,
   `deletionPolicy: Orphan` and the manifests role's `manifests_rollout_timeout_default`.
-  It carries `postBuild.substituteFrom` naming the Secret `homelab-cluster-vars` exactly
-  when the tag's render holds a placeholder.
+  It substitutes exactly when the render of its own directory, `cluster/<tag>/`, holds a
+  placeholder, as *Which Kustomizations substitute* below says.
 - `flux/cluster-vars.yaml` and `cluster/cluster-vars/`, the `cluster-vars` shared kind,
   described below.
 - `flux/kustomization.yaml`, which lists every other file in `flux/`. The root Kustomization
@@ -466,6 +471,33 @@ The bundle holds:
 
 A published tag that defers files is refused, because no Kustomization applies
 `<tag>-deferred` until D4.2 adds it.
+
+### Which Kustomizations substitute
+
+The renderer decides substitution per Kustomization directory, not per tag. A directory
+substitutes when its placeholder key set is not empty: the secret keys whose R2 sentinel
+survives the first placeholder pass in that directory's render. `placeholders.py` computes the
+set in process, and every consumer reads that one set (contract C1, *Substitution and
+escaping*).
+
+- **A substituting directory's Kustomization gets two fields.**
+  `postBuild.substituteFrom` names the Secret `homelab-cluster-vars`, and `dependsOn` names
+  `cluster-vars`. The edge makes Flux wait until `cluster-vars` is Ready,
+  so the Secret exists before the build substitutes from it. The renderer also writes a
+  literal `$` there as `$$` when `$`, `{` or a secret reference follows it, and
+  substitution turns it back into `$`.
+- **Any other directory gets neither field.** Flux never substitutes it, so a literal `${`
+  reaches the cluster as written, with no escape. A route alone does not make a directory substitute,
+  because `domain` is published and renders as a literal.
+- **`cluster-vars` never substitutes.** Its directory holds no rendered template.
+- **`<tag>` and `<tag>-deferred` decide separately** once D4.2 adds the second
+  Kustomization. The footprint rule still counts per tag, so a cluster-file edit moves the
+  footprint of a tag whose either directory substitutes.
+- **The projection is `spec.postBuild`.** A reader that sees only the written bundle reads
+  that field: the publish gate *source* below, and `promote.py verify`'s timeout.
+
+`scripts/renderer/tests/test_renderer_bundle.py` holds the predicate: a fixture with a
+placeholder gets both fields, one without gets neither and keeps `${HOME}` as written.
 
 ### Shared kinds and reserved names
 
