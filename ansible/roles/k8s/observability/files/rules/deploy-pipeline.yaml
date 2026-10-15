@@ -1,0 +1,94 @@
+# The `promote` workflow's own state: its hold, its lag behind master and whether `prod` moved
+# outside it. Plain YAML, never Jinja: prometheus-rules.yaml.j2 carries this file verbatim. The
+# design is docs/target-architecture/deploy/d2-first-leaf.md, "The deploy-pipeline exporter and
+# its alerts", and docs/flux-deploy-plane.md says what each alert means for the operator.
+#
+# The four homelab_deploy_* gauges come from the deploy-pipeline scrape job, which monitor-bridge
+# serves from ansible/roles/k8s/monitor-bridge/files/deploy_pipeline.py and refreshes once per
+# 300s cycle. Every rule carries service="deploy-pipeline", the one literal C7 admits outside the
+# deploy-tag-or-host rule (D2 Open question 12): it names no deploy tag, so no `probe.py health`
+# gate reads these alerts and a standing hold cannot fail the flux role's own gate.
+groups:
+  - name: deploy-pipeline
+    rules:
+      # A hold stops every promotion until it clears, and only the operator clears one while the
+      # revert rule stays off. The 15m hold rides over a hold that settle writes and the next run
+      # clears. Alertmanager's DeployHoldActive route repeats it every 24h rather than 6h.
+      - alert: DeployHoldActive
+        expr: homelab_deploy_hold_active{job="deploy-pipeline"} == 1
+        for: 15m
+        labels:
+          severity: warning
+          service: deploy-pipeline
+        annotations:
+          summary: The repository variable DEPLOY_HOLD has held promotion for 15 minutes.
+          description: >-
+            DEPLOY_HOLD reads something other than none, so promote moves prod nowhere. Read
+            it with gh variable get DEPLOY_HOLD and run probe.py landing; docs/flux-deploy-plane.md
+            says how to clear each form of hold.
+      # A green master commit that prod lacks, more than 2 hours after it went green, with no
+      # hold to explain it: promote is not running, or its runs end without moving prod. The
+      # `and on()` drops the alert while a hold stands, which DeployHoldActive already pages. A
+      # missing hold gauge drops it too, and DeployPipelineExporterAbsent pages that.
+      - alert: PromotionStalled
+        expr: >-
+          (homelab_deploy_unpromoted_age_seconds{job="deploy-pipeline"} > 7200)
+          and on() (homelab_deploy_hold_active{job="deploy-pipeline"} == 0)
+        for: 5m
+        labels:
+          severity: warning
+          service: deploy-pipeline
+        annotations:
+          summary: A green master commit has waited more than 2 hours for promotion.
+          description: >-
+            The oldest green master commit that prod lacks went green
+            {{ $value | humanizeDuration }} ago, and no hold stands. Read the promote
+            workflow's recent runs with gh run list --workflow promote.yml; a run that never
+            settles stalls promotion as current.
+      # promote writes PROD_DIGEST each time it moves prod, so a digest that differs for longer
+      # than the gap between a move and its write, plus one exporter cycle, means prod moved
+      # some other way. Flux follows prod, so whatever moved it is what production runs.
+      - alert: ProdMovedOutsidePromote
+        expr: homelab_deploy_prod_digest_match{job="deploy-pipeline"} == 0
+        for: 15m
+        labels:
+          severity: critical
+          service: deploy-pipeline
+        annotations:
+          summary: The prod tag's digest has differed from PROD_DIGEST for 15 minutes.
+          description: >-
+            prod in GHCR names a digest that promote did not record, so something other than
+            promote moved it, or promote moved it and failed to write PROD_DIGEST. Compare
+            probe.py landing's prod line with gh variable get PROD_DIGEST, and read the
+            package's version history for who pushed the tag.
+      # The family's zero-series alert (M1 convention 2). The first arm pages a missing scrape
+      # job, which no Kuma tile can see. The second pages a scrape that works but lacks any one
+      # gauge: a failed GitHub or GHCR read, an empty token, or a deleted variable each export no
+      # series for what they feed, never a 0. It is conjoined with up == 1, because the job
+      # carries no `origin` label and Kuma's Cluster Scrape Targets tile already pages a failed
+      # scrape (M1 convention 5) until M6's batch A3. The 15m hold rides over two failed cycles.
+      - alert: DeployPipelineExporterAbsent
+        expr: >-
+          absent(up{job="deploy-pipeline"})
+          or
+          (
+            (
+              absent(homelab_deploy_hold_active{job="deploy-pipeline"})
+              or absent(homelab_deploy_hold_age_seconds{job="deploy-pipeline"})
+              or absent(homelab_deploy_unpromoted_age_seconds{job="deploy-pipeline"})
+              or absent(homelab_deploy_prod_digest_match{job="deploy-pipeline"})
+            )
+            and on() (up{job="deploy-pipeline"} == 1)
+          )
+        for: 15m
+        labels:
+          severity: warning
+          service: deploy-pipeline
+        annotations:
+          summary: Prometheus has lost the deploy-pipeline job or one of its four gauges.
+          description: >-
+            Either no up{job="deploy-pipeline"} series exists, so the job is gone from
+            prometheus.yml, or monitor-bridge is scraped without one of the four
+            homelab_deploy_* gauges. Its log has a deploy-pipeline line each cycle naming the
+            read that failed. Until the gauges are back, DeployHoldActive, PromotionStalled
+            and ProdMovedOutsidePromote cannot fire.
