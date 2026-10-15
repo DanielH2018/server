@@ -60,7 +60,11 @@ def _two_workloads(comment: str = "") -> dict[str, dict[str, str]]:
     return {"fixture": files}
 
 
-def _values(source=SOURCE, comment="", targets=("one", "two", "three")):
+ALL = frozenset({"ConfigMap", "Secret"})
+
+
+def _values(source=SOURCE, comment="", targets=("one", "two", "three"), kinds=ALL):
+    targets = {name: kinds for name in targets}
     return restart_values("fixture", _two_workloads(comment), targets, KEYS, source)
 
 
@@ -93,17 +97,47 @@ def test_a_target_that_names_no_rendered_workload_is_flagged():
         _values(targets=("four",))
 
 
+def test_a_target_restarted_only_on_config_ignores_its_secrets():
+    """`restart_on: [config]` admits no Secret, so a Secret-only workload gets no value."""
+    assert _values(kinds=frozenset({"ConfigMap"})) == {}
+
+
+CONFIG_MAP = (
+    "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: static\n"
+    'data:\n  static.yaml: "email: ${alpha_token}"\n'
+)
+MOUNTS_CONFIG_MAP = (
+    "apiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: edge\nspec:\n"
+    "  template:\n    spec:\n      containers:\n        - name: app\n"
+    "      volumes:\n        - name: static\n          configMap:\n"
+    "            name: static\n"
+)
+
+
+def test_a_secret_placeholder_in_a_config_map_moves_the_checksum_on_rotation():
+    """traefik's static ConfigMap holds `${email}`: its text stays put when the key moves."""
+    files = {"cm.yaml": CONFIG_MAP, "deploy.yaml": MOUNTS_CONFIG_MAP}
+
+    def value(source):
+        return restart_values("f", {"f": files}, {"edge": ALL}, KEYS, source)["edge"]
+
+    assert value(SOURCE) != value({**SOURCE, "alpha_token": "c" * 64})
+
+
 INCLUDE = """- name: Deploy fixture
   ansible.builtin.include_role:
     name: k8s/manifests
   vars:
     manifests_rollout: ""
     manifests_extra_rollouts: >-
-      {{ [{'name': 'fixture-redis', 'restart_on': []}] if redis | bool else [] }}
+      {{ [{'name': 'fixture-redis', 'restart_on': ['secret']}] if redis | bool else [] }}
 """
 
 
-@pytest.mark.parametrize("redis, targets", [(True, ["fixture-redis"]), (False, [])])
+@pytest.mark.parametrize(
+    "redis, targets",
+    [(True, {"fixture-redis": frozenset({"Secret"})}), (False, {})],
+)
 def test_an_extra_rollouts_list_built_by_an_expression_resolves(
     tmp_path, redis, targets
 ):
@@ -111,6 +145,32 @@ def test_an_extra_rollouts_list_built_by_an_expression_resolves(
     (tmp_path / "fixture" / "tasks").mkdir(parents=True)
     (tmp_path / "fixture" / "tasks" / "main.yml").write_text(INCLUDE)
     assert restart_targets("fixture", {"redis": redis}, roles=tmp_path) == targets
+
+
+EXTRA = """- name: Deploy fixture
+  ansible.builtin.include_role:
+    name: k8s/manifests
+  vars:
+    manifests_extra_rollouts:
+      - name: waited
+        restart_on: []
+      - name: image-only
+        restart_on: [image]
+      - name: secret-only
+        restart_on: [secret]
+      - name: default
+"""
+
+
+def test_restart_on_decides_which_entries_are_targets_and_what_they_admit(tmp_path):
+    """Ansible waits on a `restart_on: []` entry and never restarts it (scrutiny's influxdb)."""
+    (tmp_path / "fixture" / "tasks").mkdir(parents=True)
+    (tmp_path / "fixture" / "tasks" / "main.yml").write_text(EXTRA)
+    assert restart_targets("fixture", {}, roles=tmp_path) == {
+        "default": ALL,
+        "fixture": ALL,
+        "secret-only": frozenset({"Secret"}),
+    }
 
 
 def test_a_secret_shipped_as_a_sops_manifest_hashes_its_keys_source_digest():
@@ -123,7 +183,7 @@ def test_a_secret_shipped_as_a_sops_manifest_hashes_its_keys_source_digest():
     }
 
     def value(source):
-        return restart_values("fixture", {"f": files}, ["one"], KEYS, source, sops)
+        return restart_values("fixture", {"f": files}, {"one": ALL}, KEYS, source, sops)
 
     assert value(SOURCE) != value({**SOURCE, "alpha_token": "c" * 64})
 

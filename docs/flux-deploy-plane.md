@@ -507,14 +507,20 @@ stamps the annotation `checksum/restart` on the pod template of each restart tar
 flux-owned tag, and Kubernetes rolls the pod when the value moves.
 `scripts/renderer/renderer_lib/restart.py` holds the rule.
 
-- **The targets** are the workloads the shared `k8s/manifests` role restarts. They are the
-  `manifests_rollout` workload when it is non-empty, and every `manifests_extra_rollouts`
-  entry, read from the role's include of `k8s/manifests`.
-- **The value is per workload.** It is one SHA-256 over the ConfigMaps and Secrets that the
-  workload's own pod template names through `envFrom`, `env[].valueFrom` or `volumes`, each
-  re-serialised in canonical form. It also covers the `.source` digest of every secret key
-  those Secrets reference. A YAML comment edit moves nothing, and a rotated key moves the
-  value of each workload that reads it, in the revision that carries its new ciphertext.
+- **The targets** are the workloads the shared `k8s/manifests` role restarts on a render
+  change, read from the role's include of `k8s/manifests`. They are the `manifests_rollout`
+  workload when it is non-empty, and each `manifests_extra_rollouts` entry whose
+  `restart_on` names `config` or `secret`. An entry with `restart_on: []`, such as Scrutiny's
+  InfluxDB, is one Ansible waits on and never restarts, so it gets no annotation.
+- **`restart_on` also narrows the inputs.** `config` admits the workload's ConfigMaps into its
+  value and `secret` its Secrets, as the same list narrows Ansible's restart.
+- **The value is per workload.** It is one SHA-256 over the admitted ConfigMaps and Secrets
+  that the workload's own pod template names through `envFrom`, `env[].valueFrom` or
+  `volumes`, each re-serialised in canonical form. It also covers the `.source` digest of
+  every secret key those objects reference, a ConfigMap's included: traefik's static
+  ConfigMap holds `${email}`, whose text does not move when the key rotates. A YAML comment
+  edit moves nothing, and a rotated key moves the value of each workload that reads it, in
+  the revision that carries its new ciphertext.
 - **Secrets are hashed in placeholder form,** so the annotation exposes no plaintext. A
   Secret shipped as a SOPS manifest contributes its key's `.source` digest, never its
   ciphertext.

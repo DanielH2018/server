@@ -3,15 +3,18 @@
 Ansible's shared `rollout restart` does not exist under Flux, so the renderer stamps
 `checksum/restart` on the pod template of each restart target of a flux-owned tag, and the
 pod rolls when the value moves. The targets are those the shared `k8s/manifests` role
-restarts: the `manifests_rollout` workload when it is non-empty, and every
-`manifests_extra_rollouts` entry (`restart_targets`).
+restarts on a render change: the `manifests_rollout` workload when it is non-empty, and each
+`manifests_extra_rollouts` entry whose `restart_on` names `config` or `secret`
+(`restart_targets`). An entry's `restart_on` also narrows its inputs, as it narrows Ansible's
+restart: `config` admits its ConfigMaps and `secret` its Secrets.
 
 A target's value is one SHA-256 over:
 
 - each ConfigMap and Secret its pod template names through `envFrom`, `env[].valueFrom` or
   `volumes`, from the tag's own placeholder-form render, re-serialised in canonical form, so a
   YAML comment edit moves nothing;
-- the `.source` digest of every secret key those Secrets reference as `${key}`;
+- the `.source` digest of every secret key those ConfigMaps and Secrets reference as
+  `${key}`, because the placeholder text does not move when the key rotates;
 - for a Secret shipped as a SOPS manifest, the `.source` digest of its key, never its
   ciphertext.
 
@@ -52,12 +55,25 @@ RESTART_ANNOTATION = "checksum/restart"
 # The kinds `kubectl rollout restart` acts on, the only kinds the shared role restarts.
 WORKLOAD_KINDS = frozenset({"Deployment", "DaemonSet", "StatefulSet"})
 TARGET_KEYS = ("manifests_rollout", "manifests_extra_rollouts")
+# `manifests_restart_triggers_default` in the manifests role's defaults: the signals an entry
+# restarts on when it names no `restart_on`. Only `config` and `secret` move with the render;
+# `image` is a rebuilt image behind a mutable tag, which Flux sees in the render already.
+DEFAULT_TRIGGERS = frozenset({"config", "secret", "image"})
+# Each signal to the kind of input it admits into the value.
+TRIGGER_KINDS = {"config": "ConfigMap", "secret": "Secret"}
 
 Ref = tuple[str, str]
 
 
-def restart_targets(tag: str, context: Mapping, roles: Path = K8S_ROLES) -> list[str]:
-    """The sorted workload names the shared role restarts for `tag`.
+def restart_targets(
+    tag: str, context: Mapping, roles: Path = K8S_ROLES
+) -> dict[str, frozenset[str]]:
+    """Each workload the shared role restarts for `tag`, mapped to the kinds that restart it.
+
+    The kinds are `ConfigMap` and `Secret`, as the target's `restart_on` admits them. An
+    extra-rollouts entry whose `restart_on` names neither, such as `[]`, is waited on and never
+    restarted by Ansible, so it is no target here (scrutiny's influxdb and collector,
+    authelia's redis).
 
     Args:
         tag: The deploy tag, whose role is `roles/<tag>`.
@@ -89,14 +105,21 @@ def restart_targets(tag: str, context: Mapping, roles: Path = K8S_ROLES) -> list
         raise RenderError(
             f"{tag}: manifests_rollout must be a name and manifests_extra_rollouts a list"
         )
-    names = {primary} if primary else set()
+    targets = {primary: _kinds(DEFAULT_TRIGGERS)} if primary else {}
     for entry in extra:
         if not isinstance(entry, dict) or not entry.get("name"):
             raise RenderError(
                 f"{tag}: a manifests_extra_rollouts entry has no name: {entry!r}"
             )
-        names.add(str(entry["name"]))
-    return sorted(names)
+        kinds = _kinds(entry.get("restart_on", DEFAULT_TRIGGERS))
+        if kinds:
+            targets[str(entry["name"])] = kinds
+    return dict(sorted(targets.items()))
+
+
+def _kinds(triggers: Iterable[str]) -> frozenset[str]:
+    """The input kinds `triggers`, a `restart_on` list, admits into a value."""
+    return frozenset(TRIGGER_KINDS[t] for t in triggers if t in TRIGGER_KINDS)
 
 
 def pod_template(obj: object) -> dict | None:
@@ -188,7 +211,7 @@ def sops_secrets(sops: Mapping[str, str | None], keys: Iterable[str]) -> dict[st
 def restart_values(
     tag: str,
     directories: Mapping[str, Mapping[str, str]],
-    targets: Iterable[str],
+    targets: Mapping[str, Iterable[str]],
     keys: Iterable[str],
     source: Mapping[str, str],
     sops: Mapping[str, str | None] | None = None,
@@ -198,14 +221,16 @@ def restart_values(
     Args:
         tag: The deploy tag, named in a refusal.
         directories: The tag's placeholder-form directories, each file name to its text.
-        targets: The workload names `restart_targets` returns.
+        targets: Each workload name mapped to the input kinds it admits, as
+            `restart_targets` returns them.
         keys: The key names of `ansible/vars/secrets.yml`.
         source: Each key in `ansible/vars/cluster-vars.source` mapped to its digest.
         sops: The tag's `render_sops_manifests` entries mapped to their sentinel renders.
 
     Raises:
-        RenderError: A target names no rendered workload, or a Secret it names references a
-            key that `.source` does not record, so a rotation of it would roll nothing.
+        RenderError: A target names no rendered workload, or a ConfigMap or Secret it names
+            references a key that `.source` does not record, so a rotation of it would roll
+            nothing.
     """
     keys = frozenset(keys)
     texts = [text for files in directories.values() for text in files.values()]
@@ -227,22 +252,26 @@ def restart_values(
                 "StatefulSet in its render"
             )
         inputs = []
+        admitted = frozenset(targets[name])
         for kind, ref in sorted(pod_references(workloads[name])):
+            if kind not in admitted:
+                continue
             held = set()
             if (kind, ref) in own:
                 canonical = json.dumps(
                     own[(kind, ref)], sort_keys=True, separators=(",", ":")
                 )
                 inputs.append(f"{kind}/{ref}\0{canonical}")
-                if kind == "Secret":
-                    held = set(references(canonical)) & keys
+                # A ConfigMap can hold a secret placeholder too, as traefik's static config
+                # holds `${email}`; its text stays put when the key rotates.
+                held = set(references(canonical)) & keys
             elif kind == "Secret" and ref in shipped:
                 inputs.append(f"{kind}/{ref}\0sops-manifest")
                 held = shipped[ref]
             for key in sorted(held):
                 if key not in source:
                     raise RenderError(
-                        f"{tag}: {name} reads Secret {ref}, whose key {key} has no line in "
+                        f"{tag}: {name} reads {kind} {ref}, whose key {key} has no line in "
                         "cluster-vars.source; cluster_vars.py write (operator-only) adds it"
                     )
                 inputs.append(f"{key}\0{source[key]}")
