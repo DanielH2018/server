@@ -44,10 +44,14 @@ def _problems(rules: list[dict]) -> list[str]:
     secrets = _recipients(rules, SECRETS)
     cluster_file = _recipients(rules, CLUSTER_FILE)
     out = []
-    if not cluster_file > secrets:
+    # Exactly one extra key, not merely a superset: a host key removed from the generic rule
+    # but left on the cluster rules would still form a superset, and that host would keep
+    # decrypting every cluster file.
+    if not secrets <= cluster_file or len(cluster_file - secrets) != 1:
         out.append(
-            f"{CLUSTER_FILE} must go to every secrets.yml recipient plus a cluster key; "
-            f"its rule lists {len(cluster_file)} key(s), secrets.yml's lists {len(secrets)}"
+            f"{CLUSTER_FILE} must go to every secrets.yml recipient plus exactly one "
+            f"cluster key; its rule lists {len(cluster_file)} key(s), secrets.yml's lists "
+            f"{len(secrets)}, and {len(cluster_file - secrets)} are on the cluster rule only"
         )
     if _recipients(rules, CLUSTER_MANIFEST) != cluster_file:
         out.append(
@@ -91,4 +95,12 @@ def test_cluster_key_on_the_generic_rule_is_flagged():
     rules = [dict(rule) for rule in _tree_rules()]
     generic = _rule_for(rules, SECRETS)
     generic["age"] = _rule_for(rules, CLUSTER_FILE)["age"]
+    assert any(p.startswith(CLUSTER_FILE) for p in _problems(rules))
+
+
+def test_host_key_left_on_the_cluster_rules_is_flagged():
+    """A host removed from the generic rule but not from the cluster rules."""
+    rules = [dict(rule) for rule in _tree_rules()]
+    generic = _rule_for(rules, SECRETS)
+    generic["age"] = ",".join(sorted(_recipients(rules, SECRETS))[1:])
     assert any(p.startswith(CLUSTER_FILE) for p in _problems(rules))
