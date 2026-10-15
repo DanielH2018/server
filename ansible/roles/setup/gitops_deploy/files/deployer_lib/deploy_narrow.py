@@ -248,8 +248,8 @@ def shared_role_callers(repo: str, roles) -> SharedCallers:
         subprocess.CalledProcessError: the child exited non-zero.
         subprocess.TimeoutExpired: the child outlived `SHARED_CALLERS_TIMEOUT_S`.
         ValueError: its stdout was not the JSON object it prints. That includes the flat
-            role-to-tags object a checkout from before #5052 prints, so a deployer that runs
-            ahead of the checkout keeps the line rather than reading a role as owned.
+            role-to-tags object a checkout from before #5052 prints, so the warning a
+            deployer ahead of its checkout logs names the shape it got.
     """
     out = _role_json(repo, shared_callers_argv(roles))
     callers, owned_only = out.get("callers"), out.get("owned_only")

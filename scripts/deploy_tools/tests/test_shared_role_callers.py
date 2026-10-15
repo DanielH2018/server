@@ -26,7 +26,7 @@ def test_the_deployers_argv_is_one_main_accepts(capsys):
 def test_the_deployers_decode_refuses_the_flat_object_an_older_checkout_prints(
     monkeypatch,
 ):
-    """A deployer ahead of its checkout must keep the line, not read every role as owned."""
+    """A deployer ahead of its checkout names the shape it got rather than an AttributeError."""
     flat = json.dumps({"arr-notification": ["radarr", "sonarr"]})
     monkeypatch.setattr(
         subprocess,
