@@ -70,7 +70,7 @@ from secrets_mgmt.cluster_vars_check import (
     is_dotenv,
     source_text,
 )
-from secrets_mgmt.rotation_tools import sops_set
+from secrets_mgmt.sops_io import sops_set
 
 Run = Callable[..., subprocess.CompletedProcess]
 

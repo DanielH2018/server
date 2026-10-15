@@ -391,7 +391,9 @@ pass_filenames = false
 # The whole `scripts/secrets_mgmt/` tree, not `secret_rotation.py` alone: `load_registry`,
 # `sops_names` and every other process boundary the gate depends on moved into
 # `rotation_tools.py`, and a per-file list here is a list that goes stale on the next split.
-files = "^(ansible/vars/secrets\\.yml|ansible/secret_rotation\\.yml|scripts/secrets_mgmt/.*\\.py|ansible/roles/setup/common/files/(host_lib|kuma_push)\\.py|ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_cross_role\\.py|ansible/filter_plugins/k8s_autodeploy\\.py|scripts/lib/(ansible_inventory|cli_help|estate|exit_codes|git|jinja_comments|k8s_roles|render_guard|repo_paths|yaml_fast)\\.py)$"
+# `rotate` writes the cluster file in process, which loads the renderer: `cluster_vars` imports
+# `scripts/renderer/` and, through it, the filter plugins and render helpers listed below.
+files = "^(ansible/vars/secrets\\.yml|ansible/secret_rotation\\.yml|scripts/secrets_mgmt/.*\\.py|ansible/roles/setup/common/files/(host_lib|kuma_push)\\.py|ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_cross_role\\.py|ansible/filter_plugins/.*\\.py|scripts/renderer/.*\\.py|scripts/deploy_tools/render_targets\\.py|scripts/lib/(ansible_inventory|ansible_jinja_env|cli_help|estate|exit_codes|git|jinja_comments|k8s_context|k8s_roles|k8s_yaml|plain_scalar|render_context|render_guard|repo_paths|yaml_fast)\\.py)$"
 
 # The cluster's SOPS files (target slice D3): the cluster file
 # ansible/vars/cluster-vars.sops.env, the manifests under ansible/vars/cluster-manifests/ and
