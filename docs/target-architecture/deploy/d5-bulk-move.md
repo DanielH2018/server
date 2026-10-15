@@ -1014,22 +1014,67 @@ bullet).
   moves `prod` to `last-good` and does nothing else. Like D1's inputs, it runs only from
   `refs/heads/master`. The failure path already performs this reset. The input exposes it to
   the revert runbook and to the flux PR's broken-sync-object runbook.
-    - **Decide, then write.** The input follows C2's split. A read-only job checks the hold
-      and names `last-good`'s digest. A second job of the same shape as D2's `settle` job,
-      with no checkout and `packages: write`, moves the tag. Both run in `promote-reset`,
-      so the write never waits in the group `promote`. The `promote` and `verify` jobs stay
-      read-only, and any other tag move D5 adds follows the same split.
+    - **Decide, then write.** The input follows C2's split. A read-only job checks the hold,
+      runs the in-flight check below, and names `prod`'s and `last-good`'s digests. A second
+      job of the same shape as D2's `settle` job, with no checkout and `packages: write`,
+      moves the tag. Both run in `promote-reset`, so the write never waits in the group
+      `promote`. The `promote` and `verify` jobs stay read-only, and any other tag move D5
+      adds follows the same split.
     - **It runs in its own concurrency group, `promote-reset`.** In the group `promote`, a
       reset dispatched while a later run's `decide` waits on a verification in flight would
       wait up to that wait's end, as much as 6 hours (D4 *The cap*), and the next merge's run
       would cancel it while it was pending (Baseline). D2.5's `verify` and `settle` join no
-      group, so `promote-reset` serialises the reset against nothing of D2's.
-    - **It must hold C2's two in-flight checks.** A reset dispatched while another run
-      verifies moves `prod` to `last-good`. That releases `decide`'s wait, and the in-flight
-      run's `settle` still acts on its own verdict. It writes its own hold over the
-      operator's, or it moves `last-good` to a T that `prod` no longer names. How the reset
-      avoids both is open (#5079). Refusing while `prod` and `last-good` differ is one
-      option, and `settle` re-reading `prod` before it writes is another.
+      group, so `promote-reset` serialises the reset against nothing of D2's. The in-flight
+      check below replaces the serialisation that a shared group would have given.
+    - **The hazard C2's two checks leave open.** C2 *A verification in flight blocks the
+      next promotion* guards a verification with two checks rather than a group: `decide`
+      waits while `prod` differs from `last-good`, and `tag` moves `prod` only while `prod`
+      still names the digest `decide` read. A reset dispatched while another run verifies
+      would move `prod` to `last-good`. That releases `decide`'s wait, and the in-flight
+      run's `settle` still acts on its own verdict. On a failure it writes its own hold over
+      the operator's reason. On a `good` verdict from statuses Flux posted before the reset,
+      it moves `last-good` to a T that `prod` no longer names (#5079).
+    - **It refuses while a verification is in flight.** The read job reads `prod`'s digest
+      and `last-good`'s, by the same two HEADs `decide` polls. When they are equal, the reset
+      prints that `prod` already names `last-good`, moves nothing and succeeds. When they
+      differ, the reset proceeds only if `DEPLOY_HOLD`'s first word is a 40-hex SHA X and the
+      manifest digest of `sha-<X>` in GHCR equals `prod`'s digest. The read job compares the
+      two digests rather than trusting the SHA string. A hold of that shape means the run
+      that moved `prod` to X has settled and left `prod` in place: the stateful hold
+      `<T> stateful=<names>`, H1's forward-only hold `<T>`, or C2's `<T> failed=<names>` and
+      `<T> unverified` after `settle`'s own reset failed. Any other difference means a run
+      is between its `tag` and its `settle`. The reset then exits non-zero and names that
+      run's commit. The message tells the operator to wait for that run's `settle`, to read
+      `last-good` again, and then to dispatch again. A `good` verdict moves `last-good` to
+      that commit, and a failure resets `prod` itself. Either way the second dispatch finds
+      `prod` equal to `last-good` and moves nothing.
+    - **Why it refuses rather than waits.** A refusal leaves the next step to the operator
+      once `last-good` is final. A reset that waited in its job would reset to whatever
+      `last-good` became, which may be the very revision the operator meant to leave. It
+      would also need a timeout sized to `decide`'s in-flight wait.
+    - **Why not have `settle` re-read `prod` before it writes.** That changes D2's `settle`,
+      and the re-read and the write still race the reset, because no group serialises the
+      two without exposing a pending `settle` to eviction. A `settle` that skipped its hold
+      on a moved `prod` would also lose the record of T's failure. The refusal keeps D2
+      unchanged and holds both checks true.
+    - **Which holds the refusal passes is not a policy on what may be reset.** The check
+      answers one question: has `prod`'s run settled? Whether a reset across a snapshot role
+      or a forward-only tag is allowed is each runbook's rule. Branch 1 allows it for the
+      roles it reverts. The cold-start step 2 below allows it only with a recorded
+      compatibility judgment.
+    - **The write moves `prod` only while it still names the digest the read job read**,
+      the same compare-and-move that `tag` performs. It moves `prod` to the `last-good`
+      digest that the read job read, then records it in `PROD_DIGEST`. A mismatch moves
+      nothing and exits non-zero naming both digests. The write runs only in the refusal's
+      pass case, where `prod` differs from `last-good`. In that state every `decide` either
+      returns `held` or sits in its in-flight wait, so no `tag` runs, and the two
+      compare-and-moves cannot interleave in different groups. One case escapes that
+      argument. Under C2's revert rule, a `<T> failed=<names>` hold lets `decide` wait
+      rather than return `held`. If `settle`'s own reset of `prod` lands between the
+      write's HEAD and its move, then a `decide` poll and a `tag` must also fit inside that
+      gap of a second or two. The result is safe: the write puts `prod` back on
+      `last-good`, the revert candidate's `verify` times out, and its `settle` holds as
+      `<U> unverified`.
     - **It ignores the reboot window.** A reset moves `prod` back to a revision the cluster
       already ran, and the operator dispatches it on purpose.
     - **It refuses unless a hold is set**, and exits non-zero naming the reason. It reads
@@ -1043,12 +1088,18 @@ bullet).
       is neither `none` nor empty. To clear it, run
       `gh variable set DEPLOY_HOLD --body none -R DanielH2018/server`, D1's no-hold value (D1
       Open question 9). Each set and clear step in this plan's runbooks names one of the two.
-    - **Why a separate group is safe.** A promote run reads `DEPLOY_HOLD` in `decide`, and
-      no wait separates that read from the move of `prod` (below). So no promote run moves
-      `prod` after a reset that ran under a hold. A run that is verifying when the reset
-      lands may still move `last-good` to its own verified T. That leaves `prod` behind
-      `last-good`, which the operator's next `promote` dispatch after clearing the hold
-      resolves.
+    - **Why a separate group is safe.** A promote run reads `DEPLOY_HOLD` on every poll of
+      `decide`'s in-flight wait, and no other wait separates that read from the move of
+      `prod` (below). So no promote run moves `prod` after a reset that ran under a hold,
+      except under the revert rule's own pass. No run is verifying when the reset moves
+      `prod`, because the reset refuses while one is. The reset therefore never leaves
+      `prod` behind `last-good`.
+    - **A hand-set hold does not stop a run that already decided.** A `decide` that read
+      `none` just before the operator set the hold can still reach `tag`. The reset then
+      finds `prod` ahead of `last-good` with a hold that does not name `prod`'s commit, and
+      it refuses. That run's `settle` writes `<T> failed=<names>` or `<T> unverified` over
+      the operator's reason when T fails. The value is still a hold, and the failure path
+      has reset `prod`. This is D2's behaviour for any hand-set hold, not the reset's.
 - **No promotion runs into the weekly reboot.** The reboot kills the soak Job's pod, recreates
   pods after T0, and fires critical rules whose `activeAt` follows T0. M2's `weekly-reboot`
   mute is an Alertmanager route, so it silences nothing in `ALERTS`. A promotion verifying
@@ -1109,7 +1160,19 @@ bullet).
         - the reset input moves `prod` inside the window under a hold such as `drill`.
           It refuses with `DEPLOY_HOLD` reading `none`, with an empty value, with the
           variable missing and with a failed read. The red half is a guard that refuses only
-          on an empty value, which the `none` fixture passes.
+          on an empty value, which the `none` fixture passes;
+        - the reset refuses while a verification is in flight. A fixture with `prod` on T,
+          `last-good` behind it and a hand-set hold `drill` refuses and names T. The red
+          half is a guard that checks only that a hold exists, which that fixture passes;
+        - the reset proceeds on a settled hold. A fixture with `prod` on T and
+          `DEPLOY_HOLD` reading `<T> stateful=<names>` moves `prod` to `last-good`, and the
+          same fixture with a hold that names T while `sha-<T>`'s digest differs from
+          `prod`'s refuses. The red half is a check that matches the SHA string without
+          comparing digests, which the second fixture passes;
+        - the reset moves nothing when `prod` already names `last-good`, and the write moves
+          nothing when `prod` changed after the read job read it. The red half is a write
+          that skips the compare, which moves the fixture's `prod` off the revision a
+          fixture `tag` just moved it to.
 
 ### The revert runbook (D5.2c)
 
@@ -1167,7 +1230,8 @@ names.
    The playbook takes one `volume_revert_service`. The role leaves each Deployment at zero
    replicas.
 3. **Reset `prod`.** Run `gh workflow run promote.yml --ref master -f
-   reset_to_last_good=true`. Then wait until the OCIRepository `homelab` reports
+   reset_to_last_good=true`. The stateful hold names `prod`'s commit, so the reset's
+   in-flight check passes. Then wait until the OCIRepository `homelab` reports
    `last-good`'s commit. The read-only `kubectl -n flux-system get ocirepository homelab -o
    jsonpath='{.status.artifact.metadata.org\.opencontainers\.image\.revision}'` must print
    `master@sha1:<last-good SHA>`. `.status.artifact.revision` holds a digest, not a commit
@@ -1975,8 +2039,9 @@ sizes its batch of roles against that projection.
     `decide` and `land-wait`, read with T's own derived timeout; the `deferred` result and
     `promote.yml`'s derived `schedule:` trigger at the window's end, so no run waits in the
     `promote` job, whose 6 hours also hold `decide`'s in-flight wait (D4 *The cap*); the
-    reset's answer to C2's two in-flight checks (#5079); and the four tests, as *The stateful
-    hold* describes.
+    reset's refusal while a verification is in flight, passed only by a hold whose SHA's
+    `sha-<X>` digest equals `prod`'s, and its write's compare-and-move (#5079); and the
+    seven tests, as *The stateful hold* describes.
 14. **D5.2c — The revert entry point** (about 150 lines). `ansible/volume-revert.yml`, the
     runbook with its two branch-choosing reads and its three branches in
     `docs/volume-snapshot-drills.md`, and the edits to
@@ -2494,7 +2559,10 @@ sizes its batch of roles against that projection.
                the root's reconcile (D5.1b). The source can still hold R's artifact after the
                reset, so without the suspend the restored kustomize-controller could apply
                R's components again.
-            3. Dispatch `reset_to_last_good`.
+            3. Dispatch `reset_to_last_good`. If it refuses because a verification is in
+               flight, wait for that run's `settle`, which resets `prod` itself when the
+               revision fails and writes its own hold over the reason from step 1. Read
+               `last-good` again, then dispatch again (*A reset input*).
             4. Apply the components rendered at `last-good` with `sudo k3s kubectl apply
                --server-side --force-conflicts --field-manager=kubectl -f <file>`, for the
                reasons the broken-sync-object branch below gives.
@@ -2513,7 +2581,8 @@ sizes its batch of roles against that projection.
         - a broken sync object, which leaves Flux unable to fetch: set `DEPLOY_HOLD`
           with `gh variable set DEPLOY_HOLD --body <reason> -R DanielH2018/server`, so no
           promotion moves `prod` past the reset, then suspend `flux-deferred`, which applies
-          the sync objects, and dispatch `reset_to_last_good`. Then apply the
+          the sync objects, and dispatch `reset_to_last_good`. A refusal that names a
+          verification in flight takes step 3's wait in the branch above. Then apply the
           sync objects rendered at `last-good` with `sudo k3s kubectl apply --server-side
           --force-conflicts --field-manager=kubectl -f <file>`. Wait until the OCIRepository
           is Ready and its `org.opencontainers.image.revision` key reads
@@ -2750,7 +2819,9 @@ includes valheim's initContainer.
   `deferred` without sleeping, and one outside it promotes. The scheduled run at the
   window's end hands `verify` T's full derived timeout, and the red half is a `decide` that
   waits in its job. The workflow's cron matches the derived end. The reset input refuses
-  when `DEPLOY_HOLD` reads `none`, is empty or is missing.
+  when `DEPLOY_HOLD` reads `none`, is empty or is missing. It also refuses while `prod`
+  differs from `last-good` under a hold that does not name `prod`'s commit, and it moves
+  `prod` under a settled `<T> stateful=<names>` hold.
 - **crowdsec's channel.** A fixture where the edge answers 200 fails naming the edge, and one
   with no `alloy-pi` sample fails naming the channel.
 - **Each converted verify.** Its red fixture, by class, and a refused probe leg for each new
@@ -3164,7 +3235,8 @@ includes valheim's initContainer.
       cluster-scoped form, its two exemptions and the
       retirement order with its operator-only claim delete.
     - D5.2b2: `docs/flux-deploy-plane.md` states the reset input's concurrency group, its
-      refusal without a hold, the `deferred` result, the derived `schedule:` run at the
+      refusal without a hold, its refusal while a verification is in flight, the `deferred`
+      result, the derived `schedule:` run at the
       window's end, and which timeout `decide` reads.
     - D5.2a: the snapshot section of `docs/flux-deploy-plane.md` states the new-claim skip.
       `ansible/roles/k8s/manifests/CLAUDE.md`'s claims rule says that under Flux a new claim
@@ -4400,3 +4472,12 @@ round covers it.
   `promote` would sit behind, `decide`'s in-flight wait. The new bullet *It must hold C2's
   two in-flight checks* states the hazard a reset during a verification creates, and D5.2b2
   carries it. The design that answers it is open in #5079.
+- **The reset's answer to C2's two checks (#5079).** *A reset input* now refuses while
+  `prod` differs from `last-good`, unless `DEPLOY_HOLD` names a SHA whose `sha-<X>` digest
+  equals `prod`'s. That form of hold means `prod`'s run has settled and left `prod` in
+  place. The write moves `prod` only while `prod` still names the digest the read job read.
+  Rejected: a plain refusal while the two digests differ, because the stateful hold leaves
+  them differing by design and Branch 1 would always refuse. Also rejected: `settle`
+  re-reading `prod` before it writes, because it changes D2 and still races the reset
+  across groups. The runbooks for a broken controller upgrade and a broken sync object
+  gain the wait for an in-flight `settle`, and C2's D5 row records the answer.
