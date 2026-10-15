@@ -30,6 +30,11 @@ D2.6b, the bundle writer, `digests.json`, its census and the reserved names:
 [#5010](https://github.com/DanielH2018/server/pull/5010). The first `promote` run after it
 reported 0 published tags, and `flux/homelab` read `success` on `6c26fb6f5`.
 
+D2.6c, the publish gates and the object-loss check:
+[#5044](https://github.com/DanielH2018/server/pull/5044). Its first `promote` run,
+38669383075, passed all six jobs on `a5abf8581`. `flux/homelab` read `success`, `last-good`
+moved to prod's digest `sha256:23bfc8e1854c`, and both holds read `none`.
+
 Depends on: [D1](d1-flux-installed.md), [R1](../render/r1-shadow-render.md),
 [R2](../render/r2-secret-placeholders.md) (its PR 1, placeholder mode, and its PR 2, the five
 rules). PR D2.7 also waits on PR D4.0 of [D4](d4-ordering.md) (D4 Open question 3), on
@@ -1763,8 +1768,9 @@ later slices size against:
    clear-owed k8s_unapplied <svc>" if you give me the command". The alternative, a full
    deploy under D1.2's stop rule, is not taken. D2.1d's PR body quotes the ruling. The
    same ruling covers a revert of D2.1d.
-10. **What narrow output should H1, H2 and H6 expect for a Flux-born entry?** Their steps
-    still branch on an own-tag-only outcome and expect 23 reader tags. D2.1c changes both
+10. **What narrow output should H1, H2 and H6 expect for a Flux-born entry?** *Applied on
+    2026-10-15 by [#5055](https://github.com/DanielH2018/server/pull/5055).* Their steps
+    branched on an own-tag-only outcome and expected 23 reader tags. D2.1c changes both
     for an added entry that carries `owner`:
     - **A bare entry** (`name`, `platform`, `owner`, and `depends_on` until D4.1 makes it a
       deploy-mechanics field). `deploy_tags.py narrow` names the entry's own tag plus the

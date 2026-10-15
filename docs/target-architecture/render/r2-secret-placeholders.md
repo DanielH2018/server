@@ -34,6 +34,22 @@ the operator removed the prefix with `sops`
 ([#5030](https://github.com/DanielH2018/server/pull/5030)), and both services' digests then
 matched.
 
+PR 4b, the comment follow-up: [#5037](https://github.com/DanielH2018/server/pull/5037). It
+changes only rendered comments. Its landing settled at `6798e883f`.
+
+PR 6, pi-peer-backup's SSH key: [#5043](https://github.com/DanielH2018/server/pull/5043). The
+first scheduled run after it, `pi-peer-backup-29867280` at 04:00 UTC on 2026-10-15, mounted
+the projected volume `pi-peer-backup-ssh` over both Secrets. It logged `status=up pulled 2
+peer file(s) from daniel-pi`, so the key in `pi-peer-backup-ssh-key` authenticates as
+stored.
+
+PR 7b, `mullvad_account`'s dedicated Secret:
+[#5050](https://github.com/DanielH2018/server/pull/5050). PR 7 has not merged, so the real
+tree holds three `render_sops_manifests` entries, not the four the plan counts after both. It
+deployed at `4e70b0c18`. The new pod projects `qbittorrent-mullvad` and
+`qbittorrent-mullvad-account` into one volume, and its wireguard sidecar fetched a tunnel
+address from the Mullvad API with the account read from that volume.
+
 Domain PR 1, `domain` as an inventory variable read without SOPS:
 [#4994](https://github.com/DanielH2018/server/pull/4994).
 
