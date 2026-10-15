@@ -4,8 +4,14 @@ Status: IN PROGRESS
 
 PR D4.0, netpol-baseline drains before it applies: [#4747](https://github.com/DanielH2018/server/pull/4747) (issue #4743).
 
-Depends on: [D2](d2-first-leaf.md). PR D4.0 alone depends on nothing, and it must land
-before D2.7 (Open question 3). No PR of D3 waits on D4: the publish layout that D3.3 needs is
+PR D4.9, the saturated-workers rule: [#5051](https://github.com/DanielH2018/server/pull/5051).
+Its step waits on D1.6, D1.6b and M1 and names no D2 PR, so it landed ahead of D2. After the
+deploy, Prometheus's `flux` group held 5 rules. `controller_runtime_max_concurrent_reconciles`
+read 4 for the `kustomization` controller, and the alert held no series.
+
+Depends on: [D2](d2-first-leaf.md), with two exceptions. PR D4.0 depends on nothing, and it
+must land before D2.7 (Open question 3). PR D4.9 waits only on D1.6, D1.6b and M1, as its step
+says. No PR of D3 waits on D4: the publish layout that D3.3 needs is
 D2.6b's (Open question 5).
 
 Unblocks: [D5](d5-bulk-move.md) and H1
