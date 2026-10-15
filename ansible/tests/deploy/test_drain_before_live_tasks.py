@@ -9,8 +9,9 @@ the drain configarr runs before its reconcile, so the role's batch no longer mat
 
 The rule read here: every task ahead of the drain include is a pure check, one of
 `_PURE_MODULES`, which neither applies nor reads the cluster. A role with no drain at all
-breaks the rule too. `_DRAINS_FIRST` is the population, and netpol-baseline is its named
-member, so a renamed role or task file fails rather than passing vacuously.
+breaks the rule too. `_DRAINS_FIRST` is the population: every `K8S_APPLIES_LAST` role in
+`ansible/filter_plugins/toposort.py`, which the deploy orders after all workloads. netpol-baseline
+is its named member, so a renamed role or task file fails rather than passing vacuously.
 
 Run: uv run pytest ansible/tests/deploy/test_drain_before_live_tasks.py
 """
@@ -19,12 +20,13 @@ import pytest
 
 from lib import yaml_fast
 from _helpers import REPO
+from toposort import K8S_APPLIES_LAST
 
 _K8S_ROLES = REPO / "ansible/roles/k8s"
 
-# The roles that must drain before they touch the cluster. D4.1 of the target architecture
-# widens this to every role it orders after all workloads.
-_DRAINS_FIRST = frozenset({"netpol-baseline"})
+# The roles that must drain before they touch the cluster: every role the deploy orders after
+# all workloads (D4.1, docs/target-architecture/deploy/d4-ordering.md).
+_DRAINS_FIRST = frozenset(K8S_APPLIES_LAST)
 
 # Modules that run on the controller and read nothing live, so one may precede the drain.
 # Not `meta`: `meta: flush_handlers` runs notified handlers, which can apply anything.

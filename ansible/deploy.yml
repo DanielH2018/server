@@ -79,12 +79,14 @@
       tags: always
 
     # Toposorted rather than list order, through build_k8s_dep_map and toposort_containers in
-    # filter_plugins/toposort.py: the traefik-CRD and authelia-middleware edges are derived
-    # from the role's own templates and its `use_authelia` flag, not hand-listed, and the one
-    # edge no template carries (crowdsec before traefik, for the LAPI machine credential) is
-    # declared as `depends_on:` on traefik's containers_list entry in host_vars. Stable sort,
-    # so on the live inventory — where every entry already sits in a valid topological order —
-    # this is a no-op (see ansible/tests/deploy/test_k8s_toposort.py).
+    # filter_plugins/toposort.py. Three edges are derived, not hand-listed: traefik-CRD and
+    # authelia-middleware from the role's own templates and its `use_authelia` flag, and each
+    # K8S_APPLIES_LAST role (netpol-baseline) after every other entry. The edges no template
+    # carries are declared as `depends_on:` on the containers_list entry in host_vars: crowdsec
+    # before traefik (the LAPI machine credential), sonarr and radarr before configarr, and
+    # dri-device-plugin before jellyfin and tdarr. Stable sort, so on the live inventory —
+    # where every entry already sits in a valid topological order — this is a no-op (see
+    # ansible/tests/deploy/test_k8s_toposort.py).
     #
     # Built from the FULL list, never a tag-narrowed one: this play applies
     # `--tags` per-role inside the batch loop below rather than narrowing containers_list

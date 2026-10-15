@@ -59,7 +59,7 @@ from lib.repo_paths import FILTER_PLUGINS, K8S_ROLES, REPO
 if str(FILTER_PLUGINS) not in sys.path:
     sys.path.insert(0, str(FILTER_PLUGINS))
 
-from toposort import K8S_SORTS_LAST
+from toposort import K8S_APPLIES_LAST
 
 AUTH_TIERS = ("one_factor", "two_factor")
 STRATEGIES = ("RollingUpdate", "Recreate")
@@ -215,9 +215,10 @@ See repo-root `CLAUDE.md` for shared conventions.
 def entry_lines(name, port, hostname, auth_tier, route) -> str:
     """The `containers_list` entry, as the block this script appends to daniel-box.yml.
 
-    Position in the list does not matter: `ansible/filter_plugins/toposort.py` derives the
-    ordering edges from the templates and the entry. An edge no template carries goes in
-    `depends_on:` here, never in the position.
+    Position in the list does not set the deploy order: `ansible/filter_plugins/toposort.py`
+    derives the ordering edges from the templates and the entry, and gives each
+    `K8S_APPLIES_LAST` role (netpol-baseline) an edge onto every other entry. An edge no
+    template carries goes in `depends_on:` here, never in the position.
     """
     lines = [f"  - name: {name}", "    platform: k8s"]
     if route:
@@ -232,16 +233,16 @@ def entry_lines(name, port, hostname, auth_tier, route) -> str:
 
 
 def append_entry(box_vars: Path, entry: str) -> None:
-    """Append the entry to `containers_list`, ahead of any role the deploy sorts last.
+    """Append the entry to `containers_list`, ahead of the first `K8S_APPLIES_LAST` role.
 
     After the LIST's last item, not the file's last line: `containers_list` is followed by
     other top-level keys in daniel-box.yml, and an entry written at the end of the file lands
     outside the list, where it parses as a malformed top-level mapping. Appended within the
-    list rather than inserted alphabetically because the list's order is not the deploy
+    list rather than inserted alphabetically because the list's order does not set the deploy
     order — `ansible/filter_plugins/toposort.py` derives that from the entries and templates.
 
-    A `K8S_SORTS_LAST` entry (netpol-baseline) and the comment block above it stay after the
-    new entry. The deploy sorts it last wherever it sits, but
+    A `K8S_APPLIES_LAST` entry (netpol-baseline) and the comment block above it stay after the
+    new entry. The deploy applies it last wherever it sits, but
     `test_derived_order_matches_todays_hand_ordered_list` holds the list to the sorted order,
     so an entry written after it would turn that test red.
 
@@ -267,10 +268,10 @@ def append_entry(box_vars: Path, entry: str) -> None:
     # Blank lines before that key belong to the separation, not to the list.
     while end > start + 1 and not lines[end - 1].strip():
         end -= 1
-    # Ahead of the first sorts-last item, and of the comment lines directly above it.
-    sorts_last = {f"  - name: {name}" for name in K8S_SORTS_LAST}
+    # Ahead of the first applies-last item, and of the comment lines directly above it.
+    applies_last = {f"  - name: {name}" for name in K8S_APPLIES_LAST}
     first_last = next(
-        (i for i in range(start + 1, end) if lines[i].rstrip() in sorts_last), None
+        (i for i in range(start + 1, end) if lines[i].rstrip() in applies_last), None
     )
     if first_last is not None:
         end = first_last

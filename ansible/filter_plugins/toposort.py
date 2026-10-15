@@ -75,12 +75,14 @@ K8S_CRD_EDGE_EXEMPT = {
 }
 
 
-# Roles the derived map sorts after every other k8s entry, each with the reason it must run
-# last. An edge onto every other entry, not list position: the scaffolder appends a new entry
-# after the list's last item, and a hand-added one goes wherever its author puts it, so a
-# position-held "last" lasted only until the next role was added after it (#4833). A role
-# that declares `depends_on:` onto one of these makes a cycle, and toposort_containers raises.
-K8S_SORTS_LAST = {
+# Roles the derived map applies after every other k8s entry, each with the reason it must run
+# last. An edge onto every other entry, not list position: a hand-added entry goes wherever
+# its author puts it, so a position-held "last" lasted only until the next role was added
+# after it (#4833). A role that declares `depends_on:` onto one of these makes a cycle, and
+# toposort_containers raises. The scaffolder (scripts/dev/new_k8s_service.py:append_entry)
+# still writes a new entry ahead of the first one, so the hand-ordered list stays a
+# topological order. The plan is docs/target-architecture/deploy/d4-ordering.md (D4.1).
+K8S_APPLIES_LAST = {
     "netpol-baseline": (
         "its first task drains the rollouts queued earlier in its batch, then fences the "
         "namespace and probes the fence. The drain cannot wait for a role deployed after it, "
@@ -124,37 +126,41 @@ def _role_renders_traefik_crd(role_templates_dir):
     return False
 
 
-def build_k8s_dep_map(containers_list, playbook_dir):
+def build_k8s_dep_map(containers_list, playbook_dir, applies_last=None):
     """Derive the k8s play's dependency map.
 
-    There is no hand-authored per-role dependency file. Two of the three real ordering
-    constraints are mechanically derivable, and re-deriving them here (instead of reading a
-    hand-authored file) is what lets a new role's edges arrive for free:
+    There is no hand-authored per-role dependency file, and no constraint rests on list
+    position. Three rules are derived, which is what lets a new role's edges arrive for free:
 
       * every routed role depends on traefik, except K8S_CRD_EDGE_EXEMPT -- routed meaning the
         entry declares a `hostname`, or the role's own templates render a Traefik CRD
       * every entry with `use_authelia: true` depends on authelia
+      * each K8S_APPLIES_LAST role (netpol-baseline) depends on every other entry outside
+        that set, so it applies last wherever the list puts it
 
-    The third -- crowdsec before traefik -- is not derivable from a template, so it is
-    declared data instead: an explicit `depends_on:` list on the containers_list entry,
-    unioned in below.
-
-    Each K8S_SORTS_LAST role also depends on every other entry outside that set, so it sorts
-    last wherever the list puts it.
+    Every other constraint is declared data: an explicit `depends_on:` list on the
+    containers_list entry, unioned in below. traefik declares crowdsec, which no template
+    carries; configarr declares sonarr and radarr, whose bare Service names it dials; and
+    jellyfin and tdarr declare dri-device-plugin, which advertises the `devic.es/dri`
+    resource they request.
 
     Takes the FULL containers_list, never a tag-narrowed one. The k8s play applies `--tags`
     per-role inside a single loop rather than narrowing the list before dependency
     resolution, so building this map from a tagged subset would leave every role outside that subset with an empty dep
     list -- silently falling back to list order for exactly the roles a tagged deploy is
     most likely to append one after.
+
+    `applies_last` replaces K8S_APPLIES_LAST when given. The play never passes it; a test
+    passes an empty dict to show the edge goes away with the dict.
     """
+    applies_last = K8S_APPLIES_LAST if applies_last is None else applies_last
     dep_map = {}
     names = [c["name"] for c in containers_list]
     for c in containers_list:
         name = c["name"]
         deps = set(c.get("depends_on", []))
-        if name in K8S_SORTS_LAST:
-            deps.update(n for n in names if n not in K8S_SORTS_LAST)
+        if name in applies_last:
+            deps.update(n for n in names if n not in applies_last)
         if c.get("use_authelia") and name != "authelia":
             deps.add("authelia")
         if name != "traefik" and name not in K8S_CRD_EDGE_EXEMPT:
