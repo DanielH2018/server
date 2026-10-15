@@ -111,7 +111,7 @@ spec:
           env:
             - name: TZ
               value: "{{ tz }}"
-{% if authelia_k8s_manage_oidc %}
+{% if authelia_k8s_manage_oidc | bool %}
             # Runs Go templating over the config at start, so `jwks[].key` in
             # config-secret.yaml.j2 can read the signing key from the authelia-oidc-jwk mount.
             # Gated with the mount and the Secret: with OIDC off the config holds no template
@@ -139,7 +139,7 @@ spec:
             - name: authelia-secrets
               mountPath: /secrets
               readOnly: true
-{% if authelia_k8s_manage_oidc %}
+{% if authelia_k8s_manage_oidc | bool %}
             # The OIDC signing key, read by the config's `secret` filter expression. A
             # top-level path of its own: /secrets is a read-only Secret mount.
             - name: authelia-oidc-jwk
@@ -181,7 +181,7 @@ spec:
             # 0440, not 0400: secret files are owned root:fsGroup, so a non-root container
             # reads them via the group bit. 0400 leaves the group nothing.
             defaultMode: 0440
-{% if authelia_k8s_manage_oidc %}
+{% if authelia_k8s_manage_oidc | bool %}
         - name: authelia-oidc-jwk
           secret:
             secretName: authelia-oidc-jwk

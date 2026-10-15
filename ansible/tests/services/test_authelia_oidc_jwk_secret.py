@@ -15,6 +15,7 @@ PR 7 moved it out of authelia-config. Three things have to agree for the portal 
   fixture in place of the template lookup.
 """
 
+import pytest
 from ansible.parsing.dataloader import DataLoader
 from ansible.template import Templar, trust_as_template
 
@@ -68,9 +69,11 @@ def test_the_lever_off_lists_the_jwk_secret_nowhere():
     assert "config-secret.yaml" in secret
 
 
-def test_the_deployment_mounts_the_jwk_secret_only_with_the_lever_on():
+# `-e authelia_k8s_manage_oidc=false` arrives as a string, which the list reads through `| bool`.
+@pytest.mark.parametrize("off_value", [False, "false"])
+def test_the_deployment_mounts_the_jwk_secret_only_with_the_lever_on(off_value):
     on = render_role_template("authelia", "deployment.yaml.j2")
-    off = render_role_template("authelia", "deployment.yaml.j2", {LEVER: False})
+    off = render_role_template("authelia", "deployment.yaml.j2", {LEVER: off_value})
     for marker in ("secretName: authelia-oidc-jwk", "X_AUTHELIA_CONFIG_FILTERS"):
         assert marker in on
         assert marker not in off
