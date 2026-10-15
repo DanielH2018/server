@@ -17,9 +17,11 @@ import promote
 from _promote_fakes import World, digest_of
 
 PROMOTE = Path(promote.__file__)
-PROMOTE_WAIT = PROMOTE.with_name("promote_wait.py")
-VERIFY = PROMOTE.with_name("verify_promotion.py")
-PRUNE = PROMOTE.with_name("artifact_prune.py")
+# The modules split out of promote.py, read from disk so a fourth is held to the boundary too.
+PROMOTE_LIB = sorted(PROMOTE.with_name("promote_lib").glob("*.py"))
+# The members the glob must find, so a rename or a move out of the package fails by name
+# rather than leaving the census over fewer modules.
+PROMOTE_LIB_MEMBERS = frozenset({"wait.py", "verify.py", "prune.py"})
 
 # The modules that would let promote.py make a forge call without the adapter. `subprocess`
 # and `pty` are here because `gh` and `cosign` are forge calls too.
@@ -120,13 +122,19 @@ def forbidden_imports(source: str) -> set[str]:
     )
 
 
+def test_the_census_finds_every_promote_lib_member():
+    assert PROMOTE_LIB_MEMBERS <= {path.name for path in PROMOTE_LIB}
+
+
 @pytest.mark.parametrize(
-    "module", [PROMOTE, PROMOTE_WAIT, VERIFY, PRUNE], ids=lambda p: p.name
+    "module",
+    [PROMOTE, *PROMOTE_LIB],
+    ids=lambda p: p.relative_to(PROMOTE.parent).as_posix(),
 )
 def test_promote_imports_the_adapter_and_no_http_library_is_clean(module):
-    """Each module split out of promote.py holds the same boundary: `promote_wait.py`
-    (`land-wait`), whose kubectl and logger go through `flux_host.py`; `verify_promotion.py`
-    (`verify`), whose status reads go through forge; and `artifact_prune.py` (`prune`)."""
+    """Each module split out of promote.py holds the same boundary: `promote_lib/wait.py`
+    (`land-wait`), whose kubectl and logger go through `flux_host.py`; `promote_lib/verify.py`
+    (`verify`), whose status reads go through forge; and `promote_lib/prune.py` (`prune`)."""
     source = module.read_text(encoding="utf-8")
     assert ADAPTER in imported_modules(source)
     assert forbidden_imports(source) == set()

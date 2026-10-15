@@ -25,8 +25,8 @@ from pathlib import Path as _Path
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))  # scripts/
 from lib import yaml_fast
 
-import verify_promotion
-from artifact_prune import ReadError
+from deploy_tools.promote_lib import verify
+from deploy_tools.promote_lib.prune import ReadError
 from renderer.renderer_lib.bundle import CLUSTER_DIR
 
 # The kustomize file each bundle directory carries is not an object the cluster holds.
@@ -78,7 +78,7 @@ def undeclared_losses(
         ReadError: a manifest in either bundle does not parse.
     """
     try:
-        kustomizations = verify_promotion.flux_kustomizations(target)
+        kustomizations = verify.flux_kustomizations(target)
     except yaml.YAMLError as err:
         raise ReadError(f"a flux/ file of T's bundle does not parse: {err}") from err
     kept = {str((doc.get("metadata") or {}).get("name")) for doc in kustomizations}
