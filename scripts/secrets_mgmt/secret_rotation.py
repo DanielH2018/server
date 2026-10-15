@@ -76,6 +76,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from lib.cli_help import ArgumentParser, error
 from lib.exit_codes import SECRET_ROTATION_BAD_ARGS
 from secrets_mgmt.consumers import consumer_commands, consumer_tags, tree_consumers
+from secrets_mgmt.consumers import left_out_line
 from secrets_mgmt.git_dates import (
     RENAMED_FROM,
     advance_last_rotated,
@@ -446,10 +447,7 @@ def cmd_rotate(args, tools: RotationTools) -> int:
     owners = tools.owners()
     left_out = tags & owners.keys()
     for tag in sorted(left_out):
-        print(
-            "  not redeployed: %s carries owner: %s, which no Ansible path may apply"
-            % (tag, owners[tag])
-        )
+        print(left_out_line(tag, owners[tag]))
     tags -= left_out
     if args.deploy and tags:
         if tools.deploy(sorted(tags)) != 0:

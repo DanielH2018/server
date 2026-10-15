@@ -447,14 +447,18 @@ def deploy_phase(ln: Landing) -> None:
     such a tag then waits on promotion, after deploy.sh for a PR that holds both kinds. A
     deploy-plane path derives no tag, so such a tag is also read from the deployer's narrowing
     of the PR's range (`promotion.owned_by_narrowing`), and an inventory-only flip to
-    `owner: flux` waits on promotion rather than settling on the tick alone.
+    `owner: flux` waits on promotion rather than settling on the tick alone. A PR changing a
+    cluster file derives no tag and waits on promotion too
+    (`promotion.waits_on_cluster_vars`). A plane it also carries, such as the rotation
+    note for `secrets.yml`, is reported by the health step after the wait.
     """
     t = ln.tools
     if ln.needs_diff:
         derive_from_diff(ln)
     promotion.split_owned(ln)
     promotion.owned_by_narrowing(ln)
-    if not ln.resolved_tags and not ln.owned_tags:
+    cluster_vars = promotion.waits_on_cluster_vars(ln)
+    if not ln.resolved_tags and not ln.owned_tags and not cluster_vars:
         no_tag_outcome(ln)
     ln.ledger.tags_label = ",".join(ln.resolved_tags + list(ln.owned_tags))
     if ln.resolved_tags:
@@ -467,7 +471,7 @@ def deploy_phase(ln: Landing) -> None:
     # Stamped before the promotion wait: the re-gate reads a later deploy of these tags as one
     # that started after deploy.sh returned, and the wait can last 47 minutes.
     ln.deploy_ended_at = t.wall_clock()
-    if ln.owned_tags:
+    if ln.owned_tags or cluster_vars:
         promotion.wait_on_promotion(ln)
     # Step 5's own time on the board, the promotion wait included.
     ln.ledger.t_deploy = t.clock()

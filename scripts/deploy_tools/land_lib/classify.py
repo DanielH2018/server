@@ -12,7 +12,11 @@ from pathlib import Path as _Path
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
 from deploy_tools.land_lib.landing import Classification, Landing
 from deploy_tools.land_lib.outcome import Outcome, Verdict, say
-from deploy_tools.land_lib.land_tags import DeriveSource, guard_map_rows
+from deploy_tools.land_lib.land_tags import (
+    DeriveSource,
+    changes_cluster_vars,
+    guard_map_rows,
+)
 from lib.exit_codes import LAND_BAD_ARGS
 from lib.repo_paths import GITOPS_DEPLOY_FILES
 
@@ -366,9 +370,18 @@ def narrow_plane(ln: Landing, awaited: bool = True) -> None:
 
 
 def shortcut_if_nothing(ln: Landing) -> None:
-    """A PR reaching no tag, no plane and nothing self-applied has nothing to wait for."""
+    """A PR reaching no tag, no plane and nothing self-applied has nothing to wait for.
+
+    A PR changing a cluster file reaches none of them and still waits on a promotion
+    (`land_tags.changes_cluster_vars`).
+    """
+    cl = ln.classification
     if not (
-        ln.resolved_tags or ln.plane or ln.classification.self_applied or ln.needs_diff
+        ln.resolved_tags
+        or ln.plane
+        or cl.self_applied
+        or ln.needs_diff
+        or changes_cluster_vars(cl.pr_paths)
     ):
         ln.finish(
             Verdict.NOTHING_TO_DEPLOY,

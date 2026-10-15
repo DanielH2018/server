@@ -114,6 +114,23 @@ otherwise; none of the values below are secrets themselves, only names and locat
       routine disarm or re-arm.
    Source: `ansible/roles/setup/homelab_builder/CLAUDE.md` and `docs/host-packages.md`.
 
+10. **The cluster age key.** A dedicated age keypair that decrypts only the cluster file
+    (`ansible/vars/cluster-vars.sops.env`) and the SOPS manifests under
+    `ansible/vars/cluster-manifests/`. It never decrypts `ansible/vars/secrets.yml`. Its
+    private half lives in the password manager, beside item 1, and in the Secret
+    `flux-system/sops-age`. The cluster needs it only as that Secret: `kustomize-controller`
+    reads `sops-age` to decrypt the cluster file into the Secret `homelab-cluster-vars`. A
+    rebuilt cluster gets `sops-age` by hand from the password-manager copy
+    (**operator-only**). No template renders it, and no runbook creates
+    `homelab-cluster-vars`, which Flux regenerates on the first reconcile after `sops-age`
+    exists.
+    - **A lost key needs no recovery.** Replace it with *Rotating the cluster key* in
+      `docs/secret-rotation.md`, from any host that decrypts `secrets.yml`. Every creation
+      rule that covers a cluster file also lists the host recipients and item 1, so any of
+      those keys regenerates the cluster files for the new recipient.
+   Source: `docs/target-architecture/deploy/d3-secrets.md` ("Where the values come from")
+   and `docs/adr/0022-the-cluster-decrypts-its-own-file-with-its-own-key.md`.
+
 ## What to do first, by scenario
 
 ### Scenario: daniel-box is dead, daniel-server survives

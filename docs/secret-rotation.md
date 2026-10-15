@@ -54,6 +54,73 @@ Rename every consumer of the variable in the same commit. Every value is unchang
 deploy cannot detect a half-done rename — the template render is the only signal, and it
 fails on the undefined variable.
 
+## The cluster file — the values Flux substitutes
+
+Flux cannot read `secrets.yml`. It reads its own copies, which `cluster_vars.py write`
+derives from `secrets.yml`:
+
+- `ansible/vars/cluster-vars.sops.env` holds every key that the cluster render references
+  as `${key}`. The `cluster-vars` Kustomization decrypts it into the Secret
+  `homelab-cluster-vars`, and each substituting Kustomization reads that Secret.
+- `ansible/vars/cluster-manifests/` holds one SOPS-encrypted Secret manifest per key set
+  that Flux must not substitute.
+- `ansible/vars/cluster-vars.source` holds the SHA-256 of each copied key's ciphertext in
+  `secrets.yml`. It is evidence that the copies are fresh, not a store.
+
+Only `scripts/secrets_mgmt/cluster_vars.py write` writes these files. It decrypts, so the
+operator runs it (**operator-only**). The weekly rotation cron also runs it in process for
+each key it rotates. A hand edit breaks the file's SOPS MAC. CI's `cluster_vars.py check`
+refuses a hand-edited file, and a `.source` hash that no longer matches `secrets.yml`. A
+value changed with `sops set` therefore reaches the cluster only after `write` runs.
+
+`docs/target-architecture/deploy/d3-secrets.md`, *What one secret costs*, lists every store a
+secret can touch.
+
+### Rotating a value read by both planes
+
+A value can have an Ansible-owned consumer and a consumer Flux applies, as `peanut_password`
+does for homepage and peanut. Every step that handles the value is **operator-only**.
+
+1. Set the new value with `sops set` (**operator-only**).
+2. Run `uv run python scripts/secrets_mgmt/cluster_vars.py write` (**operator-only**). Commit
+   `secrets.yml`, the cluster files it rewrote and the registry together, then open the PR.
+3. Run `uv run python scripts/secrets_mgmt/secret_rotation.py consumers <key>`. It prints a
+   `deploy.sh` line for the Ansible-owned consumers. For each `owner: flux` consumer it
+   prints the Flux path instead, because `deploy.sh` exits 5 on such a tag and deploys none
+   of the others.
+4. Land the PR with `land.sh`. A PR that changes either cluster file waits on the
+   `cluster-vars` Kustomization and on every Kustomization that depends on it, then ends
+   `needs-manual-apply` naming the Ansible half.
+5. Run the `deploy.sh` line from step 3.
+
+The weekly cron needs no `write` step: `rotate --commit` runs it before it deploys. For an
+`owner: flux` consumer, `rotate` prints that Flux applies the value once the commit lands.
+
+### Rotating the cluster key
+
+The cluster keypair decrypts only the cluster files. It is the one key in this setup that
+`secrets.yml` does not hold. Each step is **operator-only**, and the order keeps a working key
+in the Secret `flux-system/sops-age` throughout.
+
+1. Generate a replacement keypair with `age-keygen`, and store its private half in the
+   password manager. Add it to `sops-age` as a second entry, `age-next.agekey`.
+   Flux's `kustomize-controller` imports every entry in that Secret, so either key decrypts.
+2. On a branch, replace the cluster recipient in both cluster creation rules in
+   `ansible/.sops.yaml`. Run `sops updatekeys` and `sops rotate` on the cluster file and on
+   each cluster manifest, from `ansible/` or with `--config ansible/.sops.yaml`. The
+   ciphertext in `secrets.yml` does not move, so no `.source` hash moves and no pod
+   restarts. `check` reads the recipients from the rules, so it passes.
+3. Land the PR with `land.sh`, which waits on `cluster-vars` for a PR that changes the
+   cluster file. Confirm that `flux/cluster-vars` reads `success` on the promoted revision:
+   `gh api repos/DanielH2018/server/commits/<sha>/statuses --jq '.[] | select(.context ==
+   "flux/cluster-vars") | .state'`.
+4. Remove the old entry from `sops-age`, and the old private half from the password manager.
+
+The registry in `ansible/secret_rotation.yml` does not track the cluster key. The key lives
+outside `secrets.yml`, so `registry_drift` would report its row as stale. A lost cluster key
+needs no recovery: this procedure replaces it from any host that decrypts `secrets.yml`.
+`docs/break-glass.md` lists the key in its recovery kit.
+
 ## Tiers
 
 <!-- Cadences and counts are generated from TIER_DAYS and the registry; edit those. -->

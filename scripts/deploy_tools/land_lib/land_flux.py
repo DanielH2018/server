@@ -87,10 +87,12 @@ def kustomization_exists(
     )
 
 
-def run_land_wait(merge: str, services: list[str], primary: Path) -> WaitResult:
+def run_land_wait(
+    merge: str, services: list[str], primary: Path, also: frozenset[str] = frozenset()
+) -> WaitResult:
     """`promote.py land-wait`, in process. Its ancestry reads run in `primary`."""
     reads = live_wait_reads(forge.connect(os.environ), primary)
-    return land_wait(reads, merge, services)
+    return land_wait(reads, merge, services, also=also)
 
 
 @dataclass(frozen=True)
@@ -100,10 +102,12 @@ class FluxReads:
     Attributes:
         owners_at: `owners_at`.
         kustomization_exists: `kustomization_exists`.
-        land_wait: `run_land_wait`, taking the merge commit, the published tags and the
-            primary checkout.
+        land_wait: `run_land_wait`, taking the merge commit, the published tags, the
+            primary checkout and the names to wait on whatever the digests say.
     """
 
     owners_at: Callable[[Path, str], dict[str, str]] = owners_at
     kustomization_exists: Callable[[str], bool] = kustomization_exists
-    land_wait: Callable[[str, list[str], Path], WaitResult] = run_land_wait
+    land_wait: Callable[[str, list[str], Path, frozenset[str]], WaitResult] = (
+        run_land_wait
+    )

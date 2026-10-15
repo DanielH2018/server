@@ -329,6 +329,30 @@ def tree_consumers(name: str, repo: str = REPO) -> dict[str, str]:
     return found
 
 
+# What reaches a consumer Flux applies (D3.4, d3-secrets.md, *Rotating a value read by both
+# planes*). Flux substitutes the value from the cluster file, which only the operator's
+# `write` regenerates, because it decrypts. Landing the PR then waits on `cluster-vars` and
+# every Kustomization that depends on it. Backticked for the reason `consumer_commands` gives.
+FLUX_PATH = (
+    "%s carries owner: flux, so Flux applies it from the cluster file: the operator runs "
+    "`uv run python scripts/secrets_mgmt/cluster_vars.py write` (operator-only), commits it "
+    "with secrets.yml, and the PR lands with `./scripts/deploy_tools/land.sh`"
+)
+
+
+def left_out_line(tag: str, owner: str) -> str:
+    """The line `rotate --commit` prints for a consumer it left out of its redeploy.
+
+    `rotate --commit` has already run `write` in process (`sync_cluster_files`), so for an
+    `owner: flux` consumer the rest of the Flux path is the commit landing.
+    """
+    if owner == "flux":
+        reach = "; Flux applies it once the commit carrying the cluster files lands"
+    else:
+        reach = ", which no Ansible path may apply"
+    return "  not redeployed: %s carries owner: %s%s" % (tag, owner, reach)
+
+
 def consumer_commands(name: str, repo: str = REPO) -> list[str]:
     """The exact commands that make a rotated `name` take effect everywhere, deploy plane first.
 
@@ -338,7 +362,9 @@ def consumer_commands(name: str, repo: str = REPO) -> list[str]:
     A deploy tag whose `containers_list` entry carries `owner` is left off the `deploy.sh`
     line and named on a line of its own. `deploy.sh` exits 5 on such a tag, and exit 5 refuses
     the whole run, so one owned tag on the line would deploy none of the other consumers. The
-    owners are read from `repo`'s own host_vars, the same tree the census read.
+    owners are read from `repo`'s own host_vars, the same tree the census read. An
+    `owner: flux` tag's line is the Flux path, `FLUX_PATH`; any other owner's line says only
+    that no Ansible path may apply it.
     """
     consumers = tree_consumers(name, repo=repo)
     deploy_roles = sorted(r for r, plane in consumers.items() if plane == "deploy")
@@ -367,7 +393,11 @@ def consumer_commands(name: str, repo: str = REPO) -> list[str]:
             "`uv run ansible-playbook ansible/initial_setup.yml --tags %s`" % role
         )
     for tag in owned_tags:
-        commands.append(
-            "%s carries owner: %s, which no Ansible path may apply" % (tag, owners[tag])
-        )
+        if owners[tag] == "flux":
+            commands.append(FLUX_PATH % tag)
+        else:
+            commands.append(
+                "%s carries owner: %s, which no Ansible path may apply"
+                % (tag, owners[tag])
+            )
     return commands

@@ -200,6 +200,68 @@ def test_a_service_pr_that_also_flips_a_tag_waits_on_that_tag(land_run):
     ]
 
 
+# -- a PR that changes a cluster file waits on cluster-vars (D3.4) ---------------------------
+
+
+def _cluster_file_pr(*paths: str, **kwargs: object) -> Fakes:
+    """A PR changing `paths`, which touch no role, so no tag derives from them."""
+    fakes = Fakes(
+        gh_views={
+            "files,changedFiles": {
+                "files": [{"path": p} for p in paths],
+                "changedFiles": len(paths),
+            }
+        },
+        derived=([], "pr"),
+        gate=(True, []),
+    )
+    return replace(fakes, **kwargs)
+
+
+def test_a_pr_changing_only_the_cluster_source_waits_on_cluster_vars(land_run):
+    rc, out, _, calls, _ = land_run(
+        [], _cluster_file_pr("ansible/vars/cluster-vars.source")
+    )
+    assert rc == 0 and "VERDICT: settled" in out
+    waits = [c[1] for c in calls if c[0] == "land_wait"]
+    assert [(w[0], w[1], w[3]) for w in waits] == [
+        (MERGE_SHA, [], frozenset({"cluster-vars"}))
+    ]
+    assert "deploy" not in _names(calls)
+    # `cluster-vars` is no deploy tag, so the health gate is never asked about it.
+    assert [c[1] for c in calls if c[0] == "gate"] == [([],)]
+
+
+def test_a_rotation_pr_waits_on_cluster_vars_before_naming_the_ansible_half(land_run):
+    """D3.9's shape: `secrets.yml`, both cluster files and the registry, in one PR.
+
+    `secrets.yml` carries the rotation note, which ends the landing `needs-manual-apply`.
+    It must end there only after the promotion wait, not in place of it."""
+    fakes = _cluster_file_pr(
+        "ansible/vars/secrets.yml",
+        "ansible/vars/cluster-vars.sops.env",
+        "ansible/vars/cluster-vars.source",
+        "ansible/secret_rotation.yml",
+        plane="a secret's VALUE lives in no role's template",
+    )
+    rc, out, _, calls, _ = land_run([], fakes)
+    assert rc == 1 and "VERDICT: needs-manual-apply" in out
+    assert [c[1][3] for c in calls if c[0] == "land_wait"] == [
+        frozenset({"cluster-vars"})
+    ]
+
+
+def test_a_flux_owned_pr_touching_no_cluster_file_forces_no_name(land_run):
+    _, _, _, calls, _ = land_run([], _fakes())
+    assert [c[1][3] for c in calls if c[0] == "land_wait"] == [frozenset()]
+
+
+def test_a_pr_touching_no_cluster_file_and_no_tag_adds_no_wait(land_run):
+    rc, out, _, calls, _ = land_run([], _cluster_file_pr("docs/landing.md"))
+    assert rc == 0 and "VERDICT: nothing-to-deploy" in out
+    assert "land_wait" not in _names(calls)
+
+
 # -- the handback refusal --------------------------------------------------------------------
 
 

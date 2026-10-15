@@ -85,6 +85,8 @@ def test_rotate_deploy_of_a_flux_owned_consumer_is_flagged(capsys):
     assert _deploys(calls) == []
     out = capsys.readouterr().out
     assert "not redeployed: monitor-bridge carries owner: flux" in out, out
+    # The Flux path, not the refusal: `write` already ran in process (D3.4).
+    assert "Flux applies it once the commit carrying the cluster files lands" in out
     assert "deployed nothing" in out, out
 
 

@@ -293,6 +293,16 @@ deployer's narrowing of the PR's own range (`land_lib/promotion.py:owned_by_narr
 waits on promotion for the ones that are not Ansible-owned. The gate then renders
 the merge commit from a snapshot, and `land.sh` kicks the tick to converge the primary checkout.
 
+**A PR that changes a cluster file waits on promotion too.** A change to
+`ansible/vars/cluster-vars.sops.env` or `ansible/vars/cluster-vars.source` touches no role,
+so no tag derives from it. `land.sh` passes `--also cluster-vars` to the wait, which adds the
+`cluster-vars` Kustomization and every Kustomization that depends on it, read from the live
+`dependsOn` graph. A `.source`-only change moves no digest, so the changed set alone would
+not see it. A rotation PR that also changes `secrets.yml` waits first, then ends
+`needs-manual-apply` naming the Ansible half. The rule is
+`scripts/deploy_tools/land_lib/land_tags.py:CLUSTER_VARS_PATHS`, and it retires when `land.sh`
+reads its changed set from `digests.json` (slice D6).
+
 For those tags `land.sh` runs `promote.py land-wait <merge commit>`. The wait never follows one
 `promote` run, because GitHub may evict a queued run and a later run may promote a newer commit.
 Instead it reads the cluster every 30 seconds:

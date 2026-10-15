@@ -36,10 +36,12 @@ import sys as _sys
 from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
+from deploy_tools.land_lib.land_tags import changes_cluster_vars
 from deploy_tools.land_lib.landing import Landing
 from deploy_tools.land_lib.outcome import PROMOTE_TIMEOUT_NOTE, Cause, Verdict, say
 from lib.exit_codes import DEPLOY_BROAD, DEPLOY_OK
 from lib.repo_paths import GITOPS_DEPLOY_FILES
+from renderer.renderer_lib.bundle import CLUSTER_VARS
 
 _sys.path.insert(0, str(GITOPS_DEPLOY_FILES))
 from deployer_lib.deploy_changes import _BROAD_DEPLOY_PREFIXES
@@ -155,12 +157,23 @@ def owned_by_narrowing(ln: Landing) -> None:
         )
 
 
+def waits_on_cluster_vars(ln: Landing) -> bool:
+    """Whether the PR changes a cluster file (`land_tags.CLUSTER_VARS_PATHS`)."""
+    return changes_cluster_vars(ln.classification.pr_paths)
+
+
 def wait_on_promotion(ln: Landing) -> None:
-    """Wait until a promotion covers the merge commit; return on `settled`, else end the landing."""
+    """Wait until a promotion covers the merge commit; return on `settled`, else end the landing.
+
+    A PR that changes a cluster file also waits on `cluster-vars` and every Kustomization
+    that depends on it, which land-wait reads from the live graph. `cluster-vars` is not a
+    deploy tag, so it stays out of `owned_tags` and the health gate never asks for it.
+    """
     pr, sha = ln.opts.pr, ln.merge_sha
-    tags = ",".join(ln.owned_tags)
+    also = frozenset({CLUSTER_VARS}) if waits_on_cluster_vars(ln) else frozenset()
+    tags = ",".join([*ln.owned_tags, *sorted(also)])
     say(f"waiting until a promotion covers {sha[:12]} ({tags})")
-    result = ln.tools.flux.land_wait(sha, published(ln), ln.opts.primary)
+    result = ln.tools.flux.land_wait(sha, published(ln), ln.opts.primary, also)
     if result.widened:
         say(f"land-wait waited on every Kustomization: {result.widened}")
     if result.verdict == "settled":

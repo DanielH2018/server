@@ -15,6 +15,7 @@ from py_table import py_table
 
 from secrets_mgmt.consumers import (
     CROSS_HOST_PUSH_TOKENS,
+    FLUX_PATH,
     UPTIME_KUMA_TAG,
     consumer_commands,
     consumer_tags,
@@ -253,8 +254,8 @@ def test_the_tile_and_pusher_tags_are_both_real_deploy_targets():
 _FIXTURE_SECRET = "fixture_issue_4983_api_key"
 
 
-def _repo_with_a_flux_owned_consumer(tmp_path: Path) -> str:
-    """A repo whose secret is rendered by `bento-pdf` (owner: flux) and `sonarr` (unowned)."""
+def _repo_with_a_flux_owned_consumer(tmp_path: Path, owner: str | None = "flux") -> str:
+    """A repo whose secret is rendered by `bento-pdf` (owner: `owner`) and `sonarr` (unowned)."""
     for role in ("bento-pdf", "sonarr"):
         template = tmp_path / "ansible/roles/k8s" / role / "templates/secret.yaml.j2"
         template.parent.mkdir(parents=True)
@@ -265,8 +266,8 @@ def _repo_with_a_flux_owned_consumer(tmp_path: Path) -> str:
         "containers_list:\n"
         "  - name: bento-pdf\n"
         "    platform: k8s\n"
-        "    owner: flux\n"
-        "  - name: sonarr\n"
+        + (f"    owner: {owner}\n" if owner else "")
+        + "  - name: sonarr\n"
         "    platform: k8s\n"
     )
     return str(tmp_path)
@@ -308,3 +309,29 @@ def test_consumer_commands_prints_one_line_naming_the_owner_of_each_dropped_tag(
         c for c in commands if "deploy.sh" not in c and "bento-pdf" in c and "flux" in c
     ]
     assert len(owner_lines) == 1, commands
+
+
+# ── the Flux path for a Flux-owned consumer (D3.4) ──
+# d3-secrets.md, *Rotating a value read by both planes*: Flux substitutes the value from the
+# cluster file, so the line for an `owner: flux` consumer names the operator's `write` and the
+# landing, and an Ansible-owned consumer keeps its `deploy.sh` line.
+
+
+def test_consumer_commands_prints_the_flux_path_for_a_flux_owned_consumer(tmp_path):
+    commands = consumer_commands(
+        _FIXTURE_SECRET, repo=_repo_with_a_flux_owned_consumer(tmp_path)
+    )
+
+    assert commands == [
+        '`./scripts/deploy.sh --tags "sonarr"`',
+        FLUX_PATH % "bento-pdf",
+    ]
+    assert "`uv run python scripts/secrets_mgmt/cluster_vars.py write`" in commands[1]
+
+
+def test_consumer_commands_for_ansible_owned_consumers_prints_one_deploy_line(tmp_path):
+    commands = consumer_commands(
+        _FIXTURE_SECRET, repo=_repo_with_a_flux_owned_consumer(tmp_path, owner=None)
+    )
+
+    assert commands == ['`./scripts/deploy.sh --tags "bento-pdf,sonarr"`']
