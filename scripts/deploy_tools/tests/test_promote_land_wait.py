@@ -229,6 +229,15 @@ def test_a_substituting_promotion_verify_would_pass_settles_rather_than_gives_up
     assert (result.verdict, result.revision) == ("settled", M), result.detail
 
 
+def test_the_promote_timeout_constant_is_verifys_substituting_wait():
+    """`wait.py` cannot import `promote_timeout`, so its constant restates the figure.
+
+    A change to the renderer's default timeout or to the `cluster-vars` hop moves `verify`'s
+    wait, and this fails until the constant moves with it.
+    """
+    assert promote_wait.PROMOTE_TIMEOUT_S == _substituting_promote_timeout()
+
+
 def test_an_unreadable_hold_keeps_the_wait_going():
     sim = Sim(polls=[at(P), at(M)], holds=[forge.ForgeError("gh timed out"), "none"])
     assert sim.wait().verdict == "settled"
