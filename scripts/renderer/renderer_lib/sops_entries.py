@@ -5,9 +5,12 @@ placeholder render leaves out. A wrong entry would hide a whole Secret from the 
 from the round trip, so every placeholder render runs it and exits 1 on a problem. Each entry
 must render exactly one document, of kind `Secret`, and the secret keys that document names
 must be some of `SOPS_MANIFEST_KEYS` and nothing else. The keys are read from the entry's
-sentinel render, so a key reached through an alias counts. The plan's third clause, that every
-template outside the lists naming such a key carries a live `KNOWN_VIOLATIONS` entry, waits on
-a later PR.
+sentinel render, so a key reached through an alias counts.
+
+The third clause, `unlisted_namers`, holds every template outside the lists that names a
+`SOPS_MANIFEST_KEYS` key to a live `KNOWN_VIOLATIONS` entry for that key. It reads template
+sources, so it scans the whole tree on every run, like rule 5. `secret_checks.check` runs it,
+because rule 5's result and the ratchet are both there.
 
 `docs/homelab-render.md` is the operator's page, and
 `docs/target-architecture/render/r2-secret-placeholders.md` the plan.
@@ -86,3 +89,24 @@ def sops_manifest_entries(
             if not named & sops_keys:
                 problems.append(f"{where} names no key in SOPS_MANIFEST_KEYS")
     return problems
+
+
+def unlisted_namers(
+    namers: Iterable[tuple[str, str]],
+    listed: Iterable[str],
+    live: Iterable[tuple[str, str]],
+) -> list[str]:
+    """The third clause's problems, one line each; empty when clean.
+
+    Args:
+        namers: `(template, key)` for each `SOPS_MANIFEST_KEYS` key a template names.
+        listed: The templates of every role's `render_sops_manifests` entries.
+        live: `(template, key)` for each `KNOWN_VIOLATIONS` entry this run found.
+    """
+    listed, live = set(listed), set(live)
+    return [
+        f"{SOPS_MANIFEST_ENTRIES}: {template} names {key}, is in no role's "
+        "render_sops_manifests, and has no live KNOWN_VIOLATIONS entry for it"
+        for template, key in sorted(set(namers))
+        if template not in listed and (template, key) not in live
+    ]
