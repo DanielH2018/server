@@ -12,7 +12,8 @@ and reads each route the walk ends on. Each label set carries one expected outco
   that runs in parallel with a Kuma tile carries `shadow="true"`, and this is the proof that
   it pages nobody. M4's two `IngressProbeFailed*` sets move to `PAGING` in its PR 5, and
   `BlackboxExporterDown` moves in M6's batch A3. M3's two `DiskHealth*` sets move in its PR 5,
-  and the two `TextfileCollectorError` sets in M6's batch A1.
+  and the two `TextfileCollectorError` sets in M6's batch A1. H3's host-plane rules,
+  `HostReconcileFailed` and `HostUpdateStale`, page from the start.
 
 One predicate, "blackhole or muted", would pass a meta alert routed to the blackhole, which is
 a pager that never pages. Hence one outcome per set, each with a rejecting half. A paging
@@ -40,6 +41,17 @@ INGRESS_RULES = (
     ROLES / "k8s" / "observability" / "files" / "rules" / "ingress-probes.yaml"
 )
 HOST_RULES = ROLES / "k8s" / "observability" / "files" / "rules" / "host-checks.yaml"
+# The HostUpdateStale rule for a one-host map. host-checks.yaml carries one per entry of
+# observability_expected_hosts, which is empty until H3.9c, so this stands in for them.
+HOST_UPDATE_STALE_FIXTURE = (
+    ROLES
+    / "k8s"
+    / "observability"
+    / "tests"
+    / "rules"
+    / "fixtures"
+    / "host-update-stale.yaml"
+)
 DEPLOY_PIPELINE_RULES = (
     ROLES / "k8s" / "observability" / "files" / "rules" / "deploy-pipeline.yaml"
 )
@@ -74,19 +86,24 @@ def deploy_pipeline_set(alert: str) -> dict[str, str]:
     return {"alertname": alert, **rule["labels"]}
 
 
-def host_sets() -> dict[str, dict[str, str]]:
+def host_sets(shadow: bool, path=HOST_RULES) -> dict[str, dict[str, str]]:
     """The labels each host-checks rule reaches Alertmanager with, keyed `<alert>/<service>`.
 
-    `TextfileCollectorError` is one rule per node, so the alert name alone is not a key. Every
-    rule there carries a literal `service`.
+    `TextfileCollectorError` and the host-plane rules are one rule per host, so the alert name
+    alone is not a key. Every rule there carries a literal `service`.
+
+    Args:
+        shadow: Whether to return the rules that carry `shadow`, or those that do not.
+        path: The rule file to read.
     """
-    [group] = yaml_fast.safe_load(HOST_RULES.read_text())["groups"]
+    [group] = yaml_fast.safe_load(path.read_text())["groups"]
     return {
         f"{rule['alert']}/{rule['labels']['service']}": {
             "alertname": rule["alert"],
             **rule["labels"],
         }
         for rule in group["rules"]
+        if ("shadow" in rule["labels"]) == shadow
     }
 
 
@@ -119,6 +136,13 @@ PAGING = {
         deploy_pipeline_set("DeployPipelineExporterAbsent"),
         ["discord"],
     ),
+    **{
+        name: (labels, ["discord", "email"])
+        for name, labels in {
+            **host_sets(shadow=False),
+            **host_sets(shadow=False, path=HOST_UPDATE_STALE_FIXTURE),
+        }.items()
+    },
 }
 DEPLOY_HOLD, _ = PAGING["deploy-hold-active"]
 # The shadow sets, as M4's ingress-probes rules and M3's host-checks rules ship them.
@@ -126,7 +150,7 @@ SHADOW = {
     "ingress-probe-failed": ingress_set("IngressProbeFailed"),
     "ingress-probe-failed-critical": ingress_set("IngressProbeFailedCritical"),
     "blackbox-exporter-down": ingress_set("BlackboxExporterDown"),
-    **host_sets(),
+    **host_sets(shadow=True),
 }
 WATCHDOG = {"alertname": "Watchdog", "severity": "info", "service": "observability"}
 
@@ -213,12 +237,20 @@ def test_every_deploy_pipeline_rule_has_an_expected_outcome():
 
 
 def test_host_sets_names_every_host_check_rule():
-    """Non-vacuity for `host_sets`: the four rules M3's PR 3 ships, each keyed by its service."""
-    assert set(host_sets()) == {
+    """Non-vacuity for `host_sets`: M3's four shadow rules, and H3's paging host-plane rules."""
+    assert set(host_sets(shadow=True)) == {
         "DiskHealthFailed/daniel-box",
         "DiskHealthNotReporting/daniel-box",
         "TextfileCollectorError/daniel-box",
         "TextfileCollectorError/daniel-server",
+    }
+    assert set(host_sets(shadow=False)) >= {
+        "HostReconcileFailed/daniel-box",
+        "HostReconcileFailed/daniel-server",
+        "HostReconcileFailed/daniel-pi",
+    }
+    assert set(host_sets(shadow=False, path=HOST_UPDATE_STALE_FIXTURE)) == {
+        "HostUpdateStale/daniel-pi"
     }
 
 

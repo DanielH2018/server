@@ -8,9 +8,13 @@
 #
 # DiskHealthNotReporting fires with one of two label sets. Its first arm keeps the series'
 # labels, `job` and `instance` included. Its absent_over_time arm carries only the equality
-# matchers' `check` and `origin`.
+# matchers' `check` and `origin`. HostUpdateStale's two arms differ the same way.
+#
+# fixtures/host-update-stale.yaml holds the HostUpdateStale rule for a one-host map, daniel-pi
+# at 11400s, because host-checks.yaml carries none while observability_expected_hosts is empty.
 rule_files:
   - ../../files/rules/host-checks.yaml
+  - fixtures/host-update-stale.yaml
 evaluation_interval: 1m
 tests:
   # The zero-series case: no input at all, so no disk-health series has existed for longer
@@ -40,6 +44,12 @@ tests:
         exp_alerts: []
       - eval_time: 26m
         alertname: TextfileCollectorError
+        exp_alerts: []
+      - eval_time: 26m
+        alertname: HostReconcileFailed
+        exp_alerts: []
+      - eval_time: 26m
+        alertname: HostUpdateStale
         exp_alerts: []
 
   # The verdict turns red from minute 3 while the file stays fresh. DiskHealthFailed fires in
@@ -232,3 +242,162 @@ tests:
                 so a file in /var/lib/node-exporter-textfile is malformed or unreadable, and
                 every series in it is gone. Read node_textfile_mtime_seconds for the files it
                 still sees, and the node-exporter pod's log.
+
+  # daniel-pi's reconcile reads 0 from minute 0, so the host holds. HostReconcileFailed is
+  # pending at 14 minutes and fires for daniel-pi alone at 16, past its 15-minute hold.
+  - interval: 1m
+    input_series:
+      - series: 'homelab_host_reconcile_ok{instance="daniel-pi", job="node-pi", origin="daniel-pi"}'
+        values: '0x20'
+    alert_rule_test:
+      - eval_time: 14m
+        alertname: HostReconcileFailed
+        exp_alerts: []
+      - eval_time: 16m
+        alertname: HostReconcileFailed
+        exp_alerts:
+          - exp_labels:
+              instance: daniel-pi
+              job: node-pi
+              origin: daniel-pi
+              severity: critical
+              service: daniel-pi
+            exp_annotations:
+              summary: daniel-pi holds after a failed reconcile.
+              description: >-
+                homelab_host_reconcile_ok on daniel-pi has read 0 for 15 minutes, so the host
+                holds and installs no newer homelab package. Read `journalctl -u
+                homelab-updater -u homelab-reconcile` on daniel-pi and docs/host-packages.md,
+                "Host-plane pages". Once the cause is fixed, `sudo
+                /usr/lib/homelab/homelab-updater --clear-hold` reruns reconcile and clears the
+                hold if it passes, and `sudo /usr/lib/homelab/homelab-updater --clear-hold
+                --install-newest` clears the hold and then installs the newest packages as a
+                timer run does.
+
+  # daniel-pi reconciles, and the two k3s nodes hold. Each node's rule fires with its own
+  # `service`, and daniel-pi's stays quiet.
+  - interval: 1m
+    input_series:
+      - series: 'homelab_host_reconcile_ok{instance="daniel-pi", job="node-pi", origin="daniel-pi"}'
+        values: '1x20'
+      - series: 'homelab_host_reconcile_ok{instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '0x20'
+      - series: 'homelab_host_reconcile_ok{instance="daniel-server", job="node", origin="daniel-server"}'
+        values: '0x20'
+    alert_rule_test:
+      - eval_time: 16m
+        alertname: HostReconcileFailed
+        exp_alerts:
+          - exp_labels:
+              instance: daniel-box
+              job: node
+              origin: daniel-box
+              severity: critical
+              service: daniel-box
+            exp_annotations:
+              summary: daniel-box holds after a failed reconcile.
+              description: >-
+                homelab_host_reconcile_ok on daniel-box has read 0 for 15 minutes, so the host
+                holds and installs no newer homelab package. Read `journalctl -u
+                homelab-updater -u homelab-reconcile` on daniel-box and docs/host-packages.md,
+                "Host-plane pages". Once the cause is fixed, `sudo
+                /usr/lib/homelab/homelab-updater --clear-hold` reruns reconcile and clears the
+                hold if it passes, and `sudo /usr/lib/homelab/homelab-updater --clear-hold
+                --install-newest` clears the hold and then installs the newest packages as a
+                timer run does.
+          - exp_labels:
+              instance: daniel-server
+              job: node
+              origin: daniel-server
+              severity: critical
+              service: daniel-server
+            exp_annotations:
+              summary: daniel-server holds after a failed reconcile.
+              description: >-
+                homelab_host_reconcile_ok on daniel-server has read 0 for 15 minutes, so the host
+                holds and installs no newer homelab package. Read `journalctl -u
+                homelab-updater -u homelab-reconcile` on daniel-server and docs/host-packages.md,
+                "Host-plane pages". Once the cause is fixed, `sudo
+                /usr/lib/homelab/homelab-updater --clear-hold` reruns reconcile and clears the
+                hold if it passes, and `sudo /usr/lib/homelab/homelab-updater --clear-hold
+                --install-newest` clears the hold and then installs the newest packages as a
+                timer run does.
+
+  # The fixture host's last success stays at 0 while its exporter is up. HostUpdateStale is
+  # quiet at 189 minutes (11340s) and fires at 191 (11460s), past the 11400s limit.
+  - interval: 1m
+    input_series:
+      - series: 'homelab_host_update_success_timestamp_seconds{instance="daniel-pi", job="node-pi", origin="daniel-pi"}'
+        values: '0x200'
+      - series: 'up{instance="daniel-pi", job="node-pi", origin="daniel-pi"}'
+        values: '1x200'
+    alert_rule_test:
+      - eval_time: 189m
+        alertname: HostUpdateStale
+        exp_alerts: []
+      - eval_time: 191m
+        alertname: HostUpdateStale
+        exp_alerts:
+          - exp_labels:
+              instance: daniel-pi
+              job: node-pi
+              origin: daniel-pi
+              severity: critical
+              service: daniel-pi
+            exp_annotations:
+              summary: daniel-pi has had no successful homelab update for 11400s.
+              description: >-
+                No homelab-updater run on daniel-pi has succeeded in 11400s, or its exporter is
+                up and serves no success timestamp. A failed fetch, a stopped
+                homelab-apt-repo.service, a firewall rule, a keyring mismatch and a stopped
+                timer each leave it stale. Read `systemctl status homelab-updater.timer` and
+                `journalctl -u homelab-updater` on daniel-pi, and docs/host-packages.md,
+                "Host-plane pages".
+
+  # A success timestamp that follows the clock keeps HostUpdateStale quiet.
+  - interval: 1m
+    input_series:
+      - series: 'homelab_host_update_success_timestamp_seconds{instance="daniel-pi", job="node-pi", origin="daniel-pi"}'
+        values: '0+60x200'
+      - series: 'up{instance="daniel-pi", job="node-pi", origin="daniel-pi"}'
+        values: '1x200'
+    alert_rule_test:
+      - eval_time: 191m
+        alertname: HostUpdateStale
+        exp_alerts: []
+
+  # The exporter is up and serves no success timestamp. The absent arm fires with the equality
+  # matchers' `job` and `origin` alone.
+  - interval: 1m
+    input_series:
+      - series: 'up{instance="daniel-pi", job="node-pi", origin="daniel-pi"}'
+        values: '1x10'
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: HostUpdateStale
+        exp_alerts:
+          - exp_labels:
+              job: node-pi
+              origin: daniel-pi
+              severity: critical
+              service: daniel-pi
+            exp_annotations:
+              summary: daniel-pi has had no successful homelab update for 11400s.
+              description: >-
+                No homelab-updater run on daniel-pi has succeeded in 11400s, or its exporter is
+                up and serves no success timestamp. A failed fetch, a stopped
+                homelab-apt-repo.service, a firewall rule, a keyring mismatch and a stopped
+                timer each leave it stale. Read `systemctl status homelab-updater.timer` and
+                `journalctl -u homelab-updater` on daniel-pi, and docs/host-packages.md,
+                "Host-plane pages".
+
+  # The exporter is down, so every series of the target is stale and the success timestamp
+  # reads as absent. `up` at 0 keeps the absent arm quiet: a failed scrape is not a stale host.
+  - interval: 1m
+    input_series:
+      - series: 'up{instance="daniel-pi", job="node-pi", origin="daniel-pi"}'
+        values: '0x10'
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: HostUpdateStale
+        exp_alerts: []
