@@ -1,0 +1,165 @@
+---
+# Alert-triggered triage, slice 1: claude-triage@<episode>.service runs one capped, diagnose-only
+# headless session as the agent user and leaves a report. Started by hand for a drill; slice 2
+# adds the timer that starts it when a monitor goes down. docs/claude-agent-user.md,
+# "Alert-triggered triage", has the design. Imported from main.yml.
+#
+# DECIDED: the run's caps and identity are pinned as block vars here, on top of their defaults.
+# Block vars outrank host_vars and group_vars, so an agent PR that changes only the inventory
+# cannot raise its own budget, turns or wall clock, or run the unit as another user. This file
+# and every claude-triage template are on the lander's approval list (operator decision,
+# 2026-10-15), so these values change only with the operator's approval. Each is a literal.
+# ansible/tests/setup/test_claude_triage.py holds them equal to the defaults.
+
+- name: Install the agent's triage unit under its pinned caps
+  vars:
+    claude_code_triage_agent_user: claude
+    claude_code_triage_agent_home: /var/lib/claude
+    claude_code_triage_state_dir: /var/lib/claude/triage
+    claude_code_triage_model: opus
+    claude_code_triage_budget_usd: 10
+    claude_code_triage_max_turns: 60
+    claude_code_triage_run_timeout_s: 1800
+  block:
+    # Arming needs the run's own credential. Without it the session would fall back to the
+    # interactive login claude-rc.service shares, which can lapse while idle (#4618).
+    - name: Refuse to install triage without its own Claude credential
+      tags: [claude_code]
+      ansible.builtin.assert:
+        that:
+          - claude_code_triage_claude_oauth_token | default('') | length > 0
+        fail_msg: >-
+          claude_code_triage_enabled is true, but claude_code_triage_claude_oauth_token is not
+          in secrets.yml. Mint it with `claude setup-token` as the agent user and add it with the
+          add-secret skill first.
+        quiet: true
+      no_log: true
+      when: claude_code_agent_user_enabled and claude_code_triage_enabled
+
+    - name: Create triage's code, config and state directories
+      tags: [claude_code]
+      ansible.builtin.file:
+        path: "{{ item.path }}"
+        state: directory
+        owner: "{{ item.owner }}"
+        group: "{{ item.group }}"
+        mode: "{{ item.mode }}"
+      loop:
+        # Code, prompt and config: readable by the agent, writable by root alone, so a session
+        # cannot change what the next run executes or how much it may spend.
+        - {path: /opt/claude-triage, owner: root, group: root, mode: "0755"}
+        - {path: /etc/claude-triage, owner: root, group: root, mode: "0755"}
+        # The inbox, the records and the lock, written by the agent.
+        - path: "{{ claude_code_triage_state_dir }}"
+          owner: "{{ claude_code_triage_agent_user }}"
+          group: "{{ claude_code_triage_agent_user }}"
+          mode: "0750"
+        - path: "{{ claude_code_triage_state_dir }}/inbox"
+          owner: "{{ claude_code_triage_agent_user }}"
+          group: "{{ claude_code_triage_agent_user }}"
+          mode: "0750"
+      become: true
+      when: claude_code_agent_user_enabled and claude_code_triage_enabled
+
+    - name: Install the triage runner
+      tags: [claude_code]
+      ansible.builtin.copy:
+        src: claude_triage_run.py
+        dest: /opt/claude-triage/claude_triage_run.py
+        owner: root
+        group: root
+        mode: "0644"
+      become: true
+      when: claude_code_agent_user_enabled and claude_code_triage_enabled
+
+    - name: Render triage's prompt and config
+      tags: [claude_code]
+      ansible.builtin.template:
+        src: "{{ item.src }}"
+        dest: "{{ item.dest }}"
+        owner: root
+        group: root
+        mode: "0644"
+      loop:
+        - {src: claude-triage-prompt.txt.j2, dest: /opt/claude-triage/prompt.txt}
+        - {src: claude-triage-config.env.j2, dest: /etc/claude-triage/config.env}
+      become: true
+      when: claude_code_agent_user_enabled and claude_code_triage_enabled
+
+    - name: Write triage's Claude credential where only systemd reads it
+      tags: [claude_code]
+      ansible.builtin.template:
+        src: claude-triage-session.env.j2
+        dest: /etc/claude-triage/session.env
+        owner: root
+        group: root
+        mode: "0600"
+      become: true
+      no_log: true
+      when: claude_code_agent_user_enabled and claude_code_triage_enabled
+
+    # The unit's OnFailure= target: a run that crashed or was killed.
+    - name: Install triage's failure alert
+      tags: [claude_code]
+      when: claude_code_agent_user_enabled and claude_code_triage_enabled
+      ansible.builtin.import_tasks: "{{ role_path }}/../common/tasks/alert_unit.yml"
+      vars:
+        alert_unit_name: claude-triage
+        alert_unit_description: Alert when an unattended triage run of the agent user crashes
+        alert_unit_message: "claude-triage crashed on {{ inventory_hostname }}: a triage run wrote no report. `systemctl --failed claude-triage@*` names the episode, and `journalctl -u claude-triage@<episode>` has the run. The episode file is still in {{ claude_code_triage_state_dir }}/inbox."
+        alert_unit_env_dir: /etc/claude-triage
+
+    # The result page: the runner starts it with the episode and its state in the instance.
+    - name: Install triage's result page
+      tags: [claude_code]
+      when: claude_code_agent_user_enabled and claude_code_triage_enabled
+      ansible.builtin.import_tasks: "{{ role_path }}/../common/tasks/alert_unit.yml"
+      vars:
+        alert_unit_name: claude-triage-report
+        alert_unit_instanced: true
+        alert_unit_description: Report that triage episode %i finished
+        alert_unit_time_label: Finished at
+        alert_unit_message: "an unattended triage run on {{ inventory_hostname }} finished; the page opens with the episode and its state. The report is triage-<episode>.html at https://artifacts.{{ domain }}/a/{{ inventory_hostname }}-{{ claude_code_triage_agent_user }}/ and the record is {{ claude_code_triage_state_dir }}/runs/<episode>.json."
+        alert_unit_env_dir: /etc/claude-triage
+
+    - name: Install the triage unit
+      tags: [claude_code]
+      ansible.builtin.template:
+        src: claude-triage@.service.j2
+        dest: /etc/systemd/system/claude-triage@.service
+        owner: root
+        group: root
+        mode: "0644"
+      become: true
+      when: claude_code_agent_user_enabled and claude_code_triage_enabled
+      notify: Reload systemd
+
+    - name: Let the agent user start a triage run and its page, and nothing else (polkit)
+      tags: [claude_code]
+      ansible.builtin.template:
+        src: 50-claude-triage.rules.j2
+        dest: /etc/polkit-1/rules.d/50-claude-triage.rules
+        owner: root
+        group: root
+        mode: "0644"
+      become: true
+      when: claude_code_agent_user_enabled and claude_code_triage_enabled
+      # No handler: polkitd watches rules.d and reloads a changed rule on its own.
+
+    # The way out. The rule goes first, so the agent cannot start a run once removal begins.
+    # The state directory stays: it holds the records of past runs.
+    - name: Remove triage when it is switched off
+      tags: [claude_code]
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - /etc/polkit-1/rules.d/50-claude-triage.rules
+        - /etc/systemd/system/claude-triage@.service
+        - /etc/systemd/system/claude-triage-alert.service
+        - /etc/systemd/system/claude-triage-report-alert@.service
+        - /etc/claude-triage
+        - /opt/claude-triage
+      become: true
+      when: not (claude_code_agent_user_enabled and claude_code_triage_enabled)
+      notify: Reload systemd

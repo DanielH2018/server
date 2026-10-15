@@ -21,6 +21,7 @@ what a session reaches as `ubuntu` stays private. See
 | 5 | The homelab-ui login, the agent's browser, and a fan-out agent on daniel-server | Built. Peer users were dropped. |
 | 6 | Retire Claude sessions as `ubuntu` | New sessions start as `claude`, and the caps render for both users. The operator still owns dropping uid 1000. |
 | 7 | A pre-merge dry run without secrets | Optional, planned |
+| Triage | A monitor alert starts an unattended run that diagnoses, fixes, lands and reports | Slice 1 built and shipped switched off. See [Alert-triggered triage](#alert-triggered-triage). |
 
 Each slice ends in a check that can be run and a variable that turns it back off.
 [Checking and rolling back](#checking-and-rolling-back) lists both.
@@ -242,6 +243,11 @@ truth, with a reason beside each entry. It holds:
 - `ansible/roles/setup/initial_setup/tasks/access.yml`, which holds sudo, ssh and the
   operator's login
 - `ansible/.sops.yaml` and `ansible/vars/secrets.yml`
+- alert-triggered triage: `tasks/triage.yml`, every `templates/claude-triage*` template, the
+  rule `templates/50-claude-triage.rules.j2` and `files/claude_triage_run.py`, all under
+  `ansible/roles/setup/claude_code/`. The operator added them on 2026-10-15. Later slices let
+  a triage run land its own fixes with nobody watching, so it must not be able to raise its own
+  caps.
 
 Two choices keep the floor from being bypassed through the inventory:
 
@@ -482,6 +488,86 @@ ServiceAccount every request whose `request.dryRun` is false.
 
 **Unverified:** whether this k3s version's admission CEL exposes `request.dryRun`, and whether
 the dry-run path's kubectl calls can run without `become`.
+
+## Alert-triggered triage
+
+The operator ruled on 2026-10-15 that the `claude` user handles a monitor alert end to end with
+nobody watching. It diagnoses the alert, opens a fix, lands it, restarts what needs
+restarting, and leaves a report to read later. The four rulings:
+
+- **Restarts** go through a broker that restarts only listed workloads. It is a root-owned
+  `claude-restart@` unit that the agent starts through polkit. It runs `kubectl rollout restart` only, on a list of
+  workloads kept in the repo, and it is rate-limited. It cannot scale, delete or change an
+  image.
+- **Landing** follows the approval floor of `claude-land@` unchanged. Every file that sets a run's caps
+  or identity is on that floor, so the agent cannot raise its own budget unattended.
+- **The report** is an HTML page in the agent's artifacts tree, served under
+  `/a/daniel-box-claude/`. A JSON record in `/var/lib/claude/triage/runs/` sits beside it, and a
+  Discord page links the report. It is not a GitHub issue, because the repo is public. The page
+  prunes after 30 days, and the record stays.
+- **The budget** is 6 runs a day, $10 to diagnose and $25 to fix. One run goes at a time, and a
+  storm of monitors going down together gets one run.
+
+A timer running as `claude` is the trigger. It polls Kuma and Alertmanager for monitors that
+went down. A webhook into the host was rejected. Host services bind to loopback, so a webhook
+would need a non-loopback port, a firewall rule, and a network input that starts Claude.
+
+The build runs in slices, and each slice is exercised before the next starts:
+
+| Slice | Delivers | State |
+|---|---|---|
+| 1 | `claude-triage@<episode>.service`, one diagnose-only run started by hand | Built, shipped switched off |
+| 2 | The polling timer, first in a shadow mode that only logs what it would start | Planned |
+| 3 | The `claude-restart@` broker and its allowlist | Planned |
+| 4 | A fix phase that opens a PR and lands it through `claude-land@` | Planned. It needs the bot account visible again (#5126). |
+| 5 | A Kuma alive push and a weekly summary | Planned |
+
+### Slice 1: one run, started by hand
+
+`tasks/triage.yml` in `setup/claude_code` installs the run. `claude_code_triage_enabled`
+switches it on, and it installs only while `claude_code_agent_user_enabled` is also true.
+
+- **The unit** `claude-triage@<episode>.service` runs as `claude`, with the hardening the
+  `renovate-agent` unit carries. It reads `<state_dir>/inbox/<episode>.json` and runs
+  `files/claude_triage_run.py` under `flock -n`, so one run goes at a time. A busy lock exits
+  75. That exit is not a failure, and the episode waits in the inbox.
+- **The session** is `claude -p`. Edit, Write, a landing and a push are denied, and
+  `--permission-prompts none` denies anything that would wait on an answer. The session has a
+  $10 budget, 60 turns and a 30-minute wall clock, and it returns a diagnosis in a fixed JSON
+  schema.
+- **The credential** is the run's own `claude setup-token` token. It is the SOPS key
+  `claude_code_triage_claude_oauth_token`, in a root 0600 `EnvironmentFile`, and the role
+  refuses to install without it. The interactive login `claude-rc.service` uses can lapse while
+  idle (#4618).
+- **The episode text can be hostile.** A monitor message can carry log text anyone wrote. The prompt
+  frames it as data. The runner HTML-escapes every field the session returns, because the
+  report shares an origin with the operator's own artifacts.
+- **Every run leaves a record, a report and a page.** An inconclusive or timed-out run does too.
+  The page is `claude-triage-report-alert@<episode>:<state>.service`, which holds the webhook. A
+  polkit rule lets `claude` start the page and the run, in fixed shapes only. A run that crashes
+  pages through `OnFailure=claude-triage-alert.service`.
+- **The caps are pinned** as literal block vars in `tasks/triage.yml`, which outrank the
+  inventory, the same way `tasks/lander.yml` pins the landing settings.
+
+To switch it on, the operator:
+
+1. Runs `claude setup-token` as `claude`, from `sudo machinectl shell claude@ /bin/bash -l`.
+1. Adds the token as `claude_code_triage_claude_oauth_token` with the `add-secret` skill, then
+   runs `secret_rotation.py sync`.
+1. Sets `claude_code_triage_enabled: true` in daniel-box's `host_vars` and applies
+   `initial_setup.yml --tags claude_code`.
+
+To run a drill, as `claude`:
+
+```bash
+printf '%s\n' '{"monitor": "Drill", "message": "drill: no real fault"}' \
+  > /var/lib/claude/triage/inbox/drill-1.json
+systemctl start claude-triage@drill-1
+```
+
+The drill writes `/var/lib/claude/triage/runs/drill-1.json` and `triage-drill-1.html` under
+`/a/daniel-box-claude/`, and Discord gets the page. To switch triage off, set
+`claude_code_triage_enabled: false` and apply. The records stay.
 
 ## The operator's dotfiles
 

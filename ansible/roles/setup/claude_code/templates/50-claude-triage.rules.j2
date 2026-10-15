@@ -1,0 +1,26 @@
+// Managed by Ansible (roles/setup/claude_code) — edits here are overwritten.
+//
+// Lets the agent user START a triage run and the page that reports one, and nothing else.
+// The run is claude-triage@<episode>.service, which runs as the agent itself, so this grants
+// no new identity: it lets the agent's own timer or a drill start a hardened, capped unit
+// rather than a bare session. The page is claude-triage-report-alert@<episode>:<state>.service,
+// which holds the root-only Discord webhook. The episode id and the states are the shapes
+// files/claude_triage_run.py accepts (EPISODE_ID, STATES), so the most a session can post is a
+// page in that fixed shape.
+polkit.addRule(function (action, subject) {
+    if (action.id !== "org.freedesktop.systemd1.manage-units") {
+        return undefined;
+    }
+    if (subject.user !== "{{ claude_code_triage_agent_user }}") {
+        return undefined;
+    }
+    var unit = action.lookup("unit");
+    if (!/^claude-triage@[a-z0-9][a-z0-9-]{0,62}\.service$/.test(unit) &&
+        !/^claude-triage-report-alert@[a-z0-9][a-z0-9-]{0,62}:(diagnosed|inconclusive|timeout|failed)\.service$/.test(unit)) {
+        return undefined;
+    }
+    if (action.lookup("verb") !== "start") {
+        return undefined;
+    }
+    return polkit.Result.YES;
+});
