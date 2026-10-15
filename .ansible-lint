@@ -6,6 +6,10 @@ exclude_paths:
   - .github/
   - "*.log"
   - "ansible/vars/secrets.yml"
+  # SOPS-encrypted Secret manifests (target slice D3). Under a `vars/` directory ansible-lint
+  # reads them as vars files and fails on `apiVersion`; they stay there because the creation
+  # rules in ansible/.sops.yaml point there. `cluster_vars.py check` validates them instead.
+  - "ansible/vars/cluster-manifests/"
   - "ansible/collections/"
   # Claude Code creates git worktrees under .claude/worktrees/<name>/, each a FULL repo
   # checkout — including its own copy of the vendored ansible/collections/ whose changelog

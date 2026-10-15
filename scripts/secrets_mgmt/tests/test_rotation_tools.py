@@ -120,6 +120,22 @@ def test_both_sops_boundaries_bound_their_subprocess_with_a_timeout():
     )
 
 
+def test_sops_set_writes_the_file_it_is_given_and_secrets_yml_by_default():
+    """`cluster_vars.py write` sets keys in the cluster file through the same argv builder."""
+    argvs = []
+    rotation_tools.sops_set("a_key", "v", run=lambda cmd, **_kw: argvs.append(cmd))
+    rotation_tools.sops_set(
+        "a_key",
+        "v",
+        path="/elsewhere/cluster.env",
+        run=lambda cmd, **_kw: argvs.append(cmd),
+    )
+    assert [cmd[3] for cmd in argvs] == [
+        rotation_tools.SECRETS_FILE,
+        "/elsewhere/cluster.env",
+    ]
+
+
 def test_kuma_push_sends_host_libs_push_to_the_host_and_token_the_url_names():
     # The audit wrapper exports one URL; host_lib takes a host and a token, so the split is
     # what decides which monitor the verdict reaches.

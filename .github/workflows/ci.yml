@@ -568,6 +568,28 @@ jobs:
           galaxy: "true"
       - name: Install Ansible collections
         run: uv run ansible-galaxy collection install -r ansible/requirements.yml -p ansible/collections
+      # `cluster_vars.py write`'s tests (target slice D3) run the real sops against a throwaway
+      # age key, and they fail rather than skip without it. The version and digest are the
+      # hosts' pin, `sops_setup_version` and `sops_setup_binary_amd64_sha256` in
+      # ansible/roles/setup/sops_setup/defaults/main.yml, and
+      # ansible/tests/repo/test_ci_sops_matches_the_host_pin.py holds the two equal: a sops
+      # bump moves this copy too. age comes from apt, as the hosts install it.
+      - name: Install sops and age for the cluster_vars tests
+        env:
+          SOPS_VERSION: v3.13.3
+          SOPS_SHA256: e5bec3346a873ae91d871550f3e698c1aad962aff462a080e40f25fde17fef6b
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/bin"
+          curl --retry 3 -fsSLo "$RUNNER_TEMP/bin/sops" \
+            "https://github.com/getsops/sops/releases/download/$SOPS_VERSION/sops-$SOPS_VERSION.linux.amd64"
+          echo "$SOPS_SHA256  $RUNNER_TEMP/bin/sops" | sha256sum -c --strict
+          chmod +x "$RUNNER_TEMP/bin/sops"
+          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+          sudo apt-get install -y --no-install-recommends age \
+            || { sudo apt-get update -q && sudo apt-get install -y --no-install-recommends age; }
+          "$RUNNER_TEMP/bin/sops" --version --disable-version-check
+          age-keygen --version
       # The Bash hooks split commands with the dotfiles repo's `claude_guard` package, and the
       # worktree pruner reads `claude_worktree` from it. A host gets both from `chezmoi apply`;
       # this step lays the same two directories out where a host has them, so the bootstraps

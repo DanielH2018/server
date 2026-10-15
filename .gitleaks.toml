@@ -1,15 +1,28 @@
 # gitleaks config — extends the bundled default ruleset (does NOT replace it).
 #
-# Sole customization: an allowlist for the SOPS-encrypted secrets file. Every value in
-# ansible/vars/secrets.yml is AES256-GCM ciphertext — `ENC[AES256_GCM,data:...]`. The default
-# rules occasionally false-positive on that random base64 when it sits next to a suggestive key
-# name (e.g. `monitor_bridge_discord_push_token` tripped `discord-client-secret`). Scanning
-# ciphertext only ever yields false positives.
+# The first allowlist covers the SOPS-encrypted files. Every value in them is AES256-GCM
+# ciphertext — `ENC[AES256_GCM,data:...]`. The default rules occasionally false-positive on that
+# random base64 when it sits next to a suggestive key name (e.g.
+# `monitor_bridge_discord_push_token` tripped `discord-client-secret`). Scanning ciphertext only
+# ever yields false positives.
 #
-# This is path-scoped to the SOPS file ONLY — every other file in the repo is scanned unchanged,
-# so a plaintext secret committed anywhere else still trips. A plaintext secret can't realistically
-# land in secrets.yml itself: `.sops.yaml` auto-encrypts everything in vars/, and the
-# block-protected-edits hook denies direct edits (it's only ever written via `sops`).
+# It is path-scoped to those files ONLY — every other file in the repo is scanned unchanged, so a
+# plaintext secret committed anywhere else still trips. A creation rule in ansible/.sops.yaml
+# applies only when `sops` itself encrypts, so it keeps nothing out of these paths. These guards
+# do, per path:
+#   - ansible/vars/secrets.yml: the block-protected-edits hook denies an Edit or Write to a file
+#     carrying a SOPS MAC, and asks before a shell write to one, so the file is written only
+#     through `sops`.
+#   - the cluster file ansible/vars/cluster-vars.sops.env and the manifests under
+#     ansible/vars/cluster-manifests/ (target slice D3): the same hook, which also knows the
+#     dotenv form's `sops_mac=` line; the `cluster-vars-ciphertext` pre-commit hook, which fails
+#     a plaintext value or a hand edit; and, from PR D3.2c, which commits the first such file,
+#     `cluster_vars.py check` in CI.
+#   - the publish job's copies of both under out/cluster/, which PR D3.3a first publishes:
+#     `cluster_vars.py check --ciphertext-only` on exactly those files, which D3.3a adds to the
+#     publish job ahead of its gitleaks step. That step loads this file with
+#     `--config .gitleaks.toml`. The rest of out/cluster/ is plaintext by design and stays
+#     scanned.
 # (A line/match-target regex on `ENC[AES256_GCM` works in `gitleaks detect` but not in the
 # pre-commit `gitleaks git --staged` diff-scan mode, hence the path scope.)
 
@@ -17,8 +30,26 @@
 useDefault = true
 
 [[allowlists]]
-description = "ansible/vars/secrets.yml is wholly SOPS (AES256-GCM) ciphertext — not plaintext secrets"
-paths = ['''ansible/vars/secrets\.yml''']
+description = "SOPS (AES256-GCM) ciphertext files: secrets.yml, the cluster file and manifests, and their publish copies"
+paths = [
+  '''^ansible/vars/secrets\.yml$''',
+  '''^ansible/vars/cluster-vars\.sops\.env$''',
+  '''^ansible/vars/cluster-manifests/[^/]+\.sops\.yaml$''',
+  '''^out/cluster/cluster-vars/cluster-vars\.sops\.env$''',
+  '''^out/cluster/[^/]+/[^/]+\.sops\.yaml$''',
+]
+
+# ansible/vars/cluster-vars.source records one SHA-256 per cluster key, of that key's public
+# ciphertext in secrets.yml, beside the key's name. `generic-api-key` fires on a high-entropy
+# value next to a suggestive key name, and a line such as `grafana_admin_password <sha>`
+# supplies both halves. The value is a digest of tracked ciphertext, so a hit here is a false
+# positive by construction, and a real secret cannot reach the file — `cluster_vars.py write`
+# writes it, and `cluster_vars.py check` refuses a digest that matches no ciphertext. Scoped to
+# this one rule on this one path, so every other rule still scans it.
+[[allowlists]]
+description = "ansible/vars/cluster-vars.source holds ciphertext digests keyed by secret name, never a credential"
+targetRules = ["generic-api-key"]
+paths = ['''^ansible/vars/cluster-vars\.source$''']
 
 # docs/facts.lock records one SHA per cited atom, keyed by the atom's own name — a repo path, a
 # Python symbol or a pytest node id. `generic-api-key` fires on a high-entropy value next to a
@@ -31,7 +62,7 @@ paths = ['''ansible/vars/secrets\.yml''']
 [[allowlists]]
 description = "docs/facts.lock holds content digests keyed by atom name, never a credential"
 targetRules = ["generic-api-key"]
-paths = ['''docs/facts\.lock''']
+paths = ['''^docs/facts\.lock$''']
 
 # The same shape for the vendored Kubernetes schemas' provenance file: one sha256 per upstream
 # file, keyed by the file's name. Upstream names an API group's file `apis__<group>...`, and
@@ -41,4 +72,4 @@ paths = ['''docs/facts\.lock''']
 [[allowlists]]
 description = "Kubernetes schema SOURCE.json holds sha256 digests of public upstream files"
 targetRules = ["generic-api-key"]
-paths = ['''scripts/validate/schemas/kubernetes\.io/v[0-9.]+/SOURCE\.json''']
+paths = ['''^scripts/validate/schemas/kubernetes\.io/v[0-9.]+/SOURCE\.json$''']

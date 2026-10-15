@@ -23,8 +23,10 @@ Two classes, both always a mistake in this repo:
      through `sops`. (`.claude/rules/secrets.md`.) Detection is CONTENT-based, not
      path-based: `host_vars/*.yml` / `group_vars/all.yml` contain the substring
      "vars/" but are PLAINTEXT and must stay editable. It keys off the SOPS integrity
-     MAC field (a `mac:` metadata line) — NOT a bare ciphertext substring, so a file
-     that merely *mentions* the marker (a doc, a test, this hook) is not misclassified.
+     MAC field — NOT a bare ciphertext substring, so a file that merely *mentions* the
+     marker (a doc, a test, this hook) is not misclassified. The MAC is a `mac:` metadata
+     line in the YAML and JSON forms, and a line opening with `sops_mac=` in the dotenv
+     form, which SOPS writes for the cluster file `ansible/vars/cluster-vars.sops.env`.
 
 Reads the hook JSON on stdin. Emits a PreToolUse "deny" decision when the target is
 one of the above; otherwise no output -> normal permission flow. The hook can only
@@ -39,6 +41,9 @@ from _hook_common import emit_pretooluse_decision, read_payload
 
 
 _SOPS_MAC_RE = re.compile(r'(?m)^\s*"?mac"?:\s*"?ENC\[AES256_GCM,')
+# The dotenv store writes its metadata as plain `sops_<field>=<value>` lines (`SopsPrefix` in
+# sops `stores/metadata.go`), so the MAC line of a SOPS dotenv file opens with `sops_mac=`.
+_SOPS_DOTENV_MAC_RE = re.compile(r"(?m)^sops_mac=ENC\[AES256_GCM,")
 
 # (tree, the generator that owns it). Rendered from the Ansible tree by
 # scripts/docs/build_docs.py and rewritten by the docs-refresh cron, so a hand edit is lost at
@@ -57,11 +62,12 @@ _GENERATED_DOC_TREES = (
 def is_sops_encrypted(text):
     """True iff text is a SOPS-encrypted document.
 
-    Keys off the structural integrity MAC field in the sops metadata block (a `mac:` line whose
-    value is AES256-GCM ciphertext) rather than the bare marker substring — so a file that merely
-    mentions the marker (docs, tests, this progress log) is not misclassified as ciphertext.
+    Keys off the structural integrity MAC field in the sops metadata block (a `mac:` line, or a
+    dotenv `sops_mac=` line, whose value is AES256-GCM ciphertext) rather than the bare marker
+    substring — so a file that merely mentions the marker (docs, tests, this progress log) is
+    not misclassified as ciphertext.
     """
-    return bool(_SOPS_MAC_RE.search(text))
+    return bool(_SOPS_MAC_RE.search(text) or _SOPS_DOTENV_MAC_RE.search(text))
 
 
 def _read_file(path, limit=1_048_576):

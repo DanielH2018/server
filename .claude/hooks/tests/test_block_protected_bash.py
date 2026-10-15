@@ -76,6 +76,16 @@ def test_an_ordinary_bash_write_is_clean(command):
     assert decision is None, f"should not act on: {command}"
 
 
+def test_a_bash_write_to_a_sops_dotenv_is_flagged(tmp_path):
+    """The cluster file is a SOPS dotenv, and the Bash arm loads the Edit hook's detector."""
+    enc = "ENC[" + "AES256_GCM,data:Zz==,iv:Yy=,tag:Xx==,type:str]"
+    target = tmp_path / "cluster.env"
+    target.write_text("a_key=" + enc + "\n" + "sops_mac=" + enc + "\n")
+    decision, reason = _mod.decide(f"sed -i s/a/b/ {target}", str(tmp_path))
+    assert decision == "ask"
+    assert reason
+
+
 def test_a_write_into_another_checkouts_generated_tree_is_flagged(tmp_path):
     """The checkout that owns the target decides, not the cwd, as in the Edit hook.
 

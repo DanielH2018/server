@@ -90,7 +90,11 @@ files = "^ansible/.*\\.ya?ml$"
 # flux/files/gotk-components.yaml is Flux's install as `flux install --export` writes it, never
 # edited, so a regeneration diffs as upstream's change alone; its block-sequence indentation
 # trips yaml[indentation]. The validate-k8s-manifests hook validates its render.
-exclude = "^ansible/(vars/secrets\\.yml|roles/k8s/home-assistant/files/.*|roles/k8s/flux/files/gotk-components\\.yaml)$"
+# vars/cluster-manifests/ holds SOPS-encrypted Secret manifests (target slice D3). A YAML file
+# under a `vars/` directory reads to ansible-lint as a vars file, which fails on `apiVersion`.
+# They stay under ansible/vars/ because the creation rules in ansible/.sops.yaml and the
+# runbooks point there, and `cluster_vars.py check` validates them instead.
+exclude = "^ansible/(vars/secrets\\.yml|vars/cluster-manifests/.*|roles/k8s/home-assistant/files/.*|roles/k8s/flux/files/gotk-components\\.yaml)$"
 # Cap ansible-core <3 so a surprise upstream major can't silently change lint behavior
 # or break this hook on a day nothing in the repo changed (these deps aren't lock-pinned).
 additional_dependencies = ["ansible-core>=2.18,<3.0", "jmespath"]
@@ -388,6 +392,28 @@ pass_filenames = false
 # `sops_names` and every other process boundary the gate depends on moved into
 # `rotation_tools.py`, and a per-file list here is a list that goes stale on the next split.
 files = "^(ansible/vars/secrets\\.yml|ansible/secret_rotation\\.yml|scripts/secrets_mgmt/.*\\.py|ansible/roles/setup/common/files/(host_lib|kuma_push)\\.py|ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_cross_role\\.py|ansible/filter_plugins/k8s_autodeploy\\.py|scripts/lib/(ansible_inventory|cli_help|estate|exit_codes|git|jinja_comments|k8s_roles|render_guard|repo_paths|yaml_fast)\\.py)$"
+
+# The cluster's SOPS files (target slice D3): the cluster file
+# ansible/vars/cluster-vars.sops.env, the manifests under ansible/vars/cluster-manifests/ and
+# the freshness evidence ansible/vars/cluster-vars.source. Only `cluster_vars.py write`
+# writes them, so this runs the checks that need no render or key: every value is ciphertext,
+# a file whose content moved also moved its MAC and lastmodified lines since HEAD, each file
+# is encrypted to its own creation rule, and .source matches secrets.yml's ciphertext. A
+# plaintext value or a hand edit then fails here rather than after a push. From target slice
+# PR D3.2c, which commits the first cluster file, CI's full `check` is the backstop for a
+# commit made without hooks, which is how the rotation cron commits. While no cluster file
+# exists the hook checks nothing and passes, in about 0.1s.
+# `files` is the cluster paths plus the entry's import closure, which
+# scripts/tests/test_prek_files_cover_entry_imports.py derives and holds this regex to. The
+# closure reaches the renderer through `write` and the full `check`, which this hook never
+# runs, but a change there must still rerun the hook rather than merge with it skipped.
+[[repos.hooks]]
+id = "cluster-vars-ciphertext"
+name = "Cluster SOPS files are ciphertext written by cluster_vars.py"
+entry = "uv run --frozen python scripts/secrets_mgmt/cluster_vars.py check --no-render --base HEAD"
+language = "system"
+pass_filenames = false
+files = "^(ansible/vars/cluster-|ansible/filter_plugins/[^/]+\\.py$|ansible/roles/setup/common/files/(host_lib|kuma_push)\\.py$|scripts/(lib|renderer|secrets_mgmt)/.+\\.py$|scripts/deploy_tools/render_targets\\.py$)"
 
 # Assert uv.lock stays consistent with pyproject.toml. Every unattended production path
 # (gitops_deploy, secret-rotate, secret-rotation-audit) runs `uv run --frozen`, which installs
