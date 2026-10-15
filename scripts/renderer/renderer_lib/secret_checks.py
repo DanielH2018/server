@@ -466,10 +466,12 @@ def sops_manifest_namers(
         for role in roles
         for entry in entries(role)
     ]
-    # DECIDED: only a rule 5 entry makes a template's key live. Rule 5 scans the whole tree
-    # on every run, so its entries are found or reported stale whatever the render's tags. A
-    # rule 4 entry is found only when its tag is rendered, so under a `--role` render of
-    # another tag it would count while nothing checked it.
+    # DECIDED: only a rule 5 entry makes a template's key live. The third clause scans the
+    # whole tree on every run, so it may count only an entry that is found whatever the
+    # render's tags, and rule 5 scans every template source. A rule 4 entry is found only
+    # when its tag is rendered, so counting one would flag that template under a `--role`
+    # render of another tag, a failure with nothing wrong (r2-secret-placeholders.md, the
+    # `sops-manifest-entries` clauses).
     found = [(v.file, v.key) for v in live if v.rule == NO_SECRET_EXPRESSION]
     namers = [(template, key) for _tag, template, key in result.sops_namers]
     return unlisted_namers(namers, listed, found)
