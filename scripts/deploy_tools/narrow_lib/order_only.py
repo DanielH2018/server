@@ -48,21 +48,29 @@ from lib.git import git
 # effect that stays in the process is compared between the two ends rather than refused:
 # importing Ansible rebinds `sys.intern` at both (#4995). That covers an attribute of another
 # module added, rebound or deleted, a module loaded, and an in-place change to an object the
-# walk copies. The walk copies every object a module attribute holds, and every object that
-# one holds, taking each object at the shallowest depth any module attribute reaches it: an
-# item of a list, dict, set or deque, or an attribute in an object's `__dict__`, such as
-# `logging.disable` writing `logging.root.manager` or `logging.root.addFilter` adding to
-# `logging.root.filters`. It also covers process state no module attribute holds, such as the
-# umask, a signal handler or mask, a pending timer, an atexit callback, the recursion limit,
-# the dlopen flags or gc's freeze count (#5060).
-# The gaps taken: a branch HEAD's data does not exercise; a change three or more levels below
-# a module attribute, such as a logger first created by `logging.getLogger`, whose entry lands
-# in `Logger.manager.loggerDict`, or an attribute of a logger already in it; a change in state
-# held in `__slots__` or inside a C object; process state the runner does not read, such as
-# the codecs registry or an at-fork handler; `faulthandler.dump_traceback_later`, which has no
-# query function, and whose watchdog thread starts in C, so no audit event fires; an unaudited
-# call in a module the runner does not replace; and a role whose bytes depend on list order,
-# which the render proof the caller still requires catches.
+# walk copies. The walk copies every object up to four levels below a module attribute, taking
+# each object at the shallowest depth any module attribute reaches it: an item of a list, dict,
+# set or deque, or an attribute in an object's `__dict__`. So it sees `logging.disable` writing
+# `logging.root.manager`, `logging.root.addFilter` adding to `logging.root.filters`, and a named
+# logger's `disabled` flag under `logging.Logger.manager.loggerDict` (#5085). It also covers
+# process state no module attribute holds, such as the umask, a signal handler or mask, a
+# pending timer, an atexit callback, the recursion limit, the dlopen flags or gc's freeze count
+# (#5060). No function reads back the codec registries, the at-fork handlers or faulthandler's
+# handlers and watchdog, so the runner wraps the calls that change them and compares how many
+# returned. An `open` whose mode string writes ends the run as its flags do, because a C-level
+# `fopen` such as `readline.write_history_file` raises the event with flags 0 (#5081).
+# A second walk, once the plugin's module code has run, copies the objects that code created,
+# such as a logger the base end makes and the head end's filter call disables (#5085). A logger
+# first created while the chain runs sits in neither walk, so the report also compares each such
+# logger's own `bool`, `int`, `str` and container-length attributes (#5085).
+# The gaps taken: a branch HEAD's data does not exercise; a change five or more levels below a
+# module attribute; a write the plugin's module code makes to an object that code created,
+# since neither walk sees the object before it; a change to a logger's handler or filter
+# objects, as opposed to how many it holds; a change in state held in `__slots__` or
+# inside a C object; process state the runner neither reads nor counts; a counted call through a
+# reference taken before the runner wrapped it; an unaudited call in a module the runner does
+# not replace; and a role whose bytes depend on list order, which the render proof the caller
+# still requires catches.
 # The runner is distinguishable from a deploy. Its cwd ends in `/cwd` under an `order-only-`
 # temp dir, `sys.flags.isolated` is 1, and `sys.argv[0]` is `-c`. So the check holds only for
 # a plugin written in good faith. It catches an accidental side effect, not an evasive one,
@@ -81,18 +89,21 @@ _TIMEOUT = 60
 #
 # An audit hook, installed before the import so the plugin's module-level code runs under it
 # too, ends the process on any event outside the allowlist below, and on an `open` whose flags
-# write or create (#4846). The allowlist is every event the real chain raises; an event it
+# or mode string write or create (#4846, #5081). The allowlist is every event the real chain raises; an event it
 # misses, after an interpreter or Ansible upgrade, reads as doubt and keeps the line rather than
 # discharging it. An allowlist, because each denylist review found another mutating event.
 # `mkfifo` and `mknod` create a file and raise no event, so `_install` replaces them on `os`
 # and `posix` with a function that ends the process (#4999), and does the same to the
-# `unaudited` table's calls (#5063).
+# `unaudited` table's calls (#5063). It wraps each of the `counted` table's calls in one that
+# counts the calls that return, for the process state no function reads back (#5081).
 #
 # The hook also records the module state the run leaves behind (#4995). At the plugin's
 # `import` event it copies the attributes of every module loaded so far. It also takes, by
 # `walk`, a breadth-first shallow copy of each object that is a container or carries a
-# `__dict__` and that a module attribute holds or one of those objects holds, and the process
-# state `_process_state` reads (#5060). At the
+# `__dict__` and that sits up to four levels below a module attribute, the process state
+# `_process_state` reads (#5060), and the counts of the `counted` calls (#5081). At the
+# `order-only.imported` event `_chain` raises once the import returns, it walks again and
+# copies the objects the plugin's module code created (#5085). At the
 # `order-only.report` event the runner raises after the chain, it writes into the report each
 # `module.attribute` added, rebound or deleted since then, the `walk` path of each object that
 # gained, lost or replaced an item or attribute, each `process.<name>` that differs, and each
@@ -112,8 +123,8 @@ _TIMEOUT = 60
 # an `except` can swallow it. `_run` reads the nonzero exit as doubt. The chain runs inside
 # `_chain`, so the runner binds no name in `__main__` while the module state is compared.
 _RUNNER = """
-import _collections, _locale, _signal, atexit, copy, faulthandler, gc, json, os, posix, sys
-import types
+import _codecs, _collections, _locale, _signal, atexit, codecs, copy, faulthandler, gc, json
+import os, posix, sys, types
 from _functools import partial
 
 # Imported before the hook so their file-creating calls can be replaced below (#5063).
@@ -129,11 +140,27 @@ for name in list(unaudited):
     except ImportError:
         del unaudited[name]
 
+# Calls that change interpreter state no function reads back: the codec search path and error
+# handlers, the at-fork handlers, and faulthandler's C signal handlers and watchdog thread. The
+# runner wraps each to count the calls that return, and compares the counts (#5081).
+counted = {
+    "codecs": ("register", "unregister", "register_error"),
+    "_codecs": ("register", "unregister", "register_error"),
+    "os": ("register_at_fork",),
+    "posix": ("register_at_fork",),
+    "faulthandler": (
+        "register", "unregister", "dump_traceback_later", "cancel_dump_traceback_later",
+    ),
+}
 
-def _install(exit_, write_flags, allowed, exempt, modules, unaudited, process, kinds):
+
+def _install(exit_, write_flags, allowed, exempt, modules, unaudited, counted, process, kinds):
     before = {}
     contents = {}
+    claimed = set()
+    walked_after_import = []
     state = {}
+    calls = {}
     skip, deque, getset, class_dict = kinds
 
     def shallow(value):
@@ -177,10 +204,13 @@ def _install(exit_, write_flags, allowed, exempt, modules, unaudited, process, k
         # `vars(logging)`, and a depth-first pass would claim the root logger at depth 2 and
         # never read its `filters`. Each object is copied once, under the first path in
         # breadth-first order, so both ends name it alike while they load the same modules in
-        # the same order. Two levels: an attribute, and the objects it holds.
+        # the same order. Four levels, so an attribute of a named logger is in reach:
+        # `logging.Logger`, its `manager`, the manager's `loggerDict`, and the logger (#5085).
+        # A second walk, once the plugin's module code has run, descends through the objects
+        # the first copied and copies only the ones it did not, under a path not yet taken.
         seen = set()
         level = roots
-        for depth in (1, 2):
+        for depth in (1, 2, 3, 4):
             following = []
             for path, value in level:
                 if id(value) in seen or path in exempt:
@@ -192,13 +222,37 @@ def _install(exit_, write_flags, allowed, exempt, modules, unaudited, process, k
                 if copied is None:
                     continue
                 seen.add(id(value))
-                contents[path] = (value, copied)
-                if depth == 1:
+                if id(value) not in claimed and path not in contents:
+                    claimed.add(id(value))
+                    contents[path] = (value, copied)
+                if depth < 4:
                     items = copied.items() if type(copied) is dict else enumerate(copied)
                     for index, (key, child) in enumerate(items):
                         name = key if type(key) is str else "#" + str(index)
                         following.append((path + "/" + name, child))
             level = following
+
+    def signature(value):
+        # What differs between two ends' copies of an object, as one string: an exact `bool`,
+        # `int`, `str` or `None` by value, a container by its length and anything else by
+        # nothing. `_cache` follows which levels were asked about, not what the logger is set to.
+        try:
+            copied = shallow(value)
+        except Exception:
+            return "?"
+        if copied is None:
+            return "?"
+        parts = []
+        for key, item in copied.items():
+            if type(key) is not str or key == "_cache":
+                continue
+            kind = type(item)
+            if kind in (bool, int, str, type(None)):
+                parts.append(key + "=" + repr(item))
+            elif kind in (list, dict, tuple, set, frozenset, deque):
+                parts.append(key + "=#" + str(len(item)))
+        parts.sort()
+        return ",".join(parts)
 
     def module_writes():
         writes = []
@@ -222,7 +276,14 @@ def _install(exit_, write_flags, allowed, exempt, modules, unaudited, process, k
                 now = None
             if now is None or changed(old, now):
                 writes.append(path)
-        for key, value in process().items():
+        for path, (value, old) in contents.items():
+            if path.endswith("/manager/loggerDict") and type(value) is dict:
+                # A logger created while the chain runs sits in no copy, so `loggerDict` gains
+                # the same key at both ends. Its own state is what differs (#5085).
+                for name, logger in dict.copy(value).items():
+                    if id(logger) not in claimed and type(name) is str:
+                        writes.append(path + "/" + name + "=" + signature(logger))
+        for key, value in read_state().items():
             if state.get(key) != value:
                 writes.append("process." + key)
         loaded = [name for name in modules if name not in before]
@@ -230,10 +291,21 @@ def _install(exit_, write_flags, allowed, exempt, modules, unaudited, process, k
         loaded.sort()
         return writes, loaded
 
+    def read_state():
+        now = process()
+        now.update(calls)
+        return now
+
     def audit(event, args):
         try:
             if event == "open":
-                if args[2] & write_flags:
+                # A C-level `fopen`, such as `readline.write_history_file`, passes its mode as
+                # a string and its flags as 0 (#5081). `type` first, so no `str` subclass's
+                # `__contains__` runs in the hook.
+                mode = args[1]
+                if args[2] & write_flags or (
+                    type(mode) is str and any(c in mode for c in "wax+")
+                ):
                     exit_(86)
             elif event == "import":
                 if args[0] == "toposort" and not before:
@@ -244,7 +316,18 @@ def _install(exit_, write_flags, allowed, exempt, modules, unaudited, process, k
                         for name, (module, attrs) in before.items()
                         for key, value in attrs.items()
                     ])
-                    state.update(process())
+                    state.update(read_state())
+            elif event == "order-only.imported":
+                # The plugin's module code has run, so copy what it created, such as a logger
+                # its base end makes and its head end then writes to (#5085). The roots are
+                # the modules the first walk started from, which leaves out the plugin's own.
+                if before and not walked_after_import:
+                    walked_after_import.append(True)
+                    walk([
+                        (name + "." + key, value)
+                        for name, (module, attrs) in before.items()
+                        for key, value in module.__dict__.copy().items()
+                    ])
             elif event == "order-only.report":
                 args[0]["module_writes"], args[0]["modules_loaded"] = module_writes()
             elif event not in allowed:
@@ -261,12 +344,26 @@ def _install(exit_, write_flags, allowed, exempt, modules, unaudited, process, k
 
         return refuse
 
+    def counter(name, call):
+        calls[name] = 0
+
+        def count(*args, **kwargs):
+            result = call(*args, **kwargs)
+            calls[name] += 1
+            return result
+
+        return count
+
     sys.addaudithook(audit)
     for module in (os, posix):
         module.mkfifo = module.mknod = stub(exit_)
     for name, attrs in unaudited.items():
         for attr in attrs:
             setattr(modules[name], attr, stub(exit_))
+    for name, attrs in counted.items():
+        module = modules[name]
+        for attr in attrs:
+            setattr(module, attr, counter(name + "." + attr, getattr(module, attr)))
 
 
 def _process_state(umask, getsignal, signals, getrecursionlimit, getpriority, prio,
@@ -326,6 +423,7 @@ _install(
     }),
     sys.modules,
     unaudited,
+    counted,
     _process_state(
         os.umask, _signal.getsignal,
         tuple(s for s in _signal.valid_signals() if s < _signal.NSIG),
@@ -349,7 +447,7 @@ _install(
         type.__dict__["__dict__"],
     ),
 )
-del _install, _process_state, unaudited, name, partial
+del _install, _process_state, unaudited, counted, name, partial
 
 
 def _chain(plugins, roles, preload):
@@ -357,6 +455,7 @@ def _chain(plugins, roles, preload):
         __import__(name)
     sys.path.insert(0, plugins)
     import toposort
+    sys.audit("order-only.imported")
     f = toposort.FilterModule().filters()
     entries = json.load(sys.stdin)
     before = copy.deepcopy(entries)
@@ -486,6 +585,7 @@ def order_only(repo: Path, path: str, base: str, head: str) -> bool:
     old, new = _run(repo, old_tree, head, preload), _run(repo, new_tree, head, preload)
     if old is None or new is None or not (old[1] and new[1]):
         return False
+
     if old[2] != new[2]:
         return False
     return old[0].keys() == new[0].keys() and all(

@@ -782,6 +782,7 @@
  "scripts/deploy_tools/tests/test_deploy_tree_lock_hold_is_bounded.py": 2.53,
  "scripts/deploy_tools/tests/test_digest_covers.py": 1.59,
  "scripts/deploy_tools/tests/test_digest_covers_order_only.py": 1.94,
+ "scripts/deploy_tools/tests/test_digest_covers_order_only_unseen_state.py": 10.15,
  "scripts/deploy_tools/tests/test_digest_provable.py": 0.0,
  "scripts/deploy_tools/tests/test_gate_render_source.py": 0.0,
  "scripts/deploy_tools/tests/test_gitops_state.py": 0.31,
