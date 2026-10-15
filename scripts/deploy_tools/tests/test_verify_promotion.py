@@ -274,6 +274,7 @@ def test_a_bundle_holding_a_substituting_tag_adds_the_cluster_vars_hop():
 
 
 def test_a_bundle_holding_no_substituting_tag_adds_no_hop():
+    """The plan's negative half, a guard on kept behaviour: it goes red on an unconditional hop."""
     assert _timeout_of_render({"peanut": frozenset()}) == 10 * 60 + 60 + 2 * 60
 
 

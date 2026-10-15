@@ -325,6 +325,39 @@ def digests_text(value: Mapping) -> str:
     return json.dumps(value, sort_keys=True) + "\n"
 
 
+def substitution(
+    tags: Iterable[str],
+    directories: Mapping[str, object],
+    key_sets: Mapping[str, frozenset[str]],
+) -> tuple[dict[str, bool], set[str]]:
+    """Which Kustomizations substitute, and which tags count as substituting (D3.3b).
+
+    Args:
+        tags: The published tags.
+        directories: Each rendered directory's name under `cluster/`.
+        key_sets: Each directory name mapped to its placeholder key set.
+
+    Returns:
+        Each directory name in `directories` that a tag in `tags` owns, `<tag>` and
+        `<tag>-deferred` alike, mapped to whether its own key set is non-empty. That alone
+        decides `postBuild` and the `cluster-vars` edge on its Kustomization (C1
+        *Substitution and escaping*). Second, the tags with either directory substituting,
+        the per-tag set the `cluster-vars` footprint rule reads.
+    """
+    per_directory = {
+        name: bool(key_sets.get(name))
+        for tag in tags
+        for name in (tag, tag + DEFERRED_SUFFIX)
+        if name in directories
+    }
+    substituting = {
+        tag
+        for tag in tags
+        if per_directory.get(tag) or per_directory.get(tag + DEFERRED_SUFFIX)
+    }
+    return per_directory, substituting
+
+
 def bundle_files(
     directories: Mapping[str, Mapping[str, str]],
     key_sets: Mapping[str, frozenset[str]],
@@ -356,21 +389,12 @@ def bundle_files(
             f"{deferred} render a {DEFERRED_SUFFIX} directory, and no Kustomization applies "
             f"it until D4.2 adds <tag>{DEFERRED_SUFFIX}"
         )
-    # The footprint rule counts per tag, so a tag substitutes when either of its directories
-    # does. `postBuild` and the edge are per directory: each goes on the Kustomization whose
-    # own directory holds a placeholder (C1 *Substitution and escaping*).
-    substituting = {
-        tag
-        for tag in tags
-        if any(
-            key_sets.get(name)
-            for name in (tag, tag + DEFERRED_SUFFIX)
-            if name in directories
-        )
-    }
+    per_directory, substituting = substitution(tags, directories, key_sets)
     shared = cluster_vars_files(cluster_vars, timeout)
     flux = {p: t for p, t in shared.items() if p.startswith(f"{FLUX_DIR}/")}
-    files = flux_files({tag: bool(key_sets.get(tag)) for tag in tags}, timeout, flux)
+    files = flux_files(
+        {tag: per_directory.get(tag, False) for tag in tags}, timeout, flux
+    )
     files |= shared
     cluster = {
         f"{CLUSTER_DIR}/{name}/{file}": text
