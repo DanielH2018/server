@@ -306,6 +306,10 @@ applies, defers, alerts on or owes such a tag. D2's plan has the design:
   paths the range changed. It also clears a `k8s_unapplied` or `k8s_deferred` line that such
   a service still holds from before the range that set `owner`, because no Ansible deploy
   would ever discharge it.
+- **A shared role's `k8s_unapplied` line does not wait on such a caller** (#4986).
+  `scripts/deploy_tools/shared_role_callers.py:main` leaves it out of the caller set
+  `discharge_k8s_unapplied` reads. Such a caller gets no release record and no render record,
+  so waiting on it would keep the line forever.
 
 - **An added or removed such entry reaches only the readers it can move.**
   `narrow_lib/containers.py:changed_fields` records it by the fields it carries other than
