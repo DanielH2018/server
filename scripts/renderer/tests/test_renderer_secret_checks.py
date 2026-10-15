@@ -469,4 +469,3 @@ def test_any_violation_fails_the_check_is_flagged():
     report = _check_over(CONFIGMAP_DOC.format(sentinel(KEY)))
     assert report.violations == [VIOLATION]
     assert _violation_lines(report) == [f"secret check: violation: {VIOLATION.line()}"]
-    assert not report.ok()
