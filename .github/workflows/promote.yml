@@ -24,10 +24,10 @@ name: promote
 #   verify   contents: read, statuses: read. Runs `promote.py verify T`, which waits on T's
 #            commit statuses for T's changed set and prints `good` or `failed`.
 #   settle   packages: write, actions: write. Checks out nothing. A good verdict moves
-#            `last-good` to T, then dispatches this workflow for master's newest green commit
-#            when that commit is newer than T. Anything else writes DEPLOY_HOLD, then resets
-#            `prod` to `last-good` and records PROD_DIGEST. Contract C2's *Verification* is
-#            the rule.
+#            `last-good` to T. Anything else writes DEPLOY_HOLD, then resets `prod` to
+#            `last-good` and records PROD_DIGEST. Contract C2's *Verification* is the rule.
+#            Once either succeeds, it dispatches this workflow for master's newest green
+#            commit when that commit is newer than T.
 #
 # ansible/tests/repo/test_promote_workflow.py holds every guard, permission and handoff here.
 
@@ -692,20 +692,19 @@ jobs:
           [ "${#problems[@]}" -eq 0 ]
 
       # A run whose `tag` found `prod` already moved verifies nothing, so its commit would wait
-      # for the next merge (#5022). After a good verdict, this step dispatches one more run when
-      # CI's newest green push run on master is for a commit newer than T. The list is newest
-      # first, so "newer" means T's own run sits further down it. With T outside the list the
-      # step cannot tell, and dispatches nothing. The bound: a dispatched run that promotes that
-      # commit finds it equal to its own T here, and one that decides anything else never
-      # reaches `settle`. A hold skips the step, because the dispatched run would only decide
-      # `held`.
+      # for the next merge (#5022). Once the verdict is applied, this step dispatches one more
+      # run when CI's newest green push run on master is for a commit newer than T. The list is
+      # newest first, so "newer" means T's own run sits further down it. With T outside the list
+      # the step cannot tell, and dispatches nothing. The bound: a dispatched run that promotes
+      # that commit finds it equal to its own T here, and one that decides anything else never
+      # reaches `settle`. After a hold the step still dispatches, as the operator ruled: the run
+      # decides `held` unless the revert rule lets it promote a descendant.
       #
       # GitHub starts no run for an event GITHUB_TOKEN causes, except workflow_dispatch, so the
       # job token dispatches and PROMOTE_TOKEN gains no scope. GH_TOKEN is set here because `gh`
       # prefers it to GITHUB_TOKEN. The `sha` input sends the run through render's ancestry and
       # CI re-check, which a bare dispatch of master's tip would skip.
       - name: Dispatch a run for a newer green commit
-        if: ${{ needs.verify.outputs.verdict == 'good' }}
         env:
           TARGET: ${{ needs.promote.outputs.target }}
           GH_TOKEN: ${{ github.token }}
@@ -726,7 +725,9 @@ jobs:
             echo "$TARGET is master's newest green commit, so no run follows"
             exit 0
           fi
-          if ! printf '%s\n' "$green" | grep -qx "$TARGET"; then
+          # A here-string, not a pipe: `grep -q` exiting early would SIGPIPE a writer, and
+          # pipefail would read the match as a miss.
+          if ! grep -qx "$TARGET" <<< "$green"; then
             echo "::warning::$TARGET has no green CI run among master's newest 100, so this run cannot tell whether $newest is newer, and dispatches nothing"
             exit 0
           fi

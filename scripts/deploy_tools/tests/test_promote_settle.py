@@ -206,9 +206,8 @@ DISPATCH = (
     f"gh workflow run promote.yml -R DanielH2018/server --ref master -f sha={NEWER}"
 )
 DISPATCH_STEP = "Dispatch a run for a newer green commit"
-# A hold skips the step. The job token is the one `actions: write` reaches, since `gh` prefers
-# GH_TOKEN, and the `sha` input sends the run through render's CI re-check.
-DISPATCH_GATE = "needs.verify.outputs.verdict == 'good'"
+# The job token is the one `actions: write` reaches, since `gh` prefers GH_TOKEN, and the
+# `sha` input sends the run through render's CI re-check.
 DISPATCH_TOKEN = "${{ github.token }}"
 DISPATCH_ARGS = ("gh workflow run promote.yml", "--ref master", "-f sha=")
 
@@ -219,8 +218,6 @@ def dispatch_problems(settle: dict) -> list[str]:
     if step is None:
         return [f"settle: has no step named {DISPATCH_STEP!r}"]
     found = []
-    if DISPATCH_GATE not in str(step.get("if", "")):
-        found.append(f"the dispatch step's `if` lacks {DISPATCH_GATE}")
     if (step.get("env") or {}).get("GH_TOKEN") != DISPATCH_TOKEN:
         found.append(f"the dispatch step's GH_TOKEN is not {DISPATCH_TOKEN}")
     found += [
@@ -236,7 +233,6 @@ def test_the_dispatch_step_holds_every_property(jobs):
 
 
 DISPATCH_RED = {
-    "after a hold": (lambda step: step.pop("if"), "`if` lacks"),
     "with PROMOTE_TOKEN": (
         lambda step: step["env"].update(GH_TOKEN="${{ secrets.PROMOTE_TOKEN }}"),
         "GH_TOKEN is not",

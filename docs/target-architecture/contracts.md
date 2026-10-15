@@ -222,7 +222,7 @@ which needs a drill exclusion in C7 that no slice has requested, the edge goes.
       cap*).
     - `tag` moves `prod` only while `prod` still names the digest `decide` read. A second
       run that decided on the same `prod` finds it moved, and it moves and verifies nothing.
-      The run that did move `prod` makes up for it (#5022). After a `good` verdict, its
+      The run that did move `prod` makes up for it (#5022). Once it applies its verdict, its
       `settle` dispatches one more `promote` run with the `sha` input, when CI's newest
       green push run on master is for a commit newer than its T. A dispatched run that
       promotes that commit finds no newer one, so the chain ends there.
