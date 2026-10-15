@@ -1,0 +1,44 @@
+# Ansible-managed (setup/k3s, tasks/static-address.yml). Do not edit by hand.
+#
+# Join the home WiFi as a fallback uplink for when this node's ethernet link loses carrier.
+# The wired link stays preferred: its pinned routes sit at metric 100, and these at 600.
+# The fallback wins only because static-address.yml sets ignore_routes_with_linkdown on the
+# wired link, so a route lookup skips its pinned routes once the cable drops (#4510).
+#
+# server_ip stays on the wired link with no carrier (`ignore-carrier`), and the kernel
+# answers ARP for it on any link (arp_ignore 0). A peer that re-resolves server_ip with the
+# cable out therefore reaches this node over WiFi at its usual address.
+#
+# The SSID and password are SOPS secrets, so the public repo names neither.
+#
+# Lexically after the installer's 00-/50- files, so on a node whose installer already wrote
+# a `wifis:` entry for this link, these keys merge on top of it.
+network:
+  version: 2
+  # A loop over at most one link, as in netplan-static-address.yaml.j2, so the empty default
+  # renders `wifis:` with no links (static-address.yml removes the file then anyway).
+  wifis:
+{% for link in [k3s_node_wifi_link] | select %}
+    {{ link }}:
+      dhcp4: true
+      # Boot does not wait for WiFi association. systemd-networkd-wait-online would
+      # otherwise hold every unit ordered after network-online.target, k3s among them.
+      optional: true
+      # The metric is pinned rather than left to netplan's wifi default, because the
+      # fallback depends on it staying above the wired link's 100. networkd also gives the
+      # link's IPv6 RA route this metric, through the same `[DHCP] RouteMetric` (#4561).
+      #
+      # The three `use-dns: false` keys keep the lease's resolvers out of the node's DNS.
+      # This role renders the resolvers, and netplan-dns.yaml.j2 gives the reason: a pod's
+      # resolv.conf holds at most 3.
+      dhcp4-overrides:
+        route-metric: 600
+        use-dns: false
+      dhcp6-overrides:
+        use-dns: false
+      ra-overrides:
+        use-dns: false
+      access-points:
+        {{ wifi_ssid | to_json }}:
+          password: {{ wifi_password | to_json }}
+{% endfor %}

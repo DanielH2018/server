@@ -12,6 +12,10 @@ governs: []
 
 Accepted.
 
+2026-10-15: [ADR-0022](0022-the-cluster-decrypts-its-own-file-with-its-own-key.md) amends
+this decision, and the operator accepted it the same day: the cluster decrypts its own cluster
+file with its own age key, and never `secrets.yml`.
+
 ## Context
 
 The homelab is deployed from a git repository by Ansible, and the deploy needs credentials:

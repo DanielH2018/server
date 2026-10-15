@@ -1,6 +1,6 @@
 # R3 — Remove the pre-apply live reads
 
-Status: IN PROGRESS
+Status: DONE
 
 PR 1, pi-peer-backup's committed host key: [#4903](https://github.com/DanielH2018/server/pull/4903).
 
@@ -20,6 +20,11 @@ Before the merge, the operator's base and head render records both read `secret_
 `4d29bc7e5` in an operator-attended window on 2026-10-15. `probe.py health authelia` passed,
 fresh first-factor logins as the operator and as `claude-ui` succeeded, the operator logged in
 from a browser, and `pytest -m ui -k grafana` read `6 passed`.
+
+PR 5, the census and the stub-file check: [#5119](https://github.com/DanielH2018/server/pull/5119).
+It deleted `PINNED_LIVE_FACTS` and landed at `3273dde27`. The exit criterion holds at that
+commit. The stub-file key test and the live-read census passed in CI. The operator's
+shadow pair at `3273dde27` printed `58 tags, 325 files, 0 differences`.
 
 PRs 1 and 3 landed without their operator-only pre-merge checks under *Verification*. The orchestrator's briefs omitted them, and each check's property was read after the deploy instead. PR 3's assert ran unstubbed in the real deploy and returned `ok` on the live digests at 2026-10-13 18:12:00. PR 1's release records show the same `secret_digest`, `54b03051…`, before (`8a28ede4`) and after (`d98d8752`), so the Secret's bytes did not move. PR 4's checks stay pre-merge.
 

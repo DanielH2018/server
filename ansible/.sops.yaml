@@ -1,30 +1,67 @@
 ---
-# SOPS encryption config — the age recipients that ansible/vars/secrets.yml (and any
-# .yml/.yaml under vars/ or secrets/) is encrypted to. These are PUBLIC age keys, not
-# secret, so this file is tracked. SOPS searches upward from the encrypted file, so this
-# (ansible/.sops.yaml) is the config used for ansible/vars/secrets.yml — keep it here, not
-# at the repo root. Private keys live only at ~/.config/sops/age/keys.txt per host and are
-# never committed (see .gitignore keys.txt/*.agekey/*.key rules + the gitleaks hook).
+# SOPS encryption config — the age recipients each SOPS file under ansible/ is encrypted to.
+# These are PUBLIC age keys, not secret, so this file is tracked. Private keys live only at
+# ~/.config/sops/age/keys.txt per host and are never committed (see .gitignore
+# keys.txt/*.agekey/*.key rules + the gitleaks hook).
+#
+# SOPS finds this file from the WORKING DIRECTORY, searching upward, not from the file it
+# encrypts. Run every `sops` command below from ansible/, or pass `--config ansible/.sops.yaml`
+# from the repo root. From the repo root without --config, SOPS finds no creation rule.
+# --config is a global flag and goes before the subcommand:
+#   sops --config ansible/.sops.yaml updatekeys ansible/vars/cluster-vars.sops.env
 #
 # Multi-recipient is OR: ANY listed key decrypts the WHOLE file. Only a host Ansible drives
 # locally (`ansible_connection=local`) decrypts, because pre_tasks/load_secrets.yml decrypts on
 # the controller; a host driven over ssh needs no key and should not hold one.
 #
+# Three rules, four kinds of file. SOPS takes the FIRST rule whose path_regex matches, so the
+# two cluster rules must stay ahead of the generic rule: the generic rule also matches every
+# cluster manifest, and would encrypt it without the cluster key.
+#   1. cluster file       vars/cluster-vars.sops.env (dotenv) — cluster key + host keys
+#   2. cluster manifests  vars/cluster-manifests/<name>.sops.yaml — cluster key + host keys
+#   3. generic rule       vars/secrets.yml, and any other YAML under vars/ or secrets/ —
+#                         host keys only. The cluster key is never a recipient here, so the
+#                         cluster cannot decrypt secrets.yml (ADR-0022).
+# Every rule lists the same host keys, so any host that decrypts secrets.yml can also
+# regenerate the cluster files. Adding or removing a host therefore edits all three `age:`
+# strings. A file that does not exist yet needs no command; SOPS uses the rule when it is
+# first written.
+#
 # Add a host:
 #   1. On that host:  ansible-playbook ansible/bootstrap.yml --limit <host>
 #      (generates the host's own age key, prints its PUBLIC key — no secret needed).
-#   2. Append the printed pubkey to the comma-separated `age:` string below — it is ONE quoted
-#      scalar, not a YAML list, so a per-key trailing comment is impossible; extend the
-#      position->host note above it instead.
-#   3. On a host that can already decrypt (daniel-server):
-#        sops updatekeys ansible/vars/secrets.yml
-#      then commit the re-encrypted secrets.yml + this file, and `git pull` on the host.
-# Remove a host's access: delete its key here, then from ansible/ run
+#   2. Append the printed pubkey to the comma-separated `age:` string of ALL THREE rules
+#      below. Each is ONE quoted scalar, not a YAML list, so a per-key trailing comment is
+#      impossible; extend the position->host note above the generic rule instead.
+#   3. On a host that can already decrypt (daniel-server), from ansible/, once per file.
+#      Each command shows the recipient change and asks before writing:
+#        sops updatekeys vars/secrets.yml
+#        sops updatekeys vars/cluster-vars.sops.env
+#        sops updatekeys vars/cluster-manifests/<name>.sops.yaml   (each manifest)
+#      then commit the re-encrypted files + this file, and `git pull` on the host.
+# Remove a host's access: delete its key from all three rules, then from ansible/, once per
+# file:
 #   sops rotate -i --rm-age <key> vars/secrets.yml
+#   sops rotate -i --rm-age <key> vars/cluster-vars.sops.env
+#   sops rotate -i --rm-age <key> vars/cluster-manifests/<name>.sops.yaml   (each manifest)
 # `updatekeys` alone keeps the old data key, which every past revision in git history also
 # wraps to the removed key; `rotate` gives the file a new one. Past revisions stay readable
 # with the removed key whatever you do here, so destroy the private half as well.
+# The cluster key itself rotates by a separate operator-only procedure, in
+# docs/target-architecture/deploy/d3-secrets.md (*Rotating the cluster key*).
 creation_rules:
+  # Cluster rules. Unanchored at the start, like the generic rule, so each matches a path
+  # relative to ansible/, relative to the repo root, absolute, or given as --filename-override.
+  # First key = the CLUSTER key: its private half is the `sops-age` Secret in flux-system and
+  # the operator's password manager, and kustomize-controller decrypts with it. The other three
+  # are the generic rule's host keys, in the same order.
+  - path_regex: vars/cluster-vars\.sops\.env$
+    age: "age1wf2js7pakyty3qgn3mxwuz8gc277jdgd3guy283cmphgxdj62qeqk6tmnc,age1shgt54wq7y9pk4nksxcfr5s539rh2g5uqkh9t2jlx6wj4a8aq34q4cyg7k,age1nplxuas350e777k3cqvfe8v2tccm8t7rqh66t7z692f6zyt9ra2svwfeyp,age1h29wmm6fa9zfq3ld72l4efen3fwf59s9xxyzva8xqulzp997td0qpwsjc4"
+  # A manifest stays a readable Secret: only data and stringData are encrypted, so Flux and
+  # the renderer can read apiVersion, kind and metadata without a key.
+  - path_regex: vars/cluster-manifests/[^/]+\.sops\.yaml$
+    encrypted_regex: ^(data|stringData)$
+    age: "age1wf2js7pakyty3qgn3mxwuz8gc277jdgd3guy283cmphgxdj62qeqk6tmnc,age1shgt54wq7y9pk4nksxcfr5s539rh2g5uqkh9t2jlx6wj4a8aq34q4cyg7k,age1nplxuas350e777k3cqvfe8v2tccm8t7rqh66t7z692f6zyt9ra2svwfeyp,age1h29wmm6fa9zfq3ld72l4efen3fwf59s9xxyzva8xqulzp997td0qpwsjc4"
   - path_regex: .*(vars|secrets)\/.*\.ya?ml$
     # Recipients (multi-recipient = OR; ANY one key decrypts the whole file).
     # First key = daniel-server, second = OFF-BOX RECOVERY key (private half lives only in the
