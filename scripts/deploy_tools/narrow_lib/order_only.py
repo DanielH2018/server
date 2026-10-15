@@ -44,12 +44,14 @@ from lib.git import git
 # it too (#4846). `os.mkfifo` and `os.mknod` raise no audit event, so the runner replaces them
 # with a call that ends the run (#4999). A side effect that stays in the process, an attribute
 # of another module added, rebound or deleted, or a module loaded, is compared between the two
-# ends rather than refused: importing Ansible rebinds `sys.intern` at both (#4995).
+# ends rather than refused: importing Ansible rebinds `sys.intern` at both (#4995). The same
+# comparison keeps a call from another module that raises no event, such as `_dbm.open`,
+# because the base end does not load that module.
 # The gaps taken: a branch HEAD's data does not exercise; an in-place change to an object a
-# module holds, such as an item added to a module-level dict; a write into a module the run
-# itself loaded first, when both ends load it; process state no module attribute holds, such
-# as the umask or a signal handler (the three are #5060); and a role whose bytes depend on
-# list order, which the render proof the caller still requires catches.
+# module holds, such as an item added to a module-level dict, and process state no module
+# attribute holds, such as the umask or a signal handler (both #5060); such a call through a
+# module the base end already loads (#5063); and a role whose bytes depend on list order,
+# which the render proof the caller still requires catches.
 # The runner is distinguishable from a deploy. Its cwd ends in `/cwd` under an `order-only-`
 # temp dir, `sys.flags.isolated` is 1, and `sys.argv[0]` is `-c`. So the check holds only for
 # a plugin written in good faith. It catches an accidental side effect, not an evasive one,
@@ -78,9 +80,11 @@ _TIMEOUT = 60
 # `import` event it copies the attributes of every module loaded so far. At the
 # `order-only.report` event the runner raises after the chain, it writes into the report each
 # `module.attribute` added, rebound or deleted since then, and each module loaded since then.
-# A submodule bound on its parent by the import system is not a write. `_run`'s caller
-# compares the two lists between the ends, because the real plugin's import of Ansible writes
-# some at both. A report the hook never filled in reads as doubt.
+# A submodule bound on its parent by the import system is not a write. A module first loaded
+# after the copy has no baseline, and the real plugin loads all of Ansible that way, so
+# `order_only` runs each end twice: the first run names the modules it loads, and the second
+# imports them before the plugin, as a deploy's controller already has, so a write into any of
+# them shows in the diff. A report the hook never filled in reads as doubt.
 #
 # The plugin is imported after the hook and can reach anything `__main__`, `os` or `builtins`
 # holds, so the hook reads nothing from them: `_install` binds the exit function and the tables
@@ -160,7 +164,9 @@ _install(
 del _install
 
 
-def _chain(plugins, roles):
+def _chain(plugins, roles, preload):
+    for name in preload:
+        __import__(name)
     sys.path.insert(0, plugins)
     import toposort
     f = toposort.FilterModule().filters()
@@ -179,7 +185,7 @@ def _chain(plugins, roles):
     print(json.dumps(report))
 
 
-_chain(sys.argv[1], sys.argv[2])
+_chain(sys.argv[1], sys.argv[2], json.loads(sys.argv[3]))
 """
 
 
@@ -194,9 +200,15 @@ def _extract(repo: Path, treeish: str, dest: Path) -> None:
 
 @lru_cache(maxsize=None)
 def _run(
-    repo: Path, plugins: str, head: str
+    repo: Path, plugins: str, head: str, preload: tuple[str, ...] = ()
 ) -> tuple[dict, bool, tuple[tuple[str, ...], tuple[str, ...]]] | None:
     """One run of the chain with the plugin tree `plugins` on HEAD's data, or None.
+
+    Args:
+      repo: The repository the trees are read from.
+      plugins: The `ansible/filter_plugins` tree to run.
+      head: The commit whose `containers_list` and role tree the chain reads.
+      preload: Modules the runner imports before the plugin, outside the module-state diff.
 
     Returns:
       The chain's canonical outputs; whether the run left its input unchanged; and the
@@ -220,7 +232,16 @@ def _run(
             cwd.mkdir()
             before = set(root.rglob("*"))
             r = subprocess.run(
-                [sys.executable, "-I", "-B", "-c", _RUNNER, str(code), str(ansible)],
+                [
+                    sys.executable,
+                    "-I",
+                    "-B",
+                    "-c",
+                    _RUNNER,
+                    str(code),
+                    str(ansible),
+                    json.dumps(preload),
+                ],
                 cwd=cwd,
                 input=data,
                 capture_output=True,
@@ -251,8 +272,8 @@ def order_only(repo: Path, path: str, base: str, head: str) -> bool:
 
     True when the sort chain, run with the plugins at `base` and at `head` on HEAD's data,
     returns the same entries as multisets for each output, neither run changed its input, and
-    both runs left the same module state behind (#4995). False for a plugin not in
-    `ORDER_ONLY_PLUGINS` and on any doubt (`_run`).
+    both runs loaded the same modules and left the same module state behind (#4995). False for
+    a plugin not in `ORDER_ONLY_PLUGINS` and on any doubt (`_run`).
     """
     if path not in ORDER_ONLY_PLUGINS:
         return False
@@ -262,7 +283,17 @@ def order_only(repo: Path, path: str, base: str, head: str) -> bool:
     if trees.returncode != 0:
         return False
     old_tree, new_tree = trees.stdout.split()
-    old, new = _run(repo, old_tree, head), _run(repo, new_tree, head)
+    first_old, first_new = _run(repo, old_tree, head), _run(repo, new_tree, head)
+    if first_old is None or first_new is None or first_old[2][1] != first_new[2][1]:
+        return False
+    # The plugin trees' own modules are the code under test, so they load after the diff's copy.
+    own = {
+        name.removesuffix(".py")
+        for tree in (old_tree, new_tree)
+        for name in git("ls-tree", "--name-only", tree, cwd=repo).stdout.split()
+    }
+    preload = tuple(n for n in first_old[2][1] if n.partition(".")[0] not in own)
+    old, new = _run(repo, old_tree, head, preload), _run(repo, new_tree, head, preload)
     if old is None or new is None or not (old[1] and new[1]):
         return False
     if old[2] != new[2]:

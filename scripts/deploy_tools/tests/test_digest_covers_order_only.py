@@ -344,8 +344,8 @@ def test_module_state_the_base_does_not_leave_keeps_the_line(tree, helper, body)
 def test_module_state_both_ends_leave_is_order_only(tree):  # noqa: F811
     """A write the base already makes is compared, not refused (#4995).
 
-    The real plugin's import of Ansible rebinds `sys.intern` at both ends, so a rule that
-    refused every write would keep every `toposort.py` line.
+    A write both ends make is not part of the change under review. Such a write would also
+    keep every later line, including order-only ones, if the rule refused it.
     """
     writes = "import copy\n\ncopy.SOME_SETTING = 'x'\n\n\n" + TOPOSORT
     tree.write("ansible/filter_plugins/toposort.py", writes)
@@ -385,3 +385,89 @@ def test_a_dep_map_that_rewrites_the_mknod_stubs_cell_keeps_the_line(tree):  # n
     )
     reason = digest_covers.Classifier(tree.root).reason("authelia", base, head)
     assert reason and "every deploy runs" in reason
+
+
+def test_a_write_into_a_module_the_plugin_loads_at_both_ends_keeps_the_line(tree):  # noqa: F811
+    """A write into a module the runner has not loaded before the plugin keeps the line (#4995).
+
+    Both ends import `socket`, so it loads after the runner's copy of module state, as all of
+    Ansible does for the real plugin. In a deploy the controller has it loaded already and the
+    write persists, so the runner's second run imports it before the copy.
+    """
+    plugin = "import socket\n\n\n" + TOPOSORT
+    tree.write("ansible/filter_plugins/toposort.py", plugin)
+    base = tree.commit("toposort imports socket")
+    head = _commit(
+        tree,
+        [
+            {
+                "ansible/filter_plugins/toposort.py": plugin.replace(
+                    '    return {c["name"]: _edges(c) for c in containers_list}\n',
+                    "    socket.SOME_SETTING = 'x'\n"
+                    '    return {c["name"]: _edges(c) for c in containers_list}\n',
+                )
+            }
+        ],
+    )
+    reason = digest_covers.Classifier(tree.root).reason("authelia", base, head)
+    assert reason and "every deploy runs" in reason
+
+
+@pytest.mark.parametrize(
+    "helper, body",
+    [
+        ("import _dbm", "_dbm.open({path}, 'c').close()"),
+        (
+            "import _posixshmem\nimport os",
+            "os.close(_posixshmem.shm_open('/order-only-4999', os.O_CREAT | os.O_RDWR, 0o600))\n"
+            "_posixshmem.shm_unlink('/order-only-4999')",
+        ),
+    ],
+    ids=["dbm-open", "shm-open"],
+)
+def test_another_unaudited_file_creating_call_keeps_the_line(
+    tree,  # noqa: F811
+    tmp_path,
+    helper,
+    body,
+):
+    """A file-creating call outside `os` that raises no audit event keeps the line (#4999).
+
+    The runner does not replace these. The line is kept because the call's module is one the
+    base end does not load, which the comparison of loaded modules reports.
+    """
+    path = repr(str(tmp_path / "escaped"))
+    base = git_out(tree.root, "rev-parse", "HEAD")
+    head = _commit(
+        tree,
+        [
+            {
+                "ansible/filter_plugins/toposort.py": _dep_map_writes(
+                    helper, body.format(path=path)
+                )
+            }
+        ],
+    )
+    reason = digest_covers.Classifier(tree.root).reason("authelia", base, head)
+    assert reason and "every deploy runs" in reason
+
+
+def test_rewriting_the_mknod_stubs_cell_alone_is_order_only(tree):  # noqa: F811
+    """The control for the stub-cell row: the rewrite runs, and by itself changes nothing seen.
+
+    So the stub-cell row is kept because the hook still ends the run on `os.putenv`, not
+    because the rewrite failed, as it does where `os.mknod` is the builtin with no closure.
+    """
+    base = git_out(tree.root, "rev-parse", "HEAD")
+    head = _commit(
+        tree,
+        [
+            {
+                "ansible/filter_plugins/toposort.py": _dep_map_writes(
+                    "import os\n\nos.mknod.__closure__[0].cell_contents = lambda code: None",
+                    "",
+                )
+            }
+        ],
+    )
+    assert digest_covers.Classifier(tree.root).reason("authelia", base, head) is None
