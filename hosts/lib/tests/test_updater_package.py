@@ -15,6 +15,8 @@ UPDATER_SCRIPT = REPO / "hosts" / "lib" / "homelab-updater"
 SERVICE = "/usr/lib/systemd/system/homelab-updater.service"
 TIMER = "/usr/lib/systemd/system/homelab-updater.timer"
 SOURCES = "/etc/apt/sources.list.d/homelab.sources"
+KEYRING = "/usr/share/keyrings/homelab-archive-keyring.gpg"
+KEYRING_FILE = REPO / "hosts" / "keys" / "homelab-archive-keyring.gpg"
 RECONCILE_SERVICE = "/usr/lib/systemd/system/homelab-reconcile.service"
 
 _SPAN = re.compile(r"(\d+)\s*(h|min|m|s)?")
@@ -35,7 +37,7 @@ def reconcile_unit(tmp_path_factory) -> str:
 
 def test_the_package_renders_its_named_members(package):
     assert sorted(package.files) == sorted(
-        [SOURCES, "/usr/lib/homelab/homelab-updater", SERVICE, TIMER]
+        [SOURCES, "/usr/lib/homelab/homelab-updater", SERVICE, TIMER, KEYRING]
     )
     assert package.files["/usr/lib/homelab/homelab-updater"] == (
         UPDATER_SCRIPT.read_bytes(),
@@ -49,14 +51,17 @@ def test_the_source_names_daniel_box_and_the_keyring_path(package):
     box = host_mode.host_context(None, {})[0]["hostvars"]["daniel-box"]["server_ip"]
     source = package.files[SOURCES][0].decode()
     assert f"URIs: http://{box}:8791\n" in source
-    assert "Signed-By: /usr/share/keyrings/homelab-archive-keyring.gpg\n" in source
+    assert f"Signed-By: {KEYRING}\n" in source
 
 
-def test_the_package_ships_no_enable_link_and_no_keyring(package):
+def test_the_package_ships_the_committed_keyring_unchanged(package):
+    # The path `Signed-By:` names must hold the operator's export byte for byte (H3.4c).
+    assert package.files[KEYRING] == (KEYRING_FILE.read_bytes(), 0o644)
+
+
+def test_the_package_ships_no_enable_link(package):
     # A host arms its updater by shipping the link in its own package (H3, *Shared names*).
-    # The keyring joins in H3.4c, with the key.
     assert not [dst for dst in package.files if ".wants/" in dst]
-    assert not [dst for dst in package.files if dst.startswith("/usr/share/keyrings/")]
 
 
 def timeout_start_s(unit: str) -> int:

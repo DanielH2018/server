@@ -321,11 +321,48 @@ def test_a_lib_script_symlinked_out_of_lib_is_flagged(hosts, tmp_path):
     assert "AGE-SECRET-KEY" not in str(caught.value)
 
 
-def test_an_entry_naming_both_src_and_lib_is_flagged(hosts):
-    root = hosts({"files": [{"lib": "homelab-x", "src": "a", "dst": "/x"}]})
+@pytest.mark.parametrize(
+    "sources", [{"lib": "homelab-x", "src": "a"}, {"lib": "homelab-x", "key": "k"}]
+)
+def test_an_entry_naming_two_sources_is_flagged(hosts, sources):
+    root = hosts({"files": [{**sources, "dst": "/x"}]})
     _lib(root)
-    with pytest.raises(RenderRefused, match="names both src and lib"):
+    with pytest.raises(RenderRefused, match="names more than one of src, lib and key"):
         host_mode.render_host("daniel-pi", root)
+
+
+def _key(root, name="homelab-k", data=b"\x99\x02\rnot-a-real-keyring"):
+    """Write `hosts/keys/<name>.gpg` beside a fixture tree, and return its bytes."""
+    (root / "keys").mkdir(exist_ok=True)
+    (root / "keys" / f"{name}.gpg").write_bytes(data)
+    return data
+
+
+def test_a_key_is_copied_byte_for_byte(hosts):
+    root = hosts({"files": [{"key": "homelab-k", "dst": "/usr/share/keyrings/k.gpg"}]})
+    data = _key(root)
+    assert host_mode.render_host("daniel-pi", root).files[
+        "/usr/share/keyrings/k.gpg"
+    ] == (data, 0o644)
+
+
+@pytest.mark.parametrize("name", ["../homelab-k", "homelab-k.gpg"])
+def test_a_key_name_that_is_not_plain_is_flagged(hosts, name):
+    root = hosts({"files": [{"key": name, "dst": "/k.gpg"}]})
+    _key(root)
+    with pytest.raises(RenderRefused, match="is not a plain name"):
+        host_mode.render_host("daniel-pi", root)
+
+
+def test_a_key_symlinked_out_of_keys_is_flagged(hosts, tmp_path):
+    outside = tmp_path / "outside"
+    outside.write_text("AGE-SECRET-KEY-not-a-real-key\n")
+    root = hosts({"files": [{"key": "homelab-k", "dst": "/k.gpg"}]})
+    (root / "keys").mkdir()
+    (root / "keys" / "homelab-k.gpg").symlink_to(outside)
+    with pytest.raises(RenderRefused, match="is outside the component") as caught:
+        host_mode.render_host("daniel-pi", root)
+    assert "AGE-SECRET-KEY" not in str(caught.value)
 
 
 def _maintainer(root, name, text):

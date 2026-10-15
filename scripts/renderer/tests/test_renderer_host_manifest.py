@@ -89,6 +89,7 @@ def test_the_real_updater_s_units_join_a_host_manifest(tmp_path):
     (hosts / "components").mkdir()
     (hosts / "components" / "reconcile").symlink_to(REPO / "hosts/components/reconcile")
     (hosts / "lib").symlink_to(REPO / "hosts/lib")
+    (hosts / "keys").symlink_to(REPO / "hosts/keys")
     (hosts / "daniel-pi").mkdir()
     (hosts / "daniel-pi" / "package.yml").write_text("components: [reconcile]\n")
 

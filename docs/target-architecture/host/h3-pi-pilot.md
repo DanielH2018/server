@@ -229,6 +229,9 @@ H4 to H7 use these names unchanged. A slice that needs a different value says so
     - `hosts/keys/` holds the public keys hosts trust. PR H3.4c commits the first,
       `homelab-archive-keyring.gpg`. The builder's anchor reads no key ([ADR-0021](../../adr/0021-the-host-package-builder-trusts-master-plus-green-ci.md)), so
       nothing a candidate commit puts there can move it.
+    - A package ships a key with a `key:` file entry, which names `hosts/keys/<name>.gpg`
+      without its suffix, the way a `lib:` entry names `hosts/lib/<name>`. Both are copied
+      byte for byte, and they are the only sources outside a component's own directory.
 - **Packages and the slice that creates each.** `homelab-updater`, `homelab-daniel-pi` and
   `homelab-tools` in H3, `homelab-daniel-server` in H4, `homelab-daniel-box` in H6, and
   `homelab-repos` in H7. `homelab-tools` is the one architecture-specific package (C5,
