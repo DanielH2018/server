@@ -465,8 +465,9 @@ Removes-Object: <kind>/<namespace>/<name>
 - `<kind>` is the object's `kind`, such as `IngressRoute`.
 - A cluster-scoped object leaves the namespace empty: `Removes-Object: ClusterRole//<name>`.
 - The key is case-insensitive, and the line may sit anywhere in the commit message. The
-  repository's squash merge keeps every PR commit's message in the squash commit's body, so
-  a line on any commit of the PR reaches master. A merge that replaces that body, such as
+  repository's squash setting `squash_merge_commit_message: COMMIT_MESSAGES` keeps every PR
+  commit's message in the squash commit's body, so a line on any commit of the PR reaches
+  master. `land.sh` sends no body of its own for that reason. A merge that replaces that body, such as
   `gh pr merge --body`, drops it.
 - A commit outside the range does not count, including `prod`'s own commit.
 

@@ -187,6 +187,11 @@ def _merge_directly(ln: Landing, head: str) -> str:
     `sha` makes GitHub refuse if the head moved since await_ci read it green.
     `{owner}/{repo}` resolves from the checkout, as every `gh pr view` here does.
     """
+    # DECIDED: no `commit_message`. The repo's squash default (COMMIT_MESSAGES) keeps every PR
+    # commit's message in the body, which is how a `Removes-Object:` line reaches master for
+    # `promote.py decide`. Sending a body would drop it. docs/flux-deploy-plane.md, *Removing
+    # an object on purpose*; test_a_review_bound_pr_merges_directly_once_its_head_is_green
+    # pins the exact fields.
     try:
         ln.tools.gh(
             "api",
