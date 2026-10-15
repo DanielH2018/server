@@ -94,6 +94,15 @@ def test_the_state_directories_carry_the_plan_owners_and_modes():
     assert DEFAULTS["homelab_builder_signer_dir"] == "/var/lib/homelab-signer"
 
 
+def test_the_signer_can_reach_the_hold_and_the_fingerprint_but_not_list_the_directory():
+    # The signer is not in the directory's group: the world execute bit is how it stats the
+    # hold and reads archive-key.fpr. Read without it, the hold would never stop a publish.
+    task = task_named(INSTALL, "Create the builder's configuration directory")
+    assert task["ansible.builtin.file"]["mode"] == "0751"
+    fpr = task_named(INSTALL, "Write the archive signing key's fingerprint")
+    assert fpr["ansible.builtin.copy"]["mode"] == "0644"
+
+
 def test_the_signing_key_is_generated_once_as_the_signer():
     task = task_named(INSTALL, "Generate the archive signing key")
     command = task["ansible.builtin.command"]

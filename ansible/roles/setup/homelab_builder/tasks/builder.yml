@@ -1,5 +1,5 @@
 ---
-# The builder half, H3.5a (docs/target-architecture/host/h3-pi-pilot.md, *Steps, as PRs*, item 6,
+# The builder half, H3.5a, and the signer, H3.5b (docs/target-architecture/host/h3-pi-pilot.md, *Steps, as PRs*, item 6,
 # and *The builder and the repository*). install.yml imports it after the repository half, so the
 # users, the state directories and archive-key.fpr exist first.
 #
@@ -129,7 +129,7 @@
     + (homelab_builder_python.stdout | default(''))
   become: true
 
-- name: Install the builder script and publish-textfile
+- name: Install the builder script, the signer script and publish-textfile
   tags: [homelab-builder-install]
   ansible.builtin.copy:
     src: "{{ item.src }}"
@@ -139,6 +139,7 @@
     mode: "0755"
   loop:
     - { src: host_package_builder.py, dest: host_package_builder.py }
+    - { src: homelab_repo_sign.py, dest: homelab_repo_sign.py }
     - { src: publish-textfile.sh, dest: publish-textfile }
   loop_control:
     label: "{{ item.dest }}"
@@ -159,6 +160,8 @@
     stamp_deployed_pairs:
       - live: /opt/homelab-builder/host_package_builder.py
         src: ansible/roles/setup/homelab_builder/files/host_package_builder.py
+      - live: /opt/homelab-builder/homelab_repo_sign.py
+        src: ansible/roles/setup/homelab_builder/files/homelab_repo_sign.py
       - live: /opt/homelab-builder/publish-textfile
         src: ansible/roles/setup/homelab_builder/files/publish-textfile.sh
       - live: /opt/homelab-builder/host_lib.py
@@ -166,7 +169,7 @@
       - live: /opt/homelab-builder/kuma_push.py
         src: ansible/roles/setup/common/files/kuma_push.py
 
-- name: Install the builder units
+- name: Install the builder and signer units
   tags: [homelab-builder-install]
   ansible.builtin.template:
     src: "{{ item }}.j2"
@@ -175,6 +178,7 @@
   loop:
     - homelab-builder.service
     - homelab-builder.timer
+    - homelab-repo-sign.service
   become: true
   notify: Reload systemd
 
@@ -190,6 +194,20 @@
       clear, and journalctl -u homelab-builder has the run.
     alert_unit_env_dir: /etc/homelab-builder
 
+# The second import, for the signer's OnFailure=. Both write the same alert-webhook.env in
+# /etc/homelab-builder, so the teardown that removes the directory removes it for both.
+- name: Install the signer's failure alert
+  tags: [homelab-builder-install]
+  ansible.builtin.import_tasks: "{{ role_path }}/../common/tasks/alert_unit.yml"
+  vars:
+    alert_unit_name: homelab-repo-sign
+    alert_unit_description: Alert when the homelab repository signer fails
+    alert_unit_message: >-
+      homelab-repo-sign failed on {{ inventory_hostname }}, so nothing new is published.
+      journalctl -u homelab-repo-sign names the refusal or the failed step. A refused set is
+      under /var/lib/homelab-signer/refused, and docs/host-packages.md has the clear.
+    alert_unit_env_dir: /etc/homelab-builder
+
 - name: Stamp the rendered builder units
   tags: [homelab-builder-install]
   ansible.builtin.import_tasks: "{{ role_path }}/../common/tasks/stamp_render.yml"
@@ -198,6 +216,7 @@
     stamp_render_templates:
       - ansible/roles/setup/homelab_builder/templates/homelab-builder.service.j2
       - ansible/roles/setup/homelab_builder/templates/homelab-builder.timer.j2
+      - ansible/roles/setup/homelab_builder/templates/homelab-repo-sign.service.j2
       - ansible/roles/setup/common/templates/unit-failure-alert.service.j2
       - ansible/roles/setup/common/templates/alert-webhook.env.j2
       # The stamp and the drift check both hash the repo source, never the render, so the
@@ -208,8 +227,9 @@
   tags: [homelab-builder-install]
   ansible.builtin.meta: flush_handlers
 
-# The timer only: no task starts the service, so a first run that fails pages through
-# OnFailure= rather than failing this apply, which would hold every session's landings.
+# The timer only: no task starts the builder or the signer, so a first run that fails pages
+# through OnFailure= rather than failing this apply, which would hold every session's landings.
+# The signer has no timer of its own; the builder's OnSuccess= starts it.
 - name: Enable and start the builder timer
   tags: [homelab-builder-install]
   ansible.builtin.systemd:

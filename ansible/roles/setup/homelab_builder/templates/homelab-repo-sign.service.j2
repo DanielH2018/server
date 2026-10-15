@@ -1,0 +1,37 @@
+[Unit]
+Description=Homelab repository signer (signs and publishes the packages the builder staged)
+# No timer and no [Install]: homelab-builder.service starts it through OnSuccess= after every
+# run that exits 0, a held run included, which is what makes the daily re-sign happen.
+OnFailure=homelab-repo-sign-alert.service
+
+[Service]
+Type=oneshot
+User=homelab-signer
+Group=homelab-signer
+# homelab-apt-repo.service is a DynamicUser that reads repo/ through the other bits. The
+# script sets each published mode itself as well.
+UMask=0022
+# Sandboxing (h3-pi-pilot.md, *The builder and the repository*, Sandboxing). Signing needs no
+# network, so PrivateNetwork=yes. It may write its own state directory and empty staged/.
+# ansible/roles/setup/homelab_builder/tests/test_builder_units.py holds each directive.
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+PrivateNetwork=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+CapabilityBoundingSet=
+ReadWritePaths={{ homelab_builder_signer_dir }}
+ReadWritePaths={{ homelab_builder_state_dir }}/staged
+Environment=HOME={{ homelab_builder_signer_dir }}
+Environment=PYTHONDONTWRITEBYTECODE=1
+TimeoutStartSec=10min
+# The host's python3, standard library only: the signer cannot read the builder's pinned
+# interpreter under its 0700 state directory.
+ExecStart=/usr/bin/python3 {{ homelab_builder_code_dir }}/homelab_repo_sign.py
+# `+` runs the copy as root outside the sandbox, `-` keeps a failed copy from failing the unit.
+ExecStopPost=-+/bin/sh {{ homelab_builder_code_dir }}/publish-textfile homelab_repo_ {{ homelab_builder_signer_dir }}/homelab_repo.prom

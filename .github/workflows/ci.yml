@@ -590,6 +590,14 @@ jobs:
             || { sudo apt-get update -q && sudo apt-get install -y --no-install-recommends age; }
           "$RUNNER_TEMP/bin/sops" --version --disable-version-check
           age-keygen --version
+      # The repository signer's tests drive apt-ftparchive, as the signer does on daniel-box
+      # (ansible/roles/setup/homelab_builder/tests/test_repo_signer.py).
+      - name: Install apt-utils for the repository signer tests
+        run: |
+          set -euo pipefail
+          sudo apt-get install -y --no-install-recommends apt-utils \
+            || { sudo apt-get update -q && sudo apt-get install -y --no-install-recommends apt-utils; }
+          command -v apt-ftparchive
       # The Bash hooks split commands with the dotfiles repo's `claude_guard` package, and the
       # worktree pruner reads `claude_worktree` from it. A host gets both from `chezmoi apply`;
       # this step lays the same two directories out where a host has them, so the bootstraps

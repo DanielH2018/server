@@ -150,6 +150,9 @@ containers_list:
         role_owned: true
   - name: bento-pdf
     platform: k8s
+    # Flux applies bento-pdf through `promote`, and every Ansible path skips it (D2.7). The
+    # handback is two PRs, `owner: released` then removing `owner`: docs/flux-deploy-plane.md.
+    owner: flux
     # Single-label on purpose — bento-pdf.local.<domain> is covered by the existing
     # *.local.<domain> wildcard cert; a nested bento-pdf.k8s.local.<domain> would not be.
     hostname: "bento-pdf"
