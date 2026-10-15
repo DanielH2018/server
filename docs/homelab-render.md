@@ -39,14 +39,14 @@ steps, and this page describes each piece once its PR has merged.
 - A census row names every role task file that writes a cluster object itself, which the
   render does not cover (*What the render does not cover*).
 - `scripts/renderer/renderer_lib/placeholders.py` holds placeholder mode: the mode call, the
-  three passes, the per-directory key sets and `PLACEHOLDER_DEFERRED` (*Placeholder mode*).
+  three passes and the per-directory key sets (*Placeholder mode*).
 - `scripts/renderer/shadow_diff.py roundtrip` builds the placeholder render and the stub render
   with the pinned flux CLI and compares them, and `fluxprobe` checks that CLI on fixtures
   first. CI's `flux_roundtrip` job runs both (*The round trip*).
 - `scripts/renderer/renderer_lib/secret_checks.py` holds `PASSTHROUGH_FILTERS`, the filters
   that only interpolate a secret key, which is empty (*Filters that only interpolate a
   secret*).
-- The standalone-value guard: `placeholders.py`'s standalone key sets and `GUARD_DEFERRED`,
+- The standalone-value guard: `placeholders.py`'s standalone key sets,
   `scripts/renderer/standalone_map.py` and the map it commits, the resolver in
   `scripts/lib/plain_scalar.py`, `ansible/filter_plugins/standalone_guard.py`, and two tasks
   in the shared `k8s/manifests` role (*The standalone-value guard*).
@@ -109,12 +109,10 @@ A placeholder render with `--role` also writes the publish bundle, `DIR/flux/` a
 `docs/flux-deploy-plane.md`'s *The bundle* describes both. A stub render, a render without
 `--role` and a render that names no flux-owned tag write neither.
 
-`cluster` exits 2 and writes nothing in six cases:
+`cluster` exits 2 and writes nothing in five cases:
 
 - In stub mode, the stub file does not stub every key of `ansible/vars/secrets.yml`. The
   message names the keys, never a value. Write a fresh stub file for the commit.
-- In placeholder mode, every requested tag is in `PLACEHOLDER_DEFERRED`, so nothing would
-  render.
 - A `--role` names a tag that is not a k8s render target of daniel-box.
 - A directory it would write under `DIR/cluster/` already holds files from an earlier
   render, or `DIR/flux/` or `DIR/digests.json` does.
@@ -274,22 +272,22 @@ the five secret rules, and later D2's `postBuild` writer. pihole substitutes, be
 Secret holds keys, and `pihole-deferred` does not. At `65b52ff2f`, 46 of the 61 directories
 substitute.
 
-### Tags placeholder mode skips
+### Every tag renders in placeholder mode
 
-`PLACEHOLDER_DEFERRED` in `placeholders.py` names the tags placeholder mode cannot render
-yet, each with its reason. It is empty. Its last member was `home-assistant`, whose
+Placeholder mode renders every tag it is asked for, as stub mode does. R2's PR 9 deleted the
+set of tags it skipped, `PLACEHOLDER_DEFERRED`, so a tag that cannot render with sentinels
+fails the render instead of being left out. The set's last member was `home-assistant`, whose
 `from_json` parse of `google_assistant_service_account` raised on a sentinel until R2's PR 5
-moved that key into a Secret of its own. Placeholder mode skips a member and names it in the
-summary line, as `skipped, in PLACEHOLDER_DEFERRED: <tag>`. A `--role` list that names only
-members renders nothing, so `cluster` refuses it with exit 2. Stub mode renders every tag.
+moved that key into a Secret of its own.
 
-This set is a different thing from a `<tag>-deferred` directory, which holds the files a role
-passes as `manifests_deferred_files`.
+A `<tag>-deferred` directory is a different thing: it holds the files a role passes as
+`manifests_deferred_files`.
 
 ### The five secret rules
 
 `scripts/renderer/renderer_lib/secret_checks.py` runs five rules after every placeholder
-render, before anything is written. A violation makes `cluster` exit 1. Each line names the
+render, before anything is written. The rules are enforced with no exemption list: any
+violation makes `cluster` exit 1. Each line names the
 rule, the tag, the file, the document as `Kind/name` or the refused form, and the key.
 
 | Rule | Reads | Refuses |
@@ -344,9 +342,10 @@ would accept it. No template iterates such a
 part, so a reviewer reads any new `{% for %}` over a part of a container alias as a
 transform.
 
-`KNOWN_VIOLATIONS` holds every violation the first fleet render found and the tree still has.
-It is empty. An entry that no longer matches fails the check, so the set shrank only through
-fixes. R2's PRs 6 and 7 removed rule 4 on pi-peer-backup's and authelia's Secrets and rule 5's
+Until R2's PR 9, the ratchet `KNOWN_VIOLATIONS` held every violation the first fleet render
+found and the tree still had. An entry that no longer matched failed the check, so the set
+shrank only through fixes, and PR 9 deleted it once it was empty. Admitting a violation now
+means changing the rule itself. R2's PRs 6 and 7 removed rule 4 on pi-peer-backup's and authelia's Secrets and rule 5's
 `indent`s on their keys, by moving each key into a Secret of its own. R2's PR 4 removed qbittorrent's two `trim`s and
 mosquitto's `string`, and mosquitto's deploy refuses a stored hash that holds a colon.
 R2's PR 5 removed Home Assistant's two entries, the `from_json` parse and
@@ -359,9 +358,8 @@ Each rule must find its named members, so a rule that stops matching cannot pass
 `${email}` in traefik's `traefik-static` ConfigMap, rule 1 a placeholder in authelia's config
 Secret, rule 2 the escaped `$${` in qbittorrent's `qbittorrent-netns-reset` ConfigMap, rule 4 every
 `SOPS_MANIFEST_KEYS` key in `ansible/vars/secrets.yml`, and rule 5 at least 46 templates that
-name a key and two accepted uses. A `--role` render asserts a member of rules 1 to 4, and
-counts their `KNOWN_VIOLATIONS` entries stale, only for the tags it rendered. Rule 5 reads
-the whole tree on every run.
+name a key and two accepted uses. A `--role` render asserts a member of rules 1 to 4 only
+for the tags it rendered. Rule 5 reads the whole tree on every run.
 
 `scripts/renderer/tests/test_renderer_secret_checks.py` holds each rule's `_is_clean` and
 `_is_flagged` pair, and `test_renderer_secret_checks_tree.py` the fleet render and the named
@@ -397,14 +395,14 @@ placeholder render. `cluster` exits 1 and writes nothing when an entry:
 The check reads the keys from the entry's sentinel render, so a key reached through an alias
 counts. A `--role` render checks only the tags it rendered.
 
-A third clause holds the templates outside the lists. Every template that names a
-`SOPS_MANIFEST_KEYS` key, and is in no role's `render_sops_manifests`, must carry a live rule 5
-entry in `KNOWN_VIOLATIONS` for that key. Rule 5's walk supplies the names, so an alias counts. The
-clause reads template sources, so it scans the whole tree on every run, `--role` renders included.
+A third clause is an equality: the templates of every role's `render_sops_manifests` entries
+are exactly the templates that name a `SOPS_MANIFEST_KEYS` key. A template that names one and
+is in no role's list fails, and so does an entry whose template names none. Rule 5's walk
+supplies the names, so an alias counts. The clause reads template sources and every role's
+list, so it scans the whole tree on every run, `--role` renders included.
 `secret_checks.check` runs it beside the five rules, so a failure prints `secret check:
-sops-manifest-entries: <template> names <key>, ...` and `cluster` exits 1. Since R2's PR 7
-moved `authelia_oidc_rsa_key_content` out of authelia's `config-secret.yaml.j2`, the templates
-that name a `SOPS_MANIFEST_KEYS` key are exactly the four entries.
+sops-manifest-entries: <template> ...` and `cluster` exits 1. The four entries in the table
+above are the four templates that name such a key.
 
 ### Filters that only interpolate a secret
 
@@ -445,8 +443,8 @@ It runs two passes:
 
 1. **Each key's R1 stub**, on both sides.
 2. **Every key outside the standalone-value guard `0123`**, on both sides, and every other key
-   its R1 stub. A key is inside the guard when the guard's map names it under any tag, or
-   when `GUARD_DEFERRED` holds it. The stub side is a stub-mode render with those keys set to
+   its R1 stub. A key is inside the guard when the guard's map names it under any tag. The
+   stub side is a stub-mode render with those keys set to
    `0123`, so Jinja writes the template's quotes around it there. Flux drops them on the
    placeholder side (*What the pinned flux CLI does*). A difference therefore marks a
    standalone use of a key that the guard does not cover anywhere. The pass cannot see a
@@ -455,14 +453,12 @@ It runs two passes:
    one (*The standalone-value guard*). `--guard-map FILE` reads another map than the
    committed one, so `{}` sets every key to `0123` again.
 
-Two things are left out of the comparison, by name and by count, and nothing else:
-
-- **The documents a `KNOWN_VIOLATIONS` entry of rules 1 to 4 names.** None is left. The last
-  was authelia's `Secret/authelia-config`, compared since R2's PR 7 moved its multi-line key
-  out. Each entry whose directory was built must drop exactly one object.
-- **The files a role's `render_sops_manifests` names.** Placeholder mode emits no document for
-  them, and each stub render drops the same files. Each pass counts the documents it dropped
-  and fails unless the count equals the number of entries in the tags it built.
+One thing is left out of the comparison, by count, and nothing else: the files a role's
+`render_sops_manifests` names. Placeholder mode emits no document for them, and each stub
+render drops the same files. Each pass counts the documents it dropped and fails unless the
+count equals the number of entries in the tags it built. Until R2's PR 9 the round trip also
+left out the documents a `KNOWN_VIOLATIONS` entry of rules 1 to 4 named. The last was
+authelia's `Secret/authelia-config`, compared since R2's PR 7 moved its multi-line key out.
 
 Every `checksum/...` pod annotation is compared. Until domain PR 2b the round trip also left
 out observability's five `checksum/config` annotations, because Prometheus's hashed config
@@ -470,8 +466,8 @@ held `${domain}`. No hashed config holds a placeholder since `domain` was publis
 placeholder that reaches one is a difference.
 
 Each pass prints a summary line, such as `roundtrip: 58 tags, 4 deferred directories, 47
-substituting, 450 objects, 0 documents in KNOWN_VIOLATIONS left out, 0 differences, 4
-documents in render_sops_manifests, with each key's R1 stub`. `roundtrip` exits 0 only when both passes find no difference and each
+substituting, 450 objects, 0 differences, 4 documents in render_sops_manifests, with each
+key's R1 stub`. `roundtrip` exits 0 only when both passes find no difference and the
 exclusion count holds.
 
 It needs the pinned flux CLI. daniel-box has none, so it runs in CI's `flux_roundtrip` job.
@@ -486,8 +482,7 @@ uv run python scripts/renderer/shadow_diff.py roundtrip --out /tmp/r2-roundtrip 
   --role configarr --role janitorr --role home-assistant
 ```
 
-The CI job round-trips every tag outside `PLACEHOLDER_DEFERRED` in both passes, with no
-`--role`. That covers `home-assistant`, `pi-peer-backup`, `qbittorrent` and `authelia`, which
+The CI job round-trips every tag in both passes, with no `--role`. That covers `home-assistant`, `pi-peer-backup`, `qbittorrent` and `authelia`, which
 carry the four `render_sops_manifests` entries.
 Its red half runs on `configarr`, `janitorr` and `home-assistant` only, because one changed byte
 is all it has to show. The job also round-trips `traefik` with `email` dropped from the guard's
@@ -558,10 +553,8 @@ template shape fixes it, so the guard checks the values where they are decrypted
   `x-${K}`, or a placeholder inside a block that holds more text, is not standalone.
 - **The deploy path reads a committed projection.** `standalone_map.py` writes
   `ansible/roles/k8s/manifests/files/standalone_secret_keys.json`, which maps each deploy tag
-  to the sorted keys standing alone in its directories, less `GUARD_DEFERRED`. To regenerate
-  it, run `uv run python scripts/renderer/standalone_map.py` and commit the file. The tags in
-  `PLACEHOLDER_DEFERRED` render no placeholders, so the map holds none of them, and the guard
-  checks no `home-assistant` value until R2's PR 5.
+  to the sorted keys standing alone in its directories, every one of them. To regenerate it,
+  run `uv run python scripts/renderer/standalone_map.py` and commit the file.
 - **The shared `k8s/manifests` role runs the guard before every render.** Its first task,
   under `no_log`, collects the names of the service's mapped keys whose value the resolver
   refuses, or which the loaded secrets do not define. Its second task is an assert that fails
@@ -574,17 +567,15 @@ template shape fixes it, so the guard checks the values where they are decrypted
   plain-scalar resolver of go-yaml v2.4.4, the version the pinned CLI carries. It types
   `1e3`, `08`, `0o17` and `y`, which PyYAML reads as strings. The flux probe holds both to
   the pinned CLI. D3's `cluster_vars.py write` imports the same function.
-- **`GUARD_DEFERRED`** in `placeholders.py` names the keys with a standalone use that the
-  guard does not check, each with its reason. It is empty. Its last member was
-  `mullvad_account`, whose real value is all digits. R2's PR 7b moved that key into the
-  dedicated SOPS-encrypted Secret `qbittorrent-mullvad-account`, which placeholder mode
-  leaves out.
+- **The guard is enforced with no exemption list.** Every key with a standalone use is in
+  the map. R2's PR 9 deleted `GUARD_DEFERRED`, the set of keys the guard skipped. Its last
+  member was `mullvad_account`, whose real value is all digits, until R2's PR 7b moved that
+  key into the dedicated SOPS-encrypted Secret `qbittorrent-mullvad-account`, which
+  placeholder mode leaves out.
 - **The coverage test**, `scripts/renderer/tests/test_renderer_standalone_map.py`, renders the
-  fleet in placeholder mode and holds the committed map equal to it. It also fails on a key
-  in both the map and `GUARD_DEFERRED`, on a `GUARD_DEFERRED` member that stands alone
-  nowhere, and on a mapped key absent from `ansible/vars/secrets.yml`. Its named members are
-  `email` and `wireguard_interface_private_key`, mapped under `traefik` and `qbittorrent`, and
-  an empty `GUARD_DEFERRED`.
+  fleet in placeholder mode and holds the committed map equal to it. It also fails on a
+  mapped key absent from `ansible/vars/secrets.yml`. Its named members are `email` and
+  `wireguard_interface_private_key`, mapped under `traefik` and `qbittorrent`.
 
 When the assert refuses a key, the deploy stops before anything renders or applies, so the
 live objects keep their old values. R2's Open question 13 records the operator's ruling of

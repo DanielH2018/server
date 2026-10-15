@@ -20,13 +20,15 @@ Rule 5's syntax-tree walk is `jinja_uses.py`. This module gives it the sets it r
 turns each refusal into a `Violation`.
 
 Rules 1 to 4 read the rendered output. Each asserts its named member only when that member's
-tag is in the render, and a `KNOWN_VIOLATIONS` entry of theirs counts as stale only when its
-tag was rendered. Rule 5 scans the whole tree, so its floor, its named members and its stale
-entries hold on every run.
+tag is in the render. Rule 5 scans the whole tree, so its floor and its named members hold on
+every run.
+
+The rules are enforced with no exemption list: R2's PR 9 deleted the `KNOWN_VIOLATIONS`
+ratchet, so any violation fails the render. Admitting one means changing the rule itself.
 
 `sops-manifest-entries`, the check on each role's `render_sops_manifests` list, lives in
 `sops_entries.py` and is importable from here. `check` runs its third clause, which reads
-rule 5's result and the ratchet.
+rule 5's result over the whole tree.
 
 `docs/homelab-render.md` is the operator's page, and
 `docs/target-architecture/render/r2-secret-placeholders.md` the plan.
@@ -44,7 +46,7 @@ from pathlib import Path
 from typing import NamedTuple
 
 
-from lib.repo_paths import REPO, SHARED_TPL
+from lib.repo_paths import K8S_ROLES, REPO, SHARED_TPL
 from renderer.renderer_lib.environment import renderer_env
 from renderer.renderer_lib.jinja_aliases import scan_templates
 from renderer.renderer_lib.jinja_uses import (
@@ -69,8 +71,8 @@ from renderer.renderer_lib.var_aliases import (
 )
 from renderer.renderer_lib.sops_entries import (
     SOPS_MANIFEST_KEYS,
+    namer_problems,
     sops_manifest_entries as sops_manifest_entries,
-    unlisted_namers,
 )
 from renderer.renderer_lib.placeholders import (
     SENTINEL_PREFIX,
@@ -112,7 +114,7 @@ SENTINEL_FRAGMENT = re.compile(re.escape(SENTINEL_PREFIX.rstrip("_")), re.IGNORE
 
 
 class Violation(NamedTuple):
-    """One breach of a rule, and the shape of a `KNOWN_VIOLATIONS` entry.
+    """One breach of a rule.
 
     Attributes:
         rule: The rule's name, such as `no-secret-expression`.
@@ -135,14 +137,6 @@ class Violation(NamedTuple):
 
 
 _ROLE_TEMPLATES = "ansible/roles/k8s/{}/templates/{}"
-
-
-# Every violation the first fleet render finds. Each entry leaves through the PR that fixes
-# its source, and an entry that no longer matches fails the check, so the set shrinks only
-# through a fix. R2's exit criterion requires it empty. R2's PR 7 removed its last two entries,
-# rule 4 and rule 5 on authelia's OIDC key, by moving that key into a Secret of its own listed
-# in `render_sops_manifests`.
-KNOWN_VIOLATIONS: frozenset[Violation] = frozenset()
 
 
 # The fewest in-scope templates whose syntax tree names a secret key: 59 at `70591c307`, and
@@ -422,38 +416,32 @@ def rule5_members(
     return problems
 
 
+def sops_entry_templates(roles: Path = K8S_ROLES) -> list[str]:
+    """The template of every k8s role's `render_sops_manifests` entries, from the repository root."""
+    return [
+        _ROLE_TEMPLATES.format(role.name, f"{entry}.j2")
+        for role in sorted(roles.iterdir())
+        if role.is_dir()
+        for entry in sops_manifests(role.name, roles)
+    ]
+
+
 def sops_manifest_namers(
-    result: Rule5,
-    live: Iterable[Violation],
-    entries: Callable[[str], list[str]] = sops_manifests,
+    result: Rule5, listed: Iterable[str] | None = None
 ) -> list[str]:
     """The third clause of `sops-manifest-entries` over the whole tree, one line apiece.
 
-    A template that names a `SOPS_MANIFEST_KEYS` key is one of its role's
-    `render_sops_manifests` entries, or carries a live `KNOWN_VIOLATIONS` entry for that key.
-    The lists are read for every naming role, not only the rendered tags, so a `--role`
-    render does not read another role's entry as an unlisted template.
+    The templates of every role's `render_sops_manifests` entries are exactly the templates
+    that name a `SOPS_MANIFEST_KEYS` key, itself or through an alias. Every role's list is
+    read, not only the rendered tags', so a `--role` render checks the whole tree.
 
     Args:
         result: Rule 5's result over the whole tree.
-        live: The `KNOWN_VIOLATIONS` entries this run found.
-        entries: A role's `render_sops_manifests` basenames.
+        listed: The entries' templates; by default `sops_entry_templates()`.
     """
-    roles = {tag for tag, _template, _key in result.sops_namers}
-    listed = [
-        _ROLE_TEMPLATES.format(role, f"{entry}.j2")
-        for role in roles
-        for entry in entries(role)
-    ]
-    # DECIDED: only a rule 5 entry makes a template's key live. The third clause scans the
-    # whole tree on every run, so it may count only an entry that is found whatever the
-    # render's tags, and rule 5 scans every template source. A rule 4 entry is found only
-    # when its tag is rendered, so counting one would flag that template under a `--role`
-    # render of another tag, a failure with nothing wrong (r2-secret-placeholders.md, the
-    # `sops-manifest-entries` clauses).
-    found = [(v.file, v.key) for v in live if v.rule == NO_SECRET_EXPRESSION]
+    listed = sops_entry_templates() if listed is None else listed
     namers = [(template, key) for _tag, template, key in result.sops_namers]
-    return unlisted_namers(namers, listed, found)
+    return namer_problems(namers, listed)
 
 
 # -- the check -------------------------------------------------------------------------------
@@ -464,26 +452,20 @@ class Report:
     """The verdict of the five rules on one placeholder render.
 
     Attributes:
-        violations: Every violation found, known ones included.
-        unknown: The violations `KNOWN_VIOLATIONS` does not hold.
-        stale: The `KNOWN_VIOLATIONS` entries that no longer match.
-        missing: Each named member, floor or allowlist entry that failed, and each template
-            the third clause of `sops-manifest-entries` flags, one line apiece.
+        violations: Every violation found. Any one fails the render.
+        missing: Each named member, floor or allowlist entry that failed, and each problem
+            the third clause of `sops-manifest-entries` finds, one line apiece.
     """
 
     violations: list[Violation]
-    unknown: list[Violation]
-    stale: list[Violation]
     missing: list[str]
 
     def ok(self) -> bool:
-        return not (self.unknown or self.stale or self.missing)
+        return not (self.violations or self.missing)
 
     def lines(self) -> list[str]:
-        lines = [f"secret check: violation: {v.line()}" for v in self.unknown]
-        lines += [
-            f"secret check: stale KNOWN_VIOLATIONS entry, remove it: {v.line()}"
-            for v in self.stale
+        lines = [
+            f"secret check: violation: {v.line()}" for v in sorted(self.violations)
         ]
         lines += [f"secret check: {m}" for m in self.missing]
         return lines
@@ -492,28 +474,22 @@ class Report:
 def check(
     render: PlaceholderRender,
     known_keys: Iterable[str],
-    known_violations: frozenset[Violation] = KNOWN_VIOLATIONS,
     rule5_result: Rule5 | None = None,
+    listed: Iterable[str] | None = None,
 ) -> Report:
-    """Run the five rules on `render` and hold the result to `known_violations`.
+    """Run the five rules on `render`.
 
     Args:
         render: A placeholder render, after all three passes.
         known_keys: The key names of `ansible/vars/secrets.yml`.
-        known_violations: The ratchet.
         rule5_result: Rule 5's result, when the caller has it already.
+        listed: The `render_sops_manifests` templates the third clause holds the namers in
+            `rule5_result` to; by default the real tree's. A caller that passes a rule 5
+            result over other templates passes their list too.
     """
     keys = list(known_keys)
     result = rule5(keys) if rule5_result is None else rule5_result
     violations = output_violations(render, keys) + result.violations
-    found = set(violations)
-    rendered = set(render.key_sets)
-    stale = sorted(
-        v
-        for v in known_violations - found
-        if v.rule == NO_SECRET_EXPRESSION or v.tag in rendered
-    )
-    unknown = sorted({v for v in violations if v not in known_violations})
     missing = output_members(render, keys) + rule5_members(result, keys)
-    missing += sops_manifest_namers(result, found & known_violations)
-    return Report(violations, unknown, stale, missing)
+    missing += sops_manifest_namers(result, listed)
+    return Report(violations, missing)

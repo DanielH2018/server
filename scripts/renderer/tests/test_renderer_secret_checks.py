@@ -35,8 +35,6 @@ from renderer.renderer_lib.secret_checks import (
     NamedUse,
     Rule5,
     VarsLookupSite,
-    Violation,
-    check,
     output_members,
     output_violations,
     rule5,
@@ -443,31 +441,3 @@ def test_a_non_secret_vars_lookup_entry_whose_site_has_gone_is_flagged(tmp_path)
     sites = frozenset({_site(set())})
     (problem,) = rule5_members(result, FIXTURE_KEYS, sites, (), 0, ())
     assert "stale NON_SECRET_VARS_LOOKUPS entry" in problem
-
-
-# -- the ratchet ----------------------------------------------------------------------------
-
-ENTRY = Violation(CONFINED_TO_SECRET, "t", "f.yaml", "ConfigMap/c", KEY)
-
-
-def _check_over(text: str, known: frozenset[Violation]):
-    # A stand-in rule 5 result, so the ratchet is read over rules 1 to 4 alone.
-    rule5_result = Rule5(naming=["t.yaml.j2"] * RULE5_FLOOR)
-    return check(_render(text), FIXTURE_KEYS, known, rule5_result)
-
-
-def test_a_known_violation_is_clean():
-    report = _check_over(CONFIGMAP_DOC.format(sentinel(KEY)), frozenset({ENTRY}))
-    assert (report.unknown, report.stale) == ([], [])
-
-
-def test_a_known_violation_that_no_longer_matches_is_flagged():
-    report = _check_over(SECRET_DOC.format(sentinel(KEY)), frozenset({ENTRY}))
-    assert report.stale == [ENTRY]
-    assert not report.ok()
-
-
-def test_a_known_violation_of_a_tag_not_rendered_is_not_stale():
-    entry = ENTRY._replace(tag="other")
-    report = _check_over(SECRET_DOC.format(sentinel(KEY)), frozenset({entry}))
-    assert report.stale == []

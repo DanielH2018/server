@@ -22,19 +22,15 @@ It runs two passes, `stub_passes`. The first substitutes each key's R1 stub, a p
 string. The second sets every key the standalone-value guard does not cover to
 `TYPE_HOSTILE_STUB` on both sides, and keeps every other key's R1 stub. The pinned CLI drops
 the template's quotes around a substituted value, so a value such as `0123` changes type where
-it stands alone in a field. A key in the guard's map under any tag, or in `GUARD_DEFERRED`, is
-covered, so a difference in the second pass marks a standalone use the renderer's detection
-missed.
+it stands alone in a field. A key in the guard's map under any tag is covered, so a
+difference in the second pass marks a standalone use the renderer's detection missed.
 
-Two things are left out of the comparison, each named and counted, and nothing else:
-
-- The documents a `KNOWN_VIOLATIONS` entry of rules 1 to 4 names, such as a Secret that still
-  carries a multi-line key. Each entry whose directory was built must drop exactly one object.
-- A role's `render_sops_manifests` files, which are in neither build. Placeholder mode emits no
-  document for them, and `render_sides` drops the same files from each stub render. Each pass
-  counts the documents it dropped there, and fails unless the count equals the number of
-  entries in the tags it built, so an entry that hides more than its one Secret cannot read as
-  clean.
+One thing is left out of the comparison, counted, and nothing else: a role's
+`render_sops_manifests` files, which are in neither build. Placeholder mode emits no document
+for them, and `render_sides` drops the same files from each stub render. Each pass counts the
+documents it dropped there, and fails unless the count equals the number of entries in the
+tags it built, so an entry that hides more than its one Secret cannot read as clean. Every
+requested tag is built in both passes: placeholder mode skips none.
 
 `roundtrip` needs the pinned flux CLI. Where `flux` is not on `PATH`, it refuses and never
 reports a pass. `docs/homelab-render.md` is the operator's page.
@@ -62,16 +58,10 @@ from renderer.renderer_lib.cluster import (
     write_cluster,
 )
 from renderer.renderer_lib.placeholders import (
-    GUARD_DEFERRED,
     PlaceholderRender,
     exclude_sops_manifests,
     render_placeholders,
     sops_manifests,
-)
-from renderer.renderer_lib.secret_checks import (
-    KNOWN_VIOLATIONS,
-    OUTPUT_RULES,
-    Violation,
 )
 
 PLACEHOLDER, STUB = "placeholder", "stub"
@@ -188,43 +178,6 @@ def first_difference(placeholder: str, stub: str) -> str | None:
     return "the outputs differ outside any object"
 
 
-def excluded_documents(
-    directory: str, known: frozenset[Violation] = KNOWN_VIOLATIONS
-) -> frozenset[str]:
-    """The `Kind/name` of each document in `directory` that an entry of rules 1 to 4 names."""
-    return frozenset(
-        v.site for v in known if v.rule in OUTPUT_RULES and v.tag == directory
-    )
-
-
-@dataclass(frozen=True)
-class Uncompared:
-    """One side's build of one directory, less what the round trip leaves out.
-
-    Attributes:
-        text: The build output without them.
-        documents: The `Kind/name` of each document removed.
-    """
-
-    text: str
-    documents: tuple[str, ...]
-
-
-def leave_out(output: str, sites: frozenset[str]) -> Uncompared:
-    """`output` without the documents in `sites`."""
-    if not sites:
-        return Uncompared(output, ())
-    kept, dropped = [], []
-    for doc in documents(output):
-        obj = yaml_fast.safe_load(doc) or {}
-        site = f"{obj.get('kind')}/{(obj.get('metadata') or {}).get('name')}"
-        if site in sites:
-            dropped.append(site)
-            continue
-        kept.append(doc)
-    return Uncompared("---\n".join(kept), tuple(dropped))
-
-
 # The value every key takes in the second pass. The pinned CLI substitutes into a resource it
 # has already serialised, and it drops the template's quotes: measured on CI, a `stringData`
 # value written `"${n}"` came back as the integer 83 for n=0123 and as a boolean for n=true
@@ -251,8 +204,8 @@ class StubPass:
 
 
 def guarded_keys(guard_map: Mapping[str, list[str]]) -> frozenset[str]:
-    """The keys the standalone-value guard covers: mapped under any tag, or deferred."""
-    return frozenset(k for keys in guard_map.values() for k in keys) | GUARD_DEFERRED
+    """The keys the standalone-value guard covers: those mapped under any tag."""
+    return frozenset(k for keys in guard_map.values() for k in keys)
 
 
 def stub_passes(
@@ -285,25 +238,20 @@ class Report:
     Attributes:
         label: The pass's label, from `StubPass.label`.
         tags: The tags rendered on both sides.
-        skipped: The requested tags placeholder mode skipped, from `PLACEHOLDER_DEFERRED`.
         directories: Every directory compared.
         substituting: The directories built with `postBuild`.
         objects: The objects the stub side built, summed over the directories.
-        differences: One line per directory whose two builds differ or fail, and one per
-            exclusion whose count is wrong.
-        documents: The documents left out for `KNOWN_VIOLATIONS`, as `dir: Kind/name`.
+        differences: One line per directory whose two builds differ or fail.
         sops_entries: The `render_sops_manifests` entries of the tags built.
         sops_documents: The documents the stub render dropped for those entries.
     """
 
     label: str
     tags: list[str]
-    skipped: list[str]
     directories: list[str] = field(default_factory=list)
     substituting: list[str] = field(default_factory=list)
     objects: int = 0
     differences: list[str] = field(default_factory=list)
-    documents: list[str] = field(default_factory=list)
     sops_entries: int = 0
     sops_documents: int = 0
 
@@ -316,14 +264,9 @@ class Report:
                 f"{self.sops_entries} render_sops_manifests entries; each entry is one "
                 "document"
             )
-        if self.skipped:
-            lines.append(
-                f"roundtrip: skipped, in PLACEHOLDER_DEFERRED: {', '.join(self.skipped)}"
-            )
         lines.append(
             f"roundtrip: {len(self.tags)} tags, {deferred} deferred directories, "
             f"{len(self.substituting)} substituting, {self.objects} objects, "
-            f"{len(self.documents)} documents in KNOWN_VIOLATIONS left out, "
             f"{len(self.differences)} differences, {self.sops_documents} documents in "
             f"render_sops_manifests, with {self.label}"
         )
@@ -403,7 +346,6 @@ def compare_sides(
     stub_pass: StubPass,
     flux: str,
     run: Runner = subprocess.run,
-    known: frozenset[Violation] = KNOWN_VIOLATIONS,
 ) -> Report:
     """Build every directory of the placeholder render and of one pass's stub render, and compare.
 
@@ -412,12 +354,10 @@ def compare_sides(
         stub_pass: The pass whose stub render and substitute values to use.
         flux: The flux binary.
         run: The subprocess call; a test passes a stand-in.
-        known: The ratchet whose output-side entries name the documents to leave out.
     """
     report = Report(
         stub_pass.label,
         sides.tags,
-        sides.placeholder.skipped,
         sops_entries=sides.sops_entries,
         sops_documents=sides.sops_documents.get(stub_pass.name, 0),
     )
@@ -445,36 +385,9 @@ def compare_sides(
                 break
             outputs[side] = result.stdout
         else:
-            compared = {
-                side: leave_out(output, excluded_documents(name, known))
-                for side, output in outputs.items()
-            }
-            stub, placeholder = compared[stub_pass.name], compared[PLACEHOLDER]
-            report.objects += len(documents(stub.text))
-            report.documents.extend(f"{name}: {site}" for site in stub.documents)
-            if stub.documents != placeholder.documents:
-                report.differences.append(
-                    f"{name}: the two sides left out different documents"
-                )
-            difference = first_difference(placeholder.text, stub.text)
+            stub, placeholder = outputs[stub_pass.name], outputs[PLACEHOLDER]
+            report.objects += len(documents(stub))
+            difference = first_difference(placeholder, stub)
             if difference:
                 report.differences.append(f"{name}: {difference}")
-    report.differences.extend(exclusion_problems(report, known))
     return report
-
-
-def exclusion_problems(report: Report, known: frozenset[Violation]) -> list[str]:
-    """Each way a pass left out other than exactly what it names, one line apiece.
-
-    Each `KNOWN_VIOLATIONS` document of a built directory is left out exactly once.
-    """
-    built = set(report.directories)
-    expected = sorted(
-        f"{v.tag}: {v.site}" for v in known if v.rule in OUTPUT_RULES and v.tag in built
-    )
-    if sorted(report.documents) != expected:
-        return [
-            f"roundtrip: left out the documents {sorted(report.documents)}, "
-            f"where KNOWN_VIOLATIONS names {expected}"
-        ]
-    return []

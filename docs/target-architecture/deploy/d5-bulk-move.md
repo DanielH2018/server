@@ -2284,7 +2284,8 @@ sizes its batch of roles against that projection.
       the fourth `render_sops_manifests` entry (R2 *`mullvad_account` becomes a dedicated
       Secret*). The flip PR body quotes all three.
         - **R2 PR 7b is merged**, so no placeholder carries `mullvad_account` and R2's
-          `GUARD_DEFERRED` is empty. The flip PR body links the merged PR.
+          `GUARD_DEFERRED` is empty (R2's PR 9 later deleted the set). The flip PR body
+          links the merged PR.
         - **D3's SOPS manifest and `decryption`.** `cluster_vars.py check` (operator-run)
           lists D3's SOPS manifest for `mullvad_account`, and qbittorrent's Kustomization
           renders `decryption`, as for home-assistant, pi-peer-backup and authelia. A test in
