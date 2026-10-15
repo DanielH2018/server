@@ -49,15 +49,25 @@ def _reason_for_head_call(tree, imports: str, call: str) -> str | None:  # noqa:
             "import copy",
             "class _T:\n    pass\ncopy._deepcopy_dispatch[_T] = lambda x, memo: x",
         ),
+        (
+            "import logging",
+            "logging.Logger.manager.loggerDict['order-only-5081'] = logging.PlaceHolder(logging.root)",
+        ),
     ],
-    ids=["sys-path-append", "warnings-filters-insert", "deepcopy-dispatch-item"],
+    ids=[
+        "sys-path-append",
+        "warnings-filters-insert",
+        "deepcopy-dispatch-item",
+        "item-three-levels-down",
+    ],
 )
 def test_an_in_place_change_to_a_module_held_object_keeps_the_line(tree, imports, call):  # noqa: F811
     """An item added to a list or dict a module holds keeps the line (#5060).
 
     The attribute still names the same object, so comparing attribute identity sees nothing.
     In a deploy the plugin runs in the controller process, so the added item persists for
-    every later task and role.
+    every later task and role. `loggerDict` sits three levels below `logging.Logger`, past the
+    walk's two levels (#5081).
     """
     reason = _reason_for_head_call(tree, imports, call)
     assert reason and "every deploy runs" in reason
@@ -73,6 +83,8 @@ def test_an_in_place_change_to_a_module_held_object_keeps_the_line(tree, imports
         ("import os", "os.setsid()"),
         ("import sys", "sys.setdlopenflags(sys.getdlopenflags() ^ 0x100)"),
         ("import gc", "gc.freeze()"),
+        ("import codecs", "codecs.register(lambda name: None)"),
+        ("import os", "os.register_at_fork(after_in_child=lambda: None)"),
     ],
     ids=[
         "umask",
@@ -82,13 +94,16 @@ def test_an_in_place_change_to_a_module_held_object_keeps_the_line(tree, imports
         "setsid",
         "dlopen-flags",
         "gc-freeze",
+        "codecs-register",
+        "register-at-fork",
     ],
 )
 def test_a_change_to_process_state_keeps_the_line(tree, imports, call):  # noqa: F811
     """Process state that no module attribute holds and no audit event reports keeps the line (#5060).
 
     The subprocess the runner uses discards the change when it exits. In a deploy the change
-    persists in the controller process for every later task and role.
+    persists in the controller process for every later task and role. A codec search function
+    and an at-fork handler live in interpreter state that no module attribute holds (#5081).
     """
     reason = _reason_for_head_call(tree, imports, call)
     assert reason and "every deploy runs" in reason
@@ -161,6 +176,14 @@ def test_every_replaced_unaudited_call_keeps_the_line(tree, imports, call):  # n
         ("import signal", "signal.pthread_sigmask(signal.SIG_BLOCK, [signal.SIGTERM])"),
         ("import atexit", "atexit.register(print)"),
         ("import logging", "logging.root.addFilter(lambda record: False)"),
+        (
+            "import logging",
+            "logging.getLogger('ansible.utils.display').disabled = True",
+        ),
+        (
+            "import logging\nfrom ansible.errors import AnsibleFilterError",
+            "logging.getLogger('ansible').disabled = True",
+        ),
     ],
     ids=[
         "logger-level",
@@ -169,6 +192,8 @@ def test_every_replaced_unaudited_call_keeps_the_line(tree, imports, call):  # n
         "signal-mask",
         "atexit",
         "root-logger-filter",
+        "new-named-logger-disabled",
+        "existing-named-logger-disabled",
     ],
 )
 def test_a_change_to_object_attributes_or_timers_keeps_the_line(tree, imports, call):  # noqa: F811
@@ -178,6 +203,12 @@ def test_a_change_to_object_attributes_or_timers_keeps_the_line(tree, imports, c
     below the module. A pending alarm would kill the controller mid-deploy, and a blocked
     SIGTERM would make it ignore a stop. `logging.Logger` precedes `root` in the `logging`
     namespace, so the walk must reach the root logger at its shallowest depth to see its filters.
+
+    A named logger sits in `Logger.manager.loggerDict`, three levels below `logging.Logger`,
+    and its attributes four levels down (#5085). Importing `ansible.errors` creates the
+    `ansible` logger, and the runner preloads that import before it copies module state, so
+    that row's logger exists at both ends before the plugin runs. A logger the plugin's own
+    module code creates does not: both ends add it after the copy, so no walk depth sees it.
     """
     reason = _reason_for_head_call(tree, imports, call)
     assert reason and "every deploy runs" in reason
