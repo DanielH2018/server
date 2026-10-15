@@ -192,6 +192,68 @@ not rotated again by the weekly cron. Examples:
   live OIDC client; beszel's client is provisioned but parked in `archive/`, re-pair only
   if reactivated).
 
+### Authelia user passwords — mint the digest, then store both
+
+Each Authelia user has two SOPS keys: the plaintext password and its argon2 digest.
+`authelia_password` pairs with `authelia_password_argon2`, and `authelia_claude_password` and
+`authelia_agent_password` pair with their `_argon2` keys the same way.
+`ansible/roles/k8s/authelia/templates/config-secret.yaml.j2` reads only the digests. A changed
+plaintext alone therefore changes no login. The deploy asserts each digest's form before the
+apply ("Fail if a stored Authelia digest is malformed"), but it cannot check that a digest
+matches its plaintext. This procedure does.
+
+Each step handles a plaintext password, so the whole procedure is **operator-only**. Run it in a
+worktree on a branch, never in the primary checkout. Below, `KEY` stands for the plaintext's
+SOPS name.
+
+1. Set the new plaintext with `sops set`.
+2. Mint and validate the digest in a one-shot pod, because daniel-box has no Docker. The
+   plaintext travels over stdin, so it never reaches the pod spec. The flags match the hashing
+   block in `config-secret.yaml.j2`, and
+   `ansible/tests/services/test_authelia_argon2_parameters_agree.py` holds the two equal. The
+   image is the one `authelia_k8s_image` names in the role's `defaults/main.yml`.
+
+   ```bash
+   sops -d --extract "[\"$KEY\"]" ansible/vars/secrets.yml \
+     | sudo k3s kubectl -n homelab run authelia-mint --rm -i --attach --quiet \
+         --restart=Never --image="<authelia_k8s_image>" --command -- sh -c '
+       IFS= read -r pw
+       d=$(authelia crypto hash generate argon2 --password "$pw" --iterations 3 \
+             --memory 65536 --parallelism 4 --salt-size 16 --key-size 32 \
+           | grep -o "\$argon2id\$[^[:space:]]*")
+       authelia crypto hash validate --password "$pw" -- "$d" \
+         | grep -qx "The password matches the digest." && printf "%s\n" "$d"' \
+     | grep -x '\$argon2id\$v=19\$m=65536,t=3,p=4\$[A-Za-z0-9+/]*\$[A-Za-z0-9+/]*' \
+     | jq -R . \
+     | sops set --value-stdin ansible/vars/secrets.yml "[\"${KEY}_argon2\"]"
+   ```
+
+   The pipeline prints nothing on success. A failed validation emits no digest, so `sops set`
+   receives nothing and changes nothing.
+3. Commit both SOPS values in one commit, then open the PR.
+4. Land the PR with `land.sh`, passing `--tags authelia`. A rotation PR changes only
+   `ansible/vars/secrets.yml`, so `land.sh` derives no deploy tag from it. Without `--tags`,
+   `scripts/deploy_tools/land_lib/land_tags.py:plane_note` adds `_ROTATION_NOTE`, which says that
+   a rotation maps to no deploy tag by construction. `deploy.py:no_tag_outcome` in the same
+   package then ends the landing `needs-manual-apply`, exit 1, and nothing is deployed.
+   Authelia keeps verifying the old digest. With `--tags authelia`, `classify.py:classify`
+   leaves that note unread, and `deploy.py:deploy_phase` deploys authelia at the merge commit
+   through the health gate. If a landing already ran without `--tags`, deploy
+   `--tags authelia` from a checkout at that merge commit, not from the rotation worktree,
+   whose branch can be behind master.
+5. A `claude-agent` rotation also needs the `claude_code` apply, which writes the new
+   plaintext into the agent user's home. Run it only after step 4's landing reads `settled`.
+   If the authelia deploy failed, the old digest is still live, and the old plaintext in the
+   agent's home still matches it. `secret_rotation.py consumers authelia_agent_password`
+   prints the apply command. The agent's login fails from the first of steps 4 and 5 until
+   both have run.
+6. Log in as the rotated user.
+
+**To roll back a rotation,** revert the rotation commit, which restores both encrypted values
+together. The revert is a secrets-only PR too, so land it with `--tags authelia`, as in step 4,
+and repeat step 5 for a `claude-agent` rotation. The deploy-time assert checks the reverted
+value too.
+
 ### Record keys — `source: record` in the registry
 
 <!-- The key list is generated from `source: record` in the registry; edit that. -->
@@ -204,12 +266,9 @@ pod rolls, and the old credential still works. The registry marks them `source: 
 batch) with a reason naming this section. `sync` never touches an existing entry, so the field
 survives it. Each has a different mechanism:
 
-- `authelia_password` — the role reads the argon2 digest back out of the live `authelia-config`
-  Secret and reuses it, hashing the SOPS value only when that read is empty. Salts are random,
-  so re-hashing every run would roll the pod on every deploy; the read-back is deliberate and
-  makes a changed `authelia_password` inert. The one path that applies a new value is
-  `./scripts/deploy.sh --tags authelia -e authelia_k8s_rehash_passwords=true`
-  (`roles/k8s/authelia/defaults/main.yml` documents the flag).
+- `authelia_password` — the role renders the digest `authelia_password_argon2`, never this
+  plaintext, so a changed `authelia_password` is inert on its own. A rotation mints the new
+  digest and stores both, as *Authelia user passwords* above describes.
 - `bazarr_api_key` — the only reference in the tree is a reader,
   `roles/k8s/monitor-bridge/templates/env-secret.yaml.j2`. Regenerate it in Bazarr's
   Settings → General, `sops set` the new value, then redeploy monitor-bridge; setting SOPS

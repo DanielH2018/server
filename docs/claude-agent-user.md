@@ -390,8 +390,9 @@ operator-run.
 instead of the operator.
 
 - The password is `authelia_agent_password` in SOPS, so `secret_rotation.yml` tracks it (tier
-  `assisted`, like `claude-ui`'s). The `authelia` role hashes it at deploy time, with the same
-  username-keyed read-back as the other two users.
+  `assisted`, like `claude-ui`'s). The `authelia` role never reads it. The role renders the
+  digest `authelia_agent_password_argon2`, a SOPS key of its own, so a rotation mints a new
+  digest by the procedure in `docs/secret-rotation.md`, *Authelia user passwords*.
 - The `claude_code` role renders `/var/lib/claude/.config/homelab-ui/credentials.json` with the
   username, the password and the domain. The file is `0600`, owned by `claude`, and written
   under `no_log`. Ansible decrypts the three values as the operator, so the agent never holds
@@ -410,9 +411,9 @@ instead of the operator.
   deploy-ui). It has no public name.
 - To switch it off, set `claude_code_agent_user_enabled: false`, which removes the file. To
   revoke the account, delete the `claude-agent` block from the authelia role's
-  `users_database.yml` template and redeploy. To rotate the password, run `sops` set, then
-  `./scripts/deploy.sh --tags authelia -e authelia_k8s_rehash_passwords=true`, then apply
-  `claude_code` to rewrite the file.
+  `users_database.yml` template and redeploy. To rotate the password, follow *Authelia user
+  passwords* in `docs/secret-rotation.md`, which mints the new digest, lands it with
+  `--tags authelia`, and then applies `claude_code` to rewrite the file.
 
 **The agent's own browser.** The operator's Node, `playwright-mcp` and Chromium sit under
 `/home/ubuntu`, which `claude` cannot read, and the operator's homelab-ui registration is

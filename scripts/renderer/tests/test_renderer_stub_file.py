@@ -18,7 +18,7 @@ def test_stubs_writes_the_same_file_twice_for_one_tree(tmp_path):
     assert first.read_bytes() == second.read_bytes()
 
 
-def test_stub_file_holds_every_stub_the_sentinel_and_the_pinned_facts(tmp_path):
+def test_stub_file_holds_every_stub_and_the_sentinel_and_pins_no_fact(tmp_path):
     out = tmp_path / "stubs.yml"
     shadow_diff.main(["stubs", "--out", str(out)])
     loaded = yaml_fast.safe_load(out.read_text())
@@ -28,10 +28,9 @@ def test_stub_file_holds_every_stub_the_sentinel_and_the_pinned_facts(tmp_path):
         key: homelab_secret_stub(key) for key in keys
     }
     assert loaded["homelab_secret_stubs"] is True
-    assert {name: loaded[name] for name in PINNED_LIVE_FACTS} == {
-        name: fact.value for name, fact in PINNED_LIVE_FACTS.items()
-    }
-    assert set(loaded) == {*keys, "homelab_secret_stubs", *PINNED_LIVE_FACTS}
+    # R3's PR 4 moved the last pinned facts, authelia's digests, into SOPS.
+    assert PINNED_LIVE_FACTS == {}
+    assert set(loaded) == {*keys, "homelab_secret_stubs"}
 
 
 def test_stub_vars_over_a_secrets_file_without_clashes_is_clean(tmp_path):
@@ -40,8 +39,8 @@ def test_stub_vars_over_a_secrets_file_without_clashes_is_clean(tmp_path):
     assert shadow_diff.stub_vars(secrets)["email"] == "stub-email"
 
 
-def test_stub_vars_over_a_secret_key_named_like_a_pinned_fact_is_flagged(tmp_path):
+def test_stub_vars_over_a_secret_key_named_like_the_sentinel_is_flagged(tmp_path):
     secrets = tmp_path / "secrets.yml"
-    secrets.write_text("email: ENC[x]\nauthelia_password_hash: ENC[x]\n")
-    with pytest.raises(ValueError, match="authelia_password_hash"):
+    secrets.write_text("email: ENC[x]\nhomelab_secret_stubs: ENC[x]\n")
+    with pytest.raises(ValueError, match="homelab_secret_stubs"):
         shadow_diff.stub_vars(secrets)

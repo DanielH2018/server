@@ -1,244 +1,21 @@
 ---
-# The password hash is generated at deploy time rather than stored, in a one-shot pod because
-# daniel-box has no Docker.
-#
-# Read-back first, because argon2 salts are random: regenerating on every run would change
-# the Secret every deploy and trigger a rollout restart that changes nothing.
+# Each user's argon2 digest is a SOPS value (`authelia_password_argon2` and its two siblings),
+# which templates/config-secret.yaml.j2 reads directly. A rotation mints the digest by hand and
+# stores it beside the plaintext; docs/secret-rotation.md has the procedure.
 - name: Fail if the claude-ui credentials are missing
   tags: [config]
-  # The role defaults carry empty stand-ins for both, so a cluster that manages this user and
-  # does NOT hold the SOPS values resolves them to '' rather than failing on an undefined
-  # name. Without this assert that reaches `authelia crypto hash generate`, which hashes the
-  # empty string into a well-formed digest — an account with a password nobody set, behind a
-  # green recap.
+  # The role default is an empty stand-in, so a cluster that manages this user and does NOT
+  # hold the SOPS value resolves it to '' rather than failing on an undefined name. Without
+  # this assert the seeding task below registers an empty TOTP secret, behind a green recap.
   ansible.builtin.assert:
     that:
-      - authelia_claude_password | default('') | length > 0
       - authelia_claude_totp_secret | default('') | length > 0
     fail_msg: >-
-      authelia_k8s_manage_claude_user is on, but authelia_claude_password or
-      authelia_claude_totp_secret is empty. Add both to ansible/vars/secrets.yml, or set
-      authelia_k8s_manage_claude_user to false for this cluster.
-  when: authelia_k8s_manage_claude_user | bool
-
-- name: Fail if the claude-agent credential is missing
-  tags: [config]
-  # Same reason as the claude-ui assert above: the role default is an empty stand-in, and
-  # `authelia crypto hash generate` hashes the empty string into a well-formed digest.
-  ansible.builtin.assert:
-    that:
-      - authelia_agent_password | default('') | length > 0
-    fail_msg: >-
-      authelia_k8s_manage_agent_user is on, but authelia_agent_password is empty. Add it to
-      ansible/vars/secrets.yml, or set authelia_k8s_manage_agent_user to false for this cluster.
+      authelia_k8s_manage_claude_user is on, but authelia_claude_totp_secret is empty. Add it to
+      ansible/vars/secrets.yml, or set authelia_k8s_manage_claude_user to false for this cluster.
     quiet: true
   no_log: true
-  when: authelia_k8s_manage_agent_user | bool
-
-- name: Look for an existing Authelia users database in the cluster
-  tags: [config]
-  # Fetches the whole .data map rather than jsonpath={.data.users_database\.yml}. A key
-  # containing a dot cannot be addressed that way: kubectl does not error, it returns an
-  # empty string and exit 0. The guard below would read that as "no existing hash", so every
-  # deploy would regenerate the argon2 hash with a fresh salt, rewrite the Secret and roll the
-  # pod — the exact churn the read-back exists to prevent, with nothing in the output saying so.
-  ansible.builtin.command:
-    cmd: >-
-      k3s kubectl -n {{ k8s_namespace }} get secret authelia-config
-      -o jsonpath={.data}
-  register: authelia_k8s_existing
-  become: true
-  changed_when: false
-  failed_when: false
-  # Runs under --check too: reads only. This one matters more than the other read-back
-  # guards, because skipping it does not just fail — it falls through to the GENERATE path
-  # below, which spins up a pod to mint a fresh argon2 hash. A dry run must not do that.
-  # With the read intact the hash is found, `authelia_password_hash is not defined` goes
-  # false, and the generate task is never reached.
-  check_mode: false
-  no_log: true
-
-- name: Read the users already in the cluster's Authelia database
-  tags: [config]
-  # Parsed as YAML and keyed by username, NOT regex-searched for the first `$argon2` run.
-  # The database holds two users — the operator and the UI tier's `claude-ui` — so a
-  # regex that anchors on the hash itself cannot say whose hash it found. It would hand
-  # both users the first block's digest, which is one password opening two accounts.
-  #
-  # default('{}', true) covers both a missing Secret and an empty stdout — from_json on ''
-  # raises. from_yaml on '' returns None, hence the second default before `.get`.
-  ansible.builtin.set_fact:
-    authelia_k8s_existing_users: >-
-      {{ ((authelia_k8s_existing.stdout | default('{}', true) | from_json).get('users_database.yml', '')
-          | b64decode | from_yaml | default({}, true)).get('users', {}) | default({}, true) }}
-  no_log: true
-
-- name: Reuse the operator password hash already in the cluster
-  tags: [config]
-  ansible.builtin.set_fact:
-    authelia_password_hash: "{{ authelia_k8s_existing_users[authelia_user]['password'] }}"
-  when:
-    - not authelia_k8s_rehash_passwords | bool
-    - authelia_k8s_existing_users.get(authelia_user, {}).get('password', '') | length > 0
-  no_log: true
-
-- name: Reuse the claude-ui password hash already in the cluster
-  tags: [config]
-  ansible.builtin.set_fact:
-    authelia_claude_password_hash: "{{ authelia_k8s_existing_users[authelia_k8s_claude_user]['password'] }}"
-  when:
-    - authelia_k8s_manage_claude_user | bool
-    - not authelia_k8s_rehash_passwords | bool
-    - authelia_k8s_existing_users.get(authelia_k8s_claude_user, {}).get('password', '') | length > 0
-  no_log: true
-
-- name: Reuse the claude-agent password hash already in the cluster
-  tags: [config]
-  ansible.builtin.set_fact:
-    authelia_agent_password_hash: "{{ authelia_k8s_existing_users[authelia_k8s_agent_user]['password'] }}"
-  when:
-    - authelia_k8s_manage_agent_user | bool
-    - not authelia_k8s_rehash_passwords | bool
-    - authelia_k8s_existing_users.get(authelia_k8s_agent_user, {}).get('password', '') | length > 0
-  no_log: true
-
-- name: Hash the Authelia password
-  tags: [config]
-  # authelia's CLI (4.39.20) has no --password-file or env-var form — only a literal
-  # --password flag or an interactive terminal prompt (confirmed against the CLI
-  # reference), so the value has to reach `authelia` as an argv token somewhere. Putting
-  # it directly on the `kubectl run` command line put it in spec.containers[].command,
-  # which anything with `get pods` can read (homelab-readonly's view binding,
-  # homelab-mcp) and which persists in the object until the pod is GC'd — plus the node's
-  # process table for as long as `kubectl run`/the shell live. Piping it over stdin and
-  # having the in-pod shell `read` it into a local var, mirrored from the crowdsec role's
-  # `cscli machines add` task (roles/k8s/crowdsec/tasks/main.yml), keeps it out of the pod
-  # spec, the kubectl process argv, and the k8s exec audit trail entirely. It still lands
-  # in `authelia`'s own argv for the pod's brief lifetime once the shell expands "$pw" —
-  # that part is unavoidable without patching the CLI, and this task's own `ps` exposure
-  # is no worse than the interactive-prompt path would be.
-  #
-  # IFS= (not bare `read -r pw`) so a leading/trailing space in the password isn't
-  # stripped — `read` trims IFS whitespace by default, which would silently hash the
-  # wrong string while still producing a well-formed $argon2id$ hash.
-  #
-  # The pod name carries a per-run suffix, and so do the two hash pods below. `kubectl run`
-  # refuses a name that already exists, and `--rm` deletes the pod only while this kubectl client
-  # lives. With a fixed name, a controller killed mid-hash leaves a pod that fails every later
-  # rehash, and the read-only ServiceAccount cannot delete it (#4566). The suffix is inline in
-  # `cmd` because Ansible templates a task's args once, where a `vars:` entry holding `random`
-  # would yield a new value on every reference.
-  ansible.builtin.command:
-    cmd: >-
-      k3s kubectl -n {{ k8s_namespace }} run authelia-hash-{{ 4294967295 | random }}
-      --rm -i --attach --quiet --restart=Never --image={{ authelia_k8s_image }} --command --
-      sh -c 'IFS= read -r pw; authelia crypto hash generate argon2 --password "$pw"
-      --iterations 3 --memory 65536 --parallelism 4 --salt-size 16 --key-size 32'
-    stdin: "{{ authelia_password }}"
-  register: authelia_k8s_hash
-  become: true
-  changed_when: false
-  no_log: true
-  when:
-    - not (k8s_no_mutate | bool)
-    - authelia_password_hash is not defined
-
-- name: Extract the digest
-  tags: [config]
-  # regex_search rather than stripping a "Digest: " prefix: `kubectl run --attach` can
-  # interleave its own lines with the container's output, so anchor on the hash itself.
-  ansible.builtin.set_fact:
-    authelia_password_hash: "{{ authelia_k8s_hash.stdout | regex_search('\\$argon2[^\\s]+') }}"
-  when:
-    # The generate task above is skipped on a no-mutation run (`--check` or `--dry-run`),
-    # which leaves a skip result with no `stdout`. On a cluster that already holds the
-    # Secret the read-back defines the hash and neither task is reached; on a fresh one a
-    # dry run falls through to here, and without this it errors on the attribute instead
-    # of reaching the assert below, which says what is actually wrong.
-    - not (k8s_no_mutate | bool)
-    - authelia_password_hash is not defined
-  no_log: true
-
-- name: Hash the claude-ui password
-  tags: [config]
-  # A second one-shot pod rather than a loop over both users: every argument about stdin,
-  # IFS= and argv exposure on the operator task above applies here unchanged, and a loop
-  # would put both digests in one registered result that `no_log` then makes unreadable
-  # when one of them is malformed.
-  ansible.builtin.command:
-    cmd: >-
-      k3s kubectl -n {{ k8s_namespace }} run authelia-hash-claude-{{ 4294967295 | random }}
-      --rm -i --attach --quiet --restart=Never --image={{ authelia_k8s_image }} --command --
-      sh -c 'IFS= read -r pw; authelia crypto hash generate argon2 --password "$pw"
-      --iterations 3 --memory 65536 --parallelism 4 --salt-size 16 --key-size 32'
-    stdin: "{{ authelia_claude_password }}"
-  register: authelia_k8s_claude_hash
-  become: true
-  changed_when: false
-  no_log: true
-  when:
-    - not (k8s_no_mutate | bool)
-    - authelia_k8s_manage_claude_user | bool
-    - authelia_claude_password_hash is not defined
-
-- name: Extract the claude-ui digest
-  tags: [config]
-  ansible.builtin.set_fact:
-    authelia_claude_password_hash: "{{ authelia_k8s_claude_hash.stdout | regex_search('\\$argon2[^\\s]+') }}"
-  when:
-    # Same reasoning as the operator digest above.
-    - not (k8s_no_mutate | bool)
-    - authelia_k8s_manage_claude_user | bool
-    - authelia_claude_password_hash is not defined
-  no_log: true
-
-- name: Hash the claude-agent password
-  tags: [config]
-  # A third one-shot pod, for the reason the claude-ui one is a second: the password reaches
-  # `authelia` over stdin and the in-pod shell, never the pod spec, and no loop folds the three
-  # digests into one registered result.
-  ansible.builtin.command:
-    cmd: >-
-      k3s kubectl -n {{ k8s_namespace }} run authelia-hash-agent-{{ 4294967295 | random }}
-      --rm -i --attach --quiet --restart=Never --image={{ authelia_k8s_image }} --command --
-      sh -c 'IFS= read -r pw; authelia crypto hash generate argon2 --password "$pw"
-      --iterations 3 --memory 65536 --parallelism 4 --salt-size 16 --key-size 32'
-    stdin: "{{ authelia_agent_password }}"
-  register: authelia_k8s_agent_hash
-  become: true
-  changed_when: false
-  no_log: true
-  when:
-    - not (k8s_no_mutate | bool)
-    - authelia_k8s_manage_agent_user | bool
-    - authelia_agent_password_hash is not defined
-
-- name: Extract the claude-agent digest
-  tags: [config]
-  ansible.builtin.set_fact:
-    authelia_agent_password_hash: "{{ authelia_k8s_agent_hash.stdout | regex_search('\\$argon2[^\\s]+') }}"
-  when:
-    # Same reasoning as the operator digest above.
-    - not (k8s_no_mutate | bool)
-    - authelia_k8s_manage_agent_user | bool
-    - authelia_agent_password_hash is not defined
-  no_log: true
-
-- name: Stand in a placeholder digest for each user a dry run could not hash
-  tags: [config]
-  # Hashing starts a pod, so a no-mutation run skips it (#4569). The read-back still covers the
-  # common case. A user with no digest in the live Secret, or any user under
-  # `-e authelia_k8s_rehash_passwords=true`, reaches here undefined. Failing the digest assert
-  # below would stop the hourly render-records dry run at authelia and leave every later
-  # service unrecorded, so each placeholder is PHC-shaped and distinct: the assert passes it,
-  # and its guard stays the stub sentinel alone. The placeholder renders as a changed password,
-  # which is what the real run would apply. No real run sets it, because a real run hashes.
-  ansible.builtin.set_fact:
-    authelia_password_hash: "{{ authelia_password_hash | default('$argon2id$v=19$m=65536,t=3,p=4$dryrunplaceholdersaltA$dryrunplaceholderoperatorAAAAAAAAAAAAAAAAAA', true) }}"
-    authelia_claude_password_hash: "{{ authelia_claude_password_hash | default('$argon2id$v=19$m=65536,t=3,p=4$dryrunplaceholdersaltA$dryrunplaceholderclaudeuiAAAAAAAAAAAAAAAAAA', true) }}"
-    authelia_agent_password_hash: "{{ authelia_agent_password_hash | default('$argon2id$v=19$m=65536,t=3,p=4$dryrunplaceholdersaltA$dryrunplaceholderclaudeagentAAAAAAAAAAAAAAA', true) }}"
-  when: k8s_no_mutate | bool
-  no_log: true
+  when: authelia_k8s_manage_claude_user | bool
 
 - name: Fail if a stored Authelia digest is malformed
   tags: [config]
@@ -250,26 +27,27 @@
   # `Recreate`. Two users sharing one digest share one password, so that fails too. `\Z`, not
   # `$`, ends the pattern: Python's `$` also matches before a trailing newline.
   # DECIDED: guarded on `homelab_secret_stubs` alone, never on `k8s_dry_run`. A stubbed shadow
-  # run feeds this `stub-` strings, which are not PHC-shaped. An ordinary dry run reads the live
-  # digests and is meant to check them, which is how the operator proves the pattern accepts
-  # them. docs/target-architecture/render/r3-remove-live-reads.md, Design, has the reasoning;
+  # run feeds this `stub-` strings, which are not PHC-shaped. An ordinary dry run reads the
+  # stored digests and is meant to check them.
+  # docs/target-architecture/render/r3-remove-live-reads.md, Design, has the reasoning;
   # ansible/tests/services/test_authelia_digest_assert.py holds the guard.
   vars:
     authelia_k8s_digest_pattern: '^[$]argon2id[$]v=19[$]m=65536,t=3,p=4[$][A-Za-z0-9+/]{22}[$][A-Za-z0-9+/]{43}\Z'
     authelia_k8s_managed_digests: >-
-      {{ [authelia_password_hash | default('')]
-         + ([authelia_claude_password_hash | default('')]
+      {{ [authelia_password_argon2 | default('')]
+         + ([authelia_claude_password_argon2 | default('')]
             if authelia_k8s_manage_claude_user | bool else [])
-         + ([authelia_agent_password_hash | default('')]
+         + ([authelia_agent_password_argon2 | default('')]
             if authelia_k8s_manage_agent_user | bool else []) }}
   ansible.builtin.assert:
     that:
       - authelia_k8s_managed_digests | reject('match', authelia_k8s_digest_pattern) | list | length == 0
       - authelia_k8s_managed_digests | unique | list | length == authelia_k8s_managed_digests | length
     fail_msg: >-
-      A stored Authelia digest is not an argon2id digest with the hashing block's parameters,
-      or two managed users share one. Check that the authelia-hash pods could pull
-      {{ authelia_k8s_image }}.
+      A stored Authelia digest (authelia_password_argon2, authelia_claude_password_argon2 or
+      authelia_agent_password_argon2) is not an argon2id digest with the hashing block's
+      parameters, or two managed users share one. Mint it again with the procedure in
+      docs/secret-rotation.md.
     quiet: true
   when: not (homelab_secret_stubs | default(false) | bool)
   no_log: true
@@ -393,7 +171,7 @@
   # --config, not --encryption-key: the pod's own configuration.yml already names the SQLite
   # path and the storage encryption key, so neither reaches argv here. The shared secret
   # still must — `--secret` has no file or env form — so it arrives on stdin and is expanded
-  # by the in-pod shell, the same shape as the password-hash tasks above.
+  # by the in-pod shell, the same shape as the mint command in docs/secret-rotation.md.
   #
   # The three TOTP parameters are stated rather than left to the CLI defaults. ui_login.py
   # derives its codes from the same three constants, and a default that moved in a later

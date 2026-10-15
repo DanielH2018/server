@@ -166,10 +166,11 @@ authelia_k8s_manage_claude_user: true
 # Empty stand-ins, NOT values. SOPS supplies both on a cluster that manages the user, and
 # play vars outrank role defaults, so these are what a cluster with the flag off resolves
 # instead of failing on an undefined name. An empty one reaching a cluster with the flag ON
-# is a misconfiguration, and tasks/main.yml asserts against exactly that — without the
-# assert, `authelia crypto hash generate` would happily hash the empty string and hand
-# claude-ui a well-formed digest for a password nobody set.
-authelia_claude_password: ''
+# is a misconfiguration, and tasks/main.yml asserts against exactly that: the digest assert
+# refuses an empty digest, and the TOTP assert an empty shared secret. The plaintext
+# `authelia_claude_password` has no stand-in, because this role does not read it;
+# scripts/diagnostics/ui_login.py does.
+authelia_claude_password_argon2: ''
 authelia_claude_totp_secret: ''
 
 # The agent user's own identity for the homelab-ui MCP server (docs/claude-agent-user.md,
@@ -177,8 +178,8 @@ authelia_claude_totp_secret: ''
 # borrowing the operator's login. The username is plaintext on purpose, like the one above, and
 # the claude_code role mirrors it in `claude_code_homelab_ui_username`; a test holds the two
 # equal. Its password, `authelia_agent_password`, is a SOPS value that Ansible decrypts as the
-# operator, so the agent never holds the age key. The role hashes it at deploy time exactly
-# as it hashes the claude-ui one.
+# operator, so the agent never holds the age key. This role reads only its digest,
+# `authelia_agent_password_argon2`, as it does for claude-ui.
 #
 # DECIDED: no groups, unlike claude-ui, which copies the operator's two. The two groups carry
 # privilege in the apps behind the portal: Grafana maps `admins` to its Admin role
@@ -197,15 +198,5 @@ authelia_k8s_agent_groups: []
 # neither credential, and a user whose password is the empty string must never be rendered.
 authelia_k8s_manage_agent_user: "{{ authelia_k8s_manage_claude_user }}"
 
-# Empty stand-in, NOT a value, for the reason authelia_claude_password's is.
-authelia_agent_password: ''
-
-# Force every user's argon2 digest to be regenerated from the SOPS passwords, discarding
-# whatever is in the live Secret. False by default, because the read-back exists to stop a
-# fresh random salt rewriting the Secret and rolling the pod on every deploy.
-#
-# It is also the ONLY way a rotated password takes effect. `sops set authelia_password` and
-# a deploy do nothing on their own: the read-back finds the old digest and reuses it, the
-# recap is green, and the portal goes on accepting the old password. Rotate with
-# `./scripts/deploy.sh --tags authelia -e authelia_k8s_rehash_passwords=true`.
-authelia_k8s_rehash_passwords: false
+# Empty stand-in, NOT a value, for the reason authelia_claude_password_argon2's is.
+authelia_agent_password_argon2: ''
