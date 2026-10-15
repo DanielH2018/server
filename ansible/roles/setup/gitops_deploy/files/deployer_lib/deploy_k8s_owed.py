@@ -37,7 +37,6 @@ import time
 from deployer_lib import deploy_alerts
 from deployer_lib.deploy_config import WARNING, Config, log
 from deployer_lib.deploy_k8s import k8s_roles_listed
-from deployer_lib.deploy_narrow import SharedCallers
 from deployer_lib.deploy_state import (
     OWED_K8S_DEFERRED,
     OWED_K8S_UNAPPLIED,
@@ -263,7 +262,9 @@ def discharge_k8s_unapplied(
     """
     pending = state.owed_pending(OWED_K8S_UNAPPLIED)
     records = {e.service: tools.release_commit(e.service) for e in pending}
-    callers = _shared_callers(tools, config, {s for s, c in records.items() if not c})
+    callers, owned_only = _shared_callers(
+        tools, config, {s for s, c in records.items() if not c}
+    )
 
     def descends(commit: str | None, origin: str) -> bool:
         return _record_carries(tools, config, commit, origin)
@@ -299,10 +300,10 @@ def discharge_k8s_unapplied(
     waiting: dict[str, set[str]] = {}
     for entry in pending:
         own = bool(records[entry.service])
-        if not own and entry.service in callers.owned_only:
+        if not own and entry.service in owned_only:
             waiting[entry.service] = set()
             continue
-        tags = {entry.service} if own else callers.tags.get(entry.service)
+        tags = {entry.service} if own else callers.get(entry.service)
         by_digest = entry.service in (provable if own else DIGEST_PROVABLE_ROLES)
         found = [
             evidence(entry.service, t, entry.origin, by_digest) for t in tags or ()
@@ -313,12 +314,12 @@ def discharge_k8s_unapplied(
     discharged = [s for s, ranges in waiting.items() if ranges <= covered]
     if discharged:
         state.clear_owed(OWED_K8S_UNAPPLIED, discharged)
-    if proved := sorted(set(discharged) - callers.owned_only):
+    if proved := sorted(set(discharged) - owned_only):
         log(
             f"k8s_unapplied: discharged for {', '.join(proved)}: a release "
             f"record or a matching render names a commit that carries the change"
         )
-    if owned := sorted(set(discharged) & callers.owned_only):
+    if owned := sorted(set(discharged) & owned_only):
         log(
             f"k8s_unapplied: discharged for {', '.join(owned)}: every caller's entry sets "
             f"`owner`, so no Ansible deploy is left to carry the change"
@@ -357,14 +358,18 @@ def _record_carries(
 
 def _shared_callers(
     tools: DeployTools, config: Config, services: set[str]
-) -> SharedCallers:
+) -> tuple[dict[str, set[str]], set[str]]:
     """`tools.shared_role_callers` for `services`, or no callers at all when it fails.
+
+    Returns:
+        Each role's caller tags, and the roles only owned callers run, as
+        `deploy_narrow.SharedCallers` carries them.
 
     Any exception, not a tuple: the call decodes a subprocess's JSON, and the one safe
     reading of a failure is "no evidence", which keeps every line it would have judged.
     """
     if not services:
-        return SharedCallers({}, set())
+        return {}, set()
     try:
         return tools.shared_role_callers(config.repo, services)
     except Exception as exc:
@@ -373,7 +378,7 @@ def _shared_callers(
             f"({type(exc).__name__}: {exc}) — keeping their lines",
             level=WARNING,
         )
-        return SharedCallers({}, set())
+        return {}, set()
 
 
 def _digest_covers(tools: DeployTools, config: Config, items: set[str]) -> set[str]:
