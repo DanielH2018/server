@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/backlog.py
-generated_at: 2026-10-14 18:17 UTC
-generated_sha: 00689f715
+generated_at: 2026-10-15 18:17 UTC
+generated_sha: 2e472a3c8
 ---
 
 !!! warning "Generated file — do not edit"
@@ -16,6 +16,7 @@ Findings Claude confirmed and did not fix in the session that found them, filed 
 
 | # | Severity | Kind | Domain | Finding | First seen | Re-observed | Claim | Verify-by |
 |---|---|---|---|---|---|---|---|---|
+| [#5126](https://github.com/DanielH2018/server/issues/5126) | high | gap | security | The DanielClaudeBot account reads as nonexistent on GitHub, so agent PRs are invisible and cannot land | 2026-10-15 | 0 | - | - |
 | [#4188](https://github.com/DanielH2018/server/issues/4188) | medium | gap | container | Home Assistant was down 28 minutes when the tick deployed 2026.10.0, and its hold still stands | 2026-10-10 | 0 | - | ✓ |
 | [#4599](https://github.com/DanielH2018/server/issues/4599) | medium | improvement | security | The AIDE check cannot page on an unexplained file change | 2026-10-12 | 0 | - | ✓ |
 | [#4738](https://github.com/DanielH2018/server/issues/4738) | medium | improvement | docs | Target architecture G1 step 6: run the 30-day diff-notice soak checks | 2026-10-12 | 0 | - | ✓ |
@@ -24,13 +25,10 @@ Findings Claude confirmed and did not fix in the session that found them, filed 
 | [#4824](https://github.com/DanielH2018/server/issues/4824) | medium | gap | backup-observability | Target architecture M5: read the log-rule shadow soak on day 7 before PR 4a | 2026-10-13 | 0 | - | ✓ |
 | [#4839](https://github.com/DanielH2018/server/issues/4839) | medium | gap | backup-observability | Target architecture M4: read the ingress-probe shadow soak on day 3 and after the Sunday before PR 4 | 2026-10-13 | 0 | - | ✓ |
 | [#4884](https://github.com/DanielH2018/server/issues/4884) | medium | gap | cicd | Flux drops template quotes on substitution, so R2's 0123 round-trip pass flags every standalone key and mullvad_account breaks qbittorrent's Secret | 2026-10-13 | 0 | - | ✓ |
-| [#4895](https://github.com/DanielH2018/server/issues/4895) | medium | gap | docs | D5's qbittorrent flip does not name the mullvad_account SOPS manifest and D3's type proof as preconditions | 2026-10-13 | 0 | - | ✓ |
 | [#4940](https://github.com/DanielH2018/server/issues/4940) | medium | addition | backup-observability | Target architecture M3: read the host-checks shadow soak on day 7 before PR 4 | 2026-10-13 | 0 | - | ✓ |
-| [#4942](https://github.com/DanielH2018/server/issues/4942) | medium | gap | cicd | The host renderer ships an enable link as a copied file, not a symlink | 2026-10-13 | 0 | - | ✓ |
-| [#4952](https://github.com/DanielH2018/server/issues/4952) | medium | gap | security | Rule 5's alias clause refuses Prometheus's checksum hash of a set block that holds domain | 2026-10-14 | 0 | - | ✓ |
-| [#4955](https://github.com/DanielH2018/server/issues/4955) | medium | gap | cicd | D2.1c's design counts five whole-entry containers_list readers that 8e79e95d6 moved onto named filters | 2026-10-14 | 0 | - | ✓ |
-| [#4963](https://github.com/DanielH2018/server/issues/4963) | medium | addition | cicd | Target architecture D2.1c: send an added Flux-born containers_list entry only to the readers it can move | 2026-10-14 | 0 | worktree-churn-plan-orchestrator-wave3 | ✓ |
-| [#4966](https://github.com/DanielH2018/server/issues/4966) | medium | addition | cicd | Target architecture D2.4a: make the prune and drift checks tell a Flux-applied object from a handed-back one | 2026-10-14 | 0 | - | ✓ |
+| [#5122](https://github.com/DanielH2018/server/issues/5122) | medium | gap | cicd | Guard-row discharge loses its render base once the producer overwrites the render record | 2026-10-15 | 0 | - | ✓ |
+| [#5124](https://github.com/DanielH2018/server/issues/5124) | medium | gap | backup-observability | Alert when a k3s node's wired link loses carrier and it runs on WiFi | 2026-10-15 | 0 | - | ✓ |
+| [#5125](https://github.com/DanielH2018/server/issues/5125) | medium | gap | backup-observability | The Memory tile stays DOWN for days on the retired-uid arm, masking real memory pages | 2026-10-15 | 0 | - | - |
 | [#2124](https://github.com/DanielH2018/server/issues/2124) | low | gap | security | CrowdSec agent drops Traefik access-log lines with UnmarshalJSON errors | 2026-09-19 | 0 | - | ✓ |
 | [#3778](https://github.com/DanielH2018/server/issues/3778) | low | improvement | cicd | Switch the CI setup action's callers to the self-repository uses syntax once actionlint accepts it | 2026-10-09 | 0 | - | ✓ |
 | [#3865](https://github.com/DanielH2018/server/issues/3865) | low | gap | cicd | Red/green batches: a process the red author starts outside the pipeline's process tree survives the reap | 2026-10-09 | 0 | - | ✓ |
@@ -44,16 +42,20 @@ Findings Claude confirmed and did not fix in the session that found them, filed 
 | [#4750](https://github.com/DanielH2018/server/issues/4750) | low | improvement | backup-observability | Target architecture M1 Open question 9: read Prometheus retention over the week after PR 1 | 2026-10-12 | 0 | - | ✓ |
 | [#4756](https://github.com/DanielH2018/server/issues/4756) | low | improvement | backup-observability | M1's series budget counts head series, but the retention cap's bytes follow samples a second | 2026-10-12 | 0 | - | ✓ |
 | [#4840](https://github.com/DanielH2018/server/issues/4840) | low | gap | cicd | A build-context edit outside a k8s role writes no k8s_unapplied line, and the release census names the wrong cause | 2026-10-13 | 0 | - | ✓ |
-| [#4846](https://github.com/DanielH2018/server/issues/4846) | low | gap | cicd | order_only's dynamic check cannot see a plugin side effect outside the entries it returns | 2026-10-13 | 0 | - | ✓ |
 | [#4875](https://github.com/DanielH2018/server/issues/4875) | low | gap | cicd | A red-phase test with a false premise strands a correct fix at the green gate | 2026-10-13 | 0 | - | ✓ |
-| [#4893](https://github.com/DanielH2018/server/issues/4893) | low | gap | cicd | ansible-core's local temp directories accumulate under ~/.ansible/tmp on daniel-box | 2026-10-13 | 0 | - | ✓ |
 | [#4907](https://github.com/DanielH2018/server/issues/4907) | low | gap | cicd | Retiring a fan-out run's last batch deletes its manifest, so a live cc-wait fanout watch on that run fails | 2026-10-13 | 0 | - | ✓ |
-| [#4912](https://github.com/DanielH2018/server/issues/4912) | low | gap | cicd | R2's round trip finds flux's vendored Kustomization CRD different in the first pass, so PR 2's widened step cannot pass for flux | 2026-10-13 | 0 | - | ✓ |
-| [#4930](https://github.com/DanielH2018/server/issues/4930) | low | gap | cicd | Add the KNOWN_VIOLATIONS clause to sops-manifest-entries once R2's PR 2 lands | 2026-10-13 | 0 | - | ✓ |
-| [#4931](https://github.com/DanielH2018/server/issues/4931) | low | improvement | cicd | Retire google_assistant_service_account's JSON-object stub now that no template parses it | 2026-10-13 | 0 | - | ✓ |
-| [#4945](https://github.com/DanielH2018/server/issues/4945) | low | gap | cicd | land_tags CLI fans a comment-only shared-role edit out to callers the real landing drops | 2026-10-13 | 0 | - | ✓ |
-| [#4960](https://github.com/DanielH2018/server/issues/4960) | low | gap | docs | D2 plan Baseline item 5 names secret_rotation and render_targets as deploy.sh callers, but neither runs it | 2026-10-14 | 0 | - | ✓ |
-| [#4964](https://github.com/DanielH2018/server/issues/4964) | low | gap | cicd | declared_k8s_services reads list items after containers_list as declared services | 2026-10-14 | 0 | - | ✓ |
+| [#4979](https://github.com/DanielH2018/server/issues/4979) | low | gap | security | rkhunter flags the new worktree-holders group on both hosts, so both scan monitors read DOWN | 2026-10-14 | 0 | - | ✓ |
+| [#4993](https://github.com/DanielH2018/server/issues/4993) | low | improvement | docs | pi-sd-health.sh.j2 comment calls domain SOPS-loaded and names a daniel-pi.com override that does not exist | 2026-10-14 | 0 | - | ✓ |
+| [#5000](https://github.com/DanielH2018/server/issues/5000) | low | gap | cicd | Killed Ansible module runs leave ansible-tmp directories under ~/.ansible/tmp on daniel-box | 2026-10-14 | 0 | - | ✓ |
+| [#5045](https://github.com/DanielH2018/server/issues/5045) | low | improvement | docs | install_host_lib.yml's header undercounts its callers after homelab_builder joined | 2026-10-15 | 0 | - | ✓ |
+| [#5065](https://github.com/DanielH2018/server/issues/5065) | low | gap | cicd | CodeQL alert #59 flags homelab_render's stub-key-name print as clear-text secret logging | 2026-10-15 | 0 | - | ✓ |
+| [#5077](https://github.com/DanielH2018/server/issues/5077) | low | gap | cicd | Fan-out briefs name only nearby tests, so PRs go red on repo-wide guards | 2026-10-15 | 0 | - | ✓ |
+| [#5101](https://github.com/DanielH2018/server/issues/5101) | low | gap | cicd | The env-secret restart guard exempts a role whose comment says rollout restart | 2026-10-15 | 0 | - | ✓ |
+| [#5103](https://github.com/DanielH2018/server/issues/5103) | low | improvement | docs | Authelia's hashing-block comment still names the deleted mint tasks in tasks/main.yml | 2026-10-15 | 0 | - | ✓ |
+| [#5107](https://github.com/DanielH2018/server/issues/5107) | low | gap | cicd | order_only's state comparison misses post-copy objects, __slots__ state and changes five levels down | 2026-10-15 | 0 | - | ✓ |
+| [#5118](https://github.com/DanielH2018/server/issues/5118) | low | gap | cicd | The render proof did not discharge a manifests line whose change moved no caller's digest | 2026-10-15 | 0 | - | ✓ |
+| [#5127](https://github.com/DanielH2018/server/issues/5127) | low | gap | docs | Three records claim daniel-box Claude sessions run as claude while they run as ubuntu | 2026-10-15 | 0 | - | - |
+| [#5128](https://github.com/DanielH2018/server/issues/5128) | low | addition | security | D3.2a: add cluster_vars.py with its write and check modes and guards, inert | 2026-10-15 | 0 | worktree-churn-plan-orchestrator-wave4 | ✓ |
 
 ## Settled findings — do not re-flag
 
