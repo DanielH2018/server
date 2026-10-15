@@ -149,7 +149,7 @@ def dotenv_pairs(text: str) -> dict[str, str]:
 
 def dotenv_names(text: str) -> set[str]:
     """The value keys of a SOPS dotenv, less SOPS's own `sops_*` metadata lines."""
-    return {k for k in dotenv_pairs(text) if not k.startswith(SOPS_PREFIX)}
+    return {k for k in dotenv_pairs(text) if not is_sops_metadata(k)}
 
 
 def _is_ciphertext(value: object) -> bool:
@@ -180,14 +180,37 @@ def is_dotenv(path: Path | str) -> bool:
     return str(path).endswith(".env")
 
 
-# The metadata lines SOPS writes into a dotenv file (`stores/metadata.go` and the key groups'
-# `__list_N__map_` flattening). Every other `sops_` name is a value line in disguise, and
-# `write` refuses to place a key so named.
-_SOPS_METADATA = re.compile(
-    r"sops_(mac|lastmodified|version|mac_only_encrypted|shamir_threshold"
-    r"|(un)?encrypted_(suffix|regex|comment_regex)"
-    r"|(age|pgp|kms|gcp_kms|azure_kv|hc_vault|hckms)__list_\d+__map_[a-z_]+)"
+# The metadata lines SOPS writes into a dotenv file, each with the shape of its value. The set
+# is what the pinned SOPS (`sops_setup`) writes for a cluster creation rule, taken from a real
+# encrypt in `test_cluster_vars_write.py`, which names the members. A `sops_` name outside it,
+# or a member whose value has another shape, is a value line in disguise; `write` refuses to
+# place a key named `sops_*`.
+_AGE_ARMOR = (
+    r"-----BEGIN AGE ENCRYPTED FILE-----(\\n[A-Za-z0-9+/=_-]+(?: [A-Za-z0-9+/=_-]+)*)+"
+    r"\\n-----END AGE ENCRYPTED FILE-----(\\n)?"
 )
+_SOPS_METADATA: dict[str, re.Pattern[str]] = {
+    r"sops_mac": re.compile(r"ENC\[AES256_GCM,[^\]]*\]"),
+    r"sops_lastmodified": re.compile(r"\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ"),
+    r"sops_version": re.compile(r"\d+\.\d+\.\d+"),
+    r"sops_unencrypted_suffix": re.compile(r"_[A-Za-z0-9_]+"),
+    r"sops_shamir_threshold": re.compile(r"\d+"),
+    r"sops_age__list_\d+__map_recipient": re.compile(r"age1[a-z0-9]+"),
+    r"sops_age__list_\d+__map_enc": re.compile(_AGE_ARMOR),
+}
+
+
+def is_sops_metadata(name: str, value: str | None = None) -> bool:
+    """Whether `name` is a line SOPS writes into a dotenv, and `value` has the shape it writes.
+
+    Args:
+        name: The dotenv key.
+        value: The line's value, or None to test the name alone.
+    """
+    for pattern, shape in _SOPS_METADATA.items():
+        if re.fullmatch(pattern, name):
+            return value is None or shape.fullmatch(value) is not None
+    return False
 
 
 def _stray_lines(label: str, text: str, dotenv: bool) -> list[str]:
@@ -200,9 +223,9 @@ def _stray_lines(label: str, text: str, dotenv: bool) -> list[str]:
     out = []
     for number, line in enumerate(text.splitlines(), 1):
         stripped = line.strip()
-        if stripped.startswith("#") or (not dotenv and " #" in line):
+        if stripped.startswith("#") or (not dotenv and re.search(r"\s#", line)):
             out.append(f"{label}: line {number} is a comment, which sops never writes")
-        elif dotenv and "=" not in line:
+        elif dotenv and not (line.partition("=")[0].strip() and "=" in line):
             out.append(f"{label}: line {number} is not a `key=value` line")
     return out
 
@@ -210,8 +233,8 @@ def _stray_lines(label: str, text: str, dotenv: bool) -> list[str]:
 def ciphertext_problems(label: str, text: str, dotenv: bool) -> list[str]:
     """The values of one cluster file that are not `ENC[...]` strings, named never quoted.
 
-    A dotenv `sops_` line passes only when its name is SOPS's own metadata, and a comment or
-    a line that is no `key=value` fails in either kind.
+    A dotenv `sops_` line passes only when it is one of SOPS's own metadata lines, name and
+    value shape both, and a comment or a line that is no `key=value` fails in either kind.
     """
     out = _stray_lines(label, text, dotenv)
     if dotenv:
@@ -223,11 +246,9 @@ def ciphertext_problems(label: str, text: str, dotenv: bool) -> list[str]:
         )
         out += [
             f"{label}: {k} is a `sops_` line SOPS does not write"
-            for k in sorted(pairs)
-            if k.startswith(SOPS_PREFIX) and not _SOPS_METADATA.fullmatch(k)
+            for k, v in sorted(pairs.items())
+            if k.startswith(SOPS_PREFIX) and not is_sops_metadata(k, v)
         ]
-        if "sops_mac" in pairs and not _is_ciphertext(pairs["sops_mac"]):
-            out.append(f"{label}: sops_mac is not SOPS ciphertext")
     else:
         obj, problems = _load_manifest(label, text)
         if obj is None:
@@ -242,7 +263,7 @@ def _mac_fields(text: str, dotenv: bool) -> tuple[object, object, object]:
     """(the content outside SOPS metadata, the MAC, `lastmodified`) of one cluster file."""
     if dotenv:
         pairs = dotenv_pairs(text)
-        body = sorted((k, v) for k, v in pairs.items() if not k.startswith(SOPS_PREFIX))
+        body = sorted((k, v) for k, v in pairs.items() if not is_sops_metadata(k))
         return body, pairs.get("sops_mac"), pairs.get("sops_lastmodified")
     obj = yaml_fast.safe_load(text) or {}
     meta = obj.pop("sops", None) or {}
@@ -331,15 +352,39 @@ def digest(ciphertext: str) -> str:
     return hashlib.sha256(ciphertext.encode()).hexdigest()
 
 
+_SOURCE_DIGEST = re.compile(r"[0-9a-f]{64}")
+
+
+def _source_fields(text: str) -> Iterable[tuple[int, list[str]]]:
+    """Each `.source` data line as (its line number, its whitespace-split fields)."""
+    for number, line in enumerate(text.splitlines(), 1):
+        if line.strip() and not line.startswith("#"):
+            yield number, line.split()
+
+
 def parse_source(text: str) -> dict[str, SourceLine]:
-    """The `.source` file's lines, keyed by key name; comments skipped."""
-    lines = {}
-    for line in text.splitlines():
-        if not line.strip() or line.startswith("#"):
-            continue
-        key, hashed, *rest = line.split()
-        lines[key] = SourceLine(hashed, rest[0] if rest else None)
-    return lines
+    """The `.source` file's lines, keyed by key name; comments and malformed lines skipped.
+
+    `source_problems` reports a malformed line, so a caller runs both.
+    """
+    return {
+        key: SourceLine(hashed, rest[0] if rest else None)
+        for _, (key, hashed, *rest) in (
+            (n, f) for n, f in _source_fields(text) if len(f) in (2, 3)
+        )
+    }
+
+
+def source_problems(text: str) -> list[str]:
+    """Each `.source` line that is not `<key> <sha256 hex> [<manifest>]`, by line number.
+
+    The line's text is never quoted, because a hand edit may have put a value there.
+    """
+    return [
+        f".source line {number} is not `<key> <sha256> [<manifest>]`"
+        for number, fields in _source_fields(text)
+        if len(fields) not in (2, 3) or not _SOURCE_DIGEST.fullmatch(fields[1])
+    ]
 
 
 SOURCE_HEADER = (
@@ -524,7 +569,9 @@ def check_tree(
     rendered = {e.name: e.text for e in expected.manifests} if expected else {}
     for path in manifests:
         out += manifest_problems(path.name, path.read_text(), rendered.get(path.name))
-    source = parse_source(tree.source.read_text()) if tree.source.is_file() else {}
+    source_file = tree.source.read_text() if tree.source.is_file() else ""
+    source = parse_source(source_file)
+    out += source_problems(source_file)
     held = dotenv_names(tree.cluster_file.read_text()) if exists else set()
     out += hash_problems(source, ciphertexts(tree.secrets.read_text()))
     out += coverage_problems(source, held, present)

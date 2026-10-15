@@ -21,6 +21,7 @@ from secrets_mgmt.cluster_vars_check import (
     check_tree,
     dotenv_pairs,
     file_recipients,
+    is_sops_metadata,
     mac_proxy_problems,
 )
 
@@ -43,6 +44,29 @@ def test_a_first_write_is_clean_under_check_and_decrypts_to_the_values(sops_tree
     # The all-digit value went in as a string, so SOPS recorded `type:str`.
     number = tree.manifests / "acct.number-secret.sops.yaml"
     assert 'account: "7364519"' in sops_tree.decrypt(number)
+
+
+# The `sops_` names the pinned SOPS writes into a dotenv encrypted to two age recipients under
+# a flat `age:` rule, which is the shape every cluster creation rule has. `_SOPS_METADATA`
+# also admits `sops_shamir_threshold`, which SOPS writes only under a flag or a key group.
+WRITTEN_BY_SOPS = {
+    "sops_age__list_0__map_enc",
+    "sops_age__list_0__map_recipient",
+    "sops_age__list_1__map_enc",
+    "sops_age__list_1__map_recipient",
+    "sops_lastmodified",
+    "sops_mac",
+    "sops_unencrypted_suffix",
+    "sops_version",
+}
+
+
+def test_every_sops_line_a_real_write_produces_is_known_metadata(sops_tree):
+    assert write(sops_tree.tree, EXPECTED, run=sops_tree.run) == 0
+    lines = dotenv_pairs(sops_tree.tree.cluster_file.read_text())
+    written = {k: v for k, v in lines.items() if k.startswith("sops_")}
+    assert set(written) == WRITTEN_BY_SOPS
+    assert all(is_sops_metadata(k, v) for k, v in written.items())
 
 
 def test_a_no_change_write_leaves_every_file_byte_identical(sops_tree):
@@ -187,7 +211,10 @@ def test_a_manifest_encrypted_by_the_generic_rule_is_flagged(sops_tree):
 
 
 @pytest.mark.parametrize(
-    "value", ["a\nb", 'a"b', "a\\b", "a\x07b", "a{{b", "a\rb"], ids=repr
+    "value",
+    ["a\nb", 'a"b', "a\\b", "a\x07b", "a{{b", "a\rb", "a\x85b", "a\x9fb"]
+    + ["a\u2028b", "a\u2029b"],
+    ids=repr,
 )
 def test_a_forbidden_character_is_refused_by_key_name_alone(value):
     refused = value_refusals({**VALUES, "alpha_one": value}, EXPECTED)

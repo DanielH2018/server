@@ -85,7 +85,12 @@ _FORBIDDEN = (
     ("a newline", lambda v: "\n" in v or "\r" in v),
     ("a double quote", lambda v: '"' in v),
     ("a backslash", lambda v: "\\" in v),
-    ("a control character", lambda v: any(ord(c) < 32 or ord(c) == 127 for c in v)),
+    (
+        "a control character",
+        lambda v: any(ord(c) < 32 or 127 <= ord(c) <= 159 for c in v),
+    ),
+    # A line break Unicode defines beyond \n and \r. U+0085 is a C1 control and caught above.
+    ("a Unicode line break", lambda v: "\u2028" in v or "\u2029" in v),
     ("the run `{{`", lambda v: "{{" in v),
 )
 

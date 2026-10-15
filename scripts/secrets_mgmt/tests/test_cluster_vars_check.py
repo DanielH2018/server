@@ -28,6 +28,7 @@ from secrets_mgmt.cluster_vars_check import (
     manifest_set_problems,
     names_problems,
     parse_source,
+    source_problems,
     recipient_problems,
     rule_recipients,
     source_mapping_problems,
@@ -35,10 +36,11 @@ from secrets_mgmt.cluster_vars_check import (
 )
 
 ENC = "ENC[" + "AES256_GCM,data:Zz==,iv:Yy=,tag:Xx==,type:str]"
+STAMP1, STAMP2 = "2026-10-15T00:00:01Z", "2026-10-15T00:00:02Z"
 ENC_INT = "ENC[" + "AES256_GCM,data:Zz==,iv:Yy=,tag:Xx==,type:int]"
 
 
-def _dotenv(body: dict[str, str], mac: str = ENC, stamp: str = "T1") -> str:
+def _dotenv(body: dict[str, str], mac: str = ENC, stamp: str = STAMP1) -> str:
     lines = [f"{k}={v}" for k, v in body.items()]
     lines += ["sops_age__list_0__map_recipient=age1one", f"sops_lastmodified={stamp}"]
     return "\n".join(lines + ["sops_mac=" + mac, "sops_version=3.13.3"]) + "\n"
@@ -60,7 +62,7 @@ def _manifest(
         f"  namespace: homelab\n{annotation}type: Opaque\nstringData:\n"
         f"  {key}: {value}\n"
         "sops:\n  age:\n    - recipient: age1one\n"
-        '  lastmodified: "T1"\n  mac: ' + ENC + "\n"
+        '  lastmodified: "2026-10-15T00:00:01Z"\n  mac: ' + ENC + "\n"
     )
 
 
@@ -88,6 +90,52 @@ def test_a_plaintext_value_under_a_sops_name_sops_never_writes_is_flagged():
     assert found == ["f: sops_note is a `sops_` line SOPS does not write"]
 
 
+@pytest.mark.parametrize(
+    "line",
+    [
+        "sops_version=hunter2",
+        "sops_lastmodified=hunter2",
+        "sops_unencrypted_suffix=hunter2",
+        "sops_shamir_threshold=hunter2",
+        "sops_age__list_0__map_recipient=hunter2",
+        "sops_age__list_0__map_enc=hunter2",
+        "sops_mac=hunter2",
+        "sops_age__list_0__map_note=hunter2",
+    ],
+)
+def test_a_sops_metadata_line_holding_plaintext_is_flagged(line):
+    name = line.partition("=")[0]
+    kept = [
+        ln for ln in _dotenv({"a": ENC}).splitlines() if not ln.startswith(name + "=")
+    ]
+    found = ciphertext_problems("f", "\n".join(kept + [line]) + "\n", dotenv=True)
+    assert found
+    assert all("hunter2" not in problem for problem in found)
+
+
+def test_a_sops_metadata_line_with_the_value_shape_sops_writes_is_clean():
+    armor = (
+        "-----BEGIN AGE ENCRYPTED FILE-----\\nYWdl\\nZGF0YQ\\n"
+        "-----END AGE ENCRYPTED FILE-----\\n"
+    )
+    text = _dotenv({"a": ENC}) + "sops_unencrypted_suffix=_unencrypted\n"
+    text += f"sops_age__list_1__map_enc={armor}\nsops_shamir_threshold=1\n"
+    assert ciphertext_problems("f", text, dotenv=True) == []
+
+
+def test_a_sops_named_line_edited_since_the_base_is_flagged_by_the_mac_proxy():
+    base = _dotenv({"a": ENC}) + "sops_note=one\n"
+    now = _dotenv({"a": ENC}) + "sops_note=two\n"
+    found = mac_proxy_problems("f", now, base, dotenv=True)
+    assert found and "MAC and lastmodified did not" in found[0]
+
+
+def test_a_blank_key_line_in_a_dotenv_is_flagged():
+    found = ciphertext_problems("f", _dotenv({"a": ENC}) + "=hunter2\n", dotenv=True)
+    assert "f: line 6 is not a `key=value` line" in found
+    assert all("hunter2" not in problem for problem in found)
+
+
 def test_a_comment_in_a_dotenv_is_flagged_by_line_number_alone():
     text = _dotenv({"a": ENC}) + "# a_key=hunter2\n"
     found = ciphertext_problems("f", text, dotenv=True)
@@ -100,7 +148,11 @@ def test_a_bare_word_line_in_a_dotenv_is_flagged():
 
 
 def test_a_comment_in_a_manifest_is_flagged():
-    for comment in ("# a_key: hunter2\n", "kind2: x  # hunter2\n"):
+    for comment in (
+        "# a_key: hunter2\n",
+        "kind2: x  # hunter2\n",
+        "kind2: x\t# hunter2\n",
+    ):
         found = ciphertext_problems("m", _manifest() + comment, dotenv=False)
         assert len(found) == 1 and "is a comment" in found[0]
         assert "hunter2" not in found[0]
@@ -108,7 +160,7 @@ def test_a_comment_in_a_manifest_is_flagged():
 
 def test_a_dropped_line_with_both_mac_lines_moved_is_clean():
     base = _dotenv({"a": ENC, "b": ENC})
-    now = _dotenv({"a": ENC}, mac=ENC_INT, stamp="T2")
+    now = _dotenv({"a": ENC}, mac=ENC_INT, stamp=STAMP2)
     assert mac_proxy_problems("f", now, base, dotenv=True) == []
 
 
@@ -175,6 +227,21 @@ def test_a_secret_changed_since_the_cluster_file_was_written_is_flagged():
 def test_source_round_trips_through_its_text():
     lines = {"b": SourceLine("d2", "x.sops.yaml"), "a": SourceLine("d1")}
     assert parse_source(source_text(lines)) == lines
+
+
+def test_a_well_formed_source_is_clean_and_a_malformed_line_is_flagged_by_number():
+    good = "a " + "0" * 64 + "\nb " + "1" * 64 + " m.sops.yaml\n"
+    assert source_problems(good) == []
+    for bad in ("hunter2\n", "a " + "0" * 64 + " m.sops.yaml extra\n", "a hunter2\n"):
+        found = source_problems(good + bad)
+        assert found == [".source line 3 is not `<key> <sha256> [<manifest>]`"]
+
+
+def test_a_malformed_source_line_is_reported_by_check_not_raised(tmp_path):
+    tree = _tree(tmp_path)
+    tree.source.write_text("hunter2\n")
+    found = check_tree(tree, None, lambda _p: None)
+    assert found == [".source line 1 is not `<key> <sha256> [<manifest>]`"]
 
 
 def test_source_covering_every_held_key_and_manifest_is_clean():
