@@ -936,20 +936,24 @@ running node, so its verification ends with `gitops_state.py clear-owed manual_p
       `observability` is Ansible-owned it reads `containers_list`, so the landing's
       deploy-plane apply includes it, and `k8s_autodeploy: false` does not stop that plane
       (D1.2, *Landing*). If the narrow output does not list `observability`, the session
-      runs `./scripts/deploy.sh --tags observability` after landing. If that role is
+      runs `./scripts/deploy.sh --tags observability` after landing. That is the expected
+      branch: an entry without `hostname`, `port`, `tier` or `metrics` reaches no
+      observability template (D2 Open question 10). If that role is
       Flux-owned by then, promotion applies it. After landing, a Prometheus query must
       list `kube_job_failed` series for namespace `homelab`, which held 17 Jobs on
       2026-10-11. A missing `homelab` series means the flag or the grant did not take
       effect. H6.1c starts only after this query passes, so the drill never runs against a
       rule that was not deployed.
-    - **The added `containers_list` entry reaches every reader of the list.** At
-      `70591c307`, `scripts/deploy_tools/narrow_lib/containers.py:changed_fields` returns
+    - **The added `containers_list` entry reaches the readers of its fields.** At
+      `70591c307`, `scripts/deploy_tools/narrow_lib/containers.py:changed_fields` returned
       None for an added entry. `scripts/deploy_tools/narrow_lib/broad.py:_list_reader_tags`
-      with `changed` None then named 23 tags of 59, traefik, authelia, pihole and
-      netpol-baseline among them (D1, *Baseline*). The tick applies every one still owned
-      by Ansible, unattended and forward-only, until D6.1 retires its k8s arms. This
-      applies unless D2.1a or D4.1 has by then made an added `owner: flux` entry map to its
-      own tag alone (a cross-slice request; *Open questions* 11). H6.1b therefore follows
+      with `changed` None then named 23 tags of 59 (D1, *Baseline*). D2.1c records an added
+      `owner: flux` entry by its fields instead. On the tree of 2026-10-15 an entry that
+      carries `name`, `platform` and `owner` reaches artifacts, blackbox-exporter, pihole
+      and uptime-kuma, three of them `k8s_autodeploy: false` (D2 Open question 10). The
+      tick applies them unattended and forward-only, because D2.2 drops the
+      `system-upgrade` tag, until D6.1 retires its k8s arms. The own-tag-only outcome is
+      refuted: artifacts' `known_services.json` names every entry. H6.1b therefore follows
       D1.2's procedure, as M4's PR 1 does:
         - Before the PR, run `uv run python scripts/deploy_tools/deploy_tags.py narrow
           origin/master HEAD`, and record the printed list in the PR body. Do not assume
@@ -1449,8 +1453,9 @@ which journald does not store on these hosts, so it reads zero on every run.
 - **H6.1b:** revert. Flux prunes the Plans. The CRD and Namespace stay because they are
   prune-exempt, and the operator deletes them by hand if the role is abandoned. The pin
   returns to `setup/k3s`. The revert removes the `system-upgrade` entry from
-  `containers_list`, and `changed_fields` returns None for a removed entry too. Before
-  D6.1, the revert therefore follows H6.1b's narrow procedure: the recorded narrow output,
+  `containers_list`. D2.1c records a removed Flux-born entry by its fields too, so the
+  revert reaches the same readers as H6.1b and no own tag. Before D6.1, the revert
+  therefore follows H6.1b's narrow procedure: the recorded narrow output,
   D1.2's stop rule before the PR and before `land.sh`, and the same refusal exit.
 - **H6.1c:** the drill's own revert is part of the step.
 - **H6.2:** `sudo apt-get remove homelab-daniel-box` on daniel-box. This is valid only before
@@ -1564,11 +1569,11 @@ which journald does not store on these hosts, so it reads zero on every run.
       `prepare` refuses on the absent state directory, so every k3s bump ends `JobFailed`
       and holds. daniel-box's windowed restart refuses on the absent lock file, so every
       config change pends. The lock-path equality test fails at import, so CI goes red.
-- **H6.1b's landing applies every Ansible-owned reader of `containers_list`.** The added
-  entry makes `changed_fields` return None (*Steps*, H6.1b), and the deploy plane ignores
-  `k8s_autodeploy: false`. The mitigation is D1.2's: a recorded narrow output, the stop
-  rule before the PR and before `land.sh`, and its refusal exit. The revert carries the
-  same procedure. *Open questions* 11 names the fix that would remove the risk.
+- **H6.1b's landing applies the readers of its entry's fields.** The added entry reaches
+  four reader tags of `containers_list`, three of them `k8s_autodeploy: false` (*Steps*,
+  H6.1b), and the deploy plane ignores that flag. The mitigation is D1.2's: a recorded
+  narrow output, the stop rule before the PR and before `land.sh`, and its refusal exit.
+  The revert carries the same procedure. The risk ends at D6.1 (*Open questions* 11).
 - **A Flux status that predates the apply.** The expressions close the race for a version
   change only. A selector-only change can post `success` on `flux/system-upgrade` before
   SUC runs a Job, so H6.3c, H6.3d and exit 1 verify by the node label instead.
@@ -1842,12 +1847,14 @@ which journald does not store on these hosts, so it reads zero on every run.
     timers (*Verification*, *Window*). It must either use `OnCalendar` or join the
     exemption list with its own exclusion.
 11. **An added `containers_list` entry and the narrowing.** H6.1b adds the `system-upgrade`
-    entry, and its revert removes it. Before D6.1 the deployer narrows either one to every
-    reader of the list (*Steps*, H6.1b). The preferred fix belongs to D2.1a or D4.1:
-    `changed_fields` maps an added or removed entry that carries `owner: flux` to its own
-    tag only, with a test. Resolution: until that lands, H6.1b and its revert carry
-    D1.2's stop rule and refusal exit. If it lands first, H6.1b's recorded narrow output
-    lists only `system-upgrade`, and the stop rule then covers that one tag.
+    entry, and its revert removes it. Settled by D2.1c, and the own-tag request is
+    withdrawn. D2 refuses the own-tag mapping because the bare-entry render moves
+    artifacts' `known_services.json` (D2 Open question 10). D2.1c instead records the entry
+    by its fields, so before D6.1 the deployer narrows either PR to the readers of those
+    fields: artifacts, blackbox-exporter, pihole and uptime-kuma on the tree of 2026-10-15
+    (*Steps*, H6.1b). Resolution: H6.1b and its revert record their narrow output and carry
+    D1.2's stop rule and refusal exit over every tag it names. D2.1c's render census,
+    `ansible/tests/k8s/test_flux_born_entry_reader_census.py`, proves the expected shape.
 12. **`rancher/k3s-upgrade` by digest.** SUC builds the upgrade container's reference from
     `upgrade.image` and the Plan's version, so the Plans name the image by tag. This plan
     cannot confirm whether SUC v0.20.2 accepts a digest there. Recommendation: before
@@ -2368,3 +2375,13 @@ Folded from the 2026-10-12 pillar review; not adversarially reviewed. The pre-st
 - **RA-1.** The outcome paragraph and *Risks* say the hold carries H6's own value,
   never C2's `failed=` form, so C2's revert rule cannot clear it. Only the operator clears
   it.
+
+### Reader-set follow-up (2026-10-15)
+
+- **#4975: H6.1b still branched on an own-tag-only outcome and said every reader applies.**
+  Confirmed. D2.1c landed and records an added `owner: flux` entry by its fields, and D2
+  refuses the own-tag mapping. Fixed: H6.1b, *Rollback*, *Risks* and *Open questions* 11
+  name the four readers that D2 Open question 10 gives an entry carrying `name`, `platform`
+  and `owner`, and drop the own-tag branch. H6.1b names the `deploy.sh --tags
+  observability` fallback as the expected branch, because such an entry reaches no
+  observability template.

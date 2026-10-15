@@ -312,8 +312,11 @@ The exit criterion has three parts:
       monitor-bridge, netpol-baseline, pihole and uptime-kuma.
     - For qbittorrent's entry, the own tag is `qbittorrent` and the readers are the same five.
     - No `containers.py:FILTER_FIELDS` row names `netpol_from`, so the five are the
-      whole-entry readers, which `reader_paths` keeps for any field edit. D2.1c names the
-      same five for an added Flux-born entry.
+      whole-entry readers, which `reader_paths` keeps for any field edit.
+    - 8e79e95d6, 17 minutes after `70591c307`, moved those five onto named filters. The
+      same call on the tree of 2026-10-15 returns netpol-baseline alone as the reader of
+      either edit, beside the edited entry's own tag. D2 Open question 10 states what an
+      added Flux-born entry reaches on that tree.
 
   `broad.py:narrow` unions `broad.py:_changed_half` with that deploy-plane half.
   `_changed_half` maps a range's edited `ansible/roles/k8s/<role>/` paths to the role's tag,
@@ -321,7 +324,7 @@ The exit criterion has three parts:
   The tick applies the union as a broad deploy-plane apply, and every broad arm is
   forward-only. The marker `deploy_narrow.py:DECIDED the broad plane ignores` means
   `K8S_AUTODEPLOY_DENYLIST` does not stop that apply. uptime-kuma, monitor-bridge, pihole,
-  crowdsec, janitorr and qbittorrent each set `k8s_autodeploy: false` in
+  blackbox-exporter, crowdsec, janitorr and qbittorrent each set `k8s_autodeploy: false` in
   `defaults/main.yml`. artifacts, configarr and netpol-baseline set `true`.
 - **The armed prune.** `ansible/roles/k8s/manifests/defaults/main.yml:manifests_prune_allowlist`
   lets a role's next deploy delete a CronJob, ConfigMap, ServiceAccount or NetworkPolicy it no
@@ -523,13 +526,11 @@ The exit criterion has three parts:
     - qbittorrent's entry sets `netpol_role_owned: true`, so the qbittorrent role renders that
       fence. The role's one `k8s/manifests` apply creates the fence and the CronJob together,
       before the role's `k8s/cronjob-gate` include runs. The landing's narrowed apply also
-      names uptime-kuma, artifacts, monitor-bridge, netpol-baseline and pihole, the five
-      readers of any entry field edit.
+      names netpol-baseline, the one reader of `netpol_from`.
     - uptime-kuma's entry carries `netpol_from` without `netpol_role_owned`, so
       netpol-baseline's `templates/networkpolicy-callers.yaml.j2` renders that fence. The
-      landing's narrowed apply is `deploy.yml --tags
-      <role>,uptime-kuma,artifacts,monitor-bridge,netpol-baseline,pihole` (Baseline, *A field
-      edit to a `containers_list` entry narrows*). It applies the workload role first and
+      landing's narrowed apply is `deploy.yml --tags <role>,uptime-kuma,netpol-baseline`
+      (Baseline, *A field edit to a `containers_list` entry narrows*). It applies the workload role first and
       netpol-baseline last, the order `ansible/roles/k8s/netpol-baseline/CLAUDE.md`
       requires. A deploy-time gate run of a pusher therefore pushes before the fence admits
       it. *First run* says how each pusher handles that.
@@ -575,29 +576,39 @@ entry narrows*). That apply also ships any change of a named tag that is on `ori
 and not yet applied, and a failing verify task in any named tag writes `hold_sha` over the
 deploy plane. This holds until D6.1 deletes the deployer's k8s arms.
 
-The narrow output each PR expects:
+The narrow output each PR expects, measured on the tree of 2026-10-15 with
+`deploy_tags.py narrow` over a scratch commit of each edit. A `netpol_from` edit is a field
+edit, so it names the edited entry's tag and the one reader of `netpol_from`,
+netpol-baseline. The added drill entry names the readers D2 Open question 10 gives a bare
+entry.
 
-- **H2.4b:** crowdsec, uptime-kuma, artifacts, monitor-bridge, netpol-baseline and pihole.
-  Four are denylisted: crowdsec, uptime-kuma, monitor-bridge and pihole.
-- **H2.5b:** configarr and the same five readers. Three are denylisted: uptime-kuma,
-  monitor-bridge and pihole.
-- **H2.5c:** janitorr and the same five readers. Four are denylisted, janitorr among them.
-- **H2.5d:** qbittorrent and the same five readers. Four are denylisted, qbittorrent among
-  them.
-- **H2.3b:** `longhorn-restore-drill` and D2.1c's five whole-entry readers, the same five.
-  `deploy_tags.py narrow` prints the drill's tag, and D2.2's deployer skip drops it because
-  Flux owns it, so the tick applies the five. Three are denylisted. The drill's entry
-  carries no field that a `FILTER_FIELDS` row reads, so no other reader joins.
-- **A revert** expects its forward PR's list. A revert of H2.3b expects the five readers
+- **H2.4b:** crowdsec, uptime-kuma and netpol-baseline. Two are denylisted: crowdsec and
+  uptime-kuma.
+- **H2.5b:** configarr, uptime-kuma and netpol-baseline. One is denylisted: uptime-kuma.
+- **H2.5c:** janitorr, uptime-kuma and netpol-baseline. Two are denylisted: janitorr and
+  uptime-kuma.
+- **H2.5d:** qbittorrent and netpol-baseline. One is denylisted: qbittorrent.
+- **H2.3b:** `longhorn-restore-drill`, artifacts, blackbox-exporter, pihole and
+  uptime-kuma. `deploy_tags.py narrow` prints the drill's tag, and D2.2's deployer skip
+  drops it because Flux owns it, so the tick applies the four readers. Three are
+  denylisted: blackbox-exporter, pihole and uptime-kuma. The drill's entry carries
+  `platform` and `depends_on`. `lan_hostnames` reads `platform`, and no reader reads
+  `depends_on`.
+- **A revert** expects its forward PR's list. A revert of H2.3b expects the four readers
   alone, because `entry_change_tags` gives a removed entry no tag of its own.
+
+A list measured later can differ when a template starts or stops reading a field. The
+quoted output is the expectation the stop rule binds, and the D2.1c render census
+(`ansible/tests/k8s/test_flux_born_entry_reader_census.py`) holds that it covers every
+render an added Flux-born entry moves.
 
 Before the PR is opened, and again right before `land.sh`, the session runs four steps:
 
 1. **Narrow.** Run `uv run python scripts/deploy_tools/deploy_tags.py narrow origin/master
    HEAD` and quote its output. An output that differs from the expected list stops the
    session until it knows why. Examples are a list without the edited entry's own tag, a
-   list without the five readers, the drill's tag alone, or the 23 readers of a tree without
-   D2.1c.
+   list without netpol-baseline, an H2.3b list without artifacts, the drill's tag alone, or
+   the 23 readers of a tree without D2.1c.
 2. **Stop rule.** Apply D1.2's stop rule over every tag the output names. Run `uv run python
    scripts/diagnostics/probe.py releases --stale-only` and `uv run python
    scripts/diagnostics/probe.py releases`, and read the service names, not the exit code. Do
@@ -1305,12 +1316,12 @@ change at merge time*).
       disabled`.
     - Add the tag's rows to H1.1c's per-tag object census, with the ConfigMap as the named
       member, and add the step-6 namespace test.
-    - **The added entry reaches five readers of the list.** D2.1c records an added Flux-born
+    - **The added entry reaches four readers of the list.** D2.1c records an added Flux-born
       entry by its fields, so `deploy_tags.py narrow` names `longhorn-restore-drill` and
-      D2.1c's five whole-entry readers: artifacts, monitor-bridge, netpol-baseline, pihole
-      and uptime-kuma. D2.2 drops the drill's tag because Flux owns it, so the tick applies
-      the five, unattended and forward-only. Three of them are denylisted: monitor-bridge,
-      pihole and uptime-kuma. D2.1c is on `origin/master` before this PR, because H2 needs
+      the readers of those fields: artifacts, blackbox-exporter, pihole and uptime-kuma,
+      measured on the tree of 2026-10-15. D2.2 drops the drill's tag because Flux owns it,
+      so the tick applies the four, unattended and forward-only. Three of them are
+      denylisted: blackbox-exporter, pihole and uptime-kuma. D2.1c is on `origin/master` before this PR, because H2 needs
       H1 and H1 needs D2. No output is accepted as a reason to skip the stop rule, which
       binds until D6.1.
     - Before the PR, and again right before `land.sh`, run *Landing a `containers_list`
@@ -1368,8 +1379,8 @@ change at merge time*).
     - Turn their three cron and script tasks into absent arms.
     - Gate none of the three (Design, *First run*). The PR stays open for each job's first
       scheduled run.
-    - The `netpol_from` edit makes the tick apply crowdsec, uptime-kuma, artifacts,
-      monitor-bridge, netpol-baseline and pihole, four of them denylisted. Before the PR, and
+    - The `netpol_from` edit makes the tick apply crowdsec, uptime-kuma and
+      netpol-baseline, two of them denylisted. Before the PR, and
       again right before `land.sh`, run *Landing a `containers_list` edit* (Design).
     - *Open questions* 2 is decided here.
 12. **H2.4c CrowdSec home allowlist** (Ansible, in a home-edge window).
@@ -1390,8 +1401,8 @@ change at merge time*).
       `_K8S_HOST_LIB`.
     - Absent arms for the cron, `/opt/configarr-health`, the script and the `configarr`
       fragment.
-    - The `netpol_from` edit makes the tick apply configarr and the five readers, three of
-      them denylisted. Before the PR, and again right before `land.sh`, run *Landing a
+    - The `netpol_from` edit makes the tick apply configarr, uptime-kuma and
+      netpol-baseline, one of them denylisted. Before the PR, and again right before `land.sh`, run *Landing a
       `containers_list` edit* (Design). `_K8S_HOST_LIB` lives in
       `ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_cross_role.py`, a
       setup-plane path. `broad.py:_changed_half` leaves it to its own `initial_setup.yml`
@@ -1402,15 +1413,15 @@ change at merge time*).
     gated, because janitorr sets `k8s_autodeploy: false`. The PR body records the first
     scheduled run. The host-lib,
     `install_host_lib.yml` and `stamp_deployed.yml` rows of `K8S_ROLES_IMPORTING_SETUP_FILES`
-    go with the emptied set. The tick applies janitorr and the five readers, four of them
-    denylisted, so the PR runs *Landing a `containers_list` edit* (Design) before the PR and
+    go with the emptied set. The tick applies janitorr, uptime-kuma and netpol-baseline,
+    two of them denylisted, so the PR runs *Landing a `containers_list` edit* (Design) before the PR and
     again right before `land.sh`.
 15. **H2.5d qbittorrent prefs check** (Ansible). Add the CronJob, gated with
     `k8s/cronjob-gate`, reading `qbittorrent_password` from the role's Secret, with the
     connect retry (Design, *Who applies each grant*). In the same commit, add its label to
     qbittorrent's `netpol_from`, which the role applies with the CronJob, before the gate.
-    Turn the cron and its script into absent arms. The tick applies qbittorrent and the five
-    readers, four of them denylisted, so the PR runs *Landing a `containers_list` edit*
+    Turn the cron and its script into absent arms. The tick applies qbittorrent and
+    netpol-baseline, one of them denylisted, so the PR runs *Landing a `containers_list` edit*
     (Design) before the PR and again right before `land.sh`.
 16. **H2.7 Re-home the two Claude crons.**
     - Move `Sync peer Claude artifacts` and `Claude Code telemetry health` into
@@ -1633,11 +1644,12 @@ stays open for that evidence.
   one running a worktree's commit reads `unmerged` in the plain table. Either refuses the
   merge. The red case is a stale uptime-kuma. While uptime-kuma's role has a merged change
   that no apply has shipped, `--stale-only` names uptime-kuma. The narrow output of H2.4b,
-  H2.5b and H2.5c names uptime-kuma, which they reach both as the edited entry and as a
-  reader, so the stop rule refuses each of their merges. The outputs of H2.5d and H2.3b name
-  it as a reader, so they refuse too.
+  H2.5b and H2.5c names uptime-kuma as the edited entry, and H2.3b's names it as a reader of
+  `platform`, so the stop rule refuses each of their merges. H2.5d's output does not name
+  uptime-kuma, so its red case is a stale qbittorrent, its edited entry, which refuses the
+  same way.
   A narrow output that differs from the PR's expected list also stops the session: a family
-  PR's list without its edited entry's tag or without the five readers, and an H2.3b list
+  PR's list without its edited entry's tag or without netpol-baseline, and an H2.3b list
   naming the drill's tag alone. After the landing, `probe.py releases --stale-only` names
   none of the narrowed tags, and `hold_sha` is empty. A failed apply leaves `hold_sha` set,
   and a refused narrowing leaves each owed service named as stale, so both checks can go
@@ -1680,7 +1692,7 @@ carries `prune: disabled`.
   annotation keeps it. It holds the drill's state, so it is kept until the operator decides
   to delete it (**operator-only**). The revert removes the `containers_list` entry. D2.1c
   records a removed Flux-born entry by its fields, as it records an added one, so before
-  D6.1 the revert reaches the same five readers as the forward PR. The revert PR therefore
+  D6.1 the revert reaches the same four readers as the forward PR. The revert PR therefore
   runs *Landing a `containers_list` edit* (Design) and lands in a quiet window.
 - **H2.3d and H2.3e:** revert H2.3e first, so Flux applies `suspend: true` before any revert
   restores the host cron. Then revert H2.3d and run its hand apply (**operator-only**), which
@@ -1701,7 +1713,7 @@ carries `prune: disabled`.
   the reader arm from the reverted role. H2.3a reverts alone only while H2.3c has not landed.
 - **An Ansible-owned k8s PR (H2.4b, H2.4c, H2.5b, H2.5c, H2.5d):** revert. For H2.4c,
   `land.sh` deploys the role. The other four reverts remove a `netpol_from` label, a field
-  edit, so the tick applies the role with the edited entry's tag and the five readers, and
+  edit, so the tick applies the role with the edited entry's tag and netpol-baseline, and
   each revert runs *Landing a `containers_list` edit* (Design). The armed prune deletes the CronJob, its ConfigMap and its ServiceAccount, and the
   restored cron task reinstalls the host cron in the same run. The Role, RoleBinding,
   ClusterRole and ClusterRoleBinding are not prunable kinds, so they stay, inert, until a
@@ -1746,10 +1758,11 @@ carries `prune: disabled`.
   class 4). H2.3b adds the drill's entry. H2.4b, H2.5b, H2.5c and H2.5d each edit a
   `netpol_from` field, and every revert of the five edits the list again. A field edit
   narrows, and so does an added Flux-born entry once D2.1c has landed, but neither empties
-  the apply. The tick applies the edited role, the edited entry's own tag and the five
-  whole-entry readers (Design, *Landing a `containers_list` edit*). Up to four of those tags
-  declare `k8s_autodeploy: false`: uptime-kuma, monitor-bridge and pihole every time, and
-  crowdsec, janitorr or qbittorrent in their own PRs. The apply is forward-only. The stop
+  the apply. A family PR's tick applies the edited role, the edited entry's own tag and
+  netpol-baseline. H2.3b's applies artifacts, blackbox-exporter, pihole and uptime-kuma
+  (Design, *Landing a `containers_list` edit*). Up to three of those tags declare
+  `k8s_autodeploy: false`: blackbox-exporter, pihole and uptime-kuma in H2.3b, and
+  uptime-kuma, crowdsec, janitorr or qbittorrent in the family PRs that name them. The apply is forward-only. The stop
   rule keeps another session's unlanded change from riding along, and the `--dry-run` quote
   names the renders that move. A tag's own verify tasks still run, so a flaky gate in one of
   them fails the landing and holds the deploy plane until D1's way out of a hold. The
@@ -1951,7 +1964,7 @@ carries `prune: disabled`.
     - one RecurringJob with `groups: []`, whose volumes carry a per-job label, and two arms
       in `longhorn-reconcile`, one of them bounded until H2.2b;
     - one Flux-born role and tag, `longhorn-restore-drill`, whose entry's landing applies
-      D2.1c's five whole-entry readers of `containers_list`, three of them denylisted, until
+      four readers of `containers_list`, three of them denylisted, until
       D6.1 deletes the deployer's k8s arms;
     - one stamp ConfigMap, and a drill whose state lives in it;
     - four census rows, three trim-label fixtures in existing reader tests, the
@@ -1964,7 +1977,7 @@ carries `prune: disabled`.
     - two image shapes, one of them a community image, and an image leg in each shell job's
       script tests;
     - about six `netpol_from` entries, whose four PRs each run D1.2's stop rule over the
-      edited role, the edited entry's tag and the five readers until D6.1.
+      edited role, the edited entry's tag and netpol-baseline until D6.1.
 - **Removed:**
     - ten host cron files from daniel-box, with their scripts under `/usr/local/bin` and
       `/opt`, and two `setup-deployed-manifest.d` fragments;
@@ -2091,10 +2104,10 @@ carries `prune: disabled`.
     added or removed `owner: flux` entry to its own tag alone. D2 refuses that: "The entry's
     own tag alone, which X2-06 proposed, is not sound, because the bare-entry render moves
     artifacts' `known_services.json`." D2.1c instead records such an entry by its fields,
-    which cuts its reach from 23 reader tags to five: artifacts, monitor-bridge,
-    netpol-baseline, pihole and uptime-kuma. Three of the five remain denylisted (D2,
-    *Risks*). A `netpol_from` field edit reaches the same five at `70591c307` (Baseline, *A
-    field edit to a `containers_list` entry narrows*). Resolution: every H2 PR that edits the
+    which cuts the drill entry's reach from 23 reader tags to four on the tree of
+    2026-10-15: artifacts, blackbox-exporter, pihole and uptime-kuma (D2 Open question 10).
+    Three of the four remain denylisted. A `netpol_from` field edit reaches netpol-baseline
+    alone on that tree (Baseline, *A field edit to a `containers_list` entry narrows*). Resolution: every H2 PR that edits the
     list, and every revert of one, runs *Landing a `containers_list` edit* (Design). No
     narrow output exempts a PR from the stop rule. The obligation ends at D6.1.
 
@@ -2673,3 +2686,18 @@ The H1 and D2 parts go in cross-slice notes.
 
 - Cross-slice note from H1: no change. H1.1h's guard sits after the `server.yml` import,
   and a grep of this plan finds no `server.yml`, so no H2 PR moves it or adds a writer to it.
+
+### Reader-set follow-up (2026-10-15)
+
+- **#4975: the per-PR narrow outputs named D2.1c's five whole-entry readers.** Confirmed.
+  8e79e95d6 moved those readers onto named filters, so the round i1 lists no longer match
+  the tree. `deploy_tags.py narrow` over a scratch commit appending a label to uptime-kuma's
+  and qbittorrent's `netpol_from` printed `netpol-baseline,qbittorrent,uptime-kuma`. Over a
+  scratch commit adding the drill's entry it printed
+  `artifacts,blackbox-exporter,longhorn-restore-drill,pihole,uptime-kuma`, and over the
+  reverse range `artifacts,blackbox-exporter,pihole,uptime-kuma`. Fixed: *Baseline*,
+  *Landing a `containers_list` edit*, *Who applies each grant*, H2.3b, H2.4b, H2.5b to
+  H2.5d, *Verification*'s red case, *Rollback*, *Risks*, *Complexity delta* and *Open
+  questions* 13 now carry those lists and recount the denylisted tags. H2.5d's output no
+  longer names uptime-kuma, so its red case is a stale qbittorrent. The round i1 and
+  integration-2 entries above keep the lists they measured.
