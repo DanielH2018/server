@@ -31,6 +31,26 @@ def test_the_tree_feeds_no_live_read_to_a_rendered_template():
     assert real_census().offenders() == []
 
 
+# One name each task file sets, for the files the walk must enter: the play's preamble, the
+# two helper roles every k8s role includes, and the post_tasks.
+WALKED = {
+    "ansible_become_password": "pre_tasks/load_secrets.yml",
+    "k8s_built_image_tags": "roles/k8s/image-builder/tasks/main.yml",
+    "manifests_render": "roles/k8s/manifests/tasks/main.yml",
+    "k8s_image_drift_pods": "post_tasks/k8s_image_drift_gate.yml",
+}
+
+
+def test_the_task_walk_enters_every_file_the_play_reaches():
+    setters = real_census().set_by_tasks
+    missing = {
+        name: path
+        for name, path in WALKED.items()
+        if path not in setters.get(name, set())
+    }
+    assert missing == {}
+
+
 def test_the_census_finds_its_named_members():
     found = real_census()
     # A task sets it, a template reads it, and the renderer derives it.

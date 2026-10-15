@@ -104,7 +104,7 @@ class Census:
     """What one census run found.
 
     Attributes:
-        set_by_tasks: Each name a task sets, mapped to the first task file that sets it.
+        set_by_tasks: Each name a task sets, mapped to every task file that sets it.
         reached: Each reached name, mapped to every template or definition that reads it.
         templates: Every template the render reads.
         accepted: Each accepted `pipe` or `vars` lookup, as `<plugin> in <file>`.
@@ -113,7 +113,7 @@ class Census:
         derived: The names the renderer computes, which stop the walk.
     """
 
-    set_by_tasks: dict[str, str] = field(default_factory=dict)
+    set_by_tasks: dict[str, set[str]] = field(default_factory=dict)
     reached: dict[str, set[str]] = field(default_factory=dict)
     templates: set[Path] = field(default_factory=set)
     accepted: list[str] = field(default_factory=list)
@@ -125,7 +125,7 @@ class Census:
         """Each task-set name the walk reaches that is not derived, then each lookup problem."""
         live = sorted((self.set_by_tasks.keys() & self.reached.keys()) - self.derived)
         return [
-            f"{name}: set in {self.set_by_tasks[name]}, read by {_first_reader(self.reached[name])}"
+            f"{name}: set in {min(self.set_by_tasks[name])}, read by {_first_reader(self.reached[name])}"
             for name in live
         ] + self.problems
 
@@ -138,8 +138,9 @@ def _first_reader(readers: set[str]) -> str:
 @dataclass
 class _Walk:
     files: set[Path] = field(default_factory=set)
-    set_by_tasks: dict[str, str] = field(default_factory=dict)
-    set_values: dict[str, list] = field(default_factory=dict)
+    set_by_tasks: dict[str, set[str]] = field(default_factory=dict)
+    # Each `set_fact` value, as the task file that sets it and the value.
+    set_values: dict[str, list[tuple[str, object]]] = field(default_factory=dict)
     roles: set[Path] = field(default_factory=set)
     # Each included role's directory, mapped to the `vars:` of every include of it, with the
     # role directory of the task that includes it.
@@ -223,10 +224,10 @@ def _walk_tasks(
             for name, value in (task[module] or {}).items():
                 if name == "cacheable":
                     continue
-                walk.set_by_tasks.setdefault(name, where)
-                walk.set_values.setdefault(name, []).append(value)
+                walk.set_by_tasks.setdefault(name, set()).add(where)
+                walk.set_values.setdefault(name, []).append((where, value))
         if isinstance(task.get("register"), str):
-            walk.set_by_tasks.setdefault(task["register"], where)
+            walk.set_by_tasks.setdefault(task["register"], set()).add(where)
         for module in INCLUDE_TASKS & task.keys():
             args = task[module]
             target = args.get("file") if isinstance(args, dict) else args
@@ -303,8 +304,8 @@ def definitions(tree: Tree, walk: _Walk) -> dict[str, list[tuple[str, object]]]:
                 task_vars,
             )
     for name, values in walk.set_values.items():
-        for value in values:
-            add(f"set_fact in {walk.set_by_tasks[name]}", {name: value})
+        for where, value in values:
+            add(f"set_fact in {where}", {name: value})
     return found
 
 
