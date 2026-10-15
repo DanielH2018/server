@@ -28,8 +28,8 @@ def digest_of(name: str) -> str:
     return "sha256:" + hashlib.sha256(name.encode()).hexdigest()
 
 
-# The bundle a commit with no published tag renders: D1's empty root and the renderer's
-# digests.json for no tag, as promote.yml writes them.
+# The bundle a commit with no published tag rendered before D3.3a: D1's empty root and the
+# renderer's digests.json for no tag. From D3.3a such a commit publishes the shared kinds.
 EMPTY_ROOT = (
     b"apiVersion: kustomize.config.k8s.io/v1beta1\nkind: Kustomization\nresources: []\n"
 )

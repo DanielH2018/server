@@ -8,7 +8,8 @@ nothing and `prod` stays where it was. `report` runs the source, host and no-stu
   `SHARED_KINDS` member, and nothing else;
 - `flux/kustomization.yaml` lists exactly the other files in `flux/`;
 - each `<name>.yaml` holds exactly the Kustomization `<name>`, with path `./cluster/<name>`;
-- each published tag has its directory `cluster/<tag>/`;
+- each published tag and each shared kind has its directory `cluster/<name>/`, with a
+  `kustomization.yaml`;
 - `digests.json` names each published tag and shared kind, plus `_unclassified`.
 
 The allowlist comes from the renderer's inputs, never from its output, so a renderer bug
@@ -158,9 +159,9 @@ def census(
         if f"{name}.yaml" in held:
             found += _kustomization_problems(flux, name)
     found += [
-        f"{CLUSTER_DIR}/{tag}/ is missing: {tag} is published and renders no directory"
-        for tag in sorted(published)
-        if not (out / CLUSTER_DIR / tag / KUSTOMIZATION).is_file()
+        f"{CLUSTER_DIR}/{name}/ is missing: {name} is published and renders no directory"
+        for name in sorted(names)
+        if not (out / CLUSTER_DIR / name / KUSTOMIZATION).is_file()
     ]
     return found + _digests_problems(out, names)
 

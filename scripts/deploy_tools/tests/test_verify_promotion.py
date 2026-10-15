@@ -13,7 +13,13 @@ import re
 import pytest
 import yaml
 from _promote_fakes import bundle_files
-from renderer.renderer_lib.bundle import tag_kustomization
+from renderer.renderer_lib.bundle import bundle_files as render_bundle
+from renderer.renderer_lib.bundle import digests as render_digests
+from renderer.renderer_lib.bundle import (
+    digests_text,
+    kustomization_text,
+    tag_kustomization,
+)
 
 import forge
 from deploy_tools.promote_lib import verify_promotion as vp
@@ -210,6 +216,21 @@ def test_a_shared_kind_adds_its_status_and_the_kustomize_root_adds_none():
     names = vp.expected_set(files, PROD).names
     assert names == {"homelab", "cluster-vars"}
     assert "kustomization" not in names
+
+
+def test_the_first_bundle_carrying_cluster_vars_expects_its_status():
+    """D3.3a's first promotion, from the renderer's own files: D2's empty bundle to the
+    `--shared-only` bundle. The new name is a move, not a widening."""
+    prod = {
+        "flux/kustomization.yaml": kustomization_text([]).encode(),
+        "digests.json": digests_text(render_digests({}, [], kinds=())).encode(),
+    }
+    target = {
+        path: text.encode()
+        for path, text in render_bundle({}, {}, [], "10m", "x=ENC[y]\n").items()
+    }
+    expected = vp.expected_set(target, prod)
+    assert (expected.names, expected.widened) == ({"homelab", "cluster-vars"}, "")
 
 
 def test_a_dependent_already_failing_on_prods_commit_is_reported_not_expected():

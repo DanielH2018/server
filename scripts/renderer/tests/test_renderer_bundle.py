@@ -2,6 +2,8 @@
 
 Most fixtures are file maps handed to `bundle_files` and `digests`, so no role renders. Two
 tests run the real CLI on littlelink: the determinism pair and the reserved-name refusal.
+Every render that publishes copies `DOTENV`, a fixture cluster file in `tmp_path` holding
+fake ciphertext, never the tree's cluster file.
 
 Run: uv run pytest scripts/renderer/tests/test_renderer_bundle.py
 """
@@ -11,13 +13,14 @@ import pytest
 
 from changed_set import changed_set
 from lib import yaml_fast
-from lib.exit_codes import RENDER_OK, RENDER_REFUSED
+from lib.exit_codes import RENDER_BAD_ARGS, RENDER_OK, RENDER_REFUSED
 from renderer import homelab_render
 from renderer.renderer_lib import cluster as cluster_mod
 from renderer.renderer_lib.bundle import (
     DIGESTS,
     FLUX_INDEX,
     SHARED_KINDS,
+    CLUSTER_VARS_FILE,
     UNCLASSIFIED,
     bundle_files,
     digests,
@@ -28,6 +31,16 @@ from renderer.renderer_lib.placeholders import apply_placeholders, sentinel
 
 TIMEOUT = "600s"
 DEPLOYMENT = "kind: Deployment\nmetadata:\n  name: {name}\nspec:\n  value: {value}\n"
+DOTENV = "peanut_password=ENC[AES256_GCM,data:eA==,iv:aQ==,tag:dA==,type:str]\n"
+CLUSTER_VARS_DIR = "cluster/cluster-vars"
+
+
+@pytest.fixture
+def cluster_file(tmp_path):
+    """A fixture cluster file holding `DOTENV`."""
+    path = tmp_path / CLUSTER_VARS_FILE
+    path.write_text(DOTENV)
+    return path
 
 
 def _tag(name: str, value: str = "plain") -> RenderedTag:
@@ -35,12 +48,12 @@ def _tag(name: str, value: str = "plain") -> RenderedTag:
     return RenderedTag(name, {**files, KUSTOMIZATION: kustomization_text(files)})
 
 
-def _bundle(*tags: RenderedTag, keys=("email",)) -> dict[str, str]:
-    """The `flux/` files and `digests.json` for `tags`, through the placeholder passes."""
+def _bundle(*tags: RenderedTag, keys=("email",), dotenv=DOTENV) -> dict[str, str]:
+    """The bundle files for `tags`, through the placeholder passes."""
     result = apply_placeholders(list(tags), keys)
     directories = {n: f for t in result.tags for n, f in t.directories().items()}
     return bundle_files(
-        directories, result.key_sets, [t.tag for t in result.tags], TIMEOUT
+        directories, result.key_sets, [t.tag for t in result.tags], TIMEOUT, dotenv
     )
 
 
@@ -84,7 +97,7 @@ def test_the_root_lists_every_file_in_flux():
         for p in files
         if p.startswith("flux/") and p != FLUX_INDEX
     )
-    assert in_flux == ["bento-pdf.yaml", "littlelink.yaml"]
+    assert in_flux == ["bento-pdf.yaml", "cluster-vars.yaml", "littlelink.yaml"]
     assert yaml_fast.safe_load(files[FLUX_INDEX])["resources"] == in_flux
 
 
@@ -106,6 +119,11 @@ def test_a_tag_named_after_a_shared_kind_is_flagged():
         cluster_mod.select_tags(["littlelink"], kinds=frozenset({"littlelink"}))
 
 
+def test_a_tag_named_cluster_vars_is_flagged():
+    with pytest.raises(cluster_mod.RenderRefused, match=r"\['cluster-vars'\]"):
+        cluster_mod.select_tags(["cluster-vars"])
+
+
 def test_an_ordinary_tag_is_clean():
     assert cluster_mod.select_tags(["littlelink"]) == ["littlelink"]
 
@@ -123,28 +141,39 @@ def test_the_render_refuses_a_reserved_tag_and_writes_nothing(
     assert list(out.iterdir()) == []
 
 
-def test_two_renders_of_one_tree_write_identical_bundles(tmp_path):
+def test_two_renders_of_one_tree_write_identical_bundles(tmp_path, cluster_file):
     texts = []
     for name in ("first", "second"):
         out = tmp_path / name
         code = homelab_render.cluster(
-            out, ["littlelink"], None, flux_owned=lambda: {"littlelink"}
+            out,
+            ["littlelink"],
+            None,
+            flux_owned=lambda: {"littlelink"},
+            cluster_file=cluster_file,
         )
         assert code == RENDER_OK
         texts.append(
             {
                 p.relative_to(out).as_posix(): p.read_bytes()
                 for p in sorted(out.rglob("*"))
-                if p.is_file() and not p.is_relative_to(out / "cluster")
+                if p.is_file() and not p.is_relative_to(out / "cluster" / "littlelink")
             }
         )
     assert texts[0] == texts[1]
     assert sorted(texts[0]) == [
+        f"{CLUSTER_VARS_DIR}/{CLUSTER_VARS_FILE}",
+        f"{CLUSTER_VARS_DIR}/kustomization.yaml",
         DIGESTS,
+        "flux/cluster-vars.yaml",
         "flux/kustomization.yaml",
         "flux/littlelink.yaml",
     ]
-    assert set(json.loads(texts[0][DIGESTS])) == {"littlelink", UNCLASSIFIED}
+    assert set(json.loads(texts[0][DIGESTS])) == {
+        "cluster-vars",
+        "littlelink",
+        UNCLASSIFIED,
+    }
 
 
 def test_a_role_render_of_a_tag_flux_does_not_own_writes_no_bundle_is_clean(tmp_path):
@@ -152,12 +181,21 @@ def test_a_role_render_of_a_tag_flux_does_not_own_writes_no_bundle_is_clean(tmp_
     out = tmp_path / "out"
     assert homelab_render.cluster(out, ["pihole"], None, flux_owned=set) == RENDER_OK
     assert sorted(p.name for p in out.iterdir()) == ["cluster"]
-    assert (out / "cluster" / "pihole-deferred").is_dir()
+    assert sorted(p.name for p in (out / "cluster").iterdir()) == [
+        "pihole",
+        "pihole-deferred",
+    ]
 
 
-def test_a_flux_owned_tag_that_defers_files_is_flagged(tmp_path, capsys):
+def test_a_flux_owned_tag_that_defers_files_is_flagged(tmp_path, capsys, cluster_file):
     out = tmp_path / "out"
-    code = homelab_render.cluster(out, ["pihole"], None, flux_owned=lambda: {"pihole"})
+    code = homelab_render.cluster(
+        out,
+        ["pihole"],
+        None,
+        flux_owned=lambda: {"pihole"},
+        cluster_file=cluster_file,
+    )
     assert code == RENDER_REFUSED
     assert "D4.2" in capsys.readouterr().err
     assert not out.exists() or list(out.iterdir()) == []
@@ -187,6 +225,7 @@ def test_an_edit_under_a_tags_directory_moves_its_own_and_its_footprint():
     moved = _moved({**BASE, "cluster/bento-pdf/deployment.yaml": b"b"})
     assert moved == {
         "bento-pdf": {"own", "footprint"},
+        "cluster-vars": set(),
         "sonarr": set(),
         UNCLASSIFIED: set(),
     }
@@ -254,3 +293,86 @@ def test_the_written_digests_json_is_the_shape_land_wait_reads():
     assert changed_set(old, old, graph).widened == ""
     moved = changed_set(new, old, graph)
     assert moved.names == {"bento-pdf"} and moved.widened == ""
+
+
+# -- the cluster-vars kind (D3.3a) -----------------------------------------------------------
+
+
+def test_the_cluster_vars_kustomization_decrypts_with_the_cluster_key():
+    files = _bundle(_tag("bento-pdf"))
+    expected = _expected("cluster-vars")
+    expected["spec"]["decryption"] = {
+        "provider": "sops",
+        "secretRef": {"name": "sops-age"},
+    }
+    assert yaml_fast.safe_load(files["flux/cluster-vars.yaml"]) == expected
+
+
+def test_the_cluster_vars_directory_generates_the_secret_from_a_byte_copy():
+    files = _bundle(_tag("bento-pdf"))
+    assert files[f"{CLUSTER_VARS_DIR}/{CLUSTER_VARS_FILE}"] == DOTENV
+    assert yaml_fast.safe_load(files[f"{CLUSTER_VARS_DIR}/kustomization.yaml"]) == {
+        "apiVersion": "kustomize.config.k8s.io/v1beta1",
+        "kind": "Kustomization",
+        "namespace": "flux-system",
+        "generatorOptions": {"disableNameSuffixHash": True},
+        "secretGenerator": [
+            {"name": "homelab-cluster-vars", "envs": [CLUSTER_VARS_FILE]}
+        ],
+    }
+
+
+def test_a_cluster_file_edit_moves_only_a_substituting_tags_footprint():
+    tags = (_tag("bento-pdf", sentinel("email")), _tag("sonarr"))
+    old = json.loads(_bundle(*tags)[DIGESTS])
+    new = json.loads(_bundle(*tags, dotenv=DOTENV + "x=ENC[y]\n")[DIGESTS])
+    assert old["bento-pdf"]["footprint"] != new["bento-pdf"]["footprint"]
+    assert old["bento-pdf"]["own"] == new["bento-pdf"]["own"]
+    assert old["sonarr"] == new["sonarr"]
+    assert old["cluster-vars"]["own"] != new["cluster-vars"]["own"]
+    assert new[UNCLASSIFIED]["paths"] == []
+
+
+def test_a_shared_only_render_holds_the_root_and_cluster_vars_and_no_tag(
+    tmp_path, cluster_file
+):
+    out = tmp_path / "out"
+    code = homelab_render.cluster(
+        out, None, None, cluster_file=cluster_file, shared_only=True
+    )
+    assert code == RENDER_OK
+    assert sorted(p.relative_to(out).as_posix() for p in out.rglob("*.*")) == [
+        f"{CLUSTER_VARS_DIR}/{CLUSTER_VARS_FILE}",
+        f"{CLUSTER_VARS_DIR}/kustomization.yaml",
+        DIGESTS,
+        "flux/cluster-vars.yaml",
+        "flux/kustomization.yaml",
+    ]
+    assert yaml_fast.safe_load((out / FLUX_INDEX).read_text())["resources"] == [
+        "cluster-vars.yaml"
+    ]
+    assert set(json.loads((out / DIGESTS).read_text())) == {
+        "cluster-vars",
+        UNCLASSIFIED,
+    }
+
+
+def test_a_render_without_the_cluster_file_is_refused_and_writes_nothing(
+    tmp_path, capsys
+):
+    out = tmp_path / "out"
+    out.mkdir()
+    missing = tmp_path / "absent" / CLUSTER_VARS_FILE
+    code = homelab_render.cluster(
+        out, None, None, cluster_file=missing, shared_only=True
+    )
+    assert code == RENDER_REFUSED
+    assert "cannot copy the cluster file" in capsys.readouterr().err
+    assert list(out.iterdir()) == []
+
+
+def test_shared_only_beside_role_is_a_usage_error(tmp_path):
+    argv = ["cluster", "--out", str(tmp_path), "--shared-only", "--role", "littlelink"]
+    with pytest.raises(SystemExit) as exc:
+        homelab_render.main(argv)
+    assert exc.value.code == RENDER_BAD_ARGS

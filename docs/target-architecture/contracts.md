@@ -76,6 +76,8 @@ which needs a drill exclusion in C7 that no slice has requested, the edge goes.
     mode. R1's shadow comparison reads stub mode, and so do R2's `roundtrip`, from R2's PR 1,
     and R1's determinism module. Those two keep reading it after R4's PR 9 deletes the
     comparison (R2, R4). Before R2 lands, `cluster` without `--secret-stubs` exits 2.
+  - `homelab-render cluster --out DIR --shared-only`, from D3.3a. It writes the shared kinds
+    and the root, and no tag, for a publish with no flux-owned tag.
   - `homelab-render host --host NAME --out DIR`
   - `homelab-render package --name PKG --out DIR`, for the shared packages of C5 (H3).
 - **Only placeholder mode publishes.** The publish job runs `cluster` without

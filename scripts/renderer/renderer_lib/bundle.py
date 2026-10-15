@@ -5,14 +5,17 @@ A placeholder render with `--role` writes, for each tag it names:
 - `DIR/flux/<tag>.yaml`, the Kustomization `<tag>` (C3 *Per-tag Kustomizations*). It carries
   `spec.postBuild`, naming `homelab-cluster-vars`, exactly when the tag's placeholder key set
   is not empty (C1 *The projection*);
+- `DIR/flux/<kind>.yaml` and `DIR/cluster/<kind>/` for each `SHARED_KINDS` member;
 - `DIR/flux/kustomization.yaml`, which lists every other file in `DIR/flux/`, so the root
   Kustomization `homelab` applies each of them;
 - `DIR/digests.json`, each published name's `own` and `footprint` digest (C1 *Cluster output*).
 
-`SHARED_KINDS` names every Kustomization that belongs to no deploy tag. It is empty until
-D3.3a adds `cluster-vars`, and each member needs a rule in `FOOTPRINT_RULES` that names the tags
-its files count for. A deploy tag may not take the root's name or a member's name
-(`reserved_tags`).
+`SHARED_KINDS` names every Kustomization that belongs to no deploy tag. D3.3a adds the first,
+`cluster-vars`. Its directory holds a copy of the cluster file and a `secretGenerator` that
+makes the Secret `homelab-cluster-vars`, and its Kustomization decrypts the copy with the
+cluster's own key (`cluster_vars_files`). Each member needs a rule in `FOOTPRINT_RULES` that
+names the tags its files count for. A deploy tag may not take the root's name or a member's
+name (`reserved_tags`).
 
 The classification `digests` applies is D6's *What a footprint counts*:
 
@@ -56,9 +59,20 @@ FLUX_NAMESPACE = "flux-system"
 CLUSTER_VARS_SECRET = "homelab-cluster-vars"
 FLUX_API_VERSION = "kustomize.toolkit.fluxcd.io/v1"
 
+# The shared kind that delivers `CLUSTER_VARS_SECRET` (D3.3a), and the name its directory
+# gives the copy of the cluster file. kustomize-controller decrypts a `secretGenerator`
+# source as dotenv when its name ends in `.env`, and .gitleaks.toml's allowlist names the
+# copy's path.
+CLUSTER_VARS = "cluster-vars"
+CLUSTER_VARS_FILE = "cluster-vars.sops.env"
+# The Secret in `flux-system` that holds the cluster's age key (D3.0, operator-only).
+SOPS_AGE_SECRET = "sops-age"
+
 # Every shared kind, a closed literal set (C3 *Shared kinds*). D3.3a adds `cluster-vars`,
 # D5.3b2 `soak` and D5's namespace PR `homelab-namespace`, each in the PR that renders it.
-SHARED_KINDS: frozenset[str] = frozenset()
+# Membership is unconditional: a render that cannot copy the cluster file fails, so deleting
+# the file fails CI rather than narrowing the census.
+SHARED_KINDS: frozenset[str] = frozenset({CLUSTER_VARS})
 
 
 @dataclass(frozen=True)
@@ -77,7 +91,9 @@ class FootprintFacts:
 # Each SHARED_KINDS member to the deploy tags its files count for. D6's *What a footprint
 # counts* states the rule each member gets, such as `cluster-vars` counting for every
 # substituting tag. `rules_missing` and its census test fail a member without one.
-FOOTPRINT_RULES: dict[str, Callable[[FootprintFacts], Iterable[str]]] = {}
+FOOTPRINT_RULES: dict[str, Callable[[FootprintFacts], Iterable[str]]] = {
+    CLUSTER_VARS: lambda facts: facts.substituting,
+}
 
 
 def rules_missing(
@@ -146,12 +162,56 @@ def tag_kustomization(tag: str, substitutes: bool, timeout: str) -> dict:
     }
 
 
-def flux_files(substitutes: Mapping[str, bool], timeout: str) -> dict[str, str]:
+def cluster_vars_kustomization(timeout: str) -> dict:
+    """The Kustomization `cluster-vars`: a tag's fields without `postBuild`, plus `decryption`.
+
+    `deletionPolicy: Orphan` keeps the Secret serving if the Kustomization is ever deleted.
+    """
+    doc = tag_kustomization(CLUSTER_VARS, False, timeout)
+    doc["spec"]["decryption"] = {
+        "provider": "sops",
+        "secretRef": {"name": SOPS_AGE_SECRET},
+    }
+    return doc
+
+
+def cluster_vars_files(dotenv: str, timeout: str) -> dict[str, str]:
+    """The `cluster-vars` kind's files, by bundle path, around a copy of the cluster file.
+
+    Args:
+        dotenv: The cluster file's text, copied byte for byte. It is SOPS ciphertext, and
+            the publish job asserts so with `cluster_vars.py check --ciphertext-only`.
+        timeout: The `timeout` every Kustomization in the bundle sets.
+    """
+    generator = {
+        "apiVersion": "kustomize.config.k8s.io/v1beta1",
+        "kind": "Kustomization",
+        "namespace": FLUX_NAMESPACE,
+        "generatorOptions": {"disableNameSuffixHash": True},
+        "secretGenerator": [{"name": CLUSTER_VARS_SECRET, "envs": [CLUSTER_VARS_FILE]}],
+    }
+    directory = f"{CLUSTER_DIR}/{CLUSTER_VARS}"
+    return {
+        f"{FLUX_DIR}/{CLUSTER_VARS}.yaml": yaml.safe_dump(
+            cluster_vars_kustomization(timeout), sort_keys=False
+        ),
+        f"{directory}/{CLUSTER_VARS_FILE}": dotenv,
+        f"{directory}/{KUSTOMIZATION}": yaml.safe_dump(generator, sort_keys=False),
+    }
+
+
+def flux_files(
+    substitutes: Mapping[str, bool],
+    timeout: str,
+    shared: Mapping[str, str] | None = None,
+) -> dict[str, str]:
     """Each `flux/` file of a bundle publishing the tags in `substitutes`, by bundle path.
 
     Args:
         substitutes: Each published tag mapped to whether it substitutes.
         timeout: The `timeout` every tag's Kustomization sets.
+        shared: The shared kinds' `flux/` files by bundle path, which the root lists beside
+            the tags' files.
     """
     files = {
         f"{FLUX_DIR}/{tag}.yaml": yaml.safe_dump(
@@ -159,6 +219,7 @@ def flux_files(substitutes: Mapping[str, bool], timeout: str) -> dict[str, str]:
         )
         for tag, wants in sorted(substitutes.items())
     }
+    files |= dict(shared or {})
     files[FLUX_INDEX] = kustomization_text(path.split("/", 1)[1] for path in files)
     return files
 
@@ -264,15 +325,20 @@ def bundle_files(
     key_sets: Mapping[str, frozenset[str]],
     tags: Iterable[str],
     timeout: str,
+    cluster_vars: str,
 ) -> dict[str, str]:
-    """The `flux/` files and `digests.json` of a bundle whose `cluster/` holds `directories`.
+    """The files a bundle holds beside its tags' `cluster/` directories, by bundle path.
+
+    They are the `flux/` files, each shared kind's `cluster/<kind>/` and `digests.json`. With
+    no tag, the bundle holds the shared kinds alone, as `--shared-only` writes it.
 
     Args:
-        directories: Each directory name under `cluster/` mapped to its files' texts.
+        directories: Each tag directory's name under `cluster/` mapped to its files' texts.
         key_sets: Each directory name mapped to its placeholder key set, the one source for
             whether it substitutes (C1).
         tags: The published tags, one Kustomization each.
-        timeout: The `timeout` every tag's Kustomization sets.
+        timeout: The `timeout` every Kustomization sets.
+        cluster_vars: The cluster file's text, which the `cluster-vars` kind copies.
 
     Raises:
         ValueError: A published tag has a `-deferred` directory. Its Kustomization is
@@ -294,7 +360,10 @@ def bundle_files(
             if name in directories
         )
     }
-    files = flux_files({tag: tag in substituting for tag in tags}, timeout)
+    shared = cluster_vars_files(cluster_vars, timeout)
+    flux = {p: t for p, t in shared.items() if p.startswith(f"{FLUX_DIR}/")}
+    files = flux_files({tag: tag in substituting for tag in tags}, timeout, flux)
+    files |= shared
     cluster = {
         f"{CLUSTER_DIR}/{name}/{file}": text
         for name, held in directories.items()

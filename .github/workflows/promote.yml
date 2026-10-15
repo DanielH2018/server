@@ -117,16 +117,17 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
         run: uv run --frozen python scripts/deploy_tools/promote.py ci-verdict "$SHA"
 
-      # The bundle publishes the tags the inventory marks `owner: flux`. The renderer writes
-      # each one's `cluster/<tag>/`, its Kustomization `flux/<tag>.yaml`, the root's
-      # `flux/kustomization.yaml` and `digests.json`. Passing no --secret-stubs is what selects
-      # placeholder mode, the only mode that publishes (contract C1).
+      # The bundle publishes the tags the inventory marks `owner: flux` and every shared kind,
+      # such as `cluster-vars`. The renderer writes each tag's `cluster/<tag>/` and its
+      # Kustomization `flux/<tag>.yaml`, each shared kind's `cluster/<kind>/` and
+      # `flux/<kind>.yaml`, the root's `flux/kustomization.yaml` and `digests.json`. Passing no
+      # --secret-stubs is what selects placeholder mode, the only mode that publishes
+      # (contract C1).
       #
-      # With no published tag the renderer never runs, because `cluster` without `--role`
-      # renders every tag. The step then writes D1's empty root and the renderer's digests.json
-      # for an empty bundle, so Flux applies nothing outside its own namespace. Both literals
-      # are the renderer's own output for no tag, and ansible/tests/repo/test_promote_workflow.py
-      # fails a drift.
+      # With no published tag the step passes --shared-only, because `cluster` without `--role`
+      # renders every tag. The bundle then holds the shared kinds and a root listing them, so
+      # the first decryption of the cluster file gets a revision of its own (D3.3a).
+      # ansible/tests/repo/test_promote_workflow_bundle.py fails a no-tag branch without it.
       - name: Build the bundle
         id: build
         run: |
@@ -134,14 +135,7 @@ jobs:
           # A command substitution, so set -e stops the step when the read fails.
           listed="$(uv run python scripts/deploy_tools/promote.py published-tags)"
           if [ -z "$listed" ]; then
-            mkdir -p out/flux
-            printf '%s\n' \
-              'apiVersion: kustomize.config.k8s.io/v1beta1' \
-              'kind: Kustomization' \
-              'resources: []' > out/flux/kustomization.yaml
-            printf '%s\n' \
-              '{"_unclassified": {"footprint": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", "own": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", "paths": []}}' \
-              > out/digests.json
+            uv run python scripts/renderer/homelab_render.py cluster --out out --shared-only
           else
             roles=()
             while read -r tag; do roles+=(--role "$tag"); done <<< "$listed"
@@ -154,6 +148,22 @@ jobs:
       - name: Check the bundle
         id: check-bundle
         run: uv run python scripts/deploy_tools/promote.py check-bundle out
+
+      # .gitleaks.toml's allowlist skips the bundle's SOPS copies, the cluster file under
+      # out/cluster/cluster-vars/ and, from D3.3c, each role's manifest copy. This step is the
+      # guard that stands in for the scan there: each copy must hold ciphertext only. find
+      # lists them rather than a glob, so an empty list fails here instead of reaching
+      # cluster_vars.py as a literal pattern.
+      - name: Check the bundle's SOPS copies hold ciphertext
+        id: ciphertext
+        run: |
+          set -euo pipefail
+          mapfile -t copies < <(find out/cluster -type f -name '*.sops.*' | sort)
+          if [ "${#copies[@]}" -eq 0 ]; then
+            echo "::error::out/cluster holds no SOPS copy, but the cluster-vars kind always carries one"
+            exit 1
+          fi
+          uv run python scripts/secrets_mgmt/cluster_vars.py check --ciphertext-only "${copies[@]}"
 
       # The same gitleaks release as the `rev` in prek.toml, checked against the release's own
       # checksums file. A renovate.json custom manager moves the version in both URLs, and its

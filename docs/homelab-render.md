@@ -105,17 +105,26 @@ Each tag becomes `DIR/cluster/<tag>/`. The directory holds the rendered manifest
 `DIR/cluster/<tag>-deferred/`, with its own `kustomization.yaml`.
 
 A placeholder render with `--role` also writes the publish bundle, `DIR/flux/` and
-`DIR/digests.json`, for the tags it names that carry `owner: flux`.
-`docs/flux-deploy-plane.md`'s *The bundle* describes both. A stub render, a render without
-`--role` and a render that names no flux-owned tag write neither.
+`DIR/digests.json`, for the tags it names that carry `owner: flux`, plus each shared kind's
+`DIR/flux/<kind>.yaml` and `DIR/cluster/<kind>/`. `docs/flux-deploy-plane.md`'s *The bundle*
+describes them. A stub render, a render without `--role` and a render that names no
+flux-owned tag write none of them.
 
-`cluster` exits 2 and writes nothing in five cases:
+`cluster --out DIR --shared-only` writes the shared kinds, a root listing them and
+`digests.json`, and renders no tag. The publish job calls it when no tag is flux-owned. It
+takes neither `--role` nor `--secret-stubs`, and either beside it is a usage error. The
+`cluster-vars` kind copies the cluster file, `ansible/vars/cluster-vars.sops.env`, byte for
+byte.
+
+`cluster` exits 2 and writes nothing in six cases:
 
 - In stub mode, the stub file does not stub every key of `ansible/vars/secrets.yml`. The
   message names the keys, never a value. Write a fresh stub file for the commit.
 - A `--role` names a tag that is not a k8s render target of daniel-box.
 - A directory it would write under `DIR/cluster/` already holds files from an earlier
   render, or `DIR/flux/` or `DIR/digests.json` does.
+- A render that writes the bundle cannot read the cluster file. The bundle always carries
+  the `cluster-vars` kind, so the render refuses rather than publish without it.
 - A tag to render is named `homelab`, the root Kustomization's name, or after a member of
   `SHARED_KINDS` (C3 *Reserved names*). An all-tag render refuses it too.
 - A placeholder render with `--role` names a flux-owned tag that defers files. No
