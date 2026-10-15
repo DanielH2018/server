@@ -116,22 +116,20 @@ def test_a_failed_worktree_cleanup_keeps_the_keyring_reason(lab):  # noqa: F811
     assert staged(state) == []
 
 
-class RateLimitedGitHub(FakeGitHub):
-    """The check-runs API answering 403 for a spent rate limit, which is not a refused token."""
+def rate_limited_github(header: tuple[str, str], asked: list[str]):
+    """A check-runs `urlopen` answering 403 for a spent rate limit, not a refused token."""
 
-    def __init__(self, header: tuple[str, str]):
-        super().__init__()
-        self.header = header
-
-    def __call__(self, request, timeout=None):
-        self.asked.append(request.full_url.split("/commits/")[1].split("/")[0])
+    def urlopen(request, timeout=None):
+        asked.append(request.full_url.split("/commits/")[1].split("/")[0])
         headers = Message()
-        headers[self.header[0]] = self.header[1]
+        headers[header[0]] = header[1]
         refusal = urllib.error.HTTPError(
             request.full_url, 403, "Forbidden", headers, None
         )
         refusal.close()
         raise refusal
+
+    return urlopen
 
 
 @pytest.mark.parametrize(
@@ -142,7 +140,8 @@ def test_a_spent_rate_limit_stays_pending(lab, header):  # noqa: F811
     # pending, not as a token page.
     origin, state, etc, _ = lab
     origin.commit("a")
-    limited = RateLimitedGitHub(header)
+    asked: list[str] = []
+    limited = rate_limited_github(header, asked)
     assert builder((origin, state, etc, limited)).main() == 0
-    assert limited.asked
+    assert asked
     assert metric(state)[0] == "no-green"
