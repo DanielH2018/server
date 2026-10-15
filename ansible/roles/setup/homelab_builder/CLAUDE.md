@@ -52,15 +52,22 @@ After the clear, a change under this role's directory lands through the setup-pl
 - `homelab-apt-repo.service`, which runs `python3 -m http.server` on `server_ip` at
   `homelab_builder_repo_port` over `repo/`, with `DynamicUser=yes`. apt trusts the signature
   on `InRelease`, not the transport.
-- One ufw rule per `homelab_builder_repo_clients` entry, each a peer's `server_ip`. A client
-  removed from that list keeps its rule until the teardown runs or someone deletes it by hand.
+- One ufw rule per `homelab_builder_repo_clients` entry, each a peer's `server_ip`. The rule
+  admits the two peer hosts and every pod on daniel-server, because flannel masquerades a
+  pod's traffic to an address outside the pod CIDR to that node's LAN IP. That reach is
+  accepted: the repository serves only signed, public packages, and nothing at L3 tells the
+  host apart from its pods. The `# DECIDED:` marker in `defaults/main.yml` carries the
+  reasoning. A client removed from that list keeps its rule. The install arm never deletes a
+  rule, and the teardown deletes only the rules for the clients still in the list. To drop
+  such a rule, run `sudo ufw delete allow from <ip> to any port 8791 proto tcp` by hand.
 
 `/etc/homelab-builder/` and the builder's environment file arrive in H3.5a with the builder
 units, so this arm reads no SOPS key.
 
 ## The teardown keeps the signing key
 
-The teardown stops and removes the four units the role installs by H3.5b, the ufw rules and
+The teardown stops and removes the four units the role installs by H3.5b, the ufw rules for
+the clients in `homelab_builder_repo_clients` at teardown time, and
 `/var/lib/homelab-builder/`. It never touches `/var/lib/homelab-signer/` or either user. The
 GnuPG home holds the key every host trusts. A re-arm that recreated `homelab-signer` with a new
 uid could no longer read that key. The `# DECIDED:` marker at the top of `tasks/teardown.yml`

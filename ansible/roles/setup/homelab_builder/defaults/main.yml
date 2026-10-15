@@ -14,8 +14,14 @@ homelab_builder_signer_dir: /var/lib/homelab-signer
 # server_ip (*Shared names*, Repository).
 homelab_builder_repo_port: 8791
 
-# The hosts that read the repository. ufw admits homelab_builder_repo_port from these alone.
-# Each is a peer's server_ip, never a typed address and never lan_subnet.
+# The hosts that read the repository. ufw admits homelab_builder_repo_port from these two
+# addresses. Each is a peer's server_ip, never a typed address and never lan_subnet.
+#
+# DECIDED: the rule admits every pod on daniel-server as well as the host itself — flannel
+# masquerades a pod's traffic to an address outside the pod CIDR to that node's LAN IP (see
+# roles/setup/k3s/tasks/node.yml), so a pod arrives as daniel-server's server_ip and matches
+# the allow. The repository serves only signed, public packages, so the wider reach exposes no
+# data, and nothing at L3 tells the host apart from its pods.
 homelab_builder_repo_clients:
   - "{{ hostvars['daniel-server'].server_ip }}"
   - "{{ hostvars['daniel-pi'].server_ip }}"

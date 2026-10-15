@@ -114,7 +114,7 @@ def test_the_repo_unit_serves_the_signer_tree_on_server_ip_as_a_dynamic_user():
     ) in text
 
 
-def test_the_ufw_rule_admits_the_two_peers_and_no_wider_source():
+def test_the_ufw_rule_admits_only_the_two_peer_addresses():
     clients = DEFAULTS["homelab_builder_repo_clients"]
     assert clients == [
         "{{ hostvars['daniel-server'].server_ip }}",

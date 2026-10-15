@@ -2,7 +2,9 @@
 # The disarmed half. Every task is absent-shaped, so a host that was never armed no-ops
 # through the whole file.
 #
-# It stops and removes the role's four units, the ufw rule and the builder's state directory.
+# It stops and removes the role's four units, the ufw rules for the clients now in
+# homelab_builder_repo_clients, and the builder's state directory. A rule for a client already
+# dropped from that list stays until someone runs `ufw delete` by hand.
 # Two of the units (homelab-builder.service and .timer) and homelab-repo-sign.service arrive
 # in H3.5a and H3.5b; listing them now means a disarm after those PRs needs no edit here.
 #
