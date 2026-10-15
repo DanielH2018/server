@@ -38,7 +38,7 @@ ACTION = "fluxcd/flux2/action@"
 
 # Named rather than derived: a workflow that lost a flux step fails here instead of shrinking
 # the census and passing.
-FLUX_STEPS = {WORKFLOW: 2, ".github/workflows/ci.yml": 1}
+FLUX_STEPS = {WORKFLOW: 3, ".github/workflows/ci.yml": 1}
 
 # The deps named `fluxcd/flux2` other than the version input, as the extract reports each:
 # (file, datasource, manager, depType). The action dep's shape is the one #4822's lookup
