@@ -32,9 +32,11 @@ way: `deploy_narrow.digest_covers` runs `scripts/deploy_tools/digest_covers.py`,
 Reach `deploy_alerts` qualified, never by from-import.
 """
 
+import json
 import time
 
 from deployer_lib import deploy_alerts
+from deployer_lib.deploy_changes import _is_test_only_path, is_doc
 from deployer_lib.deploy_config import WARNING, Config, log
 from deployer_lib.deploy_k8s import k8s_roles_listed
 from deployer_lib.deploy_state import (
@@ -259,6 +261,14 @@ def discharge_k8s_unapplied(
     moves a line's origin to each newer change, so a change that DID reach the role's own
     tasks stays inside `R..C` after an assert-only change has moved the origin past it. One
     subprocess per call judges every range, and a failure reads as "no range is covered".
+
+    A `manifests` CALLER WHOSE GUARD-MAP ROW DID NOT MOVE CARRIES A MAP-ONLY CHANGE (#5106).
+    The guard task reads only `.get(manifests_service, [])` of `STANDALONE_GUARD_MAP`, so a
+    caller whose record at R precedes the line's origin carries it when `R..origin` changes no
+    other applied `manifests` path and leaves that caller's row equal (`_guard_row_carries`).
+    That is `land_shared.guard_map_rows`'s narrowing, asked per caller from its own record
+    because a line keeps only its newest origin. A map-only line then waits on the callers
+    whose row moved, the ones `land.sh` deploys, and on no other.
     """
     pending = state.owed_pending(OWED_K8S_UNAPPLIED)
     records = {e.service: tools.release_commit(e.service) for e in pending}
@@ -282,7 +292,9 @@ def discharge_k8s_unapplied(
             return True
         render = tools.render_proof(tag)
         if not descends(render, origin):
-            return False
+            return service == "manifests" and _guard_row_carries(
+                tools, config, tag, records[tag], origin
+            )
         if by_digest:
             return True
         return f"{service}:{records[tag]}:{render}" if records[tag] else False
@@ -354,6 +366,59 @@ def _record_carries(
     keeps the line.
     """
     return bool(commit) and tools.is_ancestor(config.repo, origin, commit)
+
+
+_MANIFESTS_ROLE = "ansible/roles/k8s/manifests/"
+# The standalone-Secret guard map. `manifests` reads one row of it per caller, so a change to it
+# alone reaches only the callers whose row moved; `land_shared.guard_map_rows` narrows a landing
+# to those callers by the same rule.
+STANDALONE_GUARD_MAP = f"{_MANIFESTS_ROLE}files/standalone_secret_keys.json"
+
+
+def _guard_row_carries(
+    tools: DeployTools, config: Config, tag: str, record: str | None, origin: str
+) -> bool:
+    """Whether `tag`, deployed at `record`, already runs the `manifests` role as `origin` does.
+
+    True when `record` is an ancestor of `origin`, `record..origin` changes no `manifests`
+    path but `STANDALONE_GUARD_MAP` and its documentation and tests, and `tag`'s row of that
+    map is equal at both ends (#5106). Every unknown is False, which keeps the line: no
+    record, a git error, or a map that is absent or does not parse at either end while the
+    range changes it.
+    """
+    if not record or not tools.is_ancestor(config.repo, record, origin):
+        return False
+    try:
+        changed = tools.run(
+            ["git", "diff", "--name-only", f"{record}..{origin}"], cwd=config.repo
+        ).splitlines()
+    except Exception:
+        return False
+    applied = [
+        p
+        for p in changed
+        if p.startswith(_MANIFESTS_ROLE) and not is_doc(p) and not _is_test_only_path(p)
+    ]
+    if any(p != STANDALONE_GUARD_MAP for p in applied):
+        return False
+    if not applied:
+        return True
+    before = _guard_rows_at(tools, config, record)
+    after = _guard_rows_at(tools, config, origin)
+    return (
+        before is not None and after is not None and before.get(tag) == after.get(tag)
+    )
+
+
+def _guard_rows_at(tools: DeployTools, config: Config, ref: str) -> dict | None:
+    """`STANDALONE_GUARD_MAP` at `ref` as a dict of rows, or None when absent or unparseable."""
+    try:
+        rows = json.loads(
+            tools.run(["git", "show", f"{ref}:{STANDALONE_GUARD_MAP}"], cwd=config.repo)
+        )
+    except Exception:
+        return None
+    return rows if isinstance(rows, dict) else None
 
 
 def _shared_callers(

@@ -108,3 +108,34 @@ def test_a_map_only_line_discharges_once_the_callers_whose_row_moved_carry_it(
     state.record_owed(OWED_K8S_UNAPPLIED, second, {"manifests"}, 2000.0)
     assert discharge() == []
     assert [e.service for e in state.owed_pending(OWED_K8S_UNAPPLIED)] == ["manifests"]
+
+
+def test_a_range_that_also_changes_the_role_keeps_the_line_for_an_unmoved_row(
+    gitops_deploy, settings, state, tmp_path
+):
+    """KEPT: the map moved only `gm-moved`'s row, but the same range edits `manifests`'
+    tasks, so `gm-untouched` at the base commit has not run the role as the origin does."""
+    root = tmp_path / "checkout"
+    base = _checkout(root)
+    origin = commit(
+        root,
+        "add a key and change the role",
+        **{
+            GUARD_MAP: _guard_map(["moved_email", "moved_token"]),
+            "ansible/roles/k8s/manifests/tasks/main.yml": (
+                "- ansible.builtin.debug:\n    msg: render twice\n"
+            ),
+        },
+    )
+    tools = DeployTools(
+        discord_post=lambda _webhook, _content: True,
+        release_commit={MOVED: origin, UNTOUCHED: base}.get,
+        shared_role_callers=_callers_from_main,
+        render_proof=lambda _svc: None,
+        digest_provable=lambda _repo, _roles: set(),
+        digest_covers=lambda _repo, _items: set(),
+    )
+    config = dataclasses.replace(settings, repo=str(root))
+    state.record_owed(OWED_K8S_UNAPPLIED, origin, {"manifests"}, 1000.0)
+    assert deploy_k8s_owed.discharge_k8s_unapplied(tools, state, config) == []
+    assert [e.service for e in state.owed_pending(OWED_K8S_UNAPPLIED)] == ["manifests"]

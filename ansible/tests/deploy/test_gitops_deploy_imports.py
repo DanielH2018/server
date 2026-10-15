@@ -115,10 +115,10 @@ ALLOWED: dict[str, set[str] | None] = {
         "deploy_toolbox",
         "gitops_markers",
     },
-    # The k8s changes the deployer owes, `k8s_deferred` and `k8s_unapplied` (#3669). Its own
-    # module so no stage module reads or writes those two ledger classes directly.
+    # The owed k8s changes, `k8s_deferred` and `k8s_unapplied` (#3669); no stage module touches them.
     "deploy_k8s_owed": {
         "deploy_alerts",
+        "deploy_changes",
         "deploy_config",
         "deploy_k8s",
         "deploy_state",
