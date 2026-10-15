@@ -41,6 +41,9 @@
 #                           it with the failure in the instance name rather than through
 #                           OnFailure= (the fan-out alert, #4602). Not combined with
 #                           alert_unit_quiet_minutes, whose stamp all instances would share
+#   alert_unit_time_label   optional, instanced only: the words before the recorded time,
+#                           `Failed at` by default. A page that reports a result rather than
+#                           a failure (claude-triage-report) says `Finished at`
 
 - name: Write the alert webhook where only systemd reads it, for {{ alert_unit_name }}
   # `src` names the owning role outright, as kuma_check_timer.yml does.
