@@ -76,6 +76,8 @@ which needs a drill exclusion in C7 that no slice has requested, the edge goes.
     mode. R1's shadow comparison reads stub mode, and so do R2's `roundtrip`, from R2's PR 1,
     and R1's determinism module. Those two keep reading it after R4's PR 9 deletes the
     comparison (R2, R4). Before R2 lands, `cluster` without `--secret-stubs` exits 2.
+  - `homelab-render cluster --out DIR --shared-only`, from D3.3a. It writes the shared kinds
+    and the root, and no tag, for a publish with no flux-owned tag.
   - `homelab-render host --host NAME --out DIR`
   - `homelab-render package --name PKG --out DIR`, for the shared packages of C5 (H3).
 - **Only placeholder mode publishes.** The publish job runs `cluster` without
@@ -577,9 +579,6 @@ request leaves this list and the round's *Review log* entry names it.
 
 ### Requests on C1
 
-- **A shared-only mode** (D3 Open question 6). *Modes* gains `cluster --out DIR
-  --shared-only`, which writes the shared kinds and the root and no tag, for a publish with
-  no flux-owned tag. Gate: before D3.3a merges.
 - **The commit input** (R4 Open question 10). *Modes* names `homelab-render cluster --commit
   SHA`. The publish job passes the commit it publishes, and the render-diff job passes the PR
   head's SHA to both renders. Gate: before R4's PR 1 merges. D6.1 no longer renders twice
@@ -1039,6 +1038,11 @@ Applied to this page:
 
 ### Applied requests (2026-10-15)
 
+- **A shared-only mode** (D3 Open question 6). C1 *Modes* now states `homelab-render cluster
+  --out DIR --shared-only`, which writes the shared kinds and the root and no tag, for a
+  publish with no flux-owned tag. D3.3a (#5145) implements it and the promote workflow's
+  no-tag branch calls it. The request leaves *Requests on C1*, which clears the gate before
+  D3.3a merges.
 - **D2.5's verification choices** (#5023). D2.5 (#5003) implemented *Verification* with
   three choices the contract did not record, and C2 now states each of them:
     - *On failure* and *The revert rule* name `settle` as the writer, and *On failure* adds the `<T> unverified` hold for a

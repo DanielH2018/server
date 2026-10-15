@@ -16,10 +16,15 @@ anything, a placeholder render also runs the five secret rules of
 
 A placeholder render with `--role` also writes the publish bundle beside `DIR/cluster/`, for
 the tags it names that carry `owner: flux` (target slice D2): `DIR/flux/<tag>.yaml`,
-`DIR/flux/kustomization.yaml` and `DIR/digests.json`. A render that names no such tag writes
-no bundle. `renderer_lib/bundle.py` holds the writer, `SHARED_KINDS` and the footprint
-rules. Every `cluster` render refuses a deploy tag named `homelab` or after a `SHARED_KINDS`
-member, the names of Kustomizations that are no deploy tag's (C3 *Reserved names*).
+`DIR/flux/kustomization.yaml` and `DIR/digests.json`, plus each `SHARED_KINDS` member's
+`DIR/flux/<kind>.yaml` and `DIR/cluster/<kind>/`. A render that names no such tag writes no
+bundle. `cluster --shared-only` writes the shared kinds, a root listing them and
+`digests.json`, and no tag: the publish job's call when no tag is flux-owned (D3.3a). The
+`cluster-vars` kind copies the cluster file `ansible/vars/cluster-vars.sops.env` byte for
+byte, and a render that cannot read it writes nothing. `renderer_lib/bundle.py` holds the
+writer, `SHARED_KINDS` and the footprint rules. Every `cluster` render refuses a deploy tag
+named `homelab` or after a `SHARED_KINDS` member, the names of Kustomizations that are no
+deploy tag's (C3 *Reserved names*).
 
 `host --host NAME` renders `hosts/NAME/package.yml` into `DIR/hosts/NAME/`, and `package --name
 PKG` renders the shared package `hosts/packages/PKG/` into `DIR/packages/PKG/`. Each writes
@@ -34,6 +39,7 @@ Exit codes: 0 rendered; 1 a template failed to render or a secret check failed; 
 before writing anything, a reserved tag name among the causes; 64 a usage error.
 
 Run: uv run python scripts/renderer/homelab_render.py cluster --out /tmp/r2-render
+     uv run python scripts/renderer/homelab_render.py cluster --out /tmp/d3 --shared-only
      uv run python scripts/renderer/shadow_diff.py stubs --out /tmp/r1-stubs.yml
      uv run python scripts/renderer/homelab_render.py cluster --out /tmp/r1-render \\
          --secret-stubs /tmp/r1-stubs.yml
@@ -59,6 +65,8 @@ from lib.exit_codes import RENDER_FAILED, RENDER_OK, RENDER_REFUSED
 from lib.repo_paths import ANSIBLE, FILTER_PLUGINS
 from renderer.renderer_lib import secret_checks
 from renderer.renderer_lib.bundle import (
+    CLUSTER_DIR,
+    CLUSTER_VARS_FILE,
     DIGESTS,
     FLUX_DIR,
     SHARED_KINDS,
@@ -91,6 +99,8 @@ if str(FILTER_PLUGINS) not in _sys.path:
 from secret_stubs import homelab_stub_keys, homelab_unstubbed_keys
 
 SECRETS = ANSIBLE / "vars" / "secrets.yml"
+# The cluster file `cluster_vars.py write` keeps. The bundle's copy keeps its basename.
+CLUSTER_FILE = ANSIBLE / "vars" / CLUSTER_VARS_FILE
 
 
 def secret_keys(secrets: Path = SECRETS) -> list[str]:
@@ -113,6 +123,8 @@ def cluster(
     render: Callable[[list[str], list[str]], PlaceholderRender] = render_placeholders,
     flux_owned: Callable[[], set[str]] = flux_owned_tags,
     kinds: frozenset[str] = SHARED_KINDS,
+    cluster_file: Path = CLUSTER_FILE,
+    shared_only: bool = False,
 ) -> int:
     """Render `roles`, or every renderable tag, into `out`; return the exit code.
 
@@ -123,10 +135,16 @@ def cluster(
         render: The placeholder render; a test replaces it with one over fixture sets.
         flux_owned: Returns the tags marked `owner: flux`; a test passes fixture tags.
         kinds: The shared kinds, whose names no deploy tag may take; a test passes others.
+        cluster_file: The cluster file the `cluster-vars` kind copies; a test passes a
+            fixture.
+        shared_only: Write the shared kinds and the root alone, and render no tag. The
+            caller rejects it beside `roles` or `secret_stubs`.
     """
+    if shared_only:
+        return _shared_cluster(out, cluster_file)
     if select_mode(secret_stubs) is Mode.STUB and secret_stubs is not None:
         return _stub_cluster(out, roles, secret_stubs, kinds)
-    return _placeholder_cluster(out, roles, render, flux_owned, kinds)
+    return _placeholder_cluster(out, roles, render, flux_owned, kinds, cluster_file)
 
 
 def _stub_cluster(
@@ -163,6 +181,7 @@ def _placeholder_cluster(
     render: Callable[[list[str], list[str]], PlaceholderRender],
     flux_owned: Callable[[], set[str]],
     kinds: frozenset[str],
+    cluster_file: Path,
 ) -> int:
     try:
         tags = select_tags(roles, kinds=kinds)
@@ -183,7 +202,7 @@ def _placeholder_cluster(
         # Only a flux-owned tag is published, so only one gets a Kustomization. A --role
         # render of any other tag, a deferring one included, writes its cluster/ alone.
         published = [t.tag for t in result.tags if t.tag in owned] if roles else []
-        bundle = _bundle(result, out, published) if published else {}
+        bundle = _bundle(result, out, published, cluster_file) if published else {}
         written = write_cluster(result.tags, out)
         written += write_bundle(bundle, out)
     except RenderRefused as exc:
@@ -204,33 +223,79 @@ def _placeholder_cluster(
 
 
 def _bundle(
-    result: PlaceholderRender, out: Path, published: list[str]
+    result: PlaceholderRender, out: Path, published: list[str], cluster_file: Path
 ) -> dict[str, str]:
-    """The `flux/` files and `digests.json` publishing the tags `published` of `result`.
+    """The bundle files publishing the tags `published` of `result` and every shared kind.
 
     Computed from the render in this process, before anything is written (C1). A rendered
     directory of a tag outside `published` counts under `_unclassified`.
 
     Raises:
-        RenderRefused: `out` already holds a `flux/` file or `digests.json`, or a published
-            tag renders a `-deferred` directory, which no Kustomization applies before D4.2.
+        RenderRefused: `out` already holds a bundle file, the cluster file cannot be read,
+            or a published tag renders a `-deferred` directory, which no Kustomization
+            applies before D4.2.
     """
-    if (out / DIGESTS).exists() or any((out / FLUX_DIR).glob("*")):
-        raise RenderRefused(
-            f"{out} already holds {FLUX_DIR}/ or {DIGESTS}; render into an empty --out"
-        )
     directories = {
         name: files for tag in result.tags for name, files in tag.directories().items()
     }
+    return _shared_bundle(out, directories, result.key_sets, published, cluster_file)
+
+
+def _shared_bundle(
+    out: Path,
+    directories: dict[str, dict[str, str]],
+    key_sets: dict[str, frozenset[str]],
+    published: list[str],
+    cluster_file: Path,
+) -> dict[str, str]:
+    """`bundle_files` for `published`, once `out` holds no bundle file to overwrite.
+
+    Raises:
+        RenderRefused: `out` already holds a `flux/` file, `digests.json` or a shared
+            kind's directory, the cluster file cannot be read, or `bundle_files` refuses.
+    """
+    occupied = (
+        (out / DIGESTS).exists()
+        or any((out / FLUX_DIR).glob("*"))
+        or any(any((out / CLUSTER_DIR / kind).glob("*")) for kind in SHARED_KINDS)
+    )
+    if occupied:
+        raise RenderRefused(
+            f"{out} already holds {FLUX_DIR}/, {DIGESTS} or a shared kind's "
+            f"{CLUSTER_DIR}/ directory; render into an empty --out"
+        )
+    try:
+        dotenv = cluster_file.read_text()
+    except OSError as exc:
+        raise RenderRefused(
+            f"the cluster-vars kind cannot copy the cluster file: {exc}. The bundle "
+            "always carries it; cluster_vars.py write (operator-only) writes it"
+        ) from exc
     try:
         return bundle_files(
-            directories,
-            result.key_sets,
-            published,
-            rollout_timeout_default(),
+            directories, key_sets, published, rollout_timeout_default(), dotenv
         )
     except ValueError as exc:
         raise RenderRefused(str(exc)) from exc
+
+
+def _shared_cluster(out: Path, cluster_file: Path) -> int:
+    """Write the shared kinds, a root listing them and `digests.json`, and no tag.
+
+    The publish job calls it when no tag is flux-owned, because `cluster` without `--role`
+    renders every tag. It renders no template and reads no secret key, so it needs no
+    Ansible.
+    """
+    try:
+        written = write_bundle(_shared_bundle(out, {}, {}, [], cluster_file), out)
+    except RenderRefused as exc:
+        print(f"homelab-render: {exc}. Nothing was written.", file=sys.stderr)
+        return RENDER_REFUSED
+    print(
+        f"homelab-render: shared kinds only, {', '.join(sorted(SHARED_KINDS))}: "
+        f"{len(written)} files under {out}"
+    )
+    return RENDER_OK
 
 
 def packages(out: Path, host: str | None, name: str | None) -> int:
@@ -296,6 +361,13 @@ def main(argv: list[str] | None = None) -> int:
         help="the stub file shadow_diff.py stubs writes, for a stub-mode render. Without "
         "it, the render is in placeholder mode",
     )
+    render.add_argument(
+        "--shared-only",
+        action="store_true",
+        help="write the shared kinds, a root listing them and digests.json, and no tag: "
+        "the publish job's bundle when no tag is flux-owned. Takes neither --role nor "
+        "--secret-stubs",
+    )
     host = commands.add_parser(
         "host", help="render hosts/NAME/package.yml into DIR/hosts/NAME/"
     )
@@ -315,12 +387,19 @@ def main(argv: list[str] | None = None) -> int:
         "--out", type=Path, required=True, metavar="DIR", help="the directory to write"
     )
     args = parser.parse_args(argv)
+    if getattr(args, "shared_only", False) and (args.roles or args.secret_stubs):
+        parser.error(
+            "--shared-only renders no tag and only publishes, so it takes neither --role "
+            "nor --secret-stubs"
+        )
     with ansible_local_temp():
         if args.command != "cluster":
             return packages(
                 args.out, getattr(args, "host", None), getattr(args, "name", None)
             )
-        return cluster(args.out, args.roles, args.secret_stubs)
+        return cluster(
+            args.out, args.roles, args.secret_stubs, shared_only=args.shared_only
+        )
 
 
 if __name__ == "__main__":

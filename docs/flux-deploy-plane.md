@@ -438,11 +438,17 @@ marking is the first PR of handing a service back (*Handing a service back*).
 
 The build step passes each published tag to the renderer with `--role` and no
 `--secret-stubs`. No `--secret-stubs` is what selects placeholder mode, the only mode that
-publishes (`docs/homelab-render.md`, *Placeholder mode*). With no published tag the renderer
-never runs, because `cluster` without `--role` renders every tag. The step then writes D1's
-empty root and an empty bundle's `digests.json` itself.
-`ansible/tests/repo/test_promote_workflow_bundle.py` fails if either literal drifts from what
-the renderer writes for no tag.
+publishes (`docs/homelab-render.md`, *Placeholder mode*). With no published tag the step runs
+`homelab_render.py cluster --out out --shared-only` instead, because `cluster` without
+`--role` renders every tag. That bundle holds the shared kinds and a root listing them, and no
+tag, so the first decryption of the cluster file gets a revision of its own.
+`ansible/tests/repo/test_promote_workflow_bundle.py` fails a no-tag branch without
+`--shared-only`.
+
+After the census, the step `ciphertext` runs `cluster_vars.py check --ciphertext-only` on
+every `*.sops.*` file under `out/cluster/`, and fails when it finds none. `.gitleaks.toml`
+skips those copies, so this check stands in for the scan there. The same test fails the
+workflow when the step is missing or runs after gitleaks.
 
 The bundle holds:
 
@@ -452,6 +458,8 @@ The bundle holds:
   `deletionPolicy: Orphan` and the manifests role's `manifests_rollout_timeout_default`.
   It carries `postBuild.substituteFrom` naming the Secret `homelab-cluster-vars` exactly
   when the tag's render holds a placeholder.
+- `flux/cluster-vars.yaml` and `cluster/cluster-vars/`, the `cluster-vars` shared kind,
+  described below.
 - `flux/kustomization.yaml`, which lists every other file in `flux/`. The root Kustomization
   `homelab` applies it.
 - `digests.json`, described below.
@@ -462,10 +470,30 @@ A published tag that defers files is refused, because no Kustomization applies
 ### Shared kinds and reserved names
 
 A Kustomization that belongs to no deploy tag is a shared kind. `SHARED_KINDS` in
-`scripts/renderer/renderer_lib/bundle.py` names every one, and it is empty until D3.3a adds
-`cluster-vars`. A shared kind publishes `flux/<name>.yaml` and `cluster/<name>/`. Each member
-needs a footprint rule in `FOOTPRINT_RULES` there, which names the tags its files count for,
-and `test_every_shared_kind_has_a_footprint_rule` fails a member without one.
+`scripts/renderer/renderer_lib/bundle.py` names every one. D3.3a added the first,
+`cluster-vars`. A shared kind publishes `flux/<name>.yaml` and `cluster/<name>/`, and the
+census fails a bundle that lacks either. Each member needs a footprint rule in
+`FOOTPRINT_RULES` there, which names the tags its files count for, and
+`test_every_shared_kind_has_a_footprint_rule` fails a member without one.
+
+`cluster-vars` delivers the Secret `homelab-cluster-vars` that a substituting tag's
+`postBuild` names:
+
+- `cluster/cluster-vars/` holds `cluster-vars.sops.env`, a byte copy of the cluster file
+  `ansible/vars/cluster-vars.sops.env`, and a `kustomization.yaml` whose `secretGenerator`
+  makes `homelab-cluster-vars` in `flux-system` from it, with no name suffix.
+- `flux/cluster-vars.yaml` sets the same fields as a tag's Kustomization, no `postBuild`, and
+  `decryption` with provider `sops` and the Secret `sops-age`, the cluster's age key.
+  Flux decrypts the copy with that key in the cluster. CI holds no key, so the bundle stays
+  ciphertext until it reaches the cluster.
+- Membership does not depend on any tag. A render that cannot read the cluster file refuses
+  and writes nothing, so the census never narrows. No PR-time render reads the file, so
+  deleting it fails CI through `cluster_vars.py check` ("does not exist"), which
+  `scripts/secrets_mgmt/tests/test_cluster_vars_tree.py` runs in the `pytest` job (D3.2c).
+- Its footprint rule counts its files for every substituting tag, so an edit to the cluster
+  file moves each such tag's `footprint` and no other tag's.
+- `promote.py verify` expects `flux/cluster-vars` like a tag's status whenever the kind's
+  footprint moves, its first promotion included.
 
 Every `cluster` render refuses a deploy tag named `homelab`, the root's name, or after a
 `SHARED_KINDS` member. D4.2 adds the `-deferred` suffix to that check.
@@ -496,7 +524,7 @@ renderer bug cannot widen it. It fails when:
 - `flux/kustomization.yaml` omits a file in `flux/`, or lists one that is not there;
 - `flux/<name>.yaml` holds anything but the Kustomization `<name>` applying
   `./cluster/<name>`;
-- a published tag has no `cluster/<tag>/`;
+- a published tag or a shared kind has no `cluster/<name>/`;
 - `digests.json` is missing or names another set.
 
 ### The publish gates
@@ -509,8 +537,8 @@ gate's name.
   a key name of `ansible/vars/secrets.yml`. Flux would not substitute such a reference.
   The gate pairs each `$$` first, as Flux does, so `$${K}` and a shell `${HOME}` pass. A tag
   with `postBuild` may name in `substituteFrom` only a Secret that a `secretGenerator` in
-  the bundle makes. No shared kind generates one until D3.3a adds `cluster-vars`, so the gate
-  refuses every substituting tag until then. The gate also fails a published tag whose
+  the bundle makes. The `cluster-vars` kind generates `homelab-cluster-vars`, the one Secret
+  a tag's `postBuild` names. The gate also fails a published tag or a shared kind whose
   directory it could not read.
 - **host**: every `Host(...)` in an IngressRoute ends in `.<domain>`, the literal that
   `ansible/inventory/group_vars/all.yml` defines. A `${domain}`, a `stub-domain` and a

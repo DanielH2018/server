@@ -150,8 +150,15 @@ def test_a_flux_owned_tag_with_role_is_clean(out, tmp_path):
     ]
     flux_owned = cluster_mod.flux_owned_tags(host_vars=host_vars)
     assert flux_owned == {"littlelink"}
+    # A fixture cluster file, so the bundle copies fake ciphertext rather than the tree's.
+    dotenv = tmp_path / "cluster-vars"
+    dotenv.write_text("x=ENC[AES256_GCM,data:eA==,type:str]\n")
     code = homelab_render.cluster(
-        out, ["littlelink"], None, flux_owned=lambda: flux_owned
+        out,
+        ["littlelink"],
+        None,
+        flux_owned=lambda: flux_owned,
+        cluster_file=dotenv,
     )
     assert code == RENDER_OK
     assert (out / "cluster" / "littlelink" / "deployment.yaml").is_file()
