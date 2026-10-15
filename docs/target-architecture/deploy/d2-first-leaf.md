@@ -537,12 +537,13 @@ verify job (no concurrency group; contents: read, statuses: read): promote.py ve
        minus suspended; a dependent already failing on prod's commit is reported only
      every one success                ─▶ verdict good
      any failure, or timeout          ─▶ verdict failed=<names>
-settle job (no concurrency group; no checkout; packages: write; PROMOTE_TOKEN):
+settle job (no concurrency group; no checkout; packages: write, actions: write; PROMOTE_TOKEN):
      good       ─▶ tag last-good = sha-T
      failed     ─▶ set DEPLOY_HOLD = "<T> failed=<names>",
                    then tag prod = last-good, write PROD_DIGEST
      no verdict ─▶ set DEPLOY_HOLD = "<T> unverified",
                    then tag prod = last-good, write PROD_DIGEST
+     then, newest green master commit newer than T ─▶ dispatch promote -f sha=<it> (#5022)
 ```
 
 C2 splits the render from the signing, and the decisions from the writes.
@@ -744,7 +745,9 @@ D1 builds the split. D2 adds its steps to the render job, and it adds the `verif
   `prod` tag moves in `settle` use `GITHUB_TOKEN` logged in to `ghcr.io`, as D1's tag moves
   do. `settle` sets `PROMOTE_TOKEN` as `GH_TOKEN`, because only that token writes
   `DEPLOY_HOLD` and `PROD_DIGEST` (D1 *Decisions*). The `render` job gains `checks: read`
-  beside `contents: read`, for D1's CI re-check of a dispatched `sha`.
+  beside `contents: read`, for D1's CI re-check of a dispatched `sha`. `settle` also holds
+  `actions: write`, and its last step dispatches the follow-up run with `GITHUB_TOKEN`
+  (#5022, ruled 2026-10-15).
 - **The timeout is derived, not chosen.** It is the largest Kustomization `timeout` in the
   bundle, plus the OCIRepository interval, plus the Kustomization `retryInterval`.
 - **The first verified run seeds `last-good`.** When `last-good` is absent, `promote.py`

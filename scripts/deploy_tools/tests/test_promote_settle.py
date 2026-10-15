@@ -1,13 +1,15 @@
 """The `tag` and `settle` jobs' shell, run as written under fake `flux`, `gh` and `docker`.
 
 Both jobs check out no repository code, so their rules live in the step text of
-`.github/workflows/promote.yml`: the `last-good` seed, the hold written before the reset, and
-the PROD_DIGEST write after every move of `prod`. Each test runs a step's own `run:` under
+`.github/workflows/promote.yml`: the `last-good` seed, the hold written before the reset, the
+PROD_DIGEST write after every move of `prod`, and the dispatch of a run for a newer green
+commit. Each test runs a step's own `run:` under
 bash with fakes that append their argv to one log, then asserts the calls and their order.
 
 Run: uv run pytest scripts/deploy_tools/tests/test_promote_settle.py
 """
 
+import copy
 import re
 import shutil
 
@@ -25,7 +27,8 @@ RESET = "sha256:" + "e" * 64
 # The move step's outputs: `moved`, and the UTC time stamped just before the move.
 MOVED = r"moved=true\nmoved_at=\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ\n"
 
-# Each fake logs `<tool> <argv>` and fails when its argv contains FAKE_<TOOL>_FAIL.
+# Each fake logs `<tool> <argv>` and fails when its argv contains FAKE_<TOOL>_FAIL. `gh api`
+# prints FAKE_GREEN, the head SHAs of CI's green push runs on master, newest first.
 _FAKE = """#!/usr/bin/env bash
 [ "{tool}" = docker ] && cat > /dev/null
 echo "{tool} $*" >> "$CALLS"
@@ -33,6 +36,7 @@ if [ -n "${{FAKE_{upper}_FAIL:-}}" ] && [[ "$*" == *"$FAKE_{upper}_FAIL"* ]]; th
   echo "fake {tool}: forced failure" >&2
   exit 1
 fi
+if [ "{tool}" = gh ] && [ "$1" = api ]; then printf '%s\\n' "${{FAKE_GREEN:-}}"; fi
 """
 
 
@@ -193,6 +197,94 @@ def test_a_failure_with_no_last_good_digest_holds_and_does_not_reset(tmp_path, j
     assert result.returncode != 0
     assert calls == [HOLD]
     assert "no last-good digest" in result.stdout
+
+
+# -- settle: the dispatch of a run for a newer green commit ---------------------------------
+
+NEWER, OLDER = "b" * 40, "c" * 40
+DISPATCH = (
+    f"gh workflow run promote.yml -R DanielH2018/server --ref master -f sha={NEWER}"
+)
+DISPATCH_STEP = "Dispatch a run for a newer green commit"
+# The job token is the one `actions: write` reaches, since `gh` prefers GH_TOKEN, and the
+# `sha` input sends the run through render's CI re-check.
+DISPATCH_TOKEN = "${{ github.token }}"
+DISPATCH_ARGS = ("gh workflow run promote.yml", "--ref master", "-f sha=")
+
+
+def dispatch_problems(settle: dict) -> list[str]:
+    """Every broken property of `settle`'s dispatch step, as one line each."""
+    step = next((s for s in settle["steps"] if s.get("name") == DISPATCH_STEP), None)
+    if step is None:
+        return [f"settle: has no step named {DISPATCH_STEP!r}"]
+    found = []
+    if (step.get("env") or {}).get("GH_TOKEN") != DISPATCH_TOKEN:
+        found.append(f"the dispatch step's GH_TOKEN is not {DISPATCH_TOKEN}")
+    found += [
+        f"the dispatch step does not run {arg}"
+        for arg in DISPATCH_ARGS
+        if arg not in str(step.get("run", ""))
+    ]
+    return found
+
+
+def test_the_dispatch_step_holds_every_property(jobs):
+    assert dispatch_problems(jobs["settle"]) == []
+
+
+DISPATCH_RED = {
+    "with PROMOTE_TOKEN": (
+        lambda step: step["env"].update(GH_TOKEN="${{ secrets.PROMOTE_TOKEN }}"),
+        "GH_TOKEN is not",
+    ),
+    "without a sha": (
+        lambda step: step.update(run=step["run"].replace(' -f sha="$newest"', "")),
+        "does not run -f sha=",
+    ),
+}
+
+
+@pytest.mark.parametrize("case", DISPATCH_RED, ids=list(DISPATCH_RED))
+def test_each_broken_dispatch_property_is_named(jobs, case):
+    mutate, expected = DISPATCH_RED[case]
+    settle = copy.deepcopy(jobs["settle"])
+    mutate(_step(settle, DISPATCH_STEP))
+    found = dispatch_problems(settle)
+    assert any(expected in line for line in found), found
+
+
+def _dispatch(tmp_path, jobs, green: list[str], **env: str):
+    script = _step(jobs["settle"], DISPATCH_STEP)["run"]
+    result, calls = _run(tmp_path, script, TARGET=T, FAKE_GREEN="\n".join(green), **env)
+    return result, [call for call in calls if not call.startswith("gh api")]
+
+
+def test_a_green_commit_newer_than_t_dispatches_promote_for_it(tmp_path, jobs):
+    result, calls = _dispatch(tmp_path, jobs, [NEWER, T, OLDER])
+    assert result.returncode == 0, result.stderr
+    assert calls == [DISPATCH]
+
+
+@pytest.mark.parametrize(
+    "green",
+    [[T, OLDER], [NEWER, OLDER]],
+    ids=["t-is-newest", "t-outside-the-list"],
+)
+def test_no_newer_green_commit_does_not_dispatch(tmp_path, jobs, green):
+    result, calls = _dispatch(tmp_path, jobs, green)
+    assert result.returncode == 0, result.stderr
+    assert calls == []
+
+
+@pytest.mark.parametrize(
+    "green, env",
+    [([NEWER, T], {"FAKE_GH_FAIL": "api"}), ([], {})],
+    ids=["failed-read", "empty-list"],
+)
+def test_an_unreadable_run_list_fails_and_does_not_dispatch(tmp_path, jobs, green, env):
+    result, calls = _dispatch(tmp_path, jobs, green, **env)
+    assert result.returncode != 0
+    assert calls == []
 
 
 # -- tag: the seed and the move --------------------------------------------------------------

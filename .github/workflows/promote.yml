@@ -23,9 +23,11 @@ name: promote
 #            tag is absent, moves `prod` to T, and records its digest in PROD_DIGEST.
 #   verify   contents: read, statuses: read. Runs `promote.py verify T`, which waits on T's
 #            commit statuses for T's changed set and prints `good` or `failed`.
-#   settle   packages: write. Checks out nothing. A good verdict moves `last-good` to T.
-#            Anything else writes DEPLOY_HOLD, then resets `prod` to `last-good` and records
-#            PROD_DIGEST. Contract C2's *Verification* is the rule.
+#   settle   packages: write, actions: write. Checks out nothing. A good verdict moves
+#            `last-good` to T. Anything else writes DEPLOY_HOLD, then resets `prod` to
+#            `last-good` and records PROD_DIGEST. Contract C2's *Verification* is the rule.
+#            Once either succeeds, it dispatches this workflow for master's newest green
+#            commit when that commit is newer than T.
 #
 # ansible/tests/repo/test_promote_workflow.py holds every guard, permission and handoff here.
 
@@ -524,7 +526,7 @@ jobs:
             *) echo "::error::HEAD prod answered HTTP $status"; exit 1 ;;
           esac
           if [ "$live" != "$PRIOR_DIGEST" ]; then
-            echo "::warning::prod is at '${live:-absent}', not the '${PRIOR_DIGEST:-absent}' decide read: another run moved it first, so this run moves nothing and verifies nothing. The next promote run promotes $TARGET or a newer commit."
+            echo "::warning::prod is at '${live:-absent}', not the '${PRIOR_DIGEST:-absent}' decide read: another run moved it first, so this run moves nothing and verifies nothing. The run that moved it dispatches one more run once it settles, when a commit newer than its own is green."
             exit 0
           fi
 
@@ -623,6 +625,7 @@ jobs:
     timeout-minutes: 5
     permissions:
       packages: write
+      actions: write  # the dispatch step's, which starts the next promote run
     steps:
       - uses: fluxcd/flux2/action@b9c17924adb533d3617ec7de97a7b0f4acc07b39 # v2.9.6
         with:
@@ -687,3 +690,46 @@ jobs:
           fi
           for problem in "${problems[@]}"; do echo "::error::$problem"; done
           [ "${#problems[@]}" -eq 0 ]
+
+      # A run whose `tag` found `prod` already moved verifies nothing, so its commit would wait
+      # for the next merge (#5022). Once the verdict is applied, this step dispatches one more
+      # run when CI's newest green push run on master is for a commit newer than T. The list is
+      # newest first, so "newer" means T's own run sits further down it. With T outside the list
+      # the step cannot tell, and dispatches nothing. The bound: a dispatched run that promotes
+      # that commit finds it equal to its own T here, and one that decides anything else never
+      # reaches `settle`. After a hold the step still dispatches, as the operator ruled: the run
+      # decides `held` unless the revert rule lets it promote a descendant.
+      #
+      # GitHub starts no run for an event GITHUB_TOKEN causes, except workflow_dispatch, so the
+      # job token dispatches and PROMOTE_TOKEN gains no scope. GH_TOKEN is set here because `gh`
+      # prefers it to GITHUB_TOKEN. The `sha` input sends the run through render's ancestry and
+      # CI re-check, which a bare dispatch of master's tip would skip.
+      - name: Dispatch a run for a newer green commit
+        env:
+          TARGET: ${{ needs.promote.outputs.target }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          printf '%s' "$TARGET" | grep -Eqx '[0-9a-f]{40}' \
+            || { echo "::error::decide's target '$TARGET' is not 40 lowercase hex"; exit 1; }
+          # A command substitution, so set -e stops the step when the read fails.
+          green="$(gh api \
+            "repos/$GITHUB_REPOSITORY/actions/workflows/ci.yml/runs?branch=master&event=push&status=success&per_page=100" \
+            --jq '.workflow_runs[].head_sha')"
+          newest="${green%%$'\n'*}"
+          if ! printf '%s' "$newest" | grep -Eqx '[0-9a-f]{40}'; then
+            echo "::error::CI's newest green push run on master names '$newest', not a 40-hex commit"
+            exit 1
+          fi
+          if [ "$newest" = "$TARGET" ]; then
+            echo "$TARGET is master's newest green commit, so no run follows"
+            exit 0
+          fi
+          # A here-string, not a pipe: `grep -q` exiting early would SIGPIPE a writer, and
+          # pipefail would read the match as a miss.
+          if ! grep -qx "$TARGET" <<< "$green"; then
+            echo "::warning::$TARGET has no green CI run among master's newest 100, so this run cannot tell whether $newest is newer, and dispatches nothing"
+            exit 0
+          fi
+          gh workflow run promote.yml -R "$GITHUB_REPOSITORY" --ref master -f sha="$newest"
+          echo "dispatched promote for $newest, master's newest green commit, which is newer than $TARGET"

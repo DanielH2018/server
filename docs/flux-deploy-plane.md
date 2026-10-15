@@ -267,7 +267,11 @@ move changes nothing in the cluster but the commit Flux reports. The workflow ha
 1. `verify` runs `promote.py verify <target>` with `contents: read` and `statuses: read`, and
    prints `good` or `failed` (*Verification*).
 1. `settle` checks out no repository code. It moves `last-good` on `good`, and otherwise
-   writes the hold and resets `prod`.
+   writes the hold and resets `prod`. Then it reads CI's green push runs on master, newest
+   first. When the newest is for a commit newer than the target, `settle`
+   dispatches `promote` again with `-f sha=<that commit>`. The job token makes the dispatch,
+   under `actions: write`, which `settle` alone holds. A run whose `tag` found `prod`
+   already moved promotes nothing, and this dispatch is what promotes its commit.
 
 The repository variable `DEPLOY_HOLD` stops promotion. The value `none` means no hold, and any
 other value holds, so a mistyped hold still holds. An empty or missing variable makes `decide`
@@ -351,7 +355,8 @@ the variable with `prod`'s live digest and pages on a mismatch.
 - `tag` moves `prod` only while it still names the digest `decide` read. Two runs can decide on
   the same `prod` when the second run's `promote` job runs while the first run's `tag` waits
   on the group. The first `tag` moves `prod`, and the second finds it moved, logs a warning,
-  and moves and verifies nothing. Its commit waits for the next run.
+  and moves and verifies nothing. The first run's `settle` then dispatches one more run, so
+  the second run's commit does not wait for the next merge (*Publishing and promotion*).
 
 `verify` and `settle` join no concurrency group: GitHub keeps one pending job per group and a
 newer one cancels it, so a pending `settle` could be dropped with its hold unwritten. Without
@@ -553,7 +558,10 @@ deletes. That job runs only master's copy of `promote.py`, because it refuses an
 
 The repository secret `PROMOTE_TOKEN` is a fine-grained token with Variables read and write
 on two repositories, `DanielH2018/server` and `DanielH2018/dotfiles`, and a 90-day expiry.
-`promote` reads `DEPLOY_HOLD` with it, and `tag` writes `PROD_DIGEST` with it. The flux role's `CLAUDE.md` has its rotation steps, and the
+`promote` reads `DEPLOY_HOLD` with it, and `tag` writes `PROD_DIGEST` with it. It never
+starts a run: `settle` dispatches the follow-up `promote` run with its own `GITHUB_TOKEN`
+under `actions: write`, because a `workflow_dispatch` is the one event that token may start a
+run with. The flux role's `CLAUDE.md` has its rotation steps, and the
 rotation registry's `external-90d` tier is the one its SOPS copy belongs on.
 
 The SOPS key `flux_github_status_token` is a fine-grained token with Commit statuses read and
