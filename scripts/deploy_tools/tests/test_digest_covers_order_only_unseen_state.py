@@ -71,8 +71,18 @@ def test_an_in_place_change_to_a_module_held_object_keeps_the_line(tree, imports
         ("import sys", "sys.setrecursionlimit(123456)"),
         ("import os", "os.nice(1)"),
         ("import os", "os.setsid()"),
+        ("import sys", "sys.setdlopenflags(sys.getdlopenflags() ^ 0x100)"),
+        ("import gc", "gc.freeze()"),
     ],
-    ids=["umask", "signal-handler", "recursion-limit", "nice", "setsid"],
+    ids=[
+        "umask",
+        "signal-handler",
+        "recursion-limit",
+        "nice",
+        "setsid",
+        "dlopen-flags",
+        "gc-freeze",
+    ],
 )
 def test_a_change_to_process_state_keeps_the_line(tree, imports, call):  # noqa: F811
     """Process state that no module attribute holds and no audit event reports keeps the line (#5060).
@@ -150,15 +160,24 @@ def test_every_replaced_unaudited_call_keeps_the_line(tree, imports, call):  # n
         ("import signal", "signal.alarm(3600)"),
         ("import signal", "signal.pthread_sigmask(signal.SIG_BLOCK, [signal.SIGTERM])"),
         ("import atexit", "atexit.register(print)"),
+        ("import logging", "logging.root.addFilter(lambda record: False)"),
     ],
-    ids=["logger-level", "logging-disable", "alarm", "signal-mask", "atexit"],
+    ids=[
+        "logger-level",
+        "logging-disable",
+        "alarm",
+        "signal-mask",
+        "atexit",
+        "root-logger-filter",
+    ],
 )
 def test_a_change_to_object_attributes_or_timers_keeps_the_line(tree, imports, call):  # noqa: F811
     """A write to an object a module holds, or to a timer or mask, keeps the line too.
 
     `logging.disable` writes an attribute of the manager the root logger holds, two levels
     below the module. A pending alarm would kill the controller mid-deploy, and a blocked
-    SIGTERM would make it ignore a stop.
+    SIGTERM would make it ignore a stop. `logging.Logger` precedes `root` in the `logging`
+    namespace, so the walk must reach the root logger at its shallowest depth to see its filters.
     """
     reason = _reason_for_head_call(tree, imports, call)
     assert reason and "every deploy runs" in reason

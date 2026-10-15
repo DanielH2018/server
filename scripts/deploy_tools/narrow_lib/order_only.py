@@ -47,16 +47,22 @@ from lib.git import git
 # runner imports those modules first and replaces the calls the same way (#5063). A side
 # effect that stays in the process is compared between the two ends rather than refused:
 # importing Ansible rebinds `sys.intern` at both (#4995). That covers an attribute of another
-# module added, rebound or deleted, a module loaded, and an in-place change to an object up to
-# two levels below a module attribute: an item of a list, dict, set or deque, or an attribute
-# in an object's `__dict__`, such as `logging.disable` writing `logging.root.manager`. It also
-# covers process state no module attribute holds, such as the umask, a signal handler or mask,
-# a pending timer, an atexit callback or the recursion limit (#5060).
+# module added, rebound or deleted, a module loaded, and an in-place change to an object the
+# walk copies. The walk copies every object a module attribute holds, and every object that
+# one holds, taking each object at the shallowest depth any module attribute reaches it: an
+# item of a list, dict, set or deque, or an attribute in an object's `__dict__`, such as
+# `logging.disable` writing `logging.root.manager` or `logging.root.addFilter` adding to
+# `logging.root.filters`. It also covers process state no module attribute holds, such as the
+# umask, a signal handler or mask, a pending timer, an atexit callback, the recursion limit,
+# the dlopen flags or gc's freeze count (#5060).
 # The gaps taken: a branch HEAD's data does not exercise; a change three or more levels below
-# a module attribute, or in state held in `__slots__` or inside a C object; process state the
-# runner does not read, such as the codecs registry or an at-fork handler; an unaudited call
-# in a module the runner does not replace; and a role whose bytes depend on list order, which
-# the render proof the caller still requires catches.
+# a module attribute, such as a logger first created by `logging.getLogger`, whose entry lands
+# in `Logger.manager.loggerDict`, or an attribute of a logger already in it; a change in state
+# held in `__slots__` or inside a C object; process state the runner does not read, such as
+# the codecs registry or an at-fork handler; `faulthandler.dump_traceback_later`, which has no
+# query function, and whose watchdog thread starts in C, so no audit event fires; an unaudited
+# call in a module the runner does not replace; and a role whose bytes depend on list order,
+# which the render proof the caller still requires catches.
 # The runner is distinguishable from a deploy. Its cwd ends in `/cwd` under an `order-only-`
 # temp dir, `sys.flags.isolated` is 1, and `sys.argv[0]` is `-c`. So the check holds only for
 # a plugin written in good faith. It catches an accidental side effect, not an evasive one,
@@ -84,8 +90,9 @@ _TIMEOUT = 60
 #
 # The hook also records the module state the run leaves behind (#4995). At the plugin's
 # `import` event it copies the attributes of every module loaded so far. It also takes, by
-# `walk`, a shallow copy of each object up to two levels below them that is a container or
-# carries a `__dict__`, and the process state `_process_state` reads (#5060). At the
+# `walk`, a breadth-first shallow copy of each object that is a container or carries a
+# `__dict__` and that a module attribute holds or one of those objects holds, and the process
+# state `_process_state` reads (#5060). At the
 # `order-only.report` event the runner raises after the chain, it writes into the report each
 # `module.attribute` added, rebound or deleted since then, the `walk` path of each object that
 # gained, lost or replaced an item or attribute, each `process.<name>` that differs, and each
@@ -164,26 +171,34 @@ def _install(exit_, write_flags, allowed, exempt, modules, unaudited, process, k
             return any(item not in now for item in old)
         return any(a is not b for a, b in zip(old, now))
 
-    def walk(path, value, depth, seen):
-        # Two levels below a module attribute reach `logging.root.manager.disable`. Each
-        # object is copied once, under the first path that reaches it, so both ends name it
-        # alike while they load the same modules in the same order.
-        if id(value) in seen or path in exempt:
-            return
-        try:
-            copied = shallow(value)
-        except Exception:
-            return
-        if copied is None:
-            return
-        seen.add(id(value))
-        contents[path] = (value, copied)
-        if depth == 2:
-            return
-        items = copied.items() if type(copied) is dict else enumerate(copied)
-        for index, (key, child) in enumerate(items):
-            name = key if type(key) is str else "#" + str(index)
-            walk(path + "/" + name, child, depth + 1, seen)
+    def walk(roots):
+        # Breadth-first, so an object is copied at the shallowest depth any module attribute
+        # reaches it and its children are then copied too: `logging.Logger` precedes `root` in
+        # `vars(logging)`, and a depth-first pass would claim the root logger at depth 2 and
+        # never read its `filters`. Each object is copied once, under the first path in
+        # breadth-first order, so both ends name it alike while they load the same modules in
+        # the same order. Two levels: an attribute, and the objects it holds.
+        seen = set()
+        level = roots
+        for depth in (1, 2):
+            following = []
+            for path, value in level:
+                if id(value) in seen or path in exempt:
+                    continue
+                try:
+                    copied = shallow(value)
+                except Exception:
+                    continue
+                if copied is None:
+                    continue
+                seen.add(id(value))
+                contents[path] = (value, copied)
+                if depth == 1:
+                    items = copied.items() if type(copied) is dict else enumerate(copied)
+                    for index, (key, child) in enumerate(items):
+                        name = key if type(key) is str else "#" + str(index)
+                        following.append((path + "/" + name, child))
+            level = following
 
     def module_writes():
         writes = []
@@ -222,12 +237,13 @@ def _install(exit_, write_flags, allowed, exempt, modules, unaudited, process, k
                     exit_(86)
             elif event == "import":
                 if args[0] == "toposort" and not before:
-                    seen = set()
                     for name, module in modules.copy().items():
                         before[name] = (module, module.__dict__.copy())
-                    for name, (module, attrs) in before.items():
-                        for key, value in attrs.items():
-                            walk(name + "." + key, value, 1, seen)
+                    walk([
+                        (name + "." + key, value)
+                        for name, (module, attrs) in before.items()
+                        for key, value in attrs.items()
+                    ])
                     state.update(process())
             elif event == "order-only.report":
                 args[0]["module_writes"], args[0]["modules_loaded"] = module_writes()
@@ -256,7 +272,7 @@ def _install(exit_, write_flags, allowed, exempt, modules, unaudited, process, k
 def _process_state(umask, getsignal, signals, getrecursionlimit, getpriority, prio,
                    getsid, getpgrp, ids, get_threshold, isenabled, getswitchinterval,
                    getitimer, timers, sigmask, ncallbacks, affinity, int_digits,
-                   faulthandler_enabled, getlocale):
+                   faulthandler_enabled, getlocale, getdlopenflags, freeze_count):
     def read():
         # Set and restore: the umask has no reader that leaves it alone.
         mask = umask(0)
@@ -276,6 +292,8 @@ def _process_state(umask, getsignal, signals, getrecursionlimit, getpriority, pr
             "intmaxstrdigits": int_digits(),
             "faulthandler": faulthandler_enabled(),
             "locale": getlocale(),
+            "dlopenflags": getdlopenflags(),
+            "gcfreeze": freeze_count(),
         }
         for timer in timers:
             # A running timer's remaining time falls between reads, so compare whether it runs.
@@ -317,7 +335,8 @@ _install(
         _signal.getitimer, (_signal.ITIMER_REAL, _signal.ITIMER_VIRTUAL, _signal.ITIMER_PROF),
         partial(_signal.pthread_sigmask, _signal.SIG_BLOCK, ()), atexit._ncallbacks,
         partial(os.sched_getaffinity, 0), sys.get_int_max_str_digits, faulthandler.is_enabled,
-        partial(_locale.setlocale, _locale.LC_ALL, None),
+        partial(_locale.setlocale, _locale.LC_ALL, None), sys.getdlopenflags,
+        gc.get_freeze_count,
     ),
     (
         frozenset({
