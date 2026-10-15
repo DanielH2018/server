@@ -256,3 +256,61 @@ def test_a_dep_map_with_another_side_effect_keeps_the_line(tree, helper, body): 
     )
     reason = digest_covers.Classifier(tree.root).reason("authelia", base, head)
     assert reason and "every deploy runs" in reason
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        "copy.Error = None",
+        "copy.SOME_SETTING = 'x'",
+    ],
+    ids=["rebinds-an-attribute", "adds-an-attribute"],
+)
+def test_a_dep_map_that_writes_another_modules_state_keeps_the_line(tree, body):  # noqa: F811
+    """A write into another imported module's attributes keeps the line (#4995).
+
+    No audit event reports it, and the entries and the input are unchanged. In a deploy,
+    Ansible imports the plugin into the controller process, so the change persists for every
+    later task. `copy` is a module the runner has imported already and does not read after the
+    chain runs, so the row reaches the rule rather than failing the run.
+    """
+    base = git_out(tree.root, "rev-parse", "HEAD")
+    head = _commit(
+        tree,
+        [{"ansible/filter_plugins/toposort.py": _dep_map_writes("import copy", body)}],
+    )
+    reason = digest_covers.Classifier(tree.root).reason("authelia", base, head)
+    assert reason and "every deploy runs" in reason
+
+
+@pytest.mark.parametrize(
+    "call",
+    ["os.mknod({path}, stat.S_IFREG | 0o600)", "os.mkfifo({path})"],
+    ids=["mknod", "mkfifo"],
+)
+def test_a_dep_map_that_creates_a_file_outside_the_temp_tree_keeps_the_line(
+    tree,  # noqa: F811
+    tmp_path,
+    call,
+):
+    """A call that raises no audit event and creates a file at an absolute path keeps the line (#4999).
+
+    The path lies outside the runner's `order-only-` temp tree, so the check for paths created
+    under that tree does not see it either. In a deploy the entry lands wherever the path
+    points, where a later role could read it.
+    """
+    path = repr(str(tmp_path / "escaped"))
+    base = git_out(tree.root, "rev-parse", "HEAD")
+    head = _commit(
+        tree,
+        [
+            {
+                "ansible/filter_plugins/toposort.py": _dep_map_writes(
+                    "import os\nimport stat",
+                    f"try:\n    {call.format(path=path)}\nexcept FileExistsError:\n    pass",
+                )
+            }
+        ],
+    )
+    reason = digest_covers.Classifier(tree.root).reason("authelia", base, head)
+    assert reason and "every deploy runs" in reason
