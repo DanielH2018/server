@@ -390,8 +390,9 @@ operator-run.
 instead of the operator.
 
 - The password is `authelia_agent_password` in SOPS, so `secret_rotation.yml` tracks it (tier
-  `assisted`, like `claude-ui`'s). The `authelia` role hashes it at deploy time, with the same
-  username-keyed read-back as the other two users.
+  `assisted`, like `claude-ui`'s). The `authelia` role never reads it. The role renders the
+  digest `authelia_agent_password_argon2`, a SOPS key of its own, so a rotation mints a new
+  digest by the procedure in `docs/secret-rotation.md`, *Authelia user passwords*.
 - The `claude_code` role renders `/var/lib/claude/.config/homelab-ui/credentials.json` with the
   username, the password and the domain. The file is `0600`, owned by `claude`, and written
   under `no_log`. Ansible decrypts the three values as the operator, so the agent never holds
