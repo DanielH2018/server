@@ -12,9 +12,20 @@ that commits one edit to one input. It then walks the job's steps in order, up t
 - A step with both an `id:` and a `run:` whose `if:` holds is RUN, as the runner would run it.
   The clone is its working directory and its `$GITHUB_WORKSPACE`. Its own `env:` block is
   resolved against the simulated contexts, and what it writes to `$GITHUB_OUTPUT` becomes
-  `steps.<id>.outputs`. The render step runs for real, so its `changed` output is the real
-  render diff. `uv` runs against this test's own environment with syncing off.
+  `steps.<id>.outputs`. `uv` runs against this test's own environment with syncing off.
+- The `render` step computes `changed` (the render diff) and `cases` (the trigger under test),
+  so it runs in full except for its two slow calls, `host_packages.py render` and `diff`. A
+  `uv` shim on its PATH answers those: `render` creates its `--out` directory and `diff` prints
+  `changed=false`. Every other `uv` call, `job-changed` included, reaches the real `uv`. The
+  simulation fails unless the step makes exactly two `render` calls and one `diff` call, so a
+  renamed subcommand cannot turn the stub into a silent no-op.
 - Every other step is not run: the nfpm fetch, the builds and the cases themselves.
+
+The render is stubbed as unchanged because no input this module edits is a render input, so the
+real diff reports `changed=false` for each. That is the worst case for the trigger: the cases
+can run only because `cases=true`. A real render per input and leg took 80s on the CI runner,
+alone in one pytest shard. `test_the_real_render_reports_no_change_for_a_case_input` runs the
+real render for the Dockerfile on one leg, so the stub cannot drift from the renderer unseen.
 
 The test then evaluates the `if:` of every step the cases depend on, once per matrix leg.
 `uses:` steps produce no outputs here, so a trigger computed by an action is invisible to the
@@ -25,6 +36,7 @@ Run: uv run pytest ansible/tests/repo/test_host_package_cases_run_on_their_input
 """
 
 import re
+import shutil
 import sys
 from pathlib import Path
 
@@ -32,11 +44,12 @@ import pytest
 from _helpers import REPO
 from lib import yaml_fast
 from lib.git_testing import git, git_out, scrubbed_env
-from lib.proc_testing import run
+from lib.proc_testing import fake_bin, run
 
 CI_WORKFLOW = REPO / ".github" / "workflows" / "ci.yml"
 JOB = "host_packages"
 
+RENDER_ID = "render"
 CASES_STEP = "Run the updater cases in systemd containers"
 # The steps the cases read from. `host_package_cases.py` globs each side's updater .deb out of
 # the build step's output and boots the image the image step tags, so a run that skips either
@@ -264,8 +277,25 @@ def _pr_merge_ref(clone: Path, path: str) -> None:
     git(clone, "merge", "-q", "--no-ff", "--no-edit", branch)
 
 
-def _simulate(clone: Path, tmp_path: Path, leg: dict) -> tuple[dict[str, bool], dict]:
-    """Run the job's output-producing steps on one leg; return each step's verdict and the context."""
+# Answers `uv run python scripts/validate/host_packages.py render|diff`; any other call goes on to uv.
+_UV_SHIM = """#!/bin/bash
+if [ "$1 $2 $3" = "run python scripts/validate/host_packages.py" ]; then
+  case "$4" in
+    render) echo render >> "$SHIM_CALLS"; mkdir -p "${@: -1}"; exit 0 ;;
+    diff) echo diff >> "$SHIM_CALLS"; echo changed=false; exit 0 ;;
+  esac
+fi
+exec "$REAL_UV" "$@"
+"""
+
+
+def _simulate(
+    clone: Path, tmp_path: Path, leg: dict, *, stub_render: bool = True
+) -> tuple[dict[str, bool], dict]:
+    """Run the job's output-producing steps on one leg; return each step's verdict and the context.
+
+    `stub_render` answers the render step's two slow calls with the `uv` shim (see the docstring).
+    """
     workflow = yaml_fast.safe_load(CI_WORKFLOW.read_text())
     job = workflow["jobs"][JOB]
     runner_temp = tmp_path / "runner-temp"
@@ -316,6 +346,9 @@ def _simulate(clone: Path, tmp_path: Path, leg: dict) -> tuple[dict[str, bool], 
             continue
         output = runner_temp / f"output-{index}"
         output.write_text("")
+        stub = stub_render and step["id"] == RENDER_ID
+        calls = runner_temp / "shim-calls"
+        calls.write_text("")
         env = scrubbed_env(
             **context["env"],
             **{k: _interpolate(v, context) for k, v in (step.get("env") or {}).items()},
@@ -329,17 +362,24 @@ def _simulate(clone: Path, tmp_path: Path, leg: dict) -> tuple[dict[str, bool], 
             GITHUB_WORKSPACE=str(clone),
             UV_PROJECT_ENVIRONMENT=sys.prefix,
             UV_NO_SYNC="1",
+            REAL_UV=shutil.which("uv") or "",
+            SHIM_CALLS=str(calls),
         )
         script = _interpolate(step["run"], context)
         proc = run(
             ["bash", "--noprofile", "--norc", "-eo", "pipefail", "-c", script],
             cwd=clone,
             env=env,
+            stub_bin=fake_bin(runner_temp / "shim", uv=_UV_SHIM) if stub else None,
             timeout=300,
         )
         assert proc.returncode == 0, (
             f"step {name!r} failed on the simulated PR:\n{proc.stdout}\n{proc.stderr}"
         )
+        if stub:
+            assert calls.read_text().split() == ["render", "render", "diff"], (
+                "the render step no longer makes the two render calls and one diff call stubbed"
+            )
         context["steps"][step["id"]] = {
             "outputs": _read_outputs(output.read_text()),
             "outcome": "success",
@@ -404,6 +444,20 @@ def test_a_dockerfile_only_pr_builds_the_debs_and_image_the_cases_read(
             f"a PR touching only {DOCKERFILE} skips {skipped} on leg {leg}; the cases read "
             f"the debs and the image those steps produce"
         )
+
+
+def test_the_real_render_reports_no_change_for_a_case_input(
+    clone: Path, tmp_path: Path
+) -> None:
+    """The stub's premise, and the only real render: a case input is not a render input."""
+    _pr_merge_ref(clone, DOCKERFILE)
+    _verdicts, context = _simulate(clone, tmp_path, _legs()[0], stub_render=False)
+    outputs = context["steps"][RENDER_ID]["outputs"]
+    assert outputs.get("changed") == "false", (
+        f"a PR touching only {DOCKERFILE} changes a render ({outputs}); the other tests stub "
+        f"the render as unchanged, so they no longer model that PR"
+    )
+    assert outputs.get("cases") == "true", outputs
 
 
 @pytest.mark.parametrize("path", _case_inputs())
