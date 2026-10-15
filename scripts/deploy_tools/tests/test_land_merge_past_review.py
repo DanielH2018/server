@@ -99,10 +99,13 @@ def test_a_pr_with_changes_requested_is_refused_before_any_merge(landing):
     assert not ln.direct_merge_subject
 
 
-def _left_for_a_direct_merge(landing, states, ci, merge_rc=(0,)):
+def _left_for_a_direct_merge(landing, states, ci, merge_rc=(0,), commits=()):
     ln, calls = landing(
         Fakes(
-            gh_views={"state,mergeable,headRefOid": _wait(states)},
+            gh_views={
+                "state,mergeable,headRefOid": _wait(states),
+                "commits": {"commits": list(commits)},
+            },
             await_ci=ci,
             gh_merge_rc=list(merge_rc),
         )
@@ -171,3 +174,50 @@ def test_a_disarmed_gate_ends_a_direct_merge_wait_naming_it(landing):
     assert exc.value.rc == 1 and exc.value.verdict == "refused"
     assert "disarmed" in exc.value.error and "REQUIRED_CONTEXTS" in exc.value.error
     assert not [c for c in calls if c[0] == "gh"]
+
+
+# Two commits, each declaring one object, as a PR that removes a route and a ClusterRole does.
+_DECLARING = [
+    {
+        "messageHeadline": "Drop the local route",
+        "messageBody": "Removes-Object: IngressRoute/homelab/bento-pdf",
+    },
+    {
+        "messageHeadline": "Drop the reader role",
+        "messageBody": "Why.\n\nremoves-object: ClusterRole//bento-reader",
+    },
+]
+
+
+def _merge_fields(landing, commits):
+    ln, calls = _left_for_a_direct_merge(
+        landing,
+        ["OPEN MERGEABLE aaaa", "MERGED MERGEABLE aaaa"],
+        [(0, "CI green")],
+        commits=commits,
+    )
+    merge.await_merge(ln)
+    (merge_call,) = [c[1] for c in calls if c[0] == "gh"]
+    return [arg for arg in merge_call if "=" in arg]
+
+
+def test_a_merge_with_no_removes_object_line_sends_no_body(landing):
+    fields = _merge_fields(
+        landing, [{"messageHeadline": "Bump vale", "messageBody": "No object."}]
+    )
+    assert not [f for f in fields if f.startswith("commit_message=")]
+
+
+def test_a_merge_copies_every_removes_object_line_into_the_body(landing):
+    """Whatever the repo's squash default, both lines end the body as trailers."""
+    fields = _merge_fields(landing, _DECLARING)
+    (body,) = [
+        f.removeprefix("commit_message=")
+        for f in fields
+        if f.startswith("commit_message=")
+    ]
+    assert body.startswith("* Drop the local route\n\nRemoves-Object: ")
+    assert body.endswith(
+        "\n\nRemoves-Object: ClusterRole//bento-reader\n"
+        "Removes-Object: IngressRoute/homelab/bento-pdf\n"
+    )

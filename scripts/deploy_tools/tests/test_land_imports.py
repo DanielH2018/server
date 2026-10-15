@@ -54,7 +54,7 @@ ALLOWED = {
     "pr_json": set(),
     "landing": {"outcome", "options", "tools", "ledger", "pr_json", "land_tags"},
     # The landing policy's checks run inside --arm-merge, before any merge call.
-    "merge": {"landing", "outcome", "policy"},
+    "merge": {"landing", "outcome", "policy", "pr_json"},
     "policy": {"landing", "outcome", "pr_json"},
     "classify": {"landing", "outcome", "land_tags"},
     "ci": {"landing", "outcome"},

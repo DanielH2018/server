@@ -19,6 +19,10 @@ call until its own checks pass. A refusal is reported and the wait goes on, so a
 keeps refusing reaches merge-timeout rather than a merge. --arm-merge without --await-merge
 therefore dies: nothing in that run would merge the PR.
 
+The direct merge copies every `Removes-Object:` line on the PR's commits into the squash body
+it sends (`squash_body`), so `promote.py decide` finds each one on master whatever the repo's
+squash default is.
+
 --arm-merge also refuses a PR whose body carries a closing keyword outside a `Closes #N` line,
 before any merge call. A "Filed and not fixed: #N" line closes #N on merge, because GitHub
 reads the keyword and not the sentence around it. `stray_closing_refs` owns the
@@ -64,9 +68,11 @@ from pathlib import Path as _Path
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
 from lib.exit_codes import CI_DISARMED, CI_GREEN, CI_RED
 from lib.json_types import as_list, as_object
+from lib import removes_object
 from deploy_tools.land_lib import policy
 from deploy_tools.land_lib.landing import BRANCH, Landing
 from deploy_tools.land_lib.outcome import Verdict, disarmed, say
+from deploy_tools.land_lib.pr_json import CommitMessage
 
 
 # GitHub's closing keywords, all three tenses of all three verbs. A keyword anywhere in the
@@ -181,29 +187,49 @@ def _leave_for_a_direct_merge(ln: Landing, subject: str) -> None:
     )
 
 
+def squash_body(commits: list[CommitMessage]) -> str:
+    """The squash body that carries the PR's `Removes-Object:` lines, or '' when it has none.
+
+    `promote.py decide` refuses a promotion that loses an object no such line declares, so a
+    line that misses master stalls every later promotion. Without a body of ours, GitHub writes
+    the repo's squash default, which a settings change can turn into the PR description or
+    nothing. The body is therefore every commit's message, in GitHub's `* <headline>` form,
+    then each line again in a final paragraph, where git's trailer parser also finds it. With
+    no line, '' leaves GitHub's default alone.
+    """
+    messages = [
+        f"* {c.get('messageHeadline', '')}\n\n{c.get('messageBody', '')}".rstrip()
+        for c in commits
+    ]
+    lines = removes_object.declared("\n\n".join(messages))
+    if not lines:
+        return ""
+    trailers = "\n".join(f"{removes_object.KEY}: {line}" for line in sorted(lines))
+    return "\n\n".join([*messages, trailers]) + "\n"
+
+
 def _merge_directly(ln: Landing, head: str) -> str:
     """Squash-merge the PR at `head` through the REST endpoint; '' on success, else why not.
 
     `sha` makes GitHub refuse if the head moved since await_ci read it green.
     `{owner}/{repo}` resolves from the checkout, as every `gh pr view` here does.
+    A PR whose commits carry a `Removes-Object:` line also sends the body `squash_body` writes.
     """
-    # DECIDED: no `commit_message`. The repo's squash default (COMMIT_MESSAGES) keeps every PR
-    # commit's message in the body, which is how a `Removes-Object:` line reaches master for
-    # `promote.py decide`. Sending a body would drop it. docs/flux-deploy-plane.md, *Removing
-    # an object on purpose*; test_a_review_bound_pr_merges_directly_once_its_head_is_green
-    # pins the exact fields.
+    fields = [
+        "merge_method=squash",
+        f"sha={head}",
+        f"commit_title={ln.direct_merge_subject}",
+    ]
+    body = squash_body(ln.view("commits").get("commits", []))
+    if body:
+        fields.append(f"commit_message={body}")
     try:
         ln.tools.gh(
             "api",
             "-X",
             "PUT",
             f"repos/{{owner}}/{{repo}}/pulls/{ln.opts.pr}/merge",
-            "-f",
-            "merge_method=squash",
-            "-f",
-            f"sha={head}",
-            "-f",
-            f"commit_title={ln.direct_merge_subject}",
+            *(arg for field in fields for arg in ("-f", field)),
         )
     except subprocess.CalledProcessError as exc:
         return (exc.stderr or "").strip() or f"gh exited {exc.returncode}"

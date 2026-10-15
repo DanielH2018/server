@@ -94,7 +94,7 @@ from pathlib import Path
 import yaml
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from lib import yaml_fast
+from lib import removes_object, yaml_fast
 from lib.cli_help import ArgumentParser, error
 from lib.exit_codes import FAILED, OK
 from lib.git import git
@@ -458,7 +458,7 @@ def live_reads(f: forge.Forge, repo: Path, master_ref: str = MASTER_REF) -> Read
         verify=f.cosign.verify,
         digest=f.registry.digest,
         bundle=f.registry.bundle,
-        declared=lambda prod, t: object_loss.declared(
+        declared=lambda prod, t: removes_object.declared(
             _git(repo, "log", "--format=%B", f"{prod}..{t}")
         ),
     )

@@ -38,7 +38,14 @@ FORBIDDEN = (
 # `lib` modules start subprocesses of their own (`lib.gh` runs `gh`, `lib.kubectl` and `lib.b2`
 # reach other services), and a new one would pass a denylist unseen. `lib.git` runs only git.
 ALLOWED_LIB = frozenset(
-    {"lib.cli_help", "lib.exit_codes", "lib.git", "lib.repo_paths", "lib.yaml_fast"}
+    {
+        "lib.cli_help",
+        "lib.exit_codes",
+        "lib.git",
+        "lib.removes_object",
+        "lib.repo_paths",
+        "lib.yaml_fast",
+    }
 )
 
 # The `deployer_lib` modules promote.py may import, for the same reason: `deploy_git` is pure,

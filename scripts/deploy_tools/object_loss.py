@@ -7,8 +7,8 @@ compares the objects, as `<kind>/<namespace>/<name>`, in candidate T's `cluster/
 
     Removes-Object: <kind>/<namespace>/<name>
 
-in the message of some commit in (`prod`, T]. A cluster-scoped object leaves the namespace
-empty, as in `ClusterRole//<name>`. An object whose whole Kustomization leaves T's bundle, as
+in the message of some commit in (`prod`, T] (`lib/removes_object.py` holds the grammar). A
+cluster-scoped object leaves the namespace empty, as in `ClusterRole//<name>`. An object whose whole Kustomization leaves T's bundle, as
 at a handback, is exempt.
 
 `decide` reads `prod`'s bundle once per run and each weighed candidate's once, and skips an
@@ -16,8 +16,6 @@ ineligible candidate with the line `refusal` returns. The plan is
 docs/target-architecture/deploy/d2-first-leaf.md, *Publication and verification*, and the
 operator's page docs/flux-deploy-plane.md, *Removing an object on purpose*.
 """
-
-import re
 
 import yaml
 
@@ -31,20 +29,8 @@ import verify_promotion
 from artifact_prune import ReadError
 from renderer.renderer_lib.bundle import CLUSTER_DIR
 
-# Matched on any line of a commit message, not only in git's trailer block. The repo's squash
-# merge keeps every PR commit's message in the body (`squash_merge_commit_message:
-# COMMIT_MESSAGES`), so a trailer from an earlier PR commit lands mid-body. The key is
-# case-insensitive, as git's trailers are.
-REMOVES_OBJECT = re.compile(
-    r"^Removes-Object:[ \t]*(\S+)[ \t]*$", re.IGNORECASE | re.MULTILINE
-)
 # The kustomize file each bundle directory carries is not an object the cluster holds.
 _KUSTOMIZE_API = "kustomize.config.k8s.io/"
-
-
-def declared(messages: str) -> frozenset[str]:
-    """The objects every `Removes-Object` line in `messages` declares."""
-    return frozenset(REMOVES_OBJECT.findall(messages))
 
 
 def bundle_objects(files: dict[str, bytes]) -> dict[str, str]:
