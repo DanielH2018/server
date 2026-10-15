@@ -25,8 +25,8 @@ landed before D3.2c, so its operator-only `write` step did not apply.
 D3.2c, the first files and the tree gate: [#5140](https://github.com/DanielH2018/server/pull/5140).
 The operator ran `cluster_vars.py write` on its branch at 20:11 UTC on 2026-10-15. It refused
 no value and wrote the dotenv, `cluster-vars.source` and four SOPS manifests, then handed the
-landing to the session. The file holds every cluster-referenced key from the start, as Open
-question 2 proposes.
+landing to the session. The file holds every cluster-referenced key from the start, and the
+operator confirmed that answer to Open question 2 the same day.
 
 Depends on: [D2](d2-first-leaf.md), [R2](../render/r2-secret-placeholders.md). D3.0 to D3.3c
 need only D2.1 to D2.6c, which include D2.6b's empty `SHARED_KINDS` and census, as the slice
@@ -1254,7 +1254,8 @@ kubectl -n flux-system get kustomizations.kustomize.toolkit.fluxcd.io bento-pdf 
 2. **Should the cluster file hold every cluster-referenced key from the start, or only the
    flux-owned roles' keys?** This plan holds every key, so that D5 needs no regeneration.
    That places values for roles that Ansible still deploys inside the cluster Secret.
-   Resolution: the operator confirms in the D3.2c review (**operator-only**).
+   Resolution: the operator confirms in the D3.2c review (**operator-only**). The operator
+   confirmed it on 2026-10-15: the cluster file holds every cluster-referenced key.
 3. **Does `sops set` work on a dotenv file with the pinned sops version?** Resolution:
    D3.2a's tests run `write` against a throwaway key with the pinned binary, which its CI
    step installs.
