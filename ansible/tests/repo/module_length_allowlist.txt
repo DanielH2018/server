@@ -32,7 +32,6 @@ ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_state.py 642  # conj
 ansible/roles/setup/gitops_deploy/tests/test_deploy_changes_planes.py 533
 ansible/roles/setup/renovate_notify/tests/test_notify_logic.py 552
 ansible/tests/deploy/test_cronjob_gate_decision.py 535
-ansible/tests/deploy/test_gitops_deploy_imports.py 505  # conjoined: ALLOWED is one dict literal that test_the_module_set_is_exactly_what_is_on_disk compares with == against files/, so a split leaves two half-tables and a test joining them
 ansible/tests/longhorn/test_longhorn_restore_drill.py 502
 ansible/tests/setup/test_cron_scripts_publish_via_pr.py 673
 scripts/backup/tests/test_longhorn_reap_logic.py 668

@@ -1620,7 +1620,7 @@ and two same-named PEP 420 portions merge into one package.
 | transport leaves | `gitops_markers`, `gitops_hold`, `deploy_config`, `deploy_state`, `deploy_failtext` | the marker table, its parsers and line rewrites, the hold's owner and its clear rule, the config file, the state directory with every marker's reader and writer, and the text a failed run's alert quotes |
 | the seam | `deploy_toolbox` | `DeployTools`, one frozen object holding every boundary the tick crosses |
 | the phases | `deploy_phases`, `deploy_handlers`, `deploy_defer`, `deploy_broad_k8s` | `assess` and `plan_tick`; one `handle_*` per terminal branch |
-| the k8s changes owed | `deploy_k8s_owed` | the one reader and writer of the `k8s_deferred` and `k8s_unapplied` ledger classes: record, discharge, the tick-start `reconcile` (#3669), and the drop of a Flux-owned service's lines (D2.2) |
+| the k8s changes owed | `deploy_k8s_owed`, `deploy_render_bases` | the one reader and writer of the `k8s_deferred` and `k8s_unapplied` ledger classes: record, discharge, the tick-start `reconcile` (#3669), and the drop of a Flux-owned service's lines (D2.2); `deploy_render_bases` holds the pure text transforms for a `manifests` line's stored render bases and the line naming the callers it waits on (#5118, #5122) |
 | the tick | `gitops_deploy` | the config constants, `tick_config()`, `main()` and `entrypoint()` |
 
 - **`main()` sequences, it does not decide.** `assess()` returns a frozen `TickTarget`,

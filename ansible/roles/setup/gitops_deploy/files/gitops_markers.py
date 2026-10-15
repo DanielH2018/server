@@ -249,8 +249,8 @@ def k8s_unapplied_remedy(subject: str) -> str:
         return (
             f"nothing to deploy: `{subject}` is a shared role, and a later tick discharges "
             f"this line once each caller's render matches what it applied. The hourly "
-            f"render producer reaches a change 10 to 70 minutes after its merge, so clear "
-            f"the line by hand only once a render at or after it still fails to prove a "
+            f"render producer reaches a change only once its CI is green, so clear the "
+            f"line by hand only once a render at or after it still fails to prove a "
             f"caller: the journal's `k8s_unapplied: {subject} waits` line names them. The "
             f"alternative, `{cmd}`, redeploys every service that runs the role"
         )
