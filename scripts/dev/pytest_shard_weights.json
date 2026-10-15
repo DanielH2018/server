@@ -1115,6 +1115,7 @@
  "scripts/renderer/tests/test_renderer_host_manifest.py": 0.22,
  "scripts/renderer/tests/test_renderer_host_mode.py": 0.45,
  "scripts/renderer/tests/test_renderer_host_update_limits.py": 0.32,
+ "scripts/renderer/tests/test_renderer_live_read_census.py": 2.87,
  "scripts/renderer/tests/test_renderer_placeholders.py": 0.24,
  "scripts/renderer/tests/test_renderer_roundtrip.py": 16.74,
  "scripts/renderer/tests/test_renderer_secret_aliases.py": 0.08,

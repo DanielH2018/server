@@ -8,9 +8,9 @@ image-builder's expression, the script checksums, `kuma_declarations` and `janit
 `playbook_dir` and `role_path` resolve as Ansible resolves them, so a lookup reads the same
 file a deploy reads.
 
-Target slice R1 started this module with the facts a role task reads from live state, each
-with a fixed stand-in that both halves of the shadow render share. Target slice R3 removed
-those reads, so `PINNED_LIVE_FACTS` is empty, and R3's PR 5 deletes it with its readers.
+No value a template reads comes from live state, so the renderer pins no fact. Target slice
+R3 removed the last live reads, and R3's live-read census in `scripts/renderer/tests/` holds
+the tree to that.
 """
 
 import sys as _sys
@@ -27,23 +27,6 @@ import jinja2
 from lib import yaml_fast
 from lib.repo_paths import ANSIBLE, K8S_ROLES
 from renderer.renderer_lib.environment import evaluate, renderer_env
-
-
-@dataclass(frozen=True)
-class PinnedFact:
-    """One live-read fact's stand-in.
-
-    Attributes:
-        value: What the fact holds in a stub render.
-        readers: The deploy tags whose templates read the fact.
-    """
-
-    value: object
-    readers: frozenset[str]
-
-
-# Empty since R3's PR 4 moved authelia's digests into SOPS. R3's PR 5 deletes it.
-PINNED_LIVE_FACTS: dict[str, PinnedFact] = {}
 
 
 IMAGE_BUILDER = K8S_ROLES / "image-builder"
