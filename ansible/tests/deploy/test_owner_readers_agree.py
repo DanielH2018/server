@@ -122,7 +122,7 @@ def test_the_three_readers_agree_on_the_live_inventory():
 def test_every_live_k8s_entry_is_reached_by_all_three_readers(tmp_path):
     """Each live entry given `owner: flux` is read as such by every reader.
 
-    No live entry carries `owner` until D2.7, so the live census compares empty sets. This
+    Only bento-pdf carries `owner` on the live list, so the live census compares one tag. This
     sets the flag on every entry of daniel-box's list, so a regex that stops reaching an
     entry, for a quoted name or a field it cannot step over, fails here rather than reading
     that entry as Ansible-owned after its flip.

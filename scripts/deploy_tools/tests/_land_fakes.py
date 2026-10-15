@@ -179,7 +179,7 @@ class Fakes:
     # exception is raised in place of an answer.
     compare: list[list[str] | Exception] = field(default_factory=lambda: [[]])
     # `tools.owners_at`: each tag that sets `owner` at a ref, by ref. A ref absent here has
-    # none, which is every live entry until D2.7. An exception is raised in place of a map.
+    # none. An exception is raised in place of a map.
     owners: dict[str, dict[str, str] | Exception] = field(default_factory=dict)
     # `tools.kustomization_exists`: the Kustomizations kubectl finds in flux-system. An
     # exception is raised for every read.
