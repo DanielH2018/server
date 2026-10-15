@@ -1307,9 +1307,10 @@ says otherwise.
       2026-10-14;
     - the C5 *Version* row (*Open questions* 7) is amended: contracts.md's *Applied requests
       (2026-10-15)* records it;
-    - **operator-only:** the signing-key reach check in *Verification* has run for every
-      account an agent session runs as and for `homelab-builder`, and its output is in the
-      PR body. A check that finds any route stops the PR until that route is closed.
+    - **operator-only:** the signing-key reach check in *Verification* has run for `claude`
+      and for `homelab-builder`, and its output is in the PR body. A check that finds any
+      route for either account stops the PR until that route is closed. `ubuntu` is out of
+      scope by the operator's ruling of 2026-10-15 (*Risks*, the `ubuntu` bullet).
     - Add `homelab-builder.service` and `homelab-builder.timer`, the builder script, the
       pinned nfpm and `apt-utils`, and `/etc/homelab-builder/config.env` carrying the token,
       `CI_CONTEXTS` and the walk bound (builder step 4).
@@ -1698,7 +1699,7 @@ ssh daniel-pi 'dpkg-query -W homelab-tools:arm64; dpkg --verify homelab-tools'
 
 ```bash
 # Operator, on daniel-box, before H3.5a merges: the signing-key reach check. Run it once
-# for each account an agent session runs as, and once for homelab-builder.
+# for claude, the agent user, and once for homelab-builder. ubuntu is out of scope (Risks).
 sudo -l -U <account>
 id <account>
 sudo -u <account> -- test -r /var/lib/homelab-signer/gnupg && echo READABLE
@@ -1723,9 +1724,9 @@ The expected results are:
 - at H3.11, `dpkg-query` prints one `arm64` line and `dpkg --verify` prints nothing;
 - the reach check passes for an account when `sudo -l` lists no rule that runs a command
   as root or as `homelab-signer`, `id` names none of `homelab-signer`, `sudo`, `docker`,
-  `lxd` or `disk`, the `test` line prints nothing, and `gpg` fails. The check covers every
-  route that skips master. A route through a merged change is the anchor itself (*Open
-  questions* 1).
+  `lxd` or `disk`, the `test` line prints nothing, and `gpg` fails. For the two accounts it
+  runs for, the check covers every route that skips master. A route through a merged change
+  is the anchor itself (*Open questions* 1).
 
 **The recovery disarm (H3.8b).** The container suite proves it, so production never loses
 its recovery timer for a test. It installs the Pi package rendered with
@@ -2086,6 +2087,13 @@ follow-up and H3.8b each publish a new Pi version before H3.9b arms the timer.
       between the two users, is what keeps that commit honest.
     - H3.5a's reach check is the gate on every other route to the key. The operator runs
       it before the builder first runs, and the PR body carries its output.
+    - **`ubuntu` reaches the key, and the check does not cover it.** The operator ruled on
+      2026-10-15 that the check runs for `claude` and `homelab-builder` only. `ubuntu` is the
+      operator's administrative account, and it already holds root on all three hosts
+      without going through master, so the signing key adds nothing to its reach. While
+      agent sessions still run as `ubuntu`, only the session hooks keep them from the key,
+      as they do from root. Retiring those sessions is slice 6 of the move to the `claude`
+      user (`docs/claude-agent-user.md`).
 - **daniel-box holds the builder, the signer and the repository.** A daniel-box outage
   stops publishing, every host keeps its installed version, and `HostUpdateStale` fires
   for each host once its limit passes. The break-glass copy of the key is the off-box
