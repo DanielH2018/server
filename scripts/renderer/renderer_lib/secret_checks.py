@@ -161,17 +161,6 @@ KNOWN_VIOLATIONS = frozenset(
         # Rule 5, the indent on each multi-line key, at the same two sites.
         _rule5("authelia", "config-secret.yaml.j2", "filter indent", _AUTHELIA_KEY),
         _rule5("pi-peer-backup", "secret.yaml.j2", "filter indent", _PPB_KEY),
-        # Rule 5: the two trims in qbittorrent and mosquitto's split. R2's PR 4 drops them.
-        _rule5("qbittorrent", "secret.yaml.j2", "filter trim", "mullvad_account"),
-        _rule5(
-            "qbittorrent",
-            "secret.yaml.j2",
-            "filter trim",
-            "wireguard_interface_private_key",
-        ),
-        _rule5(
-            "mosquitto", "config-secret.yaml.j2", "filter string", "mqtt_password_hash"
-        ),
     }
 )
 
