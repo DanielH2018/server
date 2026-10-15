@@ -16,6 +16,8 @@ import io
 import json
 import pathlib
 
+import pytest
+
 import shared_role_callers
 from deployer_lib import deploy_k8s_owed
 from deployer_lib.deploy_toolbox import DeployTools
@@ -28,10 +30,13 @@ LATER = "c" * 40
 # Tag names absent from the real tree, so a fix that reads the real host_vars stays red.
 OWNED_CALLERS = {"pdf-flux": "flux", "pdf-released": "released"}
 ANSIBLE_CALLERS = ("web-a", "web-b")
+# `manifests` discharges on a render digest; `stats-lib` stands for `image-builder` and the
+# other shared roles that do not, so a fix confined to the digest path stays red.
+SHARED_ROLES = ("manifests", "stats-lib")
 
 
 def _owned_caller_checkout(root: pathlib.Path) -> None:
-    """A checkout where four roles include `k8s/manifests` and two of their entries set `owner`.
+    """A checkout where four roles include both shared roles and two of their entries set `owner`.
 
     `shared_role_callers.main` reads the declared tags at HEAD through git and walks the role
     graph from the working tree, so both halves are committed.
@@ -43,15 +48,18 @@ def _owned_caller_checkout(root: pathlib.Path) -> None:
     files = {
         "ansible/inventory/host_vars/daniel-box.yml": "containers_list:\n"
         + "".join(entries),
-        "ansible/roles/k8s/manifests/tasks/main.yml": "- ansible.builtin.debug:\n"
-        "    msg: render\n",
     }
+    for role in SHARED_ROLES:
+        files[f"ansible/roles/k8s/{role}/tasks/main.yml"] = (
+            "- ansible.builtin.debug:\n    msg: render\n"
+        )
     for tag in (*ANSIBLE_CALLERS, *OWNED_CALLERS):
-        files[f"ansible/roles/k8s/{tag}/tasks/main.yml"] = (
-            "- ansible.builtin.include_role:\n    name: k8s/manifests\n"
+        files[f"ansible/roles/k8s/{tag}/tasks/main.yml"] = "".join(
+            f"- ansible.builtin.include_role:\n    name: k8s/{role}\n"
+            for role in SHARED_ROLES
         )
     init_repo(root)
-    commit(root, "four callers of manifests", **files)
+    commit(root, "four callers of both shared roles", **files)
 
 
 def _callers_from_main(repo, roles) -> dict[str, set[str]]:
@@ -62,8 +70,9 @@ def _callers_from_main(repo, roles) -> dict[str, set[str]]:
     return {role: set(tags) for role, tags in json.loads(out.getvalue()).items()}
 
 
-def test_a_manifests_line_discharges_once_every_ansible_owned_caller_carries_it(
-    gitops_deploy, settings, state, tmp_path
+@pytest.mark.parametrize("role", SHARED_ROLES)
+def test_a_shared_role_line_discharges_once_every_ansible_owned_caller_carries_it(
+    gitops_deploy, settings, state, tmp_path, role
 ):
     """FLAGGED half: both Ansible-owned callers carry the change, so the line drops.
 
@@ -88,10 +97,10 @@ def test_a_manifests_line_discharges_once_every_ansible_owned_caller_carries_it(
         )
         return deploy_k8s_owed.discharge_k8s_unapplied(tools, state, config)
 
-    state.record_owed(OWED_K8S_UNAPPLIED, ORIGIN, {"manifests"}, 1000.0)
-    assert discharge(behind=set()) == ["manifests"]
+    state.record_owed(OWED_K8S_UNAPPLIED, ORIGIN, {role}, 1000.0)
+    assert discharge(behind=set()) == [role]
     assert state.owed_pending(OWED_K8S_UNAPPLIED) == []
 
-    state.record_owed(OWED_K8S_UNAPPLIED, LATER, {"manifests"}, 2000.0)
+    state.record_owed(OWED_K8S_UNAPPLIED, LATER, {role}, 2000.0)
     assert discharge(behind={"web-b"}) == []
-    assert [e.service for e in state.owed_pending(OWED_K8S_UNAPPLIED)] == ["manifests"]
+    assert [e.service for e in state.owed_pending(OWED_K8S_UNAPPLIED)] == [role]
