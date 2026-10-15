@@ -7,7 +7,9 @@ A placeholder render with `--role` writes, for each tag it names:
   exactly when the placeholder key set of the directory `<tag>` is not empty (C1 *The
   projection*, D3.3b). It carries `decryption` exactly when the tag's role lists
   `render_sops_manifests`, whose SOPS manifests the renderer copies into `cluster/<tag>/`
-  (C3 *Per-role fields*, D3.3c);
+  (C3 *Per-role fields*, D3.3c). A tag that renders a `<tag>-deferred` directory gets the
+  Kustomization `<tag>-deferred` as the file's second document, which depends on `<tag>`
+  (D4.2);
 - `DIR/flux/<kind>.yaml` and `DIR/cluster/<kind>/` for each `SHARED_KINDS` member;
 - `DIR/flux/kustomization.yaml`, which lists every other file in `DIR/flux/`, so the root
   Kustomization `homelab` applies each of them;
@@ -26,6 +28,9 @@ The classification `digests` applies is D6's *What a footprint counts*:
 - a shared kind's files count for itself and for each tag its rule names;
 - `flux/kustomization.yaml`, `digests.json` and `images/` count for no name and are left out;
 - every other path, and a shared kind with no rule, lands under `_unclassified`.
+
+`dependsOn` is generated, never hand-written (D4.2): `ordering.py` derives each
+Kustomization's edges, and a cycle among them fails the render.
 
 This module imports neither Ansible nor Jinja, so `promote.py check-bundle` reads
 `SHARED_KINDS` and the file names from it. The plan is
@@ -46,9 +51,18 @@ from pathlib import Path
 import yaml
 
 from lib import yaml_fast
+from renderer.renderer_lib.ordering import (
+    ANSIBLE_OWNED_DEPS,
+    DEFERRED_SUFFIX,
+    NO_EDGES,
+    NO_ORDERING,
+    Edges,
+    Ordering,
+    dependency_cycle,
+    kustomization_edges,
+)
 
 KUSTOMIZATION = "kustomization.yaml"
-DEFERRED_SUFFIX = "-deferred"
 DIGESTS = "digests.json"
 FLUX_DIR = "flux"
 CLUSTER_DIR = "cluster"
@@ -77,7 +91,6 @@ DECRYPTION = {"provider": "sops", "secretRef": {"name": SOPS_AGE_SECRET}}
 # `disabled`, so a `${` inside a decrypted value stays literal. Every SOPS manifest carries
 # it in its plaintext metadata, written before encryption (C3 *Secrets*).
 SUBSTITUTE_OPT_OUT = "kustomize.toolkit.fluxcd.io/substitute"
-
 # Every shared kind, a closed literal set (C3 *Shared kinds*). D3.3a adds `cluster-vars`,
 # D5.3b2 `soak` and D5's namespace PR `homelab-namespace`, each in the PR that renders it.
 # Membership is unconditional: a render that cannot copy the cluster file fails, so deleting
@@ -117,11 +130,14 @@ def rules_missing(
 def reserved_tags(
     tags: Iterable[str], kinds: Iterable[str] = SHARED_KINDS
 ) -> list[str]:
-    """The sorted deploy tags in `tags` that take the root's name or a shared kind's (C3).
+    """The sorted deploy tags in `tags` that take a name the bundle reserves (C3).
 
-    D4.2 adds the `-deferred` suffix to this check, and D5.1a1 adds `-snapshot` and `-verify`.
+    A reserved name is the root's, a shared kind's, or any name ending in `-deferred`, so no
+    tag's Kustomization can collide with another tag's deferred one (D4.2). D5.1a1 adds
+    `-snapshot` and `-verify`.
     """
-    return sorted(set(tags) & ({ROOT} | set(kinds)))
+    names = {ROOT} | set(kinds)
+    return sorted(t for t in set(tags) if t in names or t.endswith(DEFERRED_SUFFIX))
 
 
 def kustomization_text(files: Iterable[str]) -> str:
@@ -140,18 +156,26 @@ def kustomization_text(files: Iterable[str]) -> str:
 
 
 def tag_kustomization(
-    tag: str, substitutes: bool, timeout: str, decrypts: bool = False
+    tag: str,
+    substitutes: bool,
+    timeout: str,
+    decrypts: bool = False,
+    edges: Edges = NO_EDGES,
 ) -> dict:
     """The Kustomization `tag`, as D2's *The per-tag Kustomization* shows it.
 
     Args:
-        tag: The deploy tag, the Kustomization's name and its directory under `cluster/`.
+        tag: The Kustomization's name and its directory under `cluster/`: a deploy tag, or
+            `<tag>-deferred`.
         substitutes: Whether the directory's placeholder key set is not empty, which alone
             decides `postBuild` (C1 *The projection*) and the `cluster-vars` edge. The edge
             makes Flux wait for `homelab-cluster-vars` before it substitutes from it (D3.3b).
         timeout: `manifests_rollout_timeout_default`, the manifests role's rollout timeout.
         decrypts: Whether the tag's role lists `render_sops_manifests`, which alone decides
             `decryption`. kustomize-controller decrypts nothing without it (D3.3c).
+        edges: The generated edges (D4.2). `dependsOn` lists `edges.kept` and the
+            `cluster-vars` edge in sorted order, and `ANSIBLE_OWNED_DEPS` lists
+            `edges.dropped`; each is left out when empty.
     """
     spec: dict = {
         "sourceRef": {"kind": "OCIRepository", "name": ROOT},
@@ -165,17 +189,23 @@ def tag_kustomization(
         # serving rather than deleting them. D6 decides whether to switch (C3).
         "deletionPolicy": "Orphan",
     }
+    depends = set(edges.kept)
     if substitutes:
         spec["postBuild"] = {
             "substituteFrom": [{"kind": "Secret", "name": CLUSTER_VARS_SECRET}]
         }
-        spec["dependsOn"] = [{"name": CLUSTER_VARS}]
+        depends.add(CLUSTER_VARS)
+    if depends:
+        spec["dependsOn"] = [{"name": name} for name in sorted(depends)]
     if decrypts:
         spec["decryption"] = dict(DECRYPTION)
+    metadata: dict = {"name": tag, "namespace": FLUX_NAMESPACE}
+    if edges.dropped:
+        metadata["annotations"] = {ANSIBLE_OWNED_DEPS: ",".join(sorted(edges.dropped))}
     return {
         "apiVersion": FLUX_API_VERSION,
         "kind": "Kustomization",
-        "metadata": {"name": tag, "namespace": FLUX_NAMESPACE},
+        "metadata": metadata,
         "spec": spec,
     }
 
@@ -220,23 +250,36 @@ def flux_files(
     timeout: str,
     shared: Mapping[str, str] | None = None,
     decrypting: Iterable[str] = (),
+    edges: Mapping[str, Edges] | None = None,
 ) -> dict[str, str]:
     """Each `flux/` file of a bundle publishing the tags in `substitutes`, by bundle path.
 
     Args:
-        substitutes: Each published tag mapped to whether it substitutes.
+        substitutes: Each Kustomization the published tags own mapped to whether it
+            substitutes: `<tag>` for each tag, and `<tag>-deferred` for a tag that renders
+            that directory. `<tag>-deferred` is the second document of `flux/<tag>.yaml`.
         timeout: The `timeout` every tag's Kustomization sets.
         shared: The shared kinds' `flux/` files by bundle path, which the root lists beside
             the tags' files.
         decrypting: The published tags whose role lists `render_sops_manifests`.
+        edges: Each Kustomization's generated edges; a name it does not map has none.
     """
     decrypting = frozenset(decrypting)
-    files = {
-        f"{FLUX_DIR}/{tag}.yaml": yaml.safe_dump(
-            tag_kustomization(tag, wants, timeout, tag in decrypting), sort_keys=False
-        )
-        for tag, wants in sorted(substitutes.items())
-    }
+    edges = edges or {}
+    files = {}
+    for tag in sorted(n for n in substitutes if not n.endswith(DEFERRED_SUFFIX)):
+        names = [tag] + [n for n in [tag + DEFERRED_SUFFIX] if n in substitutes]
+        docs = [
+            tag_kustomization(
+                name,
+                substitutes[name],
+                timeout,
+                name in decrypting,
+                edges.get(name, NO_EDGES),
+            )
+            for name in names
+        ]
+        files[f"{FLUX_DIR}/{tag}.yaml"] = yaml.safe_dump_all(docs, sort_keys=False)
     files |= dict(shared or {})
     files[FLUX_INDEX] = kustomization_text(path.split("/", 1)[1] for path in files)
     return files
@@ -378,6 +421,7 @@ def bundle_files(
     timeout: str,
     cluster_vars: str,
     decrypting: Iterable[str] = (),
+    ordering: Ordering = NO_ORDERING,
 ) -> dict[str, str]:
     """The files a bundle holds beside its tags' `cluster/` directories, by bundle path.
 
@@ -393,26 +437,33 @@ def bundle_files(
         cluster_vars: The cluster file's text, which the `cluster-vars` kind copies.
         decrypting: The published tags whose role lists `render_sops_manifests`, each of
             which gets `decryption` (C3 *Per-role fields*).
+        ordering: What `dependsOn` is generated from (D4.2). The default generates no edge
+            but `cluster-vars`.
 
     Raises:
-        ValueError: A published tag has a `-deferred` directory. Its Kustomization is
-            `<tag>-deferred`, which D4.2 adds with the suffix's reservation.
+        ValueError: The generated edges form a cycle.
     """
     tags = sorted(set(tags))
-    deferred = [tag for tag in tags if tag + DEFERRED_SUFFIX in directories]
-    if deferred:
-        raise ValueError(
-            f"{deferred} render a {DEFERRED_SUFFIX} directory, and no Kustomization applies "
-            f"it until D4.2 adds <tag>{DEFERRED_SUFFIX}"
-        )
     per_directory, substituting = substitution(tags, directories, key_sets)
+    edges = kustomization_edges(tags, directories, ordering)
+    graph = {
+        name: set(edge.kept) | ({CLUSTER_VARS} if per_directory.get(name) else set())
+        for name, edge in edges.items()
+    }
+    cycle = dependency_cycle(graph)
+    if cycle:
+        raise ValueError(
+            f"the dependsOn edges form a cycle, {' -> '.join(cycle)}, and Flux would hold "
+            "every Kustomization on it at DependencyNotReady"
+        )
     shared = cluster_vars_files(cluster_vars, timeout)
     flux = {p: t for p, t in shared.items() if p.startswith(f"{FLUX_DIR}/")}
     files = flux_files(
-        {tag: per_directory.get(tag, False) for tag in tags},
+        {name: per_directory.get(name, False) for name in edges},
         timeout,
         flux,
         set(decrypting) & set(tags),
+        edges,
     )
     files |= shared
     cluster = {
