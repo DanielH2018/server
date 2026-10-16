@@ -118,6 +118,13 @@ entry is a restart target. Both modes hash the
 placeholder-form documents and the digests in `ansible/vars/cluster-vars.source`, so they
 stamp the same value. `docs/flux-deploy-plane.md`'s *Restart triggers* has the rule.
 
+Every render, in either mode, also labels each PersistentVolumeClaim and Namespace of a
+flux-owned tag `kustomize.toolkit.fluxcd.io/prune: disabled`, so Flux leaves the
+object in place when it leaves the render (C3 *Prune exemptions*). The label is
+inserted as text and moves no other byte. Only a flux-owned tag is labelled, so every other
+tag's render stays byte-equal to Ansible's for `shadow_diff.py compare`.
+`scripts/renderer/renderer_lib/prune_label.py` holds the rule.
+
 `cluster --out DIR --shared-only` writes the shared kinds, a root listing them and
 `digests.json`, and renders no tag. The publish job calls it when no tag is flux-owned. It
 takes neither `--role` nor `--secret-stubs`, and either beside it is a usage error. The

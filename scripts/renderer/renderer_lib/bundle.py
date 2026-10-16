@@ -13,7 +13,8 @@ A placeholder render with `--role` writes, for each tag it names:
 - `DIR/flux/<kind>.yaml` and `DIR/cluster/<kind>/` for each `SHARED_KINDS` member;
 - `DIR/flux/kustomization.yaml`, which lists every other file in `DIR/flux/`, so the root
   Kustomization `homelab` applies each of them;
-- `DIR/digests.json`, each published name's `own` and `footprint` digest (C1 *Cluster output*).
+- `DIR/digests.json`, each published name's `own` and `footprint` digest, and each tag's
+  `claims` and `suspended` (C1 *Cluster output*, D5.1a2).
 
 `SHARED_KINDS` names every Kustomization that belongs to no deploy tag. D3.3a adds the first,
 `cluster-vars`. Its directory holds a copy of the cluster file and a `secretGenerator` that
@@ -52,6 +53,8 @@ from pathlib import Path
 import yaml
 
 from lib import yaml_fast
+from lib.k8s_roles import snapshot_claims
+from lib.repo_paths import K8S_ROLES
 from renderer.renderer_lib.ordering import (
     ANSIBLE_OWNED_DEPS,
     NO_EDGES,
@@ -351,12 +354,26 @@ def configmap_digest8(configmap: Mapping) -> str:
     return hashlib.sha256(text.encode()).hexdigest()[:8]
 
 
+def _suspended(text: bytes | None) -> bool:
+    """Whether a tag's `flux/<tag>.yaml` suspends its first document, the Kustomization `<tag>`.
+
+    Only `spec.suspend: true` counts, since the renderer writes the field only when it is
+    true (C3 *Suspension*). A tag with no file reads as not suspended.
+    """
+    if text is None:
+        return False
+    first = next(iter(yaml_fast.safe_load_all(text.decode())), None)
+    spec = first.get("spec") if isinstance(first, dict) else None
+    return isinstance(spec, dict) and spec.get("suspend") is True
+
+
 def digests(
     files: Mapping[str, bytes],
     tags: Iterable[str],
     substituting: Iterable[str] = (),
     kinds: Iterable[str] = SHARED_KINDS,
     rules: Mapping[str, Callable[[FootprintFacts], Iterable[str]]] = FOOTPRINT_RULES,
+    claims: Mapping[str, Iterable[str]] | None = None,
 ) -> dict:
     """`digests.json` for a bundle holding `files`, as C1 defines it.
 
@@ -367,11 +384,15 @@ def digests(
         kinds: The shared kinds; each gets an entry beside the tags.
         rules: Each shared kind's footprint rule. A kind without one counts for no tag, and
             its files land under `_unclassified` as well as in its own entry.
+        claims: Each tag's snapshot claims (`snapshot_claims`); a tag it does not map
+            declares none.
 
     Returns:
         Each tag and each shared kind mapped to `{"own": ..., "footprint": ...}`, plus
         `_unclassified` in the same form with `paths`, the sorted paths it covers. Every
-        entry carries both digests, the shape `changed_set.footprints` reads.
+        entry carries both digests, the shape `changed_set.footprints` reads. A tag's entry
+        also carries `claims`, its sorted snapshot claims, and `suspended`, whether its
+        rendered Kustomization `<tag>` sets `spec.suspend: true` (D5.1a2).
     """
     tags, kinds = frozenset(tags), frozenset(kinds)
     facts = FootprintFacts(tags, frozenset(substituting) & tags)
@@ -399,6 +420,10 @@ def digests(
         name: {"own": digest(own[name]), "footprint": digest(footprint[name])}
         for name in sorted(own)
     }
+    claims = claims or {}
+    for tag in tags:
+        result[tag]["claims"] = sorted(claims.get(tag, ()))
+        result[tag]["suspended"] = _suspended(files.get(f"{FLUX_DIR}/{tag}.yaml"))
     whole = digest(unclassified)
     result[UNCLASSIFIED] = {
         "own": whole,
@@ -454,6 +479,7 @@ def bundle_files(
     cluster_vars: str,
     decrypting: Iterable[str] = (),
     ordering: Ordering = NO_ORDERING,
+    roles: Path = K8S_ROLES,
 ) -> dict[str, str]:
     """The files a bundle holds beside its tags' `cluster/` directories, by bundle path.
 
@@ -471,9 +497,12 @@ def bundle_files(
             which gets `decryption` (C3 *Per-role fields*).
         ordering: What `dependsOn` is generated from (D4.2). The default generates no edge
             but `cluster-vars`.
+        roles: The role tree whose defaults declare each tag's snapshot claims, which
+            `digests.json` records (`snapshot_claims`).
 
     Raises:
-        ValueError: The generated edges form a cycle.
+        ValueError: The generated edges form a cycle, or a tag's
+            `k8s_autodeploy_snapshot_pvcs` is not a literal list.
     """
     tags = sorted(set(tags))
     per_directory, substituting = substitution(tags, directories, key_sets)
@@ -504,7 +533,12 @@ def bundle_files(
         for file, text in held.items()
     }
     everything = {path: text.encode() for path, text in {**cluster, **files}.items()}
-    files[DIGESTS] = digests_text(digests(everything, tags, substituting))
+    claims, problems = snapshot_claims(tags, roles)
+    if problems:
+        raise ValueError("; ".join(problems))
+    files[DIGESTS] = digests_text(
+        digests(everything, tags, substituting, claims=claims)
+    )
     return files
 
 
