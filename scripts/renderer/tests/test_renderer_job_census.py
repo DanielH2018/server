@@ -236,6 +236,39 @@ def test_a_job_whose_script_reaches_a_module_through_the_helper_is_flagged(scrip
     assert _rows(_verify(script=script)) == {"helper"}
 
 
+@pytest.mark.parametrize(
+    "script",
+    [
+        pytest.param(
+            "import urllib.error\n\n"
+            "urllib.error.urllib.request.HTTPHandler().http_open(None)\n",
+            id="package-through-urllib-error",
+        ),
+        pytest.param(
+            "from flux_job_connect import urllib\n\nurllib.request.HTTPHandler()\n",
+            id="from-helper-import-module",
+        ),
+        pytest.param(
+            "from sys import modules\n\nmodules['socket']\n",
+            id="from-sys-import-modules",
+        ),
+    ],
+)
+def test_script_offence_flags_a_module_reached_by_another_route(script):
+    assert script_offence("run.py", script)
+
+
+def test_script_offence_passes_the_helper_exports_and_admitted_urllib_submodules():
+    script = (
+        "import urllib.error\nimport urllib.parse\n\nimport flux_job_connect as f\n\n"
+        "try:\n"
+        "    f.open_url(f.Request(urllib.parse.quote('http://x')), timeout=1)\n"
+        "except urllib.error.HTTPError as err:\n"
+        "    f.refused(err)\n"
+    )
+    assert script_offence("run.py", script) == []
+
+
 def test_a_changed_copy_of_the_helper_is_flagged():
     helper = HELPER.read_text().replace("RETRY_SECONDS = 60", "RETRY_SECONDS = 0")
     assert _rows(_verify(helper=helper)) == {"helper"}
