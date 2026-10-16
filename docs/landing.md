@@ -462,7 +462,8 @@ YAML file holds the key at the base and at the merge commit, and refuses five sh
   while the role file stays put. The check matches the key at any indent, as YAML `key:` or
   INI `key=`, in every YAML and INI file under `ansible/` and every file under `inventory/`,
   `group_vars/` or `host_vars/`. It skips a comment, which starts at a `#` that opens the line
-  or follows whitespace, or at a `;` that opens the line. A `-e` passed at run time is outside
+  or follows whitespace outside a quoted value, or at a `;` that opens the line. A quoted
+  `#`, as in `note="a #b"`, is part of the value. A `-e` passed at run time is outside
   its reach.
 
 A PR that moves a key into another role at the same version is no bump, so none of the first

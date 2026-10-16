@@ -173,10 +173,40 @@ def files_setting(key: str, sha: str, repo: Path = REPO) -> list[str]:
     return [line.split(":", 1)[1] for line in hits.stdout.splitlines()]
 
 
-# A comment starts at a `#` that opens the line or follows whitespace (YAML, and INI), or at
-# a `;` that opens the line (INI). A `#` or `;` inside a value, as in `{note: "#1", ...}` or
-# `ansible_user=x;y`, starts none, so an assignment after it still counts.
-COMMENT = re.compile(r"(^|\s)#|^\s*;")
+# A quote opens at the line start or after whitespace or `{[,:=`, as a YAML scalar or an INI
+# value Ansible splits with shlex does. A quote inside a bare word, as in `x's`, opens none.
+QUOTE_OPENERS = " \t{[,:="
+
+
+def code_part(line: str) -> str:
+    """`line` with its comment cut off, so a key quoted in the comment is not read.
+
+    A comment starts at an unquoted `#` that opens the line or follows whitespace (YAML, and
+    INI), or at a `;` that opens the line (INI).
+
+    A `#` or `;` inside a value, as in `{note: "see #1", ...}`, `note="a #b"` or
+    `ansible_user=x;y`, starts none, so an assignment after it still counts. An unclosed quote
+    keeps the rest of the line, which errs toward reading an assignment.
+    """
+    if line.lstrip().startswith(";"):
+        return ""
+    quote, escaped = "", False
+    for i, char in enumerate(line):
+        if quote:
+            # A double-quoted YAML scalar escapes with `\`, a single-quoted one with `''`.
+            if escaped:
+                escaped = False
+            elif char == "\\" and quote == '"':
+                escaped = True
+            elif char == quote == "'" and line[i + 1 : i + 2] == "'":
+                escaped = True
+            elif char == quote:
+                quote = ""
+        elif char in "\"'" and (i == 0 or line[i - 1] in QUOTE_OPENERS):
+            quote = char
+        elif char == "#" and (i == 0 or line[i - 1].isspace()):
+            return line[:i]
+    return line
 
 
 def assigns(key: str, line: str) -> bool:
@@ -185,9 +215,9 @@ def assigns(key: str, line: str) -> bool:
     `==` is no assignment, so a `when: <key> == 'v1.2.3'` comparison is not one, and neither
     is a key quoted in the line's comment.
     """
-    if comment := COMMENT.search(line):
-        line = line[: comment.start()]
-    return bool(re.search(rf"""(^|[\s{{,"'-]){key}["']?\s*(:|=(?!=))""", line))
+    return bool(
+        re.search(rf"""(^|[\s{{,"'-]){key}["']?\s*(:|=(?!=))""", code_part(line))
+    )
 
 
 def files_assigning(key: str, sha: str, repo: Path = REPO) -> list[str]:

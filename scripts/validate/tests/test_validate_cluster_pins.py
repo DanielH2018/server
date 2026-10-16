@@ -189,6 +189,8 @@ def test_a_pin_read_but_not_assigned_outside_its_role_file_is_clean(repo):
                 "  when: k3s_longhorn_version == 'v1.12.1'\n"
                 "  # k3s_longhorn_version: bump one minor at a time\n"
                 "  url: x  # k3s_longhorn_version: v1.11.0\n"
+                '  url: "x"  # k3s_longhorn_version: v1.11.0\n'
+                "  url: x's  # k3s_longhorn_version: v1.11.0\n"
             ),
         },
     )
@@ -226,6 +228,18 @@ def test_the_real_tree_overrides_no_pin():
             '- hosts: all\n  vars: {note: "#1", k3s_longhorn_version: v1.11.0}\n',
         ),
         (
+            "ansible/site.yml",
+            '- hosts: all\n  vars: {note: "see #1", k3s_longhorn_version: v1.11.0}\n',
+        ),
+        (
+            "ansible/inventory/hosts.ini",
+            '[k3s]\ndaniel-box note="a #b" k3s_longhorn_version=v1.11.0\n',
+        ),
+        (
+            "ansible/site.yml",
+            "- hosts: all\n  vars: {note: 'it''s #1', k3s_longhorn_version: v1.11.0}\n",
+        ),
+        (
             "ansible/inventory/hosts.ini",
             "[k3s]\ndaniel-box ansible_user=x;y k3s_longhorn_version=v1.11.0\n",
         ),
@@ -239,6 +253,9 @@ def test_the_real_tree_overrides_no_pin():
         "set-fact",
         "flow",
         "hash-in-a-value",
+        "spaced-hash-in-a-quoted-yaml-value",
+        "spaced-hash-in-a-quoted-ini-value",
+        "spaced-hash-after-a-yaml-quote-escape",
         "semicolon-in-a-value",
     ],
 )
