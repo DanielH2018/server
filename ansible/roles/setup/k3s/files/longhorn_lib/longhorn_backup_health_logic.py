@@ -409,21 +409,38 @@ def check_restore_coverage(
     success: dict[str, str],
     now_s: float,
     coverage_slack_days: int,
+    *,
+    seen_default: float | None = None,
 ) -> tuple[int, str] | None:
     """Which restore-drill candidates have gone too long unproven.
 
     `candidates` is the drill's published eligible-volume list (one per line, order preserved).
     `seen`/`success` map a candidate to its join-marker mtime / success-stamp content (already
     newline-stripped), present only when that file exists and was readable.
+
+    `seen_default` is the seen time of a candidate with no `seen` entry. The ConfigMap arm passes
+    the ConfigMap's creationTimestamp, so such a candidate is flagged once the window passes; the
+    directory arm passes None, and such a candidate is skipped.
+
+    Candidates with no seen entry at all are reported at once, whichever arm. The drill writes a
+    seen entry for every candidate in the run that publishes the list, so an empty set means the
+    drill's state did not persist. The guard reads `seen` before `seen_default` fills it, or the
+    ConfigMap arm could never trip it.
     """
     cand_n = len(candidates)
     if cand_n == 0:
         return None
+    if not seen:
+        return (
+            3,
+            f"restore-drill state did not persist: {cand_n} candidate(s) and no seen entry — "
+            "check 8 cannot judge rotation coverage",
+        )
     coverage_max_s = (cand_n + coverage_slack_days) * 86400
 
     unproven = []
     for cand in candidates:
-        seen_at = seen.get(cand)
+        seen_at = seen.get(cand, seen_default)
         if seen_at is None:
             continue
         if not (now_s - seen_at > coverage_max_s):

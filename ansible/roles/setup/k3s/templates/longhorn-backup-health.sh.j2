@@ -57,13 +57,14 @@
 # actual (newer) setting. Nothing here catches that case; it is a property of which commit is on
 # the host, not something this script can detect from the outside.
 #
-# The reader issues up to 17 kubectl calls (2 armed targets x up to 2 calls, +1 backup list that
-# checks 2 to 5 share, +9 per-tier, +1 r2-set, +1 failed-jobs, +1 RecurringJob pod-log read for
-# check 11), each with a 30s timeout, plus check 9's two journalctl reads at 10s each — a 530s
-# worst case against this script's 600s cron period. Left as-is: `k3s kubectl` calls against the
+# The reader issues up to 18 kubectl calls (2 armed targets x up to 2 calls, +1 backup list that
+# checks 2 to 5 share, +9 per-tier, +1 r2-set, +1 failed-jobs, +1 restore-drill stamp ConfigMap
+# for checks 7 and 8, +1 RecurringJob pod-log read for check 11), each with a 30s timeout, plus
+# check 9's two journalctl reads at 10s each — a 560s worst case against this script's 600s cron
+# period. Left as-is: `k3s kubectl` calls against the
 # local API server return in well under a second in practice (the pod-log read took 0.1s on
 # 2026-10-09), and 30s is a timeout for a wedged cluster, not an expected duration. The margin is
-# 70s, so up to two more kubectl calls fit before one needs a shorter deadline or a longer cron
+# 40s, so one more kubectl call fits before one needs a shorter deadline or a longer cron
 # period.
 set -uo pipefail
 
@@ -155,6 +156,7 @@ export LONGHORN_DAILY_BACKUP_BUDGET="{{ k3s_longhorn_daily_backup_budget }}"
 export LONGHORN_BACKUP_CRON="{{ k3s_longhorn_backup_cron }}"
 export LONGHORN_WEEKLY_BACKUP_MINUTE_HOUR="{{ k3s_longhorn_weekly_backup_minute_hour }}"
 export LONGHORN_RESTORE_DRILL_STAMP_DIR="{{ k3s_longhorn_restore_drill_stamp_dir }}"
+export LONGHORN_RESTORE_DRILL_NAMESPACE="{{ k3s_longhorn_restore_drill_namespace }}"
 export LONGHORN_RESTORE_DRILL_MAX_AGE_DAYS="{{ k3s_longhorn_restore_drill_max_age_days }}"
 export LONGHORN_RESTORE_DRILL_COVERAGE_SLACK_DAYS="{{ k3s_longhorn_restore_drill_coverage_slack_days }}"
 # Check 9's transport. Absolute for the reason LONGHORN_BACKUP_KUBECTL is: cron's PATH is

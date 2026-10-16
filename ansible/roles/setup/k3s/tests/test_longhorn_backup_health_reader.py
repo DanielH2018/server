@@ -299,6 +299,7 @@ def test_reader_argv_hands_now_to_main(tmp_path):
         ("r2", "r2 volume set fetch failed (rc=124)"),
         ("failed-jobs", "failed-jobs fetch failed (rc=124)"),
         ("pod-logs", "recurring-job pod logs fetch failed (rc=124)"),
+        ("drill-stamps", "restore-drill stamp ConfigMap fetch failed (rc=124)"),
     ],
 )
 def test_a_timed_out_fetch_is_flagged_by_name(tmp_path, logger_calls, branch, named):
@@ -323,6 +324,10 @@ def test_a_timed_out_fetch_is_flagged_by_name(tmp_path, logger_calls, branch, na
     [
         ("backups", "backup list fetch returned an unparseable body"),
         ("failed-jobs", "failed-jobs fetch returned an unparseable body"),
+        (
+            "drill-stamps",
+            "restore-drill stamp ConfigMap fetch returned an unparseable body",
+        ),
     ],
 )
 def test_an_unparseable_json_body_is_flagged_by_name(

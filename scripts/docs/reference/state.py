@@ -8,7 +8,8 @@ one describes OUTCOME (what last happened, and whether that is recent enough to 
 
 SOURCES. Each loop leaves state on the host it runs on: a `last_run` marker, a drill's
 success stamp, or (for the two crons with no local file) the last commit that moved their
-tracked source. The generator runs on daniel-box under the docs-refresh cron as the `ubuntu`
+tracked source. The Longhorn restore drill's reader asks its stamp ConfigMap first and reads the
+host directory only while that holds no stamp. The generator runs on daniel-box under the docs-refresh cron as the `ubuntu`
 user, so every reader degrades: a missing state directory means "not reachable from here"
 (wrong host, no permission, role not installed) rather than a crash, and the whole page is
 never failed by one unreadable loop -- see WHAT UNREADABLE MEANS below.
@@ -43,6 +44,7 @@ Usage::
 
 import datetime as dt
 import json
+import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -59,12 +61,17 @@ from lib import yaml_fast
 
 from docs.reference import crons as crons_mod
 from lib.git import git
-from lib.repo_paths import GITOPS_DEPLOY_FILES, K3S_DEFAULTS, REPO, ROLES
+from lib.kubectl import DEFAULT_TOOLS, MissingKubectl, Tools, WrongCluster, kubectl
+from lib.repo_paths import GITOPS_DEPLOY_FILES, K3S_DEFAULTS, K3S_FILES, REPO, ROLES
 
 # The deployer's own marker module, read from its role's files/ rather than a copy (#3275).
 _sys.path.insert(0, str(GITOPS_DEPLOY_FILES))
 from gitops_hold import DeployerSnapshot
 from gitops_markers import MARKERS, STATE_DIR
+
+# The drill's stamp ConfigMap parser, shared with backup health and the Longhorn upgrade gate.
+_sys.path.insert(0, str(K3S_FILES))
+from longhorn_lib import longhorn_restore_drill_stamps as drill_stamps
 
 LATE_MULTIPLIER = 2
 
@@ -218,13 +225,50 @@ def secret_rotate_run(repo: Path = REPO) -> LoopRun:
 
 def longhorn_restore_drill_run(
     state_dir: Path = Path("/var/lib/longhorn-restore-drill"),
+    tools: Tools = DEFAULT_TOOLS,
+    namespace: str | None = None,
 ) -> LoopRun:
     """The daily Longhorn PVC restore drill.
 
     Cadence: k3s_longhorn_restore_drill_cron (roles/setup/k3s/defaults/main.yml, resolved
     directly -- see the module docstring).
+
+    Reads `last-success` from the drill's stamp ConfigMap through `lib.kubectl` on `prod`, under
+    the docs-refresh cron's KUBECONFIG, and from `state_dir` while the ConfigMap is absent or
+    holds no `last-success`. A failed read is `unreadable`, never a fallback: the directory may
+    be the stale half once the drill writes the ConfigMap.
     """
-    return _epoch_marker(state_dir, "last-success", "PVC restore proven")
+    if namespace is None:
+        namespace = _k3s_default_var("k3s_longhorn_restore_drill_namespace") or ""
+    try:
+        proc = kubectl(
+            "prod",
+            "-n",
+            namespace,
+            *drill_stamps.CONFIGMAP_GET_ARGS,
+            timeout=30,
+            tools=tools,
+        )
+    except (MissingKubectl, WrongCluster, subprocess.TimeoutExpired, OSError) as exc:
+        return LoopRun(
+            None, f"stamp ConfigMap not readable from here: {exc}", unreadable=True
+        )
+    if proc.returncode != 0:
+        return LoopRun(None, "stamp ConfigMap read failed", unreadable=True)
+    try:
+        doc = drill_stamps.parse_configmap(proc.stdout)
+    except ValueError:
+        return LoopRun(None, "stamp ConfigMap content did not parse", unreadable=True)
+    stamps = drill_stamps.from_configmap(doc, namespace)
+    if stamps is None:
+        return _epoch_marker(state_dir, "last-success", "PVC restore proven")
+    try:
+        epoch = float(stamps.last_success or "")
+    except ValueError:
+        return LoopRun(None, "stamp ConfigMap content did not parse", unreadable=True)
+    return LoopRun(
+        dt.datetime.fromtimestamp(epoch, dt.timezone.utc), "PVC restore proven"
+    )
 
 
 def etcd_restore_drill_run(

@@ -52,6 +52,17 @@ ARMED = {
 SETTLED_VOLUMES = {"items": [_volume("pvc-a"), _volume("pvc-b", "detached", "unknown")]}
 ONE_ENGINE = {"items": [_engine("longhornio/longhorn-engine:v1.12.1", refs=176)]}
 
+CM_ARGS = ("-n", "homelab", *gates.drill_stamps.CONFIGMAP_GET_ARGS)
+
+
+def _stamps(data: dict) -> dict:
+    """The drill's stamp ConfigMap as `kubectl get -o json` prints it."""
+    return {
+        "kind": "ConfigMap",
+        "metadata": {"name": gates.drill_stamps.CONFIGMAP},
+        "data": data,
+    }
+
 
 @pytest.fixture
 def state_dir(tmp_path):
@@ -62,10 +73,17 @@ def state_dir(tmp_path):
 
 
 def _run(
-    state_dir, targets=ARMED, volumes=SETTLED_VOLUMES, engines=ONE_ENGINE, now=NOW
+    state_dir,
+    targets=ARMED,
+    volumes=SETTLED_VOLUMES,
+    engines=ONE_ENGINE,
+    now=NOW,
+    stamps="",
 ):
+    """`stamps=""` is an absent ConfigMap, the live state until the drill writes one."""
     tools = fake_tools(
         {
+            CM_ARGS: stamps,
             gates.TARGETS_ARGS: targets,
             gates.VOLUMES_ARGS: volumes,
             gates.ENGINE_IMAGES_ARGS: engines,
@@ -126,6 +144,27 @@ def test_a_stale_or_absent_drill_stamp_is_flagged(state_dir):
 def test_an_absent_state_directory_is_not_a_fresh_drill(tmp_path):
     found = gates.stale_restore_drill(tmp_path / "nowhere", 3 * DAY, now=NOW)
     assert len(found) == 1 and "not a directory" in found[0]
+
+
+def test_a_fresh_configmap_stamp_is_clean_with_no_state_directory(tmp_path):
+    doc = _stamps({"last-success": f"{int(NOW - DAY)}"})
+    found = gates.stale_restore_drill(
+        tmp_path / "nowhere", 3 * DAY, NOW, doc, "homelab"
+    )
+    assert found == []
+
+
+def test_a_stale_configmap_stamp_is_flagged_over_a_fresh_directory(state_dir):
+    doc = _stamps({"last-success": f"{int(NOW - 4 * DAY)}"})
+    found = gates.stale_restore_drill(state_dir, 3 * DAY, NOW, doc, "homelab")
+    assert found == ["last restore drill passed 4.0 days ago (window 3 days)"]
+
+
+def test_a_configmap_with_no_last_success_reads_the_directory(state_dir):
+    (state_dir / gates.DRILL_STAMP).write_text(f"{int(NOW - 4 * DAY)}\n")
+    doc = _stamps({"candidates": "pvc-a\n"})
+    found = gates.stale_restore_drill(state_dir, 3 * DAY, NOW, doc, "homelab")
+    assert found == ["last restore drill passed 4.0 days ago (window 3 days)"]
 
 
 def test_the_window_is_the_k3s_roles_own_number():
@@ -219,6 +258,22 @@ def test_a_stale_drill_stops_at_gate_two_before_the_volume_read(state_dir):
     code, out = _run(state_dir, now=NOW + 10 * DAY)
     assert code == 2
     assert "gate 3" not in out
+
+
+def test_the_runner_reads_the_configmap_in_the_drill_namespace(state_dir):
+    """A fresh directory and a stale ConfigMap stamp: the ConfigMap decides."""
+    stale = _stamps({"last-success": f"{int(NOW - 4 * DAY)}"})
+    code, out = _run(state_dir, stamps=stale)
+    assert code == 2, out
+    assert gates.restore_drill_namespace() == "homelab"
+
+
+def test_a_failed_configmap_read_is_unavailable_not_a_fallback(state_dir):
+    tools = failing_read(fake_tools({gates.TARGETS_ARGS: ARMED}), "configmap")
+    out = io.StringIO()
+    code = gates.run_gates(tools=tools, state_dir=str(state_dir), out=out)
+    assert code == gates.gate_runner.EX_UNAVAILABLE
+    assert "gate 2" in out.getvalue() and "Forbidden" in out.getvalue()
 
 
 def test_a_list_that_returns_nothing_is_unavailable_not_a_failed_gate(state_dir):
