@@ -325,8 +325,9 @@ def test_the_cases_publish_a_repository_past_its_valid_until():
 
 
 def test_no_container_source_trusts_the_repository_unsigned():
-    # `Trusted: yes` makes apt skip the signature, and with it Valid-Until, so the container's
-    # source has to name the test keyring instead.
+    # `Trusted: yes` makes apt accept an InRelease signed by any key, or by none, so the case
+    # would pass whoever signed the index. The container's source names the test keyring in
+    # `Signed-By:` instead, as the hosts' source names the archive key.
     files = _tracked(
         "hosts/lib/tests/container",
         "scripts/validate/validate_lib",
