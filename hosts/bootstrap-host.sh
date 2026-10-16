@@ -5,6 +5,7 @@
 #
 # Usage, as root, with homelab-archive-keyring.gpg beside this script:
 #   ./bootstrap-host.sh <hostname>
+#   ./bootstrap-host.sh --help        print this header and exit
 #
 # Exit codes: 0 installed; 1 a step failed, with the reason on stderr; 64 usage.
 #
@@ -16,6 +17,15 @@
 # HOMELAB_ROOT prefixes every path the script writes. Only the tests in hosts/lib/tests/ set it.
 
 set -eu
+
+for arg in "$@"; do
+    case "$arg" in
+        -h | --help)
+            awk 'NR > 1 && /^#/ { print; next } NR > 1 { exit }' "$0"
+            exit 0
+            ;;
+    esac
+done
 
 REPO_URL=http://10.0.0.215:8791
 ARCHIVE_FINGERPRINT=83B57416B342DDE1CBA0752D435D139ADFD6F016
