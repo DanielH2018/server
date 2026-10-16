@@ -210,6 +210,7 @@ which needs a drill exclusion in C7 that no slice has requested, the edge goes.
       T removes. Any change under `_unclassified` puts every name in the set.
     - **A dependent that was already failing** is reported, not expected. That is a
       dependent whose `flux/<name>` status on `prod`'s commit already read `failure`.
+      `decide` records those statuses before it moves `prod` (H1.1i).
     - **An empty changed set** expects `flux/homelab` alone, and the soak (C7) passes it
       without waiting.
     - **Failures outside the set** never hold. An unchanged Kustomization that fails pages
@@ -661,18 +662,6 @@ request leaves this list and the round's *Review log* entry names it.
 
 ### Requests on C2
 
-- **The forward-only hold's excused failures** (H1 Open question 3). C2 states the hold
-  itself, applied on 2026-10-16.
-    - Before it moves `prod`, `decide` records the `flux/<name>` statuses on `prod`'s commit.
-      `verify` excuses a `failure` from a name whose tag T did not change and whose recorded
-      status was already `failure`. It also excuses an unchanged name with no status at the
-      timeout whose `dependsOn` chain reaches an excused name. The pillar review fold
-      narrowed this part. C2's changed set no longer expects an unchanged name. What
-      remains is the recorded status of a dependent already failing on `prod`'s commit, and
-      C2 *Verification* now states that (H1).
-
-  Gate: before H1.1i merges. Until then *Verification* moves `last-good` only when every
-  status is `success`.
 - **The shape of `verify`** (D4 Open question 14). This row is conditional on D5's
   measured duration of `verify` on the first broad revision. A broad revision can hold one
   long `verify` job up to the 5.5-hour cap, and no other promotion runs meanwhile. If that
@@ -1112,8 +1101,8 @@ Applied to this page:
   records that the C1 half is applied, and the gate before H1.1a merges is clear.
 - **The forward-only hold** (H1 Open question 3). C2 gains *The forward-only gates*, and *A
   hold without a reset* states that a failed revision that changes a forward-only tag holds
-  and leaves `prod`. That clears the gate before H1.1b merges. The excused failures stay
-  listed under *Requests on C2*, gated before H1.1i merges.
+  and leaves `prod`. That clears the gate before H1.1b merges. The excused failures were
+  applied later the same day (below).
 - **D5's changes** (D5 Open question 4). C2 states all seven, and the request leaves
   *Requests on C2*, which clears the gate before D5.1b merges.
     - *A hold without a reset* covers snapshot roles. The operator accepted it in principle on
@@ -1137,3 +1126,9 @@ Applied to this page:
   tag is `sha-<C>`. C2 *Tags* gains `held`, *A verification in flight blocks the next
   promotion* gains the exception, and *A hold without a reset* names the tag, for D5's
   stateful hold too. No row in *Requested amendments not yet applied* preceded it.
+- **The forward-only hold's excused failures** (H1 Open question 3). The pillar review fold
+  narrowed the request to one rule: a dependent whose `flux/<name>` status on `prod`'s commit
+  already read `failure` is reported, not expected. C2 *Verification* already stated it as
+  *A dependent that was already failing*, and now also says that `decide` records those
+  statuses before it moves `prod`. The request leaves *Requests on C2*, which clears the gate
+  before H1.1i merges.
