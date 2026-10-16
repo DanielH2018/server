@@ -17,8 +17,7 @@ HEX64 = re.compile(r"^[0-9a-f]{64}$")
 
 
 # A real release, so the accept half exercises the same shape an operator would add. The image
-# bundles this one already (defaults/main.yml explains), which is why the committed list is
-# empty and the tests inject their own.
+# bundles this one already (defaults/main.yml explains), so it is never in the committed list.
 SAMPLE_PLUGIN = {
     "name": "prometheus",
     "version": "0.9.1",
@@ -81,8 +80,30 @@ def test_the_checksum_guard_rejects_a_missing_or_malformed_digest():
 
 
 def test_an_empty_plugin_list_renders_no_init_container():
-    """The committed list is empty because the image bundles the one plugin in use; an init
-    container that downloads nothing would still be a GitHub dependency at every pod start."""
+    """An init container that downloads nothing would still be a GitHub dependency at every
+    pod start."""
     assert "initContainers" not in _pod_spec([])
+
+
+def test_the_committed_list_holds_no_plugin_the_image_ships():
+    """The image bundles prometheus (defaults/main.yml explains); a second copy lists twice
+    in GET /plugins."""
     committed = _role_context("headlamp")["headlamp_k8s_plugins"]
-    assert _pod_spec(committed) == _pod_spec([])
+    assert SAMPLE_PLUGIN["name"] not in {p["name"] for p in committed}
+    assert _install_problems(committed, _init_script(committed)) == []
+
+
+def test_asset_prefix_names_the_release_asset():
+    """flux publishes `headlamp-k8s-flux-<ver>.tar.gz`, not `<name>-<ver>.tar.gz`; a URL
+    built without the prefix 404s and the pod never starts."""
+    flux = {
+        "name": "flux",
+        "version": "0.7.0",
+        "sha256": "0" * 64,
+        "asset_prefix": "headlamp-k8s-",
+    }
+    base = "https://github.com/headlamp-k8s/plugins/releases/download"
+    assert f"{base}/flux-0.7.0/headlamp-k8s-flux-0.7.0.tar.gz" in _init_script([flux])
+    assert f"{base}/prometheus-0.9.1/prometheus-0.9.1.tar.gz" in _init_script(
+        [SAMPLE_PLUGIN]
+    )
