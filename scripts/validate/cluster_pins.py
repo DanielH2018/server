@@ -17,7 +17,9 @@ shapes:
 
 A pin changes when its value changes. The check reads each pin from whichever file under
 `ansible/roles/` holds the key at each SHA, so a PR that moves the key into another role at
-the same version is no bump, and neither the decrease nor the alone check applies to it.
+the same version is no bump, and neither the decrease nor the alone check applies to it. The
+key set in any other YAML file under `ansible/` is refused: inventory and play vars override
+a role default, so a pin there would move the deployed version while the role file stays put.
 
 There is no bypass. The plan is docs/target-architecture/host/h1-cluster-config-to-flux.md,
 *CI checks on the pins*, and docs/landing.md says what to do with a refused PR.
@@ -58,8 +60,9 @@ PINS: Mapping[str, bool] = {
     "k3s_longhorn_version": True,
     "k3s_metallb_version": False,
 }
-# Role YAML only: a role's CLAUDE.md or template can quote `<key>: v1.2.3` at a line start.
-ROLE_YAML = (":(glob)ansible/roles/**/*.yml", ":(glob)ansible/roles/**/*.yaml")
+# YAML only: a role's CLAUDE.md or template can quote `<key>: v1.2.3` at a line start.
+ANSIBLE_YAML = (":(glob)ansible/**/*.yml", ":(glob)ansible/**/*.yaml")
+ROLES = "ansible/roles/"
 VERSION = re.compile(r"v?(\d+)\.(\d+)\.(\d+)")
 
 
@@ -148,16 +151,36 @@ def problems(
     return found
 
 
+def files_setting(key: str, sha: str, repo: Path = REPO) -> list[str]:
+    """Every YAML file under `ansible/` that sets `key` at the top level at `sha`."""
+    hits = git(
+        "grep", "-l", "-E", f"^{key}:", sha, "--", *ANSIBLE_YAML, cwd=repo, check=False
+    )
+    if hits.returncode not in (0, 1):
+        raise Unjudged(f"git grep for {key} at {sha[:9]} failed: {hits.stderr}")
+    return [line.split(":", 1)[1] for line in hits.stdout.splitlines()]
+
+
+def outside_roles(sha: str, repo: Path = REPO) -> list[str]:
+    """A refusal for each pin set outside a role directory at `sha`.
+
+    Inventory and play vars take precedence over role defaults, so a pin set there would
+    move the deployed version while the role file, which `pins_at` reads, stays the same.
+    """
+    return [
+        f"{path}: {key} is set outside a role directory, where it would override the "
+        "role's pin unchecked. Set it in the role that holds the pin"
+        for key in PINS
+        for path in files_setting(key, sha, repo)
+        if not path.startswith(ROLES)
+    ]
+
+
 def pins_at(sha: str, repo: Path = REPO) -> dict[str, Pin | None]:
     """Each key in PINS mapped to its pin at `sha`, read from whichever role file holds it."""
     found: dict[str, Pin | None] = {}
     for key in PINS:
-        hits = git(
-            "grep", "-l", "-E", f"^{key}:", sha, "--", *ROLE_YAML, cwd=repo, check=False
-        )
-        if hits.returncode not in (0, 1):
-            raise Unjudged(f"git grep for {key} at {sha[:9]} failed: {hits.stderr}")
-        files = [line.split(":", 1)[1] for line in hits.stdout.splitlines()]
+        files = [f for f in files_setting(key, sha, repo) if f.startswith(ROLES)]
         if len(files) > 1:
             raise Unjudged(f"{key} is set in {len(files)} files at {sha[:9]}: {files}")
         if not files:
@@ -181,7 +204,9 @@ def check(base: str, head: str, repo: Path = REPO) -> int:
         "diff", "--no-renames", "--name-only", base, head, cwd=repo
     ).split()
     try:
-        found = problems(pins_at(base, repo), pins_at(head, repo), paths)
+        found = outside_roles(head, repo) + problems(
+            pins_at(base, repo), pins_at(head, repo), paths
+        )
     except Unjudged as exc:
         print(f"[FAIL] cluster-pins: cannot judge. {exc}", file=sys.stderr)
         return UNJUDGED

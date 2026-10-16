@@ -175,3 +175,18 @@ def test_a_key_set_in_two_role_files_is_unjudged(repo):
     base = _commit(repo, {K3S: "k3s_longhorn_version: v1.12.1\n"})
     head = _commit(repo, {LONGHORN: "k3s_longhorn_version: v1.12.1\n"})
     assert cluster_pins.check(base, head, repo) == cluster_pins.UNJUDGED
+
+
+def test_a_pin_set_only_in_a_role_is_clean(repo):
+    sha = _commit(repo, {K3S: "k3s_longhorn_version: v1.12.1\n"})
+    assert cluster_pins.outside_roles(sha, repo) == []
+
+
+def test_an_inventory_override_of_a_pin_is_flagged(repo, capsys):
+    base = _commit(repo, {K3S: "k3s_longhorn_version: v1.12.1\n"})
+    group_vars = "ansible/inventory/group_vars/all.yml"
+    head = _commit(repo, {group_vars: "k3s_longhorn_version: v1.11.0\n"})
+    assert cluster_pins.check(base, head, repo) == cluster_pins.REFUSED
+    assert f"[FAIL] {group_vars}: k3s_longhorn_version is set outside" in (
+        capsys.readouterr().err
+    )

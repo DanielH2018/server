@@ -433,7 +433,7 @@ fails without a verdict. Slice D6 deletes the gate once every role is flux-owned
 Merging `k3s_longhorn_version` or `k3s_metallb_version` is the upgrade, and neither upgrade
 runs backwards. CI's **Cluster pin checks** step, in the `hooks` job on pull requests only,
 runs `scripts/validate/cluster_pins.py --base HEAD^1`. It reads each pin from whichever role
-YAML file holds the key at the base and at the merge commit, and refuses four shapes:
+YAML file holds the key at the base and at the merge commit, and refuses five shapes:
 
 - **A decrease.** A revert PR of a bump fails here. To undo a bump, fix forward in a PR that
   keeps the version.
@@ -443,10 +443,12 @@ YAML file holds the key at the base and at the merge commit, and refuses four sh
   that holds the pin, which carries its vendored file, and docs. A test, `renovate.json` or
   another role goes in a PR of its own. `land.sh`'s land gate relies on this refusal.
 - **Two pins bumped together.** Bump each pin in its own PR.
+- **A pin set outside a role directory.** Inventory and play vars override a role default,
+  so a pin in `group_vars/` would move the deployed version while the role file stays put.
 
-A PR that moves a key into another role at the same version is no bump, so none of the four
-applies to it. A key set in two files at one commit, or a value that is not `vX.Y.Z`, exits 2:
-the check cannot judge it. There is no bypass.
+A PR that moves a key into another role at the same version is no bump, so none of the first
+four applies to it. A key set in two role files at one commit, or a value that is not `vX.Y.Z`,
+exits 2: the check cannot judge it. There is no bypass.
 
 ## The stale-tree retry
 
