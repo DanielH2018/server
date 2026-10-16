@@ -2684,7 +2684,8 @@ subject's tests.
     lasting suspend (*The backup plane and its levers*). *Resolution:* the operator confirms
     the retirement in H1.7b's review. If the operator keeps the mode instead, H1.7b depends
     on D5.1b and D5.1d, renders the flag through D5's `flux_suspend`, and accepts D5.1d's
-    freeze, under which a disarm PR must also resume the tag.
+    freeze, under which a disarm PR must also resume the tag. **Ruled 2026-10-16: retire.**
+    H1.7b deletes the flag and needs no part of D5.
     - D5's text still has H1 render `flux_suspend` and H1.7b wait on D5.1b and D5.1d: its
       header, its bullet *D5.1b is the only definer of `flux_suspend`*, its *Open questions*
       13 and its X-13 entry. Under the default here, that edge does not exist, and a
