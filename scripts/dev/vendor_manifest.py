@@ -25,7 +25,9 @@ The refresh fetches the rendered `url`, writes the file, and rewrites `fetched_u
 in the item. When the rendered URL equals `fetched_url`, the download must hash to the pinned
 sha256, or nothing is written: upstream changed bytes under a URL the pin already names. When
 the URL moved, the first download is trusted, as `asset_pins.py --refresh` trusts it, because
-upstream publishes no checksum for these files. Either way it prints each object the old file
+upstream publishes no checksum for these files. That trust needs TLS to the named host, so the
+refresh fetches only an `https://` URL and the check refuses a pin with any other scheme;
+urllib alone would also open `http://`, `ftp://` and `file://`. Either way it prints each object the old file
 held and the new one lacks, keyed by API group, kind, namespace and name, so a version
 graduation is not a removal. With `prune: false` on the plumbing tags such an object stays
 live, and the bump PR names how it is removed.
@@ -62,6 +64,7 @@ from validate.asset_pins import Fetcher, fetch
 
 KEY_SUFFIX = "vendored_manifests"
 UPSTREAM = ("files", "upstream")
+SCHEME = "https://"
 
 
 @dataclass(frozen=True)
@@ -141,6 +144,12 @@ def check_role(role: _Path) -> list[str]:
         f"{role.name}: {name} sits in files/upstream/ with no pin in defaults"
         for name in sorted(files - {pin.name for pin in pins})
     ]
+    # A refresh cannot fix a scheme, so these lines carry no "run vendor_manifest.py" hint.
+    schemes = [
+        f"{role.name}: {pin.name}: url {pin.url} is not an {SCHEME} URL"
+        for pin in pins
+        if not pin.url.startswith(SCHEME)
+    ]
     for pin in pins:
         label = f"{role.name}: {pin.name}"
         if pin.name not in files:
@@ -156,7 +165,9 @@ def check_role(role: _Path) -> list[str]:
                 f"{label}: url renders {pin.url} but the file was fetched from "
                 f"{pin.fetched_url or 'nowhere'}"
             )
-    return [f"{p}; run scripts/dev/vendor_manifest.py {role.name}" for p in problems]
+    return schemes + [
+        f"{p}; run scripts/dev/vendor_manifest.py {role.name}" for p in problems
+    ]
 
 
 def roles_in(roles: _Path = ROLES) -> list[_Path]:
@@ -246,6 +257,10 @@ def _rewrite_item(text: str, key: str, name: str, values: dict[str, str]) -> str
 
 def refresh(pin: Vendored, fetcher: Fetcher = fetch) -> tuple[bool, list[str]]:
     """Fetch `pin.url`, then write the file and its pin; (ok, report lines)."""
+    if not pin.url.startswith(SCHEME):
+        return False, [
+            f"{pin.name}: {pin.url} is not an {SCHEME} URL; nothing was fetched"
+        ]
     try:
         status, chunks = fetcher(pin.url)
         body = b"".join(chunks) if status == 200 else b""
