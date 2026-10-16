@@ -8,6 +8,17 @@ refuses a decrease, a skipped Longhorn minor and a bump that shares its PR, and 
 `moves no pin the wrong way` on its own merge. Pins set in indented play vars or INI
 inventory go unread ([#5257](https://github.com/DanielH2018/server/issues/5257)), and no such
 file sets either pin.
+PR H1.1g, the land gate: [#5265](https://github.com/DanielH2018/server/pull/5265). It merged
+at `722e98608` and deployed nothing. `land.sh` refuses a forward-only pin bump while
+(`last-good`, master tip] already changes that pin or while `DEPLOY_HOLD` reads anything but
+`none`, and it posts `homelab/upgrade-gates` at the merge. `land.sh --regate <pr>` re-posts the
+status and never merges. Renovate's grouped rule is split into `k3s`, `metallb` and `longhorn`
+rules, none automerged.
+PR H1.1j, the takeover census: [#5273](https://github.com/DanielH2018/server/pull/5273). It
+merged at `4c2a9f92e` and deployed nothing. `scripts/dev/takeover_census.py` imports the
+cleanup list, the flattening and the server-default rule from `probe_lib/takeover.py` (D5.1g)
+rather than copying them. Its inputs need the admin kubeconfig, so its first live run is the
+operator's, before H1's first flip.
 
 Depends on: D2, D4; D3 for H1.7b only; R4 for H1.9 only
 Unblocks: H2, which needs H1.1a to H1.8 and never H1.9

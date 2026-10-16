@@ -279,15 +279,19 @@ H1's flips use a different census, `scripts/dev/takeover_census.py` (H1.1j), whi
 operator-only. It compares the live object with a server-side dry-run apply as
 `kustomize-controller`, which needs the admin kubeconfig, and it also prints the fields that a
 manager outside the cleanup list keeps. It makes no API call itself. The operator renders the
-tag, writes both inputs as JSON and passes them in:
+tag, writes both inputs as JSON and passes them in. Both inputs hold whole live objects, a
+Secret's `data` included, so they go in a directory only the operator can read, and the
+directory goes once the census has printed:
 
 ```bash
 uv run python scripts/renderer/homelab_render.py cluster --out out --role <tag>
-sudo k3s kubectl get -k out/cluster/<dir> -o json --show-managed-fields > live.json
+census=$(mktemp -d)
+sudo k3s kubectl get -k out/cluster/<dir> -o json --show-managed-fields > "$census/live.json"
 sudo k3s kubectl apply --server-side --dry-run=server --force-conflicts \
     --field-manager=kustomize-controller -k out/cluster/<dir> \
-    -o json --show-managed-fields > dryrun.json
-uv run python scripts/dev/takeover_census.py live.json dryrun.json
+    -o json --show-managed-fields > "$census/dryrun.json"
+uv run python scripts/dev/takeover_census.py "$census/live.json" "$census/dryrun.json"
+rm -r "$census"
 ```
 
 `<dir>` is `<tag>`, and then `<tag>-deferred` when the render wrote one. Flux applies a
