@@ -3430,6 +3430,7 @@ includes valheim's initContainer.
    run promotes at the window's end. Resolution: contracts.md's C2 row is amended before
    D5.1b merges. Its register row names all seven, the observe-only `soak` carve-out from
    D5.3b2 to D5.3b3 among them.
+   **Applied on 2026-10-16.** C2 states all seven, and the gate before D5.1b merges is clear.
 5. **C3 changes.** It gains the non-tag Kustomizations `<tag>-snapshot`, `<tag>-verify` (R4's
    Open question 1), `soak` and `homelab-namespace`, and names `homelab-namespace` as the
    namespace's owner. `<tag>-verify` depends on the tag's last Kustomization. It gains
@@ -3443,6 +3444,10 @@ includes valheim's initContainer.
    same row. C3's per-role `prune: false` also widens. C3 allows it "for H1's vendored
    CRDs", and D5 sets it on traefik and `flux`, whose renders carry their own CRDs. The
    register row gains the widening, gated before traefik's flip PR merges.
+   **Applied on 2026-10-16.** C3 states the rest, and the gate before D5.1a1 merges is clear.
+   Its first per-role field reads "`prune: false`, for a plumbing tag (H1) or a tag whose
+   render holds a CustomResourceDefinition (D5)", one row under H1.1a's gate (H1 Open
+   question 2). traefik's flip waits on H1.1a, so its gate is clear too.
 6. **C7 changes.** The soak's verdict reaches GitHub as the commit status `flux/soak`, a channel
    C7 does not list. A rule labelled `verify="true"` is a verify successor that the soak reads,
    whatever its severity, so C7 gains that label. The soak reads alerts with M1's
@@ -3477,6 +3482,8 @@ includes valheim's initContainer.
     `DIR/images/`. Resolution: contracts.md's C1 row is amended, for the two fields before
     D5.1a2 merges and for the contexts before D5.4a1 merges, as its
     *Requested amendments not yet applied* lists.
+    **Applied on 2026-10-16** for the two fields, and the gate before D5.1a2 merges is
+    clear. The image contexts stay listed, gated before D5.4a1 merges.
 11. **Where a verifying Job lives.** D4 places netpol-baseline's probe Job in
     `netpol-baseline-deferred` and makes it a named member there (D4's Open question 4). D5
     puts every verify Job in `<tag>-verify`, which depends on the tag's last Kustomization, so
@@ -3528,6 +3535,9 @@ includes valheim's initContainer.
     and the namespace PR adds `homelab-namespace`; D5.1a1 reserves both names", before
     D5.1a1 merges, and the change joins *Requested amendments not yet applied* with that
     gate. D4 corrects its sentence in the same round.
+    **Applied.** contracts.md's round 2 made the change (X2-11). C3 *Shared kinds* names
+    D5.3b2 and the namespace PR, and *Reserved names* names D5.1a1. The gate before D5.1a1
+    merges is clear.
 17. **What does C2's revert rule leave open for the soak?** C2's proposed revert rule
     replaces the trade this question asked about, a fleet-wide soak whose failure reset
     `prod` and rolled back other PRs' healthy changes. The soak reads R's changed set (*The

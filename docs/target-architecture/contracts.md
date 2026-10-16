@@ -94,13 +94,17 @@ which needs a drill exclusion in C7 that no slice has requested, the edge goes.
   - `DIR/flux/kustomization.yaml` lists every file in `DIR/flux/`.
   - From D5.1a1, `DIR/cluster/<tag>-snapshot/` and `DIR/cluster/<tag>-verify/`.
   - From D2's first publishing PR, `DIR/digests.json` at the bundle root. No Kustomization's
-    path reaches it. It maps each deploy tag and each member of `SHARED_KINDS` to two
-    SHA-256 digests:
+    path reaches it. It maps each deploy tag and each member of `SHARED_KINDS` to an object.
+    Every object holds two SHA-256 digests, and from D5.1a2 a deploy tag's object holds two
+    more fields (D5):
       - `own` covers `cluster/<name>/` alone. D5 reads it.
       - `footprint` covers every bundle path that counts for the name. A tag's own
         directories count, with a reserved suffix stripped. So do its `flux/<tag>.yaml`, and
         the `cluster-vars` files when the tag substitutes. A shared kind's files count for
-        the names its footprint rule lists (C3).
+        the names its footprint rule lists (C3). `soak`'s footprint is normalised over the
+        revision's SHA, so the commit alone never moves it.
+      - `claims` lists the snapshot claims the tag declares.
+      - `suspended` is the tag's rendered suspend flag (C3 *Suspension*).
 
     Three index paths count for no name and are left out of every footprint:
     `flux/kustomization.yaml`, `digests.json` itself, and `images/`. A tag that joins or
@@ -174,9 +178,23 @@ which needs a drill exclusion in C7 that no slice has requested, the edge goes.
   to one commit. Each run promotes the newest published master commit: `promote.py decide`
   walks `origin/master` from its tip back to `prod`'s commit and takes the first commit T with
   a published `sha-<T>` tag, a signature that verifies and a green CI verdict. It prints
-  `promote`, `held`, `current` or `error`, and moves `prod` to T only when:
-  - the repo variable `DEPLOY_HOLD` reads `none`; and
-  - T descends from the current `prod`.
+  `promote`, `held`, `current`, `deferred` or `error`, and moves `prod` to T only when:
+  - the repo variable `DEPLOY_HOLD` reads `none`;
+  - T descends from the current `prod`;
+  - T passes *The forward-only gates* (H1); and
+  - the run is outside *The reboot window* (D5).
+- **The forward-only gates.** `prod` moves to T only when every commit in (`last-good`, T]
+  that changes a forward-only pin maps to a PR whose head carries a successful
+  `homelab/upgrade-gates` status. A commit with no PR fails that test, and a failed lookup
+  ends the run as `error`. `prod` also stays when (`prod`, T] changes one forward-only pin in
+  more than one commit, moves `k3s_longhorn_version` more than one minor, or carries a
+  required gate status older than six hours. A tag that T drops counts as changed (H1).
+- **The reboot window.** No promotion moves `prod` inside the derived reboot window. A run
+  inside it ends `deferred` without waiting, and a derived `schedule:` run promotes at the
+  window's end (D5).
+- **A change to a suspended tag holds.** `decide` holds a revision R that changes the `own`
+  digest of a tag suspended at both `last-good` and R. It writes `DEPLOY_HOLD` as
+  `<R> suspended-changed=<tag>`, naming the tag (D5).
 - **`DEPLOY_HOLD`'s values.** `none` means no hold. Any other non-empty value is a hold, so a
   mistyped hold still holds. An empty value or a missing variable is an error: `decide`
   prints `error`, exits non-zero and moves no tag. `gh` cannot set an empty value, so D1
@@ -195,6 +213,9 @@ which needs a drill exclusion in C7 that no slice has requested, the edge goes.
       without waiting.
     - **Failures outside the set** never hold. An unchanged Kustomization that fails pages
       through the Flux rule group (C7).
+    - **The observe-only set.** From D5.3b2 until D5.3b3, `verify`'s observe-only set leaves
+      out `soak` and ignores a `flux/soak` `failure`, so the first live soaks neither hold nor
+      reset. D5.3b3 deletes the set (D5).
 
   A missing expected status keeps `verify` waiting and never reads as success. When every
   expected status is `success`, `last-good` moves to `sha-<T>`.
@@ -210,7 +231,15 @@ which needs a drill exclusion in C7 that no slice has requested, the edge goes.
 
   `<T> unverified` is a hold under *`DEPLOY_HOLD`'s values*, because it is neither `none`
   nor empty. Other writers of `DEPLOY_HOLD` keep their own values (H1, D5, H6), and none of
-  them uses the `failed=` or the `unverified` form.
+  them uses the `failed=` or the `unverified` form. D5 writes `<T> stateful=<names>` and
+  `<R> suspended-changed=<tag>`, and H1's forward-only hold writes T's SHA alone.
+- **A hold without a reset.** A failed revision that changes a forward-only tag (H1) or a
+  snapshot role (D5) writes `DEPLOY_HOLD` and leaves `prod`. D5's hold reads
+  `<T> stateful=<names>`. The operator accepted it in principle on 2026-10-16, and confirms
+  its two co-batched cases in D5.2b1's review (D5 Open question 1). Each of these holds
+  clears only by hand.
+- **The hold post.** From D5.2b1, a hold posts to the deployer's Discord channel, with a
+  command block per changed snapshot role (D5).
 - **A verification in flight blocks the next promotion.** `verify` and `settle` join no
   concurrency group. GitHub keeps one pending job per group, and a newer one cancels it, so
   a pending `settle` in the group `promote` could be evicted with its hold unwritten. Two
@@ -235,13 +264,24 @@ which needs a drill exclusion in C7 that no slice has requested, the edge goes.
   `scripts/deploy_tools/promote_lib/verify_promotion.py` carries the decision as the marker
   `DECIDED: a verification in flight is guarded by two checks`. Any other job that moves
   `prod` or `last-good`, such as D5's `reset_to_last_good` dispatch, must hold both checks
-  true or state why it may break them.
+  true or state why it may break them. *The reset input* holds both.
+- **The reset input.** A `reset_to_last_good` dispatch input moves `prod` to `last-good` and
+  does nothing else. It runs in its own concurrency group, `promote-reset`, and ignores the
+  reboot window. It refuses unless `DEPLOY_HOLD` holds a hold: `none`, an empty value and a
+  missing variable each refuse. It holds both checks above true
+  ([#5079](https://github.com/DanielH2018/server/issues/5079)):
+    - It refuses while `prod` differs from `last-good`, unless `DEPLOY_HOLD`'s first word is
+      a SHA X whose `sha-<X>` digest equals `prod`'s, which means `prod`'s run has settled.
+    - It moves `prod` only while `prod` still names the digest it read, as `tag` does.
+
+  D2's `settle` is unchanged. D5 *A reset input* has the argument and the one residual race
+  under the revert rule (D5).
 - **Clearing a hold.** Clearing `DEPLOY_HOLD` means setting it back to `none` with
   `gh variable set DEPLOY_HOLD --body none -R DanielH2018/server`. Clearing by hand is
-  **operator-only**, and an agent hook denies that command (D1). There is one proposed
-  exception.
-- **The revert rule.** This is proposed, and it waits on an **operator-only** ruling. It
-  replaces D5 Open question 17.
+  **operator-only**, and an agent hook denies that command (D1). *The revert rule* below is
+  the one exception.
+- **The revert rule.** The operator adopted this rule on 2026-10-16, with the `soak`
+  exclusion below (D5 Open question 17).
     - While `DEPLOY_HOLD` reads `<T> failed=<names>`, `decide` may promote a candidate U that
       descends from T. For every name in `<names>`, U's `footprint` digest must equal
       `last-good`'s.
@@ -250,8 +290,8 @@ which needs a drill exclusion in C7 that no slice has requested, the edge goes.
     - A hold in any other form clears only by hand, `<T> unverified` included. So does a
       `failed=` hold whose names include `soak`. The soak's verdict covers every service in
       the changed set, so no single footprint can show that the failure was reverted.
-    - Until the operator rules, every hold clears only by hand, and `decide` treats a
-      `failed=` hold like any other hold.
+    - Until `decide` implements the rule, every hold clears only by hand, and `decide`
+      treats a `failed=` hold like any other hold.
 - **A `prod` move outside `promote`.** Each time `promote` moves `prod`, it writes the new
   digest to the repo variable `PROD_DIGEST`. The deploy-pipeline exporter (C7) compares that
   value with `prod`'s live digest, and a mismatch pages (D2).
@@ -285,13 +325,26 @@ which needs a drill exclusion in C7 that no slice has requested, the edge goes.
     `<tag>-deferred`, which depends on `<tag>`.
   - A verifying Job lives in `<tag>-verify`, which depends on the tag's last Kustomization
     and sets `wait: true` (R4, D5).
-  - D5.1a1 adds `<tag>-snapshot` for a role that declares snapshot claims.
-- **Per-role fields.** Four fields of a role's own Kustomization vary by role. A role may set
-  three of them from its defaults: `prune: false`, for H1's vendored CRDs; its own `timeout`
-  (H1, H6); and `healthCheckExprs` for its own custom resources (H6). The fourth, `decryption:
-  {provider: sops, secretRef: {name: sops-age}}`, is derived from a non-empty
-  `render_sops_manifests` and never set by hand (D3.3c). The shared kind `cluster-vars` also
-  sets it. No other field varies by role.
+  - D5.1a1 adds `<tag>-snapshot` for a role that declares snapshot claims. It inherits
+    `<tag>`'s `dependsOn`, less the edge to itself (D5).
+- **Per-role fields.** Five fields of a role's own Kustomization vary by role. A role may set
+  four of them from its defaults:
+  - `prune: false`, for a plumbing tag (H1) or a tag whose render holds a
+    CustomResourceDefinition (D5), through H1.1a's `flux_prune`. D5 sets it on traefik's tag
+    and on `flux`.
+  - its own `timeout` (H1, H6).
+  - `healthCheckExprs` for its own custom resources (H6).
+  - `suspend: true`, through `flux_suspend` (D5.1b). *Suspension* states how it renders.
+
+  The fifth, `decryption: {provider: sops, secretRef: {name: sops-age}}`, is derived from a
+  non-empty `render_sops_manifests` and never set by hand (D3.3c). The shared kind
+  `cluster-vars` also sets it. No other field varies by role.
+- **Suspension.** A role's `flux_suspend: true` renders `spec.suspend: true` on `<tag>` and
+  on each of its non-tag Kustomizations (D5.1b). The renderer writes `spec.suspend` only when
+  it is true, on every Flux object. The renderer drops every `dependsOn` edge that names a
+  suspended Kustomization. A hand suspend or resume of a Flux object patches `spec.suspend`
+  with the field manager `homelab-operator`, which kustomize-controller leaves alone. A hand
+  apply of whole objects keeps kubectl's default manager, so Flux takes its fields back (D5).
 - **Shared kinds.** A Kustomization that belongs to no deploy tag is a shared kind. The
   renderer names every shared kind in a closed literal set, `SHARED_KINDS`. D2.6b adds the
   set empty, D3.3a adds `cluster-vars`, D5.3b2 adds `soak`, and D5's namespace PR adds
@@ -299,7 +352,8 @@ which needs a drill exclusion in C7 that no slice has requested, the edge goes.
   member with no file. C1 says where a shared kind is published, and C2 verifies it through
   `flux/<name>` like a tag. Each member also needs a footprint rule in the renderer that
   names the deploy tags its files count for (C1 `digests.json`), and a census test fails the
-  PR that adds a member without one (D2).
+  PR that adds a member without one (D2). `homelab-namespace` owns the `homelab` Namespace
+  and its LimitRange (D5).
 - **Reserved names.** The render fails on a deploy tag named `homelab`, the root
   Kustomization's name. It also fails on a deploy tag that equals a member of `SHARED_KINDS`
   or ends in `-deferred`. D5.1a1 reserves `-snapshot`, `-verify`, `soak` and
@@ -590,9 +644,6 @@ request leaves this list and the round's *Review log* entry names it.
   SHA`. The publish job passes the commit it publishes, and the render-diff job passes the PR
   head's SHA to both renders. Gate: before R4's PR 1 merges. D6.1 no longer renders twice
   once C1's footprint replaces `--moved-tags`, so D6 Open question 13 is withdrawn.
-- **Two more digest fields** (D5 Open question 10). Each tag's object in `digests.json` gains
-  `claims` and `suspended` beside `own` and `footprint`. `soak`'s footprint is normalised
-  over the revision's SHA, so the commit alone never moves it. Gate: before D5.1a2 merges.
 - **Image contexts** (D5 Open question 10). `DIR/images/<name>/` and `DIR/images/tags.json`,
   which no Kustomization's path reaches. Gate: before D5.4a1 merges.
 - **Host-mode placeholders** (H4 Open question 6, with H3's *Host mode renders no secret*).
@@ -605,16 +656,8 @@ request leaves this list and the round's *Review log* entry names it.
 
 ### Requests on C2
 
-- **The forward-only hold** (H1 Open question 3, which quotes the full text this row adopts).
-    - A failed revision that changes a forward-only tag (H1) or a snapshot role (D5) writes
-      `DEPLOY_HOLD` and leaves `prod`.
-    - `prod` moves to T only when every commit in (`last-good`, T] that changes a
-      forward-only pin maps to a PR whose head carries a successful `homelab/upgrade-gates`
-      status. A commit with no PR fails that test, and a failed lookup ends the run as
-      `error`.
-    - `prod` also stays when (`prod`, T] changes one forward-only pin in more than one commit,
-      moves `k3s_longhorn_version` more than one minor, or carries a required gate status
-      older than six hours. A tag that T drops counts as changed.
+- **The forward-only hold's excused failures** (H1 Open question 3). C2 states the hold
+  itself, applied on 2026-10-16.
     - Before it moves `prod`, `decide` records the `flux/<name>` statuses on `prod`'s commit.
       `verify` excuses a `failure` from a name whose tag T did not change and whose recorded
       status was already `failure`. It also excuses an unchanged name with no status at the
@@ -623,37 +666,8 @@ request leaves this list and the round's *Review log* entry names it.
       remains is the recorded status of a dependent already failing on `prod`'s commit, and
       C2 *Verification* now states that (H1).
 
-  Gates: before H1.1b merges for the hold, and before H1.1i merges for the excused failures.
-  Until then *Verification* moves `last-good` only when every status is `success`.
-- **D5's changes** (D5 Open question 4).
-    - Snapshot roles hold without a reset. This part also waits on the operator's ruling in
-      D5 Open question 1 (**operator-only**).
-    - The expected statuses become C2's changed set, minus suspended ones. The pillar review
-      fold replaced "every Kustomization in the bundle's `flux/` directory" here. Under the
-      old wording, one unrelated unhealthy workload held every promotion.
-    - From D5.3b2 until D5.3b3, `verify`'s observe-only set leaves out `soak` and ignores a
-      `flux/soak` `failure`, so the first live soaks neither hold nor reset. D5.3b3 deletes
-      the set.
-    - A `reset_to_last_good` dispatch input runs in its own concurrency group,
-      `promote-reset`. It ignores the reboot window, and it refuses unless `DEPLOY_HOLD`
-      holds a hold: `none`, an empty value and a missing variable each refuse.
-    - The reset must be designed against *A verification in flight blocks the next
-      promotion*. D2.5's `verify` and `settle` join no group, so `promote-reset` serialises
-      the reset against nothing of D2's. A reset that moves `prod` to `last-good` while
-      another run verifies releases `decide`'s wait. That run's `settle` then still writes
-      its own hold over the operator's, or moves `last-good` to a T that `prod` no longer
-      names. So the reset holds both checks true (#5079). It refuses while `prod` differs
-      from `last-good`, unless `DEPLOY_HOLD`'s first word is a SHA X whose `sha-<X>` digest
-      equals `prod`'s, which means `prod`'s run has settled. It moves `prod` only while
-      `prod` still names the digest it read, as `tag` does. D2's `settle` is unchanged. D5
-      *A reset input* has the argument and the one residual race under the revert rule.
-    - The hold posts to Discord, with a command block per changed snapshot role. A revision
-      that changes a suspended tag holds with `suspended-changed`.
-    - No promotion moves `prod` inside the derived reboot window. A run inside it ends
-      `deferred` without waiting, and a derived `schedule:` run promotes at the window's end.
-
-  Gate: before D5.1b merges. The observe-only set alone has a window of its own, from D5.3b2
-  to D5.3b3.
+  Gate: before H1.1i merges. Until then *Verification* moves `last-good` only when every
+  status is `success`.
 - **The shape of `verify`** (D4 Open question 14). This row is conditional on D5's
   measured duration of `verify` on the first broad revision. A broad revision can hold one
   long `verify` job up to the 5.5-hour cap, and no other promotion runs meanwhile. If that
@@ -687,16 +701,6 @@ request leaves this list and the round's *Review log* entry names it.
   role that passes `manifests_deferred_files` gets `<tag>-deferred` once it is flux-owned",
   because D1 adds the flux role as a fourth caller, and *Reserved names* says that D4.2
   reserves the suffix. No gate is named.
-- **Suspension and hand writes** (D5 Open question 5). `spec.suspend` through
-  `flux_suspend`, rendered only when true. Edges to a suspended Kustomization are dropped. A
-  hand write to a Flux object uses the field manager `homelab-operator`. `<tag>-snapshot`
-  inherits `<tag>`'s `dependsOn`, and `homelab-namespace` owns the namespace. Gate: before
-  D5.1a1 merges.
-- **`prune: false` beyond vendored CRDs** (D5, traefik's step in Wave D). *Per-role fields*
-  names `prune: false` for H1's vendored CRDs only. D5 sets it, through H1.1a's
-  `flux_prune`, on traefik's tag and on `flux`, whose renders hold CRDs. The field then
-  reads "for a tag whose render holds a CustomResourceDefinition (H1, D5)". Gate: before
-  traefik's flip merges.
 - **Wider prune exemptions.**
     - PersistentVolumes and StorageClasses join PVCs and Namespaces (D6 Open question 12).
       Gate: before D6.7b merges. Without the amendment, D6.7b refuses to remove a tag whose
@@ -1072,3 +1076,50 @@ Applied to this page:
   `<chosen>` is the green commit the builder builds, not `origin/master`'s tip. That matches
   H3's *Package rules*. The request leaves *Requests on C5*, which clears its gate before
   H3.5a merges.
+
+### Applied requests (2026-10-16)
+
+- **Two more digest fields** (D5 Open question 10). C1 *Cluster output* states that a deploy
+  tag's object in `digests.json` holds `claims` and `suspended` beside `own` and
+  `footprint`, from D5.1a2. It also states that `soak`'s footprint is normalised over the
+  revision's SHA. The request leaves *Requests on C1*, which clears the gate before D5.1a2
+  merges. The image contexts stay listed, gated before D5.4a1 merges.
+- **Suspension and hand writes** (D5 Open question 5). C3 gains *Suspension*: `flux_suspend`
+  renders `spec.suspend` only when true, the renderer drops every edge to a suspended
+  Kustomization, and a hand suspend uses the field manager `homelab-operator`. C3 *Per-tag
+  Kustomizations* states that `<tag>-snapshot` inherits `<tag>`'s `dependsOn`, and *Shared
+  kinds* states that `homelab-namespace` owns the `homelab` Namespace. C3 *Deletion policy*
+  already sets `Orphan` on every Kustomization the bundle publishes, so the non-tag kinds
+  need no row. The request leaves *Requests on C3*, which clears the gate before D5.1a1
+  merges.
+- **When `soak` and `homelab-namespace` join `SHARED_KINDS`** (D5 Open question 16). The
+  round 2 entry for X2-11 made the edit. C3 *Shared kinds* names D5.3b2 and the namespace
+  PR, and *Reserved names* has D5.1a1 reserve both names. So this entry records that the
+  request is applied, and the gate before D5.1a1 merges is clear.
+- **`prune: false` for plumbing tags** (H1 Open question 2, with D5's traefik step). C3
+  *Per-role fields* reads "`prune: false`, for a plumbing tag (H1) or a tag whose render
+  holds a CustomResourceDefinition (D5)". H1 asked for one row that carries both halves
+  under H1.1a's gate. traefik's flip waits on H1.1a, so D5 loses nothing. The row *`prune:
+  false` beyond vendored CRDs* leaves *Requests on C3*, which clears the gates before H1.1a
+  merges and before traefik's flip merges.
+- **Vendored manifests in C1** (H1 Open question 2). The round 2 entry for X2-09 applied C1
+  *Vendored files* and the per-directory unit in *Substitution and escaping*. So this entry
+  records that the C1 half is applied, and the gate before H1.1a merges is clear.
+- **The forward-only hold** (H1 Open question 3). C2 gains *The forward-only gates*, and *A
+  hold without a reset* states that a failed revision that changes a forward-only tag holds
+  and leaves `prod`. That clears the gate before H1.1b merges. The excused failures stay
+  listed under *Requests on C2*, gated before H1.1i merges.
+- **D5's changes** (D5 Open question 4). C2 states all seven, and the request leaves
+  *Requests on C2*, which clears the gate before D5.1b merges.
+    - *A hold without a reset* covers snapshot roles. The operator accepted it in principle on
+      2026-10-16 (D5 Open question 1), and confirms its two co-batched cases in D5.2b1's
+      review.
+    - *Verification* already left suspended Kustomizations out of the changed set. It gains
+      the observe-only set, from D5.3b2 until D5.3b3.
+    - *The reset input* states `promote-reset`, the hold check, and how the reset holds both
+      checks of *A verification in flight blocks the next promotion*.
+    - *The hold post*, *A change to a suspended tag holds* and *The reboot window* state the
+      rest, and *Promotion target* gains the verdict `deferred`.
+- **The revert rule is ruled** (D5 Open question 17). The operator adopted C2's revert rule
+  on 2026-10-16, with its `soak` exclusion. C2 *The revert rule* and *Clearing a hold* no
+  longer call it proposed. No row in *Requested amendments not yet applied* preceded it.
