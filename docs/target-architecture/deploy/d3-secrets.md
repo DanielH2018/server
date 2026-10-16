@@ -41,8 +41,21 @@ D3.3c, restart and SOPS-manifest wiring: [#5166](https://github.com/DanielH2018/
 It applied Open question 6's two C3 amendments: the per-role `decryption` field and the SOPS
 manifest's `substitute: disabled` annotation. Inert, as planned: after its promotion,
 `9f49b5541`, bento-pdf still ran ReplicaSet `865c4b8dd4`, its pod template carried no
-annotation, and all three Flux statuses read `success`. D3.3d, the in-cluster type proof, is
-next.
+annotation, and all three Flux statuses read `success`.
+
+D3.3d, the in-cluster type proof: [#5171](https://github.com/DanielH2018/server/pull/5171). The
+`sops-manifest-type-proof` job passed on its first run. In a kind cluster, `0123` and
+`9007199254740993` in quoted `stringData` each decoded to exactly its digits. The
+int-encrypted copy failed to apply with `.stringData.long_digits: expected string`, and the
+API server had already read its 16-digit value as `...992`. The `data:` remedy is not needed.
+
+D3.4, rotation runbooks and the wait on `cluster-vars`: [#5176](https://github.com/DanielH2018/server/pull/5176).
+`land.sh` waits on promotion for a PR that changes a cluster file, and `land-wait` adds
+`cluster-vars` and its live dependents. `secret_rotation.py consumers` prints the Flux path
+for an `owner: flux` consumer, which no live role exercises yet, because bento-pdf reads no
+secret. Review found that the compromise guidance named only the cluster file. A follow-up
+added the cluster manifests to it, here and in both docs. D3.5 is next, and it is
+operator-only.
 
 Depends on: [D2](d2-first-leaf.md), [R2](../render/r2-secret-placeholders.md). D3.0 to D3.3c
 need only D2.1 to D2.6c, which include D2.6b's empty `SHARED_KINDS` and census, as the slice
@@ -1118,8 +1131,9 @@ kubectl -n flux-system get kustomizations.kustomize.toolkit.fluxcd.io bento-pdf 
 - **A compromised cluster key** exposes the cluster-referenced values, but never the rest of
   `secrets.yml`. Mitigation: the key is dedicated, and `.sops.yaml` gives it to two path
   rules only. The D3.4 procedure protects future revisions only, because every past revision
-  in git and every published `sha-<sha>` artifact holds a copy of the cluster file. A
-  suspected compromise also needs every key in the cluster file rotated (**operator-only**)
+  in git and every published `sha-<sha>` artifact holds a copy of the cluster file and of
+  each cluster manifest. A suspected compromise also needs every key that
+  `cluster-vars.source` lists rotated (**operator-only**), the manifest-held keys included,
   and its consumers redeployed. `docs/secret-rotation.md` and `docs/break-glass.md` state
   that distinction in D3.4.
 - **Every substituting tag depends on decryption.** A secret placeholder puts a tag behind

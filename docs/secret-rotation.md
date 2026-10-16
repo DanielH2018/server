@@ -118,11 +118,15 @@ in the Secret `flux-system/sops-age` throughout.
 
 **A suspected compromise needs more than this procedure.** Rotating the key protects future
 revisions only. Every past revision in git and every published `sha-<sha>` artifact holds a
-copy of the cluster file encrypted to the old key. Anyone holding that key can still read
-every value in those copies. After a suspected compromise, also rotate every key the cluster
-file holds (**operator-only**): set each new value with `sops set`, run `cluster_vars.py
-write`, and redeploy each key's consumers as `secret_rotation.py consumers <key>` prints them.
-The cluster key never decrypts `secrets.yml`, so the keys that only Ansible reads stay safe.
+copy of the cluster file and of each cluster manifest, all encrypted to the old key. Anyone
+holding that key can still read every value in those copies. After a suspected compromise,
+also rotate every key that `ansible/vars/cluster-vars.source` lists (**operator-only**). That
+list holds the cluster file's keys and the keys the cluster manifests hold, which carry the
+manifest's name in a third column: the Authelia OIDC signing key, the Google service-account
+key, the pi backup SSH key and the Mullvad account. For each key, set the new value with
+`sops set`, run `cluster_vars.py write`, and redeploy the key's consumers as
+`secret_rotation.py consumers <key>` prints them. The cluster key never decrypts
+`secrets.yml`, so the keys that only Ansible reads stay safe.
 
 The registry in `ansible/secret_rotation.yml` does not track the cluster key. The key lives
 outside `secrets.yml`, so `registry_drift` would report its row as stale. A lost cluster key
