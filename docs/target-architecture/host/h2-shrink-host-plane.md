@@ -1,6 +1,17 @@
 # H2 — Shrink the host plane (crons to CronJobs)
 
-Status: PLANNED
+Status: IN PROGRESS
+
+PR H2.1, the censuses: [#5335](https://github.com/DanielH2018/server/pull/5335). It merged at
+`7d9901058` and deployed nothing. It adds the flux-ownership, retired-cron and reaper-CronJob
+census rows, the RBAC-against-script test and the trim-label fixtures, and none of the six roles
+carries `owner: flux`.
+PR H2.3a, the drill's readers: [#5349](https://github.com/DanielH2018/server/pull/5349). It merged
+at `252cd470c` and owed `manual_plane k3s`. `narrow_setup.py` mapped the shared `longhorn_lib`
+change to six health-cron tags, and the operator applied all six with no gated control-plane
+task selected: `ok=115 changed=33 failed=0`. Nothing writes the stamp ConfigMap yet, so the
+readers take their host-directory fallback
+([readings](https://github.com/DanielH2018/server/pull/5349#issuecomment-6226115250)).
 Depends on: H1, D3 and H6, per PR. H2.2a needs H1.5a and H1.6. H2.3b needs H1.5a and the C3
 row of *Open questions* 12. H2.8a needs H1.7b (and through it D3) and H6.4b, with the
 region-key gate of *Open questions* 11. No other H2 PR waits outside H2 (*Open questions*
