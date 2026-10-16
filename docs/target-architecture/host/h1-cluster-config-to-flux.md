@@ -2662,11 +2662,17 @@ subject's tests.
       would wait on it.
 6. **"Merging the pin is the upgrade."** The Renovate rule records that the operator drives
    each upgrade. *Resolution:* the operator rules on the new stance, **operator-only**, and
-   H1.1g rewrites the three rule descriptions to match.
+   H1.1g rewrites the three rule descriptions to match. **Ruled 2026-10-16: accepted.**
+   Merging the pin is the upgrade. Automerge stays off for these rules, so the operator
+   still chooses when each upgrade happens, at merge time rather than in a later hand step.
 7. **The approval floor.** `ansible/roles/k8s/cluster-base/` holds the agent's read-only RBAC,
    and it now applies on merge. *Resolution:* whether that path joins the lander's approval
    floor in `claude-land-approval-paths.j2` is an **operator-only** decision, taken before
-   H1.2.
+   H1.2. **Ruled 2026-10-16: it joins.** Before H1 the RBAC lives in
+   `ansible/roles/setup/k3s/templates/readonly-rbac.yaml.j2`, which only `k3s-bringup.yml`
+   applies, so an agent PR that widens it does nothing until the operator's next bring-up.
+   Once Flux applies `cluster-base` on merge, the floor restores that human gate. The
+   floor is a plain prefix, so the path joins it before the role exists.
 8. **The design said "CoreDNS" with no image plan.** Moving CoreDNS to Flux replaces a host
    read with a pin that H6 moves together with `k3s_version`. *Resolution:* none needed beyond
    H6's PR text and the marker ordering above.

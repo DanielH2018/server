@@ -1,6 +1,6 @@
 # D4 — Ordering (`dependsOn`, deferred applies)
 
-Status: IN PROGRESS
+Status: DONE
 
 PR D4.0, netpol-baseline drains before it applies: [#4747](https://github.com/DanielH2018/server/pull/4747) (issue #4743).
 
@@ -25,6 +25,38 @@ PR D4.3, the per-file rule and the chained timeout: [#5191](https://github.com/D
 It also closed #5172. `verify`'s `timeout-minutes` moved to 335 and the `promote` job's to
 360, and `land-wait` allows 67 minutes. The promote run on its merge, `43a32d2e6`, concluded
 `success` under the chained timeout, and all 25 check runs on that commit passed.
+
+PR D4.4, the cross-plane gate: [#5214](https://github.com/DanielH2018/server/pull/5214). The
+operator ruled Open question 9 on 2026-10-16: a `tasks/` change counts only for a tag Ansible
+owns at the head. Its replay over the 30 days before then counts two refusals, #1975 and
+#2002.
+
+PR D4.5, texbrain moves to Flux: [#5217](https://github.com/DanielH2018/server/pull/5217).
+The operator ran the two-writer check at the PR's head merged with master, because
+`deploy.sh` refuses a tree behind `origin/master` before it reads `--tags`. It printed
+`DEPLOY-VERDICT: flux-owned (--tags texbrain)` and exited 5. The landing read `settled` at
+`7106ab425`, texbrain's Kustomization read Ready, `probe.py health texbrain` passed, and the
+editor page rendered.
+
+PRs D4.6 to D4.8, the drill: [#5220](https://github.com/DanielH2018/server/pull/5220),
+[#5222](https://github.com/DanielH2018/server/pull/5222) and
+[#5224](https://github.com/DanielH2018/server/pull/5224). The operator accepted the drill on
+2026-10-16 (Open question 8). D4.6 settled as E = `7466d078d`, with texbrain's `dependsOn`
+naming bento-pdf and its `lastAppliedOriginRevision` at E. D4.7 merged as D = T =
+`1175ddd7e`. Inside bento-pdf's health-check window, the source named T, texbrain's Ready
+message read `dependency 'flux-system/bento-pdf' is not ready`, and texbrain stayed at P =
+E, which lacks D. No texbrain ReplicaSet carried `FLUX_DRILL`, and T's statuses held
+`flux/bento-pdf` = `failure` and no `flux/texbrain`. `promote` set `DEPLOY_HOLD` to
+`<T> failed=bento-pdf` and reset `prod` to E, and D4.7's landing read `deploy-failed` as
+planned. A D4.8 branch built before the squash merge would have removed only the edge, so
+D4.8 was built from master after it, as a revert of D and E. After the operator cleared the
+hold and dispatched `promote`, D4.8's landing read `settled` at `551fbf84c`, `DEPLOY_HOLD`
+read `none` and `last-good` matched `prod`. The full readings are on #5222.
+
+All six exit criteria hold. The drill is criterion 4. The suites under *Verification* cover
+the rest, and at `551fbf84c` they read `5268 passed`: `scripts/renderer/tests`,
+`ansible/tests/deploy`, `scripts/dev/tests`, `scripts/deploy_tools/tests`,
+`scripts/validate/tests` and the text and roles census rows.
 
 Depends on: [D2](d2-first-leaf.md), with two exceptions. PR D4.0 depends on nothing, and it
 must land before D2.7 (Open question 3). PR D4.9 waits only on D1.6, D1.6b and M1, as its step
@@ -905,8 +937,11 @@ conditions of dispatch runs.
 
    ```bash
    gh variable set DEPLOY_HOLD --body none -R DanielH2018/server
-   gh workflow run promote.yml --ref master -f sha=<master tip>
+   gh workflow run promote.yml -R DanielH2018/server --ref master -f sha=<master tip>
    ```
+
+   Run outside a checkout, `gh workflow run` without `-R` fails with `failed to run git:
+   fatal: not a git repository`, as it did on 2026-10-16.
 
    `decide` then promotes the newest eligible commit, which contains the revert.
    `probe.py landing` shows `DEPLOY_HOLD` reading `none` (*Verification*).

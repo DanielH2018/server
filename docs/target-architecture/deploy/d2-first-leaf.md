@@ -794,10 +794,10 @@ D1 builds the split. D2 adds its steps to the render job, and it adds the `verif
   tags the current `prod` as `last-good` before it moves `prod`.
 - **`DEPLOY_HOLD` has a way out and a way to see it.** Clearing it is **operator-only**:
   `gh variable set DEPLOY_HOLD --body none -R DanielH2018/server`, the no-hold value D1
-  uses. Then `gh workflow run promote.yml --ref master -f sha=<master tip>` re-runs
-  promotion after D1's CI re-check of that commit, and `decide` promotes the newest eligible
-  commit. The deploy UI's Clear button covers `hold_sha` only, and Open question 4 asks
-  whether it should cover `DEPLOY_HOLD`.
+  uses. Then `gh workflow run promote.yml -R DanielH2018/server --ref master -f sha=<master
+  tip>` re-runs promotion after D1's CI re-check of that commit, and `decide` promotes the
+  newest eligible commit. The deploy UI's Clear button covers `hold_sha` only. The operator
+  ruled on 2026-10-16 that it does not cover `DEPLOY_HOLD` (Open question 4).
 - **`probe.py landing` prints both holds while they coexist.** Until D6 deletes the
   deployer, every run prints a `hold_sha` line and a `DEPLOY_HOLD` line, each naming its
   source and the plane it holds, even when one reads `none`. A `failed=` hold prints its
@@ -1370,7 +1370,10 @@ that D2.6d adds.
         - the operator has accepted the drill, which Open question 1 records;
         - the hash of the `.local.` IngressRoute's route rules, taken for Exit 1.
     - **Two-writer check (C4).** The PR body quotes, from a worktree at the PR's head:
-        - `./scripts/deploy.sh --tags bento-pdf` exiting 5;
+        - `./scripts/deploy.sh --tags bento-pdf` exiting 5. `deploy.sh` refuses a tree
+          behind `origin/master` with exit 4 before it reads `--tags`, so a head behind
+          master is merged with it first, as `land.sh` does before the merge (D4.5,
+          2026-10-16);
         - `--list-services` marking bento-pdf;
         - the three-reader census passing;
         - `render_targets.py daniel-box` omitting bento-pdf;
@@ -1811,8 +1814,11 @@ later slices size against:
    census as the guard? Resolution: D6 decides, using its own count of handbacks and
    retirements.
 4. **Should the deploy UI clear `DEPLOY_HOLD`?** That needs `PROMOTE_TOKEN` on daniel-box.
-   Resolution: the operator decides (**operator-only**). Until then the UI says that
-   `DEPLOY_HOLD` is cleared from the CLI.
+   Resolution: the operator decides (**operator-only**). **Ruled 2026-10-16: no.** A Clear
+   button would put a token that writes repository variables on daniel-box to save one CLI
+   command, so the UI keeps saying that `DEPLOY_HOLD` is cleared from the CLI. The same
+   ruling leaves the deploy UI's future to D6, and gives Flux's objects a view through
+   Headlamp's Flux plugin (#5221) rather than through the deploy UI.
 5. **Resolved by the operator's ruling of 2026-10-14: where does `domain` come from?** The
    operator ruled that `domain` is published: "domain is not secret, it's a var for
    flexibility just in case of future changes." The renderer writes it as a literal, and it
