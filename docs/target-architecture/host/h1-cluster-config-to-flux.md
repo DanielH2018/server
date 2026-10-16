@@ -2610,6 +2610,9 @@ subject's tests.
       note asks contracts.md to replace that row with one row that carries both halves and
       H1.1a's gate. That gate also comes before traefik's flip, which waits on H1.1a, so D5
       loses nothing. A second note asks D5 to quote the merged wording.
+    - **Applied on 2026-10-16.** C3 *Per-role fields* carries the merged wording as one row,
+      and D5 Open question 5 quotes it. contracts.md's round 2 applied C1's *Vendored files*
+      and the per-directory unit (X2-09). The gate before H1.1a merges is clear.
 3. **C2's reset is unsafe for forward-only tags.** *Resolution:* amend C2. contracts.md's
    pending row, *The forward-only hold* under *Requests on C2*, carries this text: "A failed
    revision that changes a forward-only tag (H1) or a snapshot role (D5) writes
@@ -2636,6 +2639,8 @@ subject's tests.
       any other non-empty value as a hold, and an empty or missing value as an error.
       contracts.md applied that in its X2-01 entry, so H1 needs no row for it. The DR hold
       `dr-restore` of the bring-up order is such a non-empty value.
+    - **Applied on 2026-10-16** for the hold, and the gate before H1.1b merges is clear. The
+      excused failures stay listed, gated before H1.1i merges.
 4. **Where the service list lives.** C4 says H1 removes `containers_list` from the inventory
    once every entry is `owner: flux`, but the Pi's entries never become `owner: flux`.
    *Resolution:*
