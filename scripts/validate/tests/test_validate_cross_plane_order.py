@@ -82,6 +82,21 @@ def test_a_tasks_change_in_a_flux_owned_role_is_clean():
     )
 
 
+# A renderer-only PR: nothing publishes an Ansible-owned tag's `homelab-render` output, so
+# only the flux-owned half of what it moves reaches a cluster (#5213).
+RENDERER_ONLY = ["scripts/renderer/renderer_lib/cluster.py"]
+
+
+def test_a_renderer_only_change_moving_bento_pdf_and_authelia_is_clean():
+    assert judge({"bento-pdf", "authelia"}, paths=RENDERER_ONLY) == []
+
+
+def test_a_renderer_only_change_counts_the_flux_owned_tag_alone():
+    base = snap({"bento-pdf", "authelia"}, side="base")
+    head = snap({"bento-pdf", "authelia"}, side="head")
+    assert gate.counted(base, head, RENDERER_ONLY, {}) == {"bento-pdf"}
+
+
 def test_a_change_beside_netpol_baseline_is_flagged_through_applies_last():
     flagged = judge({"bento-pdf", "netpol-baseline"})
     assert len(flagged) == 1
