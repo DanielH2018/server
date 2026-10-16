@@ -15,7 +15,9 @@ subprocess runs, as a string, and that one prepares its inputs and compares its 
 # discharging it. An allowlist, because each denylist review found another mutating event.
 # `mkfifo` and `mknod` create a file and raise no event, so `_install` replaces them on `os`
 # and `posix` with a function that ends the process (#4999), and does the same to the
-# `unaudited` table's calls (#5063). It wraps each of the `counted` table's calls in one that
+# `unaudited` table's calls (#5063). It also ends the process when a C module outside
+# `c_modules` is created, at the `_imp` call that creates it, and backs that with the `import`
+# event's name and a scan of `sys.modules` by loader (#5201). It wraps each of the `counted` table's calls in one that
 # counts the calls that return, for the process state no function reads back (#5081).
 #
 # The hook also records the module state the run leaves behind (#4995). At the plugin's
@@ -80,6 +82,19 @@ counted = {
     "_signal": ("siginterrupt",),
 }
 
+# Every C module the real chain imports once the hook is installed, and `_string`, which
+# `logging` imports and which holds no state. A C module holds state and calls that no walk,
+# reader or audit event reaches, so the hook ends the run on the import of any other, whether
+# built in or a shared object (#5201). A module loaded before the hook, as the runner's own
+# imports and the `unaudited` table's are, is outside the check. An interpreter or Ansible
+# upgrade that adds a C module to the chain reads as doubt and turns
+# `test_4836s_real_toposort_change_is_order_only` red; extend the list then.
+c_modules = frozenset({
+    "_ast", "_bisect", "_bz2", "_contextvars", "_datetime", "_heapq", "_lzma", "_opcode",
+    "_socket", "_string", "_tokenize", "_typing", "_zstd", "fcntl", "grp", "math", "pwd",
+    "unicodedata", "zlib",
+})
+
 # C objects whose state no descriptor the walk reads exposes, each with a C-level reader. The
 # walk stores what the reader returns, as its `repr`, under the key `()` (#5107).
 readers = []
@@ -116,6 +131,7 @@ except ImportError:
 
 def _install(
     exit_, write_flags, allowed, exempt, modules, unaudited, counted, readers, process, kinds,
+    c_modules, loaders,
 ):
     before = {}
     contents = {}
@@ -127,6 +143,9 @@ def _install(
     skip, deque, getset, member, class_dict, type_flags = kinds
     scalars = (bool, int, float, str, bytes, type(None))
     unset = object()
+    builtin_names, builtin_importer, extension_loader, module_type, imp = loaders
+    loaded_first = frozenset(modules)
+    checked = set()
 
     def shallow(value):
         # Only C-level copies and descriptors, so no code the plugin defines runs in the hook:
@@ -297,6 +316,20 @@ def _install(
         loaded.sort()
         return writes, loaded
 
+    def foreign_c_module():
+        # Whether a C module outside `c_modules` loaded since the hook was installed, by its
+        # loader, behind the `_imp` guards below (#5201).
+        for name, module in modules.copy().items():
+            if name in checked or name in loaded_first or name in c_modules:
+                continue
+            checked.add(name)
+            if type(module) is not module_type:
+                continue
+            loader = module.__dict__.get("__loader__")
+            if loader is builtin_importer or type(loader) is extension_loader:
+                return True
+        return False
+
     def read_state():
         now = process()
         now.update(calls)
@@ -314,7 +347,17 @@ def _install(
                 ):
                     exit_(86)
             elif event == "import":
-                if args[0] == "toposort" and not before:
+                # A built-in module is refused by name, before its code can run; a shared
+                # object the import before this one loaded is refused here (#5201).
+                name = args[0]
+                if (
+                    type(name) is str
+                    and name in builtin_names
+                    and name not in c_modules
+                    and name not in modules
+                ) or foreign_c_module():
+                    exit_(86)
+                if name == "toposort" and not before:
                     for name, module in modules.copy().items():
                         before[name] = (module, module.__dict__.copy())
                     walk([
@@ -335,6 +378,8 @@ def _install(
                         for key, value in module.__dict__.copy().items()
                     ], created)
             elif event == "order-only.report":
+                if foreign_c_module():
+                    exit_(86)
                 args[0]["module_writes"], args[0]["modules_loaded"] = module_writes()
             elif event not in allowed:
                 exit_(86)
@@ -360,7 +405,21 @@ def _install(
 
         return count
 
+    def c_module_guard(exit_guard, create):
+        # Every C module is created through `_imp.create_builtin` or `_imp.create_dynamic`,
+        # whether the import system calls it or the plugin does, and a direct call raises no
+        # `import` event and leaves nothing in `sys.modules` (#5201).
+        def guarded(spec, *args):
+            name = spec.name
+            if type(name) is not str or (name not in c_modules and name not in loaded_first):
+                exit_guard(86)
+            return create(spec, *args)
+
+        return guarded
+
     sys.addaudithook(audit)
+    for attr in ("create_builtin", "create_dynamic"):
+        setattr(imp, attr, c_module_guard(exit_, getattr(imp, attr)))
     for module in (os, posix):
         module.mkfifo = module.mknod = stub(exit_)
     for name, attrs in unaudited.items():
@@ -459,8 +518,16 @@ _install(
         type.__dict__["__dict__"],
         type.__dict__["__flags__"],
     ),
+    c_modules,
+    (
+        frozenset(sys.builtin_module_names),
+        sys.modules["_frozen_importlib"].BuiltinImporter,
+        sys.modules["_frozen_importlib_external"].ExtensionFileLoader,
+        types.ModuleType,
+        sys.modules["_imp"],
+    ),
 )
-del _install, _process_state, unaudited, counted, readers, name, partial
+del _install, _process_state, unaudited, counted, readers, c_modules, name, partial
 
 
 def _chain(plugins, roles, preload):
