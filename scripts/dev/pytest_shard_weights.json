@@ -1159,7 +1159,7 @@
  "scripts/renderer/tests/test_renderer_host_mode.py": 0.45,
  "scripts/renderer/tests/test_renderer_host_package_rules.py": 0.13,
  "scripts/renderer/tests/test_renderer_host_update_limits.py": 0.32,
- "scripts/renderer/tests/test_renderer_images.py": 3.66,
+ "scripts/renderer/tests/test_renderer_images.py": 6.53,
  "scripts/renderer/tests/test_renderer_job_census.py": 0.79,
  "scripts/renderer/tests/test_renderer_live_read_census.py": 2.87,
  "scripts/renderer/tests/test_renderer_placeholders.py": 0.24,
