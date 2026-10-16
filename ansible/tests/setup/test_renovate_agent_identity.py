@@ -307,7 +307,7 @@ def guard_decision(command: str) -> str | None:
 def test_the_project_guard_lets_the_session_land_and_read_the_verdict() -> None:
     """An unattended `ask` is a denial, so a guard rule that catches these ends every landing."""
     commands = prompt_commands() + [f"cat /var/lib/renovate-agent-land/{PR}.verdict"]
-    assert len(commands) == 3, commands
+    assert len(commands) == 4, commands
     assert {c: guard_decision(c) for c in commands} == dict.fromkeys(commands)
 
 
@@ -359,3 +359,17 @@ def test_a_lock_wait_that_times_out_leaves_no_earlier_verdict(tmp_path) -> None:
     command = shlex.split(pre.replace("%i", PR).replace(results_dir, str(tmp_path)))
     run(command, check=True)
     assert stale.read_text().startswith("VERDICT: none")
+
+
+def test_the_prompt_reads_how_the_lander_ended_before_trusting_its_file() -> None:
+    """A lander systemd stops mid-landing leaves `PENDING`, which is no verdict (#5205)."""
+    assert (
+        f"systemctl show -p Result renovate-agent-land@{PR}.service"
+        in prompt_commands()
+    )
+    script = (ROLE / "files" / "land_renovate_pr.py").read_text()
+    (pending,) = re.findall(r'atomic_write\(result, "([A-Z]+)\\n"\)', script)
+    # The bullet that reads the Result is the one that must name the placeholder: a mention
+    # anywhere else in the prompt does not tell the session to treat it as no verdict.
+    (bullet,) = [b for b in render(PROMPT).split("\n- ") if "-p Result" in b]
+    assert f"`{pending}`" in bullet, bullet
