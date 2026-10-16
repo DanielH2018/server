@@ -8,6 +8,7 @@ webhook is one POST and no forge, and `forge.py` is at its length cap. Every req
 """
 
 import json
+import time
 import urllib.error
 import urllib.request
 from collections.abc import Callable, Mapping
@@ -143,6 +144,9 @@ def _error_codes(response: Response) -> set[str]:
 
 # Discord refuses a message longer than this many characters.
 DISCORD_MAX = 2000
+# The longest `retry_after` a 429 may ask for and still get its one retry. Discord limits a
+# webhook to about five requests in two seconds, so a post of several messages can meet one.
+DISCORD_RETRY_MAX_S = 10.0
 
 # Sends one POST: the URL, the body and the headers. `urllib_post`, or the tests' fake.
 Sender = Callable[[str, bytes, Mapping[str, str]], Response]
@@ -154,18 +158,28 @@ class Discord:
     The URL is the credential, so every error says what failed and leaves the URL out.
     """
 
-    def __init__(self, webhook: str, send: Sender = urllib_post) -> None:
-        """Holds the webhook and the sender.
+    def __init__(
+        self,
+        webhook: str,
+        send: Sender = urllib_post,
+        sleep: Callable[[float], None] = time.sleep,
+    ) -> None:
+        """Holds the webhook, the sender and the pause before a rate-limited retry.
 
         Args:
             webhook: the webhook URL, from the `DEPLOY_DISCORD_WEBHOOK` repository secret.
             send: sends one POST.
+            sleep: waits the given seconds.
         """
         self._webhook = webhook.strip()
         self._send = send
+        self._sleep = sleep
 
     def post(self, content: str) -> None:
         """Post `content` as one message.
+
+        A 429 gets one retry after its `retry_after`, when that is at most
+        DISCORD_RETRY_MAX_S.
 
         Raises:
             ForgeError: the webhook is unset, the message is over DISCORD_MAX characters,
@@ -178,6 +192,20 @@ class Discord:
                 f"a message of {len(content)} characters is over Discord's {DISCORD_MAX}"
             )
         body = json.dumps({"content": content}).encode()
-        response = self._send(self._webhook, body, {"Content-Type": "application/json"})
+        headers = {"Content-Type": "application/json"}
+        response = self._send(self._webhook, body, headers)
+        wait = _retry_after(response) if response.status == 429 else None
+        if wait is not None and wait <= DISCORD_RETRY_MAX_S:
+            self._sleep(wait)
+            response = self._send(self._webhook, body, headers)
         if not 200 <= response.status < 300:
             raise ForgeError(f"the Discord webhook answered HTTP {response.status}")
+
+
+def _retry_after(response: Response) -> float | None:
+    """The seconds a 429's JSON `retry_after` asks for, or None when it names none."""
+    try:
+        wait = json.loads(response.body).get("retry_after")
+    except ValueError, AttributeError:
+        return None
+    return float(wait) if isinstance(wait, int | float) and wait >= 0 else None

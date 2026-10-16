@@ -50,6 +50,12 @@ this role checks the shape (`^[0-9a-f]{8,}$`) and transforms nothing, and trunca
 would fail to match a nine-character name. `gitops-deploy`'s automated rollback is the one caller
 that passes a fixed 8-character slice instead; the docs page has why that stays fail-closed.
 
+A flux-owned role has no automated caller. Its snapshot Job names snapshots with the role's
+`digest8`, not a commit, so its revert passes `volume_revert_sha=<digest8>`. The stateful hold's
+Discord post prints that value and the claims in each changed role's command block, and the
+operator runs the block by hand (`docs/flux-deploy-plane.md`, *Snapshot roles hold without a
+reset*).
+
 ## The sequence, and why every step is there
 
 Measured 2026-08-21 on `speedtest-config`, Longhorn v1.12.1. Two plausible shortcuts were

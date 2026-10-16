@@ -83,8 +83,9 @@ def test_both_hold_lines_print_whatever_each_reads(
         (f"{'e' * 40} suspended-changed=bento-pdf", "cause: suspended-changed"),
         (f"{'e' * 40} failed=bento-pdf", ""),
         (f"{'e' * 40} stateful=sonarr", "cause: stateful, sonarr failed"),
+        (f"{'e' * 40} stateful=unverified", "cause: stateful, verify left no verdict"),
     ],
-    ids=["suspended-changed", "failed", "stateful"],
+    ids=["suspended-changed", "failed", "stateful", "stateful-unverified"],
 )
 def test_a_suspended_changed_hold_prints_its_cause(deploy_hold, cause):
     line = _lines(_snap(CLEAR, deploy_hold))[DEPLOY_HOLD]

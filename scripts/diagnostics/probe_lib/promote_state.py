@@ -229,9 +229,11 @@ def hold_cause(value: str | None) -> str:
     """
     _, _, rest = (value or "").partition(" ")
     if rest.startswith("stateful="):
+        names = rest.removeprefix("stateful=")
+        what = "verify left no verdict" if names == "unverified" else f"{names} failed"
         return (
-            f"   cause: stateful, {rest.removeprefix('stateful=')} failed and prod was not "
-            "reset. Follow the hold's Discord post and docs/volume-snapshot-drills.md"
+            f"   cause: stateful, {what} and prod was not reset. Follow the hold's "
+            "Discord post and docs/volume-snapshot-drills.md"
         )
     if not rest.startswith("suspended-changed="):
         return ""

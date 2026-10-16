@@ -257,3 +257,32 @@ def test_an_unreachable_webhook_is_an_error_that_does_not_name_it():
     with pytest.raises(forge.ForgeError) as err:
         forge.urllib_post("http://127.0.0.1:9/api/webhooks/secret-token", b"{}", {}, 2)
     assert "secret-token" not in str(err.value) and err.value.__cause__ is None
+
+
+@pytest.mark.parametrize(
+    "retry_after, statuses, sends",
+    [(0.5, [429, 204], 2), (60, [429], 1)],
+    ids=["short-wait-retried", "long-wait-refused"],
+)
+def test_a_rate_limited_post_retries_once_after_a_short_wait(
+    retry_after, statuses, sends
+):
+    """A post of several messages can meet Discord's per-webhook limit."""
+    answers = iter(statuses)
+    sent, slept = [], []
+
+    def answer(target, body, headers):
+        sent.append(body)
+        status = next(answers)
+        body = json.dumps({"retry_after": retry_after}).encode()
+        return forge.Response(status, body=body if status == 429 else b"")
+
+    client = forge.Discord("https://example.invalid/w", send=answer, sleep=slept.append)
+    if statuses[-1] == 204:
+        client.post("x")
+        assert slept == [retry_after]
+    else:
+        with pytest.raises(forge.ForgeError, match="HTTP 429"):
+            client.post("x")
+        assert slept == []
+    assert len(sent) == sends

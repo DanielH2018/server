@@ -670,8 +670,9 @@ input*.
   resumes. Beside the classify command it prints `prod@sha256:<digest of sha-<T>>`, the
   string a role that attempted T reads in `.status.lastAttemptedRevision`. CI cannot read the
   cluster, so every changed snapshot role gets a block, and the classify step picks which to
-  revert. A message never passes Discord's 2,000 characters and never cuts a block. A failed
-  post fails the run red; the hold is already written by then.
+  revert. A message never passes Discord's 2,000 characters and never cuts a block. A 429
+  gets one retry after its `retry_after`, up to 10 seconds. A failed post fails the run red;
+  the hold is already written by then.
 - **The way out** is **operator-only**: the runbook in `docs/volume-snapshot-drills.md`, then
   a clear of `DEPLOY_HOLD`.
 
