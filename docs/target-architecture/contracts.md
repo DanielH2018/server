@@ -457,7 +457,8 @@ which needs a drill exclusion in C7 that no slice has requested, the edge goes.
     ancestor of M's first parent. `land.sh` reads both files from GHCR and derives no tags
     itself (D6). From D5 on, `flux/soak` also reads
     `success` on R. A `DEPLOY_HOLD` other than `none` (C2) ends the wait as `deploy-failed`,
-    and twice the promote timeout ends it as `gave-up`.
+    and twice the promote timeout ends it as `gave-up`. That deadline moves while a
+    verification of an earlier commit is in flight, because M's `decide` waits on it (#5164).
   - **Hosts.** For each host the PR touched, `homelab_host_applied_info` shows M or a
     descendant of M, and `homelab_host_reconcile_ok` reads 1. H3 states how the touched hosts
     are found and when the wait ends `deferred`.

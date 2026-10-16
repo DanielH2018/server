@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/secrets.py
-generated_at: 2026-10-15 18:17 UTC
-generated_sha: 2e472a3c8
+generated_at: 2026-10-16 06:17 UTC
+generated_sha: 013e72b76
 ---
 
 !!! warning "Generated file — do not edit"
@@ -12,7 +12,7 @@ generated_sha: 2e472a3c8
 
 # Secrets
 
-199 secret(s) in the rotation registry (`ansible/secret_rotation.yml`).
+200 secret(s) in the rotation registry (`ansible/secret_rotation.yml`).
 
 !!! note "Names and dates only"
     This page is generated from the plaintext rotation registry. No secret VALUE is read here, and the generator never opens the encrypted store or invokes the decryption tool — a test enforces that.
@@ -24,8 +24,8 @@ DANGER — rotating it breaks decryption or locks out access. Follow the procedu
 
 | Secret | Last rotated | Due | Days left |
 |---|---|---|---|
-| `authelia_storage` | 2025-06-27 | 2027-05-05 | 202 |
-| `zigbee_network_key` | 2026-05-26 | 2028-05-19 | 582 |
+| `authelia_storage` | 2025-06-27 | 2027-05-05 | 201 |
+| `zigbee_network_key` | 2026-05-26 | 2028-05-19 | 581 |
 
 ## assisted
 
@@ -33,87 +33,87 @@ needs a human to mint the new value, then `secret_rotation.py rotate`.
 
 | Secret | Last rotated | Due | Days left |
 |---|---|---|---|
-| `alloy_pi_http_password` | 2026-04-25 | 2027-04-17 | 184 |
-| `anthropic_api_key` | 2026-09-23 | 2027-08-28 | 317 |
-| `arr_discord_webhook_url` | 2026-09-07 | 2027-08-30 | 319 |
-| `authelia_agent_password` | 2026-08-27 | 2027-08-18 | 307 |
-| `authelia_agent_password_argon2` | 2026-07-16 | 2027-06-18 | 246 |
-| `authelia_claude_password` | 2026-01-05 | 2026-12-19 | 65 |
-| `authelia_claude_password_argon2` | 2025-12-25 | 2026-12-20 | 66 |
-| `authelia_claude_totp_secret` | 2026-02-03 | 2027-01-26 | 103 |
-| `authelia_client_password_hash` | 2025-10-08 | 2026-09-15 | -30 |
-| `authelia_jwt` | 2026-01-02 | 2026-12-06 | 52 |
-| `authelia_oidc_hmac_secret` | 2026-02-04 | 2027-01-31 | 108 |
-| `authelia_oidc_rsa_key_content` | 2026-05-15 | 2027-04-29 | 196 |
-| `authelia_password` | 2026-07-23 | 2027-07-05 | 263 |
-| `authelia_password_argon2` | 2026-02-12 | 2027-01-18 | 95 |
-| `authelia_redis_password` | 2026-06-13 | 2027-06-03 | 231 |
-| `authelia_secret` | 2025-12-15 | 2026-12-08 | 54 |
-| `bazarr_api_key` | 2026-08-30 | 2027-08-24 | 313 |
-| `become_password` | 2026-08-30 | 2027-08-29 | 318 |
-| `calendar_1` | 2026-08-30 | 2027-08-22 | 311 |
-| `calendar_2` | 2026-05-21 | 2027-05-11 | 208 |
-| `calendar_3` | 2025-09-25 | 2026-08-27 | -49 |
-| `calendar_4` | 2025-09-01 | 2026-08-30 | -46 |
-| `claude_code_agent_gh_token` | 2026-02-12 | 2027-01-14 | 91 |
-| `claude_ha_token` | 2025-10-03 | 2026-09-09 | -36 |
-| `cloudflare_analytics_token` | 2026-04-03 | 2027-03-18 | 154 |
-| `code_server_password` | 2026-08-30 | 2027-08-29 | 318 |
-| `code_server_sudo_password` | 2026-08-30 | 2027-08-14 | 303 |
-| `crowdsec_k8s_agent_password` | 2026-05-23 | 2027-05-14 | 211 |
-| `crowdsec_k8s_bouncer_api_key` | 2025-12-14 | 2026-11-19 | 35 |
-| `freshrss_password` | 2026-06-01 | 2027-05-03 | 200 |
-| `google_assistant_project_id` | 2026-06-25 | 2027-05-31 | 228 |
-| `google_assistant_service_account` | 2025-12-31 | 2026-12-08 | 54 |
-| `grafana_admin_password` | 2026-02-02 | 2027-01-31 | 108 |
-| `grafana_oidc_client_secret` | 2026-08-18 | 2027-08-07 | 296 |
-| `grafana_oidc_client_secret_hash` | 2026-06-08 | 2027-05-22 | 219 |
-| `handy_master_secret` | 2026-07-03 | 2027-06-04 | 232 |
-| `headlamp_oidc_client_secret` | 2026-05-17 | 2027-05-08 | 205 |
-| `headlamp_oidc_client_secret_hash` | 2026-05-29 | 2027-05-02 | 199 |
-| `healthchecks_api_read_only_key` | 2025-11-12 | 2026-11-10 | 26 |
-| `healthchecks_ping_key` | 2026-08-31 | 2027-08-20 | 309 |
-| `homelab_mcp_token` | 2025-09-01 | 2026-08-10 | -66 |
-| `homepage_ha_token` | 2025-09-14 | 2026-08-28 | -48 |
-| `jellyfin_api_key` | 2026-09-10 | 2027-08-15 | 304 |
-| `karakeep_homepage_api_key` | 2026-03-03 | 2027-02-03 | 111 |
-| `karakeep_meili_master_key` | 2026-02-17 | 2027-01-25 | 102 |
-| `karakeep_nextauth_secret` | 2026-03-24 | 2027-03-09 | 145 |
-| `karakeep_python_api_key` | 2025-09-17 | 2026-08-21 | -55 |
-| `livesync_db_password` | 2025-11-16 | 2026-11-02 | 18 |
-| `livesync_sync_token` | 2025-09-04 | 2026-08-10 | -66 |
-| `longhorn_b2_application_key` | 2026-05-29 | 2027-05-13 | 210 |
-| `longhorn_b2_bucket` | 2026-05-29 | 2027-05-14 | 211 |
-| `longhorn_b2_endpoint` | 2026-05-29 | 2027-05-04 | 201 |
-| `longhorn_b2_key_id` | 2026-05-29 | 2027-05-04 | 201 |
-| `monitor_bridge_ha_token` | 2025-11-06 | 2026-10-19 | 4 |
-| `mqtt_password` | 2026-06-08 | 2027-05-20 | 217 |
-| `mqtt_password_hash` | 2026-04-23 | 2027-03-29 | 165 |
-| `n8n_api_key` | 2025-10-10 | 2026-09-18 | -27 |
-| `n8n_runner_auth_token` | 2025-11-09 | 2026-11-03 | 19 |
-| `nut_ha_password` | 2026-03-23 | 2027-03-03 | 139 |
-| `nut_monitor_password` | 2026-03-13 | 2027-03-10 | 146 |
-| `peanut_password` | 2026-03-16 | 2027-03-03 | 139 |
-| `pi_peer_backup_ssh_key` | 2026-03-31 | 2027-03-29 | 165 |
-| `pihole_password` | 2026-07-23 | 2027-07-03 | 261 |
-| `prometheus_ha_token` | 2025-11-06 | 2026-10-26 | 11 |
-| `prometheus_kuma_api_key` | 2025-09-18 | 2026-08-21 | -55 |
-| `prowlarr_api_key` | 2026-08-30 | 2027-08-10 | 299 |
-| `qbittorrent_password` | 2025-09-20 | 2026-08-28 | -48 |
-| `r2_access_key_id` | 2026-04-28 | 2027-04-18 | 185 |
-| `r2_secret_access_key` | 2026-04-11 | 2027-04-10 | 177 |
-| `radarr_api_key` | 2026-08-29 | 2027-08-05 | 294 |
-| `renovate_agent_claude_oauth_token` | 2026-06-01 | 2027-05-21 | 218 |
-| `renovate_agent_gh_token` | 2026-07-21 | 2027-07-13 | 271 |
-| `scrutiny_influxdb_admin_password` | 2026-07-23 | 2027-06-29 | 257 |
-| `scrutiny_influxdb_token` | 2026-03-10 | 2027-02-09 | 117 |
-| `smtp_notify_app_password` | 2026-04-29 | 2027-04-24 | 191 |
-| `sonarr_api_key` | 2026-08-29 | 2027-08-28 | 317 |
-| `speedtest_api_token` | 2026-08-30 | 2027-08-24 | 313 |
-| `speedtest_app_key` | 2025-08-25 | 2026-07-29 | -78 |
-| `terraria_password` | 2025-12-26 | 2026-12-09 | 55 |
-| `uptime_kuma_password` | 2026-03-24 | 2027-03-11 | 147 |
-| `valheim_server_pass` | 2026-08-30 | 2027-08-01 | 290 |
+| `alloy_pi_http_password` | 2026-04-25 | 2027-04-17 | 183 |
+| `anthropic_api_key` | 2026-09-23 | 2027-08-28 | 316 |
+| `arr_discord_webhook_url` | 2026-09-07 | 2027-08-30 | 318 |
+| `authelia_agent_password` | 2026-08-27 | 2027-08-18 | 306 |
+| `authelia_agent_password_argon2` | 2026-07-16 | 2027-06-18 | 245 |
+| `authelia_claude_password` | 2026-01-05 | 2026-12-19 | 64 |
+| `authelia_claude_password_argon2` | 2025-12-25 | 2026-12-20 | 65 |
+| `authelia_claude_totp_secret` | 2026-02-03 | 2027-01-26 | 102 |
+| `authelia_client_password_hash` | 2025-10-08 | 2026-09-15 | -31 |
+| `authelia_jwt` | 2026-01-02 | 2026-12-06 | 51 |
+| `authelia_oidc_hmac_secret` | 2026-02-04 | 2027-01-31 | 107 |
+| `authelia_oidc_rsa_key_content` | 2026-05-15 | 2027-04-29 | 195 |
+| `authelia_password` | 2026-07-23 | 2027-07-05 | 262 |
+| `authelia_password_argon2` | 2026-02-12 | 2027-01-18 | 94 |
+| `authelia_redis_password` | 2026-06-13 | 2027-06-03 | 230 |
+| `authelia_secret` | 2025-12-15 | 2026-12-08 | 53 |
+| `bazarr_api_key` | 2026-08-30 | 2027-08-24 | 312 |
+| `become_password` | 2026-08-30 | 2027-08-29 | 317 |
+| `calendar_1` | 2026-08-30 | 2027-08-22 | 310 |
+| `calendar_2` | 2026-05-21 | 2027-05-11 | 207 |
+| `calendar_3` | 2025-09-25 | 2026-08-27 | -50 |
+| `calendar_4` | 2025-09-01 | 2026-08-30 | -47 |
+| `claude_code_agent_gh_token` | 2026-02-12 | 2027-01-14 | 90 |
+| `claude_ha_token` | 2025-10-03 | 2026-09-09 | -37 |
+| `cloudflare_analytics_token` | 2026-04-03 | 2027-03-18 | 153 |
+| `code_server_password` | 2026-08-30 | 2027-08-29 | 317 |
+| `code_server_sudo_password` | 2026-08-30 | 2027-08-14 | 302 |
+| `crowdsec_k8s_agent_password` | 2026-05-23 | 2027-05-14 | 210 |
+| `crowdsec_k8s_bouncer_api_key` | 2025-12-14 | 2026-11-19 | 34 |
+| `freshrss_password` | 2026-06-01 | 2027-05-03 | 199 |
+| `google_assistant_project_id` | 2026-06-25 | 2027-05-31 | 227 |
+| `google_assistant_service_account` | 2025-12-31 | 2026-12-08 | 53 |
+| `grafana_admin_password` | 2026-02-02 | 2027-01-31 | 107 |
+| `grafana_oidc_client_secret` | 2026-08-18 | 2027-08-07 | 295 |
+| `grafana_oidc_client_secret_hash` | 2026-06-08 | 2027-05-22 | 218 |
+| `handy_master_secret` | 2026-07-03 | 2027-06-04 | 231 |
+| `headlamp_oidc_client_secret` | 2026-05-17 | 2027-05-08 | 204 |
+| `headlamp_oidc_client_secret_hash` | 2026-05-29 | 2027-05-02 | 198 |
+| `healthchecks_api_read_only_key` | 2025-11-12 | 2026-11-10 | 25 |
+| `healthchecks_ping_key` | 2026-08-31 | 2027-08-20 | 308 |
+| `homelab_mcp_token` | 2025-09-01 | 2026-08-10 | -67 |
+| `homepage_ha_token` | 2025-09-14 | 2026-08-28 | -49 |
+| `jellyfin_api_key` | 2026-09-10 | 2027-08-15 | 303 |
+| `karakeep_homepage_api_key` | 2026-03-03 | 2027-02-03 | 110 |
+| `karakeep_meili_master_key` | 2026-02-17 | 2027-01-25 | 101 |
+| `karakeep_nextauth_secret` | 2026-03-24 | 2027-03-09 | 144 |
+| `karakeep_python_api_key` | 2025-09-17 | 2026-08-21 | -56 |
+| `livesync_db_password` | 2025-11-16 | 2026-11-02 | 17 |
+| `livesync_sync_token` | 2025-09-04 | 2026-08-10 | -67 |
+| `longhorn_b2_application_key` | 2026-05-29 | 2027-05-13 | 209 |
+| `longhorn_b2_bucket` | 2026-05-29 | 2027-05-14 | 210 |
+| `longhorn_b2_endpoint` | 2026-05-29 | 2027-05-04 | 200 |
+| `longhorn_b2_key_id` | 2026-05-29 | 2027-05-04 | 200 |
+| `monitor_bridge_ha_token` | 2025-11-06 | 2026-10-19 | 3 |
+| `mqtt_password` | 2026-06-08 | 2027-05-20 | 216 |
+| `mqtt_password_hash` | 2026-04-23 | 2027-03-29 | 164 |
+| `n8n_api_key` | 2025-10-10 | 2026-09-18 | -28 |
+| `n8n_runner_auth_token` | 2025-11-09 | 2026-11-03 | 18 |
+| `nut_ha_password` | 2026-03-23 | 2027-03-03 | 138 |
+| `nut_monitor_password` | 2026-03-13 | 2027-03-10 | 145 |
+| `peanut_password` | 2026-03-16 | 2027-03-03 | 138 |
+| `pi_peer_backup_ssh_key` | 2026-03-31 | 2027-03-29 | 164 |
+| `pihole_password` | 2026-07-23 | 2027-07-03 | 260 |
+| `prometheus_ha_token` | 2025-11-06 | 2026-10-26 | 10 |
+| `prometheus_kuma_api_key` | 2025-09-18 | 2026-08-21 | -56 |
+| `prowlarr_api_key` | 2026-08-30 | 2027-08-10 | 298 |
+| `qbittorrent_password` | 2025-09-20 | 2026-08-28 | -49 |
+| `r2_access_key_id` | 2026-04-28 | 2027-04-18 | 184 |
+| `r2_secret_access_key` | 2026-04-11 | 2027-04-10 | 176 |
+| `radarr_api_key` | 2026-08-29 | 2027-08-05 | 293 |
+| `renovate_agent_claude_oauth_token` | 2026-06-01 | 2027-05-21 | 217 |
+| `renovate_agent_gh_token` | 2026-07-21 | 2027-07-13 | 270 |
+| `scrutiny_influxdb_admin_password` | 2026-07-23 | 2027-06-29 | 256 |
+| `scrutiny_influxdb_token` | 2026-03-10 | 2027-02-09 | 116 |
+| `smtp_notify_app_password` | 2026-04-29 | 2027-04-24 | 190 |
+| `sonarr_api_key` | 2026-08-29 | 2027-08-28 | 316 |
+| `speedtest_api_token` | 2026-08-30 | 2027-08-24 | 312 |
+| `speedtest_app_key` | 2025-08-25 | 2026-07-29 | -79 |
+| `terraria_password` | 2025-12-26 | 2026-12-09 | 54 |
+| `uptime_kuma_password` | 2026-03-24 | 2027-03-11 | 146 |
+| `valheim_server_pass` | 2026-08-30 | 2027-08-01 | 289 |
 
 ## external
 
@@ -121,21 +121,21 @@ lives in a third-party system; rotate there first.
 
 | Secret | Last rotated | Due | Days left |
 |---|---|---|---|
-| `cloudflare_dns_token` | 2026-08-30 | 2027-08-29 | 318 |
-| `coinmarket_api_key` | 2026-08-30 | 2027-08-29 | 318 |
-| `crowdsec_discord_webhook_url` | 2026-03-17 | 2027-03-14 | 150 |
-| `crowdsec_mapquest_api_key` | 2026-04-05 | 2027-03-28 | 164 |
-| `flux_github_status_token` | 2026-10-12 | 2027-09-16 | 336 |
-| `gitops_deploy_discord_webhook` | 2026-10-04 | 2027-09-07 | 327 |
-| `healthchecks_discord_webhook_url` | 2026-04-17 | 2027-04-05 | 172 |
-| `homelab_builder_github_token` | 2026-05-31 | 2027-05-21 | 218 |
-| `karakeep_gemini_api_key` | 2026-04-17 | 2027-03-21 | 157 |
-| `monitor_bridge_deploy_pipeline_github_token` | 2026-10-11 | 2027-09-22 | 342 |
-| `monitor_discord_webhook_url` | 2026-09-19 | 2027-08-27 | 316 |
-| `mullvad_account` | 2025-11-16 | 2026-10-18 | 3 |
-| `weather_api_key` | 2026-08-30 | 2027-08-04 | 293 |
-| `wifi_password` | 2026-07-20 | 2027-06-24 | 252 |
-| `wireguard_interface_private_key` | 2026-02-09 | 2027-02-06 | 114 |
+| `cloudflare_dns_token` | 2026-08-30 | 2027-08-29 | 317 |
+| `coinmarket_api_key` | 2026-08-30 | 2027-08-29 | 317 |
+| `crowdsec_discord_webhook_url` | 2026-03-17 | 2027-03-14 | 149 |
+| `crowdsec_mapquest_api_key` | 2026-04-05 | 2027-03-28 | 163 |
+| `flux_github_status_token` | 2026-10-12 | 2027-09-16 | 335 |
+| `gitops_deploy_discord_webhook` | 2026-10-04 | 2027-09-07 | 326 |
+| `healthchecks_discord_webhook_url` | 2026-04-17 | 2027-04-05 | 171 |
+| `homelab_builder_github_token` | 2026-05-31 | 2027-05-21 | 217 |
+| `karakeep_gemini_api_key` | 2026-04-17 | 2027-03-21 | 156 |
+| `monitor_bridge_deploy_pipeline_github_token` | 2026-10-11 | 2027-09-22 | 341 |
+| `monitor_discord_webhook_url` | 2026-09-19 | 2027-08-27 | 315 |
+| `mullvad_account` | 2025-11-16 | 2026-10-18 | 2 |
+| `weather_api_key` | 2026-08-30 | 2027-08-04 | 292 |
+| `wifi_password` | 2026-07-20 | 2027-06-24 | 251 |
+| `wireguard_interface_private_key` | 2026-02-09 | 2027-02-06 | 113 |
 
 ## external-90d
 
@@ -143,7 +143,7 @@ lives in a third-party system and expires after 90 days; rotate there first.
 
 | Secret | Last rotated | Due | Days left |
 |---|---|---|---|
-| `promote_token` | 2026-10-12 | 2027-01-04 | 81 |
+| `promote_token` | 2026-10-12 | 2027-01-04 | 80 |
 
 ## auto
 
@@ -151,95 +151,96 @@ rotated unattended by the weekly secret-rotate cron.
 
 | Secret | Last rotated | Due | Days left |
 |---|---|---|---|
-| `aide_daniel_box_push_token` | 2026-08-24 | 2027-02-19 | 127 |
-| `aide_daniel_pi_push_token` | 2026-07-07 | 2026-12-20 | 66 |
-| `aide_daniel_server_push_token` | 2026-07-28 | 2027-01-17 | 94 |
-| `arr_autoblock_push_token` | 2026-08-30 | 2027-02-26 | 134 |
-| `artifacts_sync_push_token` | 2026-05-24 | 2026-11-12 | 28 |
-| `claude_otel_push_token` | 2026-08-28 | 2027-02-14 | 122 |
-| `cloudflare_ddns_direct_push_token` | 2026-08-30 | 2027-02-26 | 134 |
-| `cloudflare_ddns_proxied_push_token` | 2026-08-30 | 2027-02-16 | 124 |
-| `crowdsec_remote_allowlist_push_token` | 2026-06-05 | 2026-11-18 | 34 |
-| `daniel_box_disk_push_token` | 2026-08-28 | 2027-02-16 | 124 |
-| `docs_refresh_push_token` | 2026-08-06 | 2027-01-19 | 96 |
-| `etcd_drill_fence_push_token` | 2026-07-26 | 2027-01-19 | 96 |
-| `etcd_drill_full_push_token` | 2026-07-21 | 2027-01-13 | 90 |
-| `etcd_snapshot_push_token` | 2026-08-28 | 2027-02-22 | 130 |
-| `homelab_eval_push_token` | 2026-10-09 | 2027-04-01 | 168 |
-| `interaction_limit_push_token` | 2026-05-15 | 2026-10-30 | 15 |
-| `kuma_status_page_sync_push_token` | 2026-07-08 | 2026-12-28 | 74 |
-| `live_drift_push_token` | 2026-08-15 | 2027-02-03 | 111 |
-| `loki_route_witness_daniel_server_push_token` | 2026-05-14 | 2026-11-08 | 24 |
-| `loki_route_witness_push_token` | 2026-05-03 | 2026-10-30 | 15 |
-| `longhorn_backup_push_token` | 2026-08-28 | 2027-02-14 | 122 |
-| `manifest_prune_push_token` | 2026-08-28 | 2027-02-13 | 121 |
-| `mkv_attachment_repair_push_token` | 2026-04-02 | 2026-09-26 | -19 |
-| `monitor_bridge_appsec_push_token` | 2026-08-28 | 2027-02-16 | 124 |
-| `monitor_bridge_arr_queue_push_token` | 2026-08-30 | 2027-02-19 | 127 |
-| `monitor_bridge_b2_reachable_push_token` | 2026-08-30 | 2027-02-17 | 125 |
-| `monitor_bridge_b2_storage_push_token` | 2026-08-30 | 2027-02-25 | 133 |
-| `monitor_bridge_bazarr_push_token` | 2026-08-16 | 2027-02-02 | 110 |
-| `monitor_bridge_cert_push_token` | 2026-08-30 | 2027-02-19 | 127 |
-| `monitor_bridge_cloudflare_drift_push_token` | 2026-08-28 | 2027-02-14 | 122 |
-| `monitor_bridge_cluster_targets_push_token` | 2026-08-30 | 2027-02-20 | 128 |
-| `monitor_bridge_configarr_push_token` | 2026-08-28 | 2027-02-17 | 125 |
-| `monitor_bridge_cpu_push_token` | 2026-08-30 | 2027-02-20 | 128 |
-| `monitor_bridge_discord_push_token` | 2026-08-30 | 2027-02-26 | 134 |
-| `monitor_bridge_disk_push_token` | 2026-08-30 | 2027-02-15 | 123 |
-| `monitor_bridge_etcd_db_size_push_token` | 2026-05-23 | 2026-11-09 | 25 |
-| `monitor_bridge_etcd_drill_push_token` | 2026-04-28 | 2026-10-18 | 3 |
-| `monitor_bridge_fake_remux_push_token` | 2026-08-28 | 2027-02-19 | 127 |
-| `monitor_bridge_fake_remux_replace_push_token` | 2026-08-28 | 2027-02-17 | 125 |
-| `monitor_bridge_gitops_alive_push_token` | 2026-08-30 | 2027-02-23 | 131 |
-| `monitor_bridge_gitops_status_push_token` | 2026-08-30 | 2027-02-25 | 133 |
-| `monitor_bridge_ha_push_token` | 2026-08-30 | 2027-02-14 | 122 |
-| `monitor_bridge_healthchecks_drift_push_token` | 2026-07-31 | 2027-01-16 | 93 |
-| `monitor_bridge_home_allowlist_push_token` | 2026-08-28 | 2027-02-10 | 118 |
-| `monitor_bridge_host_temp_push_token` | 2026-08-09 | 2027-02-01 | 109 |
-| `monitor_bridge_janitorr_push_token` | 2026-08-30 | 2027-02-15 | 123 |
-| `monitor_bridge_k8s_workloads_push_token` | 2026-08-30 | 2027-02-12 | 120 |
-| `monitor_bridge_kubelet_readonly_push_token` | 2026-08-03 | 2027-01-18 | 95 |
-| `monitor_bridge_kuma_notify_failures_push_token` | 2026-06-08 | 2026-11-27 | 43 |
-| `monitor_bridge_loki_push_token` | 2026-08-30 | 2027-02-14 | 122 |
-| `monitor_bridge_loki_reachable_push_token` | 2026-08-30 | 2027-02-17 | 125 |
-| `monitor_bridge_longhorn_volumes_push_token` | 2026-09-13 | 2027-02-28 | 136 |
-| `monitor_bridge_mem_push_token` | 2026-08-30 | 2027-02-23 | 131 |
-| `monitor_bridge_n8n_push_token` | 2026-08-30 | 2027-02-23 | 131 |
-| `monitor_bridge_oom_push_token` | 2026-08-30 | 2027-02-18 | 126 |
-| `monitor_bridge_pi_peers_push_token` | 2026-08-30 | 2027-02-24 | 132 |
-| `monitor_bridge_pi_push_token` | 2026-08-30 | 2027-02-25 | 133 |
-| `monitor_bridge_prometheus_push_token` | 2026-08-30 | 2027-02-19 | 127 |
-| `monitor_bridge_promtail_dropped_push_token` | 2026-08-30 | 2027-02-26 | 134 |
-| `monitor_bridge_prowlarr_indexers_push_token` | 2026-08-30 | 2027-02-18 | 126 |
-| `monitor_bridge_pvc_push_token` | 2026-05-28 | 2026-11-16 | 32 |
-| `monitor_bridge_r2_usage_push_token` | 2026-08-30 | 2027-02-13 | 121 |
-| `monitor_bridge_renovate_alive_push_token` | 2026-08-28 | 2027-02-13 | 121 |
-| `monitor_bridge_restarts_push_token` | 2026-08-30 | 2027-02-21 | 129 |
-| `monitor_bridge_scrutiny_push_token` | 2026-08-30 | 2027-02-15 | 123 |
-| `monitor_bridge_snapshot_headroom_push_token` | 2026-05-31 | 2026-11-14 | 30 |
-| `monitor_bridge_speedtest_push_token` | 2026-04-20 | 2026-10-17 | 2 |
-| `monitor_bridge_swallowed_verdicts_push_token` | 2026-06-20 | 2026-12-04 | 50 |
-| `monitor_bridge_targets_push_token` | 2026-08-30 | 2027-02-14 | 122 |
-| `monitor_bridge_traefik_404_push_token` | 2026-06-05 | 2026-12-02 | 48 |
-| `monitor_bridge_traefik_421_push_token` | 2026-06-20 | 2026-12-16 | 62 |
-| `monitor_bridge_traefik_latency_push_token` | 2026-08-30 | 2027-02-24 | 132 |
-| `monitor_bridge_traefik_push_token` | 2026-08-30 | 2027-02-18 | 126 |
-| `monitor_bridge_ups_push_token` | 2026-08-30 | 2027-02-18 | 126 |
-| `monitor_bridge_wan_reachable_push_token` | 2026-06-25 | 2026-12-18 | 64 |
-| `pi_recovery_push_token` | 2026-08-30 | 2027-02-13 | 121 |
-| `pi_sd_health_push_token` | 2026-08-30 | 2027-02-22 | 130 |
-| `registry_gc_push_token` | 2026-05-10 | 2026-11-06 | 22 |
-| `release_staleness_push_token` | 2026-04-05 | 2026-09-26 | -19 |
-| `render_records_push_token` | 2026-08-17 | 2027-01-30 | 107 |
-| `renovate_agent_kuma_push_token` | 2026-09-10 | 2027-03-04 | 140 |
-| `rkhunter_daniel_box_push_token` | 2026-07-29 | 2027-01-13 | 90 |
-| `rkhunter_daniel_pi_push_token` | 2026-07-12 | 2027-01-08 | 85 |
-| `rkhunter_daniel_server_push_token` | 2026-10-12 | 2027-03-28 | 164 |
-| `ruleset_drift_push_token` | 2026-09-01 | 2027-02-26 | 134 |
-| `secret_rotation_push_token` | 2026-08-28 | 2027-02-24 | 132 |
-| `setup_drift_push_token` | 2026-04-05 | 2026-09-24 | -21 |
-| `ups_secondary_daniel_server_push_token` | 2026-06-13 | 2026-12-04 | 50 |
-| `ups_secondary_push_token` | 2026-08-22 | 2027-02-10 | 118 |
+| `aide_daniel_box_push_token` | 2026-08-24 | 2027-02-19 | 126 |
+| `aide_daniel_pi_push_token` | 2026-07-07 | 2026-12-20 | 65 |
+| `aide_daniel_server_push_token` | 2026-07-28 | 2027-01-17 | 93 |
+| `arr_autoblock_push_token` | 2026-08-30 | 2027-02-26 | 133 |
+| `artifacts_sync_push_token` | 2026-05-24 | 2026-11-12 | 27 |
+| `claude_otel_push_token` | 2026-08-28 | 2027-02-14 | 121 |
+| `cloudflare_ddns_direct_push_token` | 2026-08-30 | 2027-02-26 | 133 |
+| `cloudflare_ddns_proxied_push_token` | 2026-08-30 | 2027-02-16 | 123 |
+| `crowdsec_remote_allowlist_push_token` | 2026-06-05 | 2026-11-18 | 33 |
+| `daniel_box_disk_push_token` | 2026-08-28 | 2027-02-16 | 123 |
+| `docs_refresh_push_token` | 2026-08-06 | 2027-01-19 | 95 |
+| `etcd_drill_fence_push_token` | 2026-07-26 | 2027-01-19 | 95 |
+| `etcd_drill_full_push_token` | 2026-07-21 | 2027-01-13 | 89 |
+| `etcd_snapshot_push_token` | 2026-08-28 | 2027-02-22 | 129 |
+| `homelab_eval_push_token` | 2026-10-09 | 2027-04-01 | 167 |
+| `interaction_limit_push_token` | 2026-05-15 | 2026-10-30 | 14 |
+| `kuma_status_page_sync_push_token` | 2026-07-08 | 2026-12-28 | 73 |
+| `live_drift_push_token` | 2026-08-15 | 2027-02-03 | 110 |
+| `loki_route_witness_daniel_server_push_token` | 2026-05-14 | 2026-11-08 | 23 |
+| `loki_route_witness_push_token` | 2026-05-03 | 2026-10-30 | 14 |
+| `longhorn_backup_push_token` | 2026-08-28 | 2027-02-14 | 121 |
+| `manifest_prune_push_token` | 2026-08-28 | 2027-02-13 | 120 |
+| `mkv_attachment_repair_push_token` | 2026-04-02 | 2026-09-26 | -20 |
+| `monitor_bridge_appsec_push_token` | 2026-08-28 | 2027-02-16 | 123 |
+| `monitor_bridge_arr_queue_push_token` | 2026-08-30 | 2027-02-19 | 126 |
+| `monitor_bridge_b2_reachable_push_token` | 2026-08-30 | 2027-02-17 | 124 |
+| `monitor_bridge_b2_storage_push_token` | 2026-08-30 | 2027-02-25 | 132 |
+| `monitor_bridge_bazarr_push_token` | 2026-08-16 | 2027-02-02 | 109 |
+| `monitor_bridge_cert_push_token` | 2026-08-30 | 2027-02-19 | 126 |
+| `monitor_bridge_cloudflare_drift_push_token` | 2026-08-28 | 2027-02-14 | 121 |
+| `monitor_bridge_cluster_targets_push_token` | 2026-08-30 | 2027-02-20 | 127 |
+| `monitor_bridge_configarr_push_token` | 2026-08-28 | 2027-02-17 | 124 |
+| `monitor_bridge_cpu_push_token` | 2026-08-30 | 2027-02-20 | 127 |
+| `monitor_bridge_discord_push_token` | 2026-08-30 | 2027-02-26 | 133 |
+| `monitor_bridge_disk_push_token` | 2026-08-30 | 2027-02-15 | 122 |
+| `monitor_bridge_etcd_db_size_push_token` | 2026-05-23 | 2026-11-09 | 24 |
+| `monitor_bridge_etcd_drill_push_token` | 2026-04-28 | 2026-10-18 | 2 |
+| `monitor_bridge_fake_remux_push_token` | 2026-08-28 | 2027-02-19 | 126 |
+| `monitor_bridge_fake_remux_replace_push_token` | 2026-08-28 | 2027-02-17 | 124 |
+| `monitor_bridge_gitops_alive_push_token` | 2026-08-30 | 2027-02-23 | 130 |
+| `monitor_bridge_gitops_status_push_token` | 2026-08-30 | 2027-02-25 | 132 |
+| `monitor_bridge_ha_push_token` | 2026-08-30 | 2027-02-14 | 121 |
+| `monitor_bridge_healthchecks_drift_push_token` | 2026-07-31 | 2027-01-16 | 92 |
+| `monitor_bridge_home_allowlist_push_token` | 2026-08-28 | 2027-02-10 | 117 |
+| `monitor_bridge_host_packages_push_token` | 2026-07-23 | 2027-01-10 | 86 |
+| `monitor_bridge_host_temp_push_token` | 2026-08-09 | 2027-02-01 | 108 |
+| `monitor_bridge_janitorr_push_token` | 2026-08-30 | 2027-02-15 | 122 |
+| `monitor_bridge_k8s_workloads_push_token` | 2026-08-30 | 2027-02-12 | 119 |
+| `monitor_bridge_kubelet_readonly_push_token` | 2026-08-03 | 2027-01-18 | 94 |
+| `monitor_bridge_kuma_notify_failures_push_token` | 2026-06-08 | 2026-11-27 | 42 |
+| `monitor_bridge_loki_push_token` | 2026-08-30 | 2027-02-14 | 121 |
+| `monitor_bridge_loki_reachable_push_token` | 2026-08-30 | 2027-02-17 | 124 |
+| `monitor_bridge_longhorn_volumes_push_token` | 2026-09-13 | 2027-02-28 | 135 |
+| `monitor_bridge_mem_push_token` | 2026-08-30 | 2027-02-23 | 130 |
+| `monitor_bridge_n8n_push_token` | 2026-08-30 | 2027-02-23 | 130 |
+| `monitor_bridge_oom_push_token` | 2026-08-30 | 2027-02-18 | 125 |
+| `monitor_bridge_pi_peers_push_token` | 2026-08-30 | 2027-02-24 | 131 |
+| `monitor_bridge_pi_push_token` | 2026-08-30 | 2027-02-25 | 132 |
+| `monitor_bridge_prometheus_push_token` | 2026-08-30 | 2027-02-19 | 126 |
+| `monitor_bridge_promtail_dropped_push_token` | 2026-08-30 | 2027-02-26 | 133 |
+| `monitor_bridge_prowlarr_indexers_push_token` | 2026-08-30 | 2027-02-18 | 125 |
+| `monitor_bridge_pvc_push_token` | 2026-05-28 | 2026-11-16 | 31 |
+| `monitor_bridge_r2_usage_push_token` | 2026-08-30 | 2027-02-13 | 120 |
+| `monitor_bridge_renovate_alive_push_token` | 2026-08-28 | 2027-02-13 | 120 |
+| `monitor_bridge_restarts_push_token` | 2026-08-30 | 2027-02-21 | 128 |
+| `monitor_bridge_scrutiny_push_token` | 2026-08-30 | 2027-02-15 | 122 |
+| `monitor_bridge_snapshot_headroom_push_token` | 2026-05-31 | 2026-11-14 | 29 |
+| `monitor_bridge_speedtest_push_token` | 2026-04-20 | 2026-10-17 | 1 |
+| `monitor_bridge_swallowed_verdicts_push_token` | 2026-06-20 | 2026-12-04 | 49 |
+| `monitor_bridge_targets_push_token` | 2026-08-30 | 2027-02-14 | 121 |
+| `monitor_bridge_traefik_404_push_token` | 2026-06-05 | 2026-12-02 | 47 |
+| `monitor_bridge_traefik_421_push_token` | 2026-06-20 | 2026-12-16 | 61 |
+| `monitor_bridge_traefik_latency_push_token` | 2026-08-30 | 2027-02-24 | 131 |
+| `monitor_bridge_traefik_push_token` | 2026-08-30 | 2027-02-18 | 125 |
+| `monitor_bridge_ups_push_token` | 2026-08-30 | 2027-02-18 | 125 |
+| `monitor_bridge_wan_reachable_push_token` | 2026-06-25 | 2026-12-18 | 63 |
+| `pi_recovery_push_token` | 2026-08-30 | 2027-02-13 | 120 |
+| `pi_sd_health_push_token` | 2026-08-30 | 2027-02-22 | 129 |
+| `registry_gc_push_token` | 2026-05-10 | 2026-11-06 | 21 |
+| `release_staleness_push_token` | 2026-04-05 | 2026-09-26 | -20 |
+| `render_records_push_token` | 2026-08-17 | 2027-01-30 | 106 |
+| `renovate_agent_kuma_push_token` | 2026-09-10 | 2027-03-04 | 139 |
+| `rkhunter_daniel_box_push_token` | 2026-07-29 | 2027-01-13 | 89 |
+| `rkhunter_daniel_pi_push_token` | 2026-07-12 | 2027-01-08 | 84 |
+| `rkhunter_daniel_server_push_token` | 2026-10-12 | 2027-03-28 | 163 |
+| `ruleset_drift_push_token` | 2026-09-01 | 2027-02-26 | 133 |
+| `secret_rotation_push_token` | 2026-08-28 | 2027-02-24 | 131 |
+| `setup_drift_push_token` | 2026-04-05 | 2026-09-24 | -22 |
+| `ups_secondary_daniel_server_push_token` | 2026-06-13 | 2026-12-04 | 49 |
+| `ups_secondary_push_token` | 2026-08-22 | 2027-02-10 | 117 |
 
 ## ignore
 

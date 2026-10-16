@@ -321,3 +321,113 @@ def test_a_logger_both_ends_create_in_the_filter_call_and_leave_alone_is_order_o
         base_call="logging.getLogger('order-only-5085')",
     )
     assert reason is None
+
+
+def _reason_for_head_module_code(tree, imports: str, code: str) -> str | None:  # noqa: F811
+    """The rule's reason when both ends' module code runs `imports` and the head's also runs `code`."""
+    tree.write("ansible/filter_plugins/toposort.py", f"{imports}\n\n\n{TOPOSORT}")
+    base = tree.commit("toposort module code at the base")
+    head = _commit(
+        tree,
+        [{"ansible/filter_plugins/toposort.py": f"{imports}\n{code}\n\n\n{TOPOSORT}"}],
+    )
+    return digest_covers.Classifier(tree.root).reason("authelia", base, head)
+
+
+def test_a_write_the_module_code_makes_to_an_object_it_created_keeps_the_line(
+    tree,  # noqa: F811
+):
+    """A logger the plugin's module code creates and, at the head only, disables keeps the line (#5107).
+
+    Both walks run after the module code wrote the flag, so neither end sees it change within
+    its own run. In a deploy the disabled logger persists in the controller for every later task.
+    """
+    reason = _reason_for_head_module_code(
+        tree,
+        "import logging\n_LOGGER = logging.getLogger('order-only-5107')",
+        "_LOGGER.disabled = True",
+    )
+    assert reason and "every deploy runs" in reason
+
+
+_SLOTTED = (
+    "class _Slotted:\n    __slots__ = ('value',)\n\n\n"
+    "json.order_only_5107 = _Slotted()\njson.order_only_5107.value = 0"
+)
+
+
+@pytest.mark.parametrize(
+    "imports, call",
+    [
+        (
+            "import json\njson.order_only_5107 = {'a': {'b': {'c': {'d': []}}}}",
+            "json.order_only_5107['a']['b']['c']['d'].append(1)",
+        ),
+        (
+            "import logging\nlogging.getLogger('order-only-5107')",
+            "logging.getLogger('order-only-5107').addFilter(logging.Filter('x'))",
+        ),
+        (f"import json\n{_SLOTTED}", "json.order_only_5107.value = 1"),
+        ("import decimal", "decimal.DefaultContext.prec = 5"),
+        ("import random", "random.seed(5107)"),
+        ("import threading", "threading.stack_size(1 << 20)"),
+        ("import signal", "signal.siginterrupt(signal.SIGUSR1, True)"),
+    ],
+    ids=[
+        "container-five-levels-down",
+        "named-logger-filters-five-levels-down",
+        "slots-attribute",
+        "c-object-decimal-context",
+        "c-object-random-state",
+        "process-thread-stack-size",
+        "process-siginterrupt",
+    ],
+)
+def test_a_change_outside_the_walk_or_the_process_state_read_keeps_the_line(
+    tree,  # noqa: F811
+    imports,
+    call,
+):
+    """A change the four-level walk, `shallow` and `_process_state` all miss keeps the line (#5107).
+
+    The first two rows change a container at the fifth level below a module attribute: a named
+    logger sits at the fourth, so its `filters` list sits at the fifth. A `__slots__` value
+    and a C object's state have no `__dict__` for `shallow` to copy. The thread stack size and
+    a signal's restart flag are process state the runner neither reads nor counts. Each change
+    persists in the controller for every later task and role.
+    """
+    reason = _reason_for_head_call(tree, imports, call)
+    assert reason and "every deploy runs" in reason
+
+
+def test_a_file_created_through_a_module_the_runner_neither_replaces_nor_wraps_keeps_the_line(
+    tree,  # noqa: F811
+    tmp_path,
+):
+    """A Tcl interpreter's `open` creates a file and raises no audit event (#5107).
+
+    `_tkinter` is in neither of the runner's `unaudited` or `counted` tables, and with an
+    absolute path the file lands outside the temp tree the runner scans afterwards.
+    """
+    path = tmp_path / "escaped"
+    reason = _reason_for_head_call(
+        tree,
+        "import _tkinter",
+        "_tkinter.create(None, 'x', 'Tk', False, False, False, False, None)"
+        f".eval('close [open {path} w]')",
+    )
+    assert reason and "every deploy runs" in reason
+
+
+def test_an_item_replaced_five_levels_down_keeps_the_line(tree):  # noqa: F811
+    """A same-length write five levels below a module attribute keeps the line (#5107).
+
+    The list keeps its length, so comparing the module-created object between the ends sees
+    nothing; only a walk that copies the fifth level compares its items within the run.
+    """
+    reason = _reason_for_head_call(
+        tree,
+        "import json\njson.order_only_5107 = {'a': {'b': {'c': {'d': [None]}}}}",
+        "json.order_only_5107['a']['b']['c']['d'][0] = 1",
+    )
+    assert reason and "every deploy runs" in reason
