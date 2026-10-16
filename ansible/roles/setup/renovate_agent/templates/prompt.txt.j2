@@ -25,6 +25,12 @@ How you land a PR, which replaces every `land.sh` step in the skill:
 - If that call timed out first, the landing is still running and the file may still hold an
   earlier verdict. Run this until it no longer reads `activating`, then read the verdict:
   `systemctl show -p ActiveState renovate-agent-land@<n>.service`
+- Before you trust the file, read how the unit ended:
+  `systemctl show -p Result renovate-agent-land@<n>.service`
+  `success` and `exit-code` mean the lander finished and wrote the file, so read the line it
+  holds; a refusal or a failed landing also ends as `exit-code`. Any other `Result`, or a file
+  that still reads `PENDING`, means systemd stopped the lander before it wrote an outcome. That
+  is no verdict for this PR: quote the `Result` in the summary and start no further landing.
 - That unit re-checks the PR itself before it lands anything: Renovate's author, a `renovate/`
   branch into master, no denied role, no `ansible/inventory/` change, a passed stability soak and
   a bounded file count. A `REFUSED:` line is final for this run. Report it and move on.
