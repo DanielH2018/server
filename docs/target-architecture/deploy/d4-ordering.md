@@ -656,9 +656,9 @@ Flux half after CI. Usually that costs a hold and a retry. In the policies-first
   role's only diff is an image pin, judged as `deploy_k8s.py:is_image_only_diff` judges it.
   A role whose `tasks/` changed also counts when Ansible owns it at the head, because a task
   change moves no render. A flux-owned role's tasks run nowhere, so only the render they feed
-  counts (Open question 9). An Ansible-owned role's render move counts only when the PR
-  changes something under `ansible/`. Ansible applies its own templates, never `homelab-render`
-  output, so a renderer-only PR moves nothing it applies (#5213). A role that reads another entry's fields counts exactly when its
+  counts (Open question 9). A PR that changes only `scripts/renderer/` counts its
+  flux-owned roles alone. Ansible applies its own templates, never `homelab-render` output, so
+  such a PR moves nothing Ansible applies (#5213). A role that reads another entry's fields counts exactly when its
   own render moved. For example,
   `auth_tier` on bento-pdf is read by authelia's access rules
   (`narrow_lib/containers.py:FILTER_FIELDS`). An `auth_tier` edit moves authelia's render
