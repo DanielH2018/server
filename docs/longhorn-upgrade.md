@@ -36,8 +36,9 @@ three cases:
 - while (`last-good`, master tip] already holds a change to the pin, so a second bump never
   merges ahead of the first one's verification.
 
-On a pass it posts the commit status `homelab/upgrade-gates` on the PR's head SHA, and
-`promote` requires that status before it applies the bump. A merge made any other way skips
+On a pass it posts the commit status `homelab/upgrade-gates` on the PR's head SHA. Once H1.1b
+lands, `promote` requires that status before it applies the bump. Until H1 hands Longhorn to
+Flux, a merged bump still applies through the per-hop procedure below. A merge made any other way skips
 the gate. For such a merge, `land.sh --regate <pr>` re-runs the gates and re-posts the status
 without merging. A fix-forward bump after a failed bump is **operator-only**: the operator
 merges it outside `land.sh`, runs `land.sh --regate <pr>` for it, then clears the hold with

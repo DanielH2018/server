@@ -832,7 +832,7 @@
  "scripts/deploy_tools/tests/test_land_nut_host_reaches_both_hosts.py": 0.03,
  "scripts/deploy_tools/tests/test_land_options.py": 0.0,
  "scripts/deploy_tools/tests/test_land_outcome.py": 0.0,
- "scripts/deploy_tools/tests/test_land_pin_gate.py": 0.05,
+ "scripts/deploy_tools/tests/test_land_pin_gate.py": 0.19,
  "scripts/deploy_tools/tests/test_land_pipeline.py": 0.1,
  "scripts/deploy_tools/tests/test_land_plane_keeps_the_remaining_hosts_line.py": 0.0,
  "scripts/deploy_tools/tests/test_land_plane_keeps_the_tick_half_line.py": 0.0,

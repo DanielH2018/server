@@ -1,16 +1,26 @@
 """The pin gate before a forward-only pin bump merges, and `land.sh --regate` (H1.1g).
 
 Every boundary is a fake (`_land_fakes.Fakes`): the pins at each SHA, DEPLOY_HOLD, `last-good`,
-the gate run and every `gh` call. Nothing here posts a status or merges anything.
+the gate run and every `gh` call. Nothing here posts a status or merges anything. The last two
+tests run the land rule's git walk and `cluster_pins.pins_at` against a real repository in
+`tmp_path`, with only DEPLOY_HOLD and `last-good` fixed.
 
 Run: uv run pytest scripts/deploy_tools/tests/test_land_pin_gate.py
 """
 
+from pathlib import Path
+
 import pytest
 from _land_fakes import LAST_GOOD, Fakes
 from deploy_tools.land_lib import merge, pin_gate
+from deploy_tools.land_lib.land_flux import FluxReads
+from deploy_tools.land_lib.landing import Landing
+from deploy_tools.land_lib.options import Options
 from deploy_tools.land_lib.outcome import Outcome
-from deploy_tools.land_lib.pin_reads import Unreadable
+from deploy_tools.land_lib.pin_reads import PinReads, Unreadable
+from deploy_tools.land_lib.tools import Tools
+from lib import proc_testing
+from lib.git import git
 
 HEAD = "c" * 40
 BASE = "prbase"  # what the fake `git merge-base` answers
@@ -222,3 +232,61 @@ def test_land_sh_regate_exits_0_and_runs_no_landing(land_run):
     assert not {"await_ci", "tick", "deploy"} & set(_names(calls))
     assert logline == ""
     assert "VERDICT" not in out
+
+
+# ── the land rule over a real repository ────────────────────────────────────────────────────
+
+K3S = "ansible/roles/setup/k3s/defaults/main.yml"
+
+
+def _git(repo: Path, *args: str) -> str:
+    env = {"GIT_CONFIG_GLOBAL": "/dev/null", "HOME": str(repo), "PATH": "/usr/bin:/bin"}
+    return proc_testing.run(
+        ["git", "-c", "user.name=t", "-c", "user.email=t@example.com", *args],
+        cwd=repo,
+        env=env,
+        check=True,
+    ).stdout.strip()
+
+
+def _commit(repo: Path, rel: str, text: str) -> str:
+    path = repo / rel
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text)
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-q", "--no-gpg-sign", "-m", "step")
+    return _git(repo, "rev-parse", "HEAD")
+
+
+def _real_landing(repo: Path, last_good: str) -> Landing:
+    """A Landing whose git and pin reads run against `repo`; only the forge reads are fixed."""
+    reads = PinReads(hold=lambda: "none", last_good=lambda: last_good)
+    tools = Tools(git=git, flux=FluxReads(pins=reads))
+    return Landing(Options(pr="999", primary=repo), tools)
+
+
+@pytest.fixture
+def repo(tmp_path) -> Path:
+    _git(tmp_path, "init", "-q", "-b", "master")
+    return tmp_path
+
+
+def test_the_land_rule_refuses_a_real_range_that_bumps_the_pin(repo):
+    last_good = _commit(repo, K3S, "k3s_longhorn_version: v1.12.1\n")
+    bump = _commit(repo, K3S, "k3s_longhorn_version: v1.13.0\n")
+    _commit(repo, "docs/x.md", "unrelated\n")
+    _git(repo, "update-ref", "refs/remotes/origin/master", "HEAD")
+    with pytest.raises(Outcome) as exc:
+        pin_gate.land_rule(_real_landing(repo, last_good), [LONGHORN])
+    # The bump alone is named: the commit after it keeps the same value.
+    assert f"already changes it at {bump[:9]}." in exc.value.error
+
+
+def test_the_land_rule_passes_a_real_range_that_moves_only_another_pin(repo):
+    last_good = _commit(
+        repo, K3S, "k3s_longhorn_version: v1.12.1\nk3s_metallb_version: v0.16.0\n"
+    )
+    _commit(repo, "docs/x.md", "unrelated\n")
+    _commit(repo, K3S, "k3s_longhorn_version: v1.12.1\nk3s_metallb_version: v0.16.1\n")
+    _git(repo, "update-ref", "refs/remotes/origin/master", "HEAD")
+    pin_gate.land_rule(_real_landing(repo, last_good), [LONGHORN])

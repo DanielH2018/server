@@ -156,7 +156,7 @@ def _require_gate_host(ln: Landing, pins: list[str]) -> None:
         )
 
 
-def _land_rule(ln: Landing, pins: list[str]) -> None:
+def land_rule(ln: Landing, pins: list[str]) -> None:
     """Die unless DEPLOY_HOLD reads `none` and (`last-good`, tip] changes none of `pins`."""
     pr = ln.opts.pr
     try:
@@ -271,7 +271,7 @@ def gate_before_merge(ln: Landing, head: str) -> None:
         return
     say(f"PR #{ln.opts.pr} bumps {' and '.join(pins)}; running the pin gate")
     _require_gate_host(ln, pins)
-    _land_rule(ln, pins)
+    land_rule(ln, pins)
     _gate_and_post(ln, pins, head)
 
 
