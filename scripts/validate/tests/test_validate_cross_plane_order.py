@@ -82,6 +82,56 @@ def test_a_tasks_change_in_a_flux_owned_role_is_clean():
     )
 
 
+# A renderer-only PR: nothing publishes an Ansible-owned tag's `homelab-render` output, so
+# only the flux-owned half of what it moves reaches a cluster (#5213).
+RENDERER_ONLY = ["scripts/renderer/renderer_lib/cluster.py"]
+
+
+def test_a_renderer_only_change_moving_bento_pdf_and_authelia_is_clean():
+    assert judge({"bento-pdf", "authelia"}, paths=RENDERER_ONLY) == []
+
+
+def test_a_renderer_only_change_counts_the_flux_owned_tag_alone():
+    base = snap({"bento-pdf", "authelia"}, side="base")
+    head = snap({"bento-pdf", "authelia"}, side="head")
+    assert gate.counted(base, head, RENDERER_ONLY, {}) == {"bento-pdf"}
+
+
+# What a real renderer PR carries beside the renderer: docs, tests and the shard weights. None
+# of them reaches an Ansible apply.
+RENDERER_WITH_DOCS_AND_TESTS = RENDERER_ONLY + [
+    "docs/homelab-render.md",
+    "scripts/renderer/tests/test_renderer_cluster.py",
+    "ansible/tests/repo/test_census_rows_text.py",
+    "scripts/dev/pytest_shard_weights.json",
+]
+
+
+def test_a_renderer_change_with_its_docs_and_tests_is_clean():
+    assert judge({"bento-pdf", "authelia"}, paths=RENDERER_WITH_DOCS_AND_TESTS) == []
+
+
+@pytest.mark.parametrize(
+    "beside",
+    [
+        "ansible/templates/workload-shell.yml.j2",
+        "ansible/roles/k8s/authelia/templates/configmap.yaml.j2",
+        "scripts/lib/plain_scalar.py",
+        "scripts/diagnostics/probe_lib/obs_api.py",
+        "uv.lock",
+        "ansible.cfg",
+    ],
+)
+def test_a_renderer_change_beside_a_path_ansible_reads_is_flagged(beside):
+    flagged = judge({"bento-pdf", "authelia"}, paths=RENDERER_ONLY + [beside])
+    assert len(flagged) == 1 and flagged[0].startswith("arm 1: bento-pdf (flux)")
+
+
+def test_ansible_scripts_names_the_files_a_task_ships():
+    """homelab-mcp's tasks ship obs_api.py into its image build."""
+    assert "scripts/diagnostics/probe_lib/obs_api.py" in gate.ansible_scripts()
+
+
 def test_a_change_beside_netpol_baseline_is_flagged_through_applies_last():
     flagged = judge({"bento-pdf", "netpol-baseline"})
     assert len(flagged) == 1

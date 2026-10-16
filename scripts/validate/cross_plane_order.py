@@ -12,6 +12,9 @@ cluster` and refuses two shapes:
   `cluster/<tag>/` or `cluster/<tag>-deferred/` output moved, unless its role's own diff is
   only an image pin (`deploy_k8s.py:is_image_only_diff`). A tag whose role's `tasks/` changed
   counts as well when it is Ansible-owned at the head, because a task change moves no render.
+  A PR none of whose paths reaches an Ansible apply (`reaches_ansible`) counts its flux-owned
+  tags alone: a renderer change moves `homelab-render` output, which Ansible never applies
+  (#5213).
   A flux-owned role's tasks run nowhere, since every Ansible path skips the tag, so only the
   render they feed reaches a plane (D4 Open question 9). An inventory field another role reads
   counts only through the render it moves: an `auth_tier` edit on bento-pdf moves authelia's
@@ -35,7 +38,9 @@ Run: uv run python scripts/validate/cross_plane_order.py --base origin/master
      uv run pytest scripts/validate/tests/test_validate_cross_plane_order.py
 """
 
+import functools
 import hashlib
+import re
 import subprocess
 import sys
 import tarfile
@@ -66,12 +71,24 @@ if str(FILTER_PLUGINS) not in _sys.path:
 if str(GITOPS_DEPLOY_FILES) not in _sys.path:
     _sys.path.insert(0, str(GITOPS_DEPLOY_FILES))
 
+from deployer_lib.deploy_changes import _is_test_only_path, is_doc
 from deployer_lib.deploy_k8s import is_image_only_diff
 from toposort import K8S_APPLIES_LAST, build_k8s_dep_map, filter_by_platform
 
 CLEAN, REFUSED, UNJUDGED = 0, 1, 2
 HOST_VARS = Path("ansible/inventory/host_vars/daniel-box.yml")
 GROUP_VARS = Path("ansible/inventory/group_vars/all.yml")
+ANSIBLE_TREE = "ansible/"
+# The filter plugins load modules from here by path (`standalone_guard.py:_RESOLVER`).
+SCRIPTS_LIB = "scripts/lib/"
+# Root files that configure every Ansible apply: `ansible.cfg`, and the interpreter and pinned
+# packages, ansible-core and Jinja2 among them, that `uv run ansible-playbook` syncs. A bump
+# can move an Ansible-owned render as surely as a template edit.
+ROOT_ANSIBLE_INPUTS = frozenset(
+    {"ansible.cfg", "pyproject.toml", "uv.lock", "uv.toml", ".python-version"}
+)
+# A task or template that reads a file under `scripts/` names it through `playbook_dir`.
+_SCRIPT_REF = re.compile(r"playbook_dir\s*\}\}/\.\./(scripts/[\w./-]*\w)")
 K8S_ROLES = "ansible/roles/k8s/"
 SHARED_TEMPLATES = "ansible/templates/"
 ANSIBLE_PLANE = "ansible"
@@ -135,17 +152,45 @@ def closure(deps: Mapping[str, Iterable[str]], tag: str) -> set[str]:
     return seen - {tag}
 
 
+@functools.cache
+def ansible_scripts(tree: Path = REPO) -> frozenset[str]:
+    """Every path under `scripts/` that a task or template in `tree` names, file or directory."""
+    found: set[str] = set()
+    for path in (tree / "ansible").rglob("*"):
+        if path.suffix in (".yml", ".yaml", ".j2") and path.is_file():
+            found.update(_SCRIPT_REF.findall(path.read_text(errors="ignore")))
+    return frozenset(found)
+
+
+def reaches_ansible(path: str, scripts: Iterable[str]) -> bool:
+    """Whether a changed path can change what an Ansible apply sends to the cluster.
+
+    A doc or a test reaches no apply. Anything else under `ansible/` does, and so do
+    `scripts/lib/`, the root files in `ROOT_ANSIBLE_INPUTS` and every `scripts/` path in
+    `scripts`, the ones Ansible reads.
+    """
+    if is_doc(path) or _is_test_only_path(path):
+        return False
+    if path in ROOT_ANSIBLE_INPUTS or path.startswith((ANSIBLE_TREE, SCRIPTS_LIB)):
+        return True
+    return any(path == s or path.startswith(s.rstrip("/") + "/") for s in scripts)
+
+
 def counted(
     base: Snapshot,
     head: Snapshot,
     changed_paths: Iterable[str],
     role_diffs: Mapping[str, str],
+    scripts: Iterable[str] | None = None,
 ) -> set[str]:
     """The tags the PR changes, by render, by an Ansible-owned `tasks/`, never by a pin alone.
+
+    A PR none of whose paths reaches an Ansible apply counts no Ansible-owned tag.
 
     Args:
         changed_paths: The paths the PR changes.
         role_diffs: Each tag mapped to the unified diff of its role directory.
+        scripts: The `scripts/` paths Ansible reads; `ansible_scripts()` when None.
     """
     moved = {
         tag
@@ -157,6 +202,15 @@ def counted(
     # shared template or an inventory edit beside the bump also moves the role's render.
     if all(p.startswith(K8S_ROLES) for p in changed_paths):
         moved -= {tag for tag in moved if is_image_only_diff(role_diffs.get(tag, ""))}
+    # DECIDED: an Ansible-owned tag's render move counts only when a changed path reaches an
+    # Ansible apply. Ansible applies its own templates, never `homelab-render` output, so a
+    # renderer change moves nothing Ansible applies, and the docs, tests and shard weights that
+    # ride along with one reach no apply either. Only the flux-owned half reaches a cluster,
+    # through `promote` (#5213). An empty path list is left alone, as no real PR has one.
+    if scripts is None:
+        scripts = ansible_scripts()
+    if changed_paths and not any(reaches_ansible(p, scripts) for p in changed_paths):
+        moved = {tag for tag in moved if head.plane(tag) != ANSIBLE_PLANE}
     tasks = {
         p[len(K8S_ROLES) :].split("/", 1)[0]
         for p in changed_paths
