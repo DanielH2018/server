@@ -428,6 +428,26 @@ The gate has no bypass, because a bypass would become the default route. It also
 image bump that does need ordering. A render that fails at either end exits 2, and the step
 fails without a verdict. Slice D6 deletes the gate once every role is flux-owned.
 
+### A cluster pin moves forward, one step, alone in its PR
+
+Merging `k3s_longhorn_version` or `k3s_metallb_version` is the upgrade, and neither upgrade
+runs backwards. CI's **Cluster pin checks** step, in the `hooks` job on pull requests only,
+runs `scripts/validate/cluster_pins.py --base HEAD^1`. It reads each pin from whichever role
+YAML file holds the key at the base and at the merge commit, and refuses four shapes:
+
+- **A decrease.** A revert PR of a bump fails here. To undo a bump, fix forward in a PR that
+  keeps the version.
+- **A skipped Longhorn minor.** `v1.12.1` to `v1.14.0` is refused, and so is a major bump.
+  Bump one minor release per PR.
+- **A bump that shares its PR.** A PR that bumps a pin may change only the role directory
+  that holds the pin, which carries its vendored file, and docs. A test, `renovate.json` or
+  another role goes in a PR of its own. `land.sh`'s land gate relies on this refusal.
+- **Two pins bumped together.** Bump each pin in its own PR.
+
+A PR that moves a key into another role at the same version is no bump, so none of the four
+applies to it. A key set in two files at one commit, or a value that is not `vX.Y.Z`, exits 2:
+the check cannot judge it. There is no bypass.
+
 ## The stale-tree retry
 
 **If a PR that reaches YOUR OWN TAGS merges while this one is landing, the first `deploy.sh`

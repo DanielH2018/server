@@ -48,6 +48,7 @@ SCOPED_STEPS = frozenset(
         "Upload notice failure",
         "Check whether this PR touches the type proof's inputs",
         "Cross-plane order gate",
+        "Cluster pin checks",
     }
 )
 KNOWN_JOBS = frozenset(
