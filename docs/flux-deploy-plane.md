@@ -972,7 +972,10 @@ under *Rules for every Job Flux applies (D5.1a3)*.
   through `open_url` in `ansible/roles/k8s/manifests/files/flux_job_connect.py`, shipped
   byte-identical beside it. A script imports only the modules in the census's
   `ALLOWED_IMPORTS`, none of which can connect, and builds its request with the helper's
-  `Request`. The helper retries a refused or timed-out connect for 60
+  `Request`. It reads from the helper only the names in its `__all__`, reaches `urllib` only
+  through `urllib.error` or `urllib.parse`, and never touches `sys.modules`, so it cannot walk
+  through an allowed module to `urllib.request` or `socket`. It uses neither the helper module
+  nor `urllib` as a value, and reads no double-underscore name such as `__globals__`. The helper retries a refused or timed-out connect for 60
   seconds, because kube-router can refuse a new pod until it learns its address. It never
   retries an answer, so a flaky check fails rather than passing on its second try.
 
