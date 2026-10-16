@@ -14,12 +14,22 @@ WHAT `verify` EXPECTS. `flux/homelab` plus `flux/<name>` for every name in T's c
 which `changed_set.changed_set` computes from T's `digests.json` and `prod`'s, as it does for
 `land-wait`. Nothing here derives the set a second time. The Kustomizations and their
 `dependsOn` and `suspend` come from T's own bundle, never from the job's `out/`, which is the
-render of the commit that triggered the run. A dependent whose status on `prod`'s commit
-already read `failure` is reported and not expected, so a failure that predates T never holds.
+render of the commit that triggered the run.
+
+A DEPENDENT THAT WAS ALREADY FAILING (H1.1i) is excused: reported as `excused <name>` and not
+expected. A dependent is a member of the changed set that joined only through its `dependsOn`
+chain, its own footprint unchanged. Before `prod` moves, `decide` records the newest
+`flux/<name>` status on `prod`'s commit for each name in the changed set (`prior_statuses`)
+and hands the record on beside the bundles. `verify` excuses a dependent whose recorded status
+is `failure`, so a node outage that fails `longhorn` on every revision does not hold a T that
+changes only `cluster-base`. A name whose footprint T changed counts, and so does a dependent
+whose record is `success`, `error` or absent. `verify` makes no read of `prod`'s commit itself:
+the record is what the cluster showed before T, not after.
 
 WHERE THE BUNDLES COME FROM. `decide` pulls both before `prod` moves and writes them under
-`--bundle-dir` (`write_handoff`), so a registry error promotes nothing. `verify` reads them
-back (`read_handoff`) and makes no registry call.
+`--bundle-dir` (`write_handoff`), with the record of `prod`'s statuses, so a registry error
+promotes nothing. `verify` reads them back (`read_handoff`, `read_recorded`) and makes no
+registry call.
 
 ONLY STATUSES FROM THIS PROMOTION COUNT. T may carry statuses from an earlier promotion of
 the same commit, such as the `failure` that held it before an operator cleared the hold and
@@ -48,7 +58,7 @@ import json
 import re
 import sys
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -72,6 +82,9 @@ from chained_timeout import promote_timeout
 from deploy_tools.promote_lib.wait import kustomization_graph
 
 DIGESTS_FILE = "digests.json"
+# The statuses `decide` recorded on `prod`'s commit, at the handoff's root beside `prod/` and
+# `target/`, so `read_handoff` never reads it as a bundle file.
+RECORDED_FILE = "prod-statuses.json"
 # The files `verify` reads from each bundle. Nothing else is handed on.
 _HANDOFF_FILE = re.compile(r"digests\.json|flux/[a-z0-9][a-z0-9.-]*\.yaml")
 KUSTOMIZATION_API = "kustomize.toolkit.fluxcd.io/v1"
@@ -119,11 +132,15 @@ SOAK = "soak"
 
 
 def write_handoff(
-    directory: Path, prod: dict[str, bytes] | None, target: dict[str, bytes]
+    directory: Path,
+    prod: dict[str, bytes] | None,
+    target: dict[str, bytes],
+    recorded: dict[str, str] | None = None,
 ) -> None:
     """Write the files `verify` reads from `prod`'s bundle and T's under `directory`.
 
     `prod` is None on the first run, which has no `prod`, and leaves `directory/prod` absent.
+    `recorded` is what `prior_statuses` read on `prod`'s commit, written as RECORDED_FILE.
 
     Raises:
         OSError: a write failed.
@@ -135,6 +152,24 @@ def write_handoff(
                 path.parent.mkdir(parents=True, exist_ok=True)
                 path.write_bytes(raw)
     (directory / "target").mkdir(parents=True, exist_ok=True)
+    (directory / RECORDED_FILE).write_text(
+        json.dumps(recorded or {}, sort_keys=True) + "\n", encoding="utf-8"
+    )
+
+
+def read_recorded(directory: Path) -> dict[str, str]:
+    """The statuses `decide` recorded on `prod`'s commit, by name.
+
+    A missing or unreadable file is no record, so every dependent stays expected: the safe
+    direction.
+    """
+    try:
+        found = json.loads((directory / RECORDED_FILE).read_text(encoding="utf-8"))
+    except OSError, ValueError:
+        return {}
+    if not isinstance(found, dict):
+        return {}
+    return {k: v for k, v in found.items() if isinstance(k, str) and isinstance(v, str)}
 
 
 def read_handoff(
@@ -195,7 +230,8 @@ class Expected:
         names: the Kustomizations whose `flux/<name>` status must read `success`, `ROOT`
             included.
         dependents: the members of the changed set that joined through `dependsOn`. Each is
-            reported rather than expected when it already failed on `prod`'s commit.
+            excused rather than expected when its recorded status on `prod`'s commit read
+            `failure`.
         widened: why every name counts as changed, or "" when the digests decided.
         timeout_s: how long to wait.
     """
@@ -229,6 +265,38 @@ def expected_set(target: dict[str, bytes], prod: dict[str, bytes] | None) -> Exp
     )
 
 
+def prior_statuses(
+    target: dict[str, bytes],
+    prod: dict[str, bytes],
+    read: Callable[[], dict[str, str]],
+) -> dict[str, str]:
+    """`decide`'s record: the newest status on `prod`'s commit for each name in the changed set.
+
+    `read` returns the newest status per context on `prod`'s commit. It is called once, and
+    only when the changed set holds a dependent, because only a dependent can be excused. A
+    name with no status is absent from the record. A bundle whose Kustomizations do not parse
+    records nothing: `verify` fails that T on the same bundle before it reads the record.
+
+    Raises:
+        Whatever `read` raises, so a failed read is `decide`'s `error` and moves nothing.
+    """
+    try:
+        depends_on, suspended = kustomization_graph(flux_kustomizations(target))
+    except yaml.YAMLError:
+        return {}
+    found = changed_set(
+        bundle_digests(target), bundle_digests(prod), depends_on, suspended
+    )
+    if not found.names - found.direct:
+        return {}
+    states = read()
+    return {
+        name: states[STATUS_PREFIX + name]
+        for name in sorted(found.names)
+        if STATUS_PREFIX + name in states
+    }
+
+
 # -- the wait --------------------------------------------------------------------------------
 
 
@@ -255,32 +323,23 @@ class Verdict:
     Attributes:
         verdict: `good` or `failed`.
         failed: the names `settle` writes into `<T> failed=<names>`, sorted.
-        reported: the dependents left out because they already failed on `prod`'s commit.
+        excused: the dependents left out because their recorded status on `prod`'s commit
+            read `failure`.
     """
 
     verdict: str
     failed: tuple[str, ...] = ()
-    reported: tuple[str, ...] = ()
+    excused: tuple[str, ...] = ()
 
 
 def already_failing(
-    reads: StatusReads, prior: str, dependents: frozenset[str]
+    dependents: frozenset[str], recorded: Mapping[str, str]
 ) -> frozenset[str]:
-    """The dependents whose status on `prod`'s commit `prior` already read `failure`.
+    """The dependents whose status `decide` recorded on `prod`'s commit read `failure`.
 
-    One status read, made only when there is a dependent to check. A failed read reports
-    none, so each dependent stays expected: the safe direction.
+    Only `failure` excuses. An `error`, a `success` or no record keeps the dependent expected.
     """
-    if not dependents or not prior:
-        return frozenset()
-    try:
-        states = reads.statuses(prior, None)
-    except forge.ForgeError as err:
-        print(f"  verify: prod's commit {prior[:8]}: {err}; expecting every dependent")
-        return frozenset()
-    return frozenset(
-        name for name in dependents if states.get(STATUS_PREFIX + name) == "failure"
-    )
+    return frozenset(name for name in dependents if recorded.get(name) == "failure")
 
 
 def verify(
@@ -290,24 +349,27 @@ def verify(
     expected: Expected,
     since: datetime | None = None,
     poll_s: int = POLL_S,
+    recorded: Mapping[str, str] | None = None,
 ) -> Verdict:
     """Wait on T's statuses for the expected names until one fails, all pass or time runs out.
 
     Args:
-        reads: the status reads.
+        reads: the status reads, of T alone.
         target: T, the commit `decide` printed. Never the commit that triggered the run.
-        prior: `prod`'s commit before the move, or "" on the first run.
+        prior: `prod`'s commit before the move, or "" on the first run. Printed only.
         expected: what to wait on.
         since: the earliest update a status on T may carry and still count, so a status
             from an earlier promotion of T reads as none. None counts every status.
         poll_s: the seconds between reads.
+        recorded: the statuses `decide` recorded on `prod`'s commit before the move, by
+            name. None is no record, which excuses nothing.
     """
-    reported = already_failing(reads, prior, expected.dependents)
-    names = sorted(expected.names - reported)
-    for name in sorted(reported):
+    excused = already_failing(expected.dependents, recorded or {})
+    names = sorted(expected.names - excused)
+    for name in sorted(excused):
         print(
-            f"  verify: {STATUS_PREFIX}{name} already read failure on prod's commit "
-            f"{prior[:8]}, so it is reported here and not expected"
+            f"  verify: excused {name}: {STATUS_PREFIX}{name} read failure on prod's "
+            f"commit {prior[:8]} before the move, and T leaves its footprint unchanged"
         )
     print(
         f"  verify: expecting {', '.join(STATUS_PREFIX + n for n in names)} on "
@@ -328,15 +390,15 @@ def verify(
             line = f"the statuses could not be read: {err}"
         failed = [n for n in names if states.get(STATUS_PREFIX + n) in FAILED_STATES]
         if failed:
-            return Verdict("failed", tuple(failed), tuple(sorted(reported)))
+            return Verdict("failed", tuple(failed), tuple(sorted(excused)))
         if all(states.get(STATUS_PREFIX + n) == "success" for n in names):
-            return Verdict("good", reported=tuple(sorted(reported)))
+            return Verdict("good", excused=tuple(sorted(excused)))
         if line != last:
             print(f"  verify: {line}", flush=True)
             last = line
         if reads.clock() - started >= expected.timeout_s:
             missing = [n for n in names if states.get(STATUS_PREFIX + n) != "success"]
-            return Verdict("failed", tuple(missing), tuple(sorted(reported)))
+            return Verdict("failed", tuple(missing), tuple(sorted(excused)))
         reads.sleep(poll_s)
 
 
@@ -397,12 +459,13 @@ def run(f: forge.Forge, args: argparse.Namespace, github_output: str | None) -> 
     try:
         prod, target = read_handoff(args.bundle_dir)
         expected = expected_set(target, prod)
+        recorded = read_recorded(args.bundle_dir)
     except (OSError, ValueError, yaml.YAMLError) as err:
         error(f"verify: the bundles decide handed on: {err}")
         return FAILED
     since = moved_at - timedelta(seconds=MOVED_AT_SKEW_S)
     reads = StatusReads(f.github.statuses)
-    verdict = verify(reads, args.target, args.prior, expected, since)
+    verdict = verify(reads, args.target, args.prior, expected, since, recorded=recorded)
     return report(args.target, verdict, github_output)
 
 

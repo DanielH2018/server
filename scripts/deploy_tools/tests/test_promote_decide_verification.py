@@ -8,13 +8,16 @@ argument rather than patched.
 Run: uv run pytest scripts/deploy_tools/tests/test_promote_decide_verification.py
 """
 
+import argparse
 import dataclasses
 import hashlib
 import json
 from datetime import UTC, datetime, timedelta
 
 import pytest
+import yaml
 from _promote_fakes import World, bundle_files, digest_of
+from renderer.renderer_lib.bundle import tag_kustomization
 
 import promote
 from deploy_tools.promote_lib import verify_promotion as vp
@@ -326,3 +329,67 @@ def test_a_status_with_no_update_time_reads_as_none_once_bounded(world):
     world.transport.statuses[t] = {"flux/homelab": "success"}
     assert world.clients().github.statuses(t, MOVED_AT) == {}
     assert world.clients().github.statuses(t) == {"flux/homelab": "success"}
+
+
+# -- the record of prod's statuses (H1.1i) ---------------------------------------------------
+
+
+def _outage(cluster_base: str) -> dict[str, bytes]:
+    """`longhorn` depending on `cluster-base`, whose footprint is `cluster_base`."""
+    longhorn = tag_kustomization("longhorn", substitutes=False, timeout="10m")
+    longhorn["spec"]["dependsOn"] = [{"name": "cluster-base"}]
+    files = _digests(cluster_base=cluster_base, longhorn="l")
+    files["flux/cluster-base.yaml"] = yaml.safe_dump(
+        tag_kustomization("cluster-base", substitutes=False, timeout="10m")
+    ).encode()
+    files["flux/longhorn.yaml"] = yaml.safe_dump(longhorn).encode()
+    return files
+
+
+def _status_path(sha: str) -> str:
+    return f"/repos/DanielH2018/server/commits/{sha}/status"
+
+
+def test_verify_excuses_from_decides_record_and_never_reads_prods_commit(
+    world, monkeypatch, capsys
+):
+    """The record is what `prod`'s commit read before the move; a later read cannot change it."""
+    c0, *_, tip = world.commits
+    world.set_prod(c0, files=_outage("a"))
+    world.set_last_good(c0)
+    world.publish(tip, files=_outage("b"))
+    world.transport.statuses[c0] = {"flux/longhorn": "failure"}
+    _, outputs, bundle_dir, err = _decide(world, monkeypatch, capsys, tip)
+    assert outputs["verdict"] == "promote"
+    assert f"recorded on prod's commit {c0}: flux/longhorn=failure" in err
+    assert vp.read_recorded(bundle_dir) == {"longhorn": "failure"}
+
+    world.transport.statuses[c0] = {"flux/longhorn": "success"}
+    world.transport.statuses[tip] = {
+        "flux/homelab": "success",
+        "flux/cluster-base": "success",
+        "flux/longhorn": "failure",
+    }
+    world.transport.status_times[tip] = "2026-10-15T01:02:00Z"
+    sent = len(world.transport.requests)
+    args = argparse.Namespace(
+        target=tip, prior=c0, bundle_dir=bundle_dir, moved_at=MOVED_AT.isoformat()
+    )
+    assert vp.run(world.clients(), args, None) == 0
+    assert "excused longhorn" in capsys.readouterr().out
+    after = [url for _, url in world.transport.requests[sent:]]
+    assert not [url for url in after if _status_path(c0) in url]
+
+
+def test_a_failed_read_of_prods_statuses_is_an_error_and_moves_nothing(
+    world, monkeypatch, capsys
+):
+    c0, *_, tip = world.commits
+    world.set_prod(c0, files=_outage("a"))
+    world.set_last_good(c0)
+    world.publish(tip, files=_outage("b"))
+    world.transport.api_forced[_status_path(c0)] = 500
+    exit_code, outputs, bundle_dir, err = _decide(world, monkeypatch, capsys, tip)
+    assert (exit_code, outputs["verdict"], outputs["target"]) == (1, "error", "")
+    assert f"statuses for {c0}: HTTP 500" in err
+    assert not bundle_dir.exists()
