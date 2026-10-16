@@ -51,8 +51,6 @@ KNOWN_SECRET_SCRIPTS = frozenset(
         ("k8s", "configarr", "configarr-health.sh.j2"),
         ("k8s", "registry", "registry-gc.sh.j2"),
         ("setup", "initial_setup", "docs-refresh.sh.j2"),
-        ("setup", "optimize_pi", "pi-sd-health.sh.j2"),
-        ("setup", "optimize_pi", "pi-recovery-health.sh.j2"),
         ("setup", "gitops_deploy", "github-ruleset-drift.sh.j2"),
         ("setup", "gitops_deploy", "github-interaction-limit.sh.j2"),
     }

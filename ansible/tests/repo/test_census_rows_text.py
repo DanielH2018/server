@@ -356,12 +356,14 @@ ROWS = (
                 "hosts/components/pi-heartbeats/component.yml",
             ),
         ),
-        # H3.8b adds the three Pi timers.
         must_find=frozenset(
             {
                 "homelab-updater.service",
                 "homelab-updater.timer",
                 "homelab-reconcile.service",
+                "homelab-pi-sd-health.timer",
+                "homelab-pi-gz-integrity.timer",
+                "homelab-pi-recovery.timer",
             }
         ),
     ),

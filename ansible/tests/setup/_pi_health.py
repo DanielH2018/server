@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Render a daniel-pi health cron and run it under bash against stubs.
+"""Render a daniel-pi heartbeat script and run it under bash against stubs.
 
 Shared by test_pi_recovery_restarts_and_reports.py and test_pi_health_log_line_shape.py.
 Not a test module itself.
@@ -8,19 +8,30 @@ These scripts are exercised for real rather than pattern-matched, because what b
 shell logic and line formatting, neither of which a textual guard can see. The render goes
 through `_shell_render`, so what runs here cannot differ from what the shellcheck gate lints
 (#3178). Only two absolute paths are repointed at temp files -- the Kuma push helper it
-sources, and the health log it appends to. Every decision the script makes runs unmodified.
+sources, and the health log it appends to -- and the push token sits in a temp directory the
+run names as `$CREDENTIALS_DIRECTORY`, as the unit's `LoadCredential=` does. Every decision the
+script makes runs unmodified.
+
+The scripts are the `pi-heartbeats` host component's (H3.8b), and `COMPONENT_DEFAULTS` is its
+`component.yml` `defaults:` map.
 """
 
 from lib.proc_testing import fake_bin, path_with, write_exec
 from lib.proc_testing import run as launch
-from _helpers import ANSIBLE, HOST_VARS, load_yaml
+from _helpers import HOST_VARS, load_yaml
 from _shell_render import render_shell_script
+from validate.shell_templates import COMPONENTS
 
 
-ROLE = ANSIBLE / "roles" / "setup" / "optimize_pi"
-OPTIMIZE_PI_DEFAULTS = load_yaml(ROLE / "defaults" / "main.yml")
-REAL_LIB = "/usr/local/lib/kuma-push-lib.sh"
+COMPONENT = COMPONENTS / "pi-heartbeats"
+COMPONENT_DEFAULTS = load_yaml(COMPONENT / "component.yml")["defaults"]
+REAL_LIB = "/usr/lib/homelab/kuma-push-lib.sh"
 REAL_LOG = "/var/log/pi-health/health.log"
+# The credential each token script reads, by script name, as its unit's LoadCredential= names it.
+CREDENTIALS = {
+    "pi-sd-health": "pi_sd_health_push_token",
+    "pi-recovery-health": "pi_recovery_push_token",
+}
 
 # kuma_push, recording instead of pushing. Signature from
 # roles/setup/initial_setup/files/kuma-push-lib.sh: STATUS MSG PUSH_URL HOST RESOLVE_IP TAG.
@@ -109,12 +120,12 @@ echo "$STUB_LOG_FSTYPE"
 # a temp file by substituting the assignment's value.
 SD_COUNTER = "/sys/fs/ext4/mmcblk0p2/errors_count"
 
-# The role default naming the rotated-log integrity verdict pi-sd-health reads. `run()` seeds an
+# The component default naming the rotated-log integrity verdict pi-sd-health reads. `run()` seeds an
 # `up` verdict at a temp path under this name; test_pi_gz_integrity_sweep.py overrides it.
 GZ_STATE_VAR = "optimize_pi_gz_integrity_state_file"
 
 
-# The Pi's own containers_list, so the recovery cron's watch set is the one the host deploys.
+# The Pi's own containers_list, so the recovery heartbeat's watch set is the one the host deploys.
 PI_HOST_VARS = load_yaml(HOST_VARS / "daniel-pi.yml")
 
 
@@ -124,8 +135,8 @@ def render(name, tmp_path, jinja_vars=None):
 
     `containers_list` is the Pi's own (host_vars/daniel-pi.yml) rather than a group default, so
     the accessor's inventory context does not carry it -- it goes in as an override. Everything
-    else the templates read (domain, the ingress VIP, the push tokens, the gz-integrity
-    defaults) comes from that same context, the one `validate/shell_templates.py` lints
+    else the templates read (domain, the ingress VIP, the gz-integrity defaults) comes from
+    that same context, the one `validate/shell_templates.py` lints
     against. `jinja_vars` is laid on top, for a caller overriding any key by name -- the
     gz-integrity state-file path, most often.
     """
@@ -134,7 +145,7 @@ def render(name, tmp_path, jinja_vars=None):
         **(jinja_vars or {}),
     }
     body = render_shell_script(
-        "setup", "optimize_pi", f"{name}.sh.j2", overrides=overrides
+        COMPONENTS.name, COMPONENT.name, f"{name}.sh.j2", overrides=overrides
     )
 
     for literal, label in ((REAL_LIB, "push helper"), (REAL_LOG, "health log")):
@@ -168,7 +179,7 @@ def run(
     journal="",
     log_fstype="tmpfs",
 ):
-    """Run a health cron; return (status, msg, still_running, health_log_lines).
+    """Run a heartbeat script; return (status, msg, still_running, health_log_lines).
 
     `log_fstype` is what pi-sd-health's findmnt probe reads for /var/log; `""` is no mount.
     `journal` is what the journalctl stub answers, `\\n`-separated; `journalctl_calls(tmp_path)`
@@ -201,6 +212,9 @@ def run(
     state = tmp_path / "running"
     state.write_text("".join(f"{c}\n" for c in running))
     out = tmp_path / "push"
+    credentials = tmp_path / "credentials"
+    credentials.mkdir()
+    (credentials / CREDENTIALS[name]).write_text(f"stub-{name}-token")
 
     launch(
         ["bash", str(script)],
@@ -219,6 +233,7 @@ def run(
             "STUB_LOG_FSTYPE": log_fstype,
             "JOURNALCTL_CALLS": str(tmp_path / "journalctl.calls"),
             "KUMA_PUSH_OUT": str(out),
+            "CREDENTIALS_DIRECTORY": str(credentials),
         },
     )
 

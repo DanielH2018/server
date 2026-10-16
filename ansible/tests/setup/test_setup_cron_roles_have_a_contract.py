@@ -109,16 +109,6 @@ def test_census_finds_the_roles_known_to_install_crons():
     assert expected <= found, f"missing from the cron/timer census: {expected - found}"
 
 
-def test_optimize_pi_is_not_exempt():
-    """Its container-recovery cron runs `docker start` on any watched container it finds down,
-    so it is an autonomous actor and owes the contract. An exemption claiming only that the crons
-    delete nothing and change no service configuration is narrower than "changes no state" — an
-    argument this guard exists to refuse.
-    """
-    assert "optimize_pi" not in EXEMPT
-    assert _contract_problems(SETUP_ROLES / "optimize_pi") == []
-
-
 def test_docker_install_is_out_of_the_subject_not_exempt():
     """Its only cron task is the teardown's `state: absent` removal arm; a role that installs
     nothing owes no contract and must not need an EXEMPT entry to pass.

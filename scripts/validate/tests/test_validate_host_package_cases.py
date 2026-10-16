@@ -9,6 +9,7 @@ log and the apt lists. The `.deb` here is built with `dpkg-deb --build`, as in
 Run: uv run pytest scripts/validate/tests/test_validate_host_package_cases.py
 """
 
+import json
 import ast
 import getpass
 import hashlib
@@ -124,6 +125,20 @@ def test_a_pi_render_whose_dropin_moved_is_refused(tmp_path):
 
     with pytest.raises(ValueError, match="does not fire at"):
         fx.pi_dropin_variant(head, tmp_path / "variant")
+
+
+def test_the_pi_disarmed_variant_drops_only_the_recovery_timers_link(tmp_path):
+    head = tmp_path / "head"
+    host_mode.write_packages([host_mode.render_host(fx.HOST)], head)
+    real = head / "hosts" / fx.HOST
+
+    variant = fx.pi_disarmed_variant(tmp_path / "variant")
+
+    link = f"{fx.UNIT_DIR}/timers.target.wants/{fx.RECOVERY_TIMER}"
+    assert _installed(real) - _installed(variant) == {link}
+    assert not _installed(variant) - _installed(real)
+    manifest = json.loads((variant / "root/usr/lib/homelab/manifest.json").read_text())
+    assert fx.RECOVERY_TIMER not in manifest["enable_links"]
 
 
 def test_the_box_address_comes_from_the_shipped_source(tmp_path):

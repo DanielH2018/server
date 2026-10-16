@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""pi-recovery-health.sh restarts a dead container AND still reports the cycle as DOWN.
+"""pi-recovery-health restarts a dead container AND still reports the cycle as DOWN.
 
 A container whose create fails (autoheal died with an OCI create failure, "Timeout waiting
 for systemd to create scope", under memory pressure) is never retried by
@@ -8,7 +8,7 @@ whose create fails -- so it stays down until a human runs `docker start`. The sc
 therefore remediates as well as detects.
 
 Adding a restart introduces the opposite hazard, which is why the reporting half is tested
-just as hard as the restart half: a self-healing cron that pushes `up` after a successful
+just as hard as the restart half: a self-healing heartbeat that pushes `up` after a successful
 restart makes a container crashing every 5 minutes read green forever. So a cycle that had
 to intervene pushes DOWN, and only a clean cycle pushes `up`.
 
@@ -21,25 +21,33 @@ container: when dockerd itself is gone every container reads `inspect failed` an
 lives only in `journalctl -u docker`, so the line carries the newest non-info lines of that
 unit — through a stub, since the real journalctl on PATH would read this host's journal.
 
-One property here is not about the script at all: the cron that runs it must be disarmable
-from the inventory. Disarming as an edit to the task (`state: absent`) is silently undone
-by a `--tags recovery-health` run, because nothing records the intent.
+One property here is not about the script at all: the timer that runs it must be disarmable
+from the inventory. homelab-daniel-pi ships the timer's enable link only while
+`optimize_pi_recovery_restart_enabled` is true, and reconcile stops a timer whose link the new
+version drops (H3.8b). The container case in `scripts/validate/host_package_cases.py` proves
+the stop on a real systemd; the render tests here prove the link follows the flag.
 
 Run: uv run pytest ansible/tests/setup/test_pi_recovery_restarts_and_reports.py
 """
 
 import pytest
-from _helpers import SETUP_ROLES, load_defaults, load_tasks
-from _pi_health import PI_HOST_VARS, journalctl_calls, run
+from _pi_health import COMPONENT_DEFAULTS, PI_HOST_VARS, journalctl_calls, run
+from renderer.renderer_lib import host as host_mode
+from validate.validate_lib.host_fixtures import (
+    HOST,
+    RECOVERY_FLAG,
+    RECOVERY_TIMER,
+    disarmed_inventory,
+)
 
 
 SCRIPT = "pi-recovery-health"
-OPTIMIZE_PI = SETUP_ROLES / "optimize_pi"
-CRON_NAME = "Pi container-recovery heartbeat"
+UNIT_DIR = "/usr/lib/systemd/system"
+LINK = f"{UNIT_DIR}/timers.target.wants/{RECOVERY_TIMER}"
 
 # The watch set the rendered script must carry: every containers_list name on daniel-pi, plus
 # the sub-proxy the docker-proxy role's compose file declares beside its list entry. Named
-# rather than counted so the failure says which container the cron stopped watching.
+# rather than counted so the failure says which container the script stopped watching.
 PI_CONTAINERS = [c["name"] for c in PI_HOST_VARS["containers_list"]]
 EXPECTED_WATCH_SET = {*PI_CONTAINERS, "docker-proxy-lifecycle"}
 # A compose sub-service, not a containers_list entry, so iterating the list alone would miss it.
@@ -88,7 +96,6 @@ def test_a_dead_sub_proxy_is_not_the_all_clear(tmp_path):
 @pytest.mark.parametrize("dead", ALL)
 def test_a_dead_container_is_restarted(tmp_path, dead):
     """The restart half: the script brings it back rather than only naming it."""
-    # fact: ansible/roles/setup/optimize_pi/CLAUDE.md#Autonomous-role contract (the container-recovery cron restarts what it finds dead)
     running = [c for c in ALL if c != dead]
     status, msg, still_running, _ = run(SCRIPT, tmp_path, running=running)
 
@@ -280,48 +287,40 @@ def test_a_dead_daemon_with_an_empty_journal_still_reports(tmp_path):
     assert len(lines) == 1, lines
 
 
-def _cron_task() -> dict:
-    """The task that schedules the recovery heartbeat, found by its cron name."""
-    tasks = load_tasks(OPTIMIZE_PI / "tasks" / "main.yml")
-    scheduling = [
-        t for t in tasks if t.get("ansible.builtin.cron", {}).get("name") == CRON_NAME
-    ]
-    assert len(scheduling) == 1, (
-        f"expected exactly one task scheduling {CRON_NAME!r}, found {len(scheduling)}"
-    )
-    return scheduling[0]
+def _renders(tmp_path) -> tuple[host_mode.Package, host_mode.Package]:
+    """The real Pi package rendered armed, from the repo's inventory, and disarmed."""
+    armed = host_mode.render_host(HOST)
+    disarmed = host_mode.render_host(HOST, inventory=disarmed_inventory(tmp_path))
+    return armed, disarmed
 
 
-def test_the_cron_can_be_disarmed_from_the_inventory():
+def test_the_timer_can_be_disarmed_from_the_inventory(tmp_path):
     """A one-way arming switch is a bug: adding a way in means adding the way out."""
-    state = str(_cron_task()["ansible.builtin.cron"].get("state", "present"))
-    assert "optimize_pi_recovery_restart_enabled" in state, (
-        "state: must follow optimize_pi_recovery_restart_enabled, or disarming the cron means "
-        "editing this task rather than flipping a host_vars flag"
-    )
-    assert "absent" in state, (
-        "the disarmed branch must REMOVE the cron, not leave it installed"
+    armed, disarmed = _renders(tmp_path)
+    assert LINK in armed.links, f"the armed render ships no {LINK}"
+    assert LINK not in disarmed.links, (
+        f"{RECOVERY_FLAG}: false still ships {LINK}, so disarming the timer means editing "
+        "the component rather than flipping a host_vars flag"
     )
 
 
-def test_the_cron_ships_armed():
-    """The live Pi runs this cron; a default-off flag would have the next run delete it."""
-    assert load_defaults(OPTIMIZE_PI)["optimize_pi_recovery_restart_enabled"] is True, (
-        "the cron has been installed unconditionally since #1910 and is the only thing that "
+def test_the_timer_ships_armed():
+    """The live Pi runs this heartbeat; a default-off flag would have the next install stop it."""
+    assert COMPONENT_DEFAULTS[RECOVERY_FLAG] is True, (
+        "the heartbeat has run unconditionally since #1910 and is the only thing that "
         "restarts a container whose create failed at the OCI runtime"
     )
 
 
-def test_disarming_leaves_the_script_installed():
+def test_disarming_leaves_the_script_installed(tmp_path):
     """Disarming stops the schedule, not the ability to run one cycle by hand."""
-    tasks = load_tasks(OPTIMIZE_PI / "tasks" / "main.yml")
-    deploy = [
-        t
-        for t in tasks
-        if t.get("name") == "Deploy the container-recovery heartbeat script"
-    ]
-    assert len(deploy) == 1, "expected exactly one task deploying the heartbeat script"
-    assert "optimize_pi_recovery_restart_enabled" not in str(deploy[0]), (
-        "the script deploy must stay unconditional: an operator disarming the cron still needs "
-        "to be able to run one cycle by hand"
-    )
+    _, disarmed = _renders(tmp_path)
+    for path in (
+        "/usr/lib/homelab/pi-recovery-health",
+        f"{UNIT_DIR}/homelab-pi-recovery.service",
+        f"{UNIT_DIR}/{RECOVERY_TIMER}",
+    ):
+        assert path in disarmed.files, (
+            f"the disarmed render drops {path}: an operator disarming the timer still needs "
+            "to be able to start one cycle by hand"
+        )

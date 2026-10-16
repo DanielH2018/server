@@ -546,7 +546,10 @@ def _evaluate(
     A string is refused rather than tested for truth, because `"false"` is a true string.
     """
     try:
-        value = env.compile_expression(expression)(ctx)
+        value = env.compile_expression(expression, undefined_to_none=False)(ctx)
+        if isinstance(value, jinja2.Undefined):
+            # An undefined name reaches here unraised; this raises the error naming it.
+            value._fail_with_undefined_error()
     except jinja2.TemplateError as exc:
         raise _explained(exc, f"{directory}: when {expression!r}", reasons) from exc
     if not isinstance(value, bool):

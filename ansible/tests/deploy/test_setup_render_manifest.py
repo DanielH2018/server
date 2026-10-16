@@ -218,8 +218,8 @@ def test_other_setup_roles_stamp_their_own_artifacts():
 
     Each owning role includes the shared stamp, and this fails if one stops.
 
-    daniel-pi's optimize_pi scripts are deliberately absent — that host runs no
-    manifest-prune-check, and stamping them here would claim coverage this host cannot provide.
+    daniel-pi's heartbeat scripts are deliberately absent — homelab-daniel-pi ships them, that
+    host runs no manifest-prune-check, and stamping them would claim coverage it cannot provide.
     """
     expected = {
         "ansible/roles/setup/gitops_deploy/tasks/service.yml",

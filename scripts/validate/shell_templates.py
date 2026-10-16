@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Render every Jinja-templated shell script under ansible/roles/ and lint the output.
+"""Render every Jinja-templated shell script under ansible/roles/ and hosts/components/, then lint.
 
 Renders with stubbed vars, then lints with `bash -n` + shellcheck. The prek
 `bash-syntax-check` / shellcheck hooks gate plain shell files (via identify's
@@ -10,7 +10,9 @@ both gates no matter how badly it's broken. This is the same render-then-lint pa
 shell linting: render structure with stubbed vars, then prove the OUTPUT is valid shell.
 
 A render takes the inventory plus the template's own role defaults, laid under it the way
-Ansible's precedence does (`lib.render_context`). The defaults are not optional: StubUndefined
+Ansible's precedence does (`lib.render_context`). A host component's template takes its
+`component.yml` `defaults:` in the same place, and the host whose package lists the component,
+as the host renderer does. The defaults are not optional: StubUndefined
 iterates empty, so a `{% for %}` over a list a role declares renders its whole body away and
 both linters sweep what is left. `ansible/tests/_shell_render.py` renders through this module
 for the same reason in reverse — a guard asserting on a rendered script must assert on the
@@ -52,11 +54,11 @@ from validate.validate_lib.cron_checks import (
 from validate.validate_lib.cron_targets import cron_job_scripts
 from lib.render_context import render_context
 from lib.render_guard import (
-    ANSIBLE,
     REPO,
     dump_numbered,
     render_or_error,
 )
+from lib import yaml_fast
 from lib.repo_paths import ROLES
 from lib.ansible_jinja_env import template_env
 from validate.validate_lib.shell_lint import (
@@ -66,19 +68,21 @@ from validate.validate_lib.shell_lint import (
     shellcheck_check,
 )
 
+# The host components whose templates this gate also lints (H3.8b).
+COMPONENTS = REPO / "hosts" / "components"
+
 # Shell-specific overrides: values a lint pass needs to be shell-plausible rather than the bare
 # "STUB" literal StubUndefined fills in elsewhere. A bare "STUB" would actually be fine for a
-# plain string interpolation, but these three are structurally different:
-#  - the two push tokens are SOPS secrets with no plaintext fallback in group_vars/all.yml (unlike
-#    cloudflare_ips/sys_user below, which ARE plaintext and come through BASE_CONTEXT/all_vars
-#    unchanged) — any token-shaped string is fine, they're just interpolated into a URL path.
+# plain string interpolation, but these two are structurally different:
+#  - the push token is a SOPS secret with no plaintext fallback in group_vars/all.yml (unlike
+#    cloudflare_ips/sys_user, which ARE plaintext and come through BASE_CONTEXT/all_vars
+#    unchanged) — any token-shaped string is fine, it is just interpolated into a URL path.
 #  - `hostvars` is Ansible's own magic var (host facts keyed by inventory hostname), not something
-#    vanilla Jinja provides. pi-sd-health.sh.j2 only dereferences hostvars['daniel-server'].server_ip,
-#    so stub just that path — Jinja's `.attr` lookup falls back to `dict.__getitem__` when the
-#    attribute doesn't exist, so a plain nested dict renders identically to the real Ansible object.
+#    vanilla Jinja provides. Only hostvars['daniel-server'].server_ip is stubbed — Jinja's `.attr`
+#    lookup falls back to `dict.__getitem__` when the attribute doesn't exist, so a plain nested
+#    dict renders identically to the real Ansible object.
 SHELL_STUB_OVERRIDES = {
     "secret_rotation_push_token": "stub-secret-rotation-token",
-    "pi_sd_health_push_token": "stub-pi-sd-health-token",
     "hostvars": {"daniel-server": {"server_ip": "10.0.0.1"}},
 }
 
@@ -96,16 +100,36 @@ def template_context(path: Path, overrides: dict | None = None) -> dict:
     lints it in — one render, two consumers, no second stub set to drift (#3178). `overrides`
     go over the stubs, for a guard that needs a value the inventory does not hold.
     """
-    return render_context(path, overrides={**SHELL_STUB_OVERRIDES, **(overrides or {})})
+    overrides = {**SHELL_STUB_OVERRIDES, **(overrides or {})}
+    component = path.parents[1]
+    if component.parent == COMPONENTS:
+        spec = yaml_fast.safe_load((component / "component.yml").read_text()) or {}
+        return render_context(
+            None,
+            component_host(component.name),
+            overrides=overrides,
+            component_defaults=spec.get("defaults") or {},
+        )
+    return render_context(path, overrides=overrides)
+
+
+def component_host(name: str) -> str | None:
+    """The first host, by name, whose `package.yml` lists component `name`, else None."""
+    for spec in sorted(COMPONENTS.parent.glob("*/package.yml")):
+        if name in (yaml_fast.safe_load(spec.read_text()) or {}).get("components", []):
+            return spec.parent.name
+    return None
 
 
 def discover_templates() -> list[Path]:
-    """Return every *.sh.j2 under ansible/roles/, real templates only.
+    """Return every *.sh.j2 under ansible/roles/ and under a host component's templates/.
 
     Excludes ansible/collections/, the vendored third-party tree, the same way pytest's
     testpaths / ruff's extend-exclude skip it.
     """
-    return sorted(ROLES.rglob("*.sh.j2"))
+    return sorted(ROLES.rglob("*.sh.j2")) + sorted(
+        COMPONENTS.glob("*/templates/*.sh.j2")
+    )
 
 
 def check_template(
@@ -125,7 +149,7 @@ def check_template(
     Returns:
         An error string, or None on success.
     """
-    rel = path.relative_to(ANSIBLE)
+    rel = path.relative_to(REPO)
     env = template_env(path.parent)
     rendered, err = render_or_error(env, path.name, ctx)
     if rendered is None:
@@ -192,7 +216,9 @@ def main(
 
     templates = discover_templates()
     if not templates:
-        print(f"No *.sh.j2 templates found under {ROLES}", file=sys.stderr)
+        print(
+            f"No *.sh.j2 templates found under {ROLES} or {COMPONENTS}", file=sys.stderr
+        )
         return 1
 
     cron_map = cron_job_scripts()
@@ -210,7 +236,7 @@ def main(
                 failures += 1
                 print(f"  [FAIL] {rel}: {err}", file=sys.stderr)
             else:
-                rendered_ok[out_dir / path.relative_to(ANSIBLE).with_suffix("")] = path
+                rendered_ok[out_dir / path.relative_to(REPO).with_suffix("")] = path
         flagged = shellcheck_batch(list(rendered_ok), shellcheck_bin)
         for out_path, path in rendered_ok.items():
             rel = path.relative_to(REPO)

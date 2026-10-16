@@ -72,8 +72,17 @@ CRON = "ansible.builtin.cron"
 # Where the cron module writes a relative `cron_file:`. An absolute one replaces it on join.
 CRON_D = PurePosixPath("/etc/cron.d")
 
-# The Ansible-side members: the three Pi heartbeats PR H3.8b moves into a package.
-OPTIMIZE_PI_CRONS = frozenset(
+# The Ansible-side members: the interim push-token files optimize_pi stages on the Pi, which
+# the package reads through LoadCredential= and never writes (H3.8a).
+OPTIMIZE_PI_WRITES = frozenset(
+    {
+        ("path", "/etc/homelab/interim/pi_sd_health_push_token"),
+        ("path", "/etc/homelab/interim/pi_recovery_push_token"),
+    }
+)
+# The legacy members: the three Pi heartbeat crons PR H3.8b retires, which the package side
+# must hold, so a role scheduling one again meets it in the join.
+HEARTBEAT_CRONS = frozenset(
     {
         "Pi SD-card health heartbeat",
         "Pi rotated-log integrity sweep",
@@ -232,10 +241,15 @@ def test_no_path_has_two_writers():
     assert not found, "\n".join(found)
 
 
-def test_the_ansible_side_finds_the_optimize_pi_crons():
+def test_the_ansible_side_finds_the_optimize_pi_interim_files():
     ansible, _ = _tree()
-    names = {key[2] for key in ansible["daniel-pi"] if key[0] == "cron"}
-    assert OPTIMIZE_PI_CRONS <= names
+    assert OPTIMIZE_PI_WRITES <= set(ansible["daniel-pi"])
+
+
+def test_the_package_side_finds_the_retired_heartbeat_crons():
+    _, packages = _tree()
+    names = {key[2] for key in packages["daniel-pi"] if key[0] == "cron"}
+    assert HEARTBEAT_CRONS <= names
 
 
 def test_the_package_side_finds_its_named_packages():

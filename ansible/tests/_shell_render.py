@@ -13,7 +13,8 @@ guard built on this keys on field names, never on credential-shaped values.
 
 A template is addressed by its (plane, role, name) triple rather than a role name: shell
 templates live on all three planes and `k8s/crowdsec` ships four of them, so a bare role name
-is ambiguous. `ansible/tests/repo/test_secret_rendering_host_scripts_have_no_log.py` already
+is ambiguous. A host component's template takes `components` as its plane and the component's
+name as its role, which is where its path puts them: `hosts/components/<name>/templates/`. `ansible/tests/repo/test_secret_rendering_host_scripts_have_no_log.py` already
 names them that way.
 """
 
@@ -21,7 +22,7 @@ import re
 from pathlib import Path
 
 from lib.repo_paths import ROLES
-from validate.shell_templates import discover_templates, template_context
+from validate.shell_templates import COMPONENTS, discover_templates, template_context
 from validate.validate_lib.shell_lint import render_template
 
 
@@ -31,7 +32,8 @@ def shell_template_path(plane: str, role: str, template: str) -> Path:
     A renamed or moved template fails here naming what is missing, rather than handing a
     caller a render of nothing.
     """
-    path = ROLES / plane / role / "templates" / template
+    base = COMPONENTS if plane == COMPONENTS.name else ROLES / plane
+    path = base / role / "templates" / template
     assert path.is_file(), f"no such shell template: {path}"
     return path
 
@@ -86,7 +88,7 @@ _TEXTS: tuple[tuple[str, str, str, str], ...] | None = None
 
 
 def rendered_shell_texts() -> tuple[tuple[str, str, str, str], ...]:
-    """(plane, role, template name, rendered TEXT) for every `*.sh.j2` under `ansible/roles/`.
+    """(plane, role, template name, rendered TEXT) for every `*.sh.j2` the gate discovers.
 
     The whole set is rendered rather than only what a caller asks for, so the render failure of
     a template no guard reads yet still arrives as a failure here — the reason

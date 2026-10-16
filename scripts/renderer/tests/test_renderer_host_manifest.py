@@ -144,3 +144,43 @@ def test_a_legacy_entry_reading_a_secret_is_flagged(hosts):
     root = hosts({"legacy": [{"path": "/srv/{{ email }}/x"}]})
     with pytest.raises(RenderError, match="email is a secret key"):
         host_mode.render_host("daniel-pi", root)
+
+
+def _gated(when: str) -> dict:
+    """A host package installing one timer, linked only while `when` is true."""
+    return {
+        "files": [{"src": "u", "dst": f"{UNITS}/homelab-beat.timer"}],
+        "enable": {"homelab-beat.timer": {"target": "timers.target", "when": when}},
+    }
+
+
+@pytest.mark.parametrize(("when", "linked"), [("true", True), ("false", False)])
+def test_an_enable_link_ships_only_while_its_when_is_true(hosts, when, linked):
+    root = hosts(_gated(when))
+    (root / "daniel-pi" / "u").write_text("")
+    package = host_mode.render_host("daniel-pi", root)
+    assert (package.enable_links() == ["homelab-beat.timer"]) is linked
+    assert _manifest(package)["enable_links"] == package.enable_links()
+
+
+def test_an_enable_when_reads_the_host_context(hosts):
+    # daniel-pi's host_vars carry sys_user, so the expression sees the inventory, not a stub.
+    root = hosts(_gated("sys_user == 'ubuntu'"))
+    (root / "daniel-pi" / "u").write_text("")
+    assert host_mode.render_host("daniel-pi", root).enable_links() == [
+        "homelab-beat.timer"
+    ]
+
+
+@pytest.mark.parametrize(
+    ("when", "error", "message"),
+    [
+        ("'false'", RenderRefused, "not a boolean"),
+        ("no_such_flag", RenderError, "no_such_flag"),
+    ],
+)
+def test_an_enable_when_that_is_no_boolean_is_flagged(hosts, when, error, message):
+    root = hosts(_gated(when))
+    (root / "daniel-pi" / "u").write_text("")
+    with pytest.raises(error, match=message):
+        host_mode.render_host("daniel-pi", root)

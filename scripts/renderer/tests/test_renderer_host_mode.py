@@ -331,7 +331,27 @@ def test_a_lib_script_symlinked_out_of_lib_is_flagged(hosts, tmp_path):
 def test_an_entry_naming_two_sources_is_flagged(hosts, sources):
     root = hosts({"files": [{**sources, "dst": "/x"}]})
     _lib(root)
-    with pytest.raises(RenderRefused, match="names more than one of src, lib and key"):
+    with pytest.raises(
+        RenderRefused, match="names more than one of src, lib, key and shared"
+    ):
+        host_mode.render_host("daniel-pi", root)
+
+
+def test_a_shared_file_is_copied_byte_for_byte(hosts):
+    root = hosts({"files": [{"shared": "kuma-push-lib.sh", "dst": "/usr/lib/x.sh"}]})
+    source = root.parent / host_mode.SHARED_FILES["kuma-push-lib.sh"]
+    source.parent.mkdir(parents=True)
+    source.write_text("kuma_push() { :; }\n")
+    assert host_mode.render_host("daniel-pi", root).files["/usr/lib/x.sh"] == (
+        b"kuma_push() { :; }\n",
+        0o644,
+    )
+
+
+@pytest.mark.parametrize("name", ["../../etc/passwd", "kuma-push-lib", "secrets.yml"])
+def test_a_shared_name_off_the_allowlist_is_flagged(hosts, name):
+    root = hosts({"files": [{"shared": name, "dst": "/x"}]})
+    with pytest.raises(RenderRefused, match="is not one of"):
         host_mode.render_host("daniel-pi", root)
 
 
