@@ -15,8 +15,9 @@ subprocess runs, as a string, and that one prepares its inputs and compares its 
 # discharging it. An allowlist, because each denylist review found another mutating event.
 # `mkfifo` and `mknod` create a file and raise no event, so `_install` replaces them on `os`
 # and `posix` with a function that ends the process (#4999), and does the same to the
-# `unaudited` table's calls (#5063). It also ends the process on the import of a C module outside
-# `c_modules` (#5201). It wraps each of the `counted` table's calls in one that
+# `unaudited` table's calls (#5063). It also ends the process once a C module outside
+# `c_modules` loads: a built-in at its `import` event, a shared object at the next one or at
+# the report (#5201). It wraps each of the `counted` table's calls in one that
 # counts the calls that return, for the process state no function reads back (#5081).
 #
 # The hook also records the module state the run leaves behind (#4995). At the plugin's
@@ -85,7 +86,9 @@ counted = {
 # `logging` imports and which holds no state. A C module holds state and calls that no walk,
 # reader or audit event reaches, so the hook ends the run on the import of any other, whether
 # built in or a shared object (#5201). A module loaded before the hook, as the runner's own
-# imports and the `unaudited` table's are, is outside the check.
+# imports and the `unaudited` table's are, is outside the check. An interpreter or Ansible
+# upgrade that adds a C module to the chain reads as doubt and turns
+# `test_4836s_real_toposort_change_is_order_only` red; extend the list then.
 c_modules = frozenset({
     "_ast", "_bisect", "_bz2", "_contextvars", "_datetime", "_heapq", "_lzma", "_opcode",
     "_socket", "_string", "_tokenize", "_typing", "_zstd", "fcntl", "grp", "math", "pwd",
