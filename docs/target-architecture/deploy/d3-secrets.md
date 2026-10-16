@@ -28,6 +28,22 @@ no value and wrote the dotenv, `cluster-vars.source` and four SOPS manifests, th
 landing to the session. The file holds every cluster-referenced key from the start, and the
 operator confirmed that answer to Open question 2 the same day.
 
+D3.3a, the `cluster-vars` kind: [#5145](https://github.com/DanielH2018/server/pull/5145). The
+operator's precondition printed `public key: match`, `unrelated: 128` and `cluster: 0`. Its
+first promotion, `9ae59f789`, read `flux/cluster-vars` `success` at 22:07:24 UTC, and the
+Kustomization read `True ReconciliationSucceeded`. Flux decrypts the cluster file with
+`sops-age`.
+
+D3.3b, the `cluster-vars` edge: [#5156](https://github.com/DanielH2018/server/pull/5156). Inert,
+as planned: after its promotion, `c452fffda`, `flux/cluster-vars` still read `success`.
+
+D3.3c, restart and SOPS-manifest wiring: [#5166](https://github.com/DanielH2018/server/pull/5166).
+It applied Open question 6's two C3 amendments: the per-role `decryption` field and the SOPS
+manifest's `substitute: disabled` annotation. Inert, as planned: after its promotion,
+`9f49b5541`, bento-pdf still ran ReplicaSet `865c4b8dd4`, its pod template carried no
+annotation, and all three Flux statuses read `success`. D3.3d, the in-cluster type proof, is
+next.
+
 Depends on: [D2](d2-first-leaf.md), [R2](../render/r2-secret-placeholders.md). D3.0 to D3.3c
 need only D2.1 to D2.6c, which include D2.6b's empty `SHARED_KINDS` and census, as the slice
 index says. D3.4 to D3.9 need all of D2.

@@ -9,6 +9,13 @@ Its step waits on D1.6, D1.6b and M1 and names no D2 PR, so it landed ahead of D
 deploy, Prometheus's `flux` group held 5 rules. `controller_runtime_max_concurrent_reconciles`
 read 4 for the `kustomization` controller, and the alert held no series.
 
+PR D4.1, position-only constraints become edges: [#5157](https://github.com/DanielH2018/server/pull/5157).
+On its base, netpol-baseline was already the last entry, so it moved no entry, and
+`homelab-render cluster` gave the same output at the base and the head. Its landing read
+`needs-manual-apply` with 55 services owed. In a window the operator agreed on 2026-10-15,
+a full `./scripts/deploy.sh` ran from 23:04:20 UTC with `failed=0`. Afterwards
+`k8s_unapplied` read `none`, and no non-Job pod had started since the run began.
+
 Depends on: [D2](d2-first-leaf.md), with two exceptions. PR D4.0 depends on nothing, and it
 must land before D2.7 (Open question 3). PR D4.9 waits only on D1.6, D1.6b and M1, as its step
 says. No PR of D3 waits on D4: the publish layout that D3.3 needs is
