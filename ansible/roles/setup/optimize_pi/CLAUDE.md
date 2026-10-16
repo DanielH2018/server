@@ -9,10 +9,8 @@ incident each step was added after, are in `docs/pi-host-tuning-record.md`.
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's tasks, timer templates, defaults or playbook entry, or a schedule var in group_vars/all.yml. -->
 - **Applied by:** `initial_setup.yml --tags "optimize_pi"` when `inventory_hostname ==
   optimize_pi_host`
-- **Crons (3):**
-  - `Pi SD-card health heartbeat` — `*/5 * * * *`
-  - `Pi rotated-log integrity sweep` — `40 1 * * *`
-  - `Pi container-recovery heartbeat` — `*/5 * * * *`
+- **Crons / timers:** none (no `ansible.builtin.cron` task in `tasks/`, no
+  `templates/*.timer.j2`)
 <!-- /generated_from -->
 
 ## Where it runs

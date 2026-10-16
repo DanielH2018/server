@@ -2,7 +2,7 @@
 # link for homelab-updater.timer: the operator starts the updater by hand until H3.9b ships the
 # link (docs/target-architecture/host/h3-pi-pilot.md, *Steps, as PRs*).
 description: daniel-pi's homelab host package
-components: [reconcile]
+components: [reconcile, pi-heartbeats]
 maintainer_scripts: [preinst, postinst, prerm]
 files:
   - {src: units/homelab-updater.timer.conf, dst: /usr/lib/systemd/system/homelab-updater.timer.d/50-homelab.conf}

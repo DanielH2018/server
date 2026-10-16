@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
-# Pi SD-card health heartbeat — managed by Ansible (optimize_pi role); edits overwritten.
+# Pi SD-card health heartbeat — shipped by homelab-daniel-pi (hosts/components/pi-heartbeats);
+# edits overwritten.
 #
-# Usage: pi-sd-health.sh [-h|--help]
-# Takes no arguments. Cron job "Pi SD-card health heartbeat" runs it every 5 minutes on daniel-pi.
-# It reads the root filesystem's ext4 errors_count from sysfs and the verdict file that
-# pi-gz-integrity.sh writes, then pushes to the Daniel Pi SD Health Kuma monitor. Running it by
-# hand is safe, but it pushes.
+# Usage: pi-sd-health [-h|--help]
+# Takes no arguments. homelab-pi-sd-health.timer runs it every 5 minutes on daniel-pi, through
+# homelab-pi-sd-health.service, which hands it the push token. It reads the root filesystem's
+# ext4 errors_count from sysfs and the verdict file that pi-gz-integrity writes, then pushes to
+# the Daniel Pi SD Health Kuma monitor. To run it by hand, start the service; it pushes.
 #
 # SD cards have no SMART (no ATA/NVMe command set behind mmcblk0), so a dying card
 # only announces itself through filesystem errors. The kernel counts them per ext4
@@ -14,8 +15,8 @@
 # the superblock error state).
 #
 # Pushes status to the static "Daniel Pi SD Health" Kuma push monitor every 5 min
-# (cron). Dead-man's-switch: an explicit `down` names the problem fast, while a dead
-# cron/host simply stops pushing and trips the monitor's 600s heartbeat watchdog.
+# (timer). Dead-man's-switch: an explicit `down` names the problem fast, while a dead
+# timer/host simply stops pushing and trips the monitor's 600s heartbeat watchdog.
 # Route: Traefik's .local router on the server, resolved directly to the server's
 # LAN IP (no DNS dependency); Authelia bypasses ^/api/push/ on this host LAN-only —
 # the URL token is the credential.
@@ -28,20 +29,24 @@ for arg in "$@"; do
 done
 
 # shellcheck source=/dev/null
-source /usr/local/lib/kuma-push-lib.sh || {
-  logger -t pi-sd-health "kuma-push-lib.sh missing — run initial_setup on this host"
+source /usr/lib/homelab/kuma-push-lib.sh || {
+  logger -t pi-sd-health "kuma-push-lib.sh missing — reinstall homelab-daniel-pi"
   exit 1
 }
 
 COUNTER=/sys/fs/ext4/mmcblk0p2/errors_count
-{# `domain` comes from inventory/group_vars/all.yml, which every host inherits; the Pi
-   host_vars carry no override. That file's comment above `domain` covers the SOPS copy
-   that still holds the same value. The Pi's wg-easy reads the same variable. #}
 KUMA_HOST="uptime-kuma.local.{{ domain }}"
 # Pinned to the cluster ingress VIP: Kuma serves from the k8s edge, and the Docker
 # edge's bridge route for this name was removed in the slice-7 bridge teardown.
 KUMA_RESOLVE_IP="{{ k3s_metallb_ingress_vip }}"
-PUSH_URL="https://${KUMA_HOST}/api/push/{{ pi_sd_health_push_token }}"
+# The push token arrives through the unit's LoadCredential=, from a root-only file, and never
+# sits in this script. A missing token stops the push, so the monitor's watchdog trips.
+TOKEN_FILE="${CREDENTIALS_DIRECTORY:-}/pi_sd_health_push_token"
+if ! PUSH_TOKEN=$(cat "$TOKEN_FILE" 2>/dev/null) || [ -z "$PUSH_TOKEN" ]; then
+  logger -t pi-sd-health "no push token at $TOKEN_FILE — start homelab-pi-sd-health.service rather than this script"
+  exit 1
+fi
+PUSH_URL="https://${KUMA_HOST}/api/push/${PUSH_TOKEN}"
 
 if COUNT=$(cat "$COUNTER" 2>/dev/null); then
   if [ "$COUNT" = "0" ]; then
@@ -55,7 +60,7 @@ else
   STATUS=down; MSG="cannot read ${COUNTER}"
 fi
 
-# The rotated-log integrity verdict, produced daily by pi-gz-integrity.sh and folded in here.
+# The rotated-log integrity verdict, produced daily by pi-gz-integrity and folded in here.
 # Same monitor on purpose (#2715): a rotated log that stops decompressing and a climbing ext4
 # errors_count are the same operator action on the same device, and a second Kuma monitor would
 # need its own push token, SOPS entry and rotation registry row. A verdict older than the
