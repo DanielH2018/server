@@ -10,6 +10,8 @@ Run: uv run pytest scripts/renderer/tests/test_renderer_vendored.py
 
 import pytest
 
+from deploy_tools.bundle_census import census
+from deploy_tools.bundle_gates import source
 from lib import yaml_fast
 from lib.k8s_roles import role_fields
 from renderer.renderer_lib.bundle import bundle_files
@@ -20,6 +22,7 @@ from renderer.renderer_lib.cluster import (
     kustomization_text,
     write_cluster,
 )
+from renderer.renderer_lib.bundle import write_bundle
 from renderer.renderer_lib.environment import RenderError
 from renderer.renderer_lib.placeholders import apply_placeholders, sentinel
 
@@ -83,6 +86,27 @@ def test_a_vendored_file_and_a_patch_render_into_the_kustomization(tmp_path):
     assert upstream.read_bytes() == UPSTREAM.encode(), (
         "the vendored bytes reach the cluster unchanged, CRLF and the unescaped ${ included"
     )
+
+
+def test_a_bundle_with_vendored_files_passes_the_publish_census_and_source_gate(
+    tmp_path,
+):
+    """The publish job's checks walk `cluster/` recursively and read nested files too.
+
+    A patch sits outside `resources`, and the upstream `${NODE}` names no secret key.
+    """
+    roles = _role(tmp_path / "roles", "flux_prune: false\n")
+    result = apply_placeholders([_rendered()], ("email",))
+    tags = attach_vendored(result.tags, result.key_sets, roles)
+    directories = {n: f for t in tags for n, f in t.directories().items()}
+    out = tmp_path / "out"
+    write_cluster(tags, out)
+    write_bundle(
+        bundle_files(directories, result.key_sets, [TAG], TIMEOUT, DOTENV, roles=roles),
+        out,
+    )
+    assert census(out, [TAG]) == []
+    assert source(out, [TAG], frozenset({"email"})) == []
 
 
 def test_a_directory_without_patches_renders_no_patches_key():

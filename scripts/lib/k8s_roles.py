@@ -543,7 +543,7 @@ def role_fields(
     - `flux_prune: false` renders `prune: false`. A plumbing tag sets it, so a render that
       drops an object leaves it serving (H1 *Plumbing tags are never pruned*);
     - `manifests_rollout_timeout` renders as `timeout`. The manifests role's own rollout
-      wait reads the same key, so the two cannot disagree.
+      wait reads the same defaults key, though an include var of that name overrides it there.
 
     The fields go on the Kustomizations that apply the role's own manifests, `<tag>` and
     `<tag>-deferred`, so a plumbing role's deferred objects are never pruned either. The
