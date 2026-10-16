@@ -417,3 +417,17 @@ def test_a_file_created_through_a_module_the_runner_neither_replaces_nor_wraps_k
         f".eval('close [open {path} w]')",
     )
     assert reason and "every deploy runs" in reason
+
+
+def test_an_item_replaced_five_levels_down_keeps_the_line(tree):  # noqa: F811
+    """A same-length write five levels below a module attribute keeps the line (#5107).
+
+    The list keeps its length, so comparing the module-created object between the ends sees
+    nothing; only a walk that copies the fifth level compares its items within the run.
+    """
+    reason = _reason_for_head_call(
+        tree,
+        "import json\njson.order_only_5107 = {'a': {'b': {'c': {'d': [None]}}}}",
+        "json.order_only_5107['a']['b']['c']['d'][0] = 1",
+    )
+    assert reason and "every deploy runs" in reason
