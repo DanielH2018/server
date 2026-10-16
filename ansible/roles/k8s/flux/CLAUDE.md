@@ -9,6 +9,7 @@ view; the slice plan is `docs/target-architecture/deploy/d1-flux-installed.md`.
 ## At a glance
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates, tasks or containers_list entry, or the k3s role's Longhorn tier lists. -->
 - **Deploy tag:** `--tags "flux"`
+- **Image:** `python` (`flux_job_image`)
 - **Route:** none (no `templates/ingressroute.yaml.j2`)
 - **Claims:** none (no PVC)
 - **Auto-deploy:** denylisted (`k8s_autodeploy: false`) — platform: the deploy controller

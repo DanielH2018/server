@@ -86,3 +86,9 @@ flux_sync_suspend: false
 # unsigned tag `promote.yml`'s `verify_drill` dispatch pushes and must read Ready=False. False
 # deletes it, because dropping a document from the render deletes nothing live.
 flux_verify_drill: false
+
+# The one image every Job Flux applies runs, such as `<tag>-snapshot`'s (target slice D5,
+# *Rules for every Job Flux applies*). The same python:3.14-alpine digest monitor_bridge_k8s_image
+# pins, and Renovate's k8s-images manager moves both in one PR, as one dependency. The renderer
+# reads it here (scripts/renderer/renderer_lib/snapshot.py); no task of this role does.
+flux_job_image: python:3.14-alpine@sha256:f6a589d43c42b9e7f7dc67a12d37132491f362859a5d750607710cc56da3bc72
