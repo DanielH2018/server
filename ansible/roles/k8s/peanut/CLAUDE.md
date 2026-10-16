@@ -16,11 +16,25 @@ UPS state of its own; the physical UPS is USB-attached to daniel-server via the 
   difference between the two is never the image.
 - **Port:** 8080
 - **No PVC** — `/config` and `/app/config` are `emptyDir`, seeded at boot.
-- **Auto-deploy-eligible because** it is a stateless RollingUpdate with a readinessProbe and
-  a digest-pinned image.
+- **Flux applies it, not Ansible** (D3.6, the first Flux role with a Secret). Its
+  `containers_list` entry carries `owner: flux`, so `deploy.sh`, the play and the GitOps
+  deployer all skip it, and a merged change reaches the cluster when `promote` publishes and
+  verifies the next bundle. Its digest-bump PRs therefore draw no `land-wait` and no
+  `probe.py health` run. To give it back to Ansible, follow the two-PR handback in
+  `docs/flux-deploy-plane.md`; a plain revert of the flag leaves two writers on the objects.
 - **Secrets:** `peanut_username`, `peanut_password` (web UI login), `nut_ha_password`
   (upsd's read-only login, shared with Home Assistant, which PeaNUT uses to poll `upsd`) —
-  see `templates/secret.yaml.j2`.
+  see `templates/secret.yaml.j2`. The published render holds a `${<key>}` placeholder for
+  each, and Flux substitutes the values from the `homelab-cluster-vars` Secret, which it
+  decrypts from `ansible/vars/cluster-vars.sops.env`. The Kustomization depends on
+  `cluster-vars`, so a rotated value is live before peanut reconciles.
+- **A changed value rolls the pod.** No template here carries the annotation that does it:
+  the renderer stamps a restart checksum on the Deployment of every flux-owned role, a hash
+  of the ciphertext, never of a value (`docs/flux-deploy-plane.md`).
+- **Rotating `peanut_password` or `peanut_username`** is operator-only at the source: `sops
+  set`, then `cluster_vars.py write`, committed together. homepage's PeaNUT widget renders
+  the same login, so the landing also runs `./scripts/deploy.sh --tags homepage`.
+  `secret_rotation.py consumers peanut_password` prints both halves.
 
 ## Notable
 - **`alpine` init container, not the app image**, seeds `/config/settings.yml` from the
