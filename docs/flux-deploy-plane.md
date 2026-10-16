@@ -241,12 +241,17 @@ that no other manager owns, and that the render omits. It prints paths and manag
 values. It flags a Deployment, DaemonSet or StatefulSet that rolls, because a stripped path sits
 under its pod template. `probe_lib/takeover.py` holds the rules.
 
-- **Not listed: the server's defaults.** A create attributes every field the API server
+- **Listed apart: presumed server defaults.** A create attributes every field the API server
   defaults, such as `dnsPolicy`, to `kubectl-client-side-apply`. A path only that manager owns
-  and the object's last-applied config omits is such a default. The takeover removes it and the
-  server sets it again to the same value, so the census counts these per object and lists none.
-  `imagePullPolicy` is the exception. Its default follows the image reference, so the census
-  lists it when the render's reference implies a value other than the live one.
+  and the object's last-applied config omits is presumed to be such a default. The takeover
+  removes it and the server is expected to set it again to the same value. The census lists
+  these under each object as *presumed server defaults*, apart from the main list, because the
+  rule is inferred rather than measured. A field set at create by admission or by a create
+  strategy also matches it and is not restored. A Job's generated `spec.selector` is one, and
+  a field a mutating admission hook injects is another. So read that list before calling an
+  object clean. `imagePullPolicy`
+  goes in the main list when the render's image reference implies a value other than the live
+  one, because its default follows that reference.
 - **Not listed: `last-applied-configuration`.** The cleanup removes it from every object by
   design.
 - **Not read: Secrets and RBAC objects.** The census skips Secrets, whose managers D3.5 handles.

@@ -302,6 +302,8 @@ def test_run_prints_the_census_and_reports_a_forbidden_read(capsys):
     out = capsys.readouterr().out
     assert code == 0
     assert f"    {RESTARTED_AT}  (kubectl-rollout)" in out
+    assert "presumed server defaults, inferred and not measured (3):" in out
+    assert "      spec.template.spec.dnsPolicy" in out
     assert "ClusterRole r: not readable by the read-only ServiceAccount" in out
     assert "Secret homelab/s: skipped" in out
 

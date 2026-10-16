@@ -217,8 +217,10 @@ def server_defaulted(stripped, live, rendered):
     its own applied config never held, and the object's last-applied annotation is that config.
     A path only it owns and that config omits is a default: the takeover removes it and the
     server defaults it again, to the same value unless `_redefaults_alike` says otherwise. An
-    object without the annotation has none, so every path stays listed. This rule is read
-    from how server-side apply and defaulting work, not measured by an apply.
+    object without the annotation has none, so every path stays in the main list. This rule is
+    read from how server-side apply and defaulting work, not measured by an apply, and a field
+    set at create by admission or a create strategy also matches it. So `census` prints these
+    paths in their own list rather than dropping them.
     """
     annotations = (live.get("metadata") or {}).get("annotations") or {}
     try:
@@ -339,7 +341,7 @@ def doc_name(doc):
 def census(tag, docs, live_of):
     """The census text and the number of objects compared, for `docs` and a live reader."""
     lines = [f"takeover census for {tag}: the fields Flux's first apply strips"]
-    compared = stripped_total = 0
+    compared = stripped_total = defaulted_total = 0
     rolling = []
     for doc in docs:
         name = doc_name(doc)
@@ -360,24 +362,28 @@ def census(tag, docs, live_of):
         stripped = stripped_paths(live, doc)
         defaulted = server_defaulted(stripped, live, doc)
         stripped = {p: m for p, m in stripped.items() if p not in defaulted}
-        note = (
-            f" ({len(defaulted)} server-defaulted path(s) not listed, which the server "
-            "defaults again)"
-            if defaulted
-            else ""
-        )
-        if not stripped:
-            lines.append(f"  {name}: strips nothing{note}")
+        if not stripped and not defaulted:
+            lines.append(f"  {name}: strips nothing")
             continue
         flag = rolls(doc.get("kind"), stripped)
-        lines.append(f"  {name}:{' rolls' if flag else ''}{note}")
+        lines.append(f"  {name}:{' rolls' if flag else ''}")
         if flag:
             rolling.append(name)
         for path in sorted(stripped, key=format_path):
             lines.append(f"    {format_path(path)}  ({', '.join(stripped[path])})")
+        if defaulted:
+            # Listed apart, never dropped: the re-default is inferred, and a field set at
+            # create by admission or a strategy rather than by defaulting is not restored.
+            lines.append(
+                f"    presumed server defaults, inferred and not measured ({len(defaulted)}):"
+            )
+            for path in sorted(defaulted, key=format_path):
+                lines.append(f"      {format_path(path)}")
         stripped_total += len(stripped)
+        defaulted_total += len(defaulted)
     lines.append(
-        f"{stripped_total} field path(s) stripped across {compared} live object(s); "
+        f"{stripped_total} field path(s) stripped and {defaulted_total} presumed server "
+        f"default(s) across {compared} live object(s); "
         f"{len(rolling)} workload(s) roll"
         + (f": {', '.join(rolling)}" if rolling else "")
     )
