@@ -130,9 +130,11 @@ otherwise; none of the values below are secrets themselves, only names and locat
       those keys regenerates the cluster files for the new recipient.
     - **A leaked key is not a lost key.** The rotation protects future revisions only,
       because git history and every published `sha-<sha>` artifact keep copies of the
-      cluster file encrypted to the old key. A suspected compromise also needs every key in
-      the cluster file rotated (**operator-only**) and its consumers redeployed. *Rotating
-      the cluster key* in `docs/secret-rotation.md` has the steps.
+      cluster file and of each cluster manifest, all encrypted to the old key. A suspected
+      compromise also needs every key that `ansible/vars/cluster-vars.source` lists rotated
+      (**operator-only**) and its consumers redeployed. That list includes the keys the
+      cluster manifests hold. *Rotating the cluster key* in `docs/secret-rotation.md` has
+      the steps.
    Source: `docs/target-architecture/deploy/d3-secrets.md` ("Where the values come from")
    and `docs/adr/0022-the-cluster-decrypts-its-own-file-with-its-own-key.md`.
 
