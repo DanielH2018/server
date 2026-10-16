@@ -1,7 +1,7 @@
 """The LAN facts (MetalLB VIPs, the LAN subnet, each host's address, the WireGuard client
 subnet, and the cni0 gateway pair) must have exactly one YAML definition site. Everywhere
-else, a `.j2` template, an Ansible task file, or a Python module reads the variable rather
-than re-typing the literal.
+else, a `.j2` template, an Ansible task file, a Python module or a shell script reads the
+variable rather than re-typing the literal.
 
 What this guard does NOT cover, and why: the `10.42.` and `10.43.` prefixes are broader than
 the six named facts — they also match the k3s pod/Service CIDRs (`k3s_pod_cidr`,
@@ -17,9 +17,13 @@ asserts the walk visits a NAMED set of paths rather than trusting an empty resul
 """
 
 import re
+import subprocess
+import tempfile
 from pathlib import Path
 
 from _helpers import REPO
+from lib import yaml_fast
+from lib.repo_paths import HOST_VARS
 
 # --- the four LAN-fact literal shapes -----------------------------------------------------
 #
@@ -41,8 +45,8 @@ PATTERNS = {
     "cni0_gateway": re.compile(r"10\.42\.[01]\.1/32"),
 }
 
-SCAN_ROOTS = ("ansible", "scripts", "docs")
-SCAN_SUFFIXES = (".yml", ".yaml", ".j2", ".py", ".md")
+SCAN_ROOTS = ("ansible", "scripts", "docs", "hosts")
+SCAN_SUFFIXES = (".yml", ".yaml", ".j2", ".py", ".md", ".sh")
 
 # (path-prefix-or-exact-match regex, reason). A path matching ANY entry is exempt. Ordered
 # roughly by how many files a rule covers, broadest first.
@@ -91,6 +95,11 @@ ALLOWLIST: list[tuple[str, str]] = [
         "the source definition site for the hypervisor's own staging-net gateway/DHCP range "
         "(DECIDED comment above: chosen against a census of daniel-server's routes, not a "
         "copy of staging_net_cidr)",
+    ),
+    (
+        r"^hosts/bootstrap-host\.sh$",
+        "runs on a host before anything is installed, so it types daniel-box's address; "
+        "test_the_bootstrap_url_is_daniel_boxs_repository holds it equal to server_ip",
     ),
     (
         r"^ansible/roles/k8s/traefik/templates/service\.yaml\.j2$",
@@ -212,6 +221,7 @@ CONVERTED_FILES = frozenset(
         "ansible/roles/k8s/authelia/templates/config-secret.yaml.j2",
         "ansible/roles/setup/docker_install/tasks/install.yml",
         "docs/wireguard-private-homelab-access.md",
+        "hosts/bootstrap-host.sh",
     }
 )
 
@@ -220,3 +230,74 @@ def test_the_census_actually_scanned_the_files_this_change_touched():
     scanned = set(_scan_files(REPO))
     missing = CONVERTED_FILES - scanned
     assert not missing, f"walk did not visit: {missing}"
+
+
+# --- hosts/bootstrap-host.sh: the one file under hosts/ that types the repository's address -----
+
+BOOTSTRAP = REPO / "hosts" / "bootstrap-host.sh"
+ARCHIVE_KEYRING = REPO / "hosts" / "keys" / "homelab-archive-keyring.gpg"
+DANIEL_BOX = HOST_VARS / "daniel-box.yml"
+BUILDER_DEFAULTS = (
+    REPO / "ansible" / "roles" / "setup" / "homelab_builder" / "defaults" / "main.yml"
+)
+
+
+def script_value(script: str, name: str) -> str | None:
+    """The value a `NAME=value` line at the start of a line assigns in `script`, or None."""
+    match = re.search(rf"^{name}=(\S+)$", script, re.MULTILINE)
+    return match.group(1) if match else None
+
+
+def keyring_fingerprints(keyring: Path) -> list[str]:
+    """The primary-key fingerprints in `keyring`, as the bootstrap script reads them."""
+    with tempfile.TemporaryDirectory() as home:
+        listing = subprocess.run(
+            ["gpg", "--homedir", home, "--batch", "--with-colons", "--show-keys"]
+            + [str(keyring)],
+            capture_output=True,
+            text=True,
+            check=True,
+            timeout=60,
+        ).stdout
+    fingerprints, after_pub = [], False
+    for fields in (line.split(":") for line in listing.splitlines()):
+        if fields[0] == "pub":
+            after_pub = True
+        elif fields[0] == "fpr" and after_pub:
+            fingerprints.append(fields[9].upper())
+            after_pub = False
+    return fingerprints
+
+
+def pin_problem(script: str, fingerprints: list[str]) -> str | None:
+    """Why the script's pinned fingerprint is not the committed keyring's one key, or None."""
+    pin = script_value(script, "ARCHIVE_FINGERPRINT")
+    if pin is None:
+        return "bootstrap-host.sh assigns no ARCHIVE_FINGERPRINT"
+    if fingerprints != [pin]:
+        return (
+            f"bootstrap-host.sh pins {pin}; the committed keyring holds {fingerprints}"
+        )
+    return None
+
+
+def test_the_bootstrap_url_is_daniel_boxs_repository():
+    server_ip = yaml_fast.safe_load(DANIEL_BOX.read_text())["server_ip"]
+    port = yaml_fast.safe_load(BUILDER_DEFAULTS.read_text())[
+        "homelab_builder_repo_port"
+    ]
+    url = script_value(BOOTSTRAP.read_text(), "REPO_URL")
+    assert url == f"http://{server_ip}:{port}"
+
+
+def test_the_bootstrap_pin_is_the_committed_keyrings_key():
+    fingerprints = keyring_fingerprints(ARCHIVE_KEYRING)
+    assert pin_problem(BOOTSTRAP.read_text(), fingerprints) is None
+
+
+def test_a_bootstrap_pin_other_than_the_keyrings_is_flagged():
+    fingerprints = keyring_fingerprints(ARCHIVE_KEYRING)
+    script = BOOTSTRAP.read_text().replace(fingerprints[0], "0" * 40)
+    problem = pin_problem(script, fingerprints)
+    assert problem is not None
+    assert "0" * 40 in problem

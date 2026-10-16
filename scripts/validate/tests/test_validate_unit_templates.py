@@ -392,11 +392,9 @@ def test_host_units_without_the_named_member_is_flagged(tmp_path, capsys):
 
 
 def test_host_unit_groups_render_every_shipped_unit_of_the_tree(tmp_path):
-    """The named members: the shared updater's pair and the unlisted reconcile component."""
+    """The named members: the shared updater's pair, and the Pi package's reconcile unit."""
     groups = dict(v.host_unit_groups(v.HOSTS, tmp_path))
-    units = {unit for package in groups["shared"] for unit in package.units()}
-    assert {
-        "homelab-updater.service",
-        "homelab-updater.timer",
-        "homelab-reconcile.service",
-    } <= units
+    shared = {unit for package in groups["shared"] for unit in package.units()}
+    assert {"homelab-updater.service", "homelab-updater.timer"} <= shared
+    pi = {unit for package in groups["daniel-pi"] for unit in package.units()}
+    assert "homelab-reconcile.service" in pi

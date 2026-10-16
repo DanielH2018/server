@@ -249,8 +249,10 @@ key. Every step is **operator-only**, and each host step runs from a LAN session
       --export <new fpr> > hosts/keys/homelab-archive-keyring.gpg
     ```
 
-    In the same commit, update the fingerprint pin in `hosts/bootstrap-host.sh`, which PR
-    H3.6 adds. Copy the new private key into the break-glass kit, as
+    In the same commit, update the fingerprint pin, `ARCHIVE_FINGERPRINT` in
+    `hosts/bootstrap-host.sh`.
+    `ansible/tests/repo/test_lan_facts_have_one_source.py::test_the_bootstrap_pin_is_the_committed_keyrings_key`
+    fails until the two match. Copy the new private key into the break-glass kit, as
     [the break-glass doc](break-glass.md) describes.
 1. Delete the old key from the signer's home, because the role's apply refuses a home that
    holds more than one key. Then stop the agent the commands started:
@@ -276,7 +278,7 @@ key. Every step is **operator-only**, and each host step runs from a LAN session
    keyring. The signer's recorded key no longer matches `archive-key.fpr`, so it re-signs the
    whole tree with the new key.
 1. On each host, run `sudo ./bootstrap-host.sh <hostname>` from the commit that carries the
-   new pin. Its key check verifies the keyring against that pin. It then installs the newest
+   new pin, with that commit's `hosts/keys/homelab-archive-keyring.gpg` copied beside it. Its key check verifies the keyring against that pin. It then installs the newest
    packages, whose `homelab-updater` ships the same keyring. Then unmask and start the timer:
 
     ```bash

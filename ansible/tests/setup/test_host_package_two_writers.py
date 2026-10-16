@@ -80,8 +80,8 @@ OPTIMIZE_PI_CRONS = frozenset(
         "Pi container-recovery heartbeat",
     }
 )
-# The package-side member. PR H3.6 adds `homelab-daniel-pi`.
-NAMED_PACKAGES = frozenset({"homelab-updater"})
+# The package-side members: the shared package, and the Pi's host package from PR H3.6.
+NAMED_PACKAGES = frozenset({"homelab-updater", "homelab-daniel-pi"})
 
 _ONE_VARIABLE = re.compile(r"^\{\{\s*([A-Za-z_][\w.]*)\s*\}\}$")
 
