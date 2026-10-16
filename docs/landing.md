@@ -338,9 +338,12 @@ Instead it reads the cluster every 30 seconds:
   `suspended` in the merge commit's `digests.json`, so Flux applies nothing for it until a PR
   removes its `flux_suspend`. The wait ends at the first poll that reads that file, rather
   than polling to `gave-up`, and the landing runs no health gate. The suspend PR itself ends
-  this way. A change to a suspended tag cannot reach master through CI, because
-  `cross_plane_order.py` refuses it (`docs/flux-deploy-plane.md`, *Stopping one service:
-  `flux_suspend`*).
+  this way, before any promotion applies it: the suspend takes hold only once `last-good`
+  carries it, so check that `probe.py landing` shows `last-good` at or past the merge commit.
+  A change to a suspended tag cannot reach master through CI, because `cross_plane_order.py`
+  refuses it. One that races past the gate does not end here: `promote.py decide` holds it
+  as `suspended-changed`, and the wait ends `deploy-failed`, cause `promote-held`
+  (`docs/flux-deploy-plane.md`, *Stopping one service: `flux_suspend`*).
 - **`deferred`, cause `promote-timeout`, exit 75.** No promotion covered the merge commit
   within twice the promote timeout (67 minutes,
   `scripts/deploy_tools/promote_lib/wait.py:LAND_WAIT_TIMEOUT_S`). Look first at the

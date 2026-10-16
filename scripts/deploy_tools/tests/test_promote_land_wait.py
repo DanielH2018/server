@@ -67,6 +67,21 @@ def test_a_suspended_tag_ends_the_wait_at_once_where_unsuspended_it_gives_up(sus
         assert result.verdict == "gave-up" and sim.sleeps > 0
 
 
+def test_a_change_that_raced_the_gate_onto_a_suspended_tag_waits_for_the_hold():
+    """M changes bento-pdf while it is suspended at M and at its ancestor, so `decide` holds
+    and the wait ends `deploy-failed` there rather than `suspended` here."""
+    before = {"own": "own-a", "footprint": "a", "suspended": True}
+    after = {"own": "own-b", "footprint": "b", "suspended": True}
+    sim = Sim(
+        polls=[at(P)],
+        holds=["none", f"{M} suspended-changed=bento-pdf"],
+        published={M: {"bento-pdf": after}, P: {"bento-pdf": before}},
+    )
+    result = sim.wait()
+    assert (result.verdict, result.cause) == ("deploy-failed", "promote-held")
+    assert sim.sleeps == 1
+
+
 def test_a_suspended_tag_outside_the_prs_services_does_not_end_the_wait():
     entry = {"own": "own-x", "footprint": "x", "suspended": True}
     sim = Sim(published={M: {"texbrain": entry}, P: {"texbrain": entry}})

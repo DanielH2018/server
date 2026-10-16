@@ -97,7 +97,8 @@ no verdict.
 A PR whose tag Flux applies waits on `promote.py land-wait`, whose verdicts are settled |
 deploy-failed | gave-up | suspended. `suspended` means one of the PR's tags is suspended at
 the merge commit, so Flux applies nothing for it until a PR resumes it; the landing prints
-`nothing-to-deploy` and exits 0, with no health gate. The suspend PR itself ends this way.
+`nothing-to-deploy` and exits 0, with no health gate. The suspend PR itself ends this way,
+before a promotion applies it: check that `probe.py landing` shows `last-good` at or past M.
 `ci-unproven` means GitHub never ran CI for the merge commit and no later master commit can
 stand in for it, so a re-run alone never converges; the detail names the tip and the way out.
 `merge-conflict` and `pr-ci-red` are the merge wait ending early on the two states an armed

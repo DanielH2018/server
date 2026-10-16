@@ -253,8 +253,8 @@ def wait_on_promotion(ln: Landing) -> None:
     # DECIDED: `suspended` ends the landing as `nothing-to-deploy`, exit 0, with no health
     # gate. The suspend PR itself ends this way, so a failure verdict would be wrong for it.
     # Exit 75 would be wrong too: `land_probe` reads 75 as a resume point, and a re-run waits
-    # on the same suspended tag again. A change that raced the gate onto a suspended tag ends
-    # this way as well, and `promote.py decide`'s `suspended-changed` hold reports that case.
+    # on the same suspended tag again. A change that raced the gate onto a suspended tag
+    # never ends here: land-wait leaves it to `promote.py decide`'s `suspended-changed` hold.
     if result.verdict == "suspended":
         ln.finish(
             Verdict.NOTHING_TO_DEPLOY,

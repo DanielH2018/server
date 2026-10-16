@@ -24,7 +24,8 @@ may promote a newer commit. The plan is docs/target-architecture/deploy/d2-first
     suspended      One of `--services` is `suspended` in M's `digests.json`, so Flux applies
                    nothing for it until a PR resumes it (D5.1d). It ends the wait at the
                    first poll that reads M's file, rather than polling to `gave-up`. The
-                   suspend PR itself ends this way. Cause `promote-suspended`.
+                   suspend PR itself ends this way. Cause `promote-suspended`. A tag M
+                   changed while suspended at both ends is left to `decide`'s hold.
 - While a verification of an earlier commit P is in flight, M's `decide` waits on it rather
   than promoting, for up to IN_FLIGHT_WAIT_S. So each poll that reads `prod` differing from
   `last-good` at a strict ancestor of M moves the deadline to LAND_WAIT_TIMEOUT_S past that
@@ -63,7 +64,7 @@ from lib.exit_codes import FAILED, LAND_GAVE_UP, OK
 from lib.git import git
 
 import forge
-from changed_set import ROOT, ChangedSet, changed_set, suspended_tags
+from changed_set import ROOT, ChangedSet, changed_set, suspended_changed, suspended_tags
 from artifact_retention import LAST_GOOD_TAG, PROD_TAG
 from flux_host import FluxHost
 
@@ -295,10 +296,14 @@ class _Expected:
         except READ_ERRORS as err:
             self._why = f"the ancestor's {DIGESTS_FILE}: {err}"
 
-    @property
-    def new(self) -> object | None:
-        """M's parsed `digests.json`, or None until `sha-<M>` is read."""
-        return self._new
+    def suspended(self, services: list[str]) -> list[str]:
+        """The tags of `services` suspended at M, but not one M changed while suspended.
+
+        A change that raced the gate holds at `decide` (`suspended-changed`), so the wait
+        goes on and ends `deploy-failed` there rather than here.
+        """
+        raced = suspended_changed(self._old, self._new)
+        return sorted(suspended_tags(self._new) & set(services) - set(raced))
 
     def changes(self, items: list[dict]) -> ChangedSet:
         """The changed set against the Kustomizations `items` lists, `ROOT` excluded."""
@@ -382,7 +387,7 @@ def land_wait(
         if items is not None:
             cs = expected.changes(items)
             widened = cs.widened
-            if paused := sorted(suspended_tags(expected.new) & set(services)):
+            if paused := expected.suspended(services):
                 return WaitResult(
                     "suspended",
                     SUSPENDED_CAUSE,
