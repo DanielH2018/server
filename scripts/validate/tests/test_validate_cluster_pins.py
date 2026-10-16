@@ -177,9 +177,61 @@ def test_a_key_set_in_two_role_files_is_unjudged(repo):
     assert cluster_pins.check(base, head, repo) == cluster_pins.UNJUDGED
 
 
-def test_a_pin_set_only_in_a_role_is_clean(repo):
-    sha = _commit(repo, {K3S: "k3s_longhorn_version: v1.12.1\n"})
-    assert cluster_pins.outside_roles(sha, repo) == []
+def test_a_pin_read_but_not_assigned_outside_its_role_file_is_clean(repo):
+    """A Jinja read and a `==` comparison set nothing, so neither is an override."""
+    sha = _commit(
+        repo,
+        {
+            K3S: "k3s_longhorn_version: v1.12.1\n",
+            "ansible/roles/setup/k3s/tasks/longhorn.yml": (
+                "- name: apply\n"
+                "  url: https://x/{{ k3s_longhorn_version }}/longhorn.yaml\n"
+                "  when: k3s_longhorn_version == 'v1.12.1'\n"
+            ),
+        },
+    )
+    assert cluster_pins.overrides(sha, repo) == []
+
+
+def test_the_real_tree_overrides_no_pin():
+    assert cluster_pins.overrides("HEAD") == []
+
+
+@pytest.mark.parametrize(
+    ("path", "text"),
+    [
+        (
+            "ansible/k3s-bringup.yml",
+            "- hosts: k3s\n  vars:\n    k3s_longhorn_version: v1.11.0\n",
+        ),
+        (
+            "ansible/roles/setup/k3s/tasks/main.yml",
+            "- include_role:\n    name: x\n  vars:\n    k3s_longhorn_version: v1.11.0\n",
+        ),
+        (
+            "ansible/inventory/hosts.ini",
+            "[k3s]\ndaniel-box k3s_longhorn_version=v1.11.0\n",
+        ),
+        ("ansible/inventory/hosts.ini", "[all:vars]\nk3s_longhorn_version = v1.11.0\n"),
+        ("ansible/inventory/group_vars/all", "k3s_longhorn_version: v1.11.0\n"),
+        ("ansible/site.yml", "- hosts: all\n  vars: {k3s_longhorn_version: v1.11.0}\n"),
+    ],
+    ids=[
+        "play-vars",
+        "include-role-vars",
+        "ini-host-var",
+        "ini-all-vars",
+        "extensionless",
+        "flow",
+    ],
+)
+def test_an_override_the_column_zero_grep_missed_is_flagged(repo, capsys, path, text):
+    base = _commit(repo, {K3S: "k3s_longhorn_version: v1.12.1\n"})
+    head = _commit(repo, {path: text})
+    assert cluster_pins.check(base, head, repo) == cluster_pins.REFUSED
+    assert (
+        f"[FAIL] {path}: k3s_longhorn_version is set outside" in capsys.readouterr().err
+    )
 
 
 def test_an_inventory_override_of_a_pin_is_flagged(repo, capsys):

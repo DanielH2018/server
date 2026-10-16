@@ -5,9 +5,9 @@ Status: IN PROGRESS
 PR H1.1f, the CI pin checks: [#5256](https://github.com/DanielH2018/server/pull/5256). It
 merged on 2026-10-16 at `2e8d5b1e3` and deployed nothing. `scripts/validate/cluster_pins.py`
 refuses a decrease, a skipped Longhorn minor and a bump that shares its PR, and it reported
-`moves no pin the wrong way` on its own merge. Pins set in indented play vars or INI
-inventory go unread ([#5257](https://github.com/DanielH2018/server/issues/5257)), and no such
-file sets either pin.
+`moves no pin the wrong way` on its own merge. Its override refusal reads indented play
+vars, `include_role` vars and INI inventory since
+[#5257](https://github.com/DanielH2018/server/issues/5257); no such file sets either pin.
 PR H1.1g, the land gate: [#5265](https://github.com/DanielH2018/server/pull/5265). It merged
 at `722e98608` and deployed nothing. `land.sh` refuses a forward-only pin bump while
 (`last-good`, master tip] already changes that pin or while `DEPLOY_HOLD` reads anything but
