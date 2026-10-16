@@ -1,0 +1,77 @@
+# `setup/k8s_host_files` — the host-side rows of k8s roles, applied through the setup plane
+
+This role holds the host writes that D5 moves out of the k8s roles before each role flips to
+Flux: docs's site directory, pi-peer-backup's two Pi writes, traefik's absent arm, registry's
+GC absent arms, the absent arms H2 leaves in crowdsec, configarr, janitorr and qbittorrent,
+artifacts' two directory tasks and media-volume's media directories. A Flux-owned role has no
+Ansible apply left to carry them, so each lands here in its own conversion PR. The plan is
+`docs/target-architecture/deploy/d5-bulk-move.md`, sections *Host-side rows* and *The
+`k8s_host_files` role enters the setup plane once (D5.1h)*.
+
+It is not in `containers_list`, so `./scripts/deploy.sh --tags k8s_host_files` exits 2 on an
+unmatched tag. Apply it through `initial_setup.yml` on daniel-box:
+
+```bash
+uv run ansible-playbook ansible/initial_setup.yml --tags k8s_host_files > /tmp/k8s-host-files.log 2>&1 < /dev/null
+```
+
+The redirect is what a shell with non-blocking stdio needs.
+
+## At a glance
+<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's tasks, timer templates, defaults or playbook entry, or a schedule var in group_vars/all.yml. -->
+- **Applied by:** `initial_setup.yml --tags "k8s_host_files"` when `inventory_hostname ==
+  'daniel-box'`
+- **Crons / timers:** none (no `ansible.builtin.cron` task in `tasks/`, no
+  `templates/*.timer.j2`)
+<!-- /generated_from -->
+
+## What it holds
+
+`tasks/main.yml` includes no task file yet, so an apply changes nothing on the host. Wave C's
+pi-peer-backup PR adds the first task file. Every conversion PR after it adds one task file per
+source role and includes it from `tasks/main.yml`.
+
+- **The playbook entry is gated to daniel-box by a literal.** `setup_routing.py` places a role
+  whose gate admits only another host as a hand apply, so the tick could never run a Pi-gated
+  role. A row that writes on daniel-pi keeps `delegate_to: daniel-pi` inside a task here.
+- **A task moves with its sources and variables.** Role defaults and role-relative `src:` paths
+  do not resolve across roles, so a conversion PR copies the role's host templates and files
+  into this role's `templates/` and `files/`. A variable only the host files read moves to this
+  role's `defaults/main.yml`. No task here runs `include_vars` on another role's defaults.
+- **A variable both planes read stays in the k8s role, with a copy here.** This role's defaults
+  hold a copy under the k8s role's own name. A change then edits both, and each half routes to
+  its own plane. A shared key in `group_vars/all.yml` routes to the deploy plane only, which
+  never runs `initial_setup.yml`.
+
+Two tests in `ansible/tests/setup/` hold those rules:
+
+- `ansible/tests/setup/test_k8s_host_files_render.py` renders every template here under
+  `StrictUndefined`, with this role's defaults and the inventory. A template reading a
+  variable that only a `roles/k8s/` defaults file defines fails it. The role has no template
+  yet, so the test asserts the rendered set is empty; Wave C's PR adds its first named member.
+- `ansible/tests/setup/test_k8s_host_files_pairs.py` derives every key this role's defaults
+  share with a k8s role's defaults or `group_vars/all.yml`, and asserts that each copy equals
+  its source. The declared set is empty; artifacts' conversion PR adds the first pairs.
+
+## Autonomous-role contract (it will install a timer and remove crons with no human in the loop)
+
+The role installs nothing yet. Once rows move in, the GitOps tick applies it as
+`initial_setup.yml --tags k8s_host_files` on every merge that touches this role.
+
+- **Scope / exclusions:** host files, directories and units that a k8s role's Ansible apply
+  owned before its flip, plus the absent arms that remove a retired role's crons. **Never** a
+  Kubernetes object, never a `kubectl` write, and never a row outside the D5 list above. A
+  daniel-pi write happens only through `delegate_to: daniel-pi`.
+- **Mode (explicit + reversible):** each row carries the arm variable its source role used.
+  Removing a row is a revert of its conversion PR, which puts the task back in the k8s role.
+  Reverting D5.1h removes the playbook entry and parks the tick once more.
+- **Authoritative sources:** the repo at the commit being applied, through this role's own
+  defaults and `group_vars`. Never another role's defaults.
+- **Abort valves:** the tick's CI gate and `hold_sha`. A failed apply writes `hold_sha` and a
+  `hold_plane` entry naming `initial_setup.yml`, and the tick applies nothing more until the
+  hold clears.
+- **Required evidence:** the tick's receipt and `land.sh`'s `VERDICT:` line for every PR that
+  changes this role. The Pi probe timer appends its HTTP status to `/var/log/pi-health/`,
+  which the Pi's Alloy tails.
+- **Next-run review:** before moving a new row in, run `--list-tasks` with
+  `--tags k8s_host_files` and read the recap of the last apply.
