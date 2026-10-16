@@ -367,6 +367,9 @@ def test_the_prompt_reads_how_the_lander_ended_before_trusting_its_file() -> Non
         f"systemctl show -p Result renovate-agent-land@{PR}.service"
         in prompt_commands()
     )
-    prompt = " ".join(render(PROMPT).split())
-    assert "`success` and `exit-code`" in prompt
-    assert "`PENDING`" in prompt
+    script = (ROLE / "files" / "land_renovate_pr.py").read_text()
+    (pending,) = re.findall(r'atomic_write\(result, "([A-Z]+)\\n"\)', script)
+    # The bullet that reads the Result is the one that must name the placeholder: a mention
+    # anywhere else in the prompt does not tell the session to treat it as no verdict.
+    (bullet,) = [b for b in render(PROMPT).split("\n- ") if "-p Result" in b]
+    assert f"`{pending}`" in bullet, bullet
