@@ -193,11 +193,12 @@ def code_part(line: str) -> str:
     quote, escaped = "", False
     for i, char in enumerate(line):
         if quote:
-            # Only a double-quoted YAML scalar escapes with `\`; `''` in a single-quoted one
-            # closes and reopens the quote, which leaves the same span quoted.
+            # A double-quoted YAML scalar escapes with `\`, a single-quoted one with `''`.
             if escaped:
                 escaped = False
             elif char == "\\" and quote == '"':
+                escaped = True
+            elif char == quote == "'" and line[i + 1 : i + 2] == "'":
                 escaped = True
             elif char == quote:
                 quote = ""
