@@ -137,12 +137,17 @@ def test_a_cycle_is_an_error():
         ct.promote_timeout(docs(ks("a", "b"), ks("b", "a")))
 
 
-def test_the_requeue_interval_and_concurrency_are_kustomize_controllers_defaults():
-    """The vendored install passes neither flag, so the v1.9.6 defaults, 30s and 4, hold."""
-    vendored = (REPO / "ansible/roles/k8s/flux/files/gotk-components.yaml").read_text()
-    assert "--requeue-dependency" not in vendored
-    assert "--concurrent" not in vendored
-    assert (ct.REQUEUE_DEPENDENCY_S, ct.CONCURRENT) == (30, 4)
+def test_the_requeue_interval_is_kustomize_controllers_default():
+    """The vendored install and the role's flags leave it unset, so the default, 30s, holds.
+
+    `--concurrent` is the role's flag; test_flux_role.py holds CONCURRENT to it.
+    """
+    flux = REPO / "ansible/roles/k8s/flux"
+    assert (
+        "--requeue-dependency" not in (flux / "files/gotk-components.yaml").read_text()
+    )
+    assert "--requeue-dependency" not in (flux / "defaults/main.yml").read_text()
+    assert ct.REQUEUE_DEPENDENCY_S == 30
 
 
 def test_an_empty_bundle_times_out_at_the_roots_floor():
