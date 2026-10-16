@@ -16,6 +16,7 @@ from datetime import datetime, timezone
 import pytest
 
 import flux_snapshot
+from renderer.renderer_lib.snapshot import rbac
 from flux_snapshot import Claim, Config, Failed, Kube
 
 TAG = "sonarr"
@@ -42,6 +43,7 @@ class World:
         self.caps: dict[str, str] = {}
         self.snapshots: dict[str, dict] = {}
         self.becomes_ready = True
+        self.snapshot_read_status = 200
         self.listing_hides: set[str] = set()
         self.base = ""
 
@@ -104,6 +106,8 @@ class World:
             name = path.rsplit("/", 1)[1]
             if name not in self.snapshots:
                 return 404, {}
+            if method == "GET" and self.snapshot_read_status != 200:
+                return self.snapshot_read_status, {"message": "forbidden"}
             if method == "DELETE":
                 self.snapshots[name]["status"]["markRemoved"] = True
             return 200, self.snapshots[name]
@@ -312,3 +316,80 @@ def test_the_script_answers_help_and_exits_zero(capsys):
         flux_snapshot.main(["--help"])
     assert exit_.value.code == 0
     assert "Snapshot a flux-owned role's claims" in capsys.readouterr().out
+
+
+def test_a_refused_snapshot_read_fails_at_once_naming_the_status(world):
+    world.claim("sonarr-config")
+    world.snapshot_read_status = 403
+    with pytest.raises(
+        Failed, match=f"Snapshot {_name('sonarr-config')} answered HTTP 403"
+    ):
+        _run(world, "sonarr-config")
+    assert world.methods("DELETE") == []
+
+
+# -- the rendered RBAC covers every call the script makes -----------------------------------
+
+_VERBS = {"POST": "create", "DELETE": "delete"}
+
+
+def _request(method: str, path: str) -> tuple[str, str, str | None, str, str | None]:
+    """A call as (verb, apiGroup, namespace, resource, name), the terms RBAC grants in."""
+    parts = path.strip("/").split("/")
+    group, rest = ("", parts[2:]) if parts[0] == "api" else (parts[1], parts[3:])
+    namespace = None
+    if rest[0] == "namespaces":
+        namespace, rest = rest[1], rest[2:]
+    resource, name = rest[0], rest[1] if len(rest) > 1 else None
+    verb = _VERBS.get(method) or ("get" if name else "list")
+    return verb, group, namespace, resource, name
+
+
+def _uncovered(calls, docs) -> set[tuple]:
+    """The calls in `calls` that no Role or ClusterRole in `docs` grants."""
+    roles = [d for d in docs if d["kind"] in ("Role", "ClusterRole")]
+    missing = set()
+    for method, path in calls:
+        verb, group, namespace, resource, name = _request(method, path)
+        if not any(
+            (
+                role["kind"] == "ClusterRole"
+                or role["metadata"]["namespace"] == namespace
+            )
+            and group in rule["apiGroups"]
+            and resource in rule["resources"]
+            and verb in rule["verbs"]
+            and ("resourceNames" not in rule or name in rule["resourceNames"])
+            for role in roles
+            for rule in role["rules"]
+        ):
+            missing.add((verb, group, namespace, resource, name))
+    return missing
+
+
+def _every_call(world: World) -> list[tuple[str, str]]:
+    """A run that makes every kind of call the script has: read, cap list, create, prune."""
+    world.inventory("sonarr-config")
+    world.claim("sonarr-config")
+    world.caps["pvc-sonarr-config"] = str(10**12)
+    _old(world, "sonarr-config", "2026-10-01", "2026-10-02", "2026-10-03")
+    _run(world, "sonarr-config")
+    assert {m for m, _ in world.calls} == {"GET", "POST", "DELETE"}
+    return world.calls
+
+
+def test_the_rendered_rbac_grants_every_call_the_script_makes(world):
+    calls = _every_call(world)
+    assert _uncovered(calls, rbac(TAG, {"sonarr-config": "media"})) == set()
+
+
+def test_rbac_without_the_snapshot_get_leaves_the_readiness_read_uncovered(world):
+    calls = _every_call(world)
+    docs = rbac(TAG, {"sonarr-config": "media"})
+    for role in docs:
+        for rule in role.get("rules") or []:
+            if rule["resources"] == ["snapshots"]:
+                rule["verbs"].remove("get")
+    assert _uncovered(calls, docs) == {
+        ("get", "longhorn.io", "longhorn-system", "snapshots", _name("sonarr-config"))
+    }

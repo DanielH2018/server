@@ -254,7 +254,9 @@ def wait_ready(kube: Kube, name: str, volume: str, cfg: Config, sleep, clock) ->
     deadline = clock() + cfg.timeout
     while True:
         status, body = kube.call("GET", f"{LONGHORN}/snapshots/{name}")
-        state = body.get("status") or {} if status == 200 else {}
+        # A refused or vanished read is no readiness answer, so it fails at once, naming the
+        # status, rather than polling out to a timeout that blames Longhorn.
+        state = _ok(status, body, f"Snapshot {name}").get("status") or {}
         if state.get("readyToUse") is True:
             return
         if clock() >= deadline:
