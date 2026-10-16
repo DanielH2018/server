@@ -323,3 +323,24 @@ def test_land_sh_ends_its_landing_before_the_lander_script_kills_it() -> None:
         if e.startswith("LAND_DEADLINE=")
     ]
     assert deadlines and 0 < int(deadlines[-1]) <= int(timeout)
+
+
+# What the unit spends before land.sh starts its clock: `uv run` startup, the denylist read and
+# `gh pr view`, plus the script writing its verdict after land.sh returns.
+SCRIPT_OVERHEAD_S = 60
+
+
+def test_the_lock_wait_and_the_landing_both_fit_inside_the_units_timeout() -> None:
+    """systemd counts the flock wait against TimeoutStartSec; LAND_DEADLINE does not (#5203)."""
+    unit = render(LANDER)
+    timeout = _seconds(directive(unit, "TimeoutStartSec")[-1])
+    (flock_wait,) = re.findall(r"flock -w (\d+) ", directive(unit, "ExecStart")[0])
+    (deadline,) = [
+        e.split("=", 1)[1]
+        for e in directive(unit, "Environment")
+        if e.startswith("LAND_DEADLINE=")
+    ]
+    script = (ROLE / "files" / "land_renovate_pr.py").read_text()
+    (land_timeout,) = re.findall(r"^LAND_TIMEOUT_S = (\d+)$", script, re.MULTILINE)
+    landing = max(int(deadline), int(land_timeout))
+    assert int(flock_wait) + landing + SCRIPT_OVERHEAD_S <= timeout

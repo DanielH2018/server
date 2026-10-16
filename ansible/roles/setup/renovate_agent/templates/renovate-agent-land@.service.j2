@@ -19,17 +19,22 @@ Environment=RENOVATE_AGENT_REPO_DIR={{ renovate_agent_repo_dir }}
 # land.sh's own author check, behind the lander's: --arm-merge refuses any other author.
 Environment=LAND_REQUIRE_AUTHOR=app/renovate
 # land_renovate_pr.py's LAND_TIMEOUT_S, so land.sh ends a long promotion wait `deferred`
-# before the script kills it with no verdict (#5199).
+# before the script kills it with no verdict (#5199). Both count from land.sh's start, after the
+# flock wait below has already spent part of TimeoutStartSec (#5203).
 Environment=LAND_DEADLINE=3300
 # /var/lib/renovate-agent-land/<n>.verdict is the one thing the session reads back, so the
 # directory is world-readable and only this unit writes it.
 StateDirectory=renovate-agent-land
 StateDirectoryMode=0755
 SyslogLevel=notice
-# Above land_renovate_pr.py's LAND_TIMEOUT_S, so the script reports a slow landing itself
-# rather than systemd killing it inside an Ansible run.
+# Room for the flock wait below, the script's own checks and LAND_TIMEOUT_S, so the script
+# reports a slow landing itself rather than systemd killing it inside an Ansible run. systemd
+# counts the lock wait too: a landing queued 40 minutes behind another would otherwise be
+# killed 20 minutes in, with no verdict line (#5203).
 TimeoutStartSec=60min
-# One landing at a time: two would race for the same tick and the same service locks.
-ExecStart=/usr/bin/flock -w 3600 /var/lock/renovate-agent-land.lock \
+# One landing at a time: two would race for the same tick and the same service locks. The wait
+# is short because the session lands one PR at a time and blocks on each, so only a hand-started
+# unit queues here, and a longer wait would come out of the landing's share of TimeoutStartSec.
+ExecStart=/usr/bin/flock -w 180 /var/lock/renovate-agent-land.lock \
   /usr/local/bin/uv run --no-project --no-python-downloads --python {{ host_python_version }} \
   /opt/renovate-agent/land_renovate_pr.py %i
