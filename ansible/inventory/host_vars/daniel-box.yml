@@ -498,6 +498,10 @@ containers_list:
   # UPS web UI. Reads upsd over the in-cluster `nut` Service.
   - name: peanut
     platform: k8s
+    # Flux applies peanut through `promote`, and substitutes its Secret from
+    # homelab-cluster-vars (D3.6). The handback is two PRs, `owner: released` then removing
+    # `owner`: docs/flux-deploy-plane.md.
+    owner: flux
     hostname: "peanut"
     port: 8080
     use_authelia: true

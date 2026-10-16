@@ -51,6 +51,7 @@ from lib import yaml_fast
 from lib.k8s_roles import resolved_manifest_files
 from lib.render_context import render_context
 from _helpers import K8S_ROLES, render_expr
+from _helpers import command_of, walk_tasks
 from _k8s_render import rendered_texts
 from _role_census import manifests_service_of, role_task_files
 
@@ -123,9 +124,15 @@ def _restarts_privately(role_dir: Path) -> bool:
     private loop, and pihole rolls its two instances one at a time from an included
     `roll_one.yml`. Searching the whole `tasks/` tree rather than `main.yml` is the point —
     pihole's restart lives in the include, so a main.yml-only check would call it broken.
+
+    Only a task's `command`/`shell` counts. A comment, a task name or a debug message saying
+    "rollout restart" restarts nothing, and authelia's header comment exempted it this way
+    until #5097 (#5101).
     """
     return any(
-        "rollout restart" in path.read_text() for path in role_task_files(role_dir)
+        "rollout restart" in command_of(task)
+        for path in role_task_files(role_dir)
+        for task in walk_tasks(yaml_fast.safe_load(path.read_text()))
     )
 
 
@@ -400,6 +407,46 @@ def test_a_role_restarting_its_workloads_privately_is_clean(tmp_path):
         templates={"daemonset.yaml.j2": _DAEMONSET.format(name="widget")},
     )
     assert uncovered_env_secret_workloads(role) == []
+
+
+def test_a_role_saying_rollout_restart_only_in_a_comment_is_still_flagged(tmp_path):
+    """A comment is not a restart: authelia was exempt this way until #5097 (#5101)."""
+    role = _write_role(
+        tmp_path,
+        "widget",
+        tasks="# A deploy here must not trigger a rollout restart that changes nothing.\n"
+        + _TASKS.format(name="widget", extras=""),
+        templates={"daemonset.yaml.j2": _DAEMONSET.format(name="widget")},
+    )
+    assert uncovered_env_secret_workloads(role) == [("widget", "widget-agent")]
+
+
+def test_a_role_naming_rollout_restart_outside_a_command_is_still_flagged(tmp_path):
+    """Only a task's command counts: a task name or a debug message restarts nothing."""
+    role = _write_role(
+        tmp_path,
+        "widget",
+        tasks=_TASKS.format(name="widget", extras="")
+        + "\n- name: Skip the rollout restart\n"
+        "  ansible.builtin.debug:\n"
+        "    msg: no rollout restart is needed here\n",
+        templates={"daemonset.yaml.j2": _DAEMONSET.format(name="widget")},
+    )
+    assert uncovered_env_secret_workloads(role) == [("widget", "widget-agent")]
+
+
+def test_the_roles_that_restart_privately_still_read_as_exempt():
+    """The named members of the exemption: both live private restarts are found in a command.
+
+    observability runs its restart from a folded `cmd: >-` and pihole from an included
+    `roll_one.yml`, so a command parse that missed either shape would flag them both.
+    """
+    exempt = {
+        role
+        for role in ("observability", "pihole")
+        if _restarts_privately(K8S_ROLES / role)
+    }
+    assert exempt == {"observability", "pihole"}, exempt
 
 
 def test_the_extra_rollouts_restart_is_not_gated_on_manifests_rollout():

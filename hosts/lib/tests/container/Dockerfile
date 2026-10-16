@@ -48,8 +48,8 @@ RUN --mount=type=bind,from=runner-ca,source=ca-certificates.crt,target=/run/runn
     apt-get install -y --no-install-recommends --download-only tree
 
 # Units that would take dpkg's lock mid-case, or reach the runner's devices through
-# --privileged, never start. The updater's own timer is left alone: no fixture ships its
-# enable link, and the H3.6 case asserts it stays inactive.
+# --privileged, never start. The updater's own timer is left alone: neither the fixture nor the
+# real Pi package ships its enable link, and the by-hand case asserts it stays inactive.
 RUN systemctl mask \
         apt-daily.timer apt-daily-upgrade.timer dpkg-db-backup.timer e2scrub_all.timer \
         fstrim.timer motd-news.timer \

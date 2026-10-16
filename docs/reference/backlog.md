@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/backlog.py
-generated_at: 2026-10-15 18:17 UTC
-generated_sha: 2e472a3c8
+generated_at: 2026-10-16 06:17 UTC
+generated_sha: 013e72b76
 ---
 
 !!! warning "Generated file — do not edit"
@@ -24,11 +24,12 @@ Findings Claude confirmed and did not fix in the session that found them, filed 
 | [#4808](https://github.com/DanielH2018/server/issues/4808) | medium | gap | backup-observability | Flux's measured series push M1's 7-day head-series average over the 140,000 budget | 2026-10-13 | 0 | - | ✓ |
 | [#4824](https://github.com/DanielH2018/server/issues/4824) | medium | gap | backup-observability | Target architecture M5: read the log-rule shadow soak on day 7 before PR 4a | 2026-10-13 | 0 | - | ✓ |
 | [#4839](https://github.com/DanielH2018/server/issues/4839) | medium | gap | backup-observability | Target architecture M4: read the ingress-probe shadow soak on day 3 and after the Sunday before PR 4 | 2026-10-13 | 0 | - | ✓ |
-| [#4884](https://github.com/DanielH2018/server/issues/4884) | medium | gap | cicd | Flux drops template quotes on substitution, so R2's 0123 round-trip pass flags every standalone key and mullvad_account breaks qbittorrent's Secret | 2026-10-13 | 0 | - | ✓ |
 | [#4940](https://github.com/DanielH2018/server/issues/4940) | medium | addition | backup-observability | Target architecture M3: read the host-checks shadow soak on day 7 before PR 4 | 2026-10-13 | 0 | - | ✓ |
-| [#5122](https://github.com/DanielH2018/server/issues/5122) | medium | gap | cicd | Guard-row discharge loses its render base once the producer overwrites the render record | 2026-10-15 | 0 | - | ✓ |
 | [#5124](https://github.com/DanielH2018/server/issues/5124) | medium | gap | backup-observability | Alert when a k3s node's wired link loses carrier and it runs on WiFi | 2026-10-15 | 0 | - | ✓ |
 | [#5125](https://github.com/DanielH2018/server/issues/5125) | medium | gap | backup-observability | The Memory tile stays DOWN for days on the retired-uid arm, masking real memory pages | 2026-10-15 | 0 | - | - |
+| [#5186](https://github.com/DanielH2018/server/issues/5186) | medium | addition | cicd | D4.4: the cross-plane gate refuses a change that spans both deploy planes | 2026-10-16 | 0 | worktree-churn-plan-orchestrator-wave4 | ✓ |
+| [#5204](https://github.com/DanielH2018/server/issues/5204) | medium | addition | cicd | H3.6: the Pi package, empty, plus bring-up | 2026-10-16 | 0 | worktree-churn-plan-orchestrator-wave4 | ✓ |
+| [#5206](https://github.com/DanielH2018/server/issues/5206) | medium | gap | - | Record the Pi updater's four measured memory peaks in pi-host-tuning-record.md | 2026-10-16 | 0 | - | ✓ |
 | [#2124](https://github.com/DanielH2018/server/issues/2124) | low | gap | security | CrowdSec agent drops Traefik access-log lines with UnmarshalJSON errors | 2026-09-19 | 0 | - | ✓ |
 | [#3778](https://github.com/DanielH2018/server/issues/3778) | low | improvement | cicd | Switch the CI setup action's callers to the self-repository uses syntax once actionlint accepts it | 2026-10-09 | 0 | - | ✓ |
 | [#3865](https://github.com/DanielH2018/server/issues/3865) | low | gap | cicd | Red/green batches: a process the red author starts outside the pipeline's process tree survives the reap | 2026-10-09 | 0 | - | ✓ |
@@ -42,7 +43,7 @@ Findings Claude confirmed and did not fix in the session that found them, filed 
 | [#4750](https://github.com/DanielH2018/server/issues/4750) | low | improvement | backup-observability | Target architecture M1 Open question 9: read Prometheus retention over the week after PR 1 | 2026-10-12 | 0 | - | ✓ |
 | [#4756](https://github.com/DanielH2018/server/issues/4756) | low | improvement | backup-observability | M1's series budget counts head series, but the retention cap's bytes follow samples a second | 2026-10-12 | 0 | - | ✓ |
 | [#4840](https://github.com/DanielH2018/server/issues/4840) | low | gap | cicd | A build-context edit outside a k8s role writes no k8s_unapplied line, and the release census names the wrong cause | 2026-10-13 | 0 | - | ✓ |
-| [#4875](https://github.com/DanielH2018/server/issues/4875) | low | gap | cicd | A red-phase test with a false premise strands a correct fix at the green gate | 2026-10-13 | 0 | - | ✓ |
+| [#4875](https://github.com/DanielH2018/server/issues/4875) | low | gap | cicd | A red-phase test with a false premise strands a correct fix at the green gate | 2026-10-13 | 1 | - | ✓ |
 | [#4907](https://github.com/DanielH2018/server/issues/4907) | low | gap | cicd | Retiring a fan-out run's last batch deletes its manifest, so a live cc-wait fanout watch on that run fails | 2026-10-13 | 0 | - | ✓ |
 | [#4979](https://github.com/DanielH2018/server/issues/4979) | low | gap | security | rkhunter flags the new worktree-holders group on both hosts, so both scan monitors read DOWN | 2026-10-14 | 0 | - | ✓ |
 | [#4993](https://github.com/DanielH2018/server/issues/4993) | low | improvement | docs | pi-sd-health.sh.j2 comment calls domain SOPS-loaded and names a daniel-pi.com override that does not exist | 2026-10-14 | 0 | - | ✓ |
@@ -50,12 +51,16 @@ Findings Claude confirmed and did not fix in the session that found them, filed 
 | [#5045](https://github.com/DanielH2018/server/issues/5045) | low | improvement | docs | install_host_lib.yml's header undercounts its callers after homelab_builder joined | 2026-10-15 | 0 | - | ✓ |
 | [#5065](https://github.com/DanielH2018/server/issues/5065) | low | gap | cicd | CodeQL alert #59 flags homelab_render's stub-key-name print as clear-text secret logging | 2026-10-15 | 0 | - | ✓ |
 | [#5077](https://github.com/DanielH2018/server/issues/5077) | low | gap | cicd | Fan-out briefs name only nearby tests, so PRs go red on repo-wide guards | 2026-10-15 | 0 | - | ✓ |
-| [#5101](https://github.com/DanielH2018/server/issues/5101) | low | gap | cicd | The env-secret restart guard exempts a role whose comment says rollout restart | 2026-10-15 | 0 | - | ✓ |
 | [#5103](https://github.com/DanielH2018/server/issues/5103) | low | improvement | docs | Authelia's hashing-block comment still names the deleted mint tasks in tasks/main.yml | 2026-10-15 | 0 | - | ✓ |
-| [#5107](https://github.com/DanielH2018/server/issues/5107) | low | gap | cicd | order_only's state comparison misses post-copy objects, __slots__ state and changes five levels down | 2026-10-15 | 0 | - | ✓ |
-| [#5118](https://github.com/DanielH2018/server/issues/5118) | low | gap | cicd | The render proof did not discharge a manifests line whose change moved no caller's digest | 2026-10-15 | 0 | - | ✓ |
 | [#5127](https://github.com/DanielH2018/server/issues/5127) | low | gap | docs | Three records claim daniel-box Claude sessions run as claude while they run as ubuntu | 2026-10-15 | 0 | - | - |
-| [#5128](https://github.com/DanielH2018/server/issues/5128) | low | addition | security | D3.2a: add cluster_vars.py with its write and check modes and guards, inert | 2026-10-15 | 0 | worktree-churn-plan-orchestrator-wave4 | ✓ |
+| [#5132](https://github.com/DanielH2018/server/issues/5132) | low | improvement | cicd | Renovate leaves CI's sops pin behind the sops_setup pin on a bump | 2026-10-15 | 0 | - | ✓ |
+| [#5147](https://github.com/DanielH2018/server/issues/5147) | low | gap | cicd | Container case: an expired Valid-Until fails the updater's fetch without advancing last_success | 2026-10-15 | 0 | - | ✓ |
+| [#5162](https://github.com/DanielH2018/server/issues/5162) | low | gap | cicd | Renamed k8s services left render records with no release record on daniel-box | 2026-10-15 | 0 | - | ✓ |
+| [#5173](https://github.com/DanielH2018/server/issues/5173) | low | gap | cicd | Renovate reads none of the kind pins in CI's sops-manifest-type-proof job | 2026-10-16 | 0 | - | ✓ |
+| [#5201](https://github.com/DanielH2018/server/issues/5201) | low | gap | cicd | order_only still misses C-object, process and unaudited-module state outside its fixed tables | 2026-10-16 | 0 | worktree-churn-plan-orchestrator-wave4 | ✓ |
+| [#5205](https://github.com/DanielH2018/server/issues/5205) | low | gap | cicd | renovate-agent-land@ leaves a stale verdict file when the unit fails before the lander takes its lock | 2026-10-16 | 0 | - | ✓ |
+| [#5209](https://github.com/DanielH2018/server/issues/5209) | low | gap | cicd | order_only still misses C, process and object-reference state the runner's tables and its C-module list leave out | 2026-10-16 | 0 | - | ✓ |
+| [#5213](https://github.com/DanielH2018/server/issues/5213) | low | improvement | cicd | Cross-plane gate refuses a renderer-only PR whose Ansible half applies nothing | 2026-10-16 | 0 | - | ✓ |
 
 ## Settled findings — do not re-flag
 

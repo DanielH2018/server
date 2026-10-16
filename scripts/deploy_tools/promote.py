@@ -131,7 +131,8 @@ REVERT_RULE = False
 FIRST_RUN_WALK_MAX = 50
 
 # `flux push artifact --revision master@sha1:<sha>` writes this annotation on the manifest.
-REVISION_ANNOTATION = "org.opencontainers.image.revision"
+# `land-wait` reads it off `prod` too, so the name lives in `wait`.
+REVISION_ANNOTATION = wait.REVISION_ANNOTATION
 _REVISION = re.compile(r"master@sha1:([0-9a-f]{40})")
 
 

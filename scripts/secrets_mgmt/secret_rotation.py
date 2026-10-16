@@ -297,17 +297,16 @@ CLUSTER_PATHS = [
 ]
 
 
-def sync_cluster_files(rotated: list[str], tools: RotationTools) -> bool:
-    """Rewrite the cluster files for the rotated keys a cluster render reads; True on success.
+def sync_cluster_files(rotated: list[str], tools: RotationTools) -> list[str] | None:
+    """Rewrite the cluster files for the rotated keys a cluster render reads; None on failure.
 
-    A no-op while the cluster file is absent, which is the tree before D3.2c, and when no
-    rotated key is cluster-referenced. Otherwise it runs `cluster_vars.py write` and then
-    `check --no-render --base HEAD`, both in process, and returns False when either fails or
-    the render raises.
+    Returns the keys it rewrote the files for, [] for a no-op: the cluster file is absent (the
+    tree before D3.2c) or no rotated key is cluster-referenced. Otherwise it runs `write` and
+    then `check --no-render --base HEAD`, both in process, and fails when either does.
     """
     tree = tools.cluster_tree()
     if not rotated or not tree.cluster_file.is_file():
-        return True
+        return []
     # DECIDED: the render decides which rotated keys the cluster reads, not `.source`, so a
     # key a template newly references is written too. The cost: once the cluster file exists,
     # a broken k8s template render stops every rotation, host-only keys included, and it
@@ -317,16 +316,16 @@ def sync_cluster_files(rotated: list[str], tools: RotationTools) -> bool:
         expected = tools.cluster_expected()
     except Exception as exc:
         error("cluster render failed (%s): %s" % (type(exc).__name__, exc))
-        return False
+        return None
     # `expected.keys` leaves out the keys the SOPS manifests carry, so both sets count.
     referenced = expected.keys.union(*(entry.keys for entry in expected.manifests))
     hit = sorted(set(rotated) & referenced)
     if not hit:
-        return True
+        return []
     print("  cluster files: rewriting for %s" % ", ".join(hit))
     if tools.cluster_write(tree, expected) != 0:
-        return False
-    return tools.cluster_check(tree) == 0
+        return None
+    return hit if tools.cluster_check(tree) == 0 else None
 
 
 def cmd_rotate(args, tools: RotationTools) -> int:
@@ -436,7 +435,8 @@ def cmd_rotate(args, tools: RotationTools) -> int:
     # Before the deploy, so a failure here leaves no rotated value live. The cron commits with
     # --no-verify, which skips the `cluster-vars-ciphertext` hook, so the `check` this runs is
     # that path's only guard on the cluster files.
-    if not sync_cluster_files(written, tools):
+    synced = sync_cluster_files(written, tools)
+    if synced is None:
         error(
             "CLUSTER FILES NOT UPDATED for %s. Consumers were NOT deployed — revert the "
             "working tree (`git checkout -- %s`) or finish by hand."
@@ -471,7 +471,10 @@ def cmd_rotate(args, tools: RotationTools) -> int:
             if tags
             else ""
         )
-        print("\nNext: commit secrets.yml and secret_rotation.yml" + redeploy)
+        # Once `write` rewrote them, CI's `cluster_vars.py check` fails a commit without them.
+        files = ["secrets.yml", "secret_rotation.yml"] + (synced and CLUSTER_PATHS)
+        files = ", ".join(files[:-1]) + " and " + files[-1]
+        print("\nNext: commit " + files + redeploy)
     return 0
 
 

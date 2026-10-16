@@ -1,6 +1,7 @@
-# The container cases' homelab-daniel-pi, version N. H3.6 ships the real package; until then
-# scripts/validate/host_package_cases.py renders this spec, and the three beside it, as
-# hosts/daniel-pi/package.yml in a scratch tree with the real reconcile component.
+# The container cases' homelab-daniel-pi, version N. The cases need a unit, a file and a payload
+# the real package does not ship, so scripts/validate/host_package_cases.py renders this spec, and
+# the two beside it, as hosts/daniel-pi/package.yml in a scratch tree with the real reconcile
+# component. Only the by-hand case installs the real package.
 description: Fixture host package for the host_packages container cases
 components: [reconcile]
 maintainer_scripts: [preinst, postinst, prerm]

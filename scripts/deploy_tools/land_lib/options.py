@@ -31,6 +31,10 @@ APPROVAL_PATHS_ENV = "LAND_APPROVAL_PATHS"
 APPROVER_ENV = "LAND_APPROVER"
 # A user that cannot land a PR itself hands it to this lander unit (`handoff.py`).
 HANDOFF_ENV = "LAND_HANDOFF_UNIT"
+# Seconds after land.sh starts by which the landing must print its verdict. A lander whose
+# caller kills it at a fixed time sets it, so a long promotion wait ends `deferred` rather than
+# in a kill that writes no verdict (#5199).
+DEADLINE_ENV = "LAND_DEADLINE"
 # Named as a set so the deploy-tools tests can clear all of them: the renovate agent's unit
 # exports LAND_REQUIRE_AUTHOR, and a test that inherited it exercised a refusal rather than the
 # landing it was written for.
@@ -42,6 +46,7 @@ ENV_KNOBS = (
     APPROVAL_PATHS_ENV,
     APPROVER_ENV,
     HANDOFF_ENV,
+    DEADLINE_ENV,
 )
 
 
@@ -88,6 +93,8 @@ class Options:
     approval_paths: str = ""
     # The login whose approval of the head lifts the approval-path refusal; "" never does.
     approver: str = ""
+    # `LAND_DEADLINE`, in seconds after the landing starts, or 0 for none.
+    deadline: int = 0
     # Where to write PENDING, then the landing's one-line result, for a unit to hand on.
     verdict_file: str = ""
     # Sized for a PR run plus queueing behind other PRs' runs; a PR still open after this is
@@ -192,6 +199,7 @@ def parse_args(argv: list[str] | None, description: str) -> Options:
         require_branch_prefix=os.environ.get(REQUIRE_BRANCH_PREFIX_ENV) or "",
         approval_paths=os.environ.get(APPROVAL_PATHS_ENV) or "",
         approver=os.environ.get(APPROVER_ENV) or "",
+        deadline=int(os.environ.get(DEADLINE_ENV) or 0),
         verdict_file=ns.verdict_file,
         merge_poll=_merge_poll_from_env(),
         primary=_primary_from_env(),

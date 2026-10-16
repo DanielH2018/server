@@ -31,14 +31,21 @@ the ordinary deferral that clears on its own.
 """
 
 import subprocess
+from typing import NoReturn
 
 import sys as _sys
 from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
 from deploy_tools.land_lib.land_tags import changes_cluster_vars
-from deploy_tools.land_lib.landing import Landing
-from deploy_tools.land_lib.outcome import PROMOTE_TIMEOUT_NOTE, Cause, Verdict, say
+from deploy_tools.land_lib.landing import Landing, TickState
+from deploy_tools.land_lib.outcome import (
+    PROMOTE_TIMEOUT_NOTE,
+    Cause,
+    Verdict,
+    remaining_hosts_note,
+    say,
+)
 from lib.exit_codes import DEPLOY_BROAD, DEPLOY_OK
 from lib.repo_paths import GITOPS_DEPLOY_FILES
 from renderer.renderer_lib.bundle import CLUSTER_VARS
@@ -108,10 +115,11 @@ def owned_by_narrowing(ln: Landing) -> None:
     does. No PR range, no deploy-plane path, or any other failure adds nothing, which is the
     landing as it was before #5146.
 
-    An unreadable ownership map ends the landing as `needs-manual-apply`, not through
+    An unreadable ownership map ends the landing in `_owners_unread`, not through
     `owners_at_merge`'s refusal. When the tick is the apply, step 4 has already applied this
     deploy-plane change, so "nothing was deployed" would be false. What is unknown is only
-    whether a promotion owes any of the narrowed tags, and the verdict line says so.
+    whether a promotion owes any of the narrowed tags, and the verdict line says so, beside
+    the tick's own state.
     """
     cl = ln.classification
     if not any(p.startswith(_BROAD_DEPLOY_PREFIXES) for p in cl.pr_paths):
@@ -133,17 +141,7 @@ def owned_by_narrowing(ln: Landing) -> None:
     try:
         owners = ln.tools.flux.owners_at(ln.opts.primary, ln.merge_sha)
     except OWNER_READ_ERRORS as exc:
-        print(f"  could not read which tags Flux applies at {ln.merge_sha[:12]}: {exc}")
-        print(
-            "  once it reads, wait on the promotion by hand: uv run python "
-            f"scripts/deploy_tools/promote.py land-wait {ln.merge_sha}"
-        )
-        ln.finish(
-            Verdict.NEEDS_MANUAL_APPLY,
-            1,
-            f"PR #{ln.opts.pr}, {ln.merge_sha} — the tick may already have applied this "
-            f"change; whether a promotion owes {','.join(narrowed)} is unknown",
-        )
+        _owners_unread(ln, narrowed, exc)
     found = {
         tag: owners[tag]
         for tag in narrowed
@@ -157,9 +155,74 @@ def owned_by_narrowing(ln: Landing) -> None:
         )
 
 
+def _owners_unread(ln: Landing, narrowed: list[str], exc: Exception) -> NoReturn:
+    """End a deploy-plane landing whose ownership map cannot be read at the merge commit.
+
+    This arm ends the landing inside step 5, before `deploy.no_tag_outcome` and step 6 read
+    the deployer's state, so it reports that state itself (#5160). A plane only a hand can
+    apply keeps `needs-manual-apply`, with the tick's half printed beside it, as in
+    `no_tag_outcome`. Without one, a held tick means this PR's own apply failed, which is
+    `deploy-failed` with cause `tick-held` whatever a promotion owes. Every other tick state
+    is printed beside `needs-manual-apply`.
+    """
+    pr, sha, tags = ln.opts.pr, ln.merge_sha, ",".join(narrowed)
+    print(f"  could not read which tags Flux applies at {sha[:12]}: {exc}")
+    print(
+        "  once it reads, wait on the promotion by hand: uv run python "
+        f"scripts/deploy_tools/promote.py land-wait {sha}"
+    )
+    if ln.plane:
+        print(f"  it needs applying by hand: {ln.plane}")
+    if ln.classification.remaining_setup:
+        print(remaining_hosts_note(ln.classification.remaining_setup))
+    for line in ln.tick_half_open_lines():
+        print(line)
+    if (
+        not ln.plane
+        and ln.classification.self_applied
+        and ln.tick_state() == TickState.HELD
+    ):
+        ln.ledger.cause = Cause.TICK_HELD
+        ln.finish(
+            Verdict.DEPLOY_FAILED,
+            1,
+            f"PR #{pr}, {sha} — the tick's own apply failed and is held; whether a "
+            f"promotion also owes {tags} is unknown",
+        )
+    ln.finish(
+        Verdict.NEEDS_MANUAL_APPLY,
+        1,
+        f"PR #{pr}, {sha} — the tick may already have applied this change; whether a "
+        f"promotion owes {tags} is unknown",
+    )
+
+
 def waits_on_cluster_vars(ln: Landing) -> bool:
     """Whether the PR changes a cluster file (`land_tags.CLUSTER_VARS_PATHS`)."""
     return changes_cluster_vars(ln.classification.pr_paths)
+
+
+def forced_names(ln: Landing) -> list[str]:
+    """The names land-wait waits on whatever the digests say: `cluster-vars`, or none.
+
+    The ledger's `tags=` names them beside the deploy tags, so a landing that changed only a
+    cluster file still shows what it waited on (#5175). No reader of that field treats a
+    value as a deploy tag: the Landings board only prints it.
+    """
+    return [CLUSTER_VARS] if waits_on_cluster_vars(ln) else []
+
+
+# What a landing keeps back from `LAND_DEADLINE` after the promotion wait: the health gate and
+# the verdict and ledger lines written after it.
+DEADLINE_RESERVE_S = 600
+
+
+def wait_cap(ln: Landing) -> float | None:
+    """The seconds the promotion wait may take before `LAND_DEADLINE`, or None with none set."""
+    if not ln.opts.deadline:
+        return None
+    spent = ln.tools.clock() - ln.ledger.t_start
+    return max(0.0, ln.opts.deadline - spent - DEADLINE_RESERVE_S)
 
 
 def wait_on_promotion(ln: Landing) -> None:
@@ -170,10 +233,13 @@ def wait_on_promotion(ln: Landing) -> None:
     deploy tag, so it stays out of `owned_tags` and the health gate never asks for it.
     """
     pr, sha = ln.opts.pr, ln.merge_sha
-    also = frozenset({CLUSTER_VARS}) if waits_on_cluster_vars(ln) else frozenset()
-    tags = ",".join([*ln.owned_tags, *sorted(also)])
+    forced = forced_names(ln)
+    also = frozenset(forced)
+    tags = ",".join([*ln.owned_tags, *forced])
     say(f"waiting until a promotion covers {sha[:12]} ({tags})")
-    result = ln.tools.flux.land_wait(sha, published(ln), ln.opts.primary, also)
+    result = ln.tools.flux.land_wait(
+        sha, published(ln), ln.opts.primary, also, wait_cap(ln)
+    )
     if result.widened:
         say(f"land-wait waited on every Kustomization: {result.widened}")
     if result.verdict == "settled":
