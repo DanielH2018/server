@@ -107,7 +107,8 @@ uv run python scripts/diagnostics/probe.py health <service>
 That gates the rollout and a 180-second restart window — see
 [ADR-0012](adr/0012-zero-downtime-deploys-gate-on-rollout-and-restarts.md). It exits 0 only
 when the workload is fully rolled out and nothing has restarted recently, and it fails closed
-on an unreadable restart time.
+on an unreadable restart time. On a k8s tag it then reads the tag's firing alerts and
+ingress probes (`docs/claude-tooling.md` has the selector).
 
 **It cannot see whether your change took effect.** Two standing examples:
 

@@ -92,6 +92,39 @@ def test_a_promotion_timeout_is_deferred_with_promote_timeout(land_run):
     assert PROMOTE_TIMEOUT_NOTE in out
 
 
+def test_a_suspended_tag_is_nothing_to_deploy_without_a_gate(land_run):
+    suspended = WaitResult("suspended", "promote-suspended", "bento-pdf is suspended")
+    rc, out, _, calls, _ = land_run([], _fakes(land_wait=[suspended]))
+    assert rc == 0 and "VERDICT: nothing-to-deploy" in out
+    assert "bento-pdf is suspended" in out
+    assert "gate" not in _names(calls)
+
+
+def test_a_suspended_tag_beside_an_ansible_owned_one_still_gates_that_one(land_run):
+    suspended = WaitResult(
+        "suspended",
+        "promote-suspended",
+        "bento-pdf is suspended",
+        suspended=("bento-pdf",),
+    )
+    fakes = _fakes(derived=(["sonarr", "bento-pdf"], "pr"), land_wait=[suspended])
+    rc, out, _, calls, _ = land_run([], fakes)
+    assert rc == 0 and "VERDICT: settled" in out
+    assert [c[1] for c in calls if c[0] == "gate"] == [(["sonarr"],)]
+
+
+def test_a_settled_wait_that_names_a_suspended_tag_gates_the_rest(land_run):
+    settled = WaitResult("settled", detail="3 applied", suspended=("bento-pdf",))
+    fakes = _fakes(
+        derived=(["bento-pdf", "texbrain"], "pr"),
+        owners={MERGE_SHA: {"bento-pdf": "flux", "texbrain": "flux"}},
+        land_wait=[settled],
+    )
+    rc, out, _, calls, _ = land_run([], fakes)
+    assert rc == 0 and "VERDICT: settled" in out
+    assert [c[1] for c in calls if c[0] == "gate"] == [(["texbrain"],)]
+
+
 def test_an_unreadable_ownership_map_deploys_nothing(land_run):
     fakes = _fakes(owners={MERGE_SHA: ValueError("owner 'flx' is not one of ...")})
     rc, out, _, calls, _ = land_run([], fakes)

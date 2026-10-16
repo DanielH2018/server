@@ -16,7 +16,11 @@ Run: uv run pytest scripts/diagnostics/tests/test_probe_health_cluster.py
 from lib.exit_codes import PROBE_UNREADABLE
 from lib.kubectl import cluster_refusal
 
-from diagnostics.probe_lib import health
+from diagnostics.probe_lib import health, health_alerts
+
+# A Prometheus with no series at all, so these cases read the rollout verdict alone and
+# never reach the network. The alert plane's own cases are in test_probe_health_alerts.py.
+_QUIET = health_alerts.PromTools(query=lambda promql: [], sleep=lambda s: None)
 
 
 def test_run_health_refuses_before_it_gates_anything(capsys):
@@ -40,7 +44,10 @@ def test_run_health_still_gates_when_the_cluster_matches(capsys):
     That dependency is real: if a Deployment ever lands in the media-volume role, this test
     starts reaching for a cluster CI does not have. Pick another workload-free role then.
     """
-    assert health.run_health("media-volume", cluster="prod", served="prod") == 0
+    assert (
+        health.run_health("media-volume", cluster="prod", served="prod", prom=_QUIET)
+        == 0
+    )
     assert "no rollout-checkable workload" in capsys.readouterr().out
 
 
@@ -50,7 +57,10 @@ def test_a_role_with_no_workload_passes_the_gate(capsys):
     Exit 1 here made `probe.py health netpol-baseline` unpassable on a healthy deploy. The
     message keeps the marker, so the deploy notifier still reports the tag as `skipped`.
     """
-    assert health.run_health("netpol-baseline", cluster="prod", served="prod") == 0
+    assert (
+        health.run_health("netpol-baseline", cluster="prod", served="prod", prom=_QUIET)
+        == 0
+    )
     assert "no rollout-checkable workload" in capsys.readouterr().out
 
 

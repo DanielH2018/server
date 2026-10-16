@@ -5,13 +5,15 @@
   - `health_cronjob.py` — `format_cronjob_health`, the CronJob verdict
   - `health_docker.py`  — the Pi's Docker containers and the ClusterIP lookups
   - `health_vendored.py` — the workloads a role's vendored upstream files declare
+  - `health_alerts.py`  — the alert plane: firing alerts and ingress probes (C7)
 
-What stays here is the part that needs all four: resolving a deploy tag to the workloads the
+What stays here is the part that needs all of them: resolving a deploy tag to the workloads the
 role's rendered manifests declare, fetching each one, and rolling the per-workload verdicts up
 into the line `deploy_lib/detach_notify.py` reads.
 
-The gate exits 0 only when the workload is fully rolled out AND nothing restarted recently.
-Both halves are load-bearing, and the reasoning for each sits with the function it governs. A
+The gate exits 0 only when the workload is fully rolled out AND nothing restarted recently,
+and then only when the alert plane agrees (`_with_alert_plane`). Both rollout halves are
+load-bearing, and the reasoning for each sits with the function it governs. A
 role with no Deployment/DaemonSet/StatefulSet but a CronJob (configarr, pi-peer-backup) is
 gated the same way on its most recent Job instead — see health_cronjob.format_cronjob_health.
 
@@ -49,6 +51,7 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 # globals with a `from core import ...` would take a snapshot the patch never reaches.
 from diagnostics.probe_lib import core
 from diagnostics.probe_lib.core import PI_HOST
+from diagnostics.probe_lib import health_alerts
 from diagnostics.probe_lib.health_cronjob import format_cronjob_health, latest_owned_job
 from diagnostics.probe_lib.health_docker import (
     declared_on_pi,
@@ -89,7 +92,7 @@ def _render_context():
     The import is deferred because it pulls in ansible-core, PyYAML and jsonschema,
     and twelve of probe.py's thirteen subcommands never need any of it. Measured on daniel-box:
     0.41s to import, ~5 ms to build one role's context (2026-10-09), 0.02s median to render
-    one role and 0.22s for the slowest (home-assistant) — against the 30s `PROBE_TIMEOUT_S`
+    one role and 0.22s for the slowest (home-assistant) — against the 300s `PROBE_TIMEOUT_S`
     the notifier allows.
     """
     global _RENDER_CONTEXT
@@ -351,6 +354,28 @@ def _deploy_applied_at(service):
     return (_release_record(service) or {}).get("applied_at")
 
 
+def _with_alert_plane(role, text, code, ready_at, prom):
+    """(text, exit code) with the alert plane folded in after a passing rollout verdict.
+
+    A failed rollout returns unchanged, without the alert plane's waits. A failing alert plane
+    puts its own head line first: the notifier reads only the first line, and the no-workload
+    line carries a `NOT_APPLICABLE_MARKERS` substring that would report the failure `skipped`.
+    """
+    if code:
+        return text, code
+    from diagnostics.probe_lib.releases_retired import tree_owners
+
+    owner, entry = tree_owners().get(role), _render_context()[1].get(role)
+    applied_at = _deploy_applied_at(role)
+    plane_code, lines = health_alerts.check(
+        role, owner, applied_at, ready_at, entry, prom
+    )
+    if plane_code:
+        head = f"{role}: the alert plane FAILED the gate after a healthy rollout"
+        return "\n".join([head, *lines, text]), 1
+    return "\n".join([text, *lines]), 0
+
+
 def release_expected_restarts(record):
     """{workload name: applied_at} for every workload the recorded apply queued a restart of.
 
@@ -434,12 +459,15 @@ def run_health(
     served=_UNSET,
     tools=DEFAULT_TOOLS,
     roles_dir=K8S_ROLES,
+    prom=health_alerts.DEFAULT_PROM,
 ):
     """k8s workload health by default, the Pi's Docker container with --docker.
 
     k8s first because that is where ~50 of the ~55 services live. `tools` is the kubectl
     boundary of the k8s reads, injectable so a test can fail them without patching.
     `roles_dir` is where the k8s roles live, injectable so a test can resolve a fixture role.
+    `prom` is the alert plane's Prometheus boundary, read for a role-resolved tag only: the
+    Pi's `--docker` path and a guessed workload name stay on the rollout verdict alone.
     """
     if docker:
         # daniel-pi is the only Docker host left, and probe.py runs on daniel-box, so this is
@@ -527,6 +555,7 @@ def run_health(
                 for namespace, name in cronjob_targets
             ]
             text, code = format_role_cronjob_health(container, checked, now)
+            text, code = _with_alert_plane(container, text, code, None, prom)
             print(text)
             return code
         # Genuinely nothing to gate — a Job-only role (media-volume, netpol-baseline) whose
@@ -538,12 +567,17 @@ def run_health(
         # unpassable on a healthy deploy, while the notifier already skipped it via the marker.
         # Gating the probe Jobs instead was rejected: their `ttlSecondsAfterFinished: 86400`
         # deletes them a day after a deploy, so a later run would fail a healthy cluster.
-        print(
+        text, code = _with_alert_plane(
+            container,
             f"{container}: the role declares no rollout-checkable workload "
             "(no Deployment, DaemonSet or StatefulSet in its manifests) — nothing to gate, "
-            "reporting a pass"
+            "reporting a pass",
+            0,
+            None,
+            prom,
         )
-        return 0
+        print(text)
+        return code
 
     now = datetime.now(timezone.utc)
     checked = [
@@ -553,5 +587,7 @@ def run_health(
     text, code = format_role_health(
         container, checked, now, release_expected_restarts(_release_record(container))
     )
+    ready_at = health_alerts.pods_ready_at([c[4] for c in checked])
+    text, code = _with_alert_plane(container, text, code, ready_at, prom)
     print(text)
     return code

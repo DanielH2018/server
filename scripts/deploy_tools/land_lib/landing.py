@@ -123,6 +123,7 @@ class Landing:
         # wrong answer here must fall.
         self.k8s_only: list[str] = []
         self.owned_tags: dict[str, str] = {}  # tag -> owner (`promotion.split_owned`)
+        self.suspended_tags: list[str] = []  # suspended at M; the gate skips them
         self.deployed_hosts: set[str] = set()
         # The commit the deploy phase rendered, when it rendered one that is not the primary
         # checkout's HEAD -- `deploy.sh --at <sha>`. Empty means the deploy came from the
@@ -133,8 +134,7 @@ class Landing:
         # stamped after this was written by a LATER deploy of the same service, which is how
         # the health verdict tells a re-rolled workload from a broken one (#3812).
         self.deploy_ended_at: float | None = None
-        # The tags `health_verdict` gated a second time after a later deploy re-rolled them,
-        # comma-joined for the verdict line; empty when it did not.
+        # The tags `health_verdict` re-gated after a later deploy re-rolled them, comma-joined.
         self.regated = ""
         # True once a tick attempt returned TICK_STILL_RUNNING: this landing stopped WATCHING
         # a tick that was still applying. Every later read of the deployer's markers is then
