@@ -143,8 +143,10 @@ def _install(
             return tuple(value)
         if issubclass(kind, type):
             return class_dict.__get__(value).copy()
-        # An instance's `__dict__`, then the `__slots__` values of each Python-defined class
-        # in its MRO, read through their `member_descriptor`s, then any C reader's result.
+        # An instance's `__dict__`, then the members of each heap type in its MRO, read
+        # through their `member_descriptor`s, then any C reader's result. A heap type is a
+        # Python-defined class, whose `__slots__` are its members, or a C type an extension
+        # builds at import, such as `_decimal.Context`.
         copied = {}
         found_any = found_dict = False
         for klass in kind.__mro__:
@@ -155,8 +157,8 @@ def _install(
                     return None
                 copied.update(descriptor.__get__(value, kind))
                 found_any = found_dict = True
-            # Heap types only: a C type's members, such as `property.fget`, would widen the
-            # walk across every object of that type without closing a shape.
+            # Heap types only: a static C type's members, such as `property.fget`, would widen
+            # the walk across every object of that type without closing a shape.
             if type_flags.__get__(klass) & 512:
                 for key, descriptor in found.items():
                     if type(descriptor) is member:

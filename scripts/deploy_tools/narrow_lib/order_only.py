@@ -52,8 +52,8 @@ from deploy_tools.narrow_lib.order_only_runner import RUNNER
 # module added, rebound or deleted, a module loaded, and an in-place change to an object the
 # walk copies. The walk copies every object at every depth below a module attribute, taking
 # each object at the shallowest depth any module attribute reaches it: an item of a list, dict,
-# set or deque, an attribute in an object's `__dict__`, or a `__slots__` value of a
-# Python-defined class (#5107). So it sees `logging.disable` writing `logging.root.manager`,
+# set or deque, an attribute in an object's `__dict__`, or a member of a heap type, which
+# includes every `__slots__` value (#5107). So it sees `logging.disable` writing `logging.root.manager`,
 # `logging.root.addFilter` adding to `logging.root.filters`, a named logger's `disabled` flag
 # under `logging.Logger.manager.loggerDict` (#5085), and that logger's `filters` a level below.
 # The runner's `readers` table reads two C objects' state through their own C getters: a
@@ -75,7 +75,7 @@ from deploy_tools.narrow_lib.order_only_runner import RUNNER
 # makes to an object that code created which none of those attributes shows, such as one
 # replacing an object reference; a change to the handler or filter objects of a logger first
 # created while the chain runs, as opposed to how many it holds; state inside a C object outside
-# the `readers` table, or in a C type's members; process state the runner neither reads nor
+# the `readers` table, or in a static C type's members; process state the runner neither reads nor
 # counts; a counted call through a reference taken before the runner wrapped it; an unaudited
 # call in a module the runner does not replace; and a role whose bytes depend on list order,
 # which the render proof the caller still requires catches.
