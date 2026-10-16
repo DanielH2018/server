@@ -1,6 +1,13 @@
 # M6 — Switch the readers and retire Kuma
 
-Status: PLANNED
+Status: IN PROGRESS
+
+PR B-1, `probe.py health` reads the alert plane: [#5339](https://github.com/DanielH2018/server/pull/5339).
+It merged on 2026-10-16 at `ba681c934`, after C7's amendment for Open question 4 and the slice
+index's M6 split landed in #5323. On master the gate passed homepage (Ansible-owned, referenced to
+`applied_at`), speedtest (`owner: flux`, referenced to its Kustomization's revision) and
+netpol-baseline (no route, so the probe half is skipped), each with 0 gated alerts. The live drill,
+B-1d and B-1e, comes next.
 
 Depends on: M2, M3, M4, M5
 

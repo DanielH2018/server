@@ -54,6 +54,18 @@ second hand-started run, the Pi upgraded to `homelab-daniel-pi 0.5666+gd3a4f5ccc
 16:16:43 UTC with `Result=success`, and the installed `Depends` reads `python3 (>= 3.12)`.
 `tree` stays marked automatic, and `apt-get -s autoremove` lists it, so the weekly autoremove
 removes it.
+PR H3.8a, interim credentials: [#5322](https://github.com/DanielH2018/server/pull/5322). It merged
+at `8920ca2d0` and stages two files, not three, because `domain` left the SOPS store in #5087; the
+PR corrected this plan's text to match. The operator's `optimize_pi` apply read `ok=80 changed=3
+failed=0`: `/etc/homelab/interim` at `root:root 700` and the two push tokens at `root:root 600`
+([readings](https://github.com/DanielH2018/server/pull/5322#issuecomment-6224823184)).
+PR H3.8b, the heartbeats move: [#5348](https://github.com/DanielH2018/server/pull/5348). It merged
+at `4c01b38c0`. The operator's hand-started updater installed `homelab-daniel-pi
+0.5709+g252cd470cc5b` with `Result=success`. The three timers are active, `ubuntu`'s crontab
+holds no `pi-` line (3 before), and the three `/usr/local/bin/pi-*.sh` are gone. Each heartbeat's
+first timer run exited 0 between 22:42:59 and 22:45:11 UTC, and no monitor dropped
+([readings](https://github.com/DanielH2018/server/pull/5348#issuecomment-6226115060)). The owed
+`optimize_pi` line was cleared with no Ansible apply.
 
 Depends on: R1
 Unblocks: H4, H5
