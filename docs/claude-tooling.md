@@ -226,7 +226,8 @@ shadow rule or the Watchdog, and became active after the tag's reference time. T
 Kustomization first reported its current revision. Each ingress probe of the tag must then
 report a `probe_success` of 1 sampled after the rollout. The gate waits up to 90s for that
 sample and re-reads a failing verdict once after 60s. A tag whose entry renders no ingress
-route skips the probe half. A Prometheus read that fails exits 75, never a pass. The Pi's
+route skips the probe half. A routed tag with no series at all fails, because its route
+renders a probe target that has stopped reporting. A Prometheus read that fails exits 75, never a pass. The Pi's
 `--docker` path does not read the alert plane.
 
 `--docker` inspects the Pi's container over ssh instead.

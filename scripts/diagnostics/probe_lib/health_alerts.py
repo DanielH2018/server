@@ -72,15 +72,18 @@ REREAD_WAIT_S = 60
 FLUX_LOOKBACK = "7d"
 
 
-def prom_query(promql):
+def prom_query(promql, endpoint=None, fetch=None):
     """The `result` list of one instant query.
+
+    `endpoint` and `fetch` default to `core.prom_endpoint` and `core.fetch_parsed`, read at
+    call time; a test passes its own.
 
     Raises:
         core.Unreadable: curl failed, or Prometheus did not answer `success`.
     """
-    base, pin = core.prom_endpoint()
+    base, pin = (endpoint or core.prom_endpoint)()
     url = prom_query_url(base, promql)
-    data = core.fetch_parsed(url, resolve=pin)
+    data = (fetch or core.fetch_parsed)(url, resolve=pin)
     if not isinstance(data, dict) or data.get("status") != "success":
         raise core.Unreadable(f"Prometheus refused {promql}: {str(data)[:300]}")
     return (data.get("data") or {}).get("result") or []
@@ -184,9 +187,16 @@ def judge_probes(tag, reference, tools):
     while True:
         values = {_key(s): s for s in tools.query(selector)}
         if not values:
-            return [], [
-                f"  note: {tag} has no probe_success series, probe half skipped"
-            ]
+            # Only a routed tag reaches here, and its route renders a blackbox target, so no
+            # series means the probe stopped reporting: blackbox-exporter down, or the job
+            # broken. A route added since `observability` last deployed reads the same way.
+            if tools.clock() >= deadline:
+                return [
+                    f"  {tag} has an ingress route but no probe_success series after "
+                    f"{PROBE_WAIT_S}s (a new route needs an `observability` deploy)"
+                ], []
+            tools.sleep(POLL_S)
+            continue
         stamps = {
             _key(s): float(s["value"][1]) for s in tools.query(f"timestamp({selector})")
         }
