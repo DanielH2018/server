@@ -358,6 +358,71 @@ that — `--at <sha>` renders the merge commit from anywhere — but three reads
 primary: `deploy_tags.py hosts`, the diff-derived tag list a truncated file list falls back to,
 and the deploy the exit-4 fallback runs.
 
+### A PR that spans both planes is refused before it merges
+
+Until slice D5 ends, nothing orders an edge between a flux-owned role and an Ansible-owned one.
+`land.sh` applies the Ansible half after the merge, and `promote` applies the Flux half after
+CI. A PR that changes both halves lands them in whichever order the two pipelines finish.
+CI's **Cross-plane order gate** step, in the `hooks` job on pull requests only, refuses such a
+PR. It runs `scripts/validate/cross_plane_order.py --base HEAD^1`, which renders the cluster
+at the base and at the merge commit with `homelab-render cluster`. Each side renders with its
+own tree's renderer. The gate refuses two shapes:
+
+- **Arm 1, plane order.** Two changed roles sit on different planes, and one depends on the
+  other, directly or through other roles, by `build_k8s_dep_map`. netpol-baseline depends on
+  every workload (`K8S_APPLIES_LAST`). A role counts as changed when its `cluster/<tag>/`
+  output moved, or when its `tasks/` changed and Ansible owns it at the head. A flux-owned
+  role's tasks run nowhere, so only the render they feed counts. A role whose own diff is
+  only an image pin does not count. An inventory field that another role reads counts through the render it moves:
+  `auth_tier` on bento-pdf moves authelia's access rules alone, while `hostname` moves both.
+- **Arm 2, edge first.** A tag that is flux-owned at the base and at the head gains a
+  `dependsOn` edge, and its own render moves in the same PR. A tag that becomes flux-owned in
+  the PR is not judged, because its Kustomization is born with its edges.
+
+**To split an arm-1 refusal, land the dependency's half first.** Merge the dependent's half
+only after the first PR's `land.sh` verdict reads `settled`. The same rule covers two PRs that
+merge back to back, which the gate cannot see because each passes alone. **To split an arm-2
+refusal, land the edge alone first**, then the change.
+
+**A shared-template change exits by copy and migrate.** A macro under `ansible/templates/`
+moves the render of every role that imports it, on both planes. bento-pdf and authelia both
+import `workload-shell.yml.j2`, so the gate refuses most edits to it. Split the change in
+three PRs:
+
+1. Add the changed macro under a new name, and move the dependency's plane to it. Land that
+   PR until `settled`.
+2. Move the dependent's plane to the new macro.
+3. Delete the old macro, which moves no render.
+
+When a dependency set crosses the planes more than once, step 1 repeats once per plane, in
+dependency order. Each refused macro change therefore costs about three PRs until D5 ends.
+
+**The measured cost is two refusals in 30 days.** `scripts/dev/cross_plane_replay.py`
+replayed the gate over the 1598 PRs merged in the 30 days to 2026-10-16, with bento-pdf the only
+flux-owned tag. #1975 and #2002 changed the `ingressroute()` macro, which moves bento-pdf's
+route beside traefik's or authelia's own change. The replay refused #1975, and #2002 was
+judged by reading its diff.
+
+The first version of the gate also counted a flux-owned role's `tasks/`, and refused three
+more: #4291, #4292 and #4299, each a mechanical edit across many roles that included
+bento-pdf's `tasks/`. That made about 1.2 refusals a week, over the plan's one-a-week bar. The
+operator ruled on 2026-10-16 that a `tasks/` change counts only for an Ansible-owned role (D4
+Open question 9), and those three no longer count.
+
+The replay could not render 55 of the 645 commits that changed a render input. 24 of them
+change a file bento-pdf's render reads, and so do the three above, so the true count can be
+higher than two.
+
+**An edit that one inventory field carries exits by handing the role back.** A `hostname` edit on bento-pdf
+moves bento-pdf's route and authelia's access rules, and no macro copy splits it. Hand bento-pdf
+back to Ansible (`docs/flux-deploy-plane.md`), make the change while the play orders both
+roles, then flip bento-pdf again. While bento-pdf is handed back, its flux-owned dependents lose
+their edge to it, and the second flip rolls the workload once more.
+
+The gate has no bypass, because a bypass would become the default route. It also passes an
+image bump that does need ordering. A render that fails at either end exits 2, and the step
+fails without a verdict. Slice D6 deletes the gate once every role is flux-owned.
+
 ## The stale-tree retry
 
 **If a PR that reaches YOUR OWN TAGS merges while this one is landing, the first `deploy.sh`

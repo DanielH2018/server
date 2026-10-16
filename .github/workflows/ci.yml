@@ -372,6 +372,18 @@ jobs:
           # --skip static-ratchet-tests: the `pytest` job runs those twelve test files already.
           prek run --skip ansible-lint --skip static-ratchet-tests --color always --files "${changed[@]}"
 
+      # The cross-plane gate (D4.4). It refuses a PR that changes a flux-owned role and an
+      # Ansible-owned role on one dependency path, because `promote` and `land.sh` would apply
+      # the two halves in whichever order they finish. It also refuses an edge added beside a
+      # change to its dependent. docs/landing.md says how to split a refused PR, and there is
+      # no bypass. It runs on a pull request only, because a push or a dispatch has no diff to
+      # judge. The checkout is the merge commit, so its first parent is the base it merges
+      # onto, and each side renders with its own tree's renderer, about 15s each.
+      - name: Cross-plane order gate
+        if: github.event_name == 'pull_request'
+        timeout-minutes: 8
+        run: uv run python scripts/validate/cross_plane_order.py --base HEAD^1
+
       # Every push to master, and any PR the scoping step declined to trust: the full sweep.
       #
       # This is what keeps the scoped path's residual gap bounded. ansible-lint does no cross-file
