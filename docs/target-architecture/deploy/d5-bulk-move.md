@@ -1387,13 +1387,19 @@ critical alerts that C7 defines, and any alert labelled `verify="true"`, whateve
 severity. A verify successor written as a rule carries that label, so it is read on every
 promotion, an automerged one included, without having to page.
 
-- **The Kustomization.** A non-tag Kustomization, `soak`, depends on every flux-owned tag and
-  every `-deferred` and `-verify` Kustomization, minus suspended ones. It holds one Job,
-  `soak-<spec digest8>`, whose spec embeds R's SHA. The renderer takes the commit SHA as an
-  input, so two renders of one commit stay identical. Those edges also make `soak` a
-  dependent of every tag, so C2's changed set holds `soak` whenever it holds a tag. Open
-  question 19 asks whether the edges stay, because an unchanged tag that is not Ready
-  blocks the soak through them.
+- **The Kustomization.** A non-tag Kustomization, `soak`, carries no `dependsOn` edges (Open
+  question 19, ruled 2026-10-16). It holds one Job, `soak-<spec digest8>`, whose spec embeds
+  R's SHA. The renderer takes the commit SHA as an input, so two renders of one commit stay
+  identical. C2's changed set holds `soak` whenever it holds a tag, by a C2 rule that Open
+  question 19 requests, so an unchanged tag that is not Ready blocks nothing.
+- **Its run-time wait.** Before it reads a pod or an alert, the Job waits until every
+  Kustomization in its scope reads Ready with `status.lastAppliedOriginRevision` naming
+  `master@sha1:<R>`, by the origin-key rule of *Its anchor* below. A Kustomization Ready at
+  an older revision keeps it waiting. The wait has its own deadline, below the Job's
+  `activeDeadlineSeconds`, and at that deadline the Job exits 1 naming every Kustomization
+  still not Ready at R. A suspended tag is outside the scope (C3, D5.1b), so it never
+  blocks the wait. kustomize-controller's `--concurrent` gains one worker, because the
+  soak holds a worker from the start of R's rollout.
 - **Its footprint ignores R's SHA.** The renderer computes `soak`'s `own` and `footprint`
   digests (C1) over its render with R's SHA and the Job name derived from it replaced by
   fixed values. Otherwise `cluster/soak/` would change on every commit, and C2's changed set
@@ -1401,7 +1407,7 @@ promotion, an automerged one included, without having to page.
   The renderer test is two fixture commits that differ only in a docs file and give an
   empty changed set. Its red half is the same pair with the digest taken over the raw
   render, which puts `soak` in the set. The Job's ServiceAccount may read
-  OCIRepositories in `flux-system`. In each namespace in its scope it may list pods, and
+  OCIRepositories in `flux-system`, and `get` and `list` Kustomizations there. In each namespace in its scope it may list pods, and
   `get` and `list` ReplicaSets in the `apps` group.
 - **Its scope.** The Job reads only pods whose owner chain ends in a Deployment, DaemonSet or
   StatefulSet, in a namespace that some flux-owned tag renders into. M2's join covers exactly
@@ -1428,10 +1434,24 @@ promotion, an automerged one included, without having to page.
       `prod@sha256:<digest>` and names no commit (C6). A check against it would never match
       R, so every soak would exit 1 and every promotion would hold (failure class 2, D4's
       Risks).
-- **Its scope is R's changed set.** The Job reads two `digests.json` files from GHCR, R's
-  from `sha-<R>` and the base's from `last-good`, and computes C2's changed set between
-  them. R's file is not embedded in the Job's ConfigMap, because it would then move
-  `soak`'s own digest on every change. Its services are the set's names with any reserved suffix stripped,
+- **Its scope is R's changed set.** The Job reads two `digests.json` files, R's from the
+  artifact of the OCIRepository `homelab` and the base's from the artifact of a second
+  OCIRepository, `last-good`, which follows the `last-good` tag. It computes C2's changed
+  set between them through `scripts/deploy_tools/changed_set.py:changed_set`, which its
+  ConfigMap carries as a byte-identical copy that the Job census checks. Once *Its anchor*
+  has checked that `homelab`'s artifact is R, that artifact is `sha-<R>`'s content. R's
+  file is not embedded in the Job's ConfigMap, because it would then move `soak`'s own
+  digest on every change.
+    - **The verifier is source-controller.** Both OCIRepositories carry the `verify` block
+      that `homelab` carries, so source-controller checks each artifact's cosign signature
+      against the `promote` workflow's identity before it serves the artifact. The Job runs
+      no verifier of its own. It reads a file only from an OCIRepository that reads Ready
+      and `SourceVerified`, with its spec observed, and only when the fetched tarball's
+      SHA-256 matches `.status.artifact.digest`. `flux_job_image` cannot carry a cosign
+      check: the standard library has no ECDSA, and the census admits no container that
+      does not run a Python script. Reading through source-controller keeps the Job on
+      that one image, and its one HTTPS endpoint, the API server, trusts the
+      ServiceAccount's CA through `SSL_CERT_FILE`. Its services are the set's names with any reserved suffix stripped,
   minus the members of `SHARED_KINDS`. The restart and alert legs below read only those
   services.
     - **The base.** C2 takes the changed set against `prod`'s commit before the move, and
@@ -1443,7 +1463,9 @@ promotion, an automerged one included, without having to page.
     - **It fails toward the fleet.** The Job narrows only from a `digests.json` whose
       artifact signature verifies against the `promote` workflow's identity (C2). A failed
       read, a failed verification or a malformed file widens the scope to every flux-owned
-      service and W to the fleet value, and the Job logs why.
+      service and W to the fleet value, and the Job logs why. A base whose origin revision
+      is already R widens too: under D5.3b2's observe-only `verify`, `settle` can move
+      `last-good` to R while the soak runs, and R against itself would read as no change.
     - **An empty scope passes at once.** When the set holds no service, the Job runs no
       leg, waits for nothing and exits 0.
 - **Its wait.** W is the larger of `k8s_rollout_stabilise_seconds` and the longest `for:`
@@ -1463,8 +1485,9 @@ promotion, an automerged one included, without having to page.
   pod's `containerStatuses`, never from a scrape. Prometheus supplies only the service mapping
   and the first Ready time. The check covers every in-scope pod created after T0 and mapped to
   a service in the scope through `homelab:pod_service:info`, in two legs:
-    - **The gate leg** is today's gate, exactly. The Job reads `restartCount` when it starts,
-      which is after every tag is Ready, and again when its wait ends. The wait is never
+    - **The gate leg** is today's gate, exactly. The Job reads `restartCount` when its run-time
+      wait ends, which is after every Kustomization in its scope is Ready at R, and again
+      when its W wait ends. The wait is never
       shorter than `k8s_rollout_stabilise_seconds`. Any increase fails.
     - **The early leg** covers the time between a pod's first Ready and the Job's start. The
       first Ready is the minimum of `kube_pod_status_ready_time` since T0, because that series
@@ -1505,7 +1528,8 @@ promotion, an automerged one included, without having to page.
       revision that changes no snapshot role. Open question 17 states what C2's proposed
       revert rule leaves open (**operator-only**).
 - **A Prometheus roll in its own revision.** When R changes observability, Prometheus rolls
-  (`Recreate`). `soak` depends on `observability`, so the Job starts after Prometheus is back.
+  (`Recreate`). When `observability` is in the scope, the run-time wait holds the Job until it reads
+  Ready at R, so the Job's legs start after Prometheus is back.
   Prometheus's pod is an in-scope pod created after T0, so the wait runs W past its Ready, as
   the API reports it, and every rule has evaluated for W before the alert check. The scrape
   gap that the roll leaves is the gap case above. It fails the soak only when a container
@@ -1531,14 +1555,14 @@ promotion, an automerged one included, without having to page.
     - D5.3b2 therefore adds an observe-only set to `promote.py verify`, a literal
       `OBSERVE_ONLY = frozenset({"soak"})`. `verify` subtracts it from the expected set, so
       it never waits on `flux/soak`. It also ignores a `flux/soak` `failure`, so that status
-      neither holds nor resets. The name differs from D5.1b's soak exclusion, which drops a
-      suspended tag from `soak`'s `dependsOn`.
+      neither holds nor resets. The name differs from D5.1b's soak exclusion, which keeps a
+      suspended tag outside the soak's scope.
     - D5.3b3 deletes the set, and from then on `verify` expects `flux/soak` like any other
       name in the changed set.
 - **`land-wait` waits on the soak from D5.3b3 on.** C6 and D2's *How `land.sh` waits* make a
   `flux/soak` `success` on R part of `settled`. The PR's tags never include `soak`, and
-  `soak` depends on every flux-owned tag, so the tags are always Ready before the soak Job
-  starts. A `land-wait` that read only the tags would therefore return `settled` before any
+  the soak Job's run-time wait holds it until every changed tag is Ready at R, so the tags are
+  always Ready before the soak reaches a verdict. A `land-wait` that read only the tags would therefore return `settled` before any
   soak verdict existed. If the soak then failed, `verify` would hold, and might reset
   `prod`, after the session had already reported a verified deploy. So D5.3b3, the PR that
   makes the soak gate `verify`, also extends `promote.py land-wait`:
@@ -1566,7 +1590,8 @@ promotion, an automerged one included, without having to page.
   to the fleet W. A `verify` budget taken from T's own W would then time out on a healthy
   soak and write a false hold. The per-scope W shortens only the Job's actual wait. The
   cost is that the reboot window and `land-wait`'s give-up deadline still scale with the
-  fleet W.
+  fleet W. With no `dependsOn` edges, `soak`'s timeout leaves D4's chained path, so D5.3b2
+  changes D4's timeout function to keep `verify`'s budget above it (Open question 19).
 - **Reaching Prometheus.** Prometheus's fence is the bespoke
   `ansible/roles/k8s/netpol-baseline/templates/networkpolicy-prometheus.yaml.j2`, which
   netpol-baseline's tasks apply. The Job is a cross-namespace caller from `flux-system`, so
@@ -2205,11 +2230,15 @@ sizes its batch of roles against that projection.
     it. The session checks the peer with the read-only `kubectl -n observability get
     networkpolicy`.
 16. **D5.3b1 — The soak script, inert** (about 230 lines, split in two if review asks).
-    Requires M1 and M2 to have landed. The script includes the run-time scope: the two
+    Requires M1 and the M2 PR whose rule the soak reads, M2's PR 1 (#4777, the
+    workload-service mapping), not M2 done. The operator ruled so on 2026-10-16, making M2 a
+    PR-level sub-edge from D5.3b1 on. The script includes the run-time scope: the two
     signed `digests.json` reads, the changed set, the fallback to the fleet and W from the
-    per-service map. It names the signature verifier the Job runs. If
-    `flux_job_image` cannot carry it, a second pinned image joins the soak Job, and the
-    Complexity delta counts it.
+    per-service map. It names the signature verifier the Job runs: source-controller's
+    cosign check on the OCIRepositories `homelab` and `last-good` (*Its scope is R's
+    changed set*), so no second image joins the soak Job. The script also holds Open
+    question 19's run-time wait. It is `ansible/roles/k8s/manifests/files/flux_soak.py`,
+    beside `flux_job_connect.py`, with its tests in that role's `tests/`.
     The Job script and its tests, from fixture API and query results, which no render emits
     yet:
     - an authelia pod that restarts after its first Ready fails the soak and names
@@ -2242,7 +2271,22 @@ sizes its batch of roles against that projection.
       red half for a check that reads `artifact.revision`.
 17. **D5.3b2 — The soak Kustomization, observed** (about 140 lines). The `soak` renderer
     kind, the per-service map that W reads, the Job's RBAC, ReplicaSets included, and its
-    ConfigMap. `soak`'s footprint rule with R's SHA normalised, and its renderer test with
+    ConfigMap. Open question 19's ruling puts these here too:
+    - the renderer renders `soak` with no `dependsOn` edges;
+    - the Job's Role grants `get` and `list` on Kustomizations in `flux-system`;
+    - kustomize-controller's `--concurrent` gains one worker;
+    - D4's timeout function changes, because `soak`'s timeout leaves the chain (*Its
+      timeout*);
+    - C2's rule that `soak` is in the changed set whenever the set holds a tag is in
+      `contracts.md` before this PR merges.
+
+    D5.3b1's script also fixes these inputs:
+    - the flux role renders the OCIRepository `last-good`, with `homelab`'s `verify` block;
+    - the ConfigMap carries `flux_soak.py`, `flux_job_connect.py` and `changed_set.py`;
+    - the per-service map holds each service's longest `for:` and the namespaces its tag
+      renders into;
+    - the Job sets `SSL_CERT_FILE` to the ServiceAccount's `ca.crt`, and passes a
+      `--wait-seconds` below `activeDeadlineSeconds`. `soak`'s footprint rule with R's SHA normalised, and its renderer test with
     the docs-only pair as described in *The soak as a Job*. `soak`
     joins `SHARED_KINDS` here,
     with a fixture showing that it passes the census. The PR quotes W's value. It also adds
@@ -3720,6 +3764,12 @@ includes valheim's initContainer.
       would leave D4's chained path, so D4's timeout function changes too.
     - Resolution: decided in D5.3b2's review, before D5.3b3 makes the soak gate. Until
       D5.3b3 the soak is observe-only, so the edges hold nothing.
+    - **Ruled 2026-10-16: accepted.** The recommendation stands as written. The run-time wait
+      is in D5.3b1, in the Job script. The edge drop in the renderer, the Kustomization
+      `get` and `list` grant in the Job's RBAC, the extra kustomize-controller worker and
+      the change to D4's timeout function are in D5.3b2 (step 17). The C2 rule is a
+      contract amendment that the orchestrator requests once #5320's rewrite of
+      `contracts.md`'s *Requested amendments* lands, and it gates D5.3b2's merge.
 20. **Which inbound edges could narrow, so that the D2-to-D6 interim is one short window?**
     D5's index row names about ten inbound edges from four areas: D3 and D4; R3; M1, M2
     and M6's B-1e; and H1.1a, H1.7b, H2.1 and H2's family PRs. Both planes run until D6, so
