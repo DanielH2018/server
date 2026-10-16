@@ -30,7 +30,7 @@ Job and its directory:
   through an allowed module to `urllib.request`. It uses neither module as a value and reads
   no dunder, as an attribute or a string, so `getattr`, `vars` and `__globals__` cannot
   reach around those two rules. The row guards against a mistake, not an
-  adversary: a name spelled out at run time passes it.
+  adversary: a name spelled out at run time passes it. A `SIBLINGS` copy is byte-identical.
 
 The test module is `test_renderer_job_census.py`.
 """
@@ -63,6 +63,10 @@ SOAK = "soak"
 # The `backoffLimit` each kind must set. A mutation Job is absent: it states its own value.
 BACKOFF = {"snapshot": 1, SOAK: 0, "verify": 0}
 HELPER = REPO / "ansible/roles/k8s/manifests/files/flux_job_connect.py"
+# Tracked modules a ConfigMap may carry beside a script, each as a byte-identical copy. The
+# soak computes C2's changed set through the one `changed_set` rather than a second derivation.
+CHANGED_SET = REPO / "scripts/deploy_tools/changed_set.py"
+SIBLINGS = {HELPER.name: HELPER, CHANGED_SET.name: CHANGED_SET}
 # DECIDED: an allowlist of imports, not a denylist of connecting calls. A denylist missed
 # `urlretrieve`, `asyncio.open_connection`, `ftplib` and `importlib` in review. No module
 # here opens a connection; a script builds its `Request` from `flux_job_connect`, so
@@ -83,6 +87,7 @@ HELPER = REPO / "ansible/roles/k8s/manifests/files/flux_job_connect.py"
 ALLOWED_IMPORTS = frozenset(
     {
         "flux_job_connect",
+        "changed_set",
         "argparse",
         "base64",
         "collections",
@@ -93,6 +98,7 @@ ALLOWED_IMPORTS = frozenset(
         "functools",
         "hashlib",
         "hmac",
+        "io",
         "itertools",
         "json",
         "math",
@@ -102,6 +108,7 @@ ALLOWED_IMPORTS = frozenset(
         "re",
         "string",
         "sys",
+        "tarfile",
         "textwrap",
         "time",
         "typing",
@@ -438,7 +445,6 @@ def helper_offence(job: Mapping, directory: str, docs: list[dict]) -> list[str]:
     configmaps = {
         doc["metadata"]["name"]: doc for doc in docs if doc.get("kind") == "ConfigMap"
     }
-    helper = HELPER.read_text().rstrip("\n")
     offences = []
     for name in sorted(_mounted_configmaps(job)):
         if name not in configmaps:
@@ -455,12 +461,11 @@ def helper_offence(job: Mapping, directory: str, docs: list[dict]) -> list[str]:
                 offences.append(
                     f"{name}/{key} imports {HELPER.name}, which {name} lacks"
                 )
-            if key == HELPER.name:
-                if text.rstrip("\n") != helper:
-                    offences.append(
-                        f"{name}/{key} differs from the tracked {HELPER.name}"
-                    )
-                continue
+            if key in SIBLINGS:
+                if text.rstrip("\n") != SIBLINGS[key].read_text().rstrip("\n"):
+                    offences.append(f"{name}/{key} differs from the tracked {key}")
+                if key == HELPER.name:
+                    continue
             offences += [f"{name}/{line}" for line in script_offence(key, text)]
     return offences
 

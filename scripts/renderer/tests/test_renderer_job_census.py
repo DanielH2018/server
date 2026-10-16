@@ -12,7 +12,15 @@ Run: uv run pytest scripts/renderer/tests/test_renderer_job_census.py
 import copy
 
 import pytest
-from _job_census import HELPER, JOB_KIND, RERUN_SAFE, load, problems, script_offence
+from _job_census import (
+    HELPER,
+    JOB_KIND,
+    RERUN_SAFE,
+    SIBLINGS,
+    load,
+    problems,
+    script_offence,
+)
 
 from deploy_tools.bundle_census import published_tags
 from lib.exit_codes import RENDER_OK
@@ -45,6 +53,7 @@ THROUGH_HELPER = (
     "re.compile('ok')\n"
 )
 RUN = ["python3", "/scripts/run.py"]
+SOAK_SCRIPT = HELPER.with_name("flux_soak.py")
 
 
 def _named(job: dict) -> dict:
@@ -366,6 +375,33 @@ def test_a_changed_copy_of_the_helper_is_flagged():
 
 def test_a_script_importing_the_helper_without_its_copy_is_flagged():
     assert _rows(_verify(helper="")) == {"helper"}
+
+
+def _soak(changed_set: str | None = None) -> dict:
+    """The soak Job over the real script, with the helper and `changed_set.py` beside it."""
+    data = {
+        "flux_soak.py": SOAK_SCRIPT.read_text(),
+        "changed_set.py": changed_set or SIBLINGS["changed_set.py"].read_text(),
+    }
+    configmap = _configmap(script="")
+    configmap["data"] = {**configmap["data"], **data}
+    configmap["metadata"]["name"] = f"soak-{configmap_digest8(configmap)}"
+    return _bundle(
+        _job("soak", configmap, command=["python3", "/scripts/flux_soak.py"]),
+        "soak",
+        configmap,
+    )
+
+
+def test_the_soak_script_passes_the_census():
+    assert problems(_soak()) == []
+
+
+def test_a_changed_copy_of_changed_set_is_flagged():
+    changed = (
+        SIBLINGS["changed_set.py"].read_text().replace('ROOT = "homelab"', 'ROOT = ""')
+    )
+    assert _rows(_soak(changed_set=changed)) == {"helper"}
 
 
 @pytest.mark.parametrize(
