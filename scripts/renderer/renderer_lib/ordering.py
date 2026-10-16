@@ -12,9 +12,8 @@ Every edge is generated, never hand-written, from an `Ordering` the caller reads
 - `<tag>-snapshot` inherits `<tag>`'s edges (C3), and `<tag>` then depends on it, so the role
   applies only after its snapshot is taken (D5.2a). `<tag>-verify` depends on the tag's last
   Kustomization: `<tag>-deferred` when the tag renders one, `<tag>` otherwise (D5.1a1);
-- an edge from a Kustomization that runs to one a suspended tag owns is dropped, and the
-  annotation `homelab/suspended-deps` lists it, because Flux would hold the dependent at
-  `DependencyNotReady` until the resume (D5.1b). `drop_suspended` is the one step, so a
+- an edge to a Kustomization that a suspended tag owns is dropped, and the annotation `homelab/suspended-deps` lists it, because Flux would hold the dependent at
+  `DependencyNotReady` until the resume (C3 *Suspension*, D5.1b). `drop_suspended` is the one step, so a
   shared kind that depends on every tag, such as D5.3b2's `soak`, drops them the same way.
 
 `bundle.py` adds the `cluster-vars` edge and fails the render on a cycle, because Flux would
@@ -199,12 +198,6 @@ def drop_suspended(
 
     result = {}
     for name, edge in edges.items():
-        # DECIDED: an edge between two suspended Kustomizations is kept. Both wait on the
-        # resume anyway, and keeping `<tag>`'s edge on `<tag>-snapshot` means a hand resume
-        # of `<tag>` alone waits rather than applying without its snapshot (D5.2a).
-        if is_suspended(name):
-            result[name] = edge
-            continue
         gone = frozenset(n for n in edge.kept if is_suspended(n))
         result[name] = Edges(edge.kept - gone, edge.dropped, edge.suspended | gone)
     return result

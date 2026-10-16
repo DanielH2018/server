@@ -70,8 +70,7 @@ def _suspended_deps(doc: dict) -> str | None:
 def test_a_suspended_tag_is_in_no_depends_on_and_its_dependents_list_it(tmp_path):
     docs = _docs(_bundle(_roles(tmp_path, sonarr="flux_suspend: true\n")))
     for name, doc in docs.items():
-        if not name.startswith("sonarr"):
-            assert not {"sonarr", "sonarr-deferred"} & set(_depends(doc)), name
+        assert not {"sonarr", "sonarr-deferred"} & set(_depends(doc)), name
     assert _suspended_deps(docs["texbrain"]) == "sonarr"
     assert _suspended_deps(docs["netpol-baseline"]) == "sonarr,sonarr-deferred"
     assert _depends(docs["netpol-baseline"]) == ["texbrain"]
@@ -99,8 +98,9 @@ def test_every_kustomization_of_a_suspended_tag_renders_suspend_true(tmp_path):
         "sonarr-deferred",
         "sonarr-verify",
     }
-    # The edge inside the suspended tag stays, so a hand resume of one waits on the other.
-    assert _depends(docs["sonarr-verify"]) == ["sonarr-deferred"]
+    # An edge inside the suspended tag drops too; the resume PR restores every edge at once.
+    assert "dependsOn" not in docs["sonarr-verify"]["spec"]
+    assert _suspended_deps(docs["sonarr-verify"]) == "sonarr-deferred"
     assert yaml_fast.safe_load(files["digests.json"])["sonarr"]["suspended"] is True
 
 

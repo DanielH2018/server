@@ -403,10 +403,9 @@ resume, and D5.1d's gate is what refuses one.
   field back from an operator's hand suspend. `suspension.suspend_false` fails the render on any
   Flux object in the bundle that sets it, a role template's included. The flux role's
   `sync.yaml.j2` follows the same rule.
-- **No edge to it.** Every `dependsOn` edge from another tag's Kustomization to a suspended
-  one is dropped, and the annotation `homelab/suspended-deps` lists it (*Ordering:
-  `dependsOn`*). Otherwise each dependent would wait on the suspended tag's revision until
-  the resume.
+- **No edge to it.** Every `dependsOn` edge to a suspended Kustomization is dropped, and the
+  annotation `homelab/suspended-deps` lists it (*Ordering: `dependsOn`*). Otherwise each
+  dependent would wait on the suspended tag's revision until the resume.
 - **Not expected by `verify`.** A suspended Kustomization never posts. `verify` leaves out
   every Kustomization of a tag that `digests.json` marks `suspended`, so a revision that
   changes it neither times out nor resets (*Verification*).
@@ -782,12 +781,11 @@ render publishes, and the publish job renders every published tag. The edges are
   `observability`, so `headlamp-deferred` and `netpol-baseline-deferred` wait on
   `observability` once it is flux-owned and annotate it until then.
 - **`cluster-vars`**, for a substituting directory, as above.
-- **An edge to a suspended tag is dropped.** An edge from a Kustomization to one of a tag
-  whose role sets `flux_suspend: true` is left out, and the annotation
-  `homelab/suspended-deps` lists it. netpol-baseline's edges to every `<tag>-deferred` drop
-  the same way. An edge between two Kustomizations of the suspended tag stays, so a hand
-  resume of `<tag>` alone still waits on its snapshot. The suspended set is read over every
-  flux-owned role, so a `--role` render drops the same edges.
+- **An edge to a suspended tag is dropped.** An edge to a Kustomization of a tag whose role
+  sets `flux_suspend: true` is left out, and the annotation `homelab/suspended-deps` lists it. netpol-baseline's edges to every `<tag>-deferred` drop
+  the same way, and so do the edges among the suspended tag's own Kustomizations. The PR that
+  removes the key restores every edge in the same render. The suspended set is read over
+  every flux-owned role, so a `--role` render drops the same edges.
 
 `dependsOn` lists the names in sorted order. A cycle among the edges refuses the render, since
 Flux would hold every Kustomization on it at `DependencyNotReady`. An edge governs from the
