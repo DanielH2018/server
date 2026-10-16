@@ -159,7 +159,9 @@ def test_a_restart_during_the_gate_legs_wait_fails(world, tmp_path, capsys):
 def test_a_failure_names_each_failing_service_a_snapshot_roles_among_them(
     world, tmp_path
 ):
-    world.new["sonarr"] = {"footprint": "2"}
+    # Only the snapshot Kustomization moved, so sonarr reaches the scope by its stripped name.
+    world.new["sonarr-snapshot"] = {"footprint": "2"}
+    world.old["sonarr-snapshot"] = {"footprint": "1"}
     world.kustomizations.append(kustomization("sonarr-snapshot"))
     world.pods["media"] = [pod("media", "sonarr-1")]
     restart(world.pods["media"][0], T0 + 100)

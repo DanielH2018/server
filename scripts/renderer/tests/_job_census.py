@@ -63,8 +63,7 @@ SOAK = "soak"
 # The `backoffLimit` each kind must set. A mutation Job is absent: it states its own value.
 BACKOFF = {"snapshot": 1, SOAK: 0, "verify": 0}
 HELPER = REPO / "ansible/roles/k8s/manifests/files/flux_job_connect.py"
-# Tracked modules a ConfigMap may carry beside a script, each as a byte-identical copy. The
-# soak computes C2's changed set through the one `changed_set` rather than a second derivation.
+# Modules a script may import, each carried beside it (`IMPORTS`) as a byte-identical copy.
 CHANGED_SET = REPO / "scripts/deploy_tools/changed_set.py"
 SIBLINGS = {HELPER.name: HELPER, CHANGED_SET.name: CHANGED_SET}
 # DECIDED: an allowlist of imports, not a denylist of connecting calls. A denylist missed
@@ -176,7 +175,7 @@ SUBMODULE_ONLY = (
 # each one reaches past the names the rules here check.
 DUNDER = re.compile(r"__\w+__")
 PYTHONS = frozenset({"python", "python3"})
-IMPORTS_HELPER = re.compile(r"^\s*(?:from|import)\s+flux_job_connect\b", re.MULTILINE)
+IMPORTS = {k: re.compile(rf"^\s*(?:from|import)\s+{k[:-3]}\b", re.M) for k in SIBLINGS}
 
 # A bundle's directories, each name mapped to its documents.
 Bundle = Mapping[str, list[dict]]
@@ -457,10 +456,11 @@ def helper_offence(job: Mapping, directory: str, docs: list[dict]) -> list[str]:
         for key, text in sorted(data.items()):
             if not key.endswith(".py"):
                 continue
-            if HELPER.name not in data and IMPORTS_HELPER.search(text):
-                offences.append(
-                    f"{name}/{key} imports {HELPER.name}, which {name} lacks"
-                )
+            offences += [
+                f"{name}/{key} imports {module}, which {name} lacks"
+                for module, imports in IMPORTS.items()
+                if module not in data and imports.search(text)
+            ]
             if key in SIBLINGS:
                 if text.rstrip("\n") != SIBLINGS[key].read_text().rstrip("\n"):
                     offences.append(f"{name}/{key} differs from the tracked {key}")

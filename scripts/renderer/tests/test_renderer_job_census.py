@@ -378,11 +378,13 @@ def test_a_script_importing_the_helper_without_its_copy_is_flagged():
 
 
 def _soak(changed_set: str | None = None) -> dict:
-    """The soak Job over the real script, with the helper and `changed_set.py` beside it."""
+    """The soak Job over the real script and its siblings; `changed_set=""` leaves one out."""
     data = {
         "flux_soak.py": SOAK_SCRIPT.read_text(),
         "changed_set.py": changed_set or SIBLINGS["changed_set.py"].read_text(),
     }
+    if changed_set == "":
+        del data["changed_set.py"]
     configmap = _configmap(script="")
     configmap["data"] = {**configmap["data"], **data}
     configmap["metadata"]["name"] = f"soak-{configmap_digest8(configmap)}"
@@ -395,6 +397,10 @@ def _soak(changed_set: str | None = None) -> dict:
 
 def test_the_soak_script_passes_the_census():
     assert problems(_soak()) == []
+
+
+def test_a_soak_configmap_without_changed_set_is_flagged():
+    assert _rows(_soak(changed_set="")) == {"helper"}
 
 
 def test_a_changed_copy_of_changed_set_is_flagged():

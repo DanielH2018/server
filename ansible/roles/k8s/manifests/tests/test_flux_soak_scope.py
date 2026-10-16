@@ -38,7 +38,7 @@ def world(monkeypatch):
         (alert(), T0 + 60, True),
         (alert(severity="warning", verify="true"), T0 + 60, True),
         (alert(shadow="true"), T0 + 60, False),
-        (alert(service="observability", alertname="Watchdog"), T0 + 60, False),
+        (alert(alertname="Watchdog"), T0 + 60, False),
     ],
     ids=[
         "critical-before-t0",
