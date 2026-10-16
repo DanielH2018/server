@@ -49,7 +49,8 @@ def _gaps(needs: set[tuple], docs: list[dict]) -> list[tuple]:
 def test_the_real_drill_needs_its_backup_target_and_the_delete_wait() -> None:
     """The named member: the drill's script, as the host runs it, read through the derivation."""
     script = render_shell_script("setup", "k3s", "longhorn-restore-drill.sh.j2")
-    needs = shell_needs(script, DRILL_NAMESPACES)
+    # The calls' shape, without the object names, which the drill holds in variables.
+    needs = {need[:4] for need in shell_needs(script, DRILL_NAMESPACES)}
     assert ("longhorn-system", "longhorn.io", "backuptargets", "get") in needs
     assert ("longhorn-system", "longhorn.io", "volumes", "watch") in needs
     # An unnamed `get ... 2>/dev/null` is a list: the redirect's `2` is not a resource name.
@@ -70,7 +71,7 @@ def test_a_script_line_with_no_grant_is_flagged() -> None:
         namespace="longhorn-system",
     )
     assert _gaps(needs, docs) == [
-        ("longhorn-system", "longhorn.io", "backuptargets", "get")
+        ("longhorn-system", "longhorn.io", "backuptargets", "get", "x")
     ]
 
 
@@ -110,7 +111,7 @@ def test_an_applied_kind_without_patch_is_flagged() -> None:
         namespace=None,
     )
     assert _gaps(shell_needs(_PV_APPLY), docs) == [
-        (None, "", "persistentvolumes", "patch")
+        (None, "", "persistentvolumes", "patch", "x")
     ]
 
 
@@ -133,7 +134,7 @@ _INGRESSROUTES = {
 def test_an_all_namespaces_read_under_a_namespaced_role_is_flagged() -> None:
     needs = recorded_needs([["kubectl", "get", "ingressroute", "-A", "-o", "json"]])
     assert _gaps(needs, _role([_INGRESSROUTES])) == [
-        (ALL_NAMESPACES, "traefik.io", "ingressroutes", "list")
+        (ALL_NAMESPACES, "traefik.io", "ingressroutes", "list", None)
     ]
 
 
@@ -153,7 +154,7 @@ _POD_LOG_READS = [
 
 def test_logs_of_a_deployment_with_no_deployment_grant_is_flagged() -> None:
     assert _gaps(recorded_needs(_LOGS), _role(_POD_LOG_READS)) == [
-        ("homelab", "apps", "deployments", "get")
+        ("homelab", "apps", "deployments", "get", "janitorr")
     ]
 
 
@@ -184,8 +185,8 @@ def test_a_delete_granted_without_list_and_watch_is_flagged() -> None:
         ]
     )
     assert _gaps(needs, docs) == [
-        ("homelab", "", "persistentvolumeclaims", "list"),
-        ("homelab", "", "persistentvolumeclaims", "watch"),
+        ("homelab", "", "persistentvolumeclaims", "list", "$DRILL"),
+        ("homelab", "", "persistentvolumeclaims", "watch", "$DRILL"),
     ]
 
 
@@ -206,3 +207,59 @@ def test_an_unresolved_namespace_variable_is_flagged() -> None:
 def test_an_unknown_verb_is_flagged() -> None:
     with pytest.raises(KeyError, match="cordon"):
         recorded_needs([["kubectl", "cordon", "node-a"]])
+
+
+# The drill's stamp ConfigMap grant from the plan (H2.3c): a get and a patch on one name.
+_STAMPS = {
+    "apiGroups": [""],
+    "resources": ["configmaps"],
+    "verbs": ["get", "patch"],
+    "resourceNames": ["longhorn-restore-drill-stamps"],
+}
+
+
+def test_a_name_restricted_rule_is_flagged_for_another_name() -> None:
+    needs = shell_needs("$KUBECTL -n homelab patch configmap other-cm -p '{}'\n")
+    assert _gaps(needs, _role([_STAMPS])) == [
+        ("homelab", "", "configmaps", "patch", "other-cm")
+    ]
+
+
+def test_a_name_restricted_rule_is_clean_for_its_own_name() -> None:
+    needs = shell_needs(
+        "$KUBECTL -n homelab patch configmap longhorn-restore-drill-stamps -p '{}'\n"
+    )
+    assert _gaps(needs, _role([_STAMPS])) == []
+
+
+def test_a_name_restricted_rule_never_covers_create_or_an_unnamed_list() -> None:
+    """RBAC cannot narrow `create` by name, and a list without a name selects every object."""
+    rule = {**_STAMPS, "verbs": ["get", "create", "patch", "list"]}
+    needs = shell_needs(
+        'cat >"$M" <<YAML\napiVersion: v1\nkind: ConfigMap\nmetadata:\n'
+        "  name: longhorn-restore-drill-stamps\n  namespace: homelab\nYAML\n"
+        '$KUBECTL apply -f "$M"\n'
+        "$KUBECTL -n homelab get configmap -o name\n"
+    )
+    assert _gaps(needs, _role([rule])) == [
+        ("homelab", "", "configmaps", "create", "longhorn-restore-drill-stamps"),
+        ("homelab", "", "configmaps", "list", None),
+    ]
+
+
+def test_a_variable_name_against_a_name_restricted_rule_is_flagged() -> None:
+    needs = shell_needs('$KUBECTL -n homelab patch configmap "$CM" -p "{}"\n')
+    with pytest.raises(KeyError, match="variable"):
+        _gaps(needs, _role([_STAMPS]))
+
+
+def test_every_call_on_a_line_is_read() -> None:
+    """The second call after a pipe or `&&` has needs of its own, and its gap is flagged."""
+    needs = shell_needs(
+        "A=$($KUBECTL -n homelab get pod x) && $KUBECTL -n homelab delete pvc y\n"
+    )
+    pods = {"apiGroups": [""], "resources": ["pods"], "verbs": ["get"]}
+    assert _gaps(needs, _role([pods])) == [
+        ("homelab", "", "persistentvolumeclaims", v, "y")
+        for v in ("delete", "list", "watch")
+    ]

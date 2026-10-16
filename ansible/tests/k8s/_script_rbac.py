@@ -11,7 +11,11 @@ added without its grant fails a test rather than a 04:10 UTC run.
 - `argv_needs` reads the argv lists a Python module's recording runner captured.
 - `missing` names each need no grant covers.
 
-A need is `(namespace, apiGroup, resource, verb)`. The namespace is None for a cluster-scoped
+A need is `(namespace, apiGroup, resource, verb, name)`. The name is the object the call names,
+or None when it names none (a list, a pod a Deployment resolves to). A rule with
+`resourceNames` covers only a need whose name it lists, and never `create`, which RBAC cannot
+narrow by name. A name the script holds in a variable cannot be checked against such a rule,
+so that comparison raises. The namespace is None for a cluster-scoped
 resource and `ALL_NAMESPACES` for `-A`; both need a ClusterRole. A namespace the script holds in
 a variable, such as the drill's `"$PVC_NS"`, resolves through the `namespaces` map the caller
 passes, and an unresolved one raises: the caller states which namespace the variable holds.
@@ -139,11 +143,11 @@ def _resource(word: str) -> tuple[tuple, bool]:
 def argv_needs(
     argv: list[str],
     namespaces: dict[str, str] | None = None,
-    applied: Sequence[tuple[str, str | None]] = (),
+    applied: Sequence[tuple[str, str | None, str | None]] = (),
 ) -> set[tuple]:
     """The needs of one kubectl call, `argv` starting at the word after `kubectl`.
 
-    `applied` is `(kind, namespace)` for each manifest an `apply -f` sends.
+    `applied` is `(kind, namespace, name)` for each manifest an `apply -f` sends.
 
     Raises:
       KeyError: a verb, resource, kind or namespace variable this module cannot resolve.
@@ -165,12 +169,19 @@ def argv_needs(
     namespace = ALL_NAMESPACES if everywhere else _namespace(namespace, namespaces)
     verb, rest = words[0], words[1:]
 
-    def need(resource: tuple, *verbs: str, ns: str | None = namespace) -> set[tuple]:
-        return {(_scope(resource, ns), resource[0], resource[1], v) for v in verbs}
+    def need(
+        resource: tuple,
+        *verbs: str,
+        ns: str | None = namespace,
+        name: str | None = None,
+    ) -> set[tuple]:
+        return {
+            (_scope(resource, ns), resource[0], resource[1], v, name) for v in verbs
+        }
 
     if verb == "apply":
         found = set()
-        for kind, ns in applied:
+        for kind, ns, name in applied:
             if kind not in KINDS:
                 raise KeyError(f"unknown applied kind {kind!r}; add it to KINDS")
             found |= need(
@@ -179,55 +190,77 @@ def argv_needs(
                 "create",
                 "patch",
                 ns=_namespace(ns, namespaces) or namespace,
+                name=name,
             )
         return found
     if verb == "run":
-        return need(PODS, "create")
+        return need(PODS, "create", name=rest[0])
     if verb == "create" and rest[:1] == ["job"]:
-        return need(RESOURCES["job"], "create") | need(RESOURCES["cronjob"], "get")
+        source = next((w.split("/", 1)[1] for w in argv if "cronjob/" in w), None)
+        return need(RESOURCES["job"], "create", name=rest[1]) | need(
+            RESOURCES["cronjob"], "get", name=source
+        )
     if verb in ("logs", "exec"):
         target = rest[0] if "/" in rest[0] else f"pod/{rest[0]}"
         resource, _ = _resource(target)
-        found = need(resource, "get")
+        name = target.split("/", 1)[1]
+        found = need(resource, "get", name=name)
+        # The pod a Deployment or Job resolves to is chosen at run time, so it has no name here.
+        pod = name if resource == PODS else None
         if resource != PODS:
             found |= need(PODS, "list")
         sub = ("", "pods/log", True) if verb == "logs" else ("", "pods/exec", True)
-        return found | need(sub, *(("get",) if verb == "logs" else ("create", "get")))
+        sub_verbs = ("get",) if verb == "logs" else ("create", "get")
+        return found | need(sub, *sub_verbs, name=pod)
     if verb in ("get", "delete", "patch", "label", "annotate"):
-        resource, named = _resource(rest[0])
-        named = named or len(rest) > 1
+        resource, _ = _resource(rest[0])
+        name = rest[0].split("/", 1)[1] if "/" in rest[0] else (rest[1:] or [None])[0]
         if verb == "get":
-            return need(resource, "get" if named else "list")
+            return need(resource, "get" if name else "list", name=name)
         if verb == "delete":
-            return need(resource, "delete", "list", "watch")
-        return need(resource, "patch")
+            # The wait lists and watches with a `metadata.name` field selector, which RBAC
+            # authorizes against `resourceNames` like a get.
+            return need(resource, "delete", "list", "watch", name=name)
+        return need(resource, "patch", name=name)
     raise KeyError(f"unknown kubectl verb {verb!r}; teach argv_needs what it calls")
 
 
-def _heredoc_manifests(script: str) -> list[tuple[str, str | None]]:
-    """(kind, namespace) for each manifest document in any heredoc of `script`."""
+def _heredoc_manifests(script: str) -> list[tuple[str, str | None, str | None]]:
+    """(kind, namespace, name) for each manifest document in any heredoc of `script`."""
     found = []
     for _tag, body in _HEREDOC.findall(script):
         for doc in re.split(r"^---\s*$", body, flags=re.M):
             kind = re.search(r"^kind:\s*(\S+)", doc, re.M)
             namespace = re.search(r"^  namespace:\s*(\S+)", doc, re.M)
+            name = re.search(r"^  name:\s*(\S+)", doc, re.M)
             if kind:
-                found.append((kind.group(1), namespace and namespace.group(1)))
+                found.append(
+                    (
+                        kind.group(1),
+                        namespace and namespace.group(1),
+                        name and name.group(1),
+                    )
+                )
     return found
 
 
 def kubectl_lines(script: str) -> list[list[str]]:
-    """The words after `$KUBECTL` on each line that calls it, continuations joined."""
+    """The words after each `$KUBECTL` in `script`, continuations joined.
+
+    A line can hold several calls (`$KUBECTL get ... | $KUBECTL apply -f -`, `A=$($KUBECTL
+    ...) && $KUBECTL ...`), so every match on a line starts a call of its own.
+    """
     calls = []
     for line in script.replace("\\\n", " ").splitlines():
-        if line.lstrip().startswith("#") or not (m := _KUBECTL.search(line)):
+        if line.lstrip().startswith("#"):
             continue
-        words = []
-        for word in _WORD.findall(line[m.end() :]):
-            if _END.fullmatch(word):
-                break
-            words.append("".join(shlex.split(word)))
-        calls.append(words)
+        for m in _KUBECTL.finditer(line):
+            words = []
+            for word in _WORD.findall(line[m.end() :]):
+                if _END.fullmatch(word):
+                    break
+                words.append("".join(shlex.split(word)))
+            calls.append(words)
     return calls
 
 
@@ -252,7 +285,9 @@ def recorded_needs(
 
 
 def grants(docs: list[dict], namespace: str, service_account: str) -> list[tuple]:
-    """`(namespace or None, apiGroups, resources, verbs)` per rule bound to the ServiceAccount.
+    """`(namespace or None, apiGroups, resources, verbs, resourceNames)` per rule bound to it.
+
+    An empty `resourceNames` set means the rule names no object, so it covers every name.
 
     A RoleBinding grants its Role's or ClusterRole's rules in the binding's namespace only. A
     ClusterRoleBinding grants a ClusterRole's rules everywhere, which is the None namespace.
@@ -286,28 +321,53 @@ def grants(docs: list[dict], namespace: str, service_account: str) -> list[tuple
                     set(rule.get("apiGroups") or []),
                     set(rule.get("resources") or []),
                     set(rule.get("verbs") or []),
+                    set(rule.get("resourceNames") or []),
                 )
             )
     return found
 
 
 def missing(needs: set[tuple], granted: list[tuple]) -> list[tuple]:
-    """Each need, sorted, that no grant covers; `*` in a rule matches anything."""
+    """Each need, sorted, that no grant covers; `*` in a rule matches anything.
 
-    def covers(grant: tuple, need: tuple) -> bool:
-        scope, groups, resources, verbs = grant
-        namespace, group, resource, verb = need
+    Raises:
+      KeyError: a need no rule covers outright has a shell-variable name and meets a rule with
+        `resourceNames`, so whether that rule covers it depends on a value picked at run time.
+    """
+
+    def by_name(names: set[str], verb: str, name: str | None) -> bool | None:
+        """Whether a rule naming `names` covers `name`; None when `name` is a variable."""
+        if not names:
+            return True
+        if verb == "create" or name is None:
+            return False
+        if name.startswith("$") or "${" in name:
+            return None
+        return name in names
+
+    def covers(grant: tuple, need: tuple) -> bool | None:
+        scope, groups, resources, verbs, names = grant
+        namespace, group, resource, verb, name = need
         in_scope = scope is None or (
             namespace not in (None, ALL_NAMESPACES) and scope == namespace
         )
-        return (
+        if not (
             in_scope
             and (group in groups or "*" in groups)
             and (resource in resources or "*" in resources)
             and (verb in verbs or "*" in verbs)
-        )
+        ):
+            return False
+        return by_name(names, verb, name)
 
-    return sorted(
-        (n for n in needs if not any(covers(g, n) for g in granted)),
-        key=lambda n: tuple(str(x) for x in n),
-    )
+    gaps = []
+    for need in needs:
+        verdicts = [covers(g, need) for g in granted]
+        if True in verdicts:
+            continue
+        if None in verdicts:
+            raise KeyError(
+                f"{need}: its name is a variable, so a resourceNames rule cannot be checked"
+            )
+        gaps.append(need)
+    return sorted(gaps, key=lambda n: tuple(str(x) for x in n))
