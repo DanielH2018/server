@@ -9,8 +9,8 @@ because that module is near the cap for a test module.
 
 `HOST_WRITES` reads every task file of a k8s role that has a `containers_list` entry. A role
 without one is a utility role that no tag flips, and the set is derived, never listed. Its
-`allow` map names, per task file, the PR that moves the file's host writes. A flip PR cannot
-pass while its role keeps an entry there.
+`allow` map names, per task file, the PR that moves the file's host writes. An entry holds only
+while its role is Ansible-owned, so a flip PR cannot pass while its role still writes a host.
 
 `HOST_SCRIPT_WRITES` reads the scripts and modules those host-write tasks install, and the
 `templates/` and `files/` of `roles/setup/k8s_host_files/` once D5.1h creates that role. A
@@ -25,7 +25,7 @@ import re
 from _helpers import REPO, walk_tasks
 from _row_table import Census, Subject, tracked
 from lib import yaml_fast
-from lib.k8s_roles import k8s_entries
+from lib.k8s_roles import OWNER_VALUES, k8s_entries
 
 _K8S = "ansible/roles/k8s/"
 _HOST_FILES_ROLE = "ansible/roles/setup/k8s_host_files/"
@@ -159,6 +159,22 @@ HOST_WRITE_ALLOW = {
     ),
 }
 
+
+def ansible_owned_allow(
+    allow: dict[str, str], entries: dict[str, dict]
+) -> dict[str, str]:
+    """`allow` without the entries of a role whose `containers_list` entry sets `owner`.
+
+    Flux runs no task of a flux-owned role, so its host writes would stop silently at the
+    flip. Dropping its entry turns each into an offence the flip PR must move first.
+    """
+    return {
+        rel: why
+        for rel, why in allow.items()
+        if entries.get(rel.split("/")[3], {}).get("owner") not in OWNER_VALUES
+    }
+
+
 HOST_WRITES = Census(
     name="k8s-role-tasks-write-no-host",
     reason=(
@@ -236,7 +252,7 @@ HOST_WRITES = Census(
             _K8S + "pi-peer-backup/tasks/main.yml",
         }
     ),
-    allow=HOST_WRITE_ALLOW,
+    allow=ansible_owned_allow(HOST_WRITE_ALLOW, k8s_entries()),
     count=lambda subject: len(host_writes(subject)),
 )
 
@@ -259,7 +275,9 @@ _WRITE_VERBS = frozenset(
 # their values, then the subcommand. A `kubectl exec … -- cscli delete` names `exec`.
 _SHELL_KUBECTL = re.compile(
     r"(?:\bkubectl\b|\$\{?\w*KUBECTL\w*\}?)"
-    r"(?:\s+-{1,2}[\w-]+(?:=\S+|\s+(?!-)[^\s;|&]+)?)*"
+    r"(?:\s+-{1,2}[\w-]+(?:=\S+|\s+(?!-|(?:"
+    + "|".join(_WRITE_VERBS)
+    + r")\b)[^\s;|&]+)?)*"
     r"\s+(?P<verb>[a-z]+)(?:\s+(?P<sub>[a-z]+))?"
 )
 
@@ -382,6 +400,8 @@ HOST_SCRIPT_WRITES = Census(
         Subject("registry-gc.sh.j2", "#!/bin/bash\n" + _REGISTRY_GC_SCALE),
         Subject("x.sh.j2", "k3s kubectl -n homelab rollout restart deploy/x\n"),
         Subject("x.sh", "${KUBECTL} --namespace=homelab annotate pod x a=b\n"),
+        # A boolean flag must not swallow the verb as its value.
+        Subject("x.sh", "kubectl --insecure-skip-tls-verify delete pod x\n"),
         Subject(
             "x.py", 'run([K3S, "kubectl", "-n", NAMESPACE, "patch", "deploy/x"])\n'
         ),
@@ -400,12 +420,12 @@ HOST_SCRIPT_WRITES = Census(
             'run([K3S, "kubectl", "-n", NS, "exec", "deploy/x", "--", "cscli", "delete"])\n',
         ),
     ),
-    # 24 installed scripts, modules and files when the row landed (2026-10-16).
-    min_matches=20,
+    # 24 installed scripts, modules and files when the row landed (2026-10-16). H2's family PRs
+    # move most of them to setup roles, so the floor and the members are the two only D5 moves.
+    min_matches=2,
     must_find=frozenset(
         {
-            _K8S + "crowdsec/templates/crowdsec-update-home-allowlist.sh.j2",
-            _K8S + "crowdsec/files/remote_allowlist.py",
+            _K8S + "pi-peer-backup/files/pi-peer-backup-shell.sh",
             _K8S + "registry/templates/registry-gc.sh.j2",
         }
     ),
