@@ -18,7 +18,7 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 
 import functools
 import re
-from collections.abc import Collection
+from collections.abc import Collection, Iterable
 from pathlib import Path
 
 import yaml
@@ -492,3 +492,38 @@ def claim_contexts(ctx: dict) -> list[dict]:
     that declares no claims.
     """
     return [{**ctx, "manifests_claim": claim} for claim in ctx.get("k8s_claims") or []]
+
+
+def snapshot_claims(
+    tags: Iterable[str], roles: Path = K8S_ROLES
+) -> tuple[dict[str, list[str]], list[str]]:
+    """The snapshot claims each tag declares, and one line per tag it could not judge.
+
+    A tag declares them in its role's `defaults/main.yml` as `k8s_autodeploy_snapshot_pvcs`,
+    which the manifests role snapshots before each apply. A non-empty list also calls for
+    `<tag>-snapshot` (D5.2a), so `digests.json`'s `claims` (`renderer_lib/bundle.py`) and the
+    publish census (`deploy_tools/bundle_census.py`) read this one function and cannot
+    disagree. A value that is not a literal list is a problem rather
+    than a guess, and its tag is left out of the mapping.
+
+    Returns:
+        Each judged tag mapped to its sorted claim names, empty for a tag that declares none.
+    """
+    found: dict[str, list[str]] = {}
+    problems = []
+    for tag in sorted(set(tags)):
+        path = roles / tag / "defaults" / "main.yml"
+        try:
+            defaults = yaml_fast.safe_load(path.read_text()) if path.is_file() else {}
+        except (OSError, yaml.YAMLError) as err:
+            problems.append(f"could not tell whether {tag} snapshots claims: {err}")
+            continue
+        value = (defaults or {}).get("k8s_autodeploy_snapshot_pvcs")
+        if value is not None and not isinstance(value, list):
+            problems.append(
+                f"could not tell whether {tag} snapshots claims: its "
+                f"k8s_autodeploy_snapshot_pvcs is {value!r}, not a literal list"
+            )
+            continue
+        found[tag] = sorted(str(claim) for claim in value or [])
+    return found, problems

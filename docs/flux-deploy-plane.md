@@ -255,8 +255,11 @@ under its pod template. `probe_lib/takeover.py` holds the rules.
 - **Not listed: `last-applied-configuration`.** The cleanup removes it from every object by
   design.
 - **Not read: Secrets and RBAC objects.** The census skips Secrets, whose managers D3.5 handles.
-  The read-only ServiceAccount cannot read ClusterRoles or ClusterRoleBindings, so the census
-  names each one as not checked.
+  The read-only ServiceAccount cannot read Roles, RoleBindings, ClusterRoles or
+  ClusterRoleBindings, so the census names each one as not checked. Its last line lists them,
+  and the operator runs `takeover_census.py` (below) over them. The ServiceAccount stays
+  unable to read them: its ClusterRole leaves `rbac.*` out on purpose, because the bindings map
+  the escalation paths.
 - **An empty census is not a clean one.** A tag with no rendered object live exits 75.
 
 The census cannot see an apply that fails on an immutable field, such as a PVC's spec or a
@@ -276,7 +279,8 @@ names, so the diff compares real values rather than `${…}` placeholders. It re
 field paths from both commands, never values or diff hunks.
 
 H1's flips use a different census, `scripts/dev/takeover_census.py` (H1.1j), which is also
-operator-only. It compares the live object with a server-side dry-run apply as
+operator-only. A D5 role PR runs it too, over each object `probe.py takeover` names as not
+checked. It compares the live object with a server-side dry-run apply as
 `kustomize-controller`, which needs the admin kubeconfig, and it also prints the fields that a
 manager outside the cleanup list keeps. It makes no API call itself. The operator renders the
 tag, writes both inputs as JSON and passes them in. Both inputs hold whole live objects, a
@@ -459,7 +463,10 @@ notification-controller posts on T:
   `digests.json`, expects every name, and an empty set expects `flux/homelab` alone.
 - **What it never expects.** A Kustomization outside the set, so a failure that T did not
   cause never holds; the Flux alerts page it instead. A dependent whose status on `prod`'s
-  commit already read `failure` is reported in the log and not expected.
+  commit already read `failure` is logged as `excused <name>` and not expected. `decide`
+  records those statuses before `prod` moves, and `verify` reads that record rather than
+  `prod`'s commit (H1.1i). A dependent is a member of the set only through its `dependsOn`
+  chain, so a name whose footprint T changed is never excused.
 - **T, not the trigger.** `decide` may pick a commit newer than the one whose CI started the
   run, and Flux posts statuses only on the commit `prod` names. `verify` reads T's own bundle,
   which `decide` pulled, never the render job's `out/`.
@@ -883,6 +890,13 @@ shared kind to two SHA-256 digests:
 - `footprint` covers every path that counts for the name: the tag's own directories, with
   each per-tag suffix stripped, its `flux/<tag>.yaml`, and the files of each shared kind
   whose rule lists the tag.
+
+A published tag's object also holds two fields (D5.1a2):
+
+- `claims` lists the snapshot claims the tag's role declares in
+  `k8s_autodeploy_snapshot_pvcs`, sorted. The publish census's `-snapshot` rule reads the
+  same function, `scripts/lib/k8s_roles.py:snapshot_claims`.
+- `suspended` is true when the tag's rendered Kustomization sets `spec.suspend: true`.
 
 `flux/kustomization.yaml`, `digests.json` itself and `images/` count for no name. Any other
 path that no rule claims lands under `_unclassified`, with the same two digests and a `paths`
