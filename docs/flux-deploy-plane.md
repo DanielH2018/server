@@ -255,8 +255,11 @@ under its pod template. `probe_lib/takeover.py` holds the rules.
 - **Not listed: `last-applied-configuration`.** The cleanup removes it from every object by
   design.
 - **Not read: Secrets and RBAC objects.** The census skips Secrets, whose managers D3.5 handles.
-  The read-only ServiceAccount cannot read ClusterRoles or ClusterRoleBindings, so the census
-  names each one as not checked.
+  The read-only ServiceAccount cannot read Roles, RoleBindings, ClusterRoles or
+  ClusterRoleBindings, so the census names each one as not checked. Its last line lists them,
+  and the operator runs `takeover_census.py` (below) over them. The ServiceAccount stays
+  unable to read them: its ClusterRole leaves `rbac.*` out on purpose, because the bindings map
+  the escalation paths.
 - **An empty census is not a clean one.** A tag with no rendered object live exits 75.
 
 The census cannot see an apply that fails on an immutable field, such as a PVC's spec or a
@@ -276,7 +279,8 @@ names, so the diff compares real values rather than `${…}` placeholders. It re
 field paths from both commands, never values or diff hunks.
 
 H1's flips use a different census, `scripts/dev/takeover_census.py` (H1.1j), which is also
-operator-only. It compares the live object with a server-side dry-run apply as
+operator-only. A D5 role PR runs it too, over each object `probe.py takeover` names as not
+checked. It compares the live object with a server-side dry-run apply as
 `kustomize-controller`, which needs the admin kubeconfig, and it also prints the fields that a
 manager outside the cleanup list keeps. It makes no API call itself. The operator renders the
 tag, writes both inputs as JSON and passes them in. Both inputs hold whole live objects, a

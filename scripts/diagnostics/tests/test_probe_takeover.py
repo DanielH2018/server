@@ -308,6 +308,23 @@ def test_run_prints_the_census_and_reports_a_forbidden_read(capsys):
     assert "Secret homelab/s: skipped" in out
 
 
+def test_an_unreadable_object_is_handed_to_the_operators_census():
+    role = {"kind": "Role", "metadata": {"name": "r", "namespace": "homelab"}}
+
+    def live_of(doc):
+        if doc["kind"] == "Role":
+            raise tk.ReadForbidden("Error from server (Forbidden)")
+        return _live()
+
+    text, _ = tk.census("t", [_render(), role], live_of)
+    assert text.splitlines()[-1] == (
+        "1 object(s) not checked; the operator runs scripts/dev/takeover_census.py "
+        "(H1.1j) with the admin kubeconfig over them: Role homelab/r"
+    )
+    text, _ = tk.census("t", [_render()], live_of)
+    assert "not checked" not in text
+
+
 def test_a_tag_with_no_live_object_is_unreadable_not_clean():
     with pytest.raises(Unreadable):
         tk.run_takeover(
