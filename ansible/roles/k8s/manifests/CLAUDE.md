@@ -92,8 +92,9 @@ deferred pair below.
   template builds with `lookup('file'|'template', ...)` is in the rendered bytes already; one
   staged with `kubectl create configmap --from-file` is not, so that role adds a
   `checksum/<name>` pod annotation from `ansible/templates/checksum-annotation.yml.j2`. For a
-  flux-owned role, no Ansible restart runs at all. The renderer stamps `checksum/restart`
-  on each restart target, every `manifests_self_rollouts` entry included, so pihole's and
+  flux-owned role, no Ansible restart runs at all. The renderer stamps its own restart
+  annotation (`scripts/renderer/renderer_lib/restart.py:RESTART_ANNOTATION`) on each restart
+  target, every `manifests_self_rollouts` entry included, so pihole's and
   observability's own restarts have a Flux equivalent
   (`scripts/renderer/renderer_lib/restart.py:restart_targets`).
 - **Stale Secret keys are patched out explicitly, because `apply` cannot** — it prunes map keys
