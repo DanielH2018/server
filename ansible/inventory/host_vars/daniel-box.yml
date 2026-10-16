@@ -165,6 +165,9 @@ containers_list:
     auth_tier: one_factor
   - name: texbrain
     platform: k8s
+    # Flux applies texbrain through `promote`, and every Ansible path skips it (D4.5). The
+    # handback is two PRs, `owner: released` then removing `owner`: docs/flux-deploy-plane.md.
+    owner: flux
     # Single label, for the same wildcard-cert reason as bento-pdf above.
     hostname: "texbrain"
     port: 8080
