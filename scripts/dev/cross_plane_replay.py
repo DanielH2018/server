@@ -11,8 +11,9 @@ inventory said. `ansible/vars/secrets.yml` keeps this checkout's copy, because a
 value never renders.
 
 A commit whose transplant does not render is judged instead as today's tree against today's
-tree with the commit's own change reversed. One that renders neither way is counted as
-unrenderable, never as clean.
+tree with the commit's own change reversed. One that renders neither way is still judged on
+the gate's `tasks/` rule, which needs no render, and is otherwise counted as unrenderable,
+never as clean.
 
 Every pair across the planes holds a flux-owned tag, and the gate's second arm judges only
 those, so the first pass renders the flux-owned tags alone. Only a commit that moves one, or
@@ -288,12 +289,26 @@ def replay(since: str, ref: str, flux_owned: list[str], jobs: int, cache: Path) 
         with ThreadPoolExecutor(max_workers=jobs) as pool:
             for sha, snap in zip(failed, pool.map(undone, failed), strict=True):
                 full[f"{sha}^"], full[sha] = snap, today
-    refused, shared, unrenderable = [], [], []
+    refused, shared, by_tasks, unrenderable = [], [], [], []
+    # With no render, the `tasks/` rule still judges: both sides take today's dependency map
+    # and identical renders, so only a `tasks/` change can count a tag. A lower bound.
+    unrendered = (
+        Snapshot(renders={}, owners=today.owners, deps=today.deps)
+        if not isinstance(today, str)
+        else None
+    )
     for sha in candidates:
         paths, diffs, _ = judged[sha]
         base, head = full[f"{sha}^"], full[sha]
         subject = git_stdout("log", "-1", "--format=%s", sha, cwd=REPO)
         if isinstance(base, str) or isinstance(head, str):
+            found = problems(unrendered, unrendered, paths, diffs) if unrendered else []
+            if found:
+                by_tasks.append(sha)
+                print(f"REFUSED {sha[:9]} (tasks/ only, unrenderable) {subject}")
+                for line in found:
+                    print(f"    {line}")
+                continue
             unrenderable.append(sha)
             failure = base if isinstance(base, str) else head
             reason = str(failure).strip().splitlines()[-1]
@@ -310,12 +325,14 @@ def replay(since: str, ref: str, flux_owned: list[str], jobs: int, cache: Path) 
             print(f"REFUSED {sha[:9]} ({way}){tag} {subject}")
             for line in found:
                 print(f"    {line}")
+    reversed_ok = len(failed) - len(unrenderable) - len(by_tasks)
     print(
         f"replay: {len(commits)} commits on {ref} since {since}; {len(judged)} change a render "
         f"input and were judged, the rest are clean by construction; {len(failed)} did not "
-        f"render as a transplant, and {len(failed) - len(unrenderable)} of those rendered "
-        f"reversed on today's tree; {len(refused)} refused, {len(shared)} of them for a "
-        f"shared-template change; {len(unrenderable)} unrenderable either way"
+        f"render as a transplant, and {reversed_ok} of those rendered "
+        f"reversed on today's tree; {len(refused)} refused by render, {len(shared)} of them "
+        f"touching a shared template; {len(by_tasks)} more refused on tasks/ alone though "
+        f"unrenderable; {len(unrenderable)} unrenderable and not refused on tasks/"
     )
     return 0
 
