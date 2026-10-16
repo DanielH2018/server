@@ -8,6 +8,7 @@ sleep are the test's own, so the 60-second budget costs nothing.
 Run: uv run pytest ansible/roles/k8s/manifests/tests/test_flux_job_connect.py
 """
 
+import errno
 import http.client
 import http.server
 import socket
@@ -150,3 +151,8 @@ def test_a_connect_timeout_is_a_refusal_and_a_read_timeout_is_an_answer():
     assert flux_job_connect.refused(urllib.error.URLError(TimeoutError()))
     assert not flux_job_connect.refused(TimeoutError())
     assert not flux_job_connect.refused(urllib.error.URLError(ConnectionResetError()))
+
+
+def test_an_unreachable_host_is_a_refusal():
+    unreachable = OSError(errno.EHOSTUNREACH, "No route to host")
+    assert flux_job_connect.refused(urllib.error.URLError(unreachable))

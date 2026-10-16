@@ -11,7 +11,8 @@ Job and its directory:
   `verify` and `mutation`. Any other directory admits no Job. Verify and mutation Jobs share
   a directory, so only the annotation tells them apart, and a Job without it fails;
 - `ttl`: no `spec.ttlSecondsAfterFinished`, because Flux re-creates a Job its TTL deleted;
-- `name`: the name ends in `-<job_spec_digest8>`, because a Job's pod template is immutable;
+- `name`: the name ends in `-<job_spec_digest8>`, because a Job's pod template is immutable,
+  and the spec holds no `${...}` placeholder, which Flux would substitute after the digest;
 - `backoff`: `spec.backoffLimit` is set, to 1 for a snapshot Job and 0 for a soak or verify
   Job. A mutation Job states its own value;
 - `rerun-safe`: a mutation Job's `homelab/rerun-safe` annotation names a test, as
@@ -23,6 +24,8 @@ The test module is `test_renderer_job_census.py`.
 """
 
 import ast
+import json
+import re
 from collections.abc import Callable, Iterator, Mapping
 from pathlib import Path
 
@@ -31,6 +34,11 @@ from lib.repo_paths import REPO
 from renderer.renderer_lib.bundle import CLUSTER_DIR, job_spec_digest8
 from renderer.renderer_lib.ordering import SNAPSHOT_SUFFIX, VERIFY_SUFFIX, split_kind
 
+# DECIDED: a Job declares its kind in this annotation on the Job's own `metadata`, which the
+# plan does not name. Verify and mutation Jobs share `<tag>-verify`, so nothing else tells a
+# mutation Job, which must carry `RERUN_SAFE`, from a verify Job, which must not retry. A Job
+# without it fails closed. Both annotations sit on the Job, not its pod template, so adding
+# one moves no spec digest and renames no Job.
 JOB_KIND = "homelab/job-kind"
 RERUN_SAFE = "homelab/rerun-safe"
 SOAK = "soak"
@@ -49,6 +57,7 @@ CONNECTS = frozenset(
         "create_connection",
     }
 )
+IMPORTS_HELPER = re.compile(r"^\s*(?:from|import)\s+flux_job_connect\b", re.MULTILINE)
 # Modules a Job script never imports: each opens a connection below `urllib`.
 CONNECTING_MODULES = frozenset({"socket", "http.client"})
 
@@ -104,10 +113,20 @@ def ttl_offence(job: Mapping, directory: str, docs: list[dict]) -> list[str]:
 
 
 def name_offence(job: Mapping, directory: str, docs: list[dict]) -> list[str]:
+    offences = []
     want = job_spec_digest8(job)
     if not job["metadata"]["name"].endswith(f"-{want}"):
-        return [f"name does not end in its spec digest -{want}"]
-    return []
+        offences.append(f"name does not end in its spec digest -{want}")
+    # Flux substitutes `${key}` after the digest is taken, so a cluster-vars change would move
+    # the applied spec and keep the name. A substituted value reaches a Job through a Secret.
+    # `$${` is Flux's escape for a literal `${`.
+    spec = json.dumps(job.get("spec"), sort_keys=True).replace("$$", "")
+    if "${" in spec:
+        offences.append(
+            "spec holds a ${...} placeholder, which Flux substitutes after the name's "
+            "digest is taken; pass the value through a Secret"
+        )
+    return offences
 
 
 def backoff_offence(job: Mapping, directory: str, docs: list[dict]) -> list[str]:
@@ -191,9 +210,14 @@ def helper_offence(job: Mapping, directory: str, docs: list[dict]) -> list[str]:
                 "cannot read its scripts"
             )
             continue
-        for key, text in sorted((configmaps[name].get("data") or {}).items()):
+        data = configmaps[name].get("data") or {}
+        for key, text in sorted(data.items()):
             if not key.endswith(".py"):
                 continue
+            if HELPER.name not in data and IMPORTS_HELPER.search(text):
+                offences.append(
+                    f"{name}/{key} imports {HELPER.name}, which {name} lacks"
+                )
             if key == HELPER.name:
                 if text.rstrip("\n") != helper:
                     offences.append(

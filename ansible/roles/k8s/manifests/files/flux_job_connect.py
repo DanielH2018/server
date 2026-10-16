@@ -19,6 +19,7 @@ Typical usage example:
         body = response.read()
 """
 
+import errno
 import time
 import urllib.error
 import urllib.request
@@ -28,6 +29,9 @@ from collections.abc import Callable
 RETRY_SECONDS = 60
 # The pause between two connect attempts, in seconds.
 PAUSE_SECONDS = 2
+# A fence that rejects with an ICMP host or network error rather than dropping the packet
+# surfaces as one of these. Neither means a server answered.
+UNREACHABLE = frozenset({errno.EHOSTUNREACH, errno.ENETUNREACH})
 
 
 def refused(err: BaseException) -> bool:
@@ -41,7 +45,10 @@ def refused(err: BaseException) -> bool:
         err, urllib.error.URLError
     ):
         return False
-    return isinstance(err.reason, (ConnectionRefusedError, TimeoutError))
+    reason = err.reason
+    if isinstance(reason, (ConnectionRefusedError, TimeoutError)):
+        return True
+    return isinstance(reason, OSError) and reason.errno in UNREACHABLE
 
 
 def open_url(

@@ -888,7 +888,9 @@ under *Rules for every Job Flux applies (D5.1a3)*.
   the bundle.
 - **Name.** Each name ends in `-<digest8>`, the first 8 hex digits of the SHA-256 of the
   Job's `spec` as sorted-key JSON (`job_spec_digest8` in
-  `scripts/renderer/renderer_lib/bundle.py`).
+  `scripts/renderer/renderer_lib/bundle.py`). The spec holds no `${...}` placeholder,
+  because Flux substitutes it after the digest is taken. A substituted value reaches a Job
+  through a Secret.
 - **`backoffLimit`.** Every Job sets one: 1 for a snapshot Job, 0 for a soak or verify Job,
   and a mutation Job's own value, with its reason beside it.
 - **Rerun safety.** A mutation Job carries `homelab/rerun-safe`, naming as `<path>::<test>`

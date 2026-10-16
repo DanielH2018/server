@@ -74,7 +74,10 @@ def _job(kind: str) -> dict:
 
 
 def _configmap(script: str, helper: str | None = None) -> dict:
-    data = {"run.py": script, HELPER.name: helper or HELPER.read_text()}
+    """The Job's script ConfigMap, with `helper` as its helper copy; "" leaves the copy out."""
+    data = {"run.py": script}
+    if helper != "":
+        data[HELPER.name] = helper or HELPER.read_text()
     return {"kind": "ConfigMap", "metadata": {"name": SCRIPTS}, "data": data}
 
 
@@ -162,6 +165,21 @@ def test_a_changed_copy_of_the_helper_is_flagged():
     helper = HELPER.read_text().replace("RETRY_SECONDS = 60", "RETRY_SECONDS = 0")
     bundle = _bundle(_job("verify"), "sonarr-verify", helper=helper)
     assert _rows(bundle) == {"helper"}
+
+
+def test_a_script_importing_the_helper_without_its_copy_is_flagged():
+    bundle = _bundle(_job("verify"), "sonarr-verify", helper="")
+    assert _rows(bundle) == {"helper"}
+
+
+def test_a_placeholder_in_a_job_spec_is_flagged():
+    job = _broken("verify", lambda j: j["spec"]["template"].update(env="${domain}"))
+    assert _rows(_bundle(job, "sonarr-verify")) == {"name"}
+
+
+def test_an_escaped_placeholder_in_a_job_spec_is_clean():
+    job = _broken("verify", lambda j: j["spec"]["template"].update(env="$${HOME}"))
+    assert problems(_bundle(job, "sonarr-verify")) == []
 
 
 def test_a_mounted_configmap_the_directory_lacks_is_flagged():
