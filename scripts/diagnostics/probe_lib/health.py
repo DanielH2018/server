@@ -107,7 +107,7 @@ def _render_context():
     return _RENDER_CONTEXT
 
 
-def _role_kind_targets(role, default_namespace, kinds):
+def _role_kind_targets(role, default_namespace, kinds, roles_dir=K8S_ROLES):
     """[(namespace, kind, name)] for every doc of `role`'s manifests whose kind is in `kinds`.
 
     Shared by role_workload_targets (Deployment/DaemonSet/StatefulSet) and
@@ -130,7 +130,7 @@ def _role_kind_targets(role, default_namespace, kinds):
     # Checked before the render context is built, so a block tag (`config`, `deploy`, `cron`)
     # costs a directory stat rather than 0.44s of ansible + jsonschema imports, and a
     # broken renderer environment cannot fail a tag that was never a role.
-    role_dir = K8S_ROLES / role
+    role_dir = roles_dir / role
     if not role_dir.is_dir():
         return None
 
@@ -166,7 +166,7 @@ def _role_kind_targets(role, default_namespace, kinds):
     return sorted(targets)
 
 
-def role_workload_targets(role, default_namespace):
+def role_workload_targets(role, default_namespace, roles_dir=K8S_ROLES):
     """[(namespace, kind, name)] every workload `role`'s rendered manifests declare.
 
     None when `role` is not a k8s role this can resolve — then the caller falls back to
@@ -184,23 +184,25 @@ def role_workload_targets(role, default_namespace):
     Raises when a role with vendored files resolves no workload, which run_health reports as
     a failure (`health_vendored.require_a_vendored_workload`).
     """
-    targets = _role_kind_targets(role, default_namespace, WORKLOAD_KINDS)
+    targets = _role_kind_targets(role, default_namespace, WORKLOAD_KINDS, roles_dir)
     if targets is not None:
-        require_a_vendored_workload(K8S_ROLES / role, targets)
+        require_a_vendored_workload(roles_dir / role, targets)
     return targets
 
 
-def role_scalable_targets(role, default_namespace):
+def role_scalable_targets(role, default_namespace, roles_dir=K8S_ROLES):
     """[(namespace, kind, name)] for every Deployment and StatefulSet `role` renders.
 
     The workloads `kubectl scale` reaches, which is what `probe.py shed-set` lists. A
     DaemonSet runs one pod per node and has no replica count to lower. None on the same terms
     as role_workload_targets.
     """
-    return _role_kind_targets(role, default_namespace, {"Deployment", "StatefulSet"})
+    return _role_kind_targets(
+        role, default_namespace, {"Deployment", "StatefulSet"}, roles_dir
+    )
 
 
-def role_cronjob_targets(role, default_namespace):
+def role_cronjob_targets(role, default_namespace, roles_dir=K8S_ROLES):
     """[(namespace, name)] for every CronJob `role`'s rendered manifests declare.
 
     Consulted by run_health only as a fallback, when role_workload_targets found nothing —
@@ -213,7 +215,7 @@ def role_cronjob_targets(role, default_namespace):
     scripts/diagnostics/tests/test_probe_health_resolver.py from the health-gate side, and
     ansible/tests/deploy/test_cronjob_only_roles_include_the_gate.py from the deploy side.
     """
-    targets = _role_kind_targets(role, default_namespace, {"CronJob"})
+    targets = _role_kind_targets(role, default_namespace, {"CronJob"}, roles_dir)
     if targets is None:
         return None
     return [(namespace, name) for namespace, _kind, name in targets]
@@ -426,12 +428,18 @@ _UNSET = object()
 
 
 def run_health(
-    container, docker=False, cluster=DEFAULT_CLUSTER, served=_UNSET, tools=DEFAULT_TOOLS
+    container,
+    docker=False,
+    cluster=DEFAULT_CLUSTER,
+    served=_UNSET,
+    tools=DEFAULT_TOOLS,
+    roles_dir=K8S_ROLES,
 ):
     """k8s workload health by default, the Pi's Docker container with --docker.
 
     k8s first because that is where ~50 of the ~55 services live. `tools` is the kubectl
     boundary of the k8s reads, injectable so a test can fail them without patching.
+    `roles_dir` is where the k8s roles live, injectable so a test can resolve a fixture role.
     """
     if docker:
         # daniel-pi is the only Docker host left, and probe.py runs on daniel-box, so this is
@@ -475,7 +483,7 @@ def run_health(
 
     ns = core.k8s_namespace()
     try:
-        targets = role_workload_targets(container, ns)
+        targets = role_workload_targets(container, ns, roles_dir)
     except Exception as exc:
         print(
             f"{container}: could not resolve which workloads this role deploys ({exc}) — "
@@ -499,7 +507,7 @@ def run_health(
         # deploying both is gated on its rollout above, not here: role_cronjob_targets is
         # only ever consulted when role_workload_targets found nothing to gate on.
         try:
-            cronjob_targets = role_cronjob_targets(container, ns)
+            cronjob_targets = role_cronjob_targets(container, ns, roles_dir)
         except Exception as exc:
             print(
                 f"{container}: could not resolve which CronJobs this role deploys ({exc}) — "

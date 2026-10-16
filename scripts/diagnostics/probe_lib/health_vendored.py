@@ -16,8 +16,6 @@ from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
-from lib import yaml_fast
-
 VENDORED_SUBDIRS = ("upstream", "patches")
 
 
@@ -43,6 +41,10 @@ def vendored_targets(role_dir, default_namespace, kinds):
             upstream file declares. This fails closed, as a template that does not render
             does.
     """
+    # Deferred, as health.py defers its render imports: most probe.py subcommands never
+    # resolve a role, and PyYAML would otherwise load on every one of them.
+    from lib import yaml_fast
+
     found = {}
     patched = []
     for path in vendored_files(role_dir):
