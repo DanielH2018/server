@@ -48,9 +48,9 @@ from deploy_tools.narrow_lib.order_only_runner import RUNNER
 # `_multiprocessing` that create or remove a filesystem entry raise no event either, so the
 # runner imports those modules first and replaces the calls the same way (#5063). Any other C
 # module can hold state and make calls that no audit event reports, so the runner ends the run
-# once a C module outside its `c_modules` list loads, the ones the real chain imports (#5201): a
-# built-in at its import, before its code runs, and a shared object at the next import or at
-# the report, so a call made in between still runs in the runner. A side effect that stays in the process is compared between the two ends rather
+# when a C module outside its `c_modules` list, the ones the real chain imports, is created
+# (#5201). It wraps the two `_imp` calls every built-in and shared-object module is created
+# through, which run before the module's code does. A side effect that stays in the process is compared between the two ends rather
 # than refused: importing Ansible rebinds `sys.intern` at both (#4995). That covers an attribute of another
 # module added, rebound or deleted, a module loaded, and an in-place change to an object the
 # walk copies. The walk copies every object at every depth below a module attribute, taking

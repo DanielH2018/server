@@ -15,9 +15,9 @@ subprocess runs, as a string, and that one prepares its inputs and compares its 
 # discharging it. An allowlist, because each denylist review found another mutating event.
 # `mkfifo` and `mknod` create a file and raise no event, so `_install` replaces them on `os`
 # and `posix` with a function that ends the process (#4999), and does the same to the
-# `unaudited` table's calls (#5063). It also ends the process once a C module outside
-# `c_modules` loads: a built-in at its `import` event, a shared object at the next one or at
-# the report (#5201). It wraps each of the `counted` table's calls in one that
+# `unaudited` table's calls (#5063). It also ends the process when a C module outside
+# `c_modules` is created, at the `_imp` call that creates it, and backs that with the `import`
+# event's name and a scan of `sys.modules` by loader (#5201). It wraps each of the `counted` table's calls in one that
 # counts the calls that return, for the process state no function reads back (#5081).
 #
 # The hook also records the module state the run leaves behind (#4995). At the plugin's
@@ -143,7 +143,7 @@ def _install(
     skip, deque, getset, member, class_dict, type_flags = kinds
     scalars = (bool, int, float, str, bytes, type(None))
     unset = object()
-    builtin_names, builtin_importer, extension_loader, module_type = loaders
+    builtin_names, builtin_importer, extension_loader, module_type, imp = loaders
     loaded_first = frozenset(modules)
     checked = set()
 
@@ -317,9 +317,8 @@ def _install(
         return writes, loaded
 
     def foreign_c_module():
-        # Whether a C module outside `c_modules` loaded since the hook was installed. The
-        # `import` event names a module before the import system finds it, so a shared object
-        # shows only once it sits in `sys.modules`, by its loader (#5201).
+        # Whether a C module outside `c_modules` loaded since the hook was installed, by its
+        # loader, behind the `_imp` guards below (#5201).
         for name, module in modules.copy().items():
             if name in checked or name in loaded_first or name in c_modules:
                 continue
@@ -406,7 +405,21 @@ def _install(
 
         return count
 
+    def c_module_guard(exit_guard, create):
+        # Every C module is created through `_imp.create_builtin` or `_imp.create_dynamic`,
+        # whether the import system calls it or the plugin does, and a direct call raises no
+        # `import` event and leaves nothing in `sys.modules` (#5201).
+        def guarded(spec, *args):
+            name = spec.name
+            if type(name) is not str or (name not in c_modules and name not in loaded_first):
+                exit_guard(86)
+            return create(spec, *args)
+
+        return guarded
+
     sys.addaudithook(audit)
+    for attr in ("create_builtin", "create_dynamic"):
+        setattr(imp, attr, c_module_guard(exit_, getattr(imp, attr)))
     for module in (os, posix):
         module.mkfifo = module.mknod = stub(exit_)
     for name, attrs in unaudited.items():
@@ -511,6 +524,7 @@ _install(
         sys.modules["_frozen_importlib"].BuiltinImporter,
         sys.modules["_frozen_importlib_external"].ExtensionFileLoader,
         types.ModuleType,
+        sys.modules["_imp"],
     ),
 )
 del _install, _process_state, unaudited, counted, readers, c_modules, name, partial
