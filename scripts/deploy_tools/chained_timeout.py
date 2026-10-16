@@ -31,10 +31,11 @@ ROOT_RETRY_S = 60
 # `dependsOn` hop costs up to one interval (d4-ordering.md). The flux role sets no such flag;
 # scripts/deploy_tools/tests/test_chained_timeout.py fails one it adds.
 REQUEUE_DEPENDENCY_S = 30
-# kustomize-controller's `--concurrent` default: how many Kustomizations it reconciles at once.
-# One that waits on health holds a worker, so a changed set larger than this queues in rounds.
-# The same test fails a `--concurrent` the flux role adds; D5.1 sets it.
-CONCURRENT = 4
+# kustomize-controller's `--concurrent`: how many Kustomizations it reconciles at once. One
+# that waits on health holds a worker, so a changed set larger than this queues in rounds. The
+# flux role sets it to `k8s_rollout_batch_width` (D5.1c), and
+# ansible/tests/k8s/test_flux_role.py fails a drift between that width and this figure.
+CONCURRENT = 5
 # The ceiling of every derived timeout, 5.5 hours. GitHub stops a hosted job at 6 hours, and a
 # `verify` stopped by its job limit leaves no verdict, so `settle` writes `<T> unverified`,
 # which names no Kustomization. Capping here makes `verify` print `failed` first, naming the

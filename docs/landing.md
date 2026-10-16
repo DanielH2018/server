@@ -183,8 +183,9 @@ merge. It refuses on any host but daniel-box. It refuses while `DEPLOY_HOLD` rea
 but `none`, and an empty or missing value refuses too. It also refuses while (`last-good`,
 master tip] already changes the same pin. It then runs `runbook_gates.py longhorn-upgrade` or
 `metallb-upgrade`, and a non-zero exit refuses. On a pass it posts the commit status
-`homelab/upgrade-gates` on the head. Once H1.1b lands, `promote` requires that status before it
-applies the bump. Every refusal ends the landing with `refused` and nothing merged. A merge made outside
+`homelab/upgrade-gates` on the head. `promote` requires that status, at most six hours old,
+before it applies the bump, and holds without it (docs/flux-deploy-plane.md, *Forward-only
+tags*). Every refusal ends the landing with `refused` and nothing merged. A merge made outside
 `land.sh` bypasses the gate. For such a merge, `land.sh --regate <pr>` re-runs the gates for
 the merged PR and re-posts the status without merging. It exits 0 when it posted and 1 when it
 refused. The upgrade runbook's gate section, [docs/longhorn-upgrade.md](longhorn-upgrade.md),
@@ -456,8 +457,13 @@ YAML file holds the key at the base and at the merge commit, and refuses five sh
   that holds the pin, which carries its vendored file, and docs. A test, `renovate.json` or
   another role goes in a PR of its own. `land.sh`'s land gate relies on this refusal.
 - **Two pins bumped together.** Bump each pin in its own PR.
-- **A pin set outside a role directory.** Inventory and play vars override a role default,
-  so a pin in `group_vars/` would move the deployed version while the role file stays put.
+- **A pin set outside the role file that holds it.** Inventory, play vars, `include_role`
+  vars and `set_fact` override a role default, so a pin there would move the deployed version
+  while the role file stays put. The check matches the key at any indent, as YAML `key:` or
+  INI `key=`, in every YAML and INI file under `ansible/` and every file under `inventory/`,
+  `group_vars/` or `host_vars/`. It skips a comment, which starts at a `#` that opens the line
+  or follows whitespace, or at a `;` that opens the line. A `-e` passed at run time is outside
+  its reach.
 
 A PR that moves a key into another role at the same version is no bump, so none of the first
 four applies to it. A key set in two role files at one commit, or a value that is not `vX.Y.Z`,

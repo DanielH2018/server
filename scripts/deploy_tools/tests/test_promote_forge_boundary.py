@@ -21,7 +21,16 @@ PROMOTE = Path(promote.__file__)
 PROMOTE_LIB = sorted(PROMOTE.with_name("promote_lib").glob("*.py"))
 # The members the glob must find, so a rename or a move out of the package fails by name
 # rather than leaving the census over fewer modules.
-PROMOTE_LIB_MEMBERS = frozenset({"wait.py", "verify_promotion.py", "prune.py"})
+PROMOTE_LIB_MEMBERS = frozenset(
+    {
+        "wait.py",
+        "verify_promotion.py",
+        "prune.py",
+        "forward_only.py",
+        "reads.py",
+        "ci_contexts.py",
+    }
+)
 
 # The modules that would let promote.py make a forge call without the adapter. `subprocess`
 # and `pty` are here because `gh` and `cosign` are forge calls too.
@@ -134,7 +143,10 @@ def test_the_census_finds_every_promote_lib_member():
 def test_promote_imports_the_adapter_and_no_http_library_is_clean(module):
     """Each module split out of promote.py holds the same boundary: `promote_lib/wait.py`
     (`land-wait`), whose kubectl and logger go through `flux_host.py`; `promote_lib/verify_promotion.py`
-    (`verify`), whose status reads go through forge; and `promote_lib/prune.py` (`prune`)."""
+    (`verify`), whose status reads go through forge; `promote_lib/prune.py` (`prune`);
+    `promote_lib/forward_only.py`, whose PR and status reads are `promote.Reads` fields;
+    `promote_lib/reads.py`, which builds those fields over forge; and
+    `promote_lib/ci_contexts.py` (`ci-verdict`)."""
     source = module.read_text(encoding="utf-8")
     assert ADAPTER in imported_modules(source)
     assert forbidden_imports(source) == set()
@@ -181,8 +193,14 @@ def test_a_module_reaching_gh_through_a_package_or_os_is_flagged(source, flagged
 
 
 def test_the_allowed_package_imports_are_found_in_promote():
-    """Non-vacuity for the allowlists: promote.py's own package imports are each recognised."""
-    modules = imported_modules(PROMOTE.read_text(encoding="utf-8"))
+    """Non-vacuity for the allowlists: the package imports of promote.py and the modules split
+    out of it are each recognised."""
+    modules = set().union(
+        *(
+            imported_modules(p.read_text(encoding="utf-8"))
+            for p in [PROMOTE, *PROMOTE_LIB]
+        )
+    )
     assert {"lib.git", "lib.yaml_fast", "deployer_lib.deploy_git"} <= modules
     assert {name for name in modules if name.startswith("lib.")} <= ALLOWED_LIB
     assert {

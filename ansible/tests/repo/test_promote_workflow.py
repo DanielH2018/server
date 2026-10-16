@@ -48,7 +48,13 @@ REF_GUARD = "github.ref == 'refs/heads/master'"
 PERMISSIONS = {
     "render": {"contents": "read", "checks": "read"},
     "publish": {"packages": "write", "id-token": "write"},
-    "promote": {"contents": "read", "checks": "read", "packages": "read"},
+    "promote": {
+        "contents": "read",
+        "checks": "read",
+        "packages": "read",
+        "pull-requests": "read",
+        "statuses": "read",
+    },
     "tag": {"packages": "write"},
     "verify": {"contents": "read", "statuses": "read"},
     "settle": {"packages": "write", "actions": "write"},

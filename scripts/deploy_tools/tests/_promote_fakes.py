@@ -14,6 +14,7 @@ import re
 import subprocess
 import tarfile
 from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
@@ -21,6 +22,8 @@ import forge
 import promote
 
 CONTEXT = "prek (lint + validate + tests + secrets)"
+# The wall-clock time `decide` runs at, so a gate status's age is fixed.
+NOW = datetime(2026, 10, 16, 12, 0, tzinfo=UTC)
 CONTEXTS_YAML = f"gitops_deploy_ci_contexts:\n  - {CONTEXT}\n"
 
 
@@ -87,6 +90,7 @@ class FakeTransport:
         blobs: each layer's bytes by its digest.
         statuses: each commit's newest status per context, as `{context: state}`.
         status_times: the `updated_at` every status on a commit carries; none when absent.
+        pulls: the PRs the commit-to-pulls lookup returns for each commit; none when absent.
         requests: every `(method, url)` sent, in order.
     """
 
@@ -100,6 +104,7 @@ class FakeTransport:
     blobs: dict[str, bytes] = field(default_factory=dict)
     statuses: dict[str, dict[str, str]] = field(default_factory=dict)
     status_times: dict[str, str] = field(default_factory=dict)
+    pulls: dict[str, list[dict]] = field(default_factory=dict)
     requests: list[tuple[str, str]] = field(default_factory=list)
 
     def __call__(self, method, url, headers):
@@ -111,6 +116,14 @@ class FakeTransport:
         if parts.netloc == "api.github.com" and match:
             runs = self.check_runs.get(match.group(1), [])
             return forge.Response(200, body=json.dumps({"check_runs": runs}).encode())
+        match = re.fullmatch(r"/repos/[^/]+/[^/]+/commits/(\w+)/pulls", parts.path)
+        if (
+            parts.netloc == "api.github.com"
+            and match
+            and parts.path not in self.api_forced
+        ):
+            body = json.dumps(self.pulls.get(match.group(1), [])).encode()
+            return forge.Response(200, body=body)
         match = re.fullmatch(r"/repos/[^/]+/[^/]+/commits/(\w+)/status", parts.path)
         if (
             parts.netloc == "api.github.com"
@@ -184,11 +197,14 @@ class FakeTransport:
 
 @dataclass
 class FakeRun:
-    """`subprocess.run` for `gh variable get` and `cosign verify`.
+    """`subprocess.run` for `gh variable get`, `gh variable set` and `cosign verify`.
 
     Attributes:
-        hold: DEPLOY_HOLD's value, or None for a missing variable.
+        hold: DEPLOY_HOLD's value, or None for a missing variable. A `gh variable set`
+            writes it.
         hold_fails: make `gh` fail with an error other than "not found".
+        set_fails: make every `gh variable set` exit 1.
+        written: each `(name, value)` a `gh variable set` wrote.
         cosign_fails: make every `cosign verify` exit 1.
         cosign_fails_for: the digests whose `cosign verify` exits 1.
         verified: each digest cosign was asked to verify.
@@ -196,11 +212,19 @@ class FakeRun:
 
     hold: str | None = "none"
     hold_fails: bool = False
+    set_fails: bool = False
+    written: list[tuple[str, str]] = field(default_factory=list)
     cosign_fails: bool = False
     cosign_fails_for: set[str] = field(default_factory=set)
     verified: list[str] = field(default_factory=list)
 
     def __call__(self, argv, **_kwargs):
+        if argv[:3] == ["gh", "variable", "set"]:
+            if self.set_fails:
+                return subprocess.CompletedProcess(argv, 1, "", "HTTP 403")
+            self.written.append((argv[3], argv[argv.index("--body") + 1]))
+            self.hold = argv[argv.index("--body") + 1]
+            return subprocess.CompletedProcess(argv, 0, "", "")
         if argv[:3] == ["gh", "variable", "get"]:
             if self.hold_fails:
                 return subprocess.CompletedProcess(
@@ -282,6 +306,21 @@ class World:
         self.commits.append(sha)
         return sha
 
+    def commit_files(self, message: str, files: dict[str, str | None]) -> str:
+        """Commit `files` to master, deleting each path whose text is None; return the commit."""
+        for name, text in files.items():
+            path = self.repo / name
+            if text is None:
+                _git(self.repo, "rm", "-q", name)
+                continue
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(text)
+            _git(self.repo, "add", name)
+        _git(self.repo, "commit", "-q", "--allow-empty", "-m", message)
+        sha = _git(self.repo, "rev-parse", "HEAD")
+        self.commits.append(sha)
+        return sha
+
     def branch_commit(self) -> str:
         """A commit off master's root, on no path master's history takes."""
         _git(self.repo, "checkout", "-q", "-b", "side", self.commits[0])
@@ -326,8 +365,11 @@ class World:
             self.store(digest_of(sha), files)
 
     def set_last_good(self, sha: str) -> None:
-        """Point `last-good` at `sha-<sha>`'s digest."""
+        """Point `last-good` at `sha-<sha>`'s digest, its manifest annotated with `sha`."""
         self.transport.tags["last-good"] = digest_of(sha)
+        self.transport.manifests["last-good"] = {
+            "annotations": {promote.REVISION_ANNOTATION: f"master@sha1:{sha}"}
+        }
 
     def clients(self, registry: forge.Registry | None = None) -> forge.Forge:
         return forge.Forge(
@@ -349,7 +391,7 @@ class World:
             "--master-ref",
             "master",
         ]
-        exit_code = promote.main(argv, f=self.clients(registry))
+        exit_code = promote.main(argv, f=self.clients(registry), now=NOW)
         captured = capsys.readouterr()
         stdout = captured.out.splitlines()
         assert len(stdout) == 1, stdout
