@@ -19,6 +19,11 @@ apply them:
 - `manifests_deferred_files` render from the role's own templates, unlabelled, into
   `DIR/cluster/<tag>-deferred/`.
 
+A role's vendored files are no template, and `attach_vendored` adds them to `DIR/cluster/<tag>/`
+byte for byte after every pass that edits rendered text (H1.1a). `rendered_docs()` in
+`ansible/tests/_k8s_render.py` renders `templates/*.j2` alone, so the fleet guards never read
+them; H1's *Vendored upstream manifests* names the guards that bypasses and why it is accepted.
+
 A value a role task computes, such as a content tag or a script checksum, comes from
 `task_inputs.derived_facts` and goes in as a `set_fact` would, over every file layer.
 """
@@ -28,6 +33,7 @@ from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -49,6 +55,7 @@ from lib.render_guard import SHARED_TPL, StrictChainableUndefined
 from lib.repo_paths import ANSIBLE, FILTER_PLUGINS, HOST_VARS, K8S_ROLES
 from renderer.renderer_lib.bundle import (
     KUSTOMIZATION,
+    PATCHES_DIR,
     SHARED_KINDS,
     kustomization_text,
     reserved_tags,
@@ -75,6 +82,10 @@ GROUP_VARS = ANSIBLE / "inventory" / "group_vars" / "all.yml"
 # Each group variable naming a namespace that a role creates, mapped to that role. A deferred
 # document in that namespace gives `<tag>-deferred` an edge to the role (D4.2).
 NAMESPACE_ROLE_VARS = {"k8s_observability_namespace": "observability"}
+# A role's vendored files sit in these subdirectories of `files/` and keep them under
+# `cluster/<tag>/` (H1 *Vendored upstream manifests*): upstream manifests byte for byte, and
+# Kustomize patches. H1.1d's `health_vendored.py` reads the same two.
+VENDORED_DIRS = ("upstream", PATCHES_DIR)
 # The include vars that decide what the manifests role renders and where.
 INCLUDE_KEYS = frozenset(
     {
@@ -302,6 +313,69 @@ def render_tag(tag: str, stubs: dict, host: str = K8S_HOST) -> RenderedTag:
     return RenderedTag(tag, rendered, later)
 
 
+def vendored_files(tag: str, roles: Path = K8S_ROLES) -> dict[str, str]:
+    """`tag`'s vendored files by their path under `DIR/cluster/<tag>/`, each text verbatim.
+
+    A role keeps them under `files/upstream/` and `files/patches/`, and each keeps its
+    subdirectory, so no vendored name can collide with a rendered one. The text is decoded
+    from the file's bytes, with no newline translation.
+    """
+    return {
+        f"{sub}/{path.name}": path.read_bytes().decode()
+        for sub in VENDORED_DIRS
+        for path in sorted((roles / tag / "files" / sub).glob("*.y*ml"))
+        if path.is_file()
+    }
+
+
+def attach_vendored(
+    rendered: list[RenderedTag],
+    key_sets: Mapping[str, frozenset[str]] | None = None,
+    roles: Path = K8S_ROLES,
+) -> list[RenderedTag]:
+    """`rendered` with each tag's vendored files added to its own directory (H1.1a).
+
+    The tag's `kustomization.yaml` is rebuilt to list the upstream files under `resources`
+    and the patches under `patches`. `<tag>-deferred` gets none.
+
+    DECIDED: attached last, after the restart stamp, the prune label and the SOPS copies,
+    because each of those edits rendered text or rebuilds the kustomization. Upstream bytes
+    stay as upstream wrote them, so the sha256 pin still describes what Flux applies. A
+    Namespace in an upstream file therefore carries no prune label; the plumbing tags that
+    vendor set `flux_prune: false`, which leaves every object of the tag in place anyway.
+
+    Args:
+        rendered: The rendered tags.
+        key_sets: A placeholder render's key set per directory. When passed, a tag whose
+            own directory holds a placeholder and whose role vendors files is refused, so
+            that directory never substitutes and no `${` in upstream bytes reaches Flux's
+            substitution (C1 *Vendored files*). A stub render passes none.
+        roles: The role tree the vendored files are read from.
+
+    Raises:
+        RenderError: A tag that vendors files holds a placeholder.
+    """
+    attached = []
+    for tag in rendered:
+        vendored = vendored_files(tag.tag, roles)
+        if not vendored:
+            attached.append(tag)
+            continue
+        keys = sorted((key_sets or {}).get(tag.tag) or ())
+        if keys:
+            raise RenderError(
+                f"{tag.tag} vendors {sorted(vendored)} and its render holds the "
+                f"placeholders {keys}. A directory with vendored files must not substitute "
+                "(C1 *Vendored files*): move the templates that read a secret to a tag of "
+                "their own"
+            )
+        files = {k: v for k, v in tag.files.items() if k != KUSTOMIZATION}
+        files |= vendored
+        files[KUSTOMIZATION] = kustomization_text(list(files))
+        attached.append(RenderedTag(tag.tag, files, tag.deferred))
+    return attached
+
+
 def write_cluster(rendered: list[RenderedTag], out: Path) -> list[Path]:
     """Write each tag's directories under `out/cluster/`, and return the files written.
 
@@ -325,6 +399,8 @@ def write_cluster(rendered: list[RenderedTag], out: Path) -> list[Path]:
         dest = cluster / name
         dest.mkdir(parents=True, exist_ok=True)
         for file, text in sorted(files.items()):
+            # A vendored file sits one directory down, under `upstream/` or `patches/`.
+            (dest / file).parent.mkdir(parents=True, exist_ok=True)
             (dest / file).write_text(text)
             written.append(dest / file)
     return written

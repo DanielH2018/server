@@ -527,3 +527,61 @@ def snapshot_claims(
             continue
         found[tag] = sorted(str(claim) for claim in value or [])
     return found, problems
+
+
+# A Go duration as Flux parses `spec.timeout`, such as `600s` or `1h30m`.
+_DURATION = re.compile(r"(?:\d+(?:\.\d+)?(?:ns|us|µs|ms|s|m|h))+")
+
+
+def role_fields(
+    tags: Iterable[str], roles: Path = K8S_ROLES
+) -> tuple[dict[str, dict], list[str]]:
+    """The per-role fields each tag's defaults set on its Kustomization, and one line per problem.
+
+    C3 *Per-role fields* lets a role set them from its `defaults/main.yml` (H1.1a):
+
+    - `flux_prune: false` renders `prune: false`. A plumbing tag sets it, so a render that
+      drops an object leaves it serving (H1 *Plumbing tags are never pruned*);
+    - `manifests_rollout_timeout` renders as `timeout`. The manifests role's own rollout
+      wait reads the same key, so the two cannot disagree.
+
+    The fields go on the Kustomizations that apply the role's own manifests, `<tag>` and
+    `<tag>-deferred`, so a plumbing role's deferred objects are never pruned either. The
+    renderer's `-snapshot` and `-verify` kinds keep the defaults. A value must be a literal,
+    a bool for `flux_prune` and a Go duration for the timeout. A Jinja expression is a
+    problem rather than a guess, as `snapshot_claims` treats a non-literal list, and its tag
+    is left out of the mapping.
+
+    Returns:
+        Each tag whose defaults set a field mapped to `{"prune": False}`, `{"timeout": ...}`
+        or both; a tag that sets neither is left out.
+    """
+    found: dict[str, dict] = {}
+    problems = []
+    for tag in sorted(set(tags)):
+        path = roles / tag / "defaults" / "main.yml"
+        try:
+            defaults = yaml_fast.safe_load(path.read_text()) if path.is_file() else {}
+        except (OSError, yaml.YAMLError) as err:
+            problems.append(f"could not read {tag}'s Kustomization fields: {err}")
+            continue
+        defaults = defaults or {}
+        fields: dict = {}
+        prune = defaults.get("flux_prune", True)
+        if not isinstance(prune, bool):
+            problems.append(f"{tag}'s flux_prune is {prune!r}, not a literal bool")
+            continue
+        if not prune:
+            fields["prune"] = False
+        timeout = defaults.get("manifests_rollout_timeout")
+        if timeout is not None:
+            if not (isinstance(timeout, str) and _DURATION.fullmatch(timeout)):
+                problems.append(
+                    f"{tag}'s manifests_rollout_timeout is {timeout!r}, not a literal "
+                    "duration such as 900s, so its Kustomization timeout cannot be read"
+                )
+                continue
+            fields["timeout"] = timeout
+        if fields:
+            found[tag] = fields
+    return found, problems

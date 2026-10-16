@@ -9,7 +9,8 @@ A placeholder render with `--role` writes, for each tag it names:
   `render_sops_manifests`, whose SOPS manifests the renderer copies into `cluster/<tag>/`
   (C3 *Per-role fields*, D3.3c). A tag that renders a `<tag>-deferred`, `<tag>-snapshot` or
   `<tag>-verify` directory gets that Kustomization as a further document of the file, in
-  `TAG_KIND_SUFFIXES` order (D4.2, D5.1a1);
+  `TAG_KIND_SUFFIXES` order (D4.2, D5.1a1). `<tag>` and `<tag>-deferred` take `prune` and
+  `timeout` from the role's defaults where `role_fields` finds them (C3 *Per-role fields*);
 - `DIR/flux/<kind>.yaml` and `DIR/cluster/<kind>/` for each `SHARED_KINDS` member;
 - `DIR/flux/kustomization.yaml`, which lists every other file in `DIR/flux/`, so the root
   Kustomization `homelab` applies each of them;
@@ -53,10 +54,11 @@ from pathlib import Path
 import yaml
 
 from lib import yaml_fast
-from lib.k8s_roles import snapshot_claims
+from lib.k8s_roles import role_fields, snapshot_claims
 from lib.repo_paths import K8S_ROLES
 from renderer.renderer_lib.ordering import (
     ANSIBLE_OWNED_DEPS,
+    DEFERRED_SUFFIX,
     NO_EDGES,
     NO_ORDERING,
     TAG_KIND_SUFFIXES,
@@ -68,6 +70,8 @@ from renderer.renderer_lib.ordering import (
 )
 
 KUSTOMIZATION = "kustomization.yaml"
+# The subdirectory of `cluster/<tag>/` holding a role's Kustomize patches (H1.1a).
+PATCHES_DIR = "patches"
 DIGESTS = "digests.json"
 FLUX_DIR = "flux"
 CLUSTER_DIR = "cluster"
@@ -152,16 +156,19 @@ def reserved_tags(
 def kustomization_text(files: Iterable[str]) -> str:
     """A `kustomization.yaml` listing `files` in lexical order.
 
-    Lexical order is the order `kubectl apply -f <dir>/` reads a directory in.
+    Lexical order is the order `kubectl apply -f <dir>/` reads a directory in. A file under
+    `patches/` goes under `patches`, never `resources`, which would apply its partial object.
     """
-    return yaml.safe_dump(
-        {
-            "apiVersion": "kustomize.config.k8s.io/v1beta1",
-            "kind": "Kustomization",
-            "resources": sorted(files),
-        },
-        sort_keys=False,
-    )
+    files = sorted(files)
+    patches = [f for f in files if f.startswith(f"{PATCHES_DIR}/")]
+    text: dict = {
+        "apiVersion": "kustomize.config.k8s.io/v1beta1",
+        "kind": "Kustomization",
+        "resources": [f for f in files if f not in patches],
+    }
+    if patches:
+        text["patches"] = [{"path": f} for f in patches]
+    return yaml.safe_dump(text, sort_keys=False)
 
 
 def tag_kustomization(
@@ -170,6 +177,7 @@ def tag_kustomization(
     timeout: str,
     decrypts: bool = False,
     edges: Edges = NO_EDGES,
+    prune: bool = True,
 ) -> dict:
     """The Kustomization `tag`, as D2's *The per-tag Kustomization* shows it.
 
@@ -179,12 +187,14 @@ def tag_kustomization(
         substitutes: Whether the directory's placeholder key set is not empty, which alone
             decides `postBuild` (C1 *The projection*) and the `cluster-vars` edge. The edge
             makes Flux wait for `homelab-cluster-vars` before it substitutes from it (D3.3b).
-        timeout: `manifests_rollout_timeout_default`, the manifests role's rollout timeout.
+        timeout: The role's `manifests_rollout_timeout`, or `manifests_rollout_timeout_default`,
+            the manifests role's rollout timeout (`role_fields`).
         decrypts: Whether the tag's role lists `render_sops_manifests`, which alone decides
             `decryption`. kustomize-controller decrypts nothing without it (D3.3c).
         edges: The generated edges (D4.2). `dependsOn` lists `edges.kept` and the
             `cluster-vars` edge in sorted order, and `ANSIBLE_OWNED_DEPS` lists
             `edges.dropped`; each is left out when empty.
+        prune: False for a role whose defaults set `flux_prune: false` (`role_fields`).
     """
     spec: dict = {
         "sourceRef": {"kind": "OCIRepository", "name": ROOT},
@@ -192,7 +202,7 @@ def tag_kustomization(
         "interval": "10m",
         "retryInterval": "2m",
         "timeout": timeout,
-        "prune": True,
+        "prune": prune,
         "wait": True,
         # Removing a tag from the bundle, by a handback or a render bug, leaves its objects
         # serving rather than deleting them. D6 decides whether to switch (C3).
@@ -260,6 +270,7 @@ def flux_files(
     shared: Mapping[str, str] | None = None,
     decrypting: Iterable[str] = (),
     edges: Mapping[str, Edges] | None = None,
+    fields: Mapping[str, Mapping] | None = None,
 ) -> dict[str, str]:
     """Each `flux/` file of a bundle publishing the tags in `substitutes`, by bundle path.
 
@@ -268,26 +279,32 @@ def flux_files(
             substitutes: `<tag>` for each tag, and `<tag><suffix>` for each per-tag kind
             whose directory the tag renders. Those follow `<tag>` in `flux/<tag>.yaml`, in
             `TAG_KIND_SUFFIXES` order.
-        timeout: The `timeout` every tag's Kustomization sets.
+        timeout: The `timeout` every tag's Kustomization sets unless `fields` names its own.
         shared: The shared kinds' `flux/` files by bundle path, which the root lists beside
             the tags' files.
         decrypting: The published tags whose role lists `render_sops_manifests`.
         edges: Each Kustomization's generated edges; a name it does not map has none.
+        fields: Each tag's per-role fields (`role_fields`), which `<tag>` and
+            `<tag>-deferred` take; a tag it does not map has none.
     """
     decrypting = frozenset(decrypting)
     edges = edges or {}
+    fields = fields or {}
     files = {}
     for tag in sorted(n for n in substitutes if not split_kind(n)[1]):
         names = [tag] + [
             tag + suffix for suffix in TAG_KIND_SUFFIXES if tag + suffix in substitutes
         ]
+        own = fields.get(tag, {})
+        role_own = {tag, tag + DEFERRED_SUFFIX}
         docs = [
             tag_kustomization(
                 name,
                 substitutes[name],
-                timeout,
+                own.get("timeout", timeout) if name in role_own else timeout,
                 name in decrypting,
                 edges.get(name, NO_EDGES),
+                own.get("prune", True) if name in role_own else True,
             )
             for name in names
         ]
@@ -491,18 +508,21 @@ def bundle_files(
         key_sets: Each directory name mapped to its placeholder key set, the one source for
             whether it substitutes (C1).
         tags: The published tags, one Kustomization each.
-        timeout: The `timeout` every Kustomization sets.
+        timeout: The `timeout` every Kustomization sets, unless its role's defaults set
+            `manifests_rollout_timeout` (`role_fields`).
         cluster_vars: The cluster file's text, which the `cluster-vars` kind copies.
         decrypting: The published tags whose role lists `render_sops_manifests`, each of
             which gets `decryption` (C3 *Per-role fields*).
         ordering: What `dependsOn` is generated from (D4.2). The default generates no edge
             but `cluster-vars`.
         roles: The role tree whose defaults declare each tag's snapshot claims, which
-            `digests.json` records (`snapshot_claims`).
+            `digests.json` records (`snapshot_claims`), and its per-role fields
+            (`role_fields`).
 
     Raises:
-        ValueError: The generated edges form a cycle, or a tag's
-            `k8s_autodeploy_snapshot_pvcs` is not a literal list.
+        ValueError: The generated edges form a cycle, a tag's
+            `k8s_autodeploy_snapshot_pvcs` is not a literal list, or its `flux_prune` or
+            `manifests_rollout_timeout` is not a literal.
     """
     tags = sorted(set(tags))
     per_directory, substituting = substitution(tags, directories, key_sets)
@@ -517,6 +537,9 @@ def bundle_files(
             f"the dependsOn edges form a cycle, {' -> '.join(cycle)}, and Flux would hold "
             "every Kustomization on it at DependencyNotReady"
         )
+    fields, problems = role_fields(tags, roles)
+    if problems:
+        raise ValueError("; ".join(problems))
     shared = cluster_vars_files(cluster_vars, timeout)
     flux = {p: t for p, t in shared.items() if p.startswith(f"{FLUX_DIR}/")}
     files = flux_files(
@@ -525,6 +548,7 @@ def bundle_files(
         flux,
         set(decrypting) & set(tags),
         edges,
+        fields,
     )
     files |= shared
     cluster = {

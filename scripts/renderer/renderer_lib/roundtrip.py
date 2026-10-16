@@ -54,6 +54,7 @@ from lib.exit_codes import SHADOW_DIFFERENT, SHADOW_OK
 from renderer.renderer_lib.cluster import (
     DEFERRED_SUFFIX,
     RenderedTag,
+    attach_vendored,
     render_tag,
     write_cluster,
 )
@@ -333,9 +334,12 @@ def render_sides(
             count += sum(len(documents(text)) for text in dropped.values() if text)
         stub_renders[p.name] = renders
         dropped_documents[p.name] = count
-    write_cluster(placeholder.tags, root / PLACEHOLDER)
+    # Both sides carry the vendored files, so `flux build` applies the patches on each.
+    write_cluster(
+        attach_vendored(placeholder.tags, placeholder.key_sets), root / PLACEHOLDER
+    )
     for name, renders in stub_renders.items():
-        write_cluster(renders, root / name)
+        write_cluster(attach_vendored(renders), root / name)
     total = sum(len(names) for names in entries.values())
     return Sides(root, placeholder, rendered, total, dropped_documents)
 

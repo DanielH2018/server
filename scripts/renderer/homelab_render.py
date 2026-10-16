@@ -88,6 +88,7 @@ from renderer.renderer_lib.cluster import (
     RenderedTag,
     RenderError,
     RenderRefused,
+    attach_vendored,
     bundle_ordering,
     flux_owned_tags,
     render_tag,
@@ -324,7 +325,7 @@ def _stub_cluster(
                 source_digests(source_file),
             )
             rendered = label_tags(rendered, owned)
-        written = write_cluster(rendered, out)
+        written = write_cluster(attach_vendored(rendered), out)
     except RenderRefused as exc:
         print(f"homelab-render: {exc}. Nothing was written.", file=sys.stderr)
         return RENDER_REFUSED
@@ -370,10 +371,10 @@ def _placeholder_cluster(
         tags = stamp_restarts(
             result.tags, result, owned, keys, source_digests(source_file)
         )
-        tags = label_tags(tags, owned)
         tags = copy_sops_manifests(
-            tags, result.sops_manifests, published, manifests_dir
+            label_tags(tags, owned), result.sops_manifests, published, manifests_dir
         )
+        tags = attach_vendored(tags, result.key_sets)
         bundle = (
             _bundle(tags, result, out, published, cluster_file, ordering(owned))
             if published

@@ -104,6 +104,16 @@ Each tag becomes `DIR/cluster/<tag>/`. The directory holds the rendered manifest
 `kubectl apply -f <dir>/` reads a directory in. A tag that defers files also gets
 `DIR/cluster/<tag>-deferred/`, with its own `kustomization.yaml`.
 
+A role can vendor upstream files: manifests byte for byte under `files/upstream/`, and
+Kustomize patches under `files/patches/`. The renderer copies both into `DIR/cluster/<tag>/`
+under the same subdirectory names, after every pass that edits rendered text. The
+`kustomization.yaml` lists the upstream files under `resources` and the patches under
+`patches`. A placeholder render refuses a tag that vendors files and whose own render holds a
+placeholder, because Flux would then substitute into the upstream bytes. No `$` in those bytes
+is escaped. `ansible/tests/_k8s_render.py:rendered_docs` renders templates only, so the fleet
+guards never read the vendored files. H1's *Vendored upstream manifests*
+(`docs/target-architecture/host/h1-cluster-config-to-flux.md`) says why that is accepted.
+
 A placeholder render with `--role` also writes the publish bundle, `DIR/flux/` and
 `DIR/digests.json`, for the tags it names that carry `owner: flux`, plus each shared kind's
 `DIR/flux/<kind>.yaml` and `DIR/cluster/<kind>/`. `docs/flux-deploy-plane.md`'s *The bundle*
