@@ -130,8 +130,8 @@ M1's Alertmanager. Every rule carries `service="flux"`.
     - The rule compares `controller_runtime_active_workers` with
       `controller_runtime_max_concurrent_reconciles` for `controller="kustomization"`, and
       reads `workqueue_depth` for the queue. It reads the maximum from its gauge, never a
-      literal, because `--concurrent` is 4 until D5.1 changes it. The three series come from
-      the `flux` scrape job, so the rule adds no series.
+      literal, because the flux role sets `--concurrent` from `k8s_rollout_batch_width`.
+      The three series come from the `flux` scrape job, so the rule adds no series.
     - A broad revision fills the workers for hours while it progresses. The rule therefore
       reports queueing, not a failed deploy. It is a warning without `verify="true"`, so
       the promotion soak, which reads only alerts carrying `severity="critical"` or
@@ -543,14 +543,17 @@ only after its dependencies finish, so the wait sums four terms:
 - **The queueing term.** The number of changed names, dependents included, divided by
   `--concurrent` and rounded up, times the largest `timeout` among them. A Kustomization that
   waits on health holds one of the Kustomize controller's workers, so a revision that changes more
-  names than `--concurrent`, 4 by default, queues behind the workers. Without the term
+  names than `--concurrent` queues behind the workers. The flux role sets `--concurrent` to
+  `k8s_rollout_batch_width`, 5, the width the deploy play rolls workloads at. Without the term
   `verify` would time out on such a revision and write a false hold.
 - **The `OCIRepository` interval**, 1 minute.
 - **The largest `retryInterval`**, 2 minutes on every Kustomization the renderer writes.
 
 The root `homelab`'s 5-minute `timeout` is the floor of the first two terms. The flux role
-sets neither `--requeue-dependency` nor `--concurrent`, and
-`scripts/deploy_tools/tests/test_chained_timeout.py` fails a vendored install that adds one.
+leaves `--requeue-dependency` at its default, and
+`scripts/deploy_tools/tests/test_chained_timeout.py` fails a vendored install or role default
+that sets it. `ansible/tests/k8s/test_flux_role.py` holds `chained_timeout.CONCURRENT` equal to
+the `--concurrent` the role renders.
 A `dependsOn` naming a Kustomization the bundle does not hold, or a cycle, fails `verify`
 with no verdict, and `settle` holds it as `<T> unverified`.
 
