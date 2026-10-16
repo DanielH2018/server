@@ -2537,7 +2537,8 @@ follow-up and H3.8b each publish a new Pi version before H3.9b arms the timer.
     every `homelab-updater` change on both releases before it publishes, and a
     `homelab-tools` change is a pin bump with its own `arm64` and `amd64` install cases.
     Resolution: the H4 owner confirms before `homelab-daniel-server` first publishes,
-    because a second host takes the shared packages only from then.
+    because a second host takes the shared packages only from then. **Ruled 2026-10-16:
+    outside the gate.** The operator, who owns H4, confirmed the recommendation.
 
 ## Review log
 

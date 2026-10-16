@@ -43,7 +43,7 @@ import subprocess
 import pytest
 from lib import yaml_fast
 from _helpers import load_tasks as _tasks
-from _kubectl_seam import no_cluster_to_ask
+from _kubectl_seam import kubectl_has_a_cluster_configured, no_cluster_to_ask
 from _helpers import render_expr as _render
 from _volume_snapshot import _CLAIM, _DEFAULTS, _GUARD, _MAIN, _MANIFESTS, _ROLE, _named
 from _volume_ops import assert_the_role_declares_an_autodeploy_stance
@@ -268,6 +268,8 @@ def test_the_listing_jsonpath_parses() -> None:
     U+0026` — which is why the volume filter is one comparison and markRemoved is filtered in
     Jinja. This test is what catches someone folding them back together.
     """
+    if not kubectl_has_a_cluster_configured(["kubectl"]):
+        pytest.skip("kubectl has no cluster configured")
     argv = _named(_CLAIM, "List this service's live snapshots")[
         "ansible.builtin.command"
     ]["argv"]
@@ -298,6 +300,8 @@ def test_the_listing_fields_exist_on_a_real_snapshot() -> None:
     A field Longhorn renames would make every line unparseable and every prune a no-op, with nothing
     failing.
     """
+    if not kubectl_has_a_cluster_configured(["kubectl"]):
+        pytest.skip("kubectl has no cluster configured")
     result = subprocess.run(
         [
             "kubectl",

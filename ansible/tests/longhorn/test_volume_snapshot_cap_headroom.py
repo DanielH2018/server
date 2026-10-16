@@ -30,7 +30,7 @@ import subprocess
 
 import pytest
 from _helpers import render_expr as _render
-from _kubectl_seam import no_cluster_to_ask
+from _kubectl_seam import kubectl_has_a_cluster_configured, no_cluster_to_ask
 from _volume_snapshot import _CLAIM, _DEFAULTS, _named
 
 from lib import yaml_fast
@@ -206,6 +206,8 @@ def test_the_gates_reads_parse_and_return_the_field_it_sums() -> None:
     Allowlisted in `ansible/tests/leakguard.py::_LIVE_API_TESTS`: a stubbed kubectl would
     make this test prove nothing, which is the one thing it exists to rule out.
     """
+    if not kubectl_has_a_cluster_configured(["kubectl"]):
+        pytest.skip("kubectl has no cluster configured")
     for task_name in (
         "Read the snapshot-space cap on the volume backing",
         "Read the snapshot space already in use on the volume backing",

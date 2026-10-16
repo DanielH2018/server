@@ -238,6 +238,8 @@ FLOOR = [
     "ansible/roles/setup/initial_setup/tasks/access.yml",
     "ansible/.sops.yaml",
     "ansible/vars/secrets.yml",
+    # The agent's cluster RBAC joined the floor on 2026-10-16 (H1 Open question 7).
+    "ansible/roles/k8s/cluster-base/",
 ]
 
 
@@ -283,6 +285,28 @@ def test_a_pr_changing_the_lander_needs_the_operator(path, tmp_path) -> None:
     assert policy.approval_hits([{"filename": path}], floor_prefixes(tmp_path)) == [
         path
     ]
+
+
+# H1 creates cluster-base, so these paths do not exist yet and LANDER_FILES cannot hold them.
+CLUSTER_BASE_FILE = "ansible/roles/k8s/cluster-base/templates/readonly-rbac.yaml.j2"
+CLUSTER_BASE_SIBLING = "ansible/roles/k8s/cluster-baseline/templates/deployment.yaml.j2"
+
+
+def test_a_pr_changing_cluster_base_needs_the_operator(tmp_path) -> None:
+    assert policy.approval_hits(
+        [{"filename": CLUSTER_BASE_FILE}], floor_prefixes(tmp_path)
+    ) == [CLUSTER_BASE_FILE]
+
+
+def test_a_pr_changing_a_role_named_like_cluster_base_lands_without_the_operator(
+    tmp_path,
+) -> None:
+    assert (
+        policy.approval_hits(
+            [{"filename": CLUSTER_BASE_SIBLING}], floor_prefixes(tmp_path)
+        )
+        == []
+    )
 
 
 # Off the floor since 2026-10-10: the agent's own roles, the deployer and the inventory.
