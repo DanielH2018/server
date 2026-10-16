@@ -376,7 +376,9 @@ own tree's renderer. The gate refuses two shapes:
   only an image pin does not count. A PR none of whose paths reaches an Ansible apply counts its
   flux-owned roles alone, because Ansible applies its own templates and never `homelab-render`
   output. A doc or a test reaches no apply. Any other path under `ansible/` does, and so do
-  `scripts/lib/` and the `scripts/` files a task names through `playbook_dir`. An inventory field that another role reads counts through the render it moves:
+  `scripts/lib/`, the `scripts/` files a task names through `playbook_dir`, and the root files
+  that configure every apply: `ansible.cfg`, `pyproject.toml`, `uv.lock`, `uv.toml` and
+  `.python-version`. An inventory field that another role reads counts through the render it moves:
   `auth_tier` on bento-pdf moves authelia's access rules alone, while `hostname` moves both.
 - **Arm 2, edge first.** A tag that is flux-owned at the base and at the head gains a
   `dependsOn` edge, and its own render moves in the same PR. A tag that becomes flux-owned in

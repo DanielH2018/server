@@ -118,6 +118,8 @@ def test_a_renderer_change_with_its_docs_and_tests_is_clean():
         "ansible/roles/k8s/authelia/templates/configmap.yaml.j2",
         "scripts/lib/plain_scalar.py",
         "scripts/diagnostics/probe_lib/obs_api.py",
+        "uv.lock",
+        "ansible.cfg",
     ],
 )
 def test_a_renderer_change_beside_a_path_ansible_reads_is_flagged(beside):

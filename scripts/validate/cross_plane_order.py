@@ -81,6 +81,12 @@ GROUP_VARS = Path("ansible/inventory/group_vars/all.yml")
 ANSIBLE_TREE = "ansible/"
 # The filter plugins load modules from here by path (`standalone_guard.py:_RESOLVER`).
 SCRIPTS_LIB = "scripts/lib/"
+# Root files that configure every Ansible apply: `ansible.cfg`, and the interpreter and pinned
+# packages, ansible-core and Jinja2 among them, that `uv run ansible-playbook` syncs. A bump
+# can move an Ansible-owned render as surely as a template edit.
+ROOT_ANSIBLE_INPUTS = frozenset(
+    {"ansible.cfg", "pyproject.toml", "uv.lock", "uv.toml", ".python-version"}
+)
 # A task or template that reads a file under `scripts/` names it through `playbook_dir`.
 _SCRIPT_REF = re.compile(r"playbook_dir\s*\}\}/\.\./(scripts/[\w./-]*\w)")
 K8S_ROLES = "ansible/roles/k8s/"
@@ -159,12 +165,13 @@ def ansible_scripts(tree: Path = REPO) -> frozenset[str]:
 def reaches_ansible(path: str, scripts: Iterable[str]) -> bool:
     """Whether a changed path can change what an Ansible apply sends to the cluster.
 
-    A doc or a test reaches no apply. Anything else under `ansible/` does, and so does
-    `scripts/lib/` and every `scripts/` path in `scripts`, the ones Ansible reads.
+    A doc or a test reaches no apply. Anything else under `ansible/` does, and so do
+    `scripts/lib/`, the root files in `ROOT_ANSIBLE_INPUTS` and every `scripts/` path in
+    `scripts`, the ones Ansible reads.
     """
     if is_doc(path) or _is_test_only_path(path):
         return False
-    if path.startswith((ANSIBLE_TREE, SCRIPTS_LIB)):
+    if path in ROOT_ANSIBLE_INPUTS or path.startswith((ANSIBLE_TREE, SCRIPTS_LIB)):
         return True
     return any(path == s or path.startswith(s.rstrip("/") + "/") for s in scripts)
 
