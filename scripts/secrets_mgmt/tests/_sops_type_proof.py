@@ -71,6 +71,18 @@ def recorded_types(ciphertext: str) -> dict[str, str | None]:
     }
 
 
+def require_types(half: str, ciphertext: str, kind: str) -> None:
+    """Refuse a manifest unless every `stringData` field records `type:<kind>`.
+
+    Raises:
+        SystemExit: A field records another type or none, so the half would measure the
+            other half's question.
+    """
+    types = recorded_types(ciphertext)
+    if types != dict.fromkeys(FIELDS, kind):
+        raise SystemExit(f"the {half} manifest records {types}, not type:{kind}")
+
+
 def flux_objects(registry: str) -> str:
     """The OCIRepository and the two Kustomizations, as one multi-document YAML."""
     docs = [
@@ -134,9 +146,7 @@ def build(out: Path, registry: str) -> None:
 
     want = {"green": ("str", green), "red": ("int", red)}
     for half, (kind, text) in want.items():
-        types = recorded_types(text)
-        if types != dict.fromkeys(FIELDS, kind):
-            raise SystemExit(f"the {half} manifest records {types}, not type:{kind}")
+        require_types(half, text, kind)
         directory = out / "artifact" / half
         directory.mkdir(parents=True)
         (directory / "secret.sops.yaml").write_text(text)
