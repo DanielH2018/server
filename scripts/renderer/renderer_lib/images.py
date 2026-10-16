@@ -133,32 +133,62 @@ def ref_mismatches(
 
 
 def _reaches_images(base: str, path: str) -> bool:
-    """Whether `path`, relative to the bundle directory `base`, lands under `DIR/images/`."""
-    joined = posixpath.normpath(posixpath.join(base, path))
+    """Whether `path`, relative to the bundle directory `base`, lands under `DIR/images/`.
+
+    A leading `/` names the bundle root, as Flux joins `spec.path` onto the artifact root.
+    """
+    joined = (
+        posixpath.normpath(path.lstrip("/"))
+        if path.startswith("/")
+        else posixpath.normpath(posixpath.join(base, path))
+    )
     return joined == IMAGES_DIR or joined.startswith(IMAGES_DIR + "/")
+
+
+def _kustomize_paths(doc: dict) -> list[tuple[str, str]]:
+    """Each path a kustomize `kustomization.yaml` document reads, with the field naming it."""
+    found = [
+        (field, entry)
+        for field in ("resources", "components")
+        for entry in doc.get(field) or []
+        if isinstance(entry, str)
+    ]
+    found += [
+        ("patches", patch["path"])
+        for patch in doc.get("patches") or []
+        if isinstance(patch, dict) and isinstance(patch.get("path"), str)
+    ]
+    return found
 
 
 def paths_into_images(files: Mapping[str, str]) -> list[str]:
     """Each Kustomization path in the bundle `files` that reaches `DIR/images/`.
 
-    That is a Flux Kustomization's `spec.path` in `flux/*.yaml`, read from the bundle root, and
-    a `resources` entry of a `cluster/<dir>/kustomization.yaml`, read from its directory.
-    `../` is resolved first, so `./cluster/../images/nut` counts.
+    That is a Flux Kustomization's `spec.path` in `flux/*.yaml`, read from the bundle root,
+    and every `resources`, `components` and `patches[].path` entry of any
+    `kustomization.yaml`, the flux index included, read from its directory. `../` and a
+    leading `/` are resolved first, so `./cluster/../images/nut` and `/images/nut` count.
     """
     found = []
     for path, text in sorted(files.items()):
         parts = path.split("/")
-        if parts[0] == FLUX_DIR and len(parts) == 2:
-            for doc in yaml_fast.safe_load_all(text):
-                spec_path = ((doc or {}).get("spec") or {}).get("path")
-                if isinstance(spec_path, str) and _reaches_images("", spec_path):
-                    found.append(f"{path}: spec.path {spec_path}")
-        elif parts[0] == CLUSTER_DIR and parts[-1] == KUSTOMIZATION:
-            base = posixpath.dirname(path)
-            for doc in yaml_fast.safe_load_all(text):
-                for entry in (doc or {}).get("resources") or []:
-                    if isinstance(entry, str) and _reaches_images(base, entry):
-                        found.append(f"{path}: resources {entry}")
+        base = posixpath.dirname(path)
+        for doc in yaml_fast.safe_load_all(text):
+            if not isinstance(doc, dict):
+                continue
+            spec_path = (doc.get("spec") or {}).get("path")
+            if (
+                parts[0] == FLUX_DIR
+                and isinstance(spec_path, str)
+                and _reaches_images("", spec_path)
+            ):
+                found.append(f"{path}: spec.path {spec_path}")
+            if parts[-1] == KUSTOMIZATION:
+                found += [
+                    f"{path}: {field} {entry}"
+                    for field, entry in _kustomize_paths(doc)
+                    if _reaches_images(base, entry)
+                ]
     return found
 
 

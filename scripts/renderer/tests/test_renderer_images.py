@@ -14,7 +14,9 @@ import shutil
 import pytest
 
 from _image_builder_tag import templar_content_tag
-from lib.exit_codes import RENDER_OK, RENDER_REFUSED
+from dataclasses import replace
+
+from lib.exit_codes import RENDER_FAILED, RENDER_OK, RENDER_REFUSED
 from lib.render_guard import BUILT_IMAGE_TAG_STUBS
 from renderer import homelab_render
 from renderer.renderer_lib import cluster, images, placeholders
@@ -157,6 +159,13 @@ def test_no_kustomization_path_reaches_images(out):
         ("flux/nut.yaml", "kind: Kustomization\nspec:\n  path: ./images/nut\n"),
         ("flux/nut.yaml", "kind: Kustomization\nspec:\n  path: ./cluster/../images\n"),
         ("cluster/nut/kustomization.yaml", "resources:\n  - ../../images/nut/x.yaml\n"),
+        ("flux/nut.yaml", "kind: Kustomization\nspec:\n  path: /images/nut\n"),
+        ("flux/kustomization.yaml", "resources:\n  - ../images/nut\n"),
+        ("cluster/nut/kustomization.yaml", "components:\n  - ../../images/nut\n"),
+        (
+            "cluster/nut/kustomization.yaml",
+            "patches:\n  - path: ../../images/nut/p.yaml\n",
+        ),
     ],
 )
 def test_a_kustomization_path_into_images_is_flagged(path, text):
@@ -186,3 +195,41 @@ def test_an_images_directory_left_by_an_earlier_render_is_flagged(tmp_path):
     (out / images.TAGS_FILE).write_text("{}\n")
     assert homelab_render.cluster(out, ["speedtest"], None) == RENDER_REFUSED
     assert not (out / "cluster").exists()
+
+
+def _edited_render(edit):
+    """A `render` for `homelab_render.cluster`: the real placeholder render, then `edit`."""
+
+    def render(tags, keys):
+        return edit(placeholders.render_placeholders(tags, keys))
+
+    return render
+
+
+def _refused_writing_nothing(tmp_path, edit) -> None:
+    out = tmp_path / "out"
+    code = homelab_render.cluster(out, ["nut"], None, render=_edited_render(edit))
+    assert code == RENDER_FAILED
+    assert not out.exists() or not any(out.iterdir())
+
+
+def test_a_render_whose_ref_differs_from_tags_json_writes_nothing(tmp_path):
+    """The red half end to end: `check_images` must refuse before any write."""
+
+    def retag(result):
+        nut = replace(result.images["nut"], tag="sha-000000000000")
+        return replace(result, images={**result.images, "nut": nut})
+
+    _refused_writing_nothing(tmp_path, retag)
+
+
+def test_a_render_whose_kustomization_reaches_images_writes_nothing(tmp_path):
+    def reach(result):
+        (tag,) = result.tags
+        files = {
+            **tag.files,
+            "kustomization.yaml": "resources:\n  - ../../images/nut\n",
+        }
+        return replace(result, tags=[replace(tag, files=files)])
+
+    _refused_writing_nothing(tmp_path, reach)
