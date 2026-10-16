@@ -104,6 +104,19 @@ def test_check_exits_1_on_a_drifted_file_and_0_on_a_pinned_one(tmp_path, capsys)
     assert "[FAIL] demo: demo.yaml hashes" in capsys.readouterr().err
 
 
+def test_a_same_named_item_in_another_list_is_left_alone(tmp_path):
+    role = _role(tmp_path)
+    defaults = role / "defaults" / "main.yml"
+    other = 'other:\n  - name: demo.yaml\n    fetched_url: "keep"\n    sha256: "keep"\n'
+    defaults.write_text(other + defaults.read_text().replace("v1.0.0", "v1.1.0", 1))
+
+    assert main(["demo"], roles=tmp_path, fetcher=_serve(NEW)) == 0
+
+    text = defaults.read_text()
+    assert text.startswith(other)
+    assert f'sha256: "{hashlib.sha256(NEW).hexdigest()}"' in text
+
+
 def test_a_url_that_does_not_render_is_a_named_problem_not_a_traceback(
     tmp_path, capsys
 ):

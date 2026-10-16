@@ -10,7 +10,7 @@ Run: uv run pytest ansible/tests/k8s/test_vendored_manifests_match_their_pins.py
 import hashlib
 
 from lib.repo_paths import ROLES
-from vendor_manifest import check_tree, main
+from vendor_manifest import check_tree, main, roles_in
 
 # (role, file) pairs the census must find in the real tree. Empty until H1.3 vendors
 # `metallb-native.yaml` into the metallb role; that PR adds the pair, and H1.5a adds longhorn's.
@@ -39,6 +39,8 @@ def _vendored_role(tmp_path, version="v1.0.0"):
 
 
 def test_the_real_tree_holds_every_pin():
+    # A broken ROLES path or glob would make check_tree pass over no role at all.
+    assert {"flux", "k3s"} <= {role.name for role in roles_in()}
     assert check_tree() == []
 
 

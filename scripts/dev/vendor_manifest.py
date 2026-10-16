@@ -69,6 +69,7 @@ class Vendored:
     """One pinned upstream file of one role, as its defaults record it."""
 
     role: _Path
+    key: str  # the `*vendored_manifests` defaults key whose list holds this item
     name: str
     url: str
     fetched_url: str
@@ -114,6 +115,7 @@ def pins_of(role: _Path) -> list[Vendored]:
             pins.append(
                 Vendored(
                     role,
+                    key,
                     str(item["name"]),
                     url,
                     str(item.get("fetched_url") or ""),
@@ -192,24 +194,43 @@ def removed_objects(old: bytes, new: bytes) -> list[str]:
     ]
 
 
-def _rewrite_item(text: str, name: str, values: dict[str, str]) -> str:
-    """Set `values` in the list item whose first key is `name: <name>`, keeping every comment."""
+def _rewrite_item(text: str, key: str, name: str, values: dict[str, str]) -> str:
+    """Set `values` in `key`'s list item whose first key is `name: <name>`, keeping comments.
+
+    Only the item under the top-level `key` is touched, so another list in the same file
+    whose item carries the same name is left alone.
+    """
     lines = text.splitlines(keepends=True)
+    owner = next(
+        (i for i, line in enumerate(lines) if re.match(rf"{re.escape(key)}:", line)),
+        None,
+    )
+    if owner is None:
+        raise ValueError(f"no top-level `{key}:` in the defaults")
+    end = next(
+        (
+            i
+            for i in range(owner + 1, len(lines))
+            # The next top-level key ends the list; a `-` at column 0 is still its item.
+            if re.match(r"[^\s#-]", lines[i])
+        ),
+        len(lines),
+    )
     start = next(
         (
             i
-            for i, line in enumerate(lines)
+            for i in range(owner + 1, end)
             if re.fullmatch(
-                rf"\s*- name: [\"']?{re.escape(name)}[\"']?\s*(#.*)?\s*", line
+                rf"\s*- name: [\"']?{re.escape(name)}[\"']?\s*(#.*)?\s*", lines[i]
             )
         ),
         None,
     )
     if start is None:
-        raise ValueError(f"no `- name: {name}` item in the defaults")
+        raise ValueError(f"no `- name: {name}` item under `{key}:` in the defaults")
     body_indent = lines[start].index("-") + 2
     pending = dict(values)
-    for i in range(start + 1, len(lines)):
+    for i in range(start + 1, end):
         stripped = lines[i].lstrip(" ")
         if stripped.strip() and len(lines[i]) - len(stripped) < body_indent:
             break
@@ -244,6 +265,7 @@ def refresh(pin: Vendored, fetcher: Fetcher = fetch) -> tuple[bool, list[str]]:
         # both files as they were.
         defaults = _rewrite_item(
             defaults_file.read_text(),
+            pin.key,
             pin.name,
             {"fetched_url": pin.url, "sha256": actual},
         )
