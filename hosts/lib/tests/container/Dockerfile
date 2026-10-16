@@ -63,8 +63,10 @@ RUN systemctl mask \
 RUN install -d -o root -g ubuntu -m 2775 /var/lib/node-exporter-textfile
 
 # dpkg unpacks the homelab.sources homelab-updater ships at the diverted path, outside
-# sources.list.d/, so the test's source below survives every install. The source names no
-# Signed-By, so the keyring homelab-updater ships from H3.4c is installed and unused.
+# sources.list.d/, so the test's source below survives every install. The source's Signed-By
+# names the throwaway keyring host_fixtures.publish writes into the mounted repository
+# (host_fixtures.TEST_KEYRING), so apt checks InRelease's signature and its Valid-Until. The
+# keyring homelab-updater ships from H3.4c is installed and unused.
 RUN set -eu; \
     mkdir /var/lib/homelab-test; \
     dpkg-divert --local --no-rename \
@@ -75,7 +77,7 @@ RUN set -eu; \
         'URIs: http://127.0.0.1:8791' \
         'Suites: homelab' \
         'Components: main' \
-        'Trusted: yes' \
+        'Signed-By: /srv/repo/homelab-test-keyring.gpg' \
         > /etc/apt/sources.list.d/homelab.sources
 
 STOPSIGNAL SIGRTMIN+3

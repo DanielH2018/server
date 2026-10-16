@@ -4,14 +4,16 @@
 H3's *CI (builds, never signs)*, step 5 (docs/target-architecture/host/h3-pi-pilot.md). The job
 builds the test image from `hosts/lib/tests/container/Dockerfile` for one Ubuntu release, then
 runs this. It boots that image with systemd as PID 1 and hostname `daniel-pi`, serves the
-packages from an unsigned repository with `python3 -m http.server` on 127.0.0.1:8791 inside the
-container, and drives `homelab-updater` through these cases:
+packages from a repository signed with a throwaway key with `python3 -m http.server` on
+127.0.0.1:8791 inside the container, and drives `homelab-updater` through these cases:
 
   * install the base version on a bare container;
   * upgrade to the head version, which drops a unit and a file and adds `Depends: tree`;
   * stop the server, and the head version's updater exits non-zero with `last_success`
     unadvanced. This is the red proof of step 3's `--error-on=any`: it fails when the
     updater lets a failed fetch through;
+  * serve an index past its `Valid-Until`, and the head version's updater exits non-zero with
+    `last_success` unadvanced, so a host stops trusting an index whose re-sign stopped;
   * upgrade homelab-updater under a running updater, which finishes with no restart. Both
     versions ship the archive keyring at H3.4c's path, which the test's source does not name;
   * kill the updater's cgroup during an unpack, then hold dpkg's frontend lock over the next
@@ -23,7 +25,7 @@ container, and drives `homelab-updater` through these cases:
     homelab-updater.timer, and the timer, which has no enable link, stays inactive.
 
 Every case that reaches step 3 asserts that the server log holds its `GET` of
-`dists/homelab/Release`. Every case asserts that `/var/lib/apt/lists/` holds a list for the test
+`dists/homelab/InRelease` or `dists/homelab/Release`. Every case asserts that `/var/lib/apt/lists/` holds a list for the test
 repository and none named after daniel-box's address.
 
 The real homelab-updater comes from the job's base and head builds. The by-hand case installs
@@ -53,6 +55,7 @@ import subprocess
 import sys
 import time
 from collections.abc import Callable
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from lib.cli_help import ArgumentParser
@@ -70,6 +73,7 @@ from validate.validate_lib.host_fixtures import (
     HOST_PKG,
     KEYRING,
     PAYLOAD,
+    TEST_KEYRING,
     UNIT_CHANGE,
     UNIT_DIR,
     UPDATER,
@@ -88,12 +92,15 @@ PKGCACHE = "/var/cache/apt/pkgcache.bin"
 RECONCILE_RECORD = "/var/lib/homelab-reconcile/applied.json"
 # systemd's MESSAGE_ID for "Starting <unit>...", logged once per start job.
 UNIT_STARTING = "7d4958e842da4a758f6c1cdc7b36dcc5"
-RELEASE_GET = '"GET /dists/homelab/Release HTTP/'
+# apt fetches the signed InRelease first, and Release only when that is missing.
+RELEASE_GETS = tuple(
+    f'"GET /dists/homelab/{name} HTTP/' for name in ("InRelease", "Release")
+)
 
 
 def release_fetched(log: str) -> bool:
-    """Whether an http.server log holds a GET of the suite's Release file."""
-    return any(RELEASE_GET in line for line in log.splitlines())
+    """Whether an http.server log holds a GET of the suite's InRelease or Release file."""
+    return any(get in line for line in log.splitlines() for get in RELEASE_GETS)
 
 
 def list_problems(names: list[str], box: str) -> list[str]:
@@ -172,8 +179,12 @@ class Cases:
         self.debs[label] = target
         self.versions[label] = deb_version(target)
 
-    def serving(self, *labels: str) -> None:
-        publish(self.work / "repo", [self.debs[label] for label in labels])
+    def serving(self, *labels: str, valid_until: datetime | None = None) -> None:
+        publish(
+            self.work / "repo",
+            [self.debs[label] for label in labels],
+            valid_until=valid_until,
+        )
 
     def case(
         self, container: Container, name: str, body: Callable[[], None], fetch=True
@@ -282,6 +293,21 @@ class Cases:
             after = (c.read(LAST_SUCCESS), success_timestamp(c.read(PROM)))
             expect(after == before, f"the success timestamp moved: {before} -> {after}")
 
+        def expired_release() -> None:
+            # The Valid-Until half of stopped_server: the server answers, but with an index
+            # whose re-sign stopped. apt refuses it only because the source checks InRelease
+            # against TEST_KEYRING; with no signature check it would accept it.
+            self.expect_installed(c, "updater-head", "host-head")
+            time.sleep(1.1)
+            before = (c.read(LAST_SUCCESS), success_timestamp(c.read(PROM)))
+            expect(before[0] != "", f"{LAST_SUCCESS} is empty before the case")
+            past = datetime.now(UTC) - timedelta(hours=1)
+            self.serving("updater-head", "host-head", valid_until=past)
+            status = c.run_updater()
+            expect(status != 0, "the updater exited 0 with the Release expired")
+            after = (c.read(LAST_SUCCESS), success_timestamp(c.read(PROM)))
+            expect(after == before, f"the success timestamp moved: {before} -> {after}")
+
         def upgrade() -> None:
             self.serving("updater-base", "host-base", "updater-head", "host-head")
             status = c.run_updater()
@@ -317,7 +343,8 @@ class Cases:
             expect(c.exists(KEYRING), f"{KEYRING} is not installed")
             source = c.read("/etc/apt/sources.list.d/homelab.sources")
             expect(
-                f"127.0.0.1:{PORT}" in source and "Signed-By" not in source,
+                f"127.0.0.1:{PORT}" in source
+                and f"Signed-By: /srv/repo/{TEST_KEYRING}" in source,
                 f"the test's homelab.sources was replaced:\n{source}",
             )
 
@@ -397,6 +424,7 @@ class Cases:
         # After the upgrade, so the run is the head build's updater. The base build's is
         # master's, which a pull request's change to step 3 does not reach.
         self.case(c, "the stopped server", stopped_server, fetch=False)
+        self.case(c, "a Release past its Valid-Until", expired_release)
         self.case(c, "upgrade homelab-updater under a running updater", unit_change)
         self.case(c, "kill the updater during the unpack", kill_during_unpack)
         self.case(c, "dpkg's frontend lock held", lock_held, fetch=False)

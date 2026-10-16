@@ -344,3 +344,14 @@ def test_no_container_source_trusts_the_repository_unsigned():
         )
     ]
     assert trusting == []
+
+
+def test_a_server_log_with_the_inrelease_get_is_clean():
+    # apt fetches the signed InRelease and never Release once InRelease answers.
+    log = '127.0.0.1 - - [14/Oct/2026 10:00:00] "GET /dists/homelab/InRelease HTTP/1.1" 200 -\n'
+    assert cases.release_fetched(log)
+
+
+def test_the_test_images_source_names_the_published_keyring():
+    dockerfile = (fx.REPO / "hosts/lib/tests/container/Dockerfile").read_text()
+    assert f"'Signed-By: /srv/repo/{fx.TEST_KEYRING}'" in dockerfile

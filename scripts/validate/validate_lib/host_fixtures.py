@@ -4,8 +4,11 @@
 `scripts/validate/host_package_cases.py` runs the cases. This module builds what they install:
 the fixture homelab-daniel-pi in three versions, rendered by the real renderer from
 `hosts/lib/tests/container/fixture/`; a homelab-updater whose unit changes; a copy of the real
-homelab-daniel-pi whose drop-in on the updater's timer changes; and the unsigned apt
-repository, in suite `homelab`, that serves a chosen set of them.
+homelab-daniel-pi whose drop-in on the updater's timer changes; and the apt repository, in
+suite `homelab`, that serves a chosen set of them. `publish` signs that repository's `InRelease`
+with a throwaway ed25519 key, generated once per process, and writes the key's public keyring
+into the repository as TEST_KEYRING. The test image's source names that keyring in
+`Signed-By:`, so apt checks the signature and the `Valid-Until` an expired-index case moves.
 """
 
 import sys as _sys
@@ -13,11 +16,14 @@ from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
+import atexit
+import functools
 import hashlib
 import os
 import shutil
 import subprocess
 import tempfile
+from datetime import datetime, timedelta
 from email.utils import formatdate
 from pathlib import Path
 
@@ -38,6 +44,11 @@ DROPIN = f"{UNIT_DIR}/{UPDATER}.timer.d/50-homelab.conf"
 # The real Pi drop-in's minute, and the one its changed copy fires at instead.
 DROPIN_MINUTE = ":05/15:00"
 DROPIN_CHANGED = ":10/15:00"
+# The public keyring that verifies InRelease, at the top of the published repository. The test
+# image's source names it as /srv/repo/<this>, where the container mounts the repository.
+TEST_KEYRING = "homelab-test-keyring.gpg"
+# How long a published Release stays valid by default: the real signer's ValidTime.
+VALID_FOR = timedelta(days=7)
 
 
 def box_address(render: Path) -> str:
@@ -153,9 +164,53 @@ def packages_stanza(deb: Path, filename: str) -> str:
     )
 
 
-def publish(repo: Path, debs: list[Path]) -> None:
-    """Make `repo` an unsigned apt repository serving exactly `debs` in suite `homelab`.
+@functools.cache
+def _signing_home() -> Path:
+    """A GnuPG home holding one throwaway ed25519 signing key, removed when the process exits."""
+    home = Path(tempfile.mkdtemp(prefix="homelab-test-gnupg-"))
+    atexit.register(shutil.rmtree, home, ignore_errors=True)
+    atexit.register(
+        subprocess.run,
+        ["gpgconf", "--homedir", str(home), "--kill", "gpg-agent"],
+        check=False,
+        capture_output=True,
+    )
+    _gpg(
+        home,
+        *(
+            "--passphrase",
+            "",
+            "--quick-generate-key",
+            "homelab-test <t@example.invalid>",
+        ),
+        *("ed25519", "sign", "never"),
+    )
+    return home
 
+
+def _gpg(home: Path, *argv: str) -> bytes:
+    return subprocess.run(
+        [
+            "gpg",
+            "--homedir",
+            str(home),
+            "--batch",
+            "--pinentry-mode",
+            "loopback",
+            *argv,
+        ],
+        capture_output=True,
+        check=True,
+        timeout=60,
+    ).stdout
+
+
+def publish(repo: Path, debs: list[Path], valid_until: datetime | None = None) -> None:
+    """Make `repo` a signed apt repository serving exactly `debs` in suite `homelab`.
+
+    `InRelease` is the `Release` clearsigned with the throwaway key, and TEST_KEYRING holds
+    that key's public half. The `Release` is valid until `valid_until`, or VALID_FOR after its
+    `Date` when that is None; a past `valid_until` publishes an index apt refuses as expired.
     The directory itself is kept, because the container bind-mounts it: only its contents
     are replaced.
     """
@@ -171,17 +226,30 @@ def publish(repo: Path, debs: list[Path]) -> None:
     binary = repo / "dists" / "homelab" / "main" / "binary-amd64"
     binary.mkdir(parents=True)
     (binary / "Packages").write_bytes(index)
+    now = datetime.now().astimezone()
+    until = valid_until or now + VALID_FOR
     release = "\n".join(
         [
             "Origin: homelab",
             "Label: homelab",
             "Suite: homelab",
             "Codename: homelab",
-            f"Date: {formatdate(usegmt=True)}",
+            f"Date: {formatdate(now.timestamp(), usegmt=True)}",
+            f"Valid-Until: {formatdate(until.timestamp(), usegmt=True)}",
             "Architectures: amd64",
             "Components: main",
             "SHA256:",
             f" {hashlib.sha256(index).hexdigest()} {len(index)} main/binary-amd64/Packages",
         ]
     )
-    (repo / "dists" / "homelab" / "Release").write_text(release + "\n")
+    suite = repo / "dists" / "homelab"
+    (suite / "Release").write_text(release + "\n")
+    home = _signing_home()
+    _gpg(
+        home,
+        "--clearsign",
+        "--output",
+        str(suite / "InRelease"),
+        str(suite / "Release"),
+    )
+    (repo / TEST_KEYRING).write_bytes(_gpg(home, "--export"))
