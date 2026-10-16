@@ -39,9 +39,7 @@ spec:
               mountPath: /etc/nginx/tmp
           readinessProbe:
             httpGet:
-              # D4.7's drill: a path that 404s, so the new ReplicaSet never becomes Ready.
-              # D4.8 reverts it (docs/target-architecture/deploy/d4-ordering.md).
-              path: /flux-drill-not-found
+              path: /
               port: {{ container_item.port }}
             initialDelaySeconds: 5
             periodSeconds: 10
