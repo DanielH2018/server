@@ -183,8 +183,9 @@ merge. It refuses on any host but daniel-box. It refuses while `DEPLOY_HOLD` rea
 but `none`, and an empty or missing value refuses too. It also refuses while (`last-good`,
 master tip] already changes the same pin. It then runs `runbook_gates.py longhorn-upgrade` or
 `metallb-upgrade`, and a non-zero exit refuses. On a pass it posts the commit status
-`homelab/upgrade-gates` on the head. Once H1.1b lands, `promote` requires that status before it
-applies the bump. Every refusal ends the landing with `refused` and nothing merged. A merge made outside
+`homelab/upgrade-gates` on the head. `promote` requires that status, at most six hours old,
+before it applies the bump, and holds without it (docs/flux-deploy-plane.md, *Forward-only
+tags*). Every refusal ends the landing with `refused` and nothing merged. A merge made outside
 `land.sh` bypasses the gate. For such a merge, `land.sh --regate <pr>` re-runs the gates for
 the merged PR and re-posts the status without merging. It exits 0 when it posted and 1 when it
 refused. The upgrade runbook's gate section, [docs/longhorn-upgrade.md](longhorn-upgrade.md),

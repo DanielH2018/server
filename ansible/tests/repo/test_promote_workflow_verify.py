@@ -82,6 +82,16 @@ def verification_problems(wf: dict) -> list[str]:
         found.append("verify: does not bound T's statuses by the time prod moved")
     if "needs.promote.outputs.target" not in str(_steps(verify)):
         found.append("verify: does not take T from promote's outputs")
+    # Without `no_reset` reaching settle's NO_RESET, a failed forward-only revision resets
+    # `prod` to `last-good`, the downgrade the hold without a reset exists to prevent.
+    outputs = jobs.get("promote", {}).get("outputs", {})
+    if outputs.get("no_reset") != "${{ steps.decide.outputs.no_reset }}":
+        found.append("promote: output no_reset does not come from the decide step")
+    if not any(
+        s.get("env", {}).get("NO_RESET") == "${{ needs.promote.outputs.no_reset }}"
+        for s in _steps(jobs.get("settle", {}))
+    ):
+        found.append("settle: no step takes NO_RESET from promote's no_reset output")
     minutes = {name: jobs.get(name, {}).get("timeout-minutes", 0) for name in jobs}
     if minutes["verify"] * 60 <= chained_timeout.VERIFY_CAP_S + promote_verify.POLL_S:
         found.append(
@@ -217,7 +227,26 @@ def _tag_moves_without_comparing(wf):
     del step["env"]["PRIOR_DIGEST"]
 
 
+def _settle_reads_a_misspelt_no_reset(wf):
+    step = next(
+        s for s in wf["jobs"]["settle"]["steps"] if s.get("name") == "Apply the verdict"
+    )
+    step["env"]["NO_RESET"] = "${{ needs.promote.outputs.noreset }}"
+
+
+def _promote_without_no_reset(wf):
+    del wf["jobs"]["promote"]["outputs"]["no_reset"]
+
+
 OWN_RED = {
+    "settle reads a misspelt no_reset": (
+        _settle_reads_a_misspelt_no_reset,
+        "settle: no step takes NO_RESET",
+    ),
+    "promote without the no_reset output": (
+        _promote_without_no_reset,
+        "promote: output no_reset does not come",
+    ),
     "settle in the promote group": (
         _settle_in_the_promote_group,
         "settle: joins a concurrency group",
