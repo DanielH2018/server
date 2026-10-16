@@ -64,6 +64,12 @@ def test_an_image_pin_bump_in_both_roles_is_clean():
     assert judge({"bento-pdf", "authelia"}, diffs=diffs) == []
 
 
+def test_an_image_pin_bump_beside_a_shared_template_change_is_flagged():
+    diffs = {"bento-pdf": BENTO_IMAGE_BUMP, "authelia": AUTHELIA_IMAGE_BUMP}
+    paths = ["ansible/templates/workload-shell.yml.j2"]
+    assert len(judge({"bento-pdf", "authelia"}, paths=paths, diffs=diffs)) == 1
+
+
 def test_a_tasks_change_counts_though_it_moves_no_render_is_flagged():
     flagged = judge({"bento-pdf"}, paths=["ansible/roles/k8s/authelia/tasks/main.yml"])
     assert len(flagged) == 1
@@ -99,21 +105,6 @@ def test_a_flip_that_moves_the_render_and_gains_edges_is_clean():
     base, head = snap({"texbrain"}), snap({"texbrain"}, side="head", **head_kw)
     assert head.depends_on("texbrain") - base.depends_on("texbrain") == {"bento-pdf"}
     assert gate.problems(base, head, [], {}) == []
-
-
-def test_set_flux_owned_leaves_exactly_the_named_entries_on_flux(tmp_path):
-    host_vars = tmp_path / "daniel-box.yml"
-    host_vars.write_text(
-        "containers_list:\n"
-        "  - name: bento-pdf\n    platform: k8s\n"
-        "  - name: texbrain\n    platform: k8s\n    owner: flux\n"
-    )
-    gate.set_flux_owned(host_vars, ["bento-pdf"])
-    assert host_vars.read_text() == (
-        "containers_list:\n"
-        "  - name: bento-pdf\n    owner: flux\n    platform: k8s\n"
-        "  - name: texbrain\n    platform: k8s\n"
-    )
 
 
 # The real-render pairs. One HEAD copy per test, rendered for the two roles the edits reach.

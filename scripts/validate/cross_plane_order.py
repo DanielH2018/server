@@ -24,30 +24,21 @@ need ordering passes too; `docs/landing.md` states the `settled` rule that cover
 to split a refused PR. The plan is docs/target-architecture/deploy/d4-ordering.md, *The
 cross-plane gate*.
 
-`--replay-since` measures the gate over the master commits since a date (Open question 9). The
-renderer is younger than the window, so a replay renders each commit's render inputs
-(`RENDER_INPUTS`) with this checkout's renderer and filter plugins, and with the ownership
-`--flux-owned` names at both ends.
+`scripts/dev/cross_plane_replay.py` replays this gate's decision over past master commits
+(Open question 9).
 
 Exit codes: 0 clean; 1 refused; 2 a render failed, so the gate could not judge.
 
 Run: uv run python scripts/validate/cross_plane_order.py --base origin/master
-     uv run python scripts/validate/cross_plane_order.py --replay-since 2026-09-16T00:31Z \\
-         --flux-owned bento-pdf --jobs 5
      uv run pytest scripts/validate/tests/test_validate_cross_plane_order.py
 """
 
-import dataclasses
 import hashlib
-import json
-import re
-import shutil
 import subprocess
 import sys
 import tarfile
 import tempfile
-from collections.abc import Callable, Iterable, Mapping
-from concurrent.futures import ThreadPoolExecutor
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -81,20 +72,7 @@ HOST_VARS = Path("ansible/inventory/host_vars/daniel-box.yml")
 GROUP_VARS = Path("ansible/inventory/group_vars/all.yml")
 K8S_ROLES = "ansible/roles/k8s/"
 SHARED_TEMPLATES = "ansible/templates/"
-# What a replay takes from the replayed commit. Everything else, the renderer and the filter
-# plugins included, is this checkout's.
-RENDER_INPUTS = (
-    "ansible/roles/k8s",
-    "ansible/templates",
-    "ansible/inventory",
-    "ansible/vars",
-)
 ANSIBLE_PLANE = "ansible"
-MAX_REPLAY_STUBS = 20
-# The renderer's message for a template value nothing defines: `<tag>/<file> from <template>:
-# '<name>' is undefined`.
-_UNDEFINED = re.compile(r"([\w-]+)/\S+ from \S+: '(\w+)' is undefined")
-_OWNER_LINE = re.compile(r"^[ \t]+owner:[ \t]*\S+[ \t]*\n", re.MULTILINE)
 
 
 class RenderFailed(RuntimeError):
@@ -172,7 +150,11 @@ def counted(
         for tag in base.renders.keys() | head.renders.keys()
         if base.renders.get(tag) != head.renders.get(tag)
     }
-    moved -= {tag for tag in moved if is_image_only_diff(role_diffs.get(tag, ""))}
+    changed_paths = list(changed_paths)
+    # A role's image-pin diff exempts it only when nothing outside the roles moved too: a
+    # shared template or an inventory edit beside the bump also moves the role's render.
+    if all(p.startswith(K8S_ROLES) for p in changed_paths):
+        moved -= {tag for tag in moved if is_image_only_diff(role_diffs.get(tag, ""))}
     tasks = {
         p[len(K8S_ROLES) :].split("/", 1)[0]
         for p in changed_paths
@@ -250,6 +232,10 @@ def snapshot(
     k8s = filter_by_platform(entries.get("containers_list") or [], "k8s")
     names = {e["name"] for e in k8s}
     with tempfile.TemporaryDirectory(prefix="cross-plane-") as out:
+        # DECIDED: both sides run under the PR's interpreter, not each commit's own `uv run
+        # --frozen` environment. A dependency bump that changes the render is then invisible
+        # to the gate, but no plane orders on a lockfile, and a second environment per run
+        # costs a sync. D4 Open question 12 leaves a shared layout with D6.1 to D6.
         cmd = [python, str(tree / "scripts/renderer/homelab_render.py"), "cluster"]
         cmd += ["--out", out] + [arg for r in roles for arg in ("--role", r)]
         proc = subprocess.run(
@@ -287,27 +273,14 @@ def snapshot(
     )
 
 
-def extract(sha: str, dest: Path, paths: Iterable[str] = ()) -> None:
-    """Unpack `git archive` of `sha`, narrowed to `paths` when given, under `dest`."""
+def extract(sha: str, dest: Path, paths: Iterable[str] = (), repo: Path = REPO) -> None:
+    """Unpack `git archive` of `sha` in `repo`, narrowed to `paths` when given, under `dest`."""
     dest.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix="cross-plane-tar-") as tmp:
         tar_path = Path(tmp) / "tree.tar"
-        git("archive", "--format=tar", "-o", str(tar_path), sha, "--", *paths, cwd=REPO)
+        git("archive", "--format=tar", "-o", str(tar_path), sha, "--", *paths, cwd=repo)
         with tarfile.open(tar_path) as tar:
             tar.extractall(dest, filter="data")
-
-
-def set_flux_owned(host_vars: Path, flux_owned: Iterable[str]) -> None:
-    """Rewrite `host_vars` so that exactly the entries `flux_owned` names carry `owner: flux`."""
-    text = _OWNER_LINE.sub("", host_vars.read_text())
-    for name in flux_owned:
-        entry = re.compile(rf"^([ \t]*)- name: {re.escape(name)}[ \t]*\n", re.MULTILINE)
-        match = entry.search(text)
-        if not match:
-            raise ValueError(f"{host_vars} has no entry named {name}")
-        indent = match.group(1) + "  "
-        text = text[: match.end()] + f"{indent}owner: flux\n" + text[match.end() :]
-    host_vars.write_text(text)
 
 
 def changes(base: str, head: str) -> tuple[list[str], dict[str, str]]:
@@ -356,179 +329,14 @@ def gate(base: str, head: str) -> int:
     return REFUSED if found else CLEAN
 
 
-def replay_snapshot(
-    sha: str,
-    paths: list[str],
-    flux_owned: list[str],
-    workdir: Path,
-    roles: Iterable[str] = (),
-) -> Snapshot:
-    """This checkout's tree with `paths` as `sha` holds them, rendered with `flux_owned` alone.
-
-    A path `sha` does not hold is deleted. An older role's tasks computed some values at
-    deploy time that this checkout's renderer no longer derives, `authelia_password_hash`
-    among them. Each one the render reports undefined is set to a fixed stub in that role's
-    defaults and the render retried, so both ends of a replayed PR render it the same way.
-
-    Raises:
-        RenderFailed: The render still fails once no undefined value is left to stub.
-    """
-    tree = Path(tempfile.mkdtemp(prefix="replay-", dir=workdir))
-    try:
-        extract("HEAD", tree, ("ansible", "scripts"))
-        for path in paths:
-            (tree / path).unlink(missing_ok=True)
-        held = git_stdout("ls-tree", "-r", "--name-only", sha, "--", *paths, cwd=REPO)
-        if held:
-            extract(sha, tree, held.split("\n"))
-        set_flux_owned(tree / HOST_VARS, flux_owned)
-        for _ in range(MAX_REPLAY_STUBS):
-            try:
-                return snapshot(tree, roles)
-            except RenderFailed as exc:
-                missing = _UNDEFINED.search(str(exc))
-                if not missing:
-                    raise
-                role, var = missing.groups()
-                defaults = tree / K8S_ROLES / role / "defaults" / "main.yml"
-                defaults.parent.mkdir(parents=True, exist_ok=True)
-                with defaults.open("a") as fh:
-                    fh.write(f"\n{var}: replay-stub-{var}\n")
-        raise RenderFailed(f"{sha}: more than {MAX_REPLAY_STUBS} undefined values")
-    finally:
-        shutil.rmtree(tree, ignore_errors=True)
-
-
-def _cached(cache: Path, key: str, render: Callable[[], Snapshot]) -> Snapshot | str:
-    """`render()`, or its result from an earlier run's `cache`; a failure's message as a str."""
-    path = cache / f"{hashlib.sha256(key.encode()).hexdigest()}.json"
-    if path.exists():
-        data = json.loads(path.read_text())
-        return data if isinstance(data, str) else Snapshot(**data)
-    try:
-        result: Snapshot | str = render()
-    except (RenderFailed, ValueError, subprocess.CalledProcessError) as exc:
-        result = str(exc)
-    data = result if isinstance(result, str) else dataclasses.asdict(result)
-    path.write_text(json.dumps(data, default=sorted))
-    return result
-
-
-def replay(since: str, ref: str, flux_owned: list[str], jobs: int, cache: Path) -> int:
-    """Run the gate over every first-parent commit on `ref` since `since`; print the tally.
-
-    A commit is judged on this checkout's tree with only the render inputs it changed set to
-    their content at its parent and at itself (`replay_snapshot`). The renderer dates from
-    2026-10-12 and cannot render most older trees whole, while a commit's own change
-    transplants onto today's tree.
-
-    Every pair across the planes holds a flux-owned tag, and arm 2 judges only those, so the
-    first pass renders the flux-owned tags alone. Only a commit that moves one, or changes its
-    `tasks/`, gets the full render. `cache` keeps each render, so a stopped replay resumes.
-    """
-    cache.mkdir(parents=True, exist_ok=True)
-    commits = git_stdout(
-        "rev-list", "--first-parent", f"--since={since}", ref, cwd=REPO
-    ).split()
-    judged = {}
-    for sha in commits:
-        paths, diffs = changes(f"{sha}^", sha)
-        inputs = [p for p in paths if any(p.startswith(i + "/") for i in RENDER_INPUTS)]
-        if inputs:
-            judged[sha] = (paths, diffs, inputs)
-    owned = sorted(flux_owned)
-
-    def render_all(shas: list[str], roles: list[str]) -> dict[str, Snapshot | str]:
-        sides = [(side, sha) for sha in shas for side in (f"{sha}^", sha)]
-
-        def render(item: tuple[str, str]) -> Snapshot | str:
-            side, sha = item
-            inputs = judged[sha][2]
-            key = "|".join([side, *inputs, "roles", *roles, "flux", *owned])
-            return _cached(
-                cache,
-                key,
-                lambda: replay_snapshot(side, inputs, owned, Path(tmp), roles),
-            )
-
-        with ThreadPoolExecutor(max_workers=jobs) as pool:
-            done = list(pool.map(render, sides))
-        return {side: snap for (side, _), snap in zip(sides, done, strict=True)}
-
-    with tempfile.TemporaryDirectory(prefix="cross-plane-replay-") as tmp:
-        first = render_all(list(judged), owned)
-        candidates = []
-        for sha, (paths, diffs, _) in judged.items():
-            base, head = first[f"{sha}^"], first[sha]
-            if isinstance(base, str) or isinstance(head, str):
-                candidates.append(sha)
-            elif counted(base, head, paths, diffs) & set(owned):
-                candidates.append(sha)
-        print(
-            f"replay: {len(candidates)} of {len(judged)} move a flux-owned tag",
-            flush=True,
-        )
-        full = render_all(candidates, [])
-    refused, shared, unrenderable = [], [], []
-    for sha in candidates:
-        paths, diffs, _ = judged[sha]
-        base, head = full[f"{sha}^"], full[sha]
-        subject = git_stdout("log", "-1", "--format=%s", sha, cwd=REPO)
-        if isinstance(base, str) or isinstance(head, str):
-            unrenderable.append(sha)
-            failure = base if isinstance(base, str) else head
-            reason = str(failure).splitlines()[-1]
-            print(f"UNRENDERABLE {sha[:9]} {subject}\n    {reason}")
-            continue
-        found = problems(base, head, paths, diffs)
-        if found:
-            refused.append(sha)
-            template = any(p.startswith(SHARED_TEMPLATES) for p in paths)
-            if template:
-                shared.append(sha)
-            print(
-                f"REFUSED {sha[:9]}{' shared-template' if template else ''} {subject}"
-            )
-            for line in found:
-                print(f"    {line}")
-    print(
-        f"replay: {len(commits)} commits on {ref} since {since}; {len(judged)} change a render "
-        f"input and were judged, the rest are clean by construction; {len(refused)} refused, "
-        f"{len(shared)} of them for a shared-template change; {len(unrenderable)} "
-        "unrenderable at one end"
-    )
-    return CLEAN
-
-
 def main(argv: list[str] | None = None) -> int:
     parser = ArgumentParser(description=__doc__.split("\n\n")[0])
-    mode = parser.add_mutually_exclusive_group(required=True)
-    mode.add_argument("--base", help="the PR's base commit")
-    mode.add_argument(
-        "--replay-since", help="replay the gate over the commits since this date"
-    )
+    parser.add_argument("--base", required=True, help="the PR's base commit")
     parser.add_argument(
         "--head", default="HEAD", help="the PR's head commit (default HEAD)"
     )
-    parser.add_argument(
-        "--ref", default="origin/master", help="the branch a replay walks"
-    )
-    parser.add_argument(
-        "--flux-owned", action="append", default=[], help="a replay's Flux tag"
-    )
-    parser.add_argument(
-        "--jobs", type=int, default=4, help="a replay's parallel renders"
-    )
-    parser.add_argument(
-        "--cache",
-        type=Path,
-        default=Path(tempfile.gettempdir()) / "cross-plane-replay-cache",
-        help="where a replay keeps each render, so a stopped one resumes",
-    )
     args = parser.parse_args(argv)
-    if args.base:
-        return gate(args.base, args.head)
-    return replay(args.replay_since, args.ref, args.flux_owned, args.jobs, args.cache)
+    return gate(args.base, args.head)
 
 
 if __name__ == "__main__":
