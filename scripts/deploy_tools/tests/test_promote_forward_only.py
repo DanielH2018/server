@@ -8,10 +8,10 @@ docs/target-architecture/host/h1-cluster-config-to-flux.md.
 Run: uv run pytest scripts/deploy_tools/tests/test_promote_forward_only.py
 """
 
-from datetime import UTC, datetime, timedelta
+from datetime import timedelta
 
 import pytest
-from _promote_fakes import World, bundle_files, digest_of
+from _promote_fakes import NOW, World, bundle_files, digest_of
 
 from deploy_tools.promote_lib import forward_only, verify_promotion as vp
 
@@ -62,7 +62,7 @@ def _gated(world, sha: str, age: timedelta, state: str = "success") -> None:
         {"number": 7, "merge_commit_sha": sha, "head": {"sha": head}}
     ]
     world.transport.statuses[head] = {GATES: state}
-    world.transport.status_times[head] = (datetime.now(UTC) - age).isoformat()
+    world.transport.status_times[head] = (NOW - age).isoformat()
 
 
 def _decide(world, monkeypatch, capsys):

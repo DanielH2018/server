@@ -488,7 +488,7 @@ def main(
         return verify.run(f, args, output)
     try:
         decision = hand_off(
-            write_hold(decide(live_reads(f, args.repo, args.master_ref)), f),
+            write_hold(decide(live_reads(f, args.repo, args.master_ref, now)), f),
             args.bundle_dir,
         )
     except Exception as err:

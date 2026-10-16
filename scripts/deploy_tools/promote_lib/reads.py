@@ -146,9 +146,18 @@ def walk(repo: Path, prod: str | None, tip: str) -> list[str]:
     return git_read(repo, *args).split()
 
 
-def live_reads(f: forge.Forge, repo: Path, master_ref: str = MASTER_REF) -> Reads:
-    """The reads `promote.py decide` makes, against the forge and the checkout at `repo`."""
+def live_reads(
+    f: forge.Forge,
+    repo: Path,
+    master_ref: str = MASTER_REF,
+    now: datetime | None = None,
+) -> Reads:
+    """The reads `promote.py decide` makes, against the forge and the checkout at `repo`.
+
+    `now`, when given, fixes the time the gate status's age is measured from.
+    """
     return Reads(
+        now=(lambda: now) if now is not None else (lambda: datetime.now(UTC)),
         hold=lambda: f.github.variable(HOLD_VARIABLE),
         contexts=lambda: read_ci_contexts(repo / CI_CONTEXTS_SOURCE),
         prod=lambda: prod_commit(f.registry.manifest(PROD_TAG)),

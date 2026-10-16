@@ -14,6 +14,7 @@ import re
 import subprocess
 import tarfile
 from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
@@ -21,6 +22,8 @@ import forge
 import promote
 
 CONTEXT = "prek (lint + validate + tests + secrets)"
+# The wall-clock time `decide` runs at, so a gate status's age is fixed.
+NOW = datetime(2026, 10, 16, 12, 0, tzinfo=UTC)
 CONTEXTS_YAML = f"gitops_deploy_ci_contexts:\n  - {CONTEXT}\n"
 
 
@@ -388,7 +391,7 @@ class World:
             "--master-ref",
             "master",
         ]
-        exit_code = promote.main(argv, f=self.clients(registry))
+        exit_code = promote.main(argv, f=self.clients(registry), now=NOW)
         captured = capsys.readouterr()
         stdout = captured.out.splitlines()
         assert len(stdout) == 1, stdout
