@@ -331,3 +331,95 @@ def test_snapshot_claims_that_are_not_a_literal_list_are_a_problem(tmp_path):
         "could not tell whether x snapshots claims: its k8s_autodeploy_snapshot_pvcs is "
         "'{{ claims }}', not a literal list"
     ]
+
+
+# -- the per-tag object census (H1.1c) ---------------------------------------------------------
+
+CLUSTER_BASE = (
+    "kind: PriorityClass\nmetadata:\n  name: homelab-critical\n---\n"
+    "kind: ServiceAccount\nmetadata:\n  name: homelab-readonly\n---\n"
+    "kind: Secret\nmetadata:\n  name: homelab-readonly-token\n"
+)
+
+
+def _cluster_base(tmp_path, text=CLUSTER_BASE, deferring=()):
+    """The bundle publishing `cluster-base`, its `deployment.yaml` replaced by `text`."""
+    out = _bundle(tmp_path, ["cluster-base"], deferring=deferring)
+    (out / "cluster" / "cluster-base" / "deployment.yaml").write_text(text)
+    return out
+
+
+def test_a_plumbing_tag_rendering_every_named_member_is_clean(tmp_path):
+    assert bundle_census.member_census(_cluster_base(tmp_path), ["cluster-base"]) == []
+
+
+def test_a_plumbing_tag_dropping_a_named_member_is_flagged(tmp_path):
+    text = CLUSTER_BASE.replace("name: homelab-critical", "name: x")
+    assert bundle_census.member_census(
+        _cluster_base(tmp_path, text), ["cluster-base"]
+    ) == [
+        "cluster-base renders no PriorityClass homelab-critical, a named member: a plumbing "
+        "tag that drops it leaves it serving with nothing managing it"
+    ]
+
+
+def test_a_named_member_in_a_file_its_kustomization_does_not_list_is_flagged(tmp_path):
+    out = _cluster_base(tmp_path, "kind: ConfigMap\nmetadata:\n  name: x\n")
+    (out / "cluster" / "cluster-base" / "unlisted.yaml").write_text(CLUSTER_BASE)
+    assert len(bundle_census.member_census(out, ["cluster-base"])) == 3
+
+
+def test_a_named_member_in_the_tags_deferred_directory_is_clean(tmp_path):
+    out = _cluster_base(
+        tmp_path, DEPLOYMENT.format(name="x"), deferring=["cluster-base"]
+    )
+    (out / "cluster" / "cluster-base-deferred" / "deployment.yaml").write_text(
+        CLUSTER_BASE
+    )
+    assert bundle_census.member_census(out, ["cluster-base"]) == []
+
+
+def test_an_unpublished_plumbing_tag_is_not_judged(tmp_path):
+    """The census applies to a tag from the commit that publishes it."""
+    assert (
+        bundle_census.member_census(_bundle(tmp_path, ["bento-pdf"]), ["bento-pdf"])
+        == []
+    )
+
+
+def test_the_named_members_cover_the_six_plumbing_tags():
+    """Named members: H1's *Plumbing tags are never pruned* names one list per tag."""
+    assert set(bundle_census.NAMED_MEMBERS) == {
+        "cluster-base",
+        "metallb",
+        "coredns",
+        "longhorn",
+        "longhorn-backup",
+        "longhorn-reconcile",
+    }
+    assert ("PriorityClass", "homelab-critical") in bundle_census.NAMED_MEMBERS[
+        "cluster-base"
+    ]
+
+
+def test_check_bundle_fails_a_published_plumbing_tag_that_drops_a_named_member(
+    tmp_path, capsys
+):
+    host_vars = _host_vars(tmp_path, {"cluster-base": "flux"})
+    out = _cluster_base(tmp_path, CLUSTER_BASE.replace("homelab-critical", "x"))
+    code = promote.main(["check-bundle", str(out), "--host-vars", str(host_vars)])
+    assert code == FAILED
+    assert (
+        "cluster-base renders no PriorityClass homelab-critical"
+        in capsys.readouterr().err
+    )
+
+
+def test_a_named_member_in_a_directory_no_kustomization_applies_is_flagged(tmp_path):
+    """A stray `cluster-base-verify/` with no verify grant is never applied by Flux."""
+    out = _cluster_base(tmp_path, DEPLOYMENT.format(name="x"))
+    stray = out / "cluster" / "cluster-base-verify"
+    stray.mkdir()
+    (stray / "kustomization.yaml").write_text(kustomization_text(["members.yaml"]))
+    (stray / "members.yaml").write_text(CLUSTER_BASE)
+    assert len(bundle_census.member_census(out, ["cluster-base"])) == 3
