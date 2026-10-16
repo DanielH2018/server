@@ -835,8 +835,8 @@ jobs:
   #   apply or come back changed. If it applies unchanged, this job cannot see the failure it
   #   exists to catch, and it fails.
   #
-  # It runs on a PR that touches the flux pin, the sops pin, `cluster_vars.py`, its fixture or
-  # this file, and on a dispatch. On a push to master its steps skip and it passes, as deck_mod
+  # It runs on a PR that touches the flux pin, the sops pin, the registry image pin,
+  # `cluster_vars.py`, its fixture or this file, and on a dispatch. On a push to master its steps skip and it passes, as deck_mod
   # does: the PR run already measured it. The scope step is step-level, never a job-level `if:`,
   # because the `prek` gate requires `success` and a skipped job reports `skipped`.
   sops_manifest_type_proof:
@@ -861,6 +861,7 @@ jobs:
           if git diff --quiet "origin/$BASE_REF...HEAD" -- \
               ansible/roles/k8s/flux/defaults/main.yml \
               ansible/roles/k8s/flux/files/gotk-components.yaml \
+              ansible/roles/k8s/registry/defaults/main.yml \
               ansible/roles/setup/sops_setup/defaults/main.yml \
               scripts/secrets_mgmt/cluster_vars.py \
               scripts/secrets_mgmt/cluster_vars_check.py \
@@ -912,17 +913,18 @@ jobs:
           kubectl version --client
 
       # The registry sits on kind's docker network, so source-controller reaches it by container
-      # name and the runner pushes through the published port. Its image is the registry role's
-      # pin, registry_k8s_image.
+      # name and the runner pushes through the published port. Its image is read from the
+      # registry role's pin, registry_k8s_image, so this job holds no copy of it.
       - name: Create the kind cluster, the registry and the pinned Flux controllers
         if: github.event_name == 'workflow_dispatch' || steps.scope.outputs.changed == 'true'
         env:
           KIND_NODE_IMAGE: kindest/node:v1.37.0@sha256:a1ed56cfb0e7b93589bdf97c8cd566405a265939e3620fc4f5de89adff580ae5
-          REGISTRY_IMAGE: registry:3.1.2@sha256:ddf754342cfc8acc51a56d5d0ab6af06826461864460636d8bd5c546dab2a7b8
         run: |
           set -euo pipefail
+          registry_image=$(awk '/^registry_k8s_image:/ {print $2}' ansible/roles/k8s/registry/defaults/main.yml)
+          [ -n "$registry_image" ]
           kind create cluster --name proof --image "$KIND_NODE_IMAGE" --wait 120s
-          docker run -d --name kind-registry --network kind -p 127.0.0.1:5001:5000 "$REGISTRY_IMAGE"
+          docker run -d --name kind-registry --network kind -p 127.0.0.1:5001:5000 "$registry_image"
           kubectl apply --server-side -f ansible/roles/k8s/flux/files/gotk-components.yaml
           for d in source-controller kustomize-controller notification-controller; do
             kubectl -n flux-system rollout status "deployment/$d" --timeout=180s
@@ -988,10 +990,13 @@ jobs:
           case "$status" in
             False)
               echo "Ready=False at $revision: $message"
-              if printf '%s' "$message" | grep -q 'proof-red'; then
+              # The measured refusal names the Secret and its `stringData` fields. A decryption
+              # failure names the Secret too, so the field name is required as well.
+              if printf '%s' "$message" | grep -q 'proof-red' \
+                  && printf '%s' "$message" | grep -q 'stringData'; then
                 echo "RED: the int-encrypted Secret failed to apply"
               else
-                echo "::error::RED INCONCLUSIVE: the failure does not name the Secret"
+                echo "::error::RED INCONCLUSIVE: the failure names neither the Secret nor its stringData"
                 exit 1
               fi ;;
             True)
