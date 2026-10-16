@@ -2,7 +2,7 @@
 
 import pytest
 
-from lib.git_testing import git, init_repo
+from lib.git_testing import commit, git, init_repo
 from lib.facts.lock import (
     FINDING_KINDS,
     LOCK_REL,
@@ -371,3 +371,65 @@ def test_a_cited_file_leaving_the_index_is_refused(tmp_path):
     assert done == []
     assert [f.kind for f in blocking] == ["atom-no-longer-cited"]
     assert read_lock(repo / LOCK_REL)["CLAUDE.md#Gate"]["verified_sha"] == "abc1234"
+
+
+def _row(sha, h):
+    return {"atoms": {"t/m.py:LIMIT": h}, "python": _PYTHON, "verified_sha": sha}
+
+
+@pytest.mark.parametrize("first", ["reverify", "add"])
+def test_two_branches_verifying_different_sections_merge_cleanly(tmp_path, first):
+    # Issue #5341: a single top-level checksum made two such PRs conflict on its line.
+    # The sections are adjacent in sort order, and one branch adds a first-time row
+    # between them, so the merge is as tight as two non-overlapping verifies get.
+    repo = init_repo(tmp_path)
+    lock_path = repo / LOCK_REL
+    base = {"CLAUDE.md#A": _row("b0", "a0"), "CLAUDE.md#C": _row("b0", "c0")}
+    write_lock(lock_path, base)
+    commit(repo, "base")
+    git(repo, "branch", "reverify")
+    git(repo, "branch", "add")
+
+    git(repo, "switch", "-q", "reverify")
+    write_lock(lock_path, {**base, "CLAUDE.md#A": _row("r1", "a1")})
+    commit(repo, "re-verify A")
+    git(repo, "switch", "-q", "add")
+    write_lock(
+        lock_path,
+        {**base, "CLAUDE.md#B": _row("d1", "b1"), "CLAUDE.md#C": _row("d1", "c1")},
+    )
+    commit(repo, "add B, re-verify C")
+
+    git(repo, "switch", "-q", "master")
+    second = "add" if first == "reverify" else "reverify"
+    for branch in (first, second):
+        merged = git(
+            repo, "merge", "-q", "--no-edit", "--no-gpg-sign", branch, check=False
+        )
+        assert merged.returncode == 0, merged.stdout + merged.stderr
+
+    assert not lock_tampered(lock_path)
+    assert read_lock(lock_path) == {
+        "CLAUDE.md#A": _row("r1", "a1"),
+        "CLAUDE.md#B": _row("d1", "b1"),
+        "CLAUDE.md#C": _row("d1", "c1"),
+    }
+
+
+def test_a_row_moved_to_another_key_by_hand_is_flagged(tmp_path):
+    p = tmp_path / "facts.lock"
+    write_lock(p, {"CLAUDE.md#Gate": _row("abc", "h")})
+    p.write_text(p.read_text().replace('"CLAUDE.md#Gate"', '"CLAUDE.md#Other"'))
+    assert lock_tampered(p)
+
+
+def test_a_row_added_by_hand_without_a_checksum_is_flagged(tmp_path):
+    p = tmp_path / "facts.lock"
+    write_lock(p, {"CLAUDE.md#Gate": _row("abc", "h")})
+    p.write_text(
+        p.read_text().replace(
+            '"units": {',
+            '"units": {\n    "CLAUDE.md#New": {"atoms": {}, "verified_sha": "x"},',
+        )
+    )
+    assert lock_tampered(p)

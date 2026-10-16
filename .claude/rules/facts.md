@@ -94,6 +94,9 @@ continuation lines and nested bullets with it; a history paragraph ends at the n
 
 `docs/facts.lock` records the hashes each verified section was checked against. The tool
 writes it, and a hand edit fails `test_every_recorded_atom_hashes_as_recorded` as tampered.
+Each row carries its own `checksum`, so two PRs that verify different sections edit different
+lines and merge without a conflict on the lock (#5341). A hand-deleted row is not flagged,
+because it reads the same as `forget`.
 
 A row's `verified_sha` is the HEAD that `verify` ran at, which is often a branch commit the
 squash merge left off master. Do not read it as a master commit. The commit on master that

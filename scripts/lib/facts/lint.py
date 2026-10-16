@@ -128,7 +128,7 @@ def lint_sections(
             _f(
                 "",
                 "lock-tampered",
-                f"{LOCK_REL} checksum does not match; regenerate with `fact_status.py verify`",
+                f"{LOCK_REL} has a row whose checksum does not match it; regenerate with `fact_status.py verify`",
             )
         )
     for doc in repo_docs(repo):
