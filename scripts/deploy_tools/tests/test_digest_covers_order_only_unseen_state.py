@@ -398,3 +398,22 @@ def test_a_change_outside_the_walk_or_the_process_state_read_keeps_the_line(
     """
     reason = _reason_for_head_call(tree, imports, call)
     assert reason and "every deploy runs" in reason
+
+
+def test_a_file_created_through_a_module_the_runner_neither_replaces_nor_wraps_keeps_the_line(
+    tree,  # noqa: F811
+    tmp_path,
+):
+    """A Tcl interpreter's `open` creates a file and raises no audit event (#5107).
+
+    `_tkinter` is in neither of the runner's `unaudited` or `counted` tables, and with an
+    absolute path the file lands outside the temp tree the runner scans afterwards.
+    """
+    path = tmp_path / "escaped"
+    reason = _reason_for_head_call(
+        tree,
+        "import _tkinter",
+        "_tkinter.create(None, 'x', 'Tk', False, False, False, False, None)"
+        f".eval('close [open {path} w]')",
+    )
+    assert reason and "every deploy runs" in reason
