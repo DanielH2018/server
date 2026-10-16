@@ -54,8 +54,26 @@ D3.4, rotation runbooks and the wait on `cluster-vars`: [#5176](https://github.c
 `cluster-vars` and its live dependents. `secret_rotation.py consumers` prints the Flux path
 for an `owner: flux` consumer, which no live role exercises yet, because bento-pdf reads no
 secret. Review found that the compromise guidance named only the cluster file. A follow-up
-added the cluster manifests to it, here and in both docs. D3.5 is next, and it is
-operator-only.
+added the cluster manifests to it, here and in both docs.
+
+D3.5, evidence before the cutover (operator-only). On 2026-10-16 the operator read
+`peanut-secrets`, `ical-proxy-env` and `qbittorrent-mullvad-account`. Each had one manager,
+`kubectl-client-side-apply`, and carried `last-applied-configuration`, so Flux takes over
+every key. The reads are in D3.6's PR body.
+
+D3.6, the flip: [#5193](https://github.com/DanielH2018/server/pull/5193). The operator ran
+the two-writer check at the PR's head, because the classifier refuses `deploy.sh` from an
+agent: `--tags peanut` exited 5 with `DEPLOY-VERDICT: flux-owned`. The red draft #5189 failed
+CI on `check`'s names assertion. After the merge, `fea20962d`, the deployer dropped peanut as
+flux-owned and applied nothing. The `peanut` Kustomization read Ready, `probe.py health
+peanut` passed, and the PeaNUT login page rendered. The operator's value-hash comparison
+printed `match` for all three keys, which is exit criterion 1.
+
+D3.7 and D3.8, the canary: [#5194](https://github.com/DanielH2018/server/pull/5194) and
+[#5195](https://github.com/DanielH2018/server/pull/5195). After D3.7 settled, the operator's
+key-name read listed `FLUX_CANARY` beside the three real keys. D3.8 settled as `2dd6d4f92`,
+and its render matched D3.6's, restart checksum included. The operator's second read, which
+must not list `FLUX_CANARY`, closes exit criterion 2. D3.9, the rotation drill, follows it.
 
 Depends on: [D2](d2-first-leaf.md), [R2](../render/r2-secret-placeholders.md). D3.0 to D3.3c
 need only D2.1 to D2.6c, which include D2.6b's empty `SHARED_KINDS` and census, as the slice
@@ -1062,8 +1080,10 @@ kubectl -n flux-system get kustomizations.kustomize.toolkit.fluxcd.io bento-pdf 
 - The predicate test fails when a fixture directory without a placeholder gets `postBuild`,
   when its literal `${` is escaped, or when a `<tag>-deferred` directory with no placeholder
   inherits `postBuild` from its tag, as a per-tag flag would give it.
-- A placeholder missing from the dotenv fails `check`'s names assertion, and a reference to a
-  key outside `secrets.yml` fails R2's `known-key` rule. D3 adds no source-gate key set.
+- A placeholder missing from the dotenv fails `check`'s names assertion. R2's `known-key`
+  rule backstops a renderer bug only: no template can produce a `${NAME}` outside
+  `secrets.yml`, because the renderer writes `${K}` only for a key `secret_keys()` reads and
+  escapes every other `${`. D3 adds no source-gate key set.
 - The timeout pair fails when a bundle with a substituting tag derives D2's timeout unchanged.
 - The SOPS manifest pair fails when a role without `render_sops_manifests` gets `decryption`,
   and when a manifest without the annotation renders.
@@ -1073,8 +1093,10 @@ kubectl -n flux-system get kustomizations.kustomize.toolkit.fluxcd.io bento-pdf 
 - The `consumers.py` pair fails when a flux-owned tag stays on the `deploy.sh` line, and the
   `land-wait` pair fails when a cluster-file PR adds no wait.
 - Strict substitution is the live red proof that a key is missing. Before D3.6, a draft branch
-  of peanut's template that names a key absent from the cluster file fails R2's `known-key`
-  rule in CI. That draft is never merged.
+  of peanut's template that names a key `secrets.yml` holds and the cluster file lacks fails
+  `check`'s names assertion in CI
+  (`test_cluster_vars_tree.py::test_the_committed_cluster_files_pass_check`). That draft is
+  never merged. D3.6's draft, #5189, failed exactly there.
 - The canary pair (D3.7, D3.8) is the red proof for key removal. Its first read must show the
   key, or the second read proves nothing.
 - Exit 5's read fails with `NotFound` before D2.7, because bento-pdf has no Kustomization,
