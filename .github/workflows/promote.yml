@@ -698,17 +698,18 @@ jobs:
           fi
 
           if [ -n "$NO_RESET" ]; then
-            problems=()
-            if gh variable set DEPLOY_HOLD --body "$TARGET" -R "$GITHUB_REPOSITORY"; then
-              echo "DEPLOY_HOLD set to '$TARGET': T changes forward-only $NO_RESET, so prod stays on sha-$TARGET"
-            else
-              problems+=("writing DEPLOY_HOLD='$TARGET' failed")
+            # `held` marks prod's run as settled, so it is tagged only once the hold is
+            # written. With no hold, the next run's in-flight wait ends `current` instead.
+            if ! gh variable set DEPLOY_HOLD --body "$TARGET" -R "$GITHUB_REPOSITORY"; then
+              echo "::error::writing DEPLOY_HOLD='$TARGET' failed, so prod stays on sha-$TARGET untagged"
+              exit 1
             fi
-            login && flux tag artifact "oci://$repo:sha-$TARGET" --tag held \
-              || problems+=("tagging sha-$TARGET held failed, so the next run after a clear waits as in flight")
-            for problem in "${problems[@]}"; do echo "::error::$problem"; done
-            [ "${#problems[@]}" -eq 0 ]
-            exit
+            echo "DEPLOY_HOLD set to '$TARGET': T changes forward-only $NO_RESET, so prod stays on sha-$TARGET"
+            if ! { login && flux tag artifact "oci://$repo:sha-$TARGET" --tag held; }; then
+              echo "::error::tagging sha-$TARGET held failed, so the next run after a clear waits as in flight"
+              exit 1
+            fi
+            exit 0
           fi
 
           if [ "$VERDICT" = failed ] && printf '%s' "$FAILED_NAMES" | grep -Eqx '[a-z0-9-]+(,[a-z0-9-]+)*'; then

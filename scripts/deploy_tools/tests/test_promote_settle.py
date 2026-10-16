@@ -221,6 +221,14 @@ def test_a_forward_only_failure_holds_as_t_alone_and_leaves_prod(
     ]
 
 
+def test_a_failed_hold_write_tags_nothing_and_exits_non_zero(tmp_path, jobs):
+    result, calls = _settle(
+        tmp_path, jobs, NO_RESET="longhorn", FAKE_GH_FAIL="DEPLOY_HOLD"
+    )
+    assert result.returncode != 0
+    assert calls == [f"gh variable set DEPLOY_HOLD --body {T} -R DanielH2018/server"]
+
+
 def test_a_failed_held_tag_exits_non_zero_with_the_hold_in_place(tmp_path, jobs):
     result, calls = _settle(tmp_path, jobs, NO_RESET="longhorn", FAKE_FLUX_FAIL="held")
     assert result.returncode != 0
