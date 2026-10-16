@@ -123,7 +123,7 @@ flux-owned tag `kustomize.toolkit.fluxcd.io/prune: disabled`, so Flux leaves the
 object in place when it leaves the render (C3 *Prune exemptions*). The label is
 inserted as text and moves no other byte. Only a flux-owned tag is labelled, so every other
 tag's render stays byte-equal to Ansible's for `shadow_diff.py compare`.
-`scripts/renderer/renderer_lib/prune.py` holds the rule.
+`scripts/renderer/renderer_lib/prune_label.py` holds the rule.
 
 `cluster --out DIR --shared-only` writes the shared kinds, a root listing them and
 `digests.json`, and renders no tag. The publish job calls it when no tag is flux-owned. It

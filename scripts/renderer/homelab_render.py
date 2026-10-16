@@ -31,7 +31,7 @@ under `ansible/vars/cluster-manifests/` in `DIR/cluster/<tag>/`, and `decryption
 Kustomization (D3.3c); a manifest without the substitute-disabled annotation fails the render.
 In both modes, every flux-owned tag's restart targets get `checksum/restart`, hashed from the
 placeholder-form documents and `ansible/vars/cluster-vars.source`
-(`renderer_lib/restart.py`), and its claims and Namespaces the prune label (`prune.py`).
+(`renderer_lib/restart.py`), and its claims and Namespaces the prune label (`prune_label.py`).
 
 `host --host NAME` renders `hosts/NAME/package.yml` into `DIR/hosts/NAME/`, and `package --name
 PKG` renders the shared package `hosts/packages/PKG/` into `DIR/packages/PKG/`. Each writes
@@ -96,7 +96,7 @@ from renderer.renderer_lib.cluster import (
     tag_context,
     write_cluster,
 )
-from renderer.renderer_lib.prune import label_tags
+from renderer.renderer_lib.prune_label import label_tags
 from renderer.renderer_lib.restart import restart_targets, restart_values, stamp
 from secrets_mgmt.cluster_vars_check import ManifestEntry, parse_source
 from renderer.renderer_lib.context import load_stubs

@@ -5,7 +5,7 @@ The fixtures are rendered texts in the three shapes the tree produces: a claim w
 and observability's Namespace with its Pod Security labels. The live test renders two real
 roles as if flux-owned, through the CLI, with a fixture cluster file.
 
-Run: uv run pytest scripts/renderer/tests/test_renderer_prune.py
+Run: uv run pytest scripts/renderer/tests/test_renderer_prune_label.py
 """
 
 import pytest
@@ -16,7 +16,7 @@ from renderer import homelab_render
 from renderer.renderer_lib.bundle import CLUSTER_VARS_FILE
 from renderer.renderer_lib.cluster import RenderedTag
 from renderer.renderer_lib.environment import RenderError
-from renderer.renderer_lib.prune import (
+from renderer.renderer_lib.prune_label import (
     EXEMPT_KINDS,
     PRUNE_DISABLED,
     PRUNE_LABEL,
