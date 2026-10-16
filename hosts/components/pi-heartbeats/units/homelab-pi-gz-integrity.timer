@@ -1,0 +1,16 @@
+# Shipped by homelab-daniel-pi with its enable link.
+#
+# Daily at 01:40: after log2ram's own 23:55 daily sync, so /var/hdd.log holds the day's
+# rotation, and clear of the 00:00-00:10 cluster of logrotate, dpkg-db-backup and sysstat.
+# OnActiveSec=1min also runs it a minute after the timer starts, at boot and on the install
+# that adds it. The SD-health heartbeat reads a missing verdict as a down, so without that run
+# a fresh Pi would page for up to a day over a check that had never run.
+[Unit]
+Description=Check every rotated log on the Pi daily
+
+[Timer]
+OnCalendar=*-*-* 01:40:00
+OnActiveSec=1min
+
+[Install]
+WantedBy=timers.target

@@ -11,6 +11,9 @@ The pair here is the opt-out floor: a run with opt-out volumes proceeds, and a g
 RecurringJob beside one still refuses. `ansible/tests/longhorn/test_longhorn_reap_opt_out_groups.py`
 pins the group list itself to the StorageClasses that assign it.
 
+The last pair holds the native trim's per-job label (target slice H2.2a) as no tier: an opt-out
+volume that carries it keeps its sentinel, and the group form, its red half, loses it.
+
 Run: uv run pytest scripts/backup/tests/test_longhorn_reap_opt_out_snapshots.py
 """
 
@@ -93,3 +96,46 @@ def test_a_recurring_job_snapshot_on_an_opt_out_volume_is_reaped_but_its_newest_
     )
     assert [n for n, *_ in result.candidates] == ["stray"]
     assert result.kept == []
+
+
+TRIM_JOB_LABEL = "recurring-job.longhorn.io/trim"
+
+
+def _trim_volume(name, group_keys):
+    # Sorted key order, as kubectl's JSON emits it: `snapshot_owner_map` keeps the last group key
+    # it meets, so a red half's `trim` sorts after `no-backup` and wins.
+    labels = dict.fromkeys(sorted(group_keys), "enabled")
+    return {
+        "metadata": {"name": name, "labels": labels},
+        "status": {"state": "attached"},
+    }
+
+
+def test_an_opt_out_volume_with_the_trim_label_keeps_its_sentinel():
+    # H2.2a joins a volume to the native trim with the per-job label, which is no tier
+    # (docs/target-architecture/host/h2-shrink-host-plane.md, *A per-job label, not a group
+    # label*). The opt-out volume keeps its sentinel, so rule 4 still counts nothing.
+    group_job = logic.recurringjob_group_to_job(
+        [_recurringjob("daily-backup", ["default"]), _recurringjob("trim", [])]
+    )
+    volume = _trim_volume(
+        "otel-loki", [logic.RECURRING_JOB_GROUP_PREFIX + "no-backup", TRIM_JOB_LABEL]
+    )
+    owner = logic.snapshot_owner_map([volume], group_job)
+    assert owner == {"otel-loki": logic.OWNER_NO_JOB_BY_DESIGN}
+    assert logic.unresolved_owner_count(owner) == 0
+
+
+def test_a_trim_group_label_costs_an_opt_out_volume_its_sentinel():
+    # Red half: the group form names `trim`, which the RecurringJob's `groups: []` resolves to
+    # no job, so the volume reads as a renamed job and rule 4 refuses the run.
+    group_job = logic.recurringjob_group_to_job(
+        [_recurringjob("daily-backup", ["default"]), _recurringjob("trim", [])]
+    )
+    volume = _trim_volume(
+        "otel-loki",
+        [logic.RECURRING_JOB_GROUP_PREFIX + g for g in ("no-backup", "trim")],
+    )
+    owner = logic.snapshot_owner_map([volume], group_job)
+    assert owner == {"otel-loki": ""}
+    assert logic.unresolved_owner_count(owner) == 1

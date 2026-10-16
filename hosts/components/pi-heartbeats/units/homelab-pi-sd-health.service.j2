@@ -1,0 +1,13 @@
+# Shipped by homelab-daniel-pi. Started by homelab-pi-sd-health.timer.
+[Unit]
+Description=Push the Pi's SD-card health to the Daniel Pi SD Health Kuma monitor
+
+[Service]
+Type=oneshot
+User={{ sys_user }}
+ExecStart=/usr/lib/homelab/pi-sd-health
+LoadCredential=pi_sd_health_push_token:/etc/homelab/interim/pi_sd_health_push_token
+# /var/log/pi-health holds health.log, and /var/lib/pi-health the integrity verdict this
+# heartbeat reads. systemd creates both, owned by User=.
+LogsDirectory=pi-health
+StateDirectory=pi-health

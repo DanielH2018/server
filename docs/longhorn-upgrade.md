@@ -23,7 +23,8 @@ uv run python scripts/deploy_tools/runbook_gates.py longhorn-upgrade
 
 Exit 0 means all four passed. Exit 1–4 is the gate that failed, and the script prints what it
 found. Exit 69 means the cluster could not be asked. Run it on daniel-box: gate 2 reads the
-restore drill's stamp, which exists only there.
+restore drill's stamp from its ConfigMap, and while that holds none, from the drill's directory on
+daniel-box.
 
 **`land.sh` runs these gates at the merge.** Merging the pin is the upgrade (H1 Open question 6,
 ruled 2026-10-16), so `land.sh --arm-merge --await-merge` runs
@@ -50,8 +51,8 @@ merges it outside `land.sh`, runs `land.sh --regate <pr>` for it, then clears th
 2. **A restore has succeeded recently.** A green backup job is not proof — on 2026-08-15 a B2
    Class-B cap denial surfaced as `cannot find volume.cfg in backupstore`, which reads as data
    loss. The nightly drill's `last-success` stamp must be younger than
-   `k3s_longhorn_restore_drill_max_age_days`, the same window monitor-bridge's check 7 pages
-   on. A stale stamp means: fix the drill first, or run it by hand
+   `k3s_longhorn_restore_drill_max_age_days`, the same window backup health's check 7 pages
+   on. `docs/longhorn-disaster-recovery.md` names the two places the stamp lives. A stale stamp means: fix the drill first, or run it by hand
    (`sudo /usr/local/bin/longhorn-restore-drill.sh`).
 3. **Every volume accounted for.** Attached or detached, and healthy (an idle volume reports
    `unknown`). A volume mid-attach, `degraded` or `faulted` before the hop cannot be told apart

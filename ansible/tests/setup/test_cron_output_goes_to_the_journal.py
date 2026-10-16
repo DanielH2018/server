@@ -127,8 +127,6 @@ MAILS_ONLY_ON_FAILURE = {
     "Release staleness drift check": _KUMA,
     "Off-box etcd snapshot": _KUMA + ", plus a Healthchecks /fail ping",
     "UPS secondary watchdog": _KUMA,
-    "Pi SD-card health heartbeat": _KUMA + ", plus its own file log",
-    "Pi container-recovery heartbeat": _KUMA + ", plus its own file log",
     "Homelab eval sweep": (
         "writes its output to log files; the EXIT trap reports to logger and Kuma"
     ),

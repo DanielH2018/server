@@ -30,6 +30,8 @@ class Node:
         self.root = tmp_path / "root"
         self.stub = tmp_path / "stub"
         self.bin = tmp_path / "bin"
+        # A test drops /usr/bin from this to make a host binary absent, not merely stubbed.
+        self.path = f"{self.bin}:/usr/bin:/bin"
         for directory in (self.root, self.stub, self.bin):
             directory.mkdir()
         for command in COMMANDS:
@@ -105,7 +107,7 @@ class Node:
         (self.stub / "calls.jsonl").write_text("")
         self.write_manifest()
         return {
-            "PATH": f"{self.bin}:/usr/bin:/bin",
+            "PATH": self.path,
             "HOMELAB_ROOT": str(self.root),
             "STUB_STATE": str(self.stub),
         }

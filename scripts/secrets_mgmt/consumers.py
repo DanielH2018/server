@@ -36,8 +36,8 @@ from deployer_lib.deploy_cross_role import k8s_lookup_map
 # HERE, with its host pair, not to the test.
 CROSS_HOST_PUSH_TOKENS = frozenset(
     {
-        "pi_sd_health_push_token",  # Pi cron + daniel-server label
-        "pi_recovery_push_token",  # Pi cron + daniel-server label
+        "pi_sd_health_push_token",  # Pi timer, via optimize_pi's interim file + server label
+        "pi_recovery_push_token",  # Pi timer, via optimize_pi's interim file + server label
         "longhorn_backup_push_token",  # daniel-box cron (k3s role) + daniel-server label
         "claude_otel_push_token",  # daniel-box cron (k8s/observability) + daniel-server label
         "daniel_box_disk_push_token",  # daniel-box cron (k3s role) + daniel-server label

@@ -140,30 +140,43 @@ def add_policies(package: Package, directory: Path, units: object) -> None:
         package.policies[unit] = policy
 
 
-def add_enable_links(package: Package, directory: Path, enable: object) -> None:
+def add_enable_links(
+    package: Package,
+    directory: Path,
+    enable: object,
+    test: Callable[[str], bool],
+) -> None:
     """Record in `package` each enable link a spec's `enable:` map declares.
 
     `{unit: target}` becomes the symlink `systemctl enable` writes:
     `/usr/lib/systemd/system/<target>.wants/<unit>`, pointing at `../<unit>`. systemd adds a
     `Wants=` only for a unit symlinked from a `.wants/` directory, so a copied file there would
-    leave the unit unstarted at boot.
+    leave the unit unstarted at boot. `{unit: {target: <target>, when: <expression>}}` records
+    the link only when `test` returns True for the expression. A dropped link is how a host
+    disarms a timer: reconcile stops a timer whose link the new manifest no longer lists.
 
     Raises:
         RenderRefused: The map is malformed, or a second spec declares the same link.
     """
     if not isinstance(enable, dict):
         raise RenderRefused(f"{directory}: enable {enable!r} is not a map")
-    for unit, target in enable.items():
+    for unit, value in enable.items():
+        target, when = value, None
+        if isinstance(value, dict) and set(value) == {"target", "when"}:
+            target, when = value["target"], value["when"]
         if not (
             isinstance(unit, str)
             and _UNIT_NAME.fullmatch(unit)
             and isinstance(target, str)
             and _TARGET_NAME.fullmatch(target)
+            and (when is None or isinstance(when, str))
         ):
             raise RenderRefused(
-                f"{directory}: enable entry {unit!r}: {target!r} is not a unit name "
-                "mapped to a .target"
+                f"{directory}: enable entry {unit!r}: {value!r} is not a unit name "
+                "mapped to a .target, or to {target: <.target>, when: <expression>}"
             )
+        if when is not None and not test(when):
+            continue
         dst = str(UNIT_DIR / f"{target}.wants" / unit)
         if dst in package.links:
             raise RenderRefused(f"{package.name}: two specs install {dst}")

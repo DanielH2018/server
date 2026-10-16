@@ -268,7 +268,9 @@ pass_filenames = false
 # edit there can change what the rendered scripts contain. The five library modules are
 # where the render, the lint and the two cron rules actually live; naming only the entry point
 # would leave the hook's selector matching a 197-line facade while its subject sat elsewhere.
-files = "^(scripts/validate/validate_lib/ok_lines\\.py|ansible/roles/.*\\.sh\\.j2|ansible/inventory/group_vars/all\\.yml|scripts/validate/shell_templates\\.py|scripts/lib/(ansible_inventory|ansible_jinja_env|cli_help|exit_codes|estate|git|k8s_context|k8s_yaml|release_bin_groups|render_context|render_guard|repo_paths|yaml_fast)\\.py|scripts/validate/validate_lib/(cron_checks|cron_targets|shell_lint)\\.py|ansible/filter_plugins/[^/]+\\.py)$"
+# A host component's templates are in scope since H3.8b, with its component.yml, whose
+# defaults the render reads, and each host's package.yml, which names the host it renders for.
+files = "^(hosts/components/.*|hosts/[^/]+/package\\.yml|scripts/validate/validate_lib/ok_lines\\.py|ansible/roles/.*\\.sh\\.j2|ansible/inventory/group_vars/all\\.yml|scripts/validate/shell_templates\\.py|scripts/lib/(ansible_inventory|ansible_jinja_env|cli_help|exit_codes|estate|git|k8s_context|k8s_yaml|release_bin_groups|render_context|render_guard|repo_paths|yaml_fast)\\.py|scripts/validate/validate_lib/(cron_checks|cron_targets|shell_lint)\\.py|ansible/filter_plugins/[^/]+\\.py)$"
 
 # Render every systemd unit template (*.service.j2 / *.timer.j2) with stubbed vars PLUS the
 # owning role's real defaults, and verify the output with `systemd-analyze verify`. Neither

@@ -12,9 +12,12 @@ The gates, in the order the runbook gives them:
      backups it holds cannot be listed, let alone restored.
   2. A restore has actually succeeded, recently. A green backup job is not proof — on
      2026-08-15 a B2 cap denial read as "cannot find volume.cfg in backupstore". The nightly
-     restore drill writes `/var/lib/longhorn-restore-drill/last-success` only after its data
-     assertions pass; the stamp must be younger than `k3s_longhorn_restore_drill_max_age_days`
-     (the k3s role's defaults — monitor-bridge's check 7 uses the same number).
+     restore drill writes its `last-success` stamp only after its data assertions pass; the
+     stamp must be younger than `k3s_longhorn_restore_drill_max_age_days` (the k3s role's
+     defaults — backup health's check 7 uses the same number). The gate reads the stamp from
+     the drill's ConfigMap, `longhorn-restore-drill-stamps` in
+     `k3s_longhorn_restore_drill_namespace`, and from
+     `/var/lib/longhorn-restore-drill/last-success` while the ConfigMap holds none.
   3. Every volume is accounted for: attached or detached, and healthy (an idle volume reports
      `unknown`). A volume mid-attach, `degraded` or `faulted` before the hop cannot be told
      apart from upgrade damage after it.
@@ -22,10 +25,11 @@ The gates, in the order the runbook gives them:
      so engines do not follow the manager; a previous hop's image still holding references
      means engine lag that compounds across hops. Every engine image must be `deployed`.
 
-Every cluster read goes through `lib.kubectl` with the cluster named `prod`. The drill
-stamp exists only on daniel-box, the host that runs the drill, so gate 2 fails on any other
-host rather than reading an absent directory as a fresh pass. Set `LONGHORN_DRILL_STATE_DIR`
-to point it elsewhere.
+Every cluster read goes through `lib.kubectl` with the cluster named `prod`. While the drill
+writes only the host directory, the stamp exists only on daniel-box, the host that runs the
+drill, so gate 2 fails on any other host rather than reading an absent directory as a fresh
+pass. Set `LONGHORN_DRILL_STATE_DIR` to point it elsewhere. A failed ConfigMap read is exit 69,
+never a fallback to the directory.
 
 Exit codes:
   0      every gate passed
@@ -53,6 +57,7 @@ from deploy_tools.runbook_gates_lib.gate_runner import (
     TARGETS_ARGS,
     VOLUMES_ARGS,
     Gate,
+    Unreadable,
     cluster_doc,
     items,
     name_of,
@@ -61,20 +66,22 @@ from deploy_tools.runbook_gates_lib.gate_runner import (
     unsafe_volumes,
 )
 from lib import yaml_fast
-from lib.kubectl import DEFAULT_TOOLS, Tools
+from lib.kubectl import DEFAULT_TOOLS, Tools, kubectl
 from lib.repo_paths import HOST_LIB_FILES, K3S_DEFAULTS, K3S_FILES
 
 # The backup target names, shared with the backup-health cron (#3737); it imports host_lib.
 sys.path.insert(0, str(HOST_LIB_FILES))
 sys.path.insert(0, str(K3S_FILES))
 from longhorn_lib import longhorn_backups
+from longhorn_lib import longhorn_restore_drill_stamps as drill_stamps
 
 CLUSTER = "prod"
 RUNBOOK = "docs/longhorn-upgrade.md"
 
 DRILL_STATE_DIR = "/var/lib/longhorn-restore-drill"
-DRILL_STAMP = "last-success"
+DRILL_STAMP = drill_stamps.LAST_SUCCESS
 MAX_AGE_KEY = "k3s_longhorn_restore_drill_max_age_days"
+NAMESPACE_KEY = "k3s_longhorn_restore_drill_namespace"
 
 # The target the runbook's own block names. Others (`r2`) are checked when armed.
 REQUIRED_TARGETS = (longhorn_backups.B2_TARGET,)
@@ -102,23 +109,56 @@ def restore_drill_max_age_s(defaults_file: _Path = K3S_DEFAULTS) -> float:
     return float(defaults[MAX_AGE_KEY]) * 86400
 
 
+def restore_drill_namespace(defaults_file: _Path = K3S_DEFAULTS) -> str:
+    """The namespace of the drill's stamp ConfigMap, read from the k3s role's defaults."""
+    return str(yaml_fast.safe_load(defaults_file.read_text())[NAMESPACE_KEY])
+
+
+def drill_stamps_doc(tools: Tools, namespace: str):
+    """The drill's stamp ConfigMap, None when it does not exist, `Unreadable` when the read failed."""
+    args = ("-n", namespace, *drill_stamps.CONFIGMAP_GET_ARGS)
+    proc = kubectl(CLUSTER, *args, tools=tools)
+    if proc.returncode != 0:
+        detail = (proc.stderr or proc.stdout).strip()[:160] or "(no output)"
+        raise Unreadable(f"`kubectl {' '.join(args)}` failed: {detail}")
+    try:
+        return drill_stamps.parse_configmap(proc.stdout)
+    except ValueError as exc:
+        raise Unreadable(f"`kubectl {' '.join(args)}` returned {exc}") from None
+
+
 def stale_restore_drill(
-    state_dir: str | os.PathLike, max_age_s: float, now: float | None = None
+    state_dir: str | os.PathLike,
+    max_age_s: float,
+    now: float | None = None,
+    stamps_doc=None,
+    namespace: str = "",
 ) -> list[str]:
     """Why the drill stamp does not prove a recent restore, or nothing when it does.
 
     The stamp is one unix epoch. Absent, unreadable or unparseable is a failure, not a skip:
-    a drill that has never passed is the state most worth reporting.
+    a drill that has never passed is the state most worth reporting. `stamps_doc` is the drill's
+    stamp ConfigMap; while it is None or holds no `last-success`, the state directory decides.
     """
-    missing = stamp_dir_missing(state_dir, "daniel-box, the host that runs the drill")
-    if missing:
-        return missing
-    stamp = _Path(state_dir) / DRILL_STAMP
+    from_configmap = drill_stamps.from_configmap(stamps_doc, namespace)
+    if from_configmap is not None:
+        stamp, raw = from_configmap.where, from_configmap.last_success
+    else:
+        missing = stamp_dir_missing(
+            state_dir, "daniel-box, the host that runs the drill"
+        )
+        if missing:
+            return missing
+        stamp = _Path(state_dir) / DRILL_STAMP
+        try:
+            raw = stamp.read_text()
+        except FileNotFoundError:
+            return [f"<{stamp} does not exist — no restore drill has ever passed here>"]
+        except OSError as exc:
+            return [f"<cannot read an epoch from {stamp}: {exc}>"]
     try:
-        epoch = float(stamp.read_text().strip())
-    except FileNotFoundError:
-        return [f"<{stamp} does not exist — no restore drill has ever passed here>"]
-    except (OSError, ValueError) as exc:
+        epoch = float((raw or "").strip())
+    except ValueError as exc:
         return [f"<cannot read an epoch from {stamp}: {exc}>"]
     age_s = (time.time() if now is None else now) - epoch
     if age_s > max_age_s:
@@ -177,12 +217,14 @@ class Env:
         state_dir: the drill's state directory.
         max_age_s: the drill's freshness window in seconds.
         now: the clock, as a unix epoch.
+        namespace: the namespace of the drill's stamp ConfigMap.
     """
 
     tools: Tools
     state_dir: str
     max_age_s: float
     now: float
+    namespace: str
 
 
 def _gate_target(env: Env) -> list[str]:
@@ -190,7 +232,10 @@ def _gate_target(env: Env) -> list[str]:
 
 
 def _gate_drill(env: Env) -> list[str]:
-    return stale_restore_drill(env.state_dir, env.max_age_s, env.now)
+    doc = drill_stamps_doc(env.tools, env.namespace)
+    return stale_restore_drill(
+        env.state_dir, env.max_age_s, env.now, doc, env.namespace
+    )
 
 
 def _gate_volumes(env: Env) -> list[str]:
@@ -225,6 +270,7 @@ def run_gates(
         or DRILL_STATE_DIR,
         max_age_s=restore_drill_max_age_s() if max_age_s is None else max_age_s,
         now=time.time() if now is None else now,
+        namespace=restore_drill_namespace(),
     )
     return gate_runner.run_gates(GATES, RUNBOOK, env, out=out)
 

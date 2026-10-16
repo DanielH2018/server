@@ -224,6 +224,12 @@ ROWS = (
                 "flat `files/`, and deploy_ui and renovate_agent install them into /opt from "
                 "these paths"
             ),
+            "ansible/roles/k8s/manifests/files/flux_*.py": (
+                "two separate Flux Job programs, flux_soak and flux_snapshot, plus "
+                "flux_job_connect, the helper each Job's ConfigMap carries beside its script "
+                "as a flat key (a ConfigMap key cannot hold a `/`); the Job census in "
+                "scripts/renderer/tests/_job_census.py checks that copy beside each script"
+            ),
         },
     ),
 )

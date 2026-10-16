@@ -1,8 +1,9 @@
-# daniel-pi's host package (H3.6). It ships reconcile and the updater's schedule, and no enable
-# link for homelab-updater.timer: the operator starts the updater by hand until H3.9b ships the
-# link (docs/target-architecture/host/h3-pi-pilot.md, *Steps, as PRs*).
+# daniel-pi's host package (H3.6). It ships reconcile, the updater's schedule and, since H3.8b,
+# the three Pi heartbeats. It ships no enable link for homelab-updater.timer: the operator
+# starts the updater by hand until H3.9b ships the link (docs/target-architecture/host/
+# h3-pi-pilot.md, *Steps, as PRs*).
 description: daniel-pi's homelab host package
-components: [reconcile]
+components: [reconcile, pi-heartbeats]
 maintainer_scripts: [preinst, postinst, prerm]
 files:
   - {src: units/homelab-updater.timer.conf, dst: /usr/lib/systemd/system/homelab-updater.timer.d/50-homelab.conf}

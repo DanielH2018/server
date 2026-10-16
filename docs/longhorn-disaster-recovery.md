@@ -312,6 +312,30 @@ one volume name per line, and the heartbeat pages naming it. A volume that is bo
 and unbound is listed only in `excluded_oversize`. The page clears on the next drill run after a
 PVC is bound to the volume again, the volume is deleted, or it moves to `no-backup`.
 
+**The stamps have a second store, read first.** Checks 7 and 8, gate 2 of
+`docs/longhorn-upgrade.md` and the drill's row of `docs/reference/state.md` each read the
+ConfigMap `longhorn-restore-drill-stamps` in `k3s_longhorn_restore_drill_namespace` (`homelab`)
+before the directory. Each ConfigMap key stands for one file:
+
+| ConfigMap key | File under `/var/lib/longhorn-restore-drill/` | Value |
+|---|---|---|
+| `last-success` | `last-success` | the file's content, an epoch |
+| `candidates` | `candidates` | the file's content, one PVC per line |
+| `excluded_oversize` | `excluded_oversize` | the file's content |
+| `excluded_nopvc` | `excluded_nopvc` | the file's content |
+| `seen.<pvc>` | `seen/<pvc>` | the epoch the marker's mtime held |
+| `success.<pvc>` | `success/<pvc>` | the epoch the file held |
+| `attempts.<pvc>`, `retries.<pvc>` | `attempts/<pvc>`, `retries/<pvc>` | the epoch the marker's mtime held; only the drill reads these |
+
+While the ConfigMap is absent or holds no `last-success`, every reader reads the directory. A
+failed ConfigMap read never falls back: the heartbeat reports it as a failed fetch, the upgrade
+gate exits 69, and the state page marks the row unreadable. Two rules apply only to the
+ConfigMap. A candidate with no `seen.<pvc>` key takes the ConfigMap's `creationTimestamp` as its
+seen time, so check 8 flags it once the coverage window passes instead of skipping it. Check 8
+also pages at once, in either store, when the candidate list is non-empty and no candidate has a
+seen entry, because that means the drill's state did not persist. Nothing writes the ConfigMap
+until the drill moves to it (H2.3c of `docs/target-architecture/host/h2-shrink-host-plane.md`).
+
 What is still not covered: each night proves one volume, so at any moment the fleet-wide claim is
 What is still not covered: each night proves one volume, so at any moment the fleet-wide claim is
 "every volume restored within the last cycle," not "every volume restores right now." A full-cluster restore is also still rationed: at 16 MiB blocks

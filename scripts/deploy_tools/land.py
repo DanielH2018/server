@@ -94,6 +94,12 @@ changes requested, a read or a fetch that failed. The `land:` line on stderr, re
 verdict's detail, says which. `handoff-timeout` is land.sh giving up on a lander unit that is
 still running (`LAND_HANDOFF_UNIT` below); a re-run waits on it again. Bad arguments (64) print
 no verdict.
+A PR whose tag Flux applies waits on `promote.py land-wait`, whose verdicts are settled |
+deploy-failed | gave-up | suspended. A tag suspended at the merge commit applies nothing
+until a PR resumes it, so the wait and the gate leave it out. `suspended` means every such
+tag of the PR is suspended; the landing prints `nothing-to-deploy` and exits 0, unless
+deploy.sh deployed a tag, which it still gates. The suspend PR itself ends this way,
+before a promotion applies it: check that `probe.py landing` shows `last-good` at or past M.
 `ci-unproven` means GitHub never ran CI for the merge commit and no later master commit can
 stand in for it, so a re-run alone never converges; the detail names the tip and the way out.
 `merge-conflict` and `pr-ci-red` are the merge wait ending early on the two states an armed

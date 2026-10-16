@@ -139,16 +139,16 @@ def test_check_template_catches_a_broken_render(tmp_path):
     broken = broken_dir / "broken.sh.j2"
     broken.write_text("#!/bin/bash\necho '{{ sys_user }}'s broken'\n")
 
-    # check_template resolves the template's path relative to ANSIBLE for reporting, so point
-    # ANSIBLE-relative logic at a fixture tree rooted under tmp_path.
+    # check_template resolves the template's path relative to REPO for reporting, so point
+    # REPO-relative logic at a fixture tree rooted under tmp_path.
     out_dir = tmp_path / "out"
     out_dir.mkdir()
-    orig_ansible = v.ANSIBLE
-    v.ANSIBLE = tmp_path
+    orig_repo = v.REPO
+    v.REPO = tmp_path
     try:
         err = v.check_template(broken, {"sys_user": "ubuntu"}, out_dir, "bash", {})
     finally:
-        v.ANSIBLE = orig_ansible
+        v.REPO = orig_repo
 
     # "bash" as the shellcheck_bin arg is intentionally wrong (bash isn't shellcheck) — but
     # bash -n runs FIRST and must already catch this broken script before shellcheck is reached.
@@ -164,14 +164,14 @@ def test_check_template_passes_a_clean_render(tmp_path):
 
     out_dir = tmp_path / "out"
     out_dir.mkdir()
-    orig_ansible = v.ANSIBLE
-    v.ANSIBLE = tmp_path
+    orig_repo = v.REPO
+    v.REPO = tmp_path
     try:
         err = v.check_template(
             clean, {"sys_user": "ubuntu"}, out_dir, shutil.which("shellcheck"), {}
         )
     finally:
-        v.ANSIBLE = orig_ansible
+        v.REPO = orig_repo
 
     assert err is None
 
@@ -191,6 +191,27 @@ def test_role_defaults_reach_the_render_context():
     ctx = v.template_context(path)
     assert ctx["artifacts_peer_sources"], ctx.get("artifacts_peer_sources")
     assert "{{" not in sl.render_template(path, ctx)
+
+
+def test_a_host_components_templates_are_discovered():
+    # H3.8b moved the Pi heartbeats out of optimize_pi. A component glob that stopped matching
+    # would drop them from the gate with every other template still checked.
+    component = v.COMPONENTS / "pi-heartbeats" / "templates" / "pi-sd-health.sh.j2"
+    assert component in v.discover_templates()
+
+
+def test_component_defaults_and_host_reach_the_render_context():
+    # A component has no role defaults file: its defaults are component.yml's `defaults:` map,
+    # and its host is the one whose package lists it, as the host renderer reads them.
+    path = v.COMPONENTS / "pi-heartbeats" / "templates" / "pi-recovery-health.sh.j2"
+    ctx = v.template_context(path)
+    assert ctx["optimize_pi_recovery_restart_enabled"] is True
+    # wg-easy runs only on daniel-pi, so its containers_list proves the host layer is the Pi's.
+    assert any(c["name"] == "wg-easy" for c in ctx["containers_list"])
+
+
+def test_a_component_no_package_lists_has_no_host():
+    assert v.component_host("no-such-component") is None
 
 
 def test_an_override_beats_the_role_default():

@@ -7,10 +7,14 @@ Run: uv run pytest scripts/docs/tests/test_gen_reference_state.py
 """
 
 import datetime as dt
+import json
+import subprocess
 import textwrap
+from pathlib import Path
 
 from docs.reference import crons
 from docs.reference import state as g
+from lib import kubectl
 
 NOW = dt.datetime(2026, 9, 3, 12, 0, 0, tzinfo=dt.timezone.utc)
 
@@ -150,6 +154,72 @@ def test_etcd_drill_parses_the_key_value_stamp(tmp_path):
     run = g.etcd_restore_drill_run(tmp_path)
     assert run.last_run == dt.datetime.fromtimestamp(1788171603, dt.timezone.utc)
     assert "offbox-daniel-box-1788144302.zip" in run.outcome
+
+
+# --- longhorn_restore_drill_run(): the stamp ConfigMap, then the host directory -------------
+
+_CM_ARGS = ("-n", "homelab", *g.drill_stamps.CONFIGMAP_GET_ARGS)
+_NODES = {"items": [{"metadata": {"name": "daniel-box"}}]}
+
+
+def _kubectl(cm_stdout: str, rc: int = 0) -> kubectl.Tools:
+    """A `Tools` answering the identity read as `prod` and the ConfigMap read as given."""
+
+    def run(argv, timeout):
+        args = tuple(argv[argv.index("--kubeconfig") + 2 :])
+        if args == tuple(kubectl.nodes_args()):
+            return subprocess.CompletedProcess(argv, 0, json.dumps(_NODES), "")
+        assert args == _CM_ARGS, args
+        return subprocess.CompletedProcess(
+            argv, rc, cm_stdout, "Forbidden" if rc else ""
+        )
+
+    return kubectl.Tools(
+        run=run,
+        find_tool=lambda name: "/usr/local/bin/kubectl",
+        find_kubeconfig=lambda: Path("/tmp/kubeconfig"),
+    )
+
+
+def _stamps(epoch: float) -> str:
+    return json.dumps({"kind": "ConfigMap", "data": {"last-success": f"{int(epoch)}"}})
+
+
+def _drill(state_dir, tools):
+    return g.longhorn_restore_drill_run(state_dir, tools=tools, namespace="homelab")
+
+
+def test_longhorn_drill_reads_the_configmap_stamp_over_the_directory(tmp_path):
+    (tmp_path / "last-success").write_text(
+        str(int((NOW - dt.timedelta(days=9)).timestamp()))
+    )
+    fresh = (NOW - dt.timedelta(hours=1)).timestamp()
+    run = _drill(tmp_path, _kubectl(_stamps(fresh)))
+    assert run.last_run == dt.datetime.fromtimestamp(int(fresh), dt.timezone.utc)
+
+
+def test_longhorn_drill_falls_back_to_the_directory_while_the_configmap_is_absent(
+    tmp_path,
+):
+    stamp = int((NOW - dt.timedelta(hours=1)).timestamp())
+    (tmp_path / "last-success").write_text(str(stamp))
+    run = _drill(tmp_path, _kubectl(""))
+    assert run.last_run == dt.datetime.fromtimestamp(stamp, dt.timezone.utc)
+    empty = json.dumps({"kind": "ConfigMap", "data": {}})
+    assert _drill(tmp_path, _kubectl(empty)).last_run == run.last_run
+
+
+def test_longhorn_drill_with_a_failed_read_is_unreadable_not_the_directory(tmp_path):
+    (tmp_path / "last-success").write_text(str(int(NOW.timestamp())))
+    run = _drill(tmp_path, _kubectl("", rc=1))
+    assert run.unreadable and run.last_run is None
+    no_kubectl = kubectl.Tools(find_tool=lambda name: None)
+    assert _drill(tmp_path, no_kubectl).unreadable
+
+
+def test_longhorn_drill_with_both_stores_absent_is_never_a_pass(tmp_path):
+    run = _drill(tmp_path / "does-not-exist", _kubectl(""))
+    assert g.status_for(run, cadence=1440.0, now=NOW) == "unreadable"
 
 
 # --- cadence_minutes(): reused from crons.py, not duplicated --------------------------------

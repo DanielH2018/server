@@ -809,9 +809,9 @@
   # Same check-mode gate as the unpack: on a first --check the unit file does not exist yet.
   when: not ansible_check_mode
 
-# The Kuma-push helper both health crons below source is /usr/local/lib/kuma-push-lib.sh, which
-# the initial_setup role installs. initial_setup runs on every host and runs earlier in
-# initial_setup.yml than this role, so the file is on disk before either script is rendered.
+# The Pi's three heartbeats, their units and their log directory ship in homelab-daniel-pi since
+# H3.8b (hosts/components/pi-heartbeats/). This role keeps what the package cannot carry: the
+# interim push-token files below, and the removal of a helper it once installed.
 
 - name: Remove the superseded Pi-only Kuma-push helper
   tags: [sd-health, recovery-health]
@@ -822,52 +822,11 @@
     state: absent
   become: true
 
-- name: Create the directory both health crons write their verdict to
-  tags: [sd-health, recovery-health]
-  # Both scripts append an rsyslog-shaped `status=` line here, which the Pi's promtail tails
-  # under `job="syslog"` so `probe.py alerts` can reconstruct a Pi episode. Owned by the cron
-  # user rather than root: the crons run as {{ sys_user }} (uid 1000), and so does promtail
-  # (`user: "1000:1000"`), so the same uid writes and reads and no group_add is needed.
-  #
-  # This is under /var/log, which is log2ram's 128 MB RAM tmpfs — hence the logrotate stanza
-  # below rather than letting it grow. Two crons x 288 runs/day x ~90 B is ~52 KB/day, so the
-  # cap is precautionary, not load-bearing.
-  ansible.builtin.file:
-    path: /var/log/pi-health
-    state: directory
-    owner: "{{ sys_user }}"
-    group: "{{ sys_user }}"
-    mode: "0755"
-  become: true
-
-- name: Cap the health log so it cannot grow into the log2ram tmpfs
-  tags: [sd-health, recovery-health]
-  # `create`, NOT `copytruncate`. promtail holds the file open and tracks a byte offset;
-  # truncating in place leaves that offset past the new end, so it silently ships nothing
-  # until the offset happens to be passed again. Renaming and creating a fresh inode is the
-  # rotation promtail's glob-based tailer handles correctly.
-  ansible.builtin.copy:
-    dest: /etc/logrotate.d/pi-health
-    content: |
-      # Managed by Ansible (optimize_pi role) — edits here are overwritten.
-      /var/log/pi-health/*.log {
-        daily
-        rotate 1
-        size 256k
-        missingok
-        notifempty
-        create 0644 {{ sys_user }} {{ sys_user }}
-        su {{ sys_user }} {{ sys_user }}
-      }
-    mode: "0644"
-  become: true
-
 # Interim credentials for H3.8 (docs/target-architecture/host/h3-pi-pilot.md, H3.8a). The
 # homelab-daniel-pi package cannot carry a secret, so the H3.8b units read each push token
 # through `LoadCredential=` from the file below. Ansible owns these files and the package only
-# reads them; H4's last PR retires them. Nothing reads them before H3.8b: the crons above
-# still embed their tokens. `domain` gets no file, because it is an inventory value since
-# #5087 and the package renders it directly.
+# reads them; H4's last PR retires them. `domain` gets no file, because it is an inventory
+# value since #5087 and the package renders it directly.
 - name: Create the homelab credentials directory
   tags: [sd-health, recovery-health]
   # Same owner and mode as initial_setup's tasks that also create it, so they never fight.
@@ -912,136 +871,6 @@
   no_log: true  # writes pi_recovery_push_token
   become: true
 
-- name: Deploy the SD-card health heartbeat script
-  tags: [sd-health]
-  # SD cards can't do SMART (no ATA/NVMe command set behind mmcblk0), so scrutiny is
-  # useless here; the ext4 errors_count sysfs counter is the earliest reliable
-  # failure signal. The script pushes it to the static "Daniel Pi SD Health" Kuma
-  # push monitor (defined in the uptime-kuma role) through the LAN-only Authelia
-  # bypass on ^/api/push/. Mode 0700: the push token is embedded, so it's legible
-  # only to the cron user that runs it.
-  ansible.builtin.template:
-    src: pi-sd-health.sh.j2
-    dest: /usr/local/bin/pi-sd-health.sh
-    owner: "{{ sys_user }}"
-    group: "{{ sys_user }}"
-    mode: "0700"
-  no_log: true  # renders pi_sd_health_push_token
-  become: true
-
-- name: Schedule the SD-card health heartbeat
-  tags: [sd-health]
-  # Every 5 min — the Kuma monitor's 600s heartbeat window is 2x this, so one
-  # missed push is tolerated but a dead cron/host alerts. Cost per run: one sysfs
-  # read + one LAN HTTPS request; nothing measurable on the Zero 2 W.
-  ansible.builtin.cron:
-    name: "Pi SD-card health heartbeat"
-    minute: "*/5"
-    job: "/usr/local/bin/pi-sd-health.sh"
-    user: "{{ sys_user }}"
-  become: true
-
-# The rotated-log integrity sweep the heartbeat above reads. Dual-tagged `sd-health`
-# throughout: the heartbeat reads a missing verdict as a down, so a `--tags sd-health` run has to
-# install the whole chain it depends on, the same reason sd-health and recovery-health both
-# create /var/log/pi-health.
-- name: Create the directory the rotated-log integrity verdict lives in
-  tags: [sd-health, gz-integrity]
-  # /var/lib, NOT /var/log: /var/log is log2ram's tmpfs, so a verdict written there is gone after
-  # a reboot and the heartbeat would report "no verdict" — a down — until the next daily sweep,
-  # up to a day later. One small write a day on the SD card is the cheaper side of that trade.
-  ansible.builtin.file:
-    path: "{{ optimize_pi_gz_integrity_state_file | dirname }}"
-    state: directory
-    owner: "{{ sys_user }}"
-    group: "{{ sys_user }}"
-    mode: "0755"
-  become: true
-
-- name: Deploy the rotated-log integrity sweep
-  tags: [sd-health, gz-integrity]
-  # Mode 0755 and no `no_log`, unlike the two heartbeats: this script embeds no push token. It
-  # writes a verdict file and the heartbeat does the pushing.
-  ansible.builtin.template:
-    src: pi-gz-integrity.sh.j2
-    dest: /usr/local/bin/pi-gz-integrity.sh
-    owner: "{{ sys_user }}"
-    group: "{{ sys_user }}"
-    mode: "0755"
-  become: true
-  register: optimize_pi_gz_integrity_script
-
-- name: Check whether a rotated-log integrity verdict exists yet
-  tags: [sd-health, gz-integrity]
-  ansible.builtin.stat:
-    path: "{{ optimize_pi_gz_integrity_state_file }}"
-  register: optimize_pi_gz_integrity_state
-
-- name: Prime the rotated-log integrity verdict before the first daily sweep
-  tags: [sd-health, gz-integrity]
-  # Without this the verdict file does not exist until the cron first fires, and the heartbeat
-  # reads a missing verdict as a down — so a fresh Pi, or one whose sweep was just reshaped,
-  # would page for up to a day over a check that had never run. Runs as the cron's own user, so
-  # the verdict reflects what that user can read.
-  ansible.builtin.command:
-    cmd: /usr/local/bin/pi-gz-integrity.sh
-  become: true
-  become_user: "{{ sys_user }}"
-  changed_when: false
-  when:
-    - not ansible_check_mode
-    - optimize_pi_gz_integrity_script.changed or not optimize_pi_gz_integrity_state.stat.exists
-
-- name: Schedule the rotated-log integrity sweep
-  tags: [sd-health, gz-integrity]
-  # Daily at 01:40 UTC: after log2ram's own 23:55 daily sync (so /var/hdd.log holds the day's
-  # rotation) and clear of the 00:00-00:10 cluster of logrotate, dpkg-db-backup and sysstat. Both
-  # streams to the journal — the sweep prints its verdict line on every run, which cron would
-  # otherwise mail to a spool nothing reads.
-  ansible.builtin.cron:
-    name: "Pi rotated-log integrity sweep"
-    minute: "40"
-    hour: "1"
-    job: "/usr/local/bin/pi-gz-integrity.sh 2>&1 | logger -t pi-gz-integrity"
-    user: "{{ sys_user }}"
-  become: true
-
-- name: Deploy the container-recovery heartbeat script
-  tags: [recovery-health]
-  # AutoKuma cannot reach the Pi's docker socket, so the Pi's containers have no liveness
-  # monitor of their own (autoheal and docker-proxy die silently; the rest sit Exited after a
-  # failed start). This script pushes the running-state of every container in containers_list
-  # (plus the docker-proxy sub-proxies) to the static "Daniel Pi Recovery" Kuma push monitor
-  # (uptime-kuma role) via the LAN-only Authelia bypass on ^/api/push/, and `docker start`s
-  # what it finds down. Mode 0700: the push token is embedded, so it's legible only to the
-  # cron user that runs it (same as the SD-health heartbeat above).
-  ansible.builtin.template:
-    src: pi-recovery-health.sh.j2
-    dest: /usr/local/bin/pi-recovery-health.sh
-    owner: "{{ sys_user }}"
-    group: "{{ sys_user }}"
-    mode: "0700"
-  no_log: true  # renders pi_recovery_push_token
-  become: true
-
-- name: Schedule the container-recovery heartbeat
-  tags: [recovery-health]
-  # Every 5 min — the Kuma monitor's 600s window is 2x this. Cost per run: one `docker ps`
-  # filter per watched container + one LAN HTTPS request; `docker inspect` and `docker start`
-  # run only for a container that is down. Nothing measurable on the Zero 2 W.
-  #
-  # Both directions are wired: setting optimize_pi_recovery_restart_enabled to false removes the
-  # cron, so disarming is an inventory flag rather than an edit to this task that the next
-  # `--tags recovery-health` run undoes. The script above stays installed either way, so an
-  # operator can still run one cycle by hand. ENFORCED:
-  # ansible/tests/setup/test_pi_recovery_restarts_and_reports.py.
-  ansible.builtin.cron:
-    name: "Pi container-recovery heartbeat"
-    minute: "*/5"
-    job: "/usr/local/bin/pi-recovery-health.sh"
-    user: "{{ sys_user }}"
-    state: "{{ 'present' if optimize_pi_recovery_restart_enabled else 'absent' }}"
-  become: true
 
 # SUDO RESOLVES THE LOCAL HOSTNAME ON EVERY INVOCATION, and this file is the first hop. Without
 # a line here the lookup falls through to /etc/resolv.conf, whose first nameserver is the
@@ -1149,7 +978,7 @@
 - name: Restart them so Docker re-reads the host's resolvers # noqa no-handler
   tags: [pi-dns]
   # Not a handler: handlers run at the end of the play, and this role's later tasks — plus the
-  # health crons they install — resolve names. Leaving containers on a dead stub until the end
+  # packaged heartbeats — resolve names. Leaving containers on a dead stub until the end
   # of the run is the failure this task exists to close.
   community.docker.docker_container:
     name: "{{ item }}"

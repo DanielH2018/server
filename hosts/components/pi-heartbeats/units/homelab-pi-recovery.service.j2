@@ -1,0 +1,11 @@
+# Shipped by homelab-daniel-pi. Started by homelab-pi-recovery.timer, whose enable link ships
+# only while optimize_pi_recovery_restart_enabled is true. component.yml carries the contract.
+[Unit]
+Description=Start any stopped Pi container and push to the Daniel Pi Recovery Kuma monitor
+
+[Service]
+Type=oneshot
+User={{ sys_user }}
+ExecStart=/usr/lib/homelab/pi-recovery-health
+LoadCredential=pi_recovery_push_token:/etc/homelab/interim/pi_recovery_push_token
+LogsDirectory=pi-health

@@ -31,13 +31,16 @@ def fake_tools(answers: dict[tuple, object]) -> kubectl.Tools:
 
     A read the table does not carry raises `KeyError`, so a gate that reaches for a resource
     the test did not plan for fails loudly instead of passing on an empty answer. The node
-    list defaults to the production pair.
+    list defaults to the production pair. A string answer is printed as it is, so `""` stands
+    for a `--ignore-not-found` read of an object that does not exist.
     """
     table = {NODES_ARGS: BOTH_READY, **answers}
 
     def run(argv, timeout):
         args = tuple(argv[argv.index("--kubeconfig") + 2 :])
-        return subprocess.CompletedProcess(argv, 0, json.dumps(table[args]), "")
+        answer = table[args]
+        stdout = answer if isinstance(answer, str) else json.dumps(answer)
+        return subprocess.CompletedProcess(argv, 0, stdout, "")
 
     return kubectl.Tools(
         run=run,
