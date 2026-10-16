@@ -32,10 +32,11 @@
 # Leftovers from #2813, which merged the terraria-stats and valheim-stats roles into this one
 # (#3088). The manifests role prunes only inside its own `manifests_service` directory, so the
 # two old staging directories kept their copies of these same objects, and each old service kept
-# its release record. `terraria-stats-claims/` was the retired k8s/volume-claim role's staging
+# its release and render records. A render record with no release record reads as `unknown: no
+# release record` in every narrow-shadow line (#5162). `terraria-stats-claims/` was the retired k8s/volume-claim role's staging
 # directory, which the shared sweep in k8s/manifests cannot reach because it is keyed on `game-stats` (#3387).
 # Keep `/etc/rancher/k3s/terraria-stats/`: tasks/terraria.yml still stages it.
-- name: Remove the staged manifests and release records the pre-#2813 roles left behind
+- name: Remove the staged manifests, release and render records the pre-#2813 roles left behind
   tags: [config]
   ansible.builtin.file:
     path: "{{ item }}"
@@ -48,5 +49,7 @@
     - /var/lib/homelab/k8s-releases.d/terraria-stats.previous.json
     - /var/lib/homelab/k8s-releases.d/valheim-stats.json
     - /var/lib/homelab/k8s-releases.d/valheim-stats.previous.json
+    - /var/lib/homelab/k8s-renders.d/terraria-stats.json
+    - /var/lib/homelab/k8s-renders.d/valheim-stats.json
   become: true
   when: not k8s_dry_run | bool
