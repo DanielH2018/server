@@ -35,8 +35,8 @@ incident each step was added after, are in `docs/pi-host-tuning-record.md`.
 
 Fourteen steps, in this order: config-path detection, the `gpu_mem=16` split, zram, Log2Ram,
 the hardware watchdog, debloat, the log RAM budget, earlyoom, the apt timers, node_exporter as
-a host unit, the SD-card health heartbeat, the container-recovery heartbeat, the durable health
-log, and the resolver. `docs/pi-host-tuning-record.md` has each step's numbers and incident —
+a host unit, the SD-card health heartbeat (with the interim push-token files H3.8 stages), the
+container-recovery heartbeat, the durable health log, and the resolver. `docs/pi-host-tuning-record.md` has each step's numbers and incident —
 read it before you change a step. Keep these rules:
 
 - **Do not shrink zram's `PERCENT` to reclaim RAM.** The arithmetic runs the other way: zram is
@@ -54,6 +54,9 @@ read it before you change a step. Keep these rules:
 - **The resolver's ORDER is the whole failover mechanism, and `rotate` stays unset.**
 - **A missing, stale or short-file-count `gzip -t` verdict is itself a `down`**, and the health
   log's `date -Is` timestamp shape is what makes its line parse.
+- **`/etc/homelab/interim/pi_sd_health_push_token` and `pi_recovery_push_token` are
+  Ansible-owned and interim:** the H3.8b package only reads them through `LoadCredential=`,
+  and H4's last PR retires them.
 
 ENFORCED:
 `ansible/tests/setup/test_optimize_pi_declares_log2ram_sizes.py::test_the_role_checks_the_duplicate_journald_aware_lines_agree`,
