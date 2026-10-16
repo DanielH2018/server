@@ -151,7 +151,10 @@ def test_restore_drill_nopvc_is_flagged_naming_each_excluded_volume():
 
 
 def test_restore_coverage_skips_an_unseen_candidate_with_no_default():
-    """Control for the pair below: the directory arm has no seen default and skips it."""
+    """The directory arm's skip, kept from before the ConfigMap arm: no seen default, no page.
+
+    This guards retained behaviour; the creation-time rule's own test is the one below.
+    """
     seen = {"pvc-seen": NOW - DAY}
     assert (
         logic.check_restore_coverage(["pvc-seen", "pvc-new"], seen, {}, NOW, 5) is None
