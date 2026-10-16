@@ -11,7 +11,7 @@ see — would ship through `land.sh --arm-merge` like a jellyfin plugin work ord
 The rule is the class, not the instance: every per-package manual rule whose pin a denied
 role owns ends its parenthetical with the marker, and one whose pin no denied role owns does
 not, so a role promoted out of the denylist drops the marker with it. Who owns a pin is read
-from `customManagers`: a manager with a `depNameTemplate` names its package outright, so every
+from `customManagers`: a manager with a `depNameTemplate` or `packageNameTemplate` names its package outright, so every
 file it matches owns the pin; one without derives the name from the file, so the file must
 carry the package literally (the `_image:` pins). Renovate's built-in `dockerfile` manager
 reads the n8n Dockerfiles with no entry in `customManagers`, so it is spelled here. A build role that renders no workload of
@@ -109,8 +109,17 @@ def pin_owner_roles(
     """
     owners: set[str] = set()
     for manager in managers + BUILTIN_MANAGERS:
-        named = manager.get("depNameTemplate")
-        if named is not None and named != package:
+        # A manager names its package by depNameTemplate or, where the two differ, by
+        # packageNameTemplate, which Renovate also matches `matchPackageNames` against. The
+        # headlamp plugins manager is one: its depName carries the plugin, its packageName the
+        # repo every plugin ships from.
+        names = {
+            manager[key]
+            for key in ("depNameTemplate", "packageNameTemplate")
+            if key in manager
+        }
+        named = names or None
+        if named is not None and package not in named:
             continue
         if datasources and manager.get("datasourceTemplate") not in datasources:
             continue
@@ -239,6 +248,21 @@ def test_a_named_package_manager_maps_the_pin_to_every_file_it_matches() -> None
     ]
     assert pin_owner_roles("vendor/plugin", managers, files, read=lambda _: "") == {
         "traefik"
+    }
+    assert pin_owner_roles("vendor/other", managers, files, read=lambda _: "") == set()
+
+
+def test_a_package_name_template_maps_the_pin_like_a_dep_name() -> None:
+    managers = [
+        {
+            "managerFilePatterns": [_DEFAULTS_PATTERN],
+            "depNameTemplate": "vendor-plugin/{{{pluginName}}}",
+            "packageNameTemplate": "vendor/plugins",
+        }
+    ]
+    files = ["ansible/roles/k8s/headlamp/defaults/main.yml"]
+    assert pin_owner_roles("vendor/plugins", managers, files, read=lambda _: "") == {
+        "headlamp"
     }
     assert pin_owner_roles("vendor/other", managers, files, read=lambda _: "") == set()
 

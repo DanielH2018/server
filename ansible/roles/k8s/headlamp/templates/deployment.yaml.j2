@@ -48,7 +48,7 @@ spec:
               set -eu
               cd /tmp
 {% for plugin in headlamp_k8s_plugins %}
-              wget -q -O {{ plugin.name }}.tgz "https://github.com/headlamp-k8s/plugins/releases/download/{{ plugin.name }}-{{ plugin.version }}/{{ plugin.name }}-{{ plugin.version }}.tar.gz"
+              wget -q -O {{ plugin.name }}.tgz "https://github.com/headlamp-k8s/plugins/releases/download/{{ plugin.name }}-{{ plugin.version }}/{{ plugin.asset_prefix | default('') }}{{ plugin.name }}-{{ plugin.version }}.tar.gz"
               echo "{{ plugin.sha256 }}  {{ plugin.name }}.tgz" | sha256sum -c -
               tar xzf {{ plugin.name }}.tgz -C /headlamp/plugins
               echo "installed plugin {{ plugin.name }} {{ plugin.version }}"

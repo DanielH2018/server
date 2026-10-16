@@ -11,13 +11,25 @@ every touch of the role (#2985).
   live pod lists it as `static-plugins/prometheus (shipped)`. Read that endpoint before
   adding a plugin; the plugin's README does not say which image bundles it, and the first
   cut of this role installed a second copy.
-- **Extra plugins are one entry each in `headlamp_k8s_plugins`** (name, version, sha256).
-  The `fetch-plugins` init container in `templates/deployment.yaml.j2` renders only when the
-  list is non-empty; it downloads each `headlamp-k8s/plugins` release tarball at pod start,
-  verifies the digest, and unpacks into the `/headlamp/plugins` emptyDir. A bad digest or an
-  unreachable GitHub fails the pod rather than starting a plugin-less dashboard. Nothing
-  tracks the versions while the list is empty; the defaults header names the Renovate
-  manager to restore with the first entry, and the commands that finish its sha256.
+- **Extra plugins are one entry each in `headlamp_k8s_plugins`** (name, version, sha256, and
+  `asset_prefix` where the release needs one). The `fetch-plugins` init container in
+  `templates/deployment.yaml.j2` renders only when the list is non-empty; it downloads each
+  `headlamp-k8s/plugins` release tarball at pod start, verifies the digest, and unpacks into
+  the `/headlamp/plugins` emptyDir. A bad digest or an unreachable GitHub fails the pod rather
+  than starting a plugin-less dashboard. The `headlamp plugins` regex manager in
+  `renovate.json` tracks each version, and its `packageRule` keeps the bump PR manual because
+  the sha256 is not published; the defaults comment has the commands that finish it.
+- **The asset name is not uniform across plugins.** Prometheus publishes
+  `prometheus-0.9.1.tar.gz`, while Flux publishes `headlamp-k8s-flux-0.7.0.tar.gz` (0.6.0 used
+  the same prefix). `asset_prefix` carries the difference, and the version stays written once
+  so a Renovate bump rewrites the whole URL.
+- **The Flux plugin (#5221) reads through `view`.** Flux's vendored `flux-view-flux-system`
+  aggregates its six `*.toolkit.fluxcd.io` groups into `view`, read-only
+  (`ansible/tests/k8s/test_aggregated_clusterroles.py` pins it), and `headlamp-cluster-read`
+  already grants `customresourcedefinitions`, which the plugin's overview reads to decide
+  whether Flux is installed. No `headlamp_k8s_crd_api_groups` entry is needed. The plugin's
+  sync, suspend and resume buttons fail as Forbidden, which is intended: writes to Flux go
+  through git.
 - **Prometheus charts.** The plugin finds Prometheus by the `headlamp-prometheus: "true"`
   label on the Service in `roles/k8s/observability`, and queries it through the API server's
   service proxy, so `templates/rbac-observability.yaml.j2` carries a Role in `observability` granting `get`
