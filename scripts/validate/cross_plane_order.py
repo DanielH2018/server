@@ -37,14 +37,16 @@ Run: uv run python scripts/validate/cross_plane_order.py --base origin/master
      uv run pytest scripts/validate/tests/test_validate_cross_plane_order.py
 """
 
+import dataclasses
 import hashlib
+import json
 import re
 import shutil
 import subprocess
 import sys
 import tarfile
 import tempfile
-from collections.abc import Iterable, Mapping
+from collections.abc import Callable, Iterable, Mapping
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -355,7 +357,11 @@ def gate(base: str, head: str) -> int:
 
 
 def replay_snapshot(
-    sha: str, paths: list[str], flux_owned: list[str], workdir: Path
+    sha: str,
+    paths: list[str],
+    flux_owned: list[str],
+    workdir: Path,
+    roles: Iterable[str] = (),
 ) -> Snapshot:
     """This checkout's tree with `paths` as `sha` holds them, rendered with `flux_owned` alone.
 
@@ -378,7 +384,7 @@ def replay_snapshot(
         set_flux_owned(tree / HOST_VARS, flux_owned)
         for _ in range(MAX_REPLAY_STUBS):
             try:
-                return snapshot(tree)
+                return snapshot(tree, roles)
             except RenderFailed as exc:
                 missing = _UNDEFINED.search(str(exc))
                 if not missing:
@@ -393,14 +399,34 @@ def replay_snapshot(
         shutil.rmtree(tree, ignore_errors=True)
 
 
-def replay(since: str, ref: str, flux_owned: list[str], jobs: int) -> int:
+def _cached(cache: Path, key: str, render: Callable[[], Snapshot]) -> Snapshot | str:
+    """`render()`, or its result from an earlier run's `cache`; a failure's message as a str."""
+    path = cache / f"{hashlib.sha256(key.encode()).hexdigest()}.json"
+    if path.exists():
+        data = json.loads(path.read_text())
+        return data if isinstance(data, str) else Snapshot(**data)
+    try:
+        result: Snapshot | str = render()
+    except (RenderFailed, ValueError, subprocess.CalledProcessError) as exc:
+        result = str(exc)
+    data = result if isinstance(result, str) else dataclasses.asdict(result)
+    path.write_text(json.dumps(data, default=sorted))
+    return result
+
+
+def replay(since: str, ref: str, flux_owned: list[str], jobs: int, cache: Path) -> int:
     """Run the gate over every first-parent commit on `ref` since `since`; print the tally.
 
     A commit is judged on this checkout's tree with only the render inputs it changed set to
     their content at its parent and at itself (`replay_snapshot`). The renderer dates from
     2026-10-12 and cannot render most older trees whole, while a commit's own change
     transplants onto today's tree.
+
+    Every pair across the planes holds a flux-owned tag, and arm 2 judges only those, so the
+    first pass renders the flux-owned tags alone. Only a commit that moves one, or changes its
+    `tasks/`, gets the full render. `cache` keeps each render, so a stopped replay resumes.
     """
+    cache.mkdir(parents=True, exist_ok=True)
     commits = git_stdout(
         "rev-list", "--first-parent", f"--since={since}", ref, cwd=REPO
     ).split()
@@ -410,25 +436,43 @@ def replay(since: str, ref: str, flux_owned: list[str], jobs: int) -> int:
         inputs = [p for p in paths if any(p.startswith(i + "/") for i in RENDER_INPUTS)]
         if inputs:
             judged[sha] = (paths, diffs, inputs)
-    sides = [
-        (side, inputs)
-        for sha, (_, _, inputs) in judged.items()
-        for side in (f"{sha}^", sha)
-    ]
-    with tempfile.TemporaryDirectory(prefix="cross-plane-replay-") as tmp:
+    owned = sorted(flux_owned)
 
-        def render(side: tuple[str, list[str]]) -> Snapshot | str:
-            try:
-                return replay_snapshot(side[0], side[1], flux_owned, Path(tmp))
-            except (RenderFailed, ValueError, subprocess.CalledProcessError) as exc:
-                return str(exc)
+    def render_all(shas: list[str], roles: list[str]) -> dict[str, Snapshot | str]:
+        sides = [(side, sha) for sha in shas for side in (f"{sha}^", sha)]
+
+        def render(item: tuple[str, str]) -> Snapshot | str:
+            side, sha = item
+            inputs = judged[sha][2]
+            key = "|".join([side, *inputs, "roles", *roles, "flux", *owned])
+            return _cached(
+                cache,
+                key,
+                lambda: replay_snapshot(side, inputs, owned, Path(tmp), roles),
+            )
 
         with ThreadPoolExecutor(max_workers=jobs) as pool:
-            rendered = list(pool.map(render, sides))
-    snaps = {side: snap for (side, _), snap in zip(sides, rendered, strict=True)}
+            done = list(pool.map(render, sides))
+        return {side: snap for (side, _), snap in zip(sides, done, strict=True)}
+
+    with tempfile.TemporaryDirectory(prefix="cross-plane-replay-") as tmp:
+        first = render_all(list(judged), owned)
+        candidates = []
+        for sha, (paths, diffs, _) in judged.items():
+            base, head = first[f"{sha}^"], first[sha]
+            if isinstance(base, str) or isinstance(head, str):
+                candidates.append(sha)
+            elif counted(base, head, paths, diffs) & set(owned):
+                candidates.append(sha)
+        print(
+            f"replay: {len(candidates)} of {len(judged)} move a flux-owned tag",
+            flush=True,
+        )
+        full = render_all(candidates, [])
     refused, shared, unrenderable = [], [], []
-    for sha, (paths, diffs, _) in judged.items():
-        base, head = snaps[f"{sha}^"], snaps[sha]
+    for sha in candidates:
+        paths, diffs, _ = judged[sha]
+        base, head = full[f"{sha}^"], full[sha]
         subject = git_stdout("log", "-1", "--format=%s", sha, cwd=REPO)
         if isinstance(base, str) or isinstance(head, str):
             unrenderable.append(sha)
@@ -475,10 +519,16 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--jobs", type=int, default=4, help="a replay's parallel renders"
     )
+    parser.add_argument(
+        "--cache",
+        type=Path,
+        default=Path(tempfile.gettempdir()) / "cross-plane-replay-cache",
+        help="where a replay keeps each render, so a stopped one resumes",
+    )
     args = parser.parse_args(argv)
     if args.base:
         return gate(args.base, args.head)
-    return replay(args.replay_since, args.ref, args.flux_owned, args.jobs)
+    return replay(args.replay_since, args.ref, args.flux_owned, args.jobs, args.cache)
 
 
 if __name__ == "__main__":
