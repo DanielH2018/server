@@ -8,17 +8,23 @@ nothing and `prod` stays where it was. `report` runs the source, host and no-stu
   `SHARED_KINDS` member, and nothing else;
 - `flux/kustomization.yaml` lists exactly the other files in `flux/`;
 - each `<name>.yaml` holds exactly the Kustomization `<name>`, with path `./cluster/<name>`,
-  plus `<name>-deferred` second, with path `./cluster/<name>-deferred`, exactly when `<name>`
-  is a published tag that defers files (the per-file rule, D4.3);
-- each published tag and each shared kind has its directory `cluster/<name>/`, and each tag
-  that defers files `cluster/<name>-deferred/`, each with a `kustomization.yaml`;
+  then each per-tag kind its role's inputs call for, in `TAG_KIND_SUFFIXES` order, each with
+  path `./cluster/<name><suffix>` (the per-file rule, D4.3 and D5.1a1): `-deferred` when the
+  role passes `manifests_deferred_files`, `-snapshot` when it declares
+  `k8s_autodeploy_snapshot_pvcs`, and `-verify` for none yet;
+- each published tag and each shared kind has its directory `cluster/<name>/`, and each
+  per-tag kind its directory `cluster/<name><suffix>/`, each with a `kustomization.yaml`;
+- no published tag takes a reserved name (`reserved_tags`), so a tag named `soak` fails
+  here even before `soak` joins `SHARED_KINDS`;
 - `digests.json` names each published tag and shared kind, plus `_unclassified`.
 
 The allowlist comes from the renderer's inputs, never from its output, so a renderer bug
 cannot widen it: the tags the inventory marks `owner: flux` (`published_tags`), the literal
 `SHARED_KINDS`, and the published tags whose role passes `manifests_deferred_files` to its
-`k8s/manifests` include (`deferring_tags`), read as the renderer reads the include. A tag marked `owner: released` is left out of both the bundle and the
-allowlist (C4).
+`k8s/manifests` include (`deferring_tags`), read as the renderer reads the include, and those
+whose role declares snapshot claims (`snapshot_tags`). No role input names a verify Job yet,
+so `report` grants `-verify` to no tag, and the first PR that renders one adds its reader. A
+tag marked `owner: released` is left out of both the bundle and the allowlist (C4).
 
 The plan is docs/target-architecture/deploy/d2-first-leaf.md, *Publication and verification*.
 
@@ -46,13 +52,19 @@ from lib.repo_paths import K8S_ROLES
 import bundle_gates
 from renderer.renderer_lib.bundle import (
     CLUSTER_DIR,
-    DEFERRED_SUFFIX,
     DIGESTS,
     FLUX_API_VERSION,
     FLUX_DIR,
     KUSTOMIZATION,
     SHARED_KINDS,
     UNCLASSIFIED,
+    reserved_tags,
+)
+from renderer.renderer_lib.ordering import (
+    DEFERRED_SUFFIX,
+    SNAPSHOT_SUFFIX,
+    TAG_KIND_SUFFIXES,
+    VERIFY_SUFFIX,
 )
 from renderer.renderer_lib.task_inputs import include_vars
 
@@ -91,6 +103,34 @@ def deferring_tags(
     return frozenset(found), problems
 
 
+def snapshot_tags(
+    published: Iterable[str], roles: Path = K8S_ROLES
+) -> tuple[frozenset[str], list[str]]:
+    """The published tags that declare snapshot claims, and one line per tag it could not judge.
+
+    A tag declares them when its role's `defaults/main.yml` sets a non-empty
+    `k8s_autodeploy_snapshot_pvcs`, which alone calls for `<tag>-snapshot` (D5.2a). A value
+    that is not a literal list is a problem rather than a guess.
+    """
+    found, problems = set(), []
+    for tag in sorted(set(published)):
+        path = roles / tag / "defaults" / "main.yml"
+        try:
+            defaults = yaml_fast.safe_load(path.read_text()) if path.is_file() else {}
+        except (OSError, yaml.YAMLError) as err:
+            problems.append(f"could not tell whether {tag} snapshots claims: {err}")
+            continue
+        value = (defaults or {}).get("k8s_autodeploy_snapshot_pvcs")
+        if value is not None and not isinstance(value, list):
+            problems.append(
+                f"could not tell whether {tag} snapshots claims: its "
+                f"k8s_autodeploy_snapshot_pvcs is {value!r}, not a literal list"
+            )
+        elif value:
+            found.add(tag)
+    return frozenset(found), problems
+
+
 def _documents(path: Path) -> list[object] | str:
     """The parsed documents of `path`, or the parse error as text."""
     try:
@@ -122,16 +162,16 @@ def _index_problems(flux: Path, held: set[str]) -> list[str]:
     ]
 
 
-def _kustomization_problems(flux: Path, name: str, defers: bool) -> list[str]:
+def _kustomization_problems(flux: Path, name: str, suffixes: list[str]) -> list[str]:
     """What is wrong with `flux/<name>.yaml` under the per-file rule.
 
-    It must hold exactly the Kustomization `name`, plus `<name>-deferred` second when
-    `defers`, each applying its own directory under `cluster/`.
+    It must hold exactly the Kustomization `name`, then `<name><suffix>` for each of
+    `suffixes` in order, each applying its own directory under `cluster/`.
     """
     docs = _documents(flux / f"{name}.yaml")
     if isinstance(docs, str):
         return [f"{FLUX_DIR}/{name}.yaml {docs}"]
-    names = [name] + ([name + DEFERRED_SUFFIX] if defers else [])
+    names = [name] + [name + suffix for suffix in suffixes]
     found = [
         (d.get("apiVersion"), d.get("kind"), (d.get("metadata") or {}).get("name"))
         if isinstance(d, dict)
@@ -175,6 +215,8 @@ def census(
     published: Iterable[str],
     kinds: Iterable[str] = SHARED_KINDS,
     deferring: Iterable[str] = (),
+    snapshotting: Iterable[str] = (),
+    verifying: Iterable[str] = (),
 ) -> list[str]:
     """Every way the bundle at `out` differs from the allowlist, one line each.
 
@@ -183,14 +225,29 @@ def census(
         published: The published tags, from the inventory.
         kinds: The shared kinds.
         deferring: The published tags that defer files, from their roles (`deferring_tags`).
-            A shared kind never defers.
+        snapshotting: The published tags that declare snapshot claims (`snapshot_tags`).
+        verifying: The published tags with a verify or post-apply mutation Job.
+
+    A shared kind has no per-tag kind.
     """
     published, kinds = set(published), set(kinds)
-    deferring = set(deferring) & published
+    granted = {
+        DEFERRED_SUFFIX: set(deferring) & published,
+        SNAPSHOT_SUFFIX: set(snapshotting) & published,
+        VERIFY_SUFFIX: set(verifying) & published,
+    }
+    suffixes = {
+        tag: [s for s in TAG_KIND_SUFFIXES if tag in granted[s]] for tag in published
+    }
     names = published | kinds
+    reserved = [
+        f"{tag} is published under a name the bundle reserves: the root's, a shared "
+        "kind's, a RESERVED_NAMES member's, or one ending in a per-tag kind's suffix"
+        for tag in reserved_tags(published, kinds)
+    ]
     flux = out / FLUX_DIR
     if not flux.is_dir():
-        return [f"{FLUX_DIR}/ is missing"]
+        return reserved + [f"{FLUX_DIR}/ is missing"]
     held = {p.relative_to(flux).as_posix() for p in flux.rglob("*") if p.is_file()}
     expected = {KUSTOMIZATION} | {f"{name}.yaml" for name in names}
     found = [
@@ -205,18 +262,19 @@ def census(
         found += _index_problems(flux, held)
     for name in sorted(names):
         if f"{name}.yaml" in held:
-            found += _kustomization_problems(flux, name, name in deferring)
+            found += _kustomization_problems(flux, name, suffixes.get(name, []))
     found += [
         f"{CLUSTER_DIR}/{name}/ is missing: {name} is published and renders no directory"
         for name in sorted(names)
         if not (out / CLUSTER_DIR / name / KUSTOMIZATION).is_file()
     ] + [
-        f"{CLUSTER_DIR}/{tag}{DEFERRED_SUFFIX}/ is missing: {tag} defers files and renders "
-        "no deferred directory"
-        for tag in sorted(deferring)
-        if not (out / CLUSTER_DIR / f"{tag}{DEFERRED_SUFFIX}" / KUSTOMIZATION).is_file()
+        f"{CLUSTER_DIR}/{tag}{suffix}/ is missing: {tag}'s inputs call for {tag}{suffix} "
+        "and it renders no such directory"
+        for tag in sorted(published)
+        for suffix in suffixes[tag]
+        if not (out / CLUSTER_DIR / f"{tag}{suffix}" / KUSTOMIZATION).is_file()
     ]
-    return found + _digests_problems(out, names)
+    return reserved + found + _digests_problems(out, names)
 
 
 def report(out: Path, published: list[str], roles: Path = K8S_ROLES) -> int:
@@ -225,7 +283,9 @@ def report(out: Path, published: list[str], roles: Path = K8S_ROLES) -> int:
     Returns the exit code.
     """
     deferring, problems = deferring_tags(published, roles)
-    problems += census(out, published, deferring=deferring)
+    snapshotting, unjudged = snapshot_tags(published, roles)
+    problems += unjudged
+    problems += census(out, published, deferring=deferring, snapshotting=snapshotting)
     problems += bundle_gates.gates(out, published)
     for line in problems:
         print(f"check-bundle: {line}", file=sys.stderr)

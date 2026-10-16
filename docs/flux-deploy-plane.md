@@ -217,6 +217,69 @@ both in its body:
 The operator accepted that unattended apply on 2026-10-12, for this role's first landing and
 for later landings that reach `flux` as a reader.
 
+## What a takeover strips
+
+Flux's first apply of a tag takes over every live object the tag renders. Before each apply,
+`kustomize-controller` hands the fields of four managers to its own Apply entry: `kubectl` as
+Apply, and `kubectl`, `before-first-apply` and `kustomize-controller` as Update. It matches each
+name as a prefix, so `kubectl-client-side-apply`, `kubectl-rollout`, `kubectl-patch` and
+`kubectl-annotate` all match. It skips an entry that sets `subresource`, such as `kubectl scale` on
+`scale`. The apply that follows removes each handed-over field the render does not declare,
+unless another manager also owns it. A server-side dry run never runs that cleanup, so no
+dry-run diff shows the removal. speedtest's `kubectl-rollout` entry owns `restartedAt`, so its
+takeover drops the annotation and the pod rolls once.
+
+To list what a tag's takeover strips, run the read-only census with plain `kubectl`:
+
+```bash
+uv run python scripts/diagnostics/probe.py takeover <tag>
+```
+
+It renders the tag in placeholder mode and reads each live object with
+`--show-managed-fields`. For each object it prints the field paths that a cleaned manager owns,
+that no other manager owns, and that the render omits. It prints paths and manager names, never
+values. It flags a Deployment, DaemonSet or StatefulSet that rolls, because a stripped path sits
+under its pod template. `probe_lib/takeover.py` holds the rules.
+
+- **Listed apart: presumed server defaults.** A create attributes every field the API server
+  defaults, such as `dnsPolicy`, to `kubectl-client-side-apply`. A path only that manager owns
+  and the object's last-applied config omits is presumed to be such a default. The takeover
+  removes it and the server is expected to set it again to the same value. The census lists
+  these under each object as *presumed server defaults*, apart from the main list, because the
+  rule is inferred rather than measured. A field set at create by admission or by a create
+  strategy also matches it and is not restored. A Job's generated `spec.selector` is one, and
+  a field a mutating admission hook injects is another. So read that list before calling an
+  object clean. `imagePullPolicy`
+  goes in the main list when the render's image reference implies a value other than the live
+  one, because its default follows that reference.
+- **Not listed: `last-applied-configuration`.** The cleanup removes it from every object by
+  design.
+- **Not read: Secrets and RBAC objects.** The census skips Secrets, whose managers D3.5 handles.
+  The read-only ServiceAccount cannot read ClusterRoles or ClusterRoleBindings, so the census
+  names each one as not checked.
+- **An empty census is not a clean one.** A tag with no rendered object live exits 75.
+
+The census cannot see an apply that fails on an immutable field, such as a PVC's spec or a
+selector, or one that changes a value. For those the operator renders the flip PR's head, where
+the entry carries `owner: flux`, and runs the flux CLI at `flux_version` on a machine with
+cluster-admin access (**operator-only**):
+
+```bash
+uv run python scripts/renderer/homelab_render.py cluster --out out --role <tag>
+flux diff kustomization <tag> --path out/cluster/<tag> \
+    --kustomization-file out/flux/<tag>.yaml
+```
+
+Without `--dry-run`, the CLI substitutes from the Secrets the Kustomization's `substituteFrom`
+names, so the diff compares real values rather than `${…}` placeholders. It reads
+`homelab-cluster-vars`, which is why it is operator-only. A role PR quotes object names and
+field paths from both commands, never values or diff hunks.
+
+H1's flips use a different census, `scripts/dev/takeover_census.py` (H1.1j), which is also
+operator-only. It compares the live object with a server-side dry-run apply as
+`kustomize-controller`, which needs the admin kubeconfig, and it also prints the fields that a
+manager outside the cleanup list keeps.
+
 ## Handing a service back
 
 A service whose `containers_list` entry sets `owner: flux` is applied by Flux, and every
@@ -532,6 +595,13 @@ document of `flux/<tag>.yaml`. It applies `./cluster/<tag>-deferred` with the ta
 and depends on `<tag>`. The publish census admits that second document only for a tag that
 defers files (*The publish census*, the per-file rule).
 
+D5's per-tag kinds, `<tag>-snapshot` and `<tag>-verify`, follow in the same file in that
+order, each applying its own `./cluster/<tag><suffix>`. `<tag>-snapshot` inherits `<tag>`'s
+edges, and `<tag>` then depends on `<tag>-snapshot`, so the role applies only after its
+snapshot is taken. `<tag>-verify` depends on the tag's last Kustomization: `<tag>-deferred` when the
+tag has one, `<tag>` otherwise. A `K8S_APPLIES_LAST` tag waits on no other tag's
+`-snapshot` or `-verify`. No role renders either kind yet.
+
 ### Which Kustomizations substitute
 
 The renderer decides substitution per Kustomization directory, not per tag. A directory
@@ -604,6 +674,12 @@ flux-owned tag, and Kubernetes rolls the pod when the value moves.
   workload when it is non-empty, and each `manifests_extra_rollouts` entry whose
   `restart_on` names `config` or `secret`. An entry with `restart_on: []`, such as Scrutiny's
   InfluxDB, is one Ansible waits on and never restarts, so it gets no annotation.
+- **Every `manifests_self_rollouts` entry is a target too** (D5.1e). pihole and observability
+  restart those workloads in their own tasks, and a flux-owned tag runs no task. Such an
+  entry admits both ConfigMaps and Secrets, whatever its `restart_on` names, because there
+  `restart_on` shapes only the Ansible release record. pihole's instance 2 gets its
+  annotation in `pihole-deferred`, which waits on `pihole`, so a shared ConfigMap edit rolls
+  instance 2 only after instance 1 is Ready.
 - **`restart_on` also narrows the inputs.** `config` admits the workload's ConfigMaps into its
   value and `secret` its Secrets, as the same list narrows Ansible's restart.
 - **The value is per workload.** It is one SHA-256 over the admitted ConfigMaps and Secrets
@@ -628,14 +704,18 @@ The stamp inserts one block of lines at the place the YAML parser marks, and kee
 byte of the file. A re-serialised document would drop the quotes around a `"${key}"` and change
 the type Flux substitutes into it.
 
-Two tests in `scripts/renderer/tests/test_renderer_restart.py` keep the annotation honest:
+Two tests keep the annotation honest:
 
-- **The outside-role reference test** fails when a flux-owned pod template names a Secret or
-  ConfigMap that its own role does not render. The annotation sees only the role's own
-  render, so such a reference would roll nothing. peanut is its named member.
-- **The self-rollouts census** fails when an `owner: flux` entry's role passes a non-empty
-  `manifests_self_rollouts`, because nothing restarts pihole's or observability's own
-  workloads under Flux until D5.1e.
+- **The outside-role reference test**, in `scripts/renderer/tests/test_renderer_restart.py`,
+  fails when a flux-owned pod template names a Secret or ConfigMap that its own role does not
+  render. The annotation sees only the role's own render, so such a reference would roll
+  nothing. peanut is its named member.
+- **The self-rollouts census**, in
+  `scripts/renderer/tests/test_renderer_self_rollout_restart.py`, renders every role that
+  passes `manifests_self_rollouts` as flux-owned. It fails on an entry whose pod template
+  names a ConfigMap or Secret and carries no `checksum/restart`. pihole and observability
+  are its named members, and pihole-2 with its annotation removed is its red fixture. flux's
+  controllers read neither kind, so they pass unstamped.
 
 ### SOPS manifests
 
@@ -718,8 +798,12 @@ census fails a bundle that lacks either. Each member needs a footprint rule in
   footprint moves, its first promotion included.
 
 Every `cluster` render refuses a deploy tag named `homelab`, the root's name, after a
-`SHARED_KINDS` member, or ending in `-deferred`. The suffix keeps a tag's Kustomization from
-colliding with another tag's deferred one.
+`SHARED_KINDS` member, or after a member of `RESERVED_NAMES`, the literal list beside it. It
+also refuses a tag ending in `-deferred`, `-snapshot` or `-verify`. `RESERVED_NAMES` holds
+`soak` and `homelab-namespace`, D5's shared kinds that no PR renders yet. Each joins
+`SHARED_KINDS` only in the PR that renders it, because the census fails a member with no
+file. The suffixes keep a tag's Kustomization from colliding with another tag's per-tag kind.
+The publish census refuses a published tag that takes any of these names as well.
 
 ### `digests.json`
 
@@ -728,8 +812,8 @@ shared kind to two SHA-256 digests:
 
 - `own` covers `cluster/<name>/` alone.
 - `footprint` covers every path that counts for the name: the tag's own directories, with
-  `-deferred` stripped, its `flux/<tag>.yaml`, and the files of each shared kind whose rule
-  lists the tag.
+  each per-tag suffix stripped, its `flux/<tag>.yaml`, and the files of each shared kind
+  whose rule lists the tag.
 
 `flux/kustomization.yaml`, `digests.json` itself and `images/` count for no name. Any other
 path that no rule claims lands under `_unclassified`, with the same two digests and a `paths`
@@ -741,20 +825,28 @@ change under `_unclassified` counts as every name changed. D6's *What a footprin
 
 `promote.py check-bundle out` fails the render job before gitleaks and before the push. It
 computes its allowlist from the inventory, `SHARED_KINDS` and the published tags' roles,
-never from the render, so a renderer bug cannot widen it. A tag defers files when its role
-passes a non-empty `manifests_deferred_files` to its `k8s/manifests` include. It fails when:
+never from the render, so a renderer bug cannot widen it. Each per-tag kind has its input:
+
+- `-deferred` when the role passes a non-empty `manifests_deferred_files` to its
+  `k8s/manifests` include;
+- `-snapshot` when the role's defaults declare a non-empty `k8s_autodeploy_snapshot_pvcs`;
+- `-verify` for no tag yet, because no role input names a verify Job. The first PR that
+  renders one adds its reader.
+
+It fails when:
 
 - `flux/` lacks a file for a published tag or a shared kind, or holds any other file;
 - `flux/kustomization.yaml` omits a file in `flux/`, or lists one that is not there;
 - `flux/<name>.yaml` breaks the per-file rule. The file must hold exactly the Kustomization
-  `<name>` applying `./cluster/<name>`, followed by `<name>-deferred` applying
-  `./cluster/<name>-deferred` only when `<name>` is a tag that defers files. A third
-  document, or a `-deferred` for a tag that defers nothing, fails. A shared kind's file holds
+  `<name>` applying `./cluster/<name>`, followed by each per-tag kind its inputs call for, in
+  the order `-deferred`, `-snapshot`, `-verify`, each applying `./cluster/<name><suffix>`.
+  An extra document, or a kind the inputs do not call for, fails. A shared kind's file holds
   exactly its own Kustomization;
-- a published tag or a shared kind has no `cluster/<name>/`, or a tag that defers files has
-  no `cluster/<name>-deferred/`;
-- a published tag's role cannot be read, or its `manifests_deferred_files` is not a literal
-  list;
+- a published tag or a shared kind has no `cluster/<name>/`, or a per-tag kind its inputs
+  call for has no `cluster/<name><suffix>/`;
+- a published tag takes a reserved name;
+- a published tag's role cannot be read, or its `manifests_deferred_files` or
+  `k8s_autodeploy_snapshot_pvcs` is not a literal list;
 - `digests.json` is missing or names another set.
 
 ### The publish gates

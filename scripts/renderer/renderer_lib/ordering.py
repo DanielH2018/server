@@ -8,7 +8,10 @@ Every edge is generated, never hand-written, from an `Ordering` the caller reads
   annotation `homelab/ansible-owned-deps` lists it for a reader;
 - a `K8S_APPLIES_LAST` tag also depends on every other tag's `<tag>-deferred`;
 - `<tag>-deferred` depends on `<tag>`, and on the role that creates a namespace one of its
-  documents names, by the same flux-owned rule.
+  documents names, by the same flux-owned rule;
+- `<tag>-snapshot` inherits `<tag>`'s edges (C3), and `<tag>` then depends on it, so the role
+  applies only after its snapshot is taken (D5.2a). `<tag>-verify` depends on the tag's last
+  Kustomization: `<tag>-deferred` when the tag renders one, `<tag>` otherwise (D5.1a1).
 
 `bundle.py` adds the `cluster-vars` edge and fails the render on a cycle, because Flux would
 hold every Kustomization on it at `DependencyNotReady`. Like `bundle.py`, this module imports
@@ -29,6 +32,13 @@ from lib import yaml_fast
 # The suffix of a tag's deferred apply: its directory under `cluster/` and its Kustomization.
 # A deploy tag may not end in it (`bundle.reserved_tags`).
 DEFERRED_SUFFIX = "-deferred"
+# The suffixes of D5's per-tag kinds: a role's snapshot Job and its verify or post-apply
+# mutation Jobs, each in its own directory and Kustomization (C3, D5.1a1).
+SNAPSHOT_SUFFIX = "-snapshot"
+VERIFY_SUFFIX = "-verify"
+# Every per-tag kind's suffix, in the order its document follows `<tag>`'s in
+# `flux/<tag>.yaml`. The publish census expects exactly this order.
+TAG_KIND_SUFFIXES = (DEFERRED_SUFFIX, SNAPSHOT_SUFFIX, VERIFY_SUFFIX)
 # Lists, comma-separated and sorted, the edges a Kustomization's `dependsOn` leaves out because
 # their role is Ansible-owned. Each becomes a real `dependsOn` in the first render after that
 # role moves to Flux (D4.2).
@@ -72,6 +82,18 @@ NO_EDGES = Edges()
 NO_ORDERING = Ordering()
 
 
+def split_kind(name: str) -> tuple[str, str]:
+    """The tag a Kustomization or directory name belongs to, and its per-tag suffix.
+
+    The suffix is '' for the tag's own name. A deploy tag never ends in a suffix
+    (`bundle.reserved_tags`), so the split is unambiguous.
+    """
+    for suffix in TAG_KIND_SUFFIXES:
+        if name.endswith(suffix):
+            return name.removesuffix(suffix), suffix
+    return name, ""
+
+
 def _namespaces(files: Mapping[str, str]) -> set[str]:
     """Each `metadata.namespace` a document in `files` names.
 
@@ -100,7 +122,8 @@ def kustomization_edges(
         ordering: The dependency map and the rules it feeds.
 
     Returns:
-        `<tag>` for each tag, and `<tag>-deferred` for each tag that renders that directory.
+        `<tag>` for each tag, and `<tag><suffix>` for each per-tag kind whose directory the
+        tag renders.
     """
     tags = sorted(set(tags))
     owned = set(tags) if ordering.flux_owned is None else set(ordering.flux_owned)
@@ -112,6 +135,10 @@ def kustomization_edges(
         if tag in ordering.applies_last:
             # Every other tag's deferred apply, never its own: `<tag>-deferred` depends on
             # `<tag>`, so that edge would be a cycle.
+            # DECIDED: an applies-last tag waits on no other tag's `-snapshot` or `-verify`.
+            # D4 left the choice to D5.1a1. A verify Job probes through netpol-baseline's
+            # fences, so netpol-baseline waiting on another tag's `-verify` would run that Job
+            # before the fences it dials are applied. A snapshot gates only its own tag.
             kept |= {other + DEFERRED_SUFFIX for other in deferring if other != tag}
         edges[tag] = Edges(frozenset(kept), frozenset(wanted - owned))
     for tag in deferring:
@@ -124,6 +151,16 @@ def kustomization_edges(
         edges[name] = Edges(
             frozenset({tag} | (wanted & owned)), frozenset(wanted - owned)
         )
+    for tag in tags:
+        if tag + SNAPSHOT_SUFFIX in directories:
+            # Copied before `<tag>` gains the edge, so the snapshot never depends on itself.
+            edges[tag + SNAPSHOT_SUFFIX] = edges[tag]
+            edges[tag] = Edges(
+                edges[tag].kept | {tag + SNAPSHOT_SUFFIX}, edges[tag].dropped
+            )
+        if tag + VERIFY_SUFFIX in directories:
+            last = tag + DEFERRED_SUFFIX if tag + DEFERRED_SUFFIX in edges else tag
+            edges[tag + VERIFY_SUFFIX] = Edges(frozenset({last}))
     return edges
 
 
