@@ -191,16 +191,31 @@ The 59 Deployments and 5 DaemonSets that carry `restartedAt` roll once at their 
       `registry-gc.sh` reads at run time.
 - **Imperative ConfigMaps.** autofix-bridge, game-stats, monitor-bridge and observability run
   `kubectl create configmap --from-file` in their tasks.
-- **Host writes inside k8s roles.** Ten roles write outside `/etc/rancher/k3s/manifests/`.
-  R1's baseline names nine; docs is the tenth.
+- **Host writes inside k8s roles.** Twelve roles write outside `/etc/rancher/k3s/manifests/`.
+  R1's baseline names nine and docs is the tenth. D5.1c's census found media-volume and
+  game-stats, and a second write in each of observability and traefik (#5266). The staging
+  under `/etc/rancher/k3s/<role>/` of the imperative ConfigMaps above is a host write too.
+  Their row moves it, so it is not repeated here.
     - artifacts: peer directories, the peer sync script and its cron.
     - configarr: the health reader scripts, `host_lib`, and "Schedule the configarr sync
       heartbeat".
     - crowdsec: two decision modules and four crons, from "Schedule the home-allowlist updater"
       to "Schedule the AppSec verifier".
     - docs: "Ensure the built docs site directory exists".
+    - game-stats: "Remove the staged manifests, release and render records the pre-#2813
+      roles left behind", an absent arm over three staging directories and six records. It
+      is a run-once cleanup. daniel-box applied game-stats at `c5d00ead`, which carries the
+      cleanup's last edit (`7fceba186`), and none of the six records is left. The three
+      directories sit under a root-only path, so their removal rests on that apply.
     - janitorr: the health reader and "Schedule the janitorr error heartbeat".
-    - observability: "Schedule the telemetry-stack heartbeat".
+    - media-volume: "Create the media volume directories on the node", three
+      `state: directory` tasks under `media_volume_host_path` (`/srv/media`) on daniel-box,
+      the node the PV pins. The hardlink probe needs `media/` and `torrents/` to exist on a
+      volume that has never been synced.
+    - observability: "Schedule the telemetry-stack heartbeat", and "Remove the release and
+      render records the claude-otel name left behind", a run-once absent arm over three
+      records. daniel-box applied observability at `c5d00ead` too, and none of the three is
+      left.
     - pi-peer-backup: "Install the forced-command wrapper on daniel-pi" and "Authorize the pull
       key on daniel-pi", both `delegate_to: daniel-pi`.
     - qbittorrent: the prefs-check script and its cron.
@@ -213,7 +228,11 @@ The 59 Deployments and 5 DaemonSets that carry `restartedAt` roll once at their 
       and `scripts/validate/validate_lib/cron_targets.py`. The self-test Jobs copy
       `registry_k8s_probe_source` (`alpine:3.22`) with `crane copy`, which re-pushes only
       layers the registry lacks.
-    - traefik: "Remove the Cloudflare IP drift cron", an absent arm.
+    - traefik: "Remove the Cloudflare IP drift cron", an absent arm, and "Install the
+      Traefik RBAC (cluster-scoped role + per-namespace roles)". That task templates
+      `rbac.yaml.j2` to `/etc/rancher/k3s/traefik-clusterrole.yaml`, and the next task
+      applies the file. The file holds Roles in other namespaces, and the role's namespaced
+      `-n` apply of the manifests directory never reads it.
 
   The other host scripts that D5 moves run `kubectl exec` into an app at most. None scales,
   patches or applies a cluster object.
@@ -614,17 +633,27 @@ reconciliation of a flux-owned role. D5.1b rewrites the sentence in
       that set by comparing the two, rather than from a hand list. At the baseline it is the
       seven utility roles, so `release_stamp.yml`'s copy is exempt, and R4 deletes it with its
       role.
-    - Its `allow` map holds each file of the ten host-writing roles that still writes a host,
-      with the PR that moves it as the reason. The offence has no exception for `state:
+    - Its `allow` map holds each task file that still writes a host, with the PR that moves
+      it as the reason. That covers the twelve roles of the baseline's host-write list and
+      the imperative-ConfigMap staging of autofix-bridge and monitor-bridge. The offence has no exception for `state:
       absent` or `state: directory`, so an absent arm and a directory task are host writes
       too.
-        - observability: H2.7, which leaves no host row in the role and drops its entry.
+        - observability: H2.7 moves the heartbeat and its cron, and D5's run-once cleanup PR
+          deletes the claude-otel record cleanup (*Host-side rows*). Whichever lands second
+          drops the entry.
+        - game-stats' `tasks/main.yml`: D5's run-once cleanup PR, which deletes the pre-#2813
+          record cleanup and drops the entry.
         - crowdsec, configarr, janitorr, qbittorrent and artifacts: D5's `k8s_host_files`
           conversion PR for the role (*Host-side rows*). H2's family PR moves the live crons
           and scripts and leaves absent arms, and artifacts keeps its two directory tasks, so
           the entry survives H2 and only D5's PR drops it.
         - registry: D5's GC retirement, whose absent arms then move with the rest.
-        - docs, pi-peer-backup and traefik: D5's `k8s_host_files` conversion PR.
+        - docs, pi-peer-backup and media-volume: D5's `k8s_host_files` conversion PR.
+        - traefik: D5's `k8s_host_files` conversion PR moves the Cloudflare drift absent arm
+          and narrows the reason to the RBAC file. traefik's flip PR renders `rbac.yaml.j2`
+          into the bundle, deletes the staging and apply tasks, and drops the entry.
+        - autofix-bridge, monitor-bridge, game-stats' three staging files and observability's
+          `tasks/dashboards.yml`: the role's Wave D PR that renders the imperative ConfigMap.
     - `must_find` names pi-peer-backup's and docs's task files, and artifacts'
       `tasks/main.yml` for its two directory tasks, which no H2 PR moves. Only D5's PRs move
       these three, so the row fails when one of them stops matching rather than when the
@@ -1599,7 +1628,9 @@ every row one class:
 | restart on config or Secret change | cloudflare-ddns's `manifests_extra_rollouts`; observability's secret restart; pihole's `roll_one.yml` | `checksum/restart` per workload: D3's rule for cloudflare-ddns, widened by D5.1e to the self-rolled workloads of observability and pihole |
 | stale Secret keys | `k8s/manifests`' `verify_secret_keys.yml` | Flux's server-side apply removes a field it owns and no longer declares; D3.5 hands each Secret's fields to kustomize-controller first |
 | host-side, moved by H2 | the live crons, scripts and modules of crowdsec, configarr, janitorr, qbittorrent, artifacts and observability | H2's family PR for the role (H2.4b, H2.4c, H2.5b, H2.7), landed before the flip, which waits on it; the absent arms it leaves are the next row's |
-| host-side, moved by D5 | docs's site directory, pi-peer-backup's two Pi writes, traefik's absent arm, registry's GC absent arms; the absent arms H2 leaves in crowdsec, configarr, janitorr and qbittorrent; artifacts' two directory tasks | the setup role `k8s_host_files`, in a conversion PR before the flip, until H5 or H7 takes each row; sources and variables move with the task (below) |
+| host-side, moved by D5 | docs's site directory, pi-peer-backup's two Pi writes, traefik's absent arm, registry's GC absent arms; the absent arms H2 leaves in crowdsec, configarr, janitorr and qbittorrent; artifacts' two directory tasks; media-volume's three media directories | the setup role `k8s_host_files`, in a conversion PR before the flip, until H5 or H7 takes each row; sources and variables move with the task (below) |
+| host-side cleanup that has already run | game-stats' pre-#2813 record cleanup; observability's claude-otel record cleanup | deleted by D5's run-once cleanup PR before either role flips (below) |
+| manifest staged outside the manifests directory | traefik's RBAC, `/etc/rancher/k3s/traefik-clusterrole.yaml` | rendered into the bundle by traefik's flip PR, which deletes the staging and apply tasks (Wave D's traefik bullet) |
 | host-side that writes a flux-owned object | registry's GC cron and manifest | retired before the flip (Wave D's registry bullet) |
 | imperative ConfigMap | monitor-bridge, autofix-bridge, game-stats, observability | a rendered ConfigMap, covered by its readers' `checksum/restart` (D3, and D5.1e for self-rolled readers); observability's ConfigMaps keep their own `checksum/config` too |
 | pre-apply live read | pi-peer-backup, n8n, authelia's argon2 digests | R3's fix; D5 only checks the keys are in D3's cluster file |
@@ -1746,25 +1777,48 @@ leaves rows behind (H2, *What H2 leaves in `k8s_host_files`*):
 - artifacts keeps its two directory tasks, "Ensure the local artifacts directory exists" and
   "Ensure a peer directory exists for every synced host", both `ansible.builtin.file` with
   `state: directory`;
-- observability keeps no host row.
+- observability keeps no host row of H2's. Its claude-otel record cleanup was never an H2 row,
+  and D5's run-once cleanup PR deletes it (below).
 
 Every such row is a host write under D5.1c, which has no exception for an absent arm or a
-directory. So D5 moves these rows, and the host rows of docs, pi-peer-backup, traefik and
-registry, to one setup role, `ansible/roles/setup/k8s_host_files/`, with one task file per
-source role, in a conversion PR before that role flips:
+directory. So D5 moves these rows, and the host rows of docs, pi-peer-backup, traefik,
+registry and media-volume, to one setup role, `ansible/roles/setup/k8s_host_files/`, with
+one task file per source role, in a conversion PR before that role flips:
 
 - **One `k8s_host_files` conversion PR per role.** crowdsec, configarr, janitorr, qbittorrent
   and artifacts each get one. It lands after the role's H2 family PR, so it moves only what
-  that PR leaves, and it drops the role's `allow` entry. docs, traefik and registry's GC arms get
-  one each in Wave D, and pi-peer-backup's rides in its Wave C PR. A role flips only once its
-  host-write `allow` entry is gone. So crowdsec, configarr, janitorr, qbittorrent and
-  artifacts each flip after both their H2 PR and their conversion PR, and observability
-  after H2.7 alone.
+  that PR leaves, and it drops the role's `allow` entry. docs, traefik, media-volume and
+  registry's GC arms get one each in Wave D, and pi-peer-backup's rides in its Wave C PR.
+  traefik's PR narrows the entry's reason to the RBAC file rather than dropping it, and the
+  flip PR drops it (Wave D's traefik bullet). A role flips only once its host-write `allow`
+  entry is gone. So crowdsec, configarr, janitorr, qbittorrent and artifacts each flip after
+  both their H2 PR and their conversion PR. observability flips after H2.7 and the run-once
+  cleanup PR, and game-stats after the run-once cleanup PR and its imperative ConfigMap PR.
+- **The run-once cleanup PR deletes two cleanups that have already run.** game-stats' "Remove
+  the staged manifests, release and render records the pre-#2813 roles left behind" and
+  observability's "Remove the release and render records the claude-otel name left behind"
+  remove host files nothing recreates. daniel-box applied both roles at `c5d00ead`, which
+  carries both tasks' last edit (`7fceba186`). None of their nine release and render records
+  is left, and the PR body quotes an `ls` of them. Moving a task with nothing left to remove
+  into `k8s_host_files` would only hand H7.18c another legacy entry, so the PR deletes both.
+  It lands any time before either role flips, and it is a tasks-only change, which the
+  deployer skips. The same PR:
+    - drops game-stats' `tasks/main.yml` entry and the claude-otel clause of observability's
+      entry, or the whole entry if H2.7 has landed;
+    - retires the `release-record-cleanup-removes-the-render-record` row in
+      `ansible/tests/repo/_render_record_cleanup_row.py` (#5162). Its `must_find` names only
+      these two task files and its floor is their three records, so with both tasks gone the
+      row has no subject. `ansible/tasks/k8s_retire.yml` already removes both record kinds
+      for a whole-service retirement.
 - **What `k8s_host_files` holds, and who takes each row.** No row stays there past H7:
     - docs's "Ensure the built docs site directory exists" on daniel-box, which H7.10a
       replaces with a `tmpfiles.d` line in daniel-box's host tree;
     - artifacts' two directory tasks on daniel-box, which H7 replaces the same way in
       daniel-box's host tree, one line for the local directory and one per peer;
+    - media-volume's three directories under `/srv/media` on daniel-box, owned by
+      `puid`:`pgid` with no mode, which H7 replaces the same way. A `tmpfiles.d` line can
+      set the owner and leave the mode alone, which the task's comment requires because
+      the seeding rsync imposes daniel-server's modes;
     - pi-peer-backup's forced-command wrapper and authorized key on daniel-pi, which H7.4's
       `pi-peer-backup-target` component ships;
     - crowdsec-verify's probe timer on daniel-pi, which H5.14 moves into the Pi package;
@@ -1774,8 +1828,8 @@ source role, in a conversion PR before that role flips:
       deletes the role.
 
   H5 (*Rows H5 takes from D5's `k8s_host_files`*) and H7 (its setup-role table, H7.4, H7.10a
-  and H7.18c) list these rows, except artifacts' directories, which a cross-slice note asks
-  H7 to add.
+  and H7.18c) list these rows, except the directories of artifacts and media-volume, which a
+  cross-slice note asks H7 to add (#5285).
 
 - **The task moves with its sources and variables.** Role defaults and role-relative `src:`
   paths do not resolve in another role (Baseline). So each conversion PR moves the role's
@@ -1791,7 +1845,10 @@ source role, in a conversion PR before that role flips:
       re-apply. H2.7 uses the same pair for `claude_code`. artifacts' `artifacts_host_dir`,
       `artifacts_peer_dir` and `artifacts_peer_sources` are the pair test's named members:
       `ansible/roles/k8s/artifacts/templates/deployment.yaml.j2` reads all three, and so do
-      the two directory tasks.
+      the two directory tasks. media-volume's conversion PR adds `media_volume_host_path`,
+      which `ansible/roles/k8s/media-volume/templates/pv.yaml.j2` and the directory task both
+      read. The task's owner reads `puid` and `pgid` from `group_vars/all.yml`, the shared-key
+      case above, so the same PR copies them into `k8s_host_files`' defaults as pairs too.
     - A test in `ansible/tests/setup/` renders every template in `k8s_host_files` with that
       role's defaults and `group_vars`, under `StrictUndefined`, through
       `scripts/lib/ansible_jinja_env.py`. Its red half is a fixture template that reads a
@@ -2228,6 +2285,9 @@ sizes its batch of roles against that projection.
       tasks with rendered objects or `k8s_host_files` tasks that Ansible applies, at about
       100 to 200 lines. Every role over 200 task lines gets at least two, and observability,
       pihole and crowdsec get three or more.
+    - **The run-once cleanup PR** (#5284) deletes game-stats' and observability's record
+      cleanups and retires #5162's census row, about 140 lines removed (*Host-side rows*).
+      It may land before Wave D starts, and it lands before either role flips.
     - **H2's PR precedes the flip of six roles.** crowdsec, configarr, janitorr, qbittorrent,
       artifacts and observability each flip only after H2.1 and that role's H2 family PR have
       landed (*Host-side rows*). H2 lands those PRs while the roles are Ansible-owned, so D5's
@@ -2237,10 +2297,12 @@ sizes its batch of roles against that projection.
       two directory tasks, each into the role's task file in `k8s_host_files`, about 40 to 80
       lines each. The PR drops the role's `allow` entry, and artifacts' PR drops its
       `must_find` member. The tick applies it through the setup plane, and the PR body quotes
-      that apply. observability needs none, because H2.7 leaves it no host row.
+      that apply. observability needs none, because H2.7 leaves it no host row and the
+      run-once cleanup PR deletes its claude-otel record cleanup (*Host-side rows*).
     - **The flip PR's body** links the merged H2 PR and, for those five, the merged
       `k8s_host_files` conversion PR, and quotes the host-write census showing no `allow`
-      entry left for the role.
+      entry left for the role. observability's and game-stats' flip PRs also link the
+      merged run-once cleanup PR.
     - **A verify conversion lands as inert code.** The task files run 103 to 213 lines
       (`wc -l` over the six `tasks/verify.yml`), and netpol-baseline's probe template is 161.
       So a conversion PR lands each verify Job's script, its RBAC template and its red-fixture
@@ -2354,6 +2416,16 @@ sizes its batch of roles against that projection.
       fetch under C1, so they get an in-tree copy pinned by `traefik_k8s_crd_version`. The
       cluster RBAC carries `kustomize.toolkit.fluxcd.io/prune: disabled` before the move, so
       a later revert of the move cannot prune the ClusterRole (R4's Open question 4).
+        - **The RBAC moves into the bundle at the flip.** `rbac.yaml.j2` is not in traefik's
+          `manifests_files`. Its task templates it to
+          `/etc/rancher/k3s/traefik-clusterrole.yaml`, outside the manifests directory, and
+          a second task applies that file. The file holds Roles in other namespaces, so the
+          move cannot happen while Ansible's namespaced apply owns the role. The flip PR
+          renders `rbac.yaml.j2` into traefik's bundle and deletes both tasks, which drops
+          the last clause of traefik's host-write `allow` entry. The staged file stays on
+          daniel-box with no reader, which is accepted. It is root-owned, holds no secret,
+          and k3s auto-applies only `/var/lib/rancher/k3s/server/manifests/`, so it changes
+          nothing.
         - **traefik's tag renders `prune: false`.** The flip PR is the first whose render puts
           the CRDs under a Flux Kustomization. It sets H1.1a's `flux_prune: false` in
           traefik's defaults, which is C3's per-role `prune: false`. Its precondition, quoted
@@ -4552,3 +4624,22 @@ round covers it.
   broken Flux posts no statuses, so `verify` runs to its derived timeout. Fixed: the
   refusal names the in-progress run, and the two runbooks cancel it. `settle` runs under
   `always()`, so it still writes `<T> unverified` and resets `prod`.
+
+### Host-write census fold (2026-10-16)
+
+- **The baseline omitted four host writes that D5.1c's census finds (#5266).** Confirmed
+  against the census in `ansible/tests/repo/_host_write_rows.py`. Fixed, one mover per
+  write:
+    - media-volume's three media directories move to `k8s_host_files` in media-volume's
+      own conversion PR. H7 replaces them with `tmpfiles.d` lines, which the cross-slice
+      note on artifacts' directories now covers too.
+    - traefik's RBAC, staged at `/etc/rancher/k3s/traefik-clusterrole.yaml`, moves into
+      traefik's bundle in its flip PR. It cannot move earlier, because it holds Roles in
+      other namespaces. The staged file is left behind and accepted as inert.
+    - game-stats' pre-#2813 record cleanup and observability's claude-otel record cleanup
+      have already run on daniel-box, so the new run-once cleanup PR deletes them rather
+      than moving them. That PR also retires the render-record census row, whose only
+      members they are. observability therefore flips after H2.7 and that PR, not after
+      H2.7 alone.
+- Rejected: deleting the two cleanups in the PR that records this fold. It would retire
+  #5162's row on the day that row landed, which is a decision for a PR of its own.

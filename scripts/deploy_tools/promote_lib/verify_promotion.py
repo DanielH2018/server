@@ -4,8 +4,11 @@ After the `tag` job moves `prod` to T, the `verify` job waits on the commit stat
 notification-controller posts on T, one per Kustomization with the context `flux/<name>`, and
 prints `good` or `failed`. The `settle` job applies that verdict: a good one moves `last-good`
 to `sha-<T>`, and a failed one writes `<T> failed=<names>` to DEPLOY_HOLD, then resets `prod`
-to `last-good`. The plan is docs/target-architecture/deploy/d2-first-leaf.md, *Publication
-and verification*, and the operator's view is docs/flux-deploy-plane.md.
+to `last-good`. When `decide` named forward-only tags T changes (its `no_reset` output), a
+failed one writes T's SHA alone in place of that value, tags T's digest `held` and leaves
+`prod` on T (H1.1b, `forward_only.py`). The plan is
+docs/target-architecture/deploy/d2-first-leaf.md, *Publication and verification*, and the
+operator's view is docs/flux-deploy-plane.md.
 
 WHAT `verify` EXPECTS. `flux/homelab` plus `flux/<name>` for every name in T's changed set,
 which `changed_set.changed_set` computes from T's `digests.json` and `prod`'s, as it does for
@@ -63,6 +66,7 @@ from lib.cli_help import error
 from lib.exit_codes import FAILED, OK, USAGE_ERROR
 
 import forge
+from artifact_retention import HELD_TAG, LAST_GOOD_TAG, PROD_TAG
 from changed_set import ROOT, changed_set, footprints
 from chained_timeout import promote_timeout
 from deploy_tools.promote_lib.wait import kustomization_graph
@@ -451,6 +455,12 @@ class Settled:
     last_good: str | None = None
 
 
+# DECIDED: a hold without a reset (H1.1b) leaves `prod` on the failed T while `last-good` stays
+# behind, and that difference outlives the operator's clear of DEPLOY_HOLD. So `settle` tags
+# T's digest `held` when it leaves `prod` there, and a `prod` that names the `held` digest is
+# settled, not in flight. `prod` never returns to that digest once it moves on: it moves only
+# forward, or back to `last-good`, which T never became. Without the tag, every run after the
+# clear would wait IN_FLIGHT_WAIT_S and end `current`.
 def wait_settled(
     hold: Callable[[], str | None],
     digest: Callable[[str], str | None],
@@ -460,7 +470,8 @@ def wait_settled(
 ) -> Settled:
     """Read DEPLOY_HOLD, then wait while `prod` and `last-good` name different digests.
 
-    Each poll re-reads the hold, so a `failed=` hold that a `settle` writes ends the wait.
+    Each poll re-reads the hold, so a `failed=` hold that a `settle` writes ends the wait. A
+    `prod` that names the `held` tag's digest ends it too: a hold without a reset settled it.
 
     Args:
         hold: DEPLOY_HOLD's value, or None when the variable is missing.
@@ -483,8 +494,10 @@ def wait_settled(
         held = None if value == "none" else revertible(value, revert_rule)
         if value != "none" and held is None:
             return Settled(("held", f"{forge.HOLD_VARIABLE}={value}"))
-        prod, last_good = digest("prod"), digest("last-good")
+        prod, last_good = digest(PROD_TAG), digest(LAST_GOOD_TAG)
         if last_good is None or prod is None or prod == last_good:
+            return Settled(None, held, prod, last_good)
+        if digest(HELD_TAG) == prod:
             return Settled(None, held, prod, last_good)
         waited = int(clock() - started)
         if waited >= IN_FLIGHT_WAIT_S:
