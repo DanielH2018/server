@@ -35,7 +35,7 @@ from _helpers import K8S_ROLES
 from _helpers import REPO as _REPO_ROOT
 from _helpers import load_tasks as _tasks
 from _helpers import task_named
-from _kubectl_seam import no_cluster_to_ask
+from _kubectl_seam import kubectl_has_a_cluster_configured, no_cluster_to_ask
 from longhorn_manager import ready_manager_ip
 
 _ROLE = K8S_ROLES / "longhorn-api"
@@ -99,6 +99,8 @@ def _ground_truth_manager_ips() -> dict[str, str] | None:
     a broken label and a genuinely absent node-local pod both produce rc=0 and an empty item
     list on the command under test, so they cannot be told apart from that alone.
     """
+    if not kubectl_has_a_cluster_configured(["kubectl"]):
+        return None
     result = subprocess.run(
         [
             "kubectl",

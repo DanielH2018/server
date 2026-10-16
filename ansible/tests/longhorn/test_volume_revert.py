@@ -37,14 +37,17 @@ against the live API server, and the checks on the validator and dry-run lists.
 """
 
 import ast
+import importlib
 import json
 import re
 import shutil
 import subprocess
+from pathlib import Path
 
 import pytest
 from _helpers import load_tasks as _tasks
 from _helpers import render_expr as _render
+from _kubectl_seam import kubectl_has_a_cluster_configured
 from _kubectl_seam import no_cluster_to_ask as _no_cluster_to_ask
 from _volume_revert import (
     _CLAIM,
@@ -56,6 +59,7 @@ from _volume_revert import (
     _task_names,
 )
 from _volume_ops import assert_the_role_declares_an_autodeploy_stance
+from lib.proc_testing import path_with, write_exec
 
 
 def test_the_seam_test_skips_a_missing_cluster_and_fails_a_bad_jsonpath() -> None:
@@ -85,6 +89,68 @@ def test_the_seam_test_skips_a_missing_cluster_and_fails_a_bad_jsonpath() -> Non
     # The combination that matters most: an unreachable-looking message must not excuse a
     # jsonpath kubectl rejected.
     assert not _no_cluster_to_ask(rejected + " connection refused")
+
+
+# Every test that probes the live API, as (directory under ansible/tests, module, test).
+_LIVE_SEAM_TESTS = (
+    (
+        "deploy",
+        "test_cronjob_gate_decision",
+        "test_the_jsonpath_parses_against_the_live_api",
+    ),
+    ("longhorn", "test_longhorn_api", "test_the_resolve_returns_a_pod_ip_on_this_node"),
+    ("longhorn", "test_volume_revert", "test_the_listing_jsonpath_parses"),
+    ("longhorn", "test_volume_snapshot", "test_the_listing_jsonpath_parses"),
+    (
+        "longhorn",
+        "test_volume_snapshot",
+        "test_the_listing_fields_exist_on_a_real_snapshot",
+    ),
+    (
+        "longhorn",
+        "test_volume_snapshot_cap_headroom",
+        "test_the_gates_reads_parse_and_return_the_field_it_sums",
+    ),
+)
+
+
+@pytest.mark.parametrize(
+    "configured", [False, True], ids=["no-kubeconfig", "kubeconfig"]
+)
+@pytest.mark.parametrize(
+    ("directory", "module", "test"),
+    _LIVE_SEAM_TESTS,
+    ids=[t[2] for t in _LIVE_SEAM_TESTS],
+)
+def test_the_seam_tests_skip_before_any_network_call_without_a_kubeconfig(
+    tmp_path, monkeypatch, directory: str, module: str, test: str, configured: bool
+) -> None:
+    """Run each live-API seam test against a stand-in kubectl that records every call.
+
+    With no current-context, the seam test must skip having run `config current-context` and
+    nothing else: any verb that reaches the API server spends the request timeout on a machine
+    with no cluster (#5219). With one, the seam test must go on to its probe.
+    """
+    calls = tmp_path / "calls"
+    context = "echo default; exit 0" if configured else "exit 1"
+    write_exec(
+        tmp_path / "bin" / "kubectl",
+        f'echo "$*" >> {calls}\n'
+        f'[ "$1 $2" = "config current-context" ] && {{ {context}; }}\nexit 0\n',
+    )
+    monkeypatch.setenv("PATH", path_with(tmp_path / "bin"))
+    monkeypatch.syspath_prepend(str(Path(__file__).parents[1] / directory))
+    seam_test = getattr(importlib.import_module(module), test)
+    if configured:
+        try:
+            seam_test()
+        except pytest.skip.Exception:
+            pass  # An empty answer can still skip; what matters is that the probe ran.
+        assert len(calls.read_text().splitlines()) > 1, "the probe never ran"
+    else:
+        with pytest.raises(pytest.skip.Exception):
+            seam_test()
+        assert calls.read_text().splitlines() == ["config current-context"]
 
 
 def test_every_read_a_later_task_depends_on_runs_under_check() -> None:
@@ -235,6 +301,8 @@ def test_the_listing_jsonpath_parses() -> None:
     """
     if shutil.which("kubectl") is None:
         pytest.skip("no kubectl on PATH")
+    if not kubectl_has_a_cluster_configured(["kubectl"]):
+        pytest.skip("kubectl has no cluster configured")
     argv = _named(_CLAIM, "taken by this deploy")["ansible.builtin.command"]["argv"]
     rendered = [
         str(_render(str(token), volume_revert_volume="pvc-does-not-exist"))
