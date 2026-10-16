@@ -51,6 +51,7 @@ from validate.cross_plane_order import (
     RenderFailed,
     Snapshot,
     changes,
+    closure,
     counted,
     extract,
     problems,
@@ -95,33 +96,66 @@ def set_flux_owned(host_vars: Path, flux_owned: Iterable[str]) -> None:
 
 def prepare_tree(
     sha: str, paths: list[str], tree: Path, undo: bool = False, repo: Path = REPO
-) -> None:
+) -> list[str]:
     """Write `repo`'s HEAD under `tree`, with `paths` as `sha` holds them.
 
     A path `sha` does not hold is deleted. With `undo`, `paths` keep HEAD's content instead,
-    with commit `sha`'s own change to them applied in reverse.
+    with commit `sha`'s own change to each applied in reverse, file by file. A doc or a test
+    renders nothing and is left alone.
 
-    Raises:
-        RenderFailed: With `undo`, the reverse patch no longer applies to HEAD.
+    Returns:
+        The paths whose reverse patch no longer applies to HEAD; empty for a transplant.
     """
     extract("HEAD", tree, ("ansible", "scripts"), repo)
-    if undo:
-        patch = git("diff", "--binary", sha, f"{sha}^", "--", *paths, cwd=repo).stdout
-        if not patch:
-            return
+    if not undo:
+        for path in paths:
+            (tree / path).unlink(missing_ok=True)
+        held = git_stdout("ls-tree", "-r", "--name-only", sha, "--", *paths, cwd=repo)
+        if held:
+            extract(sha, tree, held.split("\n"), repo)
+        return []
+    failed = []
+    for path in paths:
+        if path.endswith(".md") or "/tests/" in path:
+            continue
+        patch = git("diff", "--binary", sha, f"{sha}^", "--", path, cwd=repo).stdout
         proc = git(
             "apply", "--whitespace=nowarn", "-", cwd=tree, input=patch, check=False
         )
-        if proc.returncode:
-            raise RenderFailed(
-                f"{sha}'s change no longer reverses on HEAD: {proc.stderr}"
-            )
-        return
-    for path in paths:
-        (tree / path).unlink(missing_ok=True)
-    held = git_stdout("ls-tree", "-r", "--name-only", sha, "--", *paths, cwd=repo)
-    if held:
-        extract(sha, tree, held.split("\n"), repo)
+        if patch and proc.returncode:
+            failed.append(path)
+    return failed
+
+
+def blockers(
+    failed: list[str], tree: Path, snap: Snapshot, owned: Iterable[str]
+) -> list[str]:
+    """The paths of `failed` whose unreversed change could alter a verdict on `snap`.
+
+    A file today's tree no longer holds is read by nothing. A file under a role that is not
+    flux-owned, not on a flux-owned tag's dependency path and not depending on one cannot
+    form a pair, so its render moving or not changes no verdict.
+    """
+    owned = set(owned)
+    relevant = set(owned)
+    for tag in snap.owners:
+        reach = closure(snap.deps, tag)
+        if tag in owned:
+            relevant |= reach
+        elif reach & owned:
+            relevant.add(tag)
+    found = []
+    for path in failed:
+        if not (tree / path).exists():
+            continue
+        role = (
+            path[len(K8S_ROLES) :].split("/", 1)[0]
+            if path.startswith(K8S_ROLES)
+            else None
+        )
+        if role is None or role in relevant:
+            found.append(path)
+    return found
 
 
 def replay_snapshot(
@@ -144,11 +178,11 @@ def replay_snapshot(
     """
     tree = Path(tempfile.mkdtemp(prefix="replay-", dir=workdir))
     try:
-        prepare_tree(sha, paths, tree, undo)
+        failed = prepare_tree(sha, paths, tree, undo)
         set_flux_owned(tree / HOST_VARS, flux_owned)
         for _ in range(MAX_STUBS):
             try:
-                return snapshot(tree, roles)
+                snap = snapshot(tree, roles)
             except RenderFailed as exc:
                 missing = _UNDEFINED.search(str(exc))
                 if not missing:
@@ -158,6 +192,13 @@ def replay_snapshot(
                 defaults.parent.mkdir(parents=True, exist_ok=True)
                 with defaults.open("a") as fh:
                     fh.write(f"\n{var}: replay-stub-{var}\n")
+                continue
+            stuck = blockers(failed, tree, snap, flux_owned)
+            if stuck:
+                raise RenderFailed(
+                    f"{sha}'s change no longer reverses on HEAD in {stuck}"
+                )
+            return snap
         raise RenderFailed(f"{sha}: more than {MAX_STUBS} undefined values")
     finally:
         shutil.rmtree(tree, ignore_errors=True)
@@ -219,7 +260,7 @@ def replay(since: str, ref: str, flux_owned: list[str], jobs: int, cache: Path) 
             inputs = judged[sha][2]
             return _cached(
                 cache,
-                "|".join(["undo", sha, *inputs, "flux", *owned]),
+                "|".join(["undo-by-file", sha, *inputs, "flux", *owned]),
                 lambda: replay_snapshot(sha, inputs, owned, Path(tmp), undo=True),
             )
 

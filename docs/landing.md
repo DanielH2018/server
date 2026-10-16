@@ -385,7 +385,21 @@ three PRs:
 3. Delete the old macro, which moves no render.
 
 When a dependency set crosses the planes more than once, step 1 repeats once per plane, in
-dependency order. CROSS_PLANE_REPLAY_COST
+dependency order. Each refused macro change therefore costs about three PRs until D5 ends.
+
+**The measured cost is more than one refusal a week.** `scripts/dev/cross_plane_replay.py`
+replayed the gate over the 1598 PRs merged in the 30 days to 2026-10-16, with bento-pdf the only
+flux-owned tag. It refused at least five, about 1.2 a week:
+
+- #1975 and #2002 changed the `ingressroute()` macro, which moves bento-pdf's route beside
+  traefik's or authelia's own change.
+- #4291, #4292 and #4299 edited the `tasks/` of many roles at once. Each changed bento-pdf
+  with `crowdsec`, `traefik`, `authelia` or `netpol-baseline`. A mechanical edit like that splits by plane: the Ansible-owned roles first, then
+  bento-pdf.
+
+The replay could not render 55 of the 645 commits that changed a render input, and 24 of
+those change a file bento-pdf's render reads, so the true count can be higher. #4994, which
+moved `domain` from the SOPS store to the inventory, is one of them.
 
 **An edit that one inventory field carries exits by handing the role back.** A `hostname` edit on bento-pdf
 moves bento-pdf's route and authelia's access rules, and no macro copy splits it. Hand bento-pdf

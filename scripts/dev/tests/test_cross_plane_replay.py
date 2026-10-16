@@ -5,7 +5,7 @@ Run: uv run pytest scripts/dev/tests/test_cross_plane_replay.py
 
 import pytest
 
-from cross_plane_replay import RenderFailed, prepare_tree, set_flux_owned
+from cross_plane_replay import Snapshot, blockers, prepare_tree, set_flux_owned
 from lib.git_testing import commit, init_repo
 
 TEMPLATE = "ansible/templates/shell.j2"
@@ -55,8 +55,26 @@ def test_an_undo_reverses_only_the_commit_s_own_change(tmp_path, repo):
     assert (tree / INVENTORY).read_text() == "b\n"
 
 
-def test_an_undo_that_no_longer_applies_is_rejected(tmp_path, repo):
+def test_an_undo_that_no_longer_applies_is_reported(tmp_path, repo):
     repo, edit = repo
     commit(repo, "rewrite", **{TEMPLATE: "limit: 9\n"})
-    with pytest.raises(RenderFailed, match="no longer reverses"):
-        prepare_tree(edit, [TEMPLATE], tmp_path / "tree", undo=True, repo=repo)
+    assert prepare_tree(edit, [TEMPLATE], tmp_path / "tree", undo=True, repo=repo) == [
+        TEMPLATE
+    ]
+
+
+def test_an_unreversed_file_blocks_only_on_a_flux_owned_dependency_path(tmp_path):
+    snap = Snapshot(
+        renders={},
+        owners={"bento-pdf": "flux", "authelia": "ansible", "zigbee2mqtt": "ansible"},
+        deps={"bento-pdf": ["authelia"], "authelia": [], "zigbee2mqtt": []},
+    )
+    paths = [
+        "ansible/roles/k8s/authelia/defaults/main.yml",
+        "ansible/roles/k8s/zigbee2mqtt/tasks/main.yml",
+        "ansible/templates/gone.yml.j2",
+    ]
+    for path in paths[:2]:
+        (tmp_path / path).parent.mkdir(parents=True)
+        (tmp_path / path).write_text("")
+    assert blockers(paths, tmp_path, snap, ["bento-pdf"]) == [paths[0]]
