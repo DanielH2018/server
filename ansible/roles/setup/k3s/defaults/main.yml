@@ -552,9 +552,11 @@ k3s_readonly_sa_name: homelab-readonly
 k3s_readonly_sa_namespace: kube-system
 k3s_readonly_kubeconfig_server: https://127.0.0.1:6443
 
-# CRD API groups the read-only role can read. The built-in `view` ClusterRole covers none of
-# them and nothing here aggregates into it, so a group left off this list means `kubectl get`
-# on that resource falls back to sudo. Add a group when a new operator's CRDs need inspecting.
+# CRD API groups the read-only role can read. The built-in `view` ClusterRole covers no CRD
+# group except Flux's six: the vendored ClusterRole `flux-view-flux-system` aggregates read on
+# them into `view`, and ansible/tests/k8s/test_aggregated_clusterroles.py lists and pins that
+# grant. Any other group left off this list means `kubectl get` on that resource falls back to
+# sudo. Add a group when a new operator's CRDs need inspecting.
 k3s_readonly_crd_api_groups:
   - traefik.io
   - metallb.io
