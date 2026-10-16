@@ -13,9 +13,9 @@ import json
 import pytest
 from _job_census import load, problems
 
-from deploy_tools.bundle_census import census
+from deploy_tools.bundle_census import report
 from lib import yaml_fast
-from lib.exit_codes import RENDER_OK
+from lib.exit_codes import OK, RENDER_OK
 from lib.k8s_roles import snapshot_claims
 from lib.repo_paths import K8S_ROLES
 from renderer import homelab_render
@@ -94,9 +94,11 @@ def test_the_job_embeds_the_digest8_that_digests_json_records(rendered):
     ]
 
 
-def test_the_snapshot_directory_passes_the_job_census_and_the_publish_census(rendered):
+def test_the_snapshot_directory_passes_the_job_census_and_check_bundle(rendered):
     assert problems(load(rendered)) == []
-    assert census(rendered, [TAG], snapshotting=[TAG]) == []
+    # `promote.py check-bundle`'s whole report: the census and the source, host and no-stub
+    # gates, over a bundle holding the snapshot Job, its ClusterRole and its Roles.
+    assert report(rendered, [TAG]) == OK
 
 
 def test_an_unpublished_snapshot_role_renders_no_snapshot_directory(tmp_path):
@@ -125,7 +127,7 @@ def _job_name(files: dict) -> str:
 
 def test_the_job_name_moves_with_the_role_digest_and_with_the_script():
     name = _job_name(_files())
-    assert name.startswith(f"snapshot-{TAG}-")
+    assert name.startswith(f"snapshot-{TAG}-") and len(name.encode()) <= NAME_LIMIT
     assert _job_name(_files(digest8="ffffffff")) != name
     assert _job_name(_files(script="print('b')\n")) != name
     assert _job_name(_files()) == name

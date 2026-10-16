@@ -197,14 +197,15 @@ def _bytes(value) -> int:
 def check_cap(kube: Kube, volume: str, label: str, log) -> None:
     """Fail only when the volume's numbers positively say its snapshot-space cap is full.
 
-    DECIDED: this gate FAILS OPEN, as `claim.yml`'s marker on the same gate explains. `"0"` is
-    Longhorn's uncapped value and the fleet default, an absent field reads empty, and a read
-    that fails or matches nothing reads as no cap. A gate in front of every snapshot role,
-    guarding a hazard nobody can reach today, must never turn a bad read into a fleet-wide
-    deploy stop. A reached cap latches, because Longhorn refuses new snapshots rather than
-    pruning, so without the gate every later revision would hold on a bare timeout.
+    A reached cap latches, because Longhorn refuses new snapshots rather than pruning, so
+    without this check every later revision would hold on a bare readiness timeout.
     """
     status, body = kube.call("GET", f"{LONGHORN}/volumes/{volume}")
+    # DECIDED: this gate FAILS OPEN, as `claim.yml`'s marker on the same gate explains. `"0"`
+    # is Longhorn's uncapped value and the fleet default, an absent field reads empty, and a
+    # read that fails or matches nothing reads as no cap. A gate in front of every snapshot
+    # role, guarding a hazard nobody can reach today, must never turn a bad read into a
+    # fleet-wide deploy stop.
     cap = (
         _bytes((body.get("spec") or {}).get("snapshotMaxSize")) if status == 200 else 0
     )
@@ -220,9 +221,10 @@ def check_cap(kube: Kube, volume: str, label: str, log) -> None:
     if used >= cap:
         raise Failed(
             f"Longhorn volume {volume} ({label}) is at its snapshot-space cap: {used} bytes "
-            f"of snapshots against a spec.snapshotMaxSize of {cap} bytes, {cap - used} bytes "
-            "of headroom. Longhorn refuses new snapshots rather than pruning; delete some of "
-            "this volume's snapshots and let Flux retry"
+            f"of snapshots against a spec.snapshotMaxSize of {cap} bytes, {max(cap - used, 0)} "
+            "bytes of headroom. Longhorn refuses new snapshots rather than pruning. Delete "
+            "some of this volume's snapshots, then delete this failed Job so Flux creates it "
+            "again; Flux never re-runs a failed Job under the same name"
         )
     log(f"{label}: {used} of {cap} snapshot bytes used")
 

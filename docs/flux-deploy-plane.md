@@ -1080,6 +1080,11 @@ to `cluster/<tag>/` renames the Job and Flux runs it again before the change app
   first apply `<tag>` has no inventory, so every absent claim is new. A PVC the inventory
   lists and the cluster lacks fails the Job, naming the PVC, because a claim that held data
   is gone.
+- **A failed Job stays failed.** Flux never re-runs a Job under the same name, so after both
+  tries fail, `<tag>-snapshot` stays not Ready and `<tag>` waits. Two things clear it: the
+  role's next revision, which renames the Job, or deleting the failed Job once its cause is
+  fixed, after which Flux creates it again (operator-only, because the agent's `kubectl` is
+  read-only).
 - **RBAC.** The ServiceAccount `snapshot-<tag>` may create, list and delete Snapshots and read
   Volumes in `longhorn-system`, and read the `<tag>` Kustomization. A ClusterRole lets it read
   the claims' PVCs by name and every PV. The PVC grant is cluster-wide because a Role in a
