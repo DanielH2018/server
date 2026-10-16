@@ -127,27 +127,33 @@ def _keyed_item(items, keys):
     return None
 
 
-def declares(obj, path):
-    """True when the rendered object `obj` declares the field at `path`."""
+def _lookup(obj, path):
+    """`(True, value)` for the field at `path` in `obj`, or `(False, None)` when it is absent."""
     node = obj
     for kind, value in path:
         if kind == "f":
             if not isinstance(node, dict) or value not in node:
-                return False
+                return False, None
             node = node[value]
         elif kind == "k":
             if not isinstance(node, list):
-                return False
+                return False, None
             node = _keyed_item(node, json.loads(value))
             if node is None:
-                return False
+                return False, None
         elif kind == "v":
-            return isinstance(node, list) and json.loads(value) in node
+            item = json.loads(value)
+            return (isinstance(node, list) and item in node), item
         else:
             if not isinstance(node, list) or value >= len(node):
-                return False
+                return False, None
             node = node[value]
-    return True
+    return True, node
+
+
+def declares(obj, path):
+    """True when the rendered object `obj` declares the field at `path`."""
+    return _lookup(obj, path)[0]
 
 
 def stripped_paths(live, rendered):
@@ -177,15 +183,42 @@ def stripped_paths(live, rendered):
 CLIENT_SIDE_APPLY = "kubectl-client-side-apply"
 
 
-def server_defaulted(stripped, live):
+def implied_pull_policy(image):
+    """The `imagePullPolicy` the API server defaults for `image`.
+
+    Mirrors `SetDefaults_Container`: `Always` when the reference's tag is `latest`, which a
+    reference with neither a tag nor a digest also means, and `IfNotPresent` otherwise.
+    """
+    name, _, digest = (image or "").partition("@")
+    last = name.rsplit("/", 1)[-1]
+    tag = last.partition(":")[2] if ":" in last else ("" if digest else "latest")
+    return "Always" if tag == "latest" else "IfNotPresent"
+
+
+def _redefaults_alike(path, live, rendered):
+    """False when the server would default this path to a different value than it holds.
+
+    `imagePullPolicy` is the one default that depends on another field: the image reference
+    the server read at the create. When the render's reference implies another policy, the
+    takeover changes the value and the pod rolls, so the path stays listed.
+    """
+    if path[-1] != ("f", "imagePullPolicy"):
+        return True
+    found, image = _lookup(rendered, path[:-1] + (("f", "image"),))
+    held = _lookup(live, path)[1]
+    return found and held == implied_pull_policy(image)
+
+
+def server_defaulted(stripped, live, rendered):
     """The stripped paths the API server defaulted when `kubectl apply` created the object.
 
     A create attributes every field the server defaults, such as `dnsPolicy` or a probe's
     `timeoutSeconds`, to the manager that sent it. So `kubectl-client-side-apply` owns fields
     its own applied config never held, and the object's last-applied annotation is that config.
     A path only it owns and that config omits is a default: the takeover removes it and the
-    server defaults it again to the same value, so it changes nothing. An object without the
-    annotation has none, so every path stays listed.
+    server defaults it again, to the same value unless `_redefaults_alike` says otherwise. An
+    object without the annotation has none, so every path stays listed. This rule is read
+    from how server-side apply and defaulting work, not measured by an apply.
     """
     annotations = (live.get("metadata") or {}).get("annotations") or {}
     try:
@@ -197,7 +230,9 @@ def server_defaulted(stripped, live):
     return {
         path
         for path, managers in stripped.items()
-        if managers == [CLIENT_SIDE_APPLY] and not declares(applied, path)
+        if managers == [CLIENT_SIDE_APPLY]
+        and not declares(applied, path)
+        and _redefaults_alike(path, live, rendered)
     }
 
 
@@ -323,7 +358,7 @@ def census(tag, docs, live_of):
             continue
         compared += 1
         stripped = stripped_paths(live, doc)
-        defaulted = server_defaulted(stripped, live)
+        defaulted = server_defaulted(stripped, live, doc)
         stripped = {p: m for p, m in stripped.items() if p not in defaulted}
         note = (
             f" ({len(defaulted)} server-defaulted path(s) not listed, which the server "

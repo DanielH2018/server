@@ -245,6 +245,8 @@ under its pod template. `probe_lib/takeover.py` holds the rules.
   defaults, such as `dnsPolicy`, to `kubectl-client-side-apply`. A path only that manager owns
   and the object's last-applied config omits is such a default. The takeover removes it and the
   server sets it again to the same value, so the census counts these per object and lists none.
+  `imagePullPolicy` is the exception. Its default follows the image reference, so the census
+  lists it when the render's reference implies a value other than the live one.
 - **Not listed: `last-applied-configuration`.** The cleanup removes it from every object by
   design.
 - **Not read: Secrets and RBAC objects.** The census skips Secrets, whose managers D3.5 handles.

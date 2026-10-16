@@ -13,6 +13,7 @@ import os
 import sys
 
 import pytest
+from typing import Any
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -43,7 +44,7 @@ ROLLOUT_ENTRY = {
 
 CONTAINER = 'k:{"name":"speedtest"}'
 
-CLIENT_SIDE_APPLY_ENTRY = {
+CLIENT_SIDE_APPLY_ENTRY: dict[str, Any] = {
     "apiVersion": "apps/v1",
     "fieldsType": "FieldsV1",
     "fieldsV1": {
@@ -146,7 +147,7 @@ def _entry(manager, fields, operation="Update", subresource=None):
 
 def _listed(live, render):
     stripped = tk.stripped_paths(live, render)
-    defaulted = tk.server_defaulted(stripped, live)
+    defaulted = tk.server_defaulted(stripped, live, render)
     return sorted(tk.format_path(p) for p in stripped if p not in defaulted)
 
 
@@ -207,13 +208,54 @@ def test_keyed_items_and_defaulted_fields_are_clean():
     `kubectl-client-side-apply` owns from the create and the last-applied config never held.
     """
     stripped = tk.stripped_paths(_live(), _render())
-    defaulted = {tk.format_path(p) for p in tk.server_defaulted(stripped, _live())}
+    defaulted = {
+        tk.format_path(p) for p in tk.server_defaulted(stripped, _live(), _render())
+    }
     assert defaulted == {
         "spec.template.spec.containers[name=speedtest].ports[containerPort=80,protocol=TCP]"
         ".protocol",
         "spec.template.spec.containers[name=speedtest].terminationMessagePath",
         "spec.template.spec.dnsPolicy",
     }
+
+
+def test_a_field_the_last_applied_config_holds_and_the_render_dropped_is_flagged():
+    """An undeployed render change: the last apply set `revisionHistoryLimit`, the render no longer does."""
+    render = _render()
+    live = _live()
+    applied = copy.deepcopy(render)
+    applied["spec"]["revisionHistoryLimit"] = 3
+    live["metadata"]["annotations"][tk.LAST_APPLIED] = json.dumps(applied)
+    entry = copy.deepcopy(CLIENT_SIDE_APPLY_ENTRY)
+    entry["fieldsV1"]["f:spec"]["f:revisionHistoryLimit"] = {}
+    live["metadata"]["managedFields"][1] = entry
+    assert _listed(live, render) == ["spec.revisionHistoryLimit", RESTARTED_AT]
+
+
+@pytest.mark.parametrize(
+    ("image", "held", "listed"),
+    [
+        ("repo/app:latest@sha256:abc", "Always", False),
+        ("repo/app", "Always", False),
+        ("repo/app:1.2@sha256:abc", "IfNotPresent", False),
+        ("repo/app@sha256:abc", "IfNotPresent", False),
+        ("repo/app:1.2", "Always", True),
+    ],
+)
+def test_an_image_pull_policy_is_a_default_only_when_the_render_implies_it(
+    image, held, listed
+):
+    render = _render()
+    render["spec"]["template"]["spec"]["containers"][0]["image"] = image
+    live = _live()
+    live["spec"]["template"]["spec"]["containers"][0]["imagePullPolicy"] = held
+    entry = copy.deepcopy(CLIENT_SIDE_APPLY_ENTRY)
+    entry["fieldsV1"]["f:spec"]["f:template"]["f:spec"]["f:containers"][CONTAINER][
+        "f:imagePullPolicy"
+    ] = {}
+    live["metadata"]["managedFields"][1] = entry
+    path = "spec.template.spec.containers[name=speedtest].imagePullPolicy"
+    assert (path in _listed(live, render)) is listed
 
 
 def test_without_a_last_applied_config_a_default_stays_listed():
