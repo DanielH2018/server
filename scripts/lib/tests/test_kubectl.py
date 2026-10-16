@@ -276,11 +276,20 @@ SCRIPTS = REPO / "scripts"
 KNOWN_CALLERS = frozenset(
     {
         "diagnostics/probe_lib/health.py",
+        "diagnostics/probe_lib/takeover.py",
         "diagnostics/probe_lib/vip_placement.py",
         "infra_map/live.py",
         "grafana/export_grafana_dashboards.py",
     }
 )
+
+
+# Modules that spell `"kubectl"` as data, not as an argv, each with the reason.
+NOT_AN_ARGV = {
+    # A field-manager name prefix in kustomize-controller's cleanup list. Its reads go
+    # through `lib.kubectl.kubectl`, which its KNOWN_CALLERS row holds it to.
+    "diagnostics/probe_lib/takeover.py": "names kubectl as a managedFields manager",
+}
 
 
 def _non_test_scripts() -> list[Path]:
@@ -310,6 +319,7 @@ def test_no_script_outside_the_invoker_builds_a_kubectl_argv():
         path.relative_to(SCRIPTS).as_posix()
         for path in _non_test_scripts()
         if '"kubectl"' in path.read_text()
+        and path.relative_to(SCRIPTS).as_posix() not in NOT_AN_ARGV
     ]
     assert offenders == [], f"kubectl argv built outside lib/kubectl.py: {offenders}"
 

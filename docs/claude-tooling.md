@@ -42,9 +42,9 @@ landing's log carries `probe.py health` output and is grepped for `^VERDICT:`.
 accepts equal the registry's names, and that every `probe_lib` module with a `run_*`/`main` entry point is
 registered.
 
-### Measurements and invariant checks: `b2-spend`, `vip-placement`, `readonly-rbac`, `shed-set`
+### Measurements and invariant checks: `b2-spend`, `vip-placement`, `readonly-rbac`, `shed-set`, `takeover`
 
-Four subcommands turn a fact an operator once had to remember into one they can re-derive. Each
+Five subcommands turn a fact an operator once had to remember into one they can re-derive. Each
 has its own test under `scripts/diagnostics/tests/`.
 
 - **`b2-spend [--since 24h]`** sums the Class B spend per volume out of Longhorn's own "changed
@@ -66,6 +66,12 @@ has its own test under `scripts/diagnostics/tests/`.
   lost, so the tiered services fit on the survivor (`probe_lib/shed_set.py`). The set is every
   k8s entry with no `tier:`, derived by `shed_entries` in `filter_plugins/service_tier.py`, and
   each role is rendered to name its scalable workloads. It reads the inventory only.
+- **`takeover <tag>`** lists the field paths Flux's first apply of a tag strips: a field a
+  manager `kustomize-controller` cleans owns, such as `kubectl-rollout`'s `restartedAt`, that no
+  other manager owns and the render omits (`probe_lib/takeover.py`). It renders the tag and
+  reads each live object with `--show-managed-fields`, and prints paths only. A tag with no
+  rendered object live exits 75. `docs/flux-deploy-plane.md` (*What a takeover strips*) has the
+  rules and the operator's `flux diff kustomization` command.
 
 ### `alerts [--days N --check X]`
 
