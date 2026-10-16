@@ -421,7 +421,7 @@ _ASSIGNMENT = re.compile(r"\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)=")
 # curl's config-file flag. Bounded so `--keepalive` and `-Ku` do not count as a match.
 _CURL_CONFIG_FLAG = re.compile(r"(?<![\w-])-K(?![\w-])")
 
-# Sources /usr/local/lib/kuma-push-lib.sh, with the reason each exemption is honest.
+# Sources kuma-push-lib.sh (any install path), with the reason each exemption is honest.
 _LIBRARY_EXEMPT = {
     "crowdsec-update-home-allowlist.sh.j2": (
         "keeps its own curl for the `--retry 3 --retry-all-errors` its # DECIDED: marker "
@@ -452,8 +452,8 @@ _EXPECTED_IN_CORPUS = {
     "ansible/roles/setup/k3s/templates/etcd-snapshot-offbox.sh.j2",
     "ansible/roles/setup/k3s/templates/longhorn-backup-health.sh.j2",
     "ansible/roles/setup/k3s/templates/manifest-prune-check.sh.j2",
-    "ansible/roles/setup/optimize_pi/templates/pi-recovery-health.sh.j2",
-    "ansible/roles/setup/optimize_pi/templates/pi-sd-health.sh.j2",
+    "hosts/components/pi-heartbeats/templates/pi-recovery-health.sh.j2",
+    "hosts/components/pi-heartbeats/templates/pi-sd-health.sh.j2",
     "ansible/roles/setup/renovate_notify/templates/renovate-notify.service.j2",
 }
 
@@ -466,8 +466,9 @@ _MIN_CORPUS = 23
 
 
 def push_corpus() -> dict[Path, str]:
-    """Every template that mentions a push URL, whatever its extension."""
-    texts = {p: rendered_or_source_text(p) for p in sorted(ROLES.rglob("*.j2"))}
+    """Every role or host-component template that mentions a push URL, any extension."""
+    paths = [*ROLES.rglob("*.j2"), *REPO.glob("hosts/components/*/templates/*.j2")]
+    texts = {p: rendered_or_source_text(p) for p in sorted(paths)}
     return {p: t for p, t in texts.items() if PUSH_LITERAL in t or "PUSH_URL" in t}
 
 
@@ -652,9 +653,8 @@ def test_the_two_audit_arms_accumulate_rather_than_suppress_each_other():
     # The branch arm's condition must not read EXTRA_DOWN -- that is the short-circuit.
     branch_arm = text.split("# Runs even when the arm above fired", 1)
     assert len(branch_arm) == 2, "the stray-branch arm lost its ordering comment"
-    # "; then", not "then": the prose above the arm contains "au-then-ticates", and splitting
-    # on the bare word truncates ahead of the condition, so the guard would pass on the mutation
-    # it exists to catch.
+    # "; then", not "then": the prose above the arm contains "au-then-ticates", and a split on
+    # the bare word truncates ahead of the condition, passing the mutation it exists to catch.
     condition = branch_arm[1].split("; then", 1)[0]
     assert "EXTRA_DOWN" not in condition, (
         "the stray-branch arm is gated on the gh-token arm, so a revoked token silences the "

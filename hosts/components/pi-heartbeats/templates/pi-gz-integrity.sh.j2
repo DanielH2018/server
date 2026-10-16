@@ -1,14 +1,15 @@
 #!/usr/bin/env bash
-# Pi rotated-log integrity sweep — managed by Ansible (optimize_pi role); edits overwritten.
+# Pi rotated-log integrity sweep — shipped by homelab-daniel-pi
+# (hosts/components/pi-heartbeats); edits overwritten.
 #
-# Usage: pi-gz-integrity.sh [-h|--help]
-# Takes no arguments. Cron job "Pi rotated-log integrity sweep" runs it daily at 01:40, with output
-# piped to logger -t pi-gz-integrity, and the role runs it once at deploy time to prime the
-# verdict. It writes the verdict file named by optimize_pi_gz_integrity_state_file. Running it by
-# hand is safe: it only reads the rotated logs.
+# Usage: pi-gz-integrity [-h|--help]
+# Takes no arguments. homelab-pi-gz-integrity.timer runs it daily at 01:40, and a minute after
+# the timer starts to prime the verdict, through homelab-pi-gz-integrity.service, which logs its
+# output under the tag pi-gz-integrity. It writes the verdict file named by
+# optimize_pi_gz_integrity_state_file. Running it by hand is safe: it only reads the rotated logs.
 #
 # Runs `gzip -t` over every rotated log on this host, once a day, and writes a verdict file.
-# It pushes nothing itself: pi-sd-health.sh reads the verdict every 5 minutes and folds it into
+# It pushes nothing itself: pi-sd-health reads the verdict every 5 minutes and folds it into
 # the "Daniel Pi SD Health" Kuma push, so this sweep needs no monitor and no push token.
 #
 # A rotated .gz that stops decompressing has two causes here, and the point is to tell either
@@ -22,13 +23,13 @@
 #
 # Cost, measured by running THIS script on daniel-pi 2026-09-27 over 144 files and 9.7 MB:
 # 1.9s wall on the first run, 1.7s (1.44s user) once warm, and ~13s when the SD-side copies are
-# cold. One gzip process, not one per file. That is why the cron is daily and not the 5-minute
+# cold. One gzip process, not one per file. That is why the timer is daily and not the 5-minute
 # heartbeat: at */5 this would be ~8 min/day of CPU and ~2.8 GB/day of reads on a 512 MB
 # Zero 2 W whose probe cadence has already caused RCU stalls (pi-healthcheck-fork-churn).
 #
-# No bash array-length operator anywhere below, on purpose: Ansible templates this file, and the
-# brace-hash that operator opens with is how Jinja starts a comment block, so a single use of it
-# fails the render with "Missing end of comment tag". Counts come from `wc` instead.
+# No bash array-length operator anywhere below, on purpose: the renderer templates this file,
+# and the brace-hash that operator opens with is how Jinja starts a comment block, so a single
+# use of it fails the render with "Missing end of comment tag". Counts come from `wc` instead.
 set -uo pipefail
 
 for arg in "$@"; do
@@ -104,7 +105,7 @@ else
   fi
 fi
 
-# Two lines, verdict then detail, written through a temp file: pi-sd-health.sh reads this every
+# Two lines, verdict then detail, written through a temp file: pi-sd-health reads this every
 # 5 minutes, and a half-written verdict would read there as an empty status (a down) for that run.
 mkdir -p "${STATE%/*}" 2>/dev/null || true
 if ! { printf '%s\n%s\n' "$verdict" "$detail" >"$work/state" && mv -f "$work/state" "$STATE"; }; then
@@ -112,6 +113,6 @@ if ! { printf '%s\n%s\n' "$verdict" "$detail" >"$work/state" && mv -f "$work/sta
   exit 1
 fi
 
-# The cron routes both streams to `logger -t pi-gz-integrity`, so this line is the journal
+# The service logs both streams under the tag pi-gz-integrity, so this line is the journal
 # record of the sweep. The ALERT is the heartbeat's Kuma push, not this line.
 printf 'status=%s %s\n' "$verdict" "$detail"

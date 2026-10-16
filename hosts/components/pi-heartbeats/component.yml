@@ -1,0 +1,105 @@
+# The Pi's three heartbeats (H3.8b, docs/target-architecture/host/h3-pi-pilot.md). Until H3.8b
+# the optimize_pi role installed them as three crons. Each script runs as a oneshot service on a
+# timer, as sys_user, which reaches `docker` and the journal through its supplementary groups.
+# The two push tokens arrive through `LoadCredential=` from the interim files optimize_pi stages
+# under /etc/homelab/interim/; H4 replaces that source with /run/credstore/.
+#
+# - homelab-pi-sd-health, every 5 minutes: the root filesystem's ext4 errors_count, the
+#   rotated-log integrity verdict and the log2ram mount, pushed to "Daniel Pi SD Health".
+# - homelab-pi-gz-integrity, daily at 01:40: `gzip -t` over every rotated log, written as the
+#   verdict the SD-health heartbeat reads. It pushes nothing itself.
+# - homelab-pi-recovery, every 5 minutes: the contract below.
+#
+# Autonomous-role contract (the container-recovery heartbeat restarts what it finds dead).
+# The other two heartbeats only read and report. This one acts: pi-recovery-health runs
+# `docker start` on any watched container it finds not running, every 5 minutes, unattended.
+#
+# - Scope / exclusions: exactly the containers this host deploys, which is every
+#   containers_list entry in inventory/host_vars/daniel-pi.yml plus the docker-proxy role's
+#   sub-proxies. One `docker start` per watched container per cycle and nothing else: never a
+#   restart, recreate, `docker rm` or pull, and nothing on the other two hosts.
+#   docs/pi-host-tuning-record.md has why the watch set is the deploy list rather than
+#   `docker ps -a --filter status=exited`.
+# - Why it acts at all: `restart: unless-stopped` covers a process exit, not a failed create
+#   at the OCI runtime, which is what this 512 MB board actually produces.
+# - Mode (explicit and reversible): optimize_pi_recovery_restart_enabled arms the timer and
+#   ships true. Setting it false in inventory/host_vars/daniel-pi.yml drops the timer's enable
+#   link from the next package version; reconcile stops the timer on the install that drops it
+#   and leaves the script installed. docs/pi-host-tuning-record.md has the disarm walkthrough,
+#   including why disarming doubles as the heartbeat's own failure signal.
+# - Authoritative sources: `docker ps` against the real socket, not docker-proxy, so it reports
+#   docker-proxy's own death too. `docker inspect` is read BEFORE the restart, which erases the
+#   exit code, the daemon's Error string and FinishedAt.
+# - Required evidence, every cycle: a Kuma push to "Daniel Pi Recovery" and a
+#   /var/log/pi-health/health.log line naming what died and whether the restart took.
+# - It pushes `down` on a cycle it fixed, on purpose: an `up` after a successful restart would
+#   hide a container crashing every 5 minutes. The script's `# DECIDED:` marker has the
+#   declined re-proposal.
+# - Next-run review: a repeat `restarted:` for the same container needs fixing upstream. Read
+#   the week's status=down lines before widening the watch set.
+#
+# ENFORCED: ansible/tests/setup/test_pi_recovery_restarts_and_reports.py::test_a_dead_container_is_restarted,
+# which renders the script and runs it against a stub `docker`.
+defaults:
+  # The daily rotated-log integrity sweep (templates/pi-gz-integrity.sh.j2). It `gzip -t`s every
+  # rotated log and writes a verdict the 5-minute SD-health heartbeat folds into its Kuma push.
+  #
+  # BOTH roots, and /var/hdd.log is the load-bearing one: /var/log is log2ram's RAM tmpfs, while
+  # /var/hdd.log is the copy on the SD card and the destination of the sync that corrupted 37
+  # files. Against the live Pi the sweep found 37 of 144 files failing, every one of them under
+  # /var/hdd.log and none under /var/log.
+  optimize_pi_gz_integrity_roots:
+    - /var/log
+    - /var/hdd.log
+  # Non-vacuity floor: a glob that matches nothing passes `gzip -t` trivially, so a logrotate
+  # config change or a moved root would turn the sweep green forever. 144 files across both
+  # roots; /var/log alone swings 35-72 over a logrotate cycle, so 40 sits below the trough of
+  # either root and well above zero.
+  optimize_pi_gz_integrity_min_files: 40
+  # /var/lib, NOT /var/log: a verdict written into log2ram's tmpfs is gone after a reboot, and
+  # the heartbeat would then read "no verdict" (a down) until the next daily sweep. Both
+  # services' StateDirectory= creates /var/lib/pi-health, so the path must stay under it.
+  optimize_pi_gz_integrity_state_file: /var/lib/pi-health/gz-integrity.state
+  # How old a verdict the heartbeat still trusts. Longer than the sweep's daily period so one
+  # missed run is tolerated; shorter than two, so a sweep that stops running goes down rather
+  # than reporting yesterday's verdict forever.
+  optimize_pi_gz_integrity_max_age_h: 26
+  # Arms the container-recovery timer: true ships its enable link, false drops it. Set it per
+  # host in inventory/host_vars/daniel-pi.yml, which beats this default, so the intent lives in
+  # the inventory rather than in a working tree.
+  #
+  # It ships TRUE: the timer is the only thing that restarts a container whose create failed
+  # at the OCI runtime, which `restart: unless-stopped` does not.
+  #
+  # Detection and remediation share one script, so disarming ends the heartbeat too: the
+  # "Daniel Pi Recovery" Kuma monitor trips its 600s watchdog within ten minutes. That is the
+  # intended signal, not a second fault.
+  optimize_pi_recovery_restart_enabled: true
+files:
+  - {src: templates/pi-sd-health.sh.j2, dst: /usr/lib/homelab/pi-sd-health, mode: "0755"}
+  - {src: templates/pi-gz-integrity.sh.j2, dst: /usr/lib/homelab/pi-gz-integrity, mode: "0755"}
+  - {src: templates/pi-recovery-health.sh.j2, dst: /usr/lib/homelab/pi-recovery-health, mode: "0755"}
+  # A package-owned copy of initial_setup's helper, which stays the single source. The scripts
+  # source this copy, so the package carries everything its units run.
+  - {shared: kuma-push-lib.sh, dst: /usr/lib/homelab/kuma-push-lib.sh}
+  # A plain file at the path optimize_pi wrote, so dpkg takes it over on unpack.
+  - {src: templates/pi-health.logrotate.j2, dst: /etc/logrotate.d/pi-health}
+  - {src: units/homelab-pi-sd-health.service.j2, dst: /usr/lib/systemd/system/homelab-pi-sd-health.service}
+  - {src: units/homelab-pi-sd-health.timer, dst: /usr/lib/systemd/system/homelab-pi-sd-health.timer}
+  - {src: units/homelab-pi-gz-integrity.service.j2, dst: /usr/lib/systemd/system/homelab-pi-gz-integrity.service}
+  - {src: units/homelab-pi-gz-integrity.timer, dst: /usr/lib/systemd/system/homelab-pi-gz-integrity.timer}
+  - {src: units/homelab-pi-recovery.service.j2, dst: /usr/lib/systemd/system/homelab-pi-recovery.service}
+  - {src: units/homelab-pi-recovery.timer, dst: /usr/lib/systemd/system/homelab-pi-recovery.timer}
+enable:
+  homelab-pi-sd-health.timer: timers.target
+  homelab-pi-gz-integrity.timer: timers.target
+  homelab-pi-recovery.timer: {target: timers.target, when: optimize_pi_recovery_restart_enabled}
+# What optimize_pi installed before H3.8b. Reconcile retires each once the timers above have
+# started, so a heartbeat never runs twice or not at all.
+legacy:
+  - {cron: "Pi SD-card health heartbeat", user: "{{ sys_user }}"}
+  - {cron: "Pi rotated-log integrity sweep", user: "{{ sys_user }}"}
+  - {cron: "Pi container-recovery heartbeat", user: "{{ sys_user }}"}
+  - {path: /usr/local/bin/pi-sd-health.sh}
+  - {path: /usr/local/bin/pi-gz-integrity.sh}
+  - {path: /usr/local/bin/pi-recovery-health.sh}

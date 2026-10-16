@@ -3,7 +3,7 @@
 
 `gzip -t` is the only reader that disagrees with a clobbered gzip trailer: that corruption
 leaves every CRC32 matching, so `zcat` recovers every byte and nothing else on the host notices.
-The sweep runs that test daily and writes a verdict; `pi-sd-health.sh` reads the verdict
+The sweep runs that test daily and writes a verdict; `pi-sd-health` reads the verdict
 every 5 minutes and folds it into the Kuma push.
 
 Two failure modes get their own tests here, because both read GREEN from the passing side:
@@ -25,20 +25,20 @@ import os
 import pytest
 from lib.proc_testing import write_exec
 from lib.proc_testing import run as launch
-from _pi_health import OPTIMIZE_PI_DEFAULTS, run
+from _pi_health import COMPONENT, COMPONENT_DEFAULTS, run
 from _shell_render import render_shell_script
 
-SWEEP = ("setup", "optimize_pi", "pi-gz-integrity.sh.j2")
+SWEEP = (COMPONENT.parent.name, COMPONENT.name, "pi-gz-integrity.sh.j2")
 
-# The floor the role ships. Read, not restated: a test carrying its own number would keep passing
+# The floor the component ships. Read, not restated: a test carrying its own number would keep passing
 # after someone lowered the real one to zero, which is the one edit that makes the check vacuous.
-FLOOR = OPTIMIZE_PI_DEFAULTS["optimize_pi_gz_integrity_min_files"]
+FLOOR = COMPONENT_DEFAULTS["optimize_pi_gz_integrity_min_files"]
 
 
 def _render(roots, state_file, floor=FLOOR):
     """The real sweep, rendered through `_shell_render` with its roots and state file overridden.
 
-    `optimize_pi_gz_integrity_roots`/`..._state_file`/`..._min_files` are role defaults the
+    `optimize_pi_gz_integrity_roots`/`..._state_file`/`..._min_files` are component defaults the
     accessor's context would otherwise resolve to the live `/var/log` and `/var/hdd.log` paths —
     exactly what a test run must not touch.
     """
@@ -248,7 +248,7 @@ def test_a_missing_verdict_reads_down(tmp_path):
 def test_a_stale_verdict_reads_down(tmp_path):
     """Yesterday's verdict is the failure mode a file-backed source adds over a live read."""
     state = _verdict_file(tmp_path, "up", "107 rotated .gz pass gzip -t")
-    age_h = OPTIMIZE_PI_DEFAULTS["optimize_pi_gz_integrity_max_age_h"] + 1
+    age_h = COMPONENT_DEFAULTS["optimize_pi_gz_integrity_max_age_h"] + 1
     stale = state.stat().st_mtime - age_h * 3600
     os.utime(state, (stale, stale))
 

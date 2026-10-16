@@ -1,0 +1,12 @@
+# Shipped by homelab-daniel-pi. Started by homelab-pi-gz-integrity.timer.
+[Unit]
+Description=Check every rotated log on the Pi with gzip -t
+
+[Service]
+Type=oneshot
+User={{ sys_user }}
+ExecStart=/usr/lib/homelab/pi-gz-integrity
+# The sweep prints its verdict line on every run, and the cron piped it to this tag.
+SyslogIdentifier=pi-gz-integrity
+LogsDirectory=pi-health
+StateDirectory=pi-health

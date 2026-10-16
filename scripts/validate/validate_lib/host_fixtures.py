@@ -4,7 +4,8 @@
 `scripts/validate/host_package_cases.py` runs the cases. This module builds what they install:
 the fixture homelab-daniel-pi in three versions, rendered by the real renderer from
 `hosts/lib/tests/container/fixture/`; a homelab-updater whose unit changes; a copy of the real
-homelab-daniel-pi whose drop-in on the updater's timer changes; and the apt repository, in
+homelab-daniel-pi whose drop-in on the updater's timer changes; the real homelab-daniel-pi
+rendered with its container-recovery timer disarmed; and the apt repository, in
 suite `homelab`, that serves a chosen set of them. `publish` signs that repository's `InRelease`
 with a throwaway ed25519 key, generated once per process, and writes the key's public keyring
 into the repository as TEST_KEYRING. The test image's source names that keyring in
@@ -17,6 +18,7 @@ from pathlib import Path as _Path
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
 import atexit
+import dataclasses
 import functools
 import hashlib
 import os
@@ -27,6 +29,7 @@ from datetime import datetime, timedelta
 from email.utils import formatdate
 from pathlib import Path
 
+from lib.estate import REPO_INVENTORY, Inventory
 from lib.repo_paths import REPO
 from renderer.renderer_lib import host as host_mode
 
@@ -41,6 +44,9 @@ KEYRING = "/usr/share/keyrings/homelab-archive-keyring.gpg"
 UNIT_DIR = "/usr/lib/systemd/system"
 UNIT_CHANGE = "Environment=HOMELAB_FIXTURE=unit-changed"
 DROPIN = f"{UNIT_DIR}/{UPDATER}.timer.d/50-homelab.conf"
+# The inventory flag whose false value drops the recovery timer's enable link (H3.8b).
+RECOVERY_FLAG = "optimize_pi_recovery_restart_enabled"
+RECOVERY_TIMER = "homelab-pi-recovery.timer"
 # The real Pi drop-in's minute, and the one its changed copy fires at instead.
 DROPIN_MINUTE = ":05/15:00"
 DROPIN_CHANGED = ":10/15:00"
@@ -118,6 +124,30 @@ def pi_dropin_variant(head: Path, out: Path) -> Path:
         raise ValueError(f"{dropin} does not fire at {DROPIN_MINUTE}")
     dropin.write_text(text.replace(DROPIN_MINUTE, DROPIN_CHANGED))
     return directory
+
+
+def disarmed_inventory(directory: Path) -> Inventory:
+    """The repo's inventory with daniel-pi's container-recovery timer disarmed, under `directory`.
+
+    The host_vars directory is copied and the Pi's file gains
+    `optimize_pi_recovery_restart_enabled: false`, the edit an operator makes to disarm it, so a
+    render through this inventory takes the path a real disarm does.
+    """
+    host_vars = directory / "host_vars"
+    shutil.copytree(REPO_INVENTORY.host_vars, host_vars)
+    pi = host_vars / f"{HOST}.yml"
+    pi.write_text(pi.read_text() + f"\n{RECOVERY_FLAG}: false\n")
+    return dataclasses.replace(REPO_INVENTORY, host_vars=host_vars)
+
+
+def pi_disarmed_variant(out: Path) -> Path:
+    """Render the real homelab-daniel-pi with its recovery timer disarmed under `out`; return it."""
+    with tempfile.TemporaryDirectory() as scratch:
+        package = host_mode.render_host(
+            HOST, inventory=disarmed_inventory(Path(scratch))
+        )
+    host_mode.write_packages([package], out)
+    return out / package.directory
 
 
 def build(directory: Path, version: str, out: Path) -> Path:

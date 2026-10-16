@@ -20,9 +20,7 @@ from lib.repo_paths import K3S_FILES, K3S_ROLE
 
 BACKUP_HEALTH = K3S_ROLE / "templates" / "longhorn-backup-health.sh.j2"
 BACKUP_HEALTH_READER = K3S_FILES / "longhorn_backup_health.py"
-KUMA_PUSH_LIB = (
-    v.ANSIBLE / "roles" / "setup" / "initial_setup" / "files" / "kuma-push-lib.sh"
-)
+KUMA_PUSH_LIB = v.ROLES / "setup" / "initial_setup" / "files" / "kuma-push-lib.sh"
 
 
 @pytest.mark.parametrize(

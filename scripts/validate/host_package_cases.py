@@ -22,14 +22,17 @@ packages from a repository signed with a throwaway key with `python3 -m http.ser
   * remove the host package, and the next run reinstalls it;
   * cold-install the head version on a fresh container;
   * install the real Pi package by hand on a fresh container, then change its drop-in on
-    homelab-updater.timer, and the timer, which has no enable link, stays inactive.
+    homelab-updater.timer, and the timer, which has no enable link, stays inactive;
+  * install the real Pi package by hand on a fresh container, then upgrade to one rendered with
+    optimize_pi_recovery_restart_enabled false, and homelab-pi-recovery.timer, which was
+    active, is stopped with no reboot (H3.8b's recovery disarm).
 
 Every case that reaches step 3 asserts that the server log holds its `GET` of
 `dists/homelab/InRelease` or `dists/homelab/Release`. Every case asserts that `/var/lib/apt/lists/` holds a list for the test
 repository and none named after daniel-box's address.
 
-The real homelab-updater comes from the job's base and head builds. The by-hand case installs
-the head build of the real homelab-daniel-pi, `hosts/daniel-pi/`. Every other case needs a unit,
+The real homelab-updater comes from the job's base and head builds. The by-hand and disarm
+cases install the head build of the real homelab-daniel-pi, `hosts/daniel-pi/`. Every other case needs a unit,
 a file and a payload the real package does not ship, so it installs a fixture homelab-daniel-pi:
 `hosts/lib/tests/container/fixture/`'s specs, rendered by the real renderer with the real
 reconcile component and maintainer scripts.
@@ -73,6 +76,7 @@ from validate.validate_lib.host_fixtures import (
     HOST_PKG,
     KEYRING,
     PAYLOAD,
+    RECOVERY_TIMER,
     TEST_KEYRING,
     UNIT_CHANGE,
     UNIT_DIR,
@@ -81,6 +85,7 @@ from validate.validate_lib.host_fixtures import (
     build,
     deb_version,
     newer,
+    pi_disarmed_variant,
     pi_dropin_variant,
     publish,
     render_fixture,
@@ -171,6 +176,11 @@ class Cases:
         rendered = pi_dropin_variant(render / "head", build_root / "pi-dropin")
         self._add(
             "pi-dropin", build(rendered, f"{head}.3", build_root / "pi-dropin-deb")
+        )
+        rendered = pi_disarmed_variant(build_root / "pi-disarmed")
+        self._add(
+            "pi-disarmed",
+            build(rendered, f"{head}.4", build_root / "pi-disarmed-deb"),
         )
 
     def _add(self, label: str, deb: Path, name: str | None = None) -> None:
@@ -489,6 +499,39 @@ class Cases:
         finally:
             c.remove()
 
+    def disarm(self) -> None:
+        """Install the real Pi package by hand, then upgrade to one whose recovery timer is disarmed.
+
+        The disarmed build drops the timer's enable link. Reconcile step 1 stops a timer whose
+        link the new manifest dropped, so the timer stops on that install, with no reboot.
+        """
+        c = self.boot("disarm")
+        if c is None:
+            return
+
+        def body() -> None:
+            debs = " ".join(
+                f"/srv/debs/{self.debs[label].name}"
+                for label in ("updater-head", "pi-head")
+            )
+            c.ok(f"DEBIAN_FRONTEND=noninteractive apt-get install -y {debs}")
+            c.ok("systemctl start homelab-reconcile.service")
+            self.expect_reconciled(c, "updater-head", "pi-head")
+            state = c.active(RECOVERY_TIMER)
+            expect(state == "active", f"{RECOVERY_TIMER} is {state} while armed")
+            self.serving("updater-head", "pi-head", "pi-disarmed")
+            status = c.run_updater()
+            expect(status == 0, f"the updater exited {status}")
+            self.expect_installed(c, "updater-head", "pi-disarmed")
+            self.expect_reconciled(c, "updater-head", "pi-disarmed")
+            state = c.active(RECOVERY_TIMER)
+            expect(state == "inactive", f"{RECOVERY_TIMER} is {state} once disarmed")
+
+        try:
+            self.case(c, "disarm the recovery timer by dropping its enable link", body)
+        finally:
+            c.remove()
+
 
 def success_timestamp(prom: str) -> str:
     """The value of the success-timestamp series in a homelab_host.prom, or ""."""
@@ -528,6 +571,7 @@ def main(argv: list[str] | None = None) -> int:
     cases.upgrade_path()
     cases.cold_install()
     cases.by_hand()
+    cases.disarm()
     if cases.failed:
         print(
             f"[FAIL] {len(cases.failed)} cases failed: {cases.failed}", file=sys.stderr

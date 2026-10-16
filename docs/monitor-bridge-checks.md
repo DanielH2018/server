@@ -980,7 +980,7 @@ checks each gate suppresses.
   The window is tolerant because file-tail volume is low and dips overnight (a lone
   `{job="syslog"}` over 10m false-paged on a 15m35s idle gap). The arm EXCLUDES the pod streams,
   because they dwarf the file-tail streams and a healthy pod stream would mask a total file-tail
-  outage. It also EXCLUDES `machine="daniel-pi"`: the Pi's health crons ship under the same
+  outage. It also EXCLUDES `machine="daniel-pi"`: the Pi's heartbeats ship under the same
   `job="syslog"` (~72 lines per 3h), so without the filter a total cluster file-tail outage never
   reaches zero (#3739).
   **Arm 2, cluster pod streams** `sum(count_over_time({job="k8s"}[30m]))` (`LOKI_DOCKER_STREAM`):

@@ -89,9 +89,9 @@ class Task:
     def mentions(self, name: str) -> bool:
         """Whether this task reads the variable `name`.
 
-        Word-bounded, so `optimize_pi_gz_integrity_state_file` is not read as a use of
-        `optimize_pi_gz_integrity_state`. Both of the tree's two near-miss pairs are that
-        shape, and a substring match would report each as a violation.
+        Word-bounded, so `demo_state_file` is not read as a use of `demo_state`. A register
+        named for the variable it stats has that shape, and a substring match would report it
+        as a violation.
         """
         mention = re.compile(rf"(?<!\w){re.escape(name)}(?!\w)")
         return any(mention.search(text) for text in self.reads)
@@ -409,7 +409,7 @@ def test_an_untagged_consumer_is_not_judged(tmp_path: Path):
 
 
 def test_a_longer_name_is_not_read_as_a_use_of_the_shorter_one(tmp_path: Path):
-    """`optimize_pi_gz_integrity_state_file`'s shape — the tree's live near miss."""
+    """The shape `optimize_pi`'s gz-integrity tasks had until the package took them (H3.8b)."""
     role = _written(
         tmp_path,
         "- name: Stat the state file\n"

@@ -17,22 +17,27 @@ component's are. A component directory under `hosts/components/` holds a `compon
 A `src` ending `.j2` renders through the renderer's strict environment. Any other `src` is
 copied byte for byte. A `lib` entry copies `hosts/lib/<name>`, a script several packages ship,
 byte for byte. A `key` entry copies `hosts/keys/<name>.gpg`, a public keyring hosts trust, byte
-for byte. Those two are the only sources outside the component a file entry may name.
+for byte. A `shared` entry copies one of the `SHARED_FILES`, a file an Ansible role still
+installs, byte for byte. Those three are the only sources outside the component a file entry
+may name.
 
 A package or component may also carry `units`, a policy for each unit reconcile must not
 restart on a change, `enable`, the enable links it installs, and `legacy`, the Ansible-era
 entries reconcile retires (H3, *The host handoff rule*)::
 
     units: {homelab-x.service: {policy: manual}}    # or windowed
-    enable: {homelab-x.timer: timers.target}        # see host_manifest.add_enable_links
+    enable:                                         # see host_manifest.add_enable_links
+      homelab-x.timer: timers.target
+      homelab-y.timer: {target: timers.target, when: x_enabled}
     legacy:
       - {path: /usr/local/bin/x.sh}
       - {cron: "X heartbeat", user: "{{ sys_user }}"}
       - {cron_file: x}
       - {unit: x.service}
 
-Each legacy value renders with the host's context. Each enable link ships as an nfpm
-`type: symlink` entry. A host package installs
+Each legacy value renders with the host's context. An enable entry's `when:` is a Jinja
+expression evaluated in that context, and the link ships only when it is true. Each enable link
+ships as an nfpm `type: symlink` entry. A host package installs
 `/usr/lib/homelab/manifest.json`, which `host_manifest` builds from these keys and the units and
 enable links the packages install. A shared package installs no manifest, and lists no legacy
 entry and no enable link.
@@ -68,13 +73,18 @@ import jinja2
 import yaml
 
 from lib import yaml_fast
-from lib.ansible_jinja_env import SHARED_TPL
 from lib.estate import REPO_INVENTORY, Inventory
 from lib.render_context import UnresolvedVarsError, render_context
 from lib.render_guard import StrictChainableUndefined, load_yaml
 from lib.repo_paths import ANSIBLE, REPO
 from renderer.renderer_lib.cluster import RenderRefused
 from renderer.renderer_lib.environment import RenderError, render_file, renderer_env
+from renderer.renderer_lib.host_sources import (
+    SHARED_FILES,
+    ConfinedLoader,
+    confined,
+    file_mode,
+)
 from renderer.renderer_lib.host_manifest import (
     DROPIN,
     UNIT_DIR,
@@ -354,11 +364,11 @@ def _render_maintainer_scripts(
                 "so only a host package lists it"
             )
         src = f"{name}.j2"
-        _confined(directory, src)
+        confined(directory, src)
         ctx, reasons = host_context(host, {}, inventory, withheld)
         ctx["package_units"] = package.units()
         env = renderer_env(directory)
-        env.loader = _ConfinedLoader(cast(jinja2.BaseLoader, env.loader), directory)
+        env.loader = ConfinedLoader(cast(jinja2.BaseLoader, env.loader), directory)
         package.scripts[name] = _render_template(
             env, src, ctx, reasons, directory
         ).encode()
@@ -392,19 +402,26 @@ def _render_unit(
     withheld: frozenset[str],
     lib: Path,
 ) -> None:
-    """Render the files, policies and legacy entries `spec` lists into `package`.
+    """Render the files, policies, enable links and legacy entries `spec` lists into `package`.
 
-    Files come from `directory`, from `lib`, or from the `keys` directory beside `lib`.
+    Files come from `directory`, from `lib`, from the `keys` directory beside `lib`, or from
+    the `SHARED_FILES` under the repo root that holds `lib`'s parent.
     """
     files = spec.get("files") or []
     add_policies(package, directory, spec.get("units") or {})
-    add_enable_links(package, directory, spec.get("enable") or {})
+    enable = spec.get("enable") or {}
     legacy = spec.get("legacy") or []
-    if not files and not legacy:
+    if not files and not legacy and not enable:
         return
     ctx, reasons = host_context(host, spec.get("defaults") or {}, inventory, withheld)
     env = renderer_env(directory)
-    env.loader = _ConfinedLoader(cast(jinja2.BaseLoader, env.loader), directory)
+    env.loader = ConfinedLoader(cast(jinja2.BaseLoader, env.loader), directory)
+    add_enable_links(
+        package,
+        directory,
+        enable,
+        lambda expression: _evaluate(env, expression, ctx, reasons, directory),
+    )
     for entry in legacy:
         package.legacy.append(
             legacy_entry(
@@ -415,12 +432,13 @@ def _render_unit(
         )
     keys = lib.parent / "keys"
     for entry in files:
-        sources = {"src", "lib", "key"} & set(entry)
+        sources = {"src", "lib", "key", "shared"} & set(entry)
         if "dst" not in entry or not sources:
             raise RenderRefused(f"{directory}: file entry {entry} lacks src or dst")
         if len(sources) > 1:
             raise RenderRefused(
-                f"{directory}: file entry {entry} names more than one of src, lib and key"
+                f"{directory}: file entry {entry} names more than one of "
+                "src, lib, key and shared"
             )
         dst = str(entry["dst"])
         destination = PurePosixPath(dst)
@@ -431,91 +449,33 @@ def _render_unit(
         refuse_wants_file(directory, destination)
         if dst in package.files:
             raise RenderRefused(f"{package.name}: two files install {dst}")
-        mode = _mode(entry.get("mode", "0644"), directory, dst)
+        mode = file_mode(entry.get("mode", "0644"), directory, dst)
         if "lib" in entry:
             # A plain name has no `.j2` suffix, so a lib script is copied, never rendered.
-            source = _confined(lib, _plain_name(entry["lib"], "lib script"))
+            source = confined(lib, _plain_name(entry["lib"], "lib script"))
             package.files[dst] = (source.read_bytes(), mode)
             continue
         if "key" in entry:
             # The name carries no suffix, so the plain-name rule holds and `.gpg` is fixed here.
-            source = _confined(keys, f"{_plain_name(entry['key'], 'key')}.gpg")
+            source = confined(keys, f"{_plain_name(entry['key'], 'key')}.gpg")
+            package.files[dst] = (source.read_bytes(), mode)
+            continue
+        if "shared" in entry:
+            name = entry["shared"]
+            if name not in SHARED_FILES:
+                raise RenderRefused(
+                    f"{directory}: shared file {name!r} is not one of {sorted(SHARED_FILES)}"
+                )
+            source = lib.parent.parent / SHARED_FILES[name]
             package.files[dst] = (source.read_bytes(), mode)
             continue
         src = str(entry["src"])
-        source = _confined(directory, src)
+        source = confined(directory, src)
         if src.endswith(".j2"):
             content = _render_template(env, src, ctx, reasons, directory).encode()
         else:
             content = source.read_bytes()
         package.files[dst] = (content, mode)
-
-
-def _confined(directory: Path, src: str) -> Path:
-    """`src` resolved through any symlink, which must be a file inside `directory`.
-
-    Both branches of a file entry call this before they read: a static `src` is read from the
-    result, and a `.j2` `src` is checked here and then loaded by name. Neither an absolute
-    path, a `..` nor a link out of the component can put a file of the rendering machine into
-    a package. The refusal names the component and the `src`, never the target.
-    """
-    path = (directory / src).resolve()
-    if not path.is_relative_to(directory.resolve()):
-        raise RenderRefused(f"{directory}: src {src!r} is outside the component")
-    if not path.is_file():
-        raise RenderRefused(f"{directory}: src {src!r} does not exist")
-    return path
-
-
-class _ConfinedLoader(jinja2.BaseLoader):
-    """The renderer's loader, refusing a template that resolves outside its search roots.
-
-    `{% include %}`, `{% import %}` and `{% extends %}` load by name through the loader, and
-    jinja's `FileSystemLoader` follows a symlink there. A link in the component to a file
-    outside it would otherwise be read into the package. The roots are the component
-    directory and the shared `ansible/templates/` the environment also searches. Nothing else
-    in host mode reads a file a component names: `lookup` is registered only when the
-    environment is given a context, and `_render_unit` does not give it one.
-    """
-
-    def __init__(self, inner: jinja2.BaseLoader, directory: Path) -> None:
-        self.inner = inner
-        self.directory = directory
-        self.roots = [directory.resolve(), SHARED_TPL.resolve()]
-
-    def get_source(self, environment, template):
-        source, filename, uptodate = self.inner.get_source(environment, template)
-        if filename is not None and not any(
-            Path(filename).resolve().is_relative_to(root) for root in self.roots
-        ):
-            raise RenderRefused(
-                f"{self.directory}: template {template!r} is outside the component"
-            )
-        return source, filename, uptodate
-
-
-def _mode(value: object, directory: Path, dst: str) -> int:
-    """A file entry's octal `mode` string as an int.
-
-    Only a quoted string is taken. YAML 1.1 loads an unquoted `0644` as the integer 420, which
-    cannot be told apart from a literal 420, so an int is refused rather than guessed at.
-    """
-    if not isinstance(value, str) or not re.fullmatch(r"0?[0-7]{3,4}", value):
-        raise RenderRefused(
-            f"{directory}: {dst} mode {value!r} is not a quoted octal string such as '0644'"
-        )
-    mode = int(value, 8)
-    special = mode & ~0o777
-    if special:
-        names = {0o4000: "setuid", 0o2000: "setgid", 0o1000: "sticky"}
-        bits = ", ".join(
-            f"{bit:#o} {name}" for bit, name in names.items() if special & bit
-        )
-        raise RenderRefused(
-            f"{directory}: {dst} mode {value!r} sets bits above 0o777 ({bits}); "
-            "no package installs a special bit"
-        )
-    return mode
 
 
 def host_context(
@@ -572,6 +532,31 @@ def _render_template(
         return render_file(env, src, ctx)
     except jinja2.TemplateError as exc:
         raise _explained(exc, f"{directory / src}", reasons) from exc
+
+
+def _evaluate(
+    env: jinja2.Environment,
+    expression: str,
+    ctx: dict,
+    reasons: dict[str, str],
+    directory: Path,
+) -> bool:
+    """A `when:` expression's value in `ctx`, which must be a boolean.
+
+    A string is refused rather than tested for truth, because `"false"` is a true string.
+    """
+    try:
+        value = env.compile_expression(expression, undefined_to_none=False)(ctx)
+        if isinstance(value, jinja2.Undefined):
+            # An undefined name reaches here unraised; this raises the error naming it.
+            value._fail_with_undefined_error()
+    except jinja2.TemplateError as exc:
+        raise _explained(exc, f"{directory}: when {expression!r}", reasons) from exc
+    if not isinstance(value, bool):
+        raise RenderRefused(
+            f"{directory}: when {expression!r} is {value!r}, not a boolean"
+        )
+    return value
 
 
 def _render_string(

@@ -17,7 +17,7 @@ redeploy recreated it.
 The 503 is a stale bind-mount. `docker-proxy` mounts `/var/run/docker.sock` as a FILE, and a
 `docker.socket` restart gives that path a new inode — measured on the Pi afterwards, the socket's
 `ctime` equals `docker.socket`'s `ActiveEnterTimestamp` — which a running container never sees. The
-recovery cron (#1910) restarts a stopped container; it cannot recreate one. That is why
+recovery heartbeat (#1910) restarts a stopped container; it cannot recreate one. That is why
 `tasks/engine-upgrade.yml` brings every Compose project back with `recreate: always`.
 
 ## The manager tracks what apt installs, not what upstream tagged

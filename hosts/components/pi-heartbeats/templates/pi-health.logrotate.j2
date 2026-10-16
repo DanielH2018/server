@@ -1,0 +1,16 @@
+# Shipped by homelab-daniel-pi (hosts/components/pi-heartbeats); edits here are overwritten.
+#
+# `create`, NOT `copytruncate`. The log shipper holds the file open and tracks a byte offset;
+# truncating in place leaves that offset past the new end, so it silently ships nothing until
+# the offset happens to be passed again. Renaming and creating a fresh inode is the rotation a
+# glob-based tailer handles correctly. /var/log is log2ram's tmpfs, and two heartbeats x 288
+# runs a day x ~90 B is ~52 KB a day, so the cap is precautionary, not load-bearing.
+/var/log/pi-health/*.log {
+  daily
+  rotate 1
+  size 256k
+  missingok
+  notifempty
+  create 0644 {{ sys_user }} {{ sys_user }}
+  su {{ sys_user }} {{ sys_user }}
+}

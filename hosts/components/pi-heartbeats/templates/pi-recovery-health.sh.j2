@@ -1,10 +1,12 @@
 #!/usr/bin/env bash
-# Pi container-recovery heartbeat — managed by Ansible (optimize_pi role); edits overwritten.
+# Pi container-recovery heartbeat — shipped by homelab-daniel-pi
+# (hosts/components/pi-heartbeats); edits overwritten.
 #
-# Usage: pi-recovery-health.sh [-h|--help]
-# Takes no arguments. Cron job "Pi container-recovery heartbeat" runs it every 5 minutes on
-# daniel-pi. It checks every container the host deploys, runs docker start on any that is not
-# running, and pushes to the Daniel Pi Recovery Kuma monitor. Running it by hand does the same.
+# Usage: pi-recovery-health [-h|--help]
+# Takes no arguments. homelab-pi-recovery.timer runs it every 5 minutes on daniel-pi, through
+# homelab-pi-recovery.service, which hands it the push token. It checks every container the
+# host deploys, runs docker start on any that is not running, and pushes to the Daniel Pi
+# Recovery Kuma monitor. Starting the service by hand does the same.
 #
 # AutoKuma only reads the SERVER's docker socket, so the Pi's containers have no liveness
 # monitor of their own. autoheal (restarts unhealthy containers) and docker-proxy (read-only
@@ -12,11 +14,11 @@
 # unhealthy Pi containers stop self-recovering; if docker-proxy dies, Alloy's docker_sd finds
 # no targets and this host's container logs stop reaching Loki, while Alloy keeps running
 # with zero targets. Kuma sees wg-easy from outside; docker-proxy-lifecycle it does not.
-# This cron watches EVERY container the host deploys (containers_list, plus the docker-proxy
+# This heartbeat watches EVERY container the host deploys (containers_list, plus the docker-proxy
 # role's sub-proxies, which are services inside its compose file rather than list entries)
 # and pushes `up` only while all of them run, to the static "Daniel Pi Recovery" Kuma push
 # monitor (uptime-kuma role), every 5 min.
-# Dead-man's-switch: an explicit `down` names the dead container fast, while a dead cron/host
+# Dead-man's-switch: an explicit `down` names the dead container fast, while a dead timer/host
 # stops pushing and trips the monitor's 600s heartbeat watchdog. Route + auth are the
 # SD-health heartbeat's: Traefik's .local router resolved straight to the server LAN IP,
 # Authelia bypasses ^/api/push/ on this host LAN-only — the URL token is the credential.
@@ -29,17 +31,23 @@ for arg in "$@"; do
 done
 
 # shellcheck source=/dev/null
-source /usr/local/lib/kuma-push-lib.sh || {
-  logger -t pi-recovery-health "kuma-push-lib.sh missing — run initial_setup on this host"
+source /usr/lib/homelab/kuma-push-lib.sh || {
+  logger -t pi-recovery-health "kuma-push-lib.sh missing — reinstall homelab-daniel-pi"
   exit 1
 }
 
-{# `domain` is the SOPS-loaded server domain (same reasoning as pi-sd-health.sh.j2). #}
 KUMA_HOST="uptime-kuma.local.{{ domain }}"
 # Pinned to the cluster ingress VIP: Kuma serves from the k8s edge, and the Docker
 # edge's bridge route for this name was removed in the slice-7 bridge teardown.
 KUMA_RESOLVE_IP="{{ k3s_metallb_ingress_vip }}"
-PUSH_URL="https://${KUMA_HOST}/api/push/{{ pi_recovery_push_token }}"
+# The push token arrives through the unit's LoadCredential=, from a root-only file, and never
+# sits in this script. A missing token stops the push, so the monitor's watchdog trips.
+TOKEN_FILE="${CREDENTIALS_DIRECTORY:-}/pi_recovery_push_token"
+if ! PUSH_TOKEN=$(cat "$TOKEN_FILE" 2>/dev/null) || [ -z "$PUSH_TOKEN" ]; then
+  logger -t pi-recovery-health "no push token at $TOKEN_FILE — start homelab-pi-recovery.service rather than this script"
+  exit 1
+fi
+PUSH_URL="https://${KUMA_HOST}/api/push/${PUSH_TOKEN}"
 
 {# The watch set is DERIVED, not listed: every containers_list entry this host deploys, plus
     the sub-proxies the docker-proxy role's compose file declares beside its list entry
@@ -73,7 +81,7 @@ for c in "${CONTAINERS[@]}"; do
   # RECORD WHY before touching it. `docker inspect` state is per container lifetime: the
   # `docker start` below (or the next deploy's recreate) erases the exit code, the daemon's
   # `Error` string and `FinishedAt` of the instance that died, the Pi's journal rotates in
-  # about a day (SystemMaxUse=32M), and this cron's own line is the only record that reaches
+  # about a day (SystemMaxUse=32M), and this heartbeat's own line is the only record that reaches
   # Loki. Diagnosing #1789 fourteen days on was impossible for exactly that reason (#1912).
   # Go-template braces are Jinja syntax, hence the raw block. `Error` is free text from the
   # OCI runtime and may span lines; the health.log parser reads ONE line per record, so it is
@@ -88,8 +96,8 @@ for c in "${CONTAINERS[@]}"; do
   # that is the failure this host actually produces under memory pressure — on 2026-08-29
   # autoheal died with "unable to start unit ... Timeout waiting for systemd to create scope"
   # and sat there with RestartCount 0 until a human ran `docker start`. Detection worked that
-  # day; the 50-minute outage was the missing remediation. One `docker start` from the cron
-  # that already runs every 5 minutes and already reads this state closes the loop with no
+  # day; the 50-minute outage was the missing remediation. One `docker start` from the
+  # heartbeat that already runs every 5 minutes and already reads this state closes the loop with no
   # new process on a box that cannot spare one.
   if docker start "$c" >/dev/null 2>&1 &&
     [ -n "$(docker ps -q --filter "name=^${c}$" --filter status=running)" ]; then
@@ -115,7 +123,7 @@ done
 # emits one per container create (every compose file here writes `no-new-privileges:true`),
 # and over a 48h window it was the ONLY non-info line, so it would crowd out the five kept.
 # dockerd's own `time="…"` prefix is dropped as redundant with the record's timestamp; the
-# rest is flattened and capped like `Error` above so the record stays one line. The cron
+# rest is flattened and capped like `Error` above so the record stays one line. The service
 # user reads the journal through the `adm` group; no privilege.
 #
 # The gate asks the DAEMON, not a container: `docker version` is one /version round trip,
@@ -166,7 +174,7 @@ kuma_push "$STATUS" "$MSG" "$PUSH_URL" "$KUMA_HOST" "$KUMA_RESOLVE_IP" pi-recove
 # DOWN alerts in the last 7d" while the monitor was live-DOWN.
 #
 # It goes to a FILE rather than to `logger`, because daniel-pi ships no journal: rsyslog is
-# masked here on purpose (see the debloat section of this role's tasks — journald is the log
+# masked here on purpose (see the debloat section of optimize_pi's tasks — journald is the log
 # of record, and a second text logger would write into the RAM-backed /var/log), and the
 # Pi's promtail scrapes only container logs. `logger` would reach the local journal and stop.
 # The Pi's promtail tails this path under `job="syslog"` instead, matching the label the
