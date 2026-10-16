@@ -272,7 +272,7 @@ def cronjob_reapers(
 
     `where` is `command` for a call in a container's command or args, or `configmap/<name>` for
     a call in a mounted ConfigMap's data. A ConfigMap is looked up in the CronJob's own
-    namespace.
+    namespace, and one the render does not hold is a hit too, since its data went unread.
     """
     configmaps = {
         (d["metadata"].get("namespace"), d["metadata"]["name"]): d
@@ -292,6 +292,10 @@ def cronjob_reapers(
         for mounted in sorted(_mounted_configmaps(pod)):
             configmap = configmaps.get((namespace, mounted))
             if configmap is None:
+                # An imperatively applied ConfigMap is not in the render, so nothing read it.
+                hits.append(
+                    (name, f"configmap/{mounted} (not rendered, so never read)")
+                )
                 continue
             read.add(("ConfigMap", mounted))
             data = json.dumps(configmap.get("data") or {})
@@ -361,3 +365,11 @@ def test_a_cronjob_naming_neither_is_clean() -> None:
     hits, read = cronjob_reapers([job, script])
     assert hits == []
     assert read == {("CronJob", "nightly"), ("ConfigMap", "nightly-script")}
+
+
+def test_a_mounted_configmap_the_render_does_not_hold_is_flagged() -> None:
+    """A script ConfigMap applied by a task, outside the render, would otherwise read as clean."""
+    job = _cronjob(["sh", "/scripts/run.sh"], configmap="applied-by-a-task")
+    assert cronjob_reapers([job])[0] == [
+        ("nightly", "configmap/applied-by-a-task (not rendered, so never read)")
+    ]
