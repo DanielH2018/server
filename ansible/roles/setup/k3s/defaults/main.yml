@@ -552,6 +552,15 @@ k3s_readonly_sa_name: homelab-readonly
 k3s_readonly_sa_namespace: kube-system
 k3s_readonly_kubeconfig_server: https://127.0.0.1:6443
 
+# The stale-checkout guard (tasks/stale-checkout-guard.yml) reads the Flux inventory with this
+# binary, and passes when it does not exist: a fresh host under `--check`, or a narrowed apply
+# that skipped `k3s_server`. Its read makes 12 tries, 10 seconds apart, on any error other
+# than "no Kustomization resource type", then fails the play and names the API as unreachable.
+# 11 retries is 12 tries: ansible-core adds the first try to `retries`.
+k3s_stale_checkout_binary: /usr/local/bin/k3s
+k3s_stale_checkout_retries: 11
+k3s_stale_checkout_delay: 10
+
 # CRD API groups the read-only role can read. The built-in `view` ClusterRole covers no CRD
 # group except Flux's six: the vendored ClusterRole `flux-view-flux-system` aggregates read on
 # them into `view`, and ansible/tests/k8s/test_aggregated_clusterroles.py lists and pins that
