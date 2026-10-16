@@ -3,13 +3,16 @@
 What each step of the `optimize_pi` role does on daniel-pi, and the measurements behind the
 numbers it sets. `ansible/roles/setup/optimize_pi/CLAUDE.md` carries the rules a session must
 not break and indexes the steps; this page is the working-out, read when you edit one of them.
+The three heartbeats below left the role in H3.8b. The `homelab-daniel-pi` package ships them
+from `hosts/components/pi-heartbeats/`, whose `component.yml` header carries the recovery
+heartbeat's Autonomous-role contract.
 
 The board is a Raspberry Pi Zero 2 W with 512 MB of RAM, so nearly every number here was
 picked against a memory ceiling rather than a CPU one.
 
 ## Granular tag rules
 
-The role's tags let one section run without the whole role, and four cases make a task carry a
+The role's tags let one section run without the whole role, and three cases make a task carry a
 tag it does not obviously belong to:
 
 - The shared prep tasks are dual-tagged: `Set variables` is `[gpu-mem, zram]`, and the
@@ -17,11 +20,8 @@ tag it does not obviously belong to:
   consumes.
 - `log2ram` also covers the log RAM-budget tasks — the journald cap, acct retention, the auditd
   cap and its rotation cleanup, sysstat retention. They exist only because of the tmpfs.
-- `sd-health` and `recovery-health` each create `/var/log/pi-health` and its logrotate stanza,
-  so either tag alone leaves the cron it installs able to write its verdict.
-- Everything the rotated-log sweep needs carries BOTH `sd-health` and `gz-integrity`, because
-  the SD-card heartbeat reads that sweep's verdict and treats a missing one as a `down`. A
-  `--tags sd-health` run therefore installs the sweep, primes its verdict and schedules it too.
+- `sd-health` and `recovery-health` each create `/etc/homelab/interim/`, so either tag alone
+  stages its heartbeat's push-token file into a directory that exists.
 
 ## Boot config, GPU split and zram
 
@@ -213,14 +213,16 @@ version to the cluster DaemonSet's.
 
 ## SD-card health heartbeat, and the rotated-log sweep it carries
 
-SD cards have no SMART, so `templates/pi-sd-health.sh.j2` (cron, every 5 minutes) pushes the
-root filesystem's ext4 `errors_count` to the static "Daniel Pi SD Health" Kuma push monitor
-through the LAN-only Authelia bypass on `^/api/push/`. A nonzero count is an explicit `down`,
-and a dead cron or host trips the 600s push watchdog. The token is `pi_sd_health_push_token`
-in `secrets.yml`.
+SD cards have no SMART, so `hosts/components/pi-heartbeats/templates/pi-sd-health.sh.j2` pushes
+the root filesystem's ext4 `errors_count` to the static "Daniel Pi SD Health" Kuma push monitor
+through the LAN-only Authelia bypass on `^/api/push/`. `homelab-pi-sd-health.timer` runs it
+every 5 minutes. A nonzero count is an explicit `down`, and a dead timer or host trips the 600s
+push watchdog. The token is `pi_sd_health_push_token` in `secrets.yml`. `optimize_pi` stages it
+as a root-only interim file, and the service reads it through `LoadCredential=`.
 
 **The same push carries the rotated-log integrity verdict** (#2715).
-`templates/pi-gz-integrity.sh.j2` (cron, daily 01:40 UTC) runs `gzip -t` over every rotated
+`pi-gz-integrity.sh.j2` (`homelab-pi-gz-integrity.timer`, daily 01:40 UTC, and a minute after
+the timer starts so a fresh install has a verdict) runs `gzip -t` over every rotated
 `.gz` under `/var/log` and `/var/hdd.log` and writes a two-line verdict to
 `optimize_pi_gz_integrity_state_file`. The heartbeat reads that file and pushes `down` on a
 failing verdict, on a verdict older than `optimize_pi_gz_integrity_max_age_h`, and on no
@@ -256,14 +258,14 @@ containers, and `docker-proxy`, the read-only socket Alloy's container-log disco
 dead autoheal stops recovering Pi containers, and a dead docker-proxy stops this host's
 container logs reaching Loki while Alloy keeps running with zero targets.
 
-`templates/pi-recovery-health.sh.j2` (cron, every 5 minutes) watches **every container the
+`pi-recovery-health.sh.j2` (`homelab-pi-recovery.timer`, every 5 minutes) watches **every container the
 host deploys** — each `containers_list` entry, plus `docker-proxy-lifecycle` and, under
 `has_code_server`, `docker-proxy-codeserver`, which are services inside the docker-proxy
 role's compose file rather than list entries. It reads `docker ps` against the real socket
 through the docker group, so it still reports docker-proxy's own death, and pushes to the
 static "Daniel Pi Recovery" Kuma push monitor over the same LAN-only `^/api/push/` bypass. Any
-one container down is an explicit `down`; a dead cron or host trips the 600s watchdog. The
-token is `pi_recovery_push_token` in `secrets.yml`. The set was autoheal and docker-proxy alone
+one container down is an explicit `down`; a dead timer or host trips the 600s watchdog. The
+token is `pi_recovery_push_token` in `secrets.yml`, staged and read as the SD-health token is. The set was autoheal and docker-proxy alone
 until #1910: the same failed start reaches wg-easy and docker-proxy-lifecycle, and Kuma
 sees neither from outside.
 
@@ -281,7 +283,7 @@ re-proposal that was declined.
 `not running: autoheal [status=exited exit=137 finished=<ts> error=<daemon text>]`. The restart
 (or the next deploy's recreate) erases that state, the journal here rotates in about a day
 under `SystemMaxUse=32M`, and `/var/log/pi-health/health.log` rotates daily on log2ram — so
-the cron's own line, shipped to Loki under `job="syslog"`, is the only record of a Pi container
+the heartbeat's own line, shipped to Loki under `job="syslog"`, is the only record of a Pi container
 failure that survives a week (#1912). `State.Error` is flattened to one line and capped at 300
 characters so it cannot split the record the alert parser reads.
 
@@ -299,33 +301,38 @@ records the RSS measurement behind that.
 
 The set is derived from `containers_list`, never hardcoded, so a new Pi service joins it on the
 next deploy. It is the deploy list rather than `docker ps -a --filter status=exited`, which is
-what keeps the cron from resurrecting a deliberate `docker stop` every 5 minutes. One
+what keeps the heartbeat from resurrecting a deliberate `docker stop` every 5 minutes. One
 `docker start` per watched container per cycle is the whole action: never `docker restart`,
 never a recreate, never a `docker rm`, never a pull, and nothing at all on daniel-box or
 daniel-server.
 
 ### Disarming it
 
-`optimize_pi_recovery_restart_enabled` arms the cron and ships `true` — the cron has restarted
-failed-create containers since #1910, so a default-off flag would have the next role run remove
-a live check. Setting it `false` REMOVES the cron; the heartbeat script stays installed, so one
-cycle can still be run by hand. Set it in `inventory/host_vars/daniel-pi.yml` rather than
-editing the task, so the intent survives another session's `--tags recovery-health` run, then
-apply:
+`optimize_pi_recovery_restart_enabled` arms the timer and ships `true` — the heartbeat has
+restarted failed-create containers since #1910, so a default-off flag would have the next
+install stop a live check. Setting it `false` drops the timer's enable link from the next
+`homelab-daniel-pi` version. Reconcile stops a timer whose link the new manifest dropped, so the
+timer stops on that install with no reboot, and stays stopped when its unit file changes later.
+The script and both units stay installed, so one cycle can still be run by hand with
+`sudo systemctl start homelab-pi-recovery.service`.
 
-```bash
-uv run ansible-playbook ansible/initial_setup.yml --tags recovery-health -e target=daniel-pi
-```
+To disarm it:
 
-Read the result with `crontab -l -u <sys_user>` on the Pi — the `pi-recovery-health.sh` line is
-gone when disarmed. A `sudo crontab -r`-style edit on the host is undone by the next role run;
-the flag is not. Detection and remediation share one script, so disarming the restart also ends
-the heartbeat: the "Daniel Pi Recovery" monitor trips its 600s watchdog within ten minutes of
-the crons stopping. That is the intended signal, not a second fault.
+1. Set `optimize_pi_recovery_restart_enabled: false` in `inventory/host_vars/daniel-pi.yml`,
+   which beats the component default, and merge.
+2. Let the updater install the version without the link. Until H3.9b arms the updater's timer,
+   start it by hand on the Pi with `sudo systemctl start homelab-updater.service`.
+3. Check with `systemctl list-timers homelab-pi-recovery.timer` on the Pi, which lists nothing
+   once the timer is stopped.
+
+A `sudo systemctl stop`-style edit on the host is undone by the next install that still ships
+the link; the flag is not. Detection and remediation share one script, so disarming the restart
+also ends the heartbeat: the "Daniel Pi Recovery" monitor trips its 600s watchdog within ten
+minutes of the timer stopping. That is the intended signal, not a second fault.
 
 ## The durable health log
 
-Both health crons leave a record at `/var/log/pi-health/health.log`, which the Pi's Alloy
+Both token heartbeats leave a record at `/var/log/pi-health/health.log`, which the Pi's Alloy
 tails as its `pi_health` source under `job="syslog"`. Kuma keeps only current state, so without
 this a DOWN that clears is gone — and `probe.py alerts` reconstructs episodes from
 `{job="syslog"} |= "status=down"`.
@@ -344,9 +351,8 @@ Adding this stream meant excluding it from monitor-bridge's Loki file-tail arm
 (`machine!="daniel-pi"` in `LOKI_STREAM`) — a Pi stream under `job="syslog"` would otherwise
 stop a total cluster file-tail outage from ever reaching that arm's zero threshold.
 
-**Two deploys activate it**, because the Pi is manual-deploy: install the cron with
-`initial_setup.yml --tags recovery-health -e target=daniel-pi`, which also copies the shared
-push lib, then redeploy `uptime-kuma` on daniel-box so AutoKuma provisions the monitor. Do both
+**Two hosts activate a new heartbeat**: the Pi installs the `homelab-daniel-pi` version that
+ships it, and `uptime-kuma` redeploys on daniel-box so AutoKuma provisions the monitor. Do both
 close together, or the fresh push monitor false-DOWNs until the first heartbeat lands.
 
 ## Resolver

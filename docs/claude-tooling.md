@@ -153,7 +153,7 @@ equivalent of the four cluster checks above, backed by `probe_lib/pi_plane.py`.
   as its own hyphen-delimited token — `pihole-k8s-dns.json` is excluded because `pi` there is a
   substring of `pihole`, not a token, and Pi-hole runs on k3s.
 - **`alerts --pi`** — scopes the DOWN-episode reconstruction to daniel-pi. The syslog stream
-  (the Pi's own health crons) carries the rsyslog host token, verified live against
+  (the Pi's own heartbeats) carries the rsyslog host token, verified live against
   `/var/log/pi-health/health.log` (`hostname` there prints `daniel-pi`); the monitor-bridge
   stream carries no host field at all, since it runs in-cluster, so its one check that watches
   the Pi remotely — `pi_pressure` (`check_pi_pressure` in monitor-bridge's `CHECKS`) — is

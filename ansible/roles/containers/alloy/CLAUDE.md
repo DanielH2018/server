@@ -1,6 +1,6 @@
 # alloy — the Pi's log shipper
 
-Grafana Alloy on daniel-pi, shipping this host's container logs and its two health crons'
+Grafana Alloy on daniel-pi, shipping this host's container logs and its two token heartbeats'
 verdict lines to loki-homelab. See repo-root `CLAUDE.md` for shared conventions.
 
 ## At a glance
@@ -56,7 +56,7 @@ verdict lines to loki-homelab. See repo-root `CLAUDE.md` for shared conventions.
   whose cost cannot be measured without a deploy, added to a process whose runtime already
   paces against its memory limit, is the case the issue's own drop rule names. The
   daemon-failure evidence the journal would have carried reaches Loki another way: when
-  dockerd stops answering, `pi-recovery-health` (`roles/setup/optimize_pi`) appends the
+  dockerd stops answering, `pi-recovery-health` (`hosts/components/pi-heartbeats/`) appends the
   newest non-info `journalctl -u docker` lines to its own DOWN record, which the
   `pi_health` source here already ships. To revisit the reader, first make room for it —
   a lower `GOGC` takes ~10 MB off every peak per halving, and the compose template's

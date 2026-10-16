@@ -978,7 +978,7 @@
 - name: Restart them so Docker re-reads the host's resolvers # noqa no-handler
   tags: [pi-dns]
   # Not a handler: handlers run at the end of the play, and this role's later tasks — plus the
-  # health crons they install — resolve names. Leaving containers on a dead stub until the end
+  # packaged heartbeats — resolve names. Leaving containers on a dead stub until the end
   # of the run is the failure this task exists to close.
   community.docker.docker_container:
     name: "{{ item }}"
