@@ -48,6 +48,7 @@ from lib.k8s_roles import (
     CLAIM_TEMPLATE,
     SHARED_MANIFEST_DEFAULTS,
     resolved_manifest_files,
+    role_fields,
     tag_owners,
 )
 from lib.k8s_context import resolve_vars
@@ -174,12 +175,21 @@ def bundle_ordering(
     host: str = K8S_HOST,
     host_vars: Path = HOST_VARS,
     group_vars: Path = GROUP_VARS,
+    roles: Path = K8S_ROLES,
 ) -> Ordering:
     """What the bundle generates `dependsOn` from: the play's own dependency map (D4.2).
 
     The map is `build_k8s_dep_map` over the full k8s `containers_list`, as `deploy.yml`
     builds it, never a `--role` subset, so a tag's edges do not depend on what else renders.
+    The suspended tags are read over every flux-owned role for the same reason (D5.1b).
+
+    Raises:
+        ValueError: A flux-owned role's `flux_suspend`, `flux_prune` or
+            `manifests_rollout_timeout` is not a literal (`role_fields`).
     """
+    fields, problems = role_fields(owned, roles)
+    if problems:
+        raise ValueError("; ".join(problems))
     entries = yaml_fast.safe_load((host_vars / f"{host}.yml").read_text())
     k8s = filter_by_platform(entries.get("containers_list") or [], "k8s")
     group = yaml_fast.safe_load(group_vars.read_text())
@@ -190,6 +200,7 @@ def bundle_ordering(
             str(group[var]): role for var, role in NAMESPACE_ROLE_VARS.items()
         },
         flux_owned=frozenset(owned),
+        suspended=frozenset(tag for tag, own in fields.items() if own.get("suspend")),
     )
 
 

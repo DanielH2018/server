@@ -2204,6 +2204,9 @@ timers or entry regenerates its glance block with `scripts/docs/gen_role_glance.
    C-4b waits on D6, and D6 waits on D5's tail, but nothing from C-1 to C-7 waits on C-4b.
    D6's every-entry-flux-owned precondition then waits for C-2b, through the uptime-kuma
    edge.
+
+   **Applied on 2026-10-16.** The slice index carries M6a, M6b with the B-1 exception, and
+   M6c, with every sub-edge above and the no-cycle paragraph. No gate was named.
 2. **Contract gap, C7: who sets `service` for an exporter.** The health gate's `service` must
    also match blackbox targets and bridge rows. C7 pins the label but not who sets it for an
    exporter. Resolution: C7 adds "a target label set by the scrape config, or a literal in the
@@ -2211,6 +2214,8 @@ timers or entry regenerates its glance block with `scripts/docs/gen_role_glance.
 3. **Contract gap, C7 and H2.** CronJob-based checks (B7, and H2's moved crons) alert on
    kube-state-metrics series, which C7 does not name. Resolution: C7 lists the CronJob recipe
    beside M3's textfile contract.
+   **Applied on 2026-10-16.** C7 *Check producers* names the recipe, and the gate before
+   B7's pi-peer-backup shadow PR is clear.
 4. **Contract gap, C7: the health gate's selector.** Phase B item 1 departs from C7's literal
    `ALERTS{alertstate="firing",service="<tag>"}` and `probe_success{service="<tag>"}` in six
    ways:
@@ -2232,6 +2237,8 @@ timers or entry regenerates its glance block with `scripts/docs/gen_role_glance.
    definition of it. B-1 merges only after that amendment lands. Because the definition is
    shared, a `drill` exclusion cannot apply to one reader only, which is why the drill's tag
    must not be flux-owned.
+   **Applied on 2026-10-16.** C7 *Health gate* states the six departures and the shared
+   definition, and the gate before B-1 merges is clear.
 5. **Batch order against H2.** Either side can go first (see *Phase A*). Resolution: whichever
    slice reaches a cron first converts it, and the other slice's plan drops that cron from its
    list.
@@ -2288,6 +2295,9 @@ timers or entry regenerates its glance block with `scripts/docs/gen_role_glance.
       C7's Open question 4 amendment only) to the M6 split row, and add C-1's edge to D5's
       registry PR.
     - Until they land, the index governs, and *Order* states the stall it implies.
+    - **Applied on 2026-10-16.** All three corrections are in the index: D5's row names
+      littlelink's flux PR, M6b carries the B-1 to B-1e exception, and M6c carries C-1's
+      edge to D5's registry PR.
 13. **Registry GC belongs to D5.** D5's Wave D registry PR retires the GC, its tile and its
     token, and D5's Open question 15 names D5 the only owner. Resolution: B6 drops
     registry-gc, and M6 counts 78 tokens. C-1 waits for D5's registry PR, which the index

@@ -1169,6 +1169,7 @@
  "scripts/renderer/tests/test_renderer_sops_manifests.py": 1.86,
  "scripts/renderer/tests/test_renderer_standalone_map.py": 11.58,
  "scripts/renderer/tests/test_renderer_stub_file.py": 0.02,
+ "scripts/renderer/tests/test_renderer_suspend.py": 0.0,
  "scripts/renderer/tests/test_renderer_task_inputs.py": 1.34,
  "scripts/renderer/tests/test_renderer_template_census.py": 0.35,
  "scripts/renderer/tests/test_renderer_trailing_newlines.py": 0.05,
