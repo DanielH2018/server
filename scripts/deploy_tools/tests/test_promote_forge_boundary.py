@@ -29,6 +29,7 @@ PROMOTE_LIB_MEMBERS = frozenset(
         "forward_only.py",
         "reads.py",
         "ci_contexts.py",
+        "stateful.py",
     }
 )
 

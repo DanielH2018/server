@@ -109,3 +109,9 @@ this role's snapshot and the apply, gated on `k8s_restore_snapshot_sha` — whic
 only when it redeploys a failed auto-deploy's prior good commit, and which carries the FAILED
 commit's SHA. The claim list comes from the rolled-back-to tree, so a claim the failed commit
 renamed makes that role's "no snapshot matches this deploy" assert fire before anything moves.
+
+That automation covers an Ansible-owned role only. A flux-owned role takes its snapshot in the
+`<tag>-snapshot` Job, and its rollback IS a manual operation. `promote` runs in CI and cannot
+reach Longhorn, so a failed revision that changes a snapshot role holds as `<T> stateful=<names>`
+and leaves `prod` on T. The hold's Discord post carries each changed role's revert commands.
+`docs/flux-deploy-plane.md`'s *Snapshot roles hold without a reset* has the rule.

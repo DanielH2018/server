@@ -220,13 +220,19 @@ def hold_lines(snap: dict) -> list[str]:
 
 
 def hold_cause(value: str | None) -> str:
-    """The cause a `suspended-changed=` hold names, as a suffix for its line, else "".
+    """The cause a `suspended-changed=` or `stateful=` hold names, as a line suffix, else "".
 
     `promote.py decide` writes `<R> suspended-changed=<tags>` when R changes a tag suspended
     at both `last-good` and R (D5.1d). A clear alone holds again at the next `decide`, so the
-    suffix names the way out.
+    suffix names the way out. `settle` writes `<T> stateful=<names>` when a failed T changes a
+    snapshot role (D5.2b1), and leaves `prod` on T, so the suffix names the runbook.
     """
     _, _, rest = (value or "").partition(" ")
+    if rest.startswith("stateful="):
+        return (
+            f"   cause: stateful, {rest.removeprefix('stateful=')} failed and prod was not "
+            "reset. Follow the hold's Discord post and docs/volume-snapshot-drills.md"
+        )
     if not rest.startswith("suspended-changed="):
         return ""
     tags = rest.removeprefix("suspended-changed=")

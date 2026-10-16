@@ -6,7 +6,7 @@ name: promote
 # docs/target-architecture/contracts.md C2 is the contract. The operator's view is
 # docs/flux-deploy-plane.md.
 #
-# Six jobs, so code that runs during a render or a decision never holds a token that can sign,
+# Seven jobs, so code that runs during a render or a decision never holds a token that can sign,
 # push or move a tag:
 #   render   contents: read, checks: read. Checks out the triggering commit, or the dispatched
 #            `sha`, refuses one that is not on master, re-reads a dispatched commit's CI,
@@ -26,12 +26,17 @@ name: promote
 #   verify   contents: read, statuses: read. Runs `promote.py verify T`, which waits on T's
 #            commit statuses for T's changed set and prints `good` or `failed`.
 #   settle   packages: write, actions: write. Checks out nothing. A good verdict moves
-#            `last-good` to T. When T changes a forward-only tag, anything else writes
-#            DEPLOY_HOLD as T's SHA alone, tags T `held` and leaves `prod`. Otherwise it writes
-#            DEPLOY_HOLD, then resets `prod` to
+#            `last-good` to T. When T changes a snapshot role (D5.2b1), anything else writes
+#            DEPLOY_HOLD as `<T> stateful=<names>`, tags T `held` and leaves `prod`. When T
+#            changes a forward-only tag, it writes T's SHA alone in the same way. Otherwise it
+#            writes DEPLOY_HOLD, then resets `prod` to
 #            `last-good` and records PROD_DIGEST. Contract C2's *Verification* is the rule.
 #            Once either succeeds, it dispatches this workflow for master's newest green
 #            commit when that commit is newer than T.
+#   post     contents: read. Runs only after `settle` wrote the stateful hold. Checks out this
+#            workflow's own commit and runs `promote.py hold`, which posts the hold, with a
+#            command block per changed snapshot role, to the deployer's Discord channel through
+#            the DEPLOY_DISCORD_WEBHOOK secret. A failed post fails the run.
 #
 # ansible/tests/repo/test_promote_workflow.py holds every guard, permission and handoff here.
 
@@ -422,6 +427,7 @@ jobs:
       seed: ${{ steps.decide.outputs.seed }}
       clears_hold: ${{ steps.decide.outputs.clears_hold }}
       no_reset: ${{ steps.decide.outputs.no_reset }}
+      stateful: ${{ steps.decide.outputs.stateful }}
     steps:
       # This workflow's own commit, so the promote.py that runs matches the promote.yml that
       # calls it. A workflow_run always runs master's copy of this file.
@@ -649,6 +655,9 @@ jobs:
     permissions:
       packages: write
       actions: write  # the dispatch step's, which starts the next promote run
+    outputs:
+      # Set once the stateful hold is written, and read by `post`.
+      stateful_hold: ${{ steps.apply.outputs.stateful_hold }}
     steps:
       - uses: fluxcd/flux2/action@b9c17924adb533d3617ec7de97a7b0f4acc07b39 # v2.9.6
         with:
@@ -666,12 +675,21 @@ jobs:
       # `failed=` or `unverified`, and leaves `prod` on T. A reset would re-apply an older
       # Longhorn or MetalLB over upgraded objects. It then tags T's digest `held`, which
       # `decide`'s in-flight wait reads once the operator clears the hold.
+      #
+      # The stateful hold (D5.2b1): when `decide` named snapshot roles T changes, anything but
+      # good writes DEPLOY_HOLD as `<T> stateful=<names>`, or `<T> stateful=unverified` when
+      # verify left no usable names, tags T `held` and leaves `prod`. A reset would apply the
+      # old image onto data T may have migrated. It comes before the forward-only branch, so a
+      # T that changes both writes the stateful form, which also never resets. The value goes
+      # to the `stateful_hold` output once written, and the `post` job posts it.
       - name: Apply the verdict
+        id: apply
         env:
           TARGET: ${{ needs.promote.outputs.target }}
           RESET_DIGEST: ${{ needs.promote.outputs.reset_digest }}
           CLEARS_HOLD: ${{ needs.promote.outputs.clears_hold }}
           NO_RESET: ${{ needs.promote.outputs.no_reset }}
+          STATEFUL: ${{ needs.promote.outputs.stateful }}
           VERDICT: ${{ needs.verify.outputs.verdict }}
           FAILED_NAMES: ${{ needs.verify.outputs.failed }}
           GH_ACTOR: ${{ github.actor }}
@@ -694,6 +712,25 @@ jobs:
               gh variable set DEPLOY_HOLD --body none -R "$GITHUB_REPOSITORY" \
                 || { echo "::error::the revert rule's clear of DEPLOY_HOLD failed"; exit 1; }
               echo "DEPLOY_HOLD cleared by the revert rule"
+            fi
+            exit 0
+          fi
+
+          if [ -n "$STATEFUL" ]; then
+            if [ "$VERDICT" = failed ] && printf '%s' "$FAILED_NAMES" | grep -Eqx '[a-z0-9-]+(,[a-z0-9-]+)*'; then
+              hold="$TARGET stateful=$FAILED_NAMES"
+            else
+              hold="$TARGET stateful=unverified"
+            fi
+            if ! gh variable set DEPLOY_HOLD --body "$hold" -R "$GITHUB_REPOSITORY"; then
+              echo "::error::writing DEPLOY_HOLD='$hold' failed, so prod stays on sha-$TARGET untagged and nothing posts"
+              exit 1
+            fi
+            echo "stateful_hold=$hold" >> "$GITHUB_OUTPUT"
+            echo "DEPLOY_HOLD set to '$hold': T changes snapshot role(s) $STATEFUL, so prod stays on sha-$TARGET"
+            if ! { login && flux tag artifact "oci://$repo:sha-$TARGET" --tag held; }; then
+              echo "::error::tagging sha-$TARGET held failed, so the next run after a clear waits as in flight"
+              exit 1
             fi
             exit 0
           fi
@@ -778,3 +815,52 @@ jobs:
           fi
           gh workflow run promote.yml -R "$GITHUB_REPOSITORY" --ref master -f sha="$newest"
           echo "dispatched promote for $newest, master's newest green commit, which is newer than $TARGET"
+
+  post:
+    needs: [promote, tag, verify, settle]
+    # always() so the post still goes out when `settle` wrote the stateful hold and then
+    # failed to tag T `held`. `stateful_hold` is set only once the hold is written.
+    if: >-
+      always() &&
+      needs.settle.outputs.stateful_hold != '' &&
+      !inputs.verify_drill &&
+      github.ref == 'refs/heads/master' && (
+      github.event_name == 'workflow_dispatch' || (
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.head_branch == 'master' &&
+      github.event.workflow_run.head_repository.full_name == github.repository))
+    runs-on: ubuntu-26.04
+    timeout-minutes: 5
+    # Repo code runs here, so the job holds no token that writes: `settle` wrote the hold, and
+    # the post reads `decide`'s record from the artifact rather than from the registry.
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - uses: ./.github/actions/setup  # zizmor: ignore[self-repository] -- see the action's header
+
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: verify-input
+          path: ${{ runner.temp }}/verify-input
+
+      # The record `decide` wrote beside the bundles names each changed snapshot role's digest8
+      # and claims and `sha-<T>`'s digest. The webhook is the repository secret
+      # DEPLOY_DISCORD_WEBHOOK, a copy of the SOPS value gitops_deploy_discord_webhook, and
+      # promote.py never prints it.
+      - name: Post the stateful hold
+        env:
+          TARGET: ${{ needs.promote.outputs.target }}
+          HOLD: ${{ needs.settle.outputs.stateful_hold }}
+          VERDICT: ${{ needs.verify.outputs.verdict }}
+          FAILED_NAMES: ${{ needs.verify.outputs.failed }}
+          DEPLOY_DISCORD_WEBHOOK: ${{ secrets.DEPLOY_DISCORD_WEBHOOK }}
+        run: >-
+          uv run --frozen python scripts/deploy_tools/promote.py hold "$TARGET"
+          --hold "$HOLD" --bundle-dir "$RUNNER_TEMP/verify-input"
+          --verdict "$VERDICT" --failed "$FAILED_NAMES"

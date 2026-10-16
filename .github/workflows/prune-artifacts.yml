@@ -8,7 +8,7 @@ name: prune-artifacts
 # docs/target-architecture/deploy/d1-flux-installed.md (*Decisions*, *Old artifact versions are
 # pruned daily*), and the operator's view is docs/flux-deploy-plane.md.
 #
-# ansible/tests/repo/test_promote_workflow.py holds this file's guard, permissions and
+# ansible/tests/repo/test_prune_artifacts_workflow.py holds this file's guard, permissions and
 # concurrency group, and holds its cosign installer step equal to promote.yml's.
 
 on:
