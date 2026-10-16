@@ -906,6 +906,7 @@ jobs:
       - name: Install sops, age and kind
         if: github.event_name == 'workflow_dispatch' || steps.scope.outputs.changed == 'true'
         env:
+          # renovate: datasource=github-release-attachments depName=kubernetes-sigs/kind
           KIND_VERSION: v0.33.0
           KIND_SHA256: aee6151561422756b764a4ae28e7f44cda5af5a9eead3cc9985112b1de8d8e0d
         run: |
@@ -931,10 +932,14 @@ jobs:
 
       # The registry sits on kind's docker network, so source-controller reaches it by container
       # name and the runner pushes through the published port. Its image is read from the
-      # registry role's pin, registry_k8s_image, so this job holds no copy of it.
+      # registry role's pin, registry_k8s_image, so this job holds no copy of it. The node
+      # image is one the pinned kind release lists, on k3s_version's Kubernetes minor:
+      # ansible/tests/repo/test_kind_node_image_follows_k3s.py holds the minor, and Renovate
+      # offers it patch and digest bumps only.
       - name: Create the kind cluster, the registry and the pinned Flux controllers
         if: github.event_name == 'workflow_dispatch' || steps.scope.outputs.changed == 'true'
         env:
+          # renovate: datasource=docker depName=kindest/node
           KIND_NODE_IMAGE: kindest/node:v1.37.0@sha256:a1ed56cfb0e7b93589bdf97c8cd566405a265939e3620fc4f5de89adff580ae5
         run: |
           set -euo pipefail
