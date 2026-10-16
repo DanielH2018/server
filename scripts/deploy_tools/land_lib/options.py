@@ -116,6 +116,8 @@ class Options:
     # outside a Claude session. The fan-out passes its worktree's `.fanout/`, which is where
     # `fanout_lib/status.py` greps for the verdict.
     log_dir: str = ""
+    # `--regate <pr>`: re-run a merged pin bump's gates and re-post its status, no landing.
+    regate: bool = False
 
     @property
     def policy_active(self) -> bool:
@@ -134,7 +136,14 @@ def parse_args(argv: list[str] | None, description: str) -> Options:
         # would instead silently resolve it to `--subject` (or `--sin` to `--since`).
         allow_abbrev=False,
     )
-    parser.add_argument("--pr", required=True, help="the PR number")
+    which = parser.add_mutually_exclusive_group(required=True)
+    which.add_argument("--pr", help="the PR number")
+    which.add_argument(
+        "--regate",
+        metavar="PR",
+        help="re-run a merged pin bump's upgrade gates and re-post homelab/upgrade-gates; "
+        "never merges or deploys",
+    )
     parser.add_argument(
         "--since", default="", help="pre-merge SHA, for the truncated-list fallback"
     )
@@ -181,13 +190,19 @@ def parse_args(argv: list[str] | None, description: str) -> Options:
         help="write PENDING here, then the landing's one-line result",
     )
     ns = parser.parse_args(argv)
+    if ns.regate and (ns.arm_merge or ns.await_merge or ns.tags or ns.detach):
+        parser.error(
+            "--regate re-runs the gates for a merged PR and nothing else; drop "
+            "--arm-merge, --await-merge, --tags and --detach"
+        )
     if ns.await_verdict:
         parser.error(
             "--await-verdict is retired; wait with cc-wait instead: "
             f"land.sh --pr {ns.pr} ... --detach && cc-wait land {ns.pr}"
         )
     return Options(
-        pr=ns.pr,
+        pr=ns.regate or ns.pr,
+        regate=bool(ns.regate),
         since=ns.since,
         tags=ns.tags,
         ci_timeout=ns.ci_timeout,

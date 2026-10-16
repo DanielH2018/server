@@ -1,4 +1,4 @@
-"""`runbook_gates.py`, the one entry point over the five runbooks' gate modules (#4344).
+"""`runbook_gates.py`, the one entry point over the six runbooks' gate modules (#4344).
 
 Run: uv run pytest scripts/deploy_tools/tests/test_runbook_gates_dispatch.py
 """
@@ -19,6 +19,7 @@ RUNBOOKS = frozenset(
         "k3s-upgrade",
         "longhorn-dr",
         "longhorn-upgrade",
+        "metallb-upgrade",
         "pinned-rotation",
     }
 )

@@ -4,7 +4,8 @@
 A runbook whose safety is step order lists its stop conditions as gates. Each runbook's gates
 are one module in runbook_gates_lib/ beside this file, and this entry point runs the one its
 first argument names. `--list` prints every runbook. `runbook_gates.py <runbook> --help`
-prints that runbook's gates, exit codes and arguments.
+prints that runbook's gates, exit codes and arguments. `land.sh` runs `longhorn-upgrade` or
+`metallb-upgrade` before it merges a forward-only pin bump (`land_lib/pin_gate.py`).
 
 Exit codes:
   0      every gate run passed
@@ -64,6 +65,11 @@ for _name, _module, _description in (
         "longhorn-upgrade",
         "longhorn_upgrade",
         "docs/longhorn-upgrade.md, before the Longhorn hop",
+    ),
+    (
+        "metallb-upgrade",
+        "metallb_upgrade",
+        "a MetalLB pin bump, before land.sh merges it",
     ),
     (
         "pinned-rotation",

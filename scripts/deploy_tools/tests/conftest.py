@@ -99,7 +99,7 @@ def land_run(capsys, monkeypatch):
         f = fakes or Fakes()
         tools, calls = build_tools(f)
         classifier = build_classifier(f, calls) if classifier is None else classifier
-        if "--pr" not in argv:
+        if "--pr" not in argv and "--regate" not in argv:
             argv = [*argv, "--pr", "999"]
         real_parse = land.parse_args
         monkeypatch.setattr(

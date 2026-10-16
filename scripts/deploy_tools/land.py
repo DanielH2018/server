@@ -58,6 +58,15 @@ Usage::
                                              # the one-command form: own logfile, shared wait
     land.sh --pr 574 --detach --log-dir .fanout && cc-wait land 574 --log-dir .fanout
                                              # put the log somewhere else
+    land.sh --regate 574                     # re-run a merged pin bump's gates and
+                                             # re-post homelab/upgrade-gates; never merges
+
+A PR THAT BUMPS A FORWARD-ONLY PIN MERGES ONLY THROUGH THE PIN GATE. When the head moves
+`k3s_longhorn_version` or `k3s_metallb_version`, the direct merge first requires daniel-box,
+DEPLOY_HOLD reading `none`, no bump of that pin in (last-good, master tip], and a green
+`runbook_gates.py longhorn-upgrade` or `metallb-upgrade`. It then posts `homelab/upgrade-gates`
+on the head. `--regate <pr>` re-runs the gates for a merged bump and re-posts the status; it
+exits 0 when it posted and 1 when it refused. `land_lib/pin_gate.py` has the rule.
 
 Exit codes:
   0   deployed and settled, or there was nothing to deploy
@@ -109,7 +118,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))  # scripts/
 from lib.exit_codes import LAND_BAD_ARGS
 from lib.git import git
-from deploy_tools.land_lib import detach, handoff, pipeline
+from deploy_tools.land_lib import detach, handoff, pin_gate, pipeline
 from deploy_tools.land_lib.landing import Landing
 from deploy_tools.land_lib.ledger import annotation_line
 from deploy_tools.land_lib.options import HANDOFF_ENV, Options, parse_args
@@ -172,6 +181,8 @@ def main(
         opts = parse_args(argv, help_text(__doc__ or ""))
     except SystemExit as exc:
         raise SystemExit(LAND_BAD_ARGS if exc.code == 2 else exc.code) from None
+    if opts.regate:
+        return _regate(opts, tools)
     unit = os.environ.get(HANDOFF_ENV)
     if unit:
         return _hand_off(opts, unit, tools)
@@ -179,6 +190,21 @@ def main(
         opts = _resolve_since(opts)
         return _detached(opts, lambda: _land(opts, tools, classifier))
     return _land(opts, tools, classifier)
+
+
+def _regate(opts: Options, tools: Tools) -> int:
+    """`--regate <pr>`: the pin gate's gates and status post for a merged PR; its exit code.
+
+    It runs before the `LAND_HANDOFF_UNIT` hand-off on purpose. The lander unit exists to
+    merge and deploy, and a regate does neither, so it runs as the caller, whose login the
+    status description records. It writes no landing annotation for the same reason.
+    """
+    try:
+        pin_gate.regate(Landing(opts, tools))
+    except Outcome as outcome:
+        outcome.emit()
+        return outcome.rc
+    return 0
 
 
 def _hand_off(opts: Options, unit: str, tools: Tools) -> int:

@@ -25,6 +25,25 @@ Exit 0 means all four passed. Exit 1–4 is the gate that failed, and the script
 found. Exit 69 means the cluster could not be asked. Run it on daniel-box: gate 2 reads the
 restore drill's stamp, which exists only there.
 
+**`land.sh` runs these gates at the merge.** Merging the pin is the upgrade (H1 Open question 6,
+ruled 2026-10-16), so `land.sh --arm-merge --await-merge` runs
+`runbook_gates.py longhorn-upgrade` before it merges a PR that changes `k3s_longhorn_version`.
+`scripts/deploy_tools/land_lib/pin_gate.py` owns the check. Before the gates, it refuses in
+three cases:
+
+- on any host but daniel-box;
+- while `DEPLOY_HOLD` reads anything but `none`, empty and missing included;
+- while (`last-good`, master tip] already holds a change to the pin, so a second bump never
+  merges ahead of the first one's verification.
+
+On a pass it posts the commit status `homelab/upgrade-gates` on the PR's head SHA. Once H1.1b
+lands, `promote` requires that status before it applies the bump. Until H1 hands Longhorn to
+Flux, a merged bump still applies through the per-hop procedure below. A merge made any other way skips
+the gate. For such a merge, `land.sh --regate <pr>` re-runs the gates and re-posts the status
+without merging. A fix-forward bump after a failed bump is **operator-only**: the operator
+merges it outside `land.sh`, runs `land.sh --regate <pr>` for it, then clears the hold with
+`gh variable set DEPLOY_HOLD --body none -R DanielH2018/server`.
+
 1. **The backup target is armed and available.** `default` must carry a URL, and every target
    that carries one must report `available` — an armed target that is not available cannot
    list what it holds, let alone restore it.
@@ -100,7 +119,8 @@ Check `Ready` for the actual health signal; the other conditions are advisory.
 ## Staying current afterwards
 
 Renovate tracks the pin (`renovate.json`, manager for
-`ansible/roles/setup/k3s/defaults/main.yml`) with `automerge: false`. A Renovate PR that jumps
+`ansible/roles/setup/k3s/defaults/main.yml`) with `automerge: false`, in a `Longhorn (manual — …)`
+group of its own that names the merge gate above. Land its PR through `land.sh`. A Renovate PR that jumps
 more than one minor is not directly mergeable, because Longhorn supports one minor per hop.
 Treat that PR as the signal to take the next minor through the per-hop procedure above. A PR
 for the next minor or a patch is directly actionable through that procedure.
