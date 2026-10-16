@@ -12,7 +12,7 @@ Run: uv run pytest scripts/renderer/tests/test_renderer_job_census.py
 import copy
 
 import pytest
-from _job_census import HELPER, JOB_KIND, RERUN_SAFE, load, problems
+from _job_census import HELPER, JOB_KIND, RERUN_SAFE, load, problems, script_offence
 
 from deploy_tools.bundle_census import published_tags
 from lib.exit_codes import RENDER_OK
@@ -188,6 +188,51 @@ def test_a_job_outside_a_job_directory_is_flagged(directory):
     ],
 )
 def test_a_script_that_connects_without_the_helper_is_flagged(script):
+    assert _rows(_verify(script=script)) == {"helper"}
+
+
+# #5274: each reaches a connecting module through one ALLOWED_IMPORTS lets in, by a name
+# FORBIDDEN does not hold, so the import allowlist alone does not catch it.
+@pytest.mark.parametrize(
+    "script",
+    [
+        pytest.param(
+            "import flux_job_connect as f\n\n"
+            "f.urllib.request.HTTPHandler().http_open(f.Request('http://x'))\n",
+            id="handler-through-helper",
+        ),
+        pytest.param(
+            "import urllib.error\n\nimport flux_job_connect\n\n"
+            "urllib.request.HTTPHandler().http_open(flux_job_connect.Request('http://x'))\n",
+            id="handler-through-urllib-error",
+        ),
+        pytest.param(
+            "import sys, flux_job_connect\n\n"
+            "sys.modules['socket'].socket().connect(('x', 80))\n",
+            id="sys-modules-socket",
+        ),
+    ],
+)
+def test_script_offence_flags_a_connection_through_an_allowed_module(script):
+    assert script_offence("run.py", script)
+
+
+@pytest.mark.parametrize(
+    "script",
+    [
+        pytest.param(
+            "import flux_job_connect as f\n\n"
+            "f.urllib.request.HTTPSHandler().https_open(f.Request('https://x'))\n",
+            id="https-handler",
+        ),
+        pytest.param(
+            "import flux_job_connect as f\n\n"
+            "f.urllib.request.socket.socket().connect(('x', 80))\n",
+            id="socket-attribute",
+        ),
+    ],
+)
+def test_a_job_whose_script_reaches_a_module_through_the_helper_is_flagged(script):
     assert _rows(_verify(script=script)) == {"helper"}
 
 
