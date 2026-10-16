@@ -4,6 +4,7 @@
   - `health_rollout.py` — `format_k8s_health`, the Deployment/DaemonSet verdict
   - `health_cronjob.py` — `format_cronjob_health`, the CronJob verdict
   - `health_docker.py`  — the Pi's Docker containers and the ClusterIP lookups
+  - `health_vendored.py` — the workloads a role's vendored upstream files declare
 
 What stays here is the part that needs all four: resolving a deploy tag to the workloads the
 role's rendered manifests declare, fetching each one, and rolling the per-workload verdicts up
@@ -64,6 +65,10 @@ from diagnostics.probe_lib.health_kubectl import (
     pod_selector,
 )
 from diagnostics.probe_lib.health_rollout import format_k8s_health, unrolled_reason
+from diagnostics.probe_lib.health_vendored import (
+    require_a_vendored_workload,
+    vendored_targets,
+)
 
 from lib.exit_codes import PROBE_UNREADABLE
 from lib.kubectl import (
@@ -116,7 +121,8 @@ def _role_kind_targets(role, default_namespace, kinds):
     this reuses validate.k8s_manifests' own render machinery rather than a second renderer or a
     hand-written role->workload table. `namespace` comes from each object's own metadata,
     falling back to `default_namespace` for the majority that omit it — the same rule
-    `kubectl apply -f` follows.
+    `kubectl apply -f` follows. The objects of the role's vendored files count as well
+    (`health_vendored.vendored_targets`).
 
     Raises on a render failure rather than returning None. Fail closed: a role whose templates
     stopped rendering must not degrade to the guess-the-name path, where a miss reads as a skip.
@@ -156,6 +162,7 @@ def _role_kind_targets(role, default_namespace, kinds):
                     meta.get("name"),
                 )
             )
+    targets |= vendored_targets(role_dir, default_namespace, kinds)
     return sorted(targets)
 
 
@@ -173,8 +180,14 @@ def role_workload_targets(role, default_namespace):
     "no Deployment or DaemonSet", which the deploy notifier skipped — so the gate silently did
     not run. Seven more roles (crowdsec, freshrss, karakeep, loki-homelab, n8n, pihole,
     prowlarr) deploy a workload named after the tag PLUS siblings that went unchecked.
+
+    Raises when a role with vendored files resolves no workload, which run_health reports as
+    a failure (`health_vendored.require_a_vendored_workload`).
     """
-    return _role_kind_targets(role, default_namespace, WORKLOAD_KINDS)
+    targets = _role_kind_targets(role, default_namespace, WORKLOAD_KINDS)
+    if targets is not None:
+        require_a_vendored_workload(K8S_ROLES / role, targets)
+    return targets
 
 
 def role_scalable_targets(role, default_namespace):
