@@ -16,6 +16,10 @@ which `changed_set.changed_set` computes from T's `digests.json` and `prod`'s, a
 `dependsOn` and `suspend` come from T's own bundle, never from the job's `out/`, which is the
 render of the commit that triggered the run.
 
+A SUSPENDED TAG IS NOT EXPECTED (D5.1b): it never posts, so expecting it would time out,
+hold and reset. `bundle_graph` leaves out every Kustomization of a tag T's `digests.json` marks
+`suspended`, and any whose own document sets `spec.suspend: true`.
+
 A DEPENDENT THAT WAS ALREADY FAILING (H1.1i) is excused: reported as `excused <name>` and not
 expected. A dependent is a member of the changed set that joined only through its `dependsOn`
 chain, its own footprint unchanged. Before `prod` moves, `decide` records the newest
@@ -77,9 +81,10 @@ from lib.exit_codes import FAILED, OK, USAGE_ERROR
 
 import forge
 from artifact_retention import HELD_TAG, LAST_GOOD_TAG, PROD_TAG
-from changed_set import ROOT, changed_set, footprints
+from changed_set import ROOT, changed_set, footprints, suspended_tags
 from chained_timeout import promote_timeout
 from deploy_tools.promote_lib.wait import kustomization_graph
+from renderer.renderer_lib.ordering import split_kind
 
 DIGESTS_FILE = "digests.json"
 # The statuses `decide` recorded on `prod`'s commit, at the handoff's root beside `prod/` and
@@ -222,6 +227,20 @@ def flux_kustomizations(files: dict[str, bytes]) -> list[dict]:
     return found
 
 
+def bundle_graph(
+    target: dict[str, bytes], docs: list[dict]
+) -> tuple[dict[str, list[str]], set[str]]:
+    """T's `dependsOn` per Kustomization, and the Kustomizations suspended in T.
+
+    A Kustomization is suspended when its document sets `spec.suspend: true` or when it
+    belongs to a tag whose object in T's `digests.json` reads `suspended: true`.
+    """
+    depends_on, suspended = kustomization_graph(docs)
+    tags = suspended_tags(bundle_digests(target))
+    suspended |= {name for name in depends_on if split_kind(name)[0] in tags}
+    return depends_on, suspended
+
+
 @dataclass(frozen=True)
 class Expected:
     """What `verify` waits on.
@@ -254,7 +273,7 @@ def expected_set(target: dict[str, bytes], prod: dict[str, bytes] | None) -> Exp
         yaml.YAMLError: a file under `flux/` is not YAML.
     """
     docs = flux_kustomizations(target)
-    depends_on, suspended = kustomization_graph(docs)
+    depends_on, suspended = bundle_graph(target, docs)
     old = bundle_digests(prod) if prod is not None else None
     found = changed_set(bundle_digests(target), old, depends_on, suspended)
     return Expected(
@@ -281,7 +300,7 @@ def prior_statuses(
         Whatever `read` raises, so a failed read is `decide`'s `error` and moves nothing.
     """
     try:
-        depends_on, suspended = kustomization_graph(flux_kustomizations(target))
+        depends_on, suspended = bundle_graph(target, flux_kustomizations(target))
     except yaml.YAMLError:
         return {}
     found = changed_set(
