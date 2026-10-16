@@ -368,15 +368,18 @@
   become: true
   when: not k8s_dry_run | bool
 
-# The 2026-10-01 rename from claude-otel (#2911) left the old service's release records beside
-# observability.json; nothing declares claude-otel any more, so they are dead copies (#3088).
-- name: Remove the release records the claude-otel name left behind
+# The 2026-10-01 rename from claude-otel (#2911) left the old service's release and render
+# records beside observability.json; nothing declares claude-otel any more, so they are dead
+# copies (#3088). A render record with no release record reads as `unknown: no release record`
+# in every narrow-shadow line and in `probe.py releases` (#5162).
+- name: Remove the release and render records the claude-otel name left behind
   tags: [config]
   ansible.builtin.file:
-    path: "/var/lib/homelab/k8s-releases.d/{{ item }}"
+    path: "{{ item }}"
     state: absent
   loop:
-    - claude-otel.json
-    - claude-otel.previous.json
+    - /var/lib/homelab/k8s-releases.d/claude-otel.json
+    - /var/lib/homelab/k8s-releases.d/claude-otel.previous.json
+    - /var/lib/homelab/k8s-renders.d/claude-otel.json
   become: true
   when: not k8s_dry_run | bool

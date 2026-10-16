@@ -42,9 +42,12 @@ rule's unit-name pattern to the PR numbers the script accepts.
 The session starts the lander with a plain `systemctl start`, which blocks until the landing
 ends. The unit raises Claude Code's 10-minute Bash cap to `renovate_agent_bash_timeout_ms`
 through `BASH_MAX_TIMEOUT_MS`, so the call outlasts the 60-minute `TimeoutStartSec` of the lander unit. A
-call cut short leaves the landing running, and the verdict file still holds the last run's line
-until the lander takes its lock and writes `PENDING`. The prompt therefore waits on the unit's
-`ActiveState` before it reads the file.
+call cut short leaves the landing running, so the prompt waits on the unit's `ActiveState`
+before it reads the file. The unit's `ExecStartPre` replaces the last run's line with a `VERDICT:
+none` line before the lock wait, and the script writes `PENDING` once it holds the lock. A unit
+that systemd stops mid-landing, by `TimeoutStartSec` or a kill, leaves `PENDING` behind. The
+prompt therefore also reads the unit's `Result`: only `success` and `exit-code` mean the script
+wrote its outcome, and anything else is no verdict (#5205).
 
 ## The session's own identity
 
