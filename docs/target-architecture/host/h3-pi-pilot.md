@@ -103,7 +103,10 @@ installs it. Until that gate passes, the Pi's updater runs only when the operato
   inline. Both also render `domain` into `KUMA_HOST`. `grep -c '^<key>:'
   ansible/vars/secrets.yml` prints 1 for each of the three. A join of every name the three
   templates read against the `secrets.yml` key names finds no fourth. The integrity sweep reads
-  none. Both token scripts install at mode 0700 with `no_log: true`.
+  none. Both token scripts install at mode 0700 with `no_log: true`. Since #5087, `domain` is
+  no longer a `secrets.yml` key, and `grep -c '^domain:' ansible/vars/secrets.yml` prints 0.
+  It lives in `ansible/inventory/group_vars/all.yml`, so only the two push tokens are
+  credentials.
 - **The moved templates read role defaults and inventory.** `pi-gz-integrity.sh.j2` and
   `pi-sd-health.sh.j2` read `optimize_pi_gz_integrity_roots`, `_min_files`, `_state_file` and
   `_max_age_h`. The recovery cron's `state:` reads `optimize_pi_recovery_restart_enabled`. All
@@ -204,7 +207,10 @@ installs it. Until that gate passes, the Pi's updater runs only when the operato
   `probe_lib/kuma_live.py`), so neither runs as the `claude` user. The operator ruled on
   2026-10-14 that `domain` is published. Domain PR 1 of the *Publish `domain`* item in R2's
   *Steps, as PRs* makes both functions read the inventory value, so this age-key blocker
-  goes away once domain PR 1 lands.
+  goes away once domain PR 1 lands. Domain PR 1 has landed: `core.py:domain` reads
+  `ansible/inventory/group_vars/all.yml`, and #5087 deleted `domain` from `secrets.yml`.
+  Neither `probe.py metric` nor `probe.py monitors` reads `secrets.yml` any more; only
+  `probe.py kuma-drift` does, through `probe_lib/monitors.py:gate_var_state`.
 - **The CI gate is one context.** `ci.yml`'s `prek` job carries the required context
   `prek (lint + validate + tests + secrets)`, and the deployer reads the same name from
   `gitops_deploy_ci_contexts`. `ansible/tests/repo/test_every_ci_job_is_gated.py` fails a
@@ -1545,9 +1551,10 @@ says otherwise.
     - If the gate fails, stop the slice and follow *Open questions* 2.
 10. **H3.8 The three heartbeats.** This PR comes in two parts, in order.
     - **H3.8a, interim credentials.**
-        - `optimize_pi` writes `/etc/homelab/interim/pi_sd_health_push_token`,
-          `pi_recovery_push_token` and `domain`, root 0600, from SOPS on the controller, as
-          every Ansible-rendered secret is at `70591c307`.
+        - `optimize_pi` writes `/etc/homelab/interim/pi_sd_health_push_token` and
+          `pi_recovery_push_token`, root 0600, from SOPS on the controller, as every
+          Ansible-rendered secret is at `70591c307`. It stages no `domain` file: #5087
+          deleted `domain` from `secrets.yml`, and H3.8b renders it from inventory.
         - **Operator-only:** apply it with `--tags sd-health,recovery-health -e
           target=daniel-pi`, then run `gitops_state.py clear-owed manual_plane optimize_pi
           --applied sd-health,recovery-health`. If the line names no narrowed tags, as
@@ -1556,10 +1563,12 @@ says otherwise.
         - Two-writer check: these files are Ansible-owned, and the package only reads them.
     - **H3.8b, move.**
         - `git mv` the three templates into `hosts/components/pi-heartbeats/templates/`.
-          The two token scripts read all three keys from `$CREDENTIALS_DIRECTORY/<key>`, and
-          their units declare `LoadCredential=<key>:/etc/homelab/interim/<key>` for each. The
-          Jinja comment in `pi-sd-health.sh.j2` that explains `domain`'s precedence goes in
-          the same edit.
+          Each token script reads its own push token from `$CREDENTIALS_DIRECTORY/<key>`,
+          two keys in all, and its unit declares
+          `LoadCredential=<key>:/etc/homelab/interim/<key>`. Both scripts render `domain`
+          from inventory, because #5087 made it a plain inventory value. The Jinja comments
+          about `domain` in `pi-sd-health.sh.j2` and `pi-recovery-health.sh.j2` are deleted
+          in the same edit, not moved.
         - Move the four `optimize_pi_gz_integrity_*` defaults and
           `optimize_pi_recovery_restart_enabled` into the component's `defaults:` map.
         - Add six units: `homelab-pi-sd-health`, `homelab-pi-gz-integrity` and
@@ -1742,8 +1751,8 @@ says otherwise.
 ## Verification
 
 An agent runs the Prometheus block, through the same loopback-then-ClusterIP transport as the
-land host wait. `probe.py metric` and `probe.py monitors` decrypt `domain`, so they are the
-operator's. The operator runs every `ssh daniel-pi` block and every command on the Pi, because
+land host wait. `probe.py metric` and `probe.py monitors` read `domain` from inventory since
+#5087 and decrypt nothing, so an agent may run them too. The operator runs every `ssh daniel-pi` block and every command on the Pi, because
 the `claude` user has no login there. Each ssh call is one batched, read-only command, which
 keeps it under the ssh rate limiter.
 
@@ -2454,9 +2463,11 @@ follow-up and H3.8b each publish a new Pi version before H3.9b arms the timer.
     - the updater's fetch-failure arm and its container case;
     - a canary service and timer, added in H3.10a and removed in H3.10b;
     - one `optimize_pi` task that creates the Pi's textfile directory;
+    - four `optimize_pi` tasks that stage the two interim push-token files (H3.8a), which
+      H4's last PR retires;
     - one runbook page.
-- **Removed:** three crons and eleven tasks from `optimize_pi`, and the inline push tokens and
-  `domain` in two rendered scripts. Five defaults move rather than go.
+- **Removed:** three crons and eleven tasks from `optimize_pi`, and the inline push tokens in
+  two rendered scripts. Five defaults move rather than go.
 - **Net:** this slice adds more than it removes. Its value is the pipeline that H4 to H7
   reuse.
 
@@ -2573,8 +2584,9 @@ reviewer's suggested remedy, the reason is given.
   in ordinary prose.
 - **H3-R1-03 (high) `domain` left in both heartbeat scripts.** Fixed. A join of the
   templates' names against the `secrets.yml` key names finds exactly `domain`,
-  `pi_sd_health_push_token` and `pi_recovery_push_token`. H3.8a stages all three, and H3.8b
-  reads all three at run time.
+  `pi_sd_health_push_token` and `pi_recovery_push_token`. #5087 has since deleted `domain`
+  from `secrets.yml`, so the join finds only the two push tokens. H3.8a stages those two, H3.8b
+  reads them at run time, and H3.8b renders `domain` from inventory.
 - **H3-R1-04 (high) land finishes a `hosts/`-only PR as `nothing-to-deploy`.** Fixed.
   Confirmed by `classify.py:shortcut_if_nothing`. A second early finish was found while
   fixing it: `deploy.py:deploy_phase` calls `deploy.py:no_tag_outcome`, which is `NoReturn`,
@@ -2594,7 +2606,8 @@ reviewer's suggested remedy, the reason is given.
   `prom_endpoint`, the transport `probe.py metric` uses, was rejected because it calls
   `core.py:sops_extract('domain')`, and the agent user has no age key. The operator's ruling
   of 2026-10-14 removes that blocker once domain PR 1 of R2's *Publish `domain`* item lands.
-  A refused transport reads as not settled, with its own message and test.
+  It has landed, and #5087 deleted `domain` from `secrets.yml`. A refused transport reads as
+  not settled, with its own message and test.
 - **H3-R1-08 (high) The rollback cannot run, and it deletes the signing key.** Fixed. The
   role gets its own arm flag, `homelab_builder_enabled`, in its defaults. A flip there is a
   path under `roles/setup/homelab_builder/`, and `deploy_changes.py:setup_tags_for` maps it to
