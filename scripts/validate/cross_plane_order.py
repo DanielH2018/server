@@ -35,8 +35,16 @@ cluster` and refuses two shapes:
   Ansible staged, and Flux at the old `prod` re-creates it. Such a service retires by two
   PRs instead (docs/flux-deploy-plane.md, *Retiring a flux-owned service*).
 
-Arms 3 and 4 run from `gate()` alone, through `removal_problems()`, so the replay of master's
-squash commits judges arms 1 and 2 only. Arm 3 reads the trailers from the PR's own commits,
+- **Arm 5, a suspended tag's render (D5.1d).** A tag that `digests.json` marks `suspended` at
+  both ends has a different `own` digest, its `cluster/<tag>/` output alone. A suspended tag
+  applies nothing until its resume, so the change would sit merged and unapplied. The same
+  change passes in the PR that resumes the tag, since the tag is then not suspended at the head.
+  The arm reads the `suspended` field, never the `flux_suspend` key, so a role that derives
+  the key from another variable is covered too (d5-bulk-move.md, *A suspended role takes no
+  change*). A shared-template change whose render reaches the tag waits for the resume.
+
+Arms 3, 4 and 5 run from `gate()` alone, through `removal_problems()` and
+`suspended_problems()`, so the replay of master's squash commits judges arms 1 and 2 only. Arm 3 reads the trailers from the PR's own commits,
 and the CI step runs on pull requests only, where `HEAD^1..HEAD` is those commits and the merge.
 
 There is no bypass for arms 1 and 2. Two PRs that merge back to back each pass alone, and an image bump that does
@@ -55,6 +63,7 @@ Run: uv run python scripts/validate/cross_plane_order.py --base origin/master
 
 import functools
 import hashlib
+import json
 import re
 import subprocess
 import sys
@@ -69,12 +78,16 @@ from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 
+from deploy_tools.changed_set import suspended_changed
 from deploy_tools.object_loss import bundle_documents
+from deploy_tools.render_targets import render_targets
 from deploy_tools.promote_lib.prune import ReadError
 from lib import removes_object, yaml_fast
 from lib.cli_help import ArgumentParser
+from lib.ansible_inventory import K8S_HOST
 from lib.git import git, git_env, git_stdout
 from lib.repo_paths import FILTER_PLUGINS, GITOPS_DEPLOY_FILES, REPO
+from renderer.renderer_lib.bundle import DIGESTS, SHARED_KINDS
 from renderer.renderer_lib.cluster import NAMESPACE_ROLE_VARS
 from renderer.renderer_lib.ordering import (
     DEFERRED_SUFFIX,
@@ -137,6 +150,7 @@ class Snapshot:
         unpruned: The objects labelled or annotated `kustomize.toolkit.fluxcd.io/prune:
             disabled`.
         retired: The names `k8s_retired_services` lists.
+        digests: The render's parsed `digests.json`, or empty when no tag is flux-owned.
     """
 
     renders: Mapping[str, str]
@@ -147,6 +161,7 @@ class Snapshot:
     objects: Mapping[str, Iterable[str]] = field(default_factory=dict)
     unpruned: Iterable[str] = ()
     retired: Iterable[str] = ()
+    digests: Mapping[str, object] = field(default_factory=dict)
 
     def plane(self, tag: str) -> str:
         return self.owners.get(tag, ANSIBLE_PLANE)
@@ -335,6 +350,17 @@ def removal_problems(
     return found
 
 
+def suspended_problems(base: Snapshot, head: Snapshot) -> list[str]:
+    """Arm 5: each tag suspended at both ends whose own render the PR changes, one line each."""
+    return [
+        f"arm 5: {tag} is suspended (flux_suspend) at the base and at the head, and this PR "
+        f"changes its render. A suspended tag applies nothing until its resume, so the change "
+        f"would sit merged and unapplied. Land it in the PR that resumes {tag}, or after it "
+        f"(docs/flux-deploy-plane.md, *Stopping one service: `flux_suspend`*)."
+        for tag in suspended_changed(base.digests, head.digests)
+    ]
+
+
 def _prune_disabled(doc: Mapping) -> bool:
     """Whether Flux's prune skips `doc`, which it does by a label or an annotation."""
     meta = doc.get("metadata") or {}
@@ -393,8 +419,12 @@ def snapshot(
     with its own code. The dependency map is this checkout's `build_k8s_dep_map` over `tree`'s
     inventory and templates.
 
+    Every tag is passed with `--role`, so the render writes the publish bundle and its
+    `digests.json` for the flux-owned ones. The shared kinds' directories are left out of what
+    arms 1 to 3 read, as they were before the bundle was written.
+
     Args:
-        roles: The tags to render, or none for every render target.
+        roles: The tags to render, or none for every render target of `tree`.
 
     Raises:
         RenderFailed: The render exited non-zero.
@@ -402,6 +432,9 @@ def snapshot(
     entries = yaml_fast.safe_load((tree / HOST_VARS).read_text())
     k8s = filter_by_platform(entries.get("containers_list") or [], "k8s")
     names = {e["name"] for e in k8s}
+    roles = list(roles) or render_targets(
+        K8S_HOST, tree / HOST_VARS.parent, tree / K8S_ROLES
+    )
     with tempfile.TemporaryDirectory(prefix="cross-plane-") as out:
         # DECIDED: both sides run under the PR's interpreter, not each commit's own `uv run
         # --frozen` environment. A dependency bump that changes the render is then invisible
@@ -418,7 +451,18 @@ def snapshot(
                 f"homelab-render exited {proc.returncode} in {tree}:\n{tail}"
             )
         cluster = Path(out) / "cluster"
-        dirs = {p.name: _read_dir(p) for p in cluster.iterdir() if p.is_dir()}
+        dirs = {
+            p.name: _read_dir(p)
+            for p in cluster.iterdir()
+            if p.is_dir() and p.name not in SHARED_KINDS
+        }
+        digests_file = Path(out) / DIGESTS
+        try:
+            digests = (
+                json.loads(digests_file.read_text()) if digests_file.exists() else {}
+            )
+        except ValueError as exc:
+            raise RenderFailed(f"{DIGESTS} is not JSON: {exc}") from exc
     renders = {
         tag: _digest(
             {f"{tag}/{k}": v for k, v in dirs[tag].items()}
@@ -447,6 +491,7 @@ def snapshot(
         retired=frozenset(
             str(e["name"]) for e in group.get("k8s_retired_services") or []
         ),
+        digests=digests if isinstance(digests, dict) else {},
     )
 
 
@@ -516,6 +561,7 @@ def gate(
     messages = git_stdout("log", "--format=%B", f"{base}..{head}", cwd=repo)
     found = problems(snaps[0], snaps[1], paths, diffs)
     found += removal_problems(snaps[0], snaps[1], removes_object.declared(messages))
+    found += suspended_problems(snaps[0], snaps[1])
     for line in found:
         print(f"[FAIL] {line}", file=sys.stderr)
     if not found:
