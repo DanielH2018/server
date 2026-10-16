@@ -18,6 +18,12 @@ nothing and `prod` stays where it was. `report` runs the source, host and no-stu
   here even before `soak` joins `SHARED_KINDS`;
 - `digests.json` names each published tag and shared kind, plus `_unclassified`.
 
+Beside it, the per-tag object census (`member_census`, H1.1c) fails a published plumbing tag
+whose render drops one of its `NAMED_MEMBERS`. A plumbing tag sets `prune: false`, so a dropped
+object stays serving and nothing reports it; the named members are the objects whose loss
+matters most. The census applies to a tag from the commit that publishes it, so a tag the
+bundle does not publish yet is not judged.
+
 The allowlist comes from the renderer's inputs, never from its output, so a renderer bug
 cannot widen it: the tags the inventory marks `owner: flux` (`published_tags`), the literal
 `SHARED_KINDS`, and the published tags whose role passes `manifests_deferred_files` to its
@@ -26,7 +32,9 @@ whose role declares snapshot claims (`snapshot_tags`). No role input names a ver
 so `report` grants `-verify` to no tag, and the first PR that renders one adds its reader. A
 tag marked `owner: released` is left out of both the bundle and the allowlist (C4).
 
-The plan is docs/target-architecture/deploy/d2-first-leaf.md, *Publication and verification*.
+The plan is docs/target-architecture/deploy/d2-first-leaf.md, *Publication and verification*,
+and docs/target-architecture/host/h1-cluster-config-to-flux.md, *Plumbing tags are never pruned*,
+for the member census.
 
 Run: uv run python scripts/deploy_tools/promote.py check-bundle out
      uv run python scripts/deploy_tools/promote.py published-tags
@@ -262,6 +270,75 @@ def census(
     return reserved + found + _digests_problems(out, names)
 
 
+# Each plumbing tag's named members, as (kind, metadata.name), from H1's *Plumbing tags are
+# never pruned*. Change a row in the PR that changes that list.
+NAMED_MEMBERS: dict[str, frozenset[tuple[str, str]]] = {
+    "cluster-base": frozenset(
+        {
+            ("PriorityClass", "homelab-critical"),
+            ("ServiceAccount", "homelab-readonly"),
+            ("Secret", "homelab-readonly-token"),
+        }
+    ),
+    "metallb": frozenset({("DaemonSet", "speaker"), ("Deployment", "controller")}),
+    "coredns": frozenset({("Deployment", "coredns"), ("Service", "kube-dns")}),
+    "longhorn": frozenset({("DaemonSet", "longhorn-manager")}),
+    "longhorn-backup": frozenset(
+        {
+            ("BackupTarget", "default"),
+            ("BackupTarget", "r2"),
+            ("RecurringJob", "daily-backup"),
+        }
+    ),
+    "longhorn-reconcile": frozenset({("CronJob", "longhorn-reconcile")}),
+}
+
+
+def _rendered_objects(directory: Path) -> set[tuple[str, str]]:
+    """The (kind, name) of each object the files `directory`'s kustomization lists hold.
+
+    A file the kustomization does not list is not applied, so it counts for nothing. A
+    missing or unparseable file counts for nothing either; `census` reports those.
+    """
+    docs = _documents(directory / KUSTOMIZATION) if directory.is_dir() else []
+    if isinstance(docs, str) or len(docs) != 1 or not isinstance(docs[0], dict):
+        return set()
+    found = set()
+    for resource in docs[0].get("resources") or []:
+        path = directory / str(resource)
+        held = _documents(path) if path.is_file() else []
+        for doc in [] if isinstance(held, str) else held:
+            if isinstance(doc, dict) and isinstance(doc.get("metadata"), dict):
+                found.add((str(doc.get("kind")), str(doc["metadata"].get("name"))))
+    return found
+
+
+def member_census(
+    out: Path,
+    published: Iterable[str],
+    members: dict[str, frozenset[tuple[str, str]]] = NAMED_MEMBERS,
+) -> list[str]:
+    """One line for each named member a published tag's render drops.
+
+    A tag's render is `cluster/<tag>/` and each of its per-tag kinds' directories,
+    `cluster/<tag><suffix>/`, so moving a member into `<tag>-deferred` does not drop it.
+    """
+    problems = []
+    for tag in sorted(set(published) & set(members)):
+        rendered = set().union(
+            *(
+                _rendered_objects(out / CLUSTER_DIR / f"{tag}{suffix}")
+                for suffix in ("", *TAG_KIND_SUFFIXES)
+            )
+        )
+        problems += [
+            f"{tag} renders no {kind} {name}, a named member: a plumbing tag that drops "
+            "it leaves it serving with nothing managing it"
+            for kind, name in sorted(members[tag] - rendered)
+        ]
+    return problems
+
+
 def report(out: Path, published: list[str], roles: Path = K8S_ROLES) -> int:
     """Print the census's and the gates' problems, or one line saying both passed.
 
@@ -271,6 +348,7 @@ def report(out: Path, published: list[str], roles: Path = K8S_ROLES) -> int:
     snapshotting, unjudged = snapshot_tags(published, roles)
     problems += unjudged
     problems += census(out, published, deferring=deferring, snapshotting=snapshotting)
+    problems += member_census(out, published)
     problems += bundle_gates.gates(out, published)
     for line in problems:
         print(f"check-bundle: {line}", file=sys.stderr)
@@ -281,7 +359,8 @@ def report(out: Path, published: list[str], roles: Path = K8S_ROLES) -> int:
         )
         return FAILED
     print(
-        f"check-bundle: the census and the source, host and no-stub gates pass: "
+        f"check-bundle: the census, the member census and the source, host and no-stub "
+        f"gates pass: "
         f"{len(published)} published tags "
         f"({', '.join(published) or 'none'}), {len(SHARED_KINDS)} shared kinds"
     )
