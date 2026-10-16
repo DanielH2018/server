@@ -72,22 +72,23 @@ READ_ERRORS = (WaitReadError, forge.ForgeError)
 # most 120 an hour, well inside a token's 5,000.
 POLL_S = 30
 
-# The promote timeout as D2 derives it (d2-first-leaf.md, *Design*, *The timeout is derived,
-# not chosen*): the largest Kustomization `timeout` in the bundle, 10m from
-# `manifests_rollout_timeout_default`, plus the OCIRepository interval, 1m in
-# `ansible/roles/k8s/flux/templates/sync.yaml.j2`, plus the largest `retryInterval`, the 2m
-# `scripts/renderer/renderer_lib/bundle.py` writes on each Kustomization. Then the
-# `cluster-vars` hop D3.3b adds for a substituting Kustomization: that Kustomization's own 10m
-# and one `verify_promotion.REQUEUE_DEPENDENCY_S`. It is the longest wait
-# `verify_promotion.promote_timeout` returns for a one-tag bundle (#5155), and
-# test_promote_land_wait.py pins the two together. `verify_promotion` imports this module, so
+# The promote timeout as D4.3's chained derivation gives it for a one-tag bundle that
+# substitutes, when a rotation changes `cluster-vars` too (d4-ordering.md, *What `promote`
+# reads*). The path is `cluster-vars`'s 10m `timeout`, one `chained_timeout.REQUEUE_DEPENDENCY_S`
+# hop and the tag's own 10m, both from `manifests_rollout_timeout_default`. One queueing round
+# adds the largest changed `timeout`, 10m, because two changed names fit in one round of
+# `--concurrent`. Then the OCIRepository interval, 1m in
+# `ansible/roles/k8s/flux/templates/sync.yaml.j2`, and the largest `retryInterval`, the 2m
+# `scripts/renderer/renderer_lib/bundle.py` writes on each Kustomization. It is the longest wait
+# `chained_timeout.promote_timeout` returns for a one-tag bundle (#5155), and
+# test_promote_land_wait.py pins the two together. `chained_timeout` imports this module, so
 # this one cannot import `promote_timeout` back to derive the figure from M's bundle.
 # `land-wait` gives up at twice it (contract C6). The second half covers `promote.yml`'s
 # `render` and `publish` jobs, 10m each, which run before any promotion of M can start. It
 # does not cover M's `decide` waiting on an earlier commit's verification that is still in
 # flight, up to `verify_promotion.IN_FLIGHT_WAIT_S`. Two merges minutes apart can then end the
 # wait `gave-up` on a promotion that passes later (#5164).
-PROMOTE_TIMEOUT_S = 10 * 60 + 60 + 2 * 60 + 10 * 60 + 30
+PROMOTE_TIMEOUT_S = 10 * 60 + 30 + 10 * 60 + 10 * 60 + 60 + 2 * 60
 LAND_WAIT_TIMEOUT_S = 2 * PROMOTE_TIMEOUT_S
 
 # How far back `_published_ancestor` walks M's first-parent history. `publish` pushes every

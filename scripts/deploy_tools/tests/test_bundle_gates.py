@@ -72,7 +72,7 @@ def test_a_secret_key_reference_in_a_tag_without_post_build_is_flagged(
     extra = {"configmap.yaml": CONFIGMAP.format(value='"${email}"')}
     assert _gates(tmp_path, inputs, _bento(extra)) == [
         "source: cluster/bento-pdf/configmap.yaml holds ${email}, a key of secrets.yml, "
-        "and flux/bento-pdf.yaml has no postBuild"
+        "and the Kustomization bento-pdf in flux/bento-pdf.yaml has no postBuild"
     ]
 
 
@@ -95,8 +95,66 @@ def test_a_substituting_tag_with_no_cluster_vars_kind_is_flagged(tmp_path, input
         substitutes={"bento-pdf"},
     )
     assert _gates(tmp_path, inputs, files) == [
-        "source: flux/bento-pdf.yaml substitutes from Secret/homelab-cluster-vars, which no "
-        "secretGenerator in the bundle makes"
+        "source: the Kustomization bento-pdf in flux/bento-pdf.yaml substitutes from "
+        "Secret/homelab-cluster-vars, which no secretGenerator in the bundle makes"
+    ]
+
+
+def _deferring(substitutes=frozenset()):
+    """bento-pdf with a deferred directory holding `${email}`: the second document of
+    `flux/bento-pdf.yaml` is `bento-pdf-deferred`, judged against its own directory."""
+    deferred = {"configmap.yaml": CONFIGMAP.format(value='"${email}"')}
+    return bundle(
+        {
+            "bento-pdf": {"ingressroute.yaml": route(DOMAIN)},
+            "bento-pdf-deferred": deferred,
+        },
+        substitutes=substitutes,
+    )
+
+
+def test_a_deferred_document_with_post_build_beside_the_cluster_vars_kind_is_clean(
+    tmp_path, inputs
+):
+    files = _deferring(substitutes={"bento-pdf-deferred"})
+    files |= bundle({"cluster-vars": {}})
+    files["cluster/cluster-vars/kustomization.yaml"] = CLUSTER_VARS
+    files["flux/kustomization.yaml"] = bundle({"bento-pdf": {}, "cluster-vars": {}})[
+        "flux/kustomization.yaml"
+    ]
+    assert _gates(tmp_path, inputs, files, kinds={"cluster-vars"}) == []
+
+
+def test_a_deferred_document_substituting_from_an_ungenerated_secret_is_flagged(
+    tmp_path, inputs
+):
+    """The red half of the clean case above: the same bundle without the cluster-vars kind,
+    so only the deferred document's `substituteFrom` can fail it."""
+    assert _gates(tmp_path, inputs, _deferring(substitutes={"bento-pdf-deferred"})) == [
+        "source: the Kustomization bento-pdf-deferred in flux/bento-pdf.yaml substitutes "
+        "from Secret/homelab-cluster-vars, which no secretGenerator in the bundle makes"
+    ]
+
+
+def test_a_deferred_document_without_post_build_over_a_secret_key_is_flagged(
+    tmp_path, inputs
+):
+    """#5172: the gate read only the file's first document and walked only `cluster/<tag>/`."""
+    assert _gates(tmp_path, inputs, _deferring()) == [
+        "source: cluster/bento-pdf-deferred/configmap.yaml holds ${email}, a key of "
+        "secrets.yml, and the Kustomization bento-pdf-deferred in flux/bento-pdf.yaml has "
+        "no postBuild"
+    ]
+
+
+def test_a_document_applying_a_path_outside_cluster_is_flagged(tmp_path, inputs):
+    files = _bento()
+    files["flux/bento-pdf.yaml"] = files["flux/bento-pdf.yaml"].replace(
+        "path: ./cluster/bento-pdf", "path: ./cluster/../flux"
+    )
+    assert _gates(tmp_path, inputs, files) == [
+        "source: could not examine the Kustomization bento-pdf in flux/bento-pdf.yaml: it "
+        "applies './cluster/../flux', which is no directory under cluster/"
     ]
 
 

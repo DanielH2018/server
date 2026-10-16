@@ -7,14 +7,17 @@ nothing and `prod` stays where it was. `report` runs the source, host and no-stu
 - `flux/` holds `kustomization.yaml` plus one `<name>.yaml` for each published tag and each
   `SHARED_KINDS` member, and nothing else;
 - `flux/kustomization.yaml` lists exactly the other files in `flux/`;
-- each `<name>.yaml` holds exactly the Kustomization `<name>`, with path `./cluster/<name>`;
-- each published tag and each shared kind has its directory `cluster/<name>/`, with a
-  `kustomization.yaml`;
+- each `<name>.yaml` holds exactly the Kustomization `<name>`, with path `./cluster/<name>`,
+  plus `<name>-deferred` second, with path `./cluster/<name>-deferred`, exactly when `<name>`
+  is a published tag that defers files (the per-file rule, D4.3);
+- each published tag and each shared kind has its directory `cluster/<name>/`, and each tag
+  that defers files `cluster/<name>-deferred/`, each with a `kustomization.yaml`;
 - `digests.json` names each published tag and shared kind, plus `_unclassified`.
 
 The allowlist comes from the renderer's inputs, never from its output, so a renderer bug
-cannot widen it: the tags the inventory marks `owner: flux` (`published_tags`) and the literal
-`SHARED_KINDS`. A tag marked `owner: released` is left out of both the bundle and the
+cannot widen it: the tags the inventory marks `owner: flux` (`published_tags`), the literal
+`SHARED_KINDS`, and the published tags whose role passes `manifests_deferred_files` to its
+`k8s/manifests` include (`deferring_tags`), read as the renderer reads the include. A tag marked `owner: released` is left out of both the bundle and the
 allowlist (C4).
 
 The plan is docs/target-architecture/deploy/d2-first-leaf.md, *Publication and verification*.
@@ -39,9 +42,11 @@ from lib import yaml_fast
 from lib.exit_codes import FAILED, OK
 from lib.ansible_inventory import K8S_HOST_VARS
 from lib.k8s_roles import tag_owners
+from lib.repo_paths import K8S_ROLES
 import bundle_gates
 from renderer.renderer_lib.bundle import (
     CLUSTER_DIR,
+    DEFERRED_SUFFIX,
     DIGESTS,
     FLUX_API_VERSION,
     FLUX_DIR,
@@ -49,6 +54,7 @@ from renderer.renderer_lib.bundle import (
     SHARED_KINDS,
     UNCLASSIFIED,
 )
+from renderer.renderer_lib.task_inputs import include_vars
 
 
 def published_tags(host_vars: Path = K8S_HOST_VARS) -> list[str]:
@@ -56,6 +62,33 @@ def published_tags(host_vars: Path = K8S_HOST_VARS) -> list[str]:
     return sorted(
         tag for tag, owner in tag_owners(host_vars).items() if owner == "flux"
     )
+
+
+def deferring_tags(
+    published: Iterable[str], roles: Path = K8S_ROLES
+) -> tuple[frozenset[str], list[str]]:
+    """The published tags that defer files, and one line per tag it could not judge.
+
+    A tag defers files when its role passes a non-empty `manifests_deferred_files` to the
+    `k8s/manifests` include that renders, which alone makes the renderer write
+    `cluster/<tag>-deferred/` and the Kustomization `<tag>-deferred`. A value that is not a
+    literal list, such as a Jinja string, is a problem rather than a guess.
+    """
+    found, problems = set(), []
+    for tag in sorted(set(published)):
+        try:
+            value = include_vars(roles / tag).get("manifests_deferred_files")
+        except (OSError, ValueError) as err:
+            problems.append(f"could not tell whether {tag} defers files: {err}")
+            continue
+        if value is not None and not isinstance(value, list):
+            problems.append(
+                f"could not tell whether {tag} defers files: its "
+                f"manifests_deferred_files is {value!r}, not a literal list"
+            )
+        elif value:
+            found.add(tag)
+    return frozenset(found), problems
 
 
 def _documents(path: Path) -> list[object] | str:
@@ -89,27 +122,36 @@ def _index_problems(flux: Path, held: set[str]) -> list[str]:
     ]
 
 
-def _kustomization_problems(flux: Path, name: str) -> list[str]:
-    """What is wrong with `flux/<name>.yaml`: it must hold exactly the Kustomization `name`."""
+def _kustomization_problems(flux: Path, name: str, defers: bool) -> list[str]:
+    """What is wrong with `flux/<name>.yaml` under the per-file rule.
+
+    It must hold exactly the Kustomization `name`, plus `<name>-deferred` second when
+    `defers`, each applying its own directory under `cluster/`.
+    """
     docs = _documents(flux / f"{name}.yaml")
     if isinstance(docs, str):
         return [f"{FLUX_DIR}/{name}.yaml {docs}"]
+    names = [name] + ([name + DEFERRED_SUFFIX] if defers else [])
     found = [
         (d.get("apiVersion"), d.get("kind"), (d.get("metadata") or {}).get("name"))
         if isinstance(d, dict)
         else (None, None, None)
         for d in docs
     ]
-    if found != [(FLUX_API_VERSION, "Kustomization", name)] or not isinstance(
-        docs[0], dict
-    ):
+    if found != [(FLUX_API_VERSION, "Kustomization", n) for n in names]:
         return [
-            f"{FLUX_DIR}/{name}.yaml holds {found}, not exactly the Kustomization {name}"
+            f"{FLUX_DIR}/{name}.yaml holds {found}, not exactly the Kustomization "
+            + " then the Kustomization ".join(names)
         ]
-    path = (docs[0].get("spec") or {}).get("path")
-    if path != f"./{CLUSTER_DIR}/{name}":
-        return [f"{FLUX_DIR}/{name}.yaml applies {path!r}, not ./{CLUSTER_DIR}/{name}"]
-    return []
+    problems = []
+    for doc, own in zip(docs, names, strict=True):
+        spec = doc.get("spec") if isinstance(doc, dict) else None
+        path = spec.get("path") if isinstance(spec, dict) else None
+        if path != f"./{CLUSTER_DIR}/{own}":
+            problems.append(
+                f"{FLUX_DIR}/{name}.yaml's {own} applies {path!r}, not ./{CLUSTER_DIR}/{own}"
+            )
+    return problems
 
 
 def _digests_problems(out: Path, names: set[str]) -> list[str]:
@@ -129,7 +171,10 @@ def _digests_problems(out: Path, names: set[str]) -> list[str]:
 
 
 def census(
-    out: Path, published: Iterable[str], kinds: Iterable[str] = SHARED_KINDS
+    out: Path,
+    published: Iterable[str],
+    kinds: Iterable[str] = SHARED_KINDS,
+    deferring: Iterable[str] = (),
 ) -> list[str]:
     """Every way the bundle at `out` differs from the allowlist, one line each.
 
@@ -137,8 +182,11 @@ def census(
         out: The bundle root, holding `flux/`, `cluster/` and `digests.json`.
         published: The published tags, from the inventory.
         kinds: The shared kinds.
+        deferring: The published tags that defer files, from their roles (`deferring_tags`).
+            A shared kind never defers.
     """
     published, kinds = set(published), set(kinds)
+    deferring = set(deferring) & published
     names = published | kinds
     flux = out / FLUX_DIR
     if not flux.is_dir():
@@ -157,21 +205,28 @@ def census(
         found += _index_problems(flux, held)
     for name in sorted(names):
         if f"{name}.yaml" in held:
-            found += _kustomization_problems(flux, name)
+            found += _kustomization_problems(flux, name, name in deferring)
     found += [
         f"{CLUSTER_DIR}/{name}/ is missing: {name} is published and renders no directory"
         for name in sorted(names)
         if not (out / CLUSTER_DIR / name / KUSTOMIZATION).is_file()
+    ] + [
+        f"{CLUSTER_DIR}/{tag}{DEFERRED_SUFFIX}/ is missing: {tag} defers files and renders "
+        "no deferred directory"
+        for tag in sorted(deferring)
+        if not (out / CLUSTER_DIR / f"{tag}{DEFERRED_SUFFIX}" / KUSTOMIZATION).is_file()
     ]
     return found + _digests_problems(out, names)
 
 
-def report(out: Path, published: list[str]) -> int:
+def report(out: Path, published: list[str], roles: Path = K8S_ROLES) -> int:
     """Print the census's and the gates' problems, or one line saying both passed.
 
     Returns the exit code.
     """
-    problems = census(out, published) + bundle_gates.gates(out, published)
+    deferring, problems = deferring_tags(published, roles)
+    problems += census(out, published, deferring=deferring)
+    problems += bundle_gates.gates(out, published)
     for line in problems:
         print(f"check-bundle: {line}", file=sys.stderr)
     if problems:

@@ -7,6 +7,12 @@ properties only these two jobs have: each runs once `prod` has moved, whatever t
 it concluded, neither joins the `promote` concurrency group, and their timeouts sit inside the
 wait `decide` makes on a verification in flight.
 
+The three limits move together (docs/target-architecture/deploy/d4-ordering.md, *The cap*):
+`verify`'s `timeout-minutes` holds the capped derived timeout, `decide`'s in-flight wait holds
+`verify`'s and `settle`'s limits plus runner queueing, and the `promote` job holds that wait
+inside GitHub's 6-hour job limit. A `verify` its job limit stops leaves no verdict, and
+`settle` writes `<T> unverified`, a hold only an operator clears.
+
 Run: uv run pytest ansible/tests/repo/test_promote_workflow_verify.py
 """
 
@@ -22,6 +28,7 @@ from test_promote_workflow import (
     problems,
 )
 
+import chained_timeout
 from deploy_tools.promote_lib import verify_promotion as promote_verify
 
 # `verify` and `settle` run only once the `tag` job's move step reports that `prod` moved.
@@ -29,6 +36,10 @@ MOVED_GATE = "needs.tag.outputs.moved == 'true'"
 # Weighed even when an earlier job failed or was cancelled, so a moved `prod` always settles.
 ALWAYS = "always()"
 PRIOR_DIGEST = "needs.promote.outputs.prior_digest"
+# Runner queueing between a run's jobs, which `decide`'s in-flight wait also covers.
+RUNNER_QUEUE_S = 10 * 60
+# GitHub stops a job on a hosted runner after 6 hours.
+HOSTED_JOB_LIMIT_MINUTES = 360
 
 
 @pytest.fixture(scope="module")
@@ -72,29 +83,24 @@ def verification_problems(wf: dict) -> list[str]:
     if "needs.promote.outputs.target" not in str(_steps(verify)):
         found.append("verify: does not take T from promote's outputs")
     minutes = {name: jobs.get(name, {}).get("timeout-minutes", 0) for name in jobs}
-    if (minutes["verify"] + minutes["settle"]) * 60 > promote_verify.IN_FLIGHT_WAIT_S:
+    if minutes["verify"] * 60 <= chained_timeout.VERIFY_CAP_S + promote_verify.POLL_S:
+        found.append(
+            "verify: its timeout-minutes cannot hold the capped derived timeout, so the "
+            "job limit would stop it with no verdict"
+        )
+    if (
+        minutes["verify"] + minutes["settle"]
+    ) * 60 + RUNNER_QUEUE_S > promote_verify.IN_FLIGHT_WAIT_S:
         found.append("verify and settle can outlast decide's in-flight wait")
     if minutes["promote"] * 60 <= promote_verify.IN_FLIGHT_WAIT_S:
         found.append("promote: its timeout-minutes cannot hold decide's in-flight wait")
+    if minutes["promote"] > HOSTED_JOB_LIMIT_MINUTES:
+        found.append("promote: its timeout-minutes exceeds GitHub's 6-hour job limit")
     return found
 
 
 def test_the_verification_jobs_hold_every_property(workflow):
     assert verification_problems(workflow) == []
-
-
-def test_verifys_timeout_holds_the_timeout_derived_for_a_tag_at_the_rollout_default():
-    """bento-pdf's Kustomization, rendered at `manifests_rollout_timeout_default`."""
-    from renderer.renderer_lib.bundle import tag_kustomization
-
-    defaults = _load(
-        WORKFLOW.parents[2] / "ansible/roles/k8s/manifests/defaults/main.yml"
-    )
-    doc = tag_kustomization(
-        "bento-pdf", False, defaults["manifests_rollout_timeout_default"]
-    )
-    minutes = _load(WORKFLOW)["jobs"]["verify"]["timeout-minutes"]
-    assert promote_verify.promote_timeout([doc]) + promote_verify.POLL_S < minutes * 60
 
 
 def _settle_checks_out(wf):
@@ -185,7 +191,16 @@ def _settle_without_the_moved_gate(wf):
 
 
 def _verify_outlasting_the_wait(wf):
-    wf["jobs"]["verify"]["timeout-minutes"] = 40
+    wf["jobs"]["verify"]["timeout-minutes"] = 346
+
+
+def _verify_below_the_cap(wf):
+    """D2.5's 25 minutes, sized for one tag's timeout before the chained timeout."""
+    wf["jobs"]["verify"]["timeout-minutes"] = 25
+
+
+def _promote_past_the_job_limit(wf):
+    wf["jobs"]["promote"]["timeout-minutes"] = 361
 
 
 def _a_short_promote_job(wf):
@@ -218,6 +233,14 @@ OWN_RED = {
     "a verify that outlasts decide's wait": (
         _verify_outlasting_the_wait,
         "can outlast decide's in-flight wait",
+    ),
+    "a verify limit below the capped timeout": (
+        _verify_below_the_cap,
+        "verify: its timeout-minutes cannot hold the capped derived timeout",
+    ),
+    "a promote job past GitHub's job limit": (
+        _promote_past_the_job_limit,
+        "promote: its timeout-minutes exceeds GitHub's 6-hour job limit",
     ),
     "a promote job shorter than the wait": (
         _a_short_promote_job,

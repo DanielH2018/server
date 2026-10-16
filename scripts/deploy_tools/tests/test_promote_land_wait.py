@@ -15,6 +15,7 @@ from dataclasses import dataclass, field, replace
 import pytest
 
 import forge
+import chained_timeout
 from deploy_tools.promote_lib import verify_promotion as vp
 from deploy_tools.promote_lib import wait as promote_wait
 from lib import yaml_fast
@@ -178,8 +179,9 @@ def test_no_promotion_within_the_timeout_gives_up():
 def _substituting_promote_timeout() -> int:
     """`verify`'s wait on the bundle the renderer writes for `peanut` substituting at 10m.
 
-    It holds the `cluster-vars` hop D3.3b added, so it is the longest wait any one-tag bundle
-    makes today.
+    Every Kustomization in it counts as changed, as a rotation of a key peanut reads changes
+    `cluster-vars` and peanut together. Its path runs through the renderer's `cluster-vars`
+    edge, so it is the longest wait any one-tag bundle makes today.
     """
     directories = {"peanut": {"kustomization.yaml": "resources: []\n"}}
     files = render_bundle(
@@ -189,7 +191,7 @@ def _substituting_promote_timeout() -> int:
         "10m",
         "x=ENC[y]\n",
     )
-    return vp.promote_timeout(
+    return chained_timeout.promote_timeout(
         vp.flux_kustomizations({p: t.encode() for p, t in files.items()})
     )
 

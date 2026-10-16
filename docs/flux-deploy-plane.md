@@ -373,14 +373,8 @@ notification-controller posts on T:
   promotion's statuses, and an old `failure` would otherwise hold it again at the first read.
 - **The verdict.** Every expected status `success` is `good`. Any `failure` or `error` is
   `failed`. A missing or `pending` status keeps the wait going and never reads as success, so
-  the timeout ends it as `failed`, naming each name that had no `success`. The timeout is the
-  largest Kustomization `timeout` in T's bundle, plus the `OCIRepository`'s interval, plus the
-  largest `retryInterval`: 13 minutes for a tag at the manifests role's default.
-- **The `cluster-vars` hop.** When T's bundle holds a substituting Kustomization, the timeout
-  also adds `cluster-vars`'s own `timeout` and one `--requeue-dependency` interval, whose
-  default in Flux's Kustomize controller is 30 seconds. A Kustomization that waits on a
-  dependency that is not Ready requeues after that interval and no sooner. At the default
-  that makes 23.5 minutes. D4.3's chained timeout replaces this term with one hop per `dependsOn` edge.
+  the timeout ends it as `failed`, naming each name that had no `success`. *The timeout
+  follows the chain* below derives it.
 
 `settle` applies the verdict:
 
@@ -403,7 +397,7 @@ the variable with `prod`'s live digest and pages on a mismatch.
 
 - `prod` and `last-good` name the same digest except between a run's `tag` and its `settle`.
   While they differ, `decide` waits, re-reading `DEPLOY_HOLD` each 30 seconds, and gives up as
-  `current` after 40 minutes.
+  `current` after 350 minutes (*The cap*).
 - `tag` moves `prod` only while it still names the digest `decide` read. Two runs can decide on
   the same `prod` when the second run's `promote` job runs while the first run's `tag` waits
   on the group. The first `tag` moves `prod`, and the second finds it moved, logs a warning,
@@ -439,6 +433,62 @@ It reads `DEPLOY_HOLD` with one `gh variable get`, `prod` from the `OCIRepositor
 `homelab`'s `status.artifact` with the read-only `kubectl`, and `last-good` with one GHCR
 manifest fetch. Each read has a 5-second timeout. A read that fails prints `unknown` on its own
 line, and `prod` is reported equal to `last-good` only when both digests were read.
+
+### The timeout follows the chain
+
+`scripts/deploy_tools/chained_timeout.py:promote_timeout` derives `verify`'s wait from T's bundle and its changed set, the same set
+`verify` expects, so the two cannot disagree. With `dependsOn` edges, a Kustomization starts
+only after its dependencies finish, so the wait sums four terms:
+
+- **The longest path.** The longest `dependsOn` path in T's bundle that ends at a changed
+  name. A changed name on the path counts its own `timeout`. An unchanged ancestor counts no
+  `timeout`: Flux still waits for it to reconcile T, but its apply changes nothing, and a
+  healthy one passes its health check at once. Each edge on the path counts one
+  `--requeue-dependency` interval, 30 seconds by default. A Kustomization whose dependency is
+  not Ready requeues after that interval and no sooner. The walk covers every Kustomization in
+  the bundle, so `cluster-vars` counts whenever it sits on the path.
+- **The queueing term.** The number of changed names, dependents included, divided by
+  `--concurrent` and rounded up, times the largest `timeout` among them. A Kustomization that
+  waits on health holds one of the Kustomize controller's workers, so a revision that changes more
+  names than `--concurrent`, 4 by default, queues behind the workers. Without the term
+  `verify` would time out on such a revision and write a false hold.
+- **The `OCIRepository` interval**, 1 minute.
+- **The largest `retryInterval`**, 2 minutes on every Kustomization the renderer writes.
+
+The root `homelab`'s 5-minute `timeout` is the floor of the first two terms. The flux role
+sets neither `--requeue-dependency` nor `--concurrent`, and
+`scripts/deploy_tools/tests/test_chained_timeout.py` fails a vendored install that adds one.
+A `dependsOn` naming a Kustomization the bundle does not hold, or a cycle, fails `verify`
+with no verdict, and `settle` holds it as `<T> unverified`.
+
+**The cap.** The derived timeout is capped at 5.5 hours, `chained_timeout.VERIFY_CAP_S`. A
+`verify` job that its own `timeout-minutes` stops leaves no verdict, and `settle` writes
+`<T> unverified`, which names no Kustomization. At the cap `verify` prints `failed` with the
+names that never passed, and `settle` writes that hold like any other timeout. Three limits
+are sized from the cap, and `ansible/tests/repo/test_promote_workflow_verify.py` holds them
+against each other:
+
+| Limit | Value | Why |
+|---|---|---|
+| `verify`'s `timeout-minutes` | 335 | above the 330-minute cap plus one poll |
+| `decide`'s in-flight wait, `IN_FLIGHT_WAIT_S` | 350 minutes | `verify`'s 335 and `settle`'s 5, plus 10 for runner queueing |
+| the `promote` job's `timeout-minutes` | 360 | above the wait, and GitHub's limit for a hosted job |
+
+A wait shorter than a verification is safe and costs a promotion. `decide` gives up as
+`current` and moves nothing, and the commit waits for the next run.
+
+**The size.** At the defaults, each Kustomization's `timeout` is the manifests role's
+`manifests_rollout_timeout_default`, 10 minutes:
+
+- a change to bento-pdf alone expects bento-pdf: one timeout and one queueing round, 23
+  minutes with the interval and the retry;
+- a change to a tag and its `-deferred` dependent: two timeouts, one hop and one round, 33.5
+  minutes;
+- a rotation that changes `cluster-vars` and the one tag that substitutes from it: the same
+  33.5 minutes. `land-wait` restates that figure as `wait.py:PROMOTE_TIMEOUT_S` and gives up
+  at twice it;
+- a revision that changes every importer of `workload-shell.yml.j2` queues in rounds of up
+  to each role's `timeout`, so it can reach the cap.
 
 ## The bundle
 
@@ -477,8 +527,8 @@ The bundle holds:
 
 A published tag that defers files also gets the Kustomization `<tag>-deferred`, the second
 document of `flux/<tag>.yaml`. It applies `./cluster/<tag>-deferred` with the tag's fields
-and depends on `<tag>`. The publish census still refuses a second document in a tag's file,
-so no tag that defers files can publish until D4.3 adds the per-file rule.
+and depends on `<tag>`. The publish census admits that second document only for a tag that
+defers files (*The publish census*, the per-file rule).
 
 ### Which Kustomizations substitute
 
@@ -688,14 +738,21 @@ change under `_unclassified` counts as every name changed. D6's *What a footprin
 ### The publish census
 
 `promote.py check-bundle out` fails the render job before gitleaks and before the push. It
-computes its allowlist from the inventory and `SHARED_KINDS`, never from the render, so a
-renderer bug cannot widen it. It fails when:
+computes its allowlist from the inventory, `SHARED_KINDS` and the published tags' roles,
+never from the render, so a renderer bug cannot widen it. A tag defers files when its role
+passes a non-empty `manifests_deferred_files` to its `k8s/manifests` include. It fails when:
 
 - `flux/` lacks a file for a published tag or a shared kind, or holds any other file;
 - `flux/kustomization.yaml` omits a file in `flux/`, or lists one that is not there;
-- `flux/<name>.yaml` holds anything but the Kustomization `<name>` applying
-  `./cluster/<name>`;
-- a published tag or a shared kind has no `cluster/<name>/`;
+- `flux/<name>.yaml` breaks the per-file rule. The file must hold exactly the Kustomization
+  `<name>` applying `./cluster/<name>`, followed by `<name>-deferred` applying
+  `./cluster/<name>-deferred` only when `<name>` is a tag that defers files. A third
+  document, or a `-deferred` for a tag that defers nothing, fails. A shared kind's file holds
+  exactly its own Kustomization;
+- a published tag or a shared kind has no `cluster/<name>/`, or a tag that defers files has
+  no `cluster/<name>-deferred/`;
+- a published tag's role cannot be read, or its `manifests_deferred_files` is not a literal
+  list;
 - `digests.json` is missing or names another set.
 
 ### The publish gates
@@ -704,13 +761,16 @@ renderer bug cannot widen it. It fails when:
 `scripts/deploy_tools/bundle_gates.py`. Each refusal prints one line that opens with the
 gate's name.
 
-- **source**: a tag whose `flux/<tag>.yaml` has no `postBuild` holds no `${K}` whose `K` is
-  a key name of `ansible/vars/secrets.yml`. Flux would not substitute such a reference.
-  The gate pairs each `$$` first, as Flux does, so `$${K}` and a shell `${HOME}` pass. A tag
-  with `postBuild` may name in `substituteFrom` only a Secret that a `secretGenerator` in
+- **source**: the gate judges each Kustomization document in `flux/<tag>.yaml` against its
+  own `spec.path` directory, so `<tag>-deferred` is judged against
+  `cluster/<tag>-deferred/` (#5172). A document with no `postBuild` applies a directory that
+  holds no `${K}` whose `K` is a key name of `ansible/vars/secrets.yml`. Flux would not substitute such a reference.
+  The gate pairs each `$$` first, as Flux does, so `$${K}` and a shell `${HOME}` pass. A
+  document with `postBuild` may name in `substituteFrom` only a Secret that a `secretGenerator` in
   the bundle makes. The `cluster-vars` kind generates `homelab-cluster-vars`, the one Secret
-  a tag's `postBuild` names. The gate also fails a published tag or a shared kind whose
-  directory it could not read.
+  a tag's `postBuild` names. The gate also fails a published tag or a shared kind whose file
+  holds no Kustomization, and a document whose `spec.path` is not a directory under
+  `cluster/`.
 - **host**: every `Host(...)` in an IngressRoute ends in `.<domain>`, the literal that
   `ansible/inventory/group_vars/all.yml` defines. A `${domain}`, a `stub-domain` and a
   hand-written host each fail. While bento-pdf is published, its `.local.` route is the

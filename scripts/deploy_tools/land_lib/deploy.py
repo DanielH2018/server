@@ -469,7 +469,7 @@ def deploy_phase(ln: Landing) -> None:
         ln.deployed_at = ln.merge_sha
         tick.kick_tick(ln)
     # Stamped before the promotion wait: the re-gate reads a later deploy of these tags as one
-    # that started after deploy.sh returned, and the wait can last 47 minutes.
+    # that started after deploy.sh returned, and the wait can last 67 minutes.
     ln.deploy_ended_at = t.wall_clock()
     if ln.owned_tags or cluster_vars:
         promotion.wait_on_promotion(ln)
