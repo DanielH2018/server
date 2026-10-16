@@ -89,6 +89,39 @@ def test_a_failed_fetch_writes_nothing(tmp_path, capsys):
     assert "HTTP 404" in capsys.readouterr().err
 
 
+def _plain_http(role):
+    defaults = role / "defaults" / "main.yml"
+    defaults.write_text(defaults.read_text().replace("https://", "http://"))
+
+
+def test_a_non_https_url_is_refused_before_any_fetch(tmp_path, capsys):
+    role = _role(tmp_path)
+    _plain_http(role)
+    before = (role / "defaults" / "main.yml").read_text()
+    fetched = []
+
+    def fetcher(url):
+        fetched.append(url)
+        return 200, iter([NEW])
+
+    assert main(["demo"], roles=tmp_path, fetcher=fetcher) == 1
+
+    assert fetched == []
+    assert (role / "files" / "upstream" / "demo.yaml").read_bytes() == OLD
+    assert (role / "defaults" / "main.yml").read_text() == before
+    assert "is not an https:// URL; nothing was fetched" in capsys.readouterr().err
+
+
+def test_check_flags_a_pin_whose_url_is_not_https(tmp_path, capsys):
+    _plain_http(_role(tmp_path))
+
+    assert main(["--check"], roles=tmp_path) == 1
+    assert (
+        "demo: demo.yaml: url http://example.invalid/v1.0.0/demo.yaml is not an "
+        "https:// URL" in capsys.readouterr().err
+    )
+
+
 def test_an_unknown_file_name_is_a_usage_error(tmp_path, capsys):
     _role(tmp_path)
 

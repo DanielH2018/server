@@ -5,9 +5,9 @@ Status: IN PROGRESS
 PR H1.1f, the CI pin checks: [#5256](https://github.com/DanielH2018/server/pull/5256). It
 merged on 2026-10-16 at `2e8d5b1e3` and deployed nothing. `scripts/validate/cluster_pins.py`
 refuses a decrease, a skipped Longhorn minor and a bump that shares its PR, and it reported
-`moves no pin the wrong way` on its own merge. Pins set in indented play vars or INI
-inventory go unread ([#5257](https://github.com/DanielH2018/server/issues/5257)), and no such
-file sets either pin.
+`moves no pin the wrong way` on its own merge. Its override refusal reads indented play
+vars, `include_role` vars and INI inventory since
+[#5257](https://github.com/DanielH2018/server/issues/5257); no such file sets either pin.
 PR H1.1g, the land gate: [#5265](https://github.com/DanielH2018/server/pull/5265). It merged
 at `722e98608` and deployed nothing. `land.sh` refuses a forward-only pin bump while
 (`last-good`, master tip] already changes that pin or while `DEPLOY_HOLD` reads anything but
@@ -2659,7 +2659,8 @@ subject's tests.
       contracts.md applied that in its X2-01 entry, so H1 needs no row for it. The DR hold
       `dr-restore` of the bring-up order is such a non-empty value.
     - **Applied on 2026-10-16** for the hold, and the gate before H1.1b merges is clear. The
-      excused failures stay listed, gated before H1.1i merges.
+      excused failures were applied the same day, after H1.1b merged, so the gate before H1.1i
+      merges is clear too.
 4. **Where the service list lives.** C4 says H1 removes `containers_list` from the inventory
    once every entry is `owner: flux`, but the Pi's entries never become `owner: flux`.
    *Resolution:*

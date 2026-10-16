@@ -11,7 +11,8 @@ services is derived from it (#3389). Four consumers read it:
   email and tag it `severity: critical`, so the email tier follows the tier field (#3480).
 - `shed_entries`: `probe.py shed-set` prints the untiered workloads to scale down when one node
   is lost, so the tiered ones fit on the survivor (#3481). No template reads it, so it is not a
-  registered filter.
+  registered filter. It drops `NEVER_SHED`, the untiered cluster plumbing no break-glass may
+  scale to zero.
 
 No Ansible import, so `scripts/lib/service_tiers.py` and the docs generators read the same
 function the playbook runs. `FilterModule` re-raises a function's `ValueError` as
@@ -43,6 +44,16 @@ SERVICE_TIERS = {
 # Names that select several tiers at once. `home-critical` is what the house and SSO stop
 # working without, and is the set the daily R2 backup tier derives from.
 TIER_GROUPS = {"home-critical": ("home-edge", "home-automation")}
+
+
+# The untiered plumbing tags the lost-node break-glass must never scale down: H1's Flux-born
+# roles whose `defaults/main.yml` sets `flux_prune: false`. CoreDNS at zero replicas stops
+# cluster DNS, and Flux then cannot fetch the bundle that restores it. A tier is no substitute,
+# because it derives a PriorityClass these roles do not run at. Each tag joins in the PR that
+# adds its entry, and `ansible/tests/k8s/test_shed_set_is_derived_from_tier.py` holds the set
+# equal to the untiered `flux_prune: false` roles, so a plumbing tag cannot land without it.
+# The full reasoning is the H1 plan's *Six Flux-born tags*.
+NEVER_SHED = frozenset()
 
 
 def _known():
@@ -82,12 +93,14 @@ def tier_entries(containers_list, tier):
     return found
 
 
-def shed_entries(containers_list):
+def shed_entries(containers_list, never_shed=NEVER_SHED):
     """The named entries of `containers_list` that are in no tier, in list order.
 
     These are the workloads to scale down when one node is lost, so that every tier in
     `SERVICE_TIERS` fits on the survivor. The set is the complement of the tiers rather than
-    a test for a missing key, so a tier added to `SERVICE_TIERS` leaves it on its own.
+    a test for a missing key, so a tier added to `SERVICE_TIERS` leaves it on its own. An
+    entry named in `never_shed` is dropped as well. Every caller but a test takes the default,
+    `NEVER_SHED`, so `probe.py shed-set` and every Python reader of the set read one answer.
 
     Raises ValueError when any entry's `tier` is unknown: a misspelt tier must not put a
     critical service on the list of things to switch off.
@@ -100,7 +113,10 @@ def shed_entries(containers_list):
     return [
         entry
         for entry in containers_list or []
-        if isinstance(entry, dict) and entry.get("name") and entry["name"] not in kept
+        if isinstance(entry, dict)
+        and entry.get("name")
+        and entry["name"] not in kept
+        and entry["name"] not in never_shed
     ]
 
 
