@@ -1,6 +1,22 @@
 # D5 — Bulk move
 
-Status: PLANNED
+Status: IN PROGRESS
+
+PR D5.1a1, the publish layout: [#5259](https://github.com/DanielH2018/server/pull/5259). It
+merged on 2026-10-16 at `645fe859a` and deployed nothing. The publish census reserves D5's
+per-tag kinds and names, and `SHARED_KINDS` gains no member. Its review's fix round made
+`<tag>` depend on `<tag>-snapshot`, as *Snapshots as a Job per role revision* requires.
+PR D5.1e, restart annotations for self-rolled workloads:
+[#5263](https://github.com/DanielH2018/server/pull/5263). It merged at `e9cb97abb` and
+deployed nothing, because neither pihole nor observability is flux-owned. D3's interim census
+is deleted, and its replacement in `scripts/renderer/tests/test_renderer_self_rollout_restart.py`
+names both roles. Grafana's admin-password initContainer moves with observability's conversion
+([#5262](https://github.com/DanielH2018/server/issues/5262)).
+PR D5.1g, the takeover census: [#5264](https://github.com/DanielH2018/server/pull/5264). It
+merged at `9f3bf0bfb`. Against the live cluster, `probe.py takeover speedtest` listed the
+Deployment's `kubectl.kubernetes.io/restartedAt` under `kubectl-rollout` and the PVC's
+`homelab.daniel-hunter.com/seeded` annotation under `kubectl-annotate`. Cluster-scoped RBAC
+objects are not read yet ([#5258](https://github.com/DanielH2018/server/issues/5258)).
 
 Related issues:
 

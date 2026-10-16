@@ -34,6 +34,8 @@ MODULES = frozenset(
         "land_shared",
         "land_tags",
         "land_tags_cli",
+        "pin_gate",
+        "pin_reads",
     }
 )
 ALLOWED = {
@@ -54,7 +56,11 @@ ALLOWED = {
     "pr_json": set(),
     "landing": {"outcome", "options", "tools", "ledger", "pr_json", "land_tags"},
     # The landing policy's checks run inside --arm-merge, before any merge call.
-    "merge": {"landing", "outcome", "policy", "pr_json"},
+    "merge": {"landing", "outcome", "pin_gate", "policy", "pr_json"},
+    # The pin gate runs inside --await-merge's direct merge, and `land.py --regate` alone.
+    "pin_gate": {"landing", "outcome", "pin_reads"},
+    # Its boundaries. It imports `promote.py`'s `last-good` reader, outside land_lib.
+    "pin_reads": set(),
     "policy": {"landing", "outcome", "pr_json"},
     "classify": {"landing", "outcome", "land_tags"},
     "ci": {"landing", "outcome"},
@@ -80,7 +86,8 @@ ALLOWED = {
     "land_platform": {"land_tags"},
     "land_reach": set(),
     # The boundaries for a tag Flux applies. It imports promote_lib.wait, outside land_lib.
-    "land_flux": set(),
+    # It also holds the pin gate's reads, `pin_reads.PinReads`.
+    "land_flux": {"pin_reads"},
     "land_rerolls": set(),
     "land_shared": set(),
     # cc-wait's `land` source runs under `uv run --no-project`, so it reads only the

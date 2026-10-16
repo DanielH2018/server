@@ -1,6 +1,14 @@
 # H1 — Hand the cluster content to Flux
 
-Status: PLANNED
+Status: IN PROGRESS
+
+PR H1.1f, the CI pin checks: [#5256](https://github.com/DanielH2018/server/pull/5256). It
+merged on 2026-10-16 at `2e8d5b1e3` and deployed nothing. `scripts/validate/cluster_pins.py`
+refuses a decrease, a skipped Longhorn minor and a bump that shares its PR, and it reported
+`moves no pin the wrong way` on its own merge. Pins set in indented play vars or INI
+inventory go unread ([#5257](https://github.com/DanielH2018/server/issues/5257)), and no such
+file sets either pin.
+
 Depends on: D2, D4; D3 for H1.7b only; R4 for H1.9 only
 Unblocks: H2, which needs H1.1a to H1.8 and never H1.9
 

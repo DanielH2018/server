@@ -19,6 +19,11 @@ call until its own checks pass. A refusal is reported and the wait goes on, so a
 keeps refusing reaches merge-timeout rather than a merge. --arm-merge without --await-merge
 therefore dies: nothing in that run would merge the PR.
 
+A head that bumps a forward-only pin (`k3s_longhorn_version`, `k3s_metallb_version`) merges
+only after `pin_gate.gate_before_merge` passes it: on daniel-box, with DEPLOY_HOLD at `none`, no
+bump of that pin already in flight, its runbook gates green and `homelab/upgrade-gates` posted
+on the head. `pin_gate.py`'s docstring has the order and what each step reads.
+
 The direct merge copies every `Removes-Object:` line on the PR's commits into the squash body
 it sends (`squash_body`), so `promote.py decide` finds each one on master whatever the repo's
 squash default is.
@@ -69,7 +74,7 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
 from lib.exit_codes import CI_DISARMED, CI_GREEN, CI_RED
 from lib.json_types import as_list, as_object
 from lib import removes_object
-from deploy_tools.land_lib import policy
+from deploy_tools.land_lib import pin_gate, policy
 from deploy_tools.land_lib.landing import BRANCH, Landing
 from deploy_tools.land_lib.outcome import Verdict, disarmed, say
 from deploy_tools.land_lib.pr_json import CommitMessage
@@ -486,9 +491,12 @@ def await_merge(ln: Landing) -> None:
     last_refusal = ""
     # The head this landing updated the branch from; empty until it does.
     updated_from = ""
-    # The head `_refuse_handback_while_flux_owns` last passed, so a merge GitHub refuses and
-    # the wait retries reads kubectl again only for a new head.
+    # The head the handback refusal and the pin gate last passed, so a merge GitHub refuses
+    # and the wait retries reads kubectl, runs the gates and posts the status again only for a
+    # new head.
     handback_checked = ""
+    # The forward-only pins that head bumps, whose land rule is read again before each retry.
+    gated_pins: list[str] = []
     while True:
         view = ln.view("state,mergeable,headRefOid")
         state = view.get("state", "")
@@ -541,7 +549,10 @@ def await_merge(ln: Landing) -> None:
                 else:
                     if head != handback_checked:
                         _refuse_handback_while_flux_owns(ln, head)
+                        gated_pins = pin_gate.gate_before_merge(ln, head)
                         handback_checked = head
+                    else:
+                        pin_gate.recheck_before_merge(ln, gated_pins)
                     refusal = _merge_directly(ln, head)
                     if not refusal:
                         continue

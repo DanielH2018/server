@@ -1,7 +1,7 @@
 # k3s control-plane upgrade runbook
 
 A k3s bump reinstalls the control plane on a single-server cluster, so it runs by hand. Renovate
-raises the PR and the `k3s control plane (manual — plan the upgrade, mind Longhorn's version skips)`
+raises the PR and the `k3s control plane (manual — hand-run upgrade: docs/k3s-upgrade.md)`
 rule blocks its automerge, which means the daily unattended `/renovate-prs` run can never land it.
 This page is what an operator follows instead.
 
