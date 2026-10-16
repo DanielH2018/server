@@ -27,7 +27,9 @@ Job and its directory:
   only the modules in `ALLOWED_IMPORTS`, none of which opens a connection, and uses no name
   in `FORBIDDEN`. It reads from `flux_job_connect` only the names in the helper's `__all__`,
   and reaches `urllib` only through a submodule `ALLOWED_IMPORTS` holds, so it cannot walk
-  through an allowed module to `urllib.request`. The row guards against a mistake, not an
+  through an allowed module to `urllib.request`. It uses neither module as a value and reads
+  no dunder, as an attribute or a string, so `getattr`, `vars` and `__globals__` cannot
+  reach around those two rules. The row guards against a mistake, not an
   adversary: a name spelled out at run time passes it.
 
 The test module is `test_renderer_job_census.py`.
@@ -134,6 +136,9 @@ FORBIDDEN = frozenset(
         "exec",
         "eval",
         "modules",
+        "AbstractHTTPHandler",
+        "HTTPHandler",
+        "HTTPSHandler",
     }
 )
 # Packages `ALLOWED_IMPORTS` admits only through a submodule: `urllib`, for `urllib.error`
@@ -143,6 +148,9 @@ SUBMODULE_ONLY = (
     frozenset(name.split(".")[0] for name in ALLOWED_IMPORTS if "." in name)
     - ALLOWED_IMPORTS
 )
+# A dunder name, which a script never reads as an attribute or a string: `__main__` aside,
+# each one reaches past the names the rules here check.
+DUNDER = re.compile(r"__\w+__")
 PYTHONS = frozenset({"python", "python3"})
 IMPORTS_HELPER = re.compile(r"^\s*(?:from|import)\s+flux_job_connect\b", re.MULTILINE)
 
@@ -340,6 +348,10 @@ def script_offence(name: str, text: str) -> list[str]:
         for a in node.names
         if a.name == "flux_job_connect"
     }
+    # Each `Name` node that is the object of an attribute read, `f` in `f.open_url`.
+    read_from = {
+        id(node.value) for node in ast.walk(tree) if isinstance(node, ast.Attribute)
+    }
     found = set()
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
@@ -356,11 +368,23 @@ def script_offence(name: str, text: str) -> list[str]:
                     for a in node.names
                     if a.name not in exports
                 }
-        elif isinstance(node, ast.Name) and node.id in FORBIDDEN:
-            found.add(node.id)
+        elif isinstance(node, ast.Name):
+            if node.id in FORBIDDEN:
+                found.add(node.id)
+            # The helper module and `urllib` are read only as `f.<export>` and
+            # `urllib.<submodule>`. Bound to another name or passed to `getattr` or `vars`,
+            # either one reaches what the attribute checks below refuse.
+            if (node.id in helpers or node.id in SUBMODULE_ONLY) and id(
+                node
+            ) not in read_from:
+                found.add(f"{node.id} as a value")
         elif isinstance(node, ast.Attribute):
             if node.attr in FORBIDDEN:
                 found.add(node.attr)
+            # A dunder reaches a function's or a module's namespace: `open_url.__globals__`
+            # holds every module the helper imports.
+            if DUNDER.fullmatch(node.attr):
+                found.add(f".{node.attr}")
             if node.attr in SUBMODULE_ONLY:
                 found.add(f".{node.attr}")
             if isinstance(node.value, ast.Name):
@@ -372,7 +396,14 @@ def script_offence(name: str, text: str) -> list[str]:
                     and f"{root}.{node.attr}" not in ALLOWED_IMPORTS
                 ):
                     found.add(f"{root}.{node.attr}")
-        elif isinstance(node, ast.Constant) and node.value in FORBIDDEN:
+        elif isinstance(node, ast.Constant) and (
+            node.value in FORBIDDEN
+            or (
+                isinstance(node.value, str)
+                and DUNDER.fullmatch(node.value)
+                and node.value != "__main__"
+            )
+        ):
             found.add(repr(node.value))
     return [
         f"{name} uses {use}; import only ALLOWED_IMPORTS and connect with "

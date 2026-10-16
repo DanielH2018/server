@@ -258,6 +258,46 @@ def test_script_offence_flags_a_module_reached_by_another_route(script):
     assert script_offence("run.py", script)
 
 
+@pytest.mark.parametrize(
+    "script",
+    [
+        pytest.param(
+            "import flux_job_connect as f\n\n"
+            "f.open_url.__globals__['urllib'].request.HTTPHandler()\n",
+            id="helper-function-globals",
+        ),
+        pytest.param(
+            "from flux_job_connect import Request\n\n"
+            "Request.__init__.__globals__['socket'].socket().connect(('x', 80))\n",
+            id="exported-class-globals",
+        ),
+        pytest.param(
+            "from flux_job_connect import open_url\n\n"
+            "getattr(open_url, '__globals__')['socket'].socket()\n",
+            id="globals-by-string",
+        ),
+        pytest.param(
+            "import flux_job_connect as f\n\ngetattr(f, 'urllib').request\n",
+            id="getattr-on-helper",
+        ),
+        pytest.param(
+            "import flux_job_connect as f\n\nvars(f)['urllib'].request\n",
+            id="vars-of-helper",
+        ),
+        pytest.param(
+            "import urllib.error\n\nu = urllib\nu.request.HTTPHandler\n",
+            id="urllib-aliased",
+        ),
+        pytest.param(
+            "import flux_job_connect as f\n\ng = f\ng.refused\n",
+            id="helper-aliased",
+        ),
+    ],
+)
+def test_script_offence_flags_a_module_reached_around_the_attribute_rules(script):
+    assert script_offence("run.py", script)
+
+
 def test_script_offence_passes_the_helper_exports_and_admitted_urllib_submodules():
     script = (
         "import urllib.error\nimport urllib.parse\n\nimport flux_job_connect as f\n\n"
@@ -265,6 +305,8 @@ def test_script_offence_passes_the_helper_exports_and_admitted_urllib_submodules
         "    f.open_url(f.Request(urllib.parse.quote('http://x')), timeout=1)\n"
         "except urllib.error.HTTPError as err:\n"
         "    f.refused(err)\n"
+        "if __name__ == '__main__':\n"
+        "    print('ok')\n"
     )
     assert script_offence("run.py", script) == []
 
