@@ -16,6 +16,11 @@ On its base, netpol-baseline was already the last entry, so it moved no entry, a
 a full `./scripts/deploy.sh` ran from 23:04:20 UTC with `failed=0`. Afterwards
 `k8s_unapplied` read `none`, and no non-Job pod had started since the run began.
 
+PR D4.2, the renderer writes `dependsOn`: [#5177](https://github.com/DanielH2018/server/pull/5177).
+It also closed #5154. After its promotion, `469ba1108`, the bento-pdf Kustomization carried
+`homelab/ansible-owned-deps: authelia,traefik`. `dependsOn` stayed empty on all three
+Kustomizations, and bento-pdf still ran ReplicaSet `865c4b8dd4`.
+
 Depends on: [D2](d2-first-leaf.md), with two exceptions. PR D4.0 depends on nothing, and it
 must land before D2.7 (Open question 3). PR D4.9 waits only on D1.6, D1.6b and M1, as its step
 says. No PR of D3 waits on D4: the publish layout that D3.3 needs is
