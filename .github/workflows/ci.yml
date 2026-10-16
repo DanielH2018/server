@@ -581,21 +581,26 @@ jobs:
       - name: Install Ansible collections
         run: uv run ansible-galaxy collection install -r ansible/requirements.yml -p ansible/collections
       # `cluster_vars.py write`'s tests (target slice D3) run the real sops against a throwaway
-      # age key, and they fail rather than skip without it. The version and digest are the
-      # hosts' pin, `sops_setup_version` and `sops_setup_binary_amd64_sha256` in
-      # ansible/roles/setup/sops_setup/defaults/main.yml, and
-      # ansible/tests/repo/test_ci_sops_matches_the_host_pin.py holds the two equal: a sops
-      # bump moves this copy too. age comes from apt, as the hosts install it.
+      # age key, and they fail rather than skip without it. The step reads the hosts' pin,
+      # `sops_setup_version` and `sops_setup_binary_amd64_sha256`, out of the sops_setup
+      # defaults, as the sops_manifest_type_proof job does, so a sops bump has no CI copy to
+      # move. Renovate moves the version there; until `asset_pins.py --refresh getsops/sops`
+      # moves the digest, this step fails and names that command. age comes from apt, as the
+      # hosts install it.
       - name: Install sops and age for the cluster_vars tests
-        env:
-          SOPS_VERSION: v3.13.3
-          SOPS_SHA256: e5bec3346a873ae91d871550f3e698c1aad962aff462a080e40f25fde17fef6b
         run: |
           set -euo pipefail
+          defaults=ansible/roles/setup/sops_setup/defaults/main.yml
+          sops_version=$(awk -F'"' '/^sops_setup_version:/ {print $2}' "$defaults")
+          sops_sha256=$(awk '/^sops_setup_binary_amd64_sha256:/ {print $2}' "$defaults")
+          [ -n "$sops_version" ] && [ -n "$sops_sha256" ]
           mkdir -p "$RUNNER_TEMP/bin"
           curl --retry 3 -fsSLo "$RUNNER_TEMP/bin/sops" \
-            "https://github.com/getsops/sops/releases/download/$SOPS_VERSION/sops-$SOPS_VERSION.linux.amd64"
-          echo "$SOPS_SHA256  $RUNNER_TEMP/bin/sops" | sha256sum -c --strict
+            "https://github.com/getsops/sops/releases/download/$sops_version/sops-$sops_version.linux.amd64"
+          echo "$sops_sha256  $RUNNER_TEMP/bin/sops" | sha256sum -c --strict || {
+            echo "::error::sops $sops_version does not match sops_setup_binary_amd64_sha256. Run: uv run python scripts/validate/asset_pins.py --refresh getsops/sops"
+            exit 1
+          }
           chmod +x "$RUNNER_TEMP/bin/sops"
           echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
           sudo apt-get install -y --no-install-recommends age \
