@@ -12,6 +12,9 @@ comments, in the scripts' own docstrings and in the role docs, so "the name appe
 `roles/setup/`" would fail on prose. What is forbidden is a SCHEDULE: a `cron:` task's fields, a
 `kuma_check_timer.yml` import's vars, and a systemd `.service.j2`/`.timer.j2` template.
 
+A fourth surface arrives with target slice H2, which moves host crons into CronJobs: a rendered
+k8s CronJob whose command, or a ConfigMap it mounts, names the reaper (the CronJob arm below).
+
 Run: uv run pytest ansible/tests/longhorn/test_longhorn_reap_never_scheduled.py
 """
 
@@ -21,6 +24,7 @@ from _helpers import ANSIBLE
 from _helpers import REPO
 from _helpers import load_tasks
 from _helpers import walk_tasks
+from _k8s_render import pod_spec, rendered_docs
 from _role_census import task_files
 from _setup_render import rendered_setup_texts
 import json
@@ -232,3 +236,128 @@ def test_a_comment_naming_a_reaper_is_clean(tmp_path: Path) -> None:
         "# never longhorn_reap.py here\n[Service]\nExecStart=/bin/true\n"
     )
     assert scheduled_reapers(tmp_path) == []
+
+
+# ── The CronJob arm: no k8s CronJob runs a reaper ────────────────────────────────────────
+#
+# H2 moves host crons into CronJobs (docs/target-architecture/host/h2-shrink-host-plane.md,
+# *The reapers stay unscheduled*), so a schedule can arrive in a rendered manifest as well as
+# in a setup task. A CronJob that names the reaper in its command is caught directly. One that
+# runs a script from a mounted ConfigMap names it only in that ConfigMap's data, so the arm
+# reads the data of every ConfigMap the CronJob mounts, through a `configMap` volume or a
+# `projected` source.
+
+# The CronJob and the mounted script ConfigMap that must be read, so an empty render cannot
+# pass. H2.3b adds the drill's script ConfigMap here when its tag renders one.
+CRONJOB_MEMBERS = frozenset({("CronJob", "pi-peer-backup")})
+MOUNTED_MEMBERS = frozenset({("ConfigMap", "kuma-maintenance-sync")})
+
+
+def _mounted_configmaps(pod: dict) -> set[str]:
+    """The names of every ConfigMap a pod spec mounts, directly or through a projected volume."""
+    names = set()
+    for volume in pod.get("volumes") or []:
+        if "configMap" in volume:
+            names.add(volume["configMap"]["name"])
+        for source in (volume.get("projected") or {}).get("sources") or []:
+            if "configMap" in source:
+                names.add(source["configMap"]["name"])
+    return names
+
+
+def cronjob_reapers(
+    docs: list[dict],
+) -> tuple[list[tuple[str, str]], set[tuple[str, str]]]:
+    """(`(cronjob, where)` per reaper call, every `(kind, name)` read) over rendered `docs`.
+
+    `where` is `command` for a call in a container's command or args, or `configmap/<name>` for
+    a call in a mounted ConfigMap's data. A ConfigMap is looked up in the CronJob's own
+    namespace.
+    """
+    configmaps = {
+        (d["metadata"].get("namespace"), d["metadata"]["name"]): d
+        for d in docs
+        if d.get("kind") == "ConfigMap"
+    }
+    hits, read = [], set()
+    for doc in docs:
+        if doc.get("kind") != "CronJob":
+            continue
+        name, namespace = doc["metadata"]["name"], doc["metadata"].get("namespace")
+        read.add(("CronJob", name))
+        pod = pod_spec(doc)
+        containers = (pod.get("initContainers") or []) + (pod.get("containers") or [])
+        argv = json.dumps([(c.get("command"), c.get("args")) for c in containers])
+        hits += [(name, "command") for reaper in sorted(REAPERS) if reaper in argv]
+        for mounted in sorted(_mounted_configmaps(pod)):
+            configmap = configmaps.get((namespace, mounted))
+            if configmap is None:
+                continue
+            read.add(("ConfigMap", mounted))
+            data = json.dumps(configmap.get("data") or {})
+            hits += [
+                (name, f"configmap/{mounted}")
+                for reaper in sorted(REAPERS)
+                if reaper in data
+            ]
+    return hits, read
+
+
+def _cronjob(command: list[str], configmap: str | None = None) -> dict:
+    volumes = [{"name": "s", "configMap": {"name": configmap}}] if configmap else []
+    container = {"name": "job", "image": "x", "command": command}
+    return {
+        "kind": "CronJob",
+        "metadata": {"name": "nightly", "namespace": "homelab"},
+        "spec": {
+            "jobTemplate": {
+                "spec": {
+                    "template": {
+                        "spec": {"containers": [container], "volumes": volumes}
+                    }
+                }
+            }
+        },
+    }
+
+
+def _configmap(name: str, script: str) -> dict:
+    return {
+        "kind": "ConfigMap",
+        "metadata": {"name": name, "namespace": "homelab"},
+        "data": {"run.sh": script},
+    }
+
+
+def test_no_k8s_cronjob_runs_a_reaper() -> None:
+    """The tree: no rendered CronJob, nor any ConfigMap one mounts, names a reaper."""
+    hits, read = cronjob_reapers([doc for _, _, doc in rendered_docs()])
+    assert hits == [], (
+        f"a CronJob runs a reaper; they are operator-invoked only: {hits}"
+    )
+    missing = (CRONJOB_MEMBERS | MOUNTED_MEMBERS) - read
+    assert not missing, f"the CronJob arm never read {sorted(missing)}"
+
+
+def test_a_cronjob_command_naming_a_reaper_is_flagged() -> None:
+    job = _cronjob(["python3", "/repo/scripts/backup/longhorn_reap.py", "backups"])
+    assert cronjob_reapers([job])[0] == [("nightly", "command")]
+
+
+def test_a_reaper_inside_a_mounted_script_configmap_is_flagged() -> None:
+    """The arm's reason to exist: the command names only the script, the script the reaper."""
+    job = _cronjob(["sh", "/scripts/run.sh"], configmap="nightly-script")
+    script = _configmap(
+        "nightly-script", "python3 longhorn_reap.py snapshots --apply\n"
+    )
+    assert cronjob_reapers([job, script])[0] == [
+        ("nightly", "configmap/nightly-script")
+    ]
+
+
+def test_a_cronjob_naming_neither_is_clean() -> None:
+    job = _cronjob(["sh", "/scripts/run.sh"], configmap="nightly-script")
+    script = _configmap("nightly-script", "rsync -a /src /dst\n")
+    hits, read = cronjob_reapers([job, script])
+    assert hits == []
+    assert read == {("CronJob", "nightly"), ("ConfigMap", "nightly-script")}
