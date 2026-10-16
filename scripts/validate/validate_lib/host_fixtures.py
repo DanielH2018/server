@@ -2,9 +2,10 @@
 """The packages and the repository the host_packages container cases serve.
 
 `scripts/validate/host_package_cases.py` runs the cases. This module builds what they install:
-the fixture homelab-daniel-pi in four versions, rendered by the real renderer from
-`hosts/lib/tests/container/fixture/`; a homelab-updater whose unit changes; and the unsigned
-apt repository, in suite `homelab`, that serves a chosen set of them.
+the fixture homelab-daniel-pi in three versions, rendered by the real renderer from
+`hosts/lib/tests/container/fixture/`; a homelab-updater whose unit changes; a copy of the real
+homelab-daniel-pi whose drop-in on the updater's timer changes; and the unsigned apt
+repository, in suite `homelab`, that serves a chosen set of them.
 """
 
 import sys as _sys
@@ -24,7 +25,7 @@ from lib.repo_paths import REPO
 from renderer.renderer_lib import host as host_mode
 
 FIXTURE = REPO / "hosts" / "lib" / "tests" / "container" / "fixture"
-VARIANTS = ("base", "head", "payload", "dropin")
+VARIANTS = ("base", "head", "payload")
 HOST = "daniel-pi"
 UPDATER = "homelab-updater"
 HOST_PKG = f"homelab-{HOST}"
@@ -34,6 +35,9 @@ KEYRING = "/usr/share/keyrings/homelab-archive-keyring.gpg"
 UNIT_DIR = "/usr/lib/systemd/system"
 UNIT_CHANGE = "Environment=HOMELAB_FIXTURE=unit-changed"
 DROPIN = f"{UNIT_DIR}/{UPDATER}.timer.d/50-homelab.conf"
+# The real Pi drop-in's minute, and the one its changed copy fires at instead.
+DROPIN_MINUTE = ":05/15:00"
+DROPIN_CHANGED = ":10/15:00"
 
 
 def box_address(render: Path) -> str:
@@ -83,6 +87,25 @@ def updater_variant(head: Path, out: Path) -> Path:
     shutil.copytree(head / "packages" / UPDATER, directory)
     unit = directory / f"root{UNIT_DIR}/{UPDATER}.service"
     unit.write_text(unit.read_text() + UNIT_CHANGE + "\n")
+    return directory
+
+
+def pi_dropin_variant(head: Path, out: Path) -> Path:
+    """Copy the head render of the real homelab-daniel-pi under `out`, its drop-in changed.
+
+    The drop-in on homelab-updater.timer fires at another minute, so its hash changes. The
+    manifest records no file hashes, so the copy needs no re-render.
+
+    Raises:
+        ValueError: the head render's drop-in does not fire at DROPIN_MINUTE.
+    """
+    directory = out / "hosts" / HOST
+    shutil.copytree(head / "hosts" / HOST, directory)
+    dropin = directory / f"root{DROPIN}"
+    text = dropin.read_text()
+    if DROPIN_MINUTE not in text:
+        raise ValueError(f"{dropin} does not fire at {DROPIN_MINUTE}")
+    dropin.write_text(text.replace(DROPIN_MINUTE, DROPIN_CHANGED))
     return directory
 
 
