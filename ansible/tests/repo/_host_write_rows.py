@@ -122,7 +122,9 @@ _CONFIGMAP = (
     "D5's Wave D PR for the role: the imperative ConfigMap's node staging under "
     "/etc/rancher/k3s/ becomes a rendered ConfigMap"
 )
-_UNNAMED = "#5266: the D5 plan names no PR that moves this write yet"
+_RUN_ONCE = (
+    "D5's run-once cleanup PR deletes the cleanup, which has already run on daniel-box"
+)
 
 HOST_WRITE_ALLOW = {
     _K8S + "artifacts/tasks/main.yml": (
@@ -132,18 +134,19 @@ HOST_WRITE_ALLOW = {
     _K8S + "configarr/tasks/main.yml": _H2_THEN_D5,
     _K8S + "crowdsec/tasks/main.yml": _H2_THEN_D5,
     _K8S + "docs/tasks/main.yml": "D5's `k8s_host_files` conversion PR for docs",
-    _K8S + "game-stats/tasks/main.yml": f"the record cleanup's absent arm: {_UNNAMED}",
+    _K8S + "game-stats/tasks/main.yml": f"the pre-#2813 record cleanup: {_RUN_ONCE}",
     _K8S + "game-stats/tasks/stage.yml": _CONFIGMAP,
     _K8S + "game-stats/tasks/terraria.yml": _CONFIGMAP,
     _K8S + "game-stats/tasks/valheim.yml": _CONFIGMAP,
     _K8S + "janitorr/tasks/main.yml": _H2_THEN_D5,
-    _K8S
-    + "media-volume/tasks/main.yml": f"the media directories on the node: {_UNNAMED}",
+    _K8S + "media-volume/tasks/main.yml": (
+        "D5's `k8s_host_files` conversion PR for media-volume moves the media directories"
+    ),
     _K8S + "monitor-bridge/tasks/main.yml": _CONFIGMAP,
     _K8S + "observability/tasks/dashboards.yml": _CONFIGMAP,
     _K8S + "observability/tasks/main.yml": (
-        "H2.7 moves the telemetry heartbeat and its cron and leaves no host row; the "
-        f"claude-otel record cleanup is not one of H2.7's rows: {_UNNAMED}"
+        "H2.7 moves the telemetry heartbeat and its cron; the claude-otel record cleanup "
+        f"is not one of H2.7's rows: {_RUN_ONCE}"
     ),
     _K8S + "pi-peer-backup/tasks/main.yml": (
         "pi-peer-backup's Wave C PR moves both daniel-pi writes to `k8s_host_files`"
@@ -155,7 +158,8 @@ HOST_WRITE_ALLOW = {
     ),
     _K8S + "traefik/tasks/main.yml": (
         "D5's `k8s_host_files` conversion PR for traefik moves the Cloudflare drift absent "
-        f"arms; the RBAC file outside {_MANIFESTS}: {_UNNAMED}"
+        f"arms; traefik's flip PR renders the RBAC it stages outside {_MANIFESTS} into "
+        "its bundle and deletes the staging task"
     ),
 }
 
