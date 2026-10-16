@@ -245,7 +245,7 @@ def _cluster_file_pr(*paths: str, **kwargs: object) -> Fakes:
 
 
 def test_a_pr_changing_only_the_cluster_source_waits_on_cluster_vars(land_run):
-    rc, out, _, calls, _ = land_run(
+    rc, out, _, calls, logline = land_run(
         [], _cluster_file_pr("ansible/vars/cluster-vars.source")
     )
     assert rc == 0 and "VERDICT: settled" in out
@@ -256,6 +256,8 @@ def test_a_pr_changing_only_the_cluster_source_waits_on_cluster_vars(land_run):
     assert "deploy" not in _names(calls)
     # `cluster-vars` is no deploy tag, so the health gate is never asked about it.
     assert [c[1] for c in calls if c[0] == "gate"] == [([],)]
+    # The ledger still names what the landing waited on (#5175).
+    assert " tags=cluster-vars " in logline
 
 
 def test_a_rotation_pr_waits_on_cluster_vars_before_naming_the_ansible_half(land_run):

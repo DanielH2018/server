@@ -325,6 +325,10 @@ Instead it reads the cluster every 30 seconds:
   `scripts/deploy_tools/promote_lib/wait.py:LAND_WAIT_TIMEOUT_S`). Look first at the
   `promote` workflow's failed `publish` jobs: a publish refusal leaves no `sha-<commit>` tag
   to promote. The next promotion may still cover the merge commit.
+  The 67 minutes count again from each poll that reads a verification of an earlier commit
+  in flight, for up to `wait.py:IN_FLIGHT_WAIT_S`. M's `decide` waits on that verification
+  before it promotes M, so two merges minutes apart would otherwise give up on a promotion
+  that passes later (#5164). A lander unit's own `TimeoutStartSec` still bounds the landing.
 
 Two holds coexist until slice D6 retires the deployer, and `probe.py landing` prints both on
 every run, each naming its source and the tags it holds:

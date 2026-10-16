@@ -19,10 +19,17 @@ may promote a newer commit. The plan is docs/target-architecture/deploy/d2-first
                    `status.lastAppliedOriginRevision` names a commit R that is M or descends
                    from it. One `deploy-annotation` line records it.
     deploy-failed  DEPLOY_HOLD holds a value other than `none`. Cause `promote-held`.
-    gave-up        LAND_WAIT_TIMEOUT_S passed. Cause `promote-timeout`.
+    gave-up        LAND_WAIT_TIMEOUT_S passed, or the later deadline below. Cause
+                   `promote-timeout`.
+- While a verification of an earlier commit P is in flight, M's `decide` waits on it rather
+  than promoting, for up to IN_FLIGHT_WAIT_S. So each poll that reads `prod` differing from
+  `last-good` at a strict ancestor of M moves the deadline to LAND_WAIT_TIMEOUT_S past that
+  poll. It stops moving IN_FLIGHT_WAIT_S after P was first read in flight, because `decide`
+  gives up there too (#5164).
 - It reads the Kustomizations with the read-only `kubectl`, ancestry with
-  `git merge-base --is-ancestor`, and DEPLOY_HOLD with `gh variable get`, which is the one
-  GitHub call per poll. A read that fails keeps the wait going and never reads as settled.
+  `git merge-base --is-ancestor`, DEPLOY_HOLD with `gh variable get`, which is the one
+  GitHub call per poll, and `prod` and `last-good` from GHCR. A read that fails keeps the wait
+  going and never reads as settled. A failed `prod` read moves no deadline.
 
 It prints a line each time what it waits on changes. Its last line is `verdict=<outcome>
 cause=<cause> merge=<M> revision=<R> widened=<why the set was every name, or empty>`.
@@ -53,12 +60,16 @@ from lib.git import git
 
 import forge
 from changed_set import ROOT, ChangedSet, changed_set
+from artifact_retention import LAST_GOOD_TAG, PROD_TAG
 from flux_host import FluxHost
 
 HOLD_VARIABLE = forge.HOLD_VARIABLE
 # The `lastAppliedOriginRevision` form that names a commit: the `--revision` that `flux push
 # artifact` writes (contract C6). promote.py reads the same form off `prod`'s manifest.
 _REVISION = re.compile(r"master@sha1:([0-9a-f]{40})")
+# The annotation `flux push artifact --revision` writes on a bundle's manifest. promote.py
+# reads `prod`'s commit from it too, through this name.
+REVISION_ANNOTATION = "org.opencontainers.image.revision"
 
 
 class WaitReadError(RuntimeError):
@@ -81,15 +92,21 @@ POLL_S = 30
 # `ansible/roles/k8s/flux/templates/sync.yaml.j2`, and the largest `retryInterval`, the 2m
 # `scripts/renderer/renderer_lib/bundle.py` writes on each Kustomization. It is the longest wait
 # `chained_timeout.promote_timeout` returns for a one-tag bundle (#5155), and
-# test_promote_land_wait.py pins the two together. `chained_timeout` imports this module, so
-# this one cannot import `promote_timeout` back to derive the figure from M's bundle.
+# test_promote_land_wait_deadline.py pins the two together. `chained_timeout` imports this
+# module, so this one cannot import `promote_timeout` back to derive the figure from M's bundle.
 # `land-wait` gives up at twice it (contract C6). The second half covers `promote.yml`'s
-# `render` and `publish` jobs, 10m each, which run before any promotion of M can start. It
-# does not cover M's `decide` waiting on an earlier commit's verification that is still in
-# flight, up to `verify_promotion.IN_FLIGHT_WAIT_S`. Two merges minutes apart can then end the
-# wait `gave-up` on a promotion that passes later (#5164).
+# `render` and `publish` jobs, 10m each, which run before any promotion of M can start.
 PROMOTE_TIMEOUT_S = 10 * 60 + 30 + 10 * 60 + 10 * 60 + 60 + 2 * 60
 LAND_WAIT_TIMEOUT_S = 2 * PROMOTE_TIMEOUT_S
+
+# How long M's `decide` waits on an earlier commit's verification before it gives up as
+# `current`, restated from `verify_promotion.IN_FLIGHT_WAIT_S`, which imports this module
+# (test_promote_land_wait_deadline.py pins the two together).
+# DECIDED: the deadline moves while that verification is in flight, rather than
+# LAND_WAIT_TIMEOUT_S rising by IN_FLIGHT_WAIT_S. The constant would cover the same worst
+# case, but every stuck landing would then take about 6.7 hours to give up, where this costs
+# only the time a verification is actually in flight (#5164).
+IN_FLIGHT_WAIT_S = 350 * 60
 
 # How far back `_published_ancestor` walks M's first-parent history. `publish` pushes every
 # green master commit, so the nearest published ancestor is usually M's first parent.
@@ -117,6 +134,8 @@ class WaitReads:
             is not published.
         published_ancestor: the newest commit on C's first-parent line, C excluded, whose
             `sha-<commit>` tag is published, or None when none is within ANCESTOR_WALK_MAX.
+        in_flight: the commit `prod` names while its digest differs from `last-good`'s, the
+            state `decide` waits on, or None when the two agree or either is absent.
         annotate: writes one syslog line under ANNOTATION_TAG and ignores any failure.
         sleep: waits the given seconds.
         clock: monotonic seconds.
@@ -127,6 +146,7 @@ class WaitReads:
     is_ancestor: Callable[[str, str], bool | None]
     digests: Callable[[str], object | None]
     published_ancestor: Callable[[str], str | None]
+    in_flight: Callable[[], str | None]
     annotate: Callable[[str], None]
     sleep: Callable[[float], None]
     clock: Callable[[], float]
@@ -334,6 +354,9 @@ def land_wait(
         also: names to wait on whatever the digests say, each with its live dependents.
     """
     started = reads.clock()
+    deadline = started + timeout_s
+    # The earlier commit last read in flight, and when it was first read so.
+    earlier, earlier_since = "", 0.0
     expected = _Expected(reads, merge)
     last = ""
     widened = ""
@@ -368,19 +391,41 @@ def land_wait(
             return WaitResult(
                 "deploy-failed", HOLD_CAUSE, hold_detail(hold), widened=widened
             )
+        now = reads.clock()
+        commit, note = _earlier_in_flight(reads, merge)
+        if commit and commit != earlier:
+            earlier, earlier_since = commit, now
+        if commit and now - earlier_since < IN_FLIGHT_WAIT_S:
+            deadline = max(deadline, now + timeout_s)
+        line += note
         if line != last:
             print(f"  promote.py land-wait: {line}", flush=True)
             last = line
-        if reads.clock() - started >= timeout_s:
+        if now >= deadline:
             return WaitResult(
                 "gave-up",
                 TIMEOUT_CAUSE,
-                f"no promotion covered {merge[:8]} within {timeout_s}s. Look first at the "
-                "`promote` workflow's failed `publish` jobs: a publish refusal leaves no "
-                "sha-<commit> tag to promote",
+                f"no promotion covered {merge[:8]} within {int(now - started)}s. Look first "
+                "at the `promote` workflow's failed `publish` jobs: a publish refusal leaves "
+                "no sha-<commit> tag to promote",
                 widened=widened,
             )
         reads.sleep(poll_s)
+
+
+def _earlier_in_flight(reads: WaitReads, merge: str) -> tuple[str, str]:
+    """The strict ancestor of `merge` whose verification is in flight, or "", and a note.
+
+    A verification of `merge` itself, or of a commit after it, is one the base timeout already
+    covers, so it moves no deadline. A read that fails moves none either; the note says so.
+    """
+    try:
+        commit = reads.in_flight()
+    except READ_ERRORS as err:
+        return "", f"; prod and last-good could not be read: {err}"
+    if commit is None or commit == merge or not reads.is_ancestor(commit, merge):
+        return "", ""
+    return commit, f"; a verification of {commit[:8]}, before this merge, is in flight"
 
 
 def annotate_promotion(
@@ -423,6 +468,29 @@ def _bundle_digests(f: forge.Forge, sha: str) -> object | None:
         raise WaitReadError(f"sha-{sha}'s {DIGESTS_FILE} is not JSON") from err
 
 
+def _in_flight(f: forge.Forge) -> str | None:
+    """The commit `prod` names while it and `last-good` name different digests, else None.
+
+    `decide` reads the same two digests (`verify_promotion.wait_settled`), so this is in flight
+    exactly when `decide` would wait.
+    """
+    tagged = f.registry.tagged(PROD_TAG)
+    last_good = f.registry.digest(LAST_GOOD_TAG)
+    if tagged is None or last_good is None or tagged[1] == last_good:
+        return None
+    annotations = tagged[0].get("annotations")
+    revision = (
+        annotations.get(REVISION_ANNOTATION) if isinstance(annotations, dict) else None
+    )
+    match = _REVISION.fullmatch(revision) if isinstance(revision, str) else None
+    if match is None:
+        raise WaitReadError(
+            f"{PROD_TAG}'s manifest has no {REVISION_ANNOTATION} of the form "
+            f"master@sha1:<sha>, got {revision!r}"
+        )
+    return match.group(1)
+
+
 def _published_ancestor(f: forge.Forge, repo: Path, sha: str) -> str | None:
     args = ("rev-list", "--first-parent", f"--max-count={ANCESTOR_WALK_MAX}", f"{sha}^")
     proc = git(*args, cwd=repo, check=False)
@@ -447,6 +515,7 @@ def live_wait_reads(
         is_ancestor=lambda a, b: _wait_is_ancestor(repo, a, b),
         digests=lambda sha: _bundle_digests(f, sha),
         published_ancestor=lambda sha: _published_ancestor(f, repo, sha),
+        in_flight=lambda: _in_flight(f),
         annotate=lambda line: host.log(ANNOTATION_TAG, line),
         sleep=time.sleep,
         clock=time.monotonic,
@@ -493,5 +562,6 @@ def add_parser(commands, repo: Path) -> None:
         "--timeout",
         type=int,
         default=LAND_WAIT_TIMEOUT_S,
-        help="seconds before it gives up (default: twice the promote timeout)",
+        help="seconds before it gives up, counted again from each poll that reads an "
+        "earlier commit's verification in flight (default: twice the promote timeout)",
     )

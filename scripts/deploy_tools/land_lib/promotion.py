@@ -202,6 +202,16 @@ def waits_on_cluster_vars(ln: Landing) -> bool:
     return changes_cluster_vars(ln.classification.pr_paths)
 
 
+def forced_names(ln: Landing) -> list[str]:
+    """The names land-wait waits on whatever the digests say: `cluster-vars`, or none.
+
+    The ledger's `tags=` names them beside the deploy tags, so a landing that changed only a
+    cluster file still shows what it waited on (#5175). No reader of that field treats a
+    value as a deploy tag: the Landings board only prints it.
+    """
+    return [CLUSTER_VARS] if waits_on_cluster_vars(ln) else []
+
+
 def wait_on_promotion(ln: Landing) -> None:
     """Wait until a promotion covers the merge commit; return on `settled`, else end the landing.
 
@@ -210,8 +220,9 @@ def wait_on_promotion(ln: Landing) -> None:
     deploy tag, so it stays out of `owned_tags` and the health gate never asks for it.
     """
     pr, sha = ln.opts.pr, ln.merge_sha
-    also = frozenset({CLUSTER_VARS}) if waits_on_cluster_vars(ln) else frozenset()
-    tags = ",".join([*ln.owned_tags, *sorted(also)])
+    forced = forced_names(ln)
+    also = frozenset(forced)
+    tags = ",".join([*ln.owned_tags, *forced])
     say(f"waiting until a promotion covers {sha[:12]} ({tags})")
     result = ln.tools.flux.land_wait(sha, published(ln), ln.opts.primary, also)
     if result.widened:

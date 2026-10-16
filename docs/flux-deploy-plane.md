@@ -486,7 +486,9 @@ A wait shorter than a verification is safe and costs a promotion. `decide` gives
   minutes;
 - a rotation that changes `cluster-vars` and the one tag that substitutes from it: the same
   33.5 minutes. `land-wait` restates that figure as `wait.py:PROMOTE_TIMEOUT_S` and gives up
-  at twice it;
+  at twice it. While a verification of an earlier commit is in flight, M's `decide` waits on
+  it, so `land-wait` counts its timeout again from each poll that reads one, for up to
+  `IN_FLIGHT_WAIT_S`;
 - a revision that changes every importer of `workload-shell.yml.j2` queues in rounds of up
   to each role's `timeout`, so it can reach the cap.
 
