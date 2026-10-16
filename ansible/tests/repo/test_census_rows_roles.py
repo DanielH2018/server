@@ -13,11 +13,13 @@ import re
 import pytest
 from _helpers import walk_tasks
 from _deploy_mechanics_row import DEPLOY_MECHANICS
+from _flux_ownership_row import FLUX_OWNERSHIP
 from _host_script_row import HOST_SCRIPT_WRITES
 from _host_write_rows import HOST_WRITES
 from _k3s_write_verbs_row import K3S_WRITE_VERBS
 from _out_of_render_row import OUT_OF_RENDER
 from _render_record_cleanup_row import RENDER_RECORD_CLEANUP
+from _retired_cron_row import RETIRED_CRON_ARMS
 from _row_table import Census, Subject, check, proof_problems, tracked
 from lib import yaml_fast
 
@@ -73,10 +75,6 @@ def _shipped(pattern: re.Pattern[str], subject: Subject) -> list[tuple[int, str]
         for match in pattern.finditer(code)
         if (name := next(g for g in match.groups() if g))
     ]
-
-
-def _is_test_file(name: str) -> bool:
-    return name == "conftest.py" or name.startswith("test_")
 
 
 # ── No role task writes a home-relative path ──────────────────────────────────────────
@@ -156,7 +154,7 @@ ROWS = (
         offence=lambda s: [
             f"line {n} ships {name}"
             for n, name in _shipped(SHIPPED_PY, s)
-            if _is_test_file(name)
+            if name == "conftest.py" or name.startswith("test_")
         ],
         count=lambda s: len(_shipped(SHIPPED_PY, s)),
         red=(
@@ -484,6 +482,8 @@ ROWS = (
     OUT_OF_RENDER,
     RENDER_RECORD_CLEANUP,
     K3S_WRITE_VERBS,
+    FLUX_OWNERSHIP,
+    RETIRED_CRON_ARMS,
 )
 
 _IDS = [row.name for row in ROWS]

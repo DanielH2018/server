@@ -69,3 +69,36 @@ def test_excluded_set_is_published_when_the_cap_leaves_nothing_eligible(
     assert proc.returncode == 1
     assert "no eligible volume" in proc.stderr, proc.stderr
     assert _excluded(run) == [f"{BIG}\t{CAP + 1}"]
+
+
+# The native trim joins a volume with its per-job label, never a group label (H2.2a). Sorted
+# key order, as kubectl emits it; the drill's jq `keys[]` sorts on its own, so here the order
+# only keeps the fixture honest to the API.
+_NO_BACKUP = "recurring-job-group.longhorn.io/no-backup"
+_TRIM_JOB = "recurring-job.longhorn.io/trim"
+
+
+def test_an_opt_out_volume_with_the_trim_label_is_no_tier(tmp_path: Path) -> None:
+    """A `no-backup` volume over the cap with a Completed backup stays out of all three sets."""
+    run = harness(
+        tmp_path,
+        [SMALL, BIG],
+        actual_sizes={BIG: CAP + 1},
+        labels={BIG: sorted([_NO_BACKUP, _TRIM_JOB])},
+    )
+    run()
+    assert _excluded(run) == []
+    assert (run.stamp_dir / "excluded_nopvc").read_text() == ""
+    assert (run.stamp_dir / "candidates").read_text().split() == [SMALL]
+
+
+def test_a_trim_group_label_reads_as_a_backup_tier(tmp_path: Path) -> None:
+    """Red half: the group form puts the same volume in a tier, so the cap reports it."""
+    run = harness(
+        tmp_path,
+        [SMALL, BIG],
+        actual_sizes={BIG: CAP + 1},
+        labels={BIG: sorted([_NO_BACKUP, "recurring-job-group.longhorn.io/trim"])},
+    )
+    run()
+    assert _excluded(run) == [f"{BIG}\t{CAP + 1}"]
