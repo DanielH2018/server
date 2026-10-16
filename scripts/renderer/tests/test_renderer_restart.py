@@ -1,9 +1,10 @@
-"""`checksum/restart`, the outside-role reference test and the self-rollouts census (D3.3c).
+"""`checksum/restart` and the outside-role reference test (D3.3c).
 
 The value's pairs run on fixture directories through `restart_values`. cloudflare-ddns and
 bento-pdf render for real through `homelab_render.cluster`, with a fixture `.source` in
 `tmp_path`. The outside-role test reads a placeholder render of every tag, so this module
-carries a shard weight.
+carries a shard weight. D5.1e's self-rolled workloads and their census are in
+`test_renderer_self_rollout_restart.py`.
 
 Run: uv run pytest scripts/renderer/tests/test_renderer_restart.py
 """
@@ -12,14 +13,8 @@ import pytest
 
 from lib import yaml_fast
 from lib.exit_codes import RENDER_OK
-from lib.repo_paths import HOST_VARS, K8S_ROLES
 from renderer import homelab_render
-from renderer.renderer_lib.cluster import (
-    RenderedTag,
-    RenderError,
-    flux_owned_tags,
-    select_tags,
-)
+from renderer.renderer_lib.cluster import RenderedTag, RenderError, flux_owned_tags
 from renderer.renderer_lib.placeholders import PlaceholderRender, sentinel
 from renderer.renderer_lib.restart import (
     RESTART_ANNOTATION,
@@ -29,7 +24,6 @@ from renderer.renderer_lib.restart import (
     restart_values,
     stamp,
 )
-from renderer.renderer_lib.task_inputs import include_vars
 from renderer.shadow_diff import stub_file_text
 from renderer.standalone_map import fleet_render
 
@@ -378,34 +372,3 @@ def test_a_flux_owned_role_whose_pod_names_another_roles_secret_is_flagged():
     assert outside_references(render, {"fixture"}) == [
         ("fixture", "Secret", "peanut-secrets")
     ]
-
-
-def self_rolled(tags) -> set[str]:
-    """The tags whose role passes a non-empty `manifests_self_rollouts`.
-
-    A Jinja string, as observability passes, counts as non-empty.
-    """
-    return {
-        tag
-        for tag in tags
-        if (K8S_ROLES / tag / "tasks").is_dir()
-        and include_vars(K8S_ROLES / tag).get("manifests_self_rollouts")
-        not in (None, [], "")
-    }
-
-
-def test_no_flux_owned_role_rolls_its_own_workloads_is_clean():
-    """Until D5.1e, nothing restarts a self-rolled workload under Flux (D3 *Restart triggers*)."""
-    tags = select_tags(None)
-    assert {"pihole", "observability"} <= self_rolled(tags)
-    assert self_rolled(flux_owned_tags()) == set()
-
-
-def test_a_self_rolled_role_marked_owner_flux_is_flagged(tmp_path):
-    text = (HOST_VARS / "daniel-box.yml").read_text()
-    marked = text.replace(
-        "  - name: pihole\n", "  - name: pihole\n    owner: flux\n", 1
-    )
-    assert marked != text
-    (tmp_path / "daniel-box.yml").write_text(marked)
-    assert self_rolled(flux_owned_tags(host_vars=tmp_path)) == {"pihole"}

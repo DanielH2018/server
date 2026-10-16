@@ -142,7 +142,9 @@ def register_ansible_filters(env: Environment) -> Environment:
     ``from_yaml`` and ``regex_replace`` are ansible-core's too, for the role task expressions
     ``homelab-render`` evaluates: image-builder's content tag parses its context render with
     the first, and uptime-kuma's ``kuma_declarations`` names each declaration with the second
-    and pairs names with declarations through ``zip``.
+    and pairs names with declarations through ``zip``. ``combine`` is ansible-core's too:
+    observability's ``manifests_self_rollouts`` adds each workload's namespace with it, and
+    ``homelab-render`` evaluates that list to stamp ``checksum/restart`` on those workloads.
 
     Args:
         env: The environment to register on, modified in place.
@@ -168,6 +170,7 @@ def register_ansible_filters(env: Environment) -> Environment:
 
     from ansible.plugins.filter.core import (
         b64encode,
+        combine,
         comment,
         from_json,
         from_yaml,
@@ -181,6 +184,7 @@ def register_ansible_filters(env: Environment) -> Environment:
 
     env.filters["b64encode"] = b64encode
     env.filters["bool"] = to_bool
+    env.filters["combine"] = combine
     env.filters["comment"] = comment
     env.filters["from_json"] = from_json
     env.filters["from_yaml"] = from_yaml
