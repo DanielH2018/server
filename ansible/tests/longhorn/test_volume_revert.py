@@ -154,19 +154,20 @@ def test_the_seam_tests_skip_before_any_network_call_without_a_kubeconfig(
 
 
 @pytest.mark.parametrize(
-    ("body", "configured"),
-    [("exec sleep 5", False), ("echo default", True)],
-    ids=["slow-kubectl", "context"],
+    ("delay", "configured"),
+    [(5, False), (0, True)],
+    ids=["slow-kubectl", "prompt-kubectl-control"],
 )
-def test_a_kubectl_that_outlasts_the_timeout_counts_as_no_cluster(
-    tmp_path, body: str, configured: bool
+def test_a_kubectl_that_outlasts_the_timeout_reads_as_no_cluster(
+    tmp_path, delay: int, configured: bool
 ) -> None:
     """A slow `config current-context` must read as no cluster, not raise `TimeoutExpired`.
 
-    An uncaught timeout turned a seam test's skip into a red test on one CI runner (#5243). The
-    stub `exec`s its sleep so the timeout's kill reaches the process holding the pipes.
+    An uncaught timeout turned a seam test's skip into a red test on one CI runner (#5243). Both
+    stubs print a context, so only the timeout can make the slow one read as no cluster. The
+    prompt stub is the control: the same output, inside the timeout, reads as configured.
     """
-    kubectl = write_exec(tmp_path / "kubectl", f"{body}\n")
+    kubectl = write_exec(tmp_path / "kubectl", f"sleep {delay}\necho default\n")
     assert kubectl_has_a_cluster_configured([str(kubectl)], timeout=0.5) is configured
 
 
