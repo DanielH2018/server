@@ -32,6 +32,7 @@ GUARD = TASKS / "stale-checkout-guard.yml"
 SPEAKER = "metallb-system_speaker_apps_DaemonSet"
 READONLY_SA = "kube-system_homelab-readonly__ServiceAccount"
 COREDNS = "kube-system_coredns_apps_Deployment"
+RECONCILE = "longhorn-system_longhorn-reconcile_batch_CronJob"
 UNMAPPED = "homelab_jellyfin_apps_Deployment"
 
 REFUSED = (
@@ -69,15 +70,19 @@ _BECOME = (
 
 def _inventory(owned: dict[str, list[str]]) -> dict:
     """A `kubectl get kustomizations -o json` answer: one Kustomization per key."""
-    items = [
+    items: list[dict] = [
         {
             "metadata": {"name": name},
             "status": {"inventory": {"entries": [{"id": i, "v": "v1"} for i in ids]}},
         }
         for name, ids in owned.items()
     ]
-    # A Kustomization that has never applied carries no inventory.
+    # A Kustomization that has never applied carries no inventory, and one that applied
+    # nothing carries a null entry list.
     items.append({"metadata": {"name": "not-yet-applied"}, "status": {}})
+    items.append(
+        {"metadata": {"name": "empty"}, "status": {"inventory": {"entries": None}}}
+    )
     return {"items": items}
 
 
@@ -177,6 +182,20 @@ def test_an_inventory_holding_no_mapped_id_passes(tmp_path):
     result, calls = _run(tmp_path, ["inventory"], {"jellyfin": [UNMAPPED]})
     _passed(result)
     assert calls == 8, "every instance reads the inventory under a whole-file run"
+
+
+def test_a_row_whose_task_name_is_a_template_names_it_as_written(tmp_path):
+    # The weekly-shard rows keep `{{ shard }}` literal with `{% raw %}`; a run that rendered
+    # it again would fail on an undefined `shard` instead of naming the task.
+    result, _ = _run(
+        tmp_path,
+        ["inventory"],
+        {"longhorn-reconcile": [RECONCILE]},
+        args=("--tags", "longhorn"),
+    )
+    _failed_naming(
+        result, "Move volumes whose weekday changed out of shard d{{ shard }}"
+    )
 
 
 def _without(task: str) -> list:

@@ -69,10 +69,11 @@
       Run the play from a checkout at or after the commit `prod` names.
   vars:
     # One line per (row, inventory entry) match. A loop that emits nothing renders as None,
-    # not as an empty string, hence `default('', true)` wherever it is read.
+    # not as an empty string, hence `default('', true)` wherever it is read. The `true` on the
+    # inner defaults covers a status whose inventory or entries is null, not just missing.
     k3s_stale_checkout_hits: >-
       {%- for kustomization in (k3s_stale_checkout_read.stdout | from_json)['items'] -%}
-      {%- for entry in ((kustomization.status | default({})).inventory | default({})).entries | default([]) -%}
+      {%- for entry in ((kustomization.status | default({}, true)).inventory | default({}, true)).entries | default([], true) -%}
       {%- for row in k3s_stale_checkout_rows if entry.id in row.ids -%}
       task '{{ row.task }}' writes {{ entry.id }}, which Kustomization
       {{ kustomization.metadata.name }} owns.
