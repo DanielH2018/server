@@ -37,10 +37,12 @@ against the live API server, and the checks on the validator and dry-run lists.
 """
 
 import ast
+import importlib
 import json
 import re
 import shutil
 import subprocess
+from pathlib import Path
 
 import pytest
 from _helpers import load_tasks as _tasks
@@ -57,7 +59,7 @@ from _volume_revert import (
     _task_names,
 )
 from _volume_ops import assert_the_role_declares_an_autodeploy_stance
-from lib.proc_testing import write_exec
+from lib.proc_testing import path_with, write_exec
 
 
 def test_the_seam_test_skips_a_missing_cluster_and_fails_a_bad_jsonpath() -> None:
@@ -89,30 +91,66 @@ def test_the_seam_test_skips_a_missing_cluster_and_fails_a_bad_jsonpath() -> Non
     assert not _no_cluster_to_ask(rejected + " connection refused")
 
 
+# Every test that probes the live API, as (directory under ansible/tests, module, test).
+_LIVE_SEAM_TESTS = (
+    (
+        "deploy",
+        "test_cronjob_gate_decision",
+        "test_the_jsonpath_parses_against_the_live_api",
+    ),
+    ("longhorn", "test_longhorn_api", "test_the_resolve_returns_a_pod_ip_on_this_node"),
+    ("longhorn", "test_volume_revert", "test_the_listing_jsonpath_parses"),
+    ("longhorn", "test_volume_snapshot", "test_the_listing_jsonpath_parses"),
+    (
+        "longhorn",
+        "test_volume_snapshot",
+        "test_the_listing_fields_exist_on_a_real_snapshot",
+    ),
+    (
+        "longhorn",
+        "test_volume_snapshot_cap_headroom",
+        "test_the_gates_reads_parse_and_return_the_field_it_sums",
+    ),
+)
+
+
 @pytest.mark.parametrize(
-    ("stdout", "rc", "configured"),
-    [
-        # kubectl with no kubeconfig, as on a GitHub runner (#5219).
-        ("", 1, False),
-        # A kubeconfig whose current-context is set: the probe may run.
-        ("default\n", 0, True),
-    ],
+    "configured", [False, True], ids=["no-kubeconfig", "kubeconfig"]
+)
+@pytest.mark.parametrize(
+    ("directory", "module", "test"),
+    _LIVE_SEAM_TESTS,
+    ids=[t[2] for t in _LIVE_SEAM_TESTS],
 )
 def test_the_seam_tests_skip_before_any_network_call_without_a_kubeconfig(
-    tmp_path, stdout: str, rc: int, configured: bool
+    tmp_path, monkeypatch, directory: str, module: str, test: str, configured: bool
 ) -> None:
-    """The pre-probe check asks only the local kubeconfig, and follows its answer.
+    """Run each live-API seam test against a stand-in kubectl that records every call.
 
-    A stand-in kubectl records its argv: the check must run `config current-context` and
-    nothing else, because any verb that reaches the API server spends the request timeout
-    on a machine with no cluster.
+    With no current-context, the seam test must skip having run `config current-context` and
+    nothing else: any verb that reaches the API server spends the request timeout on a machine
+    with no cluster (#5219). With one, the seam test must go on to its probe.
     """
     calls = tmp_path / "calls"
-    kubectl = write_exec(
-        tmp_path / "kubectl", f'echo "$*" >> {calls}\nprintf %s {stdout!r}\nexit {rc}\n'
+    context = "echo default; exit 0" if configured else "exit 1"
+    write_exec(
+        tmp_path / "bin" / "kubectl",
+        f'echo "$*" >> {calls}\n'
+        f'[ "$1 $2" = "config current-context" ] && {{ {context}; }}\nexit 0\n',
     )
-    assert kubectl_has_a_cluster_configured([str(kubectl)]) is configured
-    assert calls.read_text().splitlines() == ["config current-context"]
+    monkeypatch.setenv("PATH", path_with(tmp_path / "bin"))
+    monkeypatch.syspath_prepend(str(Path(__file__).parents[1] / directory))
+    seam_test = getattr(importlib.import_module(module), test)
+    if configured:
+        try:
+            seam_test()
+        except pytest.skip.Exception:
+            pass  # An empty answer can still skip; what matters is that the probe ran.
+        assert len(calls.read_text().splitlines()) > 1, "the probe never ran"
+    else:
+        with pytest.raises(pytest.skip.Exception):
+            seam_test()
+        assert calls.read_text().splitlines() == ["config current-context"]
 
 
 def test_every_read_a_later_task_depends_on_runs_under_check() -> None:
