@@ -1,8 +1,9 @@
-"""The generated `dependsOn` and the reserved tag names (D4.2).
+"""The generated `dependsOn`, the per-tag kinds and the reserved tag names (D4.2, D5.1a1).
 
 Most fixtures hand `bundle_files` a fixture `Ordering`, so no role renders. The reserved-name
-refusal and the cycle refusal run the real CLI on littlelink and bento-pdf. The plan is
-docs/target-architecture/deploy/d4-ordering.md, *The renderer writes `dependsOn`*.
+refusal and the cycle refusal run the real CLI on littlelink and bento-pdf. The plans are
+docs/target-architecture/deploy/d4-ordering.md, *The renderer writes `dependsOn`*, and
+d5-bulk-move.md, *Prune exemptions, digests and the collision census*.
 
 Run: uv run pytest scripts/renderer/tests/test_renderer_bundle_ordering.py
 """
@@ -13,7 +14,12 @@ from lib import yaml_fast
 from lib.exit_codes import RENDER_REFUSED
 from renderer import homelab_render
 from renderer.renderer_lib import cluster as cluster_mod
-from renderer.renderer_lib.bundle import CLUSTER_VARS_FILE, SHARED_KINDS, bundle_files
+from renderer.renderer_lib.bundle import (
+    CLUSTER_VARS_FILE,
+    SHARED_KINDS,
+    bundle_files,
+    digests,
+)
 from renderer.renderer_lib.ordering import (
     ANSIBLE_OWNED_DEPS,
     Ordering,
@@ -175,11 +181,22 @@ def test_an_ordinary_tag_is_clean():
 
 
 @pytest.mark.parametrize(
+    "tag", ["soak", "homelab-namespace", "fixture-snapshot", "fixture-verify"]
+)
+def test_a_tag_taking_a_name_d5_reserves_is_flagged(tag):
+    """`soak` and `homelab-namespace` are refused before either joins SHARED_KINDS."""
+    assert not {"soak", "homelab-namespace"} & SHARED_KINDS
+    with pytest.raises(cluster_mod.RenderRefused, match=rf"\['{tag}'\]"):
+        cluster_mod.select_tags([tag])
+
+
+@pytest.mark.parametrize(
     "tag, kinds",
     [
         ("homelab", SHARED_KINDS),
         ("littlelink", frozenset({"littlelink"})),
         ("fixture-deferred", SHARED_KINDS),
+        ("soak", SHARED_KINDS),
     ],
 )
 def test_the_render_refuses_a_reserved_tag_and_writes_nothing(
@@ -188,7 +205,97 @@ def test_the_render_refuses_a_reserved_tag_and_writes_nothing(
     out = tmp_path / "out"
     out.mkdir()
     assert homelab_render.cluster(out, [tag], None, kinds=kinds) == RENDER_REFUSED
-    assert "the root homelab, a SHARED_KINDS member, or a name ending in -deferred" in (
-        capsys.readouterr().err
-    )
+    assert "a name ending in -deferred, -snapshot or -verify" in capsys.readouterr().err
     assert list(out.iterdir()) == []
+
+
+# -- the per-tag kinds (D5.1a1) --------------------------------------------------------------
+
+
+def _every_kind() -> dict:
+    """Directories for `pihole` with every per-tag kind, and a plain `bento-pdf`."""
+    files = {"x.yaml": CONFIGMAP.format(namespace="homelab")}
+    names = [
+        "pihole",
+        "pihole-deferred",
+        "pihole-snapshot",
+        "pihole-verify",
+        "bento-pdf",
+    ]
+    return {name: files for name in names}
+
+
+def test_a_tags_kinds_follow_it_in_its_file_in_suffix_order():
+    docs = _docs(Ordering(), ["bento-pdf", "pihole"], _every_kind())
+    files = bundle_files(_every_kind(), {}, ["bento-pdf", "pihole"], TIMEOUT, DOTENV)
+    assert [
+        d["metadata"]["name"]
+        for d in yaml_fast.safe_load_all(files["flux/pihole.yaml"])
+    ] == ["pihole", "pihole-deferred", "pihole-snapshot", "pihole-verify"]
+    assert docs["pihole-snapshot"]["spec"]["path"] == "./cluster/pihole-snapshot"
+
+
+def _orphan_missing(files: dict[str, str]) -> list[str]:
+    """Each Kustomization in the `flux/` files that lacks `deletionPolicy: Orphan`."""
+    return [
+        doc["metadata"]["name"]
+        for path, text in files.items()
+        if path.startswith("flux/") and not path.endswith("kustomization.yaml")
+        for doc in yaml_fast.safe_load_all(text)
+        if doc["spec"].get("deletionPolicy") != "Orphan"
+    ]
+
+
+def test_every_kustomization_of_every_kind_sets_deletion_policy_orphan():
+    files = bundle_files(_every_kind(), {}, ["bento-pdf", "pihole"], TIMEOUT, DOTENV)
+    flux = [p for p in files if p.startswith("flux/")]
+    assert {"flux/pihole.yaml", "flux/bento-pdf.yaml", "flux/cluster-vars.yaml"} <= set(
+        flux
+    )
+    assert _orphan_missing(files) == []
+
+
+def test_a_kustomization_without_deletion_policy_orphan_is_flagged():
+    files = bundle_files(_every_kind(), {}, ["bento-pdf", "pihole"], TIMEOUT, DOTENV)
+    files["flux/pihole.yaml"] = files["flux/pihole.yaml"].replace(
+        "deletionPolicy: Orphan", "deletionPolicy: Delete", 3
+    )
+    assert _orphan_missing(files) == ["pihole", "pihole-deferred", "pihole-snapshot"]
+
+
+def test_a_verify_kind_depends_on_its_tags_deferred_kustomization():
+    docs = _docs(Ordering(), ["pihole"], _every_kind())
+    assert _depends(docs["pihole-verify"]) == ["pihole-deferred"]
+
+
+def test_a_verify_kind_of_a_tag_with_no_deferred_files_depends_on_the_tag():
+    directories = {name: {} for name in ("bento-pdf", "bento-pdf-verify")}
+    docs = _docs(Ordering(), ["bento-pdf"], directories)
+    assert _depends(docs["bento-pdf-verify"]) == ["bento-pdf"]
+
+
+def test_a_snapshot_kind_inherits_its_tags_edges():
+    ordering = Ordering(deps={"pihole": ["bento-pdf", "traefik"]})
+    docs = _docs(ordering, ["bento-pdf", "pihole"], _every_kind())
+    assert (
+        _depends(docs["pihole-snapshot"]) == _depends(docs["pihole"]) == ["bento-pdf"]
+    )
+    assert _dropped(docs["pihole-snapshot"]) == "traefik"
+
+
+def test_an_applies_last_tag_waits_on_no_other_tags_snapshot_or_verify():
+    ordering = Ordering(deps={"last": []}, applies_last=frozenset({"last"}))
+    docs = _docs(ordering, ["last", "pihole"], _every_kind() | {"last": {}})
+    assert _depends(docs["last"]) == ["pihole-deferred"]
+
+
+def test_a_tags_snapshot_and_verify_directories_move_its_footprint_not_its_own():
+    before = {"cluster/pihole/x.yaml": b"a", "cluster/pihole-verify/x.yaml": b"a"}
+    after = before | {
+        "cluster/pihole-verify/x.yaml": b"b",
+        "cluster/pihole-snapshot/x.yaml": b"b",
+    }
+    old, new = digests(before, ["pihole"]), digests(after, ["pihole"])
+    assert old["pihole"]["own"] == new["pihole"]["own"]
+    assert old["pihole"]["footprint"] != new["pihole"]["footprint"]
+    assert new["_unclassified"]["paths"] == []

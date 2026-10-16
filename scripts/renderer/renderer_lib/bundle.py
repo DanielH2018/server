@@ -7,9 +7,9 @@ A placeholder render with `--role` writes, for each tag it names:
   exactly when the placeholder key set of the directory `<tag>` is not empty (C1 *The
   projection*, D3.3b). It carries `decryption` exactly when the tag's role lists
   `render_sops_manifests`, whose SOPS manifests the renderer copies into `cluster/<tag>/`
-  (C3 *Per-role fields*, D3.3c). A tag that renders a `<tag>-deferred` directory gets the
-  Kustomization `<tag>-deferred` as the file's second document, which depends on `<tag>`
-  (D4.2);
+  (C3 *Per-role fields*, D3.3c). A tag that renders a `<tag>-deferred`, `<tag>-snapshot` or
+  `<tag>-verify` directory gets that Kustomization as a further document of the file, in
+  `TAG_KIND_SUFFIXES` order (D4.2, D5.1a1);
 - `DIR/flux/<kind>.yaml` and `DIR/cluster/<kind>/` for each `SHARED_KINDS` member;
 - `DIR/flux/kustomization.yaml`, which lists every other file in `DIR/flux/`, so the root
   Kustomization `homelab` applies each of them;
@@ -19,12 +19,13 @@ A placeholder render with `--role` writes, for each tag it names:
 `cluster-vars`. Its directory holds a copy of the cluster file and a `secretGenerator` that
 makes the Secret `homelab-cluster-vars`, and its Kustomization decrypts the copy with the
 cluster's own key (`cluster_vars_files`). Each member needs a rule in `FOOTPRINT_RULES` that
-names the tags its files count for. A deploy tag may not take the root's name or a member's
-name (`reserved_tags`).
+names the tags its files count for. A deploy tag may not take the root's name, a member's
+name, a name in `RESERVED_NAMES` or a per-tag kind's suffix (`reserved_tags`).
 
 The classification `digests` applies is D6's *What a footprint counts*:
 
-- a tag's own directories count for it, `-deferred` stripped, and so does `flux/<tag>.yaml`;
+- a tag's own directories count for it, each per-tag suffix stripped, and so does
+  `flux/<tag>.yaml`. Its `own` digest covers `cluster/<tag>/` alone;
 - a shared kind's files count for itself and for each tag its rule names;
 - `flux/kustomization.yaml`, `digests.json` and `images/` count for no name and are left out;
 - every other path, and a shared kind with no rule, lands under `_unclassified`.
@@ -53,13 +54,14 @@ import yaml
 from lib import yaml_fast
 from renderer.renderer_lib.ordering import (
     ANSIBLE_OWNED_DEPS,
-    DEFERRED_SUFFIX,
     NO_EDGES,
     NO_ORDERING,
+    TAG_KIND_SUFFIXES,
     Edges,
     Ordering,
     dependency_cycle,
     kustomization_edges,
+    split_kind,
 )
 
 KUSTOMIZATION = "kustomization.yaml"
@@ -96,6 +98,10 @@ SUBSTITUTE_OPT_OUT = "kustomize.toolkit.fluxcd.io/substitute"
 # Membership is unconditional: a render that cannot copy the cluster file fails, so deleting
 # the file fails CI rather than narrowing the census.
 SHARED_KINDS: frozenset[str] = frozenset({CLUSTER_VARS})
+# The shared kinds no PR renders yet, a closed literal set (D5.1a1). A member cannot join
+# `SHARED_KINDS` before its file exists, so this list keeps a deploy tag from taking its name
+# meanwhile. A name stays here after it joins.
+RESERVED_NAMES: frozenset[str] = frozenset({"soak", "homelab-namespace"})
 
 
 @dataclass(frozen=True)
@@ -132,12 +138,12 @@ def reserved_tags(
 ) -> list[str]:
     """The sorted deploy tags in `tags` that take a name the bundle reserves (C3).
 
-    A reserved name is the root's, a shared kind's, or any name ending in `-deferred`, so no
-    tag's Kustomization can collide with another tag's deferred one (D4.2). D5.1a1 adds
-    `-snapshot` and `-verify`.
+    A reserved name is the root's, a shared kind's, one in `RESERVED_NAMES`, or any name
+    ending in a per-tag kind's suffix, so no tag's Kustomization can collide with another
+    tag's `-deferred`, `-snapshot` or `-verify` one (D4.2, D5.1a1).
     """
-    names = {ROOT} | set(kinds)
-    return sorted(t for t in set(tags) if t in names or t.endswith(DEFERRED_SUFFIX))
+    names = {ROOT} | set(kinds) | RESERVED_NAMES
+    return sorted(t for t in set(tags) if t in names or t.endswith(TAG_KIND_SUFFIXES))
 
 
 def kustomization_text(files: Iterable[str]) -> str:
@@ -256,8 +262,9 @@ def flux_files(
 
     Args:
         substitutes: Each Kustomization the published tags own mapped to whether it
-            substitutes: `<tag>` for each tag, and `<tag>-deferred` for a tag that renders
-            that directory. `<tag>-deferred` is the second document of `flux/<tag>.yaml`.
+            substitutes: `<tag>` for each tag, and `<tag><suffix>` for each per-tag kind
+            whose directory the tag renders. Those follow `<tag>` in `flux/<tag>.yaml`, in
+            `TAG_KIND_SUFFIXES` order.
         timeout: The `timeout` every tag's Kustomization sets.
         shared: The shared kinds' `flux/` files by bundle path, which the root lists beside
             the tags' files.
@@ -267,8 +274,10 @@ def flux_files(
     decrypting = frozenset(decrypting)
     edges = edges or {}
     files = {}
-    for tag in sorted(n for n in substitutes if not n.endswith(DEFERRED_SUFFIX)):
-        names = [tag] + [n for n in [tag + DEFERRED_SUFFIX] if n in substitutes]
+    for tag in sorted(n for n in substitutes if not split_kind(n)[1]):
+        names = [tag] + [
+            tag + suffix for suffix in TAG_KIND_SUFFIXES if tag + suffix in substitutes
+        ]
         docs = [
             tag_kustomization(
                 name,
@@ -298,10 +307,8 @@ def _name_of(path: str) -> tuple[str, bool] | None:
     """
     parts = path.split("/")
     if len(parts) >= 3 and parts[0] == CLUSTER_DIR:
-        directory = parts[1]
-        if directory.endswith(DEFERRED_SUFFIX):
-            return directory.removesuffix(DEFERRED_SUFFIX), False
-        return directory, True
+        name, suffix = split_kind(parts[1])
+        return name, not suffix
     if len(parts) == 2 and parts[0] == FLUX_DIR and parts[1].endswith(".yaml"):
         return parts[1].removesuffix(".yaml"), False
     return None
@@ -394,22 +401,22 @@ def substitution(
         key_sets: Each directory name mapped to its placeholder key set.
 
     Returns:
-        Each directory name in `directories` that a tag in `tags` owns, `<tag>` and
-        `<tag>-deferred` alike, mapped to whether its own key set is non-empty. That alone
+        Each directory name in `directories` that a tag in `tags` owns, `<tag>` and each
+        `<tag><suffix>` alike, mapped to whether its own key set is non-empty. That alone
         decides `postBuild` and the `cluster-vars` edge on its Kustomization (C1
-        *Substitution and escaping*). Second, the tags with either directory substituting,
-        the per-tag set the `cluster-vars` footprint rule reads.
+        *Substitution and escaping*). Second, the tags with any of their directories
+        substituting, the per-tag set the `cluster-vars` footprint rule reads.
     """
     per_directory = {
         name: bool(key_sets.get(name))
         for tag in tags
-        for name in (tag, tag + DEFERRED_SUFFIX)
+        for name in (tag, *(tag + suffix for suffix in TAG_KIND_SUFFIXES))
         if name in directories
     }
     substituting = {
-        tag
-        for tag in tags
-        if per_directory.get(tag) or per_directory.get(tag + DEFERRED_SUFFIX)
+        split_kind(name)[0]
+        for name, substitutes in per_directory.items()
+        if substitutes
     }
     return per_directory, substituting
 
