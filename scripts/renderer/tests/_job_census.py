@@ -1,0 +1,394 @@
+"""D5.1a3's Job census: every Job Flux applies is safe to re-run and cannot wedge an apply.
+
+The plan is `docs/target-architecture/deploy/d5-bulk-move.md`, *Rules for every Job Flux
+applies (D5.1a3)*. The census reads a publish bundle's `cluster/` tree: each directory is one
+Kustomization's path, so the census's scope, the Jobs in a flux-owned tag's render and in the
+non-tag Kustomizations, is every directory there. It has seven rows, each a predicate over one
+Job and its directory:
+
+- `kind`: the Job's `homelab/job-kind` annotation is a kind its directory admits.
+  `<tag>-snapshot/` admits `snapshot`, `soak/` admits `soak`, and `<tag>-verify/` admits
+  `verify` and `mutation`. Any other directory admits no Job. Verify and mutation Jobs share
+  a directory, so only the annotation tells them apart, and a Job without it fails;
+- `ttl`: no `spec.ttlSecondsAfterFinished`, because Flux re-creates a Job its TTL deleted;
+- `name`: the name ends in `-<job_spec_digest8>`, because a Job's pod template is immutable,
+  and the spec holds no `${...}` placeholder, which Flux would substitute after the digest.
+  Each ConfigMap the Job mounts ends its name in `-<configmap_digest8>`, so the spec digest
+  covers the script and a script fix renames the Job;
+- `backoff`: `spec.backoffLimit` is set, to 1 for a snapshot Job and 0 for a soak or verify
+  Job. A mutation Job states its own value;
+- `rerun-safe`: a mutation Job's `homelab/rerun-safe` annotation names a test, as
+  `<path>::<function>`, that exists in the tree;
+- `delivery`: every container runs `python3 <mount>/<key>.py`, where `<mount>` mounts a
+  ConfigMap whole and `<key>` is one of its keys. No other command, `-c` or `-m` included,
+  so every script the Job runs is one the `helper` row reads;
+- `helper`: no Python script in a ConfigMap the Job mounts opens a connection except through
+  `flux_job_connect.py`, which must sit beside it as a byte-identical copy. A script imports
+  only the modules in `ALLOWED_IMPORTS`, none of which opens a connection, and uses no name
+  in `FORBIDDEN`. The row guards against a mistake, not an adversary: a name spelled out at
+  run time passes it.
+
+The test module is `test_renderer_job_census.py`.
+"""
+
+import ast
+import json
+import re
+from collections.abc import Callable, Iterator, Mapping
+from pathlib import Path
+
+from lib import yaml_fast
+from lib.repo_paths import REPO
+from pathlib import PurePosixPath
+
+from renderer.renderer_lib.bundle import (
+    CLUSTER_DIR,
+    configmap_digest8,
+    job_spec_digest8,
+)
+from renderer.renderer_lib.ordering import SNAPSHOT_SUFFIX, VERIFY_SUFFIX, split_kind
+
+# DECIDED: a Job declares its kind in this annotation on the Job's own `metadata`, which the
+# plan does not name. Verify and mutation Jobs share `<tag>-verify`, so nothing else tells a
+# mutation Job, which must carry `RERUN_SAFE`, from a verify Job, which must not retry. A Job
+# without it fails closed. Both annotations sit on the Job, not its pod template, so adding
+# one moves no spec digest and renames no Job.
+JOB_KIND = "homelab/job-kind"
+RERUN_SAFE = "homelab/rerun-safe"
+SOAK = "soak"
+# The `backoffLimit` each kind must set. A mutation Job is absent: it states its own value.
+BACKOFF = {"snapshot": 1, SOAK: 0, "verify": 0}
+HELPER = REPO / "ansible/roles/k8s/manifests/files/flux_job_connect.py"
+# DECIDED: an allowlist of imports, not a denylist of connecting calls. A denylist missed
+# `urlretrieve`, `asyncio.open_connection`, `ftplib` and `importlib` in review. No module
+# here opens a connection; a script builds its `Request` from `flux_job_connect`, so
+# `urllib.request` is not here either. A module joins this list only if it cannot connect.
+ALLOWED_IMPORTS = frozenset(
+    {
+        "flux_job_connect",
+        "argparse",
+        "base64",
+        "collections",
+        "collections.abc",
+        "dataclasses",
+        "datetime",
+        "enum",
+        "functools",
+        "hashlib",
+        "hmac",
+        "itertools",
+        "json",
+        "math",
+        "os",
+        "os.path",
+        "pathlib",
+        "re",
+        "string",
+        "sys",
+        "textwrap",
+        "time",
+        "typing",
+        "urllib.error",
+        "urllib.parse",
+    }
+)
+# Names a script never uses, as a name, an attribute or a string: a connection reached
+# through an allowed module (`flux_job_connect.urllib.request.urlopen`), a process that could
+# run `curl` (`os.system`), and code built at run time, which the census cannot read.
+FORBIDDEN = frozenset(
+    {
+        "urlopen",
+        "urlretrieve",
+        "build_opener",
+        "OpenerDirector",
+        "URLopener",
+        "FancyURLopener",
+        "HTTPConnection",
+        "HTTPSConnection",
+        "create_connection",
+        "system",
+        "popen",
+        "fork",
+        "posix_spawn",
+        "posix_spawnp",
+        "execl",
+        "execle",
+        "execlp",
+        "execlpe",
+        "execv",
+        "execve",
+        "execvp",
+        "execvpe",
+        "spawnl",
+        "spawnle",
+        "spawnlp",
+        "spawnlpe",
+        "spawnv",
+        "spawnve",
+        "spawnvp",
+        "spawnvpe",
+        "__import__",
+        "exec",
+        "eval",
+    }
+)
+PYTHONS = frozenset({"python", "python3"})
+IMPORTS_HELPER = re.compile(r"^\s*(?:from|import)\s+flux_job_connect\b", re.MULTILINE)
+
+# A bundle's directories, each name mapped to its documents.
+Bundle = Mapping[str, list[dict]]
+
+
+def load(out: Path) -> dict[str, list[dict]]:
+    """Each directory under `out/cluster/`, mapped to the documents of its YAML files."""
+    bundle = {}
+    for directory in sorted(p for p in (out / CLUSTER_DIR).iterdir() if p.is_dir()):
+        bundle[directory.name] = [
+            doc
+            for path in sorted(directory.glob("*.yaml"))
+            for doc in yaml_fast.safe_load_all(path.read_text())
+            if isinstance(doc, dict)
+        ]
+    return bundle
+
+
+def admitted(directory: str) -> frozenset[str]:
+    """The Job kinds a Kustomization directory may hold."""
+    if directory == SOAK:
+        return frozenset({SOAK})
+    suffix = split_kind(directory)[1]
+    if suffix == SNAPSHOT_SUFFIX:
+        return frozenset({"snapshot"})
+    if suffix == VERIFY_SUFFIX:
+        return frozenset({"verify", "mutation"})
+    return frozenset()
+
+
+def _annotations(doc: Mapping) -> Mapping:
+    return (doc.get("metadata") or {}).get("annotations") or {}
+
+
+def kind_offence(job: Mapping, directory: str, docs: list[dict]) -> list[str]:
+    kinds = admitted(directory)
+    if not kinds:
+        return [f"{directory}/ holds no Job kind; move the Job to <tag>-verify"]
+    kind = _annotations(job).get(JOB_KIND)
+    if kind not in kinds:
+        return [f"{JOB_KIND} is {kind!r}, and {directory}/ admits {sorted(kinds)}"]
+    return []
+
+
+def ttl_offence(job: Mapping, directory: str, docs: list[dict]) -> list[str]:
+    if "ttlSecondsAfterFinished" in (job.get("spec") or {}):
+        return [
+            "sets ttlSecondsAfterFinished, so Flux re-runs it once the TTL deletes it"
+        ]
+    return []
+
+
+def name_offence(job: Mapping, directory: str, docs: list[dict]) -> list[str]:
+    offences = []
+    want = job_spec_digest8(job)
+    if not job["metadata"]["name"].endswith(f"-{want}"):
+        offences.append(f"name does not end in its spec digest -{want}")
+    # Flux substitutes `${key}` after the digest is taken, so a cluster-vars change would move
+    # the applied spec and keep the name. A substituted value reaches a Job through a Secret.
+    # `$${` is Flux's escape for a literal `${`.
+    spec = json.dumps(job.get("spec"), sort_keys=True).replace("$$", "")
+    if "${" in spec:
+        offences.append(
+            "spec holds a ${...} placeholder, which Flux substitutes after the name's "
+            "digest is taken; pass the value through a Secret"
+        )
+    for configmap in _configmap_docs(job, docs).values():
+        name, digest = configmap["metadata"]["name"], configmap_digest8(configmap)
+        if not name.endswith(f"-{digest}"):
+            offences.append(
+                f"mounts ConfigMap {name}, whose name does not end in its content digest "
+                f"-{digest}, so a script fix would not rename the Job"
+            )
+    return offences
+
+
+def backoff_offence(job: Mapping, directory: str, docs: list[dict]) -> list[str]:
+    limit = (job.get("spec") or {}).get("backoffLimit")
+    if not isinstance(limit, int):
+        return ["sets no backoffLimit"]
+    want = BACKOFF.get(_annotations(job).get(JOB_KIND))
+    if want is not None and limit != want:
+        return [f"backoffLimit is {limit}, and its kind takes {want}"]
+    return []
+
+
+def rerun_safe_offence(job: Mapping, directory: str, docs: list[dict]) -> list[str]:
+    annotations = _annotations(job)
+    if annotations.get(JOB_KIND) != "mutation":
+        return []
+    test = annotations.get(RERUN_SAFE)
+    if not test:
+        return [f"is a mutation Job without {RERUN_SAFE}"]
+    path, _, function = str(test).partition("::")
+    source = REPO / path
+    if (
+        not function
+        or not source.is_file()
+        or f"def {function}(" not in source.read_text()
+    ):
+        return [f"{RERUN_SAFE} names {test!r}, which is no test in the tree"]
+    return []
+
+
+def _mounted_configmaps(job: Mapping) -> set[str]:
+    volumes = ((job.get("spec") or {}).get("template") or {}).get("spec", {}).get(
+        "volumes"
+    ) or []
+    names = set()
+    for volume in volumes:
+        if name := (volume.get("configMap") or {}).get("name"):
+            names.add(name)
+        for source in (volume.get("projected") or {}).get("sources") or []:
+            if name := (source.get("configMap") or {}).get("name"):
+                names.add(name)
+    return names
+
+
+def _configmap_docs(job: Mapping, docs: list[dict]) -> dict[str, dict]:
+    """Each ConfigMap the Job mounts that its directory holds, by name."""
+    mounted = _mounted_configmaps(job)
+    return {
+        doc["metadata"]["name"]: doc
+        for doc in docs
+        if doc.get("kind") == "ConfigMap" and doc["metadata"]["name"] in mounted
+    }
+
+
+def _containers(job: Mapping) -> list[dict]:
+    pod = ((job.get("spec") or {}).get("template") or {}).get("spec") or {}
+    return [*(pod.get("initContainers") or []), *(pod.get("containers") or [])]
+
+
+def delivery_offence(job: Mapping, directory: str, docs: list[dict]) -> list[str]:
+    pod = ((job.get("spec") or {}).get("template") or {}).get("spec") or {}
+    volumes = {v.get("name"): v for v in pod.get("volumes") or []}
+    configmaps = _configmap_docs(job, docs)
+    offences = []
+    for container in _containers(job):
+        label = f"container {container.get('name')}"
+        command = container.get("command")
+        if (
+            not isinstance(command, list)
+            or len(command) != 2
+            or command[0] not in PYTHONS
+            or not str(command[1]).endswith(".py")
+        ):
+            offences.append(
+                f"{label} runs {command!r}; run python3 <mount>/<script>.py from a "
+                "mounted ConfigMap"
+            )
+            continue
+        script = PurePosixPath(command[1])
+        mounts = [
+            m
+            for m in container.get("volumeMounts") or []
+            if m.get("mountPath", "").rstrip("/") == str(script.parent)
+            and not m.get("subPath")
+        ]
+        source = (volumes.get(mounts[0].get("name")) or {}) if mounts else {}
+        configmap = source.get("configMap") or {}
+        data = (configmaps.get(configmap.get("name")) or {}).get("data") or {}
+        if not configmap or configmap.get("items") or script.name not in data:
+            offences.append(
+                f"{label} runs {script}, which is no key of a ConfigMap mounted whole at "
+                f"{script.parent}"
+            )
+    return offences
+
+
+def script_offence(name: str, text: str) -> list[str]:
+    """Each way the Python `text` of the script `name` could connect without the helper."""
+    try:
+        tree = ast.parse(text)
+    except SyntaxError as err:
+        return [f"{name} does not parse ({err.msg}), so the census cannot read it"]
+    found = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            found |= {
+                f"import {a.name}" for a in node.names if a.name not in ALLOWED_IMPORTS
+            }
+        elif isinstance(node, ast.ImportFrom):
+            if node.level or node.module not in ALLOWED_IMPORTS:
+                found.add(f"from {'.' * node.level}{node.module or ''} import")
+            found |= {a.name for a in node.names if a.name in FORBIDDEN}
+        elif isinstance(node, ast.Name) and node.id in FORBIDDEN:
+            found.add(node.id)
+        elif isinstance(node, ast.Attribute) and node.attr in FORBIDDEN:
+            found.add(node.attr)
+        elif isinstance(node, ast.Constant) and node.value in FORBIDDEN:
+            found.add(repr(node.value))
+    return [
+        f"{name} uses {use}; import only ALLOWED_IMPORTS and connect with "
+        "flux_job_connect.open_url"
+        for use in sorted(found)
+    ]
+
+
+def helper_offence(job: Mapping, directory: str, docs: list[dict]) -> list[str]:
+    configmaps = {
+        doc["metadata"]["name"]: doc for doc in docs if doc.get("kind") == "ConfigMap"
+    }
+    helper = HELPER.read_text().rstrip("\n")
+    offences = []
+    for name in sorted(_mounted_configmaps(job)):
+        if name not in configmaps:
+            offences.append(
+                f"mounts ConfigMap {name}, which {directory}/ does not hold, so the census "
+                "cannot read its scripts"
+            )
+            continue
+        data = configmaps[name].get("data") or {}
+        for key, text in sorted(data.items()):
+            if not key.endswith(".py"):
+                continue
+            if HELPER.name not in data and IMPORTS_HELPER.search(text):
+                offences.append(
+                    f"{name}/{key} imports {HELPER.name}, which {name} lacks"
+                )
+            if key == HELPER.name:
+                if text.rstrip("\n") != helper:
+                    offences.append(
+                        f"{name}/{key} differs from the tracked {HELPER.name}"
+                    )
+                continue
+            offences += [f"{name}/{line}" for line in script_offence(key, text)]
+    return offences
+
+
+Offence = Callable[[Mapping, str, list[dict]], list[str]]
+ROWS: dict[str, Offence] = {
+    "kind": kind_offence,
+    "ttl": ttl_offence,
+    "name": name_offence,
+    "backoff": backoff_offence,
+    "rerun-safe": rerun_safe_offence,
+    "delivery": delivery_offence,
+    "helper": helper_offence,
+}
+
+
+def jobs(bundle: Bundle) -> Iterator[tuple[str, dict, list[dict]]]:
+    """Each Job in `bundle`, with its directory and that directory's documents."""
+    for directory, docs in sorted(bundle.items()):
+        for doc in docs:
+            if doc.get("kind") == "Job":
+                yield directory, doc, docs
+
+
+def problems(bundle: Bundle, rows: Mapping[str, Offence] = ROWS) -> list[str]:
+    """One line per row a Job in `bundle` fails, naming the row, the directory and the Job."""
+    return [
+        f"{row}: {directory}/{job['metadata']['name']}: {line}"
+        for directory, job, docs in jobs(bundle)
+        for row, offence in rows.items()
+        for line in offence(job, directory, docs)
+    ]

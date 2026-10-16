@@ -130,8 +130,8 @@ M1's Alertmanager. Every rule carries `service="flux"`.
     - The rule compares `controller_runtime_active_workers` with
       `controller_runtime_max_concurrent_reconciles` for `controller="kustomization"`, and
       reads `workqueue_depth` for the queue. It reads the maximum from its gauge, never a
-      literal, because `--concurrent` is 4 until D5.1 changes it. The three series come from
-      the `flux` scrape job, so the rule adds no series.
+      literal, because the flux role sets `--concurrent` from `k8s_rollout_batch_width`.
+      The three series come from the `flux` scrape job, so the rule adds no series.
     - A broad revision fills the workers for hours while it progresses. The rule therefore
       reports queueing, not a failed deploy. It is a warning without `verify="true"`, so
       the promotion soak, which reads only alerts carrying `severity="critical"` or
@@ -278,7 +278,37 @@ field paths from both commands, never values or diff hunks.
 H1's flips use a different census, `scripts/dev/takeover_census.py` (H1.1j), which is also
 operator-only. It compares the live object with a server-side dry-run apply as
 `kustomize-controller`, which needs the admin kubeconfig, and it also prints the fields that a
-manager outside the cleanup list keeps.
+manager outside the cleanup list keeps. It makes no API call itself. The operator renders the
+tag, writes both inputs as JSON and passes them in. Both inputs hold whole live objects, a
+Secret's `data` included, so they go in a directory only the operator can read, and the
+directory goes once the census has printed:
+
+```bash
+uv run python scripts/renderer/homelab_render.py cluster --out out --role <tag>
+census=$(mktemp -d)
+sudo k3s kubectl get -k out/cluster/<dir> -o json --show-managed-fields > "$census/live.json"
+sudo k3s kubectl apply --server-side --dry-run=server --force-conflicts \
+    --field-manager=kustomize-controller -k out/cluster/<dir> \
+    -o json --show-managed-fields > "$census/dryrun.json"
+uv run python scripts/dev/takeover_census.py "$census/live.json" "$census/dryrun.json"
+rm -r "$census"
+```
+
+`<dir>` is `<tag>`, and then `<tag>-deferred` when the render wrote one. Flux applies a
+tag's deferred files as their own `<tag>-deferred` Kustomization, and `kubectl -k` reads one
+directory, so the census of a tag that defers files is two runs. `probe.py takeover` reads both
+directories in one run.
+
+It differs from `probe.py takeover` in where "the render declares this path" comes from. The
+probe looks each path up in the placeholder render. The census reads the dry run's
+`kustomize-controller` Apply entry, which is the API server's own record of the fields the
+render declares. The dry-run body is no use for this, because the dry run skips the cleanup and
+its body still holds every live field. The census prints `removed`, `kept` and `rolls` per
+object, lists `last-applied-configuration` under `removed` as the expected entry, and imports
+the cleanup list, the flattening and the server-default rule from `probe_lib/takeover.py`. It
+exits 1 when the two inputs share no object, or when a dry-run object has no
+`kustomize-controller` Apply entry. Both inputs can hold Secret data, so delete the two files
+after the run.
 
 ## Handing a service back
 
@@ -548,14 +578,17 @@ only after its dependencies finish, so the wait sums four terms:
 - **The queueing term.** The number of changed names, dependents included, divided by
   `--concurrent` and rounded up, times the largest `timeout` among them. A Kustomization that
   waits on health holds one of the Kustomize controller's workers, so a revision that changes more
-  names than `--concurrent`, 4 by default, queues behind the workers. Without the term
+  names than `--concurrent` queues behind the workers. The flux role sets `--concurrent` to
+  `k8s_rollout_batch_width`, 5, the width the deploy play rolls workloads at. Without the term
   `verify` would time out on such a revision and write a false hold.
 - **The `OCIRepository` interval**, 1 minute.
 - **The largest `retryInterval`**, 2 minutes on every Kustomization the renderer writes.
 
 The root `homelab`'s 5-minute `timeout` is the floor of the first two terms. The flux role
-sets neither `--requeue-dependency` nor `--concurrent`, and
-`scripts/deploy_tools/tests/test_chained_timeout.py` fails a vendored install that adds one.
+leaves `--requeue-dependency` at its default, and
+`scripts/deploy_tools/tests/test_chained_timeout.py` fails a vendored install or role default
+that sets it. `ansible/tests/k8s/test_flux_role.py` holds `chained_timeout.CONCURRENT` equal to
+the `--concurrent` the role renders.
 A `dependsOn` naming a Kustomization the bundle does not hold, or a cycle, fails `verify`
 with no verdict, and `settle` holds it as `<T> unverified`.
 
@@ -906,6 +939,41 @@ gate's name.
   gate's named member, and the gate fails when that route holds no matching Host rule.
 - **no-stub**: no file in the bundle holds an R1 stub value, `stub-<key>` for a key name of
   `secrets.yml`. The gate decodes each Secret's `data` before it searches.
+
+### The Job census
+
+A Job Flux applies runs again whenever its object comes back: after a TTL deletes it, and
+after a reset or a revert restores an older bundle. A changed spec under the same name fails
+the apply, because a Job's pod template is immutable. The census in
+`scripts/renderer/tests/_job_census.py` holds every Job in the bundle to these rules, and
+`test_renderer_job_census.py` runs it over the live bundle in CI. D5's plan has the reasons,
+under *Rules for every Job Flux applies (D5.1a3)*.
+
+- **Kind.** Each Job's `homelab/job-kind` annotation names its kind, and its directory must
+  admit that kind. `<tag>-snapshot/` admits `snapshot`, `soak/` admits `soak`, and
+  `<tag>-verify/` admits `verify` and `mutation`. No other directory holds a Job.
+- **No TTL.** No Job sets `ttlSecondsAfterFinished`. Prune deletes a Job once its name leaves
+  the bundle.
+- **Name.** Each name ends in `-<digest8>`, the first 8 hex digits of the SHA-256 of the
+  Job's `spec` as sorted-key JSON (`job_spec_digest8` in
+  `scripts/renderer/renderer_lib/bundle.py`). The spec holds no `${...}` placeholder,
+  because Flux substitutes it after the digest is taken. A substituted value reaches a Job
+  through a Secret.
+- **Script delivery.** Every container runs `python3 <mount>/<script>.py`, where `<mount>`
+  mounts a ConfigMap whole and `<script>.py` is one of its keys. No `-c`, no `-m` and no
+  shell. Each ConfigMap a Job mounts ends its name in `-<digest8>` of its content
+  (`configmap_digest8`). The Job's spec names the ConfigMap, so a script fix renames the Job.
+- **`backoffLimit`.** Every Job sets one: 1 for a snapshot Job, 0 for a soak or verify Job,
+  and a mutation Job's own value, with its reason beside it.
+- **Rerun safety.** A mutation Job carries `homelab/rerun-safe`, naming as `<path>::<test>`
+  the test that runs it twice and finds the second run changes nothing.
+- **Connections.** A Python script in a ConfigMap the Job mounts opens every connection
+  through `open_url` in `ansible/roles/k8s/manifests/files/flux_job_connect.py`, shipped
+  byte-identical beside it. A script imports only the modules in the census's
+  `ALLOWED_IMPORTS`, none of which can connect, and builds its request with the helper's
+  `Request`. The helper retries a refused or timed-out connect for 60
+  seconds, because kube-router can refuse a new pod until it learns its address. It never
+  retries an answer, so a flaky check fails rather than passing on its second try.
 
 ## Removing an object on purpose
 

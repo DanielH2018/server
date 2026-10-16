@@ -14,7 +14,9 @@ filter. Each property here is one the fleet guards cannot see:
   `restart_on: []` and no controller pod reads the notification Secrets;
 - `flux_sync_suspend` renders `suspend: true` or no `suspend` key, never `false`;
 - the `verify-drill` OCIRepository renders only with its lever on, and is no Discord source;
-- the OCIRepository admits exactly the signer `promote.py` verifies.
+- the OCIRepository admits exactly the signer `promote.py` verifies;
+- kustomize-controller's `--concurrent` equals `k8s_rollout_batch_width`, and so does the
+  figure `chained_timeout.py` derives `verify`'s queueing term from.
 
 Run: uv run pytest ansible/tests/k8s/test_flux_role.py
 """
@@ -22,11 +24,12 @@ Run: uv run pytest ansible/tests/k8s/test_flux_role.py
 import copy
 import re
 
+import chained_timeout
 import forge
 import pytest
 from ansible.errors import AnsibleFilterError
 
-from _helpers import ROLES, load_defaults, render_expr
+from _helpers import ALL_VARS, ROLES, load_defaults, render_expr
 from lib import yaml_fast
 from _k8s_render import render_role_template, rendered_docs
 from _release_expectation import include_role_vars, rollouts
@@ -273,6 +276,49 @@ def test_the_volume_name_guard_reads_the_renamed_volumes():
         "volumes": {"source-controller-cache"},
         "volumeMounts": {"source-controller-cache"},
     }, out
+
+
+# --- kustomize-controller runs as wide as the rollout batch -----------------------------
+
+
+def _manager_args(docs: list[dict], deployment: str) -> list[str]:
+    doc = next(
+        d
+        for d in docs
+        if d["kind"] == "Deployment" and d["metadata"]["name"] == deployment
+    )
+    return doc["spec"]["template"]["spec"]["containers"][0]["args"]
+
+
+def test_kustomize_controller_runs_as_wide_as_the_rollout_batch():
+    width = int(yaml_fast.safe_load(ALL_VARS.read_text())["k8s_rollout_batch_width"])
+    args = _manager_args(_flux_docs(), "kustomize-controller")
+    assert [a for a in args if a.startswith("--concurrent=")] == [
+        f"--concurrent={width}"
+    ]
+    assert chained_timeout.CONCURRENT == width
+
+
+def test_a_controller_flag_replaces_upstreams_value_for_it():
+    install = _DEPLOYMENT.replace(
+        "image: x", "image: x\n        args: [--concurrent=4, --a]"
+    )
+    out = FilterModule().filters()["flux_components"](
+        install, {}, "c", {"cache": "cache"}, {"source-controller": ["--concurrent=5"]}
+    )
+    docs = list(yaml_fast.safe_load_all(out))
+    assert _manager_args(docs, "source-controller") == ["--a", "--concurrent=5"]
+
+
+def test_a_flag_for_a_deployment_the_install_lacks_is_refused():
+    with pytest.raises(AnsibleFilterError, match="kustomize-controller"):
+        FilterModule().filters()["flux_components"](
+            _DEPLOYMENT,
+            {},
+            "c",
+            {"cache": "cache"},
+            {"kustomize-controller": ["--x=1"]},
+        )
 
 
 # --- The suspend lever renders only `true`, never `false` -------------------------------

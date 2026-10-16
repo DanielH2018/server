@@ -66,7 +66,12 @@ controllers apply every service, and an exemption would be a lasting hole for th
   homelab tier;
 - renames `data`, `tmp` and `temp` to `<deployment>-<suffix>` (`flux_volume_suffixes`), in
   `volumes` and every `volumeMounts`. A merge patch cannot rename a list item. The filter
-  refuses a volume the map does not name, so a regeneration that adds one fails the render.
+  refuses a volume the map does not name, so a regeneration that adds one fails the render;
+- sets each flag `flux_controller_args` names on its controller, replacing upstream's value
+  for that flag. kustomize-controller's `--concurrent` equals `k8s_rollout_batch_width`, so
+  Flux reconciles as many Kustomizations at once as the deploy play rolls workloads (D5.1c).
+  `scripts/deploy_tools/chained_timeout.py:CONCURRENT` sizes `verify`'s queueing term from
+  the same figure.
 
 **This role reads `containers_list`.** The `tier_priority_class` call above makes it one, so
 an added, removed or reordered entry reaches `flux` through the GitOps broad plane, whatever
