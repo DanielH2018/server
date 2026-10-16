@@ -169,6 +169,32 @@ def test_an_unreadable_ownership_map_after_the_tick_is_not_a_refusal(land_run):
     assert "land_wait" not in _names(calls) and "deploy" not in _names(calls)
 
 
+def test_an_unreadable_ownership_map_under_a_held_tick_reports_the_hold(land_run):
+    """The tick's broad apply failed, so the hold is the verdict, not only the land-wait hint."""
+    fakes = _flip(
+        owners={MERGE_SHA: ValueError("owner 'flx' is not one of ...")},
+        state={"hold_sha": "deadbeef"},
+    )
+    rc, out, _, _, logline = land_run([], fakes)
+    assert rc == 1 and "VERDICT: deploy-failed" in out
+    assert "holding deadbeef" in out
+    assert "gitops_state.py clear-hold deadbeef`" in out
+    assert f"promote.py land-wait {MERGE_SHA}" in out
+    assert "cause=tick-held" in logline
+
+
+def test_an_unreadable_ownership_map_keeps_the_plane_line(land_run):
+    fakes = _flip(
+        owners={MERGE_SHA: ValueError("owner 'flx' is not one of ...")},
+        plane="ansible/k3s-bringup.yml",
+        state={"hold_sha": "deadbeef"},
+    )
+    rc, out, _, _, _ = land_run([], fakes)
+    assert rc == 1 and "VERDICT: needs-manual-apply" in out
+    assert "it needs applying by hand: ansible/k3s-bringup.yml" in out
+    assert "holding deadbeef" in out
+
+
 def test_a_refused_bulk_flip_still_waits_on_the_tags_it_reached(land_run):
     """`narrow` refuses a list covering most of the fleet, as D5's bulk move would, and still
     prints the tags it reached."""
