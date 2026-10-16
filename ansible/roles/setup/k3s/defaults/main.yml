@@ -425,8 +425,10 @@ k3s_longhorn_csi_sidecar_memory_request: 192Mi
 # come up. R2 restores are free (10M Class B/month, zero egress), so those four volumes cost
 # nothing on the axis that is scarce.
 k3s_longhorn_restore_drill_pvc: ""
-# Fallback only, for a volume whose kubernetesStatus carries no namespace. The rotation reads the
-# namespace off each volume, because candidates are not all in one place.
+# Two readers. The drill falls back to it for a volume whose kubernetesStatus carries no
+# namespace; the rotation reads the namespace off each volume, because candidates are not all in
+# one place. Backup health's checks 7 and 8, the Longhorn upgrade gate and the docs state page read
+# the drill's stamp ConfigMap, `longhorn-restore-drill-stamps`, in this namespace.
 k3s_longhorn_restore_drill_namespace: homelab
 # Skip a candidate whose actualSize exceeds this. Bounds one night's egress and wall-clock so a
 # slow restore cannot read as a failed one. A backed-up volume excluded here is undrilled, and the

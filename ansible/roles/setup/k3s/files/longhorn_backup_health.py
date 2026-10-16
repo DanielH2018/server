@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Longhorn backup-plane heartbeat — the cluster-reading half of longhorn-backup-health.sh.
 
-Reads the cluster through the read-only ServiceAccount kubeconfig and the restore-drill's stamp
-files on disk, then prints one tab-separated line, `up<TAB>msg` or `down<TAB>msg`, for the
+Reads the cluster through the read-only ServiceAccount kubeconfig and the restore drill's stamps,
+from the drill's ConfigMap or, while that holds no `last-success`, from the files on disk. Then prints one tab-separated line, `up<TAB>msg` or `down<TAB>msg`, for the
 wrapper to log and push to Kuma. It never exits nonzero on a bad verdict: a DOWN is data to
 report, not a crash. Same shape as configarr_health.py: this file does the I/O,
 longhorn_backup_health_logic.py holds every threshold and decides up-or-down, and the split is
@@ -19,7 +19,7 @@ templates/longhorn-backup-health.sh.j2, a cron every 10 minutes) exports every s
 calls it. It refuses to start unless the shim exported all of them: LONGHORN_BACKUP_NAMESPACE,
 LONGHORN_BACKUP_KUBECTL, LONGHORN_BACKUP_KUBECTL_TIMEOUT_S, LONGHORN_BACKUP_ARMED,
 LONGHORN_R2_ARMED, the LONGHORN_*_MAX_AGE_HOURS and LONGHORN_*_BACKUP_* thresholds,
-LONGHORN_RESTORE_DRILL_* (stamp dir and ages), LONGHORN_TRIM_CRON_* and
+LONGHORN_RESTORE_DRILL_* (stamp dir, namespace and ages), LONGHORN_TRIM_CRON_* and
 LONGHORN_B2_DELETIONS_CRON_* (cron file, expected flag, fired stamp), LONGHORN_JOURNALCTL,
 LONGHORN_JOURNAL_TIMEOUT_S and LONGHORN_CRON_EVIDENCE_WINDOW_HOURS.
 Prints `up<TAB>msg` or `down<TAB>msg` and exits 0.
@@ -45,7 +45,6 @@ from longhorn_lib import longhorn_backups as backups
 from longhorn_lib import longhorn_cron_evidence_logic as cron_evidence
 from longhorn_lib import longhorn_restore_drill_stamps as drill_stamps
 from longhorn_lib import longhorn_skipped_volumes_logic as skipped
-from longhorn_lib.longhorn_restore_drill_stamps import read_stamp as _read_stamp
 
 
 def _require_env(name: str) -> str:
@@ -128,6 +127,10 @@ DAILY_BACKUP_BUDGET = _require_int_env("LONGHORN_DAILY_BACKUP_BUDGET")
 BACKUP_CRON = _require_env("LONGHORN_BACKUP_CRON")
 WEEKLY_BACKUP_MINUTE_HOUR = _require_env("LONGHORN_WEEKLY_BACKUP_MINUTE_HOUR")
 DRILL_STAMP_DIR = _require_env("LONGHORN_RESTORE_DRILL_STAMP_DIR")
+# The drill's stamp ConfigMap lives in the drill's namespace, not Longhorn's, so it gets its own
+# runner rather than a second `-n` passed through the longhorn-system one.
+DRILL_NAMESPACE = _require_env("LONGHORN_RESTORE_DRILL_NAMESPACE")
+drill_kubectl = host_lib.kubectl_runner(KUBECTL_BIN, DRILL_NAMESPACE, TIMEOUT)
 DRILL_MAX_AGE_DAYS = _require_int_env("LONGHORN_RESTORE_DRILL_MAX_AGE_DAYS")
 DRILL_COVERAGE_SLACK_DAYS = _require_int_env(
     "LONGHORN_RESTORE_DRILL_COVERAGE_SLACK_DAYS"
@@ -275,6 +278,38 @@ def _fetch_r2_volumes(problems: list[tuple[int, str]]) -> set[str] | None:
     return set(out.split())
 
 
+def _fetch_drill_stamps(
+    problems: list[tuple[int, str]],
+) -> drill_stamps.DrillStamps | None:
+    """The store checks 7 and 8 read this run, or None having appended a problem.
+
+    An absent ConfigMap, or one with no `last-success`, falls back to the host directory: that is
+    the live state until the drill writes the ConfigMap (H2.3c). A failed read falls back to
+    nothing. It is a rank-1 problem like every other failed fetch here, and checks 7 and 8 are
+    skipped, because a directory the drill may have stopped writing is not evidence once the
+    ConfigMap could hold the current state.
+    """
+    rc, out = drill_kubectl(*drill_stamps.CONFIGMAP_GET_ARGS)
+    if rc != 0:
+        detail = out.strip()[:160] or "(no output)"
+        problems.append(
+            (1, f"restore-drill stamp ConfigMap fetch failed (rc={rc}): {detail}")
+        )
+        return None
+    try:
+        doc = drill_stamps.parse_configmap(out)
+    except ValueError:
+        detail = out.strip()[:160] or "(empty)"
+        problems.append(
+            (
+                1,
+                f"restore-drill stamp ConfigMap fetch returned an unparseable body: {detail}",
+            )
+        )
+        return None
+    return drill_stamps.select_stamps(doc, DRILL_NAMESPACE, DRILL_STAMP_DIR)
+
+
 def _syslog(message: str) -> None:
     """Writes one line to syslog via `logger`, never raising and never touching our own stdio.
 
@@ -295,6 +330,33 @@ def _syslog(message: str) -> None:
         )
     except OSError:
         pass
+
+
+def _check_restore_drill(
+    problems: list[tuple[int, str]], stamps: drill_stamps.DrillStamps, now_s: float
+) -> None:
+    """Check 7 (freshness), check 8 (rotation coverage) and the oversize and no-PVC checks."""
+    drill_problem = logic.check_restore_drill(
+        stamps.last_success,
+        stamps.where,
+        now_s,
+        DRILL_MAX_AGE_DAYS * 86400,
+        DRILL_MAX_AGE_DAYS,
+        stamp_unreadable=stamps.last_success_unreadable,
+    )
+    coverage_problem = logic.check_restore_coverage(
+        stamps.candidates,
+        stamps.seen,
+        stamps.success,
+        now_s,
+        DRILL_COVERAGE_SLACK_DAYS,
+        seen_default=stamps.seen_default,
+    )
+    oversize_problem = logic.check_restore_drill_oversize(stamps.excluded_oversize)
+    nopvc_problem = logic.check_restore_drill_nopvc(stamps.excluded_nopvc)
+    for problem in (drill_problem, coverage_problem, oversize_problem, nopvc_problem):
+        if problem:
+            problems.append(problem)
 
 
 def main(now: float | None = None) -> int:
@@ -466,40 +528,10 @@ def main(now: float | None = None) -> int:
         if failed_jobs_problem:
             problems.append(failed_jobs_problem)
 
-    # ── check 7: restore drill freshness ──────────────────────────────────────────────────
-    drill_stamp_path = os.path.join(DRILL_STAMP_DIR, "last-success")
-    drill_content, drill_unreadable = _read_stamp(drill_stamp_path)
-    drill_max_age_s = DRILL_MAX_AGE_DAYS * 86400
-    drill_problem = logic.check_restore_drill(
-        drill_content,
-        drill_stamp_path,
-        now_s,
-        drill_max_age_s,
-        DRILL_MAX_AGE_DAYS,
-        stamp_unreadable=drill_unreadable,
-    )
-    if drill_problem:
-        problems.append(drill_problem)
-
-    # ── check 8: restore-drill rotation coverage ──────────────────────────────────────────
-    candidates = drill_stamps.read_candidates(DRILL_STAMP_DIR)
-    seen = drill_stamps.read_seen(DRILL_STAMP_DIR, candidates)
-    success = drill_stamps.read_success(DRILL_STAMP_DIR, candidates)
-    coverage_problem = logic.check_restore_coverage(
-        candidates, seen, success, now_s, DRILL_COVERAGE_SLACK_DAYS
-    )
-    if coverage_problem:
-        problems.append(coverage_problem)
-    oversize_problem = logic.check_restore_drill_oversize(
-        drill_stamps.read_excluded_oversize(DRILL_STAMP_DIR)
-    )
-    if oversize_problem:
-        problems.append(oversize_problem)
-    nopvc_problem = logic.check_restore_drill_nopvc(
-        drill_stamps.read_excluded_nopvc(DRILL_STAMP_DIR)
-    )
-    if nopvc_problem:
-        problems.append(nopvc_problem)
+    # ── checks 7 and 8: the restore drill, from one store ──────────────────────────────────
+    stamps = _fetch_drill_stamps(problems)
+    if stamps is not None:
+        _check_restore_drill(problems, stamps, now_s)
 
     # ── checks 9 and 10: what the trim and B2-accounting crons said, and whether they ran ──
     problems.extend(

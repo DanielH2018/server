@@ -148,3 +148,29 @@ def test_restore_drill_nopvc_is_flagged_naming_each_excluded_volume():
         "backed-up volume(s) with no bound PVC, never drilled "
         "(rebind, delete, or move to no-backup): pvc-a, pvc-b",
     )
+
+
+def test_restore_coverage_skips_an_unseen_candidate_with_no_default():
+    """Control for the pair below: the directory arm has no seen default and skips it."""
+    seen = {"pvc-seen": NOW - DAY}
+    assert (
+        logic.check_restore_coverage(["pvc-seen", "pvc-new"], seen, {}, NOW, 5) is None
+    )
+
+
+def test_restore_coverage_flags_an_unseen_candidate_past_the_configmaps_creation_time():
+    """The ConfigMap arm's creation-time rule: no seen entry is judged from the ConfigMap's age."""
+    seen = {"pvc-seen": NOW - DAY}
+    problem = logic.check_restore_coverage(
+        ["pvc-seen", "pvc-new"], seen, {}, NOW, 5, seen_default=NOW - 30 * DAY
+    )
+    assert problem == (3, "volume(s) not restore-proven in 7d: pvc-new")
+
+
+def test_restore_coverage_is_flagged_at_once_when_no_candidate_has_a_seen_entry():
+    """The empty-seen guard reads `seen` before the default fills it, so it fires in either arm."""
+    for seen_default in (None, NOW - HOUR):
+        problem = logic.check_restore_coverage(
+            ["pvc-1", "pvc-2"], {}, {}, NOW, 5, seen_default=seen_default
+        )
+        assert problem is not None and "did not persist" in problem[1]

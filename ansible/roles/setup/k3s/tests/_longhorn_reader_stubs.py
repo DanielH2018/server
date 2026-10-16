@@ -27,6 +27,20 @@ HOST_LIB_DIR = Path(__file__).resolve().parents[2] / "common" / "files"
 # runtime, which is the straddle a pinned clock avoids.
 NOW = 1_800_000_000.0
 
+# The drill's namespace as the shim exports it. Each stub answers the stamp-ConfigMap read only
+# under this namespace, so a reader that sent it through the longhorn-system runner fails.
+DRILL_NAMESPACE = "homelab"
+
+# The stamp-ConfigMap read as the stubs match it, after `-n <namespace>` is stripped.
+DRILL_CM_ARGS = [
+    "get",
+    "configmap",
+    "longhorn-restore-drill-stamps",
+    "--ignore-not-found",
+    "-o",
+    "json",
+]
+
 # Runs the reader with main(now=NOW) instead of `python longhorn_backup_health.py`, still as a
 # subprocess: import-time env parsing, the sys.path bootstrap, the stub-kubectl shell-out and
 # the up/down<TAB>msg contract are all the real ones. `-P` keeps the cwd off sys.path, so the
@@ -74,6 +88,7 @@ def _reader_env(tmp_path, **overrides) -> dict:
             "LONGHORN_WEEKLY_BACKUP_MINUTE_HOUR": "30 4",
             "LONGHORN_RESTORE_DRILL_MAX_AGE_DAYS": "3",
             "LONGHORN_RESTORE_DRILL_COVERAGE_SLACK_DAYS": "5",
+            "LONGHORN_RESTORE_DRILL_NAMESPACE": DRILL_NAMESPACE,
             # /bin/true — rc 0 with no output, which check 9 reads as "the window held nothing"
             # and is silent about. It must not be the real journalctl: the verdict would then
             # depend on whatever the machine running the suite happens to have logged. A test
@@ -156,13 +171,17 @@ def _green_path_stub_kubectl(tmp_path, snapshot_ts: str) -> Path:
     exact flags the reader passes: without `--tail=-1` kubectl returns 10 lines per pod, and a
     reader that dropped it would pass every test while reading nothing in production.
 
+    The restore drill's stamp ConfigMap answers `STUB_DRILL_CM`, empty by default, which is how
+    `--ignore-not-found` reports an absent ConfigMap. It answers only under `DRILL_NAMESPACE`.
+
     Each dispatch arm carries a branch NAME, and two env knobs turn one named branch red without
-    disturbing the other eight: `STUB_FAIL_BRANCH` makes it exit 124 (host_lib's timeout code)
+    disturbing the others: `STUB_FAIL_BRANCH` makes it exit 124 (host_lib's timeout code)
     and `STUB_NULL_BRANCH` makes it answer the JSON literal `null` with rc 0. That is what lets
     the fetch-failure tests below reuse this one fixture instead of shipping a stub per fetch.
     """
     stub = tmp_path / "stub-kubectl-green"
-    script = r"""#!/usr/bin/env python3
+    script = (
+        r"""#!/usr/bin/env python3
 import os
 import sys
 
@@ -170,11 +189,16 @@ SNAPSHOT_TS = "__SNAPSHOT_TS__"
 BACKUP_LIST = __BACKUP_LIST__
 
 args = sys.argv[1:]
+ns = None
 if "-n" in args:
     i = args.index("-n")
+    ns = args[i + 1]
     args = args[:i] + args[i + 2:]
 
-if args[:2] == ["get", "backuptarget"]:
+if args == __DRILL_CM_ARGS__ and ns == "__DRILL_NAMESPACE__":
+    # Absent by default: `--ignore-not-found` prints nothing, the live state until H2.3c.
+    branch, body = "drill-stamps", os.environ.get("STUB_DRILL_CM", "")
+elif args[:2] == ["get", "backuptarget"]:
     branch, body = "target-" + args[2], "true"
 elif args == ["get", "backups.longhorn.io", "-o", "json"]:
     branch, body = "backups", BACKUP_LIST
@@ -206,14 +230,18 @@ if branch == os.environ.get("STUB_NULL_BRANCH"):
     body = "null"
 
 sys.stdout.write(body)
-""".replace("__SNAPSHOT_TS__", snapshot_ts).replace(
-        "__BACKUP_LIST__",
-        repr(
-            _backup_list_body(
-                ("pvc-web-data", snapshot_ts, "daily-backup"),
-                ("pvc-weekly-data", snapshot_ts, "weekly-backup-d4"),
-            )
-        ),
+""".replace("__SNAPSHOT_TS__", snapshot_ts)
+        .replace("__DRILL_CM_ARGS__", repr(DRILL_CM_ARGS))
+        .replace("__DRILL_NAMESPACE__", DRILL_NAMESPACE)
+        .replace(
+            "__BACKUP_LIST__",
+            repr(
+                _backup_list_body(
+                    ("pvc-web-data", snapshot_ts, "daily-backup"),
+                    ("pvc-weekly-data", snapshot_ts, "weekly-backup-d4"),
+                )
+            ),
+        )
     )
     return write_exec(stub, script)
 
@@ -255,8 +283,10 @@ def _grace_pair_stub_kubectl(tmp_path, created_ts: str, old_backup_ts: str) -> P
 import sys
 
 args = sys.argv[1:]
+ns = None
 if "-n" in args:
     i = args.index("-n")
+    ns = args[i + 1]
     args = args[:i] + args[i + 2:]
 
 
@@ -265,7 +295,9 @@ def emit(text, rc=0):
     sys.exit(rc)
 
 
-if args[:3] == ["get", "backuptarget", "default"]:
+if args == {DRILL_CM_ARGS!r} and ns == {DRILL_NAMESPACE!r}:
+    emit("")
+elif args[:3] == ["get", "backuptarget", "default"]:
     emit("true")
 elif args == ["get", "backups.longhorn.io", "-o", "json"]:
     emit({backup_list!r})
