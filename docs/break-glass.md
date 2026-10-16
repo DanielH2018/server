@@ -128,6 +128,11 @@ otherwise; none of the values below are secrets themselves, only names and locat
       `docs/secret-rotation.md`, from any host that decrypts `secrets.yml`. Every creation
       rule that covers a cluster file also lists the host recipients and item 1, so any of
       those keys regenerates the cluster files for the new recipient.
+    - **A leaked key is not a lost key.** The rotation protects future revisions only,
+      because git history and every published `sha-<sha>` artifact keep copies of the
+      cluster file encrypted to the old key. A suspected compromise also needs every key in
+      the cluster file rotated (**operator-only**) and its consumers redeployed. *Rotating
+      the cluster key* in `docs/secret-rotation.md` has the steps.
    Source: `docs/target-architecture/deploy/d3-secrets.md` ("Where the values come from")
    and `docs/adr/0022-the-cluster-decrypts-its-own-file-with-its-own-key.md`.
 

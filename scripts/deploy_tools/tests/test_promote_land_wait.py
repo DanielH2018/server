@@ -323,6 +323,11 @@ def test_a_forced_name_waits_on_it_and_on_its_dependent():
 
 
 def test_no_forced_name_waits_on_the_digests_alone():
+    """The control for the test above, not a test of `also`.
+
+    The same simulation settles at the first poll without `also`, so the two sleeps above
+    come from `also` and not from the digests or from `sonarr`.
+    """
     sim = _cluster_vars_sim()
     result = promote_wait.land_wait(sim.reads(), M, [])
     assert result.verdict == "settled" and sim.sleeps == 0

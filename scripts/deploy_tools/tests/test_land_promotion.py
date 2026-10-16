@@ -256,8 +256,19 @@ def test_a_flux_owned_pr_touching_no_cluster_file_forces_no_name(land_run):
     assert [c[1][3] for c in calls if c[0] == "land_wait"] == [frozenset()]
 
 
-def test_a_pr_touching_no_cluster_file_and_no_tag_adds_no_wait(land_run):
-    rc, out, _, calls, _ = land_run([], _cluster_file_pr("docs/landing.md"))
+@pytest.mark.parametrize(
+    "path",
+    [
+        # Near misses an over-broad rule would match: the same directory, a cluster
+        # manifest, the secrets file, and the registry's name under `vars/`.
+        "ansible/vars/secret_rotation.yml",
+        "ansible/vars/cluster-manifests/peanut.peanut-secrets.sops.yaml",
+        "ansible/vars/secrets.yml",
+        "ansible/vars/cluster-vars.source.bak",
+    ],
+)
+def test_a_pr_touching_no_cluster_file_and_no_tag_adds_no_wait(land_run, path):
+    rc, out, _, calls, _ = land_run([], _cluster_file_pr(path))
     assert rc == 0 and "VERDICT: nothing-to-deploy" in out
     assert "land_wait" not in _names(calls)
 

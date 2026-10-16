@@ -116,6 +116,14 @@ in the Secret `flux-system/sops-age` throughout.
    "flux/cluster-vars") | .state'`.
 4. Remove the old entry from `sops-age`, and the old private half from the password manager.
 
+**A suspected compromise needs more than this procedure.** Rotating the key protects future
+revisions only. Every past revision in git and every published `sha-<sha>` artifact holds a
+copy of the cluster file encrypted to the old key. Anyone holding that key can still read
+every value in those copies. After a suspected compromise, also rotate every key the cluster
+file holds (**operator-only**): set each new value with `sops set`, run `cluster_vars.py
+write`, and redeploy each key's consumers as `secret_rotation.py consumers <key>` prints them.
+The cluster key never decrypts `secrets.yml`, so the keys that only Ansible reads stay safe.
+
 The registry in `ansible/secret_rotation.yml` does not track the cluster key. The key lives
 outside `secrets.yml`, so `registry_drift` would report its row as stale. A lost cluster key
 needs no recovery: this procedure replaces it from any host that decrypts `secrets.yml`.
