@@ -51,6 +51,7 @@ import yaml
 
 from lib import yaml_fast
 from lib.exit_codes import SHADOW_DIFFERENT, SHADOW_OK
+from lib.repo_paths import K8S_ROLES
 from renderer.renderer_lib.cluster import (
     DEFERRED_SUFFIX,
     RenderedTag,
@@ -308,12 +309,14 @@ def render_sides(
     keys: list[str],
     passes: list[StubPass],
     stub_render: Callable[[str, dict], RenderedTag] = render_tag,
+    vendored: Path = K8S_ROLES,
 ) -> Sides:
     """Render `tags` under `root`: `placeholder/`, and one stub render per pass.
 
     Each stub render drops the `render_sops_manifests` files, as placeholder mode does, and
     counts the documents it dropped. `stub_render` renders one tag in stub mode; a test
-    passes one that changes the render.
+    passes one that changes the render. `vendored` is the role tree each tag's vendored
+    files are read from; a test passes a fixture tree.
 
     Raises:
         RenderError: A template fails to render.
@@ -336,10 +339,11 @@ def render_sides(
         dropped_documents[p.name] = count
     # Both sides carry the vendored files, so `flux build` applies the patches on each.
     write_cluster(
-        attach_vendored(placeholder.tags, placeholder.key_sets), root / PLACEHOLDER
+        attach_vendored(placeholder.tags, placeholder.key_sets, vendored),
+        root / PLACEHOLDER,
     )
     for name, renders in stub_renders.items():
-        write_cluster(attach_vendored(renders), root / name)
+        write_cluster(attach_vendored(renders, roles=vendored), root / name)
     total = sum(len(names) for names in entries.values())
     return Sides(root, placeholder, rendered, total, dropped_documents)
 

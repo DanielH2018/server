@@ -99,7 +99,8 @@ from renderer.renderer_lib.cluster import (
 )
 from renderer.renderer_lib.prune_label import label_tags
 from renderer.renderer_lib.restart import restart_targets, restart_values, stamp
-from secrets_mgmt.cluster_vars_check import ManifestEntry, parse_source
+from renderer.renderer_lib.restart import source_digests
+from secrets_mgmt.cluster_vars_check import ManifestEntry
 from renderer.renderer_lib.context import load_stubs
 from renderer.renderer_lib.host import render_host, render_package, write_packages
 from renderer.renderer_lib.sops_entries import sops_manifest_entries
@@ -150,6 +151,7 @@ def cluster(
     source_file: Path = SOURCE_FILE,
     manifests_dir: Path = MANIFESTS_DIR,
     ordering: Callable[[set[str]], Ordering] = bundle_ordering,
+    vendored: Path = K8S_ROLES,
 ) -> int:
     """Render `roles`, or every renderable tag, into `out`; return the exit code.
 
@@ -170,12 +172,13 @@ def cluster(
             a fixture directory.
         ordering: Returns what `dependsOn` is generated from, given the flux-owned tags; a
             test passes a fixture map.
+        vendored: The role tree vendored files are read from; a test passes a fixture.
     """
     if shared_only:
         return _shared_cluster(out, cluster_file)
     if select_mode(secret_stubs) is Mode.STUB and secret_stubs is not None:
         return _stub_cluster(
-            out, roles, secret_stubs, kinds, render, flux_owned, source_file
+            out, roles, secret_stubs, kinds, render, flux_owned, source_file, vendored
         )
     return _placeholder_cluster(
         out,
@@ -187,16 +190,8 @@ def cluster(
         source_file,
         manifests_dir,
         ordering,
+        vendored,
     )
-
-
-def source_digests(source_file: Path = SOURCE_FILE) -> dict[str, str]:
-    """Each key `.source` records mapped to its digest; empty when the file is absent."""
-    if not source_file.exists():
-        return {}
-    return {
-        key: line.digest for key, line in parse_source(source_file.read_text()).items()
-    }
 
 
 def stamp_restarts(
@@ -299,6 +294,7 @@ def _stub_cluster(
     render: Callable[[list[str], list[str]], PlaceholderRender],
     flux_owned: Callable[[], set[str]],
     source_file: Path,
+    vendored: Path,
 ) -> int:
     stubs = load_stubs(secret_stubs)
     missing = unstubbed(stubs)
@@ -325,7 +321,7 @@ def _stub_cluster(
                 source_digests(source_file),
             )
             rendered = label_tags(rendered, owned)
-        written = write_cluster(attach_vendored(rendered), out)
+        written = write_cluster(attach_vendored(rendered, roles=vendored), out)
     except RenderRefused as exc:
         print(f"homelab-render: {exc}. Nothing was written.", file=sys.stderr)
         return RENDER_REFUSED
@@ -348,6 +344,7 @@ def _placeholder_cluster(
     source_file: Path,
     manifests_dir: Path,
     ordering: Callable[[set[str]], Ordering],
+    vendored: Path,
 ) -> int:
     try:
         tags = select_tags(roles, kinds=kinds)
@@ -374,7 +371,7 @@ def _placeholder_cluster(
         tags = copy_sops_manifests(
             label_tags(tags, owned), result.sops_manifests, published, manifests_dir
         )
-        tags = attach_vendored(tags, result.key_sets)
+        tags = attach_vendored(tags, result.key_sets, vendored)
         bundle = (
             _bundle(tags, result, out, published, cluster_file, ordering(owned))
             if published

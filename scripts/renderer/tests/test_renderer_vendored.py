@@ -13,8 +13,11 @@ import pytest
 from deploy_tools.bundle_census import census
 from deploy_tools.bundle_gates import source
 from lib import yaml_fast
+from lib.exit_codes import RENDER_FAILED, RENDER_OK
 from lib.k8s_roles import role_fields
-from renderer.renderer_lib.bundle import bundle_files
+from renderer import homelab_render, shadow_diff
+from renderer.renderer_lib.bundle import CLUSTER_VARS_FILE, bundle_files
+from renderer.renderer_lib.roundtrip import render_sides, stub_passes
 from renderer.renderer_lib.cluster import (
     KUSTOMIZATION,
     RenderedTag,
@@ -172,3 +175,72 @@ def test_a_field_that_is_not_a_literal_is_a_problem(tmp_path, defaults):
     found, problems = role_fields([TAG], tmp_path)
     assert found == {}
     assert len(problems) == 1 and problems[0].startswith(f"{TAG}'s ")
+
+
+# The CLI renders real tags from the repo's roles and reads the vendored files from the
+# fixture tree it is handed: littlelink holds no placeholder, and speedtest holds one.
+@pytest.fixture
+def vendoring(tmp_path):
+    """A role tree in which littlelink and speedtest each vendor `UPSTREAM` and `PATCH`."""
+    roles = tmp_path / "vendored"
+    for tag in ("littlelink", "speedtest"):
+        (roles / tag / "files" / "upstream").mkdir(parents=True)
+        (roles / tag / "files" / "upstream" / "fixture.yaml").write_bytes(
+            UPSTREAM.encode()
+        )
+        (roles / tag / "files" / "patches").mkdir()
+        (roles / tag / "files" / "patches" / "speaker.yaml").write_text(PATCH)
+    return roles
+
+
+def _vendored_into(directory) -> bool:
+    kustomization = yaml_fast.safe_load((directory / KUSTOMIZATION).read_text())
+    upstream = directory / "upstream" / "fixture.yaml"
+    return upstream.read_bytes() == UPSTREAM.encode() and {
+        "path": "patches/speaker.yaml"
+    } in kustomization.get("patches", [])
+
+
+def test_a_placeholder_render_writes_the_vendored_files(tmp_path, vendoring):
+    cluster_file = tmp_path / CLUSTER_VARS_FILE
+    cluster_file.write_text(DOTENV)
+    out = tmp_path / "out"
+    code = homelab_render.cluster(
+        out,
+        ["littlelink"],
+        None,
+        flux_owned=lambda: {"littlelink"},
+        cluster_file=cluster_file,
+        vendored=vendoring,
+    )
+    assert code == RENDER_OK
+    assert _vendored_into(out / "cluster" / "littlelink")
+
+
+def test_a_placeholder_render_of_a_vendoring_tag_with_a_placeholder_fails(
+    tmp_path, vendoring, capsys
+):
+    out = tmp_path / "out"
+    code = homelab_render.cluster(out, ["speedtest"], None, vendored=vendoring)
+    assert code == RENDER_FAILED
+    assert "must not substitute" in capsys.readouterr().err
+    assert not (out / "cluster").exists()
+
+
+def test_a_stub_render_writes_the_vendored_files(tmp_path, vendoring):
+    stubs = tmp_path / "stubs.yml"
+    assert shadow_diff.main(["stubs", "--out", str(stubs)]) == 0
+    out = tmp_path / "out"
+    code = homelab_render.cluster(out, ["littlelink"], stubs, vendored=vendoring)
+    assert code == RENDER_OK
+    assert _vendored_into(out / "cluster" / "littlelink")
+
+
+def test_both_round_trip_sides_carry_the_vendored_files(tmp_path, vendoring):
+    keys = homelab_render.secret_keys()
+    passes = stub_passes(shadow_diff.stub_vars(), keys, frozenset())[:1]
+    sides = render_sides(
+        tmp_path / "rt", ["littlelink"], keys, passes, vendored=vendoring
+    )
+    assert _vendored_into(sides.cluster("placeholder") / "littlelink")
+    assert _vendored_into(sides.cluster(passes[0].name) / "littlelink")
