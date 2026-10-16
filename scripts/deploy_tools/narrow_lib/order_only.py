@@ -49,8 +49,11 @@ from deploy_tools.narrow_lib.order_only_runner import RUNNER
 # runner imports those modules first and replaces the calls the same way (#5063). Any other C
 # module can hold state and make calls that no audit event reports, so the runner ends the run
 # when a C module outside its `c_modules` list, the ones the real chain imports, is created
-# (#5201). It wraps the two `_imp` calls every built-in and shared-object module is created
-# through, which run before the module's code does. A side effect that stays in the process is compared between the two ends rather
+# through the two `_imp` calls every built-in and shared-object module is created through
+# (#5201). Those calls run before the module's code does. A plugin written to evade the wrap
+# can still reach the original calls, through the wrapper's closure or with a spec whose name
+# changes after the check. The good-faith limit at the end of this block covers that case.
+# A side effect that stays in the process is compared between the two ends rather
 # than refused: importing Ansible rebinds `sys.intern` at both (#4995). That covers an attribute of another
 # module added, rebound or deleted, a module loaded, and an in-place change to an object the
 # walk copies. The walk copies every object at every depth below a module attribute, taking
@@ -88,7 +91,10 @@ from deploy_tools.narrow_lib.order_only_runner import RUNNER
 # a plugin written in good faith. It catches an accidental side effect, not an evasive one,
 # such as a fresh `posix` from `_imp.create_builtin` that still has `mknod`.
 # We accept that limit, because a commit that can land a hostile filter plugin on master can
-# act through any deploy anyway.
+# act through any deploy anyway. The operator confirmed on 2026-10-16 that the check's bar is
+# an accidental side effect, so a review finding that needs an evasive plugin is out of scope.
+# In-process Python cannot hide a reference from code in the same interpreter, so meeting the
+# other bar would take a separate process, not another wrap.
 ORDER_ONLY_PLUGINS = frozenset({"ansible/filter_plugins/toposort.py"})
 
 _PLUGINS = "ansible/filter_plugins"
