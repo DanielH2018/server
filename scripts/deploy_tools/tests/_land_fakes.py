@@ -171,7 +171,8 @@ class Fakes:
     # here holds neither pin, so a PR whose base and head are both absent bumps nothing.
     pins: dict[str, dict[str, str]] = field(default_factory=dict)
     # DEPLOY_HOLD and `last-good`'s commit as the pin gate reads them; an Exception raises.
-    deploy_hold: str | None | Exception = "none"
+    # A list of DEPLOY_HOLD values is read one per call, the last one repeating.
+    deploy_hold: str | None | Exception | list[str | None] = "none"
     last_good: str | None | Exception = LAST_GOOD
     # The first-parent commits in (last-good, tip], oldest first, as `git rev-list` prints them.
     walk: list[str] = field(default_factory=list)
@@ -418,9 +419,12 @@ def build_tools(f: Fakes) -> tuple[Tools, list]:
         calls.append(("pins_at", (sha,), {}))
         return {key: Pin(PIN_FILE, value) for key, value in f.pins.get(sha, {}).items()}
 
-    def answer(name, value):
+    def answer(name, values):
+        seq = values if isinstance(values, list) else [values]
+
         def read():
             calls.append((name, (), {}))
+            value = seq[min(sum(c[0] == name for c in calls), len(seq)) - 1]
             if isinstance(value, Exception):
                 raise value
             return value

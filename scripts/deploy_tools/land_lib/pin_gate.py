@@ -18,6 +18,9 @@ through with no read beyond its two pin lookups. For a PR that moves one, in thi
    gate summary and who ran it in the description. H1.1b's `promote` requires it for every
    pin-changing commit it applies. A failed post refuses the merge.
 
+A merge GitHub refuses is retried at the same head. Steps 3 and 4 run once per head, and
+`recheck_before_merge` reads step 2 again before every retry.
+
 `regate` (`land.sh --regate <pr>`) runs steps 1, 3 and 4 for a PR that is already MERGED, and
 never merges. It skips the land rule on purpose: the merged bump is itself in (`last-good`,
 tip], and the procedure that clears a hold runs it while the hold is set.
@@ -264,15 +267,35 @@ def _gate_and_post(ln: Landing, pins: list[str], head: str) -> None:
     say(f"posted {STATUS_CONTEXT}=success on {head[:9]}: {text}")
 
 
-def gate_before_merge(ln: Landing, head: str) -> None:
-    """Return when `head` may merge; die when it bumps a forward-only pin it may not."""
+def gate_before_merge(ln: Landing, head: str) -> list[str]:
+    """The pins `head` bumps, once it may merge; die when it bumps one it may not.
+
+    The caller passes the list to `recheck_before_merge` before every later merge attempt
+    at the same head.
+    """
     pins = bumped_pins(ln, head)
     if not pins:
-        return
+        return []
     say(f"PR #{ln.opts.pr} bumps {' and '.join(pins)}; running the pin gate")
     _require_gate_host(ln, pins)
     land_rule(ln, pins)
     _gate_and_post(ln, pins, head)
+    return pins
+
+
+def recheck_before_merge(ln: Landing, pins: list[str]) -> None:
+    """Re-read DEPLOY_HOLD and (`last-good`, tip] before a retried merge at a gated head.
+
+    A merge GitHub refuses is retried at the same head for up to `merge_timeout`. In that
+    time a failed promotion can set DEPLOY_HOLD, or another session can merge a bump of the
+    same pin, so the land rule is read again before each attempt. The gates and the status
+    stay once per head: the status is what promote checks, and its age bound covers the wait.
+    """
+    if not pins:
+        return
+    if ln.git("fetch", "-q", "origin", BRANCH).returncode != 0:
+        ln.die(f"could not fetch {BRANCH} to re-check the land rule — not merging", 1)
+    land_rule(ln, pins)
 
 
 def regate(ln: Landing) -> None:

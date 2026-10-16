@@ -495,6 +495,8 @@ def await_merge(ln: Landing) -> None:
     # and the wait retries reads kubectl, runs the gates and posts the status again only for a
     # new head.
     handback_checked = ""
+    # The forward-only pins that head bumps, whose land rule is read again before each retry.
+    gated_pins: list[str] = []
     while True:
         view = ln.view("state,mergeable,headRefOid")
         state = view.get("state", "")
@@ -547,8 +549,10 @@ def await_merge(ln: Landing) -> None:
                 else:
                     if head != handback_checked:
                         _refuse_handback_while_flux_owns(ln, head)
-                        pin_gate.gate_before_merge(ln, head)
+                        gated_pins = pin_gate.gate_before_merge(ln, head)
                         handback_checked = head
+                    else:
+                        pin_gate.recheck_before_merge(ln, gated_pins)
                     refusal = _merge_directly(ln, head)
                     if not refusal:
                         continue

@@ -174,6 +174,39 @@ def test_a_failed_status_post_refuses_the_merge(landing):
     assert _gh_urls(calls) == [STATUS_URL]
 
 
+def _retried(landing, **fakes):
+    """A bump whose first direct merge GitHub refuses, so the wait retries at the same head."""
+    views = {
+        "state,mergeable,headRefOid": [
+            {"state": "OPEN", "mergeable": "MERGEABLE", "headRefOid": HEAD},
+            {"state": "OPEN", "mergeable": "MERGEABLE", "headRefOid": HEAD},
+            {"state": "MERGED", "mergeable": "MERGEABLE", "headRefOid": HEAD},
+        ]
+    }
+    # The status post, the refused merge, then the retry.
+    ln, calls = landing(
+        Fakes(gh_views=views, pins=BUMP, gh_merge_rc=[0, 1, 0], **fakes)
+    )
+    ln.direct_merge_subject = "Bump Longhorn to v1.13.0"
+    return ln, calls
+
+
+def test_a_retried_merge_reads_the_hold_again_and_gates_once(landing):
+    ln, calls = _retried(landing)
+    merge.await_merge(ln)
+    assert _gh_urls(calls) == [STATUS_URL, MERGE_URL, MERGE_URL]
+    assert _names(calls).count("hold") == 2
+    assert _names(calls).count("run_gates") == 1
+
+
+def test_a_hold_set_during_the_retry_wait_refuses_the_retried_merge(landing):
+    ln, calls = _retried(landing, deploy_hold=["none", "a" * 40])
+    with pytest.raises(Outcome) as exc:
+        merge.await_merge(ln)
+    assert "holds" in exc.value.error
+    assert _gh_urls(calls) == [STATUS_URL, MERGE_URL]
+
+
 # ── the status description ──────────────────────────────────────────────────────────────────
 
 
