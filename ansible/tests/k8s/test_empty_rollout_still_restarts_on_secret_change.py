@@ -402,6 +402,32 @@ def test_a_role_restarting_its_workloads_privately_is_clean(tmp_path):
     assert uncovered_env_secret_workloads(role) == []
 
 
+def test_a_role_saying_rollout_restart_only_in_a_comment_is_still_flagged(tmp_path):
+    """A comment is not a restart: authelia was exempt this way until #5097 (#5101)."""
+    role = _write_role(
+        tmp_path,
+        "widget",
+        tasks="# A deploy here must not trigger a rollout restart that changes nothing.\n"
+        + _TASKS.format(name="widget", extras=""),
+        templates={"daemonset.yaml.j2": _DAEMONSET.format(name="widget")},
+    )
+    assert uncovered_env_secret_workloads(role) == [("widget", "widget-agent")]
+
+
+def test_a_role_naming_rollout_restart_outside_a_command_is_still_flagged(tmp_path):
+    """Only a task's command counts: a task name or a debug message restarts nothing."""
+    role = _write_role(
+        tmp_path,
+        "widget",
+        tasks=_TASKS.format(name="widget", extras="")
+        + "\n- name: Skip the rollout restart\n"
+        "  ansible.builtin.debug:\n"
+        "    msg: no rollout restart is needed here\n",
+        templates={"daemonset.yaml.j2": _DAEMONSET.format(name="widget")},
+    )
+    assert uncovered_env_secret_workloads(role) == [("widget", "widget-agent")]
+
+
 def test_the_extra_rollouts_restart_is_not_gated_on_manifests_rollout():
     """The accept half for the mechanism: the escape hatch must stay ungated."""
     tasks = yaml_fast.safe_load(_MANIFESTS.read_text()) or []
