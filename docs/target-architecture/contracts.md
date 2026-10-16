@@ -707,6 +707,12 @@ No request on the slice index is open.
       `timeout-minutes` with the derived timeout. Otherwise D2.5's 25-minute
       `timeout-minutes` stops a longer `verify` first, and `settle` writes a false
       `<T> unverified` hold (D4 *The cap*).
+- **`soak` joins any changed set that holds a tag** (D5 Open question 19, ruled 2026-10-16).
+  The renderer drops `soak`'s `dependsOn` edges, so no edge puts `soak` in C2's changed set
+  any more. C2's *changed set* gains the rule that it holds `soak` whenever it holds a tag.
+  The Job waits at run time until each Kustomization in its scope reads Ready at R by
+  `status.lastAppliedOriginRevision` (C6), so an unchanged tag that is not Ready no longer
+  blocks it. Gate: before D5.3b2 merges, the PR that drops the edges.
 
 ### Requests on C3
 
