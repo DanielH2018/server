@@ -29,16 +29,18 @@ merged.
 | D2 | One stateless leaf end to end on production | D1, R1, and R2's PRs 1 and 2 (placeholder mode and the five rules). D2.6d also M1. D2.7 also D4.0, M1, and PR 2b of R2's *Publish `domain`* item (C3) |
 | D3 | Secrets through Flux | D2, R2. D3.0 to D3.3 need only D2.1 to D2.6c, which include D2.6b's empty `SHARED_KINDS` and census |
 | D4 | Ordering (`dependsOn`, deferred applies) | D2. D4.0 needs nothing. D4.9 also D1.6b and M1 |
-| D5 | Bulk move | D3, D4, R3, M1, M2. traefik's flip and the flux PR also H1.1a, and the flux PR also H1.7b. Wave D also H2.1, and the H2 family PR of each role H2 moves. The PR that flips the last Ansible-owned stateless leaf also M6's B-1e |
+| D5 | Bulk move | D3, D4, R3, M1, M2. traefik's flip and the flux PR also H1.1a, and the flux PR also H1.7b. Wave D also H2.1, and the H2 family PR of each role H2 moves. littlelink's flux PR also M6's B-1e. monitor-bridge's flip also M6's A6-7a, live; the observability and netpol-baseline flips also M6's C-1, live. D5 never flips uptime-kuma, which leaves at M6's C-2b |
 | D6 | Delete the old deploy path; ADR superseding 0010 | D5 |
 | M1 | Alertmanager and its watcher | — |
 | M2 | One bridge family to rules | M1 |
 | M3 | One host timer to the textfile collector | M1. The cutover also M2's PR 3 |
 | M4 | blackbox_exporter for the ingress probes | M1. PR 3 also M2's PR 3 |
 | M5 | loki-homelab ruler | M1. The cutover also M2's PR 3 |
-| M6 | Switch the readers and retire Kuma | M2, M3, M4, M5. A7's shadow PR also M5's ruler, live; A7's Cutover-a also M2's PR 4a, live. Phase C's C-4b also D6 |
+| M6a | Retire Kuma, Phase A: drain the producers | M2, M3, M4, M5. A7's shadow PR also M5's ruler, live; A7's Cutover-a also M2's PR 4a, live |
+| M6b | Retire Kuma, Phase B: switch the readers | M6a's A6. B-1, B-1d and B-1e need only M1 and C7's health-gate selector |
+| M6c | Retire Kuma, Phase C: delete Kuma | M6a, M6b. C-1 also D5's registry PR; C-4b also D6 |
 | H1 | Hand the cluster content to Flux | D2, D4. H1.7b also D3; H1.9 also R4 |
-| H2 | Shrink the host plane (crons → CronJobs) | H1.1a to H1.8. H2.3b also D3; H2.3c also H2.3b, live; H2.8a also D3, H6.4a and H6.4b |
+| H2 | Shrink the host plane (crons → CronJobs) | —. H2.2a also H1.5a and H1.6; H2.3b also H1.5a; H2.3c also H2.3b, live; H2.8a also H1.7b and H6.4b |
 | H3 | Pi pilot: builder, updater, versioning | R1. H3.5d, the host-rules PR, also M1, and H3.9b waits on it |
 | H4 | Secrets unit; NUT on daniel-server first | H3 |
 | H5 | Pi Compose | H3, H4 |
@@ -50,16 +52,26 @@ merged.
 | G4 | Drop the CI size test | —. The optional PR 3 also G2 |
 | G5 | Shrink root CLAUDE.md | G2 |
 
-H2 depends on H1.1a to H1.8 and never on H1.9. H1.9 waits on R4, R4 on D6, and D6 on D5,
-whose wave D waits on H2's family PRs, so a dependency on all of H1 would be a cycle.
+H2's edges are per PR (H2 Open question 1). H2.2a waits on H1.5a and H1.6, H2.3b on H1.5a,
+and H2.8a on H1.7b and H6.4b, which reach D3 and H6.4a through those two. Every other H2 PR
+waits on nothing outside H2. No H2 PR waits on H1.8 or H1.9. H1.9 waits on R4, R4 on D6, and
+D6 on D5, whose wave D waits on H2.1 and H2's family PRs, so a dependency on H1.9 would be a
+cycle. The H2 PRs that D5 waits on wait on nothing outside H2.
 
-D5's edge to M6's B-1e keeps one Ansible-owned stateless leaf alive for M6's live
-health-gate drill. The drill's tag must not be flux-owned, because D5's soak and
-`probe.py health` share one selector (M6 Open question 4). The edge adds no cycle. B-1e
-waits on PRs of M1 to M6 and on C7's selector amendment, and none of those waits on D5. Only
+D5's edge to M6's B-1e keeps one Ansible-owned stateless leaf, littlelink, alive for M6's
+live health-gate drill. The drill's tag must not be flux-owned, because D5's soak and
+`probe.py health` share one selector (M6 Open question 4). The edge adds no cycle. B-1, B-1d
+and B-1e wait on M1 and on C7's health-gate selector alone, and neither waits on D5. Only
 M6's C-4b waits on D6, and B-1e does not wait on C-4b. The edge does put M6's B-1 on D5's
 path to its exit when M6 finishes later. If M6 moves the drill to a tag the soak may own,
 which needs a drill exclusion in C7 that no slice has requested, the edge goes.
+
+D5's other edges to M6 keep a role Ansible-owned until an M6 step that needs `land.sh`'s
+order has deployed (M6 *When D5 flips a role M6 edits*). They add no cycle either. A6-7a
+waits on Phase A batches and on M2 to M5, and none of those waits on D5. C-1 waits on D5's
+registry PR, which precedes the held flips and waits on none of them. C-4b waits on D6, and
+D6 waits on D5's tail, but nothing from C-1 to C-7 waits on C-4b. D6's precondition that
+every entry is flux-owned then waits for C-2b, through the uptime-kuma edge.
 
 ## C1. Renderer
 
@@ -114,6 +126,11 @@ which needs a drill exclusion in C7 that no slice has requested, the edge goes.
     both digests in the render's own process, and no reader recomputes them. C2's changed
     set and C6's `land.sh` wait read `footprint`. These rules replace D6.1's `--moved-tags`
     mode. They apply the classification that D6's *What a footprint counts* defines.
+  - From D5.4a1, `DIR/images/<name>/` holds each rendered image context, and
+    `DIR/images/tags.json` maps each name to its content tag. No Kustomization's path reaches
+    `DIR/images/`. The content tag is `sha-<12 hex>` over the context's `data`, as
+    `image_builder_content_tag` computes it. A flux-owned consumer's image ref reads that tag
+    from the same render, never from `render_guard.py:BUILT_IMAGE_TAG_STUBS` (D5).
 - **Vendored files.** A role may ship verbatim upstream files and kustomize `patches:` in its
   `kustomization.yaml` (H1). The renderer refuses a directory that holds vendored files and a
   placeholder, so such a directory never substitutes.
@@ -515,10 +532,14 @@ which needs a drill exclusion in C7 that no slice has requested, the edge goes.
     that equals M or descends from it, and `flux/homelab` is too. M's changed set is the
     changed set of C2, taken between M's `digests.json` and the one on the newest published
     ancestor of M's first parent. `land.sh` reads both files from GHCR and derives no tags
-    itself (D6). From D5 on, `flux/soak` also reads
-    `success` on R. A `DEPLOY_HOLD` other than `none` (C2) ends the wait as `deploy-failed`,
+    itself (D6). A `DEPLOY_HOLD` other than `none` (C2) ends the wait as `deploy-failed`,
     and twice the promote timeout ends it as `gave-up`. That deadline moves while a
     verification of an earlier commit is in flight, because M's `decide` waits on it (#5164).
+  - **The soak, from D5.3b3.** Before D5.3b3 the soak gates nothing, and `land.sh` does not
+    read `flux/soak`. From D5.3b3, the cluster wait also needs `flux/soak` to read `success`
+    on R. A `flux/soak` `failure` on R ends the wait as `deploy-failed` with the `Cause`
+    `soak-failed`, before `settle` writes `DEPLOY_HOLD`. `land-wait` repeats the
+    combined-status read on each poll until the soak has a verdict (D5).
   - **Hosts.** For each host the PR touched, `homelab_host_applied_info` shows M or a
     descendant of M, and `homelab_host_reconcile_ok` reads 1. H3 states how the touched hosts
     are found and when the wait ends `deferred`.
@@ -561,8 +582,30 @@ which needs a drill exclusion in C7 that no slice has requested, the edge goes.
   probe target or a label states its series delta against that budget.
 - **Traces.** No slice adds tracing. The deploy timeline comes from commit-status timestamps
   and from the deploy-pipeline exporter's ages. `design.md` records why.
+- **Check producers.** A host producer follows M3's producer metric contract (M3 *The
+  producer metric contract*). A producer that is a CronJob, such as M6's B7 or one of H2's
+  moved crons, takes the kube-state-metrics recipe instead. Its rules read
+  `kube_cronjob_status_last_successful_time` and `kube_job_status_failed`, and the first PR
+  that uses the recipe adds `cronjobs,jobs` to kube-state-metrics' collectors (M6).
 - **Health gate.** `probe.py health <tag>` reads
-  `ALERTS{alertstate="firing",service="<tag>"}` and `probe_success{service="<tag>"}`.
+  `ALERTS{alertstate="firing",service="<tag>"}` and `probe_success{service="<tag>"}`, with six
+  departures from that literal selector (M6):
+    - `shadow!="true"`;
+    - `alertname!="Watchdog"`, because the Watchdog fires forever with
+      `service="observability"`;
+    - `severity="critical"` or `verify="true"`, the soak's set, so a warning-level verify
+      successor gates too;
+    - only alerts that became active after the tag's reference time, read from
+      `ALERTS_FOR_STATE`. The reference time is `applied_at` for an Ansible-owned tag, and for
+      an `owner: flux` tag the time its Kustomization first reported its current origin
+      revision (C6);
+    - a `probe_success` sample newer than `applied_at`, so a sample taken mid-rollout cannot
+      decide;
+    - no probe half for a tag whose rendered entry has no route, even when an old
+      `probe_success` series is still inside the lookback.
+
+  D5's soak and `probe.py health` share one definition of this selector. A drill exclusion
+  therefore cannot apply to one reader only.
 - **The soak.** From D5.3, a Job in the shared kind `soak` reads the alerts labelled
   `severity="critical"` or `verify="true"` for the services in the revision's changed set
   (C2), after M1's filter for shadow rules and the Watchdog. An empty changed set passes at
@@ -635,14 +678,7 @@ request leaves this list and the round's *Review log* entry names it.
 
 ### Requests on the slice index
 
-- **H2's per-PR edges** (H2 Open question 1). H2.2a needs H1.5a and H1.6, H2.3b needs H1.5a,
-  and H2.8a needs H1.7b and H6.4b. Every other H2 PR needs nothing outside H2. The row then
-  drops H1.8 and the H2.3b → D3 edge, and "H2.8a also D3, H6.4a and H6.4b" becomes "H2.8a
-  also H1.7b and H6.4b", which reaches D3 and H6.4a through those two. No gate: each change
-  only loosens an order the row already enforces.
-- **M6's phases** (M6 Open question 1). Split M6 into M6a (Phase A, on M2 to M5), M6b
-  (Phase B, on M6a's A6) and M6c (Phase C, on M6a and M6b, and on D6 for C-4b only). No gate
-  is named.
+No request on the slice index is open.
 
 ### Requests on C1
 
@@ -650,8 +686,6 @@ request leaves this list and the round's *Review log* entry names it.
   SHA`. The publish job passes the commit it publishes, and the render-diff job passes the PR
   head's SHA to both renders. Gate: before R4's PR 1 merges. D6.1 no longer renders twice
   once C1's footprint replaces `--moved-tags`, so D6 Open question 13 is withdrawn.
-- **Image contexts** (D5 Open question 10). `DIR/images/<name>/` and `DIR/images/tags.json`,
-  which no Kustomization's path reaches. Gate: before D5.4a1 merges.
 - **Host-mode placeholders** (H4 Open question 6, with H3's *Host mode renders no secret*).
   Host mode renders a secret reference as `${<key>}` in two kinds of file, a component's
   declared outputs and its compose files, and escapes those files by the cluster-mode rule.
@@ -673,6 +707,12 @@ request leaves this list and the round's *Review log* entry names it.
       `timeout-minutes` with the derived timeout. Otherwise D2.5's 25-minute
       `timeout-minutes` stops a longer `verify` first, and `settle` writes a false
       `<T> unverified` hold (D4 *The cap*).
+- **`soak` joins any changed set that holds a tag** (D5 Open question 19, ruled 2026-10-16).
+  The renderer drops `soak`'s `dependsOn` edges, so no edge puts `soak` in C2's changed set
+  any more. C2's *changed set* gains the rule that it holds `soak` whenever it holds a tag.
+  The Job waits at run time until each Kustomization in its scope reads Ready at R by
+  `status.lastAppliedOriginRevision` (C6), so an unchanged tag that is not Ready no longer
+  blocks it. Gate: before D5.3b2 merges, the PR that drops the edges.
 
 ### Requests on C3
 
@@ -713,22 +753,10 @@ No request on C5 is open.
 
 ### Requests on C6
 
-- **The soak in `land.sh`'s wait** (D5 Open question 18). `flux/soak` gates the wait from
-  D5.3b3, not from D5's first PR. A `flux/soak` `failure` on R ends the wait as
-  `deploy-failed` with the `Cause` `soak-failed`, before `settle` writes `DEPLOY_HOLD`.
-  `land-wait` repeats the combined-status read on each poll until the soak has a verdict.
-  Gate: before D5.3b3 merges.
+No request on C6 is open.
 
 ### Requests on C7
 
-- **CronJob checks and the health gate's selector** (M6 Open questions 3 and 4). The
-  kube-state-metrics recipe for CronJob-based checks joins M3's textfile contract. The
-  health gate's selector departs from C7's literal one in six ways: `shadow!="true"`,
-  `alertname!="Watchdog"`, the soak's set of `severity="critical"` or `verify="true"`,
-  alerts active after the tag's reference time, a `probe_success` sample newer than that
-  time, and no probe half for a tag whose entry has no route. D5's soak and `probe.py
-  health` share that one definition. Gates: before M6's B-1 merges for the selector, and
-  before B7's pi-peer-backup shadow PR for the recipe.
 - **Log rules stay outside the health gate** (M5 Open question 1). A loki-homelab ruler
   alert never reaches Prometheus `ALERTS`, and the ruler-watching alerts cover the service
   there. Gate: before M5's PR 4b merges.
@@ -1077,7 +1105,7 @@ Applied to this page:
   tag's object in `digests.json` holds `claims` and `suspended` beside `own` and
   `footprint`, from D5.1a2. It also states that `soak`'s footprint is normalised over the
   revision's SHA. The request leaves *Requests on C1*, which clears the gate before D5.1a2
-  merges. The image contexts stay listed, gated before D5.4a1 merges.
+  merges. The image contexts were applied later the same day (below).
 - **Suspension and hand writes** (D5 Open question 5). C3 gains *Suspension*: `flux_suspend`
   renders `spec.suspend` only when true, the renderer drops every edge to a suspended
   Kustomization, and a hand suspend uses the field manager `homelab-operator`. C3 *Per-tag
@@ -1132,3 +1160,40 @@ Applied to this page:
   *A dependent that was already failing*, and now also says that `decide` records those
   statuses before it moves `prod`. The request leaves *Requests on C2*, which clears the gate
   before H1.1i merges.
+- **M6's phases** (M6 Open question 1, corrected by M6 Open question 12). The slice index
+  splits M6 into M6a (Phase A, on M2 to M5), M6b (Phase B, on M6a's A6, except B-1, B-1d and
+  B-1e, which need only M1 and C7's health-gate selector) and M6c (Phase C, on M6a and M6b,
+  and on D6 for C-4b only). A7's two sub-edges move to M6a, and M6c gains C-1 on D5's
+  registry PR. D5's row names littlelink's flux PR as the one that waits on B-1e, where it
+  read "the PR that flips the last Ansible-owned stateless leaf". It also gains
+  monitor-bridge's flip on A6-7a and the observability and netpol-baseline flips on C-1,
+  each live, and states that D5 never flips uptime-kuma. A paragraph below the table states
+  why the new D5 edges add no cycle. The request leaves *Requests on the slice index*. It
+  named no gate.
+- **H2's per-PR edges** (H2 Open question 1). H2's row reads H2.2a on H1.5a and H1.6, H2.3b
+  on H1.5a, H2.3c on H2.3b live, and H2.8a on H1.7b and H6.4b. Every other H2 PR waits on
+  nothing outside H2. The row drops H1.8 and the H2.3b → D3 edge, and the paragraph below
+  the table restates why no H2 PR waits on H1.9. The request leaves *Requests on the slice
+  index*. It named no gate, because each change only loosens an order the row enforced.
+- **Image contexts** (D5 Open question 10). C1 *Cluster output* states `DIR/images/<name>/`
+  and `DIR/images/tags.json` from D5.4a1, the content tag `image_builder_content_tag`
+  computes, and that a flux-owned consumer reads that tag from the same render, never from
+  `render_guard.py:BUILT_IMAGE_TAG_STUBS`. The request leaves *Requests on C1*, which clears
+  the gate before D5.4a1 merges.
+- **The soak in `land.sh`'s wait** (D5 Open question 18). C6 *`land.sh`* gains *The soak,
+  from D5.3b3*. It states that `land.sh` does not read `flux/soak` before D5.3b3, the
+  `soak-failed` cause before `settle` writes `DEPLOY_HOLD`, and the repeated combined-status
+  read. The cluster bullet no longer says "From D5 on". D5 Open question 18 names `verify`
+  as the writer of `DEPLOY_HOLD`, and C2 *On failure* names `settle`, so C6 follows C2. The
+  request leaves *Requests on C6*, which clears the gate before D5.3b3 merges.
+- **CronJob checks and the health gate's selector** (M6 Open questions 3 and 4). C7 gains
+  *Check producers*, which places the kube-state-metrics recipe beside M3's producer metric
+  contract. C7 *Health gate* states the six departures from its literal selector, the
+  reference time, and that D5's soak and `probe.py health` share one definition. The request
+  leaves *Requests on C7*, which clears the gates before M6's B-1 merges and before B7's
+  pi-peer-backup shadow PR.
+- **The soak's channel and the `verify` label** (D5 Open question 6). Round 1 applied it for
+  X-07. C7 states the `flux/soak` commit status in *The soak*, the `verify="true"` label in
+  *Rule labels* and *Verify successors*, and M1's shadow and Watchdog filter in *The soak*.
+  This entry records that the request is applied, and the gate before D5.3b1 merges is
+  clear. No row in *Requested amendments not yet applied* preceded it.

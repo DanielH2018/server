@@ -31,11 +31,13 @@ Every fact comes from a reader that already exists; this module only joins them:
   line, which is where a landing-policy refusal writes its reason.
 - **Promotion (Flux-owned tags).** `DEPLOY_HOLD` from one `gh variable get`; `prod` from the
   OCIRepository `homelab`'s `status.artifact`, through the read-only `kubectl`; `last-good` from
-  one GHCR manifest fetch, which costs a token request and one GET. That is one
-  `api.github.com` call, two `ghcr.io` requests and one cluster read per run
-  (docs/target-architecture/deploy/d2-first-leaf.md, *What `probe.py landing` reads*). A
-  failed read leaves its own field `null`, and the text view then never reports `prod` equal
-  to `last-good`. `run_landing` passes the live reads; `collect` called without them reads none.
+  one GHCR manifest fetch, which costs a token request and one GET; and every suspended
+  Kustomization and OCIRepository with the field manager of its `spec.suspend`, from a second
+  read-only `kubectl` read (D5.1b). That is one `api.github.com` call, two `ghcr.io` requests
+  and two cluster reads per run (docs/target-architecture/deploy/d2-first-leaf.md, *What
+  `probe.py landing` reads*). A failed read leaves its own field `null`, and the text view then
+  never reports `prod` equal to `last-good`. `run_landing` passes the live reads; `collect`
+  called without them reads none.
 - **Worktrees and claims.** `git worktree list` and `findings.py claims --json`. A claim
   joins a worktree on its branch, or on the issue numbers a fan-out batch worktree's name
   carries (`fanout_lib.launch.worktree_path`: `fanout-<n>-<n>`), because a fan-out batch's
@@ -334,7 +336,12 @@ def collect(
         "last_verdict": None,
         "worktrees": None,
         "claims": None,
-        "promote": {"deploy_hold": None, "prod": None, "last_good": None},
+        "promote": {
+            "deploy_hold": None,
+            "prod": None,
+            "last_good": None,
+            "suspended": None,
+        },
         "errors": [],
     }
 
@@ -438,6 +445,13 @@ def collect(
                 snap["promote"][name] = {"commit": "", "digest": ""}
 
             attempt(name, read)
+        read_objects = promote.suspended
+        if read_objects is not None:
+
+            def read_suspended():
+                snap["promote"]["suspended"] = read_objects()
+
+            attempt("suspended", read_suspended)
     attempt("hold", read_hold)
     attempt("ci", read_ci)
     attempt("runs", read_runs)

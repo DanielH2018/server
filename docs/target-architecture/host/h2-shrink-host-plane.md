@@ -2023,6 +2023,8 @@ carries `prune: disabled`.
    H1.7b and H6.4b". Until they do, contracts.md's *Requested amendments not yet applied*
    register lists this request, and *Open questions* 12's C3 row with its gate before H2.3b.
    D5's plan names H2.5b to H2.5d where it names H2.5b.
+   **Applied on 2026-10-16.** contracts.md's H2 row and the paragraph below the table state
+   the per-PR edges. No gate was named.
 2. **A sidecar or exec for CrowdSec?** A sidecar in the `crowdsec` pod, running the allowlist
    and prune loops against the shared database, needs no `pods/exec` grant. It is no longer a
    CronJob, though, and it restarts with the LAPI. Resolution: H2.4b picks one, and records the

@@ -862,6 +862,56 @@
     mode: "0644"
   become: true
 
+# Interim credentials for H3.8 (docs/target-architecture/host/h3-pi-pilot.md, H3.8a). The
+# homelab-daniel-pi package cannot carry a secret, so the H3.8b units read each push token
+# through `LoadCredential=` from the file below. Ansible owns these files and the package only
+# reads them; H4's last PR retires them. Nothing reads them before H3.8b: the crons above
+# still embed their tokens. `domain` gets no file, because it is an inventory value since
+# #5087 and the package renders it directly.
+- name: Create the homelab credentials directory
+  tags: [sd-health, recovery-health]
+  # Same owner and mode as initial_setup's tasks that also create it, so they never fight.
+  ansible.builtin.file:
+    path: /etc/homelab
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  become: true
+
+- name: Create the interim credentials directory for the Pi heartbeats
+  tags: [sd-health, recovery-health]
+  # 0700 root: only systemd, as root, opens these files for `LoadCredential=`.
+  ansible.builtin.file:
+    path: /etc/homelab/interim
+    state: directory
+    owner: root
+    group: root
+    mode: "0700"
+  become: true
+
+- name: Stage the SD-card health push token as an interim credential
+  tags: [sd-health]
+  ansible.builtin.copy:
+    content: "{{ pi_sd_health_push_token }}"
+    dest: /etc/homelab/interim/pi_sd_health_push_token
+    owner: root
+    group: root
+    mode: "0600"
+  no_log: true  # writes pi_sd_health_push_token
+  become: true
+
+- name: Stage the container-recovery push token as an interim credential
+  tags: [recovery-health]
+  ansible.builtin.copy:
+    content: "{{ pi_recovery_push_token }}"
+    dest: /etc/homelab/interim/pi_recovery_push_token
+    owner: root
+    group: root
+    mode: "0600"
+  no_log: true  # writes pi_recovery_push_token
+  become: true
+
 - name: Deploy the SD-card health heartbeat script
   tags: [sd-health]
   # SD cards can't do SMART (no ATA/NVMe command set behind mmcblk0), so scrutiny is
