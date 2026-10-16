@@ -117,6 +117,7 @@ class World:
         self.ready_samples = None
         self.scrape_gaps = []
         self.alerts = []
+        self.pending_alerts = []
         self.firing_at_t0 = []
         self.prometheus_started = T0 - 86400
         self.now = T0 + 300
@@ -199,10 +200,15 @@ class World:
                 {"metric": {**m, "alertstate": "firing"}, "value": [T0, "1"]}
                 for m in self.firing_at_t0
             ]
+        if promql.startswith("ALERTS{"):
+            return [
+                {"metric": {**m, "alertstate": "firing"}, "value": [self.now, "1"]}
+                for m, _ in self.alerts
+            ]
         if promql.startswith("ALERTS_FOR_STATE"):
             return [
                 {"metric": m, "value": [self.now, str(active)]}
-                for m, active in self.alerts
+                for m, active in self.alerts + self.pending_alerts
             ]
         raise AssertionError(promql)
 

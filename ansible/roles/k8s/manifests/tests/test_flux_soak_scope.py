@@ -55,6 +55,12 @@ def test_an_alert_fails_only_when_critical_or_verify_and_active_after_t0(
     assert run(world, tmp_path)[0] == int(fails)
 
 
+def test_a_critical_alert_still_pending_after_t0_passes(world, tmp_path):
+    # The red half: ALERTS_FOR_STATE alone lists a pending alert beside the firing ones.
+    world.pending_alerts = [(alert(), T0 + 60)]
+    assert run(world, tmp_path) == (0, "")
+
+
 @pytest.mark.parametrize(("restarted", "code"), [(T0 + 200, 0), (T0 - 600, 1)])
 def test_a_no_for_alert_reactivated_by_a_prometheus_restart_after_t0_passes(
     world, tmp_path, restarted, code

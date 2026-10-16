@@ -431,10 +431,16 @@ def judge_alerts(reads: Reads, scope: Scope, t0: float, verdict: Verdict) -> Non
                 f'last_over_time(ALERTS{{alertstate="firing",{ALERT_FILTER}}}[5m])', t0
             )
         }
+    # ALERTS_FOR_STATE holds pending alerts too, and only a firing one fails the soak.
+    firing = {
+        _alert_key(s["metric"])
+        for s in reads.query(f'ALERTS{{alertstate="firing",{ALERT_FILTER}}}', None)
+    }
     for series in reads.query(f"ALERTS_FOR_STATE{{{ALERT_FILTER}}}", None):
         metric = series["metric"]
         if (
-            metric.get("shadow") == "true"
+            _alert_key(metric) not in firing
+            or metric.get("shadow") == "true"
             or metric.get("alertname") == "Watchdog"
             or metric.get("service") not in scope.services
             or not (
