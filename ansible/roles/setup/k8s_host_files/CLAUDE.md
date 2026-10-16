@@ -71,7 +71,7 @@ The role installs nothing yet. Once rows move in, the GitOps tick applies it as
   `hold_plane` entry naming `initial_setup.yml`, and the tick applies nothing more until the
   hold clears.
 - **Required evidence:** the tick's receipt and `land.sh`'s `VERDICT:` line for every PR that
-  changes this role. The Pi probe timer appends its HTTP status to `/var/log/pi-health/`,
-  which the Pi's Alloy tails.
+  changes this role. Once crowdsec's probe timer moves in, it appends its HTTP status to a
+  file under `/var/log/pi-health/`, which the Pi's Alloy tails.
 - **Next-run review:** before moving a new row in, run `--list-tasks` with
   `--tags k8s_host_files` and read the recap of the last apply.

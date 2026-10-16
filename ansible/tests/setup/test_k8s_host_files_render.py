@@ -94,13 +94,13 @@ def test_the_red_fixture_reads_a_name_only_a_k8s_role_defines():
         assert K8S_ONLY_VAR not in load_defaults(ROLE)
 
 
-def test_a_template_reading_a_k8s_role_default_fails(tmp_path):
+def test_a_template_reading_a_k8s_role_default_is_flagged(tmp_path):
     role_dir = _fixture_role(tmp_path, f"dir={{{{ {K8S_ONLY_VAR} }}}}\n")
     failures = render_failures(role_dir)
     assert set(failures) == {"templates/fixture.conf.j2"}, failures
     assert K8S_ONLY_VAR in failures["templates/fixture.conf.j2"]
 
 
-def test_a_template_reading_a_group_vars_key_renders(tmp_path):
+def test_a_template_reading_a_group_vars_key_is_clean(tmp_path):
     role_dir = _fixture_role(tmp_path, "user={{ sys_user }}\n")
     assert render_failures(role_dir) == {}
