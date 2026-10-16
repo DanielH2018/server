@@ -760,6 +760,21 @@
   register: optimize_pi_node_exporter_binary
   when: not ansible_check_mode
 
+# The textfile collector's directory. homelab-updater, which runs as root, writes
+# homelab_host.prom here and exits non-zero when the directory is missing; it never creates it.
+# This task is the directory's only creator on the Pi, and its owner, group and mode are M3's
+# contract (docs/target-architecture/monitoring/m3-textfile-timer.md), as on the k3s nodes:
+# the group lets a {{ sys_user }} writer in, and setgid keeps that group on new files.
+- name: Create the node_exporter textfile directory
+  tags: [node-exporter-host]
+  ansible.builtin.file:
+    path: /var/lib/node-exporter-textfile
+    state: directory
+    owner: root
+    group: "{{ sys_user }}"
+    mode: "2775"
+  become: true
+
 - name: Install the node_exporter unit
   tags: [node-exporter-host]
   ansible.builtin.template:

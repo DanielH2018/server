@@ -12,12 +12,14 @@ Run: uv run pytest ansible/tests/setup/test_renovate_agent_identity.py
 
 import importlib.util
 import re
+import shlex
 import sys
 
 import pytest
 from _helpers import ANSIBLE
 from _setup_render import render_setup_text
 from lib import yaml_fast
+from lib.proc_testing import run
 from lib.ansible_jinja_env import make_ansible_env
 
 ROLE_NAME = "renovate_agent"
@@ -323,3 +325,37 @@ def test_land_sh_ends_its_landing_before_the_lander_script_kills_it() -> None:
         if e.startswith("LAND_DEADLINE=")
     ]
     assert deadlines and 0 < int(deadlines[-1]) <= int(timeout)
+
+
+# What the unit spends before land.sh starts its clock: `uv run` startup, the denylist read and
+# `gh pr view`, plus the script writing its verdict after land.sh returns.
+SCRIPT_OVERHEAD_S = 60
+
+
+def test_the_lock_wait_and_the_landing_both_fit_inside_the_units_timeout() -> None:
+    """systemd counts the flock wait against TimeoutStartSec; LAND_DEADLINE does not (#5203)."""
+    unit = render(LANDER)
+    timeout = _seconds(directive(unit, "TimeoutStartSec")[-1])
+    (flock_wait,) = re.findall(r"flock -w (\d+) ", directive(unit, "ExecStart")[0])
+    (deadline,) = [
+        e.split("=", 1)[1]
+        for e in directive(unit, "Environment")
+        if e.startswith("LAND_DEADLINE=")
+    ]
+    script = (ROLE / "files" / "land_renovate_pr.py").read_text()
+    (land_timeout,) = re.findall(r"^LAND_TIMEOUT_S = (\d+)$", script, re.MULTILINE)
+    landing = max(int(deadline), int(land_timeout))
+    assert int(flock_wait) + landing + SCRIPT_OVERHEAD_S <= timeout
+
+
+def test_a_lock_wait_that_times_out_leaves_no_earlier_verdict(tmp_path) -> None:
+    """The verdict file is overwritten before the flock wait, not only once the script runs."""
+    unit = render(LANDER)
+    script = (ROLE / "files" / "land_renovate_pr.py").read_text()
+    (results_dir,) = re.findall(r'^RESULTS_DIR = "([^"]+)"$', script, re.MULTILINE)
+    (pre,) = directive(unit, "ExecStartPre")
+    stale = tmp_path / f"{PR}.verdict"
+    stale.write_text("VERDICT: settled\n")
+    command = shlex.split(pre.replace("%i", PR).replace(results_dir, str(tmp_path)))
+    run(command, check=True)
+    assert stale.read_text().startswith("VERDICT: none")

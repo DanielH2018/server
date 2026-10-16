@@ -19,16 +19,18 @@ container, and drives `homelab-updater` through these cases:
   * the common path, which leaves `pkgcache.bin` unchanged;
   * remove the host package, and the next run reinstalls it;
   * cold-install the head version on a fresh container;
-  * install the Pi package by hand on a fresh container, then change its drop-in on
+  * install the real Pi package by hand on a fresh container, then change its drop-in on
     homelab-updater.timer, and the timer, which has no enable link, stays inactive.
 
 Every case that reaches step 3 asserts that the server log holds its `GET` of
 `dists/homelab/Release`. Every case asserts that `/var/lib/apt/lists/` holds a list for the test
 repository and none named after daniel-box's address.
 
-The real homelab-updater comes from the job's base and head builds. No host package exists until
-H3.6, so homelab-daniel-pi is a fixture: `hosts/lib/tests/container/fixture/`'s specs, rendered
-by the real renderer with the real reconcile component and maintainer scripts.
+The real homelab-updater comes from the job's base and head builds. The by-hand case installs
+the head build of the real homelab-daniel-pi, `hosts/daniel-pi/`. Every other case needs a unit,
+a file and a payload the real package does not ship, so it installs a fixture homelab-daniel-pi:
+`hosts/lib/tests/container/fixture/`'s specs, rendered by the real renderer with the real
+reconcile component and maintainer scripts.
 
 Usage:
     uv run python scripts/validate/host_package_cases.py --image homelab-host-test:24.04 \\
@@ -44,6 +46,7 @@ from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 
+import json
 import shlex
 import shutil
 import subprocess
@@ -63,6 +66,7 @@ from validate.validate_lib.host_container import (
 )
 from validate.validate_lib.host_fixtures import (
     DROPIN,
+    DROPIN_CHANGED,
     HOST_PKG,
     KEYRING,
     PAYLOAD,
@@ -73,6 +77,7 @@ from validate.validate_lib.host_fixtures import (
     build,
     deb_version,
     newer,
+    pi_dropin_variant,
     publish,
     render_fixture,
     updater_variant,
@@ -80,6 +85,7 @@ from validate.validate_lib.host_fixtures import (
 
 LOCK_HELD = "/run/test-lock.held"
 PKGCACHE = "/var/cache/apt/pkgcache.bin"
+RECONCILE_RECORD = "/var/lib/homelab-reconcile/applied.json"
 # systemd's MESSAGE_ID for "Starting <unit>...", logged once per start job.
 UNIT_STARTING = "7d4958e842da4a758f6c1cdc7b36dcc5"
 RELEASE_GET = '"GET /dists/homelab/Release HTTP/'
@@ -128,6 +134,10 @@ class Cases:
         for side in ("base", "head"):
             (deb,) = (debs / side).glob(f"{UPDATER}_*.deb")
             self._add(f"updater-{side}", deb)
+        # The base is master before H3.6 or after it, so only the head build is sure to hold
+        # the real Pi package. The fixture's head build carries the same file name.
+        (deb,) = (debs / "head").glob(f"{HOST_PKG}_*.deb")
+        self._add("pi-head", deb, name=f"real-{deb.name}")
         base, head = self.versions["updater-base"], self.versions["updater-head"]
         if not newer(head, base):
             raise CaseFailed(
@@ -139,7 +149,6 @@ class Cases:
             "base": base,
             "head": head,
             "payload": f"{head}.2",
-            "dropin": f"{base}.1",
         }
         for variant, version in fixture_versions.items():
             rendered = render_fixture(variant, build_root / variant)
@@ -152,9 +161,13 @@ class Cases:
             "updater-unit",
             build(rendered, f"{head}.1", build_root / "updater-unit-deb"),
         )
+        rendered = pi_dropin_variant(render / "head", build_root / "pi-dropin")
+        self._add(
+            "pi-dropin", build(rendered, f"{head}.3", build_root / "pi-dropin-deb")
+        )
 
-    def _add(self, label: str, deb: Path) -> None:
-        target = self.work / "debs" / deb.name
+    def _add(self, label: str, deb: Path, name: str | None = None) -> None:
+        target = self.work / "debs" / (name or deb.name)
         shutil.copy(deb, target)
         self.debs[label] = target
         self.versions[label] = deb_version(target)
@@ -215,6 +228,18 @@ class Cases:
         want = {UPDATER: self.versions[updater], HOST_PKG: self.versions[host]}
         got = {package: installed.get(package) for package in want}
         expect(got == want, f"dpkg holds {got}, not {want}")
+
+    def expect_reconciled(self, c: Container, updater: str, host: str) -> None:
+        """Reconcile's record says its last run succeeded for these two versions."""
+        try:
+            result = json.loads(c.read(RECONCILE_RECORD))["result"]
+        except (ValueError, KeyError) as exc:
+            raise CaseFailed(f"{RECONCILE_RECORD} holds no result: {exc}") from exc
+        want = {UPDATER: self.versions[updater], HOST_PKG: self.versions[host]}
+        expect(
+            result.get("ok") is True and result.get("versions") == want,
+            f"reconcile recorded {result}, not a success for {want}",
+        )
 
     def upgrade_path(self) -> None:
         """The chained cases: one container from a bare install to a removal."""
@@ -400,7 +425,7 @@ class Cases:
             c.remove()
 
     def by_hand(self) -> None:
-        """Install the Pi package by hand, then change its drop-in on the updater's timer."""
+        """Install the real Pi package by hand, then change its drop-in on the updater's timer."""
         c = self.boot("by-hand")
         if c is None:
             return
@@ -409,28 +434,27 @@ class Cases:
         def body() -> None:
             debs = " ".join(
                 f"/srv/debs/{self.debs[label].name}"
-                for label in ("updater-base", "host-base")
+                for label in ("updater-head", "pi-head")
             )
             c.ok(f"dpkg -i {debs}")
             # Joins the start the postinst queued, and returns once that reconcile ends.
             c.ok("systemctl start homelab-reconcile.service")
-            kept = c.active("homelab-fixture-kept.service")
-            expect(kept == "active", f"reconcile did not run: the kept unit is {kept}")
+            self.expect_reconciled(c, "updater-head", "pi-head")
             state = c.active(timer)
             expect(state == "inactive", f"{timer} is {state} after the install")
-            self.serving("updater-base", "host-base", "host-dropin")
+            self.serving("updater-head", "pi-head", "pi-dropin")
             status = c.run_updater()
             expect(status == 0, f"the updater exited {status}")
-            self.expect_installed(c, "updater-base", "host-dropin")
+            self.expect_installed(c, "updater-head", "pi-dropin")
             expect(
-                ":10/15:00" in c.read(DROPIN), "the changed drop-in is not installed"
+                DROPIN_CHANGED in c.read(DROPIN), "the changed drop-in is not installed"
             )
             state = c.active(timer)
             expect(state == "inactive", f"{timer} is {state} after its drop-in changed")
 
         try:
             self.case(
-                c, "install the Pi package by hand, then change its drop-in", body
+                c, "install the real Pi package by hand, then change its drop-in", body
             )
         finally:
             c.remove()

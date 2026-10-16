@@ -196,14 +196,18 @@ and the window. The Pi memory budget review of 2026-09-18 has the host's numbers
 arm64 tarball, checksum-pinned, under `/opt`, with `/usr/local/bin/node_exporter` a symlink to
 the pinned version — a bump moves the link, which restarts `node_exporter.service`. It runs as
 the `node_exporter` system user on the LAN IP's port 9100 with the collector flags the
-container ran, plus a UFW allow from `lan_subnet`.
+container ran, plus a UFW allow from `lan_subnet`. H3.6 turned the textfile collector on over
+`/var/lib/node-exporter-textfile`, where `homelab-updater` writes `homelab_host.prom`. The same
+tag creates that directory with M3's owner contract: owner root, group `sys_user`, mode 2775.
+Nothing else creates it on the Pi, and the updater fails without it.
 
 It replaced the `node-exporter` container on 2026-09-18 (#2005; the retired role is at
 `git show 2460d0675fd748e70fcbcde87185371ffd62402b:ansible/roles/containers/archive/node-exporter/`).
 The trade was one containerd shim, about 5 MB, off a host that keeps 10-25 MB free — and this
 was the one container whose host form changes no decision.
 `ansible/tests/setup/test_pi_node_exporter_host_unit.py` holds the unit to the archived
-compose's collector set and the version to the cluster DaemonSet's.
+compose's collector set with the textfile collector on, the directory to M3's contract, and the
+version to the cluster DaemonSet's.
 
 **HISTORY — the node_exporter cutover.** It retired the container by hand (`docker rm -f node-exporter` and its `containers/node-exporter/` directory) before the first apply, because the container published the same IP and port the unit binds.
 

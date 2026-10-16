@@ -192,7 +192,7 @@ def test_the_same_tree_renders_the_same_fixture(tmp_path):
     assert host_packages.render_fixtures(REPO, tmp_path)
     # Named member: two empty renders would also compare equal.
     dropin = "root/usr/lib/systemd/system/homelab-updater.timer.d/50-homelab.conf"
-    assert (tmp_path / "dropin" / "hosts" / "daniel-pi" / dropin).is_file()
+    assert (tmp_path / "head" / "hosts" / "daniel-pi" / dropin).is_file()
     assert not host_packages.fixture_changed(REPO, REPO)
 
 

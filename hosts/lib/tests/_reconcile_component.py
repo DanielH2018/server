@@ -1,8 +1,8 @@
 """The `reconcile` component rendered as a package, the way a host package will ship it.
 
-No package lists the component until H3.6's `hosts/daniel-pi/package.yml`. This renders a
-fixture shared package that lists it, through `render_package`, the function `homelab-render
-package` calls. The fixture tree links the repo's real component and `hosts/lib/`, and the
+This renders a fixture shared package that lists the component, so the tests judge the
+component alone rather than whatever else `hosts/daniel-pi/package.yml` ships. It renders
+through `render_package`, the function `homelab-render package` calls. The fixture tree links the repo's real component and `hosts/lib/`, and the
 renderer resolves those links before its containment checks, so the checks judge the real
 files.
 """

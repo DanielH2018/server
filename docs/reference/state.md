@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/state.py
-generated_at: 2026-10-15 18:17 UTC
-generated_sha: 2e472a3c8
+generated_at: 2026-10-16 06:17 UTC
+generated_sha: 013e72b76
 ---
 
 !!! warning "Generated file — do not edit"
@@ -19,10 +19,10 @@ generated_sha: 2e472a3c8
 
 | Loop | Last run | Age | Cadence | Status | Last outcome |
 |---|---|---|---|---|---|
-| gitops-deploy | 2026-10-15T18:12:11+0000 | 5m | 10m | ok | ticked, no hold |
-| renovate-agent | 2026-10-15T11:14:56+0000 | 7h2m | 1d | ok | session completed |
-| renovate-notify | 2026-10-15T13:02:48+0000 | 5h14m | 1d | ok | notified |
-| docs-refresh | 2026-10-15T06:18:00+0000 | 11h59m | 12h | ok | generators: ok |
-| secret-rotate | 2026-10-15T17:58:42+0000 | 18m | 7d | ok | last touched by: Fall back to WiFi on both k3s nodes when their ethernet link loses carrier |
-| longhorn-restore-drill | 2026-10-15T04:10:48+0000 | 14h6m | 1d | ok | PVC restore proven |
-| etcd-restore-drill | 2026-10-12T10:20:02+0000 | 3d7h | 7d | ok | list-only restore proven (snapshot offbox-daniel-box-1791773103.zip) |
+| gitops-deploy | 2026-10-16T06:12:40+0000 | 4m | 10m | ok | ticked, no hold |
+| renovate-agent | 2026-10-15T11:14:56+0000 | 19h2m | 1d | ok | session completed |
+| renovate-notify | 2026-10-15T13:02:48+0000 | 17h14m | 1d | ok | notified |
+| docs-refresh | 2026-10-15T18:18:00+0000 | 11h59m | 12h | ok | generators: ok |
+| secret-rotate | 2026-10-15T22:46:35+0000 | 7h30m | 7d | ok | last touched by: Page when the host-package builder stops fetching or leaves a green commit unbuilt |
+| longhorn-restore-drill | 2026-10-16T04:10:57+0000 | 2h6m | 1d | ok | PVC restore proven |
+| etcd-restore-drill | 2026-10-12T10:20:02+0000 | 3d19h | 7d | ok | list-only restore proven (snapshot offbox-daniel-box-1791773103.zip) |

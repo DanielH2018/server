@@ -47,16 +47,12 @@ def test_the_head_fixture_drops_a_unit_and_a_file_and_depends_on_tree(fixtures):
     assert "- tree" not in (fixtures["base"] / "nfpm.yaml").read_text()
 
 
-def test_the_payload_and_dropin_fixtures_differ_from_their_parents_as_named(fixtures):
+def test_the_payload_fixture_differs_from_the_head_fixture_as_named(fixtures):
     assert _installed(fixtures["payload"]) - _installed(fixtures["head"]) == {
         fx.PAYLOAD
     }
     payload = fixtures["payload"] / f"root{fx.PAYLOAD}"
     assert payload.stat().st_size == 16
-    base = (fixtures["base"] / f"root{fx.DROPIN}").read_text()
-    dropin = (fixtures["dropin"] / f"root{fx.DROPIN}").read_text()
-    assert ":05/15:00" in base
-    assert ":10/15:00" in dropin
 
 
 @pytest.mark.parametrize("variant", fx.VARIANTS)
@@ -90,6 +86,32 @@ def test_the_updater_variant_changes_its_unit_and_keeps_the_keyring(tmp_path):
         head / "packages" / fx.UPDATER / keyring
     ).read_bytes()
     assert (variant / "nfpm.yaml").read_text().count(f"dst: {fx.KEYRING}") == 1
+
+
+def test_the_pi_dropin_variant_changes_only_the_real_dropin(tmp_path):
+    head = tmp_path / "head"
+    host_mode.write_packages([host_mode.render_host(fx.HOST)], head)
+    real = head / "hosts" / fx.HOST
+
+    variant = fx.pi_dropin_variant(head, tmp_path / "variant")
+
+    dropin = f"root{fx.DROPIN}"
+    assert (variant / dropin).read_text() == (real / dropin).read_text().replace(
+        fx.DROPIN_MINUTE, fx.DROPIN_CHANGED
+    )
+    assert fx.DROPIN_CHANGED in (variant / dropin).read_text()
+    assert _installed(variant) == _installed(real)
+    assert (variant / "nfpm.yaml").read_text() == (real / "nfpm.yaml").read_text()
+
+
+def test_a_pi_render_whose_dropin_moved_is_refused(tmp_path):
+    head = tmp_path / "head"
+    host_mode.write_packages([host_mode.render_host(fx.HOST)], head)
+    dropin = head / "hosts" / fx.HOST / f"root{fx.DROPIN}"
+    dropin.write_text(dropin.read_text().replace(fx.DROPIN_MINUTE, ":07/15:00"))
+
+    with pytest.raises(ValueError, match="does not fire at"):
+        fx.pi_dropin_variant(head, tmp_path / "variant")
 
 
 def test_the_box_address_comes_from_the_shipped_source(tmp_path):

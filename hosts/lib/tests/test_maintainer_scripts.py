@@ -60,7 +60,7 @@ def test_the_updaters_prerm_stops_its_own_units_on_remove_only():
 
 
 def test_a_rendered_preinst_is_clean(tmp_path):
-    # No host package lists preinst until H3.6, so a fixture host renders the real template.
+    # A fixture host renders the real template, so the test reads preinst alone.
     hosts = tmp_path / "hosts"
     templates = hosts / "lib" / "maintainer-scripts"
     templates.mkdir(parents=True)
