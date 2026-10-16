@@ -459,7 +459,10 @@ notification-controller posts on T:
   `digests.json`, expects every name, and an empty set expects `flux/homelab` alone.
 - **What it never expects.** A Kustomization outside the set, so a failure that T did not
   cause never holds; the Flux alerts page it instead. A dependent whose status on `prod`'s
-  commit already read `failure` is reported in the log and not expected.
+  commit already read `failure` is logged as `excused <name>` and not expected. `decide`
+  records those statuses before `prod` moves, and `verify` reads that record rather than
+  `prod`'s commit (H1.1i). A dependent is a member of the set only through its `dependsOn`
+  chain, so a name whose footprint T changed is never excused.
 - **T, not the trigger.** `decide` may pick a commit newer than the one whose CI started the
   run, and Flux posts statuses only on the commit `prod` names. `verify` reads T's own bundle,
   which `decide` pulled, never the render job's `out/`.
