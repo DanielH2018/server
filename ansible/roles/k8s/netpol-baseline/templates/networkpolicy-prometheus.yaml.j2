@@ -15,7 +15,7 @@
 # decide whether a promotion is healthy. Its name moves with each revision's SHA, so the peer
 # selects the stable pod label `app: soak` instead of `job-name`. prometheus itself is ALSO read on host loopback
 # by `otelq` (a workstation host process — see observability/CLAUDE.md), covered the same way as
-# tempo/otel-collector below, not by this file. Headlamp's Prometheus plugin is a fourth
+# tempo/otel-collector below, not by this file. Headlamp's Prometheus plugin is a fifth
 # in-cluster reader that this file also does NOT admit, on purpose: it queries through the API
 # server's service proxy (roles/k8s/headlamp/templates/rbac.yaml.j2), so the hop that reaches
 # the pod is the API server's, from the node's cni0/flannel.1 address — the same node-CIDR peer
