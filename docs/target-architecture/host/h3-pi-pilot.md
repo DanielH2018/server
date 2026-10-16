@@ -48,8 +48,12 @@ PR H3.7, the Depends gate: [#5237](https://github.com/DanielH2018/server/pull/52
 passed on 2026-10-16. The operator started the updater by hand, and it installed
 `homelab-daniel-pi 0.5658+g70bdf5e85e1b` with `Result=success`. apt pulled `tree` in and marked
 it automatic, `homelab-updater.timer` stayed `inactive`, and `dpkg --audit` was clean, so the
-package plan stands and Open question 2's fallback is not taken. The follow-up commit drops the
-`Depends`.
+package plan stands and Open question 2's fallback is not taken. The follow-up,
+[#5246](https://github.com/DanielH2018/server/pull/5246), drops the `Depends`. On the operator's
+second hand-started run, the Pi upgraded to `homelab-daniel-pi 0.5666+gd3a4f5ccc005` at
+16:16:43 UTC with `Result=success`, and the installed `Depends` reads `python3 (>= 3.12)`.
+`tree` stays marked automatic, and `apt-get -s autoremove` lists it, so the weekly autoremove
+removes it.
 
 Depends on: R1
 Unblocks: H4, H5
