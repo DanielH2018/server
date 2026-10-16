@@ -532,6 +532,13 @@ document of `flux/<tag>.yaml`. It applies `./cluster/<tag>-deferred` with the ta
 and depends on `<tag>`. The publish census admits that second document only for a tag that
 defers files (*The publish census*, the per-file rule).
 
+D5's per-tag kinds, `<tag>-snapshot` and `<tag>-verify`, follow in the same file in that
+order, each applying its own `./cluster/<tag><suffix>`. `<tag>-snapshot` inherits `<tag>`'s
+edges, and `<tag>` then depends on `<tag>-snapshot`, so the role applies only after its
+snapshot is taken. `<tag>-verify` depends on the tag's last Kustomization: `<tag>-deferred` when the
+tag has one, `<tag>` otherwise. A `K8S_APPLIES_LAST` tag waits on no other tag's
+`-snapshot` or `-verify`. No role renders either kind yet.
+
 ### Which Kustomizations substitute
 
 The renderer decides substitution per Kustomization directory, not per tag. A directory
@@ -728,8 +735,12 @@ census fails a bundle that lacks either. Each member needs a footprint rule in
   footprint moves, its first promotion included.
 
 Every `cluster` render refuses a deploy tag named `homelab`, the root's name, after a
-`SHARED_KINDS` member, or ending in `-deferred`. The suffix keeps a tag's Kustomization from
-colliding with another tag's deferred one.
+`SHARED_KINDS` member, or after a member of `RESERVED_NAMES`, the literal list beside it. It
+also refuses a tag ending in `-deferred`, `-snapshot` or `-verify`. `RESERVED_NAMES` holds
+`soak` and `homelab-namespace`, D5's shared kinds that no PR renders yet. Each joins
+`SHARED_KINDS` only in the PR that renders it, because the census fails a member with no
+file. The suffixes keep a tag's Kustomization from colliding with another tag's per-tag kind.
+The publish census refuses a published tag that takes any of these names as well.
 
 ### `digests.json`
 
@@ -738,8 +749,8 @@ shared kind to two SHA-256 digests:
 
 - `own` covers `cluster/<name>/` alone.
 - `footprint` covers every path that counts for the name: the tag's own directories, with
-  `-deferred` stripped, its `flux/<tag>.yaml`, and the files of each shared kind whose rule
-  lists the tag.
+  each per-tag suffix stripped, its `flux/<tag>.yaml`, and the files of each shared kind
+  whose rule lists the tag.
 
 `flux/kustomization.yaml`, `digests.json` itself and `images/` count for no name. Any other
 path that no rule claims lands under `_unclassified`, with the same two digests and a `paths`
@@ -751,20 +762,28 @@ change under `_unclassified` counts as every name changed. D6's *What a footprin
 
 `promote.py check-bundle out` fails the render job before gitleaks and before the push. It
 computes its allowlist from the inventory, `SHARED_KINDS` and the published tags' roles,
-never from the render, so a renderer bug cannot widen it. A tag defers files when its role
-passes a non-empty `manifests_deferred_files` to its `k8s/manifests` include. It fails when:
+never from the render, so a renderer bug cannot widen it. Each per-tag kind has its input:
+
+- `-deferred` when the role passes a non-empty `manifests_deferred_files` to its
+  `k8s/manifests` include;
+- `-snapshot` when the role's defaults declare a non-empty `k8s_autodeploy_snapshot_pvcs`;
+- `-verify` for no tag yet, because no role input names a verify Job. The first PR that
+  renders one adds its reader.
+
+It fails when:
 
 - `flux/` lacks a file for a published tag or a shared kind, or holds any other file;
 - `flux/kustomization.yaml` omits a file in `flux/`, or lists one that is not there;
 - `flux/<name>.yaml` breaks the per-file rule. The file must hold exactly the Kustomization
-  `<name>` applying `./cluster/<name>`, followed by `<name>-deferred` applying
-  `./cluster/<name>-deferred` only when `<name>` is a tag that defers files. A third
-  document, or a `-deferred` for a tag that defers nothing, fails. A shared kind's file holds
+  `<name>` applying `./cluster/<name>`, followed by each per-tag kind its inputs call for, in
+  the order `-deferred`, `-snapshot`, `-verify`, each applying `./cluster/<name><suffix>`.
+  An extra document, or a kind the inputs do not call for, fails. A shared kind's file holds
   exactly its own Kustomization;
-- a published tag or a shared kind has no `cluster/<name>/`, or a tag that defers files has
-  no `cluster/<name>-deferred/`;
-- a published tag's role cannot be read, or its `manifests_deferred_files` is not a literal
-  list;
+- a published tag or a shared kind has no `cluster/<name>/`, or a per-tag kind its inputs
+  call for has no `cluster/<name><suffix>/`;
+- a published tag takes a reserved name;
+- a published tag's role cannot be read, or its `manifests_deferred_files` or
+  `k8s_autodeploy_snapshot_pvcs` is not a literal list;
 - `digests.json` is missing or names another set.
 
 ### The publish gates
