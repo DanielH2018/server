@@ -6,16 +6,22 @@ the File System Access API. See repo-root `CLAUDE.md` for shared conventions.
 
 ## At a glance
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates, tasks or containers_list entry, or the k3s role's Longhorn tier lists. -->
-- **Deploy tag:** `--tags "texbrain"`
+- **Applied by:** Flux, through `promote` (`owner: flux`); `deploy.sh` refuses
+  `--tags=texbrain` with exit 5
 - **Image:** `ghcr.io/danielh2018/texbrain` (`texbrain_k8s_image`)
 - **Route:** `texbrain.<domain>` · `texbrain.local.<domain>`, Authelia one_factor
 - **Claims:** none (no PVC)
-- **Auto-deploy:** eligible (`k8s_autodeploy: true`)
 <!-- /generated_from -->
 
 - **Digest-pinned `:latest`**, built by the fork below
 - **Host:** daniel-box or daniel-server (k8s), preference only — added 2026-08-26
 - **State:** none. No Secret, no PVC, no backup job — the pod serves files and holds nothing
+- **Flux applies it, not Ansible** (D4.5). Its `containers_list` entry carries `owner: flux`,
+  so `deploy.sh`, the play and the GitOps deployer all skip it, and a merged change reaches
+  the cluster when `promote` publishes and verifies the next bundle. Its digest-bump PRs
+  therefore draw no `land-wait` and no `probe.py health` run. To give it back to Ansible,
+  follow the two-PR handback in `docs/flux-deploy-plane.md`; a plain revert of the flag
+  leaves two writers on the objects.
 
 ## The image comes from a fork, and why
 
