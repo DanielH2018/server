@@ -60,7 +60,7 @@ import subprocess
 import sys
 import tarfile
 import tempfile
-from collections.abc import Iterable, Mapping
+from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -460,43 +460,60 @@ def extract(sha: str, dest: Path, paths: Iterable[str] = (), repo: Path = REPO) 
             tar.extractall(dest, filter="data")
 
 
-def changes(base: str, head: str) -> tuple[list[str], dict[str, str]]:
+def changes(
+    base: str, head: str, repo: Path = REPO
+) -> tuple[list[str], dict[str, str]]:
     """The paths `base..head` changes, and each k8s role's unified diff."""
     paths = git_stdout(
-        "diff", "--no-renames", "--name-only", base, head, cwd=REPO
+        "diff", "--no-renames", "--name-only", base, head, cwd=repo
     ).split()
     roles = {
         p[len(K8S_ROLES) :].split("/", 1)[0] for p in paths if p.startswith(K8S_ROLES)
     }
     diffs = {
         role: git(
-            "diff", "--no-renames", base, head, "--", K8S_ROLES + role, cwd=REPO
+            "diff", "--no-renames", base, head, "--", K8S_ROLES + role, cwd=repo
         ).stdout
         for role in roles
     }
     return paths, diffs
 
 
-def gate(base: str, head: str) -> int:
-    """Judge `base..head`, each side rendered with its own tree's code."""
+def render_side(sha: str, dest: Path, repo: Path = REPO) -> Snapshot:
+    """`sha`'s tree unpacked under `dest` and rendered with its own renderer."""
+    extract(sha, dest, ("ansible", "scripts"), repo=repo)
+    return snapshot(dest)
+
+
+def gate(
+    base: str,
+    head: str,
+    repo: Path = REPO,
+    render: Callable[[str, Path, Path], Snapshot] = render_side,
+) -> int:
+    """Judge `base..head`, each side rendered with its own tree's code.
+
+    Args:
+        repo: The checkout `base` and `head` name commits in.
+        render: Renders one side as `render(sha, dest, repo)`; `render_side` by default.
+    """
     base, head = (
-        git_stdout("rev-parse", "--verify", f"{r}^{{commit}}", cwd=REPO)
+        git_stdout("rev-parse", "--verify", f"{r}^{{commit}}", cwd=repo)
         for r in (base, head)
     )
-    paths, diffs = changes(base, head)
+    paths, diffs = changes(base, head, repo)
     with tempfile.TemporaryDirectory(prefix="cross-plane-trees-") as tmp:
         snaps = []
         for name, sha in (("base", base), ("head", head)):
-            extract(sha, Path(tmp) / name, ("ansible", "scripts"))
             try:
-                snaps.append(snapshot(Path(tmp) / name))
+                snaps.append(render(sha, Path(tmp) / name, repo))
             except RenderFailed as exc:
                 print(
                     f"cross-plane-order: cannot judge, the {name} render failed. {exc}",
                     file=sys.stderr,
                 )
                 return UNJUDGED
-    messages = git_stdout("log", "--format=%B", f"{base}..{head}", cwd=REPO)
+    messages = git_stdout("log", "--format=%B", f"{base}..{head}", cwd=repo)
     found = problems(snaps[0], snaps[1], paths, diffs)
     found += removal_problems(snaps[0], snaps[1], removes_object.declared(messages))
     for line in found:

@@ -9,6 +9,7 @@ Run: uv run pytest scripts/validate/tests/test_validate_cross_plane_order.py
 """
 
 import re
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -377,3 +378,67 @@ def test_a_prune_disabled_label_or_annotation_is_read():
         doc = {"metadata": {key: {gate.PRUNE_KEY: "disabled"}}}
         assert gate._prune_disabled(doc)
     assert not gate._prune_disabled({"metadata": {"labels": {gate.PRUNE_KEY: "x"}}})
+
+
+def _git(repo: Path, *args: str) -> str:
+    env = {
+        "GIT_CONFIG_GLOBAL": "/dev/null",
+        "GIT_CONFIG_NOSYSTEM": "1",
+        "GIT_AUTHOR_NAME": "t",
+        "GIT_AUTHOR_EMAIL": "t@example.com",
+        "GIT_COMMITTER_NAME": "t",
+        "GIT_COMMITTER_EMAIL": "t@example.com",
+        "HOME": str(repo),
+        "PATH": "/usr/bin:/bin",
+    }
+    return subprocess.run(
+        ["git", *args],
+        cwd=repo,
+        env=env,
+        check=True,
+        capture_output=True,
+        text=True,
+        timeout=30,
+    ).stdout.strip()
+
+
+@pytest.mark.parametrize(
+    "messages, expected",
+    [
+        (["Drop the policy"], gate.REFUSED),
+        ([f"Drop the policy\n\nRemoves-Object: {NETPOL}", "Tidy"], gate.CLEAN),
+    ],
+)
+def test_gate_reads_the_trailers_from_the_prs_commits(tmp_path, messages, expected):
+    """`gate()` hands `removal_problems` the lines of every commit in `base..head`.
+
+    The base commit carries the line too, and it is outside the range, so it declares nothing.
+    """
+    _git(tmp_path, "init", "-q")
+    _git(
+        tmp_path,
+        "commit",
+        "-q",
+        "--allow-empty",
+        "-m",
+        f"Base\n\nRemoves-Object: {NETPOL}",
+    )
+    base = _git(tmp_path, "rev-parse", "HEAD")
+    for message in messages:
+        _git(tmp_path, "commit", "-q", "--allow-empty", "-m", message)
+    snaps = {
+        "base": gate.Snapshot(
+            renders={},
+            owners={"bento-pdf": "flux"},
+            deps={},
+            objects={"bento-pdf": BENTO},
+        ),
+        "head": gate.Snapshot(
+            renders={},
+            owners={"bento-pdf": "flux"},
+            deps={},
+            objects={"bento-pdf": BENTO - {NETPOL}},
+        ),
+    }
+    render = lambda sha, dest, repo: snaps[dest.name]
+    assert gate.gate(base, "HEAD", repo=tmp_path, render=render) == expected
