@@ -85,23 +85,42 @@ def _render(template: str, context: dict) -> str:
 
 
 def pins_of(role: _Path) -> list[Vendored]:
-    """The vendored pins in `role`'s defaults, with `url` rendered from that file alone."""
+    """The vendored pins in `role`'s defaults, with `url` rendered from that file alone.
+
+    Raises:
+        ValueError: an item lacks `name` or `url`, or its `url` does not render.
+    """
     defaults_file = role / "defaults" / "main.yml"
     if not defaults_file.is_file():
         return []
     defaults = yaml_fast.safe_load(defaults_file.read_text()) or {}
-    return [
-        Vendored(
-            role,
-            str(item["name"]),
-            _render(str(item["url"]), defaults),
-            str(item.get("fetched_url") or ""),
-            str(item.get("sha256") or "").lower(),
-        )
-        for key, items in defaults.items()
-        if key.endswith(KEY_SUFFIX)
-        for item in items or []
-    ]
+    pins = []
+    for key, items in defaults.items():
+        if not key.endswith(KEY_SUFFIX):
+            continue
+        for item in items or []:
+            if (
+                not isinstance(item, dict)
+                or not item.get("name")
+                or not item.get("url")
+            ):
+                raise ValueError(f"{key}: an item lacks `name` or `url`: {item!r}")
+            try:
+                url = _render(str(item["url"]), defaults)
+            except jinja2.TemplateError as exc:
+                raise ValueError(
+                    f"{key}: {item['name']}: url does not render: {exc}"
+                ) from exc
+            pins.append(
+                Vendored(
+                    role,
+                    str(item["name"]),
+                    url,
+                    str(item.get("fetched_url") or ""),
+                    str(item.get("sha256") or "").lower(),
+                )
+            )
+    return pins
 
 
 def check_role(role: _Path) -> list[str]:
@@ -112,7 +131,10 @@ def check_role(role: _Path) -> list[str]:
         if upstream.is_dir()
         else set()
     )
-    pins = pins_of(role)
+    try:
+        pins = pins_of(role)
+    except ValueError as exc:
+        return [f"{role.name}: {exc}"]
     problems = [
         f"{role.name}: {name} sits in files/upstream/ with no pin in defaults"
         for name in sorted(files - {pin.name for pin in pins})
@@ -177,7 +199,9 @@ def _rewrite_item(text: str, name: str, values: dict[str, str]) -> str:
         (
             i
             for i, line in enumerate(lines)
-            if re.fullmatch(rf"\s*- name: [\"']?{re.escape(name)}[\"']?\s*", line)
+            if re.fullmatch(
+                rf"\s*- name: [\"']?{re.escape(name)}[\"']?\s*(#.*)?\s*", line
+            )
         ),
         None,
     )
@@ -214,17 +238,21 @@ def refresh(pin: Vendored, fetcher: Fetcher = fetch) -> tuple[bool, list[str]]:
             f"{pin.name}: {pin.url} now hashes {actual}, but the pin for that same URL records "
             f"{pin.sha256}. Upstream changed the bytes under a pinned URL; nothing was written"
         ]
-    old = pin.path.read_bytes() if pin.path.is_file() else b""
-    pin.path.parent.mkdir(parents=True, exist_ok=True)
-    pin.path.write_bytes(body)
     defaults_file = pin.role / "defaults" / "main.yml"
-    defaults_file.write_text(
-        _rewrite_item(
+    try:
+        # Rewrite the defaults in memory first, so an item the rewrite cannot find leaves
+        # both files as they were.
+        defaults = _rewrite_item(
             defaults_file.read_text(),
             pin.name,
             {"fetched_url": pin.url, "sha256": actual},
         )
-    )
+    except ValueError as exc:
+        return False, [f"{pin.name}: {exc}; nothing was written"]
+    old = pin.path.read_bytes() if pin.path.is_file() else b""
+    pin.path.parent.mkdir(parents=True, exist_ok=True)
+    pin.path.write_bytes(body)
+    defaults_file.write_text(defaults)
     report = [f"{pin.name}: sha256 {actual} from {pin.url}"]
     report += [
         f"{pin.name}: removed upstream: {obj}" for obj in removed_objects(old, body)
@@ -259,7 +287,11 @@ def main(
     if not args.role:
         parser.error("name a role, or pass --check")
     matches = [r for r in roles_in(roles) if r.name == args.role]
-    chosen = _select(matches[0], args.names) if len(matches) == 1 else None
+    try:
+        chosen = _select(matches[0], args.names) if len(matches) == 1 else None
+    except ValueError as exc:
+        error(f"{args.role}: {exc}")
+        return FAILED
     if chosen is None:
         error(f"{args.role} {' '.join(args.names)}: no matching vendored pin".strip())
         return USAGE_ERROR

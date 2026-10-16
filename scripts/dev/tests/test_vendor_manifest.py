@@ -27,7 +27,7 @@ DEFAULTS = """\
 demo_version: v1.0.0
 demo_vendored_manifests:
   # The comment the rewrite must keep.
-  - name: demo.yaml
+  - name: demo.yaml  # a trailing comment the item match must allow
     url: "https://example.invalid/{{ demo_version }}/demo.yaml"
     fetched_url: "https://example.invalid/v1.0.0/demo.yaml"
     sha256: "%s"
@@ -102,3 +102,16 @@ def test_check_exits_1_on_a_drifted_file_and_0_on_a_pinned_one(tmp_path, capsys)
     (role / "files" / "upstream" / "demo.yaml").write_bytes(NEW)
     assert main(["--check"], roles=tmp_path) == 1
     assert "[FAIL] demo: demo.yaml hashes" in capsys.readouterr().err
+
+
+def test_a_url_that_does_not_render_is_a_named_problem_not_a_traceback(
+    tmp_path, capsys
+):
+    role = _role(tmp_path)
+    defaults = role / "defaults" / "main.yml"
+    defaults.write_text(
+        defaults.read_text().replace("demo_version }}", "no_such_key }}")
+    )
+
+    assert main(["--check"], roles=tmp_path) == 1
+    assert "demo.yaml: url does not render" in capsys.readouterr().err
