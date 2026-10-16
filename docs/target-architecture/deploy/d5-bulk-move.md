@@ -30,6 +30,14 @@ It merged at `e59b5dde9`, and its landing deployed `flux` and settled. The live
 kustomize-controller reads `--concurrent=5`, equal to `k8s_rollout_batch_width`. The four host
 writes the baseline omitted have their moving PRs named since
 [#5290](https://github.com/DanielH2018/server/pull/5290) (`f5f92e02a`).
+PR D5.1a2, prune labels, digest fields and collisions:
+[#5298](https://github.com/DanielH2018/server/pull/5298). It merged at `74aec39bb` and deployed
+nothing. Flux-owned claims and Namespaces carry `kustomize.toolkit.fluxcd.io/prune: disabled`,
+each tag's object in `digests.json` gains `claims` and `suspended`, and a census refuses an
+object two tags render.
+PR D5.1f, the removal gates: [#5296](https://github.com/DanielH2018/server/pull/5296). It merged
+at `3aeeb4fd7` and deployed nothing. `cross_plane_order.py` refuses an object drop from a
+flux-owned tag that no `Removes-Object:` trailer declares, and a flux-owned service's retirement.
 
 Related issues:
 
