@@ -76,6 +76,10 @@ HELPER = REPO / "ansible/roles/k8s/manifests/files/flux_job_connect.py"
 # learns the pod's address (`docs/target-architecture/deploy/d5-bulk-move.md`, "Rules for
 # every Job Flux applies (D5.1a3)", "A first connection retries"). That is a reliability
 # rule, so a deliberate bypass is outside it.
+# A module reached as an attribute of an allowed module, such as `dataclasses.inspect`, is
+# outside the row for the same reason: the row does not resolve an allowed module's re-export
+# chains. The literal names a connection needs on any such route are refused instead:
+# `socket` as an attribute, `import_module` and the frame names.
 ALLOWED_IMPORTS = frozenset(
     {
         "flux_job_connect",
@@ -142,6 +146,7 @@ FORBIDDEN = frozenset(
         "spawnvp",
         "spawnvpe",
         "__import__",
+        "import_module",
         "exec",
         "eval",
         "modules",

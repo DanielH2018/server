@@ -325,6 +325,17 @@ def _uses(script):
             ["tb_frame"],
             id="traceback-frame",
         ),
+        pytest.param(
+            "import dataclasses\n\ndataclasses.inspect.importlib.import_module('socket')"
+            ".socket().connect(('x', 80))\n",
+            [".socket", "import_module"],
+            id="re-export-chain-ending-in-import-module",
+        ),
+        pytest.param(
+            "import dataclasses\ndataclasses.inspect.importlib.import_module('x')\n",
+            ["import_module"],
+            id="import-module-alone",
+        ),
     ],
 )
 def test_script_offence_names_the_one_rule_that_caught_the_script(script, uses):
