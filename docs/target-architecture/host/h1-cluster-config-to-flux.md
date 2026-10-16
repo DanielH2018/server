@@ -19,6 +19,18 @@ merged at `4c2a9f92e` and deployed nothing. `scripts/dev/takeover_census.py` imp
 cleanup list, the flattening and the server-default rule from `probe_lib/takeover.py` (D5.1g)
 rather than copying them. Its inputs need the admin kubeconfig, so its first live run is the
 operator's, before H1's first flip.
+PR H1.1e, the vendoring tool: [#5279](https://github.com/DanielH2018/server/pull/5279). It
+merged at `505a5a832` and deployed nothing. `scripts/dev/vendor_manifest.py` pins each
+vendored manifest to its sha256 and fetched URL, and since
+[#5293](https://github.com/DanielH2018/server/pull/5293) it fetches only an `https://` URL.
+PR H1.1b, promote's forward-only hold and the gate status:
+[#5278](https://github.com/DanielH2018/server/pull/5278). It merged at `4daf364a1`. The first
+promote runs on its code promoted `505a5a832` and then `4daf364a1`, each with `verify` reading
+`verdict=good failed=`, and `DEPLOY_HOLD` stayed `none`. No commit since 2026-08-22 changes a
+forward-only pin, so the gate rule asked for no `homelab/upgrade-gates` status. C2 names the
+`held` tag it adds since [#5281](https://github.com/DanielH2018/server/pull/5281), and the
+excused-failures row that gated H1.1i moved to C2's applied list in
+[#5287](https://github.com/DanielH2018/server/pull/5287).
 
 Depends on: D2, D4; D3 for H1.7b only; R4 for H1.9 only
 Unblocks: H2, which needs H1.1a to H1.8 and never H1.9
