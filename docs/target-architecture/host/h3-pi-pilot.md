@@ -98,15 +98,15 @@ installs it. Until that gate passes, the Pi's updater runs only when the operato
 - **The three heartbeats are Ansible crons.** `ansible/roles/setup/optimize_pi/tasks/main.yml`
   installs `Pi SD-card health heartbeat` (`*/5`), `Pi rotated-log integrity sweep` (`40 1`) and
   `Pi container-recovery heartbeat` (`*/5`). Its `CLAUDE.md` glance block lists the same three.
-- **The two token scripts read three SOPS keys.** `pi-sd-health.sh.j2` renders
+- **The two token scripts read two SOPS keys.** `pi-sd-health.sh.j2` renders
   `pi_sd_health_push_token` and `pi-recovery-health.sh.j2` renders `pi_recovery_push_token`
-  inline. Both also render `domain` into `KUMA_HOST`. `grep -c '^<key>:'
-  ansible/vars/secrets.yml` prints 1 for each of the three. A join of every name the three
-  templates read against the `secrets.yml` key names finds no fourth. The integrity sweep reads
-  none. Both token scripts install at mode 0700 with `no_log: true`. Since #5087, `domain` is
-  no longer a `secrets.yml` key, and `grep -c '^domain:' ansible/vars/secrets.yml` prints 0.
-  It lives in `ansible/inventory/group_vars/all.yml`, so only the two push tokens are
-  credentials.
+  inline. `grep -c '^<key>:' ansible/vars/secrets.yml` prints 1 for each of the two. A join of
+  every name the three templates read against the `secrets.yml` key names finds no third. The
+  integrity sweep reads none. Both token scripts install at mode 0700 with `no_log: true`.
+- **Both token scripts also render `domain` into `KUMA_HOST`, from inventory.** At
+  `70591c307` `domain` was a third SOPS key. #5087 deleted it from `secrets.yml`, so
+  `grep -c '^domain:' ansible/vars/secrets.yml` prints 0, and the value lives in
+  `ansible/inventory/group_vars/all.yml`.
 - **The moved templates read role defaults and inventory.** `pi-gz-integrity.sh.j2` and
   `pi-sd-health.sh.j2` read `optimize_pi_gz_integrity_roots`, `_min_files`, `_state_file` and
   `_max_age_h`. The recovery cron's `state:` reads `optimize_pi_recovery_restart_enabled`. All

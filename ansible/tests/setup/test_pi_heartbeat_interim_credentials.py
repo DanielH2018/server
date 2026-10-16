@@ -78,8 +78,48 @@ def test_the_interim_directory_is_root_0700_under_both_tags():
     assert {"sd-health", "recovery-health"} <= set(task.get("tags") or [])
 
 
-def test_no_task_stages_a_domain_file():
-    assert not [d for d in _tasks_by_destination() if d.rstrip("/").endswith("/domain")]
+def domain_file_writers(tasks: list[dict]) -> list[str]:
+    """The name of every task whose module writes a file named `domain`.
+
+    Reads any module key, short or fully qualified, and both the dict and the `k=v` string
+    argument forms, so a `template:` or `lineinfile:` task is caught as well as a `copy:`.
+    """
+    writers = []
+    for task in walk_tasks(tasks):
+        for args in task.values():
+            if isinstance(args, dict):
+                targets = [args.get("dest"), args.get("path")]
+            elif isinstance(args, str):
+                targets = [
+                    word.split("=", 1)[1]
+                    for word in args.split()
+                    if word.startswith(("dest=", "path="))
+                ]
+            else:
+                continue
+            if any(str(t).rstrip("/").endswith("/domain") for t in targets if t):
+                writers.append(task.get("name", "<unnamed>"))
+    return writers
+
+
+def test_no_task_stages_a_domain_file_is_clean():
+    assert domain_file_writers(load_tasks(TASKS)) == []
+
+
+@pytest.mark.parametrize(
+    "task",
+    [
+        {
+            "name": "t",
+            "ansible.builtin.template": {"src": "d.j2", "dest": f"{INTERIM}/domain"},
+        },
+        {"name": "c", "copy": {"content": "x", "dest": f"{INTERIM}/domain"}},
+        {"name": "l", "lineinfile": f"path={INTERIM}/domain line=x create=true"},
+    ],
+    ids=["template", "short-copy", "free-form-lineinfile"],
+)
+def test_a_task_staging_a_domain_file_is_flagged(task):
+    assert domain_file_writers([*load_tasks(TASKS), task]) == [task["name"]]
 
 
 @pytest.mark.parametrize(
