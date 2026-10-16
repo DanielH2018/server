@@ -5,11 +5,11 @@ UPS state of its own; the physical UPS is USB-attached to daniel-server via the 
 
 ## At a glance
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates, tasks or containers_list entry, or the k3s role's Longhorn tier lists. -->
-- **Deploy tag:** `--tags "peanut"`
+- **Applied by:** Flux, through `promote` (`owner: flux`); `deploy.sh` refuses `--tags=peanut`
+  with exit 5
 - **Images:** `brandawg93/peanut` (`peanut_k8s_image`), `alpine` (`peanut_k8s_init_image`)
 - **Route:** `peanut.<domain>` · `peanut.local.<domain>`, Authelia one_factor
 - **Claims:** none (no PVC)
-- **Auto-deploy:** eligible (`k8s_autodeploy: true`)
 <!-- /generated_from -->
 
 - **Pinned `tag@sha256`** — same tag the Docker-era role ran, kept in lockstep so a behavior
