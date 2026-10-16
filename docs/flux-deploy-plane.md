@@ -30,6 +30,11 @@ file at the new release. Until then, the header test in `ansible/tests/k8s/test_
 fails, because the file's first line still names the old release. Land the finished PR with
 `land.sh --tags flux`; the tick applies nothing for a denylisted role.
 
+A regenerated `ansible/roles/k8s/flux/files/gotk-components.yaml` also runs CI's
+`sops-manifest-type-proof` job, which applies the file to a kind cluster. The bump PR shows
+whether the new controllers still deliver an all-digit SOPS manifest value as a string
+(*SOPS manifests* below).
+
 Flux 2.9 lists Kubernetes 1.34 to 1.36, and the cluster runs 1.37. The operator accepted
 that gap on 2026-10-12. Before each bump, check `gh release list -R fluxcd/flux2` for a
 release that lists the cluster's Kubernetes version.
@@ -605,6 +610,32 @@ manifests rather than as placeholders. `cluster_vars.py write` (operator-only) k
 `scripts/renderer/tests/test_renderer_bundle.py` holds the pair: pi-peer-backup with a fixture
 manifest gets the copy and `decryption`, bento-pdf beside it gets neither, and a manifest
 without the annotation fails the render.
+
+**An all-digit value stays a string on this path.** CI's `sops-manifest-type-proof` job
+measured it in a kind cluster running the vendored controller images (PR #5171, run
+38825866313). The job applies a manifest that `cluster_vars.py write` built, holding
+`0123` and `9007199254740993` (2**53 + 1) in quoted `stringData` fields. Both reached the
+live Secret as exactly their digits. The same Secret encrypted from integers, so that SOPS
+records `type:int`, failed the server-side dry run:
+
+```text
+Secret/proof/proof-red dry-run failed: failed to create typed patch object
+  .stringData.long_digits: expected string, got &value.valueUnstructured{Value:9007199254740992}
+  .stringData.zero_lead: expected string, got &value.valueUnstructured{Value:123}
+```
+
+An int-typed value is therefore refused rather than silently changed. It also passes through a
+float64 on the way, which turns `...993` into `...992`. `write` writes every manifest value as
+a string, and `cluster_vars.py check` requires `type:str` on each one, so neither failure
+reaches the cluster.
+
+The job runs on a PR that touches the flux pin, the SOPS pin, the registry image pin,
+`cluster_vars.py`, its fixture `scripts/secrets_mgmt/tests/_sops_type_proof.py` or
+`.github/workflows/ci.yml`. If its green
+half ever shows a changed value, the remedy is D3's fallback. `write` would emit the value
+under `data:`, base64-encoded, and `check`'s structure assertion would compare data-key names
+across `data` and `stringData`. `docs/target-architecture/deploy/d3-secrets.md` (D3.3d) gives
+the reason.
 
 ### Shared kinds and reserved names
 

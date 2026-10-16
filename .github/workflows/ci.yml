@@ -822,6 +822,203 @@ jobs:
           [ "$rc" = 1 ]
           grep -qx 'traefik: Deployment/homelab/traefik differs' "$RUNNER_TEMP/rt-map.log"
 
+  # Target slice D3's in-cluster proof (docs/target-architecture/deploy/d3-secrets.md, PR
+  # D3.3d). R2 PR 7b moves `mullvad_account`, whose value is all digits, into a SOPS manifest
+  # that kustomize-controller decrypts and applies. This job measures what the controller and
+  # the API server do with such a value in a quoted `stringData` field, in a throwaway kind
+  # cluster running the controller images the cluster runs: the vendored gotk-components.yaml.
+  # scripts/secrets_mgmt/tests/_sops_type_proof.py builds both halves with a key it generates.
+  #
+  # - Green: `cluster_vars.py write`'s manifest holding `0123` and 2**53 + 1. Its Kustomization
+  #   must reach Ready, and each value must decode to exactly its digits.
+  # - Red: the same Secret encrypted from ints, so SOPS records `type:int`. It must fail to
+  #   apply or come back changed. If it applies unchanged, this job cannot see the failure it
+  #   exists to catch, and it fails.
+  #
+  # It runs on a PR that touches the flux pin, the sops pin, the registry image pin,
+  # `cluster_vars.py`, its fixture or this file, and on a dispatch. On a push to master its steps skip and it passes, as deck_mod
+  # does: the PR run already measured it. The scope step is step-level, never a job-level `if:`,
+  # because the `prek` gate requires `success` and a skipped job reports `skipped`.
+  sops_manifest_type_proof:
+    name: sops-manifest-type-proof (an all-digit stringData value stays a string)
+    runs-on: ubuntu-26.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0  # the merge-base diff below needs history
+          persist-credentials: false  # nothing here pushes; pr_changed_files.sh's fetch carries its own token
+
+      - name: Check whether this PR touches the type proof's inputs
+        id: scope
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_REF: ${{ github.base_ref }}  # via env, never interpolated into the shell
+          FETCH_TOKEN: ${{ github.token }}  # contents: read; the checkout drops its own
+        run: |
+          set -euo pipefail
+          "$GITHUB_WORKSPACE/scripts/dev/pr_changed_files.sh"
+          if git diff --quiet "origin/$BASE_REF...HEAD" -- \
+              ansible/roles/k8s/flux/defaults/main.yml \
+              ansible/roles/k8s/flux/files/gotk-components.yaml \
+              ansible/roles/k8s/registry/defaults/main.yml \
+              ansible/roles/setup/sops_setup/defaults/main.yml \
+              scripts/secrets_mgmt/cluster_vars.py \
+              scripts/secrets_mgmt/cluster_vars_check.py \
+              scripts/secrets_mgmt/tests/_cluster_vars_fixture.py \
+              scripts/secrets_mgmt/tests/_sops_type_proof.py \
+              .github/workflows/ci.yml; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "No pin, cluster_vars.py, fixture or job change, so there is nothing to measure."
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: ./.github/actions/setup  # zizmor: ignore[self-repository] -- see the action's header
+        if: github.event_name == 'workflow_dispatch' || steps.scope.outputs.changed == 'true'
+
+      # Equal to flux_version, as the flux_roundtrip job's step is. It pushes the fixture artifact.
+      - uses: fluxcd/flux2/action@b9c17924adb533d3617ec7de97a7b0f4acc07b39 # v2.9.6
+        if: github.event_name == 'workflow_dispatch' || steps.scope.outputs.changed == 'true'
+        with:
+          # renovate: datasource=github-releases depName=fluxcd/flux2
+          version: v2.9.6
+
+      # sops comes from the hosts' pin itself, read out of the sops_setup defaults, so this job
+      # holds no copy that could drift. age comes from apt, as the hosts install it.
+      - name: Install sops, age and kind
+        if: github.event_name == 'workflow_dispatch' || steps.scope.outputs.changed == 'true'
+        env:
+          KIND_VERSION: v0.33.0
+          KIND_SHA256: aee6151561422756b764a4ae28e7f44cda5af5a9eead3cc9985112b1de8d8e0d
+        run: |
+          set -euo pipefail
+          defaults=ansible/roles/setup/sops_setup/defaults/main.yml
+          sops_version=$(awk -F'"' '/^sops_setup_version:/ {print $2}' "$defaults")
+          sops_sha256=$(awk '/^sops_setup_binary_amd64_sha256:/ {print $2}' "$defaults")
+          [ -n "$sops_version" ] && [ -n "$sops_sha256" ]
+          mkdir -p "$RUNNER_TEMP/bin"
+          curl --retry 3 -fsSLo "$RUNNER_TEMP/bin/sops" \
+            "https://github.com/getsops/sops/releases/download/$sops_version/sops-$sops_version.linux.amd64"
+          echo "$sops_sha256  $RUNNER_TEMP/bin/sops" | sha256sum -c --strict
+          curl --retry 3 -fsSLo "$RUNNER_TEMP/bin/kind" \
+            "https://github.com/kubernetes-sigs/kind/releases/download/$KIND_VERSION/kind-linux-amd64"
+          echo "$KIND_SHA256  $RUNNER_TEMP/bin/kind" | sha256sum -c --strict
+          chmod +x "$RUNNER_TEMP/bin/sops" "$RUNNER_TEMP/bin/kind"
+          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+          sudo apt-get install -y --no-install-recommends age \
+            || { sudo apt-get update -q && sudo apt-get install -y --no-install-recommends age; }
+          "$RUNNER_TEMP/bin/sops" --version --disable-version-check
+          "$RUNNER_TEMP/bin/kind" version
+          kubectl version --client
+
+      # The registry sits on kind's docker network, so source-controller reaches it by container
+      # name and the runner pushes through the published port. Its image is read from the
+      # registry role's pin, registry_k8s_image, so this job holds no copy of it.
+      - name: Create the kind cluster, the registry and the pinned Flux controllers
+        if: github.event_name == 'workflow_dispatch' || steps.scope.outputs.changed == 'true'
+        env:
+          KIND_NODE_IMAGE: kindest/node:v1.37.0@sha256:a1ed56cfb0e7b93589bdf97c8cd566405a265939e3620fc4f5de89adff580ae5
+        run: |
+          set -euo pipefail
+          registry_image=$(awk '/^registry_k8s_image:/ {print $2}' ansible/roles/k8s/registry/defaults/main.yml)
+          [ -n "$registry_image" ]
+          kind create cluster --name proof --image "$KIND_NODE_IMAGE" --wait 120s
+          docker run -d --name kind-registry --network kind -p 127.0.0.1:5001:5000 "$registry_image"
+          kubectl apply --server-side -f ansible/roles/k8s/flux/files/gotk-components.yaml
+          for d in source-controller kustomize-controller notification-controller; do
+            kubectl -n flux-system rollout status "deployment/$d" --timeout=180s
+          done
+          kubectl create namespace proof
+
+      - name: Build the fixture Secrets and push them as one artifact
+        if: github.event_name == 'workflow_dispatch' || steps.scope.outputs.changed == 'true'
+        run: |
+          set -euo pipefail
+          out="$RUNNER_TEMP/proof"
+          PYTHONPATH=scripts:scripts/secrets_mgmt/tests uv run python \
+            scripts/secrets_mgmt/tests/_sops_type_proof.py --out "$out" --registry kind-registry:5000
+          kubectl -n flux-system create secret generic sops-age --from-file=age.agekey="$out/age.agekey"
+          flux push artifact oci://127.0.0.1:5001/proof:proof --path="$out/artifact" \
+            --source=sops-manifest-type-proof --revision="proof@sha1:$GITHUB_SHA" --insecure-registry
+          kubectl apply -f "$out/flux-objects.yaml"
+
+      # Each outcome prints its own line. "GREEN CHANGED" is the result the plan's `data:` remedy
+      # answers; a timeout before it is the cluster or the source, not the question.
+      - name: Green half — the all-digit values reach the cluster as their digits
+        if: github.event_name == 'workflow_dispatch' || steps.scope.outputs.changed == 'true'
+        run: |
+          set -euo pipefail
+          kubectl -n flux-system wait ocirepository/proof --for=condition=Ready --timeout=180s
+          if ! kubectl -n flux-system wait kustomization/proof-green --for=condition=Ready --timeout=180s; then
+            echo "::error::GREEN NOT READY: $(kubectl -n flux-system get kustomization proof-green \
+              -o jsonpath='{.status.conditions[?(@.type=="Ready")].message}')"
+            exit 1
+          fi
+          rc=0
+          for pair in zero_lead=0123 long_digits=9007199254740993; do
+            field=${pair%%=*} want=${pair#*=}
+            got=$(kubectl -n proof get secret proof-green -o "jsonpath={.data.$field}" | base64 -d)
+            if [ "$got" = "$want" ]; then
+              echo "GREEN: $field decodes to $got, exactly its digits"
+            else
+              echo "::error::GREEN CHANGED: $field decodes to '$got', not $want"
+              rc=1
+            fi
+          done
+          exit "$rc"
+
+      # Red is judged only against the artifact green just applied, so a failure from a source
+      # that is not ready yet cannot pass for the type failure.
+      - name: Red half — values encrypted from an int fail to apply or come back changed
+        if: github.event_name == 'workflow_dispatch' || steps.scope.outputs.changed == 'true'
+        run: |
+          set -euo pipefail
+          revision=$(kubectl -n flux-system get ocirepository proof -o jsonpath='{.status.artifact.revision}')
+          ks() { kubectl -n flux-system get kustomization proof-red -o "jsonpath=$1"; }
+          status=""
+          for _ in $(seq 60); do
+            ready=$(ks '{.status.conditions[?(@.type=="Ready")].status}')
+            if [ "$ready" = True ] || { [ "$ready" = False ] \
+                && [ "$(ks '{.status.lastAttemptedRevision}')" = "$revision" ]; }; then
+              status=$ready
+              break
+            fi
+            sleep 3
+          done
+          message=$(ks '{.status.conditions[?(@.type=="Ready")].message}')
+          case "$status" in
+            False)
+              echo "Ready=False at $revision: $message"
+              # The measured refusal names the Secret and its `stringData` fields. A decryption
+              # failure names the Secret too, so the field name is required as well.
+              if printf '%s' "$message" | grep -q 'proof-red' \
+                  && printf '%s' "$message" | grep -q 'stringData'; then
+                echo "RED: the int-encrypted Secret failed to apply"
+              else
+                echo "::error::RED INCONCLUSIVE: the failure names neither the Secret nor its stringData"
+                exit 1
+              fi ;;
+            True)
+              # 0123 has no int form, so only the 16-digit value can come back unchanged.
+              got=$(kubectl -n proof get secret proof-red -o 'jsonpath={.data.long_digits}' | base64 -d)
+              if [ "$got" = 9007199254740993 ]; then
+                echo "::error::RED PASSED: the int-encrypted value applied unchanged, so this job cannot see a type change"
+                exit 1
+              fi
+              echo "RED: the int-encrypted Secret applied, and long_digits came back as $got" ;;
+            *)
+              echo "::error::RED UNJUDGED: proof-red reached no verdict at $revision: $message"
+              exit 1 ;;
+          esac
+
+      - name: Dump the Flux objects and controller logs
+        if: failure() && (github.event_name == 'workflow_dispatch' || steps.scope.outputs.changed == 'true')
+        run: |
+          kubectl -n flux-system get ocirepository,kustomization -o yaml || true
+          kubectl -n flux-system logs deployment/source-controller --tail=100 || true
+          kubectl -n flux-system logs deployment/kustomize-controller --tail=200 || true
+
   # Target slice H3's host packages (docs/target-architecture/host/h3-pi-pilot.md, *CI (builds,
   # never signs)*). It renders every package at the head and at the merge base on every run,
   # with no path filter, because a group_vars edit can change a render. When no rendered tree
@@ -1066,26 +1263,27 @@ jobs:
   prek:
     name: prek (lint + validate + tests + secrets)
     runs-on: ubuntu-26.04
-    needs: [hooks, pytest, ansible_lint, deck_mod, flux_roundtrip, host_packages]
+    needs: [hooks, pytest, ansible_lint, deck_mod, flux_roundtrip, sops_manifest_type_proof, host_packages]
     if: always()
     steps:
       # Every dependency must be named in an expression here, not merely in `needs` above: a
       # `needs` entry this step does not read is WAITED for and never CHECKED, so the required
       # context would pass green with that job red. `test_every_ci_job_is_gated.py` enforces it.
-      - name: Require all six halves to have succeeded
+      - name: Require all seven halves to have succeeded
         env:
           HOOKS: ${{ needs.hooks.result }}
           PYTEST: ${{ needs.pytest.result }}
           ANSIBLE_LINT: ${{ needs.ansible_lint.result }}
           DECK_MOD: ${{ needs.deck_mod.result }}
           FLUX_ROUNDTRIP: ${{ needs.flux_roundtrip.result }}
+          SOPS_TYPE_PROOF: ${{ needs.sops_manifest_type_proof.result }}
           HOST_PACKAGES: ${{ needs.host_packages.result }}
         run: |
           echo "hooks=$HOOKS pytest=$PYTEST ansible-lint=$ANSIBLE_LINT deck-mod=$DECK_MOD" \
-            "flux-roundtrip=$FLUX_ROUNDTRIP host-packages=$HOST_PACKAGES"
+            "flux-roundtrip=$FLUX_ROUNDTRIP sops-type-proof=$SOPS_TYPE_PROOF host-packages=$HOST_PACKAGES"
           [ "$HOOKS" = success ] && [ "$PYTEST" = success ] && [ "$ANSIBLE_LINT" = success ] \
             && [ "$DECK_MOD" = success ] && [ "$FLUX_ROUNDTRIP" = success ] \
-            && [ "$HOST_PACKAGES" = success ]
+            && [ "$SOPS_TYPE_PROOF" = success ] && [ "$HOST_PACKAGES" = success ]
 
   renovate-config:
     name: renovate config validator
