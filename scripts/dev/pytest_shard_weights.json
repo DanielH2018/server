@@ -1008,6 +1008,7 @@
  "scripts/diagnostics/tests/test_probe_health_resolver.py": 7.65,
  "scripts/diagnostics/tests/test_probe_health_rolled.py": 0.0,
  "scripts/diagnostics/tests/test_probe_health_surge.py": 0.0,
+ "scripts/diagnostics/tests/test_probe_health_vendored.py": 0.02,
  "scripts/diagnostics/tests/test_probe_landing.py": 0.0,
  "scripts/diagnostics/tests/test_probe_landing_promote.py": 0.0,
  "scripts/diagnostics/tests/test_probe_log_secret_redaction.py": 0.0,
