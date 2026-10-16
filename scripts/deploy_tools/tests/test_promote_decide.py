@@ -29,6 +29,7 @@ NOTHING_MOVES = {
     "reset_digest": "",
     "seed": "false",
     "clears_hold": "false",
+    "no_reset": "",
 }
 
 

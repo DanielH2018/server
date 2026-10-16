@@ -110,6 +110,7 @@ def _settle(tmp_path, jobs, **env: str):
         "TARGET": T,
         "RESET_DIGEST": RESET,
         "CLEARS_HOLD": "false",
+        "NO_RESET": "",
         "VERDICT": "failed",
         "FAILED_NAMES": "bento-pdf",
     }
@@ -197,6 +198,34 @@ def test_a_failure_with_no_last_good_digest_holds_and_does_not_reset(tmp_path, j
     assert result.returncode != 0
     assert calls == [HOLD]
     assert "no last-good digest" in result.stdout
+
+
+# -- settle: a hold without a reset (H1.1b) -------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("verdict", "names"),
+    [("failed", "longhorn"), ("", "")],
+    ids=["failed", "unverified"],
+)
+def test_a_forward_only_failure_holds_as_t_alone_and_leaves_prod(
+    tmp_path, jobs, verdict, names
+):
+    result, calls = _settle(
+        tmp_path, jobs, NO_RESET="longhorn", VERDICT=verdict, FAILED_NAMES=names
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert calls == [
+        f"gh variable set DEPLOY_HOLD --body {T} -R DanielH2018/server",
+        f"flux tag artifact {REPO_URL}:sha-{T} --tag held",
+    ]
+
+
+def test_a_failed_held_tag_exits_non_zero_with_the_hold_in_place(tmp_path, jobs):
+    result, calls = _settle(tmp_path, jobs, NO_RESET="longhorn", FAKE_FLUX_FAIL="held")
+    assert result.returncode != 0
+    assert calls[0] == f"gh variable set DEPLOY_HOLD --body {T} -R DanielH2018/server"
+    assert "tagging sha-" in result.stdout
 
 
 # -- settle: the dispatch of a run for a newer green commit ---------------------------------

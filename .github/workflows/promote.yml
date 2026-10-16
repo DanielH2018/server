@@ -16,15 +16,19 @@ name: promote
 #            it with cosign keyless under this workflow's identity. A `verify_drill` dispatch
 #            instead pushes an annotated bundle to `verify-drill` unsigned, and fails unless
 #            `cosign verify` refuses it.
-#   promote  read-only. Checks out this workflow's own commit and runs `promote.py decide`,
-#            which walks master from its tip and picks the commit T `prod` moves to. It pulls
-#            `prod`'s bundle and T's before anything moves, and hands them on to `verify`.
+#   promote  read-only, except that `decide` writes DEPLOY_HOLD as T's SHA when T fails the
+#            forward-only gate (H1.1b). Checks out this workflow's own commit and runs
+#            `promote.py decide`, which walks master from its tip and picks the commit T `prod`
+#            moves to. It pulls `prod`'s bundle and T's before anything moves, and hands them
+#            on to `verify`.
 #   tag      packages: write. Checks out nothing. Tags `prod`'s digest `last-good` when that
 #            tag is absent, moves `prod` to T, and records its digest in PROD_DIGEST.
 #   verify   contents: read, statuses: read. Runs `promote.py verify T`, which waits on T's
 #            commit statuses for T's changed set and prints `good` or `failed`.
 #   settle   packages: write, actions: write. Checks out nothing. A good verdict moves
-#            `last-good` to T. Anything else writes DEPLOY_HOLD, then resets `prod` to
+#            `last-good` to T. When T changes a forward-only tag, anything else writes
+#            DEPLOY_HOLD as T's SHA alone, tags T `held` and leaves `prod`. Otherwise it writes
+#            DEPLOY_HOLD, then resets `prod` to
 #            `last-good` and records PROD_DIGEST. Contract C2's *Verification* is the rule.
 #            Once either succeeds, it dispatches this workflow for master's newest green
 #            commit when that commit is newer than T.
@@ -404,6 +408,10 @@ jobs:
       contents: read
       checks: read
       packages: read
+      # The forward-only gate maps a pin-changing commit to its PR and reads the
+      # homelab/upgrade-gates status on that PR's head (H1.1b).
+      pull-requests: read
+      statuses: read
     outputs:
       verdict: ${{ steps.decide.outputs.verdict }}
       target: ${{ steps.decide.outputs.target }}
@@ -413,6 +421,7 @@ jobs:
       reset_digest: ${{ steps.decide.outputs.reset_digest }}
       seed: ${{ steps.decide.outputs.seed }}
       clears_hold: ${{ steps.decide.outputs.clears_hold }}
+      no_reset: ${{ steps.decide.outputs.no_reset }}
     steps:
       # This workflow's own commit, so the promote.py that runs matches the promote.yml that
       # calls it. A workflow_run always runs master's copy of this file.
@@ -437,8 +446,10 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
         run: printf '%s' "$GITHUB_TOKEN" | docker login ghcr.io -u "$GH_ACTOR" --password-stdin
 
-      # GITHUB_TOKEN reads the registry and the check-runs. GH_TOKEN is PROMOTE_TOKEN, for the
-      # `gh variable get DEPLOY_HOLD` inside `decide`. That read goes through the API when
+      # GITHUB_TOKEN reads the registry, the check-runs, the statuses and the commit-to-PR
+      # lookup. GH_TOKEN is PROMOTE_TOKEN, for the `gh variable get DEPLOY_HOLD` inside
+      # `decide`, and for the `gh variable set` that writes T's SHA when T fails the
+      # forward-only gate. That read goes through the API when
       # `decide` runs, not through the `vars` context, so a hold written after this run
       # started is still seen.
       - name: Decide
@@ -648,11 +659,18 @@ jobs:
       # read for `last-good` and records it in PROD_DIGEST. A failed hold write still attempts
       # the reset, and the step names both results. A verify that ended with no verdict holds
       # as `<T> unverified`, a form the revert rule never passes.
+      #
+      # A hold without a reset (H1.1b): when `decide` named forward-only tags T changes
+      # against `last-good`, anything but good writes DEPLOY_HOLD as T's SHA alone, never
+      # `failed=` or `unverified`, and leaves `prod` on T. A reset would re-apply an older
+      # Longhorn or MetalLB over upgraded objects. It then tags T's digest `held`, which
+      # `decide`'s in-flight wait reads once the operator clears the hold.
       - name: Apply the verdict
         env:
           TARGET: ${{ needs.promote.outputs.target }}
           RESET_DIGEST: ${{ needs.promote.outputs.reset_digest }}
           CLEARS_HOLD: ${{ needs.promote.outputs.clears_hold }}
+          NO_RESET: ${{ needs.promote.outputs.no_reset }}
           VERDICT: ${{ needs.verify.outputs.verdict }}
           FAILED_NAMES: ${{ needs.verify.outputs.failed }}
           GH_ACTOR: ${{ github.actor }}
@@ -677,6 +695,20 @@ jobs:
               echo "DEPLOY_HOLD cleared by the revert rule"
             fi
             exit 0
+          fi
+
+          if [ -n "$NO_RESET" ]; then
+            problems=()
+            if gh variable set DEPLOY_HOLD --body "$TARGET" -R "$GITHUB_REPOSITORY"; then
+              echo "DEPLOY_HOLD set to '$TARGET': T changes forward-only $NO_RESET, so prod stays on sha-$TARGET"
+            else
+              problems+=("writing DEPLOY_HOLD='$TARGET' failed")
+            fi
+            login && flux tag artifact "oci://$repo:sha-$TARGET" --tag held \
+              || problems+=("tagging sha-$TARGET held failed, so the next run after a clear waits as in flight")
+            for problem in "${problems[@]}"; do echo "::error::$problem"; done
+            [ "${#problems[@]}" -eq 0 ]
+            exit
           fi
 
           if [ "$VERDICT" = failed ] && printf '%s' "$FAILED_NAMES" | grep -Eqx '[a-z0-9-]+(,[a-z0-9-]+)*'; then
