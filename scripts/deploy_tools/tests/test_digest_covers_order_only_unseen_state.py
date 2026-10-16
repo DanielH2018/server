@@ -8,6 +8,8 @@ the one shape the issue names.
 Run: uv run pytest scripts/deploy_tools/tests/test_digest_covers_order_only_unseen_state.py
 """
 
+import importlib.util
+
 import pytest
 
 import digest_covers
@@ -123,9 +125,10 @@ def test_a_change_to_process_state_keeps_the_line(tree, imports, call):  # noqa:
             "os.close(_posixshmem.shm_open('/order-only-5063', os.O_CREAT | os.O_RDWR, 0o600))\n"
             "_posixshmem.shm_unlink('/order-only-5063')",
         ),
-        ("import readline", "readline.write_history_file({path})"),
+        # The event a C-level `fopen` raises, as `readline.write_history_file` does.
+        ("import sys", "sys.audit('open', {path}, 'w', 0)"),
     ],
-    ids=["dbm-open", "shm-open", "readline-history"],
+    ids=["dbm-open", "shm-open", "fopen-mode-string"],
 )
 def test_an_unaudited_file_creating_call_through_a_module_the_base_loads_keeps_the_line(
     tree,  # noqa: F811
@@ -137,8 +140,9 @@ def test_an_unaudited_file_creating_call_through_a_module_the_base_loads_keeps_t
 
     Both ends load the same modules, so the comparison of loaded modules reports nothing. With
     an absolute path the entry lands outside the runner's temp tree. In a deploy it lands
-    wherever the path points. `readline.write_history_file` does raise `open`, but with mode
-    `'w'` and flags 0, so the hook's flag test passes it (#5081).
+    wherever the path points. A C-level `fopen`, such as `readline.write_history_file`, does
+    raise `open`, but with mode `'w'` and flags 0, so the hook's flag test passes it (#5081).
+    `readline` is outside the runner's `c_modules`, so the last row raises that event itself.
     """
     path = repr(str(tmp_path / "escaped"))
     reason = _reason_for_head_call(tree, imports, call.format(path=path))
@@ -430,4 +434,26 @@ def test_an_item_replaced_five_levels_down_keeps_the_line(tree):  # noqa: F811
         "import json\njson.order_only_5107 = {'a': {'b': {'c': {'d': [None]}}}}",
         "json.order_only_5107['a']['b']['c']['d'][0] = 1",
     )
+    assert reason and "every deploy runs" in reason
+
+
+@pytest.mark.parametrize(
+    "imports, call",
+    [
+        ("import readline", "readline.set_history_length(5201)"),
+        ("import markupsafe", "markupsafe.escape('x')"),
+    ],
+    ids=["built-in-c-module", "shared-object-c-module"],
+)
+def test_a_c_module_outside_the_runners_list_keeps_the_line(tree, imports, call):  # noqa: F811
+    """Importing a C module the real chain does not import keeps the line, at both ends (#5201).
+
+    A C module holds state no walk or reader copies and can make calls that raise no audit
+    event, as `readline`'s history length is and `_tkinter.create` does. `readline` is built
+    into the interpreter, so the hook refuses it by name; `markupsafe._speedups` is a shared
+    object, which shows only by its loader once it has loaded.
+    """
+    spec = importlib.util.find_spec("markupsafe._speedups")
+    assert spec and str(spec.origin).endswith(".so")
+    reason = _reason_for_head_call(tree, imports, call)
     assert reason and "every deploy runs" in reason
