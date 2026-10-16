@@ -311,19 +311,6 @@ def _tracked(*paths: str) -> list[Path]:
     return [fx.REPO / name for name in listed]
 
 
-def test_the_cases_publish_a_repository_past_its_valid_until():
-    # The case itself runs only in the host_packages job, which has Docker; this holds that
-    # host_package_cases.py serves an expired repository to some case.
-    (source,) = _tracked("scripts/validate/host_package_cases.py")
-    keywords = {
-        keyword.arg
-        for node in ast.walk(ast.parse(source.read_text()))
-        if isinstance(node, ast.Call)
-        for keyword in node.keywords
-    }
-    assert VALID_UNTIL in keywords
-
-
 def test_no_container_source_trusts_the_repository_unsigned():
     # `Trusted: yes` makes apt accept an InRelease signed by any key, or by none, so the case
     # would pass whoever signed the index. The container's source names the test keyring in
@@ -357,11 +344,44 @@ def test_the_test_images_source_names_the_published_keyring():
     assert f"'Signed-By: /srv/repo/{fx.TEST_KEYRING}'" in dockerfile
 
 
+def _calls(node: ast.expr, name: str) -> bool:
+    """Whether `node` is a call to `name`, bare or as an attribute such as `datetime.now`."""
+    if not isinstance(node, ast.Call):
+        return False
+    func = node.func
+    return (isinstance(func, ast.Name) and func.id == name) or (
+        isinstance(func, ast.Attribute) and func.attr == name
+    )
+
+
+def _is_a_past_moment(value: ast.expr, body: ast.FunctionDef) -> bool:
+    """Whether `value` is `now(...) - timedelta(...)`, or a name `body` binds only to one."""
+    if isinstance(value, ast.Name):
+        bound = [
+            node.value
+            for node in ast.walk(body)
+            if isinstance(node, ast.Assign)
+            and any(
+                isinstance(target, ast.Name) and target.id == value.id
+                for target in node.targets
+            )
+        ]
+        return bool(bound) and all(_is_a_past_moment(each, body) for each in bound)
+    return (
+        isinstance(value, ast.BinOp)
+        and isinstance(value.op, ast.Sub)
+        and _calls(value.left, "now")
+        and _calls(value.right, "timedelta")
+    )
+
+
 def _cases_serving_an_expired_index(source: str) -> list[str]:
-    """The case bodies `self.case(...)` registers that serve with a `valid_until` set.
+    """The case bodies `self.case(...)` registers that serve with a past `valid_until`.
 
     `Cases.serving` itself forwards `valid_until=valid_until`, so a keyword alone proves
-    nothing; the body a case runs must pass a value that is not None.
+    nothing. Nor does a value that is merely not None, since a future moment publishes a
+    fresh index: the body a case runs must pass `datetime.now(...) - timedelta(...)`, written
+    in the call or bound to the name the call passes.
     """
     tree = ast.parse(source)
     registered = {
@@ -385,11 +405,7 @@ def _cases_serving_an_expired_index(source: str) -> list[str]:
             ):
                 continue
             if any(
-                keyword.arg == VALID_UNTIL
-                and not (
-                    isinstance(keyword.value, ast.Constant)
-                    and keyword.value.value is None
-                )
+                keyword.arg == VALID_UNTIL and _is_a_past_moment(keyword.value, node)
                 for keyword in call.keywords
             ):
                 found.append(node.name)
@@ -403,3 +419,8 @@ def test_a_registered_case_serves_an_index_past_its_valid_until():
     registration = 'self.case(c, "a Release past its Valid-Until", expired_release)'
     assert registration in source
     assert _cases_serving_an_expired_index(source.replace(registration, "")) == []
+    # Red proof: a future moment publishes a fresh index, so the case no longer counts.
+    past = "datetime.now(UTC) - timedelta(hours=1)"
+    assert past in source
+    future = source.replace(past, "datetime.now(UTC) + timedelta(days=7)")
+    assert _cases_serving_an_expired_index(future) == []
