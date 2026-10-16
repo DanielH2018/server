@@ -56,6 +56,7 @@ from lib.repo_paths import K8S_ROLES
 from renderer.renderer_lib.environment import RenderError, evaluate, renderer_env
 from renderer.renderer_lib.placeholders import Sentinels, references
 from renderer.renderer_lib.task_inputs import include_vars
+from secrets_mgmt.cluster_vars_check import parse_source
 
 RESTART_ANNOTATION = "checksum/restart"
 # The kinds `kubectl rollout restart` acts on, the only kinds the shared role restarts.
@@ -393,3 +394,15 @@ def stamp(text: str, values: Mapping[str, str], where: str) -> str:
     for line, block in sorted(inserts, reverse=True):
         lines.insert(line, block)
     return "".join(lines)
+
+
+def source_digests(source_file: Path) -> dict[str, str]:
+    """Each key `cluster-vars.source` records mapped to its digest; empty when it is absent.
+
+    `restart_values` hashes these, so a rotated Secret value moves `checksum/restart`.
+    """
+    if not source_file.exists():
+        return {}
+    return {
+        key: line.digest for key, line in parse_source(source_file.read_text()).items()
+    }
