@@ -1525,6 +1525,9 @@ says otherwise.
 9. **H3.7 The Depends gate.**
     - Add `Depends: tree` to `hosts/daniel-pi/package.yml`. Pick any package that
       `apt-cache policy` on the Pi shows as not installed.
+    - The container case that installs the real Pi package by hand runs `apt-get install`
+      on the debs, as `bootstrap-host.sh` does. With `dpkg -i`, as H3.6 wrote it, a new
+      `Depends` leaves the package unconfigured and the case fails.
     - After merge, the operator starts the updater on the Pi and confirms that
       `dpkg-query -W tree` succeeds.
     - A follow-up commit drops the `Depends`. apt marks `tree` automatic, so the weekly
