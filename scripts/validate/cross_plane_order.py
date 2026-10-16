@@ -23,8 +23,23 @@ cluster` and refuses two shapes:
   its own render moves in the same PR. A tag that becomes flux-owned in the PR is not judged:
   its Kustomization is born with its edges, and D3's `checksum/restart` stamp moves its render
   in the same commit, so judging it would refuse every flip.
+- **Arm 3, a dropped object (D5.1f).** A tag flux-owned at both ends loses an object of any
+  kind from its render, and no commit in `base..head` carries `Removes-Object:
+  <kind>/<namespace>/<name>` for it (`lib/removes_object.py`). Flux would prune it while its
+  Kustomization reads Ready. A rename passes: the object's kind, namespace and name, with the
+  renderer's trailing `-<digest8>` removed, still render in the head. So does an object
+  labelled or annotated `kustomize.toolkit.fluxcd.io/prune: disabled`, which prune never
+  deletes. A handback passes, since a tag that is not flux-owned at the head is not judged.
+- **Arm 4, a flux-owned retirement (D5.1f).** A name joins `k8s_retired_services` whose
+  entry carries `owner: flux` on the base. The play's teardown deletes the last render
+  Ansible staged, and Flux at the old `prod` re-creates it. Such a service retires by two
+  PRs instead (docs/flux-deploy-plane.md, *Retiring a flux-owned service*).
 
-There is no bypass. Two PRs that merge back to back each pass alone, and an image bump that does
+Arms 3 and 4 run from `gate()` alone, through `removal_problems()`, so the replay of master's
+squash commits judges arms 1 and 2 only. Arm 3 reads the trailers from the PR's own commits,
+and the CI step runs on pull requests only, where `HEAD^1..HEAD` is those commits and the merge.
+
+There is no bypass for arms 1 and 2. Two PRs that merge back to back each pass alone, and an image bump that does
 need ordering passes too; `docs/landing.md` states the `settled` rule that covers both, and how
 to split a refused PR. The plan is docs/target-architecture/deploy/d4-ordering.md, *The
 cross-plane gate*.
@@ -54,7 +69,9 @@ from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 
-from lib import yaml_fast
+from deploy_tools.object_loss import bundle_documents
+from deploy_tools.promote_lib.prune import ReadError
+from lib import removes_object, yaml_fast
 from lib.cli_help import ArgumentParser
 from lib.git import git, git_env, git_stdout
 from lib.repo_paths import FILTER_PLUGINS, GITOPS_DEPLOY_FILES, REPO
@@ -92,6 +109,11 @@ _SCRIPT_REF = re.compile(r"playbook_dir\s*\}\}/\.\./(scripts/[\w./-]*\w)")
 K8S_ROLES = "ansible/roles/k8s/"
 SHARED_TEMPLATES = "ansible/templates/"
 ANSIBLE_PLANE = "ansible"
+FLUX_PLANE = "flux"
+# The suffix `bundle.py:job_spec_digest8` and `configmap_digest8` give a name: a rename by
+# digest moves it, and arm 3 strips it before comparing the two sides.
+_DIGEST_SUFFIX = re.compile(r"-[0-9a-f]{8}$")
+PRUNE_KEY = "kustomize.toolkit.fluxcd.io/prune"
 
 
 class RenderFailed(RuntimeError):
@@ -110,6 +132,11 @@ class Snapshot:
         deferred: Each `<tag>-deferred` directory mapped to its files, for the namespace
             edges `kustomization_edges` derives.
         namespace_roles: Each namespace a role creates mapped to that role.
+        objects: Each rendered directory's tag mapped to its objects, as
+            `<kind>/<namespace>/<name>`; a `<tag>-deferred` directory's count for `<tag>`.
+        unpruned: The objects labelled or annotated `kustomize.toolkit.fluxcd.io/prune:
+            disabled`.
+        retired: The names `k8s_retired_services` lists.
     """
 
     renders: Mapping[str, str]
@@ -117,12 +144,15 @@ class Snapshot:
     deps: Mapping[str, Iterable[str]]
     deferred: Mapping[str, Mapping[str, str]] = field(default_factory=dict)
     namespace_roles: Mapping[str, str] = field(default_factory=dict)
+    objects: Mapping[str, Iterable[str]] = field(default_factory=dict)
+    unpruned: Iterable[str] = ()
+    retired: Iterable[str] = ()
 
     def plane(self, tag: str) -> str:
         return self.owners.get(tag, ANSIBLE_PLANE)
 
     def flux_owned(self) -> frozenset[str]:
-        return frozenset(t for t, p in self.owners.items() if p == "flux")
+        return frozenset(t for t, p in self.owners.items() if p == FLUX_PLANE)
 
     def depends_on(self, tag: str) -> frozenset[str]:
         """The `dependsOn` names the renderer writes for `tag` and its deferred apply."""
@@ -257,6 +287,77 @@ def problems(
     return found
 
 
+def _stem(ident: str) -> str:
+    """`<kind>/<namespace>/<name>` with the name's trailing `-<digest8>` removed."""
+    return _DIGEST_SUFFIX.sub("", ident)
+
+
+def removal_problems(
+    base: Snapshot, head: Snapshot, declared: Iterable[str]
+) -> list[str]:
+    """Arms 3 and 4: what the PR deletes from the cluster without saying so, one line each.
+
+    Args:
+        declared: The objects a `Removes-Object` line in the PR's commits declares.
+    """
+    declared, unpruned = set(declared), set(base.unpruned)
+    held = set().union(*map(set, head.objects.values()))
+    held_stems = {_stem(ident) for ident in held}
+    found = []
+    for tag in sorted(base.flux_owned() & head.flux_owned()):
+        for ident in sorted(set(base.objects.get(tag, ())) - held):
+            if ident in declared or ident in unpruned or _stem(ident) in held_stems:
+                continue
+            found.append(
+                f"arm 3: {tag} no longer renders {ident}, so Flux prunes it while its "
+                f"Kustomization reads Ready. If the removal is meant, add the line "
+                f"`Removes-Object: {ident}` to one of the PR's commits "
+                f"(docs/flux-deploy-plane.md, *Removing an object on purpose*)."
+            )
+    for name in sorted(set(head.retired) - set(base.retired)):
+        if base.plane(name) == FLUX_PLANE:
+            found.append(
+                f"arm 4: {name} joins k8s_retired_services while its base entry carries "
+                f"owner: flux, so the play's teardown deletes a stale staged render that Flux "
+                f"at the old prod re-creates. Retire it by two PRs: empty its templates, then "
+                f"remove its entry (docs/flux-deploy-plane.md, *Retiring a flux-owned "
+                f"service*)."
+            )
+    return found
+
+
+def _prune_disabled(doc: Mapping) -> bool:
+    """Whether Flux's prune skips `doc`, which it does by a label or an annotation."""
+    meta = doc.get("metadata") or {}
+    return any(
+        str((meta.get(key) or {}).get(PRUNE_KEY, "")) == "disabled"
+        for key in ("labels", "annotations")
+    )
+
+
+def _objects(dirs: Mapping[str, Mapping[str, str]]) -> tuple[dict, frozenset[str]]:
+    """Each tag's objects, and the ones prune skips, from `cluster/`'s directories."""
+    files = {
+        f"cluster/{name}/{path}": text.encode()
+        for name, contents in dirs.items()
+        for path, text in contents.items()
+    }
+    objects: dict[str, set[str]] = {}
+    unpruned = set()
+    try:
+        for ident, directory, doc in bundle_documents(files):
+            objects.setdefault(directory.removesuffix(DEFERRED_SUFFIX), set()).add(
+                ident
+            )
+            if _prune_disabled(doc):
+                unpruned.add(ident)
+    except ReadError as exc:
+        raise RenderFailed(str(exc)) from exc
+    return {tag: frozenset(idents) for tag, idents in objects.items()}, frozenset(
+        unpruned
+    )
+
+
 def _digest(files: Mapping[str, str]) -> str:
     h = hashlib.sha256()
     for name in sorted(files):
@@ -321,6 +422,7 @@ def snapshot(
         if tag in dirs
     }
     group = yaml_fast.safe_load((tree / GROUP_VARS).read_text())
+    objects, unpruned = _objects(dirs)
     return Snapshot(
         renders=renders,
         owners={e["name"]: str(e.get("owner") or ANSIBLE_PLANE) for e in k8s},
@@ -331,6 +433,11 @@ def snapshot(
             for var, role in NAMESPACE_ROLE_VARS.items()
             if var in group
         },
+        objects=objects,
+        unpruned=unpruned,
+        retired=frozenset(
+            str(e["name"]) for e in group.get("k8s_retired_services") or []
+        ),
     )
 
 
@@ -380,12 +487,15 @@ def gate(base: str, head: str) -> int:
                     file=sys.stderr,
                 )
                 return UNJUDGED
+    messages = git_stdout("log", "--format=%B", f"{base}..{head}", cwd=REPO)
     found = problems(snaps[0], snaps[1], paths, diffs)
+    found += removal_problems(snaps[0], snaps[1], removes_object.declared(messages))
     for line in found:
         print(f"[FAIL] {line}", file=sys.stderr)
     if not found:
         print(
-            f"cross-plane-order: {base[:9]}..{head[:9]} changes no pair across the planes"
+            f"cross-plane-order: {base[:9]}..{head[:9]} changes no pair across the planes "
+            f"and removes nothing Flux owns undeclared"
         )
     return REFUSED if found else CLEAN
 
