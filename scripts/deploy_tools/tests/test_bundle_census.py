@@ -413,3 +413,13 @@ def test_check_bundle_fails_a_published_plumbing_tag_that_drops_a_named_member(
         "cluster-base renders no PriorityClass homelab-critical"
         in capsys.readouterr().err
     )
+
+
+def test_a_named_member_in_a_directory_no_kustomization_applies_is_flagged(tmp_path):
+    """A stray `cluster-base-verify/` with no verify grant is never applied by Flux."""
+    out = _cluster_base(tmp_path, DEPLOYMENT.format(name="x"))
+    stray = out / "cluster" / "cluster-base-verify"
+    stray.mkdir()
+    (stray / "kustomization.yaml").write_text(kustomization_text(["members.yaml"]))
+    (stray / "members.yaml").write_text(CLUSTER_BASE)
+    assert len(bundle_census.member_census(out, ["cluster-base"])) == 3

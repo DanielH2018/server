@@ -313,6 +313,23 @@ def _rendered_objects(directory: Path) -> set[tuple[str, str]]:
     return found
 
 
+def _applied_directories(out: Path, tag: str) -> list[Path]:
+    """The directories the Kustomizations in `flux/<tag>.yaml` apply.
+
+    Only a directory a Kustomization names is applied, so a stray `cluster/<tag>-verify/`
+    that no document names holds nothing Flux manages. A document's path outside
+    `cluster/` counts for nothing; `census` reports it.
+    """
+    docs = _documents(out / FLUX_DIR / f"{tag}.yaml")
+    found = []
+    for doc in [] if isinstance(docs, str) else docs:
+        spec = doc.get("spec") if isinstance(doc, dict) else None
+        path = spec.get("path") if isinstance(spec, dict) else None
+        if isinstance(path, str) and path.startswith(f"./{CLUSTER_DIR}/"):
+            found.append(out / path.removeprefix("./"))
+    return found
+
+
 def member_census(
     out: Path,
     published: Iterable[str],
@@ -320,16 +337,14 @@ def member_census(
 ) -> list[str]:
     """One line for each named member a published tag's render drops.
 
-    A tag's render is `cluster/<tag>/` and each of its per-tag kinds' directories,
-    `cluster/<tag><suffix>/`, so moving a member into `<tag>-deferred` does not drop it.
+    A tag's render is every directory a Kustomization in `flux/<tag>.yaml` applies, so
+    moving a member into `<tag>-deferred` does not drop it, and moving it into a directory
+    no Kustomization applies does.
     """
     problems = []
     for tag in sorted(set(published) & set(members)):
         rendered = set().union(
-            *(
-                _rendered_objects(out / CLUSTER_DIR / f"{tag}{suffix}")
-                for suffix in ("", *TAG_KIND_SUFFIXES)
-            )
+            *(_rendered_objects(d) for d in _applied_directories(out, tag))
         )
         problems += [
             f"{tag} renders no {kind} {name}, a named member: a plumbing tag that drops "
