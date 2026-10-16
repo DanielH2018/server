@@ -8,9 +8,6 @@ with a fake clock, so a timeout costs no real time.
 Run: uv run pytest scripts/deploy_tools/tests/test_verify_promotion.py
 """
 
-import re
-
-import pytest
 import yaml
 from _promote_fakes import bundle_files
 from renderer.renderer_lib.bundle import bundle_files as render_bundle
@@ -23,12 +20,9 @@ from renderer.renderer_lib.bundle import (
 
 import forge
 from deploy_tools.promote_lib import verify_promotion as vp
-from lib import yaml_fast
-from lib.repo_paths import REPO
 
 T = "a" * 40
 PRIOR = "b" * 40
-SYNC = REPO / "ansible/roles/k8s/flux/templates/sync.yaml.j2"
 
 
 def ks(name: str, *depends: str, suspend: bool = False, timeout: str = "10m") -> str:
@@ -250,76 +244,36 @@ def test_a_dependent_passing_on_prods_commit_stays_expected():
     assert verdict == vp.Verdict("failed", ("bento-pdf-deferred",))
 
 
-# -- the timeout -----------------------------------------------------------------------------
+# -- the second document in a tag's file (D4.3) ----------------------------------------------
+
+# bento-pdf's file holding `bento-pdf` and `bento-pdf-deferred`, as the renderer writes a tag
+# that defers files: one `flux/<tag>.yaml`, two documents.
+TWO_DOCUMENTS = bundle_files(
+    digests(bento_pdf="b", sonarr="s"),
+    **{
+        "bento-pdf": ks("bento-pdf") + "---\n" + ks("bento-pdf-deferred", "bento-pdf"),
+        "sonarr": ks("sonarr"),
+    },
+)
 
 
-def test_the_timeout_is_the_largest_timeout_plus_the_interval_plus_the_largest_retry():
-    """bento-pdf's Kustomization at the manifests role's 10m rollout timeout: 10m + 1m + 2m."""
-    assert vp.expected_set(CHANGED, PROD).timeout_s == 10 * 60 + 60 + 2 * 60
+def test_a_tag_file_holding_two_documents_expects_both_and_passes_when_both_succeed():
+    expected = vp.expected_set(TWO_DOCUMENTS, PROD)
+    assert expected.names == {"homelab", "bento-pdf", "bento-pdf-deferred"}
+    states = ok("homelab", "bento-pdf", "bento-pdf-deferred")
+    assert vp.verify(reads({T: states}), T, PRIOR, expected) == vp.Verdict("good")
 
 
-def _timeout_of_render(key_sets: dict[str, frozenset[str]]) -> int:
-    """The derived timeout of a bundle the renderer writes for `peanut` at a 10m timeout."""
-    directories = {"peanut": {"kustomization.yaml": "resources: []\n"}}
-    files = render_bundle(directories, key_sets, ["peanut"], "10m", "x=ENC[y]\n")
-    return vp.promote_timeout(
-        vp.flux_kustomizations({p: t.encode() for p, t in files.items()})
-    )
-
-
-def test_a_bundle_holding_a_substituting_tag_adds_the_cluster_vars_hop():
-    """10m + 1m + 2m, plus cluster-vars's 10m and one requeue-dependency interval."""
-    found = _timeout_of_render({"peanut": frozenset({"peanut_password"})})
-    assert found == 10 * 60 + 60 + 2 * 60 + 10 * 60 + vp.REQUEUE_DEPENDENCY_S
-
-
-def test_a_bundle_holding_no_substituting_tag_adds_no_hop():
-    """The plan's negative half, a guard on kept behaviour: it goes red on an unconditional hop."""
-    assert _timeout_of_render({"peanut": frozenset()}) == 10 * 60 + 60 + 2 * 60
-
-
-def test_a_substituting_kustomization_without_cluster_vars_is_an_error():
-    doc = yaml_fast.safe_load(ks("peanut"))
-    doc["spec"]["postBuild"] = {"substituteFrom": []}
-    with pytest.raises(ValueError, match="holds no cluster-vars"):
-        vp.promote_timeout([doc])
-
-
-def test_the_requeue_interval_is_kustomize_controllers_default():
-    """The vendored install passes no `--requeue-dependency`, so the 30s default holds."""
-    vendored = (REPO / "ansible/roles/k8s/flux/files/gotk-components.yaml").read_text()
-    assert "--requeue-dependency" not in vendored
-    assert vp.REQUEUE_DEPENDENCY_S == 30
-
-
-def test_an_empty_bundle_times_out_at_the_roots_floor():
-    assert (
-        vp.promote_timeout([])
-        == vp.ROOT_TIMEOUT_S + vp.OCI_INTERVAL_S + vp.ROOT_RETRY_S
-    )
-
-
-def test_an_unreadable_duration_is_an_error():
-    with pytest.raises(ValueError, match="not a duration"):
-        vp.promote_timeout([{"spec": {"timeout": "ten minutes"}}])
-
-
-def _sync_docs() -> list[dict]:
-    """The flux role's sync template with its Jinja removed, parsed."""
-    text = re.sub(r"\{#.*?#\}", "", SYNC.read_text(), flags=re.S)
-    text = re.sub(r"^\s*\{%.*%\}\s*$", "", text, flags=re.M)
-    text = re.sub(r"\{\{.*?\}\}", "x", text)
-    return [d for d in yaml_fast.safe_load_all(text) if isinstance(d, dict)]
-
-
-def test_the_floor_matches_the_flux_roles_sync_template():
-    docs = {(d["kind"], d["metadata"]["name"]): d["spec"] for d in _sync_docs()}
-    root = docs[("Kustomization", "homelab")]
-    assert (
-        vp.seconds(docs[("OCIRepository", "homelab")]["interval"]) == vp.OCI_INTERVAL_S
-    )
-    assert vp.seconds(root["timeout"]) == vp.ROOT_TIMEOUT_S
-    assert vp.seconds(root["retryInterval"]) == vp.ROOT_RETRY_S
+def test_a_missing_deferred_status_keeps_waiting_and_a_failure_holds():
+    """The red proof that the expected set reads the second document in a file."""
+    expected = vp.expected_set(TWO_DOCUMENTS, PROD)
+    clock = Clock()
+    waited = vp.verify(reads({T: ok("homelab", "bento-pdf")}, clock), T, "", expected)
+    assert waited == vp.Verdict("failed", ("bento-pdf-deferred",))
+    assert clock.now >= expected.timeout_s
+    states = {**ok("homelab", "bento-pdf"), "flux/bento-pdf-deferred": "failure"}
+    held = vp.verify(reads({T: states}), T, "", expected)
+    assert held == vp.Verdict("failed", ("bento-pdf-deferred",))
 
 
 # -- the handoff and the CLI -----------------------------------------------------------------

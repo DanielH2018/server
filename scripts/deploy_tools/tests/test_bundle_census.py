@@ -26,14 +26,18 @@ DEPLOYMENT = "kind: Deployment\nmetadata:\n  name: {name}\n"
 DOTENV = "peanut_password=ENC[AES256_GCM,data:eA==,iv:aQ==,tag:dA==,type:str]\n"
 
 
-def _bundle(tmp_path, tags):
-    """Write the bundle the renderer builds publishing `tags`, and return its root."""
+def _bundle(tmp_path, tags, deferring=()):
+    """Write the bundle the renderer builds publishing `tags`, and return its root.
+
+    Each tag in `deferring` also renders `cluster/<tag>-deferred/`, so the renderer writes
+    `<tag>-deferred` as the second document of its file.
+    """
     directories = {
-        tag: {
-            "deployment.yaml": DEPLOYMENT.format(name=tag),
+        name: {
+            "deployment.yaml": DEPLOYMENT.format(name=name),
             "kustomization.yaml": kustomization_text(["deployment.yaml"]),
         }
-        for tag in tags
+        for name in [*tags, *(f"{tag}-deferred" for tag in deferring)]
     }
     files = bundle_files(directories, {}, tags, TIMEOUT, DOTENV)
     for tag, held in directories.items():
@@ -178,3 +182,78 @@ def test_published_tags_prints_nothing_when_no_tag_is_flux_owned(tmp_path, capsy
     host_vars = _host_vars(tmp_path, {"sonarr": "released"})
     assert promote.main(["published-tags", "--host-vars", str(host_vars)]) == OK
     assert capsys.readouterr().out == ""
+
+
+# -- the per-file rule (D4.3) ----------------------------------------------------------------
+
+
+def test_a_deferring_tags_file_holding_its_deferred_document_is_clean(tmp_path):
+    out = _bundle(tmp_path, ["pihole"], deferring=["pihole"])
+    assert bundle_census.census(out, ["pihole"], deferring=["pihole"]) == []
+
+
+def test_a_third_document_in_a_deferring_tags_file_is_flagged(tmp_path):
+    out = _bundle(tmp_path, ["pihole"], deferring=["pihole"])
+    path = out / "flux" / "pihole.yaml"
+    path.write_text(path.read_text() + "---\n" + path.read_text().split("---\n")[0])
+    found = bundle_census.census(out, ["pihole"], deferring=["pihole"])
+    assert len(found) == 1
+    assert (
+        "not exactly the Kustomization pihole then the Kustomization pihole-deferred"
+        in found[0]
+    )
+
+
+def test_a_deferred_document_for_a_tag_that_defers_nothing_is_flagged(tmp_path):
+    """The red half: the renderer bug a census computed from its output would admit."""
+    out = _bundle(tmp_path, ["pihole"], deferring=["pihole"])
+    found = bundle_census.census(out, ["pihole"])
+    assert len(found) == 1
+    assert "not exactly the Kustomization pihole" in found[0]
+
+
+def test_a_deferring_tag_with_no_deferred_directory_is_flagged(tmp_path):
+    out = _bundle(tmp_path, ["pihole"])
+    found = bundle_census.census(out, ["pihole"], deferring=["pihole"])
+    assert (
+        "cluster/pihole-deferred/ is missing: pihole defers files and renders no "
+        "deferred directory"
+    ) in found
+
+
+def test_a_deferred_document_applying_another_directory_is_flagged(tmp_path):
+    out = _bundle(tmp_path, ["pihole"], deferring=["pihole"])
+    path = out / "flux" / "pihole.yaml"
+    path.write_text(
+        path.read_text().replace("path: ./cluster/pihole-deferred", "path: ./cluster/x")
+    )
+    assert bundle_census.census(out, ["pihole"], deferring=["pihole"]) == [
+        "flux/pihole.yaml's pihole-deferred applies './cluster/x', not "
+        "./cluster/pihole-deferred"
+    ]
+
+
+def test_the_deferring_tags_are_the_roles_that_pass_manifests_deferred_files():
+    """Named members: the three deferred applies C3 lists, plus the flux role (D1)."""
+    found, problems = bundle_census.deferring_tags(
+        ["bento-pdf", "flux", "headlamp", "netpol-baseline", "pihole", "texbrain"]
+    )
+    assert (found, problems) == (
+        {"flux", "headlamp", "netpol-baseline", "pihole"},
+        [],
+    )
+
+
+def test_a_deferred_files_value_that_is_not_a_literal_list_is_a_problem(tmp_path):
+    tasks = tmp_path / "x" / "tasks"
+    tasks.mkdir(parents=True)
+    (tasks / "main.yml").write_text(
+        "- ansible.builtin.include_role:\n    name: k8s/manifests\n"
+        '  vars:\n    manifests_deferred_files: "{{ files }}"\n'
+    )
+    found, problems = bundle_census.deferring_tags(["x"], tmp_path)
+    assert found == frozenset()
+    assert problems == [
+        "could not tell whether x defers files: its manifests_deferred_files is "
+        "'{{ files }}', not a literal list"
+    ]

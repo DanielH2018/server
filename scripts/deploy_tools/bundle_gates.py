@@ -5,11 +5,14 @@ any push, so a refusal publishes nothing and `prod` stays where it was. Contract
 hold the rules, and docs/target-architecture/deploy/d2-first-leaf.md, *Publication and
 verification*, the design:
 
-- `source`: a tag whose `flux/<name>.yaml` has no `postBuild` holds no `${K}` whose K is a key
-  name of `ansible/vars/secrets.yml`, read as Flux reads it, each `$$` paired first. A tag
-  with `postBuild` names in `substituteFrom` only a Secret that a `secretGenerator` in the
-  bundle makes. The gate fails a published tag whose directory it could not examine, so it
-  never passes over nothing.
+- `source`: each Kustomization document in `flux/<name>.yaml` is judged against its own
+  `spec.path` directory, so a tag's second document, `<tag>-deferred`, is judged against
+  `cluster/<tag>-deferred/` (D4.3, the per-file rule). A document with no `postBuild` applies
+  a directory that holds no `${K}` whose K is a key name of `ansible/vars/secrets.yml`, read
+  as Flux reads it, each `$$` paired first. A document with `postBuild` names in
+  `substituteFrom` only a Secret that a `secretGenerator` in the bundle makes. The gate fails
+  a published name whose file or directories it could not examine, so it never passes over
+  nothing.
 - `host`: every `Host(...)` in an IngressRoute ends in `.<domain>`, the literal that
   `ansible/inventory/group_vars/all.yml` defines. While bento-pdf is published, its `.local.`
   route is the gate's named member, and a gate that finds no Host rule there fails.
@@ -55,6 +58,9 @@ NAMED_ROUTE = ("bento-pdf", "homelab", "bento-pdf")
 
 _HOST = re.compile(r"(?<![A-Za-z])Host\(([^)]*)\)")
 _KEY = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
+# A Kustomization's `spec.path` as the renderer writes it: one directory under `cluster/`. A
+# segment cannot start with `.`, so no path leaves the bundle.
+_PATH = re.compile(rf"\./{CLUSTER_DIR}/([a-z0-9][a-z0-9.-]*)")
 
 
 def secret_keys(secrets: Path = SECRETS) -> frozenset[str]:
@@ -122,38 +128,53 @@ def _generated_secrets(out: Path) -> set[str]:
 def source(
     out: Path, published: Iterable[str], keys: frozenset[str], kinds=SHARED_KINDS
 ) -> list[str]:
-    """The source gate: what substitutes is what the tag's Kustomization says substitutes."""
+    """The source gate: what substitutes is what each Kustomization document says substitutes."""
     found, generated = [], _generated_secrets(out)
     for name in sorted({*published, *kinds}):
-        flux_docs = _docs(out / FLUX_DIR / f"{name}.yaml")
-        directory = out / CLUSTER_DIR / name
-        if not flux_docs or not directory.is_dir():
+        file = f"{FLUX_DIR}/{name}.yaml"
+        docs = [d for d in _docs(out / file) if d.get("kind") == "Kustomization"]
+        if not docs:
             found.append(
-                f"source: could not examine {name}: it needs {FLUX_DIR}/{name}.yaml and "
+                f"source: could not examine {name}: it needs {file} and "
                 f"{CLUSTER_DIR}/{name}/"
             )
-            continue
-        post_build = (flux_docs[0].get("spec") or {}).get("postBuild")
-        if post_build is None:
-            for path in _files(directory):
-                text = path.read_text(errors="replace")
-                for body in references(text):
-                    key = _KEY.match(body)
-                    if key and key.group() in keys:
-                        found.append(
-                            f"source: {path.relative_to(out).as_posix()} holds "
-                            f"${{{key.group()}}}, a key of secrets.yml, and "
-                            f"{FLUX_DIR}/{name}.yaml has no postBuild"
-                        )
-            continue
-        for ref in (post_build or {}).get("substituteFrom") or [{}]:
-            ref = ref if isinstance(ref, dict) else {}
-            if ref.get("kind") != "Secret" or ref.get("name") not in generated:
-                found.append(
-                    f"source: {FLUX_DIR}/{name}.yaml substitutes from "
-                    f"{ref.get('kind')}/{ref.get('name')}, which no secretGenerator in "
-                    "the bundle makes"
-                )
+        for doc in docs:
+            found += _document_problems(out, file, doc, keys, generated)
+    return found
+
+
+def _document_problems(
+    out: Path, file: str, doc: dict, keys: frozenset[str], generated: set[str]
+) -> list[str]:
+    """The source gate's problems with one Kustomization document of `file`."""
+    spec = doc.get("spec")
+    spec = spec if isinstance(spec, dict) else {}
+    kustomization = (doc.get("metadata") or {}).get("name")
+    where = f"the Kustomization {kustomization} in {file}"
+    path = _PATH.fullmatch(str(spec.get("path", "")))
+    directory = out / CLUSTER_DIR / path.group(1) if path else None
+    if directory is None or not directory.is_dir():
+        return [
+            f"source: could not examine {where}: it applies {spec.get('path')!r}, "
+            f"which is no directory under {CLUSTER_DIR}/"
+        ]
+    post_build = spec.get("postBuild")
+    if post_build is None:
+        return [
+            f"source: {held.relative_to(out).as_posix()} holds ${{{key.group()}}}, a key "
+            f"of secrets.yml, and {where} has no postBuild"
+            for held in _files(directory)
+            for body in references(held.read_text(errors="replace"))
+            if (key := _KEY.match(body)) and key.group() in keys
+        ]
+    found = []
+    for ref in (post_build or {}).get("substituteFrom") or [{}]:
+        ref = ref if isinstance(ref, dict) else {}
+        if ref.get("kind") != "Secret" or ref.get("name") not in generated:
+            found.append(
+                f"source: {where} substitutes from {ref.get('kind')}/{ref.get('name')}, "
+                "which no secretGenerator in the bundle makes"
+            )
     return found
 
 

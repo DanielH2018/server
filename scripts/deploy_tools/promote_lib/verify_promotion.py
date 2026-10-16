@@ -27,7 +27,8 @@ THE VERDICT. Every expected status `success` is `good`. Any expected `failure` o
 `failed`, naming those. At the timeout it is `failed`, naming every expected name that is not
 `success`. A missing status, or a `pending` one, keeps the wait going and never reads as
 success. A status read that fails is retried at the next poll. The timeout is derived from T's
-bundle (`promote_timeout`).
+bundle and its changed set (`chained_timeout.promote_timeout`), and capped at
+`chained_timeout.VERIFY_CAP_S`.
 
 THE OTHER TWO HALVES `decide` calls:
   - `wait_settled`, the wait on a verification in flight (the DECIDED marker below);
@@ -55,7 +56,7 @@ import sys as _sys
 from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
-# `forge` and `changed_set` import bare, from scripts/deploy_tools.
+# `forge`, `changed_set` and `chained_timeout` import bare, from scripts/deploy_tools.
 _sys.path.insert(1, str(_Path(__file__).resolve().parents[1]))
 from lib import yaml_fast
 from lib.cli_help import error
@@ -63,8 +64,8 @@ from lib.exit_codes import FAILED, OK, USAGE_ERROR
 
 import forge
 from changed_set import ROOT, changed_set, footprints
+from chained_timeout import promote_timeout
 from deploy_tools.promote_lib.wait import kustomization_graph
-from renderer.renderer_lib.bundle import CLUSTER_VARS
 
 DIGESTS_FILE = "digests.json"
 # The files `verify` reads from each bundle. Nothing else is handed on.
@@ -83,21 +84,6 @@ MOVED_AT_SKEW_S = 60
 # 30 of the token's 1,000 an hour.
 POLL_S = 30
 
-# The values of the two objects the bundle does not carry, from
-# ansible/roles/k8s/flux/templates/sync.yaml.j2: the OCIRepository `homelab`'s `interval`, and
-# the root Kustomization `homelab`'s `timeout` and `retryInterval`. The root is always
-# expected, so they are the floor of every derived timeout.
-# scripts/deploy_tools/tests/test_verify_promotion.py fails a drift.
-OCI_INTERVAL_S = 60
-ROOT_TIMEOUT_S = 5 * 60
-ROOT_RETRY_S = 60
-# kustomize-controller's `--requeue-dependency` default. A Kustomization whose dependency is
-# not Ready requeues after this interval, and no watch re-enqueues it sooner, so each
-# `dependsOn` hop costs up to one interval (d4-ordering.md). The flux role sets no such flag;
-# scripts/deploy_tools/tests/test_verify_promotion.py fails one it adds.
-REQUEUE_DEPENDENCY_S = 30
-
-_DURATION = re.compile(r"(?:(\d+)h)?(?:(\d+)m)?(?:(\d+)s)?")
 
 # DECIDED: a verification in flight is guarded by two checks rather than by joining `verify`
 # and `settle` to the `promote` concurrency group. GitHub keeps one pending job per group and
@@ -113,8 +99,10 @@ _DURATION = re.compile(r"(?:(\d+)h)?(?:(\d+)m)?(?:(\d+)s)?")
 #
 # Longer than the `verify` job's timeout-minutes plus `settle`'s, with ten minutes for runner
 # queueing, so the wait outlasts any run still verifying
-# (ansible/tests/repo/test_promote_workflow_verify.py).
-IN_FLIGHT_WAIT_S = 40 * 60
+# (ansible/tests/repo/test_promote_workflow_verify.py). `verify`'s limit sits just above
+# `chained_timeout.VERIFY_CAP_S`, so this is 335 + 5 + 10 minutes, and the `promote` job that holds it fits
+# inside GitHub's 6-hour job limit with 10 minutes to spare.
+IN_FLIGHT_WAIT_S = 350 * 60
 IN_FLIGHT_POLL_S = 30
 
 # `<T> failed=<names>`, the one hold form the revert rule may pass. `settle` writes it.
@@ -195,65 +183,6 @@ def flux_kustomizations(files: dict[str, bytes]) -> list[dict]:
     return found
 
 
-def seconds(duration: str) -> int:
-    """A Go duration of whole hours, minutes and seconds, such as `10m` or `1h30m`, in seconds.
-
-    Raises:
-        ValueError: any other form, or an empty one.
-    """
-    match = _DURATION.fullmatch(duration) if isinstance(duration, str) else None
-    if match is None or not duration:
-        raise ValueError(f"{duration!r} is not a duration of h, m and s")
-    hours, minutes, secs = (int(part or 0) for part in match.groups())
-    return hours * 3600 + minutes * 60 + secs
-
-
-def promote_timeout(docs: list[dict]) -> int:
-    """How long `verify` waits, in seconds.
-
-    The largest `timeout`, plus the OCIRepository interval, plus the largest
-    `retryInterval`. The root `homelab` is always expected and is not in the bundle, so its values are the
-    floor. A Kustomization with no `timeout` times out after its `interval`, as Flux does.
-
-    When a Kustomization substitutes, which the renderer projects as `postBuild`, it waits on
-    `cluster-vars`, so the wait also covers that hop: `cluster-vars`'s own timeout plus one
-    REQUEUE_DEPENDENCY_S (D3.3b). D4.3's chained timeout replaces this term with one per edge.
-
-    Raises:
-        ValueError: a duration this module cannot read, or a substituting Kustomization in a
-            bundle that holds no `cluster-vars`.
-    """
-
-    def spec_of(doc: dict) -> dict:
-        spec = doc.get("spec")
-        return spec if isinstance(spec, dict) else {}
-
-    def timeout_of(spec: dict) -> int | None:
-        timeout = spec.get("timeout", spec.get("interval"))
-        return None if timeout is None else seconds(timeout)
-
-    timeouts, retries = [ROOT_TIMEOUT_S], [ROOT_RETRY_S]
-    for doc in docs:
-        spec = spec_of(doc)
-        timeout = timeout_of(spec)
-        if timeout is not None:
-            timeouts.append(timeout)
-        retry = spec.get("retryInterval")
-        if retry is not None:
-            retries.append(seconds(retry))
-    hop = 0
-    if any("postBuild" in spec_of(doc) for doc in docs):
-        found = [
-            d for d in docs if (d.get("metadata") or {}).get("name") == CLUSTER_VARS
-        ]
-        if not found:
-            raise ValueError(
-                f"a Kustomization substitutes and the bundle holds no {CLUSTER_VARS}"
-            )
-        hop = (timeout_of(spec_of(found[0])) or 0) + REQUEUE_DEPENDENCY_S
-    return max(timeouts) + OCI_INTERVAL_S + max(retries) + hop
-
-
 @dataclass(frozen=True)
 class Expected:
     """What `verify` waits on.
@@ -280,8 +209,8 @@ def expected_set(target: dict[str, bytes], prod: dict[str, bytes] | None) -> Exp
     and so does a first run with no `prod`.
 
     Raises:
-        ValueError: a Kustomization's duration is unreadable, or a Kustomization
-            substitutes in a bundle that holds no `cluster-vars`.
+        ValueError: a Kustomization's duration is unreadable, or its `dependsOn` names one
+            the bundle does not hold or forms a cycle (`promote_timeout`).
         yaml.YAMLError: a file under `flux/` is not YAML.
     """
     docs = flux_kustomizations(target)
@@ -292,7 +221,7 @@ def expected_set(target: dict[str, bytes], prod: dict[str, bytes] | None) -> Exp
         names=found.names | {ROOT},
         dependents=found.names - found.direct,
         widened=found.widened,
-        timeout_s=promote_timeout(docs),
+        timeout_s=promote_timeout(docs, found.names),
     )
 
 
