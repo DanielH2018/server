@@ -384,6 +384,16 @@ jobs:
         timeout-minutes: 8
         run: uv run python scripts/validate/cross_plane_order.py --base HEAD^1
 
+      # The cluster pin checks (H1.1f). Merging a Longhorn or MetalLB pin is the upgrade, so it
+      # refuses a pin that decreases, a Longhorn bump that skips a minor release, and a bump
+      # whose PR changes anything besides the pin's role directory and docs. `land.sh`'s land
+      # gate relies on that last refusal to gate one bump per PR. docs/landing.md says what to
+      # do with a refused PR, and there is no bypass. Pull requests only, for the reason above.
+      - name: Cluster pin checks
+        if: github.event_name == 'pull_request'
+        timeout-minutes: 2
+        run: uv run python scripts/validate/cluster_pins.py --base HEAD^1
+
       # Every push to master, and any PR the scoping step declined to trust: the full sweep.
       #
       # This is what keeps the scoped path's residual gap bounded. ansible-lint does no cross-file
