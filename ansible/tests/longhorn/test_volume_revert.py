@@ -153,6 +153,23 @@ def test_the_seam_tests_skip_before_any_network_call_without_a_kubeconfig(
         assert calls.read_text().splitlines() == ["config current-context"]
 
 
+@pytest.mark.parametrize(
+    ("body", "configured"),
+    [("exec sleep 5", False), ("echo default", True)],
+    ids=["slow-kubectl", "context"],
+)
+def test_a_kubectl_that_outlasts_the_timeout_counts_as_no_cluster(
+    tmp_path, body: str, configured: bool
+) -> None:
+    """A slow `config current-context` must read as no cluster, not raise `TimeoutExpired`.
+
+    An uncaught timeout turned a seam test's skip into a red test on one CI runner (#5243). The
+    stub `exec`s its sleep so the timeout's kill reaches the process holding the pipes.
+    """
+    kubectl = write_exec(tmp_path / "kubectl", f"{body}\n")
+    assert kubectl_has_a_cluster_configured([str(kubectl)], timeout=0.5) is configured
+
+
 def test_every_read_a_later_task_depends_on_runs_under_check() -> None:
     """A command task is SKIPPED under `--check` by default, and a skipped read does not fail —
     it fails its consumer several tasks later with an undefined attribute, blamed on the wrong

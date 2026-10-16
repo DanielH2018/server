@@ -32,7 +32,9 @@ def no_cluster_to_ask(stderr: str) -> bool:
     return "jsonpath" not in stderr and any(token in stderr for token in _NO_CLUSTER)
 
 
-def kubectl_has_a_cluster_configured(kubectl: list[str]) -> bool:
+def kubectl_has_a_cluster_configured(
+    kubectl: list[str], *, timeout: float = 10
+) -> bool:
     """Whether kubectl has a kubeconfig context to ask, decided without touching the network.
 
     `kubectl` is the argv prefix the seam test runs, `["kubectl"]` or `["/usr/bin/k3s",
@@ -41,12 +43,19 @@ def kubectl_has_a_cluster_configured(kubectl: list[str]) -> bool:
     spent about 15 s on its request timeout and discovery retries before it could skip (#5219).
     The same command fails for a kubeconfig the caller cannot read, the `error loading config
     file` case `no_cluster_to_ask` already treats as no cluster.
+
+    A kubectl that outlasts `timeout` also counts as no cluster, so the seam test skips rather
+    than errors: a loaded runner once took over 10 s to start kubectl, and the uncaught
+    `TimeoutExpired` turned that skip into a red test (#5243).
     """
-    done = subprocess.run(
-        [*kubectl, "config", "current-context"],
-        capture_output=True,
-        text=True,
-        timeout=10,
-        check=False,
-    )
+    try:
+        done = subprocess.run(
+            [*kubectl, "config", "current-context"],
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+            check=False,
+        )
+    except subprocess.TimeoutExpired:
+        return False
     return done.returncode == 0 and bool(done.stdout.strip())
