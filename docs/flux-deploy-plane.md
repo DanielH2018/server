@@ -872,6 +872,33 @@ gate's name.
 - **no-stub**: no file in the bundle holds an R1 stub value, `stub-<key>` for a key name of
   `secrets.yml`. The gate decodes each Secret's `data` before it searches.
 
+### The Job census
+
+A Job Flux applies runs again whenever its object comes back: after a TTL deletes it, and
+after a reset or a revert restores an older bundle. A changed spec under the same name fails
+the apply, because a Job's pod template is immutable. The census in
+`scripts/renderer/tests/_job_census.py` holds every Job in the bundle to these rules, and
+`test_renderer_job_census.py` runs it over the live bundle in CI. D5's plan has the reasons,
+under *Rules for every Job Flux applies (D5.1a3)*.
+
+- **Kind.** Each Job's `homelab/job-kind` annotation names its kind, and its directory must
+  admit that kind. `<tag>-snapshot/` admits `snapshot`, `soak/` admits `soak`, and
+  `<tag>-verify/` admits `verify` and `mutation`. No other directory holds a Job.
+- **No TTL.** No Job sets `ttlSecondsAfterFinished`. Prune deletes a Job once its name leaves
+  the bundle.
+- **Name.** Each name ends in `-<digest8>`, the first 8 hex digits of the SHA-256 of the
+  Job's `spec` as sorted-key JSON (`job_spec_digest8` in
+  `scripts/renderer/renderer_lib/bundle.py`).
+- **`backoffLimit`.** Every Job sets one: 1 for a snapshot Job, 0 for a soak or verify Job,
+  and a mutation Job's own value, with its reason beside it.
+- **Rerun safety.** A mutation Job carries `homelab/rerun-safe`, naming as `<path>::<test>`
+  the test that runs it twice and finds the second run changes nothing.
+- **Connections.** A Python script in a ConfigMap the Job mounts opens every connection
+  through `open_url` in `ansible/roles/k8s/manifests/files/flux_job_connect.py`, shipped
+  byte-identical beside it. The helper retries a refused or timed-out connect for 60
+  seconds, because kube-router can refuse a new pod until it learns its address. It never
+  retries an answer, so a flaky check fails rather than passing on its second try.
+
 ## Removing an object on purpose
 
 A render that drops a NetworkPolicy, an IngressRoute, a CronJob, a Service or an RBAC object

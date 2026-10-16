@@ -326,6 +326,19 @@ def digest(files: Mapping[str, bytes]) -> str:
     return hashed.hexdigest()
 
 
+def job_spec_digest8(job: Mapping) -> str:
+    """The first 8 hex digits of the SHA-256 of a Job's `spec`, as sorted-key compact JSON.
+
+    Every Job Flux applies ends its name in `-<this>` (D5, *Rules for every Job Flux
+    applies*). A Job's pod template is immutable, so a spec change must also change the name,
+    and the name is left out of what is hashed. The Job census in
+    `scripts/renderer/tests/test_renderer_job_census.py` checks each name against it, so the
+    first renderer kind that names a Job (D5.2a's snapshot) names it with this too.
+    """
+    text = json.dumps(job.get("spec"), sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(text.encode()).hexdigest()[:8]
+
+
 def digests(
     files: Mapping[str, bytes],
     tags: Iterable[str],
