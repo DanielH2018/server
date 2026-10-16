@@ -54,6 +54,20 @@ class ChangedSet:
     direct: frozenset[str] = frozenset()
 
 
+def suspended_tags(digests: object) -> set[str]:
+    """The tags whose object in a parsed `digests.json` reads `suspended: true` (D5.1b).
+
+    A file that is missing or malformed names none.
+    """
+    if not isinstance(digests, dict):
+        return set()
+    return {
+        name
+        for name, entry in digests.items()
+        if isinstance(entry, dict) and entry.get("suspended") is True
+    }
+
+
 def footprints(digests: object) -> dict[str, str] | None:
     """Each name's `footprint` digest in a parsed `digests.json`, or None when it is malformed.
 

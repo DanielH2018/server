@@ -543,18 +543,20 @@ def role_fields(
     - `flux_prune: false` renders `prune: false`. A plumbing tag sets it, so a render that
       drops an object leaves it serving (H1 *Plumbing tags are never pruned*);
     - `manifests_rollout_timeout` renders as `timeout`. The manifests role's own rollout
-      wait reads the same defaults key, though an include var of that name overrides it there.
+      wait reads the same defaults key, though an include var of that name overrides it there;
+    - `flux_suspend: true` renders `suspend: true` (C3 *Suspension*, D5.1b).
 
-    The fields go on the Kustomizations that apply the role's own manifests, `<tag>` and
-    `<tag>-deferred`, so a plumbing role's deferred objects are never pruned either. The
-    renderer's `-snapshot` and `-verify` kinds keep the defaults. A value must be a literal,
-    a bool for `flux_prune` and a Go duration for the timeout. A Jinja expression is a
-    problem rather than a guess, as `snapshot_claims` treats a non-literal list, and its tag
-    is left out of the mapping.
+    `prune` and `timeout` go on the Kustomizations that apply the role's own manifests, `<tag>`
+    and `<tag>-deferred`, so a plumbing role's deferred objects are never pruned either. The
+    renderer's `-snapshot` and `-verify` kinds keep the defaults. `suspend` goes on all four,
+    because a suspended role runs none of its Jobs either. A value must be a literal, a bool
+    for `flux_prune` and `flux_suspend` and a Go duration for the timeout. A Jinja expression
+    is a problem rather than a guess, as `snapshot_claims` treats a non-literal list, and its
+    tag is left out of the mapping.
 
     Returns:
-        Each tag whose defaults set a field mapped to `{"prune": False}`, `{"timeout": ...}`
-        or both; a tag that sets neither is left out.
+        Each tag whose defaults set a field mapped to the fields it sets, from
+        `{"prune": False, "timeout": ..., "suspend": True}`; a tag that sets none is left out.
     """
     found: dict[str, dict] = {}
     problems = []
@@ -573,6 +575,12 @@ def role_fields(
             continue
         if not prune:
             fields["prune"] = False
+        suspend = defaults.get("flux_suspend", False)
+        if not isinstance(suspend, bool):
+            problems.append(f"{tag}'s flux_suspend is {suspend!r}, not a literal bool")
+            continue
+        if suspend:
+            fields["suspend"] = True
         timeout = defaults.get("manifests_rollout_timeout")
         if timeout is not None:
             if not (isinstance(timeout, str) and _DURATION.fullmatch(timeout)):

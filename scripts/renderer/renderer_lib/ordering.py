@@ -11,7 +11,11 @@ Every edge is generated, never hand-written, from an `Ordering` the caller reads
   documents names, by the same flux-owned rule;
 - `<tag>-snapshot` inherits `<tag>`'s edges (C3), and `<tag>` then depends on it, so the role
   applies only after its snapshot is taken (D5.2a). `<tag>-verify` depends on the tag's last
-  Kustomization: `<tag>-deferred` when the tag renders one, `<tag>` otherwise (D5.1a1).
+  Kustomization: `<tag>-deferred` when the tag renders one, `<tag>` otherwise (D5.1a1);
+- an edge from a Kustomization that runs to one a suspended tag owns is dropped, and the
+  annotation `homelab/suspended-deps` lists it, because Flux would hold the dependent at
+  `DependencyNotReady` until the resume (D5.1b). `drop_suspended` is the one step, so a
+  shared kind that depends on every tag, such as D5.3b2's `soak`, drops them the same way.
 
 `bundle.py` adds the `cluster-vars` edge and fails the render on a cycle, because Flux would
 hold every Kustomization on it at `DependencyNotReady`. Like `bundle.py`, this module imports
@@ -43,6 +47,10 @@ TAG_KIND_SUFFIXES = (DEFERRED_SUFFIX, SNAPSHOT_SUFFIX, VERIFY_SUFFIX)
 # their role is Ansible-owned. Each becomes a real `dependsOn` in the first render after that
 # role moves to Flux (D4.2).
 ANSIBLE_OWNED_DEPS = "homelab/ansible-owned-deps"
+# Lists, comma-separated and sorted, the edges a Kustomization's `dependsOn` leaves out because
+# they name a Kustomization of a tag whose role sets `flux_suspend: true` (D5.1b). Each comes
+# back in the first render after the resume.
+SUSPENDED_DEPS = "homelab/suspended-deps"
 
 
 @dataclass(frozen=True)
@@ -53,10 +61,13 @@ class Edges:
         kept: The names its `dependsOn` lists.
         dropped: The Ansible-owned roles it waits on in the play, which `dependsOn` cannot
             name. `ANSIBLE_OWNED_DEPS` lists them.
+        suspended: The Kustomizations of suspended tags it would otherwise depend on.
+            `SUSPENDED_DEPS` lists them.
     """
 
     kept: frozenset[str] = frozenset()
     dropped: frozenset[str] = frozenset()
+    suspended: frozenset[str] = frozenset()
 
 
 @dataclass(frozen=True)
@@ -70,12 +81,16 @@ class Ordering:
         namespace_roles: Each namespace a role creates mapped to that role.
         flux_owned: The tags the inventory marks `owner: flux`, or None for the published
             tags. An edge to any other name is dropped and annotated.
+        suspended: The tags whose role sets `flux_suspend: true`, read over every flux-owned
+            role so a `--role` subset drops the same edges. An edge to any of their
+            Kustomizations is dropped and annotated (`drop_suspended`).
     """
 
     deps: Mapping[str, Iterable[str]] = field(default_factory=dict)
     applies_last: frozenset[str] = frozenset()
     namespace_roles: Mapping[str, str] = field(default_factory=dict)
     flux_owned: frozenset[str] | None = None
+    suspended: frozenset[str] = frozenset()
 
 
 NO_EDGES = Edges()
@@ -161,7 +176,38 @@ def kustomization_edges(
         if tag + VERIFY_SUFFIX in directories:
             last = tag + DEFERRED_SUFFIX if tag + DEFERRED_SUFFIX in edges else tag
             edges[tag + VERIFY_SUFFIX] = Edges(frozenset({last}))
-    return edges
+    return drop_suspended(edges, ordering.suspended)
+
+
+def drop_suspended(
+    edges: Mapping[str, Edges], suspended: Iterable[str]
+) -> dict[str, Edges]:
+    """`edges` with every edge to a Kustomization of a `suspended` tag moved to `suspended`.
+
+    A suspended Kustomization never advances its revision, so a dependent would wait on it
+    until the resume (D5.1b). A Kustomization of a suspended tag is `<tag>` or `<tag>` with a
+    per-tag suffix (`split_kind`).
+
+    Args:
+        edges: Each Kustomization mapped to its generated edges.
+        suspended: The tags whose role sets `flux_suspend: true`.
+    """
+    suspended = frozenset(suspended)
+
+    def is_suspended(name: str) -> bool:
+        return split_kind(name)[0] in suspended
+
+    result = {}
+    for name, edge in edges.items():
+        # DECIDED: an edge between two suspended Kustomizations is kept. Both wait on the
+        # resume anyway, and keeping `<tag>`'s edge on `<tag>-snapshot` means a hand resume
+        # of `<tag>` alone waits rather than applying without its snapshot (D5.2a).
+        if is_suspended(name):
+            result[name] = edge
+            continue
+        gone = frozenset(n for n in edge.kept if is_suspended(n))
+        result[name] = Edges(edge.kept - gone, edge.dropped, edge.suspended | gone)
+    return result
 
 
 def dependency_cycle(graph: Mapping[str, Iterable[str]]) -> list[str]:

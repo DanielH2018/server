@@ -194,9 +194,10 @@ Steps:
    Kubernetes force-detaches the volume from the dead node. That wait is expected. Longhorn
    then attaches the volume on daniel-box from its local replica.
 4. Verify with `probe.py targets` and `probe.py health <svc>` for each service you brought back.
-5. Once daniel-server is back, Longhorn rebuilds its replicas from daniel-box. Redeploy each
-   shed service as the shed scenario's step 3 says. The rescheduled pods stay on daniel-box
-   until their next rollout.
+5. Once daniel-server is back, Longhorn rebuilds its replicas from daniel-box. Bring back each
+   shed service by the shed scenario's step 4, below: it reads `DEPLOY_HOLD` first, resumes
+   each flux-owned service and redeploys each Ansible-owned one. The rescheduled pods stay on
+   daniel-box until their next rollout.
 
 ### Scenario: one node is down and the survivor runs short of memory
 
@@ -204,14 +205,64 @@ k3s reschedules the lost node's pods onto the survivor, which may not hold every
 The home-critical chain is pinned to `k8s_primary_node`, so it stays Pending while
 daniel-box is down, whatever this step frees.
 
+Every step below is **operator-only**. Each needs the k3s admin kubeconfig or a write to the
+`DEPLOY_HOLD` repository variable, and an agent session has neither. A flux-owned service
+needs more than a scale: Flux's drift correction restores the rendered `replicas`, and
+`./scripts/deploy.sh --tags <svc>` exits 5 for a flux-owned tag. So a flux-owned service is
+suspended before it is scaled and resumed rather than redeployed.
+
 1. Print the shed set: `uv run python scripts/diagnostics/probe.py shed-set`. It lists the
-   Deployments and StatefulSets of every service with no `tier:` in `containers_list`. Every
-   tiered service is left off it, and so is the cluster plumbing that
-   `ansible/filter_plugins/service_tier.py:NEVER_SHED` names.
-2. Scale those to zero from a host with write access, starting with the largest. Plain
-   `kubectl` on daniel-box is read-only, so use the k3s admin kubeconfig.
-3. Once the node is back, redeploy each shed service with `./scripts/deploy.sh --tags <svc>`.
-   The deploy applies the replica count its manifests declare, so it scales the service back up.
+   Deployments and StatefulSets of every service with no `tier:` in `containers_list`, each
+   with its owner. Every tiered service is left off it, and so is the cluster plumbing that
+   `ansible/filter_plugins/service_tier.py:NEVER_SHED` names. For each flux-owned service it
+   also prints the suspend and resume commands used below.
+2. If the set holds a flux-owned service, set the promotion hold first:
+   `gh variable set DEPLOY_HOLD --body <reason> -R DanielH2018/server`. Note the reason you
+   set. A hand suspend is not in `digests.json`, so when a suspended tag is in a later
+   revision's changed set, `promote`'s `verify` would wait on it until it timed out.
+    - **When GitHub cannot be reached**, skip this step and record the reason and the time in
+      a local file on daniel-box. Step 3 needs only the LAN, so it runs as written. Once the
+      WAN returns, run this step's `gh variable set` first, before any resume and before step
+      4, because a queued `promote` run can start as soon as GitHub answers.
+3. For each flux-owned service in the set, suspend its tag, then scale it to zero. Use the
+   field manager `homelab-operator`, so Flux leaves the field alone:
+
+    ```bash
+    sudo k3s kubectl -n flux-system patch kustomization <tag> --type merge \
+      --field-manager=homelab-operator -p '{"spec":{"suspend":true}}'
+    ```
+
+   A suspend frees the reconcile worker that the tag holds only when that worker's current
+   wait ends, which can take up to the tag's `timeout`. Scale each Ansible-owned service to
+   zero as it stands. Start with the largest, and use the k3s admin kubeconfig, because plain
+   `kubectl` on daniel-box is read-only.
+4. Once the node is back, and before any resume, read the hold with
+   `gh variable get DEPLOY_HOLD -R DanielH2018/server` and compare it with step 2's reason.
+   Step 2 does not stop a `promote` run that was already past `decide`, because `decide`
+   reads the hold only before it moves `prod`. If that run's `verify` failed, it wrote its
+   revision's SHA over the reason, and it may have reset `prod` to `last-good`. A reset moves
+   every tag that is not suspended to `last-good` at once, and each suspended tag applies `last-good`
+   when it resumes.
+    - **The hold names a SHA.** It records a failed revision, so do not clear it here. Work
+      it by the revert runbook's *Choosing the branch* in `docs/volume-snapshot-drills.md`,
+      and resume the shed tags after that branch's own resume step; the branch's last step
+      clears the hold. Until that runbook lands (target slice D5.2c), work the hold by
+      `docs/flux-deploy-plane.md`'s *Verification* instead, then resume as below.
+    - **The hold still reads step 2's reason.** Resume each suspended tag with the same patch
+      and `false`, rather than running `deploy.sh`:
+
+        ```bash
+        sudo k3s kubectl -n flux-system patch kustomization <tag> --type merge \
+          --field-manager=homelab-operator -p '{"spec":{"suspend":false}}'
+        ```
+
+      Flux's next reconcile restores the rendered replica count. Wait until each tag reads
+      Ready, then clear the hold with
+      `gh variable set DEPLOY_HOLD --body none -R DanielH2018/server`.
+
+   Redeploy each Ansible-owned service with `./scripts/deploy.sh --tags <svc>`, as before.
+   The deploy applies the replica count its manifests declare, so it scales the service back
+   up.
 
 ### Scenario: the laptop/machine holding your working access is dead, the lab hosts are fine
 
