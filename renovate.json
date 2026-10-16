@@ -167,6 +167,30 @@
     },
     {
       "customType": "regex",
+      "description": "The kind binary CI's `sops_manifest_type_proof` job creates its throwaway cluster with (target slice D3, PR D3.3d, issue #5173). It is pinned by version and by the sha256 of `kind-linux-amd64`, and this manager moves both in one PR, in the nfpm manager's shape: ONE matchString spans the `# renovate:` annotation, the `KIND_VERSION` line and the `KIND_SHA256` line of the step's env, so currentValue and currentDigest come from one match. The github-release-attachments datasource computes the new digest from the release's `kind-linux-amd64.sha256sum`. The node image the cluster boots is the manager below, and the `kind` packageRule puts both in one PR, because each kind release lists the node images it built. ENFORCED by scripts/tests/test_renovate_kind_pins.py.",
+      "managerFilePatterns": [
+        "/(^|/)\\.github/workflows/ci\\.yml$/"
+      ],
+      "matchStrings": [
+        "#[ \\t]*renovate:[ \\t]*datasource=github-release-attachments[ \\t]+depName=kubernetes-sigs/kind[ \\t]*\\n[ \\t]+KIND_VERSION:[ \\t]*(?<currentValue>v\\d+\\.\\d+\\.\\d+)[ \\t]*\\n[ \\t]+KIND_SHA256:[ \\t]*(?<currentDigest>[a-f0-9]{64})"
+      ],
+      "depNameTemplate": "kubernetes-sigs/kind",
+      "datasourceTemplate": "github-release-attachments"
+    },
+    {
+      "customType": "regex",
+      "description": "The kindest/node image CI's `sops_manifest_type_proof` job boots (`KIND_NODE_IMAGE`, issue #5173), pinned by tag and digest. The tag's Kubernetes minor follows `k3s_version` in roles/setup/k3s, so the proof runs on the API server the cluster runs; ansible/tests/repo/test_kind_node_image_follows_k3s.py fails a k3s minor bump that left the image behind, and the `kind` packageRule offers this pin patch and digest updates only, because a minor no k3s pin has reached yet would be red against that test. ONE matchString spans the annotation and the env line, and Renovate rewrites both the tag and the digest inside it. ENFORCED by scripts/tests/test_renovate_kind_pins.py.",
+      "managerFilePatterns": [
+        "/(^|/)\\.github/workflows/ci\\.yml$/"
+      ],
+      "matchStrings": [
+        "#[ \\t]*renovate:[ \\t]*datasource=docker[ \\t]+depName=kindest/node[ \\t]*\\n[ \\t]+KIND_NODE_IMAGE:[ \\t]*kindest/node:(?<currentValue>v\\d+\\.\\d+\\.\\d+)@(?<currentDigest>sha256:[a-f0-9]{64})"
+      ],
+      "depNameTemplate": "kindest/node",
+      "datasourceTemplate": "docker"
+    },
+    {
+      "customType": "regex",
       "description": "The pint binary scripts/validate/alert_tools.sh provisions for the validate-alert-rules hook (M2 of the target architecture). promtool and amtool follow the observability role's image pins, but pint ships no image the cluster runs, so `pint_version` in the script is its only pin. ONE matchString: the script builds the download URL and the asset name from that literal, so a bump has nothing else to rewrite. The script checks the tarball against the release's own checksums.txt, so a bump needs no checksum edit. extractVersionTemplate strips the tag's `v`, because the literal holds the bare version.",
       "managerFilePatterns": [
         "/(^|/)scripts/validate/alert_tools\\.sh$/"
@@ -466,6 +490,34 @@
         "ansible/roles/setup/homelab_builder/defaults/main.yml"
       ],
       "groupName": "{{depName}}"
+    },
+    {
+      "description": "The two kind pins of CI's `sops_manifest_type_proof` job, the binary and the kindest/node image (issue #5173), in one PR, because each kind release lists the node images it built and the proof needs a pair that boots. It sits after the `.github/workflows/**` rule, whose `{{depName}}` group would split them. Automerge is inherited: a bump edits ci.yml, which puts the proof job in scope, so the PR runs the proof on the new pair before it can merge.",
+      "matchManagers": [
+        "custom.regex"
+      ],
+      "matchFileNames": [
+        ".github/workflows/ci.yml"
+      ],
+      "matchPackageNames": [
+        "kubernetes-sigs/kind",
+        "kindest/node"
+      ],
+      "groupName": "kind (binary + node image)"
+    },
+    {
+      "description": "No major or minor update for the kindest/node image (issue #5173). Its Kubernetes minor follows `k3s_version`, which ansible/tests/repo/test_kind_node_image_follows_k3s.py holds, so a minor Renovate offered ahead of k3s would open a PR that test keeps red. A k3s minor bump fails that test instead, and the person finishing the k3s upgrade moves the image to a tag the pinned kind release lists.",
+      "matchManagers": [
+        "custom.regex"
+      ],
+      "matchPackageNames": [
+        "kindest/node"
+      ],
+      "matchUpdateTypes": [
+        "major",
+        "minor"
+      ],
+      "enabled": false
     },
     {
       "description": "The CI runner image (`runs-on: ubuntu-24.04` in every workflow). The built-in github-actions manager reads a versioned `runs-on` label through the github-runners datasource with no custom manager here; `ubuntu-latest` was the pin until #2152, and GitHub rolls that alias to a new release with no commit in this repo. NO automerge: the `language: system` prek hooks run whatever shellcheck, Go and systemd-analyze the image preinstalls, so the manual half is sweeping every hook against the new image before merging — rebase the branch onto master so it carries the `workflow_dispatch` trigger, then `gh workflow run ci.yml --ref <branch>`. Reading the image's preinstalled-software list is the weaker version of that and was all this rule asked for until 2026-09-24: a workflow-only diff matches no hook's `files` regex, so the PR's own green run never ran those hooks at all (#2366). The `renovate-prs` skill §3 carries the commands. One group for every workflow: the pins share one depName, so one PR moves all of them, and ansible/tests/repo/the workflow-runners-are-pinned row of ansible/tests/repo/test_census_rows_text.py refuses a floating label in any of them.",
