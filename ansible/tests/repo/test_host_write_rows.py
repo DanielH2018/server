@@ -1,33 +1,25 @@
-"""The host-write census refuses a flip whose role still writes a host.
+"""The host-write census refuses a flip whose role keeps its allow entry.
 
 `test_census_rows_roles.py` runs both rows of `_host_write_rows.py` over the tree with their
-red and green subjects. The row's allow map is the one part those cannot reach: an entry holds
-only while its role is Ansible-owned. This module sits beside the census rather than in it
-because that module is at the cap for a test module.
+red and green subjects. The row's allow map is the one part those cannot reach: an entry may
+exist only while its role is Ansible-owned. This module sits beside the census rather than in
+it because that module is at the cap for a test module.
 
 Run: uv run pytest ansible/tests/repo/test_host_write_rows.py
 """
 
-import dataclasses
-
-from _host_write_rows import HOST_WRITE_ALLOW, HOST_WRITES, ansible_owned_allow
-from _row_table import check
+from _host_write_rows import HOST_WRITE_ALLOW, flipped_allow_entries
 from lib.k8s_roles import k8s_entries
 
 DOCS = "ansible/roles/k8s/docs/tasks/main.yml"
 
 
-def test_an_ansible_owned_role_keeps_its_allow_entry():
-    assert DOCS in ansible_owned_allow(HOST_WRITE_ALLOW, k8s_entries())
+def test_no_flux_owned_role_keeps_a_host_write_allow_entry():
+    assert not flipped_allow_entries(HOST_WRITE_ALLOW, k8s_entries())
 
 
-def test_a_flux_owned_role_with_a_host_write_fails_the_census():
+def test_a_flip_that_keeps_its_allow_entry_is_flagged_without_a_write():
+    """The flip moved docs's write but left the entry: the entry alone is refused."""
     entries = k8s_entries()
     entries["docs"] = {**entries["docs"], "owner": "flux"}
-    flipped = dataclasses.replace(
-        HOST_WRITES, allow=ansible_owned_allow(HOST_WRITE_ALLOW, entries)
-    )
-    problems = check(flipped)
-    assert any(DOCS in p and "Ensure the built docs site" in p for p in problems), (
-        problems
-    )
+    assert flipped_allow_entries(HOST_WRITE_ALLOW, entries) == [DOCS]
