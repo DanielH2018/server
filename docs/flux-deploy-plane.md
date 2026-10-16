@@ -407,9 +407,10 @@ three checks hold it there (D5.1d):
   commit that reverts the change or resumes the tag, then the operator's clear. A clear
   without one holds again at the next `decide`. `probe.py landing` prints the cause beside
   `DEPLOY_HOLD`. No post announces the hold yet; D5.2b1 adds one.
-- **`land-wait`.** `promote.py land-wait` ends with the verdict `suspended` when one of the
-  PR's tags is suspended at the merge commit, rather than polling to `gave-up`. `land.sh`
-  prints `nothing-to-deploy` for it (`docs/landing.md`).
+- **`land-wait`.** `promote.py land-wait` leaves a tag suspended at the merge commit out of
+  the wait, and `land.sh` leaves it out of the health gate. When every tag it waits on is
+  suspended, it ends with the verdict `suspended` rather than polling to `gave-up`, and
+  `land.sh` prints `nothing-to-deploy` for it (`docs/landing.md`).
 
 - **What it renders.** `spec.suspend: true` on `<tag>` and on each of its `-deferred`,
   `-snapshot` and `-verify` Kustomizations, and `suspended: true` on the tag's object in

@@ -24,14 +24,15 @@ map to a landing's words:
 | settled | the landing goes on to the health gate | -- | -- |
 | deploy-failed | `deploy-failed` | `promote-held` | 1 |
 | gave-up | `deferred` | `promote-timeout` | 75 |
-| suspended | `nothing-to-deploy` | -- | 0 |
+| suspended | `nothing-to-deploy`, or the gate when deploy.sh deployed a tag | -- | 0 |
 
 `gave-up` keeps the closed verdict set: it prints `deferred` beside `PROMOTE_TIMEOUT_NOTE`, and
 `land_probe` reads the note and reports the landing as `gave-up`, a resume point, rather than as
 the ordinary deferral that clears on its own.
 
-`suspended` means one of the PR's tags is suspended at the merge commit, so Flux applies
-nothing for it until a PR resumes it (D5.1d).
+`suspended` means every published tag of the PR is suspended at the merge commit, so Flux
+applies nothing for them until a PR resumes them (D5.1d). A settled wait may name suspended
+tags too, when only some were. Either way the gate leaves the suspended tags out.
 """
 
 import subprocess
@@ -64,8 +65,11 @@ def published(ln: Landing) -> list[str]:
 
 
 def gated_tags(ln: Landing) -> list[str]:
-    """The tags step 6 gates: those deploy.sh deployed, then those a promotion applied."""
-    return ln.resolved_tags + published(ln)
+    """The tags step 6 gates: those deploy.sh deployed, then those a promotion applied.
+
+    A tag suspended at the merge commit is left out, as Flux applied nothing for it.
+    """
+    return ln.resolved_tags + [t for t in published(ln) if t not in ln.suspended_tags]
 
 
 # What `FluxReads.owners_at` raises when the ownership map cannot be read.
@@ -246,16 +250,25 @@ def wait_on_promotion(ln: Landing) -> None:
     )
     if result.widened:
         say(f"land-wait waited on every Kustomization: {result.widened}")
+    if result.suspended:
+        ln.suspended_tags = list(result.suspended)
+        say(
+            f"suspended at {sha[:12]}, so neither waited on nor gated: "
+            + ", ".join(result.suspended)
+        )
     if result.verdict == "settled":
         say(f"promoted: {result.detail}")
         return
     print(f"  {result.detail}")
-    # DECIDED: `suspended` ends the landing as `nothing-to-deploy`, exit 0, with no health
-    # gate. The suspend PR itself ends this way, so a failure verdict would be wrong for it.
+    # DECIDED: `suspended`, every published tag suspended, ends the landing as
+    # `nothing-to-deploy`, exit 0, unless deploy.sh deployed a tag, which the gate still
+    # grades. The suspend PR itself ends this way, so a failure verdict would be wrong for it.
     # Exit 75 would be wrong too: `land_probe` reads 75 as a resume point, and a re-run waits
     # on the same suspended tag again. A change that raced the gate onto a suspended tag
     # never ends here: land-wait leaves it to `promote.py decide`'s `suspended-changed` hold.
     if result.verdict == "suspended":
+        if ln.resolved_tags:
+            return
         ln.finish(
             Verdict.NOTHING_TO_DEPLOY,
             0,

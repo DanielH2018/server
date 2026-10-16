@@ -21,11 +21,12 @@ may promote a newer commit. The plan is docs/target-architecture/deploy/d2-first
     deploy-failed  DEPLOY_HOLD holds a value other than `none`. Cause `promote-held`.
     gave-up        LAND_WAIT_TIMEOUT_S passed, or the later deadline below. Cause
                    `promote-timeout`.
-    suspended      One of `--services` is `suspended` in M's `digests.json`, so Flux applies
-                   nothing for it until a PR resumes it (D5.1d). It ends the wait at the
-                   first poll that reads M's file, rather than polling to `gave-up`. The
-                   suspend PR itself ends this way. Cause `promote-suspended`. A tag M
-                   changed while suspended at both ends is left to `decide`'s hold.
+    suspended      Every one of `--services` is `suspended` in M's `digests.json`, so Flux
+                   applies nothing for them until a PR resumes them (D5.1d), and no `--also`
+                   name is left: the first poll that reads M's file and a `none` DEPLOY_HOLD.
+                   The suspend PR ends this way. Cause `promote-suspended`. Some suspended,
+                   the wait settles on the rest; one M changed while suspended at both ends
+                   is left to `decide`'s hold.
 - While a verification of an earlier commit P is in flight, M's `decide` waits on it rather
   than promoting, for up to IN_FLIGHT_WAIT_S. So each poll that reads `prod` differing from
   `last-good` at a strict ancestor of M moves the deadline to LAND_WAIT_TIMEOUT_S past that
@@ -64,6 +65,7 @@ from lib.exit_codes import FAILED, LAND_GAVE_UP, OK
 from lib.git import git
 
 import forge
+from renderer.renderer_lib.ordering import split_kind
 from changed_set import ROOT, ChangedSet, changed_set, suspended_changed, suspended_tags
 from artifact_retention import LAST_GOOD_TAG, PROD_TAG
 from flux_host import FluxHost
@@ -169,6 +171,7 @@ class WaitResult:
         detail: why, in one sentence.
         revision: R, the commit `homelab` applied, for `settled`.
         widened: why the set was every name, or "" when the digests decided it.
+        suspended: the PR's tags suspended at M, which the wait left out.
     """
 
     verdict: str
@@ -176,6 +179,7 @@ class WaitResult:
     detail: str = ""
     revision: str = ""
     widened: str = ""
+    suspended: tuple[str, ...] = ()
 
 
 def origin_commit(kustomization: dict) -> str | None:
@@ -297,11 +301,7 @@ class _Expected:
             self._why = f"the ancestor's {DIGESTS_FILE}: {err}"
 
     def suspended(self, services: list[str]) -> list[str]:
-        """The tags of `services` suspended at M, but not one M changed while suspended.
-
-        A change that raced the gate holds at `decide` (`suspended-changed`), so the wait
-        goes on and ends `deploy-failed` there rather than here.
-        """
+        """The tags of `services` suspended at M, less any M changed while suspended."""
         raced = suspended_changed(self._old, self._new)
         return sorted(suspended_tags(self._new) & set(services) - set(raced))
 
@@ -319,7 +319,7 @@ class _Expected:
 
 
 def _pending(
-    reads: WaitReads, merge: str, items: list[dict], expected: frozenset[str]
+    reads: WaitReads, merge: str, items: list[dict], expected: set[str] | frozenset[str]
 ) -> tuple[list[str], str]:
     """Each expected name not yet settled with why, and R, `homelab`'s commit, when none is."""
     by_name = {_name(item): item for item in items}
@@ -377,8 +377,8 @@ def land_wait(
     # The earlier commit last read in flight, and when it was first read so.
     earlier, earlier_since = "", 0.0
     expected = _Expected(reads, merge)
-    last = ""
-    widened = ""
+    last = widened = ""
+    paused, all_paused = [], False
     while True:
         try:
             items = reads.kustomizations()
@@ -386,26 +386,22 @@ def land_wait(
             items, line = None, f"the Kustomizations could not be read: {err}"
         if items is not None:
             cs = expected.changes(items)
-            widened = cs.widened
-            if paused := expected.suspended(services):
-                return WaitResult(
-                    "suspended",
-                    SUSPENDED_CAUSE,
-                    f"{', '.join(paused)} is suspended at {merge[:8]}, so Flux applies "
-                    "nothing for it until a PR removes its flux_suspend",
-                    widened=widened,
-                )
-            names = cs.names | {ROOT}
+            widened, paused = cs.widened, expected.suspended(services)
+            # Every tag the wait covers is suspended, so nothing of M is left to wait on.
+            all_paused = bool(paused) and set(paused) == set(services) and not also
+            # A suspended tag's Kustomizations never apply M, so the rest are waited on.
+            names = {n for n in cs.names if split_kind(n)[0] not in paused} | {ROOT}
             if also:
                 names |= with_dependents(also, *kustomization_graph(items))
             pending, revision = _pending(reads, merge, items, names)
-            if not pending:
+            if not pending and not all_paused:
                 annotate_promotion(reads.annotate, services, revision)
                 return WaitResult(
                     "settled",
                     detail=f"{len(names)} Kustomizations applied {revision[:8]}",
                     revision=revision,
                     widened=widened,
+                    suspended=tuple(paused),
                 )
             line = f"waiting on {', '.join(pending)}"
             if widened:
@@ -417,6 +413,15 @@ def land_wait(
         if hold and hold != "none":
             return WaitResult(
                 "deploy-failed", HOLD_CAUSE, hold_detail(hold), widened=widened
+            )
+        if all_paused:
+            return WaitResult(
+                "suspended",
+                SUSPENDED_CAUSE,
+                f"{', '.join(paused)} is suspended at {merge[:8]}, so Flux applies "
+                "nothing for it until a PR removes its flux_suspend",
+                widened=widened,
+                suspended=tuple(paused),
             )
         now = reads.clock()
         commit, note = _earlier_in_flight(reads, merge)
