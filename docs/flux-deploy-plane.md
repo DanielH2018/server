@@ -611,6 +611,12 @@ flux-owned tag, and Kubernetes rolls the pod when the value moves.
   workload when it is non-empty, and each `manifests_extra_rollouts` entry whose
   `restart_on` names `config` or `secret`. An entry with `restart_on: []`, such as Scrutiny's
   InfluxDB, is one Ansible waits on and never restarts, so it gets no annotation.
+- **Every `manifests_self_rollouts` entry is a target too** (D5.1e). pihole and observability
+  restart those workloads in their own tasks, and a flux-owned tag runs no task. Such an
+  entry admits both ConfigMaps and Secrets, whatever its `restart_on` names, because there
+  `restart_on` shapes only the Ansible release record. pihole's instance 2 gets its
+  annotation in `pihole-deferred`, which waits on `pihole`, so a shared ConfigMap edit rolls
+  instance 2 only after instance 1 is Ready.
 - **`restart_on` also narrows the inputs.** `config` admits the workload's ConfigMaps into its
   value and `secret` its Secrets, as the same list narrows Ansible's restart.
 - **The value is per workload.** It is one SHA-256 over the admitted ConfigMaps and Secrets
@@ -635,14 +641,18 @@ The stamp inserts one block of lines at the place the YAML parser marks, and kee
 byte of the file. A re-serialised document would drop the quotes around a `"${key}"` and change
 the type Flux substitutes into it.
 
-Two tests in `scripts/renderer/tests/test_renderer_restart.py` keep the annotation honest:
+Two tests keep the annotation honest:
 
-- **The outside-role reference test** fails when a flux-owned pod template names a Secret or
-  ConfigMap that its own role does not render. The annotation sees only the role's own
-  render, so such a reference would roll nothing. peanut is its named member.
-- **The self-rollouts census** fails when an `owner: flux` entry's role passes a non-empty
-  `manifests_self_rollouts`, because nothing restarts pihole's or observability's own
-  workloads under Flux until D5.1e.
+- **The outside-role reference test**, in `scripts/renderer/tests/test_renderer_restart.py`,
+  fails when a flux-owned pod template names a Secret or ConfigMap that its own role does not
+  render. The annotation sees only the role's own render, so such a reference would roll
+  nothing. peanut is its named member.
+- **The self-rollouts census**, in
+  `scripts/renderer/tests/test_renderer_self_rollout_restart.py`, renders every role that
+  passes `manifests_self_rollouts` as flux-owned. It fails on an entry whose pod template
+  names a ConfigMap or Secret and carries no `checksum/restart`. pihole and observability
+  are its named members, and pihole-2 with its annotation removed is its red fixture. flux's
+  controllers read neither kind, so they pass unstamped.
 
 ### SOPS manifests
 

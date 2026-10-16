@@ -8,6 +8,12 @@ restarts on a render change: the `manifests_rollout` workload when it is non-emp
 (`restart_targets`). An entry's `restart_on` also narrows its inputs, as it narrows Ansible's
 restart: `config` admits its ConfigMaps and `secret` its Secrets.
 
+Every `manifests_self_rollouts` entry is a target too (D5.1e): pihole and observability
+restart those workloads in their own tasks, which a flux-owned tag never runs. Such an entry
+admits both kinds whatever its `restart_on` says, because there `restart_on` describes the
+Ansible release record (observability declares `[]` on every entry), and `rolled_by_role`
+does not exempt it.
+
 A target's value is one SHA-256 over:
 
 - each ConfigMap and Secret its pod template names through `envFrom`, `env[].valueFrom` or
@@ -47,7 +53,7 @@ from lib import yaml_fast
 from lib.k8s_context import resolve_vars
 from lib.render_guard import StrictChainableUndefined
 from lib.repo_paths import K8S_ROLES
-from renderer.renderer_lib.environment import RenderError
+from renderer.renderer_lib.environment import RenderError, evaluate, renderer_env
 from renderer.renderer_lib.placeholders import Sentinels, references
 from renderer.renderer_lib.task_inputs import include_vars
 
@@ -55,6 +61,7 @@ RESTART_ANNOTATION = "checksum/restart"
 # The kinds `kubectl rollout restart` acts on, the only kinds the shared role restarts.
 WORKLOAD_KINDS = frozenset({"Deployment", "DaemonSet", "StatefulSet"})
 TARGET_KEYS = ("manifests_rollout", "manifests_extra_rollouts")
+SELF_KEY = "manifests_self_rollouts"
 # `manifests_restart_triggers_default` in the manifests role's defaults: the signals an entry
 # restarts on when it names no `restart_on`. Only `config` and `secret` move with the render;
 # `image` is a rebuilt image behind a mutable tag, which Flux sees in the render already.
@@ -75,6 +82,9 @@ def restart_targets(
     restarted by Ansible, so it is no target here (scrutiny's influxdb and collector,
     authelia's redis).
 
+    A `manifests_self_rollouts` entry admits both kinds, whatever its `restart_on` names
+    (D5.1e).
+
     Args:
         tag: The deploy tag, whose role is `roles/<tag>`.
         context: The play context the include's Jinja values resolve against.
@@ -93,28 +103,62 @@ def restart_targets(
     except (ValueError, jinja2.TemplateError) as exc:
         raise RenderError(f"{tag}: its restart targets do not resolve: {exc}") from exc
     primary = values.get("manifests_rollout", tag)
-    extra = values.get("manifests_extra_rollouts") or []
-    if isinstance(extra, str):
-        # An expression that builds the list inline, as authelia's does, renders as its
-        # text; Ansible turns such text back into the list, and so does this.
-        try:
-            extra = ast.literal_eval(extra.strip() or "[]")
-        except ValueError, SyntaxError:
-            pass
-    if not isinstance(primary, str) or not isinstance(extra, list):
-        raise RenderError(
-            f"{tag}: manifests_rollout must be a name and manifests_extra_rollouts a list"
-        )
+    extra = _entries(tag, "manifests_extra_rollouts", values)
+    if not isinstance(primary, str):
+        raise RenderError(f"{tag}: manifests_rollout must be a name")
     targets = {primary: _kinds(DEFAULT_TRIGGERS)} if primary else {}
     for entry in extra:
-        if not isinstance(entry, dict) or not entry.get("name"):
-            raise RenderError(
-                f"{tag}: a manifests_extra_rollouts entry has no name: {entry!r}"
-            )
         kinds = _kinds(entry.get("restart_on", DEFAULT_TRIGGERS))
         if kinds:
             targets[str(entry["name"])] = kinds
+    for name in self_rollouts(tag, context, roles):
+        targets[name] = frozenset(TRIGGER_KINDS.values())
     return dict(sorted(targets.items()))
+
+
+def self_rollouts(tag: str, context: Mapping, roles: Path = K8S_ROLES) -> list[str]:
+    """The workload names of `tag`'s `manifests_self_rollouts`, empty when it passes none.
+
+    Args:
+        tag: The deploy tag, whose role is `roles/<tag>`.
+        context: The play context the include's Jinja values resolve against.
+        roles: The k8s roles directory; a test passes a fixture tree.
+
+    Raises:
+        RenderError: The value does not resolve, is not a list, or an entry has no name.
+    """
+    value = include_vars(roles / tag).get(SELF_KEY)
+    if isinstance(value, str):
+        # observability builds its list with `combine`, an Ansible filter `resolve_vars`
+        # lacks, so the value is evaluated as `derived_facts` evaluates a task expression.
+        env = renderer_env(roles / tag / "templates")
+        try:
+            value = evaluate(env, value.strip(), dict(context))
+        except jinja2.TemplateError as exc:
+            raise RenderError(f"{tag}: {SELF_KEY} does not resolve: {exc}") from exc
+    return [str(e["name"]) for e in _entries(tag, SELF_KEY, {SELF_KEY: value})]
+
+
+def _entries(tag: str, key: str, values: Mapping) -> list[dict]:
+    """The `{name: ...}` entries of the list `key` in `values`, empty when it is unset.
+
+    Raises:
+        RenderError: The value is not a list, or an entry has no name.
+    """
+    entries = values.get(key) or []
+    if isinstance(entries, str):
+        # An expression that builds the list inline, as authelia's does, renders as its
+        # text; Ansible turns such text back into the list, and so does this.
+        try:
+            entries = ast.literal_eval(entries.strip() or "[]")
+        except ValueError, SyntaxError:
+            pass
+    if not isinstance(entries, list):
+        raise RenderError(f"{tag}: {key} must be a list")
+    for entry in entries:
+        if not isinstance(entry, dict) or not entry.get("name"):
+            raise RenderError(f"{tag}: a {key} entry has no name: {entry!r}")
+    return entries
 
 
 def _kinds(triggers: Iterable[str]) -> frozenset[str]:
