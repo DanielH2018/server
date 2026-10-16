@@ -68,7 +68,7 @@ from renderer.renderer_lib.environment import (
     render_file,
     renderer_env,
 )
-from renderer.renderer_lib.ordering import DEFERRED_SUFFIX, Ordering
+from renderer.renderer_lib.ordering import DEFERRED_SUFFIX, SNAPSHOT_SUFFIX, Ordering
 from renderer.renderer_lib.task_inputs import derived_facts, include_vars
 
 # Ansible loads a filter plugin by file path; a script reaches it through this insert.
@@ -112,17 +112,22 @@ class RenderedTag:
         files: Each file's name mapped to its rendered text, `kustomization.yaml` included.
         deferred: The same for `DIR/cluster/<tag>-deferred/`, empty for a role that defers
             nothing.
+        snapshot: The same for `DIR/cluster/<tag>-snapshot/`, which `snapshot.attach_snapshots`
+            adds last, for a published tag with snapshot claims (D5.2a).
     """
 
     tag: str
     files: dict[str, str]
     deferred: dict[str, str] = field(default_factory=dict)
+    snapshot: dict[str, str] = field(default_factory=dict)
 
     def directories(self) -> dict[str, dict[str, str]]:
         """Each directory name under `DIR/cluster/` mapped to the files it holds."""
         dirs = {self.tag: self.files}
         if self.deferred:
             dirs[self.tag + DEFERRED_SUFFIX] = self.deferred
+        if self.snapshot:
+            dirs[self.tag + SNAPSHOT_SUFFIX] = self.snapshot
         return dirs
 
 

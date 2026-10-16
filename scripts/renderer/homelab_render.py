@@ -29,6 +29,7 @@ deploy tag's (C3 *Reserved names*).
 A published tag whose role lists `render_sops_manifests` gets a byte copy of each SOPS manifest
 under `ansible/vars/cluster-manifests/` in `DIR/cluster/<tag>/`, and `decryption` on its
 Kustomization (D3.3c); a manifest without the substitute-disabled annotation fails the render.
+One with snapshot claims gets its snapshot Job in `DIR/cluster/<tag>-snapshot/` (`snapshot.py`).
 In both modes, every flux-owned tag's restart targets get `checksum/restart`, hashed from the
 placeholder-form documents and `ansible/vars/cluster-vars.source`
 (`renderer_lib/restart.py`), and its claims and Namespaces the prune label (`prune_label.py`).
@@ -98,6 +99,7 @@ from renderer.renderer_lib.cluster import (
     write_cluster,
 )
 from renderer.renderer_lib.prune_label import label_tags
+from renderer.renderer_lib.snapshot import attach_snapshots
 from renderer.renderer_lib.restart import restart_targets, restart_values, stamp
 from renderer.renderer_lib.restart import source_digests
 from secrets_mgmt.cluster_vars_check import ManifestEntry
@@ -372,6 +374,7 @@ def _placeholder_cluster(
             label_tags(tags, owned), result.sops_manifests, published, manifests_dir
         )
         tags = attach_vendored(tags, result.key_sets, vendored)
+        tags = attach_snapshots(tags, published, rollout_timeout_default(), vendored)
         bundle = (
             _bundle(tags, result, out, published, cluster_file, ordering(owned))
             if published

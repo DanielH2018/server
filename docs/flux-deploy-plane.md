@@ -727,7 +727,9 @@ order, each applying its own `./cluster/<tag><suffix>`. `<tag>-snapshot` inherit
 edges, and `<tag>` then depends on `<tag>-snapshot`, so the role applies only after its
 snapshot is taken. `<tag>-verify` depends on the tag's last Kustomization: `<tag>-deferred` when the
 tag has one, `<tag>` otherwise. A `K8S_APPLIES_LAST` tag waits on no other tag's
-`-snapshot` or `-verify`. No role renders either kind yet.
+`-snapshot` or `-verify`. A published tag whose role declares `k8s_autodeploy_snapshot_pvcs`
+renders `<tag>-snapshot` (*The snapshot Job* below). No published role declares one yet, and
+no role renders `<tag>-verify`.
 
 ### Which Kustomizations substitute
 
@@ -1048,6 +1050,40 @@ under *Rules for every Job Flux applies (D5.1a3)*.
   nor `urllib` as a value, and reads no double-underscore name such as `__globals__`. The helper retries a refused or timed-out connect for 60
   seconds, because kube-router can refuse a new pod until it learns its address. It never
   retries an answer, so a flaky check fails rather than passing on its second try.
+
+### The snapshot Job
+
+A flux-owned role that declares `k8s_autodeploy_snapshot_pvcs` gets the Kustomization
+`<tag>-snapshot`, which `<tag>` depends on. It holds one Job, `snapshot-<tag>-<spec digest8>`,
+in `flux-system`, which runs `ansible/roles/k8s/manifests/files/flux_snapshot.py`
+(`scripts/renderer/renderer_lib/snapshot.py` renders it). The Job's spec carries the role's
+`digest8`, the first 8 hex digits of the tag's `own` digest in `digests.json`, so every change
+to `cluster/<tag>/` renames the Job and Flux runs it again before the change applies.
+
+- **The snapshot name** is `autodeploy-<tag>-<digest8>-<claim>-<token>`, the shape
+  `volume-snapshot` writes. `<claim>` drops a leading `<tag>-`, and `<token>` is the UTC time
+  the Job's pod starts. `volume-revert` reads these snapshots with
+  `volume_revert_sha=<digest8>`. The render fails when the longest name could pass 63 bytes,
+  and the Job checks again before it creates anything.
+- **The checks.** The Job resolves every claim and reads its snapshot-space cap before it
+  creates any snapshot. A cap fails the Job only when the volume's numbers say it is full; an
+  empty or `"0"` cap, or a failed read, counts as uncapped. Then, per claim, it creates the
+  snapshot, waits up to `volume_snapshot_timeout` for `readyToUse`, checks the listing holds
+  the snapshot it created, and prunes the claim's `autodeploy-<tag>-` snapshots to
+  `volume_snapshot_retain`, floor 2. A `markRemoved` CR never counts toward the window.
+- **An existing CR of the same name fails the Job.** The Job never adopts it, because it is
+  another run's recovery point or a `markRemoved` one. The one retry (`backoffLimit: 1`)
+  starts at least a second later, so it takes another token.
+- **A new claim is skipped.** A PVC absent live and absent from `<tag>`'s `status.inventory`
+  is new in this revision: `<tag>` has never applied it, so it holds no data. The Job logs
+  the skip with the claim's name and passes, and `<tag>` then creates the claim. On a tag's
+  first apply `<tag>` has no inventory, so every absent claim is new. A PVC the inventory
+  lists and the cluster lacks fails the Job, naming the PVC, because a claim that held data
+  is gone.
+- **RBAC.** The ServiceAccount `snapshot-<tag>` may create, list and delete Snapshots and read
+  Volumes in `longhorn-system`, and read the `<tag>` Kustomization. A ClusterRole lets it read
+  the claims' PVCs by name and every PV. The PVC grant is cluster-wide because a Role in a
+  namespace `<tag>` creates would fail the snapshot's apply on the tag's first revision.
 
 ## Removing an object on purpose
 

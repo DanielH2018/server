@@ -39,8 +39,10 @@ deferred pair below.
   each entry from `ansible/templates/claim-default.yaml.j2` to `claim-<name>.yaml` in the role's
   directory, inside the prune keep-set, the digest and the dry run. A role that snapshots applies
   them before the snapshot; any other gets them from the directory apply, after its
-  `00-namespace.yaml`. This role declares no default for it, because its own default would
-  outrank the caller's (#3387).
+  `00-namespace.yaml`. Under Flux the order reverses: `<tag>` applies the claims after the
+  `<tag>-snapshot` Job, so that Job skips a new claim of a snapshot role, one absent live and
+  from `<tag>`'s inventory, and `<tag>` then creates it. This role declares no default for it,
+  because its own default would outrank the caller's (#3387).
 
 - **Templates stay in the caller's role**, and `src` is anchored to `playbook_dir`: a relative
   `src`, or a `{{ role_path }}` passed through `vars:`, resolves against this role.
