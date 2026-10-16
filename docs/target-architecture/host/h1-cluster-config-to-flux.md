@@ -2659,7 +2659,8 @@ subject's tests.
       contracts.md applied that in its X2-01 entry, so H1 needs no row for it. The DR hold
       `dr-restore` of the bring-up order is such a non-empty value.
     - **Applied on 2026-10-16** for the hold, and the gate before H1.1b merges is clear. The
-      excused failures stay listed, gated before H1.1i merges.
+      excused failures were applied the same day, after H1.1b merged, so the gate before H1.1i
+      merges is clear too.
 4. **Where the service list lives.** C4 says H1 removes `containers_list` from the inventory
    once every entry is `owner: flux`, but the Pi's entries never become `owner: flux`.
    *Resolution:*
