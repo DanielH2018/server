@@ -25,8 +25,12 @@ Job and its directory:
 - `helper`: no Python script in a ConfigMap the Job mounts opens a connection except through
   `flux_job_connect.py`, which must sit beside it as a byte-identical copy. A script imports
   only the modules in `ALLOWED_IMPORTS`, none of which opens a connection, and uses no name
-  in `FORBIDDEN`. The row guards against a mistake, not an adversary: a name spelled out at
-  run time passes it.
+  in `FORBIDDEN`. It reads from `flux_job_connect` only the names in the helper's `__all__`,
+  and reaches `urllib` only through a submodule `ALLOWED_IMPORTS` holds, so it cannot walk
+  through an allowed module to `urllib.request`. It uses neither module as a value and reads
+  no dunder, as an attribute or a string, so `getattr`, `vars` and `__globals__` cannot
+  reach around those two rules. The row guards against a mistake, not an
+  adversary: a name spelled out at run time passes it.
 
 The test module is `test_renderer_job_census.py`.
 """
@@ -63,6 +67,15 @@ HELPER = REPO / "ansible/roles/k8s/manifests/files/flux_job_connect.py"
 # `urlretrieve`, `asyncio.open_connection`, `ftplib` and `importlib` in review. No module
 # here opens a connection; a script builds its `Request` from `flux_job_connect`, so
 # `urllib.request` is not here either. A module joins this list only if it cannot connect.
+#
+# The census catches a Job script that opens a connection without `flux_job_connect.open_url`
+# by accident, which is the shape an author writes when they forget the helper. It does not
+# stop a script built to dodge it through runtime indirection, such as `getattr`, `vars()` or
+# `globals()` subscripted with a string like `'urllib'`, or a frame's globals. The helper
+# exists so that a brand-new pod's first connection retries for 60 seconds while kube-router
+# learns the pod's address (`docs/target-architecture/deploy/d5-bulk-move.md`, "Rules for
+# every Job Flux applies (D5.1a3)", "A first connection retries"). That is a reliability
+# rule, so a deliberate bypass is outside it.
 ALLOWED_IMPORTS = frozenset(
     {
         "flux_job_connect",
@@ -92,9 +105,10 @@ ALLOWED_IMPORTS = frozenset(
         "urllib.parse",
     }
 )
-# Names a script never uses, as a name, an attribute or a string: a connection reached
-# through an allowed module (`flux_job_connect.urllib.request.urlopen`), a process that could
-# run `curl` (`os.system`), and code built at run time, which the census cannot read.
+# Names a script never uses, as a name, an attribute or a string: a connecting call reached
+# through an allowed module's re-exports, any module looked up by name
+# (`sys.modules['socket']`), a process that could run `curl` (`os.system`), and code built at
+# run time, which the census cannot read.
 FORBIDDEN = frozenset(
     {
         "urlopen",
@@ -130,8 +144,25 @@ FORBIDDEN = frozenset(
         "__import__",
         "exec",
         "eval",
+        "modules",
+        "AbstractHTTPHandler",
+        "HTTPHandler",
+        "HTTPSHandler",
+        "_getframe",
+        "f_globals",
+        "tb_frame",
     }
 )
+# Packages `ALLOWED_IMPORTS` admits only through a submodule: `urllib`, for `urllib.error`
+# and `urllib.parse`. `import urllib.error` binds `urllib`, whose `request` attribute
+# connects once anything has imported it, and `urllib.error.urllib` is that same package.
+SUBMODULE_ONLY = (
+    frozenset(name.split(".")[0] for name in ALLOWED_IMPORTS if "." in name)
+    - ALLOWED_IMPORTS
+)
+# A dunder name, which a script never reads as an attribute or a string: `__main__` aside,
+# each one reaches past the names the rules here check.
+DUNDER = re.compile(r"__\w+__")
 PYTHONS = frozenset({"python", "python3"})
 IMPORTS_HELPER = re.compile(r"^\s*(?:from|import)\s+flux_job_connect\b", re.MULTILINE)
 
@@ -304,12 +335,35 @@ def delivery_offence(job: Mapping, directory: str, docs: list[dict]) -> list[str
     return offences
 
 
+def _helper_exports() -> frozenset[str]:
+    """The names in `flux_job_connect`'s `__all__`, the only ones a script may read from it."""
+    for node in ast.parse(HELPER.read_text()).body:
+        if isinstance(node, ast.Assign) and any(
+            isinstance(t, ast.Name) and t.id == "__all__" for t in node.targets
+        ):
+            return frozenset(ast.literal_eval(node.value))
+    raise AssertionError(f"{HELPER} declares no __all__")
+
+
 def script_offence(name: str, text: str) -> list[str]:
     """Each way the Python `text` of the script `name` could connect without the helper."""
     try:
         tree = ast.parse(text)
     except SyntaxError as err:
         return [f"{name} does not parse ({err.msg}), so the census cannot read it"]
+    exports = _helper_exports()
+    # The local names `import flux_job_connect [as f]` binds to the helper module.
+    helpers = {
+        a.asname or a.name
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Import)
+        for a in node.names
+        if a.name == "flux_job_connect"
+    }
+    # Each `Name` node that is the object of an attribute read, `f` in `f.open_url`.
+    read_from = {
+        id(node.value) for node in ast.walk(tree) if isinstance(node, ast.Attribute)
+    }
     found = set()
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
@@ -320,11 +374,53 @@ def script_offence(name: str, text: str) -> list[str]:
             if node.level or node.module not in ALLOWED_IMPORTS:
                 found.add(f"from {'.' * node.level}{node.module or ''} import")
             found |= {a.name for a in node.names if a.name in FORBIDDEN}
-        elif isinstance(node, ast.Name) and node.id in FORBIDDEN:
-            found.add(node.id)
-        elif isinstance(node, ast.Attribute) and node.attr in FORBIDDEN:
-            found.add(node.attr)
-        elif isinstance(node, ast.Constant) and node.value in FORBIDDEN:
+            if node.module == "flux_job_connect":
+                found |= {
+                    f"flux_job_connect.{a.name}"
+                    for a in node.names
+                    if a.name not in exports
+                }
+        elif isinstance(node, ast.Name):
+            if node.id in FORBIDDEN:
+                found.add(node.id)
+            # The helper module and `urllib` are read only as `f.<export>` and
+            # `urllib.<submodule>`. Bound to another name or passed to `getattr` or `vars`,
+            # either one reaches what the attribute checks below refuse.
+            if (node.id in helpers or node.id in SUBMODULE_ONLY) and id(
+                node
+            ) not in read_from:
+                found.add(f"{node.id} as a value")
+        elif isinstance(node, ast.Attribute):
+            if node.attr in FORBIDDEN:
+                found.add(node.attr)
+            # A dunder reaches a function's or a module's namespace: `open_url.__globals__`
+            # holds every module the helper imports.
+            if DUNDER.fullmatch(node.attr):
+                found.add(f".{node.attr}")
+            if node.attr in SUBMODULE_ONLY:
+                found.add(f".{node.attr}")
+            # `socket` is read as a name only when imported, which `ALLOWED_IMPORTS` refuses.
+            # As an attribute it is a module reached through some object, such as
+            # `x.request.socket`. The string `'socket'` stays allowed.
+            if node.attr == "socket":
+                found.add(".socket")
+            if isinstance(node.value, ast.Name):
+                root = node.value.id
+                if root in helpers and node.attr not in exports:
+                    found.add(f"{root}.{node.attr}")
+                if (
+                    root in SUBMODULE_ONLY
+                    and f"{root}.{node.attr}" not in ALLOWED_IMPORTS
+                ):
+                    found.add(f"{root}.{node.attr}")
+        elif isinstance(node, ast.Constant) and (
+            node.value in FORBIDDEN
+            or (
+                isinstance(node.value, str)
+                and DUNDER.fullmatch(node.value)
+                and node.value != "__main__"
+            )
+        ):
             found.add(repr(node.value))
     return [
         f"{name} uses {use}; import only ALLOWED_IMPORTS and connect with "

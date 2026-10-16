@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/service_catalog.py
-generated_at: 2026-10-16 06:17 UTC
-generated_sha: 013e72b76
+generated_at: 2026-10-16 18:17 UTC
+generated_sha: 505a5a832
 ---
 
 !!! warning "Generated file — do not edit"
@@ -73,7 +73,7 @@ generated_sha: 013e72b76
 | speedtest | k8s | <span class="fqdn" data-host="speedtest">speedtest.&lt;domain&gt;</span> · <span class="fqdn" data-host="speedtest.local">speedtest.local.&lt;domain&gt;</span> | Authelia one_factor | no backup (StorageClass longhorn-nobackup) | eligible |
 | tdarr | k8s | <span class="fqdn" data-host="tdarr">tdarr.&lt;domain&gt;</span> · <span class="fqdn" data-host="tdarr.local">tdarr.local.&lt;domain&gt;</span> | Authelia one_factor | weekly -> B2 (default target); not Longhorn (media-local) | denylisted (state coupled outside the volume — rewrites media-data (shared RWX, not reverted) in place, an irreversible transcode the snapshot/revert can't undo; ALSO non-atomic two-claim revert (tdarr-configs, tdarr-server)) |
 | terraria | k8s | no route (infra role) | unknown (use_authelia not declared on this entry) | weekly -> B2 (default target) | denylisted (two reasons: (1) probe-less — no readinessProbe; (2) migrating state — Recreate + RWO PVC holding irreplaceable worlds) |
-| texbrain | k8s | <span class="fqdn" data-host="texbrain">texbrain.&lt;domain&gt;</span> · <span class="fqdn" data-host="texbrain.local">texbrain.local.&lt;domain&gt;</span> | Authelia one_factor | no PVC (stateless) | eligible |
+| texbrain | k8s | <span class="fqdn" data-host="texbrain">texbrain.&lt;domain&gt;</span> · <span class="fqdn" data-host="texbrain.local">texbrain.local.&lt;domain&gt;</span> | Authelia one_factor | no PVC (stateless) | n/a: applied by Flux, through `promote` (`owner: flux`); `deploy.sh` refuses its tag with exit 5 |
 | traefik | k8s | no route (infra role) | unknown (use_authelia not declared on this entry) | daily -> R2 | denylisted (platform — ingress edge; a failed deploy removes the ability to reach or fix anything else, and host probes stay green through that kind of outage. COUPLING NOTE for a future promotion: the traefik-acme PVC holds the ACME account key and issued certs; reverting past a real rotation reinstates stale cert state) |
 | uptime-kuma | k8s | <span class="fqdn" data-host="uptime-kuma">uptime-kuma.&lt;domain&gt;</span> · <span class="fqdn" data-host="uptime-kuma.local">uptime-kuma.local.&lt;domain&gt;</span> | Authelia one_factor | no backup (listed in k3s_longhorn_nobackup_volumes) | denylisted (observability — the alerting spine; a broken deploy cannot page about being broken. ALSO Recreate + RWO PVC (migrating-state shape) — two independent reasons. COUPLING NOTE for a future promotion: two PVCs (uptime-kuma-data, autokuma-data) that must revert together; a partial revert desyncs AutoKuma's entity-ID map from Kuma's DB, the same shape as the recorded KD5 migration finding) |
 | valheim | k8s | no route (infra role) | unknown (use_authelia not declared on this entry) | weekly -> B2 (default target); no backup (StorageClass longhorn-nobackup) | denylisted (two reasons: (1) probe-less — no readinessProbe at all; (2) migrating state — Recreate + RWO PVC holding worlds) |
