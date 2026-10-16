@@ -16,6 +16,7 @@ from renderer import homelab_render
 from renderer.renderer_lib.bundle import CLUSTER_VARS_FILE
 from renderer.renderer_lib.cluster import RenderedTag
 from renderer.renderer_lib.environment import RenderError
+from renderer.shadow_diff import stub_file_text
 from renderer.renderer_lib.prune_label import (
     EXEMPT_KINDS,
     PRUNE_DISABLED,
@@ -100,15 +101,20 @@ def test_only_a_flux_owned_tags_directories_are_labelled():
     assert b == other
 
 
+@pytest.mark.parametrize("mode", ["placeholder", "stub"])
 def test_every_claim_and_namespace_of_a_live_flux_owned_render_carries_the_label(
-    tmp_path,
+    tmp_path, mode
 ):
     cluster_file = tmp_path / CLUSTER_VARS_FILE
     cluster_file.write_text(DOTENV)
+    stubs = None
+    if mode == "stub":
+        stubs = tmp_path / "stubs.yml"
+        stubs.write_text(stub_file_text())
     tags = ["observability", "sonarr"]
     out = tmp_path / "out"
     code = homelab_render.cluster(
-        out, tags, None, flux_owned=lambda: set(tags), cluster_file=cluster_file
+        out, tags, stubs, flux_owned=lambda: set(tags), cluster_file=cluster_file
     )
     assert code == RENDER_OK
     exempt = {}
