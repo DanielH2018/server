@@ -173,10 +173,6 @@ containers_list:
     port: 8080
     use_authelia: true
     auth_tier: one_factor
-    # D4's drill edge, not a runtime need: texbrain never calls bento-pdf. It gives D4.7 a
-    # flux-owned dependent to hold back, and D4.8 removes it again
-    # (docs/target-architecture/deploy/d4-ordering.md, D4.6 to D4.8).
-    depends_on: [bento-pdf]
   # Read-only cluster UI. use_authelia is load-bearing rather than decorative: the pod runs
   # with -unsafe-use-service-account-token, so this Middleware is the only thing between a
   # browser and the dashboard's (read-only) cluster identity.
