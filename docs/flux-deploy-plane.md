@@ -475,8 +475,10 @@ The bundle holds:
   `homelab` applies it.
 - `digests.json`, described below.
 
-A published tag that defers files is refused, because no Kustomization applies
-`<tag>-deferred` until D4.2 adds it.
+A published tag that defers files also gets the Kustomization `<tag>-deferred`, the second
+document of `flux/<tag>.yaml`. It applies `./cluster/<tag>-deferred` with the tag's fields
+and depends on `<tag>`. The publish census still refuses a second document in a tag's file,
+so no tag that defers files can publish until D4.3 adds the per-file rule.
 
 ### Which Kustomizations substitute
 
@@ -496,14 +498,47 @@ escaping*).
   reaches the cluster as written, with no escape. A route alone does not make a directory substitute,
   because `domain` is published and renders as a literal.
 - **`cluster-vars` never substitutes.** Its directory holds no rendered template.
-- **`<tag>` and `<tag>-deferred` decide separately** once D4.2 adds the second
-  Kustomization. The footprint rule still counts per tag, so a cluster-file edit moves the
+- **`<tag>` and `<tag>-deferred` decide separately.** A placeholder in `cluster/<tag>/`
+  alone gives `<tag>` both fields and `<tag>-deferred` neither, and the reverse split the
+  reverse. The footprint rule still counts per tag, so a cluster-file edit moves the
   footprint of a tag whose either directory substitutes.
 - **The projection is `spec.postBuild`.** A reader that sees only the written bundle reads
   that field: the publish gate *source* below, and `promote.py verify`'s timeout.
 
 `scripts/renderer/tests/test_renderer_bundle.py` holds the predicate: a fixture with a
 placeholder gets both fields, one without gets neither and keeps `${HOME}` as written.
+
+### Ordering: `dependsOn`
+
+The renderer generates every `dependsOn` from the play's own dependency map, and no template
+writes one. The `no-template-hand-writes-depends-on` row of
+`ansible/tests/repo/test_census_rows_text.py` fails a template that does.
+`scripts/renderer/renderer_lib/cluster.py:bundle_ordering` builds the map with `build_k8s_dep_map` over the full k8s
+`containers_list` and reads ownership from the inventory, so a `--role` render gives a tag
+the same toposort edges as a full one. The `<tag>-deferred` edges come from the tags the
+render publishes, and the publish job renders every published tag. The edges are:
+
+- **A tag's toposort edges, kept when flux-owned.** `<tag>` depends on each member of its
+  `build_k8s_dep_map` edges that the inventory marks `owner: flux`. Any other edge is
+  dropped, because a `dependsOn` naming a missing Kustomization fails every reconcile.
+- **The dropped edges stay visible.** The annotation `homelab/ansible-owned-deps` lists them,
+  comma-separated and sorted. Each becomes a real `dependsOn` in the first render after its
+  role moves to Flux. bento-pdf carries `authelia,traefik`.
+- **A `K8S_APPLIES_LAST` tag waits on the deferred applies.** It also depends on every other
+  tag's `<tag>-deferred`, never its own, which depends on it.
+- **`<tag>-deferred` depends on `<tag>`.** It also depends on the role that creates a
+  namespace one of its documents names, by the same flux-owned rule.
+  `NAMESPACE_ROLE_VARS` in the same file maps `k8s_observability_namespace` to
+  `observability`, so `headlamp-deferred` and `netpol-baseline-deferred` wait on
+  `observability` once it is flux-owned and annotate it until then.
+- **`cluster-vars`**, for a substituting directory, as above.
+
+`dependsOn` lists the names in sorted order. A cycle among the edges refuses the render, since
+Flux would hold every Kustomization on it at `DependencyNotReady`. An edge governs from the
+revision after the one that adds it, so a PR that adds an edge does not also change the
+dependent's render. The plan is `docs/target-architecture/deploy/d4-ordering.md`, and
+`scripts/renderer/renderer_lib/ordering.py` derives the edges, and
+`scripts/renderer/tests/test_renderer_bundle_ordering.py` holds the rules.
 
 ### Restart triggers: `checksum/restart`
 
@@ -630,8 +665,9 @@ census fails a bundle that lacks either. Each member needs a footprint rule in
 - `promote.py verify` expects `flux/cluster-vars` like a tag's status whenever the kind's
   footprint moves, its first promotion included.
 
-Every `cluster` render refuses a deploy tag named `homelab`, the root's name, or after a
-`SHARED_KINDS` member. D4.2 adds the `-deferred` suffix to that check.
+Every `cluster` render refuses a deploy tag named `homelab`, the root's name, after a
+`SHARED_KINDS` member, or ending in `-deferred`. The suffix keeps a tag's Kustomization from
+colliding with another tag's deferred one.
 
 ### `digests.json`
 

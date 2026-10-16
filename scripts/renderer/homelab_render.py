@@ -83,10 +83,12 @@ from renderer.renderer_lib.bundle import (
     sops_manifest_problem,
     write_bundle,
 )
+from renderer.renderer_lib.ordering import NO_ORDERING, Ordering
 from renderer.renderer_lib.cluster import (
     RenderedTag,
     RenderError,
     RenderRefused,
+    bundle_ordering,
     flux_owned_tags,
     render_tag,
     rollout_timeout_default,
@@ -145,6 +147,7 @@ def cluster(
     shared_only: bool = False,
     source_file: Path = SOURCE_FILE,
     manifests_dir: Path = MANIFESTS_DIR,
+    ordering: Callable[[set[str]], Ordering] = bundle_ordering,
 ) -> int:
     """Render `roles`, or every renderable tag, into `out`; return the exit code.
 
@@ -163,6 +166,8 @@ def cluster(
             passes a fixture.
         manifests_dir: The SOPS manifests a published tag's directory copies; a test passes
             a fixture directory.
+        ordering: Returns what `dependsOn` is generated from, given the flux-owned tags; a
+            test passes a fixture map.
     """
     if shared_only:
         return _shared_cluster(out, cluster_file)
@@ -179,6 +184,7 @@ def cluster(
         cluster_file,
         source_file,
         manifests_dir,
+        ordering,
     )
 
 
@@ -338,6 +344,7 @@ def _placeholder_cluster(
     cluster_file: Path,
     source_file: Path,
     manifests_dir: Path,
+    ordering: Callable[[set[str]], Ordering],
 ) -> int:
     try:
         tags = select_tags(roles, kinds=kinds)
@@ -365,7 +372,9 @@ def _placeholder_cluster(
             tags, result.sops_manifests, published, manifests_dir
         )
         bundle = (
-            _bundle(tags, result, out, published, cluster_file) if published else {}
+            _bundle(tags, result, out, published, cluster_file, ordering(owned))
+            if published
+            else {}
         )
         written = write_cluster(tags, out)
         written += write_bundle(bundle, out)
@@ -392,6 +401,7 @@ def _bundle(
     out: Path,
     published: list[str],
     cluster_file: Path,
+    ordering: Ordering,
 ) -> dict[str, str]:
     """The bundle files publishing the tags `published` of `tags` and every shared kind.
 
@@ -402,15 +412,14 @@ def _bundle(
 
     Raises:
         RenderRefused: `out` already holds a bundle file, the cluster file cannot be read,
-            or a published tag renders a `-deferred` directory, which no Kustomization
-            applies before D4.2.
+            or the generated `dependsOn` edges form a cycle.
     """
     directories = {
         name: files for tag in tags for name, files in tag.directories().items()
     }
     decrypting = [tag for tag in published if result.sops_manifests.get(tag)]
     return _shared_bundle(
-        out, directories, result.key_sets, published, cluster_file, decrypting
+        out, directories, result.key_sets, published, cluster_file, decrypting, ordering
     )
 
 
@@ -421,6 +430,7 @@ def _shared_bundle(
     published: list[str],
     cluster_file: Path,
     decrypting: list[str] | None = None,
+    ordering: Ordering = NO_ORDERING,
 ) -> dict[str, str]:
     """`bundle_files` for `published`, once `out` holds no bundle file to overwrite.
 
@@ -453,6 +463,7 @@ def _shared_bundle(
             rollout_timeout_default(),
             dotenv,
             decrypting or [],
+            ordering,
         )
     except ValueError as exc:
         raise RenderRefused(str(exc)) from exc

@@ -46,7 +46,7 @@ from lib.k8s_roles import (
 )
 from lib.k8s_context import resolve_vars
 from lib.render_guard import SHARED_TPL, StrictChainableUndefined
-from lib.repo_paths import HOST_VARS, K8S_ROLES
+from lib.repo_paths import ANSIBLE, FILTER_PLUGINS, HOST_VARS, K8S_ROLES
 from renderer.renderer_lib.bundle import (
     DEFERRED_SUFFIX,
     KUSTOMIZATION,
@@ -61,10 +61,21 @@ from renderer.renderer_lib.environment import (
     render_file,
     renderer_env,
 )
+from renderer.renderer_lib.ordering import Ordering
 from renderer.renderer_lib.task_inputs import derived_facts, include_vars
+
+# Ansible loads a filter plugin by file path; a script reaches it through this insert.
+if str(FILTER_PLUGINS) not in _sys.path:
+    _sys.path.insert(0, str(FILTER_PLUGINS))
+
+from toposort import K8S_APPLIES_LAST, build_k8s_dep_map, filter_by_platform
 
 LABEL_WRAPPER = SHARED_TPL / "role-labelled.yaml.j2"
 MANIFESTS_DEFAULTS = K8S_ROLES / "manifests" / "defaults" / "main.yml"
+GROUP_VARS = ANSIBLE / "inventory" / "group_vars" / "all.yml"
+# Each group variable naming a namespace that a role creates, mapped to that role. A deferred
+# document in that namespace gives `<tag>-deferred` an edge to the role (D4.2).
+NAMESPACE_ROLE_VARS = {"k8s_observability_namespace": "observability"}
 # The include vars that decide what the manifests role renders and where.
 INCLUDE_KEYS = frozenset(
     {
@@ -117,8 +128,8 @@ def select_tags(
 
     Raises:
         RenderRefused: A requested tag is not one of `host`'s render targets, or a tag to
-            render takes a reserved name: the root Kustomization's, `homelab`, or a member
-            of `kinds` (C3 *Reserved names*).
+            render takes a reserved name: the root Kustomization's, `homelab`, a member of
+            `kinds`, or any name ending in `-deferred` (C3 *Reserved names*, D4.2).
     """
     targets = set(render_targets(host, host_vars))
     tags = sorted(set(requested or targets))
@@ -126,7 +137,8 @@ def select_tags(
     if reserved:
         raise RenderRefused(
             f"{reserved} take a name the bundle reserves for a Kustomization that is no "
-            "deploy tag's: the root homelab or a SHARED_KINDS member"
+            "deploy tag's: the root homelab, a SHARED_KINDS member, or a name ending in "
+            f"{DEFERRED_SUFFIX}, which a tag's deferred apply takes"
         )
     unknown = sorted(set(tags) - targets)
     if unknown:
@@ -144,6 +156,30 @@ def flux_owned_tags(host: str = K8S_HOST, host_vars: Path = HOST_VARS) -> set[st
     if not path.exists():
         return set()
     return {tag for tag, owner in tag_owners(path).items() if owner == "flux"}
+
+
+def bundle_ordering(
+    owned: set[str],
+    host: str = K8S_HOST,
+    host_vars: Path = HOST_VARS,
+    group_vars: Path = GROUP_VARS,
+) -> Ordering:
+    """What the bundle generates `dependsOn` from: the play's own dependency map (D4.2).
+
+    The map is `build_k8s_dep_map` over the full k8s `containers_list`, as `deploy.yml`
+    builds it, never a `--role` subset, so a tag's edges do not depend on what else renders.
+    """
+    entries = yaml_fast.safe_load((host_vars / f"{host}.yml").read_text())
+    k8s = filter_by_platform(entries.get("containers_list") or [], "k8s")
+    group = yaml_fast.safe_load(group_vars.read_text())
+    return Ordering(
+        deps=build_k8s_dep_map(k8s, str(ANSIBLE)),
+        applies_last=frozenset(K8S_APPLIES_LAST),
+        namespace_roles={
+            str(group[var]): role for var, role in NAMESPACE_ROLE_VARS.items()
+        },
+        flux_owned=frozenset(owned),
+    )
 
 
 def rollout_timeout_default() -> str:

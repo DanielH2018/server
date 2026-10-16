@@ -27,6 +27,11 @@ signature from `83B57416B342DDE1CBA0752D435D139ADFD6F016`. `homelab_repo_publish
 names `homelab-updater` at `9b063197a50a`. With the operator's `/etc/homelab-builder/hold` in
 place, the builder's next run wrote `reason="hold"` at 21:53:13, and the signer it triggered
 exited 0 and left `InRelease`'s `Date` at 21:51:16.
+PR H3.5c, page on the builder, in the row form: [#5159](https://github.com/DanielH2018/server/pull/5159).
+M6's A1 shadow PR had not merged. The operator generated
+`monitor_bridge_host_packages_push_token`. The landing deployed monitor-bridge and
+uptime-kuma, both healthy, and `kuma-drift` showed the new "Host Packages — Status" tile live
+and not down.
 PR H3.5d, the host rules: [#5112](https://github.com/DanielH2018/server/pull/5112). It
 deployed `observability` at `de380735e`. Prometheus loaded the `host-checks` group with 7
 rules, and neither `HostReconcileFailed` nor `HostUpdateStale` has a series, because the
