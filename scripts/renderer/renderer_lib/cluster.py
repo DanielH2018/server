@@ -175,6 +175,7 @@ def bundle_ordering(
     host: str = K8S_HOST,
     host_vars: Path = HOST_VARS,
     group_vars: Path = GROUP_VARS,
+    roles: Path = K8S_ROLES,
 ) -> Ordering:
     """What the bundle generates `dependsOn` from: the play's own dependency map (D4.2).
 
@@ -186,7 +187,7 @@ def bundle_ordering(
         ValueError: A flux-owned role's `flux_suspend`, `flux_prune` or
             `manifests_rollout_timeout` is not a literal (`role_fields`).
     """
-    fields, problems = role_fields(owned)
+    fields, problems = role_fields(owned, roles)
     if problems:
         raise ValueError("; ".join(problems))
     entries = yaml_fast.safe_load((host_vars / f"{host}.yml").read_text())
