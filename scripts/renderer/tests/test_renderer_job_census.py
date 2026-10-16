@@ -262,11 +262,6 @@ def test_script_offence_flags_a_module_reached_by_another_route(script):
     "script",
     [
         pytest.param(
-            "import flux_job_connect as f\n\n"
-            "f.open_url.__globals__['urllib'].request.HTTPHandler()\n",
-            id="helper-function-globals",
-        ),
-        pytest.param(
             "from flux_job_connect import Request\n\n"
             "Request.__init__.__globals__['socket'].socket().connect(('x', 80))\n",
             id="exported-class-globals",
@@ -285,10 +280,6 @@ def test_script_offence_flags_a_module_reached_by_another_route(script):
             id="vars-of-helper",
         ),
         pytest.param(
-            "import urllib.error\n\nu = urllib\nu.request.HTTPHandler\n",
-            id="urllib-aliased",
-        ),
-        pytest.param(
             "import flux_job_connect as f\n\ng = f\ng.refused\n",
             id="helper-aliased",
         ),
@@ -296,6 +287,52 @@ def test_script_offence_flags_a_module_reached_by_another_route(script):
 )
 def test_script_offence_flags_a_module_reached_around_the_attribute_rules(script):
     assert script_offence("run.py", script)
+
+
+def _uses(script):
+    "What `script_offence` reports the script `run.py` as using, one entry per rule that fired."
+    return [
+        offence.removeprefix("run.py uses ").split(";")[0]
+        for offence in script_offence("run.py", script)
+    ]
+
+
+@pytest.mark.parametrize(
+    ("script", "uses"),
+    [
+        pytest.param(
+            "import flux_job_connect as f\n\nf.open_url.__globals__['urllib'].request\n",
+            [".__globals__"],
+            id="helper-function-globals",
+        ),
+        pytest.param(
+            "import urllib.error\n\nu = urllib\nu.request\n",
+            ["urllib as a value"],
+            id="urllib-aliased",
+        ),
+        pytest.param(
+            "def read(x):\n    return x.request.socket.socket()\n",
+            [".socket"],
+            id="socket-as-an-attribute",
+        ),
+        pytest.param(
+            "import sys\n\nsys._getframe().f_globals\n",
+            ["_getframe", "f_globals"],
+            id="frame-globals",
+        ),
+        pytest.param(
+            "import sys\n\nsys.exc_info()[2].tb_frame\n",
+            ["tb_frame"],
+            id="traceback-frame",
+        ),
+    ],
+)
+def test_script_offence_names_the_one_rule_that_caught_the_script(script, uses):
+    assert _uses(script) == uses
+
+
+def test_script_offence_allows_the_string_socket():
+    assert script_offence("run.py", "print('socket')\n") == []
 
 
 def test_script_offence_passes_the_helper_exports_and_admitted_urllib_submodules():

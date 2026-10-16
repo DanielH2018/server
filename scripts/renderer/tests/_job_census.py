@@ -67,6 +67,15 @@ HELPER = REPO / "ansible/roles/k8s/manifests/files/flux_job_connect.py"
 # `urlretrieve`, `asyncio.open_connection`, `ftplib` and `importlib` in review. No module
 # here opens a connection; a script builds its `Request` from `flux_job_connect`, so
 # `urllib.request` is not here either. A module joins this list only if it cannot connect.
+#
+# The census catches a Job script that opens a connection without `flux_job_connect.open_url`
+# by accident, which is the shape an author writes when they forget the helper. It does not
+# stop a script built to dodge it through runtime indirection, such as `getattr`, `vars()` or
+# `globals()` subscripted with a string like `'urllib'`, or a frame's globals. The helper
+# exists so that a brand-new pod's first connection retries for 60 seconds while kube-router
+# learns the pod's address (`docs/target-architecture/deploy/d5-bulk-move.md`, "Rules for
+# every Job Flux applies (D5.1a3)", "A first connection retries"). That is a reliability
+# rule, so a deliberate bypass is outside it.
 ALLOWED_IMPORTS = frozenset(
     {
         "flux_job_connect",
@@ -139,6 +148,9 @@ FORBIDDEN = frozenset(
         "AbstractHTTPHandler",
         "HTTPHandler",
         "HTTPSHandler",
+        "_getframe",
+        "f_globals",
+        "tb_frame",
     }
 )
 # Packages `ALLOWED_IMPORTS` admits only through a submodule: `urllib`, for `urllib.error`
@@ -387,6 +399,11 @@ def script_offence(name: str, text: str) -> list[str]:
                 found.add(f".{node.attr}")
             if node.attr in SUBMODULE_ONLY:
                 found.add(f".{node.attr}")
+            # `socket` is read as a name only when imported, which `ALLOWED_IMPORTS` refuses.
+            # As an attribute it is a module reached through some object, such as
+            # `x.request.socket`. The string `'socket'` stays allowed.
+            if node.attr == "socket":
+                found.add(".socket")
             if isinstance(node.value, ast.Name):
                 root = node.value.id
                 if root in helpers and node.attr not in exports:
