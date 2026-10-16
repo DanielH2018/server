@@ -55,7 +55,7 @@ from pathlib import Path
 import pytest
 from _helpers import K8S_ROLES, jinja_env, load_tasks, load_defaults, task_named
 from _role_census import role_dirs
-from _kubectl_seam import no_cluster_to_ask
+from _kubectl_seam import kubectl_has_a_cluster_configured, no_cluster_to_ask
 from lib.proc_testing import run
 
 _ROLE = K8S_ROLES / "cronjob-gate"
@@ -315,14 +315,14 @@ def test_the_jsonpath_parses_against_the_live_api() -> None:
     proves the expression PARSES, and it does not depend on any particular Job existing. Skipped
     with no cluster, so CI stays green.
     """
-    kubectl = shutil.which("kubectl") or shutil.which("k3s")
-    if kubectl is None:
-        pytest.skip("no kubectl on PATH")
+    kubectl = shutil.which("kubectl") or shutil.which("k3s") or ""
+    kubectl_argv = [kubectl, *(["kubectl"] if kubectl.endswith("k3s") else [])]
+    if not kubectl or not kubectl_has_a_cluster_configured(kubectl_argv):
+        pytest.skip("no kubectl on PATH, or no cluster configured for it")
     argv = _jsonpath_argv()
     jsonpath = next(a for a in argv if a.startswith("jsonpath="))
     probe = [
-        kubectl,
-        *(["kubectl"] if kubectl.endswith("k3s") else []),
+        *kubectl_argv,
         "get",
         "pods",
         "--request-timeout=5s",

@@ -438,7 +438,6 @@
  "ansible/tests/repo/test_ci_empty_pr_merge_fails.py": 0.19,
  "ansible/tests/repo/test_ci_master_runs_are_not_evictable.py": 0.0,
  "ansible/tests/repo/test_ci_pytest_job_fetch_depth.py": 0.0,
- "ansible/tests/repo/test_ci_sops_matches_the_host_pin.py": 0.0,
  "ansible/tests/repo/test_ci_tool_pins_do_not_move_backwards.py": 0.0,
  "ansible/tests/repo/test_claude_md_paragraphs_have_one_home.py": 0.16,
  "ansible/tests/repo/test_cross_directory_importer_bootstraps_sys_path.py": 0.03,

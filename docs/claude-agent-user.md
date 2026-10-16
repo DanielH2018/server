@@ -248,6 +248,10 @@ truth, with a reason beside each entry. It holds:
   `ansible/roles/setup/claude_code/`. The operator added them on 2026-10-15. Later slices let
   a triage run land its own fixes with nobody watching, so it must not be able to raise its own
   caps.
+- `ansible/roles/k8s/cluster-base/`, the agent's read-only cluster RBAC. The operator added it
+  on 2026-10-16 (H1 Open question 7). Before H1, that RBAC applies only through
+  `k3s-bringup.yml`, which the operator runs by hand. Once Flux applies `cluster-base` on
+  merge, the floor is what keeps a widened grant from landing without the operator.
 
 Two choices keep the floor from being bypassed through the inventory:
 

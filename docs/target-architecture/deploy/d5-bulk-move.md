@@ -3392,6 +3392,9 @@ includes valheim's initContainer.
    of them takes Branch 1 for every role that attempted R, so a reset reverts the healthy
    ones' volumes too, unless the operator records that a role's data suits `last-good`'s
    image. Resolution: the operator decides all three in D5.2b1's review (**operator-only**).
+   **Ruled 2026-10-16, in principle: accepted.** A failed revision that changes a snapshot
+   role holds without a reset. The operator confirms the two co-batched cases in D5.2b1's
+   review, with the code in front of them.
 2. **Does the in-cluster registry stay as a LAN mirror of GHCR?** After D5.4 no role pushes
    to it. A GHCR-only image path leaves the cluster no GitHub-independent pull, and nut, the
    pod half of the UPS shutdown chain, cannot start cold during a WAN outage.
@@ -3407,6 +3410,9 @@ includes valheim's initContainer.
     - Resolution: the operator rules before nut's Wave C PR merges (**operator-only**). If
       the operator declines, nut's PR states the residual, a failed cold pull during a WAN
       outage, and D6 keeps the retirement question.
+    - **Ruled 2026-10-16: yes.** The registry stays as a pull-through mirror for `ghcr.io`,
+      in the two PRs the recommendation names, and nut's Wave C PR carries the mirror
+      precondition.
 3. **Is the soak's Prometheus reach a new exposure?** It is one more caller on an existing
    fence. Resolution: reviewed in D5.3a against ADR-0009.
 4. **C2 changes in seven ways.** Snapshot roles hold without a reset. `promote`'s expected
@@ -3449,7 +3455,7 @@ includes valheim's initContainer.
    Resolution: D1 edits its sentence.
 8. **Public packages or a pull secret?** Default: public, as `homelab-manifests` and
    `texbrain` are, because a context that renders a placeholder never builds. Resolution: the
-   operator decides before D5.4a merges (**operator-only**).
+   operator decides before D5.4a merges (**operator-only**). **Ruled 2026-10-16: public.**
 9. **Which vantage point and channel does crowdsec's off-cluster verify use?** This plan's
    choice is the Pi timer, counted by a metrics stage in the Pi's Alloy and read through
    Prometheus's direct `alloy-pi` scrape. The log path through loki-homelab is ruled out,
@@ -3490,7 +3496,8 @@ includes valheim's initContainer.
       reads the rendered suspend flag, so a PR that sets the variable back to true may
       change the render.
     - Resolution: the operator rules in H1.7b's review (**operator-only**). D5 needs no
-      change either way.
+      change either way. **Ruled 2026-10-16: temporary.** The operator retired
+      `k3s_manage_backup_targets` (H1 Open question 10), so H1's fallback is not taken.
 14. **The gate's stance and each `pods/exec` grant.** Under Flux the `cronjob-gate`
     successors fail on any non-zero exit, where today's gate fails only when the container
     never starts. Any exec that a verify or mutation Job keeps needs a namespace-wide
@@ -3538,6 +3545,9 @@ includes valheim's initContainer.
       ineligible, and a cross-slice note asks C2 for it.
     - Resolution: the operator rules on C2's revert rule, with this exclusion, before
       D5.3b3 makes the soak gate (**operator-only**).
+    - **Ruled 2026-10-16: C2's revert rule, with the exclusion.** A `failed=` list that
+      names `soak` is ineligible for the revert rule, and the cross-slice note asks C2 for
+      it.
 18. **C6 changes.** C6's *`land.sh`* row says that from D5 on `flux/soak` also reads
     `success` on R. D5 makes that true from D5.3b3, not from D5's first PR, because before
     D5.3b3 the soak gates nothing. It also adds a case C6 does not state: a `flux/soak`
