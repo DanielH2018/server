@@ -20,6 +20,7 @@ from renderer import homelab_render
 from renderer.renderer_lib.bundle import (
     CLUSTER_VARS_FILE,
     SHARED_KINDS,
+    configmap_digest8,
     job_spec_digest8,
 )
 
@@ -37,10 +38,13 @@ DIRECTORY = {
 }
 BACKOFF = {"snapshot": 1, "soak": 0, "verify": 0, "mutation": 2}
 THROUGH_HELPER = (
-    "from flux_job_connect import open_url\n\n"
-    "with open_url('http://sonarr.media.svc:8989/ping', timeout=10) as r:\n"
-    "    r.read()\n"
+    "import json\nimport re\n\nfrom flux_job_connect import Request, open_url\n\n"
+    "request = Request('http://sonarr.media.svc:8989/ping')\n"
+    "with open_url(request, timeout=10) as r:\n"
+    "    json.loads(r.read())\n"
+    "re.compile('ok')\n"
 )
+RUN = ["python3", "/scripts/run.py"]
 
 
 def _named(job: dict) -> dict:
@@ -48,11 +52,28 @@ def _named(job: dict) -> dict:
     return job
 
 
-def _job(kind: str) -> dict:
-    """A Job of `kind` that passes every row."""
+def _configmap(script: str = THROUGH_HELPER, helper: str | None = None) -> dict:
+    """The Job's script ConfigMap, named by its digest; `helper=""` leaves the copy out."""
+    data = {"run.py": script}
+    if helper != "":
+        data[HELPER.name] = helper or HELPER.read_text()
+    configmap = {"kind": "ConfigMap", "metadata": {"name": SCRIPTS}, "data": data}
+    configmap["metadata"]["name"] = f"{SCRIPTS}-{configmap_digest8(configmap)}"
+    return configmap
+
+
+def _job(kind: str, configmap: dict | None = None, command=RUN) -> dict:
+    """A Job of `kind` that runs `configmap`'s `run.py` and passes every row."""
+    configmap = configmap or _configmap()
     annotations = {JOB_KIND: kind}
     if kind == "mutation":
         annotations[RERUN_SAFE] = THIS_TEST
+    container = {
+        "name": "run",
+        "image": "python",
+        "command": command,
+        "volumeMounts": [{"name": "scripts", "mountPath": "/scripts"}],
+    }
     return _named(
         {
             "apiVersion": "batch/v1",
@@ -63,8 +84,12 @@ def _job(kind: str) -> dict:
                 "template": {
                     "spec": {
                         "restartPolicy": "Never",
+                        "containers": [container],
                         "volumes": [
-                            {"name": "scripts", "configMap": {"name": SCRIPTS}}
+                            {
+                                "name": "scripts",
+                                "configMap": {"name": configmap["metadata"]["name"]},
+                            }
                         ],
                     }
                 },
@@ -73,16 +98,14 @@ def _job(kind: str) -> dict:
     )
 
 
-def _configmap(script: str, helper: str | None = None) -> dict:
-    """The Job's script ConfigMap, with `helper` as its helper copy; "" leaves the copy out."""
-    data = {"run.py": script}
-    if helper != "":
-        data[HELPER.name] = helper or HELPER.read_text()
-    return {"kind": "ConfigMap", "metadata": {"name": SCRIPTS}, "data": data}
+def _bundle(job: dict, directory: str, configmap: dict | None = None) -> dict:
+    return {directory: [job, configmap or _configmap()]}
 
 
-def _bundle(job: dict, directory: str, script: str = THROUGH_HELPER, **kw) -> dict:
-    return {directory: [job, _configmap(script, **kw)]}
+def _verify(**configmap) -> dict:
+    """A verify Job's bundle whose script ConfigMap is `_configmap(**configmap)`."""
+    built = _configmap(**configmap)
+    return _bundle(_job("verify", built), "sonarr-verify", built)
 
 
 def _rows(bundle: dict) -> set[str]:
@@ -153,23 +176,63 @@ def test_a_job_outside_a_job_directory_is_flagged(directory):
     [
         "import urllib.request\n\nurllib.request.urlopen('http://sonarr:8989/ping')\n",
         "from urllib.request import urlopen\n\nurlopen('http://sonarr:8989/ping')\n",
+        "import urllib.request\n\nurllib.request.urlretrieve('http://sonarr:8989/')\n",
         "import http.client\n\nhttp.client.HTTPConnection('sonarr', 8989).request('GET', '/')\n",
         "import socket\n\nsocket.create_connection(('sonarr', 8989))\n",
+        "import asyncio\n\nasyncio.run(asyncio.open_connection('sonarr', 8989))\n",
+        "import importlib\n\nimportlib.import_module('socket')\n",
+        "import ftplib\n\nftplib.FTP('sonarr')\n",
+        "import os\n\nos.system('curl http://sonarr:8989/ping')\n",
+        "import flux_job_connect\n\nflux_job_connect.urllib.request.urlopen('http://x')\n",
+        "exec('import socket')\n",
     ],
 )
 def test_a_script_that_connects_without_the_helper_is_flagged(script):
-    assert _rows(_bundle(_job("verify"), "sonarr-verify", script)) == {"helper"}
+    assert _rows(_verify(script=script)) == {"helper"}
 
 
 def test_a_changed_copy_of_the_helper_is_flagged():
     helper = HELPER.read_text().replace("RETRY_SECONDS = 60", "RETRY_SECONDS = 0")
-    bundle = _bundle(_job("verify"), "sonarr-verify", helper=helper)
-    assert _rows(bundle) == {"helper"}
+    assert _rows(_verify(helper=helper)) == {"helper"}
 
 
 def test_a_script_importing_the_helper_without_its_copy_is_flagged():
-    bundle = _bundle(_job("verify"), "sonarr-verify", helper="")
-    assert _rows(bundle) == {"helper"}
+    assert _rows(_verify(helper="")) == {"helper"}
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        ["python3", "-c", "import urllib.request"],
+        ["python3", "-m", "run"],
+        ["sh", "/scripts/run.sh"],
+        ["python3", "/scripts/run"],
+        None,
+    ],
+)
+def test_a_container_that_runs_no_mounted_script_is_flagged(command):
+    assert _rows(_bundle(_job("verify", command=command), "sonarr-verify")) == {
+        "delivery"
+    }
+
+
+def test_a_script_path_outside_the_mounted_configmap_is_flagged():
+    job = _job("verify", command=["python3", "/scripts/other.py"])
+    assert _rows(_bundle(job, "sonarr-verify")) == {"delivery"}
+
+
+def test_a_script_configmap_named_without_its_digest_is_flagged():
+    configmap = _configmap()
+    configmap["metadata"]["name"] = SCRIPTS
+    bundle = _bundle(_job("verify", configmap), "sonarr-verify", configmap)
+    assert _rows(bundle) == {"name"}
+
+
+def test_a_script_fix_renames_the_job():
+    fixed = _configmap(script=THROUGH_HELPER + "print('fixed')\n")
+    assert (
+        _job("verify")["metadata"]["name"] != _job("verify", fixed)["metadata"]["name"]
+    )
 
 
 def test_a_placeholder_in_a_job_spec_is_flagged():
@@ -183,7 +246,7 @@ def test_an_escaped_placeholder_in_a_job_spec_is_clean():
 
 
 def test_a_mounted_configmap_the_directory_lacks_is_flagged():
-    assert _rows({"sonarr-verify": [_job("verify")]}) == {"helper"}
+    assert _rows({"sonarr-verify": [_job("verify")]}) == {"delivery", "helper"}
 
 
 @pytest.fixture

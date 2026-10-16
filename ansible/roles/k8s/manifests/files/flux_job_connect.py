@@ -13,9 +13,10 @@ the script in the Job's ConfigMap. Standard library only: the Job image is `pyth
 
 Typical usage example:
 
-    from flux_job_connect import open_url
+    from flux_job_connect import Request, open_url
 
-    with open_url("http://sonarr.media.svc:8989/ping", timeout=10) as response:
+    request = Request("http://sonarr.media.svc:8989/ping", headers={"Accept": "*/*"})
+    with open_url(request, timeout=10) as response:
         body = response.read()
 """
 
@@ -24,6 +25,10 @@ import time
 import urllib.error
 import urllib.request
 from collections.abc import Callable
+from urllib.request import Request
+
+# A Job script builds its request from here: the census admits no `urllib.request` import.
+__all__ = ["Request", "open_url", "refused"]
 
 # How long a refused or timed-out connect keeps being retried, in seconds.
 RETRY_SECONDS = 60
@@ -52,7 +57,7 @@ def refused(err: BaseException) -> bool:
 
 
 def open_url(
-    request: str | urllib.request.Request,
+    request: str | Request,
     *,
     timeout: float,
     retry_seconds: float = RETRY_SECONDS,

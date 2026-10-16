@@ -339,6 +339,18 @@ def job_spec_digest8(job: Mapping) -> str:
     return hashlib.sha256(text.encode()).hexdigest()[:8]
 
 
+def configmap_digest8(configmap: Mapping) -> str:
+    """The first 8 hex digits of the SHA-256 of a ConfigMap's `data` and `binaryData`.
+
+    A Job's script ConfigMap ends its name in `-<this>`, and the Job's spec names the
+    ConfigMap, so `job_spec_digest8` covers the script and a script fix renames the Job (D5,
+    *Script delivery*).
+    """
+    content = {k: configmap.get(k) or {} for k in ("data", "binaryData")}
+    text = json.dumps(content, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(text.encode()).hexdigest()[:8]
+
+
 def digests(
     files: Mapping[str, bytes],
     tags: Iterable[str],

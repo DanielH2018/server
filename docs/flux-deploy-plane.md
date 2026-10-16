@@ -891,13 +891,19 @@ under *Rules for every Job Flux applies (D5.1a3)*.
   `scripts/renderer/renderer_lib/bundle.py`). The spec holds no `${...}` placeholder,
   because Flux substitutes it after the digest is taken. A substituted value reaches a Job
   through a Secret.
+- **Script delivery.** Every container runs `python3 <mount>/<script>.py`, where `<mount>`
+  mounts a ConfigMap whole and `<script>.py` is one of its keys. No `-c`, no `-m` and no
+  shell. Each ConfigMap a Job mounts ends its name in `-<digest8>` of its content
+  (`configmap_digest8`). The Job's spec names the ConfigMap, so a script fix renames the Job.
 - **`backoffLimit`.** Every Job sets one: 1 for a snapshot Job, 0 for a soak or verify Job,
   and a mutation Job's own value, with its reason beside it.
 - **Rerun safety.** A mutation Job carries `homelab/rerun-safe`, naming as `<path>::<test>`
   the test that runs it twice and finds the second run changes nothing.
 - **Connections.** A Python script in a ConfigMap the Job mounts opens every connection
   through `open_url` in `ansible/roles/k8s/manifests/files/flux_job_connect.py`, shipped
-  byte-identical beside it. The helper retries a refused or timed-out connect for 60
+  byte-identical beside it. A script imports only the modules in the census's
+  `ALLOWED_IMPORTS`, none of which can connect, and builds its request with the helper's
+  `Request`. The helper retries a refused or timed-out connect for 60
   seconds, because kube-router can refuse a new pod until it learns its address. It never
   retries an answer, so a flaky check fails rather than passing on its second try.
 
