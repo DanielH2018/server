@@ -301,7 +301,16 @@ def removal_problems(
         declared: The objects a `Removes-Object` line in the PR's commits declares.
     """
     declared, unpruned = set(declared), set(base.unpruned)
-    held = set().union(*map(set, head.objects.values()))
+    # Only what Flux applies at the head holds an object, as only that reaches `decide`'s
+    # bundle: an object moved to an Ansible-owned tag is still pruned. A shared-kind directory
+    # has no entry, so it counts.
+    held = set().union(
+        *(
+            set(idents)
+            for tag, idents in head.objects.items()
+            if head.owners.get(tag, FLUX_PLANE) == FLUX_PLANE
+        )
+    )
     held_stems = {_stem(ident) for ident in held}
     found = []
     for tag in sorted(base.flux_owned() & head.flux_owned()):

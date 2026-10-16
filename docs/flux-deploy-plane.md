@@ -990,7 +990,9 @@ names the exact line to add. Two removals pass without a line:
 A tag handed back passes too. A tag that is not `owner: flux` at the head, because it reads
 `owner: released` or lost its entry, is not judged, so the revert of a flip needs no lines.
 The arm reads the PR's own commits, which a squash merge need not copy, so it runs on pull
-requests only. On master `decide` covers the same objects.
+requests only. On master `decide` reads the same lines, but it applies neither exemption,
+so until it does a rename by digest or a dropped prune-disabled object stalls promotion
+unless a commit declares it (#5291).
 
 ## Retiring a flux-owned service
 

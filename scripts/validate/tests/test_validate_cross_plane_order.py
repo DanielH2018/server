@@ -318,6 +318,35 @@ def test_a_flux_owned_tag_that_renders_nothing_is_flagged():
     assert len(removal(BENTO, set())) == len(BENTO)
 
 
+def test_an_object_moved_to_an_ansible_owned_tag_is_flagged():
+    """Flux still prunes it from bento-pdf, and Ansible applies authelia only later."""
+    base = gate.Snapshot(
+        renders={},
+        owners={"bento-pdf": "flux", "authelia": "ansible"},
+        deps={},
+        objects={"bento-pdf": BENTO},
+    )
+    head = gate.Snapshot(
+        renders={},
+        owners=base.owners,
+        deps={},
+        objects={"bento-pdf": BENTO - {NETPOL}, "authelia": {NETPOL}},
+    )
+    assert len(gate.removal_problems(base, head, ())) == 1
+
+
+def test_an_object_moved_to_another_flux_owned_tag_is_clean():
+    flux = {"bento-pdf": "flux", "texbrain": "flux"}
+    base = gate.Snapshot(renders={}, owners=flux, deps={}, objects={"bento-pdf": BENTO})
+    head = gate.Snapshot(
+        renders={},
+        owners=flux,
+        deps={},
+        objects={"bento-pdf": BENTO - {NETPOL}, "texbrain": {NETPOL}},
+    )
+    assert gate.removal_problems(base, head, ()) == []
+
+
 def test_a_flux_owned_entry_moved_into_k8s_retired_services_is_flagged():
     flagged = removal(BENTO, BENTO, head_flux=(), head_retired={"bento-pdf"})
     assert len(flagged) == 1 and flagged[0].startswith("arm 4: bento-pdf joins")
@@ -337,7 +366,10 @@ def test_a_name_already_retired_on_the_base_is_clean():
 def test_the_snapshot_names_objects_as_decide_does(head_snapshot):
     """Arm 3's identities are the ones `promote.py decide` matches the trailer against."""
     assert "Deployment/homelab/bento-pdf" in head_snapshot.objects["bento-pdf"]
-    assert "healthchecks" in head_snapshot.retired
+    listed = gate.yaml_fast.safe_load((gate.REPO / gate.GROUP_VARS).read_text())
+    assert set(head_snapshot.retired) == {
+        e["name"] for e in listed.get("k8s_retired_services") or []
+    }
 
 
 def test_a_prune_disabled_label_or_annotation_is_read():
