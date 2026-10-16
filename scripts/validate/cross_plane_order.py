@@ -161,7 +161,7 @@ class Snapshot:
     objects: Mapping[str, Iterable[str]] = field(default_factory=dict)
     unpruned: Iterable[str] = ()
     retired: Iterable[str] = ()
-    digests: Mapping[str, object] = field(default_factory=dict)
+    digests: Mapping[str, Mapping[str, object]] = field(default_factory=dict)
 
     def plane(self, tag: str) -> str:
         return self.owners.get(tag, ANSIBLE_PLANE)

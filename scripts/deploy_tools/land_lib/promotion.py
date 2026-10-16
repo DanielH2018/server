@@ -16,7 +16,7 @@ tick applies it and derives no tag for it. The deployer's own narrowing still na
 and the tick drops it because Flux applies it, so the landing reads the same narrowing and
 waits on promotion for it (#5146).
 
-`wait_on_promotion` then runs `promote.py land-wait` on the merge commit. Its three outcomes
+`wait_on_promotion` then runs `promote.py land-wait` on the merge commit. Its four outcomes
 map to a landing's words:
 
 | land-wait | Verdict | Cause | Exit |
@@ -24,10 +24,14 @@ map to a landing's words:
 | settled | the landing goes on to the health gate | -- | -- |
 | deploy-failed | `deploy-failed` | `promote-held` | 1 |
 | gave-up | `deferred` | `promote-timeout` | 75 |
+| suspended | `nothing-to-deploy` | -- | 0 |
 
 `gave-up` keeps the closed verdict set: it prints `deferred` beside `PROMOTE_TIMEOUT_NOTE`, and
 `land_probe` reads the note and reports the landing as `gave-up`, a resume point, rather than as
 the ordinary deferral that clears on its own.
+
+`suspended` means one of the PR's tags is suspended at the merge commit, so Flux applies
+nothing for it until a PR resumes it (D5.1d).
 """
 
 import subprocess
@@ -246,6 +250,17 @@ def wait_on_promotion(ln: Landing) -> None:
         say(f"promoted: {result.detail}")
         return
     print(f"  {result.detail}")
+    # DECIDED: `suspended` ends the landing as `nothing-to-deploy`, exit 0, with no health
+    # gate. The suspend PR itself ends this way, so a failure verdict would be wrong for it.
+    # Exit 75 would be wrong too: `land_probe` reads 75 as a resume point, and a re-run waits
+    # on the same suspended tag again. A change that raced the gate onto a suspended tag ends
+    # this way as well, and `promote.py decide`'s `suspended-changed` hold reports that case.
+    if result.verdict == "suspended":
+        ln.finish(
+            Verdict.NOTHING_TO_DEPLOY,
+            0,
+            f"PR #{pr}, {sha} — {result.detail}. The landing gated none of {tags}",
+        )
     if result.verdict == "deploy-failed":
         ln.ledger.cause = Cause.PROMOTE_HELD
         ln.finish(

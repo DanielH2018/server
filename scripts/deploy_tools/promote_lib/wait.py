@@ -14,13 +14,17 @@ may promote a newer commit. The plan is docs/target-architecture/deploy/d2-first
   depends on one of them, read from the live `dependsOn` graph each poll. `land.sh` passes
   `cluster-vars` for a PR that changes a cluster file (D3.4): a change to
   `cluster-vars.source` alone moves no digest.
-- It polls every POLL_S seconds until one of three outcomes:
+- It polls every POLL_S seconds until one of four outcomes:
     settled        Every expected Kustomization is Ready, and its
                    `status.lastAppliedOriginRevision` names a commit R that is M or descends
                    from it. One `deploy-annotation` line records it.
     deploy-failed  DEPLOY_HOLD holds a value other than `none`. Cause `promote-held`.
     gave-up        LAND_WAIT_TIMEOUT_S passed, or the later deadline below. Cause
                    `promote-timeout`.
+    suspended      One of `--services` is `suspended` in M's `digests.json`, so Flux applies
+                   nothing for it until a PR resumes it (D5.1d). It ends the wait at the
+                   first poll that reads M's file, rather than polling to `gave-up`. The
+                   suspend PR itself ends this way. Cause `promote-suspended`.
 - While a verification of an earlier commit P is in flight, M's `decide` waits on it rather
   than promoting, for up to IN_FLIGHT_WAIT_S. So each poll that reads `prod` differing from
   `last-good` at a strict ancestor of M moves the deadline to LAND_WAIT_TIMEOUT_S past that
@@ -59,7 +63,7 @@ from lib.exit_codes import FAILED, LAND_GAVE_UP, OK
 from lib.git import git
 
 import forge
-from changed_set import ROOT, ChangedSet, changed_set
+from changed_set import ROOT, ChangedSet, changed_set, suspended_tags
 from artifact_retention import LAST_GOOD_TAG, PROD_TAG
 from flux_host import FluxHost
 
@@ -116,6 +120,7 @@ DIGESTS_FILE = "digests.json"
 ANNOTATION_TAG = "deploy-annotation"
 HOLD_CAUSE = "promote-held"
 TIMEOUT_CAUSE = "promote-timeout"
+SUSPENDED_CAUSE = "promote-suspended"
 
 
 @dataclass(frozen=True)
@@ -157,8 +162,9 @@ class WaitResult:
     """How `land_wait` ended.
 
     Attributes:
-        verdict: `settled`, `deploy-failed` or `gave-up`.
-        cause: HOLD_CAUSE or TIMEOUT_CAUSE beside the last two, "" beside `settled`.
+        verdict: `settled`, `deploy-failed`, `gave-up` or `suspended`.
+        cause: HOLD_CAUSE, TIMEOUT_CAUSE or SUSPENDED_CAUSE beside the last three, "" beside
+            `settled`.
         detail: why, in one sentence.
         revision: R, the commit `homelab` applied, for `settled`.
         widened: why the set was every name, or "" when the digests decided it.
@@ -289,6 +295,11 @@ class _Expected:
         except READ_ERRORS as err:
             self._why = f"the ancestor's {DIGESTS_FILE}: {err}"
 
+    @property
+    def new(self) -> object | None:
+        """M's parsed `digests.json`, or None until `sha-<M>` is read."""
+        return self._new
+
     def changes(self, items: list[dict]) -> ChangedSet:
         """The changed set against the Kustomizations `items` lists, `ROOT` excluded."""
         if not self._final:
@@ -371,6 +382,14 @@ def land_wait(
         if items is not None:
             cs = expected.changes(items)
             widened = cs.widened
+            if paused := sorted(suspended_tags(expected.new) & set(services)):
+                return WaitResult(
+                    "suspended",
+                    SUSPENDED_CAUSE,
+                    f"{', '.join(paused)} is suspended at {merge[:8]}, so Flux applies "
+                    "nothing for it until a PR removes its flux_suspend",
+                    widened=widened,
+                )
             names = cs.names | {ROOT}
             if also:
                 names |= with_dependents(also, *kustomization_graph(items))

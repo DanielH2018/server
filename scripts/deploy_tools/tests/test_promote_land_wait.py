@@ -51,6 +51,28 @@ def test_a_hold_set_during_the_wait_ends_it_as_deploy_failed():
     assert result.cause == "promote-held" and sim.sleeps == 2
 
 
+@pytest.mark.parametrize("suspended", [True, False])
+def test_a_suspended_tag_ends_the_wait_at_once_where_unsuspended_it_gives_up(suspended):
+    """The red half is the same fixture with the tag not suspended: nothing applies M, so the
+    wait polls to `gave-up`."""
+    entry = {"own": "own-b", "footprint": "b", "suspended": suspended}
+    sim = Sim(
+        polls=[at(P)], published={M: {"bento-pdf": entry}, P: digests(bento_pdf="a")}
+    )
+    result = sim.wait()
+    if suspended:
+        assert (result.verdict, result.cause) == ("suspended", "promote-suspended")
+        assert "bento-pdf" in result.detail and sim.sleeps == 0
+    else:
+        assert result.verdict == "gave-up" and sim.sleeps > 0
+
+
+def test_a_suspended_tag_outside_the_prs_services_does_not_end_the_wait():
+    entry = {"own": "own-x", "footprint": "x", "suspended": True}
+    sim = Sim(published={M: {"texbrain": entry}, P: {"texbrain": entry}})
+    assert sim.wait(services=("bento-pdf",)).verdict == "settled"
+
+
 def test_no_promotion_within_the_timeout_gives_up():
     sim = Sim(polls=[at(P)])
     result = sim.wait()

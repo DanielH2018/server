@@ -92,6 +92,14 @@ def test_a_promotion_timeout_is_deferred_with_promote_timeout(land_run):
     assert PROMOTE_TIMEOUT_NOTE in out
 
 
+def test_a_suspended_tag_is_nothing_to_deploy_without_a_gate(land_run):
+    suspended = WaitResult("suspended", "promote-suspended", "bento-pdf is suspended")
+    rc, out, _, calls, _ = land_run([], _fakes(land_wait=[suspended]))
+    assert rc == 0 and "VERDICT: nothing-to-deploy" in out
+    assert "bento-pdf is suspended" in out
+    assert "gate" not in _names(calls)
+
+
 def test_an_unreadable_ownership_map_deploys_nothing(land_run):
     fakes = _fakes(owners={MERGE_SHA: ValueError("owner 'flx' is not one of ...")})
     rc, out, _, calls, _ = land_run([], fakes)

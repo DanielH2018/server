@@ -334,6 +334,13 @@ Instead it reads the cluster every 30 seconds:
   line names the held SHA and, for a `failed=` hold, the failed names. Clearing the hold is
   **operator-only**. `promote`'s `settle` job writes a `failed=` hold when a promotion fails
   its verification (`docs/flux-deploy-plane.md`, *Verification*).
+- **`nothing-to-deploy`, from land-wait's `suspended`, exit 0.** One of the PR's tags is
+  `suspended` in the merge commit's `digests.json`, so Flux applies nothing for it until a PR
+  removes its `flux_suspend`. The wait ends at the first poll that reads that file, rather
+  than polling to `gave-up`, and the landing runs no health gate. The suspend PR itself ends
+  this way. A change to a suspended tag cannot reach master through CI, because
+  `cross_plane_order.py` refuses it (`docs/flux-deploy-plane.md`, *Stopping one service:
+  `flux_suspend`*).
 - **`deferred`, cause `promote-timeout`, exit 75.** No promotion covered the merge commit
   within twice the promote timeout (67 minutes,
   `scripts/deploy_tools/promote_lib/wait.py:LAND_WAIT_TIMEOUT_S`). Look first at the

@@ -391,9 +391,25 @@ deletes the object at the role's next run.
 `flux_suspend: true` in a flux-owned role's `defaults/main.yml` stops all reconciliation of
 that role. `k8s_autodeploy: false` is a different lever: it stops Renovate merging the
 role and, while Ansible owns it, the deployer auto-deploying its image bumps. The plan is
-`docs/target-architecture/deploy/d5-bulk-move.md`, *The stop lever (D5.1b)*. No role sets the
-key before D5.1d lands, because a merged change to a suspended role applies nothing until the
-resume, and D5.1d's gate is what refuses one.
+`docs/target-architecture/deploy/d5-bulk-move.md`, *The stop lever (D5.1b)*. A merged change
+to a suspended role applies nothing until the resume, so the suspend is a temporary stop, and
+three checks hold it there (D5.1d):
+
+- **The gate.** `scripts/validate/cross_plane_order.py`'s arm 5 refuses a PR that changes the
+  `own` digest of a tag `digests.json` marks `suspended` at both its base and its head. The
+  same change passes in the PR that removes `flux_suspend`. The arm reads the `suspended`
+  field, never the key, so a role that derives the key from another variable is covered too.
+  A shared-template change whose render reaches a suspended tag waits for its resume.
+- **The race.** Master's status-check rule is not strict, so a PR whose checks ran before the
+  suspend merged can still merge after it. `promote.py decide` holds a revision R whose `own`
+  digest differs from `last-good`'s for a tag suspended in both, and writes `DEPLOY_HOLD` as
+  `<R> suspended-changed=<tag>`. The revert rule never passes that form. The way out is a
+  commit that reverts the change or resumes the tag, then the operator's clear. A clear
+  without one holds again at the next `decide`. `probe.py landing` prints the cause beside
+  `DEPLOY_HOLD`. No post announces the hold yet; D5.2b1 adds one.
+- **`land-wait`.** `promote.py land-wait` ends with the verdict `suspended` when one of the
+  PR's tags is suspended at the merge commit, rather than polling to `gave-up`. `land.sh`
+  prints `nothing-to-deploy` for it (`docs/landing.md`).
 
 - **What it renders.** `spec.suspend: true` on `<tag>` and on each of its `-deferred`,
   `-snapshot` and `-verify` Kustomizations, and `suspended: true` on the tag's object in

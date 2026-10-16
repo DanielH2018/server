@@ -77,6 +77,20 @@ def test_both_hold_lines_print_whatever_each_reads(
     assert lines[HOLD_SHA] in text and lines[DEPLOY_HOLD] in text
 
 
+@pytest.mark.parametrize(
+    "deploy_hold, cause",
+    [
+        (f"{'e' * 40} suspended-changed=bento-pdf", "cause: suspended-changed"),
+        (f"{'e' * 40} failed=bento-pdf", ""),
+    ],
+    ids=["suspended-changed", "failed"],
+)
+def test_a_suspended_changed_hold_prints_its_cause(deploy_hold, cause):
+    line = _lines(_snap(CLEAR, deploy_hold))[DEPLOY_HOLD]
+    assert line.startswith(f"{DEPLOY_HOLD}: {deploy_hold}")
+    assert ("cause:" in line) == bool(cause) and cause in line
+
+
 def test_both_hold_lines_print_when_neither_hold_could_be_read():
     """A line never goes missing: an unread hold prints `unknown`, not nothing."""
     snap = {**_snap(), "hold": None, "promote": None, "claims": None}

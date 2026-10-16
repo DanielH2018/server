@@ -211,11 +211,29 @@ def hold_lines(snap: dict) -> list[str]:
         "hold_sha (GitOps deployer, Ansible-owned tags): "
         + ("unknown" if hold is None else hold["sha"][:8] or "none"),
         "DEPLOY_HOLD (promote workflow, Flux-owned tags): "
-        + ("unknown" if deploy_hold is None else deploy_hold or "none"),
+        + ("unknown" if deploy_hold is None else deploy_hold or "none")
+        + hold_cause(deploy_hold),
         f"prod: {artifact(prod)}   last-good: "
         + ("the same digest as prod" if same else artifact(last_good)),
         "suspended (Flux): " + suspension(promote.get("suspended")),
     ]
+
+
+def hold_cause(value: str | None) -> str:
+    """The cause a `suspended-changed=` hold names, as a suffix for its line, else "".
+
+    `promote.py decide` writes `<R> suspended-changed=<tags>` when R changes a tag suspended
+    at both `last-good` and R (D5.1d). A clear alone holds again at the next `decide`, so the
+    suffix names the way out.
+    """
+    _, _, rest = (value or "").partition(" ")
+    if not rest.startswith("suspended-changed="):
+        return ""
+    tags = rest.removeprefix("suspended-changed=")
+    return (
+        f"   cause: suspended-changed, a commit changed {tags} while suspended. Revert it "
+        "or resume the tag, then clear the hold"
+    )
 
 
 def suspension(objects: list[dict] | None) -> str:
