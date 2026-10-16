@@ -6,6 +6,8 @@ on every machine in that state. A rejected jsonpath must never read as one of th
 failure each seam test exists to catch.
 """
 
+import subprocess
+
 # kubectl's ways of saying "there is no cluster here to ask". kubectl does NOT print the bare
 # string "connection refused" — it prints "The connection to the server localhost:8080 was
 # refused" — and a cluster without Longhorn's CRDs answers "the server doesn't have a resource
@@ -28,3 +30,23 @@ def no_cluster_to_ask(stderr: str) -> bool:
     one failure the seam test exists to catch, and it reads `error: error parsing jsonpath …`.
     """
     return "jsonpath" not in stderr and any(token in stderr for token in _NO_CLUSTER)
+
+
+def kubectl_has_a_cluster_configured(kubectl: list[str]) -> bool:
+    """Whether kubectl has a kubeconfig context to ask, decided without touching the network.
+
+    `kubectl` is the argv prefix the seam test runs, `["kubectl"]` or `["/usr/bin/k3s",
+    "kubectl"]`. `config current-context` reads only the local kubeconfig, so it fails at once
+    where none is set: a GitHub runner ships kubectl with no kubeconfig, and there the live probe
+    spent about 15 s on its request timeout and discovery retries before it could skip (#5219).
+    The same command fails for a kubeconfig the caller cannot read, the `error loading config
+    file` case `no_cluster_to_ask` already treats as no cluster.
+    """
+    done = subprocess.run(
+        [*kubectl, "config", "current-context"],
+        capture_output=True,
+        text=True,
+        timeout=10,
+        check=False,
+    )
+    return done.returncode == 0 and bool(done.stdout.strip())

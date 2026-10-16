@@ -45,6 +45,7 @@ import subprocess
 import pytest
 from _helpers import load_tasks as _tasks
 from _helpers import render_expr as _render
+from _kubectl_seam import kubectl_has_a_cluster_configured
 from _kubectl_seam import no_cluster_to_ask as _no_cluster_to_ask
 from _volume_revert import (
     _CLAIM,
@@ -56,6 +57,7 @@ from _volume_revert import (
     _task_names,
 )
 from _volume_ops import assert_the_role_declares_an_autodeploy_stance
+from lib.proc_testing import write_exec
 
 
 def test_the_seam_test_skips_a_missing_cluster_and_fails_a_bad_jsonpath() -> None:
@@ -85,6 +87,32 @@ def test_the_seam_test_skips_a_missing_cluster_and_fails_a_bad_jsonpath() -> Non
     # The combination that matters most: an unreachable-looking message must not excuse a
     # jsonpath kubectl rejected.
     assert not _no_cluster_to_ask(rejected + " connection refused")
+
+
+@pytest.mark.parametrize(
+    ("stdout", "rc", "configured"),
+    [
+        # kubectl with no kubeconfig, as on a GitHub runner (#5219).
+        ("", 1, False),
+        # A kubeconfig whose current-context is set: the probe may run.
+        ("default\n", 0, True),
+    ],
+)
+def test_the_seam_tests_skip_before_any_network_call_without_a_kubeconfig(
+    tmp_path, stdout: str, rc: int, configured: bool
+) -> None:
+    """The pre-probe check asks only the local kubeconfig, and follows its answer.
+
+    A stand-in kubectl records its argv: the check must run `config current-context` and
+    nothing else, because any verb that reaches the API server spends the request timeout
+    on a machine with no cluster.
+    """
+    calls = tmp_path / "calls"
+    kubectl = write_exec(
+        tmp_path / "kubectl", f'echo "$*" >> {calls}\nprintf %s {stdout!r}\nexit {rc}\n'
+    )
+    assert kubectl_has_a_cluster_configured([str(kubectl)]) is configured
+    assert calls.read_text().splitlines() == ["config current-context"]
 
 
 def test_every_read_a_later_task_depends_on_runs_under_check() -> None:
@@ -235,6 +263,8 @@ def test_the_listing_jsonpath_parses() -> None:
     """
     if shutil.which("kubectl") is None:
         pytest.skip("no kubectl on PATH")
+    if not kubectl_has_a_cluster_configured(["kubectl"]):
+        pytest.skip("kubectl has no cluster configured")
     argv = _named(_CLAIM, "taken by this deploy")["ansible.builtin.command"]["argv"]
     rendered = [
         str(_render(str(token), volume_revert_volume="pvc-does-not-exist"))
