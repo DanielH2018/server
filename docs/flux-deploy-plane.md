@@ -130,8 +130,8 @@ M1's Alertmanager. Every rule carries `service="flux"`.
     - The rule compares `controller_runtime_active_workers` with
       `controller_runtime_max_concurrent_reconciles` for `controller="kustomization"`, and
       reads `workqueue_depth` for the queue. It reads the maximum from its gauge, never a
-      literal, because `--concurrent` is 4 until D5.1 changes it. The three series come from
-      the `flux` scrape job, so the rule adds no series.
+      literal, because the flux role sets `--concurrent` from `k8s_rollout_batch_width`.
+      The three series come from the `flux` scrape job, so the rule adds no series.
     - A broad revision fills the workers for hours while it progresses. The rule therefore
       reports queueing, not a failed deploy. It is a warning without `verify="true"`, so
       the promotion soak, which reads only alerts carrying `severity="critical"` or
@@ -400,14 +400,16 @@ move changes nothing in the cluster but the commit Flux reports. The workflow ha
    that loses no object without a declaration (*Removing an object on purpose*). It prints
    one line, `trigger=<sha> verdict=<verdict> target=<sha>`, where the verdict is
    `promote`, `held`, `current` or `error`. On `promote` it pulls `prod`'s bundle and the
-   target's before anything moves, and hands both to `verify`.
+   target's before anything moves, and hands both to `verify`. Its one write is
+   `DEPLOY_HOLD`, set to the target's SHA when the target fails the forward-only gate
+   (*Forward-only tags*).
 1. `tag` checks out no repository code. On the verdict `promote` it moves `prod` to
    `sha-<target>` and writes that digest to the repository variable `PROD_DIGEST`. When
    `last-good` does not exist yet, it first tags `prod`'s old digest `last-good`.
 1. `verify` runs `promote.py verify <target>` with `contents: read` and `statuses: read`, and
    prints `good` or `failed` (*Verification*).
 1. `settle` checks out no repository code. It moves `last-good` on `good`, and otherwise
-   writes the hold and resets `prod`. Then it reads CI's green push runs on master, newest
+   writes the hold and resets `prod`, unless the target changes a forward-only tag. Then it reads CI's green push runs on master, newest
    first. When the newest is for a commit newer than the target, `settle`
    dispatches `promote` again with `-f sha=<that commit>`. The job token makes the dispatch,
    under `actions: write`, which `settle` alone holds. A run whose `tag` found `prod`
@@ -478,6 +480,8 @@ notification-controller posts on T:
   that fails still stops the next promotion. A hold write that fails still attempts the
   reset, and the step names both results. A `verify` that ended with no verdict, because it
   crashed, timed out as a job or was cancelled, holds as `<T> unverified`.
+- **Anything else, when T changes a forward-only tag**, writes T's SHA alone to
+  `DEPLOY_HOLD`, tags `sha-<T>` as `held` and leaves `prod` on T (*Forward-only tags*).
 
 **Every move of `prod` writes `PROD_DIGEST`**: `tag` on a promotion, and `settle` on a reset.
 A failed write fails the job after the move. Slice D2.6d's deploy-pipeline exporter compares
@@ -488,9 +492,10 @@ the variable with `prod`'s live digest and pages on a mismatch.
 
 **A verification in flight blocks the next one.** Two checks enforce it:
 
-- `prod` and `last-good` name the same digest except between a run's `tag` and its `settle`.
-  While they differ, `decide` waits, re-reading `DEPLOY_HOLD` each 30 seconds, and gives up as
-  `current` after 350 minutes (*The cap*).
+- `prod` and `last-good` name the same digest except between a run's `tag` and its `settle`,
+  or after a hold without a reset. While they differ and `prod` is not the `held` digest,
+  `decide` waits, re-reading `DEPLOY_HOLD` each 30 seconds, and gives up as `current` after
+  350 minutes (*The cap*).
 - `tag` moves `prod` only while it still names the digest `decide` read. Two runs can decide on
   the same `prod` when the second run's `promote` job runs while the first run's `tag` waits
   on the group. The first `tag` moves `prod`, and the second finds it moved, logs a warning,
@@ -527,6 +532,36 @@ It reads `DEPLOY_HOLD` with one `gh variable get`, `prod` from the `OCIRepositor
 manifest fetch. Each read has a 5-second timeout. A read that fails prints `unknown` on its own
 line, and `prod` is reported equal to `last-good` only when both digests were read.
 
+### Forward-only tags
+
+Longhorn supports no downgrade, and MetalLB's CRDs carry a conversion webhook, so a reset of
+`prod` after a failed bump would re-apply the older version over upgraded objects. A k8s role
+whose `defaults/main.yml` sets `flux_forward_only: true` is a forward-only tag. Three rules in
+`scripts/deploy_tools/promote_lib/forward_only.py` follow from it. The plan is
+`docs/target-architecture/host/h1-cluster-config-to-flux.md`, *Forward-only tags and the
+promote rule*.
+
+- **A hold without a reset.** `decide` names, in its `no_reset` output, each forward-only tag
+  whose `footprint` differs between T's `digests.json` and `last-good`'s, or that one of
+  the two lacks. On anything but `good`, `settle` then writes T's SHA alone to `DEPLOY_HOLD`,
+  never the `failed=` form, so the revert rule never clears it. It leaves `prod` on T and
+  tags `sha-<T>` as `held`. `decide` reads `held` once the hold is cleared: a `prod` that
+  names the `held` digest is settled, so the in-flight wait does not stall the next run.
+- **The gate.** Every commit in (`last-good`, T] that changes `k3s_longhorn_version` or
+  `k3s_metallb_version` must map to the merged PR whose merge commit it is, and that PR's
+  head must carry a successful `homelab/upgrade-gates` status. `land.sh` posts the status at
+  the merge, and `land.sh --regate <pr>` re-posts it. For a commit the move newly applies,
+  in (`prod`, T], the status must be at most six hours old.
+- **The backstop.** (`prod`, T] may change each pin in one commit only, and
+  `k3s_longhorn_version` may move one minor release at most between `prod` and T. It catches
+  a merge that bypassed `land.sh`.
+
+A commit that fails the gate or the backstop makes `decide` write T's SHA to `DEPLOY_HOLD`
+and print `held`, so nothing moves. A failed PR lookup or status read prints `error`. The way
+out is **operator-only**: fix forward through a PR, run `land.sh --regate <pr>` for each bump
+the hold names, then clear the hold. For a failed Longhorn bump, the recovery is
+`docs/longhorn-disaster-recovery.md`, never a revert.
+
 ### The timeout follows the chain
 
 `scripts/deploy_tools/chained_timeout.py:promote_timeout` derives `verify`'s wait from T's bundle and its changed set, the same set
@@ -543,14 +578,17 @@ only after its dependencies finish, so the wait sums four terms:
 - **The queueing term.** The number of changed names, dependents included, divided by
   `--concurrent` and rounded up, times the largest `timeout` among them. A Kustomization that
   waits on health holds one of the Kustomize controller's workers, so a revision that changes more
-  names than `--concurrent`, 4 by default, queues behind the workers. Without the term
+  names than `--concurrent` queues behind the workers. The flux role sets `--concurrent` to
+  `k8s_rollout_batch_width`, 5, the width the deploy play rolls workloads at. Without the term
   `verify` would time out on such a revision and write a false hold.
 - **The `OCIRepository` interval**, 1 minute.
 - **The largest `retryInterval`**, 2 minutes on every Kustomization the renderer writes.
 
 The root `homelab`'s 5-minute `timeout` is the floor of the first two terms. The flux role
-sets neither `--requeue-dependency` nor `--concurrent`, and
-`scripts/deploy_tools/tests/test_chained_timeout.py` fails a vendored install that adds one.
+leaves `--requeue-dependency` at its default, and
+`scripts/deploy_tools/tests/test_chained_timeout.py` fails a vendored install or role default
+that sets it. `ansible/tests/k8s/test_flux_role.py` holds `chained_timeout.CONCURRENT` equal to
+the `--concurrent` the role renders.
 A `dependsOn` naming a Kustomization the bundle does not hold, or a cycle, fails `verify`
 with no verdict, and `settle` holds it as `<T> unverified`.
 

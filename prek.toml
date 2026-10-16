@@ -22,10 +22,14 @@ rev = "v6.0.0"
 [[repos.hooks]]
 id = "trailing-whitespace"
 stages = ["pre-commit"]
+# A vendored upstream manifest under a role's files/upstream/ is pinned byte for byte to a
+# sha256 (scripts/dev/vendor_manifest.py), so no fixer may rewrite it.
+exclude = "^ansible/roles/[^/]+/[^/]+/files/upstream/"
 
 [[repos.hooks]]
 id = "end-of-file-fixer"
 stages = ["pre-commit"]
+exclude = "^ansible/roles/[^/]+/[^/]+/files/upstream/"
 
 [[repos.hooks]]
 id = "check-yaml"
@@ -34,7 +38,8 @@ stages = ["pre-commit"]
 # --allow-multiple-documents. Allowing that repo-wide would pass a stray `---` in every other
 # file, so the one stream is excluded instead: the validate-k8s-manifests hook parses its
 # render, and ansible/tests/k8s/test_flux_role.py reads it.
-exclude = "^ansible/roles/k8s/flux/files/gotk-components\\.yaml$"
+# An upstream file under files/upstream/ is such a stream too, and its own pin covers it.
+exclude = "^ansible/roles/(k8s/flux/files/gotk-components\\.yaml$|[^/]+/[^/]+/files/upstream/)"
 
 [[repos.hooks]]
 # Guards renovate.json (a syntax error there silently disables ALL dependency management)
@@ -60,6 +65,7 @@ stages = ["pre-commit"]
 id = "mixed-line-ending"
 stages = ["pre-commit"]
 args = ["--fix=lf"]
+exclude = "^ansible/roles/[^/]+/[^/]+/files/upstream/"
 
 # Ansible linting
 [[repos]]
@@ -94,7 +100,9 @@ files = "^ansible/.*\\.ya?ml$"
 # under a `vars/` directory reads to ansible-lint as a vars file, which fails on `apiVersion`.
 # They stay under ansible/vars/ because the creation rules in ansible/.sops.yaml and the
 # runbooks point there, and `cluster_vars.py check` validates them instead.
-exclude = "^ansible/(vars/secrets\\.yml|vars/cluster-manifests/.*|roles/k8s/home-assistant/files/.*|roles/k8s/flux/files/gotk-components\\.yaml)$"
+# files/upstream/ holds upstream manifests byte for byte, which this repo's lint rules do not
+# govern (scripts/dev/vendor_manifest.py).
+exclude ="^ansible/(vars/secrets\\.yml|vars/cluster-manifests/.*|roles/k8s/home-assistant/files/.*|roles/k8s/flux/files/gotk-components\\.yaml|roles/[^/]+/[^/]+/files/upstream/.*)$"
 # Cap ansible-core <3 so a surprise upstream major can't silently change lint behavior
 # or break this hook on a day nothing in the repo changed (these deps aren't lock-pinned).
 additional_dependencies = ["ansible-core>=2.18,<3.0", "jmespath"]

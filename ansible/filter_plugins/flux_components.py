@@ -3,7 +3,7 @@
 The flux role vendors `flux install --export` unedited in `roles/k8s/flux/files/`, so a
 regeneration diffs as upstream's change alone. The fleet guards in `ansible/tests/k8s/` then
 read the rendered Deployments, and upstream's differ from them in four ways. This filter
-closes each one at render time:
+closes each one at render time, and sets the controller flags the role names:
 
 - the role's `flux_pod_patch` is merged into every Deployment, for the uid pin,
   `enableServiceLinks` and `revisionHistoryLimit`;
@@ -12,8 +12,12 @@ closes each one at render time:
 - each pod runs at the class the `flux` entry's tier names, never upstream's
   `system-cluster-critical`;
 - each generic volume name (`data`, `tmp`, `temp`) is prefixed with its Deployment's name, in
-  `volumes` and in every container's `volumeMounts`.
+  `volumes` and in every container's `volumeMounts`;
+- each flag in `controller_args` is set on its Deployment's first container, replacing any
+  value upstream passes for the same flag. kustomize-controller's `--concurrent` is the one
+  the role sets (D5.1c).
 
+A merge patch cannot replace one item of a list either, which is why the flags are code too.
 A merge patch cannot rename a list item, which is why the rename is code rather than patch
 data. Each renamed item is written with `name` as its first key. `_IndentedDumper` indents
 every block sequence two columns under its key, the style the hand-written templates use.
@@ -63,8 +67,21 @@ def _named_first(item: dict, name: str) -> dict:
     return {"name": name, **{k: v for k, v in item.items() if k != "name"}}
 
 
+def _set_args(container: dict, flags: list[str]) -> None:
+    """Set each `--name=value` in `flags` on `container`, replacing the same flag's old value."""
+    args = list(container.get("args", []))
+    for flag in flags:
+        name = flag.split("=", 1)[0] + "="
+        args = [a for a in args if not a.startswith(name)] + [flag]
+    container["args"] = args
+
+
 def flux_components(
-    text: str, pod_patch: dict, priority_class: str, volume_suffixes: dict
+    text: str,
+    pod_patch: dict,
+    priority_class: str,
+    volume_suffixes: dict,
+    controller_args: dict | None = None,
 ) -> str:
     """The vendored install `text`, re-serialised with every Deployment fitted to the guards.
 
@@ -74,6 +91,8 @@ def flux_components(
         priority_class: The PriorityClass every controller pod runs at.
         volume_suffixes: Upstream volume name to the suffix its renamed volume takes after
             `<deployment name>-`.
+        controller_args: Deployment name to the `--name=value` flags set on its first
+            container.
 
     Returns:
         The documents in their vendored order, with only the Deployments changed.
@@ -82,17 +101,26 @@ def flux_components(
         ValueError: The text holds no Deployment, or a Deployment mounts a volume that
             `volume_suffixes` does not name. An unnamed volume is a regeneration that added
             one, and rendering it unrenamed would trip the volume-name guard much later.
+            Or `controller_args` names a Deployment the install does not hold, so a flag
+            would silently go unset.
     """
     # ansible-core hands templated values over as tagged builtin subclasses, which SafeDumper
     # refuses to represent. A JSON round trip leaves plain dicts, lists and strings.
-    pod_patch, priority_class, volume_suffixes = json.loads(
-        json.dumps([pod_patch, priority_class, volume_suffixes])
+    pod_patch, priority_class, volume_suffixes, controller_args = json.loads(
+        json.dumps([pod_patch, priority_class, volume_suffixes, controller_args or {}])
     )
     docs = [doc for doc in yaml.load_all(str(text), Loader=_Loader) if doc is not None]
     deployments = [doc for doc in docs if doc.get("kind") == "Deployment"]
     if not deployments:
         raise ValueError(
             "the vendored install holds no Deployment, so no controller would run"
+        )
+    if unknown := sorted(
+        set(controller_args) - {d["metadata"]["name"] for d in deployments}
+    ):
+        raise ValueError(
+            f"controller args name {unknown}, which the vendored install holds no "
+            "Deployment for"
         )
     for deployment in deployments:
         name = deployment["metadata"]["name"]
@@ -114,6 +142,8 @@ def flux_components(
             pod["volumes"] = [
                 _named_first(v, renames[v["name"]]) for v in pod["volumes"]
             ]
+        if name in controller_args:
+            _set_args(pod["containers"][0], controller_args[name])
         for container in pod.get("initContainers", []) + pod["containers"]:
             if "volumeMounts" in container:
                 container["volumeMounts"] = [

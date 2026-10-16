@@ -7,8 +7,9 @@ fact it reads from outside the checkout comes through this module:
   fetch and the manifest `HEAD`, and a bundle's files read out of its layer, for `decide`'s
   pulls and `land-wait`. It lists no tags, so a run's request count does not grow with the
   number of published versions.
-- `GitHub` reads a repository variable through `gh variable get`, and a commit's check-runs
-  and commit statuses through the REST API. For `promote.py prune` it also lists the
+- `GitHub` reads a repository variable through `gh variable get`, and a commit's check-runs,
+  commit statuses and pull requests through the REST API. It writes one variable, DEPLOY_HOLD,
+  through `gh variable set`, for `decide`'s forward-only gate hold. For `promote.py prune` it also lists the
   artifact's package versions and deletes one, through the Packages API.
 - `Cosign` runs `cosign verify` under the identity the cluster's OCIRepository checks.
 
@@ -26,17 +27,25 @@ The plan is `docs/target-architecture/deploy/d1-flux-installed.md`, *Decisions*,
 import base64
 import gzip
 import io
-import json
 import re
 import subprocess
 import tarfile
 import time
-import urllib.error
-import urllib.request
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass, field
-from datetime import UTC, datetime
-from typing import Protocol
+from dataclasses import dataclass
+from datetime import datetime
+
+from forge_transport import (
+    TIMEOUT_S,
+    ForgeError,
+    Response,
+    Transport,
+    _api_message,
+    _error_codes,
+    _json,
+    _updated,
+    urllib_transport,
+)
 
 
 REPOSITORY = "DanielH2018/server"
@@ -62,12 +71,8 @@ DELETE_PAUSE_S = 1.0
 SIGNER_IDENTITY = "https://github.com/DanielH2018/server/.github/workflows/promote.yml@refs/heads/master"
 SIGNER_ISSUER = "https://token.actions.githubusercontent.com"
 
-# Seconds for one HTTP request or one subprocess. A timeout is an error, never an absence.
-TIMEOUT_S = 30
 # cosign verify fetches the signature, then reaches Sigstore's transparency log.
 COSIGN_TIMEOUT_S = 120
-
-USER_AGENT = "homelab-promote"
 
 # The manifest types `flux push artifact` writes, plus the index and Docker types, so a HEAD
 # answers with the digest of whatever the tag names rather than a 404 for an unlisted type.
@@ -80,67 +85,6 @@ MANIFEST_ACCEPT = ", ".join(
 )
 
 _DIGEST = re.compile(r"sha256:[0-9a-f]{64}")
-
-
-class ForgeError(RuntimeError):
-    """A forge read failed: a status that means neither present nor absent, or no answer."""
-
-
-@dataclass(frozen=True)
-class Response:
-    """One HTTP response, whatever its status.
-
-    Attributes:
-        status: the HTTP status code.
-        headers: the response headers, names lower-cased.
-        body: the raw body, empty for a `HEAD`.
-    """
-
-    status: int
-    headers: Mapping[str, str] = field(default_factory=dict)
-    body: bytes = b""
-
-
-class Transport(Protocol):
-    """Sends one request and returns its response, raising `ForgeError` on no answer."""
-
-    def __call__(
-        self, method: str, url: str, headers: Mapping[str, str]
-    ) -> Response: ...
-
-
-def urllib_transport(
-    method: str, url: str, headers: Mapping[str, str], timeout: float = TIMEOUT_S
-) -> Response:
-    """Send one request with `urllib`, returning a non-2xx status rather than raising it.
-
-    `timeout` is in seconds. `probe.py landing` passes its own, measured against the live
-    registry, and every `promote.py` read keeps TIMEOUT_S.
-
-    Raises:
-        ForgeError: the request timed out or never reached the server.
-    """
-    request = urllib.request.Request(
-        url, method=method, headers={"User-Agent": USER_AGENT, **headers}
-    )
-    try:
-        with urllib.request.urlopen(request, timeout=timeout) as response:
-            return Response(response.status, _lower(response.headers), response.read())
-    except urllib.error.HTTPError as err:
-        return Response(err.code, _lower(err.headers or {}), err.read() or b"")
-    except (urllib.error.URLError, TimeoutError, OSError) as err:
-        raise ForgeError(f"{method} {url}: {err}") from err
-
-
-def _lower(headers) -> dict[str, str]:
-    return {name.lower(): value for name, value in headers.items()}
-
-
-def _json(response: Response, what: str):
-    try:
-        return json.loads(response.body)
-    except ValueError as err:
-        raise ForgeError(f"{what}: the body is not JSON") from err
 
 
 class Registry:
@@ -324,39 +268,6 @@ class Registry:
         return files
 
 
-def _api_message(response: Response) -> str:
-    """`: <message>` from a GitHub API error body, or nothing when it carries none.
-
-    A 403 means either a missing permission or a rate limit, and only the message tells which.
-    """
-    try:
-        body = json.loads(response.body)
-    except ValueError:
-        return ""
-    message = body.get("message") if isinstance(body, dict) else None
-    return f": {message}" if isinstance(message, str) and message else ""
-
-
-def _updated(entry: dict) -> datetime:
-    """A commit status's `updated_at`, or the earliest time when it is missing or malformed."""
-    try:
-        return datetime.fromisoformat(str(entry.get("updated_at")))
-    except ValueError:
-        return datetime.min.replace(tzinfo=UTC)
-
-
-def _error_codes(response: Response) -> set[str]:
-    """The `code` of each entry in an OCI error body, or nothing when the body has none."""
-    try:
-        body = json.loads(response.body)
-    except ValueError:
-        return set()
-    errors = body.get("errors") if isinstance(body, dict) else None
-    if not isinstance(errors, list):
-        return set()
-    return {str(e.get("code")) for e in errors if isinstance(e, dict)}
-
-
 class GitHub:
     """One GitHub repository: a variable through `gh`, check-runs and packages through REST."""
 
@@ -460,6 +371,70 @@ class GitHub:
             and isinstance(entry.get("state"), str)
             and (since is None or _updated(entry) >= since)
         }
+
+    def status(self, sha: str, context: str) -> tuple[str, datetime] | None:
+        """The newest status of `context` on commit `sha`, as `(state, updated_at)`.
+
+        Returns:
+            None when the commit carries no status of that context. An `updated_at` that is
+            missing or malformed reads as the earliest time, so an age bound refuses it.
+
+        Raises:
+            ForgeError: as `statuses` does.
+        """
+        url = (
+            f"https://api.github.com/repos/{self.repository}/commits/{sha}/status"
+            "?per_page=100"
+        )
+        response = self._transport("GET", url, self._rest_headers())
+        if response.status != 200:
+            raise ForgeError(
+                f"statuses for {sha}: HTTP {response.status}{_api_message(response)}"
+            )
+        body = _json(response, f"statuses for {sha}")
+        found = body.get("statuses") if isinstance(body, dict) else None
+        if not isinstance(found, list):
+            raise ForgeError(f"statuses for {sha}: the body has no statuses list")
+        for entry in found:
+            if isinstance(entry, dict) and entry.get("context") == context:
+                return str(entry.get("state")), _updated(entry)
+        return None
+
+    def commit_pulls(self, sha: str) -> list[dict]:
+        """The pull requests GitHub associates with commit `sha`, up to a page of 100.
+
+        Raises:
+            ForgeError: any status but 200, a body that is not a JSON list, or no answer.
+        """
+        url = (
+            f"https://api.github.com/repos/{self.repository}/commits/{sha}/pulls"
+            "?per_page=100"
+        )
+        response = self._transport("GET", url, self._rest_headers())
+        if response.status != 200:
+            raise ForgeError(
+                f"pull requests for {sha}: HTTP {response.status}{_api_message(response)}"
+            )
+        body = _json(response, f"pull requests for {sha}")
+        if not isinstance(body, list):
+            raise ForgeError(f"pull requests for {sha}: the body is not a list")
+        return body
+
+    def set_variable(self, name: str, value: str) -> None:
+        """Set repository variable `name` to `value` through `gh`, which reads `GH_TOKEN`.
+
+        Raises:
+            ForgeError: `gh` failed, or did not finish.
+        """
+        argv = ["gh", "variable", "set", name, "--body", value, "-R", self.repository]
+        try:
+            proc = self._run(argv, capture_output=True, text=True, timeout=TIMEOUT_S)
+        except (OSError, subprocess.TimeoutExpired) as err:
+            raise ForgeError(f"gh variable set {name}: {err}") from err
+        if proc.returncode != 0:
+            raise ForgeError(
+                f"gh variable set {name} exited {proc.returncode}: {proc.stderr.strip()}"
+            )
 
     def package_versions(self) -> list[dict]:
         """Every version of the artifact's package, as the Packages API returns each one.
