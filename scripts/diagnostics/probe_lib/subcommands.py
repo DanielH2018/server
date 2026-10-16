@@ -13,7 +13,7 @@ The registry carries names, descriptions, each subcommand's backing `probe_lib` 
 the `probe_lib` modules agree.
 
 This module defines no `run_*` function of its own, so `lib.cli_registry.package_entry_points`
-still reports the same fifteen subcommand backends — the `run_*` names below are imported, and
+still reports the same sixteen subcommand backends — the `run_*` names below are imported, and
 that function counts only what a module defines.
 """
 
@@ -46,6 +46,7 @@ from diagnostics.probe_lib.pi_plane import run_pi_containers, run_pi_targets
 from diagnostics.probe_lib.readonly_rbac import run_readonly_rbac
 from diagnostics.probe_lib.releases import run_releases
 from diagnostics.probe_lib.shed_set import run_shed_set
+from diagnostics.probe_lib.takeover import run_takeover
 from diagnostics.probe_lib.vip_placement import run_vip_placement
 from lib.cli_registry import Registry
 
@@ -127,6 +128,13 @@ SUBCOMMANDS = [
         "the untiered k8s workloads to scale down when one node is lost, derived from tier",
         "shed_set",
         run_shed_set,
+    ),
+    (
+        "takeover",
+        "the field paths Flux's first apply of a tag strips: owned by a manager "
+        "kustomize-controller cleans, and absent from the render",
+        "takeover",
+        run_takeover,
     ),
     (
         "pi",

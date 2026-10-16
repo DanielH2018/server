@@ -341,6 +341,21 @@ def _build_parser():
         "the containers_list `tier` field (inventory only, no kubectl). Exit 2 when the set "
         "comes back empty.",
     )
+    tk = sub.add_parser(
+        "takeover",
+        help="the field paths Flux's first apply of a tag strips: renders the tag in "
+        "placeholder mode, reads each live object with --show-managed-fields, and lists the "
+        "fields a manager kustomize-controller cleans owns and the render omits. Paths only, "
+        "never values. Exit 75 when a read fails or no rendered object is live.",
+    )
+    tk.add_argument(
+        "tag", help="the deploy tag, as `./scripts/deploy.sh --tags` takes it"
+    )
+    tk.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="render the tag and print the kubectl reads without making them",
+    )
     pi = sub.add_parser(
         "pi",
         **_verdict_help(

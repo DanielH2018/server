@@ -217,6 +217,62 @@ both in its body:
 The operator accepted that unattended apply on 2026-10-12, for this role's first landing and
 for later landings that reach `flux` as a reader.
 
+## What a takeover strips
+
+Flux's first apply of a tag takes over every live object the tag renders. Before each apply,
+`kustomize-controller` hands the fields of four managers to its own Apply entry: `kubectl` as
+Apply, and `kubectl`, `before-first-apply` and `kustomize-controller` as Update. It matches each
+name as a prefix, so `kubectl-client-side-apply`, `kubectl-rollout`, `kubectl-patch` and
+`kubectl-annotate` all match. It skips an entry that sets `subresource`, such as `kubectl scale` on
+`scale`. The apply that follows removes each handed-over field the render does not declare,
+unless another manager also owns it. A server-side dry run never runs that cleanup, so no
+dry-run diff shows the removal. speedtest's `kubectl-rollout` entry owns `restartedAt`, so its
+takeover drops the annotation and the pod rolls once.
+
+To list what a tag's takeover strips, run the read-only census with plain `kubectl`:
+
+```bash
+uv run python scripts/diagnostics/probe.py takeover <tag>
+```
+
+It renders the tag in placeholder mode and reads each live object with
+`--show-managed-fields`. For each object it prints the field paths that a cleaned manager owns,
+that no other manager owns, and that the render omits. It prints paths and manager names, never
+values. It flags a Deployment, DaemonSet or StatefulSet that rolls, because a stripped path sits
+under its pod template. `probe_lib/takeover.py` holds the rules.
+
+- **Not listed: the server's defaults.** A create attributes every field the API server
+  defaults, such as `dnsPolicy`, to `kubectl-client-side-apply`. A path only that manager owns
+  and the object's last-applied config omits is such a default. The takeover removes it and the
+  server sets it again to the same value, so the census counts these per object and lists none.
+- **Not listed: `last-applied-configuration`.** The cleanup removes it from every object by
+  design.
+- **Not read: Secrets and RBAC objects.** The census skips Secrets, whose managers D3.5 handles.
+  The read-only ServiceAccount cannot read ClusterRoles or ClusterRoleBindings, so the census
+  names each one as not checked.
+- **An empty census is not a clean one.** A tag with no rendered object live exits 75.
+
+The census cannot see an apply that fails on an immutable field, such as a PVC's spec or a
+selector, or one that changes a value. For those the operator renders the flip PR's head, where
+the entry carries `owner: flux`, and runs the flux CLI at `flux_version` on a machine with
+cluster-admin access (**operator-only**):
+
+```bash
+uv run python scripts/renderer/homelab_render.py cluster --out out --role <tag>
+flux diff kustomization <tag> --path out/cluster/<tag> \
+    --kustomization-file out/flux/<tag>.yaml
+```
+
+Without `--dry-run`, the CLI substitutes from the Secrets the Kustomization's `substituteFrom`
+names, so the diff compares real values rather than `${…}` placeholders. It reads
+`homelab-cluster-vars`, which is why it is operator-only. A role PR quotes object names and
+field paths from both commands, never values or diff hunks.
+
+H1's flips use a different census, `scripts/dev/takeover_census.py` (H1.1j), which is also
+operator-only. It compares the live object with a server-side dry-run apply as
+`kustomize-controller`, which needs the admin kubeconfig, and it also prints the fields that a
+manager outside the cleanup list keeps.
+
 ## Handing a service back
 
 A service whose `containers_list` entry sets `owner: flux` is applied by Flux, and every
