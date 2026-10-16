@@ -117,15 +117,15 @@ def test_a_field_only_an_outside_manager_owns_is_kept():
     assert section(text, "removed") == []
 
 
-def test_a_kubectl_entry_on_the_status_subresource_is_ignored():
-    status = {"f:status": {"f:replicas": {}}}
-    live = deployment(
-        entry("kubectl-patch", "Update", status, subresource="status"),
-        entry("k3s", "Update", status, subresource="status"),
-    )
-    text = run(live, dry_run(live, REPLICAS))
+def test_a_kubectl_entry_on_a_subresource_is_ignored():
+    """`kubectl scale` writes `spec.replicas` through `scale`, which matchFieldManager skips.
+
+    The entry is the field's only owner and the render omits it, so only the subresource rule
+    keeps it out of `removed`.
+    """
+    live = deployment(entry("kubectl-scale", "Update", REPLICAS, subresource="scale"))
+    text = run(live, dry_run(live, {"f:metadata": {"f:labels": {"f:app": {}}}}))
     assert section(text, "removed") == []
-    assert section(text, "kept") == []
 
 
 def test_inputs_with_no_object_in_common_fail():
