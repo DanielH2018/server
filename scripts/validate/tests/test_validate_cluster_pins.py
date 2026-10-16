@@ -188,6 +188,7 @@ def test_a_pin_read_but_not_assigned_outside_its_role_file_is_clean(repo):
                 "  url: https://x/{{ k3s_longhorn_version }}/longhorn.yaml\n"
                 "  when: k3s_longhorn_version == 'v1.12.1'\n"
                 "  # k3s_longhorn_version: bump one minor at a time\n"
+                "  url: x  # k3s_longhorn_version: v1.11.0\n"
             ),
         },
     )
@@ -220,6 +221,14 @@ def test_the_real_tree_overrides_no_pin():
             "- set_fact:\n    k3s_longhorn_version: v1.11.0\n",
         ),
         ("ansible/site.yml", "- hosts: all\n  vars: {k3s_longhorn_version: v1.11.0}\n"),
+        (
+            "ansible/site.yml",
+            '- hosts: all\n  vars: {note: "#1", k3s_longhorn_version: v1.11.0}\n',
+        ),
+        (
+            "ansible/inventory/hosts.ini",
+            "[k3s]\ndaniel-box ansible_user=x;y k3s_longhorn_version=v1.11.0\n",
+        ),
     ],
     ids=[
         "play-vars",
@@ -229,6 +238,8 @@ def test_the_real_tree_overrides_no_pin():
         "extensionless",
         "set-fact",
         "flow",
+        "hash-in-a-value",
+        "semicolon-in-a-value",
     ],
 )
 def test_an_override_the_column_zero_grep_missed_is_flagged(repo, capsys, path, text):

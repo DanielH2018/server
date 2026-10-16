@@ -173,31 +173,34 @@ def files_setting(key: str, sha: str, repo: Path = REPO) -> list[str]:
     return [line.split(":", 1)[1] for line in hits.stdout.splitlines()]
 
 
-def assigning_key(key: str) -> str:
-    """An ERE matching `key` assigned at any indent: YAML `key:`, a flow `{key: v}`, INI `key=v`.
+# A comment starts at a `#` that opens the line or follows whitespace (YAML, and INI), or at
+# a `;` that opens the line (INI). A `#` or `;` inside a value, as in `{note: "#1", ...}` or
+# `ansible_user=x;y`, starts none, so an assignment after it still counts.
+COMMENT = re.compile(r"(^|\s)#|^\s*;")
 
-    `==` stays unmatched, so a `when: <key> == 'v1.2.3'` comparison is not an assignment, and
-    so does a key after a `#` or `;`, which is a YAML or INI comment quoting it.
+
+def assigns(key: str, line: str) -> bool:
+    """Whether `line` assigns `key` at any indent: YAML `key:`, a flow `{key: v}`, INI `key=v`.
+
+    `==` is no assignment, so a `when: <key> == 'v1.2.3'` comparison is not one, and neither
+    is a key quoted in the line's comment.
     """
-    return rf"""^[^#;]*(^|[[:space:]{{,"'-]){key}["']?[[:space:]]*(:|=([^=]|$))"""
+    if comment := COMMENT.search(line):
+        line = line[: comment.start()]
+    return bool(re.search(rf"""(^|[\s{{,"'-]){key}["']?\s*(:|=(?!=))""", line))
 
 
 def files_assigning(key: str, sha: str, repo: Path = REPO) -> list[str]:
     """Every file under `ansible/` that Ansible reads vars from and that assigns `key` at `sha`."""
-    hits = git(
-        "grep",
-        "-l",
-        "-E",
-        assigning_key(key),
-        sha,
-        "--",
-        *ANSIBLE_VARS,
-        cwd=repo,
-        check=False,
-    )
+    hits = git("grep", "-n", "-F", key, sha, "--", *ANSIBLE_VARS, cwd=repo, check=False)
     if hits.returncode not in (0, 1):
         raise Unjudged(f"git grep for {key} at {sha[:9]} failed: {hits.stderr}")
-    return [line.split(":", 1)[1] for line in hits.stdout.splitlines()]
+    found: dict[str, None] = {}
+    for hit in hits.stdout.splitlines():
+        _sha, path, _lineno, line = hit.split(":", 3)
+        if assigns(key, line):
+            found[path] = None
+    return list(found)
 
 
 def overrides(sha: str, repo: Path = REPO) -> list[str]:
