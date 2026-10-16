@@ -1987,6 +1987,11 @@ sizes its batch of roles against that projection.
   `kubectl-rollout` `restartedAt` or a `kubectl-patch` hand patch. Each listed path is either
   expected, like `restartedAt`, whose loss rolls the pod once, or moved into the render before
   the flip.
+- **Operator-only: what the takeover strips from RBAC objects.** The read-only ServiceAccount
+  cannot read Roles, RoleBindings, ClusterRoles or ClusterRoleBindings, so `probe.py takeover`
+  names each as not checked on its last line. The operator runs H1.1j's
+  `scripts/dev/takeover_census.py` with the admin kubeconfig over those objects
+  (`docs/flux-deploy-plane.md`, *What a takeover strips*), and the PR quotes its output.
 - **Operator-only: what the takeover fails on or changes.** The output of `flux diff
   kustomization` over the role's substituted render (D5.1g), for immutable fields such as a
   PVC's spec and for changed values. It leaves Secrets out, because D3.5 covered their

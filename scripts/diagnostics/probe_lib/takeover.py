@@ -343,6 +343,7 @@ def census(tag, docs, live_of):
     lines = [f"takeover census for {tag}: the fields Flux's first apply strips"]
     compared = stripped_total = defaulted_total = 0
     rolling = []
+    unchecked = []
     for doc in docs:
         name = doc_name(doc)
         if doc.get("kind") == "Secret":
@@ -351,9 +352,14 @@ def census(tag, docs, live_of):
         try:
             live = live_of(doc)
         except ReadForbidden:
+            # DECIDED: route an unreadable object to the operator rather than widen the
+            # read-only ServiceAccount. Its ClusterRole leaves `rbac.*` out on purpose
+            # (roles/setup/k3s/templates/readonly-rbac.yaml.j2, *Deliberately absent*), and
+            # `view` omits Roles too, so every RBAC object a tag renders lands here (#5258).
             lines.append(
                 f"  {name}: not readable by the read-only ServiceAccount, so not checked"
             )
+            unchecked.append(name)
             continue
         if live is None:
             lines.append(f"  {name}: not live, so the takeover creates it")
@@ -387,6 +393,12 @@ def census(tag, docs, live_of):
         f"{len(rolling)} workload(s) roll"
         + (f": {', '.join(rolling)}" if rolling else "")
     )
+    if unchecked:
+        lines.append(
+            f"{len(unchecked)} object(s) not checked; the operator runs "
+            "scripts/dev/takeover_census.py (H1.1j) with the admin kubeconfig over them: "
+            + ", ".join(unchecked)
+        )
     return "\n".join(lines), compared
 
 
