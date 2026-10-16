@@ -2263,6 +2263,13 @@ timers or entry regenerates its glance block with `scripts/docs/gen_role_glance.
    fails closed on it (Phase B item 1). Resolution: B-1's PR reads `ALERTS_FOR_STATE` for one
    firing short-`for:` alert before and after the next Prometheus pod restart, and records
    whether the value moved. If it does not move, the "age unknown" message is dropped.
+   **Partly recorded on 2026-10-16 (B-1).** No restart fell inside B-1, and an agent cannot
+   restart Prometheus, so the before/after pair is still owed
+   ([#5333](https://github.com/DanielH2018/server/issues/5333)). One reading points the
+   recalled way. The Watchdog has fired without a break, yet its `ALERTS_FOR_STATE` read
+   `1792078185`, 6.4s after `process_start_time_seconds{job="prometheus"}` read
+   `1792078178.57`. Its activation therefore reset at the last restart, so B-1 keeps the
+   "age unknown" message.
 10. **Owner of the `workload_log_errors` port** (M2 Open question 6). M5's text keeps
     `with_log_errors` and does not retire the row's token, and M2 names M6 as the fallback
     owner. Resolution: M6 owns it as A7. If M5's text adopts the port before A7's shadow PR,
