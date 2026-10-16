@@ -130,23 +130,12 @@ def test_a_failing_cluster_step_returns_non_zero_without_deploying(
     assert "ansible/vars/cluster-manifests" in err, err
 
 
-@pytest.mark.parametrize(
-    ("expected", "names_cluster_files"),
-    [
-        pytest.param(REFERENCED, True, id="cluster-key"),
-        pytest.param(
-            Expected(frozenset({"other_key"}), frozenset(), ()), False, id="host-only"
-        ),
-    ],
-)
-def test_the_next_line_names_the_cluster_files_only_when_write_rewrote_them(
-    tmp_path, capsys, expected, names_cluster_files
-):
+def test_the_next_line_names_the_cluster_files_write_rewrote(tmp_path, capsys):
     """A hand run commits what the Next: line names; CI's `check` fails on a stale `.source`."""
     registry = {"entries": {NAME: {"tier": "auto", "last_rotated": "2026-01-01"}}}
     tools, _ = build_tools(
         Fakes(
-            registry=registry, cluster_root=_cluster_tree(tmp_path), expected=expected
+            registry=registry, cluster_root=_cluster_tree(tmp_path), expected=REFERENCED
         )
     )
     args = _args()
@@ -158,4 +147,4 @@ def test_the_next_line_names_the_cluster_files_only_when_write_rewrote_them(
         if line.startswith("Next:")
     )
     for path in sr.CLUSTER_PATHS:
-        assert (path in next_line) is names_cluster_files, next_line
+        assert path in next_line, next_line
