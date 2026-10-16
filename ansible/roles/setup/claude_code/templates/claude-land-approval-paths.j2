@@ -41,3 +41,9 @@ ansible/roles/setup/initial_setup/tasks/access.yml
 # The secrets and who can decrypt them.
 ansible/.sops.yaml
 ansible/vars/secrets.yml
+# The agent's cluster grant (operator decision, 2026-10-16, H1 Open question 7): the read-only
+# ServiceAccount, its ClusterRole and its binding. Before H1 they apply only through
+# k3s-bringup.yml, by hand; once Flux applies cluster-base on merge, this entry is the human
+# gate. A plain prefix, so it holds before H1 creates the role. The trailing slash keeps a
+# sibling such as cluster-baseline off the floor.
+ansible/roles/k8s/cluster-base/
