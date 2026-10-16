@@ -457,8 +457,13 @@ YAML file holds the key at the base and at the merge commit, and refuses five sh
   that holds the pin, which carries its vendored file, and docs. A test, `renovate.json` or
   another role goes in a PR of its own. `land.sh`'s land gate relies on this refusal.
 - **Two pins bumped together.** Bump each pin in its own PR.
-- **A pin set outside a role directory.** Inventory and play vars override a role default,
-  so a pin in `group_vars/` would move the deployed version while the role file stays put.
+- **A pin set outside the role file that holds it.** Inventory, play vars, `include_role`
+  vars and `set_fact` override a role default, so a pin there would move the deployed version
+  while the role file stays put. The check matches the key at any indent, as YAML `key:` or
+  INI `key=`, in every YAML and INI file under `ansible/` and every file under `inventory/`,
+  `group_vars/` or `host_vars/`. It skips a comment, which starts at a `#` that opens the line
+  or follows whitespace, or at a `;` that opens the line. A `-e` passed at run time is outside
+  its reach.
 
 A PR that moves a key into another role at the same version is no bump, so none of the first
 four applies to it. A key set in two role files at one commit, or a value that is not `vX.Y.Z`,

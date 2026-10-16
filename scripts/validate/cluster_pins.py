@@ -17,9 +17,13 @@ shapes:
 
 A pin changes when its value changes. The check reads each pin from whichever file under
 `ansible/roles/` holds the key at each SHA, so a PR that moves the key into another role at
-the same version is no bump, and neither the decrease nor the alone check applies to it. The
-key set in any other YAML file under `ansible/` is refused: inventory and play vars override
-a role default, so a pin there would move the deployed version while the role file stays put.
+the same version is no bump, and neither the decrease nor the alone check applies to it.
+
+The key set anywhere else under `ansible/` is refused: inventory, play vars, `include_role`
+vars and `set_fact` override a role default, so a pin there would move the deployed version
+while the role file stays put. That scan matches the key at any indent, as YAML `key:` or as
+INI `key=`, in every YAML and INI file and every file under `inventory/`, `group_vars/` or
+`host_vars/`. A `-e` passed at run time is outside its reach.
 
 There is no bypass. The plan is docs/target-architecture/host/h1-cluster-config-to-flux.md,
 *CI checks on the pins*, and docs/landing.md says what to do with a refused PR.
@@ -62,6 +66,14 @@ PINS: Mapping[str, bool] = {
 }
 # YAML only: a role's CLAUDE.md or template can quote `<key>: v1.2.3` at a line start.
 ANSIBLE_YAML = (":(glob)ansible/**/*.yml", ":(glob)ansible/**/*.yaml")
+# Every file Ansible reads variables from. Inventory files take any extension or none.
+ANSIBLE_VARS = (
+    *ANSIBLE_YAML,
+    ":(glob)ansible/**/*.ini",
+    ":(glob)ansible/inventory/**",
+    ":(glob)ansible/**/group_vars/**",
+    ":(glob)ansible/**/host_vars/**",
+)
 ROLES = "ansible/roles/"
 VERSION = re.compile(r"v?(\d+)\.(\d+)\.(\d+)")
 
@@ -161,19 +173,52 @@ def files_setting(key: str, sha: str, repo: Path = REPO) -> list[str]:
     return [line.split(":", 1)[1] for line in hits.stdout.splitlines()]
 
 
-def outside_roles(sha: str, repo: Path = REPO) -> list[str]:
-    """A refusal for each pin set outside a role directory at `sha`.
+# A comment starts at a `#` that opens the line or follows whitespace (YAML, and INI), or at
+# a `;` that opens the line (INI). A `#` or `;` inside a value, as in `{note: "#1", ...}` or
+# `ansible_user=x;y`, starts none, so an assignment after it still counts.
+COMMENT = re.compile(r"(^|\s)#|^\s*;")
 
-    Inventory and play vars take precedence over role defaults, so a pin set there would
-    move the deployed version while the role file, which `pins_at` reads, stays the same.
+
+def assigns(key: str, line: str) -> bool:
+    """Whether `line` assigns `key` at any indent: YAML `key:`, a flow `{key: v}`, INI `key=v`.
+
+    `==` is no assignment, so a `when: <key> == 'v1.2.3'` comparison is not one, and neither
+    is a key quoted in the line's comment.
     """
-    return [
-        f"{path}: {key} is set outside a role directory, where it would override the "
-        "role's pin unchecked. Set it in the role that holds the pin"
-        for key in PINS
-        for path in files_setting(key, sha, repo)
-        if not path.startswith(ROLES)
-    ]
+    if comment := COMMENT.search(line):
+        line = line[: comment.start()]
+    return bool(re.search(rf"""(^|[\s{{,"'-]){key}["']?\s*(:|=(?!=))""", line))
+
+
+def files_assigning(key: str, sha: str, repo: Path = REPO) -> list[str]:
+    """Every file under `ansible/` that Ansible reads vars from and that assigns `key` at `sha`."""
+    hits = git("grep", "-n", "-F", key, sha, "--", *ANSIBLE_VARS, cwd=repo, check=False)
+    if hits.returncode not in (0, 1):
+        raise Unjudged(f"git grep for {key} at {sha[:9]} failed: {hits.stderr}")
+    found: dict[str, None] = {}
+    for hit in hits.stdout.splitlines():
+        _sha, path, _lineno, line = hit.split(":", 3)
+        if assigns(key, line):
+            found[path] = None
+    return list(found)
+
+
+def overrides(sha: str, repo: Path = REPO) -> list[str]:
+    """A refusal for each file at `sha` that assigns a pin, other than the role file holding it.
+
+    Inventory, play vars and task vars take precedence over role defaults, so a pin set there
+    would move the deployed version while the role file, which `pins_at` reads, stays the same.
+    """
+    found: list[str] = []
+    for key in PINS:
+        holders = {f for f in files_setting(key, sha, repo) if f.startswith(ROLES)}
+        found += [
+            f"{path}: {key} is set outside the role file that holds the pin, where it "
+            "would override the role's pin unchecked. Set it in that role file only"
+            for path in files_assigning(key, sha, repo)
+            if path not in holders
+        ]
+    return found
 
 
 def pins_at(sha: str, repo: Path = REPO) -> dict[str, Pin | None]:
@@ -204,7 +249,7 @@ def check(base: str, head: str, repo: Path = REPO) -> int:
         "diff", "--no-renames", "--name-only", base, head, cwd=repo
     ).split()
     try:
-        found = outside_roles(head, repo) + problems(
+        found = overrides(head, repo) + problems(
             pins_at(base, repo), pins_at(head, repo), paths
         )
     except Unjudged as exc:
