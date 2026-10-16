@@ -195,15 +195,27 @@ def test_a_legacy_cron_line_is_removed_and_the_rest_of_the_crontab_kept(node):
 
 
 def test_a_legacy_cron_on_a_host_without_crontab_counts_as_retired(node):
-    # 127 is what `run` returns when it cannot exec the binary, and what a shell returns for
-    # a command it cannot find. The container test image installs no cron package.
-    (node.bin / "crontab").write_text("#!/bin/sh\nexit 127\n")
+    # The container test image installs no cron package. PATH holds only the stubs, so
+    # this box's own /usr/bin/crontab cannot stand in for the missing one.
+    (node.bin / "crontab").unlink()
+    node.path = str(node.bin)
     node.manifest["legacy"].append({"cron": "pi-sd-health", "user": "ubuntu"})
 
     result = node.run()
 
     assert result.returncode == 0, result.stderr
     assert len(node.applied()["retired"]) == 1
+
+
+def test_a_crontab_that_will_not_run_leaves_the_cron_unretired(node):
+    # Present but failing with the shell's command-not-found code: not an absent binary.
+    (node.bin / "crontab").write_text("#!/bin/sh\nexit 127\n")
+    node.manifest["legacy"].append({"cron": "pi-sd-health", "user": "ubuntu"})
+
+    result = node.run()
+
+    assert result.returncode != 0
+    assert node.applied()["retired"] == []
 
 
 def test_a_crontab_that_fails_otherwise_leaves_the_cron_unretired(node):
