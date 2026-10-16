@@ -220,7 +220,8 @@ which needs a drill exclusion in C7 that no slice has requested, the edge goes.
   A missing expected status keeps `verify` waiting and never reads as success. When every
   expected status is `success`, `last-good` moves to `sha-<T>`.
 - **On failure**, the `settle` job writes a hold to `DEPLOY_HOLD`, then resets `prod` to
-  `last-good`. The hold is written first, so a failed reset still stops the next promotion.
+  `last-good`, except under *A hold without a reset* below. The hold is written first, so a
+  failed reset still stops the next promotion.
   The hold takes one of two forms (D2.5):
     - `<T> failed=<names>` when `verify` printed `failed`, meaning a `failure` status or
       `promote.py`'s own derived timeout. `<names>` comma-joins the expected names that read
