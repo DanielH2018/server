@@ -152,3 +152,14 @@ def test_the_live_reads_wire_the_in_flight_read_to_prod():
     transport = _prod_transport("t", "g", f"master@sha1:{P}")
     reads = promote_wait.live_wait_reads(_forge(transport), REPO, host=FluxHost())
     assert reads.in_flight() == P
+
+
+@pytest.mark.parametrize(
+    "in_flight", [P, None], ids=["an-earlier-commit-in-flight", "nothing-in-flight"]
+)
+def test_the_cap_ends_the_wait_whatever_is_in_flight(in_flight):
+    """A lander killed at a fixed time passes what its deadline leaves (#5199)."""
+    sim = Sim(polls=[at(P)], in_flight=[in_flight])
+    result = promote_wait.land_wait(sim.reads(), M, [], cap_s=1800)
+    assert (result.verdict, result.cause) == ("gave-up", "promote-timeout")
+    assert sim.sleeps * promote_wait.POLL_S == 1800

@@ -340,6 +340,7 @@ def land_wait(
     timeout_s: int = LAND_WAIT_TIMEOUT_S,
     poll_s: int = POLL_S,
     also: frozenset[str] = frozenset(),
+    cap_s: float | None = None,
 ) -> WaitResult:
     """Poll until a promotion covers `merge`, DEPLOY_HOLD holds, or `timeout_s` passes.
 
@@ -352,6 +353,8 @@ def land_wait(
         timeout_s: the seconds after which it gives up.
         poll_s: the seconds between polls.
         also: names to wait on whatever the digests say, each with its live dependents.
+        cap_s: the seconds after which it gives up whatever an in-flight verification says,
+            or None for no cap. `land.sh` passes what its own deadline leaves.
     """
     started = reads.clock()
     deadline = started + timeout_s
@@ -401,7 +404,7 @@ def land_wait(
         if line != last:
             print(f"  promote.py land-wait: {line}", flush=True)
             last = line
-        if now >= deadline:
+        if now >= deadline or (cap_s is not None and now - started >= cap_s):
             return WaitResult(
                 "gave-up",
                 TIMEOUT_CAUSE,

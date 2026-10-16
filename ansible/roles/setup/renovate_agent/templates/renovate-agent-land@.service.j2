@@ -18,6 +18,9 @@ Environment=RENOVATE_AGENT_REPO={{ renovate_agent_repo }}
 Environment=RENOVATE_AGENT_REPO_DIR={{ renovate_agent_repo_dir }}
 # land.sh's own author check, behind the lander's: --arm-merge refuses any other author.
 Environment=LAND_REQUIRE_AUTHOR=app/renovate
+# land_renovate_pr.py's LAND_TIMEOUT_S, so land.sh ends a long promotion wait `deferred`
+# before the script kills it with no verdict (#5199).
+Environment=LAND_DEADLINE=3300
 # /var/lib/renovate-agent-land/<n>.verdict is the one thing the session reads back, so the
 # directory is world-readable and only this unit writes it.
 StateDirectory=renovate-agent-land

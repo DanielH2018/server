@@ -328,7 +328,12 @@ Instead it reads the cluster every 30 seconds:
   The 67 minutes count again from each poll that reads a verification of an earlier commit
   in flight, for up to `wait.py:IN_FLIGHT_WAIT_S`. M's `decide` waits on that verification
   before it promotes M, so two merges minutes apart would otherwise give up on a promotion
-  that passes later (#5164). A lander unit's own `TimeoutStartSec` still bounds the landing.
+  that passes later (#5164).
+  A lander that is killed at a fixed time sets `LAND_DEADLINE`, the seconds after `land.sh`
+  starts by which the landing must print its verdict. The wait then gives up 10 minutes
+  before that deadline, whatever is in flight, and the landing still ends `deferred` with a
+  ledger line (#5199). `claude-land@.service` sets 5400 and `renovate-agent-land@.service`
+  sets 3300.
 
 Two holds coexist until slice D6 retires the deployer, and `probe.py landing` prints both on
 every run, each naming its source and the tags it holds:

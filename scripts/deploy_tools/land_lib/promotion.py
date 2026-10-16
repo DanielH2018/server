@@ -212,6 +212,19 @@ def forced_names(ln: Landing) -> list[str]:
     return [CLUSTER_VARS] if waits_on_cluster_vars(ln) else []
 
 
+# What a landing keeps back from `LAND_DEADLINE` after the promotion wait: the health gate and
+# the verdict and ledger lines written after it.
+DEADLINE_RESERVE_S = 600
+
+
+def wait_cap(ln: Landing) -> float | None:
+    """The seconds the promotion wait may take before `LAND_DEADLINE`, or None with none set."""
+    if not ln.opts.deadline:
+        return None
+    spent = ln.tools.clock() - ln.ledger.t_start
+    return max(0.0, ln.opts.deadline - spent - DEADLINE_RESERVE_S)
+
+
 def wait_on_promotion(ln: Landing) -> None:
     """Wait until a promotion covers the merge commit; return on `settled`, else end the landing.
 
@@ -224,7 +237,9 @@ def wait_on_promotion(ln: Landing) -> None:
     also = frozenset(forced)
     tags = ",".join([*ln.owned_tags, *forced])
     say(f"waiting until a promotion covers {sha[:12]} ({tags})")
-    result = ln.tools.flux.land_wait(sha, published(ln), ln.opts.primary, also)
+    result = ln.tools.flux.land_wait(
+        sha, published(ln), ln.opts.primary, also, wait_cap(ln)
+    )
     if result.widened:
         say(f"land-wait waited on every Kustomization: {result.widened}")
     if result.verdict == "settled":
