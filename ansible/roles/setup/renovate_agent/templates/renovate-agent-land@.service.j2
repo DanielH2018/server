@@ -32,6 +32,11 @@ SyslogLevel=notice
 # counts the lock wait too: a landing queued 40 minutes behind another would otherwise be
 # killed 20 minutes in, with no verdict line (#5203).
 TimeoutStartSec=60min
+# Replaces any earlier run's verdict before the lock wait. land_renovate_pr.py writes PENDING only
+# once it holds the lock, so a wait that times out would otherwise leave yesterday's verdict for
+# this PR for the session to read as today's. The prompt stops landing on any VERDICT line but
+# `settled`, which is the right answer when another landing holds the lock.
+ExecStartPre=/bin/sh -c 'echo "VERDICT: none (the lander did not get its lock)" > "$1"' sh /var/lib/renovate-agent-land/%i.verdict
 # One landing at a time: two would race for the same tick and the same service locks. The wait
 # is short because the session lands one PR at a time and blocks on each, so only a hand-started
 # unit queues here, and a longer wait would come out of the landing's share of TimeoutStartSec.

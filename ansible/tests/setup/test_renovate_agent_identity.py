@@ -12,12 +12,14 @@ Run: uv run pytest ansible/tests/setup/test_renovate_agent_identity.py
 
 import importlib.util
 import re
+import shlex
 import sys
 
 import pytest
 from _helpers import ANSIBLE
 from _setup_render import render_setup_text
 from lib import yaml_fast
+from lib.proc_testing import run
 from lib.ansible_jinja_env import make_ansible_env
 
 ROLE_NAME = "renovate_agent"
@@ -344,3 +346,16 @@ def test_the_lock_wait_and_the_landing_both_fit_inside_the_units_timeout() -> No
     (land_timeout,) = re.findall(r"^LAND_TIMEOUT_S = (\d+)$", script, re.MULTILINE)
     landing = max(int(deadline), int(land_timeout))
     assert int(flock_wait) + landing + SCRIPT_OVERHEAD_S <= timeout
+
+
+def test_a_lock_wait_that_times_out_leaves_no_earlier_verdict(tmp_path) -> None:
+    """The verdict file is overwritten before the flock wait, not only once the script runs."""
+    unit = render(LANDER)
+    script = (ROLE / "files" / "land_renovate_pr.py").read_text()
+    (results_dir,) = re.findall(r'^RESULTS_DIR = "([^"]+)"$', script, re.MULTILINE)
+    (pre,) = directive(unit, "ExecStartPre")
+    stale = tmp_path / f"{PR}.verdict"
+    stale.write_text("VERDICT: settled\n")
+    command = shlex.split(pre.replace("%i", PR).replace(results_dir, str(tmp_path)))
+    run(command, check=True)
+    assert stale.read_text().startswith("VERDICT: none")
