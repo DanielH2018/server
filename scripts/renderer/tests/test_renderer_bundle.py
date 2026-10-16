@@ -1,9 +1,9 @@
-"""The bundle writer: `flux/<tag>.yaml`, the root's list, the reserved names and `digests.json`.
+"""The bundle writer: `flux/<tag>.yaml`, the root's list and `digests.json`.
 
-Most fixtures are file maps handed to `bundle_files` and `digests`, so no role renders. Two
-tests run the real CLI on littlelink: the determinism pair and the reserved-name refusal.
-Every render that publishes copies `DOTENV`, a fixture cluster file in `tmp_path` holding
-fake ciphertext, never the tree's cluster file.
+Most fixtures are file maps handed to `bundle_files` and `digests`, so no role renders. The
+determinism pair runs the real CLI on littlelink. `dependsOn` and the reserved names are in
+`test_renderer_bundle_ordering.py`. Every render that publishes copies `DOTENV`, a fixture
+cluster file in `tmp_path` holding fake ciphertext, never the tree's cluster file.
 
 Run: uv run pytest scripts/renderer/tests/test_renderer_bundle.py
 """
@@ -15,7 +15,6 @@ from changed_set import changed_set
 from lib import yaml_fast
 from lib.exit_codes import RENDER_BAD_ARGS, RENDER_FAILED, RENDER_OK, RENDER_REFUSED
 from renderer import homelab_render
-from renderer.renderer_lib import cluster as cluster_mod
 from renderer.renderer_lib.bundle import (
     DIGESTS,
     FLUX_INDEX,
@@ -25,7 +24,6 @@ from renderer.renderer_lib.bundle import (
     bundle_files,
     digests,
     rules_missing,
-    substitution,
 )
 from renderer.renderer_lib.cluster import KUSTOMIZATION, RenderedTag, kustomization_text
 from renderer.renderer_lib.placeholders import apply_placeholders, sentinel
@@ -101,25 +99,42 @@ def test_a_tag_holding_no_placeholder_gets_neither_and_keeps_a_literal_dollar_br
     )
 
 
-def test_only_a_tags_own_directory_with_a_placeholder_substitutes():
-    """`<tag>` holds a placeholder and `<tag>-deferred` none, as D3.3b's fixture asks.
+def _pihole(main: str, deferred: str) -> RenderedTag:
+    return RenderedTag(
+        "pihole", _tag("pihole", main).files, _tag("pihole-deferred", deferred).files
+    )
 
-    `bundle_files` refuses `-deferred` until D4.2, so this calls the decision it makes.
+
+def _specs(tag: RenderedTag) -> list[dict]:
+    """The specs of `flux/pihole.yaml`'s two documents, `pihole` then `pihole-deferred`."""
+    docs = list(yaml_fast.safe_load_all(_bundle(tag)["flux/pihole.yaml"]))
+    assert [d["metadata"]["name"] for d in docs] == ["pihole", "pihole-deferred"]
+    return [d["spec"] for d in docs]
+
+
+def test_only_a_tags_own_directory_with_a_placeholder_substitutes():
+    """`<tag>` holds a placeholder and `<tag>-deferred` none, as D3.3b's fixture asks (#5154).
+
+    It goes red on a writer that gives `<tag>-deferred` `postBuild` because its tag
+    substitutes.
     """
-    directories = {"pihole": {}, "pihole-deferred": {}}
-    keys = {"pihole": frozenset({"email"}), "pihole-deferred": frozenset()}
-    per_directory, substituting = substitution(["pihole"], directories, keys)
-    assert per_directory == {"pihole": True, "pihole-deferred": False}
-    assert substituting == {"pihole"}
+    main, deferred = _specs(_pihole(sentinel("email"), "plain"))
+    assert main["dependsOn"] == [{"name": "cluster-vars"}]
+    assert "postBuild" in main
+    assert deferred["dependsOn"] == [{"name": "pihole"}]
+    assert "postBuild" not in deferred
 
 
 def test_a_placeholder_only_in_deferred_substitutes_there_and_counts_for_the_tag():
     """The reverse split: no edge on `<tag>`, while the footprint rule still counts it."""
-    directories = {"pihole": {}, "pihole-deferred": {}}
-    keys = {"pihole": frozenset(), "pihole-deferred": frozenset({"email"})}
-    per_directory, substituting = substitution(["pihole"], directories, keys)
-    assert per_directory == {"pihole": False, "pihole-deferred": True}
-    assert substituting == {"pihole"}
+    tag = _pihole("plain", sentinel("email"))
+    main, deferred = _specs(tag)
+    assert "dependsOn" not in main and "postBuild" not in main
+    assert deferred["dependsOn"] == [{"name": "cluster-vars"}, {"name": "pihole"}]
+    assert "postBuild" in deferred
+    old = json.loads(_bundle(tag)[DIGESTS])
+    new = json.loads(_bundle(tag, dotenv=DOTENV + "x=ENC[y]\n")[DIGESTS])
+    assert old["pihole"]["footprint"] != new["pihole"]["footprint"]
 
 
 def test_the_root_lists_every_file_in_flux():
@@ -133,44 +148,15 @@ def test_the_root_lists_every_file_in_flux():
     assert yaml_fast.safe_load(files[FLUX_INDEX])["resources"] == in_flux
 
 
-def test_a_published_tag_with_a_deferred_directory_is_flagged():
-    deferred = RenderedTag(
-        "pihole", _tag("pihole").files, {"x.yaml": "kind: ConfigMap\n"}
-    )
-    with pytest.raises(ValueError, match=r"D4\.2"):
-        _bundle(deferred)
-
-
-def test_a_tag_named_homelab_is_flagged():
-    with pytest.raises(cluster_mod.RenderRefused, match=r"\['homelab'\]"):
-        cluster_mod.select_tags(["homelab"])
-
-
-def test_a_tag_named_after_a_shared_kind_is_flagged():
-    with pytest.raises(cluster_mod.RenderRefused, match=r"\['littlelink'\]"):
-        cluster_mod.select_tags(["littlelink"], kinds=frozenset({"littlelink"}))
-
-
-def test_a_tag_named_cluster_vars_is_flagged():
-    with pytest.raises(cluster_mod.RenderRefused, match=r"\['cluster-vars'\]"):
-        cluster_mod.select_tags(["cluster-vars"])
-
-
-def test_an_ordinary_tag_is_clean():
-    assert cluster_mod.select_tags(["littlelink"]) == ["littlelink"]
-
-
-@pytest.mark.parametrize(
-    "tag, kinds", [("homelab", SHARED_KINDS), ("littlelink", frozenset({"littlelink"}))]
-)
-def test_the_render_refuses_a_reserved_tag_and_writes_nothing(
-    tmp_path, capsys, tag, kinds
-):
-    out = tmp_path / "out"
-    out.mkdir()
-    assert homelab_render.cluster(out, [tag], None, kinds=kinds) == RENDER_REFUSED
-    assert "the root homelab or a SHARED_KINDS member" in capsys.readouterr().err
-    assert list(out.iterdir()) == []
+def test_a_deferred_tag_gets_its_second_document_in_its_own_file():
+    files = _bundle(_pihole("plain", "plain"))
+    assert "flux/pihole-deferred.yaml" not in files
+    assert yaml_fast.safe_load(files[FLUX_INDEX])["resources"] == [
+        "cluster-vars.yaml",
+        "pihole.yaml",
+    ]
+    deferred = list(yaml_fast.safe_load_all(files["flux/pihole.yaml"]))[1]
+    assert deferred["spec"]["path"] == "./cluster/pihole-deferred"
 
 
 def test_two_renders_of_one_tree_write_identical_bundles(tmp_path, cluster_file):
@@ -219,7 +205,9 @@ def test_a_role_render_of_a_tag_flux_does_not_own_writes_no_bundle_is_clean(tmp_
     ]
 
 
-def test_a_flux_owned_tag_that_defers_files_is_flagged(tmp_path, capsys, cluster_file):
+def test_a_flux_owned_tag_that_defers_files_publishes_both_kustomizations(
+    tmp_path, cluster_file
+):
     out = tmp_path / "out"
     code = homelab_render.cluster(
         out,
@@ -228,9 +216,9 @@ def test_a_flux_owned_tag_that_defers_files_is_flagged(tmp_path, capsys, cluster
         flux_owned=lambda: {"pihole"},
         cluster_file=cluster_file,
     )
-    assert code == RENDER_REFUSED
-    assert "D4.2" in capsys.readouterr().err
-    assert not out.exists() or list(out.iterdir()) == []
+    assert code == RENDER_OK
+    docs = yaml_fast.safe_load_all((out / "flux" / "pihole.yaml").read_text())
+    assert [d["metadata"]["name"] for d in docs] == ["pihole", "pihole-deferred"]
 
 
 BASE = {
