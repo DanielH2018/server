@@ -48,7 +48,6 @@ from lib.k8s_context import resolve_vars
 from lib.render_guard import SHARED_TPL, StrictChainableUndefined
 from lib.repo_paths import ANSIBLE, FILTER_PLUGINS, HOST_VARS, K8S_ROLES
 from renderer.renderer_lib.bundle import (
-    DEFERRED_SUFFIX,
     KUSTOMIZATION,
     SHARED_KINDS,
     kustomization_text,
@@ -61,7 +60,7 @@ from renderer.renderer_lib.environment import (
     render_file,
     renderer_env,
 )
-from renderer.renderer_lib.ordering import Ordering
+from renderer.renderer_lib.ordering import DEFERRED_SUFFIX, Ordering
 from renderer.renderer_lib.task_inputs import derived_facts, include_vars
 
 # Ansible loads a filter plugin by file path; a script reaches it through this insert.
@@ -129,7 +128,8 @@ def select_tags(
     Raises:
         RenderRefused: A requested tag is not one of `host`'s render targets, or a tag to
             render takes a reserved name: the root Kustomization's, `homelab`, a member of
-            `kinds`, or any name ending in `-deferred` (C3 *Reserved names*, D4.2).
+            `kinds` or of `RESERVED_NAMES`, or any name ending in `-deferred`, `-snapshot` or
+            `-verify` (C3 *Reserved names*, D4.2, D5.1a1).
     """
     targets = set(render_targets(host, host_vars))
     tags = sorted(set(requested or targets))
@@ -137,8 +137,8 @@ def select_tags(
     if reserved:
         raise RenderRefused(
             f"{reserved} take a name the bundle reserves for a Kustomization that is no "
-            "deploy tag's: the root homelab, a SHARED_KINDS member, or a name ending in "
-            f"{DEFERRED_SUFFIX}, which a tag's deferred apply takes"
+            "deploy tag's: the root homelab, a SHARED_KINDS or RESERVED_NAMES member, or "
+            "a name ending in -deferred, -snapshot or -verify, which a tag's own kinds take"
         )
     unknown = sorted(set(tags) - targets)
     if unknown:
