@@ -41,6 +41,10 @@ def snap(moved=(), flux=("bento-pdf",), texbrain_deps=(), side="base"):
     )
 
 
+# A template edit under `ansible/`, so an Ansible-owned tag's render move counts.
+TEMPLATE_EDIT = ["ansible/roles/k8s/authelia/templates/configmap.yaml.j2"]
+
+
 def judge(moved, base_kw=None, head_kw=None, paths=(), diffs=None):
     base = snap(moved, side="base", **(base_kw or {}))
     head = snap(moved, side="head", **(head_kw or {}))
@@ -52,7 +56,7 @@ def test_a_change_to_bento_pdf_alone_is_clean():
 
 
 def test_a_template_change_in_bento_pdf_and_authelia_together_is_flagged():
-    flagged = judge({"bento-pdf", "authelia"})
+    flagged = judge({"bento-pdf", "authelia"}, paths=TEMPLATE_EDIT)
     assert len(flagged) == 1
     assert flagged[0].startswith(
         "arm 1: bento-pdf (flux) depends on authelia (ansible)"
@@ -98,7 +102,7 @@ def test_a_renderer_only_change_counts_the_flux_owned_tag_alone():
 
 
 def test_a_change_beside_netpol_baseline_is_flagged_through_applies_last():
-    flagged = judge({"bento-pdf", "netpol-baseline"})
+    flagged = judge({"bento-pdf", "netpol-baseline"}, paths=TEMPLATE_EDIT)
     assert len(flagged) == 1
     assert "netpol-baseline (ansible) depends on bento-pdf (flux)" in flagged[0]
 
@@ -175,7 +179,10 @@ def test_an_inventory_edit_that_moves_bento_pdf_and_authelia_is_flagged(
 ):
     edit = _bento_entry_edit("hostname", '"bento-pdf"', '"pdf"')
     head = edited(tmp_path, {str(gate.HOST_VARS): edit})
-    assert gate.counted(head_snapshot, head, [], {}) == {"bento-pdf", "authelia"}
+    assert gate.counted(head_snapshot, head, [str(gate.HOST_VARS)], {}) == {
+        "bento-pdf",
+        "authelia",
+    }
     flagged = gate.problems(head_snapshot, head, [str(gate.HOST_VARS)], {})
     assert len(flagged) == 1 and flagged[0].startswith("arm 1: bento-pdf (flux)")
 
@@ -183,7 +190,7 @@ def test_an_inventory_edit_that_moves_bento_pdf_and_authelia_is_flagged(
 def test_an_auth_tier_edit_that_moves_authelia_alone_is_clean(tmp_path, head_snapshot):
     edit = _bento_entry_edit("auth_tier", "one_factor", "two_factor")
     head = edited(tmp_path, {str(gate.HOST_VARS): edit})
-    assert gate.counted(head_snapshot, head, [], {}) == {"authelia"}
+    assert gate.counted(head_snapshot, head, [str(gate.HOST_VARS)], {}) == {"authelia"}
     assert gate.problems(head_snapshot, head, [str(gate.HOST_VARS)], {}) == []
 
 

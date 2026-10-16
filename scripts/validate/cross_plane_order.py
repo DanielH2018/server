@@ -12,6 +12,8 @@ cluster` and refuses two shapes:
   `cluster/<tag>/` or `cluster/<tag>-deferred/` output moved, unless its role's own diff is
   only an image pin (`deploy_k8s.py:is_image_only_diff`). A tag whose role's `tasks/` changed
   counts as well when it is Ansible-owned at the head, because a task change moves no render.
+  An Ansible-owned tag counts only when the PR changes something under `ansible/`: Ansible
+  applies its own templates, so a renderer-only change moves nothing it applies (#5213).
   A flux-owned role's tasks run nowhere, since every Ansible path skips the tag, so only the
   render they feed reaches a plane (D4 Open question 9). An inventory field another role reads
   counts only through the render it moves: an `auth_tier` edit on bento-pdf moves authelia's
@@ -72,6 +74,7 @@ from toposort import K8S_APPLIES_LAST, build_k8s_dep_map, filter_by_platform
 CLEAN, REFUSED, UNJUDGED = 0, 1, 2
 HOST_VARS = Path("ansible/inventory/host_vars/daniel-box.yml")
 GROUP_VARS = Path("ansible/inventory/group_vars/all.yml")
+ANSIBLE_TREE = "ansible/"
 K8S_ROLES = "ansible/roles/k8s/"
 SHARED_TEMPLATES = "ansible/templates/"
 ANSIBLE_PLANE = "ansible"
@@ -143,6 +146,8 @@ def counted(
 ) -> set[str]:
     """The tags the PR changes, by render, by an Ansible-owned `tasks/`, never by a pin alone.
 
+    An Ansible-owned tag counts only when a changed path is under `ansible/`.
+
     Args:
         changed_paths: The paths the PR changes.
         role_diffs: Each tag mapped to the unified diff of its role directory.
@@ -157,6 +162,12 @@ def counted(
     # shared template or an inventory edit beside the bump also moves the role's render.
     if all(p.startswith(K8S_ROLES) for p in changed_paths):
         moved -= {tag for tag in moved if is_image_only_diff(role_diffs.get(tag, ""))}
+    # DECIDED: an Ansible-owned tag's render move counts only when the PR changes something
+    # under `ansible/`. Ansible applies its own templates, never `homelab-render` output, so a
+    # renderer-only PR moves nothing Ansible applies; only the flux-owned half reaches a
+    # cluster, through `promote` (#5213).
+    if not any(p.startswith(ANSIBLE_TREE) for p in changed_paths):
+        moved = {tag for tag in moved if head.plane(tag) != ANSIBLE_PLANE}
     tasks = {
         p[len(K8S_ROLES) :].split("/", 1)[0]
         for p in changed_paths
