@@ -16,6 +16,27 @@ themselves (via the `! ` prefix) rather than putting the value in a command you 
 - `name` — the secret variable name (snake_case; how templates will reference it as `{{ name }}`).
 - The value, OR a request to generate one (e.g. a 32-byte token).
 
+## Which stores the secret touches
+
+What reads the secret decides which stores it touches. Each store has its own writer
+(`docs/target-architecture/deploy/d3-secrets.md`, *What one secret costs*):
+
+- **`ansible/vars/secrets.yml`** holds every secret. You write it in step 3.
+- **`ansible/vars/cluster-vars.sops.env`** holds each value a cluster render substitutes.
+  It holds every key any k8s template references, not only the keys of Flux-owned
+  services. Only the operator's `cluster_vars.py write` writes it (**operator-only**,
+  because it decrypts).
+- **A SOPS manifest under `ansible/vars/cluster-manifests/`** holds the values of a Secret
+  that Flux must not substitute. `write` writes it too.
+- **A per-host SOPS file** holds the values its host reads. Its writer is the host-package
+  plan's, not this skill's.
+- **`flux-system/sops-age`** holds the cluster's private age key and no application value.
+  Adding a secret never touches it.
+
+So a secret that only Ansible reads (a Pi compose template, a setup role) touches
+`secrets.yml` alone. A secret that a k8s template references also touches a cluster file,
+which only the operator can write. Step 6 tells you which case you are in.
+
 ## Steps
 
 1. **Check it doesn't already exist.** SOPS encrypts values but leaves key names in plaintext,
@@ -60,7 +81,22 @@ themselves (via the `! ` prefix) rather than putting the value in a command you 
    the Pi's Docker services) to use `{{ name }}`. Add `no_log: true` to
    any task that handles it. (Per `.claude/rules/secrets.md`.)
 
-6. **Register for rotation tracking:** `uv run python scripts/secrets_mgmt/secret_rotation.py sync` — this
+6. **Check whether the cluster reads it.** Run
+   `uv run python scripts/secrets_mgmt/cluster_vars.py check`. It reads no plaintext and
+   needs no key. If it fails naming `<name>`, for example `the cluster render references
+   <name>, and the cluster file does not hold it`, the key is cluster-referenced. Then:
+   - Finish steps 7 and 8, but **stop before opening the PR**. CI runs the same `check`
+     and fails until the cluster file holds the key.
+   - Hand the operator the next step: `uv run python scripts/secrets_mgmt/cluster_vars.py
+     write` on this branch (**operator-only**), then a commit of the cluster files it
+     rewrote. Never run `write` yourself, and never hand-edit a cluster file: a hand edit
+     breaks its SOPS MAC.
+   - Name the branch and the key in your report, so the operator can pick it up.
+
+   If `check` prints `clean`, no cluster render references the key, and you may open the PR.
+   If it fails naming only other keys, the tree was already stale: report that instead.
+
+7. **Register for rotation tracking:** `uv run python scripts/secrets_mgmt/secret_rotation.py sync` — this
    reconciles `ansible/secret_rotation.yml` (plaintext registry: names/tiers/dates, no values)
    with the live secret names and assigns a tier + staggered due-date. `sync` knows only
    `*_push_token` (`auto`) and `*_user`/`*_username` (`ignore`); every other name lands in
@@ -68,7 +104,7 @@ themselves (via the `! ` prefix) rather than putting the value in a command you 
    registry now** — `sync` preserves the edit. Then
    `uv run python scripts/secrets_mgmt/secret_rotation.py audit` to confirm it registered cleanly.
 
-7. **Commit** — stage the plaintext registry change, the (still-encrypted) secrets file, and
+8. **Commit** — stage the plaintext registry change, the (still-encrypted) secrets file, and
    any template edit, then commit. Suggested message body ends with the repo's Co-Authored-By
    trailer. Do **not** deploy unless the user asks (the `/deploy` skill handles that).
 
@@ -76,6 +112,7 @@ themselves (via the `! ` prefix) rather than putting the value in a command you 
 - Step 4's `grep -c '^<name>: ENC\['` prints `1`, `secret_rotation.py audit`
   shows it registered, and the change is committed. Report which template now references it and
   which deploy tag would apply it.
+- For a cluster-referenced key, step 6's handoff is in the report, and no PR is open yet.
 
 ## Onboarding a host that cannot decrypt yet
 

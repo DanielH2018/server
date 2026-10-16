@@ -60,8 +60,9 @@ ALLOWED = {
     "ci": {"landing", "outcome"},
     "tick": {"landing", "outcome"},
     "deploy": {"landing", "outcome", "ci", "tick", "land_platform", "promotion"},
-    # The split before deploy.sh and the wait on promotion, a half of step 5 (D2.3).
-    "promotion": {"landing", "outcome"},
+    # The split before deploy.sh and the wait on promotion, a half of step 5 (D2.3). It reads
+    # `land_tags.changes_cluster_vars`, the path rule for the cluster-vars wait (D3.4).
+    "promotion": {"landing", "outcome", "land_tags"},
     # `tick.rearm_tick`: the second kick request, after the gate, for a first one that joined
     # a run in flight. The kick's states live in tick.py, in one place.
     "health_verdict": {"landing", "outcome", "tick", "promotion"},

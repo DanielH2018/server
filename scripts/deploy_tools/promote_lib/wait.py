@@ -10,6 +10,10 @@ may promote a newer commit. The plan is docs/target-architecture/deploy/d2-first
   is missing or unreadable widens the set to every name. `sha-<M>` is usually not published
   yet when the wait starts, so until it is, the set is every name and the read repeats each
   poll.
+- `--also <name,...>` adds names the digests may not show, and every Kustomization that
+  depends on one of them, read from the live `dependsOn` graph each poll. `land.sh` passes
+  `cluster-vars` for a PR that changes a cluster file (D3.4): a change to
+  `cluster-vars.source` alone moves no digest.
 - It polls every POLL_S seconds until one of three outcomes:
     settled        Every expected Kustomization is Ready, and its
                    `status.lastAppliedOriginRevision` names a commit R that is M or descends
@@ -28,6 +32,7 @@ Like `promote.py`, it reaches GitHub, GHCR, the cluster and syslog only through 
 (scripts/deploy_tools/tests/test_promote_forge_boundary.py).
 
 Run: uv run python scripts/deploy_tools/promote.py land-wait <sha> --services <tag,...>
+     [--also <name,...>]
 """
 
 import json
@@ -196,6 +201,24 @@ def kustomization_graph(items: list[dict]) -> tuple[dict[str, list[str]], set[st
     return depends_on, suspended
 
 
+def with_dependents(
+    names: frozenset[str], depends_on: dict[str, list[str]], suspended: set[str]
+) -> frozenset[str]:
+    """`names`, plus every Kustomization that depends on one of them, directly or not.
+
+    A suspended dependent is left out, because Flux applies nothing for it.
+    """
+    found = set(names)
+    grew = True
+    while grew:
+        grew = False
+        for name, deps in depends_on.items():
+            if name not in found and name not in suspended and found.intersection(deps):
+                found.add(name)
+                grew = True
+    return frozenset(found)
+
+
 def hold_detail(hold: str) -> str:
     """What a DEPLOY_HOLD value says: the held SHA and, for a `failed=` hold, its names."""
     held, _, rest = hold.partition(" ")
@@ -295,6 +318,7 @@ def land_wait(
     services: list[str],
     timeout_s: int = LAND_WAIT_TIMEOUT_S,
     poll_s: int = POLL_S,
+    also: frozenset[str] = frozenset(),
 ) -> WaitResult:
     """Poll until a promotion covers `merge`, DEPLOY_HOLD holds, or `timeout_s` passes.
 
@@ -306,6 +330,7 @@ def land_wait(
         services: the PR's published tags, named in the settled annotation.
         timeout_s: the seconds after which it gives up.
         poll_s: the seconds between polls.
+        also: names to wait on whatever the digests say, each with its live dependents.
     """
     started = reads.clock()
     expected = _Expected(reads, merge)
@@ -319,12 +344,15 @@ def land_wait(
         if items is not None:
             cs = expected.changes(items)
             widened = cs.widened
-            pending, revision = _pending(reads, merge, items, cs.names | {ROOT})
+            names = cs.names | {ROOT}
+            if also:
+                names |= with_dependents(also, *kustomization_graph(items))
+            pending, revision = _pending(reads, merge, items, names)
             if not pending:
                 annotate_promotion(reads.annotate, services, revision)
                 return WaitResult(
                     "settled",
-                    detail=f"{len(cs.names) + 1} Kustomizations applied {revision[:8]}",
+                    detail=f"{len(names)} Kustomizations applied {revision[:8]}",
                     revision=revision,
                     widened=widened,
                 )
@@ -447,6 +475,12 @@ def add_parser(commands, repo: Path) -> None:
         "--services",
         default="",
         help="the PR's published tags, comma-separated, named in the settled annotation",
+    )
+    waiter.add_argument(
+        "--also",
+        default="",
+        help="Kustomizations to wait on whatever the digests say, comma-separated, each "
+        "with every Kustomization that depends on it",
     )
     waiter.add_argument(
         "--repo",

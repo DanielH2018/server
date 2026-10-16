@@ -115,6 +115,9 @@ waits until a promotion covers the merge commit (`promote.py land-wait`) and the
 promotion, and clearing it is **operator-only**: stop and name the hold. A PR that removes
 `owner` is refused before the merge while the tag's Kustomization still exists; the handback
 order is in [docs/flux-deploy-plane.md](../../../docs/flux-deploy-plane.md).
+A PR that changes `cluster-vars.sops.env` or `cluster-vars.source` waits on promotion too,
+for the `cluster-vars` Kustomization and every Kustomization that depends on it
+(`docs/landing.md`, *A tag Flux applies waits on promotion*).
 
 `deploy-failed` has one variant that is **not** a resume point — `a playbook task failed AFTER
 applying; some changes are live`. Every other `deploy-failed`, and every give-up

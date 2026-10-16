@@ -96,6 +96,22 @@ _ROTATION_NOTE = (
     "both and each carries a written reason for what to run instead."
 )
 
+# The two files whose change moves the Secret `homelab-cluster-vars`, which every
+# substituting Kustomization reads through `dependsOn: cluster-vars` (D3.4, d3-secrets.md,
+# *Rotating a value read by both planes*). A PR changing one touches no role, so no tag
+# derives from it, and `promotion.wait_on_promotion` waits on `cluster-vars` instead. The
+# rule names no changed key, which keeps it within the `DECIDED: fire on ANY change to
+# secrets.yml` marker below. It is interim: it retires in the PR where `land.sh` reads its
+# changed set from `digests.json` (D6).
+CLUSTER_VARS_PATHS = frozenset(
+    {"ansible/vars/cluster-vars.sops.env", "ansible/vars/cluster-vars.source"}
+)
+
+
+def changes_cluster_vars(paths) -> bool:
+    """Whether the PR changes a cluster file, so its landing waits on `cluster-vars`."""
+    return any(p in CLUSTER_VARS_PATHS for p in paths)
+
 
 def landing_hosts_at(
     tags, ref: str, cwd: Path, k8s_only=()
