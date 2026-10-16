@@ -1,11 +1,13 @@
-"""The three process boundaries a landing crosses for a tag Flux applies.
+"""The process boundaries a landing crosses for a tag Flux applies.
 
 `Tools.flux` holds one `FluxReads`, so a test replaces one of its fields as it replaces any
 other boundary. `promotion.split_owned` and `merge.py`'s handback refusal read which tags an
 entry's `owner` takes from Ansible (`owners_at`). The refusal reads whether a tag's
 Kustomization still exists (`kustomization_exists`). `promotion.wait_on_promotion` runs
 `promote.py land-wait` in process (`run_land_wait`). The plan is
-docs/target-architecture/deploy/d2-first-leaf.md, *How `land.sh` waits*.
+docs/target-architecture/deploy/d2-first-leaf.md, *How `land.sh` waits*. `pins` holds the reads
+the pin gate makes before a forward-only pin bump merges (`pin_reads.py`, `pin_gate.py`): Flux
+applies those pins on promotion, so their gate sits with the other Flux boundaries.
 
 `promote_lib/wait.py` is imported from land.py's checkout, beside it, as `await_ci` is, so it is the
 same release as the landing that calls it.
@@ -14,7 +16,7 @@ same release as the landing that calls it.
 import os
 import subprocess
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 import sys as _sys
@@ -24,6 +26,7 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
 # `promote_lib/wait.py` imports `forge` and `changed_set` bare, from scripts/deploy_tools.
 _sys.path.insert(1, str(_Path(__file__).resolve().parents[1]))
 from deploy_tools.deploy_lib.owners import flux_owned
+from deploy_tools.land_lib.pin_reads import PinReads
 from lib import kubectl
 
 import forge
@@ -109,6 +112,7 @@ class FluxReads:
         land_wait: `run_land_wait`, taking the merge commit, the published tags, the
             primary checkout, the names to wait on whatever the digests say, and the cap
             in seconds, or None for none.
+        pins: the pin gate's reads (`pin_reads.PinReads`).
     """
 
     owners_at: Callable[[Path, str], dict[str, str]] = owners_at
@@ -116,3 +120,4 @@ class FluxReads:
     land_wait: Callable[
         [str, list[str], Path, frozenset[str], float | None], WaitResult
     ] = run_land_wait
+    pins: PinReads = field(default_factory=PinReads)

@@ -25,6 +25,8 @@ from lib.exit_codes import DEPLOY_BROAD
 from deploy_tools.land_lib import landing as landing_mod
 from deploy_tools.land_lib.options import Options
 from deploy_tools.land_lib.land_flux import FluxReads
+from deploy_tools.land_lib.pin_reads import PinReads
+from validate.cluster_pins import Pin
 from deploy_tools.land_lib.tools import Classifier, CiVerdict, Tools
 from deploy_tools.land_lib.land_tags import Derivation, DeriveSource
 from gitops_markers import MARKERS
@@ -35,6 +37,10 @@ RECEIPTS = MARKERS["receipts"]
 # The base of the range a `receipt()` covers. `Fakes.is_ancestor_of` answers non-zero for it
 # by default, so the merge commit reads as inside `base..origin` unless a test says otherwise.
 RECEIPT_BASE = "b" * 40
+# The commit `last-good` names unless a test says otherwise.
+LAST_GOOD = "1" * 40
+# Where every faked pin lives; the gate reads only the value.
+PIN_FILE = "ansible/roles/setup/k3s/defaults/main.yml"
 
 
 def receipt(
@@ -161,6 +167,18 @@ class Fakes:
     show_at: dict[str, str] = field(default_factory=dict)
     lock_holder: list[str] = field(default_factory=lambda: ["42 flock deploy"])
     hostname: str = "daniel-box"
+    # The forward-only pins `tools.pins.pins_at` answers, by SHA: pin key -> value. A SHA absent
+    # here holds neither pin, so a PR whose base and head are both absent bumps nothing.
+    pins: dict[str, dict[str, str]] = field(default_factory=dict)
+    # DEPLOY_HOLD and `last-good`'s commit as the pin gate reads them; an Exception raises.
+    deploy_hold: str | None | Exception = "none"
+    last_good: str | None | Exception = LAST_GOOD
+    # The first-parent commits in (last-good, tip], oldest first, as `git rev-list` prints them.
+    walk: list[str] = field(default_factory=list)
+    # What each `runbook_gates.py <set>` run answers: (exit code, output).
+    gates: list[tuple[int, str]] = field(
+        default_factory=lambda: [(0, "gate 1 ok\nall 4 gates passed")]
+    )
     # What `gh api repos/{owner}/{repo}` answers: the visibility --arm-merge refuses on.
     repo: dict[str, Any] = field(default_factory=lambda: {"visibility": "public"})
     # What the REST `pulls/<n>/files` listing answers, as one page: the landing policy's input.
@@ -323,6 +341,8 @@ def build_tools(f: Fakes) -> tuple[Tools, list]:
             return _cp(f.is_ancestor_of.get(args[-1], f.is_ancestor_rc))
         if args[0] == "merge-base":
             return _cp(0, "prbase\n")
+        if args[0] == "rev-list":
+            return _cp(0, "".join(f"{sha}\n" for sha in f.walk))
         if args == ("rev-parse", f"origin/{landing_mod.BRANCH}"):
             return _cp(0, f.tip + "\n")
         return _cp()
@@ -394,6 +414,26 @@ def build_tools(f: Fakes) -> tuple[Tools, list]:
 
     land_wait = _seq(f.land_wait, calls, "land_wait")
 
+    def pins_at(checkout, sha):
+        calls.append(("pins_at", (sha,), {}))
+        return {key: Pin(PIN_FILE, value) for key, value in f.pins.get(sha, {}).items()}
+
+    def answer(name, value):
+        def read():
+            calls.append((name, (), {}))
+            if isinstance(value, Exception):
+                raise value
+            return value
+
+        return read
+
+    pins = PinReads(
+        pins_at=pins_at,
+        hold=answer("hold", f.deploy_hold),
+        last_good=answer("last_good", f.last_good),
+        run_gates=_seq(f.gates, calls, "run_gates"),
+    )
+
     t = [0.0]
 
     def clock() -> float:
@@ -414,7 +454,7 @@ def build_tools(f: Fakes) -> tuple[Tools, list]:
         declared_at=lambda ref, primary: f.declared_at,
         landing_hosts_at=landing_hosts_at,
         read_state=lambda root, name: f.state.get(name, ""),
-        flux=FluxReads(owners_at, kustomization_exists, land_wait),
+        flux=FluxReads(owners_at, kustomization_exists, land_wait, pins),
         own_narrowing=own_narrowing,
         paths_a_hand_must_apply=lambda paths, pr_range, primary, declared: [
             p for p in paths if p not in f.plane_paths_dropped

@@ -177,6 +177,19 @@ on `NotFound`. A Kustomization that exists, or a read that fails, ends the landi
 [docs/flux-deploy-plane.md](flux-deploy-plane.md#handing-a-service-back). A merge made outside
 `land.sh` bypasses this check.
 
+**A PR that bumps a forward-only pin merges only through the pin gate.** When the head moves
+`k3s_longhorn_version` or `k3s_metallb_version`, `land_lib/pin_gate.py` runs before the direct
+merge. It refuses on any host but daniel-box. It refuses while `DEPLOY_HOLD` reads anything
+but `none`, and an empty or missing value refuses too. It also refuses while (`last-good`,
+master tip] already changes the same pin. It then runs `runbook_gates.py longhorn-upgrade` or
+`metallb-upgrade`, and a non-zero exit refuses. On a pass it posts the commit status
+`homelab/upgrade-gates` on the head, and `promote` requires that status before it applies the
+bump. Every refusal ends the landing with `refused` and nothing merged. A merge made outside
+`land.sh` bypasses the gate. For such a merge, `land.sh --regate <pr>` re-runs the gates for
+the merged PR and re-posts the status without merging. It exits 0 when it posted and 1 when it
+refused. The upgrade runbook's gate section, [docs/longhorn-upgrade.md](longhorn-upgrade.md),
+has the operator-only fix-forward after a failed bump.
+
 ## The CI wait
 
 **Do not hand-poll CI and do not hand-merge.** `await_ci.py` reads the same check-runs endpoint

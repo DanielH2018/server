@@ -846,22 +846,68 @@
       "automerge": false
     },
     {
-      "description": "k3s control plane, MetalLB and Longhorn (roles/setup/k3s/defaults). NEVER automerged, for three different reasons that all land in the same place: Longhorn does not support arbitrary version skips (the file header says so) and its upgrade rewrites the storage layer under every PVC; MetalLB owns the LoadBalancer VIPs, so a bad one takes the edge and DNS offline together; and a k3s bump reinstalls the control plane on a single-server cluster. None of that is provable by CI \u2014 the PR is a SIGNAL to plan an upgrade, and the operator drives it. Same manual-finish class as the SOPS and crowdsec-plugin rules above. A k3s bump also finishes k3s_install_script_sha256 in the same file: the installer is fetched from the release tag (#2147), so the hash of its install.sh moves with the tag.",
+      "description": "k3s control plane (`k3s_version` in roles/setup/k3s/defaults). NEVER automerged: a k3s bump reinstalls the control plane on a single-server cluster, and it stays a hand apply of `k3s-bringup.yml` by the operator, following docs/k3s-upgrade.md, until H6 moves k3s into a package. A k3s bump also finishes k3s_install_script_sha256 in the same file: the installer is fetched from the release tag (#2147), so the hash of its install.sh moves with the tag. Split from MetalLB and Longhorn by H1.1g, whose two rules below name the merge gate instead. Same manual-finish class as the SOPS and crowdsec-plugin rules above.",
       "matchDatasources": [
         "github-releases"
       ],
       "matchPackageNames": [
-        "k3s-io/k3s",
-        "metallb/metallb",
-        "longhorn/longhorn"
+        "k3s-io/k3s"
       ],
-      "groupName": "k3s control plane (manual \u2014 plan the upgrade, mind Longhorn's version skips)",
+      "groupName": "k3s control plane (manual — hand-run upgrade: docs/k3s-upgrade.md)",
       "rebaseWhen": "conflicted",
       "schedule": [
         "before 6am on monday"
       ],
       "updateNotScheduled": false,
       "automerge": false
+    },
+    {
+      "description": "MetalLB (`k3s_metallb_version`). NEVER automerged, because merging this pin is the upgrade (H1 Open question 6, ruled 2026-10-16), so the operator chooses when it happens by choosing when to merge. MetalLB owns the LoadBalancer VIPs, so a bad one takes the edge and DNS offline together, and its CRDs carry a conversion webhook, so it never runs backwards. Merge it only through `land.sh --arm-merge --await-merge` on daniel-box: the pin gate there refuses while DEPLOY_HOLD reads anything but `none` or while (last-good, master tip] already changes the pin, runs `runbook_gates.py metallb-upgrade`, and posts `homelab/upgrade-gates` on the head, which promote requires. A merge from the UI skips the gate; `land.sh --regate <pr>` re-runs it afterwards. CI's cluster_pins.py refuses a decrease and a bump that shares its PR.",
+      "matchDatasources": [
+        "github-releases"
+      ],
+      "matchPackageNames": [
+        "metallb/metallb"
+      ],
+      "groupName": "MetalLB (manual — merging is the upgrade: land it through land.sh, which runs the metallb-upgrade gates)",
+      "rebaseWhen": "conflicted",
+      "schedule": [
+        "before 6am on monday"
+      ],
+      "updateNotScheduled": false,
+      "automerge": false
+    },
+    {
+      "description": "Longhorn (`k3s_longhorn_version`). NEVER automerged, because merging this pin is the upgrade (H1 Open question 6, ruled 2026-10-16), so the operator chooses when it happens by choosing when to merge. Longhorn rewrites the storage layer under every PVC, supports no downgrade and upgrades one minor per hop; CI's cluster_pins.py refuses a skipped minor, a decrease and a bump that shares its PR. Merge it only through `land.sh --arm-merge --await-merge` on daniel-box: the pin gate there refuses while DEPLOY_HOLD reads anything but `none` or while (last-good, master tip] already changes the pin, runs `runbook_gates.py longhorn-upgrade` (docs/longhorn-upgrade.md, *The gate*), and posts `homelab/upgrade-gates` on the head, which promote requires. A merge from the UI skips the gate; `land.sh --regate <pr>` re-runs it afterwards. A PR that jumps more than one minor is red by design: take the next minor by hand.",
+      "matchDatasources": [
+        "github-releases"
+      ],
+      "matchPackageNames": [
+        "longhorn/longhorn"
+      ],
+      "groupName": "Longhorn (manual — merging is the upgrade: land it through land.sh, which runs the longhorn-upgrade gates; one minor per PR)",
+      "rebaseWhen": "conflicted",
+      "schedule": [
+        "before 6am on monday"
+      ],
+      "updateNotScheduled": false,
+      "automerge": false
+    },
+    {
+      "description": "No Renovate PR for `coredns_image` (H1-R1-19). H1.4 moves the CoreDNS image into a k8s role's defaults, where the k8s image manager matches every `_image:` key, but the pin must equal the image the bundled k3s manifest names, which `test_coredns_image_follows_bundled_manifest.py` holds. So the image moves only with `k3s_version`, by the person finishing a k3s upgrade, and a standalone bump could only open a PR that test keeps red. Scoped to the docker datasource under roles/k8s, so the `coredns/coredns` release annotation the annotated-pin rule tracks is untouched.",
+      "matchManagers": [
+        "custom.regex"
+      ],
+      "matchDatasources": [
+        "docker"
+      ],
+      "matchFileNames": [
+        "ansible/roles/k8s/**"
+      ],
+      "matchPackageNames": [
+        "rancher/mirrored-coredns-coredns"
+      ],
+      "enabled": false
     },
     {
       "description": "k3s stays on the minor whose Kubernetes schemas are vendored under scripts/validate/schemas/kubernetes.io/. scripts/validate/tests/test_k8s_schema.py::test_vendored_core_schemas_match_the_cluster holds those schemas to the exact Kubernetes tag k3s_version names, so a k3s minor PR cannot pass CI until its schemas are refreshed in the same PR, and upgrading the cluster ahead of the repo pin sets up a cross-minor downgrade on the next k3s_server run (#2367). Renovate still offers patch releases inside the cap. Raising the cap by one minor is the start of a minor upgrade: docs/k3s-upgrade.md. test_renovate_k3s_cap_follows_the_schema asserts the cap is one minor above K8S_SCHEMA_VERSION.",
