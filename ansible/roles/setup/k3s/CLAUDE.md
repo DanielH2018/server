@@ -106,3 +106,11 @@ authority of those four actuators is written here so a later edit cannot quietly
   is why each check also reads live state. ENFORCED:
   `ansible/roles/setup/k3s/tests/test_manifest_prune_check_flux_skip.py::test_a_labelled_object_whose_kustomization_is_gone_is_flagged`,
   `ansible/roles/setup/k3s/tests/test_live_drift_check.py::test_a_handed_back_flux_object_is_compared`.
+- **A stale checkout stops before it writes an object Flux owns.**
+  `ansible/roles/setup/k3s/tasks/stale-checkout-guard.yml` imports `tasks/stale-checkout-check.yml`
+  once per tag set that the role's cluster writers carry, directly after `server.yml`. Each
+  instance reads every Kustomization's inventory and fails when an id one of its rows names is
+  there. A host-only tag such as `node-address` selects no instance, so it never reads the API.
+  An H1 PR that deletes a writer task deletes its row in the same commit. ENFORCED:
+  `ansible/tests/setup/test_k3s_stale_checkout_map.py::test_the_real_map_is_honest`,
+  `ansible/tests/setup/test_k3s_stale_checkout_guard.py::test_skip_tags_kubeconfig_still_runs_the_metallb_instance`.

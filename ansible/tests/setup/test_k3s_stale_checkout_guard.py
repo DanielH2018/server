@@ -303,6 +303,7 @@ def test_tags_kubeconfig_runs_the_kubeconfig_instance(tmp_path):
 
 
 def test_skip_tags_kubeconfig_still_runs_the_metallb_instance(tmp_path):
+    # fact: ansible/roles/setup/k3s/CLAUDE.md#Notable
     # Bring-up step 1. One guard tagged with the union of the writers' tags would be skipped
     # here while the metallb writers still ran.
     result, _ = _run(

@@ -136,6 +136,7 @@ def _writers(files: dict[str, str]) -> set[str]:
 
 
 def test_the_real_map_is_honest():
+    # fact: ansible/roles/setup/k3s/CLAUDE.md#Notable
     files = _role_files()
     writers = _writers(_role_texts())
     assert "Install Longhorn" in writers and len(writers) >= 30, sorted(writers)
