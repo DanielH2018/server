@@ -14,7 +14,8 @@ THE VERDICTS.
   promote  T was found. `target` is T, and `digest` is the digest of `sha-<T>`.
   held     DEPLOY_HOLD reads something other than `none`. Nothing else is read, unless the
            revert rule below is on and the hold is a `failed=` hold. Also when T fails the
-           forward-only gate or the backstop, and then `decide` writes T's SHA to DEPLOY_HOLD.
+           forward-only gate or the backstop, and then `decide` writes T's SHA to DEPLOY_HOLD,
+           or when T changes a suspended tag, below.
   current  No commit after `prod`'s is eligible, or a verification never settled, so nothing
            moves. A walk whose every candidate loses an undeclared object ends here too.
   error    A read failed or answered something no rule covers. Nothing moves.
@@ -30,6 +31,14 @@ a forward-only pin needs a fresh `homelab/upgrade-gates` status on its PR's head
 (`prod`, T] may change each pin once. T's `no_reset` names the forward-only tags it changes
 against `last-good`, under which a failed verification holds as T's SHA and leaves `prod`.
 `promote_lib/forward_only.py`'s docstring states the three rules.
+
+A SUSPENDED TAG TAKES NO CHANGE (D5.1d). A suspended tag applies nothing until its resume, and
+`cross_plane_order.py` refuses a PR that changes one. Master's status-check rule is not strict,
+so a PR whose checks ran before the suspend merged can still merge after it. So when T's `own`
+digest differs from `last-good`'s for a tag `digests.json` marks `suspended` in both, `decide`
+holds and writes DEPLOY_HOLD as `<T> suspended-changed=<tag,...>`. The value never takes the
+`failed=` form, so the revert rule never passes it. The way out is a commit that reverts the
+change or resumes the tag, and then the operator's clear. A clear without one holds again here.
 
 ALREADY-FAILING DEPENDENTS (H1.1i). Before `prod` moves, `decide` records the newest
 `flux/<name>` status on `prod`'s commit for each name in T's changed set, and writes the record
@@ -79,7 +88,7 @@ Exit codes:
       land-wait: settled. check-bundle: the census passes. published-tags: printed.
       verify: good. ci-verdict: pass.
   1   decide: error, and nothing moves, a failed write of the gate's hold included. prune: a read, a delete or a verify failed.
-      land-wait: deploy-failed, a hold. check-bundle: the census or a gate failed, one line
+      land-wait: deploy-failed, a hold, or suspended. check-bundle: the census or a gate failed, one line
       each.
       verify: failed, or no verdict. ci-verdict: anything but pass.
   64  usage error
@@ -109,6 +118,7 @@ from lib.repo_paths import GITOPS_DEPLOY_FILES, REPO
 
 import bundle_census
 import forge
+from changed_set import suspended_changed
 import object_loss
 from deploy_tools.promote_lib import forward_only, verify_promotion as verify, wait
 
@@ -162,8 +172,9 @@ class Decision:
         clears_hold: the revert rule chose T, so a good verdict sets DEPLOY_HOLD to `none`.
         no_reset: the forward-only tags T changes against `last-good`. When any is named, a
             failed verification writes DEPLOY_HOLD as T's SHA alone and leaves `prod` on T.
-        hold: what `decide` writes to DEPLOY_HOLD itself, T's SHA on a `held` from the
-            forward-only gate or the backstop, else empty.
+        hold: what `decide` writes to DEPLOY_HOLD itself: T's SHA on a `held` from the
+            forward-only gate or the backstop, `<T> suspended-changed=<tags>` on one from the
+            suspended-tag check, else empty.
         bundles: `prod`'s and T's bundle files by `prod` and `target`, for `--bundle-dir`.
         recorded: the newest status on `prod`'s commit for each name in T's changed set, by
             name, for `--bundle-dir`. Empty when the set holds no dependent.
@@ -260,6 +271,24 @@ def decide(reads: Reads, revert_rule: bool = REVERT_RULE) -> Decision:
                     print(skip, file=sys.stderr)
                     skipped += 1
                     continue
+                # `last-good`'s bundle: `prod`'s while they agree, and when `tag` seeds it.
+                if last_good is None or last_good == prod_digest:
+                    last_good_bundle = prod_bundle
+                elif last_good_bundle is None:
+                    last_good_bundle = _pull(reads, last_good, "last-good's bundle")
+                if changed := suspended_changed(
+                    verify.bundle_digests(last_good_bundle),
+                    verify.bundle_digests(target_bundle),
+                ):
+                    tags = ",".join(changed)
+                    return Decision(
+                        "held",
+                        reason=f"{candidate} changes {tags}, suspended at last-good and "
+                        "at it, so the change would apply nothing until the resume. Revert "
+                        "it or resume the tag, then clear DEPLOY_HOLD (operator-only); a "
+                        "clear without either holds again at the next decide",
+                        hold=f"{candidate} suspended-changed={tags}",
+                    )
             # The commit `last-good` names: `prod`'s while they agree, and `prod`'s when the
             # `tag` job seeds `last-good` from it.
             lower = (
@@ -287,6 +316,7 @@ def decide(reads: Reads, revert_rule: bool = REVERT_RULE) -> Decision:
                 held,
                 target_bundle,
                 prod_bundle,
+                last_good_bundle,
             )
     except READ_ERRORS as err:
         return Decision("error", reason=str(err))
@@ -319,6 +349,7 @@ def _promotion(
     held: tuple | None,
     target_bundle: dict[str, bytes] | None,
     prod_bundle: dict[str, bytes] | None,
+    last_good_bundle: dict[str, bytes] | None = None,
 ) -> Decision:
     """The `promote` decision for T, with the two bundle pulls `verify` reuses.
 
@@ -338,7 +369,7 @@ def _promotion(
     seed = last_good is None and prod_digest is not None
     base_bundle = prod_bundle
     if last_good is not None and last_good != prod_digest:
-        base_bundle = _pull(reads, last_good, "last-good's bundle")
+        base_bundle = last_good_bundle or _pull(reads, last_good, "last-good's bundle")
     # A first run has no `last-good`, which therefore lacks every tag T carries.
     base = verify.bundle_digests(base_bundle) if base_bundle is not None else {}
     flagged = reads.forward_only(target)
@@ -407,8 +438,9 @@ def hand_off(decision: Decision, bundle_dir: Path | None) -> Decision:
 def write_hold(decision: Decision, f: forge.Forge) -> Decision:
     """Write a `held` decision's DEPLOY_HOLD value; a failed write makes the run `error`.
 
-    Only the forward-only gate and the backstop write here, and they write T's SHA alone, a
-    form the revert rule never passes (contracts.md C2, *DEPLOY_HOLD's values*).
+    The forward-only gate and the backstop write T's SHA alone, and the suspended-tag check
+    writes `<T> suspended-changed=<tags>`. The revert rule passes neither form (contracts.md
+    C2, *DEPLOY_HOLD's values*).
     """
     if not decision.hold:
         return decision

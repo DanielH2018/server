@@ -38,6 +38,15 @@ object two tags render.
 PR D5.1f, the removal gates: [#5296](https://github.com/DanielH2018/server/pull/5296). It merged
 at `3aeeb4fd7` and deployed nothing. `cross_plane_order.py` refuses an object drop from a
 flux-owned tag that no `Removes-Object:` trailer declares, and a flux-owned service's retirement.
+PR D5.1b, the suspend lever: [#5318](https://github.com/DanielH2018/server/pull/5318). It merged at
+`46784ff2f` and deployed nothing. `flux_suspend` renders `spec.suspend` only when true, the renderer
+drops every edge to a suspended tag into `homelab/suspended-deps`, `promote.py verify` leaves a
+suspended tag out, and the shed steps in `docs/break-glass.md` suspend a flux-owned service. Promote
+run 38965987807 read `verify` `verdict=good failed=` on it and moved `last-good` to its revision.
+PR D5.3a, the Prometheus peer: [#5315](https://github.com/DanielH2018/server/pull/5315). It merged at
+`3f7494ef4`, and its landing deployed `netpol-baseline` and settled. The live `prometheus-callers`
+policy admits a `flux-system` pod labelled `app: soak` on 9090, beside the unchanged `homelab` peer.
+Open question 3's review found no new exposure.
 
 Related issues:
 
@@ -3622,6 +3631,9 @@ includes valheim's initContainer.
    before D5.3b1 merges. That precedes every conversion PR that adds a `verify="true"` rule,
    and R4's PR 1, which maps successors against the three shapes in *What counts as a verify
    successor*.
+   **Applied on 2026-10-16.** Round 1 put all three parts in C7, for X-07: `flux/soak` and
+   M1's filter in *The soak*, and `verify="true"` in *Rule labels* and *Verify successors*.
+   The gate before D5.3b1 merges is clear.
 7. **D1 says D5's last PR moves the flux role.** D5 moves it second to last, before the
    namespace, so that the namespace's gate closes in the commit that hands it to Flux.
    Resolution: D1 edits its sentence.
@@ -3650,7 +3662,10 @@ includes valheim's initContainer.
     D5.1a2 merges and for the contexts before D5.4a1 merges, as its
     *Requested amendments not yet applied* lists.
     **Applied on 2026-10-16** for the two fields, and the gate before D5.1a2 merges is
-    clear. The image contexts stay listed, gated before D5.4a1 merges.
+    clear.
+    **Applied on 2026-10-16** for the image contexts too. C1 *Cluster output* states
+    `DIR/images/`, `tags.json` and the content-tag rule, and the gate before D5.4a1 merges is
+    clear.
 11. **Where a verifying Job lives.** D4 places netpol-baseline's probe Job in
     `netpol-baseline-deferred` and makes it a named member there (D4's Open question 4). D5
     puts every verify Job in `<tag>-verify`, which depends on the tag's last Kustomization, so
@@ -3732,6 +3747,9 @@ includes valheim's initContainer.
     `verify` writes `DEPLOY_HOLD`. `land-wait` repeats the combined-status read on each poll
     until the soak has a verdict, where D2 reads it once. Resolution: contracts.md's C6 row
     is amended before D5.3b3 merges.
+    **Applied on 2026-10-16.** C6 *`land.sh`* states the soak's wait from D5.3b3, with
+    `settle`, C2's writer, as the job that writes `DEPLOY_HOLD`. The gate before D5.3b3
+    merges is clear.
 19. **Do `soak`'s `dependsOn` edges stay?** They make `soak` start after every tag is Ready
     and put it in every changed set that holds a tag. They also block it behind any
     unchanged tag that is not Ready. `flux/soak` then never posts on R, and `verify` times

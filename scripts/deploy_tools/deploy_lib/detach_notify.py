@@ -56,7 +56,10 @@ CONFIG_ENV_PATH = Path("/etc/gitops-deploy/config.env")
 # directory with the config everywhere else, so a verdict is never queued where nothing
 # flushes it. `test_deploy_detach_notify.py` holds this path equal to the deployer's.
 DETACH_SPOOL_DIR = Path("/var/lib/gitops-deploy/detach_spool")
-PROBE_TIMEOUT_S = 30
+# One `probe.py health` run. The alert plane sets the floor: up to 90s waiting for a probe
+# sample newer than the rollout, a 60s re-read of a would-fail verdict, and a second probe
+# wait on that re-read (`probe_lib/health_alerts.py`), on top of the render and kubectl reads.
+PROBE_TIMEOUT_S = 300
 
 # Emitted by probe.py's health command when a tag names nothing health-checkable -- a block tag
 # like config/deploy/cron, a typo --skip-tag-check let through, or a role (netpol-baseline,

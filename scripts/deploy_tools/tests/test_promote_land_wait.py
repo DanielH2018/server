@@ -51,6 +51,72 @@ def test_a_hold_set_during_the_wait_ends_it_as_deploy_failed():
     assert result.cause == "promote-held" and sim.sleeps == 2
 
 
+@pytest.mark.parametrize("suspended", [True, False])
+def test_a_suspended_tag_ends_the_wait_at_once_where_unsuspended_it_gives_up(suspended):
+    """The red half is the same fixture with the tag not suspended: nothing applies M, so the
+    wait polls to `gave-up`."""
+    entry = {"own": "own-b", "footprint": "b", "suspended": suspended}
+    sim = Sim(
+        polls=[at(P)], published={M: {"bento-pdf": entry}, P: digests(bento_pdf="a")}
+    )
+    result = sim.wait()
+    if suspended:
+        assert (result.verdict, result.cause) == ("suspended", "promote-suspended")
+        assert "bento-pdf" in result.detail and sim.sleeps == 0
+    else:
+        assert result.verdict == "gave-up" and sim.sleeps > 0
+
+
+def test_a_change_that_raced_the_gate_onto_a_suspended_tag_waits_for_the_hold():
+    """M changes bento-pdf while it is suspended at M and at its ancestor, so `decide` holds
+    and the wait ends `deploy-failed` there rather than `suspended` here."""
+    before = {"own": "own-a", "footprint": "a", "suspended": True}
+    after = {"own": "own-b", "footprint": "b", "suspended": True}
+    sim = Sim(
+        polls=[at(P)],
+        holds=["none", f"{M} suspended-changed=bento-pdf"],
+        published={M: {"bento-pdf": after}, P: {"bento-pdf": before}},
+    )
+    result = sim.wait()
+    assert (result.verdict, result.cause) == ("deploy-failed", "promote-held")
+    assert sim.sleeps == 1
+
+
+def test_a_hold_beside_a_suspended_tag_ends_the_wait_deploy_failed():
+    entry = {"own": "own-b", "footprint": "b", "suspended": True}
+    sim = Sim(
+        polls=[at(P)],
+        holds=[f"{P} failed=texbrain"],
+        published={M: {"bento-pdf": entry}, P: digests(bento_pdf="a")},
+    )
+    result = sim.wait()
+    assert (result.verdict, result.cause) == ("deploy-failed", "promote-held")
+
+
+def test_a_suspended_tag_beside_another_service_waits_on_the_other_alone():
+    """bento-pdf never applies M, so the wait settles once texbrain and homelab do."""
+    entry = {"own": "own-b", "footprint": "b", "suspended": True}
+    sim = Sim(
+        polls=[
+            at(P),
+            at(M, "texbrain") + [kustomization("bento-pdf", f"master@sha1:{P}")],
+        ],
+        published={
+            M: {"bento-pdf": entry, **digests(texbrain="t2")},
+            P: digests(bento_pdf="a", texbrain="t"),
+        },
+    )
+    result = sim.wait(services=("bento-pdf", "texbrain"))
+    assert result.verdict == "settled" and result.suspended == ("bento-pdf",)
+    assert sim.sleeps == 1
+
+
+def test_a_suspended_tag_outside_the_prs_services_does_not_end_the_wait():
+    entry = {"own": "own-x", "footprint": "x", "suspended": True}
+    sim = Sim(published={M: {"texbrain": entry}, P: {"texbrain": entry}})
+    assert sim.wait(services=("bento-pdf",)).verdict == "settled"
+
+
 def test_no_promotion_within_the_timeout_gives_up():
     sim = Sim(polls=[at(P)])
     result = sim.wait()

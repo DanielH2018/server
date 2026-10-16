@@ -217,6 +217,19 @@ halves, so without this check a deploy that rolled nothing reads `settled`. The
 predicate is the record, not the clock, on purpose: an idempotent re-run queues no restart and
 stays green, and a standalone `probe.py health` with no record keeps the two-half verdict.
 
+After a passing rollout verdict, the gate reads the alert plane (M6 B-1,
+`scripts/diagnostics/probe_lib/health_alerts.py`). The selector is C7's *Health gate* in
+`docs/target-architecture/contracts.md`, which D5's soak shares. A firing alert labelled
+`service="<tag>"` fails the gate when it is `critical` or carries `verify="true"`, is not a
+shadow rule or the Watchdog, and became active after the tag's reference time. That time is
+`applied_at` for an Ansible-owned tag. For an `owner: flux` tag it is when the tag's
+Kustomization first reported its current revision. Each ingress probe of the tag must then
+report a `probe_success` of 1 sampled after the rollout. The gate waits up to 90s for that
+sample and re-reads a failing verdict once after 60s. A tag whose entry renders no ingress
+route skips the probe half. A routed tag with no series at all fails, because its route
+renders a probe target that has stopped reporting. A Prometheus read that fails exits 75, never a pass. The Pi's
+`--docker` path does not read the alert plane.
+
 `--docker` inspects the Pi's container over ssh instead.
 
 A role with no Deployment/DaemonSet/StatefulSet but a CronJob (configarr and pi-peer-backup) is gated the same way on its most recent Job instead

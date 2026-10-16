@@ -184,6 +184,61 @@ def test_a_suspended_kustomization_is_not_expected():
     assert vp.expected_set(suspended, PROD).names == {"homelab", "bento-pdf"}
 
 
+def _rendered(roles, value: str) -> dict[str, bytes]:
+    """The renderer's own bundle of `sonarr` and its deferred directory, holding `value`."""
+    configmap = f"kind: ConfigMap\nmetadata:\n  name: x\ndata:\n  v: {value}\n"
+    directories = {
+        "sonarr": {"x.yaml": configmap},
+        "sonarr-deferred": {"x.yaml": configmap},
+    }
+    files = render_bundle(directories, {}, ["sonarr"], "10m", "x=ENC[y]\n", roles=roles)
+    return {path: text.encode() for path, text in files.items()}
+
+
+def _sonarr_role(tmp_path, defaults: str):
+    (tmp_path / "sonarr" / "defaults").mkdir(parents=True, exist_ok=True)
+    (tmp_path / "sonarr" / "defaults" / "main.yml").write_text(defaults)
+    return tmp_path
+
+
+def test_a_suspended_tag_that_never_posts_reads_good_without_waiting(tmp_path):
+    """D5.1b: a good verdict, so `settle` moves `last-good` and never resets."""
+    prod = _rendered(_sonarr_role(tmp_path / "prod", "---\n"), "1")
+    target = _rendered(_sonarr_role(tmp_path / "t", "flux_suspend: true\n"), "2")
+    expected = vp.expected_set(target, prod)
+    assert expected.names == {"homelab"}
+    clock = Clock()
+    assert (
+        vp.verify(reads({T: ok("homelab")}, clock), T, PRIOR, expected).verdict
+        == "good"
+    )
+    assert clock.sleeps == 0
+
+
+def test_the_same_tag_unsuspended_that_never_posts_times_out_and_fails(tmp_path):
+    prod = _rendered(_sonarr_role(tmp_path / "prod", "---\n"), "1")
+    target = _rendered(_sonarr_role(tmp_path / "t", "---\n"), "2")
+    expected = vp.expected_set(target, prod)
+    verdict = vp.verify(reads({T: ok("homelab")}), T, PRIOR, expected)
+    assert verdict == vp.Verdict("failed", ("sonarr", "sonarr-deferred"))
+
+
+@pytest.mark.parametrize("flag, names", [(True, set()), (False, {"sonarr-deferred"})])
+def test_digests_suspended_leaves_out_every_kustomization_of_the_tag(flag, names):
+    """The `suspended` field decides even for a document that carries no `spec.suspend`."""
+    prints = digests(bento_pdf="a", sonarr="s2")
+    prints["sonarr"]["suspended"] = flag
+    target = bundle_files(
+        prints,
+        **{
+            "bento-pdf": ks("bento-pdf"),
+            "sonarr": ks("sonarr", suspend=True),
+            "sonarr-deferred": ks("sonarr-deferred", "sonarr"),
+        },
+    )
+    assert vp.expected_set(target, PROD).names == {"homelab"} | names
+
+
 def test_an_unclassified_change_expects_every_name():
     files = bundle_files(
         {**digests(bento_pdf="a", sonarr="s"), "_unclassified": {"footprint": "u2"}},

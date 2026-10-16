@@ -26,8 +26,8 @@ and frozen; `plane` is a read-only property over it and `narrowed_plane`:
 | `ci.wait_master_ci` | `merge_sha`, `opts.ci_timeout` | `ledger.t_ci` |
 | `tick.run_tick` | `opts.lock_retries`, `opts.lock_backoff` | `ledger.lock_waited`, `ledger.lock_holder`, `ledger.t_tick`, `tick_watch_abandoned` |
 | `classify.narrow_plane` (after step 4's tick, or in its place on the fast path) | `classification`, `merge_sha`, the `receipts` marker | `narrowed_plane` |
-| `deploy.deploy_phase` | `resolved_tags`, `k8s_only`, `needs_diff`, `classification`, `opts.since`, `merge_sha`, `tick_watch_abandoned` | `resolved_tags`, `k8s_only`, `owned_tags`, `deployed_hosts`, `deployed_at`, `ledger.tags_label`, `ledger.cause`, `ledger.kick`, `ledger.t_ci`, `ledger.t_tick`, `ledger.t_deploy` |
-| `health_verdict.health` | `resolved_tags`, `owned_tags`, `deployed_at`, `plane`, `classification`, `tick_watch_abandoned`, `ledger.kick` | `ledger.cause`, `ledger.kick` |
+| `deploy.deploy_phase` | `resolved_tags`, `k8s_only`, `needs_diff`, `classification`, `opts.since`, `merge_sha`, `tick_watch_abandoned` | `resolved_tags`, `k8s_only`, `owned_tags`, `suspended_tags`, `deployed_hosts`, `deployed_at`, `ledger.tags_label`, `ledger.cause`, `ledger.kick`, `ledger.t_ci`, `ledger.t_tick`, `ledger.t_deploy` |
+| `health_verdict.health` | `resolved_tags`, `owned_tags`, `suspended_tags`, `deployed_at`, `plane`, `classification`, `tick_watch_abandoned`, `ledger.kick` | `ledger.cause`, `ledger.kick` |
 
 Every phase may end the landing by raising an `Outcome`, and the last one always does.
 """

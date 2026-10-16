@@ -386,6 +386,70 @@ pushes, and must read Ready=False with a verification error. It is not a source 
 `deploy-errors`, so the drill posts nothing to Discord. Setting the lever back to `false`
 deletes the object at the role's next run.
 
+## Stopping one service: `flux_suspend`
+
+`flux_suspend: true` in a flux-owned role's `defaults/main.yml` stops all reconciliation of
+that role. `k8s_autodeploy: false` is a different lever: it stops Renovate merging the
+role and, while Ansible owns it, the deployer auto-deploying its image bumps. The plan is
+`docs/target-architecture/deploy/d5-bulk-move.md`, *The stop lever (D5.1b)*. A merged change
+to a suspended role applies nothing until the resume, so the suspend is a temporary stop, and
+three checks hold it there (D5.1d):
+
+- **The gate.** `scripts/validate/cross_plane_order.py`'s arm 5 refuses a PR that changes the
+  `own` digest of a tag `digests.json` marks `suspended` at both its base and its head. The
+  same change passes in the PR that removes `flux_suspend`. The arm reads the `suspended`
+  field, never the key, so a role that derives the key from another variable is covered too.
+  A shared-template change whose render reaches a suspended tag waits for its resume.
+- **The race.** Master's status-check rule is not strict, so a PR whose checks ran before the
+  suspend merged can still merge after it. `promote.py decide` holds a revision R whose `own`
+  digest differs from `last-good`'s for a tag suspended in both, and writes `DEPLOY_HOLD` as
+  `<R> suspended-changed=<tag>`. The revert rule never passes that form. The way out is a
+  commit that reverts the change or resumes the tag, then the operator's clear. A clear
+  without one holds again at the next `decide`. `probe.py landing` prints the cause beside
+  `DEPLOY_HOLD`. No post announces the hold yet; D5.2b1 adds one.
+- **`land-wait`.** `promote.py land-wait` leaves a tag suspended at the merge commit out of
+  the wait, and `land.sh` leaves it out of the health gate. When every tag it waits on is
+  suspended, it ends with the verdict `suspended` rather than polling to `gave-up`, and
+  `land.sh` prints `nothing-to-deploy` for it (`docs/landing.md`).
+
+- **What it renders.** `spec.suspend: true` on `<tag>` and on each of its `-deferred`,
+  `-snapshot` and `-verify` Kustomizations, and `suspended: true` on the tag's object in
+  `digests.json`. The value must be a literal `true` or `false`; a Jinja expression fails the render.
+- **No `suspend: false`, anywhere.** The renderer writes `spec.suspend` only when it is true.
+  `kustomize-controller` applies with forced ownership, so a rendered `false` would take the
+  field back from an operator's hand suspend. `suspension.suspend_false` fails the render on any
+  Flux object in the bundle that sets it, a role template's included. The flux role's
+  `sync.yaml.j2` follows the same rule.
+- **No edge to it.** Every `dependsOn` edge to a suspended Kustomization is dropped, and the
+  annotation `homelab/suspended-deps` lists it (*Ordering: `dependsOn`*). Otherwise each
+  dependent would wait on the suspended tag's revision until the resume.
+- **Not expected by `verify`.** A suspended Kustomization never posts. `verify` leaves out
+  every Kustomization of a tag that `digests.json` marks `suspended`, so a revision that
+  changes it neither times out nor resets (*Verification*).
+- **It takes hold only once `last-good` carries it.** A hold-and-reset applies `last-good`'s
+  bundle, which un-suspends a role whose suspend landed after it. Land the suspend PR alone,
+  then check that `probe.py landing` shows `last-good` at or past it.
+- **The way back and the way to see it.** A PR that removes the key resumes the role.
+  `probe.py landing` prints a `suspended (Flux):` line naming every suspended Kustomization
+  and `OCIRepository`, the root included, with the field manager of each `spec.suspend`. A
+  suspend from git reads as `kustomize-controller`'s, and a hand suspend as
+  `homelab-operator`'s.
+
+**A hand suspend uses its own field manager.** It is operator-only, because it needs the k3s
+admin kubeconfig:
+
+```bash
+sudo k3s kubectl -n flux-system patch kustomization <tag> --type merge \
+  --field-manager=homelab-operator -p '{"spec":{"suspend":true}}'
+```
+
+The resume is the same command with `false`. `homelab-operator` matches none of the managers
+`kustomize-controller` cleans, so the applier of the suspended object leaves the field alone.
+kubectl's default manager, `kubectl-patch`, matches the `kubectl` prefix, and the next
+reconcile would revert it. A hand suspend is not in `digests.json`, so a revision that
+changes a hand-suspended tag times out `verify`. Set `DEPLOY_HOLD` first, as
+`docs/break-glass.md`'s shed scenario does.
+
 ## Publishing and promotion
 
 The `promote` workflow, `.github/workflows/promote.yml`, runs after each successful push run
@@ -459,7 +523,8 @@ notification-controller posts on T:
   `changed_set.changed_set` computes the set from T's `digests.json` and `prod`'s, as it does
   for `land.sh`'s wait. The set holds each name whose `footprint` moved, and every
   Kustomization whose `dependsOn` chain reaches one, such as a tag's `-deferred`. A suspended
-  Kustomization is left out. A change under `_unclassified`, or a bundle with no
+  Kustomization is left out: one whose document sets `spec.suspend: true`, and every
+  Kustomization of a tag that T's `digests.json` marks `suspended`. A change under `_unclassified`, or a bundle with no
   `digests.json`, expects every name, and an empty set expects `flux/homelab` alone.
 - **What it never expects.** A Kustomization outside the set, so a failure that T did not
   cause never holds; the Flux alerts page it instead. A dependent whose status on `prod`'s
@@ -733,6 +798,11 @@ render publishes, and the publish job renders every published tag. The edges are
   `observability`, so `headlamp-deferred` and `netpol-baseline-deferred` wait on
   `observability` once it is flux-owned and annotate it until then.
 - **`cluster-vars`**, for a substituting directory, as above.
+- **An edge to a suspended tag is dropped.** An edge to a Kustomization of a tag whose role
+  sets `flux_suspend: true` is left out, and the annotation `homelab/suspended-deps` lists it. netpol-baseline's edges to every `<tag>-deferred` drop
+  the same way, and so do the edges among the suspended tag's own Kustomizations. The PR that
+  removes the key restores every edge in the same render. The suspended set is read over
+  every flux-owned role, so a `--role` render drops the same edges.
 
 `dependsOn` lists the names in sorted order. A cycle among the edges refuses the render, since
 Flux would hold every Kustomization on it at `DependencyNotReady`. An edge governs from the

@@ -54,6 +54,44 @@ class ChangedSet:
     direct: frozenset[str] = frozenset()
 
 
+def suspended_tags(digests: object) -> set[str]:
+    """The tags whose object in a parsed `digests.json` reads `suspended: true` (D5.1b).
+
+    A file that is missing or malformed names none.
+    """
+    if not isinstance(digests, dict):
+        return set()
+    return {
+        name
+        for name, entry in digests.items()
+        if isinstance(entry, dict) and entry.get("suspended") is True
+    }
+
+
+def own_digests(digests: object) -> dict[str, str]:
+    """Each tag's `own` digest in a parsed `digests.json`; a malformed file or entry names none."""
+    if not isinstance(digests, Mapping):
+        return {}
+    return {
+        name: entry["own"]
+        for name, entry in digests.items()
+        if isinstance(entry, Mapping) and isinstance(entry.get("own"), str)
+    }
+
+
+def suspended_changed(older: object, newer: object) -> list[str]:
+    """The tags suspended in both parsed `digests.json` files whose `own` digest differs (D5.1d).
+
+    A suspended tag applies nothing until its resume, so a change to its render that lands
+    while it stays suspended is lost. `cross_plane_order.py` refuses such a PR, comparing its
+    base with its head, and `promote.py decide` holds such a revision, comparing `last-good`
+    with it. A tag the newer file no longer suspends is the resume and passes.
+    """
+    both = suspended_tags(older) & suspended_tags(newer)
+    old_own, new_own = own_digests(older), own_digests(newer)
+    return sorted(tag for tag in both if old_own.get(tag) != new_own.get(tag))
+
+
 def footprints(digests: object) -> dict[str, str] | None:
     """Each name's `footprint` digest in a parsed `digests.json`, or None when it is malformed.
 

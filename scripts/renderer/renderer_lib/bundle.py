@@ -10,7 +10,9 @@ A placeholder render with `--role` writes, for each tag it names:
   (C3 *Per-role fields*, D3.3c). A tag that renders a `<tag>-deferred`, `<tag>-snapshot` or
   `<tag>-verify` directory gets that Kustomization as a further document of the file, in
   `TAG_KIND_SUFFIXES` order (D4.2, D5.1a1). `<tag>` and `<tag>-deferred` take `prune` and
-  `timeout` from the role's defaults where `role_fields` finds them (C3 *Per-role fields*);
+  `timeout` from the role's defaults where `role_fields` finds them (C3 *Per-role fields*).
+  A role that sets `flux_suspend: true` renders `suspend: true` on every one of its tag's
+  Kustomizations (C3 *Suspension*, D5.1b);
 - `DIR/flux/<kind>.yaml` and `DIR/cluster/<kind>/` for each `SHARED_KINDS` member;
 - `DIR/flux/kustomization.yaml`, which lists every other file in `DIR/flux/`, so the root
   Kustomization `homelab` applies each of them;
@@ -33,7 +35,8 @@ The classification `digests` applies is D6's *What a footprint counts*:
 - every other path, and a shared kind with no rule, lands under `_unclassified`.
 
 `dependsOn` is generated, never hand-written (D4.2): `ordering.py` derives each
-Kustomization's edges, and a cycle among them fails the render.
+Kustomization's edges, and a cycle among them fails the render, as `suspend: false` does on
+any Flux object (`suspension.py`, C3 *Suspension*).
 
 This module imports neither Ansible nor Jinja, so `promote.py check-bundle` reads
 `SHARED_KINDS` and the file names from it. The plan is
@@ -48,7 +51,7 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 import hashlib
 import json
 from collections.abc import Callable, Iterable, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 import yaml
@@ -56,11 +59,13 @@ import yaml
 from lib import yaml_fast
 from lib.k8s_roles import role_fields, snapshot_claims
 from lib.repo_paths import K8S_ROLES
+from renderer.renderer_lib.suspension import refuse_suspend_false, suspends_tag
 from renderer.renderer_lib.ordering import (
     ANSIBLE_OWNED_DEPS,
     DEFERRED_SUFFIX,
     NO_EDGES,
     NO_ORDERING,
+    SUSPENDED_DEPS,
     TAG_KIND_SUFFIXES,
     Edges,
     Ordering,
@@ -178,6 +183,7 @@ def tag_kustomization(
     decrypts: bool = False,
     edges: Edges = NO_EDGES,
     prune: bool = True,
+    suspend: bool = False,
 ) -> dict:
     """The Kustomization `tag`, as D2's *The per-tag Kustomization* shows it.
 
@@ -192,9 +198,10 @@ def tag_kustomization(
         decrypts: Whether the tag's role lists `render_sops_manifests`, which alone decides
             `decryption`. kustomize-controller decrypts nothing without it (D3.3c).
         edges: The generated edges (D4.2). `dependsOn` lists `edges.kept` and the
-            `cluster-vars` edge in sorted order, and `ANSIBLE_OWNED_DEPS` lists
-            `edges.dropped`; each is left out when empty.
+            `cluster-vars` edge in sorted order, `ANSIBLE_OWNED_DEPS` lists `edges.dropped`
+            and `SUSPENDED_DEPS` lists `edges.suspended`; each is left out when empty.
         prune: False for a role whose defaults set `flux_prune: false` (`role_fields`).
+        suspend: True for a role whose defaults set `flux_suspend: true`, the one value written.
     """
     spec: dict = {
         "sourceRef": {"kind": "OCIRepository", "name": ROOT},
@@ -218,9 +225,13 @@ def tag_kustomization(
         spec["dependsOn"] = [{"name": name} for name in sorted(depends)]
     if decrypts:
         spec["decryption"] = dict(DECRYPTION)
+    if suspend:
+        spec["suspend"] = True
     metadata: dict = {"name": tag, "namespace": FLUX_NAMESPACE}
-    if edges.dropped:
-        metadata["annotations"] = {ANSIBLE_OWNED_DEPS: ",".join(sorted(edges.dropped))}
+    annotations = {ANSIBLE_OWNED_DEPS: edges.dropped, SUSPENDED_DEPS: edges.suspended}
+    annotations = {k: ",".join(sorted(v)) for k, v in annotations.items() if v}
+    if annotations:
+        metadata["annotations"] = annotations
     return {
         "apiVersion": FLUX_API_VERSION,
         "kind": "Kustomization",
@@ -284,8 +295,8 @@ def flux_files(
             the tags' files.
         decrypting: The published tags whose role lists `render_sops_manifests`.
         edges: Each Kustomization's generated edges; a name it does not map has none.
-        fields: Each tag's per-role fields (`role_fields`), which `<tag>` and
-            `<tag>-deferred` take; a tag it does not map has none.
+        fields: Each tag's per-role fields (`role_fields`): `prune` and `timeout` for `<tag>`
+            and `<tag>-deferred`, `suspend` for all; a tag it does not map has none.
     """
     decrypting = frozenset(decrypting)
     edges = edges or {}
@@ -305,6 +316,7 @@ def flux_files(
                 name in decrypting,
                 edges.get(name, NO_EDGES),
                 own.get("prune", True) if name in role_own else True,
+                own.get("suspend", False),
             )
             for name in names
         ]
@@ -371,19 +383,6 @@ def configmap_digest8(configmap: Mapping) -> str:
     return hashlib.sha256(text.encode()).hexdigest()[:8]
 
 
-def _suspended(text: bytes | None) -> bool:
-    """Whether a tag's `flux/<tag>.yaml` suspends its first document, the Kustomization `<tag>`.
-
-    Only `spec.suspend: true` counts, since the renderer writes the field only when it is
-    true (C3 *Suspension*). A tag with no file reads as not suspended.
-    """
-    if text is None:
-        return False
-    first = next(iter(yaml_fast.safe_load_all(text.decode())), None)
-    spec = first.get("spec") if isinstance(first, dict) else None
-    return isinstance(spec, dict) and spec.get("suspend") is True
-
-
 def digests(
     files: Mapping[str, bytes],
     tags: Iterable[str],
@@ -440,7 +439,7 @@ def digests(
     claims = claims or {}
     for tag in tags:
         result[tag]["claims"] = sorted(claims.get(tag, ()))
-        result[tag]["suspended"] = _suspended(files.get(f"{FLUX_DIR}/{tag}.yaml"))
+        result[tag]["suspended"] = suspends_tag(files.get(f"{FLUX_DIR}/{tag}.yaml"))
     whole = digest(unclassified)
     result[UNCLASSIFIED] = {
         "own": whole,
@@ -520,12 +519,18 @@ def bundle_files(
             (`role_fields`).
 
     Raises:
-        ValueError: The generated edges form a cycle, a tag's
-            `k8s_autodeploy_snapshot_pvcs` is not a literal list, or its `flux_prune` or
-            `manifests_rollout_timeout` is not a literal.
+        ValueError: The edges form a cycle, a tag's `k8s_autodeploy_snapshot_pvcs` is not a
+            literal list or a `role_fields` field not a literal, or a Flux object in the
+            bundle sets `suspend: false` (`suspension.py`).
     """
     tags = sorted(set(tags))
+    fields, problems = role_fields(tags, roles)
+    if problems:
+        raise ValueError("; ".join(problems))
     per_directory, substituting = substitution(tags, directories, key_sets)
+    # A published tag's own defaults decide its suspend, whatever the ordering was read from.
+    suspended = {tag for tag, own in fields.items() if own.get("suspend")}
+    ordering = replace(ordering, suspended=ordering.suspended | suspended)
     edges = kustomization_edges(tags, directories, ordering)
     graph = {
         name: set(edge.kept) | ({CLUSTER_VARS} if per_directory.get(name) else set())
@@ -537,9 +542,6 @@ def bundle_files(
             f"the dependsOn edges form a cycle, {' -> '.join(cycle)}, and Flux would hold "
             "every Kustomization on it at DependencyNotReady"
         )
-    fields, problems = role_fields(tags, roles)
-    if problems:
-        raise ValueError("; ".join(problems))
     shared = cluster_vars_files(cluster_vars, timeout)
     flux = {p: t for p, t in shared.items() if p.startswith(f"{FLUX_DIR}/")}
     files = flux_files(
@@ -556,6 +558,7 @@ def bundle_files(
         for name, held in directories.items()
         for file, text in held.items()
     }
+    refuse_suspend_false({**cluster, **files})
     everything = {path: text.encode() for path, text in {**cluster, **files}.items()}
     claims, problems = snapshot_claims(tags, roles)
     if problems:

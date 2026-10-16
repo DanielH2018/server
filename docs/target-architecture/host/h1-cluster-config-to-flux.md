@@ -47,7 +47,13 @@ named member of *Plumbing tags are never pruned*.
 PR H1.1a, renderer support: [#5312](https://github.com/DanielH2018/server/pull/5312). It merged at
 `c5db379f7` and deployed nothing. The renderer publishes vendored files, Kustomize `patches:`,
 `prune: false` and a per-role Kustomization `timeout`, and the renderer suite reads 636 passed on
-master.
+master. It reads patches from `files/patches/`, the directory H1.1d's health gate reads, which closes
+[#5283](https://github.com/DanielH2018/server/issues/5283).
+PR H1.1h, the stale-checkout guard: [#5316](https://github.com/DanielH2018/server/pull/5316). It
+merged at `c31833d3d` and owed `manual_plane k3s`. The operator applied `k3s-bringup.yml --tags
+kubeconfig`, which read `ok=18 changed=0 failed=0`: the guard read the live Flux inventory and its
+refusal skipped. The operator then cleared the line
+([readings](https://github.com/DanielH2018/server/pull/5316#issuecomment-6224451468)).
 
 Depends on: D2, D4; D3 for H1.7b only; R4 for H1.9 only
 Unblocks: H2, which needs H1.1a to H1.8 and never H1.9
@@ -668,7 +674,9 @@ After H1, merging a pin is the upgrade. Two pieces move the runbook gates to the
   placeholders (Baseline), so no byte-for-byte copy can render. `coredns` is a templated
   role derived from that file, described under *CoreDNS without a host read*.
 - **Storage.** Upstream files live under the role's `files/upstream/`, byte for byte, with
-  the version and the upstream sha256 pinned in the role defaults.
+  the version and the upstream sha256 pinned in the role defaults. Patches live under
+  `files/patches/`. The renderer lists them as the Kustomization's `patches:`, and
+  `probe.py health` reads the same directory (`health_vendored.py:VENDORED_SUBDIRS`).
 - **Refresh.** `scripts/dev/vendor_manifest.py` fetches a pinned URL, checks its sha256,
   writes the file, and prints the objects the old file had and the new one lacks. A Renovate
   bump changes the version, and the `renovate-prs` skill runs the refresh as its manual half.

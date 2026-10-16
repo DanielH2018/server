@@ -13,7 +13,12 @@ import pytest
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from diagnostics.probe_lib import landing_blockers as landing
-from diagnostics.probe_lib.promote_state import PromoteReads, artifact_of, hold_lines
+from diagnostics.probe_lib.promote_state import (
+    PromoteReads,
+    artifact_of,
+    hold_lines,
+    suspended_objects,
+)
 from test_probe_landing import CLEAR, GREEN, fake_deploy_ui, fake_run
 
 PROD = {"commit": "c" * 40, "digest": "sha256:" + "1" * 64}
@@ -30,8 +35,15 @@ def _read(value):
     return value if callable(value) else lambda: value
 
 
-def _snap(deployer=CLEAR, deploy_hold="none", prod=PROD, last_good=PROD) -> dict:
-    reads = PromoteReads(_read(deploy_hold), _read(prod), _read(last_good))
+def _snap(
+    deployer=CLEAR, deploy_hold="none", prod=PROD, last_good=PROD, suspended=None
+) -> dict:
+    reads = PromoteReads(
+        _read(deploy_hold),
+        _read(prod),
+        _read(last_good),
+        None if suspended is None else _read(suspended),
+    )
     return landing.collect(
         lambda: None, fake_deploy_ui(deployer), fake_run(GREEN), promote=reads
     )
@@ -63,6 +75,20 @@ def test_both_hold_lines_print_whatever_each_reads(
     assert lines[DEPLOY_HOLD].endswith(want_hold)
     text = landing.format_text({**_snap(deployer, deploy_hold), "claims": None})
     assert lines[HOLD_SHA] in text and lines[DEPLOY_HOLD] in text
+
+
+@pytest.mark.parametrize(
+    "deploy_hold, cause",
+    [
+        (f"{'e' * 40} suspended-changed=bento-pdf", "cause: suspended-changed"),
+        (f"{'e' * 40} failed=bento-pdf", ""),
+    ],
+    ids=["suspended-changed", "failed"],
+)
+def test_a_suspended_changed_hold_prints_its_cause(deploy_hold, cause):
+    line = _lines(_snap(CLEAR, deploy_hold))[DEPLOY_HOLD]
+    assert line.startswith(f"{DEPLOY_HOLD}: {deploy_hold}")
+    assert ("cause:" in line) == bool(cause) and cause in line
 
 
 def test_both_hold_lines_print_when_neither_hold_could_be_read():
@@ -102,7 +128,12 @@ def test_a_failed_deploy_hold_read_reads_unknown():
 
 def test_collect_without_the_promotion_reads_reads_none_of_them():
     snap = landing.collect(lambda: None, fake_deploy_ui(CLEAR), fake_run(GREEN))
-    assert snap["promote"] == {"deploy_hold": None, "prod": None, "last_good": None}
+    assert snap["promote"] == {
+        "deploy_hold": None,
+        "prod": None,
+        "last_good": None,
+        "suspended": None,
+    }
 
 
 def test_prod_comes_from_the_ocirepositorys_artifact_revision_and_metadata():
@@ -118,3 +149,41 @@ def test_prod_comes_from_the_ocirepositorys_artifact_revision_and_metadata():
 def test_an_ocirepository_without_a_revision_is_an_error():
     with pytest.raises(ValueError, match=r"status\.artifact"):
         artifact_of({"status": {"artifact": {"revision": f"prod@{PROD['digest']}"}}})
+
+
+def _flux_object(kind: str, name: str, suspend, manager: str) -> dict:
+    """A Flux object as `kubectl get -o json --show-managed-fields` returns it."""
+    fields = {"f:spec": {"f:suspend": {}}} if suspend is not None else {"f:spec": {}}
+    spec = {} if suspend is None else {"suspend": suspend}
+    return {
+        "kind": kind,
+        "metadata": {
+            "name": name,
+            "managedFields": [
+                {"manager": "gotk-kustomize-controller", "fieldsV1": {"f:spec": {}}},
+                {"manager": manager, "fieldsV1": fields},
+            ],
+        },
+        "spec": spec,
+    }
+
+
+def test_a_hand_suspend_and_a_git_suspend_print_their_field_managers():
+    items = [
+        _flux_object("Kustomization", "sonarr", True, "homelab-operator"),
+        _flux_object("Kustomization", "radarr", True, "kustomize-controller"),
+        _flux_object("Kustomization", "texbrain", None, "kustomize-controller"),
+        _flux_object("OCIRepository", "homelab", False, "homelab-operator"),
+    ]
+    line = hold_lines(_snap(suspended=suspended_objects(items)))[3]
+    assert line == (
+        "suspended (Flux): Kustomization/sonarr by homelab-operator; "
+        "Kustomization/radarr by kustomize-controller"
+    )
+
+
+def test_no_suspended_object_reads_none_and_an_unread_one_reads_unknown():
+    assert hold_lines(_snap(suspended=[]))[3] == "suspended (Flux): none"
+    snap = _snap(suspended=_broken)
+    assert hold_lines(snap)[3] == "suspended (Flux): unknown"
+    assert any(e.startswith("suspended: TimeoutError") for e in snap["errors"])

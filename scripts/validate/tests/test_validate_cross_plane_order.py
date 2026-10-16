@@ -380,6 +380,51 @@ def test_a_prune_disabled_label_or_annotation_is_read():
     assert not gate._prune_disabled({"metadata": {"labels": {gate.PRUNE_KEY: "x"}}})
 
 
+def _digests(own: str, suspended: bool) -> dict:
+    """A `digests.json` whose bento-pdf entry carries `own` and `suspended`."""
+    return {"bento-pdf": {"own": own, "footprint": own, "suspended": suspended}}
+
+
+def suspended_snap(own: str, suspended: bool) -> gate.Snapshot:
+    return gate.Snapshot(
+        renders={},
+        owners={"bento-pdf": "flux"},
+        deps={},
+        digests=_digests(own, suspended),
+    )
+
+
+def test_a_change_to_a_suspended_tags_render_is_flagged():
+    flagged = gate.suspended_problems(
+        suspended_snap("a", True), suspended_snap("b", True)
+    )
+    assert len(flagged) == 1 and flagged[0].startswith("arm 5: bento-pdf is suspended")
+
+
+def test_the_same_change_with_the_suspend_removed_is_clean():
+    assert (
+        gate.suspended_problems(suspended_snap("a", True), suspended_snap("b", False))
+        == []
+    )
+
+
+def test_suspending_a_tag_in_the_same_pr_as_a_change_is_clean():
+    """The suspend PR itself: the tag is not suspended at the base."""
+    assert (
+        gate.suspended_problems(suspended_snap("a", False), suspended_snap("b", True))
+        == []
+    )
+
+
+def test_the_gates_own_snapshot_reads_digests_json(head_tree):
+    """With no roles, as `render_side` calls it, `snapshot` still passes every render target
+    with `--role`, so the bundle's `digests.json` is there to read. A render without `--role`
+    writes no bundle, and arm 5 would read no tag as suspended."""
+    snapshot = gate.snapshot(head_tree)
+    assert snapshot.digests["bento-pdf"]["suspended"] is False
+    assert "authelia" in snapshot.renders
+
+
 def _git(repo: Path, *args: str) -> str:
     env = {
         "GIT_CONFIG_GLOBAL": "/dev/null",

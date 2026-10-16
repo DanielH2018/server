@@ -79,8 +79,11 @@ Each arm is a rule and the function that holds it; the record page has its incid
   k8s change defers-and-alerts.** `docs/gitops-pipeline.md`'s *The safety arms, in full* has the
   diff-shape eligibility test and the per-tick cap.
 - **The denylist derives from each role's own `k8s_autodeploy` declaration**
-  (`filter_plugins/k8s_autodeploy.py`, fail-closed), so `k8s_autodeploy: false` is how you stop a
-  role; `deploy_phases.reconcile_denylist` re-renders `config.env`.
+  (`filter_plugins/k8s_autodeploy.py`, fail-closed), so `k8s_autodeploy: false` is how you stop
+  an Ansible-owned role's image bumps; `deploy_phases.reconcile_denylist` re-renders
+  `config.env`. A flux-owned role takes nothing from this tick, so `flux_suspend: true` in its
+  defaults is how you stop it: it suspends every Kustomization of the tag
+  (`docs/flux-deploy-plane.md`, *Stopping one service*).
 - **Pi Docker changes are never auto-deployed**, and an encrypted-vars-only push merges without
   redeploying, alerting once per SHA.
 - **A k8s tag whose `containers_list` entry sets `owner` goes to `cs.flux`**, beside `cs.k8s`.
