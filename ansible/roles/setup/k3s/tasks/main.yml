@@ -7,6 +7,11 @@
 
 - name: Install the k3s server
   ansible.builtin.import_tasks: server.yml
+# Directly after server.yml and before every other import (H1.1h): a whole-role run with the
+# API down reaches server.yml before any guard instance reads the API, and no stale writer
+# runs ahead of the guard. ansible/tests/setup/test_k3s_stale_checkout_map.py holds the order.
+- name: Refuse a stale checkout that would write a Flux-owned object
+  ansible.builtin.import_tasks: stale-checkout-guard.yml
 - name: Install MetalLB and the PriorityClasses
   ansible.builtin.import_tasks: cluster-addons.yml
 - name: Install Longhorn and reconcile its recurring-job groups
