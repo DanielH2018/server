@@ -36,12 +36,21 @@ esac
 """
 
 
-def volume(pvc: str, actual_size: int = 1024, bound: bool = True) -> dict:
-    """A tiered Volume CR named `pvc-<pvc>`; `bound=False` blanks its pvcName, as for a released PVC."""
+def volume(
+    pvc: str,
+    actual_size: int = 1024,
+    bound: bool = True,
+    labels: list[str] | None = None,
+) -> dict:
+    """A tiered Volume CR named `pvc-<pvc>`; `bound=False` blanks its pvcName, as for a released PVC.
+
+    `labels` replaces the `default` group label, each key set to `enabled`.
+    """
+    keys = labels or ["recurring-job-group.longhorn.io/default"]
     return {
         "metadata": {
             "name": f"pvc-{pvc}",
-            "labels": {"recurring-job-group.longhorn.io/default": "enabled"},
+            "labels": dict.fromkeys(keys, "enabled"),
         },
         "spec": {"size": "16777216", "backupBlockSize": "16777216"},
         "status": {
@@ -110,12 +119,14 @@ def harness(
     backed: list[str] | None = None,
     actual_sizes: dict[str, int] | None = None,
     no_pvc: set[str] | None = None,
+    labels: dict[str, list[str]] | None = None,
 ) -> Harness:
     """A rendered drill plus a runner: `run(argv, env=..., restore=...)` -> CompletedProcess.
 
     `actual_sizes` overrides a volume's `status.actualSize`, which the empty-content waiver reads
     to decide whether a declared-empty volume is still empty. `no_pvc` names the volumes whose
-    `kubernetesStatus.pvcName` is empty.
+    `kubernetesStatus.pvcName` is empty. `labels` gives a volume its label keys in place of
+    the `default` group label.
     """
     fixtures = tmp_path / "fixtures"
     fixtures.mkdir()
@@ -124,7 +135,12 @@ def harness(
         json.dumps(
             {
                 "items": [
-                    volume(p, sizes.get(p, 1024), p not in (no_pvc or set()))
+                    volume(
+                        p,
+                        sizes.get(p, 1024),
+                        p not in (no_pvc or set()),
+                        (labels or {}).get(p),
+                    )
                     for p in pvcs
                 ]
             }
