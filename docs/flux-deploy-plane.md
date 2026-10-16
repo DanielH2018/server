@@ -278,7 +278,33 @@ field paths from both commands, never values or diff hunks.
 H1's flips use a different census, `scripts/dev/takeover_census.py` (H1.1j), which is also
 operator-only. It compares the live object with a server-side dry-run apply as
 `kustomize-controller`, which needs the admin kubeconfig, and it also prints the fields that a
-manager outside the cleanup list keeps.
+manager outside the cleanup list keeps. It makes no API call itself. The operator renders the
+tag, writes both inputs as JSON and passes them in:
+
+```bash
+uv run python scripts/renderer/homelab_render.py cluster --out out --role <tag>
+sudo k3s kubectl get -k out/cluster/<dir> -o json --show-managed-fields > live.json
+sudo k3s kubectl apply --server-side --dry-run=server --force-conflicts \
+    --field-manager=kustomize-controller -k out/cluster/<dir> \
+    -o json --show-managed-fields > dryrun.json
+uv run python scripts/dev/takeover_census.py live.json dryrun.json
+```
+
+`<dir>` is `<tag>`, and then `<tag>-deferred` when the render wrote one. Flux applies a
+tag's deferred files as their own `<tag>-deferred` Kustomization, and `kubectl -k` reads one
+directory, so the census of a tag that defers files is two runs. `probe.py takeover` reads both
+directories in one run.
+
+It differs from `probe.py takeover` in where "the render declares this path" comes from. The
+probe looks each path up in the placeholder render. The census reads the dry run's
+`kustomize-controller` Apply entry, which is the API server's own record of the fields the
+render declares. The dry-run body is no use for this, because the dry run skips the cleanup and
+its body still holds every live field. The census prints `removed`, `kept` and `rolls` per
+object, lists `last-applied-configuration` under `removed` as the expected entry, and imports
+the cleanup list, the flattening and the server-default rule from `probe_lib/takeover.py`. It
+exits 1 when the two inputs share no object, or when a dry-run object has no
+`kustomize-controller` Apply entry. Both inputs can hold Secret data, so delete the two files
+after the run.
 
 ## Handing a service back
 
