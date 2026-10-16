@@ -355,3 +355,51 @@ def test_a_server_log_with_the_inrelease_get_is_clean():
 def test_the_test_images_source_names_the_published_keyring():
     dockerfile = (fx.REPO / "hosts/lib/tests/container/Dockerfile").read_text()
     assert f"'Signed-By: /srv/repo/{fx.TEST_KEYRING}'" in dockerfile
+
+
+def _cases_serving_an_expired_index(source: str) -> list[str]:
+    """The case bodies `self.case(...)` registers that serve with a `valid_until` set.
+
+    `Cases.serving` itself forwards `valid_until=valid_until`, so a keyword alone proves
+    nothing; the body a case runs must pass a value that is not None.
+    """
+    tree = ast.parse(source)
+    registered = {
+        node.args[2].id
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Attribute)
+        and node.func.attr == "case"
+        and len(node.args) > 2
+        and isinstance(node.args[2], ast.Name)
+    }
+    found = []
+    for node in ast.walk(tree):
+        if not (isinstance(node, ast.FunctionDef) and node.name in registered):
+            continue
+        for call in ast.walk(node):
+            if not (
+                isinstance(call, ast.Call)
+                and isinstance(call.func, ast.Attribute)
+                and call.func.attr == "serving"
+            ):
+                continue
+            if any(
+                keyword.arg == VALID_UNTIL
+                and not (
+                    isinstance(keyword.value, ast.Constant)
+                    and keyword.value.value is None
+                )
+                for keyword in call.keywords
+            ):
+                found.append(node.name)
+    return found
+
+
+def test_a_registered_case_serves_an_index_past_its_valid_until():
+    source = (fx.REPO / "scripts/validate/host_package_cases.py").read_text()
+    assert _cases_serving_an_expired_index(source) == ["expired_release"]
+    # Red proof: unregistering the case leaves nothing, though serving's keyword remains.
+    registration = 'self.case(c, "a Release past its Valid-Until", expired_release)'
+    assert registration in source
+    assert _cases_serving_an_expired_index(source.replace(registration, "")) == []
