@@ -69,3 +69,8 @@
     # The fake-remux detector + reconciler run on the media stack's host (fake_remux_host).
     # Host-conditional like optimize_pi/renovate_notify.
     - { role: fake_remux, tags: ["fake_remux"], when: inventory_hostname == fake_remux_host }
+    # The host-side rows D5 moves out of the k8s roles. daniel-box is a literal rather than a
+    # `*_host` var: a var would live in group_vars/all.yml, and an inventory change routes to
+    # the deploy plane as well as this one. setup_routing places a role gated to another host
+    # as a hand apply, so a Pi write here goes through `delegate_to` instead.
+    - { role: k8s_host_files, tags: ["k8s_host_files"], when: inventory_hostname == 'daniel-box' }
