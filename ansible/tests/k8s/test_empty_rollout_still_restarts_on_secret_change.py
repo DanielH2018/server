@@ -50,7 +50,8 @@ from pathlib import Path
 from lib import yaml_fast
 from lib.k8s_roles import resolved_manifest_files
 from lib.render_context import render_context
-from _helpers import K8S_ROLES, command_of, render_expr, walk_tasks
+from _helpers import K8S_ROLES, render_expr
+from _helpers import command_of, walk_tasks
 from _k8s_render import rendered_texts
 from _role_census import manifests_service_of, role_task_files
 
