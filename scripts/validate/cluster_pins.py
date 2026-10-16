@@ -23,7 +23,7 @@ The key set anywhere else under `ansible/` is refused: inventory, play vars, `in
 vars and `set_fact` override a role default, so a pin there would move the deployed version
 while the role file stays put. That scan matches the key at any indent, as YAML `key:` or as
 INI `key=`, in every YAML and INI file and every file under `inventory/`, `group_vars/` or
-`host_vars/`. A `-e` on the command line is outside what any tree check can see.
+`host_vars/`. A `-e` passed at run time is outside its reach.
 
 There is no bypass. The plan is docs/target-architecture/host/h1-cluster-config-to-flux.md,
 *CI checks on the pins*, and docs/landing.md says what to do with a refused PR.
@@ -176,9 +176,10 @@ def files_setting(key: str, sha: str, repo: Path = REPO) -> list[str]:
 def assigning_key(key: str) -> str:
     """An ERE matching `key` assigned at any indent: YAML `key:`, a flow `{key: v}`, INI `key=v`.
 
-    `==` stays unmatched, so a `when: <key> == 'v1.2.3'` comparison is not an assignment.
+    `==` stays unmatched, so a `when: <key> == 'v1.2.3'` comparison is not an assignment, and
+    so does a key after a `#` or `;`, which is a YAML or INI comment quoting it.
     """
-    return rf"""(^|[[:space:]{{,"'-]){key}["']?[[:space:]]*(:|=([^=]|$))"""
+    return rf"""^[^#;]*(^|[[:space:]{{,"'-]){key}["']?[[:space:]]*(:|=([^=]|$))"""
 
 
 def files_assigning(key: str, sha: str, repo: Path = REPO) -> list[str]:

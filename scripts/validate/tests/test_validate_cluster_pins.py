@@ -178,7 +178,7 @@ def test_a_key_set_in_two_role_files_is_unjudged(repo):
 
 
 def test_a_pin_read_but_not_assigned_outside_its_role_file_is_clean(repo):
-    """A Jinja read and a `==` comparison set nothing, so neither is an override."""
+    """A Jinja read, a `==` comparison and a comment set nothing, so none is an override."""
     sha = _commit(
         repo,
         {
@@ -187,6 +187,7 @@ def test_a_pin_read_but_not_assigned_outside_its_role_file_is_clean(repo):
                 "- name: apply\n"
                 "  url: https://x/{{ k3s_longhorn_version }}/longhorn.yaml\n"
                 "  when: k3s_longhorn_version == 'v1.12.1'\n"
+                "  # k3s_longhorn_version: bump one minor at a time\n"
             ),
         },
     )
@@ -214,6 +215,10 @@ def test_the_real_tree_overrides_no_pin():
         ),
         ("ansible/inventory/hosts.ini", "[all:vars]\nk3s_longhorn_version = v1.11.0\n"),
         ("ansible/inventory/group_vars/all", "k3s_longhorn_version: v1.11.0\n"),
+        (
+            "ansible/roles/setup/k3s/tasks/x.yml",
+            "- set_fact:\n    k3s_longhorn_version: v1.11.0\n",
+        ),
         ("ansible/site.yml", "- hosts: all\n  vars: {k3s_longhorn_version: v1.11.0}\n"),
     ],
     ids=[
@@ -222,6 +227,7 @@ def test_the_real_tree_overrides_no_pin():
         "ini-host-var",
         "ini-all-vars",
         "extensionless",
+        "set-fact",
         "flow",
     ],
 )
