@@ -122,9 +122,7 @@ _CONFIGMAP = (
     "D5's Wave D PR for the role: the imperative ConfigMap's node staging under "
     "/etc/rancher/k3s/ becomes a rendered ConfigMap"
 )
-_RUN_ONCE = (
-    "D5's run-once cleanup PR deletes the cleanup, which has already run on daniel-box"
-)
+_RUN_ONCE = "D5's run-once cleanup PR (#5284) deletes the cleanup, which has already run on daniel-box"
 
 HOST_WRITE_ALLOW = {
     _K8S + "artifacts/tasks/main.yml": (

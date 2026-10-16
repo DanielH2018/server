@@ -633,8 +633,9 @@ reconciliation of a flux-owned role. D5.1b rewrites the sentence in
       that set by comparing the two, rather than from a hand list. At the baseline it is the
       seven utility roles, so `release_stamp.yml`'s copy is exempt, and R4 deletes it with its
       role.
-    - Its `allow` map holds each file of the twelve host-writing roles that still writes a
-      host, with the PR that moves it as the reason. The offence has no exception for `state:
+    - Its `allow` map holds each task file that still writes a host, with the PR that moves
+      it as the reason. That covers the twelve roles of the baseline's host-write list and
+      the imperative-ConfigMap staging of autofix-bridge and monitor-bridge. The offence has no exception for `state:
       absent` or `state: directory`, so an absent arm and a directory task are host writes
       too.
         - observability: H2.7 moves the heartbeat and its cron, and D5's run-once cleanup PR
@@ -1828,7 +1829,7 @@ one task file per source role, in a conversion PR before that role flips:
 
   H5 (*Rows H5 takes from D5's `k8s_host_files`*) and H7 (its setup-role table, H7.4, H7.10a
   and H7.18c) list these rows, except the directories of artifacts and media-volume, which a
-  cross-slice note asks H7 to add.
+  cross-slice note asks H7 to add (#5285).
 
 - **The task moves with its sources and variables.** Role defaults and role-relative `src:`
   paths do not resolve in another role (Baseline). So each conversion PR moves the role's
@@ -2284,9 +2285,9 @@ sizes its batch of roles against that projection.
       tasks with rendered objects or `k8s_host_files` tasks that Ansible applies, at about
       100 to 200 lines. Every role over 200 task lines gets at least two, and observability,
       pihole and crowdsec get three or more.
-    - **The run-once cleanup PR** deletes game-stats' and observability's record cleanups
-      and retires #5162's census row, about 140 lines removed (*Host-side rows*). It may
-      land before Wave D starts, and it lands before either role flips.
+    - **The run-once cleanup PR** (#5284) deletes game-stats' and observability's record
+      cleanups and retires #5162's census row, about 140 lines removed (*Host-side rows*).
+      It may land before Wave D starts, and it lands before either role flips.
     - **H2's PR precedes the flip of six roles.** crowdsec, configarr, janitorr, qbittorrent,
       artifacts and observability each flip only after H2.1 and that role's H2 family PR have
       landed (*Host-side rows*). H2 lands those PRs while the roles are Ansible-owned, so D5's
@@ -2300,7 +2301,8 @@ sizes its batch of roles against that projection.
       run-once cleanup PR deletes its claude-otel record cleanup (*Host-side rows*).
     - **The flip PR's body** links the merged H2 PR and, for those five, the merged
       `k8s_host_files` conversion PR, and quotes the host-write census showing no `allow`
-      entry left for the role.
+      entry left for the role. observability's and game-stats' flip PRs also link the
+      merged run-once cleanup PR.
     - **A verify conversion lands as inert code.** The task files run 103 to 213 lines
       (`wc -l` over the six `tasks/verify.yml`), and netpol-baseline's probe template is 161.
       So a conversion PR lands each verify Job's script, its RBAC template and its red-fixture
