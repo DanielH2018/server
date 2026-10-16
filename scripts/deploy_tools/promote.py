@@ -31,6 +31,12 @@ a forward-only pin needs a fresh `homelab/upgrade-gates` status on its PR's head
 against `last-good`, under which a failed verification holds as T's SHA and leaves `prod`.
 `promote_lib/forward_only.py`'s docstring states the three rules.
 
+ALREADY-FAILING DEPENDENTS (H1.1i). Before `prod` moves, `decide` records the newest
+`flux/<name>` status on `prod`'s commit for each name in T's changed set, and writes the record
+under `--bundle-dir` beside the bundles. It reads the statuses only when the changed set holds
+a dependent, and a failed read is `error`. `verify` excuses a dependent whose record reads
+`failure` (`promote_lib/verify_promotion.py`).
+
 Each read has three outcomes: a value, absent, or an error. Any error is the verdict `error`.
 The rules for each read are in docs/target-architecture/deploy/d1-flux-installed.md,
 *Decisions*, *Each read has three outcomes*. The ones a reader of this file asks about:
@@ -159,6 +165,8 @@ class Decision:
         hold: what `decide` writes to DEPLOY_HOLD itself, T's SHA on a `held` from the
             forward-only gate or the backstop, else empty.
         bundles: `prod`'s and T's bundle files by `prod` and `target`, for `--bundle-dir`.
+        recorded: the newest status on `prod`'s commit for each name in T's changed set, by
+            name, for `--bundle-dir`. Empty when the set holds no dependent.
     """
 
     verdict: str
@@ -173,6 +181,7 @@ class Decision:
     no_reset: tuple[str, ...] = ()
     hold: str = ""
     bundles: dict[str, dict[str, bytes] | None] = field(default_factory=dict)
+    recorded: dict[str, str] = field(default_factory=dict)
 
 
 def decide(reads: Reads, revert_rule: bool = REVERT_RULE) -> Decision:
@@ -316,10 +325,12 @@ def _promotion(
     Both pulls happen before `prod` moves, so a failed pull promotes nothing. A bundle the
     object-loss check already pulled is reused rather than pulled again. It also names the
     forward-only tags T changes against `last-good` (`forward_only.no_reset_names`), which
-    reads `last-good`'s bundle only when `last-good` and `prod` name different digests.
+    reads `last-good`'s bundle only when `last-good` and `prod` name different digests. And it
+    records `prod`'s statuses for `verify`'s excuse (`verify.prior_statuses`), before the move.
 
     Raises:
         ReadError: T's bundle, or `prod`'s, vanished between its HEAD and its pull.
+        forge.ForgeError: the read of `prod`'s statuses failed.
     """
     target_bundle = target_bundle or _pull(reads, digest, f"sha-{target}")
     if prod_bundle is None and prod_digest is not None:
@@ -336,6 +347,17 @@ def _promotion(
     no_reset = forward_only.no_reset_names(
         forward_only.changed_tags(verify.bundle_digests(target_bundle), base), flagged
     )
+    recorded: dict[str, str] = {}
+    if prod is not None and prod_bundle is not None:
+        recorded = verify.prior_statuses(
+            target_bundle, prod_bundle, lambda: reads.statuses(prod)
+        )
+        if recorded:
+            states = ", ".join(f"flux/{n}={s}" for n, s in sorted(recorded.items()))
+            print(
+                f"promote.py: recorded on prod's commit {prod}: {states}",
+                file=sys.stderr,
+            )
     return Decision(
         "promote",
         target=target,
@@ -347,6 +369,7 @@ def _promotion(
         clears_hold=held is not None,
         no_reset=tuple(sorted(no_reset)),
         bundles={"prod": prod_bundle, "target": target_bundle},
+        recorded=recorded,
     )
 
 
@@ -373,7 +396,9 @@ def hand_off(decision: Decision, bundle_dir: Path | None) -> Decision:
         target = decision.bundles.get("target")
         if target is None:
             raise ValueError("decide pulled no bundle for T")
-        verify.write_handoff(bundle_dir, decision.bundles.get("prod"), target)
+        verify.write_handoff(
+            bundle_dir, decision.bundles.get("prod"), target, decision.recorded
+        )
     except (OSError, ValueError) as err:
         return Decision("error", reason=f"--bundle-dir {bundle_dir}: {err}")
     return decision

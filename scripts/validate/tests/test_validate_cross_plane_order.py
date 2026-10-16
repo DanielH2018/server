@@ -9,6 +9,7 @@ Run: uv run pytest scripts/validate/tests/test_validate_cross_plane_order.py
 """
 
 import re
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -246,3 +247,198 @@ def test_step_1_of_copy_and_migrate_is_clean(tmp_path, head_tree, head_snapshot)
     )
     assert gate.counted(head_snapshot, head, [copy], {}) == {"authelia"}
     assert gate.problems(head_snapshot, head, [copy], {}) == []
+
+
+# Arms 3 and 4 (D5.1f), the removal gates. bento-pdf is flux-owned in the fixtures.
+NETPOL = "NetworkPolicy/homelab/bento-pdf"
+CLUSTER_ROLE = "ClusterRole//bento-pdf-reader"
+BENTO = {"Deployment/homelab/bento-pdf", NETPOL, CLUSTER_ROLE}
+
+
+def removal(base_objects, head_objects, declared=(), head_flux=("bento-pdf",), **kw):
+    base = gate.Snapshot(
+        renders={},
+        owners={"bento-pdf": "flux"},
+        deps={},
+        objects={"bento-pdf": base_objects},
+        unpruned=kw.get("unpruned", ()),
+        retired=kw.get("base_retired", ()),
+    )
+    head = gate.Snapshot(
+        renders={},
+        owners={t: "flux" for t in head_flux},
+        deps={},
+        objects={"bento-pdf": head_objects},
+        retired=kw.get("head_retired", ()),
+    )
+    return gate.removal_problems(base, head, declared)
+
+
+@pytest.mark.parametrize("dropped", [NETPOL, CLUSTER_ROLE])
+def test_a_dropped_object_without_a_trailer_is_flagged(dropped):
+    flagged = removal(BENTO, BENTO - {dropped})
+    assert len(flagged) == 1
+    assert flagged[0].startswith(f"arm 3: bento-pdf no longer renders {dropped}")
+    assert f"`Removes-Object: {dropped}`" in flagged[0]
+
+
+@pytest.mark.parametrize("dropped", [NETPOL, CLUSTER_ROLE])
+def test_a_dropped_object_with_its_trailer_is_clean(dropped):
+    messages = f"Drop the reader\n\nRemoves-Object: {dropped}\n"
+    declared = gate.removes_object.declared(messages)
+    assert removal(BENTO, BENTO - {dropped}, declared) == []
+
+
+def test_a_trailer_for_another_object_leaves_the_drop_flagged():
+    assert len(removal(BENTO, BENTO - {NETPOL}, {CLUSTER_ROLE})) == 1
+
+
+def test_a_snapshot_job_renamed_by_its_digest_is_clean():
+    base = BENTO | {"Job/homelab/bento-pdf-snapshot-0a1b2c3d"}
+    head = BENTO | {"Job/homelab/bento-pdf-snapshot-9f8e7d6c"}
+    assert removal(base, head) == []
+
+
+def test_a_digest_rename_to_another_kind_is_flagged():
+    base = BENTO | {"Job/homelab/bento-pdf-snapshot-0a1b2c3d"}
+    head = BENTO | {"ConfigMap/homelab/bento-pdf-snapshot-9f8e7d6c"}
+    assert len(removal(base, head)) == 1
+
+
+def test_a_dropped_prune_disabled_claim_is_clean():
+    claim = "PersistentVolumeClaim/homelab/bento-pdf-data"
+    assert removal(BENTO | {claim}, BENTO, unpruned={claim}) == []
+
+
+def test_the_revert_of_a_flip_is_clean():
+    """A handback drops the tag's whole Flux render, which Orphan deletes nothing of."""
+    assert removal(BENTO, set(), head_flux=()) == []
+
+
+def test_a_flux_owned_tag_that_renders_nothing_is_flagged():
+    assert len(removal(BENTO, set())) == len(BENTO)
+
+
+def test_an_object_moved_to_an_ansible_owned_tag_is_flagged():
+    """Flux still prunes it from bento-pdf, and Ansible applies authelia only later."""
+    base = gate.Snapshot(
+        renders={},
+        owners={"bento-pdf": "flux", "authelia": "ansible"},
+        deps={},
+        objects={"bento-pdf": BENTO},
+    )
+    head = gate.Snapshot(
+        renders={},
+        owners=base.owners,
+        deps={},
+        objects={"bento-pdf": BENTO - {NETPOL}, "authelia": {NETPOL}},
+    )
+    assert len(gate.removal_problems(base, head, ())) == 1
+
+
+def test_an_object_moved_to_another_flux_owned_tag_is_clean():
+    flux = {"bento-pdf": "flux", "texbrain": "flux"}
+    base = gate.Snapshot(renders={}, owners=flux, deps={}, objects={"bento-pdf": BENTO})
+    head = gate.Snapshot(
+        renders={},
+        owners=flux,
+        deps={},
+        objects={"bento-pdf": BENTO - {NETPOL}, "texbrain": {NETPOL}},
+    )
+    assert gate.removal_problems(base, head, ()) == []
+
+
+def test_a_flux_owned_entry_moved_into_k8s_retired_services_is_flagged():
+    flagged = removal(BENTO, BENTO, head_flux=(), head_retired={"bento-pdf"})
+    assert len(flagged) == 1 and flagged[0].startswith("arm 4: bento-pdf joins")
+
+
+def test_retiring_an_ansible_owned_entry_is_clean():
+    base = gate.Snapshot(renders={}, owners={"authelia": "ansible"}, deps={})
+    head = gate.Snapshot(renders={}, owners={}, deps={}, retired={"authelia"})
+    assert gate.removal_problems(base, head, ()) == []
+
+
+def test_a_name_already_retired_on_the_base_is_clean():
+    retired = {"bento-pdf"}
+    assert removal(BENTO, BENTO, base_retired=retired, head_retired=retired) == []
+
+
+def test_the_snapshot_names_objects_as_decide_does(head_snapshot):
+    """Arm 3's identities are the ones `promote.py decide` matches the trailer against."""
+    assert "Deployment/homelab/bento-pdf" in head_snapshot.objects["bento-pdf"]
+    listed = gate.yaml_fast.safe_load((gate.REPO / gate.GROUP_VARS).read_text())
+    assert set(head_snapshot.retired) == {
+        e["name"] for e in listed.get("k8s_retired_services") or []
+    }
+
+
+def test_a_prune_disabled_label_or_annotation_is_read():
+    for key in ("labels", "annotations"):
+        doc = {"metadata": {key: {gate.PRUNE_KEY: "disabled"}}}
+        assert gate._prune_disabled(doc)
+    assert not gate._prune_disabled({"metadata": {"labels": {gate.PRUNE_KEY: "x"}}})
+
+
+def _git(repo: Path, *args: str) -> str:
+    env = {
+        "GIT_CONFIG_GLOBAL": "/dev/null",
+        "GIT_CONFIG_NOSYSTEM": "1",
+        "GIT_AUTHOR_NAME": "t",
+        "GIT_AUTHOR_EMAIL": "t@example.com",
+        "GIT_COMMITTER_NAME": "t",
+        "GIT_COMMITTER_EMAIL": "t@example.com",
+        "HOME": str(repo),
+        "PATH": "/usr/bin:/bin",
+    }
+    return subprocess.run(
+        ["git", *args],
+        cwd=repo,
+        env=env,
+        check=True,
+        capture_output=True,
+        text=True,
+        timeout=30,
+    ).stdout.strip()
+
+
+@pytest.mark.parametrize(
+    "messages, expected",
+    [
+        (["Drop the policy"], gate.REFUSED),
+        ([f"Drop the policy\n\nRemoves-Object: {NETPOL}", "Tidy"], gate.CLEAN),
+    ],
+)
+def test_gate_reads_the_trailers_from_the_prs_commits(tmp_path, messages, expected):
+    """`gate()` hands `removal_problems` the lines of every commit in `base..head`.
+
+    The base commit carries the line too, and it is outside the range, so it declares nothing.
+    """
+    _git(tmp_path, "init", "-q")
+    _git(
+        tmp_path,
+        "commit",
+        "-q",
+        "--allow-empty",
+        "-m",
+        f"Base\n\nRemoves-Object: {NETPOL}",
+    )
+    base = _git(tmp_path, "rev-parse", "HEAD")
+    for message in messages:
+        _git(tmp_path, "commit", "-q", "--allow-empty", "-m", message)
+    snaps = {
+        "base": gate.Snapshot(
+            renders={},
+            owners={"bento-pdf": "flux"},
+            deps={},
+            objects={"bento-pdf": BENTO},
+        ),
+        "head": gate.Snapshot(
+            renders={},
+            owners={"bento-pdf": "flux"},
+            deps={},
+            objects={"bento-pdf": BENTO - {NETPOL}},
+        ),
+    }
+    render = lambda sha, dest, repo: snaps[dest.name]
+    assert gate.gate(base, "HEAD", repo=tmp_path, render=render) == expected

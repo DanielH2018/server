@@ -47,7 +47,7 @@ import yaml
 from lib import yaml_fast
 from lib.exit_codes import FAILED, OK
 from lib.ansible_inventory import K8S_HOST_VARS
-from lib.k8s_roles import tag_owners
+from lib.k8s_roles import snapshot_claims, tag_owners
 from lib.repo_paths import K8S_ROLES
 import bundle_gates
 from renderer.renderer_lib.bundle import (
@@ -109,26 +109,11 @@ def snapshot_tags(
     """The published tags that declare snapshot claims, and one line per tag it could not judge.
 
     A tag declares them when its role's `defaults/main.yml` sets a non-empty
-    `k8s_autodeploy_snapshot_pvcs`, which alone calls for `<tag>-snapshot` (D5.2a). A value
-    that is not a literal list is a problem rather than a guess.
+    `k8s_autodeploy_snapshot_pvcs`, which alone calls for `<tag>-snapshot` (D5.2a). It reads
+    `snapshot_claims`, the reader `digests.json`'s `claims` comes from too.
     """
-    found, problems = set(), []
-    for tag in sorted(set(published)):
-        path = roles / tag / "defaults" / "main.yml"
-        try:
-            defaults = yaml_fast.safe_load(path.read_text()) if path.is_file() else {}
-        except (OSError, yaml.YAMLError) as err:
-            problems.append(f"could not tell whether {tag} snapshots claims: {err}")
-            continue
-        value = (defaults or {}).get("k8s_autodeploy_snapshot_pvcs")
-        if value is not None and not isinstance(value, list):
-            problems.append(
-                f"could not tell whether {tag} snapshots claims: its "
-                f"k8s_autodeploy_snapshot_pvcs is {value!r}, not a literal list"
-            )
-        elif value:
-            found.add(tag)
-    return frozenset(found), problems
+    claims, problems = snapshot_claims(published, roles)
+    return frozenset(tag for tag, names in claims.items() if names), problems
 
 
 def _documents(path: Path) -> list[object] | str:

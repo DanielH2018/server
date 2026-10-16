@@ -17,6 +17,8 @@ docs/target-architecture/deploy/d2-first-leaf.md, *Publication and verification*
 operator's page docs/flux-deploy-plane.md, *Removing an object on purpose*.
 """
 
+from collections.abc import Iterator
+
 import yaml
 
 import sys as _sys
@@ -33,17 +35,16 @@ from renderer.renderer_lib.bundle import CLUSTER_DIR
 _KUSTOMIZE_API = "kustomize.config.k8s.io/"
 
 
-def bundle_objects(files: dict[str, bytes]) -> dict[str, str]:
-    """Each object under a bundle's `cluster/`, as `<kind>/<namespace>/<name>`.
+def bundle_documents(files: dict[str, bytes]) -> Iterator[tuple[str, str, dict]]:
+    """Each object under a bundle's `cluster/`, with its directory and its document.
 
-    Returns:
-        Each object mapped to the `cluster/<name>/` directory holding it, which is the name
-        of the Kustomization that applies it.
+    Yields:
+        The object as `<kind>/<namespace>/<name>`, the `cluster/<name>/` directory holding
+        it, which is the name of the Kustomization that applies it, and the parsed document.
 
     Raises:
         ReadError: a manifest does not parse, so the bundle cannot be compared.
     """
-    objects = {}
     for path in sorted(files):
         parts = path.split("/")
         if parts[0] != CLUSTER_DIR or len(parts) < 3 or not path.endswith(".yaml"):
@@ -60,8 +61,20 @@ def bundle_objects(files: dict[str, bytes]) -> dict[str, str]:
             meta = doc.get("metadata") or {}
             if doc.get("kind") and meta.get("name"):
                 ident = f"{doc['kind']}/{meta.get('namespace') or ''}/{meta['name']}"
-                objects[ident] = parts[1]
-    return objects
+                yield ident, parts[1], doc
+
+
+def bundle_objects(files: dict[str, bytes]) -> dict[str, str]:
+    """Each object under a bundle's `cluster/`, as `<kind>/<namespace>/<name>`.
+
+    Returns:
+        Each object mapped to the `cluster/<name>/` directory holding it, which is the name
+        of the Kustomization that applies it.
+
+    Raises:
+        ReadError: a manifest does not parse, so the bundle cannot be compared.
+    """
+    return {ident: owner for ident, owner, _ in bundle_documents(files)}
 
 
 def undeclared_losses(

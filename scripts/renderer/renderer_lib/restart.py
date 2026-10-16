@@ -344,10 +344,10 @@ def _insertion(
             its own line, so no line can be inserted without reformatting the document.
     """
     if not isinstance(node, yaml.MappingNode) or node.flow_style or not node.value:
-        raise RenderError(f"{where}: the pod template's mapping is not block style")
+        raise RenderError(f"{where}: the mapping to extend is not block style")
     mark = node.value[0][0].start_mark
     if lines[mark.line][: mark.column].strip():
-        raise RenderError(f"{where}: the pod template's first key does not open a line")
+        raise RenderError(f"{where}: the mapping's first key does not open a line")
     indent = " " * mark.column
     return mark.line, "".join(f"{indent}{line}\n" for line in block)
 

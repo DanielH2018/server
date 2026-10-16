@@ -67,6 +67,8 @@ class Reads:
         pulls: the PRs GitHub associates with a commit.
         gate_status: the newest `homelab/upgrade-gates` status on a commit as
             `(state, updated_at)`, or None.
+        statuses: the newest status per context on a commit, as `{context: state}`, for the
+            record of `prod`'s `flux/<name>` statuses that `verify` excuses from (H1.1i).
         now: the wall-clock time, for the gate status's age bound.
         sleep: waits the given seconds, between polls of a verification in flight.
         clock: monotonic seconds.
@@ -89,6 +91,7 @@ class Reads:
     pins: Callable[[str], Mapping[str, Pin | None]]
     pulls: Callable[[str], list[dict]]
     gate_status: Callable[[str], tuple[str, datetime] | None]
+    statuses: Callable[[str], dict[str, str]]
     now: Callable[[], datetime] = lambda: datetime.now(UTC)
     sleep: Callable[[float], None] = time.sleep
     clock: Callable[[], float] = time.monotonic
@@ -179,4 +182,5 @@ def live_reads(
         pins=lambda sha: cluster_pins.pins_at(sha, repo),
         pulls=f.github.commit_pulls,
         gate_status=lambda sha: f.github.status(sha, forward_only.GATE_STATUS_CONTEXT),
+        statuses=f.github.statuses,
     )

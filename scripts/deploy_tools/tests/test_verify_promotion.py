@@ -8,6 +8,7 @@ with a fake clock, so a timeout costs no real time.
 Run: uv run pytest scripts/deploy_tools/tests/test_verify_promotion.py
 """
 
+import pytest
 import yaml
 from _promote_fakes import bundle_files
 from renderer.renderer_lib.bundle import bundle_files as render_bundle
@@ -227,21 +228,120 @@ def test_the_first_bundle_carrying_cluster_vars_expects_its_status():
     assert (expected.names, expected.widened) == ({"homelab", "cluster-vars"}, "")
 
 
-def test_a_dependent_already_failing_on_prods_commit_is_reported_not_expected():
-    expected = vp.expected_set(CHANGED, PROD)
-    statuses = {
-        PRIOR: {"flux/bento-pdf-deferred": "failure"},
-        T: ok("homelab", "bento-pdf"),
+# -- a dependent that was already failing (H1.1i) --------------------------------------------
+
+# A node outage: `longhorn` fails on every revision. `longhorn-backup` and `longhorn-reconcile`
+# depend on `longhorn`, which depends on `cluster-base`. `bento-pdf` and `metallb` stand apart.
+OUTAGE_GRAPH = {
+    "cluster-base": ks("cluster-base"),
+    "longhorn": ks("longhorn", "cluster-base"),
+    "longhorn-backup": ks("longhorn-backup", "longhorn"),
+    "longhorn-reconcile": ks("longhorn-reconcile", "longhorn"),
+    "metallb": ks("metallb"),
+    "bento-pdf": ks("bento-pdf"),
+}
+OUTAGE_NAMES = ("cluster_base", "longhorn", "longhorn_backup", "longhorn_reconcile")
+
+
+def outage(**moved: str) -> dict[str, bytes]:
+    """The outage bundle, each footprint `a` unless `moved` names another."""
+    prints = {n: "a" for n in (*OUTAGE_NAMES, "metallb", "bento_pdf")} | moved
+    return bundle_files(digests(**prints), **OUTAGE_GRAPH)
+
+
+OUTAGE_PROD = outage()
+# T changes only cluster-base's footprint.
+CLUSTER_BASE_T = outage(cluster_base="b")
+EXPECTED_ELSEWHERE = ok(
+    "homelab", "cluster-base", "longhorn-backup", "longhorn-reconcile"
+)
+
+
+def test_a_cluster_base_change_expects_longhorn_and_its_dependents_as_dependents():
+    expected = vp.expected_set(CLUSTER_BASE_T, OUTAGE_PROD)
+    assert expected.names == {
+        "homelab",
+        "cluster-base",
+        "longhorn",
+        "longhorn-backup",
+        "longhorn-reconcile",
     }
-    verdict = vp.verify(reads(statuses), T, PRIOR, expected)
-    assert verdict == vp.Verdict("good", reported=("bento-pdf-deferred",))
+    assert expected.dependents == {"longhorn", "longhorn-backup", "longhorn-reconcile"}
 
 
-def test_a_dependent_passing_on_prods_commit_stays_expected():
-    expected = vp.expected_set(CHANGED, PROD)
-    statuses = {PRIOR: ok("bento-pdf-deferred"), T: ok("homelab", "bento-pdf")}
-    verdict = vp.verify(reads(statuses), T, PRIOR, expected)
-    assert verdict == vp.Verdict("failed", ("bento-pdf-deferred",))
+def test_a_dependent_that_read_failure_on_prods_commit_is_excused_is_clean(capsys):
+    expected = vp.expected_set(CLUSTER_BASE_T, OUTAGE_PROD)
+    states = {**EXPECTED_ELSEWHERE, "flux/longhorn": "failure"}
+    verdict = vp.verify(
+        reads({T: states}), T, PRIOR, expected, recorded={"longhorn": "failure"}
+    )
+    assert verdict == vp.Verdict("good", excused=("longhorn",))
+    assert "excused longhorn" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize(
+    "recorded",
+    [{"longhorn": "success"}, {"longhorn": "error"}, {}],
+    ids=["success-before", "error-before", "no-record"],
+)
+def test_a_dependent_not_recorded_as_failure_still_holds_is_flagged(recorded):
+    """The red half: only a recorded `failure` excuses, so T may have broken the rest."""
+    expected = vp.expected_set(CLUSTER_BASE_T, OUTAGE_PROD)
+    states = {**EXPECTED_ELSEWHERE, "flux/longhorn": "failure"}
+    verdict = vp.verify(reads({T: states}), T, PRIOR, expected, recorded=recorded)
+    assert verdict == vp.Verdict("failed", ("longhorn",))
+
+
+def test_a_name_whose_footprint_t_changed_is_never_excused():
+    expected = vp.expected_set(outage(cluster_base="b", longhorn="b"), OUTAGE_PROD)
+    states = {**EXPECTED_ELSEWHERE, "flux/longhorn": "failure"}
+    verdict = vp.verify(
+        reads({T: states}), T, PRIOR, expected, recorded={"longhorn": "failure"}
+    )
+    assert verdict == vp.Verdict("failed", ("longhorn",))
+
+
+def test_a_dependent_of_an_excused_name_with_no_status_times_out_and_holds():
+    """The timeout excuse is gone: `longhorn-reconcile` reaches `longhorn` and still counts."""
+    expected = vp.expected_set(CLUSTER_BASE_T, OUTAGE_PROD)
+    states = {
+        **ok("homelab", "cluster-base", "longhorn-backup"),
+        "flux/longhorn": "failure",
+    }
+    clock = Clock()
+    verdict = vp.verify(
+        reads({T: states}, clock), T, PRIOR, expected, recorded={"longhorn": "failure"}
+    )
+    assert verdict == vp.Verdict("failed", ("longhorn-reconcile",), ("longhorn",))
+    assert clock.now >= expected.timeout_s
+
+
+def test_an_outage_does_not_hold_a_revision_that_changes_neither_tag():
+    expected = vp.expected_set(outage(bento_pdf="b"), OUTAGE_PROD)
+    assert expected.names == {"homelab", "bento-pdf"}
+    states = {
+        **ok("homelab", "bento-pdf"),
+        "flux/longhorn": "failure",
+        "flux/metallb": "failure",
+    }
+    assert vp.verify(reads({T: states}), T, PRIOR, expected) == vp.Verdict("good")
+
+
+def test_decides_record_holds_each_changed_name_with_a_status_on_prods_commit():
+    prior = {
+        **ok("cluster-base", "metallb"),
+        "flux/longhorn": "failure",
+        "flux/homelab": "success",
+    }
+    recorded = vp.prior_statuses(CLUSTER_BASE_T, OUTAGE_PROD, lambda: prior)
+    assert recorded == {"cluster-base": "success", "longhorn": "failure"}
+
+
+def test_decide_reads_no_status_when_the_changed_set_holds_no_dependent():
+    def read():
+        raise AssertionError("no dependent can be excused, so nothing is read")
+
+    assert vp.prior_statuses(outage(bento_pdf="b"), OUTAGE_PROD, read) == {}
 
 
 # -- the second document in a tag's file (D4.3) ----------------------------------------------
@@ -283,6 +383,14 @@ def test_the_handoff_carries_digests_and_flux_files_and_nothing_else(tmp_path):
     vp.write_handoff(tmp_path, {**PROD, "cluster/bento-pdf/x.yaml": b"x"}, CHANGED)
     prod, target = vp.read_handoff(tmp_path)
     assert prod == PROD and target == CHANGED
+
+
+def test_the_handoff_carries_the_record_beside_the_bundles(tmp_path):
+    vp.write_handoff(tmp_path, PROD, CHANGED, {"longhorn": "failure"})
+    assert vp.read_handoff(tmp_path) == (PROD, CHANGED)
+    assert vp.read_recorded(tmp_path) == {"longhorn": "failure"}
+    (tmp_path / vp.RECORDED_FILE).unlink()
+    assert vp.read_recorded(tmp_path) == {}, "no record excuses nothing"
 
 
 def test_a_first_run_hands_on_no_prod(tmp_path):

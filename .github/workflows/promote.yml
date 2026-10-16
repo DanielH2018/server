@@ -462,8 +462,9 @@ jobs:
           uv run --frozen python scripts/deploy_tools/promote.py decide
           --trigger "$TRIGGER" --bundle-dir "$RUNNER_TEMP/verify-input"
 
-      # The two bundles `decide` pulled before anything moved. `verify` reads them, so it
-      # waits on T's own changed set rather than on the render of the commit that triggered.
+      # The two bundles `decide` pulled before anything moved, and its record of `prod`'s
+      # statuses. `verify` reads them, so it waits on T's own changed set rather than on the
+      # render of the commit that triggered, and excuses only a dependent already failing.
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         if: ${{ steps.decide.outputs.verdict == 'promote' }}
         with:

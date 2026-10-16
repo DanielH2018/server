@@ -17,6 +17,19 @@ merged at `9f3bf0bfb`. Against the live cluster, `probe.py takeover speedtest` l
 Deployment's `kubectl.kubernetes.io/restartedAt` under `kubectl-rollout` and the PVC's
 `homelab.daniel-hunter.com/seeded` annotation under `kubectl-annotate`. Cluster-scoped RBAC
 objects are not read yet ([#5258](https://github.com/DanielH2018/server/issues/5258)).
+PR D5.1a3, the Job census: [#5271](https://github.com/DanielH2018/server/pull/5271). It
+merged at `c5d00ead9`. Its connection helper, `flux_job_connect.py`, lives in the shared
+`manifests` role, so the landing deployed every tag and read `settled`. The census's helper
+row catches a script that connects without the helper by accident. It does not try to stop a
+deliberate bypass through runtime indirection, because the helper is a reliability rule
+(*A first connection retries*), and the `# DECIDED:` marker at `ALLOWED_IMPORTS` in
+`scripts/renderer/tests/_job_census.py` records that
+([#5289](https://github.com/DanielH2018/server/pull/5289)).
+PR D5.1c, host writes and concurrency: [#5275](https://github.com/DanielH2018/server/pull/5275).
+It merged at `e59b5dde9`, and its landing deployed `flux` and settled. The live
+kustomize-controller reads `--concurrent=5`, equal to `k8s_rollout_batch_width`. The four host
+writes the baseline omitted have their moving PRs named since
+[#5290](https://github.com/DanielH2018/server/pull/5290) (`f5f92e02a`).
 
 Related issues:
 
@@ -1974,6 +1987,11 @@ sizes its batch of roles against that projection.
   `kubectl-rollout` `restartedAt` or a `kubectl-patch` hand patch. Each listed path is either
   expected, like `restartedAt`, whose loss rolls the pod once, or moved into the render before
   the flip.
+- **Operator-only: what the takeover strips from RBAC objects.** The read-only ServiceAccount
+  cannot read Roles, RoleBindings, ClusterRoles or ClusterRoleBindings, so `probe.py takeover`
+  names each as not checked on its last line. The operator runs H1.1j's
+  `scripts/dev/takeover_census.py` with the admin kubeconfig over those objects
+  (`docs/flux-deploy-plane.md`, *What a takeover strips*), and the PR quotes its output.
 - **Operator-only: what the takeover fails on or changes.** The output of `flux diff
   kustomization` over the role's substituted render (D5.1g), for immutable fields such as a
   PVC's spec and for changed values. It leaves Secrets out, because D3.5 covered their

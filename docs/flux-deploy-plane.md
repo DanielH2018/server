@@ -255,8 +255,11 @@ under its pod template. `probe_lib/takeover.py` holds the rules.
 - **Not listed: `last-applied-configuration`.** The cleanup removes it from every object by
   design.
 - **Not read: Secrets and RBAC objects.** The census skips Secrets, whose managers D3.5 handles.
-  The read-only ServiceAccount cannot read ClusterRoles or ClusterRoleBindings, so the census
-  names each one as not checked.
+  The read-only ServiceAccount cannot read Roles, RoleBindings, ClusterRoles or
+  ClusterRoleBindings, so the census names each one as not checked. Its last line lists them,
+  and the operator runs `takeover_census.py` (below) over them. The ServiceAccount stays
+  unable to read them: its ClusterRole leaves `rbac.*` out on purpose, because the bindings map
+  the escalation paths.
 - **An empty census is not a clean one.** A tag with no rendered object live exits 75.
 
 The census cannot see an apply that fails on an immutable field, such as a PVC's spec or a
@@ -276,7 +279,8 @@ names, so the diff compares real values rather than `${…}` placeholders. It re
 field paths from both commands, never values or diff hunks.
 
 H1's flips use a different census, `scripts/dev/takeover_census.py` (H1.1j), which is also
-operator-only. It compares the live object with a server-side dry-run apply as
+operator-only. A D5 role PR runs it too, over each object `probe.py takeover` names as not
+checked. It compares the live object with a server-side dry-run apply as
 `kustomize-controller`, which needs the admin kubeconfig, and it also prints the fields that a
 manager outside the cleanup list keeps. It makes no API call itself. The operator renders the
 tag, writes both inputs as JSON and passes them in. Both inputs hold whole live objects, a
@@ -314,7 +318,8 @@ after the run.
 
 A service whose `containers_list` entry sets `owner: flux` is applied by Flux, and every
 Ansible path skips it. Handing it back to Ansible takes two PRs, in this order. Every later
-return of a service to Ansible, and every retirement, follows the same order.
+return of a service to Ansible follows the same order. A retirement takes two PRs as well, in
+the order *Retiring a flux-owned service* states.
 
 1. **PR H1 sets `owner: released`.** Every Ansible path still skips the service. The next
    bundle omits `flux/<tag>.yaml`, so the root Kustomization prunes the `<tag>` Kustomization,
@@ -458,7 +463,10 @@ notification-controller posts on T:
   `digests.json`, expects every name, and an empty set expects `flux/homelab` alone.
 - **What it never expects.** A Kustomization outside the set, so a failure that T did not
   cause never holds; the Flux alerts page it instead. A dependent whose status on `prod`'s
-  commit already read `failure` is reported in the log and not expected.
+  commit already read `failure` is logged as `excused <name>` and not expected. `decide`
+  records those statuses before `prod` moves, and `verify` reads that record rather than
+  `prod`'s commit (H1.1i). A dependent is a member of the set only through its `dependsOn`
+  chain, so a name whose footprint T changed is never excused.
 - **T, not the trigger.** `decide` may pick a commit newer than the one whose CI started the
   run, and Flux posts statuses only on the commit `prod` names. `verify` reads T's own bundle,
   which `decide` pulled, never the render job's `out/`.
@@ -883,6 +891,13 @@ shared kind to two SHA-256 digests:
   each per-tag suffix stripped, its `flux/<tag>.yaml`, and the files of each shared kind
   whose rule lists the tag.
 
+A published tag's object also holds two fields (D5.1a2):
+
+- `claims` lists the snapshot claims the tag's role declares in
+  `k8s_autodeploy_snapshot_pvcs`, sorted. The publish census's `-snapshot` rule reads the
+  same function, `scripts/lib/k8s_roles.py:snapshot_claims`.
+- `suspended` is true when the tag's rendered Kustomization sets `spec.suspend: true`.
+
 `flux/kustomization.yaml`, `digests.json` itself and `images/` count for no name. Any other
 path that no rule claims lands under `_unclassified`, with the same two digests and a `paths`
 list. `land.sh`'s wait reads `footprint` through `scripts/deploy_tools/changed_set.py`, and a
@@ -1011,6 +1026,52 @@ policy does, and D6.7's switch away from Orphan must remove it.
 
 The promote job checks out master with `fetch-depth: 0`, because `decide` reads these lines
 with `git log` back to `prod`'s commit.
+
+### The same check on the pull request
+
+CI's cross-plane order gate, `scripts/validate/cross_plane_order.py`, refuses the PR before it
+merges, so a removal never reaches `decide` undeclared. Its arm 3 renders the cluster at the
+PR's base and head. It fails when a tag that is `owner: flux` at both ends loses an object of
+any kind, and no commit of the PR carries the `Removes-Object:` line for it. The failure line
+names the exact line to add. Two removals pass without a line:
+
+- **A rename by digest.** The renderer ends a Job's name in its spec digest and a script
+  ConfigMap's name in its content digest, `-<8 hex digits>`. An object whose kind, namespace
+  and name, with that suffix removed, still render in the head is renamed, not removed.
+- **An object Flux never prunes.** An object labelled or annotated
+  `kustomize.toolkit.fluxcd.io/prune: disabled` passes. D5.1a2 stamps that label on claims;
+  a claim rendered without it is pruned like any other object and needs the line.
+
+A tag handed back passes too. A tag that is not `owner: flux` at the head, because it reads
+`owner: released` or lost its entry, is not judged, so the revert of a flip needs no lines.
+The arm reads the PR's own commits, which a squash merge need not copy, so it runs on pull
+requests only. On master `decide` reads the same lines, but it applies neither exemption,
+so until it does a rename by digest or a dropped prune-disabled object stalls promotion
+unless a commit declares it (#5291).
+
+## Retiring a flux-owned service
+
+`ansible/tasks/k8s_retire.yml` deletes the last render Ansible staged for a service. For a
+flux-owned service that render predates the flip, and Flux at the old `prod` keeps applying
+the tag until promotion, so it re-creates what the teardown deleted. Arm 4 of the
+cross-plane order gate therefore refuses a PR that adds a name to `k8s_retired_services`
+whose entry reads `owner: flux` on the PR's base. A flux-owned service retires in this order
+instead:
+
+1. **The first PR empties the service's render.** Flux prunes every object the render drops.
+   The PR carries a `Removes-Object:` line for each one (*Removing an object on purpose*).
+   A role with no Deployment left trips the restart-target refusal in the renderer, and its
+   Service and IngressRoute render from the entry, not from its templates (#5282).
+1. **Wait for the prune.** `promote` must move `prod` to a commit that holds the first PR,
+   and the objects must read `NotFound`.
+1. **The second PR removes the `containers_list` entry and the role.** The next bundle omits
+   `flux/<tag>.yaml`, and `deletionPolicy: Orphan` leaves nothing behind, because the first
+   PR's prune already removed the objects. The name never joins `k8s_retired_services`.
+1. **Delete the claim by hand (operator-only).** Prune never deletes a claim labelled
+   `kustomize.toolkit.fluxcd.io/prune: disabled`, so the claim and its Longhorn volume
+   outlive both PRs. Once the second PR is on master, and only when the data is no longer
+   wanted, the operator deletes the claim with `kubectl delete pvc -n <namespace> <claim>`.
+   The agent's ServiceAccount cannot run that write.
 
 ## Retention of old artifact versions
 
