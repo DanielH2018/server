@@ -1,0 +1,50 @@
+---
+# Revert one flux-owned service's Longhorn volumes to the snapshot its `<tag>-snapshot` Job
+# took before a failed revision applied. This is the revert runbook's entry point, and every
+# run of it is operator-only.
+#
+# WHY A PLAYBOOK OF ITS OWN. Under Ansible, `roles/k8s/manifests` includes `k8s/volume-revert`
+# between the snapshot and the apply. A flux-owned role has no such play: `promote` holds
+# without resetting `prod`, and the operator reverts each changed snapshot role by hand
+# before the reset. This play includes the role alone and never runs `deploy.yml`. The
+# runbook is "The revert runbook" in docs/volume-snapshot-drills.md, and the hold post prints
+# this command once per role, with that role's own digest8 and claims.
+#
+# WHAT IT LEAVES BEHIND. The role scales the Deployment to zero and does not scale it back.
+# The runbook's resume of `<tag>` applies `last-good`'s spec, which restores the replicas.
+#
+# NOTHING RUNS IT ON A TICK. The deployer routes this path to no plane, so a change to it
+# merges and applies nothing. ENFORCED by
+# ansible/tests/deploy/test_volume_revert_playbook_applies_nothing_from_a_tick.py.
+#
+# Usage, one service per run:
+#   uv run ansible-playbook ansible/volume-revert.yml -e volume_revert_service=<service> \
+#     -e '{"volume_revert_claims": ["<claim>"]}' -e volume_revert_sha=<digest8>
+- name: Revert a service's volumes to its pre-revision snapshot
+  hosts: daniel-box
+  # An escalated task imports from this tree's .venv as root, and the root-owned
+  # __pycache__ that leaves behind blocks the worktree's removal. See
+  # ansible/tests/deploy/test_plays_disable_bytecode_writes.py.
+  environment:
+    PYTHONDONTWRITEBYTECODE: "1"
+  connection: local
+  # The preamble gathers facts as its last task, so this play gathers through it. Leave
+  # `load_secrets_gather_facts` unset: `k8s/longhorn-api/tasks/resolve.yml` reads
+  # `ansible_hostname`, and a play that opted out of the gather would resolve the Longhorn
+  # API with that fact undefined.
+  gather_facts: false
+  pre_tasks:
+    # The preamble's first task refuses this local-connection play when it runs anywhere but
+    # daniel-box. It also sets the become password the role's `kubectl` calls need.
+    - name: Load encrypted secrets and set the become password (shared preamble)
+      ansible.builtin.import_tasks: pre_tasks/load_secrets.yml
+      tags: always
+
+  tasks:
+    # The same guard as the manifests role's call site: under `--check` or `-e
+    # k8s_dry_run=true` the role never starts. The role's own input assert refuses a missing
+    # service, a claim list that is not a list, and a digest that is not 8+ hex digits.
+    - name: Revert the volumes for {{ volume_revert_service | default('(no service given)') }}
+      ansible.builtin.include_role:
+        name: k8s/volume-revert
+      when: not (k8s_no_mutate | bool)

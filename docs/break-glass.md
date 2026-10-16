@@ -246,8 +246,9 @@ suspended before it is scaled and resumed rather than redeployed.
     - **The hold names a SHA.** It records a failed revision, so do not clear it here. Work
       it by the revert runbook's *Choosing the branch* in `docs/volume-snapshot-drills.md`,
       and resume the shed tags after that branch's own resume step; the branch's last step
-      clears the hold. Until that runbook lands (target slice D5.2c), work the hold by
-      `docs/flux-deploy-plane.md`'s *Verification* instead, then resume as below.
+      clears the hold. A hold the revert runbook does not cover, one that names no
+      `stateful=` roles, is worked by `docs/flux-deploy-plane.md`'s *Verification* instead,
+      then resume as below.
     - **The hold still reads step 2's reason.** Resume each suspended tag with the same patch
       and `false`, rather than running `deploy.sh`:
 
