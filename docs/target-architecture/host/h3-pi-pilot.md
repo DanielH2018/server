@@ -971,16 +971,19 @@ concurrency group on push. It needs no secrets, and it does these steps:
       still admits no `dpkg-divert`.
     - The test's source is deb822, because updater step 3 reads only `homelab.sources`:
       `URIs: http://127.0.0.1:8791`, `Suites: homelab`, `Components: main` and
-      `Trusted: yes`. It names no `Signed-By:`, so the keyring the package ships from H3.4c
-      is installed but unused, and needs no diversion.
+      `Signed-By: /srv/repo/homelab-test-keyring.gpg`. That keyring is the public half of a
+      throwaway key `host_fixtures.publish` generates and signs `InRelease` with, so apt
+      checks the signature and the `Valid-Until` as it does on a host (#5147). `Trusted: yes`
+      would accept an index signed by any key or by none. The keyring the package ships from
+      H3.4c is installed but unused, and needs no diversion.
 5. It boots that image with systemd as PID 1 (`--privileged --cgroupns=host`) and
    `--hostname daniel-pi`, because the Pi package's `preinst` refuses any other hostname.
    Before any case it asserts that `python3 --version` prints the minor its matrix leg
    names, `Python 3.12` on 24.04, so reconcile runs under the interpreter each release
-   carries. Every case below runs on both legs. It serves both builds from a local unsigned
+   carries. Every case below runs on both legs. It serves both builds from a local signed
    repository with `python3 -m http.server` on `127.0.0.1:8791`, as daniel-box serves the
    real one, and runs the updater against it. Every case but two asserts that the server's
-   log holds that case's `GET` of `dists/homelab/Release`. The stopped-server case has no
+   log holds that case's `GET` of `dists/homelab/InRelease` or `dists/homelab/Release`. The stopped-server case has no
    server, and the lock case exits at step 2, before the fetch, so it asserts the log holds
    no `GET`. Every case asserts that `/var/lib/apt/lists/` holds a list for the test
    repository and none named after daniel-box's address. Until H3.6 ships the Pi package,
@@ -993,7 +996,11 @@ concurrency group on push. It needs no secrets, and it does these steps:
       through, whether apt exits 0 or the updater ignores its exit. It runs after the
       upgrade because the base version's updater is master's, which a change under review
       does not reach. Every other case is its green half, so `--error-on=any` must also
-      pass a fetch from the unsigned local repository;
+      pass a fetch from the signed local repository;
+    - after the stopped-server case, serve the same packages from an index whose `Valid-Until`
+      passed an hour ago, and assert that the head version's updater exits non-zero and
+      leaves `last_success` and the success timestamp unchanged. It is the container half
+      of *Verification*'s *Valid-Until* item;
     - install the base version, and assert that `homelab_host.prom` exists in the textfile
       directory with mode 0644 after that first run;
     - upgrade to the head version, and assert that every dropped file is gone and every

@@ -123,10 +123,17 @@ def test_the_pattern_rejects_a_root_anchored_rglob_and_accepts_a_scoped_one():
 
 # ---- rule 2: no live clock in a test
 
-# A subprocess-driven test whose `now` cannot cross the process boundary. Empty;
-# an entry here needs a reason the `runpy` shim in `_reap_entrypoint_harness.py` does not
-# cover, and is removed again the moment the file sheds its clock read.
-SUBPROCESS_DRIVEN: frozenset[str] = frozenset()
+# A subprocess-driven test whose `now` cannot cross the process boundary. An entry here
+# needs a reason the `runpy` shim in `_reap_entrypoint_harness.py` does not cover, and is
+# removed again the moment the file sheds its clock read.
+SUBPROCESS_DRIVEN: frozenset[str] = frozenset(
+    {
+        # Its Valid-Until tests (#5147) sign a Release relative to the live clock because the
+        # judge is a real `apt-get update`, which compares Valid-Until with the system clock
+        # and takes no `now`. The margins are an hour or more, not the suite's runtime.
+        "scripts/validate/tests/test_validate_host_package_cases.py",
+    }
+)
 
 # Non-vacuity floor: files the census must reach, so a moved `tests/` directory or a renamed
 # module cannot empty it and let the guard pass over nothing. The census is every tracked
