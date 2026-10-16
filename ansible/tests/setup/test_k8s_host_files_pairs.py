@@ -1,0 +1,104 @@
+"""Each variable `k8s_host_files` shares with a k8s role or `group_vars` equals its source.
+
+A variable both planes read stays in the k8s role's defaults (or `group_vars/all.yml`), and
+`k8s_host_files`' defaults hold a copy under the same name (D5's *Host-side rows*). A change
+then edits both copies, and each half routes to its own plane: the copy to the setup plane,
+which the GitOps tick applies. A change that edits only one copy leaves the host and the
+cluster reading different values, and no deploy reports it. This test holds every pair equal.
+
+The pairs are DERIVED: every key of `k8s_host_files`' defaults that a `roles/k8s/*` defaults
+file or `group_vars/all.yml` also defines. `EXPECTED_PAIRS` names them, so a new pair joins
+the census by name. It is empty until artifacts' conversion PR adds `artifacts_host_dir`,
+`artifacts_peer_dir` and `artifacts_peer_sources` as its first members.
+
+Red-proof: a fixture tree under `tmp_path` whose host-files copy differs from its k8s source
+must be flagged, and one whose copy matches must not.
+
+Run: uv run pytest ansible/tests/setup/test_k8s_host_files_pairs.py
+"""
+
+from pathlib import Path
+
+from _helpers import K8S_ROLES, SETUP_ROLES, load_defaults, load_yaml
+from lib.repo_paths import ALL_VARS
+
+ROLE = SETUP_ROLES / "k8s_host_files"
+
+# Each shared key the host-files defaults carry. Empty until artifacts' conversion PR.
+EXPECTED_PAIRS: frozenset[str] = frozenset()
+
+
+def shared_pairs(
+    role_dir: Path = ROLE, k8s_roles: Path = K8S_ROLES, all_vars: Path = ALL_VARS
+) -> dict[str, list[tuple[str, object, object]]]:
+    """{key: [(source, source value, copy value), ...]} for every key the role's defaults share.
+
+    A source is a `roles/k8s/<role>` defaults file or `group_vars/all.yml`, and a key may
+    have more than one.
+    """
+    # The role ships no defaults file until a conversion PR moves the first variable in.
+    has_defaults = (role_dir / "defaults" / "main.yml").is_file()
+    copies = load_defaults(role_dir) if has_defaults else {}
+    sources = {"group_vars/all.yml": load_yaml(all_vars) or {}}
+    for defaults in sorted(k8s_roles.glob("*/defaults/main.yml")):
+        sources[f"roles/k8s/{defaults.parents[1].name}"] = load_yaml(defaults) or {}
+    pairs: dict[str, list[tuple[str, object, object]]] = {}
+    for key, copy in copies.items():
+        for source, values in sources.items():
+            if key in values:
+                pairs.setdefault(key, []).append((source, values[key], copy))
+    return pairs
+
+
+def unequal_pairs(pairs: dict[str, list[tuple[str, object, object]]]) -> list[str]:
+    return [
+        f"{key}: {source} has {value!r}, k8s_host_files has {copy!r}"
+        for key, rows in sorted(pairs.items())
+        for source, value, copy in rows
+        if value != copy
+    ]
+
+
+def test_the_live_pairs_are_exactly_the_expected_set():
+    assert ROLE.is_dir(), f"no such role: {ROLE}"
+    found = set(shared_pairs())
+    assert found == EXPECTED_PAIRS, (
+        "the k8s_host_files pair set moved: name each shared key in EXPECTED_PAIRS. "
+        f"Found {sorted(found)}"
+    )
+
+
+def test_every_live_pair_is_equal():
+    assert unequal_pairs(shared_pairs()) == []
+
+
+def _fixture_tree(tmp_path: Path, source: str, copy: str) -> tuple[Path, Path, Path]:
+    """A k8s role, a host-files role and an all.yml under `tmp_path`, sharing one key."""
+    k8s_roles = tmp_path / "roles" / "k8s"
+    (k8s_roles / "artifacts" / "defaults").mkdir(parents=True)
+    (k8s_roles / "artifacts" / "defaults" / "main.yml").write_text(
+        f"artifacts_host_dir: {source}\n"
+    )
+    role_dir = tmp_path / "roles" / "setup" / "k8s_host_files"
+    (role_dir / "defaults").mkdir(parents=True)
+    (role_dir / "defaults" / "main.yml").write_text(
+        f"artifacts_host_dir: {copy}\nk8s_host_files_only: 1\n"
+    )
+    all_vars = tmp_path / "all.yml"
+    all_vars.write_text("sys_user: ubuntu\n")
+    return role_dir, k8s_roles, all_vars
+
+
+def test_a_copy_that_differs_from_its_source_is_flagged(tmp_path):
+    pairs = shared_pairs(*_fixture_tree(tmp_path, "/srv/a", "/srv/b"))
+    assert set(pairs) == {"artifacts_host_dir"}
+    assert unequal_pairs(pairs) == [
+        "artifacts_host_dir: roles/k8s/artifacts has '/srv/a', "
+        "k8s_host_files has '/srv/b'"
+    ]
+
+
+def test_a_copy_equal_to_its_source_is_clean(tmp_path):
+    pairs = shared_pairs(*_fixture_tree(tmp_path, "/srv/a", "/srv/a"))
+    assert set(pairs) == {"artifacts_host_dir"}
+    assert unequal_pairs(pairs) == []
