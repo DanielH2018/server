@@ -34,10 +34,9 @@ source /usr/local/lib/kuma-push-lib.sh || {
 }
 
 COUNTER=/sys/fs/ext4/mmcblk0p2/errors_count
-{# `domain` here is the SOPS-loaded server domain (community.sops.load_vars in
-   initial_setup.yml outranks the Pi host_vars' daniel-pi.com override), NOT
-   hostvars['daniel-server'].domain — secrets are play-scoped, so that lookup
-   fails cross-host. Verified: the Pi's wg-easy renders the same way. #}
+{# `domain` comes from inventory/group_vars/all.yml, which every host inherits; the Pi
+   host_vars carry no override. That file's comment above `domain` covers the SOPS copy
+   that still holds the same value. The Pi's wg-easy reads the same variable. #}
 KUMA_HOST="uptime-kuma.local.{{ domain }}"
 # Pinned to the cluster ingress VIP: Kuma serves from the k8s edge, and the Docker
 # edge's bridge route for this name was removed in the slice-7 bridge teardown.
