@@ -28,11 +28,14 @@ import pytest
 
 from _helpers import REPO
 
-# The `files/` directories whose modules a deploy copies beside a consumer in another role.
+# The directories whose modules a deploy copies beside a consumer in another role.
+# `scripts/deploy_tools` holds `changed_set.py`, which the soak Job's ConfigMap carries
+# beside `flux_soak.py`.
 SHIPPED_BESIDE = (
     REPO / "ansible/roles/setup/common/files",
     REPO / "ansible/roles/setup/gitops_deploy/files",
     REPO / "ansible/roles/k8s/monitor-bridge/files",
+    REPO / "scripts/deploy_tools",
 )
 
 # Non-vacuity: one of each shape the census must keep. A hook, a role script that takes
