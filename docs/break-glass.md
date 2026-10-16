@@ -206,7 +206,8 @@ daniel-box is down, whatever this step frees.
 
 1. Print the shed set: `uv run python scripts/diagnostics/probe.py shed-set`. It lists the
    Deployments and StatefulSets of every service with no `tier:` in `containers_list`. Every
-   tiered service is left off it.
+   tiered service is left off it, and so is the cluster plumbing that
+   `ansible/filter_plugins/service_tier.py:NEVER_SHED` names.
 2. Scale those to zero from a host with write access, starting with the largest. Plain
    `kubectl` on daniel-box is read-only, so use the k3s admin kubeconfig.
 3. Once the node is back, redeploy each shed service with `./scripts/deploy.sh --tags <svc>`.
