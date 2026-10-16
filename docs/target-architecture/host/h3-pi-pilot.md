@@ -44,6 +44,12 @@ Pi, `homelab-updater.timer` read `inactive` and `homelab_host.prom` had mode 064
 Prometheus read `homelab_host_reconcile_ok{host="daniel-pi"}` = 1 and
 `node_textfile_scrape_error{job="node-pi"}` = 0, and `homelab_host_applied_info` named
 version `0.5641+g6eb63d2a4157`.
+PR H3.7, the Depends gate: [#5237](https://github.com/DanielH2018/server/pull/5237). The gate
+passed on 2026-10-16. The operator started the updater by hand, and it installed
+`homelab-daniel-pi 0.5658+g70bdf5e85e1b` with `Result=success`. apt pulled `tree` in and marked
+it automatic, `homelab-updater.timer` stayed `inactive`, and `dpkg --audit` was clean, so the
+package plan stands and Open question 2's fallback is not taken. The follow-up commit drops the
+`Depends`.
 
 Depends on: R1
 Unblocks: H4, H5
