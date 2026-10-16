@@ -25,12 +25,8 @@ from _job_census import (
 from deploy_tools.bundle_census import published_tags
 from lib.exit_codes import RENDER_OK
 from renderer import homelab_render
-from renderer.renderer_lib.bundle import (
-    CLUSTER_VARS_FILE,
-    SHARED_KINDS,
-    configmap_digest8,
-    job_spec_digest8,
-)
+from renderer.renderer_lib.bundle import CLUSTER_VARS_FILE, SHARED_KINDS
+from renderer.renderer_lib.snapshot import configmap_digest8, job_spec_digest8
 
 DOTENV = "peanut_password=ENC[AES256_GCM,data:eA==,iv:aQ==,tag:dA==,type:str]\n"
 SCRIPTS = "sonarr-seed-scripts"

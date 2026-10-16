@@ -145,6 +145,9 @@ change to it rolls kube-state-metrics through the apply and adds no key for the 
 guard to track. A kind added to the config needs `list` and `watch` in the ClusterRole beside it;
 `ansible/tests/services/test_ksm_flux_resource_state.py` fails a kind with no grant.
 `docs/flux-deploy-plane.md` has the labels, and why `suspended` is absent rather than `"false"`.
+A Kustomization's `content_digest` label is the tag's own rendered-content digest. It is what
+`probe.py health` matches a flux-owned tag's reference time on, because `revision` moves on
+every master commit (#5338).
 
 ## Grafana logs in through Authelia (OIDC), and the admin form stays on
 

@@ -123,7 +123,7 @@ K8S_ROLES = "ansible/roles/k8s/"
 SHARED_TEMPLATES = "ansible/templates/"
 ANSIBLE_PLANE = "ansible"
 FLUX_PLANE = "flux"
-# The suffix `bundle.py:job_spec_digest8` and `configmap_digest8` give a name: a rename by
+# The suffix `snapshot.py:job_spec_digest8` and `configmap_digest8` give a name: a rename by
 # digest moves it, and arm 3 strips it before comparing the two sides.
 _DIGEST_SUFFIX = re.compile(r"-[0-9a-f]{8}$")
 PRUNE_KEY = "kustomize.toolkit.fluxcd.io/prune"

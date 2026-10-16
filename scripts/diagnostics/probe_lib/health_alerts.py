@@ -119,16 +119,33 @@ def _when(ts):
     return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(ts))
 
 
-def flux_reference(tag, query):
-    """When `tag`'s Kustomization first reported its current revision, or None with no series.
+# The C6 label carrying the digest of a tag's own rendered directory, `cluster/<tag>/`. The
+# renderer stamps it on Kustomization `<tag>` (bundle.py:CONTENT_DIGEST), so a master commit
+# that leaves the tag unchanged keeps it while `revision` moves (#5338).
+CONTENT_LABEL = "content_digest"
 
-    `gotk_resource_info` (C6) is one series per (revision, ready) pair, so the earliest sample
-    of any series carrying the current revision is the first report.
+
+def flux_reference(tag, query):
+    """When `tag`'s Kustomization first reported its current content, or None with no series.
+
+    `gotk_resource_info` (C6) is one series per label set, so the earliest sample agreeing
+    with the newest one on `content_digest` is the first report of the content now applied.
+    A newest sample without the label, from a bundle or a kube-state-metrics older than it,
+    falls back to `revision`: matching on an absent label would match every sample in the
+    lookback.
+
+    DECIDED: the earliest agreeing sample, not the start of the newest run — a revert to
+    content seen earlier in the lookback reads back to that first report. That moves the
+    reference earlier, which gates more alerts, never fewer, and keeps one instant query.
     """
     selector = f'gotk_resource_info{{customresource_kind="Kustomization",name="{tag}"}}'
+    newest = query(selector)
+    if not newest:
+        return None
+    on = CONTENT_LABEL if _labels(newest[0]).get(CONTENT_LABEL) else "revision"
     rows = query(
         f"min(min_over_time(timestamp({selector})[{FLUX_LOOKBACK}:1m]) "
-        f"and on(revision) {selector})"
+        f"and on({on}) {selector})"
     )
     return float(rows[0]["value"][1]) if rows else None
 
