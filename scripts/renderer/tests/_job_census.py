@@ -30,7 +30,7 @@ Job and its directory:
   through an allowed module to `urllib.request`. It uses neither module as a value and reads
   no dunder, as an attribute or a string, so `getattr`, `vars` and `__globals__` cannot
   reach around those two rules. The row guards against a mistake, not an
-  adversary: a name spelled out at run time passes it.
+  adversary: a name spelled out at run time passes it. A `SIBLINGS` copy is byte-identical.
 
 The test module is `test_renderer_job_census.py`.
 """
@@ -63,6 +63,9 @@ SOAK = "soak"
 # The `backoffLimit` each kind must set. A mutation Job is absent: it states its own value.
 BACKOFF = {"snapshot": 1, SOAK: 0, "verify": 0}
 HELPER = REPO / "ansible/roles/k8s/manifests/files/flux_job_connect.py"
+# Modules a script may import, each carried beside it (`IMPORTS`) as a byte-identical copy.
+CHANGED_SET = REPO / "scripts/deploy_tools/changed_set.py"
+SIBLINGS = {HELPER.name: HELPER, CHANGED_SET.name: CHANGED_SET}
 # DECIDED: an allowlist of imports, not a denylist of connecting calls. A denylist missed
 # `urlretrieve`, `asyncio.open_connection`, `ftplib` and `importlib` in review. No module
 # here opens a connection; a script builds its `Request` from `flux_job_connect`, so
@@ -83,6 +86,7 @@ HELPER = REPO / "ansible/roles/k8s/manifests/files/flux_job_connect.py"
 ALLOWED_IMPORTS = frozenset(
     {
         "flux_job_connect",
+        "changed_set",
         "argparse",
         "base64",
         "collections",
@@ -93,6 +97,7 @@ ALLOWED_IMPORTS = frozenset(
         "functools",
         "hashlib",
         "hmac",
+        "io",
         "itertools",
         "json",
         "math",
@@ -102,6 +107,7 @@ ALLOWED_IMPORTS = frozenset(
         "re",
         "string",
         "sys",
+        "tarfile",
         "textwrap",
         "time",
         "typing",
@@ -169,7 +175,7 @@ SUBMODULE_ONLY = (
 # each one reaches past the names the rules here check.
 DUNDER = re.compile(r"__\w+__")
 PYTHONS = frozenset({"python", "python3"})
-IMPORTS_HELPER = re.compile(r"^\s*(?:from|import)\s+flux_job_connect\b", re.MULTILINE)
+IMPORTS = {k: re.compile(rf"^\s*(?:from|import)\s+{k[:-3]}\b", re.M) for k in SIBLINGS}
 
 # A bundle's directories, each name mapped to its documents.
 Bundle = Mapping[str, list[dict]]
@@ -438,7 +444,6 @@ def helper_offence(job: Mapping, directory: str, docs: list[dict]) -> list[str]:
     configmaps = {
         doc["metadata"]["name"]: doc for doc in docs if doc.get("kind") == "ConfigMap"
     }
-    helper = HELPER.read_text().rstrip("\n")
     offences = []
     for name in sorted(_mounted_configmaps(job)):
         if name not in configmaps:
@@ -451,16 +456,16 @@ def helper_offence(job: Mapping, directory: str, docs: list[dict]) -> list[str]:
         for key, text in sorted(data.items()):
             if not key.endswith(".py"):
                 continue
-            if HELPER.name not in data and IMPORTS_HELPER.search(text):
-                offences.append(
-                    f"{name}/{key} imports {HELPER.name}, which {name} lacks"
-                )
-            if key == HELPER.name:
-                if text.rstrip("\n") != helper:
-                    offences.append(
-                        f"{name}/{key} differs from the tracked {HELPER.name}"
-                    )
-                continue
+            offences += [
+                f"{name}/{key} imports {module}, which {name} lacks"
+                for module, imports in IMPORTS.items()
+                if module not in data and imports.search(text)
+            ]
+            if key in SIBLINGS:
+                if text.rstrip("\n") != SIBLINGS[key].read_text().rstrip("\n"):
+                    offences.append(f"{name}/{key} differs from the tracked {key}")
+                if key == HELPER.name:
+                    continue
             offences += [f"{name}/{line}" for line in script_offence(key, text)]
     return offences
 
