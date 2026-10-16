@@ -11,7 +11,9 @@ cluster` and refuses two shapes:
   transitive `build_k8s_dep_map` set, `K8S_APPLIES_LAST` included. A tag counts when its
   `cluster/<tag>/` or `cluster/<tag>-deferred/` output moved, unless its role's own diff is
   only an image pin (`deploy_k8s.py:is_image_only_diff`). A tag whose role's `tasks/` changed
-  counts as well, because a task change moves no render. An inventory field another role reads
+  counts as well when it is Ansible-owned at the head, because a task change moves no render.
+  A flux-owned role's tasks run nowhere, since every Ansible path skips the tag, so only the
+  render they feed reaches a plane (D4 Open question 9). An inventory field another role reads
   counts only through the render it moves: an `auth_tier` edit on bento-pdf moves authelia's
   access rules alone, so no pair forms.
 - **Arm 2, edge first.** A tag that is flux-owned at both ends gains a `dependsOn` edge, and
@@ -139,7 +141,7 @@ def counted(
     changed_paths: Iterable[str],
     role_diffs: Mapping[str, str],
 ) -> set[str]:
-    """The tags the PR changes, by render, by `tasks/`, never by an image pin alone.
+    """The tags the PR changes, by render, by an Ansible-owned `tasks/`, never by a pin alone.
 
     Args:
         changed_paths: The paths the PR changes.
@@ -160,7 +162,12 @@ def counted(
         for p in changed_paths
         if p.startswith(K8S_ROLES) and "/tasks/" in p
     }
-    return moved | (tasks & (base.owners.keys() | head.owners.keys()))
+    # DECIDED: a `tasks/` change counts only for a tag Ansible owns at the head. The tasks of a
+    # flux-owned role run nowhere, and the render they feed is already in `moved`. Counting them
+    # refused three mechanical edits in the 30-day replay that no plane could misorder. The
+    # operator ruled on 2026-10-16 (D4 Open question 9).
+    tasks &= base.owners.keys() | head.owners.keys()
+    return moved | {tag for tag in tasks if head.plane(tag) == ANSIBLE_PLANE}
 
 
 def problems(

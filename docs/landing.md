@@ -362,8 +362,9 @@ own tree's renderer. The gate refuses two shapes:
 - **Arm 1, plane order.** Two changed roles sit on different planes, and one depends on the
   other, directly or through other roles, by `build_k8s_dep_map`. netpol-baseline depends on
   every workload (`K8S_APPLIES_LAST`). A role counts as changed when its `cluster/<tag>/`
-  output moved or its `tasks/` changed. A role whose own diff is only an image pin does not
-  count. An inventory field that another role reads counts through the render it moves:
+  output moved, or when its `tasks/` changed and Ansible owns it at the head. A flux-owned
+  role's tasks run nowhere, so only the render they feed counts. A role whose own diff is
+  only an image pin does not count. An inventory field that another role reads counts through the render it moves:
   `auth_tier` on bento-pdf moves authelia's access rules alone, while `hostname` moves both.
 - **Arm 2, edge first.** A tag that is flux-owned at the base and at the head gains a
   `dependsOn` edge, and its own render moves in the same PR. A tag that becomes flux-owned in
@@ -387,20 +388,21 @@ three PRs:
 When a dependency set crosses the planes more than once, step 1 repeats once per plane, in
 dependency order. Each refused macro change therefore costs about three PRs until D5 ends.
 
-**The measured cost is more than one refusal a week.** `scripts/dev/cross_plane_replay.py`
+**The measured cost is two refusals in 30 days.** `scripts/dev/cross_plane_replay.py`
 replayed the gate over the 1598 PRs merged in the 30 days to 2026-10-16, with bento-pdf the only
-flux-owned tag. With one diff read by hand, it found at least five refusals, about 1.2 a
-week:
+flux-owned tag. #1975 and #2002 changed the `ingressroute()` macro, which moves bento-pdf's
+route beside traefik's or authelia's own change. The replay refused #1975, and #2002 was
+judged by reading its diff.
 
-- #1975 and #2002 changed the `ingressroute()` macro, which moves bento-pdf's route beside
-  traefik's or authelia's own change.
-- #4291, #4292 and #4299 edited the `tasks/` of many roles at once. Each changed bento-pdf
-  with `crowdsec`, `traefik`, `authelia` or `netpol-baseline`. A mechanical edit like that
-  splits by plane: the Ansible-owned roles first, then bento-pdf.
+The first version of the gate also counted a flux-owned role's `tasks/`, and refused three
+more: #4291, #4292 and #4299, each a mechanical edit across many roles that included
+bento-pdf's `tasks/`. That made about 1.2 refusals a week, over the plan's one-a-week bar. The
+operator ruled on 2026-10-16 that a `tasks/` change counts only for an Ansible-owned role (D4
+Open question 9), and those three no longer count.
 
-The replay could not render 55 of the 645 commits that changed a render input. The `tasks/`
-rule needs no render and refused three of them, and #2002 was judged by reading its diff. 24
-of the rest change a file bento-pdf's render reads, so the true count can be higher.
+The replay could not render 55 of the 645 commits that changed a render input. 24 of them
+change a file bento-pdf's render reads, and so do the three above, so the true count can be
+higher than two.
 
 **An edit that one inventory field carries exits by handing the role back.** A `hostname` edit on bento-pdf
 moves bento-pdf's route and authelia's access rules, and no macro copy splits it. Hand bento-pdf

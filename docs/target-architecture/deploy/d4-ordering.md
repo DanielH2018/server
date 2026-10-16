@@ -612,8 +612,10 @@ Flux half after CI. Usually that costs a hold and a retry. In the policies-first
 - **What counts as changed.** The gate renders the cluster at the base and at the head with
   `homelab-render cluster`. A tag counts when its `cluster/<tag>/` output differs, unless its
   role's only diff is an image pin, judged as `deploy_k8s.py:is_image_only_diff` judges it.
-  A role whose `tasks/` changed also counts, because a task change moves no render. A role
-  that reads another entry's fields counts exactly when its own render moved. For example,
+  A role whose `tasks/` changed also counts when Ansible owns it at the head, because a task
+  change moves no render. A flux-owned role's tasks run nowhere, so only the render they feed
+  counts (Open question 9). A role that reads another entry's fields counts exactly when its
+  own render moved. For example,
   `auth_tier` on bento-pdf is read by authelia's access rules
   (`narrow_lib/containers.py:FILTER_FIELDS`). An `auth_tier` edit moves authelia's render
   alone, so no pair forms.
@@ -1246,7 +1248,13 @@ Each bound below says how long a PR can be reverted alone.
    merges counts the PRs the gate would have refused, and the PR body quotes it. If the
    count exceeds one a week, the D4.4 PR asks the operator to accept the copy-and-migrate
    cost until D5 ends, and D5's wave order reads the count, because the cost ends for a role
-   once its dependencies share its plane.
+   once its dependencies share its plane. **Ruled 2026-10-16.** D4.4's replay over the 1598
+   PRs of the 30 days to 2026-10-16 counted five refusals, about 1.2 a week. Two came from the
+   `ingressroute()` macro, #1975 and #2002. Three came only from bento-pdf's own `tasks/`, in
+   mechanical edits across many roles. The operator ruled that a `tasks/` change counts only
+   for an Ansible-owned role, because a flux-owned role's tasks run nowhere. That leaves two
+   refusals in 30 days, under the bar, so the copy-and-migrate cost needs no acceptance.
+   `docs/landing.md` states the measured cost.
 10. **D5's queueing term for the verify timeout.** D5 *Controller concurrency* asked D4 to
     add the `-snapshot` and `soak` timeouts and a queueing term. Resolved in D4.3: the
     longest-path walk already counts every Kustomization on the path, and the queueing term

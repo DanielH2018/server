@@ -75,6 +75,13 @@ def test_a_tasks_change_counts_though_it_moves_no_render_is_flagged():
     assert len(flagged) == 1
 
 
+def test_a_tasks_change_in_a_flux_owned_role_is_clean():
+    """bento-pdf's tasks run nowhere once Flux owns it, so they pair with nothing (OQ 9)."""
+    assert (
+        judge({"authelia"}, paths=["ansible/roles/k8s/bento-pdf/tasks/main.yml"]) == []
+    )
+
+
 def test_a_change_beside_netpol_baseline_is_flagged_through_applies_last():
     flagged = judge({"bento-pdf", "netpol-baseline"})
     assert len(flagged) == 1
