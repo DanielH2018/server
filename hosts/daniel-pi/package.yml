@@ -2,6 +2,11 @@
 # link for homelab-updater.timer: the operator starts the updater by hand until H3.9b ships the
 # link (docs/target-architecture/host/h3-pi-pilot.md, *Steps, as PRs*).
 description: daniel-pi's homelab host package
+# H3.7's Depends gate: tree is not installed on the Pi, so the updater's apt-get must pull it in
+# for this version to configure. A follow-up commit drops it, and the weekly autoremove removes
+# tree, which apt marked automatic.
+depends:
+  - tree
 components: [reconcile]
 maintainer_scripts: [preinst, postinst, prerm]
 files:
