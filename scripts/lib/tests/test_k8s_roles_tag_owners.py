@@ -39,6 +39,6 @@ def test_any_other_owner_value_raises(tmp_path, value: str):
         tag_owners(host_vars)
 
 
-def test_bento_pdf_is_the_one_live_owned_entry():
-    """D2.7 moved bento-pdf to Flux, and no other live entry carries `owner`."""
-    assert tag_owners() == {"bento-pdf": "flux"}
+def test_bento_pdf_and_peanut_are_the_live_owned_entries():
+    """D2.7 moved bento-pdf to Flux and D3.6 moved peanut, and no other live entry carries `owner`."""
+    assert tag_owners() == {"bento-pdf": "flux", "peanut": "flux"}
