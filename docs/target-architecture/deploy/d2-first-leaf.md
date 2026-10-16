@@ -1642,8 +1642,8 @@ later slices size against:
   Deployment, or a NetworkPolicy, IngressRoute, CronJob, Service or RBAC object, prune
   deletes it, and the Kustomization still reads Ready, because nothing is left to wait on.
   `verify` cannot see it. Mitigation: `decide`'s object-loss check (D2.6c) refuses a
-  candidate that lost an object no `Removes-Object` trailer declares, and D5's PR-time
-  check stops such a PR before it merges. `probe.py health bento-pdf`, which `land.sh`
+  candidate that lost an object no `Removes-Object` trailer declares, and D5.1f's arm 3 of
+  `scripts/validate/cross_plane_order.py` stops such a PR before it merges. `probe.py health bento-pdf`, which `land.sh`
   runs, still reports a missing Deployment.
 - **The object-loss check stalls promotion until a trailer lands.** A removal merged
   without a trailer makes every later candidate ineligible, and `decide` prints `current`.
@@ -1668,8 +1668,9 @@ later slices size against:
 - **Orphaned objects on retirement.** Under `deletionPolicy: Orphan`, retiring a flux-owned
   service leaves its objects live. Mitigation: until D6, a retirement first empties the
   service's templates, which prunes its objects, and removes the entry in a second PR. The
-  first PR carries a `Removes-Object` trailer for each object it empties.
-  `docs/flux-deploy-plane.md` states the order.
+  first PR carries a `Removes-Object` trailer for each object it empties. Prune never deletes
+  the claim, so deleting it after the second PR is an operator-only hand step.
+  `docs/flux-deploy-plane.md`, *Retiring a flux-owned service*, states the order.
 - **`promote` sees only GitHub.** A status that notification-controller cannot post reads as
   a timeout and holds. That is the safe direction.
 - **A publish refusal reads as a timeout to `land.sh`.** When a gate refuses X and no later
