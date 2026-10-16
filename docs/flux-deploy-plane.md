@@ -534,7 +534,8 @@ defers files (*The publish census*, the per-file rule).
 
 D5's per-tag kinds, `<tag>-snapshot` and `<tag>-verify`, follow in the same file in that
 order, each applying its own `./cluster/<tag><suffix>`. `<tag>-snapshot` inherits `<tag>`'s
-edges, and `<tag>-verify` depends on the tag's last Kustomization: `<tag>-deferred` when the
+edges, and `<tag>` then depends on `<tag>-snapshot`, so the role applies only after its
+snapshot is taken. `<tag>-verify` depends on the tag's last Kustomization: `<tag>-deferred` when the
 tag has one, `<tag>` otherwise. A `K8S_APPLIES_LAST` tag waits on no other tag's
 `-snapshot` or `-verify`. No role renders either kind yet.
 

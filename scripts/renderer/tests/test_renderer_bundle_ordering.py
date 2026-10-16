@@ -186,8 +186,11 @@ def test_an_ordinary_tag_is_clean():
 def test_a_tag_taking_a_name_d5_reserves_is_flagged(tag):
     """`soak` and `homelab-namespace` are refused before either joins SHARED_KINDS."""
     assert not {"soak", "homelab-namespace"} & SHARED_KINDS
-    with pytest.raises(cluster_mod.RenderRefused, match=rf"\['{tag}'\]"):
+    # The reserved-name text, because none of these is a render target and the
+    # unknown-target refusal also names the tag.
+    with pytest.raises(cluster_mod.RenderRefused) as refused:
         cluster_mod.select_tags([tag])
+    assert str(refused.value).startswith(f"['{tag}'] take a name the bundle reserves")
 
 
 @pytest.mark.parametrize(
@@ -274,16 +277,19 @@ def test_a_verify_kind_of_a_tag_with_no_deferred_files_depends_on_the_tag():
     assert _depends(docs["bento-pdf-verify"]) == ["bento-pdf"]
 
 
-def test_a_snapshot_kind_inherits_its_tags_edges():
+def test_a_snapshot_kind_inherits_its_tags_edges_and_the_tag_waits_on_it():
     ordering = Ordering(deps={"pihole": ["bento-pdf", "traefik"]})
     docs = _docs(ordering, ["bento-pdf", "pihole"], _every_kind())
-    assert (
-        _depends(docs["pihole-snapshot"]) == _depends(docs["pihole"]) == ["bento-pdf"]
-    )
+    assert _depends(docs["pihole-snapshot"]) == ["bento-pdf"]
     assert _dropped(docs["pihole-snapshot"]) == "traefik"
+    assert _depends(docs["pihole"]) == ["bento-pdf", "pihole-snapshot"]
 
 
 def test_an_applies_last_tag_waits_on_no_other_tags_snapshot_or_verify():
+    """A guard of the `# DECIDED:` choice in ordering.py, not of a change this step made.
+
+    It fails only on a change that adds such an edge on purpose.
+    """
     ordering = Ordering(deps={"last": []}, applies_last=frozenset({"last"}))
     docs = _docs(ordering, ["last", "pihole"], _every_kind() | {"last": {}})
     assert _depends(docs["last"]) == ["pihole-deferred"]

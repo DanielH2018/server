@@ -9,7 +9,8 @@ Every edge is generated, never hand-written, from an `Ordering` the caller reads
 - a `K8S_APPLIES_LAST` tag also depends on every other tag's `<tag>-deferred`;
 - `<tag>-deferred` depends on `<tag>`, and on the role that creates a namespace one of its
   documents names, by the same flux-owned rule;
-- `<tag>-snapshot` inherits `<tag>`'s edges (C3), and `<tag>-verify` depends on the tag's last
+- `<tag>-snapshot` inherits `<tag>`'s edges (C3), and `<tag>` then depends on it, so the role
+  applies only after its snapshot is taken (D5.2a). `<tag>-verify` depends on the tag's last
   Kustomization: `<tag>-deferred` when the tag renders one, `<tag>` otherwise (D5.1a1).
 
 `bundle.py` adds the `cluster-vars` edge and fails the render on a cycle, because Flux would
@@ -152,7 +153,11 @@ def kustomization_edges(
         )
     for tag in tags:
         if tag + SNAPSHOT_SUFFIX in directories:
+            # Copied before `<tag>` gains the edge, so the snapshot never depends on itself.
             edges[tag + SNAPSHOT_SUFFIX] = edges[tag]
+            edges[tag] = Edges(
+                edges[tag].kept | {tag + SNAPSHOT_SUFFIX}, edges[tag].dropped
+            )
         if tag + VERIFY_SUFFIX in directories:
             last = tag + DEFERRED_SUFFIX if tag + DEFERRED_SUFFIX in edges else tag
             edges[tag + VERIFY_SUFFIX] = Edges(frozenset({last}))
