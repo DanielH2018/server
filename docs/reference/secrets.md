@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/secrets.py
-generated_at: 2026-10-16 06:17 UTC
-generated_sha: 013e72b76
+generated_at: 2026-10-16 18:17 UTC
+generated_sha: 505a5a832
 ---
 
 !!! warning "Generated file — do not edit"
@@ -93,7 +93,7 @@ needs a human to mint the new value, then `secret_rotation.py rotate`.
 | `n8n_runner_auth_token` | 2025-11-09 | 2026-11-03 | 18 |
 | `nut_ha_password` | 2026-03-23 | 2027-03-03 | 138 |
 | `nut_monitor_password` | 2026-03-13 | 2027-03-10 | 145 |
-| `peanut_password` | 2026-03-16 | 2027-03-03 | 138 |
+| `peanut_password` | 2026-10-16 | 2027-10-03 | 352 |
 | `pi_peer_backup_ssh_key` | 2026-03-31 | 2027-03-29 | 164 |
 | `pihole_password` | 2026-07-23 | 2027-07-03 | 260 |
 | `prometheus_ha_token` | 2025-11-06 | 2026-10-26 | 10 |

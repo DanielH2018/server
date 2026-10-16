@@ -12,7 +12,7 @@ Run: uv run pytest scripts/renderer/tests/test_renderer_job_census.py
 import copy
 
 import pytest
-from _job_census import HELPER, JOB_KIND, RERUN_SAFE, load, problems
+from _job_census import HELPER, JOB_KIND, RERUN_SAFE, load, problems, script_offence
 
 from deploy_tools.bundle_census import published_tags
 from lib.exit_codes import RENDER_OK
@@ -189,6 +189,163 @@ def test_a_job_outside_a_job_directory_is_flagged(directory):
 )
 def test_a_script_that_connects_without_the_helper_is_flagged(script):
     assert _rows(_verify(script=script)) == {"helper"}
+
+
+# #5274: each reaches a connecting module through one ALLOWED_IMPORTS lets in, by a name
+# FORBIDDEN does not hold, so the import allowlist alone does not catch it.
+@pytest.mark.parametrize(
+    "script",
+    [
+        pytest.param(
+            "import flux_job_connect as f\n\n"
+            "f.urllib.request.HTTPHandler().http_open(f.Request('http://x'))\n",
+            id="handler-through-helper",
+        ),
+        pytest.param(
+            "import urllib.error\n\nimport flux_job_connect\n\n"
+            "urllib.request.HTTPHandler().http_open(flux_job_connect.Request('http://x'))\n",
+            id="handler-through-urllib-error",
+        ),
+        pytest.param(
+            "import sys, flux_job_connect\n\n"
+            "sys.modules['socket'].socket().connect(('x', 80))\n",
+            id="sys-modules-socket",
+        ),
+    ],
+)
+def test_script_offence_flags_a_connection_through_an_allowed_module(script):
+    assert script_offence("run.py", script)
+
+
+@pytest.mark.parametrize(
+    "script",
+    [
+        pytest.param(
+            "import flux_job_connect as f\n\n"
+            "f.urllib.request.HTTPSHandler().https_open(f.Request('https://x'))\n",
+            id="https-handler",
+        ),
+        pytest.param(
+            "import flux_job_connect as f\n\n"
+            "f.urllib.request.socket.socket().connect(('x', 80))\n",
+            id="socket-attribute",
+        ),
+    ],
+)
+def test_a_job_whose_script_reaches_a_module_through_the_helper_is_flagged(script):
+    assert _rows(_verify(script=script)) == {"helper"}
+
+
+@pytest.mark.parametrize(
+    "script",
+    [
+        pytest.param(
+            "import urllib.error\n\n"
+            "urllib.error.urllib.request.HTTPHandler().http_open(None)\n",
+            id="package-through-urllib-error",
+        ),
+        pytest.param(
+            "from flux_job_connect import urllib\n\nurllib.request.HTTPHandler()\n",
+            id="from-helper-import-module",
+        ),
+        pytest.param(
+            "from sys import modules\n\nmodules['socket']\n",
+            id="from-sys-import-modules",
+        ),
+    ],
+)
+def test_script_offence_flags_a_module_reached_by_another_route(script):
+    assert script_offence("run.py", script)
+
+
+@pytest.mark.parametrize(
+    "script",
+    [
+        pytest.param(
+            "from flux_job_connect import Request\n\n"
+            "Request.__init__.__globals__['socket'].socket().connect(('x', 80))\n",
+            id="exported-class-globals",
+        ),
+        pytest.param(
+            "from flux_job_connect import open_url\n\n"
+            "getattr(open_url, '__globals__')['socket'].socket()\n",
+            id="globals-by-string",
+        ),
+        pytest.param(
+            "import flux_job_connect as f\n\ngetattr(f, 'urllib').request\n",
+            id="getattr-on-helper",
+        ),
+        pytest.param(
+            "import flux_job_connect as f\n\nvars(f)['urllib'].request\n",
+            id="vars-of-helper",
+        ),
+        pytest.param(
+            "import flux_job_connect as f\n\ng = f\ng.refused\n",
+            id="helper-aliased",
+        ),
+    ],
+)
+def test_script_offence_flags_a_module_reached_around_the_attribute_rules(script):
+    assert script_offence("run.py", script)
+
+
+def _uses(script):
+    "What `script_offence` reports the script `run.py` as using, one entry per rule that fired."
+    return [
+        offence.removeprefix("run.py uses ").split(";")[0]
+        for offence in script_offence("run.py", script)
+    ]
+
+
+@pytest.mark.parametrize(
+    ("script", "uses"),
+    [
+        pytest.param(
+            "import flux_job_connect as f\n\nf.open_url.__globals__['urllib'].request\n",
+            [".__globals__"],
+            id="helper-function-globals",
+        ),
+        pytest.param(
+            "import urllib.error\n\nu = urllib\nu.request\n",
+            ["urllib as a value"],
+            id="urllib-aliased",
+        ),
+        pytest.param(
+            "def read(x):\n    return x.request.socket.socket()\n",
+            [".socket"],
+            id="socket-as-an-attribute",
+        ),
+        pytest.param(
+            "import sys\n\nsys._getframe().f_globals\n",
+            ["_getframe", "f_globals"],
+            id="frame-globals",
+        ),
+        pytest.param(
+            "import sys\n\nsys.exc_info()[2].tb_frame\n",
+            ["tb_frame"],
+            id="traceback-frame",
+        ),
+    ],
+)
+def test_script_offence_names_the_one_rule_that_caught_the_script(script, uses):
+    assert _uses(script) == uses
+
+
+def test_script_offence_allows_the_string_socket():
+    assert script_offence("run.py", "print('socket')\n") == []
+
+
+def test_script_offence_passes_the_helper_exports_and_admitted_urllib_submodules():
+    script = (
+        "import urllib.error\nimport urllib.parse\n\nimport flux_job_connect as f\n\n"
+        "try:\n"
+        "    f.open_url(f.Request(urllib.parse.quote('http://x')), timeout=1)\n"
+        "except urllib.error.HTTPError as err:\n"
+        "    f.refused(err)\n"
+        "if __name__ == '__main__':\n"
+        "    print('ok')\n"
+    )
+    assert script_offence("run.py", script) == []
 
 
 def test_a_changed_copy_of_the_helper_is_flagged():
