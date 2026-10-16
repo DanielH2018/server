@@ -38,6 +38,15 @@ object two tags render.
 PR D5.1f, the removal gates: [#5296](https://github.com/DanielH2018/server/pull/5296). It merged
 at `3aeeb4fd7` and deployed nothing. `cross_plane_order.py` refuses an object drop from a
 flux-owned tag that no `Removes-Object:` trailer declares, and a flux-owned service's retirement.
+PR D5.1b, the suspend lever: [#5318](https://github.com/DanielH2018/server/pull/5318). It merged at
+`46784ff2f` and deployed nothing. `flux_suspend` renders `spec.suspend` only when true, the renderer
+drops every edge to a suspended tag into `homelab/suspended-deps`, `promote.py verify` leaves a
+suspended tag out, and the shed steps in `docs/break-glass.md` suspend a flux-owned service. Promote
+run 38965987807 read `verify` `verdict=good failed=` on it and moved `last-good` to its revision.
+PR D5.3a, the Prometheus peer: [#5315](https://github.com/DanielH2018/server/pull/5315). It merged at
+`3f7494ef4`, and its landing deployed `netpol-baseline` and settled. The live `prometheus-callers`
+policy admits a `flux-system` pod labelled `app: soak` on 9090, beside the unchanged `homelab` peer.
+Open question 3's review found no new exposure.
 
 Related issues:
 
