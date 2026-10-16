@@ -194,6 +194,30 @@ def test_a_legacy_cron_line_is_removed_and_the_rest_of_the_crontab_kept(node):
     assert len(node.applied()["retired"]) == 1
 
 
+def test_a_legacy_cron_on_a_host_without_crontab_counts_as_retired(node):
+    # 127 is what `run` returns when it cannot exec the binary, and what a shell returns for
+    # a command it cannot find. The container test image installs no cron package.
+    (node.bin / "crontab").write_text("#!/bin/sh\nexit 127\n")
+    node.manifest["legacy"].append({"cron": "pi-sd-health", "user": "ubuntu"})
+
+    result = node.run()
+
+    assert result.returncode == 0, result.stderr
+    assert len(node.applied()["retired"]) == 1
+
+
+def test_a_crontab_that_fails_otherwise_leaves_the_cron_unretired(node):
+    (node.bin / "crontab").write_text(
+        "#!/bin/sh\necho 'permission denied' >&2\nexit 1\n"
+    )
+    node.manifest["legacy"].append({"cron": "pi-sd-health", "user": "ubuntu"})
+
+    result = node.run()
+
+    assert result.returncode != 0
+    assert node.applied()["retired"] == []
+
+
 def test_a_path_dpkg_reports_as_owned_is_never_removed_and_an_unowned_one_is(node):
     for name in ("owned", "stray"):
         path = node.root / "usr/local/bin" / name

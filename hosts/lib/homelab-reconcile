@@ -280,6 +280,11 @@ def retire_path(path: Path) -> bool:
 
 def retire_cron(name: str, user: str) -> bool:
     listing = run("crontab", "-l", "-u", user)
+    if listing.returncode == 127:
+        # `run`'s code for a binary it cannot exec. A host with no cron package holds no
+        # crontab, so the entry is already gone; the test image installs none.
+        say(f"crontab is not installed; no {name} to retire")
+        return True
     if listing.returncode != 0:
         return "no crontab for" in listing.stderr
     lines = listing.stdout.splitlines(keepends=True)
