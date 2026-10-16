@@ -884,6 +884,7 @@
  "scripts/deploy_tools/tests/test_promote_decide.py": 0.89,
  "scripts/deploy_tools/tests/test_promote_decide_verification.py": 0.54,
  "scripts/deploy_tools/tests/test_promote_forge_boundary.py": 0.1,
+ "scripts/deploy_tools/tests/test_promote_forward_only.py": 1.59,
  "scripts/deploy_tools/tests/test_promote_land_wait.py": 0.0,
  "scripts/deploy_tools/tests/test_promote_land_wait_deadline.py": 0.01,
  "scripts/deploy_tools/tests/test_promote_object_loss.py": 0.31,
