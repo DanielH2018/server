@@ -338,7 +338,7 @@ its CI through the check-runs API with `promote.py ci-verdict`, and refuses anyt
 green. This is how a run resumes after a hold is cleared:
 
 ```bash
-gh workflow run promote.yml --ref master -f sha=<master tip>
+gh workflow run promote.yml -R DanielH2018/server --ref master -f sha=<master tip>
 ```
 
 A dispatch of the workflow from master with the input `verify_drill` pushes the bundle

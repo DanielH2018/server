@@ -415,6 +415,8 @@ a tag that is not flux-owned (M6 Open question 4), so that flip waits on the dri
 1. **Three smaller design points.** Whether hashing SOPS ciphertext for restart checksums
    over-triggers when sops re-encrypts unchanged values (D3). How the Longhorn pre-apply
    snapshot runs once per revision (D5). Whether `deploy_ui` retires with the deployer (D6).
+   On 2026-10-16 the operator left that to D6, and Headlamp's Flux plugin (#5221) shows
+   Flux's objects until then.
 1. **The `Depends` question.** Whether the updater's `apt-get install` installs a newly added
    `Depends` cleanly on every host. H3 tests it first. If it fails, ansible-pull becomes the
    host plan and H4 to H7 are revised.

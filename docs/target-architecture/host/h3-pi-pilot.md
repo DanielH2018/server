@@ -36,6 +36,14 @@ PR H3.5d, the host rules: [#5112](https://github.com/DanielH2018/server/pull/511
 deployed `observability` at `de380735e`. Prometheus loaded the `host-checks` group with 7
 rules, and neither `HostReconcileFailed` nor `HostUpdateStale` has a series, because the
 expected-host map is empty until H3.9c.
+PR H3.6, the Pi package and bring-up: [#5210](https://github.com/DanielH2018/server/pull/5210).
+Its landing at `6eb63d2a4` read `needs-manual-apply` with an `optimize_pi` line for the
+whole role, so the narrowed `clear-owed` in step 2 refused. The operator applied
+`node-exporter-host`, then the whole role (`ok=76 changed=0`), and cleared the line. On the
+Pi, `homelab-updater.timer` read `inactive` and `homelab_host.prom` had mode 0644.
+Prometheus read `homelab_host_reconcile_ok{host="daniel-pi"}` = 1 and
+`node_textfile_scrape_error{job="node-pi"}` = 0, and `homelab_host_applied_info` named
+version `0.5641+g6eb63d2a4157`.
 
 Depends on: R1
 Unblocks: H4, H5
@@ -1493,7 +1501,10 @@ says otherwise.
         1. `uv run ansible-playbook ansible/initial_setup.yml --tags node-exporter-host -e
            target=daniel-pi`, which decrypts.
         2. `uv run python scripts/deploy_tools/gitops_state.py clear-owed manual_plane
-           optimize_pi --applied node-exporter-host`.
+           optimize_pi`. The tick records the line for the whole role, with no narrowed
+           tags, so `clear-owed` refuses `--applied node-exporter-host`. Step 1's narrowed
+           run therefore does not discharge it: apply the whole role with `--tags
+           optimize_pi -e target=daniel-pi`, as the operator did on 2026-10-16, then clear.
         3. Copy `hosts/bootstrap-host.sh` and `hosts/keys/homelab-archive-keyring.gpg` to the
            Pi, then run `sudo ./bootstrap-host.sh daniel-pi` there.
         4. `sudo systemctl start homelab-updater.service` on the Pi.
@@ -1519,7 +1530,9 @@ says otherwise.
           every Ansible-rendered secret is at `70591c307`.
         - **Operator-only:** apply it with `--tags sd-health,recovery-health -e
           target=daniel-pi`, then run `gitops_state.py clear-owed manual_plane optimize_pi
-          --applied sd-health,recovery-health`.
+          --applied sd-health,recovery-health`. If the line names no narrowed tags, as
+          H3.6's did, `clear-owed` refuses `--applied`: apply `--tags optimize_pi` and
+          clear without it.
         - Two-writer check: these files are Ansible-owned, and the package only reads them.
     - **H3.8b, move.**
         - `git mv` the three templates into `hosts/components/pi-heartbeats/templates/`.

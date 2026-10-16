@@ -1,6 +1,17 @@
 # D3 — Secrets through Flux
 
-Status: IN PROGRESS
+Status: DONE
+
+All five exit criteria held on 2026-10-16:
+
+1. D3.6's value-hash comparison printed `match` for all three of peanut's keys.
+2. The operator's second key-name read, after D3.8, printed `WEB_PASSWORD WEB_USERNAME
+   settings.yml`, without `FLUX_CANARY`.
+3. D3.9's rotation moved peanut's restart checksum, and peanut rolled in the same revision.
+4. `test_a_secret_changed_since_the_cluster_file_was_written_is_flagged` and the
+   `cluster_vars.py check` prek hook refuse a stale cluster file.
+5. bento-pdf's Kustomization carries no `postBuild` and no `dependsOn`, so it takes nothing
+   from `homelab-cluster-vars`.
 
 D3.0, the cluster key: the operator generated it on 2026-10-15, stored the private half in the
 password manager, and created `flux-system/sops-age` from it. Deriving the public key from the
@@ -72,8 +83,20 @@ printed `match` for all three keys, which is exit criterion 1.
 D3.7 and D3.8, the canary: [#5194](https://github.com/DanielH2018/server/pull/5194) and
 [#5195](https://github.com/DanielH2018/server/pull/5195). After D3.7 settled, the operator's
 key-name read listed `FLUX_CANARY` beside the three real keys. D3.8 settled as `2dd6d4f92`,
-and its render matched D3.6's, restart checksum included. The operator's second read, which
-must not list `FLUX_CANARY`, closes exit criterion 2. D3.9, the rotation drill, follows it.
+and its render matched D3.6's, restart checksum included. The operator's second read, on
+2026-10-16, printed `WEB_PASSWORD WEB_USERNAME settings.yml` without `FLUX_CANARY`, which
+closes exit criterion 2.
+
+D3.9, the rotation drill: [#5218](https://github.com/DanielH2018/server/pull/5218). The
+operator ran `sops set` on `peanut_password` and `cluster_vars.py write`, and neither printed
+a value. `secret_rotation.py record` moved the key's `last_rotated` to 2026-10-16. The first
+landing went red on a shard-weight gate that depends on the runner, filed as #5219. After a
+re-run it ended `needs-manual-apply`, because a `secrets.yml` change maps to no tag, and
+promotion applied `b07b33061`. peanut's `checksum/restart` moved from `2a78e014…` to
+`cae737ec…`, and peanut rolled to ReplicaSet `6cff78674` at 12:46:25 UTC.
+`flux/cluster-vars` read `success` at 12:45:55 and `flux/peanut` at 12:46:40. The Ansible
+half, `./scripts/deploy.sh --tags homepage`, printed `DEPLOY-VERDICT: deployed`, and
+homepage's PeaNUT widget logged in with the new value. That closes exit criterion 3.
 
 Depends on: [D2](d2-first-leaf.md), [R2](../render/r2-secret-placeholders.md). D3.0 to D3.3c
 need only D2.1 to D2.6c, which include D2.6b's empty `SHARED_KINDS` and census, as the slice

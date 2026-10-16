@@ -1249,7 +1249,7 @@ names.
    [<claims>]}' -e volume_revert_sha=<digest8>`, with that role's own `digest8` from the post.
    The playbook takes one `volume_revert_service`. The role leaves each Deployment at zero
    replicas.
-3. **Reset `prod`.** Run `gh workflow run promote.yml --ref master -f
+3. **Reset `prod`.** Run `gh workflow run promote.yml -R DanielH2018/server --ref master -f
    reset_to_last_good=true`. The stateful hold names `prod`'s commit, so the reset's
    in-flight check passes. Then wait until the OCIRepository `homelab` reports
    `last-good`'s commit. The read-only `kubectl -n flux-system get ocirepository homelab -o
