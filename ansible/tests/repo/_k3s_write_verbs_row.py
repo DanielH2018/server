@@ -92,6 +92,32 @@ K3S_WRITE_VERBS = Census(
         _task(
             "- name: Apply with the module\n  kubernetes.core.k8s:\n    state: present\n"
         ),
+        # A global flag whose value is a separate word, before the verb.
+        _task(
+            "- name: Apply slowly\n  ansible.builtin.command:\n"
+            "    cmd: k3s kubectl --request-timeout 30s apply -f /x.yaml\n"
+        ),
+        _task(
+            "- name: Delete as admin\n  ansible.builtin.command:\n"
+            "    cmd: k3s kubectl --as admin delete pod y\n"
+        ),
+        _task(
+            "- name: Reconcile RBAC\n  ansible.builtin.shell: >-\n"
+            "    k3s kubectl auth reconcile -f /x.yaml\n"
+        ),
+        _task(
+            "- name: Approve the CSR\n  ansible.builtin.command:\n"
+            "    cmd: k3s kubectl certificate approve csr-1\n"
+        ),
+        _task(
+            "- name: Apply raw\n  ansible.builtin.raw: k3s kubectl apply -f /x.yaml\n"
+        ),
+        _task("- name: Run a script\n  ansible.builtin.script: apply.sh\n"),
+        _task(
+            "- name: Patch over HTTP\n  ansible.builtin.uri:\n"
+            "    url: https://127.0.0.1:6443/apis/apps/v1/namespaces/x/deployments/y\n"
+            "    method: PATCH\n"
+        ),
     ),
     green=(
         _task(
@@ -108,6 +134,19 @@ K3S_WRITE_VERBS = Census(
         ),
         _task(
             "- name: Read with the module\n  kubernetes.core.k8s_info:\n    kind: Pod\n"
+        ),
+        _task(
+            "- name: Ask\n  ansible.builtin.command:\n"
+            "    cmd: k3s kubectl --as admin auth can-i get pods\n"
+        ),
+        # A POST that is not to the API server, such as a heartbeat push.
+        _task(
+            "- name: Push\n  ansible.builtin.uri:\n"
+            "    url: http://uptime-kuma:3001/api/push/x\n    method: POST\n"
+        ),
+        _task(
+            "- name: Read over HTTP\n  ansible.builtin.uri:\n"
+            "    url: https://127.0.0.1:6443/api/v1/namespaces\n"
         ),
     ),
     # The three writers H1 keeps: storage_smoke.yml's two and agent_verify.yml's one.

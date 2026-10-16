@@ -36,8 +36,17 @@ _WRITE_VERBS = frozenset(
         "uncordon",
     }
 )
-_ROLLOUT_WRITES = frozenset({"pause", "restart", "resume", "undo"})
-# The global flags that take their value as the next word, before the subcommand.
+# The subcommands that write only with these sub-verbs: `rollout status`, `auth can-i` and
+# `certificate --help` read.
+_SUB_VERB_WRITES = {
+    "rollout": frozenset({"pause", "restart", "resume", "undo"}),
+    "auth": frozenset({"reconcile"}),
+    "certificate": frozenset({"approve", "deny"}),
+}
+# The flags that take their value as the next word, so the value is not read as the verb:
+# kubectl's global value flags (`kubectl options`), plus `--field-manager`, the one
+# per-command value flag a write here is likely to put first. A `--flag=value` word needs no
+# entry, and a boolean flag skips as one word.
 _VALUE_FLAGS = frozenset(
     {
         "-n",
@@ -48,6 +57,24 @@ _VALUE_FLAGS = frozenset(
         "--user",
         "-s",
         "--server",
+        "--as",
+        "--as-group",
+        "--as-uid",
+        "--cache-dir",
+        "--certificate-authority",
+        "--client-certificate",
+        "--client-key",
+        "--password",
+        "--profile",
+        "--profile-output",
+        "--request-timeout",
+        "--tls-server-name",
+        "--token",
+        "--username",
+        "-v",
+        "--v",
+        "--vmodule",
+        "--field-manager",
     }
 )
 # A word, with a Jinja expression kept whole: `-n {{ k3s_readonly_sa_namespace }}` is two words.
@@ -71,7 +98,8 @@ def kubectl_writes(command: str) -> list[str]:
     """`kubectl <verb>` for every kubectl call in `command` whose subcommand writes.
 
     The verb is the first word after `kubectl` that is not a global flag or a flag's value,
-    so `wait --for=create` and `rollout status` read, and `set image` writes.
+    so `wait --for=create`, `rollout status` and `auth can-i` read, and `set image`,
+    `--request-timeout 30s apply` and `auth reconcile` write.
     """
     words = _WORD.findall(command)
     found = []
@@ -82,23 +110,37 @@ def kubectl_writes(command: str) -> list[str]:
         while j < len(words) and words[j].startswith("-"):
             j += 2 if words[j] in _VALUE_FLAGS else 1
         verb = words[j] if j < len(words) else ""
-        if verb == "rollout":
+        if verb in _SUB_VERB_WRITES:
             sub = words[j + 1] if j + 1 < len(words) else ""
-            if sub in _ROLLOUT_WRITES:
-                found.append(f"kubectl rollout {sub}")
+            if sub in _SUB_VERB_WRITES[verb]:
+                found.append(f"kubectl {verb} {sub}")
         elif verb in _WRITE_VERBS:
             found.append(f"kubectl {verb}")
     return found
+
+
+# A `uri` call to the API server: its port, or a core or group API path.
+_API_URL = re.compile(r":6443\b|/api/v1/|/apis/")
 
 
 def _writes(task: dict) -> list[str]:
     hits = []
     for key, args in task.items():
         module = key.rsplit(".", 1)[-1]
-        if module in ("command", "shell"):
+        if module in ("command", "shell", "raw"):
             hits += kubectl_writes(_command_text(args))
         elif module in _WRITE_MODULES:
             hits.append(module)
+        elif module == "script":
+            # The script's body is a control-node file this census does not read, so it
+            # counts as a writer until an allow entry or a guard row says otherwise.
+            hits.append("script")
+        elif module == "uri" and isinstance(args, dict):
+            method = str(args.get("method", "GET")).upper()
+            if method not in ("GET", "HEAD") and _API_URL.search(
+                str(args.get("url", ""))
+            ):
+                hits.append(f"uri {method}")
     return hits
 
 

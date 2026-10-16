@@ -198,31 +198,31 @@ def test_a_row_whose_task_name_is_a_template_names_it_as_written(tmp_path):
     )
 
 
-def _without(task: str) -> list:
-    """The real guard with the row for `task` deleted, and its instance if that empties it."""
+def _without(*tasks: str) -> list:
+    """The real guard with the rows for `tasks` deleted.
+
+    An instance left with no row keeps a stand-in row naming an id no inventory here holds, so
+    a selection still runs its read and its match. Without it the instance would vanish, and
+    a pass would prove only that nothing ran.
+    """
     guard = []
     for instance in yaml_fast.safe_load(GUARD.read_text()):
         rows = [
-            r for r in instance["vars"]["k3s_stale_checkout_rows"] if r["task"] != task
-        ]
-        if rows:
-            guard.append({**instance, "vars": {"k3s_stale_checkout_rows": rows}})
+            r
+            for r in instance["vars"]["k3s_stale_checkout_rows"]
+            if r["task"] not in tasks
+        ] or [{"task": "A writer this checkout still holds", "ids": [UNMAPPED]}]
+        guard.append({**instance, "vars": {"k3s_stale_checkout_rows": rows}})
     return guard
 
 
 def test_a_checkout_whose_coredns_writers_are_gone_passes_while_flux_owns_coredns(
     tmp_path,
 ):
-    guard = _without("Run the CoreDNS image k3s bundles")
-    guard = [
-        i
-        for i in guard
-        if not any(
-            r["task"] == "Point cluster DNS at Pi-hole first"
-            for r in i["vars"]["k3s_stale_checkout_rows"]
-        )
-    ]
-    result, _ = _run(
+    guard = _without(
+        "Point cluster DNS at Pi-hole first", "Run the CoreDNS image k3s bundles"
+    )
+    result, calls = _run(
         tmp_path,
         ["inventory"],
         {"coredns": [COREDNS]},
@@ -230,13 +230,14 @@ def test_a_checkout_whose_coredns_writers_are_gone_passes_while_flux_owns_coredn
         guard=guard,
     )
     _passed(result)
+    assert calls == 1, "the coredns instance read the inventory and matched nothing"
 
 
 def test_the_read_only_identity_fails_only_while_its_writer_is_in_the_checkout(
     tmp_path,
 ):
     owned = {"cluster-base": [READONLY_SA]}
-    host_half_only, _ = _run(
+    host_half_only, calls = _run(
         tmp_path / "a",
         ["inventory"],
         owned,
@@ -244,6 +245,7 @@ def test_the_read_only_identity_fails_only_while_its_writer_is_in_the_checkout(
         guard=_without("Apply the read-only cluster identity"),
     )
     _passed(host_half_only)
+    assert calls == 1, "the kubeconfig instance read the inventory and matched nothing"
     restored, _ = _run(
         tmp_path / "b", ["inventory"], owned, args=("--tags", "kubeconfig")
     )
