@@ -84,9 +84,10 @@ trust in Authelia (`roles/setup/k3s`), the Authelia client, and these defaults.
 
 - **The image bundles the Prometheus plugin.** Read `GET /plugins` on the live pod before
   adding one; the first cut of this role installed a second copy of a plugin already shipped.
-- **Extra plugins are one entry each in `headlamp_k8s_plugins`** (name, version, sha256). The
-  `fetch-plugins` init container renders only when the list is non-empty, and a bad digest or
-  an unreachable GitHub fails the pod rather than starting a plugin-less dashboard.
+- **Extra plugins are one entry each in `headlamp_k8s_plugins`** (name, version, sha256,
+  optional `asset_prefix`). Flux is the one entry; it reads through `view`, so its writes fail
+  as Forbidden by design. A bad digest or an unreachable GitHub fails the pod rather than
+  starting a plugin-less dashboard.
 - **The Prometheus charts read `No Data` for CPU, network and filesystem; memory works.** The
   plugin hardcodes `rate(...[1m])` against a 1m cadvisor scrape, so the window holds one
   sample. Charts are off per browser too, in localStorage; no IaC can pre-enable them.

@@ -382,6 +382,20 @@
     },
     {
       "customType": "regex",
+      "description": "Headlamp plugin release pins in k8s/headlamp/defaults/main.yml (`headlamp_k8s_plugins`, one name/version/sha256 entry per plugin, installed by the fetch-plugins init container). Every plugin lives in ONE upstream repo, headlamp-k8s/plugins, whose releases are tagged `<plugin>-<version>` across all plugins, so the datasource is the same repo for each entry and extractVersionTemplate keys on the captured plugin name to select that plugin's tags and drop the prefix; without it every entry would be offered every other plugin's version. The entry's optional `asset_prefix` (flux publishes `headlamp-k8s-flux-<ver>.tar.gz`) does not carry the version, so rewriting `version` alone moves the whole download URL. NO automerge (packageRule below): the sha256 the init container verifies is not published with the release and cannot be computed by a regex manager, so the PR is a SIGNAL the operator finishes with `gh release download` + `sha256sum` (the defaults file's comment has the commands). Same manual-finish class as the SOPS, coredns and jellyfin-ani-sync pins.",
+      "managerFilePatterns": [
+        "/(^|/)ansible/roles/k8s/headlamp/defaults/main\\.yml$/"
+      ],
+      "matchStrings": [
+        "- name: (?<pluginName>[a-z0-9-]+)\\s+version: \"(?<currentValue>\\d+\\.\\d+\\.\\d+)\""
+      ],
+      "depNameTemplate": "headlamp-plugin/{{{pluginName}}}",
+      "packageNameTemplate": "headlamp-k8s/plugins",
+      "datasourceTemplate": "github-releases",
+      "extractVersionTemplate": "^{{{pluginName}}}-(?<version>\\d+\\.\\d+\\.\\d+)$"
+    },
+    {
+      "customType": "regex",
       "description": "Container images in k8s role defaults (ansible/roles/k8s/*/defaults/main.yml) AND in inventory/group_vars/all.yml. The cluster has no compose template to read, so these vars ARE the source of truth for what every pod runs \u2014 and until this manager existed none of them was tracked, so the whole cluster fleet aged with no update signal. group_vars/all.yml was added 2026-08-14: crowdsec_k8s_image had been hoisted out of its role defaults into group_vars, which put it outside this manager's patterns AND outside the coverage test's glob (scripts/tests/test_renovate_managers.py globbed roles/k8s/*/defaults/main.yml only) \u2014 so the WAF core, the one image whose staleness is a security problem, was the single pin neither could see. ansible/roles/setup/*/defaults/main.yml was added 2026-08-27: the same one-directory-short escape, this time for k3s_longhorn_restore_drill_image (busybox:stable) \u2014 an `_image:` pin one directory over from the *_version: pins the `# renovate:` annotation manager above already tracks in this same file. It is a mutable tag, so what Renovate can offer here is a digest bump (as with n8n's `stable` channel tag elsewhere in this file), not a version bump \u2014 that is enough signal to notice an upstream busybox re-push; the drill's own timeout/health assertions are the check that a bump didn't break it. autoReplaceStringTemplate was added 2026-09-24 (#2392), and it is what lets a TAG-ONLY pin gain an @sha256 suffix. With no template, Renovate rewrites a matched span by substituting currentValue -> newValue and currentDigest -> newDigest inside the text it matched (lib/workers/repository/update/branch/auto-replace.ts), so a pin carrying no digest has nothing to substitute: `pinDigests: true`, on since 5ba111de8 for #2146, refreshed every pin that already had a digest and added one to none of the rest, which is why PRs #2336-#2339 merged as one-line tag-only diffs. The template MUST keep the literal `_image: ` prefix. The matchString starts at `_image:` and Renovate replaces the WHOLE matched span, so a template without the prefix rewrites `bazarr_k8s_image: lscr.io/...` into `bazarr_k8slscr.io/...` and corrupts every pin this manager touches. It emits ONE space and NO quotes, matching what every pin here carries; the only quoted `_image:` lines in these files are the built-image ones (`\"{{ k8s_registry_pull_host }}/...\"`), and they match this manager not at all, because depName is `[^:\\s\"'@]+` and fails on the space after `{{`. scripts/tests/test_renovate_managers.py::test_the_k8s_image_template_round_trips_every_live_pin asserts the template reproduces every live matched span byte for byte, so a quoted or double-spaced pin added later fails at commit time rather than as a corrupted Renovate PR.",
       "managerFilePatterns": [
         "/^ansible/roles/k8s/[^/]+/defaults/main\\.yml$/",
@@ -1036,6 +1050,17 @@
       ],
       "updateNotScheduled": false,
       "groupSingleUpdates": true,
+      "automerge": false
+    },
+    {
+      "description": "Headlamp plugins (#5221): NO automerge, positioned after the k8s-plane rules for the same reason as jellyfin-ani-sync above, and before the pinDigests rule, which must stay last. The pin lives under ansible/roles/k8s/, so the custom.regex minor/patch rule would otherwise automerge it into the `k8s image headlamp` group. The paired sha256 in headlamp_k8s_plugins is uncomputable here; the fetch-plugins init container refuses the tarball until the operator records the new digest, so an automerged bump would deploy a Headlamp pod that never starts.",
+      "matchDatasources": [
+        "github-releases"
+      ],
+      "matchPackageNames": [
+        "headlamp-k8s/plugins"
+      ],
+      "groupName": "headlamp plugins (manual — record the new sha256)",
       "automerge": false
     },
     {
