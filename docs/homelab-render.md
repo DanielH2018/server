@@ -134,11 +134,11 @@ byte.
   the `cluster-vars` kind, so the render refuses rather than publish without it.
 - A render that writes the bundle cannot read a SOPS manifest that a published tag's role
   lists.
-- A tag to render is named `homelab`, the root Kustomization's name, or after a member of
-  `SHARED_KINDS` (C3 *Reserved names*). An all-tag render refuses it too.
-- A placeholder render with `--role` names a flux-owned tag that defers files. No
-  Kustomization applies `<tag>-deferred` until D4.2 adds it. A tag Flux does not own renders
-  as before.
+- A tag to render is named `homelab`, the root Kustomization's name, after a member of
+  `SHARED_KINDS`, or ends in `-deferred` (C3 *Reserved names*). An all-tag render refuses it
+  too.
+- The `dependsOn` edges a bundle render generates form a cycle
+  (`docs/flux-deploy-plane.md`, *Ordering: `dependsOn`*).
 
 It exits 1 when a template fails to render, and it writes nothing then either. It also exits
 1 when a SOPS manifest lacks `kustomize.toolkit.fluxcd.io/substitute: disabled`, and when a

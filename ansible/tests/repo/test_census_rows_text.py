@@ -426,6 +426,33 @@ ROWS = (
         min_matches=len(PRIMED_SURFACES),
         must_find=PRIMED_SURFACES,
     ),
+    Census(
+        name="no-template-hand-writes-depends-on",
+        reason=(
+            "The renderer generates every Flux `dependsOn` from toposort.py's map, so the play "
+            "and Flux order roles by one source (D4.2). A hand-written edge would drift from "
+            "it. Templates are the only place one takes effect outside the renderer: no k8s "
+            "role applies a static manifest from `files/`. Left out: the flux role's vendored "
+            "`gotk-components.yaml`, whose CRD schema names the field, and `docs/`'s examples."
+        ),
+        files=lambda: [
+            rel
+            for rel in tracked("ansible/roles/*", "ansible/templates/*")
+            if rel.startswith("ansible/templates/")
+            or rel.split("/")[4:5] == ["templates"]
+        ],
+        offence=lines_matching(re.compile(r"\bdependsOn\s*:")),
+        red=(Subject("t.yaml.j2", "spec:\n  dependsOn:\n    - name: traefik\n"),),
+        green=(Subject("t.yaml.j2", "spec:\n  path: ./cluster/x\n"),),
+        min_matches=300,
+        must_find=frozenset(
+            {
+                "ansible/templates/networkpolicy.yml.j2",
+                "ansible/roles/k8s/netpol-baseline/templates/networkpolicy.yaml.j2",
+                "ansible/roles/k8s/flux/templates/sync.yaml.j2",
+            }
+        ),
+    ),
 )
 
 _IDS = [row.name for row in ROWS]
