@@ -274,14 +274,12 @@ def test_a_path_that_counts_for_no_name_lands_under_unclassified():
 
 
 def test_a_shared_kinds_file_moves_the_footprint_of_each_tag_its_rule_lists():
-    kinds = {
-        "kinds": {"cluster-vars"},
-        "rules": {"cluster-vars": lambda f: f.substituting},
-    }
+    kinds = {"cluster-vars"}
+    rules = {"cluster-vars": lambda f: f.substituting}
     edited = {**BASE, "cluster/cluster-vars/secret.yaml": b"v2"}
     base = {**BASE, "cluster/cluster-vars/secret.yaml": b"v1"}
-    old = digests(base, TAGS, substituting={"bento-pdf"}, **kinds)
-    new = digests(edited, TAGS, substituting={"bento-pdf"}, **kinds)
+    old = digests(base, TAGS, substituting={"bento-pdf"}, kinds=kinds, rules=rules)
+    new = digests(edited, TAGS, substituting={"bento-pdf"}, kinds=kinds, rules=rules)
     assert old["bento-pdf"]["footprint"] != new["bento-pdf"]["footprint"]
     assert old["bento-pdf"]["own"] == new["bento-pdf"]["own"]
     assert old["sonarr"] == new["sonarr"]

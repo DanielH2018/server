@@ -845,6 +845,13 @@ shared kind to two SHA-256 digests:
   each per-tag suffix stripped, its `flux/<tag>.yaml`, and the files of each shared kind
   whose rule lists the tag.
 
+A published tag's object also holds two fields (D5.1a2):
+
+- `claims` lists the snapshot claims the tag's role declares in
+  `k8s_autodeploy_snapshot_pvcs`, sorted. The publish census's `-snapshot` rule reads the
+  same function, `scripts/lib/k8s_roles.py:snapshot_claims`.
+- `suspended` is true when the tag's rendered Kustomization sets `spec.suspend: true`.
+
 `flux/kustomization.yaml`, `digests.json` itself and `images/` count for no name. Any other
 path that no rule claims lands under `_unclassified`, with the same two digests and a `paths`
 list. `land.sh`'s wait reads `footprint` through `scripts/deploy_tools/changed_set.py`, and a
