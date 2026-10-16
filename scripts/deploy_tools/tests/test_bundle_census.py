@@ -6,6 +6,8 @@ Each fixture carries every shared kind the renderer writes, its `cluster-vars` c
 Run: uv run pytest scripts/deploy_tools/tests/test_bundle_census.py
 """
 
+import pytest
+
 import bundle_census
 import bundle_gates
 import promote
@@ -26,18 +28,19 @@ DEPLOYMENT = "kind: Deployment\nmetadata:\n  name: {name}\n"
 DOTENV = "peanut_password=ENC[AES256_GCM,data:eA==,iv:aQ==,tag:dA==,type:str]\n"
 
 
-def _bundle(tmp_path, tags, deferring=()):
+def _bundle(tmp_path, tags, deferring=(), kinds=()):
     """Write the bundle the renderer builds publishing `tags`, and return its root.
 
     Each tag in `deferring` also renders `cluster/<tag>-deferred/`, so the renderer writes
-    `<tag>-deferred` as the second document of its file.
+    `<tag>-deferred` as the second document of its file. Each name in `kinds`, such as
+    `<tag>-snapshot`, renders its directory and its document the same way.
     """
     directories = {
         name: {
             "deployment.yaml": DEPLOYMENT.format(name=name),
             "kustomization.yaml": kustomization_text(["deployment.yaml"]),
         }
-        for name in [*tags, *(f"{tag}-deferred" for tag in deferring)]
+        for name in [*tags, *(f"{tag}-deferred" for tag in deferring), *kinds]
     }
     files = bundle_files(directories, {}, tags, TIMEOUT, DOTENV)
     for tag, held in directories.items():
@@ -216,8 +219,8 @@ def test_a_deferring_tag_with_no_deferred_directory_is_flagged(tmp_path):
     out = _bundle(tmp_path, ["pihole"])
     found = bundle_census.census(out, ["pihole"], deferring=["pihole"])
     assert (
-        "cluster/pihole-deferred/ is missing: pihole defers files and renders no "
-        "deferred directory"
+        "cluster/pihole-deferred/ is missing: pihole's inputs call for pihole-deferred and "
+        "it renders no such directory"
     ) in found
 
 
@@ -256,4 +259,75 @@ def test_a_deferred_files_value_that_is_not_a_literal_list_is_a_problem(tmp_path
     assert problems == [
         "could not tell whether x defers files: its manifests_deferred_files is "
         "'{{ files }}', not a literal list"
+    ]
+
+
+# -- the per-tag kinds and the reserved names (D5.1a1) ----------------------------------------
+# The red fixtures of an unknown extra document and an unknown extra file are
+# test_a_third_document_in_a_deferring_tags_file_is_flagged and
+# test_an_extra_file_in_flux_is_flagged above.
+
+
+def test_a_snapshot_tags_file_holding_its_snapshot_document_is_clean(tmp_path):
+    out = _bundle(tmp_path, ["speedtest"], kinds=["speedtest-snapshot"])
+    assert bundle_census.census(out, ["speedtest"], snapshotting=["speedtest"]) == []
+
+
+def test_a_snapshot_document_for_a_tag_that_declares_no_claims_is_flagged(tmp_path):
+    """A renderer patched to emit `-snapshot` for a role whose inputs call for none."""
+    out = _bundle(tmp_path, ["bento-pdf"], kinds=["bento-pdf-snapshot"])
+    found = bundle_census.census(out, ["bento-pdf"])
+    assert len(found) == 1
+    assert "not exactly the Kustomization bento-pdf" in found[0]
+
+
+def test_every_kind_in_suffix_order_is_clean(tmp_path):
+    kinds = ["pihole-snapshot", "pihole-verify"]
+    out = _bundle(tmp_path, ["pihole"], deferring=["pihole"], kinds=kinds)
+    assert (
+        bundle_census.census(
+            out,
+            ["pihole"],
+            deferring=["pihole"],
+            snapshotting=["pihole"],
+            verifying=["pihole"],
+        )
+        == []
+    )
+
+
+def test_a_verifying_tag_with_no_verify_directory_is_flagged(tmp_path):
+    out = _bundle(tmp_path, ["bento-pdf"])
+    found = bundle_census.census(out, ["bento-pdf"], verifying=["bento-pdf"])
+    assert (
+        "cluster/bento-pdf-verify/ is missing: bento-pdf's inputs call for "
+        "bento-pdf-verify and it renders no such directory"
+    ) in found
+
+
+@pytest.mark.parametrize("tag", ["soak", "homelab-namespace", "x-verify"])
+def test_a_published_tag_taking_a_reserved_name_is_flagged(tmp_path, tag):
+    """A tag named `soak` fails the census itself, not only the renderer's refusal."""
+    out = _bundle(tmp_path, [tag])
+    assert bundle_census.census(out, [tag])[0] == (
+        f"{tag} is published under a name the bundle reserves: the root's, a shared "
+        "kind's, a RESERVED_NAMES member's, or one ending in a per-tag kind's suffix"
+    )
+
+
+def test_the_snapshot_tags_are_the_roles_that_declare_snapshot_claims():
+    """Named members: speedtest declares `speedtest-config`, and bento-pdf declares none."""
+    found, problems = bundle_census.snapshot_tags(["bento-pdf", "speedtest"])
+    assert (found, problems) == ({"speedtest"}, [])
+
+
+def test_snapshot_claims_that_are_not_a_literal_list_are_a_problem(tmp_path):
+    defaults = tmp_path / "x" / "defaults"
+    defaults.mkdir(parents=True)
+    (defaults / "main.yml").write_text('k8s_autodeploy_snapshot_pvcs: "{{ claims }}"\n')
+    found, problems = bundle_census.snapshot_tags(["x"], tmp_path)
+    assert found == frozenset()
+    assert problems == [
+        "could not tell whether x snapshots claims: its k8s_autodeploy_snapshot_pvcs is "
+        "'{{ claims }}', not a literal list"
     ]

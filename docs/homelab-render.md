@@ -113,7 +113,8 @@ also gets a byte copy of each of its SOPS manifests from `ansible/vars/cluster-m
 in `DIR/cluster/<tag>/`, and `decryption` on its Kustomization.
 
 Every render, in either mode, stamps `checksum/restart` on the pod template of each restart
-target of a flux-owned tag that names a ConfigMap or Secret. Both modes hash the
+target of a flux-owned tag that names a ConfigMap or Secret. Every `manifests_self_rollouts`
+entry is a restart target. Both modes hash the
 placeholder-form documents and the digests in `ansible/vars/cluster-vars.source`, so they
 stamp the same value. `docs/flux-deploy-plane.md`'s *Restart triggers* has the rule.
 
