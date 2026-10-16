@@ -125,6 +125,17 @@ def test_a_deferred_document_with_post_build_beside_the_cluster_vars_kind_is_cle
     assert _gates(tmp_path, inputs, files, kinds={"cluster-vars"}) == []
 
 
+def test_a_deferred_document_substituting_from_an_ungenerated_secret_is_flagged(
+    tmp_path, inputs
+):
+    """The red half of the clean case above: the same bundle without the cluster-vars kind,
+    so only the deferred document's `substituteFrom` can fail it."""
+    assert _gates(tmp_path, inputs, _deferring(substitutes={"bento-pdf-deferred"})) == [
+        "source: the Kustomization bento-pdf-deferred in flux/bento-pdf.yaml substitutes "
+        "from Secret/homelab-cluster-vars, which no secretGenerator in the bundle makes"
+    ]
+
+
 def test_a_deferred_document_without_post_build_over_a_secret_key_is_flagged(
     tmp_path, inputs
 ):
