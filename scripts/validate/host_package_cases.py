@@ -464,7 +464,9 @@ class Cases:
                 f"/srv/debs/{self.debs[label].name}"
                 for label in ("updater-head", "pi-head")
             )
-            c.ok(f"dpkg -i {debs}")
+            # apt-get, as bootstrap-host.sh installs on a host. dpkg -i leaves a package whose
+            # Depends is not installed unconfigured, so H3.7's `Depends: tree` would fail here.
+            c.ok(f"DEBIAN_FRONTEND=noninteractive apt-get install -y {debs}")
             # Joins the start the postinst queued, and returns once that reconcile ends.
             c.ok("systemctl start homelab-reconcile.service")
             self.expect_reconciled(c, "updater-head", "pi-head")
