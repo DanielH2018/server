@@ -97,7 +97,7 @@
 # is always a widening or a breakage, never the narrower fence it is in homelab. Most workloads
 # here have no policy of their own, so exempting one leaves it fenced by nothing. prometheus,
 # loki and alertmanager do have one each (`prometheus-callers`, `loki-callers`,
-# `alertmanager-callers`), but those are additive grants to named homelab callers, not tighter
+# `alertmanager-callers`), but those are additive grants to named cross-namespace callers, not tighter
 # replacements for the baseline. Exempting one of the three drops the baseline's traefik,
 # intra-namespace and node-CIDR peers from it, and each loses an in-namespace caller:
 #   - prometheus: Grafana's queries, plus otelq and Headlamp's proxy over the node-CIDR peer.

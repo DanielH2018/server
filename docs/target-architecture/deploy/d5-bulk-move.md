@@ -1562,7 +1562,12 @@ promotion, an automerged one included, without having to page.
   `ansible/roles/k8s/netpol-baseline/templates/networkpolicy-prometheus.yaml.j2`, which
   netpol-baseline's tasks apply. The Job is a cross-namespace caller from `flux-system`, so
   that template gains a peer for it in D5.3a, which lands and is checked before D5.3b2 wires
-  the Job.
+  the Job. The peer is one `from` item that ANDs the `flux-system` namespace with the pod
+  label `app: soak`, on TCP 9090. `job-name` cannot be the selector, because the Job's name
+  moves with R's SHA, and the renderer fixes no other pod-label convention. So D5.3b2's Job
+  template sets `app: soak` on the Job's pod template (`spec.template.metadata.labels`). On
+  the Job's own `metadata` alone the label matches nothing, because a NetworkPolicy reads pod
+  labels only, and the soak's every query is refused.
 - **The deploy annotation (D5.3b3).** After D6.1, `deploy_lib/playbook.py:annotate` is the
   only writer of Grafana's `deploy-annotation` line, and from the flux PR on `deploy.sh`
   deploys nothing in the cluster. `promote` cannot take over, because it runs on GitHub's
