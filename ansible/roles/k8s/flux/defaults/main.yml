@@ -49,6 +49,16 @@ flux_volume_suffixes:
   tmp: tmp
   temp: tmp
 
+# The flags the flux_components filter sets on a controller's container, replacing upstream's
+# value for the same flag. kustomize-controller reconciles `--concurrent` Kustomizations at once,
+# and one that waits on health holds its worker until the check settles. Equal to the deploy
+# play's rollout batch width, it keeps the rollout concurrency the play has (D5.1c).
+# scripts/deploy_tools/chained_timeout.py's CONCURRENT is the same figure, and
+# ansible/tests/k8s/test_flux_role.py fails a drift between the three.
+flux_controller_args:
+  kustomize-controller:
+    - "--concurrent={{ k8s_rollout_batch_width }}"
+
 # The artifact the `promote` workflow publishes, and the tag it moves to the newest published
 # master commit. The OCIRepository `homelab` follows that tag with no pull secret, so the
 # package must stay public (docs/flux-deploy-plane.md).
