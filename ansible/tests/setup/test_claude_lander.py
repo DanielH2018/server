@@ -388,3 +388,14 @@ def test_the_agents_claude_md_names_the_approval_list_the_lander_reads() -> None
     assert (
         "land.sh --pr <n> --arm-merge --await-merge --detach && cc-wait land <n>" in doc
     )
+
+
+def test_land_sh_ends_its_landing_before_systemd_kills_the_unit() -> None:
+    """The flock wait comes out of TimeoutStartSec before land.sh starts its own clock (#5199)."""
+    rendered = unit()
+    (timeout,) = directive(rendered, "TimeoutStartSec")
+    hours = re.fullmatch(r"(\d+)h", timeout)
+    assert hours, f"expected a span in hours, got {timeout!r}"
+    (flock_wait,) = re.findall(r"flock -w (\d+) ", directive(rendered, "ExecStart")[0])
+    deadline = int(environment(rendered)[options.DEADLINE_ENV])
+    assert 0 < deadline <= int(hours.group(1)) * 3600 - int(flock_wait)

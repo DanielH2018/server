@@ -13,7 +13,7 @@ import pytest
 from dataclasses import replace
 
 from _land_fakes import MERGE_SHA, Fakes, receipt
-from deploy_tools.land_lib import deploy, land_flux, merge
+from deploy_tools.land_lib import deploy, land_flux, merge, promotion
 from deploy_tools.land_lib.outcome import PROMOTE_TIMEOUT_NOTE, Outcome
 from deploy_tools.promote_lib.wait import WaitResult
 
@@ -245,7 +245,7 @@ def _cluster_file_pr(*paths: str, **kwargs: object) -> Fakes:
 
 
 def test_a_pr_changing_only_the_cluster_source_waits_on_cluster_vars(land_run):
-    rc, out, _, calls, _ = land_run(
+    rc, out, _, calls, logline = land_run(
         [], _cluster_file_pr("ansible/vars/cluster-vars.source")
     )
     assert rc == 0 and "VERDICT: settled" in out
@@ -256,6 +256,8 @@ def test_a_pr_changing_only_the_cluster_source_waits_on_cluster_vars(land_run):
     assert "deploy" not in _names(calls)
     # `cluster-vars` is no deploy tag, so the health gate is never asked about it.
     assert [c[1] for c in calls if c[0] == "gate"] == [([],)]
+    # The ledger still names what the landing waited on (#5175).
+    assert " tags=cluster-vars " in logline
 
 
 def test_a_rotation_pr_waits_on_cluster_vars_before_naming_the_ansible_half(land_run):
@@ -428,3 +430,16 @@ def test_a_forbidden_kustomization_read_is_unreadable():
     run = _kubectl_answering(1, stderr)
     with pytest.raises(land_flux.KustomizationUnreadable, match="Forbidden"):
         land_flux.kustomization_exists("bento-pdf", run)
+
+
+def test_a_landing_deadline_caps_the_promotion_wait(land_run, monkeypatch):
+    """`LAND_DEADLINE` less what the landing spent and the reserve for the gate (#5199)."""
+    monkeypatch.setenv("LAND_DEADLINE", "5400")
+    _, _, _, calls, _ = land_run([], _fakes())
+    (cap,) = [c[1][4] for c in calls if c[0] == "land_wait"]
+    assert cap is not None and 0 < cap <= 5400 - promotion.DEADLINE_RESERVE_S
+
+
+def test_without_a_landing_deadline_the_promotion_wait_is_uncapped(land_run):
+    _, _, _, calls, _ = land_run([], _fakes())
+    assert [c[1][4] for c in calls if c[0] == "land_wait"] == [None]

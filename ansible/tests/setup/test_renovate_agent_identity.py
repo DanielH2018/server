@@ -311,3 +311,15 @@ def test_the_project_guard_lets_the_session_land_and_read_the_verdict() -> None:
 
 def test_the_project_guard_still_denies_what_it_should() -> None:
     assert guard_decision("gh issue create --title x --body y") == "deny"
+
+
+def test_land_sh_ends_its_landing_before_the_lander_script_kills_it() -> None:
+    """land_renovate_pr.py's LAND_TIMEOUT_S counts from land.sh's start, as LAND_DEADLINE does."""
+    script = (ROLE / "files" / "land_renovate_pr.py").read_text()
+    (timeout,) = re.findall(r"^LAND_TIMEOUT_S = (\d+)$", script, re.MULTILINE)
+    deadlines = [
+        e.split("=", 1)[1]
+        for e in directive(render(LANDER), "Environment")
+        if e.startswith("LAND_DEADLINE=")
+    ]
+    assert deadlines and 0 < int(deadlines[-1]) <= int(timeout)

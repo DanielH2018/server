@@ -1,8 +1,8 @@
 """`promote.py land-wait`: wait until a promotion covers a merge commit, or a hold, or a timeout.
 
-The plan is docs/target-architecture/deploy/d2-first-leaf.md, *How `land.sh` waits*. `Sim`
-answers every read `land_wait` makes and scripts what the cluster shows poll by poll. The
-`digests.json` fixtures are in contract C1's format.
+The plan is docs/target-architecture/deploy/d2-first-leaf.md, *How `land.sh` waits*. `Sim`,
+in `_land_wait_fakes.py`, answers every read `land_wait` makes. The deadline is tested in
+test_promote_land_wait_deadline.py.
 
 Run: uv run pytest scripts/deploy_tools/tests/test_promote_land_wait.py
 """
@@ -10,129 +10,15 @@ Run: uv run pytest scripts/deploy_tools/tests/test_promote_land_wait.py
 import io
 import json
 import tarfile
-from dataclasses import dataclass, field, replace
+from dataclasses import replace
 
 import pytest
 
 import forge
-import chained_timeout
-from deploy_tools.promote_lib import verify_promotion as vp
 from deploy_tools.promote_lib import wait as promote_wait
-from lib import yaml_fast
-from lib.repo_paths import REPO
-from renderer.renderer_lib.bundle import bundle_files as render_bundle
 from flux_host import FluxHost
+from _land_wait_fakes import D, M, P, Sim, at, digests, kustomization
 from _promote_fakes import FakeTransport, digest_of
-
-M = "a" * 40  # the merge commit
-P = "9" * 40  # M's first parent, published, which `prod` named before
-D = "d" * 40  # a descendant of M, which a later promotion applied
-# What each commit descends from, itself included.
-ANCESTRY = {M: {M}, P: {P}, D: {D, M, P}}
-
-
-def kustomization(
-    name: str,
-    origin: str | None = None,
-    ready: bool = True,
-    applied: str | None = None,
-    depends_on: tuple[str, ...] = (),
-) -> dict:
-    """One Kustomization as `kubectl get -o json` lists it."""
-    status: dict = {
-        "conditions": [{"type": "Ready", "status": "True" if ready else "False"}]
-    }
-    if origin is not None:
-        status["lastAppliedOriginRevision"] = origin
-    if applied is not None:
-        status["lastAppliedRevision"] = applied
-    return {
-        "metadata": {"name": name, "namespace": "flux-system"},
-        "spec": {"dependsOn": [{"name": d} for d in depends_on]},
-        "status": status,
-    }
-
-
-def at(commit: str, *names: str, ready: bool = True) -> list[dict]:
-    """`homelab` and `names`, each applied at `commit`."""
-    return [
-        kustomization(n, f"master@sha1:{commit}", ready) for n in ("homelab", *names)
-    ]
-
-
-def digests(**footprints: str) -> dict:
-    return {
-        name.replace("_", "-"): {"own": f"own-{v}", "footprint": v}
-        for name, v in footprints.items()
-    }
-
-
-@dataclass
-class Sim:
-    """The cluster, the registry and DEPLOY_HOLD, poll by poll.
-
-    Attributes:
-        polls: what each poll's Kustomization read answers, the last one repeating. An
-            exception is raised in its place.
-        holds: what each poll's DEPLOY_HOLD read answers, the last one repeating.
-        published: each commit's parsed `digests.json`, by commit. A commit absent here has no
-            `sha-<commit>` tag; an exception is raised in place of a file.
-        published_from_poll: the poll from which `published` answers for M; None before it.
-        unfetched: the commits whose ancestry read answers None, as an unfetched R does.
-    """
-
-    polls: list = field(default_factory=lambda: [at(M)])
-    holds: list = field(default_factory=lambda: ["none"])
-    published: dict = field(default_factory=dict)
-    published_from_poll: int = 0
-    unfetched: set = field(default_factory=set)
-    annotations: list = field(default_factory=list)
-    sleeps: int = 0
-    poll: int = 0
-
-    def _kustomizations(self):
-        answer = self.polls[min(self.poll, len(self.polls) - 1)]
-        self.poll += 1
-        if isinstance(answer, Exception):
-            raise answer
-        return answer
-
-    def _hold(self):
-        answer = self.holds[min(self.poll - 1, len(self.holds) - 1)]
-        if isinstance(answer, Exception):
-            raise answer
-        return answer
-
-    def _is_ancestor(self, ancestor, descendant):
-        if descendant in self.unfetched:
-            return None
-        return ancestor in ANCESTRY.get(descendant, {descendant})
-
-    def _digests(self, sha):
-        if sha == M and self.poll - 1 < self.published_from_poll:
-            return None
-        answer = self.published.get(sha)
-        if isinstance(answer, Exception):
-            raise answer
-        return answer
-
-    def _sleep(self, _seconds):
-        self.sleeps += 1
-
-    def reads(self) -> promote_wait.WaitReads:
-        return promote_wait.WaitReads(
-            hold=self._hold,
-            kustomizations=self._kustomizations,
-            is_ancestor=self._is_ancestor,
-            digests=self._digests,
-            published_ancestor=lambda sha: P if P in self.published else None,
-            annotate=self.annotations.append,
-            sleep=self._sleep,
-            clock=lambda: float(self.sleeps * promote_wait.POLL_S),
-        )
-
-    def wait(self, services=("bento-pdf",)) -> promote_wait.WaitResult:
-        return promote_wait.land_wait(self.reads(), M, list(services))
 
 
 # -- the three outcomes ----------------------------------------------------------------------
@@ -171,73 +57,6 @@ def test_no_promotion_within_the_timeout_gives_up():
     assert (result.verdict, result.cause) == ("gave-up", "promote-timeout")
     assert sim.sleeps == promote_wait.LAND_WAIT_TIMEOUT_S // promote_wait.POLL_S
     assert "publish" in result.detail
-
-
-# -- the timeout against a substituting bundle (#5155) --------------------------------------
-
-
-def _substituting_promote_timeout() -> int:
-    """`verify`'s wait on the bundle the renderer writes for `peanut` substituting at 10m.
-
-    Every Kustomization in it counts as changed, as a rotation of a key peanut reads changes
-    `cluster-vars` and peanut together. Its path runs through the renderer's `cluster-vars`
-    edge, so it is the longest wait any one-tag bundle makes today.
-    """
-    directories = {"peanut": {"kustomization.yaml": "resources: []\n"}}
-    files = render_bundle(
-        directories,
-        {"peanut": frozenset({"peanut_password"})},
-        ["peanut"],
-        "10m",
-        "x=ENC[y]\n",
-    )
-    return chained_timeout.promote_timeout(
-        vp.flux_kustomizations({p: t.encode() for p, t in files.items()})
-    )
-
-
-def _publish_pipeline_s() -> int:
-    """The longest the `promote` workflow's `render` and `publish` jobs may run, in seconds.
-
-    A promotion of M cannot start before both finish, so `land-wait` needs this much over
-    `verify`'s wait. The `promote` job's own budget is left out: most of it is `decide`'s wait
-    on a verification already in flight.
-    """
-    jobs = yaml_fast.safe_load(
-        (REPO / ".github/workflows/promote.yml").read_text(encoding="utf-8")
-    )["jobs"]
-    return sum(int(jobs[job]["timeout-minutes"]) * 60 for job in ("render", "publish"))
-
-
-def test_the_land_wait_timeout_covers_a_substituting_promotion_plus_the_publish_pipeline():
-    """The Verify-by of #5155, against the default `land.sh` reaches through `run_land_wait`."""
-    margin = promote_wait.LAND_WAIT_TIMEOUT_S - _substituting_promote_timeout()
-    assert margin >= _publish_pipeline_s(), (
-        f"land-wait gives up {margin}s after verify would, inside the "
-        f"{_publish_pipeline_s()}s render and publish may take"
-    )
-
-
-def test_a_substituting_promotion_verify_would_pass_settles_rather_than_gives_up():
-    """M is promoted after the publish pipeline, and `verify`'s full wait, have both run out.
-
-    `land_wait` runs at its default timeout, as `land.sh` calls it, and must not report
-    `gave-up` on a promotion that `verify` still counts as on time.
-    """
-    covered_at = _substituting_promote_timeout() + _publish_pipeline_s()
-    polls_before = -(-covered_at // promote_wait.POLL_S)  # the first poll at or past it
-    sim = Sim(polls=[at(P)] * polls_before + [at(M)])
-    result = sim.wait()
-    assert (result.verdict, result.revision) == ("settled", M), result.detail
-
-
-def test_the_promote_timeout_constant_is_verifys_substituting_wait():
-    """`wait.py` cannot import `promote_timeout`, so its constant restates the figure.
-
-    A change to the renderer's default timeout or to the `cluster-vars` hop moves `verify`'s
-    wait, and this fails until the constant moves with it.
-    """
-    assert promote_wait.PROMOTE_TIMEOUT_S == _substituting_promote_timeout()
 
 
 def test_an_unreadable_hold_keeps_the_wait_going():

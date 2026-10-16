@@ -460,7 +460,9 @@ def deploy_phase(ln: Landing) -> None:
     cluster_vars = promotion.waits_on_cluster_vars(ln)
     if not ln.resolved_tags and not ln.owned_tags and not cluster_vars:
         no_tag_outcome(ln)
-    ln.ledger.tags_label = ",".join(ln.resolved_tags + list(ln.owned_tags))
+    ln.ledger.tags_label = ",".join(
+        ln.resolved_tags + list(ln.owned_tags) + promotion.forced_names(ln)
+    )
     if ln.resolved_tags:
         _deploy_resolved(ln)
     elif not ln.tick_is_the_apply:
@@ -469,7 +471,8 @@ def deploy_phase(ln: Landing) -> None:
         ln.deployed_at = ln.merge_sha
         tick.kick_tick(ln)
     # Stamped before the promotion wait: the re-gate reads a later deploy of these tags as one
-    # that started after deploy.sh returned, and the wait can last 67 minutes.
+    # that started after deploy.sh returned, and the wait can last 67 minutes, or longer while
+    # an earlier commit's verification is in flight (`wait.py:IN_FLIGHT_WAIT_S`).
     ln.deploy_ended_at = t.wall_clock()
     if ln.owned_tags or cluster_vars:
         promotion.wait_on_promotion(ln)
