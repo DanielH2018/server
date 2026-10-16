@@ -10,6 +10,8 @@ Run: uv run pytest scripts/deploy_tools/tests/test_promote_land_wait_deadline.py
 import pytest
 
 import forge
+from flux_host import FluxHost
+from lib.repo_paths import REPO
 from deploy_tools.promote_lib import verify_promotion as vp
 from deploy_tools.promote_lib import wait as promote_wait
 from _land_wait_fakes import (
@@ -144,3 +146,9 @@ def test_prod_without_a_revision_is_a_read_error():
     transport = _prod_transport("t", "g", None)
     with pytest.raises(promote_wait.WaitReadError, match="revision"):
         promote_wait._in_flight(_forge(transport))
+
+
+def test_the_live_reads_wire_the_in_flight_read_to_prod():
+    transport = _prod_transport("t", "g", f"master@sha1:{P}")
+    reads = promote_wait.live_wait_reads(_forge(transport), REPO, host=FluxHost())
+    assert reads.in_flight() == P
