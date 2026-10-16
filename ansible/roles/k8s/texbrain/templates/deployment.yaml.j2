@@ -27,6 +27,11 @@ spec:
           image: {{ texbrain_k8s_image }}
           ports:
             - containerPort: {{ container_item.port }}
+          # D4.7's drill marker. It must never reach a texbrain ReplicaSet, because texbrain
+          # waits on bento-pdf, which the same drill breaks. D4.8 reverts it.
+          env:
+            - name: FLUX_DRILL
+              value: "d4"
 {{ hardened_security_context(read_only=true, non_root=true) }}
           volumeMounts:
             # The three paths nginx-unprivileged writes. Everything served is baked into
