@@ -31,6 +31,23 @@ forward-only pin, so the gate rule asked for no `homelab/upgrade-gates` status. 
 `held` tag it adds since [#5281](https://github.com/DanielH2018/server/pull/5281), and the
 excused-failures row that gated H1.1i moved to C2's applied list in
 [#5287](https://github.com/DanielH2018/server/pull/5287).
+PR H1.1i, a dependent that was already failing: [#5300](https://github.com/DanielH2018/server/pull/5300).
+It merged at `a1e7699c0`. The first promote run on its code, for `b0f528953`, read `verify`
+`verdict=good failed=` and moved `last-good`. H1's fixed four, H1.1f, H1.1g, H1.1b and H1.1i, are
+all on master.
+PR H1.1d, health for vendored targets: [#5295](https://github.com/DanielH2018/server/pull/5295). It
+merged at `6595ea687`. `probe.py health` resolves vendored workloads, and `NEVER_SHED`, empty until
+H1.3, keeps plumbing out of the shed set. Its `filter_plugins` edit made the tick run a broad
+apply, which an outbound outage failed on 2026-10-16 around 18:46 UTC. The operator applied the
+held plane and the owed `k3s` bring-up (`ok=24 changed=0`), then cleared the hold
+([#5302](https://github.com/DanielH2018/server/issues/5302)).
+PR H1.1c, the per-tag object census: [#5307](https://github.com/DanielH2018/server/pull/5307). It
+merged at `a29cf92c7` and deployed nothing. Publish fails when a plumbing tag's render drops a
+named member of *Plumbing tags are never pruned*.
+PR H1.1a, renderer support: [#5312](https://github.com/DanielH2018/server/pull/5312). It merged at
+`c5db379f7` and deployed nothing. The renderer publishes vendored files, Kustomize `patches:`,
+`prune: false` and a per-role Kustomization `timeout`, and the renderer suite reads 636 passed on
+master.
 
 Depends on: D2, D4; D3 for H1.7b only; R4 for H1.9 only
 Unblocks: H2, which needs H1.1a to H1.8 and never H1.9

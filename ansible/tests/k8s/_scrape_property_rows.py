@@ -1,4 +1,4 @@
-"""Rendered-manifest property rows about how Prometheus and kubelet poll an exporter.
+"""Rendered-manifest property rows about how Prometheus and kubelet poll an exporter, and who reaches Prometheus.
 
 `test_rendered_properties.py` runs these rows beside its own. A row lives here only to keep that
 file under the test-module length cap; the rules for what makes a row are in its docstring.
@@ -130,6 +130,37 @@ def _job(target: str, timeout: str | None = None) -> dict:
     return job
 
 
+_SOAK_PEER = {
+    "namespaceSelector": {
+        "matchLabels": {"kubernetes.io/metadata.name": "flux-system"}
+    },
+    "podSelector": {"matchLabels": {"app": "soak"}},
+}
+
+
+def _prometheus_callers(role: str, tpl: str, doc: dict):
+    if (
+        doc.get("kind") == "NetworkPolicy"
+        and doc["metadata"]["name"] == "prometheus-callers"
+    ):
+        yield "prometheus-callers", doc["spec"]
+
+
+def _soak_peer_offence(role: str, spec: dict) -> str | None:
+    for rule in spec.get("ingress", []):
+        if {"protocol": "TCP", "port": 9090} in rule.get(
+            "ports", []
+        ) and _SOAK_PEER in rule.get("from", []):
+            return None
+    return "no rule on TCP 9090 holds flux-system AND app: soak in one from item"
+
+
+def _callers(*peers: dict, port: int = 9090) -> dict:
+    return {
+        "ingress": [{"from": list(peers), "ports": [{"protocol": "TCP", "port": port}]}]
+    }
+
+
 _PI_TARGET = f"{pi_ip()}:9100"
 _CLUSTER_TARGET = "longhorn-backend.longhorn-system.svc:9500"
 
@@ -206,5 +237,29 @@ SCRAPE_PROPERTIES = (
         more_green=(("observability", _job(_CLUSTER_TARGET)),),
         min_matches=10,
         must_find=frozenset({"node-pi", "alloy-pi", "dockerd-pi", "containerd-pi"}),
+    ),
+    Property(
+        name="prometheus-admits-the-soak-job",
+        reason=(
+            "D5.3's soak Job runs in flux-system and reads M2's homelab:pod_service:info and "
+            "the critical alerts from Prometheus on 9090 (d5-bulk-move.md, *Reaching "
+            "Prometheus*). Its name moves with each revision's SHA, so the peer selects the "
+            "pod label `app: soak`. The namespaceSelector and the podSelector must be sibling "
+            "keys of ONE from item, so they AND. As two items they OR: the namespaceSelector "
+            "alone admits every pod in flux-system, and the podSelector alone admits an "
+            "`app: soak` pod in observability. Both shapes render a valid policy."
+        ),
+        select=_prometheus_callers,
+        offence=_soak_peer_offence,
+        red=(
+            "netpol-baseline",
+            _callers(
+                {"namespaceSelector": _SOAK_PEER["namespaceSelector"]},
+                {"podSelector": _SOAK_PEER["podSelector"]},
+            ),
+        ),
+        green=("netpol-baseline", _callers(_SOAK_PEER)),
+        more_red=(("netpol-baseline", _callers(_SOAK_PEER, port=9091)),),
+        must_find=frozenset({"prometheus-callers"}),
     ),
 )

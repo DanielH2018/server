@@ -30,6 +30,14 @@ It merged at `e59b5dde9`, and its landing deployed `flux` and settled. The live
 kustomize-controller reads `--concurrent=5`, equal to `k8s_rollout_batch_width`. The four host
 writes the baseline omitted have their moving PRs named since
 [#5290](https://github.com/DanielH2018/server/pull/5290) (`f5f92e02a`).
+PR D5.1a2, prune labels, digest fields and collisions:
+[#5298](https://github.com/DanielH2018/server/pull/5298). It merged at `74aec39bb` and deployed
+nothing. Flux-owned claims and Namespaces carry `kustomize.toolkit.fluxcd.io/prune: disabled`,
+each tag's object in `digests.json` gains `claims` and `suspended`, and a census refuses an
+object two tags render.
+PR D5.1f, the removal gates: [#5296](https://github.com/DanielH2018/server/pull/5296). It merged
+at `3aeeb4fd7` and deployed nothing. `cross_plane_order.py` refuses an object drop from a
+flux-owned tag that no `Removes-Object:` trailer declares, and a flux-owned service's retirement.
 
 Related issues:
 
@@ -1554,7 +1562,12 @@ promotion, an automerged one included, without having to page.
   `ansible/roles/k8s/netpol-baseline/templates/networkpolicy-prometheus.yaml.j2`, which
   netpol-baseline's tasks apply. The Job is a cross-namespace caller from `flux-system`, so
   that template gains a peer for it in D5.3a, which lands and is checked before D5.3b2 wires
-  the Job.
+  the Job. The peer is one `from` item that ANDs the `flux-system` namespace with the pod
+  label `app: soak`, on TCP 9090. `job-name` cannot be the selector, because the Job's name
+  moves with R's SHA, and the renderer fixes no other pod-label convention. So D5.3b2's Job
+  template sets `app: soak` on the Job's pod template (`spec.template.metadata.labels`). On
+  the Job's own `metadata` alone the label matches nothing, because a NetworkPolicy reads pod
+  labels only, and the soak's every query is refused.
 - **The deploy annotation (D5.3b3).** After D6.1, `deploy_lib/playbook.py:annotate` is the
   only writer of Grafana's `deploy-annotation` line, and from the flux PR on `deploy.sh`
   deploys nothing in the cluster. `promote` cannot take over, because it runs on GitHub's
@@ -3521,6 +3534,10 @@ includes valheim's initContainer.
       precondition.
 3. **Is the soak's Prometheus reach a new exposure?** It is one more caller on an existing
    fence. Resolution: reviewed in D5.3a against ADR-0009.
+    - **Reviewed 2026-10-16 in #5315: no new exposure.** The soak is one more read-only caller
+      on 9090, because Prometheus runs without its admin, lifecycle and remote-write-receiver
+      flags. Only kustomize-controller, or an identity that can create pods in `flux-system`,
+      could carry `app: soak`, and either can already apply anything cluster-wide.
 4. **C2 changes in seven ways.** Snapshot roles hold without a reset. `promote`'s expected
    statuses become C2's changed set, minus suspended ones, which can hold `<tag>-snapshot`,
    `<tag>-verify`, `soak` and `homelab-namespace`. The pillar review fold applied this part
