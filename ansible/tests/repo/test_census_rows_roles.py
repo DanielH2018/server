@@ -14,6 +14,7 @@ import pytest
 from _helpers import walk_tasks
 from _deploy_mechanics_row import DEPLOY_MECHANICS
 from _out_of_render_row import OUT_OF_RENDER
+from _render_record_cleanup_row import RENDER_RECORD_CLEANUP
 from _row_table import Census, Subject, check, proof_problems, tracked
 from lib import yaml_fast
 
@@ -476,6 +477,7 @@ ROWS = (
     ),
     DEPLOY_MECHANICS,
     OUT_OF_RENDER,
+    RENDER_RECORD_CLEANUP,
 )
 
 _IDS = [row.name for row in ROWS]
