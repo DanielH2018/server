@@ -17,7 +17,13 @@ from lib import yaml_fast
 from lib.git import git_stdout
 from lib.repo_paths import K8S_ROLES, REPO
 from renderer.renderer_lib import soak
-from renderer.renderer_lib.bundle import DIGESTS, bundle_files, digests
+from deploy_tools.chained_timeout import promote_timeout
+from renderer.renderer_lib.bundle import (
+    DIGESTS,
+    bundle_files,
+    digests,
+    tag_kustomization,
+)
 
 TIMEOUT = "600s"
 DOTENV = "peanut_password=ENC[AES256_GCM,data:eA==,iv:aQ==,tag:dA==,type:str]\n"
@@ -140,20 +146,50 @@ def test_the_map_names_each_tags_namespaces_its_deferred_ones_included():
     assert services["sonarr"]["namespaces"] == ["media"]
 
 
-def test_the_timeout_and_deadlines_follow_the_fleet_w(tmp_path):
+def _ks(name: str, timeout: str, *depends: str) -> dict:
+    doc = tag_kustomization(name, False, timeout)
+    if depends:
+        doc["spec"]["dependsOn"] = [{"name": d} for d in depends]
+    return doc
+
+
+def _budget(files: dict[str, str]) -> tuple[int, int, int]:
+    """The Job's Kustomization wait, its deadline and the Kustomization's timeout."""
+    job = _doc(files, "cluster/soak/job.yaml")
+    args = job["spec"]["template"]["spec"]["containers"][0]["args"]
+    timeout = _doc(files, "flux/soak.yaml")["spec"]["timeout"]
+    return (
+        int(args[args.index("--wait-seconds") + 1]),
+        job["spec"]["activeDeadlineSeconds"],
+        int(timeout.removesuffix("s")),
+    )
+
+
+def test_the_wait_covers_a_slow_tags_own_timeout_and_w_follows(tmp_path):
+    """The soak starts beside the tags, so a 50-minute tag must fit inside its wait."""
     rules = _rules(
         tmp_path, _alert("Long", "1h", severity="critical", service="sonarr")
     )
-    files = soak.soak_files(R1, TAGS, DIRECTORIES, rules=rules)
-    wait = 3600 + soak.SCRAPE_AND_EVAL_SECONDS
-    timeout = wait + soak.TIMEOUT_MARGIN_S
-    assert _doc(files, "flux/soak.yaml")["spec"]["timeout"] == f"{timeout}s"
-    job = _doc(files, "cluster/soak/job.yaml")
-    deadline = timeout - soak.DEADLINE_MARGIN_S
-    assert job["spec"]["activeDeadlineSeconds"] == deadline
-    args = job["spec"]["template"]["spec"]["containers"][0]["args"]
-    wait_seconds = int(args[args.index("--wait-seconds") + 1])
-    assert 0 < wait_seconds < deadline - wait
+    others = [_ks("bento-pdf", "10m"), _ks("sonarr", "50m")]
+    files = soak.soak_files(R1, TAGS, DIRECTORIES, rules=rules, kustomizations=others)
+    wait, deadline, timeout = _budget(files)
+    assert wait == promote_timeout(others) and wait > 50 * 60
+    w = 3600 + soak.SCRAPE_AND_EVAL_SECONDS
+    assert deadline == wait + w + soak.DEADLINE_MARGIN_S
+    assert timeout == deadline + soak.DEADLINE_MARGIN_S
+
+
+def test_a_dependency_chain_lengthens_the_wait_past_either_timeout(tmp_path):
+    """The red half of a budget sized from W alone: two chained tags need both timeouts."""
+    chained = [_ks("bento-pdf", "10m"), _ks("sonarr", "10m", "bento-pdf")]
+    alone = [_ks("bento-pdf", "10m"), _ks("sonarr", "10m")]
+    waits = [
+        _budget(
+            soak.soak_files(R1, TAGS, DIRECTORIES, rules=tmp_path, kustomizations=k)
+        )[0]
+        for k in (chained, alone)
+    ]
+    assert waits[0] > waits[1] >= 10 * 60
 
 
 # -- the Job's wiring ------------------------------------------------------------------------

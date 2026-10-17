@@ -1137,8 +1137,14 @@ from. The Job's exit is the `flux/soak` status. The design is D5's *The soak as 
 - **W.** The ConfigMap's `services.json` maps each published tag to the longest `for:` among
   the critical or `verify="true"` rules under `ansible/roles/k8s/observability/files/rules/`
   that can fire for it, and to the namespaces its tag renders into. A rule with no static
-  `service` label counts for every tag. The Kustomization's `timeout` is the fleet W, the
-  map's largest entry plus the scrape and evaluation allowance, plus 10 minutes.
+  `service` label counts for every tag. The fleet W is the map's largest entry plus the
+  scrape and evaluation allowance.
+- **Its timeout.** The Job starts beside the tags, so its wait for them to read Ready at R,
+  `--wait-seconds`, is `chained_timeout.promote_timeout` over the bundle's other
+  Kustomizations with every one counted as changed. The render cannot know which ones R
+  changes. `activeDeadlineSeconds` adds the fleet W and a minute, and the Kustomization's
+  `timeout` adds another minute. With bento-pdf, texbrain and peanut published, that is
+  2010s, 2250s and 2310s.
 - **RBAC.** The ServiceAccount `soak` may get and list `OCIRepository` and Kustomization objects in
   `flux-system`, and list pods and get and list ReplicaSets in each namespace a published tag
   renders into.

@@ -6,8 +6,11 @@ docs/target-architecture/deploy/d5-bulk-move.md, *The soak as a Job (D5.3)*. The
 - `flux/soak.yaml`, the Kustomization `soak`. It carries no `dependsOn` edges (D5 Open
   question 19): the Job waits at run time for each Kustomization in its scope to read Ready at
   R. A suspended tag's Kustomizations are listed in `homelab/suspended-deps`, through
-  `ordering.drop_suspended`, because they are outside the soak's scope (D5.1b). Its `timeout`
-  is the fleet W plus `TIMEOUT_MARGIN_S`, so the Job's wait never outlives it;
+  `ordering.drop_suspended`, because they are outside the soak's scope (D5.1b). With no
+  edges the Job starts beside the tags, so its wait for them to read Ready at R gets
+  `chained_timeout.promote_timeout` over the bundle's other Kustomizations, every one
+  counted as changed. Its `timeout` adds the fleet W and two margins, so the Job's wait never
+  outlives it;
 - `cluster/soak/`: the Job `soak-<spec digest8>` in `flux-system`, which runs
   `ansible/roles/k8s/manifests/files/flux_soak.py` with R's SHA in its arguments; the ConfigMap
   `soak-<content digest8>` holding that script, byte copies of `flux_job_connect.py` and
@@ -29,6 +32,8 @@ import sys as _sys
 from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
+# `chained_timeout` imports `changed_set` bare, from scripts/deploy_tools.
+_sys.path.insert(1, str(_Path(__file__).resolve().parents[2] / "deploy_tools"))
 
 import json
 import re
@@ -38,12 +43,14 @@ from pathlib import Path
 
 import yaml
 
+from deploy_tools.chained_timeout import promote_timeout
 from lib import yaml_fast
 from lib.git import git_stdout
 from lib.repo_paths import ALL_VARS, K8S_ROLES, REPO, SCRIPTS
 from renderer.renderer_lib.bundle import (
     CLUSTER_DIR,
     FLUX_DIR,
+    FLUX_INDEX,
     FLUX_NAMESPACE,
     KUSTOMIZATION,
     configmap_digest8,
@@ -77,8 +84,6 @@ SCRAPE_SECONDS = 60
 # `flux_soak.SCRAPE_AND_EVAL_SECONDS`: the scrape and the rule evaluation W adds to the longest
 # `for:`. test_renderer_soak.py fails a drift.
 SCRAPE_AND_EVAL_SECONDS = 120
-# How far the Kustomization's `timeout` sits above the fleet W (D5, *Its timeout*).
-TIMEOUT_MARGIN_S = 10 * 60
 # How far below the `timeout` the Job's `activeDeadlineSeconds` sits, and how far below the
 # deadline less W its Kustomization wait ends, so each fails with its own message first.
 DEADLINE_MARGIN_S = 60
@@ -283,6 +288,7 @@ def soak_files(
     directories: Mapping[str, Mapping[str, str]],
     suspended: Iterable[str] = (),
     rules: Path = RULES,
+    kustomizations: Iterable[dict] = (),
 ) -> dict[str, str]:
     """The `soak` kind's files by bundle path: `flux/soak.yaml` and `cluster/soak/`.
 
@@ -293,6 +299,10 @@ def soak_files(
         suspended: The tags whose role sets `flux_suspend: true`. Each of their
             Kustomizations is listed in `homelab/suspended-deps`.
         rules: The Prometheus rule files `longest_for` reads; a test passes a fixture.
+        kustomizations: Every other Kustomization in the bundle. The Job's wait for the
+            changed ones to read Ready at R is their chained timeout with all of them
+            changed, because the render cannot know which of them R changes (D5, *Its
+            timeout*, under Open question 19).
 
     Raises:
         ValueError: a rule's `for:` is not a duration.
@@ -301,8 +311,9 @@ def soak_files(
     settings = _settings()
     services = service_map(tags, directories, longest_for(rules))
     wait = fleet_wait(services, settings["stabilise"])
-    timeout = wait + TIMEOUT_MARGIN_S
-    deadline = timeout - DEADLINE_MARGIN_S
+    ready = promote_timeout(list(kustomizations))
+    deadline = ready + wait + DEADLINE_MARGIN_S
+    timeout = deadline + DEADLINE_MARGIN_S
     owned = frozenset(name for name in directories if split_kind(name)[0] in tags)
     # Every Kustomization the soak would wait on, routed through the one suspend step so a
     # suspended tag's names land in the annotation; `kept` is dropped, since the soak waits
@@ -332,7 +343,7 @@ def soak_files(
         "--services": f"{MOUNT}/{SERVICES}",
         "--stabilise-seconds": str(settings["stabilise"]),
         "--scrape-seconds": str(SCRAPE_SECONDS),
-        "--wait-seconds": str(deadline - wait - DEADLINE_MARGIN_S),
+        "--wait-seconds": str(ready),
         "--prometheus": prometheus,
     }
     job: dict = {
@@ -414,3 +425,40 @@ def soak_files(
     files = {f"{CLUSTER_DIR}/{SOAK}/{name}": text for name, text in cluster.items()}
     files[f"{FLUX_DIR}/{SOAK}.yaml"] = yaml.safe_dump(kustomization, sort_keys=False)
     return files
+
+
+def soak_pair(
+    revision: str | None,
+    tags: Iterable[str],
+    directories: Mapping[str, Mapping[str, str]],
+    suspended: Iterable[str],
+    flux: Mapping[str, str],
+) -> tuple[dict[str, str], dict[str, str]]:
+    """The soak's files at `NORMALISED_REVISION`, for `digests.json`, and as published.
+
+    Args:
+        revision: R's SHA, or None to publish the normalised render.
+        tags: The published tags.
+        directories: Each rendered directory's name under `cluster/` mapped to its files.
+        suspended: The tags whose role sets `flux_suspend: true`.
+        flux: The bundle's other `flux/` files, `flux/kustomization.yaml` included. The
+            published files carry that index again, now listing `soak.yaml`.
+    """
+    others = [
+        doc
+        for path, text in sorted(flux.items())
+        if path != FLUX_INDEX
+        for doc in yaml_fast.safe_load_all(text)
+        if isinstance(doc, dict) and doc.get("kind") == "Kustomization"
+    ]
+    normal = soak_files(
+        NORMALISED_REVISION, tags, directories, suspended, kustomizations=others
+    )
+    published = (
+        soak_files(revision, tags, directories, suspended, kustomizations=others)
+        if revision
+        else normal
+    )
+    listed = {p for p in {**flux, **published} if p.startswith(f"{FLUX_DIR}/")}
+    index = kustomization_text(p.split("/", 1)[1] for p in listed - {FLUX_INDEX})
+    return normal, published | {FLUX_INDEX: index}

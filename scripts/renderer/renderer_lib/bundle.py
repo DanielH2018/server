@@ -549,15 +549,9 @@ def bundle_files(
         )
     # DECIDED: deferred, a documented cycle: soak.py builds on this module's writers, and
     # SHARED_KINDS makes every bundle_files caller render soak (test_scripts_import_direction).
-    from renderer.renderer_lib.soak import NORMALISED_REVISION, soak_files
+    from renderer.renderer_lib.soak import soak_pair
 
-    soak = soak_files(NORMALISED_REVISION, tags, directories, ordering.suspended)
     shared = cluster_vars_files(cluster_vars, timeout)
-    shared |= (
-        soak_files(revision, tags, directories, ordering.suspended)
-        if revision
-        else soak
-    )
     flux = {p: t for p, t in shared.items() if p.startswith(f"{FLUX_DIR}/")}
     files = flux_files(
         {name: per_directory.get(name, False) for name in edges},
@@ -567,7 +561,9 @@ def bundle_files(
         edges,
         fields,
     )
-    files |= shared
+    # The soak sizes its wait from the other Kustomizations, so it renders after them.
+    soak, published = soak_pair(revision, tags, directories, ordering.suspended, files)
+    files |= shared | published
     cluster = {
         f"{CLUSTER_DIR}/{name}/{file}": text
         for name, held in directories.items()
