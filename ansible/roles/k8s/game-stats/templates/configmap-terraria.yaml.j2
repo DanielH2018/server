@@ -1,0 +1,21 @@
+---
+# terraria-stats' code: its entry script and the stats_lib.py skeleton it imports, carried
+# verbatim. The pod mounts this at /app, and a directly-invoked script gets only its own
+# directory on `sys.path`, so `import stats_lib` resolves only because both keys sit here.
+#
+# lookup('file'), not a template: the scripts are Jinja-hostile, since their Prometheus
+# exposition strings carry {…} braces. The lookup's text is not templated again.
+#
+# Rendered here, inside the manifests, so a script edit changes the render. While Ansible owns
+# the role, k8s/manifests' rollout restart rolls the pod on that; under Flux, the renderer's
+# `checksum/restart` hashes this ConfigMap because the pod names it in `volumes`.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: terraria-stats-script
+  namespace: {{ k8s_namespace }}
+data:
+  stats.py: |
+{{ lookup('file', playbook_dir + '/roles/k8s/game-stats/files/stats.py') | indent(4, true) }}
+  stats_lib.py: |
+{{ lookup('file', playbook_dir + '/roles/k8s/game-stats/files/stats_lib.py') | indent(4, true) }}

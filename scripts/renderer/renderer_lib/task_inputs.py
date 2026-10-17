@@ -38,15 +38,9 @@ _CONTEXT_DATA = (
 )
 
 # Each role's `set_fact` values that `derived_facts` evaluates, in the order the role's tasks
-# set them, as the tasks file and the fact. `game_stats_lib_checksum` feeds both game
-# checksums and no template reads it.
+# set them, as the tasks file and the fact.
 SET_FACTS = {
     "autofix-bridge": (("main.yml", "autofix_bridge_script_checksum"),),
-    "game-stats": (
-        ("stage.yml", "game_stats_lib_checksum"),
-        ("terraria.yml", "game_stats_terraria_script_checksum"),
-        ("valheim.yml", "game_stats_valheim_script_checksum"),
-    ),
     "janitorr": (("main.yml", "janitorr_dry_run"),),
     "monitor-bridge": (("main.yml", "monitor_bridge_script_checksum"),),
     "uptime-kuma": (("main.yml", "kuma_declarations"),),
@@ -59,8 +53,6 @@ TASK_COMPUTED = frozenset(
         BUILT_IMAGE_TAGS,
         "monitor_bridge_script_checksum",
         "autofix_bridge_script_checksum",
-        "game_stats_terraria_script_checksum",
-        "game_stats_valheim_script_checksum",
         "kuma_declarations",
         "janitorr_dry_run",
     }

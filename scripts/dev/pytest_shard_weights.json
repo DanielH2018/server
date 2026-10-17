@@ -336,7 +336,6 @@
  "ansible/tests/k8s/test_flux_role.py": 0.25,
  "ansible/tests/k8s/test_flux_sync.py": 0.36,
  "ansible/tests/k8s/test_forwardauth_rebuilds_request_target.py": 0.0,
- "ansible/tests/k8s/test_game_stats_lib_ships_through_the_include.py": 0.23,
  "ansible/tests/k8s/test_headlamp_plugins_install.py": 0.09,
  "ansible/tests/k8s/test_image_builder_security_context.py": 0.05,
  "ansible/tests/k8s/test_jsonpath_quoting.py": 0.29,
