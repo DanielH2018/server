@@ -22,11 +22,12 @@ uv run ansible-playbook ansible/initial_setup.yml --tags claude_code
 - **Crons (2):**
   - `Sync peer Claude artifacts` — `*/5 * * * *`
   - `Claude Code telemetry health` — `*/10 * * * *`
-- **Timers (5):** `claude-cgroup-metrics.timer` (`OnBootSec=30s`, `OnUnitActiveSec=30s`),
+- **Timers (6):** `claude-cgroup-metrics.timer` (`OnBootSec=30s`, `OnUnitActiveSec=30s`),
   `claude-clone-sync.timer` (`OnBootSec=10min`, `OnUnitActiveSec=15min`),
   `claude-dotfiles-sync.timer` (`OnBootSec=10min`, `OnUnitActiveSec=15min`),
   `claude-memory-sync.timer` (`OnBootSec=5min`, `OnUnitActiveSec=15min`),
-  `claude-rc-restart.timer` (`OnCalendar=weekly`)
+  `claude-rc-restart.timer` (`OnCalendar=weekly`), `claude-triage-poll.timer`
+  (`OnBootSec=5min`, `OnUnitActiveSec=2min`)
 <!-- /generated_from -->
 
 ## The two Remote Control modes are different features
@@ -96,9 +97,11 @@ the tasks read. `docs/claude-agent-user.md` has the rest. `claude` lands a PR th
 `claude-land@<n>.service`.
 
 `claude-triage@<episode>.service` runs one unattended, diagnose-only session as `claude` and
-leaves a report (`tasks/triage.yml`, shipped off behind `claude_code_triage_enabled`). Its
-task file, templates and runner are on the lander's approval list, and its caps are pinned
-block vars. `docs/claude-agent-user.md`, *Alert-triggered triage*, has the design.
+leaves a report (`tasks/triage.yml`, shipped off behind `claude_code_triage_enabled`).
+`claude-triage-poll.timer` starts one when a monitor goes down, and ships in `shadow` mode,
+which only logs. The task file, templates, runner and poller are on the lander's approval
+list, and the caps and the poll mode are pinned block vars. `docs/claude-agent-user.md`,
+*Alert-triggered triage*, has the design.
 
 `claude_code_user` (default `sys_user`) is the account `claude-rc.service` runs as; its home and
 `claude_code_rc_workdir` follow it, and the unit is sandboxed only when it is not `sys_user`.
@@ -154,12 +157,20 @@ the sync behaves, and the heartbeat's template carries why it is a host cron at 
 - **Scope:** one episode per run. Slice 1 diagnoses only: Edit, Write, a landing and a push
   are denied. The later slices widen this to a fix landed through `claude-land@` and a
   restart through an allowlisted broker, under the operator's 2026-10-15 rulings.
-- **Mode:** `claude_code_triage_enabled`, false by default; false removes the rule, the units,
-  the code and the config, and keeps the records.
-- **Abort valves:** `$10`, 60 turns and a 30-minute wall clock per run, pinned in
-  `tasks/triage.yml`, plus a lock that holds runs to one at a time.
+- **Mode:** `claude_code_triage_enabled`, false by default; false stops the poller, then removes
+  the rule, the units, the code and the config, and keeps the records.
+  `claude_code_triage_poll_mode` is `off`, `shadow` or `armed`, pinned at `shadow` in
+  `tasks/triage.yml`, so arming the trigger needs the operator's approval.
+- **Abort valves:** `$10`, 60 turns and a 30-minute wall clock per run, and six runs a UTC day,
+  all pinned in `tasks/triage.yml`, plus a lock that holds runs to one at a time. The runner
+  enforces the daily cap, because polkit lets `claude` start a run without the poller. The
+  poller opens an episode only on a fall that holds for two polls, makes one storm episode of
+  more than three falls at once, and opens nothing while `DeployHoldActive` fires or the weekly
+  reboot's mute is open.
 - **Evidence:** `/var/lib/claude/triage/runs/<episode>.json`, the report under
-  `/a/<host>-claude/`, and a Discord page for every run; a crash pages separately.
+  `/a/<host>-claude/`, and a Discord page for every run; a crash pages separately. In shadow
+  mode, `/var/lib/claude/triage/shadow.jsonl` and `journalctl -u claude-triage-poll` list each
+  run the poller would have started.
 - **Next-run review:** before widening the scope or a cap, read the last week's records for
   what the runs diagnosed and what they cost.
 

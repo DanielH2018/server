@@ -21,7 +21,7 @@ what a session reaches as `ubuntu` stays private. See
 | 5 | The homelab-ui login, the agent's browser, and a fan-out agent on daniel-server | Built. Peer users were dropped. |
 | 6 | Retire Claude sessions as `ubuntu` | Plain `claude` in `~/server` starts as `claude` (dotfiles #853), and the caps render for both users. Background jobs and fan-out still start as `ubuntu`. |
 | 7 | A pre-merge dry run without secrets | Optional, planned |
-| Triage | A monitor alert starts an unattended run that diagnoses, fixes, lands and reports | Slice 1 built and shipped switched off. See [Alert-triggered triage](#alert-triggered-triage). |
+| Triage | A monitor alert starts an unattended run that diagnoses, fixes, lands and reports | Slices 1 and 2 built: a run started by hand works on daniel-box, and the poller runs in shadow mode. See [Alert-triggered triage](#alert-triggered-triage). |
 
 Each slice ends in a check that can be run and a variable that turns it back off.
 [Checking and rolling back](#checking-and-rolling-back) lists both.
@@ -522,8 +522,8 @@ The build runs in slices, and each slice is exercised before the next starts:
 
 | Slice | Delivers | State |
 |---|---|---|
-| 1 | `claude-triage@<episode>.service`, one diagnose-only run started by hand | Built, shipped switched off |
-| 2 | The polling timer, first in a shadow mode that only logs what it would start | Planned |
+| 1 | `claude-triage@<episode>.service`, one diagnose-only run started by hand | Built, and running on daniel-box |
+| 2 | The polling timer, first in a shadow mode that only logs what it would start | Built, in shadow mode |
 | 3 | The `claude-restart@` broker and its allowlist | Planned |
 | 4 | A fix phase that opens a PR and lands it through `claude-land@` | Planned. It needs the bot account visible again (#5126). |
 | 5 | A Kuma alive push and a weekly summary | Planned |
@@ -574,6 +574,40 @@ systemctl start claude-triage@drill-1
 The drill writes `/var/lib/claude/triage/runs/drill-1.json` and `triage-drill-1.html` under
 `/a/daniel-box-claude/`, and Discord gets the page. To switch triage off, set
 `claude_code_triage_enabled: false` and apply. The records stay.
+
+### Slice 2: the poller
+
+`claude-triage-poll.timer` runs `files/claude_triage_poll.py` as `claude` every two minutes.
+The code is root-owned under `/opt/claude-triage`, like the runner's.
+
+- **It reads two Prometheus vectors.** One is Kuma's `monitor_status == 0`. The other is the
+  firing `ALERTS`, without `Watchdog`, shadow and drill alerts. Prometheus publishes its port
+  on loopback only on the node it runs on, so the poller tries loopback, then the pinned
+  ClusterIP `observability_prometheus_cluster_ip`.
+- **An episode is a fall, not a red tile.** The first poll records what is already down and
+  starts nothing, so arming never fires on every known red tile at once. A key opens an episode
+  once it reads down on two consecutive polls, and keeps that episode until it recovers. A failed
+  read keeps the previous state, because a series that vanished with Prometheus is unknown, not
+  recovered.
+- **A storm is one run.** More than three keys falling in one poll make a single storm episode
+  that lists them all.
+- **Two gates defer an episode.** One is a firing `DeployHoldActive`. The other is the mute window
+  around the weekly reboot, read from the same `weekly_reboot_*` group vars as the Kuma and
+  Alertmanager mutes. A deferred key opens its episode once the gate lifts, if it is still down.
+- **The runner holds the daily cap.** A run past six in a UTC day writes a `capped` record and
+  page, and starts no session. The cap sits in the runner, because polkit lets `claude` start a
+  run directly.
+
+`claude_code_triage_poll_mode` picks what an episode does:
+
+- `off` reads nothing.
+- `shadow` logs `would start <episode>` to the journal and appends the episode to
+  `/var/lib/claude/triage/shadow.jsonl`. It ships in this mode.
+- `armed` writes the episode to the inbox and starts `claude-triage@<episode>`.
+
+The mode is a literal in `tasks/triage.yml`, on the approval floor. To arm the poller, the
+operator reads a week of `shadow.jsonl`, changes the literal and its default to `armed`, and
+lands that PR.
 
 ## The operator's dotfiles
 

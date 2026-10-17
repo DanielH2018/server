@@ -38,7 +38,7 @@ CONFIG = "/etc/claude-triage/config.env"
 # shape here and in 50-claude-triage.rules.j2.
 EPISODE_ID = re.compile(r"^[a-z0-9][a-z0-9-]{0,62}$")
 # The states the report unit may be started with. 50-claude-triage.rules.j2 admits exactly these.
-STATES = ("diagnosed", "inconclusive", "timeout", "failed")
+STATES = ("diagnosed", "inconclusive", "timeout", "failed", "capped")
 
 # The structure the session must return. Kept small: every field becomes a report section.
 SCHEMA = {
@@ -203,6 +203,28 @@ def stop_reason(result: dict, timed_out: bool) -> str:
     return f"{text} (API status {status})" if status else text
 
 
+def runs_today(runs_dir: str, now: float) -> int:
+    """Sessions recorded since UTC midnight; a capped record ran none, so it does not count."""
+    day = time.strftime("%Y-%m-%d", time.gmtime(now))
+    count = 0
+    try:
+        names = os.listdir(runs_dir)
+    except OSError:
+        return 0
+    for name in names:
+        try:
+            with open(os.path.join(runs_dir, name), encoding="utf-8") as f:
+                record = json.load(f)
+        except OSError, ValueError:
+            continue
+        if (
+            str(record.get("started", "")).startswith(day)
+            and record.get("state") != "capped"
+        ):
+            count += 1
+    return count
+
+
 def _e(value: object) -> str:
     return html.escape(str(value if value is not None else ""), quote=True)
 
@@ -237,7 +259,7 @@ code,pre{{background:var(--mantle);color:var(--peach);border-radius:4px}} code{{
 pre{{padding:12px;white-space:pre-wrap;word-break:break-word}}
 table{{border-collapse:collapse;width:100%}} th,td{{border:1px solid var(--s1);padding:6px 9px;text-align:left;vertical-align:top}}
 .chip{{display:inline-block;padding:1px 8px;border-radius:10px;font-size:13px;font-weight:600;color:var(--crust)}}
-.diagnosed{{background:var(--green)}} .inconclusive,.timeout{{background:var(--yellow)}} .failed{{background:var(--red)}}
+.diagnosed{{background:var(--green)}} .inconclusive,.timeout,.capped{{background:var(--yellow)}} .failed{{background:var(--red)}}
 .muted{{color:var(--ov);font-size:13px}}
 </style></head>
 <body data-updated="{_e(updated)}"><main>
@@ -272,8 +294,9 @@ def main(
     argv: list[str],
     config_path: str = CONFIG,
     page: Callable[[str, str], None] = start_report_unit,
+    now: Callable[[], float] = time.time,
 ) -> int:
-    """Run one episode; `page` is the seam a test replaces to see the page without systemd."""
+    """Run one episode; `page` and `now` are the seams a test replaces for systemd and the clock."""
     parser = argparse.ArgumentParser(
         prog="claude_triage_run.py",
         description="Run one unattended triage session for <STATE_DIR>/inbox/<episode>.json.",
@@ -298,15 +321,23 @@ def main(
     with open(cfg["PROMPT_FILE"], encoding="utf-8") as f:
         instructions = f.read()
 
-    started = time.strftime("%Y-%m-%d %H:%M UTC", time.gmtime())
+    t = now()
+    started = time.strftime("%Y-%m-%d %H:%M UTC", time.gmtime(t))
     t0 = time.monotonic()
-    log(f"episode {episode_id}: starting (budget ${cfg.get('BUDGET_USD', '10')})")
-    result, timed_out = run_session(
-        build_argv(cfg, build_prompt(instructions, episode)),
-        cfg.get("WORKDIR", os.path.expanduser("~/server")),
-        int(cfg.get("RUN_TIMEOUT_S", "1800")),
-    )
-    state = classify(result, timed_out)
+    cap = int(cfg.get("DAILY_CAP", "0"))
+    if cap and runs_today(os.path.join(state_dir, "runs"), t) >= cap:
+        # Here, not only in the poller: polkit lets the agent start this unit directly.
+        result, timed_out, state = {}, False, "capped"
+        error = f"the daily cap of {cap} runs was reached, so no session ran"
+    else:
+        log(f"episode {episode_id}: starting (budget ${cfg.get('BUDGET_USD', '10')})")
+        result, timed_out = run_session(
+            build_argv(cfg, build_prompt(instructions, episode)),
+            cfg.get("WORKDIR", os.path.expanduser("~/server")),
+            int(cfg.get("RUN_TIMEOUT_S", "1800")),
+        )
+        state = classify(result, timed_out)
+        error = stop_reason(result, timed_out)
     finished = time.strftime("%Y-%m-%d %H:%M UTC", time.gmtime())
     found = result.get("structured_output")
     record = {
@@ -314,7 +345,7 @@ def main(
         "episode": episode,
         "state": state,
         "diagnosis": found if isinstance(found, dict) else None,
-        "error": stop_reason(result, timed_out),
+        "error": error,
         "session_id": result.get("session_id"),
         "subtype": "timeout" if timed_out else result.get("subtype"),
         "cost_usd": result.get("total_cost_usd"),

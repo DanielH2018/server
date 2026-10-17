@@ -1,0 +1,24 @@
+[Unit]
+Description=Poll Kuma and Alertmanager and start triage for monitors that just went down
+After=network-online.target
+Wants=network-online.target
+OnFailure=claude-triage-alert.service
+
+[Service]
+Type=oneshot
+# The agent user: the poller reads Prometheus on loopback, writes the agent's own state, and
+# starts claude-triage@<episode>.service, which polkit lets that user start.
+User={{ claude_code_triage_agent_user }}
+Environment=HOME={{ claude_code_triage_agent_home }}
+Environment=PYTHONDONTWRITEBYTECODE=1
+# journald stores only notice+ here, and a shadow-mode `would start` line is the whole output.
+SyslogLevel=notice
+TimeoutStartSec=2min
+NoNewPrivileges=yes
+ProtectHome=yes
+ProtectProc=invisible
+PrivateTmp=yes
+# The code and its config are root-owned under /opt and /etc, never the agent's writable clone,
+# so a steered session cannot change what the poller sees.
+ExecStart={{ claude_code_triage_agent_home }}/.local/bin/uv run --no-project --no-python-downloads \
+  --python {{ host_python_version }} /opt/claude-triage/claude_triage_poll.py

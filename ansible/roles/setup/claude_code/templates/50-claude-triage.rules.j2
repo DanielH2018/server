@@ -16,7 +16,7 @@ polkit.addRule(function (action, subject) {
     }
     var unit = action.lookup("unit");
     if (!/^claude-triage@[a-z0-9][a-z0-9-]{0,62}\.service$/.test(unit) &&
-        !/^claude-triage-report-alert@[a-z0-9][a-z0-9-]{0,62}:(diagnosed|inconclusive|timeout|failed)\.service$/.test(unit)) {
+        !/^claude-triage-report-alert@[a-z0-9][a-z0-9-]{0,62}:(diagnosed|inconclusive|timeout|failed|capped)\.service$/.test(unit)) {
         return undefined;
     }
     if (action.lookup("verb") !== "start") {

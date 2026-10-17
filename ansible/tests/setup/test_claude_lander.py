@@ -229,6 +229,7 @@ FLOOR = [
     "ansible/roles/setup/claude_code/templates/claude-triage",
     "ansible/roles/setup/claude_code/templates/50-claude-triage.rules.j2",
     "ansible/roles/setup/claude_code/files/claude_triage_run.py",
+    "ansible/roles/setup/claude_code/files/claude_triage_poll.py",
     "scripts/deploy_tools/land",
     "pyproject.toml",
     "uv.lock",

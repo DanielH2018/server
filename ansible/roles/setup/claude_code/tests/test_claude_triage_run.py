@@ -7,10 +7,13 @@ with a fake `claude` binary instead of a real session.
 import json
 import os
 import stat
+import time
 
 import claude_triage_run as run
 import pytest
 
+# 2026-10-15 18:30 UTC: the cap tests date their records against this, never the live clock.
+T0 = 1792089000.0
 HOSTILE = '<script>alert(1)</script>"><img src=x onerror=alert(2)>'
 
 
@@ -202,3 +205,54 @@ def test_a_malformed_episode_id_runs_nothing(tmp_path) -> None:
     )
     assert paged == []
     assert not (tmp_path / "state" / "runs").exists()
+
+
+def test_the_daily_cap_stops_a_run_before_any_session_starts(tmp_path) -> None:
+    # The fake would leave a diagnosed record if a session ran.
+    body = json.dumps(
+        {"subtype": "success", "structured_output": {"confidence": "high"}}
+    )
+    config, _, _ = _setup(tmp_path, body)
+    with open(config, "a") as f:
+        f.write("\nDAILY_CAP=2\n")
+    runs = tmp_path / "state" / "runs"
+    runs.mkdir()
+    today = time.strftime("%Y-%m-%d 00:01 UTC", time.gmtime(T0))
+    for name, state in (("a", "diagnosed"), ("b", "failed"), ("c", "capped")):
+        (runs / f"{name}.json").write_text(
+            json.dumps({"started": today, "state": state})
+        )
+    pages = []
+
+    assert (
+        run.main(
+            ["claude_triage_run.py", "drill"],
+            config,
+            lambda e, s: pages.append(s),
+            lambda: T0,
+        )
+        == 0
+    )
+
+    record = json.loads((runs / "drill.json").read_text())
+    assert record["state"] == "capped"
+    assert "daily cap of 2" in record["error"]
+    assert pages == ["capped"]
+
+
+def test_a_capped_record_and_yesterdays_runs_do_not_count_toward_the_cap(
+    tmp_path,
+) -> None:
+    now = T0
+    today = time.strftime("%Y-%m-%d 09:00 UTC", time.gmtime(now))
+    yesterday = time.strftime("%Y-%m-%d 09:00 UTC", time.gmtime(now - 86400))
+    for name, started, state in (
+        ("a", today, "diagnosed"),
+        ("b", today, "capped"),
+        ("c", yesterday, "diagnosed"),
+    ):
+        (tmp_path / f"{name}.json").write_text(
+            json.dumps({"started": started, "state": state})
+        )
+    (tmp_path / "torn.json").write_text("{")
+    assert run.runs_today(str(tmp_path), now) == 1

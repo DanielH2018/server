@@ -530,6 +530,8 @@
       - ansible/roles/setup/claude_code/templates/50-claude-triage.rules.j2
       - ansible/roles/setup/claude_code/templates/claude-triage-config.env.j2
       - ansible/roles/setup/claude_code/templates/claude-triage-prompt.txt.j2
+      - ansible/roles/setup/claude_code/templates/claude-triage-poll.service.j2
+      - ansible/roles/setup/claude_code/templates/claude-triage-poll.timer.j2
       # The stamp hashes the repo source, never the rendered file, so no secret reaches it.
       - ansible/roles/setup/claude_code/templates/claude-triage-session.env.j2
 
@@ -576,3 +578,5 @@
     stamp_deployed_pairs:
       - live: /opt/claude-triage/claude_triage_run.py
         src: ansible/roles/setup/claude_code/files/claude_triage_run.py
+      - live: /opt/claude-triage/claude_triage_poll.py
+        src: ansible/roles/setup/claude_code/files/claude_triage_poll.py

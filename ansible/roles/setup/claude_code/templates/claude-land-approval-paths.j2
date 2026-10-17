@@ -20,12 +20,14 @@ ansible/roles/setup/claude_code/templates/claude-land@.service.j2
 ansible/roles/setup/claude_code/templates/50-claude-land.rules.j2
 # Alert-triggered triage (operator decision, 2026-10-15): the task file that pins the run's
 # caps and identity, every claude-triage template (a prefix: the unit, its config, its prompt
-# and its credential file), the polkit rule that lets the agent start a run, and the runner. A
-# run will land its own fixes with nobody watching, so it must not raise its own caps.
+# and its credential file, the poller's unit and timer), the polkit rule that lets the agent
+# start a run, the runner and the poller. A run will land its own fixes with nobody watching,
+# so it must not raise its own caps or arm its own trigger.
 ansible/roles/setup/claude_code/tasks/triage.yml
 ansible/roles/setup/claude_code/templates/claude-triage
 ansible/roles/setup/claude_code/templates/50-claude-triage.rules.j2
 ansible/roles/setup/claude_code/files/claude_triage_run.py
+ansible/roles/setup/claude_code/files/claude_triage_poll.py
 # The landing policy and the code that runs it.
 scripts/deploy_tools/land
 # The interpreter and packages `uv run` syncs before land.py starts. A package can run code at
