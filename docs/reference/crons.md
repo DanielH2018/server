@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/crons.py
-generated_at: 2026-10-13 06:17 UTC
-generated_sha: 0ef579e1f
+generated_at: 2026-10-17 06:17 UTC
+generated_sha: 109f8d0aa
 ---
 
 !!! warning "Generated file — do not edit"
@@ -12,7 +12,7 @@ generated_sha: 0ef579e1f
 
 # Scheduled jobs
 
-40 cron entrie(s) installed across the roles.
+37 cron entrie(s) installed across the roles.
 
 !!! warning "The state column is a heuristic"
     It is judged from the command text, and nothing in a cron task declares its own blast radius. A job that runs a wrapper script reads as "read the script" rather than being guessed at. Treat it as a pointer, not an authority.
@@ -21,7 +21,7 @@ generated_sha: 0ef579e1f
 |---|---|---|---|---|---|
 | B2 backup budget listing | `20 7 * * *` | conditional (has_repo_checkout) | `ubuntu` | yes (backup) | `ansible/roles/setup/k3s/tasks/health-crons.yml` |
 | B2 deletion accounting | `10 7 * * *` | conditional (has_repo_checkout) | `ubuntu` | no (read-only by its command) | `ansible/roles/setup/k3s/tasks/health-crons.yml` |
-| Claude Code telemetry health | `*/10 * * * *` | conditional (not k8s_dry_run \| bool) | `ubuntu` | read the script | `ansible/roles/k8s/observability/tasks/main.yml` |
+| Claude Code telemetry health | `*/10 * * * *` | every host in the play | `ubuntu` | read the script | `ansible/roles/setup/claude_code/tasks/node_crons.yml` |
 | Clean unused Docker images | `30 6 * * *` | conditional (has_docker) | `{{ ansible_facts.user_id }}` | yes (prune) | `ansible/roles/setup/initial_setup/tasks/crons.yml` |
 | Clear ansible log file | `0 6 * * 0` | conditional (has_repo_checkout) | `root` | yes (truncate) | `ansible/roles/setup/initial_setup/tasks/crons.yml` |
 | CrowdSec AppSec verify | `*/15 * * * *` | conditional (not k8s_dry_run \| bool) | `root` | read the script | `ansible/roles/k8s/crowdsec/tasks/main.yml` |
@@ -34,13 +34,10 @@ generated_sha: 0ef579e1f
 | Longhorn filesystem trim | `10 6 * * *` | every host in the play | `ubuntu` | read the script | `ansible/roles/setup/k3s/tasks/health-crons.yml` |
 | Longhorn restore drill | `10 4 * * *` | every host in the play | `root` | read the script | `ansible/roles/setup/k3s/tasks/health-crons.yml` |
 | Off-box etcd snapshot | `45 2 * * *` | every host in the play | `root` | yes (snapshot) | `ansible/roles/setup/k3s/tasks/health-crons.yml` |
-| Pi SD-card health heartbeat | `*/5 * * * *` | every host in the play | `ubuntu` | read the script | `ansible/roles/setup/optimize_pi/tasks/main.yml` |
-| Pi container-recovery heartbeat | `*/5 * * * *` | every host in the play | `ubuntu` | read the script | `ansible/roles/setup/optimize_pi/tasks/main.yml` |
-| Pi rotated-log integrity sweep | `40 1 * * *` | every host in the play | `ubuntu` | read the script | `ansible/roles/setup/optimize_pi/tasks/main.yml` |
 | Refresh generated docs | `17 6,18 * * *` | daniel-box | `ubuntu` | read the script | `ansible/roles/setup/initial_setup/tasks/crons.yml` |
 | Refresh homelab infrastructure map | `*/15 * * * *` | daniel-box | `ubuntu` | no (read-only by its command) | `ansible/roles/setup/initial_setup/tasks/crons.yml` |
 | Release staleness drift check | `*/30 * * * *` | every host in the play | `ubuntu` | read the script | `ansible/roles/setup/k3s/tasks/health-crons.yml` |
-| Sync peer Claude artifacts | `*/5 * * * *` | conditional (not k8s_dry_run \| bool) | `ubuntu` | read the script | `ansible/roles/k8s/artifacts/tasks/main.yml` |
+| Sync peer Claude artifacts | `*/5 * * * *` | every host in the play | `ubuntu` | read the script | `ansible/roles/setup/claude_code/tasks/node_crons.yml` |
 | UPS secondary watchdog | `*/10 * * * *` | conditional (nut_host_watchdog_armed \| bool) | `root` | read the script | `ansible/roles/setup/nut_host/tasks/main.yml` |
 | Weekly AIDE file integrity check | `0 3 * * 1` | every host in the play | `root` | read the script | `ansible/roles/setup/initial_setup/tasks/integrity.yml` |
 | Weekly apt autoremove | `0 2 * * 0` | every host in the play | `root` | no (read-only by its command) | `ansible/roles/setup/initial_setup/tasks/accounting.yml` |
