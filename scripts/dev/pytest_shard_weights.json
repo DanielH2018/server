@@ -713,6 +713,7 @@
  "ansible/tests/setup/test_k3s_version_guard.py": 0.0,
  "ansible/tests/setup/test_k8s_host_files_pairs.py": 0.02,
  "ansible/tests/setup/test_k8s_host_files_render.py": 0.03,
+ "ansible/tests/setup/test_k8s_host_files_rows.py": 0.0,
  "ansible/tests/setup/test_kuma_check_timer.py": 0.06,
  "ansible/tests/setup/test_kuma_env_renders_for_every_cron_tag.py": 0.02,
  "ansible/tests/setup/test_kuma_push_msg_cap.py": 0.0,
