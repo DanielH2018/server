@@ -121,7 +121,7 @@ def test_a_secrets_change_pages_once_naming_the_sha(
     )
     ((key, content),) = seen
     assert key == f"secrets:{ORIGIN}"
-    assert ORIGIN[:8] in content and "nothing was redeployed" in content
+    assert ORIGIN[:8] in content and "secret_rotation.py consumers" in content
     assert _alerted(state_dir, "secrets") == ORIGIN
 
 
