@@ -369,8 +369,8 @@ jobs:
           set -euo pipefail
           mapfile -t changed < "$RUNNER_TEMP/changed.txt"
           # --skip ansible-lint: it runs in its own job beside this one, as pytest does.
-          # --skip static-ratchet-tests: the `pytest` job runs those twelve test files already.
-          prek run --skip ansible-lint --skip static-ratchet-tests --color always --files "${changed[@]}"
+          # --skip static-ratchet-tests*: the `pytest` job runs those twenty-three test files already.
+          prek run --skip ansible-lint --skip static-ratchet-tests --skip static-ratchet-tests-python --skip static-ratchet-tests-owners --skip static-ratchet-tests-lander --skip static-ratchet-tests-checksum --skip static-ratchet-tests-shell --skip static-ratchet-tests-renovate --color always --files "${changed[@]}"
 
       # The cross-plane gate (D4.4). It refuses a PR that changes a flux-owned role and an
       # Ansible-owned role on one dependency path, because `promote` and `land.sh` would apply
@@ -408,8 +408,8 @@ jobs:
       - name: Run hooks (full sweep)
         if: github.event_name != 'pull_request' || steps.changed.outputs.mode == 'full'
         # --skip ansible-lint: it runs in its own job beside this one, as pytest does.
-        # --skip static-ratchet-tests: the `pytest` job runs those twelve test files already.
-        run: prek run --all-files --skip ansible-lint --skip static-ratchet-tests --color always
+        # --skip static-ratchet-tests*: the `pytest` job runs those twenty-three test files already.
+        run: prek run --all-files --skip ansible-lint --skip static-ratchet-tests --skip static-ratchet-tests-python --skip static-ratchet-tests-owners --skip static-ratchet-tests-lander --skip static-ratchet-tests-checksum --skip static-ratchet-tests-shell --skip static-ratchet-tests-renovate --color always
 
       # `mkdocs build --strict` also runs in the twice-daily docs-refresh cron, but a broken
       # internal link that reaches master is discovered only there — build_site() bails

@@ -263,9 +263,10 @@ other final message is a progress report: a Stop hook sends you back to work, an
 
 
 # The repo-wide guards that a new file trips and no test beside the change reaches (#5077):
-# every file the `static-ratchet-tests` prek hook runs, the script-basename and reference-page
-# checks under scripts/docs/tests, and the exit-code census. The set ran in 54s on daniel-box
-# under `-n auto`. The whole suite costs about five times that and still misses CI's weight
+# every file the `static-ratchet-tests` prek hook and its `static-ratchet-tests-*` siblings run
+# (#5481), the script-basename and reference-page checks under scripts/docs/tests, and the
+# exit-code census. The set without the siblings' files ran in 54s on daniel-box under
+# `-n auto`. The whole suite costs about five times that and still misses CI's weight
 # step, which is a workflow step and not a test, so the brief names that repair on its own.
 REPO_GUARDS = (
     "ansible/tests/repo",
@@ -273,6 +274,13 @@ REPO_GUARDS = (
     "scripts/tests/test_census_rows_test_modules.py",
     "scripts/tests/test_census_rows_test_renders.py",
     "scripts/lib/tests/test_exit_codes.py",
+    "scripts/tests/test_scripts_import_direction.py",
+    "scripts/tests/test_prek_files_cover_entry_imports.py",
+    "scripts/diagnostics/tests/test_probe_health_rolled.py",
+    "ansible/tests/setup/test_lander_deadlines_cover_the_soak.py",
+    "ansible/tests/k8s/test_checksum_annotations_documented.py",
+    "ansible/tests/deploy/test_renovate_per_package_manual_rules_carry_the_denylist_marker.py",
+    "ansible/tests/deploy/test_renovate_denylist_marker_reaches_the_pr_title.py",
 )
 
 REPO_GUARD_STEP = f"""## Before you open the PR

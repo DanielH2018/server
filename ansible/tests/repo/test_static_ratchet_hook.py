@@ -10,6 +10,7 @@ hook names still exists, its `files` gate matches the edits those tests react to
 Run: uv run pytest ansible/tests/repo/test_static_ratchet_hook.py
 """
 
+import itertools
 import re
 import shlex
 import tomllib
@@ -190,3 +191,29 @@ def test_a_ci_prek_sweep_without_the_skip_is_flagged():
     assert _unskipped(_sweeps(workflow)) == [
         "run: prek run --all-files --skip ansible-lint --color always"
     ]
+
+
+def _unskipped_ids(sweeps: list[str], ids: list[str]) -> list[tuple[str, str]]:
+    """(sweep, id) for each ratchet hook id a sweep does not name as a `--skip` argument."""
+    out = []
+    for line in sweeps:
+        tokens = shlex.split(line)
+        skipped = {
+            after for flag, after in itertools.pairwise(tokens) if flag == "--skip"
+        }
+        out += [(line, hook_id) for hook_id in ids if hook_id not in skipped]
+    return out
+
+
+def test_every_ci_prek_sweep_skips_every_sibling_by_its_exact_id():
+    """prek's `--skip` takes exact ids, so `--skip static-ratchet-tests` leaves the siblings on."""
+    ids = [hook["id"] for hook in _ratchet_hooks()]
+    assert len(ids) > 1, ids
+    assert _unskipped_ids(_sweeps(CI_WORKFLOW.read_text()), ids) == []
+
+
+def test_a_sweep_skipping_only_the_main_hook_is_flagged():
+    line = "run: prek run --all-files --skip static-ratchet-tests --color always"
+    assert _unskipped_ids(
+        [line], ["static-ratchet-tests", "static-ratchet-tests-python"]
+    ) == [(line, "static-ratchet-tests-python")]
