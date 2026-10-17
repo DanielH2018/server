@@ -67,7 +67,9 @@ bound, and runner variance spans it: one module measured about 8s on its PR run 
 the master run of the same code (#3604). So CI passes `--warn-only` on push and merge_group,
 which prints each complaint as a `::warning::` annotation and exits zero. On a pull request
 the same variance lands a module near the bound on either side of it from run to run, so an
-unweighted module between the two bounds annotates there too (#4010).
+unweighted module between the two bounds annotates there too (#4010). A pull request's author
+can repair only a module the PR's diff adds or changes, so CI passes the diff as
+`--changed-files` and every other module's complaint annotates there as well (#5480).
 
 Usage:
     uv run python scripts/dev/pytest_shard.py --of 4 --shard 1        # this shard's files
@@ -79,6 +81,7 @@ Usage:
     uv run python scripts/dev/pytest_shard.py --refresh-drifted 8     # one eighth, drifted rows only
     uv run python scripts/dev/pytest_shard.py --check-durations ci.log  # CI's measured gate
     uv run python scripts/dev/pytest_shard.py --check-durations ci.log --warn-only  # annotate, exit 0
+    uv run python scripts/dev/pytest_shard.py --check-durations ci.log --changed-files changed.txt
 """
 
 import hashlib
@@ -102,8 +105,7 @@ from shard_weight_gate import (
     RUNNER_HEAVY_FAIL_SECONDS,
     RUNNER_HEAVY_SECONDS,
     STALE_WEIGHT_RATIO,
-    durations_problems,
-    durations_warnings,
+    gate_complaints,
     parse_durations,
 )
 
@@ -433,6 +435,15 @@ def main(argv=None) -> int:
         ),
     )
     parser.add_argument(
+        "--changed-files",
+        type=Path,
+        metavar="LIST",
+        help=(
+            "a file listing the paths a pull request's diff adds or modifies, one per line: "
+            "--check-durations then fails only for a module in it and annotates the rest"
+        ),
+    )
+    parser.add_argument(
         "--threshold",
         type=float,
         default=RUNNER_HEAVY_SECONDS,
@@ -457,16 +468,16 @@ def main(argv=None) -> int:
 
     if args.check_durations:
         report = args.check_durations.read_text(errors="replace")
-        weights = load_weights()
-        problems = durations_problems(
+        changed = None
+        if args.changed_files:
+            changed = set(args.changed_files.read_text().split())
+        problems, warnings = gate_complaints(
             report,
-            weights,
+            load_weights(),
+            changed,
             threshold=args.threshold,
             ratio=args.stale_ratio,
             fail_above=args.fail_above,
-        )
-        warnings = durations_warnings(
-            report, weights, threshold=args.threshold, fail_above=args.fail_above
         )
         if args.warn_only:
             warnings, problems = warnings + problems, []
