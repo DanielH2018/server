@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
-"""Add the deploy-annotation query to every provisioned Grafana dashboard, from one place.
+"""Add the deploy-annotation queries to every provisioned Grafana dashboard, from one place.
+
+There are two queries. `--expr` reads the syslog lines a host-side deploy writes; `--flux-expr`
+reads the line the soak Job prints when a Flux promotion passes. A LogQL log query has one
+stream selector, so one query cannot read both.
 
 Grafana has no global annotation setting: an annotation query lives in each dashboard's own
 JSON, and all sixteen boards here ship `"annotations": {"list": []}`. Editing sixteen files by
@@ -33,21 +37,24 @@ from lib.cli_help import ArgumentParser
 # The name is the idempotency key. Renaming it re-injects alongside the old one rather than
 # replacing it, so treat this as a fixed identifier rather than a label to tune.
 ANNOTATION_NAME = "Deploys"
+FLUX_ANNOTATION_NAME = "Flux deploys"
 
 
-def build_annotation(uid: str, expr: str) -> dict:
+def build_annotation(
+    uid: str, expr: str, name: str = ANNOTATION_NAME, ref_id: str = "DeployAnno"
+) -> dict:
     """The annotation query, as Grafana's dashboard JSON expects it.
 
     `logfmt` is what makes the text useful: without it the annotation shows the whole raw
     syslog line, and with it `textFormat` can pull out just the service list.
     """
     return {
-        "name": ANNOTATION_NAME,
+        "name": name,
         "datasource": {"type": "loki", "uid": uid},
         "enable": True,
         "hide": False,
         "iconColor": "purple",
-        "target": {"expr": expr, "refId": "DeployAnno", "queryType": "range"},
+        "target": {"expr": expr, "refId": ref_id, "queryType": "range"},
         "textFormat": "{{services}}",
         "titleFormat": "deploy",
     }
@@ -62,17 +69,17 @@ def inject(doc: dict, annotation: dict) -> bool:
     annotations = doc.setdefault("annotations", {})
     entries = annotations.setdefault("list", [])
 
-    if any(entry.get("name") == ANNOTATION_NAME for entry in entries):
+    if any(entry.get("name") == annotation["name"] for entry in entries):
         return False
 
     entries.append(annotation)
     return True
 
 
-def process_tree(src: Path, dest: Path, annotation: dict) -> tuple[int, int]:
-    """Copy every dashboard from `src` to `dest`, injecting as it goes.
+def process_tree(src: Path, dest: Path, *annotations: dict) -> tuple[int, int]:
+    """Copy every dashboard from `src` to `dest`, injecting each of `annotations` as it goes.
 
-    Returns (written, injected). `written` counts every board that reached `dest`, so a board
+    Returns (written, injected), `injected` counting the boards that gained any annotation. `written` counts every board that reached `dest`, so a board
     that already had the annotation is still copied — `dest` must be a COMPLETE tree, since the
     ConfigMap is built from it and a board missing here is a board missing from Grafana.
     """
@@ -80,7 +87,8 @@ def process_tree(src: Path, dest: Path, annotation: dict) -> tuple[int, int]:
 
     for source_file in sorted(src.rglob("*.json")):
         doc = json.loads(source_file.read_text())
-        if inject(doc, annotation):
+        # A list, not a generator, so every annotation is injected before `any` reads it.
+        if any([inject(doc, annotation) for annotation in annotations]):
             injected += 1
 
         target = dest / source_file.relative_to(src)
@@ -117,15 +125,24 @@ def main() -> int:
         required=True,
         help="the LogQL query selecting deploy events",
     )
+    parser.add_argument(
+        "--flux-expr",
+        help="the LogQL query selecting the soak Job's deploy events, a second annotation",
+    )
     args = parser.parse_args()
 
     if not args.src.is_dir():
         print(f"source tree not found: {args.src}", file=sys.stderr)
         return 1
 
-    written, injected = process_tree(
-        args.src, args.dest, build_annotation(args.uid, args.expr)
-    )
+    annotations = [build_annotation(args.uid, args.expr)]
+    if args.flux_expr:
+        annotations.append(
+            build_annotation(
+                args.uid, args.flux_expr, FLUX_ANNOTATION_NAME, "FluxDeployAnno"
+            )
+        )
+    written, injected = process_tree(args.src, args.dest, *annotations)
 
     if not written:
         # An empty tree means the staging step silently produced nothing, and the ConfigMap

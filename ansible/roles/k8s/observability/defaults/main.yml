@@ -214,6 +214,13 @@ observability_loki_homelab_uid: bf4q19tuivta8e
 # `|= "event=deploy"` before `| logfmt`, in that order: the line filter runs first and is far
 # cheaper than parsing every syslog line in the window.
 observability_deploy_annotation_expr: '{job="syslog"} |= "event=deploy" | logfmt'
+# A Flux promotion's deploy line comes from the soak Job, which prints it on stdout when it
+# passes (ansible/roles/k8s/manifests/files/flux_soak.py:main), so Alloy ships it under the
+# cluster pods' job. A LogQL log query has one stream selector, so this is a second annotation
+# query rather than a widening of the one above. The renderer names the Job's one container
+# `soak`, and the selector scopes a dashboard load to the soak's own lines.
+observability_flux_deploy_annotation_expr: >-
+  {job="k8s", namespace="flux-system", container="soak"} |= "event=deploy" | logfmt
 
 observability_prometheus_retention: 30d
 # DECIDED: the size cap binds before the 30d time cap; read

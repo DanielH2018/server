@@ -134,6 +134,7 @@
       --dest /etc/rancher/k3s/dashboards-annotated
       --uid {{ observability_loki_homelab_uid }}
       --expr {{ observability_deploy_annotation_expr | quote }}
+      --flux-expr {{ observability_flux_deploy_annotation_expr | quote }}
   become: true
   register: observability_dashboards_annotated
   # The script writes a file only when its content actually differs, so the tree is the honest

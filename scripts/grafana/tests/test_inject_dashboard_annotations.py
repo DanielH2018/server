@@ -118,3 +118,26 @@ def test_the_query_is_carried_through_verbatim():
 
     assert annotation["target"]["expr"] == EXPR
     assert annotation["datasource"]["type"] == "loki"
+
+
+FLUX_EXPR = '{job="k8s", namespace="flux-system", container="soak"} |= "event=deploy"'
+
+
+def test_the_flux_query_is_a_second_annotation_each_idempotent_by_its_own_name(
+    tmp_path,
+):
+    """One LogQL query has one stream selector, so the soak's line needs its own query."""
+    src, dest = tmp_path / "src", tmp_path / "dest"
+    _write(src / "one.json", {"annotations": {"list": [_annotation()]}})
+    flux = inject.build_annotation(
+        UID, FLUX_EXPR, inject.FLUX_ANNOTATION_NAME, "FluxDeployAnno"
+    )
+
+    assert inject.process_tree(src, dest, _annotation(), flux) == (1, 1)
+    entries = json.loads((dest / "one.json").read_text())["annotations"]["list"]
+    assert [(e["name"], e["target"]["expr"]) for e in entries] == [
+        ("Deploys", EXPR),
+        ("Flux deploys", FLUX_EXPR),
+    ]
+    _write(src / "one.json", {"annotations": {"list": entries}})
+    assert inject.process_tree(src, dest, _annotation(), flux) == (1, 0)
