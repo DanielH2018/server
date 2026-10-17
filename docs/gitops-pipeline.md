@@ -827,7 +827,12 @@ those tags (a failed bump on a broad tick writes one) and leaves any other broad
   on detection and a skipped page is never sent. The contention arm sends nothing, because it
   resets the tree (#2459). `secrets.yml` is deliberately NOT in the broad list: the `/add-secret`
   flow ships it WITH the consuming template, which stays a scoped single-service deploy
-  (`deploy_logic.ChangeSet.secrets`).
+  (`deploy_logic.ChangeSet.secrets`). When a broad tick carries `secrets.yml` beside a
+  deploy-plane path, the narrowing maps each key whose ciphertext changed to the roles that
+  read it (`scripts/deploy_tools/narrow_lib/secret_keys.py`, #5409). A key that only a setup
+  role reads reaches no deploy tag, so it no longer defers the whole k8s plane to
+  `k8s_unapplied`. The tick still does not apply that setup role (#5436); the page above is its
+  only signal.
 - **k8s-platform roles are auto-deployed ONLY for an image-pin bump to a non-denylisted service;
   every other k8s change defers-and-alerts.** `deploy_logic.split_k8s_auto_deploy` decides
   eligibility, **diff-shape first, identity second**. Gating on the service name alone would be
