@@ -94,14 +94,28 @@ def _with_edit(files: dict[str, str], key: str) -> dict[str, str]:
     return edited
 
 
-def _without_config_maps(files: dict[str, str]) -> dict[str, str]:
-    """`files` as the imperative shape had them: the script ConfigMaps outside the render."""
-    return {
-        name: yaml.safe_dump_all(
-            [o for o in yaml_fast.safe_load_all(text) if o and o["kind"] != "ConfigMap"]
-        )
-        for name, text in files.items()
-    }
+def _detached(files: dict[str, str], pod: str) -> dict[str, str]:
+    """`files` with `pod`'s script ConfigMap volume and its mount removed from the pod."""
+    config_map = GAMES[pod][0]
+    detached = {}
+    for name, text in files.items():
+        docs = [obj for obj in yaml_fast.safe_load_all(text) if obj]
+        for obj in docs:
+            if obj["kind"] == "Deployment" and obj["metadata"]["name"] == pod:
+                spec = _pod(obj)["spec"]
+                gone = {
+                    v["name"]
+                    for v in spec["volumes"]
+                    if v.get("configMap", {}).get("name") == config_map
+                }
+                assert gone, pod
+                spec["volumes"] = [v for v in spec["volumes"] if v["name"] not in gone]
+                for container in spec["containers"]:
+                    container["volumeMounts"] = [
+                        m for m in container["volumeMounts"] if m["name"] not in gone
+                    ]
+        detached[name] = yaml.safe_dump_all(docs)
+    return detached
 
 
 def local_imports_missing(entry: str, data: dict[str, str]) -> set[str]:
@@ -170,6 +184,11 @@ def test_an_entry_script_edit_moves_only_its_own_pods_checksum(rendered, pod):
     assert all(after[other] == before[other] for other in GAMES if other != pod)
 
 
-def test_a_config_map_outside_the_render_moves_no_checksum(rendered):
-    """The red case: the imperative shape leaves the pods nothing to hash."""
-    assert _values(_without_config_maps(rendered)) == {}
+def test_a_pod_that_does_not_mount_its_config_map_keeps_its_checksum_on_an_edit(
+    rendered,
+):
+    """The red case: the edit tests above go red once a pod stops naming its ConfigMap."""
+    detached = _detached(rendered, "terraria-stats")
+    before, after = _values(detached), _values(_with_edit(detached, LIB))
+    assert after.get("terraria-stats") == before.get("terraria-stats")
+    assert after["valheim-stats"] != before["valheim-stats"]
