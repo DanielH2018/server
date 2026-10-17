@@ -1186,7 +1186,12 @@ reach A6-7a, fail the bijection test and lose its only pager.
         - a series whose newest sample predates the reference means wait: the gate re-reads for
           up to 90s (one 1m scrape interval plus slack), then fails naming the probe, because
           a probe that stopped reporting must not read as clean (class 3);
-        - a fresh 0 means fail.
+        - a fresh 0 means fail;
+        - a routed tag with no series after the wait fails when `up{job="blackbox-ingress",
+          service="<tag>"}` exists, since its loaded target stopped reporting, and when the
+          job has no `up` series at all. It passes with a note when the job is loaded but
+          the target is not: the route was added since `observability`, which is denylisted
+          from auto-deploy, last deployed (#5346).
     - **Re-read once.** A probe alert that fired during a slow cold-pull rollout can still read
       firing at the first read. Both halves re-read once after the same wait before failing.
     - A window function such as `max_over_time` is not used: a window spanning the rollout lets

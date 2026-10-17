@@ -21,10 +21,12 @@ name: promote
 #            instead pushes an annotated bundle to `verify-drill` unsigned, and fails unless
 #            `cosign verify` refuses it.
 #   promote  read-only, except that `decide` writes DEPLOY_HOLD as T's SHA when T fails the
-#            forward-only gate (H1.1b). Checks out this workflow's own commit and runs
+#            forward-only gate (H1.1b), or as `<T> suspended-changed=<tags>` when T changes a
+#            suspended tag (D5.1d). Checks out this workflow's own commit and runs
 #            `promote.py decide`, which walks master from its tip and picks the commit T `prod`
 #            moves to. It pulls `prod`'s bundle and T's before anything moves, and hands them
-#            on to `verify`.
+#            on to `verify`. A step after Decide posts a suspended-changed hold to the
+#            deployer's Discord channel, with the webhook and no token.
 #   tag      packages: write. Checks out nothing. Tags `prod`'s digest `last-good` when that
 #            tag is absent, moves `prod` to T, and records its digest in PROD_DIGEST.
 #   verify   contents: read, statuses: read. Runs `promote.py verify T`, which waits on T's
@@ -538,6 +540,18 @@ jobs:
           path: ${{ runner.temp }}/verify-input/
           if-no-files-found: error
           retention-days: 7
+
+      # D5.1d's hold is written inside Decide, so it posts here rather than from `post`. This
+      # step carries the webhook and no token, and Decide carries PROMOTE_TOKEN and no webhook,
+      # so no code that posts can write DEPLOY_HOLD. A failed post fails the run.
+      - name: Post the suspended-changed hold
+        if: ${{ steps.decide.outputs.suspended_hold != '' }}
+        env:
+          HOLD: ${{ steps.decide.outputs.suspended_hold }}
+          DEPLOY_DISCORD_WEBHOOK: ${{ secrets.DEPLOY_DISCORD_WEBHOOK }}
+        run: >-
+          uv run --frozen python scripts/deploy_tools/promote.py hold "${HOLD%% *}"
+          --hold "$HOLD"
 
   tag:
     needs: promote

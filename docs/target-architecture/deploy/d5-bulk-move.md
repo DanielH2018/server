@@ -713,8 +713,9 @@ reconciliation of a flux-owned role. D5.1b rewrites the sentence in
       ran before the suspend merged can still merge after it. `promote.py decide` therefore
       treats a revision R that changes the `own` digest of a tag suspended at both
       `last-good` and R as a hold, with the cause `suspended-changed`, naming the tag. The
-      hold path writes `DEPLOY_HOLD` as `<R> suspended-changed=<tag>` and posts, as in
-      D5.2b1. The value never takes C2's `failed=` form, so C2's proposed revert rule never
+      hold path writes `DEPLOY_HOLD` as `<R> suspended-changed=<tag>` and posts it. A step of
+      the `promote` job after Decide sends the post, with the webhook and no token (#5359), as
+      D5.2b1's `post` job does for the stateful hold. The value never takes C2's `failed=` form, so C2's proposed revert rule never
       clears it. `probe.py landing` prints the
       cause beside `DEPLOY_HOLD`. The way out is a commit that reverts the racing change or
       resumes the tag. Clearing `DEPLOY_HOLD` without one only holds again at the next

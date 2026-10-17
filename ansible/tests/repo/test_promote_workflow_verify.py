@@ -38,6 +38,9 @@ ALWAYS = "always()"
 PRIOR_DIGEST = "needs.promote.outputs.prior_digest"
 # Runner queueing between a run's jobs, which `decide`'s in-flight wait also covers.
 RUNNER_QUEUE_S = 10 * 60
+# The Discord webhook secret, and the tokens a step that holds it must not.
+WEBHOOK = "DEPLOY_DISCORD_WEBHOOK"
+TOKENS = ("secrets.PROMOTE_TOKEN", "github.token", "secrets.GITHUB_TOKEN")
 # GitHub stops a job on a hosted runner after 6 hours.
 HOSTED_JOB_LIMIT_MINUTES = 360
 
@@ -50,6 +53,27 @@ def workflow() -> dict:
 @pytest.fixture(scope="module")
 def flux_version() -> str:
     return _load(FLUX_DEFAULTS)["flux_version"]
+
+
+def _suspended_post_problems(promote: dict) -> list[str]:
+    """D5.1d's post: a step after Decide sends `decide`'s hold with the webhook and no token."""
+    found = []
+    steps = _steps(promote)
+    posting = [s for s in steps if WEBHOOK in s.get("env", {})]
+    if not any(
+        s.get("env", {}).get("HOLD") == "${{ steps.decide.outputs.suspended_hold }}"
+        and "steps.decide.outputs.suspended_hold != ''" in str(s.get("if", ""))
+        for s in posting
+    ):
+        found.append("promote: no webhook step posts decide's suspended_hold output")
+    # The webhook and a token that writes never share a step, so no code that posts can write
+    # DEPLOY_HOLD, and no code that writes it can read the webhook.
+    for step in posting:
+        if any(token in str(step.get("env")) for token in TOKENS):
+            found.append(
+                f"promote: the step {step.get('name')!r} holds the webhook and a token"
+            )
+    return found
 
 
 def verification_problems(wf: dict) -> list[str]:
@@ -104,6 +128,7 @@ def verification_problems(wf: dict) -> list[str]:
         for s in _steps(jobs.get("post", {}))
     ):
         found.append("post: no step takes HOLD from settle's stateful_hold output")
+    found += _suspended_post_problems(jobs.get("promote", {}))
     minutes = {name: jobs.get(name, {}).get("timeout-minutes", 0) for name in jobs}
     if minutes["verify"] * 60 <= chained_timeout.VERIFY_CAP_S + promote_verify.POLL_S:
         found.append(
@@ -266,7 +291,41 @@ def _post_reads_no_hold(wf):
     step["env"]["HOLD"] = "${{ needs.settle.outputs.hold }}"
 
 
+def _suspended_post(wf) -> dict:
+    return next(
+        s for s in wf["jobs"]["promote"]["steps"] if WEBHOOK in s.get("env", {})
+    )
+
+
+def _suspended_post_reads_a_misspelt_hold(wf):
+    _suspended_post(wf)["env"]["HOLD"] = "${{ steps.decide.outputs.suspended }}"
+
+
+def _suspended_post_gains_the_promote_token(wf):
+    _suspended_post(wf)["env"]["GH_TOKEN"] = "${{ secrets.PROMOTE_TOKEN }}"
+
+
+def _decide_gains_the_webhook(wf):
+    step = next(s for s in wf["jobs"]["promote"]["steps"] if s.get("id") == "decide")
+    step["env"][WEBHOOK] = "${{ secrets.DEPLOY_DISCORD_WEBHOOK }}"
+
+
 OWN_RED = {
+    "the suspended post reads a misspelt output": (
+        _suspended_post_reads_a_misspelt_hold,
+        "promote: no webhook step posts decide's suspended_hold",
+    ),
+    "the suspended post holds PROMOTE_TOKEN": (
+        _suspended_post_gains_the_promote_token,
+        "promote: the step 'Post the suspended-changed hold' holds the webhook and a token",
+    ),
+    # The other direction of the same rule: the scan covers every step that holds the
+    # webhook, so a webhook moved into the step that already holds PROMOTE_TOKEN is caught.
+    # The case above proves only that a token added to the post step is caught.
+    "Decide holds the webhook": (
+        _decide_gains_the_webhook,
+        "promote: the step 'Decide' holds the webhook and a token",
+    ),
     "settle reads a misspelt stateful": (
         _settle_reads_a_misspelt_stateful,
         "settle: no step takes STATEFUL",
