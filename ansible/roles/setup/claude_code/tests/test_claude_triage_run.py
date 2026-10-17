@@ -165,6 +165,32 @@ def test_a_run_with_no_diagnosis_still_leaves_a_record_a_report_and_a_page(
     assert pages == [("drill", "inconclusive")]
 
 
+def test_a_failed_session_says_why_in_the_record_and_the_report(tmp_path) -> None:
+    # The shape of the 2026-10-17 drill: a rejected credential, no diagnosis.
+    body = json.dumps(
+        {
+            "is_error": True,
+            "subtype": "success",
+            "result": "Not logged in · Please run /login",
+            "api_error_status": 401,
+        }
+    )
+    config, _, reports = _setup(tmp_path, body)
+
+    assert run.main(["claude_triage_run.py", "drill"], config, lambda e, s: None) == 0
+
+    record = json.loads((tmp_path / "state" / "runs" / "drill.json").read_text())
+    assert record["state"] == "failed"
+    assert record["error"] == "Not logged in · Please run /login (API status 401)"
+    with open(os.path.join(reports, "triage-drill.html")) as f:
+        assert "Why it stopped" in f.read()
+
+
+def test_a_diagnosed_session_reports_no_stop_reason() -> None:
+    result = {"subtype": "success", "structured_output": {"confidence": "high"}}
+    assert run.stop_reason(result, False) == ""
+
+
 def test_a_malformed_episode_id_runs_nothing(tmp_path) -> None:
     config, _, _ = _setup(tmp_path, "{}")
     paged = []
