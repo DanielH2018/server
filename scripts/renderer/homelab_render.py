@@ -250,9 +250,7 @@ def stamp_restarts(
             }
             for name, files in tag.directories().items()
         }
-        stamped.append(
-            RenderedTag(tag.tag, dirs[tag.tag], dirs.get(f"{tag.tag}-deferred", {}))
-        )
+        stamped.append(tag.with_directories(dirs))
     return stamped
 
 

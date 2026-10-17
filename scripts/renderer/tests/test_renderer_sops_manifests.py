@@ -11,7 +11,8 @@ Run: uv run pytest scripts/renderer/tests/test_renderer_sops_manifests.py
 import pytest
 
 from renderer import homelab_render, shadow_diff
-from renderer.renderer_lib.cluster import select_tags
+from renderer.renderer_lib.bundle import KUSTOMIZATION, SUBSTITUTE_OPT_OUT
+from renderer.renderer_lib.cluster import RenderedTag, select_tags
 from renderer.renderer_lib.placeholders import (
     PlaceholderRender,
     render_placeholders,
@@ -26,6 +27,8 @@ from renderer.renderer_lib.secret_checks import (
     sops_manifest_entries,
     sops_manifest_namers,
 )
+from renderer.renderer_lib.sops_entries import copy_sops_manifests
+from secrets_mgmt.cluster_vars_check import ManifestEntry
 
 HA = "home-assistant"
 ENTRY = "google-sa-secret.yaml"
@@ -196,3 +199,16 @@ def test_the_secret_check_runs_the_third_clause_whatever_the_render_is_flagged(
     render = PlaceholderRender([], {}, {}, {})
     report = check(render, homelab_render.secret_keys(), rule5_result=result, listed=[])
     assert _unlisted("t.yaml.j2", MULLVAD) in report.missing
+
+
+def test_copying_a_sops_manifest_keeps_the_tags_verify_directory(tmp_path):
+    """The copy rebuilds `<tag>/` alone, so `-verify` and `-snapshot` survive it."""
+    name = ManifestEntry(HA, ENTRY, "", frozenset()).name
+    (tmp_path / name).write_text(
+        f"kind: Secret\nmetadata:\n  annotations:\n    {SUBSTITUTE_OPT_OUT}: disabled\n"
+    )
+    verify = {"job.yaml": "kind: Job\n", KUSTOMIZATION: "resources: [job.yaml]\n"}
+    tag = RenderedTag(HA, {KUSTOMIZATION: "resources: []\n"}, verify=verify)
+    (copied,) = copy_sops_manifests([tag], {HA: {ENTRY: None}}, [HA], tmp_path)
+    assert name in copied.files
+    assert copied.verify == verify

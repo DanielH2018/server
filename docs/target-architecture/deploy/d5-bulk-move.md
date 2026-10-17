@@ -639,6 +639,13 @@ D5.4a1 image contexts ─▶ D5.4a2 CI images ─▶ (operator: packages public)
       kinds its role's inputs call for: `-deferred` when the role passes
       `manifests_deferred_files`, `-snapshot` when it declares `k8s_autodeploy_snapshot_pvcs`,
       and `-verify` when it has a verify Job or a post-apply mutation Job.
+    - **How a role declares a verify Job.** The role ships it, with any ConfigMap or RBAC
+      beside it, as `templates/verify/*.yaml.j2`. The renderer renders those files into
+      `out/cluster/<tag>-verify/`, and the census grants `-verify` to the published tags
+      whose role ships one. Both read `verify_files` in `scripts/renderer/renderer_lib/ordering.py` (#5261).
+      The manifests role derives its file lists from the top-level `templates/*.yaml.j2`
+      alone, so Ansible never renders or applies them. A role therefore adds the directory
+      in the PR that hands its tag to Flux.
     - **`soak` and `homelab-namespace` join `SHARED_KINDS` later.** Each joins in the PR that
       renders it: `soak` in D5.3b2, `homelab-namespace` in the namespace PR. D4's census fails a
       member with no file, so adding either in D5.1a1, before any file renders it, would fail

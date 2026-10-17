@@ -10,8 +10,8 @@ Run: uv run pytest scripts/renderer/tests/test_renderer_standalone_map.py
 import pytest
 
 from renderer import homelab_render
-from renderer.renderer_lib.placeholders import read_guard_map
-from renderer.standalone_map import coverage_problems, fleet_render
+from renderer.renderer_lib.placeholders import PlaceholderRender, read_guard_map
+from renderer.standalone_map import coverage_problems, fleet_render, guard_map
 
 
 @pytest.fixture(scope="module")
@@ -47,3 +47,13 @@ def test_a_mapped_key_absent_from_the_secrets_file_is_flagged(render, known_keys
     assert coverage_problems(read_guard_map(), render, known_keys - {"email"}) == [
         "email is in the map and not in ansible/vars/secrets.yml"
     ]
+
+
+def test_a_per_tag_kinds_standalone_keys_count_for_its_tag():
+    standalone = {
+        "x": frozenset({"a"}),
+        "x-deferred": frozenset({"b"}),
+        "x-verify": frozenset({"c"}),
+    }
+    render = PlaceholderRender([], {}, standalone)
+    assert guard_map(render) == {"x": ["a", "b", "c"]}
