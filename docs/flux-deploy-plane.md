@@ -1195,8 +1195,10 @@ from. The Job's exit is the `flux/soak` status. The design is D5's *The soak as 
   `timeout` adds another minute. With bento-pdf, texbrain and peanut published, that is
   2010s, 2250s and 2310s.
 - **RBAC.** The ServiceAccount `soak` may get and list `OCIRepository` and Kustomization objects in
-  `flux-system`, and list pods and get and list ReplicaSets in each namespace a published tag
-  renders into.
+  `flux-system`. A ClusterRole lets it list pods and get and list ReplicaSets in every
+  namespace. The grant is cluster-wide because `soak` has no `dependsOn` edges, so Flux may
+  apply it before a tag whose first revision creates a namespace. A Role in that namespace
+  would fail `soak`'s apply, and `flux/soak` would read `failure` (#5380).
 - **Its base.** The flux role renders the `OCIRepository` named `last-good`, which follows the
   `last-good` tag with `homelab`'s `verify` block. The Job diffs R's `digests.json` against
   it, and widens to the fleet when it cannot.
