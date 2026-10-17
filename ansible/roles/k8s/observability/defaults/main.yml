@@ -45,8 +45,8 @@ observability_k8s_kube_state_metrics_image: registry.k8s.io/kube-state-metrics/k
 # stamps on Kustomization `<tag>` (bundle.py:CONTENT_DIGEST). It is the digest of the tag's own
 # rendered directory, so it holds across a master commit that moves `revision` without touching
 # the tag, and C7's flux reference time matches on it (#5338). A change to the tag adds one
-# short-lived series beside the new revision's: the root Kustomization `homelab` applies the new
-# annotation before the tag's own Kustomization reports the new revision.
+# short-lived series: the root Kustomization `homelab` stamps the new annotation and the tag's
+# own Kustomization reports the new revision, in either order.
 #
 # kube-state-metrics drops a label whose path is absent. The flux role omits spec.suspend
 # unless its suspend lever is on, so `suspended` is absent rather than "false" on an object

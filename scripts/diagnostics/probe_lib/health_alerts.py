@@ -137,6 +137,8 @@ def flux_reference(tag, query):
     DECIDED: the earliest agreeing sample, not the start of the newest run — a revert to
     content seen earlier in the lookback reads back to that first report. That moves the
     reference earlier, which gates more alerts, never fewer, and keeps one instant query.
+    Root `homelab` stamps the annotation and `<tag>` applies the content, unordered, so the
+    reference can trail the content by one root apply plus one scrape.
     """
     selector = f'gotk_resource_info{{customresource_kind="Kustomization",name="{tag}"}}'
     newest = query(selector)

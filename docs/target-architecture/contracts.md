@@ -527,7 +527,9 @@ every entry is flux-owned then waits for C-2b, through the uptime-kuma edge.
   adds one series per Kustomization through that label, and C7's series budget counts
   them. A Kustomization's `content_digest` label reads its `homelab/content-digest`
   annotation (C1). It moves only when the tag's own directory does, so it adds one
-  short-lived series per change to the tag, not one per promotion.
+  short-lived series per change to the tag, not one per promotion. The root Kustomization
+  `homelab` stamps the annotation and the tag's own Kustomization applies the content; no
+  `dependsOn` orders the two.
 - **Which revision field names a commit.** A Kustomization's `status.lastAppliedOriginRevision`
   holds `master@sha1:<sha>`, the `--revision` that `flux push artifact` wrote. Its
   `status.lastAppliedRevision` holds `<tag>@sha256:<digest>` and names no commit. Every reader
@@ -616,8 +618,10 @@ every entry is flux-owned then waits for C-2b, through the uptime-kuma edge.
     - no probe half for a tag whose rendered entry has no route, even when an old
       `probe_success` series is still inside the lookback.
 
-  D5's soak and `probe.py health` share one definition of this selector. A drill exclusion
-  therefore cannot apply to one reader only.
+  D5's soak and `probe.py health` share one definition of this selector, except for the
+  reference time. A drill exclusion therefore cannot apply to one reader only. The soak's
+  reference is the arrival of its revision R (`flux_soak.py:anchor`), and it reads only the
+  tags in R's changed set, so a later unrelated revision never moves it.
 - **The soak.** From D5.3, a Job in the shared kind `soak` reads the alerts labelled
   `severity="critical"` or `verify="true"` for the services in the revision's changed set
   (C2), after M1's filter for shadow rules and the Watchdog. An empty changed set passes at
