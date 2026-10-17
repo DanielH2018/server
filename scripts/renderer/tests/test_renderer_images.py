@@ -284,6 +284,9 @@ def test_a_stub_render_points_a_flux_owned_consumer_at_ghcr_as_placeholder_mode_
     )
     assert code == RENDER_OK
     path = f"cluster/{OWNED}/deployment.yaml"
+    container = _container(tmp_path / "out" / path, OWNED)
+    assert container["image"] == f"ghcr.io/danielh2018/{OWNED}:{_tags(out)[OWNED]}"
+    assert container["imagePullPolicy"] == "IfNotPresent"
     assert (tmp_path / "out" / path).read_text() == (out / path).read_text()
 
 
