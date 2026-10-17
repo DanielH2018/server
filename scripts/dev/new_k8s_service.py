@@ -381,6 +381,47 @@ def parse_args(argv=None):
     return args
 
 
+def next_steps(args, role: Path) -> str:
+    """The follow-up instructions `main` prints once the role and entry are written."""
+    route_census = (
+        ", and ROLES_WITH_A_DEFAULT_INGRESSROUTE beside it for its route"
+        if args.route
+        else ""
+    )
+    # observability is denylisted from auto-deploy, so nothing else loads the route's
+    # blackbox target, and until then `probe.py health` skips the probe half (#5346).
+    probe_step = (
+        f"Once {args.name} is live, deploy `observability` "
+        f"(./scripts/deploy.sh --tags observability) to load its ingress probe, then gate "
+        f"it with `probe.py health {args.name}`.\n"
+        if args.route
+        else ""
+    )
+    return (
+        f"\nNext: fill the TODOs in {(role / 'CLAUDE.md').relative_to(REPO)}, then\n"
+        f"  prek run --all-files\n"
+        f"  uv run python scripts/renderer/homelab_render.py cluster --out out --role {args.name}\n"
+        f"The entry carries `owner: flux`, so deploy.sh refuses --tags {args.name} with exit 5, "
+        f"--dry-run included. Flux applies the role once the PR merges and `promote` "
+        f"publishes it: see the new-k8s-service skill.\n"
+        f"{probe_step}"
+        f"Secrets and NetworkPolicies are not scaffolded. Add each as a template under "
+        f"{(role / 'templates').relative_to(REPO)}; k8s/manifests renders every top-level "
+        f"one, and a name containing `secret` renders 0600 under no_log. A PVC is a "
+        f"`k8s_claims` entry in {(role / 'defaults' / 'main.yml').relative_to(REPO)}, not "
+        f"a template.\n"
+        f"\nTwo censuses a new role always has to join, which `prek` does not run and CI does:\n"
+        f"  BORN_FENCED_ROLES in ansible/tests/k8s/test_netpol_baseline_labels.py — add "
+        f"{args.name} with the sentence saying why Traefik is its only caller, or drop the "
+        f"`netpol-baseline: enforced` pod label and write the role its own NetworkPolicy.\n"
+        f"  ROLES_WITH_A_DEFAULT_SERVICE in "
+        f"ansible/tests/k8s/test_shared_manifest_defaults.py — add {args.name}, since it "
+        f"takes the shared default Service{route_census}.\n"
+        f"The regen-doc-fragments prek hook rewrites the auto-deploy coverage fragment on "
+        f"your commit and fails once: stage what it wrote and commit again."
+    )
+
+
 def main(argv=None) -> int:
     args = parse_args(argv)
 
@@ -413,33 +454,7 @@ def main(argv=None) -> int:
             check=True,
         )
 
-    route_census = (
-        ", and ROLES_WITH_A_DEFAULT_INGRESSROUTE beside it for its route"
-        if args.route
-        else ""
-    )
-    print(
-        f"\nNext: fill the TODOs in {(role / 'CLAUDE.md').relative_to(REPO)}, then\n"
-        f"  prek run --all-files\n"
-        f"  uv run python scripts/renderer/homelab_render.py cluster --out out --role {args.name}\n"
-        f"The entry carries `owner: flux`, so deploy.sh refuses --tags {args.name} with exit 5, "
-        f"--dry-run included. Flux applies the role once the PR merges and `promote` "
-        f"publishes it: see the new-k8s-service skill.\n"
-        f"Secrets and NetworkPolicies are not scaffolded. Add each as a template under "
-        f"{(role / 'templates').relative_to(REPO)}; k8s/manifests renders every top-level "
-        f"one, and a name containing `secret` renders 0600 under no_log. A PVC is a "
-        f"`k8s_claims` entry in {(role / 'defaults' / 'main.yml').relative_to(REPO)}, not "
-        f"a template.\n"
-        f"\nTwo censuses a new role always has to join, which `prek` does not run and CI does:\n"
-        f"  BORN_FENCED_ROLES in ansible/tests/k8s/test_netpol_baseline_labels.py — add "
-        f"{args.name} with the sentence saying why Traefik is its only caller, or drop the "
-        f"`netpol-baseline: enforced` pod label and write the role its own NetworkPolicy.\n"
-        f"  ROLES_WITH_A_DEFAULT_SERVICE in "
-        f"ansible/tests/k8s/test_shared_manifest_defaults.py — add {args.name}, since it "
-        f"takes the shared default Service{route_census}.\n"
-        f"The regen-doc-fragments prek hook rewrites the auto-deploy coverage fragment on "
-        f"your commit and fails once: stage what it wrote and commit again."
-    )
+    print(next_steps(args, role))
     return 0
 
 

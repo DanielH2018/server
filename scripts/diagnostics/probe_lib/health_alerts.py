@@ -14,7 +14,8 @@ Two halves, each judged against a reference time:
     tag. With no reference time every gated alert fails. Older alerts, and firing alerts
     outside the gated set, print as notes.
   - Probes. The newest `probe_success{service="<tag>"}` sample of each target must postdate
-    the rollout, and read 1. A tag whose entry renders no ingress route skips this half.
+    the rollout, and read 1. A tag whose entry renders no ingress route skips this half, and
+    so does a route Prometheus has not loaded a probe target for yet (`unprobed_route`).
 
 A would-fail result is re-read once after `REREAD_WAIT_S`, because a probe alert that fired
 during a slow rollout can still read firing at the first read.
@@ -195,6 +196,38 @@ def judge_alerts(tag, reference, query):
     return failing, notes
 
 
+PROBE_JOB = "blackbox-ingress"
+
+
+def unprobed_route(tag, query):
+    """(failing lines, note lines) for a routed `tag` with no `probe_success` series.
+
+    The blackbox job's static labels reach its `up` series, so `up{service="<tag>"}` exists
+    exactly when Prometheus has loaded the tag's target. With the target loaded, no probe
+    series means the probe stopped reporting (blackbox-exporter down reads `up` 0), which
+    fails. With the job loaded and the target absent, the route was added since
+    `observability` last deployed: `observability` is denylisted from auto-deploy, so a new
+    service's first gate would otherwise fail a healthy rollout (#5346). That passes with a
+    note. With no `up` series for the job at all, the job is broken, which fails.
+
+    `/api/v1/targets` would answer the same question, but Prometheus' IngressRoute admits
+    `/api/v1/query` alone.
+    """
+    if query(f'up{{job="{PROBE_JOB}",service="{tag}"}}'):
+        return [
+            f"  {tag}'s probe target is loaded but reported no probe_success series "
+            f"within {PROBE_WAIT_S}s"
+        ], []
+    if not query(f'up{{job="{PROBE_JOB}"}}'):
+        return [
+            f"  the {PROBE_JOB} job has no targets loaded, so {tag}'s route is unprobed"
+        ], []
+    return [], [
+        f"  note: {tag} has an ingress route that Prometheus does not probe yet; deploy "
+        f"`observability` to load its {PROBE_JOB} target, then re-run this gate"
+    ]
+
+
 def judge_probes(tag, reference, tools):
     """(failing lines, note lines) for `tag`'s ingress probes, waiting for a fresh sample.
 
@@ -206,14 +239,8 @@ def judge_probes(tag, reference, tools):
     while True:
         values = {_key(s): s for s in tools.query(selector)}
         if not values:
-            # Only a routed tag reaches here, and its route renders a blackbox target, so no
-            # series means the probe stopped reporting: blackbox-exporter down, or the job
-            # broken. A route added since `observability` last deployed reads the same way.
             if tools.clock() >= deadline:
-                return [
-                    f"  {tag} has an ingress route but no probe_success series after "
-                    f"{PROBE_WAIT_S}s (a new route needs an `observability` deploy)"
-                ], []
+                return unprobed_route(tag, tools.query)
             tools.sleep(POLL_S)
             continue
         stamps = {

@@ -178,6 +178,10 @@ what gates the apply. Two limits specific to a *brand-new* service:
 - A clean render says nothing about scheduling, PVC binding, probe or rollout behaviour.
   Those show only after Flux applies the tag. Gate it with
   `uv run python scripts/diagnostics/probe.py health <name>`.
+- A routed service has no ingress probe until `observability` deploys, because the blackbox
+  targets render in that role and it is denylisted from auto-deploy. Run
+  `./scripts/deploy.sh --tags observability` once the tag is live and before the gate. A gate
+  run before that skips the probe half with a note naming this deploy.
 
 An entry with the `owner` line deleted deploys through `./scripts/deploy.sh --tags "<name>"`.
 The `deploy` skill covers that wrapper's exit codes and the `--check` / `--dry-run` / `prek`
