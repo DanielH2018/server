@@ -181,6 +181,10 @@ def _kubectl(cm_stdout: str, rc: int = 0) -> kubectl.Tools:
     )
 
 
+# The live-tree tests run on hosts with a kubeconfig too; this keeps them off the cluster.
+_NO_KUBECTL = kubectl.Tools(find_tool=lambda name: None)
+
+
 def _stamps(epoch: float) -> str:
     return json.dumps({"kind": "ConfigMap", "data": {"last-success": f"{int(epoch)}"}})
 
@@ -295,7 +299,7 @@ def test_live_k3s_defaults_still_carry_the_drill_cron_vars():
 
 
 def test_build_rows_on_the_live_tree_yields_at_least_six_named_loops():
-    rows = g.build_rows()
+    rows = g.build_rows(tools=_NO_KUBECTL)
     names = {r["name"] for r in rows}
     assert len(rows) >= 6
     assert names == {
@@ -313,7 +317,7 @@ def test_build_rows_on_the_live_tree_yields_at_least_six_named_loops():
 
 
 def test_markdown_opens_with_the_provenance_banner():
-    rows = g.build_rows(now=NOW)
+    rows = g.build_rows(now=NOW, tools=_NO_KUBECTL)
     out = g.render_markdown(rows)
     assert out.startswith("---\n")
     assert "generated_from: scripts/docs/reference/state.py" in out
@@ -343,7 +347,7 @@ def test_markdown_summary_line_counts_ok_loops():
 
 
 def test_markdown_ends_with_exactly_one_newline():
-    out = g.render_markdown(g.build_rows(now=NOW))
+    out = g.render_markdown(g.build_rows(now=NOW, tools=_NO_KUBECTL))
     assert out.endswith("\n")
     assert not out.endswith("\n\n")
 
