@@ -383,7 +383,8 @@ def test_no_literal_image_lines_in_k8s_templates() -> None:
     ("dep_name", "rel_path", "datasource"),
     [
         ("prek", ".github/actions/setup/action.yml", "pypi"),
-        ("python", ".github/actions/setup/action.yml", "python-version"),
+        # python is absent on purpose: its minor and major bumps resolve to the cross-manager
+        # `python (manual` group, held by test_renovate_python_group.py (#5479).
         ("node", ".github/actions/setup/action.yml", "node-version"),
         ("vale-cli/vale", ".github/workflows/ci.yml", "github-releases"),
         ("goreleaser/nfpm", ".github/workflows/ci.yml", "github-release-attachments"),
