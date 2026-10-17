@@ -146,8 +146,8 @@ Related issues:
 
 - [#4564](https://github.com/DanielH2018/server/issues/4564): karakeep-chrome's rollout wait, superseded by Flux `wait`.
 - [#4556](https://github.com/DanielH2018/server/issues/4556): the qbittorrent reach probe's pod name, superseded when the verify tasks move.
-- [#4188](https://github.com/DanielH2018/server/issues/4188): the Home Assistant hold and its Recreate downtime, relevant to the announced
-  Recreate windows.
+- [#4188](https://github.com/DanielH2018/server/issues/4188): the Home Assistant hold and its Recreate downtime, relevant to home-assistant's
+  own window (*Waves and windows*).
 
 Depends on: [D3](d3-secrets.md), [D4](d4-ordering.md), [R3](../render/r3-remove-live-reads.md),
 [M1](../monitoring/m1-alertmanager.md), [M2](../monitoring/m2-first-bridge-family.md). Wave D
@@ -192,7 +192,8 @@ applies nothing. Four duties that Ansible tasks performed get a Flux-era owner:
   renderer computes.
 
 The 59 Deployments and 5 DaemonSets that carry `restartedAt` roll once at their takeover. The
-40 `Recreate` Deployments among them roll inside announced windows.
+40 `Recreate` Deployments among them roll at their flips: at any hour, except the seven
+own-window roles' (*Waves and windows*).
 
 **Exit criterion.** Seven checks, each under *Verification*:
 
@@ -2083,16 +2084,23 @@ sizes its batch of roles against that projection.
 | Wave | Roles | Shape | Window |
 |---|---|---|---|
 | A | deploy-ui, gpu-exporter, homepage, littlelink, longhorn-ui, node-exporter, nut-exporter, pihole-exporter | one task, `RollingUpdate` or DaemonSet, no snapshot | any time; littlelink only after M6's B-1e |
-| A' | loki-homelab, navidrome, scrutiny; then wg-easy alone | one task, `Recreate`, no snapshot | a window; wg-easy in its own window, with the operator on the LAN |
-| B | bazarr, freshrss, livesync, speedtest; then zigbee2mqtt; then home-assistant | one task, snapshot claims | a window; each home-automation role alone |
-| C | ical-proxy, homelab-mcp, terraria, valheim, code-server, karakeep, nut, n8n, pi-peer-backup | image build; code-server and karakeep with snapshots; n8n with a probe Job; pi-peer-backup with Pi writes and a gate Job | a window for `Recreate` ones |
-| D | cloudflare-ddns, docs, radarr, mosquitto, dri-device-plugin, artifacts, autofix-bridge, game-stats, prowlarr, sonarr, configarr, tdarr, qbittorrent, janitorr, jellyfin, media-volume, registry, monitor-bridge, uptime-kuma, observability, headlamp, crowdsec, traefik, authelia, pihole, netpol-baseline | imperative tasks | each alone; the home-edge roles (crowdsec, traefik, authelia, pihole) each in its own window |
+| A' | loki-homelab, navidrome, scrutiny; then wg-easy alone | one task, `Recreate`, no snapshot | any time; wg-easy in its own window, with the operator on the LAN |
+| B | bazarr, freshrss, livesync, speedtest; then zigbee2mqtt; then home-assistant | one task, snapshot claims | any time; zigbee2mqtt and home-assistant each in its own window |
+| C | ical-proxy, homelab-mcp, terraria, valheim, code-server, karakeep, nut, n8n, pi-peer-backup | image build; code-server and karakeep with snapshots; n8n with a probe Job; pi-peer-backup with Pi writes and a gate Job | any time |
+| D | cloudflare-ddns, docs, radarr, mosquitto, dri-device-plugin, artifacts, autofix-bridge, game-stats, prowlarr, sonarr, configarr, tdarr, qbittorrent, janitorr, jellyfin, media-volume, registry, monitor-bridge, uptime-kuma, observability, headlamp, crowdsec, traefik, authelia, pihole, netpol-baseline | imperative tasks | any time, each alone; the home-edge roles (crowdsec, traefik, authelia, pihole) each in its own window |
 
-- **The window** is the hour after M2's `weekly-reboot` mute ends: Sunday 08:15 to 09:15 UTC at
-  the baseline values. It derives from the reboot cron's variables and M2's
-  `weekly_reboot_mute_*` variables. Every pod has restarted shortly before, an alert in the
-  window pages, and the soak ignores the reboot's restarts because they predate T0's pods. The
-  session posts in the deploy channel before each window.
+- **Windows, as the operator ruled on 2026-10-17.** A flip needs no weekday or hour. A
+  `Recreate` role's takeover roll takes that one service down briefly, and the operator accepts
+  that at any hour. Seven roles each take a window of their own: wg-easy, zigbee2mqtt,
+  home-assistant, crowdsec, traefik, authelia and pihole. An own window is an hour, agreed with
+  the operator and announced in the deploy channel, in which no other flip lands. wg-easy's
+  also needs the operator on the LAN. The plan first held every `Recreate` flip to the hour
+  after M2's `weekly-reboot` mute ends, Sunday 08:15 to 09:15 UTC, and the ruling drops that:
+  the hour was a maintenance slot, and no flip depends on it.
+- **A flip still keeps clear of the weekly reboot.** A flip whose verification would still be
+  running at the 07:35 UTC Sunday reboot does not land. Once D5.2b2 lands, `promote` enforces
+  this itself: inside its derived no-promotion window it defers, and the flip promotes when the
+  window ends at about 08:15 UTC.
 - **Order within wave D** goes from low blast radius to high. The home-edge roles come near
   the end, then netpol-baseline, because it depends on everything (D4).
 - **observability moves before headlamp.** headlamp renders a deferred document into
@@ -2148,7 +2156,7 @@ sizes its batch of roles against that projection.
   substitution reads `homelab-cluster-vars`.
 - Both quote object names and field paths only, never values or diff hunks, because R2's
   baseline finds credentials in ConfigMaps too, and the repository is public.
-- For a `Recreate` role, the window it lands in.
+- For an own-window role (*Waves and windows*), the window it lands in.
 
 1. **D5.1a1 — The publish layout** (about 150 lines). Extends D2.6b's allowlist census,
    which holds `cluster-vars` from D3.3a: the per-tag kinds and where they are written, the
@@ -2441,7 +2449,7 @@ sizes its batch of roles against that projection.
     `ansible/roles/k8s/nut/templates/deployment.yaml.j2` and
     `ansible/roles/k8s/registry/CLAUDE.md`, saying which refs still use it and why.
 22. **D5.5 to D5.7 — Wave A**, about three roles per PR, about 60 lines each.
-23. **D5.8 — Wave A'**, loki-homelab, navidrome and scrutiny in one window, about 50 lines.
+23. **D5.8 — Wave A'**, loki-homelab, navidrome and scrutiny together, about 50 lines.
     Then wg-easy in its own window, about 20 lines, with the LAN precondition.
 24. **D5.9 to D5.13 — Wave B.**
     - The four plain roles in one PR (about 80 lines).
@@ -3276,8 +3284,8 @@ includes valheim's initContainer.
 
 ## Risks
 
-- **Downtime for `Recreate` roles at takeover.** Each rolls once. Mitigation: the window after
-  the mute, and the home-edge roles each alone.
+- **Downtime for `Recreate` roles at takeover.** Each rolls once. Mitigation: the soak judges
+  each roll, and the seven own-window roles each land alone in an announced hour.
 - **Verification lost at the move** (failure class 2). A verify task stops running the moment
   its role is flux-owned. Mitigation: the class table, which never lets `probe.py health`
   alone succeed an eligible role's verify, and the census-quote precondition.
