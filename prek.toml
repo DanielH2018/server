@@ -632,8 +632,11 @@ files = "(\\.py$|(^|/)CLAUDE\\.md$|^docs/facts\\.lock/|^scripts/dev/pytest_shard
 # module's fixtures render or walk the tree. The gates are what keep a typical commit inside
 # the budget: a `.py`-only commit outside scripts/ runs the `-python` hook alone.
 #
-# `-n0`: pyproject.toml's `-n auto` spends longer bringing up xdist workers than these
-# modules take, and each worker would repeat the module-scoped renders.
+# `-n0` on the one-module hooks: pyproject.toml's `-n auto` spent longer bringing up xdist
+# workers than they take, and each worker repeats the module-scoped render (checksum 3.5s
+# against 4.3-5.0s, the Renovate pair 4.1-4.4s against 4.8-5.4s, back to back on 2026-10-17).
+# The `-python` hook keeps `-n auto`: its five modules spread across workers, 4.6s against
+# 12.3-13.6s with `-n0`.
 # CI skips all of them on both `prek run` steps, as it skips the hook above, because its
 # `pytest` job runs the same files. To commit past one, `SKIP=<its id> git commit`.
 
@@ -643,7 +646,7 @@ files = "(\\.py$|(^|/)CLAUDE\\.md$|^docs/facts\\.lock/|^scripts/dev/pytest_shard
 [[repos.hooks]]
 id = "static-ratchet-tests-python"
 name = "Static ratchet tests over the tracked Python (import direction, exit codes, prek files, hazards, probe health)"
-entry = "uv run --frozen pytest -q -n0 -p no:cacheprovider scripts/tests/test_scripts_import_direction.py scripts/lib/tests/test_exit_codes.py scripts/tests/test_prek_files_cover_entry_imports.py ansible/tests/repo/test_tracked_python_hazards.py scripts/diagnostics/tests/test_probe_health_rolled.py"
+entry = "uv run --frozen pytest -q -p no:cacheprovider scripts/tests/test_scripts_import_direction.py scripts/lib/tests/test_exit_codes.py scripts/tests/test_prek_files_cover_entry_imports.py ansible/tests/repo/test_tracked_python_hazards.py scripts/diagnostics/tests/test_probe_health_rolled.py"
 language = "system"
 pass_filenames = false
 files = "(\\.py$|^scripts/.*\\.sh$|^(prek\\.toml|pyproject\\.toml|uv\\.lock)$)"
