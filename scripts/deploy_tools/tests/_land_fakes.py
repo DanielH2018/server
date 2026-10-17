@@ -99,6 +99,9 @@ class Fakes:
     pull_ref_rc: int = 0
     tip: str = MERGE_SHA
     await_ci: list[tuple[int, str]] = field(default_factory=lambda: [(0, "CI green")])
+    # `tools.newest_green_descendant`: the commit a stale `--at` run is retargeted to, "" for
+    # none. One entry per call, the last repeating.
+    green_descendants: list[str] = field(default_factory=lambda: [""])
     tick: list[int] = field(default_factory=lambda: [0])
     deploy: list[int] = field(default_factory=lambda: [0])
     blockers: list[int] = field(default_factory=lambda: [0])
@@ -193,6 +196,9 @@ class Fakes:
     ls_tree_rc: int = 0
     # What the REST `pulls/<n>/reviews` listing answers, as one page.
     pr_reviews: list[dict[str, Any]] = field(default_factory=list)
+    # `tools.tested_base`: the master commit a head's green CI run tested it against, by head.
+    # A head absent here is one whose run log cannot be read, so the merge base stands.
+    tested_base: dict[str, str] = field(default_factory=dict)
     # What `gh api compare/<head>...master` answers, one entry per call: the paths master
     # changed since the PR's merge base. Empty is a PR already up to date with master, and an
     # exception is raised in place of an answer.
@@ -449,6 +455,10 @@ def build_tools(f: Fakes) -> tuple[Tools, list]:
         gh=gh_run,
         git=git_run,
         await_ci=await_ci,
+        newest_green_descendant=_seq(
+            f.green_descendants, calls, "newest_green_descendant"
+        ),
+        tested_base=lambda head: f.tested_base.get(head),
         tick=_seq(f.tick, calls, "tick"),
         deploy=_seq(f.deploy, calls, "deploy"),
         deploy_tags=deploy_tags,

@@ -3,7 +3,7 @@
 # design is docs/target-architecture/deploy/d2-first-leaf.md, "The deploy-pipeline exporter and
 # its alerts", and docs/flux-deploy-plane.md says what each alert means for the operator.
 #
-# The four homelab_deploy_* gauges come from the deploy-pipeline scrape job, which monitor-bridge
+# The five homelab_deploy_* gauges come from the deploy-pipeline scrape job, which monitor-bridge
 # serves from ansible/roles/k8s/monitor-bridge/files/deploy_pipeline.py and refreshes once per
 # 300s cycle. Every rule carries service="deploy-pipeline", the one literal C7 admits outside the
 # deploy-tag-or-host rule (D2 Open question 12): it names no deploy tag, so no `probe.py health`
@@ -28,12 +28,20 @@ groups:
             says how to clear each form of hold.
       # A green master commit that prod lacks, more than 2 hours after it went green, with no
       # hold to explain it: promote is not running, or its runs end without moving prod. The
-      # `and on()` drops the alert while a hold stands, which DeployHoldActive already pages. A
-      # missing hold gauge drops it too, and DeployPipelineExporterAbsent pages that.
+      # first `and on()` drops the alert while a hold stands, which DeployHoldActive already
+      # pages. The second drops it inside the weekly reboot's no-promotion window, where
+      # promote.py decide defers every promotion on purpose (#5458). The exporter derives that
+      # gauge from the weekly_reboot_* variables, so this file holds no literal hour. The
+      # `unless` keeps the alert quiet for 30 minutes after the window ends. The scheduled
+      # promote run that moves prod fires at the end, and GitHub often starts a schedule: run
+      # 5-20 minutes late; its tag job and one 300s exporter cycle come on top. A missing hold
+      # or window gauge drops the alert too, and DeployPipelineExporterAbsent pages that.
       - alert: PromotionStalled
         expr: >-
           (homelab_deploy_unpromoted_age_seconds{job="deploy-pipeline"} > 7200)
           and on() (homelab_deploy_hold_active{job="deploy-pipeline"} == 0)
+          and on() (homelab_deploy_reboot_window_active{job="deploy-pipeline"} == 0)
+          unless on() (max_over_time(homelab_deploy_reboot_window_active{job="deploy-pipeline"}[30m]) == 1)
         for: 5m
         labels:
           severity: warning
@@ -77,6 +85,7 @@ groups:
               or absent(homelab_deploy_hold_age_seconds{job="deploy-pipeline"})
               or absent(homelab_deploy_unpromoted_age_seconds{job="deploy-pipeline"})
               or absent(homelab_deploy_prod_digest_match{job="deploy-pipeline"})
+              or absent(homelab_deploy_reboot_window_active{job="deploy-pipeline"})
             )
             and on() (up{job="deploy-pipeline"} == 1)
           )
@@ -85,10 +94,10 @@ groups:
           severity: warning
           service: deploy-pipeline
         annotations:
-          summary: Prometheus has lost the deploy-pipeline job or one of its four gauges.
+          summary: Prometheus has lost the deploy-pipeline job or one of its five gauges.
           description: >-
             Either no up{job="deploy-pipeline"} series exists, so the job is gone from
-            prometheus.yml, or monitor-bridge is scraped without one of the four
+            prometheus.yml, or monitor-bridge is scraped without one of the five
             homelab_deploy_* gauges. Its log has a deploy-pipeline line each cycle naming the
             read that failed. Until the gauges are back, DeployHoldActive, PromotionStalled
             and ProdMovedOutsidePromote cannot fire.

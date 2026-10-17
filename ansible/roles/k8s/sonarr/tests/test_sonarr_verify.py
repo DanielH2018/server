@@ -66,14 +66,25 @@ def flipped(stubs, tmp_path_factory) -> list[dict]:
 
 
 def _job(docs: list[dict]) -> dict:
-    return next(doc for doc in docs if doc["kind"] == "Job")
+    """The verify Job; arr-notification's seed Job shares `sonarr-verify` with it."""
+    (job,) = [
+        doc
+        for doc in docs
+        if doc["kind"] == "Job"
+        and doc["metadata"]["annotations"]["homelab/job-kind"] == "verify"
+    ]
+    return job
 
 
 @pytest.fixture(scope="module")
 def script_dir(flipped, tmp_path_factory):
     """The rendered ConfigMap's files, written out as the Job's volume mounts them."""
     directory = tmp_path_factory.mktemp("verify")
-    configmap = next(doc for doc in flipped if doc["kind"] == "ConfigMap")
+    configmap = next(
+        doc
+        for doc in flipped
+        if doc["kind"] == "ConfigMap" and "sonarr_verify.py" in doc["data"]
+    )
     for key, text in configmap["data"].items():
         (directory / key).write_text(text)
     return directory
@@ -202,7 +213,10 @@ def test_the_tree_renders_no_sonarr_verify_while_ansible_owns_sonarr(stubs):
 def test_the_flipped_job_passes_every_job_census_row(flipped):
     assert sorted(doc["kind"] for doc in flipped) == [
         "ConfigMap",
+        "ConfigMap",
         "Job",
+        "Job",
+        "Secret",
         "ServiceAccount",
     ]
     assert problems({f"{TAG}-verify": flipped}) == []
@@ -221,7 +235,11 @@ def test_the_census_fails_the_flipped_job_once_its_spec_moves(flipped):
 def test_the_census_fails_a_script_that_dials_without_the_helper(flipped):
     """The red case for the helper row: the script's own `urlopen` is refused."""
     docs = [dict(doc) for doc in flipped]
-    index = next(i for i, doc in enumerate(docs) if doc["kind"] == "ConfigMap")
+    index = next(
+        i
+        for i, doc in enumerate(docs)
+        if doc["kind"] == "ConfigMap" and "sonarr_verify.py" in doc["data"]
+    )
     data = dict(docs[index]["data"])
     data["sonarr_verify.py"] += "\nimport urllib.request\nurllib.request.urlopen('x')\n"
     docs[index] = {**docs[index], "data": data}
@@ -303,9 +321,16 @@ def test_the_staged_job_reads_no_other_roles_file():
 
     The deployer redeploys a role when a file it `lookup()`s in another role changes, and its
     scan reads `verify-inert/` too. tdarr's test has the same guard and its red case.
+    `notification.yaml.j2` is arr-notification's seed Job, and its lookups into that role are
+    deliberate: arr-notification's own test_seed_job.py pins them.
     """
     staged = sorted((K8S_ROLES / TAG / "templates" / "verify-inert").glob("*.j2"))
-    assert [p.name for p in staged] == ["job.yaml.j2", "rbac.yaml.j2"]
+    assert [p.name for p in staged] == [
+        "job.yaml.j2",
+        "notification.yaml.j2",
+        "rbac.yaml.j2",
+    ]
+    staged = [p for p in staged if p.name != "notification.yaml.j2"]
     assert [
         (path.name, role)
         for path in staged

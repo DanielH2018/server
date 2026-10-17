@@ -240,15 +240,15 @@ def _static_ratchet_hook_files() -> list[str]:
         for r in tomllib.loads((REPO / "prek.toml").read_text())["repos"]
         for h in r.get("hooks", [])
     ]
-    entry = next(h["entry"] for h in hooks if h["id"] == "static-ratchet-tests")
-    return [w for w in entry.split() if w.endswith(".py")]
+    entries = [h["entry"] for h in hooks if h["id"].startswith("static-ratchet-tests")]
+    return [w for entry in entries for w in entry.split() if w.endswith(".py")]
 
 
 def test_a_server_brief_runs_the_repo_wide_guards_before_the_pr_and_a_dotfiles_brief_does_not():
     """A new file tripped a guard no test beside it reaches, three times in one week (#5077).
 
-    The run must name paths that exist and cover every file the `static-ratchet-tests` hook
-    runs, so a renamed guard or a widened hook turns this red instead of the brief going stale.
+    The run must name paths that exist and cover every file the `static-ratchet-tests` hooks
+    run, so a renamed guard or a widened hook turns this red instead of the brief going stale.
     """
     hook_files = _static_ratchet_hook_files()
     assert "ansible/tests/repo/test_module_length_ratchet.py" in hook_files
@@ -269,3 +269,20 @@ def test_a_server_brief_runs_the_repo_wide_guards_before_the_pr_and_a_dotfiles_b
         ISSUES, "daniel-box", "1345-1386", "worktree-orch", [], DOTFILES
     )
     assert "## Before you open the PR" not in brief and "--record-files" not in brief
+
+
+def test_every_brief_asks_for_proof_that_new_tests_fail_and_names_the_pr_body_section():
+    """#5499: the red phase covers only `red-green` batches, so every brief carries the step."""
+    for host, target in (
+        ("daniel-box", None),
+        ("daniel-server", None),
+        ("daniel-box", DOTFILES),
+    ):
+        args = (ISSUES, host, "1345-1386", "worktree-orch", [])
+        brief = render_brief(*args) if target is None else render_brief(*args, target)
+        base = "origin/master" if target is None else target.base
+        assert "## Prove each new test can fail" in brief
+        assert "`## Tests fail without the change`" in brief
+        assert f"git merge-base HEAD {base})" in brief
+        assert "each new\ntest that still passes is reported" in brief
+        assert brief.index("## Prove each new test") < brief.index("## Landing")

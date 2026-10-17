@@ -23,26 +23,33 @@ than building one from scratch, so those keep whatever they hold; the create pat
 from `GET /api/v3/notification/schema`, which is where the app's own defaults live.
 
 WHERE THE SECRETS COME FROM. The process environment — `ARR_API_KEY` and
-`ARR_DISCORD_WEBHOOK_URL`, set by `tasks/main.yml` under `no_log`. Never argv, and nothing
+`ARR_DISCORD_WEBHOOK_URL`, set by `tasks/main.yml` under `no_log`, or by the inert seed Job in
+sonarr's and radarr's `templates/verify-inert/` from two Secrets. Never argv, and nothing
 here prints a field value: the output is the decision (created / updated / no-op) and the
 `SEED_CHANGED: <n>` marker `changed_when` reads. `probe.py arr <app> notification` prints the
 webhook URL in full, which is why verifying this by hand needs a filter and this script does
 not need one.
 
+ONE TRANSPORT, TWO CALLERS. Every request goes through `flux_job_connect.open_url`, the
+helper the Job census requires of a script Flux runs, so the script imports only modules that
+census admits. The Job's ConfigMap carries the helper beside the script. `tasks/main.yml`
+runs this file on the controller with `PYTHONPATH` at `roles/k8s/manifests/files`, where the
+helper lives, rather than keeping a second transport here. A refused connect therefore
+retries for 60 seconds on both paths.
+
 RUN IT: `tasks/main.yml` invokes it with no arguments to seed, and with `--test` to make the
-app POST a real Discord message through the resolved spec. Nothing runs at import, so the
-tests exercise the decision without a cluster.
+app POST a real Discord message through the resolved spec. `ARR_PORT` overrides the app's
+port, for a fixture server. Nothing runs at import, so the tests exercise the decision without
+a cluster.
 """
 
-from __future__ import annotations
-
 import argparse
-import copy
 import json
 import os
 import sys
 import urllib.error
-import urllib.request
+
+from flux_job_connect import Request, open_url
 
 # Mirrors scripts/diagnostics/probe_lib/arr.py. The API is reached at the Service ClusterIP
 # directly, NOT through Traefik: neither app has an Authelia bypass for /api/*, so a routed
@@ -61,6 +68,11 @@ HTTP_TIMEOUT = 30
 
 class SeedError(Exception):
     """A condition the caller must fail on rather than report as configured."""
+
+
+def deep_copy(body: dict) -> dict:
+    """An independent copy of a JSON body, by a round trip; the Job census admits no `copy`."""
+    return json.loads(json.dumps(body))
 
 
 # ── the decision (pure, and the part the tests drive) ────────────────────────────────────────
@@ -118,7 +130,7 @@ def declared_body(
             f"known: {sorted(trigger_keys(existing))}"
         )
 
-    body = copy.deepcopy(existing)
+    body = deep_copy(existing)
     body["name"] = name
     for key in trigger_keys(body):
         body[key] = key in triggers
@@ -144,7 +156,7 @@ def schema_for(schemas: list[dict]) -> dict:
     """
     for entry in schemas:
         if entry.get("implementation") == IMPLEMENTATION:
-            entry = copy.deepcopy(entry)
+            entry = deep_copy(entry)
             entry.pop("presets", None)
             return entry
     raise SeedError(
@@ -172,12 +184,12 @@ def request(base_url: str, api_key: str, path: str, method: str = "GET", body=No
     """One *arr API call. The key travels as a header, never in the URL."""
     url = f"{base_url}/api/{API_VERSION}/{path.lstrip('/')}"
     data = json.dumps(body).encode() if body is not None else None
-    req = urllib.request.Request(url, data=data, method=method)
+    req = Request(url, data=data, method=method)
     req.add_header("X-Api-Key", api_key)
     if data is not None:
         req.add_header("Content-Type", "application/json")
     try:
-        with urllib.request.urlopen(req, timeout=HTTP_TIMEOUT) as resp:
+        with open_url(req, timeout=HTTP_TIMEOUT) as resp:
             raw = resp.read().decode()
     except urllib.error.HTTPError as exc:
         # The app answers a rejected spec with a JSON body naming the field. Surfacing it is
@@ -217,7 +229,8 @@ def main(argv: list[str] | None = None) -> int:
     app = env_or_fail("ARR_APP")
     if app not in ARR_PORTS:
         raise SeedError(f"ARR_APP={app!r} is not one of {sorted(ARR_PORTS)}")
-    base_url = f"http://{env_or_fail('ARR_HOST')}:{ARR_PORTS[app]}"
+    port = os.environ.get("ARR_PORT") or ARR_PORTS[app]
+    base_url = f"http://{env_or_fail('ARR_HOST')}:{port}"
     api_key = env_or_fail("ARR_API_KEY")
     webhook_url = env_or_fail("ARR_DISCORD_WEBHOOK_URL")
     name = env_or_fail("ARR_NOTIFICATION_NAME")

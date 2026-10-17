@@ -1,11 +1,13 @@
-"""The review pipeline's CI wait: `cc-wait gh-ci` run by the pipeline on a host that does not land.
+"""The review pipeline's CI wait: `cc-wait gh-ci` run by the pipeline before its PR lands.
 
 WHY (#4737). A daniel-server batch stops at its open PR, and the orchestrator lands it. A check
 that runs only in CI, or in a suite the agent did not run, therefore first showed up as
 `pr-ci-red` at the orchestrator's `land.sh` (#4727, #4736, #4753, #4869), and the orchestrator
-repaired the branch by hand. The daniel-box pipeline does not have the gap: `review_land` runs
-`land.sh`, which waits for CI, and resumes the implementer for a red verdict. This module gives
-the other host the same two steps, a wait and one resume, after the review and its fix round.
+repaired the branch by hand. The daniel-box pipeline had the same gap one step later (#5498):
+`review_land` runs `land.sh`, which waits for CI but ends `pr-ci-red` on a red run, and
+`RESUME_VERDICTS` does not resume for it. This module gives both hosts the same two steps, a
+wait and one resume, after the review and its fix round. On daniel-box they run before
+`land.sh`.
 
 THE WAIT is `cc-wait gh-ci --pr <n>`, the waiter every other wait in this repo uses. It reads
 every check run on the PR's current head, so a push from the resume moves the wait to the new
@@ -46,7 +48,6 @@ from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
-from fanout_lib.brief import lands
 from fanout_lib.review.review_land import WAIT_MARGIN_S, login
 from fanout_lib.review.review_prompts import ci_fix_prompt
 from fanout_lib.review.review_record import Phase
@@ -183,14 +184,17 @@ def wait_for_ci(
     return CiResult(NO_VERDICT, line)
 
 
-def awaits_ci(host: str, target: Target) -> bool:
-    """Whether a batch waits for its PR's CI: this repo's, on a host that does not land.
+def awaits_ci(target: Target) -> bool:
+    """Whether a batch waits for its PR's CI: any batch in this repo, on either host.
 
-    On the deploy host `land.sh` waits for CI and the pipeline resumes the implementer for
-    its verdicts (`review_land`). Another repo's batch is left alone: this module knows
-    nothing of that repo's CI, and a repo with no CI would wait out the whole budget.
+    On the deploy host the wait runs before `review_land` starts `land.sh` (#5498). Left to
+    `land.sh`, a red CI ended `pr-ci-red` and the batch `needs-input`, 9 of 24 box
+    `needs-input` outcomes over 2026-10-15 to 2026-10-17. A green PR's CI is waited on
+    either way, so the extra wait falls on red runs only. Another repo's batch is left alone:
+    this module knows nothing of that repo's CI, and a repo with no CI would wait out the
+    whole budget.
     """
-    return target.is_server and not lands(host, target.repo)
+    return target.is_server
 
 
 # DECIDED: the CI resume gets no delta review. It repairs a check CI named, and the next CI run
