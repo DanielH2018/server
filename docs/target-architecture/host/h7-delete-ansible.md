@@ -278,7 +278,7 @@ The exit criterion is seven observations:
       `scripts/dev/fanout_lib/brief.py:APPLY_OWED` tells an agent to `cat` `hold_sha` and
       `owed.jsonl`. `renovate_agent/tasks/main.yml` and `claude_code/tasks/agent_access.yml`
       grant access to `/var/lib/gitops-deploy`. `land_renovate_pr.py:DEPLOYER_CONFIG` reads
-      `/etc/gitops-deploy/config.env`, which D6.2a repoints at
+      `/etc/gitops-deploy/config.env`, which D6.13 repoints at
       `k8s_autodeploy_counts.py --denylist`.
     - `git grep -n -i checkout-sync` over the slice plans matches only this file, so no other
       slice builds the timer that replaces the fast-forward.
@@ -1040,7 +1040,7 @@ and assigns each hit outside tests:
   `nodeSelector` for the etcd drill's stamp directory, and the role's `CLAUDE.md` restates
   that as the pin's reason. If M6 has already turned the two checks into exporter series,
   the series go instead.
-- `land_renovate_pr.py:DEPLOYER_CONFIG` no longer exists by then: D6.2a repoints the
+- `land_renovate_pr.py:DEPLOYER_CONFIG` no longer exists by then: D6.13 repoints the
   lander's denylist at `k8s_autodeploy_counts.py --denylist`. The PR body quotes the empty
   grep that confirms it.
 - `fanout_lib/brief.py:APPLY_OWED` drops its `cat` of `hold_sha` and `owed.jsonl` in
@@ -1768,7 +1768,7 @@ way, so it adds no edge. H2.10 names the S3 folder in old H7.13, so H7.34 waits 
 | H7.34 daniel-server: the `k3s` agent half and `hypervisor` | H7.9a, H7.13 | yes | H7.31, H6.1b2, H6.5b, H2 |
 | H7.35 daniel-box: the `k3s` host half | H7.9b | no: H6.4a, H6.4b and H2's `setup/k3s` PRs edit the same task files, so it starts once they merge | H7.32, H6.4a, H6.4b, H2, D5's media-volume row |
 | H7.36 daniel-box: the checkout timers | H7.10a, H7.10b, H7.10c | yes | H6.2, D5's docs row |
-| H7.37 daniel-box: Renovate and `fake_remux` | H7.11 | yes; D6.3's review picks the deploy_ui branch | H6.2, D6 |
+| H7.37 daniel-box: Renovate and `fake_remux` | H7.11 | yes; D6.15's review picks the deploy_ui branch | H6.2, D6 |
 | H7.38 Per-user tooling in `DanielH2018/dotfiles` | H7.12a | yes | none |
 | H7.39 The agent users and daniel-server's `claude_code` | H7.12b, H7.12c's daniel-server PR | yes | H7.38, H7.22, H4, H6.2, the H6 PR that lands the window test |
 | H7.40 daniel-box: `claude_code` | H7.12c's daniel-box PR | yes, with H7.39 | H7.39 live, D5's artifacts row |
@@ -1777,7 +1777,7 @@ way, so it adds no edge. H2.10 names the S3 folder in old H7.13, so H7.34 waits 
 | H7.43 The Pi runbook and the Pi rebuild | H7.15b | the runbook yes; the rebuild no, because it needs every Pi PR live | H7.25, H7.26, H7.27, H7.30, H7.42, H5, all live |
 | H7.44 The cluster-node procedure, adding a host and release upgrades | H7.15c, H7.15d, H7.15e | yes; the guest drill needs H6 live | H7.42, R4 PR 7b, H6 |
 | H7.45 Scripts for the operator playbooks | H7.16a, H7.16b | yes | R4 |
-| H7.46 The last Ansible imports | H7.17 | yes | R4, D6.2 |
+| H7.46 The last Ansible imports | H7.17 | yes | R4, D6.13 |
 | H7.47 Closing the readers | H7.18a, H7.18b, H7.18d | yes | H7.36, H7.40, H5 |
 | H7.48 Absent arms become legacy entries; `k8s_host_files` empties | H7.18c | no: its list of record is H7.23's report taken after every row has moved | H7.25, H7.35, H7.36, H7.40, H2, D5 |
 | H7.49 monitor-bridge's gitops checks go, and land.sh stops running the tick | H7.19a's first and third PRs | yes | H7.41, D6 |
@@ -2075,7 +2075,7 @@ the `manual_plane` clearing, the facts-lock `forget` and `verify`, and *Rollback
       deployer's state and starts `deploy.sh`, and none of those outlive H7.19b. H7.19a
       retires it with the deployer: its units become legacy entries in
       `homelab-daniel-box`, and the PR deletes its tasks, its Python modules and their
-      tests. The one exception is a deploy_ui that D6.3's operator review already moved
+      tests. The one exception is a deploy_ui that D6.15's operator review already moved
       onto C2's `DEPLOY_HOLD`. That one is packaged here, and H7.19b deletes its remaining
       deployer reads in `deploy_ui.py`, `deploy_ui_reads.py` and `deploy_ui_writes.py`.
       The deployer-import census covers it in both cases.
@@ -2178,7 +2178,7 @@ the `manual_plane` clearing, the facts-lock `forget` and `verify`, and *Rollback
       and R4 added, is converted to the renderer's env or to a fixed expected output taken
       from its last green run, or is deleted with its subject.
     - **The `ansible.errors` tests** follow their plugins. R4 PR 10 converted `toposort.py`
-      and `authelia_access.py`, R4 deleted `k8s_retire.py`, and D6.2 deleted
+      and `authelia_access.py`, R4 deleted `k8s_retire.py`, and D6.13 deleted
       `k8s_autodeploy.py`; the PR confirms all four. `claude_agents.py` is deleted with its
       last caller, or loses its `ansible.errors` import if the host render still uses it.
     - **Host and package modes without ansible-core.** R4's exit 4 proves cluster mode only.
@@ -3505,7 +3505,7 @@ Four findings. Every one was checked against the tree at `70591c307` before it w
   list omits it.** Fixed. Confirmed: `deploy_ui.py`, `deploy_ui_reads.py` and
   `deploy_ui_writes.py` import the three state modules. H7.11 no longer packages
   deploy_ui, and H7.19a retires it with the deployer. The one exception is a deploy_ui
-  that D6.3's operator review already moved onto `DEPLOY_HOLD`, whose remaining reads
+  that D6.15's operator review already moved onto `DEPLOY_HOLD`, whose remaining reads
   H7.19b deletes. The census covers all three files.
 
 ### Round c2 (per-slice adversarial review)
@@ -3576,7 +3576,7 @@ confirmed against the tree at `70591c307` before it was fixed.
 - **H7-C2-05 (medium) The path-reader census is incomplete.** Fixed. Confirmed:
   `brief.py:APPLY_OWED` holds the `cat`, and the two task files grant access to the
   directory.
-    - `land_renovate_pr.py:DEPLOYER_CONFIG` was confirmed at `70591c307`, but D6.2a already
+    - `land_renovate_pr.py:DEPLOYER_CONFIG` was confirmed at `70591c307`, but D6.13 already
       repoints the lander's denylist at `k8s_autodeploy_counts.py --denylist`. H7 therefore
       only quotes the empty grep.
     - H7.2e runs a fifth derivation grep for the three path prefixes, and *Path readers*
