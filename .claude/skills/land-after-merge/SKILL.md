@@ -31,7 +31,8 @@ Use it when the merge should not wait on your session. Then run the command abov
 `--arm-merge` on a merged PR is a no-op, and the landing deploys the merge commit.
 
 **A stale base costs one branch update first.** Before the merge, `land.sh` asks whether master
-changed any path since the PR's merge base. When it did, it merges master into the PR branch
+changed any path since the base the head's green CI run tested it against (the PR's merge base
+when that run's log cannot be read). When it did, it merges master into the PR branch
 once, prints `updating its branch so CI re-tests it against master before the merge`, and
 merges only after CI is green on the updated head. That is the normal path for about half of
 PRs and adds a CI run's worth of time, not a fault. The exception is a head the operator
