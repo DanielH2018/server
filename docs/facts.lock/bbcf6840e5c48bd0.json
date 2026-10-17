@@ -1,0 +1,12 @@
+{
+  "checksum": "d5f4523cdc28dff2df621bb9048735ba2627feb7d0b8c88c1639f54eef9ea0c8",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "ansible/roles/k8s/terraria/CLAUDE.md#Notable",
+  "row": {
+    "atoms": {
+      "docs/archive/k3s-migration/backup-consolidation-longhorn.md": "68920683053a3a86dc5b26671d2c51e07d558d2eddc9051e186927437878a53c"
+    },
+    "python": "3.14",
+    "verified_sha": "55862020d"
+  }
+}

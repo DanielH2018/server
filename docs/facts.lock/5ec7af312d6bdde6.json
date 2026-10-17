@@ -1,0 +1,13 @@
+{
+  "checksum": "24b95aa581de24c837f5a9e074bde3f892de97a4a12802fb3af1b8ab02af1b69",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "ansible/roles/setup/hypervisor/CLAUDE.md#Whether it fires is measured during a drill",
+  "row": {
+    "atoms": {
+      "ansible/tests/staging/test_staging_egress_fence.py": "3b6eb2b9b164e04ba8522eb78d6fb3a8b94548ea9710c7a378fa8bb5a90bb5e0",
+      "ansible/tests/staging/test_staging_egress_fence_fires.py": "63d26f277da6e839281508e8cfe7e12af2d862d3e7ccc3de6b0034e0440bd1c0"
+    },
+    "python": "3.14",
+    "verified_sha": "fd34ae8eb"
+  }
+}

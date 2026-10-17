@@ -1,0 +1,12 @@
+{
+  "checksum": "7427c75da8ada40c1a7999a42f56470c7f7f9c549042b702db8f7b41fdfa8511",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "ansible/roles/setup/renovate_agent/CLAUDE.md#`setup/renovate_agent` — the unattended Renovate agent",
+  "row": {
+    "atoms": {
+      "docs/renovate-agent-bounds-and-digest.md": "e783f32fa0f5a69e7ca918e92796805ef049b01841ea1f4a1fa59e78ecf79f5b"
+    },
+    "python": "3.14",
+    "verified_sha": "fd34ae8eb"
+  }
+}

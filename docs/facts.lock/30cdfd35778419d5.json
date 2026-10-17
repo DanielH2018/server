@@ -1,0 +1,16 @@
+{
+  "checksum": "0f5b5e3db11bb0c54a11464b0a7518323dae46dd5533fd62b4c509d5d2a7c7ea",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "ansible/roles/k8s/netpol-baseline/CLAUDE.md#Where a per-workload policy lives",
+  "row": {
+    "atoms": {
+      "ansible/filter_plugins/homepage_tiles.py": "81b0abf85cf3163280193fa22927cab08f3e5238c73cfaa521a6bd855cd0d3be",
+      "ansible/templates/networkpolicy.yml.j2": "7d6c2d810a421dcf14c3560ebd4c4f853326aa83659235c3df7af0ad1f9ca44d",
+      "ansible/tests/k8s/test_netpol_from.py": "c38452b1aa237a773322cee4c9477b41c6972fb6daff1468f596bd4bf320e0a2",
+      "ansible/tests/repo/test_census_rows_roles.py": "3d2aea13285b7bf391bc32580d93632751203e41a4e6500a667d0350dd0b6e61",
+      "docs/networkpolicy-slice-answers.md": "830536afacb6d6e8b2f1592effa3347ee7ae1a29299e82116d9dd55a5623d64e"
+    },
+    "python": "3.14",
+    "verified_sha": "cab79a38d"
+  }
+}

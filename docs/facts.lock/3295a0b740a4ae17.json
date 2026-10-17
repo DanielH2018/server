@@ -1,0 +1,12 @@
+{
+  "checksum": "cb2a4b0c0e2372b17a998ff21bf79d43b08e6c3dd99fe1673f2ad68c628be0ec",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "ansible/roles/setup/deploy_ui/CLAUDE.md#In flight",
+  "row": {
+    "atoms": {
+      "docs/archive/deploy-sh-python-port.md": "125c01cbb24ea6ba5884a099af81c798f640aba2ed597d72a246e565e7277d72"
+    },
+    "python": "3.14",
+    "verified_sha": "55862020d"
+  }
+}

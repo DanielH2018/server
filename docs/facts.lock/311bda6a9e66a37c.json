@@ -1,0 +1,13 @@
+{
+  "checksum": "b072d7123c092929f9b882b26fbf2bbf838c529538a7c19dda61ddcd7ea77ae7",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "ansible/roles/k8s/headlamp/CLAUDE.md#OIDC login (on)",
+  "row": {
+    "atoms": {
+      "ansible/tests/setup/test_k3s_oidc_trusts_authelia.py": "1d2780c367a04d80eef3acf434f86f9441ce37cee027eca9e166eac24c37c358",
+      "docs/headlamp-oidc-and-plugins.md": "4e210d07634067383e6d6fde1ef17a7f5d8788b5e420ab8c11cea4127029f411"
+    },
+    "python": "3.14",
+    "verified_sha": "7466d078d"
+  }
+}

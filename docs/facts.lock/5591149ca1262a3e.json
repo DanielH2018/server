@@ -1,0 +1,12 @@
+{
+  "checksum": "cb1aaff6e205f60d88b438e7c9d0b04aca0ded6ace5eaf61986f9d6b895f0e50",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "ansible/roles/k8s/observability/CLAUDE.md#Eviction tiers",
+  "row": {
+    "atoms": {
+      "ansible/tests/k8s/test_pod_template_hygiene.py": "5cea822090049c3c83319cfb4e9fdb2a0d18b27318e2984683825c8386e86107"
+    },
+    "python": "3.14",
+    "verified_sha": "7f5047711"
+  }
+}

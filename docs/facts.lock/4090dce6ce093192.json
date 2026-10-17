@@ -1,0 +1,12 @@
+{
+  "checksum": "8032bbfb27eb915f48b5a668f27b133fbf3b4c5eafbe7e0a725f58f182bab533",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "CLAUDE.md#`kubectl` — what actually decides",
+  "row": {
+    "atoms": {
+      "docs/claude-shell-permissions.md": "444005815ecd96d4f19a9c3a25f009aa778550679ae347cbb1d2e9f796e4a2be"
+    },
+    "python": "3.14",
+    "verified_sha": "55862020d"
+  }
+}

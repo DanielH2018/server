@@ -1,0 +1,12 @@
+{
+  "checksum": "2bcdf9e2f8e9083fd8a185a3c6a98325c035279d9814b559b0de6d48f20d9e66",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "ansible/roles/k8s/headlamp/CLAUDE.md#Plugins",
+  "row": {
+    "atoms": {
+      "docs/headlamp-oidc-and-plugins.md": "4e210d07634067383e6d6fde1ef17a7f5d8788b5e420ab8c11cea4127029f411"
+    },
+    "python": "3.14",
+    "verified_sha": "7466d078d"
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "checksum": "247c54c8df8daf989d4a4e70de8f09a313f1ae3aa7fc8c91cf87d4c6c4d4fbac",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "ansible/roles/k8s/qbittorrent/CLAUDE.md#qbittorrent — torrent client behind a WireGuard sidecar",
+  "row": {
+    "atoms": {
+      "docs/qbittorrent-vpn-and-prefs.md": "40ae82a3a54397739b637354d00e4af1dc04dd4ee85e32cbcf10ebe8673a93e9"
+    },
+    "python": "3.14",
+    "verified_sha": "fd34ae8eb"
+  }
+}

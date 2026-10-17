@@ -1,0 +1,12 @@
+{
+  "checksum": "ad05d166cfe71e96e278263a80595b2cb6a95e1f90370d21121d007986572c1d",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "ansible/roles/setup/hypervisor/CLAUDE.md#Teardown exists, and refuses when it should",
+  "row": {
+    "atoms": {
+      "ansible/tests/setup/test_has_flag_roles_have_both_directions.py": "028292b4c7a0f742e83a01ce687c61bb89b881aa3849d45439c8a32c09ddaede"
+    },
+    "python": "3.14",
+    "verified_sha": "fea456d31"
+  }
+}

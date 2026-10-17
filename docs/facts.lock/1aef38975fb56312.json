@@ -1,0 +1,13 @@
+{
+  "checksum": "42e1808ecf02683a3e668ea60dadd9d34248705a933b773a8978f2d3d9592c85",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "ansible/roles/k8s/bazarr/CLAUDE.md#Editing",
+  "row": {
+    "atoms": {
+      "ansible/templates/ingressroute-default.yaml.j2": "837539b8a48082ed0f5b9f6ca11b8029d66c7cc03562c6103b27371ce536d68c",
+      "ansible/templates/service-default.yaml.j2": "34004e457e70b79fb81002555e9e6c811fb14e3e2d3383d1beed85bce06764f0"
+    },
+    "python": "3.14",
+    "verified_sha": "fd34ae8eb"
+  }
+}

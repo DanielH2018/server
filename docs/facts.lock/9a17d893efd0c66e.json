@@ -1,0 +1,12 @@
+{
+  "checksum": "ae4acf80aa6e8f10043e6c0e095bd4dd67a68b54616745ffc5c4a6bb2f9e229a",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "ansible/roles/k8s/media-volume/CLAUDE.md#At a glance",
+  "row": {
+    "atoms": {
+      "ansible/tests/deploy/test_k8s_toposort.py::test_documented_pairwise_ordering_survives_an_adversarial_list": "31404c404dbf1e8c3158ccd296897d81a56627602184747b8ff7f137595d0da3"
+    },
+    "python": "3.14",
+    "verified_sha": "b5b460738"
+  }
+}

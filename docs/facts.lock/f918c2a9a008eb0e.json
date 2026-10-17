@@ -1,0 +1,13 @@
+{
+  "checksum": "c8bc898041d80dabab0556cbd1b2e14c07a1ce9dda59c8e86536124a03c220ae",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "CLAUDE.md#Python & Tests",
+  "row": {
+    "atoms": {
+      ".claude/rules/python-layout.md": "2aff1b17c616cea98dc90c0ed376423e239371adb8f6368361db36ac0082d7fa",
+      ".github/workflows/ci.yml": "b803fcb7f17ed9235f1e5cb1fcd2f5d3b2838429d4368ae4c57ce4436577f03f"
+    },
+    "python": "3.14",
+    "verified_sha": "55862020d"
+  }
+}
