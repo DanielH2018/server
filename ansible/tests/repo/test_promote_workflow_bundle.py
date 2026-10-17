@@ -94,7 +94,10 @@ def problems(wf: dict) -> list[str]:
             "render: does not check the SOPS copies after the build and before gitleaks"
         )
     handoff = _handoff(wf)
-    if handoff is None or wf["jobs"].get("publish", {}).get("needs") != "render":
+    needs = wf["jobs"].get("publish", {}).get("needs")
+    if handoff is None or "render" not in (
+        [needs] if isinstance(needs, str) else needs or []
+    ):
         found.append("render: hands out/ to no publish job that needs it")
     elif any(i is None or i > handoff for i in (check, ciphertext, gitleaks)):
         found.append(
