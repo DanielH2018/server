@@ -1174,8 +1174,25 @@ instead:
 
 1. **The first PR empties the service's render.** Flux prunes every object the render drops.
    The PR carries a `Removes-Object:` line for each one (*Removing an object on purpose*).
-   A role with no Deployment left trips the restart-target refusal in the renderer, and its
-   Service and IngressRoute render from the entry, not from its templates (#5282).
+   Deleting the role's templates is not enough on its own. The PR also edits the role's
+   `k8s/manifests` include, and leaves the `containers_list` entry as it is:
+
+   ```yaml
+     vars:
+       manifests_rollout: ''
+       manifests_exclude_files: [service.yaml, ingressroute.yaml]
+   ```
+
+   The renderer refuses a restart target that names no workload in the render, and
+   `manifests_rollout` defaults to the tag. The empty value clears that target. Any
+   `manifests_extra_rollouts` or `manifests_self_rollouts` entry goes too, and so do the
+   role's `k8s_claims`. The exclude list drops the Service and IngressRoute that the shared
+   defaults render from the entry's `port` and `hostname`. Editing the entry instead would
+   move the render of every Ansible-owned role that reads `containers_list`, such as
+   authelia, and arm 1 would flag the PR. The tag's `cluster/<tag>/` directory then holds
+   only a `kustomization.yaml` with `resources: []`.
+   `scripts/validate/tests/test_validate_cross_plane_retirement.py::test_step_1_of_a_flux_owned_retirement_renders_no_object`
+   renders this step on bento-pdf.
 1. **Wait for the prune.** `promote` must move `prod` to a commit that holds the first PR,
    and the objects must read `NotFound`.
 1. **The second PR removes the `containers_list` entry and the role.** The next bundle omits
