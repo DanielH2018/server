@@ -9,6 +9,10 @@ is deployed with `--at` and the primary checkout is not touched.
 
 from collections.abc import Callable
 
+import sys as _sys
+from pathlib import Path as _Path
+
+_sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
 from lib.exit_codes import DEPLOY_STALE
 from deploy_tools.land_lib.landing import Landing
 from deploy_tools.land_lib.outcome import say
