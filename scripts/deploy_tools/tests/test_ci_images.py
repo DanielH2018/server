@@ -161,7 +161,49 @@ def test_a_failed_build_fails_its_image_and_the_others_still_build(out):
     assert all("the build or its push failed" in p for p in problems)
 
 
-def test_a_push_the_registry_does_not_serve_at_its_digest_fails(out):
+def test_a_push_served_at_another_digest_than_the_build_metadata_names_is_success(out):
+    # The default `docker` driver's metadata digest can be the config digest, not the
+    # manifest digest GHCR serves.
     fakes = Fakes(Answer(404), after=Answer(200, "sha256:" + "cd" * 32))
+    assert _push(out, fakes) == []
+
+
+def test_a_push_the_registry_does_not_serve_fails(out):
+    fakes = Fakes(Answer(404), after=Answer(404))
     problems = _push(out, fakes)
-    assert problems and all("but the registry answers HTTP 200" in p for p in problems)
+    assert problems and all("but the registry answers HTTP 404" in p for p in problems)
+
+
+class ExpiringRegistry(ci_images.Registry):
+    """GHCR's token endpoint and manifests, where a build outlives every token issued before it."""
+
+    def __init__(self):
+        super().__init__("actor", "password")
+        self.issued = 0
+        self.valid: set[str] = set()
+        self.served: set[str] = set()
+
+    def _open(self, request):
+        url = request.full_url
+        if "/token?" in url:
+            self.issued += 1
+            self.valid.add(f"t{self.issued}")
+            return 200, {}, json.dumps({"token": f"t{self.issued}"}).encode()
+        bearer = str(request.get_header("Authorization", "")).removeprefix("Bearer ")
+        if bearer not in self.valid:
+            return 401, {}, b""
+        name = url.split("/v2/", 1)[1].split("/")[1]
+        if name in self.served:
+            return 200, {"Docker-Content-Digest": DIGEST}, b""
+        return 404, {}, b""
+
+    def build(self, name: str, tag: str, context) -> str:
+        self.valid.clear()
+        self.served.add(name)
+        return DIGEST
+
+
+def test_the_read_back_after_a_build_asks_for_a_fresh_token(out):
+    registry = ExpiringRegistry()
+    assert ci_images.push(out, registry.lookup, registry.build) == []
+    assert registry.issued == 2 * len(ci_images.plan(out))

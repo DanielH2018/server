@@ -11,8 +11,8 @@
 - `push OUT`, after `docker login`. For each image it reads whether GHCR already serves
   `ghcr.io/danielh2018/<name>:<content tag>`. A served tag is success and is never built
   again: the push-once rule is what makes a content tag immutable, since two builds of one
-  context are not byte-identical. An absent tag is built and pushed, then read back at the
-  digest the build pushed. Any other registry answer fails that image, so a refusal never
+  context are not byte-identical. An absent tag is built and pushed, then read back with a
+  token fetched after the build, and must be served. Any other registry answer fails that image, so a refusal never
   reads as "absent". A failed image does not stop the others.
 
 Stdlib only, so the job that holds `packages: write` installs nothing and imports no renderer
@@ -148,7 +148,6 @@ class Registry:
 
     def __init__(self, actor: str, password: str) -> None:
         self._basic = base64.b64encode(f"{actor}:{password}".encode()).decode()
-        self._tokens: dict[str, str] = {}
 
     def _open(
         self, request: urllib.request.Request
@@ -168,22 +167,23 @@ class Registry:
         raise AssertionError("unreachable")
 
     def _token(self, name: str) -> str:
-        """A bearer token for `name`, scoped to push so a package not yet created answers 404."""
-        if name not in self._tokens:
-            scope = f"repository:{OWNER}/{name}:pull,push"
-            status, _, body = self._open(
-                urllib.request.Request(
-                    f"https://{REGISTRY}/token?scope={scope}&service={REGISTRY}",
-                    headers={"Authorization": f"Basic {self._basic}"},
-                )
+        """A bearer token for `name`, scoped to push so a package not yet created answers 404.
+
+        Never cached: the read-back follows a build that can outlast a token issued before it.
+        """
+        scope = f"repository:{OWNER}/{name}:pull,push"
+        status, _, body = self._open(
+            urllib.request.Request(
+                f"https://{REGISTRY}/token?scope={scope}&service={REGISTRY}",
+                headers={"Authorization": f"Basic {self._basic}"},
             )
-            token = json.loads(body).get("token", "") if status == 200 else ""
-            if not token:
-                raise RuntimeError(
-                    f"{REGISTRY} issued no push token for {name} (HTTP {status})"
-                )
-            self._tokens[name] = token
-        return self._tokens[name]
+        )
+        token = json.loads(body).get("token", "") if status == 200 else ""
+        if not token:
+            raise RuntimeError(
+                f"{REGISTRY} issued no push token for {name} (HTTP {status})"
+            )
+        return token
 
     def lookup(self, name: str, tag: str) -> Answer:
         status, headers, _ = self._open(
@@ -273,13 +273,18 @@ def push(
         except (OSError, RuntimeError, ValueError) as exc:
             problems.append(f"{ref(name, tag)}: the read-back failed: {exc}")
             continue
-        if after.status != 200 or after.digest != digest:
+        # DECIDED: the read-back requires that GHCR serves the tag, not that it serves the
+        # build metadata's digest. The job builds on the runner's default `docker` driver,
+        # whose `containerimage.digest` can be the config digest rather than the manifest
+        # digest GHCR serves. docker/setup-buildx-action would move the build cache out of
+        # reach of the `docker system prune` that lets ten builds fit on one runner.
+        if after.status != 200 or not DIGEST_RE.fullmatch(after.digest):
             problems.append(
                 f"{ref(name, tag)}: pushed {digest}, but the registry answers HTTP "
                 f"{after.status} at {after.digest or 'no digest'}"
             )
             continue
-        print(f"pushed {ref(name, tag)} at {digest}")
+        print(f"pushed {ref(name, tag)}; GHCR serves it at {after.digest}")
     return problems
 
 
