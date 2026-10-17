@@ -43,10 +43,13 @@ registry round trip. See repo-root `CLAUDE.md` for shared conventions.
     resolves to, and any digest a running pod resolved. That last one is not belt-and-braces:
     every Ansible-owned consumer pulls from here with `imagePullPolicy: Always`, so a pod
     re-fetches by tag on each start and untagging the manifest it came from turns its next
-    restart into an ImagePullBackOff. `Always` stays while Ansible owns the consumer, because a
-    build that pushes nothing new leaves the node holding the old bytes under the same name. A
-    flux-owned consumer pulls its GHCR content tag with `IfNotPresent` instead
-    (`scripts/renderer/renderer_lib/images.py:ghcr_refs`), and this store never sees it.
+    restart into an ImagePullBackOff. `Always` stays while Ansible owns the consumer, because this
+    store's tags are mutable: `latest` moves on every build, and a forced rebuild re-pushes an
+    unchanged content tag with new bytes, so a node's cached copy can be stale. A flux-owned
+    consumer pulls its GHCR content tag with `IfNotPresent` instead
+    (`scripts/renderer/renderer_lib/images.py:ghcr_refs`). GHCR never re-pushes a tag it serves,
+    so a cached copy is always right, and this store never serves that pull until it mirrors
+    GHCR (D5 Open question 2).
   - An unrankable tag is KEPT. Ordering needs each manifest's config-blob `created`, because
     the tag names are content hashes and carry no chronology.
 - The GC run reports twice: the `Registry GC` Kuma push tile (`registry_gc_push_token`,
