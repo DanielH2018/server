@@ -30,10 +30,10 @@ groups:
           service: mosquitto
           verify: "true"
         annotations:
-          summary: The mosquitto-lan Service does not hold its pinned LAN address 10.0.0.242.
+          summary: The mosquitto-lan Service does not hold its pinned LAN address.
           description: >-
-            kube-state-metrics reports no LoadBalancer ingress 10.0.0.242 on homelab/mosquitto-lan
-            for 5 minutes, or Prometheus has no kube-state-metrics scrape job. Home Assistant and
-            the LAN publishers cannot reach the broker on the VIP. MetalLB does not re-evaluate an
+            kube-state-metrics reports no LoadBalancer ingress at the pinned VIP on
+            homelab/mosquitto-lan for 5 minutes, or Prometheus has no kube-state-metrics scrape
+            job. Home Assistant and the LAN publishers cannot reach the broker on the VIP. MetalLB does not re-evaluate an
             existing allocation, so delete the Service and redeploy mosquitto to force
             reallocation.
