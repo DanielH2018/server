@@ -101,18 +101,30 @@ def test_the_config_map_carries_every_module_byte_for_byte(rendered):
     }
 
 
-def test_the_deployment_mounts_the_rendered_config_map(rendered):
+def test_the_deployment_mounts_a_config_map_its_own_render_holds(rendered):
+    """The pod named this ConfigMap before the conversion too; what is new is that the
+    tag's render holds it, which is all `checksum/restart` can hash."""
     files, _ = rendered
     template = pod_template(_deployment(files))
     assert template is not None
     assert ("ConfigMap", CONFIG_MAP) in pod_references(template)
+    held = {
+        (obj.get("kind"), (obj.get("metadata") or {}).get("name"))
+        for text in files.values()
+        for obj in yaml_fast.safe_load_all(text)
+        if isinstance(obj, dict)
+    }
+    assert ("ConfigMap", CONFIG_MAP) in held
 
 
-def test_the_stamped_checksum_is_the_value_the_render_inputs_hash_to(rendered):
-    """Ties `_value` below to the renderer's own stamp, so the edit tests read the real value."""
+def test_the_stamped_checksum_covers_the_config_map(rendered):
+    """The renderer's stamp is `_value` of the render, and differs from the value of the same
+    render without the ConfigMap, the shape it had while a task applied it."""
     files, keys = rendered
     annotations = _deployment(files)["spec"]["template"]["metadata"]["annotations"]
+    without = {name: text for name, text in files.items() if name != CONFIG_MAP_FILE}
     assert annotations[RESTART_ANNOTATION] == _value(files, keys)
+    assert annotations[RESTART_ANNOTATION] != _value(without, keys)
 
 
 def test_a_module_edit_moves_the_checksum_is_clean(rendered):
