@@ -1143,7 +1143,7 @@
  "scripts/lib/tests/test_worktree_privileged_holders.py": 0.0,
  "scripts/lib/tests/test_worktrees.py": 0.07,
  "scripts/lib/tests/test_yaml_fast.py": 0.0,
- "scripts/renderer/tests/test_renderer_bundle.py": 0.88,
+ "scripts/renderer/tests/test_renderer_bundle.py": 11.45,
  "scripts/renderer/tests/test_renderer_bundle_ordering.py": 0.82,
  "scripts/renderer/tests/test_renderer_collision_census.py": 9.08,
  "scripts/renderer/tests/test_renderer_context.py": 0.19,
