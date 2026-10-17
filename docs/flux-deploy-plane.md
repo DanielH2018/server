@@ -768,8 +768,13 @@ only after its dependencies finish, so the wait sums four terms, with the soak b
   `--requeue-dependency` interval, 30 seconds by default. A Kustomization whose dependency is
   not Ready requeues after that interval and no sooner. The walk covers every Kustomization in
   the bundle, so `cluster-vars` counts whenever it sits on the path.
-- **The queueing term.** The number of changed names, dependents included, divided by
-  `--concurrent` and rounded up, times the largest `timeout` among them. A Kustomization that
+- **The queueing term.** The smaller of two bounds on when the last changed name, dependents
+  included, finishes. The first is the number of changed names divided by `--concurrent` and
+  rounded up, times the largest `timeout` among them. The second is Graham's bound for
+  greedy list scheduling: the other names' `timeout`s summed, divided by `--concurrent` and
+  rounded up, plus the largest. The first is the smaller for equal `timeout`s. The second is
+  the smaller when one long `timeout` sits among short ones, which the first would charge in
+  every round (#5482). `docs/target-architecture/deploy/d4-ordering.md` has the proof. A Kustomization that
   waits on health holds one of the Kustomize controller's workers, so a revision that changes more
   names than `--concurrent` queues behind the workers. The flux role sets `--concurrent` to
   `k8s_rollout_batch_width`, 5, the width the deploy play rolls workloads at, plus one worker
@@ -820,7 +825,8 @@ A wait shorter than a verification is safe and costs a promotion. `decide` gives
   two Kustomizations alone, with a 3-minute W, the wait is 41.5 minutes. `land-wait` restates
   that figure as `wait.py:PROMOTE_TIMEOUT_S` and gives up at twice it. The soak's chain counts
   every Kustomization in the bundle, so it grows by a 10-minute queueing round for each five
-  more. With the eleven tags published on 2026-10-17 the soak's `timeout` is 3510s, and
+  more 10-minute ones. Once Graham's bound is the smaller, each added Kustomization no longer
+  than the longest adds a fifth of its `timeout`. With the eleven tags published on 2026-10-17 the soak's `timeout` is 3510s, and
   `verify` waits 61.5 minutes. So `land-wait` also reads the listed `soak` Kustomization's
   `timeout` each poll, and gives up no sooner than twice `verify`'s wait on it
   (`wait.py:soak_deadline_s`). A lander unit's `LAND_DEADLINE` caps the wait below that,

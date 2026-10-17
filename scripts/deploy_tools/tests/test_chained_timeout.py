@@ -6,6 +6,7 @@ builds its bundles, and shares that module's fixtures.
 Run: uv run pytest scripts/deploy_tools/tests/test_chained_timeout.py
 """
 
+import random
 import re
 
 import pytest
@@ -64,14 +65,46 @@ def test_a_changed_ancestor_adds_its_timeout():
     assert found == 20 * 60 + HOP + TEN_M + 20 * 60 + TAIL
 
 
-def test_eleven_changed_names_under_concurrent_five_add_three_rounds_of_the_largest():
-    """An unchanged Kustomization with a larger timeout adds nothing to the term."""
+def test_eleven_uniform_changed_names_under_concurrent_five_add_three_rounds():
+    """Rounds and Graham's bound agree here. An unchanged larger timeout adds nothing."""
     names = [f"t{i}" for i in range(11)]
-    bundle = docs(
-        *(ks(n) for n in names[1:]), ks("t0", timeout="15m"), ks("idle", timeout="50m")
-    )
+    bundle = docs(*(ks(n) for n in names), ks("idle", timeout="50m"))
     found = ct.promote_timeout(bundle, set(names), concurrent=5)
-    assert found == 15 * 60 + 3 * 15 * 60 + TAIL
+    assert found == TEN_M + 3 * TEN_M + TAIL
+
+
+def test_a_uniform_bundle_keeps_rounds_times_the_largest():
+    """Ten 10m names fill two rounds, where Graham's bound gives 9 * 10m / 5 + 10m = 28m."""
+    assert ct.queueing_s([TEN_M] * 10, 5) == 2 * TEN_M
+
+
+def test_one_long_timeout_among_short_ones_gets_grahams_bound_not_rounds_of_it():
+    """valheim's 1800s among 24 600s names (D5.15): 25 * 1800s by rounds, 2880s + 1800s by
+    Graham's bound, rather than every one of the five rounds priced at 1800s (#5482)."""
+    names = [f"t{i}" for i in range(24)]
+    bundle = docs(*(ks(n) for n in names), ks("valheim", timeout="30m"))
+    found = ct.promote_timeout(bundle, {*names, "valheim"}, concurrent=5)
+    assert found == 30 * 60 + (24 * TEN_M // 5 + 30 * 60) + TAIL
+    assert found < 30 * 60 + 5 * 30 * 60 + TAIL
+
+
+def _greedy_makespan(timeouts: list[int], concurrent: int) -> int:
+    """When the last job finishes, each free worker taking the next job in order."""
+    workers = [0] * concurrent
+    for timeout in timeouts:
+        workers[workers.index(min(workers))] += timeout
+    return max(workers, default=0)
+
+
+@pytest.mark.parametrize("seed", range(20))
+def test_greedy_scheduling_never_finishes_past_the_queueing_bound(seed):
+    """Random job lists and orders, at random widths, each against a simulated controller."""
+    rng = random.Random(seed)
+    for _ in range(200):
+        count, concurrent = rng.randint(0, 40), rng.randint(1, 8)
+        timeouts = [rng.choice((60, 300, 600, 1800, 3000)) for _ in range(count)]
+        bound = ct.queueing_s(timeouts, concurrent)
+        assert _greedy_makespan(timeouts, concurrent) <= bound
 
 
 def test_a_changed_soak_longer_than_the_chain_sets_the_budget():

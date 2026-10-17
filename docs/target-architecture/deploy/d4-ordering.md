@@ -519,8 +519,11 @@ hop to every chain.
   but its apply changes nothing, and a healthy one passes its health check without waiting.
   It adds:
     - one `requeue-dependency` interval per edge on that path;
-    - a queueing term: the number of names in the changed set, dependents included, divided
-      by `--concurrent`, rounded up, times the largest `timeout` among them;
+    - a queueing term: the smaller of two upper bounds on when the last name in the changed
+      set, dependents included, finishes on `--concurrent` workers (#5482). The first is the
+      number of names divided by `--concurrent`, rounded up, times the largest `timeout`
+      among them. The second is Graham's bound for greedy list scheduling: the other
+      names' `timeout`s summed and divided by `--concurrent`, rounded up, plus the largest;
     - the OCIRepository interval;
     - the Kustomization `retryInterval`.
 
@@ -538,6 +541,26 @@ hop to every chain.
   the move (C1). Every Kustomization whose `dependsOn` chain reaches such a name counts
   too, and a suspended one does not. A change under `_unclassified` counts every name. The
   timeout and the expected statuses therefore cannot disagree.
+- **Why the queueing term takes the smaller bound.** kustomize-controller's workers take the
+  next queued Kustomization when one finishes, so the queue is greedy list scheduling of
+  independent jobs. Both bounds hold for it. Rounds holds because each round of
+  `--concurrent` names finishes within the largest `timeout`. Graham's holds because every
+  worker is busy until the last job to finish, of length p, starts; otherwise a free worker
+  would have taken it. The other jobs' Σ − p of work keeps c workers busy, so that job starts
+  no later than (Σ − p) / c. It ends by (Σ − p) / c + p, at most (Σ − max) / c + max.
+    - For a uniform bundle rounds is the smaller, so the figure does not change. For one
+      name it is that name's `timeout` either way.
+    - Rounds prices every round at the largest `timeout`, so one long name in a broad
+      bundle multiplies its cost by the number of rounds. D5.15 (#5468) gives valheim a
+      first-boot `timeout` of 1800 seconds among 600-second names. By rounds the soak's
+      `timeout` rose from 4350 to 10350 seconds, because each of five rounds rose from 600 to
+      1800 seconds. Graham's bound charges the long name about 360 seconds of queue instead.
+    - The chain term already counts `dependsOn` precedence, and adding the queueing term to
+      it stays an upper bound. Graham's bound for precedence-constrained jobs is
+      W / c + (1 − 1 / c) · L, for W the summed `timeout`s and L the critical path. The chain
+      is at least L, so the chain plus (Σ − max) / c + max is at least that bound.
+    - `scripts/deploy_tools/tests/test_chained_timeout.py` simulates greedy scheduling over
+      random job lists and widths, and fails a bound the simulation exceeds.
 - **Why the queueing term is in, as D5 asked.** A Kustomization that waits on health holds a
   worker (*Baseline*), so a revision that changes more Kustomizations than `--concurrent`
   queues behind the workers. Without the term, `verify` would time out on such a revision
@@ -601,8 +624,11 @@ hop to every chain.
       The chain through sonarr and janitorr is shorter, about 74 minutes.
     - The changed set shrinks the expected set for a narrow revision, not for a broad one.
       A revision that changes every importer of `workload-shell.yml.j2`, 48 roles, expects
-      those 48 plus netpol-baseline's two Kustomizations. At `--concurrent` 5 that adds ten
-      rounds of up to 3000 seconds, so it reaches the 5.5-hour cap. Open question 14 asks
+      those 48 plus netpol-baseline's two Kustomizations. At `--concurrent` 5 that is ten
+      rounds. With tdarr's 3000 seconds the only long `timeout` among 600-second defaults,
+      Graham's bound prices the queue at 49 × 600 / 5 + 3000 seconds, about 2.5 hours, and
+      the 102.5-minute chain brings the wait to about 4.2 hours. Each further long `timeout`
+      in the set adds its share, so such a revision can still reach the 5.5-hour cap. Open question 14 asks
       whether `verify` should hold one runner that long.
     - D5's `<tag>-snapshot` and `<tag>-verify` Kustomizations lengthen a path where they sit
       on it. `soak` sits on none, and its `timeout` is a floor of the wait.
@@ -854,7 +880,8 @@ conditions of dispatch runs.
           `requeue-dependency` intervals, one queueing round, the interval and the retry. A
           chain with a fixture shared kind at its head counts the shared kind's timeout;
         - eleven changed Kustomizations under `--concurrent` 5 add three rounds of the largest
-          changed timeout. A Kustomization outside the changed set adds nothing to the
+          changed timeout when their timeouts are equal, and Graham's bound when one is
+          longer (#5482). A Kustomization outside the changed set adds nothing to the
           queueing term, and a dependent of a changed name adds one name to it;
         - an unchanged ancestor on the path adds one `requeue-dependency` interval and no
           `timeout`, and a changed one adds its `timeout`;
