@@ -80,10 +80,11 @@ def test_consumer_tags_registry_gc_token():
     assert consumer_tags("registry_gc_push_token") == ("registry", "uptime-kuma")
 
 
-def test_consumer_tags_artifacts_sync_token():
-    # Same shape again: k8s/artifacts renders the sync cron that pushes, the tile is static in
-    # uptime-kuma, and both deploy from daniel-box in one run.
-    assert consumer_tags("artifacts_sync_push_token") == ("artifacts", "uptime-kuma")
+def test_consumer_tags_artifacts_sync_token_is_manual():
+    # setup/claude_code renders the sync cron that pushes since H2.7, and a setup role has no
+    # deploy tag, so the unattended rotation must skip it rather than redeploy `artifacts`,
+    # which no longer renders the token, and leave the cron pushing the old value.
+    assert consumer_tags("artifacts_sync_push_token") == ()
 
 
 def test_every_auto_tier_token_resolves_a_consumer_or_is_known_manual():

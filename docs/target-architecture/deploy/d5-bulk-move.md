@@ -1884,8 +1884,8 @@ one task file per source role, in a conversion PR before that role flips:
   deployer skips. The same PR:
     - drops game-stats' `tasks/main.yml` entry and the claude-otel clause of observability's
       entry, or the whole entry if H2.7 has landed;
-    - retires the `release-record-cleanup-removes-the-render-record` row in
-      `ansible/tests/repo/_render_record_cleanup_row.py` (#5162). Its `must_find` names only
+    - retires the `release-record-cleanup-removes-the-render-record` census row and its
+      module (#5162). Its `must_find` names only
       these two task files and its floor is their three records, so with both tasks gone the
       row has no subject. `ansible/tasks/k8s_retire.yml` already removes both record kinds
       for a whole-service retirement.

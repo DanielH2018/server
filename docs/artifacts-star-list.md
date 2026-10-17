@@ -7,8 +7,8 @@ in the browser reaches the prune on every host. The operating rules stay in
 
 ## One file holds every star
 
-The server writes the star list to `artifacts_stars_file` (`/var/lib/artifact-stars/stars.txt`
-on daniel-box). The file holds one `<host>/<relpath>` line per starred artifact. `<host>` is
+The server writes the star list to `artifacts_stars_name` in `artifacts_stars_dir`
+(`/var/lib/artifact-stars/stars.txt` on daniel-box). The file holds one `<host>/<relpath>` line per starred artifact. `<host>` is
 the `/srv/artifacts/<host>` segment of the artifact's URL, and it equals the
 `CLAUDE_ARTIFACTS_HOST` label that each host's prune runs under. The prune is the dotfiles'
 `prune-artifacts.sh`, which runs at session start and deletes only from that host's own tree.
@@ -27,7 +27,9 @@ It skips every artifact whose line carries its own label.
 ## A peer learns its stars from the sync
 
 daniel-server prunes its own tree, so it needs its own copy of the list. The sync cron on
-daniel-box pushes the list to each peer's `stars_path` after it pulls that peer's artifacts.
+daniel-box, which `roles/setup/claude_code` installs, pushes the list from
+`claude_code_artifacts_stars_file` to each peer's `stars_path` after it pulls that peer's
+artifacts.
 The push uses the same ssh transport as the pull, and a failed push counts toward the same
 failure streak. A missing list means nothing was ever starred, and the cron pushes nothing.
 

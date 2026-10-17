@@ -487,6 +487,15 @@
   tags: [claude_code]
   ansible.builtin.import_tasks: triage.yml
 
+# ── The artifacts node's two crons ──────────────────────────────────────────────────────
+# The peer artifact sync and the OTLP-door heartbeat, moved here from the k8s artifacts and
+# observability roles by H2.7. Gated on the node, not on a flag: both read what only that node
+# holds (the peer tree the artifacts pod mounts, and the collector's loopback hostPort).
+- name: Install the artifacts node's peer sync and telemetry heartbeat crons
+  tags: [claude_code]
+  when: inventory_hostname == claude_code_artifacts_node
+  ansible.builtin.import_tasks: node_crons.yml
+
 # Render provenance for manifest-prune-check.sh's stale-script arm: without a stamp, an edit to
 # a rendered file can sit undeployed on this host with every repo-side check green. Last in the
 # role so a failed run leaves the previous checksums rather than claiming these. `import_tasks`,

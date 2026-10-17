@@ -185,11 +185,13 @@ def test_main_fails_closed_when_shellcheck_missing():
 
 def test_role_defaults_reach_the_render_context():
     # The gate lints what the host runs only if a role's own defaults are in the context: the
-    # artifacts sync script is almost entirely a `{% for peer in artifacts_peer_sources %}`
+    # artifacts sync script is almost entirely a `{% for peer in claude_code_artifacts_peer_sources %}`
     # body, and StubUndefined iterates empty (#3178).
-    path = v.ROLES / "k8s" / "artifacts" / "templates" / "sync-artifacts.sh.j2"
+    path = v.ROLES / "setup" / "claude_code" / "templates" / "sync-artifacts.sh.j2"
     ctx = v.template_context(path)
-    assert ctx["artifacts_peer_sources"], ctx.get("artifacts_peer_sources")
+    assert ctx["claude_code_artifacts_peer_sources"], ctx.get(
+        "claude_code_artifacts_peer_sources"
+    )
     assert "{{" not in sl.render_template(path, ctx)
 
 
@@ -215,6 +217,8 @@ def test_a_component_no_package_lists_has_no_host():
 
 
 def test_an_override_beats_the_role_default():
-    path = v.ROLES / "k8s" / "artifacts" / "templates" / "sync-artifacts.sh.j2"
-    ctx = v.template_context(path, overrides={"artifacts_peer_dir": "/tmp/peer"})
-    assert ctx["artifacts_peer_dir"] == "/tmp/peer"
+    path = v.ROLES / "setup" / "claude_code" / "templates" / "sync-artifacts.sh.j2"
+    ctx = v.template_context(
+        path, overrides={"claude_code_artifacts_peer_dir": "/tmp/peer"}
+    )
+    assert ctx["claude_code_artifacts_peer_dir"] == "/tmp/peer"

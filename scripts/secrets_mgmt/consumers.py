@@ -39,7 +39,7 @@ CROSS_HOST_PUSH_TOKENS = frozenset(
         "pi_sd_health_push_token",  # Pi timer, via optimize_pi's interim file + server label
         "pi_recovery_push_token",  # Pi timer, via optimize_pi's interim file + server label
         "longhorn_backup_push_token",  # daniel-box cron (k3s role) + daniel-server label
-        "claude_otel_push_token",  # daniel-box cron (k8s/observability) + daniel-server label
+        "claude_otel_push_token",  # daniel-box cron (setup/claude_code) + daniel-server label
         "daniel_box_disk_push_token",  # daniel-box cron (k3s role) + daniel-server label
         "manifest_prune_push_token",  # daniel-box cron (k3s role) + k8s/uptime-kuma static tile
         "release_staleness_push_token",  # daniel-box cron (k3s role) + k8s/uptime-kuma static tile
@@ -55,6 +55,11 @@ CROSS_HOST_PUSH_TOKENS = frozenset(
         # Same role, same cron shape, same reason: daniel-box cron (setup/gitops_deploy) +
         # k8s/uptime-kuma static tile, applied by `initial_setup.yml --tags gitops_deploy`.
         "interaction_limit_push_token",
+        # daniel-box cron (setup/claude_code, since H2.7) + k8s/uptime-kuma static tile.
+        # claude_code has no `containers_list` entry, so `deploy.yml --tags claude_code`
+        # matches nothing; the pusher is applied by `initial_setup.yml --tags claude_code`.
+        # Until H2.7 the k8s/artifacts role rendered it and this routed to that tag.
+        "artifacts_sync_push_token",
         # daniel-box cron (setup/initial_setup) + k8s/uptime-kuma static tile. Both halves embed
         # the token and must move together; initial_setup has no deploy tag, so a `--deploy
         # --tags uptime-kuma` would rotate the tile and leave the cron pushing the old value —
@@ -205,10 +210,6 @@ def consumer_tags(name: str) -> tuple[str, ...]:
         # Same shape as registry_gc: the crowdsec role renders the daniel-box cron that pushes,
         # the tile is a static entity in k8s/uptime-kuma.
         pusher = "crowdsec"
-    elif name == "artifacts_sync_push_token":
-        # Same shape as registry_gc: the artifacts role renders the daniel-box peer sync cron
-        # that pushes, the tile is a static entity in k8s/uptime-kuma.
-        pusher = "artifacts"
     else:
         # anything else unrecognised -> manual
         return ()

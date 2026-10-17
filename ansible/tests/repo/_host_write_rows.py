@@ -122,17 +122,16 @@ _CONFIGMAP = (
     "D5's Wave D PR for the role: the imperative ConfigMap's node staging under "
     "/etc/rancher/k3s/ becomes a rendered ConfigMap"
 )
-_RUN_ONCE = "D5's run-once cleanup PR (#5284) deletes the cleanup, which has already run on daniel-box"
 
 HOST_WRITE_ALLOW = {
     _K8S + "artifacts/tasks/main.yml": (
-        f"{_H2_THEN_D5}, and its two directory tasks, which no H2 PR moves"
+        "D5's `k8s_host_files` conversion PR for artifacts moves its directory tasks, which "
+        "no H2 PR moves"
     ),
     _K8S + "autofix-bridge/tasks/main.yml": _CONFIGMAP,
     _K8S + "configarr/tasks/main.yml": _H2_THEN_D5,
     _K8S + "crowdsec/tasks/main.yml": _H2_THEN_D5,
     _K8S + "docs/tasks/main.yml": "D5's `k8s_host_files` conversion PR for docs",
-    _K8S + "game-stats/tasks/main.yml": f"the pre-#2813 record cleanup: {_RUN_ONCE}",
     _K8S + "game-stats/tasks/stage.yml": _CONFIGMAP,
     _K8S + "game-stats/tasks/terraria.yml": _CONFIGMAP,
     _K8S + "game-stats/tasks/valheim.yml": _CONFIGMAP,
@@ -142,10 +141,6 @@ HOST_WRITE_ALLOW = {
     ),
     _K8S + "monitor-bridge/tasks/main.yml": _CONFIGMAP,
     _K8S + "observability/tasks/dashboards.yml": _CONFIGMAP,
-    _K8S + "observability/tasks/main.yml": (
-        "H2.7 moves the telemetry heartbeat and its cron; the claude-otel record cleanup "
-        f"is not one of H2.7's rows: {_RUN_ONCE}"
-    ),
     _K8S + "pi-peer-backup/tasks/main.yml": (
         "pi-peer-backup's Wave C PR moves both daniel-pi writes to `k8s_host_files`"
     ),
