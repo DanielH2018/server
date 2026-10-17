@@ -8,9 +8,12 @@ pod keeps running the previous code. Server-side
 apply writes no such annotation, so the cap does not apply.
 
 The rule covers every role with an `Apply the script ConfigMap` task in any of its task files, not just the one that
-hit the cap: the other three ship one small script each today, and a guard scoped to the
-instance that failed is the guard-scope shape this repo has paid for before. The roles are
-derived from the tree, so a fifth script ConfigMap joins the rule the day it appears.
+hit the cap, because a guard scoped to the instance that failed is the guard-scope shape
+this repo has paid for before. The roles are derived from the tree, so a new script
+ConfigMap task joins the rule the day it appears. game-stats (#5444) and autofix-bridge
+(#5445) render theirs as templates, so `k8s/manifests` applies them client-side.
+`scripts/renderer/tests/test_renderer_game_stats_restart.py` holds game-stats' two under
+the cap.
 
 No role's own suite can see this: pytest imports the modules from files/ and never renders or
 applies the ConfigMap. A companion assertion pins the reason for monitor-bridge — if its
@@ -30,20 +33,14 @@ ANNOTATION_CAP = 262144
 
 
 def _apply_tasks(tasks):
-    """The apply tasks in one task file, including game-stats' per-game `... for <game>`."""
+    """The apply tasks in one task file."""
     return [
-        t
-        for t in tasks or []
-        if isinstance(t, dict)
-        and (
-            t.get("name") == TASK_NAME
-            or str(t.get("name")).startswith(f"{TASK_NAME} for ")
-        )
+        t for t in tasks or [] if isinstance(t, dict) and t.get("name") == TASK_NAME
     ]
 
 
 def _role_apply_tasks(role):
-    """Every apply task across the role's task files: game-stats keeps one per game file."""
+    """Every apply task across the role's task files."""
     return [
         task
         for tasks_file in role_task_files(role)
@@ -73,7 +70,6 @@ def test_the_derivation_finds_the_known_roles():
     # Without this the parametrized test below passes vacuously if the task is renamed.
     assert {
         "monitor-bridge",
-        "game-stats",
     } <= set(ROLES), ROLES
 
 

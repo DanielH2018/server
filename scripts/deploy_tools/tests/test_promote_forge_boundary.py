@@ -30,9 +30,15 @@ PROMOTE_LIB_MEMBERS = frozenset(
         "reads.py",
         "ci_contexts.py",
         "stateful.py",
+        "reboot_window.py",
+        "reset.py",
+        "wait_reads.py",
     }
 )
 
+# The modules that read only the checkout, so they have no forge call to route and need not
+# import the adapter. The forbidden imports still hold for them.
+CHECKOUT_ONLY = frozenset({"reboot_window.py"})
 # The modules that would let promote.py make a forge call without the adapter. `subprocess`
 # and `pty` are here because `gh` and `cosign` are forge calls too.
 FORBIDDEN = (
@@ -147,9 +153,10 @@ def test_promote_imports_the_adapter_and_no_http_library_is_clean(module):
     (`verify`), whose status reads go through forge; `promote_lib/prune.py` (`prune`);
     `promote_lib/forward_only.py`, whose PR and status reads are `promote.Reads` fields;
     `promote_lib/reads.py`, which builds those fields over forge; and
-    `promote_lib/ci_contexts.py` (`ci-verdict`)."""
+    `promote_lib/ci_contexts.py` (`ci-verdict`). CHECKOUT_ONLY makes no forge call."""
     source = module.read_text(encoding="utf-8")
-    assert ADAPTER in imported_modules(source)
+    if module.name not in CHECKOUT_ONLY:
+        assert ADAPTER in imported_modules(source)
     assert forbidden_imports(source) == set()
 
 

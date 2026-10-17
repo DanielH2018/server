@@ -70,15 +70,14 @@ Two things exist to make a mismatch visible rather than silent:
 
 Both exporters run as `python:3.14-alpine` pods with `stats_lib.py` mounted alongside their
 own entry script by a ConfigMap. A script invoked directly gets only its own directory on
-`sys.path`, so a copy has to be staged beside each script. `tasks/stage.yml` is that shared
-step, and it owns both halves of the shipment: `tasks/terraria.yml` and `tasks/valheim.yml`
-each `import_tasks` it with `game_stats_lib_dest_dir` set to their own staging directory, and
-the include copies the file there AND sets `game_stats_lib_from_file` to the
-`--from-file=stats_lib.py=<dir>/stats_lib.py` argument for that copy. Each game's task file
-interpolates that fact and never spells `stats_lib.py` itself — what reaches the pod is the
-ConfigMap, not the node-local copy, and until #2055 a caller could stage the file and forget
-the entry.
+`sys.path`, so a copy has to sit beside each script. Each game's ConfigMap is a rendered
+template, `templates/configmap-terraria.yaml.j2` and `templates/configmap-valheim.yaml.j2`,
+and each embeds its entry script and `stats_lib.py` with `lookup('file')`. The scripts never
+pass through Jinja themselves, so their `{…}` exposition strings need no escaping.
 
-`ansible/tests/k8s/test_game_stats_lib_ships_through_the_include.py` is the guard: the fact
-names exactly the file the copy stages, the task files that include `stage.yml` are exactly
-the ones that stage a script importing `stats_lib`, and every one interpolates the fact.
+Because the ConfigMap is part of the render, a script edit changes the render. While Ansible
+owns the role, `k8s/manifests`' rollout restart rolls both pods on that. Under Flux, the
+`checksum/restart` that the renderer stamps hashes each ConfigMap into the pod that mounts it.
+`scripts/renderer/tests/test_renderer_game_stats_restart.py` is the guard: each game's
+ConfigMap carries both keys its pod imports, the pod runs the entry script from the mount,
+and an edit to either file moves the `checksum/restart` of every pod that loads it.

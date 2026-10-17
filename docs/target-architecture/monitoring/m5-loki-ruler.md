@@ -623,6 +623,10 @@ depends on which tags are flux-owned, and PR 4a states each case.
   overlaps Kuma's `Loki Reachable` and `Loki Log Ingestion` tiles, which page a Loki that fails
   its queries until PR 4a (*Baseline*), so it stays shadow. `LokiRulerNotificationsFailing`
   pages, and no Kuma tile reads the ruler's sends.
+- **Soak, shortened by the operator on 2026-10-17.** The soak ends after the 2026-10-18 Sunday
+  reboot, about five days in, rather than on day 7. The window still spans that reboot, and the
+  closing reading is taken once its mute ends at 08:15 UTC. The rest of this bullet applies as
+  written, with five days where it says seven.
 - **Soak.** 7 days, and the window spans a Sunday reboot. Kuma's DOWN episodes for `Loki Log
   Ingestion`, `Loki Reachable` and `Kuma Notification Delivery` come from
   `probe.py metric 'monitor_status{monitor_name=~"Loki Log Ingestion|Loki Reachable|Kuma Notification Delivery"} == 0'`
