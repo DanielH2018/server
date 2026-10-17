@@ -11,7 +11,13 @@ PR 3, the `notice` subcommand: #4719 (issue #4713).
 PR 4, the replay and the parity table: #4727 (issue #4724).
 
 PR 5, the CI steps: #4732 (issue #4731). `<ts>` is 2026-10-12T21:14:44Z, the merge of #4732,
-so the soak's 30 days end on 2026-11-11. Step 6, the soak checks, is issue #4738.
+so the soak's 30 days would end on 2026-11-11. Step 6, the soak checks, is issue #4738.
+
+The operator shortened the soak on 2026-10-17 to five days, ending 2026-10-17T21:14:44Z, so that
+G2 to G5 do not wait into November. Every 30-day window below reads as five days from `<ts>`.
+The five days hold 353 first-parent commits on master, 63 of which touched `docs/facts.lock`,
+against 116 lock commits in the 30-day *Baseline*. The sample is about half the size the plan
+priced, so a parity miss that shows up once a month can go unseen.
 
 Depends on: none
 
@@ -557,7 +563,8 @@ blocking check, and the notice writes nothing to the tree.
       `parsed <N> citations` notice, with its message and its base intact. That run is the
       first proof that a workflow-command notice reaches the annotations endpoint. The
       squash merge drops the temporary commits.
-6. **Soak.** Thirty days after `<ts>`, run the commands in *Verification* and paste their
+6. **Soak.** Thirty days after `<ts>` (five, as the operator ruled on 2026-10-17; see the status
+   block), run the commands in *Verification* and paste their
    output into the G2 ADR PR.
     - `<ts>` starts as PR 5's merge timestamp. It moves to the merge timestamp of any later
       PR that changes `scripts/lib/facts/notice.py`, changes one of the three CI steps, or
