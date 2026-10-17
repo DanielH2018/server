@@ -13,7 +13,8 @@ removing the file from the host is housekeeping, not a requirement.
 A service whose entry carries `owner` outlives its record the same way while it is still
 declared: Flux applies it, or it is mid-handback, so no Ansible deploy writes it a newer
 record. `probe.py releases --stale-only` and `probe.py health` read that through `tree_owners`
-and ignore the record (D2.4b, docs/target-architecture/deploy/d2-first-leaf.md).
+and ignore the record (D2.4b, docs/target-architecture/deploy/d2-first-leaf.md). The plain
+`probe.py releases` listing still prints the record but does not judge it stale (#5309).
 """
 
 # `probe_lib` is a namespace package under `scripts/`, so reaching `lib.k8s_roles` by package

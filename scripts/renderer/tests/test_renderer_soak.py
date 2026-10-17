@@ -192,6 +192,24 @@ def test_a_dependency_chain_lengthens_the_wait_past_either_timeout(tmp_path):
     assert waits[0] > waits[1] >= 10 * 60
 
 
+@pytest.mark.parametrize("rollout, long", [("50m", True), ("1m", False)])
+def test_bundle_files_sizes_the_wait_from_a_roles_rollout_timeout(
+    tmp_path, rollout, long
+):
+    """`bundle_files` must hand its Kustomizations to the soak, or a 50m tag outlasts it.
+
+    The 1m half is the red one: the same render under 3000s shows that the wait follows the
+    role's timeout, rather than clearing 3000s whatever `soak_pair` was handed (#5389).
+    """
+    defaults = tmp_path / "sonarr" / "defaults"
+    defaults.mkdir(parents=True)
+    (defaults / "main.yml").write_text(f"manifests_rollout_timeout: {rollout}\n")
+    files = _bundle(R1, tmp_path)
+    sonarr = next(yaml_fast.safe_load_all(files["flux/sonarr.yaml"]))
+    assert sonarr["spec"]["timeout"] == rollout
+    assert (_budget(files)[0] > 3000) is long
+
+
 # -- the Job's wiring ------------------------------------------------------------------------
 
 
