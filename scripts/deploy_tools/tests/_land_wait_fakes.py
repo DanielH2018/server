@@ -149,9 +149,10 @@ def substituting_promote_timeout() -> int:
         "10m",
         "x=ENC[y]\n",
     )
-    return chained_timeout.promote_timeout(
-        vp.flux_kustomizations({p: t.encode() for p, t in files.items()})
-    )
+    docs = vp.flux_kustomizations({p: t.encode() for p, t in files.items()})
+    # `verify` expects no OBSERVE_ONLY name, so the soak's timeout is no part of its wait.
+    names = {d["metadata"]["name"] for d in docs} - vp.OBSERVE_ONLY
+    return chained_timeout.promote_timeout(docs, names)
 
 
 def publish_pipeline_s() -> int:

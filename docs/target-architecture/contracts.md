@@ -545,6 +545,11 @@ every entry is flux-owned then waits for C-2b, through the uptime-kuma edge.
     itself (D6). A `DEPLOY_HOLD` other than `none` (C2) ends the wait as `deploy-failed`,
     and twice the promote timeout ends it as `gave-up`. That deadline moves while a
     verification of an earlier commit is in flight, because M's `decide` waits on it (#5164).
+    When every one of the PR's tags is `suspended` in M's `digests.json`, the wait ends as
+    `suspended` at the first poll that reads that file and a `none` `DEPLOY_HOLD`, and `land.sh` prints `nothing-to-deploy` with exit 0. When only some
+    are, the wait leaves those out and settles on the rest. A tag M changed while it was
+    suspended at both ends does not end this way: `decide` holds it as `suspended-changed`,
+    and the wait ends `deploy-failed` (D5.1d, #5327).
   - **The soak, from D5.3b3.** Before D5.3b3 the soak gates nothing, and `land.sh` does not
     read `flux/soak`. From D5.3b3, the cluster wait also needs `flux/soak` to read `success`
     on R. A `flux/soak` `failure` on R ends the wait as `deploy-failed` with the `Cause`

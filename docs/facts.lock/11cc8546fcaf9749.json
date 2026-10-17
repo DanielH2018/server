@@ -1,0 +1,12 @@
+{
+  "checksum": "bdef93170171538769773f35e7f46ae5cf6791069f5e6f8009fe778f0c9c006d",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "ansible/roles/k8s/authelia/CLAUDE.md#At a glance",
+  "row": {
+    "atoms": {
+      "ansible/tests/k8s/test_forwardauth_rebuilds_request_target.py": "e59056839b99807a35f56df2c461638b69cf6c312629b29e0a18667b3dd08ebb"
+    },
+    "python": "3.14",
+    "verified_sha": "55862020d"
+  }
+}

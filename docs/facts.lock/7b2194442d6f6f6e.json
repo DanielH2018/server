@@ -1,0 +1,12 @@
+{
+  "checksum": "da28b4f365426e4db1db8d0a1c0effb60de72267d4ed2ff55224d1d125a273e4",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "ansible/roles/k8s/pihole-exporter/CLAUDE.md#Two things that bite",
+  "row": {
+    "atoms": {
+      "ansible/tests/k8s/_scrape_property_rows.py": "f2845e979485b9196830805b87696ca8a00ddfdda579fe97c74afd1eb2e6e473"
+    },
+    "python": "3.14",
+    "verified_sha": "e66aca65e"
+  }
+}

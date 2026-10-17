@@ -1,0 +1,13 @@
+{
+  "checksum": "e3b04d65192809f68c6de806ecda4535f1be2437c05312a3dd1c328d3d0191d2",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "ansible/roles/setup/gitops_deploy/CLAUDE.md#A host with `has_gitops: false` is reaped, and the code refuses on its own",
+  "row": {
+    "atoms": {
+      "ansible/inventory/group_vars/all.yml:has_gitops": "fcbcf165908dd18a9e49f7ff27810176db8e9f63b4352213741664245224f8aa",
+      "ansible/tests/setup/test_gitops_deploy_reaps_on_non_deployer.py": "0a406f5af56be4b4cca67a2e32f8cb4186003c0e09aff233a395db0153213e6c"
+    },
+    "python": "3.14",
+    "verified_sha": "026a5f1c6"
+  }
+}

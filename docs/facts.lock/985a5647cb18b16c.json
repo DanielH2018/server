@@ -1,0 +1,12 @@
+{
+  "checksum": "fbf8d8f2d3fd16123bd31f0517899dbe94ee9fc96c57771d6c1f455c95e11d15",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "ansible/roles/k8s/code-server/CLAUDE.md#Editing",
+  "row": {
+    "atoms": {
+      "ansible/roles/k8s/code-server/": "67d98c44814098bff88b534db39a0ed47662a1ebb2e60a6b041e9920856a8d96"
+    },
+    "python": "3.14",
+    "verified_sha": "55862020d"
+  }
+}

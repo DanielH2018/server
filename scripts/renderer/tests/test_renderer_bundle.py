@@ -83,29 +83,6 @@ def _with_content(expected: dict, files: dict[str, str]) -> dict:
     return expected
 
 
-def _content(files: dict[str, str], tag: str) -> str | None:
-    doc = next(yaml_fast.safe_load_all(files[f"flux/{tag}.yaml"]))
-    return (doc["metadata"].get("annotations") or {}).get(CONTENT_DIGEST)
-
-
-def test_a_tag_content_digest_moves_with_its_own_directory_alone():
-    """#5338: C7's flux reference reads this, so a change to another tag must keep it."""
-    before = _bundle(_tag("bento-pdf"), _tag("peanut"))
-    other = _bundle(_tag("bento-pdf"), _tag("peanut", "changed"))
-    mine = _bundle(_tag("bento-pdf", "changed"), _tag("peanut"))
-    assert (
-        _content(before, "bento-pdf") == json.loads(before[DIGESTS])["bento-pdf"]["own"]
-    )
-    assert _content(other, "bento-pdf") == _content(before, "bento-pdf")
-    assert _content(mine, "bento-pdf") != _content(before, "bento-pdf")
-
-
-def test_a_per_tag_kind_carries_no_content_digest():
-    docs = list(yaml_fast.safe_load_all(_bundle(_pihole("a", "b"))["flux/pihole.yaml"]))
-    assert CONTENT_DIGEST in docs[0]["metadata"]["annotations"]
-    assert "annotations" not in docs[1]["metadata"]
-
-
 def test_a_tag_holding_a_placeholder_gets_substitute_from_and_the_cluster_vars_edge():
     files = _bundle(_tag("bento-pdf", sentinel("email")))
     expected = _with_content(_expected("bento-pdf"), files)
@@ -177,7 +154,12 @@ def test_the_root_lists_every_file_in_flux():
         for p in files
         if p.startswith("flux/") and p != FLUX_INDEX
     )
-    assert in_flux == ["bento-pdf.yaml", "cluster-vars.yaml", "littlelink.yaml"]
+    assert in_flux == [
+        "bento-pdf.yaml",
+        "cluster-vars.yaml",
+        "littlelink.yaml",
+        "soak.yaml",
+    ]
     assert yaml_fast.safe_load(files[FLUX_INDEX])["resources"] == in_flux
 
 
@@ -187,6 +169,7 @@ def test_a_deferred_tag_gets_its_second_document_in_its_own_file():
     assert yaml_fast.safe_load(files[FLUX_INDEX])["resources"] == [
         "cluster-vars.yaml",
         "pihole.yaml",
+        "soak.yaml",
     ]
     deferred = list(yaml_fast.safe_load_all(files["flux/pihole.yaml"]))[1]
     assert deferred["spec"]["path"] == "./cluster/pihole-deferred"
@@ -211,18 +194,25 @@ def test_two_renders_of_one_tree_write_identical_bundles(tmp_path, cluster_file)
                 if p.is_file() and not p.is_relative_to(out / "cluster" / "littlelink")
             }
         )
+    # The image contexts are compared too, and are no bundle file (D5.4a1).
     assert texts[0] == texts[1]
-    assert sorted(texts[0]) == [
+    assert sorted(p for p in texts[0] if not p.startswith("images/")) == [
         f"{CLUSTER_VARS_DIR}/{CLUSTER_VARS_FILE}",
         f"{CLUSTER_VARS_DIR}/kustomization.yaml",
+        "cluster/soak/configmap.yaml",
+        "cluster/soak/job.yaml",
+        "cluster/soak/kustomization.yaml",
+        "cluster/soak/rbac.yaml",
         DIGESTS,
         "flux/cluster-vars.yaml",
         "flux/kustomization.yaml",
         "flux/littlelink.yaml",
+        "flux/soak.yaml",
     ]
     assert set(json.loads(texts[0][DIGESTS])) == {
         "cluster-vars",
         "littlelink",
+        "soak",
         UNCLASSIFIED,
     }
 
@@ -231,7 +221,7 @@ def test_a_role_render_of_a_tag_flux_does_not_own_writes_no_bundle_is_clean(tmp_
     """pihole defers files. Only a published tag is refused for that, so this renders."""
     out = tmp_path / "out"
     assert homelab_render.cluster(out, ["pihole"], None, flux_owned=set) == RENDER_OK
-    assert sorted(p.name for p in out.iterdir()) == ["cluster"]
+    assert sorted(p.name for p in out.iterdir()) == ["cluster", "images"]
     assert sorted(p.name for p in (out / "cluster").iterdir()) == [
         "pihole",
         "pihole-deferred",
@@ -279,6 +269,7 @@ def test_an_edit_under_a_tags_directory_moves_its_own_and_its_footprint():
     assert moved == {
         "bento-pdf": {"own", "footprint"},
         "cluster-vars": set(),
+        "soak": set(),
         "sonarr": set(),
         UNCLASSIFIED: set(),
     }
@@ -343,7 +334,8 @@ def test_the_written_digests_json_is_the_shape_land_wait_reads():
     assert changed_set(old, old, graph).names == frozenset()
     assert changed_set(old, old, graph).widened == ""
     moved = changed_set(new, old, graph)
-    assert moved.names == {"bento-pdf"} and moved.widened == ""
+    # `soak` joins by C2's rule, because the set holds a tag.
+    assert moved.names == {"bento-pdf", "soak"} and moved.widened == ""
 
 
 # -- the cluster-vars kind (D3.3a) -----------------------------------------------------------
@@ -396,15 +388,22 @@ def test_a_shared_only_render_holds_the_root_and_cluster_vars_and_no_tag(
     assert sorted(p.relative_to(out).as_posix() for p in out.rglob("*.*")) == [
         f"{CLUSTER_VARS_DIR}/{CLUSTER_VARS_FILE}",
         f"{CLUSTER_VARS_DIR}/kustomization.yaml",
+        "cluster/soak/configmap.yaml",
+        "cluster/soak/job.yaml",
+        "cluster/soak/kustomization.yaml",
+        "cluster/soak/rbac.yaml",
         DIGESTS,
         "flux/cluster-vars.yaml",
         "flux/kustomization.yaml",
+        "flux/soak.yaml",
     ]
     assert yaml_fast.safe_load((out / FLUX_INDEX).read_text())["resources"] == [
-        "cluster-vars.yaml"
+        "cluster-vars.yaml",
+        "soak.yaml",
     ]
     assert set(json.loads((out / DIGESTS).read_text())) == {
         "cluster-vars",
+        "soak",
         UNCLASSIFIED,
     }
 

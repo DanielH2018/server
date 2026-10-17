@@ -26,7 +26,7 @@ from deploy_tools.bundle_census import published_tags
 from lib.exit_codes import RENDER_OK
 from renderer import homelab_render
 from renderer.renderer_lib.bundle import CLUSTER_VARS_FILE, SHARED_KINDS
-from renderer.renderer_lib.snapshot import configmap_digest8, job_spec_digest8
+from renderer.renderer_lib.digest8 import configmap_digest8, job_spec_digest8
 
 DOTENV = "peanut_password=ENC[AES256_GCM,data:eA==,iv:aQ==,tag:dA==,type:str]\n"
 SCRIPTS = "sonarr-seed-scripts"
@@ -473,5 +473,6 @@ def test_the_live_bundle_passes_every_row(live_bundle):
     tags, bundle = live_bundle
     assert problems(bundle) == []
     assert set(tags) | SHARED_KINDS <= bundle.keys()
-    assert {"bento-pdf", "cluster-vars"} <= bundle.keys()
+    assert {"bento-pdf", "cluster-vars", "soak"} <= bundle.keys()
+    assert any(doc["kind"] == "Job" for doc in bundle["soak"]), "the soak Job is gone"
     assert all(bundle[tag] for tag in tags), "a tag directory parsed to no documents"

@@ -1,0 +1,12 @@
+{
+  "checksum": "d7c75143e75a2924b475277770fc2108b6c1ae680d547e43f91ed16e7f76e9dd",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "ansible/roles/k8s/artifacts/CLAUDE.md#Pruning",
+  "row": {
+    "atoms": {
+      "docs/artifacts-star-list.md": "411147dc2541f0edc773e630a73c6cb703da128cfb98f2e21db4ed63e58f7e67"
+    },
+    "python": "3.14",
+    "verified_sha": "2c9c1e136"
+  }
+}

@@ -3,6 +3,7 @@
 Run: uv run pytest scripts/dev/tests/test_fanout_clean.py
 """
 
+import json
 import re
 from pathlib import Path
 from types import SimpleNamespace
@@ -10,7 +11,13 @@ from types import SimpleNamespace
 import pytest
 
 from fanout_lib.clean import clean_one, remote_clean_command
-from fanout_lib.manifest import Batch, Manifest, path as manifest_path, save
+from fanout_lib.manifest import (
+    Batch,
+    Manifest,
+    path as manifest_path,
+    retired_path,
+    save,
+)
 from fanout_lib.target import Target
 from fanout_lib.transport import Tools
 from fanout_lib.place import cmd_clean_one, main
@@ -295,7 +302,7 @@ def _manifest(tmp_path, batches):
     return manifest
 
 
-def test_clean_deletes_the_manifest_once_every_batch_is_removed(tmp_path):
+def test_clean_retires_the_manifest_once_every_batch_is_removed(tmp_path):
     b1 = Batch("1", "daniel-box", "/w1", "worktree-fanout-1", "fanout-1", [1], "t")
     b2 = Batch("2", "daniel-server", "/w2", "worktree-fanout-2", "fanout-2", [2], "t")
     manifest = _manifest(tmp_path, [b1, b2])
@@ -305,6 +312,8 @@ def test_clean_deletes_the_manifest_once_every_batch_is_removed(tmp_path):
     code = main(["clean", manifest.run_id, "--manifest-root", str(tmp_path)], tools)
     assert code == 0
     assert not manifest_path(manifest.run_id, tmp_path).exists()
+    retired = json.loads(retired_path(manifest.run_id, tmp_path).read_text())
+    assert all(b["removed_at"] for b in retired["batches"])
 
 
 def test_clean_keeps_the_manifest_when_one_batch_is_not_removed(tmp_path, capsys):

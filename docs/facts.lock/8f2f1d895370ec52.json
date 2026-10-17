@@ -1,0 +1,12 @@
+{
+  "checksum": "4d35b6ad6e9c5e16a2d610085f14631b48762b0ea3075dd665628bc26c4bb39a",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "ansible/roles/k8s/homelab-mcp/CLAUDE.md#Editing",
+  "row": {
+    "atoms": {
+      "scripts/diagnostics/probe_lib/obs_api.py": "8e9d6487be4c22e78ee9a48557077b987a67bcfe1260df0b717e376df4506801"
+    },
+    "python": "3.14",
+    "verified_sha": "fd34ae8eb"
+  }
+}

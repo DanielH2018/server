@@ -72,6 +72,15 @@ def test_a_suspended_kustomization_never_blocks_the_wait(world, tmp_path):
     assert run(world, tmp_path) == (0, "")
 
 
+def test_the_same_tag_unsuspended_and_not_ready_blocks_the_wait(world, tmp_path):
+    """The red half of #5317's Job leg: without the suspend, the soak waits on sonarr."""
+    world.new["sonarr"] = {"footprint": "2"}
+    world.kustomizations[1] = kustomization("sonarr", ready=False)
+    code, message = run(world, tmp_path, wait_seconds=60)
+    assert code == 1
+    assert "not Ready at R by the deadline: sonarr" in message
+
+
 # Step 16: restarts.
 
 

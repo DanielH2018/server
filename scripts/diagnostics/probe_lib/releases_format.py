@@ -31,8 +31,14 @@ def renders_flags_table(ns):
     return not getattr(ns, "service", None) and not getattr(ns, "previous", False)
 
 
-def format_records(records, merged, service=None, stale=None, release_dir=None):
+def format_records(
+    records, merged, service=None, stale=None, release_dir=None, owners=None
+):
     """Render the release table. Pure: returns (text, exit_code).
+
+    `owners` maps each deploy tag whose entry carries `owner` to that value, as `tree_owners`
+    reads it. Such a row prints `<owner>-owned` in place of a staleness verdict, and that flag
+    alone does not count it unclean: Ansible no longer writes its record (#5309).
 
     `release_dir` is named in the no-records message only; `run_releases` passes
     `releases.RELEASE_DIR`, which stays there because `health.py` and the tests patch it.
@@ -53,6 +59,7 @@ def format_records(records, merged, service=None, stale=None, release_dir=None):
         return json.dumps(records[0], indent=2), 0
 
     stale = stale or {}
+    owners = owners or {}
     lines = [
         f"{'SERVICE':<24} {'COMMIT':<10} {'APPLIED (UTC)':<21} {'FILES':>5}  FLAGS"
     ]
@@ -73,6 +80,8 @@ def format_records(records, merged, service=None, stale=None, release_dir=None):
             flags.append("stale")
         if flags:
             unclean += 1
+        if rec.get("service") in owners:
+            flags.append(f"{owners[rec['service']]}-owned")
         lines.append(
             "{:<24} {:<10} {:<21} {:>5}  {}".format(
                 rec.get("service", "?"),
@@ -89,7 +98,9 @@ def format_records(records, merged, service=None, stale=None, release_dir=None):
         "disagrees with the applied bytes, or -- for a service no render record covers -- "
         "origin/master has moved past this record under the service's own or a shared role, "
         "or an inventory key or shared macro its render reads (`probe.py releases "
-        "--stale-only` for the reasons)."
+        "--stale-only` for the reasons); flux-owned / released-owned = the containers_list "
+        "entry carries `owner`, so Ansible no longer writes this record and it is not judged "
+        "stale."
     )
     return "\n".join(lines), (1 if unclean else 0)
 

@@ -1,0 +1,12 @@
+{
+  "checksum": "cd47f1e014ef3a8608652cd905dea781479eba2e1556e201f11d911b2efbbaeb",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "ansible/roles/setup/render_records/CLAUDE.md#`setup/render_records` — the hourly k8s render-record producer on `daniel-box`",
+  "row": {
+    "atoms": {
+      "docs/k8s-manifest-cycle-record.md": "22732131bb0284c8c4d837f93726c6a523e75769f72129ba256bdf7618a9b1dc"
+    },
+    "python": "3.14",
+    "verified_sha": "a325ca51f"
+  }
+}

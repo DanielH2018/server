@@ -1,0 +1,15 @@
+{
+  "checksum": "1650a3e5c6d60bc30031871df81b8b8edd339dd05b7f6c34fd2fa243a2c99ca0",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "ansible/roles/k8s/image-builder/CLAUDE.md#Notable",
+  "row": {
+    "atoms": {
+      "ansible/tests/deploy/test_built_image_drift_gate.py": "b44442a89d2110656ec1b839691580d8341aad929a02ef66e4bf11d521b7d759",
+      "ansible/tests/deploy/test_image_builder_wait_returns_promptly.py": "c769d92cb58976660095fb0a7bc156d7783e851ea208351ea0efbf0fa0024585",
+      "ansible/tests/k8s/test_built_images_name_the_content_tag.py": "0d9c691339359482a544027dcd068a281032b7c371931b34067af6e3b18afecc",
+      "scripts/lib/render_guard.py:BUILT_IMAGE_TAG_STUBS": "a9e8a3081a31be893c03b07f49f68764c362ee28278edae34bd7a12a1276cc9a"
+    },
+    "python": "3.14",
+    "verified_sha": "55862020d"
+  }
+}

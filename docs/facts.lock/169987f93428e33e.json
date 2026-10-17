@@ -1,0 +1,12 @@
+{
+  "checksum": "f36ef81efff9b084bda1d5e0f307b8c6e09cb8dc39aca11a82ebb3f040e727a8",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "ansible/roles/k8s/radarr/CLAUDE.md#Editing",
+  "row": {
+    "atoms": {
+      "ansible/templates/arr-deployment.yml.j2": "ec3201dd86336ad41a5b5f6946395cd3280018dbc6c5644601913a94347a57e8"
+    },
+    "python": "3.14",
+    "verified_sha": "fd34ae8eb"
+  }
+}

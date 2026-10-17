@@ -1,0 +1,12 @@
+{
+  "checksum": "45b9e89d7c6ab648adab35fecd5f756d3a5cd800ec63c01cb825b33d2f3b2bba",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "CLAUDE.md#Directory Structure",
+  "row": {
+    "atoms": {
+      "ansible/inventory/host_vars/daniel-pi.yml": "0061cc6b96086adc90b9bb1a4a23262c70b3455a9c2cf295909de4a6076a3aa6"
+    },
+    "python": "3.14",
+    "verified_sha": "55862020d"
+  }
+}

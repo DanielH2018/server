@@ -66,6 +66,33 @@ script lives in the shared `manifests` role, so the landing deployed every tag a
 flux-owned tag has a snapshot claim yet, so no live tag renders one. With D5.3b1's script, three
 flat `flux_*.py` files now share `manifests/files/`. The module-family census allows them, because
 each Job's ConfigMap carries its script and the connection helper as flat keys.
+PR D5.4a1, image contexts as a renderer output:
+[#5357](https://github.com/DanielH2018/server/pull/5357). It merged at `cb912b310` and deployed
+nothing. Every `cluster()` call now builds all ten contexts, so the bundle test's shard weight
+was re-recorded at 11.45s
+([#5374](https://github.com/DanielH2018/server/issues/5374) narrows a one-tag render). The
+promote run on `b65d0b4e0` read `verify` `verdict=good failed=`.
+PR D5.2c, the revert entry point: [#5362](https://github.com/DanielH2018/server/pull/5362). It
+merged at `b65d0b4e0` and deployed nothing. Its review left two runbook-test findings, and
+[#5377](https://github.com/DanielH2018/server/pull/5377) replaced the ordering-word check with a
+pinned sentence at `29fb683fd`.
+PR D5.4a2, CI images: [#5378](https://github.com/DanielH2018/server/pull/5378). It merged at
+`9d6a40b52` and was reverted in [#5390](https://github.com/DanielH2018/server/pull/5390) at
+`3b74100cc`. Its first `images` run, promote run 38992066819, pushed nut, pi-peer-backup,
+terraria and valheim to new GHCR packages. It failed on n8n-runners, whose context no longer
+builds ([#5391](https://github.com/DanielH2018/server/issues/5391)). `publish` needs `images`, so
+every promotion stopped until the revert. D5.4a2 lands again after
+[#5392](https://github.com/DanielH2018/server/pull/5392) fixes n8n-runners.
+PR D5.3b2, the soak Kustomization, observed:
+[#5386](https://github.com/DanielH2018/server/pull/5386). It merged at `95cd242bc` and settled
+with `flux` and `observability` healthy. kustomize-controller runs `--concurrent=6`, `last-good`
+reads Ready, and the landing revision's soak Job logged `soak: R changes no service; nothing to
+judge`. The live check, two consecutive `flux/soak` `success` statuses on revisions that change a
+flux-owned tag, is still open. The PR also covers `last-good` in `FluxNotReady`, and the
+cross-plane snapshot passes R through `HOMELAB_RENDER_REVISION`.
+The run-once cleanup PR: [#5387](https://github.com/DanielH2018/server/pull/5387), together with
+H2.7. It merged at `471397804`. It deleted game-stats' and observability's run-once record
+cleanups and the render-record census row.
 
 Related issues:
 
@@ -694,7 +721,7 @@ reconciliation of a flux-owned role. D5.1b rewrites the sentence in
           record cleanup and drops the entry.
         - crowdsec, configarr, janitorr, qbittorrent and artifacts: D5's `k8s_host_files`
           conversion PR for the role (*Host-side rows*). H2's family PR moves the live crons
-          and scripts and leaves absent arms, and artifacts keeps its two directory tasks, so
+          and scripts and leaves absent arms, and artifacts keeps its three directory tasks, so
           the entry survives H2 and only D5's PR drops it.
         - registry: D5's GC retirement, whose absent arms then move with the rest.
         - docs, pi-peer-backup and media-volume: D5's `k8s_host_files` conversion PR.
@@ -704,7 +731,7 @@ reconciliation of a flux-owned role. D5.1b rewrites the sentence in
         - autofix-bridge, monitor-bridge, game-stats' three staging files and observability's
           `tasks/dashboards.yml`: the role's Wave D PR that renders the imperative ConfigMap.
     - `must_find` names pi-peer-backup's and docs's task files, and artifacts'
-      `tasks/main.yml` for its two directory tasks, which no H2 PR moves. Only D5's PRs move
+      `tasks/main.yml` for its three directory tasks, which no H2 PR moves. Only D5's PRs move
       these three, so the row fails when one of them stops matching rather than when the
       selector drifts (failure class 4). Each D5 conversion PR that moves a member drops it
       from `must_find` in the same commit.
@@ -1707,7 +1734,7 @@ every row one class:
 | restart on config or Secret change | cloudflare-ddns's `manifests_extra_rollouts`; observability's secret restart; pihole's `roll_one.yml` | `checksum/restart` per workload: D3's rule for cloudflare-ddns, widened by D5.1e to the self-rolled workloads of observability and pihole |
 | stale Secret keys | `k8s/manifests`' `verify_secret_keys.yml` | Flux's server-side apply removes a field it owns and no longer declares; D3.5 hands each Secret's fields to kustomize-controller first |
 | host-side, moved by H2 | the live crons, scripts and modules of crowdsec, configarr, janitorr, qbittorrent, artifacts and observability | H2's family PR for the role (H2.4b, H2.4c, H2.5b, H2.7), landed before the flip, which waits on it; the absent arms it leaves are the next row's |
-| host-side, moved by D5 | docs's site directory, pi-peer-backup's two Pi writes, traefik's absent arm, registry's GC absent arms; the absent arms H2 leaves in crowdsec, configarr, janitorr and qbittorrent; artifacts' two directory tasks; media-volume's three media directories | the setup role `k8s_host_files`, in a conversion PR before the flip, until H5 or H7 takes each row; sources and variables move with the task (below) |
+| host-side, moved by D5 | docs's site directory, pi-peer-backup's two Pi writes, traefik's absent arm, registry's GC absent arms; the absent arms H2 leaves in crowdsec, configarr, janitorr and qbittorrent; artifacts' three directory tasks; media-volume's three media directories | the setup role `k8s_host_files`, in a conversion PR before the flip, until H5 or H7 takes each row; sources and variables move with the task (below) |
 | host-side cleanup that has already run | game-stats' pre-#2813 record cleanup; observability's claude-otel record cleanup | deleted by D5's run-once cleanup PR before either role flips (below) |
 | manifest staged outside the manifests directory | traefik's RBAC, `/etc/rancher/k3s/traefik-clusterrole.yaml` | rendered into the bundle by traefik's flip PR, which deletes the staging and apply tasks (Wave D's traefik bullet) |
 | host-side that writes a flux-owned object | registry's GC cron and manifest | retired before the flip (Wave D's registry bullet) |
@@ -1853,9 +1880,10 @@ leaves rows behind (H2, *What H2 leaves in `k8s_host_files`*):
 
 - crowdsec, configarr, janitorr and qbittorrent keep absent arms: the cron files, the script
   paths and, for configarr and janitorr, the host-lib copies;
-- artifacts keeps its two directory tasks, "Ensure the local artifacts directory exists" and
-  "Ensure a peer directory exists for every synced host", both `ansible.builtin.file` with
-  `state: directory`;
+- artifacts keeps its three directory tasks, "Ensure the local artifacts directory exists",
+  "Ensure a peer directory exists for every synced host" and "Ensure the star list directory
+  exists", each `ansible.builtin.file` with `state: directory`. The star list task, added on
+  2026-10-11 after H2 counted the role's rows, also carries `become: true`;
 - observability keeps no host row of H2's. Its claude-otel record cleanup was never an H2 row,
   and D5's run-once cleanup PR deletes it (below).
 
@@ -1884,18 +1912,19 @@ one task file per source role, in a conversion PR before that role flips:
   deployer skips. The same PR:
     - drops game-stats' `tasks/main.yml` entry and the claude-otel clause of observability's
       entry, or the whole entry if H2.7 has landed;
-    - retires the `release-record-cleanup-removes-the-render-record` row in
-      `ansible/tests/repo/_render_record_cleanup_row.py` (#5162). Its `must_find` names only
+    - retires the `release-record-cleanup-removes-the-render-record` census row and its
+      module (#5162). Its `must_find` names only
       these two task files and its floor is their three records, so with both tasks gone the
       row has no subject. `ansible/tasks/k8s_retire.yml` already removes both record kinds
       for a whole-service retirement.
 - **What `k8s_host_files` holds, and who takes each row.** No row stays there past H7:
     - docs's "Ensure the built docs site directory exists" on daniel-box, which H7.10a
       replaces with a `tmpfiles.d` line in daniel-box's host tree;
-    - artifacts' two directory tasks on daniel-box, which H7 replaces the same way in
-      daniel-box's host tree, one line for the local directory and one per peer;
+    - artifacts' three directory tasks on daniel-box, which H7.12c's daniel-box PR replaces
+      with `tmpfiles.d` lines in daniel-box's host tree: one for the local directory, one
+      per peer and one for the star list directory;
     - media-volume's three directories under `/srv/media` on daniel-box, owned by
-      `puid`:`pgid` with no mode, which H7 replaces the same way. A `tmpfiles.d` line can
+      `puid`:`pgid` with no mode, which H7.9b replaces the same way. A `tmpfiles.d` line can
       set the owner and leave the mode alone, which the task's comment requires because
       the seeding rsync imposes daniel-server's modes;
     - pi-peer-backup's forced-command wrapper and authorized key on daniel-pi, which H7.4's
@@ -1906,9 +1935,8 @@ one task file per source role, in a conversion PR before that role flips:
       nothing to remove after their first apply. H7.18c turns them into legacy entries and
       deletes the role.
 
-  H5 (*Rows H5 takes from D5's `k8s_host_files`*) and H7 (its setup-role table, H7.4, H7.10a
-  and H7.18c) list these rows, except the directories of artifacts and media-volume, which a
-  cross-slice note asks H7 to add (#5285).
+  H5 (*Rows H5 takes from D5's `k8s_host_files`*) and H7 (its setup-role table, H7.4, H7.9b,
+  H7.10a, H7.12c and H7.18c) list these rows.
 
 - **The task moves with its sources and variables.** Role defaults and role-relative `src:`
   paths do not resolve in another role (Baseline). So each conversion PR moves the role's
@@ -1922,9 +1950,9 @@ one task file per source role, in a conversion PR before that role flips:
       applies. A shared key in `group_vars/all.yml` would route to the deploy plane only
       (Baseline), which never runs `initial_setup.yml`, so the host half would never
       re-apply. H2.7 uses the same pair for `claude_code`. artifacts' `artifacts_host_dir`,
-      `artifacts_peer_dir` and `artifacts_peer_sources` are the pair test's named members:
-      `ansible/roles/k8s/artifacts/templates/deployment.yaml.j2` reads all three, and so do
-      the two directory tasks. media-volume's conversion PR adds `media_volume_host_path`,
+      `artifacts_peer_dir`, `artifacts_peer_sources` and `artifacts_stars_dir` are the pair
+      test's named members: `ansible/roles/k8s/artifacts/templates/deployment.yaml.j2` reads
+      all four, and so do the three directory tasks. media-volume's conversion PR adds `media_volume_host_path`,
       which `ansible/roles/k8s/media-volume/templates/pv.yaml.j2` and the directory task both
       read. The task's owner reads `puid` and `pgid` from `group_vars/all.yml`, the shared-key
       case above, so the same PR copies them into `k8s_host_files`' defaults as pairs too.
@@ -2013,8 +2041,7 @@ sizes its batch of roles against that projection.
   the end, then netpol-baseline, because it depends on everything (D4).
 - **observability moves before headlamp.** headlamp renders a deferred document into
   `observability`, so D4 gives `headlamp-deferred` an edge to `observability`. A `dependsOn`
-  naming a Kustomization that does not exist fails on every reconcile, and `soak` depends on
-  `headlamp-deferred`. D5 also asks D4 to drop a namespace edge to an Ansible-owned role, as it
+  naming a Kustomization that does not exist fails on every reconcile. D5 also asks D4 to drop a namespace edge to an Ansible-owned role, as it
   drops a toposort edge.
 - **uptime-kuma moves only if M6 has not retired it.** If M6 lands first, its entry leaves
   the list, and it never moves.
@@ -2297,7 +2324,10 @@ sizes its batch of roles against that projection.
     - D4's timeout function changes, because `soak`'s timeout leaves the chain (*Its
       timeout*);
     - C2's rule that `soak` is in the changed set whenever the set holds a tag is in
-      `contracts.md` before this PR merges.
+      `contracts.md` before this PR merges;
+    - `d4-ordering.md`'s *`K8S_APPLIES_LAST` in the renderer* bullet stops naming `soak` as
+      a Kustomization that depends on every tag, because the renderer no longer gives
+      `soak` edges.
 
     D5.3b1's script also fixes these inputs:
     - the flux role renders the OCIRepository `last-good`, with `homelab`'s `verify` block;
@@ -2396,8 +2426,8 @@ sizes its batch of roles against that projection.
       landed (*Host-side rows*). H2 lands those PRs while the roles are Ansible-owned, so D5's
       conversion PRs for the same role rebase onto them.
     - **Then the `k8s_host_files` conversion PR, for five of them.** crowdsec, configarr,
-      janitorr and qbittorrent move the absent arms their H2 PR left, and artifacts moves its
-      two directory tasks, each into the role's task file in `k8s_host_files`, about 40 to 80
+      janitorr and qbittorrent move the absent arms their H2 PR left, and artifacts moves all
+      three of its directory tasks, the star list directory included, each into the role's task file in `k8s_host_files`, about 40 to 80
       lines each. The PR drops the role's `allow` entry, and artifacts' PR drops its
       `must_find` member. The tick applies it through the setup plane, and the PR body quotes
       that apply. observability needs none, because H2.7 leaves it no host row and the
@@ -3243,9 +3273,9 @@ includes valheim's initContainer.
   scheduling: a late or skipped scheduled run delays the promotion until the next merge or
   a dispatch, and never holds.
 - **An unrelated failure holds a good revision.** The soak reads only R's changed set, so
-  an unrelated alert no longer fails it. Two paths remain. An unchanged tag that is not
-  Ready blocks `soak` through its `dependsOn` edges, and `verify` then times out on
-  `flux/soak` (Open question 19). A failed or unverified base read widens that soak's scope
+  an unrelated alert no longer fails it. Two paths remain. A changed Kustomization that never
+  reads Ready at R fails the soak at its wait's deadline, and the failure names that
+  Kustomization (Open question 19). A failed or unverified base read widens that soak's scope
   to the fleet. Mitigation: the post names the alert or the blocking Kustomization, and the
   Job logs why it widened. Open question 17 states what C2's revert rule leaves open
   (**operator-only**).
@@ -3377,7 +3407,7 @@ includes valheim's initContainer.
   Mitigation: the flip cannot pass while the role keeps a host-write `allow` entry, and the
   flip PR links the merged H2 PR.
 - **H2's leftover rows block a flip, or vanish with it.** H2 leaves absent arms in four roles
-  and two directory tasks in artifacts, and D5.1c counts each as a host write. Mitigation:
+  and three directory tasks in artifacts, and D5.1c counts each as a host write. Mitigation:
   a `k8s_host_files` conversion PR per role moves them before the flip, the census names
   artifacts' task file as a member it must find, and the flip PR links the merged
   conversion PR.
@@ -3443,8 +3473,11 @@ includes valheim's initContainer.
       `probe.py takeover` command and the operator's `flux diff kustomization` command, and
       `docs/claude-tooling.md`'s probe list gains the subcommand.
     - D5.1h: the role's `CLAUDE.md` with the Autonomous-role contract, the `StrictUndefined`
-      render test and the pair test in `ansible/tests/setup/`, and the clear procedure in
-      `docs/flux-deploy-plane.md`.
+      render test and the pair test in `ansible/tests/setup/`. The **operator-only** clear
+      stays in this plan's *The `k8s_host_files` role enters the setup plane once* section
+      and in [#5337](https://github.com/DanielH2018/server/pull/5337)'s body.
+      `docs/gitops-pipeline.md`'s *When a tick parks* holds the general procedure for a
+      parked tick, and the park recurs only on a revert of D5.1h.
     - D5.1f: `docs/flux-deploy-plane.md` states the `Removes-Object:` trailer, its
       cluster-scoped form, its two exemptions and the
       retirement order with its operator-only claim delete.
@@ -3570,7 +3603,7 @@ includes valheim's initContainer.
   (Open question 15).
 - **Kept small:** `k8s_host_files` holds rows from nine roles and one Pi timer, and most of
   the rows are absent arms. H2 moves the live crons of six roles first, so what reaches
-  `k8s_host_files` from five of them is absent arms and artifacts' two directories. Only
+  `k8s_host_files` from five of them is absent arms and artifacts' three directories. Only
   docs's and artifacts' directories and pi-peer-backup's two Pi writes stay live until H7.
 
 ## Open questions

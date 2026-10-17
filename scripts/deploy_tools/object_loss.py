@@ -9,7 +9,12 @@ compares the objects, as `<kind>/<namespace>/<name>`, in candidate T's `cluster/
 
 in the message of some commit in (`prod`, T] (`lib/removes_object.py` holds the grammar). A
 cluster-scoped object leaves the namespace empty, as in `ClusterRole//<name>`. An object whose whole Kustomization leaves T's bundle, as
-at a handback, is exempt.
+at a handback, is exempt. A rename is not a removal: an object whose name, with the
+renderer's trailing `-<digest8>` removed, still renders in T passes, as the soak Job and its
+ConfigMap do on every revision. Nor is an object labelled or annotated
+`kustomize.toolkit.fluxcd.io/prune: disabled`, which Flux's prune leaves in place (D5.1f,
+*What it exempts*). The PR gate's arm 3, `scripts/validate/cross_plane_order.py`, applies both
+exemptions through `stem` and `prune_disabled` here, so the two checks cannot drift (#5291).
 
 `decide` reads `prod`'s bundle once per run and each weighed candidate's once, and skips an
 ineligible candidate with the line `refusal` returns. The plan is
@@ -17,7 +22,8 @@ docs/target-architecture/deploy/d2-first-leaf.md, *Publication and verification*
 operator's page docs/flux-deploy-plane.md, *Removing an object on purpose*.
 """
 
-from collections.abc import Iterator
+import re
+from collections.abc import Iterator, Mapping
 
 import yaml
 
@@ -33,6 +39,24 @@ from renderer.renderer_lib.bundle import CLUSTER_DIR
 
 # The kustomize file each bundle directory carries is not an object the cluster holds.
 _KUSTOMIZE_API = "kustomize.config.k8s.io/"
+# The suffix `digest8.py:job_spec_digest8` and `configmap_digest8` give a name: a rename by
+# digest moves it, and both this check and the PR gate's arm 3 strip it before comparing.
+_DIGEST_SUFFIX = re.compile(r"-[0-9a-f]{8}$")
+PRUNE_KEY = "kustomize.toolkit.fluxcd.io/prune"
+
+
+def stem(ident: str) -> str:
+    """`<kind>/<namespace>/<name>` with the name's trailing `-<digest8>` removed."""
+    return _DIGEST_SUFFIX.sub("", ident)
+
+
+def prune_disabled(doc: Mapping) -> bool:
+    """Whether Flux's prune skips `doc`, which it does by a label or an annotation."""
+    meta = doc.get("metadata") or {}
+    return any(
+        str((meta.get(key) or {}).get(PRUNE_KEY, "")) == "disabled"
+        for key in ("labels", "annotations")
+    )
 
 
 def bundle_documents(files: dict[str, bytes]) -> Iterator[tuple[str, str, dict]]:
@@ -85,7 +109,8 @@ def undeclared_losses(
     An object whose Kustomization is absent from `target`'s `flux/` is exempt: a handback
     removes the whole Kustomization, and its `deletionPolicy: Orphan` prunes nothing. The
     exemption holds only while C3's Orphan policy does, and D6.7's switch away from Orphan
-    must remove it.
+    must remove it. An object `prune_disabled` in `prod` is exempt, as prune never deletes
+    it, and so is one whose `stem` still renders in `target`.
 
     Raises:
         ReadError: a manifest in either bundle does not parse.
@@ -96,10 +121,17 @@ def undeclared_losses(
         raise ReadError(f"a flux/ file of T's bundle does not parse: {err}") from err
     kept = {str((doc.get("metadata") or {}).get("name")) for doc in kustomizations}
     held = bundle_objects(target)
+    renamed = {stem(ident) for ident in held}
     return sorted(
-        ident
-        for ident, owner in bundle_objects(prod).items()
-        if ident not in held and owner in kept and ident not in declared
+        {
+            ident
+            for ident, owner, doc in bundle_documents(prod)
+            if ident not in held
+            and stem(ident) not in renamed
+            and not prune_disabled(doc)
+            and owner in kept
+            and ident not in declared
+        }
     )
 
 

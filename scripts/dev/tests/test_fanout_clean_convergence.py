@@ -11,7 +11,13 @@ import json
 import subprocess
 
 from fanout_lib.clean import read_clean_result, remote_clean_command
-from fanout_lib.manifest import Batch, Manifest, path as manifest_path, save
+from fanout_lib.manifest import (
+    Batch,
+    Manifest,
+    path as manifest_path,
+    retired_path,
+    save,
+)
 from fanout_lib.place import main
 from _fanout_fakes import as_operator, fake_tools, ok
 
@@ -105,6 +111,8 @@ def test_a_second_pass_makes_no_remote_call_for_a_batch_already_removed(tmp_path
     # Batch 1 costs no ssh at all the second time: the manifest remembers it.
     assert [host for host, _cmd, _stdin in calls.calls] == ["daniel-server"]
     assert not manifest_path(manifest.run_id, tmp_path).exists()
+    retired = json.loads(retired_path(manifest.run_id, tmp_path).read_text())
+    assert all(b["removed_at"] for b in retired["batches"])
 
 
 def test_a_batch_removed_earlier_is_named_rather_than_silently_skipped(

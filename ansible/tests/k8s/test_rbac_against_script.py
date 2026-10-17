@@ -247,6 +247,28 @@ def test_a_name_restricted_rule_never_covers_create_or_an_unnamed_list() -> None
     ]
 
 
+@pytest.mark.parametrize(
+    "objects",
+    [
+        "configmap longhorn-restore-drill-stamps other-cm",
+        "cm/longhorn-restore-drill-stamps cm/other-cm",
+    ],
+)
+def test_a_second_named_object_the_rule_omits_is_flagged(objects: str) -> None:
+    """Each name in one call is authorized on its own, so the one the rule omits is a gap."""
+    needs = shell_needs(f"$KUBECTL -n homelab get {objects}\n")
+    assert _gaps(needs, _role([_STAMPS])) == [
+        ("homelab", "", "configmaps", "get", "other-cm")
+    ]
+
+
+def test_label_values_are_not_read_as_object_names() -> None:
+    needs = shell_needs(
+        "$KUBECTL -n homelab label configmap longhorn-restore-drill-stamps a=b c-\n"
+    )
+    assert _gaps(needs, _role([_STAMPS])) == []
+
+
 def test_a_variable_name_against_a_name_restricted_rule_is_flagged() -> None:
     needs = shell_needs('$KUBECTL -n homelab patch configmap "$CM" -p "{}"\n')
     with pytest.raises(KeyError, match="variable"):

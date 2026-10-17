@@ -1,0 +1,20 @@
+{
+  "checksum": "9fc04a3f5beaacd3959b5eacd6862961fe03ef1f9e59ab60dcd5fbc1c6ad99dd",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "ansible/roles/setup/k3s/CLAUDE.md#Autonomous-role contract (the crons that change state with no human in the loop)",
+  "row": {
+    "atoms": {
+      "ansible/roles/setup/k3s/tests/test_longhorn_backup_health_cron_evidence.py::test_cron_evidence_is_flagged_on_a_failed_trim": "c17914fa068a16f0200a5cd0e92549ef4829ad93ef9501164f5570740e1541ee",
+      "ansible/roles/setup/k3s/tests/test_longhorn_backup_health_cron_evidence.py::test_cron_liveness_is_flagged_when_the_cron_entry_is_gone": "dd206de45f2815a17b80c6f1f87c6d44651a8c31ce677ea1969daa5cb7d0fde1",
+      "ansible/tests/longhorn/test_longhorn_reap_never_scheduled.py::test_no_setup_role_schedules_a_reaper": "852f2d6c0e3b2403dcf0d9190f9598efc49245694a70fe4b0249abced8946e6e",
+      "ansible/tests/longhorn/test_longhorn_restore_drill_byte_floor.py::test_an_undeclared_volume_still_fails_with_no_files": "e79abead2a2106c7a72e35790d42f3602e41a2dbb670db50cbd35c2bcc38f0e7",
+      "ansible/tests/longhorn/test_longhorn_restore_drill_empty_waiver.py::test_a_filled_declared_volume_fails_and_stamps_nothing": "060831a315d6fa82d8a7cec4135a206e169ba8695346f40383430f27eec2d65b",
+      "ansible/tests/longhorn/test_longhorn_restore_drill_operator_pin.py::test_argv_pin_drills_that_volume_not_the_rotations_pick": "337fb955a69cfc8948e872fdfc65c709c551521fdb5a386d5ab9799a5f2bcb81",
+      "ansible/tests/longhorn/test_longhorn_restore_drill_retry.py::test_a_retry_already_spent_leaves_the_rotation_alone": "cbcd89a15ef27bbd2eaf22179d75a4cacf31dd849c5d11e1c4c8bd4331c9ee88",
+      "docs/k3s-node-plane-crons-and-incidents.md": "47634daf3e04f54df032bcc8938c13bcccfea73558e99d58546e331f90ece53d",
+      "scripts/backup/longhorn_reap.py": "2feda27422b057e12c3a9edbf594b40d6786d7fdc9b4cca65c25cb7875911619"
+    },
+    "python": "3.14",
+    "verified_sha": "19eedc380"
+  }
+}

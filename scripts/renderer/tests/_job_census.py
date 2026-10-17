@@ -46,8 +46,8 @@ from lib.repo_paths import REPO
 from pathlib import PurePosixPath
 
 from renderer.renderer_lib.bundle import CLUSTER_DIR
+from renderer.renderer_lib.digest8 import configmap_digest8, job_spec_digest8
 from renderer.renderer_lib.ordering import SNAPSHOT_SUFFIX, VERIFY_SUFFIX, split_kind
-from renderer.renderer_lib.snapshot import configmap_digest8, job_spec_digest8
 
 # DECIDED: a Job declares its kind in this annotation on the Job's own `metadata`, which the
 # plan does not name. Verify and mutation Jobs share `<tag>-verify`, so nothing else tells a

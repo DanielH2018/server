@@ -1,0 +1,13 @@
+{
+  "checksum": "db357c7e0408575ce782e1ec962671539f535f3299dd338b8e1d53ebe1cf9a7d",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "ansible/roles/setup/claude_code/CLAUDE.md#What monitoring does and does not cover",
+  "row": {
+    "atoms": {
+      "ansible/roles/setup/gitops_deploy/tests/test_systemd_unit_secrets.py": "48f17c21ab36c22b699469adf3a718df65c81364c96a95e923bd220384ae9fd9",
+      "docs/claude-code-rc-caps.md": "2d515326fa8d32d682265f2a3e8361c3bd241b199b3810fcec388c2b120e8245"
+    },
+    "python": "3.14",
+    "verified_sha": "792df8549"
+  }
+}

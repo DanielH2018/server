@@ -257,8 +257,20 @@ def tag_context(
     return ctx
 
 
-def render_tag(tag: str, stubs: dict, host: str = K8S_HOST) -> RenderedTag:
+def render_tag(
+    tag: str,
+    stubs: dict,
+    host: str = K8S_HOST,
+    built: dict[str, str] | None = None,
+) -> RenderedTag:
     """Render every file the manifests role writes for `tag`, with a `kustomization.yaml` each.
+
+    Args:
+        tag: The deploy tag.
+        stubs: The extra vars that outrank every other layer: a mode's secret values.
+        host: The inventory host whose context the tag renders in.
+        built: The images `tag`'s role builds, each mapped to its content tag, as the
+            caller computed them for `DIR/images/tags.json`. None computes them here.
 
     Raises:
         RenderError: A template fails to render, a strict undefined among the causes, or a
@@ -271,7 +283,7 @@ def render_tag(tag: str, stubs: dict, host: str = K8S_HOST) -> RenderedTag:
         # `k8s_built_image_tags`. The first pass leaves such a default undefined, so the facts
         # go in as the overrides of a second pass, as `set_fact` outranks every file layer.
         # The stub file's extra vars outrank them in turn.
-        facts = derived_facts(role_dir, ctx)
+        facts = derived_facts(role_dir, ctx, built)
         ctx = tag_context(role_dir, tag, {**facts, **stubs}, host)
     except (ValueError, jinja2.TemplateError, AnsibleError) as exc:
         raise RenderError(f"{tag}: {exc}") from exc

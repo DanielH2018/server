@@ -68,11 +68,15 @@ n8n with an external task-runner sidecar. See repo-root `CLAUDE.md`.
 - Update both images by redeploying, not through Watchtower. The runners image `COPY`s
   exactly one file, `n8n-task-runners.json.j2`, staged via `image_builder_context`; the
   ConfigMap mount key must match the `COPY` path exactly.
-- **The one npm package the n8n image adds, `fuzzball`, is pinned by exact version** (#2213).
-  A renovate.json regex manager reads the pin over the npm datasource and opens a manual PR in
-  its own `n8n fuzzball` group; a merged bump ships only when a `--tags n8n` deploy rebuilds
-  the image. `ansible/tests/services/test_n8n_build_is_pinned.py` refuses a bare or ranged
-  install and asserts the manager's matchString still finds the pin.
+- **The one npm package both images add, `fuzzball`, is pinned by exact version** (#2213,
+  #5391). One renovate.json regex manager reads both pins over the npm datasource and opens a
+  manual PR in its own `n8n fuzzball` group; a merged bump ships only when a `--tags n8n` deploy
+  rebuilds the images. `ansible/tests/services/test_n8n_build_is_pinned.py` refuses a bare or
+  ranged install in either Dockerfile and asserts the manager's matchString finds both pins.
+- **The runners image installs fuzzball outside the runner's own tree.** A `pnpm add` inside
+  `/opt/runners/task-runner-javascript` prunes everything its `package.json` does not declare,
+  `@n8n/di` included, so `Dockerfile-runners.j2` adds fuzzball in `/opt/runners/extra-js` and
+  links it into the runner's `node_modules`. The Dockerfile's comment has the measurements.
 - **DR / encryption key:** the credential-encryption key lives in `/home/node/.n8n/config` and
   the encrypted credentials in `/home/node/.n8n/database.sqlite` — both on the `n8n-data` PVC
   (`n8n_k8s_claim`), which the Deployment mounts at `/home/node/.n8n`, so Longhorn backs them

@@ -1,0 +1,12 @@
+{
+  "checksum": "1603f8ae5e158b3ffbe74018c3607bf603ee8d1ffb2bafdb3cf109bcc057fd6d",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "ansible/roles/k8s/cronjob-gate/CLAUDE.md#What a caller's CronJob must guarantee",
+  "row": {
+    "atoms": {
+      "ansible/tests/deploy/test_cronjob_gate_decision.py": "edd240baa25af575ae4a3023479d7f33880496e1692961076b0c982b9521e719"
+    },
+    "python": "3.14",
+    "verified_sha": "55862020d"
+  }
+}

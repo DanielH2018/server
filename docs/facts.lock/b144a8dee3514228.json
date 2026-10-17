@@ -1,0 +1,13 @@
+{
+  "checksum": "b9283f2985e7808f5f6968fade21d82ff1fccf7c1e60adbb228203a100b9806d",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "ansible/roles/k8s/authelia/CLAUDE.md#authelia — SSO / forward-auth for the cluster",
+  "row": {
+    "atoms": {
+      "docs/authelia-sessions-and-crowdsec-init.md": "9cf6a1a53b2f8ce5e244c2d1d72e5680ef4a98a21f269ebf07506d9745f89c60",
+      "docs/crowdsec-waf-record.md": "0fed3631bfac065efe701fd07f11045f36675afdf7959517fcaa567e5f5cb4cb"
+    },
+    "python": "3.14",
+    "verified_sha": "89d586f13"
+  }
+}

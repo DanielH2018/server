@@ -79,7 +79,7 @@ from pathlib import Path as _Path
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 
 from deploy_tools.changed_set import suspended_changed
-from deploy_tools.object_loss import bundle_documents
+from deploy_tools.object_loss import bundle_documents, prune_disabled, stem
 from deploy_tools.render_targets import render_targets
 from deploy_tools.promote_lib.prune import ReadError
 from lib import removes_object, yaml_fast
@@ -123,10 +123,6 @@ K8S_ROLES = "ansible/roles/k8s/"
 SHARED_TEMPLATES = "ansible/templates/"
 ANSIBLE_PLANE = "ansible"
 FLUX_PLANE = "flux"
-# The suffix `snapshot.py:job_spec_digest8` and `configmap_digest8` give a name: a rename by
-# digest moves it, and arm 3 strips it before comparing the two sides.
-_DIGEST_SUFFIX = re.compile(r"-[0-9a-f]{8}$")
-PRUNE_KEY = "kustomize.toolkit.fluxcd.io/prune"
 
 
 class RenderFailed(RuntimeError):
@@ -302,11 +298,6 @@ def problems(
     return found
 
 
-def _stem(ident: str) -> str:
-    """`<kind>/<namespace>/<name>` with the name's trailing `-<digest8>` removed."""
-    return _DIGEST_SUFFIX.sub("", ident)
-
-
 def removal_problems(
     base: Snapshot, head: Snapshot, declared: Iterable[str]
 ) -> list[str]:
@@ -326,11 +317,11 @@ def removal_problems(
             if head.owners.get(tag, FLUX_PLANE) == FLUX_PLANE
         )
     )
-    held_stems = {_stem(ident) for ident in held}
+    held_stems = {stem(ident) for ident in held}
     found = []
     for tag in sorted(base.flux_owned() & head.flux_owned()):
         for ident in sorted(set(base.objects.get(tag, ())) - held):
-            if ident in declared or ident in unpruned or _stem(ident) in held_stems:
+            if ident in declared or ident in unpruned or stem(ident) in held_stems:
                 continue
             found.append(
                 f"arm 3: {tag} no longer renders {ident}, so Flux prunes it while its "
@@ -361,15 +352,6 @@ def suspended_problems(base: Snapshot, head: Snapshot) -> list[str]:
     ]
 
 
-def _prune_disabled(doc: Mapping) -> bool:
-    """Whether Flux's prune skips `doc`, which it does by a label or an annotation."""
-    meta = doc.get("metadata") or {}
-    return any(
-        str((meta.get(key) or {}).get(PRUNE_KEY, "")) == "disabled"
-        for key in ("labels", "annotations")
-    )
-
-
 def _objects(dirs: Mapping[str, Mapping[str, str]]) -> tuple[dict, frozenset[str]]:
     """Each tag's objects, and the ones prune skips, from `cluster/`'s directories."""
     files = {
@@ -384,7 +366,7 @@ def _objects(dirs: Mapping[str, Mapping[str, str]]) -> tuple[dict, frozenset[str
             objects.setdefault(directory.removesuffix(DEFERRED_SUFFIX), set()).add(
                 ident
             )
-            if _prune_disabled(doc):
+            if prune_disabled(doc):
                 unpruned.add(ident)
     except ReadError as exc:
         raise RenderFailed(str(exc)) from exc
@@ -441,9 +423,13 @@ def snapshot(
         # to the gate, but no plane orders on a lockfile, and a second environment per run
         # costs a sync. D4 Open question 12 leaves a shared layout with D6.1 to D6.
         cmd = [python, str(tree / "scripts/renderer/homelab_render.py"), "cluster"]
-        cmd += ["--out", out] + [arg for r in roles for arg in ("--role", r)]
+        cmd += ["--out", out]
+        cmd += [arg for r in roles for arg in ("--role", r)]
+        # The all-zero SHA is soak.NORMALISED_REVISION: R never moves the footprint. It goes in
+        # the environment, not a flag, so an older renderer ignores it rather than refusing it.
+        env = {**git_env(), "HOMELAB_RENDER_REVISION": "0" * 40}
         proc = subprocess.run(
-            cmd, cwd=tree, capture_output=True, text=True, env=git_env(), timeout=900
+            cmd, cwd=tree, capture_output=True, text=True, env=env, timeout=900
         )
         if proc.returncode:
             tail = "\n".join(proc.stderr.splitlines()[-5:])

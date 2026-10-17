@@ -1,0 +1,13 @@
+{
+  "checksum": "c1cc234468251fd233d943557605ab23f20d8e9ac09868e71b8b747c7072ed95",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "ansible/roles/k8s/pihole/CLAUDE.md#Notable",
+  "row": {
+    "atoms": {
+      "ansible/tests/services/test_pihole_lan_reverse_forwarding.py": "32006eefc58386b6d4607392ea7129a087c7423080f0df77e50417aefb0bcf07",
+      "docs/pihole-dns-continuity-record.md": "28af65f5faa05075dade717bc23ebb198a239ec85c7ee7215a855c00c3338b8a"
+    },
+    "python": "3.14",
+    "verified_sha": "6757b2044"
+  }
+}

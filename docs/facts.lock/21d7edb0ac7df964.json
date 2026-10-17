@@ -1,0 +1,13 @@
+{
+  "checksum": "37a2ade8631b980313132982378060b3e03ee0db89a69ca93205b79defedf3c5",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "ansible/roles/k8s/volume-snapshot/CLAUDE.md#Reverting: automated via k8s/volume-revert",
+  "row": {
+    "atoms": {
+      "ansible/volume-revert.yml": "22b3c059e4c4b020302adb665d9082f09013981c799b7f4d4faab68aab6eed30",
+      "docs/volume-snapshot-drills.md": "065c3fed1513022fe8e3b8848f85ca3b5527c7a34f0d50d3b1dad708b176b193"
+    },
+    "python": "3.14",
+    "verified_sha": "e393a8183"
+  }
+}

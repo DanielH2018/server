@@ -1,0 +1,14 @@
+{
+  "checksum": "cbced16f66dab310e23d45efc4d3115365f924a9cbdba0bb095488e3da55c385",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "ansible/roles/k8s/karakeep/CLAUDE.md#Notable",
+  "row": {
+    "atoms": {
+      "ansible/tests/k8s/_workload_property_rows.py": "9d4142206ef56b3b2ef303d8606ded96c8dccd9dadc247034e2ca7b21809eb17",
+      "ansible/tests/services/test_karakeep_backend_policies.py": "8971279ac504532dc6ea024fc91ae790c55efab08205ae978796c04c778609f6",
+      "ansible/tests/services/test_karakeep_chrome_rollout.py": "58d0f546dae793d55cff257d135ff1dd00e55d6246ec93ca7f2b8933b878e41a"
+    },
+    "python": "3.14",
+    "verified_sha": "043a2466c"
+  }
+}

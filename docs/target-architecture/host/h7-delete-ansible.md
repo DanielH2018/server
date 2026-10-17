@@ -466,7 +466,7 @@ The exit criterion is seven observations:
 | `github_cli`, `chezmoi_setup` | — | — | — | chezmoi, which bootstrap step 5 installs |
 | `gitops_deploy` | — | — | the two GitHub check timers; `homelab-checkout-sync` replaces the fast-forward | H7.19a retires the deployer and empties the role; H7.20a deletes the role |
 | `render_records` | — | — | — | R4 deletes it |
-| `k8s_host_files` (added by D5) | pi-peer-backup's forced-command wrapper, and its authorized key through the line arm (H7.4) | — | the docs site directory, as a `tmpfiles.d` line (H7.10a) | the absent arms become legacy entries, H7.18c empties the role and H7.20a deletes it; the crowdsec probe timer and the Alloy stage are H5's or D5's, not H7's |
+| `k8s_host_files` (added by D5) | pi-peer-backup's forced-command wrapper, and its authorized key through the line arm (H7.4) | — | `tmpfiles.d` lines for the docs site directory (H7.10a), media-volume's three directories under `/srv/media` (H7.9b), and artifacts' local, per-peer and star list directories (H7.12c) | the absent arms become legacy entries, H7.18c empties the role and H7.20a deletes it; the crowdsec probe timer and the Alloy stage are H5's or D5's, not H7's |
 
 ### The component checklist and the setup census
 
@@ -1838,6 +1838,14 @@ for each new key, then commits `docs/facts.lock`. 57 rows key on setup-role docs
       The netplan file declares `activate: manual:systemd-networkd.service`, because
       `netplan apply` reconfigures the link an SSH session rides on, as `static-address.yml`
       warns. `/etc/zsh/zshenv`'s block moves through the line arm.
+    - H7.9b also ships `tmpfiles.d` lines for `k8s_host_files`' media-volume directories:
+      `media_volume_host_path` and its `media` and `torrents` subdirectories, owned
+      `puid`:`pgid`. The lines leave the mode unset, because the seeding rsync imposes
+      daniel-server's modes, as the D5 task's comment says. No unit runs as a writer of
+      these directories, so `systemd-tmpfiles-setup.service` creates them at boot and
+      bootstrap step 5's `systemd-tmpfiles --create` creates them on a rebuild. The static
+      local PV needs its path to exist before a mounter's pod starts. The same PR deletes
+      media-volume's task file from `k8s_host_files`.
     - Neither PR deletes `k3s` or edits `k3s-bringup.yml`. The PR that moves the role's
       last task empties it: H7.15a, if the install tasks remain until bootstrap step 4
       replaces them. Each PR records a `manual_plane` line for `k3s`, which *Clearing
@@ -1880,6 +1888,15 @@ for each new key, then commits `docs/facts.lock`. 57 rows key on setup-role docs
       `claude-land@.service`, the slice and fan-out caps, and the `claude-rc-alert` unit.
       The daniel-server PR adds a leading `meta: end_role` guard to `claude_code` that
       names daniel-server, H4's pattern, and the daniel-box PR empties the role.
+      The daniel-box PR also ships `tmpfiles.d` lines for `k8s_host_files`' artifacts
+      directories: `artifacts_host_dir`, one per entry in `artifacts_peer_sources` under
+      `artifacts_peer_dir`, each owned by `sys_user` with mode 0750, and
+      `artifacts_stars_dir`, owned by `sys_user` with mode 0755. The artifacts sync
+      timer's service runs `systemd-tmpfiles --create` on that file in `ExecStartPre=`
+      with the `+` prefix, as H7.10a's docs-refresh unit does, because the service runs
+      as `sys_user` and two of the paths are under `/home`, which dpkg never owns. The
+      artifacts pod's hostPaths need the directories before it starts on a rebuilt
+      daniel-box. The same PR deletes artifacts' task file from `k8s_host_files`.
       The units are renamed `homelab-*` under H3's naming rule. The Ansible-era units are
       legacy entries. H6's window test exempts four of these monotonic timers by their
       Ansible-era names, `claude-cgroup-metrics.timer`, `claude-clone-sync.timer`,

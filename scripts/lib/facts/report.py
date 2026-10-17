@@ -38,7 +38,7 @@ from lib.repo_paths import primary_checkout_of
 
 from .citations import parse_citations
 from .lint import bodies_at
-from .lock import LOCK_REL, parse_lock
+from .lock import LOCK_REL, lock_at
 from .notice import Notice, moved_sections
 from .replay import LockMove, notice_replay, render_replay
 
@@ -75,11 +75,6 @@ def atom_form(atom: str) -> str | None:
     """The citation form of a recorded atom key, or None when it no longer parses as one."""
     cites, _ = parse_citations(f"`{atom}`")
     return cites[0].form if cites else None
-
-
-def _lock_at(repo: Path, rev: str) -> dict[str, dict] | None:
-    shown = git("show", f"{rev}:{LOCK_REL}", cwd=repo, check=False)
-    return parse_lock(shown.stdout) if shown.returncode == 0 else None
 
 
 def _prose_changed(
@@ -150,7 +145,7 @@ def precision(repo: Path, days: int, now: datetime | None = None) -> Precision:
         sha, epoch, *parents = line.split()
         if not parents:
             continue
-        before, after = _lock_at(repo, parents[0]), _lock_at(repo, sha)
+        before, after = lock_at(repo, parents[0]), lock_at(repo, sha)
         if after is None:
             continue
         if counted and before is not None:

@@ -18,7 +18,6 @@ from _host_script_row import HOST_SCRIPT_WRITES
 from _host_write_rows import HOST_WRITES
 from _k3s_write_verbs_row import K3S_WRITE_VERBS
 from _out_of_render_row import OUT_OF_RENDER
-from _render_record_cleanup_row import RENDER_RECORD_CLEANUP
 from _retired_cron_row import RETIRED_CRON_ARMS
 from _row_table import Census, Subject, check, proof_problems, tracked
 from lib import yaml_fast
@@ -480,7 +479,6 @@ ROWS = (
     HOST_WRITES,
     HOST_SCRIPT_WRITES,
     OUT_OF_RENDER,
-    RENDER_RECORD_CLEANUP,
     K3S_WRITE_VERBS,
     FLUX_OWNERSHIP,
     RETIRED_CRON_ARMS,

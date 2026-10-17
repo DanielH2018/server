@@ -13,6 +13,9 @@ fails, and so does an entry whose template names none. It reads template sources
 the whole tree on every run, like rule 5. `secret_checks.check` runs it, because rule 5's
 result is there.
 
+`copy_sops_manifests` is the other half: a published tag's directory gets a byte copy of each
+manifest `cluster_vars.py write` keeps for those entries (D3.3c).
+
 `docs/homelab-render.md` is the operator's page, and
 `docs/target-architecture/render/r2-secret-placeholders.md` the plan.
 """
@@ -23,11 +26,19 @@ from pathlib import Path as _Path
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
 from collections.abc import Iterable
+from pathlib import Path
 
 import yaml
 
 from lib import yaml_fast
+from renderer.renderer_lib.bundle import (
+    KUSTOMIZATION,
+    SUBSTITUTE_OPT_OUT,
+    kustomization_text,
+)
+from renderer.renderer_lib.cluster import RenderedTag, RenderError, RenderRefused
 from renderer.renderer_lib.placeholders import PlaceholderRender, Sentinels
+from secrets_mgmt.cluster_vars_check import ManifestEntry
 
 SOPS_MANIFEST_ENTRIES = "sops-manifest-entries"
 
@@ -47,6 +58,26 @@ SOPS_MANIFEST_KEYS = frozenset(
         "google_assistant_service_account",
     }
 )
+
+
+def sops_manifest_problem(name: str, text: str) -> str | None:
+    """Why the SOPS manifest `name` cannot be copied into a tag's directory, or None.
+
+    The copy is byte for byte, because SOPS's MAC covers the plaintext fields too, so the
+    renderer cannot add the substitute opt-out itself; it refuses a manifest without it.
+    """
+    try:
+        obj = yaml_fast.safe_load(text)
+    except yaml.YAMLError as exc:
+        return f"the SOPS manifest {name} does not parse: {exc}"
+    meta = (obj.get("metadata") if isinstance(obj, dict) else None) or {}
+    if (meta.get("annotations") or {}).get(SUBSTITUTE_OPT_OUT) != "disabled":
+        return (
+            f"the SOPS manifest {name} lacks the annotation {SUBSTITUTE_OPT_OUT}: disabled "
+            "in its plaintext metadata, so Flux would substitute into its decrypted values. "
+            "cluster_vars.py write (operator-only) writes it before encrypting"
+        )
+    return None
 
 
 def sops_manifest_entries(
@@ -115,3 +146,43 @@ def namer_problems(
         for template in sorted(listed - naming)
     ]
     return problems
+
+
+def copy_sops_manifests(
+    rendered: list[RenderedTag],
+    entries: dict[str, dict[str, str | None]],
+    published: list[str],
+    manifests_dir: Path,
+) -> list[RenderedTag]:
+    """`rendered` with each published tag's SOPS manifests copied byte for byte into it.
+
+    The copy keeps the name `cluster_vars.py write` gives it, `<tag>.<entry>.sops.yaml`,
+    and the tag's `kustomization.yaml` lists it.
+
+    Raises:
+        RenderRefused: A manifest cannot be read.
+        RenderError: A manifest lacks the substitute-disabled annotation.
+    """
+    copied = []
+    for tag in rendered:
+        names = sorted(entries.get(tag.tag) or {}) if tag.tag in published else []
+        if not names:
+            copied.append(tag)
+            continue
+        files = {k: v for k, v in tag.files.items() if k != KUSTOMIZATION}
+        for entry in names:
+            name = ManifestEntry(tag.tag, entry, "", frozenset()).name
+            try:
+                text = (manifests_dir / name).read_text()
+            except OSError as exc:
+                raise RenderRefused(
+                    f"{tag.tag} cannot copy its SOPS manifest: {exc}. cluster_vars.py "
+                    "write (operator-only) writes it"
+                ) from exc
+            problem = sops_manifest_problem(name, text)
+            if problem:
+                raise RenderError(f"{tag.tag}: {problem}")
+            files[name] = text
+        files[KUSTOMIZATION] = kustomization_text(list(files))
+        copied.append(RenderedTag(tag.tag, files, tag.deferred))
+    return copied

@@ -120,6 +120,23 @@ def test_clean_record_ignores_unrelated_stale_entry():
     assert _row(text, "sonarr").endswith("-")
 
 
+def test_owned_record_is_marked_owned_without_counting_unclean():
+    """An owned tag's row names its owner, and that note alone leaves the exit code clean (#5309)."""
+    text, code = pr.format_records(
+        [_record("sonarr")], merged={"a" * 40}, owners={"sonarr": "flux"}
+    )
+    assert code == 0
+    assert _row(text, "sonarr").endswith("flux-owned")
+
+
+def test_owned_record_still_carries_its_other_flags():
+    text, code = pr.format_records(
+        [_record("sonarr", dirty=True)], merged={"a" * 40}, owners={"sonarr": "flux"}
+    )
+    assert code == 1
+    assert _row(text, "sonarr").endswith("dirty,flux-owned")
+
+
 # ── per-service lookup ───────────────────────────────────────────────────────────────────────
 
 

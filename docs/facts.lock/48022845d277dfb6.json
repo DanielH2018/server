@@ -1,0 +1,12 @@
+{
+  "checksum": "ed155e1365a8b3058f886c713416fa5f3ffed237a7180cb4934161348c391013",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "CLAUDE.md#When to wait",
+  "row": {
+    "atoms": {
+      "ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_changes.py:_BROAD_MANUAL_PREFIXES": "d8b3b2210c1aef0f816765d8a2756441cdd76189251ae397cf5e427223582e6d"
+    },
+    "python": "3.14",
+    "verified_sha": "44fa8cfde"
+  }
+}

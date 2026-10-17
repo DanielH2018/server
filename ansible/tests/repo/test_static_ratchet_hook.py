@@ -62,7 +62,7 @@ def test_the_hook_runs_every_expected_module_and_each_exists():
         "scripts/dev/fact_status.py",
         "CLAUDE.md",
         "ansible/roles/k8s/traefik/CLAUDE.md",
-        "docs/facts.lock",
+        "docs/facts.lock/0123456789abcdef.json",
         "scripts/dev/pytest_shard_weights.json",
         "ansible/tests/repo/module_length_allowlist.txt",
         "ansible/roles/k8s/traefik/defaults/main.yml",

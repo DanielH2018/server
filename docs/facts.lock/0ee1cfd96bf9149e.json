@@ -1,0 +1,13 @@
+{
+  "checksum": "23cacd7c553160f7d71493404347a430b3ac3a0bbca02f72bbeb0d4dbcee1536",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "ansible/roles/setup/sops_setup/CLAUDE.md#sops_setup — install SOPS/age + generate the host's decrypt key",
+  "row": {
+    "atoms": {
+      "ansible/roles/setup/": "6f7efc309cb0d37f3fffb4e0590309e0b7f544ebc4ffb81512d51193d8aa062f",
+      "ansible/vars/secrets.yml": "7a4d09f079c0cae73bca0629f5e9f0bf13cf4752106f95a6c2c687bb94926593"
+    },
+    "python": "3.14",
+    "verified_sha": "55862020d"
+  }
+}
