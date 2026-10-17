@@ -102,7 +102,6 @@ from renderer.renderer_lib.cluster import (
 from renderer.renderer_lib.images import TAGS_FILE, check_images, image_files
 from renderer.renderer_lib.prune_label import label_tags
 from renderer.renderer_lib.snapshot import attach_snapshots
-from renderer.renderer_lib.soak import resolve_revision
 from renderer.renderer_lib.restart import restart_targets, restart_values, stamp
 from renderer.renderer_lib.restart import source_digests
 from renderer.renderer_lib.context import load_stubs
@@ -577,6 +576,9 @@ def main(argv: list[str] | None = None) -> int:
             return packages(
                 args.out, getattr(args, "host", None), getattr(args, "name", None)
             )
+        # Function-level: a host render must not open the soak's deploy_tools imports.
+        from renderer.renderer_lib.soak import resolve_revision
+
         try:
             revision = resolve_revision(args.revision)
         except ValueError as exc:

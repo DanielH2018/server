@@ -43,7 +43,6 @@ from pathlib import Path
 
 import yaml
 
-from deploy_tools.chained_timeout import promote_timeout
 from lib import yaml_fast
 from lib.git import git_stdout
 from lib.repo_paths import ALL_VARS, K8S_ROLES, REPO, SCRIPTS
@@ -311,6 +310,9 @@ def soak_files(
     settings = _settings()
     services = service_map(tags, directories, longest_for(rules))
     wait = fleet_wait(services, settings["stabilise"])
+    # Function-level: a host render imports this module, and must not open deploy_tools.
+    from deploy_tools.chained_timeout import promote_timeout
+
     ready = promote_timeout(list(kustomizations))
     deadline = ready + wait + DEADLINE_MARGIN_S
     timeout = deadline + DEADLINE_MARGIN_S
