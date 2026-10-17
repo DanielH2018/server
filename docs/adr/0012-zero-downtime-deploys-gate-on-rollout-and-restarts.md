@@ -12,6 +12,11 @@ governs: []
 
 Accepted.
 
+Amended on 2026-10-17 (D5.3b3, #5426). A flux-owned tag no longer deploys through Ansible, so
+the two gates below describe only the Ansible path. A flux-owned tag gates on the soak Job,
+which the second paragraph of *Decision* describes. The rationale is unchanged: applying is
+not shipping, and an unreadable signal fails closed.
+
 ## Context
 
 An Ansible deploy applies manifests and returns. Applying is not shipping: `kubectl apply`
@@ -35,6 +40,22 @@ generation caught up, every replica updated, ready and available. Second, a stab
 no container restarted in the last 180 seconds.
 
 An unreadable restart time counts as recent, so the gate fails closed.
+
+A flux-owned tag gates on the soak Job instead (`docs/flux-deploy-plane.md`, *The soak Job*).
+It runs once per promoted revision R and judges the services R changed:
+
+- It anchors on each in-scope pod's first Ready time after R reached the cluster, and waits W
+  past the latest one. W is the longer of the stabilise window and the longest `for:` among
+  those services' critical or `verify="true"` rules, plus the scrape and evaluation
+  allowance. Its floor is the 180 seconds above.
+- It fails on a restart after first Ready, and on a critical or `verify="true"` alert that
+  activated after R reached the cluster.
+- It fails closed on a missing Ready sample, a restart inside a scrape gap, or a pod it
+  cannot map to a service.
+
+Its verdict is the `flux/soak` commit status, which `promote.py verify` waits on. A `failure`
+holds promotion, and for a revision that changes no snapshot role it also resets `prod` to
+`last-good`.
 
 ## Consequences
 
@@ -64,5 +85,6 @@ most of the deploy.
 
 ## Governs
 
-No single line. `governs:` is empty; the gate lives in `scripts/diagnostics/probe.py health` and in the
-shared rollout tasks.
+No single line. `governs:` is empty. The Ansible gate lives in `scripts/diagnostics/probe.py health`
+and in the shared rollout tasks. The Flux gate lives in
+`ansible/roles/k8s/manifests/files/flux_soak.py` and in `promote.py verify`.
