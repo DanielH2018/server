@@ -1,0 +1,6 @@
+# Managed by Ansible (setup/claude_code, tasks/takeover_check.yml). Do not edit.
+# One command, no arguments listed: the wrapper validates its own arguments and only runs
+# dry-run checks. docs/target-architecture/deploy/d5-bulk-move.md, issue #5494.
+{% for user in claude_code_takeover_check_users %}
+{{ user }} ALL=(root) NOPASSWD: {{ claude_code_takeover_check_wrapper }}
+{% endfor %}
