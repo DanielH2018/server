@@ -35,20 +35,34 @@ USER root
 # bare `pnpm` — it depends on no PATH entry, and it names in the diff the one location upstream
 # has to keep for its own entrypoint to work.
 #
-# `pnpm add`, never `pnpm install`. The 2026-08-06 answer to the store mismatch was
-# `CI=true pnpm install` first, following pnpm's own error text. It was wrong in a way the build
-# itself could not show: that reinstall PURGES node_modules and restores only what the lockfile
-# declares, and the base's `@n8n/{di,config,errors,utils}` are workspace packages absent from it.
-# The build stayed green (rc=0) and produced an image whose runner process died on every task offer
-# with `Cannot find module '@n8n/di'` — so every Code-node workflow failed with
-# `Task request timed out`, 100+ failed executions in 9 h, while the pod stayed Ready the whole
-# time because the launcher survives its crashing child.
+# INSTALLED IN A SIBLING DIRECTORY AND LINKED IN, never `pnpm add` inside the runner's own tree.
+# Any pnpm write there reconciles node_modules against the runner's package.json, and that file
+# declares only acorn, acorn-walk, moment and ws. The base's `@n8n/{di,config,utils}` and
+# n8n-{core,workflow} sit in node_modules without being declared, so the reconcile deletes them.
+# Against the 2.42.6 base, adding fuzzball 2.2.6 there printed `Packages: +7 -433` and left no
+# node_modules/@n8n at all (#5391). The unpinned add did the same thing; the version was never
+# the cause.
 #
-# If the base ever ships a pnpm that disagrees with its own store this still fails at BUILD time
-# with ERR_PNPM_UNEXPECTED_STORE, and that is the failure worth having: the bug above was a loud
-# build error traded for a silent runtime one.
-RUN cd /opt/runners/task-runner-javascript \
-    && /usr/local/bin/pnpm add fuzzball
+# The same purge happened on 2026-08-06 through `CI=true pnpm install`. That build stayed green
+# and shipped an image whose runner process died on every task offer with
+# `Cannot find module '@n8n/di'`, so every Code-node workflow failed with `Task request timed out`
+# (100+ failed executions in 9 h) while the pod stayed Ready. The resolution check below exists
+# because of that incident, and it is what failed promote run 38992066819 at build time instead.
+#
+# The runner resolves an allowed external module with a plain `require()` from its own dist/, so
+# Node finds node_modules/fuzzball, follows the link to its real path, and resolves fuzzball's
+# own dependencies from extra-js's store. extra-js is a fresh pnpm project with nothing else in
+# it, so this add has nothing to prune.
+#
+# fuzzball PINNED (#2213), to the same version Dockerfile.j2 installs. The renovate.json fuzzball
+# manager reads both lines, so one PR bumps both, and test_n8n_build_is_pinned.py refuses a bare
+# or ranged add here.
+RUN mkdir /opt/runners/extra-js \
+    && cd /opt/runners/extra-js \
+    && echo '{}' > package.json \
+    && /usr/local/bin/pnpm add fuzzball@2.2.6 \
+    && ln -s /opt/runners/extra-js/node_modules/fuzzball \
+        /opt/runners/task-runner-javascript/node_modules/fuzzball
 
 # Fails the build if the base's workspace packages or the added one cannot be resolved. One line,
 # and it is the check that would have caught 2026-08-06 at build time instead of in production.
