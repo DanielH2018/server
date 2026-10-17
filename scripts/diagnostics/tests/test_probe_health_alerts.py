@@ -262,11 +262,21 @@ def test_a_mid_rollout_0_followed_by_a_1_is_clean():
     assert run(fake, has_route=True)[0] == 0
 
 
-def test_a_routed_tag_with_no_probe_series_after_the_wait_is_flagged():
-    """A routed tag renders a blackbox target, so no series means the probe stopped."""
-    code, lines = run(FakeProm(), has_route=True)
-    assert code == 1
-    assert any("ingress route but no probe_success series" in line for line in lines)
+@pytest.mark.parametrize(
+    "up_service, code, says",
+    [
+        (TAG, 1, "probe target is loaded but reported no probe_success"),
+        (None, 1, "job has no targets loaded"),
+        ("other", 0, "deploy `observability`"),  # a route added since it last deployed
+    ],
+    ids=["loaded_is_flagged", "job_broken_is_flagged", "not_yet_loaded_is_clean"],
+)
+def test_a_routed_tag_with_no_probe_series_after_the_wait(up_service, code, says):
+    up = [("up", {"job": "blackbox-ingress", "service": up_service}, 0, APPLIED)]
+    fake = FakeProm(up if up_service else [])
+    result, lines = run(fake, has_route=True)
+    assert (result, any(says in line for line in lines)) == (code, True), lines
+    assert fake.now >= APPLIED + 30 + health_alerts.PROBE_WAIT_S
 
 
 def test_a_routed_tag_whose_series_appears_during_the_wait_is_clean():
