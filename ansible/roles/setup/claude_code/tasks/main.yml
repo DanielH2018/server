@@ -480,6 +480,12 @@
   tags: [claude_code]
   ansible.builtin.import_tasks: lander.yml
 
+# ── The D5 takeover check ───────────────────────────────────────────────────────────────
+# A sudoers-granted wrapper for the flip PRs' pre-merge dry runs, on daniel-box only.
+- name: Install the D5 takeover check, or take it back
+  tags: [claude_code]
+  ansible.builtin.import_tasks: takeover_check.yml
+
 # ── Alert-triggered triage ──────────────────────────────────────────────────────────────
 # In its own file, because that file is on the lander's approval list and pins the run's caps
 # against an inventory override (tasks/triage.yml).

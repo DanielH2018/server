@@ -184,3 +184,24 @@ the sync behaves, and the heartbeat's template carries why it is a host cron at 
 - **Abort valve:** the clone sync skips unless the clone is a clean `master`; the dotfiles sync
   refuses a source without the agent variant.
 - **Evidence:** `journalctl -u <name>-{clone,dotfiles}-sync`; a failure pages Discord.
+
+## The takeover check
+
+`/usr/local/sbin/homelab-takeover-check` runs a D5 flip PR's pre-merge dry runs as root, behind
+one `NOPASSWD` line in `/etc/sudoers.d/claude-takeover-check`: `flux diff kustomization` or
+the server-side `kubectl diff`, then the RBAC takeover census (issue #5494). The operator
+granted it on 2026-10-17 ("Let's add those 3 to your allowed commands"). It exists on daniel-box
+only, where `claude_code_takeover_check_enabled` is true.
+
+- **What root runs:** `/usr/local/bin/k3s kubectl` and a root-owned `flux` copy at
+  `/usr/local/lib/homelab-takeover-check/flux`, pinned to the operator's chezmoi release and
+  checksum. Every flag is written in the script. The only caller input that reaches either binary
+  is a validated tag, and a path to a root-owned copy of the user's render.
+- **What root never runs:** anything the invoking user can write. The census, which is the
+  user's Python, runs as `SUDO_USER` through `runuser`.
+- **What it prints:** object names, field paths and exit codes. Full outputs stay in
+  `/var/lib/homelab-takeover-check/<label>/`, mode 0700.
+- **To take it back:** set `claude_code_takeover_check_enabled: false` and apply the role. The
+  role removes the sudoers file, the wrapper, the flux copy and the state directory, in that
+  order.
+- **To widen who holds it,** add to `claude_code_takeover_check_users`; one line per user.

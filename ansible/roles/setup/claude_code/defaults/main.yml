@@ -589,3 +589,22 @@ claude_code_telemetry_health_minute: "*/10"
 # observability_otlp_port, which bind the collector's hostPort.
 claude_code_otlp_host_ip: 127.0.0.1
 claude_code_otlp_port: 4317
+
+# ── The D5 takeover check (issue #5494) ────────────────────────────────────────────────────
+# A root-owned wrapper that runs the flip PRs' pre-merge dry runs, granted to the users below
+# through one NOPASSWD sudoers line. True only in daniel-box.yml, the node that holds the
+# cluster-admin kubeconfig. False removes the grant, the wrapper, the flux copy and the state
+# directory, in that order. CLAUDE.md, "The takeover check", has the grant and its limits.
+claude_code_takeover_check_enabled: false
+# Users the sudoers line names. The operator's own account, which is where sessions run.
+claude_code_takeover_check_users:
+  - "{{ sys_user }}"
+claude_code_takeover_check_wrapper: /usr/local/sbin/homelab-takeover-check
+claude_code_takeover_check_lib_dir: /usr/local/lib/homelab-takeover-check
+claude_code_takeover_check_state_dir: /var/lib/homelab-takeover-check
+# The flux CLI root executes. Same release and tarball sha256 as the operator's chezmoi external
+# (.local/bin/flux), which follows flux_version in roles/k8s/flux/defaults/main.yml. The sha256
+# is the line for this tarball in flux_2.9.6_checksums.txt from the release. Renovate does not
+# track it: a bump changes the version in the URL and the hash together.
+claude_code_takeover_check_flux_url: https://github.com/fluxcd/flux2/releases/download/v2.9.6/flux_2.9.6_linux_amd64.tar.gz
+claude_code_takeover_check_flux_sha256: b4d22673e9246cbd628881f1a9ef3b090085dced291e42d804555cee8e8d42c5
