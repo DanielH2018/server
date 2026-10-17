@@ -265,6 +265,8 @@ observability_rule_groups:
   - ingress-probes
   - host-checks
   - deploy-pipeline
+  # M6's live health-gate drill, from B-1d to B-1e, which removes it.
+  - health-gate-drill
 
 # The hosts whose homelab-updater must report, each with the scrape job that reads its node
 # exporter and the age in seconds past which its last successful update pages. host-checks.yaml
