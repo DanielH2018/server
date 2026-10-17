@@ -41,8 +41,9 @@ A SUSPENDED TAG TAKES NO CHANGE (D5.1d). A suspended tag applies nothing until i
 so a PR whose checks ran before the suspend merged can still merge after it. So when T's `own`
 digest differs from `last-good`'s for a tag `digests.json` marks `suspended` in both, `decide`
 holds and writes DEPLOY_HOLD as `<T> suspended-changed=<tag,...>`. The value never takes the
-`failed=` form, so the revert rule never passes it. The way out is a commit that reverts the
-change or resumes the tag, and then the operator's clear. A clear without one holds again here.
+`failed=` form, so the revert rule never passes it, and `suspended_hold` hands it to `hold`,
+which posts it. The way out is a commit that reverts the change or resumes the tag, and then the
+operator's clear. A clear without one holds again here.
 
 ALREADY-FAILING DEPENDENTS (H1.1i). Before `prod` moves, `decide` records the newest
 `flux/<name>` status on `prod`'s commit for each name in T's changed set, and writes the record
@@ -72,8 +73,8 @@ step outputs are appended to it: `verdict`, `target` and `digest`; `prior` and
 `prior_digest`, `prod`'s commit and digest before the move, which `tag` re-reads before it
 moves anything; `reset_digest`, where a failed verification resets `prod` to; `seed`, `true`
 when `tag` must tag `prior_digest` as `last-good` first; `clears_hold`; and `no_reset`, the
-comma-joined forward-only tags under which `settle` holds without a reset; and `stateful`,
-the comma-joined snapshot roles under which `settle` writes the stateful hold.
+comma-joined forward-only tags under which `settle` holds without a reset; `stateful`, the
+snapshot roles under which `settle` writes the stateful hold; and `suspended_hold`.
 
 PRUNE. `prune` deletes old artifact versions, once a day from `prune-artifacts.yml`.
 `promote_lib/prune.py` holds it, and its docstring states what it reads.
@@ -104,7 +105,6 @@ Every GitHub and GHCR call goes through `forge.py`, and this module starts no su
 (scripts/deploy_tools/tests/test_promote_forge_boundary.py).
 
 Run: uv run python scripts/deploy_tools/promote.py decide --trigger <sha>
-     uv run python scripts/deploy_tools/promote.py prune
      uv run python scripts/deploy_tools/promote.py land-wait <sha> --services <tag,...>
      uv run python scripts/deploy_tools/promote.py check-bundle out
      uv run python scripts/deploy_tools/promote.py verify <sha> --bundle-dir <dir>
@@ -505,6 +505,7 @@ def report(trigger: str, decision: Decision, github_output: str | None) -> int:
                 f"clears_hold={str(decision.clears_hold).lower()}\n"
                 f"no_reset={','.join(decision.no_reset)}\n"
                 f"stateful={','.join(decision.stateful)}\n"
+                f"suspended_hold={decision.hold if stateful.SUSPENDED in decision.hold else ''}\n"
             )
     return FAILED if decision.verdict == "error" else OK
 

@@ -416,7 +416,8 @@ three checks hold it there (D5.1d):
   `<R> suspended-changed=<tag>`. The revert rule never passes that form. The way out is a
   commit that reverts the change or resumes the tag, then the operator's clear. A clear
   without one holds again at the next `decide`. `probe.py landing` prints the cause beside
-  `DEPLOY_HOLD`. No post announces the hold yet; D5.2b1 adds one.
+  `DEPLOY_HOLD`. The `promote` job posts the hold to the deployer's Discord channel from a
+  step after Decide, which holds the webhook and no token.
 - **`land-wait`.** `promote.py land-wait` leaves a tag suspended at the merge commit out of
   the wait, and `land.sh` leaves it out of the health gate. When every tag it waits on is
   suspended, it ends with the verdict `suspended` rather than polling to `gave-up`, and
