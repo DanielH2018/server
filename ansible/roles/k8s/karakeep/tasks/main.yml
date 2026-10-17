@@ -18,10 +18,10 @@
   ansible.builtin.include_role:
     name: k8s/manifests
   vars:
-    # A cold pull of the chrome image outlasts the shared default. The number lives in
-    # defaults/main.yml because every template's progressDeadlineSeconds reads it too, and the
-    # drain gives every extra rollout below the role's timeout.
-    manifests_rollout_timeout: "{{ karakeep_k8s_rollout_timeout }}"
+    # No `manifests_rollout_timeout` here: defaults/main.yml sets it, where the renderer reads
+    # it for Flux's `timeout` and k8s/manifests reads it for the rollout wait. An include var
+    # of that name would override the default and loop through `karakeep_k8s_rollout_timeout`.
+    # The drain gives every extra rollout below the same budget.
     # meilisearch reads MEILI_MASTER_KEY from this role's Secret as an ENV var, which is only
     # injected at container start. Without this, rotating that key rolls `karakeep` with the new
     # value while `karakeep-meilisearch` keeps serving the old one — the app and its search

@@ -51,6 +51,9 @@ conventions.
   carries `app: sonarr-verify`, which sonarr's fence does not admit yet: that `netpol_from`
   peer lands in its own PR before the flip. `tests/test_sonarr_verify.py` renders the renamed
   copy, runs the Job census over it, and runs the rendered script against a fixture API.
+  `notification.yaml.j2` beside it is arr-notification's seed Job, which shares the
+  directory, the ServiceAccount and the pod label; `ansible/roles/k8s/arr-notification/CLAUDE.md`
+  has its design.
 - **`verify.yml` skips its API reads under a secret stub file.** The two `uri` reads and
   the two asserts on their registers carry `when: not (homelab_secret_stubs | default(false)
   | bool)`. `scripts/renderer/shadow_diff.py stubs` writes that sentinel into the stub file.
@@ -61,7 +64,8 @@ conventions.
   the rollout for `k8s/manifests/tasks/drain.yml` at the end of the batch rather than waiting. Until
   2026-09-22 the rootfolder read covered that rollout with a 12-sample `until:` poll, whose
   120s budget was a fifth of the rollout's own — so a slow first boot failed a rollout that
-  would have succeeded (#2235). `sonarr_k8s_rollout_timeout` is the one place that budget is
-  written; the gate, `manifests_rollout_timeout` and the template's `progressDeadlineSeconds`
-  all read it. The deadline has to move with the budget, or `rollout status` fails at the 600s
+  would have succeeded (#2235). `ansible/roles/k8s/sonarr/defaults/main.yml:manifests_rollout_timeout` is the one
+  place that budget is written, as a literal role default because the renderer reads Flux's
+  `timeout` only from one (#5464). The gate, k8s/manifests' rollout wait and the template's
+  `progressDeadlineSeconds` read it through `sonarr_k8s_rollout_timeout`. The deadline has to move with the budget, or `rollout status` fails at the 600s
   Kubernetes default whatever `--timeout` says (#2370).
