@@ -11,6 +11,7 @@ Run: uv run pytest ansible/roles/k8s/sonarr/tests/test_sonarr_verify.py
 """
 
 import json
+import re
 import shutil
 import subprocess
 import sys
@@ -27,6 +28,8 @@ from renderer.renderer_lib.context import load_stubs
 from renderer.tests._job_census import problems
 
 TAG = "sonarr"
+# A path into a role's tree, as any lookup names it; group 1 is the role.
+ROLE_PATH = re.compile(r"/roles/k8s/([^/'\"]+)/")
 KEY = "fixture-key"
 GOOD_FOLDERS = [{"path": "/data/media/tv", "accessible": True, "freeSpace": 2 * 2**40}]
 GOOD_SERIES = [
@@ -269,3 +272,19 @@ def test_a_deployment_change_renames_the_job(stubs, tmp_path):
         )
     ]
     assert names[0] != names[1]
+
+
+def test_the_staged_job_reads_no_other_roles_file():
+    """The helper and the image come from `render_tag`, never a lookup into another role.
+
+    The deployer redeploys a role when a file it `lookup()`s in another role changes, and its
+    scan reads `verify-inert/` too. tdarr's test has the same guard and its red case.
+    """
+    staged = sorted((K8S_ROLES / TAG / "templates" / "verify-inert").glob("*.j2"))
+    assert [p.name for p in staged] == ["job.yaml.j2", "rbac.yaml.j2"]
+    assert [
+        (path.name, role)
+        for path in staged
+        for role in ROLE_PATH.findall(path.read_text())
+        if role != TAG
+    ] == []
