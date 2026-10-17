@@ -14,6 +14,7 @@ import re
 
 import pytest
 from _helpers import ANSIBLE
+from _k8s_render import render_role_template
 from _setup_render import render_setup_text
 from deploy_tools.land_lib import policy
 from lib import yaml_fast
@@ -77,6 +78,8 @@ def test_the_caps_and_identity_are_pinned_above_the_inventory_at_their_defaults(
         "claude_code_triage_budget_usd",
         "claude_code_triage_max_turns",
         "claude_code_triage_run_timeout_s",
+        "claude_code_triage_daily_cap",
+        "claude_code_triage_poll_mode",
     }
     for name, value in pinned.items():
         assert value == defaults()[name], name
@@ -121,6 +124,7 @@ def admitted(name: str) -> bool:
         ("claude-triage@drill.service", True),
         ("claude-triage-report-alert@drill:diagnosed.service", True),
         ("claude-triage-report-alert@drill:failed.service", True),
+        ("claude-triage-report-alert@drill:capped.service", True),
         ("claude-triage@Drill.service", False),
         ("claude-triage@-drill.service", False),
         ("claude-triage@drill.service.d", False),
@@ -165,11 +169,21 @@ def test_switching_either_flag_off_removes_everything_the_install_writes() -> No
         if module is None:
             continue  # the credential assert
         if "loop" in task:
-            dests |= {i.get("dest") or i.get("path") for i in task["loop"]}
+            for i in task["loop"]:
+                if isinstance(i, str):
+                    dests.add(module["dest"].replace("{{ item }}", i))
+                else:
+                    dests.add(i.get("dest") or i.get("path"))
         else:
             dests.add(module.get("dest") or module["path"])
     assert "/etc/systemd/system/claude-triage-report-alert@.service" in dests
-    (removal,) = [t for t in tasks if t.get("when") == f"not ({INSTALLED})"]
+    assert "/etc/systemd/system/claude-triage-poll.timer" in dests
+    assert "/opt/claude-triage/claude_triage_poll.py" in dests
+    (removal,) = [
+        t
+        for t in tasks
+        if t.get("when") == f"not ({INSTALLED})" and "ansible.builtin.file" in t
+    ]
     removed = removal["loop"]
     state_dir = defaults()["claude_code_triage_state_dir"]
     for dest in dests:
@@ -179,6 +193,78 @@ def test_switching_either_flag_off_removes_everything_the_install_writes() -> No
     assert removed[0].endswith(".rules"), (
         "the rule goes first, so the agent loses the start"
     )
+
+
+def test_switching_off_stops_the_poller_before_it_removes_anything() -> None:
+    """A poll that ran mid-removal could start a run the rule no longer admits."""
+    off = [t for t in triage_block()["block"] if t.get("when") == f"not ({INSTALLED})"]
+    stop, removal = off
+    assert stop["ansible.builtin.systemd_service"] == {
+        "name": "claude-triage-poll.timer",
+        "enabled": False,
+        "state": "stopped",
+    }
+    assert "ansible.builtin.file" in removal
+
+
+def test_the_poller_runs_as_the_agent_and_its_timer_is_started() -> None:
+    text = re.sub(
+        r"\\\n\s*",
+        " ",
+        render_setup_text("claude_code", "claude-triage-poll.service.j2"),
+    )
+    assert directive(text, "User") == [defaults()["claude_code_agent_user"]]
+    assert directive(text, "OnFailure") == ["claude-triage-poll-alert.service"]
+    (start,) = directive(text, "ExecStart")
+    assert start.endswith("/opt/claude-triage/claude_triage_poll.py")
+    (enable,) = [
+        t
+        for t in triage_block()["block"]
+        if t.get("when") == INSTALLED and "ansible.builtin.systemd_service" in t
+    ]
+    module = enable["ansible.builtin.systemd_service"]
+    assert module["name"] == "claude-triage-poll.timer"
+    assert (module["enabled"], module["state"]) == (True, "started")
+
+
+def test_the_alert_names_and_labels_the_poller_matches_on_exist() -> None:
+    """A renamed hold alert or mute label would make the poller's gate match nothing."""
+    poller = (ROLE / "files" / "claude_triage_poll.py").read_text()
+    assert 'HOLD_ALERT = "DeployHoldActive"' in poller
+    observability = ANSIBLE / "roles" / "k8s" / "observability"
+    rules = (observability / "files" / "rules" / "deploy-pipeline.yaml").read_text()
+    assert "- alert: DeployHoldActive\n" in rules
+    secret = yaml_fast.safe_load(
+        render_role_template("observability", "alertmanager-secret.yaml.j2")
+    )
+    routes = yaml_fast.safe_load(secret["stringData"]["alertmanager.yml"])["route"]
+    matchers = {m for r in routes["routes"] for m in r.get("matchers", [])}
+    for label in ("shadow", "drill"):
+        assert f'{label}!="true"' in poller
+        assert f'{label}="true"' in matchers
+
+
+def config() -> str:
+    return render_setup_text("claude_code", "claude-triage-config.env.j2")
+
+
+def test_the_pollers_fallback_address_is_the_pinned_prometheus_cluster_ip() -> None:
+    """Prometheus publishes loopback only on its own node; the ClusterIP reaches it anywhere."""
+    observability = yaml_fast.safe_load(
+        (ANSIBLE / "roles/k8s/observability/defaults/main.yml").read_text()
+    )
+    ip = observability["observability_prometheus_cluster_ip"]
+    assert defaults()["claude_code_triage_prom_urls"] == [
+        "http://127.0.0.1:9090",
+        f"http://{ip}:9090",
+    ]
+    assert f"PROM_URLS=http://127.0.0.1:9090 http://{ip}:9090\n" in config()
+
+
+def test_the_poller_mutes_for_the_whole_weekly_reboot_window() -> None:
+    """Five minutes of lead, then the five-minute shutdown delay and 40 of recovery."""
+    assert "REBOOT_BEFORE_MIN=5\n" in config()
+    assert "REBOOT_GRACE_MIN=45\n" in config()
 
 
 def test_main_imports_the_triage_file() -> None:
@@ -192,7 +278,10 @@ TRIAGE_FILES = [
     f"ansible/roles/setup/claude_code/templates/{RULE}",
     "ansible/roles/setup/claude_code/templates/claude-triage-config.env.j2",
     "ansible/roles/setup/claude_code/templates/claude-triage-prompt.txt.j2",
+    "ansible/roles/setup/claude_code/templates/claude-triage-poll.service.j2",
+    "ansible/roles/setup/claude_code/templates/claude-triage-poll.timer.j2",
     "ansible/roles/setup/claude_code/files/claude_triage_run.py",
+    "ansible/roles/setup/claude_code/files/claude_triage_poll.py",
 ]
 
 

@@ -43,6 +43,7 @@ KNOWN_ALERTS = frozenset(
         "claude-memory-sync",
         "claude-rc",
         "claude-triage",
+        "claude-triage-poll",
         # Instanced, and started by the triage runner itself rather than OnFailure=.
         "claude-triage-report",
         # Instanced, and started by a fan-out batch's ExecStopPost= rather than OnFailure=,

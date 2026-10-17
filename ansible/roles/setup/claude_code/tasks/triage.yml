@@ -20,6 +20,9 @@
     claude_code_triage_budget_usd: 10
     claude_code_triage_max_turns: 60
     claude_code_triage_run_timeout_s: 1800
+    claude_code_triage_daily_cap: 6
+    # Arming the poller is an operator decision too.
+    claude_code_triage_poll_mode: shadow
   block:
     # Arming needs the run's own credential. Without it the session would fall back to the
     # interactive login claude-rc.service shares, which can lapse while idle (#4618).
@@ -61,14 +64,17 @@
       become: true
       when: claude_code_agent_user_enabled and claude_code_triage_enabled
 
-    - name: Install the triage runner
+    - name: Install the triage runner and poller
       tags: [claude_code]
       ansible.builtin.copy:
-        src: claude_triage_run.py
-        dest: /opt/claude-triage/claude_triage_run.py
+        src: "{{ item }}"
+        dest: "/opt/claude-triage/{{ item }}"
         owner: root
         group: root
         mode: "0644"
+      loop:
+        - claude_triage_run.py
+        - claude_triage_poll.py
       become: true
       when: claude_code_agent_user_enabled and claude_code_triage_enabled
 
@@ -146,6 +152,56 @@
       when: claude_code_agent_user_enabled and claude_code_triage_enabled
       # No handler: polkitd watches rules.d and reloads a changed rule on its own.
 
+    # Slice 2: the poller that opens an episode when a monitor goes down.
+    # The poll unit's OnFailure= target. A broken poller fails on every tick, so one page an
+    # hour is enough.
+    - name: Install the triage poller's failure alert
+      tags: [claude_code]
+      when: claude_code_agent_user_enabled and claude_code_triage_enabled
+      ansible.builtin.import_tasks: "{{ role_path }}/../common/tasks/alert_unit.yml"
+      vars:
+        alert_unit_name: claude-triage-poll
+        alert_unit_description: Alert when the triage poller fails
+        alert_unit_quiet_minutes: 60
+        alert_unit_message: "claude-triage-poll failed on {{ inventory_hostname }}: no monitor that goes down starts triage until it is fixed. `journalctl -u claude-triage-poll` has the error, and {{ claude_code_triage_state_dir }}/poll-state.json holds its state. Further failures in the next hour are not paged."
+        alert_unit_env_dir: /etc/claude-triage
+
+    - name: Install the triage poller's unit and timer
+      tags: [claude_code]
+      ansible.builtin.template:
+        src: "{{ item }}.j2"
+        dest: "/etc/systemd/system/{{ item }}"
+        owner: root
+        group: root
+        mode: "0644"
+      loop:
+        - claude-triage-poll.service
+        - claude-triage-poll.timer
+      become: true
+      when: claude_code_agent_user_enabled and claude_code_triage_enabled
+      notify: Reload systemd
+
+    - name: Enable and start the triage poller's timer
+      tags: [claude_code]
+      ansible.builtin.systemd_service:
+        name: claude-triage-poll.timer
+        daemon_reload: true
+        enabled: true
+        state: started
+      become: true
+      when: claude_code_agent_user_enabled and claude_code_triage_enabled
+
+    # The way out. The timer stops first, so no poll starts a run once removal begins.
+    - name: Stop and disable the triage poller's timer when triage is switched off
+      tags: [claude_code]
+      ansible.builtin.systemd_service:
+        name: claude-triage-poll.timer
+        enabled: false
+        state: stopped
+      become: true
+      failed_when: false
+      when: not (claude_code_agent_user_enabled and claude_code_triage_enabled)
+
     # The way out. The rule goes first, so the agent cannot start a run once removal begins.
     # The state directory stays: it holds the records of past runs.
     - name: Remove triage when it is switched off
@@ -156,6 +212,9 @@
       loop:
         - /etc/polkit-1/rules.d/50-claude-triage.rules
         - /etc/systemd/system/claude-triage@.service
+        - /etc/systemd/system/claude-triage-poll.service
+        - /etc/systemd/system/claude-triage-poll.timer
+        - /etc/systemd/system/claude-triage-poll-alert.service
         - /etc/systemd/system/claude-triage-alert.service
         - /etc/systemd/system/claude-triage-report-alert@.service
         - /etc/claude-triage

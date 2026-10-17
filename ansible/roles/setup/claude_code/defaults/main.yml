@@ -513,6 +513,23 @@ claude_code_triage_budget_usd: 10
 claude_code_triage_max_turns: 60
 # The script's wall clock. The unit's TimeoutStartSec sits 10 minutes above it.
 claude_code_triage_run_timeout_s: 1800
+# The operator's budget (2026-10-15): at most six runs a day. The runner enforces it, because
+# polkit lets the agent start a run directly, not only through the poller.
+claude_code_triage_daily_cap: 6
+# claude-triage-poll.timer: `off` reads nothing, `shadow` logs each run it would start to
+# <state_dir>/shadow.jsonl, `armed` starts it. Shipped `shadow` so a week of would-be episodes
+# can be read before the first unattended run.
+claude_code_triage_poll_mode: shadow
+claude_code_triage_poll_interval: 2min
+# Loopback first, then observability_prometheus_cluster_ip: Prometheus publishes loopback only
+# on the node it runs on. test_claude_triage.py holds the second equal to the k8s key.
+claude_code_triage_prom_urls:
+  - http://127.0.0.1:9090
+  - http://10.43.39.218:9090
+# A key must read down on this many consecutive polls before an episode opens.
+claude_code_triage_poll_streak: 2
+# More keys than this falling in one poll make one storm episode instead of one per key.
+claude_code_triage_poll_storm_size: 3
 
 # ── The fan-out alert ───────────────────────────────────────────────────────────────────
 # fanout-alert@<unit>:<state>.service pages Discord when a fan-out batch's unit stops on any

@@ -798,7 +798,7 @@
  "scripts/deploy_tools/tests/test_changed_set.py": 0.0,
  "scripts/deploy_tools/tests/test_ci_images.py": 2.31,
  "scripts/deploy_tools/tests/test_deploy_at_sha.py": 2.83,
- "scripts/deploy_tools/tests/test_deploy_detach_gate_holds_locks.py": 5.0,
+ "scripts/deploy_tools/tests/test_deploy_detach_gate_holds_locks.py": 0.01,
  "scripts/deploy_tools/tests/test_deploy_detach_notify.py": 0.02,
  "scripts/deploy_tools/tests/test_deploy_detach_notify_no_hosts.py": 0.0,
  "scripts/deploy_tools/tests/test_deploy_detach_notify_unreadable.py": 0.0,
