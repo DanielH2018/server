@@ -16,8 +16,9 @@
 # caller.
 #
 # What root executes: /usr/local/bin/k3s, the root-owned flux copy, and the coreutils named
-# below. Root never runs anything the invoking user can write. The census, which is the user's
-# Python, runs as the user through runuser.
+# below. Root never runs anything the invoking user can write, and never runs kustomize over
+# the user's files: `kubectl kustomize` builds the tag as the user, and root diffs only the
+# built output. The census, which is the user's Python, runs as the user through runuser.
 #
 # What this prints: object names, field paths and exit codes. Full outputs go to
 # /var/lib/homelab-takeover-check/<label>/, mode 0700.
@@ -31,6 +32,7 @@ FLUX=/usr/local/lib/homelab-takeover-check/flux
 STATE=/var/lib/homelab-takeover-check
 KUBECONFIG_FILE=/etc/rancher/k3s/k3s.yaml
 UV=uv
+USER_KUBECTL=kubectl
 
 # DECIDED: the paths above can be overridden by a test, and only when this is not root. Under
 # sudo the process is root and the environment is reset, so a caller can neither name its own
@@ -43,6 +45,7 @@ if [ "$(/usr/bin/id -u)" -ne 0 ]; then
   [ -n "${HOMELAB_TC_STATE:-}" ] && STATE=$HOMELAB_TC_STATE
   [ -n "${HOMELAB_TC_KUBECONFIG:-}" ] && KUBECONFIG_FILE=$HOMELAB_TC_KUBECONFIG
   [ -n "${HOMELAB_TC_UV:-}" ] && UV=$HOMELAB_TC_UV
+  [ -n "${HOMELAB_TC_USER_KUBECTL:-}" ] && USER_KUBECTL=$HOMELAB_TC_USER_KUBECTL
   as_user() { "$@"; }
 else
   as_user() { runuser -u "$SUDO_USER" -- "$@"; }
@@ -121,8 +124,8 @@ install -d -m 0700 "$full" || exit 3
 
 # ── Copies: root reads the user's files once, into a tree only root can reach ───────────────
 # A tree is refused if it holds anything but regular files and directories, so a symlink in the
-# render cannot make root read a file outside it, and a kustomization that names a remote base
-# is refused, so root fetches nothing.
+# render cannot make root read a file outside it. The copy feeds the census, which loads plain
+# manifests with -f. Kustomize never runs on it as root: the build below runs as the user.
 tree_is_plain() {
   [ -z "$(find -P "$1" ! -type f ! -type d -print -quit)" ]
 }
@@ -131,9 +134,7 @@ copy_tree() {
   rm -rf -- "$2"
   mkdir -- "$2"
   cp -rP --no-preserve=all -- "$1/." "$2/" || return 1
-  tree_is_plain "$2" || return 1
-  ! grep -rEqs --include='kustomization.y*ml' \
-    '^[[:space:]]*-[[:space:]]+["'\'']?([A-Za-z+]+://|git@|(github|gitlab|bitbucket)\.[a-z]+[/:])' "$2"
+  tree_is_plain "$2"
 }
 copy_file() {
   [ -f "$1" ] || return 1
@@ -152,7 +153,22 @@ for tag in "${tag_list[@]}"; do
   tagsrc=$(under_home "$render/cluster/$tag") || { echo "=== $tag: refused, cluster/$tag leaves $home"; failed=1; continue; }
   work="$full/$tag.path"
   if ! copy_tree "$tagsrc" "$work"; then
-    echo "=== $tag: refused, cluster/$tag holds a symlink, a special file or a remote base"
+    echo "=== $tag: refused, cluster/$tag holds a symlink or a special file"
+    failed=1
+    continue
+  fi
+
+  # The kustomize build runs as the user, so a remote base or any other fetch it makes is the
+  # user's own. Root writes the output into a directory only root can reach, then diffs that
+  # one plain file; nothing the user controls is a kustomization root builds.
+  built="$full/$tag.built"
+  rm -rf -- "$built"
+  mkdir -- "$built"
+  as_user env -i PATH="$home/.local/bin:/usr/local/bin:/usr/bin:/bin" HOME="$home" \
+    "$USER_KUBECTL" kustomize "$tagsrc" > "$built/built.yaml" 2> "$full/$tag.build.err"
+  rc=$?
+  if [ "$rc" -ne 0 ] || [ ! -s "$built/built.yaml" ] || [ -L "$built/built.yaml" ]; then
+    echo "=== $tag: refused, the build as $SUDO_USER exited $rc or wrote nothing; see $full/$tag.build.err"
     failed=1
     continue
   fi
@@ -175,8 +191,10 @@ for tag in "${tag_list[@]}"; do
 
   if grep -q 'postBuild' "$own"; then
     echo "=== $tag: flux diff kustomization"
+    # Root's own kustomization over the built file: the only thing flux builds.
+    printf 'resources:\n  - built.yaml\n' > "$built/kustomization.yaml"
     "$FLUX" --kubeconfig "$KUBECONFIG_FILE" diff kustomization "$tag" \
-      --path "$work" --kustomization-file "$own" \
+      --path "$built" --kustomization-file "$own" \
       --ignore-not-found --strict-substitute --progress-bar=false \
       > "$full/$tag.diff" 2> "$full/$tag.err"
     rc=$?
@@ -191,7 +209,7 @@ for tag in "${tag_list[@]}"; do
   else
     echo "=== $tag: kubectl diff"
     "${KUBECTL[@]}" diff --server-side --field-manager=kustomize-controller --force-conflicts \
-      -k "$work" > "$full/$tag.diff" 2> "$full/$tag.err"
+      -f "$built/built.yaml" > "$full/$tag.diff" 2> "$full/$tag.err"
     rc=$?
     echo "kubectl diff exit=$rc (0 no change, 1 changes, 2+ error)"
     if [ "$rc" -gt 1 ]; then

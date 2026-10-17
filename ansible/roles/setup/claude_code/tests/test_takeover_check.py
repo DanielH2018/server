@@ -39,6 +39,12 @@ echo "flux argv: $*" >> "$FAKE_LOG"
 echo "► Kustomization/flux-system/demo created"
 exit 1
 """
+# The user's own kubectl, which builds the tag. It runs under `env -i`, so the log path is baked in.
+FAKE_USER_KUBECTL = """#!/usr/bin/bash
+echo "user argv: $*" >> "@LOG@"
+[ -e "$(dirname "$0")/build-fails" ] && { echo "build failed" >&2; exit 1; }
+printf 'apiVersion: v1\\nkind: ConfigMap\\nmetadata:\\n  name: built\\n'
+"""
 FAKE_UV = """#!/usr/bin/bash
 echo "uv argv: $* as $(id -un) in $PWD" >> "@LOG@"
 echo "census output"
@@ -94,6 +100,7 @@ class Rig:
             ("kubectl", FAKE_KUBECTL),
             ("flux", FAKE_FLUX),
             ("uv", FAKE_UV),
+            ("user-kubectl", FAKE_USER_KUBECTL),
         ):
             write_exec(self.bin / name, body.replace("@LOG@", str(self.log)))
         (root / "kubeconfig").write_text("")
@@ -117,6 +124,7 @@ class Rig:
             "HOMELAB_TC_KUBECTL": str(self.bin / "kubectl"),
             "HOMELAB_TC_FLUX": str(self.bin / "flux"),
             "HOMELAB_TC_UV": str(self.bin / "uv"),
+            "HOMELAB_TC_USER_KUBECTL": str(self.bin / "user-kubectl"),
             "HOMELAB_TC_STATE": str(self.state),
             "HOMELAB_TC_KUBECONFIG": str(self.root / "kubeconfig"),
             "FAKE_LOG": str(self.log),
@@ -304,25 +312,53 @@ def test_a_plain_render_is_accepted(rig) -> None:
     assert "kubectl diff exit=0" in result.stdout
 
 
-def test_a_remote_kustomization_base_is_refused(rig) -> None:
-    rig.tag(
-        "demo",
-        {"kustomization.yaml": "resources:\n  - https://example.invalid/x?ref=main\n"},
-    )
-    assert "remote base" in rig.run().stdout
-    assert rig.calls() == ""
+REMOTE_BASES = [
+    "resources:\n  - https://example.invalid/x?ref=main\n",
+    "resources:\n  - git::https://example.invalid/x.git//dir\n",
+    "resources: [https://example.invalid/x]\n",
+    "resources:\n  - example.invalid/org/repo//dir?ref=v1\n",
+]
 
 
-def test_a_local_kustomization_base_is_accepted(rig) -> None:
-    rig.tag(
-        "demo",
-        {
-            "kustomization.yaml": "resources:\n  - cm.yaml\n",
-            "cm.yaml": "kind: ConfigMap\n",
-        },
-    )
-    assert "remote base" not in rig.run().stdout
-    assert "argv: diff" in rig.calls()
+def root_calls(rig: Rig) -> list[str]:
+    return [x for x in rig.calls().splitlines() if x.startswith("argv: ")]
+
+
+@pytest.mark.parametrize("kustomization", REMOTE_BASES)
+def test_root_never_runs_kustomize_over_a_remote_base_is_refused(
+    rig, kustomization
+) -> None:
+    rig.tag("demo", {"kustomization.yaml": kustomization})
+    assert_accepted(rig.run())
+    # The build is the user's call; every call root makes loads the built file with -f.
+    assert f"user argv: kustomize {rig.render / 'cluster' / 'demo'}" in rig.calls()
+    assert root_calls(rig)
+    for call in root_calls(rig):
+        words = call.split()
+        assert "-k" not in words and "kustomize" not in words, call
+
+
+def test_root_diffs_only_the_built_file_is_accepted(rig) -> None:
+    rig.tag("demo", {"kustomization.yaml": "resources:\n  - cm.yaml\n"})
+    assert_accepted(rig.run())
+    built = rig.state / "5494" / "demo.built" / "built.yaml"
+    assert built.read_text().startswith("apiVersion: v1")
+    assert f"-f {built}" in rig.calls()
+
+
+def test_a_failed_user_build_is_refused(rig) -> None:
+    rig.tag("demo")
+    (rig.bin / "build-fails").write_text("")
+    result = rig.run()
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert "refused, the build as" in result.stdout
+    assert root_calls(rig) == []
+
+
+def test_a_successful_user_build_is_accepted(rig) -> None:
+    rig.tag("demo")
+    assert_accepted(rig.run())
+    assert root_calls(rig)
 
 
 def test_kubectl_runs_with_the_hard_coded_dry_run_flags_and_a_fixed_environment(
@@ -338,9 +374,9 @@ def test_kubectl_runs_with_the_hard_coded_dry_run_flags_and_a_fixed_environment(
     )
     assert_accepted(result)
     calls = rig.calls()
-    work = rig.state / "5494" / "demo.path"
+    built = rig.state / "5494" / "demo.built" / "built.yaml"
     assert (
-        f"argv: diff --server-side --field-manager=kustomize-controller --force-conflicts -k {work}"
+        f"argv: diff --server-side --field-manager=kustomize-controller --force-conflicts -f {built}"
         in calls
     )
     assert "KUBECTL_EXTERNAL_DIFF=unset" in calls
@@ -357,7 +393,7 @@ def test_flux_runs_with_the_hard_coded_flags_on_a_copy(rig) -> None:
     )
     result = rig.run()
     assert_accepted(result)  # exit 1 from flux means changes, not failure
-    work = rig.state / "5494" / "demo.path"
+    work = rig.state / "5494" / "demo.built"
     own = rig.state / "5494" / "demo.kustomization.yaml"
     assert (
         f"flux argv: --kubeconfig {rig.root / 'kubeconfig'} diff kustomization demo "
@@ -365,6 +401,7 @@ def test_flux_runs_with_the_hard_coded_flags_on_a_copy(rig) -> None:
         "--ignore-not-found --strict-substitute --progress-bar=false"
     ) in rig.calls()
     assert "demo-snapshot" not in own.read_text()
+    assert (work / "kustomization.yaml").read_text() == "resources:\n  - built.yaml\n"
     assert "Kustomization/flux-system/demo created" in result.stdout
 
 
@@ -442,5 +479,5 @@ def test_the_script_names_only_root_owned_binaries_and_never_the_users_flux() ->
 def test_the_census_runs_as_the_user_through_runuser() -> None:
     text = SCRIPT.read_text()
     assert 'as_user() { runuser -u "$SUDO_USER" -- "$@"; }' in text
-    assert text.count("as_user env -i") == 1
-    assert "takeover_census.py" in text.split("as_user env -i")[1].split(")")[0]
+    assert text.count("as_user env -i") == 2  # the kustomize build and the census
+    assert "takeover_census.py" in text.split("as_user env -i")[2].split(")")[0]

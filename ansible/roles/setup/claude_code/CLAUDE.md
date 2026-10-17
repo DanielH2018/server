@@ -197,8 +197,9 @@ only, where `claude_code_takeover_check_enabled` is true.
   `/usr/local/lib/homelab-takeover-check/flux`, pinned to the operator's chezmoi release and
   checksum. Every flag is written in the script. The only caller input that reaches either binary
   is a validated tag, and a path to a root-owned copy of the user's render.
-- **What root never runs:** anything the invoking user can write. The census, which is the
-  user's Python, runs as `SUDO_USER` through `runuser`.
+- **What root never runs:** anything the invoking user can write, and kustomize over the user's
+  files. `kubectl kustomize` builds each tag as `SUDO_USER`, and root diffs only the built file.
+  The census, which is the user's Python, runs as `SUDO_USER` through `runuser`.
 - **What it prints:** object names, field paths and exit codes. Full outputs stay in
   `/var/lib/homelab-takeover-check/<label>/`, mode 0700.
 - **To take it back:** set `claude_code_takeover_check_enabled: false` and apply the role. The
