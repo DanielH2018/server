@@ -12,6 +12,11 @@ change to six health-cron tags, and the operator applied all six with no gated c
 task selected: `ok=115 changed=33 failed=0`. Nothing writes the stamp ConfigMap yet, so the
 readers take their host-directory fallback
 ([readings](https://github.com/DanielH2018/server/pull/5349#issuecomment-6226115250)).
+PR H2.7, the two Claude crons re-homed: [#5387](https://github.com/DanielH2018/server/pull/5387),
+together with D5's run-once cleanup PR. It merged at `471397804`. daniel-box's tick re-rendered
+both scripts at 01:41 UTC, and the peer sync cron rewrote its lock at 01:45:01, the first slot
+after. On daniel-server, `initial_setup.yml --tags claude_code` read `ok=123 changed=4
+failed=0`. The node gate kept both crons off that host, and `Restart claude-rc` did not run.
 Depends on: H1, D3 and H6, per PR. H2.2a needs H1.5a and H1.6. H2.3b needs H1.5a and the C3
 row of *Open questions* 12. H2.8a needs H1.7b (and through it D3) and H6.4b, with the
 region-key gate of *Open questions* 11. No other H2 PR waits outside H2 (*Open questions*

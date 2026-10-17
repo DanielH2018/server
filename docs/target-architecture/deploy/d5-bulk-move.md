@@ -66,6 +66,33 @@ script lives in the shared `manifests` role, so the landing deployed every tag a
 flux-owned tag has a snapshot claim yet, so no live tag renders one. With D5.3b1's script, three
 flat `flux_*.py` files now share `manifests/files/`. The module-family census allows them, because
 each Job's ConfigMap carries its script and the connection helper as flat keys.
+PR D5.4a1, image contexts as a renderer output:
+[#5357](https://github.com/DanielH2018/server/pull/5357). It merged at `cb912b310` and deployed
+nothing. Every `cluster()` call now builds all ten contexts, so the bundle test's shard weight
+was re-recorded at 11.45s
+([#5374](https://github.com/DanielH2018/server/issues/5374) narrows a one-tag render). The
+promote run on `b65d0b4e0` read `verify` `verdict=good failed=`.
+PR D5.2c, the revert entry point: [#5362](https://github.com/DanielH2018/server/pull/5362). It
+merged at `b65d0b4e0` and deployed nothing. Its review left two runbook-test findings, and
+[#5377](https://github.com/DanielH2018/server/pull/5377) replaced the ordering-word check with a
+pinned sentence at `29fb683fd`.
+PR D5.4a2, CI images: [#5378](https://github.com/DanielH2018/server/pull/5378). It merged at
+`9d6a40b52` and was reverted in [#5390](https://github.com/DanielH2018/server/pull/5390) at
+`3b74100cc`. Its first `images` run, promote run 38992066819, pushed nut, pi-peer-backup,
+terraria and valheim to new GHCR packages. It failed on n8n-runners, whose context no longer
+builds ([#5391](https://github.com/DanielH2018/server/issues/5391)). `publish` needs `images`, so
+every promotion stopped until the revert. D5.4a2 lands again after
+[#5392](https://github.com/DanielH2018/server/pull/5392) fixes n8n-runners.
+PR D5.3b2, the soak Kustomization, observed:
+[#5386](https://github.com/DanielH2018/server/pull/5386). It merged at `95cd242bc` and settled
+with `flux` and `observability` healthy. kustomize-controller runs `--concurrent=6`, `last-good`
+reads Ready, and the landing revision's soak Job logged `soak: R changes no service; nothing to
+judge`. The live check, two consecutive `flux/soak` `success` statuses on revisions that change a
+flux-owned tag, is still open. The PR also covers `last-good` in `FluxNotReady`, and the
+cross-plane snapshot passes R through `HOMELAB_RENDER_REVISION`.
+The run-once cleanup PR: [#5387](https://github.com/DanielH2018/server/pull/5387), together with
+H2.7. It merged at `471397804`. It deleted game-stats' and observability's run-once record
+cleanups and the render-record census row.
 
 Related issues:
 
