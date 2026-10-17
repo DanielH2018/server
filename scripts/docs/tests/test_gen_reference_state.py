@@ -313,6 +313,14 @@ def test_build_rows_on_the_live_tree_yields_at_least_six_named_loops():
     }
 
 
+def test_build_rows_reads_the_longhorn_drill_through_the_tools_it_is_given():
+    """Dropping the forwarding reads the default kubectl: unreadable in CI, the cluster on a host."""
+    fresh = (NOW - dt.timedelta(hours=1)).timestamp()
+    rows = g.build_rows(now=NOW, tools=_kubectl(_stamps(fresh)))
+    drill = next(r for r in rows if r["name"] == "longhorn-restore-drill")
+    assert (drill["status"], drill["outcome"]) == ("ok", "PVC restore proven")
+
+
 # --- rendering --------------------------------------------------------------------------
 
 
