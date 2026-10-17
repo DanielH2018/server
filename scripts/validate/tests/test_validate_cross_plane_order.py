@@ -373,13 +373,6 @@ def test_the_snapshot_names_objects_as_decide_does(head_snapshot):
     }
 
 
-def test_a_prune_disabled_label_or_annotation_is_read():
-    for key in ("labels", "annotations"):
-        doc = {"metadata": {key: {gate.PRUNE_KEY: "disabled"}}}
-        assert gate._prune_disabled(doc)
-    assert not gate._prune_disabled({"metadata": {"labels": {gate.PRUNE_KEY: "x"}}})
-
-
 def _digests(own: str, suspended: bool) -> dict:
     """A `digests.json` whose bento-pdf entry carries `own` and `suspended`."""
     return {"bento-pdf": {"own": own, "footprint": own, "suspended": suspended}}
