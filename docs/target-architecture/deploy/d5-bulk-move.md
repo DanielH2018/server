@@ -3576,7 +3576,7 @@ includes valheim's initContainer.
   (Open question 15).
 - **Kept small:** `k8s_host_files` holds rows from nine roles and one Pi timer, and most of
   the rows are absent arms. H2 moves the live crons of six roles first, so what reaches
-  `k8s_host_files` from five of them is absent arms and artifacts' two directories. Only
+  `k8s_host_files` from five of them is absent arms and artifacts' three directories. Only
   docs's and artifacts' directories and pi-peer-backup's two Pi writes stay live until H7.
 
 ## Open questions
