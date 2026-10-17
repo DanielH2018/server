@@ -670,7 +670,10 @@ input*.
   resumes. Beside the classify command it prints `prod@sha256:<digest of sha-<T>>`, the
   string a role that attempted T reads in `.status.lastAttemptedRevision`. CI cannot read the
   cluster, so every changed snapshot role gets a block, and the classify step picks which to
-  revert. A message never passes Discord's 2,000 characters and never cuts a block. A 429
+  revert. A message never passes Discord's 2,000 characters: a header that lists every tag
+  splits across messages, and no line or block is cut. Each block runs the revert once per
+  claim namespace, passing `k8s_namespace`, and the header says when `ansible/volume-revert.yml`
+  is not in the tree yet (D5.2c adds it). A 429
   gets one retry after its `retry_after`, up to 10 seconds. A failed post fails the run red;
   the hold is already written by then.
 - **The way out** is **operator-only**: the runbook in `docs/volume-snapshot-drills.md`, then

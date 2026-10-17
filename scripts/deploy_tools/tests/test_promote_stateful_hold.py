@@ -15,6 +15,7 @@ import promote
 import pytest
 from _promote_fakes import NOW, World, bundle_files, digest_of
 from deploy_tools.promote_lib import stateful
+from lib.repo_paths import REPO
 from renderer.renderer_lib.snapshot import snapshot_files
 
 SONARR, RADARR = "1111aaaa", "2222bbbb"
@@ -116,7 +117,7 @@ T = "a" * 40
 DIGEST = "sha256:" + "d" * 64
 
 
-def _record(tmp_path, failed_soak_job: str = "") -> object:
+def _record(tmp_path, failed_soak_job: str = "") -> dict:
     target = _bundle(
         {"sonarr": "s2", "radarr": "r2", "traefik": "t2"},
         a=SONARR_SNAP,
@@ -286,3 +287,44 @@ def test_a_rate_limited_post_retries_once_after_a_short_wait(
             client.post("x")
         assert slept == []
     assert len(sent) == sends
+
+
+def test_a_header_listing_every_tag_splits_across_messages_that_each_fit(tmp_path):
+    """A widened or broad revision names every tag; the header must still post whole."""
+    tags = sorted(p.name for p in (REPO / "ansible" / "roles" / "k8s").iterdir())
+    assert len(tags) >= 60
+    target = _bundle({t: "x" for t in tags} | {"sonarr": "s2"}, a=SONARR_SNAP)
+    found = stateful.record(target, json.loads(target["digests.json"]), None, DIGEST)
+    assert found["widened"]
+    failed = tags[:40]
+    sent = stateful.messages(T, f"{T} stateful=x", "failed", failed, found)
+    assert all(len(m) <= forge.DISCORD_MAX for m in sent), [len(m) for m in sent]
+    text = "\n".join(sent)
+    assert all(f"{t} (" in text for t in tags), "a changed tag went missing"
+    assert sum("1. classify" in m for m in sent) == 1
+
+
+def test_the_header_says_when_the_revert_playbook_is_absent(tmp_path):
+    found = _record(tmp_path)
+    absent = stateful.messages(T, f"{T} stateful=x", "failed", ["sonarr"], found, False)
+    present = stateful.messages(T, f"{T} stateful=x", "failed", ["sonarr"], found, True)
+    assert f"{stateful.PLAYBOOK} is not in this checkout yet" in absent[0]
+    assert stateful.PLAYBOOK + " is not" not in present[0]
+
+
+def test_each_claim_namespace_gets_its_own_revert_run():
+    role = {
+        "digest8": "4444dddd",
+        "claims": [
+            {"name": "app-data", "namespace": "apps"},
+            {"name": "app-cache", "namespace": "cache"},
+        ],
+    }
+    reverts = [
+        line
+        for line in stateful.block("app", role, DIGEST).splitlines()
+        if "volume-revert.yml" in line
+    ]
+    assert len(reverts) == 2
+    assert "-e k8s_namespace=apps" in reverts[0] and '["app-data"]' in reverts[0]
+    assert "-e k8s_namespace=cache" in reverts[1] and '["app-cache"]' in reverts[1]

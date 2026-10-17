@@ -40,9 +40,11 @@ stateful hold. It posts to the deployer's Discord channel:
     that attempted R reads in `.status.lastAttemptedRevision`. CI cannot read the cluster, so
     there is a block for EVERY changed snapshot role, and the classify step picks which to
     revert (D5 Open question 1, case b).
-Discord refuses a message over `forge.DISCORD_MAX` characters, so the post is a header message
-and then one message per changed snapshot role, or two when its prefixes and its block
-together pass the limit, never cut inside a block. Any failed send
+Discord refuses a message over `forge.DISCORD_MAX` characters, so the header takes as many
+messages as its listings need, which a revision that changes every tag does, and then each
+changed snapshot role takes one message, or two when its prefixes and its block together pass
+the limit. No line and no block is cut. Each block runs the revert once per claim namespace,
+and the header says when the revert playbook is not in the tree yet. Any failed send
 exits 1, so GitHub shows a red run.
 
 Like `promote.py`, this module reaches the network only through `forge.py`
@@ -67,6 +69,7 @@ _sys.path.insert(1, str(_Path(__file__).resolve().parents[1]))
 from lib import yaml_fast
 from lib.cli_help import error
 from lib.exit_codes import FAILED, OK, USAGE_ERROR
+from lib.repo_paths import REPO
 
 import forge
 from changed_set import own_digests
@@ -78,6 +81,11 @@ STATEFUL_FILE = "stateful.json"
 WEBHOOK_ENV = "DEPLOY_DISCORD_WEBHOOK"
 SOAK = "soak"
 RUNBOOK = "docs/volume-snapshot-drills.md"
+# The revert entry point each block runs. D5.2c adds it, so the post says when it is absent.
+PLAYBOOK = "ansible/volume-revert.yml"
+# The longest line a header listing takes, so a list of every tag splits across lines that
+# each fit a message beside the marker.
+_LISTING_MAX = 1500
 _SNAPSHOT_JOB = re.compile(r"cluster/([a-z0-9][a-z0-9-]*)-snapshot/job\.yaml")
 _SOAK_DIR = f"cluster/{SOAK}/"
 _SHA = re.compile(r"[0-9a-f]{40}")
@@ -262,7 +270,17 @@ def comparison(digest: str) -> str:
 
 def block(tag: str, role: dict, digest: str) -> str:
     """One changed snapshot role's commands, in Branch 1's order, as a fenced block."""
-    claims = json.dumps([c["name"] for c in role["claims"]])
+    namespaces: dict[str, list[str]] = {}
+    for claim in role["claims"]:
+        namespaces.setdefault(claim["namespace"], []).append(claim["name"])
+    # One run per namespace, because the role reverts every claim in `k8s_namespace`.
+    reverts = [
+        f"uv run ansible-playbook {PLAYBOOK} -e volume_revert_service={tag} "
+        f"-e k8s_namespace={namespace} "
+        f"""-e '{{"volume_revert_claims": {json.dumps(names)}}}' """
+        f"-e volume_revert_sha={role['digest8']}"
+        for namespace, names in sorted(namespaces.items())
+    ]
     lines = [
         "```",
         f"# 1. classify: {tag} attempted R only when this prints {comparison(digest)}",
@@ -272,8 +290,7 @@ def block(tag: str, role: dict, digest: str) -> str:
         _patch(f"{tag}-snapshot", True),
         _patch(tag, True),
         "# 3. revert the volumes",
-        f"uv run ansible-playbook ansible/volume-revert.yml -e volume_revert_service={tag} "
-        f"""-e '{{"volume_revert_claims": {claims}}}' -e volume_revert_sha={role["digest8"]}""",
+        *reverts,
         "# 4. resume, only after the reset_to_last_good dispatch and its OCIRepository wait",
         _patch(f"{tag}-snapshot", False),
         _patch(tag, False),
@@ -293,12 +310,47 @@ def _mark(name: str, snapshot: Iterable[str]) -> str:
     return f"{name} (not a snapshot role)"
 
 
-def messages(
-    target: str, hold: str, verdict: str, failed: list[str], found: dict
-) -> list[str]:
-    """The post: a header message, then one message per changed snapshot role.
+def _listing(label: str, names: list[str]) -> list[str]:
+    """`<label>: <names>` as one line, or as numbered lines of at most _LISTING_MAX each."""
+    lines, current = [], ""
+    for name in names:
+        if current and len(current) + 2 + len(name) > _LISTING_MAX:
+            lines.append(current)
+            current = name
+        else:
+            current = f"{current}, {name}" if current else name
+    lines.append(current)
+    if len(lines) == 1:
+        return [f"{label}: {lines[0]}"]
+    return [f"{label} ({n}/{len(lines)}): {line}" for n, line in enumerate(lines, 1)]
 
-    A role whose prefixes and block together pass `forge.DISCORD_MAX` takes two messages.
+
+def _pack(marker: str, lines: list[str]) -> list[str]:
+    """`lines` joined into as few messages as fit `forge.DISCORD_MAX`, never splitting one."""
+    posts, current = [], ""
+    for line in lines:
+        if current and len(current) + 1 + len(line) > forge.DISCORD_MAX:
+            posts.append(current)
+            current = f"{marker} (continued)\n{line}"
+        else:
+            current = f"{current}\n{line}" if current else line
+    posts.append(current)
+    return posts
+
+
+def messages(
+    target: str,
+    hold: str,
+    verdict: str,
+    failed: list[str],
+    found: dict,
+    playbook_present: bool = True,
+) -> list[str]:
+    """The post: the header, then one message per changed snapshot role.
+
+    The header takes as many messages as its listings need: a revision whose `changed` holds
+    every tag must still post. A role whose prefixes and block together pass
+    `forge.DISCORD_MAX` takes two messages.
 
     Args:
         target: R, the held commit.
@@ -306,23 +358,29 @@ def messages(
         verdict: `verify`'s verdict, `failed` or anything else for no verdict.
         failed: the names `verify` printed as failed or timed out.
         found: the record `decide` wrote (`read`).
+        playbook_present: whether PLAYBOOK is in the checkout; the header says when not.
     """
     snapshot = set(found["snapshot_roles"])
     stateful = found["stateful"]
     marker = f"promote hold {target[:8]}:"
-    changed = ", ".join(_mark(n, snapshot) for n in found["changed"]) or "none"
+    changed = [_mark(n, snapshot) for n in found["changed"]] or ["none"]
     if found.get("widened"):
-        changed += f" (every name counts as changed: {found['widened']})"
+        changed.append(f"(every name counts as changed: {found['widened']})")
     if verdict == "failed" and failed:
-        failing = ", ".join(_mark(n, snapshot) for n in failed)
+        failing = [_mark(n, snapshot) for n in failed]
     else:
-        failing = "none named, because verify ended with no verdict"
+        failing = ["none named, because verify ended with no verdict"]
     header = [
         f"{marker} DEPLOY_HOLD set to `{hold}`. prod was NOT reset and stays on "
         f"sha-{target}, because it changes the snapshot role(s) {', '.join(sorted(stateful))}.",
-        f"Changed tags: {changed}",
-        f"Failed or timed out: {failing}",
+        *_listing("Changed tags", changed),
+        *_listing("Failed or timed out", failing),
     ]
+    if not playbook_present:
+        header.append(
+            f"{PLAYBOOK} is not in this checkout yet (D5.2c adds it), so step 3 of each "
+            "block cannot run until it lands. Suspend, then wait for it before any reset."
+        )
     if SOAK in failed:
         job = found.get("soak_job") or ""
         if job:
@@ -340,7 +398,7 @@ def messages(
         "(reset_to_last_good) runs once, between every block's step 3 and any step 4. "
         "Clearing DEPLOY_HOLD is operator-only."
     )
-    posts = ["\n".join(header)]
+    posts = _pack(marker, header)
     for tag in sorted(stateful):
         role = stateful[tag]
         state = "FAILED" if any(split_kind(n)[0] == tag for n in failed) else "changed"
@@ -397,7 +455,8 @@ def run(args: argparse.Namespace, post: Callable[[str], None]) -> int:
     except ValueError as err:
         error(f"hold: {err}")
         return FAILED
-    posts = messages(args.target, args.hold, args.verdict, failed, found)
+    present = (REPO / PLAYBOOK).is_file()
+    posts = messages(args.target, args.hold, args.verdict, failed, found, present)
     for n, content in enumerate(posts, 1):
         try:
             post(content)
