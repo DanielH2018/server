@@ -666,15 +666,16 @@ pass_filenames = false
 files = "(\\.py$|^docs/target-architecture/deploy/d2-first-leaf\\.md$|^ansible/deploy\\.yml$|^ansible/roles/setup/[^/]+/(templates|files)/|^(pyproject\\.toml|uv\\.lock)$)"
 
 # The lander deadlines: promote.yml's job timeouts, the land units' TimeoutStartSec in the
-# setup roles, the inventory's flux-owned tags the soak render reads, and the land and render
-# code under scripts/.
+# setup roles, the inventory's flux-owned tags, the three k8s inputs the soak render reads
+# (scripts/renderer/renderer_lib/soak.py: flux's defaults, manifests' files and the alert
+# rules), and the land and render code under scripts/.
 [[repos.hooks]]
 id = "static-ratchet-tests-lander"
 name = "Lander deadlines cover the soak"
 entry = "uv run --frozen pytest -q -n0 -p no:cacheprovider ansible/tests/setup/test_lander_deadlines_cover_the_soak.py"
 language = "system"
 pass_filenames = false
-files = "^(\\.github/workflows/promote\\.yml|ansible/inventory/.*|ansible/roles/setup/[^/]+/(templates|defaults)/.*|scripts/(deploy_tools|renderer|lib)/.*\\.py|ansible/tests/(_[^/]+|setup/[^/]+)\\.py|pyproject\\.toml|uv\\.lock)$"
+files = "^(\\.github/workflows/promote\\.yml|ansible/inventory/.*|ansible/roles/setup/[^/]+/(templates|defaults)/.*|ansible/roles/k8s/(flux/defaults|manifests/files|observability/files/rules)/.*|scripts/(deploy_tools|renderer|lib)/.*\\.py|ansible/tests/(_[^/]+|setup/[^/]+)\\.py|pyproject\\.toml|uv\\.lock)$"
 
 # Every `checksum/<name>` a CLAUDE.md names, against the k8s roles' rendered manifests.
 [[repos.hooks]]
@@ -694,15 +695,18 @@ language = "system"
 pass_filenames = false
 files = "(\\.sh(\\.j2)?$|^ansible/tests/(_[^/]+|repo/test_shell_entry_points_answer_help)\\.py$|^(pyproject\\.toml|uv\\.lock)$)"
 
-# The two Renovate-rule modules: renovate.json against the autodeploy denylist, which the
-# inventory and the deployer's defaults and filter plugin decide.
+# The two Renovate-rule modules: renovate.json against the autodeploy denylist, which each
+# k8s role's `k8s_autodeploy` in its defaults and the filter plugin decide, and against who
+# owns each pin. Role defaults and the Dockerfile templates hold nearly every pin; a pin a
+# custom manager reads from a workflow, a task file or prek.toml reaches CI's `pytest` job
+# instead of this hook.
 [[repos.hooks]]
 id = "static-ratchet-tests-renovate"
 name = "Renovate rules carry the autodeploy denylist marker"
 entry = "uv run --frozen pytest -q -n0 -p no:cacheprovider ansible/tests/deploy/test_renovate_per_package_manual_rules_carry_the_denylist_marker.py ansible/tests/deploy/test_renovate_denylist_marker_reaches_the_pr_title.py"
 language = "system"
 pass_filenames = false
-files = "^(renovate\\.json|ansible/inventory/.*|ansible/roles/setup/gitops_deploy/defaults/.*|ansible/filter_plugins/k8s_autodeploy\\.py|ansible/tests/(_[^/]+|deploy/_autodeploy|deploy/test_renovate_[^/]+)\\.py|scripts/lib/.*\\.py|pyproject\\.toml|uv\\.lock)$"
+files = "^(renovate\\.json|ansible/inventory/.*|ansible/roles/[^/]+/[^/]+/(defaults/.*|templates/Dockerfile[^/]*)|ansible/filter_plugins/k8s_autodeploy\\.py|ansible/tests/(_[^/]+|deploy/_autodeploy|deploy/test_renovate_[^/]+)\\.py|scripts/lib/.*\\.py|pyproject\\.toml|uv\\.lock)$"
 
 
 # The `hooks` key of .claude/settings.json is rendered from the `# gen-hooks:` block each file

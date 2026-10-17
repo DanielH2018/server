@@ -289,8 +289,8 @@ Run `prek run --all-files` to check before committing. **That does not run the s
 hook runs it, neither at commit nor at push. The one exception is `static-ratchet-tests` and
 its `static-ratchet-tests-*` siblings: at commit time it runs twenty-three static ratchet, lock
 and census test files, which caused most of the PR reds that the author's own code did not
-(#3605, #4008, #4904, #5481). Each sibling's `files` gate runs it only on a commit that can
-change its verdict. CI's `pytest` job runs the
+(#3605, #4008, #4904, #5481). Each sibling carries its own `files` gate, so a commit runs
+only the siblings whose inputs it touches. CI's `pytest` job runs the
 suite whole on every PR, and `land.sh` waits on that job before it merges. To see a red test
 before CI does, run `uv run pytest` yourself. A pre-push hook that re-ran the suite was removed on 2026-10-02: it
 cost 89s on an idle daniel-box and 235s under load on every push, for a verdict CI repeats
