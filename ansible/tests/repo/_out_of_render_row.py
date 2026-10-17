@@ -61,8 +61,6 @@ ALLOW = {
     _K8S + "flux/tasks/main.yml": (
         "D5's flux PR: the sync objects come from the artifact, and the drill delete goes"
     ),
-    _K8S + "game-stats/tasks/terraria.yml": _CONFIGMAP,
-    _K8S + "game-stats/tasks/valheim.yml": _CONFIGMAP,
     _K8S + "headlamp/tasks/main.yml": (
         "D4 makes the deferred apply `headlamp-deferred`; " + _PROBE
     ),

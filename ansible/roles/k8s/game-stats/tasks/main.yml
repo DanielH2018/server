@@ -12,19 +12,12 @@
 # ONE k8s/manifests include for both games, not one each. The include prunes every staged file
 # its caller does not name, so a second include under the same `manifests_service` would delete
 # the first one's manifests. The consequence: a render change to either game restarts both pods.
-
-- name: Stage terraria-stats' scripts and apply its ConfigMap
-  ansible.builtin.import_tasks: terraria.yml
-
-- name: Stage valheim-stats' scripts and apply its ConfigMap
-  ansible.builtin.import_tasks: valheim.yml
+# That includes a script edit, since each game's script ConfigMap is a rendered template.
 
 - name: Deploy terraria-stats and valheim-stats to the cluster
   ansible.builtin.include_role:
     name: k8s/manifests
   vars:
-    # The script ConfigMaps are applied from their own staging directories without the role
-    # label, so the prune never selects them.
     manifests_rollout: terraria-stats
     manifests_extra_rollouts:
       - name: valheim-stats

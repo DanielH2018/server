@@ -51,7 +51,7 @@ ANNOTATION_KEY_RE = re.compile(
 )
 
 # `checksum_annotation('foo', ...)` — the shared macro (ansible/templates/checksum-
-# annotation.yml.j2) that monitor-bridge, game-stats and observability
+# annotation.yml.j2) that monitor-bridge and observability
 # call instead of writing `checksum/foo:` literally. Scoped to the SOURCE half of the census:
 # the render expands the macro into the literal key that ANNOTATION_KEY_RE already matches, so
 # a rendered template needs this pattern for nothing. A template the render does
@@ -107,10 +107,9 @@ SOURCE_FALLBACK_MEMBERS = {
 
 # One annotation per role that genuinely defines one, so narrowing the read cannot empty the
 # census and pass over nothing. Every member here arrives through the render: the macro writes
-# the literal key, and these are the only three roles that call it.
+# the literal key, and these are the only two roles that call it.
 CENSUS_MEMBERS = {
     "observability": "config",
-    "game-stats": "stats-script",
     "monitor-bridge": "check-script",
 }
 
@@ -297,7 +296,7 @@ def test_each_role_that_defines_an_annotation_is_still_credited_with_it(
 
     `ANNOTATION_KEY_RE` is stricter than the prose pattern it replaced, so a form it fails to
     match reads as "this role defines no annotation" and every claim about it passes over an
-    empty set. These four are the roles that call `checksum_annotation()`.
+    empty set. These two are the roles that call `checksum_annotation()`.
     """
     actual = _annotations_in_templates(K8S_ROLES / role_name)
     assert annotation in actual, (
@@ -333,8 +332,9 @@ def test_an_annotation_key_line_is_clean_and_a_comment_mentioning_one_is_flagged
     """The accept/reject pair for `ANNOTATION_KEY_RE`, on the three shapes that matter.
 
     A bare key and a quoted key are both real annotations. A YAML comment naming one is not,
-    whatever its indent — which is the shape game-stats' rendered manifests carry for
-    monitor-bridge's `checksum/check-script`.
+    whatever its indent — which is the shape the rendered manifests of autofix-bridge and
+    game-stats carried for monitor-bridge's `checksum/check-script` until #5445 and #5444
+    rendered their script ConfigMaps.
     """
     accepted = "\n".join(
         [

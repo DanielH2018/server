@@ -406,6 +406,10 @@ because the slice index does not order D5 after M3. Each order below holds under
 - Deploys `observability`. The rules reload in place (M1, `--config.auto-reload`), and no pod
   rolls.
 - Two-writer check: all four rules route to the blackhole receiver.
+- **Soak, shortened by the operator on 2026-10-17.** The soak ends after the 2026-10-18 Sunday
+  reboot, about four and a half days in, rather than on day 7. The window still spans that
+  reboot, and the closing reading is taken once its mute ends at 08:15 UTC. The rest of this
+  bullet applies as written.
 - **Soak.** 7 days, run as M1 convention 6 with `monitor_name="daniel-box Disk"` and
   `alertname=~"DiskHealth.*"`. The disk is far below 75% (Kuma's tile shows the share), so the
   soak mostly proves the negative: no `DiskHealthNotReporting` outside the reboot window. The

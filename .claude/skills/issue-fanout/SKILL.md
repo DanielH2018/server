@@ -329,10 +329,10 @@ bus is unreachable without one. No prefix on the command is needed.
 **Width is bounded by memory, measured, not by a number here.** Each batch costs one 2.5 GiB
 reservation (`RESERVATION_BYTES` in `scripts/dev/fanout_lib/placement.py`). Every agent runs
 as a transient user service inside `user-1000.slice`, which carries its own `MemoryHigh`
-(`claude_code_rc_memory_high`: 10G on daniel-box, 11G on daniel-server) nested under the
-fleet cap on `user.slice` (`claude_code_fleet_memory_high`: 14G on daniel-box, 13G on
+(`claude_code_rc_memory_high`: 10G on daniel-box, 17G on daniel-server) nested under the
+fleet cap on `user.slice` (`claude_code_fleet_memory_high`: 14G on daniel-box, 18G on
 daniel-server). The dispatcher
-reads both cgroups and places against whichever has less headroom, so a batch the 14G or 13G
+reads both cgroups and places against whichever has less headroom, so a batch the 14G or 18G
 fleet number alone would allow can still be refused by the tighter login-plane cap.
 `MemoryHigh` throttles rather than kills, so a batch the dispatcher refuses would have stalled
 in reclaim rather than failed loudly.
