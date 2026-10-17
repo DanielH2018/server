@@ -484,6 +484,7 @@
  "ansible/tests/repo/test_promote_drill_workflow.py": 0.0,
  "ansible/tests/repo/test_promote_workflow.py": 0.0,
  "ansible/tests/repo/test_promote_workflow_bundle.py": 0.0,
+ "ansible/tests/repo/test_promote_workflow_schedule.py": 0.0,
  "ansible/tests/repo/test_promote_workflow_verify.py": 0.0,
  "ansible/tests/repo/test_prune_artifacts_workflow.py": 0.0,
  "ansible/tests/repo/test_pytest_shards_partition_the_suite.py": 0.48,
