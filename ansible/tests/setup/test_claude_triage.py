@@ -14,6 +14,7 @@ import re
 
 import pytest
 from _helpers import ANSIBLE
+from _k8s_render import render_role_template
 from _setup_render import render_setup_text
 from deploy_tools.land_lib import policy
 from lib import yaml_fast
@@ -213,7 +214,7 @@ def test_the_poller_runs_as_the_agent_and_its_timer_is_started() -> None:
         render_setup_text("claude_code", "claude-triage-poll.service.j2"),
     )
     assert directive(text, "User") == [defaults()["claude_code_agent_user"]]
-    assert directive(text, "OnFailure") == ["claude-triage-alert.service"]
+    assert directive(text, "OnFailure") == ["claude-triage-poll-alert.service"]
     (start,) = directive(text, "ExecStart")
     assert start.endswith("/opt/claude-triage/claude_triage_poll.py")
     (enable,) = [
@@ -224,6 +225,23 @@ def test_the_poller_runs_as_the_agent_and_its_timer_is_started() -> None:
     module = enable["ansible.builtin.systemd_service"]
     assert module["name"] == "claude-triage-poll.timer"
     assert (module["enabled"], module["state"]) == (True, "started")
+
+
+def test_the_alert_names_and_labels_the_poller_matches_on_exist() -> None:
+    """A renamed hold alert or mute label would make the poller's gate match nothing."""
+    poller = (ROLE / "files" / "claude_triage_poll.py").read_text()
+    assert 'HOLD_ALERT = "DeployHoldActive"' in poller
+    observability = ANSIBLE / "roles" / "k8s" / "observability"
+    rules = (observability / "files" / "rules" / "deploy-pipeline.yaml").read_text()
+    assert "- alert: DeployHoldActive\n" in rules
+    secret = yaml_fast.safe_load(
+        render_role_template("observability", "alertmanager-secret.yaml.j2")
+    )
+    routes = yaml_fast.safe_load(secret["stringData"]["alertmanager.yml"])["route"]
+    matchers = {m for r in routes["routes"] for m in r.get("matchers", [])}
+    for label in ("shadow", "drill"):
+        assert f'{label}!="true"' in poller
+        assert f'{label}="true"' in matchers
 
 
 def config() -> str:

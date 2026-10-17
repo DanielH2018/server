@@ -4,23 +4,32 @@
 `claude-triage-poll.timer` runs this every two minutes. It reads two Prometheus vectors: Uptime
 Kuma's `monitor_status == 0`, the Kuma path, and the firing `ALERTS`, the Alertmanager path.
 It keeps per-key state in `<STATE_DIR>/poll-state.json` and opens an episode only on an
-up→down transition that has held for `STREAK` polls. A key that stays down keeps one episode
-until it recovers.
+up→down transition that has held for `POLL_STREAK` polls. A key that stays down keeps one
+episode until it recovers.
 
-Three modes, from `MODE` in the root-owned config:
+Three modes, from `POLL_MODE` in the root-owned config:
 
 - `off`: read nothing and change nothing.
-- `shadow`: log each run it would start, and append it to `<STATE_DIR>/shadow.jsonl`.
-- `armed`: write the episode to the inbox and start `claude-triage@<episode>.service`.
+- `shadow`: log each episode it would queue, and append it to `<STATE_DIR>/shadow.jsonl`.
+- `armed`: queue the episode in the inbox, and start the oldest queued episode whenever no
+  run holds the runner's lock.
 
 The first poll after a state file is created is a baseline. It records what is already down and
-starts nothing, so arming never fires on every known red tile at once. A failed read keeps the
-previous state: series that vanish because Prometheus or Kuma died are unknown, not recovered.
+starts nothing, so arming never fires on every known red tile at once.
+
+A series that vanished is unknown, not recovered, so a key keeps its previous state when its
+source cannot be trusted. A failed read leaves every key as it was. A Kuma key recovers only
+when its `monitor_status` reads 1: Kuma exports a monitor only after its first heartbeat since
+it started, so a long-interval monitor has no series for hours after a Kuma restart. Kuma's
+keys stay as they were while `up{job="uptime-kuma"}` is not 1. The alert keys stay as they were
+for `ALERTS_SETTLE_S` after Prometheus starts, because a restarted Prometheus fires nothing
+until each rule's `for:` delay, or the grace period of a restored one, has passed again.
 """
 
 from __future__ import annotations
 
 import argparse
+import fcntl
 import json
 import os
 import re
@@ -33,11 +42,16 @@ from collections.abc import Callable
 from datetime import datetime, timezone
 
 CONFIG = "/etc/claude-triage/config.env"
-KUMA_QUERY = 'monitor_status{job="uptime-kuma"} == 0'
+KUMA_QUERY = 'monitor_status{job="uptime-kuma"}'
+KUMA_UP_QUERY = 'up{job="uptime-kuma"}'
 # Watchdog always fires by design; shadow and drill alerts page nobody.
 ALERTS_QUERY = (
     'ALERTS{alertstate="firing", alertname!="Watchdog", shadow!="true", drill!="true"}'
 )
+PROM_AGE_QUERY = 'time() - process_start_time_seconds{job="prometheus"}'
+# Rules with `for:` up to 10m refire within it; a longer one is restored with Prometheus's
+# 10-minute --rules.alert.for-grace-period. Twenty minutes covers both with room.
+ALERTS_SETTLE_S = 1200
 HOLD_ALERT = "DeployHoldActive"
 EPISODE_MAX = 63
 
@@ -70,17 +84,65 @@ def prom_vector(base_url: str, query: str, timeout: float = 10) -> list[dict] | 
     try:
         with urllib.request.urlopen(url, timeout=timeout) as resp:
             body = json.load(resp)
-    except (OSError, ValueError) as exc:
-        log(f"prometheus read failed: {exc}")
+    except OSError, ValueError:
         return None
     if body.get("status") != "success":
-        log(f"prometheus answered {body.get('status')!r}")
         return None
     return body.get("data", {}).get("result", [])
 
 
+def read_all(
+    urls: list[str], read: Callable[[str, str], list[dict] | None]
+) -> dict[str, list[dict]] | None:
+    """Every query from the first URL that answers them all, or None when none does.
+
+    Prometheus publishes loopback only on the node it runs on, so the pinned ClusterIP after
+    it reaches Prometheus from either node.
+    """
+    queries = {
+        "kuma": KUMA_QUERY,
+        "kuma_up": KUMA_UP_QUERY,
+        "alerts": ALERTS_QUERY,
+        "prom_age": PROM_AGE_QUERY,
+    }
+    for base in urls:
+        found = {}
+        for name, query in queries.items():
+            result = read(base, query)
+            if result is None:
+                break
+            found[name] = result
+        else:
+            return found
+    return None
+
+
+def value(series: dict) -> float:
+    return float(series.get("value", [0, "nan"])[1])
+
+
+def unknown_sources(found: dict[str, list[dict]]) -> set[str]:
+    """The key prefixes whose emptiness this poll does not prove recovered."""
+    unknown = set()
+    if not any(value(s) == 1 for s in found["kuma_up"]):
+        unknown.add("kuma")
+    ages = [value(s) for s in found["prom_age"]]
+    if not ages or min(ages) < ALERTS_SETTLE_S:
+        unknown.add("alert")
+    return unknown
+
+
 def slug(text: str) -> str:
     return re.sub(r"[^a-z0-9]+", "-", text.lower()).strip("-")
+
+
+def kuma_up_keys(kuma: list[dict]) -> set[str]:
+    """The Kuma keys whose monitor reads up now; only these count as recovered."""
+    return {
+        f"kuma:{s['metric']['monitor_name']}"
+        for s in kuma
+        if s.get("metric", {}).get("monitor_name") and value(s) == 1
+    }
 
 
 def down_keys(kuma: list[dict], alerts: list[dict]) -> dict[str, dict]:
@@ -88,7 +150,7 @@ def down_keys(kuma: list[dict], alerts: list[dict]) -> dict[str, dict]:
     found: dict[str, dict] = {}
     for series in kuma:
         name = series.get("metric", {}).get("monitor_name", "")
-        if name:
+        if name and value(series) == 0:
             found[f"kuma:{name}"] = {"source": "kuma", "monitor": name}
     for series in alerts:
         m = series.get("metric", {})
@@ -113,7 +175,7 @@ def episode_id(key: str, now: float) -> str:
 
 
 def in_reboot_window(cfg: dict[str, str], now: float) -> bool:
-    """The weekly reboot, from the shutdown delay before it to the boot grace after it."""
+    """The weekly reboot, from the mute's lead before it to the grace after it."""
     try:
         weekday = int(cfg["REBOOT_WEEKDAY"])  # cron numbering: 0 is Sunday
         start_min = int(cfg["REBOOT_HOUR"]) * 60 + int(cfg["REBOOT_MINUTE"])
@@ -136,18 +198,27 @@ def step(
     now: float,
     streak_needed: int,
     storm_size: int,
+    unknown: set[str] | frozenset[str] = frozenset(),
+    kuma_up: set[str] | frozenset[str] = frozenset(),
 ) -> tuple[dict, list[dict]]:
-    """Advance the per-key state by one poll; return (new state, episodes to start).
+    """Advance the per-key state by one poll; return (new state, episodes to open).
 
-    `down` is None when a read failed: the state stays as it was. The first poll (no
-    `baseline` in the state) records what is down and starts nothing.
+    `down` is None when the read failed, and `unknown` names the sources (`kuma`, `alert`)
+    whose keys this poll cannot judge: either way those keys keep their state. The baseline
+    waits for a poll that can judge every source, so a source that comes back later cannot
+    read its standing reds as new falls. A Kuma key recovers only when it is in `kuma_up`; an
+    alert key recovers when it stops firing.
     """
     if down is None:
         return state, []
-    keys = dict(state.get("keys", {}))
     baseline = not state.get("baseline")
+    if baseline and unknown:
+        return state, []
+    keys = dict(state.get("keys", {}))
     ready: list[str] = []
     for key in down:
+        if key.split(":", 1)[0] in unknown:
+            continue
         entry = dict(keys.get(key, {}))
         if baseline:
             entry.update(streak=streak_needed, open=True, since=now)
@@ -157,7 +228,10 @@ def step(
                 ready.append(key)
         keys[key] = entry
     for key in list(keys):
-        if key not in down:
+        source = key.split(":", 1)[0]
+        if key in down or source in unknown:
+            continue
+        if source == "alert" or key in kuma_up:
             del keys[key]  # recovered: the next fall is a new episode
     episodes: list[dict] = []
     if ready and not (hold or muted):
@@ -173,15 +247,37 @@ def step(
             episodes += [{"id": episode_id(k, now), **down[k]} for k in sorted(ready)]
         for key in ready:
             keys[key].update(open=True, since=now)
-    # While held or muted, a ready key keeps its streak and opens once the mute lifts.
-    return {"baseline": True, "keys": keys}, episodes
+    # While held or muted, a ready key keeps its streak and opens once the gate lifts.
+    return {**state, "baseline": True, "keys": keys}, episodes
 
 
-def start_run(state_dir: str, episode: dict) -> None:
-    inbox = os.path.join(state_dir, "inbox", f"{episode['id']}.json")
-    with open(inbox, "w", encoding="utf-8") as f:
-        json.dump(episode, f, indent=2, sort_keys=True)
-    unit = f"claude-triage@{episode['id']}.service"
+def lock_free(path: str) -> bool:
+    """True when no run holds the runner's `flock`; probing takes and drops it at once."""
+    try:
+        fd = os.open(path, os.O_RDWR | os.O_CREAT, 0o644)
+    except OSError:
+        return False
+    try:
+        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError:
+        return False
+    finally:
+        os.close(fd)
+    return True
+
+
+def queued(inbox: str) -> list[str]:
+    """Episode ids waiting in the inbox, oldest first."""
+    try:
+        names = [n for n in os.listdir(inbox) if n.endswith(".json")]
+    except OSError:
+        return []
+    names.sort(key=lambda n: (os.path.getmtime(os.path.join(inbox, n)), n))
+    return [n[: -len(".json")] for n in names]
+
+
+def start_run(episode: str) -> None:
+    unit = f"claude-triage@{episode}.service"
     rc = subprocess.run(
         ["systemctl", "start", "--no-block", unit], check=False
     ).returncode
@@ -189,11 +285,29 @@ def start_run(state_dir: str, episode: dict) -> None:
         log(f"could not start {unit} (exit {rc})")
 
 
+def drain(state: dict, state_dir: str, start: Callable[[str], None]) -> dict:
+    """Start the oldest queued episode when no run holds the lock; return the new state.
+
+    The runner deletes an episode's inbox file when it finishes, so a file this poller already
+    started that is still queued once the lock is free belongs to a run that crashed. That run
+    paged through OnFailure=; starting it again would crash and page on every poll.
+    """
+    inbox = os.path.join(state_dir, "inbox")
+    waiting = queued(inbox)
+    started = [e for e in state.get("started", []) if e in waiting]
+    pending = [e for e in waiting if e not in started]
+    if pending and lock_free(os.path.join(state_dir, "run.lock")):
+        log(f"starting {pending[0]}")
+        start(pending[0])
+        started.append(pending[0])
+    return {**state, "started": started}
+
+
 def main(
     argv: list[str],
     config_path: str = CONFIG,
     read: Callable[[str, str], list[dict] | None] = prom_vector,
-    start: Callable[[str, dict], None] = start_run,
+    start: Callable[[str], None] = start_run,
     now: Callable[[], float] = time.time,
 ) -> int:
     """One poll; `read`, `start` and `now` are the seams a test replaces."""
@@ -213,42 +327,49 @@ def main(
     except OSError, ValueError:
         state = {}
     t = now()
-    kuma = alerts = None
-    # Prometheus publishes loopback only on the node it runs on, so the pinned ClusterIP
-    # follows it to the other node.
-    for base in cfg.get("PROM_URLS", "http://127.0.0.1:9090").split():
-        kuma = read(base, KUMA_QUERY)
-        alerts = read(base, ALERTS_QUERY) if kuma is not None else None
-        if kuma is not None and alerts is not None:
-            break
-    down = None if kuma is None or alerts is None else down_keys(kuma, alerts)
-    hold = any(a.get("metric", {}).get("alertname") == HOLD_ALERT for a in alerts or [])
-    muted = in_reboot_window(cfg, t)
+    urls = cfg.get("PROM_URLS", "http://127.0.0.1:9090").split()
+    found = read_all(urls, read)
+    if found is None:
+        log(f"no Prometheus answered every query; tried {' '.join(urls)}")
+        down, hold, unknown, up = None, False, set(), set()
+    else:
+        down = down_keys(found["kuma"], found["alerts"])
+        up = kuma_up_keys(found["kuma"])
+        hold = any(
+            a.get("metric", {}).get("alertname") == HOLD_ALERT for a in found["alerts"]
+        )
+        unknown = unknown_sources(found)
     state, episodes = step(
         state,
         down,
         hold,
-        muted,
+        in_reboot_window(cfg, t),
         t,
         int(cfg.get("POLL_STREAK", "2")),
         int(cfg.get("POLL_STORM_SIZE", "3")),
+        unknown,
+        up,
     )
-    tmp = f"{state_path}.tmp"
-    with open(tmp, "w", encoding="utf-8") as f:
-        json.dump(state, f, indent=2, sort_keys=True)
-    os.replace(tmp, state_path)
     for episode in episodes:
         if mode == "armed":
-            log(f"starting {episode['id']}")
-            start(state_dir, episode)
+            path = os.path.join(state_dir, "inbox", f"{episode['id']}.json")
+            with open(path, "w", encoding="utf-8") as f:
+                json.dump(episode, f, indent=2, sort_keys=True)
+            log(f"queued {episode['id']}")
         else:
             log(
-                f"shadow: would start {episode['id']}: {json.dumps(episode, sort_keys=True)}"
+                f"shadow: would queue {episode['id']}: {json.dumps(episode, sort_keys=True)}"
             )
             with open(
                 os.path.join(state_dir, "shadow.jsonl"), "a", encoding="utf-8"
             ) as f:
                 f.write(json.dumps({"at": t, **episode}, sort_keys=True) + "\n")
+    if mode == "armed":
+        state = drain(state, state_dir, start)
+    tmp = f"{state_path}.tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(state, f, indent=2, sort_keys=True)
+    os.replace(tmp, state_path)
     return 0
 
 

@@ -586,9 +586,12 @@ The code is root-owned under `/opt/claude-triage`, like the runner's.
   ClusterIP `observability_prometheus_cluster_ip`.
 - **An episode is a fall, not a red tile.** The first poll records what is already down and
   starts nothing, so arming never fires on every known red tile at once. A key opens an episode
-  once it reads down on two consecutive polls, and keeps that episode until it recovers. A failed
-  read keeps the previous state, because a series that vanished with Prometheus is unknown, not
-  recovered.
+  once it reads down on two consecutive polls, and keeps that episode until it recovers.
+- **A vanished series is unknown, not recovered.** A failed read keeps every key as it was. A
+  Kuma key recovers only when its monitor reads 1, because Kuma exports a monitor only after its
+  first heartbeat since it started. Kuma's keys hold while `up{job="uptime-kuma"}` is not 1, and
+  the alert keys hold for 20 minutes after Prometheus starts, until its rules can fire again.
+  Without these, every Kuma or Prometheus restart would read each standing red as a new fall.
 - **A storm is one run.** More than three keys falling in one poll make a single storm episode
   that lists them all.
 - **Two gates defer an episode.** One is a firing `DeployHoldActive`. The other is the mute window
@@ -603,7 +606,11 @@ The code is root-owned under `/opt/claude-triage`, like the runner's.
 - `off` reads nothing.
 - `shadow` logs `would start <episode>` to the journal and appends the episode to
   `/var/lib/claude/triage/shadow.jsonl`. It ships in this mode.
-- `armed` writes the episode to the inbox and starts `claude-triage@<episode>`.
+- `armed` queues the episode in the inbox. Each poll starts the oldest queued episode when no
+  run holds the runner's lock, so episodes run one after another. A queued episode whose run
+  the poller already started is not started again: its run crashed and paged.
+
+A poller failure pages through `claude-triage-poll-alert.service`, at most once an hour.
 
 The mode is a literal in `tasks/triage.yml`, on the approval floor. To arm the poller, the
 operator reads a week of `shadow.jsonl`, changes the literal and its default to `armed`, and

@@ -153,6 +153,19 @@
       # No handler: polkitd watches rules.d and reloads a changed rule on its own.
 
     # Slice 2: the poller that opens an episode when a monitor goes down.
+    # The poll unit's OnFailure= target. A broken poller fails on every tick, so one page an
+    # hour is enough.
+    - name: Install the triage poller's failure alert
+      tags: [claude_code]
+      when: claude_code_agent_user_enabled and claude_code_triage_enabled
+      ansible.builtin.import_tasks: "{{ role_path }}/../common/tasks/alert_unit.yml"
+      vars:
+        alert_unit_name: claude-triage-poll
+        alert_unit_description: Alert when the triage poller fails
+        alert_unit_quiet_minutes: 60
+        alert_unit_message: "claude-triage-poll failed on {{ inventory_hostname }}: no monitor that goes down starts triage until it is fixed. `journalctl -u claude-triage-poll` has the error, and {{ claude_code_triage_state_dir }}/poll-state.json holds its state. Further failures in the next hour are not paged."
+        alert_unit_env_dir: /etc/claude-triage
+
     - name: Install the triage poller's unit and timer
       tags: [claude_code]
       ansible.builtin.template:
@@ -201,6 +214,7 @@
         - /etc/systemd/system/claude-triage@.service
         - /etc/systemd/system/claude-triage-poll.service
         - /etc/systemd/system/claude-triage-poll.timer
+        - /etc/systemd/system/claude-triage-poll-alert.service
         - /etc/systemd/system/claude-triage-alert.service
         - /etc/systemd/system/claude-triage-report-alert@.service
         - /etc/claude-triage

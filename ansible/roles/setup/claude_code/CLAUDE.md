@@ -166,9 +166,11 @@ the sync behaves, and the heartbeat's template carries why it is a host cron at 
   enforces the daily cap, because polkit lets `claude` start a run without the poller. The
   poller opens an episode only on a fall that holds for two polls, makes one storm episode of
   more than three falls at once, and opens nothing while `DeployHoldActive` fires or the weekly
-  reboot's mute is open.
+  reboot's mute is open. It queues episodes and starts the next only when the lock is free,
+  and never restarts one whose run crashed.
 - **Evidence:** `/var/lib/claude/triage/runs/<episode>.json`, the report under
-  `/a/<host>-claude/`, and a Discord page for every run; a crash pages separately. In shadow
+  `/a/<host>-claude/`, and a Discord page for every run; a crash pages separately, and a
+  poller failure pages at most once an hour. In shadow
   mode, `/var/lib/claude/triage/shadow.jsonl` and `journalctl -u claude-triage-poll` list each
   run the poller would have started.
 - **Next-run review:** before widening the scope or a cap, read the last week's records for
