@@ -39,7 +39,7 @@ from renderer.renderer_lib.bundle import CLUSTER_DIR
 
 # The kustomize file each bundle directory carries is not an object the cluster holds.
 _KUSTOMIZE_API = "kustomize.config.k8s.io/"
-# The suffix `bundle.py:job_spec_digest8` and `configmap_digest8` give a name: a rename by
+# The suffix `digest8.py:job_spec_digest8` and `configmap_digest8` give a name: a rename by
 # digest moves it, and both this check and the PR gate's arm 3 strip it before comparing.
 _DIGEST_SUFFIX = re.compile(r"-[0-9a-f]{8}$")
 PRUNE_KEY = "kustomize.toolkit.fluxcd.io/prune"
