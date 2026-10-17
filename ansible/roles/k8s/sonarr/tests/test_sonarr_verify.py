@@ -246,19 +246,43 @@ def test_the_flipped_job_reads_sonarrs_service_with_sonarrs_key(flipped, stubs):
     assert container["image"] == flux["flux_job_image"]
 
 
-def test_sonarrs_own_render_holds_the_secret_the_job_reads(stubs):
-    """The Job reads `sonarr-exportarr`/`api_key`; a rename there leaves the Job with no key."""
-    rendered = cluster.render_tag(TAG, stubs)
-    secrets = [
-        doc
-        for text in rendered.files.values()
+def _secret_refs(job: dict) -> set[tuple[str, str]]:
+    """Each `(Secret name, key)` pair the Job's containers read by `secretKeyRef`."""
+    pod = job["spec"]["template"]["spec"]
+    return {
+        (ref["name"], ref["key"])
+        for container in pod["containers"]
+        for env in container.get("env") or []
+        if (ref := (env.get("valueFrom") or {}).get("secretKeyRef"))
+    }
+
+
+def _secret_keys(stubs) -> set[tuple[str, str]]:
+    """Each `(Secret name, key)` pair sonarr's own render applies."""
+    return {
+        (doc["metadata"]["name"], key)
+        for text in cluster.render_tag(TAG, stubs).files.values()
         for doc in yaml_fast.safe_load_all(text)
         if doc and doc.get("kind") == "Secret"
-    ]
-    assert any(
-        doc["metadata"]["name"] == "sonarr-exportarr" and "api_key" in doc["stringData"]
-        for doc in secrets
-    )
+        for key in {**(doc.get("data") or {}), **(doc.get("stringData") or {})}
+    }
+
+
+def test_sonarrs_own_render_holds_the_secret_the_job_reads(flipped, stubs):
+    """Every Secret key the Job reads is one sonarr's render applies, or its pod cannot start."""
+    refs = _secret_refs(_job(flipped))
+    assert refs, "the flipped Job reads no Secret, so this check reads nothing"
+    assert refs - _secret_keys(stubs) == set()
+
+
+def test_a_secret_sonarr_does_not_render_is_flagged(flipped, stubs):
+    """The red case: a Job pointed at a Secret sonarr never applies fails the check above."""
+    job = json.loads(json.dumps(_job(flipped)))
+    (container,) = job["spec"]["template"]["spec"]["containers"]
+    for env in container["env"]:
+        if "valueFrom" in env:
+            env["valueFrom"]["secretKeyRef"] = {"name": "sonarr-api", "key": "key"}
+    assert _secret_refs(job) - _secret_keys(stubs) == {("sonarr-api", "key")}
 
 
 def test_a_deployment_change_renames_the_job(stubs, tmp_path):
