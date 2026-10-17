@@ -41,8 +41,9 @@ A SUSPENDED TAG TAKES NO CHANGE (D5.1d). A suspended tag applies nothing until i
 so a PR whose checks ran before the suspend merged can still merge after it. So when T's `own`
 digest differs from `last-good`'s for a tag `digests.json` marks `suspended` in both, `decide`
 holds and writes DEPLOY_HOLD as `<T> suspended-changed=<tag,...>`. The value never takes the
-`failed=` form, so the revert rule never passes it, and the `suspended_hold` output hands it to
-`hold`, which posts it (`promote_lib/stateful.py`). The way out is a revert or the resume.
+`failed=` form, so the revert rule never passes it, and `suspended_hold` hands it to `hold`,
+which posts it. The way out is a commit that reverts the change or resumes the tag, and then the
+operator's clear. A clear without one holds again here.
 
 ALREADY-FAILING DEPENDENTS (H1.1i). Before `prod` moves, `decide` records the newest
 `flux/<name>` status on `prod`'s commit for each name in T's changed set, and writes the record
@@ -104,7 +105,6 @@ Every GitHub and GHCR call goes through `forge.py`, and this module starts no su
 (scripts/deploy_tools/tests/test_promote_forge_boundary.py).
 
 Run: uv run python scripts/deploy_tools/promote.py decide --trigger <sha>
-     uv run python scripts/deploy_tools/promote.py prune
      uv run python scripts/deploy_tools/promote.py land-wait <sha> --services <tag,...>
      uv run python scripts/deploy_tools/promote.py check-bundle out
      uv run python scripts/deploy_tools/promote.py verify <sha> --bundle-dir <dir>

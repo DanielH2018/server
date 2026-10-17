@@ -12,10 +12,13 @@ builds one, so a flux-tag landing's own commit rebuilds nothing, and `images` ru
 once its content tags exist. `test_no_published_tag_builds_an_image` fails when a tag that
 builds one is handed to Flux, because that landing would then wait on its own rebuild.
 
-Another commit's rebuild can still run ahead of the landing's `images` job (#5431). The
-`images` concurrency group runs one job and keeps one pending, and a newer pending job evicts
-the older, so at most one rebuild runs ahead. The wait therefore counts one measured rebuild
-of every built image, FULL_REBUILD_S, rather than that job's 90-minute timeout.
+Other commits' rebuilds can still delay the landing's `images` job (#5431), by at most two
+full rebuilds. The `images` concurrency group runs one job and keeps one pending, and a newer
+pending job evicts the older. So one rebuild can run ahead of the landing. And the landing's
+job can inherit a second: it builds every content tag GHCR does not serve in its own render,
+so an image change whose pending job it evicted is built in the landing's job. The wait
+therefore counts two measured rebuilds of every built image, FULL_REBUILD_S each, rather than
+the job's 90-minute timeout.
 `tag` and the `verify` job are not on the path: `land-wait` settles on Flux's `flux/soak`
 status at R, not on either job. The soak's
 `timeout` grows by a queueing round with every five Kustomizations, so the PR that hands the
@@ -102,7 +105,7 @@ def shortfall(land_deadline: int, soak: dict) -> float:
     assert cap is not None
     verify_wait = wait.soak_deadline_s([soak]) // 2
     assert verify_wait > 0, f"the rendered soak's timeout is unreadable: {soak['spec']}"
-    return verify_wait + publish_pipeline_s() + FULL_REBUILD_S - cap
+    return verify_wait + publish_pipeline_s() + 2 * FULL_REBUILD_S - cap
 
 
 @pytest.mark.parametrize("lander", LANDERS)

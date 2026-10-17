@@ -107,3 +107,9 @@ def test_a_failed_post_of_the_hold_fails_the_run():
 def test_a_stateful_hold_without_its_record_is_a_usage_error():
     sent: list[str] = []
     assert _hold(f"{R} stateful=sonarr", sent.append) == 64 and sent == []
+
+
+@pytest.mark.parametrize("hold", [R, "none", f"{R} failed=bento-pdf"])
+def test_a_hold_of_another_form_is_a_usage_error_and_posts_nothing(hold):
+    sent: list[str] = []
+    assert _hold(hold, sent.append) == 64 and sent == []

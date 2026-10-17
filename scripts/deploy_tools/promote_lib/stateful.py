@@ -473,9 +473,13 @@ def run(args: argparse.Namespace, post: Callable[[str], None]) -> int:
 
     Returns FAILED when the record is unreadable or any send fails, so the run reads red.
     """
-    suspended = args.hold.removeprefix(f"{args.target} {SUSPENDED}")
-    if _SHA.fullmatch(args.target) and _NAMES.fullmatch(suspended):
-        posts = [suspended_message(args.target, args.hold, suspended.split(","))]
+    tags = args.hold.removeprefix(f"{args.target} {SUSPENDED}")
+    if (
+        _SHA.fullmatch(args.target)
+        and args.hold.startswith(f"{args.target} {SUSPENDED}")
+        and _NAMES.fullmatch(tags)
+    ):
+        posts = [suspended_message(args.target, args.hold, tags.split(","))]
         return _send(args.target, posts, post)
     if (
         not _SHA.fullmatch(args.target)
