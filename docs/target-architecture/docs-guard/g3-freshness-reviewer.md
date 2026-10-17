@@ -39,7 +39,7 @@ only as `gone`, never as `moved`, so `moved` rows are content atoms only. G2's d
   `fact_status.py report --json` prints. G1 PR 4 adds those two keys; see *Baseline*.
 - Thirty days after G2's PR 3 merges, run
   `uv run python scripts/dev/fact_status.py report --days 30 --json` and compute the figure.
-- Compare it with the same figure from G1's exit report, which ADR-0020 records in full.
+- Compare it with the same figure from G1's exit report, which ADR-0023 records in full.
   G1's figure was taken while the lock forced a re-read.
 - The **operator decides** whether to build G3. The suggested rule is to build it when the
   post-G2 figure is under half of G1's. With about five content moves a month, that

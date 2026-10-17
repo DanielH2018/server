@@ -13,10 +13,12 @@ import subprocess
 import pytest
 
 from _land_fakes import Fakes
-from deploy_tools.land_lib import merge
+from deploy_tools.land_lib import land_tested_base, merge
 from deploy_tools.land_lib.outcome import Outcome
 
 OLD, NEW = "a" * 40, "b" * 40
+# The master commit OLD's green CI run tested it against, newer than OLD's merge base.
+TESTED = "c" * 40
 PREFIX = "worktree-claude+"
 # What master changed between #2922's merge base and the commit before its merge
 # (cc2a71fd8), as GitHub's compare endpoint lists it, cut to the path that turned master red:
@@ -39,10 +41,11 @@ def _polls(*heads: str) -> list[dict]:
     ]
 
 
-def _landing(landing, polls, compare, gh_rc=(0,), **opts):
+def _landing(landing, polls, compare, gh_rc=(0,), tested_base=None, **opts):
     ln, calls = landing(
         Fakes(
             gh_views={"state,mergeable,headRefOid": polls},
+            tested_base=tested_base or {},
             compare=compare,
             gh_merge_rc=list(gh_rc),
         ),
@@ -75,6 +78,84 @@ def test_an_up_to_date_base_merges_without_an_update(landing):
     assert _gh_writes(calls) == ["merge aaaa"]
     (compare,) = [c for c in calls if c[0] == "gh:compare"]
     assert compare[1][1] == f"repos/{{owner}}/{{repo}}/compare/{OLD}...master"
+
+
+def test_master_moving_before_the_green_run_started_merges_without_an_update(landing):
+    """Compare runs from the tested base, so a change the run already saw is not stale."""
+    ln, calls = _landing(landing, _polls(OLD), [[]], tested_base={OLD: TESTED})
+    merge.await_merge(ln)
+    assert _gh_writes(calls) == ["merge aaaa"]
+    (compare,) = [c for c in calls if c[0] == "gh:compare"]
+    assert compare[1][1] == f"repos/{{owner}}/{{repo}}/compare/{TESTED}...master"
+
+
+def test_master_moving_after_the_green_runs_base_updates_the_branch(landing):
+    ln, calls = _landing(
+        landing, _polls(OLD, NEW), [INCIDENT_2922], tested_base={OLD: TESTED}
+    )
+    merge.await_merge(ln)
+    assert _gh_writes(calls) == ["update-branch aaaa", "merge bbbb"]
+    (compare,) = [c for c in calls if c[0] == "gh:compare"]
+    assert compare[1][1] == f"repos/{{owner}}/{{repo}}/compare/{TESTED}...master"
+
+
+def test_an_unreadable_tested_base_falls_back_to_the_merge_base(landing):
+    ln, calls = _landing(landing, _polls(OLD, NEW), [INCIDENT_2922], tested_base={})
+    merge.await_merge(ln)
+    assert _gh_writes(calls) == ["update-branch aaaa", "merge bbbb"]
+    (compare,) = [c for c in calls if c[0] == "gh:compare"]
+    assert compare[1][1] == f"repos/{{owner}}/{{repo}}/compare/{OLD}...master"
+
+
+def _tested_base(runs, jobs, log):
+    """`tested_base(OLD)` over fake gh reads: the runs list, the jobs list and the job log."""
+
+    def gh_json(*args, **_):
+        endpoint = args[1]
+        if "/workflows/ci.yml/runs" in endpoint:
+            assert f"head_sha={OLD}" in endpoint
+            return runs
+        assert endpoint.endswith("/actions/runs/7/jobs")
+        return jobs
+
+    def gh(*args, **_):
+        if isinstance(log, Exception):
+            raise log
+        return subprocess.CompletedProcess(args, 0, stdout=log)
+
+    return land_tested_base.tested_base(OLD, gh_json=gh_json, gh=gh)
+
+
+CHECKOUT_LOG = (
+    "2026-10-17T22:19:21Z HEAD is now at db8b8d59f Merge {head} into {base}\n"
+    "2026-10-17T22:19:22Z Download action repository 'actions/setup-python'\n"
+)
+
+
+def test_tested_base_is_the_base_in_the_checkout_logs_merge_line():
+    log = CHECKOUT_LOG.format(head=OLD, base=TESTED)
+    assert _tested_base([7, 6], [101], log) == TESTED
+
+
+@pytest.mark.parametrize(
+    ("runs", "jobs", "log"),
+    [
+        pytest.param([], [], "", id="no-green-run"),
+        pytest.param([7], [], "", id="no-green-job"),
+        pytest.param([7], [101], "no merge line here\n", id="log-without-merge-line"),
+        pytest.param(
+            [7],
+            [101],
+            CHECKOUT_LOG.format(head=NEW, base=TESTED),
+            id="log-of-another-head",
+        ),
+        pytest.param(
+            [7], [101], subprocess.CalledProcessError(1, ["gh"]), id="log-expired"
+        ),
+    ],
+)
+def test_tested_base_is_none_when_the_run_log_cannot_name_it(runs, jobs, log):
+    assert _tested_base(runs, jobs, log) is None
 
 
 def test_the_old_head_is_not_merged_while_github_applies_the_update(landing):
