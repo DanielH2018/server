@@ -136,6 +136,70 @@ def test_an_unreadable_kustomization_list_never_reads_as_settled():
     assert sim.wait().verdict == "gave-up"
 
 
+# -- the soak's verdict (D5.3b3) -------------------------------------------------------------
+
+# M changes bento-pdf, so its changed set holds `soak` as C2 puts it beside any tag.
+SOAK_PUBLISHED = {
+    M: digests(bento_pdf="b", soak="k"),
+    P: digests(bento_pdf="a", soak="k"),
+}
+for _found in SOAK_PUBLISHED.values():
+    _found["bento-pdf"]["suspended"] = False
+
+
+def _soak_sim(**kw) -> Sim:
+    return Sim(polls=[at(M, "bento-pdf")], published=SOAK_PUBLISHED, **kw)
+
+
+def test_the_fixture_changed_set_holds_soak():
+    """Without this every case below would settle on a set the soak never joined."""
+    found = changed_set(SOAK_PUBLISHED[M], SOAK_PUBLISHED[P], {"soak": []})
+    assert "soak" in found.names
+
+
+def test_every_tag_ready_and_no_flux_soak_status_keeps_waiting():
+    """The red half against a wait that reads only the tags: it would settle at the first poll."""
+    sim = _soak_sim()
+    result = sim.wait()
+    assert result.verdict == "gave-up" and sim.annotations == []
+    assert sim.soak_reads and set(sim.soak_reads) == {M}
+
+
+def test_a_pending_flux_soak_keeps_waiting():
+    sim = _soak_sim(soak={M: ["pending"]})
+    assert sim.wait().verdict == "gave-up"
+
+
+def test_a_flux_soak_success_on_r_settles():
+    sim = _soak_sim(soak={M: [None, "pending", "success"]})
+    result = sim.wait()
+    assert (result.verdict, result.revision) == ("settled", M)
+    assert sim.sleeps == 2 and len(sim.annotations) == 1
+
+
+@pytest.mark.parametrize("state", ["failure", "error"])
+def test_a_flux_soak_failure_on_r_ends_as_soak_failed_before_any_hold(state):
+    sim = _soak_sim(soak={M: [state]})
+    result = sim.wait()
+    assert (result.verdict, result.cause) == ("deploy-failed", "soak-failed")
+    assert "app=soak" in result.detail and "terminated.message" in result.detail
+    assert sim.sleeps == 0 and sim.annotations == []
+
+
+def test_a_flux_soak_success_on_another_commit_keeps_waiting():
+    """D covers M only once Flux applies D; M's success says nothing about R = D."""
+    sim = _soak_sim(soak={M: ["success"]})
+    sim.polls = [at(D, "bento-pdf")]
+    assert sim.wait().verdict == "gave-up"
+    assert set(sim.soak_reads) == {D}
+
+
+def test_an_unreadable_flux_soak_keeps_waiting_and_never_settles():
+    sim = _soak_sim(soak={M: [forge.ForgeError("HTTP 502"), "success"]})
+    result = sim.wait()
+    assert result.verdict == "settled" and sim.sleeps == 1
+
+
 # -- the changed set -------------------------------------------------------------------------
 
 
@@ -161,18 +225,10 @@ def test_a_changed_tag_that_is_not_ready_blocks_settled():
     assert sim.wait().verdict == "gave-up"
 
 
-def test_a_failed_soak_in_the_changed_set_does_not_block_settled():
-    """Before D5.3b3 the soak gates nothing, so `land-wait` never waits on it Ready."""
-    published = {
-        M: digests(bento_pdf="b", soak="k", _unclassified="u"),
-        P: digests(bento_pdf="a", soak="k", _unclassified="u"),
-    }
-    for found in published.values():
-        found["bento-pdf"]["suspended"] = False
+def test_a_soak_kustomization_not_ready_is_never_waited_on_its_status_decides():
+    """`soak` reads Ready only after its Job judged, so the wait reads `flux/soak` instead."""
     polls = [[*at(M, "bento-pdf"), kustomization("soak", f"master@sha1:{M}", False)]]
-    sim = Sim(polls=polls, published=published)
-    # The changed set does hold `soak`, so the settle below is the exclusion's doing.
-    assert "soak" in changed_set(published[M], published[P], {"soak": []}).names
+    sim = Sim(polls=polls, published=SOAK_PUBLISHED, soak={M: ["success"]})
     assert sim.wait().verdict == "settled"
 
 

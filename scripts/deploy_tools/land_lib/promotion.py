@@ -22,7 +22,7 @@ map to a landing's words:
 | land-wait | Verdict | Cause | Exit |
 |---|---|---|---|
 | settled | the landing goes on to the health gate | -- | -- |
-| deploy-failed | `deploy-failed` | `promote-held` | 1 |
+| deploy-failed | `deploy-failed` | `promote-held`, or `soak-failed` for R's `flux/soak` | 1 |
 | gave-up | `deferred` | `promote-timeout` | 75 |
 | suspended | `nothing-to-deploy`, or the gate when deploy.sh deployed a tag | -- | 0 |
 
@@ -273,6 +273,14 @@ def wait_on_promotion(ln: Landing) -> None:
             Verdict.NOTHING_TO_DEPLOY,
             0,
             f"PR #{pr}, {sha} — {result.detail}. The landing gated none of {tags}",
+        )
+    if result.verdict == "deploy-failed" and result.cause == Cause.SOAK_FAILED:
+        ln.ledger.cause = Cause.SOAK_FAILED
+        ln.finish(
+            Verdict.DEPLOY_FAILED,
+            1,
+            f"PR #{pr}, {sha} — the soak failed on {result.revision[:12]}, so promote's "
+            f"verify holds it and {tags} is not verified",
         )
     if result.verdict == "deploy-failed":
         ln.ledger.cause = Cause.PROMOTE_HELD

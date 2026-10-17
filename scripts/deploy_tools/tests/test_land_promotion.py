@@ -83,6 +83,19 @@ def test_a_held_promotion_is_deploy_failed_with_promote_held(land_run):
     assert "gate" not in _names(calls)
 
 
+def test_a_failed_soak_is_deploy_failed_with_soak_failed(land_run):
+    """The red half is the mapping before D5.3b3, which labelled every `deploy-failed`
+    `promote-held`."""
+    failed = WaitResult(
+        "deploy-failed", "soak-failed", "flux/soak reads failure", revision="d" * 40
+    )
+    rc, out, _, calls, logline = land_run([], _fakes(land_wait=[failed]))
+    assert rc == 1 and "VERDICT: deploy-failed" in out
+    assert "flux/soak reads failure" in out and "soak failed on dddddddddddd" in out
+    assert "cause=soak-failed" in logline and "promote-held" not in logline
+    assert "gate" not in _names(calls)
+
+
 def test_a_promotion_timeout_is_deferred_with_promote_timeout(land_run):
     timed_out = WaitResult("gave-up", "promote-timeout", "no promotion covered it")
     rc, out, _, _, logline = land_run([], _fakes(land_wait=[timed_out]))

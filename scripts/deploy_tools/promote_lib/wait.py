@@ -17,8 +17,11 @@ may promote a newer commit. The plan is docs/target-architecture/deploy/d2-first
 - It polls every POLL_S seconds until one of four outcomes:
     settled        Every expected Kustomization is Ready, and its
                    `status.lastAppliedOriginRevision` names a commit R that is M or descends
-                   from it. One `deploy-annotation` line records it.
-    deploy-failed  DEPLOY_HOLD holds a value other than `none`. Cause `promote-held`.
+                   from it. When the set holds `soak`, R also carries a `flux/soak` `success`
+                   (D5.3b3). One `deploy-annotation` line records it.
+    deploy-failed  DEPLOY_HOLD holds a value other than `none`. Cause `promote-held`. Or
+                   R carries a `flux/soak` `failure` or `error`, read before `verify` writes
+                   the hold. Cause `soak-failed`.
     gave-up        LAND_WAIT_TIMEOUT_S passed, or the later deadline below. Cause
                    `promote-timeout`.
     suspended      Every one of `--services` is `suspended` in M's `digests.json`, so Flux
@@ -33,8 +36,8 @@ may promote a newer commit. The plan is docs/target-architecture/deploy/d2-first
   poll. It stops moving IN_FLIGHT_WAIT_S after P was first read in flight, because `decide`
   gives up there too (#5164).
 - It reads the Kustomizations with the read-only `kubectl`, ancestry with
-  `git merge-base --is-ancestor`, DEPLOY_HOLD with `gh variable get`, which is the one
-  GitHub call per poll, and `prod` and `last-good` from GHCR. A read that fails keeps the wait
+  `git merge-base --is-ancestor`, DEPLOY_HOLD with `gh variable get`, R's `flux/soak` status
+  once the Kustomizations have settled, and `prod` and `last-good` from GHCR. A read that fails keeps the wait
   going and never reads as settled. A failed `prod` read moves no deadline.
 
 It prints a line each time what it waits on changes. Its last line is `verdict=<outcome>
@@ -97,8 +100,9 @@ class WaitReadError(RuntimeError):
 # Both mean "this fact could not be read".
 READ_ERRORS = (WaitReadError, forge.ForgeError)
 
-# Seconds between polls. Each poll makes one authenticated GitHub call, so a landing spends at
-# most 120 an hour, well inside a token's 5,000.
+# Seconds between polls. Each poll makes one authenticated GitHub call, and a second once the
+# Kustomizations have settled and the soak's verdict is awaited, so a landing spends at most
+# 240 an hour, well inside a token's 5,000.
 POLL_S = 30
 
 # The promote timeout as D4.3's chained derivation gives it for a one-tag bundle that
@@ -141,6 +145,16 @@ ANNOTATION_TAG = "deploy-annotation"
 HOLD_CAUSE = "promote-held"
 TIMEOUT_CAUSE = "promote-timeout"
 SUSPENDED_CAUSE = "promote-suspended"
+SOAK_CAUSE = "soak-failed"
+SOAK_CONTEXT = "flux/soak"
+# What notification-controller posts for a failed soak; `verify` holds on both too.
+SOAK_FAILED_STATES = frozenset({"failure", "error"})
+# The read-only command that prints the services a failed soak named. The renderer labels the
+# soak Job's pod `app: soak`, and the next promotion prunes the Job.
+SOAK_READ = (
+    "kubectl -n flux-system get pods -l app=soak -o "
+    "jsonpath='{.items[*].status.containerStatuses[0].state.terminated.message}'"
+)
 
 
 @dataclass(frozen=True)
@@ -161,6 +175,8 @@ class WaitReads:
             `sha-<commit>` tag is published, or None when none is within ANCESTOR_WALK_MAX.
         in_flight: the commit `prod` names while its digest differs from `last-good`'s, the
             state `decide` waits on, or None when the two agree or either is absent.
+        soak: the state of the newest `flux/soak` status on commit R, or None when R has
+            none.
         annotate: writes one syslog line under ANNOTATION_TAG and ignores any failure.
         sleep: waits the given seconds.
         clock: monotonic seconds.
@@ -172,6 +188,7 @@ class WaitReads:
     digests: Callable[[str], object | None]
     published_ancestor: Callable[[str], str | None]
     in_flight: Callable[[], str | None]
+    soak: Callable[[str], str | None]
     annotate: Callable[[str], None]
     sleep: Callable[[float], None]
     clock: Callable[[], float]
@@ -183,8 +200,8 @@ class WaitResult:
 
     Attributes:
         verdict: `settled`, `deploy-failed`, `gave-up` or `suspended`.
-        cause: HOLD_CAUSE, TIMEOUT_CAUSE or SUSPENDED_CAUSE beside the last three, "" beside
-            `settled`.
+        cause: HOLD_CAUSE or SOAK_CAUSE beside `deploy-failed`, TIMEOUT_CAUSE or
+            SUSPENDED_CAUSE beside the last two, "" beside `settled`.
         detail: why, in one sentence.
         revision: R, the commit `homelab` applied, for `settled`.
         widened: why the set was every name, or "" when the digests decided it.
@@ -338,14 +355,27 @@ def land_wait(
             # Every tag the wait covers is suspended, so nothing of M is left to wait on.
             all_paused = bool(paused) and set(paused) == set(services) and not also
             # A suspended tag's Kustomizations never apply M, so the rest are waited on.
-            # `soak` is never waited on Ready: before D5.3b3 it gates nothing, and from
-            # D5.3b3 `land-wait` reads its `flux/soak` verdict instead (D5, *The soak as a Job*).
+            # `soak` is never waited on Ready. It reads Ready only once its Job has judged,
+            # so the wait reads R's `flux/soak` verdict instead (D5, *The soak as a Job*).
             names = {
                 n for n in cs.names if split_kind(n)[0] not in paused and n != SOAK
             } | {ROOT}
             if also:
                 names |= with_dependents(also, *kustomization_graph(items))
             pending, revision = _pending(reads, merge, items, names)
+            if not pending and not all_paused and SOAK in cs.names:
+                soak = _soak_state(reads, revision)
+                if soak in SOAK_FAILED_STATES:
+                    return WaitResult(
+                        "deploy-failed",
+                        SOAK_CAUSE,
+                        f"{SOAK_CONTEXT} reads {soak} on {revision[:8]}. The soak Job "
+                        f"names the services it failed: `{SOAK_READ}`",
+                        revision=revision,
+                        widened=widened,
+                    )
+                if soak != "success":
+                    pending = [f"{SOAK_CONTEXT} on {revision[:8]} ({soak})"]
             if not pending and not all_paused:
                 annotate_promotion(reads.annotate, services, revision)
                 return WaitResult(
@@ -395,6 +425,14 @@ def land_wait(
                 widened=widened,
             )
         reads.sleep(poll_s)
+
+
+def _soak_state(reads: WaitReads, revision: str) -> str:
+    """R's `flux/soak` state, `no status` when it has none, or why the read failed."""
+    try:
+        return reads.soak(revision) or "no status"
+    except READ_ERRORS as err:
+        return f"unreadable: {err}"
 
 
 def _earlier_in_flight(reads: WaitReads, merge: str) -> tuple[str, str]:
@@ -475,6 +513,11 @@ def _in_flight(f: forge.Forge) -> str | None:
     return match.group(1)
 
 
+def _soak_status(f: forge.Forge, sha: str) -> str | None:
+    found = f.github.status(sha, SOAK_CONTEXT)
+    return None if found is None else found[0]
+
+
 def _published_ancestor(f: forge.Forge, repo: Path, sha: str) -> str | None:
     args = ("rev-list", "--first-parent", f"--max-count={ANCESTOR_WALK_MAX}", f"{sha}^")
     proc = git(*args, cwd=repo, check=False)
@@ -500,6 +543,7 @@ def live_wait_reads(
         digests=lambda sha: _bundle_digests(f, sha),
         published_ancestor=lambda sha: _published_ancestor(f, repo, sha),
         in_flight=lambda: _in_flight(f),
+        soak=lambda sha: _soak_status(f, sha),
         annotate=lambda line: host.log(ANNOTATION_TAG, line),
         sleep=time.sleep,
         clock=time.monotonic,

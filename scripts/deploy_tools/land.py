@@ -100,6 +100,9 @@ until a PR resumes it, so the wait and the gate leave it out. `suspended` means 
 tag of the PR is suspended; the landing prints `nothing-to-deploy` and exits 0, unless
 deploy.sh deployed a tag, which it still gates. The suspend PR itself ends this way,
 before a promotion applies it: check that `probe.py landing` shows `last-good` at or past M.
+`settled` also needs R's `flux/soak` status to read `success` once the PR changes a tag; a
+`failure` there ends the landing `deploy-failed` with cause `soak-failed`, and the detail
+prints the read-only kubectl command that names the services the soak failed.
 `ci-unproven` means GitHub never ran CI for the merge commit and no later master commit can
 stand in for it, so a re-run alone never converges; the detail names the tip and the way out.
 `merge-conflict` and `pr-ci-red` are the merge wait ending early on the two states an armed

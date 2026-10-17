@@ -70,6 +70,9 @@ class Sim:
         unfetched: the commits whose ancestry read answers None, as an unfetched R does.
         in_flight: what each poll's in-flight read answers, the last one repeating: the
             commit `prod` names while it differs from `last-good`, or None.
+        soak: each commit's `flux/soak` state, by commit, as a list a read takes one answer
+            from each time, the last one repeating. A commit absent here has no status; an
+            exception is raised in place of a state.
     """
 
     polls: list = field(default_factory=lambda: [at(M)])
@@ -78,6 +81,8 @@ class Sim:
     published_from_poll: int = 0
     unfetched: set = field(default_factory=set)
     in_flight: list = field(default_factory=lambda: [None])
+    soak: dict = field(default_factory=dict)
+    soak_reads: list = field(default_factory=list)
     annotations: list = field(default_factory=list)
     sleeps: int = 0
     poll: int = 0
@@ -114,6 +119,14 @@ class Sim:
             raise answer
         return answer
 
+    def _soak(self, sha):
+        self.soak_reads.append(sha)
+        answers = self.soak.get(sha) or [None]
+        answer = answers[min(self.soak_reads.count(sha) - 1, len(answers) - 1)]
+        if isinstance(answer, Exception):
+            raise answer
+        return answer
+
     def _sleep(self, _seconds):
         self.sleeps += 1
 
@@ -125,6 +138,7 @@ class Sim:
             digests=self._digests,
             published_ancestor=lambda sha: P if P in self.published else None,
             in_flight=self._in_flight,
+            soak=self._soak,
             annotate=self.annotations.append,
             sleep=self._sleep,
             clock=lambda: float(self.sleeps * promote_wait.POLL_S),
