@@ -18,7 +18,8 @@ Every edge is generated, never hand-written, from an `Ordering` the caller reads
   Kustomizations through this step so its annotation names the suspended ones.
 
 `bundle.py` adds the `cluster-vars` edge and fails the render on a cycle, because Flux would
-hold every Kustomization on it at `DependencyNotReady`. Like `bundle.py`, this module imports
+hold every Kustomization on it at `DependencyNotReady`. Beside the per-tag kinds' suffixes,
+`verify_files` reads which roles call for `<tag>-verify`. Like `bundle.py`, this module imports
 neither Ansible nor Jinja. The plan is docs/target-architecture/deploy/d4-ordering.md, *The
 renderer writes `dependsOn`*.
 """
@@ -30,8 +31,10 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
+from pathlib import Path
 
 from lib import yaml_fast
+from lib.repo_paths import K8S_ROLES
 
 # The suffix of a tag's deferred apply: its directory under `cluster/` and its Kustomization.
 # A deploy tag may not end in it (`bundle.reserved_tags`).
@@ -43,6 +46,13 @@ VERIFY_SUFFIX = "-verify"
 # Every per-tag kind's suffix, in the order its document follows `<tag>`'s in
 # `flux/<tag>.yaml`. The publish census expects exactly this order.
 TAG_KIND_SUFFIXES = (DEFERRED_SUFFIX, SNAPSHOT_SUFFIX, VERIFY_SUFFIX)
+# A role's verify and post-apply mutation Jobs, with whatever they need beside them, are its
+# `templates/verify/*.yaml.j2`. They render into `cluster/<tag>-verify/` (D5.1a1, D5.1a3).
+# The manifests role derives its file lists from the top-level `templates/*.yaml.j2` alone, so
+# Ansible never renders or applies them.
+VERIFY_TEMPLATES_DIR = "verify"
+
+
 # Lists, comma-separated and sorted, the edges a Kustomization's `dependsOn` leaves out because
 # their role is Ansible-owned. Each becomes a real `dependsOn` in the first render after that
 # role moves to Flux (D4.2).
@@ -95,6 +105,25 @@ class Ordering:
 
 NO_EDGES = Edges()
 NO_ORDERING = Ordering()
+
+
+def verify_files(tags: Iterable[str], roles: Path = K8S_ROLES) -> dict[str, list[str]]:
+    """The verify manifests each tag's role ships, by basename, empty for a role that ships none.
+
+    A role ships them as `templates/verify/<name>.j2`, and a non-empty list calls for
+    `<tag>-verify`. The renderer (`renderer_lib/cluster.py`) and the publish census
+    (`deploy_tools/bundle_census.py`) read this one function, so the directory the renderer
+    writes and the Kustomization the census allows cannot disagree.
+    """
+    return {
+        tag: sorted(
+            p.name.removesuffix(".j2")
+            for p in (roles / tag / "templates" / VERIFY_TEMPLATES_DIR).glob(
+                "*.yaml.j2"
+            )
+        )
+        for tag in sorted(set(tags))
+    }
 
 
 def split_kind(name: str) -> tuple[str, str]:

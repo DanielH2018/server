@@ -55,7 +55,6 @@ from lib import yaml_fast
 from lib.ansible_inventory import K8S_HOST
 from lib.repo_paths import K8S_ROLES
 from renderer.renderer_lib.cluster import (
-    DEFERRED_SUFFIX,
     KUSTOMIZATION,
     RenderedTag,
     kustomization_text,
@@ -113,7 +112,7 @@ def exclude_sops_manifests(
         if name not in names and name != KUSTOMIZATION
     }
     kept[KUSTOMIZATION] = kustomization_text(list(kept))
-    return RenderedTag(rendered.tag, kept, rendered.deferred), dropped
+    return replace(rendered, files=kept), dropped
 
 
 class Mode(enum.Enum):
@@ -331,8 +330,7 @@ def apply_placeholders(
             else:
                 finished[name] = dict(files)
                 standalone[name] = frozenset()
-        deferred = finished.get(tag.tag + DEFERRED_SUFFIX, {})
-        tags.append(RenderedTag(tag.tag, finished[tag.tag], deferred))
+        tags.append(tag.with_directories(finished))
     return PlaceholderRender(tags, key_sets, standalone, sops or {})
 
 
@@ -342,13 +340,14 @@ def render_placeholders(
     host: str = K8S_HOST,
     entries: Callable[[str], list[str]] = sops_manifests,
     contexts: Callable[[dict, str], dict[str, BuiltImage]] = render_images,
+    roles: Path = K8S_ROLES,
 ) -> PlaceholderRender:
     """Render every one of `tags` in placeholder mode, and every built image's context.
 
     Each tag's `render_sops_manifests` files, as `entries` reads them, are dropped before
     pass 2. The image contexts, as `contexts` renders them, render first with the same
     sentinels, and each tag's refs read their tags (D5.4a1). A test passes its own `entries`
-    and `contexts`.
+    and `contexts`, and its own `roles` tree for the tags' templates.
 
     Raises:
         RenderError: A template fails to render, or an image context holds a secret's
@@ -365,7 +364,8 @@ def render_placeholders(
     rendered, sops = [], {}
     for tag in tags:
         kept, dropped = exclude_sops_manifests(
-            render_tag(tag, overrides, host, role_tags(images, tag)), entries(tag)
+            render_tag(tag, overrides, host, role_tags(images, tag), roles),
+            entries(tag),
         )
         rendered.append(kept)
         if dropped:

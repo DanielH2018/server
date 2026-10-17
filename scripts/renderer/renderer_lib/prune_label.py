@@ -23,7 +23,7 @@ from collections.abc import Iterable
 
 import yaml
 
-from renderer.renderer_lib.cluster import DEFERRED_SUFFIX, RenderedTag
+from renderer.renderer_lib.cluster import RenderedTag
 from renderer.renderer_lib.environment import RenderError
 from renderer.renderer_lib.restart import _child, _insertion
 
@@ -97,7 +97,5 @@ def label_tags(rendered: list[RenderedTag], owned: Iterable[str]) -> list[Render
             name: {file: label(text, f"{name}/{file}") for file, text in files.items()}
             for name, files in tag.directories().items()
         }
-        labelled.append(
-            RenderedTag(tag.tag, dirs[tag.tag], dirs.get(tag.tag + DEFERRED_SUFFIX, {}))
-        )
+        labelled.append(tag.with_directories(dirs))
     return labelled

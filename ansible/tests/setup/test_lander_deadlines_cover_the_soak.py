@@ -11,6 +11,14 @@ also needs `images`, whose 90 minutes are for rebuilding the built images. No pu
 builds one, so a flux-tag landing's own commit rebuilds nothing, and `images` runs in seconds
 once its content tags exist. `test_no_published_tag_builds_an_image` fails when a tag that
 builds one is handed to Flux, because that landing would then wait on its own rebuild.
+
+Other commits' rebuilds can still delay the landing's `images` job (#5431), by at most two
+full rebuilds. The `images` concurrency group runs one job and keeps one pending, and a newer
+pending job evicts the older. So one rebuild can run ahead of the landing. And the landing's
+job can inherit a second: it builds every content tag GHCR does not serve in its own render,
+so an image change whose pending job it evicted is built in the landing's job. The wait
+therefore counts two measured rebuilds of every built image, FULL_REBUILD_S each, rather than
+the job's 90-minute timeout.
 `tag` and the `verify` job are not on the path: `land-wait` settles on Flux's `flux/soak`
 status at R, not on either job. The soak's
 `timeout` grows by a queueing round with every five Kustomizations, so the PR that hands the
@@ -41,6 +49,11 @@ LANDERS = {
 }
 # What each unit set before #5427, for the red half against the same render.
 BEFORE_5427 = {"claude-land": 5400, "renovate-agent-land": 3300}
+# One `images` job that rebuilds every built image, measured on 2026-10-17 (#5431). Run
+# 38992066819's job 117276493018 built all ten in 368s, but n8n-runners failed there after 19s
+# (01:49:13 to 01:49:32). Its successful build in run 39036029019 took 45s (13:19:12 to
+# 13:19:57), so 368 - 19 + 45. code-server was the longest, at 213s.
+FULL_REBUILD_S = 394
 # Every value that has to move with LAND_DEADLINE, named in the failure.
 CASCADE = (
     "Raise LAND_DEADLINE in both lander units, then what sits above it: claude-land's "
@@ -92,7 +105,7 @@ def shortfall(land_deadline: int, soak: dict) -> float:
     assert cap is not None
     verify_wait = wait.soak_deadline_s([soak]) // 2
     assert verify_wait > 0, f"the rendered soak's timeout is unreadable: {soak['spec']}"
-    return verify_wait + publish_pipeline_s() - cap
+    return verify_wait + publish_pipeline_s() + 2 * FULL_REBUILD_S - cap
 
 
 @pytest.mark.parametrize("lander", LANDERS)
