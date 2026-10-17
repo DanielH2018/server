@@ -28,7 +28,9 @@ renovate_agent_branch: worktree-renovate-auto
 
 # PRs per tick. The ceiling exists because the wall-clock budget below has to cover every
 # landing the session starts: each one is a CI wait plus a tick plus a deploy plus a health
-# gate. Three fits; the rest wait for tomorrow's tick.
+# gate. Three fits when Ansible deploys them. A landing of a tag Flux applies waits on the soak
+# and can use most of the budget alone, so the wrapper's timeout may stop the run before the
+# third; the rest wait for tomorrow's tick.
 renovate_agent_max_prs: 3
 
 # `opus` rather than a pinned id so a model rename does not silently strand the timer.
@@ -41,18 +43,19 @@ renovate_agent_permission_mode: auto
 # CLAUDE.md is $0.32 before it does any work), and the PR cap is what actually bounds the run.
 renovate_agent_budget_usd: 25
 
-# Wall clock for the session itself. Worst case is renovate_agent_max_prs landings run
-# sequentially, each up to a ~15min CI wait plus a ~20min deploy — so this is deliberately
-# generous, and the unit's TimeoutStartSec sits above it as the backstop. The wrapper kills the
+# Wall clock for the session itself. It must outlast one landing of a tag Flux applies, which
+# waits on the soak and can take the lander's whole TimeoutStartSec (190min, #5427). A landing
+# Ansible deploys is a ~15min CI wait plus a ~20min deploy, so several of those still fit, and
+# the unit's TimeoutStartSec sits above this as the backstop. The wrapper kills the
 # session at this figure and still posts a digest saying so; systemd's ceiling posts nothing but
 # the OnFailure alert, so this one should always trip first.
-renovate_agent_run_timeout_s: 5400
-renovate_agent_unit_timeout: 100min
+renovate_agent_run_timeout_s: 14400
+renovate_agent_unit_timeout: 250min
 
 # The longest Bash call the session may make, in ms. A landing blocks in `systemctl start` for up
-# to the lander's 60-minute TimeoutStartSec, and Claude Code's own cap is 10 minutes. The unit
+# to the lander's 190-minute TimeoutStartSec, and Claude Code's own cap is 10 minutes. The unit
 # sets it as BASH_MAX_TIMEOUT_MS and the prompt quotes it.
-renovate_agent_bash_timeout_ms: 3900000
+renovate_agent_bash_timeout_ms: 11700000
 
 # 06:00 America/Chicago — after Renovate's own "before 6am" cycle (UTC, so it closes at
 # midnight/1am CT depending on DST) has opened the day's PRs. This runs BEFORE the 13:00

@@ -21,7 +21,7 @@ How you land a PR, which replaces every `land.sh` step in the skill:
 
 - Run `systemctl start renovate-agent-land@<n>.service` for PR <n>, with a Bash timeout of
   {{ renovate_agent_bash_timeout_ms }} ms. It returns when the landing has finished, which can
-  take up to 60 minutes. Then read `/var/lib/renovate-agent-land/<n>.verdict`.
+  take up to 190 minutes. Then read `/var/lib/renovate-agent-land/<n>.verdict`.
 - If that call timed out first, the landing is still running and the file may still hold an
   earlier verdict. Run this until it no longer reads `activating`, then read the verdict:
   `systemctl show -p ActiveState renovate-agent-land@<n>.service`

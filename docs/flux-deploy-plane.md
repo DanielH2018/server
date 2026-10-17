@@ -754,10 +754,11 @@ A wait shorter than a verification is safe and costs a promotion. `decide` gives
   two Kustomizations alone, with a 3-minute W, the wait is 41.5 minutes. `land-wait` restates
   that figure as `wait.py:PROMOTE_TIMEOUT_S` and gives up at twice it. The soak's chain counts
   every Kustomization in the bundle, so it grows by a 10-minute queueing round for each five
-  more. With the nine tags published on 2026-10-17 the soak's `timeout` is 2910s, and
-  `verify` waits 51.5 minutes. So `land-wait` also reads the listed `soak` Kustomization's
+  more. With the eleven tags published on 2026-10-17 the soak's `timeout` is 3510s, and
+  `verify` waits 61.5 minutes. So `land-wait` also reads the listed `soak` Kustomization's
   `timeout` each poll, and gives up no sooner than twice `verify`'s wait on it
-  (`wait.py:soak_deadline_s`). While a verification of an earlier commit is in flight, M's `decide` waits on
+  (`wait.py:soak_deadline_s`). A lander unit's `LAND_DEADLINE` caps the wait below that,
+  and `docs/landing.md` says how the units size it (#5427). While a verification of an earlier commit is in flight, M's `decide` waits on
   it, so `land-wait` counts its timeout again from each poll that reads one, for up to
   `IN_FLIGHT_WAIT_S`;
 - a revision that changes every importer of `workload-shell.yml.j2` queues in rounds of up
@@ -1199,8 +1200,8 @@ from. The Job's exit is the `flux/soak` status. The design is D5's *The soak as 
   `--wait-seconds`, is `chained_timeout.promote_timeout` over the bundle's other
   Kustomizations with every one counted as changed. The render cannot know which ones R
   changes. `activeDeadlineSeconds` adds the fleet W and a minute, and the Kustomization's
-  `timeout` adds another minute. With the nine tags published on 2026-10-17, that is 2610s,
-  2850s and 2910s.
+  `timeout` adds another minute. With the eleven tags published on 2026-10-17, that is 3210s,
+  3450s and 3510s.
 - **RBAC.** The ServiceAccount `soak` may get and list `OCIRepository` and Kustomization objects in
   `flux-system`. A ClusterRole lets it list pods and get and list ReplicaSets in every
   namespace. The grant is cluster-wide because `soak` has no `dependsOn` edges, so Flux may
