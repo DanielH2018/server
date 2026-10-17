@@ -63,7 +63,8 @@ Two tests in `ansible/tests/setup/` hold those rules:
   that each copy equals its source. docs' PR added the first pair, `docs_host_site_dir`.
 
 A third test, `ansible/tests/setup/test_k8s_host_files_rows.py`, names every moved row by task
-file and task name, and fails when one is no longer imported or writes a different path. Each
+file and task name with its whole argument map. It fails when a row is no longer imported or
+its path, owner, group or mode changes. Each
 conversion PR adds its rows there. A row that moves back to its k8s role fails the host-write
 census in `ansible/tests/repo/_host_write_rows.py`, whose `allow` entry the move dropped.
 

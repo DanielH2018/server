@@ -5,14 +5,15 @@ source role (D5's *Host-side rows*). A row that drops out of the role, or whose 
 longer imported from `tasks/main.yml`, stops running on the next apply, and no deploy says so:
 a missing directory surfaces only when a pod waits in ContainerCreating on its hostPath.
 
-`EXPECTED_ROWS` names each moved row by task file and task name, with the module, path and
-state it must keep. Each conversion PR adds its rows in the same commit as the move. The other
+`EXPECTED_ROWS` names each moved row by task file and task name, with the module and the whole
+argument map it must keep: path, state, owner, group and mode. Each conversion PR adds its rows in the same commit as the move. The other
 direction, a row coming back to its k8s role, is the host-write census's
 (`ansible/tests/repo/_host_write_rows.py`): the move drops the role's `allow` entry, so a host
 write there fails `k8s-role-tasks-write-no-host`.
 
 Red-proof: a fixture role under `tmp_path` whose `main.yml` no longer imports the file, and
-one whose task writes a different path, must each be flagged; a faithful copy must not.
+one whose task writes a different path, and one whose task drops its owner, must each be
+flagged; a faithful copy must not.
 
 Run: uv run pytest ansible/tests/setup/test_k8s_host_files_rows.py
 """
@@ -24,13 +25,20 @@ from _helpers import SETUP_ROLES, imported_task_files, leaf_tasks, load_tasks
 
 ROLE = SETUP_ROLES / "k8s_host_files"
 
-# {task file: {task name: (module, path, state)}}, one file per source role.
-EXPECTED_ROWS: dict[str, dict[str, tuple[str, str, str]]] = {
+# {task file: {task name: (module, its args)}}, one file per source role. The args are the
+# task's whole argument map, so an owner, group or mode change fails the row as well as a path:
+# docs' directory exists to be owned by sys_user, which the docs-refresh build writes as.
+EXPECTED_ROWS: dict[str, dict[str, tuple[str, dict[str, str]]]] = {
     "docs.yml": {
         "Ensure the built docs site directory exists": (
             "ansible.builtin.file",
-            "{{ docs_host_site_dir }}",
-            "directory",
+            {
+                "path": "{{ docs_host_site_dir }}",
+                "state": "directory",
+                "owner": "{{ sys_user }}",
+                "group": "{{ sys_user }}",
+                "mode": "0755",
+            },
         ),
     },
 }
@@ -43,13 +51,8 @@ def missing_rows(role_dir: Path = ROLE) -> list[str]:
     for file, rows in sorted(EXPECTED_ROWS.items()):
         tasks = leaf_tasks(load_tasks(imported[file])) if file in imported else []
         by_name = {task.get("name"): task for task in tasks}
-        for name, (module, path, state) in sorted(rows.items()):
-            args = by_name.get(name, {}).get(module)
-            if not (
-                isinstance(args, dict)
-                and args.get("path") == path
-                and args.get("state") == state
-            ):
+        for name, (module, expected) in sorted(rows.items()):
+            if by_name.get(name, {}).get(module) != expected:
                 missing.append(f"{file}: {name}")
     return missing
 
@@ -81,6 +84,15 @@ def test_a_row_writing_another_path_is_flagged(tmp_path):
     role_dir = _fixture_role(tmp_path)
     docs = role_dir / "tasks" / "docs.yml"
     docs.write_text(docs.read_text().replace("docs_host_site_dir", "docs_other_dir"))
+    assert missing_rows(role_dir) == [
+        "docs.yml: Ensure the built docs site directory exists"
+    ]
+
+
+def test_a_row_that_drops_its_owner_is_flagged(tmp_path):
+    role_dir = _fixture_role(tmp_path)
+    docs = role_dir / "tasks" / "docs.yml"
+    docs.write_text(docs.read_text().replace('    owner: "{{ sys_user }}"\n', ""))
     assert missing_rows(role_dir) == [
         "docs.yml: Ensure the built docs site directory exists"
     ]
