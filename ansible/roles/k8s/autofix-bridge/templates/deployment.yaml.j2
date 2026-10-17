@@ -1,6 +1,5 @@
 {% from 'container-resources.yml.j2' import container_resources with context %}
 {% from 'security-context.yml.j2' import hardened_security_context with context %}
-{% from 'checksum-annotation.yml.j2' import checksum_annotation with context %}
 {% from 'workload-shell.yml.j2' import spec_shell, pod_shell with context %}
 ---
 apiVersion: apps/v1
@@ -21,11 +20,6 @@ spec:
       labels:
         app: autofix-bridge
         netpol-baseline: enforced
-      annotations:
-        # Recreate the pod when any bridge module's source changes — same idiom as
-        # monitor-bridge's checksum/check-script. The fact is a hash over every module in
-        # autofix_bridge_modules, so an edit confined to bridge/common.py rolls the pod too.
-        {{ checksum_annotation('autofix-script', value=autofix_bridge_script_checksum) }}
     spec:
 {{ pod_shell('homelab-best-effort', run_as_user=puid, run_as_group=pgid, non_root=true) }}
       # Off daniel-server for the same reason as the monitor-bridge twin: the drain and
@@ -67,8 +61,9 @@ spec:
       volumes:
         - name: autofix-bridge-script
           configMap:
+            # templates/script-configmap.yaml.j2. Flat keys mounted back at their paths -- see
+            # monitor-bridge's deployment for why.
             name: autofix-bridge-script
-            # Flat keys mounted back at their paths -- see monitor-bridge's deployment for why.
             items:
 {% for item in autofix_bridge_modules %}
               - key: {{ item.name }}

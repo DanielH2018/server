@@ -84,10 +84,14 @@ here must satisfy this summary.
 - Sidecar: `files/autofix.py`, mounted from a ConfigMap along with monitor-bridge's
   `bridge/common.py` and setup/common's `kuma_push.py`, the Kuma push every host pusher shares
   (`defaults/main.yml`'s `autofix_bridge_modules` names all three). **Never fork a second copy
-  of either here** — edit the owning role's. The
-  `checksum/autofix-script` annotation hashes every staged module, because a ConfigMap change
-  alone does not restart a Deployment.
-- Manifests: `templates/deployment.yaml.j2` and `templates/env-secret.yaml.j2`
+  of either here** — edit the owning role's. `templates/script-configmap.yaml.j2` embeds
+  every module into the rendered ConfigMap `autofix-bridge-script`, so an edit to any of the
+  three changes this role's render. Under Ansible the shared role's rollout restart then rolls
+  the pod. Under Flux the renderer's restart annotation (`RESTART_ANNOTATION` in
+  `scripts/renderer/renderer_lib/restart.py`) hashes the ConfigMap into the pod template. `scripts/renderer/tests/test_renderer_autofix_bridge_script.py` holds both the
+  embed and the checksum.
+- Manifests: `templates/deployment.yaml.j2`, `templates/env-secret.yaml.j2` and
+  `templates/script-configmap.yaml.j2`
 - The two fake-remux crons live in `ansible/roles/setup/fake_remux/files/`;
   `docs/autofix-bridge-actuators.md` carries the command that runs either by hand safely.
 - Tests: `uv run pytest ansible/roles/k8s/autofix-bridge/tests` and `uv run pytest

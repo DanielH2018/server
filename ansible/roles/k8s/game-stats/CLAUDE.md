@@ -40,11 +40,15 @@ claims are unchanged.
   mirror key every node's `registries.yaml` carries, and `ansible/roles/k8s/ical-proxy/` is
   the live proof. An earlier version of this bullet claimed the opposite and would have
   talked a sibling role out of a build it could have (#2703).
-- The `checksum/stats-script` pod annotation restarts each Deployment when either of its
-  staged modules changes, since a ConfigMap edit alone doesn't roll a pod. It hashes the game's
-  own script and `stats_lib.py` together (`tasks/terraria.yml`, `tasks/valheim.yml`).
-- The scripts are Jinja-hostile (Prometheus exposition carries `{…}`), so each ConfigMap is
-  built built with `kubectl create --from-file`, never a template.
+- **Each game's script ConfigMap is a rendered template** (#5444):
+  `templates/configmap-terraria.yaml.j2` and `templates/configmap-valheim.yaml.j2` embed the
+  entry script and `stats_lib.py` with `lookup('file')`. The scripts are Jinja-hostile, since
+  Prometheus exposition carries `{…}`, and the lookup's text is never templated again.
+- **A script edit rolls the pods with no annotation of the role's own.** The edit changes the
+  render, so `k8s/manifests`' rollout restart rolls both Deployments while Ansible owns the
+  role. Under Flux, the renderer stamps a restart checksum that hashes the ConfigMap each pod
+  mounts (`docs/flux-deploy-plane.md`, *Restart triggers*).
+  `scripts/renderer/tests/test_renderer_game_stats_restart.py` holds both ConfigMaps to that.
 
 ## terraria-stats
 
@@ -94,10 +98,9 @@ tunables from a `RunConfig` the game builds from its own env constants.
 
 Both exporters run as stock `python` pods with `stats_lib.py` mounted alongside their
 own entry script by a ConfigMap, because a directly-invoked script gets only its own
-directory on `sys.path`. `tasks/stage.yml` stages the copy AND hands each game the
-`--from-file` argument for it, so no task file spells `stats_lib.py` itself.
-`docs/game-stats-internals.md` has both halves and the guard that holds them together,
-`ansible/tests/k8s/test_game_stats_lib_ships_through_the_include.py`.
+directory on `sys.path`. Each game's ConfigMap template carries the copy as a second key.
+`docs/game-stats-internals.md` has the mechanism and the guard that holds it,
+`scripts/renderer/tests/test_renderer_game_stats_restart.py`.
 
 ## Editing
 

@@ -128,13 +128,9 @@ HOST_WRITE_ALLOW = {
         "D5's `k8s_host_files` conversion PR for artifacts moves its directory tasks, which "
         "no H2 PR moves"
     ),
-    _K8S + "autofix-bridge/tasks/main.yml": _CONFIGMAP,
     _K8S + "configarr/tasks/main.yml": _H2_THEN_D5,
     _K8S + "crowdsec/tasks/main.yml": _H2_THEN_D5,
     _K8S + "docs/tasks/main.yml": "D5's `k8s_host_files` conversion PR for docs",
-    _K8S + "game-stats/tasks/stage.yml": _CONFIGMAP,
-    _K8S + "game-stats/tasks/terraria.yml": _CONFIGMAP,
-    _K8S + "game-stats/tasks/valheim.yml": _CONFIGMAP,
     _K8S + "janitorr/tasks/main.yml": _H2_THEN_D5,
     _K8S + "media-volume/tasks/main.yml": (
         "D5's `k8s_host_files` conversion PR for media-volume moves the media directories"

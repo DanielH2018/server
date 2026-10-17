@@ -470,6 +470,9 @@ containers_list:
   # list so the Deployment, Service and route keep being reconciled; only the pod count is 0.
   - name: navidrome
     platform: k8s
+    # Flux applies navidrome through `promote`, and every Ansible path skips it (D5.8). The
+    # handback is two PRs, `owner: released` then removing `owner`: docs/flux-deploy-plane.md.
+    owner: flux
     weekly_backup_claims: {navidrome-data: 3}  # Wed
     hostname: "navidrome"
     # No tile while parked: the role deploys no route at replicas 0, so the tile would be
@@ -827,6 +830,9 @@ containers_list:
   # DaemonSet.
   - name: loki-homelab
     platform: k8s
+    # Flux applies loki-homelab through `promote`, and every Ansible path skips it (D5.8). The
+    # handback is two PRs, `owner: released` then removing `owner`: docs/flux-deploy-plane.md.
+    owner: flux
     hostname: "loki-homelab"
     # A hand-written tile in uptime-kuma's static-monitors.yaml.j2 covers it: loki, which probes /ready over the ClusterIP.
     kuma: false
@@ -910,6 +916,10 @@ containers_list:
   # collector's POSTs and monitor-bridge's summary reads) in the authelia role's config.
   - name: scrutiny
     platform: k8s
+    # Flux applies scrutiny through `promote`, and substitutes its InfluxDB credentials Secret
+    # from homelab-cluster-vars (D5.8). The handback is two PRs, `owner: released` then
+    # removing `owner`: docs/flux-deploy-plane.md.
+    owner: flux
     weekly_backup_claims: {scrutiny-web-config: 6}  # Sat
     # The volume holds ONLY the SMART TSDB (verified single mount), regenerating from the
     # daily collector runs.

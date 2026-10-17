@@ -1,0 +1,12 @@
+{
+  "checksum": "3aa2cc6300ce2cd6a3ef5600cb0757aa1408b79b412245700711e00798237182",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "ansible/roles/k8s/loki-homelab/CLAUDE.md#At a glance",
+  "row": {
+    "atoms": {
+      "docs/flux-deploy-plane.md": "807c3deb44c3178e7a6f9fc0bc398a3b748b95c468b14ce9b1b890c8684535d9"
+    },
+    "python": "3.14",
+    "verified_sha": "6923dc3bc"
+  }
+}

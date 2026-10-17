@@ -1,0 +1,15 @@
+{#
+  The verify Job's identity, INERT until tdarr's flip, as `job.yaml.j2` beside it is.
+
+  It is a ServiceAccount with no Role. The Job reads no API and execs into no pod, so it needs
+  no grant, and its pod mounts no token. tdarr's VAAPI encode through its own ffmpeg is the
+  one check that would need `pods/exec`, and it stays an Ansible task (the PR that added this
+  file names why).
+#}
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: tdarr-verify
+  namespace: {{ k8s_namespace }}
+automountServiceAccountToken: false
