@@ -100,6 +100,7 @@ from renderer.renderer_lib.cluster import (
     write_cluster,
 )
 from renderer.renderer_lib.images import TAGS_FILE, check_images, image_files
+from renderer.renderer_lib.images import ghcr_refs
 from renderer.renderer_lib.prune_label import label_tags
 from renderer.renderer_lib.snapshot import attach_snapshots
 from renderer.renderer_lib.restart import restart_targets, restart_values, stamp
@@ -282,9 +283,10 @@ def _stub_cluster(
         owned = set(tags) & flux_owned()
         if owned:
             keys = secret_keys()
+            placeholder = render(sorted(owned), keys)
             rendered = stamp_restarts(
-                rendered,
-                render(sorted(owned), keys),
+                ghcr_refs(rendered, owned, placeholder.images),
+                placeholder,
                 owned,
                 keys,
                 source_digests(source_file),
@@ -335,9 +337,8 @@ def _placeholder_cluster(
         # Only a flux-owned tag is published, so only one gets a Kustomization. A --role
         # render of any other tag, a deferring one included, writes its cluster/ alone.
         published = [t.tag for t in result.tags if t.tag in owned] if roles else []
-        tags = stamp_restarts(
-            result.tags, result, owned, keys, source_digests(source_file)
-        )
+        tags = ghcr_refs(result.tags, owned, result.images)
+        tags = stamp_restarts(tags, result, owned, keys, source_digests(source_file))
         tags = copy_sops_manifests(
             label_tags(tags, owned), result.sops_manifests, published, manifests_dir
         )
