@@ -5,6 +5,7 @@ Run: uv run pytest scripts/dev/tests/test_fanout_launch_gates.py
 
 import json
 import socket
+import subprocess
 
 from fanout_lib.brief import Issue
 from fanout_lib.manifest import Batch, Manifest, save
@@ -33,18 +34,21 @@ def _launch(tools, tmp_path, *args):
 
 
 def test_live_batches_from_an_earlier_run_count_against_the_hosts_cap(tmp_path, capsys):
-    """Headroom alone underprices agents launched minutes ago, so count them."""
-    earlier = [
-        Batch(f"{n}", "daniel-box", "/w", "b", "u", [n], "t") for n in (91, 92, 93)
-    ]
+    """Headroom alone underprices agents launched minutes ago, so count them.
+
+    On a host other than this one: a remote host's unit state costs an ssh connection the
+    budget has no room for, so its batches stay counted until `clean` runs.
+    """
+    remote = _another_host()
+    earlier = [Batch(f"{n}", remote, "/w", "b", "u", [n], "t") for n in (91, 92, 93)]
     save(Manifest("20260101T000010Z", "o", earlier), root=tmp_path)
-    tools, run = fake_tools(answers={"daniel-box": ok(HEADROOM)}, issues=CLAIMED)
-    assert _launch(tools, tmp_path, "--host", "daniel-box", "--batch", "1,2") == 3
+    tools, run = fake_tools(answers={remote: ok(HEADROOM)}, issues=CLAIMED)
+    assert _launch(tools, tmp_path, "--host", remote, "--batch", "1,2") == 3
     err = capsys.readouterr().err
-    assert "daniel-box already holds 3 live batch(es)" in err
+    assert f"{remote} already holds 3 live batch(es)" in err
     assert "91 in run 20260101T000010Z" in err
     assert "run `clean <run-id>`" in err
-    # The headroom read happened; no launch call did.
+    # The headroom read happened; no launch call did, and no unit-state read either.
     assert len(run.calls) == 1
 
 
@@ -62,6 +66,70 @@ def test_a_cleaned_batch_does_not_count_against_the_cap(tmp_path):
 
 def _another_host() -> str:
     return next(h for h in ("daniel-box", "daniel-server") if h != socket.gethostname())
+
+
+def _unit_state(batch: str, running: bool) -> str:
+    """One batch's block of `status_command`'s output: an active unit, or one that exited 1."""
+    props = (
+        "ActiveState=active\nResult=success\nExecMainStatus=0"
+        if running
+        else "ActiveState=failed\nResult=exit-code\nExecMainStatus=1"
+    )
+    return f"=== {batch}\n{props}\n--- stderr\n\n--- report\n\n--- verdict\n"
+
+
+def _three_uncleaned_here(tmp_path):
+    """Three uncleaned batches on this host, whose unit state `launch` can read for free."""
+    here = socket.gethostname()
+    earlier = [Batch(f"{n}", here, "/w", "b", "u", [n], "t") for n in (91, 92, 93)]
+    save(Manifest("20260101T000010Z", "o", earlier), root=tmp_path)
+    return here
+
+
+def _launch_here(tmp_path, *reads):
+    """A dotfiles launch, which runs on this host; `reads` answer the calls after the headroom read."""
+    here = socket.gethostname()
+    issue = Issue(763, "dotfiles finding", "body", ("claude",))
+    tools, run = fake_tools(answers={here: ok(HEADROOM)}, issues=[issue])
+    run.answers_by_call.extend([ok(HEADROOM), *reads])
+    argv = ["--repo", "DanielH2018/dotfiles", "--batch", "763"]
+    return _launch(tools, tmp_path, *argv), run
+
+
+def test_finished_batches_do_not_count_against_the_cap(tmp_path):
+    """#5497: 3 uncleaned batches, 2 finished, so 1 running and the launch places."""
+    _three_uncleaned_here(tmp_path)
+    states = ok(
+        _unit_state("91", running=False)
+        + _unit_state("92", running=True)
+        + _unit_state("93", running=False)
+    )
+    code, run = _launch_here(tmp_path, states)
+    assert code == 0
+    assert "systemctl --user show" in run.host_calls[1][1]
+
+
+def test_three_running_batches_still_refuse_the_launch(tmp_path, capsys):
+    _three_uncleaned_here(tmp_path)
+    states = ok("".join(_unit_state(str(n), running=True) for n in (91, 92, 93)))
+    code, _ = _launch_here(tmp_path, states)
+    assert code == 3
+    assert "already holds 3 live batch(es)" in capsys.readouterr().err
+
+
+def test_a_unit_state_that_cannot_be_read_counts_as_running(tmp_path, capsys):
+    """Fail closed: an empty reply, a failed command and a timeout each leave all 3 live."""
+    for read in (
+        ok(""),
+        subprocess.CompletedProcess(["x"], 1, stdout="", stderr="no bus"),
+        subprocess.TimeoutExpired("systemctl", 30),
+    ):
+        _three_uncleaned_here(tmp_path)
+        code, _ = _launch_here(tmp_path, read)
+        assert code == 3
+        assert "already holds 3 live batch(es)" in capsys.readouterr().err
+        for stale in tmp_path.glob("*.json"):
+            stale.unlink()
 
 
 def test_a_dotfiles_launch_runs_here_and_reads_the_dotfiles_register(tmp_path):

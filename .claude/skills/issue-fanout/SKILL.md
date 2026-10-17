@@ -147,10 +147,14 @@ claim nothing. Exit 7 is a launch that started batches but dropped a refused cla
 placement refusals: neither host has a
 reservation's worth of headroom; the placement would put more
 than three batches on one remote host in this run (the ssh budget); or it would leave a host
-holding more than three LIVE batches counting every earlier run not yet cleaned (the memory
+holding more than three RUNNING batches, counting every earlier run not yet cleaned (the memory
 cap — a five-minute-old agent still holds its 2.5 GiB while the headroom read underprices it).
-Narrow the fan-out, do not queue. For the third, `clean <run-id>` the finished runs first — an
-uncleaned worktree counts against its host. `--host daniel-box` pins a batch that must land in
+A batch whose agent has finished does not count, whether or not its worktree still stands:
+`launch` reads the unit state `place status` reads, and only for a batch on the host it runs
+on, and only when the manifests alone would refuse. A state it cannot read counts as running,
+and so does every batch on the other host, where the read would cost an ssh connection the
+budget lacks. Narrow the fan-out, do not queue. For the third, wait for a batch to finish, or
+`clean <run-id>` the finished runs on the other host. `--host daniel-box` pins a batch that must land in
 the same run or that only daniel-box can verify.
 
 **Every batch gets a separate review unless `launch` is given `--no-review`** (the default
