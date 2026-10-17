@@ -61,6 +61,11 @@ class ServiceConfig:
     HA_BAN_SELECTOR: str
     DEPLOY_PIPELINE_GITHUB_TOKEN: str = field(repr=False)
     DEPLOY_PIPELINE_PORT: int
+    WEEKLY_REBOOT_MINUTE: int
+    WEEKLY_REBOOT_HOUR: int
+    WEEKLY_REBOOT_WEEKDAY: int
+    WEEKLY_REBOOT_SHUTDOWN_DELAY_MIN: int
+    WEEKLY_REBOOT_MUTE_RECOVERY_MIN: int
 
 
 def service_config(
@@ -315,4 +320,12 @@ def service_config(
         # series, and DeployPipelineExporterAbsent pages that.
         DEPLOY_PIPELINE_GITHUB_TOKEN=_env("DEPLOY_PIPELINE_GITHUB_TOKEN"),
         DEPLOY_PIPELINE_PORT=_int("DEPLOY_PIPELINE_PORT"),
+        # The weekly reboot's cron fields (weekday 0 = Sunday, in UTC), the minutes from the
+        # cron's fire to the reboot, and the minutes M2's mute stays open after it. The
+        # exporter's homelab_deploy_reboot_window_active derives from them.
+        WEEKLY_REBOOT_MINUTE=_int("WEEKLY_REBOOT_MINUTE"),
+        WEEKLY_REBOOT_HOUR=_int("WEEKLY_REBOOT_HOUR"),
+        WEEKLY_REBOOT_WEEKDAY=_int("WEEKLY_REBOOT_WEEKDAY"),
+        WEEKLY_REBOOT_SHUTDOWN_DELAY_MIN=_int("WEEKLY_REBOOT_SHUTDOWN_DELAY_MIN"),
+        WEEKLY_REBOOT_MUTE_RECOVERY_MIN=_int("WEEKLY_REBOOT_MUTE_RECOVERY_MIN"),
     )

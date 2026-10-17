@@ -181,7 +181,7 @@ def _unskipped(sweeps: list[str]) -> list[str]:
 
 def test_every_ci_prek_sweep_skipping_the_hook_is_clean():
     sweeps = _sweeps(CI_WORKFLOW.read_text())
-    assert len(sweeps) == 2, f"expected the scoped and the full sweep, found {sweeps}"
+    assert len(sweeps) == 1, f"expected the one full sweep, found {sweeps}"
     unskipped = _unskipped(sweeps)
     assert not unskipped, f"these CI prek runs would run {HOOK_ID} twice: {unskipped}"
 

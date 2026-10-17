@@ -740,10 +740,9 @@ files = "^(\\.claude/hooks/[^/]+\\.(sh|py)|\\.claude/settings\\.json|scripts/dev
 # pinned in the lock, so a lock-file maintenance PR decides which ruff version gates every
 # .py in the tree and used to run none of it. Renovate #2548 moved ruff 0.16.8 -> 0.16.9 that
 # way (#2552); a release that tightens a rule would have passed the PR and turned master red
-# on its first full sweep, which is what the Vale binary did in #2536. ENFORCED by
-# ansible/tests/repo/test_hook_config_changes_run_the_hook.py, which also covers the hooks
-# that take filenames and so cannot widen `files` this way (see the `FULL_SWEEP_PATHS` lists
-# in ci.yml).
+# on its first full sweep, which is what the Vale binary did in #2536. A CI pull request run now sweeps
+# every hook over the whole tree (#5489), so the PR run catches the same escape regardless of `files`;
+# `files` still decides what a commit-time run checks.
 [[repos.hooks]]
 id = "ruff"
 name = "Lint first-party Python (ruff)"

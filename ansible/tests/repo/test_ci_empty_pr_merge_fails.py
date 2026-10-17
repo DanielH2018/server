@@ -1,4 +1,4 @@
-"""The `hooks` job's scoping step fails a PR whose merge would change no files.
+"""The `hooks` job's empty-merge step fails a PR whose merge would change no files.
 
 On a `pull_request` event the checkout is the merge ref, so the step's three-dot diff against
 the base branch is exactly what merging the PR would land. An empty result would fall through
@@ -7,7 +7,7 @@ previous bump's branch under the next version's title and master already holds i
 The step exits non-zero there, which fails the `prek` gate the ruleset requires.
 
 This runs the step's own `run:` script, extracted from ci.yml, against a scratch repository
-built into each of the three shapes the step distinguishes. The empty fixture reproduces that
+built into each of the shapes the step distinguishes. The empty fixture reproduces that
 geometry rather than a branch with no commits: a branch off an older master carrying a
 commit, master carrying the same content from a separate commit, and a merge commit of the two
 checked out detached with `origin/master` set.
@@ -26,28 +26,26 @@ def clone(tmp_path: Path) -> Path:
     return make_clone(tmp_path)
 
 
-def test_a_pr_that_changes_a_file_is_scoped(clone: Path, tmp_path: Path) -> None:
+def test_a_pr_that_changes_a_file_passes(clone: Path, tmp_path: Path) -> None:
     git(clone, "checkout", "-q", "-b", "pr")
     commit(clone, "bump", **{"README.md": "bumped\n"})
     checkout_merge_ref(clone, "pr")
 
-    proc, output = run_step(clone, tmp_path)
+    proc, _ = run_step(clone, tmp_path)
 
     assert proc.returncode == 0, proc.stdout + proc.stderr
-    assert "mode=scoped" in output
+    assert "changes 1 file(s)" in proc.stdout
 
 
-def test_a_pr_that_only_deletes_runs_the_full_sweep(
-    clone: Path, tmp_path: Path
-) -> None:
+def test_a_pr_that_only_deletes_passes(clone: Path, tmp_path: Path) -> None:
     git(clone, "checkout", "-q", "-b", "pr")
     commit(clone, "drop", **{"keep.txt": None})
     checkout_merge_ref(clone, "pr")
 
-    proc, output = run_step(clone, tmp_path)
+    proc, _ = run_step(clone, tmp_path)
 
     assert proc.returncode == 0, proc.stdout + proc.stderr
-    assert "mode=full" in output
+    assert "deletes 1" in proc.stdout
 
 
 def test_a_pr_whose_content_master_already_holds_fails(
@@ -62,8 +60,7 @@ def test_a_pr_whose_content_master_already_holds_fails(
     git(clone, "push", "-q", "origin", "master")
     checkout_merge_ref(clone, "pr")
 
-    proc, output = run_step(clone, tmp_path)
+    proc, _ = run_step(clone, tmp_path)
 
     assert proc.returncode != 0
     assert "::error::" in proc.stdout
-    assert "mode=" not in output

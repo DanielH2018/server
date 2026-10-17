@@ -39,10 +39,7 @@ SWEEP_STEPS = frozenset(
 )
 SCOPED_STEPS = frozenset(
     {
-        "Collect this PR's changed files",
-        "Run hooks (PR — scoped to changed files)",
-        "Collect this PR's changed ansible files",
-        "Lint the changed ansible files",
+        "Reject a PR whose merge changes no files",
         "Notice: CLAUDE.md sections citing atoms this PR moved",
         "Notice step failed",
         "Upload notice failure",
@@ -61,8 +58,17 @@ KNOWN_JOBS = frozenset(
         "host_packages",
         "prek",
         "renovate-config",
+        "prove",
     }
 )
+
+# The one job that is meant to be skipped on a dispatch: it proves a PUSH's tree, and its
+# absence is what makes every other job run. test_ci_skip_proven_master.py pins its condition.
+PUSH_ONLY_JOBS = frozenset({"prove"})
+
+# The proof arm of a dependent job's condition. `prove` is skipped on a dispatch, so its output
+# is empty and the comparison is true there; the evaluator reads the arm that way.
+_PROOF_ARM = "needs.prove.outputs.proven != 'true'"
 
 _EVENT_TERM = re.compile(r"github\.event_name\s*(==|!=)\s*'([a-z_]+)'")
 
@@ -82,6 +88,9 @@ def truthy(condition: str, event: str) -> bool:
     """
 
     def term(text: str) -> bool:
+        text = text.strip().removeprefix("${{").removesuffix("}}").strip()
+        if text == "true":
+            return True
         match = _EVENT_TERM.search(text)
         if not match:
             return False
@@ -94,12 +103,12 @@ def truthy(condition: str, event: str) -> bool:
 
 
 def _step_conditions() -> dict[str, str]:
-    """Every named step in ci.yml that carries an `if:`, keyed by step name."""
+    """Every named step in ci.yml, keyed by step name. A step with no `if:` always runs."""
     conditions = {}
     for job in _workflow()["jobs"].values():
         for step in job.get("steps", []):
-            if "name" in step and "if" in step:
-                conditions[step["name"]] = str(step["if"])
+            if "name" in step:
+                conditions[step["name"]] = str(step.get("if", "true"))
     return conditions
 
 
@@ -112,6 +121,7 @@ def _job_runs_on_dispatch(condition: str | None) -> bool:
         return True
     if "always()" in condition:
         return True
+    condition = condition.replace(_PROOF_ARM, "true").replace("!cancelled()", "true")
     return truthy(condition, "workflow_dispatch")
 
 
@@ -131,7 +141,9 @@ def test_a_dispatch_runs_every_job():
         f"so nothing below is checking them"
     )
     skipped = [
-        name for name, job in jobs.items() if not _job_runs_on_dispatch(job.get("if"))
+        name
+        for name, job in jobs.items()
+        if name not in PUSH_ONLY_JOBS and not _job_runs_on_dispatch(job.get("if"))
     ]
     assert not skipped, (
         f"jobs {skipped} do not run on a workflow_dispatch — a dispatched sweep that skips a job "
@@ -169,8 +181,10 @@ def test_the_evaluator_reads_a_pull_request_the_other_way():
     half while proving nothing. On a pull request those same conditions must hold.
     """
     conditions = _step_conditions()
-    assert truthy(conditions["Collect this PR's changed files"], "pull_request")
-    assert truthy(conditions["Collect this PR's changed ansible files"], "pull_request")
+    assert truthy(
+        conditions["Reject a PR whose merge changes no files"], "pull_request"
+    )
+    assert not truthy(conditions["Reject a PR whose merge changes no files"], "push")
 
 
 def test_a_sweep_condition_keyed_on_push_is_flagged():
