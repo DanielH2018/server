@@ -1,8 +1,9 @@
-"""The `static-ratchet-tests` prek hook runs the twelve tests that turned PRs red, and CI skips it.
+"""The `static-ratchet-tests` prek hook runs the static tests that turned PRs red, and CI skips it.
 
 Twelve static test modules caused most of the PR reds that the author's own code did not
-(#3605, #4008, #4904). The hook runs them at commit time so the failure and its repair arrive
-before CI. This guard holds three things a later edit could quietly lose: every module the
+(#3605, #4008, #4904), and eleven more cheap ones failed 15 PR runs across 13 PRs between
+2026-10-15 and 2026-10-17 (#5481). The hook runs them at commit time so the failure and its
+repair arrive before CI. This guard holds three things a later edit could quietly lose: every module the
 hook names still exists, its `files` gate matches the edits those tests react to, and CI's two
 `prek run` steps skip it, because the `pytest` job runs the same modules.
 
@@ -36,6 +37,34 @@ EXPECTED_MODULES = {
     "ansible/tests/repo/test_census_rows_layout.py",
 }
 
+# The cheap ratchet and census modules #5481 measured failing PR CI, each with a path whose edit
+# reintroduced or can reintroduce its failure. The two Renovate-rule modules are the ones whose
+# recorded weights (0.66s and 0.0s) the issue quotes. `test_gen_reference_scripts` (31.09s) and
+# `test_guard_tests_read_renders_not_templates` (10.12s) stay out: the equality pin below fails
+# on either one.
+ADDED_BY_5481 = {
+    "scripts/tests/test_scripts_import_direction.py": "scripts/lib/repo_paths.py",
+    "scripts/lib/tests/test_exit_codes.py": "scripts/deploy.sh",
+    "ansible/tests/setup/test_lander_deadlines_cover_the_soak.py": ".github/workflows/promote.yml",
+    "scripts/tests/test_prek_files_cover_entry_imports.py": "prek.toml",
+    "ansible/tests/repo/test_tracked_python_hazards.py": "scripts/dev/tests/test_findings.py",
+    "ansible/tests/k8s/test_checksum_annotations_documented.py": "ansible/roles/k8s/monitor-bridge/CLAUDE.md",
+    "ansible/tests/repo/test_shell_entry_points_answer_help.py": ".claude/hooks/run-hook.sh",
+    "ansible/tests/deploy/test_renovate_per_package_manual_rules_carry_the_denylist_marker.py": "renovate.json",
+    "ansible/tests/deploy/test_renovate_denylist_marker_reaches_the_pr_title.py": "renovate.json",
+    "ansible/tests/repo/test_owner_entry_points_census.py": "docs/target-architecture/deploy/d2-first-leaf.md",
+    "scripts/diagnostics/tests/test_probe_health_rolled.py": "scripts/diagnostics/probe.py",
+}
+
+NUMBER_WORDS = {
+    word: n
+    for n, word in enumerate(
+        "zero one two three four five six seven eight nine ten eleven twelve thirteen fourteen "
+        "fifteen sixteen seventeen eighteen nineteen twenty twenty-one twenty-two twenty-three "
+        "twenty-four twenty-five twenty-six twenty-seven twenty-eight twenty-nine thirty".split()
+    )
+}
+
 
 def _hook() -> dict:
     config = tomllib.loads((REPO / "prek.toml").read_text())
@@ -49,9 +78,26 @@ def _hook() -> dict:
     return hooks[0]
 
 
+def _modules(hook: dict) -> set[str]:
+    """The test files an entry names, with any `::node` suffix dropped."""
+    args = (arg.split("::", 1)[0] for arg in shlex.split(hook["entry"]))
+    return {arg for arg in args if arg.endswith(".py")}
+
+
+def _ratchet_hooks() -> list[dict]:
+    """`static-ratchet-tests` and any sibling split off it to carry its own `files` gate."""
+    config = tomllib.loads((REPO / "prek.toml").read_text())
+    return [
+        hook
+        for repo in config["repos"]
+        for hook in repo.get("hooks", [])
+        if hook.get("id", "").startswith(HOOK_ID)
+    ]
+
+
 def test_the_hook_runs_every_expected_module_and_each_exists():
-    named = {arg for arg in shlex.split(_hook()["entry"]) if arg.endswith(".py")}
-    assert named == EXPECTED_MODULES
+    named = set().union(*(_modules(hook) for hook in _ratchet_hooks()))
+    assert named == EXPECTED_MODULES | set(ADDED_BY_5481)
     missing = sorted(m for m in named if not (REPO / m).is_file())
     assert not missing, f"{HOOK_ID} names modules that do not exist: {missing}"
 
@@ -79,6 +125,29 @@ def test_the_hook_runs_every_expected_module_and_each_exists():
 )
 def test_the_gate_matches_an_edit_the_tests_react_to(path):
     assert re.search(_hook()["files"], path)
+
+
+@pytest.mark.parametrize(("module", "trigger"), sorted(ADDED_BY_5481.items()))
+def test_a_commit_reintroducing_a_listed_failure_runs_its_test(module, trigger):
+    """The edit that turned a PR red now selects a ratchet hook whose entry runs the test."""
+    running = [hook for hook in _ratchet_hooks() if module in _modules(hook)]
+    assert running, f"no {HOOK_ID} hook runs {module}"
+    assert any(re.search(hook["files"], trigger) for hook in running), (
+        f"an edit to {trigger} skips every {HOOK_ID} hook that runs {module}"
+    )
+
+
+def test_claude_md_states_how_many_files_the_hook_runs():
+    paragraph = (REPO / "CLAUDE.md").read_text().split("## Pre-commit Hooks", 1)[1]
+    match = re.search(
+        r"commit time it runs ([\w-]+) static", " ".join(paragraph.split())
+    )
+    assert match, (
+        "CLAUDE.md's Pre-commit Hooks paragraph no longer states the hook's file count"
+    )
+    word = match.group(1).lower()
+    stated = int(word) if word.isdigit() else NUMBER_WORDS.get(word)
+    assert stated == len(EXPECTED_MODULES | set(ADDED_BY_5481))
 
 
 @pytest.mark.parametrize(
