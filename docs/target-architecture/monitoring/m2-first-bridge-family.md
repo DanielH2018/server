@@ -607,6 +607,10 @@ mutes this family today.
   its `tasks/verify.yml`, and both pass against the running pod.
 - Two-writer check: every new alert routes to the blackhole receiver. Kuma's tile remains the
   only pager.
+- **Soak, shortened by the operator on 2026-10-17.** The soak ends after the 2026-10-18 Sunday
+  reboot, about five days in, rather than on day 7. The window still spans that reboot, and the
+  day-7 reading below is taken once its mute ends at 08:15 UTC. The rest of this bullet applies
+  as written.
 - **Soak.** Start the 7-day clock at the deploy. Run soak queries 1 to 3 from *Verification*,
   and the attribution step, on days 3 and 7. If retention reads under 7 days, run the second
   pass over the window retention covers and record it.

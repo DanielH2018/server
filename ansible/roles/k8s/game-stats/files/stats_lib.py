@@ -5,10 +5,9 @@ Shipped as a sibling copy beside valheim_stats.py and stats.py (terraria-stats),
 mechanism `host_lib.py` uses from `roles/setup/common`: a directly-invoked script gets only
 its own directory on `sys.path`, so a shared module has to be copied in rather than imported
 across the tree (see the repo-root CLAUDE.md). This one ships into a ConfigMap and runs
-inside a python:3.14-alpine pod rather than on a host, so it is staged by
-`roles/k8s/game-stats/tasks/stage.yml`, not `install_host_lib.yml` — see that file's
-header for why a new role owns it instead of extending host_lib.py or having one game role
-own it for the other.
+inside a python:3.14-alpine pod rather than on a host, so each game's rendered ConfigMap
+(`roles/k8s/game-stats/templates/configmap-*.yaml.j2`) carries a copy beside the entry
+script, rather than `install_host_lib.yml` staging one on a node.
 
 Both stats roles tail a game's console out of Loki, parse join/leave-shaped lines, fold them
 into all-time per-player stats kept in SQLite, and serve Prometheus metrics. They were built
@@ -76,9 +75,8 @@ def http_get_json(url, timeout, user_agent):
 #
 # The cost side is a staging path, not a line count. obs_api's own docstring says an edit there
 # maps to no deploy tag: homelab-mcp's image keeps the previous copy until its next deploy. Two
-# more pods on that footing, each with a third `--from-file` entry in its ConfigMap and a third
-# file folded into its `checksum/stats-script` annotation, is the real bill — and a stale obs_api
-# in a game pod is a stats gap nobody is watching for.
+# more pods on that footing, each with a third file embedded in its ConfigMap, is the real
+# bill — and a stale obs_api in a game pod is a stats gap nobody is watching for.
 #
 # What would be shared is one `urlencode` call. The transports also differ: `http_get_json` here
 # sends a User-Agent, which `obs_api.get_json` does not.

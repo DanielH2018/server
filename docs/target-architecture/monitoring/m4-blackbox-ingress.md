@@ -608,7 +608,9 @@ tuned. The likely episodes:
   `count(probe_success{job="blackbox-ingress"} == 1)` equals the tile count (26 at the
   baseline), or each target missing from that count is explained in the PR. A count of the
   failing series cannot serve as the gate: `== 0` returns no series both when nothing fails
-  and when the job is absent. Soak at least 7 days from that start, including one Sunday. Run
+  and when the job is absent. Soak at least 7 days from that start, including one Sunday;
+  the operator shortened that on 2026-10-17 to end after the 2026-10-18 Sunday reboot, about
+  five days in, once its mute ends at 08:15 UTC. Run
   both soak queries on day 3 and after the Sunday, and record the start time and each result
   in the PR.
 
