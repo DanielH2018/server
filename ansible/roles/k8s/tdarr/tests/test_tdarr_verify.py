@@ -9,14 +9,13 @@ render still emits no `tdarr-verify`. The plan is docs/target-architecture/deplo
 Run: uv run pytest ansible/roles/k8s/tdarr/tests/test_tdarr_verify.py
 """
 
+import re
 import shutil
 
 import pytest
 
 import tdarr_verify
-from deployer_lib.deploy_cross_role import k8s_lookup_map
 from lib import yaml_fast
-from lib.repo_paths import REPO
 from lib.k8s_roles import K8S_ROLES
 from renderer import shadow_diff
 from renderer.renderer_lib import cluster
@@ -24,6 +23,8 @@ from renderer.renderer_lib.context import load_stubs
 from renderer.tests._job_census import problems
 
 TAG = "tdarr"
+# A path into a role's tree, as any lookup names it; group 1 is the role.
+ROLE_PATH = re.compile(r"/roles/k8s/([^/'\"]+)/")
 
 
 def _env(tmp_path, device=None, media=None) -> dict[str, str]:
@@ -137,8 +138,42 @@ def test_the_staged_job_reads_no_other_roles_file():
     """The deployer redeploys a role when a file it `lookup()`s in another role changes.
 
     The Job takes `flux_job_image` from the renderer rather than from the flux defaults, so a
-    Renovate bump of that pin does not redeploy tdarr. The scan reads `verify-inert/` too.
+    Renovate bump of that pin does not redeploy tdarr. The deployer's scan
+    (`deploy_cross_role._K8S_LOOKUP_RE`) misses a lookup that passes keyword arguments, so
+    this reads every role path the staged templates name, in any form.
     """
-    readers = k8s_lookup_map(REPO)
-    assert readers, "the scan found no cross-role lookup at all"
-    assert [path for path, roles in readers.items() if TAG in roles] == []
+    staged = sorted((K8S_ROLES / TAG / "templates" / "verify-inert").glob("*.j2"))
+    assert [p.name for p in staged] == ["job.yaml.j2", "rbac.yaml.j2"]
+    assert [
+        (path.name, role)
+        for path in staged
+        for role in ROLE_PATH.findall(path.read_text())
+        if role != TAG
+    ] == []
+
+
+def test_the_role_path_scan_finds_a_lookup_with_keyword_arguments():
+    """The red case: the form the deployer's regex misses is the form the scan must find."""
+    text = "lookup('file', playbook_dir + '/roles/k8s/flux/defaults/main.yml', rstrip=False)"
+    assert ROLE_PATH.findall(text) == ["flux"]
+
+
+def test_a_deployment_change_renames_the_job(stubs, tmp_path):
+    """A new tdarr image changes the Deployment, so Flux runs the renamed Job again."""
+    names = []
+    for image in (
+        "ghcr.io/haveagitgat/tdarr:3.00.00",
+        "ghcr.io/haveagitgat/tdarr:3.00.01",
+    ):
+        roles = tmp_path / image.rsplit(":", 1)[1]
+        shutil.copytree(K8S_ROLES / TAG, roles / TAG)
+        templates = roles / TAG / "templates"
+        (templates / "verify-inert").rename(templates / "verify")
+        rendered = cluster.render_tag(
+            TAG, {**stubs, "tdarr_k8s_image": image}, roles=roles
+        )
+        docs = yaml_fast.safe_load_all(rendered.verify["job.yaml"])
+        names.append(
+            next(d for d in docs if d and d["kind"] == "Job")["metadata"]["name"]
+        )
+    assert names[0] != names[1]

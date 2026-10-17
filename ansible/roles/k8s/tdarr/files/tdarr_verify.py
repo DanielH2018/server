@@ -9,12 +9,16 @@ PUID and PGID, the uid tdarr's own process writes the library as. So it proves t
 pod built like tdarr's, not of the live tdarr pod, which nothing here can reach without
 `pods/exec`.
 
-The third check, an encode through tdarr's own ffmpeg, stays an Ansible task: this Job's image
-carries no ffmpeg, and the Job census forbids spawning a process.
+The third check, an encode through tdarr's own ffmpeg, has no form this Job can take. The
+Job's image carries no ffmpeg, and the Job census forbids spawning a process. An exec into
+tdarr's pod through the API needs a websocket upgrade, and the census admits none of `socket`,
+`ssl` or `http.client`. Ansible runs the encode check until the flip. After the flip nothing
+runs it unless the operator's choice in #5451 lands first.
 
 The Job reaches no Service and no API, so it opens no connection and imports no
 `flux_job_connect`. Inputs come from the Job's environment: `VERIFY_DEVICE`, the render node,
-and `VERIFY_MEDIA`, the library mount. The probe file is named after the pod's `HOSTNAME`, so
+and `VERIFY_MEDIA`, the library mount. `TDARR_DEPLOYMENT_DIGEST8` is in the spec only to rename
+the Job, and the script prints it. The probe file is named after the pod's `HOSTNAME`, so
 two runs never collide. Exit 0 when both checks pass, 1 when either fails, naming it.
 
 Run: python3 tdarr_verify.py (in the Job; it takes no arguments)
@@ -72,6 +76,7 @@ def run(env: Mapping[str, str]) -> list[str]:
     """
     probe = f".tdarr-verify-{env.get('HOSTNAME', 'probe')}"
     return [
+        f"verifying tdarr's Deployment {env.get('TDARR_DEPLOYMENT_DIGEST8', 'unknown')}",
         check_device(Path(env["VERIFY_DEVICE"])),
         check_media(Path(env["VERIFY_MEDIA"]), probe),
     ]

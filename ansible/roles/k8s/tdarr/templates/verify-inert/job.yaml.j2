@@ -11,12 +11,21 @@
   `job_spec_digest8` of its spec. Each is computed here from the same JSON those functions
   hash, so the spec is written once as YAML text, parsed for the hash and emitted verbatim.
   The renderer passes `flux_job_image` to every `templates/verify/` file (`render_tag`).
+
+  DECIDED: the spec embeds a digest of tdarr's rendered Deployment, not the role's `digest8`.
+  The plan has a Job that must run once per role revision embed `digest8`, so that a new
+  revision renames the Job and Flux runs it again, as Ansible runs `verify.yml` on every
+  deploy. `digest8` is known only after the renderer's later passes, which a template cannot
+  see. The Deployment's render is what rolls tdarr's pod, so keying on it reruns the Job on
+  every roll. A revision that changes only the Service or the route does not rerun it, and
+  neither the device nor the library depends on those.
   ansible/roles/k8s/tdarr/tests/test_tdarr_verify.py runs the census over this render.
 #}
 {% set script_name = 'tdarr_verify.py' %}
 {% set script_dir = '/verify' %}
 {% set data = {script_name: lookup('file', playbook_dir + '/roles/k8s/tdarr/files/' + script_name, rstrip=False)} %}
 {% set configmap_name = 'tdarr-verify-' + ({'data': data, 'binaryData': {}} | to_json(sort_keys=True, separators=(',', ':')) | hash('sha256'))[:8] %}
+{% set deployment_digest8 = (lookup('template', 'deployment.yaml.j2') | hash('sha256'))[:8] %}
 {% set spec_text %}
 # A flaky check fails rather than passing on a retry.
 backoffLimit: 0
@@ -55,6 +64,9 @@ template:
             value: /dev/dri/renderD128
           - name: VERIFY_MEDIA
             value: /media
+          # Renames the Job whenever tdarr's Deployment changes; see the DECIDED note above.
+          - name: TDARR_DEPLOYMENT_DIGEST8
+            value: "{{ deployment_digest8 }}"
           - name: PYTHONDONTWRITEBYTECODE
             value: "1"
         # The device request is what puts the render node in this pod, as it does in tdarr's.

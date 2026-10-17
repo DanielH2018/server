@@ -50,8 +50,11 @@ shared conventions.
   The Job runs `files/tdarr_verify.py`, which replaces two of `tasks/verify.yml`'s exec checks:
   the render node opens, and the library is writable. Its pod is built like tdarr's, with the
   same device request, render group, PUID and `media-data` subPath, so it checks that wiring
-  and not the live pod. The VAAPI encode through tdarr's own ffmpeg has no Job form, because
-  the Job image has no ffmpeg and the Job census forbids spawning a process.
+  and not the live pod. Its spec embeds a digest of tdarr's rendered Deployment, so every
+  change that rolls tdarr renames the Job and Flux runs it again.
+  The VAAPI encode through tdarr's own ffmpeg has no Job form, because the Job image has no
+  ffmpeg and the Job census forbids spawning a process and opening a socket. Ansible runs it
+  until the flip; after that it is lost unless the operator's choice in #5451 lands first.
   `tests/test_tdarr_verify.py` renders the renamed copy and runs the Job census over it.
 - **Every rollout waits 3000s, five times the shared default.** A cold pull of the 1432 MiB
   image took 25m37s on 2026-10-08 and failed the old 300s gate (#3689).
