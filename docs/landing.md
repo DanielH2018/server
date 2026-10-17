@@ -359,7 +359,9 @@ Instead it reads the cluster every 30 seconds:
   (`docs/flux-deploy-plane.md`, *Stopping one service: `flux_suspend`*).
 - **`deferred`, cause `promote-timeout`, exit 75.** No promotion covered the merge commit
   within twice the promote timeout (83 minutes,
-  `scripts/deploy_tools/promote_lib/wait.py:LAND_WAIT_TIMEOUT_S`). Look first at the
+  `scripts/deploy_tools/promote_lib/wait.py:LAND_WAIT_TIMEOUT_S`), or within twice
+  `verify`'s wait on the listed `soak` Kustomization's `timeout`, whichever is later. The
+  soak's `timeout` grows with every flux-owned Kustomization. Look first at the
   `promote` workflow's failed `publish` jobs: a publish refusal leaves no `sha-<commit>` tag
   to promote. The next promotion may still cover the merge commit.
   The 83 minutes count again from each poll that reads a verification of an earlier commit

@@ -67,6 +67,7 @@ from lib.exit_codes import FAILED, LAND_GAVE_UP, OK
 from lib.git import git
 
 import forge
+from chained_timeout import OCI_INTERVAL_S, seconds
 from renderer.renderer_lib.ordering import split_kind
 from changed_set import (
     ROOT,
@@ -100,29 +101,21 @@ class WaitReadError(RuntimeError):
 # Both mean "this fact could not be read".
 READ_ERRORS = (WaitReadError, forge.ForgeError)
 
-# Seconds between polls. Each poll makes one authenticated GitHub call, and a second once the
-# Kustomizations have settled and the soak's verdict is awaited, so a landing spends at most
-# 240 an hour, well inside a token's 5,000.
+# Seconds between polls. A poll makes one authenticated GitHub call, two while it awaits the
+# soak's verdict: at most 240 an hour, well inside a token's 5,000.
 POLL_S = 30
 
 # The promote timeout as D4.3's chained derivation gives it for a one-tag bundle that
 # substitutes, when a rotation changes `cluster-vars` too (d4-ordering.md, *What `promote`
-# reads*). The tags' chain is `cluster-vars`'s 10m `timeout`, one `chained_timeout.REQUEUE_DEPENDENCY_S`
-# hop and the tag's own 10m, both from `manifests_rollout_timeout_default`. One queueing round
-# adds the largest changed `timeout`, 10m, because two changed names fit in one round of
-# `--concurrent`. Then the OCIRepository interval, 1m in
-# `ansible/roles/k8s/flux/templates/sync.yaml.j2`, and the largest `retryInterval`, the 2m
-# `scripts/renderer/renderer_lib/bundle.py` writes on each Kustomization. That is `_TAGS_S`.
-# `verify` expects `soak` too (D5.3b3), whose `timeout` the renderer sets to `_TAGS_S` plus
-# the fleet W and two 1m margins (`renderer_lib/soak.py:DEADLINE_MARGIN_S`). W is 3m for a
-# tag whose rules carry no `for:`: the 1m `k8s_rollout_stabilise_seconds` and 2m for the
-# scrape and the rule evaluation. The soak's term is longer than the tags', so the total is
-# it plus the interval and the `retryInterval` again. It is the longest wait
-# `chained_timeout.promote_timeout` returns for a one-tag bundle (#5155), and
-# test_promote_land_wait_deadline.py pins the two together. `chained_timeout` imports this
-# module, so this one cannot import `promote_timeout` back to derive the figure from M's bundle.
-# `land-wait` gives up at twice it (contract C6). The second half covers `promote.yml`'s
-# `render` and `publish` jobs, 10m each, which run before any promotion of M can start.
+# reads*). `_TAGS_S` is the tags' share: `cluster-vars`'s 10m, one requeue hop and the tag's
+# 10m on the path, one 10m queueing round, the 1m OCIRepository interval and the 2m
+# `retryInterval`. `verify` expects `soak` too (D5.3b3), whose `timeout` the renderer sets to
+# `_TAGS_S` plus W, 3m for a tag with no `for:`, and two 1m margins; that term is the longest,
+# so the total adds the interval and the `retryInterval` again. test_promote_land_wait_deadline.py
+# pins this to `chained_timeout.promote_timeout` (#5155). `land-wait` gives up at twice it
+# (contract C6): the second half covers `promote.yml`'s `render` and `publish`, 10m each.
+# The soak's chain counts every Kustomization in the bundle, so `land_wait` raises the deadline
+# from the live `soak` Kustomization's `timeout` too (`soak_deadline_s`).
 _TAGS_S = 10 * 60 + 30 + 10 * 60 + 10 * 60 + 60 + 2 * 60
 PROMOTE_TIMEOUT_S = _TAGS_S + 3 * 60 + 2 * 60 + 60 + 2 * 60
 LAND_WAIT_TIMEOUT_S = 2 * PROMOTE_TIMEOUT_S
@@ -147,10 +140,8 @@ TIMEOUT_CAUSE = "promote-timeout"
 SUSPENDED_CAUSE = "promote-suspended"
 SOAK_CAUSE = "soak-failed"
 SOAK_CONTEXT = "flux/soak"
-# What notification-controller posts for a failed soak; `verify` holds on both too.
 SOAK_FAILED_STATES = frozenset({"failure", "error"})
-# The read-only command that prints the services a failed soak named. The renderer labels the
-# soak Job's pod `app: soak`, and the next promotion prunes the Job.
+# Prints the services a failed soak named; the renderer labels the soak Job's pod `app: soak`.
 SOAK_READ = (
     "kubectl -n flux-system get pods -l app=soak -o "
     "jsonpath='{.items[*].status.containerStatuses[0].state.terminated.message}'"
@@ -363,6 +354,8 @@ def land_wait(
             if also:
                 names |= with_dependents(also, *kustomization_graph(items))
             pending, revision = _pending(reads, merge, items, names)
+            if SOAK in cs.names:
+                deadline = max(deadline, started + soak_deadline_s(items))
             if not pending and not all_paused and SOAK in cs.names:
                 soak = _soak_state(reads, revision)
                 if soak in SOAK_FAILED_STATES:
@@ -425,6 +418,18 @@ def land_wait(
                 widened=widened,
             )
         reads.sleep(poll_s)
+
+
+def soak_deadline_s(items: list[dict]) -> int:
+    """Twice `verify`'s wait on `soak`: its listed `timeout`, the interval and `retryInterval`.
+
+    0 when `soak` is not listed or its `timeout` is unreadable, so the constant stands.
+    """
+    spec = next((i.get("spec") or {} for i in items if _name(i) == SOAK), {})
+    try:
+        return 2 * (seconds(spec.get("timeout", "")) + OCI_INTERVAL_S + 2 * 60)
+    except ValueError:
+        return 0
 
 
 def _soak_state(reads: WaitReads, revision: str) -> str:

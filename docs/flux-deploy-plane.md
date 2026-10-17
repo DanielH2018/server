@@ -755,7 +755,9 @@ A wait shorter than a verification is safe and costs a promotion. `decide` gives
   that figure as `wait.py:PROMOTE_TIMEOUT_S` and gives up at twice it. The soak's chain counts
   every Kustomization in the bundle, so it grows by a 10-minute queueing round for each five
   more. With the nine tags published on 2026-10-17 the soak's `timeout` is 2910s, and
-  `verify` waits 51.5 minutes. While a verification of an earlier commit is in flight, M's `decide` waits on
+  `verify` waits 51.5 minutes. So `land-wait` also reads the listed `soak` Kustomization's
+  `timeout` each poll, and gives up no sooner than twice `verify`'s wait on it
+  (`wait.py:soak_deadline_s`). While a verification of an earlier commit is in flight, M's `decide` waits on
   it, so `land-wait` counts its timeout again from each poll that reads one, for up to
   `IN_FLIGHT_WAIT_S`;
 - a revision that changes every importer of `workload-shell.yml.j2` queues in rounds of up
