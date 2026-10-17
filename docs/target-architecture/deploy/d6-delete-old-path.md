@@ -1422,7 +1422,7 @@ D5's end. The 17 steps, D6.0 to D6.8b, became 12 PRs, D6.10 to D6.21.
 |---|---|---|---|
 | D6.10 | D6.1b | Not yet: [#5425](https://github.com/DanielH2018/server/issues/5425) re-scopes it first | D1.6, merged |
 | D6.11 | D6.7a, D6.7c | Yes | D5.1a2, merged; D5's flux PR; the operator's break-glass key pair |
-| D6.12 | D6.0, D6.1 | Yes, rebased and re-measured at D5's end | D5, *live*; M2 Open question 1's label amendment |
+| D6.12 | D6.0, D6.1 | Yes, except the annotation comment and test, which follow #5425. Rebased and re-measured at D5's end | D5, *live*; M2 Open question 1's label amendment |
 | D6.13 | D6.2a, D6.2b | Yes | D6.12, *live* |
 | D6.14 | D6.6 | Yes | D6.12, *live* |
 | D6.15 | D6.3 | Yes | D6.12 |
@@ -1491,6 +1491,12 @@ D6.12, three chains run side by side: D6.13 and D6.14, D6.16 to D6.18, and D6.15
     - **Written ahead: yes.** The deployer's k8s arms, D2's drops, D3.4's interim rule and
       D2.3's `land-wait` are all in the tree. The writer rebases at D5's end and re-measures
       each count.
+    - **One part follows #5425.** Old D6.1 rewrites the comment above
+      `observability_deploy_annotation_expr` and the docstring of `test_deploy_annotations.py`
+      so that they name two emitters. D5.3b3's soak query already sits beside that key. D6.10
+      may also merge first, and old D6.1b planned only for the other order. So at rebase,
+      D6.12 keeps every source those texts name, D6.10's and the soak's included, and drops
+      only `deploy_io.py`.
     - **Waits on:** D5, *live*. Old D6.0's checks read it: the deploy-tag label amendment
       (M2 Open question 1), a footprint in `prod`'s `digests.json` for every deploy tag and
       every `SHARED_KINDS` member, a clean `probe.py gitops-state`, and `render_records`
@@ -1526,7 +1532,9 @@ D6.12, three chains run side by side: D6.13 and D6.14, D6.16 to D6.18, and D6.15
     - **Waits on:** D6.12, *live*: three watched ticks and a clean ledger check. The
       `daniel-box.yml` keys take the deploy-plane route, which is a no-op only under D6.12's
       code. D6.13 and D6.14 merge in either order. The second rebases, because both
-      regenerate the monitor-bridge copy of `gitops_markers.py`.
+      regenerate the monitor-bridge copy of `gitops_markers.py`. It merges only after the
+      first one's tick has run and `last_run` has advanced, so a broken tick points at one
+      change.
     - **Operator gates:** none of its own. On a crash, the operator re-applies the deployer
       by hand, as for every self-applied deployer PR.
     - **After merge:** in the primary checkout, `k8s_autodeploy_counts.py --denylist` prints
@@ -1537,7 +1545,8 @@ D6.12, three chains run side by side: D6.13 and D6.14, D6.16 to D6.18, and D6.15
     - **Exit criterion:** exit 5's plugin path and denylist symbols.
 5. **D6.14 — The k8s ledger readers** (old D6.6, about 350 lines removed).
     - **Why apart.** Size: with D6.13 it would pass 1,000 changed lines. It shares D6.13's
-      predecessor, and the two merge in either order.
+      predecessor, and the two merge in either order, the second only after the first one's
+      tick has run.
     - **Written ahead: yes.** Every reader it deletes is in the tree.
     - **Waits on:** D6.12, *live*. The tick that ran the old code, the last writer, has run,
       and D6.12's ledger check is clean.
