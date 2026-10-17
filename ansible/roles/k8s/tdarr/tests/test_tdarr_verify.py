@@ -14,7 +14,9 @@ import shutil
 import pytest
 
 import tdarr_verify
+from deployer_lib.deploy_cross_role import k8s_lookup_map
 from lib import yaml_fast
+from lib.repo_paths import REPO
 from lib.k8s_roles import K8S_ROLES
 from renderer import shadow_diff
 from renderer.renderer_lib import cluster
@@ -127,3 +129,16 @@ def test_the_flipped_job_runs_as_tdarr_with_its_device_and_library(flipped):
     media = next(m for m in container["volumeMounts"] if m["name"] == "media")
     assert (media["mountPath"], media["subPath"]) == ("/media", "media")
     assert pod["automountServiceAccountToken"] is False
+    flux = yaml_fast.safe_load((K8S_ROLES / "flux/defaults/main.yml").read_text())
+    assert container["image"] == flux["flux_job_image"]
+
+
+def test_the_staged_job_reads_no_other_roles_file():
+    """The deployer redeploys a role when a file it `lookup()`s in another role changes.
+
+    The Job takes `flux_job_image` from the renderer rather than from the flux defaults, so a
+    Renovate bump of that pin does not redeploy tdarr. The scan reads `verify-inert/` too.
+    """
+    readers = k8s_lookup_map(REPO)
+    assert readers, "the scan found no cross-role lookup at all"
+    assert [path for path, roles in readers.items() if TAG in roles] == []

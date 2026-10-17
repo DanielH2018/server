@@ -10,18 +10,18 @@
   applies*): the ConfigMap's in `configmap_digest8` of its data, the Job's in
   `job_spec_digest8` of its spec. Each is computed here from the same JSON those functions
   hash, so the spec is written once as YAML text, parsed for the hash and emitted verbatim.
+  The renderer passes `flux_job_image` to every `templates/verify/` file (`render_tag`).
   ansible/roles/k8s/tdarr/tests/test_tdarr_verify.py runs the census over this render.
 #}
 {% set script_name = 'tdarr_verify.py' %}
 {% set script_dir = '/verify' %}
 {% set data = {script_name: lookup('file', playbook_dir + '/roles/k8s/tdarr/files/' + script_name, rstrip=False)} %}
 {% set configmap_name = 'tdarr-verify-' + ({'data': data, 'binaryData': {}} | to_json(sort_keys=True, separators=(',', ':')) | hash('sha256'))[:8] %}
-{% set job_image = (lookup('file', playbook_dir + '/roles/k8s/flux/defaults/main.yml') | from_yaml).flux_job_image %}
 {% set spec_text %}
 # A flaky check fails rather than passing on a retry.
 backoffLimit: 0
-# Below the 600s Kustomization timeout tdarr takes once its pre-pull leaves the tag, with room
-# for the media volume to attach, so the Job fails with its own message first.
+# Below the 600s `manifests_rollout_timeout_default` every `<tag>-verify` Kustomization takes,
+# with room for the media volume to attach, so the Job fails with its own message first.
 activeDeadlineSeconds: 300
 template:
   metadata:
@@ -46,7 +46,7 @@ template:
         type: RuntimeDefault
     containers:
       - name: verify
-        image: {{ job_image }}
+        image: {{ flux_job_image }}
         command:
           - python3
           - {{ script_dir }}/{{ script_name }}
