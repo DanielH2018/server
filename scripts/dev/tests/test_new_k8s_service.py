@@ -176,11 +176,20 @@ def test_authelia_writes_the_tier_beside_the_flag(args):
     assert entry == {
         "name": "widget",
         "platform": "k8s",
+        "owner": "flux",
         "hostname": "widget",
         "port": 8080,
         "use_authelia": True,
         "auth_tier": "one_factor",
     }
+
+
+def test_the_entry_is_born_owned_by_flux():
+    """From D5.5 on, a new service is Flux's from its first commit: no Ansible path applies it."""
+    entry = yaml_fast.safe_load(
+        scaffold.entry_lines("widget", 8080, "widget", None, False)
+    )[0]
+    assert entry["owner"] == "flux"
 
 
 def test_the_entry_lands_inside_containers_list(tmp_path):

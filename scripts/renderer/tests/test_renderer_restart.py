@@ -292,11 +292,21 @@ def test_bento_pdf_gets_no_annotation_and_renders_as_if_unowned(
 
 
 # A reference a flux-owned pod may make to an object its own role does not render, as
-# (tag, kind, name), each with its reason. Empty: no flux-owned role makes one.
-OUTSIDE_ROLE_EXEMPT: frozenset[tuple[str, str, str]] = frozenset()
+# (tag, kind, name), each with its reason. `checksum/restart` cannot see such an object, so a
+# change to it rolls nothing; an entry here accepts that for its pod.
+OUTSIDE_ROLE_EXEMPT: dict[tuple[str, str, str], str] = {
+    ("pihole-exporter", "Secret", "pihole-env"): (
+        "D5.5. The exporter reads FTL's own admin password from the pihole role's Secret, so "
+        "the cluster holds one copy of it. Ansible never rolled this pod on a rotation either: "
+        "the pihole role restarts only its two FTL pods. A stale password shows as "
+        'up{job="pihole"} == 0 (ansible/roles/k8s/pihole-exporter/CLAUDE.md).'
+    ),
+}
 
 
-def outside_references(render, tags) -> list[tuple[str, str, str]]:
+def outside_references(
+    render, tags, exempt=OUTSIDE_ROLE_EXEMPT
+) -> list[tuple[str, str, str]]:
     """Each `(tag, kind, name)` a pod of `tags` names and its own render does not hold.
 
     A Secret the tag ships as a SOPS manifest counts as its own.
@@ -325,7 +335,7 @@ def outside_references(render, tags) -> list[tuple[str, str, str]]:
                     tag,
                     kind,
                     name,
-                ) not in OUTSIDE_ROLE_EXEMPT:
+                ) not in exempt:
                     found.append((tag, kind, name))
     return found
 
@@ -337,6 +347,12 @@ def fleet():
 
 def test_no_flux_owned_pod_names_another_roles_secret_or_config_map_is_clean(fleet):
     assert outside_references(fleet, flux_owned_tags()) == []
+
+
+def test_every_outside_role_exemption_is_still_a_live_flux_owned_reference(fleet):
+    """An entry whose tag left Flux, or whose pod stopped naming the object, is stale."""
+    found = set(outside_references(fleet, flux_owned_tags(), exempt={}))
+    assert set(OUTSIDE_ROLE_EXEMPT) <= found, sorted(set(OUTSIDE_ROLE_EXEMPT) - found)
 
 
 def test_the_outside_role_test_resolves_peanuts_three_references(fleet):

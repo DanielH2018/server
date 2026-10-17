@@ -39,6 +39,13 @@ def test_any_other_owner_value_raises(tmp_path, value: str):
         tag_owners(host_vars)
 
 
-def test_bento_pdf_peanut_and_texbrain_are_the_live_owned_entries():
-    """D2.7, D3.6 and D4.5 moved bento-pdf, peanut and texbrain to Flux, and no other live entry carries `owner`."""
-    assert tag_owners() == {"bento-pdf": "flux", "peanut": "flux", "texbrain": "flux"}
+def test_the_live_owned_entries_are_the_ones_d2_to_d5_moved():
+    """D2.7, D3.6, D4.5 and D5.5 moved these six to Flux, and no other live entry carries `owner`."""
+    assert tag_owners() == {
+        "bento-pdf": "flux",
+        "gpu-exporter": "flux",
+        "nut-exporter": "flux",
+        "peanut": "flux",
+        "pihole-exporter": "flux",
+        "texbrain": "flux",
+    }

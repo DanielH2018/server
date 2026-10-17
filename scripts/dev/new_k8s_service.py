@@ -34,11 +34,12 @@ WHAT IT DOES NOT WRITE, deliberately:
 * No PVC, no Secret, no NetworkPolicy, no probes beyond the readiness/liveness pair on the
   service's own port. Each is a decision about the service, and a generated placeholder for a
   decision is the narration problem again in a new form.
-* No deploy. The role is not wired to anything until it is committed, and `deploy.sh` deploys
-  HEAD rather than the working tree.
+* No deploy. The entry is born `owner: flux` (D5.5), so no Ansible path applies the role:
+  `deploy.sh --tags <name>` exits 5, `--dry-run` included. Flux applies it once the PR merges
+  and `promote` publishes the next bundle.
 
-The output is meant to pass `prek run --all-files` and `./scripts/deploy.sh --tags <name>
---dry-run` with no hand edits; `scripts/dev/tests/test_new_k8s_service.py` renders it through
+The output is meant to pass `prek run --all-files` and the renderer's `cluster` render of the
+new tag with no hand edits; `scripts/dev/tests/test_new_k8s_service.py` renders it through
 the repo's own manifest validator to hold that.
 """
 
@@ -219,8 +220,12 @@ def entry_lines(name, port, hostname, auth_tier, route) -> str:
     derives the ordering edges from the templates and the entry, and gives each
     `K8S_APPLIES_LAST` role (netpol-baseline) an edge onto every other entry. An edge no
     template carries goes in `depends_on:` here, never in the position.
+
+    The entry carries `owner: flux` from D5.5 on, so a service added during D5 is born owned
+    by Flux and never needs a flip PR of its own
+    (docs/target-architecture/deploy/d5-bulk-move.md).
     """
-    lines = [f"  - name: {name}", "    platform: k8s"]
+    lines = [f"  - name: {name}", "    platform: k8s", "    owner: flux"]
     if route:
         lines.append(f'    hostname: "{hostname}"')
     lines.append(f"    port: {port}")
@@ -416,9 +421,10 @@ def main(argv=None) -> int:
     print(
         f"\nNext: fill the TODOs in {(role / 'CLAUDE.md').relative_to(REPO)}, then\n"
         f"  prek run --all-files\n"
-        f"  ./scripts/deploy.sh --tags {args.name} --dry-run\n"
-        f"A dry run does not prove a brand-new service: see the new-k8s-service skill for "
-        f"what it leaves uncovered.\n"
+        f"  uv run python scripts/renderer/homelab_render.py cluster --out out --role {args.name}\n"
+        f"The entry carries `owner: flux`, so deploy.sh refuses --tags {args.name} with exit 5, "
+        f"--dry-run included. Flux applies the role once the PR merges and `promote` "
+        f"publishes it: see the new-k8s-service skill.\n"
         f"Secrets and NetworkPolicies are not scaffolded. Add each as a template under "
         f"{(role / 'templates').relative_to(REPO)}; k8s/manifests renders every top-level "
         f"one, and a name containing `secret` renders 0600 under no_log. A PVC is a "

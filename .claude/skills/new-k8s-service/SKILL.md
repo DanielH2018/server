@@ -119,8 +119,11 @@ the sources it reads.
 ## 2. The inventory entry — ordering is automatic, position is not
 
 The scaffolder appends the entry to `containers_list` in
-`ansible/inventory/host_vars/daniel-box.yml` with `platform: k8s`, at the end of the list
-but ahead of netpol-baseline. netpol-baseline is ordered after every other entry, because it
+`ansible/inventory/host_vars/daniel-box.yml` with `platform: k8s` and `owner: flux`, at the end
+of the list but ahead of netpol-baseline. **The entry is born owned by Flux** (D5.5 of
+`docs/target-architecture/deploy/d5-bulk-move.md`): every Ansible path skips it from its first
+commit, so it never needs a flip PR. Delete the `owner` line only for a service that must stay
+on Ansible until D5 moves it, and say why in the comment above the entry. netpol-baseline is ordered after every other entry, because it
 is in `K8S_APPLIES_LAST`, and `test_derived_order_matches_todays_hand_ordered_list` holds the
 list to the sorted order. Otherwise, where in the list doesn't matter: the k8s play toposorts
 on `build_k8s_dep_map` / `toposort_containers` (`ansible/filter_plugins/toposort.py`), and
@@ -154,20 +157,28 @@ remove it live. Patch it out and verify.
 
 ## 4. Deploy
 
+**Flux applies the new role, not `deploy.sh`.** The entry carries `owner: flux`, so
+`./scripts/deploy.sh --tags "<name>"` exits 5 (`DEPLOY_FLUX_OWNED`), `--dry-run` included.
+To check the role before the merge, render it the way `promote` does:
+
 ```bash
-./scripts/deploy.sh --tags "<name>"
+uv run python scripts/renderer/homelab_render.py cluster --out out --role <name>
+uv run python scripts/deploy_tools/promote.py check-bundle out
 ```
 
-The `deploy` skill covers the wrapper's exit codes and the `--check` / `--dry-run` / `prek`
-split. Two limits specific to a *brand-new* service:
+Once the PR merges, `promote` publishes the next bundle and Flux applies the tag. Its
+*Publishing and promotion* and *Verification* sections in `docs/flux-deploy-plane.md` say
+what gates the apply. Two limits specific to a *brand-new* service:
 
-- `--dry-run` only half-checks it. Its `k8s_claims` are applied with `--dry-run=server`, which
-  validates the claim object and provisions nothing, and nothing at admission verifies that a
-  referenced PVC exists. So the Deployment validates while the volume is never proven
-  provisionable.
-- A green dry run says nothing about scheduling, PVC binding, probe or rollout behaviour.
-  Those need a real deploy, gated with
+- The render proves the manifests are well-formed, not that the cluster admits them. Nothing
+  before the merge verifies that a referenced PVC can be provisioned.
+- A clean render says nothing about scheduling, PVC binding, probe or rollout behaviour.
+  Those show only after Flux applies the tag. Gate it with
   `uv run python scripts/diagnostics/probe.py health <name>`.
+
+An entry with the `owner` line deleted deploys through `./scripts/deploy.sh --tags "<name>"`.
+The `deploy` skill covers that wrapper's exit codes and the `--check` / `--dry-run` / `prek`
+split, and the rest of this section applies to such an entry.
 
 **A role declaring `k8s_autodeploy: false` heals itself within two ticks, but you can render it
 now.** The deployer re-renders its own config.env when the baked denylist disagrees with the
