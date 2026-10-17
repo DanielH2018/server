@@ -8,4 +8,4 @@
 
 The `VERDICT:` line ends with one of 17 words: `settled`, `unhealthy`, `deploy-failed`, `nothing-to-deploy`, `blocked`, `needs-manual-apply`, `deferred`, `merge-conflict`, `pr-ci-red`, `merge-timeout`, `ci-red`, `ci-timeout`, `ci-unproven`, `lock-busy`, `tip-outran-retries`, `refused`, `handoff-timeout`.
 
-A `deploy-failed` verdict carries one of 16 causes in the landing annotation: `tick-held`, `tick-failed`, `host-lookup`, `tag-miss`, `playbook-failed`, `deploy-exit-1`, `deploy-exit-3`, `deploy-exit-4`, `deploy-exit-64`, `deploy-exit-76`, `deploy-exit-78`, `deploy-exit-79`, `deploy-exit-other`, `promote-held`, `promote-timeout`, `invalid-cause`.
+A `deploy-failed` verdict carries one of 17 causes in the landing annotation: `tick-held`, `tick-failed`, `host-lookup`, `tag-miss`, `playbook-failed`, `deploy-exit-1`, `deploy-exit-3`, `deploy-exit-4`, `deploy-exit-64`, `deploy-exit-76`, `deploy-exit-78`, `deploy-exit-79`, `deploy-exit-other`, `promote-held`, `promote-timeout`, `soak-failed`, `invalid-cause`.

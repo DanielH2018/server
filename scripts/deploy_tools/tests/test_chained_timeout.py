@@ -119,12 +119,15 @@ def test_a_derived_timeout_past_the_cap_gets_the_cap_and_verify_prints_failed(ca
 
 def _timeout_of_render(key_sets: dict[str, frozenset[str]]) -> int:
     """The derived timeout of a bundle the renderer writes for `peanut` at a 10m timeout,
-    with every Kustomization in it changed."""
+    with every Kustomization in it changed but `soak`.
+
+    `soak`'s timeout is the chain plus W, a parallel term that would hide the chain these
+    pairs test. The two soak tests above test that term.
+    """
     directories = {"peanut": {"kustomization.yaml": "resources: []\n"}}
     files = render_bundle(directories, key_sets, ["peanut"], "10m", "x=ENC[y]\n")
     docs = vp.flux_kustomizations({p: t.encode() for p, t in files.items()})
-    # `verify` expects no OBSERVE_ONLY name, so the soak's timeout is no part of its wait.
-    names = {d["metadata"]["name"] for d in docs} - vp.OBSERVE_ONLY
+    names = {d["metadata"]["name"] for d in docs} - {vp.SOAK}
     return ct.promote_timeout(docs, names)
 
 

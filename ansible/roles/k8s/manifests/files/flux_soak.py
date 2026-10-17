@@ -17,7 +17,9 @@ notification-controller posts as `flux/soak`. In order, it:
    a pod's first Ready, on a pod it cannot map or order, and on a critical or `verify="true"`
    alert activated after T0.
 
-A failure writes `failed-services: <service>,...` to the termination message and exits 1. Every
+A pass prints the services it judged, then one `event=deploy` logfmt line, the cluster's deploy
+annotation. A failure writes `failed-services: <service>,...` to the termination message and
+exits 1. Every
 connection goes through `flux_job_connect.open_url`, which the Job census requires, and the
 API server's CA reaches `urlopen` through `SSL_CERT_FILE`, which the Job sets.
 
@@ -135,7 +137,11 @@ class Scope:
 
 @dataclass
 class Verdict:
+    """The failures, and on a judged run the services judged and the seconds from T0 to W's end."""
+
     failures: list[tuple[str, str]] = field(default_factory=list)
+    judged: list[str] = field(default_factory=list)
+    window: float = 0.0
 
     def fail(self, service: str, why: str) -> None:
         self.failures.append((service, why))
@@ -483,6 +489,7 @@ def soak(reads: Reads, inputs: Inputs) -> Verdict:
     until = max(readies, default=t0) + wait_seconds(inputs, scope.services)
     if until > reads.clock():
         reads.sleep(until - reads.clock())
+    verdict.judged, verdict.window = sorted(scope.services), until - t0
     judge_pods(reads, inputs, scope, t0, before, verdict)
     judge_alerts(reads, scope, t0, verdict)
     return verdict
@@ -548,6 +555,18 @@ def main(argv: list[str] | None = None, reads: Reads | None = None) -> int:
         args.termination_log.write_text(f"error: {err}\n")
         return 1
     if not verdict.failures:
+        if verdict.judged:
+            # A judged pass names what it judged, so its log never reads like a missing one (#5419).
+            print(
+                f"soak: {inputs.revision[:8]} judged {', '.join(verdict.judged)} over "
+                f"{verdict.window:.0f}s; pass"
+            )
+        # The cluster's deploy annotation (D5.3b3): observability's
+        # `observability_flux_deploy_annotation_expr` reads this line from Loki.
+        print(
+            f"event=deploy services=flux sha={inputs.revision[:8]} result=ok source=flux",
+            flush=True,
+        )
         return 0
     for service, why in verdict.failures:
         print(f"soak: {service}: {why}", file=sys.stderr)

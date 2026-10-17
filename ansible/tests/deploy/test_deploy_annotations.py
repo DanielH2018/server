@@ -5,8 +5,9 @@ an annotation query that matches nothing exactly as it renders one with no deplo
 
     deploy.sh / gitops_deploy.py  --logger-->  syslog
     promote.py land-wait          --logger-->  syslog  (promote_lib/wait.py, flux_host.py)
+    the soak Job (flux_soak.py)   --stdout-->  its pod log, the cluster's annotation (D5.3b3)
     alloy                         --ships-->   loki-homelab
-    dashboards                    --query-->   that Loki, by datasource uid
+    dashboards                    --query-->   that Loki, by datasource uid, one query each
 
 So the things worth pinning are the joins, not the parts. A test that only checked "deploy.sh
 calls logger" would pass while the query looked for a different string.
@@ -36,6 +37,8 @@ _GITOPS = _REPO / "ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_i
 _PROMOTE = _REPO / "scripts/deploy_tools/promote_lib/wait.py"
 _FLUX_HOST = _REPO / "scripts/deploy_tools/flux_host.py"
 _EMITTERS = (_DEPLOY_PLAYBOOK, _GITOPS, _PROMOTE)
+# The soak Job prints the cluster's line, which a second query reads from its pod log.
+_SOAK = _REPO / "ansible/roles/k8s/manifests/files/flux_soak.py"
 
 
 def test_the_query_matches_what_the_deployers_actually_log():
@@ -218,4 +221,28 @@ def test_the_injector_writes_a_derived_tree_not_the_staged_one():
     assert src.group(1) != dest.group(1), (
         "src and dest must differ — an in-place edit makes the staging copy task and the "
         "injector overwrite each other on every deploy"
+    )
+
+
+def test_the_flux_query_matches_what_the_soak_job_prints():
+    """The second query's join: its line filter, its parsed field and its container."""
+    import inject_dashboard_annotations as inject
+    from renderer.renderer_lib import soak
+
+    expr = load_defaults(_ROLE)["observability_flux_deploy_annotation_expr"]
+    text = _SOAK.read_text()
+    literals = re.findall(r'\|=\s*"([^"]+)"', expr)
+    assert literals and all(literal in text for literal in literals), expr
+    field = re.fullmatch(
+        r"\{\{(\w+)\}\}", inject.build_annotation("x", expr)["textFormat"]
+    )
+    assert field and "logfmt" in expr and f"{field.group(1)}=" in text
+    assert f'container="{soak.SOAK}"' in expr and 'namespace="flux-system"' in expr
+
+
+def test_dashboards_pass_the_flux_query_as_the_second_annotation():
+    block = _DASHBOARDS_TASKS.read_text().split("Inject the deploy-annotation", 1)[1]
+    block = block.split("- name:", 1)[0]
+    assert (
+        "--flux-expr {{ observability_flux_deploy_annotation_expr | quote }}" in block
     )

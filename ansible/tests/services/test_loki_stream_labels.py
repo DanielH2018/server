@@ -150,15 +150,17 @@ def _loki_rule_exprs() -> dict[str, str]:
 
 
 def _consumers() -> dict[str, str]:
-    expr = load_yaml(_OBSERVABILITY / "defaults/main.yml")[
-        "observability_deploy_annotation_expr"
-    ]
+    defaults = load_yaml(_OBSERVABILITY / "defaults/main.yml")
+    annotations = (
+        "observability_deploy_annotation_expr",
+        "observability_flux_deploy_annotation_expr",
+    )
     return {
         **_monitor_bridge_selectors(),
         **_logql_constants(),
         **_dashboard_queries(),
         **_loki_rule_exprs(),
-        "observability_deploy_annotation_expr": expr,
+        **{name: defaults[name] for name in annotations},
     }
 
 
@@ -215,6 +217,7 @@ def test_the_consumer_census_finds_its_named_members():
         "logs.py SWALLOWED_VERDICTS_LOGQL",
         "alerts.py SYSLOG_ALERT_LOGQL",
         "observability_deploy_annotation_expr",
+        "observability_flux_deploy_annotation_expr",
         "homelab-logs.yaml LokiPodLogsSilent",
     ):
         assert name in consumers, f"{name} is no longer found, so it is unchecked"

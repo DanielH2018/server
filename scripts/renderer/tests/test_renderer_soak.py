@@ -226,31 +226,71 @@ def test_the_job_judges_r_from_a_pod_prometheus_admits(tmp_path):
     assert set(services) == set(TAGS)
 
 
-def test_the_rbac_reads_kustomizations_and_each_namespaces_pods_and_replicasets(
+def _grants(files: dict[str, str]) -> set[tuple[str, str, str, str]]:
+    """Each `(binding kind, namespace or "", resource, verb)` the `soak` ServiceAccount holds."""
+    docs = list(yaml_fast.safe_load_all(files["cluster/soak/rbac.yaml"]))
+    roles = {
+        (d["kind"], d["metadata"].get("namespace", "")): d["rules"]
+        for d in docs
+        if d["kind"] in ("Role", "ClusterRole")
+    }
+    found = set()
+    for binding in (d for d in docs if d["kind"].endswith("Binding")):
+        assert binding["subjects"] == [
+            {"kind": "ServiceAccount", "name": "soak", "namespace": "flux-system"}
+        ]
+        namespace = binding["metadata"].get("namespace", "")
+        for rule in roles[(binding["roleRef"]["kind"], namespace)]:
+            found |= {
+                (binding["kind"], namespace, resource, verb)
+                for resource in rule["resources"]
+                for verb in rule["verbs"]
+            }
+    return found
+
+
+def test_the_rbac_reads_kustomizations_and_every_namespaces_pods_and_replicasets(
     tmp_path,
 ):
     files = soak.soak_files(R1, TAGS, DIRECTORIES, rules=tmp_path)
-    roles = {
-        doc["metadata"]["namespace"]: doc["rules"]
-        for doc in yaml_fast.safe_load_all(files["cluster/soak/rbac.yaml"])
-        if doc["kind"] == "Role"
-    }
-    assert set(roles) == {"flux-system", "homelab", "media"}
-    granted = {
-        (ns, resource, verb)
-        for ns, rules in roles.items()
-        for rule in rules
-        for resource in rule["resources"]
-        for verb in rule["verbs"]
-    }
     assert {
-        ("flux-system", "kustomizations", "get"),
-        ("flux-system", "kustomizations", "list"),
-        ("flux-system", "ocirepositories", "get"),
-        ("media", "pods", "list"),
-        ("media", "replicasets", "get"),
-        ("homelab", "replicasets", "list"),
-    } <= granted
+        ("RoleBinding", "flux-system", "kustomizations", "get"),
+        ("RoleBinding", "flux-system", "kustomizations", "list"),
+        ("RoleBinding", "flux-system", "ocirepositories", "get"),
+        ("ClusterRoleBinding", "", "pods", "list"),
+        ("ClusterRoleBinding", "", "replicasets", "get"),
+        ("ClusterRoleBinding", "", "replicasets", "list"),
+    } <= _grants(files)
+
+
+def _namespaced_outside_flux_system(files: dict[str, str]) -> list[str]:
+    return [
+        f"{d['kind']}/{d['metadata']['namespace']}"
+        for d in yaml_fast.safe_load_all(files["cluster/soak/rbac.yaml"])
+        if d["metadata"].get("namespace", "flux-system") != "flux-system"
+    ]
+
+
+def test_no_rbac_object_needs_a_namespace_a_tag_creates(tmp_path):
+    """#5380: `soak` has no `dependsOn` edges, so Flux may apply it before the tag that
+    creates `media` on the tag's first revision, and a Role in `media` would fail the apply.
+
+    `sonarr-deferred` creates `media` with its own Namespace document, and the map still
+    scopes sonarr's pods to it.
+    """
+    files = soak.soak_files(R1, TAGS, DIRECTORIES, rules=tmp_path)
+    services = json.loads(
+        _doc(files, "cluster/soak/configmap.yaml")["data"]["services.json"]
+    )
+    assert services["sonarr"]["namespaces"] == ["media"]
+    assert _namespaced_outside_flux_system(files) == []
+
+
+def test_a_role_in_a_tags_namespace_is_what_the_check_refuses():
+    """The red half: D5.3b2's per-namespace render put a Role and a RoleBinding in `media`."""
+    role = {"kind": "Role", "metadata": {"name": "soak", "namespace": "media"}}
+    files = {"cluster/soak/rbac.yaml": yaml.safe_dump(role)}
+    assert _namespaced_outside_flux_system(files) == ["Role/media"]
 
 
 # -- drift against what the Job reads --------------------------------------------------------

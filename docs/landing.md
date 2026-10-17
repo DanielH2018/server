@@ -327,9 +327,19 @@ Instead it reads the cluster every 30 seconds:
   widens the wait to every Kustomization, and the progress line says so. `sha-<merge commit>`
   is usually not published when the wait starts, so the wait widens until it is.
 - **`settled`.** Every expected Kustomization is Ready, and its
-  `status.lastAppliedOriginRevision` names the merge commit or a commit that descends from it.
-  `land-wait` then writes one `deploy-annotation` line with `source=promote`, and the landing
-  goes on to the health gate for each `owner: flux` tag.
+  `status.lastAppliedOriginRevision` names the merge commit or a commit R that descends from
+  it. When the changed set holds `soak`, as it does whenever it holds a tag, R must also carry
+  a `flux/soak` `success`. The tags read Ready before the soak Job reaches a verdict, so
+  `land-wait` reads R's combined status with `gh` on each poll until the soak has one. No
+  status, or a `pending` one, keeps the wait going. `land-wait` then writes one
+  `deploy-annotation` line with `source=promote`, and the landing goes on to the health gate
+  for each `owner: flux` tag.
+- **`deploy-failed`, cause `soak-failed`.** R carries a `flux/soak` `failure` or `error`.
+  The wait ends at once rather than waiting for `verify` to write `DEPLOY_HOLD`. The line
+  prints the read-only command that names the services the soak failed:
+  `kubectl -n flux-system get pods -l app=soak -o jsonpath='{.items[*].status.containerStatuses[0].state.terminated.message}'`.
+  `verify` holds the same revision, and for a revision with no snapshot role resets `prod`
+  (`docs/volume-snapshot-drills.md`, *Choosing the branch*).
 - **`deploy-failed`, cause `promote-held`.** `DEPLOY_HOLD` holds a value other than `none`. The
   line names the held SHA and, for a `failed=` hold, the failed names. Clearing the hold is
   **operator-only**. `promote`'s `settle` job writes a `failed=` hold when a promotion fails
@@ -348,11 +358,13 @@ Instead it reads the cluster every 30 seconds:
   as `suspended-changed`, and the wait ends `deploy-failed`, cause `promote-held`
   (`docs/flux-deploy-plane.md`, *Stopping one service: `flux_suspend`*).
 - **`deferred`, cause `promote-timeout`, exit 75.** No promotion covered the merge commit
-  within twice the promote timeout (67 minutes,
-  `scripts/deploy_tools/promote_lib/wait.py:LAND_WAIT_TIMEOUT_S`). Look first at the
+  within twice the promote timeout (83 minutes,
+  `scripts/deploy_tools/promote_lib/wait.py:LAND_WAIT_TIMEOUT_S`), or within twice
+  `verify`'s wait on the listed `soak` Kustomization's `timeout`, whichever is later. The
+  soak's `timeout` grows with every flux-owned Kustomization. Look first at the
   `promote` workflow's failed `publish` jobs: a publish refusal leaves no `sha-<commit>` tag
   to promote. The next promotion may still cover the merge commit.
-  The 67 minutes count again from each poll that reads a verification of an earlier commit
+  The 83 minutes count again from each poll that reads a verification of an earlier commit
   in flight, for up to `wait.py:IN_FLIGHT_WAIT_S`. M's `decide` waits on that verification
   before it promotes M, so two merges minutes apart would otherwise give up on a promotion
   that passes later (#5164).
@@ -376,8 +388,9 @@ promotion, so it ends `land-wait` for a flux-owned tag and leaves an Ansible-own
 alone.
 
 `land-wait` reads the Kustomizations with the read-only `kubectl`, ancestry with
-`git merge-base --is-ancestor` in the primary checkout, and `DEPLOY_HOLD` with
-`gh variable get`. The last is one authenticated GitHub call per poll. A read that fails keeps
+`git merge-base --is-ancestor` in the primary checkout, `DEPLOY_HOLD` with
+`gh variable get`, and, once the tags have settled, R's `flux/soak` status. Each of the last
+two is one authenticated GitHub call per poll, at most 240 an hour. A read that fails keeps
 the wait going, and an unreadable Kustomization list never reads as `settled`.
 
 `land.sh` runs from the primary checkout wherever you invoke it. The deploy no longer depends on
