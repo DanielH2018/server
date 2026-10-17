@@ -29,4 +29,10 @@ HOST_INPUTS = (
     "ansible.cfg",
     "scripts/deploy_tools/render_targets.py",
     "scripts/secrets_mgmt/cluster_vars_check.py",
+    # Also past the plan's list, imported at load through `ansible/filter_plugins/` and
+    # `scripts/lib/`. A warm bytecode cache hid them, because the loader then opens only the
+    # untracked `.pyc`; the audit runs with none.
+    "ansible/roles/setup/common/files/host_lib.py",
+    "ansible/roles/setup/common/files/kuma_push.py",
+    "ansible/roles/setup/k3s/files/longhorn_lib/longhorn_backups.py",
 )

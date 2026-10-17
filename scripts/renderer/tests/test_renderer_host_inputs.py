@@ -4,7 +4,8 @@ One render of daniel-pi's package runs in `_host_inputs_child.py`, under an audi
 records every `open`. A tracked file it opened that falls under no member means a change to
 that file could alter a host package while the landing reads the PR as reaching no host.
 Untracked files are left out: a PR changes only tracked ones, and the render also opens
-`ansible.log`, the worktree's `.git` file and bytecode caches.
+`ansible.log` and the worktree's `.git` file. The child runs with no bytecode cache, so each
+import opens its tracked `.py` rather than an untracked `.pyc`.
 
 Run: uv run pytest scripts/renderer/tests/test_renderer_host_inputs.py
 """
@@ -59,11 +60,15 @@ def render(tmp_path_factory) -> dict:
     record = tmp / "record.json"
     spec = {"host": "daniel-pi", "out": str(tmp / "out"), "record": str(record)}
     result = run(
-        [sys.executable, str(CHILD), json.dumps(spec)],
+        # `-B` and an empty bytecode prefix make every import open its `.py`. With a warm
+        # `__pycache__` the loader opens only the `.pyc`, which is untracked, so no Python
+        # member's files would reach the audit.
+        [sys.executable, "-B", str(CHILD), json.dumps(spec)],
         cwd=REPO,
         env={
             **os.environ,
             "PYTHONPATH": str(SCRIPTS),
+            "PYTHONPYCACHEPREFIX": str(tmp / "pycache"),
             "ANSIBLE_LOCAL_TEMP": str(tmp / "ansible"),
         },
         timeout=120,
@@ -81,7 +86,10 @@ def test_every_tracked_file_a_host_render_opens_is_under_a_member_is_clean(
     render, tracked
 ):
     assert render["rc"] == 0
-    assert outside_inputs(render["opened"], tracked, HOST_INPUTS) == []
+    outside = outside_inputs(render["opened"], tracked, HOST_INPUTS)
+    assert not outside, (
+        f"opened by a host render, under no HOST_INPUTS member: {outside}"
+    )
 
 
 def test_the_render_opened_the_pi_package_spec(render):
@@ -97,6 +105,14 @@ def test_a_read_under_no_member_is_flagged(render, tracked):
     without_hosts = [m for m in HOST_INPUTS if m != "hosts/"]
 
     assert PI_SPEC in outside_inputs(render["opened"], tracked, without_hosts)
+
+
+def test_an_imported_module_under_no_member_is_flagged(render, tracked):
+    without_renderer = [m for m in HOST_INPUTS if m != "scripts/renderer/"]
+
+    assert "scripts/renderer/homelab_render.py" in outside_inputs(
+        render["opened"], tracked, without_renderer
+    )
 
 
 def test_host_inputs_names_the_secrets_file_and_the_shared_kuma_lib():
