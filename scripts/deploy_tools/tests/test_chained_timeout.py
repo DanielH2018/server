@@ -65,12 +65,15 @@ def test_a_changed_ancestor_adds_its_timeout():
     assert found == 20 * 60 + HOP + TEN_M + 20 * 60 + TAIL
 
 
-def test_eleven_uniform_changed_names_under_concurrent_five_add_three_rounds():
-    """Rounds and Graham's bound agree here. An unchanged larger timeout adds nothing."""
+def test_eleven_changed_names_with_one_longer_get_grahams_bound_not_three_rounds():
+    """t0's 15m among ten 10m names: 100m / 5 + 15m = 35m of queue, where three rounds of
+    15m gave 45m (#5482). An unchanged Kustomization with a larger timeout adds nothing."""
     names = [f"t{i}" for i in range(11)]
-    bundle = docs(*(ks(n) for n in names), ks("idle", timeout="50m"))
+    bundle = docs(
+        *(ks(n) for n in names[1:]), ks("t0", timeout="15m"), ks("idle", timeout="50m")
+    )
     found = ct.promote_timeout(bundle, set(names), concurrent=5)
-    assert found == TEN_M + 3 * TEN_M + TAIL
+    assert found == 15 * 60 + (10 * TEN_M // 5 + 15 * 60) + TAIL
 
 
 def test_a_uniform_bundle_keeps_rounds_times_the_largest():

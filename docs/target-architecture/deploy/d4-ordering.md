@@ -623,12 +623,15 @@ hop to every chain.
       defaults and tdarr's 3000 seconds sum to 100 minutes, and five hops add 2.5 minutes.
       The chain through sonarr and janitorr is shorter, about 74 minutes.
     - The changed set shrinks the expected set for a narrow revision, not for a broad one.
-      A revision that changes every importer of `workload-shell.yml.j2`, 48 roles, expects
-      those 48 plus netpol-baseline's two Kustomizations. At `--concurrent` 5 that is ten
-      rounds. With tdarr's 3000 seconds the only long `timeout` among 600-second defaults,
-      Graham's bound prices the queue at 49 × 600 / 5 + 3000 seconds, about 2.5 hours, and
-      the 102.5-minute chain brings the wait to about 4.2 hours. Each further long `timeout`
-      in the set adds its share, so such a revision can still reach the 5.5-hour cap. Open question 14 asks
+      A revision that changes every importer of `workload-shell.yml.j2` expects those roles
+      plus netpol-baseline's two Kustomizations. At `d5e174965` that is 49 roles and 51
+      names, so `--concurrent` 5 gives eleven rounds. Four of the roles set a longer
+      `timeout` than the 600-second default: tdarr 3000 seconds, valheim 1800, karakeep 1200
+      and prowlarr 780. The 51 `timeout`s sum to 34980 seconds. Rounds price the queue at
+      11 × 3000 seconds, which alone reaches the 5.5-hour cap. Graham's bound prices it at
+      (34980 − 3000) / 5 + 3000 seconds, about 2.6 hours. With the 102.5-minute chain the
+      wait is about 4.3 hours, under the cap. A further long `timeout` in the set adds a
+      fifth of itself, so a broader revision can still reach the cap. Open question 14 asks
       whether `verify` should hold one runner that long.
     - D5's `<tag>-snapshot` and `<tag>-verify` Kustomizations lengthen a path where they sit
       on it. `soak` sits on none, and its `timeout` is a floor of the wait.
