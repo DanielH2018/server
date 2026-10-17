@@ -55,8 +55,9 @@ groups:
       # The max by() drops the labels that change while an object stays unhealthy. A failing
       # Kustomization's Ready flips between False and Unknown on every retry, and a label change
       # starts a new series, which would restart the 15-minute hold each time. The
-      # OCIRepository arm names `homelab`, so the drill's verify-drill, which is meant to read
-      # Ready=False, never fires it. An absent `ready` label, before the first condition is
+      # OCIRepository arms name `homelab` and `last-good`, the base the soak Job diffs against,
+      # so a stalled base pages as the source does. Neither arm names the drill's verify-drill,
+      # which is meant to read Ready=False, so it never fires. An absent `ready` label, before the first condition is
       # written, also reads as not Ready.
       # last_over_time bridges a gap in kube-state-metrics' scrape. A failed scrape or a roll of
       # its pod stale-marks every series it exports, and an instant read would then return
@@ -79,6 +80,7 @@ groups:
             max by (customresource_kind, exported_namespace, name) (
               last_over_time(gotk_resource_info{customresource_kind="Kustomization", ready!="True"}[10m])
               or last_over_time(gotk_resource_info{customresource_kind="OCIRepository", name="homelab", ready!="True"}[10m])
+              or last_over_time(gotk_resource_info{customresource_kind="OCIRepository", name="last-good", ready!="True"}[10m])
             )
             unless on(customresource_kind, exported_namespace, name)
             gotk_resource_info{ready="True"}
