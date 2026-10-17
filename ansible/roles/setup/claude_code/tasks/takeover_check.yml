@@ -1,0 +1,114 @@
+---
+# The D5 flip pre-merge checks as one sudoers-granted wrapper (issue #5494). Imported from
+# main.yml. files/homelab-takeover-check.sh is the wrapper and the role's CLAUDE.md, "The
+# takeover check", has the grant, who gave it and how to take it back.
+#
+# Install order puts the grant last, so the sudoers line never names a command that is not yet
+# on disk. Removal runs the other way round: the grant first, then the wrapper, the flux copy
+# and the state directory.
+
+- name: Install the takeover check
+  when: claude_code_takeover_check_enabled
+  block:
+    - name: Create the takeover check's root-owned library directory
+      tags: [claude_code]
+      ansible.builtin.file:
+        path: "{{ claude_code_takeover_check_lib_dir }}"
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+      become: true
+
+    - name: Download the pinned flux CLI
+      tags: [claude_code]
+      # The same release and sha256 as the operator's chezmoi external for ~/.local/bin/flux.
+      # This copy is the one root executes, because the user can write ~/.local/bin/flux.
+      ansible.builtin.get_url:
+        url: "{{ claude_code_takeover_check_flux_url }}"
+        dest: "{{ claude_code_takeover_check_lib_dir }}/{{ claude_code_takeover_check_flux_url | basename }}"
+        checksum: "sha256:{{ claude_code_takeover_check_flux_sha256 }}"
+        owner: root
+        group: root
+        mode: "0644"
+      become: true
+      # A --check run on a host without the directory has nothing to download into yet.
+      ignore_errors: "{{ ansible_check_mode }}"
+
+    - name: Unpack the flux CLI
+      tags: [claude_code]
+      ansible.builtin.unarchive:
+        src: "{{ claude_code_takeover_check_lib_dir }}/{{ claude_code_takeover_check_flux_url | basename }}"
+        dest: "{{ claude_code_takeover_check_lib_dir }}"
+        remote_src: true
+        owner: root
+        group: root
+        mode: "0755"
+        creates: "{{ claude_code_takeover_check_lib_dir }}/flux"
+      become: true
+      ignore_errors: "{{ ansible_check_mode }}"
+
+    - name: Install the takeover check wrapper
+      tags: [claude_code]
+      ansible.builtin.copy:
+        src: homelab-takeover-check.sh
+        dest: "{{ claude_code_takeover_check_wrapper }}"
+        owner: root
+        group: root
+        mode: "0755"
+        validate: bash -n %s
+      become: true
+
+    - name: Create the takeover check's state directory
+      tags: [claude_code]
+      # 0711: the census runs as the user and has to reach its per-run input directory by name.
+      # Every label directory inside is 0700.
+      ansible.builtin.file:
+        path: "{{ claude_code_takeover_check_state_dir }}"
+        state: directory
+        owner: root
+        group: root
+        mode: "0711"
+      become: true
+
+    - name: Grant the takeover check to its users
+      tags: [claude_code]
+      ansible.builtin.template:
+        src: claude-takeover-check.sudoers.j2
+        dest: /etc/sudoers.d/claude-takeover-check
+        owner: root
+        group: root
+        mode: "0440"
+        validate: visudo -cf %s
+      become: true
+
+- name: Take the takeover check back
+  when: not claude_code_takeover_check_enabled
+  block:
+    - name: Remove the takeover check's sudoers grant
+      tags: [claude_code]
+      ansible.builtin.file:
+        path: /etc/sudoers.d/claude-takeover-check
+        state: absent
+      become: true
+
+    - name: Remove the takeover check wrapper
+      tags: [claude_code]
+      ansible.builtin.file:
+        path: "{{ claude_code_takeover_check_wrapper }}"
+        state: absent
+      become: true
+
+    - name: Remove the takeover check's flux copy
+      tags: [claude_code]
+      ansible.builtin.file:
+        path: "{{ claude_code_takeover_check_lib_dir }}"
+        state: absent
+      become: true
+
+    - name: Remove the takeover check's state directory
+      tags: [claude_code]
+      ansible.builtin.file:
+        path: "{{ claude_code_takeover_check_state_dir }}"
+        state: absent
+      become: true

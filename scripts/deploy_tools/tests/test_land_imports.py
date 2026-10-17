@@ -21,6 +21,7 @@ MODULES = frozenset(
         "tick",
         "deploy",
         "promotion",
+        "stale_retarget",
         "health_verdict",
         "pipeline",
         "detach",
@@ -68,7 +69,17 @@ ALLOWED = {
     "classify": {"landing", "outcome", "land_tags"},
     "ci": {"landing", "outcome"},
     "tick": {"landing", "outcome"},
-    "deploy": {"landing", "outcome", "ci", "tick", "land_platform", "promotion"},
+    "deploy": {
+        "landing",
+        "outcome",
+        "ci",
+        "tick",
+        "land_platform",
+        "promotion",
+        "stale_retarget",
+    },
+    # Step 5's answer to a stale `--at` run: the deploy callable is handed in, not imported.
+    "stale_retarget": {"landing", "outcome"},
     # The split before deploy.sh and the wait on promotion, a half of step 5 (D2.3). It reads
     # `land_tags.changes_cluster_vars`, the path rule for the cluster-vars wait (D3.4).
     "promotion": {"landing", "outcome", "land_tags"},

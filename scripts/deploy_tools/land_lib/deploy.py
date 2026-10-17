@@ -24,7 +24,7 @@ from lib.exit_codes import (
     DEPLOY_TAG_MISS,
 )
 from deploy_tools.land_lib import land_platform
-from deploy_tools.land_lib import ci, promotion, tick
+from deploy_tools.land_lib import ci, promotion, stale_retarget, tick
 from deploy_tools.land_lib.landing import Landing, TickState, retry_while_locked
 from deploy_tools.land_lib.outcome import (
     ABANDONED_WATCH_NOTE,
@@ -495,12 +495,18 @@ def _deploy_resolved(ln: Landing) -> None:
         ln.deployed_at = ln.merge_sha
     rc = deploy_with_lock_retry(ln, at=ln.deployed_at)
     if rc == DEPLOY_STALE and ln.deployed_at:
-        # DECIDED: exit 4 under `--at` means a commit MERGED AFTER this one reaches the same
-        # tags, and that newer landing owns the service. Deploying the merge commit anyway
-        # would revert their change; deploying the primary's HEAD would deploy a tree this
-        # landing never CI-gated. So this one falls back to the path it had before `--at`
-        # existed -- wait for the tick to fast-forward the primary onto the newest green
-        # commit, then deploy from there -- and the retry loop below is that path, unchanged.
+        rc = stale_retarget.retarget(ln, rc, deploy_with_lock_retry)
+    if rc == DEPLOY_STALE and ln.deployed_at:
+        # DECIDED: exit 4 under `--at` means a commit MERGED AFTER the deployed one reaches
+        # the same tags, and that newer landing owns the service. `stale_retarget.retarget`
+        # has already tried the newest green descendant: it contains this PR (nothing of
+        # anyone's is reverted), its master CI is green (a CI-gated tree), and the
+        # per-service lock still lets one deploy of a service run at a time. What still holds
+        # of the old reasoning: the primary's HEAD was never CI-gated, so it is no target.
+        # This arm is the path from before `--at` existed (the tick fast-forwards the
+        # primary, then deploy from there), reached when no green descendant exists or every
+        # retarget went stale; the retry loop below is that path, unchanged. Raising
+        # `stale_retries` only lengthens a race that cannot converge at this rate (#5486).
         say(
             f"a later commit reaches {ln.tags_csv}; falling back to the tick and the primary "
             "checkout"

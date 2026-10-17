@@ -601,6 +601,7 @@ exclude = "^(docs/assets/generated/|scripts/dev/pytest_shard_weights\\.json$|eva
 # the edit that usually breaks the row deletes a macro template, which `.j2` already gates.
 #
 # CI skips it on both `prek run` steps, because its `pytest` job runs the same twelve files.
+# The `static-ratchet-tests-*` siblings below carry the eleven more #5481 added.
 # That job's checkout is not shallow (`fetch-depth: 0`), so the ratchet's allowlist comparison
 # runs there too, against the merge base with origin/master (#4009). docs-refresh
 # stages scripts/dev/pytest_shard_weights.json, so this fires on that cron's commit, which
@@ -613,6 +614,101 @@ entry = "uv run --frozen pytest -q -p no:cacheprovider ansible/tests/repo/test_m
 language = "system"
 pass_filenames = false
 files = "(\\.py$|(^|/)CLAUDE\\.md$|^docs/facts\\.lock/|^scripts/dev/pytest_shard_weights\\.json$|^ansible/tests/repo/module_length_allowlist\\.txt$|^pyproject\\.toml$|^\\.github/workflows/[^/]+\\.yml$|^ansible/.*\\.(ya?ml|j2|ini)$|^ansible/roles/[^/]+/[^/]+/(templates|defaults|files)/|^(\\.claude/(skills|agents)|evals/cases)/.*\\.(md|json)$|\\.(pyc|so)$|(^|/)__pycache__/)"
+
+# Eleven more cheap ratchet and census modules, which failed 15 PR runs across 13 PRs between
+# 2026-10-15 and 2026-10-17 (#5481). They sit in sibling hooks rather than in the entry above,
+# so that each runs only on a commit that can change its verdict. Widening the gate above to
+# `renovate.json` or a planning doc would make those commits pay all twenty-three modules.
+# Each `files` gate is the data the tests read, plus the test module and its import closure
+# (scripts/tests/test_prek_files_cover_entry_imports.py), plus pyproject.toml and uv.lock,
+# which decide the pytest that runs them. None matches a path the docs-refresh or eval-run
+# crons commit.
+#
+# Cost, measured on daniel-server on 2026-10-17, one module at a time with `-n0`, each
+# including its ~0.4s interpreter start: lander deadlines 5.4s, the Renovate pair 3.5-4.0s
+# each, import direction 3.6s, checksum annotations 3.5s, tracked Python hazards 3.1s, prek
+# files 1.9s, exit codes 1.5s, shell `--help` 1.3s, the owner census 0.8s, probe health 0.4s.
+# That is 19s together, well above the issue's 7.5s estimate from recorded weights, because
+# each module's fixtures render or walk the tree. As hooks under `prek run <id> --all-files`,
+# at load average 3.3: `-python` 4.6s, `-owners` 0.9s, `-lander` 5.2s, `-checksum` 3.5s,
+# `-shell` 1.3s, `-renovate` 3.9s, against 27.6s for the hook above in the same run. The
+# gates keep a typical commit near budget: a `.py` commit outside scripts/lib/,
+# deploy_tools/ and renderer/, outside ansible/tests/_*.py and outside the k8s roles runs
+# `-python` and `-owners` alone, about 5.5s.
+#
+# `-n0` on the one-module hooks: pyproject.toml's `-n auto` spent longer bringing up xdist
+# workers than they take, and each worker repeats the module-scoped render (checksum 3.5s
+# against 4.3-5.0s, the Renovate pair 4.1-4.4s against 4.8-5.4s, back to back on 2026-10-17).
+# The `-python` hook keeps `-n auto`: its five modules spread across workers, 4.6s against
+# 12.3-13.6s with `-n0`.
+# CI skips all of them on both `prek run` steps, as it skips the hook above, because its
+# `pytest` job runs the same files. To commit past one, `SKIP=<its id> git commit`.
+
+# Six walks of the tracked Python, so any `.py` can change their verdict. test_exit_codes
+# also reads every scripts/*.sh exit contract, and test_prek_files_cover_entry_imports
+# reads prek.toml itself.
+[[repos.hooks]]
+id = "static-ratchet-tests-python"
+name = "Static ratchet tests over the tracked Python (import direction, exit codes, prek files, hazards, probe health)"
+entry = "uv run --frozen pytest -q -p no:cacheprovider scripts/tests/test_scripts_import_direction.py scripts/lib/tests/test_exit_codes.py scripts/tests/test_prek_files_cover_entry_imports.py ansible/tests/repo/test_tracked_python_hazards.py scripts/diagnostics/tests/test_probe_health_rolled.py"
+language = "system"
+pass_filenames = false
+files = "(\\.py$|^scripts/.*\\.sh$|^(prek\\.toml|pyproject\\.toml|uv\\.lock)$)"
+
+# D2's owner table, and the entry points it names: Python, `ansible/deploy.yml`, and the
+# setup-role templates and files that read which tags Flux owns.
+[[repos.hooks]]
+id = "static-ratchet-tests-owners"
+name = "D2 owner table matches the entry points that read tag ownership"
+entry = "uv run --frozen pytest -q -n0 -p no:cacheprovider ansible/tests/repo/test_owner_entry_points_census.py"
+language = "system"
+pass_filenames = false
+files = "(\\.py$|^docs/target-architecture/deploy/d2-first-leaf\\.md$|^ansible/deploy\\.yml$|^ansible/roles/setup/[^/]+/(templates|files)/|^(pyproject\\.toml|uv\\.lock)$)"
+
+# The lander deadlines: promote.yml's job timeouts, the land units' TimeoutStartSec in the
+# setup roles, the inventory's flux-owned tags, the k8s roles, and the land and render code
+# under scripts/. The k8s gate is every role's tasks, templates, defaults and files rather
+# than the soak's own inputs: the soak fixture renders every flux-owned role, and
+# test_no_published_tag_builds_an_image reads every role's tasks for an image-builder
+# include (`images.builder_roles`). So a k8s role edit pays this hook's ~5s.
+[[repos.hooks]]
+id = "static-ratchet-tests-lander"
+name = "Lander deadlines cover the soak"
+entry = "uv run --frozen pytest -q -n0 -p no:cacheprovider ansible/tests/setup/test_lander_deadlines_cover_the_soak.py"
+language = "system"
+pass_filenames = false
+files = "^(\\.github/workflows/promote\\.yml|ansible/inventory/.*|ansible/roles/setup/[^/]+/(templates|defaults)/.*|ansible/roles/k8s/[^/]+/(tasks|templates|defaults|files)/.*|scripts/(deploy_tools|renderer|lib)/.*\\.py|ansible/tests/(_[^/]+|setup/[^/]+)\\.py|pyproject\\.toml|uv\\.lock)$"
+
+# Every `checksum/<name>` a CLAUDE.md names, against the k8s roles' rendered manifests.
+[[repos.hooks]]
+id = "static-ratchet-tests-checksum"
+name = "Documented checksum annotations exist in the manifests"
+entry = "uv run --frozen pytest -q -n0 -p no:cacheprovider ansible/tests/k8s/test_checksum_annotations_documented.py"
+language = "system"
+pass_filenames = false
+files = "^(ansible/roles/k8s/.*|CLAUDE\\.md|ansible/(templates|filter_plugins)/.*|ansible/tests/(_[^/]+|k8s/test_checksum_annotations_documented)\\.py|scripts/(lib|renderer)/.*\\.py|pyproject\\.toml|uv\\.lock)$"
+
+# Every tracked `.sh` and rendered `*.sh.j2` answers `--help`.
+[[repos.hooks]]
+id = "static-ratchet-tests-shell"
+name = "Shell entry points answer --help"
+entry = "uv run --frozen pytest -q -n0 -p no:cacheprovider ansible/tests/repo/test_shell_entry_points_answer_help.py"
+language = "system"
+pass_filenames = false
+files = "(\\.sh(\\.j2)?$|^ansible/tests/(_[^/]+|repo/test_shell_entry_points_answer_help)\\.py$|^(pyproject\\.toml|uv\\.lock)$)"
+
+# The two Renovate-rule modules: renovate.json against the autodeploy denylist, which each
+# k8s role's `k8s_autodeploy` in its defaults and the filter plugin decide, and against who
+# owns each pin. Role defaults and the Dockerfile templates hold nearly every pin; a pin a
+# custom manager reads from a workflow, a task file or prek.toml reaches CI's `pytest` job
+# instead of this hook.
+[[repos.hooks]]
+id = "static-ratchet-tests-renovate"
+name = "Renovate rules carry the autodeploy denylist marker"
+entry = "uv run --frozen pytest -q -n0 -p no:cacheprovider ansible/tests/deploy/test_renovate_per_package_manual_rules_carry_the_denylist_marker.py ansible/tests/deploy/test_renovate_denylist_marker_reaches_the_pr_title.py"
+language = "system"
+pass_filenames = false
+files = "^(renovate\\.json|ansible/inventory/.*|ansible/roles/[^/]+/[^/]+/(defaults/.*|templates/Dockerfile[^/]*)|ansible/filter_plugins/k8s_autodeploy\\.py|ansible/tests/(_[^/]+|deploy/_autodeploy|deploy/test_renovate_[^/]+)\\.py|scripts/lib/.*\\.py|pyproject\\.toml|uv\\.lock)$"
 
 
 # The `hooks` key of .claude/settings.json is rendered from the `# gen-hooks:` block each file

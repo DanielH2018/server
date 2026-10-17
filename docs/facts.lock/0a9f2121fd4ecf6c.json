@@ -1,0 +1,14 @@
+{
+  "checksum": "19fc773741f19d8dd298396acbc77d9a53cd2b30ba49588d856a8180e7de95a4",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "ansible/roles/k8s/valheim/CLAUDE.md#At a glance",
+  "row": {
+    "atoms": {
+      "ansible/vars/cluster-vars.sops.env": "8c24a130c690763aef1567c818f7b90a44a3ec816552b84e3d4dde2b759654dd",
+      "docs/flux-deploy-plane.md": "807c3deb44c3178e7a6f9fc0bc398a3b748b95c468b14ce9b1b890c8684535d9",
+      "scripts/renderer/renderer_lib/images.py:ghcr_refs": "7f71afd8cebd89ff8e89e654db90b7bc266ebb6840203bca245b7a484e16a14f"
+    },
+    "python": "3.14",
+    "verified_sha": "7d8a1ecea"
+  }
+}

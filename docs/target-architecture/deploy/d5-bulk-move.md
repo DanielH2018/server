@@ -2166,6 +2166,12 @@ sizes its batch of roles against that projection.
   PVC's spec and for changed values. It leaves Secrets out, because D3.5 covered their
   managers. The agent's read-only ServiceAccount cannot run a dry-run write, and the
   substitution reads `homelab-cluster-vars`.
+- **The session runs both checks through the takeover check wrapper (#5494).** `sudo -n
+  /usr/local/sbin/homelab-takeover-check --label <pr> --render <dir> --src <dir> --tags <a,b>`
+  does the `flux diff`, or the server-side `kubectl diff` stand-in, and the census for each
+  tag, and prints object names, field paths and exit codes only. The operator no longer runs
+  a script per flip batch. The wrapper's limits are in the `setup/claude_code` role's
+  `CLAUDE.md`, *The takeover check*.
 - Both quote object names and field paths only, never values or diff hunks, because R2's
   baseline finds credentials in ConfigMaps too, and the repository is public.
 - For an own-window role (*Waves and windows*), the window it lands in.

@@ -1,14 +1,13 @@
 ---
-# Built in-cluster rather than pulled. The upstream image cannot run as a
+# Built rather than pulled. The upstream image cannot run as a
 # non-root uid — its entrypoint hardcodes /root, which is 0700 — so a one-layer image that chowns
 # HOME is what lets this workload drop root and its DAC_OVERRIDE. templates/Dockerfile.j2 carries
 # the evidence.
 #
 # The upstream DIGEST PIN lives in that Dockerfile's FROM line, which is where Renovate's
-# built-in dockerfile manager reads it. Built images carry automerge: false, so a digest PR is
-# applied by an operator rebuild (`./scripts/deploy.sh --tags terraria`) rather than by the
-# deployer applying a pin. That is a small difference here because k8s_autodeploy is false
-# below.
+# built-in dockerfile manager reads it. Built images carry automerge: false, so a person merges
+# the digest PR. Since D5.15 Flux applies this role: the merge moves the content tag, the
+# promote workflow's `images` job pushes it to GHCR, and the renderer points this ref there.
 terraria_k8s_image: "{{ k8s_registry_pull_host }}/terraria:{{ k8s_built_image_tags.get('terraria', 'latest') }}"
 
 # Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
