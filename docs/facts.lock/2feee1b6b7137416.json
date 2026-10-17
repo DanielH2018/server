@@ -1,0 +1,13 @@
+{
+  "checksum": "5251be3c6bb367dacf7b9b636d7fd2a5ff648be07874e3ac27eec1a9dc6ec647",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "ansible/roles/k8s/monitor-bridge/CLAUDE.md#Module layout — and the one rule that governs it",
+  "row": {
+    "atoms": {
+      "ansible/filter_plugins/py_table.py": "4b98d617829460acfed0f8f562ab6034df5f8d228687ed0396be9a91456c520a",
+      "ansible/tests/services/test_monitor_bridge_modules.py": "b1d9ab10dd3a24a919377790269995ccdeb773a6269daf2776abc3991ee55685"
+    },
+    "python": "3.14",
+    "verified_sha": "66e237c86"
+  }
+}

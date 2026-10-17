@@ -1,0 +1,12 @@
+{
+  "checksum": "0c2022d174342a39c5f4c5bcccb942a4263c2bd72158e561c7bed6796e502b23",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "ansible/roles/k8s/blackbox-exporter/CLAUDE.md#blackbox-exporter — HTTP probes of the ingress names, for Prometheus to scrape",
+  "row": {
+    "atoms": {
+      "docs/target-architecture/monitoring/m4-blackbox-ingress.md": "9801543adbf865bc66804029c04e6b8ac75e1cd61d09159c979806f4f389df38"
+    },
+    "python": "3.14",
+    "verified_sha": "58c34fe38"
+  }
+}

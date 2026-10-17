@@ -1,0 +1,13 @@
+{
+  "checksum": "bef67892923a9d1f19db001ce09b7fe5e659b8e7a95f3b45e57b07997ad06901",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "ansible/roles/setup/homelab_builder/CLAUDE.md#The teardown keeps the signing key",
+  "row": {
+    "atoms": {
+      "ansible/tests/setup/test_homelab_builder.py::test_the_teardown_never_names_the_signer_tree_is_clean": "c4e1596e4b529d8224a0563f6e150e0b5b4f39cb5f9e1b33db95e29dcc7d5126",
+      "docs/host-packages.md": "86b9cf9178023719fe89a9954ed609bf0e9f6512bb5382279d0c80e35d11ac86"
+    },
+    "python": "3.14",
+    "verified_sha": "6798e883f"
+  }
+}

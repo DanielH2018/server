@@ -1,0 +1,19 @@
+{
+  "checksum": "13eeb6b15a6f96f73622fc547b20a17a0b8e5f21cb253062b1fa5406813cd42c",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "ansible/roles/k8s/homepage/CLAUDE.md#Notable",
+  "row": {
+    "atoms": {
+      "ansible/filter_plugins/homepage_tiles.py": "81b0abf85cf3163280193fa22927cab08f3e5238c73cfaa521a6bd855cd0d3be",
+      "ansible/tests/k8s/_workload_property_rows.py": "9d4142206ef56b3b2ef303d8606ded96c8dccd9dadc247034e2ca7b21809eb17",
+      "ansible/tests/k8s/test_k8s_manifests_rbac.py": "7ccdcbbd6ffc59c49fc0b7186c93d22f297aba579abf1f0f7dbee830d3463f47",
+      "ansible/tests/services/test_homepage_block_label_overrides.py": "684fdd5e1e31c9f144ec3903b0cf5f9f1fb05b69d8f742bc88593dd1008860ae",
+      "ansible/tests/services/test_homepage_longhorn_widget_url.py": "a81bbfcddd8a0dd928dd7b8dadf878f77046516ec44821ac59aa56b1b18beb79",
+      "ansible/tests/services/test_homepage_tiles_filter.py": "a52d600fe319e172e2d1cc142e28253b854c9eaebcd4f79fdeaa7ac9b1e85ff5",
+      "ansible/tests/services/test_homepage_widget_urls_carry_no_credentials.py": "023ecafd04fc7bed1160d040e275acd5b95f03e42e135870258c92687981ac9b",
+      "docs/homepage-widgets-and-layout.md": "0da2508ad1486a3d74f0e8b68589ce984f30d53a5149273a297ff6cd8a9a3c78"
+    },
+    "python": "3.14",
+    "verified_sha": "cab79a38d"
+  }
+}

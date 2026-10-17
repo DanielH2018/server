@@ -1,0 +1,14 @@
+{
+  "checksum": "cbf5a416e29c7b7808cdacef8d05a7c532980ca9b4db3171a2d04d4f3caccc05",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "ansible/roles/k8s/prowlarr/CLAUDE.md#Notable",
+  "row": {
+    "atoms": {
+      "ansible/roles/k8s/prowlarr/defaults/main.yml:prowlarr_k8s_fs_disable_media": "b5bea41b6c623f7c09f1bf24dcae58ebab3c0cdd90ad966bc43a45b44867e12b",
+      "ansible/roles/k8s/prowlarr/defaults/main.yml:prowlarr_k8s_fs_mem_limit": "178f0500c96b189423a09b50e945fb7f25015b84bd753d30176d8f6215dbe9f5",
+      "ansible/roles/k8s/prowlarr/defaults/main.yml:prowlarr_k8s_fs_mem_request": "ca59077d6440bd5dc90ee9c004074062d92f88e9274e9f3dcde58892a9c038f0"
+    },
+    "python": "3.14",
+    "verified_sha": "b5930b871"
+  }
+}

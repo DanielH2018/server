@@ -1,0 +1,12 @@
+{
+  "checksum": "c60db85d016919ca4c569d1a50db13d3e56032f364dd8d23a115bfd1e3cb713a",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "ansible/roles/k8s/game-stats/CLAUDE.md#valheim-stats",
+  "row": {
+    "atoms": {
+      "docs/game-stats-internals.md": "7e3c07884f669383774693fc6d333b3a6f08479252e1dea206213ab1c5ae180d"
+    },
+    "python": "3.14",
+    "verified_sha": "fd34ae8eb"
+  }
+}

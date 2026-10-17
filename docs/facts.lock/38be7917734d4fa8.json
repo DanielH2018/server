@@ -1,0 +1,12 @@
+{
+  "checksum": "7aa3b7c464ff72ceb588e749439ea0122c959482c64fc78abe0123bb90274aa4",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "ansible/roles/k8s/uptime-kuma/CLAUDE.md#The status page's groups are synced by a CronJob, not by AutoKuma",
+  "row": {
+    "atoms": {
+      "ansible/roles/k8s/uptime-kuma/tests/test_status_page_groups.py::test_no_status_page_is_declared_as_an_autokuma_entity": "1d987fd7e0fdcd5af4622f563ef8e154b57adbff3f377e65d15217791ba174d5"
+    },
+    "python": "3.14",
+    "verified_sha": "fd34ae8eb"
+  }
+}

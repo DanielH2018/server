@@ -1,0 +1,13 @@
+{
+  "checksum": "eb9fcc04deb80d4adac7149ae87aa576ae921cca83f15ee5aaab80e4ebc664fb",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "ansible/roles/k8s/docs/CLAUDE.md#Born fenced",
+  "row": {
+    "atoms": {
+      "ansible/tests/k8s/test_netpol_baseline_labels.py": "881c8d283b0ce20a19091425be8d2622bd4ff2657087905a00c14f4a78c0a393",
+      "docs/networkpolicy-default-deny.md": "7d2fc85d9fbb2aa00b3ceba1c5340c2e3f0f40d8c6a9fd8e4f313418ac78387f"
+    },
+    "python": "3.14",
+    "verified_sha": "55862020d"
+  }
+}

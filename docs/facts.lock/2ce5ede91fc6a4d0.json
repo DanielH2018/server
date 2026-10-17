@@ -1,0 +1,12 @@
+{
+  "checksum": "af127db39d1cd0d8fdfe1f4850bcfefc4db2ff38d59d37f46aa10619c14f007a",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "ansible/roles/k8s/jellyfin/CLAUDE.md#jellyfin — the media server, and the fleet's only GPU workload",
+  "row": {
+    "atoms": {
+      "docs/jellyfin-plugins.md": "4b099b7d69846f771031a6b377b473eae0bb91592658a663c0d7eaacb4fa6d9d"
+    },
+    "python": "3.14",
+    "verified_sha": "fd34ae8eb"
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "checksum": "e43eaf687f0693a7f2e5178684e2f50f2c92959414bc12c68640be4eeff9c72d",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "ansible/roles/setup/docker_install/CLAUDE.md#docker_install — Docker Engine + Compose v2 + the Docker networks",
+  "row": {
+    "atoms": {
+      ".claude/rules/docker.md": "8839f30c2bb8ecf5ceba25d51372a061151efb5346c5eda0b5066503ef5be6a4",
+      "ansible/roles/setup/": "6f7efc309cb0d37f3fffb4e0590309e0b7f544ebc4ffb81512d51193d8aa062f",
+      "docs/docker-engine-pins-and-runtime.md": "c8c8a4425f4c79194324d061592d90bc2545310874955c8e3aa6b75a937c1e0f"
+    },
+    "python": "3.14",
+    "verified_sha": "bf3eae97b"
+  }
+}

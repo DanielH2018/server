@@ -1,0 +1,13 @@
+{
+  "checksum": "b2d860c1e4b6a52569696ffce8b4bd8743f6bd33c21736441353d27b7e08dea6",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "CLAUDE.md#Claude Tooling in This Repo (`.claude/`)",
+  "row": {
+    "atoms": {
+      "docs/claude-tooling.md": "9079fc6cd04120bc8f4b60e0464da1635f9000fc803657c56f03bf47a5374a9d",
+      "scripts/diagnostics/probe.py": "6a5c7e83e3af5c45f83dd13a9d5819a3f9b4473f56e53ac4dd338e5a241db2f6"
+    },
+    "python": "3.14",
+    "verified_sha": "55862020d"
+  }
+}

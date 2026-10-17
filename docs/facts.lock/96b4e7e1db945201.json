@@ -1,0 +1,12 @@
+{
+  "checksum": "bf48e22570ac910cc35fa06f71531ffb70ec1ac57342e44e0e136bd36f528372",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "ansible/roles/setup/gitops_deploy/CLAUDE.md#gitops_deploy — pull-based deploy on master change (every has_gitops host)",
+  "row": {
+    "atoms": {
+      "docs/gitops-pipeline.md": "60fc646704304a39c486cd25cee64f94e3b56d69d1b15076af2b9124a4d00c18"
+    },
+    "python": "3.14",
+    "verified_sha": "55862020d"
+  }
+}

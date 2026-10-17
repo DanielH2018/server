@@ -1,0 +1,12 @@
+{
+  "checksum": "265bdaf791d507bcb29a6d90457f0e5ab7e765f0db3a82d1f0e95822815c0940",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "ansible/roles/k8s/authelia/CLAUDE.md#Access control comes from containers_list",
+  "row": {
+    "atoms": {
+      "ansible/tests/services/test_authelia_access_tiers.py": "30ca87be3382543c38331450efc91968b7f830b95c26d52b1dd2fee681d3f08c"
+    },
+    "python": "3.14",
+    "verified_sha": "55862020d"
+  }
+}

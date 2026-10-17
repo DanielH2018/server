@@ -1,0 +1,13 @@
+{
+  "checksum": "0f177a11f972a7f8e5f6e30b4bf9b85264be6c4b900198cc786123c200478a53",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "ansible/roles/k8s/manifests/CLAUDE.md#manifests — the shared render → apply → queue cycle for every k3s workload",
+  "row": {
+    "atoms": {
+      "ansible/roles/k8s/": "0932085c67a0b0e993697b3e5d4793417ffcefbed6368bf10c4149392355a76d",
+      "docs/k8s-manifest-cycle-record.md": "22732131bb0284c8c4d837f93726c6a523e75769f72129ba256bdf7618a9b1dc"
+    },
+    "python": "3.14",
+    "verified_sha": "a325ca51f"
+  }
+}

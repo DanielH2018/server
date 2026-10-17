@@ -1,0 +1,12 @@
+{
+  "checksum": "814b2ee1fe4803e46d6e563fa7cc96360a742ed255135b4b2ab7767986df7c5a",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "ansible/roles/k8s/autofix-bridge/CLAUDE.md#Two actuator planes (the load-bearing design point — don't merge them)",
+  "row": {
+    "atoms": {
+      "docs/autofix-bridge-actuators.md": "c280f1c82fa09fa08706a54f6c289260ae9ed11718400671fb5ddad30ec35b7b"
+    },
+    "python": "3.14",
+    "verified_sha": "da83cba28"
+  }
+}

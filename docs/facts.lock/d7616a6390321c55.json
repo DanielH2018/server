@@ -1,0 +1,12 @@
+{
+  "checksum": "585eda8dc4f52d7741a0169b37a461080c4a4a93dd0c0b2067bda96f7dec645a",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "ansible/roles/setup/chezmoi_setup/CLAUDE.md#At a glance",
+  "row": {
+    "atoms": {
+      "ansible/tests/setup/test_chezmoi_setup_seed.py::test_the_operator_seed_answers_every_prompt_the_agent_seed_answers": "e6b9798c062e648d5b0df73f45a36e9c35473b9abb56869a788cbaf1346ad415"
+    },
+    "python": "3.14",
+    "verified_sha": "943faa506"
+  }
+}

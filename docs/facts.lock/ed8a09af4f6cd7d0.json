@@ -1,0 +1,12 @@
+{
+  "checksum": "cf4f150a5232c444087b552cd618601fb2647396f600f33fadfe496a4b73a8ea",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "ansible/roles/setup/claude_code/CLAUDE.md#`setup/claude_code` — Claude Code install + the Remote Control host",
+  "row": {
+    "atoms": {
+      "docs/claude-code-rc-caps.md": "2d515326fa8d32d682265f2a3e8361c3bd241b199b3810fcec388c2b120e8245"
+    },
+    "python": "3.14",
+    "verified_sha": "fd34ae8eb"
+  }
+}

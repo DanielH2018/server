@@ -1,0 +1,12 @@
+{
+  "checksum": "4723498ef102dbca16cf4e1540745b482c5dfab62ada16402ce7f0e87f7fa847",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "ansible/roles/k8s/scrutiny/CLAUDE.md#At a glance",
+  "row": {
+    "atoms": {
+      "ansible/inventory/host_vars/daniel-box.yml": "3ed34cd7aaa115d84ea089e1eaef3824d4b0b6d6cf98c7f84ab8d731c368c670"
+    },
+    "python": "3.14",
+    "verified_sha": "2e96e8a4e"
+  }
+}

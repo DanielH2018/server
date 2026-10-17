@@ -52,7 +52,7 @@ def test_new_citation_after_verify_is_out(tmp_path, capsys):
 def test_verify_then_status_is_clean(tmp_path, capsys):
     repo = _repo(tmp_path)
     assert main(["verify", "--repo", str(repo), "CLAUDE.md#Gate"]) == 0
-    assert (repo / "docs" / "facts.lock").is_file()
+    assert (repo / "docs" / "facts.lock").is_dir()
     assert main(["status", "--repo", str(repo)]) == 0
     assert "IN  CLAUDE.md#Gate" in capsys.readouterr().out
 

@@ -1,0 +1,12 @@
+{
+  "checksum": "cb64a8aac0565161b0fe61fcd5fdb115cd98ca3a8e554b74c398b3c6a2e5b1a0",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "ansible/roles/k8s/scrutiny/CLAUDE.md#Notable",
+  "row": {
+    "atoms": {
+      "ansible/tests/services/test_scrutiny_influxdb_policy.py": "a26e9239d05ad78f4f0f8b79916a823d222a54e7d2e29a67770947ebc7faf623"
+    },
+    "python": "3.14",
+    "verified_sha": "55862020d"
+  }
+}

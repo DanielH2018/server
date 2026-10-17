@@ -1,0 +1,12 @@
+{
+  "checksum": "4bc3779667ace7edf85970fee4cda704839c6d33f5adbbee0e3a503d2a309151",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "ansible/roles/k8s/n8n/CLAUDE.md#Every digest bump appends a row to `base-pin-history.tsv`",
+  "row": {
+    "atoms": {
+      "scripts/tests/test_renovate_dockerfiles.py": "e3d4a087371f7084600ac959facd1d7a5f8cf04ddcb3d2543e2b780ae3306267"
+    },
+    "python": "3.14",
+    "verified_sha": "9c98af1a2"
+  }
+}
