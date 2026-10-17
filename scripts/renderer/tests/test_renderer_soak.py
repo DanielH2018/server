@@ -260,6 +260,12 @@ def test_the_revision_defaults_to_the_checkouts_head():
     assert soak.resolve_revision(R1) == R1
 
 
+def test_the_revision_env_var_is_read_after_the_flag_and_before_head(monkeypatch):
+    monkeypatch.setenv("HOMELAB_RENDER_REVISION", "0" * 40)
+    assert soak.resolve_revision(R1) == R1
+    assert soak.resolve_revision(None) == "0" * 40
+
+
 @pytest.mark.parametrize("given", ["nothex", "a" * 39, "A" * 40])
 def test_a_revision_that_is_not_40_lowercase_hex_is_refused(given):
     with pytest.raises(ValueError, match="40-hex"):

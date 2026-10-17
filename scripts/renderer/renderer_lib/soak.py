@@ -36,6 +36,7 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 _sys.path.insert(1, str(_Path(__file__).resolve().parents[2] / "deploy_tools"))
 
 import json
+import os
 import re
 import subprocess
 from collections.abc import Iterable, Mapping
@@ -98,7 +99,14 @@ def resolve_revision(given: str | None, repo: Path = REPO) -> str:
         ValueError: `given` is not 40 hex characters, or git fails or prints anything else.
     """
     try:
-        found = given or git_stdout("rev-parse", "HEAD", cwd=repo)
+        # Set only by cross_plane_order.snapshot(): a snapshot is an extracted tree with no
+        # version-control metadata, and it may be rendered by an older renderer that has no
+        # --revision flag to pass. The publish path sets neither, so it stays on HEAD.
+        found = (
+            given
+            or os.getenv("HOMELAB_RENDER_REVISION")
+            or git_stdout("rev-parse", "HEAD", cwd=repo)
+        )
     except (OSError, subprocess.CalledProcessError) as exc:
         raise ValueError(f"git rev-parse HEAD failed: {exc}") from exc
     if not _SHA.fullmatch(found):
