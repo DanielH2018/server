@@ -15,6 +15,9 @@ _sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from fanout_lib.target import SERVER
 
 MANIFEST_DIR = Path.home() / ".claude" / "fanout"
+# Where `retire` moves a run whose every batch is removed. A subdirectory, so the
+# non-recursive `*.json` globs (`all_runs`, the SessionStart banner) never list it.
+RETIRED = "retired"
 
 
 @dataclass(frozen=True)
@@ -68,6 +71,36 @@ def path(run_id: str, root: Path = MANIFEST_DIR) -> Path:
     return root / f"{run_id}.json"
 
 
+def retired_path(run_id: str, root: Path = MANIFEST_DIR) -> Path:
+    """Where `retire` moves `run_id`'s manifest, and where `load` looks second."""
+    return root / RETIRED / f"{run_id}.json"
+
+
+def exists(run_id: str, root: Path = MANIFEST_DIR) -> bool:
+    """Whether `load` finds `run_id`, as a live run or a retired one."""
+    return path(run_id, root).exists() or retired_path(run_id, root).exists()
+
+
+def retire(run_id: str, root: Path = MANIFEST_DIR, replace=os.replace) -> None:
+    """Move a run whose every batch carries `removed_at` out of the live set.
+
+    `clean` and `abandon` call this instead of deleting the file. A deleted manifest made a
+    live `cc-wait fanout` watch on the run fail every read with "no fan-out run", and that
+    watch then stopped reporting the other runs it named (#4907). A retired run still loads,
+    so `status` reports each batch as `cleaned` and the watch ends `finished`. Every reader of
+    the live set sees what it saw after a deletion, because none of them looks in `RETIRED`.
+
+    A run already retired has no live file, and the call is a no-op: `clean` reaches it again
+    on a second pass over a run it finished earlier.
+    """
+    retired = retired_path(run_id, root)
+    retired.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        replace(path(run_id, root), retired)
+    except FileNotFoundError:
+        return
+
+
 def save(m: Manifest, root: Path = MANIFEST_DIR, replace=os.replace) -> Path:
     """Write the manifest as `<root>/<run_id>.json`, creating `root` if needed.
 
@@ -103,12 +136,22 @@ def load(run_id: str, root: Path = MANIFEST_DIR) -> Manifest:
     """Read back the manifest written by `save` for `run_id`.
 
     A batch written before `removed_at` existed simply lacks the key, and takes the field's
-    default — so a run launched by an older build still cleans.
+    default — so a run launched by an older build still cleans. A run `retire` moved is read
+    from `RETIRED` when no live file exists. The read is tried rather than checked first,
+    because `os.replace` makes the retired file appear as the live one disappears.
 
     Raises:
-        FileNotFoundError: no manifest for `run_id` under `root`.
+        FileNotFoundError: no manifest for `run_id` under `root`, live or retired. The error
+            names the live path, so a mistyped run id reads as it always did.
     """
-    data = json.loads(path(run_id, root).read_text())
+    try:
+        text = path(run_id, root).read_text()
+    except FileNotFoundError as missing:
+        try:
+            text = retired_path(run_id, root).read_text()
+        except FileNotFoundError:
+            raise missing from None
+    data = json.loads(text)
     return Manifest(
         data["run_id"],
         data["orchestrator_branch"],
