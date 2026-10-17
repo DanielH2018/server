@@ -139,8 +139,8 @@ def test_the_batch_loop_skips_owned_entries_that_templates_still_see():
         "seeing a service Flux applies"
     )
     # bento-pdf has carried `owner: flux` since D2.7, peanut since D3.6, texbrain since D4.5,
-    # the three Wave A exporters since D5.5, and deploy-ui, littlelink and longhorn-ui since
-    # D5.6, so the live list holds owned entries too.
+    # the three Wave A exporters since D5.5, deploy-ui, littlelink and longhorn-ui since D5.6,
+    # and homepage and node-exporter since D5.7, so the live list holds owned entries too.
     owned = {"fixture-flux", "fixture-released"} | {
         c["name"] for c in live if "owner" in c
     }
@@ -148,8 +148,10 @@ def test_the_batch_loop_skips_owned_entries_that_templates_still_see():
         "bento-pdf",
         "deploy-ui",
         "gpu-exporter",
+        "homepage",
         "littlelink",
         "longhorn-ui",
+        "node-exporter",
         "nut-exporter",
         "peanut",
         "pihole-exporter",

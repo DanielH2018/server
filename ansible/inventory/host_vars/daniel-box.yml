@@ -503,6 +503,10 @@ containers_list:
     # hostAliases.
   - name: homepage
     platform: k8s
+    # Flux applies homepage through `promote`, and substitutes its config Secret from
+    # homelab-cluster-vars (D5.7). The handback is two PRs, `owner: released` then removing
+    # `owner`: docs/flux-deploy-plane.md.
+    owner: flux
     hostname: "homepage"
     port: 3000
     use_authelia: true
@@ -858,6 +862,9 @@ containers_list:
   # Host metrics for BOTH nodes.
   - name: node-exporter
     platform: k8s
+    # Flux applies node-exporter through `promote`, and every Ansible path skips it (D5.7). The
+    # handback is two PRs, `owner: released` then removing `owner`: docs/flux-deploy-plane.md.
+    owner: flux
   - name: autofix-bridge
     platform: k8s
   # The NUT primary (upsd + usbhid-ups + upsmon). The pod is pinned to daniel-server, the
