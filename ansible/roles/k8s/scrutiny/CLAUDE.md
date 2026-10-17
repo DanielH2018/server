@@ -31,8 +31,7 @@ SMART trend history. See repo-root `CLAUDE.md` for shared conventions.
 - **The rolling branch tags** are `master-web` and `master-collector`.
 - **Renovate does not automerge its image bumps** (`k8s_autodeploy: false`). The images ride
   rolling branch tags on a stateful monitor, and the InfluxDB and web Deployments are
-  `Recreate` with RWO claims, so a bump that rolls either lands in a window (D5's *The
-  window*).
+  `Recreate` with RWO claims, so a bump that rolls either takes the UI and API down briefly.
 - **Flux applies it, not Ansible** (D5.8, Wave A'). Its `containers_list` entry carries
   `owner: flux`, so `deploy.sh`, the play and the GitOps deployer all skip it, and a merged
   change reaches the cluster when `promote` publishes and verifies the next bundle. Its
@@ -77,7 +76,7 @@ SMART trend history. See repo-root `CLAUDE.md` for shared conventions.
 - The images are pinned by digest on a **rolling tag**, matching the retired Docker
   copy's policy: Renovate can raise a digest PR for a new commit on the same tag, but
   cannot move the tag itself. A tag move stays a deliberate, supervised change: its PR is
-  reviewed and merged by hand, and `promote` applies it in a window.
+  reviewed and merged by hand, and `promote` applies it.
 - The collector runs on its own cron (`scrutiny_k8s_collector_cron`, daily at
   midnight), pinned because monitor-bridge's SMART-freshness check has a fixed window
   and must not depend on the image's own default schedule.

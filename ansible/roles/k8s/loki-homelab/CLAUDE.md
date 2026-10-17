@@ -26,7 +26,8 @@ separate from the `observability` Loki (decision KL1, `docs/archive/.../slice-7-
   Ansible, follow the two-PR handback in `docs/flux-deploy-plane.md`; a plain revert of the
   flag leaves two writers on the objects. traefik stays Ansible-owned, so the Kustomization
   records it in its `homelab/ansible-owned-deps` annotation, not in `dependsOn`. The Loki
-  Deployment is `Recreate`, so a change that rolls it lands in a window (D5's *The window*).
+  Deployment is `Recreate`, so a change that rolls it takes log queries, pushes and the ruler
+  down briefly.
 - **Where the task went.** `tasks/main.yml` holds one task, the include of `k8s/manifests`,
   and no Flux path runs it. It stays for the handback. Its `manifests_rollout: loki-homelab`
   and the `alloy` entry in `manifests_extra_rollouts` named the two workloads for the

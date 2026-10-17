@@ -51,8 +51,8 @@ directory, so the library mount is an `emptyDir`.
   (#3388) did under Ansible. The gate is in the list rather than the template because the
   prune's labelling wrapper refuses a template that renders no document.
 - **`Recreate` strategy**, not rolling: the data PVC is RWO on a single Longhorn replica, and
-  SQLite wants one writer. Once it has a pod, a change that rolls it lands in a window (D5's
-  *The window*).
+  SQLite wants one writer. Once it has a pod, a change that rolls it takes the service down
+  briefly.
 
 ## Bringing it back
 Set `navidrome_k8s_replicas: 1`, point `navidrome_k8s_music_dir` at a real library on the
