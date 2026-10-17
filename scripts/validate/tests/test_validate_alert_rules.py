@@ -256,7 +256,6 @@ def test_the_tree_rules_meet_every_convention_is_clean():
         "ingress-probes",
         "host-checks",
         "deploy-pipeline",
-        "health-gate-drill",
     ]
     assert keys == {
         "alerting-meta.yaml",
@@ -267,7 +266,6 @@ def test_the_tree_rules_meet_every_convention_is_clean():
         "ingress-probes.yaml",
         "host-checks.yaml",
         "deploy-pipeline.yaml",
-        "health-gate-drill.yaml",
     }
     doc = yaml_fast.safe_load(
         (alert_rules.RULES_DIR / "alerting-meta.yaml").read_text()
