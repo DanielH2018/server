@@ -185,6 +185,24 @@ def classify(result: dict, timed_out: bool) -> str:
     return "inconclusive"
 
 
+def stop_reason(result: dict, timed_out: bool) -> str:
+    """Why a run produced no diagnosis, in the session's own words; empty when it did.
+
+    A failed session still prints its error as `result` (2026-10-17's drill: "Not logged in ·
+    Please run /login", status 401), and a report that only says `failed` sends the operator
+    to reproduce the run by hand to read it.
+    """
+    if timed_out:
+        return "the session ran past the run's wall clock and was stopped"
+    if isinstance(result.get("structured_output"), dict) and not result.get("is_error"):
+        return ""
+    if not result:
+        return "the session printed no JSON; the unit's journal has its stderr"
+    status = result.get("api_error_status")
+    text = str(result.get("result") or result.get("subtype") or "no reason given")
+    return f"{text} (API status {status})" if status else text
+
+
 def _e(value: object) -> str:
     return html.escape(str(value if value is not None else ""), quote=True)
 
@@ -226,6 +244,7 @@ table{{border-collapse:collapse;width:100%}} th,td{{border:1px solid var(--s1);p
 <h1>Triage: {_e(monitor)}</h1>
 <p><span class="chip {_e(record["state"])}">{_e(record["state"])}</span>
  confidence {_e(found.get("confidence", "n/a"))} · ${_e(record.get("cost_usd"))} · {_e(record.get("duration_s"))} s</p>
+{f"<h2>Why it stopped</h2><pre>{_e(record['error'])}</pre>" if record.get("error") else ""}
 <h2>Summary</h2><p>{_e(found.get("summary", "The session returned no diagnosis."))}</p>
 <h2>Root cause</h2><p>{_e(found.get("root_cause", ""))}</p>
 <h2>Evidence</h2><table><tr><th>Source</th><th>Finding</th></tr>{rows}</table>
@@ -295,6 +314,7 @@ def main(
         "episode": episode,
         "state": state,
         "diagnosis": found if isinstance(found, dict) else None,
+        "error": stop_reason(result, timed_out),
         "session_id": result.get("session_id"),
         "subtype": "timeout" if timed_out else result.get("subtype"),
         "cost_usd": result.get("total_cost_usd"),
@@ -304,6 +324,8 @@ def main(
         "finished": finished,
         "report": f"{cfg.get('REPORT_BASE_URL', '')}triage-{episode_id}.html",
     }
+    if record["error"]:
+        log(f"episode {episode_id}: {record['error']}")
     os.makedirs(os.path.join(state_dir, "runs"), exist_ok=True)
     atomic_write(
         os.path.join(state_dir, "runs", f"{episode_id}.json"),
