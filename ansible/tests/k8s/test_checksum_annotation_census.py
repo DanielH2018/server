@@ -94,7 +94,6 @@ CENSUS = sorted(from_file_configmap_roles())
 # role renamed) must fail loudly here rather than silently emptying CENSUS and passing the
 # parametrized check below on zero cases.
 KNOWN_FLOOR = {
-    "autofix-bridge",
     "observability",
     "game-stats",
     "monitor-bridge",

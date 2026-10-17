@@ -1,0 +1,29 @@
+{#
+  The bridge's Python modules, one flat key per autofix_bridge_modules entry, which the
+  Deployment mounts back at each entry's `path` under /app.
+
+  Rendered here rather than staged on the node and applied by a task (D5's imperative-ConfigMap
+  row), so the ConfigMap is part of this role's manifests: under Ansible a module edit changes
+  the render and the shared role's rollout restart rolls the pod; under Flux the renderer's
+  `checksum/restart` hashes this ConfigMap into the Deployment's pod template.
+  scripts/renderer/tests/test_renderer_autofix_bridge_script.py holds both halves.
+
+  The modules live in files/ and in two other roles, never in templates/, because
+  validate/k8s_manifests.py renders every *.j2 under templates/ as a manifest. `lookup('file')`
+  strips trailing whitespace, and the `|` block puts back exactly one newline, so each key
+  equals its source file's bytes.
+
+  Keep comments at column 0 and above the document: an indented comment between two keys would
+  land inside the preceding block scalar.
+#}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: autofix-bridge-script
+  namespace: {{ k8s_namespace }}
+data:
+{% for item in autofix_bridge_modules %}
+  {{ item.name }}: |
+{{ lookup('file', item.src) | indent(4, true) }}
+{% endfor %}

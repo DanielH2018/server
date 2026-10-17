@@ -41,7 +41,6 @@ _CONTEXT_DATA = (
 # set them, as the tasks file and the fact. `game_stats_lib_checksum` feeds both game
 # checksums and no template reads it.
 SET_FACTS = {
-    "autofix-bridge": (("main.yml", "autofix_bridge_script_checksum"),),
     "game-stats": (
         ("stage.yml", "game_stats_lib_checksum"),
         ("terraria.yml", "game_stats_terraria_script_checksum"),
@@ -58,7 +57,6 @@ TASK_COMPUTED = frozenset(
     {
         BUILT_IMAGE_TAGS,
         "monitor_bridge_script_checksum",
-        "autofix_bridge_script_checksum",
         "game_stats_terraria_script_checksum",
         "game_stats_valheim_script_checksum",
         "kuma_declarations",

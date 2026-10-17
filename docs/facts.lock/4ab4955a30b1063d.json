@@ -1,13 +1,15 @@
 {
-  "checksum": "0234f5f1a7ce6da476da94988b6701374daefc79268f404df351f50a2cc7a5b9",
+  "checksum": "02618117d1754cfcb134f23a8d6529bf6b61cec2b3ff4f7aff8d67203a8c83dc",
   "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
   "key": "ansible/roles/k8s/autofix-bridge/CLAUDE.md#Editing & testing",
   "row": {
     "atoms": {
       "ansible/roles/setup/fake_remux/files/": "19aa294e1bbacfd22b696e3b6a3fe8edc485540ea0b8418cbef300b4f464324d",
-      "docs/autofix-bridge-actuators.md": "c280f1c82fa09fa08706a54f6c289260ae9ed11718400671fb5ddad30ec35b7b"
+      "docs/autofix-bridge-actuators.md": "c280f1c82fa09fa08706a54f6c289260ae9ed11718400671fb5ddad30ec35b7b",
+      "scripts/renderer/renderer_lib/restart.py": "b331d41dae536f3934ebb79237271891eab11638dba5103a0271331fd42eb8d4",
+      "scripts/renderer/tests/test_renderer_autofix_bridge_script.py": "7b1a54202b459259afec507b82eddc8eadd3dfa77c7dfea8287fde84fdf8db28"
     },
     "python": "3.14",
-    "verified_sha": "eaffe7ef8"
+    "verified_sha": "7d8a1ecea"
   }
 }
