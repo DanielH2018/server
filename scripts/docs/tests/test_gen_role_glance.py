@@ -343,8 +343,11 @@ def _copy_role(name: str, roles: Path) -> Path:
         if not (src / sub).is_dir():
             continue
         (dst / sub).mkdir(parents=True)
+        # Files only: a subdirectory such as sonarr's `templates/verify-inert/` is no input
+        # the glance reads.
         for path in (src / sub).glob("*"):
-            (dst / sub / path.name).write_text(path.read_text())
+            if path.is_file():
+                (dst / sub / path.name).write_text(path.read_text())
     if (src / "CLAUDE.md").is_file():
         (dst / "CLAUDE.md").write_text((src / "CLAUDE.md").read_text())
     return dst

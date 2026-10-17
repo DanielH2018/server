@@ -30,11 +30,13 @@ from _helpers import REPO
 
 # The directories whose modules a deploy copies beside a consumer in another role.
 # `scripts/deploy_tools` holds `changed_set.py`, which the soak Job's ConfigMap carries
-# beside `flux_soak.py`.
+# beside `flux_soak.py`. `k8s/manifests/files` holds `flux_job_connect.py`, which a verify
+# Job's ConfigMap carries beside its role's script, such as sonarr's `sonarr_verify.py`.
 SHIPPED_BESIDE = (
     REPO / "ansible/roles/setup/common/files",
     REPO / "ansible/roles/setup/gitops_deploy/files",
     REPO / "ansible/roles/k8s/monitor-bridge/files",
+    REPO / "ansible/roles/k8s/manifests/files",
     REPO / "scripts/deploy_tools",
 )
 
