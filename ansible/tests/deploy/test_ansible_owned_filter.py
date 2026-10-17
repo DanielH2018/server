@@ -140,7 +140,8 @@ def test_the_batch_loop_skips_owned_entries_that_templates_still_see():
     )
     # bento-pdf has carried `owner: flux` since D2.7, peanut since D3.6, texbrain since D4.5,
     # the three Wave A exporters since D5.5, deploy-ui, littlelink and longhorn-ui since D5.6,
-    # and homepage and node-exporter since D5.7, so the live list holds owned entries too.
+    # homepage and node-exporter since D5.7, and loki-homelab, navidrome and scrutiny since
+    # D5.8, so the live list holds owned entries too.
     owned = {"fixture-flux", "fixture-released"} | {
         c["name"] for c in live if "owner" in c
     }
@@ -150,11 +151,14 @@ def test_the_batch_loop_skips_owned_entries_that_templates_still_see():
         "gpu-exporter",
         "homepage",
         "littlelink",
+        "loki-homelab",
         "longhorn-ui",
+        "navidrome",
         "node-exporter",
         "nut-exporter",
         "peanut",
         "pihole-exporter",
+        "scrutiny",
         "texbrain",
     } <= owned
     assert visited == [n for n in _names(fact) if n not in owned]
