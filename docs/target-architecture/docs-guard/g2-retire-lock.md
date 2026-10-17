@@ -22,7 +22,7 @@ signal that a diff moved a cited atom, and it never blocks.
 A new ADR amends [ADR-0019](../../adr/0019-fact-support-stops-at-the-repo-store.md).
 ADR-0019 retires the lock when `report --days 60` shows fewer than two actual content moves.
 At `70591c307` the figure was three, so its own test was not met. PR 1 measures the figure
-again. If that run shows fewer than two, ADR-0019's own criterion fires, and ADR-0020
+again. If that run shows fewer than two, ADR-0019's own criterion fires, and ADR-0023
 records the retirement under that criterion rather than as an override.
 
 **Exit criterion.** A PR that moves a cited symbol, YAML key, test or marker gets a green
@@ -211,8 +211,9 @@ invalidate, and a blocking test that fails until someone re-verifies. The notice
 the two ends of one diff and blocks nothing. What stays blocking is the part that never
 depended on stored state: lint's rules over the tree as it stands.
 
-**The ADR.** Use the next free number, which is ADR-0020 at `70591c307`. The file is
-`docs/adr/0020-fact-support-is-a-diff-notice.md`, titled *Fact support is a diff notice, and
+**The ADR.** Use the next free number. At `70591c307` that was 0020, but D1's ADR took 0020
+before PR 1 opened, and ADR-0021 and ADR-0022 followed it, so G2's ADR is ADR-0023. The file is
+`docs/adr/0023-fact-support-is-a-diff-notice.md`, titled *Fact support is a diff notice, and
 the lock is retired*.
 
 - *Context.*
@@ -250,7 +251,7 @@ the lock is retired*.
       from now on, and G3 is the escalation path if the yield falls.
     - Reversing the decision means restoring the lock from git history and re-verifying every
       section that moved since. *Rollback* in this slice gives the order.
-- *Governs.* One marker: `# DECIDED the notice never blocks a merge (ADR-0020)`, added in
+- *Governs.* One marker: `# DECIDED: the notice never blocks a merge … (ADR-0023)`, added in
   the same PR to the notice step's comment in `.github/workflows/ci.yml`. The frontmatter
   lists `.github/workflows/ci.yml#the notice never blocks a merge`.
   `test_adr_links.py` then holds the marker and the record to each other.
@@ -327,8 +328,8 @@ condition, because PR 3 deletes the hook.
 ```diff
  docs/
 -  facts.lock
-+  adr/0020-fact-support-is-a-diff-notice.md
- mkdocs.yml                + ADR-0020 nav line
++  adr/0023-fact-support-is-a-diff-notice.md
+ mkdocs.yml                + ADR-0023 nav line
  scripts/dev/fact_status.py
 -  status, verify, reverify, forget
    notice, lint, report
@@ -357,7 +358,7 @@ condition, because PR 3 deletes the hook.
 The PR numbers stay as other slices cite them: G3 and G4 name G2's PR 2, PR 3 and PR 4.
 The pre-flip PR therefore takes the label PR 2b.
 
-- **PR 1 — ADR-0020, proposed** (about 120 lines).
+- **PR 1 — ADR-0023, proposed** (about 120 lines).
     - **Entry condition.** PR 1 opens only when G1's exit criterion holds. That criterion
       is the three checks in G1's *Goal and exit criterion*, items 1 to 3, run with the
       commands in G1's *Verification*. G1's *Steps*, item 6, defines the lower bound
@@ -374,12 +375,12 @@ The pre-flip PR therefore takes the label PR 2b.
     - Write the ADR with `status: Proposed`, and its *Status* section reading *Proposed*.
     - Add the `DECIDED` marker to the notice step's comment in `ci.yml`.
     - Add a paragraph to ADR-0019's *Status* section. Its wording depends on the figure:
-        - two or more actual content moves: *Amended by ADR-0020. The lock is retired by a
+        - two or more actual content moves: *Amended by ADR-0023. The lock is retired by a
           measured replacement, not by this record's criterion.*
-        - fewer than two: *Amended by ADR-0020. This record's retirement criterion fired on
-          <date>, and ADR-0020 records the replacement.*
+        - fewer than two: *Amended by ADR-0023. This record's retirement criterion fired on
+          <date>, and ADR-0023 records the replacement.*
     - Add the row to `docs/adr/index.md`.
-    - Add the ADR-0020 line to the ADR list in the `mkdocs.yml` nav, after ADR-0019's.
+    - Add the ADR-0023 line to the ADR list in the `mkdocs.yml` nav, after ADR-0019's.
     - **Operator-only:** approve the ADR by setting `status: Accepted` and the *Status* text
       before merge. PRs 2 to 5 do not merge until master carries the accepted record.
 - **PR 2 — `report` stops reading the lock** (about 120 lines added and 150 deleted, most
@@ -462,7 +463,7 @@ The pre-flip PR therefore takes the label PR 2b.
           key as a YAML atom puts a notice on every bump PR, for a section whose prose the
           bump cannot change;
         - rewrite the opener of *Rules that read prose* without the IN grade;
-        - rewrite *Commands* around `notice`, `lint` and `report`, pointing at ADR-0020.
+        - rewrite *Commands* around `notice`, `lint` and `report`, pointing at ADR-0023.
     - Rewrite the `scripts/lib/facts/pins.py` module docstring with the same reason as the
       `renovate-pin` paragraph. It names no deleted test or subcommand.
     - Rewrite the `citations.py:sections` docstring sentence about the unit the lock is
@@ -508,7 +509,7 @@ The pre-flip PR therefore takes the label PR 2b.
     - Rewrite the `atoms.py` module docstring that names `lock.check_lock`.
     - Remove the second deleted module from the census `must_find`.
     - In ADR-0019's *Governs* section, replace the node citation with the module's basename
-      and a pointer to ADR-0020. `test_every_cited_test_exists` would otherwise fail.
+      and a pointer to ADR-0023. `test_every_cited_test_exists` would otherwise fail.
     - Regenerate `docs/reference/decisions.md` and `docs/reference/scripts.md` with their
       generators.
 
@@ -619,10 +620,10 @@ uv run python scripts/dev/fact_status.py lint --changed-since origin/master
 The PRs undo in reverse order. A later PR deletes code that an earlier PR's revert would
 restore an import of, so a revert reaches back only through the PRs after it.
 
-- **PR 1 — operator-only.** ADR-0020 is `Accepted` before it merges, and
+- **PR 1 — operator-only.** ADR-0023 is `Accepted` before it merges, and
   `docs/adr/index.md` forbids deleting or rewriting an accepted record.
     - Before merge, the operator closes the PR.
-    - After merge, the operator either sets ADR-0020 to `Rejected` or writes a new ADR that
+    - After merge, the operator either sets ADR-0023 to `Rejected` or writes a new ADR that
       supersedes it. ADR-0019's *Status* paragraph stays as the record, and gains one
       sentence that names the reversal.
     - Do this only before PR 3, or together with PR 3's undo, so the record never
@@ -666,7 +667,7 @@ Each risk is checked against `docs/failure-classes.md`.
       check-runs API, as the root `CLAUDE.md` row says.
     - Mitigation: the replay in `report` measures whether authors still act on it.
     - Mitigation: G3 is the escalation if they do not.
-    - ADR-0020 records the trade and the agent-visibility gap.
+    - ADR-0023 records the trade and the agent-visibility gap.
 - **G1's notice is wrong, crashes, or never reaches the PR when G2 starts.** G2 makes the
   notice the only signal. A parity miss, a crash, or an annotation that never reaches the PR
   at that point leaves moves unreported.
@@ -674,7 +675,7 @@ Each risk is checked against `docs/failure-classes.md`.
       checks and G1's *Steps*, item 6, rather than restating them, so a later change to
       G1's rules cannot leave G2 grading against a stale copy. It stops G2 when any check
       fails.
-    - Mitigation: ADR-0020's *Context* carries all three outputs, so the record shows the
+    - Mitigation: ADR-0023's *Context* carries all three outputs, so the record shows the
       delivery evidence that PR 3 relies on.
 - **Branches cut before PR 3.** Their own `prek.toml` still runs the reverify hook, and
   their own tests still include the hash test. After rebasing they conflict on
@@ -791,7 +792,7 @@ Each risk is checked against `docs/failure-classes.md`.
     - the four-status algebra;
     - every `verify` commit. That was 116 lock commits in 30 days.
 - **Added:**
-    - ADR-0020, about 80 lines, and its nav line;
+    - ADR-0023, about 80 lines, and its nav line;
     - the whole-tree lint test, about 40 lines;
     - `lock-retired` and its pair, about 40 lines;
     - one `DECIDED` marker.
@@ -802,7 +803,8 @@ Each risk is checked against `docs/failure-classes.md`.
 
 - **Which ADR number?** D6 also writes an ADR, superseding 0010. Resolution: PR 1 takes the
   next free number when it opens and renames on conflict before merge. This is reported as
-  a contract gap.
+  a contract gap. PR 1 opened on 2026-10-17 as ADR-0023, because ADR-0020 to ADR-0022 were
+  taken by then.
 - **Does the notice keep `gone` path rows?** Resolution: decided in PR 1 from G1's replay
   counts, and recorded in the ADR.
 - **Does `renovate-pin` keep its rule?** PR 3 rewrites its reason. Without the lock, a
@@ -857,12 +859,12 @@ Findings raised, all fixed except where marked:
   resolution.** Fixed.
     - The *Design* and *Risks* text now say it blocks on every error rule in `lint.RULES`,
       except `vanished-identifier`, which needs a range.
-    - The choice is to accept that, and ADR-0020's *Decision* names it.
+    - The choice is to accept that, and ADR-0023's *Decision* names it.
     - The diffs that can trip it from outside a `CLAUDE.md` are named: a host removal
       (`retired-host`), and a Renovate manager from M2's PR 2 or H5.7 (`renovate-pin`).
     - H7 keeps `ansible/inventory/`, so `retired-host` stays live.
 - **G2-R1-05 (medium): agents cannot read job summaries.** Fixed.
-    - The gap is in ADR-0020's *Consequences*.
+    - The gap is in ADR-0023's *Consequences*.
     - `gh run view --help` was checked: its JSON fields hold no summary.
     - The PR proof reads the notice annotations of the `hooks` job through
       `gh api .../check-runs/<job-id>/annotations`. That call and the `detailsUrl` lookup
@@ -881,7 +883,7 @@ Findings raised, all fixed except where marked:
   PRs 4 and 5. It also covers PR 2's dependence on `lock.parse_lock`, and PR 2b's on the
   lock file.
 - **G2-R1-08 (medium): the PR 1 rollback deletes an accepted ADR.** Fixed. PR 1's undo is
-  **operator-only**. The operator either sets ADR-0020 to `Rejected` or supersedes it with
+  **operator-only**. The operator either sets ADR-0023 to `Rejected` or supersedes it with
   a new ADR, and ADR-0019's *Status* paragraph stays.
 - **G2-R1-09 (medium): PR 3 exceeds the size budget, and "cannot split further" is false.**
   Partly fixed, partly refuted.
@@ -1012,7 +1014,7 @@ Findings raised: one. It is fixed in G2's part, and the G3 part is reported to G
 
 Folded from the 2026-10-12 pillar review; not adversarially reviewed. The pre-start review round covers it.
 
-- **P9 (where the notice lives).** *Design*, in ADR-0020's *Consequences*, names
+- **P9 (where the notice lives).** *Design*, in ADR-0023's *Consequences*, names
   `fact_status.py notice --since origin/master` as the notice's source. G1's CI step runs the
   same notice once per output format, so the job summary and the check-run annotations are
   two views of it, and the notice does not depend on GitHub. *Goal and exit criterion* adds

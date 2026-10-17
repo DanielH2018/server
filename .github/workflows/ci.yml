@@ -282,6 +282,10 @@ jobs:
       # soak, and the lock stays the only blocking check, so the notice never fails the job. The
       # long form is docs/target-architecture/docs-guard/g1-diff-notice.md, *Design*.
       #
+      # DECIDED: the notice never blocks a merge, during the soak or after the lock retires. A
+      # PR that moves a cited atom gets a notice, not a red check. The trade, and the coverage
+      # it gives up, is in docs/adr/0023-fact-support-is-a-diff-notice.md. (ADR-0023)
+      #
       # No step of the three can fail the job. `continue-on-error` turns a failed step green,
       # but it does not cover the job's 20-minute timeout, and a job timeout fails the `prek`
       # gate. Each step therefore carries its own `timeout-minutes`, which ends a hang as a step
