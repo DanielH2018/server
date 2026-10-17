@@ -467,7 +467,6 @@
  "ansible/tests/repo/test_gitleaks_allowlist_paths_are_anchored.py": 0.0,
  "ansible/tests/repo/test_guard_tests_read_renders_not_templates.py": 10.12,
  "ansible/tests/repo/test_helpers.py": 0.0,
- "ansible/tests/repo/test_hook_config_changes_run_the_hook.py": 1.15,
  "ansible/tests/repo/test_host_package_case_inputs_census.py": 0.02,
  "ansible/tests/repo/test_host_package_cases_run_on_their_inputs.py": 10.86,
  "ansible/tests/repo/test_host_tool_pins_match_their_twins.py": 0.0,
