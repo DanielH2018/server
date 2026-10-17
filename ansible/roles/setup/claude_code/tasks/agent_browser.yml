@@ -178,6 +178,10 @@
       - -rf
       - "{}"
       - +
+    # find returns to its starting directory after each -exec. Ansible starts it in the
+    # playbook's directory under /home/{{ sys_user }}, which the agent cannot enter, so a prune
+    # that removes a tree fails with "Failed to restore initial working directory".
+    chdir: /
   register: claude_code_agent_node_pruned
   changed_when: claude_code_agent_node_pruned.stdout != ''
   become: true
