@@ -47,6 +47,25 @@ PR D5.3a, the Prometheus peer: [#5315](https://github.com/DanielH2018/server/pul
 `3f7494ef4`, and its landing deployed `netpol-baseline` and settled. The live `prometheus-callers`
 policy admits a `flux-system` pod labelled `app: soak` on 9090, beside the unchanged `homelab` peer.
 Open question 3's review found no new exposure.
+PR D5.1d, a suspended role takes no change: [#5342](https://github.com/DanielH2018/server/pull/5342).
+It merged at `9cbe9ae9d` and deployed nothing. `cross_plane_order.py` refuses a render change to
+a tag suspended at the PR's base, `decide` holds with `<R> suspended-changed=<tag>`, and
+`land-wait` returns `suspended`. Promote run 38972816002 ran its `decide` on its own revision and
+read `verify` `verdict=good failed=`.
+PR D5.1h, the `k8s_host_files` role: [#5337](https://github.com/DanielH2018/server/pull/5337). It
+merged at `f261e792f` and parked the tick, as designed. The operator fast-forwarded the primary
+checkout to it and ran `initial_setup.yml --tags k8s_host_files`, which read `ok=12 changed=0`,
+and the next tick crossed. From here the tick applies every `k8s_host_files` PR.
+PR D5.3b1, the soak script, inert: [#5340](https://github.com/DanielH2018/server/pull/5340). It
+merged at `2f1fe908a`. The script lives in the shared `manifests` role, so the landing deployed
+every tag and settled. It records the operator's two 2026-10-16 rulings at step 16 and Open
+question 19, and the soak and Job-census suites read 105 passed on master.
+PR D5.2a, snapshot Jobs: [#5350](https://github.com/DanielH2018/server/pull/5350). It merged at
+`ca52038ac`. The renderer emits `<tag>-snapshot` for a role with snapshot claims, and its Job
+script lives in the shared `manifests` role, so the landing deployed every tag and settled. No
+flux-owned tag has a snapshot claim yet, so no live tag renders one. With D5.3b1's script, three
+flat `flux_*.py` files now share `manifests/files/`. The module-family census allows them, because
+each Job's ConfigMap carries its script and the connection helper as flat keys.
 
 Related issues:
 
@@ -3770,6 +3789,8 @@ includes valheim's initContainer.
       the change to D4's timeout function are in D5.3b2 (step 17). The C2 rule is a
       contract amendment that the orchestrator requests once #5320's rewrite of
       `contracts.md`'s *Requested amendments* lands, and it gates D5.3b2's merge.
+    - **Applied on 2026-10-16.** C2 *Verification* states that the changed set holds `soak`
+      whenever it holds a tag, and the gate before D5.3b2 merges is clear.
 20. **Which inbound edges could narrow, so that the D2-to-D6 interim is one short window?**
     D5's index row names about ten inbound edges from four areas: D3 and D4; R3; M1, M2
     and M6's B-1e; and H1.1a, H1.7b, H2.1 and H2's family PRs. Both planes run until D6, so
