@@ -437,7 +437,7 @@ def cmd_clean(args, tools: Tools) -> int:
     A removal is recorded rather than re-derived because the evidence is destroyed by the
     act: the remote leg reads the worktree, and the worktree is what it deletes. So the
     manifest is saved after each `removed:` verdict, a batch already carrying `removed_at`
-    is skipped without an ssh call, and the file is deleted only once no batch is left.
+    is skipped without an ssh call, and the file is retired only once no batch is left.
 
     A leg that reached no verdict at all — ssh refused, the fetch failed, a timeout — is
     reported as failed and exits 1, rather than joining the trees deliberately kept back.
@@ -481,7 +481,7 @@ def cmd_clean(args, tools: Tools) -> int:
     if kept:
         print(f"run {run.run_id}: kept {', '.join(kept)} — re-run clean once merged")
     if not kept and not failed:
-        manifest_mod.path(run.run_id, args.manifest_root).unlink(missing_ok=True)
+        manifest_mod.retire(run.run_id, args.manifest_root)
     return 1 if failed else 0
 
 
@@ -589,7 +589,7 @@ def main(argv=None, tools: Tools | None = None) -> int:
     # must keep its traceback. `launch` refuses with "run clean <run-id> first", so a
     # mistyped id at that prompt is the likely way in.
     if args.cmd in run_parsers:
-        if not manifest_mod.path(args.run_id, args.manifest_root).exists():
+        if not manifest_mod.exists(args.run_id, args.manifest_root):
             error(f"no manifest for run {args.run_id} under {args.manifest_root}")
             return FANOUT_PLACE_BAD_ARGS
     return args.fn(args, tools or Tools())

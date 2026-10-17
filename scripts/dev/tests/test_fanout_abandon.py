@@ -17,7 +17,13 @@ from unittest import mock
 from fanout_lib import abandon
 from fanout_lib.abandon import remote_abandon_command
 from fanout_lib.clean import live_process_scan
-from fanout_lib.manifest import Batch, Manifest, path as manifest_path, save
+from fanout_lib.manifest import (
+    Batch,
+    Manifest,
+    path as manifest_path,
+    retired_path,
+    save,
+)
 from fanout_lib.place import main
 from lib.git_testing import git, init_repo, scrubbed_env
 from lib.proc_testing import fake_bin, path_with, run
@@ -132,6 +138,18 @@ def test_abandon_records_the_removal_and_releases_under_the_orchestrator(tmp_pat
         "release 1 2 --worktree worktree-orch --reason fan-out batch 1-2 abandoned",
         None,
     )
+
+
+def test_abandoning_the_last_batch_retires_the_manifest_with_its_removal(tmp_path):
+    """The retired copy carries the last `removed_at`, so `status` reads the run as cleaned."""
+    save(Manifest(RUN_ID, "worktree-orch", [B1]), root=tmp_path)
+    tools, _calls = fake_tools(answers={"daniel-box": ok("removed: /w1 (abandoned)")})
+    assert (
+        main(["abandon", RUN_ID, "1-2", "--manifest-root", str(tmp_path)], tools) == 0
+    )
+    assert not manifest_path(RUN_ID, tmp_path).exists()
+    written = json.loads(retired_path(RUN_ID, tmp_path).read_text())
+    assert [b["removed_at"] is not None for b in written["batches"]] == [True]
 
 
 def test_abandon_of_a_kept_tree_releases_nothing_and_exits_1(tmp_path):

@@ -306,8 +306,10 @@ removes each worktree once its branch is merged into `origin/master` and the tre
 then deletes that `worktree-fanout-<batch>` branch, and reports a kept tree with its reason. A
 branch that refuses to delete reads `kept`, naming it. `clean` records each removal in the run's manifest, so a
 later pass skips a batch it already removed rather than reading a host for a worktree that is
-gone, and `status` shows such a batch as `cleaned`. `clean` deletes the manifest under
-`~/.claude/fanout/` only once every batch is removed, and exits 1 naming any batch whose remote
+gone, and `status` shows such a batch as `cleaned`. Once every batch is removed, `clean` and
+`abandon` move the manifest into `~/.claude/fanout/retired/`. `runs`, the launch gates and the
+SessionStart banner then stop listing the run, while `status` and `cc-wait fanout` still read
+it as cleaned, so a watch over several runs ends normally. `clean` exits 1 naming any batch whose remote
 leg failed outright — an unreachable host is not a tree to re-clean once merged. A batch whose
 unit is still active is kept, naming the unit: a running agent's tree is clean and at master
 until it commits, which is exactly what a merged tree looks like, and a `clean` run too early

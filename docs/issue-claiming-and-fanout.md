@@ -263,8 +263,9 @@ and the host with the most left takes the next batch.
 `clean` records each removal in the manifest, because the act destroys its own evidence: the
 remote leg reads the worktree it deletes, so a later pass has nothing left to ask. A batch
 already removed is skipped without an ssh call, `status` reports it as `cleaned` rather than
-reading a host whose report file went with the worktree, and the manifest is deleted only once
-every batch is removed.
+reading a host whose report file went with the worktree. Once every batch is removed, the
+manifest moves into `~/.claude/fanout/retired/`, out of every listing, and `status` still
+reads the run as cleaned (#4907).
 
 `launch` refuses daniel-server as a host until the operator registers its SSH key as a GitHub
 signing key once (`gh ssh-key add ~/.ssh/id_ed25519.pub --type signing`): the repo's ruleset
