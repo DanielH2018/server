@@ -319,6 +319,9 @@ OWN_RED = {
         _suspended_post_gains_the_promote_token,
         "promote: the step 'Post the suspended-changed hold' holds the webhook and a token",
     ),
+    # The other direction of the same rule: the scan covers every step that holds the
+    # webhook, so a webhook moved into the step that already holds PROMOTE_TOKEN is caught.
+    # The case above proves only that a token added to the post step is caught.
     "Decide holds the webhook": (
         _decide_gains_the_webhook,
         "promote: the step 'Decide' holds the webhook and a token",
