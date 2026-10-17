@@ -2,11 +2,14 @@
 
 bento-pdf stands in for the retiring service: it is flux-owned, ships one Deployment template,
 and takes its Service and IngressRoute from the shared defaults, as texbrain does. Each test
-renders a copy of HEAD's tree with its templates deleted.
+renders a copy of HEAD's tree with its templates deleted and the include edits the doc's
+yaml block states, read from the doc itself.
 
 Run: uv run pytest scripts/validate/tests/test_validate_cross_plane_retirement.py
 """
 
+import re
+import textwrap
 from pathlib import Path
 
 import pytest
@@ -16,13 +19,20 @@ from validate import cross_plane_order as gate
 # authelia reads `containers_list`, so it moves if the first PR edits the entry.
 ROLES = ("bento-pdf", "authelia")
 ROLE = "ansible/roles/k8s/bento-pdf"
-# The include edits the doc's step 1 states, appended to the role's `k8s/manifests` include.
-INCLUDE_VARS = (
-    "  vars:\n"
-    "    manifests_rollout: ''\n"
-    "    manifests_exclude_files: [service.yaml, ingressroute.yaml]\n"
-)
+DOC = gate.REPO / "docs/flux-deploy-plane.md"
+SECTION = "## Retiring a flux-owned service\n"
 PATHS = [f"{ROLE}/templates/deployment.yaml.j2", f"{ROLE}/tasks/main.yml"]
+
+
+def documented_include_vars(text: str) -> str:
+    """The first fenced yaml block of the doc's retirement section, indented under `- name:`.
+
+    The doc is the oracle: the test renders whatever step 1 tells the PR to add.
+    """
+    section = text.split(SECTION, 1)[1].split("\n## ", 1)[0]
+    match = re.search(r"```yaml\n(.*?)\n *```", section, re.DOTALL)
+    assert match, f"{DOC.name} {SECTION.strip()} holds no yaml block"
+    return textwrap.indent(textwrap.dedent(match.group(1)), "  ") + "\n"
 
 
 @pytest.fixture(scope="module")
@@ -42,7 +52,7 @@ def retired_step_1(tmp_path: Path, include_vars: str) -> gate.Snapshot:
 
 
 def test_step_1_of_a_flux_owned_retirement_renders_no_object(tmp_path, head_snapshot):
-    head = retired_step_1(tmp_path, INCLUDE_VARS)
+    head = retired_step_1(tmp_path, documented_include_vars(DOC.read_text()))
     assert head_snapshot.objects["bento-pdf"]
     assert "bento-pdf" in head.renders
     assert not head.objects.get("bento-pdf")
