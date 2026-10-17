@@ -1,0 +1,12 @@
+{
+  "checksum": "44419d46b56bd6dd8c66563fe31117c9f937c80157f4e9c9efa9dd4d9220f31c",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "ansible/roles/k8s/pihole-exporter/CLAUDE.md#It holds no credential of its own",
+  "row": {
+    "atoms": {
+      "scripts/renderer/tests/test_renderer_restart.py": "000c673a7543c44f34fdfc4321e1a98103201207c3be4a71bb0a9fc364cd7760"
+    },
+    "python": "3.14",
+    "verified_sha": "b7cf2224c"
+  }
+}

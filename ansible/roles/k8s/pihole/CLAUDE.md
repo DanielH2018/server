@@ -76,6 +76,11 @@ continuity. Coexisted with a Docker-era copy through the DNS cutover; that copy 
   fix through — and it also forwards a whole TLD, which would hand the `.lan` names the
   `host-record=` lines answer for to the router. ENFORCED by
   `ansible/tests/services/test_pihole_lan_reverse_forwarding.py`.
+- **Rotating `pihole_password` leaves pihole-exporter on the old value.** The exporter reads
+  the password from this role's `pihole-env` Secret, and it is flux-owned, so neither this
+  role's restarts nor `deploy.sh` roll it, and `up{job="pihole"}` stays at 0. After the
+  rotation the operator rolls it by hand, as `ansible/roles/k8s/pihole-exporter/CLAUDE.md`
+  says. `secret_rotation.py consumers pihole_password` does not list it yet (#5416).
 - **`pihole_k8s_dns_cluster_ip` is a pinned ClusterIP**, immutable once bound — cluster DNS
   forwards there rather than to the LAN VIP, since the VIP is subject to
   `externalTrafficPolicy: Local`. Recreating the Service needs a new address chosen deliberately.

@@ -5,12 +5,28 @@ Deployment, one Service, no volume, no route, no secret of its own.
 
 ## At a glance
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates, tasks or containers_list entry, or the k3s role's Longhorn tier lists. -->
-- **Deploy tag:** `--tags "pihole-exporter"`
+- **Applied by:** Flux, through `promote` (`owner: flux`); `deploy.sh` refuses
+  `--tags=pihole-exporter` with exit 5
 - **Image:** `ekofr/pihole-exporter` (`pihole_exporter_k8s_image`)
 - **Route:** none (no `templates/ingressroute.yaml.j2`)
 - **Claims:** none (no PVC)
-- **Auto-deploy:** eligible (`k8s_autodeploy: true`)
 <!-- /generated_from -->
+
+- **Flux applies it, not Ansible** (D5.5, the first Wave A PR). Its `containers_list` entry
+  carries `owner: flux`, so `deploy.sh`, the play and the GitOps deployer all skip it, and a
+  merged change reaches the cluster when `promote` publishes and verifies the next bundle. Its
+  image-bump PRs therefore draw no `land-wait` and no `probe.py health` run. To give it back to
+  Ansible, follow the two-PR handback in `docs/flux-deploy-plane.md`; a plain revert of the
+  flag leaves two writers on the objects.
+- **Where the task went.** `tasks/main.yml` holds one task, the include of `k8s/manifests`,
+  and no Flux path runs it. It stays for the handback. Flux applies the same render, and the
+  Kustomization's `wait` replaces the rollout wait.
+  `k8s_autodeploy` no longer gates an apply, because the deployer skips the tag. It still
+  decides whether Renovate automerges the image bump.
+- **Its Kustomization has no `dependsOn: pihole`.** pihole is still Ansible-owned, so the
+  renderer drops the edge and records it as `homelab/ansible-owned-deps: pihole`. The edge
+  becomes a real `dependsOn` in the first render after pihole moves to Flux. The `pihole-env`
+  Secret exists already, so the drop changes nothing at apply.
 
 ## Why an exporter and not a native scrape
 
@@ -54,8 +70,16 @@ to rotate it. That cross-role read is why the `containers_list` entry declares
 roll a Deployment, and the pihole role's restart tasks sequence its own two FTL pods and
 nothing else — so after a rotation this exporter keeps presenting the old password. That is
 visible rather than silent, since `up{job="pihole"}` drops to 0 once the old value stops
-authenticating, but nothing rolls the pod for you. Redeploy the role:
-`./scripts/deploy.sh --tags "pihole-exporter"`.
+authenticating, but nothing rolls the pod for you.
+
+Flux does not roll it either. The restart checksum the renderer stamps hashes only the Secrets a
+tag renders itself, and `pihole-env` is the pihole role's. The flip therefore needed an entry
+in `OUTSIDE_ROLE_EXEMPT` in `scripts/renderer/tests/test_renderer_restart.py`, which records
+this trade. `deploy.sh --tags pihole-exporter` exits 5 since D5.5, so no agent path rolls the
+pod. The operator rolls it with the admin kubeconfig (**operator-only**):
+`sudo k3s kubectl -n homelab rollout restart deployment/pihole-exporter`. That leaves a
+`kubectl-rollout` field manager on `restartedAt`, which Flux's next apply of the tag strips,
+so the pod rolls once more then.
 
 ## Two things that bite
 
@@ -67,7 +91,8 @@ pod.
 
 **`k8s_autodeploy` is `true` here and `false` on the pihole role**, deliberately. A failed
 pihole deploy breaks name resolution fleet-wide; this pod holds no DNS path at all, so a bad
-image bump costs dashboards.
+image bump costs dashboards. Under Flux the flag decides only whether Renovate automerges the
+bump; `promote`'s verification gates the apply.
 
 ## NetworkPolicy
 

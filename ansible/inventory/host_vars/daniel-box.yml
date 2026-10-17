@@ -680,6 +680,9 @@ containers_list:
   # holding a second copy of the credential.
   - name: pihole-exporter
     platform: k8s
+    # Flux applies pihole-exporter through `promote`, and every Ansible path skips it (D5.5). The
+    # handback is two PRs, `owner: released` then removing `owner`: docs/flux-deploy-plane.md.
+    owner: flux
     port: 80
     depends_on: [pihole]
     # One exporter, BOTH FTL instances, every series labelled `hostname`: a panel must sum
@@ -699,6 +702,9 @@ containers_list:
   # this pod is not hostNetwork, but a distinct number keeps `ss -ltnp` on a node unambiguous.
   - name: gpu-exporter
     platform: k8s
+    # Flux applies gpu-exporter through `promote`, and every Ansible path skips it (D5.5). The
+    # handback is two PRs, `owner: released` then removing `owner`: docs/flux-deploy-plane.md.
+    owner: flux
     port: 9101
 
   - name: ical-proxy
@@ -857,6 +863,9 @@ containers_list:
   # exporter bump. No port and no route derive — it is a scrape target only.
   - name: nut-exporter
     platform: k8s
+    # Flux applies nut-exporter through `promote`, and every Ansible path skips it (D5.5). The
+    # handback is two PRs, `owner: released` then removing `owner`: docs/flux-deploy-plane.md.
+    owner: flux
     # upsd's own variables: battery charge and runtime, load, input voltage, and ups.status as
     # a per-flag 0/1. Before this job, UPS state reached Grafana only as `hass_*` series from
     # the home-assistant job, which routes a power-loss signal through a workload the UPS

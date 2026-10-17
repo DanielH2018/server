@@ -1,13 +1,14 @@
 {
-  "checksum": "c1cc234468251fd233d943557605ab23f20d8e9ac09868e71b8b747c7072ed95",
+  "checksum": "c8de6fa3bb9cf1a316435bcc794c6af50a4ccaf462b7bc7e494701b95cac9411",
   "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
   "key": "ansible/roles/k8s/pihole/CLAUDE.md#Notable",
   "row": {
     "atoms": {
+      "ansible/roles/k8s/pihole-exporter/CLAUDE.md": "8d3b9c782661a6df78c97aecd09d79a4a6ad0d22203e901345ae4cadcfb477a1",
       "ansible/tests/services/test_pihole_lan_reverse_forwarding.py": "32006eefc58386b6d4607392ea7129a087c7423080f0df77e50417aefb0bcf07",
       "docs/pihole-dns-continuity-record.md": "28af65f5faa05075dade717bc23ebb198a239ec85c7ee7215a855c00c3338b8a"
     },
     "python": "3.14",
-    "verified_sha": "6757b2044"
+    "verified_sha": "188d73a47"
   }
 }
