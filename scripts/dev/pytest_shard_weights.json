@@ -898,6 +898,7 @@
  "scripts/deploy_tools/tests/test_narrow_filter_tables.py": 0.03,
  "scripts/deploy_tools/tests/test_narrow_flux_born_entry.py": 0.53,
  "scripts/deploy_tools/tests/test_narrow_reads_the_deployers_split.py": 0.08,
+ "scripts/deploy_tools/tests/test_narrow_secret_keys.py": 0.21,
  "scripts/deploy_tools/tests/test_narrow_setup.py": 7.49,
  "scripts/deploy_tools/tests/test_narrow_setup_edges.py": 1.73,
  "scripts/deploy_tools/tests/test_narrow_setup_exit_contract.py": 0.08,

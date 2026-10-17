@@ -381,22 +381,6 @@ def test_a_bring_up_playbook_in_the_range_is_flagged(tree: Tree):
         tree.narrow(*_refs(tree))
 
 
-def test_a_secret_rotation_beside_an_inventory_change_is_flagged(tree: Tree):
-    """The clean half is `test_a_group_vars_key_two_roles_read_narrows_to_both`.
-
-    The same inventory edit, plus a rotated secret. `secrets.yml` maps to no template, so
-    the new value reaches a service only when that service renders again — and the full run
-    this replaces rendered all of them.
-    """
-    tree.write("ansible/vars/secrets.yml", "sops: {}\n")
-    tree.write(
-        "ansible/inventory/group_vars/all.yml",
-        GROUP_VARS.replace("10.0.0.0/24", "10.2.0.0/24"),
-    )
-    with pytest.raises(narrow_broad.CannotNarrow, match="secret"):
-        tree.narrow(*_refs(tree))
-
-
 def test_a_key_read_through_another_inventory_value_is_flagged(tree: Tree):
     """The clean half is `test_a_group_vars_key_two_roles_read_narrows_to_both`.
 

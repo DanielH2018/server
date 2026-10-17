@@ -368,7 +368,7 @@ def test_a_secrets_change_bundled_with_an_image_bump_is_still_flagged(
     assert gitops_deploy.main(tick.tools, tick.config, state) == 0
     assert tick.playbooks == [DEPLOY_SONARR]
     assert _alerted(state_dir, "secrets") == ORIGIN
-    assert any("nothing was redeployed" in post for post in tick.posts)
+    assert any("still holds the old value" in post for post in tick.posts)
 
 
 def test_a_non_image_k8s_change_is_ff_merged_and_flagged_not_deployed(
