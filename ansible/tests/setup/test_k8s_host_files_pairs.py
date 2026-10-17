@@ -1,31 +1,42 @@
 """Each variable `k8s_host_files` shares with a k8s role or `group_vars` equals its source.
 
 A variable both planes read stays in the k8s role's defaults (or `group_vars/all.yml`), and
-`k8s_host_files`' defaults hold a copy under the same name (D5's *Host-side rows*). A change
-then edits both copies, and each half routes to its own plane: the copy to the setup plane,
-which the GitOps tick applies. A change that edits only one copy leaves the host and the
-cluster reading different values, and no deploy reports it. This test holds every pair equal.
+`k8s_host_files` holds a copy under the same name (D5's *Host-side rows*). A change then edits
+both copies, and each half routes to its own plane: the copy to the setup plane, which the
+GitOps tick applies. A change that edits only one copy leaves the host and the cluster reading
+different values, and no deploy reports it. This test holds every pair equal.
 
-The pairs are DERIVED: every key of `k8s_host_files`' defaults that a `roles/k8s/*` defaults
-file or `group_vars/all.yml` also defines. `EXPECTED_PAIRS` names them, so a new pair joins
-the census by name. It is empty until artifacts' conversion PR adds `artifacts_host_dir`,
-`artifacts_peer_dir` and `artifacts_peer_sources` as its first members.
+A copy lives in the role's `defaults/main.yml` or in the `vars:` of a task its `tasks/main.yml`
+imports. docs' copy sits in task vars: role defaults are play-wide in `initial_setup.yml`, so a
+defaults copy would be read by `initial_setup`'s `docs-refresh.sh.j2` as well.
+
+The pairs are DERIVED: every copied key that a `roles/k8s/*` defaults file or
+`group_vars/all.yml` also defines. `EXPECTED_PAIRS` names them, so a new pair joins the census
+by name. docs' conversion PR added the first, `docs_host_site_dir`.
 
 Red-proof: a fixture tree under `tmp_path` whose host-files copy differs from its k8s source
-must be flagged, and one whose copy matches must not.
+must be flagged, and one whose copy matches must not, for a defaults copy and a task-vars copy.
 
 Run: uv run pytest ansible/tests/setup/test_k8s_host_files_pairs.py
 """
 
 from pathlib import Path
 
-from _helpers import K8S_ROLES, SETUP_ROLES, load_defaults, load_yaml
+from _helpers import (
+    K8S_ROLES,
+    SETUP_ROLES,
+    imported_task_files,
+    load_defaults,
+    load_tasks,
+    load_yaml,
+    walk_tasks,
+)
 from lib.repo_paths import ALL_VARS
 
 ROLE = SETUP_ROLES / "k8s_host_files"
 
-# Each shared key the host-files defaults carry. Empty until artifacts' conversion PR.
-EXPECTED_PAIRS: frozenset[str] = frozenset()
+# Each shared key the role copies, added by the conversion PR that moves its row.
+EXPECTED_PAIRS: frozenset[str] = frozenset({"docs_host_site_dir"})
 
 
 def shared_pairs(
@@ -36,9 +47,13 @@ def shared_pairs(
     A source is a `roles/k8s/<role>` defaults file or `group_vars/all.yml`, and a key may
     have more than one.
     """
-    # The role ships no defaults file until a conversion PR moves the first variable in.
+    # The role ships no defaults file until a conversion PR moves a host-only variable in.
     has_defaults = (role_dir / "defaults" / "main.yml").is_file()
     copies = load_defaults(role_dir) if has_defaults else {}
+    if (role_dir / "tasks" / "main.yml").is_file():
+        for task_file in imported_task_files(role_dir):
+            for task in walk_tasks(load_tasks(task_file)):
+                copies.update(task.get("vars") or {})
     sources = {"group_vars/all.yml": load_yaml(all_vars) or {}}
     for defaults in sorted(k8s_roles.glob("*/defaults/main.yml")):
         sources[f"roles/k8s/{defaults.parents[1].name}"] = load_yaml(defaults) or {}
@@ -100,5 +115,35 @@ def test_a_copy_that_differs_from_its_source_is_flagged(tmp_path):
 
 def test_a_copy_equal_to_its_source_is_clean(tmp_path):
     pairs = shared_pairs(*_fixture_tree(tmp_path, "/srv/a", "/srv/a"))
+    assert set(pairs) == {"artifacts_host_dir"}
+    assert unequal_pairs(pairs) == []
+
+
+def _task_vars_tree(tmp_path: Path, copy: str) -> tuple[Path, Path, Path]:
+    """The fixture tree with the copy in an imported task's `vars:` instead of defaults."""
+    role_dir, k8s_roles, all_vars = _fixture_tree(tmp_path, "/srv/a", "/srv/a")
+    (role_dir / "defaults" / "main.yml").write_text("k8s_host_files_only: 1\n")
+    (role_dir / "tasks").mkdir()
+    (role_dir / "tasks" / "main.yml").write_text(
+        "- name: Artifacts\n  ansible.builtin.import_tasks: artifacts.yml\n"
+    )
+    (role_dir / "tasks" / "artifacts.yml").write_text(
+        "- name: Ensure the directory\n  ansible.builtin.file:\n"
+        "    path: '{{ artifacts_host_dir }}'\n    state: directory\n"
+        f"  vars:\n    artifacts_host_dir: {copy}\n"
+    )
+    return role_dir, k8s_roles, all_vars
+
+
+def test_a_task_vars_copy_that_differs_from_its_source_is_flagged(tmp_path):
+    pairs = shared_pairs(*_task_vars_tree(tmp_path, "/srv/b"))
+    assert unequal_pairs(pairs) == [
+        "artifacts_host_dir: roles/k8s/artifacts has '/srv/a', "
+        "k8s_host_files has '/srv/b'"
+    ]
+
+
+def test_a_task_vars_copy_equal_to_its_source_is_clean(tmp_path):
+    pairs = shared_pairs(*_task_vars_tree(tmp_path, "/srv/a"))
     assert set(pairs) == {"artifacts_host_dir"}
     assert unequal_pairs(pairs) == []

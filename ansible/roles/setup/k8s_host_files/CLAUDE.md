@@ -28,9 +28,12 @@ The redirect is what a shell with non-blocking stdio needs.
 
 ## What it holds
 
-`tasks/main.yml` includes no task file yet, so an apply changes nothing on the host. Wave C's
-pi-peer-backup PR adds the first task file. Every conversion PR after it adds one task file per
-source role and includes it from `tasks/main.yml`.
+Each conversion PR adds one task file per source role, named after that role, and imports it
+from `tasks/main.yml` with `ansible.builtin.import_tasks`. The import is static so the play's
+`k8s_host_files` tag reaches every task in the file. docs' conversion PR wrote the first,
+`tasks/docs.yml`, which creates the site directory docs' Deployment mounts as a hostPath of
+`type: Directory`. A row drops its source role's `when: not k8s_dry_run` guard, because
+`initial_setup.yml` has no dry-run mode.
 
 - **The playbook entry is gated to daniel-box by a literal.** `setup_routing.py` places a role
   whose gate admits only another host as a hand apply, so the tick could never run a Pi-gated
@@ -39,10 +42,15 @@ source role and includes it from `tasks/main.yml`.
   do not resolve across roles, so a conversion PR copies the role's host templates and files
   into this role's `templates/` and `files/`. A variable only the host files read moves to this
   role's `defaults/main.yml`. No task here runs `include_vars` on another role's defaults.
-- **A variable both planes read stays in the k8s role, with a copy here.** This role's defaults
-  hold a copy under the k8s role's own name. A change then edits both, and each half routes to
-  its own plane. A shared key in `group_vars/all.yml` routes to the deploy plane only, which
-  never runs `initial_setup.yml`.
+- **A variable both planes read stays in the k8s role, with a copy here.** The copy keeps the
+  k8s role's own name. A change then edits both, and each half routes to its own plane. A
+  shared key in `group_vars/all.yml` routes to the deploy plane only, which never runs
+  `initial_setup.yml`.
+- **docs' copy sits in its task's `vars:`, not in this role's defaults.** Role defaults are
+  play-wide in `initial_setup.yml`, and `initial_setup`'s `docs-refresh.sh.j2` reads
+  `docs_host_site_dir`. A defaults copy would make that a cross-role read, which
+  `ansible/tests/setup/test_setup_cross_role_reads.py` refuses without a row in the deployer's
+  cross-role table.
 
 Two tests in `ansible/tests/setup/` hold those rules:
 
@@ -50,14 +58,19 @@ Two tests in `ansible/tests/setup/` hold those rules:
   `StrictUndefined`, with this role's defaults and the inventory. A template reading a
   variable that only a `roles/k8s/` defaults file defines fails it. The role has no template
   yet, so the test asserts the rendered set is empty; Wave C's PR adds its first named member.
-- `ansible/tests/setup/test_k8s_host_files_pairs.py` derives every key this role's defaults
-  share with a k8s role's defaults or `group_vars/all.yml`, and asserts that each copy equals
-  its source. The declared set is empty; artifacts' conversion PR adds the first pairs.
+- `ansible/tests/setup/test_k8s_host_files_pairs.py` derives every key this role's defaults or
+  imported task `vars:` share with a k8s role's defaults or `group_vars/all.yml`, and asserts
+  that each copy equals its source. docs' PR added the first pair, `docs_host_site_dir`.
+
+A third test, `ansible/tests/setup/test_k8s_host_files_rows.py`, names every moved row by task
+file and task name, and fails when one is no longer imported or writes a different path. Each
+conversion PR adds its rows there. A row that moves back to its k8s role fails the host-write
+census in `ansible/tests/repo/_host_write_rows.py`, whose `allow` entry the move dropped.
 
 ## Autonomous-role contract (it will install a timer and remove crons with no human in the loop)
 
-The role installs nothing yet. Once rows move in, the GitOps tick applies it as
-`initial_setup.yml --tags k8s_host_files` on every merge that touches this role.
+The GitOps tick applies the role as `initial_setup.yml --tags k8s_host_files` on every merge
+that touches it. It holds host directories so far and installs no timer yet.
 
 - **Scope / exclusions:** host files, directories and units that a k8s role's Ansible apply
   owned before its flip, plus the absent arms that remove a retired role's crons. **Never** a

@@ -1,14 +1,17 @@
 {
-  "checksum": "e29ea58a0479bdc267a330bbb3ce0c3b0ab99a73a13c821573803c1222bebc88",
+  "checksum": "ecd8c19da85c418ea842ec76b169d9fb5e451e4210904159d9ca920a0a8a0f46",
   "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
   "key": "ansible/roles/setup/k8s_host_files/CLAUDE.md#What it holds",
   "row": {
     "atoms": {
+      "ansible/tests/repo/_host_write_rows.py": "e123f86e94ff2e880238260b007255adad5190a526da48d4f5f29cad399a5da1",
       "ansible/tests/setup/": "21eda762d0dab9f35d1267af17e00d045dad949bb9a35de641b6248a9993296f",
       "ansible/tests/setup/test_k8s_host_files_pairs.py": "d206ec0dc4cd0a817a9aef3f3a3edef2b10c565cf997ce16cc4bfbd4db3bafec",
-      "ansible/tests/setup/test_k8s_host_files_render.py": "59899b9c8f498b760641e55c1bc0de8c402ce6dade780130a4bc59e8711dedd1"
+      "ansible/tests/setup/test_k8s_host_files_render.py": "59899b9c8f498b760641e55c1bc0de8c402ce6dade780130a4bc59e8711dedd1",
+      "ansible/tests/setup/test_k8s_host_files_rows.py": "a3d62c69e3322e4ae0cd598b77fb133dab3a7ef9f3f0bf44637903a437ff9c39",
+      "ansible/tests/setup/test_setup_cross_role_reads.py": "c2f854a253fff368c00a3b1d673287739e63bf312f1a677522395ea9566fe25b"
     },
     "python": "3.14",
-    "verified_sha": "8f6d2a920"
+    "verified_sha": "dd8cf4ce0"
   }
 }

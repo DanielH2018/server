@@ -130,7 +130,6 @@ HOST_WRITE_ALLOW = {
     ),
     _K8S + "configarr/tasks/main.yml": _H2_THEN_D5,
     _K8S + "crowdsec/tasks/main.yml": _H2_THEN_D5,
-    _K8S + "docs/tasks/main.yml": "D5's `k8s_host_files` conversion PR for docs",
     _K8S + "game-stats/tasks/stage.yml": _CONFIGMAP,
     _K8S + "game-stats/tasks/terraria.yml": _CONFIGMAP,
     _K8S + "game-stats/tasks/valheim.yml": _CONFIGMAP,
@@ -247,15 +246,14 @@ HOST_WRITES = Census(
             "    k3s kubectl get pod x -o name 2>/dev/null >/dev/null 2>&1\n",
         ),
     ),
-    # The writes the three must_find members keep until D5's own PRs: docs's directory,
-    # pi-peer-backup's two Pi writes and artifacts' two directory tasks.
-    min_matches=5,
-    # Only D5's PRs move these three, so the row fails when one stops matching rather than
+    # The writes the two must_find members keep until D5's own PRs: pi-peer-backup's two Pi
+    # writes and artifacts' two directory tasks. docs's directory moved to `k8s_host_files`.
+    min_matches=4,
+    # Only D5's PRs move these two, so the row fails when one stops matching rather than
     # when the selector drifts. Each D5 PR that moves a member drops it here in the same commit.
     must_find=frozenset(
         {
             _K8S + "artifacts/tasks/main.yml",
-            _K8S + "docs/tasks/main.yml",
             _K8S + "pi-peer-backup/tasks/main.yml",
         }
     ),
