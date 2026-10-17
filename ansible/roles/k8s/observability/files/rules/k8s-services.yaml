@@ -1,0 +1,39 @@
+# The cluster's Services, from kube-state-metrics' services collector, which the Prometheus job
+# trims to kube_service_status_load_balancer_ingress. Plain YAML, never Jinja:
+# prometheus-rules.yaml.j2 carries this file verbatim.
+#
+# MosquittoLanAddressNotPinned replaces mosquitto's deploy-time assert, "Fail if mosquitto-lan
+# did not get its pinned LAN address", as the verify-on-a-metric conversion of D5
+# (docs/target-architecture/deploy/d5-bulk-move.md). It carries verify="true", so the soak Job
+# fails a revision that changes mosquitto while it fires. The address is a literal because a
+# rule file is never Jinja; ansible/tests/services/test_mosquitto_lan_rule_agrees.py holds it,
+# the namespace and the Service name to the inventory and the rendered Service.
+groups:
+  - name: k8s-services
+    rules:
+      # MetalLB reads its address request from an annotation and ignores an annotation key it
+      # does not recognise, so a wrong prefix brings the Service up on an auto-assigned address
+      # with every pod healthy. Home Assistant and every LAN publisher dial the pinned VIP.
+      # The second arm is conjoined with up == 1, so a failed kube-state-metrics scrape, which
+      # the Cluster Scrape Targets tile pages, does not page here a second time. The first arm
+      # is the family's zero-series alert: with no scrape job at all, nothing can verify the
+      # address.
+      - alert: MosquittoLanAddressNotPinned
+        expr: >-
+          absent(up{job="kube-state-metrics"})
+          or
+          (absent(kube_service_status_load_balancer_ingress{job="kube-state-metrics", namespace="homelab", service="mosquitto-lan", ip="10.0.0.242"})
+          and on() (up{job="kube-state-metrics"} == 1))
+        for: 5m
+        labels:
+          severity: warning
+          service: mosquitto
+          verify: "true"
+        annotations:
+          summary: The mosquitto-lan Service does not hold its pinned LAN address 10.0.0.242.
+          description: >-
+            kube-state-metrics reports no LoadBalancer ingress 10.0.0.242 on homelab/mosquitto-lan
+            for 5 minutes, or Prometheus has no kube-state-metrics scrape job. Home Assistant and
+            the LAN publishers cannot reach the broker on the VIP. MetalLB does not re-evaluate an
+            existing allocation, so delete the Service and redeploy mosquitto to force
+            reallocation.

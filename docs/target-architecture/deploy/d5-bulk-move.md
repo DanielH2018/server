@@ -162,6 +162,10 @@ also depends on H2's family PRs for six roles, as *Host-side rows* lists, and ne
 - D3's `cluster_vars.py write` refusals gate two flips: the `{{` and argon2 refusals gate
   authelia's, and the `mqtt_password_hash` colon refusal gates mosquitto's (*How each kind of
   task moves*).
+- M2's PR 4b gates dri-device-plugin's flip. dri-device-plugin's verify is M2's
+  `K8sExtendedResourceMissing`, which carries `verify="true"` and `shadow: "true"`. The soak
+  reads neither a shadow rule's `for:` nor its alert, so the verify is inert until PR 4b drops
+  `shadow` from k8s-workloads. M2 does not depend on D5, so the edge adds no loop.
 - R2 PR 7b and a green run of D3.3d's `sops-manifest-type-proof` job gate qbittorrent's flip,
   because R2 PR 7b moves `mullvad_account` into a dedicated SOPS Secret whose all-digit value
   only that job measures (*How each kind of task moves*). Neither R2 nor D3 waits on D5, so
