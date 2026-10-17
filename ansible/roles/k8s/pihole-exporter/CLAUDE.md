@@ -72,7 +72,7 @@ nothing else — so after a rotation this exporter keeps presenting the old pass
 visible rather than silent, since `up{job="pihole"}` drops to 0 once the old value stops
 authenticating, but nothing rolls the pod for you.
 
-Flux does not roll it either. The renderer's `checksum/restart` hashes only the Secrets a
+Flux does not roll it either. The restart checksum the renderer stamps hashes only the Secrets a
 tag renders itself, and `pihole-env` is the pihole role's. The flip therefore needed an entry
 in `OUTSIDE_ROLE_EXEMPT` in `scripts/renderer/tests/test_renderer_restart.py`, which records
 this trade. `deploy.sh --tags pihole-exporter` exits 5 since D5.5, so no agent path rolls the

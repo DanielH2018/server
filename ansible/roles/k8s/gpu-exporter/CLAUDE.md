@@ -82,9 +82,9 @@ sysfs" — a flat zero looks identical to a broken read path otherwise.
   scrape target would give one series flipping between two different GPUs. The `gpu` job uses
   pod discovery and labels each target with `origin: <node>`, like the `node` job.
 - **The script rides in a ConfigMap the manifests carry**, so an edit to it rolls the
-  DaemonSet without a hand-written annotation. The renderer stamps `checksum/restart`, a hash
-  of that ConfigMap, on the pod template (`docs/flux-deploy-plane.md`, *Restart triggers*).
-  That is why `templates/` carries no `checksum/` annotation of its own.
+  DaemonSet without a hand-written annotation. The renderer stamps a restart checksum, a hash of
+  that ConfigMap, on the pod template (`docs/flux-deploy-plane.md`, *Restart triggers*).
+  That is why `templates/` carries no checksum annotation of its own.
 
 ## Editing
 
