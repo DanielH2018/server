@@ -15,6 +15,8 @@ and reads each route the walk ends on. Each label set carries one expected outco
   and the two `TextfileCollectorError` sets in M6's batch A1. H3's host-plane rules page from
   the start: each `HostReconcileFailed`, and each `HostUpdateStale` once
   `observability_expected_hosts` lists a host and `host-checks.yaml` carries its rule (H3.9c).
+  M6's `HealthGateDrill` (`DRILL`) is critical and carries `drill="true"`, so it must reach
+  the blackhole ahead of both critical routes.
 
 One predicate, "blackhole or muted", would pass a meta alert routed to the blackhole, which is
 a pager that never pages. Hence one outcome per set, each with a rejecting half. A paging
@@ -205,6 +207,35 @@ def test_every_route_a_shadow_alert_reaches_is_the_blackhole(name):
 def test_a_paging_alert_expected_as_blackhole_is_flagged():
     labels, receivers = PAGING["ingress-probes-missing"]
     assert not_blackholed(labels) == receivers
+
+
+# M6's health-gate drill, written out rather than read from health-gate-drill.yaml: B-1e
+# deletes that rule and keeps the route, and the route must still hold this set.
+DRILL = {
+    "alertname": "HealthGateDrill",
+    "severity": "critical",
+    "drill": "true",
+    "service": "littlelink",
+}
+CRITICAL_RECEIVERS = ["discord", "email"]
+
+
+def test_a_critical_drill_alert_reaches_only_the_blackhole():
+    assert [r["receiver"] for r in reached(route_tree(), DRILL)] == [BLACKHOLE]
+    assert not_blackholed(DRILL) == []
+
+
+def test_the_drill_set_without_its_label_pages():
+    labels = {k: v for k, v in DRILL.items() if k != "drill"}
+    assert not_blackholed(labels) == CRITICAL_RECEIVERS
+
+
+def test_a_drill_route_behind_the_critical_routes_is_flagged():
+    tree = route_tree()
+    [drill] = [r for r in tree["routes"] if r.get("matchers") == ['drill="true"']]
+    tree["routes"].remove(drill)
+    tree["routes"].append(drill)
+    assert not_blackholed(DRILL, tree) == CRITICAL_RECEIVERS
 
 
 def test_every_ingress_rule_has_an_expected_outcome():

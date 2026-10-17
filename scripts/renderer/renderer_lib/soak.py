@@ -53,11 +53,10 @@ from renderer.renderer_lib.bundle import (
     FLUX_INDEX,
     FLUX_NAMESPACE,
     KUSTOMIZATION,
-    configmap_digest8,
-    job_spec_digest8,
     kustomization_text,
     tag_kustomization,
 )
+from renderer.renderer_lib.digest8 import configmap_digest8, job_spec_digest8
 from renderer.renderer_lib.ordering import (
     DEFERRED_SUFFIX,
     NO_EDGES,

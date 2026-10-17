@@ -365,6 +365,44 @@ def test_an_always_on_alert_is_flagged(tmp_path):
     ]
 
 
+def _always_on_problems(tmp_path, name, labels):
+    """`rule_problems` with alerting-meta's reload rule turned into the constant alert `name`,
+    carrying `labels` on top of its own."""
+
+    def always_on(rules):
+        rule = _reload_rule(rules)
+        rule.update(alert=name, expr="vector(1)")
+        rule["labels"].update(labels)
+
+    def rename_cases(tests):
+        for case in tests["tests"]:
+            for check in case["alert_rule_test"]:
+                if check["alertname"] == "PrometheusRuleReloadFailed":
+                    check["alertname"] = name
+
+    return _rule_problems(
+        *_rule_tree(tmp_path, edit_rules=always_on, edit_tests=rename_cases)
+    )
+
+
+@pytest.mark.parametrize(
+    "name, labels",
+    [("AlwaysOn", {"drill": "true"}), ("HealthGateDrill", {})],
+    ids=["another-name-with-the-drill-label", "the-drill-name-without-the-label"],
+)
+def test_a_constant_alert_short_of_the_drill_exemption_is_flagged(
+    tmp_path, name, labels
+):
+    assert _always_on_problems(tmp_path, name, labels) == [
+        f"alerting-meta/{name}: the expression 'vector(1)' names no metric, so the alert "
+        "fires forever. Only the one Watchdog may do that."
+    ]
+
+
+def test_the_health_gate_drill_with_its_label_is_clean(tmp_path):
+    assert _always_on_problems(tmp_path, "HealthGateDrill", {"drill": "true"}) == []
+
+
 @pytest.mark.parametrize(
     "expr",
     [

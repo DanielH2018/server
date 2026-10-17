@@ -111,6 +111,7 @@ def _settle(tmp_path, jobs, **env: str):
         "RESET_DIGEST": RESET,
         "CLEARS_HOLD": "false",
         "NO_RESET": "",
+        "STATEFUL": "",
         "VERDICT": "failed",
         "FAILED_NAMES": "bento-pdf",
     }
@@ -234,6 +235,81 @@ def test_a_failed_held_tag_exits_non_zero_with_the_hold_in_place(tmp_path, jobs)
     assert result.returncode != 0
     assert calls[0] == f"gh variable set DEPLOY_HOLD --body {T} -R DanielH2018/server"
     assert "tagging sha-" in result.stdout
+
+
+# -- settle: the stateful hold (D5.2b1) -----------------------------------------------------
+
+HELD = f"flux tag artifact {REPO_URL}:sha-{T} --tag held"
+
+
+def _stateful_hold(value: str) -> str:
+    return f"gh variable set DEPLOY_HOLD --body {T} {value} -R DanielH2018/server"
+
+
+def _outputs(tmp_path) -> str:
+    output = tmp_path / "github_output"
+    return output.read_text() if output.exists() else ""
+
+
+def test_a_failure_that_changes_a_snapshot_role_holds_stateful_and_does_not_reset(
+    tmp_path, jobs
+):
+    """The no-reset rule and the hold's form.
+
+    The red half is C2's `failed=` form followed by a reset, which the same fixture without
+    STATEFUL produces (`test_a_failure_writes_the_hold_before_the_reset_then_records_prod_digest`).
+    """
+    result, calls = _settle(tmp_path, jobs, STATEFUL="sonarr", FAILED_NAMES="sonarr")
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert calls == [_stateful_hold("stateful=sonarr"), HELD]
+    assert f"stateful_hold={T} stateful=sonarr\n" in _outputs(tmp_path)
+
+
+def test_a_snapshot_role_change_with_a_failing_non_snapshot_role_holds_without_reset(
+    tmp_path, jobs
+):
+    """D5 Open question 1, case (a).
+
+    The trigger is a changed snapshot role, not a failed one, so traefik's failure leaves
+    `prod` on T, and the hold names traefik.
+    """
+    result, calls = _settle(tmp_path, jobs, STATEFUL="sonarr", FAILED_NAMES="traefik")
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert calls == [_stateful_hold("stateful=traefik"), HELD]
+
+
+@pytest.mark.parametrize(
+    "verdict, names",
+    [("", ""), ("failed", ""), ("failed", "sonarr;reboot")],
+    ids=["no-verdict", "no-names", "malformed-names"],
+)
+def test_a_stateful_failure_with_no_usable_names_holds_as_stateful_unverified(
+    tmp_path, jobs, verdict, names
+):
+    result, calls = _settle(
+        tmp_path, jobs, STATEFUL="sonarr", VERDICT=verdict, FAILED_NAMES=names
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert calls == [_stateful_hold("stateful=unverified"), HELD]
+
+
+def test_a_revision_that_is_stateful_and_forward_only_writes_the_stateful_form(
+    tmp_path, jobs
+):
+    result, calls = _settle(
+        tmp_path, jobs, STATEFUL="sonarr", NO_RESET="longhorn", FAILED_NAMES="longhorn"
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert calls == [_stateful_hold("stateful=longhorn"), HELD]
+
+
+def test_a_failed_stateful_hold_write_tags_nothing_and_leaves_no_post(tmp_path, jobs):
+    result, calls = _settle(
+        tmp_path, jobs, STATEFUL="sonarr", FAKE_GH_FAIL="DEPLOY_HOLD"
+    )
+    assert result.returncode != 0
+    assert calls == [_stateful_hold("stateful=bento-pdf")]
+    assert "stateful_hold=" not in _outputs(tmp_path)
 
 
 # -- settle: the dispatch of a run for a newer green commit ---------------------------------

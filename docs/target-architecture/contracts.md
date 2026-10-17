@@ -102,6 +102,8 @@ every entry is flux-owned then waits for C-2b, through the uptime-kuma edge.
   - `DIR/cluster/<tag>-deferred/` holds the files the role passes as
     `manifests_deferred_files` (R1).
   - `DIR/flux/<tag>.yaml` holds the Kustomization `<tag>` and its suffixed kinds, see C3.
+    The Kustomization `<tag>` carries the annotation `homelab/content-digest`, the tag's
+    `own` digest from `digests.json`, which C6 exports and C7 reads (#5338).
   - `DIR/flux/<name>.yaml` and `DIR/cluster/<name>/` hold a shared kind, see C3.
   - `DIR/flux/kustomization.yaml` lists every file in `DIR/flux/`.
   - From D5.1a1, `DIR/cluster/<tag>-snapshot/` and `DIR/cluster/<tag>-verify/`.
@@ -255,12 +257,16 @@ every entry is flux-owned then waits for C-2b, through the uptime-kuma edge.
 
   `<T> unverified` is a hold under *`DEPLOY_HOLD`'s values*, because it is neither `none`
   nor empty. Other writers of `DEPLOY_HOLD` keep their own values (H1, D5, H6), and none of
-  them uses the `failed=` or the `unverified` form. D5 writes `<T> stateful=<names>` and
-  `<R> suspended-changed=<tag>`, and H1's forward-only hold writes T's SHA alone.
+  them uses the `failed=` or the `unverified` form. D5 writes `<T> stateful=<names>`,
+  `<T> stateful=unverified` and `<R> suspended-changed=<tag>`, and H1's forward-only hold
+  writes T's SHA alone.
 - **A hold without a reset.** A failed revision that changes a forward-only tag (H1) or a
   snapshot role (D5) writes `DEPLOY_HOLD` and leaves `prod`. D5's hold reads
-  `<T> stateful=<names>`. The operator accepted it in principle on 2026-10-16, and confirms
-  its two co-batched cases in D5.2b1's review (D5 Open question 1). Each of these holds
+  `<T> stateful=<names>` or `<T> stateful=unverified`. D5 writes `<T> stateful=unverified`
+  when `verify` left no verdict or its names were malformed; it is D5's own value, not C2's
+  bare `<T> unverified`. The operator accepted the hold in principle on 2026-10-16, and
+  confirmed its two co-batched cases and the `stateful=unverified` value on 2026-10-17 in
+  D5.2b1's review (D5 Open question 1). Each of these holds
   clears only by hand. Its `settle` tags T as `held`, D5's stateful hold included, because
   `last-good` stays on the older revision while `prod` names T.
 - **The hold post.** From D5.2b1, a hold posts to the deployer's Discord channel, with a
@@ -523,7 +529,11 @@ every entry is flux-owned then waits for C-2b, through the uptime-kuma edge.
 - **Cluster plane.** The commit statuses from C2, plus Flux's `gotk_resource_info` series,
   whose `revision` label reads `status.lastAppliedOriginRevision` (D1.6). Every promotion
   adds one series per Kustomization through that label, and C7's series budget counts
-  them.
+  them. A Kustomization's `content_digest` label reads its `homelab/content-digest`
+  annotation (C1). It moves only when the tag's own directory does, so it adds one
+  short-lived series per change to the tag, not one per promotion. The root Kustomization
+  `homelab` stamps the annotation and the tag's own Kustomization applies the content; no
+  `dependsOn` orders the two.
 - **Which revision field names a commit.** A Kustomization's `status.lastAppliedOriginRevision`
   holds `master@sha1:<sha>`, the `--revision` that `flux push artifact` wrote. Its
   `status.lastAppliedRevision` holds `<tag>@sha256:<digest>` and names no commit. Every reader
@@ -606,15 +616,21 @@ every entry is flux-owned then waits for C-2b, through the uptime-kuma edge.
       successor gates too;
     - only alerts that became active after the tag's reference time, read from
       `ALERTS_FOR_STATE`. The reference time is `applied_at` for an Ansible-owned tag, and for
-      an `owner: flux` tag the time its Kustomization first reported its current origin
-      revision (C6);
+      an `owner: flux` tag the time its Kustomization first reported its current
+      `content_digest` (C6). Every per-tag Kustomization tracks the shared source, so its
+      origin revision moves on every master commit; a reference read from it would let an
+      unrelated commit move a failing tag's reference past its alert (#5338). A series
+      without `content_digest` falls back to the first report of the current origin
+      revision;
     - a `probe_success` sample newer than `applied_at`, so a sample taken mid-rollout cannot
       decide;
     - no probe half for a tag whose rendered entry has no route, even when an old
       `probe_success` series is still inside the lookback.
 
-  D5's soak and `probe.py health` share one definition of this selector. A drill exclusion
-  therefore cannot apply to one reader only.
+  D5's soak and `probe.py health` share one definition of this selector, except for the
+  reference time. A drill exclusion therefore cannot apply to one reader only. The soak's
+  reference is the arrival of its revision R (`flux_soak.py:anchor`), and it reads only the
+  tags in R's changed set, so a later unrelated revision never moves it.
 - **The soak.** From D5.3, a Job in the shared kind `soak` reads the alerts labelled
   `severity="critical"` or `verify="true"` for the services in the revision's changed set
   (C2), after M1's filter for shadow rules and the Watchdog. An empty changed set passes at
@@ -1200,7 +1216,25 @@ Applied to this page:
   *Rule labels* and *Verify successors*, and M1's shadow and Watchdog filter in *The soak*.
   This entry records that the request is applied, and the gate before D5.3b1 merges is
   clear. No row in *Requested amendments not yet applied* preceded it.
+- **The flux reference time reads the tag's content, not the revision** (#5338). C7 *Health
+  gate* takes an `owner: flux` tag's reference time from the first report of its current
+  `content_digest`, C6 states the label and C1 the annotation it reads. Live on 2026-10-16,
+  peanut's reference moved from 21:04:54Z to 21:11:54Z between two `probe.py health peanut`
+  runs with no change to peanut. D5's soak keeps its own anchor: it reads alerts only for the
+  tags its revision changed, from that revision's arrival, so an unrelated revision never
+  moves it. No row in *Requested amendments not yet applied* preceded it; the PR that
+  applies it is where the contract owner rules on it. Accepted by the operator on 2026-10-17
+  in #5369's review.
 - **`soak` joins any changed set that holds a tag** (D5 Open question 19, ruled 2026-10-16).
   C2 *Verification* gains the rule beside *The changed set*, because the renderer drops
   `soak`'s `dependsOn` edges and no chain puts `soak` in the set any more. The request leaves
   *Requests on C2*, which clears the gate before D5.3b2 merges.
+
+### Applied requests (2026-10-17)
+
+- **`<T> stateful=unverified`** (D5 Open question 1). C2 *A hold without a reset* names a
+  second form of D5's stateful hold, written when `verify` left no verdict or its names were
+  malformed, and the list under *On failure* names it beside `<T> stateful=<names>`. It keeps
+  the first word a SHA, as C2's `<T> unverified` does. The operator confirmed it on
+  2026-10-17 in D5.2b1's review, with the two co-batched cases. No row in *Requested
+  amendments not yet applied* preceded it.

@@ -1138,7 +1138,9 @@ reach A6-7a, fail the bijection test and lose its only pager.
         - For an `owner: flux` tag the Ansible play skips the entry (C4), so the release
           record freezes at the last Ansible apply and would make every later alert gate. The
           reference is instead the time the tag's Kustomization first reported its current
-          origin revision, read from C6's `gotk_resource_info` `revision` label. With no such
+          content, read from C6's `gotk_resource_info` `content_digest` label. The `revision`
+          label moves on every master commit, whether or not it touches the tag, so it is the
+          fallback only for a series without `content_digest` (#5338). With no such
           series, every firing alert in the gated set below gates, as with no release
           record.
     - **After a Prometheus restart**, an alert's `ALERTS_FOR_STATE` value may restart at the
@@ -1726,9 +1728,22 @@ gate. `probe.py health <tag>` renders the tag's role to enumerate its workloads
 (`land_lib/tools.py`'s note on the detached worktree says so), and
 `health.py:_deploy_applied_at` needs the tag's release record. A scratch tag has neither.
 
-- **Blast radius.** One rule and one Alertmanager route in `observability`. The rule's alert
-  routes to the blackhole receiver, so nothing pages, and littlelink keeps serving throughout.
-  B-1e is the rollback.
+- **Blast radius.** One rule and one Alertmanager route in `observability`, and one
+  exemption in `scripts/validate/alert_conventions.py`, which otherwise refuses a constant
+  expression on any alert but the `Watchdog`. The rule's alert routes to the blackhole
+  receiver, so Alertmanager pages nobody, and littlelink keeps serving throughout. B-1e is the
+  rollback.
+- **What else fails while the rule is live.** Every `probe.py health littlelink` fails.
+  `deploy.sh --tags littlelink` posts that verdict to the gitops-deploy Discord channel
+  (`scripts/deploy_tools/deploy_lib/detach_run.py:notify`). A `land.sh` landing whose tags
+  include littlelink reads unhealthy, and so does a broad landing that gates it. The
+  deployer's own gate reads no alerts
+  (`ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_io.py:deploy_k8s`), so a
+  deployer-applied littlelink image-pin bump deploys green and sets no `hold_sha`. That bump
+  still moves `applied_at` and voids the drill. Renovate's k8s digest rule automerges
+  littlelink's GHCR `:latest@sha256` pin on its first run, with no soak.
+- **Mitigation.** No other landing runs between B-1d's `observability` deploy and B-1e's, and
+  littlelink has no open Renovate PR when B-1d lands.
 - **Preconditions, quoted in B-1d and again in B-1e.**
     - littlelink's `containers_list` entry is not `owner: flux`. D5's soak reads every
       flux-owned service's critical alerts, so the drill alert on a flux-owned tag would fail
@@ -1749,13 +1764,18 @@ gate. `probe.py health <tag>` renders the tag's role to enumerate its workloads
 1. B-1d adds a rule `HealthGateDrill` (`expr: vector(1)`, `severity: critical`,
    `drill: "true"`, `service: littlelink`) with a promtool case that it fires with those
    labels. In the same PR, an Alertmanager route sends `drill="true"` to the blackhole
-   receiver, ahead of the critical route. An amtool routing case in M1's routing test proves
-   that a critical `drill="true"` alert reaches the blackhole receiver, so nothing pages. The
-   rule becomes active after littlelink's last `applied_at`, so it gates.
+   receiver, ahead of the critical route. A routing case in M1's routing test proves that a
+   critical `drill="true"` alert reaches the blackhole receiver, so nothing pages. That test
+   walks the rendered `alertmanager.yml` in Python rather than running amtool. B-1d also
+   exempts the rule from `alert_conventions.py`'s constant-expression check, which admits only
+   an alert named `HealthGateDrill` that carries `drill="true"`, with a red proof for each
+   half. The rule becomes active after littlelink's last `applied_at`, so it gates.
 2. After the `observability` deploy, run `probe.py health littlelink`. It must exit non-zero
    and name `HealthGateDrill`. Read littlelink's `applied_at` again. Quote both in B-1e.
-3. B-1e removes the rule and keeps the route. Run `probe.py health littlelink` again; it exits
-   0. Read littlelink's `applied_at` a third time.
+3. B-1e removes the rule file, its `observability_rule_groups` entry, its promtool case and
+   the validator exemption with its tests. It keeps the route and its routing case. Run
+   `probe.py health littlelink` again; it exits 0, because the gate reads only alerts firing
+   now. Read littlelink's `applied_at` a third time.
 
 If littlelink's `applied_at` moved at any of the three reads, a deploy reached it during the
 window, for example a deployer-applied image-pin bump. The drill is then void and runs again.
@@ -2234,7 +2254,7 @@ timers or entry regenerates its glance block with `scripts/docs/gen_role_glance.
     - only alerts that became active after the tag's reference time (`ALERTS_FOR_STATE`), as
       D5 does, so an older alert cannot fail an unrelated deploy. The reference time is
       `applied_at` for an Ansible-owned tag, and the time its Kustomization first reported its
-      current C6 origin revision for an `owner: flux` tag;
+      current C6 `content_digest` for an `owner: flux` tag (#5338);
     - a `probe_success` sample newer than `applied_at`, so a sample taken mid-rollout cannot
       decide;
     - no probe half for a tag whose rendered entry has no route, even when an old

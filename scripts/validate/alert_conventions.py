@@ -24,7 +24,9 @@ Prometheus. `rule_problems` holds the role's rule files to the conventions in
   The C7 health gate excludes that name, so a second one would be hidden from every gate, and
   with none nothing pings the `alertmanager-watchdog` check on Healthchecks.io. Every other
   alert's expression names a metric (`names_a_metric`), because a constant expression fires
-  forever;
+  forever. The one exception is M6's `HealthGateDrill` carrying `drill="true"`, the live
+  health-gate drill, which needs the name and the label together. B-1e removes it with the
+  rule;
 - no rule, rule test or Alertmanager template source holds `${`. The rendered
   `alertmanager.yml` is outside this, because it carries placeholders by design;
 - a test case fires every alert and asserts its `service` and `severity`;
@@ -74,6 +76,11 @@ SERVICE_FALLBACK = re.compile(r'"service"\s*,\s*"unmapped"\s*,\s*""\s*,\s*""')
 WATCHDOG = "Watchdog"
 WATCHDOG_GROUP = "alerting-meta"
 WATCHDOG_EXPR = "vector(1)"
+# M6's live health-gate drill fires a constant alert from B-1d until B-1e deletes the rule and
+# this exemption ("The health-gate drill" in docs/target-architecture/monitoring/m6-retire-kuma.md).
+# Both the name and the label must match, so neither alone admits a second constant alert.
+DRILL_ALERT = "HealthGateDrill"
+DRILL_LABEL = "drill"
 
 # The source files that must hold no `${`: Flux's substitution would rewrite one, so the
 # rendered ConfigMap would differ from the file promtool checked.
@@ -396,7 +403,10 @@ def rule_file_problems(
             problems.append(
                 f'{stem}/{name}: shadow is {labels["shadow"]!r}; it is absent or "true"'
             )
-        if name != WATCHDOG and not names_a_metric(str(rule.get("expr", ""))):
+        may_be_constant = name == WATCHDOG or (
+            name == DRILL_ALERT and labels.get(DRILL_LABEL) == "true"
+        )
+        if not may_be_constant and not names_a_metric(str(rule.get("expr", ""))):
             problems.append(
                 f"{stem}/{name}: the expression {rule.get('expr')!r} names no metric, so the "
                 f"alert fires forever. Only the one {WATCHDOG} may do that."

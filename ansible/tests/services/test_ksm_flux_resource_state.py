@@ -13,7 +13,9 @@ template that stops passing it fails here too.
 import copy
 import json
 
+from diagnostics.probe_lib.health_alerts import CONTENT_LABEL
 from lib import yaml_fast
+from renderer.renderer_lib.bundle import CONTENT_DIGEST
 
 from _k8s_render import render_role_template
 
@@ -114,3 +116,19 @@ def test_a_revision_read_from_the_digest_field_is_flagged() -> None:
     config = copy.deepcopy(_config(_docs()))
     _kustomization_revision(config)[:] = ["status", "lastAppliedRevision"]
     assert not _reads_origin_revision(config)
+
+
+def test_the_kustomization_content_label_reads_the_renderer_annotation() -> None:
+    """#5338: three literals must agree, or the label is never exported.
+
+    The renderer writes `CONTENT_DIGEST`, kube-state-metrics exports it under `CONTENT_LABEL`,
+    and `flux_reference` matches on `CONTENT_LABEL`. With the label missing, the reference
+    quietly falls back to `revision`, which moves on every master commit.
+    """
+    resource = next(
+        r
+        for r in _resources(_config(_docs()))
+        if r["groupVersionKind"]["kind"] == "Kustomization"
+    )
+    labels = resource["metrics"][0]["labelsFromPath"]
+    assert labels.get(CONTENT_LABEL) == ["metadata", "annotations", CONTENT_DIGEST]

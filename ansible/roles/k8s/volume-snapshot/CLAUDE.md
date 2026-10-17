@@ -111,7 +111,10 @@ commit's SHA. The claim list comes from the rolled-back-to tree, so a claim the 
 renamed makes that role's "no snapshot matches this deploy" assert fire before anything moves.
 
 **For a flux-owned role the revert is an operator-only runbook.** The `<tag>-snapshot` Job takes
-the snapshot in this role's name shape, with the role's `digest8` in place of `<sha8>`. A failed
-revision that changed a snapshot role holds without resetting `prod`, and the operator reverts
-each changed snapshot role through `ansible/volume-revert.yml` before the reset. The runbook is
-*The revert runbook* in `docs/volume-snapshot-drills.md`.
+the snapshot in this role's name shape, with the role's `digest8` in place of `<sha8>`. `promote`
+runs in CI and cannot reach Longhorn, so a failed revision that changes a snapshot role holds as
+`<T> stateful=<names>` and leaves `prod` on T. The hold's Discord post carries each changed
+role's revert commands, and the operator reverts each changed snapshot role through
+`ansible/volume-revert.yml` before the reset. The runbook is *The revert runbook* in
+`docs/volume-snapshot-drills.md`, and `docs/flux-deploy-plane.md`'s *Snapshot roles hold without
+a reset* has the rule.

@@ -41,7 +41,12 @@ observability_k8s_kube_state_metrics_image: registry.k8s.io/kube-state-metrics/k
 # so upstream Flux boards and rules read these series unchanged, with one exception: a
 # Kustomization's `revision` reads status.lastAppliedOriginRevision (`master@sha1:<sha>`), the
 # field contracts.md C6 names, where upstream reads lastAppliedRevision (`prod@sha256:<digest>`),
-# which names no commit.
+# which names no commit. A second addition, `content_digest`, reads the annotation the renderer
+# stamps on Kustomization `<tag>` (bundle.py:CONTENT_DIGEST). It is the digest of the tag's own
+# rendered directory, so it holds across a master commit that moves `revision` without touching
+# the tag, and C7's flux reference time matches on it (#5338). A change to the tag adds one
+# short-lived series: the root Kustomization `homelab` stamps the new annotation and the tag's
+# own Kustomization reports the new revision, in either order.
 #
 # kube-state-metrics drops a label whose path is absent. The flux role omits spec.suspend
 # unless its suspend lever is on, so `suspended` is absent rather than "false" on an object
@@ -67,6 +72,7 @@ observability_ksm_flux_resource_state:
               ready: [status, conditions, "[type=Ready]", status]
               suspended: [spec, suspend]
               revision: [status, lastAppliedOriginRevision]
+              content_digest: [metadata, annotations, homelab/content-digest]
               source_name: [spec, sourceRef, name]
       - groupVersionKind: {group: source.toolkit.fluxcd.io, version: v1, kind: OCIRepository}
         metricNamePrefix: gotk
@@ -259,6 +265,8 @@ observability_rule_groups:
   - ingress-probes
   - host-checks
   - deploy-pipeline
+  # M6's live health-gate drill, from B-1d to B-1e, which removes it.
+  - health-gate-drill
 
 # The hosts whose homelab-updater must report, each with the scrape job that reads its node
 # exporter and the age in seconds past which its last successful update pages. host-checks.yaml

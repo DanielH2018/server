@@ -33,9 +33,10 @@ class FakeProm:
     means the series does not exist yet. `queries` records every query the gate sent.
     """
 
-    def __init__(self, series=(), flux_first_report=None):
+    def __init__(self, series=(), flux_first_report=None, flux_labels=None):
         self.series: list = list(series)
         self.flux_first_report = flux_first_report
+        self.flux_labels = flux_labels or {"revision": "master@sha1:aaaa"}
         self.now = APPLIED + 30
         self.queries = []
 
@@ -47,6 +48,10 @@ class FakeProm:
         if promql.startswith("min(min_over_time"):
             fr = self.flux_first_report
             return [] if fr is None else [{"metric": {}, "value": [self.now, str(fr)]}]
+        if promql.startswith("gotk_resource_info{"):
+            if self.flux_first_report is None:
+                return []
+            return [{"metric": self.flux_labels, "value": [self.now, "1"]}]
         stamp = promql.startswith("timestamp(")
         name, _, body = promql.removeprefix("timestamp(").partition("{")
         rows = []
@@ -201,6 +206,29 @@ def test_a_flux_tag_alert_after_its_kustomization_revision_is_flagged():
     fake.series = alert(APPLIED + 60, service="peanut") + START
     gate = health_alerts.gate("peanut", reference, APPLIED, False, fake.tools())
     assert gate[0] == 1
+
+
+@pytest.mark.parametrize(
+    ("labels", "on"),
+    [
+        ({"revision": "master@sha1:aaaa", "content_digest": "x"}, "on(content_digest)"),
+        # A Kustomization stamped before #5338, or a kube-state-metrics that does not export
+        # the label: matching on it would match every sample in the lookback.
+        ({"revision": "master@sha1:aaaa"}, "on(revision)"),
+    ],
+)
+def test_a_flux_reference_matches_on_content_only_when_the_series_carries_it(
+    labels, on
+):
+    fake = FakeProm(flux_first_report=APPLIED, flux_labels=labels)
+    assert health_alerts.flux_reference("peanut", fake.query) == APPLIED
+    (first,) = [q for q in fake.queries if q.startswith("min(")]
+    assert on in first
+
+
+def test_a_flux_reference_without_a_series_is_none():
+    fake = FakeProm()
+    assert health_alerts.flux_reference("peanut", fake.query) is None
 
 
 def test_an_ansible_tag_reference_is_its_applied_at():

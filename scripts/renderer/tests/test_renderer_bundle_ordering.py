@@ -68,7 +68,7 @@ def test_an_edge_between_two_flux_owned_roles_is_kept():
     docs = _docs(ordering, ["bento-pdf", "texbrain"])
     assert _depends(docs["texbrain"]) == ["bento-pdf"]
     assert _dropped(docs["texbrain"]) == "traefik"
-    assert "annotations" not in docs["bento-pdf"]["metadata"]
+    assert _dropped(docs["bento-pdf"]) is None
 
 
 def test_a_flux_owned_role_outside_the_render_is_kept_not_annotated():
