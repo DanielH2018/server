@@ -40,17 +40,20 @@ def test_any_other_owner_value_raises(tmp_path, value: str):
 
 
 def test_the_entries_d2_to_d5_moved_are_live_and_owned_by_flux():
-    """D2.7, D3.6, D4.5, D5.5, D5.6, D5.7 and D5.8 moved these fourteen to Flux.
+    """D2.7, D3.6, D4.5, D5.5, D5.6, D5.7, D5.8 and D5.9 moved these eighteen to Flux.
 
     A floor, not an equality: from D5.5 on the scaffolder writes `owner: flux` on every new
     entry, so the live set grows with each new service.
     """
     assert {
+        "bazarr",
         "bento-pdf",
         "deploy-ui",
+        "freshrss",
         "gpu-exporter",
         "homepage",
         "littlelink",
+        "livesync",
         "loki-homelab",
         "longhorn-ui",
         "navidrome",
@@ -59,5 +62,6 @@ def test_the_entries_d2_to_d5_moved_are_live_and_owned_by_flux():
         "peanut",
         "pihole-exporter",
         "scrutiny",
+        "speedtest",
         "texbrain",
     } <= tag_owners().keys()

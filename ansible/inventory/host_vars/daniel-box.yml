@@ -339,6 +339,9 @@ containers_list:
       - flaresolverr-netpol-probe  # control leg of this role's own isolation probe
   - name: bazarr
     platform: k8s
+    # Flux applies bazarr through `promote`, and every Ansible path skips it (D5.9). The
+    # handback is two PRs, `owner: released` then removing `owner`: docs/flux-deploy-plane.md.
+    owner: flux
     weekly_backup_claims: {bazarr-config: 5}  # Fri
     depends_on: [media-volume]
     hostname: "bazarr"
@@ -421,6 +424,10 @@ containers_list:
     use_authelia: false
   - name: speedtest
     platform: k8s
+    # Flux applies speedtest through `promote`, and substitutes its APP_KEY Secret from
+    # homelab-cluster-vars (D5.9). The handback is two PRs, `owner: released` then removing
+    # `owner`: docs/flux-deploy-plane.md.
+    owner: flux
     hostname: "speedtest"
     port: 80
     use_authelia: true
@@ -447,6 +454,9 @@ containers_list:
     platform: k8s
   - name: freshrss
     platform: k8s
+    # Flux applies freshrss through `promote`, and every Ansible path skips it (D5.9). The
+    # handback is two PRs, `owner: released` then removing `owner`: docs/flux-deploy-plane.md.
+    owner: flux
     weekly_backup_claims: {freshrss-config: 5}  # Fri
     hostname: "freshrss"
     kuma: {name: k3s FreshRSS}
@@ -487,6 +497,10 @@ containers_list:
   # deliberately (see the role's defaults).
   - name: livesync
     platform: k8s
+    # Flux applies livesync through `promote`, and substitutes its CouchDB credentials Secret
+    # from homelab-cluster-vars (D5.9). The handback is two PRs, `owner: released` then
+    # removing `owner`: docs/flux-deploy-plane.md.
+    owner: flux
     hostname: "livesync"
     # A hand-written tile in uptime-kuma's static-monitors.yaml.j2 covers it: livesync-k8s, which expects CouchDB's 401.
     kuma: false
