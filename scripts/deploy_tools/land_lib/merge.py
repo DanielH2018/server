@@ -57,7 +57,8 @@ queues are not offered on a user-owned repo and no ruleset requires an up-to-dat
 nothing else re-tests a PR against the master it merges into. 4 of 5 sampled red master runs
 followed a PR whose every job was green, and two of them came from a master commit merged
 after the PR's base. Once the head reads green, `_master_paths_since` asks GitHub which paths
-master changed since the PR's merge base. When any did, `_update_branch` merges master into the
+master changed since the master commit the head's green CI run tested it against (the PR's
+merge base when that cannot be read). When any did, `_update_branch` merges master into the
 PR branch, and the merge waits for CI on the updated head instead. A landing updates the
 branch at most once. It never updates the branch of a head the landing policy admitted on
 an approval, which the update would void: a stale approved head is refused with a rebase
@@ -245,7 +246,10 @@ def _merge_directly(ln: Landing, head: str) -> str:
 
 
 def _master_paths_since(ln: Landing, head: str) -> list[str]:
-    """The paths master changed since the merge base of `head` and master; [] when none did.
+    """The paths master changed since the base `head` was last tested against; [] when none did.
+
+    That base is the master commit the head's green `ci.yml` PR run checked out
+    (`tools.tested_base`), and the merge base of `head` and master when it cannot be read.
 
     GitHub's compare endpoint lists at most 300 files. A capped list is still non-empty, so a
     capped answer still reads as stale.
@@ -258,14 +262,17 @@ def _master_paths_since(ln: Landing, head: str) -> list[str]:
     # sharing no directory with the PR: #2922 (cc2a71fd8) added a size test while master grew the
     # claude-otel role's CLAUDE.md past it, and #2266 (b86d87d60) changed initial_setup
     # while master changed docs/facts.lock and ansible/roles/setup/k3s/CLAUDE.md. A directory
-    # or overlap filter passes both. The merge base is older than the base the PR's CI ran
-    # against when the PR was pushed after master moved, so this can update a branch that CI
-    # had already tested in full. That costs one CI run.
+    # or overlap filter passes both. Only the base moves: a PR pushed after master moved was
+    # tested against that newer master, so the merge base alone would update a branch CI had
+    # already tested in full (149 of 235 landings in 2026-10-15..17, 642 CI minutes, #5487).
+    # The tested base is the master commit in the checkout log's `Merge <head> into <base>`;
+    # when it cannot be read the merge base stands, which costs one CI run at worst.
+    base = ln.tools.tested_base(head) or head
     try:
         paths = as_list(
             ln.tools.gh_json(
                 "api",
-                f"repos/{{owner}}/{{repo}}/compare/{head}...{BRANCH}",
+                f"repos/{{owner}}/{{repo}}/compare/{base}...{BRANCH}",
                 "--jq",
                 "[.files[]?.filename]",
             ),

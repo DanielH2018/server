@@ -35,6 +35,7 @@ MODULES = frozenset(
         "land_shared",
         "land_tags",
         "land_tags_cli",
+        "land_tested_base",
         "pin_gate",
         "pin_reads",
     }
@@ -52,6 +53,7 @@ ALLOWED = {
         "land_rerolls",
         "land_shared",
         "land_tags",
+        "land_tested_base",
     },
     # The PR JSON types are a leaf: `Landing.view` returns them and the policy reads them.
     "pr_json": set(),
@@ -93,6 +95,7 @@ ALLOWED = {
     "land_flux": {"pin_reads"},
     "land_rerolls": set(),
     "land_shared": set(),
+    "land_tested_base": set(),
     # cc-wait's `land` source runs under `uv run --no-project`, so it reads only the
     # stdlib-only fork record and the verdict words.
     "land_probe": {"detach", "outcome"},
