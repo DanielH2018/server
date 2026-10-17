@@ -52,6 +52,7 @@ scripts/diagnostics/tests/test_probe_log_secret_redaction.py 3
 scripts/diagnostics/tests/test_probe_metric_span.py 3
 scripts/diagnostics/tests/test_probe_monitors.py 4
 scripts/diagnostics/tests/test_probe_pi_plane.py 5
+scripts/diagnostics/tests/test_probe_releases_owned_listing.py 4
 scripts/diagnostics/tests/test_ui_smoke_helpers.py 2
 scripts/docs/tests/test_build_docs.py 12
 scripts/docs/tests/test_gen_reference_backlog.py 1
