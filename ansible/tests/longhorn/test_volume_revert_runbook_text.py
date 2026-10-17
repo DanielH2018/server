@@ -45,13 +45,13 @@ _INLINE_CODE = re.compile(r"`([^`]+)`")
 _LIST_ITEM = re.compile(r"^\s*(?:-|\d+\.)\s")
 _KUBECTL_PATCH = re.compile(r"\bkubectl\b.*\bpatch\b")
 _NEGATION = re.compile(r"\b(?:not|never|don't|skip\w*)\b", re.IGNORECASE)
+_ORDER_WORD = re.compile(r"\b(?:after|before|once|until|first|then)\b", re.IGNORECASE)
 _RESUME_OR_CLEAR = re.compile(
     r"\bresum\w*|--body none|\"suspend\":false", re.IGNORECASE
 )
-# An ordering word among the few words just ahead of an event, with no comma, colon or
-# semicolon between them: "after you resume", "once you have resumed", "before running".
-_ORDER_WORDS = {"after", "before", "once", "until"}
-_ORDER_WINDOW_WORDS = 4
+WAN_RETURNS = "Once the WAN returns,"
+# The one resume mention the offline branch may hold: an ordering constraint on the set.
+_LATER_RESUME = "before any resume"
 
 
 def section(text: str, heading: str) -> str:
@@ -144,68 +144,55 @@ def offline_branch(shed: str) -> str:
     return "\n".join(lines[start:end])
 
 
-def order_word(clause: str, start: int) -> str | None:
-    """The ordering word just ahead of the event at `start`, lower-cased, or None.
-
-    Only the last few words before the event count, and a comma, colon or semicolon between
-    the word and the event ends its reach. So "Once the WAN returns, run" gives `run` no
-    ordering word, while "only after you resume" gives the resume `after`.
-    """
-    reach = re.split(r"[,;:]", clause[:start])[-1]
-    window = re.findall(r"[\w']+", reach.lower())[-_ORDER_WINDOW_WORDS:]
-    return next((w for w in reversed(window) if w in _ORDER_WORDS), None)
-
-
 def offline_order_problems(branch: str) -> list[str]:
     """In the offline branch, `DEPLOY_HOLD` is set before any resume or clear.
 
-    Events are ordered by position, inside a clause and across clauses, so a resume written
-    ahead of the set in the same sentence still counts as first. Text position is not
-    execution order when an ordering word stands just ahead of an event, so within its clause:
+    Text position is not execution order: "set it only after you resume", "before running
+    the set, resume" and "set it. Before that, resume" all put the resume first. So the
+    check is structural rather than positional, and it rejects any wording it cannot rank:
 
-    - a resume after "after", "once" or "until" runs before the clause's other events;
-    - a resume after "before" ("before any resume") names a later step, not an action here;
-    - a set after "before" ("before running the set, resume") runs after the other events;
-    - a set after "after", "once" or "until" runs before them.
+    - The first action after "Once the WAN returns," is `gh variable set DEPLOY_HOLD`. The
+      text between them holds no sentence end, no resume or clear, no ordering word and no
+      negation.
+    - The branch mentions a resume or clear only as "before any resume". Resuming is step
+      4's job, so any other mention, in any sentence, is a problem.
 
-    Only `gh variable set DEPLOY_HOLD` sets the hold; a set of any other variable is not an
-    event. A set with `--body none` is a clear, and a set its clause negates ("do not run",
-    "skip") leaves the hold unset. Any resume or clear before the first set is a problem,
-    because a queued `promote` run can start as soon as GitHub answers.
+    Only `gh variable set DEPLOY_HOLD` sets the hold; a set of any other variable, or one
+    with `--body none`, does not count. A queued `promote` run can start as soon as GitHub
+    answers, which is why the set must come first.
     """
     problems = []
-    hold_set = False
     text = " ".join(branch.split())
-    for clause in re.split(r"(?<=[.!?;])\s+", text):
-        events = []
-        for m in _RESUME_OR_CLEAR.finditer(clause):
-            word = order_word(clause, m.start())
-            if word == "before":
-                continue
-            rank = float("-inf") if word else m.start()
-            events.append((rank, "resume", m.group(0)))
-        for m in re.finditer(re.escape(HOLD_SET), clause):
-            if "--body none" in clause[m.end() : m.end() + 40]:
-                continue
-            if _NEGATION.search(clause[: m.start()]):
-                continue
-            word = order_word(clause, m.start())
-            if word == "before":
-                rank = float("inf")
-            elif word:
-                rank = float("-inf")
-            else:
-                rank = m.start()
-            events.append((rank, "set", m.group(0)))
-        # A set and a resume ranked alike sort resume first ("resume" < "set"), so a tie
-        # reads as the unsafe order.
-        for _, kind, _match in sorted(events):
-            if kind == "set":
-                hold_set = True
-            elif not hold_set:
-                problems.append(clause)
-    if not hold_set:
-        problems.append(f"the offline branch never runs `{HOLD_SET}`")
+    anchor = text.find(WAN_RETURNS)
+    if anchor < 0:
+        return [f"the offline branch never says {WAN_RETURNS!r}"]
+    after_anchor = text[anchor + len(WAN_RETURNS) :]
+    first_set = next(
+        (
+            m
+            for m in re.finditer(re.escape(HOLD_SET), after_anchor)
+            if "--body none" not in after_anchor[m.end() : m.end() + 40]
+        ),
+        None,
+    )
+    if first_set is None:
+        problems.append(
+            f"the offline branch never runs `{HOLD_SET}` after the WAN returns"
+        )
+    else:
+        lead = after_anchor[: first_set.start()]
+        if (
+            re.search(r"[.!?;]", lead)
+            or _RESUME_OR_CLEAR.search(lead)
+            or _ORDER_WORD.search(lead)
+            or _NEGATION.search(lead)
+        ):
+            problems.append(f"`{HOLD_SET}` is not the first action: {lead!r}")
+    for m in _RESUME_OR_CLEAR.finditer(text):
+        if not text[: m.end()].endswith(_LATER_RESUME):
+            problems.append(
+                f"a resume or clear the set may not precede: {text[max(0, m.start() - 40) : m.end()]!r}"
+            )
     return problems
 
 
@@ -285,6 +272,9 @@ def test_the_offline_branch_sets_the_hold_before_any_resume(shed: str) -> None:
     assert offline_order_problems(offline_branch(shed)) == []
 
 
+SET = "run this step's `gh variable set DEPLOY_HOLD` first, before any resume and before step 4"
+
+
 @pytest.mark.parametrize(
     ("old", "new"),
     [
@@ -303,18 +293,43 @@ def test_the_offline_branch_sets_the_hold_before_any_resume(shed: str) -> None:
         ),
         # Ordering words that put the resume first while the set comes first in the text.
         (
-            "run this step's `gh variable set DEPLOY_HOLD` first, before any resume and before step 4",
+            SET,
             "run this step's `gh variable set DEPLOY_HOLD` only after you resume each suspended "
             "tag, and before step 4",
         ),
         (
-            "run this step's `gh variable set DEPLOY_HOLD` first, before any resume and before step 4",
+            SET,
             "before running this step's `gh variable set DEPLOY_HOLD`, resume each suspended tag, "
             "then step 4",
         ),
         (
-            "run this step's `gh variable set DEPLOY_HOLD` first, before any resume and before step 4",
+            SET,
             "run this step's `gh variable set DEPLOY_HOLD` once you have resumed each suspended tag",
+        ),
+        # A "before <noun>" ahead of a resume does not make the resume a later step.
+        (
+            SET,
+            "before step 4 resume each suspended tag, then run this step's "
+            "`gh variable set DEPLOY_HOLD`",
+        ),
+        # "after that" refers back to the resume.
+        (
+            SET,
+            "resume each suspended tag, then after that run `gh variable set DEPLOY_HOLD`",
+        ),
+        # Ordering words across a sentence boundary.
+        (
+            SET,
+            "run this step's `gh variable set DEPLOY_HOLD`. Before that, resume each suspended "
+            "tag",
+        ),
+        (
+            SET,
+            "run this step's `gh variable set DEPLOY_HOLD`. But first resume each suspended tag",
+        ),
+        (
+            "before step 4,",
+            "before step 4. Before running it, resume each suspended tag,",
         ),
         # A set of another variable is not the hold.
         (
