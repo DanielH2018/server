@@ -91,6 +91,8 @@ FLUX_NAMESPACE = "flux-system"
 # names it until a Kustomization in the same bundle generates it.
 CLUSTER_VARS_SECRET = "homelab-cluster-vars"
 FLUX_API_VERSION = "kustomize.toolkit.fluxcd.io/v1"
+# Kustomization `<tag>`'s `own` digest, C6's `content_digest` and C7's flux reference (#5338).
+CONTENT_DIGEST = "homelab/content-digest"
 
 # The shared kind that delivers `CLUSTER_VARS_SECRET` (D3.3a), and the name its directory
 # gives the copy of the cluster file. kustomize-controller decrypts a `secretGenerator`
@@ -186,6 +188,7 @@ def tag_kustomization(
     edges: Edges = NO_EDGES,
     prune: bool = True,
     suspend: bool = False,
+    content: str | None = None,
 ) -> dict:
     """The Kustomization `tag`, as D2's *The per-tag Kustomization* shows it.
 
@@ -204,6 +207,7 @@ def tag_kustomization(
             and `SUSPENDED_DEPS` lists `edges.suspended`; each is left out when empty.
         prune: False for a role whose defaults set `flux_prune: false` (`role_fields`).
         suspend: True for a role whose defaults set `flux_suspend: true`, the one value written.
+        content: The tag's `own` digest, written as `CONTENT_DIGEST` unless None.
     """
     spec: dict = {
         "sourceRef": {"kind": "OCIRepository", "name": ROOT},
@@ -232,6 +236,8 @@ def tag_kustomization(
     metadata: dict = {"name": tag, "namespace": FLUX_NAMESPACE}
     annotations = {ANSIBLE_OWNED_DEPS: edges.dropped, SUSPENDED_DEPS: edges.suspended}
     annotations = {k: ",".join(sorted(v)) for k, v in annotations.items() if v}
+    if content is not None:
+        annotations[CONTENT_DIGEST] = content
     if annotations:
         metadata["annotations"] = annotations
     return {
@@ -284,6 +290,7 @@ def flux_files(
     decrypting: Iterable[str] = (),
     edges: Mapping[str, Edges] | None = None,
     fields: Mapping[str, Mapping] | None = None,
+    contents: Mapping[str, str] | None = None,
 ) -> dict[str, str]:
     """Each `flux/` file of a bundle publishing the tags in `substitutes`, by bundle path.
 
@@ -299,6 +306,7 @@ def flux_files(
         edges: Each Kustomization's generated edges; a name it does not map has none.
         fields: Each tag's per-role fields (`role_fields`): `prune` and `timeout` for `<tag>`
             and `<tag>-deferred`, `suspend` for all; a tag it does not map has none.
+        contents: Each tag's `own` digest, stamped on `<tag>` alone.
     """
     decrypting = frozenset(decrypting)
     edges = edges or {}
@@ -319,6 +327,7 @@ def flux_files(
                 edges.get(name, NO_EDGES),
                 own.get("prune", True) if name in role_own else True,
                 own.get("suspend", False),
+                (contents or {}).get(name) if name == tag else None,
             )
             for name in names
         ]
@@ -348,6 +357,21 @@ def _name_of(path: str) -> tuple[str, bool] | None:
     return None
 
 
+def own_digests(cluster: Mapping[str, str], tags: Iterable[str]) -> dict[str, str]:
+    """Each tag's `own` digest over the `cluster/` files in `cluster`, as `digests` computes it.
+
+    DECIDED: `CONTENT_DIGEST` carries `own`, not `footprint`, which covers the annotation's
+    own file. A missed `<tag>-deferred` change leaves C7's reference earlier (#5338).
+    """
+    held = {path: _name_of(path) for path in cluster}
+    return {
+        tag: digest(
+            {p: t.encode() for p, t in cluster.items() if held[p] == (tag, True)}
+        )
+        for tag in tags
+    }
+
+
 def digest(files: Mapping[str, bytes]) -> str:
     """One SHA-256 over `files`, each bundle path with the SHA-256 of its bytes, sorted.
 
@@ -358,31 +382,6 @@ def digest(files: Mapping[str, bytes]) -> str:
     for path in sorted(files):
         hashed.update(f"{path}\0{hashlib.sha256(files[path]).hexdigest()}\n".encode())
     return hashed.hexdigest()
-
-
-def job_spec_digest8(job: Mapping) -> str:
-    """The first 8 hex digits of the SHA-256 of a Job's `spec`, as sorted-key compact JSON.
-
-    Every Job Flux applies ends its name in `-<this>` (D5, *Rules for every Job Flux
-    applies*). A Job's pod template is immutable, so a spec change must also change the name,
-    and the name is left out of what is hashed. The Job census in
-    `scripts/renderer/tests/test_renderer_job_census.py` checks each name against it, so the
-    first renderer kind that names a Job (D5.2a's snapshot) names it with this too.
-    """
-    text = json.dumps(job.get("spec"), sort_keys=True, separators=(",", ":"))
-    return hashlib.sha256(text.encode()).hexdigest()[:8]
-
-
-def configmap_digest8(configmap: Mapping) -> str:
-    """The first 8 hex digits of the SHA-256 of a ConfigMap's `data` and `binaryData`.
-
-    A Job's script ConfigMap ends its name in `-<this>`, and the Job's spec names the
-    ConfigMap, so `job_spec_digest8` covers the script and a script fix renames the Job (D5,
-    *Script delivery*).
-    """
-    content = {k: configmap.get(k) or {} for k in ("data", "binaryData")}
-    text = json.dumps(content, sort_keys=True, separators=(",", ":"))
-    return hashlib.sha256(text.encode()).hexdigest()[:8]
 
 
 def digests(
@@ -553,6 +552,11 @@ def bundle_files(
 
     shared = cluster_vars_files(cluster_vars, timeout)
     flux = {p: t for p, t in shared.items() if p.startswith(f"{FLUX_DIR}/")}
+    cluster = {
+        f"{CLUSTER_DIR}/{name}/{file}": text
+        for name, held in directories.items()
+        for file, text in held.items()
+    }
     files = flux_files(
         {name: per_directory.get(name, False) for name in edges},
         timeout,
@@ -560,15 +564,11 @@ def bundle_files(
         set(decrypting) & set(tags),
         edges,
         fields,
+        own_digests(cluster, tags),
     )
     # The soak sizes its wait from the other Kustomizations, so it renders after them.
     soak, published = soak_pair(revision, tags, directories, ordering.suspended, files)
     files |= shared | published
-    cluster = {
-        f"{CLUSTER_DIR}/{name}/{file}": text
-        for name, held in directories.items()
-        for file, text in held.items()
-    }
     refuse_suspend_false({**cluster, **files})
     # `soak` is digested at the normalised SHA, so R's own SHA never moves its footprint (C1).
     digested = {**cluster, **files, **soak}

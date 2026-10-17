@@ -1,14 +1,14 @@
 {
-  "checksum": "43d4e7649adfc6bb2a605a369c0b83014b8332bae5fea28697650b2976f1bdb3",
+  "checksum": "b3f51a10687da0fea8428b5e854328efc8354c7aa6a7a49ac57c286a56196605",
   "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
   "key": "ansible/roles/k8s/observability/CLAUDE.md#Flux in the metrics plane",
   "row": {
     "atoms": {
-      "ansible/roles/k8s/observability/defaults/main.yml:observability_ksm_flux_resource_state": "375873473318b0485daea491d4dca6f99091fc23a5bb02935a9be6059fc17842",
+      "ansible/roles/k8s/observability/defaults/main.yml:observability_ksm_flux_resource_state": "84ae79e01ecb0156576138095dbe509c120e636124b573a45dc30b1534597b41",
       "ansible/tests/services/test_ksm_flux_resource_state.py": "6d8c9d548698669c01ee878bc7b6ab53bbab15ec8dc095c5c8e8bc67ed1e69bd",
       "docs/flux-deploy-plane.md": "807c3deb44c3178e7a6f9fc0bc398a3b748b95c468b14ce9b1b890c8684535d9"
     },
     "python": "3.14",
-    "verified_sha": "5d925cf9c"
+    "verified_sha": "e5b56a0fc"
   }
 }

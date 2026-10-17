@@ -20,6 +20,7 @@ from renderer.renderer_lib.bundle import (
     FLUX_INDEX,
     SHARED_KINDS,
     CLUSTER_VARS_FILE,
+    CONTENT_DIGEST,
     UNCLASSIFIED,
     bundle_files,
     digests,
@@ -75,9 +76,16 @@ def _expected(name: str) -> dict:
     }
 
 
+def _with_content(expected: dict, files: dict[str, str]) -> dict:
+    """`expected` carrying the tag's `own` digest from the bundle's `digests.json`."""
+    own = json.loads(files[DIGESTS])[expected["metadata"]["name"]]["own"]
+    expected["metadata"]["annotations"] = {CONTENT_DIGEST: own}
+    return expected
+
+
 def test_a_tag_holding_a_placeholder_gets_substitute_from_and_the_cluster_vars_edge():
     files = _bundle(_tag("bento-pdf", sentinel("email")))
-    expected = _expected("bento-pdf")
+    expected = _with_content(_expected("bento-pdf"), files)
     expected["spec"]["postBuild"] = {
         "substituteFrom": [{"kind": "Secret", "name": "homelab-cluster-vars"}]
     }
@@ -92,7 +100,9 @@ def test_a_tag_holding_no_placeholder_gets_neither_and_keeps_a_literal_dollar_br
     """
     tag = _tag("bento-pdf", "${HOME}")
     files = _bundle(tag)
-    assert yaml_fast.safe_load(files["flux/bento-pdf.yaml"]) == _expected("bento-pdf")
+    assert yaml_fast.safe_load(files["flux/bento-pdf.yaml"]) == _with_content(
+        _expected("bento-pdf"), files
+    )
     rendered = apply_placeholders([tag], ("email",)).tags[0].files["deployment.yaml"]
     assert "value: ${HOME}\n" in rendered, (
         "Flux never substitutes it, so it stays unescaped"

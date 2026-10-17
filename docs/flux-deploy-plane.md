@@ -66,10 +66,13 @@ Two sources put Flux in the metrics plane, both in `ansible/roles/k8s/observabil
   works.
 - **kube-state-metrics exports `gotk_resource_info`**, one series per Kustomization and
   `OCIRepository`, with the labels `name`, `exported_namespace`, `ready`, `suspended` and
-  `revision`. The controllers do not export this series themselves. A Kustomization's
+  `revision`, and on a Kustomization `content_digest` too. The controllers do not export this series themselves. A Kustomization's
   `revision` reads `status.lastAppliedOriginRevision`, so it carries `master@sha1:<sha>`, the
   field [contracts.md C6](target-architecture/contracts.md) names. An `OCIRepository`'s `revision` reads
-  `status.artifact.revision`, the digest form. The config is a defaults variable,
+  `status.artifact.revision`, the digest form. A Kustomization's `content_digest` reads the
+  `homelab/content-digest` annotation, which the renderer stamps on each Kustomization `<tag>`
+  with the tag's `own` digest from `digests.json`. A master commit that leaves the tag's
+  directory unchanged keeps it, while `revision` moves on every commit (#5338). The config is a defaults variable,
   `observability_ksm_flux_resource_state`, passed to kube-state-metrics as one argument, so a
   change to it rolls kube-state-metrics.
 
@@ -1103,7 +1106,7 @@ under *Rules for every Job Flux applies (D5.1a3)*.
   the bundle.
 - **Name.** Each name ends in `-<digest8>`, the first 8 hex digits of the SHA-256 of the
   Job's `spec` as sorted-key JSON (`job_spec_digest8` in
-  `scripts/renderer/renderer_lib/bundle.py`). The spec holds no `${...}` placeholder,
+  `scripts/renderer/renderer_lib/digest8.py`). The spec holds no `${...}` placeholder,
   because Flux substitutes it after the digest is taken. A substituted value reaches a Job
   through a Secret.
 - **Script delivery.** Every container runs `python3 <mount>/<script>.py`, where `<mount>`

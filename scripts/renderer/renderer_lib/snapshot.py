@@ -42,12 +42,11 @@ from renderer.renderer_lib.bundle import (
     CLUSTER_DIR,
     FLUX_NAMESPACE,
     KUSTOMIZATION,
-    configmap_digest8,
     digest,
-    job_spec_digest8,
     kustomization_text,
 )
 from renderer.renderer_lib.cluster import RenderedTag
+from renderer.renderer_lib.digest8 import configmap_digest8, job_spec_digest8
 from renderer.renderer_lib.environment import RenderError
 
 FILES = K8S_ROLES / "manifests" / "files"

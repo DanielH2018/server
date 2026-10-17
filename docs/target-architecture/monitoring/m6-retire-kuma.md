@@ -1138,7 +1138,9 @@ reach A6-7a, fail the bijection test and lose its only pager.
         - For an `owner: flux` tag the Ansible play skips the entry (C4), so the release
           record freezes at the last Ansible apply and would make every later alert gate. The
           reference is instead the time the tag's Kustomization first reported its current
-          origin revision, read from C6's `gotk_resource_info` `revision` label. With no such
+          content, read from C6's `gotk_resource_info` `content_digest` label. The `revision`
+          label moves on every master commit, whether or not it touches the tag, so it is the
+          fallback only for a series without `content_digest` (#5338). With no such
           series, every firing alert in the gated set below gates, as with no release
           record.
     - **After a Prometheus restart**, an alert's `ALERTS_FOR_STATE` value may restart at the
@@ -2234,7 +2236,7 @@ timers or entry regenerates its glance block with `scripts/docs/gen_role_glance.
     - only alerts that became active after the tag's reference time (`ALERTS_FOR_STATE`), as
       D5 does, so an older alert cannot fail an unrelated deploy. The reference time is
       `applied_at` for an Ansible-owned tag, and the time its Kustomization first reported its
-      current C6 origin revision for an `owner: flux` tag;
+      current C6 `content_digest` for an `owner: flux` tag (#5338);
     - a `probe_success` sample newer than `applied_at`, so a sample taken mid-rollout cannot
       decide;
     - no probe half for a tag whose rendered entry has no route, even when an old
