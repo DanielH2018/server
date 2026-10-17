@@ -25,6 +25,7 @@ MODULES = frozenset(
         "pipeline",
         "detach",
         "handoff",
+        "host_wait",
         "pr_json",
         "land_flux",
         "land_platform",
@@ -83,6 +84,8 @@ ALLOWED = {
     # The CLI over the tag derivation. It reads `shared_role_reach` from outside land_lib,
     # which imports `land_tags`, so it sits above both (#4945).
     "land_tags_cli": {"land_tags", "land_reach"},
+    # H3.9a: the wait on the hosts a merge reaches. Its snapshot and render are `tools`' boundaries.
+    "host_wait": {"landing", "outcome", "tools"},
     "land_platform": {"land_tags"},
     "land_reach": set(),
     # The boundaries for a tag Flux applies. It imports promote_lib.wait, outside land_lib.
