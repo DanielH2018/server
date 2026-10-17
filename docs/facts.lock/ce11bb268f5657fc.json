@@ -1,0 +1,13 @@
+{
+  "checksum": "aada1fe7193335404ae0a3affb044bf84ed082f107b35f259f7d9ac3b32da8ab",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "ansible/roles/k8s/littlelink/CLAUDE.md#At a glance",
+  "row": {
+    "atoms": {
+      "docs/flux-deploy-plane.md": "807c3deb44c3178e7a6f9fc0bc398a3b748b95c468b14ce9b1b890c8684535d9",
+      "docs/target-architecture/monitoring/m6-retire-kuma.md": "521cc9bee40ee23c4f9947b444898dff18c9f2a4f644eeb75419cd9721d8a32c"
+    },
+    "python": "3.14",
+    "verified_sha": "d02b4c299"
+  }
+}

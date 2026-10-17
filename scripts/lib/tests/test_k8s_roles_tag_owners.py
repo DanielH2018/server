@@ -40,14 +40,17 @@ def test_any_other_owner_value_raises(tmp_path, value: str):
 
 
 def test_the_entries_d2_to_d5_moved_are_live_and_owned_by_flux():
-    """D2.7, D3.6, D4.5 and D5.5 moved these six to Flux.
+    """D2.7, D3.6, D4.5, D5.5 and D5.6 moved these nine to Flux.
 
     A floor, not an equality: from D5.5 on the scaffolder writes `owner: flux` on every new
     entry, so the live set grows with each new service.
     """
     assert {
         "bento-pdf",
+        "deploy-ui",
         "gpu-exporter",
+        "littlelink",
+        "longhorn-ui",
         "nut-exporter",
         "peanut",
         "pihole-exporter",

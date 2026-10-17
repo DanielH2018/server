@@ -194,6 +194,9 @@ containers_list:
   # stolen password alone.
   - name: deploy-ui
     platform: k8s
+    # Flux applies deploy-ui through `promote`, and every Ansible path skips it (D5.6). The
+    # handback is two PRs, `owner: released` then removing `owner`: docs/flux-deploy-plane.md.
+    owner: flux
     hostname: "deploy"
     port: 8790
     use_authelia: true
@@ -206,6 +209,9 @@ containers_list:
   # blast radius than code-server/n8n.
   - name: longhorn-ui
     platform: k8s
+    # Flux applies longhorn-ui through `promote`, and every Ansible path skips it (D5.6). The
+    # handback is two PRs, `owner: released` then removing `owner`: docs/flux-deploy-plane.md.
+    owner: flux
     hostname: "longhorn"
     port: 80
     use_authelia: true
@@ -407,6 +413,9 @@ containers_list:
   # The public link-in-bio landing page, so a login gate would break it.
   - name: littlelink
     platform: k8s
+    # Flux applies littlelink through `promote`, and every Ansible path skips it (D5.6). The
+    # handback is two PRs, `owner: released` then removing `owner`: docs/flux-deploy-plane.md.
+    owner: flux
     hostname: "www"
     port: 3000
     use_authelia: false

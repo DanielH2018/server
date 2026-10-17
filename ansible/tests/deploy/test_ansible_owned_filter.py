@@ -138,14 +138,18 @@ def test_the_batch_loop_skips_owned_entries_that_templates_still_see():
         "the containers_list fact lost an owned entry, so a template reading it would stop "
         "seeing a service Flux applies"
     )
-    # bento-pdf has carried `owner: flux` since D2.7, peanut since D3.6, texbrain since D4.5
-    # and the three Wave A exporters since D5.5, so the live list holds owned entries too.
+    # bento-pdf has carried `owner: flux` since D2.7, peanut since D3.6, texbrain since D4.5,
+    # the three Wave A exporters since D5.5, and deploy-ui, littlelink and longhorn-ui since
+    # D5.6, so the live list holds owned entries too.
     owned = {"fixture-flux", "fixture-released"} | {
         c["name"] for c in live if "owner" in c
     }
     assert {
         "bento-pdf",
+        "deploy-ui",
         "gpu-exporter",
+        "littlelink",
+        "longhorn-ui",
         "nut-exporter",
         "peanut",
         "pihole-exporter",
