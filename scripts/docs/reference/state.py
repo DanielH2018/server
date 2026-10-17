@@ -316,7 +316,9 @@ def _cron_job_cadence(job_name: str, roles: Path = ROLES) -> float | None:
 
 # name, reader, cadence (minutes) -- built once at call time so tests can import the
 # individual reader functions above without paying for a live git/yaml read at import time.
-def _loops(roles: Path = ROLES) -> list[tuple[str, LoopRun, float | None]]:
+def _loops(
+    roles: Path = ROLES, tools: Tools = DEFAULT_TOOLS
+) -> list[tuple[str, LoopRun, float | None]]:
     longhorn_default = _k3s_default_var("k3s_longhorn_restore_drill_cron")
     etcd_default = _k3s_default_var("k3s_etcd_restore_drill_cron")
     return [
@@ -335,7 +337,7 @@ def _loops(roles: Path = ROLES) -> list[tuple[str, LoopRun, float | None]]:
         ),
         (
             "longhorn-restore-drill",
-            longhorn_restore_drill_run(),
+            longhorn_restore_drill_run(tools=tools),
             crons_mod.cadence_minutes(longhorn_default) if longhorn_default else None,
         ),
         (
@@ -372,7 +374,9 @@ def _format_duration(minutes: float | None) -> str:
 
 
 def build_rows(
-    roles: Path = ROLES, now: dt.datetime | None = None
+    roles: Path = ROLES,
+    now: dt.datetime | None = None,
+    tools: Tools = DEFAULT_TOOLS,
 ) -> list[dict[str, str]]:
     """One row per autonomous loop, statuses computed against `now` (default: real time).
 
@@ -381,13 +385,15 @@ def build_rows(
             `ansible.builtin.cron` task.
         now: The instant to compute age/status against. Defaults to the real current time;
             tests pass a fixed instant so a fixture's freshness does not rot.
+        tools: The kubectl boundary the Longhorn drill's stamp ConfigMap read crosses.
+            Tests pass one with fakes, so a host with a kubeconfig is never queried.
 
     Returns:
         One dict per loop, keyed by the columns `render_markdown` renders.
     """
     now = now or dt.datetime.now(dt.timezone.utc)
     rows = []
-    for name, run, cadence in _loops(roles):
+    for name, run, cadence in _loops(roles, tools):
         last_run_local = run.last_run.astimezone() if run.last_run else None
         age = (
             _format_duration((now - run.last_run).total_seconds() / 60)
