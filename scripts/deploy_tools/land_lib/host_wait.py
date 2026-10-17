@@ -32,6 +32,7 @@ Typical usage example (H3.9b's, after master CI is green on the merge commit):
 
 import json
 import os
+import re
 import socket
 import subprocess
 import tempfile
@@ -430,12 +431,16 @@ def read_states(hosts: list[str], reads: HostReads) -> dict[str, HostState]:
     return states
 
 
+_APPLIED_SHA = re.compile(r"[0-9a-f]{7,40}")
+
+
 def covers(applied: str, merge: str, primary: Path, reads: HostReads) -> bool:
     """Whether the applied commit `applied`, a SHA prefix, is `merge` or descends from it.
 
     A commit the primary checkout does not know is not a descendant: the host is not settled.
     """
-    if len(applied) < 7:
+    # The label comes from a host's textfile exporter, so it is checked before it reaches git argv.
+    if not _APPLIED_SHA.fullmatch(applied):
         return False
     if merge.startswith(applied):
         return True

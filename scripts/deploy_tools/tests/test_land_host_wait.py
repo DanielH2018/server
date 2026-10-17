@@ -284,6 +284,22 @@ def test_an_older_commit_or_an_absent_series_is_not_settled(state):
     assert not host_wait.settled(state, MERGE, Path("/p"), reads)
 
 
+@pytest.mark.parametrize("label", ["--output=x", "ABCDEF1"])
+def test_a_label_that_is_not_lowercase_hex_is_not_settled_and_git_is_never_called(
+    label,
+):
+    calls = []
+
+    def recording_git(*args, cwd=None, check=True):
+        calls.append(args)
+        return SimpleNamespace(returncode=0, stdout="")
+
+    state = HostState(applied=[label], reconcile_ok=1)
+    reads = HostReads(git=recording_git)
+    assert not host_wait.settled(state, MERGE, Path("/p"), reads)
+    assert calls == []
+
+
 # -- wait_for_hosts ----------------------------------------------------------------------
 
 
