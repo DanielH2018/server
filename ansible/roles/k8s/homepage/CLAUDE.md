@@ -5,15 +5,41 @@ daniel-box since E3 (2026-08-12). See repo-root `CLAUDE.md` for shared conventio
 
 ## At a glance
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates, tasks or containers_list entry, or the k3s role's Longhorn tier lists. -->
-- **Deploy tag:** `--tags "homepage"`
+- **Applied by:** Flux, through `promote` (`owner: flux`); `deploy.sh` refuses
+  `--tags=homepage` with exit 5
 - **Images:** `ghcr.io/gethomepage/homepage` (`homepage_k8s_image`), `alpine`
   (`homepage_k8s_init_image`)
 - **Route:** `homepage.<domain>` · `homepage.local.<domain>`, Authelia one_factor
 - **Claims:** none (no PVC)
-- **Auto-deploy:** eligible (`k8s_autodeploy: true`)
 <!-- /generated_from -->
 
 - **Depends on:** traefik, authelia
+- **Flux applies it, not Ansible** (D5.7, the third Wave A PR). Its `containers_list` entry
+  carries `owner: flux`, so `deploy.sh`, the play and the GitOps deployer all skip it, and a
+  merged change reaches the cluster when `promote` publishes and verifies the next bundle. Its
+  image-bump PRs therefore draw no `land-wait` and no `probe.py health` run. To give it back to
+  Ansible, follow the two-PR handback in `docs/flux-deploy-plane.md`; a plain revert of the
+  flag leaves two writers on the objects. Both dependencies stay Ansible-owned, so the
+  Kustomization records them in its `homelab/ansible-owned-deps` annotation, not in
+  `dependsOn`.
+- **Where the task went.** `tasks/main.yml` holds one task, the include of `k8s/manifests`,
+  and no Flux path runs it. It stays for the handback. Flux applies the same render, and the
+  Kustomization's `wait` replaces the rollout wait. `k8s_autodeploy` no longer gates an
+  apply, because the deployer skips the tag. It still decides whether Renovate automerges the
+  image bump.
+- **Flux prunes the cluster-scoped RBAC.** The task's comment says the namespaced prune
+  allowlist in `k8s/manifests` never selects the ClusterRole and ClusterRoleBinding. Flux
+  prunes by its own inventory instead, and that inventory holds both, so dropping one from
+  `rbac.yaml.j2` deletes it live at the next promotion. `deletionPolicy: Orphan` applies only
+  when the Kustomization itself is deleted.
+- **The config Secret substitutes from `homelab-cluster-vars`.** Every credential the widgets
+  use is a `${<key>}` placeholder in the published render. Flux substitutes the values from
+  the `homelab-cluster-vars` Secret, which it decrypts from
+  `ansible/vars/cluster-vars.sops.env`. The Kustomization depends on `cluster-vars`, so a
+  rotated value is live before homepage reconciles. The renderer stamps a restart checksum on
+  the Deployment, so a changed value or a config edit rolls the pod. Rotating one of those
+  keys is operator-only at the source: `sops set`, then `cluster_vars.py write`, committed
+  together. `secret_rotation.py consumers <key>` names every role that reads it.
 
 ## Where the config lives
 All of it renders into one Secret (`config-secret.yaml.j2`), which mounts read-only:
