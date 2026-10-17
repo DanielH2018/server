@@ -83,7 +83,9 @@ or changes how the renderer reads the tree without changing a rendered byte.
 ## Baseline at `70591c307`
 
 R4 runs after D5 and D6. This baseline measures the tree before either, so R4's first PR
-re-measures every item and drops what D5 or D6 already deleted.
+re-measures every item and drops what D5 or D6 already deleted. Since the 2026-10-17 re-slice,
+R4.1 can merge while D6 is still in flight, so R4.5 and R4.7 re-measure their own items
+again (*Steps, as PRs*, *The edge to D6, narrowed*).
 
 - **86 task files, 9,635 lines,** under `ansible/roles/k8s/*/tasks/`. 57 of them include
   `k8s/manifests`, and nine include `k8s/image-builder`.
@@ -493,6 +495,8 @@ D6's ownership table gives R4 the manifests role's tasks, the k8s play with its 
 and post_tasks, `render_records`, the render halves of role task files, "about 70
 Ansible-mechanics tests" and the `ansible_owned` filter. R4 starts from the tree D6 leaves.
 PR 1 lists every baseline item with `git ls-files` and deletes only what is still there.
+Since the 2026-10-17 re-slice, the first half holds for R4.5 and R4.7, which delete what D6
+hands over, while R4.1 to R4.4 need only D6.1 (*The edge to D6, narrowed*).
 `render_targets.py` is the one item R4 moves before it deletes, because C1 names it as a
 renderer input. PR 5 moves its logic into `renderer_lib/targets.py`, and PR 6 deletes the file
 with its last caller, `render_records.py`.
@@ -986,10 +990,10 @@ later. The measurements a description quotes are always taken at the PR's own me
 
 | New PR | Old steps | Written ahead? | Waits on |
 |---|---|---|---|
-| R4.1 The gate, the inventory and the precondition | 1 | Yes. The renderer takes its commit as `--revision`, so the workflow runs on a branch. The inventory waits for the merge base. | D5's tail, D6.1, and C1 naming the commit input (Open question 10) |
+| R4.1 The gate, the inventory and the precondition | 1 | Yes, except the workflow's runs. The agent's token has no `workflow` scope, so the operator pushes `render-diff.yml` before the five red-proof runs. The renderer already takes its commit as `--revision`. The inventory waits for the merge base. | D5's tail, D6.1, and C1 naming the commit input (Open question 10) |
 | R4.2 Render metadata moves to role defaults | 2, 3a to 3d | Partly. The readers, and the key moves of roles already flux-owned. Every other role's moves wait for its D5 flip. | R4.1, and its context in the live ruleset |
 | R4.3 The renderer reads no task file | 4, 5 | Yes, rebasing on R4.2 | R4.2 |
-| R4.4 The renderer becomes the reference | 7c, 7d, 7e | Yes | R4.1, and its context in the live ruleset |
+| R4.4 The renderer becomes the reference | 7c, 7d, 7e | Yes. The operator pushes 7e's workflow edit. | R4.1, and its context in the live ruleset |
 | R4.5 Delete render_records | 6 | Partly. The role's deletion; its reader list after D6.4 | R4.3, D6.4 |
 | R4.6 A standalone revert entry, conditional | 7a | Expected skipped | R4.1's record of the entry point |
 | R4.7 Delete the k8s play and the manifests role | 7b, 8 | Partly. The runbook-resolution test and the glance marker; the deletion after D6 | R4.4, R4.5, R4.6 if it runs, and the whole of D6 |
@@ -1944,7 +1948,8 @@ daniel-box. The operator produces them, because each needs the host:
 6. **Does D6.2 break the setup plane?** `role_dirs` imports `is_leftover_dir`'s rule from
    `k8s_autodeploy.py`, which D6.2 deletes, and `setup_routing.py` calls `role_dirs`.
    *Resolution:* D6.2 moves the rule into `scripts/lib/k8s_roles.py` first. If it has not,
-   R4's PR 10 does, and PR 1 reports the breakage as a D6 finding.
+   R4's PR 10 does, and PR 1 reports the breakage as a D6 finding. Since the 2026-10-17
+   re-slice, R4.1 can merge before D6.2a, so R4.8, which follows the whole of D6, reports it.
 7. **Which route does the deployer give a deploy-plane path after D6?** PR 8 edits
    `ansible/deploy.yml`, `ansible/tasks/`, `ansible/post_tasks/`, `ansible/filter_plugins/`
    and `group_vars/all.yml`, all `broad_deploy` at the baseline. *Resolution:* resolved in
