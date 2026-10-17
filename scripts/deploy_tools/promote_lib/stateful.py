@@ -47,11 +47,19 @@ the limit. No line and no block is cut. Each block runs the revert once per clai
 and the header says when the revert playbook is not in the tree yet. Any failed send
 exits 1, so GitHub shows a red run.
 
+THE SUSPENDED-CHANGED POST (D5.1d). `decide` writes `<R> suspended-changed=<tags>` itself, in
+the `promote` job, and hands the value on as its `suspended_hold` output. A step after Decide
+runs `promote.py hold` on it with no `--bundle-dir`, and posts one message: the hold, the tags,
+that `prod` did not move, and the way out. That step holds the webhook and no token, so no
+code that posts can write DEPLOY_HOLD. Later runs stop at the hold before they reach the
+suspended-tag check, so only the run that wrote the hold posts it.
+
 Like `promote.py`, this module reaches the network only through `forge.py`
 (scripts/deploy_tools/tests/test_promote_forge_boundary.py).
 
 Run: uv run python scripts/deploy_tools/promote.py hold <sha> --hold '<sha> stateful=<names>'
      --bundle-dir <dir> --verdict failed --failed <names>
+     uv run python scripts/deploy_tools/promote.py hold <sha> --hold '<sha> suspended-changed=<tags>'
 """
 
 import argparse
@@ -77,6 +85,8 @@ from deploy_tools.promote_lib.prune import ReadError
 from renderer.renderer_lib.ordering import split_kind
 
 STATEFUL_FILE = "stateful.json"
+# What follows R's SHA in the DEPLOY_HOLD value `decide` writes for a suspended tag (D5.1d).
+SUSPENDED = "suspended-changed="
 # The environment variable the `post` job sets from the repository secret of the same name.
 WEBHOOK_ENV = "DEPLOY_DISCORD_WEBHOOK"
 SOAK = "soak"
@@ -425,29 +435,57 @@ def messages(
     return posts
 
 
+def suspended_message(target: str, hold: str, tags: list[str]) -> str:
+    """The one message for the hold `decide` wrote because R changes a suspended tag."""
+    return (
+        f"promote hold {target[:8]}: DEPLOY_HOLD set to `{hold}`. prod did not move to "
+        f"sha-{target}, because it changes {', '.join(tags)}, suspended at last-good and at "
+        "it, so the change would apply nothing until the resume.\n"
+        "The way out: merge a commit that reverts the change or resumes the tag, then clear "
+        "DEPLOY_HOLD (operator-only). A clear without either holds again at the next "
+        "decide. docs/flux-deploy-plane.md, *Stopping one service: `flux_suspend`*, has the rule."
+    )
+
+
 def add_parser(commands) -> None:
     """Add the `hold` subcommand to `promote.py`'s subparsers."""
     cmd = commands.add_parser(
-        "hold", help="post the stateful hold settle wrote to the deployer's channel"
+        "hold",
+        help="post the stateful hold settle wrote, or the suspended-changed hold decide "
+        "wrote, to the deployer's channel",
     )
     cmd.add_argument("target", help="R, the held commit")
-    cmd.add_argument("--hold", required=True, help="the DEPLOY_HOLD value settle wrote")
+    cmd.add_argument("--hold", required=True, help="the DEPLOY_HOLD value written")
     cmd.add_argument(
-        "--bundle-dir", type=Path, required=True, help="where decide wrote its record"
+        "--bundle-dir",
+        type=Path,
+        help="where decide wrote its record; required for a stateful hold",
     )
     cmd.add_argument("--verdict", default="", help="verify's verdict")
     cmd.add_argument("--failed", default="", help="verify's failed names, comma-joined")
 
 
 def run(args: argparse.Namespace, post: Callable[[str], None]) -> int:
-    """`promote.py hold`: read the record, build the post, send each message.
+    """`promote.py hold`: build the post for the hold's form, send each message.
+
+    A stateful hold reads the record under `--bundle-dir`. A suspended-changed hold reads
+    nothing: its value names the tags.
 
     Returns FAILED when the record is unreadable or any send fails, so the run reads red.
     """
-    if not _SHA.fullmatch(args.target) or not args.hold.startswith(
-        f"{args.target} stateful="
+    suspended = args.hold.removeprefix(f"{args.target} {SUSPENDED}")
+    if _SHA.fullmatch(args.target) and _NAMES.fullmatch(suspended):
+        posts = [suspended_message(args.target, args.hold, suspended.split(","))]
+        return _send(args.target, posts, post)
+    if (
+        not _SHA.fullmatch(args.target)
+        or not args.hold.startswith(f"{args.target} stateful=")
+        or args.bundle_dir is None
     ):
-        error(f"hold takes R's 40-hex SHA and its stateful hold, not {args.hold!r}")
+        error(
+            "hold takes R's 40-hex SHA and its suspended-changed hold, or its stateful "
+            f"hold with --bundle-dir, not {args.hold!r}"
+        )
         return USAGE_ERROR
     failed = args.failed.split(",") if _NAMES.fullmatch(args.failed) else []
     try:
@@ -457,13 +495,16 @@ def run(args: argparse.Namespace, post: Callable[[str], None]) -> int:
         return FAILED
     present = (REPO / PLAYBOOK).is_file()
     posts = messages(args.target, args.hold, args.verdict, failed, found, present)
+    return _send(args.target, posts, post)
+
+
+def _send(target: str, posts: list[str], post: Callable[[str], None]) -> int:
+    """Send each message in order; FAILED at the first send that fails."""
     for n, content in enumerate(posts, 1):
         try:
             post(content)
         except forge.ForgeError as err:
             error(f"hold: message {n} of {len(posts)} was not posted: {err}")
             return FAILED
-    print(
-        f"promote.py: posted the stateful hold for {args.target} in {len(posts)} messages"
-    )
+    print(f"promote.py: posted the hold for {target} in {len(posts)} messages")
     return OK
