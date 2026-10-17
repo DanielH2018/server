@@ -1,0 +1,123 @@
+{#
+  tdarr's verify Job and the ConfigMap that carries its script, INERT until tdarr's flip.
+
+  This directory is `verify-inert/`, which neither reader globs: the manifests role takes only
+  top-level `templates/*.yaml.j2`, and `verify_files` takes only `templates/verify/*.yaml.j2`.
+  tdarr's flip PR moves the directory to `templates/verify/`, and the renderer then emits it
+  into `tdarr-verify` (D5, *A verify conversion lands as inert code*).
+
+  Both names end in a digest, as the Job census requires (D5, *Rules for every Job Flux
+  applies*): the ConfigMap's in `configmap_digest8` of its data, the Job's in
+  `job_spec_digest8` of its spec. Each is computed here from the same JSON those functions
+  hash, so the spec is written once as YAML text, parsed for the hash and emitted verbatim.
+  The renderer passes `flux_job_image` to every `templates/verify/` file (`render_tag`).
+
+  DECIDED: the spec embeds a digest of tdarr's rendered Deployment, not the role's `digest8`.
+  The plan has a Job that must run once per role revision embed `digest8`, so that a new
+  revision renames the Job and Flux runs it again, as Ansible runs `verify.yml` on every
+  deploy. `digest8` is known only after the renderer's later passes, which a template cannot
+  see. The Deployment's render is what rolls tdarr's pod, so keying on it reruns the Job on
+  every roll. A revision that changes only the Service or the route does not rerun it, and
+  neither the device nor the library depends on those.
+  ansible/roles/k8s/tdarr/tests/test_tdarr_verify.py runs the census over this render.
+#}
+{% set script_name = 'tdarr_verify.py' %}
+{% set script_dir = '/verify' %}
+{% set data = {script_name: lookup('file', playbook_dir + '/roles/k8s/tdarr/files/' + script_name, rstrip=False)} %}
+{% set configmap_name = 'tdarr-verify-' + ({'data': data, 'binaryData': {}} | to_json(sort_keys=True, separators=(',', ':')) | hash('sha256'))[:8] %}
+{% set deployment_digest8 = (lookup('template', 'deployment.yaml.j2') | hash('sha256'))[:8] %}
+{% set spec_text %}
+# A flaky check fails rather than passing on a retry.
+backoffLimit: 0
+# Below the 600s `manifests_rollout_timeout_default` every `<tag>-verify` Kustomization takes,
+# with room for the media volume to attach, so the Job fails with its own message first.
+activeDeadlineSeconds: 300
+template:
+  metadata:
+    labels:
+      app: tdarr-verify
+  spec:
+    serviceAccountName: tdarr-verify
+    # The Job reads no API, so its pod holds no token.
+    automountServiceAccountToken: false
+    restartPolicy: Never
+    enableServiceLinks: false
+    # tdarr's PUID and PGID, the uid tdarr's own process writes the library as, and the
+    # render-node group tdarr's Deployment adds. The Ansible task this replaces probed as root
+    # with DAC_OVERRIDE, which would pass a library tdarr itself cannot write.
+    securityContext:
+      runAsNonRoot: true
+      runAsUser: {{ puid }}
+      runAsGroup: {{ pgid }}
+      supplementalGroups:
+        - {{ render_gid }}
+      seccompProfile:
+        type: RuntimeDefault
+    containers:
+      - name: verify
+        image: {{ flux_job_image }}
+        command:
+          - python3
+          - {{ script_dir }}/{{ script_name }}
+        env:
+          - name: VERIFY_DEVICE
+            value: /dev/dri/renderD128
+          - name: VERIFY_MEDIA
+            value: /media
+          # Renames the Job whenever tdarr's Deployment changes; see the DECIDED note above.
+          - name: TDARR_DEPLOYMENT_DIGEST8
+            value: "{{ deployment_digest8 }}"
+          - name: PYTHONDONTWRITEBYTECODE
+            value: "1"
+        # The device request is what puts the render node in this pod, as it does in tdarr's.
+        # `dri_device_plugin_count` shares the one node among four pods, so tdarr and
+        # jellyfin holding theirs leave room for this one.
+        resources:
+          requests:
+            cpu: 10m
+            memory: 32Mi
+            {{ tdarr_k8s_dri_resource }}: "1"
+          limits:
+            memory: 64Mi
+            {{ tdarr_k8s_dri_resource }}: "1"
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+              - ALL
+        volumeMounts:
+          - name: script
+            mountPath: {{ script_dir }}
+            readOnly: true
+          # tdarr's own mount of the library: the same claim and subPath, read-write.
+          - name: media
+            mountPath: /media
+            subPath: {{ tdarr_k8s_media_subpath }}
+    volumes:
+      - name: script
+        configMap:
+          name: {{ configmap_name }}
+      - name: media
+        persistentVolumeClaim:
+          claimName: {{ tdarr_k8s_media_claim }}
+{% endset %}
+{% set spec = spec_text | from_yaml %}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ configmap_name }}
+  namespace: {{ k8s_namespace }}
+data:
+  {{ script_name }}: {{ data[script_name] | to_json }}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: tdarr-verify-{{ (spec | to_json(sort_keys=True, separators=(',', ':')) | hash('sha256'))[:8] }}
+  namespace: {{ k8s_namespace }}
+  annotations:
+    homelab/job-kind: verify
+spec:
+{{ spec_text | indent(2, true) }}
