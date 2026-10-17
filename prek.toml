@@ -633,8 +633,8 @@ files = "(\\.py$|(^|/)CLAUDE\\.md$|^docs/facts\\.lock/|^scripts/dev/pytest_shard
 # at load average 3.3: `-python` 4.6s, `-owners` 0.9s, `-lander` 5.2s, `-checksum` 3.5s,
 # `-shell` 1.3s, `-renovate` 3.9s, against 27.6s for the hook above in the same run. The
 # gates keep a typical commit near budget: a `.py` commit outside scripts/lib/,
-# deploy_tools/ and renderer/ and outside ansible/tests/_*.py runs `-python` and `-owners`
-# alone, about 5.5s.
+# deploy_tools/ and renderer/, outside ansible/tests/_*.py and outside the k8s roles runs
+# `-python` and `-owners` alone, about 5.5s.
 #
 # `-n0` on the one-module hooks: pyproject.toml's `-n auto` spent longer bringing up xdist
 # workers than they take, and each worker repeats the module-scoped render (checksum 3.5s
@@ -666,16 +666,18 @@ pass_filenames = false
 files = "(\\.py$|^docs/target-architecture/deploy/d2-first-leaf\\.md$|^ansible/deploy\\.yml$|^ansible/roles/setup/[^/]+/(templates|files)/|^(pyproject\\.toml|uv\\.lock)$)"
 
 # The lander deadlines: promote.yml's job timeouts, the land units' TimeoutStartSec in the
-# setup roles, the inventory's flux-owned tags, the three k8s inputs the soak render reads
-# (scripts/renderer/renderer_lib/soak.py: flux's defaults, manifests' files and the alert
-# rules), and the land and render code under scripts/.
+# setup roles, the inventory's flux-owned tags, the k8s roles, and the land and render code
+# under scripts/. The k8s gate is every role's tasks, templates, defaults and files rather
+# than the soak's own inputs: the soak fixture renders every flux-owned role, and
+# test_no_published_tag_builds_an_image reads every role's tasks for an image-builder
+# include (`images.builder_roles`). So a k8s role edit pays this hook's ~5s.
 [[repos.hooks]]
 id = "static-ratchet-tests-lander"
 name = "Lander deadlines cover the soak"
 entry = "uv run --frozen pytest -q -n0 -p no:cacheprovider ansible/tests/setup/test_lander_deadlines_cover_the_soak.py"
 language = "system"
 pass_filenames = false
-files = "^(\\.github/workflows/promote\\.yml|ansible/inventory/.*|ansible/roles/setup/[^/]+/(templates|defaults)/.*|ansible/roles/k8s/(flux/defaults|manifests/files|observability/files/rules)/.*|scripts/(deploy_tools|renderer|lib)/.*\\.py|ansible/tests/(_[^/]+|setup/[^/]+)\\.py|pyproject\\.toml|uv\\.lock)$"
+files = "^(\\.github/workflows/promote\\.yml|ansible/inventory/.*|ansible/roles/setup/[^/]+/(templates|defaults)/.*|ansible/roles/k8s/[^/]+/(tasks|templates|defaults|files)/.*|scripts/(deploy_tools|renderer|lib)/.*\\.py|ansible/tests/(_[^/]+|setup/[^/]+)\\.py|pyproject\\.toml|uv\\.lock)$"
 
 # Every `checksum/<name>` a CLAUDE.md names, against the k8s roles' rendered manifests.
 [[repos.hooks]]

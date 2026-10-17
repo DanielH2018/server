@@ -217,3 +217,23 @@ def test_a_sweep_skipping_only_the_main_hook_is_flagged():
     assert _unskipped_ids(
         [line], ["static-ratchet-tests", "static-ratchet-tests-python"]
     ) == [(line, "static-ratchet-tests-python")]
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "ansible/roles/k8s/bento-pdf/tasks/main.yml",
+        "ansible/roles/k8s/bento-pdf/templates/deployment.yaml.j2",
+        "ansible/roles/k8s/flux/defaults/main.yml",
+        "ansible/roles/k8s/observability/files/rules/x.yml",
+    ],
+)
+def test_the_lander_gate_matches_every_k8s_input_its_render_reads(path):
+    """The soak fixture renders every flux-owned role, and the image check reads every role's tasks."""
+    lander = next(h for h in _ratchet_hooks() if h["id"] == f"{HOOK_ID}-lander")
+    assert re.search(lander["files"], path)
+
+
+def test_the_lander_gate_skips_a_k8s_role_doc():
+    lander = next(h for h in _ratchet_hooks() if h["id"] == f"{HOOK_ID}-lander")
+    assert not re.search(lander["files"], "ansible/roles/k8s/bento-pdf/CLAUDE.md")
