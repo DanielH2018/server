@@ -33,8 +33,9 @@ import json
 from lib.cli_help import ArgumentParser
 from lib.exit_codes import FAILED, OK
 from renderer.homelab_render import ansible_local_temp, secret_keys
-from renderer.renderer_lib.cluster import DEFERRED_SUFFIX, select_tags
+from renderer.renderer_lib.cluster import select_tags
 from renderer.renderer_lib.environment import RenderError
+from renderer.renderer_lib.ordering import split_kind
 from renderer.renderer_lib.placeholders import (
     GUARD_MAP,
     PlaceholderRender,
@@ -47,12 +48,12 @@ REGENERATE = "uv run python scripts/renderer/standalone_map.py"
 def guard_map(render: PlaceholderRender) -> dict[str, list[str]]:
     """Each rendered tag mapped to the sorted keys standing alone in its directories.
 
-    A tag's `-deferred` directory counts as the tag's, because one deploy of the tag renders
-    both. A tag with no such key is left out.
+    A tag's per-tag kinds, `-deferred` and `-verify`, count as the tag's, because one render
+    of the tag writes them all. A tag with no such key is left out.
     """
     keys: dict[str, set[str]] = {}
     for name, standalone in render.standalone.items():
-        tag = name.removesuffix(DEFERRED_SUFFIX)
+        tag = split_kind(name)[0]
         keys.setdefault(tag, set()).update(standalone)
     return {tag: sorted(found) for tag, found in sorted(keys.items()) if found}
 
