@@ -533,6 +533,34 @@
       "automerge": false
     },
     {
+      "description": "Every Python pin the repo keeps in lockstep, in ONE PR (issue #5479): the CI setup action's `python-version:` (the custom.regex manager, datasource python-version), `.python-version` (the built-in pyenv manager) and the Dockerfile `FROM python:` tags (the built-in dockerfile manager). Three managers report the same packageName `python`, and before this rule each opened its own PR. Renovate PR #5363 bumped only the CI pin to 3.15.0, so ansible/tests/repo/test_python_version_consistency.py and test_renovate_dockerfiles.py::test_python_version_pins_in_lockstep failed on it forever, and Renovate rebased it onto every master move: 57 SHAs and 44 red CI runs in about 46 hours, 52% of the 85 failed ci.yml runs from 2026-10-15 to 2026-10-17. It sits AFTER the `{{depName}}` rule for .github/** (which would otherwise name the CI-only group) and the dockerfile rules above. matchUpdateTypes is minor and major only: a patch bump edits the three-part CI pin alone, which the lockstep tests accept, so it keeps flowing through the groups above. The k8s `python:3.14-alpine@sha256` image pins in roles/k8s/*/defaults/main.yml share the packageName but are excluded by matchFileNames: they are Job and Deployment images the auto-deploy plane owns, and the manual half of this PR is not theirs. The manual half: a minor or major interpreter bump is moved by a person across the three sites, because the suite and the image smoke job must pass on the new interpreter before merge and the PR cannot automerge. The weekly keys are the ones scripts/tests/test_renovate_manual_rules_push_weekly.py requires of every `(manual` rule, so a red Python PR is pushed at most once a week, not on every master move. The pin sites falling in one group is ENFORCED by scripts/tests/test_renovate_python_group.py::test_every_python_pin_site_falls_in_one_manual_group.",
+      "matchManagers": [
+        "custom.regex",
+        "pyenv",
+        "dockerfile"
+      ],
+      "matchPackageNames": [
+        "python"
+      ],
+      "matchFileNames": [
+        ".github/workflows/**",
+        ".github/actions/**",
+        ".python-version",
+        "ansible/roles/k8s/*/templates/Dockerfile*.j2"
+      ],
+      "matchUpdateTypes": [
+        "minor",
+        "major"
+      ],
+      "groupName": "python (manual — lockstep: .github/actions/setup/action.yml, .python-version and the Dockerfile python tags; run the suite and image smoke on the new interpreter)",
+      "rebaseWhen": "conflicted",
+      "schedule": [
+        "before 6am on monday"
+      ],
+      "updateNotScheduled": false,
+      "automerge": false
+    },
+    {
       "description": "Digest bumps on the k8s plane. 45 of 92 `*_image` pins carry a @sha256 digest (counted 2026-10-03) and 20 of those sit on a MUTABLE tag (latest, release, master-web/-collector, jvm-stable, alpine) where a VERSION bump can never be offered \u2014 only a digest one. That is about half the fleet, and `matchUpdateTypes: [minor, patch]` above does not match updateType `digest`, so none of them auto-merged. Watchtower applied exactly this class automatically until it was retired 2026-08-09 with the note 'Renovate owns image updates' \u2014 leaving it manual was a regression against what it replaced, not a deliberate posture. minimumReleaseAge is 3 days rather than 7: there is no version to soak, only a re-push of the same tag, so the wait is purely to let a poisoned/yanked push be noticed. The auto-deploy denylist (derived by ansible/filter_plugins/k8s_autodeploy.py) is the safety boundary, and since #1886 the manual rule below keeps it on the merge side too: a denylisted service's digest PR opens as `manual \u2014` rather than merging into a drift alert. A pin on a CHANNEL tag (`:latest@sha256:`) is the shape with no version anywhere in its diff, so a bump on one cannot be read for direction and a downgrade looks like an upgrade (issue #1524, the same shape as n8n's #1493). That class is accepted for the roles left eligible here and fenced by the denylist for the ones whose regression is expensive — the DECIDED marker recording why, and the guard holding the fence, are in ansible/tests/deploy/test_channel_tag_digest_pins_stay_off_autodeploy.py. pinDigest sits beside digest (issue #2481). Renovate types the update that ADDS an @sha256 to a tag-only pin as pinDigest, not digest, and #2480 made those ~35 pins rewritable, so without it each one opened a hand-merge PR. A pinDigest is content-neutral: it pins the digest already behind the tag the cluster runs. Each merged pin auto-deploys its service, and gitops_deploy_k8s_autodeploy_max_per_tick bounds how many one tick takes on. The denylist rule below carries no matchUpdateTypes, so it keeps a denied role's pinDigest manual too. The 3 days is not universal: the nginx alpine rule directly below lowers it to 1 day for two pins whose tag re-pushes faster than a 3-day soak clears (#2886). The 3 days also binds only a digest Renovate can age (issue #3368). Renovate ages a digest update against the release timestamp of the newest VERSION matching its tag. Only Docker Hub returns release timestamps, as `tag_last_pushed`. A tag that names no version (latest, alpine, jvm-stable) has no matching version to age against. So a digest on GHCR or lscr.io, which serves from GHCR, has no timestamp, and neither does any digest on a channel tag. Under Renovate's default `minimumReleaseAgeBehaviour: timestamp-required`, an update with no timestamp stays in Pending Status Checks indefinitely: healthchecks, qbittorrent, janitorr and cloudflare-ddns sat there 4 to 13 days past their soak on 2026-10-03. `timestamp-optional` raises such an update with no age check. Where a timestamp exists, Renovate still enforces the 3 days, so a versioned Docker Hub tag (python:3.14-alpine, traefik:v3.7.13) keeps its soak. The cost: an autodeploy-eligible channel-tag or GHCR digest automerges on its first Renovate run. For an Ansible-owned role, the deployer's health gate and rollback are its only check. For a flux-owned role, `promote`'s verification is: the soak Job (`flux/soak`) fails the promotion on a restart or a critical or verify=\"true\" alert in the services it changed, and `verify` then holds it and, for a role with no snapshot, resets `prod`. A denylisted role's digest still opens as a `manual —` PR. Renovate documents the behaviour in docs/usage/key-concepts/minimum-release-age.md, section `digest` updates. ENFORCED: scripts/tests/test_renovate_digest_soak_without_timestamp.py. platformAutomerge is false for the reason the container-images rule gives.",
       "matchManagers": [
         "custom.regex"
