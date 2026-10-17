@@ -5,8 +5,8 @@ Status: PLANNED
 Re-sliced on 2026-10-17 at the operator's request: 18 steps became 9 PRs. One of the nine,
 R4.6, runs only if R4.1 finds the revert runbook without its own entry (*Steps, as PRs*).
 
-Depends on: D6, narrowed per PR on 2026-10-17. R4.1 waits on D6.1 and on D5's tail, R4.5
-also on D6.4, and R4.7 on the whole of D6 (*Steps, as PRs*, *The edge to D6, narrowed*).
+Depends on: D6, narrowed per PR on 2026-10-17. R4.1 waits on D6.12 and on D5's tail, R4.5
+also on D6.18, and R4.7 on the whole of D6 (*Steps, as PRs*, *The edge to D6, narrowed*).
 
 Related issues: [#4527](https://github.com/DanielH2018/server/issues/4527), which proposes a
 shared `_as_filter` helper for the filter plugins. No symbol of that name exists at
@@ -213,7 +213,7 @@ again (*Steps, as PRs*, *The edge to D6, narrowed*).
 - **How the deployer routes R4's paths.** Measured with
   `deploy_changes.py:services_from_changed_paths`:
     - `ansible/roles/k8s/<role>/tasks/` or `defaults/` gives `k8s={'<role>'}`, the k8s arm
-      that D6.1 deletes.
+      that D6.12 deletes.
     - A path under `ansible/roles/setup/render_records/` gives `broad_setup=True` and
       `setup_roles={'render_records'}`. The tick applies `initial_setup.yml --tags
       render_records` itself, with the become password `pre_tasks/load_secrets.yml` loads.
@@ -253,7 +253,7 @@ again (*Steps, as PRs*, *The edge to D6, narrowed*).
     - `ansible/inventory/group_vars/all.yml`, `ansible/deploy.yml`,
       `ansible/tasks/k8s_batch.yml`, `ansible/post_tasks/k8s_stabilise_gate.yml` and every
       file under `ansible/filter_plugins/` that R4 edits give `broad_deploy=True`, the
-      deploy-plane arm that D6.1 and D6.4 delete. From D6.1 on, the tick fast-forwards past
+      deploy-plane arm that D6.12 and D6.18 delete. From D6.12 on, the tick fast-forwards past
       such a path with no apply and writes no ledger line (D6, *The route of a deploy-plane
       path after D6*).
     - `scripts/deploy_tools/render_targets.py`, `scripts/renderer/`, `.github/` and
@@ -312,7 +312,7 @@ again (*Steps, as PRs*, *The edge to D6, narrowed*).
       `ansible/filter_plugins/k8s_autodeploy.py` imports `ansible.errors`. `role_dirs` calls
       `is_leftover_dir`. `scripts/validate/k8s_manifests.py`,
       `scripts/deploy_tools/setup_routing.py` and `scripts/docs/catalog_lib/catalog_backup.py`
-      call `role_dirs`. D6.2 deletes `k8s_autodeploy.py`.
+      call `role_dirs`. D6.13 deletes `k8s_autodeploy.py`.
 - **Licences.** `LICENSE` is the MIT License. ansible-core 2.21.5's package metadata reads
   `License-Expression: GPL-3.0-or-later`.
 - **Docs that send the operator to `deploy.sh` for the cluster.**
@@ -494,7 +494,7 @@ and post_tasks, `render_records`, the render halves of role task files, "about 7
 Ansible-mechanics tests" and the `ansible_owned` filter. R4 starts from the tree D6 leaves.
 PR 1 lists every baseline item with `git ls-files` and deletes only what is still there.
 Since the 2026-10-17 re-slice, the first half holds for R4.5 and R4.7, which delete what D6
-hands over, while R4.1 to R4.4 need only D6.1 (*The edge to D6, narrowed*).
+hands over, while R4.1 to R4.4 need only D6.12 (*The edge to D6, narrowed*).
 `render_targets.py` is the one item R4 moves before it deletes, because C1 names it as a
 renderer input. PR 5 moves its logic into `renderer_lib/targets.py`, and PR 6 deletes the file
 with its last caller, `render_records.py`.
@@ -919,7 +919,7 @@ root is withheld, not suspended*).
                                                    (- render_records from _KUMA_CHECK)
   scripts/secrets_mgmt/consumers.py                (- render_records_push_token, after PR 6)
 - scripts/diagnostics/probe_lib/releases_render.py (if D6 left it)
-  scripts/validate/render_diff_gates.py            (- the retirement arm; D6.1 names the file)
+  scripts/validate/render_diff_gates.py            (- the retirement arm; D6.12 names the file)
 + scripts/renderer/renderer_lib/targets.py         (render_targets logic, task-free)
 + scripts/renderer/renderer_lib/filters.py         (reimplemented ansible-core filters)
 + scripts/renderer/renderer_lib/derived.py         (content tag, checksums, declarations)
@@ -988,11 +988,11 @@ later. The measurements a description quotes are always taken at the PR's own me
 
 | New PR | Old steps | Written ahead? | Waits on |
 |---|---|---|---|
-| R4.1 The gate, the inventory and the precondition | 1 | Yes, except the workflow's runs. The agent's token has no `workflow` scope, so the operator pushes `render-diff.yml` before the five red-proof runs. The renderer already takes its commit as `--revision`. The inventory waits for the merge base. | D5's tail, D6.1, and C1 naming the commit input (Open question 10) |
+| R4.1 The gate, the inventory and the precondition | 1 | Yes, except the workflow's runs. The agent's token has no `workflow` scope, so the operator pushes `render-diff.yml` before the five red-proof runs. The renderer already takes its commit as `--revision`. The inventory waits for the merge base. | D5's tail, D6.12, and C1 naming the commit input (Open question 10) |
 | R4.2 Render metadata moves to role defaults | 2, 3a to 3d | Partly. The readers, and the key moves of roles already flux-owned. Every other role's moves wait for its D5 flip. | R4.1, and its context in the live ruleset |
 | R4.3 The renderer reads no task file | 4, 5 | Yes, rebasing on R4.2 | R4.2 |
 | R4.4 The renderer becomes the reference | 7c, 7d, 7e | Yes. The operator pushes 7e's workflow edit. | R4.1, and its context in the live ruleset |
-| R4.5 Delete render_records | 6 | Partly. The role's deletion; its reader list after D6.4 | R4.3, D6.4 |
+| R4.5 Delete render_records | 6 | Partly. The role's deletion; its reader list after D6.18 | R4.3, D6.18 |
 | R4.6 A standalone revert entry, conditional | 7a | Expected skipped | R4.1's record of the entry point |
 | R4.7 Delete the k8s play and the manifests role | 7b, 8 | Partly. The runbook-resolution test and the glance marker; the deletion after D6 | R4.4, R4.5, R4.6 if it runs, and the whole of D6 |
 | R4.8 Retire the comparison and reimplement the filters | 9, 10 | Yes, rebasing on R4.7 | R4.7, and C1's stub-mode amendment (Open question 9) |
@@ -1002,21 +1002,21 @@ later. The measurements a description quotes are always taken at the PR's own me
 
 R4 still depends on D6, but only R4.7 waits on the whole slice.
 
-- **R4.1 waits on D6.1, the tick's k8s arms.** It needs D6.1 merged for one measurement: the
-  deployer route of a deploy-plane path and of a deleted role `tasks/` path after D6.1. R4.7
+- **R4.1 waits on D6.12, the tick's k8s arms.** It needs D6.12 merged for one measurement: the
+  deployer route of a deploy-plane path and of a deleted role `tasks/` path after D6.12. R4.7
   quotes that route again at its own base. R4.1 also waits on D5's tail directly, because its
   ownership test needs every k8s entry to be flux-owned. That includes uptime-kuma, which
   leaves at M6's C-2b. On 2026-10-17, 14 of the 58 k8s entries were flux-owned, and four more
   were in open PRs.
 - **R4.2, R4.3 and R4.4 wait on no D6 PR.** They change how the renderer reads the tree, and
-  they touch no code that D6 deletes. D6.2a also edits `scripts/lib/k8s_roles.py`, which
+  they touch no code that D6 deletes. D6.13 also edits `scripts/lib/k8s_roles.py`, which
   makes a rebase, not an edge.
-- **R4.5 waits on D6.4, reach and narrowing.** D6.4 deletes `shared_role_callers.py`, which
-  calls `render_targets.py`. D6.4 merges after D6.5b, which deletes `releases_render.py`, a
-  reader of the render records. D6.1 deletes `deploy_release.py`, the other deployer reader,
+- **R4.5 waits on D6.18, reach and narrowing.** D6.18 (old D6.4) deletes `shared_role_callers.py`, which
+  calls `render_targets.py`. D6.18 (old D6.4) merges after D6.18 (old D6.5b), which deletes `releases_render.py`, a
+  reader of the render records. D6.12 deletes `deploy_release.py`, the other deployer reader,
   and edits `deploy_narrow.py`, the last other caller of `render_targets.py`.
 - **R4.7 waits on the whole of D6.** The play's `k8s_retired_services` teardown has no job
-  left only once D6.7's deletion policy is live (D6, *The deletion policy*). D6.3 deletes the
+  left only once D6.20's deletion policy is live (D6, *The deletion policy*). D6.15 deletes the
   `land.sh` and `deploy.sh` arms that still name the play. R4.8 and R4.9 follow R4.7.
 - **D6 may renumber its PRs.** D6 was re-sliced on the same day. Each edge above names its
   D6 PR by subject as well as by number. Read the number as the re-sliced D6 PR that absorbs
@@ -1026,10 +1026,10 @@ Two costs follow from the narrowing:
 
 - **D6's later PRs carry a `Render-diff:` line.** From R4.1's merge, the `render-diff` context
   is required, and a PR on a hazard path needs the line (*The render-diff gate*). A grep of
-  D6's steps for the hazard paths finds two D6 PRs that can merge after R4.1. D6.2a edits
-  `scripts/lib/k8s_roles.py` and deletes `ansible/filter_plugins/k8s_autodeploy.py`. D6.7
-  edits the deletion policy under `scripts/renderer/`. D6.2a carries `Render-diff: none`, and
-  D6.7 lists every `flux/<tag>.yaml` it changes. The design already asks this of every slice
+  D6's steps for the hazard paths finds two D6 PRs that can merge after R4.1. D6.13 edits
+  `scripts/lib/k8s_roles.py` and deletes `ansible/filter_plugins/k8s_autodeploy.py`. D6.20
+  edits the deletion policy under `scripts/renderer/`. D6.13 carries `Render-diff: none`, and
+  D6.20 lists every `flux/<tag>.yaml` it changes. The design already asks this of every slice
   that edits a hazard path while R4 is in flight.
 - **R4.1's inventory can list items that a later D6 PR deletes.** R4.5 and R4.7 therefore
   re-run R4.1's `git ls-files` listing for the items they delete, at their own base, and
@@ -1285,7 +1285,7 @@ deployer route of its paths, measured with `services_from_changed_paths` at its 
       with the old `/opt/gitops-deploy`, whose `_KUMA_CHECK` still names `render_records`,
       so step 5 follows step 4 at once. The description quotes the output of steps 2 and
       3. The `group_vars/all.yml` edit needs nothing more, because a deploy-plane path
-      applies nothing after D6.1.
+      applies nothing after D6.12.
     - **Operator-only, after this PR:** the secrets commit from *render_records* removes
       `render_records_push_token` with `sops`, runs
       `uv run python scripts/secrets_mgmt/secret_rotation.py sync`, and drops the token
@@ -1500,8 +1500,8 @@ deployer route of its paths, measured with `services_from_changed_paths` at its 
       and the gap goes to the slice that owns that step.
     - **Route.** The deploy-plane paths, `ansible/deploy.yml`, `ansible/tasks/`,
       `ansible/post_tasks/`, `ansible/filter_plugins/` and `group_vars/all.yml`, fast-forward
-      with no apply from D6.1 on (D6, *The route of a deploy-plane path after D6*). PR 1
-      re-measures that route and the route of a deleted role `tasks/` path after D6.1, and
+      with no apply from D6.12 on (D6, *The route of a deploy-plane path after D6*). PR 1
+      re-measures that route and the route of a deleted role `tasks/` path after D6.12, and
       this PR quotes both.
     - `/var/lib/homelab/k8s-releases.d` loses its last writer. **Operator-only:** remove it on
       daniel-box once D6 has deleted its readers.
@@ -1769,7 +1769,7 @@ daniel-box. The operator produces them, because each needs the host:
   identifier, so each deletion PR fixes the docs it orphans.
 - **The deployer parks on one path (design.md, defect class B).** PR 6 edits
   `initial_setup.yml`, which parks every later landing. PR 8 edits deploy-plane paths,
-  which fast-forward with no apply after D6.1 (D6, *The route of a deploy-plane path after
+  which fast-forward with no apply after D6.12 (D6, *The route of a deploy-plane path after
   D6*). Mitigation: each PR quotes its measured route, and PR 1 re-measures PR 8's. The
   operator clears PR 6's park by fast-forwarding to PR 6's squash commit, never to
   `origin/master`, after `git rev-list` lists the span up to that commit. Commits merged
@@ -1943,15 +1943,15 @@ daniel-box. The operator produces them, because each needs the host:
    `group_vars/all.yml`, a path that routes to `broad_deploy` and never reaches the role. M6
    batch B4 then drops render_records rather than converting a producer R4 deletes. If the
    units are still present at PR 1, PR 1 disarms the producer first.
-6. **Does D6.2 break the setup plane?** `role_dirs` imports `is_leftover_dir`'s rule from
-   `k8s_autodeploy.py`, which D6.2 deletes, and `setup_routing.py` calls `role_dirs`.
-   *Resolution:* D6.2 moves the rule into `scripts/lib/k8s_roles.py` first. If it has not,
+6. **Does D6.13 break the setup plane?** `role_dirs` imports `is_leftover_dir`'s rule from
+   `k8s_autodeploy.py`, which D6.13 deletes, and `setup_routing.py` calls `role_dirs`.
+   *Resolution:* D6.13 moves the rule into `scripts/lib/k8s_roles.py` first. If it has not,
    R4's PR 10 does, and PR 1 reports the breakage as a D6 finding. Since the 2026-10-17
-   re-slice, R4.1 can merge before D6.2a, so R4.8, which follows the whole of D6, reports it.
+   re-slice, R4.1 can merge before D6.13, so R4.8, which follows the whole of D6, reports it.
 7. **Which route does the deployer give a deploy-plane path after D6?** PR 8 edits
    `ansible/deploy.yml`, `ansible/tasks/`, `ansible/post_tasks/`, `ansible/filter_plugins/`
    and `group_vars/all.yml`, all `broad_deploy` at the baseline. *Resolution:* resolved in
-   D6, *The route of a deploy-plane path after D6*: from D6.1 on, the tick applies nothing
+   D6, *The route of a deploy-plane path after D6*: from D6.12 on, the tick applies nothing
    for such a path, fast-forwards past it as it passes a docs-only one, and writes no ledger
    line. PR 1 re-measures the route to confirm it, and PR 8 quotes it.
 8. **Do ADR-0011, ADR-0017 and ADR-0012 need amendments?**

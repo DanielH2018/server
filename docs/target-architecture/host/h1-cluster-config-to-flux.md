@@ -400,7 +400,7 @@ The exit criterion has two parts:
 
 Each tag is a k8s role under `ansible/roles/k8s/<tag>/`. Its `containers_list` entry carries
 `owner: flux` from its first commit. Adding that entry reaches every reader of the list until
-D6.1 (*Steps*, *Rules for every PR from H1.2 on*). Ansible never reaches it, and the PR that adds it
+D6.12 (*Steps*, *Rules for every PR from H1.2 on*). Ansible never reaches it, and the PR that adds it
 deletes the `setup/k3s` tasks that wrote the same objects. That is C4 applied to a setup
 writer.
 
@@ -483,7 +483,7 @@ CustomResourceDefinition (D5)", gated before H1.1a merges (*Open questions* 2).
   Service, the MetalLB speaker or a BackupTarget. With `prune: false`, a render that drops
   an object leaves it serving. Deleting the Kustomization, by a revert or by a render that
   drops the tag, orphans its objects. That holds under D2's `deletionPolicy: Orphan` and
-  after D6.7, because the default `MirrorPrune` follows `prune`.
+  after D6.20, because the default `MirrorPrune` follows `prune`.
 - **Today's semantics.** `kubectl apply` never deletes what a manifest stopped mentioning, so
   `prune: false` keeps the behaviour these objects have now. An object upstream removes
   between versions stays orphaned, as it does today.
@@ -1359,7 +1359,7 @@ moves the Pi's entries from the first key to the second. The removal of the Pi's
   the guard-map rows of the writer tasks it deletes (H1.1h). The rows live in
   `tasks/stale-checkout-guard.yml`. A PR whose deletion leaves a guard instance with no row
   deletes that instance too.
-- **An added entry reaches readers of the list until D6.1.** H1.2, H1.3, H1.4, H1.5a,
+- **An added entry reaches readers of the list until D6.12.** H1.2, H1.3, H1.4, H1.5a,
   H1.6 and H1.7b each add one entry to `containers_list` in
   `ansible/inventory/host_vars/daniel-box.yml`, and the tick applies that file as a
   deploy-plane change.
@@ -1385,7 +1385,7 @@ moves the Pi's entries from the first key to the second. The removal of the Pi's
       master and not yet applied. The entry's own tag is `owner: flux`, which the deployer
       skips (C4).
 
-  Until D6.1 retires the deployer's k8s arms, each of the six PRs, and each revert of one,
+  Until D6.12 retires the deployer's k8s arms, each of the six PRs, and each revert of one,
   does this:
     - **Quote the narrow output.** Before the PR, run `uv run python
       scripts/deploy_tools/deploy_tags.py narrow origin/master HEAD` and quote its list in
@@ -2158,7 +2158,7 @@ subject's tests.
     - The reverted commit restores the Ansible tasks and their guard-map rows, but nothing
       runs them.
     - The revert removes the tag's `containers_list` entry, which reaches every reader of
-      the list as the addition did. Before D6.1 the revert PR carries the same narrow
+      the list as the addition did. Before D6.12 the revert PR carries the same narrow
       output, stop rule and hold exit (*Rules for every PR from H1.2 on*).
     - The root `homelab` Kustomization deletes the child only after the revert promotes. Until
       then the child's inventory still lists the objects, and the guard refuses the
@@ -2181,7 +2181,7 @@ subject's tests.
     - A PR that moved a pin is not reverted after a later bump, because CI refuses the
       decrease. The pin moves back in a forward PR that keeps the version.
     - `longhorn-reconcile` prunes by default. A revert of H1.6 orphans its CronJob under
-      D2's `deletionPolicy: Orphan` and deletes it after D6.7. An orphaned CronJob writes the
+      D2's `deletionPolicy: Orphan` and deletes it after D6.20. An orphaned CronJob writes the
       same labels that the restored tasks write, and the revert PR names its
       **operator-only** delete.
 - **H1.7a:** revert the PR while H1.7b has not landed. The routing tasks return, and they
@@ -2267,14 +2267,14 @@ subject's tests.
   instance carries `node-address`, `node-dns`, `longhorn_host`, `backup-health` or any other
   host-only tag, so these applies select none and run as they do at `70591c307`. The
   `--tags node-address` selection case fails if an instance gains that tag or `always`.
-- **A takeover PR re-applies readers of `containers_list`.** Until D6.1, an added or
+- **A takeover PR re-applies readers of `containers_list`.** Until D6.12, an added or
   removed Flux-born entry narrows the deploy plane to the readers of the fields it carries,
   applied unattended and forward-only. For H1's entries that is artifacts,
   blackbox-exporter, pihole and uptime-kuma at `a5abf8581` (D2 Open question
   10). Three of them, blackbox-exporter, pihole and uptime-kuma, set
   `k8s_autodeploy: false`. Each of the six PRs and each revert quotes
   the narrow output and runs D1.2's stop rule, so no reader carries another session's
-  unlanded change into that apply. The cost ends at D6.1, because no narrowing can drop
+  unlanded change into that apply. The cost ends at D6.12, because no narrowing can drop
   artifacts, whose `known_services.json` names every entry (D2.1c).
 - **A tier change could make a revision forward-only.** The desired tiers live in
   `longhorn-reconcile`, which is not forward-only. A red fixture fails when adding a stateful
@@ -2582,7 +2582,7 @@ subject's tests.
     - a mirrored pair of identity keys and a mirrored pair of R2 region keys, each with the
       test that holds it equal;
     - the narrow output and D1.2's stop rule over the reader tags it names on each PR that
-      adds or removes an entry, until D6.1;
+      adds or removes an entry, until D6.12;
     - a commit-to-PR lookup in `promote`'s gate check;
     - a break-glass check in the backup-health reader and an annotation listing in
       `probe.py landing`;
@@ -3281,7 +3281,7 @@ slices. None was refuted.
   reader that iterates the list". `grep -c` of H1 for `changed_fields` was 0. *Fixed, H1's
   part, with the fallback:*
     - *Rules for every PR from H1.2 on* gains *An added entry reaches every reader of the
-      list until D6.1*. H1.2, H1.3, H1.4, H1.5a, H1.6 and H1.7b, and each revert of one,
+      list until D6.12*. H1.2, H1.3, H1.4, H1.5a, H1.6 and H1.7b, and each revert of one,
       quote the `deploy_tags.py narrow` output, carry D1.2's stop rule before the PR and
       again before `land.sh`, name the moved renders from a `--dry-run`, and follow D1.2's
       hold exit.
@@ -3367,7 +3367,7 @@ None was refuted.
       now names artifacts, blackbox-exporter, pihole and uptime-kuma, as D2 Open question
       10 does, with blackbox-exporter, pihole and uptime-kuma denylisted.)
     - The "own tag only" branch, its D2.1a or D4.1 citation and its cross-slice note are
-      gone. *Risks* and *Complexity delta* follow, and the cost now ends at D6.1.
+      gone. *Risks* and *Complexity delta* follow, and the cost now ends at D6.12.
 - **H1-I1-03 (medium)** Bring-up step 7's "A hold comes first" contradicted steps 6 and 12.
   *Confirmed* against D5's bootstrap step 2, which scopes the rule to "a hold that step 1
   did not leave". *Fixed:* step 7's first sub-step reads "a value other than `none` that

@@ -1705,7 +1705,7 @@ promotion, an automerged one included, without having to page.
   template sets `app: soak` on the Job's pod template (`spec.template.metadata.labels`). On
   the Job's own `metadata` alone the label matches nothing, because a NetworkPolicy reads pod
   labels only, and the soak's every query is refused.
-- **The deploy annotation (D5.3b3).** After D6.1, `deploy_lib/playbook.py:annotate` is the
+- **The deploy annotation (D5.3b3).** After D6.12, `deploy_lib/playbook.py:annotate` is the
   only writer of Grafana's `deploy-annotation` line, and from the flux PR on `deploy.sh`
   deploys nothing in the cluster. `promote` cannot take over, because it runs on GitHub's
   runners and cannot write daniel-box's syslog. So the soak Job writes the cluster's
@@ -2646,11 +2646,11 @@ sizes its batch of roles against that projection.
         - **The CRD census.** The flip PR adds a renderer test that fails on a
           CustomResourceDefinition in any tag whose Kustomization renders `prune: true`.
           traefik is a named member that the test must find carrying CRDs and `prune: false`.
-          The red fixture is traefik's render with `flux_prune` removed. This is D6.7b's CRD
+          The red fixture is traefik's render with `flux_prune` removed. This is D6.19's CRD
           guard landing early, without D6's exception for `flux`.
         - **The rejected alternative** is a `kustomize.toolkit.fluxcd.io/prune: disabled`
           label on every rendered CRD. It would keep pruning for traefik's other objects.
-          But D6.7b's guard keys on the tag's `prune` value, so traefik's tag would fail it.
+          But D6.19's guard keys on the tag's `prune` value, so traefik's tag would fail it.
         - **The cost:** an object dropped from traefik's render, such as a retired
           Middleware, stays live until the operator deletes it (**operator-only**). The
           same cost holds for H1's five plumbing tags.
@@ -2993,7 +2993,7 @@ sizes its batch of roles against that projection.
       is gone.
     - "Tear down retired k8s services" keeps its gate, and it serves only a service that was
       Ansible-owned on the PR's base. From this PR on, every entry is flux-owned, so a
-      service retired before D6.7 retires by D2's two PRs: the first empties its templates,
+      service retired before D6.20 retires by D2's two PRs: the first empties its templates,
       so Flux prunes its objects, and the second removes its entry. D5.1f's gate refuses a
       flux-owned name added to `k8s_retired_services`, because the play's teardown would
       delete the stale staged render while Flux at the old `prod` still applies it. M6's
@@ -3652,7 +3652,7 @@ includes valheim's initContainer.
   mutation Job; seven census rows (host writes, host scripts, Job rules, Job connections,
   GHCR pull policy, publish layout, restart annotations, the last replacing D3's interim
   one); `prune: false` on traefik and `flux` through H1.1a's existing lever, and one
-  renderer CRD census, which D6.7b's guard would otherwise add later; one text test over
+  renderer CRD census, which D6.19's guard would otherwise add later; one text test over
   the flux recovery runbook. D5.3b2's observe-only set in `verify` is added and then
   removed by D5.3b3, so it nets to zero. One `land-wait` read of `flux/soak` and one
   `Cause`, `soak-failed`; one `deferred` promote result and one derived `schedule:`
@@ -4499,7 +4499,7 @@ Findings raised:
 - D5-C1-03 (high): D5.3b2 makes `flux/soak` gate promotion at once, so the observe-first step
   D5.3b3 assumes does not exist.
 - D5-C1-04 (high): traefik's CRDs and Flux's own CRDs move into tags that render
-  `prune: true`, against D6.7b's CRD guard.
+  `prune: true`, against D6.19's CRD guard.
 - D5-C1-05 (medium): the broken-sync-object recovery applies server-side without
   `--force-conflicts`, so it fails on exactly the fields it must fix.
 - D5-C1-06 (medium): the broken-controller-upgrade runbook sets no hold, reset or suspend,
@@ -4540,7 +4540,7 @@ Fixed:
   `flux_prune: false`. traefik's flip adds the renderer CRD census with traefik as a named
   member, and `flux` joins the census in the flux PR. The header gains the PR-level edge to
   H1.1a. H1's header depends on D2 and D4 only, so the edge adds no loop. The per-CRD
-  `prune: disabled` label was rejected, because D6.7b's guard keys on the tag's `prune`
+  `prune: disabled` label was rejected, because D6.19's guard keys on the tag's `prune`
   value. Risks gains a failure-class-5 entry. Rollback forbids reverting the setting alone.
   Verification gains a live read of both tags' `.spec.prune`.
 - D5-C1-05: confirmed. The cleanup list in `kustomization_controller.go` opens with
