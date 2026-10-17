@@ -41,12 +41,7 @@ def claude_cgroup_verdict(
        thing the warning was about.
     2. The stall rate is over `stall_max_pct`. PSI `full` counts time when NO task in the cgroup
        made progress, so this is the 2026-09-05 shape (#1243) while it is still only a stall.
-    3. A uid the host watches runs Claude Code. `uid_procs` is `claude_uid_processes` per
-       (origin, uid), and a host lists a uid there only once no session may run as it (slice 6 of
-       docs/claude-agent-user.md). A value above 0 is a session started as the wrong account,
-       which escapes that account's caps and runs with its credentials. Ranked under the two
-       memory arms, because a kill or a stall is the more urgent page.
-    4. An expected cgroup is not reporting at all. Fails rather than passing, because an empty
+    3. An expected cgroup is not reporting at all. Fails rather than passing, because an empty
        vector is exactly how a dead writer reads green forever — the failure the kopia
        `b2_billable_bytes` board took two weeks to notice, and the reason check_disk and
        check_mem carry _host_origin_shortfall. With `expected_by_origin`, the missing set is
@@ -55,9 +50,29 @@ def claude_cgroup_verdict(
        differ by host because only a host running claude-rc.service has its cgroup. An empty
        `expected_by_origin` judges `expected` across all hosts, for a caller that names none.
 
-    Arm 4 is deliberately LAST, matching check_disk and check_mem: a cgroup that IS reporting and
+    Arm 3 is deliberately LAST, matching check_disk and check_mem: a cgroup that IS reporting and
     IS in trouble pages ahead of a complaint about the absent one.
+
+    A watched uid running Claude Code is a NOTE on the passing message, not an arm. `uid_procs`
+    is `claude_uid_processes` per (origin, uid); a value above 0 is a session started as the
+    wrong account (slice 6 of docs/claude-agent-user.md).
+
+    DECIDED: note, never page (operator, 2026-10-17, #5125). As an arm it held the Memory tile
+    DOWN near-continuously from 2026-10-09, because background jobs and fan-out still start as
+    the operator's uid. That masked any real memory page behind it, and an alert-triggered
+    triage run would start on it every poll. The note keeps it visible on the tile.
     """
+    wrong_uid = sorted(
+        "%s/uid %s: %.0f" % (m.get("origin", "?"), m.get("uid", "?"), n)
+        for m, n in uid_procs
+        if n > 0
+    )
+    note = (
+        " · note: claude running as a retired uid (start sessions with claude-agents): %s"
+        % ", ".join(wrong_uid)
+        if wrong_uid
+        else ""
+    )
     firing = [
         ("%s %s +%.0f" % (_where(m), m.get("event", "?"), v), v)
         for m, v in events
@@ -81,17 +96,6 @@ def claude_cgroup_verdict(
             stall_window,
             ", ".join(d for d, _ in stalled[:5]),
         )
-    wrong_uid = [
-        "%s/uid %s: %.0f" % (m.get("origin", "?"), m.get("uid", "?"), n)
-        for m, n in uid_procs
-        if n > 0
-    ]
-    if wrong_uid:
-        return (
-            False,
-            "claude running as a retired uid (start sessions with claude-agents): %s"
-            % (", ".join(sorted(wrong_uid))),
-        )
     if expected_by_origin:
         reporting = {(m.get("origin"), m.get("cgroup")) for m, _ in stalls}
         missing = [
@@ -110,4 +114,4 @@ def claude_cgroup_verdict(
             % ", ".join(missing),
         )
     worst = max((pct for _, pct in stalls), default=0.0)
-    return True, "claude cgroups stalled %.2f%% of %s" % (worst, stall_window)
+    return True, "claude cgroups stalled %.2f%% of %s%s" % (worst, stall_window, note)

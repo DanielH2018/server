@@ -19,7 +19,7 @@ what a session reaches as `ubuntu` stays private. See
 | 3 | Merged agent work lands and deploys through a lander unit | Done |
 | 4 | The phone host `claude-rc.service` runs as `claude` | Done |
 | 5 | The homelab-ui login, the agent's browser, and a fan-out agent on daniel-server | Built. Peer users were dropped. |
-| 6 | Retire Claude sessions as `ubuntu` | New sessions start as `claude`, and the caps render for both users. The operator still owns dropping uid 1000. |
+| 6 | Retire Claude sessions as `ubuntu` | Plain `claude` in `~/server` starts as `claude` (dotfiles #853), and the caps render for both users. Background jobs and fan-out still start as `ubuntu`. |
 | 7 | A pre-merge dry run without secrets | Optional, planned |
 | Triage | A monitor alert starts an unattended run that diagnoses, fixes, lands and reports | Slice 1 built and shipped switched off. See [Alert-triggered triage](#alert-triggered-triage). |
 
@@ -444,7 +444,8 @@ daniel-box's host_vars) has the `claude_code` role give the agent its own copies
 
 ## Slice 6: retire Claude sessions as `ubuntu`
 
-New interactive sessions start as `claude` through the dotfiles function `claude-agents`, which
+Interactive sessions start as `claude` through two dotfiles functions. Plain `claude` typed in
+`~/server` routes there (dotfiles #853), `claude-ubuntu` bypasses it, and `claude-agents`
 runs `sudo machinectl shell claude@ /bin/bash -lc 'cd ~/server && exec claude agents "$@"'`. A
 `claude-agents` session runs in `user.slice/user-996.slice/session-<n>.scope` beside
 `claude-rc.service`, and the phone host still connects. daniel-server still runs sessions as
@@ -462,8 +463,9 @@ runs `sudo machinectl shell claude@ /bin/bash -lc 'cd ~/server && exec claude ag
   writes `claude_uid_processes{uid}` for each uid in `claude_code_watch_uids`, an explicit 0
   included. It counts processes named `claude` by their real uid in `/proc/<pid>/status`.
   daniel-box watches uid 1000. The list defaults to empty, so daniel-server writes no series.
-  monitor-bridge's Memory tile pages while any watched uid runs `claude`, after the cgroup arm's
-  two-cycle streak, and the message names the host and the uid.
+  monitor-bridge's Memory tile names the host and the uid in its message while any watched uid
+  runs `claude`, and stays up. It paged until 2026-10-17 (#5125): background jobs and fan-out
+  still start as `ubuntu`, so the page held the tile DOWN for days and hid real memory pages.
 - **daniel-box sets `claude_code_login_uids: []`,** which removes the caps from `user-1000.slice`.
   The fleet bound on `user.slice` still covers it.
 
