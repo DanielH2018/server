@@ -139,44 +139,46 @@ def rollout_seconds(value, role: Path) -> int | None:
     """`"660s"` or `"{{ sonarr_k8s_rollout_timeout }}"` -> 660; None for anything else.
 
     `role` is the role DIRECTORY, because a `{{ var }}` is resolved against that role's own
-    `defaults/main.yml`. One level of reference only: a default that names another variable is
-    unresolved rather than chased, so a guard reading this gets None and says so.
+    `defaults/main.yml`. Up to two references are chased, so the alias
+    `sonarr_k8s_rollout_timeout: "{{ manifests_rollout_timeout }}"` resolves (#5464); anything
+    else is unresolved, so a guard reading this gets None and says so.
     """
     text = str(value).strip().strip("\"'")
-    literal = _SECONDS.match(text)
-    if literal:
-        return int(literal.group(1))
-    reference = _ROLE_VAR.match(text)
-    if not reference:
-        return None
-    resolved = _SECONDS.match(
-        str(load_defaults(role).get(reference.group(1), "")).strip()
-    )
-    return int(resolved.group(1)) if resolved else None
+    for _ in range(3):
+        if literal := _SECONDS.match(text):
+            return int(literal.group(1))
+        if not (reference := _ROLE_VAR.match(text)):
+            return None
+        text = str(load_defaults(role).get(reference.group(1), "")).strip()
+    return None
 
 
+_ROLLOUT_KEY = "manifests_rollout_timeout"
 _ROLLOUT_TIMEOUT_CALL_SITE = re.compile(
-    r"^\s*manifests_rollout_timeout:\s*(.+?)\s*$", re.MULTILINE
+    rf"^\s*{_ROLLOUT_KEY}:\s*(.+?)\s*$", re.MULTILINE
 )
 
 
 def manifests_rollout_timeout_s(role: Path) -> int:
     """The seconds a role's `k8s/manifests` include waits for its rollout.
 
-    `MANIFESTS_ROLLOUT_DEFAULT_S` when the role passes no override. A role that passes one this
-    reader cannot resolve RAISES: the whole point is that an unreadable budget must not read as
-    the default, which is how a 660s service would be sized as a 300s one.
+    The include var when the role's tasks pass one, else the role's own
+    `manifests_rollout_timeout` default, which k8s/manifests reads the same way (#5464), else
+    `MANIFESTS_ROLLOUT_DEFAULT_S`. A budget this reader cannot resolve RAISES: the whole point
+    is that an unreadable budget must not read as the default, which is how a 660s service
+    would be sized as a 300s one.
     """
     tasks = role / "tasks" / "main.yml"
     match = _ROLLOUT_TIMEOUT_CALL_SITE.search(
         tasks.read_text() if tasks.is_file() else ""
     )
-    if not match:
+    declared = match.group(1) if match else load_defaults(role).get(_ROLLOUT_KEY)
+    if declared is None:
         return MANIFESTS_ROLLOUT_DEFAULT_S
-    seconds = rollout_seconds(match.group(1), role)
+    seconds = rollout_seconds(declared, role)
     if seconds is None:
         raise AssertionError(
-            f"{role.name} passes manifests_rollout_timeout: {match.group(1)}, which this "
+            f"{role.name} passes manifests_rollout_timeout: {declared}, which this "
             "reader cannot resolve to a number of seconds. Spell it as `<n>s` or as a "
             "`{{ role_var }}` whose defaults/main.yml value is `<n>s`."
         )

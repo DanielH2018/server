@@ -1,0 +1,12 @@
+{
+  "checksum": "e3bb346f5aa29d2fda3adf6307dde6c04e0e857f036ea1786d1e8f371a7d5860",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "ansible/roles/k8s/tdarr/CLAUDE.md#Notable",
+  "row": {
+    "atoms": {
+      "ansible/roles/k8s/tdarr/defaults/main.yml:manifests_rollout_timeout": "a14d61cc97b23876cbcfbefbfe821020069152b67fb64ae5093bd7368361725d"
+    },
+    "python": "3.14",
+    "verified_sha": "e11418271"
+  }
+}

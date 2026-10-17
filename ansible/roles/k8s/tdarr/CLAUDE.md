@@ -58,8 +58,9 @@ shared conventions.
   `tests/test_tdarr_verify.py` renders the renamed copy and runs the Job census over it.
 - **Every rollout waits 3000s, five times the shared default.** A cold pull of the 1432 MiB
   image took 25m37s on 2026-10-08 and failed the old 300s gate (#3689).
-  `tdarr_k8s_rollout_timeout` sets the drain's wait, the `verify.yml` gate and the template's
-  `progressDeadlineSeconds`. The deadline has to move with the wait, or `rollout status` fails
+  The budget is the literal `ansible/roles/k8s/tdarr/defaults/main.yml:manifests_rollout_timeout`,
+  which Flux's `timeout` and the drain's wait read. The `verify.yml` gate and the template's
+  `progressDeadlineSeconds` read it through `tdarr_k8s_rollout_timeout`. The deadline has to move with the wait, or `rollout status` fails
   at the 600s default anyway.
 - **`tasks/main.yml` pulls the image onto the node before the apply (#3875).** `Recreate` stops
   the old pod first, so without the pre-pull tdarr is down for the whole 25-minute pull. The pull

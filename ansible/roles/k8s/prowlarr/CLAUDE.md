@@ -32,8 +32,10 @@ rendering attacker-supplied pages in a headless browser.
   `templates/networkpolicy-flaresolverr.yaml.j2` — a deliberate narrowing from the Compose-era
   isolated network, since egress policies on this cluster don't hold but ingress does.
 - **Both Deployments wait 780s, above the shared default.** A cold pull on daniel-server took 8m54s for the
-  292 MB flaresolverr image and 3m41s for prowlarr's own (#2369). `prowlarr_k8s_rollout_timeout`
-  sets the drain's wait and each template's `progressDeadlineSeconds`. The deadline has to move
+  292 MB flaresolverr image and 3m41s for prowlarr's own (#2369). The budget is the literal
+  `ansible/roles/k8s/prowlarr/defaults/main.yml:manifests_rollout_timeout`, which Flux's
+  `timeout` and the drain's wait read, and each template's `progressDeadlineSeconds` reads it
+  through `prowlarr_k8s_rollout_timeout`. The deadline has to move
   with the wait, or `rollout status` fails at the 600s default anyway.
 - **flaresolverr's memory limit is sized from a burst, not from steady state.** It launches a
   fresh headless Chromium per solve, so a full deploy that restarts the *arr stack hands a cold
