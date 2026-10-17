@@ -1,6 +1,7 @@
 ---
-# The host-side rows D5 moves out of the k8s roles land here, one task file per source role,
-# each included from this file by its conversion PR. The role enters initial_setup.yml with
-# no task at all, so applying it changes nothing on the host
-# (docs/target-architecture/deploy/d5-bulk-move.md, D5.1h).
-[]
+# The host-side rows D5 moves out of the k8s roles, one task file per source role, each named
+# after that role and imported here by its conversion PR
+# (docs/target-architecture/deploy/d5-bulk-move.md, *Host-side rows*). A static import, so the
+# play's `k8s_host_files` tag reaches every task in the file.
+- name: Docs' site directory
+  ansible.builtin.import_tasks: docs.yml
