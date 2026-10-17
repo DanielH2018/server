@@ -12,6 +12,10 @@ name: promote
 #            `sha`, refuses one that is not on master, re-reads a dispatched commit's CI,
 #            renders the bundle, runs the publish census and gates and scans it, and hands
 #            `out/` on.
+#   images   contents: read, packages: write. Checks out this workflow's own commit, refuses any
+#            context in `out/images/` that does not hash to its tag in `tags.json` before a
+#            credential exists, then builds and pushes each image whose content tag GHCR does
+#            not serve (scripts/deploy_tools/ci_images.py). `publish` needs it.
 #   publish  packages: write, id-token: write. Checks out nothing. Pushes `sha-<X>` and signs
 #            it with cosign keyless under this workflow's identity. A `verify_drill` dispatch
 #            instead pushes an annotated bundle to `verify-drill` unsigned, and fails unless
@@ -200,8 +204,64 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
-  publish:
+  # images: contents: read, packages: write. Builds each of the ten contexts `render` wrote under
+  # out/images/ and pushes ghcr.io/danielh2018/<name>:<content tag> when GHCR does not serve that
+  # tag (D5.4a2). It runs no renderer code: it reads `render`'s artifact and this workflow's own
+  # scripts/deploy_tools/ci_images.py, which imports only the stdlib and lib.cli_help. The plan is
+  # docs/target-architecture/deploy/d5-bulk-move.md, *Images built by CI (D5.4)*.
+  #
+  # `publish` needs it, so a failing image stops every promotion until it is fixed. A served tag
+  # is success and is never rebuilt, because the push-once rule is what makes a content tag
+  # immutable. The concurrency group keeps two runs from both reading a tag as absent and both
+  # pushing it; a newer pending run evicts an older one, and pushes whatever that one would have.
+  # Nothing pulls these refs until D5.4b.
+  images:
     needs: render
+    if: >-
+      github.ref == 'refs/heads/master' && (
+      github.event_name == 'workflow_dispatch' || (
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.head_branch == 'master' &&
+      github.event.workflow_run.head_repository.full_name == github.repository))
+    runs-on: ubuntu-26.04
+    # The first run builds all ten, code-server's toolchains the longest.
+    timeout-minutes: 90
+    concurrency:
+      group: images
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: bundle
+          path: out
+
+      # Before any credential exists: each context's files must hash to the tag tags.json names,
+      # by image-builder's own rule, or nothing is pushed.
+      - name: Check each image context against its content tag
+        id: plan
+        run: python3 scripts/deploy_tools/ci_images.py plan out
+
+      - name: Push each image whose content tag GHCR does not serve
+        id: push
+        env:
+          GH_ACTOR: ${{ github.actor }}
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          printf '%s' "$GITHUB_TOKEN" | docker login ghcr.io -u "$GH_ACTOR" --password-stdin
+          python3 scripts/deploy_tools/ci_images.py push out
+
+  publish:
+    needs: [render, images]
     if: >-
       github.ref == 'refs/heads/master' && (
       github.event_name == 'workflow_dispatch' || (

@@ -1,0 +1,15 @@
+{
+  "checksum": "5c6da07260ce93b40250c2e2a7c12f3031311f56928c73af0483ef9a0205e291",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "ansible/roles/setup/initial_setup/CLAUDE.md#Autonomous-role contract — Generated docs refresh (`crons` tag)",
+  "row": {
+    "atoms": {
+      "docs/assets/generated/": "8d2be7fd1bf3ad3c06ea741dd1d8991ad00e8a8e7ff4fbbe13bf1bbfdf25eeb4",
+      "docs/host-baseline-record.md": "b3164734e9ac148a9ebe6d63fcf7f075408648cf8c9e218a4db57ea057b3a360",
+      "docs/reference/": "15258a72a5cb4dc7d2f6045d119355fac9eb99d754894846890b6d2253ece9d6",
+      "scripts/dev/pytest_shard_weights.json": "27249e30d39dffd043954af54b6412b0f2f1d4ebc4c4a87f503b54a08807cd0e"
+    },
+    "python": "3.14",
+    "verified_sha": "6757b2044"
+  }
+}

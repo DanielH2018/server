@@ -2,7 +2,7 @@
 paths:
   - "CLAUDE.md"
   - "**/CLAUDE.md"
-  - "docs/facts.lock"
+  - "docs/facts.lock/**"
   - "scripts/lib/facts/**"
   - "scripts/dev/fact_status.py"
 ---
@@ -92,8 +92,13 @@ continuation lines and nested bullets with it; a history paragraph ends at the n
 
 ## Commands
 
-`docs/facts.lock` records the hashes each verified section was checked against. The tool
+`docs/facts.lock/` records the hashes each verified section was checked against. The tool
 writes it, and a hand edit fails `test_every_recorded_atom_hashes_as_recorded` as tampered.
+It is a directory holding one file per section, named by a hash of the section key, and each
+file carries its own `checksum`. Two PRs that verify different sections therefore edit
+different files, and git merges them without a conflict (#5341). A hand-deleted file is not
+flagged, because it reads the same as `forget`. To find a section's file, grep the directory
+for its key.
 
 A row's `verified_sha` is the HEAD that `verify` ran at, which is often a branch commit the
 squash merge left off master. Do not read it as a master commit. The commit on master that

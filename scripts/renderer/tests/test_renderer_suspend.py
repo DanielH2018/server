@@ -16,10 +16,7 @@ from renderer.renderer_lib.bundle import bundle_files
 from renderer.renderer_lib.suspension import suspend_false
 from renderer.renderer_lib.ordering import (
     SUSPENDED_DEPS,
-    Edges,
     Ordering,
-    drop_suspended,
-    kustomization_edges,
 )
 
 TIMEOUT = "600s"
@@ -105,13 +102,18 @@ def test_every_kustomization_of_a_suspended_tag_renders_suspend_true(tmp_path):
     assert yaml_fast.safe_load(files["digests.json"])["sonarr"]["suspended"] is True
 
 
-def test_a_soak_shaped_kustomization_drops_the_suspended_tags_kustomizations():
-    """D5.3b2's `soak` depends on every Kustomization and goes through the same step."""
-    edges = kustomization_edges(TAGS, DIRECTORIES, ORDERING)
-    with_soak = {**edges, "soak": Edges(frozenset(edges))}
-    soak = drop_suspended(with_soak, {"sonarr"})["soak"]
-    assert soak.suspended == {"sonarr", "sonarr-deferred"}
-    assert soak.kept == {"netpol-baseline", "texbrain"}
+def test_the_rendered_soak_has_no_edges_and_lists_the_suspended_tag(tmp_path):
+    """#5317: `soak` waits at run time (D5 Open question 19) and names a suspended tag."""
+    soak = _docs(_bundle(_roles(tmp_path, sonarr="flux_suspend: true\n")))["soak"]
+    assert "dependsOn" not in soak["spec"]
+    assert _suspended_deps(soak) == "sonarr,sonarr-deferred"
+
+
+def test_the_rendered_soak_lists_no_tag_when_none_is_suspended(tmp_path):
+    """The red half: the same fixture unsuspended leaves the annotation off."""
+    soak = _docs(_bundle(_roles(tmp_path)))["soak"]
+    assert "dependsOn" not in soak["spec"]
+    assert _suspended_deps(soak) is None
 
 
 def test_a_suspended_flux_owned_tag_outside_the_render_is_dropped(tmp_path):

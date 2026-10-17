@@ -8,10 +8,12 @@ Run: uv run pytest scripts/dev/tests/test_fanout_brief.py
 """
 
 import re
+import tomllib
 
 from fanout_lib.brief import Comment, Issue, relevant_health, render_brief
 from fanout_lib.review.review import issues_section
 from fanout_lib.target import Target
+from lib.repo_paths import REPO
 
 ISSUES = [
     Issue(1345, "Traefik startupProbe has no red-proof", "body one\nline two"),
@@ -230,3 +232,40 @@ def test_the_placed_hosts_own_prefix_does_not_make_every_line_relevant():
     assert relevant_health(["[daniel-box] ⚠ radarr is owed a deploy"], issues) == [
         "(1 other host-state lines omitted: none names a role or host these issues cite)"
     ]
+
+
+def _static_ratchet_hook_files() -> list[str]:
+    hooks = [
+        h
+        for r in tomllib.loads((REPO / "prek.toml").read_text())["repos"]
+        for h in r.get("hooks", [])
+    ]
+    entry = next(h["entry"] for h in hooks if h["id"] == "static-ratchet-tests")
+    return [w for w in entry.split() if w.endswith(".py")]
+
+
+def test_a_server_brief_runs_the_repo_wide_guards_before_the_pr_and_a_dotfiles_brief_does_not():
+    """A new file tripped a guard no test beside it reaches, three times in one week (#5077).
+
+    The run must name paths that exist and cover every file the `static-ratchet-tests` hook
+    runs, so a renamed guard or a widened hook turns this red instead of the brief going stale.
+    """
+    hook_files = _static_ratchet_hook_files()
+    assert "ansible/tests/repo/test_module_length_ratchet.py" in hook_files
+    for host in ("daniel-box", "daniel-server"):
+        brief = render_brief(
+            [Issue(1, "t", "no cited path")], host, "1", "worktree-orch", []
+        )
+        run = re.search(r"^uv run pytest -q -n auto (.+)$", brief, re.M)
+        assert run, f"{host}: the brief names no repo-guard run"
+        paths = run.group(1).split()
+        assert [p for p in paths if not (REPO / p).exists()] == []
+        assert "scripts/lib/tests/test_exit_codes.py" in paths
+        uncovered = [f for f in hook_files if not any(f.startswith(p) for p in paths)]
+        assert uncovered == [], f"the brief's guard run misses hook files {uncovered}"
+        assert brief.index("## Before you open the PR") < brief.index("## Landing")
+        assert "pytest_shard.py --record-files <module>" in brief
+    brief = render_brief(
+        ISSUES, "daniel-box", "1345-1386", "worktree-orch", [], DOTFILES
+    )
+    assert "## Before you open the PR" not in brief and "--record-files" not in brief

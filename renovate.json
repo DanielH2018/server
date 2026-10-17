@@ -382,12 +382,12 @@
     },
     {
       "customType": "regex",
-      "description": "The fuzzball package the n8n image installs with `npm install -g fuzzball@X.Y.Z` (#2213). Same shape as the Claude Code CLI manager above and for the same reason: the built-in npm manager reads package.json only, and this pin sits in a Dockerfile. It was `npm install -g fuzzball` with no version until 2026-09-21, so every rebuild took whatever npm served that day — the class #2149 closed for code-server.",
+      "description": "The fuzzball package both n8n images install: `npm install -g fuzzball@X.Y.Z` in the n8n image (#2213) and `pnpm add fuzzball@X.Y.Z` in the runners image (#5391). Same shape as the Claude Code CLI manager above and for the same reason: the built-in npm manager reads package.json only, and these pins sit in Dockerfiles. One manager over both files, so one PR moves both pins together. Each line had no version at first, so every rebuild took whatever npm served that day — the class #2149 closed for code-server.",
       "managerFilePatterns": [
-        "/(^|/)ansible/roles/k8s/n8n/templates/Dockerfile\\.j2$/"
+        "/(^|/)ansible/roles/k8s/n8n/templates/Dockerfile(-runners)?\\.j2$/"
       ],
       "matchStrings": [
-        "npm install -g fuzzball@(?<currentValue>[\\d.]+)"
+        "(?:npm install -g|pnpm add) fuzzball@(?<currentValue>[\\d.]+)"
       ],
       "depNameTemplate": "fuzzball",
       "datasourceTemplate": "npm"

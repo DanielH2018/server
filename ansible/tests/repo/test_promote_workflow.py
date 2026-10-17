@@ -24,9 +24,9 @@ from lib import yaml_fast
 WORKFLOW = REPO / ".github" / "workflows" / "promote.yml"
 FLUX_DEFAULTS = REPO / "ansible" / "roles" / "k8s" / "flux" / "defaults" / "main.yml"
 
-JOBS = ("render", "publish", "promote", "tag", "verify", "settle", "post")
+JOBS = ("render", "images", "publish", "promote", "tag", "verify", "settle", "post")
 NEEDS = {
-    "publish": "render",
+    "publish": ["render", "images"],
     "promote": "publish",
     "tag": "promote",
     "verify": ["promote", "tag"],
@@ -43,9 +43,9 @@ TRIGGER_GUARDS = (
 )
 # A dispatch reaches every job, so every job also requires master's copy of the file.
 REF_GUARD = "github.ref == 'refs/heads/master'"
-
 PERMISSIONS = {
     "render": {"contents": "read", "checks": "read"},
+    "images": {"contents": "read", "packages": "write"},
     "publish": {"packages": "write", "id-token": "write"},
     "promote": {
         "contents": "read",

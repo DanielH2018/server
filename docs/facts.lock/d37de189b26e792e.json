@@ -1,0 +1,12 @@
+{
+  "checksum": "1ff1324b2c69d274ecf0378e9988360afca09f9cfbd8c7bcd6b16eebdd732005",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "ansible/roles/k8s/crowdsec/CLAUDE.md#The ban gate waits for the edge bouncer's pull, not a timer",
+  "row": {
+    "atoms": {
+      "ansible/tests/services/test_crowdsec_ban_gate.py": "10a8408d7433e12eaf8df73992d5843ae5ada20e2e1c1c6e951268f416f6f8cc"
+    },
+    "python": "3.14",
+    "verified_sha": "f18b2700d"
+  }
+}

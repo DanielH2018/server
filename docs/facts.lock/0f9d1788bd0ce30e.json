@@ -1,0 +1,13 @@
+{
+  "checksum": "97e1e052076e45474ad7e18adf7199edd952a0cc4cadae38aee9bde84aa77dc4",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "ansible/roles/k8s/traefik/CLAUDE.md#Pod plumbing",
+  "row": {
+    "atoms": {
+      "ansible/templates/crowdsec-agent.yml.j2": "c8fc54e5ac8f9406d48186fa35efe6c98e55d8ccb97c2875761f90b5d2cebd25",
+      "docs/crowdsec-waf-record.md": "0fed3631bfac065efe701fd07f11045f36675afdf7959517fcaa567e5f5cb4cb"
+    },
+    "python": "3.14",
+    "verified_sha": "89d586f13"
+  }
+}

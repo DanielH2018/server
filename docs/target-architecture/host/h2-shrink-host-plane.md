@@ -1,6 +1,22 @@
 # H2 — Shrink the host plane (crons to CronJobs)
 
-Status: PLANNED
+Status: IN PROGRESS
+
+PR H2.1, the censuses: [#5335](https://github.com/DanielH2018/server/pull/5335). It merged at
+`7d9901058` and deployed nothing. It adds the flux-ownership, retired-cron and reaper-CronJob
+census rows, the RBAC-against-script test and the trim-label fixtures, and none of the six roles
+carries `owner: flux`.
+PR H2.3a, the drill's readers: [#5349](https://github.com/DanielH2018/server/pull/5349). It merged
+at `252cd470c` and owed `manual_plane k3s`. `narrow_setup.py` mapped the shared `longhorn_lib`
+change to six health-cron tags, and the operator applied all six with no gated control-plane
+task selected: `ok=115 changed=33 failed=0`. Nothing writes the stamp ConfigMap yet, so the
+readers take their host-directory fallback
+([readings](https://github.com/DanielH2018/server/pull/5349#issuecomment-6226115250)).
+PR H2.7, the two Claude crons re-homed: [#5387](https://github.com/DanielH2018/server/pull/5387),
+together with D5's run-once cleanup PR. It merged at `471397804`. daniel-box's tick re-rendered
+both scripts at 01:41 UTC, and the peer sync cron rewrote its lock at 01:45:01, the first slot
+after. On daniel-server, `initial_setup.yml --tags claude_code` read `ok=123 changed=4
+failed=0`. The node gate kept both crons off that host, and `Restart claude-rc` did not run.
 Depends on: H1, D3 and H6, per PR. H2.2a needs H1.5a and H1.6. H2.3b needs H1.5a and the C3
 row of *Open questions* 12. H2.8a needs H1.7b (and through it D3) and H6.4b, with the
 region-key gate of *Open questions* 11. No other H2 PR waits outside H2 (*Open questions*
@@ -699,8 +715,8 @@ rows*). D5 wave D waits on H2's family PR for each of the six roles, so H2 takes
   and H2.5b to H2.5d: the cron files, the script paths and, for configarr and janitorr, the
   host-lib copies and their fragments. Their conversion PRs move those arms into
   `k8s_host_files`, and H7 deletes them.
-- **observability** keeps no host row after H2.7. **artifacts** keeps its two directory
-  tasks, which its conversion PR moves.
+- **observability** keeps no host row after H2.7. **artifacts** keeps its three directory
+  tasks, the star list directory included, which its conversion PR moves.
 - **Rows H2 never touches:**
     - docs's site directory, which stays in `k8s_host_files` until H7;
     - registry's GC absent arms and traefik's `Cloudflare IP drift` arm, which H7 deletes;
@@ -1440,7 +1456,7 @@ change at merge time*).
     - The tick applies `initial_setup.yml --tags claude_code`, and the PR body quotes that
       run.
     - D5 wave D waits on this PR for artifacts and observability, so D5's conversion PRs find
-      only artifacts' two directory tasks (*What H2 leaves in `k8s_host_files`*).
+      only artifacts' three directory tasks (*What H2 leaves in `k8s_host_files`*).
 17. **H2.8a etcd-s3 on.** This step needs H1.7b and H6.4b.
     - Gate: `longhorn-backup` defaults define `k3s_longhorn_r2_region` before this PR merges.
       If they do not, the PR adds `longhorn_backup_etcd_s3_region` there and the render test

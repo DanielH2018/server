@@ -1,0 +1,14 @@
+{
+  "checksum": "e29ea58a0479bdc267a330bbb3ce0c3b0ab99a73a13c821573803c1222bebc88",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "ansible/roles/setup/k8s_host_files/CLAUDE.md#What it holds",
+  "row": {
+    "atoms": {
+      "ansible/tests/setup/": "21eda762d0dab9f35d1267af17e00d045dad949bb9a35de641b6248a9993296f",
+      "ansible/tests/setup/test_k8s_host_files_pairs.py": "d206ec0dc4cd0a817a9aef3f3a3edef2b10c565cf997ce16cc4bfbd4db3bafec",
+      "ansible/tests/setup/test_k8s_host_files_render.py": "59899b9c8f498b760641e55c1bc0de8c402ce6dade780130a4bc59e8711dedd1"
+    },
+    "python": "3.14",
+    "verified_sha": "8f6d2a920"
+  }
+}

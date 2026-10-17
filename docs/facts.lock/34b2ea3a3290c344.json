@@ -1,0 +1,14 @@
+{
+  "checksum": "7a8d485954fc54bb205910331539908942d8d2ce07b795be911d932f9e54a6bd",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "ansible/roles/k8s/traefik/CLAUDE.md#Plugins and the startupProbe",
+  "row": {
+    "atoms": {
+      "ansible/tests/k8s/test_traefik_cloudflare_realip.py": "c2f9540dbc520e9e9a3a143e7073d1ce3508cd13993949e6a93229095c3d1f8b",
+      "ansible/tests/services/test_traefik_bouncer_metrics_ticker_off.py": "2493349caa2c38a994ae3fc01f7b6d468460b6d00d0d9faca8b7fa9c25bd0ca2",
+      "ansible/tests/services/test_traefik_edge_selfcheck.py": "047427a3b7de3e97ef00c781bfa63b6ebb31d4bb52ae4ab7e54623de2d1cf936"
+    },
+    "python": "3.14",
+    "verified_sha": "454da7c98"
+  }
+}

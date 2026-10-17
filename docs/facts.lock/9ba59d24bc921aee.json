@@ -1,0 +1,12 @@
+{
+  "checksum": "e8bedd5af43cfa615ebb47575c7bb91331d435d133424d4fcdc0ed647bdffe02",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "ansible/roles/k8s/bento-pdf/CLAUDE.md#At a glance",
+  "row": {
+    "atoms": {
+      "docs/flux-deploy-plane.md": "807c3deb44c3178e7a6f9fc0bc398a3b748b95c468b14ce9b1b890c8684535d9"
+    },
+    "python": "3.14",
+    "verified_sha": "3b99e25a1"
+  }
+}

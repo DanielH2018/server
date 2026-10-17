@@ -1,0 +1,14 @@
+{
+  "checksum": "049ce03ea067572cfd41345ab43482216d4314a2b6aea41d506de47eae13257c",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "ansible/roles/setup/optimize_pi/CLAUDE.md#Where it runs",
+  "row": {
+    "atoms": {
+      "ansible/initial_setup.yml": "dad2997555424b8d42206e5b7189899762140856058c0dd59f2ae7c26906f439",
+      "docs/pi-host-tuning-record.md": "a608a4080a6e45e5e453c94a8a5d86aba0c6319a9cab7c063be331b0d741c133",
+      "hosts/components/pi-heartbeats/": "60dc7e1066b40a73ca02188395384a5b1175cb524d787aab24acbe05da3254c4"
+    },
+    "python": "3.14",
+    "verified_sha": "40d7f3f82"
+  }
+}

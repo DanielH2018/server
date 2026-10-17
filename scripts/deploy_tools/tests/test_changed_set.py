@@ -96,3 +96,45 @@ def test_a_widened_set_takes_in_every_unkeyed_kustomization_and_is_all_direct():
     result = changed_set(OLD, None, graph)
     assert result.names == {"bento-pdf", "sonarr", "cluster-vars", "bento-pdf-deferred"}
     assert result.direct == result.names
+
+
+def _with_soak(**footprints: str) -> dict:
+    """`digests` with `soak` beside the tags, each tag carrying `suspended` as D5.1a2 writes it."""
+    found = digests(**footprints)
+    for name in ("bento-pdf", "sonarr"):
+        found[name]["suspended"] = False
+    return found
+
+
+SOAK_GRAPH = {**GRAPH, "soak": []}
+SOAK_OLD = _with_soak(
+    bento_pdf="a", sonarr="s", cluster_vars="v", soak="k", _unclassified="u"
+)
+
+
+def test_soak_joins_a_set_that_holds_a_tag_as_a_direct_member():
+    new = _with_soak(
+        bento_pdf="b", sonarr="s", cluster_vars="v", soak="k", _unclassified="u"
+    )
+    result = changed_set(new, SOAK_OLD, SOAK_GRAPH)
+    assert result.names == result.direct == {"bento-pdf", "soak"}
+
+
+def test_soak_stays_out_of_a_set_that_holds_no_tag():
+    new = _with_soak(
+        bento_pdf="a", sonarr="s", cluster_vars="v2", soak="k", _unclassified="u"
+    )
+    assert changed_set(new, SOAK_OLD, SOAK_GRAPH).names == {"cluster-vars"}
+
+
+def test_soak_stays_out_when_its_only_changed_tag_is_suspended():
+    new = _with_soak(
+        bento_pdf="b", sonarr="s", cluster_vars="v", soak="k", _unclassified="u"
+    )
+    assert changed_set(new, SOAK_OLD, SOAK_GRAPH, {"bento-pdf"}).names == frozenset()
+
+
+def test_a_bundle_without_soak_never_gains_it():
+    new = _with_soak(bento_pdf="b", sonarr="s", cluster_vars="v", _unclassified="u")
+    old = _with_soak(bento_pdf="a", sonarr="s", cluster_vars="v", _unclassified="u")
+    assert changed_set(new, old, GRAPH).names == {"bento-pdf"}

@@ -1,0 +1,12 @@
+{
+  "checksum": "063f993705702a415a36ff80eb3af94dba1fc3115d7e6e65a06e0694e0510e0b",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "ansible/roles/k8s/nut/CLAUDE.md#Timer vs. safety net",
+  "row": {
+    "atoms": {
+      "ansible/tests/setup/test_nut_host_secondary.py": "d2cbe0a9538f4ed8bfddf57db86236d5623fad840c7afa47de285195c1114a74"
+    },
+    "python": "3.14",
+    "verified_sha": "55862020d"
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "checksum": "f5abc7675a4ce85cc1f02e06e97c97f3079b92829dba8d47f1bab8108292c690",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "ansible/roles/k8s/qbittorrent/CLAUDE.md#The sidecar resets the netns on every start",
+  "row": {
+    "atoms": {
+      "ansible/tests/services/test_qbittorrent_sidecar_resets_the_netns.py": "58b5e6754512d78a38a2e6679902a79009802f375b35c7a2c4ece083f6777f05"
+    },
+    "python": "3.14",
+    "verified_sha": "fd34ae8eb"
+  }
+}

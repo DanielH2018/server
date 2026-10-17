@@ -138,7 +138,8 @@ The dispatcher claims each batch (step 2), writes the brief (issue bodies verbat
 note, the landing path or the stop-at-PR rule, and the session-health lines of the placed host
 that name a role or host the batch's issues cite, the rest as a count, and, for this repo, the
 deploy tag and the test files the cited paths imply, which `findings.py show <n> --brief`
-prints for a solo session) and starts a headless
+prints for a solo session, plus the fixed repo-wide guard run and shard-weight repair from
+`fanout_lib/brief.py`'s `REPO_GUARDS`, which no test beside a change reaches) and starts a headless
 Opus agent as a transient user service in a fresh worktree on whichever host has the
 most memory headroom under the tighter of its fleet and login-plane caps. Exit 3 means nothing
 was placed: every claim was refused (step 2), or one of three placement refusals fired, which
@@ -305,8 +306,10 @@ removes each worktree once its branch is merged into `origin/master` and the tre
 then deletes that `worktree-fanout-<batch>` branch, and reports a kept tree with its reason. A
 branch that refuses to delete reads `kept`, naming it. `clean` records each removal in the run's manifest, so a
 later pass skips a batch it already removed rather than reading a host for a worktree that is
-gone, and `status` shows such a batch as `cleaned`. `clean` deletes the manifest under
-`~/.claude/fanout/` only once every batch is removed, and exits 1 naming any batch whose remote
+gone, and `status` shows such a batch as `cleaned`. Once every batch is removed, `clean` and
+`abandon` move the manifest into `~/.claude/fanout/retired/`. `runs`, the launch gates and the
+SessionStart banner then stop listing the run, while `status` and `cc-wait fanout` still read
+it as cleaned, so a watch over several runs ends normally. `clean` exits 1 naming any batch whose remote
 leg failed outright — an unreachable host is not a tree to re-clean once merged. A batch whose
 unit is still active is kept, naming the unit: a running agent's tree is clean and at master
 until it commits, which is exactly what a merged tree looks like, and a `clean` run too early

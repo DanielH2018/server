@@ -1,0 +1,13 @@
+{
+  "checksum": "0044387288230932defe33527b8c457d3883e0579fdc5149236c055cc6d04e0c",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "ansible/roles/containers/alloy/CLAUDE.md#Notable",
+  "row": {
+    "atoms": {
+      "ansible/tests/services/test_alloy_pi_gomemlimit_headroom.py": "210ab7075a2837eeeefdc831ac26ff07d121b9f166f0170e96264e44aededeac",
+      "hosts/components/pi-heartbeats/": "60dc7e1066b40a73ca02188395384a5b1175cb524d787aab24acbe05da3254c4"
+    },
+    "python": "3.14",
+    "verified_sha": "40d7f3f82"
+  }
+}

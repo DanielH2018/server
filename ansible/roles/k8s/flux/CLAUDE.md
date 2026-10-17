@@ -69,10 +69,11 @@ controllers apply every service, and an exemption would be a lasting hole for th
   `volumes` and every `volumeMounts`. A merge patch cannot rename a list item. The filter
   refuses a volume the map does not name, so a regeneration that adds one fails the render;
 - sets each flag `flux_controller_args` names on its controller, replacing upstream's value
-  for that flag. kustomize-controller's `--concurrent` equals `k8s_rollout_batch_width`, so
-  Flux reconciles as many Kustomizations at once as the deploy play rolls workloads (D5.1c).
+  for that flag. kustomize-controller's `--concurrent` is `k8s_rollout_batch_width` plus one,
+  so Flux reconciles as many tags at once as the deploy play rolls workloads (D5.1c), and the
+  soak holds the extra worker from the start of a rollout (D5.3b2).
   `scripts/deploy_tools/chained_timeout.py:CONCURRENT` sizes `verify`'s queueing term from
-  the same figure.
+  the width alone.
 
 **This role reads `containers_list`.** The `tier_priority_class` call above makes it one, so
 an added, removed or reordered entry reaches `flux` through the GitOps broad plane, whatever
@@ -134,7 +135,7 @@ errors. `docs/flux-deploy-plane.md` describes each object.
 - **The signer identity is pinned twice.** `flux_signer_subject` and `flux_signer_issuer` are
   the regular expressions the OCIRepository matches, and `scripts/deploy_tools/forge.py` holds
   the same identity for `promote.py`'s `cosign verify`.
-  `ansible/tests/k8s/test_flux_role.py` fails a drift between the two.
+  `ansible/tests/k8s/test_flux_sync.py` fails a drift between the two.
 
 ## The suspend lever
 

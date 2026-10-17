@@ -1,0 +1,12 @@
+{
+  "checksum": "583722a11c81765f896dd9d8a62483a4b4a340b051982a203f79113427b78e51",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "ansible/roles/k8s/texbrain/CLAUDE.md#Two things that look like bugs and are not",
+  "row": {
+    "atoms": {
+      "ansible/tests/k8s/test_netpol_baseline_labels.py": "881c8d283b0ce20a19091425be8d2622bd4ff2657087905a00c14f4a78c0a393"
+    },
+    "python": "3.14",
+    "verified_sha": "55862020d"
+  }
+}

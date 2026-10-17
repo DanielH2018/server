@@ -1,0 +1,12 @@
+{
+  "checksum": "5d29628583c68525f439488d3a44badf30569c4bfdbad3f6bba348b149723c4a",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "ansible/roles/k8s/jellyfin/CLAUDE.md#At a glance",
+  "row": {
+    "atoms": {
+      "ansible/tests/services/test_every_jellyfin_plugin_target_abi_fits_the_image.py": "7a07cd255c7423e636ae17d21f01b96ec31eedc34a6d9ffef20d17358a2ae0ce"
+    },
+    "python": "3.14",
+    "verified_sha": "f18b2700d"
+  }
+}

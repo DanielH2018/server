@@ -1,0 +1,14 @@
+{
+  "checksum": "07e18b71558e43ae7fb91f2f5ccb707d5b0ceb39199fab8fd188d589588c1d9e",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "ansible/roles/k8s/traefik/CLAUDE.md#Client identity and TLS",
+  "row": {
+    "atoms": {
+      "ansible/templates/origin-pull.yml.j2": "de8182fd1509cd024d24975916ebfa92942baf184cdd39cb71e4a4e3d80bc2c0",
+      "ansible/tests/k8s/test_public_routes_require_cloudflare_origin_pull.py": "b1315bc9df7fa0445243b64daf9b48885a96100b0146c06ac6f325703e557eb7",
+      "ansible/tests/services/test_traefik_watched_namespaces.py::test_empty_services_keep_their_router_is_clean": "457000d537990e9bd1d5b7f7bdaa0ff4609931349bf732a4ee8ef2e7740c81fb"
+    },
+    "python": "3.14",
+    "verified_sha": "454da7c98"
+  }
+}

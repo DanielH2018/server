@@ -32,6 +32,10 @@ from renderer.renderer_lib.environment import evaluate, renderer_env
 IMAGE_BUILDER = K8S_ROLES / "image-builder"
 CONTENT_TAG = "image_builder_content_tag"
 BUILT_IMAGE_TAGS = "k8s_built_image_tags"
+# The `data` the content tag's expression hashes, read the way that expression reads it.
+_CONTEXT_DATA = (
+    "{{ (lookup('template', 'context-configmap.yaml.j2') | from_yaml)['data'] }}"
+)
 
 # Each role's `set_fact` values that `derived_facts` evaluates, in the order the role's tasks
 # set them, as the tasks file and the fact. `game_stats_lib_checksum` feeds both game
@@ -210,6 +214,42 @@ def content_tag(variables: dict) -> str:
     return str(evaluate(env, expression, variables))
 
 
+@dataclass(frozen=True)
+class ImageContext:
+    """One build's rendered context and its content tag.
+
+    Attributes:
+        data: The `data` of image-builder's context ConfigMap, each file name mapped to its
+            text, parsed as the content tag's expression parses it. It holds every byte the
+            build reads.
+        tag: `image_builder_content_tag`, by `content_tag`.
+    """
+
+    data: dict[str, str]
+    tag: str
+
+
+def image_contexts(role_dir: Path, ctx: dict) -> dict[str, ImageContext]:
+    """Each image `role_dir` builds, mapped to its context and content tag.
+
+    A build whose `when:` is false is left out, as Ansible skips it. The context renders
+    `context-configmap.yaml.j2` through the lookup and `from_yaml` the content tag's expression applies,
+    so a file written from `data` hashes to `tag`.
+    """
+    built = {}
+    for site in image_builder_sites(role_dir):
+        variables = site_variables(site, ctx)
+        env = renderer_env(IMAGE_BUILDER / "templates", variables)
+        if not all(env.compile_expression(cond)(**variables) for cond in site.when):
+            continue
+        data = evaluate(env, _CONTEXT_DATA, variables)
+        built[variables["image_builder_name"]] = ImageContext(
+            {str(k): str(v) for k, v in cast(dict, data).items()},
+            content_tag(variables),
+        )
+    return built
+
+
 def built_image_tags(role_dir: Path, ctx: dict) -> dict[str, str]:
     """`k8s_built_image_tags` after `role_dir`'s builds: each image's name mapped to its tag.
 
@@ -217,16 +257,12 @@ def built_image_tags(role_dir: Path, ctx: dict) -> dict[str, str]:
     own image, so a role that builds nothing reads an empty map. A build whose `when:` is false
     adds nothing, and its consumer falls back to `latest`.
     """
-    tags = {}
-    for site in image_builder_sites(role_dir):
-        variables = site_variables(site, ctx)
-        env = renderer_env(IMAGE_BUILDER / "templates", variables)
-        if all(env.compile_expression(cond)(**variables) for cond in site.when):
-            tags[variables["image_builder_name"]] = content_tag(variables)
-    return tags
+    return {name: c.tag for name, c in image_contexts(role_dir, ctx).items()}
 
 
-def derived_facts(role_dir: Path, ctx: dict) -> dict:
+def derived_facts(
+    role_dir: Path, ctx: dict, built: dict[str, str] | None = None
+) -> dict:
     """The values `role_dir`'s tasks compute that its templates and defaults read.
 
     That is `k8s_built_image_tags` for every role, and the `SET_FACTS` values of the roles
@@ -236,12 +272,17 @@ def derived_facts(role_dir: Path, ctx: dict) -> dict:
     Args:
         role_dir: The role directory, `ansible/roles/k8s/<tag>`.
         ctx: The role's play-time context, the stub file's variables included.
+        built: `k8s_built_image_tags` as the caller already computed it from `ctx`, so a
+            render's `DIR/images/tags.json` and its consumers' refs share one computation.
+            None computes it here.
 
     Raises:
         ValueError: A `SET_FACTS` entry names a fact its tasks file does not set once.
         jinja2.TemplateError: An expression will not evaluate.
     """
-    facts: dict = {BUILT_IMAGE_TAGS: built_image_tags(role_dir, ctx)}
+    if built is None:
+        built = built_image_tags(role_dir, ctx)
+    facts: dict = {BUILT_IMAGE_TAGS: dict(built)}
     for tasks_file, fact in SET_FACTS.get(role_dir.name, ()):
         expression, task_vars = set_fact_task(role_dir / "tasks" / tasks_file, fact)
         variables = {

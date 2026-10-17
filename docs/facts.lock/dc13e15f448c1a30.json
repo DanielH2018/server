@@ -1,0 +1,12 @@
+{
+  "checksum": "369e3aa89cbe7696edf8c1bdf11208e31f9284fce71213cb9b2c0e8c43c49cce",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "ansible/roles/k8s/nut/CLAUDE.md#Editing",
+  "row": {
+    "atoms": {
+      "ansible/roles/setup/nut_host/": "479c14f208590adc0553e917af54dcc93a7aa826e97e4228b3bc27210495646e"
+    },
+    "python": "3.14",
+    "verified_sha": "55862020d"
+  }
+}

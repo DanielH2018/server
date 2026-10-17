@@ -1,0 +1,12 @@
+{
+  "checksum": "fff26594caa3cad3b51b302fbcfe66c6f22597bdef3143cb19a95197a7066b06",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "ansible/roles/k8s/cronjob-gate/CLAUDE.md#Why a CronJob needs this at all",
+  "row": {
+    "atoms": {
+      "ansible/tests/deploy/test_k8s_autodeploy_batch_gates.py": "5bd586bd4332dcfd82561d147d6b9e59d81249d4938f19ce4c8b85c4300c7218"
+    },
+    "python": "3.14",
+    "verified_sha": "55862020d"
+  }
+}

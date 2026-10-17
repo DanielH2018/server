@@ -51,13 +51,14 @@ flux_volume_suffixes:
 
 # The flags the flux_components filter sets on a controller's container, replacing upstream's
 # value for the same flag. kustomize-controller reconciles `--concurrent` Kustomizations at once,
-# and one that waits on health holds its worker until the check settles. Equal to the deploy
-# play's rollout batch width, it keeps the rollout concurrency the play has (D5.1c).
-# scripts/deploy_tools/chained_timeout.py's CONCURRENT is the same figure, and
+# and one that waits on health holds its worker until the check settles. The deploy play's
+# rollout batch width keeps the rollout concurrency the play has (D5.1c), and one more worker
+# is the soak's, which holds it from the start of a revision's rollout (D5.3b2).
+# scripts/deploy_tools/chained_timeout.py's CONCURRENT is the width alone, and
 # ansible/tests/k8s/test_flux_role.py fails a drift between the three.
 flux_controller_args:
   kustomize-controller:
-    - "--concurrent={{ k8s_rollout_batch_width }}"
+    - "--concurrent={{ k8s_rollout_batch_width | int + 1 }}"
 
 # The artifact the `promote` workflow publishes, and the tag it moves to the newest published
 # master commit. The OCIRepository `homelab` follows that tag with no pull secret, so the
@@ -68,7 +69,7 @@ flux_artifact_tag: prod
 # The keyless identity `promote` signs under, as Go regular expressions for the
 # OCIRepository's `matchOIDCIdentity`. scripts/deploy_tools/forge.py holds the same identity
 # as SIGNER_IDENTITY and SIGNER_ISSUER for `cosign verify`, and
-# ansible/tests/k8s/test_flux_role.py fails a drift between the two.
+# ansible/tests/k8s/test_flux_sync.py fails a drift between the two.
 flux_signer_subject: '^https://github\.com/DanielH2018/server/\.github/workflows/promote\.yml@refs/heads/master$'
 flux_signer_issuer: '^https://token\.actions\.githubusercontent\.com$'
 

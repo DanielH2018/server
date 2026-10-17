@@ -1,0 +1,12 @@
+{
+  "checksum": "79f045ae3322103881b8ebd6c68174159dc841b40cee5cf0221fd066ced68b88",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "CLAUDE.md#Common Commands",
+  "row": {
+    "atoms": {
+      "docs/deploying.md": "27ccda254fe500e13705e63554cdf4dcaf4c8b8e2fc74024f61776d407a30c56"
+    },
+    "python": "3.14",
+    "verified_sha": "f7d11e6b9"
+  }
+}

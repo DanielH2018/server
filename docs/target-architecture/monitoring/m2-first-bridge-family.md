@@ -694,7 +694,7 @@ one-commit rule, and the bound is stated under PR 4a.
 
 - Drop `shadow: "true"` from `k8s-workloads.yaml` and update its promtool cases, which assert
   the label.
-- Rewrite the comment in `ansible/roles/k8s/observability/templates/telemetry-health.sh.j2`,
+- Rewrite the comment in `ansible/roles/setup/claude_code/templates/telemetry-health.sh.j2`,
   a host script, so that it names the `k8s-workloads` rules.
 - Rewrite `ansible/roles/k8s/valheim/CLAUDE.md` so that pod death surfaces through
   `K8sDeploymentZeroAvailable` and `K8sContainerCrashLooping`.

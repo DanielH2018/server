@@ -262,6 +262,34 @@ other final message is a progress report: a Stop hook sends you back to work, an
 """
 
 
+# The repo-wide guards that a new file trips and no test beside the change reaches (#5077):
+# every file the `static-ratchet-tests` prek hook runs, the script-basename and reference-page
+# checks under scripts/docs/tests, and the exit-code census. The set ran in 54s on daniel-box
+# under `-n auto`. The whole suite costs about five times that and still misses CI's weight
+# step, which is a workflow step and not a test, so the brief names that repair on its own.
+REPO_GUARDS = (
+    "ansible/tests/repo",
+    "scripts/docs/tests",
+    "scripts/tests/test_census_rows_test_modules.py",
+    "scripts/tests/test_census_rows_test_renders.py",
+    "scripts/lib/tests/test_exit_codes.py",
+)
+
+REPO_GUARD_STEP = f"""## Before you open the PR
+The tests beside your change do not reach the guards that read the whole tree: the module
+length ratchet, the census and exit-code tests, and the script-basename check. A new file is
+what trips them, and each red in CI costs a full round trip. To catch them first, run this once
+after your last commit and before `gh pr create`. It takes about a minute:
+```bash
+uv run pytest -q -n auto {" ".join(REPO_GUARDS)}
+```
+Fix a red guard. Never skip or deselect it. CI's weight step also fails a heavy test module
+that `scripts/dev/pytest_shard_weights.json` does not list, and no test runs that step. For each
+test module you added, run `uv run python scripts/dev/pytest_shard.py --record-files <module>`
+after committing it, then commit the JSON it rewrites.
+"""
+
+
 def _precomputed(cited: list[str]) -> str:
     """`findings_lib.precomputed`'s block, imported only here, where a brief is rendered.
 
@@ -318,6 +346,9 @@ def render_brief(
     # Only this repo's paths mean anything to `land.sh`'s classifier and this tree's tests.
     cited = sorted({p for i in issues for p in cited_paths(i.body)})
     facts = _precomputed(cited) if target.is_server else ""
+    # Unconditional for this repo: `_precomputed` is empty when the issues cite no path, and a
+    # new file trips these guards wherever it lands. Another repo has its own suite.
+    guards = REPO_GUARD_STEP if target.is_server else ""
     if target.is_server:
         findings = "`findings.py open`"
     else:
@@ -343,6 +374,7 @@ dispatcher has posted the `Worked by` comment naming your branch on each of them
 {health_block}
 
 {facts}
+{guards}
 {REVIEW_LANDING if review else _landing(host, batch, target)}
 {_finishing(host, target, review)}
 ## Anything you do not fix

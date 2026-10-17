@@ -1,0 +1,12 @@
+{
+  "checksum": "974838a2d573c9b4bbde9ef92ba2e83824890f0a589a10fcfdd993d26e2cff48",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "ansible/roles/containers/autoheal/CLAUDE.md#At a glance",
+  "row": {
+    "atoms": {
+      "ansible/tests/deploy/test_platform_filter_real_inventory.py": "406575cff68beb205b09a060f8ad23a977655232478f995c253e2ecb81cd1d17"
+    },
+    "python": "3.14",
+    "verified_sha": "fd34ae8eb"
+  }
+}

@@ -3,8 +3,9 @@
 This role holds the host writes that D5 moves out of the k8s roles before each role flips to
 Flux: docs's site directory, pi-peer-backup's two Pi writes, traefik's absent arm, registry's
 GC absent arms, the absent arms H2 leaves in crowdsec, configarr, janitorr and qbittorrent,
-artifacts' two directory tasks and media-volume's media directories. A Flux-owned role has no
-Ansible apply left to carry them, so each lands here in its own conversion PR. The plan is
+artifacts' three directory tasks (the star list directory among them) and media-volume's media
+directories. A Flux-owned role has no Ansible apply left to carry them, so each lands here in
+its own conversion PR. The plan is
 `docs/target-architecture/deploy/d5-bulk-move.md`, sections *Host-side rows* and *The
 `k8s_host_files` role enters the setup plane once (D5.1h)*.
 

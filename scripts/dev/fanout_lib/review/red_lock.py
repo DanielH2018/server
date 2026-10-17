@@ -64,7 +64,18 @@ that is in no red node's fixture closure, a helper or constant nothing kept name
 import only deleted statements used. In #4359 the red test demanded the deletion of a fixture
 nothing requested.
 
-WHAT IT DOES NOT SEE. Code that runs at import time inside an allowed statement: a decorator
+A PATCH REGISTRY (#4875). `forbidden_registry_change` lets a fix change a file in
+`REGISTRIES` that the red commits touched only in the lines whose first field names a file the
+red commits added. The monkeypatch ratchet needs a `<path> <count>` line for every test module
+that patches, so a fix that appends a patching test to a red file must raise that file's count.
+In #5397 the red commits added `scripts/dev/tests/test_cross_plane_replay_renderer_only.py 8`
+and the fix raised it to 9, which the gate refused as an edit to a red data file. Every other
+line, comments and blank lines included, must stay, so a fix cannot add, raise or delete
+another module's entry. Lines compare as a multiset, because the ratchet in CI checks the order.
+Dropping a red file's own line passes here too; the ratchet refuses it while the file patches.
+
+WHAT IT DOES NOT SEE. A red test that reads a registry itself, whose input a changed line of a
+red file can move. Code that runs at import time inside an allowed statement: a decorator
 argument, a default value, an annotation, or an import of a new module with side effects. A
 fixture a conftest requests by a name built at runtime. The green gate still runs every red
 node, and CI runs the whole suite on the pushed head.
@@ -95,6 +106,8 @@ PYTEST_NAMES = frozenset(
 )
 # The builtins a constant may call. A fix may not rebind one in a red file.
 LITERAL_CALLS = frozenset({"frozenset", "set", "tuple", "list", "dict"})
+# Ratchet files of `<path> <count>` lines, where a red test module may need registering.
+REGISTRIES = frozenset({"ansible/tests/repo/monkeypatch_allowlist.txt"})
 _CONTAINERS = (ast.Tuple, ast.List, ast.Set, ast.Dict)
 # What each conftest fixture requests by the name a test requests it by, and what every
 # autouse one requests, which every test requests in turn.
@@ -516,4 +529,26 @@ def _decorator_problem(decorator: ast.expr) -> str:
             return (
                 "is a fixture with `name=`, which can override one a red test requests"
             )
+    return ""
+
+
+def forbidden_registry_change(red_src: str, head_src: str, added: Iterable[str]) -> str:
+    """Why `head_src` changes a line naming no file the red commits added, or "".
+
+    Args:
+        red_src: the registry as the red commits left it.
+        head_src: the same file at the implementer's HEAD.
+        added: the files the red commits created.
+    """
+    red, head, ours = (
+        Counter(red_src.splitlines()),
+        Counter(head_src.splitlines()),
+        set(added),
+    )
+    for verb, lines in (("drops", red - head), ("adds", head - red)):
+        for line in sorted(lines):
+            if not set(line.split()[:1]) & ours:
+                return (
+                    f"{verb} `{line}`, a line that names no file the red commits added"
+                )
     return ""
