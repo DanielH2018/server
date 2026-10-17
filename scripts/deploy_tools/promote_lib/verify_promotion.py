@@ -282,7 +282,7 @@ def expected_set(target: dict[str, bytes], prod: dict[str, bytes] | None) -> Exp
         names=(found.names - OBSERVE_ONLY) | {ROOT},
         dependents=found.names - OBSERVE_ONLY - found.direct,
         widened=found.widened,
-        timeout_s=promote_timeout(docs, found.names),
+        timeout_s=promote_timeout(docs, found.names - OBSERVE_ONLY),
     )
 
 

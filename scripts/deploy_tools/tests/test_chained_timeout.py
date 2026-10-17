@@ -122,9 +122,10 @@ def _timeout_of_render(key_sets: dict[str, frozenset[str]]) -> int:
     with every Kustomization in it changed."""
     directories = {"peanut": {"kustomization.yaml": "resources: []\n"}}
     files = render_bundle(directories, key_sets, ["peanut"], "10m", "x=ENC[y]\n")
-    return ct.promote_timeout(
-        vp.flux_kustomizations({p: t.encode() for p, t in files.items()})
-    )
+    docs = vp.flux_kustomizations({p: t.encode() for p, t in files.items()})
+    # `verify` expects no OBSERVE_ONLY name, so the soak's timeout is no part of its wait.
+    names = {d["metadata"]["name"] for d in docs} - vp.OBSERVE_ONLY
+    return ct.promote_timeout(docs, names)
 
 
 def test_a_substituting_tag_chains_through_the_renderers_cluster_vars_edge():

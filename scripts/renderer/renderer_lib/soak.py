@@ -451,6 +451,15 @@ def soak_pair(
         for doc in yaml_fast.safe_load_all(text)
         if isinstance(doc, dict) and doc.get("kind") == "Kustomization"
     ]
+    # A `--role` render may publish a tag whose edge names a flux-owned tag it leaves out.
+    # Flux applies that one from its own render, so it adds nothing to this bundle's chain.
+    held = {doc["metadata"]["name"] for doc in others}
+    for doc in others:
+        spec = doc["spec"]
+        kept = [d for d in spec.get("dependsOn") or [] if d.get("name") in held]
+        spec.pop("dependsOn", None)
+        if kept:
+            spec["dependsOn"] = kept
     normal = soak_files(
         NORMALISED_REVISION, tags, directories, suspended, kustomizations=others
     )

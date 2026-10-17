@@ -664,7 +664,9 @@ only after its dependencies finish, so the wait sums four terms, with the soak b
   hold.
 - **The soak, beside the chain.** `soak` has no edges and holds its own worker from the start
   of the rollout, so it is in neither term above. When it is in the set, the first two terms
-  together never fall below its `timeout`, which bounds the soak Job's whole run.
+  together never fall below its `timeout`, which bounds the soak Job's whole run. Until
+  D5.3b3, `verify` leaves `soak` out of the set it passes, because it waits on no
+  observe-only name.
 - **The `OCIRepository` interval**, 1 minute.
 - **The largest `retryInterval`**, 2 minutes on every Kustomization the renderer writes.
 
