@@ -337,6 +337,7 @@ extra-paths = [
   "ansible/roles/setup/claude_code/files",
   "ansible/roles/k8s/home-assistant/files",
   "ansible/roles/k8s/tdarr/files",
+  "ansible/roles/k8s/sonarr/files",
   "scripts/backup/tests",
   "scripts/deploy_tools/tests",
   "scripts/docs/tests",

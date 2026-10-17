@@ -17,6 +17,7 @@ import pytest
 import forge
 from changed_set import changed_set
 from deploy_tools.promote_lib import wait as promote_wait
+from deploy_tools.promote_lib import wait_reads
 from flux_host import FluxHost
 from _land_wait_fakes import D, M, P, Sim, at, digests, kustomization
 from _promote_fakes import FakeTransport, digest_of
@@ -399,7 +400,7 @@ def test_a_bundle_without_the_digests_file_is_a_read_error():
         forge.Registry(transport, None), forge.GitHub(transport, None), forge.Cosign()
     )
     with pytest.raises(promote_wait.WaitReadError, match=r"holds no digests\.json"):
-        promote_wait._bundle_digests(f, M)
+        wait_reads._bundle_digests(f, M)
 
 
 def test_the_kustomization_list_is_read_with_the_read_only_kubectl():

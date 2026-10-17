@@ -24,13 +24,13 @@ merged.
 | R1 | Shadow render with zero diff | — |
 | R2 | Secret placeholders and CI secret checks | R1 |
 | R3 | Remove the pre-apply live reads | R1 |
-| R4 | Delete the k8s Ansible path | D6 |
+| R4 | Delete the k8s Ansible path | D6, per PR. R4.1 needs only D6.1 and D5's tail, R4.5 also D6.4, and R4.7 the whole of D6 |
 | D1 | Flux installed, owning nothing | —. D1.6b, the `flux` rule group, also M1 |
 | D2 | One stateless leaf end to end on production | D1, R1, and R2's PRs 1 and 2 (placeholder mode and the five rules). D2.6d also M1. D2.7 also D4.0, M1, and PR 2b of R2's *Publish `domain`* item (C3) |
 | D3 | Secrets through Flux | D2, R2. D3.0 to D3.3 need only D2.1 to D2.6c, which include D2.6b's empty `SHARED_KINDS` and census |
 | D4 | Ordering (`dependsOn`, deferred applies) | D2. D4.0 needs nothing. D4.9 also D1.6b and M1 |
 | D5 | Bulk move | D3, D4, R3, M1, M2. traefik's flip and the flux PR also H1.1a, and the flux PR also H1.7b. Wave D also H2.1, and the H2 family PR of each role H2 moves. littlelink's flux PR also M6's B-1e. monitor-bridge's flip also M6's A6-7a, live; the observability and netpol-baseline flips also M6's C-1, live. D5 never flips uptime-kuma, which leaves at M6's C-2b |
-| D6 | Delete the old deploy path; ADR superseding 0010 | D5 |
+| D6 | Delete the old deploy path; ADR superseding 0010 | D5. D6.10 needs only D1.6. D6.11 needs only D5.1a2 and D5's flux PR |
 | M1 | Alertmanager and its watcher | — |
 | M2 | One bridge family to rules | M1 |
 | M3 | One host timer to the textfile collector | M1. The cutover also M2's PR 3 |
@@ -45,7 +45,7 @@ merged.
 | H4 | Secrets unit; NUT on daniel-server first | H3 |
 | H5 | Pi Compose | H3, H4 |
 | H6 | system-upgrade-controller for k3s | D2, H1.1a to H1.8, H4, M1. H6.3e's verify Jobs also D5.1a1 (H6 Open question 14) |
-| H7 | Remaining roles, then delete Ansible | H2, H5, H6, R4 |
+| H7 | Remaining roles, then delete Ansible | H2, H5, H6, R4, per PR (H7's *Waits on* column). H7.21 to H7.23 need only H3, H4.3b2, D1 and D5.1h. The Pi PRs need H3, and H7.26 also H5.12. daniel-server's PRs need H4, daniel-box's need H6.2, and H7.24 needs all three. A PR that empties a `k8s_host_files` row also needs the D5 PR that added it. H7.34 also H6.1b2, H6.5b and H2; H7.35 also H6.4b and H2; H7.42 also H6.1b; H7.44 also R4 PR 7b and H6. H7.37 and H7.49 to H7.51 also D6. H7.43 and H7.45 to H7.57 wait on the whole of each slice they name |
 | G1 | Diff notice alongside the lock | — |
 | G2 | Retire the lock; ADR amending 0019 | G1 |
 | G3 | (optional) Notice dispatches the freshness reviewer | G2 |

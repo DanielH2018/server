@@ -30,7 +30,8 @@ from deploy_tools.land_lib.pin_reads import PinReads
 from lib import kubectl
 
 import forge
-from deploy_tools.promote_lib.wait import WaitResult, land_wait, live_wait_reads
+from deploy_tools.promote_lib.wait import WaitResult, land_wait
+from deploy_tools.promote_lib.wait_reads import live_wait_reads
 
 KUSTOMIZATIONS = "kustomizations.kustomize.toolkit.fluxcd.io"
 
