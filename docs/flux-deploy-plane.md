@@ -531,11 +531,11 @@ notification-controller posts on T:
   `digests.json`, expects every name, and an empty set expects `flux/homelab` alone. The set
   also holds `soak` whenever it holds a tag, because `soak` has no `dependsOn` chain to join
   through (C2).
-- **The observe-only set.** `verify_promotion.py:OBSERVE_ONLY` holds `soak`, and `verify`
-  subtracts it from the set. So `verify` never waits on `flux/soak`, and a `flux/soak`
-  `failure` neither holds nor resets: the first live soaks are watched before they gate.
-  `land-wait` never waits on `soak` Ready either. D5.3b3 deletes the set, and from then on
-  `verify` expects `flux/soak` like any other name in the set.
+- **The soak gates.** `verify` expects `flux/soak` like any other name in the set, so a
+  revision whose soak never posts times out and holds, and a `flux/soak` `failure` holds. D5.3b2
+  had left `soak` out of the set until two live soaks had passed; D5.3b3 removed that
+  carve-out on 2026-10-17. `land-wait` never waits on `soak` Ready. It reads the `flux/soak`
+  status on R instead (`docs/landing.md`).
 - **What it never expects.** A Kustomization outside the set, so a failure that T did not
   cause never holds; the Flux alerts page it instead. A dependent whose status on `prod`'s
   commit already read `failure` is logged as `excused <name>` and not expected. `decide`
@@ -711,9 +711,7 @@ only after its dependencies finish, so the wait sums four terms, with the soak b
   hold.
 - **The soak, beside the chain.** `soak` has no edges and holds its own worker from the start
   of the rollout, so it is in neither term above. When it is in the set, the first two terms
-  together never fall below its `timeout`, which bounds the soak Job's whole run. Until
-  D5.3b3, `verify` leaves `soak` out of the set it passes, because it waits on no
-  observe-only name.
+  together never fall below its `timeout`, which bounds the soak Job's whole run.
 - **The `OCIRepository` interval**, 1 minute.
 - **The largest `retryInterval`**, 2 minutes on every Kustomization the renderer writes.
 
@@ -749,8 +747,17 @@ A wait shorter than a verification is safe and costs a promotion. `decide` gives
 - a change to a tag and its `-deferred` dependent: two timeouts, one hop and one round, 33.5
   minutes;
 - a rotation that changes `cluster-vars` and the one tag that substitutes from it: the same
-  33.5 minutes. `land-wait` restates that figure as `wait.py:PROMOTE_TIMEOUT_S` and gives up
-  at twice it. While a verification of an earlier commit is in flight, M's `decide` waits on
+  33.5 minutes for the tags;
+- the soak, which every set holding a tag also holds: its `timeout` is the tags' chain with
+  every Kustomization in the bundle counted as changed, plus the fleet W and two minutes. It
+  is longer than the tags' terms, so it sets the wait. For a bundle holding that rotation's
+  two Kustomizations alone, with a 3-minute W, the wait is 41.5 minutes. `land-wait` restates
+  that figure as `wait.py:PROMOTE_TIMEOUT_S` and gives up at twice it. The soak's chain counts
+  every Kustomization in the bundle, so it grows by a 10-minute queueing round for each five
+  more. With the nine tags published on 2026-10-17 the soak's `timeout` is 2910s, and
+  `verify` waits 51.5 minutes. So `land-wait` also reads the listed `soak` Kustomization's
+  `timeout` each poll, and gives up no sooner than twice `verify`'s wait on it
+  (`wait.py:soak_deadline_s`). While a verification of an earlier commit is in flight, M's `decide` waits on
   it, so `land-wait` counts its timeout again from each poll that reads one, for up to
   `IN_FLIGHT_WAIT_S`;
 - a revision that changes every importer of `workload-shell.yml.j2` queues in rounds of up
@@ -1192,16 +1199,21 @@ from. The Job's exit is the `flux/soak` status. The design is D5's *The soak as 
   `--wait-seconds`, is `chained_timeout.promote_timeout` over the bundle's other
   Kustomizations with every one counted as changed. The render cannot know which ones R
   changes. `activeDeadlineSeconds` adds the fleet W and a minute, and the Kustomization's
-  `timeout` adds another minute. With bento-pdf, texbrain and peanut published, that is
-  2010s, 2250s and 2310s.
+  `timeout` adds another minute. With the nine tags published on 2026-10-17, that is 2610s,
+  2850s and 2910s.
 - **RBAC.** The ServiceAccount `soak` may get and list `OCIRepository` and Kustomization objects in
-  `flux-system`, and list pods and get and list ReplicaSets in each namespace a published tag
-  renders into.
+  `flux-system`. A ClusterRole lets it list pods and get and list ReplicaSets in every
+  namespace. The grant is cluster-wide because `soak` has no `dependsOn` edges, so Flux may
+  apply it before a tag whose first revision creates a namespace. A Role in that namespace
+  would fail `soak`'s apply, and `flux/soak` would read `failure` (#5380).
 - **Its base.** The flux role renders the `OCIRepository` named `last-good`, which follows the
   `last-good` tag with `homelab`'s `verify` block. The Job diffs R's `digests.json` against
   it, and widens to the fleet when it cannot.
-- **Observe-only until D5.3b3.** A `failure` holds nothing (*Verification*). To read why a
-  soak failed, read the failed Job's termination message, its `failed-services:` line.
+- **It gates promotion.** A `failure` holds, and for a revision with no snapshot role resets
+  `prod` (*Verification*). To read why a soak failed, read the failed Job's termination
+  message, its `failed-services:` line. A pass prints the revision, the services it judged
+  and the window, then the cluster's `event=deploy` annotation line, which Grafana reads
+  through `observability_flux_deploy_annotation_expr`.
 
 ## Removing an object on purpose
 

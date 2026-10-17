@@ -97,6 +97,8 @@ class Cause(StrEnum):
 
     PROMOTE_* NAME HOW A WAIT ON PROMOTION ENDED (`promote.py land-wait`), for a PR whose tag
     Flux applies. `promote-held` is DEPLOY_HOLD holding, beside `deploy-failed`.
+    `soak-failed` is R's `flux/soak` reading `failure`, beside `deploy-failed`, read before
+    `verify` writes the hold that would end the wait as `promote-held` a poll later (D5.3b3).
     `promote-timeout` is the wait reaching its deadline: twice the promote timeout, counted
     again from each poll that reads an earlier commit's verification in flight. It rides beside
     `deferred`, as `deploy-exit-4` rides beside `tip-outran-retries`: the promotion applies
@@ -118,6 +120,7 @@ class Cause(StrEnum):
     DEPLOY_EXIT_OTHER = "deploy-exit-other"
     PROMOTE_HELD = "promote-held"
     PROMOTE_TIMEOUT = "promote-timeout"
+    SOAK_FAILED = "soak-failed"
     INVALID = "invalid-cause"
 
 

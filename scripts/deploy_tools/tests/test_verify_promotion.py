@@ -202,14 +202,17 @@ def _sonarr_role(tmp_path, defaults: str):
 
 
 def test_a_suspended_tag_that_never_posts_reads_good_without_waiting(tmp_path):
-    """D5.1b: a good verdict, so `settle` moves `last-good` and never resets."""
+    """D5.1b: a good verdict, so `settle` moves `last-good` and never resets.
+
+    `soak` is expected, because the suspend moves its footprint, and it judges no service.
+    """
     prod = _rendered(_sonarr_role(tmp_path / "prod", "---\n"), "1")
     target = _rendered(_sonarr_role(tmp_path / "t", "flux_suspend: true\n"), "2")
     expected = vp.expected_set(target, prod)
-    assert expected.names == {"homelab"}
+    assert expected.names == {"homelab", "soak"}
     clock = Clock()
     assert (
-        vp.verify(reads({T: ok("homelab")}, clock), T, PRIOR, expected).verdict
+        vp.verify(reads({T: ok("homelab", "soak")}, clock), T, PRIOR, expected).verdict
         == "good"
     )
     assert clock.sleeps == 0
@@ -220,7 +223,7 @@ def test_the_same_tag_unsuspended_that_never_posts_times_out_and_fails(tmp_path)
     target = _rendered(_sonarr_role(tmp_path / "t", "---\n"), "2")
     expected = vp.expected_set(target, prod)
     verdict = vp.verify(reads({T: ok("homelab")}), T, PRIOR, expected)
-    assert verdict == vp.Verdict("failed", ("sonarr", "sonarr-deferred"))
+    assert verdict == vp.Verdict("failed", ("soak", "sonarr", "sonarr-deferred"))
 
 
 @pytest.mark.parametrize("flag, names", [(True, set()), (False, {"sonarr-deferred"})])
@@ -280,7 +283,10 @@ def test_the_first_bundle_carrying_cluster_vars_expects_its_status():
         for path, text in render_bundle({}, {}, [], "10m", "x=ENC[y]\n").items()
     }
     expected = vp.expected_set(target, prod)
-    assert (expected.names, expected.widened) == ({"homelab", "cluster-vars"}, "")
+    assert (expected.names, expected.widened) == (
+        {"homelab", "cluster-vars", "soak"},
+        "",
+    )
 
 
 # -- a dependent that was already failing (H1.1i) --------------------------------------------

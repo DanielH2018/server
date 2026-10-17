@@ -15,7 +15,7 @@ docs/target-architecture/deploy/d5-bulk-move.md, *The soak as a Job (D5.3)*. The
   `ansible/roles/k8s/manifests/files/flux_soak.py` with R's SHA in its arguments; the ConfigMap
   `soak-<content digest8>` holding that script, byte copies of `flux_job_connect.py` and
   `scripts/deploy_tools/changed_set.py`, and `services.json`, the per-service map W reads; and
-  the ServiceAccount `soak` with its RBAC.
+  the ServiceAccount `soak` with its RBAC, whose pod and ReplicaSet reads are a ClusterRole.
 
 `services.json` maps each published tag to the longest `for:` among the Prometheus rules that
 can page for it, critical or `verify="true"` and not `shadow`, and to the namespaces its tag
@@ -211,72 +211,73 @@ def fleet_wait(services: Mapping[str, Mapping], stabilise: int) -> int:
     return max(stabilise, longest) + SCRAPE_AND_EVAL_SECONDS
 
 
-def _binding(name: str, namespace: str) -> dict:
+def _binding(kind: str, namespace: str | None) -> dict:
+    """The `soak` ServiceAccount's binding to the `kind` named `soak`, in `namespace` or none."""
+    metadata = {"name": SOAK} | ({"namespace": namespace} if namespace else {})
     return {
         "apiVersion": "rbac.authorization.k8s.io/v1",
-        "kind": "RoleBinding",
-        "metadata": {"name": name, "namespace": namespace},
+        "kind": f"{kind}Binding",
+        "metadata": metadata,
         "roleRef": {
             "apiGroup": "rbac.authorization.k8s.io",
-            "kind": "Role",
-            "name": name,
+            "kind": kind,
+            "name": SOAK,
         },
         "subjects": [
-            {"kind": "ServiceAccount", "name": name, "namespace": FLUX_NAMESPACE}
+            {"kind": "ServiceAccount", "name": SOAK, "namespace": FLUX_NAMESPACE}
         ],
     }
 
 
-def rbac(namespaces: Iterable[str]) -> list[dict]:
+def rbac() -> list[dict]:
     """The ServiceAccount `soak` and the reads `flux_soak.py` makes, no more.
 
     In `flux-system` it reads the OCIRepositories `homelab` and `last-good` and every
-    Kustomization. In each namespace a published tag renders into it lists pods and reads
-    ReplicaSets, the hop from a Deployment's pod to its Deployment.
+    Kustomization. A ClusterRole lets it list pods and read ReplicaSets, the hop from a
+    Deployment's pod to its Deployment, in any namespace. The grant is cluster-wide because a
+    Role in a namespace that a tag's own revision creates would fail `soak`'s apply on that
+    revision: `soak` has no `dependsOn` edges, so Flux may apply it before the tag (#5380).
+    `snapshot.rbac` puts its PVC read in a ClusterRole for the same reason.
     """
-    rules: dict[str, list[dict]] = {
-        FLUX_NAMESPACE: [
-            {
-                "apiGroups": ["source.toolkit.fluxcd.io"],
-                "resources": ["ocirepositories"],
-                "verbs": ["get", "list"],
-            },
-            {
-                "apiGroups": ["kustomize.toolkit.fluxcd.io"],
-                "resources": ["kustomizations"],
-                "verbs": ["get", "list"],
-            },
-        ]
-    }
-    for namespace in namespaces:
-        rules.setdefault(namespace, []).extend(
-            [
+    return [
+        {
+            "apiVersion": "v1",
+            "kind": "ServiceAccount",
+            "metadata": {"name": SOAK, "namespace": FLUX_NAMESPACE},
+        },
+        {
+            "apiVersion": "rbac.authorization.k8s.io/v1",
+            "kind": "Role",
+            "metadata": {"name": SOAK, "namespace": FLUX_NAMESPACE},
+            "rules": [
+                {
+                    "apiGroups": ["source.toolkit.fluxcd.io"],
+                    "resources": ["ocirepositories"],
+                    "verbs": ["get", "list"],
+                },
+                {
+                    "apiGroups": ["kustomize.toolkit.fluxcd.io"],
+                    "resources": ["kustomizations"],
+                    "verbs": ["get", "list"],
+                },
+            ],
+        },
+        _binding("Role", FLUX_NAMESPACE),
+        {
+            "apiVersion": "rbac.authorization.k8s.io/v1",
+            "kind": "ClusterRole",
+            "metadata": {"name": SOAK},
+            "rules": [
                 {"apiGroups": [""], "resources": ["pods"], "verbs": ["list"]},
                 {
                     "apiGroups": ["apps"],
                     "resources": ["replicasets"],
                     "verbs": ["get", "list"],
                 },
-            ]
-        )
-    docs: list[dict] = [
-        {
-            "apiVersion": "v1",
-            "kind": "ServiceAccount",
-            "metadata": {"name": SOAK, "namespace": FLUX_NAMESPACE},
-        }
+            ],
+        },
+        _binding("ClusterRole", None),
     ]
-    for namespace, held in sorted(rules.items()):
-        docs.append(
-            {
-                "apiVersion": "rbac.authorization.k8s.io/v1",
-                "kind": "Role",
-                "metadata": {"name": SOAK, "namespace": namespace},
-                "rules": held,
-            }
-        )
-        docs.append(_binding(SOAK, namespace))
-    return docs
 
 
 def _settings() -> dict:
@@ -422,13 +423,10 @@ def soak_files(
         },
     }
     job["metadata"]["name"] = f"{SOAK}-{job_spec_digest8(job)}"
-    namespaces = sorted(
-        {ns for entry in services.values() for ns in entry["namespaces"]}
-    )
     cluster = {
         "configmap.yaml": yaml.safe_dump(configmap, sort_keys=False),
         "job.yaml": yaml.safe_dump(job, sort_keys=False),
-        "rbac.yaml": yaml.safe_dump_all(rbac(namespaces), sort_keys=False),
+        "rbac.yaml": yaml.safe_dump_all(rbac(), sort_keys=False),
     }
     cluster[KUSTOMIZATION] = kustomization_text(cluster)
     files = {f"{CLUSTER_DIR}/{SOAK}/{name}": text for name, text in cluster.items()}

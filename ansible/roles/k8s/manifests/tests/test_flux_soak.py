@@ -23,6 +23,40 @@ def test_a_clean_promotion_waits_w_past_the_first_ready_and_passes(world, tmp_pa
     assert world.now == T0 + 60 + W
 
 
+# The pass line (#5419) and the deploy annotation (D5.3b3), both on stdout.
+
+ANNOTATION = f"event=deploy services=flux sha={R[:8]} result=ok source=flux"
+
+
+def test_a_judged_pass_names_its_revision_each_service_and_the_window(
+    world, tmp_path, capsys
+):
+    world.new["sonarr"] = {"footprint": "2"}
+    assert run(world, tmp_path) == (0, "")
+    # The first Ready is T0 + 60, and W for sonarr's 3600s rule is 3720.
+    assert capsys.readouterr().out.splitlines() == [
+        f"soak: {R[:8]} judged authelia, sonarr over 3780s; pass",
+        ANNOTATION,
+    ]
+
+
+def test_nothing_to_judge_keeps_its_own_line_and_names_no_service(
+    world, tmp_path, capsys
+):
+    world.new = world.old
+    assert run(world, tmp_path) == (0, "")
+    assert capsys.readouterr().out.splitlines() == [
+        "soak: R changes no service; nothing to judge",
+        ANNOTATION,
+    ]
+
+
+def test_a_failing_soak_prints_no_pass_line_and_no_annotation(world, tmp_path, capsys):
+    restart(world.pods["authelia"][0], T0 + 100)
+    assert run(world, tmp_path)[0] == 1
+    assert capsys.readouterr().out == ""
+
+
 # Open question 19: the run-time wait.
 
 

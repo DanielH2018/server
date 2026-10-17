@@ -20,6 +20,8 @@ from _land_wait_fakes import (
     P,
     Sim,
     at,
+    digests,
+    kustomization,
     publish_pipeline_s,
     substituting_promote_timeout,
 )
@@ -57,6 +59,51 @@ def test_the_promote_timeout_constant_is_verifys_substituting_wait():
     wait, and this fails until the constant moves with it.
     """
     assert promote_wait.PROMOTE_TIMEOUT_S == substituting_promote_timeout()
+
+
+# -- the soak's timeout, which grows with the bundle (D5.3b3) -------------------------------
+
+# M changes bento-pdf, so its changed set holds `soak`.
+_SOAK_DIGESTS = {
+    M: digests(bento_pdf="b", soak="k"),
+    P: digests(bento_pdf="a", soak="k"),
+}
+for _found in _SOAK_DIGESTS.values():
+    _found["bento-pdf"]["suspended"] = False
+# The soak's `timeout` two queueing rounds past the nine tags published on 2026-10-17, whose
+# bundle rendered 2910s. The constant, derived from a one-tag bundle, no longer covers it.
+_GROWN_SOAK = "4110s"
+
+
+def _with_soak(commit: str, timeout: str | None) -> list[dict]:
+    soak = kustomization("soak", f"master@sha1:{commit}", ready=False)
+    if timeout is not None:
+        soak["spec"]["timeout"] = timeout
+    return [*at(commit, "bento-pdf"), soak]
+
+
+def test_the_soak_deadline_is_twice_verifys_wait_on_the_listed_soak():
+    assert promote_wait.soak_deadline_s(_with_soak(M, _GROWN_SOAK)) == 2 * (4110 + 180)
+    assert promote_wait.soak_deadline_s(_with_soak(M, "soon")) == 0
+    assert promote_wait.soak_deadline_s(at(M, "bento-pdf")) == 0
+
+
+@pytest.mark.parametrize("listed", [_GROWN_SOAK, None])
+def test_a_promotion_verify_still_counts_on_time_settles_only_with_the_soak_deadline(
+    listed,
+):
+    """M promotes after the publish pipeline and `verify`'s full wait on a grown soak.
+
+    The red half lists `soak` with no `timeout`, which leaves the one-tag constant: the wait
+    gives up first, the #5155 shape.
+    """
+    covered_at = 4110 + 180 + publish_pipeline_s()
+    assert covered_at > promote_wait.LAND_WAIT_TIMEOUT_S
+    polls = [_with_soak(P, listed)] * _polls_until(covered_at) + [_with_soak(M, listed)]
+    sim = Sim(polls=polls, published=_SOAK_DIGESTS, soak={M: ["success"]})
+    result = sim.wait()
+    expected = "settled" if listed else "gave-up"
+    assert result.verdict == expected, result.detail
 
 
 # -- an earlier commit's verification in flight (#5164) -------------------------------------
