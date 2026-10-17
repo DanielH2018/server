@@ -1,0 +1,14 @@
+{
+  "checksum": "ffe3a89bddf810f14c144f0691c6ee4dab638e57169006c0d10f555375b1ab9e",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "ansible/roles/k8s/crowdsec/CLAUDE.md#Which Prometheus job covers which agent",
+  "row": {
+    "atoms": {
+      "ansible/inventory/group_vars/all.yml:crowdsec_k8s_sidecar_agents": "4e2acf5d4662494e95e25a946822bbf47fc22aa6a37694660f89730bd27040ea",
+      "ansible/tests/k8s/test_crowdsec_sidecars_are_scraped.py": "ad876fff3b0a836c066978d04fee5c86591dcdee7741dae3494a3e3d3ee19447",
+      "ansible/tests/services/test_dashboard_queries_match_this_clusters_labels.py": "3a94640a30bb51bffdfcd959dad4a2e3f2d288d030e3a11ea0765f9dbb208286"
+    },
+    "python": "3.14",
+    "verified_sha": "837d5a7ea"
+  }
+}

@@ -213,15 +213,27 @@ def argv_needs(
         sub_verbs = ("get",) if verb == "logs" else ("create", "get")
         return found | need(sub, *sub_verbs, name=pod)
     if verb in ("get", "delete", "patch", "label", "annotate"):
-        resource, _ = _resource(rest[0])
-        name = rest[0].split("/", 1)[1] if "/" in rest[0] else (rest[1:] or [None])[0]
-        if verb == "get":
-            return need(resource, "get" if name else "list", name=name)
-        if verb == "delete":
-            # The wait lists and watches with a `metadata.name` field selector, which RBAC
-            # authorizes against `resourceNames` like a get.
-            return need(resource, "delete", "list", "watch", name=name)
-        return need(resource, "patch", name=name)
+        if verb in ("label", "annotate"):
+            # The `key=value` and `key-` words after the objects name no object.
+            rest = [w for w in rest if "=" not in w and not w.endswith("-")]
+        # Every object the call names is a need of its own: the API server authorizes each
+        # against `resourceNames` separately, so a second name the rule omits is Forbidden.
+        if "/" in rest[0]:
+            objects = [(_resource(w)[0], w.split("/", 1)[1]) for w in rest]
+        else:
+            resource, _ = _resource(rest[0])
+            objects = [(resource, name) for name in rest[1:]] or [(resource, None)]
+        found = set()
+        for resource, name in objects:
+            if verb == "get":
+                found |= need(resource, "get" if name else "list", name=name)
+            elif verb == "delete":
+                # The wait lists and watches with a `metadata.name` field selector, which
+                # RBAC authorizes against `resourceNames` like a get.
+                found |= need(resource, "delete", "list", "watch", name=name)
+            else:
+                found |= need(resource, "patch", name=name)
+        return found
     raise KeyError(f"unknown kubectl verb {verb!r}; teach argv_needs what it calls")
 
 

@@ -104,8 +104,14 @@ spec.volumeName" assert failing before the apply.
 
 ## Reverting: automated via k8s/volume-revert
 
-A rollback is not a manual operation. `roles/k8s/manifests` includes `k8s/volume-revert` between
+For an Ansible-owned role, a rollback is not a manual operation. `roles/k8s/manifests` includes `k8s/volume-revert` between
 this role's snapshot and the apply, gated on `k8s_restore_snapshot_sha` — which gitops-deploy sets
 only when it redeploys a failed auto-deploy's prior good commit, and which carries the FAILED
 commit's SHA. The claim list comes from the rolled-back-to tree, so a claim the failed commit
 renamed makes that role's "no snapshot matches this deploy" assert fire before anything moves.
+
+**For a flux-owned role the revert is an operator-only runbook.** The `<tag>-snapshot` Job takes
+the snapshot in this role's name shape, with the role's `digest8` in place of `<sha8>`. A failed
+revision that changed a snapshot role holds without resetting `prod`, and the operator reverts
+each changed snapshot role through `ansible/volume-revert.yml` before the reset. The runbook is
+*The revert runbook* in `docs/volume-snapshot-drills.md`.

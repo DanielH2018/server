@@ -521,3 +521,54 @@ claude_code_triage_run_timeout_s: 1800
 # operator and each agent user start it for the states that page and nothing else. False
 # removes the unit, the rule and the webhook file, and a stopped batch then pages nothing.
 claude_code_fanout_alert_enabled: true
+
+# ── The two Claude crons on the artifacts node (H2.7) ───────────────────────────────────
+# `Sync peer Claude artifacts` (templates/sync-artifacts.sh.j2) and `Claude Code telemetry
+# health` (templates/telemetry-health.sh.j2) run only on this node, from tasks/node_crons.yml.
+# Until H2.7 they lived in the k8s artifacts and observability roles, under the same cron file
+# names and script paths.
+#
+# DECIDED: a key pair held equal by a test, not one shared key in group_vars/all.yml. A shared
+# key routes as a deploy-plane change only, so the tick would never re-apply claude_code when
+# it moved (docs/target-architecture/host/h2-shrink-host-plane.md, H2.7). Each name below that
+# has a twin in a k8s role is held equal to it by
+# ansible/tests/setup/test_claude_code_artifacts_node_crons.py, so a change edits both.
+#
+# The node the artifacts pod pins, which holds the tree the sync fills and the loopback OTLP
+# door the heartbeat probes. Twin of artifacts_k8s_node. On every other host both tasks skip.
+claude_code_artifacts_node: "{{ k8s_primary_node }}"
+
+# Every 5 minutes: an artifact written on daniel-server is browsable within one interval. It
+# cannot be instant — daniel-server holds no key to daniel-box, so the sync only runs in the
+# pull direction, on a timer. A session on daniel-box mounts its own tree and never waits.
+claude_code_artifacts_sync_minute: "*/5"
+
+# Consecutive failed runs before sync-artifacts.sh writes to stderr, which is what cron mails.
+# 12 runs at the interval above is an hour of a peer being unreachable. Below it the failure goes
+# to the journal alone (`journalctl -t sync-artifacts`), because daniel-server being off is the
+# ordinary case and mailing each run would bury the spool.
+claude_code_artifacts_sync_alert_after_failures: 12
+
+# Hosts whose artifacts are PULLED onto the artifacts node, because it is the only side that can
+# open the connection: the `daniel-box` name does not resolve from daniel-server, and the pod
+# holds no ssh key. The same connection carries the star list the other way, to `stars_path`,
+# which is where that host's prune-artifacts.sh reads it (the dotfiles default).
+# Twin of artifacts_peer_sources: the artifacts pod mounts one peer directory per entry.
+claude_code_artifacts_peer_sources:
+  - name: daniel-server
+    ssh_target: daniel-server
+    path: /home/ubuntu/.claude/artifacts
+    stars_path: /home/ubuntu/.claude/artifact-stars.txt
+# Where the sync writes each peer's copy, one subdirectory per host. Twin of artifacts_peer_dir.
+claude_code_artifacts_peer_dir: /home/ubuntu/.claude/artifacts-peer
+# The star list the artifacts GUI writes, which the sync pushes to each peer. Twin of
+# artifacts_stars_file.
+claude_code_artifacts_stars_file: /var/lib/artifact-stars/stars.txt
+
+# */10, matching the Longhorn backup heartbeat. The Kuma monitor's heartbeat interval must stay
+# above this (see the uptime-kuma role) so a dead cron trips the watchdog.
+claude_code_telemetry_health_minute: "*/10"
+# The OTLP door the heartbeat opens a connection to. Twins of observability_otlp_host_ip and
+# observability_otlp_port, which bind the collector's hostPort.
+claude_code_otlp_host_ip: 127.0.0.1
+claude_code_otlp_port: 4317

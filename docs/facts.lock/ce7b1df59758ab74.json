@@ -1,0 +1,12 @@
+{
+  "checksum": "d8a1fe2187fcaa9830a3ec370535bc0acc8d26c11716ec10f8bc79bfd5edf5be",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "ansible/roles/setup/homelab_builder/CLAUDE.md#The builder's run",
+  "row": {
+    "atoms": {
+      "ansible/roles/setup/homelab_builder/files/host_package_builder.py:DECIDED: the anchor is a commit": "43f8ef90c8623b78ca1e9f908b203d564df57b1b410d9e92aa8623a69be3eb3e"
+    },
+    "python": "3.14",
+    "verified_sha": "6798e883f"
+  }
+}

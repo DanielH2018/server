@@ -154,7 +154,7 @@ def test_the_facts_lock_is_excluded(tmp_path):
     """The lock keys a cited marker by its text beside a hash, which is not a decision."""
     _write(
         tmp_path,
-        "docs/facts.lock",
+        "docs/facts.lock/0123456789abcdef.json",
         '"a.py:DECIDED: use the retry flag": "' + "a1" * 32 + '",\n',
     )
     assert _rows(tmp_path) == []
@@ -269,7 +269,7 @@ def test_live_tree_excludes_its_own_generator_and_test_file():
     paths = {r["path"] for r in rows}
     assert "scripts/docs/reference/decisions.py" not in paths
     assert "scripts/docs/tests/test_gen_reference_decisions.py" not in paths
-    assert "docs/facts.lock" not in paths
+    assert not [p for p in paths if p.startswith("docs/facts.lock/")]
 
 
 # ── Pointer resolution ───────────────────────────────────────────────────────────────────

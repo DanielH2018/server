@@ -24,7 +24,7 @@ import os
 import sys
 from pathlib import Path
 
-# The lock `fact_status.py verify` writes, one row per verified section.
+# The lock `fact_status.py verify` writes: a directory holding one file per verified section.
 FACTS_LOCK = os.path.join("docs", "facts.lock")
 
 # How many section names the line spells out before it says "(+N more)".
@@ -38,14 +38,18 @@ _SCRIPTS = os.path.join(
 
 
 def _lock_units(root):
-    """The section keys `docs/facts.lock` holds a row for, read as `lock.read_lock` reads it.
+    """The section keys `docs/facts.lock/` holds a row file for, read as `lock.read_lock` reads it.
 
     Not `read_lock` itself: `lib.facts.lock` imports the atom-hashing modules, about 25 ms of
     import for a reader that needs only the keys.
     """
-    with open(os.path.join(root, FACTS_LOCK), encoding="utf-8") as fh:
-        lines = [ln for ln in fh.read().splitlines() if not ln.startswith("#")]
-    return frozenset(json.loads("\n".join(lines))["units"])
+    lock = os.path.join(root, FACTS_LOCK)
+    keys = set()
+    for name in os.listdir(lock):
+        if name.endswith(".json"):
+            with open(os.path.join(lock, name), encoding="utf-8") as fh:
+                keys.add(json.load(fh)["key"])
+    return frozenset(keys)
 
 
 def unverified_sections(root, doc, cache=None):

@@ -1,0 +1,15 @@
+{
+  "checksum": "9d2f7268cf7dc8bcfbf73512c3a09aa78cb6f7220f0432a188f5180c8372eb58",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "ansible/roles/k8s/manifests/CLAUDE.md#The caller's contract",
+  "row": {
+    "atoms": {
+      "ansible/roles/k8s/manifests/defaults/main.yml:manifests_shadow_dir": "12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126",
+      "ansible/templates/claim-default.yaml.j2": "7e9bff97152eea4a19894bc896029ac7fcd07e385c9d053532ebdde51f31a3cf",
+      "ansible/tests/deploy/test_manifests_shadow_dir.py": "40a7d2d95646e380f8a9b4b379a3f795f6b6eda29006af8ec915ab96986af9e2",
+      "docs/homelab-render.md": "31a3793b72de788921edbaedecb69a2fa317af51e063094fdc0a8d797d09fdf6"
+    },
+    "python": "3.14",
+    "verified_sha": "a25922205"
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "checksum": "21952d2b15793c1b0e00ab3226f3ce802f3ae9e7e00d7488e7d0271ac61e9d3d",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "ansible/roles/k8s/manifests/CLAUDE.md#Release records",
+  "row": {
+    "atoms": {
+      "ansible/roles/setup/render_records/": "c0e1e86b3f817e1d5472fef160e25ad2fe6f8d9cb81bfb0010f21d36836d3ba7"
+    },
+    "python": "3.14",
+    "verified_sha": "a325ca51f"
+  }
+}

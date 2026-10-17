@@ -1,0 +1,12 @@
+{
+  "checksum": "b4fad000c965be194083715f82d2b1bcbef2d7f0c5ec10ecab94256bf6cc48db",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "ansible/roles/k8s/n8n/CLAUDE.md#Community node packages are PVC state this repo cannot describe",
+  "row": {
+    "atoms": {
+      "docs/n8n-community-packages.md": "08e71efbd8120c0fab45af618683bd1a5e3a8e24f9f8f77916cf567fae1be5f3"
+    },
+    "python": "3.14",
+    "verified_sha": "df2b9a704"
+  }
+}

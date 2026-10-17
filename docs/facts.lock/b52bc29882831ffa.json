@@ -1,0 +1,14 @@
+{
+  "checksum": "8c3fc7f4f0c554338903f3f93851c2cd6cbaee6431d978415edf0ad6c19521d3",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "ansible/roles/setup/hypervisor/CLAUDE.md#Autonomous-role contract (the monthly drill creates and destroys a guest)",
+  "row": {
+    "atoms": {
+      "ansible/tests/staging/test_etcd_drill_vm.py": "6d83bca5e31ac77b28d5700181b3cc7d0682a958f0c1dda1c12aedac2980d61d",
+      "docs/k3s-etcd-restore.md": "d5f0970c14cc58b5ca7e13a58c77608e62bffd4e1ad937fbf41871b05dbdd9ac",
+      "scripts/backup/etcd_restore_drill.sh": "1b3d181489d5f4d56f56f0eefdeb0c08872a23e844dd4a471642f6fb5a627212"
+    },
+    "python": "3.14",
+    "verified_sha": "f18b2700d"
+  }
+}

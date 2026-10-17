@@ -1,0 +1,13 @@
+{
+  "checksum": "0e85ba2add730e4452471dc2f07ef6f81b5d632509a45a0afd3297c7e1cca64f",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "ansible/roles/setup/deploy_ui/CLAUDE.md#Trust",
+  "row": {
+    "atoms": {
+      "ansible/tests/services/test_authelia_access_tiers.py": "30ca87be3382543c38331450efc91968b7f830b95c26d52b1dd2fee681d3f08c",
+      "ansible/tests/setup/test_deploy_ui_firewall_sources.py": "a5faf2c87f514e291134c7c0b75f97cfeb6c8dd27619d269ac1871296841abc6"
+    },
+    "python": "3.14",
+    "verified_sha": "55862020d"
+  }
+}

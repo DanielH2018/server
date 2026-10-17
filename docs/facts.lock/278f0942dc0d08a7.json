@@ -1,0 +1,12 @@
+{
+  "checksum": "5ee3226ff59c06c9e66857b285d66b208380e02ba771acfef20bff1bb8ebfed0",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "ansible/roles/setup/sops_setup/CLAUDE.md#Where it runs",
+  "row": {
+    "atoms": {
+      "ansible/initial_setup.yml": "dad2997555424b8d42206e5b7189899762140856058c0dd59f2ae7c26906f439"
+    },
+    "python": "3.14",
+    "verified_sha": "eaffe7ef8"
+  }
+}

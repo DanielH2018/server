@@ -1,0 +1,12 @@
+{
+  "checksum": "80fa08b950f50f628e91682ad67ef338068fcaae2f573c4133acf5a6cfecc6de",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "ansible/roles/setup/renovate_notify/CLAUDE.md#Liveness, and the sandbox",
+  "row": {
+    "atoms": {
+      "docs/renovate-notify-internals.md": "cb30c680666ee631c55c05028f020d1d629ba0c2f9ef028554c000bf2a46eaac"
+    },
+    "python": "3.14",
+    "verified_sha": "fd34ae8eb"
+  }
+}

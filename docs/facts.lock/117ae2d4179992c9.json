@@ -1,0 +1,12 @@
+{
+  "checksum": "43314b9a8a695597c154995cb52904072acf1ecc639f7e4e4876ff31c57a3e07",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "ansible/roles/k8s/observability/CLAUDE.md#observability — the cluster metrics plane plus the Claude Code telemetry stack (k3s, daniel-box)",
+  "row": {
+    "atoms": {
+      "docs/observability-dashboards.md": "3f7bb280621a98c03a611a8ee5ddd5c6c87cb7cbe3f3761f19172324edd44cef"
+    },
+    "python": "3.14",
+    "verified_sha": "89d586f13"
+  }
+}

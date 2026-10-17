@@ -1,0 +1,13 @@
+{
+  "checksum": "80ccc813fc19e4cbdcda681bade4f789fa767b5689d86310f8d3f037fffc0a66",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "ansible/roles/k8s/manifests/CLAUDE.md#Guards",
+  "row": {
+    "atoms": {
+      "ansible/roles/k8s/manifests/files/standalone_secret_keys.json": "7edeac563af7e1b92e198b11868f2855bdd5886ec8abc32e1a2ac14588602b29",
+      "docs/homelab-render.md": "31a3793b72de788921edbaedecb69a2fa317af51e063094fdc0a8d797d09fdf6"
+    },
+    "python": "3.14",
+    "verified_sha": "3131378af"
+  }
+}

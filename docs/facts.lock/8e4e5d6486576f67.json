@@ -1,0 +1,12 @@
+{
+  "checksum": "4956b5b8dc4f95f153e8247fcee3b536e8c0cd397733165d646b30de37fad2d0",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "ansible/roles/k8s/livesync/CLAUDE.md#Notable",
+  "row": {
+    "atoms": {
+      "ansible/vars/secrets.yml": "7a4d09f079c0cae73bca0629f5e9f0bf13cf4752106f95a6c2c687bb94926593"
+    },
+    "python": "3.14",
+    "verified_sha": "55862020d"
+  }
+}

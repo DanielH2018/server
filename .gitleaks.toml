@@ -60,9 +60,9 @@ paths = ['''^ansible/vars/cluster-vars\.source$''']
 # writes it, and `ansible/tests/repo/test_facts_lock_matches_tree.py` refuses a hand edit as
 # tampered. Scoped to this one rule on this one path, so every other rule still scans it.
 [[allowlists]]
-description = "docs/facts.lock holds content digests keyed by atom name, never a credential"
+description = "docs/facts.lock/ holds content digests keyed by atom name, never a credential"
 targetRules = ["generic-api-key"]
-paths = ['''^docs/facts\.lock$''']
+paths = ['''^docs/facts\.lock/[0-9a-f]+\.json$''']
 
 # The same shape for the vendored Kubernetes schemas' provenance file: one sha256 per upstream
 # file, keyed by the file's name. Upstream names an API group's file `apis__<group>...`, and

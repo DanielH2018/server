@@ -694,7 +694,7 @@ reconciliation of a flux-owned role. D5.1b rewrites the sentence in
           record cleanup and drops the entry.
         - crowdsec, configarr, janitorr, qbittorrent and artifacts: D5's `k8s_host_files`
           conversion PR for the role (*Host-side rows*). H2's family PR moves the live crons
-          and scripts and leaves absent arms, and artifacts keeps its two directory tasks, so
+          and scripts and leaves absent arms, and artifacts keeps its three directory tasks, so
           the entry survives H2 and only D5's PR drops it.
         - registry: D5's GC retirement, whose absent arms then move with the rest.
         - docs, pi-peer-backup and media-volume: D5's `k8s_host_files` conversion PR.
@@ -704,7 +704,7 @@ reconciliation of a flux-owned role. D5.1b rewrites the sentence in
         - autofix-bridge, monitor-bridge, game-stats' three staging files and observability's
           `tasks/dashboards.yml`: the role's Wave D PR that renders the imperative ConfigMap.
     - `must_find` names pi-peer-backup's and docs's task files, and artifacts'
-      `tasks/main.yml` for its two directory tasks, which no H2 PR moves. Only D5's PRs move
+      `tasks/main.yml` for its three directory tasks, which no H2 PR moves. Only D5's PRs move
       these three, so the row fails when one of them stops matching rather than when the
       selector drifts (failure class 4). Each D5 conversion PR that moves a member drops it
       from `must_find` in the same commit.
@@ -1707,7 +1707,7 @@ every row one class:
 | restart on config or Secret change | cloudflare-ddns's `manifests_extra_rollouts`; observability's secret restart; pihole's `roll_one.yml` | `checksum/restart` per workload: D3's rule for cloudflare-ddns, widened by D5.1e to the self-rolled workloads of observability and pihole |
 | stale Secret keys | `k8s/manifests`' `verify_secret_keys.yml` | Flux's server-side apply removes a field it owns and no longer declares; D3.5 hands each Secret's fields to kustomize-controller first |
 | host-side, moved by H2 | the live crons, scripts and modules of crowdsec, configarr, janitorr, qbittorrent, artifacts and observability | H2's family PR for the role (H2.4b, H2.4c, H2.5b, H2.7), landed before the flip, which waits on it; the absent arms it leaves are the next row's |
-| host-side, moved by D5 | docs's site directory, pi-peer-backup's two Pi writes, traefik's absent arm, registry's GC absent arms; the absent arms H2 leaves in crowdsec, configarr, janitorr and qbittorrent; artifacts' two directory tasks; media-volume's three media directories | the setup role `k8s_host_files`, in a conversion PR before the flip, until H5 or H7 takes each row; sources and variables move with the task (below) |
+| host-side, moved by D5 | docs's site directory, pi-peer-backup's two Pi writes, traefik's absent arm, registry's GC absent arms; the absent arms H2 leaves in crowdsec, configarr, janitorr and qbittorrent; artifacts' three directory tasks; media-volume's three media directories | the setup role `k8s_host_files`, in a conversion PR before the flip, until H5 or H7 takes each row; sources and variables move with the task (below) |
 | host-side cleanup that has already run | game-stats' pre-#2813 record cleanup; observability's claude-otel record cleanup | deleted by D5's run-once cleanup PR before either role flips (below) |
 | manifest staged outside the manifests directory | traefik's RBAC, `/etc/rancher/k3s/traefik-clusterrole.yaml` | rendered into the bundle by traefik's flip PR, which deletes the staging and apply tasks (Wave D's traefik bullet) |
 | host-side that writes a flux-owned object | registry's GC cron and manifest | retired before the flip (Wave D's registry bullet) |
@@ -1853,9 +1853,10 @@ leaves rows behind (H2, *What H2 leaves in `k8s_host_files`*):
 
 - crowdsec, configarr, janitorr and qbittorrent keep absent arms: the cron files, the script
   paths and, for configarr and janitorr, the host-lib copies;
-- artifacts keeps its two directory tasks, "Ensure the local artifacts directory exists" and
-  "Ensure a peer directory exists for every synced host", both `ansible.builtin.file` with
-  `state: directory`;
+- artifacts keeps its three directory tasks, "Ensure the local artifacts directory exists",
+  "Ensure a peer directory exists for every synced host" and "Ensure the star list directory
+  exists", each `ansible.builtin.file` with `state: directory`. The star list task, added on
+  2026-10-11 after H2 counted the role's rows, also carries `become: true`;
 - observability keeps no host row of H2's. Its claude-otel record cleanup was never an H2 row,
   and D5's run-once cleanup PR deletes it (below).
 
@@ -1884,8 +1885,8 @@ one task file per source role, in a conversion PR before that role flips:
   deployer skips. The same PR:
     - drops game-stats' `tasks/main.yml` entry and the claude-otel clause of observability's
       entry, or the whole entry if H2.7 has landed;
-    - retires the `release-record-cleanup-removes-the-render-record` row in
-      `ansible/tests/repo/_render_record_cleanup_row.py` (#5162). Its `must_find` names only
+    - retires the `release-record-cleanup-removes-the-render-record` census row and its
+      module (#5162). Its `must_find` names only
       these two task files and its floor is their three records, so with both tasks gone the
       row has no subject. `ansible/tasks/k8s_retire.yml` already removes both record kinds
       for a whole-service retirement.
@@ -1922,9 +1923,9 @@ one task file per source role, in a conversion PR before that role flips:
       applies. A shared key in `group_vars/all.yml` would route to the deploy plane only
       (Baseline), which never runs `initial_setup.yml`, so the host half would never
       re-apply. H2.7 uses the same pair for `claude_code`. artifacts' `artifacts_host_dir`,
-      `artifacts_peer_dir` and `artifacts_peer_sources` are the pair test's named members:
-      `ansible/roles/k8s/artifacts/templates/deployment.yaml.j2` reads all three, and so do
-      the two directory tasks. media-volume's conversion PR adds `media_volume_host_path`,
+      `artifacts_peer_dir`, `artifacts_peer_sources` and `artifacts_stars_dir` are the pair
+      test's named members: `ansible/roles/k8s/artifacts/templates/deployment.yaml.j2` reads
+      all four, and so do the three directory tasks. media-volume's conversion PR adds `media_volume_host_path`,
       which `ansible/roles/k8s/media-volume/templates/pv.yaml.j2` and the directory task both
       read. The task's owner reads `puid` and `pgid` from `group_vars/all.yml`, the shared-key
       case above, so the same PR copies them into `k8s_host_files`' defaults as pairs too.
@@ -2398,8 +2399,8 @@ sizes its batch of roles against that projection.
       landed (*Host-side rows*). H2 lands those PRs while the roles are Ansible-owned, so D5's
       conversion PRs for the same role rebase onto them.
     - **Then the `k8s_host_files` conversion PR, for five of them.** crowdsec, configarr,
-      janitorr and qbittorrent move the absent arms their H2 PR left, and artifacts moves its
-      two directory tasks, each into the role's task file in `k8s_host_files`, about 40 to 80
+      janitorr and qbittorrent move the absent arms their H2 PR left, and artifacts moves all
+      three of its directory tasks, the star list directory included, each into the role's task file in `k8s_host_files`, about 40 to 80
       lines each. The PR drops the role's `allow` entry, and artifacts' PR drops its
       `must_find` member. The tick applies it through the setup plane, and the PR body quotes
       that apply. observability needs none, because H2.7 leaves it no host row and the
@@ -3379,7 +3380,7 @@ includes valheim's initContainer.
   Mitigation: the flip cannot pass while the role keeps a host-write `allow` entry, and the
   flip PR links the merged H2 PR.
 - **H2's leftover rows block a flip, or vanish with it.** H2 leaves absent arms in four roles
-  and two directory tasks in artifacts, and D5.1c counts each as a host write. Mitigation:
+  and three directory tasks in artifacts, and D5.1c counts each as a host write. Mitigation:
   a `k8s_host_files` conversion PR per role moves them before the flip, the census names
   artifacts' task file as a member it must find, and the flip PR links the merged
   conversion PR.
@@ -3575,7 +3576,7 @@ includes valheim's initContainer.
   (Open question 15).
 - **Kept small:** `k8s_host_files` holds rows from nine roles and one Pi timer, and most of
   the rows are absent arms. H2 moves the live crons of six roles first, so what reaches
-  `k8s_host_files` from five of them is absent arms and artifacts' two directories. Only
+  `k8s_host_files` from five of them is absent arms and artifacts' three directories. Only
   docs's and artifacts' directories and pi-peer-backup's two Pi writes stay live until H7.
 
 ## Open questions

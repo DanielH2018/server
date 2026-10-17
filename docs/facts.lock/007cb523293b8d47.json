@@ -1,0 +1,15 @@
+{
+  "checksum": "5ba0e2e30da8364440b10a8c3f928687564ac8c80a566a6429329215c9b2ecee",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "ansible/roles/setup/k3s/CLAUDE.md#`setup/k3s` — the cluster's host plane: k3s itself, Longhorn, and the backup crons",
+  "row": {
+    "atoms": {
+      "ansible/k3s-bringup.yml": "72b787809fc709416df6dbc688428ec5953c55dc98b855b29a79dfef3f8f7fc5",
+      "ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_remediation.py:maximal_tag_warning": "9376e5055deb6b2ab7972dd74c23a53971919041b2f1cfa68b4d46715a73aff8",
+      "ansible/roles/setup/k3s/tasks/kubeconfig.yml": "a838bb40af4bcdd674784ee2ddcad8729684eaa39fd09383c27e467ab457ef33",
+      "docs/k3s-node-plane-crons-and-incidents.md": "47634daf3e04f54df032bcc8938c13bcccfea73558e99d58546e331f90ece53d"
+    },
+    "python": "3.14",
+    "verified_sha": "44fa8cfde"
+  }
+}

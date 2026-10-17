@@ -15,7 +15,7 @@ from lib.facts.lint import (
     host_pattern,
     lint_sections,
 )
-from lib.facts.lock import LOCK_REL, write_lock
+from lib.facts.lock import LOCK_REL, row_file_name, write_lock
 from lib.repo_paths import REPO
 
 
@@ -230,7 +230,7 @@ def test_hand_edited_lock_is_flagged(tmp_path):
         repo / LOCK_REL,
         {"CLAUDE.md#A": {"verified_sha": "abc", "atoms": {"t/m.py:LIMIT": "h"}}},
     )
-    p = repo / LOCK_REL
+    p = repo / LOCK_REL / row_file_name("CLAUDE.md#A")
     p.write_text(p.read_text().replace('"h"', '"hh"'))
     found = {(f.unit, f.rule): f.warn for f in lint_sections(repo, None)}
     assert found[("", "lock-tampered")] is False

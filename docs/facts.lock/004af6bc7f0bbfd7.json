@@ -1,0 +1,12 @@
+{
+  "checksum": "03ebfee2379eef208d30688dea5ce8ce0c0954e36bd42a324f210224b0434ff4",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "ansible/roles/k8s/docs/CLAUDE.md#`docs_host_site_dir` sits outside the repo checkout deliberately",
+  "row": {
+    "atoms": {
+      "scripts/docs/build_docs.py": "73dd87c1dec39fcf8c7cb3f9062e58af58d167287911fd4f112daa276bda0d51"
+    },
+    "python": "3.14",
+    "verified_sha": "55862020d"
+  }
+}

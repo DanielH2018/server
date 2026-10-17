@@ -1,0 +1,12 @@
+{
+  "checksum": "f922a3e323c4c9caaf430ba5ffc1ec9bea1c76e55f856d78fe19c17a0f83b55e",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "ansible/roles/setup/gitops_deploy/CLAUDE.md#Traps",
+  "row": {
+    "atoms": {
+      "docs/gitops-pipeline.md": "60fc646704304a39c486cd25cee64f94e3b56d69d1b15076af2b9124a4d00c18"
+    },
+    "python": "3.14",
+    "verified_sha": "fd34ae8eb"
+  }
+}

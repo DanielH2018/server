@@ -1,0 +1,12 @@
+{
+  "checksum": "e2f7b2f89e3746ee2a4be265bfa3aa8b2a8b81a919c643fb24186592fb078ff9",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "ansible/roles/setup/renovate_notify/CLAUDE.md#What it watches, and why each arm exists",
+  "row": {
+    "atoms": {
+      "docs/renovate-notify-internals.md": "cb30c680666ee631c55c05028f020d1d629ba0c2f9ef028554c000bf2a46eaac"
+    },
+    "python": "3.14",
+    "verified_sha": "fd34ae8eb"
+  }
+}

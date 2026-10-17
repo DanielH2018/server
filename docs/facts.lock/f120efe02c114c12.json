@@ -1,0 +1,12 @@
+{
+  "checksum": "fc4a085be790da85b99b615dd6658cca5613cd86d02fdc7c74f6a8bcc847b097",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "ansible/roles/k8s/blackbox-exporter/CLAUDE.md#Editing",
+  "row": {
+    "atoms": {
+      "ansible/templates/service-default.yaml.j2": "34004e457e70b79fb81002555e9e6c811fb14e3e2d3383d1beed85bce06764f0"
+    },
+    "python": "3.14",
+    "verified_sha": "58c34fe38"
+  }
+}

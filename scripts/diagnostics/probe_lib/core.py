@@ -70,7 +70,6 @@ def domain(group_vars_path=None):
     """The homelab's domain, read from inventory (plaintext, not a secret).
 
     The operator ruled on 2026-10-14 that `domain` is not a secret, so this needs no age key.
-    `secrets.yml` holds the same value until R2's domain PR 3 deletes it there.
 
     Args:
         group_vars_path: The group_vars file to read. None reads the repo's `all.yml`.
