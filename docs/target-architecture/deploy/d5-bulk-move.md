@@ -1892,10 +1892,11 @@ one task file per source role, in a conversion PR before that role flips:
 - **What `k8s_host_files` holds, and who takes each row.** No row stays there past H7:
     - docs's "Ensure the built docs site directory exists" on daniel-box, which H7.10a
       replaces with a `tmpfiles.d` line in daniel-box's host tree;
-    - artifacts' two directory tasks on daniel-box, which H7 replaces the same way in
-      daniel-box's host tree, one line for the local directory and one per peer;
+    - artifacts' three directory tasks on daniel-box, which H7.12c's daniel-box PR replaces
+      with `tmpfiles.d` lines in daniel-box's host tree: one for the local directory, one
+      per peer and one for the star list directory;
     - media-volume's three directories under `/srv/media` on daniel-box, owned by
-      `puid`:`pgid` with no mode, which H7 replaces the same way. A `tmpfiles.d` line can
+      `puid`:`pgid` with no mode, which H7.9b replaces the same way. A `tmpfiles.d` line can
       set the owner and leave the mode alone, which the task's comment requires because
       the seeding rsync imposes daniel-server's modes;
     - pi-peer-backup's forced-command wrapper and authorized key on daniel-pi, which H7.4's
@@ -1906,9 +1907,8 @@ one task file per source role, in a conversion PR before that role flips:
       nothing to remove after their first apply. H7.18c turns them into legacy entries and
       deletes the role.
 
-  H5 (*Rows H5 takes from D5's `k8s_host_files`*) and H7 (its setup-role table, H7.4, H7.10a
-  and H7.18c) list these rows, except the directories of artifacts and media-volume, which a
-  cross-slice note asks H7 to add (#5285).
+  H5 (*Rows H5 takes from D5's `k8s_host_files`*) and H7 (its setup-role table, H7.4, H7.9b,
+  H7.10a, H7.12c and H7.18c) list these rows.
 
 - **The task moves with its sources and variables.** Role defaults and role-relative `src:`
   paths do not resolve in another role (Baseline). So each conversion PR moves the role's
@@ -2013,8 +2013,7 @@ sizes its batch of roles against that projection.
   the end, then netpol-baseline, because it depends on everything (D4).
 - **observability moves before headlamp.** headlamp renders a deferred document into
   `observability`, so D4 gives `headlamp-deferred` an edge to `observability`. A `dependsOn`
-  naming a Kustomization that does not exist fails on every reconcile, and `soak` depends on
-  `headlamp-deferred`. D5 also asks D4 to drop a namespace edge to an Ansible-owned role, as it
+  naming a Kustomization that does not exist fails on every reconcile. D5 also asks D4 to drop a namespace edge to an Ansible-owned role, as it
   drops a toposort edge.
 - **uptime-kuma moves only if M6 has not retired it.** If M6 lands first, its entry leaves
   the list, and it never moves.
@@ -2297,7 +2296,10 @@ sizes its batch of roles against that projection.
     - D4's timeout function changes, because `soak`'s timeout leaves the chain (*Its
       timeout*);
     - C2's rule that `soak` is in the changed set whenever the set holds a tag is in
-      `contracts.md` before this PR merges.
+      `contracts.md` before this PR merges;
+    - `d4-ordering.md`'s *`K8S_APPLIES_LAST` in the renderer* bullet stops naming `soak` as
+      a Kustomization that depends on every tag, because the renderer no longer gives
+      `soak` edges.
 
     D5.3b1's script also fixes these inputs:
     - the flux role renders the OCIRepository `last-good`, with `homelab`'s `verify` block;
@@ -3243,9 +3245,9 @@ includes valheim's initContainer.
   scheduling: a late or skipped scheduled run delays the promotion until the next merge or
   a dispatch, and never holds.
 - **An unrelated failure holds a good revision.** The soak reads only R's changed set, so
-  an unrelated alert no longer fails it. Two paths remain. An unchanged tag that is not
-  Ready blocks `soak` through its `dependsOn` edges, and `verify` then times out on
-  `flux/soak` (Open question 19). A failed or unverified base read widens that soak's scope
+  an unrelated alert no longer fails it. Two paths remain. A changed Kustomization that never
+  reads Ready at R fails the soak at its wait's deadline, and the failure names that
+  Kustomization (Open question 19). A failed or unverified base read widens that soak's scope
   to the fleet. Mitigation: the post names the alert or the blocking Kustomization, and the
   Job logs why it widened. Open question 17 states what C2's revert rule leaves open
   (**operator-only**).
@@ -3443,8 +3445,11 @@ includes valheim's initContainer.
       `probe.py takeover` command and the operator's `flux diff kustomization` command, and
       `docs/claude-tooling.md`'s probe list gains the subcommand.
     - D5.1h: the role's `CLAUDE.md` with the Autonomous-role contract, the `StrictUndefined`
-      render test and the pair test in `ansible/tests/setup/`, and the clear procedure in
-      `docs/flux-deploy-plane.md`.
+      render test and the pair test in `ansible/tests/setup/`. The **operator-only** clear
+      stays in this plan's *The `k8s_host_files` role enters the setup plane once* section
+      and in [#5337](https://github.com/DanielH2018/server/pull/5337)'s body.
+      `docs/gitops-pipeline.md`'s *When a tick parks* holds the general procedure for a
+      parked tick, and the park recurs only on a revert of D5.1h.
     - D5.1f: `docs/flux-deploy-plane.md` states the `Removes-Object:` trailer, its
       cluster-scoped form, its two exemptions and the
       retirement order with its operator-only claim delete.
