@@ -136,6 +136,12 @@ ENTRY_POINTS: dict[str, tuple[Link, ...]] = {
         Link(RETIRED, "drop_owned", "tree_owners"),
         TREE_OWNERS,
     ),
+    "`probe.py releases` (plain listing)": (
+        Link(
+            "scripts/diagnostics/probe_lib/releases.py", "run_releases", "tree_owners"
+        ),
+        TREE_OWNERS,
+    ),
     "`manifest-prune-check.sh`": (
         Link(
             "ansible/roles/setup/k3s/templates/manifest-prune-check.sh.j2",
