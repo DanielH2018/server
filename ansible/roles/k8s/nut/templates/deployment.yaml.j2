@@ -28,8 +28,13 @@ spec:
       containers:
         - name: nut
           image: {{ nut_k8s_image }}
-          # Built in-cluster to a mutable :latest; explicit for the reason terraria's
-          # deployment records.
+{# Ansible owns nut, so its ref is the in-cluster registry's, where a build that skips pushes
+   nothing new and leaves a pod asking for a name the node already holds: `Always`, for the
+   reason terraria's deployment records. A flux-owned tag's ref is a GHCR content tag instead,
+   and the renderer sets `IfNotPresent` beside it
+   (scripts/renderer/renderer_lib/images.py:ghcr_refs), so a node that holds the tag restarts
+   the pod with no WAN. nut moves in its Wave C PR, after the in-cluster registry mirrors GHCR
+   (D5 Open question 2). A Jinja comment, so an edit here never changes nut's render. #}
           imagePullPolicy: Always
           ports:
             - containerPort: 3493

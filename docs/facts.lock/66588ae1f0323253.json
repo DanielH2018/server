@@ -1,0 +1,12 @@
+{
+  "checksum": "0337310883df1655cc15beff2dac8cefd8637e377371283752a80f687f8844ef",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "ansible/roles/k8s/registry/CLAUDE.md#Notable",
+  "row": {
+    "atoms": {
+      "scripts/renderer/renderer_lib/images.py:ghcr_refs": "06256a1fd08b4b8ba140b342c0191617c0e7522b01022945eac7c16106a2407f"
+    },
+    "python": "3.14",
+    "verified_sha": "2a1ac8573"
+  }
+}

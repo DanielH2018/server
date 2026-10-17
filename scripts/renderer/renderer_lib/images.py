@@ -11,9 +11,12 @@ same `ImageContext` tags (`render_tag`'s `built`), so a consumer's ref and `tags
 one computation. `ref_mismatches` holds them equal, and `paths_into_images` holds that no
 Kustomization reaches `DIR/images/`.
 
-No Kustomization applies these files. D5.4a2's `images` job builds and pushes them, and D5.4b
-points the flux-owned consumers at GHCR. The plan is
-docs/target-architecture/deploy/d5-bulk-move.md, *Images built by CI (D5.4)*.
+No Kustomization applies these files. D5.4a2's `images` job builds and pushes them to GHCR.
+`ghcr_refs` points each flux-owned tag's refs to a built image at that push, with
+`imagePullPolicy: IfNotPresent` beside each (D5.4b). An Ansible-owned tag keeps the in-cluster
+registry and its `Always`. `pull_policy_offences` refuses a GHCR content-tag ref whose policy is
+`Always` or unset. The plan is docs/target-architecture/deploy/d5-bulk-move.md, *Images built
+by CI (D5.4)*.
 """
 
 import sys as _sys
@@ -24,23 +27,37 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 import json
 import posixpath
 import re
-from collections.abc import Mapping
-from dataclasses import dataclass
+from collections.abc import Iterable, Iterator, Mapping
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 import jinja2
+import yaml
 from ansible.errors import AnsibleError
 
+from deploy_tools.ci_images import OWNER, REGISTRY
+from deploy_tools.ci_images import ref as ghcr_ref
 from lib import yaml_fast
 from lib.ansible_inventory import K8S_HOST
 from lib.repo_paths import K8S_ROLES
 from renderer.renderer_lib.bundle import CLUSTER_DIR, FLUX_DIR, KUSTOMIZATION
 from renderer.renderer_lib.cluster import RenderedTag, RenderRefused, tag_context
 from renderer.renderer_lib.environment import RenderError
+from renderer.renderer_lib.ordering import DEFERRED_SUFFIX, SNAPSHOT_SUFFIX
 from renderer.renderer_lib.task_inputs import image_builder_sites, image_contexts
 
 IMAGES_DIR = "images"
 TAGS_FILE = f"{IMAGES_DIR}/tags.json"
+# A GHCR content tag is immutable under `ci_images`' push-once rule, so a node's cached copy is
+# always the right image. Under `Always`, kubelet asks GHCR on every container start, so a GHCR
+# or WAN outage would fail every restart, reboot and crash recovery of the consumer.
+GHCR_PULL_POLICY = "IfNotPresent"
+# A built-image ref as a role default spells it: `<pull host>/<name>:<content tag>`. A GHCR ref
+# has a second `/` before the name, so it never matches.
+BUILT_REF = re.compile(
+    r"[^/\s]+/(?P<name>[a-z0-9]+(?:-[a-z0-9]+)*):(?P<tag>sha-[0-9a-f]{12})"
+)
+GHCR_REF = re.compile(re.escape(f"{REGISTRY}/{OWNER}/") + r"[^:\s]+:sha-[0-9a-f]{12}")
 
 
 @dataclass(frozen=True)
@@ -132,6 +149,124 @@ def ref_mismatches(
     ]
 
 
+def _containers(node: yaml.Node | None) -> Iterator[tuple[yaml.MappingNode, dict]]:
+    """Each mapping under `node` with an `image` key, and its keys to their key and value nodes."""
+    if isinstance(node, yaml.SequenceNode):
+        for item in node.value:
+            yield from _containers(item)
+    elif isinstance(node, yaml.MappingNode):
+        keys = {
+            k.value: (k, v) for k, v in node.value if isinstance(k, yaml.ScalarNode)
+        }
+        if "image" in keys:
+            yield node, keys
+        for _, value in node.value:
+            yield from _containers(value)
+
+
+def ghcr_text(text: str, tags: Mapping[str, str], where: str) -> str:
+    """`text` with each built-image ref at GHCR and `imagePullPolicy: IfNotPresent` beside it.
+
+    A built-image ref is an `image` that names one of `tags` with its tag, on any host. The
+    policy's value is replaced, or, for a container that sets none, a line is inserted after
+    the `image` line. Every other byte is kept, as `restart.stamp` keeps them.
+
+    Raises:
+        RenderError: A container that sets no policy is a flow mapping, which a line insert
+            cannot extend.
+    """
+    lines = text.splitlines(keepends=True)
+    offsets = [0]
+    for line in lines:
+        offsets.append(offsets[-1] + len(line))
+    edits = []
+    for doc in yaml.compose_all(text, Loader=yaml.SafeLoader):
+        for container, keys in _containers(doc):
+            key, image = keys["image"]
+            m = BUILT_REF.fullmatch(str(image.value))
+            if not m or tags.get(m["name"]) != m["tag"]:
+                continue
+            new = ghcr_ref(m["name"], m["tag"])
+            edits.append((image.start_mark.index, image.end_mark.index, new))
+            if "imagePullPolicy" in keys:
+                policy = keys["imagePullPolicy"][1]
+                edits.append(
+                    (policy.start_mark.index, policy.end_mark.index, GHCR_PULL_POLICY)
+                )
+            elif container.flow_style:
+                raise RenderError(f"{where}: {new} is in a flow mapping with no policy")
+            else:
+                at = offsets[min(image.end_mark.line + 1, len(lines))]
+                indent = " " * key.start_mark.column
+                edits.append((at, at, f"{indent}imagePullPolicy: {GHCR_PULL_POLICY}\n"))
+    for start, end, new in sorted(edits, reverse=True):
+        text = text[:start] + new + text[end:]
+    return text
+
+
+def ghcr_refs(
+    rendered: list[RenderedTag], owned: Iterable[str], images: Mapping[str, BuiltImage]
+) -> list[RenderedTag]:
+    """`rendered` with each flux-owned tag's built-image refs pointed at GHCR (D5.4b).
+
+    DECIDED: a pass over the rendered text, not a role variable. A tag moves to GHCR, and to
+    `IfNotPresent`, in the render of the PR that marks it `owner: flux`, and no role's
+    defaults or templates change, so Ansible keeps the in-cluster registry and `Always` for
+    every tag it still owns. Only a ref to a `tags.json` image moves, so any other image of a
+    flux-owned tag keeps its host, as registry's self-test probe does.
+
+    Args:
+        rendered: The tags to edit.
+        owned: The flux-owned tags.
+        images: Every built image, as `tags.json` names them.
+    """
+    owned = set(owned)
+    tags = {name: image.tag for name, image in images.items()}
+    pointed = []
+    for tag in rendered:
+        if tag.tag not in owned or not tags:
+            pointed.append(tag)
+            continue
+        dirs = {
+            name: {f: ghcr_text(t, tags, f"{name}/{f}") for f, t in files.items()}
+            for name, files in tag.directories().items()
+        }
+        pointed.append(
+            replace(
+                tag,
+                files=dirs[tag.tag],
+                deferred=dirs.get(tag.tag + DEFERRED_SUFFIX, {}),
+                snapshot=dirs.get(tag.tag + SNAPSHOT_SUFFIX, {}),
+            )
+        )
+    return pointed
+
+
+def pull_policy_offences(directories: Mapping[str, Mapping[str, str]]) -> list[str]:
+    """Each GHCR content-tag ref in `directories` whose `imagePullPolicy` is `Always` or unset.
+
+    Args:
+        directories: Each directory name under `cluster/` mapped to its files.
+    """
+    found = []
+    for directory, files in sorted(directories.items()):
+        for file, text in sorted(files.items()):
+            if not GHCR_REF.search(text):
+                continue
+            for doc in yaml.compose_all(text, Loader=yaml.SafeLoader):
+                for _, keys in _containers(doc):
+                    image = str(keys["image"][1].value)
+                    policy = keys.get("imagePullPolicy")
+                    value = str(policy[1].value) if policy else "unset"
+                    if GHCR_REF.fullmatch(image) and value in ("unset", "Always"):
+                        found.append(
+                            f"cluster/{directory}/{file} pulls {image} with "
+                            f"imagePullPolicy {value}, so every container start asks "
+                            f"GHCR; a content tag takes {GHCR_PULL_POLICY}"
+                        )
+    return found
+
+
 def _reaches_images(base: str, path: str) -> bool:
     """Whether `path`, relative to the bundle directory `base`, lands under `DIR/images/`.
 
@@ -216,7 +351,8 @@ def check_images(
     Raises:
         RenderRefused: `out/images/` already holds a file.
         RenderError: A rendered ref names a built image with a tag other than `tags.json`'s,
-            or a Kustomization path reaches `DIR/images/`.
+            a GHCR content-tag ref pulls `Always` or sets no policy, or a Kustomization path
+            reaches `DIR/images/`.
     """
     if images:
         refuse_occupied(out)
@@ -227,8 +363,10 @@ def check_images(
         for name, files in directories.items()
         for file, text in files.items()
     }
-    problems = ref_mismatches(directories, tag_map) + paths_into_images(
-        {**cluster_files, **bundle}
+    problems = (
+        ref_mismatches(directories, tag_map)
+        + pull_policy_offences(directories)
+        + paths_into_images({**cluster_files, **bundle})
     )
     if problems:
         raise RenderError("\n".join(problems))

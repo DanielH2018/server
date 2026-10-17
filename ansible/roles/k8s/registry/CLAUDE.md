@@ -41,8 +41,12 @@ registry round trip. See repo-root `CLAUDE.md` for shared conventions.
   on a refused connection and only the blob sweep runs.
   - It keeps `registry_k8s_keep_content_tags` (3) newest per repository, the digest `latest`
     resolves to, and any digest a running pod resolved. That last one is not belt-and-braces:
-    built images run `imagePullPolicy: Always`, so a pod re-fetches by tag on each start and
-    untagging the manifest it came from turns its next restart into an ImagePullBackOff.
+    every Ansible-owned consumer pulls from here with `imagePullPolicy: Always`, so a pod
+    re-fetches by tag on each start and untagging the manifest it came from turns its next
+    restart into an ImagePullBackOff. `Always` stays while Ansible owns the consumer, because a
+    build that pushes nothing new leaves the node holding the old bytes under the same name. A
+    flux-owned consumer pulls its GHCR content tag with `IfNotPresent` instead
+    (`scripts/renderer/renderer_lib/images.py:ghcr_refs`), and this store never sees it.
   - An unrankable tag is KEPT. Ordering needs each manifest's config-blob `created`, because
     the tag names are content hashes and carry no chronology.
 - The GC run reports twice: the `Registry GC` Kuma push tile (`registry_gc_push_token`,
