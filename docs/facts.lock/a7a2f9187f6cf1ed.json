@@ -1,13 +1,14 @@
 {
-  "checksum": "890b204ca595e2fcf4c4f2b120a7c1cc96821313aca1b10b00abf24e482a6d57",
+  "checksum": "d0e5abf5c23103464cbac1800fd6b5ab7d49ad741a241066126d9ec31c1fcf74",
   "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
   "key": "ansible/roles/k8s/volume-revert/CLAUDE.md#What the caller passes",
   "row": {
     "atoms": {
       "ansible/volume-revert.yml": "22b3c059e4c4b020302adb665d9082f09013981c799b7f4d4faab68aab6eed30",
+      "docs/flux-deploy-plane.md": "807c3deb44c3178e7a6f9fc0bc398a3b748b95c468b14ce9b1b890c8684535d9",
       "docs/volume-snapshot-drills.md": "065c3fed1513022fe8e3b8848f85ca3b5527c7a34f0d50d3b1dad708b176b193"
     },
     "python": "3.14",
-    "verified_sha": "e393a8183"
+    "verified_sha": "a97039555"
   }
 }

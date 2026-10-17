@@ -3619,6 +3619,8 @@ includes valheim's initContainer.
    **Ruled 2026-10-16, in principle: accepted.** A failed revision that changes a snapshot
    role holds without a reset. The operator confirms the two co-batched cases in D5.2b1's
    review, with the code in front of them.
+   **Confirmed 2026-10-17 in D5.2b1's review:** both co-batched cases hold as built, and the
+   hold value `<T> stateful=unverified` is accepted.
 2. **Does the in-cluster registry stay as a LAN mirror of GHCR?** After D5.4 no role pushes
    to it. A GHCR-only image path leaves the cluster no GitHub-independent pull, and nut, the
    pod half of the UPS shutdown chain, cannot start cold during a WAN outage.

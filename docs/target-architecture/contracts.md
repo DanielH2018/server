@@ -255,12 +255,16 @@ every entry is flux-owned then waits for C-2b, through the uptime-kuma edge.
 
   `<T> unverified` is a hold under *`DEPLOY_HOLD`'s values*, because it is neither `none`
   nor empty. Other writers of `DEPLOY_HOLD` keep their own values (H1, D5, H6), and none of
-  them uses the `failed=` or the `unverified` form. D5 writes `<T> stateful=<names>` and
-  `<R> suspended-changed=<tag>`, and H1's forward-only hold writes T's SHA alone.
+  them uses the `failed=` or the `unverified` form. D5 writes `<T> stateful=<names>`,
+  `<T> stateful=unverified` and `<R> suspended-changed=<tag>`, and H1's forward-only hold
+  writes T's SHA alone.
 - **A hold without a reset.** A failed revision that changes a forward-only tag (H1) or a
   snapshot role (D5) writes `DEPLOY_HOLD` and leaves `prod`. D5's hold reads
-  `<T> stateful=<names>`. The operator accepted it in principle on 2026-10-16, and confirms
-  its two co-batched cases in D5.2b1's review (D5 Open question 1). Each of these holds
+  `<T> stateful=<names>` or `<T> stateful=unverified`. D5 writes `<T> stateful=unverified`
+  when `verify` left no verdict or its names were malformed; it is D5's own value, not C2's
+  bare `<T> unverified`. The operator accepted the hold in principle on 2026-10-16, and
+  confirmed its two co-batched cases and the `stateful=unverified` value on 2026-10-17 in
+  D5.2b1's review (D5 Open question 1). Each of these holds
   clears only by hand. Its `settle` tags T as `held`, D5's stateful hold included, because
   `last-good` stays on the older revision while `prod` names T.
 - **The hold post.** From D5.2b1, a hold posts to the deployer's Discord channel, with a
@@ -1204,3 +1208,12 @@ Applied to this page:
   C2 *Verification* gains the rule beside *The changed set*, because the renderer drops
   `soak`'s `dependsOn` edges and no chain puts `soak` in the set any more. The request leaves
   *Requests on C2*, which clears the gate before D5.3b2 merges.
+
+### Applied requests (2026-10-17)
+
+- **`<T> stateful=unverified`** (D5 Open question 1). C2 *A hold without a reset* names a
+  second form of D5's stateful hold, written when `verify` left no verdict or its names were
+  malformed, and the list under *On failure* names it beside `<T> stateful=<names>`. It keeps
+  the first word a SHA, as C2's `<T> unverified` does. The operator confirmed it on
+  2026-10-17 in D5.2b1's review, with the two co-batched cases. No row in *Requested
+  amendments not yet applied* preceded it.

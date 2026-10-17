@@ -83,15 +83,27 @@ def verification_problems(wf: dict) -> list[str]:
     if "needs.promote.outputs.target" not in str(_steps(verify)):
         found.append("verify: does not take T from promote's outputs")
     # Without `no_reset` reaching settle's NO_RESET, a failed forward-only revision resets
-    # `prod` to `last-good`, the downgrade the hold without a reset exists to prevent.
+    # `prod` to `last-good`, the downgrade the hold without a reset exists to prevent. Without
+    # `stateful` reaching STATEFUL, a failed snapshot-role revision resets onto data it may
+    # have migrated (D5.2b1).
     outputs = jobs.get("promote", {}).get("outputs", {})
-    if outputs.get("no_reset") != "${{ steps.decide.outputs.no_reset }}":
-        found.append("promote: output no_reset does not come from the decide step")
+    for key, env in (("no_reset", "NO_RESET"), ("stateful", "STATEFUL")):
+        if outputs.get(key) != f"${{{{ steps.decide.outputs.{key} }}}}":
+            found.append(f"promote: output {key} does not come from the decide step")
+        if not any(
+            s.get("env", {}).get(env) == f"${{{{ needs.promote.outputs.{key} }}}}"
+            for s in _steps(jobs.get("settle", {}))
+        ):
+            found.append(f"settle: no step takes {env} from promote's {key} output")
+    # The post runs only on the value settle wrote, so a broken link posts nothing.
+    settle_out = jobs.get("settle", {}).get("outputs", {})
+    if settle_out.get("stateful_hold") != "${{ steps.apply.outputs.stateful_hold }}":
+        found.append("settle: output stateful_hold does not come from the apply step")
     if not any(
-        s.get("env", {}).get("NO_RESET") == "${{ needs.promote.outputs.no_reset }}"
-        for s in _steps(jobs.get("settle", {}))
+        s.get("env", {}).get("HOLD") == "${{ needs.settle.outputs.stateful_hold }}"
+        for s in _steps(jobs.get("post", {}))
     ):
-        found.append("settle: no step takes NO_RESET from promote's no_reset output")
+        found.append("post: no step takes HOLD from settle's stateful_hold output")
     minutes = {name: jobs.get(name, {}).get("timeout-minutes", 0) for name in jobs}
     if minutes["verify"] * 60 <= chained_timeout.VERIFY_CAP_S + promote_verify.POLL_S:
         found.append(
@@ -238,7 +250,35 @@ def _promote_without_no_reset(wf):
     del wf["jobs"]["promote"]["outputs"]["no_reset"]
 
 
+def _settle_reads_a_misspelt_stateful(wf):
+    step = next(
+        s for s in wf["jobs"]["settle"]["steps"] if s.get("name") == "Apply the verdict"
+    )
+    step["env"]["STATEFUL"] = "${{ needs.promote.outputs.statefull }}"
+
+
+def _promote_without_stateful(wf):
+    del wf["jobs"]["promote"]["outputs"]["stateful"]
+
+
+def _post_reads_no_hold(wf):
+    step = next(s for s in wf["jobs"]["post"]["steps"] if "HOLD" in s.get("env", {}))
+    step["env"]["HOLD"] = "${{ needs.settle.outputs.hold }}"
+
+
 OWN_RED = {
+    "settle reads a misspelt stateful": (
+        _settle_reads_a_misspelt_stateful,
+        "settle: no step takes STATEFUL",
+    ),
+    "promote without the stateful output": (
+        _promote_without_stateful,
+        "promote: output stateful does not come",
+    ),
+    "post reads a hold settle never sets": (
+        _post_reads_no_hold,
+        "post: no step takes HOLD",
+    ),
     "settle reads a misspelt no_reset": (
         _settle_reads_a_misspelt_no_reset,
         "settle: no step takes NO_RESET",

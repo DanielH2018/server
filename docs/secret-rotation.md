@@ -373,6 +373,11 @@ Mint a new value in the provider, then `sops set` + redeploy the consumer:
 - `cloudflare_dns_token`: Cloudflare dashboard → API Tokens (keep it **zone-scoped**: DNS
   edit + Zone read for the one zone — audit this scope when rotating).
 - `*_discord_webhook*`: Discord → channel → Integrations → Webhooks → regenerate.
+    - `gitops_deploy_discord_webhook` has a second copy, the `DEPLOY_DISCORD_WEBHOOK`
+      repository secret, which `promote.yml`'s `post` job reads for the stateful hold's post.
+      A rotation re-sets that secret too, with `gh secret set DEPLOY_DISCORD_WEBHOOK -R
+      DanielH2018/server` reading the new value from stdin (**operator-only**). A stale copy
+      fails the next stateful hold's post red, with the hold already written.
 - `mullvad_account`: Mullvad account panel. The value is all digits, so it has a Secret of its
   own, `qbittorrent-mullvad-account`, rendered from
   `ansible/roles/k8s/qbittorrent/templates/mullvad-account-secret.yaml.j2`. A rotation changes
