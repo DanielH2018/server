@@ -8,12 +8,12 @@ pod keeps running the previous code. Server-side
 apply writes no such annotation, so the cap does not apply.
 
 The rule covers every role with an `Apply the script ConfigMap` task in any of its task files, not just the one that
-hit the cap: autofix-bridge ships one small script, and a guard scoped to the
-instance that failed is the guard-scope shape this repo has paid for before. The roles are
-derived from the tree, so a new script ConfigMap task joins the rule the day it appears.
-game-stats rendered its two as templates in #5444, so `k8s/manifests` applies them
-client-side, and `scripts/renderer/tests/test_renderer_game_stats_restart.py` holds each
-under the cap.
+hit the cap, because a guard scoped to the instance that failed is the guard-scope shape
+this repo has paid for before. The roles are derived from the tree, so a new script
+ConfigMap task joins the rule the day it appears. game-stats (#5444) and autofix-bridge
+(#5445) render theirs as templates, so `k8s/manifests` applies them client-side.
+`scripts/renderer/tests/test_renderer_game_stats_restart.py` holds game-stats' two under
+the cap.
 
 No role's own suite can see this: pytest imports the modules from files/ and never renders or
 applies the ConfigMap. A companion assertion pins the reason for monitor-bridge — if its
@@ -70,7 +70,6 @@ def test_the_derivation_finds_the_known_roles():
     # Without this the parametrized test below passes vacuously if the task is renamed.
     assert {
         "monitor-bridge",
-        "autofix-bridge",
     } <= set(ROLES), ROLES
 
 

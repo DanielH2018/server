@@ -1164,6 +1164,7 @@
  "scripts/lib/tests/test_worktree_privileged_holders.py": 0.0,
  "scripts/lib/tests/test_worktrees.py": 0.07,
  "scripts/lib/tests/test_yaml_fast.py": 0.0,
+ "scripts/renderer/tests/test_renderer_autofix_bridge_script.py": 2.62,
  "scripts/renderer/tests/test_renderer_bundle.py": 11.45,
  "scripts/renderer/tests/test_renderer_bundle_content.py": 0.09,
  "scripts/renderer/tests/test_renderer_bundle_ordering.py": 1.35,
