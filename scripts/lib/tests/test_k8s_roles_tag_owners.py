@@ -39,13 +39,17 @@ def test_any_other_owner_value_raises(tmp_path, value: str):
         tag_owners(host_vars)
 
 
-def test_the_live_owned_entries_are_the_ones_d2_to_d5_moved():
-    """D2.7, D3.6, D4.5 and D5.5 moved these six to Flux, and no other live entry carries `owner`."""
-    assert tag_owners() == {
-        "bento-pdf": "flux",
-        "gpu-exporter": "flux",
-        "nut-exporter": "flux",
-        "peanut": "flux",
-        "pihole-exporter": "flux",
-        "texbrain": "flux",
-    }
+def test_the_entries_d2_to_d5_moved_are_live_and_owned_by_flux():
+    """D2.7, D3.6, D4.5 and D5.5 moved these six to Flux.
+
+    A floor, not an equality: from D5.5 on the scaffolder writes `owner: flux` on every new
+    entry, so the live set grows with each new service.
+    """
+    assert {
+        "bento-pdf",
+        "gpu-exporter",
+        "nut-exporter",
+        "peanut",
+        "pihole-exporter",
+        "texbrain",
+    } <= tag_owners().keys()

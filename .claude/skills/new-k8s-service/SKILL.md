@@ -159,10 +159,13 @@ remove it live. Patch it out and verify.
 
 **Flux applies the new role, not `deploy.sh`.** The entry carries `owner: flux`, so
 `./scripts/deploy.sh --tags "<name>"` exits 5 (`DEPLOY_FLUX_OWNED`), `--dry-run` included.
-To check the role before the merge, render it the way `promote` does:
+To check the role before the merge, render every published tag the way `promote` does, then
+check the bundle. `check-bundle` examines each tag `published-tags` lists, so a render of the
+new role alone fails it for every tag the render left out:
 
 ```bash
-uv run python scripts/renderer/homelab_render.py cluster --out out --role <name>
+uv run python scripts/deploy_tools/promote.py published-tags | sed 's/^/--role /' \
+    | xargs uv run python scripts/renderer/homelab_render.py cluster --out out
 uv run python scripts/deploy_tools/promote.py check-bundle out
 ```
 
