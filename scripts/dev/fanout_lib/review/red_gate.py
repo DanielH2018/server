@@ -34,6 +34,7 @@ THE GREEN GATE runs after the implementer and again after every fix round. The w
 must match HEAD, because the PR ships HEAD: an uncommitted edit to a red test or to the code
 would otherwise pass a gate the pushed head fails (#3821). Every pytest config file but a
 `conftest.py`, the `leakguard` plugin and any red data file must be unchanged since `red`. A
+patch registry may change only in lines naming a file the red commits added (#4875). A
 `conftest.py` may only lose what no red test requests (`red_lock.forbidden_conftest_change`,
 #4542). In a red `test_*.py`, what the red commits wrote and what it reaches must be unchanged,
 and anything else may only be a test, a helper, a fixture, an import or a constant;
@@ -74,7 +75,7 @@ _sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 _sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 
 from fanout_lib.brief import fence_for
-from fanout_lib.review.red_lock import forbidden_change, forbidden_conftest_change
+from fanout_lib.review import red_lock
 from fanout_lib.review.red_tests import red_by_absence, stale_suppressions
 
 from fanout_lib.review.hardened_runs import (
@@ -94,7 +95,6 @@ from fanout_lib.review.hardened_runs import (
 from findings_lib.red_green import RED_GREEN_LABEL
 from lib.cli_help import warn
 
-# What the implementer may not change once the red commit exists, besides the red files.
 # The `file` of the finding a failed green gate becomes, which no real path can equal.
 GREEN_FILE = "(red/green gate)"
 # How often the pipeline's gates run the red nodes; `Gates` says why more than once.
@@ -270,23 +270,27 @@ def _red_file_change(
     """How the fix changed `path` beyond what `red_lock` allows, or "".
 
     A red `test_*.py` may gain tests (#4214), and what the red tests do not reach in it may
-    change (#4517). A `conftest.py` may lose what no red test requests (#4542). A red data
-    file, any other pytest config file and the `leakguard` plugin may not change at all, and
-    neither may a red file be deleted.
+    change (#4517). A `conftest.py` may lose what no red test requests (#4542). A patch
+    registry may change only lines naming a file the red commits added (#4875). No other red
+    data file, pytest config file or `leakguard` may change, and no red file may be deleted.
     """
     conftest = PurePosixPath(path).name == "conftest.py"
-    if not conftest and (path not in gate.files or not path.endswith(".py")):
+    registry = bool(gate.base) and path in red_lock.REGISTRIES and path in gate.files
+    if not (conftest or registry or (path in gate.files and path.endswith(".py"))):
         return path
     blobs = [_blob(run, worktree, rev, path) for rev in (red, "HEAD")]
     if None in blobs:
         return f"{path} {'added' if blobs[0] is None else 'deleted'}"
     red_src, head_src = blobs[0] or "", blobs[1] or ""
     tests = [f for f in gate.files if f.endswith(".py")]
-    if conftest:
+    if registry:
+        added = [f for f in gate.files if _blob(run, worktree, gate.base, f) is None]
+        problem = red_lock.forbidden_registry_change(red_src, head_src, added)
+    elif conftest:
         red_files = [_blob(run, worktree, red, f) or "" for f in tests]
         conftests = _conftests(run, worktree, red, tests)
         closure = set().union(*gate.closures.values())
-        problem = forbidden_conftest_change(
+        problem = red_lock.forbidden_conftest_change(
             red_src, head_src, red_files, conftests, closure
         )
     else:
@@ -297,7 +301,7 @@ def _red_file_change(
         closure = set().union(
             *(v for n, v in gate.closures.items() if n.startswith(f"{path}::"))
         )
-        problem = forbidden_change(
+        problem = red_lock.forbidden_change(
             base_src or "", red_src, head_src, names, conftests, closure
         )
     return f"{path} {problem}" if problem else ""
