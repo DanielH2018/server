@@ -51,6 +51,9 @@ conventions.
   carries `app: sonarr-verify`, which sonarr's fence does not admit yet: that `netpol_from`
   peer lands in its own PR before the flip. `tests/test_sonarr_verify.py` renders the renamed
   copy, runs the Job census over it, and runs the rendered script against a fixture API.
+  `notification.yaml.j2` beside it is arr-notification's seed Job, which shares the
+  directory, the ServiceAccount and the pod label; `ansible/roles/k8s/arr-notification/CLAUDE.md`
+  has its design.
 - **`verify.yml` skips its API reads under a secret stub file.** The two `uri` reads and
   the two asserts on their registers carry `when: not (homelab_secret_stubs | default(false)
   | bool)`. `scripts/renderer/shadow_diff.py stubs` writes that sentinel into the stub file.

@@ -129,6 +129,9 @@ pythonpath = [
   "ansible/roles/setup/gitops_deploy/files",
   "ansible/roles/setup/deploy_ui/files",
   "ansible/roles/k8s/monitor-bridge/files",
+  # flux_job_connect.py is the one transport of every Job script Flux runs, and
+  # arr-notification's seed imports it from here on the controller path too.
+  "ansible/roles/k8s/manifests/files",
   # `scripts` resolves the cross-directory `from lib.docs_provenance import ...` form (a PEP 420
   # namespace package — the subdirectories deliberately have no __init__.py, which would change
   # how pytest names the test modules under them). Each remaining subdirectory is listed as well
