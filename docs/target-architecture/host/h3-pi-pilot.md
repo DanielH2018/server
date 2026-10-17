@@ -66,6 +66,9 @@ holds no `pi-` line (3 before), and the three `/usr/local/bin/pi-*.sh` are gone.
 first timer run exited 0 between 22:42:59 and 22:45:11 UTC, and no monitor dropped
 ([readings](https://github.com/DanielH2018/server/pull/5348#issuecomment-6226115060)). The owed
 `optimize_pi` line was cleared with no Ansible apply.
+PR H3.9a, the host-wait module, unwired: [#5383](https://github.com/DanielH2018/server/pull/5383).
+It merged at `340f20772` and deployed nothing. Nothing calls `land_lib/host_wait.py` yet. Its
+`HOST_INPUTS` audit caught D5.3b2's soak imports reaching a host render before D5.3b2 merged.
 
 Depends on: R1
 Unblocks: H4, H5
