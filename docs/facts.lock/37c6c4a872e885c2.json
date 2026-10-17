@@ -1,0 +1,13 @@
+{
+  "checksum": "2f18ee73b533647f0eaa95647aa373480d5e64a412dd18be5cda9085a9e6062e",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "ansible/roles/k8s/sonarr/CLAUDE.md#Notable",
+  "row": {
+    "atoms": {
+      "ansible/templates/arr-deployment.yml.j2": "ec3201dd86336ad41a5b5f6946395cd3280018dbc6c5644601913a94347a57e8",
+      "ansible/tests/services/test_exportarr_sidecars.py::test_the_image_pins_stay_in_lockstep": "f3e695a6d3fd29e04faa710d3b029d1d85bac8aede4ae2e6f29dea3287ba842d"
+    },
+    "python": "3.14",
+    "verified_sha": "fd34ae8eb"
+  }
+}

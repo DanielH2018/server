@@ -1,0 +1,12 @@
+{
+  "checksum": "9c6b9a74108084f50645daec9b8141c9f2c466c1bb1c413a86ab9db73dd99d4b",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "ansible/roles/k8s/arr-notification/CLAUDE.md#Decisions worth not re-opening",
+  "row": {
+    "atoms": {
+      "scripts/diagnostics/probe_lib/arr.py": "6da7522cb9dabc1e57d5720a321635528dc34b46ccd3848494de5dcf719e6d25"
+    },
+    "python": "3.14",
+    "verified_sha": "55862020d"
+  }
+}

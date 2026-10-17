@@ -1,0 +1,14 @@
+{
+  "checksum": "2dc62d39b5245ba8ba4d91d8884230dc3ce88006a4daaae33c308e55382f2154",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "CLAUDE.md#The procedure",
+  "row": {
+    "atoms": {
+      "ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_git.py:_CI_NO_VERDICT_CONCLUSIONS": "c5f45b668f4c37fa1b5726ce80aad2b21bd09f64126a74615b4becf98b6a3114",
+      "ansible/tests/deploy/test_ci_cancelled_is_not_a_verdict.py::test_cancelled_is_declared_no_verdict": "129eb63e16f709f2d8b973017bb9a9cda2feaf17df7d0903426f540d8521b8dc",
+      "docs/landing.md": "7933f9f7ba643d82bfba99ad1fe7a11dafe6a34dbc23c588838c482d406e7e27"
+    },
+    "python": "3.14",
+    "verified_sha": "44fa8cfde"
+  }
+}

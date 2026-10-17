@@ -1,0 +1,12 @@
+{
+  "checksum": "49c57bbd86e858188b7c516ed0a6d0131f7734f91ca9892c4fa9dbeab98052ff",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "ansible/roles/setup/initial_setup/CLAUDE.md#Granular tags (run one block without the whole role)",
+  "row": {
+    "atoms": {
+      "docs/host-baseline-record.md": "b3164734e9ac148a9ebe6d63fcf7f075408648cf8c9e218a4db57ea057b3a360"
+    },
+    "python": "3.14",
+    "verified_sha": "fd34ae8eb"
+  }
+}

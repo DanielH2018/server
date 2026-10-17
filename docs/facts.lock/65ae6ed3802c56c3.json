@@ -1,0 +1,12 @@
+{
+  "checksum": "8c59de3ae684e11d29e760dec6a1d3ce4299b4b0229c8a3985b98216e1e713e9",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "ansible/roles/setup/claude_code/CLAUDE.md#The fleet bound, and why it lives on `user.slice`",
+  "row": {
+    "atoms": {
+      "docs/claude-code-rc-caps.md": "2d515326fa8d32d682265f2a3e8361c3bd241b199b3810fcec388c2b120e8245"
+    },
+    "python": "3.14",
+    "verified_sha": "fd34ae8eb"
+  }
+}

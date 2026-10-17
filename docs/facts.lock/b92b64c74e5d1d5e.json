@@ -1,0 +1,12 @@
+{
+  "checksum": "8350937ec2ba99f70f87a93598b3ee26bc8c1374dceaa65c3f6fc63c38fd5964",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "ansible/roles/setup/github_cli/CLAUDE.md#At a glance",
+  "row": {
+    "atoms": {
+      "ansible/tests/setup/test_apt_keyring_permissions.py": "a18249dc3a864f8c10d73f7bbcedcd2408955710e8a8893f8a76b5763b45ce6f"
+    },
+    "python": "3.14",
+    "verified_sha": "55862020d"
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "checksum": "85deccd0c3da50400dccf98a4bb6c3df7f3154f76f6e2e61cfce3719bfd597bf",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "ansible/roles/k8s/volume-revert/CLAUDE.md#k8s/volume-revert — put a service's volumes back to the pre-deploy snapshot",
+  "row": {
+    "atoms": {
+      "ansible/tests/longhorn/test_volume_revert.py": "8c95bfe660faaae0d3210cf3425dea803626cb734d0795c25bde93459704232c",
+      "docs/volume-revert-drill-and-sizing.md": "835672c637e2b693b04f566ca7729163ae20eec86a39dde8f0bc2a360c00c3be"
+    },
+    "python": "3.14",
+    "verified_sha": "24185bfdf"
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "checksum": "10963db02b63efd5914b508de64ac0846299a4d9c95dbdf95642995ddc435726",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "ansible/roles/k8s/janitorr/CLAUDE.md#Notable",
+  "row": {
+    "atoms": {
+      "ansible/deploy.yml": "83efaa4b3f30584c15a7040620863d596818732916afa6870b9f534bf55c78a0",
+      "ansible/tests/services/test_karakeep_backend_policies.py": "8971279ac504532dc6ea024fc91ae790c55efab08205ae978796c04c778609f6"
+    },
+    "python": "3.14",
+    "verified_sha": "55862020d"
+  }
+}

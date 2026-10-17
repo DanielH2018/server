@@ -1,0 +1,12 @@
+{
+  "checksum": "ac50117a87e3c77795a561dafbcab8e48da106d8ef298ed4a1db3cd573c46626",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "ansible/roles/k8s/crowdsec/CLAUDE.md#A crowdsec deploy races its own rollout",
+  "row": {
+    "atoms": {
+      "ansible/roles/k8s/crowdsec/tasks/main.yml": "d2fbe293f9987d6f9b8af361dc3e930757bb4534d95a6c6a47a6f96abc7526b9"
+    },
+    "python": "3.14",
+    "verified_sha": "55862020d"
+  }
+}

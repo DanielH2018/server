@@ -1,0 +1,12 @@
+{
+  "checksum": "6e52236a5d271221d1fb7cf1f4d78506418d15db0c81b6a230549f88ec4a33a8",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "ansible/roles/setup/renovate_notify/CLAUDE.md#The stuck-pending clock, and the two ways it goes inert",
+  "row": {
+    "atoms": {
+      "docs/renovate-notify-internals.md": "cb30c680666ee631c55c05028f020d1d629ba0c2f9ef028554c000bf2a46eaac"
+    },
+    "python": "3.14",
+    "verified_sha": "fd34ae8eb"
+  }
+}

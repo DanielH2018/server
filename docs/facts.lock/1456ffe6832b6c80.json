@@ -1,0 +1,13 @@
+{
+  "checksum": "f6fffb1c59813ff3a3d03b87537c9425f575f0f16579545e749606a2397a2b7c",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "ansible/roles/k8s/game-stats/CLAUDE.md#terraria-stats",
+  "row": {
+    "atoms": {
+      "ansible/inventory/group_vars/all.yml": "a9e26f83a4a9763bd4261ca4b7d94354ff85fb63301d701c683420cdfded7c0b",
+      "ansible/tests/services/test_terraria_stats_follows_the_server.py": "f7579424b0b83c0fe39e777d9d0835ea910724f289e0f8de92842d82c8745dd2"
+    },
+    "python": "3.14",
+    "verified_sha": "fd34ae8eb"
+  }
+}

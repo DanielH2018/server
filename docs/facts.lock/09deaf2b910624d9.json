@@ -1,0 +1,14 @@
+{
+  "checksum": "8240d107b7fc396992c362b283603805af52a5f5cd57da81e3cd502c1507eab9",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "ansible/roles/k8s/n8n/CLAUDE.md#At a glance",
+  "row": {
+    "atoms": {
+      "ansible/inventory/host_vars/daniel-box.yml": "3ed34cd7aaa115d84ea089e1eaef3824d4b0b6d6cf98c7f84ab8d731c368c670",
+      "ansible/post_tasks/k8s_image_drift_gate.yml": "dbb313a61e9a0afa97465573f3ade5981afb8ad7e50adf609dd13fecd258da8a",
+      "docs/target-architecture/render/r3-remove-live-reads.md": "7c6b2ff2b48b36b5a4798517ea5dc751e28fea1e2a850a5256a3207a20643c94"
+    },
+    "python": "3.14",
+    "verified_sha": "503464fe3"
+  }
+}

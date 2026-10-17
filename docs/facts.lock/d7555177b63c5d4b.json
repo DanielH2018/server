@@ -1,0 +1,13 @@
+{
+  "checksum": "e7a3a5b4768c156b31c9b9db31af019099c1cad93414d6be569f22c525fd715d",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "ansible/roles/setup/renovate_notify/CLAUDE.md#`setup/renovate_notify` — the Renovate reporting half",
+  "row": {
+    "atoms": {
+      "ansible/roles/setup/": "6f7efc309cb0d37f3fffb4e0590309e0b7f544ebc4ffb81512d51193d8aa062f",
+      "docs/renovate-notify-internals.md": "cb30c680666ee631c55c05028f020d1d629ba0c2f9ef028554c000bf2a46eaac"
+    },
+    "python": "3.14",
+    "verified_sha": "e7d218d72"
+  }
+}
