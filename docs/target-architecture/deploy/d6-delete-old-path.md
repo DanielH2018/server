@@ -2,7 +2,11 @@
 
 Status: PLANNED
 
-Depends on: [D5](d5-bulk-move.md)
+Re-sliced on 2026-10-17 at the operator's request: 17 steps became 12 PRs. *Steps, as PRs*
+maps each old step label to the PR that absorbs it.
+
+Depends on: [D5](d5-bulk-move.md). Two PRs wait on less. D6.10 needs only D1.6, and D6.11
+needs only D5.1a2 and D5's flux PR (*Steps, as PRs*).
 
 Unblocks: R4
 
@@ -1397,7 +1401,287 @@ Each deletion PR removes one coherent subject and states the census rows it remo
 - **The two-writer rule (C4).** No PR here changes ownership of a live object, so the rule has
   nothing to check. D6.3's census enforces the end state.
 
-The PRs merge in this order.
+**The re-slice.** On 2026-10-17 the operator asked to finish the migration in days, and
+approved merging D6's steps into fewer, larger PRs that agents write in parallel ahead of
+D5's end. The 17 steps, D6.0 to D6.8b, became 12 PRs, D6.10 to D6.21.
+
+- **Names.** The PRs are numbered from D6.10, so no PR name equals an old step label. The
+  rest of this plan, other slices' plans, contracts.md's register and two code comments cite
+  the old labels. Each old label resolves through the table below to the PR that absorbs it.
+- **What a PR carries.** A PR does the work of every old step it absorbs, as the collapsed
+  list below states it: the code, the tests, the docs and the pre-merge quotes. Each entry
+  below restates those steps' operator gates, checks, rollback note and share of the exit
+  criterion, and adds only what the merge changes.
+- **Written ahead.** "Yes" means an agent can write the PR on master as it stood on
+  2026-10-17 and rebase it when its predecessors land. Merging still waits on the last
+  column.
+- **Live edges.** A predecessor marked *live* must be deployed and checked on the host, not
+  only merged, as contracts.md uses the word.
+
+| PR | Old steps | Written ahead? | Waits on |
+|---|---|---|---|
+| D6.10 | D6.1b | Not yet: [#5425](https://github.com/DanielH2018/server/issues/5425) re-scopes it first | D1.6, merged |
+| D6.11 | D6.7a, D6.7c | Yes | D5.1a2, merged; D5's flux PR; the operator's break-glass key pair |
+| D6.12 | D6.0, D6.1 | Yes, rebased and re-measured at D5's end | D5, *live*; M2 Open question 1's label amendment |
+| D6.13 | D6.2a, D6.2b | Yes | D6.12, *live* |
+| D6.14 | D6.6 | Yes | D6.12, *live* |
+| D6.15 | D6.3 | Yes | D6.12 |
+| D6.16 | D6.5a | Yes | D6.12, *live*; M6's B2 |
+| D6.17 | D6.5 | Partly: the rules half waits for M6's B1 and B2 | D6.16, *live*; M6's B1 |
+| D6.18 | D6.5b, D6.4 | Yes | D6.17, *live*; D6.15 |
+| D6.19 | D6.7b | Yes | D6.12; D6.15; the C3 prune-exemption row or line |
+| D6.20 | D6.7 | Yes, except the handback count | D6.11, D6.15 and D6.19; C3's kept-set line; the operator's decision |
+| D6.21 | D6.8a, D6.8b | A draft | every other D6 PR; G5, if it has started; the operator's ADR approval |
+
+The PRs merge in this order. D6.10 and D6.11 merge whenever their own edges allow. After
+D6.12, three chains run side by side: D6.13 and D6.14, D6.16 to D6.18, and D6.15 to D6.20.
+
+1. **D6.10 — Deploy markers from kustomize-controller's log** (old D6.1b, about 80 lines).
+    - **Why alone.** It needs nothing from D5 or from another D6 PR, so it lands as soon as
+      it is written. No other step edits the dashboards' annotation queries.
+    - **Written ahead: not yet.** D5.3b3 added `observability_flux_deploy_annotation_expr`,
+      a second annotation query that reads the soak's line, after old D6.1b was planned.
+      [#5425](https://github.com/DanielH2018/server/issues/5425) asks whether the controller
+      query is a third query or replaces the soak's. That is a design question, so the
+      re-slice leaves it to #5425. Once #5425 is answered, an agent writes the PR and merges
+      it at once.
+    - **Waits on:** D1.6, which has merged. The slice edge to D5 narrows to that.
+    - **Checks.** No operator gate. Before merge, the PR body quotes one apply line and one
+      no-change line read with `probe.py loki-query`, and the marker pair with its red half.
+    - **Rollback:** *Rollback*'s D6.1b bullet.
+    - **Exit criterion:** none of the six. It closes the marker gap that D2 *Risks* records.
+2. **D6.11 — The deletion drill, with break-glass promotion** (old D6.7a and D6.7c, about
+   420 lines).
+    - **Why together.** D6.7c adds its two cases to the job that D6.7a creates. One
+      workflow, one fixture harness and one `registry:2` source serve all five cases.
+    - **Written ahead: yes.** The drill's subject is the renderer's prune stamping and its
+      Kustomization writer, which D5.1a1 and D5.1a2 fixed when they merged. If either step is
+      still inline in the CLI path, the PR factors it out first (Open question 11). The
+      drill runs on the open PR from its first push.
+    - **Waits on:**
+        - D5's flux PR. The break-glass source form edits the flux role's OCIRepository
+          template, which that PR pins. The drill half needs only D5.1a2, so the slice edge
+          to D5 narrows to these two PRs.
+        - D5 Open question 2 kept the in-cluster registry, ruled on 2026-10-16. Old D6.7c's
+          precondition holds.
+    - **Operator gates:**
+        - Before the PR, the operator generates the break-glass key pair and stores the
+          private half in the break-glass kit (**operator-only**). The PR carries only the
+          public half.
+        - In its review, the operator decides whether `flux-deletion-drill` becomes a
+          required check (**operator-only**, Open question 10).
+        - The runbook it adds is **operator-only** to run.
+    - **Before merge:** the PR's own run is the baseline under `Orphan`, because the renderer
+      writes `Orphan` until D6.20. The body quotes the three deletion cases, the revision-1
+      wait that shows all three tags Ready, the two break-glass cases, and the answer to
+      Open question 16.
+    - **Rollback:** *Rollback*'s D6.7a and D6.7c bullets. A revert leaves nothing live. While
+      the cluster follows the in-cluster registry, revert nothing until the way back has
+      completed. While D6.20 is live, revert D6.20 first.
+    - **Exit criterion:** none directly. D6.20's pre-merge proof runs this job.
+3. **D6.12 — Preconditions, and the tick's k8s arms** (old D6.0 and D6.1: about 2,000 lines
+   removed, about 60 moved into `deploy_handlers.py`, about 80 added for `land.sh`'s list,
+   and about 19 test files).
+    - **Why together.** Old D6.0 has no diff. Its four checks become this PR's pre-merge
+      gate, and old D6.1 already repeats the ledger check after its first tick.
+    - **Why apart from D6.13 and D6.14.** The tick that fast-forwards this PR runs the old
+      deployer. So this PR carries no deploy-plane path, and D6.13's `daniel-box.yml` keys
+      ride a later tick. That old code is also the ledger's last writer, so D6.14 deletes the
+      readers and the last `clear-owed` path only after that tick has run.
+    - **Written ahead: yes.** The deployer's k8s arms, D2's drops, D3.4's interim rule and
+      D2.3's `land-wait` are all in the tree. The writer rebases at D5's end and re-measures
+      each count.
+    - **Waits on:** D5, *live*. Old D6.0's checks read it: the deploy-tag label amendment
+      (M2 Open question 1), a footprint in `prod`'s `digests.json` for every deploy tag and
+      every `SHARED_KINDS` member, a clean `probe.py gitops-state`, and `render_records`
+      disarmed by D5's disarm PR. Through D5's uptime-kuma edge, this PR also waits on M6's
+      C-2b.
+    - **Operator gates:** a hold or a ledger line that a precondition or the post-tick check
+      finds is cleared with `gitops_state.py clear-hold` or `clear-owed`
+      (**operator-only**). On a crash or a partial apply, the operator re-applies the
+      reverted deployer by hand (*Rollback*).
+    - **Before merge:** old D6.0's four checks, and old D6.1's quotes. Those are the import
+      grep with its symbol half, the import of a laid-out `files/`, `land.py --help`,
+      `deploy_tags.py changed origin/master`, `services_from_changed_paths` over the PR's
+      own paths with `broad_deploy=False`, and the red runs of the two tick tests and of the
+      first three landing tests.
+    - **After merge:** the session watches three ticks, reads the `gitops-deploy` stamp
+      fragment, and repeats the ledger check. D6.13 opens only once that check is clean, as
+      old D6.2a did, and D6.14 and D6.16 wait on the same check.
+    - **Rollback:** *Rollback*'s D6.1 bullets, and its bullet on the render-diff gates'
+      rename.
+    - **Exit criterion:** part of exit 1 (the four modules and three `ChangeSet` fields),
+      exit 2's two pages, and part of exit 4 (the two sentences of root `CLAUDE.md`).
+4. **D6.13 — The `k8s_autodeploy` key: the deployer's denylist, and the key's wording** (old
+   D6.2a and D6.2b, about 670 changed lines, of which D6.2b's 190 are one-line comment
+   edits).
+    - **Why together.** D6.2a removes the deployer's reading of the key. That makes the
+      "read by gitops_deploy" comment in 62 role defaults false, and D6.2b rewrites it. One
+      PR keeps the comment true at every commit. The old split existed only to keep the
+      deletion diff readable.
+    - **Written ahead: yes.** The plugin, the lander and the 62 comments are in the tree.
+      D6.2b's generator edits leave every glance block unchanged only at D5's end. So the
+      writer re-runs the `regen-role-glance` hook and the catalog at rebase, and the diff then
+      changes no block.
+    - **Waits on:** D6.12, *live*: three watched ticks and a clean ledger check. The
+      `daniel-box.yml` keys take the deploy-plane route, which is a no-op only under D6.12's
+      code. D6.13 and D6.14 merge in either order. The second rebases, because both
+      regenerate the monitor-bridge copy of `gitops_markers.py`.
+    - **Operator gates:** none of its own. On a crash, the operator re-applies the deployer
+      by hand, as for every self-applied deployer PR.
+    - **After merge:** in the primary checkout, `k8s_autodeploy_counts.py --denylist` prints
+      a non-empty list. After the next agent run that reaches a Renovate PR, each verdict is a
+      VERDICT line or a refusal that is not about the denylist.
+    - **Rollback:** *Rollback*'s bullets on the self-applied deployer PRs and on D6.2a's
+      lander change, including its hand apply of `renovate_agent`.
+    - **Exit criterion:** exit 5's plugin path and denylist symbols.
+5. **D6.14 — The k8s ledger readers** (old D6.6, about 350 lines removed).
+    - **Why apart.** Size: with D6.13 it would pass 1,000 changed lines. It shares D6.13's
+      predecessor, and the two merge in either order.
+    - **Written ahead: yes.** Every reader it deletes is in the tree.
+    - **Waits on:** D6.12, *live*. The tick that ran the old code, the last writer, has run,
+      and D6.12's ledger check is clean.
+    - **Operator gates:** just before merge, the session repeats the ledger check, and the
+      operator clears any `k8s_deferred` or `k8s_unapplied` line with `gitops_state.py
+      clear-owed <class> <subject>` (**operator-only**). On a crash, the operator re-applies
+      the deployer by hand.
+    - **Rollback:** *Rollback*'s bullets on the self-applied deployer PRs and on D6.6.
+    - **Exit criterion:** exit 5, for the two class names and their readers.
+6. **D6.15 — The k8s arms of `land.sh` and `deploy.sh`** (old D6.3, about 700 lines
+   removed).
+    - **Why apart from D6.18.** D6.18 must follow D6.17's hand apply. Merged with it, this
+      PR's census row, which D6.19 and D6.20 rely on, would wait behind the drift chain from
+      D6.16 to D6.18.
+    - **Written ahead: yes.** The census row's floor is the count of k8s entries that D5
+      ends with, so the writer fills that number in at rebase.
+    - **Waits on:** D6.12, merged. It builds on D6.12's changed-set wiring.
+    - **Operator gates:** in its review, the operator decides whether `deploy_ui` retires with
+      the deployer (**operator-only**, Open question 1).
+    - **Before merge:** the `k8s_remediation` symbol grep, `land.py --help`,
+      `deploy_tags.py changed origin/master`, the fallback test's red run, and D6.12's four
+      landing tests.
+    - **After merge:** `deploy.sh --tags bento-pdf` exits 5 and names `promote`, and the first
+      settled landing of a flux-owned tag writes a `source=promote` line.
+    - **Rollback:** *Rollback*'s D6.3 bullet. Its revert also allows a handback again. Once
+      D6.18 has merged, revert D6.18 first.
+    - **Exit criterion:** exit 1's `deploy.sh`, `land.sh` and census halves, and part of
+      exit 4 (the exit-3 bullet of *When to wait*).
+7. **D6.16 — Arm the setup-drift reader on daniel-box** (old D6.5a, about 40 lines).
+    - **Why apart from D6.17.** D6.17's `NotReporting` arm for the box fires unless the box
+      has already written a sample, and the timer runs once a day. So this PR deploys, and
+      the box writes its first sample, before D6.17 opens.
+    - **Written ahead: yes.** It edits `setup_drift_check_hosts` and a test. The writer
+      rebases after M6's B2, which makes setup drift a textfile check and retires its tile.
+    - **Waits on:** D6.12, *live*. Under the old deployer, the tick applies `deploy.yml` for
+      a `group_vars/all.yml` path, and under D6.12's code it applies nothing. Also M6's B2.
+    - **Operator gates:** after the merge tick has fast-forwarded, the session runs the
+      `--tags setup_drift` apply on daniel-box under the tree lock, **operator-attended**.
+    - **After merge:** both hosts' setup-drift timers are active, and
+      `homelab_check_success{check="setup-drift-check"}` reads 1 for each `origin` after the
+      box's first scheduled run. That reading is D6.17's gate.
+    - **Rollback:** *Rollback*'s D6.5a bullet. Revert it only while D6.17 is unmerged, or
+      after reverting D6.17.
+    - **Exit criterion:** exit 2's setup-drift reading for daniel-box.
+8. **D6.17 — Disarm the drift checks** (old D6.5, about 200 lines).
+    - **Why apart from D6.18.** The release-staleness cron runs `probe.py releases` from the
+      primary checkout. This PR's hand apply removes the cron, and only then may D6.18
+      delete `releases.py`.
+    - **Written ahead: partly.** The absent tasks and the tag edits in
+      `tasks/health-crons.yml` can be written ahead. The rules half deletes M6's B1 rules for
+      the three checks and copies B2's setup-drift rules for the box, so it waits until B1
+      and B2 are in the tree.
+    - **Waits on:** D6.16, *live*: the box's setup-drift series reads 1. Also M6's B1.
+    - **Before merge:** the push-token grep at the base prints nothing, and
+      `narrow_setup.py k3s` exits 0 with the six tags.
+    - **Operator gates:** after the tick, the session runs the six-tag `k3s-bringup.yml`
+      apply that `probe.py gitops-state` prints, **operator-attended**. It then runs
+      `gitops_state.py clear-owed manual_plane k3s --applied <tags>`, which must print
+      `cleared k3s`.
+    - **After merge:** the box's setup-drift check still reads 1, and the box's new rule arm
+      does not fire.
+    - **Rollback:** *Rollback*'s D6.5 bullet. While D6.18 is unmerged, this PR reverts alone.
+    - **Exit criterion:** exit 2's setup-drift half, through the box's rule arm.
+9. **D6.18 — Delete the drift checks' code, the `releases` family, and reach and
+   narrowing** (old D6.5b and D6.4, about 4,200 lines removed).
+    - **Why together.** `releases.py` imports `narrow_lib/broad.py`, so old D6.4 had to merge
+      after old D6.5b. In one PR the two files go in one commit, and the edge disappears.
+      Neither step waits on a live result of the other. Almost all of the diff deletes whole
+      files, and the import grep checks those.
+    - **Written ahead: yes.** Every file it deletes is in the tree.
+    - **Waits on:** D6.17, *live*: its hand apply and its clear. Also D6.15, merged, which
+      removed `k8s_remediation`'s last two callers and the `shared_role_callers` import.
+    - **Before merge:** `probe.py gitops-state` shows no k3s `manual_plane` line, and
+      `narrow_setup.py k3s` exits 1 with `cannot narrow k3s`. The body quotes the import
+      grep, D6.12's and D6.15's landing tests, the routing test's red run, `land.py --help`
+      and `deploy_tags.py changed origin/master`.
+    - **Operator gates:** old D6.5b's whole-role procedure, all of it
+      **operator-attended**. The session stops and hands the line to the operator if the
+      fast-forwarded range holds another commit. Otherwise it applies the tags that
+      `tasks/health-crons.yml` declares at the head, checks the state D6.17's apply made, and
+      clears the line bare. It never runs `--tags k3s`. If the self-applied deployer half
+      crashes, the operator re-applies the deployer by hand.
+    - **After merge:** exit 1's and exit 5's greps print 0. The first settled landing of a
+      direct role PR, and of a broad PR, each write a marker with a non-empty `services=`
+      list.
+    - **Rollback:** revert this PR before D6.15, because a revert of D6.15 imports what this
+      PR deletes. To restore the drift units, revert this PR before D6.17. The revert lands a
+      whole-role line, which the session clears by old D6.5b's procedure.
+    - **Exit criterion:** exit 1's grep, exit 5's deletion list, and the edit to failure
+      class 5's row.
+10. **D6.19 — The guards the default policy needs** (old D6.7b, about 200 lines).
+    - **Why apart from D6.20.** The operator decides whether D6.20 merges. These guards are
+      harmless under `Orphan`, so they land either way, and they are live before any
+      deletion can happen.
+    - **Written ahead: yes,** against `cross_plane_order.py`, then rebased onto D6.12's
+      rename to `render_diff_gates.py`.
+    - **Waits on:** D6.15, merged. Its census row refuses a handback, so removing the two
+      handback exemptions is harmless. Also D6.12's rename.
+    - **Contract gate:** contracts.md's register holds Open question 12's request, *Wider
+      prune exemptions*, with the gate "before D6.7b merges". With the row alone, the PR
+      ships the fallback: the tag rule refuses to remove a tag whose render at `prod` holds a
+      PersistentVolume. If C3's line is amended by then, the PR ships the marker test
+      instead. The body quotes the line.
+    - **Rollback:** *Rollback*'s D6.7b bullet. Revert D6.20 first.
+    - **Exit criterion:** exit 6's bound on `promote.py` covers its tag rule.
+11. **D6.20 — The deletion policy** (old D6.7, about 100 lines).
+    - **Why alone.** It is the one switch a revert cannot undo: a tag removed while it is
+      live loses its objects for good.
+    - **Written ahead: yes.** The PR body's count of handbacks, retirements and renames from
+      D2 to D5 is read at merge.
+    - **Waits on:** D6.11, D6.15 and D6.19, merged.
+    - **Contract gate:** C3's *Deletion policy* line names the kept set. The register row
+      alone does not satisfy the gate (Open question 7).
+    - **Operator gates:** the operator writes the decision in the PR thread after reading the
+      count, and the body quotes it (**operator-only**). The executing session's brief says
+      not to merge until then. Without the decision, D6 ends at `Orphan`.
+    - **Before merge:** a `flux-deletion-drill` run on the PR that printed all three cases,
+      not `skipped`.
+    - **Rollback:** *Rollback*'s D6.7 bullet. A revert restores `Orphan` and brings back no
+      object already deleted.
+    - **Exit criterion:** none of the six. It ends the handback and the two-step retirement.
+12. **D6.21 — The root docs, the archive and the ADR** (old D6.8a and D6.8b, about 550
+    lines, most of them moved).
+    - **Why together.** Both describe the finished path, for exits 3 and 4. R4 waits on all
+      of D6, so the ADR approval that also gates the docs rewrite delays nothing downstream.
+    - **Written ahead: a draft.** ADR-0020 exists as `Proposed`, from D1, so this PR
+      completes and accepts it rather than writing a second. Its *Consequences* come from
+      what D5 paid, and root `CLAUDE.md` changes under D6.12, D6.15 and G5. So the writer
+      finishes both at the end.
+    - **Waits on:** every other D6 PR, with D6.20 or the operator's ruling that D6 ends at
+      `Orphan`. Also G5, if G5 has started.
+    - **Operator gates:** approving the ADR (**operator-only**).
+    - **Before merge:** `fact_status.py verify` for each edited section,
+      `test_adr_links.py`, `mkdocs build --strict`, and exit 6's two counts.
+    - **Rollback:** *Rollback*'s D6.8b bullet. An accepted ADR is never rewritten.
+    - **Exit criterion:** exits 3, 4 and 6.
+
+Open question 2, the amendments to ADR-0011, ADR-0012 and ADR-0017, is **operator-only** and
+belongs to no PR.
+
+<details markdown="1">
+<summary>The 17 steps before the re-slice, D6.0 to D6.8b</summary>
+
+The steps merged in this order.
 
 1. **D6.0 — Preconditions** (no code). The executing session runs four checks and quotes
    each.
@@ -2096,6 +2380,8 @@ The PRs merge in this order.
     - Write or accept the ADR, set ADR-0010's status, and add both rows to
       `docs/adr/index.md` and the nav.
     - Approving the ADR is **operator-only**, and only this PR waits on it.
+
+</details>
 
 ## Verification
 
