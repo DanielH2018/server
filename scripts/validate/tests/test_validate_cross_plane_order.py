@@ -14,6 +14,7 @@ from pathlib import Path
 
 import pytest
 
+from deploy_tools.object_loss import PRUNE_KEY, prune_disabled
 from validate import cross_plane_order as gate
 from toposort import build_k8s_dep_map
 
@@ -375,9 +376,8 @@ def test_the_snapshot_names_objects_as_decide_does(head_snapshot):
 
 def test_a_prune_disabled_label_or_annotation_is_read():
     for key in ("labels", "annotations"):
-        doc = {"metadata": {key: {gate.PRUNE_KEY: "disabled"}}}
-        assert gate._prune_disabled(doc)
-    assert not gate._prune_disabled({"metadata": {"labels": {gate.PRUNE_KEY: "x"}}})
+        assert prune_disabled({"metadata": {key: {PRUNE_KEY: "disabled"}}})
+    assert not prune_disabled({"metadata": {"labels": {PRUNE_KEY: "x"}}})
 
 
 def _digests(own: str, suspended: bool) -> dict:
