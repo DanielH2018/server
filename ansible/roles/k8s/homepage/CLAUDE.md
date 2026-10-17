@@ -37,9 +37,11 @@ daniel-box since E3 (2026-08-12). See repo-root `CLAUDE.md` for shared conventio
   the `homelab-cluster-vars` Secret, which it decrypts from
   `ansible/vars/cluster-vars.sops.env`. The Kustomization depends on `cluster-vars`, so a
   rotated value is live before homepage reconciles. The renderer stamps a restart checksum on
-  the Deployment, so a changed value or a config edit rolls the pod. Rotating one of those
-  keys is operator-only at the source: `sops set`, then `cluster_vars.py write`, committed
-  together. `secret_rotation.py consumers <key>` names every role that reads it.
+  the Deployment, so a changed value or a config edit rolls the pod. A rotation of one of
+  those keys reaches homepage only through `cluster_vars.py write`. The operator runs it after
+  a hand rotation, and the rotation cron runs it after it rotates an `auto`-tier key; either
+  way the new value and the cluster file land in one commit. `secret_rotation.py consumers
+  <key>` names every role that reads it.
 
 ## Where the config lives
 All of it renders into one Secret (`config-secret.yaml.j2`), which mounts read-only:
