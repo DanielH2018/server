@@ -28,7 +28,9 @@ renovate_agent_branch: worktree-renovate-auto
 
 # PRs per tick. The ceiling exists because the wall-clock budget below has to cover every
 # landing the session starts: each one is a CI wait plus a tick plus a deploy plus a health
-# gate. Three fits; the rest wait for tomorrow's tick.
+# gate. Three fits when Ansible deploys them. A landing of a tag Flux applies waits on the soak
+# and can use most of the budget alone, so the wrapper's timeout may stop the run before the
+# third; the rest wait for tomorrow's tick.
 renovate_agent_max_prs: 3
 
 # `opus` rather than a pinned id so a model rename does not silently strand the timer.

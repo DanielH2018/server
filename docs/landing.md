@@ -371,11 +371,11 @@ Instead it reads the cluster every 30 seconds:
   A lander that is killed at a fixed time sets `LAND_DEADLINE`, the seconds after `land.sh`
   starts by which the landing must print its verdict. The wait then gives up 10 minutes
   before that deadline, whatever is in flight, and the landing still ends `deferred` with a
-  ledger line (#5199). On such a lander the rule above holds only while that cap is longer
-  than the soak's wait. `claude-land@.service` and `renovate-agent-land@.service` each set
-  10800. That leaves the wait room for the merge and master CI budgets, `verify`'s wait on
-  the rendered soak, and the `promote` workflow's `render` and `publish` jobs, with headroom of about three
-  queueing rounds.
+  ledger line (#5199). So on a lander unit the wait can give up before twice `verify`'s wait.
+  `claude-land@.service` and `renovate-agent-land@.service` each set 10800. After the merge
+  and master CI budgets, that leaves the wait room for `verify`'s wait on the rendered soak,
+  once, and the `promote` workflow's `render` and `publish` jobs. About three queueing rounds
+  of headroom remain.
   `ansible/tests/setup/test_lander_deadlines_cover_the_soak.py` renders the published bundle
   and fails once a newly published tag outgrows that headroom (#5427).
 

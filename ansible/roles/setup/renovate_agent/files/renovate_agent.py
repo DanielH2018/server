@@ -184,7 +184,7 @@ def run_session(cfg: dict[str, str], cwd: str, log_path: str) -> tuple[str, int,
         "--max-budget-usd",
         cfg.get("BUDGET_USD", "25"),
     ]
-    timeout = int(cfg.get("RUN_TIMEOUT_S", "5400"))
+    timeout = int(cfg.get("RUN_TIMEOUT_S", "14400"))
     log(f"starting session (timeout {timeout}s, budget ${cfg.get('BUDGET_USD', '25')})")
     try:
         p = subprocess.run(
