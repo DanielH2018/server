@@ -134,9 +134,8 @@ no fact. Ansible stays the only writer to the cluster.
 - **Task-computed inputs reach templates through defaults as well as directly.**
   `k8s_built_image_tags` appears in no `templates/` file. Nine roles' `defaults/main.yml` read
   it 11 times (`git grep -c k8s_built_image_tags`), and the templates read the `*_k8s_image`
-  names those defaults define. `game-stats/tasks/stage.yml` sets `game_stats_lib_checksum`, and
-  a `set_fact` folds it into the two `game_stats_*_script_checksum` facts that the templates
-  read. pi-peer-backup's read has the same shape: a `register`, then a `set_fact`, then the
+  names those defaults define. game-stats read two script checksums this way, set by a chain
+  of `set_fact` tasks, until #5444 rendered its script ConfigMaps. pi-peer-backup's read has the same shape: a `register`, then a `set_fact`, then the
   template.
 - **The derivable inputs read only the tree.** The content tags, the four script checksums,
   `kuma_declarations` and `janitorr_dry_run` read no live state. R1 computes them.
