@@ -1,0 +1,13 @@
+{
+  "checksum": "83ffa743e9a30022574c8a1598bef6a300cac4c2667036bfbee93114474fdba1",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "ansible/roles/k8s/docs/CLAUDE.md#The node pin is load-bearing",
+  "row": {
+    "atoms": {
+      "ansible/roles/setup/k8s_host_files/tasks/docs.yml": "1ce5b7a74f1a8f449526e37c2d136f956e6c80f92c91fb62cadc1dfab7027ce1",
+      "ansible/tests/setup/test_k8s_host_files_pairs.py": "d206ec0dc4cd0a817a9aef3f3a3edef2b10c565cf997ce16cc4bfbd4db3bafec"
+    },
+    "python": "3.14",
+    "verified_sha": "dd8cf4ce0"
+  }
+}

@@ -1,18 +1,7 @@
 ---
-# ── host side: the tree the pod mounts ─────────────────────────────────────────────────
-# The hostPath volume is `type: Directory`, so this must exist before the Deployment starts.
-# A missing path leaves the pod in ContainerCreating rather than serving an empty site.
-- name: Ensure the built docs site directory exists
-  tags: [config]
-  ansible.builtin.file:
-    path: "{{ docs_host_site_dir }}"
-    state: directory
-    owner: "{{ sys_user }}"
-    group: "{{ sys_user }}"
-    mode: "0755"
-  when: not k8s_dry_run | bool
-
-# ── cluster side ───────────────────────────────────────────────────────────────────────
+# The site directory the pod mounts is a host write, so roles/setup/k8s_host_files/tasks/docs.yml
+# creates it through the setup plane (D5's conversion PR for docs). A Flux-owned role runs no
+# task, so a host write left here would stop at the flip.
 - name: Deploy the docs site to the cluster
   ansible.builtin.include_role:
     name: k8s/manifests
