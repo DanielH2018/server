@@ -1,0 +1,14 @@
+{
+  "checksum": "4163715bbc2ca25b5a7e09ccc91ceea764c5e1f750a9d63ecb98c2e308a27bd6",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "ansible/roles/setup/claude_code/CLAUDE.md#The artifacts node's two crons",
+  "row": {
+    "atoms": {
+      "ansible/roles/k8s/artifacts/CLAUDE.md": "8bb09d7140cfc17a776d5ea8e024d807e2d1b93ef4dd53f4a7d08177e81a7482",
+      "ansible/tests/setup/test_claude_code_artifacts_node_crons.py": "6b00542c60402e663b0483cfc6f37a4650e61a91ae949b14f0ea4e1c85581a65",
+      "scripts/secrets_mgmt/consumers.py": "12023fbcd23ef1432efeead24a0ded8c04bc3d4f0973ba7bf7a7394288800720"
+    },
+    "python": "3.14",
+    "verified_sha": "3b11cce69"
+  }
+}

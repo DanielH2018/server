@@ -1,0 +1,87 @@
+---
+# The two Claude crons that run only on the artifacts node, claude_code_artifacts_node. H2.7
+# moved them here from the k8s artifacts and observability roles. The cron file names, the cron
+# `name:`s and the script paths are the ones those roles installed, so on daniel-box the move
+# rewrites the same /etc/cron.d files with the same lines and leaves nothing behind.
+# ansible/tests/setup/test_claude_code_artifacts_node_crons.py pins all three.
+#
+# main.yml imports this file under `when: inventory_hostname == claude_code_artifacts_node`, so
+# on daniel-server every task here skips. daniel-server never held either cron, so the skip
+# leaves nothing behind there either.
+
+# 0700 owned by sys_user: the script embeds a live Kuma push token, and the cron below runs as
+# sys_user, so root:root 0700 would lock out its own caller.
+- name: Install the peer artifact sync script
+  tags: [claude_code]
+  ansible.builtin.template:
+    src: sync-artifacts.sh.j2
+    dest: /usr/local/bin/sync-artifacts.sh
+    owner: "{{ sys_user }}"
+    group: "{{ sys_user }}"
+    mode: "0700"
+  become: true
+  no_log: true  # renders the Kuma push token
+
+# Runs on the artifacts node because only it can open the connection: `daniel-box` does not
+# resolve from daniel-server, and a peer-side job would need an ssh key inside the cluster.
+# It pulls the peer's artifacts and pushes the star list back over the same connection.
+# Cron rather than a sidecar for the same reason — the credential stays on the host and
+# never enters a pod.
+- name: Schedule the peer artifact sync
+  tags: [claude_code]
+  ansible.builtin.cron:
+    name: "Sync peer Claude artifacts"
+    minute: "{{ claude_code_artifacts_sync_minute }}"
+    user: "{{ sys_user }}"
+    job: "/usr/local/bin/sync-artifacts.sh"
+    cron_file: sync-artifacts
+  become: true
+
+# Runs as sys_user, not root: all it does is open a TCP connection to the node's own loopback
+# and push the outcome, so it needs no privilege at all. That is the one probe no in-cluster
+# pod can run — the template's own DECIDED marker has why.
+#
+# DECIDED: the heartbeat keeps the name `claude-otel-health` though the k8s role was renamed to
+# `observability` on 2026-10-01 (#2911) and the cron moved here in H2.7. That string is a join
+# key in four places: the AutoKuma monitor id `claude-otel-health` in
+# roles/k8s/uptime-kuma/templates/static-monitors.yaml.j2, the group rule
+# `^claude-otel-health$` in that role's defaults, the syslog tag query B of the Alert History
+# board reads, and `probe.py alerts`' parser. Renaming it costs the Kuma monitor's history —
+# AutoKuma runs ON_DELETE=delete, so a changed id is a delete plus a create — and orphans
+# every `claude-otel-health` line already in Loki's 31-day window. A changed cron `name:` or
+# `cron_file:` would also leave the old crontab entry behind on daniel-box.
+- name: Deploy the telemetry-stack heartbeat
+  tags: [claude_code]
+  ansible.builtin.template:
+    src: telemetry-health.sh.j2
+    dest: /usr/local/bin/claude-otel-health.sh
+    # DECIDED: 0700 owned by sys_user, not 0755 — embeds a live Kuma push token. Owner is
+    # sys_user because the cron below runs as sys_user; root:root 0700 would lock out its own
+    # caller. See the same marker in roles/k8s/janitorr/tasks/main.yml.
+    mode: "0700"
+    owner: "{{ sys_user }}"
+    group: "{{ sys_user }}"
+  become: true
+  no_log: true  # renders the Kuma push token
+
+- name: Schedule the telemetry-stack heartbeat
+  tags: [claude_code]
+  ansible.builtin.cron:
+    name: "Claude Code telemetry health"
+    minute: "{{ claude_code_telemetry_health_minute }}"
+    user: "{{ sys_user }}"
+    job: "/usr/local/bin/claude-otel-health.sh"
+    cron_file: claude-otel-health
+  become: true
+
+# Its own group rather than a line in main.yml's `claude-code` stamp: that one is written on
+# every host the role runs on, and a fragment must exist only where its templates rendered
+# (common/tasks/stamp_render.yml, PER-HOST BY CONSTRUCTION).
+- name: Stamp the rendered artifacts-node cron scripts
+  tags: [claude_code]
+  ansible.builtin.import_tasks: "{{ role_path }}/../common/tasks/stamp_render.yml"
+  vars:
+    stamp_render_name: claude-code-node-crons
+    stamp_render_templates:
+      - ansible/roles/setup/claude_code/templates/sync-artifacts.sh.j2
+      - ansible/roles/setup/claude_code/templates/telemetry-health.sh.j2

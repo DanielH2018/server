@@ -204,7 +204,7 @@ def main(argv: Sequence[str] = ()) -> int:
     parsed_templates: list[tuple[str, list]] = []
     for role in roles:
         # Not every .j2 in a k8s role's templates/ is a manifest — a role may also ship a
-        # helper script (observability's telemetry-health.sh.j2) or a Dockerfile for
+        # helper script (janitorr's janitorr-health.sh.j2) or a Dockerfile for
         # image-builder (homelab-mcp). Shell is rendered and linted by
         # validate/shell_templates.py; a Dockerfile is consumed by buildctl. Parsing
         # either here reports a comment line as malformed YAML.

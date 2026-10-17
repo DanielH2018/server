@@ -39,37 +39,6 @@
   become: true
   when: not k8s_dry_run | bool
 
-- name: Install the peer artifact sync script
-  tags: [config]
-  ansible.builtin.template:
-    src: sync-artifacts.sh.j2
-    dest: /usr/local/bin/sync-artifacts.sh
-    # 0700 owned by sys_user, the same DECIDED as roles/k8s/observability/tasks/main.yml: the
-    # script embeds a live Kuma push token, and the cron below runs as sys_user, so
-    # root:root 0700 would lock out its own caller.
-    owner: "{{ sys_user }}"
-    group: "{{ sys_user }}"
-    mode: "0700"
-  become: true
-  no_log: true  # renders the Kuma push token
-  when: not k8s_dry_run | bool
-
-# Runs on daniel-box because only daniel-box can open the connection: `daniel-box` does not
-# resolve from daniel-server, and a peer-side job would need an ssh key inside the cluster.
-# It pulls the peer's artifacts and pushes the star list back over the same connection.
-# Cron rather than a sidecar for the same reason — the credential stays on the host and
-# never enters a pod.
-- name: Schedule the peer artifact sync
-  tags: [cron]
-  ansible.builtin.cron:
-    name: "Sync peer Claude artifacts"
-    minute: "{{ artifacts_sync_minute }}"
-    user: "{{ sys_user }}"
-    job: "/usr/local/bin/sync-artifacts.sh"
-    cron_file: sync-artifacts
-  become: true
-  when: not k8s_dry_run | bool
-
 # ── cluster side ───────────────────────────────────────────────────────────────────────
 - name: Deploy the artifacts browser to the cluster
   ansible.builtin.include_role:

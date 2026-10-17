@@ -29,14 +29,14 @@ from lib import yaml_fast
 from _helpers import ROLES, load_defaults
 from _shell_render import render_shell_script, rendered_shell_text
 
-ARTIFACTS = ROLES / "k8s" / "artifacts"
-TEMPLATE = ("k8s", "artifacts", "sync-artifacts.sh.j2")
+CLAUDE_CODE = ROLES / "setup" / "claude_code"
+TEMPLATE = ("setup", "claude_code", "sync-artifacts.sh.j2")
 
-DEFAULTS = load_defaults(ARTIFACTS)
-THRESHOLD = DEFAULTS["artifacts_sync_alert_after_failures"]
-PEER = DEFAULTS["artifacts_peer_sources"][0]["name"]
-PEER_SSH = DEFAULTS["artifacts_peer_sources"][0]["ssh_target"]
-PEER_STARS = DEFAULTS["artifacts_peer_sources"][0]["stars_path"]
+DEFAULTS = load_defaults(CLAUDE_CODE)
+THRESHOLD = DEFAULTS["claude_code_artifacts_sync_alert_after_failures"]
+PEER = DEFAULTS["claude_code_artifacts_peer_sources"][0]["name"]
+PEER_SSH = DEFAULTS["claude_code_artifacts_peer_sources"][0]["ssh_target"]
+PEER_STARS = DEFAULTS["claude_code_artifacts_peer_sources"][0]["stars_path"]
 
 # Every `rsync` call is recorded. It fails when the stub file says `fail`, and only the star
 # push fails when it says `push-fail`, so one rendered script drives every path.
@@ -82,8 +82,8 @@ def _runner(tmp_path: Path) -> _Runner:
         render_shell_script(
             *TEMPLATE,
             overrides={
-                "artifacts_peer_dir": str(tmp_path / "peer"),
-                "artifacts_stars_file": str(stars),
+                "claude_code_artifacts_peer_dir": str(tmp_path / "peer"),
+                "claude_code_artifacts_stars_file": str(stars),
             },
         )
     )
@@ -228,10 +228,12 @@ def test_the_ssh_transport_drops_inherited_local_forwards():
 
 def test_the_cron_runs_the_script_this_suite_renders():
     """Non-vacuity: the suite is pointless if the installed cron runs something else."""
-    tasks = yaml_fast.safe_load((ARTIFACTS / "tasks" / "main.yml").read_text())
-    jobs = [
-        task["ansible.builtin.cron"]["job"]
+    tasks = yaml_fast.safe_load((CLAUDE_CODE / "tasks" / "node_crons.yml").read_text())
+    jobs = {
+        task["ansible.builtin.cron"]["name"]: task["ansible.builtin.cron"]["job"]
         for task in tasks
         if isinstance(task.get("ansible.builtin.cron"), dict)
-    ]
-    assert jobs == ["/usr/local/bin/sync-artifacts.sh"], jobs
+    }
+    assert jobs["Sync peer Claude artifacts"] == "/usr/local/bin/sync-artifacts.sh", (
+        jobs
+    )

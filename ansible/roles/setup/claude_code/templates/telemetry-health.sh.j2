@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Claude Code telemetry OTLP-door heartbeat — managed by Ansible (k8s/observability role); edits overwritten.
+# Claude Code telemetry OTLP-door heartbeat — managed by Ansible (setup/claude_code role, moved
+# from k8s/observability by H2.7); edits overwritten.
 #
 # ONE check: is the ingest door open? This is the property no k8s object reports and no
 # in-cluster pod can test. The OTLP receiver is a `hostPort` DNAT installed by the CNI portmap
@@ -7,14 +8,15 @@
 # and Ready while Claude Code, a HOST process rather than a container, silently fails to export.
 #
 # DECIDED: this cron survives the 2026-10-01 fold into monitor-bridge (#3094) because the door
-# is pinned to the node's LOOPBACK — `observability_otlp_host_ip` is 127.0.0.1, which this role's
-# own "Fail if the OTLP receiver is not pinned to loopback" task asserts against the live
-# collector, because content logging ships prompts verbatim. A pod's 127.0.0.1 is its own
-# loopback, so monitor-bridge cannot reach this address from inside the cluster; the only route
-# that would is `hostNetwork: true` on monitor-bridge, which re-addresses every NetworkPolicy
-# that admits it by pod selector, on the one workload that cannot page about its own breakage.
+# is pinned to the node's LOOPBACK — `observability_otlp_host_ip` is 127.0.0.1, which the
+# observability role's "Fail if the OTLP receiver is not pinned to loopback" task asserts
+# against the live collector, because content logging ships prompts verbatim. A pod's
+# 127.0.0.1 is its own loopback, so monitor-bridge cannot reach this address from inside the
+# cluster; the only route that would is `hostNetwork: true` on monitor-bridge, which
+# re-addresses every NetworkPolicy that admits it by pod selector, on the one workload that
+# cannot page about its own breakage.
 # The substitute that needs no host — querying the receiver's `otelcol_receiver_accepted_*`
-# throughput instead — is refused by this role's CLAUDE.md "The trap: an idle stack is
+# throughput instead — is refused by observability's CLAUDE.md "The trap: an idle stack is
 # indistinguishable from a broken one": the stack has run 47h with nothing wrong and nothing
 # flowing, so a throughput query reads the same for a quiet host as for a dead door.
 #
@@ -29,8 +31,10 @@
 #
 # Usage: telemetry-health.sh (no arguments)
 # Runs from the telemetry-health cron on daniel-box, every 10 minutes by default
-# (observability_health_cron_minute). It probes the OTLP receiver on the node's loopback, reads
-# /usr/local/lib/kuma-push-lib.sh, and pushes the verdict to the telemetry Kuma push monitor.
+# (claude_code_telemetry_health_minute). It probes the OTLP receiver on the node's loopback,
+# reads /usr/local/lib/kuma-push-lib.sh, and pushes the verdict to the telemetry Kuma push
+# monitor. claude_code_otlp_host_ip and claude_code_otlp_port are held equal to observability's
+# pair by ansible/tests/setup/test_claude_code_artifacts_node_crons.py.
 set -uo pipefail
 
 for arg in "$@"; do
@@ -51,12 +55,12 @@ KUMA_HOST="uptime-kuma.local.{{ domain }}"
 KUMA_RESOLVE_IP="{{ k3s_metallb_ingress_vip }}"
 PUSH_URL="https://${KUMA_HOST}/api/push/{{ claude_otel_push_token }}"
 
-if timeout 5 bash -c "exec 3<>/dev/tcp/{{ observability_otlp_host_ip }}/{{ observability_otlp_port }}" 2>/dev/null; then
+if timeout 5 bash -c "exec 3<>/dev/tcp/{{ claude_code_otlp_host_ip }}/{{ claude_code_otlp_port }}" 2>/dev/null; then
   STATUS=up
-  MSG="OTLP receiver reachable on {{ observability_otlp_host_ip }}:{{ observability_otlp_port }}"
+  MSG="OTLP receiver reachable on {{ claude_code_otlp_host_ip }}:{{ claude_code_otlp_port }}"
 else
   STATUS=down
-  MSG="OTLP receiver unreachable on {{ observability_otlp_host_ip }}:{{ observability_otlp_port }}"
+  MSG="OTLP receiver unreachable on {{ claude_code_otlp_host_ip }}:{{ claude_code_otlp_port }}"
 fi
 
 kuma_push "$STATUS" "$MSG" "$PUSH_URL" "$KUMA_HOST" "$KUMA_RESOLVE_IP" claude-otel-health
