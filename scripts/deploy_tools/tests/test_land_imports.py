@@ -27,6 +27,7 @@ MODULES = frozenset(
         "handoff",
         "host_wait",
         "pr_json",
+        "gh_read",
         "land_flux",
         "land_platform",
         "land_probe",
@@ -57,7 +58,17 @@ ALLOWED = {
     },
     # The PR JSON types are a leaf: `Landing.view` returns them and the policy reads them.
     "pr_json": set(),
-    "landing": {"outcome", "options", "tools", "ledger", "pr_json", "land_tags"},
+    # The retry around a read-only gh call: `Landing.view` uses it, and it prints with `say`.
+    "gh_read": {"outcome"},
+    "landing": {
+        "outcome",
+        "options",
+        "tools",
+        "ledger",
+        "pr_json",
+        "land_tags",
+        "gh_read",
+    },
     # The landing policy's checks run inside --arm-merge, before any merge call.
     "merge": {"landing", "outcome", "pin_gate", "policy", "pr_json"},
     # The pin gate runs inside --await-merge's direct merge, and `land.py --regate` alone.

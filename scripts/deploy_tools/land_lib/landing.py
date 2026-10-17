@@ -32,7 +32,7 @@ from deploy_tools.land_lib.outcome import (
     unrecorded_apply_note,
 )
 from deploy_tools.land_lib.pr_json import PrView, parse_view
-from deploy_tools.land_lib import land_tags
+from deploy_tools.land_lib import gh_read, land_tags
 from deploy_tools.land_lib.tools import Classifier, Tools
 from lib.json_types import as_object
 from lib.repo_paths import GITOPS_DEPLOY_FILES
@@ -217,24 +217,22 @@ class Landing:
         shape. The last two
         would otherwise propagate out of the phase and annotate as `aborted` with no line
         saying which PR read failed.
+
+        A timeout or a 5xx is retried first (`gh_read`, #5503).
         """
+        pr = self.opts.pr
+
+        def call() -> PrView:
+            got = self.tools.gh_json("pr", "view", pr, "--json", fields)
+            return parse_view(as_object(got or {}, "gh pr view"))
+
         try:
-            return parse_view(
-                as_object(
-                    self.tools.gh_json("pr", "view", self.opts.pr, "--json", fields)
-                    or {},
-                    "gh pr view",
-                )
-            )
-        except subprocess.CalledProcessError as exc:
-            self.die(f"could not read PR #{self.opts.pr}: {exc.stderr.strip()}", 1)
-        except subprocess.TimeoutExpired:
-            self.die(f"could not read PR #{self.opts.pr}: gh timed out", 1)
+            return gh_read.read(call, self.tools.sleep, f"gh pr view #{pr}")
+        except gh_read.GhReadFailed as exc:
+            self.die(f"could not read PR #{pr}: {exc}", 1)
         except ValueError as exc:
             # json.JSONDecodeError is a ValueError subclass.
-            self.die(
-                f"could not read PR #{self.opts.pr}: unparseable gh output: {exc}", 1
-            )
+            self.die(f"could not read PR #{pr}: unparseable gh output: {exc}", 1)
 
     def git(self, *args: str) -> subprocess.CompletedProcess[str]:
         """git in the PRIMARY checkout, never raising; callers read returncode."""
