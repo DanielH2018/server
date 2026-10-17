@@ -48,7 +48,7 @@ wrong is worth more than the record of one that did not.
 | [0020](0020-flux-applies-the-cluster-from-a-promoted-artifact.md) | Flux applies the cluster from a promoted artifact | Proposed | 2026-10-12 |
 | [0021](0021-the-host-package-builder-trusts-master-plus-green-ci.md) | The host-package builder trusts master plus green CI, and checks no signature | Accepted | 2026-10-14 |
 | [0022](0022-the-cluster-decrypts-its-own-file-with-its-own-key.md) | The cluster decrypts its own file with its own key, and never secrets.yml | Accepted | 2026-10-15 |
-| [0023](0023-fact-support-is-a-diff-notice.md) | Fact support is a diff notice, and the lock is retired | Proposed | 2026-10-17 |
+| [0023](0023-fact-support-is-a-diff-notice.md) | Fact support is a diff notice, and the lock is retired | Accepted | 2026-10-17 |
 
 ## The long-form behind a record
 

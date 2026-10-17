@@ -1,7 +1,7 @@
 ---
 id: "0023"
 title: Fact support is a diff notice, and the lock is retired
-status: Proposed
+status: Accepted
 date: 2026-10-17
 governs:
   - ".github/workflows/ci.yml#the notice never blocks a merge"
@@ -16,10 +16,21 @@ test. This record replaces both with the diff notice that slice G1 built.
 
 ## Status
 
-Proposed. The operator approves it by setting `status: Accepted` and this section's text
-before the PR merges. Slice G2's later PRs, which delete the lock, do not merge until master
-carries the accepted record. The plan is
-[g2-retire-lock.md](../target-architecture/docs-guard/g2-retire-lock.md).
+Accepted. The operator accepted it on 2026-10-17 in PR 1's review. The words "I accept
+everything in #2" answered a list of six rulings, and so accepted each one:
+
+1. The five-day window, with its 4 graded content moves, is G1's parity evidence, in place
+   of the plan's 30 days and about 5 moves.
+2. The notice keeps `gone` rows.
+3. The reconstructed `notice_replay` JSON below meets G1's requirement for a verbatim
+   record.
+4. Content atoms lose their blocking coverage, which failure class 8 names.
+5. Agent sessions cannot read the notice until slice G3 lands, except by running it
+   locally or reading the check-run annotations.
+6. This record takes the number 0023.
+
+Slice G2's later PRs, which delete the lock, merge only after master carries this record.
+The plan is [g2-retire-lock.md](../target-architecture/docs-guard/g2-retire-lock.md).
 
 The plan named this record ADR-0020. D1's ADR took 0020 first, and ADR-0021 and ADR-0022
 followed it, so this record takes the next free number.
@@ -60,7 +71,10 @@ instruction bytes per session.
 
 **The lock's cost.** At `70591c307`, 116 of the 1,282 commits in 30 days were lock commits.
 A Renovate PR that bumps a cited YAML key stays red until a person commits a `verify` to it
-(#4012). Master push run 35729601483 failed on 2026-09-22.
+(#4012). Master push run 35729601483 failed on 2026-09-22, on head `b86d87d60`, because the
+lock test `ansible/tests/repo/test_facts_lock_matches_tree.py` raised an AssertionError on
+`ansible/roles/setup/k3s/CLAUDE.md#Autonomous-role contract`. The coordinator checked that
+run's log on 2026-10-17.
 
 **G1's soak passed over a five-day window, not 30 days.** The operator shortened the soak to
 five days on 2026-10-17 (#5470). The window ran from `<ts>`, 2026-10-12T21:14:44Z, to
