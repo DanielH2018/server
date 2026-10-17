@@ -8,6 +8,8 @@ PR 2, disk-health's verdict written to the textfile collector: [#4871](https://g
 
 PR 3, the host-checks rules in shadow beside Kuma's disk tile: [#4937](https://github.com/DanielH2018/server/pull/4937) (issue #4936).
 
+Soak note, 2026-10-17: D5.7 ([#5423](https://github.com/DanielH2018/server/pull/5423)) moved node-exporter to Flux at 17:47:09Z, and the takeover rolled its DaemonSet once. The pods restarted at 17:47:10Z on daniel-server and 17:47:22Z on daniel-box. `DiskHealthNotReporting` is built to ride through such a roll (`unless on (origin) (up{job="node"} == 0)`). Under M1's convention 6, any episode at that time is explained, not a reset.
+
 Depends on: M1, and M2's PR 3 (the `weekly-reboot` mute) before the cutover
 
 Unblocks: M6 (with M2, M4 and M5)
