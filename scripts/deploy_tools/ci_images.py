@@ -15,14 +15,14 @@
   token fetched after the build, and must be served. Any other registry answer fails that image, so a refusal never
   reads as "absent". A failed image does not stop the others.
 
-Stdlib only, so the job that holds `packages: write` installs nothing and imports no renderer
-code. The plan is docs/target-architecture/deploy/d5-bulk-move.md, *Images built by CI (D5.4)*.
+It imports the stdlib and `lib.cli_help`, which is stdlib only itself, so the job that holds
+`packages: write` installs nothing and imports no renderer code. The plan is
+docs/target-architecture/deploy/d5-bulk-move.md, *Images built by CI (D5.4)*.
 
 Run: python3 scripts/deploy_tools/ci_images.py plan out
      python3 scripts/deploy_tools/ci_images.py push out
 """
 
-import argparse
 import base64
 import hashlib
 import json
@@ -37,6 +37,9 @@ import urllib.request
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from lib.cli_help import ArgumentParser
 
 REGISTRY = "ghcr.io"
 OWNER = "danielh2018"
@@ -289,7 +292,7 @@ def push(
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description=__doc__.split("\n", 1)[0])
+    parser = ArgumentParser(description=__doc__.split("\n", 1)[0])
     parser.add_argument("command", choices=("plan", "push"))
     parser.add_argument("out", type=Path, help="the render's output directory")
     args = parser.parse_args(argv)

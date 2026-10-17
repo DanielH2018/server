@@ -202,7 +202,7 @@ jobs:
   # images: contents: read, packages: write. Builds each of the ten contexts `render` wrote under
   # out/images/ and pushes ghcr.io/danielh2018/<name>:<content tag> when GHCR does not serve that
   # tag (D5.4a2). It runs no renderer code: it reads `render`'s artifact and this workflow's own
-  # scripts/deploy_tools/ci_images.py, which is stdlib only. The plan is
+  # scripts/deploy_tools/ci_images.py, which imports only the stdlib and lib.cli_help. The plan is
   # docs/target-architecture/deploy/d5-bulk-move.md, *Images built by CI (D5.4)*.
   #
   # `publish` needs it, so a failing image stops every promotion until it is fixed. A served tag
