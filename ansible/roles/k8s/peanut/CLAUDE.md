@@ -33,8 +33,10 @@ UPS state of its own; the physical UPS is USB-attached to daniel-server via the 
   of the ciphertext, never of a value (`docs/flux-deploy-plane.md`).
 - **Rotating `peanut_password` or `peanut_username`** is operator-only at the source: `sops
   set`, then `cluster_vars.py write`, committed together. homepage's PeaNUT widget renders
-  the same login, so the landing also runs `./scripts/deploy.sh --tags homepage`.
-  `secret_rotation.py consumers peanut_password` prints both halves.
+  the same login. homepage has been flux-owned since D5.7 and substitutes it from the same
+  `homelab-cluster-vars` Secret, so the next promotion carries the rotation to both roles,
+  and no `deploy.sh` run follows. `secret_rotation.py consumers peanut_password` prints both
+  halves.
 
 ## Notable
 - **`alpine` init container, not the app image**, seeds `/config/settings.yml` from the
