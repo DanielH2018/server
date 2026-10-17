@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/secrets.py
-generated_at: 2026-10-17 06:17 UTC
-generated_sha: 109f8d0aa
+generated_at: 2026-10-17 18:17 UTC
+generated_sha: 4462b2540
 ---
 
 !!! warning "Generated file — do not edit"
@@ -12,7 +12,7 @@ generated_sha: 109f8d0aa
 
 # Secrets
 
-200 secret(s) in the rotation registry (`ansible/secret_rotation.yml`).
+201 secret(s) in the rotation registry (`ansible/secret_rotation.yml`).
 
 !!! note "Names and dates only"
     This page is generated from the plaintext rotation registry. No secret VALUE is read here, and the generator never opens the encrypted store or invokes the decryption tool — a test enforces that.
@@ -56,6 +56,7 @@ needs a human to mint the new value, then `secret_rotation.py rotate`.
 | `calendar_3` | 2025-09-25 | 2026-08-27 | -51 |
 | `calendar_4` | 2025-09-01 | 2026-08-30 | -48 |
 | `claude_code_agent_gh_token` | 2026-02-12 | 2027-01-14 | 89 |
+| `claude_code_triage_claude_oauth_token` | 2026-04-10 | 2027-03-23 | 157 |
 | `claude_ha_token` | 2025-10-03 | 2026-09-09 | -38 |
 | `cloudflare_analytics_token` | 2026-04-03 | 2027-03-18 | 152 |
 | `code_server_password` | 2026-08-30 | 2027-08-29 | 316 |
