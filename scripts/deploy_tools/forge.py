@@ -343,6 +343,25 @@ class GitHub:
             raise ForgeError(f"check-runs for {sha}: the body has no check_runs list")
         return runs
 
+    def runs(self, workflow: str, status: str) -> list[dict]:
+        """The newest 100 runs of `workflow`, a file name such as `promote.yml`, with `status`.
+
+        Raises:
+            ForgeError: any status but 200, a body without a `workflow_runs` list, or no answer.
+        """
+        url = (
+            f"https://api.github.com/repos/{self.repository}/actions/workflows/{workflow}"
+            f"/runs?status={status}&per_page=100"
+        )
+        response = self._transport("GET", url, self._rest_headers())
+        if response.status != 200:
+            raise ForgeError(f"{workflow} runs: HTTP {response.status}")
+        runs = _json(response, f"{workflow} runs")
+        runs = runs.get("workflow_runs") if isinstance(runs, dict) else None
+        if not isinstance(runs, list):
+            raise ForgeError(f"{workflow} runs: the body has no workflow_runs list")
+        return runs
+
     def statuses(self, sha: str, since: datetime | None = None) -> dict[str, str]:
         """The newest commit status per context on commit `sha`, as `{context: state}`.
 
