@@ -10,6 +10,13 @@ its parent and at itself. Ownership is `--flux-owned` at both ends, whatever the
 inventory said. `ansible/vars/secrets.yml` keeps this checkout's copy, because a secret's
 value never renders.
 
+A commit that changes `scripts/renderer/` is judged as the CI gate judges it instead: each end
+is that commit's own tree, renderer included, so a renderer change that adds a `dependsOn`
+edge and moves the render in one commit reads as arm 2 refuses it (#5230). Ownership is still
+`--flux-owned` at both ends. When such a commit also changes render inputs and its own tree
+does not render, those inputs fall back to the reversed render below, and its renderer change
+goes unjudged. Any other `scripts/`-only commit is clean by construction.
+
 A commit whose transplant does not render is judged instead as today's tree against today's
 tree with the commit's own change reversed. One that renders neither way is still judged on
 the gate's `tasks/` rule, which needs no render, and is otherwise counted as unrenderable,
@@ -67,6 +74,8 @@ RENDER_INPUTS = (
     "ansible/inventory",
     "ansible/vars",
 )
+# A commit changing this renders each end with that end's own tree, as the gate does.
+RENDERER = "scripts/renderer/"
 # A transplant keeps this checkout's copy. A secret's value never renders, only its key name,
 # and an older copy still holds keys that later moved to the inventory, `domain` among them,
 # which the secret checks then refuse to see rendered.
@@ -96,18 +105,26 @@ def set_flux_owned(host_vars: Path, flux_owned: Iterable[str]) -> None:
 
 
 def prepare_tree(
-    sha: str, paths: list[str], tree: Path, undo: bool = False, repo: Path = REPO
+    sha: str,
+    paths: list[str],
+    tree: Path,
+    undo: bool = False,
+    repo: Path = REPO,
+    own: bool = False,
 ) -> list[str]:
     """Write `repo`'s HEAD under `tree`, with `paths` as `sha` holds them.
 
-    A path `sha` does not hold is deleted. With `undo`, `paths` keep HEAD's content instead,
+    With `own`, `tree` is `sha`'s own `ansible/` and `scripts/` whole instead, renderer
+    included, and `paths` is ignored. A path `sha` does not hold is deleted. With `undo`, `paths` keep HEAD's content instead,
     with commit `sha`'s own change to each applied in reverse, file by file. A doc or a test
     renders nothing and is left alone.
 
     Returns:
         The paths whose reverse patch no longer applies to HEAD; empty for a transplant.
     """
-    extract("HEAD", tree, ("ansible", "scripts"), repo)
+    extract(sha if own else "HEAD", tree, ("ansible", "scripts"), repo)
+    if own:
+        return []
     if not undo:
         for path in paths:
             (tree / path).unlink(missing_ok=True)
@@ -166,6 +183,7 @@ def replay_snapshot(
     workdir: Path,
     roles: Iterable[str] = (),
     undo: bool = False,
+    own: bool = False,
 ) -> Snapshot:
     """`prepare_tree`'s tree rendered with `flux_owned` the only Flux tags.
 
@@ -179,7 +197,7 @@ def replay_snapshot(
     """
     tree = Path(tempfile.mkdtemp(prefix="replay-", dir=workdir))
     try:
-        failed = prepare_tree(sha, paths, tree, undo)
+        failed = prepare_tree(sha, paths, tree, undo, own=own)
         set_flux_owned(tree / HOST_VARS, flux_owned)
         for _ in range(MAX_STUBS):
             try:
@@ -234,8 +252,9 @@ def replay(since: str, ref: str, flux_owned: list[str], jobs: int, cache: Path) 
             for p in paths
             if any(p.startswith(i + "/") for i in RENDER_INPUTS) and p not in KEEPS_HEAD
         ]
-        if inputs:
-            judged[sha] = (paths, diffs, inputs)
+        own = any(p.startswith(RENDERER) for p in paths)
+        if inputs or own:
+            judged[sha] = (paths, diffs, inputs, own)
     owned = sorted(flux_owned)
 
     with tempfile.TemporaryDirectory(prefix="cross-plane-replay-") as tmp:
@@ -245,12 +264,15 @@ def replay(since: str, ref: str, flux_owned: list[str], jobs: int, cache: Path) 
 
             def render(item: tuple[str, str]) -> Snapshot | str:
                 side, sha = item
-                inputs = judged[sha][2]
-                key = "|".join([side, *inputs, "roles", *roles, "flux", *owned])
+                inputs, own = judged[sha][2:]
+                how = ["own-tree"] if own else inputs
+                key = "|".join([side, *how, "roles", *roles, "flux", *owned])
                 return _cached(
                     cache,
                     key,
-                    lambda: replay_snapshot(side, inputs, owned, Path(tmp), roles),
+                    lambda: replay_snapshot(
+                        side, inputs, owned, Path(tmp), roles, own=own
+                    ),
                 )
 
             with ThreadPoolExecutor(max_workers=jobs) as pool:
@@ -267,7 +289,7 @@ def replay(since: str, ref: str, flux_owned: list[str], jobs: int, cache: Path) 
 
         first = render_all(list(judged), owned)
         candidates = []
-        for sha, (paths, diffs, _) in judged.items():
+        for sha, (paths, diffs, _, _) in judged.items():
             base, head = first[f"{sha}^"], first[sha]
             if isinstance(base, str) or isinstance(head, str):
                 candidates.append(sha)
@@ -286,8 +308,12 @@ def replay(since: str, ref: str, flux_owned: list[str], jobs: int, cache: Path) 
         today = _cached(
             cache, "HEAD-tree", lambda: replay_snapshot("HEAD", [], owned, Path(tmp))
         )
+        # A commit's own renderer cannot be reversed onto today's tree, so a renderer-only
+        # commit that does not render stays unrenderable. One that also changes render inputs
+        # falls back to reversing those, and its renderer half goes unjudged.
+        undoable = [sha for sha in failed if judged[sha][2]]
         with ThreadPoolExecutor(max_workers=jobs) as pool:
-            for sha, snap in zip(failed, pool.map(undone, failed), strict=True):
+            for sha, snap in zip(undoable, pool.map(undone, undoable), strict=True):
                 full[f"{sha}^"], full[sha] = snap, today
     refused, shared, by_tasks, unrenderable = [], [], [], []
     # With no render, the `tasks/` rule still judges: both sides take today's dependency map
@@ -298,7 +324,7 @@ def replay(since: str, ref: str, flux_owned: list[str], jobs: int, cache: Path) 
         else None
     )
     for sha in candidates:
-        paths, diffs, _ = judged[sha]
+        paths, diffs, _, own = judged[sha]
         base, head = full[f"{sha}^"], full[sha]
         subject = git_stdout("log", "-1", "--format=%s", sha, cwd=REPO)
         if isinstance(base, str) or isinstance(head, str):
@@ -320,16 +346,25 @@ def replay(since: str, ref: str, flux_owned: list[str], jobs: int, cache: Path) 
             template = any(p.startswith(SHARED_TEMPLATES) for p in paths)
             if template:
                 shared.append(sha)
-            way = "reversed" if sha in failed else "transplanted"
+            way = (
+                "reversed"
+                if sha in failed
+                else "own renderer"
+                if own
+                else "transplanted"
+            )
             tag = " shared-template" if template else ""
             print(f"REFUSED {sha[:9]} ({way}){tag} {subject}")
             for line in found:
                 print(f"    {line}")
-    reversed_ok = len(failed) - len(unrenderable) - len(by_tasks)
+    reversed_ok = sum(
+        not isinstance(full[f"{sha}^"], str) and not isinstance(full[sha], str)
+        for sha in undoable
+    )
     print(
         f"replay: {len(commits)} commits on {ref} since {since}; {len(judged)} change a render "
-        f"input and were judged, the rest are clean by construction; {len(failed)} did not "
-        f"render as a transplant, and {reversed_ok} of those rendered "
+        f"input or the renderer and were judged, the rest are clean by construction; {len(failed)} did not "
+        f"render as judged, and {reversed_ok} of those rendered "
         f"reversed on today's tree; {len(refused)} refused by render, {len(shared)} of them "
         f"touching a shared template; {len(by_tasks)} more refused on tasks/ alone though "
         f"unrenderable; {len(unrenderable)} unrenderable and not refused on tasks/"
