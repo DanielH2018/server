@@ -473,6 +473,7 @@ applies nothing and says so. No site ever hands an empty `--tags` value on.
 | `secret_rotation.py --deploy` | `cmd_rotate` drops T before it calls `rotation_tools.run_deploy`, which runs `ansible-playbook ansible/deploy.yml` without `deploy.sh`. It runs no playbook when nothing remains. D3 gives a rotated cluster secret its path. |
 | `probe.py health T` | Ignores the release record when T is not Ansible-owned in the tree (`tag_owners`). |
 | `probe.py releases --stale-only` | Skips T, read the same way. |
+| `probe.py releases` (plain listing) | Lists T's record but judges it for neither staleness nor digest drift, and marks the row with T's owner (#5309). |
 | `manifest-prune-check.sh` | Skips an object labelled `kustomize.toolkit.fluxcd.io/name=<n>` only while a Kustomization `<n>` exists in `flux-system`. It reads that list once per run with the read-only kubeconfig. |
 | `live_drift_check.py` | Needs no skip, because `is_server_side_applied` already excludes kustomize-controller's objects. D2.4a narrows that function: a `kustomize-controller` `Apply` entry does not count on an object that carries `last-applied-configuration`. Flux strips that annotation on every apply, so its presence means Ansible applied the object after a handback. |
 | `gen_role_glance.py`, `service_catalog.py` | For `owner: flux`, print that Flux applies the role through `promote` and that `deploy.sh` refuses it with exit 5, in place of the deploy tag and the auto-deploy stance. |
