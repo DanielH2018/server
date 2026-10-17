@@ -824,12 +824,19 @@ containers_list:
   # via its Service (the wg-easy pattern — the router's forward points at this device).
   - name: terraria
     platform: k8s
+    # Flux applies terraria through `promote`, and every Ansible path skips it (D5.15). The
+    # handback is two PRs, `owner: released` then removing `owner`: docs/flux-deploy-plane.md.
+    owner: flux
     weekly_backup_claims: {terraria-config: 3}  # Wed
 
   # Same shape as terraria: nothing about it is HTTP — the game answers UDP 2456-2457 on
   # the node IP via its own Service.
   - name: valheim
     platform: k8s
+    # Flux applies valheim through `promote`, and substitutes its join-password Secret from
+    # homelab-cluster-vars (D5.15). The handback is two PRs, `owner: released` then removing
+    # `owner`: docs/flux-deploy-plane.md.
+    owner: flux
     weekly_backup_claims: {valheim-config: 2}  # Tue
 
   # The homelab log store — a SECOND cluster Loki, deliberately separate from observability's,
