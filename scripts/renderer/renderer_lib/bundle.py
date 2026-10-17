@@ -547,7 +547,8 @@ def bundle_files(
             f"the dependsOn edges form a cycle, {' -> '.join(cycle)}, and Flux would hold "
             "every Kustomization on it at DependencyNotReady"
         )
-    # Imported here, because soak.py builds on this module's writers.
+    # DECIDED: deferred, a documented cycle: soak.py builds on this module's writers, and
+    # SHARED_KINDS makes every bundle_files caller render soak (test_scripts_import_direction).
     from renderer.renderer_lib.soak import NORMALISED_REVISION, soak_files
 
     soak = soak_files(NORMALISED_REVISION, tags, directories, ordering.suspended)
