@@ -26,7 +26,7 @@ from validate.cluster_pins import Pin
 
 import forge
 from artifact_retention import LAST_GOOD_TAG, PROD_TAG
-from deploy_tools.promote_lib import forward_only, wait
+from deploy_tools.promote_lib import forward_only, reboot_window, wait
 from deploy_tools.promote_lib.ci_contexts import CI_CONTEXTS_SOURCE, read_ci_contexts
 from deploy_tools.promote_lib.prune import ReadError
 
@@ -69,7 +69,8 @@ class Reads:
             `(state, updated_at)`, or None.
         statuses: the newest status per context on a commit, as `{context: state}`, for the
             record of `prod`'s `flux/<name>` statuses that `verify` excuses from (H1.1i).
-        now: the wall-clock time, for the gate status's age bound.
+        reboot: the weekly reboot's schedule, from which T's no-promotion window derives.
+        now: the wall-clock time, for the gate status's age bound and the reboot window.
         sleep: waits the given seconds, between polls of a verification in flight.
         clock: monotonic seconds.
     """
@@ -92,6 +93,7 @@ class Reads:
     pulls: Callable[[str], list[dict]]
     gate_status: Callable[[str], tuple[str, datetime] | None]
     statuses: Callable[[str], dict[str, str]]
+    reboot: Callable[[], reboot_window.Schedule]
     now: Callable[[], datetime] = lambda: datetime.now(UTC)
     sleep: Callable[[float], None] = time.sleep
     clock: Callable[[], float] = time.monotonic
@@ -183,4 +185,5 @@ def live_reads(
         pulls=f.github.commit_pulls,
         gate_status=lambda sha: f.github.status(sha, forward_only.GATE_STATUS_CONTEXT),
         statuses=f.github.statuses,
+        reboot=lambda: reboot_window.read_schedule(repo),
     )

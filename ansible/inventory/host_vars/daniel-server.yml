@@ -50,31 +50,29 @@ claude_code_agent_user_enabled: true
 # False removes the key and the ssh-users membership.
 claude_agent_ssh_login_enabled: true
 
-# DECIDED: 13G fleet cap, derived the way defaults/main.yml derives daniel-box's 14G.
-# Measured on daniel-server 2026-09-09. Re-derive all of it if you change this:
-#   RAM: MemTotal 32,478,080 kB = 31.0 GiB.
-#   Unreclaimable footprint, as cgroup anon: kubepods.slice 4.98 GiB + machine.slice (the
-#     daniel-stage KVM guest, retired 2026-09-29 — #2941) 4.75 GiB + system.slice 0.58 GiB =
-#     10.3 GiB. Budgeted at 14.4 GiB (+40%) so k3s and the guest can grow without racing the
-#     fleet. The measurement is left as taken: re-derive it from a fresh reading rather than
-#     subtracting the retired guest on paper.
-#   Kernel: SUnreclaim 0.48 GiB. Page cache left free for Longhorn I/O: ~3 GiB.
-#   31.0 - 14.4 - 0.5 - 3 = 13.1 GiB available to the fleet. The cap was 10G until
-#     2026-09-26, leaving ~3 GiB unspent. It was raised to 13G at user request to fit one
-#     more fan-out batch, which leaves ~0.1 GiB unspent. Do not raise it past the 13.1 GiB,
-#     because the throttle stalls whichever cgroup loses the reclaim race and the homelab
-#     plane is the one that must not.
-# Re-measured 2026-09-26 before the raise: anon was kubepods.slice 3.95 GiB + machine.slice
-#   5.65 GiB + system.slice 0.62 GiB = 10.2 GiB, inside its 14.4 GiB budget.
-# With the RC unit disabled, user-1000.slice is the only plane here, so the 11G login cap is
+# DECIDED: 18G fleet cap, derived the way defaults/main.yml derives daniel-box's 14G.
+# Measured on daniel-server 2026-10-17. Re-derive all of it if you change this:
+#   RAM: MemTotal 32,478,052 kB = 31.0 GiB.
+#   Unreclaimable footprint, as cgroup anon: kubepods.slice 5.31 GiB + machine.slice 0.00 GiB
+#     (the daniel-stage KVM guest, retired 2026-09-29 — #2941) + system.slice 0.69 GiB =
+#     6.0 GiB. Budgeted at 8.4 GiB (+40%) so k3s can grow without racing the fleet.
+#   Kernel: SUnreclaim 0.64 GiB. Page cache left free for Longhorn I/O: ~3 GiB.
+#   31.0 - 8.4 - 0.6 - 3 = 19.0 GiB available to the fleet, so 18G leaves ~1 GiB unspent.
+#     Do not raise it past the 19.0 GiB, because the throttle stalls whichever cgroup loses
+#     the reclaim race and the homelab plane is the one that must not.
+# History: 10G until 2026-09-26, then 13G against a budget that still counted the KVM guest's
+#   4.75 GiB, then 18G on 2026-10-17 at user request, to run three fan-out batches here as
+#   daniel-box does. The 2026-09-09 reading was kubepods.slice 4.98 GiB + machine.slice 4.75
+#   GiB + system.slice 0.58 GiB.
+# With the RC unit disabled, user-1000.slice is the only plane here, so the 17G login cap is
 # the effective per-plane bound and the fleet cap only matters once a second plane appears.
-claude_code_fleet_memory_high: 13G
+claude_code_fleet_memory_high: 18G
 # 2G is under a third of this host's 7 GiB swap (`free -g`) — the same
 # shape as daniel-box's "a quarter of its 8 GiB" reasoning in defaults/main.yml:117-119.
 claude_code_fleet_swap_max: 2G
-claude_code_rc_memory_high: 11G
+claude_code_rc_memory_high: 17G
 claude_code_rc_memory_swap_max: 2G
 # 8 cores against daniel-box's 16. The bound that matters is workers x concurrent runs, not
-# workers (defaults/main.yml): 4 x 3 fan-out agents is 12 workers, ~1.2 GB against the 11G
+# workers (defaults/main.yml): 4 x 3 fan-out agents is 12 workers, ~1.2 GB against the 17G
 # login cap. CPU is not what failed, so the count is not scaled down with the cores.
 claude_code_rc_pytest_workers: 4

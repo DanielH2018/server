@@ -147,10 +147,14 @@ claim nothing. Exit 7 is a launch that started batches but dropped a refused cla
 placement refusals: neither host has a
 reservation's worth of headroom; the placement would put more
 than three batches on one remote host in this run (the ssh budget); or it would leave a host
-holding more than three LIVE batches counting every earlier run not yet cleaned (the memory
+holding more than three RUNNING batches, counting every earlier run not yet cleaned (the memory
 cap — a five-minute-old agent still holds its 2.5 GiB while the headroom read underprices it).
-Narrow the fan-out, do not queue. For the third, `clean <run-id>` the finished runs first — an
-uncleaned worktree counts against its host. `--host daniel-box` pins a batch that must land in
+A batch whose agent has finished does not count, whether or not its worktree still stands:
+`launch` reads the unit state `place status` reads, and only for a batch on the host it runs
+on, and only when the manifests alone would refuse. A state it cannot read counts as running,
+and so does every batch on the other host, where the read would cost an ssh connection the
+budget lacks. Narrow the fan-out, do not queue. For the third, wait for a batch to finish, or
+`clean <run-id>` the finished runs on the other host. `--host daniel-box` pins a batch that must land in
 the same run or that only daniel-box can verify.
 
 **Every batch gets a separate review unless `launch` is given `--no-review`** (the default
@@ -167,15 +171,16 @@ marks vacuous at any severity, resumes the agent for one fix round when its
 confidence is 0.5 or more, and a second reviewer reads only the fix. A finding of
 severity medium or worse at confidence 0.8 or more that survives the fix round holds the PR:
 the batch ends `needs input:`, naming the finding, and nothing lands it. Otherwise, on
-daniel-box, the pipeline runs `land.sh` itself. It resumes the agent only for an `unhealthy`,
+both hosts, the pipeline waits for the PR's CI with `cc-wait gh-ci --pr` after the fix round
+(`scripts/dev/fanout_lib/review/review_ci.py`, #4737 for daniel-server, #5498 for daniel-box).
+On daniel-box it then runs `land.sh` itself. It resumes the agent only for an `unhealthy`,
 `deploy-failed`, `needs-manual-apply` or `blocked` verdict, with the verdict and the end of the
-landing's log. Any other verdict ends the batch. On daniel-server, where the orchestrator lands
-the PR, the pipeline instead waits for the PR's CI with `cc-wait gh-ci --pr` after the fix round
-(`scripts/dev/fanout_lib/review/review_ci.py`, #4737). A red verdict resumes the agent once, with
+landing's log. Any other verdict ends the batch. On daniel-server the orchestrator lands the PR
+after that wait. A red CI verdict resumes the agent once, with
 each failed check's name and the end of its job's log, and the pipeline waits again on the new
 head. A batch whose CI is still red then ends `needs input:` naming the checks. A `cancelled` run
 is no verdict: the pipeline waits on it again, and a wait that spends its 15 minutes with no
-verdict also ends `needs input:`. Only this repo's daniel-server batches wait; another repo's
+verdict also ends `needs input:`. Only this repo's batches wait, on either host; another repo's
 batch does not. The review's counts and costs go on the PR as
 a comment, with only the actionable findings listed and security findings as a count only. The full record goes to `~/.local/state/fanout-review/`.
 Before the review, every batch of this repo runs the PR's new tests with its code changes
@@ -238,7 +243,7 @@ text. A blocker line (`needs input:` or `failed:`) outranks a PR URL, so a held 
 progress report and the Stop hook's three continuations ran out. Both print the final text
 and exit 1, because there is no PR to land, or the PR is held. A host whose read timed out reads `unread` and exits 75
 unless another batch exits 1 or 5; `place.py`'s docstring has every tier. A daniel-server batch reports `done <PR URL>` once its PR's CI has passed, so land that
-PR from this session with `land.sh`. A daniel-server batch whose CI stayed red after its one
+PR from this session with `land.sh`. A batch on either host whose CI stayed red after its one
 resume, or gave no verdict in its wait, reads `needs-input` with the failing checks named. Read the
 failure, then fix the branch or re-run the CI before landing.
 
@@ -329,10 +334,10 @@ bus is unreachable without one. No prefix on the command is needed.
 **Width is bounded by memory, measured, not by a number here.** Each batch costs one 2.5 GiB
 reservation (`RESERVATION_BYTES` in `scripts/dev/fanout_lib/placement.py`). Every agent runs
 as a transient user service inside `user-1000.slice`, which carries its own `MemoryHigh`
-(`claude_code_rc_memory_high`: 10G on daniel-box, 11G on daniel-server) nested under the
-fleet cap on `user.slice` (`claude_code_fleet_memory_high`: 14G on daniel-box, 13G on
+(`claude_code_rc_memory_high`: 10G on daniel-box, 17G on daniel-server) nested under the
+fleet cap on `user.slice` (`claude_code_fleet_memory_high`: 14G on daniel-box, 18G on
 daniel-server). The dispatcher
-reads both cgroups and places against whichever has less headroom, so a batch the 14G or 13G
+reads both cgroups and places against whichever has less headroom, so a batch the 14G or 18G
 fleet number alone would allow can still be refused by the tighter login-plane cap.
 `MemoryHigh` throttles rather than kills, so a batch the dispatcher refuses would have stalled
 in reclaim rather than failed loudly.

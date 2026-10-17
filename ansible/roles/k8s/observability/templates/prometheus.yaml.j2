@@ -188,7 +188,7 @@ data:
           - source_labels: [__name__]
             action: drop
             regex: .+_bucket
-      # The deploy-pipeline exporter's four homelab_deploy_* gauges, which monitor-bridge serves
+      # The deploy-pipeline exporter's five homelab_deploy_* gauges, which monitor-bridge serves
       # and the deploy-pipeline rule group reads (docs/target-architecture/deploy/
       # d2-first-leaf.md, *The deploy-pipeline exporter and its alerts*). The bridge refreshes
       # them once per 300s cycle, so 1m loses nothing. Hand-written rather than a `metrics`

@@ -35,6 +35,9 @@ may promote a newer commit. The plan is docs/target-architecture/deploy/d2-first
   `last-good` at a strict ancestor of M moves the deadline to LAND_WAIT_TIMEOUT_S past that
   poll. It stops moving IN_FLIGHT_WAIT_S after P was first read in flight, because `decide`
   gives up there too (#5164).
+- Inside the weekly reboot's no-promotion window `decide` defers (D5.2b2), so each poll inside
+  it moves the deadline to LAND_WAIT_TIMEOUT_S past the window's end and prints that end. The
+  window is the widest any T has, VERIFY_CAP_S, since a later T than M may promote M.
 - It reads the Kustomizations with the read-only `kubectl`, ancestry with
   `git merge-base --is-ancestor`, DEPLOY_HOLD with `gh variable get`, R's `flux/soak` status
   once the Kustomizations have settled, and `prod` and `last-good` from GHCR. A read that fails keeps the wait
@@ -51,10 +54,9 @@ Run: uv run python scripts/deploy_tools/promote.py land-wait <sha> --services <t
      [--also <name,...>]
 """
 
-import json
-import time
 from collections.abc import Callable
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 
 import sys as _sys
@@ -64,7 +66,6 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
 # `forge`, `changed_set` and `flux_host` import bare, from scripts/deploy_tools.
 _sys.path.insert(1, str(_Path(__file__).resolve().parents[1]))
 from lib.exit_codes import FAILED, LAND_GAVE_UP, OK
-from lib.git import git
 
 import forge
 from chained_timeout import OCI_INTERVAL_S, seconds
@@ -78,15 +79,13 @@ from changed_set import (
     suspended_tags,
 )
 from deploy_tools.kustomizations import (
-    REVISION as _REVISION,
     is_ready,
     kustomization_graph,
     kustomization_name as _name,
     origin_commit,
     with_dependents,
 )
-from artifact_retention import LAST_GOOD_TAG, PROD_TAG
-from flux_host import FluxHost
+from deploy_tools.promote_lib import reboot_window
 
 HOLD_VARIABLE = forge.HOLD_VARIABLE
 # The annotation `flux push artifact --revision` writes on a bundle's manifest. promote.py
@@ -168,6 +167,7 @@ class WaitReads:
             state `decide` waits on, or None when the two agree or either is absent.
         soak: the state of the newest `flux/soak` status on commit R, or None when R has
             none.
+        reboot_window: `(seconds left, end)` while inside the reboot's no-promotion window.
         annotate: writes one syslog line under ANNOTATION_TAG and ignores any failure.
         sleep: waits the given seconds.
         clock: monotonic seconds.
@@ -180,6 +180,7 @@ class WaitReads:
     published_ancestor: Callable[[str], str | None]
     in_flight: Callable[[], str | None]
     soak: Callable[[str], str | None]
+    reboot_window: Callable[[], tuple[int, datetime] | None]
     annotate: Callable[[str], None]
     sleep: Callable[[float], None]
     clock: Callable[[], float]
@@ -404,7 +405,10 @@ def land_wait(
             earlier, earlier_since = commit, now
         if commit and now - earlier_since < IN_FLIGHT_WAIT_S:
             deadline = max(deadline, now + timeout_s)
-        line += note
+        left, window_note = _reboot_window(reads)
+        if left is not None:
+            deadline = max(deadline, now + left + timeout_s)
+        line += note + window_note
         if line != last:
             print(f"  promote.py land-wait: {line}", flush=True)
             last = line
@@ -455,6 +459,19 @@ def _earlier_in_flight(reads: WaitReads, merge: str) -> tuple[str, str]:
     return commit, f"; a verification of {commit[:8]}, before this merge, is in flight"
 
 
+def _reboot_window(reads: WaitReads) -> tuple[int | None, str]:
+    """Seconds until the reboot's no-promotion window ends, None outside it, and a note."""
+    try:
+        found = reads.reboot_window()
+    except (*READ_ERRORS, reboot_window.ReadError) as err:
+        return None, f"; the reboot schedule could not be read: {err}"
+    if found is None:
+        return None, ""
+    return found[
+        0
+    ], f"; promotions wait for the reboot window's end, {found[1]:%a %H:%M} UTC"
+
+
 def annotate_promotion(
     annotate: Callable[[str], None], services: list[str], revision: str
 ) -> None:
@@ -466,92 +483,6 @@ def annotate_promotion(
     annotate(
         f"event=deploy services={','.join(services)} sha={revision[:8]} "
         "result=ok source=promote"
-    )
-
-
-def _wait_is_ancestor(repo: Path, ancestor: str, descendant: str) -> bool | None:
-    """`git merge-base --is-ancestor`, fetching origin and answering None on any other exit."""
-    proc = git(
-        "merge-base", "--is-ancestor", ancestor, descendant, cwd=repo, check=False
-    )
-    if proc.returncode in (0, 1):
-        return proc.returncode == 0
-    # 128 is most often an R this checkout has not fetched yet.
-    git("fetch", "-q", "origin", cwd=repo, check=False)
-    return None
-
-
-def _bundle_digests(f: forge.Forge, sha: str) -> object | None:
-    """The parsed `digests.json` of `sha-<sha>`, or None when that tag is not published."""
-    files = f.registry.bundle(f"sha-{sha}")
-    if files is None:
-        return None
-    raw = files.get(DIGESTS_FILE)
-    if raw is None:
-        raise WaitReadError(f"sha-{sha} holds no {DIGESTS_FILE}")
-    try:
-        return json.loads(raw)
-    except ValueError as err:
-        raise WaitReadError(f"sha-{sha}'s {DIGESTS_FILE} is not JSON") from err
-
-
-def _in_flight(f: forge.Forge) -> str | None:
-    """The commit `prod` names while it and `last-good` name different digests, else None.
-
-    `decide` reads the same two digests (`verify_promotion.wait_settled`), so this is in flight
-    exactly when `decide` would wait.
-    """
-    tagged = f.registry.tagged(PROD_TAG)
-    last_good = f.registry.digest(LAST_GOOD_TAG)
-    if tagged is None or last_good is None or tagged[1] == last_good:
-        return None
-    annotations = tagged[0].get("annotations")
-    revision = (
-        annotations.get(REVISION_ANNOTATION) if isinstance(annotations, dict) else None
-    )
-    match = _REVISION.fullmatch(revision) if isinstance(revision, str) else None
-    if match is None:
-        raise WaitReadError(
-            f"{PROD_TAG}'s manifest has no {REVISION_ANNOTATION} of the form "
-            f"master@sha1:<sha>, got {revision!r}"
-        )
-    return match.group(1)
-
-
-def _soak_status(f: forge.Forge, sha: str) -> str | None:
-    found = f.github.status(sha, SOAK_CONTEXT)
-    return None if found is None else found[0]
-
-
-def _published_ancestor(f: forge.Forge, repo: Path, sha: str) -> str | None:
-    args = ("rev-list", "--first-parent", f"--max-count={ANCESTOR_WALK_MAX}", f"{sha}^")
-    proc = git(*args, cwd=repo, check=False)
-    if proc.returncode != 0:
-        raise WaitReadError(
-            f"git {' '.join(args)} exited {proc.returncode}: {proc.stderr.strip()}"
-        )
-    for candidate in proc.stdout.split():
-        if f.registry.digest(f"sha-{candidate}") is not None:
-            return candidate
-    return None
-
-
-def live_wait_reads(
-    f: forge.Forge, repo: Path, host: FluxHost | None = None
-) -> WaitReads:
-    """The reads `promote.py land-wait` makes, against the forge, the host and `repo`."""
-    host = host or FluxHost()
-    return WaitReads(
-        hold=lambda: f.github.variable(HOLD_VARIABLE),
-        kustomizations=host.kustomizations,
-        is_ancestor=lambda a, b: _wait_is_ancestor(repo, a, b),
-        digests=lambda sha: _bundle_digests(f, sha),
-        published_ancestor=lambda sha: _published_ancestor(f, repo, sha),
-        in_flight=lambda: _in_flight(f),
-        soak=lambda sha: _soak_status(f, sha),
-        annotate=lambda line: host.log(ANNOTATION_TAG, line),
-        sleep=time.sleep,
-        clock=time.monotonic,
     )
 
 

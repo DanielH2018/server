@@ -202,5 +202,5 @@ def test_every_default_tag_renders_under_the_strict_undefined(tag, stubs):
 def test_the_default_tag_set_is_every_render_target():
     """Non-vacuity for the parametrisation above, the tags reading task-computed values too."""
     tags = set(cluster.select_tags(None))
-    assert len(tags) >= 56 and {"traefik", "nut", "uptime-kuma", "game-stats"} <= tags
+    assert len(tags) >= 56 and {"traefik", "nut", "uptime-kuma", "janitorr"} <= tags
     assert tags == set(render_targets(K8S_HOST))

@@ -551,6 +551,10 @@ containers_list:
   # only mcp.local.<domain>, so no dnsmasq override or public router may exist for it.
   - name: homelab-mcp
     platform: k8s
+    # Flux applies homelab-mcp through `promote`, pulls its image from GHCR, and substitutes
+    # its token Secret from homelab-cluster-vars (D5.14). The handback is two PRs,
+    # `owner: released` then removing `owner`: docs/flux-deploy-plane.md.
+    owner: flux
     port: 8000
     use_authelia: false
     # Named Service port, which the shared default Service renders on request.
@@ -725,6 +729,10 @@ containers_list:
 
   - name: ical-proxy
     platform: k8s
+    # Flux applies ical-proxy through `promote`, pulls its image from GHCR, and substitutes
+    # its calendar-feed Secret from homelab-cluster-vars (D5.14). The handback is two PRs,
+    # `owner: released` then removing `owner`: docs/flux-deploy-plane.md.
+    owner: flux
     hostname: "ical-proxy"
     # A hand-written tile in uptime-kuma's static-monitors.yaml.j2 covers it: ical-proxy-k8s, which probes a calendar over the ClusterIP.
     kuma: false
