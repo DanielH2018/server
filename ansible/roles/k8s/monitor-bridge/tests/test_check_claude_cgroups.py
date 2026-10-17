@@ -325,11 +325,13 @@ def test_a_retired_uid_running_no_claude_is_clean():
     assert ok, msg
 
 
-def test_a_retired_uid_running_claude_is_flagged():
+def test_a_retired_uid_running_claude_is_noted_without_paging():
+    # DECIDED in verdicts/host_cgroups.py (#5125): a note on the passing message, never a page.
     ok, msg = claude_cgroup_verdict(
         [(RC, 0.0)], [], ["claude-rc"], 10, "5m", "10m", [(BOX_1000, 2.0)]
     )
-    assert not ok
+    assert ok
+    assert "note: claude running as a retired uid" in msg
     assert "daniel-box/uid 1000: 2" in msg
     assert "claude-agents" in msg
 
@@ -348,10 +350,10 @@ def test_a_memory_event_outranks_a_retired_uid():
     assert msg.startswith("claude cgroup memory events")
 
 
-def test_check_mem_pages_on_a_retired_uid(armed):
+def test_check_mem_stays_up_on_a_retired_uid_and_names_it(armed):
     armed = replace(armed, CLAUDE_CGROUP_CONSECUTIVE=1)
     src = _sources([(RC, 0.0)], [], [(BOX_1000, 1.0)])
     ok, msg = checks.host.check_mem(armed, src)
-    assert not ok
-    assert msg.startswith("claude running as a retired uid")
+    assert ok, msg
+    assert "claude running as a retired uid" in msg
     assert any(UID_METRIC in q for q in src.queries("prom_vector"))

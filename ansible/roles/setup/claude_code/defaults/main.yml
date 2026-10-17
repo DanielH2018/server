@@ -217,7 +217,7 @@ claude_code_login_uids: "{{ [claude_code_login_uid] }}"
 
 # Every uid that must run no Claude Code at all. claude-cgroup-metrics.sh writes
 # claude_uid_processes{uid} for each, an explicit 0 included, and monitor-bridge's Memory tile
-# pages while any is above 0. Empty here, so daniel-server, where sessions still run as
+# names any above 0 in its message without paging (#5125). Empty here, so daniel-server, where sessions still run as
 # {{ sys_user }}, writes no series and nothing judges it. daniel-box lists the operator's uid
 # once its sessions moved to the agent (slice 6).
 claude_code_watch_uids: []
