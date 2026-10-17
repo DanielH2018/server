@@ -33,6 +33,7 @@ OFFLINE_BULLET = "- **When GitHub cannot be reached**"
 
 FIELD_MANAGER = "--field-manager=homelab-operator"
 HOLD_READ = "gh variable get DEPLOY_HOLD"
+HOLD_SET = "gh variable set"
 HOLD_CLEAR = "gh variable set DEPLOY_HOLD --body none"
 ORIGIN_KEY = "org.opencontainers.image.revision"
 
@@ -43,6 +44,7 @@ _FENCED_BLOCK = re.compile(
 _INLINE_CODE = re.compile(r"`([^`]+)`")
 _LIST_ITEM = re.compile(r"^\s*(?:-|\d+\.)\s")
 _KUBECTL_PATCH = re.compile(r"\bkubectl\b.*\bpatch\b")
+_NEGATION = re.compile(r"\b(?:not|never|don't|skip\w*)\b", re.IGNORECASE)
 _RESUME_OR_CLEAR = re.compile(
     r"\bresum\w*|--body none|\"suspend\":false", re.IGNORECASE
 )
@@ -141,17 +143,29 @@ def offline_branch(shed: str) -> str:
 def offline_order_problems(branch: str) -> list[str]:
     """In the offline branch, the hold is set before any resume or clear.
 
-    Read sentence by sentence. A sentence that runs `gh variable set` without `--body none`
-    sets the hold. Any other sentence that resumes or clears, before the hold is set, is a
+    Events are ordered by position, inside a clause and across clauses, so a resume written
+    ahead of the set in the same sentence still counts as first. A `gh variable set` without
+    `--body none` sets the hold, unless its clause negates it ("do not run", "skip"): the
+    branch then has not set the hold yet. Any resume or clear before the first set is a
     problem, because a queued `promote` run can start as soon as GitHub answers.
     """
     problems = []
     hold_set = False
-    for sentence in re.split(r"(?<=[.!?])\s+", " ".join(branch.split())):
-        if "gh variable set" in sentence and "--body none" not in sentence:
-            hold_set = True
-        elif _RESUME_OR_CLEAR.search(sentence) and not hold_set:
-            problems.append(sentence)
+    text = " ".join(branch.split())
+    for clause in re.split(r"(?<=[.!?;])\s+", text):
+        events = [
+            (m.start(), "resume", m.group(0)) for m in _RESUME_OR_CLEAR.finditer(clause)
+        ]
+        for m in re.finditer(re.escape(HOLD_SET), clause):
+            if "--body none" in clause[m.end() : m.end() + 40]:
+                continue
+            if not _NEGATION.search(clause[: m.start()]):
+                events.append((m.start(), "set", m.group(0)))
+        for _, kind, _match in sorted(events):
+            if kind == "set":
+                hold_set = True
+            elif not hold_set:
+                problems.append(clause)
     if not hold_set:
         problems.append("the offline branch never runs `gh variable set`")
     return problems
@@ -233,13 +247,27 @@ def test_the_offline_branch_sets_the_hold_before_any_resume(shed: str) -> None:
     assert offline_order_problems(offline_branch(shed)) == []
 
 
-def test_an_offline_branch_with_a_resume_moved_first_fails(shed: str) -> None:
-    branch = offline_branch(shed)
-    red = mutate(
-        branch,
-        "skip this step",
-        "resume each suspended tag. Then skip this step",
-    )
+@pytest.mark.parametrize(
+    ("old", "new"),
+    [
+        # A resume in its own sentence ahead of the set.
+        ("skip this step", "resume each suspended tag. Then skip this step"),
+        # A resume ahead of the set inside the same sentence.
+        (
+            "run this step's `gh variable set` first",
+            "resume each suspended tag, then run this step's `gh variable set`",
+        ),
+        # The set negated, with the resume after it in the text.
+        (
+            "run this step's `gh variable set` first",
+            "do not run this step's `gh variable set`; resume each suspended tag first",
+        ),
+    ],
+)
+def test_an_offline_branch_with_a_resume_moved_first_fails(
+    shed: str, old: str, new: str
+) -> None:
+    red = mutate(" ".join(offline_branch(shed).split()), old, new)
     assert offline_order_problems(red)
 
 
