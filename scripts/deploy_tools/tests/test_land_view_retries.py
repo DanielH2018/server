@@ -11,7 +11,9 @@ import subprocess
 
 import pytest
 
+from deploy_tools.land_lib import merge, policy
 from deploy_tools.land_lib.outcome import Outcome
+from deploy_tools.land_lib.pr_json import parse_file
 
 # What gh exits with when GitHub's GraphQL endpoint does not answer: the shape #5296 logged.
 IO_TIMEOUT = subprocess.CalledProcessError(
@@ -118,4 +120,30 @@ def test_the_retries_back_off_5s_then_15s(landing):
         ln.view("headRefOid")
     except Outcome:
         pass
+    assert _sleeps(calls) == [5, 15]
+
+
+# The other read-only gh calls a landing can refuse on, each with an answer it accepts.
+_OTHER_READS = {
+    "policy-file-list": (
+        [[{"status": "modified", "filename": "docs/a.md"}]],
+        lambda ln: policy._list(ln, "files", parse_file),
+    ),
+    "compare": (["docs/a.md"], lambda ln: merge._master_paths_since(ln, "a" * 40)),
+    "repo-visibility": (
+        {"visibility": "public"},
+        lambda ln: merge._refuse_private_repo(ln),
+    ),
+}
+
+
+@pytest.mark.parametrize("answer,read", _OTHER_READS.values(), ids=_OTHER_READS)
+def test_the_other_read_only_gh_calls_retry_a_timeout_too(landing, answer, read):
+    ln, calls = landing()
+    attempts = _reads(ln, [IO_TIMEOUT, SERVER_ERROR, answer])
+    try:
+        read(ln)
+    except Outcome as exc:
+        pytest.fail(f"the landing refused on a transient read: {exc.error}")
+    assert len(attempts) == 3
     assert _sleeps(calls) == [5, 15]

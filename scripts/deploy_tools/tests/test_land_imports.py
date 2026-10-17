@@ -70,12 +70,12 @@ ALLOWED = {
         "gh_read",
     },
     # The landing policy's checks run inside --arm-merge, before any merge call.
-    "merge": {"landing", "outcome", "pin_gate", "policy", "pr_json"},
+    "merge": {"landing", "outcome", "pin_gate", "policy", "pr_json", "gh_read"},
     # The pin gate runs inside --await-merge's direct merge, and `land.py --regate` alone.
     "pin_gate": {"landing", "outcome", "pin_reads"},
     # Its boundaries. It imports `promote.py`'s `last-good` reader, outside land_lib.
     "pin_reads": set(),
-    "policy": {"landing", "outcome", "pr_json"},
+    "policy": {"landing", "outcome", "pr_json", "gh_read"},
     "classify": {"landing", "outcome", "land_tags"},
     "ci": {"landing", "outcome"},
     "tick": {"landing", "outcome"},
