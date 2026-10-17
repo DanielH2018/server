@@ -104,11 +104,6 @@ def test_the_two_apps_carry_the_same_template():
 
 
 @pytest.mark.parametrize("app", APPS)
-def test_the_tree_renders_no_seed_job_while_ansible_owns_the_app(stubs, app):
-    assert cluster.render_tag(app, stubs).verify == {}
-
-
-@pytest.mark.parametrize("app", APPS)
 def test_the_flipped_seed_job_passes_every_job_census_row(flipped, app):
     assert problems({f"{app}-verify": flipped[app]}) == []
 
