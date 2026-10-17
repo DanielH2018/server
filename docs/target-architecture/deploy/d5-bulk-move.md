@@ -81,8 +81,13 @@ PR D5.4a2, CI images: [#5378](https://github.com/DanielH2018/server/pull/5378). 
 `3b74100cc`. Its first `images` run, promote run 38992066819, pushed nut, pi-peer-backup,
 terraria and valheim to new GHCR packages. It failed on n8n-runners, whose context no longer
 builds ([#5391](https://github.com/DanielH2018/server/issues/5391)). `publish` needs `images`, so
-every promotion stopped until the revert. D5.4a2 lands again after
-[#5392](https://github.com/DanielH2018/server/pull/5392) fixes n8n-runners.
+every promotion stopped until the revert.
+[#5392](https://github.com/DanielH2018/server/pull/5392) fixed n8n-runners at `6ad46042e`, and
+D5.4a2 landed again in [#5403](https://github.com/DanielH2018/server/pull/5403) at `2a1ac8573`.
+Its first `images` run, promote run 39036029019, pushed n8n-runners `sha-16bb62020cf1` and found
+the other nine tags already served. The run read `verdict=good` and moved `last-good`. All ten
+packages answered an anonymous manifest request with 200 on 2026-10-17, so Open question 8's
+ruling is in effect.
 PR D5.3b2, the soak Kustomization, observed:
 [#5386](https://github.com/DanielH2018/server/pull/5386). It merged at `95cd242bc` and settled
 with `flux` and `observability` healthy. kustomize-controller runs `--concurrent=6`, `last-good`
@@ -93,6 +98,16 @@ cross-plane snapshot passes R through `HOMELAB_RENDER_REVISION`.
 The run-once cleanup PR: [#5387](https://github.com/DanielH2018/server/pull/5387), together with
 H2.7. It merged at `471397804`. It deleted game-stats' and observability's run-once record
 cleanups and the render-record census row.
+PR D5.2b1, the stateful hold: [#5361](https://github.com/DanielH2018/server/pull/5361). It merged
+at `b346b7141` and deployed nothing. In its review the operator confirmed both of Open question
+1's co-batched cases and the hold value `<T> stateful=unverified`. The first promote run after
+it, 39037279058, read `verdict=good`, moved `last-good` and skipped `post`, as a run with no hold
+must.
+PR D5.4b, GHCR refs: [#5407](https://github.com/DanielH2018/server/pull/5407). It merged at
+`588cdfd0d` and settled with `nut` healthy. No flux-owned role consumes a built image yet, so
+the GHCR rewrite has no live consumer, and nut keeps `localhost:5000/nut:sha-cf9e7ebc31ed` with
+`Always`. nut's `imagePullPolicy` comment is now a Jinja comment, which cost the one nut restart.
+M6's B-1e landed at `f8e28584f`, so littlelink's flux PR no longer waits on M6 (Open question 12).
 
 Related issues:
 
