@@ -32,6 +32,10 @@ a forward-only pin needs a fresh `homelab/upgrade-gates` status on its PR's head
 against `last-good`, under which a failed verification holds as T's SHA and leaves `prod`.
 `promote_lib/forward_only.py`'s docstring states the three rules.
 
+SNAPSHOT ROLES (D5.2b1). Under T's `stateful`, the snapshot roles whose `own` digest T
+changes, a failed verification holds as `<T> stateful=<names>` without a reset. `hold T`
+posts it after `settle`, from the record `decide` writes (`promote_lib/stateful.py`).
+
 A SUSPENDED TAG TAKES NO CHANGE (D5.1d). A suspended tag applies nothing until its resume, and
 `cross_plane_order.py` refuses a PR that changes one. Master's status-check rule is not strict,
 so a PR whose checks ran before the suspend merged can still merge after it. So when T's `own`
@@ -68,7 +72,8 @@ step outputs are appended to it: `verdict`, `target` and `digest`; `prior` and
 `prior_digest`, `prod`'s commit and digest before the move, which `tag` re-reads before it
 moves anything; `reset_digest`, where a failed verification resets `prod` to; `seed`, `true`
 when `tag` must tag `prior_digest` as `last-good` first; `clears_hold`; and `no_reset`, the
-comma-joined forward-only tags under which `settle` holds without a reset.
+comma-joined forward-only tags under which `settle` holds without a reset; and `stateful`,
+the comma-joined snapshot roles under which `settle` writes the stateful hold.
 
 PRUNE. `prune` deletes old artifact versions, once a day from `prune-artifacts.yml`.
 `promote_lib/prune.py` holds it, and its docstring states what it reads.
@@ -86,11 +91,12 @@ checkout alone (`bundle_census.py`, `bundle_gates.py`).
 Exit codes:
   0   decide: promote, held or current. prune: every read, delete and verify succeeded.
       land-wait: settled. check-bundle: the census passes. published-tags: printed.
-      verify: good. ci-verdict: pass.
+      verify: good. ci-verdict: pass. hold: every message posted.
   1   decide: error, and nothing moves, a failed write of the gate's hold included. prune: a read, a delete or a verify failed.
       land-wait: deploy-failed, a hold, or suspended. check-bundle: the census or a gate failed, one line
       each.
-      verify: failed, or no verdict. ci-verdict: anything but pass.
+      verify: failed, or no verdict. ci-verdict: anything but pass. hold: the record is
+      unreadable, or a message was not posted.
   64  usage error
   75  land-wait: gave-up, the wait reached its timeout.
 
@@ -107,6 +113,7 @@ Run: uv run python scripts/deploy_tools/promote.py decide --trigger <sha>
 import argparse
 import os
 import sys
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
@@ -120,7 +127,12 @@ import bundle_census
 import forge
 from changed_set import suspended_changed
 import object_loss
-from deploy_tools.promote_lib import forward_only, verify_promotion as verify, wait
+from deploy_tools.promote_lib import (
+    forward_only,
+    stateful,
+    verify_promotion as verify,
+    wait,
+)
 
 # Re-exported, as `promote.<name>`, for the tests and for `land.sh`'s pin gate.
 from deploy_tools.promote_lib.ci_contexts import (
@@ -172,6 +184,10 @@ class Decision:
         clears_hold: the revert rule chose T, so a good verdict sets DEPLOY_HOLD to `none`.
         no_reset: the forward-only tags T changes against `last-good`. When any is named, a
             failed verification writes DEPLOY_HOLD as T's SHA alone and leaves `prod` on T.
+        stateful: the snapshot roles T changes against `last-good`. When any is named, a
+            failed verification writes DEPLOY_HOLD as `<T> stateful=<names>` and leaves
+            `prod` on T, whatever `no_reset` says.
+        stateful_record: what the hold's post prints (`stateful.record`).
         hold: what `decide` writes to DEPLOY_HOLD itself: T's SHA on a `held` from the
             forward-only gate or the backstop, `<T> suspended-changed=<tags>` on one from the
             suspended-tag check, else empty.
@@ -190,6 +206,8 @@ class Decision:
     seed: bool = False
     clears_hold: bool = False
     no_reset: tuple[str, ...] = ()
+    stateful: tuple[str, ...] = ()
+    stateful_record: dict = field(default_factory=dict)
     hold: str = ""
     bundles: dict[str, dict[str, bytes] | None] = field(default_factory=dict)
     recorded: dict[str, str] = field(default_factory=dict)
@@ -358,9 +376,11 @@ def _promotion(
     forward-only tags T changes against `last-good` (`forward_only.no_reset_names`), which
     reads `last-good`'s bundle only when `last-good` and `prod` name different digests. And it
     records `prod`'s statuses for `verify`'s excuse (`verify.prior_statuses`), before the move.
+    And it names the snapshot roles T changes against the same bundle (`stateful.record`).
 
     Raises:
-        ReadError: T's bundle, or `prod`'s, vanished between its HEAD and its pull.
+        ReadError: T's bundle, or `prod`'s, vanished between its HEAD and its pull, or a
+            snapshot Job in T's bundle is unreadable.
         forge.ForgeError: the read of `prod`'s statuses failed.
     """
     target_bundle = target_bundle or _pull(reads, digest, f"sha-{target}")
@@ -375,8 +395,15 @@ def _promotion(
     flagged = reads.forward_only(target)
     if lower is not None:
         flagged |= reads.forward_only(lower)
+    target_digests = verify.bundle_digests(target_bundle)
     no_reset = forward_only.no_reset_names(
-        forward_only.changed_tags(verify.bundle_digests(target_bundle), base), flagged
+        forward_only.changed_tags(target_digests, base), flagged
+    )
+    record = stateful.record(
+        target_bundle,
+        target_digests,
+        verify.bundle_digests(base_bundle) if base_bundle is not None else None,
+        digest,
     )
     recorded: dict[str, str] = {}
     if prod is not None and prod_bundle is not None:
@@ -399,6 +426,8 @@ def _promotion(
         seed=seed,
         clears_hold=held is not None,
         no_reset=tuple(sorted(no_reset)),
+        stateful=tuple(record["stateful"]),
+        stateful_record=record,
         bundles={"prod": prod_bundle, "target": target_bundle},
         recorded=recorded,
     )
@@ -417,7 +446,9 @@ def _pull(reads: Reads, digest: str, what: str) -> dict[str, bytes]:
 
 
 def hand_off(decision: Decision, bundle_dir: Path | None) -> Decision:
-    """Write a `promote` decision's two bundles under `bundle_dir` for the `verify` job.
+    """Write a `promote` decision's two bundles and its stateful record under `bundle_dir`.
+
+    `verify` reads the bundles, and `promote.py hold` reads the record.
 
     A write that fails turns the decision into `error`, so `prod` never moves without them.
     """
@@ -430,6 +461,7 @@ def hand_off(decision: Decision, bundle_dir: Path | None) -> Decision:
         verify.write_handoff(
             bundle_dir, decision.bundles.get("prod"), target, decision.recorded
         )
+        stateful.write(bundle_dir, decision.stateful_record)
     except (OSError, ValueError) as err:
         return Decision("error", reason=f"--bundle-dir {bundle_dir}: {err}")
     return decision
@@ -472,6 +504,7 @@ def report(trigger: str, decision: Decision, github_output: str | None) -> int:
                 f"seed={str(decision.seed).lower()}\n"
                 f"clears_hold={str(decision.clears_hold).lower()}\n"
                 f"no_reset={','.join(decision.no_reset)}\n"
+                f"stateful={','.join(decision.stateful)}\n"
             )
     return FAILED if decision.verdict == "error" else OK
 
@@ -480,6 +513,7 @@ def main(
     argv: list[str] | None = None,
     f: forge.Forge | None = None,
     now: datetime | None = None,
+    post: Callable[[str], None] | None = None,
 ) -> int:
     parser = ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
@@ -518,11 +552,16 @@ def main(
             help="the checkout to read git and the contexts from",
         )
     verify.add_parser(commands)
+    stateful.add_parser(commands)
     wait.add_parser(commands, REPO)
     bundle_census.add_parsers(commands)
     args = parser.parse_args(argv)
     if args.command in bundle_census.COMMANDS:
         return bundle_census.run(args)
+    if args.command == "hold":
+        if post is None:
+            post = forge.Discord(os.environ.get(stateful.WEBHOOK_ENV, "")).post
+        return stateful.run(args, post)
     if f is None:
         f = forge.connect(os.environ)
     if args.command == "land-wait":

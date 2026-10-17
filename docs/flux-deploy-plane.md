@@ -565,6 +565,9 @@ notification-controller posts on T:
   crashed, timed out as a job or was cancelled, holds as `<T> unverified`.
 - **Anything else, when T changes a forward-only tag**, writes T's SHA alone to
   `DEPLOY_HOLD`, tags `sha-<T>` as `held` and leaves `prod` on T (*Forward-only tags*).
+- **Anything else, when T changes a snapshot role**, writes `<T> stateful=<names>` to
+  `DEPLOY_HOLD`, tags `sha-<T>` as `held`, leaves `prod` on T, and the `post` job posts the
+  hold (*Snapshot roles hold without a reset*). This branch comes before the forward-only one.
 
 **Every move of `prod` writes `PROD_DIGEST`**: `tag` on a promotion, and `settle` on a reset.
 A failed write fails the job after the move. Slice D2.6d's deploy-pipeline exporter compares
@@ -644,6 +647,47 @@ and print `held`, so nothing moves. A failed PR lookup or status read prints `er
 out is **operator-only**: fix forward through a PR, run `land.sh --regate <pr>` for each bump
 the hold names, then clear the hold. For a failed Longhorn bump, the recovery is
 `docs/longhorn-disaster-recovery.md`, never a revert.
+
+### Snapshot roles hold without a reset
+
+`promote` runs in CI and cannot reach Longhorn. A reset of `prod` after a failed revision would
+apply the old image onto data the failed image may have migrated, the state `volume-snapshot`
+exists to prevent. So a failed revision that changes a snapshot role holds without a reset.
+`scripts/deploy_tools/promote_lib/stateful.py` holds the rules, and the plan is
+`docs/target-architecture/deploy/d5-bulk-move.md`, *The stateful hold, its post, and the reset
+input*.
+
+- **Which revisions.** `decide` names, in its `stateful` output, each snapshot role whose
+  `own` digest differs between T's `digests.json` and `last-good`'s, or that one of the two
+  lacks. A snapshot role is a tag whose `cluster/<tag>-snapshot/job.yaml` T's bundle holds
+  (*The snapshot Job*). `own` is the digest that renames the snapshot Job, so a role whose
+  `own` is unchanged took no snapshot for T and does not count.
+- **The trigger is a changed snapshot role, not a failed one.** A revision that changes sonarr
+  and breaks traefik holds without a reset too, and traefik stays broken until the operator
+  acts. A reset would roll sonarr, which applied T, back onto data T may have migrated.
+- **The hold.** On anything but `good`, `settle` writes `<T> stateful=<names>`, where
+  `<names>` are the names `verify` printed as failed or timed out, or `unverified` when it
+  printed none. The value never takes the `failed=` form, so the revert rule never clears it.
+  `settle` tags `sha-<T>` as `held` and leaves `prod` on T. When T also changes a
+  forward-only tag, the stateful form wins; neither resets.
+- **The post.** Once the hold is written, the `post` job runs `promote.py hold`, which posts
+  to the deployer's Discord channel through the `DEPLOY_DISCORD_WEBHOOK` repository secret,
+  a copy of `gitops_deploy_discord_webhook`. It names the held SHA, every changed tag and
+  every failed name, each marked as a snapshot role or not, and, when `soak` failed, the soak
+  Job and the command that reads the services it named. Then, for each changed snapshot
+  role, it prints the `digest8`, each claim's snapshot prefix, and a command block in the
+  revert runbook's Branch 1 order: classify, two suspends, the `volume-revert.yml` run, two
+  resumes. Beside the classify command it prints `prod@sha256:<digest of sha-<T>>`, the
+  string a role that attempted T reads in `.status.lastAttemptedRevision`. CI cannot read the
+  cluster, so every changed snapshot role gets a block, and the classify step picks which to
+  revert. A message never passes Discord's 2,000 characters: a header that lists every tag
+  splits across messages, and no line or block is cut. Each block runs the revert once per
+  claim namespace, passing `k8s_namespace`, and the header says when `ansible/volume-revert.yml`
+  is not in the tree yet (D5.2c adds it). A 429
+  gets one retry after its `retry_after`, up to 10 seconds. A failed post fails the run red;
+  the hold is already written by then.
+- **The way out** is **operator-only**: the runbook in `docs/volume-snapshot-drills.md`, then
+  a clear of `DEPLOY_HOLD`.
 
 ### The timeout follows the chain
 
@@ -1312,6 +1356,12 @@ starts a run: `settle` dispatches the follow-up `promote` run with its own `GITH
 under `actions: write`, because a `workflow_dispatch` is the one event that token may start a
 run with. The flux role's `CLAUDE.md` has its rotation steps, and the
 rotation registry's `external-90d` tier is the one its SOPS copy belongs on.
+
+The repository secret `DEPLOY_DISCORD_WEBHOOK` holds the value of the SOPS key
+`gitops_deploy_discord_webhook`, the deployer's Discord channel. Only the `post` job reads it,
+for the stateful hold's post, and that job holds `contents: read` alone. `promote.py` never
+prints the URL, and a failed post names only the HTTP status. `docs/secret-rotation.md` has
+the rotation step for the copy.
 
 The SOPS key `flux_github_status_token` is a fine-grained token with Commit statuses read and
 write on two repositories, `DanielH2018/server` and `DanielH2018/dotfiles`, which

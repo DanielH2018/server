@@ -30,6 +30,7 @@ NOTHING_MOVES = {
     "seed": "false",
     "clears_hold": "false",
     "no_reset": "",
+    "stateful": "",
 }
 
 
