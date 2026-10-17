@@ -1,4 +1,4 @@
-"""The deploy-pipeline exporter's four gauges, each as a pair, and the reads that feed them.
+"""The deploy-pipeline exporter's first four gauges, each as a pair, and the reads that feed them.
 
 D2's item 12 names the pairs: DEPLOY_HOLD `none` against a `failed=` hold, PROD_DIGEST equal
 to and different from `prod`'s digest, a green run `prod` contains against one it lacks, and a
@@ -116,6 +116,7 @@ def test_a_failed_read_drops_only_the_gauges_it_feeds(piped):
         "homelab_deploy_hold_active",
         "homelab_deploy_hold_age_seconds",
         "homelab_deploy_prod_digest_match",
+        "homelab_deploy_reboot_window_active",
     }
     assert [p for p in problems if p.startswith("unpromoted: ")]
 
@@ -174,7 +175,7 @@ def test_a_cycle_sends_three_gets_to_github_and_nothing_else(piped):
     assert len([r for r in sent if r.host == "ghcr.io"]) == 2
 
 
-def test_the_endpoint_serves_the_four_gauges_and_nothing_else(piped):
+def test_the_endpoint_serves_the_five_gauges_and_nothing_else(piped):
     exposition = deploy_pipeline.Exposition()
     found, _ = deploy_pipeline.collect(piped, github(), NOW)
     exposition.publish(found)
@@ -191,9 +192,13 @@ def test_the_endpoint_serves_the_four_gauges_and_nothing_else(piped):
         server.shutdown()
         server.server_close()
     series = [line for line in body.splitlines() if not line.startswith("#")]
-    assert sorted(line.split()[0] for line in series) == sorted(
-        name for name, _ in deploy_pipeline.GAUGES
-    )
+    assert sorted(line.split()[0] for line in series) == [
+        "homelab_deploy_hold_active",
+        "homelab_deploy_hold_age_seconds",
+        "homelab_deploy_prod_digest_match",
+        "homelab_deploy_reboot_window_active",
+        "homelab_deploy_unpromoted_age_seconds",
+    ]
     assert "homelab_deploy_hold_active 0.0" in series
 
 
