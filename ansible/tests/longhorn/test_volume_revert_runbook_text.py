@@ -11,8 +11,8 @@ can run them:
 Each clause below is a mistake that leaves the cluster in a worse state than the failure it
 answers: a suspend Flux takes back at its next reconcile, a clear that erases a failure hold,
 a one-role revert copied into Branch 1, a classify read compared with the wrong value, and a
-wait on a field that never names a commit. Each clause has a red fixture made by mutating the
-real document.
+wait on a field that never names a commit. Each clause has a red fixture. Most mutate the real
+document; the offline hold order has a table of literal bullets it must refuse.
 
 Run: uv run pytest ansible/tests/longhorn/test_volume_revert_runbook_text.py
 """
@@ -33,7 +33,7 @@ OFFLINE_BULLET = "- **When GitHub cannot be reached**"
 
 FIELD_MANAGER = "--field-manager=homelab-operator"
 HOLD_READ = "gh variable get DEPLOY_HOLD"
-HOLD_SET = "gh variable set"
+HOLD_SET = "gh variable set DEPLOY_HOLD"
 HOLD_CLEAR = "gh variable set DEPLOY_HOLD --body none"
 ORIGIN_KEY = "org.opencontainers.image.revision"
 
@@ -44,9 +44,16 @@ _FENCED_BLOCK = re.compile(
 _INLINE_CODE = re.compile(r"`([^`]+)`")
 _LIST_ITEM = re.compile(r"^\s*(?:-|\d+\.)\s")
 _KUBECTL_PATCH = re.compile(r"\bkubectl\b.*\bpatch\b")
-_NEGATION = re.compile(r"\b(?:not|never|don't|skip\w*)\b", re.IGNORECASE)
 _RESUME_OR_CLEAR = re.compile(
     r"\bresum\w*|--body none|\"suspend\":false", re.IGNORECASE
+)
+_ANY_VARIABLE_SET = re.compile(r"\bgh variable set\b")
+_STEP_4 = re.compile(r"\bstep 4\b", re.IGNORECASE)
+# The offline branch's one ordering sentence, whitespace-normalised. Rewording the bullet
+# means rewording this constant in the same commit; see offline_order_problems.
+OFFLINE_ORDER_SENTENCE = (
+    f"Once the WAN returns, run this step's `{HOLD_SET}` first, before any resume and "
+    "before step 4, because a queued `promote` run can start as soon as GitHub answers."
 )
 
 
@@ -141,34 +148,41 @@ def offline_branch(shed: str) -> str:
 
 
 def offline_order_problems(branch: str) -> list[str]:
-    """In the offline branch, the hold is set before any resume or clear.
+    """In the offline branch, `DEPLOY_HOLD` is set before any resume or clear.
 
-    Events are ordered by position, inside a clause and across clauses, so a resume written
-    ahead of the set in the same sentence still counts as first. A `gh variable set` without
-    `--body none` sets the hold, unless its clause negates it ("do not run", "skip"): the
-    branch then has not set the hold yet. Any resume or clear before the first set is a
-    problem, because a queued `promote` run can start as soon as GitHub answers.
+    The order is a safety rule: a queued `promote` run can start as soon as GitHub answers,
+    so the hold must be set before anything else. The check pins the one sentence that
+    states that order, OFFLINE_ORDER_SENTENCE, and reads no ordering words. A rule that
+    parses "before", "after", "once" or "until" opens a new bypass with each fix; three
+    review findings on PR #5377 were bypasses of exactly that kind. A reworded bullet fails
+    here until the same commit rewords the pinned sentence, so a reviewer reads the new
+    order in the diff rather than trusting a parser to have ranked it.
+
+    - The whitespace-normalised bullet holds OFFLINE_ORDER_SENTENCE exactly once.
+    - Outside that sentence, the bullet mentions no resume or clear, no `gh variable set`
+      and no step 4. Each would be a second statement of the order that the pin cannot
+      rank.
+
+    Only `gh variable set DEPLOY_HOLD` sets the hold. The pin carries the closing backtick,
+    so a set of another variable, or one with `--body none`, does not match it.
     """
-    problems = []
-    hold_set = False
     text = " ".join(branch.split())
-    for clause in re.split(r"(?<=[.!?;])\s+", text):
-        events = [
-            (m.start(), "resume", m.group(0)) for m in _RESUME_OR_CLEAR.finditer(clause)
+    count = text.count(OFFLINE_ORDER_SENTENCE)
+    if count != 1:
+        return [
+            f"the offline branch holds the pinned order sentence {count} times, not once: "
+            f"{OFFLINE_ORDER_SENTENCE!r}"
         ]
-        for m in re.finditer(re.escape(HOLD_SET), clause):
-            if "--body none" in clause[m.end() : m.end() + 40]:
-                continue
-            if not _NEGATION.search(clause[: m.start()]):
-                events.append((m.start(), "set", m.group(0)))
-        for _, kind, _match in sorted(events):
-            if kind == "set":
-                hold_set = True
-            elif not hold_set:
-                problems.append(clause)
-    if not hold_set:
-        problems.append("the offline branch never runs `gh variable set`")
-    return problems
+    rest = text.replace(OFFLINE_ORDER_SENTENCE, " ")
+    return [
+        f"{name} outside the pinned order sentence: {rest[max(0, m.start() - 40) : m.end() + 40]!r}"
+        for name, pattern in (
+            ("a resume or clear", _RESUME_OR_CLEAR),
+            ("a `gh variable set`", _ANY_VARIABLE_SET),
+            ("a step 4 mention", _STEP_4),
+        )
+        for m in pattern.finditer(rest)
+    ]
 
 
 def branch_1_revert_command_problems(branch_1: str) -> list[str]:
@@ -247,28 +261,99 @@ def test_the_offline_branch_sets_the_hold_before_any_resume(shed: str) -> None:
     assert offline_order_problems(offline_branch(shed)) == []
 
 
+# Literal offline bullets, whitespace-normalised. The bullet's opening, which states no order.
+_OFFLINE_LEAD = (
+    "- **When GitHub cannot be reached**, skip this step and record the reason and the time "
+    "in a local file on daniel-box. Step 3 needs only the LAN, so it runs as written."
+)
+_CANONICAL = (
+    "Once the WAN returns, run this step's `gh variable set DEPLOY_HOLD` first, before any "
+    "resume and before step 4, because a queued `promote` run can start as soon as GitHub "
+    "answers."
+)
+
+
 @pytest.mark.parametrize(
-    ("old", "new"),
+    ("bullet", "refused"),
     [
-        # A resume in its own sentence ahead of the set.
-        ("skip this step", "resume each suspended tag. Then skip this step"),
-        # A resume ahead of the set inside the same sentence.
-        (
-            "run this step's `gh variable set` first",
-            "resume each suspended tag, then run this step's `gh variable set`",
+        pytest.param(f"{_OFFLINE_LEAD} {_CANONICAL}", False, id="canonical-passes"),
+        # The pinned sentence reworded or replaced. Review findings 1-3 on PR #5377 first.
+        pytest.param(
+            f"{_OFFLINE_LEAD} Once the WAN returns, before step 4 resume each suspended tag, "
+            "then run this step's `gh variable set DEPLOY_HOLD`.",
+            True,
+            id="before-noun-ahead-of-a-resume",
         ),
-        # The set negated, with the resume after it in the text.
-        (
-            "run this step's `gh variable set` first",
-            "do not run this step's `gh variable set`; resume each suspended tag first",
+        pytest.param(
+            f"{_OFFLINE_LEAD} Once the WAN returns, resume each suspended tag, then after that "
+            "run `gh variable set DEPLOY_HOLD`, before step 4.",
+            True,
+            id="after-that-refers-back-to-the-resume",
+        ),
+        pytest.param(
+            f"{_OFFLINE_LEAD} Once the WAN returns, run this step's `gh variable set "
+            "DEPLOY_HOLD`. Before that, resume each suspended tag.",
+            True,
+            id="ordering-word-across-a-sentence-boundary",
+        ),
+        pytest.param(
+            f"{_OFFLINE_LEAD} Once the WAN returns, resume each suspended tag first, then run "
+            "this step's `gh variable set DEPLOY_HOLD`, before step 4, because a queued "
+            "`promote` run can start as soon as GitHub answers.",
+            True,
+            id="resume-first-wording",
+        ),
+        pytest.param(
+            f"{_OFFLINE_LEAD} Once the WAN returns, run this step's `gh variable set "
+            "SOMETHING_ELSE` first, before any resume and before step 4, because a queued "
+            "`promote` run can start as soon as GitHub answers.",
+            True,
+            id="set-of-a-different-variable",
+        ),
+        pytest.param(
+            f"{_OFFLINE_LEAD} Once the WAN returns, run this step's `gh variable set "
+            "DEPLOY_HOLD --body none` first, before any resume and before step 4, because a "
+            "queued `promote` run can start as soon as GitHub answers.",
+            True,
+            id="clear-in-the-place-of-the-set",
+        ),
+        # The pinned sentence intact, with a second statement of the order beside it.
+        pytest.param(
+            f"{_OFFLINE_LEAD} {_CANONICAL} Before step 4 and before that set, resume each "
+            "suspended tag.",
+            True,
+            id="trailing-step-4-clause-puts-the-resume-first",
+        ),
+        pytest.param(
+            f"{_OFFLINE_LEAD} Resume each suspended tag. {_CANONICAL}",
+            True,
+            id="resume-sentence-ahead-of-the-pin",
+        ),
+        pytest.param(
+            f"{_OFFLINE_LEAD} {_CANONICAL} Then run `gh variable set DEPLOY_HOLD --body none`.",
+            True,
+            id="clear-after-the-pin",
+        ),
+        pytest.param(
+            f"{_OFFLINE_LEAD} {_CANONICAL} Then run `gh variable set SOMETHING_ELSE --body x`.",
+            True,
+            id="other-variable-set-beside-the-pin",
+        ),
+        pytest.param(
+            f"{_OFFLINE_LEAD} {_CANONICAL} Then go to step 4.",
+            True,
+            id="bare-step-4-beside-the-pin",
+        ),
+        pytest.param(
+            f"{_OFFLINE_LEAD} {_CANONICAL} {_CANONICAL}",
+            True,
+            id="pin-stated-twice",
         ),
     ],
 )
-def test_an_offline_branch_with_a_resume_moved_first_fails(
-    shed: str, old: str, new: str
-) -> None:
-    red = mutate(" ".join(offline_branch(shed).split()), old, new)
-    assert offline_order_problems(red)
+def test_the_offline_order_case_table(bullet: str, refused: bool) -> None:
+    problems = offline_order_problems(bullet)
+    assert bool(problems) is refused, problems
 
 
 def test_branch_1_holds_no_revert_command(runbook: str) -> None:
