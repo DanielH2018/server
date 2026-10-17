@@ -24,7 +24,7 @@ merged.
 | R1 | Shadow render with zero diff | — |
 | R2 | Secret placeholders and CI secret checks | R1 |
 | R3 | Remove the pre-apply live reads | R1 |
-| R4 | Delete the k8s Ansible path | D6 |
+| R4 | Delete the k8s Ansible path | D6, per PR. R4.1 needs only D6.1 and D5's tail, R4.5 also D6.4, and R4.7 the whole of D6 |
 | D1 | Flux installed, owning nothing | —. D1.6b, the `flux` rule group, also M1 |
 | D2 | One stateless leaf end to end on production | D1, R1, and R2's PRs 1 and 2 (placeholder mode and the five rules). D2.6d also M1. D2.7 also D4.0, M1, and PR 2b of R2's *Publish `domain`* item (C3) |
 | D3 | Secrets through Flux | D2, R2. D3.0 to D3.3 need only D2.1 to D2.6c, which include D2.6b's empty `SHARED_KINDS` and census |

@@ -2,7 +2,11 @@
 
 Status: PLANNED
 
-Depends on: D6
+Re-sliced on 2026-10-17 at the operator's request: 18 steps became 9 PRs. One of the nine,
+R4.6, runs only if R4.1 finds the revert runbook without its own entry (*Steps, as PRs*).
+
+Depends on: D6, narrowed per PR on 2026-10-17. R4.1 waits on D6.1 and on D5's tail, R4.5
+also on D6.4, and R4.7 on the whole of D6 (*Steps, as PRs*, *The edge to D6, narrowed*).
 
 Related issues: [#4527](https://github.com/DanielH2018/server/issues/4527), which proposes a
 shared `_as_filter` helper for the filter plugins. No symbol of that name exists at
@@ -941,7 +945,207 @@ without Ansible*).
 ## Steps, as PRs
 
 No PR in R4 moves ownership of a live object, so the two-writer rule (C4) has nothing to
-check beyond PR 1's precondition.
+check beyond R4.1's precondition.
+
+**Re-sliced on 2026-10-17.** The operator asked for fewer, larger PRs, written in parallel so
+that each one lands as soon as its predecessor does. The 18 steps of the earlier list became
+the nine PRs below, R4.1 to R4.9. The earlier list stays at the end of this section,
+collapsed. Each new PR carries every bullet of the old steps it absorbs, including their
+verification, rollback notes, operator-only gates and exit-criterion parts. Where the old
+text says more than the summary here, the old text binds.
+
+**An old step number names a part of a new PR.** The sections after this one cite the old
+numbers, and so do other slices' plans ("R4 PR 7b", "R4's PR 1"). Read each through this
+table:
+
+| Old step | New PR |
+|---|---|
+| PR 1 | R4.1 |
+| PR 2, PRs 3a to 3d | R4.2 |
+| PR 4, PR 5 | R4.3 |
+| PR 7c, PR 7d, PR 7e | R4.4 |
+| PR 6 | R4.5 |
+| PR 7a | R4.6, conditional |
+| PR 7b, PR 8 | R4.7 |
+| PR 9, PR 10 | R4.8 |
+| PR 11 | R4.9 |
+
+**Size.** R4.5 and R4.7 are deletion PRs, sized by subject rather than by line count, on the
+amendment that Open question 11 names. A deletion PR removes one subject together with the
+tests whose subject it is and the docs that describe it. Its description carries the census
+command that proves nothing still names what it deleted. Until G2 retires
+`docs/facts.lock`, it also names every lock row it moves: `fact_status.py verify` for a
+section it edits, and `fact_status.py forget` for a section it deletes. Every other PR aims
+at about 300 to 800 changed lines. Every PR carries a `Render-diff:` line and quotes the
+deployer route of its paths, measured with `services_from_changed_paths` at its base.
+
+### The PRs at a glance
+
+"Written ahead" means an agent can write the PR before its predecessors land and rebase it
+later. The measurements a description quotes are always taken at the PR's own merge base.
+
+| New PR | Old steps | Written ahead? | Waits on |
+|---|---|---|---|
+| R4.1 The gate, the inventory and the precondition | 1 | Yes. The renderer takes its commit as `--revision`, so the workflow runs on a branch. The inventory waits for the merge base. | D5's tail, D6.1, and C1 naming the commit input (Open question 10) |
+| R4.2 Render metadata moves to role defaults | 2, 3a to 3d | Partly. The readers, and the key moves of roles already flux-owned. Every other role's moves wait for its D5 flip. | R4.1, and its context in the live ruleset |
+| R4.3 The renderer reads no task file | 4, 5 | Yes, rebasing on R4.2 | R4.2 |
+| R4.4 The renderer becomes the reference | 7c, 7d, 7e | Yes | R4.1, and its context in the live ruleset |
+| R4.5 Delete render_records | 6 | Partly. The role's deletion; its reader list after D6.4 | R4.3, D6.4 |
+| R4.6 A standalone revert entry, conditional | 7a | Expected skipped | R4.1's record of the entry point |
+| R4.7 Delete the k8s play and the manifests role | 7b, 8 | Partly. The runbook-resolution test and the glance marker; the deletion after D6 | R4.4, R4.5, R4.6 if it runs, and the whole of D6 |
+| R4.8 Retire the comparison and reimplement the filters | 9, 10 | Yes, rebasing on R4.7 | R4.7, and C1's stub-mode amendment (Open question 9) |
+| R4.9 Retire the render-diff gate | 11 | No. It lists every other R4 PR's run. | Every other R4 PR |
+
+### The edge to D6, narrowed
+
+R4 still depends on D6, but only R4.7 waits on the whole slice.
+
+- **R4.1 waits on D6.1, the tick's k8s arms.** It needs D6.1 merged for one measurement: the
+  deployer route of a deploy-plane path and of a deleted role `tasks/` path after D6.1. R4.7
+  quotes that route again at its own base. R4.1 also waits on D5's tail directly, because its
+  ownership test needs every k8s entry to be flux-owned. That includes uptime-kuma, which
+  leaves at M6's C-2b. On 2026-10-17, 14 of the 58 k8s entries were flux-owned, and four more
+  were in open PRs.
+- **R4.2, R4.3 and R4.4 wait on no D6 PR.** They change how the renderer reads the tree, and
+  they touch no code that D6 deletes. D6.2a also edits `scripts/lib/k8s_roles.py`, which
+  makes a rebase, not an edge.
+- **R4.5 waits on D6.4, reach and narrowing.** D6.4 deletes `shared_role_callers.py`, which
+  calls `render_targets.py`. D6.4 merges after D6.5b, which deletes `releases_render.py`, a
+  reader of the render records. D6.1 deletes `deploy_release.py`, the other deployer reader,
+  and edits `deploy_narrow.py`, the last other caller of `render_targets.py`.
+- **R4.7 waits on the whole of D6.** The play's `k8s_retired_services` teardown has no job
+  left only once D6.7's deletion policy is live (D6, *The deletion policy*). D6.3 deletes the
+  `land.sh` and `deploy.sh` arms that still name the play. R4.8 and R4.9 follow R4.7.
+- **D6 may renumber its PRs.** D6 was re-sliced on the same day. Each edge above names its
+  D6 PR by subject as well as by number. Read the number as the re-sliced D6 PR that absorbs
+  that subject.
+
+Two costs follow from the narrowing:
+
+- **D6's later PRs carry a `Render-diff:` line.** From R4.1's merge, the `render-diff` context
+  is required, and a PR on a hazard path needs the line (*The render-diff gate*). A grep of
+  D6's steps for the hazard paths finds two D6 PRs that can merge after R4.1. D6.2a edits
+  `scripts/lib/k8s_roles.py` and deletes `ansible/filter_plugins/k8s_autodeploy.py`. D6.7
+  edits the deletion policy under `scripts/renderer/`. D6.2a carries `Render-diff: none`, and
+  D6.7 lists every `flux/<tag>.yaml` it changes. The design already asks this of every slice
+  that edits a hazard path while R4 is in flight.
+- **R4.1's inventory can list items that a later D6 PR deletes.** R4.5 and R4.7 therefore
+  re-run R4.1's `git ls-files` listing for the items they delete, at their own base, and
+  delete only what is still there.
+
+### The PRs
+
+1. **R4.1: the render-diff gate, the inventory and the precondition** (old PR 1, about 200
+   lines).
+    - **Why alone.** The operator pushes `render-diff.yml`, and adds its context to the live
+      ruleset when R4.1 merges (**operator-only**). R4.2's description then quotes a
+      throwaway PR whose red run left the merge blocked. No later R4 PR merges until the
+      context is required.
+    - **Scope.** Every bullet of old PR 1: the ownership test, the precondition test with
+      its `flux` exemption and its six fixtures, the allowlist existence test, the workflow,
+      the context in `gitops_deploy_expected_ruleset_contexts`, and the template's
+      `Render-diff:` section. The description holds the inventory, the verify-row mapping
+      to C7's three shapes, the mapping of flux's exempted rows, the deployer routes, the
+      four re-measured inputs, the revert entry point and the render_records unit check. If
+      the units are still present, a disarm PR through the role's defaults lands first.
+    - **Verification.** The render-diff job's five failing cases, the commit-pin proof and
+      the precondition fixtures (*Verification*, *Red-proofs*). The run on R4.1 is
+      advisory.
+    - **Rollback.** The operator removes the context from the live ruleset in the same
+      window as a revert.
+    - **Exit criterion.** Records exit 1's allowlist, starts exit 3, and holds exit 5's
+      mapping.
+1. **R4.2: render metadata moves to role defaults** (old PRs 2 and 3a to 3d, about 700
+   lines).
+    - **Why together.** One subsystem, the place where render metadata lives. Old PR 2's
+      reader raises on a key that both sources set, and it lands in the commit that moves
+      the keys, so no commit has two live sources for one key. No live result sits between
+      the steps: the render-diff run proves the whole move moved no byte.
+    - **Scope.** The readers take `defaults/main.yml` first and `tasks/` second. The keys of
+      R4.1's measured set move in the four role groups, one branch commit per group, as
+      old PR 3 lists them. Ansible-only keys stay for R4.7.
+    - **Written ahead, partly.** A role that is not flux-owned still runs its include vars
+      through Ansible, and its D5 flip PR rewrites the same task file. So its moves wait
+      for its flip.
+    - **Verification.** `Render-diff: none`. The description quotes R4.1's throwaway PR,
+      which shows the context binds.
+    - **Rollback.** R4.2 reverts whole. A partial revert would leave a key in both sources,
+      and the reader raises on that.
+1. **R4.3: the renderer reads no task file** (old PRs 4 and 5, about 380 lines).
+    - **Why together.** After R4.3 the renderer reads nothing under `tasks/`. Old PR 4 moves
+      the task-made facts into `renderer_lib/derived.py`, and old PR 5 drops the `tasks/`
+      read and moves `render_targets()` into `renderer_lib/targets.py`. Old PR 5 must follow
+      every move group, so R4.3 follows R4.2.
+    - **Verification.** `Render-diff: none`, because a moved content tag would rebuild all
+      nine images. The `Templar` oracle for the content tag, the raising declaration checks,
+      the readers' hard errors, and the equality and floor tests of the service set.
+    - **Rollback.** A revert moves no byte. `scripts/deploy_tools/render_targets.py` stays
+      until R4.5.
+1. **R4.4: the renderer becomes the reference** (old PRs 7c, 7d and 7e, about 410 lines).
+    - **Why together.** These are the three prerequisites of the play's deletion that make
+      the renderer, not Ansible, the reference. The tests read the renderer's bytes (7c),
+      the dialect is written down and checked once against Ansible (7d), and a renderer
+      dependency bump must declare its diff (7e). None of them waits on a live result of
+      another. R4.4 may merge before, between or after R4.2 and R4.3.
+    - **Merges before R4.7.** Old PR 7d's precedence fixtures are checked against an
+      `ansible-playbook` render, which R4.7 deletes. Old PR 7c moves every kept reader off
+      `deploy_play`.
+    - **Operator-only.** Approving the dialect ADR. Pushing the workflow change of old
+      PR 7e.
+    - **Verification.** `Render-diff: none`. The description quotes the `deploy_play` grep,
+      the two equal outputs of each spec literal, and the dependency-pin fixtures.
+    - **Rollback.** A revert restores `deploy_play` and the play-reading tests, which pass
+      only while the play exists, so R4.7 reverts first.
+    - **Why old PR 7e does not join R4.1.** It edits the same workflow, and joining would
+      save one push. It would also start the dependency-pin hazard at R4.1 rather than at
+      old PR 7e, which is a design change, so it stays here.
+1. **R4.5: delete render_records** (old PR 6, deletion PR).
+    - **Why alone.** It parks the tick (`broad_manual`) and owes the operator's
+      `gitops_deploy` apply. The role, its `initial_setup.yml` entry and its `_KUMA_CHECK`
+      entry leave in one commit, and its revert parks the tick the same way.
+    - **Scope.** Every bullet of old PR 6, after re-running R4.1's listing for the readers
+      D6 left.
+    - **Operator-only.** Old PR 6's five park steps in one sitting, ending in
+      `initial_setup.yml --tags gitops_deploy` and every apply step 3 names. The secrets
+      commit after R4.5, which removes `render_records_push_token`. The removal of
+      `/var/lib/homelab/k8s-renders.d`.
+    - **Verification.** The three outputs of *PR 6's landing*.
+1. **R4.6: a standalone entry for the revert runbook** (old PR 7a, conditional, about 60
+   lines).
+    - **Runs only if** R4.1 finds no `ansible/volume-revert.yml`, or finds the command still
+      reaching `volume-revert` through the manifests role or `deploy.yml`. On 2026-10-17 the
+      playbook is on master and includes `k8s/volume-revert` alone, so R4.6 is expected to
+      be skipped. R4.1 confirms.
+    - **Why alone.** Its speedtest drill through the new playbook on production runs before
+      R4.7 merges (**operator-only**), with old PR 7a's blast radius.
+1. **R4.7: delete the k8s play and the manifests role** (old PRs 7b and 8, deletion PR).
+    - **Why together.** Old PR 7b changes no file. Its four bootstrap properties were always
+      checked in old PR 8's description, at its merge base.
+    - **Scope.** Every bullet of old PR 8, after re-running R4.1's listing, and old PR 7b's
+      four checks with the `awk` program, its red half and its exit codes.
+    - **Operator-only.** Deciding in review whether to rerun D5.2c's speedtest drill after
+      the merge. Removing `/var/lib/homelab/k8s-releases.d` once D6 has deleted its readers.
+      Ruling on the ADR-0011, ADR-0017 and ADR-0012 amendments (Open question 8).
+    - **If Open question 11's amendment is refused,** R4.7 splits by subject in the order
+      that question gives.
+1. **R4.8: retire the Ansible-tree comparison and reimplement the filters** (old PRs 9 and
+   10, about 300 lines).
+    - **Why together.** Both make the renderer stand alone once R4.7 has removed the Ansible
+      render. Old PR 9 deletes `compare` and `stubcheck`, whose subject R4.7 deleted. Old
+      PR 10 removes the renderer's last ansible-core import. Neither waits on a live result.
+    - **Verification.** `Render-diff: none`. The filter parity tests and the ansible-free
+      runtime test with its red half (exit 4). R4.4's spec tests pass on the branch commit
+      before the filter switch and on the head, and the description quotes both runs.
+    - **Gate.** C1's stub-mode amendment lands before R4.8 merges (Open question 9).
+1. **R4.9: retire the render-diff gate** (old PR 11, about 60 lines removed).
+    - **Why alone and last.** The operator removes the context from the live ruleset first
+      (**operator-only**), and R4.9 merges the same day. Its description lists every R4 PR
+      with its `render-diff` run, which is exit 3's evidence. Exit 6 is read here.
+    - **Operator-only.** Removing the context, pushing the workflow's deletion, ruling on
+      Open question 12, and deciding an exit 6 overrun.
+
+<details markdown="1">
+<summary>The step list before the 2026-10-17 re-slice: 18 steps</summary>
 
 PRs 6 and 8 are deletion PRs, sized by subject rather than by line count. That sizing rests
 on a contract amendment that has not landed (Open question 11). A deletion PR removes one
@@ -1335,6 +1539,8 @@ deployer route of its paths, measured with `services_from_changed_paths` at its 
     applies itself. The description lists every R4 PR with its `render-diff` run and
     conclusion, which is exit 3's evidence.
 
+</details>
+
 ## Verification
 
 **Exit checks:**
@@ -1468,8 +1674,9 @@ daniel-box. The operator produces them, because each needs the host:
 ## Rollback
 
 - **PRs 1 to 5 and 10** change how the tree is read. The render-diff gate shows each moved no
-  byte, so a revert moves none either. A PR 3 group reverts whole: a partial revert would
-  leave one key in both sources, and PR 2's reader raises on that rather than rendering.
+  byte, so a revert moves none either. R4.2, which holds PR 2 and every PR 3 group, reverts
+  whole: a partial revert would leave one key in both sources, and PR 2's reader raises on
+  that rather than rendering.
 - **PR 6.** A revert restores the role, its tests, `render_targets.py`, PR 5's equality
   test, the `_KUMA_CHECK` entry and the playbook entry with `render_records_state: absent`,
   so it re-arms nothing. That revert also edits `initial_setup.yml`, so it parks the tick the
