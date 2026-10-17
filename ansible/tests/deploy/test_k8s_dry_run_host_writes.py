@@ -50,8 +50,8 @@ _HOST_WRITE_MODULES = (
 )
 
 # A `command`/`shell` that redirects into an absolute path writes the host as surely as `copy`
-# does. The four script-ConfigMap renders (monitor-bridge, autofix-bridge and the two stats
-# roles) are exactly this shape: `kubectl create configmap --dry-run=client -o yaml > <file>`.
+# does. The three script-ConfigMap renders (monitor-bridge and the two stats roles) are
+# exactly this shape: `kubectl create configmap --dry-run=client -o yaml > <file>`.
 _HOST_REDIRECT = re.compile(r">>?\s*/(?:etc|opt|usr|var|srv)/")
 
 # Roles whose host writes are the dry-run MECHANISM rather than a side effect of it.
@@ -66,7 +66,6 @@ _HOST_WRITE_EXEMPT = frozenset({"manifests"})
 _ROLES_THAT_WRITE_THE_HOST = frozenset(
     {
         "artifacts",
-        "autofix-bridge",
         "observability",
         "configarr",
         "crowdsec",

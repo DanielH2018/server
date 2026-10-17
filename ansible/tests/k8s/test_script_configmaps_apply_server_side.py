@@ -73,7 +73,6 @@ def test_the_derivation_finds_the_known_roles():
     # Without this the parametrized test below passes vacuously if the task is renamed.
     assert {
         "monitor-bridge",
-        "autofix-bridge",
         "game-stats",
     } <= set(ROLES), ROLES
 

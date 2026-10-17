@@ -1,8 +1,8 @@
 {#
   checksum/<name> pod-template annotation — the trigger a Deployment/DaemonSet needs to
   restart on content it mounts but `ansible.builtin.template` never rendered. A ConfigMap
-  staged by `kubectl create configmap --from-file` (monitor-bridge, autofix-bridge,
-  valheim-stats, terraria-stats all do this for a Jinja-hostile script) sits outside the
+  staged by `kubectl create configmap --from-file` (monitor-bridge, valheim-stats and
+  terraria-stats all do this for a Jinja-hostile script) sits outside the
   manifests role's own render/apply cycle, so `manifests_render is changed`
   (roles/k8s/manifests/tasks/main.yml) never fires for it and the pod keeps running the code
   it started with. See "A config edit won't restart the pod (k3s)" in the repo CLAUDE.md.
@@ -11,14 +11,15 @@
   manifest listed in `manifests_files`/`manifests_secret_files` needs no annotation at all —
   the embed changes the rendered manifest's bytes, `manifests_render is changed` fires on its
   own, and the central rollout-restart covers it. Reach for this macro only for content that
-  reaches the cluster some other way.
+  reaches the cluster some other way. autofix-bridge's templates/script-configmap.yaml.j2 is
+  the worked example of the embed.
 
   Two call shapes, matching the two ways a caller computes its value:
 
     checksum_annotation('name', value=<already-computed checksum>)
       Renders the value verbatim, `| default('unstaged')`. Use this when the value comes from
       a task — a `copy` register, a fact hashing several files together (monitor-bridge,
-      autofix-bridge, valheim-stats and terraria-stats each stage TWO modules and hash
+      valheim-stats and terraria-stats each stage TWO modules and hash
       both into one trigger — see their tasks/main.yml) — anything other than one file's
       raw bytes, so a role's own
       computation is preserved exactly rather than approximated by this macro's own hashing.

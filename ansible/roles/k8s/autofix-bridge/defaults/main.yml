@@ -8,11 +8,11 @@ autofix_bridge_k8s_image: python:3.14-alpine@sha256:f6a589d43c42b9e7f7dc67a12d37
 # workload that fixes *arr issues with no page of its own if it silently stops.
 #
 # autofix.py is this role's own file. bridge/common.py is monitor-bridge's canonical copy and
-# kuma_push.py is setup/common's, both staged cross-role (the pattern `host_lib.py` uses from
+# kuma_push.py is setup/common's, both shipped cross-role (the pattern `host_lib.py` uses from
 # `roles/setup/common`), never a second edited copy under this role's files/.
 # ENFORCED by ansible/tests/services/test_autofix_bridge_modules.py.
 # `name` is the ConfigMap key (no slash allowed); `path` is where the Deployment mounts it
-# under /app, and where the staging copy lands. The shared module is `bridge/common.py` in
+# under /app. templates/script-configmap.yaml.j2 embeds each `src`. The shared module is `bridge/common.py` in
 # both roles' pods, so `autofix.py` imports it the same way monitor-bridge's modules do.
 autofix_bridge_modules:
   - name: autofix.py

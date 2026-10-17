@@ -128,7 +128,6 @@ HOST_WRITE_ALLOW = {
         "D5's `k8s_host_files` conversion PR for artifacts moves its directory tasks, which "
         "no H2 PR moves"
     ),
-    _K8S + "autofix-bridge/tasks/main.yml": _CONFIGMAP,
     _K8S + "configarr/tasks/main.yml": _H2_THEN_D5,
     _K8S + "crowdsec/tasks/main.yml": _H2_THEN_D5,
     _K8S + "docs/tasks/main.yml": "D5's `k8s_host_files` conversion PR for docs",
