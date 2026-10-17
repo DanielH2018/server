@@ -20,6 +20,7 @@ from dataclasses import replace
 
 from lib.exit_codes import RENDER_FAILED, RENDER_OK, RENDER_REFUSED
 from lib.render_guard import BUILT_IMAGE_TAG_STUBS
+from deploy_tools import ci_images
 from lib import yaml_fast
 from renderer import homelab_render
 from renderer.renderer_lib import cluster, images, placeholders
@@ -326,6 +327,10 @@ def test_ghcr_text_moves_only_built_refs_and_adds_a_missing_policy():
         "    - image: ghcr.io/danielh2018/n8n:sha-ba9876543210\n"
         "      imagePullPolicy: IfNotPresent\n"
     )
+
+
+def test_the_ghcr_prefix_is_where_ci_images_pushes():
+    assert f"{images.GHCR}/nut:sha-0" == ci_images.ref("nut", "sha-0")
 
 
 def test_a_render_whose_ghcr_ref_pulls_always_writes_nothing(tmp_path):

@@ -35,8 +35,6 @@ import jinja2
 import yaml
 from ansible.errors import AnsibleError
 
-from deploy_tools.ci_images import OWNER, REGISTRY
-from deploy_tools.ci_images import ref as ghcr_ref
 from lib import yaml_fast
 from lib.ansible_inventory import K8S_HOST
 from lib.repo_paths import K8S_ROLES
@@ -57,7 +55,10 @@ GHCR_PULL_POLICY = "IfNotPresent"
 BUILT_REF = re.compile(
     r"[^/\s]+/(?P<name>[a-z0-9]+(?:-[a-z0-9]+)*):(?P<tag>sha-[0-9a-f]{12})"
 )
-GHCR_REF = re.compile(re.escape(f"{REGISTRY}/{OWNER}/") + r"[^:\s]+:sha-[0-9a-f]{12}")
+# Where `ci_images` pushes each image. A host render imports this module, and `ci_images` is no
+# `HOST_INPUTS` member, so the prefix is repeated here and a test holds the two equal.
+GHCR = "ghcr.io/danielh2018"
+GHCR_REF = re.compile(re.escape(GHCR) + r"/[^:\s]+:sha-[0-9a-f]{12}")
 
 
 @dataclass(frozen=True)
@@ -186,7 +187,7 @@ def ghcr_text(text: str, tags: Mapping[str, str], where: str) -> str:
             m = BUILT_REF.fullmatch(str(image.value))
             if not m or tags.get(m["name"]) != m["tag"]:
                 continue
-            new = ghcr_ref(m["name"], m["tag"])
+            new = f"{GHCR}/{m['name']}:{m['tag']}"
             edits.append((image.start_mark.index, image.end_mark.index, new))
             if "imagePullPolicy" in keys:
                 policy = keys["imagePullPolicy"][1]
