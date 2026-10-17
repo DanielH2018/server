@@ -1,15 +1,13 @@
-"""Run a ci.yml scoping step's `run:` script against a scratch repository.
+"""Run the `hooks` job's empty-merge step against a scratch repository.
 
-Both the `hooks` and the `ansible_lint` job decide `mode=full|scoped|none` in a step with
-`id: changed`, and two test modules exercise those decisions: `test_ci_empty_pr_merge_fails.py`
-(an empty merge fails) and `test_hook_config_changes_run_the_hook.py` (a hook-config edit forces
-the full sweep). The harness lives here, at the `pythonpath` root, so neither imports the other.
+The step has `id: changed` and fails a PR whose merge would change no files.
+`test_ci_empty_pr_merge_fails.py` exercises it.
 
 The scratch repository itself comes from `lib.git_testing`.
 
 The script is extracted from the workflow and run with the step's own `env:` block, so a
-variable the step declares (`FULL_SWEEP_PATHS`) reaches it the way the runner supplies it, and
-a `${{ }}` expression in that block is replaced by the caller's value rather than passed raw.
+variable the step declares reaches it the way the runner supplies it, and a `${{ }}`
+expression in that block is replaced by the caller's value rather than passed raw.
 
 The step calls `scripts/dev/pr_changed_files.sh` through `$GITHUB_WORKSPACE`, which on the
 runner is the checkout it stands in. Here it is this repository, so the scratch clone runs the
@@ -26,14 +24,12 @@ from lib.proc_testing import run
 
 CI_WORKFLOW = REPO / ".github" / "workflows" / "ci.yml"
 
-# The step is found by its id, which the job's later `if:` expressions read as
-# `steps.changed.outputs.mode`, so it cannot be renamed without those breaking too.
 STEP_ID = "changed"
 
-# A literal the extracted script must carry, so a step that stopped being the scoping step
+# A literal the extracted script must carry, so a step that stopped being the empty-merge step
 # (or an extractor that returned some other step's script) fails here rather than passing on
 # whatever `bash` made of the wrong text.
-SCRIPT_MARKER = 'echo "mode=scoped" >> "$GITHUB_OUTPUT"'
+SCRIPT_MARKER = "would change no files"
 
 
 def scoping_step(workflow_text: str, job: str) -> dict:
@@ -45,12 +41,6 @@ def scoping_step(workflow_text: str, job: str) -> dict:
 
 def scoping_script(workflow_text: str, job: str = "hooks") -> str:
     return scoping_step(workflow_text, job)["run"]
-
-
-def full_sweep_paths(workflow_text: str, job: str) -> list[str]:
-    """The step's `FULL_SWEEP_PATHS` block, one path per line, as the script reads it."""
-    block = scoping_step(workflow_text, job).get("env", {}).get("FULL_SWEEP_PATHS", "")
-    return [line for line in block.splitlines() if line.strip()]
 
 
 def make_clone(tmp_path: Path) -> Path:

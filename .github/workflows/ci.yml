@@ -34,12 +34,13 @@ on:
   # path. GitHub documents the Run-workflow BUTTON as requiring the default branch; that half is
   # untested here, so reach for `gh workflow run` rather than the UI.
   #
-  # Every job treats a dispatch like a push, with nothing to configure. Both scoping steps are
-  # `if: github.event_name == 'pull_request'`, so `steps.changed.outputs.mode` stays unset and
-  # each full-sweep step fires; `pytest` carries no condition; `renovate-config` runs on
-  # `!= 'push'`. ENFORCED by ansible/tests/repo/test_ci_dispatch_sweeps_everything.py, because a
-  # scoping condition rewritten to key on `push` would leave a dispatch fast, green and checking
-  # nothing.
+  # Every job treats a dispatch like a push that no PR run proved, with nothing to configure.
+  # The `prove` job runs on `push` only, so on a dispatch its output is empty and every other job
+  # runs. A PR run is a full sweep as well, so no step keys on `pull_request` to scope a hook;
+  # the PR-only steps (the facts notice, the cross-plane gate, the type-proof scope) are skipped
+  # on a dispatch. `renovate-config` runs on `!= 'push'`. ENFORCED by
+  # ansible/tests/repo/test_ci_dispatch_sweeps_everything.py, because a job condition rewritten to
+  # key on `push` would leave a dispatch fast, green and checking nothing.
   workflow_dispatch:
   push:
     branches: [master]
@@ -76,6 +77,48 @@ permissions:
   contents: read
 
 jobs:
+  # Proves, on a push to master, that the pushed tree is one a green PR run already tested
+  # (#5489). Of 235 squash commits from 2026-10-15 to 2026-10-17, 186 had the tree of their PR's
+  # head run, and master runs were 21% of all runner time. A PR run is a full sweep (see the
+  # `hooks` job), so a master run on a tree it already swept repeats work and checks nothing new.
+  #
+  # `scripts/dev/tested_tree.py` reads the `ci/tested-tree` commit status that the `prek` gate
+  # writes on the PR head, and answers `proven=true` only when that status carries the pushed
+  # commit's tree id. Every other job then skips. Any other answer, including an unreadable
+  # status, a token without access and a failed lookup, is `proven=false`, and the run proceeds
+  # in full as it did before. The script exits 0 either way.
+  #
+  # The job runs on a push only. On every other event it is skipped, its output is empty, and
+  # every dependent runs: a dispatch, a merge_group run and a PR run are never proven. Nothing
+  # here is push-only except this job, so there is no push-only job to keep running.
+  #
+  # The `prek` gate stays green on the proven path because a `skipped` dependency counts as a
+  # pass only when this job succeeded and said `proven=true`. The deployer's CI gate and
+  # `await_ci.py` read the gate's check-run, and read `skipped` as a pass.
+  prove:
+    name: prove the pushed tree was tested
+    if: github.event_name == 'push'
+    runs-on: ubuntu-26.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read
+      statuses: read
+    outputs:
+      proven: ${{ steps.prove.outputs.proven }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - name: Compare the pushed tree with the tree a green PR run recorded
+        id: prove
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          python3 scripts/dev/tested_tree.py prove \
+            --repo "$GITHUB_REPOSITORY" --sha "$GITHUB_SHA" --tree "$(git rev-parse "$GITHUB_SHA^{tree}")"
+
   # The hook sweep is split three ways — `ansible-lint`, `pytest`, and this job for everything
   # else. None of the three carries the branch-protection required context; the `prek` gate job
   # at the bottom does, under the name "prek (lint + validate + tests + secrets)".
@@ -124,6 +167,8 @@ jobs:
   # per branch, so master paid this on its own first run and each open PR branch pays it once
   # too. Don't read either as the steady state.
   hooks:
+    needs: prove
+    if: ${{ !cancelled() && needs.prove.outputs.proven != 'true' }}
     name: hooks (lint + validate + secrets + docs)
     # A versioned runner label, not the `-latest` alias: the `language: system` hooks run whatever
     # shellcheck, Go and systemd-analyze the image preinstalls, and GitHub rolls the alias to a
@@ -194,88 +239,35 @@ jobs:
       - name: Prove each alert tool rejects its bad fixture
         run: uv run python scripts/validate/alert_rules.py --prove-red
 
-      # On a PR, run every hook against only the files the PR actually touches — the same thing
-      # prek does locally at commit time, and what each hook's `files` regex in prek.toml is
-      # already written for. Measured locally, this sweep is 7.1s over --all-files and 0.10s
-      # over a one-file list.
+      # A PR run is a full sweep. Every hook runs over the whole tree, and so does ansible-lint in
+      # its own job. This is what lets the push run skip when it merges a tree that a PR run
+      # already tested (the `prove` job below, #5489): the PR run is the sweep, so the green it
+      # records covers everything the push run would check. A changed-file scope on the PR run
+      # would leave the scoped-out files unchecked, and the skipped push run would be the only
+      # place they ever got checked.
       #
-      # The file list is computed HERE rather than handed to prek's --from-ref/--to-ref, because
-      # that mode does not skip a hook whose matching-file set is empty: it runs the hook with NO
-      # filenames, and a hook that walks the tree when given none then does so. `ansible-lint` is
-      # that hook, and it runs in its own job now — see the warning on the identical step there.
-      #
-      # scripts/dev/pr_changed_files.sh owns the fetch, the merge-base diff and the rule that a
-      # deletion or a FULL_SWEEP_PATHS change forces the full sweep; the `ansible_lint` job
-      # calls the same script. What stays here is this job's own list and its empty-merge check.
-      - name: Collect this PR's changed files
+      # What stays of the old scoping step is its empty-merge check. scripts/dev/pr_changed_files.sh
+      # owns the fetch and the merge-base diff.
+      - name: Reject a PR whose merge changes no files
         id: changed
         if: github.event_name == 'pull_request'
         env:
           BASE_REF: ${{ github.base_ref }}  # via env, never interpolated into the shell
           FETCH_TOKEN: ${{ github.token }}  # contents: read; the checkout drops its own, see the fetch in the script
-          # A change to one of these is a change to what a hook CHECKS, not to a file it checks,
-          # and the scoped run cannot see that: the hook's `files` regex matches the code, so a
-          # PR editing only the config ran that hook against nothing and master's full sweep
-          # failed after the merge. Vale's terms did this on 2026-08-27 (`.vale.ini`), ruff's
-          # rules on 2026-09-02 (pyproject.toml). Every hook that takes NO filenames now names
-          # its config in `files` instead (ruff, ruff-format, ty, mkdocs-strict); the ones here
-          # are the hooks that DO take filenames, which cannot — prek would hand them the
-          # config file to lint. prek.toml is here because a rev bump changes every hook's
-          # behaviour and matches no hook's `files` but check-toml's. The `ansible_lint` job
-          # keeps its own list. ENFORCED by test_hook_config_changes_run_the_hook.py, which
-          # reads this list, so an entry cannot be dropped without a test naming it.
-          #
-          # A hook's config is not always one file, and Vale's is three. Its vocabulary decides
-          # which words Vale.Spelling accepts across the whole corpus, so a term added or
-          # removed changes the verdict on docs the PR never touched. This workflow carries the
-          # binary pin (the curl above), and CI's own Vale version is what turned master red on
-          # 15 untouched lines in 10 docs when Renovate bumped 3.21.0 -> 3.22.0 (#2536, #2543);
-          # the PR's run checks out the merge ref, so the sweep runs the NEW binary. Listing
-          # ci.yml means every workflow edit runs the full sweep, which is the cost of catching
-          # that bump on its own PR. The host's Vale pin in
-          # ansible/roles/setup/initial_setup/tasks/host-basics.yml is deliberately NOT here:
-          # it is not the binary CI runs, and test_vale_matches_the_ci_pin.py already forces a
-          # bump to move both in one commit.
-          #
-          # The setup action carries the prek pin, which changes how every hook runs, as a
-          # prek.toml rev bump does. The changed-files script decides what this job checks. Both
-          # lived in this file until #3713 and #3714 moved them out, and they stay listed so an
-          # edit to either still sweeps the whole tree on its own PR.
-          FULL_SWEEP_PATHS: |
-            prek.toml
-            .vale.ini
-            styles/config/vocabularies/Homelab/accept.txt
-            .github/workflows/ci.yml
-            .github/actions/setup/action.yml
-            scripts/dev/pr_changed_files.sh
-            .shellcheckrc
-            .gitleaks.toml
         run: |
           set -euo pipefail
           "$GITHUB_WORKSPACE/scripts/dev/pr_changed_files.sh"
-          # Deletions are rare on the PRs this optimises for (Renovate bumps, single-role edits),
-          # so the fast path stays the common one.
-          if [ -s "$RUNNER_TEMP/full_sweep.txt" ]; then
-            echo "mode=full" >> "$GITHUB_OUTPUT"
-            printf '%s — running the full sweep.\n' "$(< "$RUNNER_TEMP/full_sweep.txt")"
-          elif [ ! -s "$RUNNER_TEMP/changed.txt" ]; then
-            # No deletions and no changed files means merging this PR would land NOTHING: the
+          if [ ! -s "$RUNNER_TEMP/changed.txt" ] && [ ! -s "$RUNNER_TEMP/deleted.txt" ]; then
+            # No added, modified or deleted file means merging this PR would land NOTHING: the
             # checkout is the merge ref, so a three-dot diff against the base is exactly what a
             # merge adds. That is never a correct PR, whoever opened it. Renovate can reuse
             # the previous bump's branch under the next version's title when master already
             # holds the content, and the squash commit then carries an empty file list.
             # Failing here fails the `prek` gate, so an automerge cannot fire on the run.
-            #
-            # `ansible_lint`'s scoping step has an empty branch that stays GREEN on purpose: its
-            # list is filtered to ansible YAML, so empty there means "no ansible files changed",
-            # which any docs-only PR produces.
             echo "::error::This PR's merge would change no files against $BASE_REF. Its content already landed, or its branch is stale — close it rather than merge it (#1755)."
             exit 1
-          else
-            echo "mode=scoped" >> "$GITHUB_OUTPUT"
-            echo "Scoping hooks to $(wc -l < "$RUNNER_TEMP/changed.txt") changed file(s):"
-            sed 's/^/  /' "$RUNNER_TEMP/changed.txt"
           fi
+          echo "This PR changes $(wc -l < "$RUNNER_TEMP/changed.txt") file(s) and deletes $(wc -l < "$RUNNER_TEMP/deleted.txt")."
 
       # The facts notice lists every CLAUDE.md section that cites an atom this PR moved, as
       # annotations and as a job-summary table. It runs beside docs/facts.lock for G1's 30-day
@@ -367,15 +359,6 @@ jobs:
           path: ${{ runner.temp }}/notice.err
           if-no-files-found: warn
 
-      - name: Run hooks (PR — scoped to changed files)
-        if: steps.changed.outputs.mode == 'scoped'
-        run: |
-          set -euo pipefail
-          mapfile -t changed < "$RUNNER_TEMP/changed.txt"
-          # --skip ansible-lint: it runs in its own job beside this one, as pytest does.
-          # --skip static-ratchet-tests: the `pytest` job runs those twelve test files already.
-          prek run --skip ansible-lint --skip static-ratchet-tests --color always --files "${changed[@]}"
-
       # The cross-plane gate (D4.4). It refuses a PR that changes a flux-owned role and an
       # Ansible-owned role on one dependency path, because `promote` and `land.sh` would apply
       # the two halves in whichever order they finish. It also refuses an edge added beside a
@@ -400,17 +383,10 @@ jobs:
         timeout-minutes: 2
         run: uv run python scripts/validate/cluster_pins.py --base HEAD^1
 
-      # Every push to master, and any PR the scoping step declined to trust: the full sweep.
-      #
-      # This is what keeps the scoped path's residual gap bounded. ansible-lint does no cross-file
-      # variable analysis, and each other hook's `files` regex is hand-maintained — so a change to
-      # file X will not re-lint an unchanged file Y that consumes it, and a test added at a path
-      # pytest's regex does not match is skipped on the PR. Both surface on the merge to master
-      # rather than never: a deliberate trade of post-merge detection for PR latency.
-      # scripts/tests/test_prek_files_cover_entry_imports.py narrows the second gap: a hook's
-      # `files` must match every in-repo module its Python entry imports.
+      # The full sweep, on every event: a PR run, a dispatch and a push that the `prove` job did not
+      # skip. There is no scoped arm, so a hook's `files` regex no longer decides what a PR run
+      # leaves unchecked.
       - name: Run hooks (full sweep)
-        if: github.event_name != 'pull_request' || steps.changed.outputs.mode == 'full'
         # --skip ansible-lint: it runs in its own job beside this one, as pytest does.
         # --skip static-ratchet-tests: the `pytest` job runs those twelve test files already.
         run: prek run --all-files --skip ansible-lint --skip static-ratchet-tests --color always
@@ -438,6 +414,8 @@ jobs:
   # its key with the `pytest` job, because the hook's own entry runs `ansible-galaxy collection
   # install` before linting — warm that is a 0.4s no-op, cold a ~40 MB download.
   ansible_lint:
+    needs: prove
+    if: ${{ !cancelled() && needs.prove.outputs.proven != 'true' }}
     name: ansible-lint
     runs-on: ubuntu-26.04
     timeout-minutes: 20  # cap a wedged ansible-galaxy install so it can't burn to the 6h default
@@ -454,74 +432,14 @@ jobs:
           prek-cache-key: prek-lint
           galaxy: "true"
 
-      # $RUNNER_TEMP is per-job, so this recomputes the list rather than reading what the `hooks`
-      # job wrote. The same script computes it, so the merge-base diff and the deletions-force-a-
-      # full-sweep rule cannot drift between the two; the ansible filter is the part only here.
-      - name: Collect this PR's changed ansible files
-        id: changed
-        if: github.event_name == 'pull_request'
-        env:
-          BASE_REF: ${{ github.base_ref }}  # via env, never interpolated into the shell
-          FETCH_TOKEN: ${{ github.token }}  # contents: read; the checkout drops its own, see the fetch in the script
-          # What changes ansible-lint's verdict on files this PR did not touch: its own config,
-          # the hook rev in prek.toml, and the collections it resolves modules against. None of
-          # them can go in the hook's `files` — an explicitly passed path is linted whatever it
-          # is (see the hook's comment in prek.toml) — and the ansible filter below would either
-          # drop them (`mode=none`, so a `.ansible-lint` edit was linted by master alone) or
-          # scope-lint requirements.yml as if it were a task file. The setup action is here for
-          # its prek pin, which changes how this hook runs as a prek.toml rev bump does. Same
-          # contract as the `hooks` job's list; ENFORCED by the same test.
-          FULL_SWEEP_PATHS: |
-            prek.toml
-            .ansible-lint
-            ansible/requirements.yml
-            .github/actions/setup/action.yml
-        run: |
-          set -euo pipefail
-          "$GITHUB_WORKSPACE/scripts/dev/pr_changed_files.sh"
-          # Filtered with grep rather than a git pathspec glob (`ansible/**/*.yml` behaves
-          # differently under git's wildmatch than it reads). secrets.yml is dropped here as well
-          # as by the hook's own exclude: were it the ONLY changed ansible file, the hook would
-          # filter the list to empty and fall straight into the tree walk warned about below.
-          #
-          # The greps read the FILE rather than continuing the pipe, so that `|| true` — which
-          # is there for grep's empty-match exit 1 — cannot also swallow a `git diff` failure.
-          # Swallowed, that would produce an empty list, read as `mode=none`, and lint nothing
-          # while reporting green.
-          grep -E '^ansible/.*\.ya?ml$' "$RUNNER_TEMP/changed.txt" \
-            | grep -v '^ansible/vars/secrets\.yml$' > "$RUNNER_TEMP/ansible.txt" || true
-          if [ -s "$RUNNER_TEMP/full_sweep.txt" ]; then
-            echo "mode=full" >> "$GITHUB_OUTPUT"
-            printf '%s — linting the whole tree.\n' "$(< "$RUNNER_TEMP/full_sweep.txt")"
-          elif [ -s "$RUNNER_TEMP/ansible.txt" ]; then
-            echo "mode=scoped" >> "$GITHUB_OUTPUT"
-            echo "Linting $(wc -l < "$RUNNER_TEMP/ansible.txt") changed ansible file(s):"
-            sed 's/^/  /' "$RUNNER_TEMP/ansible.txt"
-          else
-            echo "mode=none" >> "$GITHUB_OUTPUT"
-            echo "No ansible YAML changed in this PR — nothing for ansible-lint to do."
-          fi
-
-      # NEVER let this run with an empty --files list. ansible-lint given no filenames does not
-      # skip: it walks all 954 files (35s local, 36-90s on the runner) and reports a cheerful
-      # "Passed", so an empty list reads as a fast green while costing the most time in the run.
-      # Measured with an explicit `--files docs/secret-rotation.md`: every other
-      # hook, local and remote, correctly reports "(no files to check)Skipped" — ansible-lint
-      # runs bare anyway, with and without require_serial, cause not identified. Hence the
-      # `mode=none` branch above, which skips the step outright rather than passing nothing.
-      - name: Lint the changed ansible files
-        if: steps.changed.outputs.mode == 'scoped'
-        run: |
-          set -euo pipefail
-          mapfile -t ansible < "$RUNNER_TEMP/ansible.txt"
-          # Hook id BEFORE --files: --files is variadic and would otherwise swallow it.
-          prek run ansible-lint --color always --files "${ansible[@]}"
-
-      # Every push to master, and any PR the scoping step declined to trust. ansible-lint does no
-      # cross-file variable analysis, so a change to file X does not re-lint an unchanged file Y
-      # that consumes it — that gap closes on the merge to master rather than never.
+      # Always the whole tree: on a PR run, a dispatch and a push the `prove` job did not skip.
+      # ansible-lint does no cross-file variable analysis, so a changed-file scope on the PR run
+      # would leave every unchanged consumer of a changed variable unlinted, and the push run
+      # that used to catch it is skipped when it merges a tree the PR run tested (#5489).
+      #
+      # NEVER hand this an empty --files list. ansible-lint given no filenames does not skip: it
+      # walks every file and reports "Passed". `--all-files` names the intent.
       - name: Lint the whole tree
-        if: github.event_name != 'pull_request' || steps.changed.outputs.mode == 'full'
         run: prek run ansible-lint --all-files --color always
 
   # The whole pytest suite, unscoped on PRs and pushes alike — the same suite the prek `pytest`
@@ -558,6 +476,8 @@ jobs:
   # (2026-10-02) and 235s on daniel-server at load 15, on every push, to repeat what this job
   # checks in ~61s, and `land.sh` already waits on this job through the `prek` gate.
   pytest:
+    needs: prove
+    if: ${{ !cancelled() && needs.prove.outputs.proven != 'true' }}
     name: pytest (shard ${{ matrix.shard }} of ${{ strategy.job-total }})
     runs-on: ubuntu-26.04
     timeout-minutes: 20
@@ -757,6 +677,8 @@ jobs:
   # the required context red and park every landing behind a check of a file the push did not
   # change. A dispatch still runs it, as every job here does.
   deck_mod:
+    needs: prove
+    if: ${{ !cancelled() && needs.prove.outputs.proven != 'true' }}
     name: deck mod (claude plugin validate + test)
     runs-on: ubuntu-26.04
     timeout-minutes: 10
@@ -808,6 +730,8 @@ jobs:
   # more with `--red-proof`, which must make it exit 1, so this log shows both halves going red
   # on the pinned binary as well as green.
   flux_roundtrip:
+    needs: prove
+    if: ${{ !cancelled() && needs.prove.outputs.proven != 'true' }}
     name: flux round trip (placeholder render against stub render)
     runs-on: ubuntu-26.04
     timeout-minutes: 30
@@ -893,6 +817,8 @@ jobs:
   # does: the PR run already measured it. The scope step is step-level, never a job-level `if:`,
   # because the `prek` gate requires `success` and a skipped job reports `skipped`.
   sops_manifest_type_proof:
+    needs: prove
+    if: ${{ !cancelled() && needs.prove.outputs.proven != 'true' }}
     name: sops-manifest-type-proof (an all-digit stringData value stays a string)
     runs-on: ubuntu-26.04
     timeout-minutes: 20
@@ -1094,6 +1020,8 @@ jobs:
   # Renovate PR that bumps the pin changes no render, so with the fetch behind the diff gate a
   # wrong digest or a 404 URL would reach master green.
   host_packages:
+    needs: prove
+    if: ${{ !cancelled() && needs.prove.outputs.proven != 'true' }}
     runs-on: ubuntu-26.04
     # The image build fetches from snapshot.ubuntu.com, which answers 5xx often enough that
     # apt's retries can take minutes, and the cases boot three containers per leg.
@@ -1321,14 +1249,26 @@ jobs:
   prek:
     name: prek (lint + validate + tests + secrets)
     runs-on: ubuntu-26.04
-    needs: [hooks, pytest, ansible_lint, deck_mod, flux_roundtrip, sops_manifest_type_proof, host_packages]
+    needs: [prove, hooks, pytest, ansible_lint, deck_mod, flux_roundtrip, sops_manifest_type_proof, host_packages]
     if: always()
+    # `statuses: write` is for the record step below, on a pull request only. The job runs no
+    # checkout and no repository code.
+    permissions:
+      contents: read
+      statuses: write
     steps:
       # Every dependency must be named in an expression here, not merely in `needs` above: a
       # `needs` entry this step does not read is WAITED for and never CHECKED, so the required
       # context would pass green with that job red. `test_every_ci_job_is_gated.py` enforces it.
+      #
+      # A dependency passes when it succeeded. It also passes when it was skipped AND the `prove`
+      # job succeeded with `proven=true`: that is the proven path, where the pushed tree is one a
+      # green PR run swept. A skip on any other path is a failure, because a skipped job otherwise
+      # reads as a pass to GitHub.
       - name: Require all seven halves to have succeeded
         env:
+          PROVE: ${{ needs.prove.result }}
+          PROVEN: ${{ needs.prove.outputs.proven }}
           HOOKS: ${{ needs.hooks.result }}
           PYTEST: ${{ needs.pytest.result }}
           ANSIBLE_LINT: ${{ needs.ansible_lint.result }}
@@ -1337,11 +1277,39 @@ jobs:
           SOPS_TYPE_PROOF: ${{ needs.sops_manifest_type_proof.result }}
           HOST_PACKAGES: ${{ needs.host_packages.result }}
         run: |
-          echo "hooks=$HOOKS pytest=$PYTEST ansible-lint=$ANSIBLE_LINT deck-mod=$DECK_MOD" \
-            "flux-roundtrip=$FLUX_ROUNDTRIP sops-type-proof=$SOPS_TYPE_PROOF host-packages=$HOST_PACKAGES"
-          [ "$HOOKS" = success ] && [ "$PYTEST" = success ] && [ "$ANSIBLE_LINT" = success ] \
-            && [ "$DECK_MOD" = success ] && [ "$FLUX_ROUNDTRIP" = success ] \
-            && [ "$SOPS_TYPE_PROOF" = success ] && [ "$HOST_PACKAGES" = success ]
+          echo "prove=$PROVE proven=${PROVEN:-} hooks=$HOOKS pytest=$PYTEST ansible-lint=$ANSIBLE_LINT" \
+            "deck-mod=$DECK_MOD flux-roundtrip=$FLUX_ROUNDTRIP sops-type-proof=$SOPS_TYPE_PROOF" \
+            "host-packages=$HOST_PACKAGES"
+          # `prove` runs on a push only, so it is `skipped` on every other event.
+          [ "$PROVE" = success ] || [ "$PROVE" = skipped ] || exit 1
+          proven=false
+          if [ "$PROVE" = success ] && [ "${PROVEN:-}" = true ]; then proven=true; fi
+          ok() { [ "$1" = success ] || { [ "$proven" = true ] && [ "$1" = skipped ]; }; }
+          ok "$HOOKS" && ok "$PYTEST" && ok "$ANSIBLE_LINT" && ok "$DECK_MOD" \
+            && ok "$FLUX_ROUNDTRIP" && ok "$SOPS_TYPE_PROOF" && ok "$HOST_PACKAGES"
+
+      # Records what this green run tested, for the push run's `prove` job (#5489). On a pull
+      # request GITHUB_SHA is the merge commit of refs/pull/N/merge, and its tree is the tree
+      # every job above checked out. The status goes on the PR head commit, which is the commit
+      # the squash merge's PR lookup returns.
+      #
+      # A fork's PR gets a read-only token, so this step cannot write there and does not try. The
+      # squash commit of a fork PR then finds no status, `prove` answers false, and the push run
+      # sweeps in full. `continue-on-error` keeps a failed write from turning the gate red: the
+      # cost of a missing status is one full master run, never a wrong skip.
+      - name: Record the tested tree on the PR head
+        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          tree=$(gh api "repos/$GITHUB_REPOSITORY/git/commits/$GITHUB_SHA" --jq .tree.sha)
+          gh api "repos/$GITHUB_REPOSITORY/statuses/$HEAD_SHA" \
+            -f state=success -f context=ci/tested-tree -f description="$tree" -f target_url="$RUN_URL"
+          echo "Recorded tree $tree on $HEAD_SHA."
 
   renovate-config:
     name: renovate config validator
