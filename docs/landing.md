@@ -348,11 +348,11 @@ Instead it reads the cluster every 30 seconds:
   as `suspended-changed`, and the wait ends `deploy-failed`, cause `promote-held`
   (`docs/flux-deploy-plane.md`, *Stopping one service: `flux_suspend`*).
 - **`deferred`, cause `promote-timeout`, exit 75.** No promotion covered the merge commit
-  within twice the promote timeout (67 minutes,
+  within twice the promote timeout (83 minutes,
   `scripts/deploy_tools/promote_lib/wait.py:LAND_WAIT_TIMEOUT_S`). Look first at the
   `promote` workflow's failed `publish` jobs: a publish refusal leaves no `sha-<commit>` tag
   to promote. The next promotion may still cover the merge commit.
-  The 67 minutes count again from each poll that reads a verification of an earlier commit
+  The 83 minutes count again from each poll that reads a verification of an earlier commit
   in flight, for up to `wait.py:IN_FLIGHT_WAIT_S`. M's `decide` waits on that verification
   before it promotes M, so two merges minutes apart would otherwise give up on a promotion
   that passes later (#5164).

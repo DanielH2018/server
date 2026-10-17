@@ -103,18 +103,24 @@ POLL_S = 30
 
 # The promote timeout as D4.3's chained derivation gives it for a one-tag bundle that
 # substitutes, when a rotation changes `cluster-vars` too (d4-ordering.md, *What `promote`
-# reads*). The path is `cluster-vars`'s 10m `timeout`, one `chained_timeout.REQUEUE_DEPENDENCY_S`
+# reads*). The tags' chain is `cluster-vars`'s 10m `timeout`, one `chained_timeout.REQUEUE_DEPENDENCY_S`
 # hop and the tag's own 10m, both from `manifests_rollout_timeout_default`. One queueing round
 # adds the largest changed `timeout`, 10m, because two changed names fit in one round of
 # `--concurrent`. Then the OCIRepository interval, 1m in
 # `ansible/roles/k8s/flux/templates/sync.yaml.j2`, and the largest `retryInterval`, the 2m
-# `scripts/renderer/renderer_lib/bundle.py` writes on each Kustomization. It is the longest wait
+# `scripts/renderer/renderer_lib/bundle.py` writes on each Kustomization. That is `_TAGS_S`.
+# `verify` expects `soak` too (D5.3b3), whose `timeout` the renderer sets to `_TAGS_S` plus
+# the fleet W and two 1m margins (`renderer_lib/soak.py:DEADLINE_MARGIN_S`). W is 3m for a
+# tag whose rules carry no `for:`: the 1m `k8s_rollout_stabilise_seconds` and 2m for the
+# scrape and the rule evaluation. The soak's term is longer than the tags', so the total is
+# it plus the interval and the `retryInterval` again. It is the longest wait
 # `chained_timeout.promote_timeout` returns for a one-tag bundle (#5155), and
 # test_promote_land_wait_deadline.py pins the two together. `chained_timeout` imports this
 # module, so this one cannot import `promote_timeout` back to derive the figure from M's bundle.
 # `land-wait` gives up at twice it (contract C6). The second half covers `promote.yml`'s
 # `render` and `publish` jobs, 10m each, which run before any promotion of M can start.
-PROMOTE_TIMEOUT_S = 10 * 60 + 30 + 10 * 60 + 10 * 60 + 60 + 2 * 60
+_TAGS_S = 10 * 60 + 30 + 10 * 60 + 10 * 60 + 60 + 2 * 60
+PROMOTE_TIMEOUT_S = _TAGS_S + 3 * 60 + 2 * 60 + 60 + 2 * 60
 LAND_WAIT_TIMEOUT_S = 2 * PROMOTE_TIMEOUT_S
 
 # How long M's `decide` waits on an earlier commit's verification before it gives up as

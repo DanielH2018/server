@@ -150,8 +150,7 @@ def substituting_promote_timeout() -> int:
         "x=ENC[y]\n",
     )
     docs = vp.flux_kustomizations({p: t.encode() for p, t in files.items()})
-    # `verify` expects no OBSERVE_ONLY name, so the soak's timeout is no part of its wait.
-    names = {d["metadata"]["name"] for d in docs} - vp.OBSERVE_ONLY
+    names = {d["metadata"]["name"] for d in docs}
     return chained_timeout.promote_timeout(docs, names)
 
 
