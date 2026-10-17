@@ -45,7 +45,7 @@ merged.
 | H4 | Secrets unit; NUT on daniel-server first | H3 |
 | H5 | Pi Compose | H3, H4 |
 | H6 | system-upgrade-controller for k3s | D2, H1.1a to H1.8, H4, M1. H6.3e's verify Jobs also D5.1a1 (H6 Open question 14) |
-| H7 | Remaining roles, then delete Ansible | H2, H5, H6, R4 |
+| H7 | Remaining roles, then delete Ansible | H2, H5, H6, R4, per PR (H7's *Waits on* column). H7.21 to H7.23 need only H3, H4.3b2, D1 and D5.1h. The Pi PRs need H3, and H7.26 also H5.12. daniel-server's PRs need H4, daniel-box's need H6.2, and H7.24 needs all three. A PR that empties a `k8s_host_files` row also needs the D5 PR that added it. H7.34 also H6.1b2, H6.5b and H2; H7.35 also H6.4b and H2; H7.42 also H6.1b; H7.44 also R4 PR 7b and H6. H7.37 and H7.49 to H7.51 also D6. H7.43 and H7.45 to H7.57 wait on the whole of each slice they name |
 | G1 | Diff notice alongside the lock | — |
 | G2 | Retire the lock; ADR amending 0019 | G1 |
 | G3 | (optional) Notice dispatches the freshness reviewer | G2 |

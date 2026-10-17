@@ -1,8 +1,14 @@
 # H7 — Remaining roles, then delete Ansible
 
 Status: PLANNED
-Depends on: H2, H5, H6, R4
+Depends on: H2, H5, H6, R4, per PR (the *Waits on* column of *Steps, as PRs*)
 Unblocks: none (it closes Area 3)
+
+Re-sliced on 2026-10-17 at the operator's request: 65 steps became 37 PRs. The 65 count each
+PR the old list planned. Its 20 numbered items name 48 steps, and the canary triples of H7.6
+and H7.7, the two host PRs of H7.12c and the five PRs of H7.19a count once per PR. The
+re-sliced PRs are numbered from H7.21, so no re-sliced ID equals an old one. No step has
+landed.
 
 Related issues: [#4561](https://github.com/DanielH2018/server/issues/4561), daniel-server's IPv6 default route. Its netplan file moves into the
 host package.
@@ -1710,6 +1716,202 @@ This step lasts until H7.19b deletes the ledger.
 scripts/dev/fact_status.py forget '<old key>'` for each section key it removes and `verify`
 for each new key, then commits `docs/facts.lock`. 57 rows key on setup-role docs (Baseline).
 
+### The re-sliced PRs
+
+The 65 planned PRs merge into the 37 below. The re-slicing changes no design. Each re-sliced
+PR carries the full text of every old step it absorbs, from the collapsed list under *The old
+step list*, with that step's verification, rollback note, operator-only gate and share of the
+exit criterion. *Design*, *Verification*, *Rollback*, *Risks*, *Tests and docs* and the H3 to
+H6 plans cite the old IDs, such as H7.2e or H7.19a's fifth PR, and the *Old steps* column
+resolves each one to its re-sliced PR.
+
+Four rules decide where a merge stops:
+
+- **Canary hosts stay apart.** A per-host PR waits until the previous host reads the version
+  in `homelab_host_applied_info` and passes its live-state check, so the Pi, daniel-server
+  and daniel-box PRs of one subject never merge. Several subjects of one host do merge,
+  because `<role>_packaged_hosts` maps each subject to its hosts separately.
+- **A live wait stays a PR boundary.** H7.19a's third and fourth PRs precede its fifth. The
+  fifth's daniel-box version precedes H7.19b's, and H7.19b's version precedes H7.20a.
+- **Another repository is another PR.** H7.12a lands in `DanielH2018/dotfiles` first.
+- **An operator drill that takes hosts down runs alone.** H7.8's `upsmon -c fsd` drill
+  powers off both cluster nodes.
+
+*Written ahead* says whether an agent can write the PR before its predecessors merge and
+rebase it later (**yes**), or must wait for a predecessor's merged code or live result
+(**no**, with the reason). A *live* entry in *Waits on* waits until that PR is deployed and
+its live-state check passes, not only merged.
+
+**Narrowed edges.** H7's slice edges are H2, H5, H6 and R4. Each re-sliced PR names the part
+of a predecessor it reads. The edges that H7 reached only through those four become explicit:
+H3 and H4 through H5 and H6, and D1, D5 and D6 through R4. Each host's package bounds its
+PRs: H3 created `homelab-daniel-pi`, H4 creates `homelab-daniel-server`, and H6.2 creates
+`homelab-daniel-box`. Nothing waits on H7, so no narrowing can form a cycle. Two cited H2 IDs
+are absent from H2's step list. H2.6 appears only as a condition that H7.2e handles either
+way, so it adds no edge. H2.10 names the S3 folder in old H7.13, so H7.34 waits on all of H2.
+
+| PR | Old steps | Written ahead? | Waits on |
+|---|---|---|---|
+| H7.21 Activation, drift and the ufw arm | H7.2a, H7.2b | yes; B is measured at H3.2b's merge commit | H3.2b, H4.3b2 |
+| H7.22 The libvirt, users and line arms | H7.2c, H7.2d | yes | H7.21 |
+| H7.23 Shared modules leave the setup tree; the setup census | H7.2e, H7.2f | yes | H3's builder, D1's `promote.py`, D5.1h |
+| H7.24 `homelab-repos`, and `sops_setup` retires | H7.1 | yes | H3, H4, H6.2 |
+| H7.25 Pi: `optimize_pi`, `config_files` and the Pi rows of `k8s_host_files` | H7.3, H7.4 | yes; the owner measurement is a read-only call on the live Pi | H7.22, H3.6, D5.1h |
+| H7.26 Pi: `docker_install` | H7.5 | yes, against H5's Compose unit | H7.22, H5.12 |
+| H7.27 Pi: `initial_setup`, part 1 | H7.6a, H7.6d, H7.6g | yes | H7.22 |
+| H7.28 daniel-server: `initial_setup`, part 1 | H7.6b, H7.6e, H7.6h | yes, with H7.27 | H7.27 live, H4 |
+| H7.29 daniel-box: `initial_setup`, part 1 | H7.6c, H7.6f, H7.6i | yes, with H7.27 | H7.28 live, H6.2 |
+| H7.30 Pi: `initial_setup`, part 2 | H7.7a, H7.7d, H7.7g | yes | H7.25, H7.26 |
+| H7.31 daniel-server: `initial_setup`, part 2 | H7.7b, H7.7e, H7.7h | yes, with H7.30 | H7.30 live, H4 |
+| H7.32 daniel-box: `initial_setup`, part 2 | H7.7c, H7.7f, H7.7i | yes, with H7.30 | H7.31 live, H6.2 |
+| H7.33 daniel-box: NUT secondary | H7.8 | yes | H4, H6.2 |
+| H7.34 daniel-server: the `k3s` agent half and `hypervisor` | H7.9a, H7.13 | yes | H7.31, H6.1b2, H6.5b, H2 |
+| H7.35 daniel-box: the `k3s` host half | H7.9b | no: H6.4a, H6.4b and H2's `setup/k3s` PRs edit the same task files, so it starts once they merge | H7.32, H6.4a, H6.4b, H2, D5's media-volume row |
+| H7.36 daniel-box: the checkout timers | H7.10a, H7.10b, H7.10c | yes | H6.2, D5's docs row |
+| H7.37 daniel-box: Renovate and `fake_remux` | H7.11 | yes; D6.3's review picks the deploy_ui branch | H6.2, D6 |
+| H7.38 Per-user tooling in `DanielH2018/dotfiles` | H7.12a | yes | none |
+| H7.39 The agent users and daniel-server's `claude_code` | H7.12b, H7.12c's daniel-server PR | yes | H7.38, H7.22, H4, H6.2, the H6 PR that lands the window test |
+| H7.40 daniel-box: `claude_code` | H7.12c's daniel-box PR | yes, with H7.39 | H7.39 live, D5's artifacts row |
+| H7.41 daniel-box: the builder hosts itself | H7.14 | yes | H3, H6.2 |
+| H7.42 `bootstrap-host.sh`, complete | H7.15a | yes | H7.24, H6.1b, H6.2 |
+| H7.43 The Pi runbook and the Pi rebuild | H7.15b | the runbook yes; the rebuild no, because it needs every Pi PR live | H7.25, H7.26, H7.27, H7.30, H7.42, H5, all live |
+| H7.44 The cluster-node procedure, adding a host and release upgrades | H7.15c, H7.15d, H7.15e | yes; the guest drill needs H6 live | H7.42, R4 PR 7b, H6 |
+| H7.45 Scripts for the operator playbooks | H7.16a, H7.16b | yes | R4 |
+| H7.46 The last Ansible imports | H7.17 | yes | R4, D6.2 |
+| H7.47 Closing the readers | H7.18a, H7.18b, H7.18d | yes | H7.36, H7.40, H5 |
+| H7.48 Absent arms become legacy entries; `k8s_host_files` empties | H7.18c | no: its list of record is H7.23's report taken after every row has moved | H7.25, H7.35, H7.36, H7.40, H2, D5 |
+| H7.49 monitor-bridge's gitops checks go, and land.sh stops running the tick | H7.19a's first and third PRs | yes | H7.41, D6 |
+| H7.50 deploy_ui retires | H7.19a's second PR | yes | H7.37, H7.41, D6 |
+| H7.51 `homelab-checkout-sync` beside the deployer | H7.19a's fourth PR | yes | H7.41, H7.47, D6, the H6 PR that lands the window test |
+| H7.52 The deployer's timer retires | H7.19a's fifth PR | no: it deletes H6's seven deployer-coupled items, so it starts once they merge | H7.49, H7.51 live, H7.29, H7.32, H7.33, H7.35, H7.36, H7.37, H7.40, H6 |
+| H7.53 Re-home and delete the deployer; the setup census turns strict | H7.19b, H7.19c | the re-home half yes | H7.52 live on daniel-box, H7.48, H7.24 to H7.41 |
+| H7.54 The test env leaves ansible-core | H7.19d | no: its parity proof runs over the suite as H7.48 and H7.52 leave it | H7.46, H7.48, H7.52 |
+| H7.55 Delete the playbooks and the role directories | H7.20a | no: it deletes what H7.53 leaves | H7.53 live on daniel-box, H7.44 |
+| H7.56 ansible-core leaves, and so does the Pi's `containers_list` key | H7.20b, H7.20d | no: its two census greps run at its base | H7.54, H7.55, H5 |
+| H7.57 The ADR | H7.20c | yes | H7.55 |
+
+### What each re-sliced PR carries
+
+Every per-role PR keeps the rules above the table: H3's handoff rule, the emptied-role stub,
+the `manual_plane` clearing, the facts-lock `forget` and `verify`, and *Rollback*'s
+**operator-only** hand re-apply and `--clear-hold`. The notes name only what a merge moves.
+
+1. **H7.21** (about 580 lines, 270 of them reconcile source). The activation step, the drift
+   metric and the ufw arm all extend reconcile. No host uses an arm until a later PR declares
+   state for it, so nothing needs a live check between them. The reconcile-size census and
+   its ceiling land here, ahead of any arm's source. It carries the activation, ufw-arm,
+   ufw two-writer, per-host-guard and reconcile-ceiling proofs, and exit observation 7's
+   census.
+2. **H7.22** (about 600 lines, 300 of them reconcile source). The libvirt, users and line
+   arms are the remaining arms, and the line arm's census extends the two-writer census that
+   H7.21 extends. It carries the libvirt-arm, users-arm, way-out-of-a-hold, line-arm and
+   line-arm two-writer proofs.
+3. **H7.23.** Both steps change the tree and no host state, and both act on the setup tree's
+   layout: H7.2e moves the shared modules out, and H7.2f's census reads what stays. It
+   carries H7.2e's four derivation greps, the key grep, the routing test and the empty
+   cluster `diff -r`, the moved-CI-key, shared-module-routing and setup-census proofs, the
+   `manual_plane` line for `k3s` that the `host_lib.py` move records, and H7.2e's revert note.
+4. **H7.24** stays alone. It is the one PR that writes all three host packages at once, and
+   its body quotes `command -v sops` on each host. It carries the age-key decision in
+   `docs/break-glass.md`. The removal of daniel-server's user-home age key waits for the
+   operator's confirmation that nothing reads it (**operator-only**).
+5. **H7.25.** Both steps move `optimize_pi`, and H7.4 empties the role that H7.3 starts.
+   zram's keys and the Pi's other sysctl keys share one line arm on `/etc/sysctl.conf`. It
+   carries H7.3's owner measurement and its divert contingency, H7.4's textfile-directory
+   proof and `stat` read, and the `manual_plane` line for `optimize_pi`. Its rollback keeps
+   H7.4's exception: the operator re-applies `k8s_host_files` ON daniel-box
+   (**operator-only**).
+6. **H7.26** stays alone, because it waits on H5's late PRs and the held engine (#1961) is
+   its own risk. It carries the Compose measurement, the Compose-networks and Docker-engine
+   proofs, and the six networks the operator removes or keeps. The operator rules on
+   Open question 8, a windowed engine upgrade, in its review (**operator-only**).
+7. **H7.27 to H7.29.** One host's apt, sshd and sysctl subjects land in one PR. Part 1 and
+   part 2 stay apart, because sshd and ufw are the two subjects that can lock a host out.
+   Each host's live check then proves one of them before the other lands, and a revert drops
+   only one. Each carries the live-state probe, the host's `/etc/sysctl.conf` keys marked as
+   declared or as host history for the operator, the config-validity proof and
+   `docs/host-baseline-record.md`'s sshd sections. H7.29 deletes the subjects' tasks.
+8. **H7.30 to H7.32.** One host's fail2ban group, maintenance timers and ufw land in one PR.
+   Each carries the rules listed by exact spec and comment, the `Status: active` and rule-
+   order reads, and the ufw rollback: removing a `keep` rule or disabling ufw is the
+   operator's, at the host's console (**operator-only**). H7.30 waits on H7.25 and H7.26,
+   because the Pi's ufw lists their rules by spec. H7.32 deletes `Enable UFW firewall`.
+9. **H7.33** stays alone. Its `upsmon -c fsd` drill powers off both cluster nodes in a window
+   the operator schedules, with the operator at both consoles and a clear Longhorn gate
+   (**operator-only**).
+10. **H7.34.** Both steps are daniel-server's last roles, and exit observation 3 reads both:
+    the hypervisor's drill takes its token from the agent's installer env file. It carries
+    the agent ufw rules declared `keep`, the `manual_plane` line for `k3s`, the S3 folder the
+    drill reads after H2, and the drill run once by hand, then from its timer.
+11. **H7.35** stays alone, because it edits the task files that H6.4a, H6.4b and H2 edit. It
+    carries the netplan `manual:` activation, the media-volume `tmpfiles.d` lines and the
+    `manual_plane` line for `k3s`.
+12. **H7.36.** All three steps move daniel-box timers that read the primary checkout, and
+    each keeps its `## Autonomous-role contract` in its component. It carries the docs site
+    directory's `tmpfiles.d` line and the docs role's `CLAUDE.md` edit.
+13. **H7.37** stays alone. Its three roles hold 61 files at `70591c307`.
+14. **H7.38** stays alone. It lands in `DanielH2018/dotfiles` under that repo's `bin/gate`,
+    before H7.39 deletes the tasks.
+15. **H7.39.** The agent users and the units that run as them come up together on the first
+    host. It carries the `meta: end_role` guard naming daniel-server. Old H7.12c names the
+    `homelab-*` rename, the four window-test entries and the `claude-land@` callers once for
+    both host PRs. The PR that first ships a renamed unit carries them, and its body says
+    which. Restarting a host's `claude-rc.service` drops the phone's sessions, so H7.39 and
+    H7.40 each land in a window the operator picks (**operator-only**).
+16. **H7.40** stays alone as the second canary host. It carries the artifacts directories'
+    `tmpfiles.d` lines and empties `claude_code`.
+17. **H7.41** stays alone. It carries the fingerprint-file proof and the break-glass procedure
+    for a broken builder.
+18. **H7.42** stays alone. It carries the bootstrap, offline and bootstrap-pins proofs.
+19. **H7.43** stays alone, because the operator's rebuild is exit observation 2. The operator
+    rebuilds at the Pi's console and keeps the old SD card as the rollback
+    (**operator-only**). The cluster's wg-easy on 51820 is proven first.
+20. **H7.44.** All three steps are procedures built on H7.42's script, in
+    `docs/break-glass.md` and `docs/host-packages.md`, and H7.15d's host census is their one
+    test. It carries R4 PR 7b's kind drill run on this PR, the guest drill with its blast
+    radius (**operator-only**, exit observation 4), and the D6 case that Open question 14
+    asks for. It merges before H7.55.
+21. **H7.45.** Both steps replace an operator playbook or runbook role with a script. The
+    operator drills the snapshot command once (**operator-only**).
+22. **H7.46** stays alone. It carries the renders-without-ansible-core proof and lands the
+    deletion census with its allowlist.
+23. **H7.47.** Each step points a reader of the setup tree at the packages: the docs
+    generators, the contract census, and the two scripts that name `ansible_connection`. It
+    carries the generators' named members, the contract census and the empty cluster
+    `diff -r`.
+24. **H7.48** stays alone. It carries the retired-crons census and empties `k8s_host_files`.
+25. **H7.49.** Both PRs remove a consumer of the running tick outside the deployer's role,
+    and both must precede H7.52. The deployer runs unwatched from this merge until H7.52's.
+    It carries the no-gitops-hostPath and land.sh-without-a-tick proofs. Its revert restores
+    the checks, which need `/var/lib/gitops-deploy`.
+26. **H7.50** stays alone, a deletion of about 2,300 lines. Its revert needs the operator's
+    `--tags deploy_ui` re-apply ON daniel-box (**operator-only**).
+27. **H7.51** stays alone, because it must be live and fast-forwarding before H7.52 removes
+    the timer. It carries the checkout-sync proofs and the window-test exemption.
+28. **H7.52** stays alone. It merges only while `hold_sha` is empty and `owed.jsonl` holds no
+    line. It carries the proof for H6's deployer-coupled checks. Its revert needs the
+    operator's `--tags gitops_deploy` re-apply ON daniel-box (**operator-only**).
+29. **H7.53.** H7.19b deletes the deployer's code once its timer is gone, and H7.19c then fails
+    the census on any setup task left. H7.19b may still split in two, the re-home first. It
+    carries the deployer-import census and the legacy entries, and names
+    `/var/lib/gitops-deploy/` as the operator's cleanup. Exit observation 5 holds once its
+    version is live on daniel-box.
+30. **H7.54** stays alone. Its parity proof covers 361 modules.
+31. **H7.55** stays alone. It merges only after daniel-box shows H7.53's version and lists no
+    `gitops-deploy` unit file. It carries the two-part proof, exit observation 1's listings
+    and exit observation 7's census at its head.
+32. **H7.56.** Both steps follow H7.55 and remove the last Ansible inputs: ansible-core with its
+    config and hook, and the Pi's empty key. Neither moves a rendered byte. It carries exit
+    observation 1's two counts, the Pi service-list proof and the two render pairs.
+33. **H7.57** stays alone, so the deletions land while the operator reviews it. Approving the
+    ADR is **operator-only** (exit observation 6), and so is deciding whether ADR-0001,
+    ADR-0011 and ADR-0017 need an amendment.
+
+### The old step list
+
+<details markdown="1">
+<summary>The 20 numbered items and 65 PRs that the re-sliced list replaces</summary>
+
 1. **H7.1 `homelab-repos`, and `sops_setup` retires.**
     - Move the Docker, GitHub CLI and Log2Ram sources and keyrings out of their roles.
     - `homelab-tools` comes from H3, with sops and chezmoi (C5). H7.1 adds nfpm to it for
@@ -2132,6 +2334,8 @@ for each new key, then commits `docs/facts.lock`. 57 rows key on setup-role docs
       Proof: `homelab-render cluster` and `homelab-render host --host daniel-pi` at the
       PR's base and head, and `diff -r` over each pair prints nothing. The Pi's key was
       already empty, so no rendered byte moves.
+
+</details>
 
 ## Verification
 
