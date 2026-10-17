@@ -331,6 +331,14 @@ def test_a_pull_request_only_annotates_a_bad_weight_outside_its_diff(tmp_path, c
     assert "parsed no durations" not in printed
 
 
+def test_a_pull_request_editing_the_weight_table_fails_on_every_module():
+    """A PR that re-records weights changes only the table, so a bad row it wrote belongs to a
+    module outside its diff. Its author can still repair it, so the gate runs unscoped."""
+    changed = {"scripts/dev/pytest_shard_weights.json"}
+    problems, _ = shard_weight_gate.gate_complaints(REPORT, RECORDED, changed)
+    assert len(problems) == 1 and NEW_MODULE in problems[0]
+
+
 def test_the_diff_scopes_the_recorded_weight_arms_too():
     """An over-recorded and an under-recorded entry outside the diff annotate as the unweighted
     arm does, and the same two inside it fail."""

@@ -335,6 +335,17 @@ OUTSIDE_DIFF_NOTE = (
 )
 
 
+# The files that decide every module's verdict at once: the weight table and the gate's code.
+# A diff touching one can repair any module, so the gate runs unscoped on it.
+GATE_INPUTS = frozenset(
+    {
+        "scripts/dev/pytest_shard_weights.json",
+        "scripts/dev/pytest_shard.py",
+        "scripts/dev/shard_weight_gate.py",
+    }
+)
+
+
 def split_by_diff(text: str, changed: set[str]) -> tuple[str, str]:
     """The durations lines of the modules in `changed`, and the lines of every other module.
 
@@ -365,10 +376,13 @@ def gate_complaints(
     warning, because its author is not the one reading this run: 4 of the 16 gate failures
     between 2026-10-15 and 2026-10-17 named a module outside the failing PR's diff (#5480).
 
+    A set that holds one of `GATE_INPUTS` counts as None. A PR that re-records the table or
+    moves a bound wrote every row the gate then reads, so every complaint is its author's.
+
     The empty-report complaint reads the WHOLE report. Most PRs change no test module a given
     shard ran, so a scoped half is usually empty, and that is not a format change.
     """
-    if changed is None or not parse_durations(text):
+    if changed is None or changed & GATE_INPUTS or not parse_durations(text):
         return (
             durations_problems(text, weights, threshold, ratio, fail_above),
             durations_warnings(text, weights, threshold, fail_above),

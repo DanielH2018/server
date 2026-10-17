@@ -724,8 +724,9 @@ jobs:
       # On a pull_request it fails only for a module the PR's diff adds or changes
       # (`--changed-files`). A module outside the diff annotates, because its author is not the
       # one reading the run and the docs-refresh cron re-records it: 4 of 16 gate failures in
-      # two days named such a module (#5480). A dispatch has no base to diff, so it fails on
-      # every module.
+      # two days named such a module (#5480). A PR that changes the weight table or the gate's
+      # code fails on every module, because it wrote every row the gate reads. A dispatch has
+      # no base to diff, so it fails on every module too.
       - name: Check every heavy module's recorded weight
         env:
           EVENT: ${{ github.event_name }}  # via env, never interpolated into the shell
