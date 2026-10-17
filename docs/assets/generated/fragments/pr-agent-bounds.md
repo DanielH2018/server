@@ -2,6 +2,6 @@
 | Bound | Var | Value |
 |---|---|---|
 | PRs per tick | `renovate_agent_max_prs` | `3` |
-| Wall clock | `renovate_agent_run_timeout_s` | `14400 s` |
-| Wall clock, backstop | `renovate_agent_unit_timeout` | `250min` |
+| Wall clock | `renovate_agent_run_timeout_s` | `21600 s` |
+| Wall clock, backstop | `renovate_agent_unit_timeout` | `370min` |
 | Spend | `renovate_agent_budget_usd` | `25 USD` |
