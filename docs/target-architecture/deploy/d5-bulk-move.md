@@ -92,9 +92,10 @@ PR D5.3b2, the soak Kustomization, observed:
 [#5386](https://github.com/DanielH2018/server/pull/5386). It merged at `95cd242bc` and settled
 with `flux` and `observability` healthy. kustomize-controller runs `--concurrent=6`, `last-good`
 reads Ready, and the landing revision's soak Job logged `soak: R changes no service; nothing to
-judge`. The live check, two consecutive `flux/soak` `success` statuses on revisions that change a
-flux-owned tag, is still open. The PR also covers `last-good` in `FluxNotReady`, and the
-cross-plane snapshot passes R through `HOMELAB_RENDER_REVISION`.
+judge`. The PR also covers `last-good` in `FluxNotReady`, and the cross-plane snapshot passes R
+through `HOMELAB_RENDER_REVISION`. Its live check, two consecutive `flux/soak` `success`
+statuses on revisions that change a flux-owned tag, passed on 2026-10-17 with D5.5's and D5.6's
+soaks (below).
 The run-once cleanup PR: [#5387](https://github.com/DanielH2018/server/pull/5387), together with
 H2.7. It merged at `471397804`. It deleted game-stats' and observability's run-once record
 cleanups and the render-record census row.
@@ -108,6 +109,38 @@ PR D5.4b, GHCR refs: [#5407](https://github.com/DanielH2018/server/pull/5407). I
 the GHCR rewrite has no live consumer, and nut keeps `localhost:5000/nut:sha-cf9e7ebc31ed` with
 `Always`. nut's `imagePullPolicy` comment is now a Jinja comment, which cost the one nut restart.
 M6's B-1e landed at `f8e28584f`, so littlelink's flux PR no longer waits on M6 (Open question 12).
+PR D5.5, Wave A's first PR: [#5417](https://github.com/DanielH2018/server/pull/5417). It moved
+gpu-exporter, nut-exporter and pihole-exporter to Flux at `d02b4c299`. The flux CLI was not yet
+installed, and the three renders substitute nothing, so the operator's pre-merge diff was a
+server-side `kubectl diff` as kustomize-controller. Only gpu-exporter's DaemonSet changed, by
+`checksum/restart`. Soak Job `soak-cc85dbec` judged the three tags and `flux/soak` read `success`.
+The operator kept pihole-exporter with an exemption: a `pihole_password` rotation does not roll it
+under Flux, and the operator rolls it by hand ([#5416](https://github.com/DanielH2018/server/issues/5416)).
+PR D5.6: [#5420](https://github.com/DanielH2018/server/pull/5420). It moved littlelink,
+longhorn-ui and deploy-ui to Flux at `88a31914c`. The operator's diff showed no change for any of
+the three, and `deploy.sh --tags <tag>` exited 5 for each after the merge. Soak Job
+`soak-9c66fcc4` judged the three tags and passed, the second consecutive judged success. The
+operator accepted that code review is now the only gate on longhorn-ui's and deploy-ui's routes.
+PR D5.7: [#5423](https://github.com/DanielH2018/server/pull/5423). It moved homepage and
+node-exporter to Flux at `4462b2540`. homepage's Secret substitutes, so the operator ran the
+real `flux diff`, with the CLI installed in dotfiles#859. It needed `--ignore-not-found`, because a
+first flip has no live Kustomization. Every object gained Flux's two ownership labels, and the
+Deployment gained `checksum/restart`. homepage's RBAC census removed only the
+`last-applied-configuration` annotation from its three RBAC objects and kept nothing. Soak Job
+`soak-5602724c` judged both tags from 17:47:09 to 17:50:35 and passed. blackbox-exporter, Wave A's
+late arrival, is the ingress pager M4's soak measures, so it moves in Wave A's last PR after
+2026-10-20T06:19Z.
+PR D5.3b3, the soak gates: [#5426](https://github.com/DanielH2018/server/pull/5426), with
+[#5380](https://github.com/DanielH2018/server/issues/5380) and
+[#5419](https://github.com/DanielH2018/server/issues/5419). It merged at `0203086a3`. Its landing
+deployed every Ansible-owned tag, because it edits the shared `k8s/manifests` role, and all of them
+settled. The first promote run after it printed `verify: expecting flux/homelab, flux/soak on
+0203086a within 3690s` and read `verdict=good`. The operator ruled to amend ADR-0012, and
+[#5429](https://github.com/DanielH2018/server/pull/5429) did so at `3ca6c0895`. Its review left
+[#5427](https://github.com/DanielH2018/server/issues/5427): the lander units' deadlines were shorter
+than a gated landing. [#5430](https://github.com/DanielH2018/server/pull/5430) raised them at
+`8592dd71a`: `claude-land@` to `TimeoutStartSec=4h` and `renovate-agent-land@` to `190min`, each
+with `LAND_DEADLINE=10800`.
 
 Related issues:
 

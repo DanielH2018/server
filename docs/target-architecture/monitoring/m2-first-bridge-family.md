@@ -5,6 +5,12 @@ Status: IN PROGRESS
 PR 1, the workload-service mapping: [#4777](https://github.com/DanielH2018/server/pull/4777).
 PR 2, the k8s-workloads rules in shadow: [#4779](https://github.com/DanielH2018/server/pull/4779). Its soak starts at its deploy, and PR 4a waits 7 days from that time.
 PR 3, the weekly-reboot mute: [#4793](https://github.com/DanielH2018/server/pull/4793). PR 4a waits until it records the three Alertmanager series after its deploy.
+Soak note, 2026-10-17: D5's Wave A moved eight roles to Flux inside this soak's window. Six of the takeovers rolled their workload once:
+- gpu-exporter, nut-exporter and pihole-exporter from 15:52:58Z (D5.5, #5417);
+- littlelink after 17:01Z (D5.6, #5420);
+- homepage and node-exporter from 17:47:09Z (D5.7, #5423). node-exporter's pods restarted at 17:47:10Z on daniel-server and 17:47:22Z on daniel-box.
+
+longhorn-ui and deploy-ui did not roll. Under M1's convention 6, a Query-1 episode at those times is explained, not a reset.
 
 Depends on: M1
 

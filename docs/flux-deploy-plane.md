@@ -272,9 +272,16 @@ cluster-admin access (**operator-only**):
 
 ```bash
 uv run python scripts/renderer/homelab_render.py cluster --out out --role <tag>
-flux diff kustomization <tag> --path out/cluster/<tag> \
-    --kustomization-file out/flux/<tag>.yaml
+sudo /home/ubuntu/.local/bin/flux --kubeconfig /etc/rancher/k3s/k3s.yaml \
+    diff kustomization <tag> --path out/cluster/<tag> \
+    --kustomization-file out/flux/<tag>.yaml --ignore-not-found --strict-substitute
 ```
+
+On daniel-box the CLI sits at `~/.local/bin/flux`, installed by a pinned chezmoi external
+(dotfiles#859), and the admin kubeconfig is readable only by root. A flip has no live
+Kustomization yet, so without `--ignore-not-found` the diff stops with `failed to get
+kustomization object`. `--strict-substitute` fails the diff when the render names a variable
+that `homelab-cluster-vars` lacks.
 
 Without `--dry-run`, the CLI substitutes from the Secrets the Kustomization's `substituteFrom`
 names, so the diff compares real values rather than `${…}` placeholders. It reads
