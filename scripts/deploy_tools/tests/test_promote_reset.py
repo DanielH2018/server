@@ -8,10 +8,8 @@ docs/target-architecture/deploy/d5-bulk-move.md, *A reset input*.
 Run: uv run pytest scripts/deploy_tools/tests/test_promote_reset.py
 """
 
-import dataclasses
 import re
 import shutil
-from datetime import UTC, datetime
 
 import pytest
 from _promote_fakes import World, digest_of
@@ -21,13 +19,11 @@ from lib.proc_testing import fake_bin
 from lib.proc_testing import run as proc_run
 from lib.repo_paths import REPO
 
-from chained_timeout import VERIFY_CAP_S
-from deploy_tools.promote_lib import reboot_window, reset
+from deploy_tools.promote_lib import reset
 
 WORKFLOW = REPO / ".github" / "workflows" / "promote.yml"
 REPO_URL = "oci://ghcr.io/danielh2018/homelab-manifests"
 OWN_RUN = "4242"
-SUNDAY_0700 = datetime(2026, 10, 18, 7, tzinfo=UTC)
 
 
 @pytest.fixture
@@ -52,29 +48,22 @@ def _check(world) -> reset.Check:
 # -- the hold ------------------------------------------------------------------------------
 
 
-def test_the_reset_moves_prod_inside_the_reboot_window_under_a_settled_hold(world):
-    """`reset-check` takes no clock and no schedule, so the window cannot stop it.
+def test_the_reset_moves_prod_under_a_settled_hold(world):
+    """The plan names a hand-set hold such as `drill` here.
 
-    The plan names a hand-set hold such as `drill` here, but `drill` never names `prod`'s
-    commit, so with `prod` ahead it refuses (the next test) and with `prod` on `last-good` it
-    moves nothing. The settled stateful hold is the one that moves `prod`.
+    `drill` never names `prod`'s commit, so with `prod` ahead it refuses (the next tests) and
+    with `prod` on `last-good` it moves nothing. The settled stateful hold is the one that
+    moves `prod`. That the reset ignores the reboot window is a property of the workflow:
+    its jobs need none of the jobs that read the window
+    (`ansible/tests/repo/test_promote_workflow_schedule.py`).
     """
     c1, t = _verified(world)
     world.run.hold = f"{t} stateful=bento-pdf"
-    inside = reboot_window.window(
-        reboot_window.read_schedule(world.repo),
-        VERIFY_CAP_S,
-        SUNDAY_0700,
-    )
-    assert inside is not None, "the fixture instant is inside the window"
-    assert {f.name for f in dataclasses.fields(reset.ResetReads)} == {
-        "hold",
-        "digest",
-        "prod_commit",
-        "in_progress",
-    }
-    assert _check(world) == reset.Check(
-        "move", _check(world).reason, digest_of(t), digest_of(c1)
+    result = _check(world)
+    assert (result.verdict, result.prod, result.last_good) == (
+        "move",
+        digest_of(t),
+        digest_of(c1),
     )
 
 

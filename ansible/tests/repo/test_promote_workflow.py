@@ -438,9 +438,14 @@ RED = {
 
 @pytest.mark.parametrize("case", RED, ids=list(RED))
 def test_each_broken_property_is_named(workflow, flux_version, case):
-    """The red halves: the real file with one property broken must fail with that property."""
+    """The red halves: the real file with one property broken must fail with that property.
+
+    A mutation that changes nothing proves nothing, since a check that also fires on the
+    real file would pass it, so each must change the workflow.
+    """
     mutate, expected = RED[case]
     broken = copy.deepcopy(workflow)
     mutate(broken)
+    assert broken != workflow, f"{case}: the mutation left the workflow unchanged"
     found = problems(broken, flux_version)
     assert any(expected in line for line in found), found
