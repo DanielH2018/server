@@ -361,7 +361,7 @@ def replay(since: str, ref: str, flux_owned: list[str], jobs: int, cache: Path) 
     print(
         f"replay: {len(commits)} commits on {ref} since {since}; {len(judged)} change a render "
         f"input or the renderer and were judged, the rest are clean by construction; {len(failed)} did not "
-        f"render as a transplant, and {reversed_ok} of those rendered "
+        f"render as judged, and {reversed_ok} of those rendered "
         f"reversed on today's tree; {len(refused)} refused by render, {len(shared)} of them "
         f"touching a shared template; {len(by_tasks)} more refused on tasks/ alone though "
         f"unrenderable; {len(unrenderable)} unrenderable and not refused on tasks/"

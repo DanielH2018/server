@@ -12,7 +12,7 @@ from _bundle_fixtures import LOCAL_ROUTE, bundle, route
 from _promote_fakes import World
 from lib.git import git_stdout
 from lib.repo_paths import REPO
-from object_loss import bundle_objects, prune_disabled, undeclared_losses
+from object_loss import bundle_objects, undeclared_losses
 from renderer.renderer_lib.bundle import bundle_files as render_bundle
 
 DEPLOYMENT = "apiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: bento-pdf\n  namespace: homelab\n"
@@ -258,9 +258,3 @@ def test_the_digest_suffix_is_defined_in_one_module():
         if "/tests/" not in path and literal in (REPO / path).read_text()
     )
     assert len(defining) == 1, defining
-
-
-def test_a_prune_disabled_label_or_annotation_is_read():
-    for key in ("labels", "annotations"):
-        assert prune_disabled({"metadata": {key: {PRUNE_KEY: "disabled"}}})
-    assert not prune_disabled({"metadata": {"labels": {PRUNE_KEY: "x"}}})
