@@ -172,6 +172,30 @@ def test_a_host_the_merge_adds_is_a_target_with_nothing_armed(tmp_path):
     assert (target.host, target.armed, target.triggers) == ("daniel-pi", False, None)
 
 
+def test_a_dangling_enable_link_written_to_disk_reads_as_armed(tmp_path):
+    # `write_packages` writes the link pointing at the updater's unit, absent from this root.
+    wants = tmp_path / "root/usr/lib/systemd/system/timers.target.wants"
+    wants.mkdir(parents=True)
+    (wants / "homelab-updater.timer").symlink_to("../homelab-updater.timer")
+    tree = host_wait.read_host_tree(tmp_path)
+    assert tree[LINK] == ("link", 0, b"../homelab-updater.timer")
+    assert host_wait._target("daniel-pi", tree, REPO).armed is True
+
+
+def test_the_real_pi_render_reads_its_drop_in_schedule():
+    # A real render through the CLI, from this checkout. `armed` is left alone: H3.9b ships
+    # the link.
+    tree = host_wait.render_host_tree(REPO, "daniel-pi")
+    assert tree is not None
+    target = host_wait._target("daniel-pi", tree, REPO)
+    assert target.triggers == {"OnCalendar": ["*-*-* 01..03,06..22:05/15:00"]}
+
+
+def test_the_git_fallback_finds_the_pi_at_head():
+    hosts = host_wait._every_host(REPO, "HEAD", host_wait.REAL_READS)
+    assert HostTarget("daniel-pi") in hosts
+
+
 # -- the transport -----------------------------------------------------------------------
 
 

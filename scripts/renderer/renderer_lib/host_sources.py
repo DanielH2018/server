@@ -28,31 +28,6 @@ SHARED_FILES = {
     "kuma-push-lib.sh": "ansible/roles/setup/initial_setup/files/kuma-push-lib.sh",
 }
 
-# Every repo path a host render reads, as a prefix relative to the repo root: a member ending
-# `/` is a directory, any other is one file (H3, *Steps*, H3.9a item 1). A change under none of
-# them leaves every host package's render as it was, which is what lets the landing tell a PR
-# that may reach a host from one that cannot without rendering. `secrets.yml` is a member
-# because host mode removes its key names (`host.secret_names`), and `kuma-push-lib.sh`
-# because it is one of `SHARED_FILES`. `pyproject.toml` and `uv.lock` decide the environment
-# `uv run` renders in. The last three are past the plan's list: ansible-core reads
-# `ansible.cfg` from the render's working directory, and `homelab_render.py` imports the other
-# two at load, for cluster mode. `test_renderer_host_inputs.py` records every tracked file a
-# real host render opens and fails on one under no member.
-HOST_INPUTS = (
-    "hosts/",
-    "ansible/inventory/",
-    "ansible/filter_plugins/",
-    "scripts/lib/",
-    "scripts/renderer/",
-    "pyproject.toml",
-    "uv.lock",
-    "ansible/vars/secrets.yml",
-    SHARED_FILES["kuma-push-lib.sh"],
-    "ansible.cfg",
-    "scripts/deploy_tools/render_targets.py",
-    "scripts/secrets_mgmt/cluster_vars_check.py",
-)
-
 
 def confined(directory: Path, src: str) -> Path:
     """`src` resolved through any symlink, which must be a file inside `directory`.

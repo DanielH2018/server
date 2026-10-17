@@ -59,7 +59,18 @@ from lib.systemd_timer import DAY_S, calendar_fires, span_s, timer_settings
 
 # The renderer's host mode, run from a gate snapshot's root. A daniel-pi render takes about
 # 2s; the bound stops a wedged one, which `host_targets` reads as a failed render.
-HOST_RENDER_ARGV = ("uv", "run", "python", "scripts/renderer/homelab_render.py", "host")
+# DECIDED: `--no-sync`. Both snapshots share the primary's `.venv`, and `uv.lock` is a
+# HOST_INPUTS member, so a synced render would upgrade that venv at the merge commit and
+# downgrade it at the first parent while the tick may be using it. A render that needs a
+# dependency the venv lacks fails instead, and a failed render waits on every host.
+HOST_RENDER_ARGV = (
+    "uv",
+    "run",
+    "--no-sync",
+    "python",
+    "scripts/renderer/homelab_render.py",
+    "host",
+)
 HOST_RENDER_TIMEOUT = 300
 # One rendered host package: each path under `hosts/<host>/` mapped to its kind (`file` or
 # `link`), its mode, and its bytes or its link target.
@@ -143,15 +154,23 @@ def render_host_tree(snapshot: Path, host: str) -> HostTree | None:
             last = (done.stderr.strip().splitlines() or ["no output"])[-1]
             say(f"host render of {host} at {snapshot} failed: {last}")
             return None
-        root = Path(out) / "hosts" / host
-        tree: HostTree = {}
-        for path in sorted(root.rglob("*")):
-            key = path.relative_to(root).as_posix()
-            if path.is_symlink():
-                tree[key] = ("link", 0, os.fsencode(os.readlink(path)))
-            elif path.is_file():
-                tree[key] = ("file", path.stat().st_mode & 0o7777, path.read_bytes())
-        return tree
+        return read_host_tree(Path(out) / "hosts" / host)
+
+
+def read_host_tree(root: Path) -> HostTree:
+    """The package directory `write_packages` wrote at `root`, keyed by path under it.
+
+    A link is read as a link, never followed: an enable link points at a unit another package
+    installs, so it dangles here.
+    """
+    tree: HostTree = {}
+    for path in sorted(root.rglob("*")):
+        key = path.relative_to(root).as_posix()
+        if path.is_symlink():
+            tree[key] = ("link", 0, os.fsencode(os.readlink(path)))
+        elif path.is_file():
+            tree[key] = ("file", path.stat().st_mode & 0o7777, path.read_bytes())
+    return tree
 
 
 def fetch_url(url: str, timeout: float) -> bytes:

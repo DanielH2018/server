@@ -9,6 +9,7 @@ Untracked files are left out: a PR changes only tracked ones, and the render als
 Run: uv run pytest scripts/renderer/tests/test_renderer_host_inputs.py
 """
 
+import ast
 import json
 import os
 import sys
@@ -20,7 +21,9 @@ import pytest
 from lib.git import git
 from lib.proc_testing import run
 from lib.repo_paths import REPO, SCRIPTS
-from renderer.renderer_lib.host_sources import HOST_INPUTS
+from renderer.renderer_lib import host_inputs
+from renderer.renderer_lib.host_inputs import HOST_INPUTS
+from renderer.renderer_lib.host_sources import SHARED_FILES
 
 CHILD = Path(__file__).resolve().with_name("_host_inputs_child.py")
 PI_SPEC = "hosts/daniel-pi/package.yml"
@@ -99,3 +102,12 @@ def test_a_read_under_no_member_is_flagged(render, tracked):
 def test_host_inputs_names_the_secrets_file_and_the_shared_kuma_lib():
     assert "ansible/vars/secrets.yml" in HOST_INPUTS
     assert "ansible/roles/setup/initial_setup/files/kuma-push-lib.sh" in HOST_INPUTS
+    assert set(SHARED_FILES.values()) <= set(HOST_INPUTS)
+
+
+def test_host_inputs_module_imports_nothing():
+    # The landing reads the constant; an import here would load into every landing.
+    tree = ast.parse(Path(host_inputs.__file__).read_text())
+    assert not [
+        n for n in ast.walk(tree) if isinstance(n, (ast.Import, ast.ImportFrom))
+    ]
