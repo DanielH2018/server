@@ -1,0 +1,13 @@
+{
+  "checksum": "12f96e6d32063b396059ac9025a3a895e4c60c1d8bced4a45846ec31fbb7bf4b",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "ansible/roles/k8s/longhorn-ui/CLAUDE.md#At a glance",
+  "row": {
+    "atoms": {
+      "ansible/roles/k8s/flux/files/gotk-components.yaml": "fa3ff19b0e2748d268d69e5f50d5b8574eff178c54f4329f914947a19cb6b28a",
+      "docs/flux-deploy-plane.md": "807c3deb44c3178e7a6f9fc0bc398a3b748b95c468b14ce9b1b890c8684535d9"
+    },
+    "python": "3.14",
+    "verified_sha": "d02b4c299"
+  }
+}

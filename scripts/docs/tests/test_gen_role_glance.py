@@ -437,8 +437,12 @@ def test_a_hand_edited_pi_block_is_flagged(tmp_path):
 
 
 def _littlelink_block(tmp_path, owner):
-    """The block `stale_k8s_docs` writes for a copy of littlelink, its entry carrying `owner`."""
+    """The block `stale_k8s_docs` writes for a copy of littlelink, its entry carrying `owner`.
+
+    The live entry has carried `owner: flux` since D5.6, so `owner=None` drops the key.
+    """
     entry = dict(g.Estate().k8s_entries()["littlelink"])
+    entry.pop("owner", None)
     if owner:
         entry["owner"] = owner
     dst = _copy_role("littlelink", tmp_path / "roles")

@@ -1,12 +1,13 @@
 {
-  "checksum": "a71b327cc6e92babf531d23cb2bb9020285ff2c151bfae517b1ba8de0fc89169",
+  "checksum": "f36a55253e688463b6e6f8bc327d79d2e6d7b50e9205919e889e2947d2acaff2",
   "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
   "key": "ansible/roles/k8s/deploy-ui/CLAUDE.md#At a glance",
   "row": {
     "atoms": {
-      "ansible/tests/services/test_authelia_access_tiers.py": "30ca87be3382543c38331450efc91968b7f830b95c26d52b1dd2fee681d3f08c"
+      "ansible/tests/services/test_authelia_access_tiers.py": "30ca87be3382543c38331450efc91968b7f830b95c26d52b1dd2fee681d3f08c",
+      "docs/flux-deploy-plane.md": "807c3deb44c3178e7a6f9fc0bc398a3b748b95c468b14ce9b1b890c8684535d9"
     },
     "python": "3.14",
-    "verified_sha": "55862020d"
+    "verified_sha": "d02b4c299"
   }
 }
