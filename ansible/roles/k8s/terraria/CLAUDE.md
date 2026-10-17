@@ -16,9 +16,9 @@ irreplaceable data kopia still uniquely protected; the Docker role is in git his
 - **Built by CI** from `templates/Dockerfile.j2`: in-cluster from 2026-08-31, and by the
   promote workflow's `images` job since D5.15. It is a single `chown` layer whose only purpose
   is to let the server run as a non-root uid. The **digest pin did not go away**: it is the
-  `FROM` line of that Dockerfile, still `beardedio/terraria:vanilla-latest@sha256:901bc117…`
-  (2026-08-13). Upstream publishes no pinned vanilla versions, so `vanilla-latest` is the only
-  tag available and the digest is what stops it floating.
+  `FROM` line of that Dockerfile, `beardedio/terraria:vanilla-latest` pinned by a digest that
+  Renovate bumps. Upstream publishes no pinned vanilla versions, so `vanilla-latest` is the
+  only tag available and the digest is what stops it floating.
   What changed is how an update lands. Renovate's built-in dockerfile manager still raises a
   digest-bump PR, and built images carry `automerge: false`, so a person merges it. The merge
   changes the context, so the content tag moves, the `images` job pushes the new tag, and
