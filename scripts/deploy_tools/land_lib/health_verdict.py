@@ -24,6 +24,16 @@ from deploy_tools.land_lib.outcome import (
 )
 
 
+def _primary_carries(ln: Landing, sha: str) -> bool:
+    """Does the primary checkout contain `sha`?
+
+    Asked of `deployed_at`, not the merge commit: a stale `--at` run is retargeted to a green
+    descendant (`stale_retarget.retarget`), and a primary holding only the merge
+    commit does not hold that tree.
+    """
+    return ln.git("merge-base", "--is-ancestor", sha, "HEAD").returncode == 0
+
+
 def gate_from_the_deployed_tree(ln: Landing) -> tuple[bool, list[str]]:
     """Ask the health gate, rendering the role's manifests from the tree that was deployed.
 
@@ -43,7 +53,7 @@ def gate_from_the_deployed_tree(ln: Landing) -> tuple[bool, list[str]]:
     with ln.tools.snapshot(ln.opts.primary, ln.deployed_at) as snap:
         if snap is not None:
             return ln.tools.gate(promotion.gated_tags(ln), cwd=snap)
-        if ln.merge_applied():
+        if _primary_carries(ln, ln.deployed_at):
             say(
                 f"could not snapshot {ln.deployed_at[:12]} for the health gate; the primary "
                 "checkout already carries it, so rendering there instead"

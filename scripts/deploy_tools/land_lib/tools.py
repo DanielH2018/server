@@ -519,6 +519,8 @@ class Tools:
     gh_json: Callable[..., JsonValue] = gh_json
     gh: Callable[..., subprocess.CompletedProcess[str]] = gh
     git: Callable[..., subprocess.CompletedProcess[str]] = git
+    # Above `await_ci:`, whose field name shadows the module for the rest of this class body.
+    newest_green_descendant: Callable[[str], str] = await_ci.newest_green_descendant
     await_ci: Callable[[str, int], CiVerdict] = await_ci_verdict
     # `...` rather than the argument list: both take an optional `observe` callback, which a
     # fake absorbs through **kwargs and a call site passes by keyword.
@@ -546,9 +548,8 @@ class Tools:
     )
     read_state: Callable[[Path, str], str | None] = read_state
     flux: land_flux.FluxReads = field(default_factory=land_flux.FluxReads)
-    # The PR's own narrowing, for a landing that never awaits the tick and so has no receipt
-    # to read. Runs git over the PR's range, which is why it is a boundary here rather than a
-    # `Classifier`. `classify.narrow_plane` is its one caller.
+    # The PR's own narrowing, for a landing that never awaits the tick and so has no receipt.
+    # Runs git over the PR's range, so it is a boundary, not a `Classifier`. Caller: `narrow_plane`.
     own_narrowing: Callable[[list[str], str, Path], dict[str, frozenset[str]]] = (
         land_tags.own_narrow_tags
     )
@@ -558,8 +559,7 @@ class Tools:
         [list[str], str, Path, set[str] | None], list[str]
     ] = shared_role_reach.paths_a_hand_must_apply
     lock_holder: Callable[[], str] = lock_holder
-    # `handoff.land_through_unit`'s one boundary: it starts the lander unit and reads its
-    # recorded exit code.
+    # `handoff.land_through_unit`'s one boundary: starts the lander unit, reads its exit code.
     systemctl: Callable[..., subprocess.CompletedProcess[str]] = systemctl
     hostname: Callable[[], str] = socket.gethostname
     logger: Callable[[str], None] = syslog

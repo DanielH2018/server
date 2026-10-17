@@ -99,6 +99,9 @@ class Fakes:
     pull_ref_rc: int = 0
     tip: str = MERGE_SHA
     await_ci: list[tuple[int, str]] = field(default_factory=lambda: [(0, "CI green")])
+    # `tools.newest_green_descendant`: the commit a stale `--at` run is retargeted to, "" for
+    # none. One entry per call, the last repeating.
+    green_descendants: list[str] = field(default_factory=lambda: [""])
     tick: list[int] = field(default_factory=lambda: [0])
     deploy: list[int] = field(default_factory=lambda: [0])
     blockers: list[int] = field(default_factory=lambda: [0])
@@ -449,6 +452,9 @@ def build_tools(f: Fakes) -> tuple[Tools, list]:
         gh=gh_run,
         git=git_run,
         await_ci=await_ci,
+        newest_green_descendant=_seq(
+            f.green_descendants, calls, "newest_green_descendant"
+        ),
         tick=_seq(f.tick, calls, "tick"),
         deploy=_seq(f.deploy, calls, "deploy"),
         deploy_tags=deploy_tags,

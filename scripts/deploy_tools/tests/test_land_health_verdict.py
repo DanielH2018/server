@@ -442,3 +442,16 @@ def test_an_unreadable_deployer_state_is_not_settled(landing, capsys):
         health_verdict.health(ln)
     assert (exc.value.rc, exc.value.verdict) == (1, "needs-manual-apply")
     assert "could not be read" in capsys.readouterr().out
+
+
+def test_a_failed_snapshot_asks_whether_the_primary_carries_the_retargeted_commit(
+    landing,
+):
+    """After a retarget, `deployed_at` is newer than the merge commit, and a primary holding
+    only the merge commit is not an equivalent tree to gate from."""
+    ln, calls = _deployed(landing, Fakes(gate_snapshot=None, merge_applied_rc=1))
+    ln.deployed_at = "d" * 40
+    with pytest.raises(Outcome):
+        health_verdict.health(ln)
+    asked = [c[1] for c in calls if c[0] == "git" and c[1][:1] == ("merge-base",)]
+    assert ("merge-base", "--is-ancestor", "d" * 40, "HEAD") in asked
