@@ -145,12 +145,20 @@ def manual_plane_alert(origin: str, remediation: str, marker: str) -> str:
 
 
 def secrets_deferred_alert(origin: str) -> str:
-    """The post for a `secrets.yml` change that ff-merged with no consumer redeployed."""
+    """The post for a merged `secrets.yml` change, sent whatever the tick applied beside it.
+
+    A broad tick redeploys the k8s readers of each changed key (#5409) and never a setup role
+    (#5436); every other path redeploys none. So the post claims neither, and names the
+    command that lists every consumer with the repair for its own plane.
+    """
     return (
-        f"⚠️ gitops-deploy: `secrets.yml` changed in `{origin[:8]}` with no "
-        f"service template — fast-forwarded but **nothing was redeployed**. The "
-        f"rotated secret won't reach its container(s) until you redeploy them "
-        f"(`{PLAYBOOK_CMD} ansible/deploy.yml --tags <svc>`)."
+        f"⚠️ gitops-deploy: `secrets.yml` changed in `{origin[:8]}`. A changed secret reaches "
+        f"a consumer only when that consumer renders again: a service this tick applied has "
+        f"it, and **every other consumer, every setup role included, still holds the old "
+        f"value**. For each changed key, `uv run python scripts/secrets_mgmt/secret_rotation.py "
+        f"consumers <secret>` names its consumers and the command for each plane — "
+        f"`{PLAYBOOK_CMD} ansible/deploy.yml --tags <svc>` for a service, "
+        f"`{PLAYBOOK_CMD} ansible/initial_setup.yml --tags <role>` for a setup role."
     )
 
 

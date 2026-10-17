@@ -276,3 +276,13 @@ def test_the_real_tree_agrees_that_a_scaffolded_role_takes_the_default(args, tmp
     declared = declared_manifest_files("widget", tmp_path, _entry(args))
     assert "service.yaml" in declared
     assert "ingressroute.yaml" in declared
+
+
+@pytest.mark.parametrize("route, printed", [([], True), (["--no-route"], False)])
+def test_a_routed_service_is_told_to_deploy_observability_before_the_gate(
+    route, printed
+):
+    """observability is denylisted, so only this step loads the route's probe (#5346)."""
+    args = scaffold.parse_args(["widget", "--image", "img:1", "--port", "1", *route])
+    text = scaffold.next_steps(args, scaffold.K8S_ROLES / args.name)
+    assert ("--tags observability" in text) is printed

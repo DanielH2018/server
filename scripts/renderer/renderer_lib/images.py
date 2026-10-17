@@ -28,7 +28,7 @@ import json
 import posixpath
 import re
 from collections.abc import Iterable, Iterator, Mapping
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from pathlib import Path
 
 import jinja2
@@ -41,7 +41,6 @@ from lib.repo_paths import K8S_ROLES
 from renderer.renderer_lib.bundle import CLUSTER_DIR, FLUX_DIR, KUSTOMIZATION
 from renderer.renderer_lib.cluster import RenderedTag, RenderRefused, tag_context
 from renderer.renderer_lib.environment import RenderError
-from renderer.renderer_lib.ordering import DEFERRED_SUFFIX, SNAPSHOT_SUFFIX
 from renderer.renderer_lib.task_inputs import image_builder_sites, image_contexts
 
 IMAGES_DIR = "images"
@@ -232,14 +231,7 @@ def ghcr_refs(
             name: {f: ghcr_text(t, tags, f"{name}/{f}") for f, t in files.items()}
             for name, files in tag.directories().items()
         }
-        pointed.append(
-            replace(
-                tag,
-                files=dirs[tag.tag],
-                deferred=dirs.get(tag.tag + DEFERRED_SUFFIX, {}),
-                snapshot=dirs.get(tag.tag + SNAPSHOT_SUFFIX, {}),
-            )
-        )
+        pointed.append(tag.with_directories(dirs))
     return pointed
 
 

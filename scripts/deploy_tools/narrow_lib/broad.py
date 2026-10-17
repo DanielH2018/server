@@ -21,6 +21,8 @@ can move because of it:
   - `ansible/filter_plugins/<x>.py`: every role whose files name one of the filters its
     `FilterModule.filters()` registers (`filters.py`, #3843); a comment or docstring edit
     reaches none (#4412). A play-tree caller refuses, as `toposort.py`'s in `deploy.yml` does.
+  - `ansible/vars/secrets.yml`: every role that reads a key whose ciphertext changed
+    (`secret_keys.py`, #5409). A key only a setup role reads reaches no tag.
 
 ANY DOUBT IS A REFUSAL, and `deploy_handlers.handle_broad` defers a refused plane to
 `k8s_unapplied`, naming every candidate, rather than running the whole play (#4333).
@@ -53,7 +55,7 @@ import sys
 from pathlib import Path
 from typing import Callable, NamedTuple
 
-from deploy_tools.narrow_lib import containers, filters, paths
+from deploy_tools.narrow_lib import containers, filters, paths, secret_keys
 from deploy_tools.narrow_lib import templates as narrow_templates
 from lib.exit_codes import DEPLOY_BROAD, DEPLOY_OK
 from lib.git import git, git_stdout
@@ -449,21 +451,15 @@ def _changed_half(cs, ctx: Context) -> set[str]:
     side. Refusing here would only turn the dropped deploy half of a mixed range into a full
     run nobody ran. A bring-up playbook still refuses: the tick parks on those before any
     plan exists, and a hand `deploy_tags.py narrow` over such a range must not read as
-    applyable. `cs.tasks`/`cs.secrets` refuse for the opposite reason: `changed`
-    reports them as work a human deploys by hand, and the full run this replaces DOES apply
-    them. A rotated secret reaches a service only when that service renders again, so
-    narrowing a range that carries one would leave every service outside the tag list on the
-    old value.
+    applyable. `cs.tasks` refuses for the opposite reason: `changed` reports it as work a
+    human deploys by hand, and the full run this replaces DOES apply it. `cs.secrets` is
+    left to `narrow`, which maps each key the range moved to its readers (`secret_keys`).
 
     `cs` is the range's whole `ChangeSet`. A deploy-plane path sets only the plane flags and
     `setup_roles`, which this does not read, so the deploy half needs no carving out first.
     """
     if cs.broad_manual:
         raise CannotNarrow("the range also changes a bring-up playbook")
-    if cs.secrets:
-        raise CannotNarrow(
-            "the range rotates a secret, which reaches a service only on its next render"
-        )
     if cs.tasks:
         raise CannotNarrow(
             f"structural change in {sorted(cs.tasks)}, which no tag captures"
@@ -509,6 +505,9 @@ def narrow(
     diff = git_stdout("diff", "--name-only", f"{old_ref}..{new_ref}", cwd=cwd)
     one = reach([p for p in diff.splitlines() if p])
     tags = _changed_half(one.changes, ctx)
+    if one.changes.secrets:  # a value reaches a service on its next render (#5409)
+        rules = secret_keys.Rules(_grep, _sort_hits, template_importers, _role_tags)
+        tags |= secret_keys.reached(old_ref, ctx, rules)
     for path in one.deploy_plane:
         tags |= broad_path_tags(path, old_ref, ctx)
     # A tag list covering most of the fleet saves none of the twenty minutes this exists to

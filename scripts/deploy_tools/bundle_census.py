@@ -11,7 +11,7 @@ nothing and `prod` stays where it was. `report` runs the source, host and no-stu
   then each per-tag kind its role's inputs call for, in `TAG_KIND_SUFFIXES` order, each with
   path `./cluster/<name><suffix>` (the per-file rule, D4.3 and D5.1a1): `-deferred` when the
   role passes `manifests_deferred_files`, `-snapshot` when it declares
-  `k8s_autodeploy_snapshot_pvcs`, and `-verify` for none yet;
+  `k8s_autodeploy_snapshot_pvcs`, and `-verify` when it ships `templates/verify/`;
 - each published tag and each shared kind has its directory `cluster/<name>/`, and each
   per-tag kind its directory `cluster/<name><suffix>/`, each with a `kustomization.yaml`;
 - no published tag takes a reserved name (`reserved_tags`), so a tag named
@@ -28,9 +28,9 @@ The allowlist comes from the renderer's inputs, never from its output, so a rend
 cannot widen it: the tags the inventory marks `owner: flux` (`published_tags`), the literal
 `SHARED_KINDS`, and the published tags whose role passes `manifests_deferred_files` to its
 `k8s/manifests` include (`deferring_tags`), read as the renderer reads the include, and those
-whose role declares snapshot claims (`snapshot_tags`). No role input names a verify Job yet,
-so `report` grants `-verify` to no tag, and the first PR that renders one adds its reader. A
-tag marked `owner: released` is left out of both the bundle and the allowlist (C4).
+whose role declares snapshot claims (`snapshot_tags`), and those whose role ships verify or
+post-apply mutation Jobs as `templates/verify/*.yaml.j2` (`verifying_tags`). A tag marked
+`owner: released` is left out of both the bundle and the allowlist (C4).
 
 The plan is docs/target-architecture/deploy/d2-first-leaf.md, *Publication and verification*,
 and docs/target-architecture/host/h1-cluster-config-to-flux.md, *Plumbing tags are never pruned*,
@@ -73,6 +73,7 @@ from renderer.renderer_lib.ordering import (
     SNAPSHOT_SUFFIX,
     TAG_KIND_SUFFIXES,
     VERIFY_SUFFIX,
+    verify_files,
 )
 from renderer.renderer_lib.task_inputs import include_vars
 
@@ -122,6 +123,18 @@ def snapshot_tags(
     """
     claims, problems = snapshot_claims(published, roles)
     return frozenset(tag for tag, names in claims.items() if names), problems
+
+
+def verifying_tags(published: Iterable[str], roles: Path = K8S_ROLES) -> frozenset[str]:
+    """The published tags whose role ships verify or post-apply mutation Jobs.
+
+    A role ships them as `templates/verify/*.yaml.j2`, which alone makes the renderer write
+    `cluster/<tag>-verify/` and the Kustomization `<tag>-verify` (D5.1a1). It reads
+    `verify_files`, the reader the renderer renders that directory from too.
+    """
+    return frozenset(
+        tag for tag, names in verify_files(published, roles).items() if names
+    )
 
 
 def _documents(path: Path) -> list[object] | str:
@@ -219,7 +232,8 @@ def census(
         kinds: The shared kinds.
         deferring: The published tags that defer files, from their roles (`deferring_tags`).
         snapshotting: The published tags that declare snapshot claims (`snapshot_tags`).
-        verifying: The published tags with a verify or post-apply mutation Job.
+        verifying: The published tags with a verify or post-apply mutation Job
+            (`verifying_tags`).
 
     A shared kind has no per-tag kind.
     """
@@ -362,7 +376,13 @@ def report(out: Path, published: list[str], roles: Path = K8S_ROLES) -> int:
     deferring, problems = deferring_tags(published, roles)
     snapshotting, unjudged = snapshot_tags(published, roles)
     problems += unjudged
-    problems += census(out, published, deferring=deferring, snapshotting=snapshotting)
+    problems += census(
+        out,
+        published,
+        deferring=deferring,
+        snapshotting=snapshotting,
+        verifying=verifying_tags(published, roles),
+    )
     problems += member_census(out, published)
     problems += bundle_gates.gates(out, published)
     for line in problems:

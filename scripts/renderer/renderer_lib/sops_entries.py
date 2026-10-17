@@ -26,6 +26,7 @@ from pathlib import Path as _Path
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
 from collections.abc import Iterable
+from dataclasses import replace
 from pathlib import Path
 
 import yaml
@@ -184,5 +185,5 @@ def copy_sops_manifests(
                 raise RenderError(f"{tag.tag}: {problem}")
             files[name] = text
         files[KUSTOMIZATION] = kustomization_text(list(files))
-        copied.append(RenderedTag(tag.tag, files, tag.deferred))
+        copied.append(replace(tag, files=files))
     return copied
