@@ -624,13 +624,17 @@ files = "(\\.py$|(^|/)CLAUDE\\.md$|^docs/facts\\.lock/|^scripts/dev/pytest_shard
 # which decide the pytest that runs them. None matches a path the docs-refresh or eval-run
 # crons commit.
 #
-# Cost, measured on daniel-box on 2026-10-17, one module at a time with `-n0`, each including
-# its ~0.4s interpreter start: lander deadlines 5.4s, the Renovate pair 3.5-4.0s each,
-# import direction 3.6s, checksum annotations 3.5s, tracked Python hazards 3.1s, prek files
-# 1.9s, exit codes 1.5s, shell `--help` 1.3s, the owner census 0.8s, probe health 0.4s. That is
-# 19s together, well above the issue's 7.5s estimate from recorded weights, because each
-# module's fixtures render or walk the tree. The gates are what keep a typical commit inside
-# the budget: a `.py`-only commit outside scripts/ runs the `-python` hook alone.
+# Cost, measured on daniel-server on 2026-10-17, one module at a time with `-n0`, each
+# including its ~0.4s interpreter start: lander deadlines 5.4s, the Renovate pair 3.5-4.0s
+# each, import direction 3.6s, checksum annotations 3.5s, tracked Python hazards 3.1s, prek
+# files 1.9s, exit codes 1.5s, shell `--help` 1.3s, the owner census 0.8s, probe health 0.4s.
+# That is 19s together, well above the issue's 7.5s estimate from recorded weights, because
+# each module's fixtures render or walk the tree. As hooks under `prek run <id> --all-files`,
+# at load average 3.3: `-python` 4.6s, `-owners` 0.9s, `-lander` 5.2s, `-checksum` 3.5s,
+# `-shell` 1.3s, `-renovate` 3.9s, against 27.6s for the hook above in the same run. The
+# gates keep a typical commit near budget: a `.py` commit outside scripts/lib/,
+# deploy_tools/ and renderer/ and outside ansible/tests/_*.py runs `-python` and `-owners`
+# alone, about 5.5s.
 #
 # `-n0` on the one-module hooks: pyproject.toml's `-n auto` spent longer bringing up xdist
 # workers than they take, and each worker repeats the module-scoped render (checksum 3.5s
