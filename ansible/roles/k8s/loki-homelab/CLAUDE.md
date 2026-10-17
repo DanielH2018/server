@@ -31,7 +31,7 @@ separate from the `observability` Loki (decision KL1, `docs/archive/.../slice-7-
   and no Flux path runs it. It stays for the handback. Its `manifests_rollout: loki-homelab`
   and the `alloy` entry in `manifests_extra_rollouts` named the two workloads for the
   stabilisation gate and the shared restart. The Kustomization's `wait` replaces the gate, and
-  the render's `checksum/restart` replaces the restart. `k8s_autodeploy: false` no longer
+  the restart checksum the renderer stamps replaces the restart. `k8s_autodeploy: false` no longer
   gates an apply, because the deployer skips the tag. It still stops Renovate automerging the
   image bump.
 - **Flux prunes the cluster-scoped RBAC.** The task's comment says the namespaced prune
@@ -41,7 +41,7 @@ separate from the `observability` Loki (decision KL1, `docs/archive/.../slice-7-
   `deletionPolicy: Orphan` applies only when the Kustomization itself is deleted.
 
 ## Notable
-- **The render's `checksum/restart` rolls each workload when a ConfigMap it mounts changes.**
+- **The renderer's restart checksum rolls each workload when a ConfigMap it mounts changes.**
   The Loki Deployment mounts `loki-homelab-config` and `loki-homelab-rules`. The Alloy
   DaemonSet mounts `loki-homelab-config` only, so a config edit rolls both and a rules edit
   rolls Loki alone.
@@ -73,7 +73,7 @@ Alertmanager in the observability namespace, on its Service at port 9093.
   monitor-bridge `INTERVAL`, rather than Loki's 1m default. Each evaluation is a range query
   on this Loki.
 - **Every rules edit restarts Loki.** The Loki Deployment mounts the rules ConfigMap, so the
-  render's `checksum/restart` moves and the `Recreate` pod rolls, which restarts the ruler.
+  renderer's restart checksum moves and the `Recreate` pod rolls, which restarts the ruler.
   Alloy does not mount it and does not roll. When a config edit rolls Alloy, it resumes from
   its positions file, so a restart costs an ingestion pause, not lost lines.
 - **The ruler's alerts never reach Prometheus.** It writes `ALERTS` only to a remote-write

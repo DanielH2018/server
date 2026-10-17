@@ -44,7 +44,7 @@ SMART trend history. See repo-root `CLAUDE.md` for shared conventions.
 - **Where the task went.** `tasks/main.yml` holds one task, the include of `k8s/manifests`,
   and no Flux path runs it. It stays for the handback. `manifests_rollout: scrutiny-web` named
   the web Deployment for the stabilisation gate and the shared restart. The Kustomization's
-  `wait` replaces the gate, and the render's `checksum/restart` on `scrutiny-web` replaces the
+  `wait` replaces the gate, and the restart checksum the renderer stamps on `scrutiny-web` replaces the
   restart. The two `manifests_extra_rollouts` entries declare `restart_on: []`, and the
   renderer honours it, so neither InfluxDB nor the collector carries the checksum, and neither
   rolls on a config or Secret change. `manifests_exclude_files: [service.yaml]` still keeps
