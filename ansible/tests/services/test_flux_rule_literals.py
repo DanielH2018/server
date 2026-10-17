@@ -5,8 +5,8 @@
 - `FluxControllerDown` has one `absent()` arm per controller, because pod discovery leaves no
   `up` series for a controller with no pod. An arm the rule lacks leaves that controller's
   loss unpaged, so the arms must name every `flux_controllers` entry;
-- `FluxNotReady`'s OCIRepository arm names the source the root Kustomization follows, the one
-  OCIRepository `sync.yaml.j2` renders with the verify drill off.
+- `FluxNotReady`'s OCIRepository arms name every OCIRepository `sync.yaml.j2` renders with the
+  verify drill off: `homelab`, which the root Kustomization follows, and `last-good`, the soak's base.
 
 Run: uv run pytest ansible/tests/services/test_flux_rule_literals.py
 """
@@ -57,7 +57,7 @@ def rule_inputs() -> tuple[str, set[str], set[str]]:
         for doc in yaml_fast.safe_load_all(sync)
         if isinstance(doc, dict) and doc.get("kind") == "OCIRepository"
     }
-    assert sources == {"homelab"}
+    assert sources == {"homelab", "last-good"}
     return RULES.read_text(), controllers, sources
 
 

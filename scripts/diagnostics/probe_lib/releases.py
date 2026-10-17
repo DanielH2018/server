@@ -83,7 +83,11 @@ from diagnostics.probe_lib.releases_consumers import (  # noqa: E402
 
 # The digest verdict, which outranks the path verdict computed here.
 from diagnostics.probe_lib.releases_render import apply_digest_verdicts, path_reason  # noqa: E402
-from diagnostics.probe_lib.releases_retired import drop_owned, drop_retired  # noqa: E402
+from diagnostics.probe_lib.releases_retired import (  # noqa: E402
+    drop_owned,
+    drop_retired,
+    tree_owners,
+)
 from diagnostics.probe_lib.releases_retired import role_dir_names  # noqa: E402
 
 
@@ -568,12 +572,21 @@ def run_releases(ns):
     # Both verdicts are skipped for the views that print no FLAGS column, and skipped
     # TOGETHER -- `renders_flags_table` says why the digest half cannot run over an empty dict.
     flags_table = renders_flags_table(ns)
-    hits = {}
-    stale = compute_stale(records, hits_out=hits) if flags_table else {}
+    hits, stale, owners = {}, {}, {}
     if flags_table:
-        apply_digest_verdicts(stale, records, hits=hits)
+        # An owned tag's record is listed but not judged, as `--stale-only` drops it: Flux
+        # applies the tag, so no Ansible deploy writes it a newer record (#5309).
+        owners = tree_owners()
+        judged = [r for r in records if "error" in r or r.get("service") not in owners]
+        stale = compute_stale(judged, hits_out=hits)
+        apply_digest_verdicts(stale, judged, hits=hits)
     text, code = format_records(
-        records, merged, service=service, stale=stale, release_dir=RELEASE_DIR
+        records,
+        merged,
+        service=service,
+        stale=stale,
+        release_dir=RELEASE_DIR,
+        owners=owners,
     )
     print(text)
     return code

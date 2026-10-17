@@ -15,8 +15,8 @@ from collections.abc import Iterable
 from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))  # scripts/
-from changed_set import ROOT
-from deploy_tools.promote_lib.wait import kustomization_graph
+from changed_set import ROOT, SOAK
+from deploy_tools.kustomizations import kustomization_graph
 
 # The values of the two objects the bundle does not carry, from
 # ansible/roles/k8s/flux/templates/sync.yaml.j2: the OCIRepository `homelab`'s `interval`, and
@@ -31,9 +31,10 @@ ROOT_RETRY_S = 60
 # `dependsOn` hop costs up to one interval (d4-ordering.md). The flux role sets no such flag;
 # scripts/deploy_tools/tests/test_chained_timeout.py fails one it adds.
 REQUEUE_DEPENDENCY_S = 30
-# kustomize-controller's `--concurrent`: how many Kustomizations it reconciles at once. One
-# that waits on health holds a worker, so a changed set larger than this queues in rounds. The
-# flux role sets it to `k8s_rollout_batch_width` (D5.1c), and
+# The workers kustomize-controller's `--concurrent` leaves the tags: how many it reconciles at
+# once. One that waits on health holds a worker, so a changed set larger than this queues in
+# rounds. The flux role sets `--concurrent` to `k8s_rollout_batch_width` plus one, the worker
+# the soak holds from the start of a rollout (D5.1c, D5.3b2), and
 # ansible/tests/k8s/test_flux_role.py fails a drift between that width and this figure.
 CONCURRENT = 5
 # The ceiling of every derived timeout, 5.5 hours. GitHub stops a hosted job at 6 hours, and a
@@ -75,6 +76,11 @@ def promote_timeout(
     - a queueing term: the changed names divided by `concurrent`, rounded up, times the
       largest `timeout` among them, since each one waiting on health holds a worker;
     - the OCIRepository interval and the largest `retryInterval`.
+
+    `soak` carries no edges and holds a worker of its own from the start of the rollout,
+    waiting at run time for the rest (D5 Open question 19). So when it is changed its
+    `timeout` is a parallel term: the first two terms together never fall below it, and it
+    takes no place in the queue.
 
     The root `homelab` is always expected and is not in the bundle, so its `timeout` is the
     floor of the first two terms together, and its `retryInterval` the floor of the last. A
@@ -131,10 +137,12 @@ def promote_timeout(
         return longest[name]
 
     chain = max(
-        (path_to(name, ()) for name in changed if name in depends_on), default=0
+        (path_to(name, ()) for name in changed - {SOAK} if name in depends_on),
+        default=0,
     )
-    waiting = [timeouts[name] for name in changed if name in timeouts]
+    waiting = [timeouts[name] for name in changed - {SOAK} if name in timeouts]
     rounds = -(-len(waiting) // concurrent)
     queueing = rounds * max(waiting, default=0)
-    total = max(chain + queueing, ROOT_TIMEOUT_S) + OCI_INTERVAL_S + max(retries)
+    soak = timeouts.get(SOAK, 0) if SOAK in changed else 0
+    total = max(chain + queueing, soak, ROOT_TIMEOUT_S) + OCI_INTERVAL_S + max(retries)
     return min(total, VERIFY_CAP_S)

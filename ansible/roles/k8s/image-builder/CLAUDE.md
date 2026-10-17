@@ -75,12 +75,9 @@ while reporting success.
 - **For a flux-owned role, the content tag comes from `DIR/images/tags.json`.** The
   consumer's ref renders from the same computation, and the render refuses a ref that
   differs. `scripts/lib/render_guard.py:BUILT_IMAGE_TAG_STUBS` stays a stub for guards.
-- **What replaces this role for a flux-owned role** is the promote workflow's `images` job
-  (D5.4a2), which `publish` needs. It recomputes each context's content tag from the files
-  under `DIR/images/<name>/`, refuses one that differs from `tags.json`, and pushes
-  `ghcr.io/danielh2018/<name>:<content tag>` only when GHCR does not serve that tag
-  (`scripts/deploy_tools/ci_images.py`). A served tag is never rebuilt, so the tag stays
-  immutable. D5.4b points flux-owned consumers there. Until D5.4b lands, every consumer
+- **What replaces this role for a flux-owned role** is a CI build, which does not exist yet.
+  D5.4a2 adds an `images` job to the promote workflow that builds each context and pushes it
+  to GHCR, and D5.4b points flux-owned consumers there. Until D5.4b lands, every consumer
   builds here.
 - **`image_builder_force` has no Flux-era use.** The plan's rule for a package refresh that
   no pin moves is a hand PR that bumps a `rebuild_stamp` data key in the context, which moves

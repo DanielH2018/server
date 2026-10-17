@@ -9,7 +9,7 @@ from fanout_lib import place
 from fanout_lib import wait_probe
 from fanout_lib.manifest import Batch, Manifest, save
 from fanout_lib.status import UNREAD
-from _fanout_fakes import fake_tools
+from _fanout_fakes import fake_tools, ok
 
 
 def status(**runs: tuple[int, list[dict]]):
@@ -81,6 +81,52 @@ def test_read_status_reads_the_json_rows_status_prints(tmp_path):
     rc, rows = wait_probe.read_status("20260101T000010Z", main)
     assert rc == 0
     assert [(r["batch"], r["state"]) for r in rows] == [("1", "cleaned")]
+
+
+def _clean_every_batch(root, run_id):
+    """A one-batch manifest for `run_id`, then a real `clean` that removes the batch."""
+    b = Batch("1", "daniel-box", "/w1", "worktree-fanout-1", "fanout-1", [1], "t")
+    save(Manifest(run_id, "o", [b]), root=root)
+    tools, _run = fake_tools(answers={"daniel-box": ok("removed: /w1")})
+    assert place.main(["clean", run_id, "--manifest-root", str(root)], tools) == 0
+
+
+def _status_under(root):
+    """`read_status` through the real `place.main`, pointed at `root`."""
+    tools, _run = fake_tools()
+
+    def main(argv):
+        return place.main([*argv, "--manifest-root", str(root)], tools)
+
+    return lambda run_id: wait_probe.read_status(run_id, main)
+
+
+def test_a_run_whose_last_batch_was_cleaned_reads_finished(tmp_path):
+    """`clean` retires the manifest rather than deleting it, so the read is no error (#4907)."""
+    _clean_every_batch(tmp_path, "20261017T004858Z")
+    state = wait_probe.read(["20261017T004858Z"], _status_under(tmp_path))
+    assert state == {"state": "finished", "detail": "1 batches finished"}
+
+
+def test_a_cleaned_run_keeps_the_watch_on_a_live_one(tmp_path):
+    """The issue's verify-by: the second run is still reported after the first is cleaned."""
+    _clean_every_batch(tmp_path, "20261017T004858Z")
+    real = _status_under(tmp_path)
+
+    def readers(run_id):
+        return (
+            real(run_id) if run_id == "20261017T004858Z" else (0, [row("b", "running")])
+        )
+
+    state = wait_probe.read(["20261017T004858Z", "20261017T010000Z"], readers)
+    assert state["state"] == "running"
+
+
+def test_a_run_id_that_never_existed_is_unreadable_not_finished(tmp_path):
+    """A typo must not read as a finished run, retired runs or not."""
+    _clean_every_batch(tmp_path, "20261017T004858Z")
+    with pytest.raises(wait_probe.Unreadable):
+        wait_probe.read(["20261017T004859Z"], _status_under(tmp_path))
 
 
 def test_the_declared_states_keep_cc_wait_s_contract():

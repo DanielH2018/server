@@ -1,6 +1,6 @@
 ---
 # DOCKER_MODS rides along (HACS).
-home_assistant_k8s_image: lscr.io/linuxserver/homeassistant:2026.10.1-ls254@sha256:2fc1dbb6818d62bebb4eb418a2f2332f1d8b3ee116b546df78b902d1f28f13fa
+home_assistant_k8s_image: lscr.io/linuxserver/homeassistant:2026.10.2-ls257@sha256:38ca271323058a45cefa5829d58a15761df669f598862ae084d41e0a11d211d2
 
 # Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
 # Migrating state — the sharpest case in the fleet: strategy is Recreate and the config volume

@@ -525,7 +525,14 @@ notification-controller posts on T:
   Kustomization whose `dependsOn` chain reaches one, such as a tag's `-deferred`. A suspended
   Kustomization is left out: one whose document sets `spec.suspend: true`, and every
   Kustomization of a tag that T's `digests.json` marks `suspended`. A change under `_unclassified`, or a bundle with no
-  `digests.json`, expects every name, and an empty set expects `flux/homelab` alone.
+  `digests.json`, expects every name, and an empty set expects `flux/homelab` alone. The set
+  also holds `soak` whenever it holds a tag, because `soak` has no `dependsOn` chain to join
+  through (C2).
+- **The observe-only set.** `verify_promotion.py:OBSERVE_ONLY` holds `soak`, and `verify`
+  subtracts it from the set. So `verify` never waits on `flux/soak`, and a `flux/soak`
+  `failure` neither holds nor resets: the first live soaks are watched before they gate.
+  `land-wait` never waits on `soak` Ready either. D5.3b3 deletes the set, and from then on
+  `verify` expects `flux/soak` like any other name in the set.
 - **What it never expects.** A Kustomization outside the set, so a failure that T did not
   cause never holds; the Flux alerts page it instead. A dependent whose status on `prod`'s
   commit already read `failure` is logged as `excused <name>` and not expected. `decide`
@@ -639,7 +646,7 @@ the hold names, then clear the hold. For a failed Longhorn bump, the recovery is
 
 `scripts/deploy_tools/chained_timeout.py:promote_timeout` derives `verify`'s wait from T's bundle and its changed set, the same set
 `verify` expects, so the two cannot disagree. With `dependsOn` edges, a Kustomization starts
-only after its dependencies finish, so the wait sums four terms:
+only after its dependencies finish, so the wait sums four terms, with the soak beside them:
 
 - **The longest path.** The longest `dependsOn` path in T's bundle that ends at a changed
   name. A changed name on the path counts its own `timeout`. An unchanged ancestor counts no
@@ -652,8 +659,14 @@ only after its dependencies finish, so the wait sums four terms:
   `--concurrent` and rounded up, times the largest `timeout` among them. A Kustomization that
   waits on health holds one of the Kustomize controller's workers, so a revision that changes more
   names than `--concurrent` queues behind the workers. The flux role sets `--concurrent` to
-  `k8s_rollout_batch_width`, 5, the width the deploy play rolls workloads at. Without the term
-  `verify` would time out on such a revision and write a false hold.
+  `k8s_rollout_batch_width`, 5, the width the deploy play rolls workloads at, plus one worker
+  for the soak. Without the term `verify` would time out on such a revision and write a false
+  hold.
+- **The soak, beside the chain.** `soak` has no edges and holds its own worker from the start
+  of the rollout, so it is in neither term above. When it is in the set, the first two terms
+  together never fall below its `timeout`, which bounds the soak Job's whole run. Until
+  D5.3b3, `verify` leaves `soak` out of the set it passes, because it waits on no
+  observe-only name.
 - **The `OCIRepository` interval**, 1 minute.
 - **The largest `retryInterval`**, 2 minutes on every Kustomization the renderer writes.
 
@@ -661,7 +674,7 @@ The root `homelab`'s 5-minute `timeout` is the floor of the first two terms. The
 leaves `--requeue-dependency` at its default, and
 `scripts/deploy_tools/tests/test_chained_timeout.py` fails a vendored install or role default
 that sets it. `ansible/tests/k8s/test_flux_role.py` holds `chained_timeout.CONCURRENT` equal to
-the `--concurrent` the role renders.
+the `--concurrent` the role renders, less the soak's worker.
 A `dependsOn` naming a Kustomization the bundle does not hold, or a cycle, fails `verify`
 with no verdict, and `settle` holds it as `<T> unverified`.
 
@@ -951,9 +964,9 @@ census fails a bundle that lacks either. Each member needs a footprint rule in
 Every `cluster` render refuses a deploy tag named `homelab`, the root's name, after a
 `SHARED_KINDS` member, or after a member of `RESERVED_NAMES`, the literal list beside it. It
 also refuses a tag ending in `-deferred`, `-snapshot` or `-verify`. `RESERVED_NAMES` holds
-`soak` and `homelab-namespace`, D5's shared kinds that no PR renders yet. Each joins
-`SHARED_KINDS` only in the PR that renders it, because the census fails a member with no
-file. The suffixes keep a tag's Kustomization from colliding with another tag's per-tag kind.
+`soak` and `homelab-namespace`, D5's shared kinds. `soak` is rendered and in `SHARED_KINDS`
+(*The soak Job*). `homelab-namespace` joins only in the PR that renders it, because the census
+fails a member with no file. The suffixes keep a tag's Kustomization from colliding with another tag's per-tag kind.
 The publish census refuses a published tag that takes any of these names as well.
 
 ### `digests.json`
@@ -1107,6 +1120,42 @@ to `cluster/<tag>/` renames the Job and Flux runs it again before the change app
   the claims' PVCs by name and every PV. The PVC grant is cluster-wide because a Role in a
   namespace `<tag>` creates would fail the snapshot's apply on the tag's first revision.
 
+### The soak Job
+
+Every bundle carries the shared kind `soak` (`scripts/renderer/renderer_lib/soak.py`). Its
+Kustomization holds one Job, `soak-<spec digest8>`, in `flux-system`, which runs
+`ansible/roles/k8s/manifests/files/flux_soak.py` against R, the commit the bundle was rendered
+from. The Job's exit is the `flux/soak` status. The design is D5's *The soak as a Job*.
+
+- **No `dependsOn`.** The Job waits at run time until every Kustomization R changed reads
+  Ready with `lastAppliedOriginRevision` at R. A suspended tag is outside its scope, and the
+  Kustomization's `homelab/suspended-deps` annotation names the suspended tag's
+  Kustomizations. `kustomize-controller` runs one worker more than the rollout width, because
+  the soak holds one from the start of the rollout.
+- **R's SHA moves the Job, not the footprint.** The Job's arguments carry R's SHA, so its name
+  changes on every commit. `digests.json` records `soak` over a render at an all-zero SHA, so a
+  docs-only commit still has an empty changed set. `homelab_render.py cluster --revision`
+  names R, and defaults to the checkout's `HEAD`, which the publish job pins.
+- **W.** The ConfigMap's `services.json` maps each published tag to the longest `for:` among
+  the critical or `verify="true"` rules under `ansible/roles/k8s/observability/files/rules/`
+  that can fire for it, and to the namespaces its tag renders into. A rule with no static
+  `service` label counts for every tag. The fleet W is the map's largest entry plus the
+  scrape and evaluation allowance.
+- **Its timeout.** The Job starts beside the tags, so its wait for them to read Ready at R,
+  `--wait-seconds`, is `chained_timeout.promote_timeout` over the bundle's other
+  Kustomizations with every one counted as changed. The render cannot know which ones R
+  changes. `activeDeadlineSeconds` adds the fleet W and a minute, and the Kustomization's
+  `timeout` adds another minute. With bento-pdf, texbrain and peanut published, that is
+  2010s, 2250s and 2310s.
+- **RBAC.** The ServiceAccount `soak` may get and list `OCIRepository` and Kustomization objects in
+  `flux-system`, and list pods and get and list ReplicaSets in each namespace a published tag
+  renders into.
+- **Its base.** The flux role renders the `OCIRepository` named `last-good`, which follows the
+  `last-good` tag with `homelab`'s `verify` block. The Job diffs R's `digests.json` against
+  it, and widens to the fleet when it cannot.
+- **Observe-only until D5.3b3.** A `failure` holds nothing (*Verification*). To read why a
+  soak failed, read the failed Job's termination message, its `failed-services:` line.
+
 ## Removing an object on purpose
 
 A render that drops a NetworkPolicy, an IngressRoute, a CronJob, a Service or an RBAC object
@@ -1127,6 +1176,10 @@ Removes-Object: <kind>/<namespace>/<name>
   reaches master whatever the repository's squash default says. A merge outside `land.sh`
   that replaces the body, such as `gh pr merge --body`, drops it.
 - A commit outside the range does not count, including `prod`'s own commit.
+- A rename is not a removal. An object whose name, with the trailing `-<digest8>`
+  removed, still renders in the candidate passes, as the soak Job and its ConfigMap do on
+  every revision. `scripts/deploy_tools/object_loss.py` strips the suffix as
+  `cross_plane_order.py` does at PR time.
 
 `decide` skips an ineligible candidate with one stderr line per candidate, naming each
 undeclared object, and weighs older ones. When every candidate loses an object, it prints
@@ -1159,9 +1212,9 @@ names the exact line to add. Two removals pass without a line:
 A tag handed back passes too. A tag that is not `owner: flux` at the head, because it reads
 `owner: released` or lost its entry, is not judged, so the revert of a flip needs no lines.
 The arm reads the PR's own commits, which a squash merge need not copy, so it runs on pull
-requests only. On master `decide` reads the same lines, but it applies neither exemption,
-so until it does a rename by digest or a dropped prune-disabled object stalls promotion
-unless a commit declares it (#5291).
+requests only. On master `decide` reads the same lines and applies both exemptions. The two
+checks share one implementation of them, `stem` and `prune_disabled` in
+`scripts/deploy_tools/object_loss.py`, so they cannot judge the same drop differently (#5291).
 
 ## Retiring a flux-owned service
 

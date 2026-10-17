@@ -244,3 +244,40 @@ def test_the_green_gate_passes_a_guard_constant_the_red_test_needs_changed(tmp_p
     fixed = GUARD.replace('{"old.py"}', '{"old.py", "new.py"}') + GUARD_RED
     commit(repo, "fix", **{"tests/test_guard.py": fixed})
     assert green_gate(run, repo, red, gate) == ""
+
+
+# #5397: the red commits registered their patching module, and the fix raised its count.
+REGISTRY = "ansible/tests/repo/monkeypatch_allowlist.txt"
+LISTED = "tests/test_listed.py 2\n"
+RED_LINE = "tests/test_new.py 8\n"
+PLAIN_RED_TEST = (
+    "def test_doubles():\n    from mod import double\n\n    assert double(2) == 4\n"
+)
+
+
+@pytest.mark.parametrize(
+    ("head", "reason"),
+    [
+        (LISTED + "tests/test_new.py 9\n", ""),
+        (LISTED, ""),
+        ("tests/test_listed.py 3\n" + RED_LINE, "drops `tests/test_listed.py 2`"),
+        (RED_LINE, "drops `tests/test_listed.py 2`"),
+        (LISTED + "tests/test_old.py 1\n" + RED_LINE, "adds `tests/test_old.py 1`"),
+    ],
+    ids=[
+        "raises-the-red-modules-line",
+        "drops-the-red-modules-line",
+        "raises-an-older-modules-line",
+        "deletes-an-older-modules-line",
+        "adds-a-line-for-a-module-at-base",
+    ],
+)
+def test_a_patch_registry_may_change_only_the_red_modules_lines(tmp_path, head, reason):
+    repo, red, gate = _gated(
+        tmp_path,
+        {"tests/test_old.py": "def test_old():\n    pass\n", REGISTRY: LISTED},
+        {"tests/test_new.py": PLAIN_RED_TEST, REGISTRY: LISTED + RED_LINE},
+    )
+    commit(repo, "fix", **{"mod.py": FIXED, REGISTRY: head})
+    refusal = f"{REGISTRY} {reason}, a line that names no file the red commits added"
+    assert green_gate(run, repo, red, gate) == (STANDS_ON + refusal if reason else "")

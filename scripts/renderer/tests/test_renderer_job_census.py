@@ -477,5 +477,6 @@ def test_the_live_bundle_passes_every_row(live_bundle):
     tags, bundle = live_bundle
     assert problems(bundle) == []
     assert set(tags) | SHARED_KINDS <= bundle.keys()
-    assert {"bento-pdf", "cluster-vars"} <= bundle.keys()
+    assert {"bento-pdf", "cluster-vars", "soak"} <= bundle.keys()
+    assert any(doc["kind"] == "Job" for doc in bundle["soak"]), "the soak Job is gone"
     assert all(bundle[tag] for tag in tags), "a tag directory parsed to no documents"

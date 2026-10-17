@@ -132,8 +132,8 @@ def cmd_abandon(args, tools: Tools) -> int:
     """Discard one unmerged batch's tree and branch, record it, and release its claims.
 
     The removal is recorded in the manifest before the release runs: the tree is gone either
-    way, and `launch` reads `removed_at` to allow a relaunch of those issues. The manifest is
-    deleted once every batch carries one, as `clean` does.
+    way, and `launch` reads `removed_at` to allow a relaunch of those issues. Once every batch
+    carries one, the manifest is saved and then retired, as `clean` does it.
 
     Returns:
         0 when the tree, the branch and the claims are all gone; 1 otherwise.
@@ -167,10 +167,9 @@ def cmd_abandon(args, tools: Tools) -> int:
     run.batches[index] = dataclasses.replace(
         b, removed_at=datetime.now(UTC).isoformat()
     )
+    manifest_mod.save(run, root=args.manifest_root)
     if all(x.removed_at for x in run.batches):
-        manifest_mod.path(run.run_id, args.manifest_root).unlink(missing_ok=True)
-    else:
-        manifest_mod.save(run, root=args.manifest_root)
+        manifest_mod.retire(run.run_id, args.manifest_root)
     return 0 if release_batch(tools, run, b, target, "abandoned") else 1
 
 
