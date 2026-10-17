@@ -1,0 +1,13 @@
+{
+  "checksum": "566d4f79ac9c53dd13bf2eaf2a3f0a47566eb571f156ac52f7646d9086bc7166",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "ansible/roles/setup/renovate_agent/CLAUDE.md#Arming it",
+  "row": {
+    "atoms": {
+      "ansible/tests/setup/test_renovate_agent_unit.py": "94e8b35cfbcb95bffbda8fbf58a3df4502b3da4bdbfdb6cad4384d2e5dba8d4a",
+      "docs/renovate-agent-bounds-and-digest.md": "e783f32fa0f5a69e7ca918e92796805ef049b01841ea1f4a1fa59e78ecf79f5b"
+    },
+    "python": "3.14",
+    "verified_sha": "4408b2335"
+  }
+}

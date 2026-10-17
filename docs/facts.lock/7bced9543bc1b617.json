@@ -1,0 +1,12 @@
+{
+  "checksum": "d7572e6d9c2b2c643ed807ee77d51f3e55857bffe8d05d877f5aa5b36e0c405a",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "ansible/roles/k8s/volume-revert/CLAUDE.md#The guard is `k8s_no_mutate`, and neither `--check` nor `--dry-run` reaches this role",
+  "row": {
+    "atoms": {
+      "ansible/tests/longhorn/test_volume_revert.py": "8c95bfe660faaae0d3210cf3425dea803626cb734d0795c25bde93459704232c"
+    },
+    "python": "3.14",
+    "verified_sha": "fd34ae8eb"
+  }
+}

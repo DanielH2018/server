@@ -1,0 +1,12 @@
+{
+  "checksum": "18dbe45ccbe3e5533acd27280963103d2611aa7a515164b4386bcd3f3d870e45",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "ansible/roles/k8s/uptime-kuma/CLAUDE.md#uptime-kuma — status monitoring, with AutoKuma reconciling monitors from templates",
+  "row": {
+    "atoms": {
+      "docs/uptime-kuma-autokuma-record.md": "745c8c50d4b8430bc712667c51ff3024ef6a1af57b5149f114f0b3a20dbb30c8"
+    },
+    "python": "3.14",
+    "verified_sha": "fd34ae8eb"
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "checksum": "ba377f3695ec1234b69775e88af19ae745dddfed983e8268a2c318346e0f7a7c",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "ansible/roles/setup/claude_code/CLAUDE.md#Traps already paid for",
+  "row": {
+    "atoms": {
+      "ansible/tests/setup/test_claude_fleet_slice_cap.py": "997cdc6f8b8f35a1c139acfa6f03b9a544d732bef177dc79fdb2007b86267872",
+      "ansible/tests/setup/test_claude_login_slice_caps.py": "848caff738220947e072b08c9c760429cd875563ec4a996513648886f89d8940",
+      "ansible/tests/setup/test_claude_rc_unit.py": "cc567ed1d95532357f0b097c2a20aa453cda18c1f58565bb72403854c652d234"
+    },
+    "python": "3.14",
+    "verified_sha": "0e168361d"
+  }
+}

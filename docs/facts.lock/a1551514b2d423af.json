@@ -1,0 +1,12 @@
+{
+  "checksum": "a584cb05c3b618a4ef20e274813e069f3725a8022f0f5b1a91fb5d7fdfdd42df",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "ansible/roles/setup/deploy_ui/CLAUDE.md#Writes",
+  "row": {
+    "atoms": {
+      "scripts/deploy_tools/deploy_lib/tags.py": "170faa6b532a7e444f059586a75bd9c71b3c46c9041653b9319e5054edad6b94"
+    },
+    "python": "3.14",
+    "verified_sha": "a778a9eeb"
+  }
+}

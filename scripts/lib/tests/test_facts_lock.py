@@ -1,5 +1,7 @@
 """facts.lock: written by the tool, checksummed against a hand edit, and checked against the tree."""
 
+import json
+
 import pytest
 
 from lib.git_testing import commit, git, init_repo
@@ -11,10 +13,12 @@ from lib.facts.lock import (
     build_repo_edb,
     check_lock,
     forget_units,
+    lock_at,
     lock_tampered,
     read_lock,
     repo_citations,
     reverify_benign,
+    row_file_name,
     verify_units,
     write_lock,
 )
@@ -62,7 +66,8 @@ def test_hand_edited_lock_is_flagged(tmp_path):
     write_lock(
         p, {"CLAUDE.md#Gate": {"verified_sha": "abc", "atoms": {"m.py:LIMIT": "h"}}}
     )
-    p.write_text(p.read_text().replace('"h"', '"hh"').replace(": h\n", ": hh\n"))
+    row = p / row_file_name("CLAUDE.md#Gate")
+    row.write_text(row.read_text().replace('"h"', '"hh"'))
     assert lock_tampered(p)
 
 
@@ -134,7 +139,8 @@ def test_tampered_lock_is_the_only_finding(tmp_path):
     repo = _repo(tmp_path)
     verify_units(repo, repo / LOCK_REL, ["CLAUDE.md#Gate"], "abc1234")
     p = repo / LOCK_REL
-    p.write_text(p.read_text().replace("abc1234", "zzz9999"))
+    row = p / row_file_name("CLAUDE.md#Gate")
+    row.write_text(row.read_text().replace("abc1234", "zzz9999"))
     assert [f.kind for f in check_lock(repo, p)] == ["lock-tampered"]
 
 
@@ -321,10 +327,9 @@ def test_a_tampered_lock_is_never_reverified_over(tmp_path):
     repo = _repo(tmp_path)
     verify_units(repo, repo / LOCK_REL, ["CLAUDE.md#Gate"], "abc1234")
     lock_path = repo / LOCK_REL
-    lock_path.write_text(
-        lock_path.read_text().replace(
-            '"verified_sha": "abc1234"', '"verified_sha": "zzz"'
-        )
+    row = lock_path / row_file_name("CLAUDE.md#Gate")
+    row.write_text(
+        row.read_text().replace('"verified_sha": "abc1234"', '"verified_sha": "zzz"')
     )
 
     done, blocking = reverify_benign(repo, lock_path, {"CLAUDE.md#Gate"}, "def5678")
@@ -377,59 +382,101 @@ def _row(sha, h):
     return {"atoms": {"t/m.py:LIMIT": h}, "python": _PYTHON, "verified_sha": sha}
 
 
-@pytest.mark.parametrize("first", ["reverify", "add"])
-def test_two_branches_verifying_different_sections_merge_cleanly(tmp_path, first):
-    # Issue #5341: a single top-level checksum made two such PRs conflict on its line.
-    # The sections are adjacent in sort order, and one branch adds a first-time row
-    # between them, so the merge is as tight as two non-overlapping verifies get.
+_A, _B, _B2, _C, _D = (f"CLAUDE.md#{h}" for h in ("A", "B", "B2", "C", "D"))
+_BASE = {_A: _row("b0", "a0"), _C: _row("b0", "c0")}
+# Each shape is two branches' locks from `_BASE`. All three conflicted in one file: the first
+# on a top-level checksum, the other two on rows a single sorted file put next to each other.
+_SHAPES = {
+    "reverify-and-insert-between": (
+        {**_BASE, _A: _row("r1", "a1")},
+        {**_BASE, _B: _row("d1", "b1"), _C: _row("d1", "c1")},
+    ),
+    "two-inserts-in-one-gap": (
+        {**_BASE, _B: _row("r1", "b1")},
+        {**_BASE, _B2: _row("d1", "b2")},
+    ),
+    "append-after-a-reverified-last-row": (
+        {**_BASE, _C: _row("r1", "c1")},
+        {**_BASE, _D: _row("d1", "d1")},
+    ),
+}
+
+
+@pytest.mark.parametrize("swap", [False, True], ids=["one-first", "two-first"])
+@pytest.mark.parametrize("shape", sorted(_SHAPES))
+def test_two_branches_verifying_different_sections_merge_cleanly(tmp_path, shape, swap):
+    # Issue #5341: two PRs that verified different sections conflicted on the lock.
     repo = init_repo(tmp_path)
     lock_path = repo / LOCK_REL
-    base = {"CLAUDE.md#A": _row("b0", "a0"), "CLAUDE.md#C": _row("b0", "c0")}
-    write_lock(lock_path, base)
+    write_lock(lock_path, _BASE)
     commit(repo, "base")
-    git(repo, "branch", "reverify")
-    git(repo, "branch", "add")
-
-    git(repo, "switch", "-q", "reverify")
-    write_lock(lock_path, {**base, "CLAUDE.md#A": _row("r1", "a1")})
-    commit(repo, "re-verify A")
-    git(repo, "switch", "-q", "add")
-    write_lock(
-        lock_path,
-        {**base, "CLAUDE.md#B": _row("d1", "b1"), "CLAUDE.md#C": _row("d1", "c1")},
-    )
-    commit(repo, "add B, re-verify C")
+    branches = dict(zip(("one", "two"), _SHAPES[shape], strict=True))
+    for name, units in branches.items():
+        git(repo, "switch", "-q", "-c", name, "master")
+        write_lock(lock_path, units)
+        commit(repo, name)
 
     git(repo, "switch", "-q", "master")
-    second = "add" if first == "reverify" else "reverify"
-    for branch in (first, second):
+    for name in sorted(branches, reverse=swap):
         merged = git(
-            repo, "merge", "-q", "--no-edit", "--no-gpg-sign", branch, check=False
+            repo, "merge", "-q", "--no-edit", "--no-gpg-sign", name, check=False
         )
         assert merged.returncode == 0, merged.stdout + merged.stderr
 
     assert not lock_tampered(lock_path)
-    assert read_lock(lock_path) == {
-        "CLAUDE.md#A": _row("r1", "a1"),
-        "CLAUDE.md#B": _row("d1", "b1"),
-        "CLAUDE.md#C": _row("d1", "c1"),
-    }
+    expected = dict(_BASE)
+    for units in branches.values():
+        expected.update({k: v for k, v in units.items() if _BASE.get(k) != v})
+    assert read_lock(lock_path) == expected
 
 
 def test_a_row_moved_to_another_key_by_hand_is_flagged(tmp_path):
     p = tmp_path / "facts.lock"
     write_lock(p, {"CLAUDE.md#Gate": _row("abc", "h")})
-    p.write_text(p.read_text().replace('"CLAUDE.md#Gate"', '"CLAUDE.md#Other"'))
+    row = p / row_file_name("CLAUDE.md#Gate")
+    row.rename(p / row_file_name("CLAUDE.md#Other"))
     assert lock_tampered(p)
 
 
 def test_a_row_added_by_hand_without_a_checksum_is_flagged(tmp_path):
     p = tmp_path / "facts.lock"
     write_lock(p, {"CLAUDE.md#Gate": _row("abc", "h")})
-    p.write_text(
-        p.read_text().replace(
-            '"units": {',
-            '"units": {\n    "CLAUDE.md#New": {"atoms": {}, "verified_sha": "x"},',
-        )
+    (p / row_file_name("CLAUDE.md#New")).write_text(
+        '{"key": "CLAUDE.md#New", "row": {"atoms": {}, "verified_sha": "x"}}\n'
     )
     assert lock_tampered(p)
+
+
+_SINGLE_FILE = '# old header\n{"checksum": "x", "units": {"CLAUDE.md#Gate": %s}}\n'
+
+
+def test_a_single_file_lock_reads_and_is_replaced_by_the_directory(tmp_path):
+    p = tmp_path / "facts.lock"
+    p.write_text(_SINGLE_FILE % json.dumps(_row("abc", "h")))
+    assert read_lock(p) == {"CLAUDE.md#Gate": _row("abc", "h")}
+    assert lock_tampered(p)
+
+    write_lock(p, read_lock(p))
+
+    assert p.is_dir()
+    assert read_lock(p) == {"CLAUDE.md#Gate": _row("abc", "h")}
+    assert not lock_tampered(p)
+
+
+def test_lock_at_reads_both_layouts_from_history(tmp_path):
+    repo = init_repo(tmp_path)
+    empty = commit(repo, "no lock", README="x")
+    (repo / "docs").mkdir()
+    (repo / LOCK_REL).write_text(_SINGLE_FILE % json.dumps(_row("old", "h")))
+    single = commit(repo, "single-file lock")
+    write_lock(
+        repo / LOCK_REL, {"CLAUDE.md#Gate": _row("new", "h"), _A: _row("new", "a")}
+    )
+    per_row = commit(repo, "directory lock")
+
+    assert lock_at(repo, single) == {"CLAUDE.md#Gate": _row("old", "h")}
+    assert lock_at(repo, per_row) == {
+        "CLAUDE.md#Gate": _row("new", "h"),
+        _A: _row("new", "a"),
+    }
+    assert lock_at(repo, empty) is None

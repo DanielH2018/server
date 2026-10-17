@@ -1,0 +1,12 @@
+{
+  "checksum": "e5edd66d8aad32ad43aad2c5164a2fe4842499a5b780f9aed1921f5a4252ef25",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "ansible/roles/k8s/longhorn-api/CLAUDE.md#At a glance",
+  "row": {
+    "atoms": {
+      "ansible/filter_plugins/longhorn_manager.py:ready_manager_ip": "3986a851d9eaefc8c96e79f55e499554fd12973cbe09bf0da9d8afea63a7200f"
+    },
+    "python": "3.14",
+    "verified_sha": "fd34ae8eb"
+  }
+}

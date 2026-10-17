@@ -1,0 +1,13 @@
+{
+  "checksum": "29f9a79d883e63d03e4f97268a5f84a7c4e5c6b369406a85d5a4396599352d5b",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "ansible/roles/setup/docker_install/CLAUDE.md#The engine is held; `--tags docker-engine-upgrade` is how it moves",
+  "row": {
+    "atoms": {
+      "ansible/tests/setup/test_docker_engine_is_held_before_apt_upgrade.py": "ddef7dd509be1afa80dfefb9272dc7e770802beb873a63629038f8cd91d2ce1c",
+      "scripts/tests/test_renovate_docker_engine_pins.py::test_managers_name_the_apt_packages_they_pin": "3f9ee2884bd9c1da00e0bbcb7174b20640b56afffa25d111c883ca4e45eaa4d4"
+    },
+    "python": "3.14",
+    "verified_sha": "c4ebce28c"
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "checksum": "1ddb9fa854145edbffe56ffaac09bc0767d28280edce2da636b6cf9e9aaa3fd0",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "ansible/roles/k8s/home-assistant/CLAUDE.md#Testing",
+  "row": {
+    "atoms": {
+      "scripts/home_assistant/validate_ha_config.py": "fabc82aa5d190906a7d58507cc9f4d156f3201bacd28b3459773c5647f18ddc4"
+    },
+    "python": "3.14",
+    "verified_sha": "55862020d"
+  }
+}

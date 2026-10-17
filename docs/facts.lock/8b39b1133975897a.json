@@ -1,0 +1,13 @@
+{
+  "checksum": "6c2c79fc9245b548e37fa8110d51b0ab7fa2bb8ec0887f371003bcebe61cfa99",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "ansible/roles/k8s/nut-exporter/CLAUDE.md#Two things that bite",
+  "row": {
+    "atoms": {
+      "ansible/inventory/host_vars/daniel-box.yml": "3ed34cd7aaa115d84ea089e1eaef3824d4b0b6d6cf98c7f84ab8d731c368c670",
+      "ansible/tests/k8s/_scrape_property_rows.py": "f2845e979485b9196830805b87696ca8a00ddfdda579fe97c74afd1eb2e6e473"
+    },
+    "python": "3.14",
+    "verified_sha": "37d636e3d"
+  }
+}

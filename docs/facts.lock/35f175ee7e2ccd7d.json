@@ -1,0 +1,12 @@
+{
+  "checksum": "93d785735db4f3aeebbe7ba401711a7dc32ad04ed231a853fad394dd33b4b68e",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "ansible/roles/k8s/pi-peer-backup/CLAUDE.md#Editing",
+  "row": {
+    "atoms": {
+      "ansible/roles/k8s/cronjob-gate/CLAUDE.md": "cf74c652695ec707f9d1a97917867bc6ab1fa075e8082dc5da78d077430ab2bc"
+    },
+    "python": "3.14",
+    "verified_sha": "55862020d"
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "checksum": "d4952d8d369d19278abe6b861c174c61ead5bde8c00bf09739d7b94aba433a0f",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "ansible/roles/k8s/wg-easy/CLAUDE.md#The traps, all of which are written out at their own lines in the role",
+  "row": {
+    "atoms": {
+      "ansible/secret_rotation.yml": "1abb90e8eab0f31bef5e261c5eefaeb60b1808f539ce8d7667b6aa4b6f8e179a"
+    },
+    "python": "3.14",
+    "verified_sha": "55862020d"
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "checksum": "613b990b58ecb280b085a001e916456ea93b409096530340bbeb07fb66bc14fd",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "ansible/roles/k8s/netpol-baseline/CLAUDE.md#At a glance",
+  "row": {
+    "atoms": {
+      "ansible/tests/deploy/test_manifests_prune.py": "1269f2637b51e23cf6cc9e6cd5048d3f268c09abb9bbfd3f20102fe679e2db23"
+    },
+    "python": "3.14",
+    "verified_sha": "a8458a936"
+  }
+}

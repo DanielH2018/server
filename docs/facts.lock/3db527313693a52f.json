@@ -1,0 +1,13 @@
+{
+  "checksum": "183a234f58d32737a89f1a03f68aae0acd9a23b54adc5e65e88804d6cb2fbc02",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "ansible/roles/setup/initial_setup/CLAUDE.md#initial_setup — host baseline + security hardening",
+  "row": {
+    "atoms": {
+      "ansible/roles/setup/": "6f7efc309cb0d37f3fffb4e0590309e0b7f544ebc4ffb81512d51193d8aa062f",
+      "docs/host-baseline-record.md": "b3164734e9ac148a9ebe6d63fcf7f075408648cf8c9e218a4db57ea057b3a360"
+    },
+    "python": "3.14",
+    "verified_sha": "c5d408c66"
+  }
+}

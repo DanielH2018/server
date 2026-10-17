@@ -1,0 +1,12 @@
+{
+  "checksum": "74bef2d859609ad1e354e6e8ff5c49db3888d85785a65cf63d16a17aefea5a7e",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "ansible/roles/k8s/artifacts/CLAUDE.md#A new Python module goes in `artifacts_modules`, and nowhere else",
+  "row": {
+    "atoms": {
+      "ansible/tests/services/test_artifacts_configmap.py": "c2eca46eef7637fde4e2d4e7551b81afdc9cdc15fbb29aaf5ead7a152663870c"
+    },
+    "python": "3.14",
+    "verified_sha": "55862020d"
+  }
+}

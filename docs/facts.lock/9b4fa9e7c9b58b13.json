@@ -1,0 +1,12 @@
+{
+  "checksum": "c854834d11f2508aed2d50f432433b8253d4472ceb1fc8f978ae170da93d42a6",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "ansible/roles/k8s/volume-snapshot/CLAUDE.md#k8s/volume-snapshot — a pre-apply Longhorn snapshot for a `Recreate` + RWO role",
+  "row": {
+    "atoms": {
+      "docs/volume-snapshot-drills.md": "065c3fed1513022fe8e3b8848f85ca3b5527c7a34f0d50d3b1dad708b176b193"
+    },
+    "python": "3.14",
+    "verified_sha": "55862020d"
+  }
+}

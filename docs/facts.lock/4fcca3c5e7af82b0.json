@@ -1,0 +1,13 @@
+{
+  "checksum": "6d78f138d5a61076b1b17fe4fb6374286a609b9d44eb2f8b065b32b56e1c7025",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "ansible/roles/setup/claude_code/CLAUDE.md#The agent user",
+  "row": {
+    "atoms": {
+      "ansible/filter_plugins/claude_agents.py": "cfda595593f8d7b48ef4320a5091dfd68dece67124c52be57a7e61399734a38e",
+      "docs/claude-agent-user.md": "2406c931c957af4700b44d61857808bff08d543a53baa319af3b24878d32f070"
+    },
+    "python": "3.14",
+    "verified_sha": "0e168361d"
+  }
+}

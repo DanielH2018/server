@@ -1,0 +1,12 @@
+{
+  "checksum": "6c79105b85d80b471de7121f415da0ceda4bb128901f7c365f13fc35ee9c6189",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "ansible/roles/k8s/headlamp/CLAUDE.md#Two identities, one grant",
+  "row": {
+    "atoms": {
+      "ansible/tests/k8s/test_k8s_manifests_rbac.py": "7ccdcbbd6ffc59c49fc0b7186c93d22f297aba579abf1f0f7dbee830d3463f47"
+    },
+    "python": "3.14",
+    "verified_sha": "55862020d"
+  }
+}

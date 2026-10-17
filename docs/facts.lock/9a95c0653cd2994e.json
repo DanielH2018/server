@@ -1,0 +1,12 @@
+{
+  "checksum": "37336592b74ae76928da650b4ad4c82795bb0df48a1a436a72837deb54c98def",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "ansible/roles/k8s/authelia/CLAUDE.md#Sessions live in redis",
+  "row": {
+    "atoms": {
+      "ansible/tests/services/test_authelia_redis_sessions.py": "f117eb956cc803ff142634941b160fa49599c9c5be69bdae9f21d48008290864"
+    },
+    "python": "3.14",
+    "verified_sha": "55862020d"
+  }
+}

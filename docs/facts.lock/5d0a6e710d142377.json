@@ -1,0 +1,13 @@
+{
+  "checksum": "2f4a1cd2826f290dc8cfeb73310481fe05c256f2f93a0cefef52d811da14e8cf",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "ansible/roles/k8s/crowdsec/CLAUDE.md#`UnmarshalJSON : unexpected end of JSON input` is a partial-line read, fixed only upstream",
+  "row": {
+    "atoms": {
+      "ansible/inventory/group_vars/all.yml": "a9e26f83a4a9763bd4261ca4b7d94354ff85fb63301d701c683420cdfded7c0b",
+      "ansible/roles/k8s/crowdsec/templates/node-agent-acquis.yaml.j2": "aa46b43db62777acc8be98a892c6457e57dae581a237121ac315aa699524d283"
+    },
+    "python": "3.14",
+    "verified_sha": "022d12791"
+  }
+}
