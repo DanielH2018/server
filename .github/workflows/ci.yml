@@ -677,6 +677,19 @@ jobs:
       #
       # pipefail is what makes the tee safe: without it the pipeline reports tee's exit status
       # and a failing suite would read green.
+      # The gate below fails a pull request only for a module the PR's diff adds or changes
+      # (#5480). The diff is read here, before the suite runs, because the suite's tests write
+      # git state of their own. Only `changed.txt` is read: a deletion's full-sweep rule is
+      # about which files a hook checks, not about who can re-record a weight.
+      - name: Collect this PR's changed files
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_REF: ${{ github.base_ref }}  # via env, never interpolated into the shell
+          FETCH_TOKEN: ${{ github.token }}  # contents: read; the checkout drops its own
+        run: |
+          set -euo pipefail
+          "$GITHUB_WORKSPACE/scripts/dev/pr_changed_files.sh"
+
       - name: Run the test suite
         run: |
           set -euo pipefail
@@ -708,6 +721,11 @@ jobs:
       # and nobody can apply the repair on master (#3604). On a PR an unweighted module
       # measuring between `RUNNER_HEAVY_SECONDS` and `RUNNER_HEAVY_FAIL_SECONDS` annotates
       # too, since the same variance put one either side of the bound on a rerun (#4010).
+      # On a pull_request it fails only for a module the PR's diff adds or changes
+      # (`--changed-files`). A module outside the diff annotates, because its author is not the
+      # one reading the run and the docs-refresh cron re-records it: 4 of 16 gate failures in
+      # two days named such a module (#5480). A dispatch has no base to diff, so it fails on
+      # every module.
       - name: Check every heavy module's recorded weight
         env:
           EVENT: ${{ github.event_name }}  # via env, never interpolated into the shell
@@ -715,6 +733,7 @@ jobs:
           set -euo pipefail
           mode=()
           if [ "$EVENT" = push ] || [ "$EVENT" = merge_group ]; then mode=(--warn-only); fi
+          if [ "$EVENT" = pull_request ]; then mode=(--changed-files "$RUNNER_TEMP/changed.txt"); fi
           uv run python scripts/dev/pytest_shard.py "${mode[@]}" \
             --check-durations "$RUNNER_TEMP/durations.log"
 

@@ -302,6 +302,50 @@ def test_warn_only_annotates_the_same_complaint_and_exits_zero(tmp_path, capsys)
     assert printed.startswith("::warning::") and NEW_MODULE in printed
 
 
+def test_a_pull_request_fails_on_a_bad_weight_its_diff_changes(tmp_path, capsys):
+    """The fail half of the pair (#5480): the author touched the module, so the author can
+    re-record it. With no `--changed-files` at all, as on a push, every module counts, which
+    `test_the_cli_exits_nonzero_on_a_heavy_unweighted_module` covers."""
+    changed = tmp_path / "changed.txt"
+    changed.write_text(f"README.md\n{NEW_MODULE}\n")
+    log = tmp_path / "durations.log"
+    log.write_text(REPORT)
+    argv = ["--check-durations", str(log), "--changed-files", str(changed)]
+    assert pytest_shard.main(argv) == 1
+    assert NEW_MODULE in capsys.readouterr().out
+
+
+def test_a_pull_request_only_annotates_a_bad_weight_outside_its_diff(tmp_path, capsys):
+    """The pass half: the same report, with the module outside the diff. Most PRs change no
+    test module a shard ran, so the in-diff half is empty and must not read as a report
+    whose format changed."""
+    changed = tmp_path / "changed.txt"
+    changed.write_text("README.md\n")
+    log = tmp_path / "durations.log"
+    log.write_text(REPORT)
+    argv = ["--check-durations", str(log), "--changed-files", str(changed)]
+    assert pytest_shard.main(argv) == 0
+    printed = capsys.readouterr().out
+    assert printed.startswith("::warning::") and NEW_MODULE in printed
+    assert shard_weight_gate.OUTSIDE_DIFF_NOTE in printed
+    assert "parsed no durations" not in printed
+
+
+def test_the_diff_scopes_the_recorded_weight_arms_too():
+    """An over-recorded and an under-recorded entry outside the diff annotate as the unweighted
+    arm does, and the same two inside it fail."""
+    report = (
+        "0.09s call     ansible/tests/k8s/test_secret_consumer_census.py::test_every_consumer\n"
+        "16.00s call     scripts/dev/tests/test_run_as_cron.py::test_a_shell_builtin_still_runs\n"
+    )
+    problems, warnings = shard_weight_gate.gate_complaints(report, RECORDED, set())
+    assert problems == [] and len(warnings) == 2
+    problems, warnings = shard_weight_gate.gate_complaints(
+        report, RECORDED, set(RECORDED)
+    )
+    assert len(problems) == 2 and warnings == []
+
+
 def test_the_stale_repair_refuses_a_path_no_shard_runs():
     """`--record-files` measures whatever it is handed, so a typo or an unstaged file would
     otherwise write a table row no census ever reads back."""

@@ -295,6 +295,9 @@ def durations_problems(
     repairs differ — `--record-missing` fills a gap and cannot refresh an entry that is merely
     wrong.
 
+    It does not know which modules a pull request changed; `gate_complaints` splits the report
+    by that before calling it.
+
     A function rather than inline asserts in `main`, so the accept and reject halves can hand
     it a fixed report rather than needing a CI run.
 
@@ -323,3 +326,64 @@ def durations_problems(
             f"Repair (seconds): {RECORD_FILES_HINT}"
         )
     return problems
+
+
+# The prefix a complaint about a module outside a pull request's diff carries when it annotates.
+OUTSIDE_DIFF_NOTE = (
+    "outside this pull request's diff, so it annotates and does not fail; the docs-refresh "
+    "cron's --record-missing and --refresh-drifted repair it"
+)
+
+
+def split_by_diff(text: str, changed: set[str]) -> tuple[str, str]:
+    """The durations lines of the modules in `changed`, and the lines of every other module.
+
+    Each half keeps every phase of its modules, so each module sums to the same total in its
+    half as in the whole report. Lines that are not durations lines go in neither half.
+    """
+    inside, outside = [], []
+    for line in text.splitlines():
+        match = _DURATION_LINE.match(line.strip())
+        if match:
+            (inside if match.group(3) in changed else outside).append(line)
+    return "\n".join(inside), "\n".join(outside)
+
+
+def gate_complaints(
+    text: str,
+    weights: dict[str, float],
+    changed: set[str] | None = None,
+    threshold: float = RUNNER_HEAVY_SECONDS,
+    ratio: float = STALE_WEIGHT_RATIO,
+    fail_above: float = RUNNER_HEAVY_FAIL_SECONDS,
+) -> tuple[list[str], list[str]]:
+    """`(problems, warnings)` for a durations report: what fails the run, and what annotates it.
+
+    `changed` is the set of paths a pull request's diff adds or modifies, or None for a run
+    with no diff to scope to. With None, every module's complaint counts, as on a push. With a
+    set, only a module in it can fail the run. Every other module's complaint becomes a
+    warning, because its author is not the one reading this run: 4 of the 16 gate failures
+    between 2026-10-15 and 2026-10-17 named a module outside the failing PR's diff (#5480).
+
+    The empty-report complaint reads the WHOLE report. Most PRs change no test module a given
+    shard ran, so a scoped half is usually empty, and that is not a format change.
+    """
+    if changed is None or not parse_durations(text):
+        return (
+            durations_problems(text, weights, threshold, ratio, fail_above),
+            durations_warnings(text, weights, threshold, fail_above),
+        )
+    inside, outside = split_by_diff(text, changed)
+    problems, warnings = [], []
+    if inside:
+        problems = durations_problems(inside, weights, threshold, ratio, fail_above)
+        warnings = durations_warnings(inside, weights, threshold, fail_above)
+    if outside:
+        warnings += [
+            f"{OUTSIDE_DIFF_NOTE}: {complaint}"
+            for complaint in durations_problems(
+                outside, weights, threshold, ratio, fail_above
+            )
+            + durations_warnings(outside, weights, threshold, fail_above)
+        ]
+    return problems, warnings
