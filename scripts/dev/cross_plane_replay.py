@@ -13,7 +13,9 @@ value never renders.
 A commit that changes `scripts/renderer/` is judged as the CI gate judges it instead: each end
 is that commit's own tree, renderer included, so a renderer change that adds a `dependsOn`
 edge and moves the render in one commit reads as arm 2 refuses it (#5230). Ownership is still
-`--flux-owned` at both ends. Any other `scripts/`-only commit is clean by construction.
+`--flux-owned` at both ends. When such a commit also changes render inputs and its own tree
+does not render, those inputs fall back to the reversed render below, and its renderer change
+goes unjudged. Any other `scripts/`-only commit is clean by construction.
 
 A commit whose transplant does not render is judged instead as today's tree against today's
 tree with the commit's own change reversed. One that renders neither way is still judged on
@@ -306,9 +308,10 @@ def replay(since: str, ref: str, flux_owned: list[str], jobs: int, cache: Path) 
         today = _cached(
             cache, "HEAD-tree", lambda: replay_snapshot("HEAD", [], owned, Path(tmp))
         )
-        # A commit's own renderer cannot be reversed onto today's tree, so a renderer commit
-        # that does not render stays unrenderable.
-        undoable = [sha for sha in failed if not judged[sha][3]]
+        # A commit's own renderer cannot be reversed onto today's tree, so a renderer-only
+        # commit that does not render stays unrenderable. One that also changes render inputs
+        # falls back to reversing those, and its renderer half goes unjudged.
+        undoable = [sha for sha in failed if judged[sha][2]]
         with ThreadPoolExecutor(max_workers=jobs) as pool:
             for sha, snap in zip(undoable, pool.map(undone, undoable), strict=True):
                 full[f"{sha}^"], full[sha] = snap, today
@@ -344,10 +347,10 @@ def replay(since: str, ref: str, flux_owned: list[str], jobs: int, cache: Path) 
             if template:
                 shared.append(sha)
             way = (
-                "own renderer"
-                if own
-                else "reversed"
+                "reversed"
                 if sha in failed
+                else "own renderer"
+                if own
                 else "transplanted"
             )
             tag = " shared-template" if template else ""

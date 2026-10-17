@@ -99,3 +99,60 @@ def test_a_renderer_only_commit_that_adds_an_edge_and_moves_the_render_is_refuse
     out = capsys.readouterr().out
     assert re.search(rf"^REFUSED {edge[:9]} ", out, re.MULTILINE), out
     assert "arm 2: bento-pdf gains dependsOn ['authelia']" in out
+
+
+ROLE = "ansible/roles/k8s/bento-pdf/templates/deployment.yaml.j2"
+# Today's tree holds this file and the mixed commit's own tree does not, so only that tree
+# fails to render.
+LATER = "ansible/later.txt"
+
+
+def _fake_render_needing_later(tree, roles=(), python=None):
+    """A snapshot whose bento-pdf has the edge once `tree`'s role template says so.
+
+    Raises:
+        RenderFailed: `tree` lacks `LATER`, as an older tree lacks what today's env needs.
+    """
+    if not (tree / LATER).exists():
+        raise cross_plane_order.RenderFailed(f"{tree} predates {LATER}")
+    edge = "edge" in (tree / ROLE).read_text()
+    return Snapshot(
+        renders={"bento-pdf": "b" if edge else "a", "authelia": "x"},
+        owners={"bento-pdf": "flux", "authelia": "flux"},
+        deps={"bento-pdf": ["authelia"] if edge else [], "authelia": []},
+    )
+
+
+def test_a_mixed_commit_whose_own_tree_does_not_render_falls_back_to_the_reversed_render(
+    tmp_path, monkeypatch, capsys
+):
+    """A commit changing the renderer and a role keeps the reversed render for the role."""
+    repo = init_repo(tmp_path / "repo")
+    root = commit(
+        repo,
+        "base",
+        **{
+            HOST_VARS: "containers_list:\n"
+            "  - name: bento-pdf\n    platform: k8s\n"
+            "  - name: authelia\n    platform: k8s\n",
+            ORDERING: "EDGE = False\n",
+            ROLE: "plain\n",
+        },
+    )
+    mixed = commit(
+        repo,
+        "Order bento-pdf after authelia",
+        **{ORDERING: "EDGE = True\n", ROLE: "edge\n"},
+    )
+    commit(repo, "Add a file today's render needs", **{LATER: "x\n"})
+    _point_at(monkeypatch, repo)
+    monkeypatch.setattr(cross_plane_replay, "snapshot", _fake_render_needing_later)
+    replay(
+        "1970-01-01T00:00:00Z",
+        f"{root}..master",
+        ["bento-pdf", "authelia"],
+        1,
+        tmp_path / "cache",
+    )
+    out = capsys.readouterr().out
+    assert re.search(rf"^REFUSED {mixed[:9]} \(reversed\) ", out, re.MULTILINE), out
