@@ -717,6 +717,7 @@
  "ansible/tests/setup/test_kuma_push_msg_cap.py": 0.0,
  "ansible/tests/setup/test_kuma_push_retry.py": 0.07,
  "ansible/tests/setup/test_kuma_push_wan_skip.py": 0.0,
+ "ansible/tests/setup/test_lander_deadlines_cover_the_soak.py": 2.49,
  "ansible/tests/setup/test_loki_route_witness.py": 0.02,
  "ansible/tests/setup/test_manifest_prune_check_list_failure.py": 0.15,
  "ansible/tests/setup/test_netplan_dns_overrides.py": 0.0,
