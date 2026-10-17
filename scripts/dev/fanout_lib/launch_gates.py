@@ -37,8 +37,8 @@ LOCAL_HOST = GITOPS_HOST
 # own ssh connection — before the run risks the 6th.
 MAX_BATCHES_PER_REMOTE_HOST = 3
 # The memory cap, which is a DIFFERENT constraint that happens to share the number. An agent
-# reserves RESERVATION_BYTES (2.5 GiB) and daniel-server's login plane is capped at 11 GiB
-# (`claude_code_rc_memory_high`), so four live agents fit and five do not. Unlike the ssh
+# reserves RESERVATION_BYTES (2.5 GiB) against a login plane capped at 10 to 17 GiB
+# (`claude_code_rc_memory_high`), which also holds the operator's own sessions. Unlike the ssh
 # budget above, this one stacks ACROSS runs: a second launch minutes after the first measures
 # a memory.current the first run's agents have not yet grown into, so headroom alone underprices
 # them. Counted from the run manifests, which cost no ssh to read.
