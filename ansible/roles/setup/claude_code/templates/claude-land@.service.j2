@@ -35,13 +35,14 @@ SyslogLevel=notice
 # merge and 15 for master CI, then ticks, deploys and checks health. A landing systemd kills
 # leaves its verdict file reading PENDING, or no file if the kill came during the lock wait,
 # so the session also reads this unit's Result.
-TimeoutStartSec=4h
+TimeoutStartSec=6h
 # Fits inside what TimeoutStartSec leaves after the flock wait below, so land.sh ends a long
 # promotion wait `deferred` before systemd kills it with no verdict (#5199). It must also leave
-# land-wait room for `verify`'s wait on the rendered soak plus promote's `render` and
-# `publish`, after the merge and CI waits: ansible/tests/setup/test_lander_deadlines_cover_the_soak.py
-# renders the published bundle and fails when it does not (#5427).
-Environment=LAND_DEADLINE=10800
+# land-wait room for `verify`'s wait on the rendered soak plus promote's `render`, `images`
+# and `publish`, after the merge and CI waits: ansible/tests/setup/test_lander_deadlines_cover_the_soak.py
+# renders the published bundle and fails when it does not (#5427). `images` counts since
+# published tags build images (#5466).
+Environment=LAND_DEADLINE=18000
 # One of the agent's landings at a time, so a second waits for the first's deploy rather than
 # racing it for the same tick. Interactive sessions and renovate-agent's lander do not take
 # this lock; deploy.sh's own locks order the deploys themselves.

@@ -12,6 +12,9 @@ governs: []
 
 Accepted.
 
+Amended by [ADR-0023](0023-fact-support-is-a-diff-notice.md). The lock is retired by a
+measured replacement, not by this record's criterion.
+
 ## Context
 
 The fact-support design of 2026-09-19 planned seven slices. Slices 1–3 shipped. They give

@@ -1,0 +1,119 @@
+{#
+  sonarr's verify Job and the ConfigMap that carries its script, INERT until sonarr's flip.
+
+  This directory is `verify-inert/`, which neither reader globs: the manifests role takes only
+  top-level `templates/*.yaml.j2`, and `verify_files` takes only `templates/verify/*.yaml.j2`.
+  sonarr's flip PR moves the directory to `templates/verify/`, and the renderer then emits it
+  into `sonarr-verify` (D5, *A verify conversion lands as inert code*).
+
+  Both names end in a digest, as the Job census requires (D5, *Rules for every Job Flux
+  applies*): the ConfigMap's in `configmap_digest8` of its data, the Job's in
+  `job_spec_digest8` of its spec. Each is computed here from the same JSON those functions
+  hash, so the spec is written once as YAML text, parsed for the hash and emitted verbatim.
+  The renderer passes `flux_job_image` and `flux_job_connect`, the helper's text, to every
+  `templates/verify/` file (`render_tag`). The spec embeds a digest of sonarr's rendered
+  Deployment, so every change that rolls sonarr renames the Job and Flux runs it again;
+  tdarr's `job.yaml.j2` has the DECIDED note on why that digest and not the role's `digest8`.
+
+  DECIDED: the API key comes from `sonarr-exportarr`, the Secret sonarr's own render already
+  holds, not from a Secret in this directory. A Job spec cannot carry a `${...}` placeholder
+  (the census's name row), and a Secret here would make `sonarr-verify` substitute, which
+  needs `substituteFrom` and the `cluster-vars` edge for a value `sonarr` already applies.
+  `sonarr-verify` starts only once `sonarr` is applied and Ready, so the Secret exists.
+  ansible/roles/k8s/sonarr/tests/test_sonarr_verify.py fails if that Secret or key goes away.
+#}
+{% set script_name = 'sonarr_verify.py' %}
+{% set script_dir = '/verify' %}
+{% set data = {
+  script_name: lookup('file', playbook_dir + '/roles/k8s/sonarr/files/' + script_name, rstrip=False),
+  'flux_job_connect.py': flux_job_connect,
+} %}
+{% set configmap_name = 'sonarr-verify-' + ({'data': data, 'binaryData': {}} | to_json(sort_keys=True, separators=(',', ':')) | hash('sha256'))[:8] %}
+{% set deployment_digest8 = (lookup('template', 'deployment.yaml.j2') | hash('sha256'))[:8] %}
+{% set spec_text %}
+# A flaky check fails rather than passing on a retry.
+backoffLimit: 0
+# Below the 600s `manifests_rollout_timeout_default` every `<tag>-verify` Kustomization takes.
+# Two reads of at most 30s each, plus the helper's 60s of retries on the first connect.
+activeDeadlineSeconds: 300
+template:
+  metadata:
+    labels:
+      # The label a `sonarr-verify` entry in sonarr's `netpol_from` admits. Neither that fence
+      # nor netpol-baseline admits it yet; the peer lands in its own PR before the flip.
+      app: sonarr-verify
+  spec:
+    serviceAccountName: sonarr-verify
+    # The Job reads sonarr's API, not the Kubernetes API, so its pod holds no token.
+    automountServiceAccountToken: false
+    restartPolicy: Never
+    enableServiceLinks: false
+    securityContext:
+      runAsNonRoot: true
+      runAsUser: 65534
+      runAsGroup: 65534
+      seccompProfile:
+        type: RuntimeDefault
+    containers:
+      - name: verify
+        image: {{ flux_job_image }}
+        command:
+          - python3
+          - {{ script_dir }}/{{ script_name }}
+        env:
+          # The Service by its cluster name: the Job runs in the cluster, so the ClusterIP
+          # lookup `tasks/verify.yml` needs on the node is not needed here.
+          - name: SONARR_URL
+            value: http://{{ container_item.name }}.{{ k8s_namespace }}.svc.cluster.local:{{ container_item.port }}
+          - name: SONARR_API_KEY
+            valueFrom:
+              secretKeyRef:
+                name: sonarr-exportarr
+                key: api_key
+          # Renames the Job whenever sonarr's Deployment changes; see the note above.
+          - name: SONARR_DEPLOYMENT_DIGEST8
+            value: "{{ deployment_digest8 }}"
+          - name: PYTHONDONTWRITEBYTECODE
+            value: "1"
+        resources:
+          requests:
+            cpu: 10m
+            memory: 32Mi
+          limits:
+            memory: 64Mi
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+              - ALL
+        volumeMounts:
+          - name: script
+            mountPath: {{ script_dir }}
+            readOnly: true
+    volumes:
+      - name: script
+        configMap:
+          name: {{ configmap_name }}
+{% endset %}
+{% set spec = spec_text | from_yaml %}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ configmap_name }}
+  namespace: {{ k8s_namespace }}
+data:
+{% for key, text in data | dictsort %}
+  {{ key }}: {{ text | to_json }}
+{% endfor %}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: sonarr-verify-{{ (spec | to_json(sort_keys=True, separators=(',', ':')) | hash('sha256'))[:8] }}
+  namespace: {{ k8s_namespace }}
+  annotations:
+    homelab/job-kind: verify
+spec:
+{{ spec_text | indent(2, true) }}
