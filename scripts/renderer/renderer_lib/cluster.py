@@ -19,6 +19,10 @@ apply them:
 - `manifests_deferred_files` render from the role's own templates, unlabelled, into
   `DIR/cluster/<tag>-deferred/`.
 
+One rule is the renderer's alone: a role's `templates/verify/*.yaml.j2` (`verify_files`) render
+unlabelled into `DIR/cluster/<tag>-verify/`, the verify and post-apply mutation Jobs Flux runs
+once the tag is applied (D5.1a1). Ansible never reads that directory.
+
 A role's vendored files are no template, and `attach_vendored` adds them to `DIR/cluster/<tag>/`
 byte for byte after every pass that edits rendered text (H1.1a). `rendered_docs()` in
 `ansible/tests/_k8s_render.py` renders `templates/*.j2` alone, so the fleet guards never read
@@ -34,7 +38,7 @@ from pathlib import Path as _Path
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
 from collections.abc import Mapping
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 
 import jinja2
@@ -68,7 +72,14 @@ from renderer.renderer_lib.environment import (
     render_file,
     renderer_env,
 )
-from renderer.renderer_lib.ordering import DEFERRED_SUFFIX, SNAPSHOT_SUFFIX, Ordering
+from renderer.renderer_lib.ordering import (
+    DEFERRED_SUFFIX,
+    SNAPSHOT_SUFFIX,
+    VERIFY_SUFFIX,
+    VERIFY_TEMPLATES_DIR,
+    Ordering,
+    verify_files,
+)
 from renderer.renderer_lib.task_inputs import derived_facts, include_vars
 
 # Ansible loads a filter plugin by file path; a script reaches it through this insert.
@@ -114,12 +125,15 @@ class RenderedTag:
             nothing.
         snapshot: The same for `DIR/cluster/<tag>-snapshot/`, which `snapshot.attach_snapshots`
             adds last, for a published tag with snapshot claims (D5.2a).
+        verify: The same for `DIR/cluster/<tag>-verify/`, empty for a role that ships no
+            `templates/verify/` (D5.1a1).
     """
 
     tag: str
     files: dict[str, str]
     deferred: dict[str, str] = field(default_factory=dict)
     snapshot: dict[str, str] = field(default_factory=dict)
+    verify: dict[str, str] = field(default_factory=dict)
 
     def directories(self) -> dict[str, dict[str, str]]:
         """Each directory name under `DIR/cluster/` mapped to the files it holds."""
@@ -128,7 +142,23 @@ class RenderedTag:
             dirs[self.tag + DEFERRED_SUFFIX] = self.deferred
         if self.snapshot:
             dirs[self.tag + SNAPSHOT_SUFFIX] = self.snapshot
+        if self.verify:
+            dirs[self.tag + VERIFY_SUFFIX] = self.verify
         return dirs
+
+    def with_directories(self, dirs: Mapping[str, dict[str, str]]) -> "RenderedTag":
+        """This tag holding `dirs`, a map shaped as `directories` returns it.
+
+        A pass that edits every directory's text rebuilds the tag through this, so no
+        per-tag kind is dropped on the way.
+        """
+        return replace(
+            self,
+            files=dirs[self.tag],
+            deferred=dirs.get(self.tag + DEFERRED_SUFFIX, {}),
+            snapshot=dirs.get(self.tag + SNAPSHOT_SUFFIX, {}),
+            verify=dirs.get(self.tag + VERIFY_SUFFIX, {}),
+        )
 
 
 def select_tags(
@@ -223,17 +253,20 @@ def _manifests_prune_default() -> object:
     return yaml_fast.safe_load(MANIFESTS_DEFAULTS.read_text())["manifests_prune"]
 
 
-def _sources(tag: str, names: set[str], own_only: bool) -> dict[str, Path]:
+def _sources(
+    tag: str, names: set[str], own_only: bool, templates: Path | None = None
+) -> dict[str, Path]:
     """The template each manifest basename renders from, as the manifests role resolves it.
 
-    The role's own `templates/<name>.j2` wins. A basename in `SHARED_MANIFEST_DEFAULTS` the role
-    ships no template for takes the shared default, unless `own_only`, as for secret files.
+    The role's own `<templates>/<name>.j2` wins, `templates` defaulting to the tree role's
+    `templates/`. A basename in `SHARED_MANIFEST_DEFAULTS` the role ships no template for takes
+    the shared default, unless `own_only`, as for secret files.
 
     Raises:
         RenderError: A basename has no template, which Ansible reports as "Could not find or
             access" the template.
     """
-    templates = K8S_ROLES / tag / "templates"
+    templates = templates or K8S_ROLES / tag / "templates"
     sources = {}
     for name in sorted(names):
         own = templates / f"{name}.j2"
@@ -262,8 +295,11 @@ def render_tag(
     stubs: dict,
     host: str = K8S_HOST,
     built: dict[str, str] | None = None,
+    roles: Path = K8S_ROLES,
 ) -> RenderedTag:
     """Render every file the manifests role writes for `tag`, with a `kustomization.yaml` each.
+
+    The role's `templates/verify/` renders too, into `RenderedTag.verify`.
 
     Args:
         tag: The deploy tag.
@@ -271,12 +307,13 @@ def render_tag(
         host: The inventory host whose context the tag renders in.
         built: The images `tag`'s role builds, each mapped to its content tag, as the
             caller computed them for `DIR/images/tags.json`. None computes them here.
+        roles: The role tree `tag`'s role is read from; a test passes a fixture copy.
 
     Raises:
         RenderError: A template fails to render, a strict undefined among the causes, or a
             listed basename has no template.
     """
-    role_dir = K8S_ROLES / tag
+    role_dir = roles / tag
     try:
         ctx = tag_context(role_dir, tag, stubs, host)
         # A role default can read a fact a task sets, as every `*_k8s_image` built here reads
@@ -301,7 +338,7 @@ def render_tag(
     # The include's vars outrank the role defaults and the inventory; the stub file's extra
     # vars outrank them in turn.
     ctx: dict = {**ctx, **include, **stubs, "manifests_service": tag}
-    files, secret = resolved_manifest_files(tag, entry=entry)
+    files, secret = resolved_manifest_files(tag, roles, entry=entry)
     if "manifests_files" in include:
         files = set(include["manifests_files"])
     if "manifests_secret_files" in include:
@@ -323,9 +360,10 @@ def render_tag(
             raise RenderError(f"{tag}/{out_name} from {path.name}: {exc}") from exc
 
     rendered = {}
+    templates = role_dir / "templates"
     for name, src in {
-        **_sources(tag, files, False),
-        **_sources(tag, secret, True),
+        **_sources(tag, files, False, templates),
+        **_sources(tag, secret, True, templates),
     }.items():
         rendered[name] = render(src, name, prune, item=name)
     for claim in ctx.get("k8s_claims") or []:
@@ -334,11 +372,20 @@ def render_tag(
     rendered[KUSTOMIZATION] = kustomization_text(list(rendered))
 
     later = {}
-    for name, src in _sources(tag, deferred, True).items():
+    for name, src in _sources(tag, deferred, True, templates).items():
         later[name] = render(src, name, False, item=name)
     if later:
         later[KUSTOMIZATION] = kustomization_text(list(later))
-    return RenderedTag(tag, rendered, later)
+
+    verify = {}
+    verifying = set(verify_files([tag], roles)[tag])
+    for name, src in _sources(
+        tag, verifying, True, templates / VERIFY_TEMPLATES_DIR
+    ).items():
+        verify[name] = render(src, name, False, item=name)
+    if verify:
+        verify[KUSTOMIZATION] = kustomization_text(list(verify))
+    return RenderedTag(tag, rendered, later, verify=verify)
 
 
 def vendored_files(tag: str, roles: Path = K8S_ROLES) -> dict[str, str]:
@@ -400,7 +447,7 @@ def attach_vendored(
         files = {k: v for k, v in tag.files.items() if k != KUSTOMIZATION}
         files |= vendored
         files[KUSTOMIZATION] = kustomization_text(list(files))
-        attached.append(RenderedTag(tag.tag, files, tag.deferred))
+        attached.append(replace(tag, files=files))
     return attached
 
 

@@ -6,13 +6,18 @@ Each fixture carries every shared kind the renderer writes, its `cluster-vars` c
 Run: uv run pytest scripts/deploy_tools/tests/test_bundle_census.py
 """
 
+import shutil
+
 import pytest
 
 import bundle_census
 import bundle_gates
 import promote
 from _bundle_fixtures import route
-from lib.exit_codes import FAILED, OK
+from lib import yaml_fast
+from lib.exit_codes import FAILED, OK, RENDER_OK
+from lib.repo_paths import K8S_ROLES
+from renderer import homelab_render
 from renderer.renderer_lib.bundle import (
     DIGESTS,
     FLUX_INDEX,
@@ -22,6 +27,7 @@ from renderer.renderer_lib.bundle import (
     kustomization_text,
     write_bundle,
 )
+from renderer.renderer_lib.placeholders import render_placeholders
 
 TIMEOUT = "600s"
 DEPLOYMENT = "kind: Deployment\nmetadata:\n  name: {name}\n"
@@ -331,6 +337,71 @@ def test_snapshot_claims_that_are_not_a_literal_list_are_a_problem(tmp_path):
         "could not tell whether x snapshots claims: its k8s_autodeploy_snapshot_pvcs is "
         "'{{ claims }}', not a literal list"
     ]
+
+
+VERIFY_TEMPLATE = (
+    "kind: ConfigMap\nmetadata:\n  name: {{ manifests_service }}-verify\n"
+    "  namespace: default\n"
+)
+
+
+def _verifying_role(tmp_path, tag):
+    """A copy of the tree's `tag` role that ships one verify manifest, and the copy's root."""
+    roles = tmp_path / "roles"
+    shutil.copytree(K8S_ROLES / tag, roles / tag)
+    verify = roles / tag / "templates" / "verify"
+    verify.mkdir()
+    (verify / "verify-check.yaml.j2").write_text(VERIFY_TEMPLATE)
+    return roles
+
+
+def test_the_verifying_tags_are_the_roles_that_ship_templates_verify(tmp_path):
+    """Named members: the copy ships `templates/verify/`, the tree's littlelink does not."""
+    roles = _verifying_role(tmp_path, "littlelink")
+    (roles / "bento-pdf" / "templates").mkdir(parents=True)
+    (roles / "bento-pdf" / "templates" / "verify-job.yaml.j2").write_text("")
+    assert bundle_census.verifying_tags(["littlelink", "bento-pdf"], roles) == {
+        "littlelink"
+    }
+    assert bundle_census.verifying_tags(["littlelink"]) == frozenset()
+
+
+def test_a_rendered_verify_directory_passes_check_bundle_only_for_its_role(
+    tmp_path, capsys
+):
+    """The renderer writes `<tag>-verify` from the role's input, and the census reads it.
+
+    The same bundle checked against the tree's littlelink, which ships no verify manifest,
+    fails: a renderer that emitted `-verify` for that role would be refused.
+    """
+    roles = _verifying_role(tmp_path, "littlelink")
+    cluster_file = tmp_path / "cluster-vars.sops.env"
+    cluster_file.write_text(DOTENV)
+    out = tmp_path / "out"
+    code = homelab_render.cluster(
+        out,
+        ["littlelink"],
+        None,
+        flux_owned=lambda: {"littlelink"},
+        cluster_file=cluster_file,
+        render=lambda tags, keys: render_placeholders(tags, keys, roles=roles),
+        vendored=roles,
+    )
+    assert code == RENDER_OK
+    verify = out / "cluster" / "littlelink-verify"
+    assert sorted(p.name for p in verify.iterdir()) == [
+        "kustomization.yaml",
+        "verify-check.yaml",
+    ]
+    assert "name: littlelink-verify" in (verify / "verify-check.yaml").read_text()
+    docs = list(yaml_fast.safe_load_all((out / "flux" / "littlelink.yaml").read_text()))
+    assert [d["metadata"]["name"] for d in docs] == ["littlelink", "littlelink-verify"]
+    assert docs[1]["spec"]["dependsOn"] == [{"name": "littlelink"}]
+
+    assert bundle_census.report(out, ["littlelink"], roles) == OK
+    capsys.readouterr()
+    assert bundle_census.report(out, ["littlelink"]) == FAILED
+    assert "not exactly the Kustomization littlelink" in capsys.readouterr().err
 
 
 # -- the per-tag object census (H1.1c) ---------------------------------------------------------

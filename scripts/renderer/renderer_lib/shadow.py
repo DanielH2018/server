@@ -36,6 +36,7 @@ import yaml
 from lib import yaml_fast
 from lib.exit_codes import SHADOW_DIFFERENT, SHADOW_OK, SHADOW_REFUSED
 from renderer.renderer_lib.cluster import DEFERRED_SUFFIX, KUSTOMIZATION
+from renderer.renderer_lib.ordering import split_kind
 
 CLUSTER = "cluster"
 # A stub token, as `homelab_secret_stub` builds it.
@@ -118,9 +119,8 @@ def load_tree(root: Path) -> Tree:
 
 
 def key_tag(key: str) -> str:
-    """The deploy tag a C1 key belongs to: its directory, less any `-deferred` suffix."""
-    directory = key.split("/", 1)[0]
-    return directory.removesuffix(DEFERRED_SUFFIX)
+    """The deploy tag a C1 key belongs to: its directory, less any per-tag kind's suffix."""
+    return split_kind(key.split("/", 1)[0])[0]
 
 
 # -- stub tokens --------------------------------------------------------------------------

@@ -126,8 +126,15 @@ def test_compare_groups_a_difference_by_its_class_is_flagged(
 
 
 def test_compare_ignoring_a_flux_owned_render_directory_is_clean(trees, run):
+    """A flux-owned tag's per-tag kinds, `-verify` among them, are ignored with it."""
     ansible, c1 = trees
-    _write_c1(c1, {"valheim/deployment.yaml": "kind: Deployment\n"})
+    _write_c1(
+        c1,
+        {
+            "valheim/deployment.yaml": "kind: Deployment\n",
+            "valheim-verify/job.yaml": "kind: Job\n",
+        },
+    )
     code, out, _ = run(
         "compare", ansible, c1, targets=[*TARGETS, "valheim"], flux=["valheim"]
     )
