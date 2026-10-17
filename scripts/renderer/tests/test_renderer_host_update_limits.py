@@ -18,6 +18,7 @@ import pytest
 
 from lib import yaml_fast
 from lib.repo_paths import REPO
+from lib.systemd_timer import DAY_S, calendar_fires, span_s, timer_settings
 from renderer.renderer_lib import host as host_mode
 
 DEFAULTS = (
@@ -30,103 +31,8 @@ DROPIN = UNITS / "homelab-updater.timer.d" / "50-homelab.conf"
 # The Pi's drop-in, as H3 specifies it and the container cases install it. H3.6 ships it in
 # hosts/daniel-pi/; until then this copy is the Pi's schedule.
 PI_DROPIN = REPO / "hosts/lib/tests/container/fixture/units/updater-timer.conf"
-DAY_S = 86400
-
-_SPAN = re.compile(r"(\d+)\s*(h|hr|min|m|s|sec)?")
-_UNITS = {"h": 3600, "hr": 3600, "min": 60, "m": 60, "s": 1, "sec": 1, None: 1}
-_TRIGGERS = frozenset(
-    {
-        "OnActiveSec",
-        "OnBootSec",
-        "OnStartupSec",
-        "OnUnitActiveSec",
-        "OnUnitInactiveSec",
-        "OnCalendar",
-    }
-)
 # Triggers that fire once after boot. They add no gap once the host is up.
 _BOOT_ONLY = frozenset({"OnBootSec", "OnStartupSec"})
-
-
-def span_s(value: str) -> int:
-    """A systemd time span such as `1h 20min` or `90`, in seconds."""
-    parts = _SPAN.findall(value)
-    if not parts or _SPAN.sub("", value).strip():
-        raise ValueError(f"{value!r} is not a span this test reads")
-    return sum(int(n) * _UNITS[unit or None] for n, unit in parts)
-
-
-def _field(text: str, top: int) -> list[int]:
-    """The values one OnCalendar time field matches: `*`, `a`, `a..b`, each with `/step`."""
-    values = set()
-    for part in text.split(","):
-        body, _, step = part.partition("/")
-        if body == "*":
-            low, high = 0, top
-        elif ".." in body:
-            low, high = (int(n) for n in body.split(".."))
-        else:
-            low = int(body)
-            high = top if step else low
-        values.update(range(low, high + 1, int(step) if step else 1))
-    return sorted(values)
-
-
-def calendar_fires(expression: str) -> list[int]:
-    """The seconds after midnight at which a daily `OnCalendar=` expression fires.
-
-    Reads `*-*-* H:M[:S]` and `H:M[:S]` alone, each field a comma list of `*`, `a` or `a..b`,
-    each with an optional `/step`. Anything else raises, so a schedule this test cannot expand
-    fails rather than reads as a short gap.
-
-    Raises:
-        ValueError: The expression is not one this test reads.
-    """
-    words = expression.split()
-    if len(words) == 2 and words[0] == "*-*-*":
-        words = words[1:]
-    fields = words[0].split(":") if len(words) == 1 else []
-    if len(fields) == 2:
-        fields.append("00")
-    if len(fields) != 3 or not all(re.fullmatch(r"[\d*.,/]+", f) for f in fields):
-        raise ValueError(
-            f"OnCalendar={expression} is not a daily schedule this test reads"
-        )
-    hours, minutes, seconds = (
-        _field(f, top) for f, top in zip(fields, (23, 59, 59), strict=True)
-    )
-    return sorted(
-        h * 3600 + m * 60 + s for h in hours for m in minutes for s in seconds
-    )
-
-
-def timer_settings(unit: str, dropins: list[str]) -> tuple[dict[str, list[str]], int]:
-    """The triggers and `RandomizedDelaySec` of a timer with its drop-ins applied in order.
-
-    An empty assignment to any trigger resets every trigger, as systemd reads it.
-    """
-    triggers: dict[str, list[str]] = {}
-    delay = 0
-    for text in [unit, *dropins]:
-        section = None
-        for line in text.splitlines():
-            line = line.strip()
-            if not line or line.startswith(("#", ";")):
-                continue
-            if line.startswith("["):
-                section = line
-                continue
-            key, _, value = (s.strip() for s in line.partition("="))
-            if section != "[Timer]":
-                continue
-            if key in _TRIGGERS:
-                if value:
-                    triggers.setdefault(key, []).append(value)
-                else:
-                    triggers = {}
-            elif key == "RandomizedDelaySec":
-                delay = span_s(value) if value else 0
-    return triggers, delay
 
 
 def longest_gap_s(unit: str, dropins: list[str]) -> int:
