@@ -16,7 +16,7 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 import yaml
-from _promote_fakes import World, bundle_files, digest_of
+from _promote_fakes import NOW, World, bundle_files, digest_of
 from renderer.renderer_lib.bundle import tag_kustomization
 
 import promote
@@ -44,7 +44,7 @@ def _decide(world, monkeypatch, capsys, trigger: str = ""):
     monkeypatch.setenv("GITHUB_OUTPUT", str(output))
     argv = ["decide", "--trigger", trigger, "--repo", str(world.repo)]
     argv += ["--master-ref", "master", "--bundle-dir", str(bundle_dir)]
-    exit_code = promote.main(argv, f=world.clients())
+    exit_code = promote.main(argv, f=world.clients(), now=NOW)
     err = capsys.readouterr().err
     outputs = dict(line.split("=", 1) for line in output.read_text().splitlines())
     return exit_code, outputs, bundle_dir, err
@@ -66,7 +66,7 @@ class Clock:
 
 def _reads(world, clock: Clock | None = None) -> promote.Reads:
     clock = clock or Clock()
-    reads = promote.live_reads(world.clients(), world.repo, "master")
+    reads = promote.live_reads(world.clients(), world.repo, "master", NOW)
     return dataclasses.replace(reads, sleep=clock.sleep, clock=clock)
 
 

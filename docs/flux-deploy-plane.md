@@ -697,6 +697,64 @@ input*.
 - **The way out** is **operator-only**: the runbook in `docs/volume-snapshot-drills.md`, then
   a clear of `DEPLOY_HOLD`.
 
+### The reset input
+
+A `promote` dispatch with `reset_to_last_good` set moves `prod` to `last-good` and does nothing
+else. It runs only from master's copy of the workflow, and dispatching it is **operator-only**.
+It skips render, publish and promotion, and refuses a dispatch that also sets `sha` or
+`verify_drill`. `scripts/deploy_tools/promote_lib/reset.py` holds the rules.
+
+- **Its concurrency group is `promote-reset`, not `promote`.** In `promote`, the reset would
+  wait behind a `decide` that waits on a verification in flight, for up to 6 hours, and a
+  run that the next merge starts would evict it while it was pending.
+- **It decides, then writes.** The `reset-check` job reads with read-only tokens. The
+  `reset-move` job checks out nothing and holds `packages: write`. It moves `prod` only while
+  `prod` still names the digest `reset-check` read, and then records PROD_DIGEST. A live
+  `prod` already on `last-good` succeeds and moves nothing. Any other digest moves nothing
+  and fails, naming both.
+- **It refuses without a hold.** `DEPLOY_HOLD` reading `none`, an empty value, a missing
+  variable and a failed read all refuse. Without a hold, the next promote run would move
+  `prod` forward again. To set a hold, run `gh variable set DEPLOY_HOLD --body <reason> -R
+  DanielH2018/server` (**operator-only**).
+- **It refuses while a verification is in flight.** When `prod` and `last-good` name the same
+  digest, the reset moves nothing and succeeds. When they differ, it proceeds only if
+  `DEPLOY_HOLD`'s first word is a commit X and the digest of `sha-<X>` equals `prod`'s. That
+  hold means the run that moved `prod` has settled. Any other difference means a run is
+  between its `tag` and its `settle`. The refusal names `prod`'s commit and the in-progress
+  `promote` runs. To proceed, wait for that run's `settle`, or cancel it with `gh run cancel
+  <run-id> -R DanielH2018/server` (**operator-only**), then dispatch again.
+- **It ignores the reboot window below.** It moves `prod` back to a revision the cluster
+  already ran.
+
+### No promotion runs into the weekly reboot
+
+The reboot kills the soak Job's pod, recreates pods and fires critical rules after the move.
+M2's `weekly-reboot` mute is an Alertmanager route, so it silences nothing `verify` reads. A
+promotion verifying across the reboot would therefore hold.
+`scripts/deploy_tools/promote_lib/reboot_window.py` holds the rules.
+
+- **The window.** It opens T's own derived verify timeout before the reboot, and it closes when
+  M2's mute ends. The reboot is the cron's fire plus `weekly_reboot_shutdown_delay_minutes`,
+  and the mute ends `weekly_reboot_mute_recovery_minutes` after the reboot. `decide` reads the
+  `weekly_reboot_*` variables from `ansible/inventory/group_vars/all.yml` in its checkout.
+  At the committed schedule, the window closes at 08:15 UTC on Sunday and opens between about
+  02:05 and 07:30, depending on T.
+- **Which timeout `decide` reads.** It is T's own, from `verify_promotion.expected_set`, the
+  function `verify` calls, so the two cannot disagree.
+- **`deferred`.** Inside the window, `decide` ends the run with the verdict `deferred` and
+  moves nothing. It never waits in its job, because a wait before `verify` would come out of
+  `verify`'s budget and time out into a false hold.
+- **The scheduled run.** `promote.yml`'s `schedule:` cron fires at the window's end and
+  promotes master's tip. It skips render, images and publish, because every commit merged
+  in the window was published by its own run. GitHub reads the cron as a literal, so
+  `scripts/deploy_tools/tests/test_promote_reboot_window.py` derives it from the same
+  variables and fails when the two differ. GitHub can start a scheduled run late or skip it.
+  A skipped run leaves the window's commits for the run the next merge starts.
+- **`land-wait`.** Each poll inside the window moves the give-up deadline to the window's end
+  plus the base timeout, and prints when the window ends. `land-wait` holds no T's bundle,
+  so it reads the widest window any T has, `chained_timeout.VERIFY_CAP_S`. A `land.sh`
+  deadline still caps the wait.
+
 ### The timeout follows the chain
 
 `scripts/deploy_tools/chained_timeout.py:promote_timeout` derives `verify`'s wait from T's bundle and its changed set, the same set

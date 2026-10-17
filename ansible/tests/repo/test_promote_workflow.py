@@ -24,8 +24,21 @@ from lib import yaml_fast
 WORKFLOW = REPO / ".github" / "workflows" / "promote.yml"
 FLUX_DEFAULTS = REPO / "ansible" / "roles" / "k8s" / "flux" / "defaults" / "main.yml"
 
-JOBS = ("render", "images", "publish", "promote", "tag", "verify", "settle", "post")
+# The reset_to_last_good dispatch's two jobs (D5.2b2), guarded by RESET_GUARDS instead.
+RESET_JOBS = ("reset-check", "reset-move")
+JOBS = (
+    "render",
+    "images",
+    "publish",
+    "promote",
+    "tag",
+    "verify",
+    "settle",
+    "post",
+    *RESET_JOBS,
+)
 NEEDS = {
+    "reset-move": "reset-check",
     "publish": ["render", "images"],
     "promote": "publish",
     "tag": "promote",
@@ -43,6 +56,14 @@ TRIGGER_GUARDS = (
 )
 # A dispatch reaches every job, so every job also requires master's copy of the file.
 REF_GUARD = "github.ref == 'refs/heads/master'"
+# The reset jobs run only for a dispatch of master's copy that sets the input, and render skips
+# that dispatch, so it renders, publishes and promotes nothing.
+RESET_GUARDS = (
+    "inputs.reset_to_last_good",
+    REF_GUARD,
+    "github.event_name == 'workflow_dispatch'",
+)
+RESET_SKIP = "!inputs.reset_to_last_good"
 PERMISSIONS = {
     "render": {"contents": "read", "checks": "read"},
     "images": {"contents": "read", "packages": "write"},
@@ -58,6 +79,8 @@ PERMISSIONS = {
     "verify": {"contents": "read", "statuses": "read"},
     "settle": {"packages": "write", "actions": "write"},
     "post": {"contents": "read"},
+    "reset-check": {"contents": "read", "packages": "read", "actions": "read"},
+    "reset-move": {"packages": "write"},
 }
 
 RENDER_REF = "${{ inputs.sha || github.event.workflow_run.head_sha || github.sha }}"
@@ -97,6 +120,12 @@ def _step_index(job: dict, step_id: str) -> int | None:
 
 def _guard_problems(name: str, job: dict) -> list[str]:
     condition = " ".join(str(job.get("if", "")).split())
+    if name in RESET_JOBS:
+        return [
+            f"{name}: its `if` lacks the reset guard {guard}"
+            for guard in RESET_GUARDS
+            if guard not in condition
+        ]
     found = [
         f"{name}: its `if` lacks the trigger guard {guard}"
         for guard in TRIGGER_GUARDS
@@ -114,6 +143,7 @@ def _checkout_problems(jobs: dict) -> list[str]:
         ("promote", PROMOTE_REF),
         ("verify", PROMOTE_REF),
         ("post", PROMOTE_REF),
+        ("reset-check", PROMOTE_REF),
     ):
         checkouts = _checkouts(jobs.get(name, {}))
         if len(checkouts) != 1:
@@ -122,10 +152,14 @@ def _checkout_problems(jobs: dict) -> list[str]:
         args = checkouts[0].get("with") or {}
         if args.get("ref") != ref:
             found.append(f"{name}: checks out {args.get('ref')!r}, not {ref!r}")
-        # `verify` and `post` read no history: what they read came from `decide`.
-        if name not in ("verify", "post") and args.get("fetch-depth") != 0:
+        # `verify` and `post` read no history: what they read came from `decide`. Nor does
+        # `reset-check`, which reads only the registry and DEPLOY_HOLD.
+        if (
+            name not in ("verify", "post", "reset-check")
+            and args.get("fetch-depth") != 0
+        ):
             found.append(f"{name}: checks out without fetch-depth: 0")
-    for name in ("publish", "tag", "settle"):
+    for name in ("publish", "tag", "settle", "reset-move"):
         if _checkouts(jobs.get(name, {})):
             found.append(f"{name}: checks out the repository")
     return found
@@ -193,8 +227,10 @@ def _pin_problems(jobs: dict, flux_version: str) -> list[str]:
         for s in _steps(job)
         if _uses(s, "fluxcd/flux2/action")
     ]
-    if {name for name, _ in flux_steps} != {"publish", "tag", "settle"}:
-        found.append("the flux CLI is not installed in exactly publish, tag and settle")
+    if {name for name, _ in flux_steps} != {"publish", "tag", "settle", "reset-move"}:
+        found.append(
+            "the flux CLI is not installed in exactly publish, tag, settle and reset-move"
+        )
     for name, step in flux_steps:
         version = (step.get("with") or {}).get("version")
         if version != flux_version:
@@ -245,6 +281,12 @@ def problems(wf: dict, flux_version: str) -> list[str]:
         group = jobs.get(name, {}).get("concurrency")
         if group != {"group": "promote", "cancel-in-progress": False}:
             found.append(f"{name}: is not in the promote concurrency group")
+    for name in RESET_JOBS:
+        group = jobs.get(name, {}).get("concurrency")
+        if group != {"group": "promote-reset", "cancel-in-progress": False}:
+            found.append(f"{name}: is not in the promote-reset concurrency group")
+    if RESET_SKIP not in " ".join(str(jobs.get("render", {}).get("if", "")).split()):
+        found.append(f"render: its `if` lacks {RESET_SKIP}, so a reset also promotes")
 
     found += _checkout_problems(jobs)
     found += _ancestry_problems(jobs.get("render", {}))
@@ -333,6 +375,20 @@ def _tag_without_the_verdict_gate(wf):
     job["if"] = job["if"].replace(VERDICT_GATE, "true")
 
 
+def _reset_in_the_promote_group(wf):
+    wf["jobs"]["reset-move"]["concurrency"]["group"] = "promote"
+
+
+def _render_on_a_reset(wf):
+    job = wf["jobs"]["render"]
+    job["if"] = job["if"].replace(RESET_SKIP, "true")
+
+
+def _reset_without_its_input(wf):
+    job = wf["jobs"]["reset-check"]
+    job["if"] = job["if"].replace(RESET_GUARDS[0], "true")
+
+
 RED = {
     "a trigger guard removed": (
         _drop_guard,
@@ -367,6 +423,15 @@ RED = {
     "tag without the verdict gate": (
         _tag_without_the_verdict_gate,
         "tag: its `if` lacks the verdict gate",
+    ),
+    "a reset job in the promote group": (
+        _reset_in_the_promote_group,
+        "reset-move: is not in the promote-reset",
+    ),
+    "render on a reset dispatch": (_render_on_a_reset, "so a reset also promotes"),
+    "reset-check without its input": (
+        _reset_without_its_input,
+        "reset-check: its `if` lacks the reset guard inputs.reset_to_last_good",
     ),
 }
 

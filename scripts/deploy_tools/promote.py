@@ -18,6 +18,9 @@ THE VERDICTS.
            or when T changes a suspended tag, below.
   current  No commit after `prod`'s is eligible, or a verification never settled, so nothing
            moves. A walk whose every candidate loses an undeclared object ends here too.
+  deferred T was found, but the clock is inside T's no-promotion window before the weekly
+           reboot, so nothing moves and nothing waits (D5.2b2, `promote_lib/reboot_window.py`).
+           `promote.yml`'s `schedule:` run at the window's end promotes master's tip.
   error    A read failed or answered something no rule covers. Nothing moves.
 
 VERIFICATION (contract C2). While `prod` and `last-good` name different digests, a run's
@@ -36,14 +39,11 @@ SNAPSHOT ROLES (D5.2b1). Under T's `stateful`, the snapshot roles whose `own` di
 changes, a failed verification holds as `<T> stateful=<names>` without a reset. `hold T`
 posts it after `settle`, from the record `decide` writes (`promote_lib/stateful.py`).
 
-A SUSPENDED TAG TAKES NO CHANGE (D5.1d). A suspended tag applies nothing until its resume, and
-`cross_plane_order.py` refuses a PR that changes one. Master's status-check rule is not strict,
-so a PR whose checks ran before the suspend merged can still merge after it. So when T's `own`
-digest differs from `last-good`'s for a tag `digests.json` marks `suspended` in both, `decide`
-holds and writes DEPLOY_HOLD as `<T> suspended-changed=<tag,...>`. The value never takes the
-`failed=` form, so the revert rule never passes it, and `suspended_hold` hands it to `hold`,
-which posts it. The way out is a commit that reverts the change or resumes the tag, and then the
-operator's clear. A clear without one holds again here.
+A SUSPENDED TAG TAKES NO CHANGE (D5.1d). A PR whose checks ran before a suspend merged can still
+merge after it, since master's status-check rule is not strict. So when T's `own` digest differs
+from `last-good`'s for a tag `digests.json` marks `suspended` in both, `decide` holds and writes
+DEPLOY_HOLD as `<T> suspended-changed=<tag,...>`, which the revert rule never passes and `hold`
+posts. The way out is a commit that reverts the change or resumes the tag, then the clear.
 
 ALREADY-FAILING DEPENDENTS (H1.1i). Before `prod` moves, `decide` records the newest
 `flux/<name>` status on `prod`'s commit for each name in T's changed set, and writes the record
@@ -51,9 +51,8 @@ under `--bundle-dir` beside the bundles. It reads the statuses only when the cha
 a dependent, and a failed read is `error`. `verify` excuses a dependent whose record reads
 `failure` (`promote_lib/verify_promotion.py`).
 
-Each read has three outcomes: a value, absent, or an error. Any error is the verdict `error`.
-The rules for each read are in docs/target-architecture/deploy/d1-flux-installed.md,
-*Decisions*, *Each read has three outcomes*. The ones a reader of this file asks about:
+Each read has three outcomes: a value, absent, or an error, and any error is `error`
+(d1-flux-installed.md, *Each read has three outcomes*). The ones a reader asks about:
   - DEPLOY_HOLD: `none` is no hold. Any other non-empty value holds, so a mistyped hold
     still holds. Empty or missing is an error, because an empty read looks the same as a
     broken one.
@@ -67,37 +66,32 @@ The rules for each read are in docs/target-architecture/deploy/d1-flux-installed
     does too. A failed signature check is an error, so a Sigstore outage stops promotion
     rather than skipping to an older commit.
 
-OUTPUT. One line on stdout, `trigger=<sha> verdict=<verdict> target=<sha or empty>`. The
-reason for a `held`, `current` or `error` goes to stderr. When `$GITHUB_OUTPUT` is set, the
-step outputs are appended to it: `verdict`, `target` and `digest`; `prior` and
-`prior_digest`, `prod`'s commit and digest before the move, which `tag` re-reads before it
-moves anything; `reset_digest`, where a failed verification resets `prod` to; `seed`, `true`
-when `tag` must tag `prior_digest` as `last-good` first; `clears_hold`; and `no_reset`, the
-comma-joined forward-only tags under which `settle` holds without a reset; `stateful`, the
-snapshot roles under which `settle` writes the stateful hold; and `suspended_hold`.
+OUTPUT. One line on stdout, `trigger=<sha> verdict=<verdict> target=<sha or empty>`, and any
+verdict's reason on stderr. `$GITHUB_OUTPUT` gets `verdict`, `target`, `digest`; `prior` and
+`prior_digest`, which `tag` re-reads before it moves anything; `reset_digest`; `seed`, `true`
+when `tag` tags `prior_digest` `last-good` first; `clears_hold`; `no_reset` and `stateful`,
+under which `settle` holds without a reset; and `suspended_hold`.
 
-PRUNE. `prune` deletes old artifact versions, once a day from `prune-artifacts.yml`.
-`promote_lib/prune.py` holds it, and its docstring states what it reads.
-
-VERIFY. `verify T` prints `good` or `failed` for the `settle` job (`promote_lib/verify_promotion.py`).
-`ci-verdict SHA` prints a commit's CI verdict, for the render job's re-check of a dispatched sha.
-
-LAND-WAIT. `land-wait M` waits until a promotion covers merge commit M, for `land.sh`
-(`promote_lib/wait.py`, whose docstring states the three outcomes and what each reads).
+THE OTHER SUBCOMMANDS, each stated in its module's docstring:
+  prune        deletes old artifact versions, daily from prune-artifacts.yml (`prune.py`).
+  verify T     prints `good` or `failed` for `settle` (`verify_promotion.py`).
+  ci-verdict   prints a commit's CI verdict, for render's re-check of a dispatched sha.
+  land-wait M  waits until a promotion covers merge commit M, for `land.sh` (`wait.py`).
+  reset-check  the `reset_to_last_good` dispatch's read job (`reset.py`, D5.2b2).
 
 CHECK-BUNDLE. `check-bundle DIR` runs the publish census and the source, host and no-stub gates
 before any push, and `published-tags` prints the render step's `--role` list. Both read the
 checkout alone (`bundle_census.py`, `bundle_gates.py`).
 
 Exit codes:
-  0   decide: promote, held or current. prune: every read, delete and verify succeeded.
+  0   decide: promote, held, current or deferred. prune: every read, delete and verify succeeded.
       land-wait: settled. check-bundle: the census passes. published-tags: printed.
-      verify: good. ci-verdict: pass. hold: every message posted.
-  1   decide: error, and nothing moves, a failed write of the gate's hold included. prune: a read, a delete or a verify failed.
-      land-wait: deploy-failed, a hold, or suspended. check-bundle: the census or a gate failed, one line
-      each.
+      verify: good. ci-verdict: pass. hold: every message posted. reset-check: a move or none.
+  1   decide: error, and nothing moves, a failed write of the gate's hold included. prune: a
+      read, a delete or a verify failed. land-wait: deploy-failed, a hold, or suspended.
+      check-bundle: the census or a gate failed, one line each.
       verify: failed, or no verdict. ci-verdict: anything but pass. hold: the record is
-      unreadable, or a message was not posted.
+      unreadable, or a message was not posted. reset-check: a refusal.
   64  usage error
   75  land-wait: gave-up, the wait reached its timeout.
 
@@ -127,12 +121,8 @@ import bundle_census
 import forge
 from changed_set import suspended_changed
 import object_loss
-from deploy_tools.promote_lib import (
-    forward_only,
-    stateful,
-    verify_promotion as verify,
-    wait,
-)
+from deploy_tools.promote_lib import forward_only, reboot_window, reset, stateful
+from deploy_tools.promote_lib import verify_promotion as verify, wait, wait_reads
 
 # Re-exported, as `promote.<name>`, for the tests and for `land.sh`'s pin gate.
 from deploy_tools.promote_lib.ci_contexts import (
@@ -386,6 +376,13 @@ def _promotion(
     target_bundle = target_bundle or _pull(reads, digest, f"sha-{target}")
     if prod_bundle is None and prod_digest is not None:
         prod_bundle = _pull(reads, prod_digest, "prod's bundle")
+    # After every other read, so no wait separates the clock from the move (D5.2b2).
+    if why := reboot_window.deferral(
+        reads.reboot,
+        lambda: verify.expected_set(target_bundle, prod_bundle).timeout_s,
+        reads.now,
+    ):
+        return Decision("deferred", reason=f"{target} is {why}")
     seed = last_good is None and prod_digest is not None
     base_bundle = prod_bundle
     if last_good is not None and last_good != prod_digest:
@@ -554,6 +551,7 @@ def main(
         )
     verify.add_parser(commands)
     stateful.add_parser(commands)
+    reset.add_parser(commands)
     wait.add_parser(commands, REPO)
     bundle_census.add_parsers(commands)
     args = parser.parse_args(argv)
@@ -567,7 +565,7 @@ def main(
         f = forge.connect(os.environ)
     if args.command == "land-wait":
         services = [tag for tag in args.services.split(",") if tag]
-        reads = wait.live_wait_reads(f, args.repo)
+        reads = wait_reads.live_wait_reads(f, args.repo)
         also = frozenset(name for name in args.also.split(",") if name)
         result = wait.land_wait(reads, args.merge, services, args.timeout, also=also)
         return wait.report_wait(args.merge, result)
@@ -583,6 +581,8 @@ def main(
     output = os.environ.get("GITHUB_OUTPUT")
     if args.command == "verify":
         return verify.run(f, args, output)
+    if args.command == "reset-check":
+        return reset.run(f, args, output)
     try:
         decision = hand_off(
             write_hold(decide(live_reads(f, args.repo, args.master_ref, now)), f),
