@@ -24,9 +24,12 @@ WORKFLOW = REPO / ".github" / "workflows" / "promote.yml"
 SCHEDULED = "github.event_name == 'schedule'"
 # `promote` runs on a skipped publish for the scheduled run alone.
 SCHEDULED_PROMOTE = f"({SCHEDULED} && needs.publish.result == 'skipped')"
-# `tag` reads `promote`'s result itself, because GitHub's implicit success() reads every
-# ancestor, and the skipped publish would skip it.
-TAG_RESULT = ("!cancelled()", "needs.promote.result == 'success'")
+# A status-check function in an `if` replaces GitHub's implicit success(), which reads every
+# ancestor in `needs`. Without one, the scheduled run's skipped publish skips the job. Only
+# !cancelled() is accepted: always() would also move `prod` on a cancelled run.
+STATUS_CHECK = "!cancelled()"
+# `tag` reads `promote`'s result itself, because the skipped publish is its ancestor too.
+TAG_RESULT = (STATUS_CHECK, "needs.promote.result == 'success'")
 AFTER_PROMOTE = ("tag", "verify", "settle", "post")
 # `decide` reads the window in `promote`, and the jobs after it act on its verdict. A reset job
 # that needed one of these would skip with the window, or wait on it.
@@ -50,8 +53,13 @@ def problems(wf: dict) -> list[str]:
     found = []
     if SCHEDULED in _condition(jobs.get("render", {})):
         found.append("render: runs on the schedule, so it publishes an unchecked tip")
-    if SCHEDULED_PROMOTE not in _condition(jobs.get("promote", {})):
+    promote = _condition(jobs.get("promote", {}))
+    if SCHEDULED_PROMOTE not in promote:
         found.append(f"promote: its `if` lacks {SCHEDULED_PROMOTE}")
+    if STATUS_CHECK not in promote:
+        found.append(
+            f"promote: its `if` lacks {STATUS_CHECK}, so the scheduled run skips it"
+        )
     for guard in TAG_RESULT:
         if guard not in _condition(jobs.get("tag", {})):
             found.append(f"tag: its `if` lacks {guard}, so the scheduled run skips it")
@@ -103,6 +111,10 @@ RED = {
     "tag on implicit success": (
         _replace("tag", "!cancelled() &&", ""),
         "tag: its `if` lacks !cancelled()",
+    ),
+    "promote on implicit success": (
+        _replace("promote", "!cancelled() &&", ""),
+        "promote: its `if` lacks !cancelled()",
     ),
     "promote on a published tip only": (
         _replace("promote", SCHEDULED_PROMOTE, "false"),
