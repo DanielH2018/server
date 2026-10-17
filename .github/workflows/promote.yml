@@ -6,12 +6,16 @@ name: promote
 # docs/target-architecture/contracts.md C2 is the contract. The operator's view is
 # docs/flux-deploy-plane.md.
 #
-# Six jobs, so code that runs during a render or a decision never holds a token that can sign,
+# Seven jobs, so code that runs during a render or a decision never holds a token that can sign,
 # push or move a tag:
 #   render   contents: read, checks: read. Checks out the triggering commit, or the dispatched
 #            `sha`, refuses one that is not on master, re-reads a dispatched commit's CI,
 #            renders the bundle, runs the publish census and gates and scans it, and hands
 #            `out/` on.
+#   images   contents: read, packages: write. Checks out this workflow's own commit, refuses any
+#            context in `out/images/` that does not hash to its tag in `tags.json` before a
+#            credential exists, then builds and pushes each image whose content tag GHCR does
+#            not serve (scripts/deploy_tools/ci_images.py). `publish` needs it.
 #   publish  packages: write, id-token: write. Checks out nothing. Pushes `sha-<X>` and signs
 #            it with cosign keyless under this workflow's identity. A `verify_drill` dispatch
 #            instead pushes an annotated bundle to `verify-drill` unsigned, and fails unless
