@@ -1783,10 +1783,10 @@ way, so it adds no edge. H2.10 names the S3 folder in old H7.13, so H7.34 waits 
 | H7.49 monitor-bridge's gitops checks go, and land.sh stops running the tick | H7.19a's first and third PRs | yes | H7.41, D6 |
 | H7.50 deploy_ui retires | H7.19a's second PR | yes | H7.37, H7.41, D6 |
 | H7.51 `homelab-checkout-sync` beside the deployer | H7.19a's fourth PR | yes | H7.41, H7.47, D6, the H6 PR that lands the window test |
-| H7.52 The deployer's timer retires | H7.19a's fifth PR | no: it deletes H6's seven deployer-coupled items, so it starts once they merge | H7.49, H7.51 live, H7.29, H7.32, H7.33, H7.35, H7.36, H7.37, H7.40, H6 |
-| H7.53 Re-home and delete the deployer; the setup census turns strict | H7.19b, H7.19c | the re-home half yes | H7.52 live on daniel-box, H7.48, H7.24 to H7.41 |
+| H7.52 The deployer's timer retires | H7.19a's fifth PR | no: it deletes H6's seven deployer-coupled items, so it starts once they merge | H7.49, H7.51 live, H7.24, H7.25, H7.29, H7.32, H7.33, H7.35, H7.36, H7.37, H7.40, H7.41, H7.48, H6 |
+| H7.53 Re-home and delete the deployer; the setup census turns strict | H7.19b, H7.19c | the re-home half yes | H7.52 live on daniel-box, H7.24 to H7.41, H7.48, H7.50 |
 | H7.54 The test env leaves ansible-core | H7.19d | no: its parity proof runs over the suite as H7.48 and H7.52 leave it | H7.46, H7.48, H7.52 |
-| H7.55 Delete the playbooks and the role directories | H7.20a | no: it deletes what H7.53 leaves | H7.53 live on daniel-box, H7.44 |
+| H7.55 Delete the playbooks and the role directories | H7.20a | no: it deletes what H7.53 leaves | H7.53 live on daniel-box, H7.43, H7.44, H7.45 |
 | H7.56 ansible-core leaves, and so does the Pi's `containers_list` key | H7.20b, H7.20d | no: its two census greps run at its base | H7.54, H7.55, H5 |
 | H7.57 The ADR | H7.20c | yes | H7.55 |
 
@@ -1855,8 +1855,8 @@ the `manual_plane` clearing, the facts-lock `forget` and `verify`, and *Rollback
 15. **H7.39.** The agent users and the units that run as them come up together on the first
     host. It carries the `meta: end_role` guard naming daniel-server. Old H7.12c names the
     `homelab-*` rename, the four window-test entries and the `claude-land@` callers once for
-    both host PRs. The PR that first ships a renamed unit carries them, and its body says
-    which. Restarting a host's `claude-rc.service` drops the phone's sessions, so H7.39 and
+    both host PRs. Old H7.12c's text decides which of H7.39 and H7.40 carries them, and that
+    PR's body quotes the sentence it followed. Restarting a host's `claude-rc.service` drops the phone's sessions, so H7.39 and
     H7.40 each land in a window the operator picks (**operator-only**).
 16. **H7.40** stays alone as the second canary host. It carries the artifacts directories'
     `tmpfiles.d` lines and empties `claude_code`.
