@@ -14,7 +14,6 @@ from lib.git import git_stdout
 from lib.repo_paths import REPO
 from object_loss import bundle_objects, undeclared_losses
 from renderer.renderer_lib.bundle import bundle_files as render_bundle
-from validate.cross_plane_order import Snapshot, _objects, removal_problems
 
 DEPLOYMENT = "apiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: bento-pdf\n  namespace: homelab\n"
 CLUSTER_ROLE = "apiVersion: rbac.authorization.k8s.io/v1\nkind: ClusterRole\nmetadata:\n  name: bento-reader\n"
@@ -221,6 +220,8 @@ def test_a_candidate_that_drops_a_prune_disabled_claim_is_promoted(
 @pytest.mark.parametrize("where", ["labels", "annotations"])
 def test_decide_and_the_pr_gate_agree_on_a_dropped_prune_disabled_claim(where):
     """The PR gate's arm 3 and `decide` judge the same drop the same way, so neither drifts."""
+    from validate.cross_plane_order import Snapshot, _objects, removal_problems
+
     prod_dirs = {"bento-pdf": {**WITH_ROUTE, "pvc.yaml": _claim(where)}}
     target_dirs = {"bento-pdf": WITH_ROUTE}
 
