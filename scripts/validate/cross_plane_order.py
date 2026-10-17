@@ -441,9 +441,13 @@ def snapshot(
         # to the gate, but no plane orders on a lockfile, and a second environment per run
         # costs a sync. D4 Open question 12 leaves a shared layout with D6.1 to D6.
         cmd = [python, str(tree / "scripts/renderer/homelab_render.py"), "cluster"]
-        cmd += ["--out", out] + [arg for r in roles for arg in ("--role", r)]
+        cmd += ["--out", out]
+        cmd += [arg for r in roles for arg in ("--role", r)]
+        # The all-zero SHA is soak.NORMALISED_REVISION: R never moves the footprint. It goes in
+        # the environment, not a flag, so an older renderer ignores it rather than refusing it.
+        env = {**git_env(), "HOMELAB_RENDER_REVISION": "0" * 40}
         proc = subprocess.run(
-            cmd, cwd=tree, capture_output=True, text=True, env=git_env(), timeout=900
+            cmd, cwd=tree, capture_output=True, text=True, env=env, timeout=900
         )
         if proc.returncode:
             tail = "\n".join(proc.stderr.splitlines()[-5:])

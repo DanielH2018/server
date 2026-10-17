@@ -14,8 +14,8 @@ nothing and `prod` stays where it was. `report` runs the source, host and no-stu
   `k8s_autodeploy_snapshot_pvcs`, and `-verify` for none yet;
 - each published tag and each shared kind has its directory `cluster/<name>/`, and each
   per-tag kind its directory `cluster/<name><suffix>/`, each with a `kustomization.yaml`;
-- no published tag takes a reserved name (`reserved_tags`), so a tag named `soak` fails
-  here even before `soak` joins `SHARED_KINDS`;
+- no published tag takes a reserved name (`reserved_tags`), so a tag named
+  `homelab-namespace` fails here even before that kind joins `SHARED_KINDS`;
 - `digests.json` names each published tag and shared kind, plus `_unclassified`.
 
 Beside it, the per-tag object census (`member_census`, H1.1c) fails a published plumbing tag

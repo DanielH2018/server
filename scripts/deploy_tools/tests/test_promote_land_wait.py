@@ -15,6 +15,7 @@ from dataclasses import replace
 import pytest
 
 import forge
+from changed_set import changed_set
 from deploy_tools.promote_lib import wait as promote_wait
 from flux_host import FluxHost
 from _land_wait_fakes import D, M, P, Sim, at, digests, kustomization
@@ -158,6 +159,21 @@ def test_a_changed_tag_that_is_not_ready_blocks_settled():
         polls=[[*at(M), kustomization("bento-pdf", f"master@sha1:{M}", False)]]
     )
     assert sim.wait().verdict == "gave-up"
+
+
+def test_a_failed_soak_in_the_changed_set_does_not_block_settled():
+    """Before D5.3b3 the soak gates nothing, so `land-wait` never waits on it Ready."""
+    published = {
+        M: digests(bento_pdf="b", soak="k", _unclassified="u"),
+        P: digests(bento_pdf="a", soak="k", _unclassified="u"),
+    }
+    for found in published.values():
+        found["bento-pdf"]["suspended"] = False
+    polls = [[*at(M, "bento-pdf"), kustomization("soak", f"master@sha1:{M}", False)]]
+    sim = Sim(polls=polls, published=published)
+    # The changed set does hold `soak`, so the settle below is the exclusion's doing.
+    assert "soak" in changed_set(published[M], published[P], {"soak": []}).names
+    assert sim.wait().verdict == "settled"
 
 
 def test_an_ancestor_with_no_digests_json_waits_on_every_name():

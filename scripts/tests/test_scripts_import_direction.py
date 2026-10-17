@@ -89,10 +89,10 @@ FACADE_EDGES = frozenset(
     }
 )
 
-# The three back-edges `_cycles` finds in the tree, each one a pair of modules that reach each
+# The four back-edges `_cycles` finds in the tree, each one a pair of modules that reach each
 # other by a DEFERRED import inside a function. An entry is one back-edge, NOT a complete cycle
 # census -- `_cycles` says why, and the name is kept only because the entries here happen to be
-# two-module loops, where the two coincide. They are listed so a FOURTH cannot appear unnoticed;
+# two-module loops, where the two coincide. They are listed so a FIFTH cannot appear unnoticed;
 # nothing here says they are good, and shrinking this set is a fix.
 ALLOWED_CYCLES = frozenset(
     {
@@ -113,6 +113,11 @@ ALLOWED_CYCLES = frozenset(
         # `from ha_state_model import (...)` and at ha_state_model.py's `main()` (the deferred
         # `from ha_state_checks import check_errors`).
         frozenset({"home_assistant.ha_state_checks", "home_assistant.ha_state_model"}),
+        # `soak.py` renders the soak kind with `bundle.py`'s writers at module level, and
+        # `bundle_files` imports `soak_files` inside the function, because `SHARED_KINDS`
+        # makes every bundle render `soak`. Why: `# DECIDED: deferred, a documented cycle` in
+        # bundle.py's `bundle_files`.
+        frozenset({"renderer.renderer_lib.bundle", "renderer.renderer_lib.soak"}),
     }
 )
 

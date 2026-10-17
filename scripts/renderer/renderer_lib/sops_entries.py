@@ -33,8 +33,8 @@ import yaml
 from lib import yaml_fast
 from renderer.renderer_lib.bundle import (
     KUSTOMIZATION,
+    SUBSTITUTE_OPT_OUT,
     kustomization_text,
-    sops_manifest_problem,
 )
 from renderer.renderer_lib.cluster import RenderedTag, RenderError, RenderRefused
 from renderer.renderer_lib.placeholders import PlaceholderRender, Sentinels
@@ -58,6 +58,26 @@ SOPS_MANIFEST_KEYS = frozenset(
         "google_assistant_service_account",
     }
 )
+
+
+def sops_manifest_problem(name: str, text: str) -> str | None:
+    """Why the SOPS manifest `name` cannot be copied into a tag's directory, or None.
+
+    The copy is byte for byte, because SOPS's MAC covers the plaintext fields too, so the
+    renderer cannot add the substitute opt-out itself; it refuses a manifest without it.
+    """
+    try:
+        obj = yaml_fast.safe_load(text)
+    except yaml.YAMLError as exc:
+        return f"the SOPS manifest {name} does not parse: {exc}"
+    meta = (obj.get("metadata") if isinstance(obj, dict) else None) or {}
+    if (meta.get("annotations") or {}).get(SUBSTITUTE_OPT_OUT) != "disabled":
+        return (
+            f"the SOPS manifest {name} lacks the annotation {SUBSTITUTE_OPT_OUT}: disabled "
+            "in its plaintext metadata, so Flux would substitute into its decrypted values. "
+            "cluster_vars.py write (operator-only) writes it before encrypting"
+        )
+    return None
 
 
 def sops_manifest_entries(
