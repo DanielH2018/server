@@ -45,11 +45,8 @@ from lib import yaml_fast
 from lib.repo_paths import REPO
 from pathlib import PurePosixPath
 
-from renderer.renderer_lib.bundle import (
-    CLUSTER_DIR,
-    configmap_digest8,
-    job_spec_digest8,
-)
+from renderer.renderer_lib.bundle import CLUSTER_DIR
+from renderer.renderer_lib.digest8 import configmap_digest8, job_spec_digest8
 from renderer.renderer_lib.ordering import SNAPSHOT_SUFFIX, VERIFY_SUFFIX, split_kind
 
 # DECIDED: a Job declares its kind in this annotation on the Job's own `metadata`, which the
