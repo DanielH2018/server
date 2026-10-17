@@ -34,7 +34,7 @@ from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
 
-from typing import TYPE_CHECKING
+from typing import Callable, NamedTuple
 
 from lib.git import git
 from lib.narrow_git import CannotNarrow, changed_mapping_keys, mapping_at
@@ -44,9 +44,6 @@ from secrets_mgmt.consumers import _CENSUS_SKIP_FILES
 _sys.path.insert(0, str(GITOPS_DEPLOY_FILES))
 
 from deployer_lib.deploy_cross_role import k8s_lookup_map
-
-if TYPE_CHECKING:
-    from deploy_tools.narrow_lib.broad import Context
 
 SECRETS_FILE = "ansible/vars/secrets.yml"
 # SOPS's own metadata — the MAC and `lastmodified` move on every edit and name no secret.
@@ -71,28 +68,38 @@ def changed_keys(old_ref: str, new_ref: str, cwd) -> set[str]:
     return changed_mapping_keys(old, new, SECRETS_FILE)
 
 
-def key_tags(key: str, ctx: "Context", lookups: dict[str, set[str]]) -> set[str]:
+class Rules(NamedTuple):
+    """`broad`'s own rule functions, passed in because `broad` imports this module.
+
+    An import back the other way, even one deferred into a function, is an import cycle
+    `scripts/tests/test_scripts_import_direction.py` refuses.
+    """
+
+    grep: Callable
+    sort_hits: Callable
+    template_importers: Callable
+    role_tags: Callable
+
+
+def key_tags(key: str, ctx, lookups: dict[str, set[str]], rules: Rules) -> set[str]:
     """The deploy tags whose render reads the secret `key` at `ctx.ref`.
 
-    `lookups` is `k8s_lookup_map`'s answer: a file another k8s role `lookup()`s, relative to
-    `ansible/`, to the roles reading it.
+    `ctx` is `broad.Context`. `lookups` is `k8s_lookup_map`'s answer: a file another k8s role
+    `lookup()`s, relative to `ansible/`, to the roles reading it.
     """
-    # Lazy because `broad` imports this module.
-    from deploy_tools.narrow_lib import broad
-
     hits = [
         h
-        for h in broad._grep(ctx, key, word=True, inventory=True)
+        for h in rules.grep(ctx, key, word=True, inventory=True)
         if h.rsplit("/", 1)[-1] not in _CENSUS_SKIP_FILES
     ]
-    found = broad._sort_hits(hits, f"the secret {key}", ctx, key)
+    found = rules.sort_hits(hits, f"the secret {key}", ctx, key)
     roles = set(found.roles)
     for hit in hits:
         roles |= lookups.get(hit.removeprefix("ansible/"), set())
     for name in sorted(found.templates):
-        roles |= broad.template_importers(name, ctx.ref, ctx.cwd, {name}, ctx.explain)
+        roles |= rules.template_importers(name, ctx.ref, ctx.cwd, {name}, ctx.explain)
     try:
-        tags = broad._role_tags(roles, ctx)
+        tags = rules.role_tags(roles, ctx)
     except CannotNarrow as exc:
         ctx.explain(f"narrow: secret {key} -> roles {','.join(sorted(roles))}")
         raise CannotNarrow(f"the secret {key} reaches a role where {exc}") from exc
@@ -100,7 +107,7 @@ def key_tags(key: str, ctx: "Context", lookups: dict[str, set[str]]) -> set[str]
     return tags
 
 
-def reached(old_ref: str, ctx: "Context") -> set[str]:
+def reached(old_ref: str, ctx, rules: Rules) -> set[str]:
     """Every deploy tag a `secrets.yml` change in `old_ref..ctx.ref` reaches."""
     keys = changed_keys(old_ref, ctx.ref, ctx.cwd)
     if not keys:
@@ -108,5 +115,5 @@ def reached(old_ref: str, ctx: "Context") -> set[str]:
     lookups = k8s_lookup_map(ctx.cwd)
     tags: set[str] = set()
     for key in sorted(keys):
-        tags |= key_tags(key, ctx, lookups)
+        tags |= key_tags(key, ctx, lookups, rules)
     return tags

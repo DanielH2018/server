@@ -506,7 +506,8 @@ def narrow(
     one = reach([p for p in diff.splitlines() if p])
     tags = _changed_half(one.changes, ctx)
     if one.changes.secrets:  # a value reaches a service on its next render (#5409)
-        tags |= secret_keys.reached(old_ref, ctx)
+        rules = secret_keys.Rules(_grep, _sort_hits, template_importers, _role_tags)
+        tags |= secret_keys.reached(old_ref, ctx, rules)
     for path in one.deploy_plane:
         tags |= broad_path_tags(path, old_ref, ctx)
     # A tag list covering most of the fleet saves none of the twenty minutes this exists to
