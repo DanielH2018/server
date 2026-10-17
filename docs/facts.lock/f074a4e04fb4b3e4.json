@@ -1,0 +1,15 @@
+{
+  "checksum": "97270b0993330718fb0b45342c7f26a35712938f2b09f0aee488288f2ff5a154",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "ansible/roles/k8s/homelab-mcp/CLAUDE.md#At a glance",
+  "row": {
+    "atoms": {
+      "ansible/secret_rotation.yml": "1abb90e8eab0f31bef5e261c5eefaeb60b1808f539ce8d7667b6aa4b6f8e179a",
+      "ansible/vars/cluster-vars.sops.env": "8c24a130c690763aef1567c818f7b90a44a3ec816552b84e3d4dde2b759654dd",
+      "docs/flux-deploy-plane.md": "807c3deb44c3178e7a6f9fc0bc398a3b748b95c468b14ce9b1b890c8684535d9",
+      "scripts/deploy_tools/ci_images.py": "aaef88f8480fbc58d95976aa3d7d707bd5868491c9bb9e61036192f6c1e4d6fc"
+    },
+    "python": "3.14",
+    "verified_sha": "7d8a1ecea"
+  }
+}
