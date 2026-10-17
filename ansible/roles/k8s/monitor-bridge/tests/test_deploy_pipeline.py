@@ -192,9 +192,13 @@ def test_the_endpoint_serves_the_five_gauges_and_nothing_else(piped):
         server.shutdown()
         server.server_close()
     series = [line for line in body.splitlines() if not line.startswith("#")]
-    assert sorted(line.split()[0] for line in series) == sorted(
-        name for name, _ in deploy_pipeline.GAUGES
-    )
+    assert sorted(line.split()[0] for line in series) == [
+        "homelab_deploy_hold_active",
+        "homelab_deploy_hold_age_seconds",
+        "homelab_deploy_prod_digest_match",
+        "homelab_deploy_reboot_window_active",
+        "homelab_deploy_unpromoted_age_seconds",
+    ]
     assert "homelab_deploy_hold_active 0.0" in series
 
 

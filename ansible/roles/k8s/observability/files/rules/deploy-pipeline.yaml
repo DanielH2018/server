@@ -31,13 +31,17 @@ groups:
       # first `and on()` drops the alert while a hold stands, which DeployHoldActive already
       # pages. The second drops it inside the weekly reboot's no-promotion window, where
       # promote.py decide defers every promotion on purpose (#5458). The exporter derives that
-      # gauge from the weekly_reboot_* variables, so this file holds no literal hour. A missing
-      # hold or window gauge drops the alert too, and DeployPipelineExporterAbsent pages that.
+      # gauge from the weekly_reboot_* variables, so this file holds no literal hour. The
+      # `unless` keeps the alert quiet for 30 minutes after the window ends. The scheduled
+      # promote run that moves prod fires at the end, and GitHub often starts a schedule: run
+      # 5-20 minutes late; its tag job and one 300s exporter cycle come on top. A missing hold
+      # or window gauge drops the alert too, and DeployPipelineExporterAbsent pages that.
       - alert: PromotionStalled
         expr: >-
           (homelab_deploy_unpromoted_age_seconds{job="deploy-pipeline"} > 7200)
           and on() (homelab_deploy_hold_active{job="deploy-pipeline"} == 0)
           and on() (homelab_deploy_reboot_window_active{job="deploy-pipeline"} == 0)
+          unless on() (max_over_time(homelab_deploy_reboot_window_active{job="deploy-pipeline"}[30m]) == 1)
         for: 5m
         labels:
           severity: warning

@@ -187,7 +187,8 @@ gate (D2 Open question 12).
   without moving `prod`, such as a run that never settles and leaves every later run
   reporting `current`. Read the workflow's recent runs. A hold silences this alert, because
   `DeployHoldActive` already pages that state. The reboot window silences it too, because
-  `promote` defers inside it on purpose and the scheduled run at its end promotes.
+  `promote` defers inside it on purpose and the scheduled run at its end promotes. The alert
+  stays quiet for 30 minutes after the window ends, which covers a late start of that run.
 - **`ProdMovedOutsidePromote`, critical.** `prod`'s digest has differed from `PROD_DIGEST` for
   15 minutes. `promote` writes `PROD_DIGEST` each time it moves `prod`, so either something
   else moved the tag, or `promote` moved it and the write failed. Flux follows `prod`, so
