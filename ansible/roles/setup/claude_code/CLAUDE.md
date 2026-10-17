@@ -1,8 +1,9 @@
 # `setup/claude_code` — Claude Code install + the Remote Control host
 
-Three things live here: the **install** (native installer, per-user, auto-updating),
-**`claude-rc.service`**, the Remote Control host that lets sessions be created from a phone, and
-**`claude-memory-sync.timer`**, which copies daniel-box's Claude memory store to daniel-server.
+Four things live here: the **install** (native installer, per-user, auto-updating),
+**`claude-rc.service`**, the Remote Control host that lets sessions be created from a phone,
+**`claude-memory-sync.timer`**, which copies daniel-box's Claude memory store to daniel-server,
+and **the artifacts node's two crons**, the peer artifact sync and the OTLP-door heartbeat.
 
 Runs on every host with `has_claude_code: true` (daniel-box and daniel-server, with per-host cap
 numbers in host_vars). The unit is enabled only where `claude_code_rc_enabled` is also true
@@ -18,6 +19,9 @@ uv run ansible-playbook ansible/initial_setup.yml --tags claude_code
 ## At a glance
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's tasks, timer templates, defaults or playbook entry, or a schedule var in group_vars/all.yml. -->
 - **Applied by:** `initial_setup.yml --tags "claude_code"` when `has_claude_code`
+- **Crons (2):**
+  - `Sync peer Claude artifacts` — `*/5 * * * *`
+  - `Claude Code telemetry health` — `*/10 * * * *`
 - **Timers (5):** `claude-cgroup-metrics.timer` (`OnBootSec=30s`, `OnUnitActiveSec=30s`),
   `claude-clone-sync.timer` (`OnBootSec=10min`, `OnUnitActiveSec=15min`),
   `claude-dotfiles-sync.timer` (`OnBootSec=10min`, `OnUnitActiveSec=15min`),
@@ -98,6 +102,40 @@ block vars. `docs/claude-agent-user.md`, *Alert-triggered triage*, has the desig
 
 `claude_code_user` (default `sys_user`) is the account `claude-rc.service` runs as; its home and
 `claude_code_rc_workdir` follow it, and the unit is sandboxed only when it is not `sys_user`.
+
+## The artifacts node's two crons
+
+`Sync peer Claude artifacts` and `Claude Code telemetry health` run only on
+`claude_code_artifacts_node` (daniel-box); every task in `tasks/node_crons.yml` skips on
+daniel-server. H2.7 moved them here from the k8s artifacts and observability roles under the
+same cron file names and script paths. `ansible/roles/k8s/artifacts/CLAUDE.md` documents how
+the sync behaves, and the heartbeat's template carries why it is a host cron at all.
+
+- **Every key the k8s roles also read has a twin there.** `claude_code_artifacts_node`,
+  `claude_code_artifacts_peer_sources`, `claude_code_artifacts_peer_dir`,
+  `claude_code_artifacts_stars_file`, `claude_code_otlp_host_ip` and `claude_code_otlp_port`
+  are each held equal to the k8s key by
+  `ansible/tests/setup/test_claude_code_artifacts_node_crons.py`. A change edits both roles and
+  needs both applies. One key in `group_vars/all.yml` would route as a deploy-plane change and
+  never re-apply this role.
+- **A push-token rotation is manual.** `artifacts_sync_push_token` and
+  `claude_otel_push_token` are in `CROSS_HOST_PUSH_TOKENS`
+  (`scripts/secrets_mgmt/consumers.py`), because no deploy tag re-renders these scripts.
+- **No task here notifies `Restart claude-rc`**, so an apply that changes only these crons
+  leaves every Remote Control session running.
+
+## Autonomous-role contract (`sync-artifacts`, a mirror of another host's tree)
+
+- **Scope:** `rsync --delete` of each `claude_code_artifacts_peer_sources` entry's `path` into
+  `claude_code_artifacts_peer_dir/<name>` on daniel-box, then a copy of
+  `claude_code_artifacts_stars_file` to the peer's `stars_path`. It deletes on daniel-box only
+  what the peer has already deleted.
+- **Mode:** always on where it is installed; removing the entry from
+  `claude_code_artifacts_peer_sources` (and its twin) stops that peer's sync.
+- **Abort valve:** a `flock` holds runs to one at a time, and ssh runs in `BatchMode` with a
+  10-second connect timeout, so an unreachable peer fails the run rather than hanging it.
+- **Evidence:** `journalctl -t sync-artifacts`, and the `Artifacts Peer Sync` Kuma tile, which
+  goes DOWN at `claude_code_artifacts_sync_alert_after_failures` consecutive failures.
 
 ## Autonomous-role contract (`claude-memory-sync` overwrites a store on another host)
 

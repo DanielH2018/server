@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Managed by ansible (roles/k8s/artifacts) — edits here are overwritten on the next deploy.
+# Managed by ansible (roles/setup/claude_code) — edits here are overwritten on the next apply.
 #
 # Copy every other host's ~/.claude/artifacts onto daniel-box, one directory per host, so the
 # artifacts Deployment can serve them all from a single hostPath tree, and copy the GUI's star
@@ -9,9 +9,9 @@
 #
 # Usage: sync-artifacts.sh (no arguments)
 # Runs from the sync-artifacts cron on daniel-box as the sys user, every 5 minutes by default
-# (artifacts_sync_minute). Environment, optional: SYNC_ARTIFACTS_STATE_DIR (default /tmp), which
-# holds the lock and the per-peer failure counters. The peers it pulls from are the
-# artifacts_peer_sources entries rendered into this file.
+# (claude_code_artifacts_sync_minute). Environment, optional: SYNC_ARTIFACTS_STATE_DIR (default
+# /tmp), which holds the lock and the per-peer failure counters. The peers it pulls from are
+# the claude_code_artifacts_peer_sources entries rendered into this file.
 set -euo pipefail
 
 for arg in "$@"; do
@@ -41,7 +41,7 @@ status=0
 # with its streak named in the message.
 verdict=up
 report=""
-{% for peer in artifacts_peer_sources %}
+{% for peer in claude_code_artifacts_peer_sources %}
 # --delete, so an artifact pruned on {{ peer.name }} stops being served here too; the index
 # would otherwise keep offering links to documents that no longer exist anywhere.
 # ConnectTimeout keeps a rebooting peer from holding the lock for the whole interval, and
@@ -57,10 +57,10 @@ report=""
 {% endif %}
 if rsync -a --delete --timeout=60 \
     -e 'ssh -o BatchMode=yes -o ConnectTimeout=10 -o ClearAllForwardings=yes' \
-    "{{ peer.ssh_target }}:{{ peer.path }}/" "{{ artifacts_peer_dir }}/{{ peer.name }}/"{% if peer.stars_path | default('') %} \
-  && { [ ! -f "{{ artifacts_stars_file }}" ] || rsync -a --timeout=60 \
+    "{{ peer.ssh_target }}:{{ peer.path }}/" "{{ claude_code_artifacts_peer_dir }}/{{ peer.name }}/"{% if peer.stars_path | default('') %} \
+  && { [ ! -f "{{ claude_code_artifacts_stars_file }}" ] || rsync -a --timeout=60 \
     -e 'ssh -o BatchMode=yes -o ConnectTimeout=10 -o ClearAllForwardings=yes' \
-    "{{ artifacts_stars_file }}" "{{ peer.ssh_target }}:{{ peer.stars_path }}"; }{% endif %}; then
+    "{{ claude_code_artifacts_stars_file }}" "{{ peer.ssh_target }}:{{ peer.stars_path }}"; }{% endif %}; then
   # A run that recovers says so in the journal and forgets the streak, so the next outage
   # starts counting from zero rather than inheriting the last one's total.
   if [ -f "${state_dir}/sync-artifacts-{{ peer.name }}.fails" ]; then
@@ -79,20 +79,21 @@ else
   fails=$(( $(cat "${state_dir}/sync-artifacts-{{ peer.name }}.fails" 2>/dev/null || echo 0) + 1 ))
   echo "$fails" > "${state_dir}/sync-artifacts-{{ peer.name }}.fails"
   logger -t sync-artifacts "{{ peer.name }} failed (consecutive run $fails)"
-  # The threshold is artifacts_sync_alert_after_failures in the role's defaults, which carries
-  # the reasoning for the number. Interpolated at its use site rather than held in a variable:
-  # the peer list can be empty, and an unused variable fails shellcheck in the rendered script.
-  if [ "$fails" -eq {{ artifacts_sync_alert_after_failures }} ]; then
+  # The threshold is claude_code_artifacts_sync_alert_after_failures in the role's defaults,
+  # which carries the reasoning for the number. Interpolated at its use site rather than held
+  # in a variable: the peer list can be empty, and an unused variable fails shellcheck in the
+  # rendered script.
+  if [ "$fails" -eq {{ claude_code_artifacts_sync_alert_after_failures }} ]; then
     echo "sync-artifacts: {{ peer.name }} has failed $fails consecutive runs" >&2
   fi
   # -ge, not the -eq the mail uses: the mail fires once per outage, but the tile must stay DOWN
   # on every run past the threshold, or it would go green again in the middle of the outage.
-  if [ "$fails" -ge {{ artifacts_sync_alert_after_failures }} ]; then
+  if [ "$fails" -ge {{ claude_code_artifacts_sync_alert_after_failures }} ]; then
     verdict=down
     report="${report:+$report; }{{ peer.name }} failed $fails consecutive runs"
   else
     report="${report:+$report; }{{ peer.name }} failed $fails consecutive run(s), DOWN at \
-{{ artifacts_sync_alert_after_failures }}"
+{{ claude_code_artifacts_sync_alert_after_failures }}"
   fi
   status=1
 fi

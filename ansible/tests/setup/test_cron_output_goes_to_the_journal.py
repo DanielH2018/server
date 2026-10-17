@@ -104,9 +104,9 @@ MAILS_ONLY_ON_FAILURE = {
     "Sync peer Claude artifacts": (
         "rsync -a without -v and ssh in BatchMode print nothing on success, and a failure goes "
         "to logger -t sync-artifacts; only the run that reaches "
-        "artifacts_sync_alert_after_failures consecutive failures writes to stderr, so a peer "
-        "that stays down mails once per outage rather than every 5 minutes (#2467); its "
-        "verdict is a Kuma push (#2516)"
+        "claude_code_artifacts_sync_alert_after_failures consecutive failures writes to stderr, "
+        "so a peer that stays down mails once per outage rather than every 5 minutes (#2467); "
+        "its verdict is a Kuma push (#2516)"
     ),
     "Claude Code telemetry health": _KUMA,
     "configarr sync health": _KUMA,

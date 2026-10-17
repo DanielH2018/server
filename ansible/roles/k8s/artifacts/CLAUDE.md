@@ -3,8 +3,9 @@
 Serves the HTML/Markdown artifacts Claude Code sessions write to `~/.claude/artifacts/`, so a
 report generated in a terminal session is readable in a browser behind Authelia. Written
 2026-08-24: this role had no `CLAUDE.md` at all, and it was the only role under `roles/k8s/` in
-that state — which mattered because it installs a **root-scheduled cross-host cron** that nothing
-else in the tree documents.
+that state — which mattered because it installed a **cross-host cron** that nothing else in the
+tree documented. Since H2.7 `roles/setup/claude_code` installs that cron, and this file still
+documents how it behaves.
 
 ## At a glance
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates, tasks or containers_list entry, or the k3s role's Longhorn tier lists. -->
@@ -32,9 +33,14 @@ else in the tree documents.
   it reads that tree through the `ubuntu` group grant.
 
 ## The peer sync runs from daniel-box, and the direction is not arbitrary
-`tasks/main.yml` installs `/usr/local/bin/sync-artifacts.sh` and a cron
-(`artifacts_sync_minute`, every 5 minutes) that rsyncs each entry in `artifacts_peer_sources`
-onto daniel-box, then pushes the star list to the peer's `stars_path`.
+`ansible/roles/setup/claude_code/tasks/node_crons.yml` installs `/usr/local/bin/sync-artifacts.sh`
+and a cron (`claude_code_artifacts_sync_minute`, every 5 minutes) that rsyncs each entry in
+`claude_code_artifacts_peer_sources` onto daniel-box, then pushes the star list to the peer's
+`stars_path`. This role keeps the twin keys the pod reads, `artifacts_peer_sources` and
+`artifacts_peer_dir`, and
+`ansible/tests/setup/test_claude_code_artifacts_node_crons.py` holds each pair equal. A
+change to the peer list therefore edits both roles and needs both applies: `deploy.sh --tags
+artifacts` for the mounts, and `initial_setup.yml --tags claude_code` for the sync.
 
 **daniel-box opens every connection.** The reason is written at the task and is worth repeating
 because it looks backwards at first glance: the name `daniel-box` does not resolve from
@@ -46,20 +52,20 @@ Consequences worth knowing before debugging a missing artifact:
 
 - **An artifact written on daniel-server takes up to 5 minutes to appear.** That is the interval,
   not a fault. A session on daniel-box mounts its own tree directly and never waits.
-- **The cron runs as `sys_user`, not root**, and is gated `when: not k8s_dry_run` — so a
-  `--dry-run` deploy renders the script but installs no cron.
+- **The cron runs as `sys_user`, not root**, and only on `claude_code_artifacts_node`
+  (daniel-box). An `artifacts` deploy neither renders the script nor installs the cron.
 - **A failed run goes to the journal; only a sustained outage mails.** Read it with
   `journalctl -t sync-artifacts` on daniel-box — every failed run logs there, with the
   consecutive-failure count, and a recovery logs the streak it ended. cron mail carries one
-  message per outage: the run that reaches `artifacts_sync_alert_after_failures` consecutive
-  failures is the only one that writes to stderr. The script's `DECIDED:` comment has why (#2467).
+  message per outage: the run that reaches `claude_code_artifacts_sync_alert_after_failures`
+  consecutive failures is the only one that writes to stderr. The script's `DECIDED:` comment has why (#2467).
 - **The ssh transport passes `ClearAllForwardings=yes`.** `ssh` reads `~/.ssh/config` for every
   connection, so a `LocalForward` on the peer's host entry applies to this one too, and a bind
   collision on its local port fails the whole connection. rsync needs no forward, so the sync
   declines all of them.
 - **The `Artifacts Peer Sync` Kuma tile is the monitor (#2516).** Every run pushes one verdict
-  for all peers, after the loop. A peer at `artifacts_sync_alert_after_failures` consecutive
-  failures or more turns it DOWN, and it stays DOWN on every later run until the peer recovers.
+  for all peers, after the loop. A peer at `claude_code_artifacts_sync_alert_after_failures`
+  consecutive failures or more turns it DOWN, and it stays DOWN on every later run until the peer recovers.
   A shorter streak pushes UP and names the streak in the message. Ten minutes of silence means
   the cron itself stopped. The token is `artifacts_sync_push_token`, so the installed script is
   `0700` owned by `sys_user` — don't `cat` it on the host.
@@ -93,6 +99,6 @@ lands stays put and an abandoned one clears itself. **Executable files are never
 generated script is a tool, not a report. If a session writes one here it must be `chmod +x` or
 it ages out with the docs.
 
-**Starred artifacts are never pruned either.** The GUI's star writes `artifacts_stars_file`,
-the pod's only writable mount, and each host's prune reads its own copy.
+**Starred artifacts are never pruned either.** The GUI's star writes `stars.txt` in
+`artifacts_stars_dir`, the pod's only writable mount, and each host's prune reads its own copy.
 `docs/artifacts-star-list.md` covers how the list reaches each host, and the window before it does.

@@ -1,0 +1,13 @@
+{
+  "checksum": "5dabb16c311396a4ee5dbbb9acf09e9ef19d2f2e22f9475435614768fb7b8b5f",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "ansible/roles/k8s/artifacts/CLAUDE.md#The peer sync runs from daniel-box, and the direction is not arbitrary",
+  "row": {
+    "atoms": {
+      "ansible/roles/setup/claude_code/tasks/node_crons.yml": "d6debbc1ff13ef29a4f8aeef11f6599a7991f034146e5430eacdd7b2da895892",
+      "ansible/tests/setup/test_claude_code_artifacts_node_crons.py": "6b00542c60402e663b0483cfc6f37a4650e61a91ae949b14f0ea4e1c85581a65"
+    },
+    "python": "3.14",
+    "verified_sha": "3b11cce69"
+  }
+}

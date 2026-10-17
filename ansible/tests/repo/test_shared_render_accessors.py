@@ -176,13 +176,13 @@ def test_an_unrendered_dockerfile_is_named_rather_than_missed() -> None:
 GUARDED_SHELL_TEMPLATES = frozenset(
     {
         ("k8s", "crowdsec", "crowdsec-update-home-allowlist.sh.j2"),
-        ("k8s", "artifacts", "sync-artifacts.sh.j2"),
+        ("setup", "claude_code", "sync-artifacts.sh.j2"),
         ("setup", "k3s", "longhorn-restore-drill.sh.j2"),
         ("setup", "k3s", "longhorn-backup-health.sh.j2"),
     }
 )
 
-ARTIFACTS_DEFAULTS = load_defaults(ROLES / "k8s" / "artifacts")
+CLAUDE_CODE_DEFAULTS = load_defaults(ROLES / "setup" / "claude_code")
 IMAGE_BUILDER_DEFAULTS = load_defaults(ROLES / "k8s" / "image-builder")
 
 
@@ -198,31 +198,31 @@ def test_every_shell_template_in_the_tree_is_rendered() -> None:
 def test_a_rendered_shell_template_has_its_role_defaults_expanded() -> None:
     """The layering this accessor exists for, and the red proof for it.
 
-    `StubUndefined` iterates empty, so a context without `artifacts_peer_sources` renders
+    `StubUndefined` iterates empty, so a context without `claude_code_artifacts_peer_sources` renders
     `sync-artifacts.sh` with its whole peer loop — every rsync call and every streak line —
     dropped. `"{{" not in text` passes just as happily on that emptied render, so the assertion
     that catches it is the loop body being THERE, at the threshold the defaults declare.
     """
-    script = rendered_shell_text("k8s", "artifacts", "sync-artifacts.sh.j2")
+    script = rendered_shell_text("setup", "claude_code", "sync-artifacts.sh.j2")
     assert "{{" not in script
-    peer = ARTIFACTS_DEFAULTS["artifacts_peer_sources"][0]["name"]
+    peer = CLAUDE_CODE_DEFAULTS["claude_code_artifacts_peer_sources"][0]["name"]
     assert f"{peer} failed (consecutive run" in script
-    threshold = ARTIFACTS_DEFAULTS["artifacts_sync_alert_after_failures"]
+    threshold = CLAUDE_CODE_DEFAULTS["claude_code_artifacts_sync_alert_after_failures"]
     assert f'[ "$fails" -eq {threshold} ]' in script
 
 
 def test_an_unrendered_shell_template_is_named_rather_than_missed() -> None:
     with pytest.raises(AssertionError, match=r"sync-artifact\.sh\.j2"):
-        rendered_shell_text("k8s", "artifacts", "sync-artifact.sh.j2")
+        rendered_shell_text("setup", "claude_code", "sync-artifact.sh.j2")
 
 
 def test_a_shell_render_takes_an_override_the_inventory_does_not_hold() -> None:
     """The artifacts guard runs the script for real, so its peer tree must be a tmp_path."""
     script = render_shell_script(
-        "k8s",
-        "artifacts",
+        "setup",
+        "claude_code",
         "sync-artifacts.sh.j2",
-        overrides={"artifacts_peer_dir": "/tmp/peer"},
+        overrides={"claude_code_artifacts_peer_dir": "/tmp/peer"},
     )
     assert "/tmp/peer/" in script
 
