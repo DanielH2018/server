@@ -122,6 +122,18 @@ flux-owned tag write none of them. A published tag whose role lists `render_sops
 also gets a byte copy of each of its SOPS manifests from `ansible/vars/cluster-manifests/`
 in `DIR/cluster/<tag>/`, and `decryption` on its Kustomization.
 
+Every placeholder render also writes the image contexts (D5.4a1, C1 *Cluster output*).
+`DIR/images/<name>/` holds one file per key of the build context that `k8s/image-builder`
+renders for that image, byte for byte as its `data` parses. `DIR/images/tags.json` maps each
+name to its content tag, `sha-<12 hex>`, which image-builder's own expression computes over
+that `data`. The renderer renders every role that includes `k8s/image-builder`, whatever
+`--role` names, so the publish job's render carries all ten. A consumer's ref reads its tag
+from the same computation, never from `render_guard.py:BUILT_IMAGE_TAG_STUBS`. No
+Kustomization's path reaches `DIR/images/`, and the bundle's footprints leave it out. A stub
+render and `--shared-only` write no image context. `scripts/renderer/renderer_lib/images.py`
+holds the writer and the checks. No job builds the contexts yet. D5.4a2 adds the `images`
+job that builds and pushes them, and D5.4b points the flux-owned consumers at GHCR.
+
 Every render, in either mode, stamps `checksum/restart` on the pod template of each restart
 target of a flux-owned tag that names a ConfigMap or Secret. Every `manifests_self_rollouts`
 entry is a restart target. Both modes hash the
@@ -147,7 +159,7 @@ byte.
   message names the keys, never a value. Write a fresh stub file for the commit.
 - A `--role` names a tag that is not a k8s render target of daniel-box.
 - A directory it would write under `DIR/cluster/` already holds files from an earlier
-  render, or `DIR/flux/` or `DIR/digests.json` does.
+  render, or `DIR/flux/`, `DIR/digests.json` or `DIR/images/` does.
 - A render that writes the bundle cannot read the cluster file. The bundle always carries
   the `cluster-vars` kind, so the render refuses rather than publish without it.
 - A render that writes the bundle cannot read a SOPS manifest that a published tag's role
@@ -161,7 +173,9 @@ byte.
 It exits 1 when a template fails to render, and it writes nothing then either. It also exits
 1 when a SOPS manifest lacks `kustomize.toolkit.fluxcd.io/substitute: disabled`, and when a
 flux-owned tag's restart target names no rendered workload or reads a secret key that
-`cluster-vars.source` does not record. It exits 64
+`cluster-vars.source` does not record. A placeholder render exits 1 in three more cases: an
+image context holds a secret's sentinel, a rendered ref names a built image with a tag other
+than `DIR/images/tags.json`'s, or a Kustomization path reaches `DIR/images/`. It exits 64
 on a usage error. `scripts/lib/exit_codes.py` holds the four codes as its `RENDER_*` family.
 
 ### The play-time context
