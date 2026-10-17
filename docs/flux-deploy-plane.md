@@ -160,7 +160,7 @@ readiness arms and `FluxSuspended` quiet ([#4809](https://github.com/DanielH2018
 
 The `deploy-pipeline` rule group,
 `ansible/roles/k8s/observability/files/rules/deploy-pipeline.yaml`, pages on `promote`'s own
-state. monitor-bridge reads that state each 300-second cycle and serves it as four gauges, one
+state. monitor-bridge reads that state each 300-second cycle and serves it as five gauges, one
 series each, which the `deploy-pipeline` scrape job collects:
 
 - `homelab_deploy_hold_active` reads 1 while `DEPLOY_HOLD` reads anything but `none`.
@@ -170,6 +170,10 @@ series each, which the `deploy-pipeline` scrape job collects:
   `prod`'s commit lacks went green, and 0 when there is none.
 - `homelab_deploy_prod_digest_match` reads 1 when `prod`'s digest in GHCR equals
   `PROD_DIGEST`, and also while `PROD_DIGEST` reads `none` and no `prod` tag exists.
+- `homelab_deploy_reboot_window_active` reads 1 inside the no-promotion window of the
+  weekly reboot, where `promote.py decide` defers every promotion. monitor-bridge derives it from the
+  `weekly_reboot_*` variables, using the widest window any target has: `VERIFY_CAP_S` before
+  the reboot, until M2's mute ends.
 
 Every rule carries `service="deploy-pipeline"`. That value names no deploy tag, so no
 `probe.py health` gate reads these alerts, and a standing hold cannot fail the `flux` role's
@@ -182,14 +186,15 @@ gate (D2 Open question 12).
   than 2 hours ago, and no hold stands. Either `promote` is not running, or its runs end
   without moving `prod`, such as a run that never settles and leaves every later run
   reporting `current`. Read the workflow's recent runs. A hold silences this alert, because
-  `DeployHoldActive` already pages that state.
+  `DeployHoldActive` already pages that state. The reboot window silences it too, because
+  `promote` defers inside it on purpose and the scheduled run at its end promotes.
 - **`ProdMovedOutsidePromote`, critical.** `prod`'s digest has differed from `PROD_DIGEST` for
   15 minutes. `promote` writes `PROD_DIGEST` each time it moves `prod`, so either something
   else moved the tag, or `promote` moved it and the write failed. Flux follows `prod`, so
   production runs whatever the tag names now. The 15 minutes cover the gap between a move and
   its write, plus one exporter cycle.
 - **`DeployPipelineExporterAbsent`, warning.** For 15 minutes, either the scrape job is gone
-  from `prometheus.yml`, or monitor-bridge is scraped without one of the four gauges. A read
+  from `prometheus.yml`, or monitor-bridge is scraped without one of the five gauges. A read
   that fails exports no series for what it feeds, never a 0, and so does a deleted variable
   or an empty token. monitor-bridge logs one `deploy-pipeline:` line each cycle naming the
   read that failed. A failed scrape of the job pages through Kuma's `Cluster Scrape Targets`

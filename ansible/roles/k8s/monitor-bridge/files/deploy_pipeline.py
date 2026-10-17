@@ -1,4 +1,4 @@
-"""The deploy-pipeline exporter: four gauges on the `promote` workflow's state, for Prometheus.
+"""The deploy-pipeline exporter: five gauges on the `promote` workflow's state, for Prometheus.
 
 `promote` keeps its state in GitHub and GHCR, where nothing pages: the repository variables
 DEPLOY_HOLD and PROD_DIGEST, master's green CI runs, and the `prod` tag. Each cycle `collect`
@@ -13,6 +13,9 @@ scrape job, whose rule group pages on it:
 - `homelab_deploy_prod_digest_match` reads 1 when `prod`'s digest in GHCR equals PROD_DIGEST.
   While PROD_DIGEST reads `none` and no `prod` tag exists, nothing has moved `prod`, so it
   reads 1 then too.
+- `homelab_deploy_reboot_window_active` reads 1 inside the weekly reboot's no-promotion window,
+  where `promote.py decide` defers every promotion, so PromotionStalled stays quiet there. It
+  reads no remote state, only the `WEEKLY_REBOOT_*` schedule.
 
 This is the one family the bridge serves rather than pushes to Kuma. It reads no Prometheus,
 so no reachability gate applies to it, and it runs after every check has pushed.
@@ -32,7 +35,7 @@ import json
 import threading
 import urllib.error
 from collections.abc import Mapping
-from datetime import datetime
+from datetime import UTC, datetime, timedelta
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import bridge.common
@@ -71,6 +74,11 @@ CI_RUNS = (
 # merges in 2 hours has not happened here.
 RUNS_PER_PAGE = 20
 NO_HOLD = "none"
+# `chained_timeout.VERIFY_CAP_S`, the ceiling of every target's verify timeout, restated for the
+# same reason as the names above. The reboot window opens one target's timeout before the
+# reboot, and the exporter holds no target, so it reports the widest window any target has, as
+# `land-wait` does. tests/test_deploy_pipeline_reboot_window.py holds it to chained_timeout's.
+VERIFY_CAP_S = 330 * 60
 
 GAUGES = (
     (
@@ -88,6 +96,10 @@ GAUGES = (
     (
         "homelab_deploy_prod_digest_match",
         "1 when the prod tag's digest in GHCR equals PROD_DIGEST.",
+    ),
+    (
+        "homelab_deploy_reboot_window_active",
+        "1 inside the weekly reboot's no-promotion window, where promote defers.",
     ),
 )
 
@@ -200,6 +212,37 @@ def unpromoted_age(
     return max(0.0, now - candidates[oldest][1])
 
 
+def in_reboot_window(cfg: Config, now: float) -> bool:
+    """Whether `now` falls inside the weekly reboot's no-promotion window for the widest target.
+
+    The same window `scripts/deploy_tools/promote_lib/reboot_window.py:window` derives, which
+    the pod cannot import: it opens `VERIFY_CAP_S` before the reboot and closes, exclusive, when
+    M2's mute ends, so the scheduled `promote` run at the end promotes rather than defers. The
+    schedule is UTC, as `reboot_window.read_schedule` requires, and the pod's `TZ` is not, so
+    the clock is read in UTC explicitly. tests/test_deploy_pipeline_reboot_window.py sweeps a
+    week against `reboot_window.window` to hold the two equal.
+    """
+    clock = datetime.fromtimestamp(now, UTC)
+    # datetime counts weekdays from Monday, cron from Sunday.
+    cron_day = (clock.weekday() + 1) % 7
+    back = timedelta(days=(cron_day - cfg.WEEKLY_REBOOT_WEEKDAY) % 7)
+    fire = (clock - back).replace(
+        hour=cfg.WEEKLY_REBOOT_HOUR,
+        minute=cfg.WEEKLY_REBOOT_MINUTE,
+        second=0,
+        microsecond=0,
+    )
+    for week in (-1, 0, 1):
+        reboot = fire + timedelta(
+            weeks=week, minutes=cfg.WEEKLY_REBOOT_SHUTDOWN_DELAY_MIN
+        )
+        start = reboot - timedelta(seconds=VERIFY_CAP_S)
+        end = reboot + timedelta(minutes=cfg.WEEKLY_REBOOT_MUTE_RECOVERY_MIN)
+        if start <= clock < end:
+            return True
+    return False
+
+
 def collect(
     cfg: Config, src: Sources, now: float
 ) -> tuple[dict[str, float], list[str]]:
@@ -219,7 +262,12 @@ def collect(
     """
     if not cfg.DEPLOY_PIPELINE_GITHUB_TOKEN:
         return {}, ["DEPLOY_PIPELINE_GITHUB_TOKEN is empty, so nothing is read"]
-    gauges: dict[str, float] = {}
+    # Read from the schedule alone, so a failed GitHub read never drops it.
+    gauges: dict[str, float] = {
+        "homelab_deploy_reboot_window_active": 1.0
+        if in_reboot_window(cfg, now)
+        else 0.0
+    }
     problems: list[str] = []
     variables = None
     try:
@@ -274,7 +322,7 @@ def render(gauges: Mapping[str, float]) -> bytes:
 class Exposition:
     """The body the scrape endpoint serves: the last cycle's gauges, and nothing else.
 
-    No process or runtime families: the series budget prices this job at the four gauges plus
+    No process or runtime families: the series budget prices this job at the five gauges plus
     Prometheus's five automatic series. A thread serving `serve`'s listener reads the body while
     the loop's thread replaces it, so both go through one lock.
     """

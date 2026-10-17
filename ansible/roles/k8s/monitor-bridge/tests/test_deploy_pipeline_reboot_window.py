@@ -11,7 +11,7 @@ Run: uv run pytest ansible/roles/k8s/monitor-bridge/tests/test_deploy_pipeline_r
 """
 
 from dataclasses import replace
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 import pytest
 
@@ -21,6 +21,8 @@ from _deploy_pipeline_fakes import github
 from _k8s_render import render_role_template
 from bridge.config import load_config
 from lib import yaml_fast
+from deploy_tools import chained_timeout
+from deploy_tools.promote_lib import reboot_window
 
 GAUGE = "homelab_deploy_reboot_window_active"
 
@@ -81,3 +83,42 @@ def test_the_endpoint_serves_the_window_gauge(piped):
         if not line.startswith("#")
     ]
     assert GAUGE in series
+
+
+def test_the_cap_matches_chained_timeouts():
+    """The pod cannot import chained_timeout.py, so the restated cap is held to its figure."""
+    assert deploy_pipeline.VERIFY_CAP_S == chained_timeout.VERIFY_CAP_S
+
+
+@pytest.mark.parametrize(
+    "hour, minute, weekday",
+    [(7, 30, 0), (13, 30, 0), (1, 0, 0), (23, 50, 6)],
+    ids=["committed", "midday", "window-opens-saturday", "window-crosses-into-sunday"],
+)
+def test_the_gauge_agrees_with_promotes_window_across_a_week(
+    piped, hour, minute, weekday
+):
+    """Every 5 minutes of a week, the gauge reads 1 exactly where `decide` defers the widest T."""
+    cfg = replace(
+        piped,
+        WEEKLY_REBOOT_HOUR=hour,
+        WEEKLY_REBOOT_MINUTE=minute,
+        WEEKLY_REBOOT_WEEKDAY=weekday,
+    )
+    schedule = reboot_window.Schedule(
+        minute=minute,
+        hour=hour,
+        weekday=weekday,
+        delay_min=cfg.WEEKLY_REBOOT_SHUTDOWN_DELAY_MIN,
+        lead_min=0,
+        recovery_min=cfg.WEEKLY_REBOOT_MUTE_RECOVERY_MIN,
+    )
+    start = datetime(2026, 10, 12, tzinfo=timezone.utc)
+    instants = [start + timedelta(minutes=5 * k) for k in range(7 * 24 * 12)]
+    found = [deploy_pipeline.in_reboot_window(cfg, t.timestamp()) for t in instants]
+    expected = [
+        reboot_window.window(schedule, chained_timeout.VERIFY_CAP_S, t) is not None
+        for t in instants
+    ]
+    assert found == expected
+    assert any(found)

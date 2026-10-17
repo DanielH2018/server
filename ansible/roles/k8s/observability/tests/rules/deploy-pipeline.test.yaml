@@ -26,10 +26,10 @@ tests:
               severity: warning
               service: deploy-pipeline
             exp_annotations: &absent
-              summary: Prometheus has lost the deploy-pipeline job or one of its four gauges.
+              summary: Prometheus has lost the deploy-pipeline job or one of its five gauges.
               description: >-
                 Either no up{job="deploy-pipeline"} series exists, so the job is gone from
-                prometheus.yml, or monitor-bridge is scraped without one of the four
+                prometheus.yml, or monitor-bridge is scraped without one of the five
                 homelab_deploy_* gauges. Its log has a deploy-pipeline line each cycle naming
                 the read that failed. Until the gauges are back, DeployHoldActive,
                 PromotionStalled and ProdMovedOutsidePromote cannot fire.
@@ -70,11 +70,13 @@ tests:
         alertname: DeployPipelineExporterAbsent
         exp_alerts: []
 
-  # All four gauges present and healthy: nothing fires, the Absent rule included.
+  # All five gauges present and healthy: nothing fires, the Absent rule included.
   - interval: 1m
     input_series:
       - series: 'up{job="deploy-pipeline", instance="monitor-bridge.homelab.svc:9180"}'
         values: '1x30'
+      - series: 'homelab_deploy_reboot_window_active{job="deploy-pipeline", instance="monitor-bridge.homelab.svc:9180"}'
+        values: '0x30'
       - series: 'homelab_deploy_hold_active{job="deploy-pipeline", instance="monitor-bridge.homelab.svc:9180"}'
         values: '0x30'
       - series: 'homelab_deploy_hold_age_seconds{job="deploy-pipeline", instance="monitor-bridge.homelab.svc:9180"}'
@@ -119,13 +121,15 @@ tests:
                 Read it with gh variable get DEPLOY_HOLD and run probe.py landing;
                 docs/flux-deploy-plane.md says how to clear each form of hold.
 
-  # PromotionStalled fires at 3 hours with the hold gauge at 0, and stays silent at 3 hours
-  # with the hold gauge at 1. The age climbs 60s a minute from 0, so it passes 7200 at 2h.
+  # PromotionStalled fires at 3 hours with the hold and window gauges at 0, and stays silent at
+  # 3 hours with either at 1. The age climbs 60s a minute from 0, so it passes 7200 at 2h.
   - interval: 1m
     input_series:
       - series: 'homelab_deploy_unpromoted_age_seconds{job="deploy-pipeline", instance="monitor-bridge.homelab.svc:9180"}'
         values: '0+60x180'
       - series: 'homelab_deploy_hold_active{job="deploy-pipeline", instance="monitor-bridge.homelab.svc:9180"}'
+        values: '0x180'
+      - series: 'homelab_deploy_reboot_window_active{job="deploy-pipeline", instance="monitor-bridge.homelab.svc:9180"}'
         values: '0x180'
     alert_rule_test:
       - eval_time: 1h55m
@@ -150,6 +154,21 @@ tests:
       - series: 'homelab_deploy_unpromoted_age_seconds{job="deploy-pipeline", instance="monitor-bridge.homelab.svc:9180"}'
         values: '0+60x180'
       - series: 'homelab_deploy_hold_active{job="deploy-pipeline", instance="monitor-bridge.homelab.svc:9180"}'
+        values: '1x180'
+      - series: 'homelab_deploy_reboot_window_active{job="deploy-pipeline", instance="monitor-bridge.homelab.svc:9180"}'
+        values: '0x180'
+    alert_rule_test:
+      - eval_time: 3h
+        alertname: PromotionStalled
+        exp_alerts: []
+  # Inside the reboot window promote defers on purpose, so a 3-hour wait with no hold is quiet.
+  - interval: 1m
+    input_series:
+      - series: 'homelab_deploy_unpromoted_age_seconds{job="deploy-pipeline", instance="monitor-bridge.homelab.svc:9180"}'
+        values: '0+60x180'
+      - series: 'homelab_deploy_hold_active{job="deploy-pipeline", instance="monitor-bridge.homelab.svc:9180"}'
+        values: '0x180'
+      - series: 'homelab_deploy_reboot_window_active{job="deploy-pipeline", instance="monitor-bridge.homelab.svc:9180"}'
         values: '1x180'
     alert_rule_test:
       - eval_time: 3h
