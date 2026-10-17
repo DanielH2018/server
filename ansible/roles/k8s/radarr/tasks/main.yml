@@ -2,12 +2,9 @@
 - name: Deploy radarr to the cluster
   ansible.builtin.include_role:
     name: k8s/manifests
-  vars:
-    # The startupProbe allows up to 10 min of first-boot DOCKER_MODS install; the shared
-    # rollout default times out against it and aborts the whole deploy while the pod is still
-    # coming up healthy. The number lives in
-    # defaults/main.yml because deployment.yaml.j2's progressDeadlineSeconds reads it too.
-    manifests_rollout_timeout: "{{ radarr_k8s_rollout_timeout }}"
+  # No `manifests_rollout_timeout` include var: defaults/main.yml sets it, where the renderer
+  # reads it for Flux's `timeout` and k8s/manifests reads it for the rollout wait. An include
+  # var of that name would override the default and loop through `radarr_k8s_rollout_timeout`.
 
 # The Discord Connect notification is a row in radarr.db, not a manifest — live state a
 # Longhorn revert or a recreated claim drops silently. roles/k8s/arr-notification declares it.

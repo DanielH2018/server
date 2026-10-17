@@ -1848,7 +1848,9 @@ assertion becomes a standing rule.
 - **Grafana's admin password** becomes an initContainer on the grafana pod (D5.1e).
 - **arr-notification's seed** becomes a post-apply Job in `sonarr-verify` and
   `radarr-verify`, which runs `files/seed_arr_notification.py` against the app's Service. Its
-  API key and webhook arrive through substitution into a Secret in the same Kustomization.
+  webhook arrives through substitution into a Secret in the same Kustomization. Its API key
+  comes from `<app>-exportarr`, the Secret the app's own render applies, as sonarr's verify
+  Job reads it (#5471).
   Its first connection goes through the shared helper. `sonarr-verify` and `radarr-verify`
   join those roles' `netpol_from`. The script adopts and never deletes, so a re-run changes
   nothing, and its existing tests in `ansible/roles/k8s/arr-notification/tests/` gain a
@@ -2164,6 +2166,12 @@ sizes its batch of roles against that projection.
   PVC's spec and for changed values. It leaves Secrets out, because D3.5 covered their
   managers. The agent's read-only ServiceAccount cannot run a dry-run write, and the
   substitution reads `homelab-cluster-vars`.
+- **The session runs both checks through the takeover check wrapper (#5494).** `sudo -n
+  /usr/local/sbin/homelab-takeover-check --label <pr> --render <dir> --src <dir> --tags <a,b>`
+  does the `flux diff`, or the server-side `kubectl diff` stand-in, and the census for each
+  tag, and prints object names, field paths and exit codes only. The operator no longer runs
+  a script per flip batch. The wrapper's limits are in the `setup/claude_code` role's
+  `CLAUDE.md`, *The takeover check*.
 - Both quote object names and field paths only, never values or diff hunks, because R2's
   baseline finds credentials in ConfigMaps too, and the repository is public.
 - For an own-window role (*Waves and windows*), the window it lands in.

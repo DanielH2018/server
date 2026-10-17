@@ -74,8 +74,35 @@ ARR_APP=… ARR_HOST=<clusterIP> ARR_API_KEY=… ARR_DISCORD_WEBHOOK_URL=… \
 ARR_NOTIFICATION_NAME='Discord (health)' ARR_NOTIFICATION_USERNAME=Sonarr \
 ARR_NOTIFICATION_TRIGGERS='["onHealthIssue","onHealthRestored"]' \
 ARR_NOTIFICATION_INCLUDE_HEALTH_WARNINGS=false \
+PYTHONPATH=ansible/roles/k8s/manifests/files \
 uv run python ansible/roles/k8s/arr-notification/files/seed_arr_notification.py --test
 ```
+
+`PYTHONPATH` is there because the script opens every connection through
+`flux_job_connect.py`, which lives in `k8s/manifests`. `tasks/main.yml` sets the same path.
+
+## The Job form, inert until sonarr's and radarr's flips
+
+Under Flux the seed runs as a post-apply mutation Job in `sonarr-verify` and `radarr-verify`.
+`templates/verify-inert/notification.yaml.j2` in each app's role holds it, byte-identical in
+both, and nothing renders it until that role's flip moves the directory to `templates/verify/`.
+
+- **The script is the one this role ships**, read by a cross-role `lookup()`, so a change here
+  redeploys both apps, as the `include_role` already does. The template also reads
+  `arr_notification_name`, `arr_notification_triggers` and
+  `arr_notification_include_health_warnings` from `defaults/main.yml` as literals, and spells
+  `arr_notification_username` as the app's name capitalised.
+- **One transport.** The script imports only modules the Job census admits, so it reaches the
+  app through `flux_job_connect.open_url` on the controller path too. A refused connect
+  therefore retries for 60 seconds on both paths.
+- **The API key comes from `<app>-exportarr`**, which the app's own render applies. The webhook
+  comes from `<app>-notification`, a Secret in `<app>-verify` filled by substitution, so that
+  Kustomization substitutes.
+- **The Job reruns once per revision that rolls the app**, because its spec embeds a digest of
+  the rendered Deployment. A webhook rotation alone renames nothing, so the rotated URL reaches
+  the app on the next revision that rolls it.
+- **The fence peers are not in yet.** The Job's pod carries `app: <app>-verify`, which neither
+  app's `netpol_from` admits until the inventory PR before the flips.
 
 ## Tests
 
@@ -83,6 +110,10 @@ uv run python ansible/roles/k8s/arr-notification/files/seed_arr_notification.py 
 rule is an accept/reject pair over `find_notification` / `declared_body` / `needs_update` —
 the three functions that decide create, rewrite or no-op.
 
+`tests/test_seed_job.py` renders both apps' flipped Jobs, runs the Job census over them, and
+runs the rendered script twice against a fixture API from no row and from a drifted row. The
+second run must write nothing; the Job's `homelab/rerun-safe` annotation names that test.
+
 **The create path is unexercised live.** Both notifications already existed when this role was
 written, so only the update-and-no-op branch has ever run against a real app. The create branch
-is covered by the schema test alone until a claim is recreated.
+is covered by the schema test and the fixture run alone until a claim is recreated.

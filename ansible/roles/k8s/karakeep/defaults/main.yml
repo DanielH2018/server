@@ -11,9 +11,8 @@ karakeep_k8s_image: ghcr.io/karakeep-app/karakeep:release@sha256:b069e4307dec06e
 # `release` is a moving tag behind a digest, the same shape as karakeep_k8s_image above, so the
 # k8s-defaults manager's `matchUpdateTypes: [digest]` rule bumps it after its soak.
 karakeep_k8s_chrome_image: ghcr.io/karakeep-app/karakeep-chrome:release@sha256:c51a8c8e6c3c1040a50fa0ecfd0b2fc298401b4229262636552458151f6f18fa
-# The rollout budget for all four Deployments, declared once. Read by the
-# `manifests_rollout_timeout` passed to k8s/manifests in tasks/main.yml (the drain's
-# `rollout status --timeout`) and by `progressDeadlineSeconds` in every deployment template. The
+# The rollout budget for all four Deployments, declared once. Read as Flux's
+# health-check `timeout`, by the drain's `rollout status --timeout` and by `progressDeadlineSeconds` in every deployment template. The
 # deadline has to move with the timeout: at the 600s Kubernetes default, `rollout status` fails
 # on ProgressDeadlineExceeded whatever `--timeout` says.
 # Sized from the chrome image, the one karakeep pull that outlasts the shared 600s: daniel-server
@@ -21,7 +20,11 @@ karakeep_k8s_chrome_image: ghcr.io/karakeep-app/karakeep-chrome:release@sha256:c
 # is that pull with prowlarr's ~1.4x margin. Its cost is a genuinely stuck karakeep rollout
 # failing at 20 minutes rather than 10. A cached image rolls in seconds, so the budget costs time
 # only on a real hang or a cold pull.
-karakeep_k8s_rollout_timeout: 1200s
+# The literal is `manifests_rollout_timeout` because the renderer reads a role's Flux
+# Kustomization `timeout` only from a literal role default (`role_fields` in
+# scripts/lib/k8s_roles.py); as an include var it would render Flux's 600s default (#5464).
+manifests_rollout_timeout: 1200s  # noqa var-naming[no-role-prefix]
+karakeep_k8s_rollout_timeout: "{{ manifests_rollout_timeout }}"
 karakeep_k8s_meili_image: getmeili/meilisearch:v1.54.3@sha256:e68913ab7d6f5b159529e472cfd362ce3c741fafd3c127961b2142abbe41b3c9
 # Built in-cluster. The base-image pin (uv `python3.14-bookworm-slim` digest) lives in
 # `templates/Dockerfile.j2`'s `FROM` line, where Renovate's dockerfile manager reads it. All five

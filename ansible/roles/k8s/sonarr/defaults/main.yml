@@ -21,15 +21,19 @@ k8s_autodeploy_snapshot_pvcs: [sonarr-config]  # noqa var-naming[no-role-prefix]
 # what this role creates can see the coupling.
 k8s_autodeploy_unreverted_claims: [media-data]  # noqa var-naming[no-role-prefix]
 
-# The rollout budget, declared once. Read by THREE places, so none of them can drift: the
-# `manifests_rollout_timeout` passed to k8s/manifests in tasks/main.yml, the inline `rollout
+# The rollout budget, declared once. Read as Flux's health-check `timeout` and by THREE
+# places, so none of them can drift: k8s/manifests' rollout wait, the inline `rollout
 # status` gate in tasks/verify.yml, and `progressDeadlineSeconds` in templates/deployment.yaml.j2.
 # A first boot installing DOCKER_MODS takes up to 10 minutes; the 300s k8s/manifests default
 # times out against the startupProbe that allows it.
 # The deadline has to move with the budget: at the 600s Kubernetes default, `rollout status`
 # fails on ProgressDeadlineExceeded whatever `--timeout` says, so the last 60s of this budget
 # is unreachable unless the deadline is rendered from this variable too.
-sonarr_k8s_rollout_timeout: 660s
+# The literal is `manifests_rollout_timeout` because the renderer reads a role's Flux
+# Kustomization `timeout` only from a literal role default (`role_fields` in
+# scripts/lib/k8s_roles.py); as an include var it would render Flux's 600s default (#5464).
+manifests_rollout_timeout: 660s  # noqa var-naming[no-role-prefix]
+sonarr_k8s_rollout_timeout: "{{ manifests_rollout_timeout }}"
 
 # ── the config database ─────────────────────────────────────────────────────────────────────
 # 85 M / 221 files. `longhorn`, not longhorn-nobackup: sonarr.db holds the library and the

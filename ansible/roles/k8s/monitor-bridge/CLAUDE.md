@@ -67,7 +67,7 @@ the credentials and the prerequisites are on the internals page.
 ## The deploy-pipeline family
 
 One family is served rather than pushed. `files/deploy_pipeline.py` reads the `promote`
-workflow's state each cycle, after every check has pushed, and serves four `homelab_deploy_*`
+workflow's state each cycle, after every check has pushed, and serves five `homelab_deploy_*`
 gauges on `monitor_bridge_deploy_pipeline_port` through `templates/service.yaml.j2`.
 observability's `deploy-pipeline` scrape job collects them, and its `deploy-pipeline` rule
 group pages on them. `docs/flux-deploy-plane.md` says what each alert means.
@@ -78,6 +78,9 @@ group pages on them. `docs/flux-deploy-plane.md` says what each alert means.
   empty token reads nothing and serves no series, which `DeployPipelineExporterAbsent` pages.
 - **A failed read exports no series for the gauges it feeds, never a 0.** Each cycle logs one
   `deploy-pipeline:` line with the values and any failed read.
+- **The reboot-window gauge reads no remote state.** It derives from the `WEEKLY_REBOOT_*` env
+  keys, which the env-secret renders from the `weekly_reboot_*` group vars, so PromotionStalled
+  stays quiet while `promote` defers across the weekly reboot (#5458).
 - **`--once`, `--dry-run` and `--check` neither serve nor read it**, so a hand-run beside the
   pod never contends for the port.
 - **The scrape target's port is a literal in `prometheus.yaml.j2`.**

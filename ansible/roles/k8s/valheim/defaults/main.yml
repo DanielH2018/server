@@ -8,12 +8,17 @@
 # is the wrapper's own release.
 valheim_k8s_image: ghcr.io/community-valheim-tools/valheim-server:1.4.0@sha256:f3ccde9a4e292663cf5096d502ff33cc9617015f6d70b6a9ca0968543f165ef2
 
-# The first-boot budget for this server, declared ONCE. Read by the `manifests_rollout_timeout`
-# passed to k8s/manifests in tasks/main.yml (the drain's `rollout status --timeout`) and by
-# `progressDeadlineSeconds` in templates/deployment.yaml.j2. The two have to move together: at a
-# deadline below the budget, `rollout status` fails on ProgressDeadlineExceeded whatever
-# `--timeout` says, and at a budget below the deadline the drain gives up first and the extra
-# deadline is never reached.
+# The first-boot budget for this server, declared ONCE, as `manifests_rollout_timeout` below.
+# Three readers take it. The renderer sets it as the valheim Kustomization's `timeout`, Flux's
+# health-check wait (C3's per-role fields, `role_fields` in scripts/lib/k8s_roles.py). The
+# renderer reads only a literal role default, so the value cannot be an include var or a Jinja
+# expression: before D5.15 it was an include var, and the flip would have rendered the 600s
+# default, below the startupProbe's own 60 x 15s. `progressDeadlineSeconds` in
+# templates/deployment.yaml.j2 reads it through `valheim_k8s_rollout_timeout`. k8s/manifests'
+# `rollout status --timeout` reads the same default, but only after a handback to Ansible. The
+# wait and the deadline have to move together: at a deadline below the budget, the wait fails
+# on ProgressDeadlineExceeded whatever its timeout says, and at a budget below the deadline the
+# wait gives up first and the extra deadline is never reached.
 #
 # 1800s rather than 900s because nothing in the repo records a first boot completing inside
 # 900s. A measured rollout was still pulling this image at 10 minutes and was marked
@@ -21,10 +26,12 @@ valheim_k8s_image: ghcr.io/community-valheim-tools/valheim-server:1.4.0@sha256:f
 # underneath. Between that pull and the ~1.8 G SteamCMD download into an empty install PVC,
 # first boot needs the room; a cached restart rolls in seconds and never spends it.
 #
-# valheim is NOT auto-deployed (`k8s_autodeploy: false`), so this budget is outside
-# gitops_deploy's forward and rollback caps — raising it costs an operator deploy a slower
-# failure on a genuinely stuck rollout and nothing else.
-valheim_k8s_rollout_timeout: 1800s
+# Under Flux, raising it costs a genuinely stuck rollout a slower failure: the Kustomization
+# holds one of kustomize-controller's workers for the whole budget, and `verify`'s derived
+# wait grows on a revision that changes valheim (docs/flux-deploy-plane.md, *The timeout
+# follows the chain*).
+manifests_rollout_timeout: 1800s  # noqa var-naming[no-role-prefix]
+valheim_k8s_rollout_timeout: "{{ manifests_rollout_timeout }}"
 
 # ── BepInEx and the mod set ─────────────────────────────────────────────────────────────
 # BEPINEX=true makes the image install BepInExPack Valheim beside the vanilla server in
@@ -50,7 +57,7 @@ valheim_k8s_mods_image: "{{ k8s_registry_pull_host }}/valheim:{{ k8s_built_image
 # checksum before it unpacks, so a re-uploaded archive fails the build instead of reaching the
 # server. To bump one, read the new version and URL from
 # `https://thunderstore.io/api/experimental/package/<namespace>/<name>/`, download it and
-# `sha256sum` it, then redeploy: the rebuild changes the image digest and rolls the pod.
+# `sha256sum` it, then merge: the content tag moves, CI pushes it and `promote` rolls the pod.
 #
 # BepInExPack is NOT listed: the image installs and updates it on its own.
 #

@@ -26,8 +26,8 @@ prowlarr_k8s_claim: prowlarr-config
 prowlarr_k8s_storage_class: longhorn
 prowlarr_k8s_size: 2Gi
 
-# The rollout budget for BOTH Deployments, declared once. Read by the `manifests_rollout_timeout`
-# passed to k8s/manifests in tasks/main.yml (the drain's `rollout status --timeout`) and by
+# The rollout budget for BOTH Deployments, declared once. Read as Flux's health-check
+# `timeout`, by the drain's `rollout status --timeout` and by
 # `progressDeadlineSeconds` in both deployment templates. The deadline has to move with the
 # timeout: at the 600s Kubernetes default, `rollout status` fails on ProgressDeadlineExceeded
 # whatever `--timeout` says (the valheim role measured exactly that).
@@ -42,7 +42,11 @@ prowlarr_k8s_size: 2Gi
 # the probe wait since #2399. 780s leaves 245s over the one measured pull. A slower link needs the
 # rollback budget raised first, and that budget is already at the ceiling the four tree-lock
 # waiters clear. A cached image rolls in seconds, so the budget costs time only on a real hang.
-prowlarr_k8s_rollout_timeout: 780s
+# The literal is `manifests_rollout_timeout` because the renderer reads a role's Flux
+# Kustomization `timeout` only from a literal role default (`role_fields` in
+# scripts/lib/k8s_roles.py); as an include var it would render Flux's 600s default (#5464).
+manifests_rollout_timeout: 780s  # noqa var-naming[no-role-prefix]
+prowlarr_k8s_rollout_timeout: "{{ manifests_rollout_timeout }}"
 
 # ── flaresolverr ────────────────────────────────────────────────────────────────────────────
 # Solves Cloudflare challenges for the indexers, which means it RENDERS ATTACKER-SUPPLIED PAGES

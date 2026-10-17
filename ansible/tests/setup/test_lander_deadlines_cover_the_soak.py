@@ -6,23 +6,24 @@ Before the wait, a landing spends up to its merge and master CI budgets, the `Op
 defaults both landers run with. The tick has no fixed budget, and the headroom covers it.
 
 The wait needs `verify`'s wait on the soak that the publish job renders from this tree, plus
-promote's `render` and `publish` jobs, which run before any promotion can start. `publish`
-also needs `images`, whose 90 minutes are for rebuilding the built images. No published tag
-builds one, so a flux-tag landing's own commit rebuilds nothing, and `images` runs in seconds
-once its content tags exist. `test_no_published_tag_builds_an_image` fails when a tag that
-builds one is handed to Flux, because that landing would then wait on its own rebuild.
+promote's `render`, `images` and `publish` jobs, which run before any promotion can start.
+Published tags build images since D5.14 handed ical-proxy and homelab-mcp to Flux, so a
+flux-tag landing's own commit can rebuild one, and `publish` needs `images`. The sum counts
+each of the three jobs at its `timeout-minutes`, so `images`' 20 minutes bound the landing's
+own rebuild. `test_the_pipeline_counts_every_job_publish_waits_on` derives the jobs from
+`publish`'s `needs` in the workflow, so a job added ahead of `publish` turns it red.
 
-Other commits' rebuilds can still delay the landing's `images` job (#5431), by at most two
-full rebuilds. The `images` concurrency group runs one job and keeps one pending, and a newer
-pending job evicts the older. So one rebuild can run ahead of the landing. And the landing's
-job can inherit a second: it builds every content tag GHCR does not serve in its own render,
-so an image change whose pending job it evicted is built in the landing's job. The wait
-therefore counts two measured rebuilds of every built image, FULL_REBUILD_S each, rather than
-the job's 90-minute timeout.
+Another commit's rebuild can still delay the landing's `images` job (#5431). The `images`
+concurrency group runs one job and keeps one pending, and a newer pending job evicts the
+older. So one rebuild can run ahead of the landing, and the wait counts it as FULL_REBUILD_S,
+one measured rebuild of every built image. A second rebuild is inside the landing's own job:
+that job builds every content tag GHCR does not serve in its own render, so an image change
+whose pending job it evicted is built there, and the job's timeout already counts it.
 `tag` and the `verify` job are not on the path: `land-wait` settles on Flux's `flux/soak`
 status at R, not on either job. The soak's
-`timeout` grows by a queueing round with every five Kustomizations, so the PR that hands the
-next tags to Flux is the one this turns red.
+`timeout` grows by a queueing round with every five equal Kustomizations, or by a fifth of an
+added one's `timeout` once Graham's bound is the smaller (`chained_timeout.queueing_s`), so the
+PR that hands the next tags to Flux is the one this turns red.
 
 Run: uv run pytest ansible/tests/setup/test_lander_deadlines_cover_the_soak.py
 """
@@ -47,8 +48,11 @@ LANDERS = {
     "claude-land": ("claude_code", "claude-land@.service.j2"),
     "renovate-agent-land": ("renovate_agent", "renovate-agent-land@.service.j2"),
 }
-# What each unit set before #5427, for the red half against the same render.
-BEFORE_5427 = {"claude-land": 5400, "renovate-agent-land": 3300}
+# What each unit set before D5.14 counted `images` (#5466), for the red half against the same
+# render. #5427 had raised them from 5400 and 3300.
+BEFORE_IMAGES = {"claude-land": 10800, "renovate-agent-land": 10800}
+# The promote jobs a promotion waits on, each counted at its `timeout-minutes`.
+PIPELINE = ("render", "images", "publish")
 # One `images` job that rebuilds every built image, measured on 2026-10-17 (#5431). Run
 # 38992066819's job 117276493018 built all ten in 368s, but n8n-runners failed there after 19s
 # (01:49:13 to 01:49:32). Its successful build in run 39036029019 took 45s (13:19:12 to
@@ -75,12 +79,30 @@ def soak(tmp_path_factory) -> dict:
     return doc
 
 
-def publish_pipeline_s() -> int:
-    """The longest promote's `render` and `publish` jobs may run, which precede a promotion."""
-    jobs = yaml_fast.safe_load(
+def _promote_jobs() -> dict:
+    return yaml_fast.safe_load(
         (REPO / ".github/workflows/promote.yml").read_text(encoding="utf-8")
     )["jobs"]
-    return sum(int(jobs[job]["timeout-minutes"]) * 60 for job in ("render", "publish"))
+
+
+def publish_pipeline_s(pipeline: tuple[str, ...] = PIPELINE) -> int:
+    """The longest the promote jobs that precede a promotion may run, `images` included."""
+    jobs = _promote_jobs()
+    return sum(int(jobs[job]["timeout-minutes"]) * 60 for job in pipeline)
+
+
+def uncounted(pipeline: tuple[str, ...]) -> set[str]:
+    """The jobs `publish` waits on, itself included, that `pipeline` leaves out of the sum."""
+    jobs = _promote_jobs()
+    path: set[str] = set()
+    todo = ["publish"]
+    while todo:
+        job = todo.pop()
+        if job not in path:
+            path.add(job)
+            needs = jobs[job].get("needs", [])
+            todo.extend([needs] if isinstance(needs, str) else needs)
+    return path - set(pipeline)
 
 
 def deadline(lander: str) -> int:
@@ -105,7 +127,7 @@ def shortfall(land_deadline: int, soak: dict) -> float:
     assert cap is not None
     verify_wait = wait.soak_deadline_s([soak]) // 2
     assert verify_wait > 0, f"the rendered soak's timeout is unreadable: {soak['spec']}"
-    return verify_wait + publish_pipeline_s() + 2 * FULL_REBUILD_S - cap
+    return verify_wait + publish_pipeline_s() + FULL_REBUILD_S - cap
 
 
 @pytest.mark.parametrize("lander", LANDERS)
@@ -118,9 +140,11 @@ def test_the_wait_cap_covers_verifys_wait_on_the_rendered_soak(lander, soak):
 
 
 @pytest.mark.parametrize("lander", LANDERS)
-def test_the_deadlines_before_5427_fall_short_of_the_same_render(lander, soak):
-    """The red half: the values the issue measured end a healthy promotion `deferred`."""
-    assert shortfall(BEFORE_5427[lander], soak) > 0
+def test_the_deadlines_before_images_counted_fall_short_of_the_same_render(
+    lander, soak
+):
+    """The red half: the values that left `images` out end a healthy promotion `deferred`."""
+    assert shortfall(BEFORE_IMAGES[lander], soak) > 0
 
 
 def test_the_handoff_outwaits_the_claude_lander():
@@ -132,11 +156,24 @@ def test_the_handoff_outwaits_the_claude_lander():
     assert handoff.START_TIMEOUT_S > int(timeout) * 3600
 
 
-def test_no_published_tag_builds_an_image():
-    """The pipeline above leaves out `images`' rebuild time, which holds only while this does."""
+def test_published_tags_build_images():
+    """ical-proxy and homelab-mcp build images and are flux-owned since D5.14 (#5466)."""
     builders = set(images.builder_roles())
     assert "code-server" in builders, builders
-    assert not builders & set(published_tags()), (
-        "a tag Flux applies builds an image, so its landing waits on `images` before "
-        "`publish`: count that job's timeout in publish_pipeline_s"
+    assert {"homelab-mcp", "ical-proxy"} <= builders & set(published_tags()), (
+        "the named builders are no longer published tags, so check whether `images` still "
+        "belongs in PIPELINE"
     )
+
+
+def test_the_pipeline_counts_every_job_publish_waits_on():
+    missing = uncounted(PIPELINE)
+    assert not missing, (
+        f"`publish` waits on {sorted(missing)}, which publish_pipeline_s leaves out of the "
+        f"landing's wait. {CASCADE}"
+    )
+
+
+def test_a_pipeline_without_images_leaves_it_out():
+    """The red half: the sum before D5.14, `render` and `publish` alone, misses `images`."""
+    assert uncounted(("render", "publish")) == {"images"}
