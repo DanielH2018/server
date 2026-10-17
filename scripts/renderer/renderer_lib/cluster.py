@@ -22,7 +22,8 @@ apply them:
 One rule is the renderer's alone: a role's `templates/verify/*.yaml.j2` (`verify_files`) render
 unlabelled into `DIR/cluster/<tag>-verify/`, the verify and post-apply mutation Jobs Flux runs
 once the tag is applied (D5.1a1). Ansible never reads that directory. Those templates also see
-`flux_job_image`, the image every such Job runs.
+`flux_job_image`, the image every such Job runs, and `flux_job_connect`, the text of the helper
+a Job script that dials a Service carries beside it.
 
 A role's vendored files are no template, and `attach_vendored` adds them to `DIR/cluster/<tag>/`
 byte for byte after every pass that edits rendered text (H1.1a). `rendered_docs()` in
@@ -92,6 +93,7 @@ from toposort import K8S_APPLIES_LAST, build_k8s_dep_map, filter_by_platform
 LABEL_WRAPPER = SHARED_TPL / "role-labelled.yaml.j2"
 MANIFESTS_DEFAULTS = K8S_ROLES / "manifests" / "defaults" / "main.yml"
 FLUX_DEFAULTS = K8S_ROLES / "flux" / "defaults" / "main.yml"
+FLUX_JOB_CONNECT = K8S_ROLES / "manifests" / "files" / "flux_job_connect.py"
 GROUP_VARS = ANSIBLE / "inventory" / "group_vars" / "all.yml"
 # Each group variable naming a namespace that a role creates, mapped to that role. A deferred
 # document in that namespace gives `<tag>-deferred` an edge to the role (D4.2).
@@ -388,11 +390,15 @@ def render_tag(
     # Every Job Flux applies runs `flux_job_image`, a flux role default no other role's
     # context holds. Passing it here keeps a verify template from `lookup()`ing the flux
     # defaults, which the deployer's cross-role scan would read as the role depending on them.
+    # The helper's text comes the same way, so a helper fix does not redeploy every verifying role.
     image = _flux_job_image() if verifying else None
+    helper = FLUX_JOB_CONNECT.read_text() if verifying else None
     for name, src in _sources(
         tag, verifying, True, templates / VERIFY_TEMPLATES_DIR
     ).items():
-        verify[name] = render(src, name, False, item=name, flux_job_image=image)
+        verify[name] = render(
+            src, name, False, item=name, flux_job_image=image, flux_job_connect=helper
+        )
     if verify:
         verify[KUSTOMIZATION] = kustomization_text(list(verify))
     return RenderedTag(tag, rendered, later, verify=verify)

@@ -198,6 +198,23 @@ def test_the_gate_fails_only_where_its_repair_can_be_applied():
     assert '"${mode[@]}"' in gate["run"]
 
 
+def test_a_pull_request_fails_only_on_modules_its_diff_changes():
+    """A PR author can re-record only a module the diff contains, so on a pull_request the gate
+    reads the diff and annotates every other module (#5480). The diff is collected before the
+    suite runs, because the suite's tests write git state of their own."""
+    steps = _pytest_job()["steps"]
+    runs = [str(s.get("run", "")) for s in steps]
+    collect = next(i for i, r in enumerate(runs) if "pr_changed_files.sh" in r)
+    suite = next(i for i, r in enumerate(runs) if "-m pytest" in r)
+    assert collect < suite, "the diff must be read before the suite runs"
+    assert steps[collect]["if"] == "github.event_name == 'pull_request'"
+    gate = next(r for r in runs if "--check-durations" in r)
+    assert re.search(
+        r'\[ "\$EVENT" = pull_request \]; then mode=\(--changed-files "\$RUNNER_TEMP/changed\.txt"\)',
+        gate,
+    ), "a pull_request must scope the gate to the diff pr_changed_files.sh wrote"
+
+
 def test_the_workflow_derives_the_shard_count_from_the_matrix():
     """The drift this guard exists for. A literal `--of 4` beside a matrix of any other length
     silently drops or double-runs part of the suite, and every leg still reports green."""

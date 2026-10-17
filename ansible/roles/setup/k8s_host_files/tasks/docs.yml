@@ -1,0 +1,21 @@
+---
+# Moved from roles/k8s/docs by D5's conversion PR for docs. H7.10a replaces it with a
+# tmpfiles.d line in daniel-box's host tree.
+#
+# docs' Deployment mounts this as a hostPath of `type: Directory`, so it must exist before the
+# pod starts. A missing path leaves the pod in ContainerCreating rather than serving an empty
+# site. kubelet would create a `DirectoryOrCreate` path as root, and the docs-refresh build
+# runs as sys_user, so this task creates it with that ownership instead.
+- name: Ensure the built docs site directory exists
+  ansible.builtin.file:
+    path: "{{ docs_host_site_dir }}"
+    state: directory
+    owner: "{{ sys_user }}"
+    group: "{{ sys_user }}"
+    mode: "0755"
+  # DECIDED: the copy of docs' `docs_host_site_dir` sits in task vars, not in this role's
+  # defaults. Role defaults are play-wide in initial_setup.yml, so a defaults copy becomes a
+  # read by initial_setup's docs-refresh.sh.j2 and needs a deployer cross-role row.
+  # test_k8s_host_files_pairs.py holds this copy equal to roles/k8s/docs/defaults/main.yml.
+  vars:
+    docs_host_site_dir: "/home/{{ sys_user }}/docs-site"
