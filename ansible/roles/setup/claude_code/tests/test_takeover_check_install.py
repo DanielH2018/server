@@ -94,10 +94,9 @@ def test_the_flux_copy_is_pinned_to_the_flux_the_cluster_runs() -> None:
     flux = yaml_fast.safe_load(
         (ANSIBLE / "roles" / "k8s" / "flux" / "defaults" / "main.yml").read_text()
     )
-    assert (
-        f"/download/{flux['flux_version']}/"
-        in defaults["claude_code_takeover_check_flux_url"]
-    )
+    assert defaults["claude_code_takeover_check_flux_version"] == flux["flux_version"]
+    url = defaults["claude_code_takeover_check_flux_url"]
+    assert "/download/{{ claude_code_takeover_check_flux_version }}/" in url
     assert len(defaults["claude_code_takeover_check_flux_sha256"]) == 64
     (install, _) = tasks()
     download = next(t for t in install["block"] if "ansible.builtin.get_url" in t)
