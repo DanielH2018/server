@@ -201,10 +201,10 @@ observability_dashboard_folders:
   - Security
 
 # ── deploy annotations ────────────────────────────────────────────────────────────────────────
-# Deploys are recorded as syslog lines (deploy_lib/playbook.annotate and
-# deployer_lib/deploy_io.py both call `logger`), promtail ships them to loki-homelab, and every
-# dashboard gets an annotation query injected at deploy time by
-# scripts/grafana/inject_dashboard_annotations.py. No Grafana API call, so no pinned ClusterIP and
+# Host-side deploys are recorded as syslog lines (deploy_lib/playbook.annotate and
+# deployer_lib/deploy_io.py both call `logger`), and a Flux promotion as a line the soak Job
+# prints. Alloy ships both to loki-homelab, and every dashboard gets one annotation query per
+# source injected at deploy time by scripts/grafana/inject_dashboard_annotations.py. No Grafana API call, so no pinned ClusterIP and
 # no standing write credential — see the emit_deploy_annotation comments.
 #
 # The uid MUST equal the `loki-homelab` datasource uid in templates/grafana.yaml.j2. A wrong one

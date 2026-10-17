@@ -194,7 +194,7 @@ def test_a_flux_soak_success_on_another_commit_keeps_waiting():
     assert set(sim.soak_reads) == {D}
 
 
-def test_an_unreadable_flux_soak_keeps_waiting_and_never_settles():
+def test_an_unreadable_flux_soak_is_no_verdict_and_the_next_success_settles():
     sim = _soak_sim(soak={M: [forge.ForgeError("HTTP 502"), "success"]})
     result = sim.wait()
     assert result.verdict == "settled" and sim.sleeps == 1
