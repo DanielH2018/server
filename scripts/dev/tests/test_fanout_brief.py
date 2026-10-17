@@ -269,3 +269,20 @@ def test_a_server_brief_runs_the_repo_wide_guards_before_the_pr_and_a_dotfiles_b
         ISSUES, "daniel-box", "1345-1386", "worktree-orch", [], DOTFILES
     )
     assert "## Before you open the PR" not in brief and "--record-files" not in brief
+
+
+def test_every_brief_asks_for_proof_that_new_tests_fail_and_names_the_pr_body_section():
+    """#5499: the red phase covers only `red-green` batches, so every brief carries the step."""
+    for host, target in (
+        ("daniel-box", None),
+        ("daniel-server", None),
+        ("daniel-box", DOTFILES),
+    ):
+        args = (ISSUES, host, "1345-1386", "worktree-orch", [])
+        brief = render_brief(*args) if target is None else render_brief(*args, target)
+        base = "origin/master" if target is None else target.base
+        assert "## Prove each new test can fail" in brief
+        assert "`## Tests fail without the change`" in brief
+        assert f"git merge-base HEAD {base})" in brief
+        assert "each new\ntest that still passes is reported" in brief
+        assert brief.index("## Prove each new test") < brief.index("## Landing")

@@ -54,9 +54,9 @@ def from_file_configmap_roles(roles_dir: Path = K8S_ROLES) -> set[str]:
     census the day it appears — the same shape `test_script_configmaps_apply_server_side.py`
     uses for its own (narrower — one exact task name) version of this predicate.
 
-    Reads the command each task runs, not the file's text: `game-stats/tasks/stage.yml`
-    documents the `kubectl create configmap` command its callers run, and a text scan would
-    count that helper role — which stages nothing and renders no workload — as one of them.
+    Reads the command each task runs, not the file's text: a task file can document a
+    `kubectl create configmap` command its callers run, and a text scan would count it as one
+    of them.
     """
     found = set()
     for role_dir in role_dirs(roles_dir):
@@ -94,9 +94,7 @@ CENSUS = sorted(from_file_configmap_roles())
 # role renamed) must fail loudly here rather than silently emptying CENSUS and passing the
 # parametrized check below on zero cases.
 KNOWN_FLOOR = {
-    "autofix-bridge",
     "observability",
-    "game-stats",
     "monitor-bridge",
 }
 

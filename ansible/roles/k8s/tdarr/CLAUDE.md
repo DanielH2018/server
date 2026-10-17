@@ -44,10 +44,23 @@ shared conventions.
   here is single-replica with `maxUnavailable: 0`, so the OLD pod satisfies readiness
   through the whole rollout and a readiness-based check would silently verify the pod
   being replaced.
+- **`templates/verify-inert/` is tdarr's verify Job for Flux, and nothing renders it yet.**
+  Neither the manifests role nor the renderer's `verify_files` reads that directory. tdarr's
+  flip PR renames it to `templates/verify/`, which makes the renderer emit `tdarr-verify`.
+  The Job runs `files/tdarr_verify.py`, which replaces two of `tasks/verify.yml`'s exec checks:
+  the render node opens, and the library is writable. Its pod is built like tdarr's, with the
+  same device request, render group, PUID and `media-data` subPath, so it checks that wiring
+  and not the live pod. Its spec embeds a digest of tdarr's rendered Deployment, so every
+  change that rolls tdarr renames the Job and Flux runs it again.
+  The VAAPI encode through tdarr's own ffmpeg has no Job form, because the Job image has no
+  ffmpeg and the Job census forbids spawning a process and opening a socket. Ansible runs it
+  until the flip; after that it is lost unless the operator's choice in #5451 lands first.
+  `tests/test_tdarr_verify.py` renders the renamed copy and runs the Job census over it.
 - **Every rollout waits 3000s, five times the shared default.** A cold pull of the 1432 MiB
   image took 25m37s on 2026-10-08 and failed the old 300s gate (#3689).
-  `tdarr_k8s_rollout_timeout` sets the drain's wait, the `verify.yml` gate and the template's
-  `progressDeadlineSeconds`. The deadline has to move with the wait, or `rollout status` fails
+  The budget is the literal `ansible/roles/k8s/tdarr/defaults/main.yml:manifests_rollout_timeout`,
+  which Flux's `timeout` and the drain's wait read. The `verify.yml` gate and the template's
+  `progressDeadlineSeconds` read it through `tdarr_k8s_rollout_timeout`. The deadline has to move with the wait, or `rollout status` fails
   at the 600s default anyway.
 - **`tasks/main.yml` pulls the image onto the node before the apply (#3875).** `Recreate` stops
   the old pod first, so without the pre-pull tdarr is down for the whole 25-minute pull. The pull

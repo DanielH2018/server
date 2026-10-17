@@ -290,6 +290,37 @@ after committing it, then commit the JSON it rewrites.
 """
 
 
+TESTS_FAIL_HEADING = "Tests fail without the change"
+
+
+def _test_proof_step(base: str) -> str:
+    """The instruction to prove each new test fails without the change (#5499).
+
+    The wording follows `fanout_lib.review.base_check`, which runs the same check on the PR:
+    the changed files outside the tests go back to the merge base, a file the PR added is
+    deleted, the tests stay, and the new tests that still pass are reported. The implementer
+    and the reviewer then use the same terms. The red phase covers only a `red-green` batch,
+    and `test/vacuous` and `test/missing-coverage` drove 71 of the actionable findings in the
+    three days measured, so every batch gets this step.
+    """
+    return f"""## Prove each new test can fail
+A test that passes on the code as it stood before your change cannot be checking what the
+change did. The reviewer runs the same check on your PR: every file you changed outside the
+tests goes back to the merge base, a file you added is deleted, the tests stay, and each new
+test that still passes is reported. Run it yourself after your last commit and before
+`gh pr create`:
+1. Put each non-test file you changed back at the merge base with
+   `git checkout "$(git merge-base HEAD {base})" -- <file>`, and delete each non-test file you
+   added. Leave the tests as they are.
+2. Run the test modules you added or changed, and record which of the new tests fail.
+3. Restore the change with `git checkout HEAD -- .`, and confirm `git status` is clean.
+4. Add a `## {TESTS_FAIL_HEADING}` section to the PR body. Quote the run's `FAILED` lines and
+   its summary line. Name each new test that still passes, with the reason it cannot fail,
+   such as a structural census or a regression guard for behaviour the change keeps. A test
+   that passes for no reason you can give is vacuous: strengthen it, or delete it.
+"""
+
+
 def _precomputed(cited: list[str]) -> str:
     """`findings_lib.precomputed`'s block, imported only here, where a brief is rendered.
 
@@ -374,6 +405,7 @@ dispatcher has posted the `Worked by` comment naming your branch on each of them
 {health_block}
 
 {facts}
+{_test_proof_step(target.base)}
 {guards}
 {REVIEW_LANDING if review else _landing(host, batch, target)}
 {_finishing(host, target, review)}

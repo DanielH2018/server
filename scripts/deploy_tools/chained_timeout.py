@@ -60,6 +60,31 @@ def seconds(duration: str) -> int:
     return hours * 3600 + minutes * 60 + secs
 
 
+def queueing_s(timeouts: list[int], concurrent: int) -> int:
+    """An upper bound on when the last of `timeouts` finishes on `concurrent` workers.
+
+    kustomize-controller's workers take the next queued Kustomization as one finishes, which is
+    greedy list scheduling. Two bounds hold for it, and this returns the smaller:
+
+    - rounds: `timeouts` in rounds of `concurrent`, each priced at the largest timeout. It is
+      the smaller for a uniform bundle.
+    - Graham's: the last job to finish, of length p, starts once every worker is busy no
+      later than (sum - p) / concurrent, and so ends by (sum - max) / concurrent + max. It is
+      the smaller when one long timeout sits among short ones, which rounds would price
+      into every round (#5482).
+
+    `promote_timeout` adds this to the longest `dependsOn` path, and the sum stays a bound
+    under precedence: the path is at least the critical path L, and Graham's bound for
+    precedence-constrained jobs is sum / concurrent + (1 - 1 / concurrent) * L.
+    """
+    if not timeouts:
+        return 0
+    longest = max(timeouts)
+    rounds = -(-len(timeouts) // concurrent) * longest
+    graham = -(-(sum(timeouts) - longest) // concurrent) + longest
+    return min(rounds, graham)
+
+
 def promote_timeout(
     docs: list[dict],
     changed: Iterable[str] | None = None,
@@ -73,8 +98,11 @@ def promote_timeout(
     - the longest `dependsOn` path that ends at a changed name. A changed name on it counts
       its own `timeout`. An unchanged ancestor counts none, because its apply changes nothing
       and a healthy one passes its health check at once. Each edge counts one `requeue_s`;
-    - a queueing term: the changed names divided by `concurrent`, rounded up, times the
-      largest `timeout` among them, since each one waiting on health holds a worker;
+    - a queueing term, since each changed name waiting on health holds a worker. It is the
+      smaller of two bounds on when the last one finishes: the changed names divided by
+      `concurrent`, rounded up, times the largest `timeout` among them; and Graham's bound
+      for greedy list scheduling, the other `timeout`s' sum divided by `concurrent`,
+      rounded up, plus the largest (`queueing_s`);
     - the OCIRepository interval and the largest `retryInterval`.
 
     `soak` carries no edges and holds a worker of its own from the start of the rollout,
@@ -141,8 +169,7 @@ def promote_timeout(
         default=0,
     )
     waiting = [timeouts[name] for name in changed - {SOAK} if name in timeouts]
-    rounds = -(-len(waiting) // concurrent)
-    queueing = rounds * max(waiting, default=0)
+    queueing = queueing_s(waiting, concurrent)
     soak = timeouts.get(SOAK, 0) if SOAK in changed else 0
     total = max(chain + queueing, soak, ROOT_TIMEOUT_S) + OCI_INTERVAL_S + max(retries)
     return min(total, VERIFY_CAP_S)

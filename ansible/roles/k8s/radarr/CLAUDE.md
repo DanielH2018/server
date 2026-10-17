@@ -32,9 +32,15 @@ when both paths share one mount.
   Radarr's own import/rename history while the files on `media-data` stay put. Recoverable by
   a library rescan, not automatic.
 - **The rollout waits 660s, above the shared default.** A first boot installing DOCKER_MODS takes up to 10
-  minutes. `radarr_k8s_rollout_timeout` is the one place that budget is written; both
-  `manifests_rollout_timeout` and the template's `progressDeadlineSeconds` read it — see
+  minutes. `ansible/roles/k8s/radarr/defaults/main.yml:manifests_rollout_timeout` is the one place
+  that budget is written, as a literal role default because the renderer reads Flux's
+  `timeout` only from one (#5464). k8s/manifests' rollout wait and the template's
+  `progressDeadlineSeconds` read it through `radarr_k8s_rollout_timeout` — see
   `ansible/roles/k8s/sonarr/CLAUDE.md` for why the deadline has to move with the budget (#2370).
+- **`templates/verify-inert/` holds arr-notification's seed Job for Flux, and nothing renders
+  it yet.** radarr's flip PR renames it to `templates/verify/`, so `radarr-verify` holds only
+  that Job and its `radarr-verify` ServiceAccount: radarr has no `tasks/verify.yml` to convert.
+  `ansible/roles/k8s/arr-notification/CLAUDE.md` has the Job's design.
 - **Log churn, not log size, drives PVC growth** — `radarr_k8s_log_level`/`_log_rotate` cap
   upstream's noisier defaults; see `roles/k8s/sonarr/defaults/main.yml` for the shared
   rationale across all three *arr roles.

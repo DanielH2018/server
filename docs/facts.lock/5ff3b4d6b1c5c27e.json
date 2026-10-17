@@ -1,12 +1,14 @@
 {
-  "checksum": "ca6d580f2a0662abe9603f21957cde1f07d1cce5ddf1cf07521b39f6d3d437c8",
+  "checksum": "fb0b46fd962fe95903b4c680e82572ef5aca0f26daffa9932446b03a04a70ec8",
   "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
   "key": "ansible/roles/k8s/radarr/CLAUDE.md#Notable",
   "row": {
     "atoms": {
+      "ansible/roles/k8s/arr-notification/CLAUDE.md": "2f2e547e8f675251883d6805f1a991e7d01cf462fd72a294124db423bac52f7f",
+      "ansible/roles/k8s/radarr/defaults/main.yml:manifests_rollout_timeout": "44f22a5e6c06543837b972c2ca072717fa3a36c01738d4cf38c9fb819fcf5bb7",
       "ansible/roles/k8s/sonarr/CLAUDE.md": "9adba8ab7b06041dc54f88cb17b73dec5b9af73868a0388aca338c16ea7365a3"
     },
     "python": "3.14",
-    "verified_sha": "55862020d"
+    "verified_sha": "a80b2ca8d"
   }
 }

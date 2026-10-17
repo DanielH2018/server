@@ -59,6 +59,8 @@
     cmd: >-
       {{ ansible_playbook_python }} {{ role_path }}/files/seed_arr_notification.py
   environment:
+    # The script opens every connection through the Job helper, which lives in k8s/manifests.
+    PYTHONPATH: "{{ playbook_dir }}/roles/k8s/manifests/files"
     ARR_APP: "{{ arr_notification_app }}"
     ARR_HOST: "{{ arr_notification_clusterip.stdout | default('') }}"
     ARR_API_KEY: "{{ lookup('vars', arr_notification_app ~ '_api_key') }}"

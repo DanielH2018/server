@@ -49,7 +49,7 @@ from gitops_hold import DeployerSnapshot, read_field
 from gitops_markers import MARKERS
 from deploy_tools import await_ci, shared_role_reach
 from deploy_tools.land_lib import land_platform, land_reach, land_rerolls
-from deploy_tools.land_lib import land_flux, land_shared, land_tags
+from deploy_tools.land_lib import land_flux, land_shared, land_tags, land_tested_base
 from deploy_tools.deploy_lib.detach_notify import GateResult, gate as health_gate
 from lib.exit_codes import CI_DISARMED
 from deploy_tools.land_lib.land_tags import Derivation
@@ -520,6 +520,7 @@ class Tools:
     gh: Callable[..., subprocess.CompletedProcess[str]] = gh
     git: Callable[..., subprocess.CompletedProcess[str]] = git
     await_ci: Callable[[str, int], CiVerdict] = await_ci_verdict
+    tested_base: Callable[[str], str | None] = land_tested_base.tested_base
     # `...` rather than the argument list: both take an optional `observe` callback, which a
     # fake absorbs through **kwargs and a call site passes by keyword.
     tick: Callable[..., int] = run_tick
@@ -547,8 +548,7 @@ class Tools:
     read_state: Callable[[Path, str], str | None] = read_state
     flux: land_flux.FluxReads = field(default_factory=land_flux.FluxReads)
     # The PR's own narrowing, for a landing that never awaits the tick and so has no receipt
-    # to read. Runs git over the PR's range, which is why it is a boundary here rather than a
-    # `Classifier`. `classify.narrow_plane` is its one caller.
+    # to read. It runs git over the PR's range, so it is a boundary; `classify.narrow_plane` calls it.
     own_narrowing: Callable[[list[str], str, Path], dict[str, frozenset[str]]] = (
         land_tags.own_narrow_tags
     )

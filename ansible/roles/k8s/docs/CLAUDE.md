@@ -59,7 +59,10 @@ than as a scheduling mistake, which is the expensive kind of wrong.
 
 The `hostPath` volume is `type: Directory`, not `DirectoryOrCreate`. kubelet would create a
 missing path as root, and the build script runs as the unprivileged user, so it could then never
-write into it. The role's own task creates the directory with the right ownership first.
+write into it. `ansible/roles/setup/k8s_host_files/tasks/docs.yml` creates the directory with
+the right ownership first, through the setup plane: D5 moved it out of this role, because a
+Flux-owned role runs no task. Its copy of `docs_host_site_dir`, in that task's `vars:`, must
+equal this role's, which `ansible/tests/setup/test_k8s_host_files_pairs.py` holds.
 
 ## `/healthz` is answered by nginx, not from the mounted tree
 

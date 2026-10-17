@@ -1,7 +1,6 @@
 {% from 'container-resources.yml.j2' import container_resources with context %}
 {% from 'security-context.yml.j2' import hardened_security_context with context %}
 {% from 'pod-affinity.yml.j2' import node_affinity_preference with context %}
-{% from 'checksum-annotation.yml.j2' import checksum_annotation with context %}
 {% from 'workload-shell.yml.j2' import spec_shell, pod_shell with context %}
 ---
 apiVersion: apps/v1
@@ -21,13 +20,6 @@ spec:
       labels:
         app: valheim-stats
         netpol-baseline: enforced
-      annotations:
-        # Recreate the pod when the script ConfigMap's source changes — the manifests role
-        # only restarts on manifest changes, and neither staged script is a manifest. The
-        # fact is a hash over BOTH staged modules (tasks/valheim.yml), the same "value=" shape
-        # monitor-bridge's and autofix-bridge's checksum/check-script use, since valheim_stats.py
-        # imports stats_lib.py and an edit confined to that sibling must also roll the pod.
-        {{ checksum_annotation('stats-script', value=game_stats_valheim_script_checksum) }}
     spec:
       # Needed here even though terraria-stats has no fsGroup, and the difference is the
       # seed: that claim arrived pre-populated by `tar -p --numeric-owner`, so its files

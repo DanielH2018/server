@@ -82,7 +82,7 @@ class Options:
     pr: str
     since: str = ""
     tags: str = ""
-    ci_timeout: int = 900
+    ci_timeout: int = 1200
     await_merge: bool = False
     arm_merge: bool = False
     subject: str = ""
@@ -151,7 +151,7 @@ def parse_args(argv: list[str] | None, description: str) -> Options:
         "--tags", default="", help="skip derivation; comma-separated deploy tags"
     )
     parser.add_argument(
-        "--ci-timeout", type=int, default=900, help="master CI wait budget, seconds"
+        "--ci-timeout", type=int, default=1200, help="master CI wait budget, seconds"
     )
     parser.add_argument(
         "--await-merge", action="store_true", help="poll until the PR is merged first"

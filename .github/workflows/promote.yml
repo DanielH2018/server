@@ -6,7 +6,7 @@ name: promote
 # docs/target-architecture/contracts.md C2 is the contract. The operator's view is
 # docs/flux-deploy-plane.md.
 #
-# Seven jobs, so code that runs during a render or a decision never holds a token that can sign,
+# Ten jobs, so code that runs during a render or a decision never holds a token that can sign,
 # push or move a tag:
 #   render   contents: read, checks: read. Checks out the triggering commit, or the dispatched
 #            `sha`, refuses one that is not on master, re-reads a dispatched commit's CI,
@@ -43,6 +43,17 @@ name: promote
 #            workflow's own commit and runs `promote.py hold`, which posts the hold, with a
 #            command block per changed snapshot role, to the deployer's Discord channel through
 #            the DEPLOY_DISCORD_WEBHOOK secret. A failed post fails the run.
+#   reset-check  contents: read, packages: read, actions: read. Runs only for a
+#            `reset_to_last_good` dispatch, which skips every job above. Runs
+#            `promote.py reset-check`, which refuses without a hold or while a verification is in
+#            flight, and hands on the two digests it read.
+#   reset-move   packages: write. Checks out nothing. Moves `prod` to `last-good` only while
+#            `prod` still names the digest `reset-check` read, and records PROD_DIGEST.
+#
+# The `schedule:` run fires when the weekly reboot's no-promotion window ends (D5.2b2). Inside
+# the window `decide` ends `deferred` and moves nothing, so this run promotes master's tip.
+# Every commit merged in the window was published by its own run, so this one skips render,
+# images and publish and starts at `promote`.
 #
 # ansible/tests/repo/test_promote_workflow.py holds every guard, permission and handoff here.
 
@@ -51,8 +62,19 @@ on:
   workflow_run:
     workflows: [CI]
     types: [completed]
+  # The weekly reboot's no-promotion window ends here, at the cron's 07:30 UTC Sunday plus the
+  # 5-minute shutdown delay and the mute's 40-minute recovery, all from
+  # ansible/inventory/group_vars/all.yml. GitHub reads this literal, so
+  # scripts/deploy_tools/tests/test_promote_reboot_window.py derives it and fails a drift.
+  schedule:
+    - cron: "15 8 * * 0"
   workflow_dispatch:
     inputs:
+      reset_to_last_good:
+        description: "Move prod back to last-good and do nothing else. Refuses unless DEPLOY_HOLD holds and prod's run has settled (operator-only)."
+        required: false
+        type: boolean
+        default: false
       verify_drill:
         description: "Push the bundle UNSIGNED to the tag verify-drill, for the flux role's signature drill. Never touches prod."
         required: false
@@ -70,7 +92,9 @@ jobs:
   render:
     # The same guard opens every job: a successful push run of CI on master in this repository,
     # or a dispatch of master's copy of this file. A branch's copy never runs with these tokens.
+    # A reset dispatch and the scheduled run skip it, and so every job that needs it.
     if: >-
+      !inputs.reset_to_last_good &&
       github.ref == 'refs/heads/master' && (
       github.event_name == 'workflow_dispatch' || (
       github.event.workflow_run.conclusion == 'success' &&
@@ -227,8 +251,10 @@ jobs:
       github.event.workflow_run.head_branch == 'master' &&
       github.event.workflow_run.head_repository.full_name == github.repository))
     runs-on: ubuntu-26.04
-    # The first run builds all ten, code-server's toolchains the longest.
-    timeout-minutes: 90
+    # About 3x the slowest measured run, at a 20-minute floor (#5482). A rebuild of all ten
+    # took 394s on 2026-10-17, code-server's toolchains the longest at 213s. Over the 35
+    # `images` jobs to that date the slowest success took 54s.
+    timeout-minutes: 20
     concurrency:
       group: images
       cancel-in-progress: false
@@ -452,14 +478,20 @@ jobs:
 
   promote:
     needs: publish
+    # The scheduled run skips publish, so this job runs on a skipped publish for it alone, and
+    # on a successful one otherwise.
     if: >-
+      !cancelled() &&
       !inputs.verify_drill &&
+      !inputs.reset_to_last_good &&
       github.ref == 'refs/heads/master' && (
+      (github.event_name == 'schedule' && needs.publish.result == 'skipped') || (
+      needs.publish.result == 'success' && (
       github.event_name == 'workflow_dispatch' || (
       github.event.workflow_run.conclusion == 'success' &&
       github.event.workflow_run.event == 'push' &&
       github.event.workflow_run.head_branch == 'master' &&
-      github.event.workflow_run.head_repository.full_name == github.repository))
+      github.event.workflow_run.head_repository.full_name == github.repository))))
     runs-on: ubuntu-26.04
     # `decide` waits up to 350 minutes on a verification in flight
     # (promote_lib/verify_promotion.py:IN_FLIGHT_WAIT_S), and the walk and the pulls take a few more.
@@ -555,11 +587,16 @@ jobs:
 
   tag:
     needs: promote
+    # !cancelled() and the result, because a skipped publish on the scheduled run would skip
+    # this job too: GitHub's implicit success() reads every ancestor, not only `promote`.
     if: >-
+      !cancelled() &&
+      needs.promote.result == 'success' &&
       needs.promote.outputs.verdict == 'promote' &&
       !inputs.verify_drill &&
       github.ref == 'refs/heads/master' && (
-      github.event_name == 'workflow_dispatch' || (
+      github.event_name == 'workflow_dispatch' ||
+      github.event_name == 'schedule' || (
       github.event.workflow_run.conclusion == 'success' &&
       github.event.workflow_run.event == 'push' &&
       github.event.workflow_run.head_branch == 'master' &&
@@ -665,7 +702,8 @@ jobs:
       needs.tag.outputs.moved == 'true' &&
       !inputs.verify_drill &&
       github.ref == 'refs/heads/master' && (
-      github.event_name == 'workflow_dispatch' || (
+      github.event_name == 'workflow_dispatch' ||
+      github.event_name == 'schedule' || (
       github.event.workflow_run.conclusion == 'success' &&
       github.event.workflow_run.event == 'push' &&
       github.event.workflow_run.head_branch == 'master' &&
@@ -719,7 +757,8 @@ jobs:
       needs.tag.outputs.moved == 'true' &&
       !inputs.verify_drill &&
       github.ref == 'refs/heads/master' && (
-      github.event_name == 'workflow_dispatch' || (
+      github.event_name == 'workflow_dispatch' ||
+      github.event_name == 'schedule' || (
       github.event.workflow_run.conclusion == 'success' &&
       github.event.workflow_run.event == 'push' &&
       github.event.workflow_run.head_branch == 'master' &&
@@ -899,7 +938,8 @@ jobs:
       needs.settle.outputs.stateful_hold != '' &&
       !inputs.verify_drill &&
       github.ref == 'refs/heads/master' && (
-      github.event_name == 'workflow_dispatch' || (
+      github.event_name == 'workflow_dispatch' ||
+      github.event_name == 'schedule' || (
       github.event.workflow_run.conclusion == 'success' &&
       github.event.workflow_run.event == 'push' &&
       github.event.workflow_run.head_branch == 'master' &&
@@ -938,3 +978,134 @@ jobs:
           uv run --frozen python scripts/deploy_tools/promote.py hold "$TARGET"
           --hold "$HOLD" --bundle-dir "$RUNNER_TEMP/verify-input"
           --verdict "$VERDICT" --failed "$FAILED_NAMES"
+
+  # The `reset_to_last_good` dispatch (D5.2b2): move `prod` back to `last-good` and do nothing
+  # else, for the revert runbook's Branch 1 and the broken-sync-object runbook. It follows C2's
+  # split: `reset-check` decides with read tokens, and `reset-move` writes with no checkout.
+  # Both run in `promote-reset`, never `promote`: in `promote` the reset would wait behind a
+  # `decide` in its in-flight wait, up to 6 hours, and the next merge's run would evict it while
+  # pending. `reset-check`'s refusal while a verification is in flight replaces the
+  # serialisation a shared group would give (promote_lib/reset.py). The reset ignores the
+  # reboot window: it moves `prod` back to a revision the cluster already ran.
+  reset-check:
+    if: >-
+      inputs.reset_to_last_good &&
+      github.ref == 'refs/heads/master' &&
+      github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-26.04
+    timeout-minutes: 10
+    concurrency:
+      group: promote-reset
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      packages: read
+      actions: read  # the in-progress promote runs a refusal names
+    outputs:
+      move: ${{ steps.check.outputs.move }}
+      prod: ${{ steps.check.outputs.prod }}
+      last_good: ${{ steps.check.outputs.last_good }}
+    steps:
+      - name: Refuse a reset combined with another input
+        env:
+          VERIFY_DRILL: ${{ inputs.verify_drill }}
+          SHA: ${{ inputs.sha }}
+        run: |
+          if [ "$VERIFY_DRILL" = true ] || [ -n "$SHA" ]; then
+            echo "::error::reset_to_last_good moves prod to last-good and does nothing else, so dispatch it without verify_drill or sha"
+            exit 1
+          fi
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - uses: ./.github/actions/setup  # zizmor: ignore[self-repository] -- see the action's header
+
+      # GITHUB_TOKEN reads GHCR and the run list. GH_TOKEN is PROMOTE_TOKEN, for the
+      # `gh variable get DEPLOY_HOLD` read through the API, as in Decide.
+      - name: Check the reset
+        id: check
+        env:
+          RUN_ID: ${{ github.run_id }}
+          GITHUB_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ secrets.PROMOTE_TOKEN }}
+        run: uv run --frozen python scripts/deploy_tools/promote.py reset-check --run-id "$RUN_ID"
+
+  reset-move:
+    needs: reset-check
+    if: >-
+      needs.reset-check.outputs.move == 'true' &&
+      inputs.reset_to_last_good &&
+      github.ref == 'refs/heads/master' &&
+      github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-26.04
+    timeout-minutes: 10
+    concurrency:
+      group: promote-reset
+      cancel-in-progress: false
+    permissions:
+      packages: write
+    steps:
+      - uses: fluxcd/flux2/action@b9c17924adb533d3617ec7de97a7b0f4acc07b39 # v2.9.6
+        with:
+          # renovate: datasource=github-releases depName=fluxcd/flux2
+          version: v2.9.6
+
+      # The same compare-and-move as `tag`'s: `prod` moves only while it still names the digest
+      # `reset-check` read. A live `prod` already on `last-good`, as after `settle`'s own reset
+      # landed first, succeeds and moves nothing. Any other digest means a run moved `prod`
+      # after the read, so nothing moves and the step names both.
+      - name: Move prod to last-good
+        id: move
+        env:
+          PROD: ${{ needs.reset-check.outputs.prod }}
+          LAST_GOOD: ${{ needs.reset-check.outputs.last_good }}
+          GH_ACTOR: ${{ github.actor }}
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          for digest in "$PROD" "$LAST_GOOD"; do
+            printf '%s' "$digest" | grep -Eqx 'sha256:[0-9a-f]{64}' \
+              || { echo "::error::reset-check handed on digest '$digest', not sha256:<64 hex>"; exit 1; }
+          done
+
+          # prod's live digest, from one HEAD. curl reads each credential from stdin.
+          name=danielh2018/homelab-manifests
+          token="$(printf 'user = "%s:%s"\n' "$GH_ACTOR" "$GITHUB_TOKEN" \
+            | curl --retry 3 -fsS -K - \
+              "https://ghcr.io/token?scope=repository:$name:pull&service=ghcr.io" \
+            | jq -r '.token // empty')"
+          [ -n "$token" ] || { echo "::error::ghcr.io issued no pull token for $name"; exit 1; }
+          heads="$RUNNER_TEMP/prod-head.txt"
+          status="$(printf 'header = "Authorization: Bearer %s"\n' "$token" \
+            | curl --retry 3 -sS -K - -I -o "$heads" -w '%{http_code}' \
+              -H 'Accept: application/vnd.oci.image.manifest.v1+json, application/vnd.oci.image.index.v1+json' \
+              "https://ghcr.io/v2/$name/manifests/prod")"
+          case "$status" in
+            200) live="$(tr -d '\r' < "$heads" | awk 'tolower($1) == "docker-content-digest:" { print $2 }')" ;;
+            *) echo "::error::HEAD prod answered HTTP $status"; exit 1 ;;
+          esac
+          if [ "$live" = "$LAST_GOOD" ]; then
+            echo "prod already names last-good $LAST_GOOD, so nothing moves"
+            exit 0
+          fi
+          if [ "$live" != "$PROD" ]; then
+            echo "::error::prod is at '$live', not the $PROD reset-check read nor last-good $LAST_GOOD: a run moved it after the read, so nothing moves. Read prod and last-good again, then dispatch again."
+            exit 1
+          fi
+
+          printf '%s' "$GITHUB_TOKEN" | docker login ghcr.io -u "$GH_ACTOR" --password-stdin
+          flux tag artifact "oci://ghcr.io/$name@$LAST_GOOD" --tag prod
+          echo "prod moved from $PROD to last-good $LAST_GOOD"
+          echo "moved=true" >> "$GITHUB_OUTPUT"
+
+      # A failed write leaves PROD_DIGEST ahead of prod, which the deploy-pipeline exporter
+      # pages on, as after `tag`'s move.
+      - name: Record prod's digest
+        if: ${{ steps.move.outputs.moved == 'true' }}
+        env:
+          DIGEST: ${{ needs.reset-check.outputs.last_good }}
+          GH_TOKEN: ${{ secrets.PROMOTE_TOKEN }}
+        run: gh variable set PROD_DIGEST --body "$DIGEST" -R "$GITHUB_REPOSITORY"

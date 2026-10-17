@@ -73,6 +73,8 @@ class Sim:
         soak: each commit's `flux/soak` state, by commit, as a list a read takes one answer
             from each time, the last one repeating. A commit absent here has no status; an
             exception is raised in place of a state.
+        reboot_window: what each poll's reboot-window read answers, the last one repeating:
+            `(seconds left, end)` inside the window, or None outside it.
     """
 
     polls: list = field(default_factory=lambda: [at(M)])
@@ -83,6 +85,7 @@ class Sim:
     in_flight: list = field(default_factory=lambda: [None])
     soak: dict = field(default_factory=dict)
     soak_reads: list = field(default_factory=list)
+    reboot_window: list = field(default_factory=lambda: [None])
     annotations: list = field(default_factory=list)
     sleeps: int = 0
     poll: int = 0
@@ -139,6 +142,9 @@ class Sim:
             published_ancestor=lambda sha: P if P in self.published else None,
             in_flight=self._in_flight,
             soak=self._soak,
+            reboot_window=lambda: self.reboot_window[
+                min(self.sleeps, len(self.reboot_window) - 1)
+            ],
             annotate=self.annotations.append,
             sleep=self._sleep,
             clock=lambda: float(self.sleeps * promote_wait.POLL_S),

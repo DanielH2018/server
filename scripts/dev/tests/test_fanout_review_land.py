@@ -28,6 +28,21 @@ def test_a_settled_landing_ends_the_batch_without_resuming_the_implementer(tmp_p
     assert json.loads(record.read_text())["verdict"] == "VERDICT: settled (deployed)"
 
 
+def test_the_ci_wait_runs_before_land_sh_starts(tmp_path):
+    pipeline, _ = _pipeline(tmp_path, _clean_review())
+    order = []
+    inner = pipeline.run
+
+    def recording(argv, stdin):
+        if argv[0] == "bash":
+            order.append("ci" if "gh-ci" in argv else "land")
+        return inner(argv, stdin)
+
+    pipeline.run = recording
+    pipeline.run_all()
+    assert order == ["ci", "land", "land"]
+
+
 def test_a_needs_manual_apply_verdict_resumes_the_implementer_with_the_log(tmp_path):
     pipeline, run = _pipeline(tmp_path, _clean_review())
     run.verdict = "VERDICT: needs-manual-apply (run initial_setup.yml --tags dns)"
@@ -53,7 +68,7 @@ def test_a_landing_still_running_at_the_deadline_names_the_wait_to_resume(tmp_pa
     run.waits = [75]
 
     def first_wait_outlasts_the_unit(argv, stdin):
-        if "cc-wait" in argv:
+        if "cc-wait" in argv and "gh-ci" not in argv:
             now[0] = float(10**6)
         return run(argv, stdin)
 

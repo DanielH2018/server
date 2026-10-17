@@ -236,7 +236,9 @@ def cmd_launch(args, tools: Tools) -> int:
     except NoHeadroom as exc:
         error(str(exc))
         return FANOUT_PLACE_NOTHING_PLACED
-    if over_ssh_budget(placed) or over_live_batch_cap(placed, args.manifest_root):
+    if over_ssh_budget(placed) or over_live_batch_cap(
+        placed, args.manifest_root, tools, this_host()
+    ):
         return FANOUT_PLACE_NOTHING_PLACED
     # Only the hosts a batch landed on. Reading every host placement looked at spends an ssh
     # connection (`ufw limit ssh` allows 5 per 30s) on a host the signing gate or a failed

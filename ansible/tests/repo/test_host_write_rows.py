@@ -11,7 +11,7 @@ Run: uv run pytest ansible/tests/repo/test_host_write_rows.py
 from _host_write_rows import HOST_WRITE_ALLOW, flipped_allow_entries
 from lib.k8s_roles import k8s_entries
 
-DOCS = "ansible/roles/k8s/docs/tasks/main.yml"
+MEDIA_VOLUME = "ansible/roles/k8s/media-volume/tasks/main.yml"
 
 
 def test_no_flux_owned_role_keeps_a_host_write_allow_entry():
@@ -19,7 +19,7 @@ def test_no_flux_owned_role_keeps_a_host_write_allow_entry():
 
 
 def test_a_flip_that_keeps_its_allow_entry_is_flagged_without_a_write():
-    """The flip moved docs's write but left the entry: the entry alone is refused."""
+    """The flip moved media-volume's writes but left the entry: the entry alone is refused."""
     entries = k8s_entries()
-    entries["docs"] = {**entries["docs"], "owner": "flux"}
-    assert flipped_allow_entries(HOST_WRITE_ALLOW, entries) == [DOCS]
+    entries["media-volume"] = {**entries["media-volume"], "owner": "flux"}
+    assert flipped_allow_entries(HOST_WRITE_ALLOW, entries) == [MEDIA_VOLUME]

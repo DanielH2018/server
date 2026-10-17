@@ -1848,7 +1848,9 @@ assertion becomes a standing rule.
 - **Grafana's admin password** becomes an initContainer on the grafana pod (D5.1e).
 - **arr-notification's seed** becomes a post-apply Job in `sonarr-verify` and
   `radarr-verify`, which runs `files/seed_arr_notification.py` against the app's Service. Its
-  API key and webhook arrive through substitution into a Secret in the same Kustomization.
+  webhook arrives through substitution into a Secret in the same Kustomization. Its API key
+  comes from `<app>-exportarr`, the Secret the app's own render applies, as sonarr's verify
+  Job reads it (#5471).
   Its first connection goes through the shared helper. `sonarr-verify` and `radarr-verify`
   join those roles' `netpol_from`. The script adopts and never deletes, so a re-run changes
   nothing, and its existing tests in `ansible/roles/k8s/arr-notification/tests/` gain a
@@ -2087,7 +2089,7 @@ sizes its batch of roles against that projection.
 | A' | loki-homelab, navidrome, scrutiny; then wg-easy alone | one task, `Recreate`, no snapshot | any time; wg-easy in its own window, with the operator on the LAN |
 | B | bazarr, freshrss, livesync, speedtest; then zigbee2mqtt; then home-assistant | one task, snapshot claims | any time; zigbee2mqtt and home-assistant each in its own window |
 | C | ical-proxy, homelab-mcp, terraria, valheim, code-server, karakeep, nut, n8n, pi-peer-backup | image build; code-server and karakeep with snapshots; n8n with a probe Job; pi-peer-backup with Pi writes and a gate Job | any time |
-| D | cloudflare-ddns, docs, radarr, mosquitto, dri-device-plugin, artifacts, autofix-bridge, game-stats, prowlarr, sonarr, configarr, tdarr, qbittorrent, janitorr, jellyfin, media-volume, registry, monitor-bridge, uptime-kuma, observability, headlamp, crowdsec, traefik, authelia, pihole, netpol-baseline | imperative tasks | any time, each alone; the home-edge roles (crowdsec, traefik, authelia, pihole) each in its own window |
+| D | cloudflare-ddns, docs, radarr, mosquitto, dri-device-plugin, artifacts, autofix-bridge, game-stats, prowlarr, sonarr, configarr, tdarr, qbittorrent, janitorr, jellyfin, media-volume, registry, monitor-bridge, uptime-kuma, observability, headlamp, crowdsec, traefik, authelia, pihole, netpol-baseline | imperative tasks | any time, three to five roles per PR; the home-edge roles (crowdsec, traefik, authelia, pihole) each alone in its own window |
 
 - **Windows, as the operator ruled on 2026-10-17.** A flip needs no weekday or hour. A
   `Recreate` role's takeover roll takes that one service down briefly, and the operator accepts
@@ -2097,6 +2099,16 @@ sizes its batch of roles against that projection.
   also needs the operator on the LAN. The plan first held every `Recreate` flip to the hour
   after M2's `weekly-reboot` mute ends, Sunday 08:15 to 09:15 UTC, and the ruling drops that:
   the hour was a maintenance slot, and no flip depends on it.
+- **Flip PR size, as the operator ruled on 2026-10-17.** A flip PR in waves B to D carries
+  three to five roles, where the plan first gave Wave C about two and Wave D one. The seven
+  own-window roles still flip alone. A role joins a flip PR only once every conversion PR,
+  H2 PR and M6 step it waits on has landed, so a batch takes the next ready roles in wave-table
+  order rather than a fixed slice of the table. The cost is that one role's failed soak holds
+  every role in its revision, and the stateful hold (D5.2b1) applies to the whole batch.
+- **Which PRs the fan-out review reads, as the operator ruled on 2026-10-17.** A flip PR and a
+  status PR skip the fan-out pipeline's separate model review. CI, the operator's pre-merge
+  diff and the soak still gate each one. A mechanism, conversion or deletion PR keeps the
+  review.
 - **A flip still keeps clear of the weekly reboot.** A flip whose verification would still be
   running at the 07:35 UTC Sunday reboot does not land. Once D5.2b2 lands, `promote` enforces
   this itself: inside its derived no-promotion window it defers, and the flip promotes when the
@@ -2458,7 +2470,7 @@ sizes its batch of roles against that projection.
     - zigbee2mqtt (about 40 lines), then home-assistant (about 60 lines). home-assistant also
       needs D3's SOPS manifest for `google_assistant_service_account` and its `decryption`
       setting.
-25. **D5.14 to D5.18 — Wave C**, about two roles per PR, about 100 lines each. nut is the UPS
+25. **D5.14 to D5.18 — Wave C**, two to five roles per PR (*Flip PR size*). nut is the UPS
     primary and gets its own PR. n8n and pi-peer-backup wait on R3. pi-peer-backup also needs
     D3's SOPS manifest. n8n's `n8n-netpol-probe` becomes `n8n-verify`. pi-peer-backup's Pi
     writes move to `k8s_host_files`, which D5.1h has created, and its `cronjob-gate` Job
@@ -2468,7 +2480,8 @@ sizes its batch of roles against that projection.
     the exact content tag, returns 200 on daniel-box and on daniel-server. nut's PR also waits
     on Open question 2's ruling. If the mirror is kept, a manifest GET of nut's content tag
     through the mirror on daniel-server returns 200 first.
-26. **D5.19 onwards — Wave D**, in the order of the wave table.
+26. **D5.19 onwards — Wave D**, in the order of the wave table, three to five roles per flip PR
+    (*Flip PR size*, below).
     - **Two readings on the first Wave D revisions.** The session re-takes D4's
       worker-occupancy reading and tunes the 30-minute window of D4.9's
       `FluxWorkersSaturated` from it. It also measures how long `verify` runs on the first

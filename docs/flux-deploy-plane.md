@@ -160,7 +160,7 @@ readiness arms and `FluxSuspended` quiet ([#4809](https://github.com/DanielH2018
 
 The `deploy-pipeline` rule group,
 `ansible/roles/k8s/observability/files/rules/deploy-pipeline.yaml`, pages on `promote`'s own
-state. monitor-bridge reads that state each 300-second cycle and serves it as four gauges, one
+state. monitor-bridge reads that state each 300-second cycle and serves it as five gauges, one
 series each, which the `deploy-pipeline` scrape job collects:
 
 - `homelab_deploy_hold_active` reads 1 while `DEPLOY_HOLD` reads anything but `none`.
@@ -170,6 +170,10 @@ series each, which the `deploy-pipeline` scrape job collects:
   `prod`'s commit lacks went green, and 0 when there is none.
 - `homelab_deploy_prod_digest_match` reads 1 when `prod`'s digest in GHCR equals
   `PROD_DIGEST`, and also while `PROD_DIGEST` reads `none` and no `prod` tag exists.
+- `homelab_deploy_reboot_window_active` reads 1 inside the no-promotion window of the
+  weekly reboot, where `promote.py decide` defers every promotion. monitor-bridge derives it from the
+  `weekly_reboot_*` variables, using the widest window any target has: `VERIFY_CAP_S` before
+  the reboot, until M2's mute ends.
 
 Every rule carries `service="deploy-pipeline"`. That value names no deploy tag, so no
 `probe.py health` gate reads these alerts, and a standing hold cannot fail the `flux` role's
@@ -182,14 +186,16 @@ gate (D2 Open question 12).
   than 2 hours ago, and no hold stands. Either `promote` is not running, or its runs end
   without moving `prod`, such as a run that never settles and leaves every later run
   reporting `current`. Read the workflow's recent runs. A hold silences this alert, because
-  `DeployHoldActive` already pages that state.
+  `DeployHoldActive` already pages that state. The reboot window silences it too, because
+  `promote` defers inside it on purpose and the scheduled run at its end promotes. The alert
+  stays quiet for 30 minutes after the window ends, which covers a late start of that run.
 - **`ProdMovedOutsidePromote`, critical.** `prod`'s digest has differed from `PROD_DIGEST` for
   15 minutes. `promote` writes `PROD_DIGEST` each time it moves `prod`, so either something
   else moved the tag, or `promote` moved it and the write failed. Flux follows `prod`, so
   production runs whatever the tag names now. The 15 minutes cover the gap between a move and
   its write, plus one exporter cycle.
 - **`DeployPipelineExporterAbsent`, warning.** For 15 minutes, either the scrape job is gone
-  from `prometheus.yml`, or monitor-bridge is scraped without one of the four gauges. A read
+  from `prometheus.yml`, or monitor-bridge is scraped without one of the five gauges. A read
   that fails exports no series for what it feeds, never a 0, and so does a deleted variable
   or an empty token. monitor-bridge logs one `deploy-pipeline:` line each cycle naming the
   read that failed. A failed scrape of the job pages through Kuma's `Cluster Scrape Targets`
@@ -697,6 +703,64 @@ input*.
 - **The way out** is **operator-only**: the runbook in `docs/volume-snapshot-drills.md`, then
   a clear of `DEPLOY_HOLD`.
 
+### The reset input
+
+A `promote` dispatch with `reset_to_last_good` set moves `prod` to `last-good` and does nothing
+else. It runs only from master's copy of the workflow, and dispatching it is **operator-only**.
+It skips render, publish and promotion, and refuses a dispatch that also sets `sha` or
+`verify_drill`. `scripts/deploy_tools/promote_lib/reset.py` holds the rules.
+
+- **Its concurrency group is `promote-reset`, not `promote`.** In `promote`, the reset would
+  wait behind a `decide` that waits on a verification in flight, for up to 6 hours, and a
+  run that the next merge starts would evict it while it was pending.
+- **It decides, then writes.** The `reset-check` job reads with read-only tokens. The
+  `reset-move` job checks out nothing and holds `packages: write`. It moves `prod` only while
+  `prod` still names the digest `reset-check` read, and then records PROD_DIGEST. A live
+  `prod` already on `last-good` succeeds and moves nothing. Any other digest moves nothing
+  and fails, naming both.
+- **It refuses without a hold.** `DEPLOY_HOLD` reading `none`, an empty value, a missing
+  variable and a failed read all refuse. Without a hold, the next promote run would move
+  `prod` forward again. To set a hold, run `gh variable set DEPLOY_HOLD --body <reason> -R
+  DanielH2018/server` (**operator-only**).
+- **It refuses while a verification is in flight.** When `prod` and `last-good` name the same
+  digest, the reset moves nothing and succeeds. When they differ, it proceeds only if
+  `DEPLOY_HOLD`'s first word is a commit X and the digest of `sha-<X>` equals `prod`'s. That
+  hold means the run that moved `prod` has settled. Any other difference means a run is
+  between its `tag` and its `settle`. The refusal names `prod`'s commit and the in-progress
+  `promote` runs. To proceed, wait for that run's `settle`, or cancel it with `gh run cancel
+  <run-id> -R DanielH2018/server` (**operator-only**), then dispatch again.
+- **It ignores the reboot window below.** It moves `prod` back to a revision the cluster
+  already ran.
+
+### No promotion runs into the weekly reboot
+
+The reboot kills the soak Job's pod, recreates pods and fires critical rules after the move.
+M2's `weekly-reboot` mute is an Alertmanager route, so it silences nothing `verify` reads. A
+promotion verifying across the reboot would therefore hold.
+`scripts/deploy_tools/promote_lib/reboot_window.py` holds the rules.
+
+- **The window.** It opens T's own derived verify timeout before the reboot, and it closes when
+  M2's mute ends. The reboot is the cron's fire plus `weekly_reboot_shutdown_delay_minutes`,
+  and the mute ends `weekly_reboot_mute_recovery_minutes` after the reboot. `decide` reads the
+  `weekly_reboot_*` variables from `ansible/inventory/group_vars/all.yml` in its checkout.
+  At the committed schedule, the window closes at 08:15 UTC on Sunday and opens between about
+  02:05 and 07:30, depending on T.
+- **Which timeout `decide` reads.** It is T's own, from `verify_promotion.expected_set`, the
+  function `verify` calls, so the two cannot disagree.
+- **`deferred`.** Inside the window, `decide` ends the run with the verdict `deferred` and
+  moves nothing. It never waits in its job, because a wait before `verify` would come out of
+  `verify`'s budget and time out into a false hold.
+- **The scheduled run.** `promote.yml`'s `schedule:` cron fires at the window's end and
+  promotes master's tip. It skips render, images and publish, because every commit merged
+  in the window was published by its own run. GitHub reads the cron as a literal, so
+  `scripts/deploy_tools/tests/test_promote_reboot_window.py` derives it from the same
+  variables and fails when the two differ. GitHub can start a scheduled run late or skip it.
+  A skipped run leaves the window's commits for the run the next merge starts.
+- **`land-wait`.** Each poll inside the window moves the give-up deadline to the window's end
+  plus the base timeout, and prints when the window ends. `land-wait` holds no T's bundle,
+  so it reads the widest window any T has, `chained_timeout.VERIFY_CAP_S`. A `land.sh`
+  deadline still caps the wait.
+
 ### The timeout follows the chain
 
 `scripts/deploy_tools/chained_timeout.py:promote_timeout` derives `verify`'s wait from T's bundle and its changed set, the same set
@@ -710,8 +774,13 @@ only after its dependencies finish, so the wait sums four terms, with the soak b
   `--requeue-dependency` interval, 30 seconds by default. A Kustomization whose dependency is
   not Ready requeues after that interval and no sooner. The walk covers every Kustomization in
   the bundle, so `cluster-vars` counts whenever it sits on the path.
-- **The queueing term.** The number of changed names, dependents included, divided by
-  `--concurrent` and rounded up, times the largest `timeout` among them. A Kustomization that
+- **The queueing term.** The smaller of two bounds on when the last changed name, dependents
+  included, finishes. The first is the number of changed names divided by `--concurrent` and
+  rounded up, times the largest `timeout` among them. The second is Graham's bound for
+  greedy list scheduling: the other names' `timeout`s summed, divided by `--concurrent` and
+  rounded up, plus the largest. The first is the smaller for equal `timeout`s. The second is
+  the smaller when one long `timeout` sits among short ones, which the first would charge in
+  every round (#5482). `docs/target-architecture/deploy/d4-ordering.md` has the proof. A Kustomization that
   waits on health holds one of the Kustomize controller's workers, so a revision that changes more
   names than `--concurrent` queues behind the workers. The flux role sets `--concurrent` to
   `k8s_rollout_batch_width`, 5, the width the deploy play rolls workloads at, plus one worker
@@ -762,8 +831,9 @@ A wait shorter than a verification is safe and costs a promotion. `decide` gives
   two Kustomizations alone, with a 3-minute W, the wait is 41.5 minutes. `land-wait` restates
   that figure as `wait.py:PROMOTE_TIMEOUT_S` and gives up at twice it. The soak's chain counts
   every Kustomization in the bundle, so it grows by a 10-minute queueing round for each five
-  more. With the eleven tags published on 2026-10-17 the soak's `timeout` is 3510s, and
-  `verify` waits 61.5 minutes. So `land-wait` also reads the listed `soak` Kustomization's
+  more 10-minute ones. Once Graham's bound is the smaller, each added Kustomization no longer
+  than the longest adds a fifth of its `timeout`. With the 16 tags published at `0758aa3f5`
+  the soak's `timeout` is 4350s, and `verify` waits 75.5 minutes. So `land-wait` also reads the listed `soak` Kustomization's
   `timeout` each poll, and gives up no sooner than twice `verify`'s wait on it
   (`wait.py:soak_deadline_s`). A lander unit's `LAND_DEADLINE` caps the wait below that,
   and `docs/landing.md` says how the units size it (#5427). While a verification of an earlier commit is in flight, M's `decide` waits on
