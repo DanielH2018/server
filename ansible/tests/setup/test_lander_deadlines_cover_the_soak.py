@@ -9,7 +9,7 @@ The wait needs `verify`'s wait on the soak that the publish job renders from thi
 promote's `render`, `images` and `publish` jobs, which run before any promotion can start.
 Published tags build images since D5.14 handed ical-proxy and homelab-mcp to Flux, so a
 flux-tag landing's own commit can rebuild one, and `publish` needs `images`. The sum counts
-each of the three jobs at its `timeout-minutes`, so `images`' 90 minutes bound the landing's
+each of the three jobs at its `timeout-minutes`, so `images`' 20 minutes bound the landing's
 own rebuild. `test_the_pipeline_counts_every_job_publish_waits_on` derives the jobs from
 `publish`'s `needs` in the workflow, so a job added ahead of `publish` turns it red.
 
@@ -21,8 +21,9 @@ that job builds every content tag GHCR does not serve in its own render, so an i
 whose pending job it evicted is built there, and the job's timeout already counts it.
 `tag` and the `verify` job are not on the path: `land-wait` settles on Flux's `flux/soak`
 status at R, not on either job. The soak's
-`timeout` grows by a queueing round with every five Kustomizations, so the PR that hands the
-next tags to Flux is the one this turns red.
+`timeout` grows by a queueing round with every five equal Kustomizations, or by a fifth of an
+added one's `timeout` once Graham's bound is the smaller (`chained_timeout.queueing_s`), so the
+PR that hands the next tags to Flux is the one this turns red.
 
 Run: uv run pytest ansible/tests/setup/test_lander_deadlines_cover_the_soak.py
 """

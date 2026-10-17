@@ -376,9 +376,9 @@ Instead it reads the cluster every 30 seconds:
   and master CI budgets, that leaves the wait room for `verify`'s wait on the rendered soak,
   once, and the `promote` workflow's `render`, `images` and `publish` jobs at their
   timeouts. It also covers one measured rebuild of every built image by a commit queued ahead
-  (#5431). `images` counts at its 90 minutes because published tags build images since D5.14
-  handed ical-proxy and homelab-mcp to Flux (#5466). About three queueing rounds of headroom
-  remain.
+  (#5431). `images` counts at its 20 minutes because published tags build images since D5.14
+  handed ical-proxy and homelab-mcp to Flux (#5466). With the 16 tags published at
+  `0758aa3f5`, 6476 seconds of headroom remain (#5482).
   `ansible/tests/setup/test_lander_deadlines_cover_the_soak.py` renders the published bundle
   and fails once a newly published tag outgrows that headroom (#5427).
 
