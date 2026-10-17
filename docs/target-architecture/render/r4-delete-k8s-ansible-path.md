@@ -282,11 +282,9 @@ again (*Steps, as PRs*, *The edge to D6, narrowed*).
 
   `grep -rlE 'roles/k8s/manifests/tasks|ansible/deploy.yml|"deploy.yml"|k8s_batch|k8s_stabilise_gate|k8s_image_drift_gate|k8s_retire' ansible/tests scripts .claude --include='*.py'`
   lists 86 files. That selector misses tests that read a role's `tasks/` or the manifests
-  role's `defaults/` and `files/`, all of which PR 8 deletes. Examples are
+  role's `defaults/` and `files/`, all of which PR 8 deletes. An example is
   `ansible/tests/k8s/test_shared_manifest_defaults.py`, which holds
-  `SHARED_MANIFEST_DEFAULTS` against the manifests role's defaults, and
-  `ansible/tests/k8s/test_game_stats_lib_ships_through_the_include.py`, which reads
-  game-stats' `tasks/stage.yml`. Adding `roles/k8s/[a-z0-9-]+/tasks`,
+  `SHARED_MANIFEST_DEFAULTS` against the manifests role's defaults. Adding `roles/k8s/[a-z0-9-]+/tasks`,
   `k8s/manifests/(defaults|files)` and `/ "tasks"` to the selector, over `ansible/tests`,
   `scripts`, `ansible/roles/k8s` and `.claude`, lists 270 files. PR 1 sorts that wider set:
   tests that PRs 3 to 5 retarget at defaults, tests that PR 7c retargets at the renderer,

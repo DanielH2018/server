@@ -20,11 +20,19 @@ from urllib.parse import parse_qs, urlsplit
 
 import forge
 import promote
+from deploy_tools.promote_lib import reboot_window
 
 CONTEXT = "prek (lint + validate + tests + secrets)"
 # The wall-clock time `decide` runs at, so a gate status's age is fixed.
 NOW = datetime(2026, 10, 16, 12, 0, tzinfo=UTC)
 CONTEXTS_YAML = f"gitops_deploy_ci_contexts:\n  - {CONTEXT}\n"
+# The weekly reboot as group_vars/all.yml states it: the cron fires Sunday 07:30 UTC, the hosts
+# go down at 07:35 and M2's mute ends at 08:15. NOW is a Friday, outside every window.
+REBOOT_YAML = (
+    "weekly_reboot_minute: 30\nweekly_reboot_hour: 7\nweekly_reboot_weekday: 0\n"
+    "weekly_reboot_shutdown_delay_minutes: 5\nweekly_reboot_timezone: UTC\n"
+    "weekly_reboot_mute_lead_minutes: 5\nweekly_reboot_mute_recovery_minutes: 40\n"
+)
 
 
 def digest_of(name: str) -> str:
@@ -91,6 +99,7 @@ class FakeTransport:
         statuses: each commit's newest status per context, as `{context: state}`.
         status_times: the `updated_at` every status on a commit carries; none when absent.
         pulls: the PRs the commit-to-pulls lookup returns for each commit; none when absent.
+        runs: the in-progress runs the Actions API lists for `promote.yml`.
         requests: every `(method, url)` sent, in order.
     """
 
@@ -105,6 +114,7 @@ class FakeTransport:
     statuses: dict[str, dict[str, str]] = field(default_factory=dict)
     status_times: dict[str, str] = field(default_factory=dict)
     pulls: dict[str, list[dict]] = field(default_factory=dict)
+    runs: list[dict] = field(default_factory=list)
     requests: list[tuple[str, str]] = field(default_factory=list)
 
     def __call__(self, method, url, headers):
@@ -140,6 +150,11 @@ class FakeTransport:
                 ]
             }
             return forge.Response(200, body=json.dumps(body).encode())
+        if parts.path.endswith("/actions/workflows/promote.yml/runs") and (
+            parts.path not in self.api_forced
+        ):
+            body = json.dumps({"workflow_runs": self.runs}).encode()
+            return forge.Response(200, body=body)
         if parts.path in self.api_forced:
             message = {"message": f"forced HTTP {self.api_forced[parts.path]}"}
             body = json.dumps(message).encode()
@@ -289,6 +304,9 @@ class World:
         contexts = self.repo / promote.CI_CONTEXTS_SOURCE
         contexts.parent.mkdir(parents=True)
         contexts.write_text(contexts_yaml)
+        reboot = self.repo / reboot_window.SOURCE
+        reboot.parent.mkdir(parents=True)
+        reboot.write_text(REBOOT_YAML)
         _git(self.repo, "add", ".")
         _git(self.repo, "commit", "-q", "-m", "c0")
         for n in range(1, size):
@@ -378,7 +396,9 @@ class World:
             cosign=forge.Cosign(run=self.run),
         )
 
-    def decide(self, monkeypatch, capsys, trigger: str = "", registry=None) -> Result:
+    def decide(
+        self, monkeypatch, capsys, trigger: str = "", registry=None, now: datetime = NOW
+    ) -> Result:
         output = self.tmp_path / "github_output"
         output.write_text("")
         monkeypatch.setenv("GITHUB_OUTPUT", str(output))
@@ -391,7 +411,7 @@ class World:
             "--master-ref",
             "master",
         ]
-        exit_code = promote.main(argv, f=self.clients(registry), now=NOW)
+        exit_code = promote.main(argv, f=self.clients(registry), now=now)
         captured = capsys.readouterr()
         stdout = captured.out.splitlines()
         assert len(stdout) == 1, stdout

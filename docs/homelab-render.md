@@ -251,9 +251,9 @@ templates render in, so the renderer never restates one:
   `playbook_dir` resolving to `ansible/`. An include whose `when:` is false adds no tag, as
   valheim's does without mods. The tags form `k8s_built_image_tags`, which every role reads
   as `{}` when it builds nothing, as `ansible/deploy.yml` resets it.
-- **Script checksums.** monitor-bridge, autofix-bridge and game-stats hash their staged
-  modules with `lookup('file', ..., rstrip=False) | hash('sha1')`. game-stats' two checksums
-  also read `game_stats_lib_checksum`, which `tasks/stage.yml` sets first.
+- **Script checksums.** monitor-bridge and autofix-bridge hash their staged modules with
+  `lookup('file', ..., rstrip=False) | hash('sha1')`. game-stats embeds its scripts in
+  rendered ConfigMaps instead (#5444), so it computes no checksum in a task.
 - **`kuma_declarations`.** uptime-kuma's task renders `static-monitors.yaml.j2` and parses
   its `stringData`. The template reads it through `default({})`, so a missing value would
   still render, and a test holds the rendered index above 50 declarations, as the role's own

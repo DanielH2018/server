@@ -741,7 +741,9 @@ render_records_push_interval_s: 7200
 # derives the Kuma maintenance window that keeps the restart from paging Discord
 # (roles/k8s/uptime-kuma/templates/maintenance-sync-configmap.yaml.j2), and observability
 # derives Alertmanager's `weekly-reboot` mute from the same values
-# (roles/k8s/observability/templates/alertmanager-secret.yaml.j2). It lives here rather than in
+# (roles/k8s/observability/templates/alertmanager-secret.yaml.j2), and promote.py derives its
+# no-promotion window and promote.yml's `schedule:` cron (scripts/deploy_tools/promote_lib/
+# reboot_window.py). It lives here rather than in
 # any role's defaults because a schedule written twice drifts: a reboot moved without the window
 # is a Sunday morning of DOWN messages, and a window moved without the reboot suppresses nothing.
 weekly_reboot_minute: 30

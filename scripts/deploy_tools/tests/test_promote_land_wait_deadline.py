@@ -14,6 +14,7 @@ from flux_host import FluxHost
 from lib.repo_paths import REPO
 from deploy_tools.promote_lib import verify_promotion as vp
 from deploy_tools.promote_lib import wait as promote_wait
+from deploy_tools.promote_lib import wait_reads
 from _land_wait_fakes import (
     D,
     M,
@@ -181,23 +182,23 @@ def _forge(transport: FakeTransport) -> forge.Forge:
 
 def test_prod_ahead_of_last_good_reads_as_its_commit_in_flight():
     transport = _prod_transport("t", "g", f"master@sha1:{P}")
-    assert promote_wait._in_flight(_forge(transport)) == P
+    assert wait_reads._in_flight(_forge(transport)) == P
 
 
 def test_prod_at_last_good_reads_as_nothing_in_flight():
     transport = _prod_transport("g", "g", f"master@sha1:{P}")
-    assert promote_wait._in_flight(_forge(transport)) is None
+    assert wait_reads._in_flight(_forge(transport)) is None
 
 
 def test_prod_without_a_revision_is_a_read_error():
     transport = _prod_transport("t", "g", None)
     with pytest.raises(promote_wait.WaitReadError, match="revision"):
-        promote_wait._in_flight(_forge(transport))
+        wait_reads._in_flight(_forge(transport))
 
 
 def test_the_live_reads_wire_the_in_flight_read_to_prod():
     transport = _prod_transport("t", "g", f"master@sha1:{P}")
-    reads = promote_wait.live_wait_reads(_forge(transport), REPO, host=FluxHost())
+    reads = wait_reads.live_wait_reads(_forge(transport), REPO, host=FluxHost())
     assert reads.in_flight() == P
 
 

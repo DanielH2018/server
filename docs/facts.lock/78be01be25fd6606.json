@@ -1,13 +1,13 @@
 {
-  "checksum": "375e89810819856a4f7992cd42cae15fc242c807649ef90c2c7fb48bc106e657",
+  "checksum": "a83bbf5e495a6f534579e35815ca7c13ab867894987d8f29f7cdc8d00fc5aaef",
   "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
   "key": "ansible/roles/k8s/game-stats/CLAUDE.md#How it ships",
   "row": {
     "atoms": {
-      "ansible/tests/k8s/test_game_stats_lib_ships_through_the_include.py": "27b0e701d4d0909069ecf01ce2bb4c8746778c81bd944ecefaa60922ac17f285",
-      "docs/game-stats-internals.md": "7e3c07884f669383774693fc6d333b3a6f08479252e1dea206213ab1c5ae180d"
+      "docs/game-stats-internals.md": "7e3c07884f669383774693fc6d333b3a6f08479252e1dea206213ab1c5ae180d",
+      "scripts/renderer/tests/test_renderer_game_stats_restart.py": "011f225a8798b9f64ece31b2a2dfd5208da73b791626e0ba85c2e1cda209736c"
     },
     "python": "3.14",
-    "verified_sha": "df2b9a704"
+    "verified_sha": "7d8a1ecea"
   }
 }
