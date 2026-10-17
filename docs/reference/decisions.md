@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/decisions.py
-generated_at: 2026-10-17 01:02 UTC
-generated_sha: 3b11cce69
+generated_at: 2026-10-17 06:17 UTC
+generated_sha: 109f8d0aa
 ---
 
 !!! warning "Generated file — do not edit"
@@ -12,7 +12,7 @@ generated_sha: 3b11cce69
 
 # Decisions
 
-758 `DECIDED:` marker(s) found across the tree. A marker is a settled trade-off recorded as a comment at the line it governs, per CLAUDE.md's "Review & Memory Hygiene" section — written so a reviewer trips over the reasoning before re-opening a decision that already has one. A reviewer brief greps the literal marker text before flagging something as new; this page exists so a human can browse the same set instead of guessing a phrase to grep.
+764 `DECIDED:` marker(s) found across the tree. A marker is a settled trade-off recorded as a comment at the line it governs, per CLAUDE.md's "Review & Memory Hygiene" section — written so a reviewer trips over the reasoning before re-opening a decision that already has one. A reviewer brief greps the literal marker text before flagging something as new; this page exists so a human can browse the same set instead of guessing a phrase to grep.
 
 !!! warning "Possible duplicates"
     Two markers below have a near-identical first sentence once case and whitespace are normalised — usually the same trade-off decided twice, or a marker copied and never specialised. Worth a look, not a verdict.
@@ -30,7 +30,7 @@ generated_sha: 3b11cce69
     * `.claude/skills/worktree-cleanup/SKILL.md:52` and `ansible/roles/setup/common/CLAUDE.md:26`
     * `.claude/skills/worktree-cleanup/SKILL.md:52` and `docs/monitor-bridge-checks.md:1013`
     * `.claude/skills/worktree-cleanup/SKILL.md:52` and `prek.toml:517`
-    * `ansible/roles/containers/autoheal/CLAUDE.md:49` and `ansible/roles/k8s/artifacts/CLAUDE.md:69`
+    * `ansible/roles/containers/autoheal/CLAUDE.md:49` and `ansible/roles/k8s/artifacts/CLAUDE.md:75`
     * `ansible/roles/containers/autoheal/CLAUDE.md:49` and `ansible/roles/k8s/uptime-kuma/templates/static-monitors.yaml.j2:338`
     * `ansible/roles/containers/autoheal/CLAUDE.md:49` and `ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_config.py:15`
     * `ansible/roles/containers/autoheal/CLAUDE.md:49` and `ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_failtext.py:13`
@@ -41,16 +41,16 @@ generated_sha: 3b11cce69
     * `ansible/roles/containers/autoheal/CLAUDE.md:49` and `docs/gitops-pipeline.md:1158`
     * `ansible/roles/containers/autoheal/CLAUDE.md:49` and `scripts/diagnostics/tests/test_probe_could_not_read_exits.py:4`
     * `ansible/roles/containers/autoheal/CLAUDE.md:49` and `scripts/lib/b2.py:21`
-    * `ansible/roles/k8s/artifacts/CLAUDE.md:69` and `ansible/roles/k8s/uptime-kuma/templates/static-monitors.yaml.j2:338`
-    * `ansible/roles/k8s/artifacts/CLAUDE.md:69` and `ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_config.py:15`
-    * `ansible/roles/k8s/artifacts/CLAUDE.md:69` and `ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_failtext.py:13`
-    * `ansible/roles/k8s/artifacts/CLAUDE.md:69` and `ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_io.py:25`
-    * `ansible/roles/k8s/artifacts/CLAUDE.md:69` and `ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_state.py:15`
-    * `ansible/roles/k8s/artifacts/CLAUDE.md:69` and `ansible/tests/repo/test_adr_links.py:12`
-    * `ansible/roles/k8s/artifacts/CLAUDE.md:69` and `docs/archive/docs-ui-and-adrs/design.md:27`
-    * `ansible/roles/k8s/artifacts/CLAUDE.md:69` and `docs/gitops-pipeline.md:1158`
-    * `ansible/roles/k8s/artifacts/CLAUDE.md:69` and `scripts/diagnostics/tests/test_probe_could_not_read_exits.py:4`
-    * `ansible/roles/k8s/artifacts/CLAUDE.md:69` and `scripts/lib/b2.py:21`
+    * `ansible/roles/k8s/artifacts/CLAUDE.md:75` and `ansible/roles/k8s/uptime-kuma/templates/static-monitors.yaml.j2:338`
+    * `ansible/roles/k8s/artifacts/CLAUDE.md:75` and `ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_config.py:15`
+    * `ansible/roles/k8s/artifacts/CLAUDE.md:75` and `ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_failtext.py:13`
+    * `ansible/roles/k8s/artifacts/CLAUDE.md:75` and `ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_io.py:25`
+    * `ansible/roles/k8s/artifacts/CLAUDE.md:75` and `ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_state.py:15`
+    * `ansible/roles/k8s/artifacts/CLAUDE.md:75` and `ansible/tests/repo/test_adr_links.py:12`
+    * `ansible/roles/k8s/artifacts/CLAUDE.md:75` and `docs/archive/docs-ui-and-adrs/design.md:27`
+    * `ansible/roles/k8s/artifacts/CLAUDE.md:75` and `docs/gitops-pipeline.md:1158`
+    * `ansible/roles/k8s/artifacts/CLAUDE.md:75` and `scripts/diagnostics/tests/test_probe_could_not_read_exits.py:4`
+    * `ansible/roles/k8s/artifacts/CLAUDE.md:75` and `scripts/lib/b2.py:21`
     * `ansible/roles/k8s/authelia/tasks/main.yml:98` and `ansible/roles/k8s/nut/tasks/main.yml:22`
     * `ansible/roles/k8s/configarr/tasks/main.yml:156` and `ansible/roles/setup/claude_code/tasks/node_crons.yml:58`
     * `ansible/roles/k8s/home-assistant/files/automations/wake-and-sleep.yaml:141` and `ansible/roles/k8s/home-assistant/files/automations/wake-and-sleep.yaml:266`
@@ -172,7 +172,7 @@ generated_sha: 3b11cce69
     * `docs/gitops-pipeline.md:1565` and `scripts/diagnostics/tests/test_probe_health.py:323`
     * `docs/monitor-bridge-checks.md:1013` and `prek.toml:517`
     * `docs/security-tools.md:25` and `docs/security-tools.md:89`
-    * `docs/target-architecture/contracts.md:292` and `docs/target-architecture/deploy/d2-first-leaf.md:754`
+    * `docs/target-architecture/contracts.md:292` and `docs/target-architecture/deploy/d2-first-leaf.md:755`
     * `scripts/deploy_tools/tests/test_shared_role_reach.py:111` and `scripts/deploy_tools/tests/test_shared_role_reach.py:125`
     * `scripts/dev/fanout_lib/brief.py:268` and `scripts/dev/findings_lib/history_cli.py:200`
     * `scripts/dev/findings_lib/claim_cli.py:30` and `scripts/dev/findings_lib/export_cli.py:37`
@@ -189,8 +189,8 @@ generated_sha: 3b11cce69
 |---|---|---|
 | ` marker and the argument; widening is an edit to that one list. | `ansible/roles/k8s/arr-notification/CLAUDE.md:40` | 2026-09-06 |
 | health-only, matching what both apps already carried as UI state. for grab + import + application-update as well. That is a behaviour change, not a declaration: every episode and every movie import would post to the channel. Adopting the live set first makes the adopting PR a no-op on behaviour, and widening it later is an edit to this one list. The asymmetry is the argument — a too-narrow default costs a var edit, a too-wide one spams the channel until someone notices. | `ansible/roles/k8s/arr-notification/defaults/main.yml:20` | 2026-09-06 |
-| ` comment has why (#2467). | `ansible/roles/k8s/artifacts/CLAUDE.md:55` | 2026-10-11 |
-| ` | `ansible/roles/k8s/artifacts/CLAUDE.md:69` | 2026-09-25 |
+| ` comment has why (#2467). | `ansible/roles/k8s/artifacts/CLAUDE.md:61` | 2026-10-17 |
+| ` | `ansible/roles/k8s/artifacts/CLAUDE.md:75` | 2026-09-25 |
 | the check is `os.path.realpath` then `str.startswith`, not `Path.resolve` then | `ansible/roles/k8s/artifacts/files/artifact_server.py:305` | 2026-09-04 |
 | ` marker sits at the line. | `ansible/roles/k8s/authelia/CLAUDE.md:77` | 2026-09-29 |
 | separate from traefik_k8s_manage_crowdsec rather than one shared variable. shared one would live in group_vars/all.yml, an `ansible/inventory/` path the GitOps deployer treats as broad — it defers and returns WITHOUT fast-forwarding, so the change would need clearing by hand. The surfaces are asymmetric too: this pod carries only an agent and PRODUCES signals, where Traefik carries a bouncer plugin and enforces bans. | `ansible/roles/k8s/authelia/defaults/main.yml:17` | 2026-08-28 |
@@ -584,6 +584,10 @@ generated_sha: 3b11cce69
 | exit 4 under `--at` means a commit MERGED AFTER this one reaches the same tags, and that newer landing owns the service. Deploying the merge commit anyway would revert their change; deploying the primary's HEAD would deploy a tree this landing never CI-gated. So this one falls back to the path it had before `--at` existed -- wait for the tick to fast-forward the primary onto the newest green commit, then deploy from there -- and the retry loop below is that path, unchanged. | `scripts/deploy_tools/land_lib/deploy.py:498` | 2026-09-16 |
 | the tick is kicked HERE, after deploy.sh has returned, not in step 4. `gitops-deploy.service` wraps its whole unit run in the tree lock, so a tick kicked before the deploy is one deploy.sh then queues behind inside its own `flock -w 3840` -- the same wait, moved out of `tick=` and into `lock=`. Kicked after, it converges the primary while this landing gates, and the gate's own snapshot needs no lock. Not on the fallback arm: the retry loop runs a tick WITH its wait, and two requests for the same work is one more than the path had before `--at`. | `scripts/deploy_tools/land_lib/deploy.py:515` | 2026-09-16 |
 | a failing retick here ENDS the landing (deploy-failed, cause=tick-failed) rather than carrying on to deploy_by_host the way bash's stale-retry loop did -- bash discarded the tick's own exit code and kept going regardless. Deliberate per tick.py's module docstring and #1013: this shares tick.py's one retry implementation with step 4 rather than land.sh's un-retried, un-accounted copy, and that implementation's failure mode is to raise. Listed as #1085 item 8 so it is not re-derived as a parity bug. | `scripts/deploy_tools/land_lib/deploy.py:566` | 2026-09-04 |
+| `--no-sync`. HOST_INPUTS member, so a synced render would upgrade that venv at the merge commit and downgrade it at the first parent while the tick may be using it. A render that needs a dependency the venv lacks fails instead, and a failed render waits on every host. | `scripts/deploy_tools/land_lib/host_wait.py:63` | 2026-10-17 |
+| the schedule is read in UTC. host runs Etc/UTC (`weekly_reboot_timezone` in group_vars/all.yml records the same fact for the reboot cron). | `scripts/deploy_tools/land_lib/host_wait.py:102` | 2026-10-17 |
+| both the enable link and the schedule come from the first parent's render, never | `scripts/deploy_tools/land_lib/host_wait.py:267` | 2026-10-17 |
+| a target whose schedule is unknown, because its render failed or its timer is | `scripts/deploy_tools/land_lib/host_wait.py:555` | 2026-10-17 |
 | ` holding the operator's ruling and the gap it accepts. | `scripts/deploy_tools/land_lib/land_shared.py:15` | 2026-10-01 |
 | fire on ANY change to secrets.yml` marker below. It is interim: it retires in the PR where `land.sh` reads its changed set from `digests.json` (D6). | `scripts/deploy_tools/land_lib/land_tags.py:103` | 2026-10-16 |
 | `except Exception`, because any failure here must print the role tag. derivation shells out to git and decodes the output. An escape would kill a landing that has already merged, over a note the whole-role tag answers correctly. | `scripts/deploy_tools/land_lib/land_tags.py:162` | 2026-09-24 |
@@ -612,8 +616,8 @@ generated_sha: 3b11cce69
 | a shipped file this role renders only through another role's task file refuses here; it is not resolved through that task file's readers (#3322). The kuma-check templates reach gitops_deploy, render_records and k3s only through `common/tasks/kuma_check_timer.yml`, so a change to them falls back to the whole-role tag. That costs a longer apply and never misses one. Those templates changed twice in the repo's history, and each routing layer added from 2026-10-01 on found the next indirection, so one more layer was not worth its code. Reopen it if the trigger recurs or the fallback grows costlier than a longer apply; #3322's close reason is the long form. | `scripts/deploy_tools/narrow_setup.py:361` | 2026-10-03 |
 | a first run has no `last-good` and no `prod` to bound the range, so it reads the same window its walk examined and takes the oldest commit in it as the lower bound. The first run predates every forward-only pin by construction. | `scripts/deploy_tools/promote_lib/forward_only.py:274` | 2026-10-16 |
 | a verification in flight is guarded by two checks rather than by joining `verify` and `settle` to the `promote` concurrency group. GitHub keeps one pending job per group and a newer one cancels it, so a pending `settle` could be evicted with its hold unwritten. Unguarded, a second run could move `prod` past a T that `verify` still waits on, Flux would never post T's statuses, and the timeout would write a false hold and reset `prod` under the second run's verified commit. So `decide` waits while `prod` differs from `last-good`, which it does only between a run's `tag` and its `settle`, at two HEADs a poll. And `tag` moves `prod` only while it still names the digest `decide` read, which closes the gap between one run's `decide` and an earlier run's `tag` (promote.yml, the `Move prod` step). A run that never settles stalls promotion as `current`, which D2.6d's `PromotionStalled` alert pages once it lands. The long form is docs/flux-deploy-plane.md, *Verification*. | `scripts/deploy_tools/promote_lib/verify_promotion.py:110` | 2026-10-15 |
-| a hold without a reset (H1.1b) leaves `prod` on the failed T while `last-good` stays behind, and that difference outlives the operator's clear of DEPLOY_HOLD. So `settle` tags T's digest `held` when it leaves `prod` there, and a `prod` that names the `held` digest is settled, not in flight. `prod` never returns to that digest once it moves on: it moves only forward, or back to `last-good`, which T never became. Without the tag, every run after the clear would wait IN_FLIGHT_WAIT_S and end `current`. | `scripts/deploy_tools/promote_lib/verify_promotion.py:540` | 2026-10-16 |
-| the deadline moves while that verification is in flight, rather than LAND_WAIT_TIMEOUT_S rising by IN_FLIGHT_WAIT_S. The constant would cover the same worst case, but every stuck landing would then take about 6.7 hours to give up, where this costs only the time a verification is actually in flight (#5164). | `scripts/deploy_tools/promote_lib/wait.py:112` | 2026-10-16 |
+| a hold without a reset (H1.1b) leaves `prod` on the failed T while `last-good` stays behind, and that difference outlives the operator's clear of DEPLOY_HOLD. So `settle` tags T's digest `held` when it leaves `prod` there, and a `prod` that names the `held` digest is settled, not in flight. `prod` never returns to that digest once it moves on: it moves only forward, or back to `last-good`, which T never became. Without the tag, every run after the clear would wait IN_FLIGHT_WAIT_S and end `current`. | `scripts/deploy_tools/promote_lib/verify_promotion.py:542` | 2026-10-16 |
+| the deadline moves while that verification is in flight, rather than LAND_WAIT_TIMEOUT_S rising by IN_FLIGHT_WAIT_S. The constant would cover the same worst case, but every stuck landing would then take about 6.7 hours to give up, where this costs only the time a verification is actually in flight (#5164). | `scripts/deploy_tools/promote_lib/wait.py:123` | 2026-10-16 |
 | the tag is dropped, not only the shared-role note. current manifests on its next image bump anyway, and a pytest guard reaches no cluster. | `scripts/deploy_tools/reach.py:127` | 2026-10-10 |
 | ` at | `scripts/deploy_tools/shared_role_callers.py:24` | 2026-10-01 |
 | transitive. walk that stopped at the first hop would name no tag for them and their `k8s_unapplied` lines would need a hand to clear. #2704 replaced the land side's first-hop `covered_roles` with this for the same reason. | `scripts/deploy_tools/shared_role_callers.py:47` | 2026-10-01 |
@@ -747,8 +751,9 @@ generated_sha: 3b11cce69
 | x", | `scripts/lib/tests/test_facts_notice.py:389` | 2026-10-12 |
 | count an unreadable process only when another non-root uid runs it inside `user-<this uid>.slice` (#3994); every wider rule refuses every removal on daniel-box. The rule and its reasoning live in `claude_worktree._foreign_in_my_slice`, the one copy this repo and the dotfiles worktree hooks share (dotfiles#822). | `scripts/lib/worktrees.py:274` | 2026-10-10 |
 | the socket fails closed once it accepts, and an absent socket or a connect refused for permission falls back to the #3994 slice rule. The helper reads every uid's cwd and environ, so a gap in its answer is a process that could hold this tree, and a refused removal is retried next week. Neither fallback can fail closed the same way: without root, claude-rc.service and the claude user's own sessions are always unreadable, so that rule would refuse every removal on a host where the hand apply has not run, and in every session older than its user's group grant. The fallback says so on stderr, which the cron journals. | `scripts/lib/worktrees.py:342` | 2026-10-10 |
+| deferred, a documented cycle: soak.py builds on this module's writers, and SHARED_KINDS makes every bundle_files caller render soak (test_scripts_import_direction). | `scripts/renderer/renderer_lib/bundle.py:550` | 2026-10-17 |
 | attached last, after the restart stamp, the prune label and the SOPS copies, | `scripts/renderer/renderer_lib/cluster.py:369` | 2026-10-16 |
-| an applies-last tag waits on no other tag's `-snapshot` or `-verify`. D4 left the choice to D5.1a1. A verify Job probes through netpol-baseline's fences, so netpol-baseline waiting on another tag's `-verify` would run that Job before the fences it dials are applied. A snapshot gates only its own tag. | `scripts/renderer/renderer_lib/ordering.py:152` | 2026-10-16 |
+| an applies-last tag waits on no other tag's `-snapshot` or `-verify`. D4 left the choice to D5.1a1. A verify Job probes through netpol-baseline's fences, so netpol-baseline waiting on another tag's `-verify` would run that Job before the fences it dials are applied. A snapshot gates only its own tag. | `scripts/renderer/renderer_lib/ordering.py:153` | 2026-10-16 |
 | only a flux-owned tag is labelled, as only one gets `checksum/restart`. | `scripts/renderer/renderer_lib/prune_label.py:79` | 2026-10-16 |
 | a Job declares its kind in this annotation on the Job's own `metadata`, which the plan does not name. Verify and mutation Jobs share `<tag>-verify`, so nothing else tells a mutation Job, which must carry `RERUN_SAFE`, from a verify Job, which must not retry. A Job without it fails closed. Both annotations sit on the Job, not its pod template, so adding one moves no spec digest and renames no Job. | `scripts/renderer/tests/_job_census.py:55` | 2026-10-16 |
 | an allowlist of imports, not a denylist of connecting calls. `urlretrieve`, `asyncio.open_connection`, `ftplib` and `importlib` in review. No module here opens a connection; a script builds its `Request` from `flux_job_connect`, so `urllib.request` is not here either. A module joins this list only if it cannot connect. | `scripts/renderer/tests/_job_census.py:69` | 2026-10-16 |
@@ -764,9 +769,10 @@ generated_sha: 3b11cce69
 | no fourth rule for Popen. reaches `wait`/`communicate` with no `timeout=` and no preceding `kill()`. The 2026-10-01 census found seven `Popen` call sites in test modules, and that shape sorts them badly. | `scripts/tests/_test_module_rules.py:131` | 2026-10-03 |
 | ` at probe_lib/ha.py:581 and at ha_state_model.py's `cmd_refresh` (the deferred `from diagnostics.probe_lib import core`/`ha`). | `scripts/tests/test_scripts_import_direction.py:107` | 2026-09-05 |
 | ` at ha_state_checks.py's `from ha_state_model import (...)` and at ha_state_model.py's `main()` (the deferred `from ha_state_checks import check_errors`). | `scripts/tests/test_scripts_import_direction.py:112` | 2026-09-05 |
-| an Ansible-owned tag's render move counts only when a changed path reaches an Ansible apply. Ansible applies its own templates, never `homelab-render` output, so a renderer change moves nothing Ansible applies, and the docs, tests and shard weights that ride along with one reach no apply either. Only the flux-owned half reaches a cluster, through `promote` (#5213). An empty path list is left alone, as no real PR has one. | `scripts/validate/cross_plane_order.py:250` | 2026-10-16 |
-| a `tasks/` change counts only for a tag Ansible owns at the head. flux-owned role run nowhere, and the render they feed is already in `moved`. Counting them refused three mechanical edits in the 30-day replay that no plane could misorder. The operator ruled on 2026-10-16 (D4 Open question 9). | `scripts/validate/cross_plane_order.py:264` | 2026-10-16 |
-| both sides run under the PR's interpreter, not each commit's own `uv run --frozen` environment. A dependency bump that changes the render is then invisible to the gate, but no plane orders on a lockfile, and a second environment per run costs a sync. D4 Open question 12 leaves a shared layout with D6.1 to D6. | `scripts/validate/cross_plane_order.py:439` | 2026-10-16 |
+| deferred, a documented cycle` in bundle.py's `bundle_files`. | `scripts/tests/test_scripts_import_direction.py:118` | 2026-10-17 |
+| an Ansible-owned tag's render move counts only when a changed path reaches an Ansible apply. Ansible applies its own templates, never `homelab-render` output, so a renderer change moves nothing Ansible applies, and the docs, tests and shard weights that ride along with one reach no apply either. Only the flux-owned half reaches a cluster, through `promote` (#5213). An empty path list is left alone, as no real PR has one. | `scripts/validate/cross_plane_order.py:246` | 2026-10-16 |
+| a `tasks/` change counts only for a tag Ansible owns at the head. flux-owned role run nowhere, and the render they feed is already in `moved`. Counting them refused three mechanical edits in the 30-day replay that no plane could misorder. The operator ruled on 2026-10-16 (D4 Open question 9). | `scripts/validate/cross_plane_order.py:260` | 2026-10-16 |
+| both sides run under the PR's interpreter, not each commit's own `uv run --frozen` environment. A dependency bump that changes the render is then invisible to the gate, but no plane orders on a lockfile, and a second environment per run costs a sync. D4 Open question 12 leaves a shared layout with D6.1 to D6. | `scripts/validate/cross_plane_order.py:421` | 2026-10-16 |
 | redirect_stderr/redirect_stdout, not capsys. pytest refuses to inject it into a module-scoped fixture; main() writes with print(file=sys.stderr), which redirect_stderr captures because it rebinds sys.stderr at call time. | `scripts/validate/tests/test_validate_k8s_manifests.py:35` | 2026-09-01 |
 
 ## docs
@@ -845,7 +851,7 @@ generated_sha: 3b11cce69
 | ` marker in `ansible/roles/setup/initial_setup/templates/rkhunter-check.sh.j2` holds the evidence. | `docs/security-tools.md:25` | 2026-10-12 |
 | ` marker in `ansible/roles/setup/initial_setup/templates/aide-check.sh.j2` holds the evidence. | `docs/security-tools.md:89` | 2026-10-12 |
 | a verification in flight is guarded by two checks`. | `docs/target-architecture/contracts.md:292` | 2026-10-15 |
-| a verification in flight is guarded by two checks` in | `docs/target-architecture/deploy/d2-first-leaf.md:754` | 2026-10-15 |
+| a verification in flight is guarded by two checks` in | `docs/target-architecture/deploy/d2-first-leaf.md:755` | 2026-10-15 |
 | ` marker at `ALLOWED_IMPORTS` in | `docs/target-architecture/deploy/d5-bulk-move.md:25` | 2026-10-16 |
 | no usage-metrics ticker` comment in `templates/dynamic.yaml.j2` has the | `docs/traefik-plugins-and-startup.md:54` | 2026-09-29 |
 | keep a router` marker | `docs/traefik-plugins-and-startup.md:153` | 2026-10-10 |
