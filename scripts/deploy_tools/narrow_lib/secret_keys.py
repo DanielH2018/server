@@ -8,8 +8,8 @@ ones that read a key the range moved, and the key names are plaintext in the SOP
 services to `k8s_unapplied` for it.
 
 SOPS re-encrypts only the values an edit changed, so the ciphertext of every other key is
-byte-identical across the commit. Measured on the eight commits before 3ef888712, each
-changed exactly the keys its message names. A key added, rotated or removed is therefore a
+byte-identical across the commit. Measured on the last eight commits to touch the file,
+through 3ef888712, each changed exactly the keys its message names. A key added, rotated or removed is therefore a
 key whose parsed value differs, and each one is mapped to its readers the way an inventory
 key is: a grep across the role trees, the shared templates, the play and the inventory, at
 the new ref. A setup-role reader maps to no deploy tag, because `deploy.yml` renders nothing
