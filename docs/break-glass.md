@@ -222,8 +222,8 @@ suspended before it is scaled and resumed rather than redeployed.
    revision's changed set, `promote`'s `verify` would wait on it until it timed out.
     - **When GitHub cannot be reached**, skip this step and record the reason and the time in
       a local file on daniel-box. Step 3 needs only the LAN, so it runs as written. Once the
-      WAN returns, run this step's `gh variable set` first, before any resume and before step
-      4, because a queued `promote` run can start as soon as GitHub answers.
+      WAN returns, run this step's `gh variable set DEPLOY_HOLD` first, before any resume and
+      before step 4, because a queued `promote` run can start as soon as GitHub answers.
 3. For each flux-owned service in the set, suspend its tag, then scale it to zero. Use the
    field manager `homelab-operator`, so Flux leaves the field alone:
 
