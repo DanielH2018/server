@@ -66,6 +66,24 @@ while reporting success.
   a stale pod in front of an unchanged tag still surfaces to the post-deploy drift gate
   (`ansible/tests/deploy/test_built_image_drift_gate.py`).
 
+## Flux-owned roles (target slice D5.4)
+- **The renderer writes every context this role builds.** `homelab-render cluster` writes
+  each of the ten contexts to `DIR/images/<name>/` and each content tag to
+  `DIR/images/tags.json` (`scripts/renderer/renderer_lib/images.py`). The tag is this role's
+  own expression, evaluated over the same `data`
+  (`scripts/renderer/renderer_lib/task_inputs.py:image_contexts`).
+- **For a flux-owned role, the content tag comes from `DIR/images/tags.json`.** The
+  consumer's ref renders from the same computation, and the render refuses a ref that
+  differs. `scripts/lib/render_guard.py:BUILT_IMAGE_TAG_STUBS` stays a stub for guards.
+- **What replaces this role for a flux-owned role** is a CI build, which does not exist yet.
+  D5.4a2 adds an `images` job to the promote workflow that builds each context and pushes it
+  to GHCR, and D5.4b points flux-owned consumers there. Until D5.4b lands, every consumer
+  builds here.
+- **`image_builder_force` has no Flux-era use.** The plan's rule for a package refresh that
+  no pin moves is a hand PR that bumps a `rebuild_stamp` data key in the context, which moves
+  the content tag. No context carries that key yet.
+  The plan is `docs/target-architecture/deploy/d5-bulk-move.md`, *Images built by CI (D5.4)*.
+
 ## Editing
 - Task logic: `tasks/main.yml` · Job/ConfigMap shape: `templates/build-job.yaml.j2`,
   `templates/context-configmap.yaml.j2`.

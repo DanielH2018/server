@@ -1,5 +1,5 @@
 {
-  "checksum": "cd3e8af4c3ca64f18ce482c131a3c00498a9a27b842d4d71015a1a64adbc49d6",
+  "checksum": "dc862bb1e723ccbb29e3e1db668c6b853df980b07f7f43e407b285ef3eb4715b",
   "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
   "key": "CLAUDE.md#Where to Look (task → start here)",
   "row": {
@@ -25,6 +25,6 @@
       "scripts/docs/build_docs.py": "73dd87c1dec39fcf8c7cb3f9062e58af58d167287911fd4f112daa276bda0d51"
     },
     "python": "3.14",
-    "verified_sha": "23fbde1d5"
+    "verified_sha": "e70607e2c"
   }
 }

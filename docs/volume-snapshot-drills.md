@@ -1,15 +1,171 @@
-# volume-snapshot: the drill record
+# volume-snapshot: the revert runbook and the drill record
 
-The measurements behind `k8s/volume-snapshot`, and the traps its
+This page holds two things. The first is the revert runbook for a flux-owned snapshot role,
+which the operator follows when `promote` holds a failed revision without resetting `prod`.
+The second is the measurements behind `k8s/volume-snapshot`, and the traps its
 `kubectl` calls and Ansible registers are written around. The operating rules — what the role
 does on each path, what fails a deploy, what a caller can and cannot override — are in
 `ansible/roles/k8s/volume-snapshot/CLAUDE.md`, which is the file a session loads before touching
-the role. This page is where the numbers came from, kept out of that file so the rule stays
+the role. The measurements are kept out of that file so the rule stays
 short and the evidence stays findable (the same split `docs/monitor-bridge-checks.md` makes for
 monitor-bridge, #2699).
 
-Nothing tests this page. `ansible/roles/k8s/volume-snapshot/tasks/claim.yml` is the authority on
-what the role does; where a paragraph here disagrees with it, the task file is right.
+A text test reads the runbook:
+`ansible/tests/longhorn/test_volume_revert_runbook_text.py`. Nothing tests the measurements.
+`ansible/roles/k8s/volume-snapshot/tasks/claim.yml` is the authority on what the role does;
+where a paragraph here disagrees with it, the task file is right.
+
+## The revert runbook
+
+Every step that writes to the cluster or to `DEPLOY_HOLD` is **operator-only**. The agent's
+permissions deny `sudo` and every `kubectl` write, and plain `kubectl` is read-only. The
+design and the reasoning behind each step are in
+`docs/target-architecture/deploy/d5-bulk-move.md`, *The revert runbook (D5.2c)*.
+
+The runbook starts from a stateful hold. When a failed revision R changed a snapshot role,
+`promote` writes `DEPLOY_HOLD` as `<R> stateful=<names>`, does **not** reset `prod`, and
+posts to the deployer's Discord channel. The post lists every changed tag and every
+Kustomization that failed or timed out, each marked as a snapshot role or not. For each
+changed snapshot role it prints that role's `digest8`, the snapshot prefix of each claim,
+and a command block in Branch 1's order: the classify command, two suspends, one revert run,
+and two resumes. Beside the classify command it prints the string a role that attempted R
+reads there, `prod@sha256:<digest>`.
+
+**Prerequisites that land in other slices.** The hold post comes from D5.2b1, and the
+`reset_to_last_good` input that Branch 1's reset dispatches comes from D5.2b2. Until both
+are on master, no stateful hold exists, and the runbook has nothing to start from.
+
+### Choosing the branch
+
+Two reads come first, both with the read-only `kubectl`, and both before any reset. A reset
+prunes R's soak Job together with its pod, and the first read needs that pod.
+
+- **Which services the soak named**, when `soak` failed. The soak Job writes them to its
+  termination message. The post names the Job and prints the read:
+  `kubectl -n flux-system get pods -l job-name=<soak Job> -o jsonpath='{.items[*].status.containerStatuses[0].state.terminated.message}'`.
+- **Which changed snapshot roles attempted R.** For each one, run the post's classify
+  command, `kubectl -n flux-system get kustomization <s> -o jsonpath='{.status.lastAttemptedRevision}'`,
+  and compare what it prints with the value the post prints beside it,
+  `prod@sha256:<digest of sha-<R>>`. Equal means the role attempted R. Any other value means
+  it did not. The field holds a tag and a digest, never a commit, so a comparison with R's
+  SHA never matches. That mistake reads every role as blocked and sends a failed snapshot
+  role to Branch 2.
+    - Cross-check the comparison value. While the hold keeps `prod` at R,
+      `kubectl -n flux-system get ocirepository homelab -o jsonpath='{.status.artifact.revision}'`
+      prints the same `prod@sha256:` value. This read is valid only before any reset.
+    - A role that an upstream failure blocked never reads R's value there, so its data is
+      unchanged. It took no snapshot for R, so `volume-revert` would fail on it with "Fail
+      when no snapshot matches this deploy". Leave it out of Branch 1.
+
+Then pick the branch:
+
+- **Branch 1** when a changed snapshot role that attempted R failed: its `<s>` or
+  `<s>-verify` failed or timed out, or the soak named its service.
+- **Branch 3** when a `<s>-snapshot` Job failed on a full cap.
+- **Branch 2** otherwise.
+
+### Branch 1: a snapshot role failed
+
+A reset moves `prod` for the whole bundle, so it rolls back every changed snapshot role, not
+only the failed one. So revert every changed snapshot role that attempted R, each from its
+own block in the post. A role that did not attempt R needs no step, because the reset leaves
+it on the spec it already runs. Run the steps in this order. Resuming comes last, because a
+resumed `<s>` re-applies whatever `prod` names.
+
+1. **Suspend every role you revert, before any revert.** For each role, suspend
+   `<s>-snapshot`, then `<s>`:
+
+    ```bash
+    sudo k3s kubectl -n flux-system patch kustomization <name> --type merge \
+      --field-manager=homelab-operator -p '{"spec":{"suspend":true}}'
+    ```
+
+   The field manager keeps each suspend in place through every reconcile of the
+   Kustomization that applies the suspended object: the root, and from the flux PR on,
+   `flux-deferred`. The root therefore needs no suspend of its own.
+2. **Revert the volumes, one run per role.** Run the revert line of each role's block in the
+   post, exactly as printed. Each line carries that role's own `digest8` and claims, and the
+   playbook takes one service per run. Do not assemble the line by hand from another role's
+   block. *The entry point* below describes the playbook. It leaves each Deployment at zero
+   replicas.
+3. **Reset `prod`.** Dispatch the reset input:
+   `gh workflow run promote.yml -R DanielH2018/server --ref master -f reset_to_last_good=true`.
+   The stateful hold names `prod`'s commit, so the reset's in-flight check passes. Then wait
+   until the `OCIRepository` `homelab` reports `last-good`'s commit. This read must print
+   `master@sha1:<last-good SHA>`:
+   `kubectl -n flux-system get ocirepository homelab -o jsonpath='{.status.artifact.metadata.org\.opencontainers\.image\.revision}'`.
+   The `revision` field of the artifact holds a digest, not a commit, so it cannot answer
+   this wait.
+4. **Resume each reverted role, in the post's order.** Resume `<s>-snapshot`, then `<s>`:
+
+    ```bash
+    sudo k3s kubectl -n flux-system patch kustomization <name> --type merge \
+      --field-manager=homelab-operator -p '{"spec":{"suspend":false}}'
+    ```
+
+   The snapshot Job for `last-good`'s digest runs again with a fresh token. Then `<s>`
+   applies `last-good`'s spec, which restores the replica count.
+5. **Clear the hold.** Land the revert of the failed commit. Then clear the hold with
+   `gh variable set DEPLOY_HOLD --body none -R DanielH2018/server` and dispatch `promote`
+   for the revert, by D2's procedure in `docs/flux-deploy-plane.md`.
+
+A co-changed role that attempted R and applied it successfully may skip steps 1, 2 and 4
+only when the operator records in the hold's thread that its R-written data suits
+`last-good`'s image. The reset then rolls it back without a revert. Without that record,
+revert it.
+
+### Branch 2: no snapshot role that attempted R failed
+
+The failures are in roles that are not snapshot roles, or in a `<s>-snapshot` Job that
+failed for a reason other than a full cap before `<s>` attempted R. No volume needs a
+revert, so skip Branch 1's steps 1 to 4. The default is a forward revert: land the revert of
+the commit that broke the failing tag, then clear the hold with
+`gh variable set DEPLOY_HOLD --body none -R DanielH2018/server` and dispatch `promote`. The
+changed snapshot roles stay at R, which they applied successfully. Reset `prod` instead only
+after confirming that each changed snapshot role's data still suits `last-good`'s image.
+
+### Branch 3: a snapshot Job failed on a full cap
+
+The role never applied R, so its data is unchanged. The Job's failure names the cap, the
+space in use and the headroom. Delete that volume's older snapshots by hand, as the comment
+on the cap gate in `ansible/roles/k8s/volume-snapshot/tasks/claim.yml` describes. Then delete
+the failed Job so that Flux creates it again. Both are `kubectl` writes. Then clear the hold
+with `gh variable set DEPLOY_HOLD --body none -R DanielH2018/server` and dispatch `promote`
+for R.
+
+### The entry point
+
+`ansible/volume-revert.yml` is a playbook on daniel-box. It includes `k8s/volume-revert`
+alone and never runs `deploy.yml`. It takes the three variables the role's input assert
+requires, `volume_revert_service`, `volume_revert_claims` (a list) and `volume_revert_sha`
+(the role's `digest8`). The hold post prints one line per role in this shape:
+
+```bash
+uv run ansible-playbook ansible/volume-revert.yml -e volume_revert_service=<s> \
+  -e '{"volume_revert_claims": [<claims>]}' -e volume_revert_sha=<digest8>
+```
+
+- **It reads the `<tag>-snapshot` Job's snapshots unchanged.** The Job names each one
+  `autodeploy-<tag>-<digest8>-<claim>-<token>`, the shape `volume-snapshot` uses, so the
+  role's prefix and its `^[0-9a-f]{8,}$` check accept `<digest8>` as the SHA.
+- **It gathers facts through the shared preamble.** `k8s/longhorn-api/tasks/resolve.yml`
+  reads `ansible_hostname`, so a copy of the header that opts out of the preamble's gather
+  would run the revert with that fact undefined.
+- **Nothing runs it unattended.** The deployer routes the path to no plane, so a change to
+  the playbook merges and applies nothing.
+  `ansible/tests/deploy/test_volume_revert_playbook_applies_nothing_from_a_tick.py` holds that.
+- **`--check` and `-e k8s_dry_run=true` skip the role**, as the manifests role's call site
+  does. A silent dry run proves nothing about whether a snapshot exists.
+- H7 replaces the playbook with a task-free tool before it deletes Ansible.
+
+### The drill
+
+In Wave B, once speedtest is flux-owned, a one-line PR points speedtest's `readinessProbe` at
+a missing path. `verify` fails, and `promote` holds without resetting and posts a message
+that names speedtest's snapshot. The operator runs this runbook end to end, and then the
+revert lands. This is the live proof of the hold rule, the post, the entry point and the
+resume order. After the flux PR the drill runs again, and waits through one reconcile of the
+root and of `speedtest` before step 2.
 
 ## The maintenance-mode attach was never reached by a deploy, and #2740 retired it
 

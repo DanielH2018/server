@@ -46,7 +46,7 @@ import enum
 import json
 import re
 from collections.abc import Callable, Iterable, Iterator
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 
 import yaml
@@ -62,6 +62,12 @@ from renderer.renderer_lib.cluster import (
     render_tag,
 )
 from renderer.renderer_lib.environment import RenderError
+from renderer.renderer_lib.images import (
+    BuiltImage,
+    image_files,
+    render_images,
+    role_tags,
+)
 
 SENTINEL_PREFIX = "HOMELAB_SECRET__"
 SENTINEL_SUFFIX = "__END"
@@ -285,12 +291,15 @@ class PlaceholderRender:
         sops_manifests: Each rendered tag with `render_sops_manifests` entries, mapped to
             each entry's sentinel render, which no directory holds; None where the role
             rendered no such file.
+        images: Every built image's context and content tag, for `DIR/images/`. Each
+            rendered tag's refs read the same tags. Empty for a render built from fixtures.
     """
 
     tags: list[RenderedTag]
     key_sets: dict[str, frozenset[str]]
     standalone: dict[str, frozenset[str]]
     sops_manifests: dict[str, dict[str, str | None]] = field(default_factory=dict)
+    images: dict[str, BuiltImage] = field(default_factory=dict)
 
     def substituting(self) -> list[str]:
         """The sorted names of the directories that substitute."""
@@ -332,22 +341,33 @@ def render_placeholders(
     keys: list[str],
     host: str = K8S_HOST,
     entries: Callable[[str], list[str]] = sops_manifests,
+    contexts: Callable[[dict, str], dict[str, BuiltImage]] = render_images,
 ) -> PlaceholderRender:
-    """Render every one of `tags` in placeholder mode.
+    """Render every one of `tags` in placeholder mode, and every built image's context.
 
     Each tag's `render_sops_manifests` files, as `entries` reads them, are dropped before
-    pass 2. A test passes its own `entries`.
+    pass 2. The image contexts, as `contexts` renders them, render first with the same
+    sentinels, and each tag's refs read their tags (D5.4a1). A test passes its own `entries`
+    and `contexts`.
 
     Raises:
-        RenderError: A template fails to render.
+        RenderError: A template fails to render, or an image context holds a secret's
+            sentinel. CI builds a context in the open, so no context may read a secret.
     """
     overrides = placeholder_vars(keys)
+    images = contexts(overrides, host)
+    leaked = Sentinels(keys).key_set(image_files(images))
+    if leaked:
+        raise RenderError(
+            f"an image context reads the secrets {sorted(leaked)}. CI builds every context "
+            "in the open, so move the secret out of the build into the pod's environment"
+        )
     rendered, sops = [], {}
     for tag in tags:
         kept, dropped = exclude_sops_manifests(
-            render_tag(tag, overrides, host), entries(tag)
+            render_tag(tag, overrides, host, role_tags(images, tag)), entries(tag)
         )
         rendered.append(kept)
         if dropped:
             sops[tag] = dropped
-    return apply_placeholders(rendered, keys, sops)
+    return replace(apply_placeholders(rendered, keys, sops), images=images)
