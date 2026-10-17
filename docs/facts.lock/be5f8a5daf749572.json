@@ -1,14 +1,16 @@
 {
-  "checksum": "47aadc25859a73c5701cc521ca3a0e16def5a1a7d40b93979e62ee95db6a7694",
+  "checksum": "1f5ac98cfdfc3b29f1a0171687c0d96c8d02444e981026b32be549a7e6200230",
   "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
   "key": "ansible/roles/k8s/game-stats/CLAUDE.md#At a glance",
   "row": {
     "atoms": {
       "ansible/inventory/group_vars/all.yml:k8s_registry_pull_host": "cc492dfc9bbd74351c0edc30e1c2876ec3cdd20b2b6a12a383414c886fd4f217",
       "ansible/roles/k8s/ical-proxy/": "13db274c218c9977da8174d5041f5e6ca72ce7b2f85104f26245ecdc9fe97851",
-      "ansible/tests/deploy/test_k8s_toposort.py::test_documented_pairwise_ordering_survives_an_adversarial_list": "31404c404dbf1e8c3158ccd296897d81a56627602184747b8ff7f137595d0da3"
+      "ansible/tests/deploy/test_k8s_toposort.py::test_documented_pairwise_ordering_survives_an_adversarial_list": "31404c404dbf1e8c3158ccd296897d81a56627602184747b8ff7f137595d0da3",
+      "docs/flux-deploy-plane.md": "807c3deb44c3178e7a6f9fc0bc398a3b748b95c468b14ce9b1b890c8684535d9",
+      "scripts/renderer/tests/test_renderer_game_stats_restart.py": "011f225a8798b9f64ece31b2a2dfd5208da73b791626e0ba85c2e1cda209736c"
     },
     "python": "3.14",
-    "verified_sha": "df2b9a704"
+    "verified_sha": "7d8a1ecea"
   }
 }
