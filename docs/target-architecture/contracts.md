@@ -1223,7 +1223,8 @@ Applied to this page:
   runs with no change to peanut. D5's soak keeps its own anchor: it reads alerts only for the
   tags its revision changed, from that revision's arrival, so an unrelated revision never
   moves it. No row in *Requested amendments not yet applied* preceded it; the PR that
-  applies it is where the contract owner rules on it.
+  applies it is where the contract owner rules on it. Accepted by the operator on 2026-10-17
+  in #5369's review.
 - **`soak` joins any changed set that holds a tag** (D5 Open question 19, ruled 2026-10-16).
   C2 *Verification* gains the rule beside *The changed set*, because the renderer drops
   `soak`'s `dependsOn` edges and no chain puts `soak` in the set any more. The request leaves
