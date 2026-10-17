@@ -13,8 +13,9 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
+import yaml
 from _land_wait_fakes import P, Sim, at
-from _promote_fakes import NOW, REBOOT_YAML, World
+from _promote_fakes import NOW, REBOOT_YAML, World, bundle_files
 from lib import yaml_fast
 from lib.repo_paths import REPO
 
@@ -23,6 +24,7 @@ from chained_timeout import VERIFY_CAP_S
 from deploy_tools.promote_lib import reboot_window
 from deploy_tools.promote_lib import verify_promotion as vp
 from deploy_tools.promote_lib import wait as promote_wait
+from renderer.renderer_lib.bundle import tag_kustomization
 
 WORKFLOW = REPO / ".github" / "workflows" / "promote.yml"
 # A Sunday, and the instants around its reboot.
@@ -143,14 +145,36 @@ def test_a_window_that_ends_past_midnight_moves_the_crons_day(tmp_path):
 # -- decide --------------------------------------------------------------------------------
 
 
+def _no_sleep(seconds: float) -> None:
+    pytest.fail(f"decide waited {seconds}s in its job")
+
+
+def _long_world(world) -> str:
+    """T changes `sonarr`, whose Kustomization times out at 2h, so T's window is long."""
+    _, c1, _, tip = world.commits
+    digests = {"_unclassified": {"own": "u", "footprint": "u"}}
+    world.set_prod(
+        c1, files=bundle_files({**digests, "sonarr": {"own": "a", "footprint": "a"}})
+    )
+    world.set_last_good(c1)
+    sonarr = tag_kustomization("sonarr", substitutes=False, timeout="2h")
+    world.publish(
+        tip,
+        files=bundle_files(
+            {**digests, "sonarr": {"own": "b", "footprint": "b"}},
+            sonarr=yaml.safe_dump(sonarr),
+        ),
+    )
+    return tip
+
+
 def test_a_run_inside_ts_window_ends_deferred_moves_nothing_and_never_sleeps(world):
     tip = _settled_world(world)
-    clock = Clock()
-    decision = promote.decide(_reads(world, END - timedelta(minutes=30), clock))
+    reads = _reads(world, END - timedelta(minutes=30), Clock())
+    decision = promote.decide(dataclasses.replace(reads, sleep=_no_sleep))
     assert decision.verdict == "deferred"
     assert decision.target == ""
     assert tip in decision.reason and "no-promotion window" in decision.reason
-    assert clock.now == 0, "decide waited in its job"
 
 
 def test_a_deferred_run_exits_0_and_hands_tag_no_target(world, monkeypatch, capsys):
@@ -161,41 +185,40 @@ def test_a_deferred_run_exits_0_and_hands_tag_no_target(world, monkeypatch, caps
     assert world.run.written == []
 
 
-def test_the_window_opens_ts_own_timeout_before_the_reboot(world):
-    """The empty bundle's T verifies in minutes, so 06:00 is outside its window."""
-    tip = _settled_world(world)
-    early = SUNDAY.replace(hour=6)
-    decision = promote.decide(_reads(world, early, Clock()))
+def test_the_window_opens_ts_own_timeout_before_the_reboot(tmp_path):
+    """At 06:00 a T that verifies in minutes promotes, and one with a 2h chain defers."""
+    six = SUNDAY.replace(hour=6)
+    (tmp_path / "short").mkdir()
+    short = World(tmp_path / "short")
+    tip = _settled_world(short)
+    decision = promote.decide(_reads(short, six, Clock()))
     assert (decision.verdict, decision.target) == ("promote", tip)
-    target = decision.bundles["target"]
-    assert target is not None
-    timeout = vp.expected_set(target, decision.bundles["prod"])
-    reboot = SUNDAY.replace(hour=7, minute=35)
-    assert early < reboot - timedelta(seconds=timeout.timeout_s)
-    assert early < SUNDAY.replace(hour=7, minute=35) - timedelta(
-        seconds=timeout.timeout_s
-    )
+
+    (tmp_path / "long").mkdir()
+    long = World(tmp_path / "long")
+    tip = _long_world(long)
+    decision = promote.decide(_reads(long, six, Clock()))
+    assert decision.verdict == "deferred", decision.reason
+    assert tip in decision.reason
 
 
 def test_the_scheduled_run_at_the_windows_end_hands_verify_its_full_timeout(world):
-    """The red half is a decide that waits in its job: its budget is the cap less the wait."""
-    tip = _settled_world(world)
-    clock = Clock()
-    decision = promote.decide(_reads(world, END, clock))
+    """The red half is a decide that waits in its job, which `_no_sleep` fails at the call.
+
+    `verify` derives its timeout from the bundles `decide` hands on, by the function the
+    window read, so the two agree and none of it was spent before `verify` starts.
+    """
+    tip = _long_world(world)
+    reads = _reads(world, END, Clock())
+    decision = promote.decide(dataclasses.replace(reads, sleep=_no_sleep))
     assert (decision.verdict, decision.target) == ("promote", tip)
-    assert VERIFY_CAP_S - clock.now == VERIFY_CAP_S
-
-    def waiting_decide(reads: promote.Reads) -> promote.Decision:
-        found = reboot_window.window(reads.reboot(), VERIFY_CAP_S, reads.now())
-        assert found is not None
-        end = found[1]
-        reads.sleep((end - reads.now()).total_seconds())
-        return promote.decide(dataclasses.replace(reads, now=lambda: end))
-
-    waiting = Clock()
-    late = waiting_decide(_reads(world, END - timedelta(hours=2), waiting))
-    assert late.verdict == "promote"
-    assert VERIFY_CAP_S - waiting.now == VERIFY_CAP_S - 2 * 60 * 60
+    handoff = world.tmp_path / "verify-input"
+    promote.hand_off(decision, handoff)
+    prod, target = vp.read_handoff(handoff)
+    verify_timeout = vp.expected_set(target, prod).timeout_s
+    assert verify_timeout >= 2 * 60 * 60
+    early = END - timedelta(seconds=verify_timeout) + timedelta(minutes=1)
+    assert promote.decide(_reads(world, early, Clock())).verdict == "deferred"
 
 
 def test_a_run_outside_every_window_promotes(world):
