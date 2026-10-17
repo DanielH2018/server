@@ -251,8 +251,10 @@ jobs:
       github.event.workflow_run.head_branch == 'master' &&
       github.event.workflow_run.head_repository.full_name == github.repository))
     runs-on: ubuntu-26.04
-    # The first run builds all ten, code-server's toolchains the longest.
-    timeout-minutes: 90
+    # About 3x the slowest measured run, at a 20-minute floor (#5482). A rebuild of all ten
+    # took 394s on 2026-10-17, code-server's toolchains the longest at 213s. Over the 35
+    # `images` jobs to that date the slowest success took 54s.
+    timeout-minutes: 20
     concurrency:
       group: images
       cancel-in-progress: false

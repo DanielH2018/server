@@ -587,7 +587,7 @@ class Pipeline:
             if green
             else held_for_findings(self.record, self.state_dir)
         )
-        if final is None and awaits_ci(self.host, self.target):
+        if final is None and awaits_ci(self.target):
             # Before the comment, so the comment carries the CI gate beside the others.
             last, final = ci_gate(self, last)
         self._comment()
