@@ -1,0 +1,14 @@
+{
+  "checksum": "84547e0660224342dc88b4ed250efadfb1fa224a39950e924bc3a81f0aa8ff75",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "ansible/roles/k8s/authelia/CLAUDE.md#The `claude-ui` user",
+  "row": {
+    "atoms": {
+      "ansible/tests/services/test_authelia_config_schema.py": "1280a6c02b949c15a99934c3d61193d264a48d9fab4b39bf148480e51cc4ef0f",
+      "ansible/tests/services/test_authelia_digest_assert.py": "103dcd4cdd8075472ebb0a199b521ef9c6e144775ae462c95db3216feda0f579",
+      "docs/secret-rotation.md": "93a2e8492581420545568d5dd82c559f37746c8c974d1211a4a676a3fca0c2f8"
+    },
+    "python": "3.14",
+    "verified_sha": "da8fd4fd2"
+  }
+}

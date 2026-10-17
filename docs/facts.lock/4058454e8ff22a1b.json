@@ -1,0 +1,12 @@
+{
+  "checksum": "4fc46f26e88d8eb4cf22baba65f2a1e902013e22a137e60da1182fb148266a92",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "ansible/roles/setup/hypervisor/CLAUDE.md#hypervisor — KVM/libvirt on daniel-server",
+  "row": {
+    "atoms": {
+      "docs/hypervisor-libvirt-internals.md": "3ca4446b89834bf565608cd7b2b58beb636dbaa6a777fff436f976e17171c61a"
+    },
+    "python": "3.14",
+    "verified_sha": "f18b2700d"
+  }
+}

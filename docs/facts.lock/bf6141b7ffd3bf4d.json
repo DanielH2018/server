@@ -1,0 +1,12 @@
+{
+  "checksum": "1904ae4bbf8b8cbb83ab9b13ddaf8c665fb260d6f0d4288d826842e6ce97b2b4",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "ansible/roles/setup/render_records/CLAUDE.md#How one run works",
+  "row": {
+    "atoms": {
+      "scripts/deploy_tools/render_targets.py": "d6882243d524ca17d6cbc24045fa5d7fe799ccac22183cf8ddeaa077501f98e4"
+    },
+    "python": "3.14",
+    "verified_sha": "55862020d"
+  }
+}

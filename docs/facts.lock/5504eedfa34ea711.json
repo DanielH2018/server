@@ -1,0 +1,13 @@
+{
+  "checksum": "2e7fff31df33cb096190d52623c72ecd73f22e6fc8dda336629e867da20bb589",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "ansible/roles/k8s/monitor-bridge/CLAUDE.md#monitor-bridge — every threshold check, pushed to Uptime Kuma (k8s)",
+  "row": {
+    "atoms": {
+      "docs/monitor-bridge-checks.md": "46dfee20951f769d53e9761151a499032a8ada1b76e1d48021f4f52cb91d2f9a",
+      "docs/monitor-bridge-internals.md": "570e35a47f6bca60ea2628644a30ddb509eb39108278344a4f58dd12a1ae48a7"
+    },
+    "python": "3.14",
+    "verified_sha": "66e237c86"
+  }
+}

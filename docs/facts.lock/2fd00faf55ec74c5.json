@@ -1,0 +1,18 @@
+{
+  "checksum": "95dd4a47906764836beb250b2b64b085032b9b481c091dc737236bb490191e7c",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "CLAUDE.md#Secrets Management",
+  "row": {
+    "atoms": {
+      "ansible/.sops.yaml": "aef2d6fbfa6d5dc87c2dc587b0a86c2a59457d3b6a170fc45b9d5c05441fe492",
+      "ansible/bootstrap.yml": "7bc925a3ec3c73e00c9a56a23ae1ebaf83905d08b86cd39569091e1f89b32e42",
+      "ansible/secret_rotation.yml": "1abb90e8eab0f31bef5e261c5eefaeb60b1808f539ce8d7667b6aa4b6f8e179a",
+      "ansible/vars/": "d2aae192a8ace1c1a2522320891784581f33bbdca74ac269f2a609c30556a300",
+      "ansible/vars/secrets.yml": "7a4d09f079c0cae73bca0629f5e9f0bf13cf4752106f95a6c2c687bb94926593",
+      "docs/claude-shell-permissions.md": "444005815ecd96d4f19a9c3a25f009aa778550679ae347cbb1d2e9f796e4a2be",
+      "docs/secret-rotation.md": "93a2e8492581420545568d5dd82c559f37746c8c974d1211a4a676a3fca0c2f8"
+    },
+    "python": "3.14",
+    "verified_sha": "9ca696963"
+  }
+}

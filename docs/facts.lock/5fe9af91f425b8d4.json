@@ -1,0 +1,12 @@
+{
+  "checksum": "e93254aac8cfc404f48f7c7e88a97beb0d403333f71cdff3f59e5109bb99c71a",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "ansible/roles/setup/k8s_host_files/CLAUDE.md#`setup/k8s_host_files` — the host-side rows of k8s roles, applied through the setup plane",
+  "row": {
+    "atoms": {
+      "docs/target-architecture/deploy/d5-bulk-move.md": "68f06dcef9185ec0962b8cebaacbda14fab2ea116b98bb09b42510a6893dc1b5"
+    },
+    "python": "3.14",
+    "verified_sha": "6c6ee0dd7"
+  }
+}

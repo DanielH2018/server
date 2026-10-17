@@ -1,0 +1,12 @@
+{
+  "checksum": "5d91e0e0808e126ce3ba836de2b10fbd60a9b10c87d9765f9c7630c02c449954",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "ansible/roles/k8s/n8n/CLAUDE.md#Notable",
+  "row": {
+    "atoms": {
+      "ansible/tests/services/test_n8n_build_is_pinned.py": "0ae33c775be3b53234e3326cf8251e06d40aec9c923062c51f216acc16501c1b"
+    },
+    "python": "3.14",
+    "verified_sha": "9c98af1a2"
+  }
+}

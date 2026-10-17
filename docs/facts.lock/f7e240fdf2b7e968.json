@@ -1,0 +1,12 @@
+{
+  "checksum": "1c105af7a91e468e41f8a700ae8de3913c6b8232096de346cc480e15713a01b2",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "ansible/roles/k8s/flux/CLAUDE.md#The suspend lever",
+  "row": {
+    "atoms": {
+      "docs/target-architecture/deploy/d1-flux-installed.md": "0f95112144bce8fbd630d3f8c9128117034d37840d9071635d89a53cb781cf45"
+    },
+    "python": "3.14",
+    "verified_sha": "bfb86ebda"
+  }
+}

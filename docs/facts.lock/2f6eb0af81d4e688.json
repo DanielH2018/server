@@ -1,0 +1,13 @@
+{
+  "checksum": "5fad0af1fac292eaabef8e19f3786eb42084cf786eddf550aa025a153e8a75cd",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "ansible/roles/k8s/home-assistant/CLAUDE.md#At a glance",
+  "row": {
+    "atoms": {
+      "ansible/roles/k8s/home-assistant/templates/deployment.yaml.j2:DECIDED: every Deployment of a home-critical": "5609c0c69d0f30d5be276e76b8529ab5ad1f13468500de0f34f0926e9e972c39",
+      "ansible/roles/k8s/netpol-baseline/templates/networkpolicy-nut.yaml.j2": "083ea9be20a9f60ffa9331269f87d7778a806c804301d7f0a75cb7477d8b5dd8"
+    },
+    "python": "3.14",
+    "verified_sha": "fd34ae8eb"
+  }
+}

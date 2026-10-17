@@ -82,18 +82,19 @@ _SKIP_PATH_PARTS = (".claude/worktrees",)
 # so a rename breaks this loudly (an unrecognised path just re-appears in the output) instead
 # of silently widening what else gets skipped.
 #
-# `docs/facts.lock` is the one entry that is not this generator's own: it keys each cited
+# `docs/facts.lock/` is the one entry that is not this generator's own: it keys each cited
 # marker by its text and records a hash beside it, so every marker a CLAUDE.md cites re-appears
-# there as a row whose "decision" is a 64-hex digest. gitleaks reads such a row as a generic API
+# there as a row whose "decision" is a 64-hex digest. It is a directory of row files, so it is
+# skipped by prefix in `_SELF_DIRS`. gitleaks reads such a row as a generic API
 # key, so a regenerated page carrying one fails the commit.
 _SELF_PATHS = frozenset(
     {
         "scripts/docs/reference/decisions.py",
         "scripts/docs/tests/test_gen_reference_decisions.py",
         "docs/reference/decisions.md",
-        "docs/facts.lock",
     }
 )
+_SELF_DIRS = ("docs/facts.lock/",)
 
 # A line-comment prefix: leading whitespace, then one comment token, then a space or EOL.
 # Matches `# `, `    # `, `// `, `-- `, `; `. Deliberately excludes Jinja's `{# #}` and
@@ -178,7 +179,7 @@ def _iter_candidate_files(root: Path):
     tracked = _tracked_files(root)
     if tracked is not None:
         for rel in tracked:
-            if rel not in _SELF_PATHS:
+            if rel not in _SELF_PATHS and not rel.startswith(_SELF_DIRS):
                 yield root / rel
         return
 
@@ -193,7 +194,7 @@ def _iter_candidate_files(root: Path):
         ]
         for name in filenames:
             rel = f"{prefix}{name}"
-            if rel in _SELF_PATHS:
+            if rel in _SELF_PATHS or rel.startswith(_SELF_DIRS):
                 continue
             yield current / name
 

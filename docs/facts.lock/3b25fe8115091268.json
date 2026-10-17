@@ -1,0 +1,12 @@
+{
+  "checksum": "9444e0fdb5899afc41142dbab2b507f6a9ec2c82f1a7ca6112067f27c395d8b3",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "ansible/roles/k8s/crowdsec/CLAUDE.md#crowdsec — WAF / behavioural bouncer in front of Traefik",
+  "row": {
+    "atoms": {
+      "docs/crowdsec-waf-record.md": "0fed3631bfac065efe701fd07f11045f36675afdf7959517fcaa567e5f5cb4cb"
+    },
+    "python": "3.14",
+    "verified_sha": "fd34ae8eb"
+  }
+}

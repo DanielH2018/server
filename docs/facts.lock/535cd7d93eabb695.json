@@ -1,0 +1,17 @@
+{
+  "checksum": "732ac6b498f44a596cc31d086ab8b50cea0b67663559f3da90fdf99448358f7e",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "ansible/roles/k8s/authelia/CLAUDE.md#Traps",
+  "row": {
+    "atoms": {
+      "ansible/roles/k8s/authelia/defaults/main.yml:authelia_k8s_cookie_name": "e08ac57df0675c556ebe78fb9f59ddd79462f232222b3916eed4bdb0590c5b03",
+      "ansible/secret_rotation.yml": "1abb90e8eab0f31bef5e261c5eefaeb60b1808f539ce8d7667b6aa4b6f8e179a",
+      "ansible/tests/services/test_authelia_oidc_jwk_secret.py": "4d80a97109a3cd88167697c5bd75b0de9a83a4fae44f4d961229eba32bfac510",
+      "ansible/tests/services/test_crowdsec_config_install_seeds_staged_tree.py": "09907cf7dae6b35f0036d8c824b334bbd92d4d512f5634b3b62ab3d802ea2fa5",
+      "ansible/tests/services/test_crowdsec_hub_install_stages_the_hub_tree.py": "90e2d4ef4707150ed579a2700a983a0c7b80e7b36e5213143cef514f6658dc89",
+      "ansible/tests/services/test_smtp_wiring.py": "781a1261a23978930b6ce1d296e6670423083b912d73ee203cb8a744a58128ca"
+    },
+    "python": "3.14",
+    "verified_sha": "b7d8f0ef5"
+  }
+}

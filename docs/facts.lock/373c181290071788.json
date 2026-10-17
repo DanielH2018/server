@@ -1,0 +1,13 @@
+{
+  "checksum": "84acb532ad2ae22980ef8b8fff10ee701ed6224e5167d7ad1c371d1897cde774",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "ansible/roles/k8s/traefik/CLAUDE.md#At a glance",
+  "row": {
+    "atoms": {
+      "docs/crowdsec-waf-record.md": "0fed3631bfac065efe701fd07f11045f36675afdf7959517fcaa567e5f5cb4cb",
+      "docs/traefik-plugins-and-startup.md": "4a7b8a8b9fe14c935db36b52fe2280d2615ee3740938fb5e8b3bb3f8b1e57a8d"
+    },
+    "python": "3.14",
+    "verified_sha": "89d586f13"
+  }
+}

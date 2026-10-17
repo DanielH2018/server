@@ -1,0 +1,12 @@
+{
+  "checksum": "ac7922d7bd43b0e8e81a5311e70ef0e4bd734266ba8c206d32a6b0672cf9b480",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "ansible/roles/k8s/zigbee2mqtt/CLAUDE.md#Notable",
+  "row": {
+    "atoms": {
+      "ansible/roles/k8s/uptime-kuma/templates/static-monitors.yaml.j2": "fafbfd94c77f91a3cafedac444fa1abcc0df3bd165a368a7ff9681cd6428aae1"
+    },
+    "python": "3.14",
+    "verified_sha": "55862020d"
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "checksum": "ce5a990c92a274091709ef02f465b7cdba42c7914b0daa617d5fa660ab92300e",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "ansible/roles/setup/gitops_deploy/CLAUDE.md#Which apply clears a hold",
+  "row": {
+    "atoms": {
+      "docs/gitops-pipeline.md": "60fc646704304a39c486cd25cee64f94e3b56d69d1b15076af2b9124a4d00c18"
+    },
+    "python": "3.14",
+    "verified_sha": "fd34ae8eb"
+  }
+}
