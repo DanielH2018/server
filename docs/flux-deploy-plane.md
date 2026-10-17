@@ -826,8 +826,8 @@ A wait shorter than a verification is safe and costs a promotion. `decide` gives
   that figure as `wait.py:PROMOTE_TIMEOUT_S` and gives up at twice it. The soak's chain counts
   every Kustomization in the bundle, so it grows by a 10-minute queueing round for each five
   more 10-minute ones. Once Graham's bound is the smaller, each added Kustomization no longer
-  than the longest adds a fifth of its `timeout`. With the eleven tags published on 2026-10-17 the soak's `timeout` is 3510s, and
-  `verify` waits 61.5 minutes. So `land-wait` also reads the listed `soak` Kustomization's
+  than the longest adds a fifth of its `timeout`. With the 16 tags published at `0758aa3f5`
+  the soak's `timeout` is 4350s, and `verify` waits 75.5 minutes. So `land-wait` also reads the listed `soak` Kustomization's
   `timeout` each poll, and gives up no sooner than twice `verify`'s wait on it
   (`wait.py:soak_deadline_s`). A lander unit's `LAND_DEADLINE` caps the wait below that,
   and `docs/landing.md` says how the units size it (#5427). While a verification of an earlier commit is in flight, M's `decide` waits on
