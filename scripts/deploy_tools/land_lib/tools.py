@@ -519,10 +519,11 @@ class Tools:
     gh_json: Callable[..., JsonValue] = gh_json
     gh: Callable[..., subprocess.CompletedProcess[str]] = gh
     git: Callable[..., subprocess.CompletedProcess[str]] = git
+    # Above `await_ci:`, whose field name shadows the module for the rest of this class body.
+    newest_green_descendant: Callable[[str], str] = await_ci.newest_green_descendant
     await_ci: Callable[[str, int], CiVerdict] = await_ci_verdict
     tested_base: Callable[[str], str | None] = land_tested_base.tested_base
-    # `...` rather than the argument list: both take an optional `observe` callback, which a
-    # fake absorbs through **kwargs and a call site passes by keyword.
+    # `...`, not the argument list: both take an optional `observe` callback, passed by keyword.
     tick: Callable[..., int] = run_tick
     deploy: Callable[..., int] = run_deploy
     deploy_tags: Callable[[Path, list[str]], subprocess.CompletedProcess[str]] = (
@@ -558,8 +559,7 @@ class Tools:
         [list[str], str, Path, set[str] | None], list[str]
     ] = shared_role_reach.paths_a_hand_must_apply
     lock_holder: Callable[[], str] = lock_holder
-    # `handoff.land_through_unit`'s one boundary: it starts the lander unit and reads its
-    # recorded exit code.
+    # `handoff.land_through_unit`'s one boundary: starts the lander unit, reads its exit code.
     systemctl: Callable[..., subprocess.CompletedProcess[str]] = systemctl
     hostname: Callable[[], str] = socket.gethostname
     logger: Callable[[str], None] = syslog
