@@ -9,7 +9,9 @@ compares the objects, as `<kind>/<namespace>/<name>`, in candidate T's `cluster/
 
 in the message of some commit in (`prod`, T] (`lib/removes_object.py` holds the grammar). A
 cluster-scoped object leaves the namespace empty, as in `ClusterRole//<name>`. An object whose whole Kustomization leaves T's bundle, as
-at a handback, is exempt.
+at a handback, is exempt. A rename is not a removal: an object whose name, with the
+renderer's trailing `-<digest8>` removed, still renders in T passes, as the soak Job and its
+ConfigMap do on every revision (D5.1f, *What it exempts*).
 
 `decide` reads `prod`'s bundle once per run and each weighed candidate's once, and skips an
 ineligible candidate with the line `refusal` returns. The plan is
@@ -17,6 +19,7 @@ docs/target-architecture/deploy/d2-first-leaf.md, *Publication and verification*
 operator's page docs/flux-deploy-plane.md, *Removing an object on purpose*.
 """
 
+import re
 from collections.abc import Iterator
 
 import yaml
@@ -33,6 +36,9 @@ from renderer.renderer_lib.bundle import CLUSTER_DIR
 
 # The kustomize file each bundle directory carries is not an object the cluster holds.
 _KUSTOMIZE_API = "kustomize.config.k8s.io/"
+# The suffix `bundle.py:job_spec_digest8` and `configmap_digest8` give a name. The same
+# literal is `cross_plane_order.py:_DIGEST_SUFFIX`, which strips it at PR time.
+_DIGEST_SUFFIX = re.compile(r"-[0-9a-f]{8}$")
 
 
 def bundle_documents(files: dict[str, bytes]) -> Iterator[tuple[str, str, dict]]:
@@ -96,10 +102,14 @@ def undeclared_losses(
         raise ReadError(f"a flux/ file of T's bundle does not parse: {err}") from err
     kept = {str((doc.get("metadata") or {}).get("name")) for doc in kustomizations}
     held = bundle_objects(target)
+    renamed = {_DIGEST_SUFFIX.sub("", ident) for ident in held}
     return sorted(
         ident
         for ident, owner in bundle_objects(prod).items()
-        if ident not in held and owner in kept and ident not in declared
+        if ident not in held
+        and _DIGEST_SUFFIX.sub("", ident) not in renamed
+        and owner in kept
+        and ident not in declared
     )
 
 

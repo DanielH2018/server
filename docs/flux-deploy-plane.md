@@ -646,7 +646,7 @@ the hold names, then clear the hold. For a failed Longhorn bump, the recovery is
 
 `scripts/deploy_tools/chained_timeout.py:promote_timeout` derives `verify`'s wait from T's bundle and its changed set, the same set
 `verify` expects, so the two cannot disagree. With `dependsOn` edges, a Kustomization starts
-only after its dependencies finish, so the wait sums four terms:
+only after its dependencies finish, so the wait sums four terms, with the soak beside them:
 
 - **The longest path.** The longest `dependsOn` path in T's bundle that ends at a changed
   name. A changed name on the path counts its own `timeout`. An unchanged ancestor counts no
@@ -1168,6 +1168,10 @@ Removes-Object: <kind>/<namespace>/<name>
   reaches master whatever the repository's squash default says. A merge outside `land.sh`
   that replaces the body, such as `gh pr merge --body`, drops it.
 - A commit outside the range does not count, including `prod`'s own commit.
+- A rename is not a removal. An object whose name, with the trailing `-<digest8>`
+  removed, still renders in the candidate passes, as the soak Job and its ConfigMap do on
+  every revision. `scripts/deploy_tools/object_loss.py` strips the suffix as
+  `cross_plane_order.py` does at PR time.
 
 `decide` skips an ineligible candidate with one stderr line per candidate, naming each
 undeclared object, and weighs older ones. When every candidate loses an object, it prints

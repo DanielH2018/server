@@ -525,11 +525,13 @@ hop to every chain.
     - the Kustomization `retryInterval`.
 
   The walk covers every Kustomization in the bundle, so D3's `cluster-vars` and D5's
-  `<tag>-snapshot`, `<tag>-verify` and `soak` count whenever they sit on the path, with no
-  change to the rule. `requeue-dependency` and `--concurrent` are read from the
-  kustomize-controller args in the flux role's vendored components when they set them, and
-  are otherwise the v1.9.6 defaults: 30 seconds and 4. D5.1 sets `--concurrent` to
-  `k8s_rollout_batch_width`.
+  `<tag>-snapshot` and `<tag>-verify` count whenever they sit on the path, with no change to
+  the rule. D5's `soak` carries no edges (D5 Open question 19), so D5.3b2 takes it out of both
+  terms: its `timeout` is a floor beside them, and it holds a worker of its own.
+  `requeue-dependency` and `--concurrent` are read from the kustomize-controller args in the
+  flux role's vendored components when they set them, and are otherwise the v1.9.6 defaults:
+  30 seconds and 4. D5.1 sets `--concurrent` to `k8s_rollout_batch_width`, and D5.3b2 adds
+  the soak's worker.
 - **Which Kustomizations count as changed.** The timeout reads C2's changed set, the set
   whose statuses `verify` expects (D2.5), and derives no second one. A name counts when its
   `footprint` digest in T's `digests.json` differs from the one on `prod`'s commit before
@@ -602,8 +604,8 @@ hop to every chain.
       those 48 plus netpol-baseline's two Kustomizations. At `--concurrent` 5 that adds ten
       rounds of up to 3000 seconds, so it reaches the 5.5-hour cap. Open question 14 asks
       whether `verify` should hold one runner that long.
-    - D5's `soak`, `<tag>-snapshot` and `<tag>-verify` Kustomizations lengthen a path where
-      they sit on it.
+    - D5's `<tag>-snapshot` and `<tag>-verify` Kustomizations lengthen a path where they sit
+      on it. `soak` sits on none, and its `timeout` is a floor of the wait.
 
   `land-wait` gives up at twice the promote timeout (C6): about 82 minutes for a one-role
   change, about 4 hours for a tdarr change, and 11 hours at the cap. `settle` writes the hold
