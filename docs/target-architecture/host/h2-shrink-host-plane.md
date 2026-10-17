@@ -710,8 +710,8 @@ rows*). D5 wave D waits on H2's family PR for each of the six roles, so H2 takes
   and H2.5b to H2.5d: the cron files, the script paths and, for configarr and janitorr, the
   host-lib copies and their fragments. Their conversion PRs move those arms into
   `k8s_host_files`, and H7 deletes them.
-- **observability** keeps no host row after H2.7. **artifacts** keeps its two directory
-  tasks, which its conversion PR moves.
+- **observability** keeps no host row after H2.7. **artifacts** keeps its three directory
+  tasks, the star list directory included, which its conversion PR moves.
 - **Rows H2 never touches:**
     - docs's site directory, which stays in `k8s_host_files` until H7;
     - registry's GC absent arms and traefik's `Cloudflare IP drift` arm, which H7 deletes;
@@ -1451,7 +1451,7 @@ change at merge time*).
     - The tick applies `initial_setup.yml --tags claude_code`, and the PR body quotes that
       run.
     - D5 wave D waits on this PR for artifacts and observability, so D5's conversion PRs find
-      only artifacts' two directory tasks (*What H2 leaves in `k8s_host_files`*).
+      only artifacts' three directory tasks (*What H2 leaves in `k8s_host_files`*).
 17. **H2.8a etcd-s3 on.** This step needs H1.7b and H6.4b.
     - Gate: `longhorn-backup` defaults define `k3s_longhorn_r2_region` before this PR merges.
       If they do not, the PR adds `longhorn_backup_etcd_s3_region` there and the render test
