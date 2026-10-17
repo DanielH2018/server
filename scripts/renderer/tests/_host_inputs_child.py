@@ -29,9 +29,9 @@ def _main(spec: dict) -> int:
     from renderer import homelab_render
 
     rc = homelab_render.packages(Path(spec["out"]), spec["host"], None)
-    record = {"rc": rc, "opened": sorted(opened)}
+    record = {"opened": sorted(opened)}
     Path(spec["record"]).write_text(json.dumps(record))
-    return 0
+    return rc
 
 
 if __name__ == "__main__":

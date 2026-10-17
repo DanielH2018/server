@@ -55,7 +55,7 @@ def outside_inputs(
 
 @pytest.fixture(scope="module")
 def render(tmp_path_factory) -> dict:
-    """The child's record of one daniel-pi render: its exit code and every real path opened."""
+    """Every real path one daniel-pi render opened; the child exits with the render's code."""
     tmp = tmp_path_factory.mktemp("host-inputs")
     record = tmp / "record.json"
     spec = {"host": "daniel-pi", "out": str(tmp / "out"), "record": str(record)}
@@ -85,7 +85,6 @@ def tracked() -> frozenset[str]:
 def test_every_tracked_file_a_host_render_opens_is_under_a_member_is_clean(
     render, tracked
 ):
-    assert render["rc"] == 0
     outside = outside_inputs(render["opened"], tracked, HOST_INPUTS)
     assert not outside, (
         f"opened by a host render, under no HOST_INPUTS member: {outside}"
