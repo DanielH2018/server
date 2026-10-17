@@ -6,7 +6,13 @@ Before the wait, a landing spends up to its merge and master CI budgets, the `Op
 defaults both landers run with. The tick has no fixed budget, and the headroom covers it.
 
 The wait needs `verify`'s wait on the soak that the publish job renders from this tree, plus
-promote's `render` and `publish` jobs, which run before any promotion can start. The soak's
+promote's `render` and `publish` jobs, which run before any promotion can start. `publish`
+also needs `images`, whose 90 minutes are for rebuilding the built images. No published tag
+builds one, so a flux-tag landing's own commit rebuilds nothing, and `images` runs in seconds
+once its content tags exist. `test_no_published_tag_builds_an_image` fails when a tag that
+builds one is handed to Flux, because that landing would then wait on its own rebuild.
+`tag` and the `verify` job are not on the path: `land-wait` settles on Flux's `flux/soak`
+status at R, not on either job. The soak's
 `timeout` grows by a queueing round with every five Kustomizations, so the PR that hands the
 next tags to Flux is the one this turns red.
 
@@ -27,6 +33,7 @@ from lib import yaml_fast
 from lib.exit_codes import RENDER_OK
 from lib.repo_paths import REPO
 from renderer import homelab_render
+from renderer.renderer_lib import images
 
 LANDERS = {
     "claude-land": ("claude_code", "claude-land@.service.j2"),
@@ -110,3 +117,13 @@ def test_the_handoff_outwaits_the_claude_lander():
         r"^TimeoutStartSec=(\d+)h$", render_setup_text(role, template), re.MULTILINE
     )
     assert handoff.START_TIMEOUT_S > int(timeout) * 3600
+
+
+def test_no_published_tag_builds_an_image():
+    """The pipeline above leaves out `images`' rebuild time, which holds only while this does."""
+    builders = set(images.builder_roles())
+    assert "code-server" in builders, builders
+    assert not builders & set(published_tags()), (
+        "a tag Flux applies builds an image, so its landing waits on `images` before "
+        "`publish`: count that job's timeout in publish_pipeline_s"
+    )
