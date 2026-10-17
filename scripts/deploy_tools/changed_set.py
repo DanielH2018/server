@@ -8,7 +8,9 @@ holds:
 
   - each name whose `footprint` differs, including a name the newer file adds;
   - every Kustomization whose `dependsOn` chain reaches one of those names;
-  - every name, when `_unclassified` differs.
+  - every name, when `_unclassified` differs;
+  - `soak`, whenever it holds a tag and the newer bundle renders `soak` (C2, D5 Open
+    question 19). `soak` carries no `dependsOn` edges, so no chain would put it there.
 
 It leaves out a name absent from the newer file, which the newer commit removes, and every
 suspended Kustomization. A Kustomization that no `digests.json` keys, such as a tag's
@@ -34,6 +36,8 @@ UNCLASSIFIED = "_unclassified"
 # The root Kustomization. Every reader expects it beside the changed set, so it is never a
 # member of the set itself.
 ROOT = "homelab"
+# The soak's Kustomization (D5.3b2). It has no edges, so the set takes it in by rule.
+SOAK = "soak"
 
 
 @dataclass(frozen=True)
@@ -124,6 +128,17 @@ def dependents(
     return reached
 
 
+def _tags(digests: object) -> set[str]:
+    """The deploy tags a parsed `digests.json` keys: only a tag's object holds `suspended` (C1)."""
+    if not isinstance(digests, Mapping):
+        return set()
+    return {
+        name
+        for name, entry in digests.items()
+        if isinstance(entry, Mapping) and "suspended" in entry
+    }
+
+
 def changed_set(
     new: object,
     old: object,
@@ -169,4 +184,9 @@ def changed_set(
     }
     # A dependent the newer bundle removes is not expected either.
     reached = dependents(moved, depends_on) & universe
+    if SOAK in universe and (reached - left_out) & _tags(new):
+        # `direct`, because the soak judges this revision itself, so a failure it read on
+        # `prod`'s commit never excuses it as an already-failing dependent.
+        reached.add(SOAK)
+        moved.add(SOAK)
     return ChangedSet(frozenset(reached - left_out), direct=frozenset(moved - left_out))

@@ -74,6 +74,20 @@ def test_eleven_changed_names_under_concurrent_five_add_three_rounds_of_the_larg
     assert found == 15 * 60 + 3 * 15 * 60 + TAIL
 
 
+def test_a_changed_soak_longer_than_the_chain_sets_the_budget():
+    """`soak` has no edges, so its timeout is a term beside the chain, never added to it."""
+    bundle = docs(ks("a"), ks("soak", timeout="60m"))
+    assert ct.promote_timeout(bundle, {"a", "soak"}) == 60 * 60 + TAIL
+
+
+def test_a_changed_soak_shorter_than_the_chain_takes_no_place_in_the_queue():
+    """Five tags fill one round at `--concurrent` 5, and the soak's worker is the sixth."""
+    names = [f"t{i}" for i in range(5)]
+    bundle = docs(*(ks(n) for n in names), ks("soak", timeout="13m"))
+    found = ct.promote_timeout(bundle, {*names, "soak"}, concurrent=5)
+    assert found == TEN_M + TEN_M + TAIL
+
+
 def test_a_dependent_of_a_changed_name_joins_the_queueing_term():
     """Ten changed tags fill two rounds at `--concurrent` 5; their dependent makes three."""
     names = [f"t{i}" for i in range(10)]

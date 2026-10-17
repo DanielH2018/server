@@ -83,7 +83,7 @@ import forge
 from artifact_retention import HELD_TAG, LAST_GOOD_TAG, PROD_TAG
 from changed_set import ROOT, changed_set, footprints, suspended_tags
 from chained_timeout import promote_timeout
-from deploy_tools.promote_lib.wait import kustomization_graph
+from deploy_tools.kustomizations import kustomization_graph
 from renderer.renderer_lib.ordering import split_kind
 
 DIGESTS_FILE = "digests.json"
@@ -131,6 +131,8 @@ IN_FLIGHT_POLL_S = 30
 _FAILED_HOLD = re.compile(r"([0-9a-f]{40}) failed=([a-z0-9-]+(?:,[a-z0-9-]+)*)")
 # A soak verdict covers every service in the changed set, so no footprint shows it reverted.
 SOAK = "soak"
+# Not expected, so its failure or absence holds nothing (D5.3b2). D5.3b3 deletes the set.
+OBSERVE_ONLY = frozenset({SOAK})
 
 
 # -- the bundles -----------------------------------------------------------------------------
@@ -277,8 +279,8 @@ def expected_set(target: dict[str, bytes], prod: dict[str, bytes] | None) -> Exp
     old = bundle_digests(prod) if prod is not None else None
     found = changed_set(bundle_digests(target), old, depends_on, suspended)
     return Expected(
-        names=found.names | {ROOT},
-        dependents=found.names - found.direct,
+        names=(found.names - OBSERVE_ONLY) | {ROOT},
+        dependents=found.names - OBSERVE_ONLY - found.direct,
         widened=found.widened,
         timeout_s=promote_timeout(docs, found.names),
     )

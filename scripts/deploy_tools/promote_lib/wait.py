@@ -49,7 +49,6 @@ Run: uv run python scripts/deploy_tools/promote.py land-wait <sha> --services <t
 """
 
 import json
-import re
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -66,14 +65,26 @@ from lib.git import git
 
 import forge
 from renderer.renderer_lib.ordering import split_kind
-from changed_set import ROOT, ChangedSet, changed_set, suspended_changed, suspended_tags
+from changed_set import (
+    ROOT,
+    SOAK,
+    ChangedSet,
+    changed_set,
+    suspended_changed,
+    suspended_tags,
+)
+from deploy_tools.kustomizations import (
+    REVISION as _REVISION,
+    is_ready,
+    kustomization_graph,
+    kustomization_name as _name,
+    origin_commit,
+    with_dependents,
+)
 from artifact_retention import LAST_GOOD_TAG, PROD_TAG
 from flux_host import FluxHost
 
 HOLD_VARIABLE = forge.HOLD_VARIABLE
-# The `lastAppliedOriginRevision` form that names a commit: the `--revision` that `flux push
-# artifact` writes (contract C6). promote.py reads the same form off `prod`'s manifest.
-_REVISION = re.compile(r"master@sha1:([0-9a-f]{40})")
 # The annotation `flux push artifact --revision` writes on a bundle's manifest. promote.py
 # reads `prod`'s commit from it too, through this name.
 REVISION_ANNOTATION = "org.opencontainers.image.revision"
@@ -180,75 +191,6 @@ class WaitResult:
     revision: str = ""
     widened: str = ""
     suspended: tuple[str, ...] = ()
-
-
-def origin_commit(kustomization: dict) -> str | None:
-    """The commit `status.lastAppliedOriginRevision` names, or None for any other value.
-
-    Only the `master@sha1:<40 hex>` form names a commit. `status.lastAppliedRevision` holds
-    `<tag>@sha256:<digest>`, which no git command takes, so it is never read (contract C6).
-    """
-    status = kustomization.get("status")
-    revision = (
-        status.get("lastAppliedOriginRevision") if isinstance(status, dict) else None
-    )
-    match = _REVISION.fullmatch(revision) if isinstance(revision, str) else None
-    return match.group(1) if match else None
-
-
-def is_ready(kustomization: dict) -> bool:
-    """Whether the Kustomization's `Ready` condition reads `True`."""
-    status = kustomization.get("status")
-    conditions = status.get("conditions") if isinstance(status, dict) else None
-    return isinstance(conditions, list) and any(
-        isinstance(c, dict) and c.get("type") == "Ready" and c.get("status") == "True"
-        for c in conditions
-    )
-
-
-def _name(kustomization: dict) -> str:
-    metadata = kustomization.get("metadata")
-    name = metadata.get("name") if isinstance(metadata, dict) else None
-    return name if isinstance(name, str) else ""
-
-
-def kustomization_graph(items: list[dict]) -> tuple[dict[str, list[str]], set[str]]:
-    """Each Kustomization's `dependsOn` names, and the names that are suspended."""
-    depends_on: dict[str, list[str]] = {}
-    suspended: set[str] = set()
-    for item in items:
-        name = _name(item)
-        if not name:
-            continue
-        spec = item.get("spec")
-        spec = spec if isinstance(spec, dict) else {}
-        deps = spec.get("dependsOn")
-        depends_on[name] = [
-            d["name"]
-            for d in (deps if isinstance(deps, list) else [])
-            if isinstance(d, dict) and isinstance(d.get("name"), str)
-        ]
-        if spec.get("suspend") is True:
-            suspended.add(name)
-    return depends_on, suspended
-
-
-def with_dependents(
-    names: frozenset[str], depends_on: dict[str, list[str]], suspended: set[str]
-) -> frozenset[str]:
-    """`names`, plus every Kustomization that depends on one of them, directly or not.
-
-    A suspended dependent is left out, because Flux applies nothing for it.
-    """
-    found = set(names)
-    grew = True
-    while grew:
-        grew = False
-        for name, deps in depends_on.items():
-            if name not in found and name not in suspended and found.intersection(deps):
-                found.add(name)
-                grew = True
-    return frozenset(found)
 
 
 def hold_detail(hold: str) -> str:
@@ -390,7 +332,11 @@ def land_wait(
             # Every tag the wait covers is suspended, so nothing of M is left to wait on.
             all_paused = bool(paused) and set(paused) == set(services) and not also
             # A suspended tag's Kustomizations never apply M, so the rest are waited on.
-            names = {n for n in cs.names if split_kind(n)[0] not in paused} | {ROOT}
+            # `soak` is never waited on Ready: before D5.3b3 it gates nothing, and from
+            # D5.3b3 `land-wait` reads its `flux/soak` verdict instead (D5, *The soak as a Job*).
+            names = {
+                n for n in cs.names if split_kind(n)[0] not in paused and n != SOAK
+            } | {ROOT}
             if also:
                 names |= with_dependents(also, *kustomization_graph(items))
             pending, revision = _pending(reads, merge, items, names)

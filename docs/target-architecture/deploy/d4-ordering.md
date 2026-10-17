@@ -441,10 +441,10 @@ hop to every chain.
   an Ansible-owned role is dropped, because it would name a missing Kustomization.
 - **`K8S_APPLIES_LAST` in the renderer.** A tag in that dict also depends on every flux-owned
   `<tag>-deferred` Kustomization except its own. In Ansible, pihole applies instance 2 inside
-  its own role, before netpol-baseline runs, and this edge keeps that order. The tag never
-  depends on a non-tag Kustomization that itself depends on every tag. D5's `soak` is the
-  case that exists, and an edge to it would be a cycle. Whether the tag also waits on another
-  tag's `<tag>-snapshot` or `<tag>-verify` is D5.1a1's to decide, when those kinds exist.
+  its own role, before netpol-baseline runs, and this edge keeps that order. D5's `soak`
+  carries no `dependsOn` edges (D5 Open question 19), so the tag has no edge to it either.
+  Whether the tag also waits on another tag's `<tag>-snapshot` or `<tag>-verify` is D5.1a1's
+  to decide, when those kinds exist.
 - **Dropped edges stay visible.** They are listed in the annotation
   `homelab/ansible-owned-deps` for a reader. Each one becomes a real `dependsOn` in the
   first render after that dependency moves to Flux.

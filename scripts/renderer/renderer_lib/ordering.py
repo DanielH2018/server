@@ -13,8 +13,9 @@ Every edge is generated, never hand-written, from an `Ordering` the caller reads
   applies only after its snapshot is taken (D5.2a). `<tag>-verify` depends on the tag's last
   Kustomization: `<tag>-deferred` when the tag renders one, `<tag>` otherwise (D5.1a1);
 - an edge to a Kustomization that a suspended tag owns is dropped, and the annotation `homelab/suspended-deps` lists it, because Flux would hold the dependent at
-  `DependencyNotReady` until the resume (C3 *Suspension*, D5.1b). `drop_suspended` is the one step, so a
-  shared kind that depends on every tag, such as D5.3b2's `soak`, drops them the same way.
+  `DependencyNotReady` until the resume (C3 *Suspension*, D5.1b). `drop_suspended` is the one step.
+  D5.3b2's `soak` keeps no edge at all (D5 Open question 19), and `soak.py` routes every tag's
+  Kustomizations through this step so its annotation names the suspended ones.
 
 `bundle.py` adds the `cluster-vars` edge and fails the render on a cycle, because Flux would
 hold every Kustomization on it at `DependencyNotReady`. Like `bundle.py`, this module imports

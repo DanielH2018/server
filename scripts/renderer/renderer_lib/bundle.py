@@ -13,7 +13,8 @@ A placeholder render with `--role` writes, for each tag it names:
   `timeout` from the role's defaults where `role_fields` finds them (C3 *Per-role fields*).
   A role that sets `flux_suspend: true` renders `suspend: true` on every one of its tag's
   Kustomizations (C3 *Suspension*, D5.1b);
-- `DIR/flux/<kind>.yaml` and `DIR/cluster/<kind>/` for each `SHARED_KINDS` member;
+- `DIR/flux/<kind>.yaml` and `DIR/cluster/<kind>/` for each `SHARED_KINDS` member: `cluster-vars`
+  and `soak` (`soak.py`);
 - `DIR/flux/kustomization.yaml`, which lists every other file in `DIR/flux/`, so the root
   Kustomization `homelab` applies each of them;
 - `DIR/digests.json`, each published name's `own` and `footprint` digest, and each tag's
@@ -56,7 +57,6 @@ from pathlib import Path
 
 import yaml
 
-from lib import yaml_fast
 from lib.k8s_roles import role_fields, snapshot_claims
 from lib.repo_paths import K8S_ROLES
 from renderer.renderer_lib.suspension import refuse_suspend_false, suspends_tag
@@ -109,7 +109,7 @@ SUBSTITUTE_OPT_OUT = "kustomize.toolkit.fluxcd.io/substitute"
 # D5.3b2 `soak` and D5's namespace PR `homelab-namespace`, each in the PR that renders it.
 # Membership is unconditional: a render that cannot copy the cluster file fails, so deleting
 # the file fails CI rather than narrowing the census.
-SHARED_KINDS: frozenset[str] = frozenset({CLUSTER_VARS})
+SHARED_KINDS: frozenset[str] = frozenset({CLUSTER_VARS, "soak"})
 # The shared kinds no PR renders yet, a closed literal set (D5.1a1). A member cannot join
 # `SHARED_KINDS` before its file exists, so this list keeps a deploy tag from taking its name
 # meanwhile. A name stays here after it joins.
@@ -134,6 +134,8 @@ class FootprintFacts:
 # substituting tag. `rules_missing` and its census test fail a member without one.
 FOOTPRINT_RULES: dict[str, Callable[[FootprintFacts], Iterable[str]]] = {
     CLUSTER_VARS: lambda facts: facts.substituting,
+    # The soak judges the tags and changes none of them; C2 adds it to any set holding a tag.
+    "soak": lambda facts: (),
 }
 
 
@@ -496,6 +498,7 @@ def bundle_files(
     decrypting: Iterable[str] = (),
     ordering: Ordering = NO_ORDERING,
     roles: Path = K8S_ROLES,
+    revision: str | None = None,
 ) -> dict[str, str]:
     """The files a bundle holds beside its tags' `cluster/` directories, by bundle path.
 
@@ -517,6 +520,8 @@ def bundle_files(
         roles: The role tree whose defaults declare each tag's snapshot claims, which
             `digests.json` records (`snapshot_claims`), and its per-role fields
             (`role_fields`).
+        revision: R's commit SHA, which the soak Job judges. None renders the soak at
+            `soak.NORMALISED_REVISION`, for a bundle nobody publishes.
 
     Raises:
         ValueError: The edges form a cycle, a tag's `k8s_autodeploy_snapshot_pvcs` is not a
@@ -542,7 +547,16 @@ def bundle_files(
             f"the dependsOn edges form a cycle, {' -> '.join(cycle)}, and Flux would hold "
             "every Kustomization on it at DependencyNotReady"
         )
+    # Imported here, because soak.py builds on this module's writers.
+    from renderer.renderer_lib.soak import NORMALISED_REVISION, soak_files
+
+    soak = soak_files(NORMALISED_REVISION, tags, directories, ordering.suspended)
     shared = cluster_vars_files(cluster_vars, timeout)
+    shared |= (
+        soak_files(revision, tags, directories, ordering.suspended)
+        if revision
+        else soak
+    )
     flux = {p: t for p, t in shared.items() if p.startswith(f"{FLUX_DIR}/")}
     files = flux_files(
         {name: per_directory.get(name, False) for name in edges},
@@ -559,7 +573,9 @@ def bundle_files(
         for file, text in held.items()
     }
     refuse_suspend_false({**cluster, **files})
-    everything = {path: text.encode() for path, text in {**cluster, **files}.items()}
+    # `soak` is digested at the normalised SHA, so R's own SHA never moves its footprint (C1).
+    digested = {**cluster, **files, **soak}
+    everything = {path: text.encode() for path, text in digested.items()}
     claims, problems = snapshot_claims(tags, roles)
     if problems:
         raise ValueError("; ".join(problems))
@@ -567,26 +583,6 @@ def bundle_files(
         digests(everything, tags, substituting, claims=claims)
     )
     return files
-
-
-def sops_manifest_problem(name: str, text: str) -> str | None:
-    """Why the SOPS manifest `name` cannot be copied into a tag's directory, or None.
-
-    The copy is byte for byte, because SOPS's MAC covers the plaintext fields too, so the
-    renderer cannot add the substitute opt-out itself; it refuses a manifest without it.
-    """
-    try:
-        obj = yaml_fast.safe_load(text)
-    except yaml.YAMLError as exc:
-        return f"the SOPS manifest {name} does not parse: {exc}"
-    meta = (obj.get("metadata") if isinstance(obj, dict) else None) or {}
-    if (meta.get("annotations") or {}).get(SUBSTITUTE_OPT_OUT) != "disabled":
-        return (
-            f"the SOPS manifest {name} lacks the annotation {SUBSTITUTE_OPT_OUT}: disabled "
-            "in its plaintext metadata, so Flux would substitute into its decrypted values. "
-            "cluster_vars.py write (operator-only) writes it before encrypting"
-        )
-    return None
 
 
 def write_bundle(files: Mapping[str, str], out: Path) -> list[Path]:
