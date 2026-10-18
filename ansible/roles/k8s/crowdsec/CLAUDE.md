@@ -62,10 +62,17 @@ over a `pods/exec` grant on 2026-10-18 (#5655).
   it sees the same database as the LAPI. It is statically linked at the pinned digest; recheck
   with `file` on the next `crowdsec_k8s_image` bump.
 - **The scheduler is the jobs' wrapper.** It runs each job as a child process, kills one past its
-  timeout, skips a slot whose previous run is still going, and prints `<tag>: status=<up|down>
-  <summary>` to the container log. It pushes the remote allowlist and AppSec verdicts to their
-  Kuma tiles with URLs from the `crowdsec-jobs` Secret. Read the jobs with
-  `probe.py loki-query '{container="crowdsec-jobs"}'`.
+  timeout, skips a slot whose previous run is still going, and prints `<UTC time> <pod>
+  <tag>: status=<up|down> <summary>` to the container log, flushed per line. It pushes the
+  remote allowlist and AppSec verdicts to their Kuma tiles with URLs from the `crowdsec-jobs`
+  Secret. Read the jobs with `probe.py loki-query '{container="crowdsec-jobs"}'`. The prefix is
+  the host crons' syslog shape, so monitor-bridge's Swallowed Push Verdicts and `probe.py
+  alerts` read this container as they read the host crons.
+- **Only the sidecar holds a Kubernetes token.** The pod does not automount one; a projected
+  volume at `/var/run/crowdsec-jobs` reaches the sidecar alone, and `kubectl` finds it through
+  the kubeconfig in the `crowdsec-jobs` ConfigMap. Its Role reads every homelab pod's log,
+  which is why the engine container, which parses attacker-controlled requests, must not
+  hold it.
 - **A job edit restarts the LAPI.** The ConfigMap is part of the role's render, so the shared
   rollout restart rolls the whole pod.
 - **A sidecar crash takes the LAPI out of its Service** until the container restarts, because

@@ -25,12 +25,12 @@ spec:
       # has why.
       nodeSelector:
         kubernetes.io/hostname: {{ k8s_primary_node }}
-      # The ServiceAccount is the crowdsec-jobs sidecar's (jobs-rbac.yaml.j2), whose kubectl reads
-      # the token from the automounted path. Automounting puts the token in the engine container
-      # too. Its rules only read IngressRoutes and Traefik's log, which the engine already sees.
-      # A projected volume at the same path, for the sidecar alone, is what the rendered-property
-      # row no-mount-shadows-the-serviceaccount-token refuses.
-{{ pod_shell(containers_list | tier_priority_class('crowdsec'), service_account='crowdsec-jobs', automount=true) }}
+      # The ServiceAccount is the crowdsec-jobs sidecar's (jobs-rbac.yaml.j2). Its token is not
+      # automounted: the crowdsec-jobs-token volume projects it into the sidecar alone, so the
+      # engine container holds no Kubernetes credential. That volume sits off the default path,
+      # which the rendered-property row no-mount-shadows-the-serviceaccount-token keeps free, and
+      # the sidecar's kubectl finds it through the kubeconfig in the crowdsec-jobs ConfigMap.
+{{ pod_shell(containers_list | tier_priority_class('crowdsec'), service_account='crowdsec-jobs', automount=false) }}
       initContainers:
         # /etc/crowdsec is an emptyDir the image entrypoint populates with defaults on
         # start; this seeds our config first so the entrypoint treats it as existing
@@ -147,6 +147,12 @@ spec:
             # The ConfigMap mount is read-only, so Python cannot write __pycache__ there.
             - name: PYTHONDONTWRITEBYTECODE
               value: "1"
+            # A pipe is block-buffered, and an OOM kill discards the buffer, so every verdict
+            # line reaches the container log as it is printed.
+            - name: PYTHONUNBUFFERED
+              value: "1"
+            - name: KUBECONFIG
+              value: /jobs/kubeconfig
             - name: REMOTE_ALLOWLIST_PUSH_URL
               valueFrom:
                 secretKeyRef:
@@ -170,6 +176,9 @@ spec:
             - name: crowdsec-jobs-tools
               mountPath: /tools
               readOnly: true
+            - name: crowdsec-jobs-token
+              mountPath: /var/run/crowdsec-jobs
+              readOnly: true
             - name: crowdsec-jobs-tmp
               mountPath: /tmp
 {{ container_resources(cpu_limit=crowdsec_k8s_jobs_cpu_limit, mem_limit=crowdsec_k8s_jobs_mem_limit, cpu_request=crowdsec_k8s_jobs_cpu_request, mem_request=crowdsec_k8s_jobs_mem_request) }}
@@ -191,3 +200,16 @@ spec:
           emptyDir: {}
         - name: crowdsec-jobs-tmp
           emptyDir: {}
+        # What automounting would give every container, given to the sidecar alone: a bound
+        # token and the cluster CA, which jobs-configmap.yaml.j2's kubeconfig names.
+        - name: crowdsec-jobs-token
+          projected:
+            sources:
+              - serviceAccountToken:
+                  path: token
+                  expirationSeconds: 3607
+              - configMap:
+                  name: kube-root-ca.crt
+                  items:
+                    - key: ca.crt
+                      path: ca.crt

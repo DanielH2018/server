@@ -1,6 +1,6 @@
 {#
-  The crowdsec-jobs sidecar's code: the scheduler, its three jobs, and kuma_push.py from
-  setup/common, which the scheduler imports. Python puts the scheduler's own directory on
+  The crowdsec-jobs sidecar's code: the scheduler, its three jobs, kuma_push.py from
+  setup/common, which the scheduler imports, and kubectl's kubeconfig. Python puts the scheduler's own directory on
   sys.path, so the files sit flat at the mount.
 
   No secret goes in here. The push URLs reach the sidecar from the crowdsec-jobs Secret through
@@ -18,6 +18,27 @@ metadata:
   name: crowdsec-jobs
   namespace: {{ k8s_namespace }}
 data:
+  # kubectl's credential for the remote allowlist: the projected token and CA the sidecar alone
+  # mounts at /var/run/crowdsec-jobs (deployment.yaml.j2). Paths only; no secret value.
+  kubeconfig: |
+    apiVersion: v1
+    kind: Config
+    clusters:
+      - name: in-cluster
+        cluster:
+          server: https://kubernetes.default.svc
+          certificate-authority: /var/run/crowdsec-jobs/ca.crt
+    users:
+      - name: crowdsec-jobs
+        user:
+          tokenFile: /var/run/crowdsec-jobs/token
+    contexts:
+      - name: crowdsec-jobs
+        context:
+          cluster: in-cluster
+          user: crowdsec-jobs
+          namespace: {{ k8s_namespace }}
+    current-context: crowdsec-jobs
   crowdsec_jobs.py: |
 {{ lookup('file', playbook_dir + '/roles/k8s/crowdsec/files/crowdsec_jobs.py') | indent(4, true) }}
   remote_allowlist.py: |

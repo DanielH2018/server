@@ -18,7 +18,10 @@ run that outlives its timeout is killed and reported as down. A job still runnin
 slot comes is skipped for that slot, as `concurrencyPolicy: Forbid` would skip it. This process
 does what each job's bash wrapper did on the host: it takes the child's exit code and last
 output line as the verdict, prints `<tag>: status=<up|down> <summary>` to stdout, and pushes the
-verdict to the job's Kuma monitor. The push URL comes from the environment variable the job
+verdict to the job's Kuma monitor. Each stdout line carries the host crons' syslog prefix,
+`<UTC time> <pod name> <tag>: <message>`, and is flushed as it is written. monitor-bridge's
+Swallowed Push Verdicts check and `probe.py alerts` both parse that shape from
+`{container="crowdsec-jobs"}`. The push URL comes from the environment variable the job
 names, which the pod reads from the `crowdsec-jobs` Secret.
 
 No job runs in the first `STARTUP_GRACE_S` seconds. The engine container writes
@@ -36,12 +39,14 @@ Usage:
 
 import os
 import signal
+import socket
 import subprocess
 import sys
 import threading
 import time
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Protocol
 
@@ -110,6 +115,23 @@ JOBS = (
 )
 
 
+def emit(
+    line: str,
+    now: Callable[[], datetime] = lambda: datetime.now(UTC),
+    host: Callable[[], str] = socket.gethostname,
+    write: Callable[..., None] = print,
+) -> None:
+    """Prints one `<tag>: <message>` line to stdout in the host crons' syslog shape.
+
+    The prefix is the two whitespace-free tokens rsyslog writes, an ISO time and the host, here
+    the pod name: the readers of this stream match exactly two tokens before the tag. The flush
+    is per line, because a pipe is block-buffered, and an OOM kill would discard a buffered
+    verdict before the container log ever held it.
+    """
+    stamp = now().strftime("%Y-%m-%dT%H:%M:%SZ")
+    write(f"{stamp} {host()} {line}", flush=True)
+
+
 def due(job: Job, minute: int) -> bool:
     """Whether `job` starts at `minute` of the UTC hour."""
     return minute % job.period == job.offset
@@ -128,7 +150,7 @@ def run_job(
     runner: Callable[..., subprocess.CompletedProcess] = subprocess.run,
     push: Callable[..., bool] = kuma_push.kuma_push,
     env: Mapping[str, str] | None = None,
-    out: Callable[[str], None] = print,
+    out: Callable[[str], None] = emit,
 ) -> int:
     """Runs `job` once, prints its verdict and pushes it.
 
@@ -174,7 +196,7 @@ def tick(
     running: dict[str, Running],
     *,
     start: Callable[[Job], Running] = start_thread,
-    out: Callable[[str], None] = print,
+    out: Callable[[str], None] = emit,
 ) -> None:
     """Starts every job due at `minute` whose previous run has finished."""
     for job in JOBS:
@@ -194,11 +216,13 @@ def main(
     sleep: Callable[[float], None] = time.sleep,
     start: Callable[[Job], Running] = start_thread,
     minutes: int | None = None,
+    grace_s: float = STARTUP_GRACE_S,
 ) -> int:
     """Runs the schedule until SIGTERM, or for `minutes` minute boundaries when a test sets it.
 
-    The minute comes from the boundary it slept to, not from the clock read after waking, so a
-    wake a millisecond early cannot start the previous minute's jobs a second time.
+    A wake before the boundary sleeps again. The minute passed to `tick` is the boundary it slept
+    to, not the clock read after waking, so a wake that runs late, past the next boundary, still
+    starts the jobs of the minute it waited for. The minutes it overslept are not made up.
     """
     started = clock()
     running: dict[str, Running] = {}
@@ -206,7 +230,7 @@ def main(
         boundary = (int(clock() // 60) + 1) * 60
         while (now := clock()) < boundary:
             sleep(boundary - now)
-        if boundary - started >= STARTUP_GRACE_S:
+        if boundary - started >= grace_s:
             tick(boundary // 60 % 60, running, start=start)
         if minutes is not None:
             minutes -= 1

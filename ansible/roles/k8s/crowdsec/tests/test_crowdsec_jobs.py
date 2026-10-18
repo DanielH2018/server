@@ -11,6 +11,7 @@ Run: uv run pytest ansible/roles/k8s/crowdsec/tests/test_crowdsec_jobs.py
 
 import subprocess
 import sys
+from datetime import UTC, datetime
 
 import pytest
 from _k8s_render import render_role_template
@@ -140,8 +141,8 @@ def test_a_job_still_running_at_its_next_slot_is_skipped():
     assert started == ["crowdsec-appsec-verify", "crowdsec-remote-allowlist"]
 
 
-def test_no_job_starts_in_the_startup_grace_and_minutes_come_from_the_boundary():
-    # The clock starts at 12:59:30 UTC and wakes 1 ms early once, which must not re-run 12:59.
+def test_no_job_starts_in_the_startup_grace():
+    # The clock starts at 12:59:30 UTC and wakes 1 ms early once, which sleeps again.
     now = [1792303170.0]
     wakes = iter([-0.001])
 
@@ -157,6 +158,26 @@ def test_no_job_starts_in_the_startup_grace_and_minutes_come_from_the_boundary()
     cj.main(clock=lambda: now[0], sleep=sleep, start=start, minutes=7)
     # 13:00 and 13:01 fall inside the 120 s grace from 12:59:30; 13:05 is the first slot after.
     assert started == [("crowdsec-remote-allowlist", 5)]
+
+
+def test_a_late_wake_still_runs_the_minute_it_slept_to():
+    # From 13:04:30 UTC the sleep to 13:05 overshoots by 61 s and wakes at 13:06:01. The clock
+    # then reads minute 6, which has no job; the boundary it slept to is minute 5, which starts
+    # the remote allowlist. Minute 7, the next boundary, has no job either.
+    now = [1792328670.0]
+    wakes = iter([61.0])
+
+    def sleep(seconds):
+        now[0] += seconds + next(wakes, 0.0)
+
+    started = []
+
+    def start(job):
+        started.append(job.tag)
+        return _Alive(False)
+
+    cj.main(clock=lambda: now[0], sleep=sleep, start=start, minutes=2, grace_s=0)
+    assert started == ["crowdsec-remote-allowlist"]
 
 
 @pytest.fixture(scope="module")
@@ -203,11 +224,61 @@ def test_the_sidecar_runs_the_scheduler_from_the_configmap_with_the_tools_the_mo
             assert env[job.push_env]["secretKeyRef"]["name"] == "crowdsec-jobs"
 
 
-def test_the_pod_runs_as_the_jobs_service_account_with_its_token_mounted(pod):
-    # kubectl reads the automounted token; a pod that stopped mounting it would fail every
-    # remote allowlist run with an anonymous-user Forbidden.
+def test_only_the_sidecar_holds_the_service_account_token(pod):
+    # The Role reads every homelab pod's log, so the token must not reach the engine container,
+    # which parses attacker-controlled requests.
     assert pod["serviceAccountName"] == "crowdsec-jobs"
-    assert pod["automountServiceAccountToken"] is True
+    assert pod["automountServiceAccountToken"] is False
+    [token] = [v for v in pod["volumes"] if v["name"] == "crowdsec-jobs-token"]
+    assert any("serviceAccountToken" in src for src in token["projected"]["sources"])
+    holders = [
+        c["name"]
+        for c in pod["containers"] + pod["initContainers"]
+        if "crowdsec-jobs-token" in _mounts(c).values()
+    ]
+    assert holders == ["crowdsec-jobs"]
+
+
+def test_the_kubeconfig_names_the_paths_the_sidecar_mounts(pod):
+    [configmap] = yaml_fast.safe_load_all(
+        render_role_template("crowdsec", "jobs-configmap.yaml.j2")
+    )
+    kubeconfig = yaml_fast.safe_load(configmap["data"]["kubeconfig"])
+    [sidecar] = [c for c in pod["containers"] if c["name"] == "crowdsec-jobs"]
+    env = {e["name"]: e.get("value") for e in sidecar["env"]}
+    mounts = _mounts(sidecar)
+    # KUBECONFIG names the file the ConfigMap mount carries.
+    assert env["KUBECONFIG"] == "/jobs/kubeconfig"
+    assert mounts["/jobs"] == "crowdsec-jobs-code"
+    token_dir = next(
+        path for path, name in mounts.items() if name == "crowdsec-jobs-token"
+    )
+    [user] = kubeconfig["users"]
+    [cluster] = kubeconfig["clusters"]
+    assert user["user"]["tokenFile"] == f"{token_dir}/token"
+    assert cluster["cluster"]["certificate-authority"] == f"{token_dir}/ca.crt"
+    assert env["PYTHONUNBUFFERED"] == "1"
+
+
+def test_each_log_line_carries_the_syslog_prefix_and_is_flushed():
+    # monitor-bridge's Swallowed Push Verdicts and probe.py alerts both want exactly two
+    # whitespace-free tokens before the tag: a time and the host.
+    printed = []
+    cj.emit(
+        "crowdsec-appsec-verify: status=down no enabled appsec-configs",
+        now=lambda: datetime(2026, 10, 18, 13, 5, tzinfo=UTC),
+        host=lambda: "crowdsec-6f9c-x2",
+        write=lambda *args, **kwargs: printed.append((args, kwargs)),
+    )
+    assert printed == [
+        (
+            (
+                "2026-10-18T13:05:00Z crowdsec-6f9c-x2 "
+                "crowdsec-appsec-verify: status=down no enabled appsec-configs",
+            ),
+            {"flush": True},
+        )
+    ]
 
 
 def test_every_module_imports_from_the_pods_mounted_layout(tmp_path):

@@ -12,9 +12,11 @@
   to homelab would change which routers count as authelia-gated, so the grant follows the
   script.
 
-  The pod automounts the token, so the engine container holds it too (deployment.yaml.j2 says
-  why). ansible/tests/k8s/test_rbac_against_script.py runs the module's main with a recording
-  runner and holds these rules to the calls it records.
+  `pods/log` cannot name the Traefik pod, whose name changes on every rollout, so the grant
+  reads every homelab pod's log. That is why the token reaches the sidecar alone, through a
+  projected volume, and never the engine container (deployment.yaml.j2).
+  ansible/tests/k8s/test_rbac_against_script.py runs the module's main with a recording runner
+  and holds these rules to the calls it records.
 #}
 ---
 apiVersion: v1
@@ -22,6 +24,7 @@ kind: ServiceAccount
 metadata:
   name: crowdsec-jobs
   namespace: {{ k8s_namespace }}
+automountServiceAccountToken: false
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
