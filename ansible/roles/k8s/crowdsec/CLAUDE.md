@@ -61,6 +61,11 @@ over a `pods/exec` grant on 2026-10-18 (#5655).
   from `crowdsec_k8s_image`. It reads the shared `/etc/crowdsec` (read-only) and `crowdsec-db`, so
   it sees the same database as the LAPI. It is statically linked at the pinned digest; recheck
   with `file` on the next `crowdsec_k8s_image` bump.
+- **`crowdsec-db` holds links into the engine image's `/staging`**, which the entrypoint makes
+  on every start, and the sidecar's image has no `/staging`. cscli creates its trace directory
+  through the `trace` link on every call, so the sidecar mounts an emptyDir at
+  `/staging/var/lib/crowdsec/data/trace`. Without it, every job failed with `mkdir
+  /var/lib/crowdsec/data/trace: file exists`. The other links name data files no job opens.
 - **The scheduler is the jobs' wrapper.** It runs each job as a child process, kills one past its
   timeout, skips a slot whose previous run is still going, and prints `<UTC time> <pod>
   <tag>: status=<up|down> <summary>` to the container log, flushed per line. It pushes the
