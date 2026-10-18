@@ -829,10 +829,15 @@ containers_list:
       - kuma-maintenance-sync    # KUMA__URL (uptime-kuma's maintenance-sync CronJob)
 
   # Runs WITHOUT docker plumbing — no DOCKER_HOST, so no in-IDE docker CLI or devcontainers.
-  # Image built in-cluster from the containers role's Dockerfile, which is the build source.
+  # CI's `images` job builds the image from the role's own Dockerfile and pushes it to GHCR.
   # two_factor even on the LAN: a shell as the repo user on a stolen password alone.
   - name: code-server
     platform: k8s
+    # Flux applies code-server through `promote`, snapshots both claims in its
+    # code-server-snapshot Job first, and substitutes its password Secret from
+    # homelab-cluster-vars (D5.16). The handback is two PRs, `owner: released` then removing
+    # `owner`: docs/flux-deploy-plane.md.
+    owner: flux
     weekly_backup_claims: {code-server-workspace: 0}  # Sun
     # Measured composition, not an estimate. `du` inside the pod puts 5.8 G in
     # .local/share/code-server/extensions — a directory the server does NOT read, since it
