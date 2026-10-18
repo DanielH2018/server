@@ -382,7 +382,8 @@ Instead it reads the cluster every 30 seconds:
   pull from GHCR at a 4500s `timeout`, put the soak's `timeout` at 14070s and left the wait
   3544 seconds short. D5.20 then published sonarr, radarr and mosquitto with two verify
   Kustomizations, which put the soak's `timeout` at 14934s, so D5.16 raised the deadline
-  again, to 25200, which leaves 2792 seconds of headroom (#5512, #5566).
+  again, to 25200. n8n's flip added `n8n-prepull` at a 3600s `timeout` and put the soak's
+  `timeout` at 15894s, which leaves 1832 seconds of headroom (#5512, #5566, #5546).
   `ansible/tests/setup/test_lander_deadlines_cover_the_soak.py` renders the published bundle
   and fails once a newly published tag outgrows that headroom (#5427).
 
