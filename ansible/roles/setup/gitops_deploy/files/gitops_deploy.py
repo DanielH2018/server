@@ -72,6 +72,7 @@ from deployer_lib.deploy_config import (
     read_config_file,
 )
 from deployer_lib.deploy_toolbox import DeployTools, default_tools
+import gitops_tick_metrics
 
 # The transient-fetch failure `deploy_phases.assess` raises and `entrypoint()` below catches.
 # The class is DEFINED in deploy_tick_types.py because `assess` moved there and a leaf may not
@@ -267,6 +268,7 @@ def main(tools: DeployTools, config: Config, state: deploy_state.DeployerState) 
 
     target = deploy_phases.assess(tools, state, config)
     if target.action == "dirty":
+        tools.note_outcome("dirty")
         return deploy_handlers.handle_dirty(tools, state, config, target)
     # Before any branch that could return: a stale denylist is healed on an IDLE tick, which is
     # what the tick after an ff-merge is, and that is the tick whose checkout already carries the
@@ -280,21 +282,26 @@ def main(tools: DeployTools, config: Config, state: deploy_state.DeployerState) 
         # max(broad, k8s + rollback), not a sum — so a render that ran on to a k8s
         # deploy would be the first arm to add its budget to another's and could be SIGTERMed
         # mid-rollback. The next tick is ten minutes away and reads the fresh config.
+        tools.note_outcome("nothing")
         return 0
     if target.action == "noop":
+        tools.note_outcome("nothing")
         return 0
     if target.action == "skip_hold":
+        tools.note_outcome("held")
         log(f"hold: origin at known-bad {target.origin[:8]}; holding")
         return 0
     if target.action == "ci_pending":
         # Normal for the first tick after a push: the workflow is still running. No alert — it
         # resolves on its own, and a host left behind for hours is the behind-origin watchdog's
         # job, not this branch's.
+        tools.note_outcome("ci-wait")
         log(
             f"ci: origin {target.origin[:8]} not finished — deferring, will retry next tick"
         )
         return 0
     if target.action == "ci_failed":
+        tools.note_outcome("ci-failed")
         return deploy_handlers.handle_ci_failed(tools, state, config, target)
     if target.red_tip:
         # This tick fast-forwarded to a green ancestor of a RED tip, so it deploys — and the
@@ -311,6 +318,8 @@ def main(tools: DeployTools, config: Config, state: deploy_state.DeployerState) 
     # origin meanwhile, so no Ansible deploy can need the dropped line; once the range merges,
     # Flux applies the service. Running it here covers every handler with one call (D2.2).
     deploy_k8s_owed.skip_not_ansible_owned(state, plan, target.origin)
+    # Every handler below merges the range, except a broad park, which relabels the tick.
+    tools.note_outcome("merged")
     if plan.cs.broad:
         return deploy_handlers.handle_broad(tools, state, config, target, plan)
     if plan.cs.k8s_deploy:
@@ -324,6 +333,7 @@ def entrypoint(
     state: deploy_state.DeployerState,
     *,
     main=main,
+    metrics: str | None = None,
 ) -> int:
     """One tick as systemd runs it.
 
@@ -331,6 +341,10 @@ def entrypoint(
     guard below builds the arguments and hands the result to sys.exit, so a test can call this
     directly (test_gitops_deploy_fetch_skip.py). `main` is a parameter so that a test can
     script main()'s outcome without patching this module.
+
+    `metrics` is the textfile `gitops_tick_metrics.record` rewrites with how the tick ended.
+    None records nothing, which is what every test that does not pass one wants: the suite
+    runs as a user who can write the live textfile directory.
     """
     # When this tick began, so the contention streak below can tell a marker this tick wrote
     # from one an earlier tick left: `for_contention` stamps `last_seen` with the wall clock.
@@ -343,6 +357,9 @@ def entrypoint(
     except Exception as e:
         log(f"tick: could not read HEAD before the tick: {e}", level=WARNING)
         head_before = None
+    hold_before = state.hold_sha
+    labels: list[str] = []
+    tools = dataclasses.replace(tools, note_outcome=labels.append)
     try:
         rc = main(tools, config, state)
     except RetryableFetchError as e:
@@ -354,6 +371,7 @@ def entrypoint(
             f"fetch: git fetch failed (retryable) — skipping tick, will retry next run: {e}",
             level=WARNING,
         )
+        _record_tick(metrics, "fetch-failed", state, tick_started)
         return 0
     except deploy_tick_types.NotTheDeployerHost as e:
         # DECIDED: exit 0, no Discord post, no last_run. The unit only reaches this branch on a
@@ -377,9 +395,11 @@ def entrypoint(
         # Exit 0 on a delivered detailed post so OnFailure's generic curl doesn't double-page,
         # same convention as the other `0 if posted else 1` branches; exit 1 only if the
         # detailed post itself failed, leaving OnFailure the backstop.
+        _record_tick(metrics, "failed", state, tick_started)
         return 0 if posted else 1
     except Exception as e:
         deploy_alerts.discord(tools, config, deploy_alert_text.crash_alert(e))
+        _record_tick(metrics, "failed", state, tick_started)
         raise
     # Whether this host ENDED the tick behind origin, read after everything the tick did rather
     # than before it: a tick that deployed successfully converged and must clear the marker
@@ -409,12 +429,43 @@ def entrypoint(
     # the lock has stopped wedging the deployer, whatever else this tick did. Only a tick
     # that reaches this line clears it — a crash above raises past here, and a crash is not
     # evidence the lock was released.
+    contention = state.contention_pending()
+    lock_deferred = contention is not None and contention.last_seen >= tick_started
     if state.clear_contention_unless_touched_since(tick_started):
         log("contention_since: cleared, this tick was not deferred on a service lock")
     # Liveness marker: a tick that completed without crashing (incl. a rollback, rc=1).
     # monitor-bridge reads this; a crash skips the write so the Alive monitor goes stale.
     state.write("last_run", str(time.time()))
+    if rc != 0 or state.hold_sha not in (None, hold_before):
+        outcome = "failed"
+    elif lock_deferred:
+        outcome = "lock-deferred"
+    else:
+        outcome = labels[-1] if labels else "nothing"
+    _record_tick(metrics, outcome, state, tick_started)
     return rc
+
+
+def _record_tick(
+    metrics: str | None,
+    outcome: str,
+    state: deploy_state.DeployerState,
+    tick_started: float,
+) -> None:
+    """Add this tick to the textfile metric, best-effort: a metrics failure only logs."""
+    if metrics is None:
+        return
+    now = time.time()
+    try:
+        gitops_tick_metrics.record(
+            metrics,
+            outcome,
+            now=now,
+            duration=now - tick_started,
+            behind_marker=state.behind_since,
+        )
+    except Exception as e:
+        log(f"metrics: could not write {metrics}: {e}", level=WARNING)
 
 
 if __name__ == "__main__":
@@ -423,5 +474,6 @@ if __name__ == "__main__":
             default_tools(CONFIG),
             tick_config(),
             deploy_state.DeployerState(deploy_state.STATE_DIR),
+            metrics=gitops_tick_metrics.TEXTFILE,
         )
     )

@@ -160,6 +160,12 @@ data:
           - source_labels: [__name__]
             action: drop
             regex: kube_service_(annotations|created|deletion_timestamp|info|labels|spec_external_ip|spec_type)
+          # Jobs are collected for the gate-Job durations files/rules/gate-jobs.yaml records
+          # (#5675): the start and completion times, the succeeded and failed counts, and
+          # status_active for one still running. The other twelve v2.20 families have no reader.
+          - source_labels: [__name__]
+            action: drop
+            regex: kube_job_(annotations|complete|created|failed|info|labels|owner|spec_active_deadline_seconds|spec_completions|spec_parallelism|status_ready|status_suspended)
       # The three Flux controllers' own metrics, on the `http-prom` container port (8080). No
       # Service exposes that port, so this job discovers the pods, and scrape_jobs.py leaves a
       # job needing pod discovery hand-written. The flux role's flux-allow-prometheus policy

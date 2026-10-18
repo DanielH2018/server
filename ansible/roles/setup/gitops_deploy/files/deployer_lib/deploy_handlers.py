@@ -160,6 +160,7 @@ def handle_broad(
     # retries. A deleted role is dropped and an unplaced one is recorded; neither parks.
     if deploy_defer.parks_the_tick(cs, setup_tags, pending):
         deploy_defer.park(tools, state, config, origin, cs)
+        tools.note_outcome("parked")
         return 0
 
     # Everything else fast-forwards and applies what `deploy_narrow.plan` names. The

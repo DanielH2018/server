@@ -75,6 +75,8 @@ MUST_DROP = [
     ("kube-state-metrics", "kube_service_info"),
     ("kube-state-metrics", "kube_service_labels"),
     ("kube-state-metrics", "kube_service_deletion_timestamp"),
+    ("kube-state-metrics", "kube_job_info"),
+    ("kube-state-metrics", "kube_job_status_ready"),
     ("flux", "gotk_reconcile_duration_seconds_bucket"),
     ("flux", "workqueue_queue_duration_seconds_bucket"),
 ]
@@ -125,6 +127,16 @@ MUST_KEEP = [
         "kube-state-metrics",
         "kube_replicaset_owner",
         "the pod to Deployment hop in observability's files/rules/workload-service.yaml",
+    ),
+    (
+        "kube-state-metrics",
+        "kube_job_status_completion_time",
+        "homelab:gate_job_duration_seconds in observability's files/rules/gate-jobs.yaml",
+    ),
+    (
+        "kube-state-metrics",
+        "kube_job_status_failed",
+        "a gate Job's outcome; one prefix from the dropped kube_job_failed",
     ),
     (
         "kube-state-metrics",

@@ -45,9 +45,6 @@ _VERIFY = "D5: the verify task's exec or pod check is converted or granted"
 # Each writing task file, with the slice whose document moves what it writes. Two owners where
 # the file's tasks split between slices.
 ALLOW = {
-    _K8S + "authelia/tasks/main.yml": (
-        "R3 removes the `kubectl run` hashing pods; D5 makes the TOTP seed an initContainer"
-    ),
     _K8S + "cronjob-gate/tasks/main.yml": (
         "D5: the gate Job becomes a Job in `<tag>-verify` copied from the jobTemplate"
     ),
@@ -127,8 +124,9 @@ OUT_OF_RENDER = Census(
     green=(Subject("widget/tasks/main.yml", _APPLY.replace(" apply -f", " get -f")),),
     # 58 writing tasks in 28 files of 23 roles when the row landed (2026-10-13); 49 once
     # n8n's flip deleted its probe tasks (#5546); 44 once media-volume's flip deleted its
-    # hardlink probe tasks (#5652).
-    min_matches=44,
+    # hardlink probe tasks (#5652); 43 once authelia's TOTP seed became an initContainer
+    # (#5647).
+    min_matches=43,
     must_find=frozenset(
         {
             _K8S + "observability/tasks/dashboards.yml",

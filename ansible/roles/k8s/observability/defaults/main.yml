@@ -301,6 +301,7 @@ observability_rule_groups:
   - ingress-probes
   - host-checks
   - deploy-pipeline
+  - gate-jobs
 
 # The hosts whose homelab-updater must report, each with the scrape job that reads its node
 # exporter and the age in seconds past which its last successful update pages. host-checks.yaml

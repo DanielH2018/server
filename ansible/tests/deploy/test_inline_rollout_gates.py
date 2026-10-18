@@ -346,10 +346,6 @@ _GATE_BUDGETS = {
         300,
         "default; one looped gate covering all six telemetry workloads",
     ),
-    "authelia": (
-        300,
-        "default; gates the claude-ui TOTP seeding, which execs into the running pod",
-    ),
     "cloudflare-ddns": (300, "default"),
     "flux": (300, "default; one looped gate covering the three Flux controllers"),
     "crowdsec": (300, "default"),

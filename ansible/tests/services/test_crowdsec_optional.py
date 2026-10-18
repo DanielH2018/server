@@ -154,15 +154,21 @@ def test_the_agent_sidecar_ships_with_crowdsec_on_and_not_with_it_off(
 
 
 def test_authelia_drops_the_init_container_key_rather_than_emptying_it() -> None:
-    """Two sources feed it: CrowdSec's seeding steps, and `wait-for-redis`. Gating on
-    CrowdSec alone emitted a bare `initContainers:` whenever CrowdSec was off and redis on; both
-    off is the only branch with no contributor, and there the key goes entirely."""
+    """Three sources feed it: CrowdSec's seeding steps, the claude-ui TOTP seed and
+    `wait-for-redis`. Gating on CrowdSec alone emitted a bare `initContainers:` whenever CrowdSec
+    was off and redis on; all three off is the only branch with no contributor, and there the
+    key goes entirely."""
     inits = _pod_spec("authelia", True)["initContainers"]
     assert "crowdsec-config-install" in [c["name"] for c in inits]
-    without = _pod_spec("authelia", False, authelia_k8s_redis_sessions=True)
+    no_claude = {"authelia_k8s_manage_claude_user": False}
+    without = _pod_spec(
+        "authelia", False, authelia_k8s_redis_sessions=True, **no_claude
+    )
     assert [c["name"] for c in without["initContainers"]] == ["wait-for-redis"]
+    only_seed = _pod_spec("authelia", False, authelia_k8s_redis_sessions=False)
+    assert [c["name"] for c in only_seed["initContainers"]] == ["seed-claude-totp"]
     assert "initContainers" not in _pod_spec(
-        "authelia", False, authelia_k8s_redis_sessions=False
+        "authelia", False, authelia_k8s_redis_sessions=False, **no_claude
     )
 
 

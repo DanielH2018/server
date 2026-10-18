@@ -37,9 +37,20 @@ x265 re-encode instead, which made Jellyfin buffer and seek slowly.
   finished run, because that run genuinely performs the reconcile — `pi-peer-backup`'s gate
   run does not count toward its dead-man monitor, and that role's CLAUDE.md has the other side
   of the choice.
-- **The health reader was a daniel-box host cron until H2.5b.** `tasks/main.yml` keeps absent
-  arms for the cron, `/opt/configarr-health`, `/usr/local/bin/configarr-health.sh` and the
-  `configarr` drift fragment, ahead of the manifests include.
+- **The health reader was a daniel-box host cron until H2.5b.** The absent arms for the cron,
+  `/opt/configarr-health`, `/usr/local/bin/configarr-health.sh` and the `configarr` drift
+  fragment live in `ansible/roles/setup/k8s_host_files/tasks/configarr.yml`, which the setup
+  plane applies. D5's conversion PR moved them out of `tasks/main.yml` ahead of the Flux flip.
+- **`flux_cronjob_gates` in `defaults/main.yml` is the gate's Flux form, and it is inert until
+  the flip.** The renderer reads it only for a flux-owned tag. It then copies each CronJob's
+  `jobTemplate` into `configarr-verify` as `<cronjob>-deploy-gate-<spec digest8>`. configarr's
+  gate is a post-apply mutation whose `homelab/rerun-safe` names
+  `ansible/roles/k8s/configarr/tests/test_configarr_gate.py::test_a_second_sync_reports_no_change`.
+  configarr-health's gate
+  is a verify. The renamed Job keeps `app: configarr`, and the health reader selects by that
+  label and by finish time, never by name, so it still counts a gate run. Under Flux the gate
+  becomes stricter: a sync that exits non-zero fails `configarr-verify`. Both gates also start
+  together there, so the health gate can read the previous run rather than the fresh one.
 - **The push URL, token included, lives in its own Secret, `configarr-health`**
   (`templates/health-secret.yaml.j2`), and reaches the pod as `KUMA_PUSH_URL` through
   `secretKeyRef`. It is a whole URL rather than a bare token so that it stays out of
