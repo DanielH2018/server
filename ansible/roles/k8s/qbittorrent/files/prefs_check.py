@@ -24,6 +24,7 @@ Run: python3 prefs_check.py (no arguments), from a directory holding apply_prefs
 
 from __future__ import annotations
 
+import argparse
 import contextlib
 import io
 import os
@@ -84,4 +85,8 @@ def run(
 
 
 if __name__ == "__main__":
+    # No options: --help prints this docstring and exits before the check runs.
+    argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    ).parse_args()
     sys.exit(run(os.environ))
