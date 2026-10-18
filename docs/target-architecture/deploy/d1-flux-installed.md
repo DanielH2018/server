@@ -211,8 +211,8 @@ and upstream facts through `gh`.
   names observability as the one narrowing role.
 - **A dropped document stays live.** `kubectl apply` deletes nothing it no longer sees, and
   `manifests_prune_allowlist` holds no Flux kind. The prowlarr task "Retire the flaresolverr
-  config PVC" in `ansible/roles/k8s/prowlarr/tasks/main.yml` deletes a retired object by name
-  with `--ignore-not-found`, under `when: not k8s_no_mutate`.
+  config PVC" deleted a retired object by name with `--ignore-not-found`, under
+  `when: not k8s_no_mutate`. #5557 removed that task once the claim was gone.
 - **A server dry run cannot create a namespace's contents.** Under `--dry-run`, the task
   "Apply manifests for ..." applies with `--dry-run=server`, which persists nothing, the
   Namespace document included. kubernetes
@@ -583,7 +583,7 @@ daniel-box:   source-controller polls :prod every minute and verifies the signat
   --timeout=60s`, under `when: not k8s_no_mutate`. It runs after the CRD wait and the
   deferred apply, because `--ignore-not-found` covers a missing object but not a missing
   kind. The timeout bounds the wait on source-controller's finalizer. This follows
-  prowlarr's "Retire the flaresolverr config PVC". C3 names one OCIRepository, so the drill
+  prowlarr's former "Retire the flaresolverr config PVC". C3 names one OCIRepository, so the drill
   object is a transient exception that Open question 7 asks C3 to name, gated before D1.5
   merges.
 - **Ansible owns the flux role until D5's last PR.** The role is an ordinary k8s role with no
@@ -2013,7 +2013,7 @@ one taken.
 - **D1-R10-03 (high), the verify-drill OCIRepository outlived the drill. Fixed.** Confirmed:
   `manifests_prune_allowlist` holds no Flux kind and `kubectl apply` deletes nothing it no
   longer sees. The role deletes `ocirepository/verify-drill` with `--ignore-not-found`
-  while the lever is off, following prowlarr's "Retire the flaresolverr config PVC". The
+  while the lever is off, following prowlarr's former "Retire the flaresolverr config PVC". The
   `deploy-errors` Alert names only Kustomizations and the OCIRepository `homelab`, so the
   drill posts nothing to Discord. *Verification* proves the object is gone, and Open
   question 7 requests the C3 amendment.

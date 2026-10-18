@@ -78,6 +78,7 @@ UNRENDERED_CALLERS = {
 STAGED_CALLERS = {
     "sonarr-verify": "sonarr",
     "radarr-verify": "radarr",
+    "prowlarr-verify": "prowlarr",
 }
 
 
