@@ -1,13 +1,14 @@
 {
-  "checksum": "c6fe5519e9dc419ba83515bafb0e19f121a5375ce829ece414467dc3d223d574",
+  "checksum": "0f4cdad9c1376db8b18282bce677498d754e8983d9a483361e5c798f862e276f",
   "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
   "key": "ansible/roles/k8s/janitorr/CLAUDE.md#At a glance",
   "row": {
     "atoms": {
       "ansible/roles/k8s/manifests/files/standalone_secret_keys.json": "7edeac563af7e1b92e198b11868f2855bdd5886ec8abc32e1a2ac14588602b29",
+      "ansible/roles/setup/k8s_host_files/tasks/janitorr.yml": "678be6ce347e8ee2f91d8750031eed9914bd3a9329436bf954136fb655f93971",
       "ansible/tests/k8s/test_no_secret_in_a_moved_jobs_configmap.py": "494173af32f38dace06c496ad7031f6391f146cc6271c8facd621309eb0e267e"
     },
     "python": "3.14",
-    "verified_sha": "41fadef59"
+    "verified_sha": "98a84d0a6"
   }
 }

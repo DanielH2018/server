@@ -27,9 +27,10 @@ See repo-root `CLAUDE.md` for shared conventions.
   lines in its log, through its own ServiceAccount (`templates/health-rbac.yaml.j2`). It pushes
   the "Janitorr Errors" Kuma monitor. Not gated by `k8s/cronjob-gate`: `k8s_autodeploy` is
   false here, so no batch gate is required.
-- **The health reader was a daniel-box host cron until H2.5c.** `tasks/main.yml` keeps absent
-  arms for the cron, `/opt/janitorr-health`, `/usr/local/bin/janitorr-health.sh` and the
-  `janitorr` drift fragment, ahead of the manifests include.
+- **The health reader was a daniel-box host cron until H2.5c.** The absent arms for the cron,
+  `/opt/janitorr-health`, `/usr/local/bin/janitorr-health.sh` and the `janitorr` drift fragment
+  live in `ansible/roles/setup/k8s_host_files/tasks/janitorr.yml`, which the setup plane
+  applies through `initial_setup.yml`, so they survive janitorr's Flux flip.
 - **The push URL, token included, lives in its own Secret, `janitorr-health`**
   (`templates/health-secret.yaml.j2`), and reaches the pod as `KUMA_PUSH_URL` through
   `secretKeyRef`. It is a whole URL rather than a bare token so that it stays out of
@@ -90,6 +91,18 @@ See repo-root `CLAUDE.md` for shared conventions.
   for the above.** It orders the Ansible applies within one deploy run (`ansible/deploy.yml`
   toposorts from it); it does not gate pod start after a node reboot, when no Ansible run is
   involved at all.
+
+## The Flux verify Job waits in `templates/verify-inert/`
+
+Nothing renders that directory while Ansible owns janitorr. The flip PR renames it to
+`templates/verify/`, and the renderer then emits `janitorr-verify`, which replaces
+`tasks/verify.yml` with no `pods/exec` grant. `files/verify_janitorr.py` reads the mounted
+`application.yml`, dials sonarr, radarr and jellyfin over HTTP, and writes, reads and removes
+the leaving-soon probe link through jellyfin's mount layout; its docstring maps each proof.
+Its pod is `app: janitorr-verify`, which sonarr's and radarr's `netpol_from` must list before
+the flip; #5709 adds both peers in a PR of their own, because the cross-plane gate refuses them
+beside a janitorr change. `tests/test_verify_janitorr.py` renders the renamed directory through the Job census and
+holds the Job's mounts to janitorr's and jellyfin's.
 
 ## Editing
 - Rules: `templates/config/application.yml.j2` (rendered into the k8s Secret by `roles/k8s/janitorr`)

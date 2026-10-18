@@ -1,0 +1,27 @@
+---
+# Moved from roles/k8s/janitorr by D5's conversion PR for janitorr. H7 deletes both rows,
+# with the RETIRED entries for the cron and the fragment in ansible/tests/repo/_retired_cron_row.py.
+#
+# The health reader was a daniel-box host cron until H2.5c
+# (docs/target-architecture/host/h2-shrink-host-plane.md, Steps item 14), and the
+# janitorr-health CronJob replaced it. These absent arms remove the cron, its script, its code
+# directory and the drift fragment it stamped from a host that still carries them.
+- name: Remove the retired janitorr error heartbeat cron
+  ansible.builtin.cron:
+    name: "janitorr error health"
+    user: "{{ sys_user }}"
+    cron_file: janitorr-health
+    state: absent
+  become: true
+
+# The fragment goes with the code it stamped: left behind, setup drift compares four live
+# paths that no longer exist and turns DOWN.
+- name: Remove the retired janitorr health reader from the host
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - /usr/local/bin/janitorr-health.sh
+    - /opt/janitorr-health
+    - /var/lib/homelab/setup-deployed-manifest.d/janitorr
+  become: true

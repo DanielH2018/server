@@ -13,35 +13,9 @@
   ansible.builtin.set_fact:
     janitorr_dry_run: "{{ janitorr_k8s_dry_run }}"
 
-# The health reader was a daniel-box host cron until H2.5c
-# (docs/target-architecture/host/h2-shrink-host-plane.md, Steps item 14). These absent arms
-# remove it, ahead of the k8s/manifests include, so the host cron is gone before the CronJob
-# that replaces it exists. They stay until D5's conversion PR moves them into
-# setup/k8s_host_files, and H7 deletes them. ansible/tests/repo/_retired_cron_row.py holds the
-# cron's and the fragment's arms to the tree.
-- name: Remove the retired janitorr error heartbeat cron
-  tags: [cron]
-  ansible.builtin.cron:
-    name: "janitorr error health"
-    user: "{{ sys_user }}"
-    cron_file: janitorr-health
-    state: absent
-  become: true
-  when: not k8s_dry_run | bool
-
-- name: Remove the retired janitorr health reader from the host
-  tags: [config]
-  # The fragment goes with the code it stamped: left behind, setup drift compares four live
-  # paths that no longer exist and turns DOWN.
-  ansible.builtin.file:
-    path: "{{ item }}"
-    state: absent
-  loop:
-    - /usr/local/bin/janitorr-health.sh
-    - /opt/janitorr-health
-    - /var/lib/homelab/setup-deployed-manifest.d/janitorr
-  become: true
-  when: not k8s_dry_run | bool
+# The absent arms that remove the retired health reader's host cron, its script, its code
+# directory and its drift fragment moved to setup/k8s_host_files (tasks/janitorr.yml there) in
+# D5's conversion PR for janitorr.
 
 - name: Deploy janitorr to the cluster
   ansible.builtin.include_role:
