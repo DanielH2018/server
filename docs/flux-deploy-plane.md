@@ -1140,7 +1140,7 @@ never from the render, so a renderer bug cannot widen it. Each per-tag kind has 
 - `-snapshot` when the role's defaults declare a non-empty `k8s_autodeploy_snapshot_pvcs`;
 - `-verify` when the role ships `templates/verify/*.yaml.j2` (`verifying_tags`, which reads the
   same `verify_files` the renderer reads), or opts a CronJob into a gate Job with
-  `flux_cronjob_gates` (`cronjob_gates`). sonarr and radarr do the first; no role does the second yet.
+  `flux_cronjob_gates` (`cronjob_gates`). sonarr and radarr do the first. configarr sets the second ahead of its flip, which stays inert while it is Ansible-owned.
 
 It fails when:
 

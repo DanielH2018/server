@@ -1,13 +1,15 @@
 {
-  "checksum": "15d6f3e1d2bd6b483867364ab26836a8736caa3f6274c0533c1e164b4a6064be",
+  "checksum": "062ec541cd86dcb2573c6a01f09e6dbbfdd6f9348403660e3cab2f33eef6a4d2",
   "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
   "key": "ansible/roles/k8s/configarr/CLAUDE.md#At a glance",
   "row": {
     "atoms": {
+      "ansible/roles/k8s/configarr/tests/test_configarr_gate.py::test_a_second_sync_reports_no_change": "7dae4d6fc0cb7c5a01228c9bb336c8fbb78e36ec45dac98a0ef2f4be85d08dac",
       "ansible/roles/k8s/manifests/files/standalone_secret_keys.json": "7edeac563af7e1b92e198b11868f2855bdd5886ec8abc32e1a2ac14588602b29",
+      "ansible/roles/setup/k8s_host_files/tasks/configarr.yml": "ab1dd4e3946634cb1cc9eb184426bf65ede1fd4afe8fc20679948ce86ca8bd25",
       "ansible/tests/k8s/test_no_secret_in_a_moved_jobs_configmap.py": "494173af32f38dace06c496ad7031f6391f146cc6271c8facd621309eb0e267e"
     },
     "python": "3.14",
-    "verified_sha": "8082187d5"
+    "verified_sha": "faaf67f64"
   }
 }

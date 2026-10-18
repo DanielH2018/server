@@ -33,7 +33,9 @@ from `tasks/main.yml` with `ansible.builtin.import_tasks`. The import is static 
 `k8s_host_files` tag reaches every task in the file. docs' conversion PR wrote the first,
 `tasks/docs.yml`, which creates the site directory docs' Deployment mounts as a hostPath of
 `type: Directory`. artifacts' PR wrote `tasks/artifacts.yml`, which creates the three trees
-artifacts' Deployment mounts the same way. A row drops its source role's `when: not
+artifacts' Deployment mounts the same way. configarr's PR wrote `tasks/configarr.yml`, the
+absent arms that remove H2.5b's retired host health reader: its cron, its script, its working
+directory and its drift fragment. A row drops its source role's `when: not
 k8s_dry_run` guard and its `config` tag, because `initial_setup.yml` has no dry-run mode.
 
 - **The playbook entry is gated to daniel-box by a literal.** `setup_routing.py` places a role
@@ -77,7 +79,8 @@ census in `ansible/tests/repo/_host_write_rows.py`, whose `allow` entry the move
 ## Autonomous-role contract (it will install a timer and remove crons with no human in the loop)
 
 The GitOps tick applies the role as `initial_setup.yml --tags k8s_host_files` on every merge
-that touches it. It holds host directories so far and installs no timer yet.
+that touches it. It holds host directories and configarr's absent arms so far, and installs
+no timer yet.
 
 - **Scope / exclusions:** host files, directories and units that a k8s role's Ansible apply
   owned before its flip, plus the absent arms that remove a retired role's crons. **Never** a

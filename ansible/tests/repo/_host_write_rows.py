@@ -124,7 +124,6 @@ _CONFIGMAP = (
 )
 
 HOST_WRITE_ALLOW = {
-    _K8S + "configarr/tasks/main.yml": _H2_THEN_D5,
     _K8S + "crowdsec/tasks/main.yml": _H2_THEN_D5,
     _K8S + "janitorr/tasks/main.yml": _H2_THEN_D5,
     _K8S + "media-volume/tasks/main.yml": (

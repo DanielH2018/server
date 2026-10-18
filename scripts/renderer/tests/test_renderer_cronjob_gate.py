@@ -2,7 +2,7 @@
 
 The fixture renders pi-peer-backup, the real role whose gate the plan converts first, through
 the real CLI as if the inventory marked it `owner: flux`, from a copy of its role tree whose
-defaults opt its CronJob in. No role opts in on master, so no live tag renders a gate Job.
+defaults opt its CronJob in. No flux-owned role opts in on master, so no live tag renders a gate Job.
 
 Run: uv run pytest scripts/renderer/tests/test_renderer_cronjob_gate.py
 """

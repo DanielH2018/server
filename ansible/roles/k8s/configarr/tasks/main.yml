@@ -5,36 +5,6 @@
 # role deploys the CronJob plus the configarr-health CronJob that reads it; the config itself is
 # rendered from templates/config/config.yml.j2, so the grab policy has exactly one source.
 
-# The health reader was a daniel-box host cron until H2.5b
-# (docs/target-architecture/host/h2-shrink-host-plane.md, Steps item 13). These absent arms
-# remove it, ahead of the k8s/manifests include, so the host cron is gone before the CronJob
-# that replaces it exists. They stay until D5's conversion PR moves them into
-# setup/k8s_host_files, and H7 deletes them. ansible/tests/repo/_retired_cron_row.py holds the
-# cron's and the fragment's arms to the tree.
-- name: Remove the retired configarr sync heartbeat cron
-  tags: [cron]
-  ansible.builtin.cron:
-    name: "configarr sync health"
-    user: "{{ sys_user }}"
-    cron_file: configarr-health
-    state: absent
-  become: true
-  when: not k8s_dry_run | bool
-
-- name: Remove the retired configarr health reader from the host
-  tags: [config]
-  # The fragment goes with the code it stamped: left behind, setup drift compares five live
-  # paths that no longer exist and turns DOWN.
-  ansible.builtin.file:
-    path: "{{ item }}"
-    state: absent
-  loop:
-    - /usr/local/bin/configarr-health.sh
-    - /opt/configarr-health
-    - /var/lib/homelab/setup-deployed-manifest.d/configarr
-  become: true
-  when: not k8s_dry_run | bool
-
 - name: Deploy configarr to the cluster
   ansible.builtin.include_role:
     name: k8s/manifests

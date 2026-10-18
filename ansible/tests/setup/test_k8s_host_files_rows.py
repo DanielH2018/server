@@ -6,7 +6,8 @@ longer imported from `tasks/main.yml`, stops running on the next apply, and no d
 a missing directory surfaces only when a pod waits in ContainerCreating on its hostPath.
 
 `EXPECTED_ROWS` names each moved row by task file and task name, with the module and the whole
-argument map it must keep: path, state, owner, group and mode. Each conversion PR adds its rows in the same commit as the move. The other
+argument map it must keep: path, state, owner, group and mode. A row that loops over `{{ item }}`
+also pins its loop in `EXPECTED_LOOPS`. Each conversion PR adds its rows in the same commit as the move. The other
 direction, a row coming back to its k8s role, is the host-write census's
 (`ansible/tests/repo/_host_write_rows.py`): the move drops the role's `allow` entry, so a host
 write there fails `k8s-role-tasks-write-no-host`.
@@ -62,6 +63,21 @@ EXPECTED_ROWS: dict[str, dict[str, tuple[str, dict[str, str]]]] = {
             },
         ),
     },
+    "configarr.yml": {
+        "Remove the retired configarr sync heartbeat cron": (
+            "ansible.builtin.cron",
+            {
+                "name": "configarr sync health",
+                "user": "{{ sys_user }}",
+                "cron_file": "configarr-health",
+                "state": "absent",
+            },
+        ),
+        "Remove the retired configarr health reader from the host": (
+            "ansible.builtin.file",
+            {"path": "{{ item }}", "state": "absent"},
+        ),
+    },
     "docs.yml": {
         "Ensure the built docs site directory exists": (
             "ansible.builtin.file",
@@ -76,6 +92,16 @@ EXPECTED_ROWS: dict[str, dict[str, tuple[str, dict[str, str]]]] = {
     },
 }
 
+# {(task file, task name): its loop}, for a row whose argument map writes `{{ item }}`: the
+# map alone would let a loop drop a path unnoticed. configarr's arm removes three host paths.
+EXPECTED_LOOPS: dict[tuple[str, str], list[str]] = {
+    ("configarr.yml", "Remove the retired configarr health reader from the host"): [
+        "/usr/local/bin/configarr-health.sh",
+        "/opt/configarr-health",
+        "/var/lib/homelab/setup-deployed-manifest.d/configarr",
+    ],
+}
+
 
 def missing_rows(role_dir: Path = ROLE) -> list[str]:
     """`<file>: <task name>` for each expected row the role does not import as declared."""
@@ -85,7 +111,9 @@ def missing_rows(role_dir: Path = ROLE) -> list[str]:
         tasks = leaf_tasks(load_tasks(imported[file])) if file in imported else []
         by_name = {task.get("name"): task for task in tasks}
         for name, (module, expected) in sorted(rows.items()):
-            if by_name.get(name, {}).get(module) != expected:
+            task = by_name.get(name, {})
+            loop = EXPECTED_LOOPS.get((file, name))
+            if task.get(module) != expected or (loop and task.get("loop") != loop):
                 missing.append(f"{file}: {name}")
     return missing
 
@@ -112,6 +140,8 @@ def test_a_task_file_main_no_longer_imports_is_flagged(tmp_path):
         "artifacts.yml: Ensure a peer directory exists for every synced host",
         "artifacts.yml: Ensure the local artifacts directory exists",
         "artifacts.yml: Ensure the star list directory exists",
+        "configarr.yml: Remove the retired configarr health reader from the host",
+        "configarr.yml: Remove the retired configarr sync heartbeat cron",
         "docs.yml: Ensure the built docs site directory exists",
     ]
 
@@ -141,4 +171,27 @@ def test_an_artifacts_row_that_widens_the_star_list_mode_is_flagged(tmp_path):
     artifacts.write_text(artifacts.read_text().replace('mode: "0755"', 'mode: "0777"'))
     assert missing_rows(role_dir) == [
         "artifacts.yml: Ensure the star list directory exists"
+    ]
+
+
+def test_a_configarr_arm_that_drops_a_path_from_its_loop_is_flagged(tmp_path):
+    """The loop carries the paths, so a dropped one leaves the argument map unchanged."""
+    role_dir = _fixture_role(tmp_path)
+    configarr = role_dir / "tasks" / "configarr.yml"
+    configarr.write_text(
+        configarr.read_text().replace("    - /opt/configarr-health\n", "")
+    )
+    assert missing_rows(role_dir) == [
+        "configarr.yml: Remove the retired configarr health reader from the host"
+    ]
+
+
+def test_a_configarr_cron_arm_that_turns_present_is_flagged(tmp_path):
+    role_dir = _fixture_role(tmp_path)
+    configarr = role_dir / "tasks" / "configarr.yml"
+    configarr.write_text(
+        configarr.read_text().replace("state: absent", "state: present", 1)
+    )
+    assert missing_rows(role_dir) == [
+        "configarr.yml: Remove the retired configarr sync heartbeat cron"
     ]

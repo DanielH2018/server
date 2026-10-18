@@ -8,3 +8,6 @@
 
 - name: Artifacts' host directories
   ansible.builtin.import_tasks: artifacts.yml
+
+- name: Configarr's retired host health reader
+  ansible.builtin.import_tasks: configarr.yml

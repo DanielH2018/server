@@ -66,7 +66,6 @@ _HOST_WRITE_EXEMPT = frozenset({"manifests"})
 _ROLES_THAT_WRITE_THE_HOST = frozenset(
     {
         "observability",
-        "configarr",
         "crowdsec",
         "headlamp",
         "image-builder",

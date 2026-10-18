@@ -9,6 +9,23 @@ configarr_k8s_image: ghcr.io/raydak-labs/configarr:1.35.0@sha256:13ef4d9a6ebc131
 k8s_autodeploy: true  # noqa var-naming[no-role-prefix]
 k8s_autodeploy_reason: "CronJob gated at deploy time by k8s/cronjob-gate, which proves the new image RUNS (a container that never starts fails the deploy) but deliberately does not enforce a successful sync; concurrencyPolicy Forbid is set, and the reconciler is convergent, so even if the gate's one-off run does overlap a scheduled one, running the same sync twice is harmless; the configarr-health CronJob is gated the same way, and an extra run of it only re-reads the last Job and re-pushes its verdict"  # noqa var-naming[no-role-prefix]
 
+# The gate Jobs Flux runs in `configarr-verify` once configarr flips, one per CronJob, which the
+# renderer copies from each jobTemplate (scripts/renderer/renderer_lib/cronjob_gate.py). Inert
+# until then: the renderer and the bundle census read this key for flux-owned tags only, and
+# k8s/cronjob-gate runs both gates while Ansible applies the role.
+# - configarr's gate run performs the reconcile, so it is a post-apply mutation. The sync
+#   converges on its config, so a second run reports no change; the rerun_safe test holds three
+#   consecutive live runs to that. It keeps the CronJob's backoffLimit: 0, and its Job keeps
+#   `app: configarr`, which is the health reader's selector and sonarr's and radarr's admission.
+# - configarr-health's run re-reads the last Job and re-pushes its verdict, and always exits 0,
+#   so it is a verify gate: a run that starts proves the reader's image and ServiceAccount.
+flux_cronjob_gates:  # noqa var-naming[no-role-prefix]
+  configarr:
+    kind: mutation
+    rerun_safe: ansible/roles/k8s/configarr/tests/test_configarr_gate.py::test_a_second_sync_reports_no_change
+  configarr-health:
+    kind: verify
+
 # The health reader below reads whatever the last run produced,
 # so the two schedules are independent — this one can move without touching monitoring.
 configarr_k8s_schedule: "30 4 * * *"

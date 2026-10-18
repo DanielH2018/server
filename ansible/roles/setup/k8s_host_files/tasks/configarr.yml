@@ -1,0 +1,28 @@
+---
+# Moved from roles/k8s/configarr by D5's conversion PR for configarr. H7 deletes them.
+#
+# The configarr health reader was a daniel-box host cron until H2.5b
+# (docs/target-architecture/host/h2-shrink-host-plane.md, Steps item 13), and the configarr-health
+# CronJob replaced it. These absent arms remove the cron, its script, its working directory and
+# its setup drift fragment from a host that still holds them. ansible/tests/repo/_retired_cron_row.py
+# holds the cron's and the fragment's arms to the tree. The rows read only `sys_user`, a
+# group_vars key, so they carry no copied variables.
+- name: Remove the retired configarr sync heartbeat cron
+  ansible.builtin.cron:
+    name: "configarr sync health"
+    user: "{{ sys_user }}"
+    cron_file: configarr-health
+    state: absent
+  become: true
+
+- name: Remove the retired configarr health reader from the host
+  # The fragment goes with the code it stamped: left behind, setup drift compares five live
+  # paths that no longer exist and turns DOWN.
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - /usr/local/bin/configarr-health.sh
+    - /opt/configarr-health
+    - /var/lib/homelab/setup-deployed-manifest.d/configarr
+  become: true
