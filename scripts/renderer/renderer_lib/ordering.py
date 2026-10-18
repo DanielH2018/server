@@ -58,12 +58,20 @@ PREPULL_SUFFIX = "-prepull"
 TAG_KIND_SUFFIXES = (DEFERRED_SUFFIX, SNAPSHOT_SUFFIX, PREPULL_SUFFIX, VERIFY_SUFFIX)
 # The role default that calls for `<tag>-prepull` and sets its Kustomization's `timeout`.
 PREPULL_TIMEOUT = "flux_prepull_timeout"
-_DURATION = re.compile(r"(?:\d+h)?(?:\d+m)?(?:\d+s)?")
+_DURATION = re.compile(r"(?:(\d+)h)?(?:(\d+)m)?(?:(\d+)s)?")
+# How far a `<tag>-verify` timeout sits above its Jobs' longest `activeDeadlineSeconds`, so a
+# hung Job fails on its own deadline before Flux reports a bare timeout. `cronjob_gate_timeout`
+# sits the same 60 seconds above pi-peer-backup's 600-second deadline.
+VERIFY_DEADLINE_MARGIN_S = 60
 # A role's verify and post-apply mutation Jobs, with whatever they need beside them, are its
 # `templates/verify/*.yaml.j2`. They render into `cluster/<tag>-verify/` (D5.1a1, D5.1a3).
 # The manifests role derives its file lists from the top-level `templates/*.yaml.j2` alone, so
 # Ansible never renders or applies them.
 VERIFY_TEMPLATES_DIR = "verify"
+# The role default that opts a role's CronJobs into gate Jobs in `<tag>-verify`, and the two
+# classes a gate takes (`cronjob_gates`).
+CRONJOB_GATES = "flux_cronjob_gates"
+GATE_KINDS = frozenset({"verify", "mutation"})
 
 
 # Lists, comma-separated and sorted, the edges a Kustomization's `dependsOn` leaves out because
@@ -169,6 +177,93 @@ def prepull_timeouts(
             continue
         found[tag] = value
     return found, problems
+
+
+def cronjob_gates(
+    tags: Iterable[str], roles: Path = K8S_ROLES
+) -> tuple[dict[str, dict[str, dict]], list[str]]:
+    """Each tag whose role sets `flux_cronjob_gates` mapped to its gates, and one line per problem.
+
+    The value maps a CronJob the role renders to its gate's class, R1's census row for it:
+    `{kind: verify}`, or `{kind: mutation, rerun_safe: <path>::<function>}`. A gate calls for
+    `<tag>-verify`, which holds the gate Job `cronjob_gate.py` copies from the CronJob (D5,
+    *`cronjob-gate`'s gate Job*). The renderer and the publish census read this one function,
+    as they read `verify_files`. A value must be a literal of that shape; any other value is a
+    problem and its tag is left out.
+    """
+    found, problems = {}, []
+    for tag in sorted(set(tags)):
+        path = roles / tag / "defaults" / "main.yml"
+        try:
+            defaults = yaml_fast.safe_load(path.read_text()) if path.is_file() else {}
+        except (OSError, yaml.YAMLError) as err:
+            problems.append(f"could not read {tag}'s {CRONJOB_GATES}: {err}")
+            continue
+        value = (defaults or {}).get(CRONJOB_GATES)
+        if value is None:
+            continue
+        wrong = _gate_problems(value)
+        if wrong:
+            problems += [f"{tag}'s {CRONJOB_GATES}: {line}" for line in wrong]
+            continue
+        found[tag] = {str(name): dict(gate) for name, gate in value.items()}
+    return found, problems
+
+
+def _gate_problems(value: object) -> list[str]:
+    """Why `value` is not a literal `flux_cronjob_gates` mapping, empty when it is one."""
+    if not isinstance(value, dict) or not value:
+        return [
+            f"{value!r} is not a non-empty mapping of CronJob names to gate classes"
+        ]
+    problems = []
+    for name, gate in value.items():
+        if not isinstance(gate, dict) or gate.get("kind") not in GATE_KINDS:
+            problems.append(f"{name}: {gate!r} names no kind of {sorted(GATE_KINDS)}")
+            continue
+        extra = set(gate) - {"kind", "rerun_safe"}
+        rerun = gate.get("rerun_safe")
+        if extra:
+            problems.append(f"{name}: unknown keys {sorted(extra)}")
+        elif gate["kind"] == "mutation" and not (
+            isinstance(rerun, str) and "::" in rerun
+        ):
+            problems.append(
+                f"{name}: a mutation gate names its rerun_safe test as <path>::<function>"
+            )
+        elif gate["kind"] == "verify" and rerun is not None:
+            problems.append(
+                f"{name}: a verify gate never re-runs, so takes no rerun_safe"
+            )
+    return problems
+
+
+def verify_timeout(files: Mapping[str, str], default: str) -> str:
+    """`<tag>-verify`'s Kustomization `timeout`, given the directory's files.
+
+    It is `default` unless a Job there sets an `activeDeadlineSeconds` within
+    `VERIFY_DEADLINE_MARGIN_S` of it, and then that deadline plus the margin. A gate Job keeps
+    its CronJob's deadline (`cronjob_gate.py`), which can sit at the bundle's default.
+
+    Raises:
+        ValueError: `default` is not a Go duration of whole hours, minutes and seconds.
+    """
+    deadlines = [
+        int(doc["spec"]["activeDeadlineSeconds"])
+        for text in files.values()
+        for doc in yaml_fast.safe_load_all(text)
+        if isinstance(doc, dict)
+        and doc.get("kind") == "Job"
+        and (doc.get("spec") or {}).get("activeDeadlineSeconds") is not None
+    ]
+    if not deadlines:
+        return default
+    floor = max(deadlines) + VERIFY_DEADLINE_MARGIN_S
+    match = _DURATION.fullmatch(default)
+    if not default or match is None:
+        raise ValueError(f"{default!r} is not a duration of h, m and s")
+    hours, minutes, secs = (int(g or 0) for g in match.groups())
+    return default if hours * 3600 + minutes * 60 + secs >= floor else f"{floor}s"
 
 
 def split_kind(name: str) -> tuple[str, str]:

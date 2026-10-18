@@ -1870,6 +1870,13 @@ assertion becomes a standing rule.
   as a gate run. A test beside the renderer reads the `HOSTNAME` pattern out of
   `pull-pi-peers.sh` and matches the rendered Job name plus a pod suffix against it, with a
   red half for a Job named `pi-peer-backup-gate-<digest8>`.
+  `scripts/renderer/renderer_lib/cronjob_gate.py` is that renderer half (#5556), and
+  `test_renderer_cronjob_gate.py` holds the pattern test. A role opts a CronJob in through
+  `flux_cronjob_gates` in its `defaults/main.yml`, as `{<cronjob>: {kind: verify}}` or as
+  `{kind: mutation, rerun_safe: <path>::<function>}`. The renderer embeds the role's `digest8`
+  as the pod-template annotation `homelab/role-digest8`. It raises a `-verify` timeout to the
+  longest Job deadline there plus 60 seconds. The census row `delivery` still refuses a copied
+  gate Job, which runs its own image's command (#5562).
     - **The gate loses `Forbid`'s protection.** `kubectl create job --from=cronjob` sets a
       controller ownerReference to the CronJob, and `concurrencyPolicy: Forbid` keys on it to
       suppress a scheduled firing while a gate runs. `cronjob-gate`'s `CLAUDE.md` calls that

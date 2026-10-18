@@ -3,8 +3,7 @@
 
 `cluster` renders each deploy tag into `DIR/cluster/<tag>/`, with a `kustomization.yaml`
 listing its files. It reads the git tree and, in stub mode, the stub file, and never contacts
-a cluster, a host, a registry or a decryption key. Ansible stays the only writer to the
-cluster.
+a cluster, a host, a registry or a decryption key. Ansible stays the only writer to the cluster.
 
 Without `--secret-stubs`, `cluster` renders in placeholder mode (target slice R2): every secret
 reference renders as `${<key>}`, and a directory whose render holds one escapes every other `$`
@@ -32,7 +31,7 @@ under `ansible/vars/cluster-manifests/` in `DIR/cluster/<tag>/`, and `decryption
 Kustomization (D3.3c); a manifest without the substitute-disabled annotation fails the render.
 One with snapshot claims gets its snapshot Job in `DIR/cluster/<tag>-snapshot/` (`snapshot.py`).
 One whose role sets `flux_prepull_timeout` gets its pre-pull Jobs in `DIR/cluster/<tag>-prepull/`
-(`prepull.py`).
+(`prepull.py`); one setting `flux_cronjob_gates`, its gate Jobs in `<tag>-verify/` (`cronjob_gate.py`).
 A placeholder render also writes every image context `k8s/image-builder` builds, whatever
 tags it names: `DIR/images/<name>/` and `DIR/images/tags.json`, whose content tags each
 consumer's ref reads in the same render (`renderer_lib/images.py`, D5.4a1).
@@ -101,9 +100,9 @@ from renderer.renderer_lib.cluster import (
     tag_context,
     write_cluster,
 )
-from renderer.renderer_lib.images import TAGS_FILE, check_images, image_files
-from renderer.renderer_lib.images import ghcr_refs
+from renderer.renderer_lib.images import TAGS_FILE, check_images, ghcr_refs, image_files
 from renderer.renderer_lib.prune_label import label_tags
+from renderer.renderer_lib.cronjob_gate import attach_gates
 from renderer.renderer_lib.prepull import attach_prepulls
 from renderer.renderer_lib.snapshot import attach_snapshots
 from renderer.renderer_lib.restart import restart_targets, restart_values, stamp
@@ -346,6 +345,7 @@ def _placeholder_cluster(
         tags = attach_vendored(tags, result.key_sets, vendored)
         tags = attach_snapshots(tags, published, rollout_timeout_default(), vendored)
         tags = attach_prepulls(tags, published, vendored)
+        tags = attach_gates(tags, published, vendored)
         bundle = (
             _bundle(
                 tags, result, out, published, cluster_file, ordering(owned), revision

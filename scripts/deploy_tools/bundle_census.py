@@ -31,7 +31,8 @@ cannot widen it: the tags the inventory marks `owner: flux` (`published_tags`), 
 `k8s/manifests` include (`deferring_tags`), read as the renderer reads the include, and those
 whose role declares snapshot claims (`snapshot_tags`), those whose role sets
 `flux_prepull_timeout` (`prepull_tags`), and those whose role ships verify or post-apply
-mutation Jobs as `templates/verify/*.yaml.j2` (`verifying_tags`). A tag marked
+mutation Jobs as `templates/verify/*.yaml.j2` (`verifying_tags`) or opts a CronJob into a gate
+Job with `flux_cronjob_gates` (`gating_tags`). A tag marked
 `owner: released` is left out of both the bundle and the allowlist (C4).
 
 The plan is docs/target-architecture/deploy/d2-first-leaf.md, *Publication and verification*,
@@ -76,6 +77,7 @@ from renderer.renderer_lib.ordering import (
     SNAPSHOT_SUFFIX,
     TAG_KIND_SUFFIXES,
     VERIFY_SUFFIX,
+    cronjob_gates,
     prepull_timeouts,
     verify_files,
 )
@@ -139,6 +141,18 @@ def prepull_tags(
     """
     timeouts, problems = prepull_timeouts(published, roles)
     return frozenset(timeouts), problems
+
+
+def gating_tags(
+    published: Iterable[str], roles: Path = K8S_ROLES
+) -> tuple[frozenset[str], list[str]]:
+    """The published tags whose role sets `flux_cronjob_gates`, and one line per problem.
+
+    That default calls for `<tag>-verify`, which holds the gate Jobs (`cronjob_gate.py`). It
+    reads `cronjob_gates`, the reader the renderer reads too.
+    """
+    gates, problems = cronjob_gates(published, roles)
+    return frozenset(gates), problems
 
 
 def verifying_tags(published: Iterable[str], roles: Path = K8S_ROLES) -> frozenset[str]:
@@ -398,12 +412,14 @@ def report(out: Path, published: list[str], roles: Path = K8S_ROLES) -> int:
     problems += unjudged
     prepulling, unjudged = prepull_tags(published, roles)
     problems += unjudged
+    gating, unjudged = gating_tags(published, roles)
+    problems += unjudged
     problems += census(
         out,
         published,
         deferring=deferring,
         snapshotting=snapshotting,
-        verifying=verifying_tags(published, roles),
+        verifying=verifying_tags(published, roles) | gating,
         prepulling=prepulling,
     )
     problems += member_census(out, published)
