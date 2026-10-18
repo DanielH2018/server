@@ -106,9 +106,10 @@
   # it never appears in argv (host `ps`) or the k8s audit trail; no_log keeps it out of
   # Ansible output. Idempotent: adds only when the machine is absent, prints ADDED so
   # changed_when is accurate.
+  # `-c crowdsec`: the pod also runs the crowdsec-jobs sidecar, so exec names its container.
   ansible.builtin.command:
     cmd: >-
-      k3s kubectl -n {{ k8s_namespace }} exec -i deploy/crowdsec -- sh -c
+      k3s kubectl -n {{ k8s_namespace }} exec -i deploy/crowdsec -c crowdsec -- sh -c
       'read -r pw; cscli machines list -o raw | grep -q "^{{ item }}," ||
       { cscli machines add {{ item }} --password "$pw" -f /dev/null && echo ADDED; }'
     stdin: "{{ crowdsec_k8s_agent_password }}"
