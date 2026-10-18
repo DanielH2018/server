@@ -72,6 +72,9 @@ MUST_DROP = [
     ("longhorn", "longhorn_workqueue_queue_duration_seconds_bucket"),
     ("longhorn", "longhorn_workqueue_work_duration_seconds_bucket"),
     ("kube-state-metrics", "kube_replicaset_created"),
+    ("kube-state-metrics", "kube_service_info"),
+    ("kube-state-metrics", "kube_service_labels"),
+    ("kube-state-metrics", "kube_service_deletion_timestamp"),
     ("flux", "gotk_reconcile_duration_seconds_bucket"),
     ("flux", "workqueue_queue_duration_seconds_bucket"),
 ]
@@ -122,6 +125,11 @@ MUST_KEEP = [
         "kube-state-metrics",
         "kube_replicaset_owner",
         "the pod to Deployment hop in observability's files/rules/workload-service.yaml",
+    ),
+    (
+        "kube-state-metrics",
+        "kube_service_status_load_balancer_ingress",
+        "MosquittoLanAddressNotPinned in observability's files/rules/k8s-services.yaml reads it",
     ),
     (
         "flux",
