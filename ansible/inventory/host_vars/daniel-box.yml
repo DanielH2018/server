@@ -933,6 +933,10 @@ containers_list:
   # 127.0.0.1:3493 target via hostPort.
   - name: nut
     platform: k8s
+    # Flux applies nut through `promote` and pulls its image from GHCR, first through the
+    # in-cluster ghcr.io mirror (D5.17). The handback is two PRs, `owner: released` then
+    # removing `owner`: docs/flux-deploy-plane.md.
+    owner: flux
     tier: platform
   # The Prometheus face of the same upsd, as its own workload rather than a sidecar: the nut pod
   # is privileged and USB-pinned, and a sidecar there would restart the shutdown chain on every
