@@ -955,7 +955,7 @@
  "scripts/dev/tests/test_fanout_brief.py": 0.0,
  "scripts/dev/tests/test_fanout_claim.py": 0.0,
  "scripts/dev/tests/test_fanout_clean.py": 0.06,
- "scripts/dev/tests/test_fanout_clean_chain.py": 5.23,
+ "scripts/dev/tests/test_fanout_clean_chain.py": 1.0,
  "scripts/dev/tests/test_fanout_clean_convergence.py": 0.0,
  "scripts/dev/tests/test_fanout_clean_real_git.py": 0.18,
  "scripts/dev/tests/test_fanout_cli.py": 0.0,
