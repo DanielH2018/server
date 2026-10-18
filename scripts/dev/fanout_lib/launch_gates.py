@@ -11,7 +11,6 @@ agents then fix the same defect. The check reads the same body citations the orc
 groups by, so a grouping that missed one is refused here rather than discovered at merge.
 """
 
-import subprocess
 import sys
 from collections.abc import Collection, Mapping, Sequence
 from pathlib import Path
@@ -23,13 +22,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from fanout_lib.brief import Issue
 from fanout_lib.manifest import Batch, live_batches
-from fanout_lib.status import (
-    STATUS_TIMEOUT_S,
-    BatchStatus,
-    parse_status,
-    status_command,
-)
-from fanout_lib.transport import Tools
+from fanout_lib.placement import HostReading
+from fanout_lib.status import BatchStatus, parse_status
 from findings_lib.issue_model import cited_paths
 from findings_lib.solo_only import fanout_tooling_paths
 from findings_lib.tracked_paths import resolve_fragments
@@ -81,44 +75,39 @@ def _stopped(s: BatchStatus) -> bool:
     return s.state != "running" and not (s.state == "failed" and s.exit_code is None)
 
 
+def live_by_host(root: Path) -> dict[str, list[tuple[str, Batch]]]:
+    """Every uncleaned batch under `root` by the host it runs on, each with its run id."""
+    live: dict[str, list[tuple[str, Batch]]] = {}
+    for run_id, b in live_batches(root).values():
+        live.setdefault(b.host, []).append((run_id, b))
+    return live
+
+
 def still_running(
-    standing: list[tuple[str, Batch]], host: str, tools: Tools | None, local_host: str
+    standing: list[tuple[str, Batch]], unit_states: str
 ) -> list[tuple[str, Batch]]:
-    """The `standing` (run id, batch) pairs on `host` whose agent has not stopped.
+    """The `standing` (run id, batch) pairs whose agent has not stopped.
 
     The unit state is the oracle, the one `place status` reads: a finished agent holds no
     memory, and neither a standing worktree nor an unset `removed_at` says it has finished.
-    Fails closed: a read that cannot be taken returns every batch, so a gate that cannot tell
-    refuses as it always did.
-
-    The read runs only on `local_host`. A remote host's read is an ssh connection of its own,
-    and the ssh budget (`MAX_BATCHES_PER_REMOTE_HOST`) has no spare one, so a remote host's
-    batches all stay live until `clean` removes them.
+    Fails closed: a batch with no block in `unit_states`, or none at all, stays running, so a
+    gate that cannot tell refuses as it always did.
 
     Args:
         standing: the host's uncleaned batches, each with the run id it was launched under.
-        host: the host they were placed on.
-        tools: the process boundary, or None when the caller has none (nothing is read).
-        local_host: the host this process runs on, where a read costs no ssh.
+        unit_states: the unit blocks `transport.read_host` took on the headroom connection,
+            as `HostReading.unit_states` carries them; empty when none came back.
     """
-    if tools is None or host != local_host or not standing:
+    if not unit_states or not standing:
         return standing
-    batches = [b for _, b in standing]
-    try:
-        proc = tools.run(host, status_command(batches), STATUS_TIMEOUT_S, None)
-    except subprocess.TimeoutExpired, OSError:
-        return standing
-    if proc.returncode != 0:
-        return standing
-    statuses = {s.batch: s for s in parse_status(batches, proc.stdout)}
+    statuses = {s.batch: s for s in parse_status([b for _, b in standing], unit_states)}
     return [(run_id, b) for run_id, b in standing if not _stopped(statuses[b.batch])]
 
 
 def over_live_batch_cap(
     placed: list[tuple[str, str]],
     root: Path,
-    tools: Tools | None = None,
-    local_host: str = "",
+    readings: Sequence[HostReading] = (),
 ) -> bool:
     """Print and return True when a host would end up holding too many running batches.
 
@@ -130,20 +119,18 @@ def over_live_batch_cap(
     run's placements to them.
 
     A batch whose agent has finished holds no reservation, so it does not count, whether or
-    not its worktree still stands (#5497). The unit state is read only when the manifests
-    alone would refuse, so a launch with room spends nothing on it. `clean <run-id>` still
-    matters for a remote host's batches, which stay counted until it runs, and for the
-    clean-before-relaunch refusal in `live_elsewhere`.
+    not its worktree still stands (#5497), and on either host (#5506). The unit states come
+    from `readings`: `read_host` asked for them on the headroom connection, which costs no ssh
+    the budget lacks. A host with no reading, or one whose states did not come back, keeps
+    every batch counted until `clean <run-id>` removes it.
 
     Args:
         placed: `place`'s (batch, host) pairs for this run.
         root: the manifest directory to read every run under.
-        tools: the process boundary the unit-state read goes through.
-        local_host: the host this process runs on; only its batches are read.
+        readings: the headroom readings `read_host` took, carrying each host's unit states.
     """
-    live: dict[str, list[tuple[str, Batch]]] = {}
-    for run_id, b in live_batches(root).values():
-        live.setdefault(b.host, []).append((run_id, b))
+    states = {r.host: r.unit_states for r in readings}
+    live = live_by_host(root)
     new: dict[str, int] = {}
     for _, host in placed:
         new[host] = new.get(host, 0) + 1
@@ -153,10 +140,7 @@ def over_live_batch_cap(
     # reason does not transfer to memory, which a local agent consumes exactly as a remote one
     # does. The two caps share the number 3 and nothing else.
     for host, n in sorted(new.items()):
-        standing = live.get(host, [])
-        if len(standing) + n <= MAX_LIVE_BATCHES_PER_HOST:
-            continue
-        standing = still_running(standing, host, tools, local_host)
+        standing = still_running(live.get(host, []), states.get(host, ""))
         if len(standing) + n <= MAX_LIVE_BATCHES_PER_HOST:
             continue
         held = ", ".join(sorted(f"{b.batch} in run {run_id}" for run_id, b in standing))
@@ -164,7 +148,7 @@ def over_live_batch_cap(
             f"{host} already holds {len(standing)} live batch(es) ({held or 'none'}) and "
             f"this run would place {n} more, over the {MAX_LIVE_BATCHES_PER_HOST} that "
             "host's memory cap fits — wait for one to finish, run `clean <run-id>` on "
-            "the finished ones of a remote host, or split the fan-out"
+            "the finished ones, or split the fan-out"
         )
         over = True
     return over
