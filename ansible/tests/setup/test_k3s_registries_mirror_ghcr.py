@@ -13,7 +13,6 @@ from _setup_render import render_setup_text
 from lib.repo_paths import ALL_VARS
 
 VARS = yaml_fast.safe_load(ALL_VARS.read_text())
-PORT = VARS["k8s_registry_ghcr_mirror_port"]
 
 
 def _mirrors(host: str) -> dict:
@@ -22,13 +21,14 @@ def _mirrors(host: str) -> dict:
 
 
 @pytest.mark.parametrize(
-    ("host", "endpoint"),
+    ("host", "address"),
     [
-        ("daniel-box", f"http://localhost:{PORT}"),
-        ("daniel-server", f"http://{VARS['k8s_registry_cluster_ip']}:{PORT}"),
+        ("daniel-box", "localhost"),
+        ("daniel-server", VARS["k8s_registry_cluster_ip"]),
     ],
 )
-def test_ghcr_is_mirrored_through_the_registry(host, endpoint):
+def test_ghcr_is_mirrored_through_the_registry(host, address):
+    endpoint = f"http://{address}:{VARS.get('k8s_registry_ghcr_mirror_port')}"
     mirrors = _mirrors(host)
     ghcr = mirrors.get("ghcr.io")
     assert ghcr, f"{host}'s registries.yaml mirrors only {sorted(mirrors)}"
