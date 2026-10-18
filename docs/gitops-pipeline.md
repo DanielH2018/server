@@ -860,8 +860,10 @@ those tags (a failed bump on a broad tick writes one) and leaves any other broad
   refusal at the ceiling names its readers, and they are deferred to `k8s_unapplied`. A
   refusal that names none, a timeout or a crash merges and pages as before: a park on a
   failure that repeats would hold every landing, and an unnamed deferral would owe the whole
-  fleet for one key. One cost comes with the route: an image bump promoted in the same range
-  deploys through the broad arm, forward-only, rather than with `handle_k8s`'s rollback.
+  fleet for one key. A range that also carries a k8s role change or a promoted image bump
+  routes nothing and pages as before: the secret plan applies each reader's whole render, so
+  it would ship a hand-edited template past defer-and-alert, and `cs.broad` would move the
+  bump off `handle_k8s`'s snapshot and rollback.
 - **k8s-platform roles are auto-deployed ONLY for an image-pin bump to a non-denylisted service;
   every other k8s change defers-and-alerts.** `deploy_logic.split_k8s_auto_deploy` decides
   eligibility, **diff-shape first, identity second**. Gating on the service name alone would be

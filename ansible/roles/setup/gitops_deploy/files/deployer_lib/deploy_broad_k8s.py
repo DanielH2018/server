@@ -121,7 +121,8 @@ def route_secret_k8s_readers(
     redeployed it. This asks `secret_setup_readers.py --deploy-tags` for the secrets half
     alone, as `deploy_defer.route_secret_readers` asks it for the setup roles, and routes the
     range through `handle_broad` only when a reader exists. A range with a deploy-plane path
-    is skipped, because `narrow` already maps its keys.
+    is skipped, because `narrow` already maps its keys, and so is a range carrying any k8s
+    role change, for the reason the `DECIDED:` below gives.
 
     The tags it applies drop each one Flux owns, as `deploy_narrow._deploy_plane` does. A
     refusal naming its tags (the fleet-coverage ceiling) defers them to `k8s_unapplied`.
@@ -129,11 +130,23 @@ def route_secret_k8s_readers(
     cs = plan.cs
     if not cs.secrets or cs.broad_deploy:
         return plan
+    # DECIDED: a range that also carries a k8s role change or a promoted image bump is left
+    # alone, and merges and pages as before #5577. A secret plan applies each reader's whole
+    # render, so a reader whose template the range edits (the /add-secret shape) would ship
+    # that edit forward-only, past the defer-and-alert every hand-edited k8s change takes.
+    # `cs.broad` would also move a promoted bump from `handle_k8s`, with its snapshot and
+    # rollback, to the forward-only broad arm. The rotation alone is the case this route is for.
+    if cs.k8s or cs.k8s_deploy or cs.k8s_consumers:
+        log(
+            "secret-readers: the range also changes a k8s role, so no k8s reader is routed; "
+            "the secrets page names the consumers"
+        )
+        return plan
     # DECIDED: a failed or nameless lookup merges and pages, where the setup half parks
     # (#5436). The `secrets` page goes out on every merged exit and names the command listing
     # each consumer, which was this range's only signal before #5577. A park on a failure
     # that repeats, such as a checkout older than this deployer whose script lacks the flag
-    # (argparse exits 2), would hold every other session's landing behind a rotation.
+    # (argparse exits 64), would hold every other session's landing behind a rotation.
     try:
         rc, out = tools.secret_k8s_readers(config.repo, target.local, target.origin)
     except Exception as exc:

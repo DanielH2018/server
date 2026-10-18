@@ -13,7 +13,10 @@ Run: uv run pytest ansible/roles/setup/gitops_deploy/tests/test_gitops_deploy_se
 
 import subprocess
 
-from _deploy_fakes import receipt_applied
+from deployer_lib import deploy_broad_k8s
+from deployer_lib.deploy_changes import ChangeSet
+from deployer_lib.deploy_tick_types import TickPlan, TickTarget
+from _deploy_fakes import LOCAL, receipt_applied
 from gitops_ledger import OWED_K8S_UNAPPLIED
 
 ORIGIN = "2" * 40
@@ -141,3 +144,38 @@ def test_a_key_both_planes_read_applies_the_setup_role_first(
         ["ansible/initial_setup.yml", "--tags", "claude_code"],
         ["ansible/deploy.yml", "--tags", "homepage"],
     ]
+
+
+def test_an_add_secret_range_keeps_the_templates_defer_and_alert(
+    gitops_deploy, tick, state
+):
+    """The /add-secret shape: a new key and the peanut template reading it, in one range.
+
+    A secret plan would apply peanut's whole render forward-only, past the defer-and-alert
+    every hand-edited k8s change takes, so the lookup is not asked and peanut is owed.
+    """
+    tick.declare(DECLARES)
+    tick.paths = [SECRETS, "ansible/roles/k8s/peanut/templates/secret.yaml.j2"]
+    tick.secret_k8s = (0, "peanut")
+    assert gitops_deploy.main(tick.tools, tick.config, state) == 0
+    assert tick.playbooks == []
+    assert tick.merges == [ORIGIN]
+    assert not any(entry[0] == "secret_k8s" for entry in tick.log)
+    assert any("peanut" in post and "not applied" in post for post in tick.posts)
+
+
+def test_a_promoted_bump_beside_a_rotation_stays_off_the_broad_arm(tick):
+    """`cs.broad` would move the bump from `handle_k8s`'s snapshot and rollback."""
+    tick.secret_k8s = (0, "homepage")
+    plan = TickPlan(
+        cs=ChangeSet(secrets=True, k8s_deploy={"sonarr"}), paths=[], k8s_services=set()
+    )
+    target = TickTarget(
+        local=LOCAL, origin=ORIGIN, hold=None, dirty=False, status="", action="deploy"
+    )
+    routed = deploy_broad_k8s.route_secret_k8s_readers(
+        tick.tools, tick.config, target, plan
+    )
+    assert routed.secret_plans == ()
+    assert routed.cs.broad is False
+    assert not any(entry[0] == "secret_k8s" for entry in tick.log)
