@@ -463,6 +463,10 @@ containers_list:
   # Headless DDNS client: no web UI, no Traefik route.
   - name: cloudflare-ddns
     platform: k8s
+    # Flux applies cloudflare-ddns through `promote` and substitutes its API-token and Kuma
+    # push-token Secret from homelab-cluster-vars (D5.19). The handback is two PRs,
+    # `owner: released` then removing `owner`: docs/flux-deploy-plane.md.
+    owner: flux
   - name: freshrss
     platform: k8s
     # Flux applies freshrss through `promote`, and every Ansible path skips it (D5.9). The
@@ -557,6 +561,9 @@ containers_list:
   # reader is.
   - name: artifacts
     platform: k8s
+    # Flux applies artifacts through `promote`; its host directories are k8s_host_files' (D5.19).
+    # The handback is two PRs, `owner: released` then removing `owner`: docs/flux-deploy-plane.md.
+    owner: flux
     hostname: "artifacts"
     port: 8080
     use_authelia: true
@@ -567,6 +574,9 @@ containers_list:
   # Authelia. The role's ingressroute template records why it stopped being LAN-only.
   - name: docs
     platform: k8s
+    # Flux applies docs through `promote`; its site directory is k8s_host_files' (D5.19). The
+    # handback is two PRs, `owner: released` then removing `owner`: docs/flux-deploy-plane.md.
+    owner: flux
     hostname: "docs"
     port: 8080
     use_authelia: true
@@ -901,6 +911,9 @@ containers_list:
   # Loki. No web UI and no route; each exporter's Service is scraped in-cluster.
   - name: game-stats
     platform: k8s
+    # Flux applies game-stats through `promote` (D5.19). The handback is two PRs, `owner:
+    # released` then removing `owner`: docs/flux-deploy-plane.md.
+    owner: flux
     weekly_backup_claims: {terraria-stats-data: 0, valheim-stats-data: 1}  # Sun, Mon
     depends_on: [loki-homelab]
     # One job per game, each a single replica behind its own Service. terraria-stats runs as
@@ -927,6 +940,10 @@ containers_list:
     owner: flux
   - name: autofix-bridge
     platform: k8s
+    # Flux applies autofix-bridge through `promote` and substitutes its env Secret from
+    # homelab-cluster-vars (D5.19). The handback is two PRs, `owner: released` then removing
+    # `owner`: docs/flux-deploy-plane.md.
+    owner: flux
   # The NUT primary (upsd + usbhid-ups + upsmon). The pod is pinned to daniel-server, the
   # UPS's USB host — a physical pin that never unwinds. The host's secondary upsmon, the
   # thing that actually powers daniel-server off on FSD, is the nut_host role and keeps its

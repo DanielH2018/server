@@ -5,11 +5,11 @@ runbooks, design documents and generated reference pages are readable in a brows
 
 ## At a glance
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates, tasks or containers_list entry, or the k3s role's Longhorn tier lists. -->
-- **Deploy tag:** `--tags "docs"`
+- **Applied by:** Flux, through `promote` (`owner: flux`); `deploy.sh` refuses `--tags=docs`
+  with exit 5
 - **Image:** `nginxinc/nginx-unprivileged` (`docs_k8s_image`)
 - **Route:** `docs.<domain>` · `docs.local.<domain>`, Authelia one_factor
 - **Claims:** none (no PVC)
-- **Auto-deploy:** eligible (`k8s_autodeploy: true`)
 <!-- /generated_from -->
 
 - **Serves static files and nothing else** (an unprivileged nginx).
@@ -23,6 +23,18 @@ runbooks, design documents and generated reference pages are readable in a brows
   `mkdocs.yml`'s `exclude_docs`.
 - **Built by:** `scripts/docs/build_docs.py`, run by the `docs-refresh` cron. **Not by this role** —
   a deploy renders manifests, it does not rebuild the site.
+- **Flux applies it, not Ansible** (D5.19, the first Wave D PR). Its `containers_list` entry
+  carries `owner: flux`, so `deploy.sh`, the play and the GitOps deployer all skip it, and a
+  merged change reaches the cluster when `promote` publishes and verifies the next bundle. To
+  give it back to Ansible, follow the two-PR handback in `docs/flux-deploy-plane.md`; a plain
+  revert of the flag leaves two writers on the objects. traefik and authelia stay
+  Ansible-owned, so the Kustomization records them in its `homelab/ansible-owned-deps`
+  annotation, not in `dependsOn`. The Deployment is `RollingUpdate` with one replica, so a
+  roll keeps one pod serving.
+- **Where the task went.** `tasks/main.yml` holds one task, the include of `k8s/manifests`,
+  and no Flux path runs it. It stays for the handback. The Kustomization's `wait` replaces the
+  rollout wait, and the restart checksum the renderer stamps replaces the shared restart, so
+  an nginx config edit still rolls the pod. The site directory is the setup plane's (below).
 
 ## The build runs on the host, never in the pod
 
@@ -72,7 +84,8 @@ crashlooping pod — "the site is not built" is an operator problem, not a rollo
 
 ## Verifying a change actually landed
 
-`uv run python scripts/diagnostics/probe.py health docs` gates the rollout and the 180s restart window. It
+Under Flux, `promote`'s `verify` gates the rollout, and a merge draws no `land.sh` health run.
+`uv run python scripts/diagnostics/probe.py health docs` still reads the pod and the route by hand. It
 cannot see whether the site rendered: the Authelia middleware answers with a 302 before Traefik
 reaches nginx, so a green probe plus a working redirect proves nothing about content.
 
