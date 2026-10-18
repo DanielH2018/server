@@ -64,6 +64,7 @@
  "ansible/roles/k8s/homelab-mcp/tests/test_k8s_reads.py": 0.0,
  "ansible/roles/k8s/homelab-mcp/tests/test_safe_reads.py": 0.0,
  "ansible/roles/k8s/ical-proxy/tests/test_app.py": 0.0,
+ "ansible/roles/k8s/janitorr/tests/test_janitorr_health.py": 0.12,
  "ansible/roles/k8s/janitorr/tests/test_janitorr_health_logic.py": 0.0,
  "ansible/roles/k8s/karakeep/tests/test_archive_pruner.py": 0.01,
  "ansible/roles/k8s/karakeep/tests/test_time_tagger_wiring.py": 0.0,
