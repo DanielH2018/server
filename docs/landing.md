@@ -383,10 +383,11 @@ Instead it reads the cluster every 30 seconds:
   3544 seconds short. D5.20 then published sonarr, radarr and mosquitto with two verify
   Kustomizations, which put the soak's `timeout` at 14934s, so D5.16 raised the deadline
   again, to 25200. n8n's flip added `n8n-prepull` at a 3600s `timeout` and put the soak's
-  `timeout` at 15894s. The flip that handed karakeep, pi-peer-backup and media-volume to Flux
-  added karakeep's 1200s budget, its snapshot and three verify Kustomizations. That put the
-  soak's `timeout` at 18114s and left the wait 388 seconds short, so the flip raised the
-  deadline to 28800, which leaves 3212 seconds of headroom (#5512, #5566, #5546, #5652).
+  `timeout` at 15894s, and later flips took it to 17130s. The flip that handed karakeep,
+  pi-peer-backup and media-volume to Flux added karakeep's 1200s budget, its snapshot and
+  three verify Kustomizations. That put the soak's `timeout` at 18114s and left the wait 388
+  seconds short, so the flip raised the deadline to 28800, which leaves 3212 seconds of
+  headroom (#5512, #5566, #5546, #5652).
   `ansible/tests/setup/test_lander_deadlines_cover_the_soak.py` renders the published bundle
   and fails once a newly published tag outgrows that headroom (#5427).
 
