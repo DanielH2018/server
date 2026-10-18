@@ -1,8 +1,7 @@
-"""Pure decision core for the janitorr health cron (janitorr_health.py).
+"""Pure decision core for the janitorr-health CronJob's reader (janitorr_health.py).
 
-Split from the I/O shell so it stays stdlib-only (daniel-box runs it via `uv run --no-project
---python <pin>`, host_python_version in ansible/inventory/group_vars/all.yml) and unit-testable without a
-cluster.
+Split from the I/O shell so it stays stdlib-only (the CronJob runs it in the bare
+python:3.14-alpine image, with no wheels installed) and unit-testable without a cluster.
 
 Replaces monitor-bridge's `check_janitorr`, which read the error count from **Loki** and the uptime
 from `container_start_time_seconds{name="janitorr"}` in Prometheus. Neither survives the port:

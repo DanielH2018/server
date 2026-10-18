@@ -45,8 +45,8 @@
     src: prefs-check.sh.j2
     dest: /usr/local/bin/qbittorrent-prefs-check.sh
     # DECIDED: 0700 owned by sys_user, not 0755 — the script interpolates the qBittorrent WebUI
-    # password directly (same shape as janitorr-health.sh.j2's Kuma token), and at 0755 any
-    # local account could read it.
+    # password directly (the shape janitorr's host health cron used for its Kuma token until
+    # H2.5c), and at 0755 any local account could read it.
     mode: "0700"
     owner: "{{ sys_user }}"
     group: "{{ sys_user }}"

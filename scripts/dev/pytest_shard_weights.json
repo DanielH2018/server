@@ -562,7 +562,6 @@
  "ansible/tests/services/test_grafana_authelia_oidc.py": 0.0,
  "ansible/tests/services/test_ha_trusted_proxies_cover_cloudflare.py": 0.01,
  "ansible/tests/services/test_headlamp_widget_mapping_order.py": 0.0,
- "ansible/tests/services/test_health_reader_code_is_stamped.py": 0.0,
  "ansible/tests/services/test_healthchecks_pings.py": 0.0,
  "ansible/tests/services/test_homelab_mcp_pins.py": 0.62,
  "ansible/tests/services/test_homepage_block_label_overrides.py": 0.0,
