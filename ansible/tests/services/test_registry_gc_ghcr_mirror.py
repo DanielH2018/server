@@ -58,6 +58,16 @@ def test_digests_from_statuses_and_specs_in_every_namespace_are_written(tmp_path
     )
 
 
+def test_tag_only_ghcr_refs_are_written_beside_the_digests(tmp_path):
+    """A flux-owned image runs by tag alone, so a scaled-to-zero one leaves only its tag."""
+    body = f'{{"items": [{{"imageID": "ghcr.io/x@{LIVE}"}}, {{"image": "ghcr.io/danielh2018/nut:abc123"}}]}}'
+    calls, note = _write(tmp_path, 0, body)
+
+    assert note == ""
+    written = "\n".join(calls)
+    assert f"--from-literal=digests={LIVE}\ndanielh2018/nut:abc123" in written, calls
+
+
 def test_an_unreadable_cluster_writes_no_keep_set(tmp_path):
     calls, note = _write(tmp_path, 1, "")
 
@@ -131,3 +141,46 @@ def test_a_finished_mirror_job_is_journaled_and_kept_for_its_log(tmp_path):
 
     assert f"logger {PRUNED_LINE}" in calls, calls
     assert not any("delete job" in c for c in calls), calls
+
+
+REPORT = rendered_shell_function(
+    "k8s", "registry", "registry-gc.sh.j2", "report_mirror_job"
+)
+
+
+def _report(tmp_path: Path, note: str) -> tuple[str, str]:
+    """Run report_mirror_job after a completed mirror Job; return STATUS and MSG."""
+    script = f"""
+KUBECTL="k3s kubectl -n homelab"
+NS=homelab
+MIRROR_JOB=registry-gc-ghcr-mirror
+APPLIED_AT=$SECONDS
+STATUS=up
+MSG="gc completed"
+MIRROR_NOTE="$NOTE"
+k3s() {{ case "$*" in *" logs "*" prune"*) printf '%s\\n' "$PRUNED_LINE" ;; esac; }}
+logger() {{ cat > /dev/null; }}
+{JOURNAL}
+{REPORT}
+report_mirror_job
+printf '%s\\n%s' "$STATUS" "$MSG"
+"""
+    env = {**os.environ, "NOTE": note, "PRUNED_LINE": PRUNED_LINE}
+    status, msg = run(["bash", "-c", script], env=env, check=True).stdout.split("\n", 1)
+    return status, msg
+
+
+def test_a_completed_prune_keeps_the_run_up(tmp_path):
+    status, msg = _report(tmp_path, "")
+
+    assert status == "up", msg
+    assert "ghcr-mirror: 1 revision(s) pruned" in msg, msg
+
+
+def test_a_skipped_prune_reports_the_run_down(tmp_path):
+    """A persistent keep-set fault would otherwise skip every week behind a green tile."""
+    note = "ghcr-mirror prune skipped, workloads unreadable"
+    status, msg = _report(tmp_path, note)
+
+    assert status == "down", msg
+    assert note in msg, msg

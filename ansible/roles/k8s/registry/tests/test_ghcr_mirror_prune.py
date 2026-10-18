@@ -162,3 +162,27 @@ def test_each_repository_is_ranked_on_its_own(tmp_path):
 
     assert store.revisions(other) == flux
     assert len(store.revisions()) == 2
+
+
+def test_a_tag_in_the_keep_set_keeps_the_revision_it_points_at(tmp_path):
+    """A tag-pulled workload scaled to zero reaches the keep set only as its spec's tag."""
+    store = _store(tmp_path)
+    store.cache(1), store.cache(5)
+    old = store.cache(9)
+    store.tag("abc123", old)
+
+    out = _prune(tmp_path, [UNRELATED, f"{REPO}:abc123"])
+
+    assert old in store.revisions(), out
+    assert "abc123" in store.tags(), out
+
+
+def test_a_tag_of_another_repository_keeps_nothing_here(tmp_path):
+    store = _store(tmp_path)
+    store.cache(1), store.cache(5)
+    old = store.cache(9)
+    store.tag("abc123", old)
+
+    out = _prune(tmp_path, [UNRELATED, "danielh2018/ical-proxy:abc123"])
+
+    assert old not in store.revisions(), out

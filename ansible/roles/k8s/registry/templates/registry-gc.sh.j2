@@ -268,10 +268,18 @@ prune_content_tags
 # A CronJob's pod is not running at 04:20 on a Sunday, so its pinned digest comes from its spec.
 # Every sha256 digest in the JSON is kept, which can only keep more than strictly needed.
 #
+# TAG REFS TOO. A flux-owned built image runs as `ghcr.io/danielh2018/<name>:<tag>` with no
+# digest, so a workload of one scaled to zero leaves no digest anywhere. Its spec still names
+# the tag, and the prune keeps whatever revision that tag points at in the store. Each ref goes
+# in as `<repo>:<tag>`; a digest-pinned ref also yields one, which only keeps more.
+#
 # FAIL CLOSED. The previous run's ConfigMap is deleted first, and the Job mounts it as optional,
-# so a run that could not build the set prunes nothing rather than pruning by last week's.
+# so a run that could not build the set prunes nothing rather than pruning by last week's. A
+# skip reports the run down: a cause that persists would otherwise skip every week behind a
+# green tile while the claim fills. A cluster running pods always has an imageID digest, so an
+# empty set is a fault as well.
 write_mirror_keep_set() {
-  local json keep
+  local json keep tags
   if ! $KUBECTL delete configmap "$MIRROR_KEEP_CM" --ignore-not-found >/dev/null 2>&1; then
     MSG="could not delete the previous ghcr-mirror keep set (configmap/${MIRROR_KEEP_CM}) — aborted before scaling down"
     exit 1
@@ -286,6 +294,9 @@ write_mirror_keep_set() {
     MIRROR_NOTE="ghcr-mirror prune skipped, no digest found in any workload"
     return 0
   fi
+  tags=$(grep -oE 'ghcr\.io/[a-z0-9._/-]+:[A-Za-z0-9._-]+' <<<"$json" | sed 's|^ghcr\.io/||' \
+           | sort -u)
+  [[ -n "$tags" ]] && keep="${keep}"$'\n'"${tags}"
   if ! $KUBECTL create configmap "$MIRROR_KEEP_CM" --from-literal=digests="$keep" \
          >/dev/null 2>&1; then
     MIRROR_NOTE="ghcr-mirror prune skipped, could not write configmap/${MIRROR_KEEP_CM}"
@@ -327,19 +338,28 @@ else
   exit 1
 fi
 
-# The mirror Job started with the one above, so it waits only for what is left of the shared
-# deadline. Its own activeDeadlineSeconds fails it at the same point.
-MIRROR_WAIT=$(( {{ registry_k8s_gc_deadline_s }} - (SECONDS - APPLIED_AT) ))
-(( MIRROR_WAIT < 30 )) && MIRROR_WAIT=30
-if $KUBECTL wait --for=condition=complete "job/${MIRROR_JOB}" \
-     --timeout="${MIRROR_WAIT}s" >/dev/null 2>&1; then
+# Waits for the mirror Job and appends its result to MSG. It started with the push store's Job,
+# so it waits only for what is left of the shared deadline; its own activeDeadlineSeconds fails
+# it at the same point. Returns 1 when the Job did not complete.
+report_mirror_job() {
+  local wait_s pruned blobs
+  wait_s=$(( {{ registry_k8s_gc_deadline_s }} - (SECONDS - APPLIED_AT) ))
+  (( wait_s < 30 )) && wait_s=30
+  if ! $KUBECTL wait --for=condition=complete "job/${MIRROR_JOB}" \
+         --timeout="${wait_s}s" >/dev/null 2>&1; then
+    STATUS=down
+    MSG="${MSG}; ghcr-mirror job did not complete — see: kubectl -n ${NS} logs job/${MIRROR_JOB} -c prune"
+    return 1
+  fi
   MIRROR_DONE=1
-  MIRROR_PRUNED=$(journal_mirror_prune | grep -c '^pruned ')
-  MIRROR_BLOBS=$($KUBECTL logs "job/${MIRROR_JOB}" -c gc 2>/dev/null | grep -c 'Deleting blob')
-  MSG="${MSG}; ghcr-mirror: ${MIRROR_PRUNED} revision(s) pruned, ${MIRROR_BLOBS} blob(s) deleted"
-  [[ -n "$MIRROR_NOTE" ]] && MSG="${MSG} (${MIRROR_NOTE})"
-else
-  STATUS=down
-  MSG="${MSG}; ghcr-mirror job did not complete — see: kubectl -n ${NS} logs job/${MIRROR_JOB} -c prune"
-  exit 1
-fi
+  pruned=$(journal_mirror_prune | grep -c '^pruned ')
+  blobs=$($KUBECTL logs "job/${MIRROR_JOB}" -c gc 2>/dev/null | grep -c 'Deleting blob')
+  MSG="${MSG}; ghcr-mirror: ${pruned} revision(s) pruned, ${blobs} blob(s) deleted"
+  # The push store collected, but a skipped prune is a fault write_mirror_keep_set explains.
+  if [[ -n "$MIRROR_NOTE" ]]; then
+    STATUS=down
+    MSG="${MSG} (${MIRROR_NOTE})"
+  fi
+}
+
+report_mirror_job || exit 1

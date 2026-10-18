@@ -49,17 +49,21 @@ registry round trip. See repo-root `CLAUDE.md` for shared conventions.
     manifest DELETE, so `gc-job.yaml.j2`'s second Job, `registry-gc-ghcr-mirror`, edits the
     store offline in the same scaled-to-zero window. Its `prune` initContainer runs
     `files/ghcr-mirror-prune.sh`, and its `gc` container then runs plain `garbage-collect`.
-  - The prune's unit is a manifest revision, not a tag. Every ghcr.io image here is pinned
+  - The prune's unit is a manifest revision, not a tag. A third-party ghcr.io image is pinned
     by digest, and the proxy caches a digest pull with no tag, so `--delete-untagged` on this
-    store would delete nearly every cached image. Per repository it keeps the
-    `registry_k8s_ghcr_mirror_keep_revisions` (3) newest top-level revisions, the children of
-    every kept index, and every digest in the keep set.
+    store would delete every such image. A flux-owned built image runs by tag alone
+    (`scripts/renderer/renderer_lib/images.py:ghcr_text`), so it is cached tagged. Per
+    repository the prune keeps the `registry_k8s_ghcr_mirror_keep_revisions` (3) newest
+    top-level revisions, the children of every kept index, every digest in the keep set, and
+    the revision each `<repo>:<tag>` in the keep set points at.
   - `registry-gc.sh` writes the keep set to the `registry-gc-ghcr-mirror-keep` ConfigMap
-    before the scale-down. It holds every sha256 digest in pods, Deployments, StatefulSets,
-    DaemonSets, CronJobs and Jobs across all namespaces. The script deletes the previous set
-    first and the Job mounts it as optional, so a run that cannot read the cluster prunes
-    nothing. Each pruned revision is a `pruned <repo>@<digest>` line in the Job log and in the
-    `registry-gc` journal.
+    before the scale-down. It holds every sha256 digest and every `ghcr.io` tag ref in pods,
+    Deployments, StatefulSets, DaemonSets, CronJobs and Jobs across all namespaces. The tag
+    refs protect a tag-pulled workload scaled to zero, which has no pod to report a digest.
+    The script deletes the previous set first and the Job mounts it as optional, so a run that
+    cannot read the cluster prunes nothing. Such a skip reports the run down, so a cause that
+    persists cannot hide behind a green tile while the claim fills. Each pruned revision is a
+    `pruned <repo>@<digest>` line in the Job log and in the `registry-gc` journal.
   - containerd falls back to `ghcr.io` while the GC scales the pod to zero. A mirror container
     that cannot start leaves the whole pod unready, push store included.
 - A weekly garbage collection (`gc-job.yaml.j2`, Sunday 04:20) takes the registry

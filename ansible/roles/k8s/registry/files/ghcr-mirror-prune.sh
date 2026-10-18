@@ -7,17 +7,22 @@
 # zero replicas. The Job's second container then runs plain `garbage-collect`, which sweeps the
 # blobs no remaining revision references.
 #
-# THE UNIT IS A MANIFEST REVISION, NOT A TAG. Every ghcr.io image in this repo is pinned
-# `name:tag@sha256:...`, so containerd pulls it by digest and the proxy stores a revision link
-# with no tag beside it. A tag-based prune would reclaim nothing, and `garbage-collect
-# --delete-untagged` would delete nearly the whole cache. That is why the Job's garbage-collect
-# runs without that flag.
+# THE UNIT IS A MANIFEST REVISION, NOT A TAG. A pull caches two shapes here. A third-party
+# ghcr.io image pinned `name:tag@sha256:...` is pulled by digest, and the proxy stores a revision
+# link with no tag beside it. A flux-owned built image is rewritten to `ghcr.io/danielh2018/
+# <name>:<tag>` with no digest (scripts/renderer/renderer_lib/images.py:ghcr_text), so it is
+# pulled by tag and cached tagged. A tag-based prune would never reclaim the first shape, and
+# `garbage-collect --delete-untagged` would delete all of it. That is why the Job's
+# garbage-collect runs without that flag.
 #
 # Per repository it keeps:
 #   - the KEEP_NEWEST newest top-level revisions, ranked by the mtime of their revision link,
 #     which is the time the mirror first cached them;
 #   - every revision whose digest is listed in KEEP_FILE. registry-gc.sh writes there every
 #     digest a pod resolved or a workload pins, in every namespace;
+#   - every revision a tag listed in KEEP_FILE as `<repo>:<tag>` points at. registry-gc.sh
+#     writes there every tag-only ghcr.io ref a workload spec names, which is what protects a
+#     tag-pulled workload scaled to zero: it has no pod, so no digest reaches the set;
 #   - every child manifest of a kept index, which a multi-arch pull caches beside the index;
 #   - any revision whose link or manifest blob it cannot read.
 # It removes every other revision link and every tag whose current link names one, and prints
@@ -28,7 +33,7 @@
 #
 # Usage: ghcr-mirror-prune.sh (no arguments)
 # Reads MIRROR_ROOT (the store's root directory, default /var/lib/registry), KEEP_FILE (one
-# sha256 digest per line, default /keep/digests) and KEEP_NEWEST (default 3).
+# sha256 digest or `<repo>:<tag>` per line, default /keep/digests) and KEEP_NEWEST (default 3).
 
 set -u
 
@@ -95,6 +100,14 @@ while read -r manifests; do
       grep -o "$DIGEST_RE" "$body" | grep -vxF "$digest" | sed "s|^|${digest} |" >> "${WORK}/edges"
     fi
   done
+
+  # A kept tag keeps the revision its current link names. A tag name holds no `/`, so one that
+  # does could only climb out of the tags directory and is ignored.
+  awk -v p="${repo}:" 'index($0, p) == 1 { print substr($0, length(p) + 1) }' "$KEEP_FILE" \
+    | while read -r tag; do
+        case "$tag" in */* | "" | . | ..) continue ;; esac
+        cat "${manifests}/tags/${tag}/current/link" 2>/dev/null && echo
+      done | grep "^${DIGEST_RE}\$" >> "${WORK}/keep"
 
   cut -d' ' -f2 "${WORK}/edges" | sort -u > "${WORK}/children"
   lines_not_in "${WORK}/children" "${WORK}/all" > "${WORK}/tops"
