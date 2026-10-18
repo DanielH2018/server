@@ -310,19 +310,24 @@ def render_sides(
     passes: list[StubPass],
     stub_render: Callable[[str, dict], RenderedTag] = render_tag,
     vendored: Path = K8S_ROLES,
+    placeholder_render: Callable[
+        [list[str], list[str]], PlaceholderRender
+    ] = render_placeholders,
 ) -> Sides:
     """Render `tags` under `root`: `placeholder/`, and one stub render per pass.
 
     Each stub render drops the `render_sops_manifests` files, as placeholder mode does, and
-    counts the documents it dropped. `stub_render` renders one tag in stub mode; a test
-    passes one that changes the render. `vendored` is the role tree each tag's vendored
-    files are read from; a test passes a fixture tree.
+    counts the documents it dropped. `stub_render` renders one tag in stub mode, and
+    `placeholder_render` renders the tags in placeholder mode. A test passes a `stub_render`
+    that changes the render, or a pair that reuses one render of a tag across its tests.
+    `vendored` is the role tree each tag's vendored files are read from; a test passes a
+    fixture tree.
 
     Raises:
         RenderError: A template fails to render.
         RenderRefused: A directory to write already holds files.
     """
-    placeholder = render_placeholders(tags, keys)
+    placeholder = placeholder_render(tags, keys)
     rendered = [t.tag for t in placeholder.tags]
     entries = {tag: sops_manifests(tag) for tag in rendered}
     stub_renders: dict[str, list[RenderedTag]] = {}

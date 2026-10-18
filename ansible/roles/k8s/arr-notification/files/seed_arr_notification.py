@@ -23,8 +23,8 @@ than building one from scratch, so those keep whatever they hold; the create pat
 from `GET /api/v3/notification/schema`, which is where the app's own defaults live.
 
 WHERE THE SECRETS COME FROM. The process environment — `ARR_API_KEY` and
-`ARR_DISCORD_WEBHOOK_URL`, set by `tasks/main.yml` under `no_log`, or by the inert seed Job in
-sonarr's and radarr's `templates/verify-inert/` from two Secrets. Never argv, and nothing
+`ARR_DISCORD_WEBHOOK_URL`, set by `tasks/main.yml` under `no_log`, or by the seed Job in
+sonarr's and radarr's `templates/verify/` from two Secrets. Never argv, and nothing
 here prints a field value: the output is the decision (created / updated / no-op) and the
 `SEED_CHANGED: <n>` marker `changed_when` reads. `probe.py arr <app> notification` prints the
 webhook URL in full, which is why verifying this by hand needs a filter and this script does

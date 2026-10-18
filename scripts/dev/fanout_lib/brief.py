@@ -228,13 +228,33 @@ of your final message. A {LANDS} session lands it and closes the issue.
 """
 
 
-REVIEW_LANDING = """## Landing
-This batch has a review phase. Open the PR with `gh pr create` and STOP there: **do not
+def drafts_pr(target: Target) -> bool:
+    """Whether a review batch opens its PR as a draft, which the pipeline marks ready (#5563).
+
+    This repo's `ci.yml` skips every job on a draft PR. A fan-out batch pushes again while its
+    review runs, so CI on the first push was wasted: from 2026-10-16 to 2026-10-18, 27 PR runs
+    were cancelled by such a push, and 50 more finished on a head such a push replaced.
+    `review_ci.ready_gate` marks the PR ready after the review. Another repo's CI does not
+    skip drafts, so a draft there would only stop `autoland` from landing it.
+    """
+    return target.is_server
+
+
+def _review_landing(target: Target) -> str:
+    create = "`gh pr create --draft`" if drafts_pr(target) else "`gh pr create`"
+    draft = (
+        "\nThe PR stays a draft, with no CI, until the review and its fix round are done; the "
+        "pipeline then marks it ready, and CI runs once on the head that lands.\n"
+        if drafts_pr(target)
+        else ""
+    )
+    return f"""## Landing
+This batch has a review phase. Open the PR with {create} and STOP there: **do not
 merge**, do not run the land script, and do not close the issues. A separate reviewer reads
 the PR next, and this session is resumed with its findings. The pipeline then lands the PR
 itself, and resumes this session again only for a verdict that needs a decision.
 Print the PR URL as the last line of your final message.
-"""
+{draft}"""
 
 
 def _finishing(host: str, target: Target = SERVER_TARGET, review: bool = False) -> str:
@@ -415,7 +435,7 @@ dispatcher has posted the `Worked by` comment naming your branch on each of them
 {facts}
 {_test_proof_step(target.base)}
 {guards}
-{REVIEW_LANDING if review else _landing(host, batch, target)}
+{_review_landing(target) if review else _landing(host, batch, target)}
 {_finishing(host, target, review)}
 ## Anything you do not fix
 File it with {findings} (flags: `findings.py open --help`). Never leave it unmentioned.

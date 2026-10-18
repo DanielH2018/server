@@ -31,6 +31,37 @@ spec:
           image: {{ autofix_bridge_k8s_image }}
           command: ["python", "/app/autofix.py"]
 {{ hardened_security_context(read_only=true) }}
+          # The settings, as plain values; the credentials come from env-secret.yaml.j2. A
+          # quoted number belongs here, never in the Secret: Flux's typed patch reads a
+          # Secret's "300" back as a number and refuses it (#5574). Only what CHANGED in the
+          # move from the Docker compose template is commented.
+          env:
+            - name: TZ
+              value: "{{ tz }}"
+            - name: PYTHONUNBUFFERED
+              value: "1"
+            - name: PYTHONDONTWRITEBYTECODE
+              value: "1"
+            - name: INTERVAL
+              value: "300"
+            # In-cluster Service names replace the -k8s LAN routes (same move as the
+            # monitor-bridge twin): no VIP, no Traefik, no monitoring IngressRoute in the path.
+            - name: KUMA_URL
+              value: http://uptime-kuma.{{ k8s_namespace }}.svc.cluster.local:{{ containers_list | entry_port('uptime-kuma') }}
+            # LIVE remediation, carried over unchanged — the operator flipped it 2026-07-06 and
+            # the autonomous-role contract (this role's CLAUDE.md) governs any change here.
+            - name: DRY_RUN
+              value: "false"
+            - name: GRACE_CYCLES
+              value: "3"
+            - name: MAX_ACTIONS_PER_CYCLE
+              value: "5"
+            - name: DANGEROUS_MSG_PATTERNS
+              value: executable file with extension,potentially dangerous,sample
+            - name: SONARR_URL
+              value: http://sonarr.{{ k8s_namespace }}.svc.cluster.local:8989
+            - name: RADARR_URL
+              value: http://radarr.{{ k8s_namespace }}.svc.cluster.local:7878
           envFrom:
             - secretRef:
                 name: autofix-bridge-env

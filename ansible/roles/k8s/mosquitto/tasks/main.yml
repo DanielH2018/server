@@ -1,59 +1,9 @@
 ---
-# templates/config-secret.yaml.j2 renders `mqtt_username:mqtt_password_hash` with no transform
-# on the hash (R2 rule 5). `mosquitto_passwd` writes `username:hash` lines, so a rotation that
-# stored the whole line would render `user:user:$7$...` and fail every client's auth. A `$7$`
-# hash holds no colon, so refuse any colon before the apply and the old Secret stays live.
-# Only the count becomes a fact, so the assert needs no `no_log` and prints no value.
-# ansible/tests/services/test_mosquitto_hash_colon_assert.py holds both tasks.
-- name: Count the colons in the stored mosquitto password hash
-  tags: [config]
-  ansible.builtin.set_fact:
-    mosquitto_k8s_hash_colons: "{{ (mqtt_password_hash | string).count(':') }}"
-  no_log: true
-
-- name: Fail if the stored mosquitto password hash carries a user prefix
-  tags: [config]
-  ansible.builtin.assert:
-    that: mosquitto_k8s_hash_colons | int == 0
-    fail_msg: >-
-      mqtt_password_hash holds {{ mosquitto_k8s_hash_colons }} colon(s), so it carries the
-      `user:` prefix of a mosquitto_passwd line. Store only the part after the first `:`
-      (docs/secret-rotation.md, `assisted`) and redeploy.
-    success_msg: "mqtt_password_hash holds no colon"
-  # A stubbed shadow run holds no stored hash to check; an ordinary dry run reads the real one.
-  when: not (homelab_secret_stubs | default(false) | bool)
-
+# Flux applies mosquitto (D5.20), and no Ansible path reaches this file; it stays for the
+# handback. Its two asserts have successors: `cluster_vars.py write` refuses a `:` in
+# mqtt_password_hash, and observability's MosquittoLanAddressNotPinned rule fires when
+# mosquitto-lan does not hold the pinned address.
 # The claim is `k8s_claims` in defaults/main.yml; k8s/manifests renders and applies it.
 - name: Deploy mosquitto to the cluster
   ansible.builtin.include_role:
     name: k8s/manifests
-
-# `wait` returns the moment MetalLB writes the address, and `-o jsonpath` prints that field
-# once the condition holds — one watch instead of a 12x5s sampling loop.
-- name: Read the mosquitto-lan LoadBalancer address
-  tags: [deploy]
-  ansible.builtin.command:
-    cmd: >-
-      k3s kubectl -n {{ k8s_namespace }} wait svc/mosquitto-lan
-      --for=jsonpath={.status.loadBalancer.ingress[0].ip} --timeout=60s
-      -o jsonpath={.status.loadBalancer.ingress[0].ip}
-  register: mosquitto_k8s_lb_ip
-  become: true
-  changed_when: false
-  # Only reads, so let it run under --check too — otherwise stdout is empty and the assertion
-  # below dies with it.
-  check_mode: false
-
-# MetalLB reads a request annotation rather than a spec field, and it ignores annotation keys
-# it does not recognise — so a wrong prefix is silent: the Service comes up on an
-# auto-assigned address with every pod healthy and the deploy green. Home Assistant and every
-# LAN publisher reach the broker by this address, so assert what landed, not the spelling.
-- name: Fail if mosquitto-lan did not get its pinned LAN address
-  tags: [deploy]
-  ansible.builtin.assert:
-    that: mosquitto_k8s_lb_ip.stdout == mosquitto_k8s_lan_ip
-    fail_msg: >-
-      mosquitto-lan holds {{ mosquitto_k8s_lb_ip.stdout }}, not the pinned
-      {{ mosquitto_k8s_lan_ip }}. MetalLB does not re-evaluate an existing allocation when
-      pools or annotations change — delete the Service and redeploy to force reallocation.
-    success_msg: "mosquitto-lan holds its pinned address {{ mosquitto_k8s_lan_ip }}"

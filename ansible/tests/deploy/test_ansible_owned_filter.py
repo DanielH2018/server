@@ -142,7 +142,8 @@ def test_the_batch_loop_skips_owned_entries_that_templates_still_see():
     # the three Wave A exporters since D5.5, deploy-ui, littlelink and longhorn-ui since D5.6,
     # homepage and node-exporter since D5.7, loki-homelab, navidrome and scrutiny since D5.8,
     # homelab-mcp and ical-proxy since D5.14, bazarr, freshrss, livesync and speedtest since D5.9,
-    # terraria and valheim since D5.15, and artifacts, autofix-bridge, cloudflare-ddns, docs and
+    # terraria and valheim since D5.15, code-server since D5.16, mosquitto, radarr and sonarr
+    # since D5.20, n8n since #5546, and artifacts, autofix-bridge, cloudflare-ddns, docs and
     # game-stats since D5.19, so the live list holds owned entries too.
     owned = {"fixture-flux", "fixture-released"} | {
         c["name"] for c in live if "owner" in c
@@ -153,6 +154,7 @@ def test_the_batch_loop_skips_owned_entries_that_templates_still_see():
         "bazarr",
         "bento-pdf",
         "cloudflare-ddns",
+        "code-server",
         "deploy-ui",
         "docs",
         "freshrss",
@@ -164,13 +166,17 @@ def test_the_batch_loop_skips_owned_entries_that_templates_still_see():
         "littlelink",
         "livesync",
         "loki-homelab",
+        "mosquitto",
         "longhorn-ui",
+        "n8n",
         "navidrome",
         "node-exporter",
         "nut-exporter",
         "peanut",
         "pihole-exporter",
+        "radarr",
         "scrutiny",
+        "sonarr",
         "speedtest",
         "terraria",
         "texbrain",

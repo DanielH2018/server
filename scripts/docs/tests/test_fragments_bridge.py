@@ -79,18 +79,18 @@ def test_thresholds_renders_key_and_value():
 # --- readers: what counts as a tunable ------------------------------------------------------
 
 TEMPLATE = """\
-stringData:
-  TZ: "{{ tz }}"
-  PYTHONUNBUFFERED: "1"
-  INTERVAL: "300"
-  # DISK_COMMENTED: "5"
-  TRAEFIK_421_RPS: "0.02"
-  N8N_FAIL_WINDOW: 2h
-  DISK_MOUNTPOINTS: /,/boot
-  LOG_ERROR_MAX: "{{ role_var }}"
-  N8N_API_KEY: "{{ n8n_api_key }}"
+---
+TZ: "{{ tz }}"
+PYTHONUNBUFFERED: "1"
+INTERVAL: "300"
+# DISK_COMMENTED: "5"
+TRAEFIK_421_RPS: "0.02"
+N8N_FAIL_WINDOW: 2h
+DISK_MOUNTPOINTS: /,/boot
+LOG_ERROR_MAX: "{{ role_var }}"
+BUILDER_MAX_LAG_S: "{{ monitor_bridge_builder_max_lag_s }}"
 {% for c in checks %}
-  KUMA_PUSH_{{ c }}: "{{ token }}"
+KUMA_PUSH_{{ c }}: "{{ token }}"
 {% endfor %}
 """
 
@@ -105,7 +105,7 @@ def test_tunables_keep_numbers_and_durations_in_template_order():
 
 def test_tunables_never_carry_a_value_built_from_a_variable():
     keys = {key for key, _ in fb.read_env_tunables(TEMPLATE)}
-    assert not keys & {"N8N_API_KEY", "LOG_ERROR_MAX", "TZ"}
+    assert not keys & {"BUILDER_MAX_LAG_S", "LOG_ERROR_MAX", "TZ"}
 
 
 def test_gate_set_names_come_from_the_members_assignments():
@@ -136,7 +136,7 @@ def test_every_non_gate_check_is_in_exactly_one_gate_set_row():
 
 
 def test_thresholds_fragment_finds_the_template_tunables():
-    found = dict(fb.read_env_tunables(fb.ENV_SECRET.read_text()))
+    found = dict(fb.read_env_tunables(fb.ENV_SETTINGS.read_text()))
     assert len(found) >= 40
     assert found["INTERVAL"] == "300"
     assert found["HWMON_TEMP_CONSECUTIVE"] == "12"

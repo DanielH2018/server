@@ -108,7 +108,8 @@ every entry is flux-owned then waits for C-2b, through the uptime-kuma edge.
   - `DIR/flux/kustomization.yaml` lists every file in `DIR/flux/`.
   - `DIR/README.md` at the bundle root, a static note on the layout. No Kustomization's path
     reaches it, and it counts for no name (see `_unclassified` below).
-  - From D5.1a1, `DIR/cluster/<tag>-snapshot/` and `DIR/cluster/<tag>-verify/`.
+  - From D5.1a1, `DIR/cluster/<tag>-snapshot/` and `DIR/cluster/<tag>-verify/`. From #5525,
+    `DIR/cluster/<tag>-prepull/`.
   - From D2's first publishing PR, `DIR/digests.json` at the bundle root. No Kustomization's
     path reaches it. It maps each deploy tag and each member of `SHARED_KINDS` to an object.
     Every object holds two SHA-256 digests, and from D5.1a2 a deploy tag's object holds two
@@ -131,7 +132,10 @@ every entry is flux-owned then waits for C-2b, through the uptime-kuma edge.
     set and C6's `land.sh` wait read `footprint`. These rules replace D6.12's `--moved-tags`
     mode. They apply the classification that D6's *What a footprint counts* defines.
   - From D5.4a1, `DIR/images/<name>/` holds each rendered image context, and
-    `DIR/images/tags.json` maps each name to its content tag. No Kustomization's path reaches
+    `DIR/images/tags.json` maps each name to its content tag. A render of every tag, and a
+    render with `--all-images`, holds all ten. A `--role` render holds the contexts of the
+    named tags' roles alone, and no `DIR/images/` when none of them builds an image, so each
+    named consumer still reads its own tag from it (#5374). No Kustomization's path reaches
     `DIR/images/`. The content tag is `sha-<12 hex>` over the context's `data`, as
     `image_builder_content_tag` computes it. A flux-owned consumer's image ref reads that tag
     from the same render, never from `render_guard.py:BUILT_IMAGE_TAG_STUBS` (D5).
@@ -362,6 +366,12 @@ every entry is flux-owned then waits for C-2b, through the uptime-kuma edge.
     and sets `wait: true` (R4, D5).
   - D5.1a1 adds `<tag>-snapshot` for a role that declares snapshot claims. It inherits
     `<tag>`'s `dependsOn`, less the edge to itself (D5).
+  - #5525 adds `<tag>-prepull` for a role that sets `flux_prepull_timeout`, the kind D5's
+    Open question 21 asks for. Its Jobs pull the tag's images under its workloads' own
+    placement, so a `Recreate` rollout pays only the container start. It inherits `<tag>`'s
+    `dependsOn` the same way, `<tag>` depends on it, and it never depends on `<tag>-snapshot`
+    or the reverse. Its `timeout` is the role's `flux_prepull_timeout`. Its document follows
+    `<tag>-snapshot`'s and precedes `<tag>-verify`'s.
 - **Per-role fields.** Five fields of a role's own Kustomization vary by role. A role may set
   four of them from its defaults:
   - `prune: false`, for a plumbing tag (H1) or a tag whose render holds a
@@ -393,7 +403,7 @@ every entry is flux-owned then waits for C-2b, through the uptime-kuma edge.
   Kustomization's name. It also fails on a deploy tag that equals a member of `SHARED_KINDS`
   or ends in `-deferred`. D5.1a1 reserves `-snapshot`, `-verify`, `soak` and
   `homelab-namespace` too, so no deploy tag takes `soak` or `homelab-namespace` before its
-  kind joins the set.
+  kind joins the set. #5525 reserves `-prepull`.
 - **Publish census.** The files under `flux/` must equal the flux-owned tags plus the members
   of `SHARED_KINDS`, and each tag's file holds exactly `<tag>` and the suffixed kinds its
   role's inputs call for. The census computes this allowlist from the renderer's inputs, never

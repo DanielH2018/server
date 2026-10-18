@@ -48,7 +48,6 @@ KNOWN_SECRET_SCRIPTS = frozenset(
         ("k8s", "crowdsec", "crowdsec-update-home-allowlist.sh.j2"),
         ("k8s", "crowdsec", "crowdsec-appsec-verify.sh.j2"),
         ("k8s", "janitorr", "janitorr-health.sh.j2"),
-        ("k8s", "configarr", "configarr-health.sh.j2"),
         ("k8s", "registry", "registry-gc.sh.j2"),
         ("setup", "initial_setup", "docs-refresh.sh.j2"),
         ("setup", "gitops_deploy", "github-ruleset-drift.sh.j2"),

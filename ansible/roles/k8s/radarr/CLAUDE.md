@@ -6,13 +6,13 @@ when both paths share one mount.
 
 ## At a glance
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates, tasks or containers_list entry, or the k3s role's Longhorn tier lists. -->
-- **Deploy tag:** `--tags "radarr"`
+- **Applied by:** Flux, through `promote` (`owner: flux`); `deploy.sh` refuses `--tags=radarr`
+  with exit 5
 - **Images:** `lscr.io/linuxserver/radarr` (`radarr_k8s_image`), `ghcr.io/onedr0p/exportarr`
   (`radarr_k8s_exportarr_image`)
 - **Route:** `radarr.<domain>` · `radarr.local.<domain>`, Authelia one_factor
 - **Claims:** `radarr-config` (weekly -> B2 (default target)), `media-data` (not Longhorn
   (media-local))
-- **Auto-deploy:** eligible (`k8s_autodeploy: true`)
 <!-- /generated_from -->
 
 - **The `-lsNN` linuxserver tag scheme** means a breaking bump can hide as a routine patch
@@ -23,25 +23,43 @@ when both paths share one mount.
 - **Persists:** `radarr-config` PVC (`longhorn`, ~30Mi) — `radarr.db` holds the library and
   absolute root-folder paths. Also mounts `media-data` (`radarr_k8s_media_claim`), shared RWX.
 - **`radarr-striptracks`** Docker mod strips unwanted audio/subtitle tracks on import.
-- **`Recreate` strategy, auto-deployed anyway** — protected by a pre-apply Longhorn snapshot (`k8s_autodeploy_snapshot_pvcs: [radarr-config]`) that
-  `k8s/manifests` reverts to on a failed deploy.
+- **Flux applies it, not Ansible** (D5.20, a Wave D PR with sonarr and mosquitto). Its
+  `containers_list` entry carries `owner: flux`, so `deploy.sh`, the play and the GitOps
+  deployer all skip it, and a merged change reaches the cluster when `promote` publishes and
+  verifies the next bundle. Its image-bump PRs therefore draw no `land-wait` and no `probe.py
+  health` run. To give it back to Ansible, follow the two-PR handback in
+  `docs/flux-deploy-plane.md`; a plain revert of the flag leaves two writers on the objects.
+  authelia, media-volume and traefik stay Ansible-owned, so the Kustomization records them in
+  its `homelab/ansible-owned-deps` annotation, not in `dependsOn`. The Deployment is
+  `Recreate`, so a change that rolls it takes the service down briefly.
+- **The `radarr-snapshot` Job snapshots `radarr-config` before each revision applies**
+  (D5.2a). The radarr Kustomization depends on `radarr-snapshot`, so a revision applies only
+  after the snapshot is ready; `docs/flux-deploy-plane.md` lists the Job's checks. A failed
+  revision that changes radarr writes the stateful hold, and `promote` does not reset `prod`,
+  because the failed image may already have migrated the database. Nothing reverts the claim
+  on its own: the operator follows the revert runbook in `docs/volume-snapshot-drills.md`.
+  `k8s_autodeploy: true` still lets Renovate automerge the image bump, which is safe for the
+  same reason it was under Ansible: a bad swap can be reverted to the snapshot.
+- **`media-data` is neither snapshotted nor reverted** (`k8s_autodeploy_unreverted_claims`). A
+  revert can desync import/rename history from files left in place, recoverable by a library
+  rescan.
+- **Where the tasks went.** `tasks/main.yml` holds two includes, `k8s/manifests` and
+  `k8s/arr-notification`, and no Flux path runs them. They stay for the handback. The
+  pre-apply snapshot through `k8s/volume-snapshot` became the `radarr-snapshot` Job, and the
+  Kustomization's `wait` replaces the rollout wait. arr-notification's seed Job in
+  `radarr-verify` runs the same script as the include (*Notable*).
 
 ## Notable
-- **A revert desyncs import history, not files.** `media-data` is declared in
-  `k8s_autodeploy_unreverted_claims` — it's mounted but never reverted, so a rollback rewinds
-  Radarr's own import/rename history while the files on `media-data` stay put. Recoverable by
-  a library rescan, not automatic.
 - **The rollout waits 660s, above the shared default.** A first boot installing DOCKER_MODS takes up to 10
   minutes. `ansible/roles/k8s/radarr/defaults/main.yml:manifests_rollout_timeout` is the one place
   that budget is written, as a literal role default because the renderer reads Flux's
-  `timeout` only from one (#5464). k8s/manifests' rollout wait and the template's
-  `progressDeadlineSeconds` read it through `radarr_k8s_rollout_timeout` — see
+  `timeout` only from one (#5464). The template's
+  `progressDeadlineSeconds` reads it through `radarr_k8s_rollout_timeout` — see
   `ansible/roles/k8s/sonarr/CLAUDE.md` for why the deadline has to move with the budget (#2370).
-- **`templates/verify-inert/` holds arr-notification's seed Job for Flux, and nothing renders
-  it yet.** radarr's flip PR renames it to `templates/verify/`, so `radarr-verify` holds only
-  that Job and its `radarr-verify` ServiceAccount: radarr has no `tasks/verify.yml` to convert.
-  The Job's pod carries `app: radarr-verify`, which radarr's `netpol_from` lists ahead of the
-  flip (#5535). `ansible/roles/k8s/arr-notification/CLAUDE.md` has the Job's design.
+- **`templates/verify/` holds arr-notification's seed Job.** The renderer emits it into
+  `radarr-verify`, which holds only that Job and its `radarr-verify` ServiceAccount: radarr had
+  no Ansible verify tasks to convert. The Job's pod carries `app: radarr-verify`, which
+  radarr's `netpol_from` lists (#5535). `ansible/roles/k8s/arr-notification/CLAUDE.md` has the Job's design.
 - **Log churn, not log size, drives PVC growth** — `radarr_k8s_log_level`/`_log_rotate` cap
   upstream's noisier defaults; see `roles/k8s/sonarr/defaults/main.yml` for the shared
   rationale across all three *arr roles.

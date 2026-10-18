@@ -126,8 +126,13 @@ Every placeholder render also writes the image contexts (D5.4a1, C1 *Cluster out
 `DIR/images/<name>/` holds one file per key of the build context that `k8s/image-builder`
 renders for that image, byte for byte as its `data` parses. `DIR/images/tags.json` maps each
 name to its content tag, `sha-<12 hex>`, which image-builder's own expression computes over
-that `data`. The renderer renders every role that includes `k8s/image-builder`, whatever
-`--role` names, so the publish job's render carries all ten. A consumer's ref reads its tag
+that `data`. The renderer renders each role among the render's tags that includes
+`k8s/image-builder`, because a consumer reads only the images its own role builds. A render
+without `--role` therefore writes all ten. A `--role` render writes the named builders'
+contexts alone, and no `DIR/images/` when it names none (#5374). `--all-images` renders all
+ten whatever `--role` names, and the publish job passes it, because its `images` job builds
+every context. Every placeholder render refuses an `--out` whose `images/` already holds a
+file. A consumer's ref reads its tag
 from the same computation, never from `render_guard.py:BUILT_IMAGE_TAG_STUBS`. No
 Kustomization's path reaches `DIR/images/`, and the bundle's footprints leave it out. A stub
 render and `--shared-only` write no image context. `scripts/renderer/renderer_lib/images.py`
@@ -400,7 +405,7 @@ found and the tree still had. An entry that no longer matched failed the check, 
 shrank only through fixes, and PR 9 deleted it once it was empty. Admitting a violation now
 means changing the rule itself. R2's PRs 6 and 7 removed rule 4 on pi-peer-backup's and authelia's Secrets and rule 5's
 `indent`s on their keys, by moving each key into a Secret of its own. R2's PR 4 removed qbittorrent's two `trim`s and
-mosquitto's `string`, and mosquitto's deploy refuses a stored hash that holds a colon.
+mosquitto's `string`, and `cluster_vars.py write` refuses a stored hash that holds a colon.
 R2's PR 5 removed Home Assistant's two entries, the `from_json` parse and
 the Secret that embedded its output through `indent`. R2's PR 3 removed the 24 truthiness
 tests, each now `{% if K is defined %}`. Domain PR 2b removed the `hash('sha1')` on

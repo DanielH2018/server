@@ -42,7 +42,8 @@ def test_the_pr_job_skips_push_but_not_pull_request():
     assert "push" in condition, (
         "renovate-config runs on push again; the publish-window flake is back"
     )
-    assert "pull_request" not in condition, (
+    # The quoted event name, so the draft arm's `github.event.pull_request.draft` passes (#5563).
+    assert "'pull_request'" not in condition, (
         "renovate-config must still run on a PR: it is a required merge context"
     )
 

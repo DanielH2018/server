@@ -55,7 +55,7 @@ import sys
 from pathlib import Path
 from typing import Callable, NamedTuple
 
-from deploy_tools.narrow_lib import containers, filters, paths, secret_keys
+from deploy_tools.narrow_lib import containers, filters, guard_map, paths, secret_keys
 from deploy_tools.narrow_lib import templates as narrow_templates
 from lib.exit_codes import DEPLOY_BROAD, DEPLOY_OK
 from lib.git import git, git_stdout
@@ -503,17 +503,18 @@ def narrow(
     from deploy_tools.reach import reach
 
     diff = git_stdout("diff", "--name-only", f"{old_ref}..{new_ref}", cwd=cwd)
-    one = reach([p for p in diff.splitlines() if p])
-    tags = _changed_half(one.changes, ctx)
+    changed = [p for p in diff.splitlines() if p]
+    one = reach(changed)
+    tags = guard_map.split_off(changed, one.changes, old_ref, ctx, _role_tags)
+    tags |= _changed_half(one.changes, ctx)
     if one.changes.secrets:  # a value reaches a service on its next render (#5409)
         rules = secret_keys.Rules(_grep, _sort_hits, template_importers, _role_tags)
         tags |= secret_keys.reached(old_ref, ctx, rules)
     for path in one.deploy_plane:
         tags |= broad_path_tags(path, old_ref, ctx)
     # A tag list covering most of the fleet saves none of the twenty minutes this exists to
-    # save, and adds a way to miss something the whole play would have done. `manifests` is
-    # the shape that reaches it: 54 roles include it, so any variable it reads fans out to
-    # every caller.
+    # save, and adds a way to miss something the whole play would have done. `manifests`, which
+    # 54 roles include, is the shape that reaches it: anything it reads reaches every caller.
     if len(tags) * 2 > len(ctx.declared):
         raise CannotNarrow(
             f"{len(tags)} of {len(ctx.declared)} services — most of the fleet, which is not a "

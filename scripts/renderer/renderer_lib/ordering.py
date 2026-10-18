@@ -10,16 +10,20 @@ Every edge is generated, never hand-written, from an `Ordering` the caller reads
 - `<tag>-deferred` depends on `<tag>`, and on the role that creates a namespace one of its
   documents names, by the same flux-owned rule;
 - `<tag>-snapshot` inherits `<tag>`'s edges (C3), and `<tag>` then depends on it, so the role
-  applies only after its snapshot is taken (D5.2a). `<tag>-verify` depends on the tag's last
+  applies only after its snapshot is taken (D5.2a). `<tag>-prepull` does the same, so the role
+  applies only after its images are on the node (#5525). The two are siblings, never a chain,
+  so the longer of them, not their sum, sits on the path. `<tag>-verify` depends on the tag's last
   Kustomization: `<tag>-deferred` when the tag renders one, `<tag>` otherwise (D5.1a1);
 - an edge to a Kustomization that a suspended tag owns is dropped, and the annotation `homelab/suspended-deps` lists it, because Flux would hold the dependent at
   `DependencyNotReady` until the resume (C3 *Suspension*, D5.1b). `drop_suspended` is the one step.
   D5.3b2's `soak` keeps no edge at all (D5 Open question 19), and `soak.py` routes every tag's
   Kustomizations through this step so its annotation names the suspended ones.
 
-`bundle.py` adds the `cluster-vars` edge and fails the render on a cycle, because Flux would
+`substitution` decides which Kustomizations substitute, and so which take the `cluster-vars`
+edge. `bundle.py` adds that edge and fails the render on a cycle, because Flux would
 hold every Kustomization on it at `DependencyNotReady`. Beside the per-tag kinds' suffixes,
-`verify_files` reads which roles call for `<tag>-verify`. Like `bundle.py`, this module imports
+`verify_files` and `cronjob_gates` read which roles call for `<tag>-verify`, and
+`prepull_timeouts` which call for `<tag>-prepull`. Like `bundle.py`, this module imports
 neither Ansible nor Jinja. The plan is docs/target-architecture/deploy/d4-ordering.md, *The
 renderer writes `dependsOn`*.
 """
@@ -29,9 +33,12 @@ from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
+import re
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
+
+import yaml
 
 from lib import yaml_fast
 from lib.repo_paths import K8S_ROLES
@@ -43,14 +50,28 @@ DEFERRED_SUFFIX = "-deferred"
 # mutation Jobs, each in its own directory and Kustomization (C3, D5.1a1).
 SNAPSHOT_SUFFIX = "-snapshot"
 VERIFY_SUFFIX = "-verify"
+# A role's pre-pull Job, which pulls the tag's images onto its node before `<tag>` applies
+# (`prepull.py`, #5525).
+PREPULL_SUFFIX = "-prepull"
 # Every per-tag kind's suffix, in the order its document follows `<tag>`'s in
 # `flux/<tag>.yaml`. The publish census expects exactly this order.
-TAG_KIND_SUFFIXES = (DEFERRED_SUFFIX, SNAPSHOT_SUFFIX, VERIFY_SUFFIX)
+TAG_KIND_SUFFIXES = (DEFERRED_SUFFIX, SNAPSHOT_SUFFIX, PREPULL_SUFFIX, VERIFY_SUFFIX)
+# The role default that calls for `<tag>-prepull` and sets its Kustomization's `timeout`.
+PREPULL_TIMEOUT = "flux_prepull_timeout"
+_DURATION = re.compile(r"(?:(\d+)h)?(?:(\d+)m)?(?:(\d+)s)?")
+# How far a `<tag>-verify` timeout sits above its Jobs' longest `activeDeadlineSeconds`, so a
+# hung Job fails on its own deadline before Flux reports a bare timeout. `cronjob_gate_timeout`
+# sits the same 60 seconds above pi-peer-backup's 600-second deadline.
+VERIFY_DEADLINE_MARGIN_S = 60
 # A role's verify and post-apply mutation Jobs, with whatever they need beside them, are its
 # `templates/verify/*.yaml.j2`. They render into `cluster/<tag>-verify/` (D5.1a1, D5.1a3).
 # The manifests role derives its file lists from the top-level `templates/*.yaml.j2` alone, so
 # Ansible never renders or applies them.
 VERIFY_TEMPLATES_DIR = "verify"
+# The role default that opts a role's CronJobs into gate Jobs in `<tag>-verify`, and the two
+# classes a gate takes (`cronjob_gates`).
+CRONJOB_GATES = "flux_cronjob_gates"
+GATE_KINDS = frozenset({"verify", "mutation"})
 
 
 # Lists, comma-separated and sorted, the edges a Kustomization's `dependsOn` leaves out because
@@ -113,7 +134,8 @@ def verify_files(tags: Iterable[str], roles: Path = K8S_ROLES) -> dict[str, list
     A role ships them as `templates/verify/<name>.j2`, and a non-empty list calls for
     `<tag>-verify`. The renderer (`renderer_lib/cluster.py`) and the publish census
     (`deploy_tools/bundle_census.py`) read this one function, so the directory the renderer
-    writes and the Kustomization the census allows cannot disagree.
+    writes and the Kustomization the census allows cannot disagree. `cronjob_gates` is the
+    other input that calls for `<tag>-verify`.
     """
     return {
         tag: sorted(
@@ -126,6 +148,125 @@ def verify_files(tags: Iterable[str], roles: Path = K8S_ROLES) -> dict[str, list
     }
 
 
+def prepull_timeouts(
+    tags: Iterable[str], roles: Path = K8S_ROLES
+) -> tuple[dict[str, str], list[str]]:
+    """Each tag whose role sets `flux_prepull_timeout` mapped to it, and one line per problem.
+
+    The value calls for `<tag>-prepull` and is that Kustomization's `timeout` (#5525). The
+    renderer (`prepull.py`, `bundle.bundle_files`) and the publish census read this one
+    function, as they read `verify_files`. A value must be a literal Go duration, as
+    `role_fields` requires of `manifests_rollout_timeout`; any other value is a problem and
+    its tag is left out.
+    """
+    found, problems = {}, []
+    for tag in sorted(set(tags)):
+        path = roles / tag / "defaults" / "main.yml"
+        try:
+            defaults = yaml_fast.safe_load(path.read_text()) if path.is_file() else {}
+        except (OSError, yaml.YAMLError) as err:
+            problems.append(f"could not read {tag}'s {PREPULL_TIMEOUT}: {err}")
+            continue
+        value = (defaults or {}).get(PREPULL_TIMEOUT)
+        if value is None:
+            continue
+        if not (isinstance(value, str) and value and _DURATION.fullmatch(value)):
+            problems.append(
+                f"{tag}'s {PREPULL_TIMEOUT} is {value!r}, not a literal duration such as "
+                "3600s, so its pre-pull Kustomization timeout cannot be read"
+            )
+            continue
+        found[tag] = value
+    return found, problems
+
+
+def cronjob_gates(
+    tags: Iterable[str], roles: Path = K8S_ROLES
+) -> tuple[dict[str, dict[str, dict]], list[str]]:
+    """Each tag whose role sets `flux_cronjob_gates` mapped to its gates, and one line per problem.
+
+    The value maps a CronJob the role renders to its gate's class, R1's census row for it:
+    `{kind: verify}`, or `{kind: mutation, rerun_safe: <path>::<function>}`. A gate calls for
+    `<tag>-verify`, which holds the gate Job `cronjob_gate.py` copies from the CronJob (D5,
+    *`cronjob-gate`'s gate Job*). The renderer and the publish census read this one function,
+    as they read `verify_files`. A value must be a literal of that shape; any other value is a
+    problem and its tag is left out.
+    """
+    found, problems = {}, []
+    for tag in sorted(set(tags)):
+        path = roles / tag / "defaults" / "main.yml"
+        try:
+            defaults = yaml_fast.safe_load(path.read_text()) if path.is_file() else {}
+        except (OSError, yaml.YAMLError) as err:
+            problems.append(f"could not read {tag}'s {CRONJOB_GATES}: {err}")
+            continue
+        value = (defaults or {}).get(CRONJOB_GATES)
+        if value is None:
+            continue
+        wrong = _gate_problems(value)
+        if wrong:
+            problems += [f"{tag}'s {CRONJOB_GATES}: {line}" for line in wrong]
+            continue
+        found[tag] = {str(name): dict(gate) for name, gate in value.items()}
+    return found, problems
+
+
+def _gate_problems(value: object) -> list[str]:
+    """Why `value` is not a literal `flux_cronjob_gates` mapping, empty when it is one."""
+    if not isinstance(value, dict) or not value:
+        return [
+            f"{value!r} is not a non-empty mapping of CronJob names to gate classes"
+        ]
+    problems = []
+    for name, gate in value.items():
+        if not isinstance(gate, dict) or gate.get("kind") not in GATE_KINDS:
+            problems.append(f"{name}: {gate!r} names no kind of {sorted(GATE_KINDS)}")
+            continue
+        extra = set(gate) - {"kind", "rerun_safe"}
+        rerun = gate.get("rerun_safe")
+        if extra:
+            problems.append(f"{name}: unknown keys {sorted(extra)}")
+        elif gate["kind"] == "mutation" and not (
+            isinstance(rerun, str) and "::" in rerun
+        ):
+            problems.append(
+                f"{name}: a mutation gate names its rerun_safe test as <path>::<function>"
+            )
+        elif gate["kind"] == "verify" and rerun is not None:
+            problems.append(
+                f"{name}: a verify gate never re-runs, so takes no rerun_safe"
+            )
+    return problems
+
+
+def verify_timeout(files: Mapping[str, str], default: str) -> str:
+    """`<tag>-verify`'s Kustomization `timeout`, given the directory's files.
+
+    It is `default` unless a Job there sets an `activeDeadlineSeconds` within
+    `VERIFY_DEADLINE_MARGIN_S` of it, and then that deadline plus the margin. A gate Job keeps
+    its CronJob's deadline (`cronjob_gate.py`), which can sit at the bundle's default.
+
+    Raises:
+        ValueError: `default` is not a Go duration of whole hours, minutes and seconds.
+    """
+    deadlines = [
+        int(doc["spec"]["activeDeadlineSeconds"])
+        for text in files.values()
+        for doc in yaml_fast.safe_load_all(text)
+        if isinstance(doc, dict)
+        and doc.get("kind") == "Job"
+        and (doc.get("spec") or {}).get("activeDeadlineSeconds") is not None
+    ]
+    if not deadlines:
+        return default
+    floor = max(deadlines) + VERIFY_DEADLINE_MARGIN_S
+    match = _DURATION.fullmatch(default)
+    if not default or match is None:
+        raise ValueError(f"{default!r} is not a duration of h, m and s")
+    hours, minutes, secs = (int(g or 0) for g in match.groups())
+    return default if hours * 3600 + minutes * 60 + secs >= floor else f"{floor}s"
+
+
 def split_kind(name: str) -> tuple[str, str]:
     """The tag a Kustomization or directory name belongs to, and its per-tag suffix.
 
@@ -136,6 +277,39 @@ def split_kind(name: str) -> tuple[str, str]:
         if name.endswith(suffix):
             return name.removesuffix(suffix), suffix
     return name, ""
+
+
+def substitution(
+    tags: Iterable[str],
+    directories: Mapping[str, object],
+    key_sets: Mapping[str, frozenset[str]],
+) -> tuple[dict[str, bool], set[str]]:
+    """Which Kustomizations substitute, and which tags count as substituting (D3.3b).
+
+    Args:
+        tags: The published tags.
+        directories: Each rendered directory's name under `cluster/`.
+        key_sets: Each directory name mapped to its placeholder key set.
+
+    Returns:
+        Each directory name in `directories` that a tag in `tags` owns, `<tag>` and each
+        `<tag><suffix>` alike, mapped to whether its own key set is non-empty. That alone
+        decides `postBuild` and the `cluster-vars` edge on its Kustomization (C1
+        *Substitution and escaping*). Second, the tags with any of their directories
+        substituting, the per-tag set the `cluster-vars` footprint rule reads.
+    """
+    per_directory = {
+        name: bool(key_sets.get(name))
+        for tag in tags
+        for name in (tag, *(tag + suffix for suffix in TAG_KIND_SUFFIXES))
+        if name in directories
+    }
+    substituting = {
+        split_kind(name)[0]
+        for name, substitutes in per_directory.items()
+        if substitutes
+    }
+    return per_directory, substituting
 
 
 def _namespaces(files: Mapping[str, str]) -> set[str]:
@@ -196,12 +370,16 @@ def kustomization_edges(
             frozenset({tag} | (wanted & owned)), frozenset(wanted - owned)
         )
     for tag in tags:
-        if tag + SNAPSHOT_SUFFIX in directories:
-            # Copied before `<tag>` gains the edge, so the snapshot never depends on itself.
-            edges[tag + SNAPSHOT_SUFFIX] = edges[tag]
-            edges[tag] = Edges(
-                edges[tag].kept | {tag + SNAPSHOT_SUFFIX}, edges[tag].dropped
-            )
+        # Each predecessor copies `<tag>`'s edges before `<tag>` gains any, so neither depends
+        # on itself or on the other.
+        before = [
+            tag + suffix
+            for suffix in (SNAPSHOT_SUFFIX, PREPULL_SUFFIX)
+            if tag + suffix in directories
+        ]
+        for name in before:
+            edges[name] = edges[tag]
+        edges[tag] = Edges(edges[tag].kept | set(before), edges[tag].dropped)
         if tag + VERIFY_SUFFIX in directories:
             last = tag + DEFERRED_SUFFIX if tag + DEFERRED_SUFFIX in edges else tag
             edges[tag + VERIFY_SUFFIX] = Edges(frozenset({last}))

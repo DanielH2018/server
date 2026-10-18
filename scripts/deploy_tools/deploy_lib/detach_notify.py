@@ -105,10 +105,18 @@ class CheckResult(NamedTuple):
 
 
 class GateResult(NamedTuple):
-    """The notification's headline verdict, and the per-tag lines behind it."""
+    """The notification's headline verdict, and the per-tag lines behind it.
+
+    `unreadable` is True when the gate is unsettled only because a probe could not read its
+    store (`PROBE_UNREADABLE`): no tag was found unhealthy, and at least one was not graded at
+    all. Prometheus rolling under the gate is the usual cause (#5543), and a re-run a minute
+    later answers. An unhealthy tag beside an unreadable one leaves it False, because one
+    workload already failed.
+    """
 
     settled: bool
     lines: list[str]
+    unreadable: bool = False
 
 
 def check_one(
@@ -117,7 +125,10 @@ def check_one(
     platforms: set[str] | None = None,
     cwd: Path | None = None,
 ) -> CheckResult:
-    """('ok'|'unhealthy'|'skipped', first line of probe.py's output) for one service tag.
+    """('ok'|'unhealthy'|'unreadable'|'skipped', first line of probe.py's output) for one tag.
+
+    `unreadable` is probe.py's `PROBE_UNREADABLE`: it could not reach the store it reads, so
+    the workload was not graded. That is no verdict on the workload, healthy or not (#5543).
 
     `cwd` is the checkout the probe runs in, defaulting to this file's own. It decides WHICH
     TREE THE ROLE'S MANIFESTS ARE RENDERED FROM, because `scripts/diagnostics/probe.py` is
@@ -175,6 +186,11 @@ def check_one(
     def not_applicable(line: str) -> bool:
         return any(marker in line for marker in NOT_APPLICABLE_MARKERS)
 
+    def graded(code: int) -> str:
+        if code == 0:
+            return "ok"
+        return "unreadable" if code == PROBE_UNREADABLE else "unhealthy"
+
     if platforms is None:
         # The SAME tree the probe renders from, not this checkout's inventory: a PR that adds a
         # Pi role and its containers_list entry together declares the tag only at the commit
@@ -184,7 +200,7 @@ def check_one(
 
     if platforms == {"docker"}:
         code, line = probe(["--docker"])
-        return CheckResult("ok" if code == 0 else "unhealthy", line)
+        return CheckResult(graded(code), line)
 
     if platforms == {"k8s"}:
         code, line = probe([])
@@ -192,14 +208,19 @@ def check_one(
         # still reported as `skipped`, not as a workload that was checked and found healthy.
         if not_applicable(line):
             return CheckResult("skipped", line)
-        return CheckResult("ok" if code == 0 else "unhealthy", line)
+        return CheckResult(graded(code), line)
 
     if platforms == {"docker", "k8s"}:
         k8s_code, k8s_line = probe([])
         docker_code, docker_line = probe(["--docker"])
         line = f"{k8s_line}; {docker_line}"
-        if docker_code != 0 or (k8s_code != 0 and not not_applicable(k8s_line)):
-            return CheckResult("unhealthy", line)
+        states = {graded(docker_code)}
+        if not not_applicable(k8s_line):
+            states.add(graded(k8s_code))
+        # One side found unhealthy outranks the other side being unreadable.
+        for state in ("unhealthy", "unreadable"):
+            if state in states:
+                return CheckResult(state, line)
         return CheckResult("ok", line)
 
     code, line = probe([])
@@ -211,7 +232,7 @@ def check_one(
             return CheckResult("ok", line)
         if not_applicable(line):
             return CheckResult("skipped", line)
-    return CheckResult("unhealthy", line)
+    return CheckResult(graded(code), line)
 
 
 def gate(
@@ -232,7 +253,7 @@ def gate(
     if not ansible_ok:
         return GateResult(False, ["ansible-playbook exited non-zero -- see the log."])
     lines = []
-    ok = True
+    unhealthy = unreadable = False
     if not tags:
         lines.append("no --tags given -- health not gated, ansible exit code only.")
     for tag in tags:
@@ -242,10 +263,18 @@ def gate(
                 f"{tag}: not a health-checkable workload (skipped) -- {detail}"
             )
             continue
+        if state == "unreadable":
+            lines.append(
+                f"{tag}: not graded -- probe.py health could not read its store: {detail}"
+            )
+            unreadable = True
+            continue
         lines.append(detail or f"{tag}: {state}")
         if state == "unhealthy":
-            ok = False
-    return GateResult(ok, lines)
+            unhealthy = True
+    return GateResult(
+        not (unhealthy or unreadable), lines, unreadable=unreadable and not unhealthy
+    )
 
 
 def notify(content: str) -> None:
@@ -325,9 +354,10 @@ def main(argv: list[str] | None = None, tools: NotifyTools | None = None) -> int
     tags = [t for t in ns.tags.split(",") if t]
     # `tools` is the same seam `gate` and `check_one` take, carried one level up so a test can
     # watch where the probe is actually run rather than patching this module.
-    settled, lines = gate(
+    result = gate(
         tags, ns.status == 0, tools=tools, cwd=Path(ns.cwd) if ns.cwd else None
     )
+    settled, lines = result.settled, result.lines
     # deploy.sh's own code, not ansible's: the playbook exited 0 having matched no host, and
     # the wrapper read that off the PLAY RECAP. Said in those words, because
     # "exited non-zero -- see the log" sends the reader to a log whose ansible run looks clean.
@@ -338,7 +368,9 @@ def main(argv: list[str] | None = None, tools: NotifyTools | None = None) -> int
             "the playbook matched NO host, so nothing was deployed -- see the log."
         ]
 
-    headline = "settled" if settled else "FAILED"
+    # Not FAILED: nothing was found broken, only not read. Still exit 1, because a deploy
+    # nobody graded is not reported settled.
+    headline = "settled" if settled else "UNGRADED" if result.unreadable else "FAILED"
     content = "\n".join(
         [
             f"deploy --detach {headline} ({who} exit {ns.status})",

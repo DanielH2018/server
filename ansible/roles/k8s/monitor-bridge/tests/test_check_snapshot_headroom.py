@@ -19,7 +19,9 @@ from verdicts.storage import parse_snapshot_caps, snapshot_used_by_pvc
 from _fake_sources import FakeSources
 
 ROLES = Path(__file__).resolve().parents[3]
-ENV_SECRET = Path(__file__).resolve().parents[1] / "templates" / "env-secret.yaml.j2"
+ENV_SECRET = (
+    Path(__file__).resolve().parents[1] / "templates" / "config" / "env.yaml.j2"
+)
 
 # jellyfin-config, the one capped volume: 16 GiB, against 2,081,329,152 bytes of snapshots
 # (12.1% of the cap). Used as the realistic clean case below.
@@ -162,7 +164,7 @@ def test_the_check_is_registered_and_gated_by_prometheus():
 def _declared_caps() -> dict[str, int]:
     """The caps SNAPSHOT_CAPS declares in the rendered env, as a map."""
     match = re.search(r"^\s*SNAPSHOT_CAPS:\s*(\S.*)$", ENV_SECRET.read_text(), re.M)
-    assert match, "no SNAPSHOT_CAPS entry in env-secret.yaml.j2"
+    assert match, "no SNAPSHOT_CAPS entry in config/env.yaml.j2"
     return parse_snapshot_caps(match.group(1).strip().strip("\"'"))
 
 

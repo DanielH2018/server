@@ -20,7 +20,7 @@ a leaf never imports this facade. What stays HERE is the loop and endpoint field
 needs, the check filter, and the two reads a repo test greps for by text:
 `ansible/tests/services/test_dri_resource_name_agrees.py` matches
 `_env("K8S_EXTENDED_RESOURCES", ...)` in THIS file, and `PVC_EXCLUDE` is rendered in
-`templates/env-secret.yaml.j2` beside it.
+`templates/config/env.yaml.j2` beside it.
 
 BUILDING THIS MUST NOT RAISE. A ValueError on one malformed number used to kill the pod during
 import, before the heartbeat file existed and before any monitor could be told. `_int`/`_num`
@@ -28,8 +28,8 @@ below record the problem, fall back to a placeholder, and hand the whole list to
 `main()` as `Config.CONFIG_PROBLEMS`, which prints one operator-readable line per problem and
 exits 2.
 
-A KEY THE ENV-SECRET RENDERS HAS NO DEFAULT HERE. `templates/env-secret.yaml.j2` holds the value
-the pod runs with, so a second default in this package was a copy the deploy never read, and 40
+A KEY THE POD'S ENVIRONMENT RENDERS HAS NO DEFAULT HERE. `templates/config/env.yaml.j2` holds the
+value the pod runs with, and `templates/env-secret.yaml.j2` the credentials, so a second default in this package was a copy the deploy never read, and 40
 of the 133 keys both files named had drifted apart (#3659). A read with no default is required:
 an absent key records a problem the same way a malformed one does. A default survives only on a
 key the template does not render. `tests/test_config_reads_the_rendered_env.py` holds both
@@ -109,15 +109,15 @@ def load_config(env: Mapping[str, str], problems: list[str] | None = None) -> Co
     def _env(name: str, default: str | None = None) -> str:
         """The `name` env var. With no `default`, the key is REQUIRED.
 
-        A required key is one `templates/env-secret.yaml.j2` renders, so the env-secret holds
-        its value and this module holds none (#3659). Absent, it records a problem and reads
+        A required key is one `templates/config/env.yaml.j2` or the env-secret renders, so the
+        template holds its value and this module holds none (#3659). Absent, it records a problem and reads
         as "" rather than raising, and `main()` exits 2 naming it.
         """
         if default is not None:
             return env.get(name, default)
         if name not in env:
             problems.append(
-                "%s is unset; templates/env-secret.yaml.j2 renders it, so this env is not "
+                "%s is unset; templates/config/env.yaml.j2 renders it, so this env is not "
                 "the one the pod gets" % name
             )
         return env.get(name, "")

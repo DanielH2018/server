@@ -210,14 +210,20 @@ def _constructed_path_references(text: str) -> set[str]:
     return found
 
 
-def _invoked_by(path: Path, scripts: Path) -> set[str]:
-    """Everything one file invokes, by whichever reading its language allows."""
+def _invoked_by(path: Path, catalogue: dict[str, Path]) -> set[str]:
+    """Everything one file invokes, by whichever reading its language allows.
+
+    Args:
+        path: The file to read.
+        catalogue: `by_name(scripts)`, built once by the caller. Rebuilding it here walked
+            `scripts/` once per file read, which was most of `classify`'s run time.
+    """
     text = file_text(path)
     found = _invoked_in(text)
     if path.suffix == ".py":
         found |= _argv_references(text) | _constructed_path_references(text)
     found.discard(path.name)
-    return {n for n in found if n in by_name(scripts)}
+    return {n for n in found if n in catalogue}
 
 
 def _cron_jobs(repo: Path) -> list[tuple[str, str]]:
@@ -358,10 +364,11 @@ def classify(repo: Path = REPO, scripts: Path = SCRIPTS) -> dict[str, tuple[str,
     for script, cron in _scheduled(repo).items():
         record(script, "scheduled", f"cron: {cron}")
 
-    by_path = by_name(scripts)
+    catalogue = candidates(scripts)
+    by_path = {p.name: p for p in catalogue}
     roles = repo / "ansible" / "roles"
     for path, kind, evidence in _invocation_sites(repo):
-        for script in _invoked_by(path, scripts):
+        for script in _invoked_by(path, by_path):
             # A role's tasks naming a Python module with no `__main__` guard carry it into an
             # image rather than run it: homelab-mcp's ship `obs_api.py` as a library.
             # A hook, or a role's own `files/` runner, naming one still runs it.
@@ -401,7 +408,7 @@ def classify(repo: Path = REPO, scripts: Path = SCRIPTS) -> dict[str, tuple[str,
         path = by_path.get(f"{stem}.py")
         if path is None or not _is_dispatch_target(file_text(path)):
             continue
-        runs = runs_in_process.get(f"{stem}.py", set()) | _invoked_by(path, scripts)
+        runs = runs_in_process.get(f"{stem}.py", set()) | _invoked_by(path, by_path)
         for caller in stem_callers:
             runs_in_process.setdefault(caller, set()).update(runs)
 
@@ -410,8 +417,8 @@ def classify(repo: Path = REPO, scripts: Path = SCRIPTS) -> dict[str, tuple[str,
     # as things nobody runs. Iterated to a fixpoint: the chain is cron → build_docs.py →
     # generator, and a longer one would otherwise resolve only as far as it was walked.
     callers = {
-        path: _invoked_by(path, scripts) | runs_in_process.get(path.name, set())
-        for path in candidates(scripts)
+        path: _invoked_by(path, by_path) | runs_in_process.get(path.name, set())
+        for path in catalogue
     }
     while True:
         settled = True
@@ -432,7 +439,7 @@ def classify(repo: Path = REPO, scripts: Path = SCRIPTS) -> dict[str, tuple[str,
     # `grafana_panel_report.py` is the live case: its classifier is unit-tested without a
     # browser, and the page called it "no automated caller in the tree".
     tested = _test_importers(scripts)
-    for path in candidates(scripts):
+    for path in catalogue:
         if path.suffix != ".py" or path.name in verdicts:
             continue
         callers = tested.get(path.stem)
@@ -443,7 +450,7 @@ def classify(repo: Path = REPO, scripts: Path = SCRIPTS) -> dict[str, tuple[str,
                 f"no `__main__` guard; imported by {', '.join(sorted(callers))}",
             )
 
-    for path in candidates(scripts):
+    for path in catalogue:
         verdicts.setdefault(path.name, ("adhoc", "no automated caller in the tree"))
     return verdicts
 

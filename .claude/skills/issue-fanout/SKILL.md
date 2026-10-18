@@ -165,7 +165,10 @@ whose primary checkout lags `origin/master` still runs the current one. Another 
 runs the copy in its own snapshot of this repo's `origin/master`, which `launch` archives into
 the batch's `.fanout/server`. The snapshot also supplies that batch's system prompt and
 `fanout-stop` hook.
-The agent stops at its PR on every host, and the pipeline decides what happens next. A fresh reviewer then reads only the issue text and the diff, and returns findings with
+The agent stops at its PR on every host, and the pipeline decides what happens next. In
+this repo the agent opens that PR as a draft, and `ci.yml` runs no job on a draft. The pipeline
+marks the PR ready after the review and its fix round, so CI runs once, on the head that lands
+(#5563). A fresh reviewer then reads only the issue text and the diff, and returns findings with
 a severity and a confidence. A finding of severity medium or worse, or a test the reviewer
 marks vacuous at any severity, resumes the agent for one fix round when its
 confidence is 0.5 or more, and a second reviewer reads only the fix. A finding of
@@ -175,7 +178,12 @@ both hosts, the pipeline waits for the PR's CI with `cc-wait gh-ci --pr` after t
 (`scripts/dev/fanout_lib/review/review_ci.py`, #4737 for daniel-server, #5498 for daniel-box).
 On daniel-box it then runs `land.sh` itself. It resumes the agent only for an `unhealthy`,
 `deploy-failed`, `needs-manual-apply` or `blocked` verdict, with the verdict and the end of the
-landing's log. Any other verdict ends the batch. On daniel-server the orchestrator lands the PR
+landing's log. Any other verdict ends the batch. On daniel-server, `claude-fanout-server-lander.timer` on daniel-box lands the PR within about
+ten minutes when the review record and the PR both pass `scripts/dev/fanout_lib/autoland.py:problems`:
+a reviewed batch with a passed CI gate and no leftover finding, whose PR is open, still at the reviewed
+head, with no operator step in its body. Run `journalctl -u claude-fanout-server-lander -n 40` before
+landing a server batch's PR by hand, because `land.sh` holds no per-PR lock and a second landing would
+arm the merge twice. The orchestrator lands every other server PR, `--no-review` batches included,
 after that wait. A red CI verdict resumes the agent once, with
 each failed check's name and the end of its job's log, and the pipeline waits again on the new
 head. A batch whose CI is still red then ends `needs input:` naming the checks. A `cancelled` run

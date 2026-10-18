@@ -330,10 +330,13 @@ def test_host_origins_floor_is_overridable_from_the_env_secret():
     import pathlib
 
     env_secret = (
-        pathlib.Path(__file__).resolve().parents[1] / "templates" / "env-secret.yaml.j2"
+        pathlib.Path(__file__).resolve().parents[1]
+        / "templates"
+        / "config"
+        / "env.yaml.j2"
     )
     assert 'HOST_ORIGINS_MIN: "2"' in env_secret.read_text(), (
-        "HOST_ORIGINS_MIN must be rendered in env-secret.yaml.j2 so an operator can lower it "
+        "HOST_ORIGINS_MIN must be rendered in config/env.yaml.j2 so an operator can lower it "
         "for a maintenance window and put it back, rather than editing check.py."
     )
 
@@ -395,14 +398,14 @@ def test_the_exclusion_keeps_series_that_carry_no_origin_label(cfg):
 def test_the_exclusion_is_rendered_in_the_env_secret():
     """The deployed value must exist, not be inherited from check.py's default.
 
-    check.py's `_env` default and the env-secret are two places one fact can live, and only the
-    env-secret is what actually runs. Rendering it explicitly is also what lets a maintenance
+    check.py's `_env` default and config/env.yaml.j2 are two places one fact can live, and only the
+    rendered file is what actually runs. Rendering it explicitly is also what lets a maintenance
     window widen or clear the exclusion the way HOST_ORIGINS_MIN can be lowered.
     """
     from pathlib import Path
 
     env_secret = (
-        Path(__file__).resolve().parents[1] / "templates" / "env-secret.yaml.j2"
+        Path(__file__).resolve().parents[1] / "templates" / "config" / "env.yaml.j2"
     )
     text = env_secret.read_text()
 

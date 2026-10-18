@@ -647,7 +647,8 @@ D5.4a1 image contexts ─▶ D5.4a2 CI images ─▶ (operator: packages public)
     - **How a role declares a verify Job.** The role ships it, with any ConfigMap or RBAC
       beside it, as `templates/verify/*.yaml.j2`. The renderer renders those files into
       `out/cluster/<tag>-verify/`, and the census grants `-verify` to the published tags
-      whose role ships one. Both read `verify_files` in `scripts/renderer/renderer_lib/ordering.py` (#5261).
+      whose role ships one. Both read `verify_files` in `scripts/renderer/renderer_lib/ordering.py` (#5261),
+      and `cronjob_gates` beside it for a role whose CronJob gate needs the directory (#5556).
       The manifests role derives its file lists from the top-level `templates/*.yaml.j2`
       alone, so Ansible never renders or applies them. A role therefore adds the directory
       in the PR that hands its tag to Flux.
@@ -855,6 +856,11 @@ pass each time, because no pod is created after T0.
   `Recreate` (`spec_shell('Recreate')` in `grafana.yaml.j2`), so no server runs beside the
   initContainer. observability's conversion PR checks on the pinned image that the CLI works
   against the database with no server running.
+  The initContainer landed live under Ansible ahead of the flip (#5262), and the role's
+  restart task rolls grafana on a rotation until the flip. That PR deleted "Sync the live
+  Grafana admin password with SOPS" and kept the restart task. On `grafana/grafana:13.2.3`,
+  the CLI reset the password in a database that a stopped server had initialised. It also
+  created the database and the admin user on an empty data directory.
 - **Tests in `scripts/renderer/tests/`.** An Alertmanager Secret edit moves alertmanager's
   annotation and no other workload's. A pihole ConfigMap edit moves both instance templates,
   instance 2's inside `pihole-deferred`. D3's tests already cover cloudflare-ddns and a YAML
@@ -1032,6 +1038,14 @@ API server with the pod's ServiceAccount token, and Prometheus or an app over HT
 - **Script delivery.** A ConfigMap in the same Kustomization, whose name ends in the digest of
   the script. The Job's spec names the ConfigMap, so the Job's spec digest covers the script,
   and a script fix renames the Job.
+    - A CronJob's gate Job is the one exception. It runs the CronJob's own image and
+      command, so the census skips its `delivery` and `helper` rows. The census takes a Job
+      for a gate when it sits in `<tag>-verify`, carries `homelab/role-digest8`, and its pod
+      template less that annotation equals the `jobTemplate` pod template of a CronJob in
+      `<tag>`. This holds for a verify gate and a mutation gate alike, because both run
+      the copied image. A gate whose template differs in any other field, such as its
+      image, meets every row. `scripts/renderer/renderer_lib/cronjob_gate.py:is_gate_copy`
+      is the predicate (#5562).
 - **Namespace.** Snapshot and soak Jobs run in `flux-system`. Verify and mutation Jobs run in
   their tag's namespace, because they probe as callers from that namespace.
 - **A fence admits every Job that dials through it.** Today's verifies run as the node or
@@ -1870,6 +1884,14 @@ assertion becomes a standing rule.
   as a gate run. A test beside the renderer reads the `HOSTNAME` pattern out of
   `pull-pi-peers.sh` and matches the rendered Job name plus a pod suffix against it, with a
   red half for a Job named `pi-peer-backup-gate-<digest8>`.
+  `scripts/renderer/renderer_lib/cronjob_gate.py` is that renderer half (#5556), and
+  `test_renderer_cronjob_gate.py` holds the pattern test. A role opts a CronJob in through
+  `flux_cronjob_gates` in its `defaults/main.yml`, as `{<cronjob>: {kind: verify}}` or as
+  `{kind: mutation, rerun_safe: <path>::<function>}`. The renderer embeds the role's `digest8`
+  as the pod-template annotation `homelab/role-digest8`. When the longest Job deadline in
+  `-verify` plus 60 seconds exceeds the default `timeout`, the renderer raises the timeout to
+  that sum. The Job census exempts the gate Job from its `delivery` and `helper` rows, by
+  the rule under *Script delivery* above (#5562).
     - **The gate loses `Forbid`'s protection.** `kubectl create job --from=cronjob` sets a
       controller ownerReference to the CronJob, and `concurrencyPolicy: Forbid` keys on it to
       suppress a scheduled firing while a gate runs. `cronjob-gate`'s `CLAUDE.md` calls that
@@ -2494,7 +2516,8 @@ sizes its batch of roles against that projection.
     `https://ghcr.io/token` for `repository:danielh2018/<name>:pull`, then a manifest GET of
     the exact content tag, returns 200 on daniel-box and on daniel-server. nut's PR also waits
     on Open question 2's ruling. If the mirror is kept, a manifest GET of nut's content tag
-    through the mirror on daniel-server returns 200 first.
+    through the mirror on daniel-server returns 200 first. The mirror listens on port 5002, not
+    the push store's 5000 (Open question 2).
 26. **D5.19 onwards — Wave D**, in the order of the wave table, three to five roles per flip PR
     (*Flip PR size*, below).
     - **Two readings on the first Wave D revisions.** The session re-takes D4's
@@ -3731,6 +3754,12 @@ includes valheim's initContainer.
     - **Ruled 2026-10-16: yes.** The registry stays as a pull-through mirror for `ghcr.io`,
       in the two PRs the recommendation names, and nut's Wave C PR carries the mirror
       precondition.
+    - **Built in one PR (#5539), as a second listener.** A registry in proxy mode refuses
+      every push and delete, so the mirror is a second container, `ghcr-mirror`, in the
+      registry pod, on `k8s_registry_ghcr_mirror_port` (5002). The push store keeps 5000. The
+      same PR adds the `ghcr.io` entry to `registries.yaml.j2`. The precondition's manifest GET
+      therefore reads `http://10.43.51.14:5002/v2/danielh2018/nut/manifests/<content tag>` on
+      daniel-server. The registry deploy goes first, then the hand apply of `k3s-bringup.yml`.
 3. **Is the soak's Prometheus reach a new exposure?** It is one more caller on an existing
    fence. Resolution: reviewed in D5.3a against ADR-0009.
     - **Reviewed 2026-10-16 in #5315: no new exposure.** The soak is one more read-only caller
@@ -3941,6 +3970,12 @@ includes valheim's initContainer.
     `timeout` bounds that wait, and a failed pre-pull delays only tdarr. Resolution:
     tdarr's conversion PR names the kind, and the publish census admits it in the same PR.
     The suffix needs a C3 per-tag-kind amendment and a reserved name in D5.1a1's list.
+    **Answered by #5525** for code-server, whose GHCR pull hit the same outage first. The
+    kind is `<tag>-prepull`, and any role opts in with `flux_prepull_timeout` in its
+    defaults, so tdarr's conversion PR sets that key rather than naming a kind. C3 carries the
+    amendment and the reserved suffix. The Job copies the workload's placement rather than
+    pinning a node, and it sets no deadline, so a slow pull delays the tag instead of wedging
+    it (`docs/flux-deploy-plane.md`, *The pre-pull Job*).
 
 ## Review log
 

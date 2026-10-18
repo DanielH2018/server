@@ -19,7 +19,9 @@ from verdicts.storage import parse_pvc_floors, pvc_fullness_verdict
 from _fake_sources import FakeSources
 
 ROLES = Path(__file__).resolve().parents[3]
-ENV_SECRET = Path(__file__).resolve().parents[1] / "templates" / "env-secret.yaml.j2"
+ENV_SECRET = (
+    Path(__file__).resolve().parents[1] / "templates" / "config" / "env.yaml.j2"
+)
 
 GIB = 1024**3
 # The shape at 10Gi: 7.7 G used of 9.8 G, 2.1 G free, against a 2.2 G copy the
@@ -173,7 +175,7 @@ def test_parse_drops_a_malformed_or_zero_entry_and_keeps_the_rest():
 
 def _declared_floors() -> dict[str, int]:
     m = re.search(r"^\s*PVC_MIN_FREE:\s*(\S+)\s*$", ENV_SECRET.read_text(), re.M)
-    assert m, "PVC_MIN_FREE is no longer rendered in env-secret.yaml.j2"
+    assert m, "PVC_MIN_FREE is no longer rendered in config/env.yaml.j2"
     return parse_pvc_floors(m.group(1))
 
 

@@ -339,7 +339,6 @@ def test_the_pre_fix_registry_jobs_are_flagged(tmp_path):
 KNOWN_PRUNED_DIRS = frozenset({"n8n", "registry", "traefik", "authelia", "jellyfin"})
 KNOWN_STAGED_FILES = frozenset(
     {
-        ("n8n-netpol", "netpol-probe-job.yaml"),
         ("registry-jobs", "gc-job.yaml"),
         ("headlamp-netpol", "netpol-probe-job.yaml"),
         ("media-volume-probe", "hardlink-probe-job.yaml"),

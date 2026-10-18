@@ -11,18 +11,17 @@ from pathlib import Path
 from _secret_derivation import _word_pattern
 from test_secret_key_task_census import _live_census, census
 
-# The two sonarr asserts STUB_REFUSING names because no derivation followed their register.
-SONARR_REGISTER_ASSERTS = (
-    "sonarr/verify.yml::Fail if a root folder does not resolve inside the pod",
-    "sonarr/verify.yml::Fail if the cluster library is not intact",
+# A task that names no secret key and reads the register of one that does. sonarr's two
+# register asserts held this place until sonarr's Flux flip (D5.20) deleted them.
+REGISTER_READERS = (
+    "arr-notification/main.yml::Report what the notification seed decided for "
+    "{{ arr_notification_app }}",
 )
 
 
-def test_the_census_selects_sonarrs_register_asserts() -> None:
+def test_the_census_selects_a_live_register_reader() -> None:
     selected, _ = _live_census()
-    missing = [
-        task_id for task_id in SONARR_REGISTER_ASSERTS if task_id not in selected
-    ]
+    missing = [task_id for task_id in REGISTER_READERS if task_id not in selected]
     assert missing == [], (
         f"the census does not follow the secret read's register into {missing}"
     )

@@ -152,7 +152,8 @@ def test_the_scan_finds_keys_across_most_configmaps() -> None:
     templates = len(CASES)
     keys = sum(len(k) for _, _, _, k in CASES)
     # Measured: 51 templates, 321 keys; 290 keys since monitor-bridge's 44 push tokens moved
-    # into a loop (#3659). The floors sit just under that, high enough
+    # into a loop (#3659), and 154 since the two bridges' 162 settings left their Secrets for
+    # the Deployment's `env` (#5574). The floors sit just under that, high enough
     # to catch the two ways this scan can lose coverage silently: stopping at a
     # multi-line `{# ... #}` header drops it to 49/312, and stopping at the first column-0
     # `{{ lookup(...) }}` line drops home-assistant from ten checked keys to one. Both still
@@ -161,7 +162,7 @@ def test_the_scan_finds_keys_across_most_configmaps() -> None:
     assert templates >= 50, (
         f"only {templates} templates carry scanned keys — the source scan broke"
     )
-    assert keys >= 280, f"only {keys} keys are being checked — the source scan broke"
+    assert keys >= 150, f"only {keys} keys are being checked — the source scan broke"
 
 
 @pytest.mark.parametrize(
