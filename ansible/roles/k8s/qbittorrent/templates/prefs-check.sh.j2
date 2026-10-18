@@ -30,7 +30,7 @@ done
 # Credentials interpolated directly, not sourced from a separate env file: this file is
 # rendered 0700 owned by {{ sys_user }} (the same user the cron below runs as), so there is no
 # second account that needs read access the way kuma-push.env's root+{{ sys_user }} split
-# does. The shape janitorr's host health cron used for its Kuma token until H2.5c.
+# does. Same shape as janitorr-health.sh.j2's Kuma token.
 export QBT_USERNAME="{{ qbittorrent_username }}"
 export QBT_PASSWORD="{{ qbittorrent_password }}"
 export QBT_URL="http://qbittorrent.{{ k8s_namespace }}.svc.cluster.local:{{ qbittorrent_k8s_webui_port }}"
