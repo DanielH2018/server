@@ -102,9 +102,18 @@ def test_the_reader_imports_from_the_pods_mounted_layout(tmp_path):
         target.parent.mkdir(exist_ok=True)
         target.write_text(configmap["data"][item["key"]])
     # `--help` returns after every module-level import has run, so exit 0 proves the import
-    # closure resolves from the mounted files alone.
+    # closure resolves from the mounted files alone. `-S` drops the venv's site-packages,
+    # which `-I` keeps: the pod's bare python image has no wheels, so a third-party import
+    # must fail here too. `-P` keeps the working directory off sys.path.
     proc = subprocess.run(
-        [sys.executable, "-I", str(tmp_path / "configarr_health.py"), "--help"],
+        [
+            sys.executable,
+            "-I",
+            "-S",
+            "-P",
+            str(tmp_path / "configarr_health.py"),
+            "--help",
+        ],
         cwd=tmp_path,
         capture_output=True,
         text=True,
