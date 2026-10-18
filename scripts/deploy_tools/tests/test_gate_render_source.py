@@ -46,7 +46,7 @@ def test_the_gate_renders_from_the_checkout_it_is_pointed_at(tmp_path):
         seen.append((argv, kwargs.get("cwd")))
         return _result(0, "sonarr: 1/1 ready, 1 updated, restarts=0")
 
-    ok, _lines = notify_mod.gate(
+    ok, _lines, _ = notify_mod.gate(
         ["sonarr"], ansible_ok=True, tools=_k8s_tools(run), cwd=tmp_path
     )
     argv, cwd = seen[0]

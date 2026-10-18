@@ -88,7 +88,9 @@ beyond the one the tick just ran on, so it is landed but not live everywhere.
 `deferred` means the tick applies this PR itself and has not crossed origin yet; the next
 tick does it -- UNLESS the verdict says this run stopped watching a tick that was still
 applying, in which case the deployer's markers were read mid-apply and a hold cannot be
-ruled out. Re-run land.sh then; no later tick crosses a hold.
+ruled out. Re-run land.sh then; no later tick crosses a hold. A `deferred` from the health gate
+says probe.py health could not read its store (exit 75), so the deploy went ungraded; no tick
+gates health, so re-run land.sh to grade it.
 `refused` is every other exit-1 stop: the landing policy, a PR closed unmerged or with
 changes requested, a read or a fetch that failed. The `land:` line on stderr, repeated in the
 verdict's detail, says which. `handoff-timeout` is land.sh giving up on a lander unit that is
