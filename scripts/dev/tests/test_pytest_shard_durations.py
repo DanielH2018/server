@@ -160,6 +160,34 @@ def test_the_stale_ratio_decides():
     assert shard_weight_gate.durations_problems(report, weights, ratio=2.0) != []
 
 
+# `test_media_volume_verify.py` on #5598: recorded 4.86s on a host busy with fan-out batches,
+# measured 0.97s on the runner (5.0x), and the PR that changed it went red (#5616).
+BUSY_HOST_MODULE = "ansible/roles/k8s/media-volume/tests/test_media_volume_verify.py"
+BUSY_HOST_REPORT = f"0.97s call     {BUSY_HOST_MODULE}::test_verify\n"
+
+
+def test_an_entry_a_busy_host_over_recorded_annotates_rather_than_fails():
+    """Under `STALE_WEIGHT_FAIL_RATIO`, a pull request that changed the module still passes
+    (no problem, so `main` exits 0), and the entry stays visible as an annotation naming its
+    repair."""
+    weights = {BUSY_HOST_MODULE: 4.86}
+    problems, warnings = shard_weight_gate.gate_complaints(
+        BUSY_HOST_REPORT, weights, {BUSY_HOST_MODULE}
+    )
+    assert problems == [] and len(warnings) == 1
+    assert "recorded 4.86s" in warnings[0] and "--record-files" in warnings[0]
+
+
+def test_an_entry_recorded_twenty_times_what_it_measured_still_fails():
+    """The fail half: the same changed module recorded at 20x its measurement."""
+    weights = {BUSY_HOST_MODULE: 19.4}
+    problems, warnings = shard_weight_gate.gate_complaints(
+        BUSY_HOST_REPORT, weights, {BUSY_HOST_MODULE}
+    )
+    assert len(problems) == 1 and warnings == []
+    assert "recorded 19.40s" in problems[0] and "measured 0.97s" in problems[0]
+
+
 # REPORT's new module recorded at the 0.48s that `test_guard_tests_read_renders_not_templates.py`
 # carried while it measured 45.67s on a master run (#4873): present in the table, and as good as
 # missing from it.
