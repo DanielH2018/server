@@ -13,7 +13,8 @@ import pytest
 
 from lib import yaml_fast
 from lib.exit_codes import RENDER_OK
-from renderer import homelab_render
+from render_share import sharing_placeholder_renders
+from renderer import homelab_render, standalone_map
 from renderer.renderer_lib.cluster import RenderedTag, RenderError, flux_owned_tags
 from renderer.renderer_lib.placeholders import PlaceholderRender, sentinel
 from renderer.renderer_lib.restart import (
@@ -368,7 +369,8 @@ def outside_references(
 
 @pytest.fixture(scope="module")
 def fleet():
-    return fleet_render()
+    with sharing_placeholder_renders(standalone_map):
+        return fleet_render()
 
 
 def test_no_flux_owned_pod_names_another_roles_secret_or_config_map_is_clean(fleet):

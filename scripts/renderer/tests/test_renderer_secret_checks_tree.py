@@ -14,7 +14,8 @@ import dataclasses
 
 import pytest
 
-from renderer import homelab_render
+from render_share import sharing_placeholder_renders
+from renderer import homelab_render, standalone_map
 from renderer.renderer_lib.cluster import RenderedTag
 from renderer.renderer_lib.placeholders import apply_placeholders, sentinel
 from renderer.renderer_lib.secret_checks import (
@@ -31,7 +32,8 @@ from renderer.standalone_map import fleet_render
 
 @pytest.fixture(scope="module")
 def render():
-    return fleet_render()
+    with sharing_placeholder_renders(standalone_map):
+        return fleet_render()
 
 
 @pytest.fixture(scope="module")

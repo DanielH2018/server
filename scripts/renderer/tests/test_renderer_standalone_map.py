@@ -9,14 +9,16 @@ Run: uv run pytest scripts/renderer/tests/test_renderer_standalone_map.py
 
 import pytest
 
-from renderer import homelab_render
+from render_share import sharing_placeholder_renders
+from renderer import homelab_render, standalone_map
 from renderer.renderer_lib.placeholders import PlaceholderRender, read_guard_map
 from renderer.standalone_map import coverage_problems, fleet_render, guard_map
 
 
 @pytest.fixture(scope="module")
 def render():
-    return fleet_render()
+    with sharing_placeholder_renders(standalone_map):
+        return fleet_render()
 
 
 @pytest.fixture(scope="module")
