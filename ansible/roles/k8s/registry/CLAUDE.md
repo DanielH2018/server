@@ -64,6 +64,10 @@ registry round trip. See repo-root `CLAUDE.md` for shared conventions.
     cannot read the cluster prunes nothing. Such a skip reports the run down, so a cause that
     persists cannot hide behind a green tile while the claim fills. Each pruned revision is a
     `pruned <repo>@<digest>` line in the Job log and in the `registry-gc` journal.
+  - A cold blob that takes over about 8 minutes to fetch never completes through the
+    mirror. ghcr.io's signed blob URL expires mid-transfer on HTTP/1.1 and HTTP/2 alike,
+    and the proxy never resumes (#5654). The measurement is in the comment above
+    `REGISTRY_PROXY_REMOTEURL` in `templates/deployment.yaml.j2`.
   - containerd falls back to `ghcr.io` while the GC scales the pod to zero. A mirror container
     that cannot start leaves the whole pod unready, push store included.
 - A weekly garbage collection (`gc-job.yaml.j2`, Sunday 04:20) takes the registry
