@@ -1,0 +1,135 @@
+{#
+  The throughput preferences apply as a post-apply mutation Job, INERT until qbittorrent's
+  flip, as `job.yaml.j2` beside it is.
+
+  It runs `files/qbittorrent_job.py` with `QBT_JOB=apply-prefs`, which writes the keys of its
+  `DESIRED` that differ from the live preferences and reads them back. Under Ansible the same
+  apply is `files/apply_prefs.py`, run by hand, because a deploy task would have waited out the
+  sidecar's five-minute startup window. `qbittorrent-verify` starts only once the
+  `qbittorrent` Kustomization reads Ready, which is after that window, so the Job meets a
+  serving WebUI (D5, *Post-apply mutation Jobs share `<tag>-verify`*).
+
+  DECIDED: the spec embeds a digest of the inputs that roll the pod, the ones `checksum/restart`
+  hashes under Flux (`scripts/renderer/renderer_lib/restart.py`): the rendered Deployment, the
+  `qbittorrent-netns-reset` ConfigMap, the two Secret templates the pod names, and the
+  `cluster-vars.source` digest of each key those templates read. The Deployment alone would
+  miss a netns-reset edit and a key rotation, both of which roll the pod.
+  `tests/test_qbittorrent_job.py` fails if a ConfigMap or Secret the pod names drops out.
+  So the apply runs on every revision that rolls the pod, not only when `DESIRED` changes (which renames the
+  ConfigMap, and with it the Job). A roll is when a reverted `qbittorrent-config` claim meets a
+  new pod, and the apply writes nothing when the preferences already match.
+
+  DECIDED: the pod carries `app: qbittorrent-prefs-check`, the drift check's label, which
+  qbittorrent's `netpol_from` already lists. Both pods log in to the WebUI and read the same
+  preferences; this one also writes the keys that differ. The caller census is the drift
+  check's: one dial, to qbittorrent:<webui port>, through `networkpolicy.yaml.j2`.
+#}
+{% set script_name = 'qbittorrent_job.py' %}
+{% set script_dir = '/job' %}
+{% set data = {
+  script_name: lookup('file', playbook_dir + '/roles/k8s/qbittorrent/files/' + script_name, rstrip=False),
+  'flux_job_connect.py': flux_job_connect,
+} %}
+{% set configmap_name = 'qbittorrent-prefs-' + ({'data': data, 'binaryData': {}} | to_json(sort_keys=True, separators=(',', ':')) | hash('sha256'))[:8] %}
+{#- The pod's roll inputs, as `checksum/restart` hashes them; see the note above. The Secret
+    templates are read raw, never rendered, and `cluster-vars.source` holds a digest of each
+    key's ciphertext, so no value enters the hash. -#}
+{% set roll = namespace(
+  text=lookup('template', 'deployment.yaml.j2') + lookup('template', 'configmap-netns-reset.yaml.j2'),
+  secrets='',
+) %}
+{% for name in ['secret.yaml.j2', 'mullvad-account-secret.yaml.j2'] %}
+{% set roll.secrets = roll.secrets + lookup('file', playbook_dir + '/roles/k8s/qbittorrent/templates/' + name) %}
+{% endfor %}
+{% for line in lookup('file', playbook_dir + '/vars/cluster-vars.source').splitlines() if line and not line.startswith('#') and ('{{ ' + line.split()[0] + ' ') in roll.secrets %}
+{% set roll.text = roll.text + line %}
+{% endfor %}
+{% set roll_digest8 = ((roll.text + roll.secrets) | hash('sha256'))[:8] %}
+{% set spec_text %}
+# No retry. A retry logs in again, and every rejected login counts against qBittorrent's
+# web_ui_max_auth_fail_count of 5. A failed apply waits for the next revision or a hand run.
+backoffLimit: 0
+# Below the 600s `manifests_rollout_timeout_default` every `<tag>-verify` Kustomization takes.
+# The first connect's 60s of retries, then four 15s requests.
+activeDeadlineSeconds: 180
+template:
+  metadata:
+    labels:
+      # A peer of qbittorrent's fence; see the DECIDED note above.
+      app: qbittorrent-prefs-check
+  spec:
+    serviceAccountName: qbittorrent-verify
+    # The Job reads the WebUI, not the Kubernetes API, so its pod holds no token.
+    automountServiceAccountToken: false
+    restartPolicy: Never
+    enableServiceLinks: false
+    securityContext:
+      runAsNonRoot: true
+      runAsUser: 65534
+      runAsGroup: 65534
+      seccompProfile:
+        type: RuntimeDefault
+    containers:
+      - name: apply-prefs
+        image: {{ flux_job_image }}
+        command:
+          - python3
+          - {{ script_dir }}/{{ script_name }}
+        env:
+          - name: QBT_JOB
+            value: apply-prefs
+          - name: QBT_URL
+            value: http://qbittorrent.{{ k8s_namespace }}.svc.cluster.local:{{ qbittorrent_k8s_webui_port }}
+          - name: QBT_CREDENTIALS
+            valueFrom:
+              secretKeyRef:
+                name: qbittorrent-prefs-check
+                key: credentials
+          # Renames the Job whenever qbittorrent's pod rolls; see the note above.
+          - name: QBITTORRENT_ROLL_DIGEST8
+            value: "{{ roll_digest8 }}"
+          - name: PYTHONDONTWRITEBYTECODE
+            value: "1"
+        resources:
+          requests:
+            cpu: 10m
+            memory: 32Mi
+          limits:
+            memory: 64Mi
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+              - ALL
+        volumeMounts:
+          - name: script
+            mountPath: {{ script_dir }}
+            readOnly: true
+    volumes:
+      - name: script
+        configMap:
+          name: {{ configmap_name }}
+{% endset %}
+{% set spec = spec_text | from_yaml %}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ configmap_name }}
+  namespace: {{ k8s_namespace }}
+data:
+{% for key, text in data | dictsort %}
+  {{ key }}: {{ text | to_json }}
+{% endfor %}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: qbittorrent-prefs-{{ (spec | to_json(sort_keys=True, separators=(',', ':')) | hash('sha256'))[:8] }}
+  namespace: {{ k8s_namespace }}
+  annotations:
+    homelab/job-kind: mutation
+    homelab/rerun-safe: ansible/roles/k8s/qbittorrent/tests/test_qbittorrent_job.py::test_a_second_apply_writes_nothing
+spec:
+{{ spec_text | indent(2, true) }}

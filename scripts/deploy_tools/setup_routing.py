@@ -20,6 +20,9 @@ For each directory under `ansible/roles/setup/`:
     `setup_gates.eval_when_strict`. A gate it cannot read is unplaced, never "reached".
   - `host` is the one host the gate admits, for a role the tick's host does not run. The
     printed remediation appends `-e target=<host>` from it.
+  - `agent_hosts`, on a role in `AGENT_HOSTS_VAR` only, is the inventory list of hosts its
+    playbook's opt-in join plays apply the agent half to (#5606). The printed remediation
+    names one `-e join_agent=<host>` run per entry.
 
 The deployer runs under `uv run --no-project` and cannot import yaml, so it runs this as a
 subprocess over origin's tree (`deploy_setup_roles.derive_routing`). A repo-env reader
@@ -55,6 +58,10 @@ INITIAL_SETUP = "ansible/initial_setup.yml"
 # In precedence order: `sops_setup` is in `bootstrap.yml` for a host that cannot decrypt yet
 # and in `initial_setup.yml` for maintenance, and the tick's apply is the second.
 PLAYBOOKS = (INITIAL_SETUP, "ansible/k3s-bringup.yml", "ansible/bootstrap.yml")
+# Role -> the group_vars list naming the hosts its playbook joins as agents. `k3s-bringup.yml`
+# runs the k3s role's `tasks/agent.yml` only from a play matching `-e join_agent=<host>`, so
+# the role's own `--tags` value never reaches those hosts.
+AGENT_HOSTS_VAR = {"k3s": "k3s_agent_hosts"}
 
 
 def _entries(playbook: Path) -> list[tuple[str, object, object]]:
@@ -98,6 +105,19 @@ def tick_host(root: Path = REPO) -> str:
 def _vars_at(root: Path) -> tuple[Path, Path]:
     inventory = root / "ansible" / "inventory"
     return inventory / "group_vars" / "all.yml", inventory / "host_vars"
+
+
+def _agent_hosts(all_vars: Path, var: str) -> list[str]:
+    """The host names `var` lists in group_vars/all.yml, or [] when it is absent or not a list.
+
+    An empty answer prints a placeholder rather than a guessed host, so a tree without the
+    list degrades to a visible gap in the remediation.
+    """
+    doc = yaml_fast.safe_load(all_vars.read_text()) if all_vars.is_file() else None
+    hosts = doc.get(var) if isinstance(doc, dict) else None
+    if not isinstance(hosts, list):
+        return []
+    return [h for h in hosts if isinstance(h, str)]
 
 
 def routes(root: Path = REPO, host: str | None = None) -> dict:
@@ -155,6 +175,8 @@ def routes(root: Path = REPO, host: str | None = None) -> dict:
             route["on_tick_host"] = host in admitted
             if not route["on_tick_host"] and len(admitted) == 1:
                 route["host"] = admitted[0]
+        if role in AGENT_HOSTS_VAR:
+            route["agent_hosts"] = _agent_hosts(all_vars, AGENT_HOSTS_VAR[role])
         out["routes"][role] = route
     return out
 

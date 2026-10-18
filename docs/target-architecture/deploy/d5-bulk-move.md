@@ -1736,7 +1736,7 @@ promotion, an automerged one included, without having to page.
       selects `{job="syslog"}`, and a LogQL log query has one stream selector. So D5.3b3 adds
       a second default, `observability_flux_deploy_annotation_expr`, which reads
       `{job="k8s", namespace="flux-system", container="soak"} |= "event=deploy" | logfmt`.
-      `scripts/grafana/inject_dashboard_annotations.py` injects both. The renderer names the
+      `ansible/filter_plugins/grafana_dashboards.py` injects both. The renderer names the
       soak Job's one container `soak`, so the selector reads a fixed value. The stream selector
       scopes the query, so a dashboard load reads only the soak's lines, never every pod's.
     - **Tests.** `test_deploy_annotations.py` pins the soak's line shape and its
@@ -1844,7 +1844,9 @@ assertion becomes a standing rule.
   `Recreate` means no server runs beside it. On a new volume the initContainer meets an empty
   database. The conversion PR checks on the pinned image whether `totp generate` needs
   `authelia storage migrate up` first, and runs it first if so.
-- **jellyfin's cap** becomes a Job in jellyfin's Kustomization. It resolves the volume from the
+- **jellyfin's cap** becomes a mutation Job in `jellyfin-verify`, by the rule *Post-apply
+  mutation Jobs share `<tag>-verify`*. The Job census admits no Job in a `<tag>` directory,
+  and the cap needs the claim Bound (#5614). It resolves the volume from the
   PVC's `spec.volumeName` at run time, and patches `spec.snapshotMaxSize` to the rendered
   value, so a re-run changes nothing. RBAC cannot name a volume whose name the renderer cannot
   know, so its Role in `longhorn-system` grants `get` and `patch` on every
@@ -2127,8 +2129,10 @@ sizes its batch of roles against that projection.
 - **Windows, as the operator ruled on 2026-10-17.** A flip needs no weekday or hour. A
   `Recreate` role's takeover roll takes that one service down briefly, and the operator accepts
   that at any hour. Seven roles each take a window of their own: wg-easy, zigbee2mqtt,
-  home-assistant, crowdsec, traefik, authelia and pihole. An own window is an hour, agreed with
-  the operator and announced in the deploy channel, in which no other flip lands. wg-easy's
+  home-assistant, crowdsec, traefik, authelia and pihole. An own window means the role's flip
+  PR carries that role alone, and it merges only while the operator is present. The session
+  tells the operator before it merges the PR. As the operator ruled on 2026-10-18, a window
+  reserves no hour: the next flip can land as soon as this one has promoted. wg-easy's window
   also needs the operator on the LAN. The plan first held every `Recreate` flip to the hour
   after M2's `weekly-reboot` mute ends, Sunday 08:15 to 09:15 UTC, and the ruling drops that:
   the hour was a maintenance slot, and no flip depends on it.
@@ -2662,6 +2666,14 @@ sizes its batch of roles against that projection.
       cron. So H2 drops both PRs and the `registry-gc` row from its exit list, and the host
       cron runs as today until this PR retires it. registry's flip therefore waits on no H2
       PR. Open question 2 rules on the registry's own fate before nut's Wave C PR.
+
+      **Status, 2026-10-18.** The push self-test and the netpol probe have their inert Jobs in
+      `ansible/roles/k8s/registry/templates/verify-inert/` (#5651). The pull self-tests have no
+      Job form: their proof is the pod's own image, which holds no Python, so the census's
+      `delivery` row refuses it. The GC retirement waits on #5680. karakeep and
+      pi-peer-backup still push to the store, and since #5541 the same GC window is the only
+      thing that bounds the `ghcr-mirror` store, so "nothing new needs collecting" no longer
+      holds.
     - traefik: the CRDs come from a URL in the role's `tasks/main.yml`, which no render may
       fetch under C1, so they get an in-tree copy pinned by `traefik_k8s_crd_version`. The
       cluster RBAC carries `kustomize.toolkit.fluxcd.io/prune: disabled` before the move, so
@@ -3338,7 +3350,7 @@ includes valheim's initContainer.
 ## Risks
 
 - **Downtime for `Recreate` roles at takeover.** Each rolls once. Mitigation: the soak judges
-  each roll, and the seven own-window roles each land alone in an announced hour.
+  each roll, and the seven own-window roles each land alone, with the operator present.
 - **Verification lost at the move** (failure class 2). A verify task stops running the moment
   its role is flux-owned. Mitigation: the class table, which never lets `probe.py health`
   alone succeed an eligible role's verify, and the census-quote precondition.

@@ -97,6 +97,19 @@ trust in Authelia (`roles/setup/k3s`), the Authelia client, and these defaults.
   FAIL to reach headlamp from a non-traefik pod, proving `networkpolicy.yaml.j2` fences it. It
   probes a traefik control connection first, so a failure is attributable to the policy rather
   than to DNS or a dead pod.
+- **`templates/verify-inert/` is the Flux form of that probe, and nothing renders it yet.**
+  Ansible still applies `headlamp-netpol-probe` from `tasks/main.yml` on every deploy.
+  headlamp's flip PR renames the directory to `templates/verify/`, which makes the renderer
+  emit `headlamp-verify`, and deletes the probe tasks. The Job runs `files/headlamp_verify.py`:
+  traefik's port must answer, as the control, and headlamp's must refuse. Its pod carries
+  `app: headlamp-verify`, which headlamp's fence must never admit. Its spec embeds a digest of
+  headlamp's rendered NetworkPolicy and Deployment, so an edit to either makes Flux run it
+  again. `job.yaml.j2` carries the caller census, and `tests/test_headlamp_verify.py` renders
+  the renamed copy through the Job census and checks both fences against the pod.
+- **The observability RBAC already has its Flux form.** The renderer emits
+  `rbac-observability.yaml` into `headlamp-deferred`, which depends on `headlamp` and, once
+  both are flux-owned, on `observability`. The flip deletes the "Apply headlamp's observability
+  RBAC" task, the deferred apply's Ansible half.
 - `headlamp_k8s_session_ttl: 86400` — how long a browser session survives before Headlamp
   re-reads the ServiceAccount token.
 

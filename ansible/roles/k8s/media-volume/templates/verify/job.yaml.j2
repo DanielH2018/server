@@ -1,13 +1,10 @@
 {#
-  media-volume's verify Job and the ConfigMap that carries its script, INERT until
-  media-volume's flip.
+  media-volume's verify Job and the ConfigMap that carries its script.
 
-  This directory is `verify-inert/`, which neither reader globs: the manifests role takes only
-  top-level `templates/*.yaml.j2`, and `verify_files` takes only `templates/verify/*.yaml.j2`.
-  media-volume's flip PR moves the directory to `templates/verify/`, and the renderer then
-  emits it into `media-volume-verify` (D5, *A verify conversion lands as inert code*). The same
-  PR deletes the hardlink probe tasks and `hardlink-probe-job.yaml.j2`, which this Job
-  replaces.
+  The renderer emits `templates/verify/*.yaml.j2` into `media-volume-verify` (`verify_files`),
+  which Flux applies once the `media-volume` Kustomization reads Ready. The manifests role takes
+  only top-level `templates/*.yaml.j2`, so no Ansible path renders it. The Job replaced the
+  hardlink probe tasks and `hardlink-probe-job.yaml.j2` in media-volume's flip.
 
   Both names end in a digest, as the Job census requires (D5, *Rules for every Job Flux
   applies*): the ConfigMap's in `configmap_digest8` of its data, the Job's in
@@ -17,7 +14,7 @@
 
   DECIDED: the spec embeds a digest of the rendered PersistentVolume and StorageClass, because
   the role renders no Deployment whose roll could rename the Job. Those two documents are what
-  the probe tests: the path, the node pin and the binding. The Ansible probe re-runs on every
+  the probe tests: the path, the node pin and the binding. The Ansible probe re-ran on every
   deploy, and this Job re-runs only when that render changes. A regression with no render
   change, such as a claim rebound by hand, waits for the next one. tdarr's verify Job mounts
   the same claim, so a claim that no longer binds still fails a Job on tdarr's next roll.

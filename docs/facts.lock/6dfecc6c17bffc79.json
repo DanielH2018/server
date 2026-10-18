@@ -1,5 +1,5 @@
 {
-  "checksum": "ecd8c19da85c418ea842ec76b169d9fb5e451e4210904159d9ca920a0a8a0f46",
+  "checksum": "dc0a51d28e66b1cea8cb3821934aa70876ec66a7c868e05f32e13fccb3299cad",
   "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
   "key": "ansible/roles/setup/k8s_host_files/CLAUDE.md#What it holds",
   "row": {
@@ -12,6 +12,6 @@
       "ansible/tests/setup/test_setup_cross_role_reads.py": "c2f854a253fff368c00a3b1d673287739e63bf312f1a677522395ea9566fe25b"
     },
     "python": "3.14",
-    "verified_sha": "dd8cf4ce0"
+    "verified_sha": "69b7772f1"
   }
 }

@@ -168,6 +168,42 @@ def test_a_dry_run_sends_no_delete():
     assert api.deletes() == []
 
 
+class StatefulKarakeep(FakeKarakeep):
+    """A FakeKarakeep whose DELETEs remove the bookmark or asset, so a second run sees the result."""
+
+    @contextmanager
+    def __call__(self, req, timeout):
+        with super().__call__(req, timeout) as body:
+            yield body
+        if req.get_method() != "DELETE":
+            return
+        parts = self.calls[-1][1].split("/")
+        if len(parts) == 2:
+            self.bookmarks = [b for b in self.bookmarks if b["id"] != parts[1]]
+        else:
+            for b in self.bookmarks:
+                if b["id"] == parts[1]:
+                    b["assets"] = [a for a in b["assets"] if a["id"] != parts[3]]
+
+
+def test_a_second_run_changes_nothing():
+    """The rerun-safe test karakeep-verify's gate Job names (`flux_cronjob_gates`).
+
+    Under Flux the gate copy and a scheduled firing can overlap, and the gate re-runs on every
+    karakeep revision, so a run straight after an applied one must send no DELETE. A run that
+    reached `--max-deletes` leaves work for the next, but that work is due whichever run takes it.
+    """
+    # fact: ansible/roles/k8s/karakeep/CLAUDE.md#Notable
+    api = StatefulKarakeep(
+        [bookmark("old", 120), bookmark("mid", 40, assets=[("s1", "screenshot")])]
+    )
+    run(api, "--apply")
+    assert sorted(api.deletes()) == ["bookmarks/mid/assets/s1", "bookmarks/old"]
+    api.calls.clear()
+    run(api, "--apply")
+    assert api.deletes() == []
+
+
 def test_max_deletes_caps_deletions_per_run_and_reports_the_rest_once(capsys):
     api = FakeKarakeep([bookmark(f"b{i}", 100) for i in range(4)])
     karakeep_archive_pruner.main(

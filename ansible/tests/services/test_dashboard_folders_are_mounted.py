@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """A dashboard in an unlisted folder is provisioned nowhere, silently.
 
-`tasks/dashboards.yml` bakes one ConfigMap per name in `observability_dashboard_folders`, and the
+`templates/grafana-dashboards.yaml.j2` renders one ConfigMap per name in `observability_dashboard_folders`, and the
 Deployment mounts each by EXPLICIT per-folder volume name (see the comment above that variable in
 `defaults/main.yml`). A board dropped into `files/dashboards/<folder>/` whose folder is not on that
 list is therefore never baked and never mounted: the deploy is green, Grafana is Ready, and the

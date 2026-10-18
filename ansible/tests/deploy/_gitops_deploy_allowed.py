@@ -70,9 +70,12 @@ ALLOWED: dict[str, set[str] | None] = {
     "deploy_locks": set(),
     # `gitops_ledger` for the `manual_plane` class name its clear command prints (#3547), and
     # `deploy_cross_role`, a leaf, for the roles that render `common`'s files (#4316).
+    # `deploy_setup_roles`, a stdlib leaf, for the agent hosts the k3s join command names
+    # (#5606); `deploy_changes` re-exports its other names but sits at its length cap.
     "deploy_remediation": {
         "deploy_changes",
         "deploy_cross_role",
+        "deploy_setup_roles",
         "gitops_ledger",
         "gitops_markers",
     },

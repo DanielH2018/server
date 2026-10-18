@@ -1,0 +1,14 @@
+{#
+  The identity of qbittorrent's two Flux Jobs, INERT until qbittorrent's flip, as `job.yaml.j2`
+  and `prefs.yaml.j2` beside it are.
+
+  It is a ServiceAccount with no Role. Both Jobs read the WebUI and exec into no pod, so they
+  need no grant, and their pods mount no token.
+#}
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: qbittorrent-verify
+  namespace: {{ k8s_namespace }}
+automountServiceAccountToken: false

@@ -92,7 +92,6 @@ ROLE_DIRS_CALLERS = frozenset(
     for rel in (
         "_k8s_render.py",
         "k8s/test_built_images_name_the_content_tag.py",
-        "k8s/test_checksum_annotation_census.py",
         "k8s/test_checksum_annotations_documented.py",
         "k8s/test_configmap_keys_not_absorbed.py",
         "k8s/test_manifest_roles_include_the_shared_render.py",

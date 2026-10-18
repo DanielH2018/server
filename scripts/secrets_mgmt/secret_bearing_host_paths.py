@@ -36,6 +36,7 @@ import yaml
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 
 from lib import yaml_fast
+from lib.cli_help import answer_help
 
 from lib.repo_paths import ANSIBLE
 
@@ -205,7 +206,8 @@ def world_readable_secret_bearing_tasks(
     return offenders
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
+    answer_help(__doc__, argv)
     paths = secret_bearing_host_paths()
     for dest, names in sorted(paths.items()):
         print(f"{dest}\t{','.join(names)}")

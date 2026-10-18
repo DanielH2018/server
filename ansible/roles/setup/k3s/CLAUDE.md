@@ -17,6 +17,13 @@ of those, such as `--tags kubeconfig` (`ansible/roles/setup/k3s/tasks/kubeconfig
 deployer prints this warning beside the command it suggests, from
 `ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_remediation.py:maximal_tag_warning`.
 
+**`--tags k3s` never reaches an agent node.** `tasks/agent.yml` runs only from the opt-in join
+plays, so a change it reads, such as `templates/registries.yaml.j2`, also needs
+`uv run ansible-playbook ansible/k3s-bringup.yml -e join_agent=daniel-server --tags k3s_agent`
+before the role's `manual_plane` line is cleared. The deployer prints that command beside the
+whole-role tag for each host in `k3s_agent_hosts` (`ansible/inventory/group_vars/all.yml`), from
+`ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_remediation.py:_agent_commands`.
+
 ## At a glance
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's tasks, timer templates, defaults or playbook entry, or a schedule var in group_vars/all.yml. -->
 - **Applied by:** `k3s-bringup.yml --tags "k3s"`; `k3s-bringup.yml --tags "k3s_agent"`;

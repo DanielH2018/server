@@ -47,15 +47,20 @@ shared conventions.
 - **`templates/verify-inert/` is tdarr's verify Job for Flux, and nothing renders it yet.**
   Neither the manifests role nor the renderer's `verify_files` reads that directory. tdarr's
   flip PR renames it to `templates/verify/`, which makes the renderer emit `tdarr-verify`.
-  The Job runs `files/tdarr_verify.py`, which replaces two of `tasks/verify.yml`'s exec checks:
+  The Job runs `files/tdarr_verify.py`, which replaces `tasks/verify.yml`'s two exec checks:
   the render node opens, and the library is writable. Its pod is built like tdarr's, with the
   same device request, render group, PUID and `media-data` subPath, so it checks that wiring
   and not the live pod. Its spec embeds a digest of tdarr's rendered Deployment, so every
   change that rolls tdarr renames the Job and Flux runs it again.
   The VAAPI encode through tdarr's own ffmpeg has no Job form, because the Job image has no
-  ffmpeg and the Job census forbids spawning a process and opening a socket. Ansible runs it
-  until the flip; after that it is lost unless the operator's choice in #5451 lands first.
+  ffmpeg and the Job census forbids spawning a process and opening a socket.
   `tests/test_tdarr_verify.py` renders the renamed copy and runs the Job census over it.
+- **The VAAPI encode is the Deployment's `vaapi-encode` initContainer (#5451, option 1).** It
+  runs tdarr's own ffmpeg in tdarr's image, as tdarr's PUID, with the same device request, so
+  a broken driver or ffmpeg build keeps tdarr from starting. Under Ansible that shows as the
+  `rollout status` gate in `tasks/verify.yml` failing on a pod stuck in Init, not as a fast
+  exec failure; read the init container's log for the ffmpeg error. It runs on every roll
+  under Ansible and Flux alike, so the flip loses no check.
 - **Every rollout waits 3000s, five times the shared default.** A cold pull of the 1432 MiB
   image took 25m37s on 2026-10-08 and failed the old 300s gate (#3689).
   The budget is the literal `ansible/roles/k8s/tdarr/defaults/main.yml:manifests_rollout_timeout`,
@@ -68,3 +73,10 @@ shared conventions.
   pins tdarr to `inventory_hostname`; the role asserts that pin before it pulls. The 3000s budget
   stays: it bounds the pre-pull task, and it is the rollout's backstop if the kubelet's image
   garbage collection removes the image before the new pod starts.
+- **Flux's form of the pre-pull is `flux_prepull_timeout`, inert until the flip.** The renderer
+  adds `tdarr-prepull` for a published tag alone (`scripts/renderer/renderer_lib/prepull.py`),
+  and its Job copies the Deployment's placement. That is why the Deployment carries a required
+  node affinity to `inventory_hostname`, the node the `media-data` PV already pins it to: the
+  renderer refuses a pre-pull for a workload that names no node. tdarr's flip PR deletes the
+  crictl tasks and their test, and drops `manifests_rollout_timeout` to the 600s default (D5
+  step 26).

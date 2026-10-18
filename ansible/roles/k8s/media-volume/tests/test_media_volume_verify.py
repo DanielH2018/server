@@ -1,10 +1,8 @@
-"""media-volume's inert verify Job: its script fails a split volume, and its render passes the census.
+"""media-volume's verify Job: its script fails a split volume, and its render passes the census.
 
 The script tests run `media_volume_verify.main` against a temporary volume. The render tests
-copy the media-volume role, move `templates/verify-inert/` to `templates/verify/` as the flip PR
-will, and render the copy, so the Job is checked as Flux will receive it while the tree's own
-render still emits no `media-volume-verify`. The plan is
-docs/target-architecture/deploy/d5-bulk-move.md, *A verify conversion lands as inert code*.
+render a copy of the media-volume role, so one test can move the host path and leave the tree
+alone. The plan is docs/target-architecture/deploy/d5-bulk-move.md.
 
 Run: uv run pytest ansible/roles/k8s/media-volume/tests/test_media_volume_verify.py
 """
@@ -96,14 +94,12 @@ def stubs(tmp_path_factory):
 
 def _flipped_render(stubs, roles, overrides=None):
     shutil.copytree(K8S_ROLES / TAG, roles / TAG)
-    templates = roles / TAG / "templates"
-    (templates / "verify-inert").rename(templates / "verify")
     return cluster.render_tag(TAG, {**stubs, **(overrides or {})}, roles=roles)
 
 
 @pytest.fixture(scope="module")
 def flipped(stubs, tmp_path_factory) -> dict[str, list[dict]]:
-    """The `media-volume-verify` directory a copy of the role renders once its Job leaves `verify-inert/`."""
+    """The `media-volume-verify` directory a copy of the role renders."""
     rendered = _flipped_render(stubs, tmp_path_factory.mktemp("roles"))
     return {
         f"{TAG}-verify": [
@@ -116,8 +112,10 @@ def flipped(stubs, tmp_path_factory) -> dict[str, list[dict]]:
     }
 
 
-def test_the_tree_renders_no_media_volume_verify_while_ansible_owns_it(stubs):
-    assert cluster.render_tag(TAG, stubs).verify == {}
+def test_the_tree_renders_media_volume_verify(stubs, tmp_path):
+    """The flip moved the Job to `templates/verify/`, so the tree's own render emits it."""
+    own = cluster.render_tag(TAG, stubs).verify
+    assert own == _flipped_render(stubs, tmp_path).verify != {}
 
 
 def test_the_flipped_job_passes_every_job_census_row(flipped):
@@ -154,7 +152,7 @@ def test_the_flipped_job_mounts_the_claim_as_the_media_stack(flipped):
 
 def test_the_staged_job_reads_no_other_roles_file():
     """The deployer redeploys a role when a file it `lookup()`s in another role changes."""
-    staged = sorted((K8S_ROLES / TAG / "templates" / "verify-inert").glob("*.j2"))
+    staged = sorted((K8S_ROLES / TAG / "templates" / "verify").glob("*.j2"))
     assert [p.name for p in staged] == ["job.yaml.j2", "rbac.yaml.j2"]
     assert [
         (path.name, role)

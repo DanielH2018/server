@@ -1,8 +1,9 @@
 """A CronJob's gate Job in `<tag>-verify`, copied from its `jobTemplate` (D5, #5556).
 
-The fixture renders pi-peer-backup, the real role whose gate the plan converts first, through
-the real CLI as if the inventory marked it `owner: flux`, from a copy of its role tree whose
-defaults opt its CronJob in. No flux-owned role opts in on master, so no live tag renders a gate Job.
+The fixture renders pi-peer-backup, the real role whose gate the plan converted first, through
+the real CLI as `owner: flux`, from a copy of its role tree. The copy's defaults drop the live
+`flux_cronjob_gates` and append the opt-in a test names, so a test can render the role with and
+without it. The live role opts in since its flip (#5652).
 
 Run: uv run pytest scripts/renderer/tests/test_renderer_cronjob_gate.py
 """
@@ -45,11 +46,19 @@ OPT_IN = f"\nflux_cronjob_gates:\n  {TAG}:\n    kind: verify\n"
 GATE_ROWS = ("kind", "ttl", "name", "backoff", "rerun-safe")
 
 
+# The live opt-in: the key and its indented lines.
+_LIVE_OPT_IN = re.compile(r"^flux_cronjob_gates:.*\n(?:[ \t]+.*\n)*", re.MULTILINE)
+
+
 def _roles(tmp_path, defaults: str = OPT_IN):
     roles = tmp_path / "roles"
     shutil.copytree(K8S_ROLES / TAG, roles / TAG)
-    with (roles / TAG / "defaults" / "main.yml").open("a") as handle:
-        handle.write(defaults)
+    path = roles / TAG / "defaults" / "main.yml"
+    live, dropped = _LIVE_OPT_IN.subn("", path.read_text())
+    assert dropped == 1, (
+        f"{TAG}'s defaults no longer carry one flux_cronjob_gates block"
+    )
+    path.write_text(live + defaults)
     return roles
 
 
@@ -163,10 +172,15 @@ def test_a_gate_whose_pod_template_differs_from_its_cronjobs_is_not_exempt(rende
 
 
 def test_check_bundle_refuses_the_verify_directory_of_a_role_without_the_opt_in(
-    rendered, capsys
+    rendered, tmp_path, capsys
 ):
-    assert report(rendered, [TAG]) != OK
+    assert report(rendered, [TAG], roles=_roles(tmp_path, defaults="")) != OK
     assert "pi-peer-backup-verify" in capsys.readouterr().err
+
+
+def test_check_bundle_accepts_the_verify_directory_of_the_live_role(rendered):
+    """The green half: the live role opts its CronJob in, so the census grants `-verify`."""
+    assert report(rendered, [TAG]) == OK
 
 
 def _hostname_glob() -> str:

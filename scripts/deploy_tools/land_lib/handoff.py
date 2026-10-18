@@ -28,7 +28,7 @@ STATE_ROOT = _Path("/var/lib")
 # can record others (a signal, flock giving up on its lock), which are reported as 1.
 LAND_CODES = frozenset({0, 1, 64, 75})
 # Above the unit's TimeoutStartSec, so systemd ends a stuck landing before this stops waiting.
-START_TIMEOUT_S = 9 * 3600
+START_TIMEOUT_S = 10 * 3600
 # The PR numbers the lander's polkit rule lets the agent user start a unit for.
 _PR_NUMBER = re.compile(r"[1-9][0-9]{0,6}")
 

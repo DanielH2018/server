@@ -1,7 +1,8 @@
 """Is a Job or CronJob credited as gated -- the batch half of the auto-deploy derivation.
 
 A batch workload is credited when a live task of the role waits on it by name or delegates
-to `cronjob-gate`; whether the role also holds a completion gate and a failure escalation
+to `cronjob-gate`, or, for a flux-owned role, when the role names the CronJob in
+`flux_cronjob_gates`; whether the role also holds a completion gate and a failure escalation
 are separate predicates the guard combines. Everything here
 reads tasks through `_autodeploy._live_tasks`, so a task commented out, tagged `never` or
 behind a `when: false` is invisible to the credit exactly as it is invisible to a deploy.
@@ -9,9 +10,35 @@ Consumed by `test_k8s_autodeploy_batch_gates.py` and by `_autodeploy_rollout.py`
 """
 
 import re
+from functools import cache
 from pathlib import Path
 
 from _autodeploy import _LITERAL_NAME, _live_tasks, _strip_comments, _task_command_text
+from lib.k8s_roles import tag_owners
+from renderer.renderer_lib.ordering import cronjob_gates
+
+
+@cache
+def _owners() -> dict[str, str]:
+    return tag_owners()
+
+
+def flux_gated_names(role: Path, owners: dict[str, str] | None = None) -> set[str]:
+    """The CronJobs a flux-owned role gates through `flux_cronjob_gates`.
+
+    Flux runs no task of a flux-owned role, so no `k8s/cronjob-gate` include can gate it.
+    The renderer copies each CronJob the role names there into a gate Job in `<tag>-verify`,
+    which Flux runs once per role revision (`scripts/renderer/renderer_lib/cronjob_gate.py`).
+    A role Ansible still owns gets no credit for the opt-in, because nothing renders its gate.
+
+    Args:
+        role: The role directory.
+        owners: Each tag's `owner`, the live inventory's when None.
+    """
+    if (owners if owners is not None else _owners()).get(role.name) != "flux":
+        return set()
+    found, _problems = cronjob_gates([role.name], roles=role.parent)
+    return set(found.get(role.name, {}))
 
 
 # Anchored to the run of `job/<name>` (or `job.batch/<name>`) tokens immediately following the
@@ -76,10 +103,10 @@ def _batch_gated_names(role: Path) -> set[str]:
     an empty loop rather than through this function. `_GATING_SHARED_ROLES` asserts that both
     shared roles really do gate what they claim to.
     """
+    names = flux_gated_names(role)
     tasks_file = role / "tasks/main.yml"
     if not tasks_file.is_file():
-        return set()
-    names: set[str] = set()
+        return names
     for task in _live_tasks(role):
         cmd = _task_command_text(task)
         if cmd:

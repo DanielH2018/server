@@ -1,0 +1,13 @@
+{#
+  The verify Jobs' identity, INERT until registry's flip, as `job.yaml.j2` beside it is.
+
+  It is a ServiceAccount with no Role. Both Jobs dial the registry over the pod network and
+  exec into no pod, so they need no Kubernetes grant, and their pods mount no token.
+#}
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: registry-verify
+  namespace: {{ k8s_namespace }}
+automountServiceAccountToken: false

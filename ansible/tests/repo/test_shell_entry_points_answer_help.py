@@ -37,7 +37,7 @@ EXEMPT = {
 # cluster-side template, and the template that pushes to GitHub.
 MUST_FIND = frozenset(
     {
-        "ansible/roles/k8s/pi-peer-backup/files/pi-peer-backup-shell.sh",
+        "ansible/roles/setup/k8s_host_files/files/pi-peer-backup-shell.sh",
         ".claude/hooks/run-hook.sh",
         "setup/k3s/longhorn-backup-health.sh.j2",
         "k8s/crowdsec/crowdsec-prune-bouncers.sh.j2",

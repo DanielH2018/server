@@ -1,5 +1,5 @@
 {#
-  The verify Job's identity, INERT until media-volume's flip, as `job.yaml.j2` beside it is.
+  The verify Job's identity, rendered into `media-volume-verify` beside `job.yaml.j2`.
 
   It is a ServiceAccount with no Role. The Job reads no API and execs into no pod, so it needs
   no grant, and its pod mounts no token.

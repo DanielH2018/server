@@ -53,6 +53,9 @@ LANDERS = {
 BEFORE_IMAGES = {"claude-land": 10800, "renovate-agent-land": 10800}
 # What each unit set before D5.16 handed code-server to Flux with a 4500s pre-pull (#5512).
 BEFORE_CODE_SERVER = {"claude-land": 18000, "renovate-agent-land": 18000}
+# What each unit set before karakeep, pi-peer-backup and media-volume joined the soak with their
+# snapshot and verify Kustomizations.
+BEFORE_KARAKEEP = {"claude-land": 25200, "renovate-agent-land": 25200}
 # The promote jobs a promotion waits on, each counted at its `timeout-minutes`.
 PIPELINE = ("render", "images", "publish")
 # One `images` job that rebuilds every built image, measured on 2026-10-17 (#5431). Run
@@ -154,6 +157,13 @@ def test_the_deadlines_before_code_server_fall_short_of_the_same_render(lander, 
     """The red half: code-server's 4500s pre-pull `timeout` on the chain outgrew 18000's headroom."""
     assert "code-server" in published_tags()
     assert shortfall(BEFORE_CODE_SERVER[lander], soak) > 0
+
+
+@pytest.mark.parametrize("lander", LANDERS)
+def test_the_deadlines_before_karakeep_fall_short_of_the_same_render(lander, soak):
+    """The red half: karakeep's 1200s budget and the three tags' verify kinds outgrew 25200."""
+    assert {"karakeep", "media-volume", "pi-peer-backup"} <= set(published_tags())
+    assert shortfall(BEFORE_KARAKEEP[lander], soak) > 0
 
 
 def test_the_handoff_outwaits_the_claude_lander():

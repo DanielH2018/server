@@ -225,12 +225,12 @@ containers_list:
   # Must precede every media workload — a pod that mounts an undeclared claim stays
   # Pending, and WaitForFirstConsumer makes that look like a scheduling problem rather
   # than a missing volume.
-  #
-  # Its seeding copy does NOT run on an ordinary deploy: it is gated behind
-  # `-e media_volume_sync=true` because the rsync mirrors with --delete, which would erase
-  # whatever qbittorrent has downloaded. See the role's tasks/sync.yml.
   - name: media-volume
     platform: k8s
+    # Flux applies media-volume through `promote`, and its hardlink check runs as a Job in
+    # `media-volume-verify` (D5, Wave D). The handback is two PRs, `owner: released` then
+    # removing `owner`: docs/flux-deploy-plane.md.
+    owner: flux
   # Mounts media-volume's claim at /data, so `depends_on` puts it after that role — as it does
   # for every other media-data mounter below. ansible/tests/deploy/test_k8s_toposort.py pins
   # each pair.
@@ -603,6 +603,10 @@ containers_list:
   # karakeep addresses them by those names.
   - name: karakeep
     platform: k8s
+    # Flux applies karakeep through `promote`, snapshots karakeep-data in `karakeep-snapshot`,
+    # and runs the archive pruner's gate in `karakeep-verify` (D5, Wave C). The handback is two
+    # PRs, `owner: released` then removing `owner`: docs/flux-deploy-plane.md.
+    owner: flux
     weekly_backup_claims: {karakeep-data: 3}  # Wed
     hostname: "karakeep"
     port: 3000
@@ -995,6 +999,11 @@ containers_list:
   # weekly, so there is no same-day off-site restore point.
   - name: pi-peer-backup
     platform: k8s
+    # Flux applies pi-peer-backup through `promote` and runs its gate in
+    # `pi-peer-backup-verify`; its two daniel-pi writes moved to `setup/k8s_host_files` (D5,
+    # Wave C). The handback is two PRs, `owner: released` then removing `owner`:
+    # docs/flux-deploy-plane.md.
+    owner: flux
     weekly_backup_claims: {pi-peer-backup-data: 6}  # Sat
   # SMART monitoring. UI behind Authelia; /api/* is bypassed for LAN machine traffic (the
   # collector's POSTs and monitor-bridge's summary reads) in the authelia role's config.

@@ -118,27 +118,17 @@ _H2_THEN_D5 = (
     "H2's family PR for the role moves the live crons and scripts, then D5's `k8s_host_files` "
     "conversion PR for the role moves the absent arms it leaves"
 )
-_CONFIGMAP = (
-    "D5's Wave D PR for the role: the imperative ConfigMap's node staging under "
-    "/etc/rancher/k3s/ becomes a rendered ConfigMap"
-)
-
 HOST_WRITE_ALLOW = {
     _K8S + "crowdsec/tasks/main.yml": _H2_THEN_D5,
     _K8S + "janitorr/tasks/main.yml": _H2_THEN_D5,
-    _K8S + "observability/tasks/dashboards.yml": _CONFIGMAP,
-    _K8S + "pi-peer-backup/tasks/main.yml": (
-        "pi-peer-backup's Wave C PR moves both daniel-pi writes to `k8s_host_files`"
-    ),
-    _K8S + "qbittorrent/tasks/main.yml": _H2_THEN_D5,
     _K8S + "registry/tasks/main.yml": (
         "D5's GC retirement (Wave D's registry bullet), whose absent arms then move with "
         "the rest"
     ),
     _K8S + "traefik/tasks/main.yml": (
-        "D5's `k8s_host_files` conversion PR for traefik moves the Cloudflare drift absent "
-        f"arms; traefik's flip PR renders the RBAC it stages outside {_MANIFESTS} into "
-        "its bundle and deletes the staging task"
+        f"traefik's flip PR renders the RBAC it stages outside {_MANIFESTS} into its bundle "
+        "and deletes the staging task; the Cloudflare drift absent arms already moved to "
+        "`k8s_host_files`"
     ),
 }
 
@@ -234,12 +224,13 @@ HOST_WRITES = Census(
             "    k3s kubectl get pod x -o name 2>/dev/null >/dev/null 2>&1\n",
         ),
     ),
-    # The writes the must_find member keeps until its D5 PR: pi-peer-backup's two Pi writes.
-    # docs's, artifacts' and media-volume's directories moved to `k8s_host_files`.
-    min_matches=2,
+    # The writes the must_find member keeps until its D5 PRs: traefik's RBAC staging and its two
+    # Cloudflare drift absent arms. docs's, artifacts' and media-volume's directories and
+    # pi-peer-backup's two Pi writes moved to `k8s_host_files`.
+    min_matches=3,
     # Only a D5 PR moves this member, so the row fails when it stops matching rather than when
     # the selector drifts. The D5 PR that moves a member drops it here in the same commit.
-    must_find=frozenset({_K8S + "pi-peer-backup/tasks/main.yml"}),
+    must_find=frozenset({_K8S + "traefik/tasks/main.yml"}),
     allow=HOST_WRITE_ALLOW,
     count=lambda subject: len(host_writes(subject)),
 )

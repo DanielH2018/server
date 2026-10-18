@@ -15,10 +15,9 @@ their own writes under `--check` and report what would change, and the wider fac
 that diff into a skip.
 
 What the census cannot see: a `command`/`shell` that writes the host through neither a file
-module nor a redirect. observability's `inject_dashboard_annotations.py --dest
-/etc/rancher/k3s/dashboards-annotated` is that shape — guarded today through the include, and
-unguarding it would not fail anything here. Recognising it needs a per-script rule, which is
-worth writing the day a second one exists.
+module nor a redirect. observability's dashboard injector was the one such command until its
+ConfigMaps became a template render. Recognising the shape needs a per-script rule, which is
+worth writing the day one exists again.
 """
 
 import re
@@ -70,10 +69,7 @@ _ROLES_THAT_WRITE_THE_HOST = frozenset(
         "headlamp",
         "image-builder",
         "janitorr",
-        "media-volume",
         "netpol-baseline",
-        "pi-peer-backup",
-        "qbittorrent",
         "registry",
         "traefik",
     }
