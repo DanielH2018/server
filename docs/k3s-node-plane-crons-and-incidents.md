@@ -234,6 +234,14 @@ entries carry no interface. The kernel therefore routes the encapsulated packets
 main table, which picks WiFi once the wired routes are skipped. This paragraph is read from
 the routing tables and the forwarding entries on 2026-10-15; no unplug test has confirmed it.
 
+Because the node stays Ready on WiFi, a pulled cable or a dead switch port causes no outage
+that anything else reports. Prometheus raises `WiredLinkDown`, a warning routed to Discord,
+once the link that `k3s_node_static_link` names has had no carrier, or has been down, for 5
+minutes. The rules live in the observability role's `host-checks` group, one per node.
+`ansible/tests/services/test_host_plane_rule_literals.py` holds them to each node's
+`k3s_node_static_link`, so a node that pins a new link fails that test until its rule is
+added (#5124).
+
 The same ARP behaviour has a cost with the cable in. Both links answer a broadcast ARP
 request, so a client can learn the WiFi MAC for an address the wired link carries. MetalLB's
 speaker builds an ARP responder on every link that is up, `wlo1` included, so on daniel-box
