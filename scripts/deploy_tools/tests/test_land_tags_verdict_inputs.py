@@ -179,3 +179,14 @@ def test_a_secrets_rotation_beside_a_k8s_role_keeps_the_k8s_readers_owed():
     )
     assert "redeploy each k8s consumer by hand" in note
     assert "secret-readers:" not in note
+
+
+def test_a_secrets_rotation_beside_the_deploy_plane_leaves_the_readers_to_its_apply():
+    """A deploy-plane path routes the readers through `narrow`, not `secret-readers:`.
+
+    `route_secret_k8s_readers` returns early on `cs.broad_deploy`, so it logs no such line,
+    and the landing already waits on the `deploy.yml` receipt.
+    """
+    note = land_tags.plane_note(["ansible/vars/secrets.yml", "ansible/deploy.yml"])
+    assert "#5409" in note and "this landing waits on that apply" in note
+    assert "secret-readers:" not in note
