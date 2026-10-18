@@ -157,6 +157,8 @@ def _census_rows(script: str = SCRIPT, kind: str = "prepull") -> set[str]:
     files = prepull_files("app", [({"nodeSelector": {"h": "a"}}, ["app:1"])])
     configmap = yaml_fast.safe_load(files["configmap.yaml"])
     job = yaml_fast.safe_load(files["job.yaml"])
+    [container] = job["spec"]["template"]["spec"]["containers"]
+    assert container["command"] == ["sh", f"/opt/prepull/{SCRIPT_NAME}"]
     configmap["data"][SCRIPT_NAME] = script
     configmap["metadata"]["name"] = f"prepull-app-{configmap_digest8(configmap)}"
     job["metadata"]["annotations"]["homelab/job-kind"] = kind
