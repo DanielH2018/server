@@ -52,6 +52,9 @@ tests:
       - eval_time: 26m
         alertname: HostUpdateStale
         exp_alerts: []
+      - eval_time: 26m
+        alertname: WiredLinkDown
+        exp_alerts: []
 
   # The verdict turns red from minute 3 while the file stays fresh. DiskHealthFailed fires in
   # shadow at once, and DiskHealthNotReporting stays quiet.
@@ -401,4 +404,86 @@ tests:
     alert_rule_test:
       - eval_time: 5m
         alertname: HostUpdateStale
+        exp_alerts: []
+
+  # The cable to daniel-box's eno1 is pulled at minute 3: carrier reads 0 while the link stays
+  # administratively up. WiredLinkDown is pending at 7 minutes and fires for daniel-box at 9,
+  # past its 5-minute hold. wlp4s0, the WiFi fallback, keeps carrier, and daniel-server's
+  # wired link stays up, so neither raises an alert.
+  - interval: 1m
+    input_series:
+      - series: 'node_network_carrier{device="eno1", instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '1x2 0x10'
+      - series: 'node_network_up{device="eno1", instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '1x12'
+      - series: 'node_network_carrier{device="wlp4s0", instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '1x12'
+      - series: 'node_network_carrier{device="enp88s0", instance="daniel-server", job="node", origin="daniel-server"}'
+        values: '1x12'
+      - series: 'node_network_up{device="enp88s0", instance="daniel-server", job="node", origin="daniel-server"}'
+        values: '1x12'
+    alert_rule_test:
+      - eval_time: 7m
+        alertname: WiredLinkDown
+        exp_alerts: []
+      - eval_time: 9m
+        alertname: WiredLinkDown
+        exp_alerts:
+          - exp_labels:
+              device: eno1
+              instance: daniel-box
+              job: node
+              origin: daniel-box
+              severity: warning
+              service: daniel-box
+            exp_annotations:
+              summary: daniel-box's wired link eno1 is down, so the node runs on WiFi.
+              description: >-
+                eno1 on daniel-box has had no carrier, or has been down, for 5 minutes. The
+                node routes over its WiFi fallback, which carries Longhorn replication and
+                media at a fraction of the wired rate. Check the cable and the switch port,
+                then run `ip link show eno1` and `ip route get 1.1.1.1` on daniel-box.
+
+  # daniel-server's enp88s0 is set administratively down from minute 3, so node_exporter
+  # serves no carrier series for it and only node_network_up reads 0. The `up` arm fires
+  # daniel-server's rule. wlo1 losing carrier at the same time raises nothing, because no rule
+  # reads the WiFi link.
+  - interval: 1m
+    input_series:
+      - series: 'node_network_carrier{device="enp88s0", instance="daniel-server", job="node", origin="daniel-server"}'
+        values: '1x2 stale'
+      - series: 'node_network_up{device="enp88s0", instance="daniel-server", job="node", origin="daniel-server"}'
+        values: '1x2 0x10'
+      - series: 'node_network_carrier{device="wlo1", instance="daniel-server", job="node", origin="daniel-server"}'
+        values: '1x2 0x10'
+    alert_rule_test:
+      - eval_time: 9m
+        alertname: WiredLinkDown
+        exp_alerts:
+          - exp_labels:
+              device: enp88s0
+              instance: daniel-server
+              job: node
+              origin: daniel-server
+              severity: warning
+              service: daniel-server
+            exp_annotations:
+              summary: daniel-server's wired link enp88s0 is down, so the node runs on WiFi.
+              description: >-
+                enp88s0 on daniel-server has had no carrier, or has been down, for 5 minutes.
+                The node routes over its WiFi fallback, which carries Longhorn replication and
+                media at a fraction of the wired rate. Check the cable and the switch port,
+                then run `ip link show enp88s0` and `ip route get 1.1.1.1` on daniel-server.
+
+  # A three-minute flap, as a switch reboot leaves, ends inside the 5-minute hold, so
+  # WiredLinkDown never fires.
+  - interval: 1m
+    input_series:
+      - series: 'node_network_carrier{device="eno1", instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '1x2 0x2 1x10'
+      - series: 'node_network_up{device="eno1", instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '1x14'
+    alert_rule_test:
+      - eval_time: 9m
+        alertname: WiredLinkDown
         exp_alerts: []
