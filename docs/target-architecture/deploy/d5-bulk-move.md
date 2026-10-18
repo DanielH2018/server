@@ -1079,9 +1079,11 @@ API server with the pod's ServiceAccount token, and Prometheus or an app over HT
 - **Names.** Every Job's name ends in its spec digest, the soak Job included: it is
   `soak-<spec digest8>`, and its spec embeds R's SHA.
 - **A first connection retries.** A brand-new pod admitted by a selector peer can be refused
-  until kube-router learns its address (the MEMORY note on kube-router's source-pod lag,
-  enforced only for the netpol probe's control leg by
-  `ansible/tests/k8s/test_netpol_probe_race.py`). Every Job that reads a fenced Service opens
+  until kube-router learns its address (the MEMORY note on kube-router's source-pod lag). A
+  test once enforced it for prowlarr's netpol probe alone, and prowlarr's flip retired both
+  (#5594);
+  `ansible/roles/k8s/manifests/tests/test_flux_job_connect.py::test_a_refused_connect_is_retried_until_the_server_listens`
+  holds the helper below to it. Every Job that reads a fenced Service opens
   its first connection through one shared helper, which retries a refused or timed-out
   connection for 60 seconds. The helper tells a refusal apart from an empty answer, and never
   retries the second.

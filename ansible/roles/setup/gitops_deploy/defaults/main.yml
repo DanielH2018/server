@@ -191,7 +191,8 @@ gitops_deploy_k8s_autodeploy_denylist: "{{ playbook_dir | k8s_autodeploy_denylis
 # DERIVED from the worst promoted role. The same terms the rollback budget below sums,
 # minus the revert ones, run inside this one budget in sequence: claims x volume_snapshot_timeout
 # (the pre-apply snapshot) + the role's OWN in-role waits + manifests_rollout_timeout +
-# k8s_rollout_stabilise_seconds. prowlarr is the worst at 120 + 300 + 780 + 60 = 1260s. The
+# k8s_rollout_stabilise_seconds. prowlarr is the worst at 120 + 0 + 780 + 60 = 960s, since its
+# flip deleted the 300s isolation probe that made it 1260s when this cap was sized (#5594). The
 # rollout term is counted only for a role that queues one: netpol-baseline has the most in-role
 # waiting in the repo (one probe Job at `--timeout=310s`) and passes `manifests_rollout: ""`,
 # so it pays 370s rather than the 970s its own rollout budget would suggest.
@@ -201,8 +202,9 @@ gitops_deploy_k8s_autodeploy_denylist: "{{ playbook_dir | k8s_autodeploy_denylis
 #     allowance: a sonarr tick showed a 70s gap consistent with one.
 #   - playbook overhead (start-up, facts, renders). 60s allowance: a sonarr tick was 27.8s in
 #     total, of which the snapshot was 4.74s and the probe 0.27s.
-# 1260 + 90 + 60 = 1410, rounded up to 1440. Under 1410 a cap kill lands as a killpg MID-DRAIN
-# that routes to _rollback_k8s, and it binds before prowlarr's own 780s rollout timeout does.
+# The cap was sized at 1260 + 90 + 60 = 1410, rounded up to 1440, and prowlarr's 960s leaves 300s
+# more. A cap under the worst sum lands as a killpg MID-DRAIN that routes to _rollback_k8s, and
+# it binds before prowlarr's own 780s rollout timeout does.
 #
 # Every second here is inside `_worst_lock_hold` (600 + 120 + 1440 + 1620 = 3780s), so raising
 # this moves four other values with it, in the same change: the tree-lock waits of secret-rotate,
@@ -233,13 +235,14 @@ gitops_deploy_k8s_timeout_s: 1440
 #             + manifests_rollout_timeout + k8s_rollout_stabilise_seconds (60)
 #
 # The in-role term matters. A role's own `tasks/` run before k8s/manifests/tasks/drain.yml, so
-# what they wait for adds to the drain rather than overlapping it: prowlarr waits
-# `--timeout=300s` for its flaresolverr isolation probe Job, on top of its 780s rollout. That
-# makes prowlarr the worst promoted service at 480 + 300 + 780 + 60 = 1620s. An inline `rollout status` gate is
+# what they wait for adds to the drain rather than overlapping it. prowlarr waited
+# `--timeout=300s` for its flaresolverr isolation probe Job on top of its 780s rollout, which
+# made it the worst promoted service at 480 + 300 + 780 + 60 = 1620s. Its flip deleted the probe
+# (#5594), so it is still the worst, at 1320s. An inline `rollout status` gate is
 # NOT counted — sonarr's 660s gate waits for the rollout the drain also waits for, so the two are
 # alternatives on one timeline, not additions.
 #
-# 1620 is the worst case exactly, with no slack, and that is deliberate: it is the largest
+# 1620 was the worst case exactly, with no slack, and that was deliberate: it is the largest
 # value the four tree-lock waiters (3840s) still clear with a 60s margin. The test below computes the real ceiling
 # from role sources rather than trusting this number, so a new in-role wait or a rollout bump
 # fails there instead of being absorbed silently.
