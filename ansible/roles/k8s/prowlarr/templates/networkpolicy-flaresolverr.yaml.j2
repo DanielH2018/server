@@ -15,7 +15,8 @@
 # INGRESS, and that word is doing work. Measured on this cluster 2026-08-07 (slice 4, B3): an
 # Egress policy selects pods correctly and blocks nothing. Ingress policies ARE enforced —
 # n8n-broker relies on one and probes it. So this is written in the direction that holds, and
-# netpol-probe-job.yaml.j2 checks it on every deploy rather than trusting the asymmetry.
+# the prowlarr-verify Job (templates/verify/job.yaml.j2) checks it on every revision that edits
+# this policy or flaresolverr's Deployment, rather than trusting the asymmetry.
 #
 # Rendered from the shared macro with literal arguments rather than a `netpol_fences` item on
 # prowlarr's entry: the port is `prowlarr_k8s_flaresolverr_port`, a role default the inventory

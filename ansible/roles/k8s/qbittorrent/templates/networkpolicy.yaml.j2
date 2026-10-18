@@ -10,7 +10,7 @@
 # the two ever diverge.
 #
 # This rule is PORT-SCOPED, and for the callers below that scoping is the whole grant: the baseline
-# admits none of sonarr, radarr, qbittorrent-reach-probe or homepage, so they reach this pod only through
+# admits none of sonarr, radarr, qbittorrent-reach-probe, qbittorrent-prefs-check or homepage, so they reach this pod only through
 # this rule and only on the WebUI port.
 #
 # TRAEFIK IS LISTED HERE DELIBERATELY — do not remove it as redundant — but be accurate about why.
@@ -40,6 +40,10 @@
 # (roles/k8s/homepage/templates/config/services.yaml.j2). It goes direct rather than through Traefik
 # because qbittorrent's public route is Authelia-gated — so this entry is the whole grant, and
 # fencing it out breaks the widget.
+#
+# qbittorrent-prefs-check is the daily drift check's CronJob (prefs-check-cronjob.yaml.j2). It
+# dials the WebUI Service directly, logs in and reads the preferences, so this entry is its
+# whole grant. It lands in the same apply as the CronJob, because this role renders the fence.
 #
 # The caller list is `netpol_from:` on this role's containers_list entry
 # (inventory/host_vars/daniel-box.yml), each caller's reason beside it. The entry's

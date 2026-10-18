@@ -33,7 +33,9 @@ from `tasks/main.yml` with `ansible.builtin.import_tasks`. The import is static 
 `k8s_host_files` tag reaches every task in the file. docs' conversion PR wrote the first,
 `tasks/docs.yml`, which creates the site directory docs' Deployment mounts as a hostPath of
 `type: Directory`. artifacts' PR wrote `tasks/artifacts.yml`, which creates the three trees
-artifacts' Deployment mounts the same way. configarr's PR wrote `tasks/configarr.yml`, the
+artifacts' Deployment mounts the same way. media-volume's PR wrote `tasks/media-volume.yml`,
+which creates the directory media-volume's static PersistentVolume names and its `media/` and
+`torrents/` subdirectories, with no mode. configarr's PR wrote `tasks/configarr.yml`, the
 absent arms that remove H2.5b's retired host health reader: its cron, its script, its working
 directory and its drift fragment. A row drops its source role's `when: not
 k8s_dry_run` guard and its `config` tag, because `initial_setup.yml` has no dry-run mode.
@@ -67,12 +69,14 @@ Two tests in `ansible/tests/setup/` hold those rules:
   imported task `vars:` share with a k8s role's defaults or `group_vars/all.yml`, and asserts
   that each copy equals its source. docs' PR added the first pair, `docs_host_site_dir`, and
   artifacts' PR added `artifacts_host_dir`, `artifacts_peer_dir`, `artifacts_peer_sources`
-  and `artifacts_stars_dir`. It also holds `docs-refresh.sh.j2`'s `SITE_DIR` equal to docs'
+  and `artifacts_stars_dir`. media-volume's PR added `media_volume_host_path` and the
+  `group_vars` keys `puid` and `pgid`, copied so that the setup plane re-applies the owner
+  when they change. It also holds `docs-refresh.sh.j2`'s `SITE_DIR` equal to docs'
   default, the third copy of that path.
 
 A third test, `ansible/tests/setup/test_k8s_host_files_rows.py`, names every moved row by task
 file and task name with its whole argument map. It fails when a row is no longer imported or
-its path, owner, group or mode changes. Each
+its path, owner, group or mode changes, and pins a looped row's `loop`. Each
 conversion PR adds its rows there. A row that moves back to its k8s role fails the host-write
 census in `ansible/tests/repo/_host_write_rows.py`, whose `allow` entry the move dropped.
 

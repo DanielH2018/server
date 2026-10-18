@@ -6,15 +6,16 @@ longer imported from `tasks/main.yml`, stops running on the next apply, and no d
 a missing directory surfaces only when a pod waits in ContainerCreating on its hostPath.
 
 `EXPECTED_ROWS` names each moved row by task file and task name, with the module and the whole
-argument map it must keep: path, state, owner, group and mode. A row that loops over `{{ item }}`
-also pins its loop in `EXPECTED_LOOPS`. Each conversion PR adds its rows in the same commit as the move. The other
+argument map it must keep: path, state, owner, group and mode. A looped row's path reads
+`item`, so `EXPECTED_LOOPS` pins its loop too. Each conversion PR adds its rows in the same
+commit as the move. The other
 direction, a row coming back to its k8s role, is the host-write census's
 (`ansible/tests/repo/_host_write_rows.py`): the move drops the role's `allow` entry, so a host
 write there fails `k8s-role-tasks-write-no-host`.
 
-Red-proof: a fixture role under `tmp_path` whose `main.yml` no longer imports the file, and
-one whose task writes a different path, and one whose task drops its owner, must each be
-flagged; a faithful copy must not.
+Red-proof: a fixture role under `tmp_path` whose `main.yml` no longer imports the file, one
+whose task writes a different path, one whose task drops its owner, and one whose loop drops a
+directory, must each be flagged; a faithful copy must not.
 
 Run: uv run pytest ansible/tests/setup/test_k8s_host_files_rows.py
 """
@@ -90,15 +91,37 @@ EXPECTED_ROWS: dict[str, dict[str, tuple[str, dict[str, str]]]] = {
             },
         ),
     },
+    # No mode, on purpose: the library keeps the directory modes it came with.
+    "media-volume.yml": {
+        "Create the media volume directories on the node": (
+            "ansible.builtin.file",
+            {
+                "path": "{{ item }}",
+                "state": "directory",
+                "owner": "{{ puid }}",
+                "group": "{{ pgid }}",
+            },
+        ),
+    },
 }
 
-# {(task file, task name): its loop}, for a row whose argument map writes `{{ item }}`: the
-# map alone would let a loop drop a path unnoticed. configarr's arm removes three host paths.
-EXPECTED_LOOPS: dict[tuple[str, str], list[str]] = {
+# {(task file, task name): its `loop`} for every looped row. A row absent here must not loop.
+# media-volume's hardlink probe links between media/ and torrents/, so both must exist.
+# configarr's arm removes three host paths.
+EXPECTED_LOOPS: dict[tuple[str, str], object] = {
+    (
+        "artifacts.yml",
+        "Ensure a peer directory exists for every synced host",
+    ): "{{ artifacts_peer_sources }}",
     ("configarr.yml", "Remove the retired configarr health reader from the host"): [
         "/usr/local/bin/configarr-health.sh",
         "/opt/configarr-health",
         "/var/lib/homelab/setup-deployed-manifest.d/configarr",
+    ],
+    ("media-volume.yml", "Create the media volume directories on the node"): [
+        "{{ media_volume_host_path }}",
+        "{{ media_volume_host_path }}/media",
+        "{{ media_volume_host_path }}/torrents",
     ],
 }
 
@@ -112,8 +135,9 @@ def missing_rows(role_dir: Path = ROLE) -> list[str]:
         by_name = {task.get("name"): task for task in tasks}
         for name, (module, expected) in sorted(rows.items()):
             task = by_name.get(name, {})
-            loop = EXPECTED_LOOPS.get((file, name))
-            if task.get(module) != expected or (loop and task.get("loop") != loop):
+            if task.get(module) != expected or task.get("loop") != EXPECTED_LOOPS.get(
+                (file, name)
+            ):
                 missing.append(f"{file}: {name}")
     return missing
 
@@ -143,6 +167,7 @@ def test_a_task_file_main_no_longer_imports_is_flagged(tmp_path):
         "configarr.yml: Remove the retired configarr health reader from the host",
         "configarr.yml: Remove the retired configarr sync heartbeat cron",
         "docs.yml: Ensure the built docs site directory exists",
+        "media-volume.yml: Create the media volume directories on the node",
     ]
 
 
@@ -194,4 +219,16 @@ def test_a_configarr_cron_arm_that_turns_present_is_flagged(tmp_path):
     )
     assert missing_rows(role_dir) == [
         "configarr.yml: Remove the retired configarr sync heartbeat cron"
+    ]
+
+
+def test_a_media_volume_row_that_drops_a_directory_from_its_loop_is_flagged(tmp_path):
+    """The path reads `item`, so only the loop says torrents/ is still created."""
+    role_dir = _fixture_role(tmp_path)
+    media = role_dir / "tasks" / "media-volume.yml"
+    line = '    - "{{ media_volume_host_path }}/torrents"\n'
+    assert line in media.read_text()
+    media.write_text(media.read_text().replace(line, ""))
+    assert missing_rows(role_dir) == [
+        "media-volume.yml: Create the media volume directories on the node"
     ]

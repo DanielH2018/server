@@ -44,9 +44,8 @@ from secrets_mgmt.secret_bearing_host_paths import (
 #     /etc/nut/upsmon.conf at runtime. Kept deliberately — the census errs toward denying, and
 #     narrowing the matcher to Jinja expressions would drop a read-deny and this anchor with it
 #     The no_log census (ansible/tests/repo/) matches Jinja-only because a false hit
-#     there demands a task change, not a prompt.
-#   * qbittorrent-prefs-check.sh — a name that is not `*_push_token`, so the census cannot
-#     silently narrow to push-token-shaped matches and still pass
+#     there demands a task change, not a prompt. Its name is not `*_push_token`, so the
+#     census cannot silently narrow to push-token-shaped matches and still pass.
 #   * secret-rotate.sh — its only reason to be in the census is `secret_rotation_push_token`,
 #     so nothing else pins the path.
 # The NAME is pinned alongside the path deliberately: a path survives a `GENERIC_NAMES` entry
@@ -54,7 +53,6 @@ from secrets_mgmt.secret_bearing_host_paths import (
 MUST_FIND = {
     "/usr/local/bin/secret-rotation-audit.sh": "secret_rotation_push_token",
     "/usr/local/bin/ups-secondary-health.sh": "nut_monitor_password",
-    "/usr/local/bin/qbittorrent-prefs-check.sh": "qbittorrent_password",
     "/usr/local/bin/secret-rotate.sh": "secret_rotation_push_token",
 }
 

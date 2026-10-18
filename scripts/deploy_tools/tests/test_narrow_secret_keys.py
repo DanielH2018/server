@@ -158,6 +158,47 @@ def test_a_key_the_play_reads_refuses_the_setup_answer(tree: Tree, capsys):
     assert _setup_readers(tree, capsys) == (DEPLOY_BROAD, {})
 
 
+# ── the deploy plane's half for a range `narrow` never sees (#5577) ──────────────────────────
+
+
+def _deploy_tags(tree: Tree, capsys) -> tuple[int, str]:
+    """`secret_setup_readers.py --deploy-tags` over the tree's last commit, as the tick runs it."""
+    old, new = _refs(tree)
+    rc = secret_setup_readers.main(
+        ["--deploy-tags", old, new, "--repo", str(tree.root)]
+    )
+    return rc, capsys.readouterr().out.strip()
+
+
+def test_deploy_tags_names_the_k8s_reader_of_a_rotated_key(tree: Tree, capsys):
+    tree.write(SECRETS, _with(BASE_SECRETS, "jellyfin_api_key", "zzz"))
+    assert _deploy_tags(tree, capsys) == (0, "jellyfin")
+
+
+def test_deploy_tags_is_empty_for_a_key_only_a_setup_role_reads(tree: Tree, capsys):
+    tree.write(SECRETS, _with(BASE_SECRETS, "new_setup_token", "eee"))
+    assert _deploy_tags(tree, capsys) == (0, "")
+
+
+def test_deploy_tags_refuses_a_key_the_play_reads_naming_nothing(tree: Tree, capsys):
+    tree.write("ansible/deploy.yml", PLAY + "    k: '{{ bazarr_api_key }}'\n")
+    tree.commit("the play reads a secret")
+    tree.write(SECRETS, _with(BASE_SECRETS, "bazarr_api_key", "xxx"))
+    assert _deploy_tags(tree, capsys) == (DEPLOY_BROAD, "")
+
+
+def test_deploy_tags_refuses_most_of_the_fleet_naming_it(tree: Tree, capsys):
+    """`narrow`'s coverage ceiling: four of the six declared services read the key."""
+    for role in ("sonarr", "radarr", "lidarr"):
+        tree.write(
+            f"ansible/roles/k8s/{role}/templates/token.yaml.j2",
+            "t: {{ bazarr_api_key }}\n",
+        )
+    tree.commit("three more readers")
+    tree.write(SECRETS, _with(BASE_SECRETS, "bazarr_api_key", "xxx"))
+    assert _deploy_tags(tree, capsys) == (DEPLOY_BROAD, "bazarr,lidarr,radarr,sonarr")
+
+
 CLAUDE_DEFAULTS = "ansible/roles/setup/claude_code/defaults/main.yml"
 
 

@@ -1,34 +1,11 @@
 ---
-# The shared media volume for the media stack's nine workloads. Creates it; does NOT fill it — the
-# 19 G copy is opt-in, see sync.yml.
+# The shared media volume for the media stack's nine workloads. Declares it to the cluster; the
+# setup role k8s_host_files creates its directories on the node (tasks/media-volume.yml there).
 #
 # An ordinary deploy reports changed=2, not changed=0, and that is deliberate: the hardlink
 # probe re-runs every time, for the same reason the registry role's self-test does. What it
 # checks is cluster state that can regress without anyone editing this role — a split volume,
 # a claim rebound to something else — so a run that skipped it would prove nothing about today.
-
-# noqa risky-file-permissions: the omitted `mode` is the point — see the comment below.
-- name: Create the media volume directories on the node # noqa risky-file-permissions
-  tags: [config]
-  # media/ and torrents/ are created here rather than left to the first rsync, so the hardlink
-  # probe below has somewhere to link between on a fresh volume that has never been synced.
-  #
-  # DELIBERATELY NO `mode:`. rsync runs with -p and imposes daniel-server's directory modes;
-  # a mode here would fight it, flipping 0775 <-> 0755 on every deploy and — worse — showing up
-  # as a `.d..p......` phantom difference in the verification that is supposed to mean "the
-  # copy is wrong". Ownership does not have the same problem: the copy runs unprivileged and so
-  # cannot chown, which is why {{ puid }}:{{ pgid }} is safe to enforce.
-  ansible.builtin.file:
-    path: "{{ item }}"
-    state: directory
-    owner: "{{ puid }}"
-    group: "{{ pgid }}"
-  loop:
-    - "{{ media_volume_host_path }}"
-    - "{{ media_volume_host_path }}/media"
-    - "{{ media_volume_host_path }}/torrents"
-  become: true
-  when: not k8s_dry_run | bool
 
 - name: Declare the media volume to the cluster
   ansible.builtin.include_role:
@@ -39,14 +16,6 @@
     # Armed for the label, not for a deletion it can make: the StorageClass and PV are
     # cluster-scoped and the claim is a PersistentVolumeClaim, so no document here is a kind in
     # manifests_prune_allowlist. The prune would start covering a kind this role adds later.
-
-- name: Copy the media tree from {{ media_volume_source_host }}
-  ansible.builtin.include_tasks: sync.yml
-  # Not on a dry run: the rsync is a real --delete mirror into the host path, and k8s_dry_run
-  # promises the run changed nothing. --check still reads through it, as sync.yml expects.
-  when:
-    - media_volume_sync | bool
-    - not (k8s_dry_run | bool)
 
 # ── hardlink probe ──────────────────────────────────────────────────────────────────────────
 # Rendered into its OWN directory, not media-volume/. `kubectl apply -f <dir>` is

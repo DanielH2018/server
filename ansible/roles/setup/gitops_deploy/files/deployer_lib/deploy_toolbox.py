@@ -195,6 +195,10 @@ class DeployTools:
     secret_setup_readers: Callable[..., tuple[list[str], dict[str, list[str]]]] = (
         deploy_setup_roles.secret_setup_readers
     )
+    # Its deploy-plane half, the k8s tags reading a moved key (#5577), for the same reasons.
+    secret_k8s_readers: Callable[[str, str, str], tuple[int, str]] = (
+        deploy_setup_roles.secret_k8s_readers
+    )
     emit_deploy_annotation: Callable[[set[str], str], None] = (
         deploy_io.emit_deploy_annotation
     )

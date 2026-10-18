@@ -9,5 +9,8 @@
 - name: Artifacts' host directories
   ansible.builtin.import_tasks: artifacts.yml
 
+- name: Media-volume's media directories
+  ansible.builtin.import_tasks: media-volume.yml
+
 - name: Configarr's retired host health reader
   ansible.builtin.import_tasks: configarr.yml

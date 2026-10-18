@@ -27,6 +27,9 @@ The same keys reach the setup plane through `setup_reader_paths` (#5436), which 
 tick runs through `secret_setup_readers.py`: a key `setup/claude_code` reads applies that role
 there, because no deploy tag ever will.
 
+`narrow` maps the keys only for a range carrying a deploy-plane path. For a range without one,
+the tick asks `reached` through `secret_setup_readers.py --deploy-tags` instead (#5577).
+
 The file is read with `git cat-file blob`, never `git show` or `git diff`. `.gitattributes`
 gives it `diff=sops`, a textconv that decrypts, and no value may reach the journal.
 

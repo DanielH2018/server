@@ -1079,9 +1079,11 @@ API server with the pod's ServiceAccount token, and Prometheus or an app over HT
 - **Names.** Every Job's name ends in its spec digest, the soak Job included: it is
   `soak-<spec digest8>`, and its spec embeds R's SHA.
 - **A first connection retries.** A brand-new pod admitted by a selector peer can be refused
-  until kube-router learns its address (the MEMORY note on kube-router's source-pod lag,
-  enforced only for the netpol probe's control leg by
-  `ansible/tests/k8s/test_netpol_probe_race.py`). Every Job that reads a fenced Service opens
+  until kube-router learns its address (the MEMORY note on kube-router's source-pod lag). A
+  test once enforced it for prowlarr's netpol probe alone, and prowlarr's flip retired both
+  (#5594);
+  `ansible/roles/k8s/manifests/tests/test_flux_job_connect.py::test_a_refused_connect_is_retried_until_the_server_listens`
+  holds the helper below to it. Every Job that reads a fenced Service opens
   its first connection through one shared helper, which retries a refused or timed-out
   connection for 60 seconds. The helper tells a refusal apart from an empty answer, and never
   retries the second.
@@ -1810,7 +1812,7 @@ every row one class:
 | stale Secret keys | `k8s/manifests`' `verify_secret_keys.yml` | Flux's server-side apply removes a field it owns and no longer declares; D3.5 hands each Secret's fields to kustomize-controller first |
 | host-side, moved by H2 | the live crons, scripts and modules of crowdsec, configarr, janitorr, qbittorrent, artifacts and observability | H2's family PR for the role (H2.4b, H2.4c, H2.5b, H2.7), landed before the flip, which waits on it; the absent arms it leaves are the next row's |
 | host-side, moved by D5 | docs's site directory, pi-peer-backup's two Pi writes, traefik's absent arm, registry's GC absent arms; the absent arms H2 leaves in crowdsec, configarr, janitorr and qbittorrent; artifacts' three directory tasks; media-volume's three media directories | the setup role `k8s_host_files`, in a conversion PR before the flip, until H5 or H7 takes each row; sources and variables move with the task (below) |
-| host-side cleanup that has already run | game-stats' pre-#2813 record cleanup; observability's claude-otel record cleanup | deleted by D5's run-once cleanup PR before either role flips (below) |
+| host-side cleanup that has already run | game-stats' pre-#2813 record cleanup; observability's claude-otel record cleanup; media-volume's opt-in seeding rsync, `tasks/sync.yml` | deleted by D5's run-once cleanup PR before either role flips (below); media-volume's by its own conversion PR, because its source, daniel-server's `containers/data`, no longer exists |
 | manifest staged outside the manifests directory | traefik's RBAC, `/etc/rancher/k3s/traefik-clusterrole.yaml` | rendered into the bundle by traefik's flip PR, which deletes the staging and apply tasks (Wave D's traefik bullet) |
 | host-side that writes a flux-owned object | registry's GC cron and manifest | retired before the flip (Wave D's registry bullet) |
 | imperative ConfigMap | monitor-bridge, autofix-bridge, game-stats, observability | a rendered ConfigMap, covered by its readers' `checksum/restart` (D3, and D5.1e for self-rolled readers); observability's ConfigMaps keep their own `checksum/config` too |

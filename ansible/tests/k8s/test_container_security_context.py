@@ -285,7 +285,6 @@ _UNMEASURED_SHORT_LIVED = {
     ("n8n", "wait-for-broker"),
     ("netpol-baseline", "probe"),
     ("peanut", "seed-config"),
-    ("prowlarr", "probe"),
     ("registry", "crane"),
     ("registry", "probe"),
     ("registry", "pulled"),
