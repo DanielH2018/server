@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/crons.py
-generated_at: 2026-10-17 06:17 UTC
-generated_sha: 109f8d0aa
+generated_at: 2026-10-18 06:17 UTC
+generated_sha: 1fa29723f
 ---
 
 !!! warning "Generated file — do not edit"
@@ -12,7 +12,7 @@ generated_sha: 109f8d0aa
 
 # Scheduled jobs
 
-37 cron entrie(s) installed across the roles.
+36 cron entrie(s) installed across the roles.
 
 !!! warning "The state column is a heuristic"
     It is judged from the command text, and nothing in a cron task declares its own blast radius. A job that runs a wrapper script reads as "read the script" rather than being guessed at. Treat it as a pointer, not an authority.
@@ -47,7 +47,6 @@ generated_sha: 109f8d0aa
 | Weekly rkhunter malware scan | `0 2 * * 3` | every host in the play | `root` | read the script | `ansible/roles/setup/initial_setup/tasks/integrity.yml` |
 | Weekly secret rotation (auto tier) | `0 9 * * 0` | the gitops host | `ubuntu` | yes (rotate) | `ansible/roles/setup/initial_setup/tasks/crons.yml` |
 | Weekly system restart | `30 7 * * 0` | every host in the play | `root` | yes (reboot, restart) | `ansible/roles/setup/initial_setup/tasks/crons.yml` |
-| configarr sync health | `*/10 * * * *` | conditional (not k8s_dry_run \| bool) | `ubuntu` | read the script | `ansible/roles/k8s/configarr/tasks/main.yml` |
 | daniel-box disk health | `*/10 * * * *` | every host in the play | `ubuntu` | read the script | `ansible/roles/setup/k3s/tasks/health-crons.yml` |
 | etcd restore drill | `20 10 * * 1` | conditional (has_repo_checkout) | `root` | yes (backup) | `ansible/roles/setup/k3s/tasks/health-crons.yml` |
 | fake-remux health | `*/10 * * * *` | every host in the play | `ubuntu` | read the script | `ansible/roles/setup/fake_remux/tasks/main.yml` |

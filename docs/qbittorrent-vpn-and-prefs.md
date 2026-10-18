@@ -126,9 +126,9 @@ are deliberate:
   `kuma-push-lib.sh` contract.
 - **No new SOPS surface.** It reuses the `qbittorrent_username`/`qbittorrent_password` keys that
   `homepage`'s widget already renders, projected into
-  `/usr/local/bin/qbittorrent-prefs-check.sh` at 0700 owner `{{ sys_user }}` — the same shape as
-  `janitorr-health.sh.j2`'s Kuma token, interpolated directly rather than split into an env file,
-  since only one user ever needs to read this one.
+  `/usr/local/bin/qbittorrent-prefs-check.sh` at 0700 owner `{{ sys_user }}` — the shape
+  janitorr's host health cron used for its Kuma token until H2.5c, interpolated directly rather
+  than split into an env file, since only one user ever needs to read this one.
 - **The exit codes became a contract**: `EXIT_OK` (0), `EXIT_UNREACHABLE` (1), `EXIT_BAD_ARGS` (2),
   `EXIT_DRIFT` (3, `--dry-run` only). Before 2026-08-27, `--dry-run` returned 0 whether or not
   anything had drifted, which is why the cron could not previously have branched on it. No caller

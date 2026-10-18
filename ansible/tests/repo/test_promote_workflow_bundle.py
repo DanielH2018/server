@@ -23,6 +23,9 @@ from lib import yaml_fast
 WORKFLOW = REPO / ".github" / "workflows" / "promote.yml"
 CENSUS = "promote.py check-bundle out"
 SHARED_ONLY = "homelab_render.py cluster --out out --shared-only"
+# The tag branch's render: a `--role` render writes only the named tags' image contexts, and
+# the `images` job builds all ten from it (#5374).
+ALL_IMAGES = 'homelab_render.py cluster --out out --all-images "${roles[@]}"'
 NO_TAG = 'if [ -z "$listed" ]; then'
 CIPHERTEXT = "cluster_vars.py check --ciphertext-only"
 
@@ -118,6 +121,8 @@ def problems(wf: dict) -> list[str]:
             "promote: does not fetch the history decide reads trailers from "
             f"(fetch-depth {depths})"
         )
+    if ALL_IMAGES not in script:
+        found.append(f"render: the build step's tag branch does not run `{ALL_IMAGES}`")
     if f"uv run python scripts/renderer/{SHARED_ONLY}" not in _no_tag_branch(script):
         found.append(
             f"render: the build step's no-tag branch does not run `{SHARED_ONLY}`"
@@ -166,7 +171,9 @@ def _ciphertext_after_gitleaks(wf):
 def _shared_only_in_the_tag_branch(wf):
     """`--shared-only` stays in the script, on the line that publishes tags. An unscoped
     `SHARED_ONLY in script` check finds it there, so only the branch-scoped check reports."""
-    _build_script(wf, 'out "${roles[@]}"', 'out --shared-only "${roles[@]}"')
+    _build_script(
+        wf, 'out --all-images "${roles[@]}"', 'out --shared-only "${roles[@]}"'
+    )
     _build_script(
         wf, "cluster --out out --shared-only\n", "cluster --out out --role x\n"
     )
@@ -183,7 +190,9 @@ def _shared_only_line_outside_the_no_tag_branch(where):
         )
         if where == "else":
             _build_script(
-                wf, 'out "${roles[@]}"\n', f'out "${{roles[@]}}"\n{literal}\n'
+                wf,
+                'out --all-images "${roles[@]}"\n',
+                f'out --all-images "${{roles[@]}}"\n{literal}\n',
             )
         else:
             _build_script(wf, "\nfi", f"\nfi\n{literal}")
@@ -243,6 +252,10 @@ RED = {
     "the --shared-only line after the if block": (
         _shared_only_line_outside_the_no_tag_branch("after"),
         "the build step's no-tag branch does not run",
+    ),
+    "a tag branch that renders only the named tags' images": (
+        lambda wf: _build_script(wf, " --all-images", ""),
+        "the build step's tag branch does not run",
     ),
     "the ciphertext check after gitleaks": (
         _ciphertext_after_gitleaks,

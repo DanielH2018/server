@@ -132,7 +132,10 @@ every entry is flux-owned then waits for C-2b, through the uptime-kuma edge.
     set and C6's `land.sh` wait read `footprint`. These rules replace D6.12's `--moved-tags`
     mode. They apply the classification that D6's *What a footprint counts* defines.
   - From D5.4a1, `DIR/images/<name>/` holds each rendered image context, and
-    `DIR/images/tags.json` maps each name to its content tag. No Kustomization's path reaches
+    `DIR/images/tags.json` maps each name to its content tag. A render of every tag, and a
+    render with `--all-images`, holds all ten. A `--role` render holds the contexts of the
+    named tags' roles alone, and no `DIR/images/` when none of them builds an image, so each
+    named consumer still reads its own tag from it (#5374). No Kustomization's path reaches
     `DIR/images/`. The content tag is `sha-<12 hex>` over the context's `data`, as
     `image_builder_content_tag` computes it. A flux-owned consumer's image ref reads that tag
     from the same render, never from `render_guard.py:BUILT_IMAGE_TAG_STUBS` (D5).

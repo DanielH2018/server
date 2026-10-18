@@ -12,7 +12,8 @@ registry round trip. See repo-root `CLAUDE.md` for shared conventions.
 - **Images:** `registry` (`registry_k8s_image`), `gcr.io/go-containerregistry/crane`
   (`registry_k8s_crane_image`), `alpine` (`registry_k8s_netpol_probe_image`)
 - **Route:** none (no `templates/ingressroute.yaml.j2`)
-- **Claim:** `registry-data` (no backup (StorageClass longhorn-nobackup))
+- **Claims:** `registry-data` (no backup (StorageClass longhorn-nobackup)),
+  `registry-ghcr-mirror` (no backup (StorageClass longhorn-nobackup))
 - **Auto-deploy:** denylisted (`k8s_autodeploy: false`) — dependency edges — image-supply path
   for n8n/homelab-mcp/ical-proxy/nut/pi-peer-backup/code-server/terraria/valheim/karakeep; no
   intra-tick ordering. ALSO Recreate + its own PVC (blob store) — two independent reasons.
@@ -29,6 +30,23 @@ registry round trip. See repo-root `CLAUDE.md` for shared conventions.
   regenerates.
 
 ## Notable
+- **The pod runs a second registry, `ghcr-mirror`, as a pull-through mirror of `ghcr.io`**
+  (D5 Open question 2, ruled 2026-10-16). Every node's `registries.yaml` names it as the
+  `ghcr.io` mirror (`ansible/roles/setup/k3s/templates/registries.yaml.j2`), so a node keeps a
+  LAN copy of each flux-owned GHCR image it pulled and nut can cold-start during a WAN outage.
+  - It is a second container, not `REGISTRY_PROXY_*` on the push store, because a registry in
+    proxy mode refuses every manifest Put and Delete.
+    `ansible/roles/k8s/registry/templates/deployment.yaml.j2:DECIDED: a second container` has
+    the trade-off.
+  - It listens on `k8s_registry_ghcr_mirror_port` (5002) on the same pinned ClusterIP and
+    loopback hostPort scheme. `templates/networkpolicy.yaml.j2` admits that port only from the
+    two node grants, and the netpol probe Job checks a pod is refused on it.
+  - It caches every `ghcr.io` image in the cluster, not only `danielh2018`'s, because a
+    `registries.yaml` mirror covers the whole host. Its store is therefore its own claim,
+    `registry_k8s_ghcr_mirror_claim` (30Gi, `longhorn-nobackup`), which the GC Job never
+    mounts. The TTL is zero, so nothing reclaims a cached tag (#5541).
+  - containerd falls back to `ghcr.io` while the GC scales the pod to zero. A mirror container
+    that cannot start leaves the whole pod unready, push store included.
 - A weekly garbage collection (`gc-job.yaml.j2`, Sunday 04:20) takes the registry
   offline for up to 20 minutes — nothing else reclaims space, and every rebuild pushing
   the same `latest` tag orphans the previous manifest.
@@ -48,8 +66,8 @@ registry round trip. See repo-root `CLAUDE.md` for shared conventions.
     unchanged content tag with new bytes, so a node's cached copy can be stale. A flux-owned
     consumer pulls its GHCR content tag with `IfNotPresent` instead
     (`scripts/renderer/renderer_lib/images.py:ghcr_refs`). GHCR never re-pushes a tag it serves,
-    so a cached copy is always right, and this store never serves that pull until it mirrors
-    GHCR (D5 Open question 2).
+    so a cached copy is always right. That pull goes through the `ghcr-mirror` container above,
+    never through this store.
   - An unrankable tag is KEPT. Ordering needs each manifest's config-blob `created`, because
     the tag names are content hashes and carry no chronology.
 - The GC run reports twice: the `Registry GC` Kuma push tile (`registry_gc_push_token`,

@@ -47,8 +47,6 @@ MUST_INCLUDE = frozenset(
         "ansible/roles/setup/gitops_deploy/files/gitops_deploy.py",
         "ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_io.py",
         "ansible/roles/setup/deploy_ui/files/deploy_ui.py",
-        "ansible/roles/k8s/configarr/files/configarr_health.py",
-        "ansible/roles/k8s/janitorr/files/janitorr_health.py",
         "ansible/roles/k8s/crowdsec/files/bouncer_prune.py",
         "ansible/roles/k8s/crowdsec/files/remote_allowlist.py",
         "ansible/roles/setup/fake_remux/files/fake_remux.py",
@@ -357,18 +355,17 @@ def test_yaml_added_to_the_deployers_io_module_turns_the_walk_red(tmp_path):
 
 
 def test_an_install_directory_resolves_only_what_its_role_ships(tmp_path):
-    # configarr_status sits in the tree's role files, but janitorr's install does not ship it.
+    # configarr_status sits in the tree's role files, but renovate-notify's install does not
+    # ship it.
     checker = _checker()
     module = tmp_path / "importer.py"
-    module.write_text(
-        "import janitorr_health_logic\nimport host_lib\n", encoding="utf-8"
-    )
-    assert checker.walk(module, [_install("/opt/janitorr-health")]) == []
+    module.write_text("import notify_logic\nimport host_lib\n", encoding="utf-8")
+    assert checker.walk(module, [_install("/opt/renovate-notify")]) == []
     unshipped = tmp_path / "unshipped.py"
     unshipped.write_text(
         "from configarr_lib import configarr_status\n", encoding="utf-8"
     )
-    assert checker.walk(unshipped, [_install("/opt/janitorr-health")]) == [
+    assert checker.walk(unshipped, [_install("/opt/renovate-notify")]) == [
         "configarr_lib"
     ]
 
@@ -376,9 +373,9 @@ def test_an_install_directory_resolves_only_what_its_role_ships(tmp_path):
 def test_a_staged_copy_is_checked_against_its_own_install_only():
     # host_lib.py ships to a dozen install directories; a union would resolve through siblings.
     checker = _checker()
-    staged = _install("/opt/janitorr-health") / "host_lib.py"
+    staged = _install("/opt/renovate-notify") / "host_lib.py"
     dirs = dict(checker.members())[staged]
-    assert dirs == [_install("/opt/janitorr-health")]
+    assert dirs == [_install("/opt/renovate-notify")]
 
 
 def test_an_installed_insert_and_its_env_override_point_at_the_stage():

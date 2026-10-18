@@ -69,6 +69,14 @@ class FakeRunner:
         self.ci = [(0, "WAIT: passed abcd1234: 20 check runs passed\n")]
         self.rollup = []
         self.job_logs = {}
+        # The draft step: whether `gh pr view` reports a draft, each `gh pr ready` call, and
+        # the `ci.yml` run ids each `gh api .../runs` read answers with in order (the last
+        # repeats).
+        self.draft = False
+        self.readied = []
+        self.ci_runs = [[1]]
+        # Every `gh pr ready`, run-id read and `cc-wait gh-ci` call, in the order they ran.
+        self.log = []
 
     def __call__(self, argv, stdin):
         argv = unprefixed(argv)
@@ -84,8 +92,22 @@ class FakeRunner:
         if argv[:3] == ["gh", "issue", "view"]:
             return subprocess.CompletedProcess(argv, 0, json.dumps(self.labels), "")
         if argv[:3] == ["gh", "pr", "view"]:
-            out = json.dumps({"statusCheckRollup": self.rollup})
+            out = json.dumps(
+                {
+                    "statusCheckRollup": self.rollup,
+                    "isDraft": self.draft,
+                    "headRefOid": "bbb",
+                }
+            )
             return subprocess.CompletedProcess(argv, 0, out, "")
+        if argv[:3] == ["gh", "pr", "ready"]:
+            self.readied.append(argv)
+            self.log.append(("undo" if "--undo" in argv else "ready",))
+            return subprocess.CompletedProcess(argv, 0, "", "")
+        if argv[:2] == ["gh", "api"] and "/actions/workflows/ci.yml/runs" in argv[2]:
+            ids = self.ci_runs.pop(0) if len(self.ci_runs) > 1 else self.ci_runs[0]
+            self.log.append(("runs", ids))
+            return subprocess.CompletedProcess(argv, 0, json.dumps(ids), "")
         if argv[:3] == ["gh", "run", "view"]:
             log = self.job_logs.get(argv[4], "")
             return subprocess.CompletedProcess(argv, 0, log, "")
@@ -105,6 +127,7 @@ class FakeRunner:
         command = argv[argv.index("land") + 1 :]
         if "gh-ci" in command:
             self.ci_calls.append(command)
+            self.log.append(("gh-ci",))
             rc, out = self.ci.pop(0) if len(self.ci) > 1 else self.ci[0]
             return subprocess.CompletedProcess(argv, rc, out, "")
         self.lands.append(command)

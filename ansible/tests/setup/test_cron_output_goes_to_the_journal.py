@@ -109,10 +109,8 @@ MAILS_ONLY_ON_FAILURE = {
         "its verdict is a Kuma push (#2516)"
     ),
     "Claude Code telemetry health": _KUMA,
-    "configarr sync health": _KUMA,
     "CrowdSec remote allowlist": _KUMA,
     "CrowdSec AppSec verify": _KUMA,
-    "janitorr error health": _KUMA,
     "qbittorrent prefs drift check": (
         "captures the reader's output and reports drift through logger alone"
     ),

@@ -49,7 +49,16 @@ H2_FRAGMENTS = {
     "k3s-longhorn-reap": ("setup/k3s",),
 }
 # The names already retired: only a `state: absent` task passes for these.
-RETIRED = frozenset({"Cloudflare IP drift", "k3s-longhorn-reap"})
+RETIRED = frozenset(
+    {
+        "Cloudflare IP drift",
+        "configarr sync health",
+        "configarr",
+        "janitorr error health",
+        "janitorr",
+        "k3s-longhorn-reap",
+    }
+)
 
 
 class RetiredName(Subject):
@@ -178,6 +187,8 @@ RETIRED_CRON_ARMS = Census(
         ),
         # janitorr's import dropped with no arm for its fragment.
         _subject("fragment", "janitorr", "k8s/janitorr", _UNRELATED),
+        # janitorr's fragment, retired at H2.5c, stamped again in place of its arm.
+        _subject("fragment", "janitorr", "k8s/janitorr", _JANITORR_IMPORT),
         # The reaper retirement's arm with the fragment's path gone from its loop.
         _subject(
             "fragment",
@@ -189,7 +200,6 @@ RETIRED_CRON_ARMS = Census(
     green=(
         _subject("cron", _HOME, "k8s/crowdsec", _cron(_HOME)),
         _subject("cron", _HOME, "k8s/crowdsec", _cron(_HOME, "    state: absent\n")),
-        _subject("fragment", "janitorr", "k8s/janitorr", _JANITORR_IMPORT),
         _subject(
             "fragment",
             "janitorr",

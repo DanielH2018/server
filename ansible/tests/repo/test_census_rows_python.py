@@ -111,6 +111,9 @@ YAML_FAST_USERS = frozenset(
 
 def _pyyaml_offence(subject: Subject) -> list[str]:
     """A CALL to `yaml.safe_load[_all]`; a docstring mentioning one is not a call."""
+    # The attribute is an identifier, so a file that never spells it calls neither (#5501).
+    if "safe_load" not in subject.text:
+        return []
     tree = _parse(subject)
     return [
         f"line {node.lineno}: yaml.{node.func.attr}"
