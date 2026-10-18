@@ -2,6 +2,7 @@
 {% from 'security-context.yml.j2' import hardened_security_context with context %}
 {% from 'workload-shell.yml.j2' import spec_shell, pod_shell with context %}
 {% from 'lsio-env.yml.j2' import lsio_env with context %}
+{% from 'pod-affinity.yml.j2' import node_affinity_required with context %}
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -25,11 +26,47 @@ spec:
         netpol-baseline: enforced
     spec:
 {{ pod_shell('homelab-best-effort') }}
+      # Pinned to the node media-data's local PV names (k8s/media-volume pins it to the same
+      # `inventory_hostname`), so the pin moves no pod: tdarr could run nowhere else. It is
+      # written here because the tdarr-prepull Job copies this pod's placement and cannot read
+      # a PV's, and the renderer refuses a pre-pull for a workload that names no node.
+{{ node_affinity_required(inventory_hostname) }}
       # The file-mode half of the GPU wiring (D2) — the device plugin below handles the cgroup
       # half. Same pair as jellyfin; see that role for why the GID lives in host_vars.
       securityContext:
         supplementalGroups:
           - {{ render_gid }}
+      # ── the VAAPI encode, before tdarr starts (#5451, option 1) ──────────────────────────
+      # tdarr's OWN bundled ffmpeg, not jellyfin's: a different binary built against different
+      # libraries, so jellyfin's encode proof does not carry over. It runs in tdarr's image with
+      # the same device request, so a broken driver, device or ffmpeg build keeps tdarr from
+      # starting instead of leaving it to fail every transcode. A Job cannot run it: its image
+      # has no ffmpeg and the Job census forbids spawning a process.
+      # The binary is located rather than hardcoded: the image has moved it between releases,
+      # and a wrong path would fail here in a way that reads like an unreachable GPU.
+      # `timeout` bounds a wedged GPU, which would otherwise hold the rollout until
+      # progressDeadlineSeconds; it is skipped if the image ever stops shipping it.
+      initContainers:
+        - name: vaapi-encode
+          image: {{ tdarr_k8s_image }}
+          command:
+            - sh
+            - -c
+            - |
+              set -e
+              if command -v ffmpeg >/dev/null; then bin=ffmpeg; else bin=/app/ffmpeg/ffmpeg; fi
+              limit=""
+              if command -v timeout >/dev/null; then limit="timeout 120"; fi
+              echo "using $bin"
+              $limit "$bin" -v error -init_hw_device vaapi=va:/dev/dri/renderD128 -filter_hw_device va -f lavfi -i testsrc=size=1280x720:rate=30:duration=3 -vf format=nv12,hwupload -c:v h264_vaapi -f null -
+              echo VAAPI_OK
+          # tdarr's PUID and PGID, the uid tdarr's own transcodes run as, with the render group
+          # from the pod securityContext above. The exec check this replaces ran as root, which
+          # would pass a render node tdarr's process cannot open.
+{{ hardened_security_context(read_only=true, non_root=true, run_as_user=puid, run_as_group=pgid) }}
+          # The device request is what puts the render node in this container. The kubelet
+          # hands the init container's device on to tdarr's, so the pod still holds one.
+{{ container_resources(cpu_limit='1', mem_limit='512Mi', cpu_request='100m', mem_request='128Mi', extra=tdarr_k8s_dri_resource) }}
       containers:
         - name: tdarr
           image: {{ tdarr_k8s_image }}
