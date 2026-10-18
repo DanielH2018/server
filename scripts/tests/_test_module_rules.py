@@ -93,6 +93,10 @@ def raw_git_calls(source: str) -> list[str]:
     A list or a tuple opening with the literal `"git"`. Read from the AST, so a docstring
     naming the old form is prose rather than a hit.
     """
+    # A hit calls through the bare `subprocess` name, an identifier no module can spell
+    # any other way (#5501).
+    if "subprocess" not in source:
+        return []
     found = []
     for node in ast.walk(ast.parse(source)):
         if not (

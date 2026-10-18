@@ -26,6 +26,9 @@ def bare_jinja_envs(source: str) -> list[str]:
     A name counts only when it was imported from `jinja2` or `jinja2.nativetypes`, so
     `liquid.Environment()` — a different template language — is not a hit.
     """
+    # An import is an identifier, so a module that never spells `jinja2` imports neither (#5501).
+    if "jinja2" not in source:
+        return []
     tree = ast.parse(source)
     bound: set[str] = set()
     modules: set[str] = set()
@@ -97,6 +100,8 @@ def _eval_file_path(node: ast.expr, module: Path) -> Path | None:
 
 def local_repo_roots(source: str, module: Path, repo: Path = REPO) -> list[str]:
     """The names `source` binds to `repo` by walking up from `__file__` at `module`."""
+    if "__file__" not in source:
+        return []
     found = []
     for node in ast.walk(ast.parse(source)):
         if isinstance(node, ast.Assign):

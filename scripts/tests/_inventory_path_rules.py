@@ -107,14 +107,20 @@ def _search_dirs(parent: Path | None) -> tuple[Path, ...]:
     return own + _import_roots()
 
 
-# The census resolves ~22000 imports across ~1400 modules, mostly the same few helpers from
-# the same few directories. Searching every root per import cost ~5s of the
-# static-ratchet-tests hook before this cache (#5501).
-@cache
+# The census resolves ~22000 imports across ~1400 modules, mostly the same few helpers and
+# the standard library, which misses every root. Searching every root per import cost ~5s of
+# the static-ratchet-tests hook before these caches (#5501).
 def _first_on_disk(parent: Path | None, dotted: str) -> Path | None:
+    own = () if parent is None else (parent, parent.parent / "files")
     return next(
-        (f for d in _search_dirs(parent) if (f := _on_disk(d, dotted)) is not None),
-        None,
+        (f for d in own if (f := _on_disk(d, dotted)) is not None), None
+    ) or _on_import_roots(dotted)
+
+
+@cache
+def _on_import_roots(dotted: str) -> Path | None:
+    return next(
+        (f for d in _import_roots() if (f := _on_disk(d, dotted)) is not None), None
     )
 
 
@@ -328,14 +334,15 @@ def inline_inventory_paths(
     """
     tree = ast.parse(source)
     names = _local_anchors(tree, module, sources or {})
-    inner = {
-        id(node.left)
+    joins = [
+        node
         for node in ast.walk(tree)
         if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Div)
-    }
+    ]
+    inner = {id(node.left) for node in joins}
     found = []
-    for node in ast.walk(tree):
-        if not isinstance(node, ast.BinOp) or id(node) in inner:
+    for node in joins:
+        if id(node) in inner:
             continue
         chain = _chain(node, names, module)
         if chain is None:
