@@ -28,6 +28,7 @@ _CLASS_AT_DERIVATION = {
     "crowdsec": "homelab-critical",
     "traefik": "homelab-critical",
     "authelia": "homelab-critical",
+    "traefik-crds": "homelab-critical",
     "pihole": "homelab-critical",
     "registry": "homelab-critical",
     "monitor-bridge": "homelab-critical",

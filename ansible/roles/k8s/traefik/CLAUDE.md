@@ -1,18 +1,15 @@
 # traefik — the cluster ingress edge
 
-Traefik terminates TLS and installs the IngressRoute/Middleware CRDs every other k8s role
-depends on, so it must render before any role whose manifests reference those CRDs.
+Traefik terminates TLS. Every routed k8s role depends on it, and through it on the
+`traefik-crds` tag that holds the IngressRoute/Middleware CRDs those roles' manifests use.
 
 ## At a glance
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates, tasks or containers_list entry, or the k3s role's Longhorn tier lists. -->
-- **Deploy tag:** `--tags "traefik"`
+- **Applied by:** Flux, through `promote` (`owner: flux`); `deploy.sh` refuses `--tags=traefik`
+  with exit 5
 - **Images:** `traefik` (`traefik_k8s_image`), `alpine` (`traefik_k8s_logrotate_image`)
 - **Route:** none (no `templates/ingressroute.yaml.j2`)
 - **Claim:** `traefik-acme` (daily -> R2)
-- **Auto-deploy:** denylisted (`k8s_autodeploy: false`) — platform — ingress edge; a failed
-  deploy removes the ability to reach or fix anything else, and host probes stay green through
-  that kind of outage. COUPLING NOTE for a future promotion: the traefik-acme PVC holds the
-  ACME account key and issued certs; reverting past a real rotation reinstates stale cert state
 <!-- /generated_from -->
 
 - **The dashboard has its own IngressRoute** (`dashboard-ingressroute.yaml.j2`).
@@ -23,21 +20,28 @@ The working-out behind the rules below is `docs/traefik-plugins-and-startup.md` 
 download, the probe's red path, the forwarded-header chain, origin-pull, the 421 incidents).
 The init containers' working-out is `docs/crowdsec-waf-record.md`.
 
-## CRDs
+## Flux applies it
 
-- **The CRDs are an in-tree copy of upstream's definitions**,
-  `files/crds/kubernetes-crd-definition-v1.yml`, pinned by `traefik_k8s_crd_version`, `traefik_k8s_crd_url` and `traefik_k8s_crd_sha256`.
-  The task applies the file; it fetches no URL, because no render may (D5 step 26's traefik
-  bullet). The flip PR moves the copy into a role of its own, `traefik-crds`, whose
-  bundle renders it (#5666).
-- **A minor image bump needs a refresh of the copy.** `ansible/tests/k8s/test_traefik_crds.py`
-  fails when the image's minor differs from `traefik_k8s_crd_version`'s, and when the file
-  stops hashing to the pin. The refresh steps sit above the pin in `defaults/main.yml`.
-- **The copy lives in `files/crds/`, not `files/upstream/`.** The renderer attaches
-  `files/upstream/` to the tag's render, and it refuses a tag that vendors files while its
-  render holds a placeholder. traefik's render holds six, and `email` is read by the
-  static-config ConfigMap and the Deployment, so no move of the Secrets can empty it. That
-  is why the CRDs get their own tag at the flip rather than `files/upstream/` here.
+- **Flux applies traefik, not Ansible** (D5, traefik's own window, #5707). Its
+  `containers_list` entry carries `owner: flux`, so `deploy.sh`, the play and the GitOps
+  deployer all skip it, and a merged change reaches the cluster when `promote` publishes and
+  verifies the next bundle. To give it back to Ansible, follow the two-PR handback in
+  `docs/flux-deploy-plane.md` for both `traefik` and `traefik-crds`; a plain revert of the flag
+  leaves two writers on the objects.
+- **Where the tasks went.** `tasks/main.yml` holds the include of `k8s/manifests` alone, and
+  no Flux path runs it. The CRD install and its "established" wait became the `traefik-crds`
+  tag, which traefik's Kustomization depends on. The RBAC staging under `/etc/rancher/k3s`
+  and its apply became `rbac.yaml` in this tag's `manifests_files`. The reserved-VIP assert
+  became observability's `TraefikIngressAddressNotPinned`, which carries `verify="true"`, so
+  the soak fails a revision that changes traefik while it fires.
+- **The RBAC carries `kustomize.toolkit.fluxcd.io/prune: disabled`** on the ClusterRole, the
+  ClusterRoleBinding and each watched namespace's Role and RoleBinding (#5668). This tag
+  prunes, and a pruned grant drops traefik's Secret informers: the edge fails green.
+- **The CRDs are the `traefik-crds` role's**, an in-tree copy of upstream's definitions whose
+  tag renders `prune: false` (#5666). `ansible/roles/k8s/traefik-crds/CLAUDE.md` has why the
+  copy cannot sit in this tag: `attach_vendored` refuses a tag that vendors files while its
+  render holds a placeholder, and this one holds six. A minor bump of this role's image needs
+  a refresh of that copy, which `ansible/tests/k8s/test_traefik_crds.py` enforces.
 
 ## Plugins and the startupProbe
 

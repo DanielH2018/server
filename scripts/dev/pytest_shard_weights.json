@@ -1222,6 +1222,7 @@
  "scripts/renderer/tests/test_renderer_bundle_ordering.py": 1.35,
  "scripts/renderer/tests/test_renderer_collision_census.py": 3.78,
  "scripts/renderer/tests/test_renderer_context.py": 0.19,
+ "scripts/renderer/tests/test_renderer_crd_census.py": 17.11,
  "scripts/renderer/tests/test_renderer_cronjob_gate.py": 1.24,
  "scripts/renderer/tests/test_renderer_determinism_0.py": 6.85,
  "scripts/renderer/tests/test_renderer_determinism_1.py": 4.87,

@@ -177,10 +177,10 @@ def test_every_template_of_a_jinja_list_role_is_listed_is_clean():
         name: set() for name in JINJA_LIST_ROLES
     }
     # The named members: authelia's OIDC key Secret, which R2's PR 7 lists behind its lever,
-    # and traefik's rbac.yaml, which traefik's own task renders.
+    # and traefik's rbac.yaml, which its flip moved from a staging task into the list.
     _files, secret = resolved_manifest_files("authelia")
     assert "oidc-jwk-secret.yaml" in secret
-    assert "rbac.yaml" not in set().union(*resolved_manifest_files("traefik"))
+    assert "rbac.yaml" in resolved_manifest_files("traefik")[0]
 
 
 def test_a_template_an_explicit_list_leaves_out_is_flagged(tmp_path):
