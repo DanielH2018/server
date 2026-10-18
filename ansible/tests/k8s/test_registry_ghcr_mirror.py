@@ -137,15 +137,16 @@ def test_the_mirror_prune_reads_an_optional_keep_set_and_the_script_verbatim():
     with no file (which prunes nothing) rather than block the pod or reuse an old set."""
     job = _gc_jobs()["registry-gc-ghcr-mirror"]
     volumes = {v["name"]: v for v in job["spec"]["template"]["spec"]["volumes"]}
-    assert volumes["keep"]["configMap"] == {
+    assert volumes["ghcr-mirror-keep"]["configMap"] == {
         "name": "registry-gc-ghcr-mirror-keep",
         "optional": True,
-    }, volumes["keep"]
+    }, volumes["ghcr-mirror-keep"]
     (script,) = [
         d
         for d in _docs("gc-job.yaml.j2")
         if d["kind"] == "ConfigMap"
-        and d["metadata"]["name"] == volumes["prune-script"]["configMap"]["name"]
+        and d["metadata"]["name"]
+        == volumes["ghcr-mirror-prune-script"]["configMap"]["name"]
     ]
     source = (K8S / ROLE / "files" / "ghcr-mirror-prune.sh").read_text()
     assert script["data"]["ghcr-mirror-prune.sh"] == source

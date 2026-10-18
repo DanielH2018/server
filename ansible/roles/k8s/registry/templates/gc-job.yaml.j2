@@ -114,13 +114,13 @@ spec:
           volumeMounts:
             - name: ghcr-mirror-data
               mountPath: /var/lib/registry
-            - name: prune-script
+            - name: ghcr-mirror-prune-script
               mountPath: /prune
               readOnly: true
-            - name: keep
+            - name: ghcr-mirror-keep
               mountPath: /keep
               readOnly: true
-            - name: tmp
+            - name: ghcr-mirror-prune-tmp
               mountPath: /tmp
 {{ container_resources(cpu_limit='500m', mem_limit='128Mi', cpu_request='50m', mem_request='16Mi') }}
       containers:
@@ -148,17 +148,17 @@ spec:
         - name: ghcr-mirror-data
           persistentVolumeClaim:
             claimName: {{ registry_k8s_ghcr_mirror_claim }}
-        - name: prune-script
+        - name: ghcr-mirror-prune-script
           configMap:
             name: registry-gc-ghcr-mirror-prune
         # registry-gc.sh deletes this ConfigMap and writes it afresh on each run. Optional, so a
         # run whose keep set could not be read starts the prune with no file, which prunes
         # nothing, rather than with last week's set.
-        - name: keep
+        - name: ghcr-mirror-keep
           configMap:
             name: registry-gc-ghcr-mirror-keep
             optional: true
-        - name: tmp
+        - name: ghcr-mirror-prune-tmp
           emptyDir:
             medium: Memory
             sizeLimit: 16Mi
