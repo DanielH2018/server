@@ -230,7 +230,7 @@ each slice's *Complexity delta*. It counts owned code only, and leaves out tests
 | Renderer (`homelab-render`, `renderer_lib`) | about 1,900: R1 700, R2 500, D3 300, D4 170, R4 230; H1 to H5 unsized | Ansible's k8s render path: the manifests role and 86 task files, 9,635 lines (R4) | at most 2,600 lines (R4 exit 6) |
 | `promote.py` and its workflows | about 930: D1 580 with 230 of workflow, D2 200, D4 150; D5 and H1 unsized | — | `promote.py` at most 900 lines (D6 exit 6) |
 | GitOps deployer | — | about 7.4k at D6 (k8s arms, drift checks, reach, narrowing, ledgers); the host-plane arm in H7, unsized | deleted by H7 |
-| `land` | D6.1 about 80 | the k8s arms with `deploy.sh`'s, about 700 (D6); the host-plane arms in H7, unsized | at most 6,400 lines after D6; final size unplanned |
+| `land` | D6.10 about 80 | the k8s arms with `deploy.sh`'s, about 700 (D6); the host-plane arms in H7, unsized | at most 6,400 lines after D6; final size unplanned |
 | Host reconcile | H5 130; H3, H4, H6 and H7 unsized | — | H7's ceiling, (B + 720) × 1.3, whose crossing switches the host plan to ansible-pull |
 | Host packaging and builder | unsized; H3 measures it | the bring-up playbooks, about 25k lines of setup and containers roles (an unvalidated census that H2 and H7 re-measure) | — |
 | Alert rules and exporters | about 1,100, with 12 items unsized | about 40 | M1's series budget, 140,000 head series |
