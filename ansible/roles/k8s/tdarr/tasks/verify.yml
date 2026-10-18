@@ -1,6 +1,6 @@
 ---
 # The GATE, not the exit criterion — same split as the jellyfin role. These prove the render node
-# is reachable from tdarr's pod and that its OWN ffmpeg can encode through VAAPI. The actual
+# is reachable from tdarr's pod and that the library is writable. The actual
 # proof is a real library file transcoding to completion and the output playing, which needs a
 # job run and a human.
 
@@ -51,29 +51,9 @@
   ansible.builtin.debug:
     msg: "{{ tdarr_k8s_device.stdout_lines }}"
 
-# tdarr's OWN bundled ffmpeg, not jellyfin's — a different binary built against different
-# libraries, which is why jellyfin's encode proof does not carry over. Locating it rather than
-# hardcoding a path: the image has moved it between releases, and a wrong path would fail here
-# in a way that reads identically to the GPU being unreachable.
-- name: Encode through VAAPI with tdarr's own ffmpeg
-  tags: [deploy]
-  ansible.builtin.command:
-    cmd: >-
-      k3s kubectl -n {{ k8s_namespace }} exec {{ tdarr_k8s_pod.stdout }} --
-      sh -c "ffmpeg=$(command -v ffmpeg || ls /app/ffmpeg/ffmpeg 2>/dev/null | head -1);
-      echo using $ffmpeg;
-      $ffmpeg -v error -init_hw_device vaapi=va:/dev/dri/renderD128 -filter_hw_device va
-      -f lavfi -i testsrc=size=1280x720:rate=30:duration=3
-      -vf format=nv12,hwupload -c:v h264_vaapi -f null - && echo VAAPI_OK"
-  become: true
-  changed_when: false
-  register: tdarr_k8s_vaapi
-  failed_when: "'VAAPI_OK' not in tdarr_k8s_vaapi.stdout"
-
-- name: Report the VAAPI encode
-  tags: [deploy]
-  ansible.builtin.debug:
-    msg: "{{ tdarr_k8s_vaapi.stdout_lines }}"
+# The encode through tdarr's own ffmpeg is not here: the Deployment's `vaapi-encode`
+# initContainer runs it before tdarr starts (#5451), so a failed encode holds the pod in
+# Init and fails the `rollout status` gate above rather than an exec here.
 
 # The library is the thing tdarr can damage, so prove it is both present and WRITABLE before
 # trusting the pod. A read-only or empty /media reads as "no work to do" in the UI rather than as
