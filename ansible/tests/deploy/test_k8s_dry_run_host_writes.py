@@ -73,7 +73,6 @@ _ROLES_THAT_WRITE_THE_HOST = frozenset(
         "media-volume",
         "netpol-baseline",
         "pi-peer-backup",
-        "qbittorrent",
         "registry",
         "traefik",
     }
