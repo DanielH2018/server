@@ -11,3 +11,6 @@
 
 - name: Media-volume's media directories
   ansible.builtin.import_tasks: media-volume.yml
+
+- name: Traefik's Cloudflare IP drift absent arms
+  ansible.builtin.import_tasks: traefik.yml
