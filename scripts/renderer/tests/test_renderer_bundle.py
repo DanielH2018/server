@@ -218,10 +218,10 @@ def test_two_renders_of_one_tree_write_identical_bundles(tmp_path, cluster_file)
 
 
 def test_a_role_render_of_a_tag_flux_does_not_own_writes_no_bundle_is_clean(tmp_path):
-    """pihole defers files. Only a published tag is refused for that, so this renders."""
+    """pihole defers files, which only a published tag is refused for, and builds no image."""
     out = tmp_path / "out"
     assert homelab_render.cluster(out, ["pihole"], None, flux_owned=set) == RENDER_OK
-    assert sorted(p.name for p in out.iterdir()) == ["cluster", "images"]
+    assert sorted(p.name for p in out.iterdir()) == ["cluster"]
     assert sorted(p.name for p in (out / "cluster").iterdir()) == [
         "pihole",
         "pihole-deferred",
