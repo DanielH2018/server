@@ -132,20 +132,26 @@ def test_the_entry_point_answers_help_with_exit_zero(name):
     assert r.stdout.strip(), f"{name} --help exited 0 and printed nothing to stdout"
 
 
-# The template validators the test above once waited on: each ignored `--help` and ran its whole
-# render, which still exits 0 with output, so the subprocess test passed while
+# The entry points the test above once waited on: each ignored `--help` and ran its whole check,
+# which still exits 0 with output, so the subprocess test passed while
 # `k8s_manifests.py --help` took 7s to print its summary line (#5564).
-RENDERING_VALIDATORS = (
-    "k8s_manifests",
-    "setup_templates",
-    "shell_templates",
-    "unit_templates",
+WORK_BEFORE_HELP = (
+    "validate.k8s_manifests",
+    "validate.setup_templates",
+    "validate.shell_templates",
+    "validate.unit_templates",
+    "validate.compose_templates",
+    "validate.grafana_dashboards",
+    "validate.jinja_bash_collisions",
+    "home_assistant.validate_ha_config",
+    "secrets_mgmt.secret_bearing_host_paths",
+    "dev.k8s_autodeploy_counts",
 )
 
 
-@pytest.mark.parametrize("name", RENDERING_VALIDATORS)
-def test_a_template_validator_answers_help_before_it_renders(name, capsys):
-    module = importlib.import_module(f"validate.{name}")
+@pytest.mark.parametrize("name", WORK_BEFORE_HELP)
+def test_an_entry_point_answers_help_before_its_work(name, capsys):
+    module = importlib.import_module(name)
     with pytest.raises(SystemExit) as exc:
         module.main(["--help"])
     assert exc.value.code == 0
