@@ -2781,8 +2781,10 @@ sizes its batch of roles against that projection.
       inert guard Job in `ansible/roles/k8s/pihole/templates/guard-inert/guard.yaml.j2`
       (#5695). It reads `pihole-2-web`'s EndpointSlices and fails while pihole-2 has no ready
       endpoint, so Flux holds `pihole`. It passes when `pihole` has no EndpointSlice, which is
-      a first apply. It must run before `pihole`, and
-      no role-owned kind does yet, so the flip needs one first (#5719).
+      a first apply. It must run before `pihole`, so the flip moves it into
+      `templates/precheck/`, the role-owned kind that renders into `<tag>-precheck`, which
+      `<tag>` depends on (#5719). The flip also names a break-glass for a guard that holds
+      a fix to a down pihole-2 (#5740).
     - **Before the first Wave D flip**, the session measures one revision that changes at
       least ten flux-owned tags, from `prod`'s move to the last status, and compares it with
       the derived verify timeout. A measurement above half the timeout raises the timeout

@@ -109,7 +109,7 @@ every entry is flux-owned then waits for C-2b, through the uptime-kuma edge.
   - `DIR/README.md` at the bundle root, a static note on the layout. No Kustomization's path
     reaches it, and it counts for no name (see `_unclassified` below).
   - From D5.1a1, `DIR/cluster/<tag>-snapshot/` and `DIR/cluster/<tag>-verify/`. From #5525,
-    `DIR/cluster/<tag>-prepull/`.
+    `DIR/cluster/<tag>-prepull/`. From #5719, `DIR/cluster/<tag>-precheck/`.
   - From D2's first publishing PR, `DIR/digests.json` at the bundle root. No Kustomization's
     path reaches it. It maps each deploy tag and each member of `SHARED_KINDS` to an object.
     Every object holds two SHA-256 digests, and from D5.1a2 a deploy tag's object holds two
@@ -372,6 +372,14 @@ every entry is flux-owned then waits for C-2b, through the uptime-kuma edge.
     `dependsOn` the same way, `<tag>` depends on it, and it never depends on `<tag>-snapshot`
     or the reverse. Its `timeout` is the role's `flux_prepull_timeout`. Its document follows
     `<tag>-snapshot`'s and precedes `<tag>-verify`'s.
+  - #5719 adds `<tag>-precheck` for a role that ships `templates/precheck/`, its own check
+    Jobs that must pass before `<tag>` applies, such as pihole's sibling guard. It inherits
+    `<tag>`'s `dependsOn` the same way, and `<tag>` depends on it. It also depends on the
+    role that creates a namespace one of its documents names, so a precheck in a namespace
+    its own tag creates is a cycle and fails the render. Its `timeout` sits 60 seconds above
+    its Jobs' longest `activeDeadlineSeconds`, as `<tag>-verify`'s does. Its document follows
+    `<tag>-prepull`'s and precedes `<tag>-verify`'s. The Job census admits a `precheck` Job
+    there, with `backoffLimit: 0`.
 - **Per-role fields.** Five fields of a role's own Kustomization vary by role. A role may set
   four of them from its defaults:
   - `prune: false`, for a plumbing tag (H1) or a tag whose render holds a
@@ -403,7 +411,7 @@ every entry is flux-owned then waits for C-2b, through the uptime-kuma edge.
   Kustomization's name. It also fails on a deploy tag that equals a member of `SHARED_KINDS`
   or ends in `-deferred`. D5.1a1 reserves `-snapshot`, `-verify`, `soak` and
   `homelab-namespace` too, so no deploy tag takes `soak` or `homelab-namespace` before its
-  kind joins the set. #5525 reserves `-prepull`.
+  kind joins the set. #5525 reserves `-prepull`, and #5719 `-precheck`.
 - **Publish census.** The files under `flux/` must equal the flux-owned tags plus the members
   of `SHARED_KINDS`, and each tag's file holds exactly `<tag>` and the suffixed kinds its
   role's inputs call for. The census computes this allowlist from the renderer's inputs, never

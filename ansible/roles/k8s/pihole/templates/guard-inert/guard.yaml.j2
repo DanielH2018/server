@@ -4,10 +4,12 @@
 
   The operator's ruling on #5695 puts this Job in `pihole`'s dependsOn chain, the way a
   `<tag>-snapshot` Job sits in front of its tag: while it fails, Flux holds `pihole`, and
-  instance 1 keeps serving at its old revision. The renderer has no role-owned kind that
-  precedes `<tag>` yet. `-snapshot` and `-prepull` are the renderer's own Jobs, and
-  `templates/verify/` renders into `<tag>-verify`, which runs after `pihole-deferred` and so
-  guards nothing. The flip PR therefore needs that kind first (#5719).
+  instance 1 keeps serving at its old revision. The flip PR moves this directory to
+  `templates/precheck/`, the role-owned kind that renders into `pihole-precheck`, which
+  `pihole` depends on (#5719). `templates/verify/` would be the wrong place: it renders into
+  `<tag>-verify`, which runs after `pihole-deferred` and so guards nothing. The guard runs in
+  `homelab`, which no tag creates: `deploy.yml`'s pre-task applies it, and `homelab-namespace`
+  owns it once that kind joins `SHARED_KINDS`. So the kind needs no namespace edge.
 
   It runs `files/pihole_sibling_guard.py`, which reads the EndpointSlices of `pihole` and
   `pihole-2-web`, the two web Services that each select one instance. It passes at once when
@@ -20,7 +22,7 @@
   instance 1's sibling check before `apply_instance_2.yml` runs. The cost is a down pihole-2
   that a later revision rolling instance 1 would fix: that revision cannot reach pihole-2 while
   the guard fails, and deleting the failed Job does not help, because Flux recreates it under
-  the same name. No break-glass exists under Flux yet; #5719 asks the flip for one.
+  the same name. No break-glass exists under Flux yet; #5740 asks the flip for one.
   `backoffLimit: 0` keeps a failed check failed, and the 300s wait inside the Job covers a
   pihole-2 restart that is already under way. Instance 1 keeps serving through the hold.
 
@@ -139,8 +141,7 @@ metadata:
   name: pihole-sibling-guard-{{ (spec | to_json(sort_keys=True, separators=(',', ':')) | hash('sha256'))[:8] }}
   namespace: {{ k8s_namespace }}
   annotations:
-    # A read-only check, so it takes a verify Job's `backoffLimit`. The pre-apply kind the flip
-    # needs names its own Job kind; until then this is the census row that fits.
-    homelab/job-kind: verify
+    # A read-only check that runs before `pihole` applies, the kind `pihole-precheck` admits.
+    homelab/job-kind: precheck
 spec:
 {{ spec_text | indent(2, true) }}

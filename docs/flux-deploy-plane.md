@@ -1100,7 +1100,7 @@ census fails a bundle that lacks either. Each member needs a footprint rule in
 
 Every `cluster` render refuses a deploy tag named `homelab`, the root's name, after a
 `SHARED_KINDS` member, or after a member of `RESERVED_NAMES`, the literal list beside it. It
-also refuses a tag ending in `-deferred`, `-snapshot`, `-prepull` or `-verify`. `RESERVED_NAMES` holds
+also refuses a tag ending in `-deferred`, `-snapshot`, `-prepull`, `-precheck` or `-verify`. `RESERVED_NAMES` holds
 `soak` and `homelab-namespace`, D5's shared kinds. `soak` is rendered and in `SHARED_KINDS`
 (*The soak Job*). `homelab-namespace` joins only in the PR that renders it, because the census
 fails a member with no file. The suffixes keep a tag's Kustomization from colliding with another tag's per-tag kind.

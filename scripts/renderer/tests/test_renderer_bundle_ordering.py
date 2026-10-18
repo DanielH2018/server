@@ -209,7 +209,7 @@ def test_the_render_refuses_a_reserved_tag_and_writes_nothing(
     out.mkdir()
     assert homelab_render.cluster(out, [tag], None, kinds=kinds) == RENDER_REFUSED
     assert (
-        "a name ending in -deferred, -snapshot, -prepull or -verify"
+        "a name ending in -deferred, -snapshot, -prepull, -precheck or -verify"
         in capsys.readouterr().err
     )
     assert list(out.iterdir()) == []

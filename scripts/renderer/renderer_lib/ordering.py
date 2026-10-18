@@ -12,8 +12,11 @@ Every edge is generated, never hand-written, from an `Ordering` the caller reads
 - `<tag>-snapshot` inherits `<tag>`'s edges (C3), and `<tag>` then depends on it, so the role
   applies only after its snapshot is taken (D5.2a). `<tag>-prepull` does the same, so the role
   applies only after its images are on the node (#5525). The two are siblings, never a chain,
-  so the longer of them, not their sum, sits on the path. `<tag>-verify` depends on the tag's last
-  Kustomization: `<tag>-deferred` when the tag renders one, `<tag>` otherwise (D5.1a1);
+  so the longer of them, not their sum, sits on the path. `<tag>-precheck`, the role's own
+  pre-apply checks, does the same, so a failing check holds the role (#5719). It also depends
+  on the role that creates a namespace one of its documents names, as `<tag>-deferred` does.
+  `<tag>-verify` depends on the tag's last Kustomization: `<tag>-deferred` when the tag
+  renders one, `<tag>` otherwise (D5.1a1);
 - an edge to a Kustomization that a suspended tag owns is dropped, and the annotation `homelab/suspended-deps` lists it, because Flux would hold the dependent at
   `DependencyNotReady` until the resume (C3 *Suspension*, D5.1b). `drop_suspended` is the one step.
   D5.3b2's `soak` keeps no edge at all (D5 Open question 19), and `soak.py` routes every tag's
@@ -22,8 +25,9 @@ Every edge is generated, never hand-written, from an `Ordering` the caller reads
 `substitution` decides which Kustomizations substitute, and so which take the `cluster-vars`
 edge. `bundle.py` adds that edge and fails the render on a cycle, because Flux would
 hold every Kustomization on it at `DependencyNotReady`. Beside the per-tag kinds' suffixes,
-`verify_files` and `cronjob_gates` read which roles call for `<tag>-verify`, and
-`prepull_timeouts` which call for `<tag>-prepull`. Like `bundle.py`, this module imports
+`verify_files` and `cronjob_gates` read which roles call for `<tag>-verify`,
+`prepull_timeouts` which call for `<tag>-prepull`, and `precheck_files` which call for
+`<tag>-precheck`. Like `bundle.py`, this module imports
 neither Ansible nor Jinja. The plan is docs/target-architecture/deploy/d4-ordering.md, *The
 renderer writes `dependsOn`*.
 """
@@ -53,13 +57,22 @@ VERIFY_SUFFIX = "-verify"
 # A role's pre-pull Job, which pulls the tag's images onto its node before `<tag>` applies
 # (`prepull.py`, #5525).
 PREPULL_SUFFIX = "-prepull"
+# A role's own pre-apply check Jobs, such as pihole's sibling guard, which `<tag>` waits on
+# (#5719).
+PRECHECK_SUFFIX = "-precheck"
 # Every per-tag kind's suffix, in the order its document follows `<tag>`'s in
 # `flux/<tag>.yaml`. The publish census expects exactly this order.
-TAG_KIND_SUFFIXES = (DEFERRED_SUFFIX, SNAPSHOT_SUFFIX, PREPULL_SUFFIX, VERIFY_SUFFIX)
+TAG_KIND_SUFFIXES = (
+    DEFERRED_SUFFIX,
+    SNAPSHOT_SUFFIX,
+    PREPULL_SUFFIX,
+    PRECHECK_SUFFIX,
+    VERIFY_SUFFIX,
+)
 # The role default that calls for `<tag>-prepull` and sets its Kustomization's `timeout`.
 PREPULL_TIMEOUT = "flux_prepull_timeout"
 _DURATION = re.compile(r"(?:(\d+)h)?(?:(\d+)m)?(?:(\d+)s)?")
-# How far a `<tag>-verify` timeout sits above its Jobs' longest `activeDeadlineSeconds`, so a
+# How far a `<tag>-verify` or `<tag>-precheck` timeout sits above its Jobs' longest `activeDeadlineSeconds`, so a
 # hung Job fails on its own deadline before Flux reports a bare timeout. `cronjob_gate_timeout`
 # sits the same 60 seconds above pi-peer-backup's 600-second deadline.
 VERIFY_DEADLINE_MARGIN_S = 60
@@ -68,6 +81,11 @@ VERIFY_DEADLINE_MARGIN_S = 60
 # The manifests role derives its file lists from the top-level `templates/*.yaml.j2` alone, so
 # Ansible never renders or applies them.
 VERIFY_TEMPLATES_DIR = "verify"
+# A role's pre-apply check Jobs, with whatever they need beside them, are its
+# `templates/precheck/*.yaml.j2`. They render into `cluster/<tag>-precheck/`, which `<tag>`
+# depends on, so a check that fails holds the role at its previous revision (#5719). Ansible
+# never renders them, as it never renders `templates/verify/`.
+PRECHECK_TEMPLATES_DIR = "precheck"
 # The role default that opts a role's CronJobs into gate Jobs in `<tag>-verify`, and the two
 # classes a gate takes (`cronjob_gates`).
 CRONJOB_GATES = "flux_cronjob_gates"
@@ -128,24 +146,36 @@ NO_EDGES = Edges()
 NO_ORDERING = Ordering()
 
 
-def verify_files(tags: Iterable[str], roles: Path = K8S_ROLES) -> dict[str, list[str]]:
+def verify_files(
+    tags: Iterable[str], roles: Path = K8S_ROLES, directory: str = VERIFY_TEMPLATES_DIR
+) -> dict[str, list[str]]:
     """The verify manifests each tag's role ships, by basename, empty for a role that ships none.
 
     A role ships them as `templates/verify/<name>.j2`, and a non-empty list calls for
     `<tag>-verify`. The renderer (`renderer_lib/cluster.py`) and the publish census
     (`deploy_tools/bundle_census.py`) read this one function, so the directory the renderer
     writes and the Kustomization the census allows cannot disagree. `cronjob_gates` is the
-    other input that calls for `<tag>-verify`.
+    other input that calls for `<tag>-verify`. `directory` names another role-owned
+    directory of `templates/` read the same way (`precheck_files`).
     """
     return {
         tag: sorted(
             p.name.removesuffix(".j2")
-            for p in (roles / tag / "templates" / VERIFY_TEMPLATES_DIR).glob(
-                "*.yaml.j2"
-            )
+            for p in (roles / tag / "templates" / directory).glob("*.yaml.j2")
         )
         for tag in sorted(set(tags))
     }
+
+
+def precheck_files(
+    tags: Iterable[str], roles: Path = K8S_ROLES
+) -> dict[str, list[str]]:
+    """The pre-apply check manifests each tag's role ships, as `verify_files` reads verify ones.
+
+    A role ships them as `templates/precheck/<name>.j2`, and a non-empty list calls for
+    `<tag>-precheck` (#5719). Nothing else does.
+    """
+    return verify_files(tags, roles, PRECHECK_TEMPLATES_DIR)
 
 
 def prepull_timeouts(
@@ -240,7 +270,7 @@ def _gate_problems(value: object) -> list[str]:
 
 
 def verify_timeout(files: Mapping[str, str], default: str) -> str:
-    """`<tag>-verify`'s Kustomization `timeout`, given the directory's files.
+    """`<tag>-verify`'s or `<tag>-precheck`'s Kustomization `timeout`, given its files.
 
     It is `default` unless a Job there sets an `activeDeadlineSeconds` within
     `VERIFY_DEADLINE_MARGIN_S` of it, and then that deadline plus the margin. A gate Job keeps
@@ -374,11 +404,27 @@ def kustomization_edges(
         # on itself or on the other.
         before = [
             tag + suffix
-            for suffix in (SNAPSHOT_SUFFIX, PREPULL_SUFFIX)
+            for suffix in (SNAPSHOT_SUFFIX, PREPULL_SUFFIX, PRECHECK_SUFFIX)
             if tag + suffix in directories
         ]
         for name in before:
             edges[name] = edges[tag]
+        if tag + PRECHECK_SUFFIX in directories:
+            # A role's own checks apply before the role, so a namespace they name must exist
+            # first. DECIDED: the tag itself is not subtracted, as `-deferred` subtracts it. A
+            # precheck in a namespace its own tag creates then forms the cycle
+            # `<tag>-precheck -> <tag>`, and `bundle_files` refuses the render, where dropping
+            # the edge would leave the Job failing on a fresh cluster with no namespace.
+            name = tag + PRECHECK_SUFFIX
+            wanted = {
+                ordering.namespace_roles[ns]
+                for ns in _namespaces(directories[name])
+                if ns in ordering.namespace_roles
+            }
+            edges[name] = Edges(
+                edges[name].kept | (wanted & owned),
+                edges[name].dropped | (wanted - owned),
+            )
         edges[tag] = Edges(edges[tag].kept | set(before), edges[tag].dropped)
         if tag + VERIFY_SUFFIX in directories:
             last = tag + DEFERRED_SUFFIX if tag + DEFERRED_SUFFIX in edges else tag

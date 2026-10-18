@@ -12,6 +12,7 @@ Run: uv run pytest scripts/renderer/tests/test_renderer_precheck.py
 import re
 import shutil
 
+import pytest
 from _job_census import HELPER, JOB_KIND, problems
 
 from deploy_tools import bundle_census
@@ -265,3 +266,10 @@ def test_a_precheck_document_in_a_role_created_namespace_waits_on_that_role():
     precheck = edges.get(PIHOLE_PRECHECK)
     assert precheck is not None, "the renderer writes no edges for pihole-precheck"
     assert "observability" in precheck.kept
+
+
+def test_a_precheck_in_a_namespace_its_own_tag_creates_fails_the_render():
+    """The namespace would not exist before the precheck applies, so the edge is kept and cycles."""
+    ordering = Ordering(namespace_roles={"homelab": "pihole"})
+    with pytest.raises(ValueError, match="pihole-precheck -> pihole"):
+        _docs(ordering, ["bento-pdf", "pihole"], _prechecking())
