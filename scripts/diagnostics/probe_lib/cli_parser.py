@@ -143,7 +143,11 @@ def _build_parser():
     )
     sub.add_parser(
         "monitors",
-        **_verdict_help("Kuma down-monitors rollup", "all up", "a monitor is not up"),
+        **_verdict_help(
+            "Kuma down-monitors rollup and firing ingress alerts",
+            "all up",
+            "a monitor is not up or an ingress alert fires",
+        ),
     )
     kd = sub.add_parser(
         "kuma-drift",

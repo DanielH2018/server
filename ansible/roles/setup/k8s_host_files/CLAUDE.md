@@ -35,7 +35,8 @@ from `tasks/main.yml` with `ansible.builtin.import_tasks`. The import is static 
 `type: Directory`. artifacts' PR wrote `tasks/artifacts.yml`, which creates the three trees
 artifacts' Deployment mounts the same way. media-volume's PR wrote `tasks/media-volume.yml`,
 which creates the directory media-volume's static PersistentVolume names and its `media/` and
-`torrents/` subdirectories, with no mode. A row drops its source role's `when: not
+`torrents/` subdirectories, with no mode. traefik's PR wrote `tasks/traefik.yml`, the two
+absent arms that remove the retired Cloudflare IP drift cron and its script. A row drops its source role's `when: not
 k8s_dry_run` guard and its `config` tag, because `initial_setup.yml` has no dry-run mode.
 
 - **The playbook entry is gated to daniel-box by a literal.** `setup_routing.py` places a role

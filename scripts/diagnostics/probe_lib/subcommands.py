@@ -63,7 +63,7 @@ SUBCOMMANDS = [
     ),
     (
         "monitors",
-        "Kuma down-monitors rollup (exit 0 = all up)",
+        "Kuma down-monitors rollup and firing ingress alerts (exit 0 = all up)",
         "monitors",
         run_monitors,
     ),

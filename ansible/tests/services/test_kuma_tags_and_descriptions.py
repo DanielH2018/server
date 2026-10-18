@@ -63,16 +63,16 @@ def test_severity_critical_is_exactly_the_email_tier():
 
 
 def test_a_service_tile_leaves_the_email_tier_with_its_tier():
-    # The five home-critical service tiles take severity and email from containers_list
-    # `tier`, not from a literal. Untier authelia and its tile must lose both together.
+    # The home-critical service tiles take severity and email from containers_list `tier`,
+    # not from a literal. Untier mosquitto and its tile must lose both together.
     untiered = [
         {k: v for k, v in entry.items() if k != "tier"}
-        if entry.get("name") == "authelia"
+        if entry.get("name") == "mosquitto"
         else entry
         for entry in _hostvars()["daniel-box"]["containers_list"]
     ]
-    tile = entities_with({"containers_list": untiered})["auth-k8s.json"]
-    assert "email" in _entities()["auth-k8s.json"]["notification_name_list"]
+    tile = entities_with({"containers_list": untiered})["mosquitto-k8s.json"]
+    assert "email" in _entities()["mosquitto-k8s.json"]["notification_name_list"]
     assert "email" not in tile["notification_name_list"]
     assert not _tag_values(tile, "tag-severity")
 
