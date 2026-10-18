@@ -1,0 +1,155 @@
+{#
+  qbittorrent's verify Job and the ConfigMap that carries its script, INERT until qbittorrent's
+  flip.
+
+  This directory is `verify-inert/`, which neither reader globs: the manifests role takes only
+  top-level `templates/*.yaml.j2`, and `verify_files` takes only `templates/verify/*.yaml.j2`.
+  qbittorrent's flip PR moves the directory to `templates/verify/`, and the renderer then emits
+  it into `qbittorrent-verify` (D5, *A verify conversion lands as inert code*). The renderer
+  passes `flux_job_image` and `flux_job_connect`, the helper's text, to every
+  `templates/verify/` file (`render_tag`).
+
+  The Job runs `files/qbittorrent_job.py` with `QBT_JOB=verify`, which replaces the three proofs
+  of `tasks/verify.yml` with no `pods/exec` grant; the script's docstring names how each one
+  moved. Both names end in a digest, as the Job census requires: the ConfigMap's in
+  `configmap_digest8` of its data, the Job's in `job_spec_digest8` of its spec.
+
+  The spec embeds a digest of qbittorrent's rendered Deployment, so every change that rolls the
+  pod renames the Job and Flux runs it again, as Ansible runs `verify.yml` on every deploy.
+
+  DECIDED: the pod carries `app: qbittorrent-reach-probe`, the label of the `kubectl run` pod
+  this Job replaces, not `qbittorrent-verify`. qbittorrent's `netpol_from` already lists that
+  label, so the fence admits the Job with no inventory edit, and the label still names one
+  caller doing one thing: dialing the WebUI from the pod CIDR. The flip PR updates the
+  `netpol_from` comment that names `tasks/verify.yml`.
+
+  The caller census (D5, *A fence admits every Job that dials through it*). The pod is
+  `app: qbittorrent-reach-probe` in `k8s_namespace`. It execs into nothing and dials:
+    - qbittorrent:<webui port>, through `networkpolicy.yaml.j2`, the role-owned fence, which
+      admits the label above. `tests/test_qbittorrent_job.py` fails if it stops admitting it.
+      Without the peer the first connect is refused and the Job fails closed;
+    - `qbittorrent_k8s_verify_egress_url`, outside the cluster. No egress policy here is
+      enforced on this cluster, and the pod's address there is the node's.
+  It also mounts `qbittorrent-config` read-only at the sidecar's `modcache` subPath. The claim
+  is a Longhorn ReadWriteOnce volume, which pods on one node share, so the pod requires
+  qbittorrent's node.
+#}
+{% set script_name = 'qbittorrent_job.py' %}
+{% set script_dir = '/job' %}
+{% set data = {
+  script_name: lookup('file', playbook_dir + '/roles/k8s/qbittorrent/files/' + script_name, rstrip=False),
+  'flux_job_connect.py': flux_job_connect,
+} %}
+{% set configmap_name = 'qbittorrent-verify-' + ({'data': data, 'binaryData': {}} | to_json(sort_keys=True, separators=(',', ':')) | hash('sha256'))[:8] %}
+{% set deployment_digest8 = (lookup('template', 'deployment.yaml.j2') | hash('sha256'))[:8] %}
+{% set spec_text %}
+# A flaky check fails rather than passing on a retry, and a retry would log in again.
+backoffLimit: 0
+# Below the 600s `manifests_rollout_timeout_default` every `<tag>-verify` Kustomization takes.
+# The reach leg's 60s of connect retries, the tunnel leg's 120s wait for an external address,
+# and three 15s requests, with room for the volume to mount.
+activeDeadlineSeconds: 300
+template:
+  metadata:
+    labels:
+      # A peer of qbittorrent's fence; see the DECIDED note above.
+      app: qbittorrent-reach-probe
+  spec:
+    serviceAccountName: qbittorrent-verify
+    # The Job reads the WebUI, not the Kubernetes API, so its pod holds no token.
+    automountServiceAccountToken: false
+    restartPolicy: Never
+    enableServiceLinks: false
+    # The ReadWriteOnce config claim attaches to one node, so the Job runs where qbittorrent runs.
+    affinity:
+      podAffinity:
+        requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchLabels:
+                app: qbittorrent
+            topologyKey: kubernetes.io/hostname
+    # The LinuxServer images' PUID, which the config volume's files belong to. The sidecar
+    # writes the mod cache as root, with the image's default umask, so the tarballs are
+    # world-readable; the flip's first run is where that is proven live.
+    securityContext:
+      runAsNonRoot: true
+      runAsUser: {{ puid }}
+      runAsGroup: {{ pgid }}
+      seccompProfile:
+        type: RuntimeDefault
+    containers:
+      - name: verify
+        image: {{ flux_job_image }}
+        command:
+          - python3
+          - {{ script_dir }}/{{ script_name }}
+        env:
+          - name: QBT_JOB
+            value: verify
+          - name: QBT_URL
+            value: http://qbittorrent.{{ k8s_namespace }}.svc.cluster.local:{{ qbittorrent_k8s_webui_port }}
+          - name: QBT_CREDENTIALS
+            valueFrom:
+              secretKeyRef:
+                name: qbittorrent-prefs-check
+                key: credentials
+          - name: EGRESS_URL
+            value: {{ qbittorrent_k8s_verify_egress_url | to_json }}
+          - name: MODCACHE_DIR
+            value: /modcache
+          # Renames the Job whenever qbittorrent's Deployment changes; see the note above.
+          - name: QBITTORRENT_DEPLOYMENT_DIGEST8
+            value: "{{ deployment_digest8 }}"
+          - name: PYTHONDONTWRITEBYTECODE
+            value: "1"
+        resources:
+          requests:
+            cpu: 10m
+            memory: 32Mi
+          limits:
+            memory: 64Mi
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+              - ALL
+        volumeMounts:
+          - name: script
+            mountPath: {{ script_dir }}
+            readOnly: true
+          # The wireguard sidecar's own mount of its mod cache: the same claim and subPath.
+          - name: config
+            mountPath: /modcache
+            subPath: modcache
+            readOnly: true
+    volumes:
+      - name: script
+        configMap:
+          name: {{ configmap_name }}
+      - name: config
+        persistentVolumeClaim:
+          claimName: {{ qbittorrent_k8s_claim }}
+          readOnly: true
+{% endset %}
+{% set spec = spec_text | from_yaml %}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ configmap_name }}
+  namespace: {{ k8s_namespace }}
+data:
+{% for key, text in data | dictsort %}
+  {{ key }}: {{ text | to_json }}
+{% endfor %}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: qbittorrent-verify-{{ (spec | to_json(sort_keys=True, separators=(',', ':')) | hash('sha256'))[:8] }}
+  namespace: {{ k8s_namespace }}
+  annotations:
+    homelab/job-kind: verify
+spec:
+{{ spec_text | indent(2, true) }}
