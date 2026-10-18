@@ -1,0 +1,12 @@
+{
+  "checksum": "553d92b10cfa71136e94d76eea9897e52dd6474a7ecab08378de66c9ce98d058",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "ansible/roles/k8s/pihole/CLAUDE.md#The Flux forms wait in `templates/verify-inert/`",
+  "row": {
+    "atoms": {
+      "ansible/tests/services/test_lan_address_rules_agree.py": "7f174509839ee8bf6e08438e37a6da989a4ecae974cee1b67a4f7309e93c5b9a"
+    },
+    "python": "3.14",
+    "verified_sha": "c5d4c4eed"
+  }
+}
