@@ -96,7 +96,7 @@ KNOWN_K8S_EDGES = {
         "janitorr",
         "uptime-kuma",
     },
-    "ansible/roles/setup/common/tasks/install_host_lib.yml": {"configarr", "janitorr"},
+    "ansible/roles/setup/common/tasks/install_host_lib.yml": {"janitorr"},
 }
 
 

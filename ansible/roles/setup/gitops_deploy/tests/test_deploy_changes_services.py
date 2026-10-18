@@ -357,14 +357,16 @@ def test_an_initial_setup_defaults_change_reaches_claude_code():
 
 
 def test_a_host_lib_change_defers_the_k8s_roles_importing_it():
-    """janitorr and configarr copy `host_lib.py` through `install_host_lib.yml` (#3320). The
-    deployer applies no k8s role for this change, so each lands in `cs.k8s` and defer-alerts.
-    A `common` file no k8s role imports names none."""
+    """janitorr copies `host_lib.py` through `install_host_lib.yml` (#3320), and configarr
+    stages it into its health CronJob's ConfigMap (H2.5b). The deployer applies no k8s role for
+    this change, so each lands in `cs.k8s` and defer-alerts. A `common` file no k8s role
+    imports names none."""
+    lib = ["ansible/roles/setup/common/files/host_lib.py"]
+    assert services_from_changed_paths(lib).k8s == {"configarr", "janitorr"}
     for path in (
-        "ansible/roles/setup/common/files/host_lib.py",
         "ansible/roles/setup/common/tasks/install_host_lib.yml",
         "ansible/roles/setup/common/tasks/stamp_deployed.yml",
     ):
-        assert services_from_changed_paths([path]).k8s == {"configarr", "janitorr"}
+        assert services_from_changed_paths([path]).k8s == {"janitorr"}
     timer = ["ansible/roles/setup/common/tasks/kuma_check_timer.yml"]
     assert services_from_changed_paths(timer).k8s == set()
