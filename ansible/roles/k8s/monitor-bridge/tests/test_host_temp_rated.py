@@ -141,11 +141,11 @@ def test_the_shipped_config_rates_daniel_boxs_k10temp():
     """
     declared = [
         line
-        for line in (_ROLE / "templates/env-secret.yaml.j2").read_text().splitlines()
+        for line in (_ROLE / "templates/config/env.yaml.j2").read_text().splitlines()
         if line.strip().startswith("HWMON_TEMP_RATED_MAX_C:")
     ]
     assert len(declared) == 1, (
-        "env-secret.yaml.j2 must declare HWMON_TEMP_RATED_MAX_C exactly once, found %d"
+        "config/env.yaml.j2 must declare HWMON_TEMP_RATED_MAX_C exactly once, found %d"
         % len(declared)
     )
     cfg, problems = _host_config(declared[0].split(":", 1)[1].strip().strip('"'))
@@ -176,7 +176,7 @@ def test_the_shipped_hysteresis_rides_out_this_sensors_boost_excursions(cfg):
     page. Both are daniel-box's k10temp/Tctl, which spends 12.0% of a week above that 90C limit
     as ordinary boost. Measured over 7d at the 5 min loop cadence, its 115
     excursions ran to 8 cycles with one outlier of 18 and nothing in between; 3 cycles paged 26
-    times that week, 12 pages once. The `cfg` fixture is the rendered env-secret, the one value
+    times that week, 12 pages once. The `cfg` fixture is the rendered pod environment, the one value
     the pod reads (#3659).
     """
     assert cfg.HWMON_TEMP_CONSECUTIVE == 12, (

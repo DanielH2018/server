@@ -263,7 +263,7 @@ def io_config(
         # stops SHIPPING (a relabel regression, positions-file corruption, a stale /var/log
         # mount) — a silently-dead log pipeline that quietly blinds the log dashboards and any
         # future log forensics. Three arms, down if ANY is silent. Every selector is rendered in
-        # env-secret.yaml.j2 from the `loki_streams` label owner in group_vars/all.yml.
+        # config/env.yaml.j2 from the `loki_streams` label owner in group_vars/all.yml.
         #   arm 1 (cluster file-tail union): count the cluster hosts' authlog+syslog streams over
         #   a TOLERANT window (LOKI_FILETAIL_WINDOW) and go down at zero — an Alloy file-source
         #   regression, a stale /var/log mount, or host rsyslog dying silences both at once

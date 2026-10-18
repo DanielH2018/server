@@ -3,14 +3,14 @@
 monitor_bridge_k8s_image: python:3.14-alpine@sha256:f6a589d43c42b9e7f7dc67a12d37132491f362859a5d750607710cc56da3bc72
 
 # The deploy-pipeline exporter's listener (files/deploy_pipeline.py), the one thing this pod
-# serves rather than pushes. The env-secret hands it to the process, the Service and the
+# serves rather than pushes. config/env.yaml.j2 hands it to the process, the Service and the
 # container port read it, and observability's deploy-pipeline scrape job targets it as a literal,
 # because role defaults do not cross the deploy play's include_role loop.
 # ansible/tests/services/test_deploy_pipeline_scrape.py holds that literal to this value.
 monitor_bridge_deploy_pipeline_port: 9180
 
-# The host-package builder's two page bounds (h3-pi-pilot.md, *Builder arms*), rendered into the
-# env-secret as BUILDER_MAX_LAG_S and BUILDER_MAX_FETCH_AGE_S for the `host_packages` row.
+# The host-package builder's two page bounds (h3-pi-pilot.md, *Builder arms*), rendered into
+# config/env.yaml.j2 as BUILDER_MAX_LAG_S and BUILDER_MAX_FETCH_AGE_S for the `host_packages` row.
 # Lag: how long master may sit unbuilt (a trust, keyring or tools refusal, a rewritten master,
 # a hold, an open rollout gate, a master that stays red) before the tile pages: 2 hours, against
 # a ~103 s master CI run. Fetch age: how old the builder's last successful `git fetch` may be,

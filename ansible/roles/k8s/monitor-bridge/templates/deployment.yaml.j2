@@ -38,6 +38,16 @@ spec:
             - name: metrics
               containerPort: {{ monitor_bridge_deploy_pipeline_port }}
 {{ hardened_security_context(read_only=true) }}
+          # The settings, one plain value per entry of config/env.yaml.j2; the credentials come
+          # from env-secret.yaml.j2. A quoted number belongs there, never in the Secret: Flux's
+          # typed patch reads a Secret's "300" back as a number and refuses it (#5574).
+          # `to_json` writes each value as the double-quoted string the file holds, so a value
+          # that file left unquoted as a number renders as one and the apply refuses it.
+          env:
+{% for name, value in lookup('template', playbook_dir + '/roles/k8s/monitor-bridge/templates/config/env.yaml.j2') | from_yaml | dictsort %}
+            - name: {{ name }}
+              value: {{ value | to_json }}
+{% endfor %}
           envFrom:
             - secretRef:
                 name: monitor-bridge-env

@@ -330,7 +330,7 @@ setup_drift_check_hosts:
 
 # The label values loki-homelab's streams carry, one entry per stream role (#3740). Both Alloy
 # configs stamp their streams from this map: roles/k8s/loki-homelab for the cluster nodes and
-# roles/containers/alloy for daniel-pi. monitor-bridge's LogQL selectors in env-secret.yaml.j2
+# roles/containers/alloy for daniel-pi. monitor-bridge's LogQL selectors in config/env.yaml.j2
 # are rendered from it too.
 #
 # A consumer that cannot render a var is compared against it instead: the Grafana dashboards,

@@ -6,7 +6,7 @@ every threshold read by a check in `checks/host.py`, `checks/host_thermal.py` an
 host-metric checks fail closed on.
 
 A field's justification sits beside its DECLARATION; its env var name sits beside its READ in
-`host_config`, and its value in `templates/env-secret.yaml.j2`. `bridge/config.py` composes this into the single frozen `Config`
+`host_config`, and its value in `templates/config/env.yaml.j2`. `bridge/config.py` composes this into the single frozen `Config`
 that `main()` builds and threads down. This module imports nothing from `bridge.config` — the
 parsers arrive as arguments, so the split leaf never reaches back into its facade.
 """
@@ -230,7 +230,7 @@ def host_config(
         # still have a PUBLISHED rating, and an operator can supply it. Ratioed exactly like a
         # declared max, so a rated 100 and a declared 100 produce the same 90C limit.
         # Empty by default — a rating belongs beside the host it describes, in
-        # templates/env-secret.yaml.j2, where the part number justifying the number is reviewable.
+        # templates/config/env.yaml.j2, where the part number justifying the number is reviewable.
         # daniel-box's k10temp/Tctl is the entry that exists: AMD publishes Tjmax 100C for the
         # Ryzen 7 8845HS. See the `DECIDED: daniel-box's k10temp/Tctl takes its limit` marker in
         # verdicts.host.hwmon_temp_limits for that evidence and for how to fetch amd.com, and the
@@ -492,7 +492,7 @@ def host_config(
         # not by cgroup — so user-1000-slice is covered when it exists and absent without paging
         # when it does not.
         # Empty disables the arm entirely, like PI_ORIGIN and PI_PUBLISHED_PORTS; the live
-        # value is set in templates/env-secret.yaml.j2, beside the host it describes.
+        # value is set in templates/config/env.yaml.j2, beside the host it describes.
         CLAUDE_CGROUPS=tuple(
             c.strip() for c in _env("CLAUDE_CGROUPS").split(",") if c.strip()
         ),
