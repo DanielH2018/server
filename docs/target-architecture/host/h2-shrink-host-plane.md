@@ -17,6 +17,11 @@ together with D5's run-once cleanup PR. It merged at `471397804`. daniel-box's t
 both scripts at 01:41 UTC, and the peer sync cron rewrote its lock at 01:45:01, the first slot
 after. On daniel-server, `initial_setup.yml --tags claude_code` read `ok=123 changed=4
 failed=0`. The node gate kept both crons off that host, and `Restart claude-rc` did not run.
+H2.4b and H2.4c wait on *Open questions* 2, which only the operator can decide. Every one of
+crowdsec's four crons reaches `cscli` through `kubectl exec deploy/crowdsec`. A CronJob of that
+shape needs a `pods/exec` grant, and D5 *Open questions* 14 makes each such grant an operator
+decision. A fan-out session on 2026-10-18 (#5649) found no exec-free form and stopped.
+#5655 asks the operator for the ruling.
 Depends on: H1, D3 and H6, per PR. H2.2a needs H1.5a and H1.6. H2.3b needs H1.5a and the C3
 row of *Open questions* 12. H2.8a needs H1.7b (and through it D3) and H6.4b, with the
 region-key gate of *Open questions* 11. No other H2 PR waits outside H2 (*Open questions*
@@ -1387,6 +1392,7 @@ change at merge time*).
     (**operator-only**). A one-time `rm -r /var/lib/longhorn-restore-drill` follows
     (**operator-only**, root).
 11. **H2.4b CrowdSec, three API-only jobs** (Ansible, in a home-edge window).
+    - Gate: the operator has decided *Open questions* 2 for each of the three jobs.
     - Add the remote allowlist, bouncer prune and AppSec verify CronJobs with their RBAC,
       images and the two Python entry points. In the same commit, add the three jobs' labels
       to uptime-kuma's `netpol_from`.
@@ -1403,6 +1409,7 @@ change at merge time*).
       again right before `land.sh`, run *Landing a `containers_list` edit* (Design).
     - *Open questions* 2 is decided here.
 12. **H2.4c CrowdSec home allowlist** (Ansible, in a home-edge window).
+    - Gate: the operator has decided *Open questions* 2 for the home allowlist.
     - Add the host-network CronJob, with its state kept in the allowlist itself, and
       `monitor_bridge_home_allowlist_push_token` in the role's Secret. It needs no
       `netpol_from` grant, and it is gated with `k8s/cronjob-gate`. Its tests gain the image
@@ -2045,6 +2052,28 @@ carries `prune: disabled`.
    and prune loops against the shared database, needs no `pods/exec` grant. It is no longer a
    CronJob, though, and it restarts with the LAPI. Resolution: H2.4b picks one, and records the
    measured cost of the sidecar's memory request against the exec grant.
+   **Measured 2026-10-18 (#5649): no third form exists over the network.** The four jobs
+   need three kinds of `cscli` call: `allowlists` writes, `bouncers list` and `bouncers
+   prune`, and `appsec-configs list` and `appsec-rules list`. The LAPI at the pinned
+   `crowdsecurity/crowdsec:v1.8.1` serves none of these. Its route table
+   (`pkg/apiserver/controllers/controller.go` at the `v1.8.1` tag) serves allowlists
+   read-only (`GET /v1/allowlists`, `GET /v1/allowlists/:allowlist_name` and the `check`
+   routes). It has no bouncer route and no AppSec route. Each job therefore needs one of
+   three things:
+    - the `pods/exec` grant this section's design gives it;
+    - the sidecar above;
+    - a Job that runs `cscli` from the crowdsec image against `crowdsec-db` mounted directly.
+      That PVC is ReadWriteOnce on Longhorn, so the Job must schedule on the LAPI's node. It
+      would also write the SQLite file beside a running LAPI, which nothing here measures.
+   The sidecar cannot host either Python job as it stands, because the crowdsec image carries
+   no Python. `bouncer_prune.py` and `remote_allowlist.py` are both Python modules, so each
+   needs a port to shell or an image that adds an interpreter. `remote_allowlist.py` also
+   reads IngressRoutes and Traefik's access log through `kubectl`, which the image lacks too. The AppSec verify checks what the live engine
+   loaded, so only an exec or a sidecar in the engine's pod reads the same thing. The
+   operator picks the form per job in the H2.4b PR's review (**operator-only**). Until then
+   no cron is retired and no `netpol_from` label is added, because a retired cron with no
+   running replacement would let the home address be banned and would remove the only check
+   that the WAF enforces.
 3. **Backup health and the B2 pair stay on the host.** design.md's host-plane section says
    about 15 cluster-reading crons become CronJobs. This plan retires ten cron files from
    daniel-box, D5 retires registry GC, and these three stay.

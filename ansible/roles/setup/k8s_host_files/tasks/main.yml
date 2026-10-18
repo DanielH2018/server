@@ -12,5 +12,11 @@
 - name: Media-volume's media directories
   ansible.builtin.import_tasks: media-volume.yml
 
+- name: Observability's retired dashboard staging trees
+  ansible.builtin.import_tasks: observability.yml
+
 - name: Qbittorrent's retired prefs drift check
   ansible.builtin.import_tasks: qbittorrent.yml
+
+- name: Traefik's Cloudflare IP drift absent arms
+  ansible.builtin.import_tasks: traefik.yml

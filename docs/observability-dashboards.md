@@ -2,7 +2,7 @@
 
 Evidence and history behind `ansible/roles/k8s/observability/CLAUDE.md`, which keeps the rules a session loads on every touch of the role (#2925, #2993). The first half covers the Grafana boards: how the two community boards are seeded, the panel-query traps a 2026-09-10 audit measured, and the B2 usage board that was removed. The second half covers the Grafana OIDC measurements, the four behaviours that make an idle telemetry stack look broken, and the commands that exercise the pipeline end to end.
 
-Nothing tests the board half. `ansible/roles/k8s/observability/tasks/dashboards.yml` and the JSON under `ansible/roles/k8s/observability/files/` are the authority on what is provisioned; where a paragraph here disagrees with them, the tree is right.
+Nothing tests the board half. `ansible/roles/k8s/observability/templates/grafana-dashboards.yaml.j2`, the board lists in `ansible/roles/k8s/observability/defaults/main.yml:observability_dashboard_folders` and the JSON under `ansible/roles/k8s/observability/files/` are the authority on what is provisioned; where a paragraph here disagrees with them, the tree is right.
 
 ## Seeding and round-tripping a board
 

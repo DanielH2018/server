@@ -8,7 +8,7 @@ down leaves the ratio at N/N up.
 from pathlib import Path
 
 from check_table import CHECKS
-from diagnostics.probe_lib import kuma_live, kuma_pi, monitors
+from diagnostics.probe_lib import firing_ingress, kuma_live, kuma_pi, monitors
 
 TEMPLATE_SAMPLE = """\
 stringData:
@@ -25,6 +25,9 @@ stringData:
     {"type": "push", "name": "Off-box etcd Snapshot", "interval": 90000, "push_token": "x"}
 {% endif %}
 """
+
+
+ETCD_GATE = "etcd_snapshot_push_token | default('')"
 
 
 def drift(declared, live, kuma_age_seconds, **kwargs):
@@ -82,7 +85,25 @@ def test_declared_monitor_count_reads_the_real_template():
     # template, so a template that moved or a parse that returns nothing shows up here as a
     # missing count rather than as a coverage line that is silent forever.
     declared = monitors.declared_monitor_count()
-    assert declared is not None and declared >= 90, declared
+    assert declared is not None and declared >= 80, declared
+
+
+def _alerts(*firing):
+    """An ALERTS response with one series per (alertname, service) in `firing`."""
+    result = [{"metric": {"alertname": a, "service": s}} for a, s in firing]
+    return {"status": "success", "data": {"result": result}}
+
+
+def test_format_ingress_alerts_is_clean_on_no_firing_alert():
+    # No series is what Prometheus returns when nothing fires, not a failed scrape.
+    assert firing_ingress.format_ingress_alerts(_alerts()) == ([], 0)
+
+
+def test_format_ingress_alerts_is_flagged_on_a_firing_alert_and_names_its_service():
+    flagged = firing_ingress.format_ingress_alerts(
+        _alerts(("IngressProbeFailed", "homepage"))
+    )
+    assert flagged == (["  homepage: IngressProbeFailed firing"], 1)
 
 
 def test_declared_monitor_count_leaves_gated_declarations_out(tmp_path):
@@ -200,12 +221,7 @@ def test_kuma_drift_reports_a_live_monitor_nobody_declared():
 def test_kuma_drift_skips_a_monitor_whose_gate_is_genuinely_unset():
     declared = monitors.parse_declared_monitors(TEMPLATE_SAMPLE)
     live = {"Root Disk", "WG Pi Peer Backup", "k3s Grafana"}
-    text, code = drift(
-        declared,
-        live,
-        86400,
-        gate_states={"etcd_snapshot_push_token | default('')": False},
-    )
+    text, code = drift(declared, live, 86400, gate_states={ETCD_GATE: False})
     assert code == 0
     assert "Off-box etcd Snapshot" in text
     assert "gated off" in text
@@ -222,12 +238,7 @@ def test_kuma_drift_reports_drift_when_the_gate_is_set_but_the_monitor_is_absent
     live = {"Root Disk", "WG Pi Peer Backup", "k3s Grafana"}
     # Past the monitor's own 90000s interval, so `pending` cannot absorb it — a gate-set
     # monitor inside its interval is still legitimately pending, not drift.
-    text, code = drift(
-        declared,
-        live,
-        86400 * 3,
-        gate_states={"etcd_snapshot_push_token | default('')": True},
-    )
+    text, code = drift(declared, live, 86400 * 3, gate_states={ETCD_GATE: True})
     assert code == 1
     assert "Off-box etcd Snapshot: declared, not live" in text
     assert "gated off" not in text
@@ -484,17 +495,3 @@ def test_the_real_template_declares_every_bridge_tile_ungated():
     assert len(bridge) >= 44 and "Traefik 421" in bridge
     assert all(d is not None and d["gated"] is False for d in bridge.values()), bridge
     assert not [name for name in declared if "{" in name]
-
-
-def test_the_real_template_declares_every_ingress_tile_ungated():
-    """#3690 moved the ingress tiles into a loop over containers_list; kuma-drift must list each."""
-    declared = monitors.parse_declared_monitors(
-        Path(monitors.STATIC_MONITORS_PATH).read_text()
-    )
-    for name in ("k3s Grafana", "k3s Authelia Portal", "k3s littlelink"):
-        assert declared.get(name) == {
-            "type": "http",
-            "interval": 60,
-            "gated": False,
-            "gate": None,
-        }, name

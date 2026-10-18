@@ -30,7 +30,7 @@ Subcommands:
     targets                  Prometheus scrape-target health (prometheus :9090)
     monitors                 Kuma down-monitors rollup (exit 0 = all up), read from the
                              monitor_status metric Prometheus already scrapes — no Kuma
-                             API credential needed
+                             API credential needed — then the firing ingress-probe alerts
     loki-labels              Loki label names [--loki homelab|observability]
     loki-query '<logql>'     Loki range query [--limit N] [--since 6h] [--step 5m] [--json]
                              [--loki homelab|observability]

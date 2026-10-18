@@ -73,7 +73,9 @@ ALLOW = {
         "D4 makes the deferred apply `netpol-baseline-deferred`; " + _PROBE
     ),
     _K8S + "observability/tasks/dashboards.yml": (
-        "D5: the dashboard ConfigMaps become rendered ConfigMaps"
+        "D5: observability's flip drops grafana-dashboards.yaml from "
+        "`manifests_exclude_files`, so the rendered ConfigMaps join the bundle, and deletes "
+        "the server-side apply"
     ),
     _K8S + "observability/tasks/main.yml": (
         "D5.1e: a restart annotation replaces the rollout restart"

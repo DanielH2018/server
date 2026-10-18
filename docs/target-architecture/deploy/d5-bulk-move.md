@@ -1736,7 +1736,7 @@ promotion, an automerged one included, without having to page.
       selects `{job="syslog"}`, and a LogQL log query has one stream selector. So D5.3b3 adds
       a second default, `observability_flux_deploy_annotation_expr`, which reads
       `{job="k8s", namespace="flux-system", container="soak"} |= "event=deploy" | logfmt`.
-      `scripts/grafana/inject_dashboard_annotations.py` injects both. The renderer names the
+      `ansible/filter_plugins/grafana_dashboards.py` injects both. The renderer names the
       soak Job's one container `soak`, so the selector reads a fixed value. The stream selector
       scopes the query, so a dashboard load reads only the soak's lines, never every pod's.
     - **Tests.** `test_deploy_annotations.py` pins the soak's line shape and its

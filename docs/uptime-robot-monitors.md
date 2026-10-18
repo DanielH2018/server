@@ -43,7 +43,8 @@ copy that could stay green through an outage.
 
 **Two were retired the same day**, `Littlelink` and `Home Assistant Keyword`. Both probed through
 the same Traefik edge as the two above and so reported nothing the edge probe does not, and both
-keep a 60-second on-prem Kuma tile (`k3s littlelink`, `k3s Home Assistant`). The reasoning is under
+keep a 60-second on-prem probe. That was a Kuma tile until M4's PR 4 (#5625), and is the
+`blackbox-ingress` job's probe of `www` and `home-assistant` since. The reasoning is under
 *Why two monitors* below; the 2026-08-30 restart is what prompted it, when four monitors
 sent four alerts for one 8m35s outage.
 

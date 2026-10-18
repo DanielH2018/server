@@ -2,11 +2,11 @@
 # The Claude Code telemetry stack: collector + Loki + Prometheus, Grafana behind Authelia,
 # Tempo + the traces pipeline.
 
-- name: Build the ported Grafana dashboard ConfigMaps
-  # Guarded at the include rather than task by task: every task in dashboards.yml either writes
-  # the node (three staging trees, the annotated copies, the ConfigMap manifests) or reads one
-  # of those trees back, and the guard propagates to all of them. Nothing in this role's
-  # rendered manifests reads a fact the file sets, so skipping it moves no digest.
+- name: Render and apply the Grafana dashboard ConfigMaps
+  # Guarded at the include rather than task by task: dashboards.yml renders into its own
+  # directory under /etc/rancher/k3s/manifests/ and applies it, and the guard propagates to
+  # every task. Nothing in this role's rendered manifests reads a fact the file sets, so
+  # skipping it moves no digest.
   when: not k8s_dry_run | bool
   ansible.builtin.include_tasks: dashboards.yml
 
@@ -18,8 +18,10 @@
     # prune run there. The dashboard ConfigMaps are applied from their own directory, unlabelled,
     # so the prune never selects them.
     manifests_prune_namespace: "{{ k8s_observability_namespace }}"
-    # The entry's `port` is Grafana's, whose Service grafana.yaml renders itself.
-    manifests_exclude_files: [service.yaml]
+    # The entry's `port` is Grafana's, whose Service grafana.yaml renders itself. The dashboard
+    # ConfigMaps are too large for this role's client-side apply, so dashboards.yml renders and
+    # applies grafana-dashboards.yaml server-side; the flip PR drops it from this list.
+    manifests_exclude_files: [service.yaml, grafana-dashboards.yaml]
     # The shared role waits on ONE Deployment in {{ k8s_namespace }}; this role has several,
     # in a different namespace. Skip its wait and roll our own below.
     manifests_rollout: ''

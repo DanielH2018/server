@@ -111,17 +111,6 @@ stringData:
 "notification_name_list": ["{{ kuma_notification_id }}"]
 {%- endif %}
 {%- endmacro %}
-  # ── k3s ingress monitors ───────────────────────────────────────────────────────────────
-  # One tile per containers_list entry with a `hostname`, from the `kuma_ingress_monitors`
-  # filter (ansible/filter_plugins/kuma_monitors.py, #3690). The entry's `auth_tier` decides
-  # whether the probe expects Authelia's 302, its `tier` decides the alerting, and its `kuma:`
-  # key overrides the id or name or opts the entry out. A tile that probes anything other than
-  # the bare ingress URL (a path, a VIP, a ClusterIP, another status) stays hand-written below,
-  # and its entry carries `kuma: false`.
-{% for tile in containers_list | kuma_ingress_monitors %}
-  {{ tile.id }}.json: |
-    {"type": "http", "name": {{ tile.name | to_json(ensure_ascii=False) }}, "url": "https://{{ tile.hostname }}.local.{{ domain }}", "interval": 60, "maxretries": 2, {% if tile.behind_sso %}"accepted_statuscodes": ["302"], "max_redirects": 0, {% endif %}{{ service_alerting(tile.entry) }}}
-{% endfor %}
   # Probes the edge's LAN-only `livesync-probe` router (roles/k8s/traefik/templates/
   # livesync-gate-secret.yaml.j2), the one token-free path on this host: k8s edge -> probe
   # router -> CouchDB. A 401 is CouchDB's require_valid_user answering unauthenticated, the

@@ -32,12 +32,12 @@ BOX = "ansible/inventory/host_vars/daniel-box.yml"
 _BARE = {"name": "d2-1c-fixture", "platform": "k8s", "owner": "flux"}
 FIXTURES = {"bare": _BARE, "hostname": {**_BARE, "hostname": "d2-1c-fixture"}}
 # The renders each fixture must move, so a census that stopped reaching them fails here: the
-# list of names in `known_services.json`, uptime-kuma's monitors, and pihole's ConfigMap
-# through `hostvars` and its include.
+# list of names in `known_services.json`, observability's `blackbox-ingress` probe targets,
+# and pihole's ConfigMap through `hostvars` and its include.
 NAMED_MEMBERS = {
     "bare": {("artifacts", "configmap.yaml.j2")},
     "hostname": {
-        ("uptime-kuma", "static-monitors.yaml.j2"),
+        ("observability", "prometheus.yaml.j2"),
         ("pihole", "configmap.yaml.j2"),
     },
 }

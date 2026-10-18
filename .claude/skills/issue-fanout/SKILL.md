@@ -191,6 +191,8 @@ is no verdict: the pipeline waits on it again, and a wait that spends its 15 min
 verdict also ends `needs input:`. Only this repo's batches wait, on either host; another repo's
 batch does not. The review's counts and costs go on the PR as
 a comment, with only the actionable findings listed and security findings as a count only. The full record goes to `~/.local/state/fanout-review/`.
+Each phase's Claude Code telemetry also carries `fanout_batch` and `fanout_phase` labels in
+Prometheus (`fanout_lib/review/processes.py:otel_attributes`), so spend per batch and phase is one query across both hosts.
 Before the review, every batch of this repo runs the PR's new tests with its code changes
 taken out (`scripts/dev/fanout_lib/review/base_check.py`). The reviewer is told which still pass, and
 the PR comment counts them.
