@@ -77,6 +77,7 @@ from renderer.renderer_lib.ordering import (
     kustomization_edges,
     prepull_timeouts,
     split_kind,
+    substitution,
 )
 
 KUSTOMIZATION = "kustomization.yaml"
@@ -460,39 +461,6 @@ def digests(
 def digests_text(value: Mapping) -> str:
     """`digests.json`'s bytes: one line of JSON with sorted keys, so two renders agree."""
     return json.dumps(value, sort_keys=True) + "\n"
-
-
-def substitution(
-    tags: Iterable[str],
-    directories: Mapping[str, object],
-    key_sets: Mapping[str, frozenset[str]],
-) -> tuple[dict[str, bool], set[str]]:
-    """Which Kustomizations substitute, and which tags count as substituting (D3.3b).
-
-    Args:
-        tags: The published tags.
-        directories: Each rendered directory's name under `cluster/`.
-        key_sets: Each directory name mapped to its placeholder key set.
-
-    Returns:
-        Each directory name in `directories` that a tag in `tags` owns, `<tag>` and each
-        `<tag><suffix>` alike, mapped to whether its own key set is non-empty. That alone
-        decides `postBuild` and the `cluster-vars` edge on its Kustomization (C1
-        *Substitution and escaping*). Second, the tags with any of their directories
-        substituting, the per-tag set the `cluster-vars` footprint rule reads.
-    """
-    per_directory = {
-        name: bool(key_sets.get(name))
-        for tag in tags
-        for name in (tag, *(tag + suffix for suffix in TAG_KIND_SUFFIXES))
-        if name in directories
-    }
-    substituting = {
-        split_kind(name)[0]
-        for name, substitutes in per_directory.items()
-        if substitutes
-    }
-    return per_directory, substituting
 
 
 def bundle_files(

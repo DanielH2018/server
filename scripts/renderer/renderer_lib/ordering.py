@@ -19,9 +19,11 @@ Every edge is generated, never hand-written, from an `Ordering` the caller reads
   D5.3b2's `soak` keeps no edge at all (D5 Open question 19), and `soak.py` routes every tag's
   Kustomizations through this step so its annotation names the suspended ones.
 
-`bundle.py` adds the `cluster-vars` edge and fails the render on a cycle, because Flux would
+`substitution` decides which Kustomizations substitute, and so which take the `cluster-vars`
+edge. `bundle.py` adds that edge and fails the render on a cycle, because Flux would
 hold every Kustomization on it at `DependencyNotReady`. Beside the per-tag kinds' suffixes,
-`verify_files` reads which roles call for `<tag>-verify`. Like `bundle.py`, this module imports
+`verify_files` reads which roles call for `<tag>-verify`, and `prepull_timeouts` which call for
+`<tag>-prepull`. Like `bundle.py`, this module imports
 neither Ansible nor Jinja. The plan is docs/target-architecture/deploy/d4-ordering.md, *The
 renderer writes `dependsOn`*.
 """
@@ -179,6 +181,39 @@ def split_kind(name: str) -> tuple[str, str]:
         if name.endswith(suffix):
             return name.removesuffix(suffix), suffix
     return name, ""
+
+
+def substitution(
+    tags: Iterable[str],
+    directories: Mapping[str, object],
+    key_sets: Mapping[str, frozenset[str]],
+) -> tuple[dict[str, bool], set[str]]:
+    """Which Kustomizations substitute, and which tags count as substituting (D3.3b).
+
+    Args:
+        tags: The published tags.
+        directories: Each rendered directory's name under `cluster/`.
+        key_sets: Each directory name mapped to its placeholder key set.
+
+    Returns:
+        Each directory name in `directories` that a tag in `tags` owns, `<tag>` and each
+        `<tag><suffix>` alike, mapped to whether its own key set is non-empty. That alone
+        decides `postBuild` and the `cluster-vars` edge on its Kustomization (C1
+        *Substitution and escaping*). Second, the tags with any of their directories
+        substituting, the per-tag set the `cluster-vars` footprint rule reads.
+    """
+    per_directory = {
+        name: bool(key_sets.get(name))
+        for tag in tags
+        for name in (tag, *(tag + suffix for suffix in TAG_KIND_SUFFIXES))
+        if name in directories
+    }
+    substituting = {
+        split_kind(name)[0]
+        for name, substitutes in per_directory.items()
+        if substitutes
+    }
+    return per_directory, substituting
 
 
 def _namespaces(files: Mapping[str, str]) -> set[str]:
