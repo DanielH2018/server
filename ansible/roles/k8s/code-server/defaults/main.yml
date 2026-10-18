@@ -164,3 +164,13 @@ k8s_claims:  # noqa var-naming[no-role-prefix]
   - name: "{{ code_server_k8s_workspace_claim }}"
     storage_class: "{{ code_server_k8s_workspace_storage_class }}"
     size: "{{ code_server_k8s_workspace_size }}"
+
+# The budget of the code-server-prepull Kustomization, whose Job pulls this role's image onto
+# its node before the code-server Kustomization applies (scripts/renderer/renderer_lib/prepull.py).
+# The Deployment is `Recreate`, so without it the old pod stops before the new pod's pull
+# starts, and the editor is down for the whole pull. With it, the old pod keeps serving while
+# the image arrives. MEASURED 2026-10-17 (#5525): GHCR serves daniel-box at 0.21-0.33 MB/s; a
+# claude-code CLI bump re-pulls about 377 MB (about 22 minutes) and a base bump about 851 MB
+# (about 50 minutes). 3600s covers the full re-pull down to 0.24 MB/s. Only Flux reads it: the
+# renderer adds the Kustomization for a published tag alone, so an Ansible deploy ignores it.
+flux_prepull_timeout: 3600s  # noqa var-naming[no-role-prefix]

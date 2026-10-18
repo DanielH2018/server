@@ -7,8 +7,8 @@ A placeholder render with `--role` writes, for each tag it names:
   exactly when the placeholder key set of the directory `<tag>` is not empty (C1 *The
   projection*, D3.3b). It carries `decryption` exactly when the tag's role lists
   `render_sops_manifests`, whose SOPS manifests the renderer copies into `cluster/<tag>/`
-  (C3 *Per-role fields*, D3.3c). A tag that renders a `<tag>-deferred`, `<tag>-snapshot` or
-  `<tag>-verify` directory gets that Kustomization as a further document of the file, in
+  (C3 *Per-role fields*, D3.3c). A tag that renders a per-tag kind's directory, such as
+  `<tag>-snapshot`, gets that Kustomization as a further document of the file, in
   `TAG_KIND_SUFFIXES` order (D4.2, D5.1a1). `<tag>` and `<tag>-deferred` take `prune` and
   `timeout` from the role's defaults where `role_fields` finds them (C3 *Per-role fields*).
   A role that sets `flux_suspend: true` renders `suspend: true` on every one of its tag's
@@ -68,12 +68,14 @@ from renderer.renderer_lib.ordering import (
     DEFERRED_SUFFIX,
     NO_EDGES,
     NO_ORDERING,
+    PREPULL_SUFFIX,
     SUSPENDED_DEPS,
     TAG_KIND_SUFFIXES,
     Edges,
     Ordering,
     dependency_cycle,
     kustomization_edges,
+    prepull_timeouts,
     split_kind,
 )
 
@@ -159,7 +161,7 @@ def reserved_tags(
 
     A reserved name is the root's, a shared kind's, one in `RESERVED_NAMES`, or any name
     ending in a per-tag kind's suffix, so no tag's Kustomization can collide with another
-    tag's `-deferred`, `-snapshot` or `-verify` one (D4.2, D5.1a1).
+    tag's `-deferred`, `-snapshot`, `-prepull` or `-verify` one (D4.2, D5.1a1).
     """
     names = {ROOT} | set(kinds) | RESERVED_NAMES
     return sorted(t for t in set(tags) if t in names or t.endswith(TAG_KIND_SUFFIXES))
@@ -307,8 +309,8 @@ def flux_files(
             the tags' files.
         decrypting: The published tags whose role lists `render_sops_manifests`.
         edges: Each Kustomization's generated edges; a name it does not map has none.
-        fields: Each tag's per-role fields (`role_fields`): `prune` and `timeout` for `<tag>`
-            and `<tag>-deferred`, `suspend` for all; a tag it does not map has none.
+        fields: Each tag's per-role fields: `prune` and `timeout` (`role_fields`) for `<tag>`
+            and `<tag>-deferred`, `prepull_timeout` for `<tag>-prepull`, `suspend` for all.
         contents: Each tag's `own` digest, stamped on `<tag>` alone.
     """
     decrypting = frozenset(decrypting)
@@ -321,11 +323,13 @@ def flux_files(
         ]
         own = fields.get(tag, {})
         role_own = {tag, tag + DEFERRED_SUFFIX}
+        timeouts = {name: own.get("timeout", timeout) for name in role_own}
+        timeouts[tag + PREPULL_SUFFIX] = own.get("prepull_timeout", timeout)
         docs = [
             tag_kustomization(
                 name,
                 substitutes[name],
-                own.get("timeout", timeout) if name in role_own else timeout,
+                timeouts.get(name, timeout),
                 name in decrypting,
                 edges.get(name, NO_EDGES),
                 own.get("prune", True) if name in role_own else True,
@@ -532,6 +536,9 @@ def bundle_files(
     """
     tags = sorted(set(tags))
     fields, problems = role_fields(tags, roles)
+    pulls, unread = prepull_timeouts(tags, roles)
+    problems += unread
+    fields |= {t: {**fields.get(t, {}), "prepull_timeout": v} for t, v in pulls.items()}
     if problems:
         raise ValueError("; ".join(problems))
     per_directory, substituting = substitution(tags, directories, key_sets)

@@ -108,7 +108,8 @@ every entry is flux-owned then waits for C-2b, through the uptime-kuma edge.
   - `DIR/flux/kustomization.yaml` lists every file in `DIR/flux/`.
   - `DIR/README.md` at the bundle root, a static note on the layout. No Kustomization's path
     reaches it, and it counts for no name (see `_unclassified` below).
-  - From D5.1a1, `DIR/cluster/<tag>-snapshot/` and `DIR/cluster/<tag>-verify/`.
+  - From D5.1a1, `DIR/cluster/<tag>-snapshot/` and `DIR/cluster/<tag>-verify/`. From #5525,
+    `DIR/cluster/<tag>-prepull/`.
   - From D2's first publishing PR, `DIR/digests.json` at the bundle root. No Kustomization's
     path reaches it. It maps each deploy tag and each member of `SHARED_KINDS` to an object.
     Every object holds two SHA-256 digests, and from D5.1a2 a deploy tag's object holds two
@@ -362,6 +363,12 @@ every entry is flux-owned then waits for C-2b, through the uptime-kuma edge.
     and sets `wait: true` (R4, D5).
   - D5.1a1 adds `<tag>-snapshot` for a role that declares snapshot claims. It inherits
     `<tag>`'s `dependsOn`, less the edge to itself (D5).
+  - #5525 adds `<tag>-prepull` for a role that sets `flux_prepull_timeout`, the kind D5's
+    Open question 21 asks for. Its Jobs pull the tag's images onto the node its workloads
+    name, so a `Recreate` rollout pays only the container start. It inherits `<tag>`'s
+    `dependsOn` the same way, `<tag>` depends on it, and it never depends on `<tag>-snapshot`
+    or the reverse. Its `timeout` is the role's `flux_prepull_timeout`. Its document follows
+    `<tag>-snapshot`'s and precedes `<tag>-verify`'s.
 - **Per-role fields.** Five fields of a role's own Kustomization vary by role. A role may set
   four of them from its defaults:
   - `prune: false`, for a plumbing tag (H1) or a tag whose render holds a
@@ -393,7 +400,7 @@ every entry is flux-owned then waits for C-2b, through the uptime-kuma edge.
   Kustomization's name. It also fails on a deploy tag that equals a member of `SHARED_KINDS`
   or ends in `-deferred`. D5.1a1 reserves `-snapshot`, `-verify`, `soak` and
   `homelab-namespace` too, so no deploy tag takes `soak` or `homelab-namespace` before its
-  kind joins the set.
+  kind joins the set. #5525 reserves `-prepull`.
 - **Publish census.** The files under `flux/` must equal the flux-owned tags plus the members
   of `SHARED_KINDS`, and each tag's file holds exactly `<tag>` and the suffixed kinds its
   role's inputs call for. The census computes this allowlist from the renderer's inputs, never

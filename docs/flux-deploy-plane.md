@@ -885,10 +885,11 @@ document of `flux/<tag>.yaml`. It applies `./cluster/<tag>-deferred` with the ta
 and depends on `<tag>`. The publish census admits that second document only for a tag that
 defers files (*The publish census*, the per-file rule).
 
-D5's per-tag kinds, `<tag>-snapshot` and `<tag>-verify`, follow in the same file in that
-order, each applying its own `./cluster/<tag><suffix>`. `<tag>-snapshot` inherits `<tag>`'s
-edges, and `<tag>` then depends on `<tag>-snapshot`, so the role applies only after its
-snapshot is taken. `<tag>-verify` depends on the tag's last Kustomization: `<tag>-deferred` when the
+D5's per-tag kinds, `<tag>-snapshot`, `<tag>-prepull` and `<tag>-verify`, follow in the same
+file in that order, each applying its own `./cluster/<tag><suffix>`. `<tag>-snapshot` inherits
+`<tag>`'s edges, and `<tag>` then depends on `<tag>-snapshot`, so the role applies only after its
+snapshot is taken. `<tag>-prepull` does the same beside it, never after it (*The pre-pull Job*
+below). `<tag>-verify` depends on the tag's last Kustomization: `<tag>-deferred` when the
 tag has one, `<tag>` otherwise. A `K8S_APPLIES_LAST` tag waits on no other tag's
 `-snapshot` or `-verify`. A published tag whose role declares `k8s_autodeploy_snapshot_pvcs`
 renders `<tag>-snapshot` (*The snapshot Job* below). No published role declares one yet, and
@@ -1096,7 +1097,7 @@ census fails a bundle that lacks either. Each member needs a footprint rule in
 
 Every `cluster` render refuses a deploy tag named `homelab`, the root's name, after a
 `SHARED_KINDS` member, or after a member of `RESERVED_NAMES`, the literal list beside it. It
-also refuses a tag ending in `-deferred`, `-snapshot` or `-verify`. `RESERVED_NAMES` holds
+also refuses a tag ending in `-deferred`, `-snapshot`, `-prepull` or `-verify`. `RESERVED_NAMES` holds
 `soak` and `homelab-namespace`, D5's shared kinds. `soak` is rendered and in `SHARED_KINDS`
 (*The soak Job*). `homelab-namespace` joins only in the PR that renders it, because the census
 fails a member with no file. The suffixes keep a tag's Kustomization from colliding with another tag's per-tag kind.
@@ -1213,6 +1214,40 @@ under *Rules for every Job Flux applies (D5.1a3)*.
   nor `urllib` as a value, and reads no double-underscore name such as `__globals__`. The helper retries a refused or timed-out connect for 60
   seconds, because kube-router can refuse a new pod until it learns its address. It never
   retries an answer, so a flaky check fails rather than passing on its second try.
+
+### The pre-pull Job
+
+A `Recreate` Deployment stops its old pod before the new pod's pull starts, so a large image
+from a slow registry is an outage as long as the pull. GHCR serves both nodes at 0.21-0.51
+MB/s (measured 2026-10-17), so code-server's 851 MB re-pull after a base bump is about 50
+minutes down (#5525).
+
+A role that sets `flux_prepull_timeout` in its `defaults/main.yml` gets
+`cluster/<tag>-prepull/` and the Kustomization `<tag>-prepull`
+(`scripts/renderer/renderer_lib/prepull.py`). The directory holds one Job per node the tag's
+Deployments and StatefulSets name by `kubernetes.io/hostname`, in a `nodeSelector` or a
+required or preferred node affinity. Each Job runs one container per distinct image those
+workloads run, with `imagePullPolicy: IfNotPresent` and a script that exits at once, so the
+Job completes when the kubelet holds every image. `<tag>` depends on `<tag>-prepull`, so the
+old pod keeps serving through the pull and the rollout pays only the container start.
+
+- **The wait moves, it does not go away.** `<tag>-prepull`'s `timeout` is the role's
+  `flux_prepull_timeout`, its Job's deadline sits 60s under it, and it holds a
+  `kustomize-controller` worker for the pull. It sits on `verify`'s chained timeout like any
+  other Kustomization, so the pull's budget stays on the critical path. What changes is
+  that the service keeps serving through it.
+- **A revision that keeps the images keeps the Job.** The Job's name carries a digest of its
+  spec, image refs and node included, so only a content-tag change runs a new pull.
+- **A preference is not a pin.** A workload placed by a preferred affinity can land on
+  another node when its preferred node is cordoned or full, and there the rollout pays the
+  cold pull as before. The rollout's own budget stays the backstop for that case.
+- **Every image must carry `python3`**, because the Job census requires each container to run
+  a mounted script.
+- **Kubelet image garbage collection can still remove the image** between the pull and the
+  rollout if the node passes its disk high-water mark, which the rollout budget also covers.
+
+code-server is the one role that sets it. Its `<tag>-prepull` renders once the role is
+flux-owned.
 
 ### The snapshot Job
 

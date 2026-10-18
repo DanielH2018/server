@@ -3941,6 +3941,12 @@ includes valheim's initContainer.
     `timeout` bounds that wait, and a failed pre-pull delays only tdarr. Resolution:
     tdarr's conversion PR names the kind, and the publish census admits it in the same PR.
     The suffix needs a C3 per-tag-kind amendment and a reserved name in D5.1a1's list.
+    **Answered by #5525** for code-server, whose GHCR pull hit the same outage first. The
+    kind is `<tag>-prepull`, and any role opts in with `flux_prepull_timeout` in its
+    defaults, so tdarr's conversion PR sets that key rather than naming a kind. C3 carries the
+    amendment and the reserved suffix. One Job per node the workloads name, not only the
+    pinned one, so a preferred affinity is covered where it points
+    (`docs/flux-deploy-plane.md`, *The pre-pull Job*).
 
 ## Review log
 

@@ -208,7 +208,10 @@ def test_the_render_refuses_a_reserved_tag_and_writes_nothing(
     out = tmp_path / "out"
     out.mkdir()
     assert homelab_render.cluster(out, [tag], None, kinds=kinds) == RENDER_REFUSED
-    assert "a name ending in -deferred, -snapshot or -verify" in capsys.readouterr().err
+    assert (
+        "a name ending in -deferred, -snapshot, -prepull or -verify"
+        in capsys.readouterr().err
+    )
     assert list(out.iterdir()) == []
 
 
@@ -283,6 +286,20 @@ def test_a_snapshot_kind_inherits_its_tags_edges_and_the_tag_waits_on_it():
     assert _depends(docs["pihole-snapshot"]) == ["bento-pdf"]
     assert _dropped(docs["pihole-snapshot"]) == "traefik"
     assert _depends(docs["pihole"]) == ["bento-pdf", "pihole-snapshot"]
+
+
+def test_a_prepull_kind_inherits_its_tags_edges_beside_the_snapshot():
+    ordering = Ordering(deps={"pihole": ["bento-pdf", "traefik"]})
+    directories = _every_kind() | {"pihole-prepull": {}}
+    docs = _docs(ordering, ["bento-pdf", "pihole"], directories)
+    assert _depends(docs["pihole-prepull"]) == ["bento-pdf"]
+    assert _dropped(docs["pihole-prepull"]) == "traefik"
+    assert _depends(docs["pihole-snapshot"]) == ["bento-pdf"]
+    assert _depends(docs["pihole"]) == [
+        "bento-pdf",
+        "pihole-prepull",
+        "pihole-snapshot",
+    ]
 
 
 def test_an_applies_last_tag_waits_on_no_other_tags_snapshot_or_verify():
