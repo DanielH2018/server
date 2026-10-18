@@ -203,6 +203,7 @@
  "ansible/roles/setup/gitops_deploy/tests/test_gitops_deploy_main_branches.py": 0.0,
  "ansible/roles/setup/gitops_deploy/tests/test_gitops_deploy_not_the_deployer.py": 0.0,
  "ansible/roles/setup/gitops_deploy/tests/test_gitops_deploy_phases.py": 0.0,
+ "ansible/roles/setup/gitops_deploy/tests/test_gitops_deploy_secret_k8s_readers.py": 0.06,
  "ansible/roles/setup/gitops_deploy/tests/test_gitops_deploy_setup_narrow.py": 0.0,
  "ansible/roles/setup/gitops_deploy/tests/test_gitops_deploy_subprocess.py": 2.0,
  "ansible/roles/setup/gitops_deploy/tests/test_gitops_deploy_timeout_budgets.py": 0.21,
