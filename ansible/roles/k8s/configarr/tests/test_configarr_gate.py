@@ -6,9 +6,11 @@ while configarr is Ansible-owned, so the render tests render the real role as if
 marked it `owner: flux`.
 
 configarr's gate is a post-apply mutation, and its `homelab/rerun-safe` annotation names
-`test_a_second_sync_reports_no_change`. That test reads the change counters configarr logged in
-three consecutive live runs on 2026-10-17 and 2026-10-18, the 03:45 deploy gate run between two
-scheduled 04:30 runs, all on the same image. Every one reported nothing created or updated.
+`test_a_second_sync_reports_no_change`. configarr overwrites each value it manages with the one
+its config names, so that test reads the config the role renders and fails on the shapes that
+would make a second run write something new (`nonconvergent`). The live evidence, three
+consecutive runs on 2026-10-17 and 2026-10-18 that each reported nothing created or updated,
+is quoted in the PR that added this module rather than frozen here.
 
 Run: uv run pytest ansible/roles/k8s/configarr/tests/test_configarr_gate.py
 """
@@ -30,52 +32,64 @@ TAG = "configarr"
 VERIFY = f"{TAG}-verify"
 DOTENV = "peanut_password=ENC[AES256_GCM,data:eA==,iv:aQ==,tag:dA==,type:str]\n"
 
-# The counter lines of `kubectl -n homelab logs job/<name>` for each run, ANSI codes stripped.
-LIVE_RUNS = {
-    "configarr-29870490": """
-INFO  [09:30:22.807]: Created CFs: 0, Updated CFs: 0, Untouched CFs: 35, Error CFs: 0
-INFO  [09:30:22.827]: QualityProfiles: Create: 0, Update: 0, Unchanged: 8
-INFO  [09:30:23.118]: Created CFs: 0, Updated CFs: 0, Untouched CFs: 34, Error CFs: 0
-INFO  [09:30:23.135]: QualityProfiles: Create: 0, Update: 0, Unchanged: 7
-""",
-    "configarr-deploy-gate": """
-INFO  [03:46:08.681]: Created CFs: 0, Updated CFs: 0, Untouched CFs: 35, Error CFs: 0
-INFO  [03:46:08.717]: QualityProfiles: Create: 0, Update: 0, Unchanged: 8
-INFO  [03:46:09.164]: Created CFs: 0, Updated CFs: 0, Untouched CFs: 34, Error CFs: 0
-INFO  [03:46:09.179]: QualityProfiles: Create: 0, Update: 0, Unchanged: 7
-""",
-    "configarr-29871930": """
-INFO  [09:30:34.270]: Created CFs: 0, Updated CFs: 0, Untouched CFs: 35, Error CFs: 0
-INFO  [09:30:34.285]: QualityProfiles: Create: 0, Update: 0, Unchanged: 8
-INFO  [09:30:34.566]: Created CFs: 0, Updated CFs: 0, Untouched CFs: 34, Error CFs: 0
-INFO  [09:30:34.579]: QualityProfiles: Create: 0, Update: 0, Unchanged: 7
-""",
-}
-# One line per *arr instance for each counter, so a log missing an instance is not a clean run.
-INSTANCES = 2
-_CHANGES = re.compile(
-    r"Created CFs: (\d+), Updated CFs: (\d+)|QualityProfiles: Create: (\d+), Update: (\d+)"
-)
+# A full commit SHA: a branch or tag can move between the gate run and the next, so the second
+# run would apply different templates from the first.
+_PINNED = re.compile(r"[0-9a-f]{40}")
 
 
-def changes(log: str) -> list[int]:
-    """Each create or update count configarr logged, in order."""
-    return [int(n) for match in _CHANGES.finditer(log) for n in match.groups() if n]
+def nonconvergent(config: dict) -> list[str]:
+    """Why a second configarr sync with `config` would write something the first did not.
+
+    configarr overwrites each value it manages with the one its config names, so a second run
+    is a no-op unless two entries write the same value differently, or the templates move under
+    it. That leaves three shapes:
+
+    - two `customFormatDefinitions` with the same `trash_id` or `name`, which configarr writes
+      in turn onto one custom format;
+    - one custom format scored twice in one profile of one instance, with different scores;
+    - `recyclarrRevision` not pinned to a commit.
+
+    Args:
+        config: The parsed `config.yml` the `configarr-config` Secret carries.
+
+    Returns:
+        One line per problem, empty when a second run converges.
+    """
+    found = []
+    for key in ("trash_id", "name"):
+        values = [d.get(key) for d in config.get("customFormatDefinitions") or []]
+        found += [
+            f"customFormatDefinitions {key} {v!r} is defined twice"
+            for v in sorted({v for v in values if values.count(v) > 1})
+        ]
+    for arr in ("sonarr", "radarr"):
+        for instance, body in (config.get(arr) or {}).items():
+            scores: dict[tuple[str, str], set] = {}
+            for entry in body.get("custom_formats") or []:
+                for trash_id in entry.get("trash_ids") or []:
+                    for target in entry.get("assign_scores_to") or []:
+                        key = (trash_id, target.get("name"))
+                        scores.setdefault(key, set()).add(target.get("score"))
+            found += [
+                f"{arr}/{instance}: {tid} is scored {sorted(s, key=str)} in {profile}"
+                for (tid, profile), s in sorted(scores.items())
+                if len(s) > 1
+            ]
+    if not _PINNED.fullmatch(str(config.get("recyclarrRevision", ""))):
+        found.append("recyclarrRevision is not pinned to a commit")
+    return found
 
 
-def test_a_second_sync_reports_no_change():
-    # fact: ansible/roles/k8s/configarr/CLAUDE.md#At a glance
-    for name, log in LIVE_RUNS.items():
-        counts = changes(log)
-        assert len(counts) == 4 * INSTANCES, name
-        assert not any(counts), f"{name} changed the *arrs: {counts}"
-
-
-def test_a_run_that_updated_a_custom_format_counts_as_a_change():
-    log = LIVE_RUNS["configarr-deploy-gate"].replace(
-        "Updated CFs: 0", "Updated CFs: 1", 1
-    )
-    assert changes(log) == [0, 1, 0, 0, 0, 0, 0, 0]
+def _config(out) -> dict:
+    """The `config.yml` of the rendered `configarr-config` Secret."""
+    [secret] = [
+        d
+        for d in yaml_fast.safe_load_all(
+            (out / "cluster" / TAG / "config-secret.yaml").read_text()
+        )
+        if d
+    ]
+    return yaml_fast.safe_load(secret["stringData"]["config.yml"])
 
 
 @pytest.fixture(scope="module")
@@ -146,3 +160,40 @@ def test_both_gates_pass_the_job_census(rendered):
     ]
     assert all(len(n) <= MAX_NAME for n in names)
     assert problems(bundle) == []
+
+
+def test_a_second_sync_reports_no_change(rendered):
+    # fact: ansible/roles/k8s/configarr/CLAUDE.md#At a glance
+    config = _config(rendered)
+    # Non-vacuity: the render carries the four local definitions and both instances.
+    assert len(config["customFormatDefinitions"]) == 4
+    assert set(config["sonarr"]) == {"series"} and set(config["radarr"]) == {"movies"}
+    assert nonconvergent(config) == []
+
+
+def test_a_custom_format_defined_twice_is_flagged(rendered):
+    config = _config(rendered)
+    config["customFormatDefinitions"].append(dict(config["customFormatDefinitions"][0]))
+    assert nonconvergent(config) == [
+        "customFormatDefinitions trash_id 'local-fake-remux-groups' is defined twice",
+        "customFormatDefinitions name 'Fake/Mislabeled Remux Groups' is defined twice",
+    ]
+
+
+def test_a_custom_format_scored_twice_in_one_profile_is_flagged(rendered):
+    config = _config(rendered)
+    config["sonarr"]["series"]["custom_formats"].append(
+        {
+            "trash_ids": ["local-anime-trusted-groups"],
+            "assign_scores_to": [{"name": "Anime", "score": 50}],
+        }
+    )
+    assert nonconvergent(config) == [
+        "sonarr/series: local-anime-trusted-groups is scored [200, 50] in Anime"
+    ]
+
+
+def test_a_template_revision_on_a_branch_is_flagged(rendered):
+    config = _config(rendered)
+    config["recyclarrRevision"] = "master"
+    assert nonconvergent(config) == ["recyclarrRevision is not pinned to a commit"]
