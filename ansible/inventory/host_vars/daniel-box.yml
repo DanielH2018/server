@@ -814,7 +814,7 @@ containers_list:
       - pi-peer-backup
       - kuma-status-page-sync    # KUMA__URL + deadman push (uptime-kuma's status-page-sync CronJob)
       - kuma-maintenance-sync    # KUMA__URL (uptime-kuma's maintenance-sync CronJob)
-      - configarr-health         # KUMA_URL + push (configarr's health CronJob, H2.5b)
+      - configarr-health         # push_url (configarr/templates/health-secret.yaml.j2), a CronJob (H2.5b)
 
   # Runs WITHOUT docker plumbing — no DOCKER_HOST, so no in-IDE docker CLI or devcontainers.
   # Image built in-cluster from the containers role's Dockerfile, which is the build source.

@@ -77,6 +77,17 @@ def test_the_render_reaches_the_known_configmaps() -> None:
     assert len(sentinels()) >= 100
 
 
+def test_the_sentinels_reach_the_render() -> None:
+    """The positive control: the Secret beside the ConfigMap does carry the token's sentinel.
+
+    Without it, a binding that never reached the templates would leave every ConfigMap clean.
+    """
+    token = sentinels()["monitor_bridge_configarr_push_token"]
+    assert token in render_role_template(
+        "configarr", "health-secret.yaml.j2", sentinels()
+    )
+
+
 def test_a_moved_roles_configmaps_carry_no_secret_value_is_clean() -> None:
     found = {
         key: leaked(text, sentinels())
