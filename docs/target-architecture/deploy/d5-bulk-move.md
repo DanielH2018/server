@@ -2490,7 +2490,8 @@ sizes its batch of roles against that projection.
     `https://ghcr.io/token` for `repository:danielh2018/<name>:pull`, then a manifest GET of
     the exact content tag, returns 200 on daniel-box and on daniel-server. nut's PR also waits
     on Open question 2's ruling. If the mirror is kept, a manifest GET of nut's content tag
-    through the mirror on daniel-server returns 200 first.
+    through the mirror on daniel-server returns 200 first. The mirror listens on port 5002, not
+    the push store's 5000 (Open question 2).
 26. **D5.19 onwards — Wave D**, in the order of the wave table, three to five roles per flip PR
     (*Flip PR size*, below).
     - **Two readings on the first Wave D revisions.** The session re-takes D4's
@@ -3727,6 +3728,12 @@ includes valheim's initContainer.
     - **Ruled 2026-10-16: yes.** The registry stays as a pull-through mirror for `ghcr.io`,
       in the two PRs the recommendation names, and nut's Wave C PR carries the mirror
       precondition.
+    - **Built in one PR (#5539), as a second listener.** A registry in proxy mode refuses
+      every push and delete, so the mirror is a second container, `ghcr-mirror`, in the
+      registry pod, on `k8s_registry_ghcr_mirror_port` (5002). The push store keeps 5000. The
+      same PR adds the `ghcr.io` entry to `registries.yaml.j2`. The precondition's manifest GET
+      therefore reads `http://10.43.51.14:5002/v2/danielh2018/nut/manifests/<content tag>` on
+      daniel-server. The registry deploy goes first, then the hand apply of `k3s-bringup.yml`.
 3. **Is the soak's Prometheus reach a new exposure?** It is one more caller on an existing
    fence. Resolution: reviewed in D5.3a against ADR-0009.
     - **Reviewed 2026-10-16 in #5315: no new exposure.** The soak is one more read-only caller

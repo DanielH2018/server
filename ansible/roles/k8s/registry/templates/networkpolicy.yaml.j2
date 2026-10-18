@@ -96,6 +96,11 @@ spec:
         # daniel-server-pinned pull selftest is what distinguishes (b) loudly.
         - ipBlock:
             cidr: {{ registry_k8s_netpol_agent_flannel }}
+      # The ghcr.io mirror is a pull path too, from the same two host sources. No pod-network
+      # rule admits it: a pod has no reason to pull through it, and one that could would be
+      # able to fill this role's shared volume with arbitrary public images.
       ports:
         - protocol: TCP
           port: {{ k8s_registry_port }}
+        - protocol: TCP
+          port: {{ k8s_registry_ghcr_mirror_port }}
