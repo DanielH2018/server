@@ -181,6 +181,13 @@ spec:
               readOnly: true
             - name: crowdsec-jobs-tmp
               mountPath: /tmp
+            # The engine's entrypoint links every entry of the image's
+            # /staging/var/lib/crowdsec/data into crowdsec-db, `trace` among them. This image has
+            # no /staging, so without this mount the link dangles, and every cscli call fails
+            # with `while setting up trace directory: mkdir /var/lib/crowdsec/data/trace: file
+            # exists`. The other links name data files that no job's cscli command opens.
+            - name: crowdsec-jobs-trace
+              mountPath: /staging/var/lib/crowdsec/data/trace
 {{ container_resources(cpu_limit=crowdsec_k8s_jobs_cpu_limit, mem_limit=crowdsec_k8s_jobs_mem_limit, cpu_request=crowdsec_k8s_jobs_cpu_request, mem_request=crowdsec_k8s_jobs_mem_request) }}
       volumes:
         - name: crowdsec-seed
@@ -199,6 +206,8 @@ spec:
         - name: crowdsec-jobs-tools
           emptyDir: {}
         - name: crowdsec-jobs-tmp
+          emptyDir: {}
+        - name: crowdsec-jobs-trace
           emptyDir: {}
         # What automounting would give every container, given to the sidecar alone: a bound
         # token and the cluster CA, which jobs-configmap.yaml.j2's kubeconfig names.

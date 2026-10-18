@@ -224,6 +224,21 @@ def test_the_sidecar_runs_the_scheduler_from_the_configmap_with_the_tools_the_mo
             assert env[job.push_env]["secretKeyRef"]["name"] == "crowdsec-jobs"
 
 
+def test_the_engines_trace_link_resolves_to_a_writable_directory_in_the_sidecar(pod):
+    # The engine's entrypoint links `trace` into crowdsec-db as
+    # /staging/var/lib/crowdsec/data/trace, a path only the engine image has. cscli creates its
+    # trace directory through that link on every call, so the sidecar mounts a directory there.
+    [sidecar] = [c for c in pod["containers"] if c["name"] == "crowdsec-jobs"]
+    [mount] = [
+        m
+        for m in sidecar["volumeMounts"]
+        if m["mountPath"] == "/staging/var/lib/crowdsec/data/trace"
+    ]
+    assert not mount.get("readOnly")
+    volumes = {v["name"]: v for v in pod["volumes"]}
+    assert "emptyDir" in volumes[mount["name"]]
+
+
 def test_only_the_sidecar_holds_the_service_account_token(pod):
     # The Role reads every homelab pod's log, so the token must not reach the engine container,
     # which parses attacker-controlled requests.
