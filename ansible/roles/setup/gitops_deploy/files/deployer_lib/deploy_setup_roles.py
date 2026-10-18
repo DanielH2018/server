@@ -22,6 +22,10 @@ changes*). So a role the routing does not place is never guessed at, and
 It reads alone. It imports no sibling module, it takes the routing from a subprocess, and it
 answers for a role name, where `deploy_changes` answers for a changed path. `deploy_changes`
 re-exports every name, so its readers keep their imports.
+
+`secret_setup_readers` is the one question here about a range rather than a role: which
+setup-role files name a `secrets.yml` key the range moved (#5436). It is a YAML-parsing
+subprocess for the same reason, and `deploy_defer.route_secret_readers` maps its paths.
 """
 
 from __future__ import annotations
@@ -36,6 +40,18 @@ ROUTING_SCRIPT = "scripts/deploy_tools/setup_routing.py"
 # Three playbooks and the vars files, parsed once: 0.8s measured under a loaded suite run.
 # Thirty seconds is the wedged case, as for the setup narrowing (`NARROW_SETUP_TIMEOUT_S`).
 ROUTING_TIMEOUT_S = 30.0
+# A grep per changed key: 0.4s measured over PR #5405's commit, so the routing bound serves.
+SECRET_READERS_SCRIPT = "scripts/deploy_tools/secret_setup_readers.py"
+# The script's deliberate refusal, distinct from 1, which a traceback exits with. This unit
+# cannot import `lib.exit_codes`, so `test_narrow_secret_keys.py` pins it to `DEPLOY_BROAD`.
+SECRET_READERS_REFUSED_EXIT = 3
+
+
+class SecretReadersRefused(RuntimeError):
+    """The reader script answered that it cannot say which setup roles read a moved key.
+
+    A deterministic answer, unlike a timeout or a crash: a retry reads the same tree.
+    """
 
 
 class SetupRoute(NamedTuple):
@@ -126,6 +142,50 @@ def derive_routing(
     if r.returncode != 0:
         raise RuntimeError(r.stderr.strip() or f"exited {r.returncode}")
     return routes_from_json(r.stdout)
+
+
+def secret_setup_readers(
+    repo: str, old: str, new: str
+) -> tuple[list[str], dict[str, list[str]]]:
+    """Run `secret_setup_readers.py` over `old..new` in `repo`.
+
+    Returns:
+        (paths, unread). `paths` is every file under `ansible/roles/setup/` at `new` naming a
+        `secrets.yml` key whose ciphertext differs across the range, empty when none does.
+        `unread` maps a shipped vars file among them to the shippers that read no key of it
+        built from a moved secret.
+
+    Raises:
+        subprocess.TimeoutExpired: the child outlived `ROUTING_TIMEOUT_S`.
+        SecretReadersRefused: the child exited `SECRET_READERS_REFUSED_EXIT`; the message is
+            its stderr.
+        RuntimeError: the child exited non-zero otherwise, with its stderr as the message.
+        ValueError: its stdout is not that JSON object.
+        OSError: the child could not be started.
+    """
+    r = subprocess.run(
+        ["uv", "run", "--frozen", "python", SECRET_READERS_SCRIPT, old, new],
+        cwd=repo,
+        capture_output=True,
+        text=True,
+        timeout=ROUTING_TIMEOUT_S,
+        check=False,
+    )
+    if r.returncode == SECRET_READERS_REFUSED_EXIT:
+        raise SecretReadersRefused(r.stderr.strip() or "refused")
+    if r.returncode != 0:
+        raise RuntimeError(r.stderr.strip() or f"exited {r.returncode}")
+    data = json.loads(r.stdout)
+    paths = data.get("paths") if isinstance(data, dict) else None
+    unread = data.get("unread") if isinstance(data, dict) else None
+    if not (
+        isinstance(paths, list)
+        and all(isinstance(p, str) for p in paths)
+        and isinstance(unread, dict)
+        and all(isinstance(v, list) for v in unread.values())
+    ):
+        raise ValueError(f"not the secret-readers JSON: {r.stdout.strip()[:200]!r}")
+    return paths, unread
 
 
 def current_routing() -> dict[str, SetupRoute] | None:

@@ -17,7 +17,10 @@ which is the refusal every test written before this slice relies on.
 Run: uv run pytest ansible/roles/setup/gitops_deploy/tests/test_gitops_deploy_setup_narrow.py
 """
 
+import subprocess
+
 from deployer_lib import deploy_narrow
+from deployer_lib.deploy_setup_roles import SECRET_READERS_SCRIPT, SecretReadersRefused
 from gitops_ledger import OWED_HOLD_PLANE, owed_line
 
 from _deploy_fakes import receipt_applied
@@ -334,3 +337,130 @@ def test_a_range_no_setup_role_needs_a_tag_for_runs_no_playbook(
         "ansible/initial_setup.yml": (deploy_narrow.NARROWED_TO_NOTHING,)
     }
     assert [e.role for e in state.manual_plane_pending()] == ["k3s"]
+
+
+# ── a secrets.yml key a setup role reads (#5436) ──────────────────────────────────────────────
+SECRETS = "ansible/vars/secrets.yml"
+CLAUDE_TRIAGE_TASKS = "ansible/roles/setup/claude_code/tasks/triage.yml"
+
+
+def test_a_secrets_only_range_applies_the_setup_role_reading_its_key(
+    gitops_deploy, tick, state
+):
+    """PR #5405's shape: one new key `claude_code` reads, and no path under the role.
+
+    Before #5436 the range took the no-services branch, so it merged, paged, and applied
+    nothing. The page still goes out, because no derivation sees a consumer it refused.
+    """
+    tick.paths = [SECRETS]
+    tick.secret_readers = [CLAUDE_TRIAGE_TASKS]
+    assert gitops_deploy.main(tick.tools, tick.config, state) == 0
+    assert _playbook_argv(tick)[-3:] == [
+        "ansible/initial_setup.yml",
+        "--tags",
+        "claude_code",
+    ]
+    assert tick.merges == [ORIGIN]
+    assert any("`secrets.yml` changed" in post for post in tick.posts)
+
+
+def test_a_reader_another_playbook_applies_is_recorded_not_applied(
+    gitops_deploy, tick, state
+):
+    """A key only k3s reads: `k3s-bringup.yml` applies k3s, so the tick records it for a hand."""
+    tick.paths = [SECRETS]
+    tick.secret_readers = ["ansible/roles/setup/k3s/templates/registries.yaml.j2"]
+    assert gitops_deploy.main(tick.tools, tick.config, state) == 0
+    assert tick.playbooks == []
+    assert tick.merges == [ORIGIN]
+    assert [e.role for e in state.manual_plane_pending()] == ["k3s"]
+
+
+def test_a_refused_reader_derivation_merges_and_applies_no_setup_role(
+    gitops_deploy, tick, capsys, state
+):
+    """A refusal routes nothing, so the range behaves as before #5436: merged and paged."""
+    tick.paths = [SECRETS]
+    tick.secret_readers = [CLAUDE_TRIAGE_TASKS]
+    tick.secret_readers_error = SecretReadersRefused("cannot say (a play-level reader)")
+    assert gitops_deploy.main(tick.tools, tick.config, state) == 0
+    assert tick.playbooks == []
+    assert tick.merges == [ORIGIN]
+    assert any("`secrets.yml` changed" in post for post in tick.posts)
+    assert "no setup role routed" in capsys.readouterr().out
+
+
+def test_a_reader_derivation_that_times_out_parks_the_range(
+    gitops_deploy, tick, capsys, state
+):
+    """A timeout is not an answer: merged, no later range would carry the key again."""
+    tick.paths = [SECRETS]
+    tick.secret_readers = [CLAUDE_TRIAGE_TASKS]
+    tick.secret_readers_error = subprocess.TimeoutExpired(["uv"], 30)
+    assert gitops_deploy.main(tick.tools, tick.config, state) == 0
+    assert tick.merges == [] and tick.playbooks == []
+    assert "parked, nothing merged" in capsys.readouterr().out
+
+
+def test_a_shipper_that_reads_none_of_the_secrets_keys_is_not_applied(
+    gitops_deploy, tick, state
+):
+    """claude_code's defaults name four secrets, and initial_setup ships the file for one
+    unrelated key. Without `unread` the rotation applied all of `--tags initial_setup`."""
+    claude_defaults = "ansible/roles/setup/claude_code/defaults/main.yml"
+    tick.paths = [SECRETS]
+    tick.secret_readers = [claude_defaults]
+    tick.secret_unread = {claude_defaults: ["initial_setup"]}
+    assert gitops_deploy.main(tick.tools, tick.config, state) == 0
+    assert _playbook_argv(tick)[-1] == "claude_code"
+
+
+def _park_on_a_failed_reader_lookup(gitops_deploy, tick, state, error):
+    """One tick over a `secrets.yml` range whose reader lookup raises `error`."""
+    tick.paths = [SECRETS]
+    tick.secret_readers = [CLAUDE_TRIAGE_TASKS]
+    tick.secret_readers_error = error
+    assert gitops_deploy.main(tick.tools, tick.config, state) == 0
+    assert tick.merges == []
+
+
+def test_a_parked_reader_failure_logs_the_lookup_as_the_reason(
+    gitops_deploy, tick, capsys, state
+):
+    """The journal reason is load-bearing (#1467): it must not read as the nameless-path park."""
+    _park_on_a_failed_reader_lookup(
+        gitops_deploy, tick, state, OSError("uv: not found")
+    )
+    parked = [ln for ln in capsys.readouterr().out.splitlines() if "park:" in ln]
+    assert len(parked) == 1, parked
+    assert "secret-reader lookup failed" in parked[0]
+    assert "names no role" not in parked[0]
+
+
+def test_a_parked_reader_failure_pages_the_retry_and_never_a_merge(
+    gitops_deploy, tick, capsys, state
+):
+    """An operator who merges past the `secrets.yml` change loses the key for good."""
+    _park_on_a_failed_reader_lookup(
+        gitops_deploy, tick, state, OSError("uv: not found")
+    )
+    pages = [post for post in tick.posts if ORIGIN[:8] in post]
+    assert len(pages) == 1, tick.posts
+    assert "git merge --ff-only" not in pages[0]
+    assert "next tick retries" in pages[0]
+    assert SECRET_READERS_SCRIPT in pages[0]
+    assert "git merge --ff-only" not in capsys.readouterr().out
+
+
+def test_a_transient_reader_failure_is_retried_by_the_next_tick(
+    gitops_deploy, tick, state
+):
+    """The park leaves the range unmerged, so the next tick looks the readers up again."""
+    _park_on_a_failed_reader_lookup(
+        gitops_deploy, tick, state, subprocess.TimeoutExpired(["uv"], 30)
+    )
+    assert tick.playbooks == []
+    tick.secret_readers_error = None
+    assert gitops_deploy.main(tick.tools, tick.config, state) == 0
+    assert tick.merges == [ORIGIN]
+    assert _playbook_argv(tick)[-1] == "claude_code"
