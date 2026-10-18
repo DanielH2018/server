@@ -212,7 +212,7 @@ and upstream facts through `gh`.
 - **A dropped document stays live.** `kubectl apply` deletes nothing it no longer sees, and
   `manifests_prune_allowlist` holds no Flux kind. The prowlarr task "Retire the flaresolverr
   config PVC" deleted a retired object by name with `--ignore-not-found`, under
-  `when: not k8s_no_mutate`. #5557 removed that task once the claim was gone.
+  `when: not k8s_no_mutate`. It was removed for #5557 once the claim was gone.
 - **A server dry run cannot create a namespace's contents.** Under `--dry-run`, the task
   "Apply manifests for ..." applies with `--dry-run=server`, which persists nothing, the
   Namespace document included. kubernetes

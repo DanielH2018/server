@@ -21,7 +21,7 @@
 
 # flaresolverr runs on an emptyDir: its /config is a browser profile cache it rebuilds on first
 # use. Its old `prowlarr-flaresolverr-config` claim was deleted by a "Retire the flaresolverr
-# config PVC" task here, removed in #5557 once `kubectl get pvc -n homelab` no longer listed it.
+# config PVC" task here, removed for #5557 once `kubectl get pvc -n homelab` no longer listed it.
 
 # ── prove the flaresolverr isolation ──────────────────────────────────────
 # Its own directory: `kubectl apply -f <dir>` reads every file in the directory it is given, and
