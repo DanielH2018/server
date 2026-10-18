@@ -4,7 +4,8 @@ This role holds the host writes that D5 moves out of the k8s roles before each r
 Flux: docs's site directory, pi-peer-backup's two Pi writes, traefik's absent arm, registry's
 GC absent arms, the absent arms H2 leaves in crowdsec, configarr, janitorr and qbittorrent,
 artifacts' three directory tasks (the star list directory among them), media-volume's media
-directories and observability's retired dashboard staging trees. A Flux-owned role has no Ansible apply left to carry them, so each lands here in
+directories, observability's retired dashboard staging trees and uptime-kuma's stale
+autokuma-claims staging directory. A Flux-owned role has no Ansible apply left to carry them, so each lands here in
 its own conversion PR. The plan is
 `docs/target-architecture/deploy/d5-bulk-move.md`, sections *Host-side rows* and *The
 `k8s_host_files` role enters the setup plane once (D5.1h)*.
@@ -45,7 +46,8 @@ which installs the forced-command wrapper and authorizes the pull key on daniel-
 both files into `files/`. qbittorrent's PR wrote `tasks/qbittorrent.yml`, which holds
 the absent arms for the prefs drift check's retired host cron and script. traefik's PR wrote
 `tasks/traefik.yml`, the two absent arms that remove the retired Cloudflare IP drift cron and
-its script. A row drops its source role's `when: not k8s_dry_run` guard and its `config` tag,
+its script. uptime-kuma's PR wrote `tasks/uptime-kuma.yml`, the absent arm that removes
+the directory k8s/volume-claim staged autokuma-data's claim under. A row drops its source role's `when: not k8s_dry_run` guard and its `config` tag,
 because `initial_setup.yml` has no dry-run mode.
 
 - **The playbook entry is gated to daniel-box by a literal.** `setup_routing.py` places a role
