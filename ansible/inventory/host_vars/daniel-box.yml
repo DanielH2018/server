@@ -225,10 +225,6 @@ containers_list:
   # Must precede every media workload — a pod that mounts an undeclared claim stays
   # Pending, and WaitForFirstConsumer makes that look like a scheduling problem rather
   # than a missing volume.
-  #
-  # Its seeding copy does NOT run on an ordinary deploy: it is gated behind
-  # `-e media_volume_sync=true` because the rsync mirrors with --delete, which would erase
-  # whatever qbittorrent has downloaded. See the role's tasks/sync.yml.
   - name: media-volume
     platform: k8s
   # Mounts media-volume's claim at /data, so `depends_on` puts it after that role — as it does

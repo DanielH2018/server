@@ -1,0 +1,13 @@
+{#
+  The verify Job's identity, INERT until media-volume's flip, as `job.yaml.j2` beside it is.
+
+  It is a ServiceAccount with no Role. The Job reads no API and execs into no pod, so it needs
+  no grant, and its pod mounts no token.
+#}
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: media-volume-verify
+  namespace: {{ k8s_namespace }}
+automountServiceAccountToken: false
