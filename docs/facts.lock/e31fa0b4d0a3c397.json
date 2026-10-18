@@ -1,13 +1,14 @@
 {
-  "checksum": "17ca27336440e0d9cfa6b52220399f1d424960f85fc29e400f4bd62d9c67f941",
+  "checksum": "2df1155d935165e8fc192b4a700fc8839c9d2c856b45db3c07a420b7fe0e92fc",
   "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
   "key": "ansible/roles/k8s/code-server/CLAUDE.md#Notable",
   "row": {
     "atoms": {
       "ansible/tests/services/test_code_server_build_is_pinned.py": "007d28cd2ed5a7e428452d8063377822aae1b160a8175836aba63d63357ce9f0",
-      "ansible/tests/services/test_code_server_build_is_pinned.py::test_cargo_writes_stay_off_the_backed_up_claim": "fccf2456f5cbc6bf52e84811976e196049592728f56a73711fddf3c4f9645ba3"
+      "ansible/tests/services/test_code_server_build_is_pinned.py::test_cargo_writes_stay_off_the_backed_up_claim": "fccf2456f5cbc6bf52e84811976e196049592728f56a73711fddf3c4f9645ba3",
+      "docs/flux-deploy-plane.md": "807c3deb44c3178e7a6f9fc0bc398a3b748b95c468b14ce9b1b890c8684535d9"
     },
     "python": "3.14",
-    "verified_sha": "d7a76d705"
+    "verified_sha": "b62090477"
   }
 }

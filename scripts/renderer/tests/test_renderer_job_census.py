@@ -36,11 +36,12 @@ THIS_TEST = (
 )
 DIRECTORY = {
     "snapshot": "sonarr-snapshot",
+    "prepull": "sonarr-prepull",
     "soak": "soak",
     "verify": "sonarr-verify",
     "mutation": "sonarr-verify",
 }
-BACKOFF = {"snapshot": 1, "soak": 0, "verify": 0, "mutation": 2}
+BACKOFF = {"snapshot": 1, "prepull": 0, "soak": 0, "verify": 0, "mutation": 2}
 THROUGH_HELPER = (
     "import json\nimport re\n\nfrom flux_job_connect import Request, open_url\n\n"
     "request = Request('http://sonarr.media.svc:8989/ping')\n"

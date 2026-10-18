@@ -76,6 +76,7 @@ from renderer.renderer_lib.environment import (
 )
 from renderer.renderer_lib.ordering import (
     DEFERRED_SUFFIX,
+    PREPULL_SUFFIX,
     SNAPSHOT_SUFFIX,
     VERIFY_SUFFIX,
     VERIFY_TEMPLATES_DIR,
@@ -129,6 +130,8 @@ class RenderedTag:
             nothing.
         snapshot: The same for `DIR/cluster/<tag>-snapshot/`, which `snapshot.attach_snapshots`
             adds last, for a published tag with snapshot claims (D5.2a).
+        prepull: The same for `DIR/cluster/<tag>-prepull/`, which `prepull.attach_prepulls`
+            adds, for a published tag whose role sets `flux_prepull_timeout` (#5525).
         verify: The same for `DIR/cluster/<tag>-verify/`, empty for a role that ships no
             `templates/verify/` (D5.1a1).
     """
@@ -137,6 +140,7 @@ class RenderedTag:
     files: dict[str, str]
     deferred: dict[str, str] = field(default_factory=dict)
     snapshot: dict[str, str] = field(default_factory=dict)
+    prepull: dict[str, str] = field(default_factory=dict)
     verify: dict[str, str] = field(default_factory=dict)
 
     def directories(self) -> dict[str, dict[str, str]]:
@@ -146,6 +150,8 @@ class RenderedTag:
             dirs[self.tag + DEFERRED_SUFFIX] = self.deferred
         if self.snapshot:
             dirs[self.tag + SNAPSHOT_SUFFIX] = self.snapshot
+        if self.prepull:
+            dirs[self.tag + PREPULL_SUFFIX] = self.prepull
         if self.verify:
             dirs[self.tag + VERIFY_SUFFIX] = self.verify
         return dirs
@@ -161,6 +167,7 @@ class RenderedTag:
             files=dirs[self.tag],
             deferred=dirs.get(self.tag + DEFERRED_SUFFIX, {}),
             snapshot=dirs.get(self.tag + SNAPSHOT_SUFFIX, {}),
+            prepull=dirs.get(self.tag + PREPULL_SUFFIX, {}),
             verify=dirs.get(self.tag + VERIFY_SUFFIX, {}),
         )
 
@@ -179,8 +186,8 @@ def select_tags(
     Raises:
         RenderRefused: A requested tag is not one of `host`'s render targets, or a tag to
             render takes a reserved name: the root Kustomization's, `homelab`, a member of
-            `kinds` or of `RESERVED_NAMES`, or any name ending in `-deferred`, `-snapshot` or
-            `-verify` (C3 *Reserved names*, D4.2, D5.1a1).
+            `kinds` or of `RESERVED_NAMES`, or any name ending in `-deferred`, `-snapshot`,
+            `-prepull` or `-verify` (C3 *Reserved names*, D4.2, D5.1a1).
     """
     targets = set(render_targets(host, host_vars))
     tags = sorted(set(requested or targets))
@@ -189,7 +196,8 @@ def select_tags(
         raise RenderRefused(
             f"{reserved} take a name the bundle reserves for a Kustomization that is no "
             "deploy tag's: the root homelab, a SHARED_KINDS or RESERVED_NAMES member, or "
-            "a name ending in -deferred, -snapshot or -verify, which a tag's own kinds take"
+            "a name ending in -deferred, -snapshot, -prepull or -verify, which a tag's own "
+            "kinds take"
         )
     unknown = sorted(set(tags) - targets)
     if unknown:

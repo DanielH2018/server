@@ -16,8 +16,7 @@ already exclude check mode at a level a per-task read cannot see:
   - Two are in `ansible/roles/k8s/crowdsec/tasks/verify.yml`, whose importer in
     `main.yml` gates the whole file on `not ansible_check_mode`. A `when` on an
     `import_tasks` propagates to every task in the imported file.
-  - One, `Sync the live Grafana admin password with SOPS`, carries `not ansible_check_mode`
-    inline alongside its own condition.
+  - A task may also carry `not ansible_check_mode` inline alongside its own condition.
 
 `excludes_check_mode`, `importer_guards` and `walk_with_inherited_when` teach the predicate
 to see all three, which is what makes a tree-wide census honest rather than a demand for
@@ -94,8 +93,8 @@ def check_mode_retry_problem(task: dict, inherited_when=()) -> str | None:
         return None
     # FIRST, because a task check mode never reaches is clean whatever else it carries. The
     # `changed_when` branch below demands `false`, and a guarded task is free to compute a
-    # real changed status — `Sync the live Grafana admin password with SOPS` does exactly
-    # that and would be flagged for the wrong reason if this branch ran second.
+    # real changed status from its own rc, and would be flagged for the wrong reason if this
+    # branch ran second.
     if excludes_check_mode(task.get("when")):
         return None
     if any(excludes_check_mode(when) for when in inherited_when):
@@ -284,9 +283,8 @@ def test_a_block_with_no_check_mode_guard_hands_down_nothing_that_clears():
 def test_a_guarded_task_may_compute_a_real_changed_status():
     """The `when:` branch runs before the `changed_when` one, and this is why.
 
-    `Sync the live Grafana admin password with SOPS` guards itself on check mode and keys
-    `changed_when` on its own rc. Checking `changed_when` first would flag it for a defect it
-    does not have.
+    A task that guards itself on check mode may key `changed_when` on its own rc. Checking
+    `changed_when` first would flag it for a defect it does not have.
     """
     task = _task(
         retries=6,

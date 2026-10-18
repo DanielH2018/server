@@ -548,7 +548,7 @@ def role_fields(
 
     `prune` and `timeout` go on the Kustomizations that apply the role's own manifests, `<tag>`
     and `<tag>-deferred`, so a plumbing role's deferred objects are never pruned either. The
-    renderer's `-snapshot` and `-verify` kinds keep the defaults. `suspend` goes on all four,
+    renderer's `-snapshot` and `-verify` kinds keep the defaults. `suspend` goes on every kind,
     because a suspended role runs none of its Jobs either. A value must be a literal, a bool
     for `flux_prune` and `flux_suspend` and a Go duration for the timeout. A Jinja expression
     is a problem rather than a guess, as `snapshot_claims` treats a non-literal list, and its

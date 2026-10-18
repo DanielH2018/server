@@ -95,10 +95,17 @@ taking its inputs as arguments). `check_table.py` imports only `bridge.types` an
 but `fn` are literals: `ansible/filter_plugins/py_table.py` parses the table without running
 it. Modules split at 600 lines; the internals page has the per-module table.
 
-**Adding a module means adding its path to `monitor_bridge_modules`** in `defaults/main.yml`, a
-flat ConfigMap key mounted back at its path by the Deployment's `items:`. A module missing from
-it kills the pod at import on its next roll;
-`ansible/tests/services/test_monitor_bridge_modules.py` and its mount-layout sibling catch that.
+**Adding a module means adding its path to `monitor_bridge_modules`** in `defaults/main.yml`.
+`templates/script-configmap.yaml.j2` renders each entry as its own ConfigMap, and the
+Deployment's projected volume mounts every one back at its path under `/app`. One ConfigMap per
+module, because the shared role's client-side apply caps each object near 256 KiB and the
+modules total about 700 KB. A module missing from the list kills the pod at import on its next
+roll; `ansible/tests/services/test_monitor_bridge_modules.py` and its mount-layout sibling catch
+that. A module edit changes the render, so the shared role's rollout restart rolls the pod, and
+under Flux the renderer's restart annotation (`RESTART_ANNOTATION` in
+`scripts/renderer/renderer_lib/restart.py`) hashes every ConfigMap the volume names.
+`scripts/renderer/tests/test_renderer_monitor_bridge_script.py` holds the embed, the size and
+the checksum.
 
 ## Configuration is a parameter, not a module global
 
