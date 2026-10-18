@@ -2777,8 +2777,12 @@ sizes its batch of roles against that projection.
       netpol-baseline with a refused `pihole` row in the probe table. Instance 2 already
       renders into `pihole-deferred`, which waits on `pihole`, and a test pins that order on
       pihole's own render. The live exercise of that order is still the flip PR's, because
-      Ansible applies both instances until then. `roll_one.yml`'s sibling gate has no Flux
-      form: `pihole` rolls instance 1 whatever state instance 2 is in (#5695).
+      Ansible applies both instances until then. `roll_one.yml`'s sibling gate became an
+      inert guard Job in `ansible/roles/k8s/pihole/templates/guard-inert/guard.yaml.j2`
+      (#5695). It reads `pihole-2-web`'s EndpointSlices and fails while pihole-2 has no ready
+      endpoint, so Flux holds `pihole`. It passes when `pihole` has no EndpointSlice, which is
+      a first apply. It must run before `pihole`, and
+      no role-owned kind does yet, so the flip needs one first (#5719).
     - **Before the first Wave D flip**, the session measures one revision that changes at
       least ten flux-owned tags, from `prod`'s move to the last status, and compares it with
       the derived verify timeout. A measurement above half the timeout raises the timeout

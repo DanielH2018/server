@@ -148,6 +148,7 @@
  "ansible/roles/k8s/netpol-baseline/tests/test_netpol_baseline_verify.py": 3.29,
  "ansible/roles/k8s/observability/tests/test_observability_verify.py": 1.81,
  "ansible/roles/k8s/pihole/tests/test_pihole_gravity.py": 1.88,
+ "ansible/roles/k8s/pihole/tests/test_pihole_sibling_guard.py": 0.95,
  "ansible/roles/k8s/prowlarr/tests/test_prowlarr_verify.py": 5.18,
  "ansible/roles/k8s/qbittorrent/tests/test_apply_prefs.py": 0.0,
  "ansible/roles/k8s/qbittorrent/tests/test_prefs_check.py": 0.0,
