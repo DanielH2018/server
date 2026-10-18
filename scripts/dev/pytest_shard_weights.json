@@ -1213,6 +1213,7 @@
  "scripts/renderer/tests/test_renderer_soak.py": 0.27,
  "scripts/renderer/tests/test_renderer_sops_manifests.py": 1.86,
  "scripts/renderer/tests/test_renderer_standalone_map.py": 11.58,
+ "scripts/renderer/tests/test_renderer_string_values_census.py": 9.7,
  "scripts/renderer/tests/test_renderer_stub_file.py": 0.02,
  "scripts/renderer/tests/test_renderer_suspend.py": 0.0,
  "scripts/renderer/tests/test_renderer_task_inputs.py": 1.34,
