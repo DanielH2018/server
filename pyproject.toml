@@ -346,6 +346,7 @@ extra-paths = [
   "ansible/roles/k8s/headlamp/files",
   "ansible/roles/k8s/observability/files",
   "ansible/roles/k8s/media-volume/files",
+  "ansible/roles/k8s/netpol-baseline/files",
   "scripts/backup/tests",
   "scripts/deploy_tools/tests",
   "scripts/docs/tests",

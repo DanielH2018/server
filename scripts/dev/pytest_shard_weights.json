@@ -140,6 +140,7 @@
  "ansible/roles/k8s/monitor-bridge/tests/test_sources_boundary.py": 0.07,
  "ansible/roles/k8s/monitor-bridge/tests/test_verdicts_storage.py": 0.0,
  "ansible/roles/k8s/n8n/tests/test_n8n_verify.py": 8.48,
+ "ansible/roles/k8s/netpol-baseline/tests/test_netpol_baseline_verify.py": 3.29,
  "ansible/roles/k8s/observability/tests/test_observability_verify.py": 1.81,
  "ansible/roles/k8s/prowlarr/tests/test_prowlarr_verify.py": 5.18,
  "ansible/roles/k8s/qbittorrent/tests/test_apply_prefs.py": 0.0,
