@@ -86,7 +86,8 @@ prove the write, so a second run reports "nothing to do".
 
 **It is deliberately NOT wired into `deploy.yml`.** The replacement pod waits on the sidecar's
 startupProbe (`failureThreshold: 60 × 5s`), so a prefs task in the deploy path would block on that
-window every time and turn an lscr.io blip into a failed deploy. Keep the apply manual.
+window every time and turn an lscr.io blip into a failed deploy. Keep the apply manual while
+Ansible owns the role.
 
 ### The daily drift check is log-only, and does not apply anything
 
@@ -106,12 +107,34 @@ the docs page has why.
   ConfigMap that stages the code holds no secret.
 - **The deploy gates it after `verify.yml`**, through `k8s/cronjob-gate`, so the gate run meets
   a rolled-out pod rather than the sidecar's startup window.
-- **It was a daniel-box host cron until H2.5d.** `tasks/main.yml` keeps absent arms for the
-  cron, `/usr/local/bin/qbittorrent-prefs-check.sh` and `/opt/qbittorrent-prefs-check`, ahead of
-  the manifests include.
+- **It was a daniel-box host cron until H2.5d.** The absent arms for the cron,
+  `/usr/local/bin/qbittorrent-prefs-check.sh` and `/opt/qbittorrent-prefs-check` sit in
+  `ansible/roles/setup/k8s_host_files/tasks/qbittorrent.yml`, which the setup plane applies
+  through `initial_setup.yml`. D5's conversion PR moved them there from `tasks/main.yml`.
 
 ### The login trap
 qBittorrent 5.2.3 answers a successful `POST /api/v2/auth/login` with **HTTP 204 and an empty
 body**, where older builds answered `200 "Ok."` — so a client checking for that string rejects a
 login that succeeded. Check for the `QBT_SID` cookie instead; a bad password sets none.
 `web_ui_max_auth_fail_count` is 5, so don't debug a login by retrying it.
+
+## The Flux Jobs wait in `templates/verify-inert/`
+
+Nothing renders that directory: the manifests role reads only top-level templates, and the
+renderer's `verify_files` only `templates/verify/`. qbittorrent's flip PR renames it, and the
+renderer then emits two Jobs into `qbittorrent-verify`, both running `files/qbittorrent_job.py`
+with no `pods/exec` grant:
+
+- **`job.yaml.j2` replaces `tasks/verify.yml`.** The Job dials the WebUI from the pod CIDR,
+  lists the mod cache through its own read-only mount of the sidecar's claim and subPath, and
+  compares qBittorrent's `last_external_address_v4` with its own egress address. The script's
+  docstring maps each proof to its Job form.
+- **`prefs.yaml.j2` runs the prefs apply on every revision that rolls the pod.** The startup
+  window that keeps the apply out of `deploy.yml` has passed by then, because `<tag>-verify`
+  starts once the tag is Ready. It reruns safely: a second run writes nothing.
+- **Their pods reuse two labels the fence already admits**, `qbittorrent-reach-probe` and
+  `qbittorrent-prefs-check`; each template's `DECIDED:` note says why.
+- **The script cannot import `apply_prefs.py`**, because the Job census admits no
+  `urllib.request`. Its `DESIRED` is a copy, and `tests/test_qbittorrent_job.py` holds the two
+  equal, renders the renamed directory through the Job census, and runs each check against a
+  stand-in WebUI.

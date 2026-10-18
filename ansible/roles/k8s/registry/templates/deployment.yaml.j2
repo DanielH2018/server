@@ -111,6 +111,17 @@ spec:
               value: "127.0.0.1:{{ registry_k8s_ghcr_mirror_debug_port }}"
             - name: REGISTRY_STORAGE_FILESYSTEM_ROOTDIRECTORY
               value: /var/lib/registry
+{#
+  A blob that takes longer than about 8 to 10 minutes to fetch never completes through this
+  mirror (#5654). ghcr.io redirects each blob to an Azure SAS URL, whose `se` expiry read
+  7 minutes after issue, and the transfer is cut at the next 10 MiB boundary after that.
+  Measured from daniel-box on 2026-10-18 with curl, on a 223460165-byte flaresolverr layer:
+  HTTP/2 was cut at 200 MiB after 608s, HTTP/1.1 at 210 MiB after 572s, and HTTP/2 limited
+  to 120 KB/s at 60 MiB after 513s. The cap is time-based and not HTTP/2, so
+  `GODEBUG=http2client=0` would not help. distribution's proxy refetches from byte 0 on each
+  request and never resumes, so retries die at the same point. A Jinja comment, so that
+  editing it renames no verify Job and rolls nothing.
+#}
             - name: REGISTRY_PROXY_REMOTEURL
               value: https://ghcr.io
             # Never expire. The default 168h would drop nut's image a week after its last

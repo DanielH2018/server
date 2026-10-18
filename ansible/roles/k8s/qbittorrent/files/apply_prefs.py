@@ -22,6 +22,11 @@ Authelia-gated — but the WebUI is reachable directly from the node over the po
 ClusterIP, which is what a hand run uses. Verified 2026-08-26: `curl
 http://<pod-ip>:8080/` returns 200 from daniel-box.
 
+UNDER FLUX, A JOB RUNS A COPY. templates/verify-inert/prefs.yaml.j2 applies DESIRED from
+files/qbittorrent_job.py once qbittorrent's flip renders it, after the pod is Ready. The Job
+census refuses this file's cookie jar and opener, so that script holds its own copy of DESIRED,
+and tests/test_qbittorrent_job.py holds the two equal. Change a value in both.
+
 THE SCHEDULED CALLER. The qbittorrent-prefs-check CronJob runs files/prefs_check.py, which
 calls main() with `--dry-run --connect-wait 60` and logs the verdict. It never writes.
 
