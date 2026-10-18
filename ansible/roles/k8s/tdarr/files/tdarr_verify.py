@@ -2,18 +2,18 @@
 
 Inert until tdarr's flip: `templates/verify-inert/` holds the Job, and the flip PR moves it to
 `templates/verify/`, where the renderer emits it into `tdarr-verify` (target slice D5, *A
-verify conversion lands as inert code*). It replaces two of `tasks/verify.yml`'s three
+verify conversion lands as inert code*). It replaces `tasks/verify.yml`'s two
 `kubectl exec` checks. The Job's pod requests the same `devic.es/dri` device, the same
 render-node group and the same `media-data` subPath as tdarr's Deployment, and runs as tdarr's
 PUID and PGID, the uid tdarr's own process writes the library as. So it proves the wiring of a
 pod built like tdarr's, not of the live tdarr pod, which nothing here can reach without
 `pods/exec`.
 
-The third check, an encode through tdarr's own ffmpeg, has no form this Job can take. The
-Job's image carries no ffmpeg, and the Job census forbids spawning a process. An exec into
-tdarr's pod through the API needs a websocket upgrade, and the census admits none of `socket`,
-`ssl` or `http.client`. Ansible runs the encode check until the flip. After the flip nothing
-runs it unless the operator's choice in #5451 lands first.
+The encode through tdarr's own ffmpeg, which `tasks/verify.yml` also ran by exec, has no
+form this Job can take. The Job's image carries no ffmpeg, and the Job census forbids spawning
+a process. An exec into tdarr's pod through the API needs a websocket upgrade, and the census
+admits none of `socket`, `ssl` or `http.client`. The Deployment's `vaapi-encode` initContainer
+runs that encode instead, under Ansible and Flux alike (#5451).
 
 The Job reaches no Service and no API, so it opens no connection and imports no
 `flux_job_connect`. Inputs come from the Job's environment: `VERIFY_DEVICE`, the render node,

@@ -30,6 +30,19 @@ from pathlib import Path
 PR_SET_CHILD_SUBREAPER = 36
 
 
+def otel_attributes(batch: str, phase: str) -> str:
+    """The `OTEL_RESOURCE_ATTRIBUTES=` assignment one phase's `claude -p` runs under (#5673).
+
+    Claude Code's telemetry reaches Prometheus with each resource attribute as a label, so
+    `fanout_batch` and `fanout_phase` make spend, tokens and tool failures readable per batch
+    and phase. Before this, those lived only in the review records, split across both hosts.
+    An attribute the unit's own environment already carries is kept ahead of them.
+    """
+    ours = f"fanout.batch={batch},fanout.phase={phase}"
+    inherited = os.environ.get("OTEL_RESOURCE_ATTRIBUTES", "")
+    return f"OTEL_RESOURCE_ATTRIBUTES={inherited + ',' if inherited else ''}{ours}"
+
+
 def run_process(argv: list[str], stdin: str | None) -> subprocess.CompletedProcess:
     return subprocess.run(
         argv, input=stdin, capture_output=True, text=True, check=False

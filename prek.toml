@@ -23,13 +23,15 @@ rev = "v6.0.0"
 id = "trailing-whitespace"
 stages = ["pre-commit"]
 # A vendored upstream manifest under a role's files/upstream/ is pinned byte for byte to a
-# sha256 (scripts/dev/vendor_manifest.py), so no fixer may rewrite it.
-exclude = "^ansible/roles/[^/]+/[^/]+/files/upstream/"
+# sha256 (scripts/dev/vendor_manifest.py), so no fixer may rewrite it. traefik's
+# files/crds/ holds its upstream CRDs the same way, outside files/upstream/ until its flip
+# (ansible/tests/k8s/test_traefik_crds.py has the pin and why).
+exclude = "^ansible/roles/[^/]+/[^/]+/files/(upstream|crds)/"
 
 [[repos.hooks]]
 id = "end-of-file-fixer"
 stages = ["pre-commit"]
-exclude = "^ansible/roles/[^/]+/[^/]+/files/upstream/"
+exclude = "^ansible/roles/[^/]+/[^/]+/files/(upstream|crds)/"
 
 [[repos.hooks]]
 id = "check-yaml"
@@ -39,7 +41,7 @@ stages = ["pre-commit"]
 # file, so the one stream is excluded instead: the validate-k8s-manifests hook parses its
 # render, and ansible/tests/k8s/test_flux_role.py reads it.
 # An upstream file under files/upstream/ is such a stream too, and its own pin covers it.
-exclude = "^ansible/roles/(k8s/flux/files/gotk-components\\.yaml$|[^/]+/[^/]+/files/upstream/)"
+exclude = "^ansible/roles/(k8s/flux/files/gotk-components\\.yaml$|[^/]+/[^/]+/files/(upstream|crds)/)"
 
 [[repos.hooks]]
 # Guards renovate.json (a syntax error there silently disables ALL dependency management)
@@ -65,7 +67,7 @@ stages = ["pre-commit"]
 id = "mixed-line-ending"
 stages = ["pre-commit"]
 args = ["--fix=lf"]
-exclude = "^ansible/roles/[^/]+/[^/]+/files/upstream/"
+exclude = "^ansible/roles/[^/]+/[^/]+/files/(upstream|crds)/"
 
 # Ansible linting
 [[repos]]
@@ -101,8 +103,8 @@ files = "^ansible/.*\\.ya?ml$"
 # They stay under ansible/vars/ because the creation rules in ansible/.sops.yaml and the
 # runbooks point there, and `cluster_vars.py check` validates them instead.
 # files/upstream/ holds upstream manifests byte for byte, which this repo's lint rules do not
-# govern (scripts/dev/vendor_manifest.py).
-exclude ="^ansible/(vars/secrets\\.yml|vars/cluster-manifests/.*|roles/k8s/home-assistant/files/.*|roles/k8s/flux/files/gotk-components\\.yaml|roles/[^/]+/[^/]+/files/upstream/.*)$"
+# govern (scripts/dev/vendor_manifest.py), and traefik's files/crds/ holds its CRDs the same way.
+exclude ="^ansible/(vars/secrets\\.yml|vars/cluster-manifests/.*|roles/k8s/home-assistant/files/.*|roles/k8s/flux/files/gotk-components\\.yaml|roles/[^/]+/[^/]+/files/(upstream|crds)/.*)$"
 # Cap ansible-core <3 so a surprise upstream major can't silently change lint behavior
 # or break this hook on a day nothing in the repo changed (these deps aren't lock-pinned).
 additional_dependencies = ["ansible-core>=2.18,<3.0", "jmespath"]
@@ -201,7 +203,7 @@ name = "Validate Grafana dashboard datasource uids"
 entry = "uv run --frozen python scripts/validate/grafana_dashboards.py"
 language = "system"
 pass_filenames = false
-files = "^(ansible/roles/k8s/observability/files/dashboards/.*\\.json|ansible/roles/k8s/observability/templates/grafana\\.yaml\\.j2|scripts/validate/grafana_dashboards\\.py|scripts/lib/repo_paths\\.py)$"
+files = "^(ansible/roles/k8s/observability/files/dashboards/.*\\.json|ansible/roles/k8s/observability/templates/grafana\\.yaml\\.j2|scripts/validate/grafana_dashboards\\.py|scripts/lib/(cli_help|exit_codes|repo_paths)\\.py)$"
 
 # Check the alert plane's inputs with the tools that load them. promtool checks the rendered
 # prometheus.yml, every rule file and every rule test; amtool checks the Alertmanager config;
@@ -314,7 +316,7 @@ language = "system"
 pass_filenames = false
 # Every template in the tree, plus the scanner itself. No inventory or defaults file is in
 # scope: this reads template text and renders nothing, so no variable can change its verdict.
-files = "^(ansible/.*\\.j2|scripts/validate/jinja_bash_collisions\\.py|scripts/lib/repo_paths\\.py)$"
+files = "^(ansible/.*\\.j2|scripts/validate/jinja_bash_collisions\\.py|scripts/lib/(cli_help|exit_codes|repo_paths)\\.py)$"
 
 # Fail when a root-level file exists that `.gitignore`'s `/*` hides from git. Such a file
 # stages nothing and lands nothing through a green CI and a clean merge. A

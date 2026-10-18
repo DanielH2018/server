@@ -21,6 +21,7 @@ import re
 # directory on sys.path, and pyproject's `pythonpath` is a pytest setting.
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from lib.cli_help import answer_help
 from lib.repo_paths import K8S_ROLES, REPO
 
 GRAFANA_ROLE = K8S_ROLES / "observability"
@@ -191,12 +192,13 @@ def validate(
     return errors + duplicate_dashboard_uids(dashboard_uids(dashboards_dir))
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
     """Run `validate` and print its errors, if any, on stderr.
 
     Returns:
         0 if `validate` found no errors, 1 otherwise.
     """
+    answer_help(__doc__, argv)
     errors = validate()
     if errors:
         # Each error opens with the dashboard's path, so this is `[FAIL] <path>: <reason>`.

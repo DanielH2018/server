@@ -72,6 +72,11 @@ _CONFIGMAP_DATA_KEYS = {
 # One key per rule group, so its count moves with every rule PR.
 _RULES_CONFIGMAP = "prometheus-rules"
 _RULES_RELOAD_FLAG = "--config.auto-reload"
+# The dashboard ConfigMaps, one key per board, which Grafana's file provisioner re-reads from the
+# mount every `updateIntervalSeconds`. Exempt from the key count too: this guard covers the
+# Ansible-era `checksum/config` capture only. Once observability is flux-owned the renderer's
+# `checksum/restart` hashes these and rolls grafana on a board edit, which #5679 tracks.
+_DASHBOARD_CONFIGMAPS = "grafana-dashboards-"
 
 _WORKLOAD_KINDS = {"Deployment", "DaemonSet", "StatefulSet"}
 _CHECKSUM_ANNOTATION = "checksum/config"
@@ -246,6 +251,9 @@ def test_no_role_configmap_grew_a_key_the_annotation_does_not_hash():
         for doc in _role_docs()
         if doc.get("kind") == "ConfigMap"
         and (doc.get("metadata") or {}).get("name") != _RULES_CONFIGMAP
+        and not str((doc.get("metadata") or {}).get("name")).startswith(
+            _DASHBOARD_CONFIGMAPS
+        )
     }
     assert counts == _CONFIGMAP_DATA_KEYS, (
         f"observability's ConfigMap data keys are {counts}, not {_CONFIGMAP_DATA_KEYS}. Each "

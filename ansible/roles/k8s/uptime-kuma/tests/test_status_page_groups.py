@@ -12,19 +12,14 @@ from pathlib import Path as _Path
 import yaml
 
 from _k8s_render import render_role_template
-from kuma_monitors import kuma_ingress_monitors
 from py_table import py_table
 from render_status_page import bucket
-
-from lib.repo_paths import HOST_VARS
 
 ROLE = _Path(__file__).resolve().parents[1]
 
 # monitor-bridge's push tiles render from one loop over this table (#3781), so their ids are
 # the rows' `kuma_id`s rather than literal keys in the template.
 CHECK_TABLE = ROLE.parent / "monitor-bridge" / "files" / "check_table.py"
-# The ingress tiles render from one loop over this host's containers_list (#3690).
-DANIEL_BOX_VARS = HOST_VARS / "daniel-box.yml"
 
 DECLARATION = re.compile(r"^  (?P<id>[A-Za-z0-9._-]+)\.json: \|$")
 NAME = re.compile(r'"name": "(?P<name>[^"]*)"')
@@ -37,7 +32,7 @@ TYPE = re.compile(r'"type": "(?P<type>[a-z_]+)"')
 KNOWN_IDS = frozenset(
     {
         "daniel-pi-host",
-        "grafana-k8s",
+        "livesync-k8s",
         "longhorn-backup",
         "monitor-bridge-b2-storage",
         "gitops-deploy-alive",
@@ -51,8 +46,8 @@ KNOWN_IDS = frozenset(
 def declarations():
     """AutoKuma id -> (display name, entity type) for every monitor in the template.
 
-    A literal declaration is read off the template's lines, the bridge tile loop off the table
-    it iterates, and the ingress tile loop off the containers_list it iterates.
+    A literal declaration is read off the template's lines, and the bridge tile loop off the
+    table it iterates.
     """
     text = (ROLE / "templates" / "static-monitors.yaml.j2").read_text()
     lines = text.splitlines()
@@ -70,10 +65,6 @@ def declarations():
     if "py_table('CHECKS')" in text:
         for row in py_table(CHECK_TABLE.read_text(), "CHECKS"):
             found[row["kuma_id"]] = (row["display"], "push")
-    if "kuma_ingress_monitors" in text:
-        entries = yaml.safe_load(DANIEL_BOX_VARS.read_text())["containers_list"]
-        for tile in kuma_ingress_monitors(entries):
-            found[tile["id"]] = (tile["name"], "http")
     return found
 
 

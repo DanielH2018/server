@@ -33,6 +33,20 @@ tdarr_k8s_image: ghcr.io/haveagitgat/tdarr:3.00.00@sha256:7ba5325ea64951181a30f2
 manifests_rollout_timeout: 3000s  # noqa var-naming[no-role-prefix]
 tdarr_k8s_rollout_timeout: "{{ manifests_rollout_timeout }}"
 
+# The budget of the tdarr-prepull Kustomization, whose Job pulls tdarr's image onto its node
+# before the tdarr Kustomization applies (scripts/renderer/renderer_lib/prepull.py). It is the
+# Flux form of the crictl pre-pull in tasks/main.yml (#3875). Only Flux reads it: the renderer
+# adds the Kustomization for a published tag alone, so an Ansible deploy ignores it and the
+# crictl task keeps running until tdarr's flip. The flip PR deletes that task and drops
+# manifests_rollout_timeout above to the 600s default, so a stuck tdarr then holds a Flux
+# worker for 10 minutes rather than 50 (D5 step 26).
+# 3000s is the cold-pull budget measured above: the 1432 MiB pull took 25m37s on 2026-10-08.
+# It covers a pull down to 0.5 MB/s. GHCR served daniel-box at 0.21-0.33 MB/s on 2026-10-17
+# (#5525), which would take 4550-7150s here. The Job has no deadline, so a pull that slow
+# costs that revision its verdict, the Job keeps pulling, and Flux applies tdarr on a later
+# retry; a longer budget would hold a worker for over an hour on every cold pull instead.
+flux_prepull_timeout: 3000s  # noqa var-naming[no-role-prefix]
+
 # Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
 # k8s/manifests takes a pre-apply Longhorn snapshot of both config claims below and reverts
 # them on a failed deploy, and that machinery works here. Auto-deploy stays off for two

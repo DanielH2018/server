@@ -32,7 +32,7 @@ tests:
                 gone from prometheus.yml or renders no target. No ingress probe can fire until
                 the series is back.
 
-  # A warning-tier ingress fails from minute 3. IngressProbeFailed fires in shadow once its
+  # A warning-tier ingress fails from minute 3. IngressProbeFailed fires once its
   # 2m hold has passed, and the critical rule, which selects the other tier, stays quiet.
   - interval: 1m
     input_series:
@@ -54,7 +54,6 @@ tests:
               module: http_sso_302
               page_tier: warning
               severity: warning
-              shadow: "true"
             exp_annotations:
               summary: The ingress probe of homepage is failing.
               description: >-
@@ -73,7 +72,7 @@ tests:
         alertname: IngressProbesMissing
         exp_alerts: []
 
-  # A home-critical ingress fails from minute 3. IngressProbeFailedCritical fires in shadow,
+  # A home-critical ingress fails from minute 3. IngressProbeFailedCritical fires,
   # and the warning rule stays quiet.
   - interval: 1m
     input_series:
@@ -93,7 +92,6 @@ tests:
               module: http_2xx
               page_tier: critical
               severity: critical
-              shadow: "true"
             exp_annotations:
               summary: The ingress probe of authelia is failing.
               description: >-

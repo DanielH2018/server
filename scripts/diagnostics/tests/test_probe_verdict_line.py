@@ -128,6 +128,11 @@ def test_monitors_ends_with_its_verdict(monkeypatch, capsys, status, expected_rc
     def run(argv, *args, **kwargs):
         # `k8s_endpoint` reads the domain from inventory, so `monitors` needs no age key.
         assert argv[0] != "sops", f"monitors decrypted: {argv}"
+        if "ALERTS" in argv[-1]:
+            # No ingress alert fires, so Kuma's status alone decides the verdict.
+            return _completed(
+                argv, json.dumps({"status": "success", "data": {"result": []}})
+            )
         return _completed(argv, _monitor_status(status))
 
     monkeypatch.setattr(subprocess, "run", run)
