@@ -47,6 +47,7 @@ _mod = _load("bash-pretool")
 EXPECTED_ARMS = (
     "block-protected-bash",
     "block-footguns",
+    "block-batch-full-suite",
     "inject-nested-docs",
 )
 
@@ -262,3 +263,25 @@ def test_an_arm_that_raises_loses_only_its_own_verdict(sandbox, monkeypatch, cap
     # And it said so, naming the arm: a dead arm behind clean verdicts must not be silent.
     assert "block-protected-bash" in captured.err
     assert "arm is broken" in captured.err
+
+
+# ── arm 4: block-batch-full-suite ────────────────────────────────────────────────────
+
+
+def test_accept_a_whole_suite_run_in_a_batch_is_denied(
+    sandbox, monkeypatch, capsys, tmp_path
+):
+    batch = tmp_path / ".claude" / "worktrees" / "fanout-5667"
+    batch.mkdir(parents=True)
+    out = dispatch("uv run pytest -q", sandbox, monkeypatch, capsys, cwd=str(batch))
+    assert out["permissionDecision"] == "deny"
+    assert out["permissionDecisionReason"].startswith("[block-batch-full-suite] ")
+
+
+def test_reject_a_whole_suite_run_outside_a_batch_is_not_denied(
+    sandbox, monkeypatch, capsys, tmp_path
+):
+    # tmp_path, not _REPO: a batch running this suite has a fan-out worktree as _REPO.
+    monkeypatch.delenv("CLAUDE_PROJECT_DIR", raising=False)
+    out = dispatch("uv run pytest -q", sandbox, monkeypatch, capsys, cwd=str(tmp_path))
+    assert out is None or out["permissionDecision"] != "deny"

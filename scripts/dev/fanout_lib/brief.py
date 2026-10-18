@@ -311,7 +311,9 @@ after your last commit and before `gh pr create`. It takes about a minute:
 ```bash
 uv run pytest -q -n auto {" ".join(REPO_GUARDS)}
 ```
-Fix a red guard. Never skip or deselect it. CI's weight step also fails a heavy test module
+Fix a red guard. Never skip or deselect it. Do not run the whole suite: a hook refuses a
+pytest run that names no path or more than 300 test modules in a batch, because CI runs the
+whole suite on the PR and the pipeline resumes you with each failing check. CI's weight step also fails a heavy test module
 that `scripts/dev/pytest_shard_weights.json` does not list, and no test runs that step. For each
 test module you added, run `uv run python scripts/dev/pytest_shard.py --record-files <module>`
 after committing it, then commit the JSON it rewrites.
