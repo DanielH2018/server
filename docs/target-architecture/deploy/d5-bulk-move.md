@@ -1842,7 +1842,9 @@ assertion becomes a standing rule.
   `Recreate` means no server runs beside it. On a new volume the initContainer meets an empty
   database. The conversion PR checks on the pinned image whether `totp generate` needs
   `authelia storage migrate up` first, and runs it first if so.
-- **jellyfin's cap** becomes a Job in jellyfin's Kustomization. It resolves the volume from the
+- **jellyfin's cap** becomes a mutation Job in `jellyfin-verify`, by the rule *Post-apply
+  mutation Jobs share `<tag>-verify`*. The Job census admits no Job in a `<tag>` directory,
+  and the cap needs the claim Bound (#5614). It resolves the volume from the
   PVC's `spec.volumeName` at run time, and patches `spec.snapshotMaxSize` to the rendered
   value, so a re-run changes nothing. RBAC cannot name a volume whose name the renderer cannot
   know, so its Role in `longhorn-system` grants `get` and `patch` on every

@@ -67,6 +67,22 @@ the Trakt and SSO-Auth decisions, and why the snapshot cap is the number it is.
   the download, so a failed install leaves the working version in place.
   `ansible/tests/services/test_jellyfin_plugin_pins_hold_across_a_restart.py` runs all five
   installers against a seeded directory.
+- **`templates/verify-inert/` holds jellyfin's two Jobs for Flux, and nothing renders them yet.**
+  Neither the manifests role nor the renderer's `verify_files` reads that directory. jellyfin's
+  flip PR renames it to `templates/verify/`, which makes the renderer emit `jellyfin-verify`.
+  - `job.yaml.j2` runs `files/jellyfin_verify.py`, which replaces two of `tasks/verify.yml`'s
+    exec checks: the render node opens, and the library sits at the depth Jellyfin's database
+    expects, with a real file readable. Its pod is built like jellyfin's, with the same device
+    request, render group, PUID and both read-only `media-data` mounts, so it checks that wiring
+    and not the live pod. It dials no Service and no API, so it needs no fence peer and no Role.
+  - The VAAPI encode and the HDR tone-mapping check have no Job form: the Job image has no
+    ffmpeg, and the Job census forbids spawning a process and opening a socket. Ansible runs
+    both until the flip; after that they are lost unless the operator's choice in #5451 lands
+    first.
+  - `cap.yaml.j2` is the snapshot cap below, as a mutation Job.
+  - Both Jobs' specs embed a digest of jellyfin's rendered Deployment, so every change that
+    rolls jellyfin renames them and Flux runs them again. `tests/test_jellyfin_verify.py`
+    renders the renamed copy through the Job census.
 - **Read the live plugin census from the pod's log**, not from this file:
   `kubectl -n homelab logs <pod> -c jellyfin | grep 'Loaded plugin:'`. The image bundles five of its
   own, which move with `jellyfin_k8s_image` and need no pin here.
@@ -79,6 +95,12 @@ behind a PVC that is itself capped.
 
 - **The patch runs after `k8s/manifests`, so a new volume's first snapshot is uncapped.** The
   `DECIDED:` marker on the cap task has why (#3387).
+- **Under Flux the cap is a mutation Job, `templates/verify-inert/cap.yaml.j2`.** It runs
+  `files/jellyfin_snapshot_cap.py` in `jellyfin-verify`, after the claim applies. It resolves
+  the volume from the claim's `spec.volumeName` and patches only a differing cap, so a re-run
+  writes nothing. Its Role in `longhorn-system` grants `get` and `patch` on every Longhorn
+  volume, because the renderer cannot know the volume's generated name; that is the stated
+  trade. The template's `DECIDED:` note has what changes about the first-snapshot gap.
 
 - **Longhorn picks the number, not you.** It accepts `"0"` or a value no smaller than
   `Volume.Spec.Size` × 2, so the var stays derived: a hardcoded one goes illegal the moment the PVC
