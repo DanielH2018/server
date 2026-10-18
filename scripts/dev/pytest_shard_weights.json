@@ -41,7 +41,7 @@
  "ansible/roles/k8s/artifacts/tests/test_artifact_server.py": 0.09,
  "ansible/roles/k8s/artifacts/tests/test_artifact_stars.py": 0.12,
  "ansible/roles/k8s/autofix-bridge/tests/test_autofix.py": 0.0,
- "ansible/roles/k8s/configarr/tests/test_configarr_gate.py": 1.27,
+ "ansible/roles/k8s/configarr/tests/test_configarr_gate.py": 2.14,
  "ansible/roles/k8s/configarr/tests/test_configarr_health.py": 0.12,
  "ansible/roles/k8s/configarr/tests/test_configarr_health_logic.py": 0.0,
  "ansible/roles/k8s/configarr/tests/test_configarr_status.py": 0.0,
