@@ -46,6 +46,20 @@ MAX_BATCHES_PER_REMOTE_HOST = 3
 # them. Counted from the run manifests, which cost no ssh to read, less the batches whose
 # unit has stopped (`still_running`).
 MAX_LIVE_BATCHES_PER_HOST = 3
+# DECIDED: daniel-server holds a 4th live batch (#5667, 2026-10-18). Its 7 batches
+# measured since #5665 peaked at 2473 MiB of anon each and 4.3 GiB in total across
+# three, against an 18G fleet cap, a 17G login-plane cap and 26 GiB available, so four
+# at the observed peak come to about 9.9 GiB. Three batches reached 5.8 of 8 cores at
+# p95, and k8s workloads hold 3.1x the fleet slice's CPU weight (313 against 100), so a
+# 4th batch yields to them under contention. daniel-box stays at 3: its fleet cap is 14G
+# and the fleet slice peaked at 13.95 GiB in the week to 2026-10-18. #5667's check-in on
+# 2026-10-26 re-reads both with a week of data.
+LIVE_BATCH_CAP_BY_HOST = {"daniel-server": 4}
+
+
+def live_batch_cap(host: str) -> int:
+    """How many running batches `host` fits; `MAX_LIVE_BATCHES_PER_HOST` by default."""
+    return LIVE_BATCH_CAP_BY_HOST.get(host, MAX_LIVE_BATCHES_PER_HOST)
 
 
 def over_ssh_budget(placed: list[tuple[str, str]]) -> bool:
@@ -138,15 +152,15 @@ def over_live_batch_cap(
     # DECIDED: no LOCAL_HOST exemption, unlike `over_ssh_budget` above. daniel-box is exempt
     # there because its launches go over `bash -c` and spend no ssh connection at all; that
     # reason does not transfer to memory, which a local agent consumes exactly as a remote one
-    # does. The two caps share the number 3 and nothing else.
+    # does. The two caps share the number 3 on daniel-box, and nothing else.
     for host, n in sorted(new.items()):
         standing = still_running(live.get(host, []), states.get(host, ""))
-        if len(standing) + n <= MAX_LIVE_BATCHES_PER_HOST:
+        if len(standing) + n <= live_batch_cap(host):
             continue
         held = ", ".join(sorted(f"{b.batch} in run {run_id}" for run_id, b in standing))
         error(
             f"{host} already holds {len(standing)} live batch(es) ({held or 'none'}) and "
-            f"this run would place {n} more, over the {MAX_LIVE_BATCHES_PER_HOST} that "
+            f"this run would place {n} more, over the {live_batch_cap(host)} that "
             "host's memory cap fits — wait for one to finish, run `clean <run-id>` on "
             "the finished ones, or split the fan-out"
         )

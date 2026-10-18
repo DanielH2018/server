@@ -39,7 +39,8 @@ which creates the directory media-volume's static PersistentVolume names and its
 absent arms that remove H2.5b's retired host health reader: its cron, its script, its working
 directory and its drift fragment. observability's dashboard conversion wrote
 `tasks/observability.yml`, an absent arm over the three trees its old `tasks/dashboards.yml`
-staged under `/etc/rancher/k3s/`. pi-peer-backup's flip wrote `tasks/pi-peer-backup.yml`,
+staged under `/etc/rancher/k3s/`. janitorr's PR wrote `tasks/janitorr.yml`, which holds the absent arms for the retired health
+reader's host cron, its script and code directory, and its drift fragment. pi-peer-backup's flip wrote `tasks/pi-peer-backup.yml`,
 which installs the forced-command wrapper and authorizes the pull key on daniel-pi, and moved
 both files into `files/`. qbittorrent's PR wrote `tasks/qbittorrent.yml`, which holds
 the absent arms for the prefs drift check's retired host cron and script. traefik's PR wrote
@@ -94,8 +95,8 @@ census in `ansible/tests/repo/_host_write_rows.py`, whose `allow` entry the move
 ## Autonomous-role contract (it will install a timer and remove crons with no human in the loop)
 
 The GitOps tick applies the role as `initial_setup.yml --tags k8s_host_files` on every merge
-that touches it. It holds host directories, configarr's absent arms and pi-peer-backup's two
-daniel-pi writes so far, and installs no timer yet.
+that touches it. It holds host directories, configarr's and janitorr's absent arms and
+pi-peer-backup's two daniel-pi writes so far, and installs no timer yet.
 
 - **Scope / exclusions:** host files, directories and units that a k8s role's Ansible apply
   owned before its flip, plus the absent arms that remove a retired role's crons. **Never** a

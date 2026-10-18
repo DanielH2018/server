@@ -2,12 +2,13 @@
 # trims to kube_service_status_load_balancer_ingress. Plain YAML, never Jinja:
 # prometheus-rules.yaml.j2 carries this file verbatim.
 #
-# MosquittoLanAddressNotPinned replaces mosquitto's deploy-time assert, "Fail if mosquitto-lan
-# did not get its pinned LAN address", as the verify-on-a-metric conversion of D5
-# (docs/target-architecture/deploy/d5-bulk-move.md). It carries verify="true", so the soak Job
-# fails a revision that changes mosquitto while it fires. The address is a literal because a
-# rule file is never Jinja; ansible/tests/services/test_mosquitto_lan_rule_agrees.py holds it,
-# the namespace and the Service name to the inventory and the rendered Service.
+# MosquittoLanAddressNotPinned, JellyfinLanAddressNotPinned and PiholeLanAddressNotPinned replace
+# each role's deploy-time assert, "Fail if <Service> did not get its pinned LAN address", as the
+# verify-on-a-metric conversion of D5 (docs/target-architecture/deploy/d5-bulk-move.md). Each
+# carries verify="true", so the soak Job fails a revision that changes its service while it
+# fires. The address is a literal because a rule file is never Jinja;
+# ansible/tests/services/test_lan_address_rules_agree.py holds it, the namespace and the
+# Service name to the rendered Service.
 groups:
   - name: k8s-services
     rules:
@@ -37,3 +38,47 @@ groups:
             job. Home Assistant and the LAN publishers cannot reach the broker on the VIP. MetalLB does not re-evaluate an
             existing allocation, so delete the Service and redeploy mosquitto to force
             reallocation.
+      # jellyfin's twin of the rule above (#5697). TV and phone clients have the VIP typed in by
+      # hand, so an auto-assigned address breaks them with every pod healthy.
+      - alert: JellyfinLanAddressNotPinned
+        expr: >-
+          absent(up{job="kube-state-metrics"})
+          or
+          (absent(kube_service_status_load_balancer_ingress{job="kube-state-metrics", namespace="homelab", service="jellyfin-lan", ip="10.0.0.241"})
+          and on() (up{job="kube-state-metrics"} == 1))
+        for: 5m
+        labels:
+          severity: warning
+          service: jellyfin
+          verify: "true"
+        annotations:
+          summary: The jellyfin-lan Service does not hold its pinned LAN address.
+          description: >-
+            kube-state-metrics reports no LoadBalancer ingress at the pinned VIP on
+            homelab/jellyfin-lan for 5 minutes, or Prometheus has no kube-state-metrics scrape
+            job. TV and phone clients that dial the VIP cannot reach Jellyfin. MetalLB does not
+            re-evaluate an existing allocation, so delete the Service and redeploy jellyfin to
+            force reallocation.
+      # pihole's twin of the rules above (#5696). LAN clients get the VIP from the router's DHCP
+      # DNS option, so an auto-assigned address leaves every client without a resolver while
+      # both pods stay Ready. CoreDNS forwards to the pinned ClusterIP instead, so the cluster
+      # keeps resolving and nothing else notices.
+      - alert: PiholeLanAddressNotPinned
+        expr: >-
+          absent(up{job="kube-state-metrics"})
+          or
+          (absent(kube_service_status_load_balancer_ingress{job="kube-state-metrics", namespace="homelab", service="pihole-dns", ip="10.0.0.243"})
+          and on() (up{job="kube-state-metrics"} == 1))
+        for: 5m
+        labels:
+          severity: warning
+          service: pihole
+          verify: "true"
+        annotations:
+          summary: The pihole-dns Service does not hold its pinned LAN address.
+          description: >-
+            kube-state-metrics reports no LoadBalancer ingress at the pinned VIP on
+            homelab/pihole-dns for 5 minutes, or Prometheus has no kube-state-metrics scrape
+            job. LAN clients that took the VIP from DHCP have no DNS resolver. MetalLB does not
+            re-evaluate an existing allocation, so delete the Service and redeploy pihole to
+            force reallocation.

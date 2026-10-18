@@ -89,3 +89,165 @@ tests:
       - alertname: MosquittoLanAddressNotPinned
         eval_time: 6m
         exp_alerts: []
+
+  # JellyfinLanAddressNotPinned: the zero-series case fires through its first arm.
+  - interval: 1m
+    input_series: []
+    alert_rule_test:
+      - eval_time: 6m
+        alertname: JellyfinLanAddressNotPinned
+        exp_alerts:
+          - exp_labels:
+              job: kube-state-metrics
+              service: jellyfin
+              severity: warning
+              verify: "true"
+            exp_annotations: &jellyfin_annotations
+              summary: The jellyfin-lan Service does not hold its pinned LAN address.
+              description: "kube-state-metrics reports no LoadBalancer ingress at the pinned VIP on homelab/jellyfin-lan for 5 minutes, or Prometheus has no kube-state-metrics scrape job. TV and phone clients that dial the VIP cannot reach Jellyfin. MetalLB does not re-evaluate an existing allocation, so delete the Service and redeploy jellyfin to force reallocation."
+
+  # MetalLB gave jellyfin-lan an auto-assigned address. The rule holds 5 minutes, then fires.
+  - interval: 1m
+    input_series:
+      - series: 'up{job="kube-state-metrics", instance="kube-state-metrics:8080"}'
+        values: '1x10'
+      - series: 'kube_service_status_load_balancer_ingress{job="kube-state-metrics", instance="kube-state-metrics:8080", namespace="homelab", service="jellyfin-lan", uid="u3", ip="10.0.0.200"}'
+        values: '1x10'
+    alert_rule_test:
+      - alertname: JellyfinLanAddressNotPinned
+        eval_time: 4m
+        exp_alerts: []
+      - alertname: JellyfinLanAddressNotPinned
+        eval_time: 6m
+        exp_alerts:
+          - exp_labels:
+              namespace: homelab
+              service: jellyfin
+              ip: 10.0.0.241
+              job: kube-state-metrics
+              severity: warning
+              verify: "true"
+            exp_annotations: *jellyfin_annotations
+
+  # jellyfin-lan holds its pinned address: nothing fires.
+  - interval: 1m
+    input_series:
+      - series: 'up{job="kube-state-metrics", instance="kube-state-metrics:8080"}'
+        values: '1x10'
+      - series: 'kube_service_status_load_balancer_ingress{job="kube-state-metrics", instance="kube-state-metrics:8080", namespace="homelab", service="jellyfin-lan", uid="u3", ip="10.0.0.241"}'
+        values: '1x10'
+    alert_rule_test:
+      - alertname: JellyfinLanAddressNotPinned
+        eval_time: 6m
+        exp_alerts: []
+
+  # jellyfin's pinned address on a different Service does not satisfy the rule.
+  - interval: 1m
+    input_series:
+      - series: 'up{job="kube-state-metrics", instance="kube-state-metrics:8080"}'
+        values: '1x10'
+      - series: 'kube_service_status_load_balancer_ingress{job="kube-state-metrics", instance="kube-state-metrics:8080", namespace="homelab", service="traefik", uid="u4", ip="10.0.0.241"}'
+        values: '1x10'
+    alert_rule_test:
+      - alertname: JellyfinLanAddressNotPinned
+        eval_time: 6m
+        exp_alerts:
+          - exp_labels:
+              namespace: homelab
+              service: jellyfin
+              ip: 10.0.0.241
+              job: kube-state-metrics
+              severity: warning
+              verify: "true"
+            exp_annotations: *jellyfin_annotations
+
+  # A failed kube-state-metrics scrape pages through the Cluster Scrape Targets tile, not here.
+  - interval: 1m
+    input_series:
+      - series: 'up{job="kube-state-metrics", instance="kube-state-metrics:8080"}'
+        values: '0x10'
+    alert_rule_test:
+      - alertname: JellyfinLanAddressNotPinned
+        eval_time: 6m
+        exp_alerts: []
+
+  # PiholeLanAddressNotPinned: the zero-series case fires through its first arm.
+  - interval: 1m
+    input_series: []
+    alert_rule_test:
+      - eval_time: 6m
+        alertname: PiholeLanAddressNotPinned
+        exp_alerts:
+          - exp_labels:
+              job: kube-state-metrics
+              service: pihole
+              severity: warning
+              verify: "true"
+            exp_annotations: &pihole_annotations
+              summary: The pihole-dns Service does not hold its pinned LAN address.
+              description: "kube-state-metrics reports no LoadBalancer ingress at the pinned VIP on homelab/pihole-dns for 5 minutes, or Prometheus has no kube-state-metrics scrape job. LAN clients that took the VIP from DHCP have no DNS resolver. MetalLB does not re-evaluate an existing allocation, so delete the Service and redeploy pihole to force reallocation."
+
+  # MetalLB gave pihole-dns an auto-assigned address. The rule holds 5 minutes, then fires.
+  - interval: 1m
+    input_series:
+      - series: 'up{job="kube-state-metrics", instance="kube-state-metrics:8080"}'
+        values: '1x10'
+      - series: 'kube_service_status_load_balancer_ingress{job="kube-state-metrics", instance="kube-state-metrics:8080", namespace="homelab", service="pihole-dns", uid="u5", ip="10.0.0.200"}'
+        values: '1x10'
+    alert_rule_test:
+      - alertname: PiholeLanAddressNotPinned
+        eval_time: 4m
+        exp_alerts: []
+      - alertname: PiholeLanAddressNotPinned
+        eval_time: 6m
+        exp_alerts:
+          - exp_labels:
+              namespace: homelab
+              service: pihole
+              ip: 10.0.0.243
+              job: kube-state-metrics
+              severity: warning
+              verify: "true"
+            exp_annotations: *pihole_annotations
+
+  # pihole-dns holds its pinned address: nothing fires.
+  - interval: 1m
+    input_series:
+      - series: 'up{job="kube-state-metrics", instance="kube-state-metrics:8080"}'
+        values: '1x10'
+      - series: 'kube_service_status_load_balancer_ingress{job="kube-state-metrics", instance="kube-state-metrics:8080", namespace="homelab", service="pihole-dns", uid="u5", ip="10.0.0.243"}'
+        values: '1x10'
+    alert_rule_test:
+      - alertname: PiholeLanAddressNotPinned
+        eval_time: 6m
+        exp_alerts: []
+
+  # pihole's pinned address on a different Service does not satisfy the rule.
+  - interval: 1m
+    input_series:
+      - series: 'up{job="kube-state-metrics", instance="kube-state-metrics:8080"}'
+        values: '1x10'
+      - series: 'kube_service_status_load_balancer_ingress{job="kube-state-metrics", instance="kube-state-metrics:8080", namespace="homelab", service="mosquitto-lan", uid="u6", ip="10.0.0.243"}'
+        values: '1x10'
+    alert_rule_test:
+      - alertname: PiholeLanAddressNotPinned
+        eval_time: 6m
+        exp_alerts:
+          - exp_labels:
+              namespace: homelab
+              service: pihole
+              ip: 10.0.0.243
+              job: kube-state-metrics
+              severity: warning
+              verify: "true"
+            exp_annotations: *pihole_annotations
+
+  # A failed kube-state-metrics scrape pages through the Cluster Scrape Targets tile, not here.
+  - interval: 1m
+    input_series:
+      - series: 'up{job="kube-state-metrics", instance="kube-state-metrics:8080"}'
+        values: '0x10'
+    alert_rule_test:
+      - alertname: PiholeLanAddressNotPinned
+        eval_time: 6m
+        exp_alerts: []

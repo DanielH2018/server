@@ -147,8 +147,9 @@ claim nothing. Exit 7 is a launch that started batches but dropped a refused cla
 placement refusals: neither host has a
 reservation's worth of headroom; the placement would put more
 than three batches on one remote host in this run (the ssh budget); or it would leave a host
-holding more than three RUNNING batches, counting every earlier run not yet cleaned (the memory
+holding more RUNNING batches than its cap, counting every earlier run not yet cleaned (the memory
 cap — a five-minute-old agent still holds its 2.5 GiB while the headroom read underprices it).
+The cap is three on daniel-box and four on daniel-server (`launch_gates.live_batch_cap`, #5667).
 A batch whose agent has finished does not count, whether or not its worktree still stands:
 `launch` reads the unit state `place status` reads, and only for a batch on the host it runs
 on, and only when the manifests alone would refuse. A state it cannot read counts as running,

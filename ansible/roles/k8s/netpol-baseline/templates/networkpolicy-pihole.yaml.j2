@@ -48,6 +48,10 @@ spec:
     # pihole-exporter polls the v6 admin API on this same port — Pi-hole serves no separate
     # metrics endpoint — and it polls BOTH instances, which is why this policy's `app: pihole`
     # selector matters here rather than the Service's two-label one.
+    #
+    # pihole-gravity is pihole's gravity reconcile Job, which writes the declared blocklists
+    # through the same API on both instances (pihole/templates/verify-inert/gravity.yaml.j2).
+    # It lands before pihole's Flux flip, so the Job is admitted the first time it runs.
     - from:
         - podSelector:
             matchLabels:
@@ -58,6 +62,9 @@ spec:
         - podSelector:
             matchLabels:
               app: pihole-exporter
+        - podSelector:
+            matchLabels:
+              app: pihole-gravity
       ports:
         - port: 80
           protocol: TCP

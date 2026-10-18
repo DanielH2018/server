@@ -85,5 +85,42 @@ continuity. Coexisted with a Docker-era copy through the DNS cutover; that copy 
   forwards there rather than to the LAN VIP, since the VIP is subject to
   `externalTrafficPolicy: Local`. Recreating the Service needs a new address chosen deliberately.
 
+## The Flux forms wait in `templates/verify-inert/`
+
+D5 step 26 converts this role before its Wave D flip. The conversion is inert: Ansible still
+deploys pihole, and nothing renders `templates/verify-inert/`. The flip PR renames it to
+`templates/verify/`, which makes the renderer emit `pihole-verify`, and deletes the tasks the
+forms below replace.
+
+- **The gravity reconcile is `gravity.yaml.j2`, a mutation Job.** It runs
+  `files/pihole_gravity.py` against each FTL's v6 REST API, through the `pihole` and
+  `pihole-2-web` Services, with the password from `pihole-env`. So it needs no `pods/exec` and
+  no Role. It adds what is absent, sets `enabled` where it differs, reads the result back, and
+  rebuilds gravity on both instances only after a change. FTL validates a regex before storing
+  it, so an invalid pattern in `pihole_k8s_regex_deny` fails the Job rather than sitting unused.
+  netpol-baseline's `networkpolicy-pihole.yaml.j2` admits its label, `app: pihole-gravity`, on
+  port 80.
+- **`roll_one.yml`'s one-at-a-time roll becomes Kustomization order.** Instance 1 renders in
+  `pihole`, instance 2 in `pihole-deferred`, and `pihole-deferred` depends on `pihole` with
+  `wait: true`. A shared ConfigMap edit moves the restart annotation the renderer stamps on
+  both instances, and instance 2 rolls only after instance 1 is Ready. `pihole-verify` depends on `pihole-deferred`, so the
+  reconcile meets two Ready instances.
+- **The ready-endpoint check is deleted at the flip, with no successor.** `Verify both Pi-hole
+  instances have a ready DNS endpoint` counts the Ready pods behind `pihole-dns`. Under Flux,
+  `wait: true` on `pihole` holds instance 1 Ready and `wait: true` on `pihole-deferred` holds
+  instance 2 Ready. `pihole-dns` selects both by `app: pihole`, so two Ready Deployments are
+  two ready endpoints.
+- **The pinned-VIP assert becomes observability's `PiholeLanAddressNotPinned` rule.** The rule
+  reads `pihole-dns`'s LoadBalancer ingress from kube-state-metrics, at `warning` with
+  `verify="true"`, so the soak checks it on every revision. It lands while observability is
+  Ansible-owned, so the flip PR deletes the two LAN-address tasks without touching
+  observability. Its address is a literal, so moving `dns_k8s_vip` is an edit to that rule
+  too. `ansible/tests/services/test_lan_address_rules_agree.py` holds the literal to the
+  rendered Service.
+- **One check has no Flux form yet.** `roll_one.yml` refuses to roll an instance while its
+  sibling is not Ready or is terminating. Under Flux, `pihole` rolls instance 1 whatever state
+  instance 2 is in, and `pihole` cannot depend on `pihole-deferred` without a cycle (#5695).
+  `tests/test_pihole_gravity.py` covers the Job and the ordering.
+
 ## Editing
 Adlists/regex: `defaults/main.yml`.

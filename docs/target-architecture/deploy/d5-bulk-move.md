@@ -2757,6 +2757,16 @@ sizes its batch of roles against that projection.
           `ansible/tests/k8s/test_netpol_baseline_exempt_gates.py`.
     - pihole's PR exercises `pihole-deferred` live: instance 2 applies only after instance 1
       is Ready.
+
+      **Status, 2026-10-18.** The gravity reconcile has its inert mutation Job in
+      `ansible/roles/k8s/pihole/templates/verify-inert/gravity.yaml.j2` (#5648). It drives
+      each FTL's v6 REST API through the `pihole` and `pihole-2-web` Services, so it needs no
+      `pods/exec` and no Role. Its fence peer, `app: pihole-gravity`, landed in
+      netpol-baseline with a refused `pihole` row in the probe table. Instance 2 already
+      renders into `pihole-deferred`, which waits on `pihole`, and a test pins that order on
+      pihole's own render. The live exercise of that order is still the flip PR's, because
+      Ansible applies both instances until then. `roll_one.yml`'s sibling gate has no Flux
+      form: `pihole` rolls instance 1 whatever state instance 2 is in (#5695).
     - **Before the first Wave D flip**, the session measures one revision that changes at
       least ten flux-owned tags, from `prod`'s move to the last status, and compares it with
       the derived verify timeout. A measurement above half the timeout raises the timeout
