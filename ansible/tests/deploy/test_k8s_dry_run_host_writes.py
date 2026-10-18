@@ -70,9 +70,7 @@ _ROLES_THAT_WRITE_THE_HOST = frozenset(
         "headlamp",
         "image-builder",
         "janitorr",
-        "media-volume",
         "netpol-baseline",
-        "pi-peer-backup",
         "registry",
         "traefik",
     }

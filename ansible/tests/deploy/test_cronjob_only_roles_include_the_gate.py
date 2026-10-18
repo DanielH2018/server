@@ -60,12 +60,15 @@ def test_census_matches_the_known_cronjob_only_roles():
 def test_every_cronjob_only_role_is_gated_at_deploy_time():
     """Each CronJob-only role's tasks/main.yml must include k8s/cronjob-gate, named for every
     CronJob its own manifests declare -- the deploy-time proof `format_cronjob_health`'s
-    read-only check is verifying after the fact."""
+    read-only check is verifying after the fact. A flux-owned role runs no task, so it names
+    each CronJob in `flux_cronjob_gates` instead, and Flux runs the gate Job in `<tag>-verify`
+    (`_autodeploy_batch.flux_gated_names`)."""
     for role, targets in _cronjob_only_census().items():
         gated = _batch_gated_names(_K8S_ROLES / role)
         declared = {name for _, name in targets}
         missing = declared - gated
         assert not missing, (
             f"{role} declares CronJob(s) {sorted(missing)} with no matching "
-            "k8s/cronjob-gate include (cronjob_gate_name) or job/<name> wait in tasks/main.yml"
+            "k8s/cronjob-gate include (cronjob_gate_name) or job/<name> wait in tasks/main.yml, "
+            "or, for a flux-owned role, no flux_cronjob_gates entry"
         )

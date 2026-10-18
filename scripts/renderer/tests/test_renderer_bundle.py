@@ -466,8 +466,8 @@ def test_a_role_with_render_sops_manifests_gets_the_copy_and_decryption(
     assert (directory / SOPS_NAME).read_bytes() == SOPS_MANIFEST.encode()
     listed = yaml_fast.safe_load((directory / KUSTOMIZATION).read_text())["resources"]
     assert SOPS_NAME in listed
-    flux = yaml_fast.safe_load((out / "flux" / "pi-peer-backup.yaml").read_text())
-    assert flux["spec"]["decryption"] == {
+    docs = yaml_fast.safe_load_all((out / "flux" / "pi-peer-backup.yaml").read_text())
+    assert next(docs)["spec"]["decryption"] == {
         "provider": "sops",
         "secretRef": {"name": "sops-age"},
     }

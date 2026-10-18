@@ -2,7 +2,8 @@
 
 A key authorized on daniel-pi with no options gives anyone who can read the
 `pi-peer-backup-ssh` Secret a shell as a NOPASSWD-sudo user there. The key is pinned
-to `files/pi-peer-backup-shell.sh`, which re-derives one `sudo rsync --server --sender` of the
+to `pi-peer-backup-shell.sh`, which `setup/k8s_host_files` installs on the Pi since
+pi-peer-backup's flip to Flux. The wrapper re-derives one `sudo rsync --server --sender` of the
 wg-easy directory from SSH_ORIGINAL_COMMAND and refuses everything else. The wrapper is run
 for real here with `sudo` shadowed by a stub on PATH that prints its argv, so the assertions
 are on what the Pi would execute, not on the wrapper's text.
@@ -16,11 +17,11 @@ from lib import yaml_fast
 from lib.k8s_context import resolve_vars
 from lib.render_context import render_context
 from lib.proc_testing import fake_bin, path_with, run
-from _helpers import K8S_ROLES, ROLES, stub_logger_on_path
+from _helpers import ROLES, stub_logger_on_path
 from _k8s_render import rendered_docs
 
-ROLE = ROLES / "k8s/pi-peer-backup"
-WRAPPER = ROLE / "files/pi-peer-backup-shell.sh"
+HOST_FILES = ROLES / "setup/k8s_host_files"
+WRAPPER = HOST_FILES / "files/pi-peer-backup-shell.sh"
 SRC = "/home/ubuntu/server/containers/wg-easy/config/"
 
 # The request rsync 3.2.7 sends for the CronJob's exact client invocation
@@ -106,7 +107,10 @@ def test_a_rejection_is_logged_through_the_stub(fake_sudo, logger_calls):
 
 
 def test_the_key_is_pinned_to_the_wrapper_installed_one_task_earlier():
-    tasks = yaml_fast.safe_load((ROLE / "tasks/main.yml").read_text())
+    (block,) = yaml_fast.safe_load(
+        (HOST_FILES / "tasks/pi-peer-backup.yml").read_text()
+    )
+    tasks = block["block"]
     names = [t.get("name") for t in tasks]
     install = tasks[names.index("Install the forced-command wrapper on daniel-pi")]
     authorize = tasks[names.index("Authorize the pull key on daniel-pi")]
@@ -114,7 +118,7 @@ def test_the_key_is_pinned_to_the_wrapper_installed_one_task_earlier():
     dest = install["ansible.builtin.copy"]["dest"]
     options = resolve_vars(
         {"key_options": authorize["ansible.posix.authorized_key"]["key_options"]},
-        render_context(K8S_ROLES / "pi-peer-backup", strict=True),
+        render_context(HOST_FILES, overrides=block["vars"], strict=True),
     )["key_options"]
     assert options.startswith("restrict,")
     pinned = re.fullmatch(rf'restrict,command="{re.escape(dest)} (\S+)"', options)

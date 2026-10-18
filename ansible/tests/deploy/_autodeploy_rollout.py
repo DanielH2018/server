@@ -16,7 +16,7 @@ from _autodeploy import (
     _deployment_templates,
     _template_texts,
 )
-from _autodeploy_batch import _batch_gated_names
+from _autodeploy_batch import _batch_gated_names, _owners
 
 
 def _sets_empty_rollout(role: Path) -> bool:
@@ -67,7 +67,8 @@ def _rollout_gate_offender(role: Path) -> bool:
 
     The condition on ALL of that is `manifests_rollout: ''`, written literally in the role's
     tasks. A role that does not write it returns False at the top and is never judged here,
-    including a role that renders no workload at all.
+    including a role that renders no workload at all. A flux-owned role returns False as well:
+    no Ansible apply runs for it, and the batch guard judges its CronJobs instead.
 
     That gives two cases:
 
@@ -80,6 +81,11 @@ def _rollout_gate_offender(role: Path) -> bool:
       stays fail-closed and must declare `k8s_autodeploy: false` instead.
     """
     if not _sets_empty_rollout(role):
+        return False
+    # Flux applies a flux-owned role, so the `k8s/manifests` include that `manifests_rollout`
+    # configures never runs. The Kustomization's `wait` takes the rollout wait's place, and the
+    # batch guard still requires each CronJob in `flux_cronjob_gates`.
+    if _owners().get(role.name) == "flux":
         return False
     if _ungated_deployments(role):
         return True

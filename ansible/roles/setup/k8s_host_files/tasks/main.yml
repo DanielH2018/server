@@ -15,6 +15,9 @@
 - name: Observability's retired dashboard staging trees
   ansible.builtin.import_tasks: observability.yml
 
+- name: Pi-peer-backup's forced-command pin on daniel-pi
+  ansible.builtin.import_tasks: pi-peer-backup.yml
+
 - name: Qbittorrent's retired prefs drift check
   ansible.builtin.import_tasks: qbittorrent.yml
 

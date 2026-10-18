@@ -1,4 +1,9 @@
 ---
+# Flux owns this role, so no Flux path runs either include below; they stay for a handback
+# (docs/flux-deploy-plane.md). promote's `images` job builds the image, the renderer's restart
+# checksum rolls the extra Deployments, and its gate Job in `karakeep-verify` replaced the
+# k8s/cronjob-gate run of the archive pruner this file held.
+#
 # The time-tagger's image, a one-layer chown over the pinned uv base so the tagger can run as
 # uid 1000. Built under the name `karakeep`, not `karakeep-time-tagger`: k8s/manifests
 # keys `k8s_rebuilt_images` on `manifests_service`, so a mismatched name pushes an image whose
@@ -68,15 +73,3 @@
     # deployment.yaml lands before both networkpolicy files and the pod may wait in Init for the
     # seconds until they arrive. The wait is unbounded, so it resolves on its own — which is the
     # whole difference from the split: the policy arrives in the same deploy rather than never.
-
-# One run of the archive pruner now, so a deploy shows its log at once rather than at the next
-# 05:15. With karakeep_k8s_pruner_apply false that run is a dry-run report. The extra run is
-# safe with apply on too: the rules key on age, so it acts only on what is already due.
-# karakeep may still be rolling here (manifests drains rollouts at the end of the batch), which
-# the script's connect retry covers. See ansible/roles/k8s/cronjob-gate/CLAUDE.md.
-- name: Gate the karakeep deploy on a one-off archive-pruner run
-  tags: [deploy]
-  ansible.builtin.include_role:
-    name: k8s/cronjob-gate
-  vars:
-    cronjob_gate_name: karakeep-archive-pruner
