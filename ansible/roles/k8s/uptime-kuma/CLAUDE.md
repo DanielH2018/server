@@ -50,6 +50,13 @@ reading behind each rule below.
   so the check stopped the first shadow-render dry run here. The guard is not `k8s_dry_run`,
   because an ordinary dry run still checks the real tokens. ENFORCED:
   `ansible/tests/k8s/test_secret_key_task_census.py::test_every_stub_refusing_task_is_skipped_under_stubs`.
+- **Both declaration checks in `tasks/main.yml` have a Flux form, landed before the flip
+  (#5712).** The index check's is `tests/test_declaration_index_flux_form.py`, which runs the
+  assert's `that:` over the Secret the renderer emits. The push-token check's is the
+  `_push_token` refusal in `scripts/secrets_mgmt/cluster_vars.py`, because the render
+  carries placeholder tokens and only `cluster_vars.py write` reads the real ones. The
+  `autokuma-claims` staging-directory absent arm moved to
+  `ansible/roles/setup/k8s_host_files/tasks/uptime-kuma.yml`.
 
 ## One Discord template for every monitor, fed by `description` and tags
 

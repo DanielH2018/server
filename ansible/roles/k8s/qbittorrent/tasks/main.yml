@@ -4,6 +4,10 @@
 #
 # The config claim is `k8s_claims` in defaults/main.yml, which k8s/manifests renders and applies
 # ahead of the workload (#3387).
+#
+# Flux owns qbittorrent (D5, Wave D), so no Ansible run reaches this file. The tunnel proofs
+# and the prefs apply are the two Jobs in templates/verify/, and the drift check's gate run is
+# the gate Job `flux_cronjob_gates` in defaults/main.yml puts in `qbittorrent-verify`.
 
 # The absent arms that remove the retired prefs drift host cron, and its script, moved to
 # setup/k8s_host_files (tasks/qbittorrent.yml there) in D5's conversion PR for qbittorrent.
@@ -11,19 +15,3 @@
 - name: Deploy qbittorrent to the cluster
   ansible.builtin.include_role:
     name: k8s/manifests
-
-- name: Prove the tunnel carries the traffic
-  tags: [deploy]
-  ansible.builtin.include_tasks: verify.yml
-
-# After verify.yml, which waits out the rollout the render just queued. A gate run straight
-# after the apply would meet the replacement pod inside the sidecar's startup window, up to
-# five minutes, and always log "cannot reach". The fence that admits the check's label came
-# with the CronJob in the apply above. An extra run reads the same preferences and logs the
-# same verdict, and writes nothing.
-- name: Gate the qbittorrent-prefs-check deploy on a one-off run
-  tags: [deploy]
-  ansible.builtin.include_role:
-    name: k8s/cronjob-gate
-  vars:
-    cronjob_gate_name: qbittorrent-prefs-check

@@ -1,14 +1,14 @@
 {
-  "checksum": "62aefe32836da0f2e777408641c84dd95e96f50b5f7a8b656bcc8ddb01bad57c",
+  "checksum": "9e00b11e861c5c523b58a32c65f3346531f44b697d3b89196b0a39276bd1dc7b",
   "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
   "key": "ansible/roles/k8s/mosquitto/CLAUDE.md#At a glance",
   "row": {
     "atoms": {
       "ansible/tests/deploy/test_k8s_toposort.py::test_documented_pairwise_ordering_survives_an_adversarial_list": "31404c404dbf1e8c3158ccd296897d81a56627602184747b8ff7f137595d0da3",
       "docs/flux-deploy-plane.md": "807c3deb44c3178e7a6f9fc0bc398a3b748b95c468b14ce9b1b890c8684535d9",
-      "scripts/secrets_mgmt/cluster_vars.py:successor_refusals": "28d4b2e383ea871fcc0c53864445974c85bb73545895261ea5c264dc865085e3"
+      "scripts/secrets_mgmt/cluster_vars.py:successor_refusals": "b872701ba25ed832074780cbb64e22ca6251ea56ba14be19b9d22956834695e6"
     },
     "python": "3.14",
-    "verified_sha": "dc22417c5"
+    "verified_sha": "269778bd3"
   }
 }

@@ -6,8 +6,8 @@
 # baseline.
 #
 # This rule is PORT-SCOPED, and for the callers below that scoping is the whole grant: the baseline
-# admits none of janitorr, configarr, monitor-bridge, autofix-bridge, bazarr, prowlarr, sonarr-verify or
-# homepage, so they reach sonarr only through this rule and only on this one port.
+# admits none of janitorr, configarr, monitor-bridge, autofix-bridge, bazarr, prowlarr, sonarr-verify,
+# janitorr-verify or homepage, so they reach sonarr only through this rule and only on this one port.
 #
 # TRAEFIK IS IN THE CALLER LIST DELIBERATELY — do not remove it as redundant — but be accurate about why.
 # The baseline admits traefik to every baseline-labelled pod on ANY port, and policies are
@@ -41,6 +41,13 @@
 # The renderer emits them into the `sonarr-verify` Kustomization, and they dial sonarr's API over
 # the ClusterIP, so without this entry the fence would refuse them. The entry landed ahead of the
 # Flux flip (#5535), so the Jobs were admitted on their first run.
+#
+# janitorr-verify is the pod label of janitorr's verify Job in roles/k8s/janitorr/templates/verify-inert/.
+# Nothing renders that directory while Ansible owns janitorr, so no pod carries the label yet and
+# the entry admits nothing today. It is here ahead of janitorr's Flux flip, which moves the
+# directory to templates/verify/: from then the Job dials sonarr:8989/ping from the
+# `janitorr-verify` Kustomization, and without this entry the fence would refuse it.
+# ansible/tests/k8s/test_netpol_from.py holds it in STAGED_CALLERS until the flip (#5709).
 #
 # The caller list is `netpol_from:` on this role's containers_list entry
 # (inventory/host_vars/daniel-box.yml), each caller's reason beside it. The entry's

@@ -13,23 +13,25 @@ x265 re-encode instead, which made Jellyfin buffer and seek slowly.
 
 ## At a glance
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates, tasks or containers_list entry, or the k3s role's Longhorn tier lists. -->
-- **Deploy tag:** `--tags "configarr"`
+- **Applied by:** Flux, through `promote` (`owner: flux`); `deploy.sh` refuses
+  `--tags=configarr` with exit 5
 - **Images:** `ghcr.io/raydak-labs/configarr` (`configarr_k8s_image`), `python`
   (`configarr_k8s_health_image`), `alpine/k8s` (`configarr_k8s_health_kubectl_image`)
 - **Route:** none (no `templates/ingressroute.yaml.j2`)
 - **Claims:** none (no PVC)
-- **Auto-deploy:** eligible (`k8s_autodeploy: true`)
 <!-- /generated_from -->
 
+- **Flux applies it, not Ansible** (D5, Wave D). Its `containers_list` entry carries
+  `owner: flux`, so `deploy.sh`, the play and the GitOps deployer all skip it. A merged change
+  reaches the cluster when `promote` publishes and verifies the next bundle. To give it back
+  to Ansible, follow the two-PR handback in `docs/flux-deploy-plane.md`; a plain revert of the
+  flag leaves two writers on the objects.
 - **Host: daniel-box (k8s CronJob).** This role renders `templates/config/config.yml.j2` and
-  stages `files/configarr_lib/configarr_status.py` into a ConfigMap. Edit the config HERE; deploy with `--tags configarr`
-  from daniel-box.
+  stages `files/configarr_lib/configarr_status.py` into a ConfigMap. Edit the config HERE.
 - **No web UI** or Authelia; it targets the cluster sonarr/radarr
-- **One-shot (ephemeral):** a nightly k8s CronJob, plus a `configarr-deploy-gate` Job the
-  deploy creates from it (via `k8s/cronjob-gate`) so a config change syncs immediately. That
-  gate proves the new image RUNS — a container that never starts fails the deploy; a sync that
-  runs and fails is reported and the deploy continues, deliberately: a transient *arr outage
-  must not fail the deploy. No healthcheck / AutoKuma — a batch
+- **One-shot (ephemeral):** a nightly k8s CronJob, plus a gate Job that Flux runs from it in
+  `configarr-verify` on every role revision, so a config change syncs immediately (below).
+  No healthcheck / AutoKuma — a batch
   job, not a service; its health signal is a second CronJob, `configarr-health`
   (`templates/health-cronjob.yaml.j2`), every 10 minutes. It reads the last Job's outcome via
   `configarr_lib/configarr_status.py` through its own ServiceAccount and pushes the
@@ -41,16 +43,23 @@ x265 re-encode instead, which made Jellyfin buffer and seek slowly.
   `/opt/configarr-health`, `/usr/local/bin/configarr-health.sh` and the `configarr` drift
   fragment live in `ansible/roles/setup/k8s_host_files/tasks/configarr.yml`, which the setup
   plane applies. D5's conversion PR moved them out of `tasks/main.yml` ahead of the Flux flip.
-- **`flux_cronjob_gates` in `defaults/main.yml` is the gate's Flux form, and it is inert until
-  the flip.** The renderer reads it only for a flux-owned tag. It then copies each CronJob's
-  `jobTemplate` into `configarr-verify` as `<cronjob>-deploy-gate-<spec digest8>`. configarr's
-  gate is a post-apply mutation whose `homelab/rerun-safe` names
+- **`flux_cronjob_gates` in `defaults/main.yml` names the two gate Jobs.** The renderer copies
+  each CronJob's `jobTemplate` into `configarr-verify` as `<cronjob>-deploy-gate-<spec
+  digest8>`, so the reconcile's Job is `configarr-deploy-gate-<spec digest8>` and the reader's
+  is `configarr-health-deploy-gate-<spec digest8>`. They replaced the `k8s/cronjob-gate` runs
+  at configarr's flip. configarr's gate is a post-apply mutation whose `homelab/rerun-safe`
+  names
   `ansible/roles/k8s/configarr/tests/test_configarr_gate.py::test_a_second_sync_reports_no_change`.
-  configarr-health's gate
-  is a verify. The renamed Job keeps `app: configarr`, and the health reader selects by that
-  label and by finish time, never by name, so it still counts a gate run. Under Flux the gate
-  becomes stricter: a sync that exits non-zero fails `configarr-verify`. Both gates also start
-  together there, so the health gate can read the previous run rather than the fresh one.
+  configarr-health's gate is a verify. The renamed Job keeps `app: configarr`, and the health
+  reader selects by that label and by finish time, never by name, so it still counts a gate
+  run. `ansible/roles/k8s/configarr/tests/test_configarr_gate.py::test_the_reconcile_gate_is_a_rerun_safe_mutation_the_health_reader_counts`
+  runs the reader's own predicate over the rendered Job.
+- **The Flux gate is stricter than the Ansible one was.** A sync that exits non-zero fails
+  `configarr-verify` and holds the revision, where `k8s/cronjob-gate` reported it and let the
+  deploy continue. The copy carries no ownerReference to the CronJob, so `concurrencyPolicy:
+  Forbid` no longer keeps a scheduled 04:30 firing off a gate run; the sync converges, so an
+  overlap writes nothing twice. Both gates also start together, so the health gate can read
+  the previous run rather than the fresh one (#5617).
 - **The push URL, token included, lives in its own Secret, `configarr-health`**
   (`templates/health-secret.yaml.j2`), and reaches the pod as `KUMA_PUSH_URL` through
   `secretKeyRef`. It is a whole URL rather than a bare token so that it stays out of
@@ -120,10 +129,10 @@ the bespoke scheme first.
   `tests/test_configarr_status.py`) — staged into the `configarr-health` ConfigMap and mounted
   at `configarr_lib/`, beside `configarr_lib/configarr_health_logic.py`, under the
   `configarr_health.py` reader.
-- Verify the health reader: `kubectl -n homelab logs job/configarr-health-deploy-gate` — its
+- Verify the health reader: `kubectl -n homelab logs -l app=configarr-health --tail=5` — its
   `configarr-health: status=up` line is the verdict, and `configarr-health: pushed` is the push.
-- Deploy (from daniel-box): `./scripts/deploy.sh --tags "configarr"` —
-  the k8s role also runs a one-off `configarr-deploy-gate` Job so the edit syncs immediately.
-- Verify a sync: `kubectl -n homelab logs job/configarr-deploy-gate` — a healthy run lists
-  the managed CFs and reports no errors.
+- Deploy: merge the change. `promote` publishes the revision, and Flux runs the gate Job
+  `configarr-deploy-gate-<spec digest8>` in `configarr-verify`, so the edit syncs immediately.
+- Verify a sync: `kubectl -n homelab get jobs -l app=configarr`, then `kubectl -n homelab logs
+  job/<newest>` — a healthy run lists the managed CFs and reports no errors.
 - Unit tests: `uv run pytest ansible/roles/k8s/configarr/tests`.

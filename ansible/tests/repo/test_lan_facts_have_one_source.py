@@ -104,8 +104,9 @@ ALLOWLIST: list[tuple[str, str]] = [
     (
         r"^ansible/roles/k8s/observability/files/rules/k8s-services\.yaml$",
         "a rule file is never Jinja, so MosquittoLanAddressNotPinned, "
-        "JellyfinLanAddressNotPinned and PiholeLanAddressNotPinned each type their VIP once in "
-        "a selector; test_lan_address_rules_agree.py holds each equal to the rendered "
+        "JellyfinLanAddressNotPinned, PiholeLanAddressNotPinned and "
+        "TraefikIngressAddressNotPinned each type their VIP once in a selector; "
+        "test_lan_address_rules_agree.py holds each equal to the rendered "
         "LoadBalancer Service's address",
     ),
     (

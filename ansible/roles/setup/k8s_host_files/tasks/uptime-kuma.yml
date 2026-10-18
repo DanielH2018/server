@@ -1,0 +1,12 @@
+---
+# Moved from roles/k8s/uptime-kuma by D5's conversion PR for uptime-kuma (#5712).
+#
+# autokuma-data was staged by k8s/volume-claim under `autokuma-claims/`, a directory the shared
+# sweep in k8s/manifests cannot reach because it is keyed on `uptime-kuma` (#3387). The claim
+# renders through uptime-kuma's `k8s_claims`, so the staged copy is stale. This absent arm has
+# nothing left to remove after its first apply.
+- name: Remove the k8s/volume-claim staging directory autokuma-data left behind
+  ansible.builtin.file:
+    path: /etc/rancher/k3s/manifests/autokuma-claims
+    state: absent
+  become: true

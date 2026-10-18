@@ -4,15 +4,8 @@
 qbittorrent_k8s_image: lscr.io/linuxserver/qbittorrent:latest@sha256:97333cc1ccf903e0bbcd8eb67e3332e4970e9c1ecabe145e499e9c0847ebcaed
 qbittorrent_k8s_wireguard_image: lscr.io/linuxserver/wireguard:latest@sha256:437a490f7afc6969434251351ba47455a3829e71cef9c6172f3f533332d04063
 
-# The throwaway pod verify.yml runs to prove the tunnel's return path. It is a defaults key
-# here rather than a cross-role read from sonarr, because a cross-role default is only in
-# scope when that role ran in the same play. A Jinja `default()` covering the miss would be
-# invisible to Renovate's k8s-defaults manager, so the pin would never get a PR.
-qbittorrent_k8s_probe_image: alpine:3.24@sha256:294b683cb724975bec92580e1e685676bd4b50bda910ddb8c51d4cabeaec77e6
-
-# Where the inert verify Job (templates/verify-inert/job.yaml.j2) reads its own public
-# address, to compare with the one qBittorrent's peers see. The same service tasks/verify.yml
-# asks for the host's address.
+# Where the verify Job (templates/verify/job.yaml.j2) reads its own public address, to compare
+# with the one qBittorrent's peers see.
 qbittorrent_k8s_verify_egress_url: https://api.ipify.org
 
 # Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
@@ -27,6 +20,15 @@ k8s_autodeploy_reason: "state coupled outside the volume — reverting qbittorre
 # The pre-apply Longhorn snapshot k8s/manifests takes via k8s/volume-snapshot. Declared
 # regardless of k8s_autodeploy — it protects a manual deploy too.
 k8s_autodeploy_snapshot_pvcs: [qbittorrent-config]  # noqa var-naming[no-role-prefix]
+
+# The gate Job Flux runs in `qbittorrent-verify`, copied from the drift check's jobTemplate
+# (scripts/renderer/renderer_lib/cronjob_gate.py). It replaced the k8s/cronjob-gate run in
+# tasks/main.yml at qbittorrent's flip. The check reads the preferences and logs a verdict, and
+# exits 0 on a match and on drift alike, so it is a verify: a run that starts and reaches the
+# WebUI proves the check's image, Secret and fence peer.
+flux_cronjob_gates:  # noqa var-naming[no-role-prefix]
+  qbittorrent-prefs-check:
+    kind: verify
 
 # The manifest whose Secret holds the all-digit Mullvad account number, which no Flux
 # placeholder can carry as a string. A placeholder render (scripts/renderer, target slice R2)
@@ -96,7 +98,7 @@ qbittorrent_k8s_mem_request: 256Mi
 
 # The qbittorrent-prefs-check CronJob's schedule, read on Etc/UTC. Until H2.5d
 # (docs/target-architecture/host/h2-shrink-host-plane.md, Steps item 15) it was a daniel-box
-# host cron, whose clock is UTC; tasks/main.yml keeps the absent arms that remove it. The host
+# host cron, whose clock is UTC; setup/k8s_host_files keeps the absent arms that remove it. The host
 # cron's fields, unchanged. Daily, not */10 like the health readers: a WebUI edit or a Longhorn
 # restore that reverts files/apply_prefs.py's eight throughput settings is rare, and there is
 # no Kuma watchdog interval this needs to stay under (files/prefs_check.py logs, it does not
@@ -109,8 +111,8 @@ qbittorrent_k8s_prefs_check_schedule: "37 6 * * *"
 qbittorrent_k8s_prefs_check_image: python:3.14-alpine@sha256:f6a589d43c42b9e7f7dc67a12d37132491f362859a5d750607710cc56da3bc72
 
 # Above the check's worst case: the 60 s connect wait (files/prefs_check.py:CONNECT_WAIT_S),
-# then a login and a preferences read at 15 s each, plus a cold image pull. Below
-# cronjob_gate_timeout (660), which ansible/tests/deploy/test_cronjob_gate_decision.py holds.
+# then a login and a preferences read at 15 s each, plus a cold image pull. The gate Job copies
+# it, and `bundle.flux_files` raises the `qbittorrent-verify` timeout above it.
 qbittorrent_k8s_prefs_check_deadline_seconds: 300
 
 qbittorrent_k8s_prefs_check_cpu_limit: "200m"

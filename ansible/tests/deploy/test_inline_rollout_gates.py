@@ -24,7 +24,7 @@ incident.
 
 The derived half recognises three shapes of "inspects a pod", all of them via `kubectl`:
 
-  1. `get pod -l app=<workload>`     — jellyfin, tdarr, janitorr, qbittorrent
+  1. `get pod -l app=<workload>`     — jellyfin, janitorr
   2. `get pod -l <anylabel>=<value>` — pihole, which selects an instance by the pod-only
                                        `instance` label because both its Deployments share
                                        `app: pihole` in an immutable selector
@@ -177,8 +177,6 @@ _KNOWN_SELF_POD_ROLES = {
     "janitorr",
     "jellyfin",
     "pihole",
-    "qbittorrent",
-    "tdarr",
 }
 
 # 30 resolved self-pod inspections across those roles. A floor far below
@@ -330,15 +328,14 @@ def test_no_role_gates_with_a_readiness_wait_on_its_own_pods() -> None:
 # share: a gate waits as long as ITS workload's first boot takes. `manifests_rollout_timeout` is
 # passed as a var at each role's own call site, so for most roles there is nothing in scope for
 # the `verify.yml` where the gate lives to reference, and inventing a shared constant would mean
-# plumbing it through six roles to remove one literal. tdarr is the exception and shows the
-# shape when it IS worth it: the same budget is needed several times in one role, so it declares
-# `tdarr_k8s_rollout_timeout` in its own defaults and every reader takes it from there. The
-# census below resolves that reference (`_helpers.rollout_seconds`), so a role spelling its
+# plumbing it through six roles to remove one literal. arr-notification is the exception and
+# shows the shape when it IS worth it: it declares `arr_notification_rollout_timeout` in its own
+# defaults and the gate takes it from there. The census below resolves that reference (`_helpers.rollout_seconds`), so a role spelling its
 # budget as a variable stays inside this check rather than dropping out of it.
 #
 # The table holds the reason the values differ. Everything else about these gates is pinned
 # above — that one exists, that it precedes the pod inspection, that it is `rollout status` and
-# not a readiness wait. A reader meeting an outlier (qbittorrent above the 300s default,
+# not a readiness wait. A reader meeting an outlier (arr-notification above the 300s default,
 # dri-device-plugin below it) could not tell a considered budget from a typo without going and
 # looking, and for dri-device-plugin looking does not answer it.
 _GATE_BUDGETS = {
@@ -358,11 +355,6 @@ _GATE_BUDGETS = {
     "janitorr": (300, "default"),
     "jellyfin": (300, "default"),
     "pihole": (300, "default"),
-    "qbittorrent": (
-        480,
-        "Recreate strategy plus the wireguard sidecar's 5-minute startupProbe; the derivation "
-        "is at the call site in roles/k8s/qbittorrent/tasks/verify.yml",
-    ),
     "registry": (300, "default"),
     "arr-notification": (
         660,
@@ -370,12 +362,6 @@ _GATE_BUDGETS = {
         "gates talks HTTP to that same Deployment. It entered this census on 2026-09-22: the "
         "literal-only `--timeout=` regex could not see a templated budget, so this gate sat "
         "outside the check from the day it was written",
-    ),
-    "tdarr": (
-        3000,
-        "declared once as `tdarr_k8s_rollout_timeout` and read by this gate, the manifests "
-        "call site and progressDeadlineSeconds; a cold pull of the 1432 MiB image took 25m37s "
-        "on 2026-10-08 and failed the 300s gate this replaced (#3689)",
     ),
 }
 
@@ -433,16 +419,16 @@ def test_every_inline_gate_waits_its_declared_budget() -> None:
 
 def test_a_templated_gate_budget_resolves_and_a_bad_one_does_not() -> None:
     # Red proof for the resolution above, which is only ever observed succeeding. The accept
-    # half is tdarr's live spelling; the reject half is what a budget nothing can read must
+    # half is arr-notification's live spelling; the reject half is what a budget nothing can read must
     # return, so the assertion in `_inline_gate_budgets` can actually fire.
-    tdarr = _K8S_ROLES / "tdarr"
-    assert rollout_seconds("{{ tdarr_k8s_rollout_timeout }}", tdarr) == 3000
-    assert rollout_seconds("{{ tdarr_k8s_no_such_timeout }}", tdarr) is None
+    role = _K8S_ROLES / "arr-notification"
+    assert rollout_seconds("{{ arr_notification_rollout_timeout }}", role) == 660
+    assert rollout_seconds("{{ arr_notification_no_such_timeout }}", role) is None
 
 
 def test_a_drifted_gate_budget_is_flagged() -> None:
     # Red proof for the check above, which can only ever be observed passing.
-    expected, _ = _GATE_BUDGETS["tdarr"]
+    expected, _ = _GATE_BUDGETS["arr-notification"]
     assert {900} != {expected}, (
         "the comparison must reject a budget that moved; if it does not, it measures nothing."
     )

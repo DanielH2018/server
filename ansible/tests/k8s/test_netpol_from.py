@@ -69,18 +69,22 @@ def fence_name(entry: dict) -> str:
     return entry.get("netpol_app", entry["name"])
 
 
-# Callers that are pods a task creates with `kubectl run`, so no rendered manifest carries their
-# label. Each maps to the task file that must still stamp it: a probe that loses the label stops
-# matching the fence and reports a denial that is the probe's, not the service's.
-UNRENDERED_CALLERS = {
-    "qbittorrent-reach-probe": K8S_ROLES / "qbittorrent" / "tasks" / "verify.yml",
-}
-
-
 # Callers whose pods render only from a role's `templates/verify/`, which the renderer emits into
 # `<tag>-verify` and `rendered_docs()` does not read. Named so the derivation below cannot
 # quietly stop reaching a role: each must be a pod label `verify_pod_labels` returns.
-VERIFY_CALLERS = frozenset({"sonarr-verify", "radarr-verify", "prowlarr-verify"})
+# qbittorrent's verify Job keeps the label of the `kubectl run` probe it replaced at the flip.
+VERIFY_CALLERS = frozenset(
+    {"sonarr-verify", "radarr-verify", "prowlarr-verify", "qbittorrent-reach-probe"}
+)
+
+
+# Callers whose pods render only from a role's `templates/verify-inert/`, which nothing renders
+# until that role's Flux flip moves it to `templates/verify/`. Each maps to that role and to the
+# fences that list the caller ahead of the flip, so the Job is admitted on its first run (#5709).
+# janitorr's tests/test_verify_janitorr.py renders the flipped copy and checks both fences admit it.
+STAGED_CALLERS = {
+    "janitorr-verify": ("janitorr", ("sonarr", "radarr")),
+}
 
 
 @pytest.fixture(scope="module")
@@ -230,14 +234,21 @@ def test_every_caller_is_a_label_some_rendered_pod_carries(verify_pod_labels):
         (name, caller)
         for name, fence in declared_fences().items()
         for caller in fence["callers"]
-        if caller not in labels and caller not in UNRENDERED_CALLERS
+        if caller not in labels and caller not in STAGED_CALLERS
     }
     assert unknown == set()
 
 
-def test_each_unrendered_caller_is_still_labelled_by_its_task():
-    for caller, tasks in UNRENDERED_CALLERS.items():
-        assert f"--labels app={caller}" in tasks.read_text(), (
-            f"{tasks} no longer runs a pod labelled app={caller}; drop it from "
-            "UNRENDERED_CALLERS and from the caller list that names it"
+def test_each_staged_caller_is_still_staged_and_listed_by_its_fences():
+    """An exemption that outlives the flip would hide a caller nothing labels any more."""
+    fences = declared_fences()
+    for caller, (role, fenced) in STAGED_CALLERS.items():
+        templates = K8S_ROLES / role / "templates"
+        staged = (templates / "verify-inert").is_dir()
+        assert staged and not (templates / "verify").exists(), (
+            f"{role} has flipped; drop {caller} from STAGED_CALLERS so the rendered label is checked"
         )
+        for fence in fenced:
+            assert caller in fences[fence]["callers"], (
+                f"{fence}'s netpol_from no longer lists {caller}"
+            )

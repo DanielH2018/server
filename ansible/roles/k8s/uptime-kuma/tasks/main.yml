@@ -26,6 +26,9 @@
 # The index is built by parsing a render, so a change to how that template is shaped could leave
 # it EMPTY — and an empty index renders a valid ConfigMap, applies cleanly, and gives the sync a
 # page with no monitors on it. A census that finds nothing has to fail here rather than deploy.
+#
+# Its Flux form is tests/test_declaration_index_flux_form.py, which evaluates this `that:` over
+# the static-monitors Secret the renderer emits, in CI before a merge (#5712).
 - name: Check the declaration index is populated
   tags: [deploy]
   ansible.builtin.assert:
@@ -37,6 +40,10 @@
 # AutoKuma refuses a push token that is not 32 letters and digits with one WARN per sync and
 # never creates the monitor, so its pusher gets 404 and nothing pages (#3985). A token added by
 # hand through sops is checked by nothing else.
+#
+# Its Flux form is the `_push_token` refusal in scripts/secrets_mgmt/cluster_vars.py's
+# `successor_refusals`: the renderer emits placeholder tokens, so `cluster_vars.py write` is
+# the one Flux-era step that reads the real ones (#5712).
 #
 # DECIDED: no no_log on this assert, though it reads kuma_declarations. The filter returns
 # AutoKuma ids only, never a token, and no_log would hide the ids its message exists to name.
@@ -66,14 +73,3 @@
     manifests_secret_files:
       - secret.yaml
       - static-monitors.yaml
-
-# autokuma-data was staged by k8s/volume-claim under `autokuma-claims/`, a directory the shared
-# sweep in k8s/manifests cannot reach because it is keyed on `uptime-kuma` (#3387). The claim
-# renders through `k8s_claims` now, so the staged copy is stale.
-- name: Remove the k8s/volume-claim staging directory autokuma-data left behind
-  tags: [config]
-  ansible.builtin.file:
-    path: /etc/rancher/k3s/manifests/autokuma-claims
-    state: absent
-  become: true
-  when: not k8s_dry_run | bool

@@ -169,9 +169,11 @@ something:
    `nc -z prowlarr` for up to 150s from a pod labelled `app: flaresolverr-netpol-probe`. The census
    looked for assertions, not controls. prowlarr's Flux flip (#5594) replaced that probe with the
    `prowlarr-verify` Job, whose control leg prowlarr's fence admits the same way.
-3. **A pod created by `kubectl run` inside a verify task.** `qbittorrent/tasks/verify.yml` creates
+3. **A pod created by `kubectl run` inside a verify task.** qbittorrent's verify tasks created
    an unlabelled probe pod whose stated purpose is proving qbittorrent is reachable *from the pod
    CIDR* despite the Mullvad kill-switch — which the policy would have silently inverted.
+   qbittorrent's Flux flip replaced that pod with the `qbittorrent-verify` Job, which keeps the
+   `app: qbittorrent-reach-probe` label the fence admits.
 
 **The lesson for slices 3-5:** a caller census built from manifests alone is not sufficient. It must
 also be asked for probe and verify **control** legs, and for `kubectl run` / `kubectl exec` inside

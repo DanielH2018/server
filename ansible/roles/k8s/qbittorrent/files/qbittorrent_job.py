@@ -1,11 +1,9 @@
 """qbittorrent's two Flux Jobs: the verify checks, and the throughput preferences apply.
 
-`templates/verify-inert/` holds both Jobs, which nothing renders while Ansible owns qbittorrent.
-qbittorrent's flip PR renames the directory to `templates/verify/`, and the renderer then emits
-them into `qbittorrent-verify` (target slice D5, *A verify conversion lands as inert code*).
-`QBT_JOB` picks the Job:
+`templates/verify/` holds both Jobs, which the renderer emits into `qbittorrent-verify` (target
+slice D5). `QBT_JOB` picks the Job:
 
-- `verify` replaces `tasks/verify.yml`'s three proofs without an exec into the pod:
+- `verify` replaced the three proofs of the Ansible verify tasks without an exec into the pod:
     - reach: the WebUI answers this pod, which sits in the pod CIDR as Traefik and the
       kubelet's probes do. The Mullvad kill-switch rejects everything that does not leave
       through wg0, except the ranges the role lists, so a refusal that outlasts the helper's
@@ -69,8 +67,8 @@ DESIRED: dict[str, bool | int] = {
 
 # The socket timeout of each WebUI or egress request, in seconds, as `apply_prefs.py` uses.
 TIMEOUT = 15
-# How long the first connect retries a refusal, in seconds. It replaces verify.yml's 20 x 2s
-# loop, which waited out kube-router learning a new pod's address.
+# How long the first connect retries a refusal, in seconds. It replaced the Ansible verify
+# tasks' 20 x 2s loop, which waited out kube-router learning a new pod's address.
 REACH_RETRY_SECONDS = 60
 # How long the tunnel check waits for qBittorrent to learn its external address, in seconds.
 # A pod that has only just started reports an empty address until a DHT node or a tracker

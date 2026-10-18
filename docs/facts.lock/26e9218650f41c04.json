@@ -1,0 +1,12 @@
+{
+  "checksum": "36f7d9b4d5c43f18c877d1f310cd366a1f2753910fdae9782c3e463ad161c479",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "CLAUDE.md#Pre-commit Hooks",
+  "row": {
+    "atoms": {
+      ".claude/hooks/block-batch-full-suite.py": "7ebb272aee7d2497fbbfdcadef6ff3bab6eb2b6b58cd74b83cebe341bdc024ae"
+    },
+    "python": "3.14",
+    "verified_sha": "5f59446d0"
+  }
+}

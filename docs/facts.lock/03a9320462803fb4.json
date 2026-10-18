@@ -1,15 +1,17 @@
 {
-  "checksum": "8e51a961aca7bd3dc48c23ab8264f330e0f0e1023d0e1455f2b4007ddcc78a89",
+  "checksum": "bea9790f50f6cc44c9f7f65f046462edf700a09426c65cffa500ebdb6d9cc4a5",
   "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
   "key": "ansible/roles/k8s/configarr/CLAUDE.md#At a glance",
   "row": {
     "atoms": {
       "ansible/roles/k8s/configarr/tests/test_configarr_gate.py::test_a_second_sync_reports_no_change": "c839ce6ed5508a54e1e29445fe1f865a08e087969ab25d99225800771af66d97",
+      "ansible/roles/k8s/configarr/tests/test_configarr_gate.py::test_the_reconcile_gate_is_a_rerun_safe_mutation_the_health_reader_counts": "e6e17cb4ec7316df73a016a1bed20b7464e0a4b7090da80316311fc847ab9e77",
       "ansible/roles/k8s/manifests/files/standalone_secret_keys.json": "7edeac563af7e1b92e198b11868f2855bdd5886ec8abc32e1a2ac14588602b29",
       "ansible/roles/setup/k8s_host_files/tasks/configarr.yml": "ab1dd4e3946634cb1cc9eb184426bf65ede1fd4afe8fc20679948ce86ca8bd25",
-      "ansible/tests/k8s/test_no_secret_in_a_moved_jobs_configmap.py": "494173af32f38dace06c496ad7031f6391f146cc6271c8facd621309eb0e267e"
+      "ansible/tests/k8s/test_no_secret_in_a_moved_jobs_configmap.py": "494173af32f38dace06c496ad7031f6391f146cc6271c8facd621309eb0e267e",
+      "docs/flux-deploy-plane.md": "807c3deb44c3178e7a6f9fc0bc398a3b748b95c468b14ce9b1b890c8684535d9"
     },
     "python": "3.14",
-    "verified_sha": "c9da3dfc2"
+    "verified_sha": "4f52381e6"
   }
 }
