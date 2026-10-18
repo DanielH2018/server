@@ -2,14 +2,14 @@
 """The Pi's publishing-container set is derived, and the derivation must not narrow.
 
 monitor-bridge's detached-container arm compares each Pi container's live published ports
-against `PI_PUBLISHED_PORTS`, which `env-secret.yaml.j2` renders from daniel-pi's
+against `PI_PUBLISHED_PORTS`, which `config/env.yaml.j2` renders from daniel-pi's
 `containers_list` — every entry with a `port`. The derivation is what keeps the set from
 drifting as containers come and go, but a derivation can also silently drop a name it was
 written to cover, which is the failure this pins: `selectattr('port', 'defined')` returning
 one name instead of two reads as a narrowing nobody sees, and the arm goes blind to whichever
 container fell out.
 
-Asserted against the RENDERED Secret, not against the template's text. The value the pod
+Asserted against the RENDERED pod environment, not against the template's text. The value the pod
 reads is a `name:port` list built by a `{% for %}` loop, so a source scan can only confirm
 that the Jinja is still spelled the way it was spelled — it cannot see which containers come
 out, which port each one carries, or that `udp_port` stays out (#3107, #2809). Rendered, the
@@ -17,7 +17,7 @@ same value is one string the test parses the way `bridge/config_host.py` parses 
 
 The shared render context carries the Pi's literal `containers_list` in `hostvars` (#3860),
 but this test needs to swap that list for one the inventory does not hold. So it renders the
-one template with the three hosts' `host_vars` handed in, the way `_kuma_entities.py` does for
+bridge's two env templates with the three hosts' `host_vars` handed in, the way `_kuma_entities.py` does for
 the tiles that index the Pi.
 
 The expected members are named rather than counted. A container legitimately added to or
@@ -29,12 +29,10 @@ Run: uv run pytest ansible/tests/services/test_pi_publishing_containers.py
 """
 
 from _helpers import HOST_VARS
-from _k8s_render import render_role_template
-from lib import yaml_fast
+from _k8s_render import render_pod_env
 from validate.k8s_manifests import load_yaml
 
 ROLE = "monitor-bridge"
-ENV_SECRET = "env-secret.yaml.j2"
 ENV_VAR = "PI_PUBLISHED_PORTS"
 # The bridge reads the Pi's address from `hostvars` too, and the k8s roles' own variables
 # resolve against daniel-box, so all three hosts go in rather than the Pi alone.
@@ -74,17 +72,9 @@ def published(pi_containers: list | None = None) -> dict[str, int]:
     accepts is a value the bridge watches. A malformed pair is an assertion here rather than
     a skipped entry, because in the pod it is a container that silently stops being probed.
     """
-    rendered = render_role_template(
-        ROLE, ENV_SECRET, {"hostvars": _hostvars(pi_containers)}
-    )
-    secret = yaml_fast.safe_load(rendered)
-    assert secret.get("kind") == "Secret", (
-        f"{ROLE}/{ENV_SECRET} no longer renders a Secret, got {secret.get('kind')!r} — "
-        f"every assertion below would read an empty mapping and pass"
-    )
-    raw = (secret.get("stringData") or {}).get(ENV_VAR)
+    raw = render_pod_env(ROLE, {"hostvars": _hostvars(pi_containers)}).get(ENV_VAR)
     assert raw is not None, (
-        f"the rendered Secret carries no {ENV_VAR} key, so the detached-container arm watches "
+        f"the rendered pod environment carries no {ENV_VAR} key, so the detached-container arm watches "
         f"nothing and the census below is vacuous"
     )
     pairs: dict[str, int] = {}

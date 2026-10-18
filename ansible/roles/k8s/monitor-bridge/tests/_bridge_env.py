@@ -1,9 +1,11 @@
-"""The environment the pod gets, rendered from `templates/env-secret.yaml.j2`, for the suite.
+"""The environment the pod gets, rendered from `templates/`, for the suite.
 
-Since #3659 every key the env-secret renders has no default in `bridge/config*.py`, so a test
-that builds a `Config` starts from this render rather than from an empty dict. It is the same
-render a deploy of daniel-box makes (`_k8s_render.render_role_template`), with two changes so a
-test cannot reach a real service by accident:
+The settings render from `templates/config/env.yaml.j2` into the Deployment's `env`, and the
+credentials from `templates/env-secret.yaml.j2` (#5574). Since #3659 every key either renders
+has no default in `bridge/config*.py`, so a test that builds a `Config` starts from this render
+rather than from an empty dict. It is the same render a deploy of daniel-box makes
+(`_k8s_render.render_pod_env`), with two changes so a test cannot reach a real service by
+accident:
 
 - A SOPS secret is undefined in a render and comes out as `STUB`. Each one is blanked, which is
   the value that disables the check reading it — the convention every check follows.
@@ -12,20 +14,16 @@ test cannot reach a real service by accident:
 
 import functools
 
-from lib import yaml_fast
-from _k8s_render import render_role_template
+from _k8s_render import render_pod_env
 
 UNDEFINED = "STUB"
 
 
 @functools.cache
 def _rendered() -> tuple[tuple[str, str], ...]:
-    doc = yaml_fast.safe_load(
-        render_role_template("monitor-bridge", "env-secret.yaml.j2")
-    )
     return tuple(
         (key, "" if str(value) == UNDEFINED else str(value))
-        for key, value in doc["stringData"].items()
+        for key, value in render_pod_env("monitor-bridge").items()
     )
 
 

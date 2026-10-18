@@ -5,7 +5,7 @@ staging-gate backfill, Home Assistant and the deploy-pipeline exporter — every
 `checks/service.py`, plus the Traefik latency and error-rate bounds `checks/cluster.py` reads.
 
 Field justifications sit beside the declarations, env var names beside the reads, and the values
-in `templates/env-secret.yaml.j2`.
+in `templates/config/env.yaml.j2`.
 Composed into `Config` by `bridge/config.py`; imports nothing from it.
 """
 

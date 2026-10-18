@@ -30,7 +30,7 @@ def _silence(pushes, ran, names=("disk",), probe_prometheus=None, **env):
     Returns the `checks=` / `gate_config=` / `sources=` / `sink=` / `env=` / `exposition=` keyword
     arguments to hand
     `cli.main`, which is how a test says which checks exist and what they read without mutating
-    a module. `env` is the rendered env-secret, the environment the pod's `main()` reads, with
+    a module. `env` is the rendered pod environment, the one the pod's `main()` reads, with
     `HEARTBEAT_FILE` pointed at the null device so a cycle's heartbeat writes nowhere.
 
     Args:
@@ -293,14 +293,14 @@ def test_a_malformed_number_is_recorded_rather_than_raised():
 
 
 def test_a_rendered_key_missing_from_the_env_is_recorded_rather_than_defaulted():
-    """A key the env-secret renders has no Python default since #3659, so its absence is a
+    """A key the pod environment renders has no Python default since #3659, so its absence is a
     config fault main() reports, never a quiet fall back to a second copy of the value."""
     env = bridge_env()
     del env["TRAEFIK_421_RPS"]
     cfg = load_config(env)
     assert cfg.TRAEFIK_421_RPS == 0
     assert [p for p in cfg.CONFIG_PROBLEMS if p.startswith("TRAEFIK_421_RPS ")] == [
-        "TRAEFIK_421_RPS is unset; templates/env-secret.yaml.j2 renders it, so this env "
+        "TRAEFIK_421_RPS is unset; templates/config/env.yaml.j2 renders it, so this env "
         "is not the one the pod gets"
     ]
 

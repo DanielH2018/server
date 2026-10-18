@@ -216,6 +216,27 @@ def render_role_template(
     return rendered
 
 
+def render_pod_env(
+    role: str,
+    overrides: dict | None = None,
+    *,
+    secret: str = "env-secret.yaml.j2",
+    deployment: str = "deployment.yaml.j2",
+) -> dict[str, str]:
+    """The environment a role's first container receives, rendered: env var -> value.
+
+    The Deployment's `env` values over the env Secret's `stringData`, the precedence Kubernetes
+    gives `env` over `envFrom`. Since #5574 the bridges keep only credentials in the Secret and
+    every setting in `env`, so a guard reading either alone sees half the pod's environment.
+    """
+    data = yaml_fast.safe_load(render_role_template(role, secret, overrides))
+    assert data.get("kind") == "Secret", f"{role}/{secret} renders no Secret"
+    workload = yaml_fast.safe_load(render_role_template(role, deployment, overrides))
+    container = workload["spec"]["template"]["spec"]["containers"][0]
+    plain = {e["name"]: e["value"] for e in container.get("env", []) if "value" in e}
+    return {**data["stringData"], **plain}
+
+
 # `_render_all` skips `Dockerfile*` because its output feeds a YAML parse. A build pin is still
 # a rendered value — code-server's Dockerfile names its node URL and every extension URL
 # through a role default — so the build files get their own accessor and their own cache (#3175).

@@ -551,7 +551,7 @@ def test_the_floor_and_its_grace_are_pinned_and_overridable(cfg):
         "the Pi drops out for longer than either amd64 node: about 20 min observed over the 7d "
         "to 2026-08-29, against 15 min of the shared grace at INTERVAL=300"
     )
-    env_secret = (_ROLE / "templates" / "env-secret.yaml.j2").read_text()
+    env_secret = (_ROLE / "templates" / "config" / "env.yaml.j2").read_text()
     for key, value in (
         ("HWMON_TEMP_ORIGINS_MIN", "3"),
         ("HWMON_TEMP_ORIGINS_CONSECUTIVE", "5"),

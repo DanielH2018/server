@@ -60,7 +60,7 @@ The rules below shaped those memberships.
   `longhorn_b2_application_key`, `CF_ANALYTICS_TOKEN_FILE`, `SPEEDTEST_TOKEN_FILE`,
   `HEALTHCHECKS_API_KEY_FILE`) are rendered 0600 and read through `bridge.config._env_file`; an
   empty file disables the check. Ids stay inline.
-- Thresholds are env-tunable in `templates/env-secret.yaml.j2`, the only place each value is
+- Thresholds are env-tunable in `templates/config/env.yaml.j2`, the only place each value is
   written: `bridge/config*.py` reads a rendered key with no default (#3659). A failed query makes that monitor `down` with an explanatory message.
 
 ## Operator prerequisites
@@ -120,7 +120,7 @@ The rules below shaped those memberships.
 ## The test seams
 
 - **A test states its configuration.** The `cfg` fixture is `load_config(bridge_env())`, the
-  rendered `templates/env-secret.yaml.j2`, because a key the template renders has no Python
+  rendered `templates/config/env.yaml.j2`, because a key the template renders has no Python
   default (#3659); narrow it with
   `dataclasses.replace(cfg, X=...)`, or call `load_config(bridge_env(X=...))` when the READ is
   under test.
