@@ -200,8 +200,8 @@ batch runs as `ubuntu` on `worktree-fanout-<batch>`.
   ended `pr`, passed its CI gate and left no finding, whose PR is open, not a draft, still at
   the head the review read, with no unchecked box under an operator or before-merge heading and
   no `needs input` or `Do not merge` text. A `--no-review` batch writes no record, so it never
-  lands. Neither does a PR touching the landing code, the fan-out tooling, `.github/` or this
-  role. Each landing runs from its own `origin/master` worktree under
+  lands. Neither does a PR touching the landing path's code (`scripts/deploy_tools/`, `scripts/lib/`), the
+  fan-out tooling, the deployer, `ansible/vars/`, `.github/`, `.claude/` or this role. Each landing runs from its own `origin/master` worktree under
   `~/.local/state/fanout-server-lander/checkouts/`, never from the primary checkout.
 - **Mode:** `claude_code_fanout_server_lander_enabled`, true only in daniel-box's host_vars.
   Setting it to false and applying the role stops the timer and removes the units, and every

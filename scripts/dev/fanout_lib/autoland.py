@@ -79,13 +79,20 @@ GH_TIMEOUT_S = 60.0
 STATE_DIR = Path.home() / ".local" / "state" / "fanout-server-lander"
 # gh returns at most this many changed files, so a PR at the cap may hide a path past it.
 FILE_CAP = 100
-# Paths whose change widens what this command or the lander may do. A PR touching one is
-# left for a person, the way `claude-land@`'s approval list leaves it.
+# Paths whose change widens what this command or the lander may do, or that the landing path
+# imports. A PR touching one is left for a person, the way `claude-land@`'s approval list leaves
+# it. `scripts/deploy_tools/` is the whole tree because land.sh imports await_ci.py and the rest
+# of it, not only land*. The deployer's `files/` decide the CI gate, `ansible/vars/` holds the
+# secrets and the generated cluster file, and `.claude/` holds the repo's hooks and settings.
 OWN_PATHS = (
-    "scripts/deploy_tools/land",
+    "scripts/deploy_tools/",
+    "scripts/lib/",
     "scripts/dev/fanout",
     ".github/",
+    ".claude/",
     "ansible/roles/setup/claude_code/",
+    "ansible/roles/setup/gitops_deploy/",
+    "ansible/vars/",
     "pyproject.toml",
     "uv.lock",
     "uv.toml",

@@ -173,6 +173,29 @@ def test_a_pr_that_is_not_the_batchs_own_clean_pr_never_lands(tmp_path, over):
     assert run.started == []
 
 
+@pytest.mark.parametrize(
+    "path",
+    [
+        "scripts/deploy_tools/await_ci.py",
+        "scripts/lib/git.py",
+        "scripts/dev/fanout_lib/autoland.py",
+        ".github/workflows/ci.yml",
+        ".claude/settings.json",
+        "ansible/roles/setup/claude_code/tasks/main.yml",
+        "ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_git.py",
+        "ansible/vars/secrets.yml",
+        "uv.lock",
+    ],
+)
+def test_a_pr_touching_the_landing_paths_own_surface_is_refused_with_that_reason(
+    tmp_path, path
+):
+    run = _Landings([_record()], [_pr(files=[{"path": path}])])
+    _, text = run.run(tmp_path)
+    assert run.started == []
+    assert "ineligible, it changes the lander's own surface" in text
+
+
 def test_a_failed_handoff_is_logged_with_its_reason_and_starts_nothing_else(tmp_path):
     run = _Landings([_record()], [_pr()], start_rc=1)
     _, text = run.run(tmp_path)
