@@ -106,6 +106,8 @@ every entry is flux-owned then waits for C-2b, through the uptime-kuma edge.
     `own` digest from `digests.json`, which C6 exports and C7 reads (#5338).
   - `DIR/flux/<name>.yaml` and `DIR/cluster/<name>/` hold a shared kind, see C3.
   - `DIR/flux/kustomization.yaml` lists every file in `DIR/flux/`.
+  - `DIR/README.md` at the bundle root, a static note on the layout. No Kustomization's path
+    reaches it, and it counts for no name (see `_unclassified` below).
   - From D5.1a1, `DIR/cluster/<tag>-snapshot/` and `DIR/cluster/<tag>-verify/`.
   - From D2's first publishing PR, `DIR/digests.json` at the bundle root. No Kustomization's
     path reaches it. It maps each deploy tag and each member of `SHARED_KINDS` to an object.

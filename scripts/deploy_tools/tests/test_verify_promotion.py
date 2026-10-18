@@ -13,6 +13,7 @@ import yaml
 from _promote_fakes import bundle_files
 from renderer.renderer_lib.bundle import bundle_files as render_bundle
 from renderer.renderer_lib.bundle import digests as render_digests
+from renderer.renderer_lib.bundle_readme import BUNDLE_README
 from renderer.renderer_lib.bundle import (
     digests_text,
     kustomization_text,
@@ -276,7 +277,9 @@ def test_the_first_bundle_carrying_cluster_vars_expects_its_status():
     `--shared-only` bundle. The new name is a move, not a widening."""
     prod = {
         "flux/kustomization.yaml": kustomization_text([]).encode(),
-        "digests.json": digests_text(render_digests({}, [], kinds=())).encode(),
+        "digests.json": digests_text(
+            render_digests({"README.md": BUNDLE_README.encode()}, [], kinds=())
+        ).encode(),
     }
     target = {
         path: text.encode()
