@@ -265,14 +265,52 @@ _CRONJOB = (
 )
 
 
-def test_the_pod_logql_names_the_pi_peer_backup_container():
+def test_the_pod_logql_names_both_pod_pushers_containers():
     # The container name is the only thing tying the second selector to that CronJob, so it is
     # read from the template rather than trusted: a rename there would leave the selector
     # matching nothing and the check permanently green for this pusher.
     names = re.findall(r"^\s+- name: (\S+)\n\s+image:", _CRONJOB.read_text(), re.M)
     assert names == ["pi-peer-backup"], names
-    assert '{container="pi-peer-backup"}' in checks.logs.SWALLOWED_VERDICTS_POD_LOGQL
+    # crowdsec's H2.4b PR (#5711) adds the `crowdsec-jobs` container, and with it the
+    # assertion that the Deployment names it. This selector lands first, because CI's
+    # cross-plane gate refuses monitor-bridge and crowdsec's netpol peers in one PR.
+    assert (
+        '{container=~"pi-peer-backup|crowdsec-jobs"}'
+        in checks.logs.SWALLOWED_VERDICTS_POD_LOGQL
+    )
     assert '!= "push failed transiently"' in checks.logs.SWALLOWED_VERDICTS_POD_LOGQL
+
+
+# crowdsec's crowdsec-jobs sidecar (H2.4b): its scheduler prints the syslog prefix with the pod
+# name as host, and kuma_push.py's final line carries `http=<code>[ by=kuma]` with no rc.
+_SIDECAR_H = "2026-10-18T13:15:00Z crowdsec-6f9c-x2 crowdsec-appsec-verify: "
+_SIDECAR_LOST_DOWN = _SIDECAR_H + (
+    "push failed (http=404) (status=down: no enabled appsec-configs)"
+)
+_SIDECAR_TRANSPORT = _SIDECAR_H + (
+    "push failed (error=URLError) (status=down: no enabled appsec-configs)"
+)
+
+
+def test_a_lost_down_push_from_the_crowdsec_jobs_sidecar_is_flagged(cfg):
+    assert parse_push_line(_SIDECAR_LOST_DOWN) == (
+        "crowdsec-appsec-verify",
+        "crowdsec-6f9c-x2",
+        "swallowed",
+        "down",
+        "http=404",
+    )
+    transport = parse_push_line(_SIDECAR_TRANSPORT)
+    assert transport is not None
+    assert transport[2:] == (
+        "swallowed",
+        "down",
+        "error=URLError",
+    )
+    src = _src(_streams([(1, _SIBLING_RUN)], [(2, _SIDECAR_LOST_DOWN)]))
+    ok, msg = checks.logs.check_swallowed_verdicts(cfg, src, uptime_s=_unread_clock)
+    assert not ok
+    assert "crowdsec-appsec-verify" in msg
 
 
 def test_a_rejected_push_from_the_pod_stream_is_flagged(cfg):

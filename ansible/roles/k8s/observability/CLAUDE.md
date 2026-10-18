@@ -83,11 +83,13 @@ as a directory and runs with `--config.auto-reload`, so a rule edit reloads in p
 rolls the `Recreate` pod
 (`ansible/roles/k8s/observability/templates/prometheus.yaml.j2:DECIDED: rules reload in place`).
 Grafana's file provisioner re-reads the dashboard ConfigMaps from their mounts every 30
-seconds, so while Ansible owns the role a board edit rolls nothing either. That stops at the
-flip. The restart annotation the renderer stamps on grafana hashes every ConfigMap the pod mounts
-(`scripts/renderer/renderer_lib/restart.py:pod_references`), so once the dashboards join the
-bundle a board edit restarts the `Recreate` pod, and so does a rule edit for Prometheus.
-#5679 tracks the exemption the flip PR needs.
+seconds, so a board edit rolls nothing either. Both hold after the flip too. The renderer's
+restart annotation hashes the ConfigMaps a pod mounts, but it skips every name in
+`scripts/renderer/renderer_lib/restart.py:RELOADED_IN_PLACE`. Without that list, a board edit
+would restart the `Recreate` grafana pod once the dashboards join the bundle, and a rule edit
+would restart Prometheus.
+`scripts/renderer/tests/test_renderer_self_rollout_restart.py::test_a_board_or_rule_edit_after_the_flip_moves_no_restart_value`
+renders the flipped role and holds both values still across such an edit.
 
 Every entry declares `restart_on: []`, so the shared release record stamps `restart: false`
 for each workload. After its rollout wait, the role raises that to `restart: true` through

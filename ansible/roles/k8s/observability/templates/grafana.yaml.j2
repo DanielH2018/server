@@ -259,6 +259,10 @@ spec:
               mountPath: /etc/grafana/provisioning/datasources
             - name: grafana-provisioning-dashboards
               mountPath: /etc/grafana/provisioning/dashboards
+            # The provisioner re-reads each board ConfigMap here every updateIntervalSeconds, so
+            # a board edit rolls nothing. These carry no checksum/config, and the renderer's
+            # checksum/restart skips them (RELOADED_IN_PLACE in
+            # scripts/renderer/renderer_lib/restart.py).
 {% for folder in observability_dashboard_folders %}
             - name: dashboards-{{ folder | lower }}
               mountPath: /var/lib/grafana/dashboards/homelab/{{ folder }}
