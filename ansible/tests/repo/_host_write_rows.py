@@ -124,10 +124,6 @@ _CONFIGMAP = (
 )
 
 HOST_WRITE_ALLOW = {
-    _K8S + "artifacts/tasks/main.yml": (
-        "D5's `k8s_host_files` conversion PR for artifacts moves its directory tasks, which "
-        "no H2 PR moves"
-    ),
     _K8S + "configarr/tasks/main.yml": _H2_THEN_D5,
     _K8S + "crowdsec/tasks/main.yml": _H2_THEN_D5,
     _K8S + "janitorr/tasks/main.yml": _H2_THEN_D5,
@@ -243,17 +239,12 @@ HOST_WRITES = Census(
             "    k3s kubectl get pod x -o name 2>/dev/null >/dev/null 2>&1\n",
         ),
     ),
-    # The writes the two must_find members keep until D5's own PRs: pi-peer-backup's two Pi
-    # writes and artifacts' two directory tasks. docs's directory moved to `k8s_host_files`.
-    min_matches=4,
-    # Only D5's PRs move these two, so the row fails when one stops matching rather than
-    # when the selector drifts. Each D5 PR that moves a member drops it here in the same commit.
-    must_find=frozenset(
-        {
-            _K8S + "artifacts/tasks/main.yml",
-            _K8S + "pi-peer-backup/tasks/main.yml",
-        }
-    ),
+    # The writes the must_find member keeps until its D5 PR: pi-peer-backup's two Pi writes.
+    # docs's and artifacts' directories moved to `k8s_host_files`.
+    min_matches=2,
+    # Only a D5 PR moves this member, so the row fails when it stops matching rather than when
+    # the selector drifts. The D5 PR that moves a member drops it here in the same commit.
+    must_find=frozenset({_K8S + "pi-peer-backup/tasks/main.yml"}),
     allow=HOST_WRITE_ALLOW,
     count=lambda subject: len(host_writes(subject)),
 )

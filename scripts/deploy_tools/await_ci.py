@@ -5,7 +5,7 @@ THE PROBLEM. After a merge a session must know whether master CI went green befo
 deploys: PR CI is scoped to changed files, so a whole-tree failure can appear only after
 the merge.
 
-`deploy_logic.ci_verdict` is already the right logic and the deployer's own gate reads it.
+`deploy_logic.ci_verdict` is the right logic and the deployer's own gate reads it; it reads the gate's jobs when the gate has not run (#5507).
 This is a CLI over that same function against that same endpoint, so a session's verdict
 and a tick's agree by construction rather than by convention.
 

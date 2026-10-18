@@ -12,14 +12,20 @@ defaults copy would be read by `initial_setup`'s `docs-refresh.sh.j2` as well.
 
 The pairs are DERIVED: every copied key that a `roles/k8s/*` defaults file or
 `group_vars/all.yml` also defines. `EXPECTED_PAIRS` names them, so a new pair joins the census
-by name. docs' conversion PR added the first, `docs_host_site_dir`.
+by name. docs' conversion PR added the first, `docs_host_site_dir`, and artifacts' added four.
+
+docs-refresh.sh, the setup plane's site build, holds a third copy of `docs_host_site_dir` as
+its `SITE_DIR`, because no setup play loads docs' defaults. The rendered script's value must
+equal docs' default rendered with `sys_user`.
 
 Red-proof: a fixture tree under `tmp_path` whose host-files copy differs from its k8s source
 must be flagged, and one whose copy matches must not, for a defaults copy and a task-vars copy.
+A docs-refresh script whose `SITE_DIR` differs from docs' default must be flagged.
 
 Run: uv run pytest ansible/tests/setup/test_k8s_host_files_pairs.py
 """
 
+import re
 from pathlib import Path
 
 from _helpers import (
@@ -31,12 +37,21 @@ from _helpers import (
     load_yaml,
     walk_tasks,
 )
+from _shell_render import rendered_shell_text
 from lib.repo_paths import ALL_VARS
 
 ROLE = SETUP_ROLES / "k8s_host_files"
 
 # Each shared key the role copies, added by the conversion PR that moves its row.
-EXPECTED_PAIRS: frozenset[str] = frozenset({"docs_host_site_dir"})
+EXPECTED_PAIRS: frozenset[str] = frozenset(
+    {
+        "artifacts_host_dir",
+        "artifacts_peer_dir",
+        "artifacts_peer_sources",
+        "artifacts_stars_dir",
+        "docs_host_site_dir",
+    }
+)
 
 
 def shared_pairs(
@@ -147,3 +162,35 @@ def test_a_task_vars_copy_equal_to_its_source_is_clean(tmp_path):
     pairs = shared_pairs(*_task_vars_tree(tmp_path, "/srv/a"))
     assert set(pairs) == {"artifacts_host_dir"}
     assert unequal_pairs(pairs) == []
+
+
+def docs_refresh_drift(script: str, docs_default: str, sys_user: str) -> list[str]:
+    """The mismatch between docs-refresh.sh's `SITE_DIR` and docs' default, or []."""
+    match = re.search(r'^SITE_DIR="([^"]*)"$', script, re.M)
+    assert match, "docs-refresh.sh no longer sets SITE_DIR"
+    expected = docs_default.replace("{{ sys_user }}", sys_user)
+    assert "{{" not in expected, (
+        f"docs' default reads more than sys_user: {docs_default!r}"
+    )
+    if match[1] == expected:
+        return []
+    return [f"docs-refresh.sh writes {match[1]!r}, roles/k8s/docs has {expected!r}"]
+
+
+def _docs_default_and_user() -> tuple[str, str]:
+    docs = load_yaml(K8S_ROLES / "docs" / "defaults" / "main.yml")
+    return docs["docs_host_site_dir"], load_yaml(ALL_VARS)["sys_user"]
+
+
+def test_docs_refresh_writes_where_docs_mounts():
+    script = rendered_shell_text("setup", "initial_setup", "docs-refresh.sh.j2")
+    assert docs_refresh_drift(script, *_docs_default_and_user()) == []
+
+
+def test_a_docs_refresh_site_dir_that_differs_is_flagged():
+    script = 'REPO="/home/ubuntu/server"\nSITE_DIR="/srv/docs-site"\n'
+    docs_default, sys_user = _docs_default_and_user()
+    assert docs_refresh_drift(script, docs_default, sys_user) == [
+        f"docs-refresh.sh writes '/srv/docs-site', roles/k8s/docs has "
+        f"{docs_default.replace('{{ sys_user }}', sys_user)!r}"
+    ]

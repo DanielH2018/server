@@ -31,7 +31,6 @@ approval as well.
 """
 
 import posixpath
-import subprocess
 import sys as _sys
 from importlib import machinery
 from collections.abc import Callable, Iterable, Mapping
@@ -40,6 +39,7 @@ from types import ModuleType
 from typing import NoReturn
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
+from deploy_tools.land_lib import gh_read
 from deploy_tools.land_lib.landing import BRANCH, Landing
 from deploy_tools.land_lib.outcome import hold_clear_hint, say
 from deploy_tools.land_lib.pr_json import (
@@ -336,26 +336,20 @@ def _list[T](ln: Landing, what: str, parse: Callable[[JsonObject], T]) -> list[T
     `parse` runs inside the read, so an entry of the wrong shape refuses the landing as
     unparseable gh output rather than escaping as a traceback.
     """
-    try:
-        pages = as_list(
-            ln.tools.gh_json(
-                "api",
-                "--paginate",
-                "--slurp",
-                f"repos/{{owner}}/{{repo}}/pulls/{ln.opts.pr}/{what}",
-            )
-            or [],
-            f"gh api pulls/{what}",
-        )
+    url = f"repos/{{owner}}/{{repo}}/pulls/{ln.opts.pr}/{what}"
+
+    def call() -> list[T]:
+        got = ln.tools.gh_json("api", "--paginate", "--slurp", url)
         return [
             parse(entry)
-            for page in pages
+            for page in as_list(got or [], f"gh api pulls/{what}")
             for entry in as_object_list(page, f"gh api pulls/{what} page")
         ]
-    except subprocess.CalledProcessError as exc:
-        _refuse(ln, f"could not list the PR's {what}: {exc.stderr.strip()}")
-    except subprocess.TimeoutExpired:
-        _refuse(ln, f"could not list the PR's {what}: gh timed out")
+
+    try:
+        return gh_read.read(call, ln.tools.sleep, f"gh api pulls/{what}")
+    except gh_read.GhReadFailed as exc:
+        _refuse(ln, f"could not list the PR's {what}: {exc}")
     except ValueError as exc:
         _refuse(ln, f"could not list the PR's {what}: unparseable gh output: {exc}")
 

@@ -1,0 +1,13 @@
+{
+  "checksum": "1775f546157e8c327e05a2698c50bbce5604a78417e5f014b6f7780b1a14271e",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "ansible/roles/k8s/bazarr/CLAUDE.md#At a glance",
+  "row": {
+    "atoms": {
+      "docs/flux-deploy-plane.md": "807c3deb44c3178e7a6f9fc0bc398a3b748b95c468b14ce9b1b890c8684535d9",
+      "docs/volume-snapshot-drills.md": "065c3fed1513022fe8e3b8848f85ca3b5527c7a34f0d50d3b1dad708b176b193"
+    },
+    "python": "3.14",
+    "verified_sha": "e00d00e4e"
+  }
+}

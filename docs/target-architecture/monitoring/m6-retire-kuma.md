@@ -178,7 +178,7 @@ push-token secret remains.
   moves 37. Most are host scripts; four run in pods. Where each lives:
     - **daniel-box host crons in the k3s role:** longhorn backup health, the etcd snapshot,
       manifest-prune, release staleness and live-drift. M6 owns the last three only until
-      their Kuma side is gone. After C-2b, D6.5 disarms the checks and D6.5b deletes them
+      their Kuma side is gone. After C-2b, D6.17 disarms the checks and D6.18 deletes them
       (*Cross-slice follow-up*, #4609).
     - **The initial_setup role, on both nodes:** docs-refresh, the eval sweep, the two
       Loki-route witnesses, secret rotation and setup drift.
@@ -582,7 +582,7 @@ dependency between them. The cutover windows run one after another (*No-pager wi
 | A6 bridge exporter | the 15 other-source checks and `swallowed_verdicts`, plus the `b2_reachable` and `wan_reachable` gates | Exporter | monitor-bridge | See *The bridge as an exporter*. The `prometheus` gate retires with its token, because the Watchdog covers a dead Prometheus. `swallowed_verdicts` is exported until C-7 deletes it. | 19 |
 | A7 log arm | `workload_log_errors` | M5 | monitor-bridge (`land.sh`); the rule deploys `loki-homelab` | `startup_grace` becomes `for: 5m`, as in A6. See *A7*. | 1 |
 | B0 shared library | No check. Moves `boot_grace_active`, `wan_reachable` and `reachout_verdict` into `homelab-check-lib.sh`, which also gains `write_check_textfile` (M3's atomic write). Its copy task and its `stamp_deployed` record in `initial_setup/tasks/crons.yml` are `tags: [always]`, like the `kuma-push-lib.sh` pair beside them (*B0, B5, B7 and B8*). | — | the tick (initial_setup) on daniel-box; a hand on daniel-server and the Pi | — | 0 |
-| B1 k3s crons | longhorn backup health, etcd snapshot, manifest-prune, release staleness, live-drift | M3 | a hand: `k3s-bringup.yml --tags "backup-health,etcd-snapshot,manifest-prune,release-staleness,live-drift"` (**operator-only**) | `KumaDown` replaces `uptime-kuma-alive` (see below). B1 retires the tiles and tokens of manifest-prune, release staleness and live-drift; D6.5 disarms those three checks and deletes B1's rules for them, and D6.5b deletes their code. | 5 |
+| B1 k3s crons | longhorn backup health, etcd snapshot, manifest-prune, release staleness, live-drift | M3 | a hand: `k3s-bringup.yml --tags "backup-health,etcd-snapshot,manifest-prune,release-staleness,live-drift"` (**operator-only**) | `KumaDown` replaces `uptime-kuma-alive` (see below). B1 retires the tiles and tokens of manifest-prune, release staleness and live-drift; D6.17 disarms those three checks and deletes B1's rules for them, and D6.18 deletes their code. | 5 |
 | B2 initial_setup | docs-refresh, eval sweep, secret rotation, setup drift, the two Loki-route witnesses | M3 | the tick on daniel-box; a hand on daniel-server | daniel-server gets the textfile-directory task. | 6 |
 | B3 gitops_deploy | ruleset drift, interaction limit | M3 | the tick | — | 2 |
 | B4 other setup roles | two etcd drills, three fake_remux, two UPS secondaries, render_records, renovate_agent, renovate_notify | M3 | the tick on daniel-box; a hand on daniel-server for its UPS secondary | — | 10 |
@@ -1446,7 +1446,7 @@ here. C-1 waits for the operator's acceptance.
       `kuma-check-<name>.{service,timer}`, so the old and new timers never both run. The
       removal runs in both arms, not only the present arm. An absent import must also remove
       the old name, or a `kuma-check-*` unit that a hand apply has not yet removed outlives
-      the rename (*When D6.5 or D6.5b has landed first*). A test case asserts each arm. The removal names `kuma-check-`, which exit criterion 3 forbids, so
+      the rename (*When D6.17 or D6.18 has landed first*). A test case asserts each arm. The removal names `kuma-check-`, which exit criterion 3 forbids, so
       C-6 deletes it once a read-only `systemctl list-unit-files 'kuma-check-*'` lists nothing
       on daniel-box, daniel-server and the Pi. Update `SETUP_FILES_SHIPPED_BY_OTHER_ROLES`, `narrow_setup.py`,
       `setup_role_chains.py` and `test_setup_cross_role_files.py`, unless D6 has deleted them.
@@ -1466,36 +1466,36 @@ here. C-1 waits for the operator's acceptance.
       The rerun-while-red contract stays,
       because it still sets how fast a red check clears. The `k3s` hand apply is
       `--tags "manifest-prune,live-drift"`, the tags on its two timer imports.
-    - **When D6.5 or D6.5b has landed first.** D6 opens after C-2b, so D6.5 and D6.5b can
-      land before C-3a or C-3b. D6.5 disarms the two k3s timers and the live-drift check. It
+    - **When D6.17 or D6.18 has landed first.** D6 opens after C-2b, so D6.17 and D6.18 can
+      land before C-3a or C-3b. D6.17 disarms the two k3s timers and the live-drift check. It
       keeps the two timer imports and sets their `kuma_check_state` to `absent`. It turns the
-      live-drift tasks into absent tasks that keep their `live-drift` tag. D6.5b deletes
+      live-drift tasks into absent tasks that keep their `live-drift` tag. D6.18 deletes
       those imports and those absent tasks (#4609, #4635). Each PR therefore reads the k3s
       role at its base:
-        - If D6.5 has set the two timer imports absent, C-3b still renames their variables.
+        - If D6.17 has set the two timer imports absent, C-3b still renames their variables.
           C-3b carries the literal `check_timer_state: absent` across the rename. Dropping it
-          would re-arm the units that D6.5 disarmed. `glance_facts.py:timer_units` skips an
+          would re-arm the units that D6.17 disarmed. `glance_facts.py:timer_units` skips an
           import whose state is the literal `absent`, and C-3b keeps that skip under
           `check_timer_state`. Without the skip, the glance block would list two timers that
           are not installed. The named-member case therefore excludes the two k3s imports.
           It asserts that initial_setup yields `homelab-check-setup-drift.timer` instead. The
           `k3s` hand apply stays `--tags "manifest-prune,live-drift"`.
-        - If D6.5 has merged but its hand apply has not run, C-3b can still merge first.
-          D6.5's apply then runs on a tree that holds C-3b's rename, so the k3s absent arm
+        - If D6.17 has merged but its hand apply has not run, C-3b can still merge first.
+          D6.17's apply then runs on a tree that holds C-3b's rename, so the k3s absent arm
           is the renamed one. That arm removes the legacy `kuma-check-<name>` units as well
           as the `homelab-check-<name>` ones, so the apply still stops
           `kuma-check-manifest-prune` and `kuma-check-live-drift`. An absent arm that removed
           only `homelab-check-*` would leave both old units running behind a green recap,
-          and nothing would catch them before D6.5b's step 4 (#4636).
-        - If D6.5b has deleted the two timer imports, C-3b renames no k3s import and has no
+          and nothing would catch them before D6.18's step 4 (#4636).
+        - If D6.18 has deleted the two timer imports, C-3b renames no k3s import and has no
           `k3s` hand apply. Its named-member case asserts the same initial_setup timer.
-        - C-3a's `k3s` hand apply stays `--tags "backup-health,live-drift"` until D6.5b
-          deletes D6.5's absent live-drift tasks. If D6.5b has deleted them, the apply is
+        - C-3a's `k3s` hand apply stays `--tags "backup-health,live-drift"` until D6.18
+          deletes D6.17's absent live-drift tasks. If D6.18 has deleted them, the apply is
           `--tags "backup-health"` alone.
 
       The PR body quotes `git grep -n -E 'kuma_check_timer|kuma_check_state|live-drift' ansible/roles/setup/k3s/tasks/`
       at its base to show which case applies. A `kuma_check_state: absent` line on a k3s
-      timer import means that D6.5 has landed. No `kuma_check_timer` import means that D6.5b
+      timer import means that D6.17 has landed. No `kuma_check_timer` import means that D6.18
       has landed.
 4. **C-4, the names**, in two PRs:
     - **C-4a.** Add `ansible/filter_plugins/ingress_probes.py` with `ingress_probe_targets`,
@@ -2913,39 +2913,39 @@ claim was checked at `70591c307` before the edit.
   behind* now says that `audit --check` exits non-zero on any missing or stale row
   (`secret_rotation.py:cmd_audit` at `70591c307`). Each token PR is already one commit, so
   the recipe's order needed no change.
-- **#4609 (medium): B1 and D6.5 both retired the three drift checks' tiles and tokens.**
+- **#4609 (medium): B1 and D6.17 both retired the three drift checks' tiles and tokens.**
   B1 converts manifest-prune, release staleness and live-drift to textfile checks, and
-  D6.5 removed the same tiles and tokens before deleting the checks. Neither page cited the
+  D6.17 removed the same tiles and tokens before deleting the checks. Neither page cited the
   other. **Fixed by giving the Kuma side to B1 and the checks to D6.** X2-13's remedy, which
   dropped registry-gc from B6, does not fit here. C-1 needs exactly one Kuma series, so the
   three tiles must be gone before C-1. D6 waits for C-2b through the uptime-kuma edge
-  (*When D5 flips a role M6 edits*), so D6.5 cannot remove them first. B1 therefore keeps
-  all three, and the B1 row and *Other producers* name D6.5 and D6.5b as the slices that
-  delete the checks. D6.5 deletes B1's `<Check>Failed` and `<Check>NotReporting` rules for
-  them in the PR that disarms their crons. D6.5 can also land before C-3a or C-3b. C-3b
-  therefore gains *When D6.5 or D6.5b has landed first*: each PR reads the k3s role at its
+  (*When D5 flips a role M6 edits*), so D6.17 cannot remove them first. B1 therefore keeps
+  all three, and the B1 row and *Other producers* name D6.17 and D6.18 as the slices that
+  delete the checks. D6.17 deletes B1's `<Check>Failed` and `<Check>NotReporting` rules for
+  them in the PR that disarms their crons. D6.17 can also land before C-3a or C-3b. C-3b
+  therefore gains *When D6.17 or D6.18 has landed first*: each PR reads the k3s role at its
   base, and C-3b's named member falls back to initial_setup's setup-drift timer.
-- **#4635 (medium): *When D6.5 has landed first* assumed that D6.5 deletes the k3s timer
-  imports and the live-drift tasks.** D6.5 keeps the imports and sets their
+- **#4635 (medium): *When D6.17 has landed first* assumed that D6.17 deletes the k3s timer
+  imports and the live-drift tasks.** D6.17 keeps the imports and sets their
   `kuma_check_state` to `absent`. It turns the live-drift tasks into absent tasks that keep
-  their tag. D6.5b deletes both. The section's fallback therefore never triggered between
-  D6.5 and D6.5b. In that window C-3b renamed imports whose units were already absent, and
+  their tag. D6.18 deletes both. The section's fallback therefore never triggered between
+  D6.17 and D6.18. In that window C-3b renamed imports whose units were already absent, and
   its named member asserted two timers that were not installed. Nothing told C-3b to carry
   the absent state across the variable rename, so the rename could re-arm the units that
-  D6.5 disarmed. **Fixed.** The section is renamed *When D6.5 or D6.5b has landed first*, and
-  its conditions name D6.5b as the PR that deletes. C-3b carries `check_timer_state: absent`
+  D6.17 disarmed. **Fixed.** The section is renamed *When D6.17 or D6.18 has landed first*, and
+  its conditions name D6.18 as the PR that deletes. C-3b carries `check_timer_state: absent`
   across the rename and keeps `timer_units`'s skip of a literal `absent`. Its named member
   excludes those imports. The PR body's grep adds `kuma_check_state`, so it shows which
-  case applies. The B1 row and *Other producers* say that D6.5 disarms the checks.
+  case applies. The B1 row and *Other producers* say that D6.17 disarms the checks.
 
-- **#4636 (medium): C-3b could merge between D6.5's merge and D6.5's hand apply.** The
+- **#4636 (medium): C-3b could merge between D6.17's merge and D6.17's hand apply.** The
   apply then ran on the renamed task file, whose absent arm removed only `homelab-check-*`
   units. The `kuma-check-manifest-prune` and `kuma-check-live-drift` units kept running after
-  a green apply, until D6.5b's step 4 or C-6's `systemctl list-unit-files 'kuma-check-*'`
+  a green apply, until D6.18's step 4 or C-6's `systemctl list-unit-files 'kuma-check-*'`
   caught them. A merge gate on C-3b was rejected: it depends on a session reading
   `gitops_state.py` at the right moment, and it still misses an apply that runs late.
   **Fixed.** C-3b's legacy-unit removal runs in both arms, with a test case per arm, and
-  *When D6.5 or D6.5b has landed first* names the ordering. C-6 deletes the removal on the
+  *When D6.17 or D6.18 has landed first* names the ordering. C-6 deletes the removal on the
   same `systemctl list-unit-files 'kuma-check-*'` evidence as before.
 
 ### Pillar review fold (2026-10-12)

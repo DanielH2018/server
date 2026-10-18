@@ -897,6 +897,7 @@
  "scripts/deploy_tools/tests/test_land_tags_verdict_inputs.py": 0.11,
  "scripts/deploy_tools/tests/test_land_tick.py": 0.0,
  "scripts/deploy_tools/tests/test_land_tools.py": 0.12,
+ "scripts/deploy_tools/tests/test_land_view_retries.py": 0.0,
  "scripts/deploy_tools/tests/test_narrow_claim_template.py": 0.67,
  "scripts/deploy_tools/tests/test_narrow_containers_fields.py": 0.85,
  "scripts/deploy_tools/tests/test_narrow_deletes_a_role.py": 0.07,
