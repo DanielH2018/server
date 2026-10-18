@@ -141,6 +141,7 @@
  "ansible/roles/k8s/n8n/tests/test_n8n_verify.py": 8.48,
  "ansible/roles/k8s/prowlarr/tests/test_prowlarr_verify.py": 5.18,
  "ansible/roles/k8s/qbittorrent/tests/test_apply_prefs.py": 0.0,
+ "ansible/roles/k8s/qbittorrent/tests/test_prefs_check.py": 0.0,
  "ansible/roles/k8s/sonarr/tests/test_sonarr_verify.py": 6.27,
  "ansible/roles/k8s/tdarr/tests/test_tdarr_verify.py": 0.9,
  "ansible/roles/k8s/uptime-kuma/tests/test_maintenance_window.py": 0.78,

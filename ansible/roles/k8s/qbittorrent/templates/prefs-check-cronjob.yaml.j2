@@ -1,0 +1,83 @@
+{% from 'container-resources.yml.j2' import job_container_resources with context %}
+{% from 'security-context.yml.j2' import job_hardened_security_context with context %}
+{#
+  The daily, log-only preference drift check: files/prefs_check.py runs files/apply_prefs.py
+  --dry-run against the WebUI Service and prints one `qbittorrent-prefs-check: <verdict>` line.
+  It never writes to qBittorrent and pushes nothing. It replaced the daniel-box host cron
+  `qbittorrent prefs drift check` at H2.5d
+  (docs/target-architecture/host/h2-shrink-host-plane.md, Steps item 15).
+
+  It calls no Kubernetes API, so it has no ServiceAccount of its own and mounts no token.
+
+  The labels are `app: qbittorrent-prefs-check`, never `app: qbittorrent`. The WebUI Service,
+  the compat `wireguard` Service and tasks/verify.yml's pod lookup all select `app=qbittorrent`,
+  so that label here would route WebUI traffic to this pod. qbittorrent's `netpol_from` admits
+  `qbittorrent-prefs-check`, and this role renders that fence itself (netpol_role_owned), so the
+  fence and this CronJob arrive in the same apply.
+
+  k8s/cronjob-gate runs this CronJob once per deploy, after tasks/verify.yml has waited out the
+  rollout. An extra run reads the same preferences and logs the same verdict, so it is
+  idempotent.
+#}
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: qbittorrent-prefs-check
+  namespace: {{ k8s_namespace }}
+spec:
+  schedule: "{{ qbittorrent_k8s_prefs_check_schedule }}"
+  # The host cron ran on daniel-box's clock, which is Etc/UTC.
+  timeZone: Etc/UTC
+  concurrencyPolicy: Forbid
+  # A missed day is not made up: the next run reports the same drift.
+  startingDeadlineSeconds: 3600
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 2
+  jobTemplate:
+    metadata:
+      labels:
+        app: qbittorrent-prefs-check
+    spec:
+      activeDeadlineSeconds: {{ qbittorrent_k8s_prefs_check_deadline_seconds }}
+      # No retry: a pod retry would log in again, and the next run is a day away anyway.
+      backoffLimit: 0
+      template:
+        metadata:
+          labels:
+            app: qbittorrent-prefs-check
+            netpol-baseline: enforced
+        spec:
+          restartPolicy: Never
+          enableServiceLinks: false
+          automountServiceAccountToken: false
+          securityContext:
+            runAsUser: {{ puid }}
+            runAsGroup: {{ pgid }}
+            runAsNonRoot: true
+          priorityClassName: homelab-best-effort
+          containers:
+            - name: qbittorrent-prefs-check
+              image: {{ qbittorrent_k8s_prefs_check_image }}
+              command: ["python3", "/config/prefs_check.py"]
+              env:
+                - name: QBT_URL
+                  value: "http://qbittorrent.{{ k8s_namespace }}.svc.cluster.local:{{ qbittorrent_k8s_webui_port }}"
+                # The ConfigMap mount is read-only, so Python cannot write __pycache__ there.
+                - name: PYTHONDONTWRITEBYTECODE
+                  value: "1"
+                - name: QBT_CREDENTIALS
+                  valueFrom:
+                    secretKeyRef:
+                      name: qbittorrent-prefs-check
+                      key: credentials
+{{ job_hardened_security_context(read_only=true) }}
+              volumeMounts:
+                - name: qbittorrent-prefs-check-code
+                  mountPath: /config
+                  readOnly: true
+{{ job_container_resources(cpu_limit=qbittorrent_k8s_prefs_check_cpu_limit, mem_limit=qbittorrent_k8s_prefs_check_mem_limit, cpu_request=qbittorrent_k8s_prefs_check_cpu_request, mem_request=qbittorrent_k8s_prefs_check_mem_request) }}
+          volumes:
+            - name: qbittorrent-prefs-check-code
+              configMap:
+                name: qbittorrent-prefs-check

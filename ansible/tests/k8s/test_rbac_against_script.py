@@ -3,7 +3,9 @@
 Target slice H2.1 lands the derivation in `_script_rbac.py` before any cron moves. Each H2 family
 PR that turns a host cron into a CronJob adds a case here that derives its script's needs and
 checks them against that job's rendered Role or ClusterRole: the drill at H2.3c, the CrowdSec
-jobs at H2.4b and H2.4c, and the *arr checks at H2.5b to H2.5d. Until then the real drill is the
+jobs at H2.4b and H2.4c, and the *arr checks at H2.5b and H2.5c. H2.5d's qbittorrent prefs check
+adds no case: it calls no Kubernetes API and runs with no ServiceAccount token, so it has no
+grants to derive. Until then the real drill is the
 named member: its derived set must hold `get` on its backup target and the `watch` its teardown
 needs, or the derivation reads nothing.
 

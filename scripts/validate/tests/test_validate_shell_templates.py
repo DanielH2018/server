@@ -64,7 +64,6 @@ def test_discover_templates_finds_the_known_set():
     # caught, not just "fewer templates checked" sliding by unnoticed.
     names = {p.name for p in v.discover_templates()}
     assert names == {
-        "prefs-check.sh.j2",
         "crowdsec-update-home-allowlist.sh.j2",
         "crowdsec-update-remote-allowlist.sh.j2",
         "crowdsec-appsec-verify.sh.j2",
