@@ -151,6 +151,7 @@
  "ansible/roles/setup/claude_code/tests/test_claude_triage_poll.py": 0.0,
  "ansible/roles/setup/claude_code/tests/test_claude_triage_run.py": 0.0,
  "ansible/roles/setup/claude_code/tests/test_takeover_check.py": 0.63,
+ "ansible/roles/setup/claude_code/tests/test_takeover_check_flux_selection.py": 0.7,
  "ansible/roles/setup/claude_code/tests/test_takeover_check_install.py": 0.02,
  "ansible/roles/setup/common/tests/test_host_lib.py": 0.01,
  "ansible/roles/setup/common/tests/test_host_lib_discord_spool.py": 0.01,
