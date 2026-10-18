@@ -137,4 +137,5 @@ def test_the_engines_cscli_runs_in_the_jobs_image(docker, jobs, tmp_path):
         subprocess.run([docker, "rm", created], capture_output=True, timeout=60)
     proc = _run_in_jobs_image(docker, jobs, tools, "/tools/cscli", "version")
     assert proc.returncode == 0, proc.stderr
-    assert "Version: v" in proc.stdout + proc.stderr
+    # cscli prints `version: v1.8.1-909b5157` at the pinned digest: lower case, then its tag.
+    assert "version: v" in (proc.stdout + proc.stderr).lower()
