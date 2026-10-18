@@ -23,5 +23,8 @@
     # adds the role label to this Deployment and restarts the UPS monitor once, which leaves
     # about a minute without power-cut shutdown coverage. #3388 counts nut as deliberately
     # excluded. The prune is armed by default since #3662, so this line is the opt-out.
+    # Flux owns nut since D5.17, so this include runs only after a handback. The renderer still
+    # reads the line and leaves the role label off nut's objects; Flux's own prune tracks them
+    # by its inventory, not by that label.
     manifests_prune: false
     manifests_rollout: nut
