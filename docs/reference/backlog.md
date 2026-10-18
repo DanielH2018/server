@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/backlog.py
-generated_at: 2026-10-17 18:17 UTC
-generated_sha: 4462b2540
+generated_at: 2026-10-18 06:17 UTC
+generated_sha: 1fa29723f
 ---
 
 !!! warning "Generated file — do not edit"
@@ -19,24 +19,36 @@ Findings Claude confirmed and did not fix in the session that found them, filed 
 | [#5126](https://github.com/DanielH2018/server/issues/5126) | high | gap | security | The DanielClaudeBot account reads as nonexistent on GitHub, so agent PRs are invisible and cannot land | 2026-10-15 | 0 | - | - |
 | [#4188](https://github.com/DanielH2018/server/issues/4188) | medium | gap | container | Home Assistant was down 28 minutes when the tick deployed 2026.10.0, and its hold still stands | 2026-10-10 | 0 | - | ✓ |
 | [#4599](https://github.com/DanielH2018/server/issues/4599) | medium | improvement | security | The AIDE check cannot page on an unexplained file change | 2026-10-12 | 0 | - | ✓ |
-| [#4738](https://github.com/DanielH2018/server/issues/4738) | medium | improvement | docs | Target architecture G1 step 6: run the 30-day diff-notice soak checks | 2026-10-12 | 0 | - | ✓ |
 | [#4786](https://github.com/DanielH2018/server/issues/4786) | medium | addition | backup-observability | Target architecture M2: read the k8s-workloads shadow soak on days 3 and 7 before PR 4a | 2026-10-13 | 0 | - | ✓ |
 | [#4808](https://github.com/DanielH2018/server/issues/4808) | medium | gap | backup-observability | Flux's measured series push M1's 7-day head-series average over the 140,000 budget | 2026-10-13 | 0 | - | ✓ |
 | [#4824](https://github.com/DanielH2018/server/issues/4824) | medium | gap | backup-observability | Target architecture M5: read the log-rule shadow soak on day 7 before PR 4a | 2026-10-13 | 0 | - | ✓ |
 | [#4839](https://github.com/DanielH2018/server/issues/4839) | medium | gap | backup-observability | Target architecture M4: read the ingress-probe shadow soak on day 3 and after the Sunday before PR 4 | 2026-10-13 | 0 | - | ✓ |
 | [#4940](https://github.com/DanielH2018/server/issues/4940) | medium | addition | backup-observability | Target architecture M3: read the host-checks shadow soak on day 7 before PR 4 | 2026-10-13 | 0 | - | ✓ |
-| [#5124](https://github.com/DanielH2018/server/issues/5124) | medium | gap | backup-observability | Alert when a k3s node's wired link loses carrier and it runs on WiFi | 2026-10-15 | 0 | - | ✓ |
 | [#5206](https://github.com/DanielH2018/server/issues/5206) | medium | gap | - | Record the Pi updater's four measured memory peaks in pi-host-tuning-record.md | 2026-10-16 | 0 | - | ✓ |
-| [#5261](https://github.com/DanielH2018/server/issues/5261) | medium | gap | cicd | The publish census grants -verify to no tag until a role input names a verify Job | 2026-10-16 | 0 | - | ✓ |
-| [#5262](https://github.com/DanielH2018/server/issues/5262) | medium | gap | backup-observability | Add the Grafana admin-password initContainer before observability flips to Flux | 2026-10-16 | 0 | - | ✓ |
-| [#5346](https://github.com/DanielH2018/server/issues/5346) | medium | gap | backup-observability | Health gate fails a new routed service's first deploy until observability redeploys | 2026-10-16 | 0 | - | ✓ |
 | [#5351](https://github.com/DanielH2018/server/issues/5351) | medium | gap | cicd | H3.8b manual apply pending on daniel-pi: start the updater, read back, clear manual_plane optimize_pi | 2026-10-16 | 0 | - | ✓ |
-| [#5380](https://github.com/DanielH2018/server/issues/5380) | medium | gap | cicd | The soak's per-namespace Role fails its apply on a tag's first revision into a new namespace | 2026-10-17 | 1 | worktree-churn-plan-orchestrator-wave5 | ✓ |
 | [#5400](https://github.com/DanielH2018/server/issues/5400) | medium | gap | cicd | The green gate still strands a correct fix on a false-premise red test, a red-file helper under test, or a derived constant | 2026-10-17 | 0 | - | ✓ |
-| [#5409](https://github.com/DanielH2018/server/issues/5409) | medium | gap | cicd | A new SOPS key consumed only by a setup role defers the whole k8s plane to k8s_unapplied | 2026-10-17 | 0 | - | - |
-| [#5422](https://github.com/DanielH2018/server/issues/5422) | medium | addition | cicd | D5.3b3: promote verify and land-wait wait on flux/soak, so the soak gates promotion | 2026-10-17 | 0 | worktree-churn-plan-orchestrator-wave5 | - |
-| [#5424](https://github.com/DanielH2018/server/issues/5424) | medium | gap | cicd | land-wait's fixed deadline does not grow with the soak's timeout, which grows with every flux-owned tag | 2026-10-17 | 0 | - | ✓ |
-| [#5427](https://github.com/DanielH2018/server/issues/5427) | medium | gap | cicd | LAND_DEADLINE caps land-wait below verify's wait on the soak, so lander-unit landings of flux-owned tags end deferred | 2026-10-17 | 0 | - | ✓ |
+| [#5409](https://github.com/DanielH2018/server/issues/5409) | medium | gap | cicd | A new SOPS key consumed only by a setup role defers the whole k8s plane to k8s_unapplied | 2026-10-17 | 0 | worktree-churn-plan-orchestrator-wave5 | - |
+| [#5436](https://github.com/DanielH2018/server/issues/5436) | medium | gap | cicd | A secrets.yml key read only by a setup role is never applied by the GitOps tick | 2026-10-17 | 0 | worktree-churn-plan-orchestrator-wave5 | - |
+| [#5451](https://github.com/DanielH2018/server/issues/5451) | medium | gap | container | tdarr's VAAPI encode check has no Job form for its Flux flip | 2026-10-17 | 0 | - | ✓ |
+| [#5511](https://github.com/DanielH2018/server/issues/5511) | medium | addition | cicd | Target architecture D5: Wave D's first flip, cloudflare-ddns, docs and autofix-bridge to Flux | 2026-10-17 | 0 | - | - |
+| [#5526](https://github.com/DanielH2018/server/issues/5526) | medium | improvement | cicd | CI demand exceeds the 20-job runner cap during fan-outs, and master push runs wait 6 minutes for a runner | 2026-10-18 | 0 | - | ✓ |
+| [#5527](https://github.com/DanielH2018/server/issues/5527) | medium | gap | backup-observability | D5: dri-device-plugin's soak verify is inert until M2's PR 4b drops shadow | 2026-10-18 | 0 | - | ✓ |
+| [#5530](https://github.com/DanielH2018/server/issues/5530) | medium | gap | backup-observability | dri-device-plugin is not found by the soak's verify census, as #5513's verify-by requires | 2026-10-18 | 0 | - | - |
+| [#5534](https://github.com/DanielH2018/server/issues/5534) | medium | improvement | cicd | Target architecture D5: Wave C, nut to Flux | 2026-10-18 | 0 | - | - |
+| [#5537](https://github.com/DanielH2018/server/issues/5537) | medium | addition | cicd | Target architecture D5: n8n's flip wires n8n-verify and deletes its netpol probe tasks | 2026-10-18 | 0 | - | ✓ |
+| [#5539](https://github.com/DanielH2018/server/issues/5539) | medium | gap | cicd | D5 Open question 2: make the in-cluster registry a GHCR pull-through mirror before nut's flip | 2026-10-18 | 0 | - | ✓ |
+| [#5541](https://github.com/DanielH2018/server/issues/5541) | medium | gap | container | Reclaim superseded GHCR tags from the registry's ghcr-mirror store | 2026-10-18 | 0 | - | ✓ |
+| [#5542](https://github.com/DanielH2018/server/issues/5542) | medium | gap | backup-observability | Monitor that the registry's ghcr.io mirror actually serves pulls | 2026-10-18 | 0 | - | ✓ |
+| [#5546](https://github.com/DanielH2018/server/issues/5546) | medium | improvement | cicd | Target architecture D5: Wave C, n8n to Flux | 2026-10-18 | 0 | worktree-churn-plan-orchestrator-wave5 | - |
+| [#5552](https://github.com/DanielH2018/server/issues/5552) | medium | gap | container | Let the pre-pull Job retry a failed Pod so an eviction cannot wedge code-server | 2026-10-18 | 0 | - | ✓ |
+| [#5558](https://github.com/DanielH2018/server/issues/5558) | medium | improvement | cicd | Target architecture D5: media-volume's directories, hardlink probe and sync move off imperative tasks | 2026-10-18 | 0 | worktree-churn-plan-orchestrator-wave5 | ✓ |
+| [#5563](https://github.com/DanielH2018/server/issues/5563) | medium | improvement | cicd | 28% of PR CI runs are cancelled by a newer push and burn 13% of CI job-minutes | 2026-10-18 | 0 | worktree-churn-plan-orchestrator-wave5 | ✓ |
+| [#5564](https://github.com/DanielH2018/server/issues/5564) | medium | improvement | cicd | Five test modules take 111s of the suite's 807s | 2026-10-18 | 0 | worktree-churn-plan-orchestrator-wave5 | ✓ |
+| [#5569](https://github.com/DanielH2018/server/issues/5569) | medium | gap | backup-observability | Swallowed Push Verdicts does not read the configarr-health pod's push failures | 2026-10-18 | 0 | - | - |
+| [#5575](https://github.com/DanielH2018/server/issues/5575) | medium | gap | cicd | The takeover check diffs a substituting -verify directory with kubectl diff, so its substitution goes unchecked | 2026-10-18 | 0 | worktree-churn-plan-orchestrator-wave5 | ✓ |
+| [#5587](https://github.com/DanielH2018/server/issues/5587) | medium | improvement | cicd | Renovate rebases automerge PRs onto every master move, re-running CI until master goes quiet | 2026-10-18 | 0 | - | ✓ |
+| [#5590](https://github.com/DanielH2018/server/issues/5590) | medium | improvement | cicd | Target architecture H2.5c: janitorr's health reader moves from a host cron to a CronJob | 2026-10-18 | 0 | worktree-churn-plan-orchestrator-wave5 | ✓ |
+| [#5594](https://github.com/DanielH2018/server/issues/5594) | medium | improvement | cicd | Target architecture D5: Wave D, the next three to five roles to Flux (prowlarr, monitor-bridge, tdarr, configarr, jellyfin) | 2026-10-18 | 0 | - | ✓ |
 | [#2124](https://github.com/DanielH2018/server/issues/2124) | low | gap | security | CrowdSec agent drops Traefik access-log lines with UnmarshalJSON errors | 2026-09-19 | 0 | - | ✓ |
 | [#3778](https://github.com/DanielH2018/server/issues/3778) | low | improvement | cicd | Switch the CI setup action's callers to the self-repository uses syntax once actionlint accepts it | 2026-10-09 | 0 | - | ✓ |
 | [#3865](https://github.com/DanielH2018/server/issues/3865) | low | gap | cicd | Red/green batches: a process the red author starts outside the pipeline's process tree survives the reap | 2026-10-09 | 0 | - | ✓ |
@@ -55,12 +67,30 @@ Findings Claude confirmed and did not fix in the session that found them, filed 
 | [#5308](https://github.com/DanielH2018/server/issues/5308) | low | gap | backup-observability | Release staleness check reads a fetch that outlasted an outage as drift | 2026-10-16 | 0 | - | ✓ |
 | [#5333](https://github.com/DanielH2018/server/issues/5333) | low | gap | backup-observability | M6 Open question 9: confirm ALERTS_FOR_STATE resets across a Prometheus restart | 2026-10-16 | 0 | - | ✓ |
 | [#5347](https://github.com/DanielH2018/server/issues/5347) | low | improvement | docs | Stale cron wording left after the Pi heartbeats moved to packaged timers | 2026-10-16 | 0 | - | ✓ |
-| [#5359](https://github.com/DanielH2018/server/issues/5359) | low | gap | cicd | The suspended-changed hold posts nothing to Discord, though D5.1d says it posts as D5.2b1 does | 2026-10-16 | 0 | - | ✓ |
-| [#5374](https://github.com/DanielH2018/server/issues/5374) | low | improvement | cicd | A single-tag render builds all ten image contexts, so it and every test that calls cluster() pay about 0.6s more | 2026-10-17 | 0 | - | ✓ |
 | [#5379](https://github.com/DanielH2018/server/issues/5379) | low | improvement | docs | Comments outside #5321's two still call domain a SOPS value | 2026-10-17 | 0 | - | ✓ |
 | [#5416](https://github.com/DanielH2018/server/issues/5416) | low | gap | container | A pihole_password rotation does not roll the flux-owned pihole-exporter | 2026-10-17 | 0 | - | ✓ |
-| [#5419](https://github.com/DanielH2018/server/issues/5419) | low | improvement | cicd | A soak that judges services and passes logs nothing, so a pass reads like a missing log | 2026-10-17 | 0 | worktree-churn-plan-orchestrator-wave5 | ✓ |
 | [#5425](https://github.com/DanielH2018/server/issues/5425) | low | improvement | docs | D6.1b plans the second deploy-annotation query that D5.3b3 already added for the soak | 2026-10-17 | 0 | - | ✓ |
+| [#5432](https://github.com/DanielH2018/server/issues/5432) | low | gap | cicd | test_session_health.py runs 5x slower on daniel-box than CI, so its local shard weight trips the over-recorded check | 2026-10-17 | 0 | - | ✓ |
+| [#5449](https://github.com/DanielH2018/server/issues/5449) | low | improvement | cicd | autofix-bridge leaves its retired ConfigMap staging directory on daniel-box | 2026-10-17 | 0 | - | ✓ |
+| [#5452](https://github.com/DanielH2018/server/issues/5452) | low | improvement | docs | Flux-owned snapshot roles' defaults still say a failed deploy reverts the claim | 2026-10-17 | 0 | - | - |
+| [#5456](https://github.com/DanielH2018/server/issues/5456) | low | improvement | container | Remove game-stats' retired node staging directories from daniel-box | 2026-10-17 | 0 | - | ✓ |
+| [#5457](https://github.com/DanielH2018/server/issues/5457) | low | gap | cicd | Lander LAND_DEADLINE gives up on a Sunday merge that the reboot window defers | 2026-10-17 | 0 | - | - |
+| [#5462](https://github.com/DanielH2018/server/issues/5462) | low | improvement | docs | The role glance prints the in-cluster registry for a flux-owned built image | 2026-10-17 | 0 | - | - |
+| [#5463](https://github.com/DanielH2018/server/issues/5463) | low | gap | cicd | The deployer's cross-role lookup scan misses a lookup with keyword arguments | 2026-10-17 | 0 | - | - |
+| [#5483](https://github.com/DanielH2018/server/issues/5483) | low | gap | cicd | Duplicate Reload systemd handler names leave claude_code's login cap unreloaded on daniel-server | 2026-10-17 | 0 | - | ✓ |
+| [#5520](https://github.com/DanielH2018/server/issues/5520) | low | improvement | cicd | The fan-out red lock refuses an appended parametrize table that no red test reads | 2026-10-17 | 0 | - | ✓ |
+| [#5521](https://github.com/DanielH2018/server/issues/5521) | low | improvement | docs | Reword Ansible-era autodeploy reasons on flux-owned roles | 2026-10-18 | 0 | - | ✓ |
+| [#5524](https://github.com/DanielH2018/server/issues/5524) | low | gap | container | artifacts' peer directory mode flips between the k8s_host_files task (0750) and the peer sync's rsync -a (755) | 2026-10-18 | 0 | - | ✓ |
+| [#5561](https://github.com/DanielH2018/server/issues/5561) | low | improvement | container | Drop sonarr's and radarr's arr-notification include once the census tests stop naming it | 2026-10-18 | 0 | - | ✓ |
+| [#5570](https://github.com/DanielH2018/server/issues/5570) | low | improvement | docs | Three host health scripts still compare themselves to the deleted configarr-health.sh | 2026-10-18 | 0 | - | - |
+| [#5577](https://github.com/DanielH2018/server/issues/5577) | low | gap | cicd | A secrets.yml-only range never redeploys the k8s roles that read the changed key | 2026-10-18 | 0 | - | - |
+| [#5579](https://github.com/DanielH2018/server/issues/5579) | low | gap | cicd | Entry points that run their whole job on --help still pass the --help test | 2026-10-18 | 0 | - | ✓ |
+| [#5588](https://github.com/DanielH2018/server/issues/5588) | low | gap | cicd | Re-measure the cancelled share of CI job-minutes after fan-out PRs open as drafts | 2026-10-18 | 0 | - | ✓ |
+| [#5592](https://github.com/DanielH2018/server/issues/5592) | low | improvement | cicd | The renderer parses the same group_vars, host_vars and defaults again for every render_context call | 2026-10-18 | 0 | - | ✓ |
+| [#5593](https://github.com/DanielH2018/server/issues/5593) | low | gap | cicd | A promote run with no flux-owned tag writes no image contexts, so the images job refuses and publish never runs | 2026-10-18 | 0 | - | ✓ |
+| [#5597](https://github.com/DanielH2018/server/issues/5597) | low | improvement | docs | media-volume's inventory comment names the deleted seeding task | 2026-10-18 | 0 | - | ✓ |
+| [#5599](https://github.com/DanielH2018/server/issues/5599) | low | improvement | cicd | The static-ratchet-tests hook still runs 21-35s on a loaded daniel-server | 2026-10-18 | 0 | - | ✓ |
+| [#5601](https://github.com/DanielH2018/server/issues/5601) | low | improvement | docs | Three comments cite the retired janitorr-health.sh.j2 as a precedent | 2026-10-18 | 0 | - | ✓ |
 
 ## Settled findings — do not re-flag
 
