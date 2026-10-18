@@ -1,5 +1,5 @@
 {
-  "checksum": "dc862bb1e723ccbb29e3e1db668c6b853df980b07f7f43e407b285ef3eb4715b",
+  "checksum": "66ef681743cfe7eb36f3a5d633f3dd09bfe85f09a6f875d58cac02c13d875b84",
   "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
   "key": "CLAUDE.md#Where to Look (task → start here)",
   "row": {
@@ -11,8 +11,9 @@
       "ansible/roles/k8s/home-assistant/CLAUDE.md": "89536b66d56eb717b35ee7fe051bd6372cd64a67b0e3019228410f3532d8b729",
       "ansible/roles/k8s/manifests/CLAUDE.md": "512da50d019dca92ae0a3494c7f7208debd8bebeaca5ff2a6c0ebebcbba07795",
       "ansible/roles/k8s/monitor-bridge/files/registry.py": "5bd850ab8f3bde64c398148ffbde8c3e3c6dabf92a25c62255bd27a53b883b57",
-      "ansible/roles/k8s/monitor-bridge/templates/deployment.yaml.j2": "46cd54e7bcfc8ec6d9a2dfedc3c8a79e5eea81435f64e7db46b26082bda291e4",
+      "ansible/roles/k8s/monitor-bridge/templates/script-configmap.yaml.j2": "51446bd48f857d3f8b2e0c78cd49105367c3069b52fe579eea37106eb453348a",
       "ansible/roles/setup/claude_code/CLAUDE.md": "ce65dd0ec3c55c2822a8ee68270ffdf4ae8249d756413e55ccf641845c2d0071",
+      "ansible/templates/checksum-annotation.yml.j2": "a4437adb5cdb813552c464e339f5feb58deb96c0f949caa0382bdfd9c85a7e48",
       "ansible/tests/": "e357225b83fd4644ff28aed4f884e39d160ba119e06ef6d79414314f78198a87",
       "ansible/tests/repo/test_role_claude_md.py": "fbbd0488cc77c1eb19fa67420eb303c722e3fb893ce12ba73191e3ca7f97c3cc",
       "ansible/tests/setup/test_setup_cron_roles_have_a_contract.py": "ec27d3374d09d9cde28038d3a44e820cbb97a27bda24ab19f911f18095b8ca77",
@@ -25,6 +26,6 @@
       "scripts/docs/build_docs.py": "73dd87c1dec39fcf8c7cb3f9062e58af58d167287911fd4f112daa276bda0d51"
     },
     "python": "3.14",
-    "verified_sha": "e70607e2c"
+    "verified_sha": "1e6479eeb"
   }
 }

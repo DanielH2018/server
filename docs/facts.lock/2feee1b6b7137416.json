@@ -1,13 +1,15 @@
 {
-  "checksum": "5251be3c6bb367dacf7b9b636d7fd2a5ff648be07874e3ac27eec1a9dc6ec647",
+  "checksum": "2d47ac321426c03e7b961bd681640a9bc4b7c023051a00a18de6ea5dc817805a",
   "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
   "key": "ansible/roles/k8s/monitor-bridge/CLAUDE.md#Module layout — and the one rule that governs it",
   "row": {
     "atoms": {
       "ansible/filter_plugins/py_table.py": "4b98d617829460acfed0f8f562ab6034df5f8d228687ed0396be9a91456c520a",
-      "ansible/tests/services/test_monitor_bridge_modules.py": "b1d9ab10dd3a24a919377790269995ccdeb773a6269daf2776abc3991ee55685"
+      "ansible/tests/services/test_monitor_bridge_modules.py": "b1d9ab10dd3a24a919377790269995ccdeb773a6269daf2776abc3991ee55685",
+      "scripts/renderer/renderer_lib/restart.py": "b331d41dae536f3934ebb79237271891eab11638dba5103a0271331fd42eb8d4",
+      "scripts/renderer/tests/test_renderer_monitor_bridge_script.py": "cab9517e406aa8d2efc6c95483a84fb23314500120e033caae77061f59e55172"
     },
     "python": "3.14",
-    "verified_sha": "66e237c86"
+    "verified_sha": "1e6479eeb"
   }
 }
