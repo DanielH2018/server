@@ -49,9 +49,11 @@ def test_a_rotation_applies_the_k8s_roles_reading_its_key(gitops_deploy, tick, s
 
 
 def test_a_rotation_no_k8s_role_reads_applies_nothing(gitops_deploy, tick, state):
+    """The lookup ran and answered nothing, so the range keeps the no-services branch."""
     tick.declare(DECLARES)
     tick.paths = [SECRETS]
     assert gitops_deploy.main(tick.tools, tick.config, state) == 0
+    assert ("secret_k8s", [tick.local, ORIGIN]) in tick.log
     assert tick.playbooks == []
     assert tick.merges == [ORIGIN]
     assert receipt_applied(state) is None

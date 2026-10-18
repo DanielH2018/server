@@ -820,9 +820,10 @@ those tags (a failed bump on a broad tick writes one) and leaves any other broad
     class too, through `lib.deployer_park`, and names a pending role from the moment it is
     recorded.
 - **Secrets-only pushes** (`ansible/vars/secrets.yml` changed with no service template — a
-  rotation pushed from another machine) are fast-forwarded but **not** redeployed: the new
-  value only reaches a container on its next deploy, so the deployer alerts (once per SHA,
-  the `secrets` slot of `alerted_shas`) to redeploy the consumers. On a broad tick that page fires
+  rotation pushed from another machine) are fast-forwarded, and the tick applies only the
+  readers the two bullets below derive. The new value reaches any other consumer only on its
+  next deploy, so the deployer alerts (once per SHA, the `secrets` slot of `alerted_shas`) to
+  redeploy the consumers. On a broad tick that page fires
   from every exit that leaves the range merged (#2383), because `alert_once` advances its marker
   on detection and a skipped page is never sent. The contention arm sends nothing, because it
   resets the tree (#2459). `secrets.yml` is deliberately NOT in the broad list: the `/add-secret`

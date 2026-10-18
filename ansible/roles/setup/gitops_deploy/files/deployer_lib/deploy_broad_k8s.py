@@ -8,13 +8,12 @@ of them, and named none of them either, because `alert_deferred` fires its k8s c
 `ChangeSet.k8s` alone. These functions are that half of the broad arm: `apply_broad_k8s`
 deploys it, and `covered_by_plane` says which bumps the deploy plane applies on its own.
 
-A module of its own because it answers one question from its arguments and the toolbox: which
-image-pin bumps in a broad range deploy. It reads nothing private to `deploy_handlers.py`, and
-`handle_broad` there is the only production caller of these.
-
-`route_secret_k8s_readers` is the other k8s half (#5577): the roles reading a `secrets.yml` key
-a range moved, when no deploy-plane path sends the range to `narrow`. `main()` calls it after
-`plan_tick`, and `handle_broad` appends the plan it returns after its own.
+A module of its own because it answers, from its arguments and the toolbox, which k8s roles
+a broad range deploys beside its planes. It reads nothing private to `deploy_handlers.py`.
+`handle_broad` there calls the bump functions, and `main()` calls `route_secret_k8s_readers`
+after `plan_tick`. That one is the other k8s half (#5577): the roles reading a `secrets.yml`
+key a range moved, when no deploy-plane path sends the range to `narrow`. `handle_broad`
+appends the plan it returns after its own.
 
 Reach `deploy_io` and `deploy_alerts` qualified, never by from-import.
 """
