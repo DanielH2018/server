@@ -7,7 +7,7 @@ declarations the real template renders.
 
 Under Flux the render carries only placeholder tokens, so the assert's successor is the
 `_push_token` refusal in `cluster_vars.py write` (#5712). The last two tests hold that refusal
-to the same rule and to every key the render places in a `push_token` field.
+to the same rule and run it over every key the render places in a `push_token` field.
 """
 
 import copy
@@ -112,10 +112,10 @@ def test_the_cluster_file_refusal_uses_autokumas_rule():
     assert cluster_vars.PUSH_TOKEN.pattern == _PUSH_TOKEN.pattern
 
 
-def test_every_rendered_push_token_is_named_as_the_refusal_selects_it():
-    # `cluster_vars.py write` selects a push token by its `_push_token` suffix. Under the test
-    # render each token is `stub-<variable>`, so a token fed by a variable named otherwise
-    # would reach the cluster file unchecked.
+def test_cluster_vars_refuses_a_malformed_value_in_every_rendered_push_token():
+    # Under the test render each token is `stub-<variable>`, so the variables are the keys the
+    # cluster file holds. Feeding each one a base64 token through the real refusal ties the
+    # check to how `successor_refusals` selects keys, not to a restated suffix.
     variables = {
         entity["push_token"].removeprefix("stub-")
         for entity in _entities().values()
@@ -126,4 +126,10 @@ def test_every_rendered_push_token_is_named_as_the_refusal_selects_it():
         "homelab_eval_push_token",
         "monitor_bridge_cpu_push_token",
     } <= variables
-    assert sorted(v for v in variables if not v.endswith("_push_token")) == []
+    base64_token = "QUJD" * 10 + "QQ+="
+    refusals = cluster_vars.successor_refusals(
+        dict.fromkeys(variables, base64_token), frozenset(variables)
+    )
+    refused = {line.split(":", 1)[0] for line in refusals}
+    assert sorted(variables - refused) == []
+    assert all(base64_token not in line for line in refusals)
