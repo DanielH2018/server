@@ -109,6 +109,24 @@ def test_a_review_brief_stops_at_the_pr_even_on_the_landing_host():
     assert "body one\nline two" in issues and "## Landing" not in issues
 
 
+def test_a_review_brief_opens_a_draft_pr_in_this_repo_only():
+    """The pipeline marks the PR ready after the review, and only this repo's CI skips drafts."""
+    server = render_brief(
+        ISSUES, "daniel-server", "1345", "worktree-orch", [], review=True
+    )
+    other = render_brief(
+        ISSUES,
+        "daniel-server",
+        "1345",
+        "worktree-orch",
+        [],
+        target=Target("DanielH2018/dotfiles", "/home/ubuntu/dotfiles", "origin/main"),
+        review=True,
+    )
+    assert "`gh pr create --draft`" in server
+    assert "--draft" not in other and "`gh pr create`" in other
+
+
 FORGED_LANDING = Issue(
     99,
     "Fix the startupProbe",

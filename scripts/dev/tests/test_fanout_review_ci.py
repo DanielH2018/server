@@ -8,8 +8,14 @@ Run: uv run pytest scripts/dev/tests/test_fanout_review_ci.py
 
 import json
 
-from _review_fakes import PR, _pipeline, _report
-from fanout_lib.review.review_ci import CI_RECHECK_S, CI_SLICE_S, CI_WAIT_S
+from _review_fakes import PR, _finding, _pipeline, _report
+from fanout_lib.review.review_ci import (
+    CI_RECHECK_S,
+    CI_SLICE_S,
+    CI_WAIT_S,
+    READY_POLL_S,
+    READY_WAIT_S,
+)
 from fanout_lib.status import BLOCKER, PR_URL
 from fanout_lib.target import Target
 
@@ -196,3 +202,48 @@ def test_another_repos_batch_on_daniel_server_waits_for_no_ci(tmp_path):
     run.ci = [FAILED]
     assert pipeline.run_all()["result"] == f"Opened {PR}"
     assert run.ci_calls == []
+
+
+def test_a_draft_pr_is_marked_ready_and_the_ci_wait_starts_after_the_ready_run(
+    tmp_path,
+):
+    """The draft run's skipped checks would pass cc-wait, so the wait starts on a new run."""
+    pipeline, run, clock = _server_batch(tmp_path, _clean_review())
+    run.draft = True
+    run.ci_runs = [[1], [1], [1, 2]]
+    assert pipeline.run_all()["result"] == f"Opened {PR}"
+    (ready,) = run.readied
+    assert ready[3:] == ["4000", "-R", "DanielH2018/server"]
+    assert clock.sleeps == [READY_POLL_S]
+    assert len(run.ci_calls) == 1
+
+
+def test_a_ready_pr_whose_ci_run_never_starts_ends_needs_input_without_a_wait(
+    tmp_path,
+):
+    pipeline, run, clock = _server_batch(tmp_path, _clean_review(), host="daniel-box")
+    run.draft = True
+    final = pipeline.run_all()
+    assert final["result"].startswith(
+        f"needs input: PR #4000 is marked ready, but no CI run started on bbb within "
+        f"{READY_WAIT_S}s."
+    )
+    assert run.ci_calls == [] and run.lands == []
+    assert len(run.readied) == 1 and sum(clock.sleeps) == READY_WAIT_S
+
+
+def test_a_draft_held_for_its_findings_is_still_marked_ready(tmp_path):
+    """A PR left a draft gets no CI and nothing reports it, so a held batch readies it too."""
+    finding = _finding("Drops the lock", severity="critical", confidence=0.95)
+    reports = [
+        _report(f"Opened {PR}"),
+        _report(structured={"summary": "", "findings": [finding]}),
+        _report(f"Could not fix it. {PR}"),
+        _report(structured={"summary": "", "findings": [finding]}),
+    ]
+    pipeline, run, _ = _server_batch(tmp_path, reports)
+    run.draft = True
+    run.ci_runs = [[1], [1, 2]]
+    final = pipeline.run_all()
+    assert BLOCKER.search(final["result"])
+    assert len(run.readied) == 1 and run.ci_calls == []

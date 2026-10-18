@@ -9,6 +9,10 @@ repaired the branch by hand. The daniel-box pipeline had the same gap one step l
 wait and one resume, after the review and its fix round. On daniel-box they run before
 `land.sh`.
 
+THE DRAFT (#5563). This repo's review batch opens its PR as a draft, and `ci.yml` runs no job on
+a draft. `ready_gate` marks the PR ready once the review and its fix round are done. It then
+waits for the run that marking ready starts, before any wait reads the head's checks.
+
 THE WAIT is `cc-wait gh-ci --pr <n>`, the waiter every other wait in this repo uses. It reads
 every check run on the PR's current head, so a push from the resume moves the wait to the new
 commit. It exits 0 for a pass, 1 for a failed or cancelled run, 75 when its slice of the budget
@@ -51,6 +55,7 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 from fanout_lib.review.review_land import WAIT_MARGIN_S, login
 from fanout_lib.review.review_prompts import ci_fix_prompt
 from fanout_lib.review.review_record import Phase
+from fanout_lib.brief import drafts_pr
 from fanout_lib.status import PR_URL
 from fanout_lib.target import Target
 
@@ -67,6 +72,10 @@ TAIL_LINES = 40
 # The cap on one failed job's log in the resume prompt.
 LOG_CHARS = 4000
 MAX_FAILING = 8
+# How long `ready_for_ci` waits for the run `gh pr ready` starts. GitHub registers a run within
+# seconds of the event, so two minutes is a queue that is stuck, not slow.
+READY_WAIT_S = 120
+READY_POLL_S = 10
 # The conclusions cc-wait's `gh-ci` source fails on (`cc_wait/github.py:FAILED_CONCLUSIONS`),
 # and `error`, which a commit status reports. `cancelled` is deliberately absent: it is no
 # verdict.
@@ -182,6 +191,93 @@ def wait_for_ci(
         if done.returncode != 75:
             sleep(CI_RECHECK_S)
     return CiResult(NO_VERDICT, line)
+
+
+def _ci_run_ids(run: Runner, repo: str, sha: str) -> set[int] | None:
+    """The ids of the `ci.yml` pull-request runs on `sha`, or None when the read fails."""
+    out = run(
+        [
+            "gh",
+            "api",
+            f"repos/{repo}/actions/workflows/ci.yml/runs?head_sha={sha}&event=pull_request",
+            "--jq",
+            "[.workflow_runs[].id]",
+        ],
+        None,
+    )
+    try:
+        ids = json.loads(out.stdout) if out.returncode == 0 else None
+    except ValueError:
+        return None
+    return {i for i in ids if isinstance(i, int)} if isinstance(ids, list) else None
+
+
+def ready_for_ci(
+    run: Runner,
+    pr_url: str,
+    repo: str,
+    clock: Callable[[], float],
+    sleep: Callable[[float], None],
+) -> str:
+    """Mark the draft PR ready for review, then wait for the `ci.yml` run that starts.
+
+    Returns "" once that run exists, or when the PR was not a draft. Otherwise returns why
+    CI cannot be trusted to have started, which the caller turns into `needs input:`.
+
+    The wait is the guard. A draft run skips every job, the `prek` gate included. Both
+    `cc-wait gh-ci` and `land.sh`'s `await_ci` count a skipped check run as a pass. For the
+    seconds before the ready run registers, the draft run's skipped checks are therefore the
+    only ones on the head, and a wait started then would pass a head that nothing tested.
+    A run id that was absent before `gh pr ready` is the ready run, because the draft run on
+    the same head registered minutes earlier, when the implementer or the fix round pushed.
+    """
+    pr = pr_url.rstrip("/").rsplit("/", 1)[-1]
+    out = run(
+        ["gh", "pr", "view", pr, "-R", repo, "--json", "isDraft,headRefOid"], None
+    )
+    try:
+        view = json.loads(out.stdout)
+    except ValueError:
+        view = None
+    if not isinstance(view, dict) or "isDraft" not in view:
+        return f"`gh pr view {pr}` gave no draft state, so the PR may still be a draft"
+    if view["isDraft"] is not True:
+        return ""
+    sha = str(view.get("headRefOid") or "")
+    before = _ci_run_ids(run, repo, sha) if sha else None
+    if before is None:
+        return f"could not list the CI runs on PR #{pr}'s head before marking it ready"
+    ready = run(["gh", "pr", "ready", pr, "-R", repo], None)
+    if ready.returncode != 0:
+        why = (ready.stderr or "").strip() or f"exit {ready.returncode}"
+        return (
+            f"`gh pr ready {pr}` failed ({why}), so the PR is still a draft with no CI"
+        )
+    end = clock() + READY_WAIT_S
+    while clock() < end:
+        now = _ci_run_ids(run, repo, sha)
+        if now is not None and now - before:
+            return ""
+        sleep(READY_POLL_S)
+    return (
+        f"PR #{pr} is marked ready, but no CI run started on {sha[:8]} within "
+        f"{READY_WAIT_S}s"
+    )
+
+
+def ready_gate(pipe: "Pipeline") -> dict | None:
+    """Mark this repo's draft PR ready (`ready_for_ci`); a `needs input:` report if it fails."""
+    if not drafts_pr(pipe.target):
+        return None
+    why = ready_for_ci(
+        pipe.run, pipe.record.pr, pipe.target.repo, pipe.clock, pipe.sleep
+    )
+    if not why:
+        return None
+    # `status` reads any `https://…/pull/N` in the text as `done`, so the hold names the PR
+    # without its scheme.
+    pr = pipe.record.pr.removeprefix("https://")
+    return {"type": "result", "is_error": False, "result": f"needs input: {why}.\n{pr}"}
 
 
 def awaits_ci(target: Target) -> bool:

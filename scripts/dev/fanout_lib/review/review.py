@@ -12,7 +12,7 @@ THE PHASES, each one `claude -p` in the batch's worktree:
    the issue text and nothing else, writes one failing test per stated behaviour and commits
    it. `red_gate.red_gate` then proves the tests fail on the unchanged code; the module says
    how. A refused red commit is reset away and the batch runs as if it had no red phase.
-1. implement — the brief on stdin. A `--review` brief tells the agent to stop at the PR.
+1. implement — the brief on stdin. A `--review` brief stops the agent at its PR, a draft here.
 2. review — a fresh session with the issue text and the diff only, never the implementer's
    transcript. Edit and Write are denied to it, and it returns findings as structured output.
    Before it, this repo's batch runs `base_check`, and the reviewer is told which of the PR's
@@ -22,6 +22,7 @@ THE PHASES, each one `claude -p` in the batch's worktree:
    gate runs again after the fix; a batch still failing it is not landed. A batch passing it
    has each fix hunk reverted on its own under the red tests (`hunk_check`), for the record.
 4. delta review — a fresh reviewer reads only the fix's commits.
+4b. ready — `review_ci.ready_gate` marks a draft PR ready and waits for its CI run (#5563).
 5. land — on the deploy host, the pipeline runs `land.sh` itself (`review_land`) and resumes
    the implementer only for a verdict that needs a decision, as the `apply` phase. Before the
    landing, and on every other host instead of it, a session resumes to file what is left.
@@ -116,7 +117,7 @@ from fanout_lib.review.base_check import BaseCheck, unproven_tests
 from fanout_lib.review.git_state import GitState, changed, snapshot
 from fanout_lib.review.hunk_check import HunkCheck, red_detection
 from fanout_lib.review.processes import reaping, run_process
-from fanout_lib.review.review_ci import awaits_ci, ci_gate
+from fanout_lib.review.review_ci import awaits_ci, ci_gate, ready_gate
 from fanout_lib.review.review_land import RESUME_VERDICTS, land
 from fanout_lib.review.review_land import report as landing_report
 from fanout_lib.review.review_record import (
@@ -582,15 +583,18 @@ class Pipeline:
 
         if red is not None and not green:
             self._detection(red)
+        # Whatever the review found, since a PR left a draft gets no CI.
+        ready = ready_gate(self)
         final = (
             held_for_green(self.record, green)
             if green
             else held_for_findings(self.record, self.state_dir)
-        )
+        ) or ready
         if final is None and awaits_ci(self.target):
             # Before the comment, so the comment carries the CI gate beside the others.
             last, final = ci_gate(self, last)
-        self._comment()
+        comment = ["gh", "pr", "comment", self.record.pr, "--body-file", "-"]
+        self.run(comment, comment_body(self.record))
         final = final or self._finish(last)
         self.record.outcome = outcome(final, has_pr=True)
         self._save()
@@ -602,12 +606,6 @@ class Pipeline:
                 f"read them in {self.state_dir}.\n{final.get('result') or ''}"
             )
         return final
-
-    def _comment(self) -> None:
-        self.run(
-            ["gh", "pr", "comment", self.record.pr, "--body-file", "-"],
-            comment_body(self.record),
-        )
 
     def _finish(self, last: Phase) -> dict:
         if lands(self.host, self.target.repo):
