@@ -35,6 +35,16 @@ def test_ghcr_is_mirrored_through_the_registry(host, address):
     assert ghcr["endpoint"] == [endpoint], ghcr
 
 
-def test_the_push_store_mirror_is_unchanged():
+@pytest.mark.parametrize(
+    ("host", "address"),
+    [
+        ("daniel-box", "localhost"),
+        ("daniel-server", VARS["k8s_registry_cluster_ip"]),
+    ],
+)
+def test_the_push_store_mirror_keeps_its_endpoint(host, address):
     """The ghcr.io entry is beside the push store's, not in place of it."""
-    assert _mirrors("daniel-server").get("localhost:5000")
+    port = VARS["k8s_registry_port"]
+    push = _mirrors(host).get(f"localhost:{port}")
+    assert push, f"{host}'s registries.yaml lost the push store's mirror"
+    assert push["endpoint"] == [f"http://{address}:{port}"], push
