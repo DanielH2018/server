@@ -87,8 +87,10 @@ spec:
         # ErrUnsupported in distribution v3.1.2), which would break every image-builder push
         # and registry-gc.sh's untag DELETEs. A sidecar rather than its own Deployment keeps
         # the pinned ClusterIP, the node pin, the NetworkPolicy and the PVC this role already
-        # has. The cost: registry-gc.sh scales this pod to zero for up to
+        # has. Two costs. registry-gc.sh scales this pod to zero for up to
         # registry_k8s_gc_deadline_s every Sunday, and containerd falls back to ghcr.io then.
+        # And a mirror container that cannot start leaves the whole pod unready, which takes
+        # the push store's Service endpoint down with it.
         - name: ghcr-mirror
           image: {{ registry_k8s_image }}
           ports:
@@ -107,11 +109,8 @@ spec:
             # crash-loops.
             - name: REGISTRY_HTTP_DEBUG_ADDR
               value: "127.0.0.1:{{ registry_k8s_ghcr_mirror_debug_port }}"
-            # A directory beside the push store's `docker/` tree on the same volume. The GC
-            # Job's `garbage-collect` walks only `/var/lib/registry/docker/registry/v2`, so it
-            # never reads or deletes this cache.
             - name: REGISTRY_STORAGE_FILESYSTEM_ROOTDIRECTORY
-              value: {{ registry_k8s_ghcr_mirror_root }}
+              value: /var/lib/registry
             - name: REGISTRY_PROXY_REMOTEURL
               value: https://ghcr.io
             # Never expire. The default 168h would drop nut's image a week after its last
@@ -119,8 +118,11 @@ spec:
             # distribution's proxyregistry.go reads a zero TTL as "never expire".
             - name: REGISTRY_PROXY_TTL
               value: "0s"
+          # Its own claim, not registry-data. Every ghcr.io image in the cluster pulls through
+          # here, not only danielh2018's, and nothing expires them, so a shared volume would
+          # fill and fail the push store's builds too. The GC Job mounts only registry-data.
           volumeMounts:
-            - name: registry-data
+            - name: ghcr-mirror-data
               mountPath: /var/lib/registry
           # `/v2/` answers from the local handler, so neither probe depends on ghcr.io being
           # reachable. A probe that did would mark the whole pod unready in a WAN outage and
@@ -142,3 +144,6 @@ spec:
         - name: registry-data
           persistentVolumeClaim:
             claimName: {{ registry_k8s_claim }}
+        - name: ghcr-mirror-data
+          persistentVolumeClaim:
+            claimName: {{ registry_k8s_ghcr_mirror_claim }}

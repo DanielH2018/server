@@ -9,14 +9,12 @@ WAN outage. Four properties keep it from being decorative or from breaking the p
   * its TTL is zero. The 168h default drops nut's image a week after its last rebuild;
   * it binds neither the push store's port nor the baked config's debug port :5001, which the
     two containers would otherwise both claim in the shared pod netns;
-  * its store sits outside the push store's `docker/registry/v2` tree, which the GC Job's
-    garbage-collect walks.
+  * its store is its own claim. Every ghcr.io image in the cluster pulls through it and none
+    expires, so on the push store's claim it would fill the volume and fail every build.
 
 The `registries.yaml` half is `ansible/tests/setup/test_k3s_registries_mirror_ghcr.py`, and the
 NetworkPolicy half is in `ansible/tests/k8s/test_registry_netpol_grants_follow_the_pinned_node.py`.
 """
-
-import posixpath
 
 from lib import yaml_fast
 from _manifest_guards import K8S, _render, _role_context
@@ -78,16 +76,33 @@ def test_the_mirror_binds_its_own_ports():
     assert container_ports == {port}, container_ports
 
 
-def test_the_mirror_store_is_outside_the_collected_tree():
-    push_root = _env(_containers()["registry"])[
-        "REGISTRY_STORAGE_FILESYSTEM_ROOTDIRECTORY"
+def test_the_mirror_stores_on_its_own_claim():
+    """Every ghcr.io image pulls through the mirror and none expires, so it gets its own volume.
+
+    On the push store's claim the cache would fill it and fail every image build. The GC Job
+    mounts only the push store's claim, so its garbage-collect never walks the cache.
+    """
+    (deployment,) = [
+        d for d in _docs("deployment.yaml.j2") if d["kind"] == "Deployment"
     ]
-    mirror_root = _env(_mirror())["REGISTRY_STORAGE_FILESYSTEM_ROOTDIRECTORY"]
-    collected = posixpath.join(push_root, "docker")
-    assert mirror_root != push_root, mirror_root
-    assert not (mirror_root + "/").startswith(collected + "/"), (
-        f"the mirror store {mirror_root} sits inside {collected}, which garbage-collect walks"
-    )
+    volumes = {
+        v["name"]: v["persistentVolumeClaim"]["claimName"]
+        for v in deployment["spec"]["template"]["spec"]["volumes"]
+    }
+
+    def claims(container: dict) -> set[str]:
+        return {volumes[m["name"]] for m in container.get("volumeMounts", [])}
+
+    mirror = claims(_mirror())
+    assert mirror, "the mirror mounts no claim"
+    assert CTX["registry_k8s_claim"] not in mirror, mirror
+    (gc,) = _docs("gc-job.yaml.j2")
+    gc_claims = {
+        v["persistentVolumeClaim"]["claimName"]
+        for v in gc["spec"]["template"]["spec"]["volumes"]
+        if "persistentVolumeClaim" in v
+    }
+    assert not mirror & gc_claims, (mirror, gc_claims)
 
 
 def test_the_service_exposes_the_mirror_on_the_pinned_cluster_ip():

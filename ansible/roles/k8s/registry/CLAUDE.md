@@ -12,7 +12,8 @@ registry round trip. See repo-root `CLAUDE.md` for shared conventions.
 - **Images:** `registry` (`registry_k8s_image`), `gcr.io/go-containerregistry/crane`
   (`registry_k8s_crane_image`), `alpine` (`registry_k8s_netpol_probe_image`)
 - **Route:** none (no `templates/ingressroute.yaml.j2`)
-- **Claim:** `registry-data` (no backup (StorageClass longhorn-nobackup))
+- **Claims:** `registry-data` (no backup (StorageClass longhorn-nobackup)),
+  `registry-ghcr-mirror` (no backup (StorageClass longhorn-nobackup))
 - **Auto-deploy:** denylisted (`k8s_autodeploy: false`) — dependency edges — image-supply path
   for n8n/homelab-mcp/ical-proxy/nut/pi-peer-backup/code-server/terraria/valheim/karakeep; no
   intra-tick ordering. ALSO Recreate + its own PVC (blob store) — two independent reasons.
@@ -40,9 +41,12 @@ registry round trip. See repo-root `CLAUDE.md` for shared conventions.
   - It listens on `k8s_registry_ghcr_mirror_port` (5002) on the same pinned ClusterIP and
     loopback hostPort scheme. `templates/networkpolicy.yaml.j2` admits that port only from the
     two node grants, and the netpol probe Job checks a pod is refused on it.
-  - Its store is `registry_k8s_ghcr_mirror_root`, beside the push store's `docker/` tree on the
-    same claim. `garbage-collect` never walks it, and its TTL is zero, so nothing reclaims a
-    cached tag. containerd falls back to `ghcr.io` while the GC scales the pod to zero.
+  - It caches every `ghcr.io` image in the cluster, not only `danielh2018`'s, because a
+    `registries.yaml` mirror covers the whole host. Its store is therefore its own claim,
+    `registry_k8s_ghcr_mirror_claim` (30Gi, `longhorn-nobackup`), which the GC Job never
+    mounts. The TTL is zero, so nothing reclaims a cached tag (#5541).
+  - containerd falls back to `ghcr.io` while the GC scales the pod to zero. A mirror container
+    that cannot start leaves the whole pod unready, push store included.
 - A weekly garbage collection (`gc-job.yaml.j2`, Sunday 04:20) takes the registry
   offline for up to 20 minutes — nothing else reclaims space, and every rebuild pushing
   the same `latest` tag orphans the previous manifest.
