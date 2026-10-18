@@ -34,9 +34,20 @@ left by an earlier run that reused a `--testrunuid`. The second runs after xdist
 workers down, so no worker is still reading. A run killed before that leaves its directory in
 the temporary directory, where nothing reads it: the next run has a new id.
 
-Without xdist there is no run id, and `shared_value` calls `compute` directly. No cache
-survives between runs, and nothing hashes the tree, because a stale cache would let a test
-pass while checking nothing.
+Without xdist there is no run id, and `shared_value` keeps the pickled value in the process
+instead. No cache survives between runs, and nothing hashes the tree, because a stale cache
+would let a test pass while checking nothing.
+
+## Who pays for the render
+
+DECIDED: the fleet render leaves `--durations`, as the k8s render in `conftest.py` does.
+`pytest_collection_finish` builds it before any test's timed phases, in a run that collected
+a module importing from here. Charged to a test instead, it landed on whichever module asked
+first, which varied by shard and by run, while the serial `pytest_shard.py --record` run
+charged every module alone. The shard weight gate then failed CI on every module that did
+not pay: a recorded 11.58s against a measured 0.03s (#5734). Under xdist each worker waits on
+the one build before its first test, so a shard that holds a consumer pays about one render
+of wall time that no weight models.
 
 Run: uv run pytest ansible/tests/repo/test_render_share.py
 """
@@ -57,6 +68,11 @@ from types import ModuleType
 import pytest
 
 RUN_ID_ENV = "PYTEST_XDIST_TESTRUNUID"
+# The text that marks a test module as a reader of the shared fleet render.
+CONSUMER_IMPORT = "from render_share import"
+
+# The pickled values of a run with no xdist run id, by key digest.
+_IN_PROCESS: dict[str, bytes] = {}
 
 
 def run_root(run_id: str | None = None) -> Path | None:
@@ -95,15 +111,17 @@ def shared_value[T](
         key: Every input that changes what `compute` returns, as JSON-serialisable data.
         compute: Returns the value to share, which must be picklable.
         root: The shared directory; None derives it from the xdist run id. With neither,
-            `compute` runs on every call and nothing is stored.
+            the value is kept in this process only.
 
     Raises:
         RuntimeError: `root` is not private to this user.
     """
     root = root or run_root()
-    if root is None:
-        return compute()
     digest = hashlib.sha256(json.dumps(key, sort_keys=True).encode()).hexdigest()[:24]
+    if root is None:
+        if digest not in _IN_PROCESS:
+            _IN_PROCESS[digest] = pickle.dumps(compute())
+        return pickle.loads(_IN_PROCESS[digest])
     final = _private(root) / f"{digest}.pickle"
     if not final.exists():
         with open(root / f"{digest}.lock", "a") as lock:
@@ -152,6 +170,40 @@ def sharing_placeholder_renders(*modules: ModuleType) -> Generator[None]:
                 placeholder_renderer(module.render_placeholders),
             )
         yield
+
+
+def is_consumer(path: Path) -> bool:
+    """Whether the test module at `path` imports from here, and so reads the fleet render."""
+    try:
+        return CONSUMER_IMPORT in path.read_text()
+    except OSError, UnicodeDecodeError:
+        return False
+
+
+def prebuild() -> None:
+    """Build the shared render of the fleet: every render target, with every secret key."""
+    from renderer.homelab_render import secret_keys
+    from renderer.renderer_lib.cluster import select_tags
+
+    placeholder_renderer()(select_tags(None), secret_keys())
+
+
+def build_if_consumed(paths: set[Path], build: Callable[[], None] = prebuild) -> bool:
+    """Run `build` when any test module in `paths` is a consumer, and say whether it ran."""
+    consumed = any(is_consumer(path) for path in paths)
+    if consumed:
+        build()
+    return consumed
+
+
+def pytest_collection_finish(session: pytest.Session) -> None:
+    """Build the fleet render before any test's timed phases, when a consumer was collected.
+
+    Under xdist this runs in each worker, which all collect every module. The first takes
+    the lock and builds, and the rest wait on it and read the file.
+    """
+    if not session.config.option.collectonly:
+        build_if_consumed({item.path for item in session.items})
 
 
 @pytest.hookimpl(tryfirst=True)
