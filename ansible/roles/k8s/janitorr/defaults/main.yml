@@ -42,11 +42,30 @@ janitorr_k8s_mem_limit: 1024Mi
 janitorr_k8s_cpu_request: "100m"
 janitorr_k8s_mem_request: 128Mi
 
-# Cluster-side health check. Values match monitor-bridge's JANITORR_WINDOW=12h and
+# The janitorr-health CronJob's verdict. Values match monitor-bridge's JANITORR_WINDOW=12h and
 # JANITORR_STARTUP_GRACE_S=600, so the verdict does not change with the host.
 janitorr_k8s_error_window_hours: 12
 janitorr_k8s_startup_grace_seconds: 600
 
-# */10 like the other three cluster-side health crons, and the Kuma monitor's interval must stay
-# above it so a dead cron trips the push watchdog.
-janitorr_k8s_health_cron_minute: "*/10"
+# The janitorr-health CronJob's schedule. Until H2.5c
+# (docs/target-architecture/host/h2-shrink-host-plane.md, Steps item 14) it was a daniel-box
+# host cron; tasks/main.yml keeps the absent arms that remove it. */10 like the other
+# cluster-side health readers, and the Kuma monitor's interval must stay above it so a dead
+# CronJob trips the push watchdog. The host cron's UTC minute field, unchanged.
+janitorr_k8s_health_schedule: "*/10 * * * *"
+
+# The health reader runs in the repo's pinned python image and gets kubectl from an init
+# container of alpine/k8s, which keeps the binary at /usr/bin/kubectl. The same two digests as
+# configarr's health reader (configarr_k8s_health_image), whose defaults record the evidence.
+janitorr_k8s_health_image: python:3.14-alpine@sha256:f6a589d43c42b9e7f7dc67a12d37132491f362859a5d750607710cc56da3bc72
+janitorr_k8s_health_kubectl_image: alpine/k8s:1.37.1@sha256:712dc5385d1c1a3f83b747fa9e40f64d433a97f72ff42f9755ff7dd1f62846e4
+
+# Above the reader's worst case: two 30 s kubectl calls (JANITORR_KUBECTL_TIMEOUT_S) plus
+# kuma_push's three 10 s attempts and its two 30 s waits, 150 s, plus the cold pull of both
+# images. No k8s/cronjob-gate runs this CronJob, so no gate timeout bounds it from above.
+janitorr_k8s_health_deadline_seconds: 420
+
+janitorr_k8s_health_cpu_limit: "200m"
+janitorr_k8s_health_mem_limit: 128Mi
+janitorr_k8s_health_cpu_request: "10m"
+janitorr_k8s_health_mem_request: 32Mi
