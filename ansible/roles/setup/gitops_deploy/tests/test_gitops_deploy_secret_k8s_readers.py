@@ -82,7 +82,10 @@ def test_a_refusal_naming_its_readers_owes_them(gitops_deploy, tick, state):
 
 
 def _merged_and_paged_owing_nothing(gitops_deploy, tick, state) -> None:
-    """One tick over a rotation whose k8s lookup did not answer with tags."""
+    """One tick over a rotation whose k8s lookup did not answer with tags.
+
+    The caller asserts the journal line naming its arm, so the lookup is known to have run.
+    """
     tick.declare(DECLARES)
     tick.paths = [SECRETS]
     assert gitops_deploy.main(tick.tools, tick.config, state) == 0
@@ -93,20 +96,22 @@ def _merged_and_paged_owing_nothing(gitops_deploy, tick, state) -> None:
 
 
 def test_a_nameless_refusal_merges_and_pages_without_owing_the_fleet(
-    gitops_deploy, tick, state
+    gitops_deploy, tick, capsys, state
 ):
     """#5409's regression in reverse: a refusal owing every declared service, for one key."""
     tick.secret_k8s = (3, "")
     _merged_and_paged_owing_nothing(gitops_deploy, tick, state)
+    assert "no k8s reader routed (exit 3)" in capsys.readouterr().out
 
 
 def test_a_failed_lookup_merges_and_pages_rather_than_parking(
-    gitops_deploy, tick, state
+    gitops_deploy, tick, capsys, state
 ):
     """A park on a failure that repeats, such as a checkout whose script predates
     `--deploy-tags`, would hold every landing behind one rotation."""
     tick.secret_k8s_error = subprocess.TimeoutExpired(["uv"], 30)
     _merged_and_paged_owing_nothing(gitops_deploy, tick, state)
+    assert "k8s lookup failed (TimeoutExpired" in capsys.readouterr().out
 
 
 def test_a_range_with_a_deploy_plane_path_leaves_its_keys_to_narrow(
