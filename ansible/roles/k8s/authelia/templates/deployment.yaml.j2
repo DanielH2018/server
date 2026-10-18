@@ -58,9 +58,10 @@ spec:
         #
         # stdout goes to /dev/null: `totp generate` prints the otpauth:// URI, which carries the
         # shared secret, and pod logs ship to Loki. The secret arrives through the environment,
-        # so it never reaches the pod spec. The three TOTP parameters are stated rather than
-        # left to the CLI defaults, because scripts/diagnostics/ui_login.py derives its codes
-        # from the same three constants.
+        # so it never reaches the pod spec. The Secret carries it as a `|` block, so the
+        # `printf` command substitution strips the block's trailing newline before the CLI sees
+        # it. The three TOTP parameters are stated rather than left to the CLI defaults, because
+        # scripts/diagnostics/ui_login.py derives its codes from the same three constants.
         #
         # DECIDED: the seed fails open. A failure logs to stderr and exits 0, so the portal still
         # starts. Under Recreate a failing init container is an SSO outage for the fleet, which
@@ -81,8 +82,9 @@ spec:
                 echo "seed-claude-totp: storage migration failed, so the TOTP row was not seeded" >&2;
                 exit 0;
               fi;
+              s=$(printf '%s' "$CLAUDE_TOTP_SECRET");
               if authelia storage user totp generate {{ authelia_k8s_claude_user }}
-              --config /secrets/configuration.yml --secret "$CLAUDE_TOTP_SECRET" --force
+              --config /secrets/configuration.yml --secret "$s" --force
               --algorithm SHA1 --digits 6 --period 30 >/dev/null; then
                 echo "seed-claude-totp: seeded the TOTP row";
               else

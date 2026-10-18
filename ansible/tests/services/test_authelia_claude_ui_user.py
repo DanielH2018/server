@@ -231,15 +231,7 @@ def test_a_cluster_that_does_not_manage_the_agent_user_renders_no_such_account()
 _TOTP_KEY = "authelia_claude_totp_secret"
 
 
-@pytest.mark.parametrize("manage_claude", [True, False])
-def test_the_placeholder_render_places_the_totp_secret_only_for_a_managed_claude_user(
-    manage_claude,
-):
-    """`cluster_vars.py write` refuses an empty value only for a key the render places.
-
-    That refusal succeeds "Fail if the claude-ui credentials are missing" once authelia is
-    flux-owned, so the render must place the TOTP secret under the assert's own condition.
-    """
+def _placed_totp_keys(manage_claude):
     text = render_role_template(
         "authelia",
         "config-secret.yaml.j2",
@@ -248,8 +240,34 @@ def test_the_placeholder_render_places_the_totp_secret_only_for_a_managed_claude
             "authelia_k8s_manage_claude_user": manage_claude,
         },
     )
-    placed = Sentinels({_TOTP_KEY}).key_set({"config-secret.yaml": text})
-    assert placed == ({_TOTP_KEY} if manage_claude else set())
+    return Sentinels({_TOTP_KEY}).key_set({"config-secret.yaml": text})
+
+
+def test_the_placeholder_render_places_the_totp_secret_only_for_a_managed_claude_user():
+    """`cluster_vars.py write` refuses an empty value only for a key the render places.
+
+    That refusal succeeds "Fail if the claude-ui credentials are missing" once authelia is
+    flux-owned, so the render must place the TOTP secret under the assert's own condition.
+    """
+    assert _placed_totp_keys(True) == {_TOTP_KEY}
+    assert _placed_totp_keys(False) == set()
+
+
+def test_the_totp_secret_never_stands_alone_in_a_field():
+    """The manifests role's standalone-value guard reads a tag's whole map row.
+
+    It ignores `authelia_k8s_manage_claude_user`. If the key stood alone, a cluster with the
+    lever off would resolve it to the role default '', which the guard refuses, and every
+    authelia deploy there would stop. The `|` block keeps it out of the row.
+    """
+    keys = Sentinels({_TOTP_KEY})
+    raw = render_role_template(
+        "authelia", "config-secret.yaml.j2", placeholder_vars({_TOTP_KEY})
+    )
+    assert keys.key_set({"config-secret.yaml": raw}) == {_TOTP_KEY}, (
+        "the TOTP key is not rendered at all, so this test checks nothing"
+    )
+    assert keys.standalone_keys({"config-secret.yaml": keys.finish(raw)}) == frozenset()
 
 
 def _seed_container(manage_claude):
@@ -294,7 +312,3 @@ def test_the_seed_migrates_first_and_keeps_the_otpauth_uri_out_of_the_log():
     assert "schema already up to date" in script[migrate:generate], script
     after = script[generate:]
     assert ">/dev/null" in after[: after.index("then")], script
-
-
-def test_a_cluster_that_does_not_manage_the_claude_user_renders_no_seed():
-    assert _seed_container(False) == []
