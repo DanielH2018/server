@@ -1,5 +1,5 @@
 {
-  "checksum": "9ae527e5ce9a31aa0befaf4c613ff6ebbe20fde977558dfeb6bcd91a5a59d541",
+  "checksum": "49fad2dfbc1d90294413411fb35afc121f0bb85f7257b69e956dbc3a4a9e2695",
   "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
   "key": "ansible/roles/k8s/observability/CLAUDE.md#One config change, one restart",
   "row": {
@@ -10,9 +10,10 @@
       "ansible/roles/k8s/observability/templates/prometheus.yaml.j2:DECIDED: rules reload in place": "5abbd531d56afb299173219d3007a490b4934626948fb2dba68f660f225d7eda",
       "ansible/templates/checksum-annotation.yml.j2": "a4437adb5cdb813552c464e339f5feb58deb96c0f949caa0382bdfd9c85a7e48",
       "ansible/tests/services/test_observability_config_rolls_one_workload.py": "caf82d57dcb82f857e7a920e93608c6a5aab3cb3e90daa7509c267d741d37406",
-      "scripts/renderer/renderer_lib/restart.py:pod_references": "f0ab1b9fb2cb2588d9d2760d150e48eca16277711a23725e2419013103f7554f"
+      "scripts/renderer/renderer_lib/restart.py:RELOADED_IN_PLACE": "03350e230052152bd7c0f6588994217c79a11aa7dc11df9bb21042b39ac57ecb",
+      "scripts/renderer/tests/test_renderer_self_rollout_restart.py::test_a_board_or_rule_edit_after_the_flip_moves_no_restart_value": "8b0e99a64281fbbe8a02949948895956974a80dfb2a351db657213364b45858b"
     },
     "python": "3.14",
-    "verified_sha": "8b5fcc593"
+    "verified_sha": "a6c8f93c7"
   }
 }
