@@ -11,7 +11,8 @@ Neither leg reaches a LAPI. What the sidecar's `cscli` reads from the live engin
 `/etc/crowdsec` and database is checked by the post-landing `--run` in the role's CLAUDE.md.
 
 The legs skip when `docker` is missing and `CI` is unset, and fail when `CI` is set, so CI
-always runs them.
+always runs them. Both are in `_LIVE_API_TESTS` in ansible/tests/leakguard.py, which hands
+them the real PATH. Every other test gets leakguard's `docker` shim, which exits 127.
 
 Run: uv run pytest ansible/roles/k8s/crowdsec/tests/test_jobs_image.py
 """
