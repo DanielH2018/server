@@ -3,11 +3,12 @@ name: CI
 on:
   # A draft PR runs no job; `ready_for_review` starts its first real run (#5563). A fan-out
   # batch opens its PR as a draft and pushes again while its review runs. From 2026-10-16 to
-  # 2026-10-18, 33 PR runs were cancelled by such a push, 477 runner-minutes and half of all
-  # cancelled PR runner-minutes, and 57 more finished on a head the fix round then replaced,
-  # 1,238 runner-minutes. Setting `types` replaces GitHub's default list, so the first three
-  # are that default restated. Every job below carries `github.event.pull_request.draft !=
-  # true`, which is true on a push, a dispatch and a merge_group run, where the field is unset.
+  # 2026-10-18, 27 PR runs were cancelled by a push made before the review ended: 359
+  # runner-minutes, 37% of all cancelled PR runner-minutes. 50 more finished on a head such a
+  # push replaced: 1,075 runner-minutes. Setting `types` replaces GitHub's default list, so
+  # the first three are that default restated. Every job below carries
+  # `github.event.pull_request.draft != true`, which is true on a push, a dispatch and a
+  # merge_group run, where the field is unset.
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
   # Inert. Merge queues are not offered on user-owned repositories, so the push run below

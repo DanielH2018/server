@@ -232,8 +232,8 @@ def drafts_pr(target: Target) -> bool:
     """Whether a review batch opens its PR as a draft, which the pipeline marks ready (#5563).
 
     This repo's `ci.yml` skips every job on a draft PR. A fan-out batch pushes again while its
-    review runs, so CI on the first push was wasted: from 2026-10-16 to 2026-10-18, 33 PR runs
-    were cancelled by such a push, and 57 more finished on a head the fix round replaced.
+    review runs, so CI on the first push was wasted: from 2026-10-16 to 2026-10-18, 27 PR runs
+    were cancelled by such a push, and 50 more finished on a head such a push replaced.
     `review_ci.ready_gate` marks the PR ready after the review. Another repo's CI does not
     skip drafts, so a draft there would only stop `autoland` from landing it.
     """
