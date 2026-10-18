@@ -72,6 +72,16 @@ def test_a_reserialised_guard_map_narrows_to_nothing(tree: Tree):
     assert _narrow(tree, *_refs(tree)) == set()
 
 
+def test_a_removed_row_of_a_retired_role_narrows_to_nothing(tree: Tree):
+    """A row whose role has no tag and no caller deploys nothing, rather than refusing."""
+    tree.write(
+        GUARD_MAP, GUARD_ROWS.replace("{\n", '{\n  "retired": ["retired_api_key"],\n')
+    )
+    tree.commit("a row for a role about to retire")
+    tree.write(GUARD_MAP, GUARD_ROWS)
+    assert _narrow(tree, *_refs(tree)) == set()
+
+
 def test_a_containers_list_edit_beside_a_guard_map_row_narrows_to_both(tree: Tree):
     """The measured refusal: an entry edit plus one map row reaches that entry and that row's
     caller, not most of the fleet."""
