@@ -92,6 +92,17 @@ See repo-root `CLAUDE.md` for shared conventions.
   toposorts from it); it does not gate pod start after a node reboot, when no Ansible run is
   involved at all.
 
+## The Flux verify Job waits in `templates/verify-inert/`
+
+Nothing renders that directory while Ansible owns janitorr. The flip PR renames it to
+`templates/verify/`, and the renderer then emits `janitorr-verify`, which replaces
+`tasks/verify.yml` with no `pods/exec` grant. `files/verify_janitorr.py` reads the mounted
+`application.yml`, dials sonarr, radarr and jellyfin over HTTP, and writes, reads and removes
+the leaving-soon probe link through jellyfin's mount layout; its docstring maps each proof.
+Its pod is `app: janitorr-verify`, which sonarr's and radarr's `netpol_from` list ahead of the
+flip. `tests/test_verify_janitorr.py` renders the renamed directory through the Job census and
+holds the Job's mounts to janitorr's and jellyfin's.
+
 ## Editing
 - Rules: `templates/config/application.yml.j2` (rendered into the k8s Secret by `roles/k8s/janitorr`)
 - Verify the health reader: `kubectl -n homelab logs job/<the newest janitorr-health Job>`. Its
