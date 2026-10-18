@@ -22,8 +22,8 @@ Every edge is generated, never hand-written, from an `Ordering` the caller reads
 `substitution` decides which Kustomizations substitute, and so which take the `cluster-vars`
 edge. `bundle.py` adds that edge and fails the render on a cycle, because Flux would
 hold every Kustomization on it at `DependencyNotReady`. Beside the per-tag kinds' suffixes,
-`verify_files` reads which roles call for `<tag>-verify`, and `prepull_timeouts` which call for
-`<tag>-prepull`. Like `bundle.py`, this module imports
+`verify_files` and `cronjob_gates` read which roles call for `<tag>-verify`, and
+`prepull_timeouts` which call for `<tag>-prepull`. Like `bundle.py`, this module imports
 neither Ansible nor Jinja. The plan is docs/target-architecture/deploy/d4-ordering.md, *The
 renderer writes `dependsOn`*.
 """
@@ -134,7 +134,8 @@ def verify_files(tags: Iterable[str], roles: Path = K8S_ROLES) -> dict[str, list
     A role ships them as `templates/verify/<name>.j2`, and a non-empty list calls for
     `<tag>-verify`. The renderer (`renderer_lib/cluster.py`) and the publish census
     (`deploy_tools/bundle_census.py`) read this one function, so the directory the renderer
-    writes and the Kustomization the census allows cannot disagree.
+    writes and the Kustomization the census allows cannot disagree. `cronjob_gates` is the
+    other input that calls for `<tag>-verify`.
     """
     return {
         tag: sorted(

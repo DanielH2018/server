@@ -112,12 +112,22 @@ def _cronjobs(files: Mapping[str, str]) -> dict[str, dict]:
     return found
 
 
-def gate_files(tag: RenderedTag, gates: Mapping[str, Mapping]) -> dict[str, str]:
+def gate_files(
+    tag: RenderedTag, gates: Mapping[str, Mapping], substitutes: bool = False
+) -> dict[str, str]:
     """`tag.verify` with one `<cronjob>-deploy-gate.yaml` per gate, and its kustomization.
 
+    Args:
+        tag: The rendered tag whose CronJobs the gates copy.
+        gates: Its `flux_cronjob_gates` entries, by CronJob name.
+        substitutes: Whether `cluster/<tag>/` holds a placeholder. Its every `$` is then
+            escaped or a placeholder, and `<tag>-verify` substitutes nothing, so a copied `$`
+            would reach the pod as written.
+
     Raises:
-        RenderError: A gate names a CronJob `tag` does not render, or its file name is one
-            the role's `templates/verify/` already renders.
+        RenderError: A gate names a CronJob `tag` does not render, its file name is one the
+            role's `templates/verify/` already renders, or it copies a `$` from a
+            substituting directory.
     """
     rendered = _cronjobs(tag.files)
     missing = sorted(set(gates) - set(rendered))
@@ -131,20 +141,29 @@ def gate_files(tag: RenderedTag, gates: Mapping[str, Mapping]) -> dict[str, str]
         out = f"{name}-deploy-gate.yaml"
         if out in files:
             raise RenderError(f"{tag.tag}: templates/verify/ already renders {out}")
-        files[out] = yaml.safe_dump(
-            gate_job(rendered[name], digest8, gate), sort_keys=False
-        )
+        text = yaml.safe_dump(gate_job(rendered[name], digest8, gate), sort_keys=False)
+        if substitutes and "$" in text:
+            raise RenderError(
+                f"{tag.tag}: the gate for CronJob {name} copies a $ from cluster/{tag.tag}/, "
+                "which substitutes, into a -verify directory that does not, so the pod would "
+                "run the escaped text"
+            )
+        files[out] = text
     files[KUSTOMIZATION] = kustomization_text(list(files))
     return files
 
 
 def attach_gates(
-    rendered: list[RenderedTag], published: Iterable[str], roles: Path = K8S_ROLES
+    rendered: list[RenderedTag],
+    published: Iterable[str],
+    roles: Path = K8S_ROLES,
+    key_sets: Mapping[str, frozenset[str]] | None = None,
 ) -> list[RenderedTag]:
     """`rendered` with each published tag's gate Jobs added to its `<tag>-verify` directory.
 
     Runs after every pass that edits `cluster/<tag>/`, because the Job copies the CronJob as
     Flux applies it and embeds that directory's digest, which `digests.json` records as `own`.
+    `key_sets`, a placeholder render's key set per directory, says which tags substitute.
 
     Raises:
         RenderError: A tag's `flux_cronjob_gates` cannot be read, or `gate_files` refuses it.
@@ -153,7 +172,10 @@ def attach_gates(
     if problems:
         raise RenderError("; ".join(problems))
     return [
-        replace(tag, verify=gate_files(tag, gates[tag.tag]))
+        replace(
+            tag,
+            verify=gate_files(tag, gates[tag.tag], bool((key_sets or {}).get(tag.tag))),
+        )
         if tag.tag in gates
         else tag
         for tag in rendered

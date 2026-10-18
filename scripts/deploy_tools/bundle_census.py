@@ -158,8 +158,9 @@ def gating_tags(
 def verifying_tags(published: Iterable[str], roles: Path = K8S_ROLES) -> frozenset[str]:
     """The published tags whose role ships verify or post-apply mutation Jobs.
 
-    A role ships them as `templates/verify/*.yaml.j2`, which alone makes the renderer write
-    `cluster/<tag>-verify/` and the Kustomization `<tag>-verify` (D5.1a1). It reads
+    A role ships them as `templates/verify/*.yaml.j2`, which makes the renderer write
+    `cluster/<tag>-verify/` and the Kustomization `<tag>-verify` (D5.1a1). A gate Job
+    (`gating_tags`) is the one other input that does. It reads
     `verify_files`, the reader the renderer renders that directory from too.
     """
     return frozenset(

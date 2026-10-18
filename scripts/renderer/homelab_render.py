@@ -345,7 +345,7 @@ def _placeholder_cluster(
         tags = attach_vendored(tags, result.key_sets, vendored)
         tags = attach_snapshots(tags, published, rollout_timeout_default(), vendored)
         tags = attach_prepulls(tags, published, vendored)
-        tags = attach_gates(tags, published, vendored)
+        tags = attach_gates(tags, published, vendored, result.key_sets)
         bundle = (
             _bundle(
                 tags, result, out, published, cluster_file, ordering(owned), revision

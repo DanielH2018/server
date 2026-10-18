@@ -22,7 +22,12 @@ from lib.repo_paths import K8S_ROLES
 from renderer import homelab_render
 from renderer.renderer_lib.bundle import CLUSTER_VARS_FILE
 from renderer.renderer_lib.cluster import RenderedTag
-from renderer.renderer_lib.cronjob_gate import attach_gates, gate_job, gate_name
+from renderer.renderer_lib.cronjob_gate import (
+    attach_gates,
+    gate_files,
+    gate_job,
+    gate_name,
+)
 from renderer.renderer_lib.digest8 import job_spec_digest8
 from renderer.renderer_lib.environment import RenderError
 from renderer.renderer_lib.ordering import Ordering, cronjob_gates, verify_timeout
@@ -222,6 +227,25 @@ def test_an_opt_in_naming_no_rendered_cronjob_fails_the_render(tmp_path):
     )
     with pytest.raises(RenderError, match=r"names \['nightly'\]"):
         attach_gates([tag], [TAG], roles)
+
+
+DOLLAR_CRONJOB = (
+    "kind: CronJob\nmetadata:\n  name: sync\nspec:\n  jobTemplate:\n    spec:\n"
+    "      template:\n        spec:\n          containers:\n"
+    "            - {name: sync, image: 'sync:1', args: [echo, $$HOME]}\n"
+)
+
+
+def test_a_gate_copying_a_dollar_from_a_substituting_directory_is_refused():
+    tag = RenderedTag("sync", {"cronjob.yaml": DOLLAR_CRONJOB}, {})
+    with pytest.raises(RenderError, match="escaped text"):
+        gate_files(tag, {"sync": {"kind": "verify"}}, substitutes=True)
+
+
+def test_a_gate_copying_a_dollar_from_a_plain_directory_keeps_it():
+    tag = RenderedTag("sync", {"cronjob.yaml": DOLLAR_CRONJOB}, {})
+    files = gate_files(tag, {"sync": {"kind": "verify"}}, substitutes=False)
+    assert "$$HOME" in files["sync-deploy-gate.yaml"]
 
 
 @pytest.mark.parametrize(
