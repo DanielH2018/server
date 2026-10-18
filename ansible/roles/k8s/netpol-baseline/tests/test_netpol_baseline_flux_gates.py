@@ -6,7 +6,7 @@ task runs.
 - The lever asserts become a check over the render context: the variables
   `renderer_lib.cluster.tag_context` resolves for the tag, the context Flux's render reads.
   Flux takes no `-e`, so the repo's defaults and inventory are every value a lever can hold,
-  and CI runs this before a typo can merge. The predicate is the Ansible assert's.
+  and CI runs this before a typo can merge. It evaluates the Ansible assert's own `that:`\n  list, and every lever default must be named there.
 - The exempt-set gates become the `exempt` check of the verify Job's `gate` initContainer,
   which runs after the apply. The script tests run it against fake API reads; the render
   tests read the flipped Job.
@@ -15,25 +15,54 @@ Run: uv run pytest ansible/roles/k8s/netpol-baseline/tests/test_netpol_baseline_
 """
 
 import json
+import re
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
+import jinja2
 import pytest
 from _netpol_baseline_flipped import TAG, docs, env_of, flipped_render, job, write_stubs
 
 import netpol_baseline_verify as verify
+from lib import yaml_fast
+from lib.ansible_jinja_env import make_ansible_env
 from lib.k8s_roles import K8S_ROLES
 from renderer.renderer_lib import cluster
 
-BOOL_LEVERS = ("netpol_baseline_enforced", "netpol_baseline_obs_enforced")
-SCOPE_LEVERS = ("netpol_baseline_scope", "netpol_baseline_obs_scope")
+TASKS = K8S_ROLES / TAG / "tasks" / "main.yml"
+DEFAULTS = K8S_ROLES / TAG / "defaults" / "main.yml"
+# A lever is a role default that ends in `enforced` or `scope`: each plane's on/off switch
+# and its label/namespace selector. A third plane's pair matches without an edit here.
+LEVER = re.compile(r"^netpol_baseline_(?:\w+_)?(?:enforced|scope)$")
+
+
+def lever_asserts() -> list[str]:
+    """The `that:` list of the "Check the netpol-baseline levers" task, verbatim.
+
+    Read from tasks/main.yml rather than restated, so the Flux form cannot drift from the
+    assert it replaces. netpol-baseline's flip PR deletes that file, and moves this list
+    into this module as a literal in the same PR.
+    """
+    task = next(
+        t
+        for t in yaml_fast.safe_load(TASKS.read_text())
+        if t.get("name") == "Check the netpol-baseline levers"
+    )
+    return task["ansible.builtin.assert"]["that"]
 
 
 def lever_problems(ctx: dict) -> list[str]:
-    """The levers in `ctx` that the "Check the netpol-baseline levers" assert would refuse."""
+    """The levers whose `that:` condition is false in `ctx`, as the assert would refuse them.
+
+    Each condition is evaluated with Ansible's filters, under a strict undefined so a lever
+    missing from the context fails rather than reading as false.
+    """
+    env = make_ansible_env(undefined_cls=jinja2.StrictUndefined)
     return [
-        name for name in BOOL_LEVERS if str(ctx[name]).lower() not in ("true", "false")
-    ] + [name for name in SCOPE_LEVERS if ctx[name] not in ("label", "namespace")]
+        expr.split()[0]
+        for expr in lever_asserts()
+        if not env.compile_expression(expr)(**ctx)
+    ]
 
 
 @pytest.fixture(scope="module")
@@ -45,15 +74,15 @@ def _context(stubs, overrides=None) -> dict:
     return cluster.tag_context(K8S_ROLES / TAG, TAG, {**stubs, **(overrides or {})})
 
 
+def test_every_lever_default_is_asserted():
+    """A lever the assert does not name would reach a Flux render unchecked."""
+    levers = {k for k in yaml_fast.safe_load(DEFAULTS.read_text()) if LEVER.match(k)}
+    assert "netpol_baseline_obs_scope" in levers
+    assert levers == {expr.split()[0] for expr in lever_asserts()}
+
+
 def test_the_rendered_levers_are_clean(stubs):
-    ctx = _context(stubs)
-    assert {name: ctx[name] for name in BOOL_LEVERS + SCOPE_LEVERS} == {
-        "netpol_baseline_enforced": True,
-        "netpol_baseline_obs_enforced": True,
-        "netpol_baseline_scope": "namespace",
-        "netpol_baseline_obs_scope": "namespace",
-    }
-    assert lever_problems(ctx) == []
+    assert lever_problems(_context(stubs)) == []
 
 
 @pytest.mark.parametrize(
@@ -67,6 +96,20 @@ def test_the_rendered_levers_are_clean(stubs):
 )
 def test_a_mistyped_lever_is_flagged(stubs, lever, value):
     assert lever_problems(_context(stubs, {lever: value})) == [lever]
+
+
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        {"netpol_baseline_enforced": False},
+        {"netpol_baseline_obs_enforced": "false"},
+        {"netpol_baseline_scope": "label", "netpol_baseline_obs_scope": "label"},
+    ],
+    ids=["enforced-off", "obs-off-as-string", "label-scope"],
+)
+def test_a_rollback_lever_value_is_clean(stubs, overrides):
+    """The documented rollbacks are valid values, so the check must pass them."""
+    assert lever_problems(_context(stubs, overrides)) == []
 
 
 HOMELAB = {

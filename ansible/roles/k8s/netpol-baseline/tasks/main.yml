@@ -27,8 +27,8 @@
 #     `| bool` trap on both the template's `if` and the probe tasks' `when:`. A typo here is silent in the same direction: allow-all renders, the probe
 #     skips, and the deploy reports green while observability is unfenced.
 #
-# Its Flux form is tests/test_netpol_baseline_flux_gates.py, which applies this predicate to
-# the render context (#5685). Keep the two predicates the same.
+# Its Flux form is tests/test_netpol_baseline_flux_gates.py, which evaluates this `that:` list
+# against the render context and fails on a lever default the list does not name (#5685).
 - name: Check the netpol-baseline levers
   ansible.builtin.assert:
     that:
