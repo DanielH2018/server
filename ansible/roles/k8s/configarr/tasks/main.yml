@@ -2,8 +2,38 @@
 # The nightly TRaSH-guide reconcile.
 #
 # No Deployment, no Service, no route: configarr runs, reconciles the two *arrs, and exits. This
-# role deploys the CronJob plus the health cron that reads it; the config itself is rendered from
-# templates/config/config.yml.j2, so the grab policy has exactly one source.
+# role deploys the CronJob plus the configarr-health CronJob that reads it; the config itself is
+# rendered from templates/config/config.yml.j2, so the grab policy has exactly one source.
+
+# The health reader was a daniel-box host cron until H2.5b
+# (docs/target-architecture/host/h2-shrink-host-plane.md, Steps item 13). These absent arms
+# remove it, ahead of the k8s/manifests include, so the host cron is gone before the CronJob
+# that replaces it exists. They stay until D5's conversion PR moves them into
+# setup/k8s_host_files, and H7 deletes them. ansible/tests/repo/_retired_cron_row.py holds the
+# cron's and the fragment's arms to the tree.
+- name: Remove the retired configarr sync heartbeat cron
+  tags: [cron]
+  ansible.builtin.cron:
+    name: "configarr sync health"
+    user: "{{ sys_user }}"
+    cron_file: configarr-health
+    state: absent
+  become: true
+  when: not k8s_dry_run | bool
+
+- name: Remove the retired configarr health reader from the host
+  tags: [config]
+  # The fragment goes with the code it stamped: left behind, setup drift compares five live
+  # paths that no longer exist and turns DOWN.
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - /usr/local/bin/configarr-health.sh
+    - /opt/configarr-health
+    - /var/lib/homelab/setup-deployed-manifest.d/configarr
+  become: true
+  when: not k8s_dry_run | bool
 
 - name: Deploy configarr to the cluster
   ansible.builtin.include_role:
@@ -52,145 +82,13 @@
   vars:
     cronjob_gate_name: configarr
 
-- name: Install the configarr health reader
-  tags: [config]
-  ansible.builtin.file:
-    path: "{{ item }}"
-    state: directory
-    owner: "{{ sys_user }}"
-    group: "{{ sys_user }}"
-    mode: "0755"
-  loop:
-    - /opt/configarr-health
-    - /opt/configarr-health/configarr_lib # configarr_health.py's modules
-  become: true
-  when: not k8s_dry_run | bool
-
-- name: Install the shared host_lib helper beside the configarr health reader
-  tags: [config]
-  # Before the reader, not in the same loop after it: the cron invokes the reader by absolute
-  # path, so a window in which it exists without its sibling import is a spurious page. The
-  # shared file lives in the setup plane and is reached from here by path — see its header.
-  ansible.builtin.import_tasks: "{{ role_path }}/../../setup/common/tasks/install_host_lib.yml"
-  vars:
-    host_lib_dir: /opt/configarr-health
-    host_lib_owner: "{{ sys_user }}"
-
-- name: Install the configarr health reader library
-  tags: [config]
-  # Before the reader, for the reason host_lib goes first: the cron invokes the reader by
-  # absolute path, and a reader that exists without the modules it imports is a spurious page.
-  # One file at a time rather than the directory: a directory copy also ships whatever
-  # __pycache__ the controller's checkout holds.
-  ansible.builtin.copy:
-    src: "{{ role_path }}/files/configarr_lib/{{ item }}"
-    dest: "/opt/configarr-health/configarr_lib/{{ item }}"
-    owner: "{{ sys_user }}"
-    group: "{{ sys_user }}"
-    mode: "0644"
-  loop:
-    - configarr_health_logic.py
-    # The verdict logic, whose tests live beside it.
-    # Copied rather than duplicated for the same reason host_lib.py is: the copy is what
-    # `configarr_lib.configarr_status` resolves to at runtime, and a second edited copy is how
-    # two callers quietly stop agreeing about what a failed sync looks like.
-    - configarr_status.py
-  become: true
-  when: not k8s_dry_run | bool
-
-- name: Install the configarr health reader script
-  tags: [config]
-  ansible.builtin.copy:
-    src: configarr_health.py
-    dest: /opt/configarr-health/configarr_health.py
-    owner: "{{ sys_user }}"
-    group: "{{ sys_user }}"
-    mode: "0755"
-  become: true
-  when: not k8s_dry_run | bool
-
-- name: Remove the configarr health modules that moved into configarr_lib
-  tags: [config]
-  # Until #4416 these two sat flat beside the reader. A copy loop removes nothing it stops
-  # naming, so without this the stale copies stay on the host and the drift check no longer
-  # watches them. After the reader copy, so the reader on disk never imports a module that is
-  # already gone.
-  ansible.builtin.file:
-    path: "/opt/configarr-health/{{ item }}"
-    state: absent
-  loop:
-    - configarr_health_logic.py
-    - configarr_status.py
-  become: true
-  when: not k8s_dry_run | bool
-
-# The reader scripts and their host_lib sibling are stamped, because setup-drift-lib.sh's
-# deployed-code arm only compares pairs a role declared. An unstamped copy would go stale behind
-# a drift check reporting "deployed code matches the repo". Tagged
-# `config` like the copies above, so a `--tags config` run stamps exactly what it just wrote.
-- name: Record the deployed configarr health reader code
-  tags: [config]
-  ansible.builtin.import_tasks: "{{ role_path }}/../../setup/common/tasks/stamp_deployed.yml"
-  vars:
-    stamp_deployed_name: configarr
-    stamp_deployed_pairs:
-      # Spelled as literals, not through a var: the copy<->stamp guard in
-      # ansible/tests/setup/test_host_lib_sibling_copies.py compares these strings against the
-      # include's `host_lib_dir` as written, so a var here reads to it as the wrong directory.
-      - live: /opt/configarr-health/host_lib.py
-        src: ansible/roles/setup/common/files/host_lib.py
-      - live: /opt/configarr-health/kuma_push.py
-        src: ansible/roles/setup/common/files/kuma_push.py
-      - live: /opt/configarr-health/configarr_health.py
-        src: ansible/roles/k8s/configarr/files/configarr_health.py
-      - live: /opt/configarr-health/configarr_lib/configarr_health_logic.py
-        src: ansible/roles/k8s/configarr/files/configarr_lib/configarr_health_logic.py
-      - live: /opt/configarr-health/configarr_lib/configarr_status.py
-        src: ansible/roles/k8s/configarr/files/configarr_lib/configarr_status.py
-
-- name: Deploy the configarr sync heartbeat
-  tags: [cron]
-  ansible.builtin.template:
-    src: configarr-health.sh.j2
-    dest: /usr/local/bin/configarr-health.sh
-    # DECIDED: 0700 owned by sys_user, not 0755 — embeds a live Kuma push token. Owner is
-    # sys_user because the cron below runs as sys_user; root:root 0700 would lock out its own
-    # caller. See the same marker in roles/k8s/janitorr/tasks/main.yml.
-    mode: "0700"
-    owner: "{{ sys_user }}"
-    group: "{{ sys_user }}"
-  become: true
-  no_log: true  # renders the Kuma push token
-  when: not k8s_dry_run | bool
-
-- name: Schedule the configarr sync heartbeat
-  tags: [cron]
-  ansible.builtin.cron:
-    name: "configarr sync health"
-    minute: "{{ configarr_k8s_health_cron_minute }}"
-    user: "{{ sys_user }}"
-    job: "/usr/local/bin/configarr-health.sh"
-    cron_file: configarr-health
-  become: true
-  when: not k8s_dry_run | bool
-
-# Reported, not enforced. A failed guide sync is the monitor's job to page, and failing the
-# deploy over a transient *arr outage is the wrong trade.
-# Running the reader here also proves it works, on the deploy that installs it.
-- name: Report what the health reader makes of the reconcile
+# After the configarr gate, so its run reads the Job that gate just finished. Its push proves
+# the reader runs in its image with its ServiceAccount; on a landing that adds the reader's
+# label to uptime-kuma's netpol_from, the fence admits it only after netpol-baseline applies,
+# and the gate counts the started container as a run either way.
+- name: Gate the configarr-health deploy on a one-off run
   tags: [deploy]
-  ansible.builtin.command:
-    cmd: >-
-      /usr/local/bin/uv run --no-project --no-python-downloads --python {{ host_python_version }}
-      /opt/configarr-health/configarr_health.py
-  environment:
-    CONFIGARR_NAMESPACE: "{{ k8s_namespace }}"
-    CONFIGARR_MAX_AGE_H: "{{ configarr_k8s_max_age_hours }}"
-  changed_when: false
-  failed_when: false
-  register: configarr_k8s_health
-
-- name: Show the configarr verdict
-  tags: [deploy]
-  ansible.builtin.debug:
-    msg: "{{ configarr_k8s_health.stdout_lines | default(['(no output)']) }}"
+  ansible.builtin.include_role:
+    name: k8s/cronjob-gate
+  vars:
+    cronjob_gate_name: configarr-health

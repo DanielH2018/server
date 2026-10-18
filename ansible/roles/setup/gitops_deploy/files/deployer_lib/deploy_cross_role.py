@@ -110,11 +110,14 @@ SETUP_FILES_ROUTED_TO_OWNER: dict[str, frozenset[str]] = {
 # (#3320). The deployer never applies a k8s role for a change that is not an image-pin bump, so
 # naming them in `cs.k8s` is what keeps their copy of `host_lib.py` from going stale unseen.
 # `ansible/tests/setup/test_setup_cross_role_files.py` holds it to the tree.
-_K8S_HOST_LIB = frozenset({"configarr", "janitorr"})
+# The roles in `_K8S_HOST_LIB` copy host_lib.py onto a host. configarr left it at H2.5b, and
+# stages host_lib.py and kuma_push.py into its health CronJob's ConfigMap instead.
+_K8S_HOST_LIB = frozenset({"janitorr"})
 K8S_ROLES_IMPORTING_SETUP_FILES: dict[str, frozenset[str]] = {
-    f"{_COMMON}/files/host_lib.py": _K8S_HOST_LIB,
-    # autofix-bridge and uptime-kuma stage it into a pod's ConfigMap (#3745).
-    f"{_COMMON}/files/kuma_push.py": _K8S_HOST_LIB | {"autofix-bridge", "uptime-kuma"},
+    f"{_COMMON}/files/host_lib.py": _K8S_HOST_LIB | {"configarr"},
+    # autofix-bridge, configarr and uptime-kuma stage it into a pod's ConfigMap (#3745).
+    f"{_COMMON}/files/kuma_push.py": _K8S_HOST_LIB
+    | {"autofix-bridge", "configarr", "uptime-kuma"},
     f"{_COMMON}/tasks/install_host_lib.yml": _K8S_HOST_LIB,
     f"{_COMMON}/tasks/stamp_deployed.yml": _K8S_HOST_LIB,
 }

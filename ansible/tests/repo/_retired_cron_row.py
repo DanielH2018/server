@@ -49,7 +49,9 @@ H2_FRAGMENTS = {
     "k3s-longhorn-reap": ("setup/k3s",),
 }
 # The names already retired: only a `state: absent` task passes for these.
-RETIRED = frozenset({"Cloudflare IP drift", "k3s-longhorn-reap"})
+RETIRED = frozenset(
+    {"Cloudflare IP drift", "configarr sync health", "configarr", "k3s-longhorn-reap"}
+)
 
 
 class RetiredName(Subject):

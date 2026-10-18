@@ -1,0 +1,30 @@
+{#
+  The configarr-health CronJob's code: the reader, its two configarr_lib modules, and the two
+  setup/common modules it imports, host_lib.py and kuma_push.py.
+
+  Flat keys, because a ConfigMap key cannot hold a `/`. The CronJob's volume maps each
+  configarr_lib key back under configarr_lib/ with `items:`, so `from configarr_lib import ...`
+  resolves beside the reader as it did on the host.
+
+  No secret goes in here. The push token reaches the pod from the configarr-health Secret
+  through `secretKeyRef` (the H2 plan's *No secret in a ConfigMap*), and
+  ansible/tests/k8s/test_no_secret_in_a_moved_jobs_configmap.py renders this file with every
+  secrets.yml key bound to a sentinel and fails on any sentinel it finds.
+#}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: configarr-health
+  namespace: {{ k8s_namespace }}
+data:
+  configarr_health.py: |
+{{ lookup('file', playbook_dir + '/roles/k8s/configarr/files/configarr_health.py') | indent(4, true) }}
+  configarr_health_logic.py: |
+{{ lookup('file', playbook_dir + '/roles/k8s/configarr/files/configarr_lib/configarr_health_logic.py') | indent(4, true) }}
+  configarr_status.py: |
+{{ lookup('file', playbook_dir + '/roles/k8s/configarr/files/configarr_lib/configarr_status.py') | indent(4, true) }}
+  host_lib.py: |
+{{ lookup('file', playbook_dir + '/roles/setup/common/files/host_lib.py') | indent(4, true) }}
+  kuma_push.py: |
+{{ lookup('file', playbook_dir + '/roles/setup/common/files/kuma_push.py') | indent(4, true) }}

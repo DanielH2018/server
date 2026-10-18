@@ -260,8 +260,8 @@ containers_list:
       - traefik         # deliberate, not redundant — see the policy's header
       - janitorr        # templates/config/application.yml.j2 — deploy-time verify too
       - configarr       # CronJob; its pod template carries app: configarr
-      - monitor-bridge  # env-secret.yaml.j2, cluster FQDN
-      - autofix-bridge  # env-secret.yaml.j2, cluster FQDN
+      - monitor-bridge  # config/env.yaml.j2, cluster FQDN
+      - autofix-bridge  # deployment.yaml.j2, cluster FQDN
       - bazarr          # app DB, bare name — see the policy's header
       - prowlarr        # Application Sync writes indexers in — see the policy's header
       - sonarr-verify   # templates/verify/ Jobs — see the policy's header
@@ -456,7 +456,7 @@ containers_list:
     # baseline already admits both on every port. The baseline's node CIDRs are two /32 cni0
     # host addresses, so no pod-network caller is covered by them.
     netpol_from:
-      # SPEEDTEST_URL (monitor-bridge/templates/env-secret.yaml.j2): the check that reads the
+      # SPEEDTEST_URL (monitor-bridge/templates/config/env.yaml.j2): the check that reads the
       # newest result row. A failed run leaves no other trace, because the container logs only
       # its pre-run connectivity ping.
       - monitor-bridge
@@ -707,7 +707,7 @@ containers_list:
     # both. probe.py's `ha` subcommands run on a node, so the baseline's cni0 /32s cover them.
     netpol_from:
       - homelab-mcp     # HA_URL (homelab-mcp/templates/deployment.yaml.j2), Claude's read tools
-      - monitor-bridge  # HA_URL (monitor-bridge/templates/env-secret.yaml.j2), the
+      - monitor-bridge  # HA_URL (monitor-bridge/templates/config/env.yaml.j2), the
                         # scheduler-stuck check the container healthcheck cannot see
 
   # LAN DNS on its own pinned VIP (dns_k8s_vip). Not seeded: blocklist state is declared in
@@ -819,8 +819,8 @@ containers_list:
     # browsers arrive through traefik. The `autokuma` sidecar needs no entry: it reaches Kuma
     # over pod-local loopback, which no NetworkPolicy evaluates.
     netpol_from:
-      - monitor-bridge           # KUMA_URL (monitor-bridge/templates/env-secret.yaml.j2)
-      - autofix-bridge           # KUMA_URL (autofix-bridge/templates/env-secret.yaml.j2)
+      - monitor-bridge           # KUMA_URL (monitor-bridge/templates/config/env.yaml.j2)
+      - autofix-bridge           # KUMA_URL (autofix-bridge/templates/deployment.yaml.j2)
       - cloudflare-ddns-direct   # push URL (cloudflare-ddns/templates/deployment-direct.yaml.j2)
       - cloudflare-ddns-proxied  # push URL (cloudflare-ddns/templates/deployment-proxied.yaml.j2)
       # push_url (pi-peer-backup/templates/secret.yaml.j2), a CronJob. The first census read
@@ -828,12 +828,18 @@ containers_list:
       - pi-peer-backup
       - kuma-status-page-sync    # KUMA__URL + deadman push (uptime-kuma's status-page-sync CronJob)
       - kuma-maintenance-sync    # KUMA__URL (uptime-kuma's maintenance-sync CronJob)
+      - configarr-health         # push_url (configarr/templates/health-secret.yaml.j2), a CronJob (H2.5b)
 
   # Runs WITHOUT docker plumbing — no DOCKER_HOST, so no in-IDE docker CLI or devcontainers.
-  # Image built in-cluster from the containers role's Dockerfile, which is the build source.
+  # CI's `images` job builds the image from the role's own Dockerfile and pushes it to GHCR.
   # two_factor even on the LAN: a shell as the repo user on a stolen password alone.
   - name: code-server
     platform: k8s
+    # Flux applies code-server through `promote`, snapshots both claims in its
+    # code-server-snapshot Job first, and substitutes its password Secret from
+    # homelab-cluster-vars (D5.16). The handback is two PRs, `owner: released` then removing
+    # `owner`: docs/flux-deploy-plane.md.
+    owner: flux
     weekly_backup_claims: {code-server-workspace: 0}  # Sun
     # Measured composition, not an estimate. `du` inside the pod puts 5.8 G in
     # .local/share/code-server/extensions — a directory the server does NOT read, since it
@@ -983,7 +989,7 @@ containers_list:
     netpol_from:
       - scrutiny-collector  # COLLECTOR_API_ENDPOINT (scrutiny/templates/collector-daemonset.yaml.j2),
                             # posts SMART data from both nodes
-      - monitor-bridge      # SCRUTINY_URL (monitor-bridge/templates/env-secret.yaml.j2), the
+      - monitor-bridge      # SCRUTINY_URL (monitor-bridge/templates/config/env.yaml.j2), the
                             # Kuma disk-health tile
       - homelab-mcp         # SCRUTINY_URL (homelab-mcp/templates/deployment.yaml.j2), Claude's
                             # disk-health read tool

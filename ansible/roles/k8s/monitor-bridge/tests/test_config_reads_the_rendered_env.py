@@ -1,6 +1,6 @@
-"""Each threshold has one home: the env-secret renders it, and `bridge/config*.py` only reads it.
+"""Each threshold has one home: the pod environment renders it, and `bridge/config*.py` only reads it.
 
-Until #3659 `TRAEFIK_421_RPS` defaulted to "0.02" in both `templates/env-secret.yaml.j2` and
+Until #3659 `TRAEFIK_421_RPS` defaulted to "0.02" in both the env-secret template and
 `bridge/config_service.py`, and 40 of the 133 keys both files named disagreed (`TARGETS_MIN` 1
 against 2, `PROWLARR_INDEXER_MIN_DOWN_MIN` 10080 against 30). The pod read the template while the
 suite read the Python, so a test could pass at a value nothing deployed. A read with no default is
@@ -42,7 +42,7 @@ def test_no_rendered_key_carries_a_second_default_in_python():
         (m, k) for m, k, has_default in reads if has_default and k in rendered
     )
     assert not doubled, (
-        "these keys are rendered by templates/env-secret.yaml.j2, so a Python default is a "
+        "these keys are rendered into the pod environment, so a Python default is a "
         "second copy the pod never reads; drop it: %s" % doubled
     )
 
