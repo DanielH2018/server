@@ -2714,6 +2714,19 @@ sizes its batch of roles against that projection.
       the new policies unapplied, which is D4's exit criterion on the real policies-first
       edge. Its probe Job becomes `netpol-baseline-verify`, which depends on
       `netpol-baseline-deferred`.
+        - **The pre-apply checks have successors (#5685).** `tasks/main.yml` runs two kinds
+          of check before it applies, and the flip deletes both with the file. The flip PR
+          names where each one went.
+        - The lever asserts ("Check the netpol-baseline levers") go to
+          `tests/test_netpol_baseline_flux_gates.py`. It applies the assert's predicate to
+          the render context. Flux takes no `-e`, so a typo cannot reach a Flux render past
+          CI.
+        - The two live exempt-set gates go to the `exempt` check of the verify Job's `gate`
+          initContainer. It lists the `netpol-baseline-exempt` pods in each namespace-scoped
+          baseline's namespace. It runs after the apply, so drift fails the Job and the
+          revision's soak acts on it, where the task refused the apply. The flip PR also
+          deletes the `tasks/main.yml` half of
+          `ansible/tests/k8s/test_netpol_baseline_exempt_gates.py`.
     - pihole's PR exercises `pihole-deferred` live: instance 2 applies only after instance 1
       is Ready.
     - **Before the first Wave D flip**, the session measures one revision that changes at

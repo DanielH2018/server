@@ -13,7 +13,6 @@ Run: uv run pytest ansible/roles/k8s/netpol-baseline/tests/test_netpol_baseline_
 
 import json
 import re
-import shutil
 import socket
 import threading
 import urllib.error
@@ -21,17 +20,17 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import pytest
 from _k8s_render import rendered_docs
+from _netpol_baseline_flipped import STAGED, TAG, write_stubs
+from _netpol_baseline_flipped import docs as _docs
+from _netpol_baseline_flipped import env_of as _env_of
+from _netpol_baseline_flipped import flipped_render as _flipped_render
+from _netpol_baseline_flipped import job as _job
 
 import netpol_baseline_verify as verify
-from lib import yaml_fast
 from lib.k8s_roles import K8S_ROLES
-from renderer import shadow_diff
 from renderer.renderer_lib import cluster
-from renderer.renderer_lib.context import load_stubs
 from renderer.tests._job_census import problems
 
-TAG = "netpol-baseline"
-STAGED = K8S_ROLES / TAG / "templates" / "verify-inert"
 # A path into a role's tree, as any lookup names it; group 1 is the role.
 ROLE_PATH = re.compile(r"/roles/k8s/([^/'\"]+)/")
 
@@ -315,40 +314,13 @@ def test_an_unknown_stage_fails(capsys):
 
 @pytest.fixture(scope="module")
 def stubs(tmp_path_factory):
-    path = tmp_path_factory.mktemp("stubs") / "stubs.yml"
-    assert shadow_diff.main(["stubs", "--out", str(path)]) == 0
-    return load_stubs(path)
-
-
-def _flipped_render(stubs, roles, overrides=None):
-    shutil.copytree(K8S_ROLES / TAG, roles / TAG)
-    templates = roles / TAG / "templates"
-    (templates / "verify-inert").rename(templates / "verify")
-    return cluster.render_tag(TAG, {**stubs, **(overrides or {})}, roles=roles)
-
-
-def _docs(rendered) -> list[dict]:
-    return [
-        doc
-        for name, text in sorted(rendered.verify.items())
-        if name != "kustomization.yaml"
-        for doc in yaml_fast.safe_load_all(text)
-        if doc
-    ]
+    return write_stubs(tmp_path_factory)
 
 
 @pytest.fixture(scope="module")
 def flipped(stubs, tmp_path_factory) -> list[dict]:
     """The `netpol-baseline-verify` documents a copy of the role renders once its Job leaves `verify-inert/`."""
     return _docs(_flipped_render(stubs, tmp_path_factory.mktemp("roles")))
-
-
-def _job(docs):
-    return next(doc for doc in docs if doc["kind"] == "Job")
-
-
-def _env_of(container) -> dict[str, str]:
-    return {e["name"]: e.get("value") for e in container["env"]}
 
 
 def test_the_tree_renders_no_netpol_baseline_verify_while_ansible_owns_it(stubs):
@@ -415,21 +387,22 @@ def test_the_homelab_lever_off_drops_its_rows_and_legs(stubs, tmp_path):
     assert not any(".homelab." in row["url"] for row in json.loads(legs_env["TARGETS"]))
 
 
-def test_the_roles_grant_only_endpointslice_lists(flipped):
-    roles = [doc for doc in flipped if doc["kind"] == "Role"]
-    assert sorted(r["metadata"]["namespace"] for r in roles) == [
-        "flux-system",
-        "homelab",
-        "observability",
-    ]
-    for role in roles:
-        assert role["rules"] == [
-            {
-                "apiGroups": ["discovery.k8s.io"],
-                "resources": ["endpointslices"],
-                "verbs": ["list"],
-            }
-        ]
+def test_the_roles_grant_only_lists(flipped):
+    """EndpointSlices everywhere the table dials; pods only where a baseline exempts."""
+    slices = {
+        "apiGroups": ["discovery.k8s.io"],
+        "resources": ["endpointslices"],
+        "verbs": ["list"],
+    }
+    pods = {"apiGroups": [""], "resources": ["pods"], "verbs": ["list"]}
+    roles = {
+        r["metadata"]["namespace"]: r["rules"] for r in flipped if r["kind"] == "Role"
+    }
+    assert roles == {
+        "flux-system": [slices],
+        "homelab": [slices, pods],
+        "observability": [slices, pods],
+    }
 
 
 def test_every_policy_template_renames_the_job():
