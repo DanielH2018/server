@@ -20,8 +20,8 @@ failed=0`. The node gate kept both crons off that host, and `Restart claude-rc` 
 H2.4b and H2.4c wait on *Open questions* 2, which only the operator can decide. Every one of
 crowdsec's four crons reaches `cscli` through `kubectl exec deploy/crowdsec`. A CronJob of that
 shape needs a `pods/exec` grant, and D5 *Open questions* 14 makes each such grant an operator
-decision. A fan-out session on 2026-10-18 (#5649) found no exec-free form and stopped. #5655 asks the
-operator for the ruling.
+decision. A fan-out session on 2026-10-18 (#5649) found no exec-free form and stopped.
+#5655 asks the operator for the ruling.
 Depends on: H1, D3 and H6, per PR. H2.2a needs H1.5a and H1.6. H2.3b needs H1.5a and the C3
 row of *Open questions* 12. H2.8a needs H1.7b (and through it D3) and H6.4b, with the
 region-key gate of *Open questions* 11. No other H2 PR waits outside H2 (*Open questions*
