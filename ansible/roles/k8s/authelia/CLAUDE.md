@@ -103,8 +103,11 @@ headless UI tier logs in as to reach the `two_factor` services without a code of
 `claude_code` role renders its SOPS password into the agent's home, so a rotation also needs a
 `claude_code` apply. `authelia_k8s_agent_user` in `defaults/main.yml` has the reasoning.
 `authelia_k8s_claude_user` in `defaults/main.yml` has the reasoning, and the TOTP registration
-lives in Authelia's SQLite database rather than the rendered `users_database.yml`, re-seeded from
-the fixed `authelia_claude_totp_secret` every deploy.
+lives in Authelia's SQLite database rather than the rendered `users_database.yml`. The
+`seed-claude-totp` init container re-seeds it from the fixed `authelia_claude_totp_secret` on every
+pod start, and fails open so a seed failure never takes SSO down; the `DECIDED:` marker sits at
+the container in `templates/deployment.yaml.j2`. ENFORCED:
+`ansible/tests/services/test_authelia_claude_ui_user.py`.
 
 - **Rotating a password means minting its digest too.** The template reads each user's digest
   from SOPS, `authelia_password_argon2` and its two siblings, never the plaintext. So

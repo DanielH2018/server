@@ -33,19 +33,105 @@ spec:
       # starts as root, and skips that path entirely otherwise.
       # fsGroup makes the config PVC writable for the SQLite database and notification file.
 {{ pod_shell(containers_list | tier_priority_class('authelia'), run_as_user=puid, run_as_group=pgid, fs_group=pgid) }}
-{# Two independent sources of init containers — CrowdSec's three seeding steps and the
-   wait-for-redis gate — each with its own lever. Gate the KEY on either being on, so it is
-   absent rather than left with no list under it. #}
-{% if authelia_k8s_manage_crowdsec or authelia_k8s_redis_sessions | bool %}
+{# Three independent sources of init containers — CrowdSec's three seeding steps, the
+   wait-for-redis gate and the claude-ui TOTP seed — each with its own lever. Gate the KEY on
+   any being on, so it is absent rather than left with no list under it. #}
+{% if authelia_k8s_manage_crowdsec or authelia_k8s_redis_sessions | bool or authelia_k8s_manage_claude_user | bool %}
       initContainers:
 {% endif %}
 {% if authelia_k8s_manage_crowdsec %}
 {{ crowdsec_agent_init_containers('authelia', log_volume='authelia-logs', log_dir='/var/log/authelia', log_file='authelia.log', uid=puid, gid=pgid) }}
 {% endif %}
+{% if authelia_k8s_manage_claude_user | bool %}
+        # claude-ui's TOTP registration lives in the SQLite database on the claim, not in the
+        # rendered users_database.yml, so it is seeded through Authelia's own CLI before the
+        # portal starts. `--force` rewrites the row from the fixed `authelia_claude_totp_secret`
+        # on every pod start, so a rotation lands when the changed Secret rolls the pod. This
+        # replaced an Ansible task that exec'd into the running pod (target slice D5, step 26),
+        # so neither Ansible nor Flux needs `pods/exec` on authelia.
+        #
+        # `migrate up` runs first because `totp generate` refuses a schema older than its
+        # binary (CheckSchema at v4.39.28), which is the state of the claim on the first start
+        # after an Authelia bump that adds a migration, and of a fresh claim. The portal's own
+        # startup runs the same migration. The CLI exits non-zero on "schema already up to
+        # date", so that text is matched rather than every failure being ignored.
+        #
+        # stdout goes to /dev/null: `totp generate` prints the otpauth:// URI, which carries the
+        # shared secret, and pod logs ship to Loki. The secret arrives through the environment,
+        # so it never reaches the pod spec. The Secret carries it as a `|` block, so the
+        # `printf` command substitution strips the block's trailing newline before the CLI sees
+        # it. The three TOTP parameters are stated rather than left to the CLI defaults, because
+        # scripts/diagnostics/ui_login.py derives its codes from the same three constants.
+        #
+        # DECIDED: the seed fails open. A failure logs to stderr and exits 0, so the portal still
+        # starts. Under Recreate a failing init container is an SSO outage for the fleet, which
+        # is the trade `disable_startup_check: true` in config-secret.yaml.j2 refuses for SMTP
+        # too, and the row this writes serves only claude-ui. A missing row shows as the UI
+        # tier's two_factor login failing (`uv run pytest -m ui`), and this container's log
+        # names the step that failed.
+        - name: seed-claude-totp
+          image: {{ authelia_k8s_image }}
+          command:
+            - /bin/sh
+            - -c
+            - >-
+              if ! authelia storage migrate up --config /secrets/configuration.yml
+              >/tmp/seed-claude-totp.log 2>&1
+              && ! grep -q 'schema already up to date' /tmp/seed-claude-totp.log; then
+                cat /tmp/seed-claude-totp.log >&2;
+                echo "seed-claude-totp: storage migration failed, so the TOTP row was not seeded" >&2;
+                exit 0;
+              fi;
+              s=$(printf '%s' "$CLAUDE_TOTP_SECRET");
+              if authelia storage user totp generate {{ authelia_k8s_claude_user }}
+              --config /secrets/configuration.yml --secret "$s" --force
+              --algorithm SHA1 --digits 6 --period 30 >/dev/null; then
+                echo "seed-claude-totp: seeded the TOTP row";
+              else
+                echo "seed-claude-totp: totp generate failed, so the TOTP row was not seeded" >&2;
+              fi
+          env:
+            - name: TZ
+              value: "{{ tz }}"
+{% if authelia_k8s_manage_oidc | bool %}
+            # The CLI loads the same configuration.yml as the portal, whose `jwks[].key` is a
+            # template expression only this filter resolves.
+            - name: X_AUTHELIA_CONFIG_FILTERS
+              value: template
+{% endif %}
+            - name: CLAUDE_TOTP_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: authelia-config
+                  key: claude-totp-secret
+          # The portal's own context, for the reason given at the portal container below:
+          # Authelia does not start with a read-only root filesystem.
+{{ hardened_security_context(non_root=true) }}
+          # The portal container's mounts, so the CLI resolves the same paths: the config, the
+          # signing key its template expression reads, the database on the claim, scratch
+          # space, and the log file the config names.
+          volumeMounts:
+            - name: authelia-secrets
+              mountPath: /secrets
+              readOnly: true
+{% if authelia_k8s_manage_oidc | bool %}
+            - name: authelia-oidc-jwk
+              mountPath: /oidc-jwk
+              readOnly: true
+{% endif %}
+            - name: authelia-config
+              mountPath: /config
+            - name: authelia-tmp
+              mountPath: /tmp
+            - name: authelia-logs
+              mountPath: /var/log/authelia
+{{ container_resources(cpu_limit=authelia_k8s_cpu_limit, mem_limit=authelia_k8s_mem_limit, cpu_request=authelia_k8s_cpu_request, mem_request=authelia_k8s_mem_request) }}
+{% endif %}
 {% if authelia_k8s_redis_sessions | bool %}
-        # LAST, after CrowdSec's three seeding steps. Those write a local emptyDir and need no
-        # network, so running them first overlaps their work with the policy lag this container
-        # waits out, and it leaves the documented hub → config → data ordering untouched.
+        # LAST, after CrowdSec's three seeding steps and the TOTP seed. Those write a local
+        # emptyDir or the claim and need no network, so running them first overlaps their work
+        # with the policy lag this container waits out, and it leaves the documented hub →
+        # config → data ordering untouched.
         #
         # Authelia writes a startup probe to the session backend, retries it 19 times at 500ms
         # and then EXITS (internal/session/provider.go, StartupCheck at v4.39.21) — about 9.5s

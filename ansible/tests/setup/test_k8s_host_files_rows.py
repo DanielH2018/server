@@ -68,6 +68,21 @@ EXPECTED_ROWS: dict[str, dict[str, tuple[str, dict[str, str]]]] = {
             },
         ),
     },
+    "configarr.yml": {
+        "Remove the retired configarr sync heartbeat cron": (
+            "ansible.builtin.cron",
+            {
+                "name": "configarr sync health",
+                "user": "{{ sys_user }}",
+                "cron_file": "configarr-health",
+                "state": "absent",
+            },
+        ),
+        "Remove the retired configarr health reader from the host": (
+            "ansible.builtin.file",
+            {"path": "{{ item }}", "state": "absent"},
+        ),
+    },
     "docs.yml": {
         "Ensure the built docs site directory exists": (
             "ansible.builtin.file",
@@ -162,11 +177,17 @@ EXPECTED_ROWS: dict[str, dict[str, tuple[str, dict[str, str]]]] = {
 
 # {(task file, task name): its `loop`} for every looped row. A row absent here must not loop.
 # media-volume's hardlink probe links between media/ and torrents/, so both must exist.
+# configarr's arm removes three host paths.
 EXPECTED_LOOPS: dict[tuple[str, str], object] = {
     (
         "artifacts.yml",
         "Ensure a peer directory exists for every synced host",
     ): "{{ artifacts_peer_sources }}",
+    ("configarr.yml", "Remove the retired configarr health reader from the host"): [
+        "/usr/local/bin/configarr-health.sh",
+        "/opt/configarr-health",
+        "/var/lib/homelab/setup-deployed-manifest.d/configarr",
+    ],
     ("media-volume.yml", "Create the media volume directories on the node"): [
         "{{ media_volume_host_path }}",
         "{{ media_volume_host_path }}/media",
@@ -222,6 +243,8 @@ def test_a_task_file_main_no_longer_imports_is_flagged(tmp_path):
         "artifacts.yml: Ensure a peer directory exists for every synced host",
         "artifacts.yml: Ensure the local artifacts directory exists",
         "artifacts.yml: Ensure the star list directory exists",
+        "configarr.yml: Remove the retired configarr health reader from the host",
+        "configarr.yml: Remove the retired configarr sync heartbeat cron",
         "docs.yml: Ensure the built docs site directory exists",
         "media-volume.yml: Create the media volume directories on the node",
         "observability.yml: Remove the retired dashboard staging trees",
@@ -259,6 +282,29 @@ def test_an_artifacts_row_that_widens_the_star_list_mode_is_flagged(tmp_path):
     artifacts.write_text(artifacts.read_text().replace('mode: "0755"', 'mode: "0777"'))
     assert missing_rows(role_dir) == [
         "artifacts.yml: Ensure the star list directory exists"
+    ]
+
+
+def test_a_configarr_arm_that_drops_a_path_from_its_loop_is_flagged(tmp_path):
+    """The loop carries the paths, so a dropped one leaves the argument map unchanged."""
+    role_dir = _fixture_role(tmp_path)
+    configarr = role_dir / "tasks" / "configarr.yml"
+    configarr.write_text(
+        configarr.read_text().replace("    - /opt/configarr-health\n", "")
+    )
+    assert missing_rows(role_dir) == [
+        "configarr.yml: Remove the retired configarr health reader from the host"
+    ]
+
+
+def test_a_configarr_cron_arm_that_turns_present_is_flagged(tmp_path):
+    role_dir = _fixture_role(tmp_path)
+    configarr = role_dir / "tasks" / "configarr.yml"
+    configarr.write_text(
+        configarr.read_text().replace("state: absent", "state: present", 1)
+    )
+    assert missing_rows(role_dir) == [
+        "configarr.yml: Remove the retired configarr sync heartbeat cron"
     ]
 
 

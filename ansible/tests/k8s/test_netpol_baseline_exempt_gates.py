@@ -1,7 +1,9 @@
 """Guards the live exempt-set gates the netpol-baseline role runs under namespace scope.
 
 Split from `test_netpol_baseline_labels.py`, which guards the rendered labels; this file reads
-the role's own tasks and defaults instead.
+the role's own tasks and defaults instead. The gates' Flux form is the verify Job's `exempt`
+check, which `ansible/roles/k8s/netpol-baseline/tests/test_netpol_baseline_flux_gates.py`
+pins. netpol-baseline's flip PR deletes `tasks/main.yml` and the test below that reads it.
 
 Run: uv run pytest ansible/tests/k8s/test_netpol_baseline_exempt_gates.py
 """

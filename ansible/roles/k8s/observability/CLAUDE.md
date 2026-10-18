@@ -155,7 +155,9 @@ Deployment, DaemonSet and pod, each carrying the deploy tag as `service`. kube-s
 exports the `homelab/role` and `kustomize.toolkit.fluxcd.io/name` labels through its
 `--metric-labels-allowlist`. It collects ReplicaSets only for `kube_replicaset_owner`, the hop
 from a pod to its Deployment, and the `kube-state-metrics` scrape job drops the other
-`kube_replicaset_*` families. A workload with no label resolves through a literal override
+`kube_replicaset_*` families. It collects Jobs for `homelab:gate_job_duration_seconds`, the
+duration of each soak, snapshot and verify Job a landing waits on (#5675), and the scrape job
+keeps five `kube_job_*` families of the seventeen. A workload with no label resolves through a literal override
 table in the rule, then to `k3s` in the add-on namespaces, then to `unmapped`.
 `ansible/tests/k8s/test_workload_service_overrides.py` derives the table from the render. The
 pod mapping leaves out Job-owned and ownerless pods outside the add-on namespaces. That holds

@@ -192,3 +192,38 @@ def test_empty_services_keep_their_router_is_clean(overrides: dict | None) -> No
 @pytest.mark.parametrize("provider", [{}, {"allowEmptyServices": False}])
 def test_empty_services_dropping_their_router_is_flagged(provider: dict) -> None:
     assert empty_services_problem(provider) is not None
+
+
+_PRUNE_LABEL = "kustomize.toolkit.fluxcd.io/prune"
+# Each RBAC kind traefik's flip moves into its bundle, and how many of it prod renders: one
+# cluster-scoped object, or one per watched namespace.
+_PER_NAMESPACE = len(["homelab", "observability", "longhorn-system"])
+
+
+@pytest.mark.parametrize(
+    ("template", "kind", "count"),
+    [
+        ("rbac.yaml.j2", "ClusterRole", 1),
+        ("rbac-binding.yaml.j2", "ClusterRoleBinding", 1),
+        ("rbac.yaml.j2", "Role", _PER_NAMESPACE),
+        ("rbac.yaml.j2", "RoleBinding", _PER_NAMESPACE),
+    ],
+)
+def test_rbac_is_exempt_from_prune(template: str, kind: str, count: int) -> None:
+    """D5 step 26's traefik bullet: the RBAC carries the prune exemption before the flip
+    moves it into traefik's bundle, whose tag prunes, so neither a dropped object nor a
+    revert of only that move can prune a grant the edge needs."""
+    docs = [
+        d
+        for d in yaml_fast.safe_load_all(_render(_HOST, template))
+        if isinstance(d, dict) and d.get("kind") == kind
+    ]
+    assert len(docs) == count, f"{template} renders {len(docs)} {kind} documents"
+    unlabelled = [
+        d["metadata"].get("namespace", "<cluster>")
+        for d in docs
+        if (d["metadata"].get("labels") or {}).get(_PRUNE_LABEL) != "disabled"
+    ]
+    assert not unlabelled, (
+        f"{template}'s {kind} lacks {_PRUNE_LABEL}: disabled in {unlabelled}"
+    )

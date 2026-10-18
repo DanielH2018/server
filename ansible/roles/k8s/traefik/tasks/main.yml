@@ -2,7 +2,8 @@
 # The CRDs come from the role's in-tree copy of the upstream release's definitions, pinned by
 # `traefik_k8s_crd_version` and `traefik_k8s_crd_sha256` (defaults/main.yml). They are
 # upstream's bytes, never hand-edited. No render may fetch a URL under D5, and the flip PR
-# renders this same file into traefik's bundle. Only the RBAC is authored locally (see
+# moves this same file into the `traefik-crds` role, whose bundle renders it. Only the RBAC is
+# authored locally (see
 # templates/rbac.yaml.j2 for why).
 # The path is the role's own files/ on the controller, which is the node: daniel-box runs
 # Ansible with connection=local.

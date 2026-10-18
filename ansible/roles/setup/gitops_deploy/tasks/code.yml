@@ -54,6 +54,7 @@
     - gitops_markers.py
     - gitops_ledger.py
     - gitops_hold.py
+    - gitops_tick_metrics.py
     - gitops_deploy.py
   become: true
   notify: Run gitops-deploy once
@@ -140,6 +141,8 @@
         src: ansible/roles/setup/gitops_deploy/files/gitops_ledger.py
       - live: /opt/gitops-deploy/gitops_hold.py
         src: ansible/roles/setup/gitops_deploy/files/gitops_hold.py
+      - live: /opt/gitops-deploy/gitops_tick_metrics.py
+        src: ansible/roles/setup/gitops_deploy/files/gitops_tick_metrics.py
       - live: /opt/gitops-deploy/deployer_lib/deploy_failtext.py
         src: ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_failtext.py
       - live: /opt/gitops-deploy/deployer_lib/deploy_alerts.py
