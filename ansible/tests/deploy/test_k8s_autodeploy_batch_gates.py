@@ -26,6 +26,7 @@ from _autodeploy_batch import (
     _batch_gated_names,
     _has_completion_gate,
     _has_failure_escalation,
+    flux_gated_names,
 )
 
 
@@ -415,3 +416,27 @@ def test_gating_shared_roles_actually_wait() -> None:
             f"{shared}: waits for completion but runs no ansible.builtin.fail to actually "
             "fail the deploy on a bad image"
         )
+
+
+_GATED_CRONJOB_DEFAULTS = "flux_cronjob_gates:\n  widget-sync: {kind: verify}\n"
+
+
+def test_a_flux_owned_role_is_credited_with_the_cronjobs_it_names_for_flux(
+    widget_role,
+) -> None:
+    role = widget_role(defaults=_GATED_CRONJOB_DEFAULTS)
+    assert flux_gated_names(role, owners={"widget": "flux"}) == {"widget-sync"}
+
+
+def test_an_ansible_owned_role_gets_no_credit_for_the_flux_opt_in(widget_role) -> None:
+    """Nothing renders the gate Job of a role Ansible still owns, so the opt-in gates nothing."""
+    role = widget_role(defaults=_GATED_CRONJOB_DEFAULTS)
+    assert flux_gated_names(role, owners={}) == set()
+    assert flux_gated_names(role, owners={"widget": "released"}) == set()
+
+
+def test_pi_peer_backup_is_gated_by_its_flux_gate_alone() -> None:
+    """The named member: its tasks hold no k8s/cronjob-gate include since its flip (#5652)."""
+    role = _K8S_ROLES / "pi-peer-backup"
+    assert flux_gated_names(role) == {"pi-peer-backup"}
+    assert _batch_gated_names(role) == {"pi-peer-backup"}

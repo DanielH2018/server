@@ -9,7 +9,7 @@ deleted at the start of the next deploy and re-rendered a few tasks later — a 
 (`registry-gc.sh` reads `gc-job.yaml` at CRON time) a window in which the file is simply gone.
 
 The fix is to move the file to a sibling directory under the manifest root that no role's
-`manifests_service` claims, the way `headlamp-netpol`, `media-volume-probe`, `build-*`,
+`manifests_service` claims, the way `headlamp-netpol`, `build-*`,
 `registry-jobs` and `<service>-claims` do.
 
 Those sibling names are a reservation: a role with `manifests_service: n8n-netpol` would
@@ -341,7 +341,6 @@ KNOWN_STAGED_FILES = frozenset(
     {
         ("registry-jobs", "gc-job.yaml"),
         ("headlamp-netpol", "netpol-probe-job.yaml"),
-        ("media-volume-probe", "hardlink-probe-job.yaml"),
     }
 )
 

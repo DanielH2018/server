@@ -122,8 +122,8 @@ FLUX_OWNERSHIP = Census(
         "/etc/cron.d or /etc/systemd, or a host-lib or setup-deployed import left in one keeps "
         "running on the host with nothing to update or remove it. Before the flip, turn the "
         "install into an absent arm (H2's family PR for the role), then let D5's conversion PR "
-        "move the arm to `roles/setup/k8s_host_files/`. Registry's GC cron and pi-peer-backup's "
-        "Pi wrapper are the two installs outside H2 that would fail once flipped."
+        "move the arm to `roles/setup/k8s_host_files/`. Registry's GC cron is the install outside "
+        "H2 that would fail once flipped; pi-peer-backup's Pi wrapper moved at its flip."
     ),
     files=_role_subjects,
     offence=kept_installs,

@@ -11,3 +11,6 @@
 
 - name: Media-volume's media directories
   ansible.builtin.import_tasks: media-volume.yml
+
+- name: Pi-peer-backup's forced-command pin on daniel-pi
+  ansible.builtin.import_tasks: pi-peer-backup.yml

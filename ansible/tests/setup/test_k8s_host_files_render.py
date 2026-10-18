@@ -7,9 +7,10 @@ setup-plane guard would render it as `STUB`. This test renders each template und
 `StrictUndefined` instead, with the role's defaults, `group_vars/all.yml` and daniel-box's
 host_vars, through `lib.ansible_jinja_env`, so the read fails here first.
 
-The role has no template yet, so the live set is asserted EMPTY. Wave C's pi-peer-backup PR
-adds the first template and names it in `EXPECTED_TEMPLATES`, which then makes the census
-non-vacuous.
+The role has no template yet, so the live set is asserted EMPTY. pi-peer-backup's flip, which
+the plan expected to add the first, moved a static wrapper and a public key into `files/`
+instead. The first PR that moves a template names it in `EXPECTED_TEMPLATES`, which then makes
+the census non-vacuous.
 
 Red-proof: a fixture role under `tmp_path`, laid out like the real one, whose template reads
 `artifacts_host_dir`. Only `roles/k8s/artifacts/defaults/main.yml` defines that name, so the
@@ -32,7 +33,7 @@ from validate.setup_templates import ANSIBLE_RUNTIME_CONTEXT
 
 ROLE = SETUP_ROLES / "k8s_host_files"
 
-# The templates the live role ships. Empty until Wave C's pi-peer-backup PR adds the first.
+# The templates the live role ships. Empty until a conversion PR moves the first one in.
 EXPECTED_TEMPLATES: frozenset[str] = frozenset()
 
 # A name only a k8s role's defaults define, which a moved template could still read.
