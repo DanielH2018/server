@@ -116,7 +116,7 @@ from fanout_lib.review.worktree_reset import reset_worktree
 from fanout_lib.review.base_check import BaseCheck, unproven_tests
 from fanout_lib.review.git_state import GitState, changed, snapshot
 from fanout_lib.review.hunk_check import HunkCheck, red_detection
-from fanout_lib.review.processes import reaping, run_process
+from fanout_lib.review.processes import otel_attributes, reaping, run_process
 from fanout_lib.review.review_ci import awaits_ci, ci_gate, ready_gate
 from fanout_lib.review.review_land import RESUME_VERDICTS, land
 from fanout_lib.review.review_land import report as landing_report
@@ -256,7 +256,7 @@ class Pipeline:
         )
         (fanout / "stop-blocks").write_text("0\n")
         started = self.clock()
-        proc = self.run(argv, stdin)
+        proc = self.run(["env", otel_attributes(self.batch, name), *argv], stdin)
         try:
             report = json.loads(proc.stdout)
         except json.JSONDecodeError:
