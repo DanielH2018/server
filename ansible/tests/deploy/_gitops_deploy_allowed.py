@@ -104,7 +104,8 @@ ALLOWED: dict[str, set[str] | None] = {
         "gitops_markers",
     },
     "deploy_tick_types": {"deploy_changes"},
-    # The k8s half of a broad range: applying the promoted bumps a plane did not.
+    # The k8s half of a broad range: applying the promoted bumps a plane did not, and the
+    # `BroadPlan` for a moved secret's k8s readers with the reader script's refusal code (#5577).
     "deploy_broad_k8s": {
         "deploy_alert_text",
         "deploy_alerts",
@@ -114,6 +115,8 @@ ALLOWED: dict[str, set[str] | None] = {
         "deploy_io",
         "deploy_k8s_owed",
         "deploy_locks",
+        "deploy_narrow",
+        "deploy_setup_roles",
         "deploy_state",
         "deploy_tick_types",
         "deploy_toolbox",

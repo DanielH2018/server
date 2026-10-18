@@ -8,9 +8,12 @@ of them, and named none of them either, because `alert_deferred` fires its k8s c
 `ChangeSet.k8s` alone. These functions are that half of the broad arm: `apply_broad_k8s`
 deploys it, and `covered_by_plane` says which bumps the deploy plane applies on its own.
 
-A module of its own because it answers one question from its arguments and the toolbox: which
-image-pin bumps in a broad range deploy. It reads nothing private to `deploy_handlers.py`, and
-`handle_broad` there is the only production caller of these.
+A module of its own because it answers, from its arguments and the toolbox, which k8s roles
+a broad range deploys beside its planes. It reads nothing private to `deploy_handlers.py`.
+`handle_broad` there calls the bump functions, and `main()` calls `route_secret_k8s_readers`
+after `plan_tick`. That one is the other k8s half (#5577): the roles reading a `secrets.yml`
+key a range moved, when no deploy-plane path sends the range to `narrow`. `handle_broad`
+appends the plan it returns after its own.
 
 Reach `deploy_io` and `deploy_alerts` qualified, never by from-import.
 """
@@ -25,7 +28,9 @@ from deployer_lib import deploy_io
 from deployer_lib import deploy_k8s_owed
 from deployer_lib import deploy_locks
 from deployer_lib.deploy_changes import ChangeSet
-from deployer_lib.deploy_config import ERR, Config, log
+from deployer_lib.deploy_config import ERR, WARNING, Config, log
+from deployer_lib.deploy_narrow import BroadPlan
+from deployer_lib.deploy_setup_roles import SECRET_READERS_REFUSED_EXIT
 from deployer_lib.deploy_state import DeployerState
 from deployer_lib.deploy_tick_types import TickPlan, TickTarget
 from deployer_lib.deploy_toolbox import DeployTools
@@ -103,6 +108,84 @@ def fold_deferred(cs: ChangeSet, plans, declared: set[str]) -> ChangeSet:
         "narrowed, and the whole play does not fit the tick's budget"
     )
     return replace(cs, k8s=cs.k8s | owed)
+
+
+def route_secret_k8s_readers(
+    tools: DeployTools, config: Config, target: TickTarget, plan: TickPlan
+) -> TickPlan:
+    """Give a `secrets.yml` range with no deploy-plane path a plan for its k8s readers (#5577).
+
+    `narrow` maps each moved key to the k8s roles reading it (#5409), but `handle_broad` asks
+    it only when the range carries a deploy-plane path. A rotation alone set `cs.secrets` and
+    nothing else, so it merged, paged, and every reader kept the old value until a hand
+    redeployed it. This asks `secret_setup_readers.py --deploy-tags` for the secrets half
+    alone, as `deploy_defer.route_secret_readers` asks it for the setup roles, and routes the
+    range through `handle_broad` only when a reader exists. A range with a deploy-plane path
+    is skipped, because `narrow` already maps its keys, and so is a range carrying any k8s
+    role change, for the reason the `DECIDED:` below gives.
+
+    The tags it applies drop each one Flux owns, as `deploy_narrow._deploy_plane` does. A
+    refusal naming its tags (the fleet-coverage ceiling) defers them to `k8s_unapplied`.
+    """
+    cs = plan.cs
+    if not cs.secrets or cs.broad_deploy:
+        return plan
+    # DECIDED: a range that also carries a k8s role change or a promoted image bump is left
+    # alone, and merges and pages as before #5577. A secret plan applies each reader's whole
+    # render, so a reader whose template the range edits (the /add-secret shape) would ship
+    # that edit forward-only, past the defer-and-alert every hand-edited k8s change takes.
+    # `cs.broad` would also move a promoted bump from `handle_k8s`, with its snapshot and
+    # rollback, to the forward-only broad arm. The rotation alone is the case this route is for.
+    if cs.k8s or cs.k8s_deploy or cs.k8s_consumers:
+        log(
+            "secret-readers: the range also changes a k8s role, so no k8s reader is routed; "
+            "the secrets page names the consumers"
+        )
+        return plan
+    # DECIDED: a failed or nameless lookup merges and pages, where the setup half parks
+    # (#5436). The `secrets` page goes out on every merged exit and names the command listing
+    # each consumer, which was this range's only signal before #5577. A park on a failure
+    # that repeats, such as a checkout older than this deployer whose script lacks the flag
+    # (argparse exits 64), would hold every other session's landing behind a rotation.
+    try:
+        rc, out = tools.secret_k8s_readers(config.repo, target.local, target.origin)
+    except Exception as exc:
+        log(
+            f"secret-readers: k8s lookup failed ({type(exc).__name__}: {exc}) — no k8s "
+            "reader routed; the secrets page names the consumers",
+            level=WARNING,
+        )
+        return plan
+    tags = sorted({t for t in out.split(",") if t})
+    if rc == SECRET_READERS_REFUSED_EXIT and tags:
+        log(
+            f"secret-readers: cannot narrow the k8s readers ({','.join(tags)}) — "
+            "deferring them to k8s_unapplied"
+        )
+        secret_plan = BroadPlan(
+            DEPLOY_PLAYBOOK, [], False, deferred=True, owed=tuple(tags)
+        )
+    elif rc != 0:
+        log(
+            f"secret-readers: no k8s reader routed (exit {rc}); the secrets page names the "
+            "consumers"
+        )
+        return plan
+    else:
+        for t in (t for t in tags if t in plan.owners):
+            log(
+                f"secret-readers: dropping {t}: owned by {plan.owners[t]}, so Flux applies it"
+            )
+        tags = [t for t in tags if t not in plan.owners]
+        if not tags:
+            return plan
+        log(
+            f"secret-readers: secrets.yml moved a key {','.join(tags)} read — applying "
+            f"{DEPLOY_PLAYBOOK} --tags {','.join(tags)}"
+        )
+        secret_plan = BroadPlan(DEPLOY_PLAYBOOK, tags, True)
+    cs.broad = True
+    return replace(plan, secret_plans=(secret_plan,))
 
 
 def apply_broad_k8s(

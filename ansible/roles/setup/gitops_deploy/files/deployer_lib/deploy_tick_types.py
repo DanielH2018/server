@@ -87,12 +87,16 @@ class TickPlan:
             which decide whether a deferred k8s alert can name a `--tags` redeploy at all.
         owners: each tag whose entry sets `owner` at the commit being applied, to that value
             (`deploy_inventory.service_owners`). The deploy plane drops these tags.
+        secret_plans: the `deploy_narrow.BroadPlan` for the k8s roles reading a moved
+            `secrets.yml` key on a range with no deploy-plane path, empty otherwise
+            (`deploy_broad_k8s.route_secret_k8s_readers`, #5577).
     """
 
     cs: ChangeSet
     paths: list[str]
     k8s_services: set[str]
     owners: dict[str, str] = field(default_factory=dict)
+    secret_plans: tuple = ()
 
 
 class NotTheDeployerHost(Exception):

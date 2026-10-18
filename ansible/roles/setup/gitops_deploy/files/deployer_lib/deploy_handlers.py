@@ -199,6 +199,9 @@ def handle_broad(
         if applies
         else []
     )
+    # The k8s readers of a moved secret on a range `narrow` never saw (#5577). After the
+    # setup plan, so the deploy plane still applies second.
+    plans += plan.secret_plans
     tools.run(["git", "merge", "--ff-only", origin], cwd=config.repo)
     log_pi_changes(cs)
     # Recorded at the ff-merge, which is the moment the role becomes merged-and-unapplied —

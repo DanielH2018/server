@@ -158,11 +158,11 @@ def manual_plane_alert(origin: str, remediation: str, marker: str) -> str:
 def secrets_deferred_alert(origin: str) -> str:
     """The post for a merged `secrets.yml` change, sent whatever the tick applied beside it.
 
-    A broad tick redeploys the k8s readers of each changed key (#5409) and applies the setup
+    A tick redeploys the k8s readers of each changed key (#5409, #5577) and applies the setup
     roles reading one that this host runs (#5436). Neither covers a reader the derivation
-    refused, a setup role gated onto another host, or the k8s readers of a range with no
-    deploy-plane path. So the post claims no consumer, and names the command that lists every
-    consumer with the repair for its own plane.
+    refused, a setup role gated onto another host, or a Pi service. So the post claims no
+    consumer, and names the command that lists every consumer with the repair for its own
+    plane.
     """
     return (
         f"⚠️ gitops-deploy: `secrets.yml` changed in `{origin[:8]}`. A changed secret reaches "
