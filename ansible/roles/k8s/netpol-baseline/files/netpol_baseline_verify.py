@@ -7,7 +7,10 @@ The pod stands in for a compromised workload: its `app: netpol-baseline-verify` 
 caller list, so every `refused` row must refuse it. The Job runs this script twice, once per
 stage, which `NETPOL_VERIFY_STAGE` names.
 
-- `gate`, the initContainer. Every active row of `netpol_baseline_probe_targets` must have an
+- `gate`, the initContainer. First, under each namespace-scoped baseline, the pods carrying
+  `netpol-baseline-exempt` must be exactly the apps `EXEMPT_SETS` expects, the check
+  `tasks/main.yml` ran before its apply. Here it runs after the apply, so a mismatch is a
+  detection the revision's soak acts on rather than a gate. Then every active row of `netpol_baseline_probe_targets` must have an
   EndpointSlice endpoint whose `conditions.ready` is `true`. Most legs are inverted, so a
   target that is down would read as fenced. It reads the API server with the pod's
   ServiceAccount token, and the API server's CA reaches `urlopen` through `SSL_CERT_FILE`,
@@ -47,6 +50,12 @@ API = "https://kubernetes.default.svc"
 TOKEN_FILE = "/var/run/secrets/kubernetes.io/serviceaccount/token"
 # The socket timeout of each API read, in seconds.
 API_TIMEOUT = 10
+# The label a workload with its own, tighter policy carries to leave a namespace-scoped baseline.
+EXEMPT_LABEL = "netpol-baseline-exempt"
+# The `Accept` of the exempt read: a `pods` list otherwise returns every pod's whole spec, env
+# values included, and RBAC cannot narrow a `list` to metadata. This asks the API server for
+# the metadata alone.
+METADATA_ONLY = "application/json;as=PartialObjectMetadataList;g=meta.k8s.io;v=v1"
 # The socket timeout of each leg's connect, in seconds; the probe it replaces used `nc -w 5`.
 TIMEOUT = 5
 # The liveness fetch's socket timeout, in seconds; the probe used `wget -T 10`.
@@ -101,13 +110,15 @@ def _dial(
         return err
 
 
-def api_reader(token: str, base: str = API) -> Callable[[str], dict]:
+def api_reader(
+    token: str, base: str = API, accept: str = "application/json"
+) -> Callable[[str], dict]:
     """A reader that GETs an API path as this pod's ServiceAccount and returns the JSON."""
 
     def get(path: str) -> dict:
         request = Request(
             base + path,
-            headers={"Authorization": f"Bearer {token}", "Accept": "application/json"},
+            headers={"Authorization": f"Bearer {token}", "Accept": accept},
         )
         try:
             with open_url(request, timeout=API_TIMEOUT) as response:
@@ -135,6 +146,58 @@ def ready(slices: Mapping) -> bool:
         for item in slices.get("items") or []
         for endpoint in item.get("endpoints") or []
     )
+
+
+def exempt(sets: Sequence[Mapping], get: Callable[[str], dict]) -> list[str]:
+    """Prove the pods that opt out of each namespace-scoped baseline are the expected apps.
+
+    An exact set comparison by `app` label, in both directions. Duplicates collapse, because
+    a rollout briefly runs two pods of one app. A labelled pod with no `app` label is named
+    by its pod name, so it can never match an expected app.
+
+    Args:
+        sets: `{namespace, variable, apps}` per namespace whose baseline is namespace-scoped;
+            `variable` is the role default that lists `apps`.
+        get: Reads an API path and returns its JSON.
+
+    Raises:
+        Failed: A namespace's live exempt set differs, naming both directions.
+    """
+    lines, wrong = [], []
+    query = urllib.parse.urlencode({"labelSelector": EXEMPT_LABEL})
+    for row in sets:
+        pods = get(f"/api/v1/namespaces/{row['namespace']}/pods?{query}")
+        live = set()
+        for pod in pods.get("items") or []:
+            meta = pod.get("metadata") or {}
+            app = (meta.get("labels") or {}).get("app")
+            live.add(app or f"pod {meta.get('name')} (no app label)")
+        expected = set(row["apps"])
+        if live == expected:
+            lines.append(
+                f"exempt ok: {row['namespace']} exempts exactly "
+                f"{', '.join(sorted(live)) or 'nothing'}"
+            )
+            continue
+        parts = []
+        if missing := sorted(expected - live):
+            parts.append(
+                f"{', '.join(missing)} carries no exemption, so the baseline's allow-list is "
+                "ADDED to its own tighter policy; deploy that workload's role"
+            )
+        if extra := sorted(live - expected):
+            parts.append(
+                f"{', '.join(extra)} is exempt but not in {row['variable']}, so the baseline "
+                "no longer fences it; remove its label, or add it there with a policy that "
+                "admits every caller the baseline admitted"
+            )
+        wrong.append(f"{row['namespace']}: {'; '.join(parts)}")
+    if wrong:
+        raise Failed(
+            "EXEMPT SET DRIFT: the pods carrying "
+            f"{EXEMPT_LABEL} are not the ones the role expects. {' | '.join(wrong)}"
+        )
+    return lines
 
 
 def gate(rows: Sequence[Mapping], get: Callable[[str], dict]) -> list[str]:
@@ -297,7 +360,9 @@ def legs(
     return lines
 
 
-def run(env: Mapping[str, str], token_file: str = TOKEN_FILE) -> list[str]:
+def run(
+    env: Mapping[str, str], token_file: str = TOKEN_FILE, base: str = API
+) -> list[str]:
     """Run the stage `NETPOL_VERIFY_STAGE` names, and return its report lines.
 
     Raises:
@@ -306,8 +371,13 @@ def run(env: Mapping[str, str], token_file: str = TOKEN_FILE) -> list[str]:
     stage = env.get("NETPOL_VERIFY_STAGE")
     head = f"verifying netpol-baseline's render {env.get('NETPOL_VERIFY_DIGEST8', 'unknown')}"
     if stage == "gate":
-        get = api_reader(Path(token_file).read_text().strip())
-        return [head, *gate(json.loads(env["GATE_TARGETS"]), get)]
+        token = Path(token_file).read_text().strip()
+        sets = json.loads(env["EXEMPT_SETS"])
+        return [
+            head,
+            *exempt(sets, api_reader(token, base, accept=METADATA_ONLY)),
+            *gate(json.loads(env["GATE_TARGETS"]), api_reader(token, base)),
+        ]
     if stage == "legs":
         return [head, *legs(env)]
     raise Failed(f"NETPOL_VERIFY_STAGE is {stage!r}; it must be 'gate' or 'legs'")

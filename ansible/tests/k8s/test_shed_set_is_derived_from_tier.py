@@ -116,7 +116,7 @@ def test_a_never_shed_member_whose_role_prunes_is_flagged(tmp_path):
 
 
 def test_a_tiered_unpruned_role_outside_never_shed_is_clean(tmp_path):
-    """traefik and `flux` set `flux_prune: false` from D5 and keep their tier instead."""
+    """`traefik-crds` and `flux` set `flux_prune: false` from D5 and keep a tier instead."""
     _role(tmp_path, "traefik", flux_prune=False)
     _role(tmp_path, "coredns", flux_prune=False)
     entries = [_entry("traefik", "home-edge"), _entry("coredns")]
