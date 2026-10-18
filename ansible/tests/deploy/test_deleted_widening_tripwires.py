@@ -193,17 +193,14 @@ def test_a_sibling_path_import_is_flagged(tmp_path):
 def test_the_tasks_file_census_is_not_empty():
     """Non-vacuity. A glob that matched nothing would make the clean test pass over nothing.
 
-    janitorr imports a tasks file by path — the CROSS-PLANE form, which is not the shape this
-    class is about. Naming it holds the census and the discriminator at once.
+    No live k8s role imports a tasks file by path since H2.5c, when janitorr dropped its
+    cross-plane imports of setup/common, so the cross-plane-is-not-a-sibling discriminator is
+    held by the fixture in `test_a_sibling_path_import_is_flagged` alone. The named member here
+    holds the census: a role tree every k8s deploy reads.
     """
     seen = {p.relative_to(REPO).as_posix() for p in k8s_tasks_files()}
     assert len(seen) >= 50, f"the k8s tasks-file census collapsed to {len(seen)} files"
-    for name in ("ansible/roles/k8s/janitorr/tasks/main.yml",):
-        assert name in seen, f"the census no longer reads {name}"
-        assert "../" in (REPO / name).read_text(), (
-            f"{name} no longer imports a tasks file by path, so it no longer holds the "
-            "cross-plane-is-not-a-sibling discriminator — name another file that does"
-        )
+    assert "ansible/roles/k8s/manifests/tasks/main.yml" in seen
 
 
 # --- class 3: an entry declaring a second tag hides a recording caller -------------------------

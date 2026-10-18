@@ -332,3 +332,37 @@ def test_the_configarr_health_role_grants_every_call_its_reader_makes(
         ("homelab", "", "pods/log", "get"),
     }
     assert missing(needs, grants(docs, "homelab", "configarr-health")) == []
+
+
+def test_the_janitorr_health_role_grants_every_call_its_reader_makes(
+    monkeypatch,
+) -> None:
+    """H2.5c: janitorr_health.py's main, run with a recording runner, against its rendered Role.
+
+    The replies put the container an hour past its startup grace, so the reader goes on from
+    the pod read to the log read and every call it can make is recorded.
+    """
+    monkeypatch.syspath_prepend(str(K8S_ROLES / "janitorr" / "files"))
+    reader = importlib.import_module("janitorr_health")
+    replies = {"get": "2026-10-18T04:30:26Z", "logs": "INFO cleanup done\n"}
+    argvs = []
+
+    def record(*args: str) -> tuple[int, str]:
+        argvs.append(["kubectl", "-n", "homelab", *args])
+        return 0, replies[args[0]]
+
+    monkeypatch.delenv("KUMA_PUSH_URL", raising=False)
+    assert reader.main(kubectl=record, now=lambda: 1792301426.0) == 0
+    assert [argv[3] for argv in argvs] == ["get", "logs"]
+    docs = list(
+        yaml_fast.safe_load_all(render_role_template("janitorr", "health-rbac.yaml.j2"))
+    )
+    needs = recorded_needs(argvs)
+    # The calls the plan derives this reader's grants from (*The *arr checks*), so a recorder
+    # that stopped recording cannot pass on an empty set.
+    assert {need[:4] for need in needs} == {
+        ("homelab", "apps", "deployments", "get"),
+        ("homelab", "", "pods", "list"),
+        ("homelab", "", "pods/log", "get"),
+    }
+    assert missing(needs, grants(docs, "homelab", "janitorr-health")) == []

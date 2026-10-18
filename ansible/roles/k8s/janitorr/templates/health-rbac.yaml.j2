@@ -1,0 +1,51 @@
+{#
+  The janitorr-health CronJob's identity. Its rules are the grant set the H2 plan's *The *arr
+  checks* derives from the calls janitorr_health.py makes:
+
+    get pod -l app=janitorr -o jsonpath=...   list on pods
+    logs deploy/janitorr --since=...          get on deployments.apps, list on pods,
+                                              get on pods/log
+
+  `get` on pods is the one rule no recorded call needs. The plan grants it, and it is kept
+  because a reader that kubectl refuses pages the tile DOWN. It adds no access: `list` already
+  returns every pod in the namespace in full.
+
+  ansible/tests/k8s/test_rbac_against_script.py runs the reader's main with a recording
+  runner and holds this Role to the calls it records.
+#}
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: janitorr-health
+  namespace: {{ k8s_namespace }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: janitorr-health
+  namespace: {{ k8s_namespace }}
+rules:
+  - apiGroups: [apps]
+    resources: [deployments]
+    verbs: [get]
+  - apiGroups: [""]
+    resources: [pods]
+    verbs: [get, list]
+  - apiGroups: [""]
+    resources: [pods/log]
+    verbs: [get]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: janitorr-health
+  namespace: {{ k8s_namespace }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: janitorr-health
+subjects:
+  - kind: ServiceAccount
+    name: janitorr-health
+    namespace: {{ k8s_namespace }}

@@ -6,7 +6,8 @@ See repo-root `CLAUDE.md` for shared conventions.
 ## At a glance
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates, tasks or containers_list entry, or the k3s role's Longhorn tier lists. -->
 - **Deploy tag:** `--tags "janitorr"`
-- **Image:** `ghcr.io/schaka/janitorr` (`janitorr_k8s_image`)
+- **Images:** `ghcr.io/schaka/janitorr` (`janitorr_k8s_image`), `python`
+  (`janitorr_k8s_health_image`), `alpine/k8s` (`janitorr_k8s_health_kubectl_image`)
 - **Route:** none (no `templates/ingressroute.yaml.j2`)
 - **Claim:** `media-data` (not Longhorn (media-local))
 - **Auto-deploy:** denylisted (`k8s_autodeploy: false`) — probe-less — no readinessProbe on the
@@ -20,6 +21,24 @@ See repo-root `CLAUDE.md` for shared conventions.
   from is gone; this role's Secret renders `templates/config/application.yml.j2`. Edit retention
   rules HERE; deploy with `--tags janitorr` from daniel-box.
 - **No web UI** (background service) · targets the cluster sonarr/radarr/jellyfin
+- **Its health signal is the `janitorr-health` CronJob** (`templates/health-cronjob.yaml.j2`),
+  every 10 minutes. `files/janitorr_health.py` reads the running pod's container start time
+  and, past a 10-minute startup grace, counts `Unexpected error occurred in scheduled task`
+  lines in its log, through its own ServiceAccount (`templates/health-rbac.yaml.j2`). It pushes
+  the "Janitorr Errors" Kuma monitor. Not gated by `k8s/cronjob-gate`: `k8s_autodeploy` is
+  false here, so no batch gate is required.
+- **The health reader was a daniel-box host cron until H2.5c.** `tasks/main.yml` keeps absent
+  arms for the cron, `/opt/janitorr-health`, `/usr/local/bin/janitorr-health.sh` and the
+  `janitorr` drift fragment, ahead of the manifests include.
+- **The push URL, token included, lives in its own Secret, `janitorr-health`**
+  (`templates/health-secret.yaml.j2`), and reaches the pod as `KUMA_PUSH_URL` through
+  `secretKeyRef`. It is a whole URL rather than a bare token so that it stays out of
+  `ansible/roles/k8s/manifests/files/standalone_secret_keys.json`. The reader's code ships in
+  the `janitorr-health` ConfigMap, beside `host_lib.py` and `kuma_push.py` from `setup/common`,
+  and no secret goes in it (`ansible/tests/k8s/test_no_secret_in_a_moved_jobs_configmap.py`).
+- **The health pod carries `app: janitorr-health`, never `app: janitorr`.** The reader and
+  `tasks/verify.yml` both take the first Running pod labelled `app=janitorr`. uptime-kuma's
+  `netpol_from` admits `janitorr-health`.
 
 ## Notable
 - Behaviour (retention rules, leaving-soon thresholds, dry-run flag) lives in
@@ -74,3 +93,5 @@ See repo-root `CLAUDE.md` for shared conventions.
 
 ## Editing
 - Rules: `templates/config/application.yml.j2` (rendered into the k8s Secret by `roles/k8s/janitorr`)
+- Verify the health reader: `kubectl -n homelab logs job/<the newest janitorr-health Job>`. Its
+  `janitorr-health: status=up` line is the verdict, and `janitorr-health: pushed` is the push.

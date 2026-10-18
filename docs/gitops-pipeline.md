@@ -199,10 +199,10 @@ with the reason.
   hand applies, since `k3s` runs from `k3s-bringup.yml` and `optimize_pi` runs on daniel-pi only,
   so it routes `common` to `manual_plane`, whose remediation names both commands.
 
-A k8s role can import a `common` file too. `janitorr` and `configarr` copy `host_lib.py` through
-`install_host_lib.yml` and stamp it through `stamp_deployed.yml`, and
-`K8S_ROLES_IMPORTING_SETUP_FILES` puts both in `ChangeSet.k8s` when one of those three files
-changes. The deployer applies a k8s role only for an image-pin bump, so each one defer-and-alerts
+A k8s role can read a `common` file too. `configarr` and `janitorr` stage `host_lib.py` and
+`kuma_push.py` into their health CronJobs' ConfigMaps, and `autofix-bridge` and `uptime-kuma`
+stage `kuma_push.py`. `K8S_ROLES_IMPORTING_SETUP_FILES` puts each in `ChangeSet.k8s` when a file
+it stages changes. The deployer applies a k8s role only for an image-pin bump, so each one defer-and-alerts
 and records a `k8s_unapplied` line. The same test holds that table to the k8s roles' tasks.
 
 The third class is the bring-up playbooks, which run by hand by construction. The deployer's own
