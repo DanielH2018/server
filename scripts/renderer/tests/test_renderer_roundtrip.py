@@ -12,7 +12,9 @@ through `_render_sides` (#5582).
 Run: uv run pytest scripts/renderer/tests/test_renderer_roundtrip.py
 """
 
+import contextlib
 import copy
+import io
 import json
 import re
 import sys
@@ -103,13 +105,31 @@ print("---\\n".join(out), end="")
 """
 
 
-@pytest.fixture
-def flux_on_path(tmp_path, monkeypatch):
+def _put_flux_on_path(directory, monkeypatch) -> str:
     fake = FAKE_FLUX.format(python=sys.executable, manifest=TYPES_FIXTURE_MANIFEST)
-    bin_dir = fake_bin(tmp_path / "bin", flux=fake)
+    bin_dir = fake_bin(directory / "bin", flux=fake)
     monkeypatch.setenv("PATH", str(bin_dir))
     monkeypatch.setenv("FAKE_FLUX_REPLAY", json.dumps(MEASURED))
     return str(bin_dir / "flux")
+
+
+@pytest.fixture
+def flux_on_path(tmp_path, monkeypatch):
+    return _put_flux_on_path(tmp_path, monkeypatch)
+
+
+@pytest.fixture(scope="module")
+def measured_probe(tmp_path_factory) -> tuple[int, str]:
+    """`fluxprobe`'s exit code and stdout against the fake replaying `MEASURED`.
+
+    Two tests read this one run; each probe spawns the fake once per corpus value.
+    """
+    tmp = tmp_path_factory.mktemp("fluxprobe")
+    out = io.StringIO()
+    with pytest.MonkeyPatch.context() as mp, contextlib.redirect_stdout(out):
+        _put_flux_on_path(tmp, mp)
+        code = _main("fluxprobe", "--out", str(tmp / "probe"))
+    return code, out.getvalue()
 
 
 # Each render the module has made: placeholder mode per tag set, stub mode per tag and pass
@@ -288,9 +308,9 @@ def test_roundtrip_without_flux_on_path_exits_2(tmp_path, monkeypatch, capsys):
     assert not (tmp_path / "rt").exists()
 
 
-def test_fluxprobe_passes_every_case_the_fake_returns(flux_on_path, tmp_path, capsys):
-    assert _main("fluxprobe", "--out", str(tmp_path / "probe")) == 0
-    printed = capsys.readouterr().out
+def test_fluxprobe_passes_every_case_the_fake_returns(measured_probe):
+    code, printed = measured_probe
+    assert code == 0
     assert "FAIL" not in printed
     assert (
         "ok probe-substitute escaped-run: '$$$$$${x}' came back as '$$${x}'" in printed
@@ -307,11 +327,10 @@ def test_fluxprobe_with_an_expected_output_missing_is_flagged(
     assert "FAIL resolver '1:20': " in printed
 
 
-def test_fluxprobe_holds_the_resolver_to_the_measured_cli_is_clean(
-    flux_on_path, tmp_path, capsys
-):
-    assert _main("fluxprobe", "--out", str(tmp_path / "probe")) == 0
-    lines = capsys.readouterr().out.splitlines()
+def test_fluxprobe_holds_the_resolver_to_the_measured_cli_is_clean(measured_probe):
+    code, printed = measured_probe
+    assert code == 0
+    lines = printed.splitlines()
     assert sum(ln.startswith("ok resolver ") for ln in lines) == len(RESOLVER_CORPUS)
     assert "ok resolver '1e3': the CLI returned 1000, the resolver refuses it" in lines
 

@@ -64,12 +64,16 @@ class SetupRoute(NamedTuple):
         on_tick_host: whether its `when:` admits the tick's host.
         host: the one host its gate admits, for a role the tick's host does not run, else
             None. The printed remediation appends `-e target=<host>` from it.
+        agent_hosts: the hosts its playbook's opt-in join plays apply the agent half to,
+            from the routing's `agent_hosts` key (#5606). Empty for every role but `k3s`,
+            and for a routing script too old to emit the key.
     """
 
     playbook: str | None
     tag: str
     on_tick_host: bool
     host: str | None
+    agent_hosts: tuple[str, ...] = ()
 
 
 # None until a tick installs routing or a reader first asks; see `routing`.
@@ -115,7 +119,10 @@ def _route(role: str, r: dict) -> SetupRoute:
         raise ValueError(f"{role}: malformed playbook {playbook!r}")
     if host is not None and not isinstance(host, str):
         raise ValueError(f"{role}: malformed host {host!r}")
-    return SetupRoute(playbook, tag, r["on_tick_host"], host)
+    agents = r.get("agent_hosts", [])
+    if not isinstance(agents, list) or not all(isinstance(h, str) for h in agents):
+        raise ValueError(f"{role}: malformed agent_hosts {agents!r}")
+    return SetupRoute(playbook, tag, r["on_tick_host"], host, tuple(agents))
 
 
 def derive_routing(
@@ -313,6 +320,12 @@ def setup_role_host(role: str) -> str | None:
     """The one host a role the tick's host does not run is gated onto, else None."""
     route = routing().get(role)
     return route.host if route else None
+
+
+def setup_role_agent_hosts(role: str) -> tuple[str, ...]:
+    """The hosts `role`'s playbook joins as agents, or () when it has no agent half."""
+    route = routing().get(role)
+    return route.agent_hosts if route else ()
 
 
 def keys_naming_no_role(keys: set[str], present: set[str]) -> set[str]:

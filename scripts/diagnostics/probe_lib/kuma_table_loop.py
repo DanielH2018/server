@@ -1,18 +1,15 @@
-"""The two table loops in the static-monitors template, as `parse_declared_monitors` reads them.
+"""The table loop in the static-monitors template, as `parse_declared_monitors` reads it.
 
 monitor-bridge's push tiles render from a loop over its check table (#3781):
 
     {% for <row> in lookup('file', playbook_dir ~ '<path>') | py_table('<TABLE>') %}
 
-and the ingress tiles from a loop over daniel-box's `containers_list` (#3690):
+The loop's entity line names its tile `{{ <row>.<field> | to_json }}`. A line-by-line parser
+sees one templated name there, which is no monitor at all, so `TableLoop` reads the rows the
+loop iterates and hands back one name per row.
 
-    {% for <row> in containers_list | kuma_ingress_monitors %}
-
-Each loop's entity line names its tile `{{ <row>.<field> | to_json }}`. A line-by-line
-parser sees one templated name there, which is no monitor at all, so `TableLoop` reads the
-rows the loop iterates and hands back one name per row. The ingress rows come from the same
-filter the playbook runs, applied to the inventory file the template's `containers_list`
-comes from.
+The ingress tiles' loop over `containers_list` was the second such loop until M4's PR 4
+(#5625) moved those probes to blackbox-exporter.
 """
 
 import re
@@ -28,19 +25,12 @@ from lib.repo_paths import FILTER_PLUGINS
 
 _sys.path.insert(0, str(FILTER_PLUGINS))
 
-from kuma_monitors import kuma_ingress_monitors
-from lib import yaml_fast
 from py_table import py_table
 
 _LOOP_RE = re.compile(
     r"{%-?\s*for\s+(\w+)\s+in\s+lookup\('file',\s*playbook_dir\s*~\s*'([^']+)'\)"
     r"\s*\|\s*py_table\('(\w+)'\)"
 )
-_INGRESS_LOOP_RE = re.compile(
-    r"{%-?\s*for\s+(\w+)\s+in\s+containers_list\s*\|\s*kuma_ingress_monitors\b"
-)
-# The host whose `containers_list` the uptime-kuma role renders against.
-_INGRESS_HOST_VARS = "inventory/host_vars/daniel-box.yml"
 _ENDFOR_RE = re.compile(r"{%-?\s*endfor\b")
 _ROW_NAME_RE = re.compile(r'"name":\s*\{\{\s*(\w+)\.(\w+)\b')
 
@@ -49,8 +39,7 @@ class TableLoop:
     """Tracks whether the parser is inside a table loop, and the rows it iterates.
 
     Args:
-      root: The `ansible/` directory the loop's `playbook_dir` path, and the inventory, resolve
-        under.
+      root: The `ansible/` directory the loop's `playbook_dir` path resolves under.
     """
 
     def __init__(self, root: Path) -> None:
@@ -63,12 +52,6 @@ class TableLoop:
         if start := _LOOP_RE.search(line):
             source = (self.root / start.group(2).lstrip("/")).read_text()
             self.var, self.rows = start.group(1), py_table(source, start.group(3))
-        elif start := _INGRESS_LOOP_RE.search(line):
-            host_vars = yaml_fast.safe_load(
-                (self.root / _INGRESS_HOST_VARS).read_text()
-            )
-            self.var = start.group(1)
-            self.rows = kuma_ingress_monitors(host_vars["containers_list"])
         elif _ENDFOR_RE.search(line):
             self.var, self.rows = None, []
 

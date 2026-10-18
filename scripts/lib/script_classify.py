@@ -23,6 +23,7 @@ from pathlib import Path as _Path
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 
 import ast
+import functools
 import re
 from pathlib import Path
 
@@ -123,8 +124,20 @@ def file_text(path: Path) -> str:
         return ""
 
 
-def _argv_references(text: str) -> set[str]:
-    """Script filenames named by a string literal in Python source.
+def _nodes(text: str) -> list[ast.AST]:
+    """Every node of Python source, walked once, or none when it does not parse.
+
+    Both readers below scan the whole tree, and `ast.walk` costs more than either scan: a
+    `classify()` of the real tree spent most of its time walking each file once per reader.
+    """
+    try:
+        return list(ast.walk(ast.parse(text)))
+    except SyntaxError, ValueError:
+        return []
+
+
+def _argv_references(nodes: list[ast.AST]) -> set[str]:
+    """Script filenames named by a string literal in Python source, given as its `_nodes`.
 
     `build_docs.py` runs the reference generators through `subprocess`, so the path is one
     element of an argv list and the word `python` is several lines away — the line scan
@@ -135,13 +148,9 @@ def _argv_references(text: str) -> set[str]:
     sentence "…the staleness gate (scripts/deploy_tools/deploy_lib/staleness.py, exit 4)…" in a
     string it prints, and reading that as an invocation would put a deploy gate behind a session hook.
     """
-    try:
-        tree = ast.parse(text)
-    except SyntaxError, ValueError:
-        return set()
     docstrings = {
         node.body[0].value
-        for node in ast.walk(tree)
+        for node in nodes
         if isinstance(
             node, (ast.Module, ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)
         )
@@ -151,7 +160,7 @@ def _argv_references(text: str) -> set[str]:
         and isinstance(node.body[0].value.value, str)
     }
     found: set[str] = set()
-    for node in ast.walk(tree):
+    for node in nodes:
         if (
             isinstance(node, ast.Constant)
             and isinstance(node.value, str)
@@ -187,8 +196,8 @@ def _literal_segments(node: ast.AST) -> list[str]:
     return out
 
 
-def _constructed_path_references(text: str) -> set[str]:
-    """Script filenames an expression assembles out of separate path segments.
+def _constructed_path_references(nodes: list[ast.AST]) -> set[str]:
+    """Script filenames an expression assembles out of separate path segments, from `_nodes`.
 
     A caller can build `os.path.join(repo, "scripts", "deploy_tools",
     "staging_expectations.py")`, so no string literal in the file spells the filename next to
@@ -196,12 +205,8 @@ def _constructed_path_references(text: str) -> set[str]:
     script "no automated caller in the tree". This reader is what stops an assembled path
     from reading that way.
     """
-    try:
-        tree = ast.parse(text)
-    except SyntaxError, ValueError:
-        return set()
     found: set[str] = set()
-    for node in ast.walk(tree):
+    for node in nodes:
         if not isinstance(node, (ast.Call, ast.BinOp)):
             continue
         match = ARGV_RE.fullmatch("/".join(_literal_segments(node)))
@@ -221,7 +226,8 @@ def _invoked_by(path: Path, catalogue: dict[str, Path]) -> set[str]:
     text = file_text(path)
     found = _invoked_in(text)
     if path.suffix == ".py":
-        found |= _argv_references(text) | _constructed_path_references(text)
+        nodes = _nodes(text)
+        found |= _argv_references(nodes) | _constructed_path_references(nodes)
     found.discard(path.name)
     return {n for n in found if n in catalogue}
 
@@ -324,35 +330,39 @@ def _test_importers(scripts: Path) -> dict[str, set[str]]:
     return _import_graph(scripts, _is_test_file)
 
 
-def _has_main_guard(text: str) -> bool:
-    """Whether Python source has a module-level `if __name__ == ...` block of its own."""
+def _main_shape(text: str) -> tuple[bool, bool]:
+    """(has a module-level `if __name__ == ...` block, defines a module-level `main`).
+
+    Both are False when the source does not parse.
+    """
     try:
-        tree = ast.parse(text)
+        body = ast.parse(text).body
     except SyntaxError, ValueError:
-        return False
-    return any(
+        return False, False
+    guarded = any(
         isinstance(node, ast.If)
         and isinstance(node.test, ast.Compare)
         and isinstance(node.test.left, ast.Name)
         and node.test.left.id == "__name__"
-        for node in tree.body
+        for node in body
+    )
+    return guarded, any(
+        isinstance(n, ast.FunctionDef) and n.name == "main" for n in body
     )
 
 
-def _is_dispatch_target(text: str) -> bool:
-    """Whether Python source defines a module-level `main` with no `__main__` guard."""
-    if _has_main_guard(text):
-        return False
-    try:
-        tree = ast.parse(text)
-    except SyntaxError, ValueError:
-        return False
-    return any(isinstance(n, ast.FunctionDef) and n.name == "main" for n in tree.body)
+def _has_main_guard(text: str) -> bool:
+    """Whether Python source has a module-level `if __name__ == ...` block of its own."""
+    return _main_shape(text)[0]
 
 
 def classify(repo: Path = REPO, scripts: Path = SCRIPTS) -> dict[str, tuple[str, str]]:
     """Script filename -> (how it runs, the evidence for saying so)."""
     verdicts: dict[str, tuple[str, str]] = {}
+    # Each script is read once per question for this call. Four checks below ask its
+    # `_main_shape`, and a dispatch target is asked what it invokes twice; the repeats were
+    # a sixth of this function's time (#5564).
+    shape = functools.cache(lambda path: _main_shape(file_text(path)))
 
     def record(script: str, kind: str, evidence: str) -> bool:
         current = verdicts.get(script)
@@ -366,9 +376,10 @@ def classify(repo: Path = REPO, scripts: Path = SCRIPTS) -> dict[str, tuple[str,
 
     catalogue = candidates(scripts)
     by_path = {p.name: p for p in catalogue}
+    invoked = functools.cache(lambda path: _invoked_by(path, by_path))
     roles = repo / "ansible" / "roles"
     for path, kind, evidence in _invocation_sites(repo):
-        for script in _invoked_by(path, by_path):
+        for script in invoked(path):
             # A role's tasks naming a Python module with no `__main__` guard carry it into an
             # image rather than run it: homelab-mcp's ship `obs_api.py` as a library.
             # A hook, or a role's own `files/` runner, naming one still runs it.
@@ -376,7 +387,7 @@ def classify(repo: Path = REPO, scripts: Path = SCRIPTS) -> dict[str, tuple[str,
                 path.is_relative_to(roles)
                 and path.parent.name == "tasks"
                 and script.endswith(".py")
-                and not _has_main_guard(file_text(by_path[script]))
+                and not shape(by_path[script])[0]
             ):
                 record(script, "library", f"no `__main__` guard; carried by {evidence}")
                 continue
@@ -393,7 +404,7 @@ def classify(repo: Path = REPO, scripts: Path = SCRIPTS) -> dict[str, tuple[str,
     entry_points = {
         stem
         for stem in imported
-        if f"{stem}.py" in by_path and _has_main_guard(file_text(by_path[f"{stem}.py"]))
+        if f"{stem}.py" in by_path and shape(by_path[f"{stem}.py"])[0]
     }
     runs_in_process: dict[str, set[str]] = {}
     for stem in entry_points:
@@ -406,9 +417,10 @@ def classify(repo: Path = REPO, scripts: Path = SCRIPTS) -> dict[str, tuple[str,
     # `detach_notify.py` it spawns still run on every deploy (#4347).
     for stem, stem_callers in imported.items():
         path = by_path.get(f"{stem}.py")
-        if path is None or not _is_dispatch_target(file_text(path)):
+        # A dispatch target: a module-level `main` and no `__main__` guard.
+        if path is None or shape(path) != (False, True):
             continue
-        runs = runs_in_process.get(f"{stem}.py", set()) | _invoked_by(path, by_path)
+        runs = runs_in_process.get(f"{stem}.py", set()) | invoked(path)
         for caller in stem_callers:
             runs_in_process.setdefault(caller, set()).update(runs)
 
@@ -417,7 +429,7 @@ def classify(repo: Path = REPO, scripts: Path = SCRIPTS) -> dict[str, tuple[str,
     # as things nobody runs. Iterated to a fixpoint: the chain is cron → build_docs.py →
     # generator, and a longer one would otherwise resolve only as far as it was walked.
     callers = {
-        path: _invoked_by(path, by_path) | runs_in_process.get(path.name, set())
+        path: invoked(path) | runs_in_process.get(path.name, set())
         for path in catalogue
     }
     while True:
@@ -443,7 +455,7 @@ def classify(repo: Path = REPO, scripts: Path = SCRIPTS) -> dict[str, tuple[str,
         if path.suffix != ".py" or path.name in verdicts:
             continue
         callers = tested.get(path.stem)
-        if callers and not _has_main_guard(file_text(path)):
+        if callers and not shape(path)[0]:
             record(
                 path.name,
                 "library",

@@ -124,7 +124,8 @@ module holds that set to host_vars, so a node that pins a new link needs a rule 
 
 **The `blackbox-ingress` job probes every ingress tile through blackbox-exporter.** It is
 hand-written in `prometheus.yaml.j2` and renders one target per tile the
-`kuma_ingress_monitors` filter yields, so Kuma's tiles and the probes read one list. Each
+`kuma_ingress_monitors` filter yields. Kuma's own ingress tiles came from that filter until
+M4's PR 4 (#5625) removed them, so these probes are the only ones on the ingress names. Each
 target sets `service`, `module` and `page_tier`, and the `ingress-probes` rules take `service`
 from the target rather than from a literal. A new routed entry therefore changes
 `prometheus.yml` and rolls Prometheus. `ansible/tests/services/test_blackbox_ingress_targets.py`

@@ -106,8 +106,20 @@ def test_the_subprocess_argv_is_one_the_script_takes(capsys):
         {"playbook": 1, "tag": "x", "on_tick_host": True, "host": None},
         {"playbook": None, "tag": "x", "on_tick_host": "yes", "host": None},
         {"playbook": None, "tag": "x", "on_tick_host": True},
+        {
+            "playbook": None,
+            "tag": "x",
+            "on_tick_host": True,
+            "host": None,
+            "agent_hosts": "daniel-server",
+        },
     ],
-    ids=["playbook-not-a-path", "flag-not-a-bool", "key-missing"],
+    ids=[
+        "playbook-not-a-path",
+        "flag-not-a-bool",
+        "key-missing",
+        "agent-hosts-not-a-list",
+    ],
 )
 def test_a_malformed_route_is_rejected_rather_than_read(route):
     text = json.dumps({"routes": {"x": route}, "unplaced": {}})
