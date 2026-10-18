@@ -183,6 +183,29 @@ groups:
             reconcile and clears the hold if it passes, and `sudo
             /usr/lib/homelab/homelab-updater --clear-hold --install-newest` clears the hold and
             then installs the newest packages as a timer run does.
+      # SHADOW UNTIL #5658's ruling on unattended launches decides whether idle slots page
+      # anyone (#5672). No batch ran for 16.4h on the night of 2026-10-13 while 9 filed issues
+      # waited, and nothing said so. The server lander writes findings_issues from issue labels
+      # each pass (fanout_lib/operator_waits.py), and claude-cgroup-metrics.sh writes one
+      # claude_fanout_batch_pids_current series per live batch on either node, so no series
+      # at all means no batch runs anywhere. A free count with no series behind it reads
+      # absent, never 0, so a lander that stopped writing leaves this quiet rather than firing.
+      - alert: FanoutSlotsIdleWithFreeWork
+        expr: >-
+          max(findings_issues{state="free", origin="daniel-box"}) > 0
+          unless on() count(claude_fanout_batch_pids_current) > 0
+        for: 1h
+        labels:
+          severity: warning
+          service: daniel-box
+          shadow: "true"
+        annotations:
+          summary: Free fan-out issues have waited an hour with no batch running.
+          description: >-
+            findings_issues{state="free"} has been above 0 for an hour while no fan-out batch
+            ran on either node. Read `uv run python scripts/dev/findings.py next` for what is
+            free and `uv run python scripts/dev/fanout.py place read` for the hosts' headroom,
+            then launch, or record why the queue waits (`findings.py defer`).
       # HostUpdateStale: one rule per entry of observability_expected_hosts, which is empty
       # until H3.9c, so no rule follows yet. Each entry's rule is the shape of
       # tests/rules/fixtures/host-update-stale.yaml, and
