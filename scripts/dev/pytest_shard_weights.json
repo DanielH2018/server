@@ -66,6 +66,8 @@
  "ansible/roles/k8s/ical-proxy/tests/test_app.py": 0.0,
  "ansible/roles/k8s/janitorr/tests/test_janitorr_health.py": 0.12,
  "ansible/roles/k8s/janitorr/tests/test_janitorr_health_logic.py": 0.0,
+ "ansible/roles/k8s/jellyfin/tests/test_jellyfin_snapshot_cap.py": 0.0,
+ "ansible/roles/k8s/jellyfin/tests/test_jellyfin_verify.py": 1.24,
  "ansible/roles/k8s/karakeep/tests/test_archive_pruner.py": 0.01,
  "ansible/roles/k8s/karakeep/tests/test_time_tagger_wiring.py": 0.0,
  "ansible/roles/k8s/manifests/tests/test_flux_job_connect.py": 1.0,
