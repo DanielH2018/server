@@ -260,6 +260,7 @@ containers_list:
       - autofix-bridge  # env-secret.yaml.j2, cluster FQDN
       - bazarr          # app DB, bare name — see the policy's header
       - prowlarr        # Application Sync writes indexers in — see the policy's header
+      - sonarr-verify   # templates/verify-inert/ Jobs, staged for the flip — see the policy's header
     # homepage's Sonarr widget dials the ClusterIP; this key adds homepage to the callers above.
     homepage_widget: true
   # Runs a WireGuard/Mullvad sidecar sharing the pod's netns, gating qbittorrent's start so
@@ -309,6 +310,7 @@ containers_list:
       - autofix-bridge
       - bazarr
       - prowlarr        # Application Sync writes indexers in — see the policy's header
+      - radarr-verify   # templates/verify-inert/ Job, staged for the flip — see the policy's header
     # homepage's Radarr widget dials the ClusterIP; this key adds homepage to the callers above.
     homepage_widget: true
   # Brings a second workload with it — flaresolverr, which renders attacker-supplied
@@ -339,6 +341,9 @@ containers_list:
       - flaresolverr-netpol-probe  # control leg of this role's own isolation probe
   - name: bazarr
     platform: k8s
+    # Flux applies bazarr through `promote`, and every Ansible path skips it (D5.9). The
+    # handback is two PRs, `owner: released` then removing `owner`: docs/flux-deploy-plane.md.
+    owner: flux
     weekly_backup_claims: {bazarr-config: 5}  # Fri
     depends_on: [media-volume]
     hostname: "bazarr"
@@ -421,6 +426,10 @@ containers_list:
     use_authelia: false
   - name: speedtest
     platform: k8s
+    # Flux applies speedtest through `promote`, and substitutes its APP_KEY Secret from
+    # homelab-cluster-vars (D5.9). The handback is two PRs, `owner: released` then removing
+    # `owner`: docs/flux-deploy-plane.md.
+    owner: flux
     hostname: "speedtest"
     port: 80
     use_authelia: true
@@ -451,6 +460,9 @@ containers_list:
     owner: flux
   - name: freshrss
     platform: k8s
+    # Flux applies freshrss through `promote`, and every Ansible path skips it (D5.9). The
+    # handback is two PRs, `owner: released` then removing `owner`: docs/flux-deploy-plane.md.
+    owner: flux
     weekly_backup_claims: {freshrss-config: 5}  # Fri
     hostname: "freshrss"
     kuma: {name: k3s FreshRSS}
@@ -491,6 +503,10 @@ containers_list:
   # deliberately (see the role's defaults).
   - name: livesync
     platform: k8s
+    # Flux applies livesync through `promote`, and substitutes its CouchDB credentials Secret
+    # from homelab-cluster-vars (D5.9). The handback is two PRs, `owner: released` then
+    # removing `owner`: docs/flux-deploy-plane.md.
+    owner: flux
     hostname: "livesync"
     # A hand-written tile in uptime-kuma's static-monitors.yaml.j2 covers it: livesync-k8s, which expects CouchDB's 401.
     kuma: false
@@ -536,6 +552,9 @@ containers_list:
   # reader is.
   - name: artifacts
     platform: k8s
+    # Flux applies artifacts through `promote`; its host directories are k8s_host_files' (D5.19).
+    # The handback is two PRs, `owner: released` then removing `owner`: docs/flux-deploy-plane.md.
+    owner: flux
     hostname: "artifacts"
     port: 8080
     use_authelia: true
@@ -869,6 +888,9 @@ containers_list:
   # Loki. No web UI and no route; each exporter's Service is scraped in-cluster.
   - name: game-stats
     platform: k8s
+    # Flux applies game-stats through `promote` (D5.19). The handback is two PRs, `owner:
+    # released` then removing `owner`: docs/flux-deploy-plane.md.
+    owner: flux
     weekly_backup_claims: {terraria-stats-data: 0, valheim-stats-data: 1}  # Sun, Mon
     depends_on: [loki-homelab]
     # One job per game, each a single replica behind its own Service. terraria-stats runs as

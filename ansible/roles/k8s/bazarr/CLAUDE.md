@@ -5,23 +5,42 @@ shared conventions.
 
 ## At a glance
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates, tasks or containers_list entry, or the k3s role's Longhorn tier lists. -->
-- **Deploy tag:** `--tags "bazarr"`
+- **Applied by:** Flux, through `promote` (`owner: flux`); `deploy.sh` refuses `--tags=bazarr`
+  with exit 5
 - **Image:** `lscr.io/linuxserver/bazarr` (`bazarr_k8s_image`)
 - **Route:** `bazarr.<domain>` · `bazarr.local.<domain>`, Authelia one_factor
 - **Claims:** `bazarr-config` (weekly -> B2 (default target)), `media-data` (not Longhorn
   (media-local))
-- **Auto-deploy:** eligible (`k8s_autodeploy: true`)
 <!-- /generated_from -->
 
 - **Port:** 6767.
 - **Storage:** `bazarr-config` PVC (`longhorn`, 1Gi) holds the database and subtitle paths.
   Also mounts the shared `media-data` claim (read/write, via subPath) for the files
   themselves.
-- **Auto-deploy since slice 7b (2026-08-21):** the `bazarr-config` claim is snapshotted pre-apply by `k8s/volume-snapshot` and reverted on a
-  failed deploy, which is what makes the Recreate + RWO migrating-state risk safe to
-  auto-promote. `media-data` itself is **not** reverted (a shared claim other roles also
-  write); a revert can forget a subtitle file bazarr already wrote there, which is
-  self-healing because bazarr checks existence before re-downloading.
+- **Flux applies it, not Ansible** (D5.9, the first Wave B PR). Its `containers_list` entry
+  carries `owner: flux`, so `deploy.sh`, the play and the GitOps deployer all skip it, and a
+  merged change reaches the cluster when `promote` publishes and verifies the next bundle. Its
+  image-bump PRs therefore draw no `land-wait` and no `probe.py health` run. To give it back to
+  Ansible, follow the two-PR handback in `docs/flux-deploy-plane.md`; a plain revert of the
+  flag leaves two writers on the objects. authelia, media-volume and traefik stay
+  Ansible-owned, so the Kustomization records them in its `homelab/ansible-owned-deps`
+  annotation, not in `dependsOn`. The Deployment is `Recreate`, so a change that rolls it
+  takes the service down briefly.
+- **The `bazarr-snapshot` Job snapshots `bazarr-config` before each revision applies**
+  (D5.2a). The bazarr Kustomization depends on `bazarr-snapshot`, so a revision applies only
+  after the snapshot is ready; `docs/flux-deploy-plane.md` lists the Job's checks. A failed
+  revision that changes bazarr writes the stateful hold, and `promote` does not reset `prod`,
+  because the failed image may already have migrated the database. Nothing reverts the claim
+  on its own: the operator follows the revert runbook in `docs/volume-snapshot-drills.md`.
+  `k8s_autodeploy: true` still lets Renovate automerge the image bump, which is safe for the
+  same reason it was under Ansible: a bad swap can be reverted to the snapshot.
+- **`media-data` is neither snapshotted nor reverted** (`k8s_autodeploy_unreverted_claims`). It
+  is a shared claim other roles also write; a revert can forget a subtitle file bazarr already
+  wrote there, which is self-healing because bazarr checks existence before re-downloading.
+- **Where the task went.** `tasks/main.yml` holds one task, the include of `k8s/manifests`,
+  and no Flux path runs it. It stays for the handback. Its pre-apply snapshot through
+  `k8s/volume-snapshot` became the `bazarr-snapshot` Job, and the Kustomization's `wait`
+  replaces the rollout wait.
 
 ## Notable
 - `-lsNN` linuxserver tagging hides a breaking bump as a routine patch bump — the reason the
@@ -67,7 +86,7 @@ case outstanding here. `GET /api/episodes/wanted` and `GET /api/movies/wanted` b
 missing. Against that, Whisper needs an ASR sidecar (`whisperai.endpoint` is already stubbed at
 `http://whisper:9001` in Bazarr's own defaults, pointing at nothing) and a CPU budget on
 `daniel-box`, which is also the node running the GPU transcoder and every other workload. So
-the cost is real and the benefit is currently zero. **Revisit when a wanted count stays
+the cost is real and the benefit was zero on 2026-09-10. **Revisit when a wanted count stays
 non-zero** — that is the measurement that would change the answer, not a judgement about the
 library.
 

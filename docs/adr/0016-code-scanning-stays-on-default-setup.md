@@ -1,7 +1,7 @@
 ---
 id: "0016"
 title: Code scanning stays on default setup, and false positives are removed in code
-status: Accepted
+status: Superseded by ADR-0024
 date: 2026-09-02
 governs:
   - scripts/diagnostics/probe_lib/ha.py:280
@@ -12,7 +12,7 @@ governs:
 
 ## Status
 
-Accepted.
+Superseded by [ADR-0024](0024-code-scanning-is-off.md) on 2026-10-18: code scanning is off.
 
 ## Context
 

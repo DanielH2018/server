@@ -65,7 +65,6 @@ _HOST_WRITE_EXEMPT = frozenset({"manifests"})
 # rather than the role getting clean — check before editing the list.
 _ROLES_THAT_WRITE_THE_HOST = frozenset(
     {
-        "artifacts",
         "observability",
         "configarr",
         "crowdsec",

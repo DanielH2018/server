@@ -196,7 +196,7 @@ def test_two_renders_of_one_tree_write_identical_bundles(tmp_path, cluster_file)
         )
     # The image contexts are compared too, and are no bundle file (D5.4a1).
     assert texts[0] == texts[1]
-    assert sorted(p for p in texts[0] if not p.startswith("images/")) == [
+    assert sorted(p for p in texts[0] if not p.startswith(("images/", "README"))) == [
         f"{CLUSTER_VARS_DIR}/{CLUSTER_VARS_FILE}",
         f"{CLUSTER_VARS_DIR}/kustomization.yaml",
         "cluster/soak/configmap.yaml",
@@ -374,7 +374,7 @@ def test_a_cluster_file_edit_moves_only_a_substituting_tags_footprint():
     assert old["bento-pdf"]["own"] == new["bento-pdf"]["own"]
     assert old["sonarr"] == new["sonarr"]
     assert old["cluster-vars"]["own"] != new["cluster-vars"]["own"]
-    assert new[UNCLASSIFIED]["paths"] == []
+    assert new[UNCLASSIFIED]["paths"] == ["README.md"]
 
 
 def test_a_shared_only_render_holds_the_root_and_cluster_vars_and_no_tag(
@@ -386,6 +386,7 @@ def test_a_shared_only_render_holds_the_root_and_cluster_vars_and_no_tag(
     )
     assert code == RENDER_OK
     assert sorted(p.relative_to(out).as_posix() for p in out.rglob("*.*")) == [
+        "README.md",
         f"{CLUSTER_VARS_DIR}/{CLUSTER_VARS_FILE}",
         f"{CLUSTER_VARS_DIR}/kustomization.yaml",
         "cluster/soak/configmap.yaml",

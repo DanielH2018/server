@@ -1,0 +1,50 @@
+---
+# Moved from roles/k8s/artifacts by D5's conversion PR for artifacts. H7.12c replaces them with
+# lines in daniel-box's host tree.
+#
+# artifacts' Deployment mounts each of these as a hostPath of `type: Directory`, so each must
+# exist before the pod starts. A missing path leaves the pod in ContainerCreating rather than
+# serving an empty index.
+- name: Artifacts' host directories
+  # DECIDED: the copies of artifacts' variables sit in this block's vars, not in this role's
+  # defaults. Role defaults are play-wide in initial_setup.yml, so a defaults copy becomes a
+  # cross-role read for any setup role that names the key (#5472).
+  # test_k8s_host_files_pairs.py holds each copy equal to roles/k8s/artifacts/defaults/main.yml.
+  vars:
+    artifacts_host_dir: /home/ubuntu/.claude/artifacts
+    artifacts_peer_dir: /home/ubuntu/.claude/artifacts-peer
+    artifacts_stars_dir: /var/lib/artifact-stars
+    artifacts_peer_sources:
+      - name: daniel-server
+        ssh_target: daniel-server
+        path: /home/ubuntu/.claude/artifacts
+        stars_path: /home/ubuntu/.claude/artifact-stars.txt
+  block:
+    - name: Ensure the local artifacts directory exists
+      ansible.builtin.file:
+        path: "{{ artifacts_host_dir }}"
+        state: directory
+        owner: "{{ sys_user }}"
+        group: "{{ sys_user }}"
+        mode: "0750"
+
+    - name: Ensure a peer directory exists for every synced host
+      ansible.builtin.file:
+        path: "{{ artifacts_peer_dir }}/{{ item.name }}"
+        state: directory
+        owner: "{{ sys_user }}"
+        group: "{{ sys_user }}"
+        mode: "0750"
+      loop: "{{ artifacts_peer_sources }}"
+      loop_control:
+        label: "{{ item.name }}"
+
+    # 0755, not 0750: the agent user's prune reads the star list as `claude`. The pod writes it
+    # as puid:pgid, which is sys_user, so sys_user owns the directory.
+    - name: Ensure the star list directory exists
+      ansible.builtin.file:
+        path: "{{ artifacts_stars_dir }}"
+        state: directory
+        owner: "{{ sys_user }}"
+        group: "{{ sys_user }}"
+        mode: "0755"

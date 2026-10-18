@@ -123,16 +123,22 @@ def test_expected_restarts_is_empty_when_the_record_cannot_answer():
 
 
 def test_a_record_written_by_the_stamp_on_daniel_box_parses(tmp_path):
-    """`_release_record` reads the file the stamp writes, and tolerates its absence."""
-    assert health._release_record("freshrss", tmp_path) is None
+    """`_release_record` reads the file the stamp writes, and tolerates its absence.
+
+    The host_vars is a fixture with freshrss Ansible-owned: the live tree marks freshrss
+    `owner: flux` since D5.9, and `_release_record` returns None for an owned tag by design.
+    """
+    host_vars = tmp_path / "daniel-box.yml"
+    host_vars.write_text("containers_list:\n  - name: freshrss\n    platform: k8s\n")
+    assert health._release_record("freshrss", tmp_path, host_vars) is None
     (tmp_path / "freshrss.json").write_text(
         json.dumps(_record([{"name": "freshrss", "kind": "deploy", "restart": True}]))
     )
     assert health.release_expected_restarts(
-        health._release_record("freshrss", tmp_path)
+        health._release_record("freshrss", tmp_path, host_vars)
     ) == {"freshrss": APPLIED}
     (tmp_path / "freshrss.json").write_text("{trunc")
-    assert health._release_record("freshrss", tmp_path) is None
+    assert health._release_record("freshrss", tmp_path, host_vars) is None
 
 
 # --- format_role_health, end to end -------------------------------------------------------

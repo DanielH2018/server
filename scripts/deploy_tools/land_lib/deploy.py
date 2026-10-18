@@ -499,14 +499,14 @@ def _deploy_resolved(ln: Landing) -> None:
     if rc == DEPLOY_STALE and ln.deployed_at:
         # DECIDED: exit 4 under `--at` means a commit MERGED AFTER the deployed one reaches
         # the same tags, and that newer landing owns the service. `stale_retarget.retarget`
-        # has already tried the newest green descendant: it contains this PR (nothing of
-        # anyone's is reverted), its master CI is green (a CI-gated tree), and the
-        # per-service lock still lets one deploy of a service run at a time. What still holds
-        # of the old reasoning: the primary's HEAD was never CI-gated, so it is no target.
-        # This arm is the path from before `--at` existed (the tick fast-forwards the
-        # primary, then deploy from there), reached when no green descendant exists or every
-        # retarget went stale; the retry loop below is that path, unchanged. Raising
-        # `stale_retries` only lengthens a race that cannot converge at this rate (#5486).
+        # has tried the newest green descendant, WAITING up to `ci_timeout` for a newer one
+        # when that went stale too (#5517): each contains this PR (nothing reverted), its
+        # master CI is green (a CI-gated tree), and the per-service lock still lets one
+        # deploy of a service run at a time. What still holds of the old reasoning: the
+        # primary's HEAD was never CI-gated, so it is no target. This arm is the path from
+        # before `--at` (the tick fast-forwards the primary, then deploy from there), reached
+        # when no green descendant exists, the wait ran out, or every retarget went stale;
+        # the retry loop below is that path. More `stale_retries` cannot converge (#5486).
         say(
             f"a later commit reaches {ln.tags_csv}; falling back to the tick and the primary "
             "checkout"

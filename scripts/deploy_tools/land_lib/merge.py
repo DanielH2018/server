@@ -73,9 +73,9 @@ from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
 from lib.exit_codes import CI_DISARMED, CI_GREEN, CI_RED
-from lib.json_types import as_list, as_object
+from lib.json_types import JsonObject, as_list, as_object
 from lib import removes_object
-from deploy_tools.land_lib import pin_gate, policy
+from deploy_tools.land_lib import gh_read, pin_gate, policy
 from deploy_tools.land_lib.landing import BRANCH, Landing
 from deploy_tools.land_lib.outcome import Verdict, disarmed, say
 from deploy_tools.land_lib.pr_json import CommitMessage
@@ -268,20 +268,16 @@ def _master_paths_since(ln: Landing, head: str) -> list[str]:
     # The tested base is the master commit in the checkout log's `Merge <head> into <base>`;
     # when it cannot be read the merge base stands, which costs one CI run at worst.
     base = ln.tools.tested_base(head) or head
+    url = f"repos/{{owner}}/{{repo}}/compare/{base}...{BRANCH}"
+
+    def call() -> list:
+        got = ln.tools.gh_json("api", url, "--jq", "[.files[]?.filename]")
+        return as_list(got, "gh api compare")
+
     try:
-        paths = as_list(
-            ln.tools.gh_json(
-                "api",
-                f"repos/{{owner}}/{{repo}}/compare/{base}...{BRANCH}",
-                "--jq",
-                "[.files[]?.filename]",
-            ),
-            "gh api compare",
-        )
-    except subprocess.CalledProcessError as exc:
-        ln.die(f"could not compare {head[:8]} with {BRANCH}: {exc.stderr.strip()}", 1)
-    except subprocess.TimeoutExpired:
-        ln.die(f"could not compare {head[:8]} with {BRANCH}: gh timed out", 1)
+        paths = gh_read.read(call, ln.tools.sleep, "gh api compare")
+    except gh_read.GhReadFailed as exc:
+        ln.die(f"could not compare {head[:8]} with {BRANCH}: {exc}", 1)
     except ValueError as exc:
         ln.die(
             f"could not compare {head[:8]} with {BRANCH}: unparseable gh output: {exc}",
@@ -432,14 +428,15 @@ def _refuse_private_repo(ln: Landing) -> None:
     A failed or unparseable read dies too: an unknown visibility is an unknown merge gate,
     and the cost is one landing to re-run.
     """
+
+    def call() -> JsonObject:
+        got = ln.tools.gh_json("api", "repos/{owner}/{repo}")
+        return as_object(got or {}, "gh api repos")
+
     try:
-        repo = as_object(
-            ln.tools.gh_json("api", "repos/{owner}/{repo}") or {}, "gh api repos"
-        )
-    except subprocess.CalledProcessError as exc:
-        ln.die(f"could not read the repo's visibility: {exc.stderr.strip()}", 1)
-    except subprocess.TimeoutExpired:
-        ln.die("could not read the repo's visibility: gh timed out", 1)
+        repo = gh_read.read(call, ln.tools.sleep, "gh api repos")
+    except gh_read.GhReadFailed as exc:
+        ln.die(f"could not read the repo's visibility: {exc}", 1)
     except ValueError as exc:
         ln.die(f"could not read the repo's visibility: unparseable gh output: {exc}", 1)
     visibility = repo.get("visibility") or "<unknown>"

@@ -9,12 +9,24 @@ documents how it behaves.
 
 ## At a glance
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates, tasks or containers_list entry, or the k3s role's Longhorn tier lists. -->
-- **Deploy tag:** `--tags "artifacts"`
+- **Applied by:** Flux, through `promote` (`owner: flux`); `deploy.sh` refuses
+  `--tags=artifacts` with exit 5
 - **Image:** `python` (`artifacts_k8s_image`)
 - **Route:** `artifacts.<domain>` · `artifacts.local.<domain>`, Authelia one_factor
 - **Claims:** none (no PVC)
-- **Auto-deploy:** eligible (`k8s_autodeploy: true`)
 <!-- /generated_from -->
+
+- **Flux applies it, not Ansible** (D5.19, the first Wave D PR). Its `containers_list` entry
+  carries `owner: flux`, so `deploy.sh`, the play and the GitOps deployer all skip it, and a
+  merged change reaches the cluster when `promote` publishes and verifies the next bundle. To
+  give it back to Ansible, follow the two-PR handback in `docs/flux-deploy-plane.md`; a plain
+  revert of the flag leaves two writers on the objects. The Deployment is `RollingUpdate`
+  with one replica, so a roll keeps one pod serving. The host directories it mounts are the
+  setup plane's (below), so Flux creates none of them.
+- **Where the task went.** `tasks/main.yml` holds one task, the include of `k8s/manifests`,
+  and no Flux path runs it. It stays for the handback. The Kustomization's `wait` replaces the
+  rollout wait, and the restart checksum the renderer stamps replaces the shared restart, so a
+  ConfigMap edit still rolls the pod.
 
 - **Host:** pinned to `daniel-box` (`artifacts_k8s_node`), because it bind-mounts that host's own
   artifact tree.
@@ -22,6 +34,13 @@ documents how it behaves.
   (`~/.claude/artifacts`, daniel-box's own) and `artifacts_peer_dir`
   (`~/.claude/artifacts-peer`, everything pulled from peers). Stdlib only — no build, no
   extra deps.
+- **This role's deploy creates none of the host directories it mounts.**
+  `ansible/roles/setup/k8s_host_files/tasks/artifacts.yml` creates `artifacts_host_dir`, one
+  peer directory per `artifacts_peer_sources` entry and `artifacts_stars_dir` through the
+  setup plane, because a Flux-owned role runs no task (D5). Each is a `type: Directory`
+  hostPath, so on a fresh host `initial_setup.yml --tags k8s_host_files` runs before the
+  first `artifacts` deploy. Its copies of those four keys, in the block's `vars:`, must equal
+  this role's, which `ansible/tests/setup/test_k8s_host_files_pairs.py` holds.
 - **The agent user's tree is a third source.** `artifacts_agent_dir`
   (`/var/lib/claude/.claude/artifacts`, set only while `claude_code_agent_user_enabled` is true)
   mounts read-only at `/srv/artifacts/daniel-box-claude`, so the index lists it as the host

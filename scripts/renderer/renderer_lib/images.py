@@ -296,9 +296,13 @@ def paths_into_images(files: Mapping[str, str]) -> list[str]:
     and every `resources`, `components` and `patches[].path` entry of any
     `kustomization.yaml`, the flux index included, read from its directory. `../` and a
     leading `/` are resolved first, so `./cluster/../images/nut` and `/images/nut` count.
+    A file that is not YAML, such as the bundle's `README.md`, holds no Kustomization and is
+    not read.
     """
     found = []
     for path, text in sorted(files.items()):
+        if not path.endswith((".yaml", ".yml")):
+            continue
         parts = path.split("/")
         base = posixpath.dirname(path)
         for doc in yaml_fast.safe_load_all(text):

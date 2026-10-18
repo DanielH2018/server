@@ -48,8 +48,8 @@ conventions.
   The Job runs `files/sonarr_verify.py`, which makes `verify.yml`'s two API reads and asserts
   against the Service's cluster name, through the `flux_job_connect` helper. It reads the key
   from the `sonarr-exportarr` Secret; the `DECIDED:` note in `job.yaml.j2` says why. Its pod
-  carries `app: sonarr-verify`, which sonarr's fence does not admit yet: that `netpol_from`
-  peer lands in its own PR before the flip. `tests/test_sonarr_verify.py` renders the renamed
+  carries `app: sonarr-verify`. sonarr's `netpol_from` lists that label ahead of the flip
+  (#5535), so the fence admits the Job once it renders. `tests/test_sonarr_verify.py` renders the renamed
   copy, runs the Job census over it, and runs the rendered script against a fixture API.
   `notification.yaml.j2` beside it is arr-notification's seed Job, which shares the
   directory, the ServiceAccount and the pod label; `ansible/roles/k8s/arr-notification/CLAUDE.md`

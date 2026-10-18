@@ -29,6 +29,39 @@ ROLE = SETUP_ROLES / "k8s_host_files"
 # task's whole argument map, so an owner, group or mode change fails the row as well as a path:
 # docs' directory exists to be owned by sys_user, which the docs-refresh build writes as.
 EXPECTED_ROWS: dict[str, dict[str, tuple[str, dict[str, str]]]] = {
+    "artifacts.yml": {
+        "Ensure the local artifacts directory exists": (
+            "ansible.builtin.file",
+            {
+                "path": "{{ artifacts_host_dir }}",
+                "state": "directory",
+                "owner": "{{ sys_user }}",
+                "group": "{{ sys_user }}",
+                "mode": "0750",
+            },
+        ),
+        "Ensure a peer directory exists for every synced host": (
+            "ansible.builtin.file",
+            {
+                "path": "{{ artifacts_peer_dir }}/{{ item.name }}",
+                "state": "directory",
+                "owner": "{{ sys_user }}",
+                "group": "{{ sys_user }}",
+                "mode": "0750",
+            },
+        ),
+        # 0755, not 0750: the agent user's prune reads the star list as `claude`.
+        "Ensure the star list directory exists": (
+            "ansible.builtin.file",
+            {
+                "path": "{{ artifacts_stars_dir }}",
+                "state": "directory",
+                "owner": "{{ sys_user }}",
+                "group": "{{ sys_user }}",
+                "mode": "0755",
+            },
+        ),
+    },
     "docs.yml": {
         "Ensure the built docs site directory exists": (
             "ansible.builtin.file",
@@ -76,7 +109,10 @@ def test_a_task_file_main_no_longer_imports_is_flagged(tmp_path):
     role_dir = _fixture_role(tmp_path)
     (role_dir / "tasks" / "main.yml").write_text("---\n[]\n")
     assert missing_rows(role_dir) == [
-        "docs.yml: Ensure the built docs site directory exists"
+        "artifacts.yml: Ensure a peer directory exists for every synced host",
+        "artifacts.yml: Ensure the local artifacts directory exists",
+        "artifacts.yml: Ensure the star list directory exists",
+        "docs.yml: Ensure the built docs site directory exists",
     ]
 
 
@@ -95,4 +131,14 @@ def test_a_row_that_drops_its_owner_is_flagged(tmp_path):
     docs.write_text(docs.read_text().replace('    owner: "{{ sys_user }}"\n', ""))
     assert missing_rows(role_dir) == [
         "docs.yml: Ensure the built docs site directory exists"
+    ]
+
+
+def test_an_artifacts_row_that_widens_the_star_list_mode_is_flagged(tmp_path):
+    """The star list directory is the one 0755 row, so its mode is the field most likely to drift."""
+    role_dir = _fixture_role(tmp_path)
+    artifacts = role_dir / "tasks" / "artifacts.yml"
+    artifacts.write_text(artifacts.read_text().replace('mode: "0755"', 'mode: "0777"'))
+    assert missing_rows(role_dir) == [
+        "artifacts.yml: Ensure the star list directory exists"
     ]
