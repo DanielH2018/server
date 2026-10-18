@@ -375,8 +375,8 @@ every entry is flux-owned then waits for C-2b, through the uptime-kuma edge.
 - **Per-role fields.** Five fields of a role's own Kustomization vary by role. A role may set
   four of them from its defaults:
   - `prune: false`, for a plumbing tag (H1) or a tag whose render holds a
-    CustomResourceDefinition (D5), through H1.1a's `flux_prune`. D5 sets it on traefik's tag
-    and on `flux`.
+    CustomResourceDefinition (D5), through H1.1a's `flux_prune`. D5 sets it on
+    `traefik-crds`, the tag that carries traefik's CRDs, and on `flux`.
   - its own `timeout` (H1, H6).
   - `healthCheckExprs` for its own custom resources (H6).
   - `suspend: true`, through `flux_suspend` (D5.1b). *Suspension* states how it renders.

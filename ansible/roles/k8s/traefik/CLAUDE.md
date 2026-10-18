@@ -28,13 +28,16 @@ The init containers' working-out is `docs/crowdsec-waf-record.md`.
 - **The CRDs are an in-tree copy of upstream's definitions**,
   `files/crds/kubernetes-crd-definition-v1.yml`, pinned by `traefik_k8s_crd_version`, `traefik_k8s_crd_url` and `traefik_k8s_crd_sha256`.
   The task applies the file; it fetches no URL, because no render may (D5 step 26's traefik
-  bullet). The flip PR renders the same file into traefik's bundle.
+  bullet). The flip PR moves the copy into a role of its own, `traefik-crds`, whose
+  bundle renders it (#5666).
 - **A minor image bump needs a refresh of the copy.** `ansible/tests/k8s/test_traefik_crds.py`
   fails when the image's minor differs from `traefik_k8s_crd_version`'s, and when the file
   stops hashing to the pin. The refresh steps sit above the pin in `defaults/main.yml`.
 - **The copy lives in `files/crds/`, not `files/upstream/`.** The renderer attaches
   `files/upstream/` to the tag's render, and it refuses a tag that vendors files while its
-  render holds a placeholder. traefik's Secrets hold six.
+  render holds a placeholder. traefik's render holds six, and `email` is read by the
+  static-config ConfigMap and the Deployment, so no move of the Secrets can empty it. That
+  is why the CRDs get their own tag at the flip rather than `files/upstream/` here.
 
 ## Plugins and the startupProbe
 

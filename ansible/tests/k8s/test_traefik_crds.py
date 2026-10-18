@@ -1,7 +1,8 @@
 """traefik's CRDs come from its in-tree copy, pinned, never from a URL.
 
 D5 step 26's traefik bullet: no render may fetch a URL, so the role keeps upstream's CRD file
-under `files/crds/` and the flip PR renders that file into traefik's bundle. Until then the
+under `files/crds/` and the flip PR moves that file into the `traefik-crds` role, whose
+bundle renders it (#5666). Until then the
 role's task applies the same file. Four things keep the copy honest:
 
 - the file hashes to `traefik_k8s_crd_sha256`, so a hand edit or a partial refresh fails;
