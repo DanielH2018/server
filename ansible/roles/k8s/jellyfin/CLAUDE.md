@@ -35,7 +35,11 @@ the Trakt and SSO-Auth decisions, and why the snapshot cap is the number it is.
   from inside the pod as part of every deploy.
 - **LAN address:** a MetalLB LoadBalancer Service on a fixed IP, typed into TV and phone clients
   by hand and asserted after apply — a MetalLB misconfiguration otherwise moves the Service to an
-  auto-assigned address with the pod still healthy.
+  auto-assigned address with the pod still healthy. observability's
+  `JellyfinLanAddressNotPinned` rule watches the same address from kube-state-metrics, at
+  `warning` with `verify="true"`, so the soak checks it on every revision. It is the assert's
+  successor at the flip, which deletes the two `tasks/main.yml` tasks. Its address is a
+  literal, so moving the VIP is an edit to that rule too.
 
 ## Notable
 - `k8s_autodeploy: true` despite `Recreate` + RWO storage — the pre-apply Longhorn snapshot
