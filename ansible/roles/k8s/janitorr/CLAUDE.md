@@ -27,9 +27,10 @@ See repo-root `CLAUDE.md` for shared conventions.
   lines in its log, through its own ServiceAccount (`templates/health-rbac.yaml.j2`). It pushes
   the "Janitorr Errors" Kuma monitor. Not gated by `k8s/cronjob-gate`: `k8s_autodeploy` is
   false here, so no batch gate is required.
-- **The health reader was a daniel-box host cron until H2.5c.** `tasks/main.yml` keeps absent
-  arms for the cron, `/opt/janitorr-health`, `/usr/local/bin/janitorr-health.sh` and the
-  `janitorr` drift fragment, ahead of the manifests include.
+- **The health reader was a daniel-box host cron until H2.5c.** The absent arms for the cron,
+  `/opt/janitorr-health`, `/usr/local/bin/janitorr-health.sh` and the `janitorr` drift fragment
+  live in `ansible/roles/setup/k8s_host_files/tasks/janitorr.yml`, which the setup plane
+  applies through `initial_setup.yml`, so they survive janitorr's Flux flip.
 - **The push URL, token included, lives in its own Secret, `janitorr-health`**
   (`templates/health-secret.yaml.j2`), and reaches the pod as `KUMA_PUSH_URL` through
   `secretKeyRef`. It is a whole URL rather than a bare token so that it stays out of

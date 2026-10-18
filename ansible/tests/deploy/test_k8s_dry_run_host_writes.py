@@ -68,7 +68,6 @@ _ROLES_THAT_WRITE_THE_HOST = frozenset(
         "crowdsec",
         "headlamp",
         "image-builder",
-        "janitorr",
         "netpol-baseline",
         "registry",
         "traefik",

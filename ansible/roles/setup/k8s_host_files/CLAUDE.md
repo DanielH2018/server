@@ -39,7 +39,8 @@ which creates the directory media-volume's static PersistentVolume names and its
 absent arms that remove H2.5b's retired host health reader: its cron, its script, its working
 directory and its drift fragment. observability's dashboard conversion wrote
 `tasks/observability.yml`, an absent arm over the three trees its old `tasks/dashboards.yml`
-staged under `/etc/rancher/k3s/`. pi-peer-backup's flip wrote `tasks/pi-peer-backup.yml`,
+staged under `/etc/rancher/k3s/`. janitorr's PR wrote `tasks/janitorr.yml`, which holds the absent arms for the retired health
+reader's host cron, its script and code directory, and its drift fragment. pi-peer-backup's flip wrote `tasks/pi-peer-backup.yml`,
 which installs the forced-command wrapper and authorizes the pull key on daniel-pi, and moved
 both files into `files/`. qbittorrent's PR wrote `tasks/qbittorrent.yml`, which holds
 the absent arms for the prefs drift check's retired host cron and script. traefik's PR wrote
