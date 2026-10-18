@@ -74,6 +74,7 @@ MUST_DROP = [
     ("kube-state-metrics", "kube_replicaset_created"),
     ("kube-state-metrics", "kube_service_info"),
     ("kube-state-metrics", "kube_service_labels"),
+    ("kube-state-metrics", "kube_service_deletion_timestamp"),
     ("flux", "gotk_reconcile_duration_seconds_bucket"),
     ("flux", "workqueue_queue_duration_seconds_bucket"),
 ]
