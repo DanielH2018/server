@@ -43,8 +43,23 @@ registry round trip. See repo-root `CLAUDE.md` for shared conventions.
     two node grants, and the netpol probe Job checks a pod is refused on it.
   - It caches every `ghcr.io` image in the cluster, not only `danielh2018`'s, because a
     `registries.yaml` mirror covers the whole host. Its store is therefore its own claim,
-    `registry_k8s_ghcr_mirror_claim` (30Gi, `longhorn-nobackup`), which the GC Job never
-    mounts. The TTL is zero, so nothing reclaims a cached tag (#5541).
+    `registry_k8s_ghcr_mirror_claim` (30Gi, `longhorn-nobackup`), which the push store's GC
+    Job never mounts.
+  - The TTL is zero, so only the weekly GC reclaims the store (#5541). A proxy refuses
+    manifest DELETE, so `gc-job.yaml.j2`'s second Job, `registry-gc-ghcr-mirror`, edits the
+    store offline in the same scaled-to-zero window. Its `prune` initContainer runs
+    `files/ghcr-mirror-prune.sh`, and its `gc` container then runs plain `garbage-collect`.
+  - The prune's unit is a manifest revision, not a tag. Every ghcr.io image here is pinned
+    by digest, and the proxy caches a digest pull with no tag, so `--delete-untagged` on this
+    store would delete nearly every cached image. Per repository it keeps the
+    `registry_k8s_ghcr_mirror_keep_revisions` (3) newest top-level revisions, the children of
+    every kept index, and every digest in the keep set.
+  - `registry-gc.sh` writes the keep set to the `registry-gc-ghcr-mirror-keep` ConfigMap
+    before the scale-down. It holds every sha256 digest in pods, Deployments, StatefulSets,
+    DaemonSets, CronJobs and Jobs across all namespaces. The script deletes the previous set
+    first and the Job mounts it as optional, so a run that cannot read the cluster prunes
+    nothing. Each pruned revision is a `pruned <repo>@<digest>` line in the Job log and in the
+    `registry-gc` journal.
   - containerd falls back to `ghcr.io` while the GC scales the pod to zero. A mirror container
     that cannot start leaves the whole pod unready, push store included.
 - A weekly garbage collection (`gc-job.yaml.j2`, Sunday 04:20) takes the registry

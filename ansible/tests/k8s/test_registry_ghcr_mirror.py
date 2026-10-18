@@ -1,7 +1,7 @@
 """The registry pod's ghcr.io pull-through mirror (D5 Open question 2, ruled 2026-10-16).
 
 The mirror gives a node a LAN copy of a flux-owned GHCR image, so nut can cold-start during a
-WAN outage. Four properties keep it from being decorative or from breaking the push store:
+WAN outage. Five properties keep it from being decorative or from breaking the push store:
 
   * the mirror is its OWN container. A registry with `REGISTRY_PROXY_REMOTEURL` refuses every
     manifest Put and Delete, so the setting on the push store would break every image-builder
@@ -10,7 +10,9 @@ WAN outage. Four properties keep it from being decorative or from breaking the p
   * it binds neither the push store's port nor the baked config's debug port :5001, which the
     two containers would otherwise both claim in the shared pod netns;
   * its store is its own claim. Every ghcr.io image in the cluster pulls through it and none
-    expires, so on the push store's claim it would fill the volume and fail every build.
+    expires, so on the push store's claim it would fill the volume and fail every build;
+  * its weekly prune keeps untagged revisions. The push store's `--delete-untagged` would
+    delete every digest-pinned image the mirror caches (#5541).
 
 The `registries.yaml` half is `ansible/tests/setup/test_k3s_registries_mirror_ghcr.py`, and the
 NetworkPolicy half is in `ansible/tests/k8s/test_registry_netpol_grants_follow_the_pinned_node.py`.
@@ -79,8 +81,9 @@ def test_the_mirror_binds_its_own_ports():
 def test_the_mirror_stores_on_its_own_claim():
     """Every ghcr.io image pulls through the mirror and none expires, so it gets its own volume.
 
-    On the push store's claim the cache would fill it and fail every image build. The GC Job
-    mounts only the push store's claim, so its garbage-collect never walks the cache.
+    On the push store's claim the cache would fill it and fail every image build. The push
+    store's GC Job mounts only the push store's claim, so its `--delete-untagged` never walks
+    the cache.
     """
     (deployment,) = [
         d for d in _docs("deployment.yaml.j2") if d["kind"] == "Deployment"
@@ -96,13 +99,56 @@ def test_the_mirror_stores_on_its_own_claim():
     mirror = claims(_mirror())
     assert mirror, "the mirror mounts no claim"
     assert CTX["registry_k8s_claim"] not in mirror, mirror
-    (gc,) = _docs("gc-job.yaml.j2")
-    gc_claims = {
+    gc_claims = _job_claims(_gc_jobs()["registry-gc"])
+    assert not mirror & gc_claims, (mirror, gc_claims)
+
+
+def _gc_jobs() -> dict[str, dict]:
+    return {
+        d["metadata"]["name"]: d for d in _docs("gc-job.yaml.j2") if d["kind"] == "Job"
+    }
+
+
+def _job_claims(job: dict) -> set[str]:
+    return {
         v["persistentVolumeClaim"]["claimName"]
-        for v in gc["spec"]["template"]["spec"]["volumes"]
+        for v in job["spec"]["template"]["spec"]["volumes"]
         if "persistentVolumeClaim" in v
     }
-    assert not mirror & gc_claims, (mirror, gc_claims)
+
+
+def test_the_mirror_gc_job_collects_the_mirror_store_without_delete_untagged():
+    """A digest-pinned pull is cached as a revision with no tag, so --delete-untagged on the
+    mirror's store would delete nearly every cached image (#5541)."""
+    job = _gc_jobs()["registry-gc-ghcr-mirror"]
+    assert _job_claims(job) == {CTX["registry_k8s_ghcr_mirror_claim"]}, job
+    (gc,) = job["spec"]["template"]["spec"]["containers"]
+    assert gc["args"][0] == "garbage-collect", gc["args"]
+    assert "--delete-untagged" not in gc["args"], gc["args"]
+    (prune,) = job["spec"]["template"]["spec"]["initContainers"]
+    assert prune["command"] == ["sh", "/prune/ghcr-mirror-prune.sh"], prune
+    assert _env(prune)["KEEP_NEWEST"] == str(
+        CTX["registry_k8s_ghcr_mirror_keep_revisions"]
+    )
+
+
+def test_the_mirror_prune_reads_an_optional_keep_set_and_the_script_verbatim():
+    """registry-gc.sh deletes the keep set before each run, so a missing one must start the prune
+    with no file (which prunes nothing) rather than block the pod or reuse an old set."""
+    job = _gc_jobs()["registry-gc-ghcr-mirror"]
+    volumes = {v["name"]: v for v in job["spec"]["template"]["spec"]["volumes"]}
+    assert volumes["keep"]["configMap"] == {
+        "name": "registry-gc-ghcr-mirror-keep",
+        "optional": True,
+    }, volumes["keep"]
+    (script,) = [
+        d
+        for d in _docs("gc-job.yaml.j2")
+        if d["kind"] == "ConfigMap"
+        and d["metadata"]["name"] == volumes["prune-script"]["configMap"]["name"]
+    ]
+    source = (K8S / ROLE / "files" / "ghcr-mirror-prune.sh").read_text()
+    assert script["data"]["ghcr-mirror-prune.sh"] == source
 
 
 def test_the_service_exposes_the_mirror_on_the_pinned_cluster_ip():

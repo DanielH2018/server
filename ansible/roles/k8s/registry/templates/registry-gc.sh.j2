@@ -25,8 +25,9 @@
 # Usage: registry-gc.sh (no arguments)
 # Runs from the registry-gc root cron on daniel-box, weekly at the time set by
 # registry_k8s_gc_cron_weekday, _hour and _minute. It scales the registry Deployment to 0, runs
-# the garbage-collect Job from /etc/rancher/k3s/manifests/registry-jobs/gc-job.yaml, scales it
-# back, and pushes the result to Kuma when registry_gc_push_token is set. It reads
+# the two Jobs in /etc/rancher/k3s/manifests/registry-jobs/gc-job.yaml (the push store's
+# garbage-collect, and the ghcr-mirror store's prune and garbage-collect), scales it back, and
+# pushes the result to Kuma when registry_gc_push_token is set. It reads
 # /etc/rancher/k3s/k3s.yaml and /usr/local/lib/kuma-push-lib.sh, and keeps its state in
 # /var/lib/registry-gc.
 
@@ -53,6 +54,11 @@ NS="{{ k8s_namespace }}"
 KUBECTL="k3s kubectl -n ${NS}"
 DEPLOY=registry
 JOB=registry-gc
+MIRROR_JOB=registry-gc-ghcr-mirror
+MIRROR_KEEP_CM=registry-gc-ghcr-mirror-keep
+MIRROR_STARTED=0
+MIRROR_DONE=0
+MIRROR_NOTE=""
 JOB_MANIFEST=/etc/rancher/k3s/manifests/registry-jobs/gc-job.yaml
 STATE_DIR=/var/lib/registry-gc
 STATE_FILE="${STATE_DIR}/state.json"
@@ -110,6 +116,13 @@ finish() {
 # this a failed run leaves the cluster unable to pull any locally-built image until a human
 # notices — a worse outage than the full disk this fixes.
 scale_up_and_report() {
+  # The mirror Job mounts the same RWO claim the registry pod does, and both land on one node,
+  # so nothing stops the pod starting while the prune is still unlinking revisions. A Job that
+  # has not completed is deleted, and waited for, before the registry serves the store again.
+  if [[ "$MIRROR_STARTED" == 1 && "$MIRROR_DONE" != 1 ]]; then
+    $KUBECTL delete job "$MIRROR_JOB" --ignore-not-found --cascade=foreground --wait=true \
+      --timeout=120s >/dev/null 2>&1
+  fi
   $KUBECTL scale "deploy/${DEPLOY}" --replicas=1 >/dev/null 2>&1
   $KUBECTL rollout status "deploy/${DEPLOY}" --timeout=180s >/dev/null 2>&1 \
     || { STATUS=down; MSG="${MSG}; registry did NOT come back — check deploy/${DEPLOY}"; }
@@ -226,6 +239,43 @@ prune_content_tags() {
 
 prune_content_tags
 
+# ── ghcr-mirror keep set ─────────────────────────────────────────────────────────────────────
+# The ghcr-mirror container's store is pruned offline by the second Job in gc-job.yaml
+# (files/ghcr-mirror-prune.sh in the k8s/registry role, #5541), which has no API access. It
+# reads the digests to keep from a ConfigMap this function writes before the scale-down.
+#
+# EVERY NAMESPACE, AND SPECS AS WELL AS STATUSES. A `registries.yaml` mirror covers the whole
+# ghcr.io host, so Flux's controllers in flux-system pull through it as much as anything here.
+# A CronJob's pod is not running at 04:20 on a Sunday, so its pinned digest comes from its spec.
+# Every sha256 digest in the JSON is kept, which can only keep more than strictly needed.
+#
+# FAIL CLOSED. The previous run's ConfigMap is deleted first, and the Job mounts it as optional,
+# so a run that could not build the set prunes nothing rather than pruning by last week's.
+write_mirror_keep_set() {
+  local json keep
+  if ! $KUBECTL delete configmap "$MIRROR_KEEP_CM" --ignore-not-found >/dev/null 2>&1; then
+    MSG="could not delete the previous ghcr-mirror keep set (configmap/${MIRROR_KEEP_CM}) — aborted before scaling down"
+    exit 1
+  fi
+  if ! json=$($KUBECTL get pods,deployments,statefulsets,daemonsets,cronjobs,jobs -A -o json \
+                2>/dev/null); then
+    MIRROR_NOTE="ghcr-mirror prune skipped, workloads unreadable"
+    return 0
+  fi
+  keep=$(grep -o 'sha256:[0-9a-f]\{64\}' <<<"$json" | sort -u)
+  if [[ -z "$keep" ]]; then
+    MIRROR_NOTE="ghcr-mirror prune skipped, no digest found in any workload"
+    return 0
+  fi
+  if ! $KUBECTL create configmap "$MIRROR_KEEP_CM" --from-literal=digests="$keep" \
+         >/dev/null 2>&1; then
+    MIRROR_NOTE="ghcr-mirror prune skipped, could not write configmap/${MIRROR_KEEP_CM}"
+  fi
+}
+
+write_mirror_keep_set
+[[ -n "$MIRROR_NOTE" ]] && logger -t registry-gc "$MIRROR_NOTE"
+
 $KUBECTL scale "deploy/${DEPLOY}" --replicas=0 >/dev/null 2>&1
 # Wait for the pod to actually exit. Scaling returns immediately, and GC must not start while
 # the old process still holds the store.
@@ -234,7 +284,9 @@ if ! $KUBECTL wait --for=delete pod -l app="${DEPLOY}" --timeout=120s >/dev/null
   exit 1
 fi
 
-$KUBECTL delete job "$JOB" --ignore-not-found >/dev/null 2>&1
+$KUBECTL delete job "$JOB" "$MIRROR_JOB" --ignore-not-found >/dev/null 2>&1
+APPLIED_AT=$SECONDS
+MIRROR_STARTED=1
 if ! $KUBECTL apply -f "$JOB_MANIFEST" >/dev/null 2>&1; then
   MSG="could not apply ${JOB_MANIFEST}"
   exit 1
@@ -253,5 +305,26 @@ if $KUBECTL wait --for=condition=complete "job/${JOB}" \
   MSG="gc completed; ${PRUNED} content tag(s) untagged, ${DELETED} blob(s) and ${LINKS} layer link(s) deleted"
 else
   MSG="gc job did not complete within {{ registry_k8s_gc_deadline_s }}s — see: kubectl -n ${NS} logs job/${JOB}"
+  exit 1
+fi
+
+# The mirror Job started with the one above, so it waits only for what is left of the shared
+# deadline. Its own activeDeadlineSeconds fails it at the same point.
+MIRROR_WAIT=$(( {{ registry_k8s_gc_deadline_s }} - (SECONDS - APPLIED_AT) ))
+(( MIRROR_WAIT < 30 )) && MIRROR_WAIT=30
+if $KUBECTL wait --for=condition=complete "job/${MIRROR_JOB}" \
+     --timeout="${MIRROR_WAIT}s" >/dev/null 2>&1; then
+  MIRROR_DONE=1
+  # The prune names every revision it removed. The Job log goes when the Job's TTL runs out, so
+  # the names go to the journal as well.
+  MIRROR_LOG=$($KUBECTL logs "job/${MIRROR_JOB}" -c prune 2>/dev/null)
+  grep -E '^(pruned|keeping|could not) ' <<<"$MIRROR_LOG" | logger -t registry-gc
+  MIRROR_PRUNED=$(grep -c '^pruned ' <<<"$MIRROR_LOG")
+  MIRROR_BLOBS=$($KUBECTL logs "job/${MIRROR_JOB}" -c gc 2>/dev/null | grep -c 'Deleting blob')
+  MSG="${MSG}; ghcr-mirror: ${MIRROR_PRUNED} revision(s) pruned, ${MIRROR_BLOBS} blob(s) deleted"
+  [[ -n "$MIRROR_NOTE" ]] && MSG="${MSG} (${MIRROR_NOTE})"
+else
+  STATUS=down
+  MSG="${MSG}; ghcr-mirror job did not complete — see: kubectl -n ${NS} logs job/${MIRROR_JOB} -c prune"
   exit 1
 fi

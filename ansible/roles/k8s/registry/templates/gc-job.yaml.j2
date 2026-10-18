@@ -1,9 +1,9 @@
 {% from 'container-resources.yml.j2' import container_resources with context %}
 {% from 'security-context.yml.j2' import hardened_security_context with context %}
 ---
-# Garbage-collect the registry's blob store. Applied by registry-gc.sh, which scales the
-# registry Deployment to 0 first — see that script for why this must never run against a live
-# registry.
+# Garbage-collect the registry's blob store, and prune and collect the ghcr-mirror store below.
+# Applied by registry-gc.sh, which scales the registry Deployment to 0 first — see that script
+# for why this must never run against a live registry.
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -62,3 +62,103 @@ spec:
         - name: registry-data
           persistentVolumeClaim:
             claimName: {{ registry_k8s_claim }}
+---
+# The ghcr-mirror store's prune script, carried verbatim from files/ so a test can run it.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: registry-gc-ghcr-mirror-prune
+  namespace: {{ k8s_namespace }}
+data:
+  ghcr-mirror-prune.sh: |
+{{ lookup('file', playbook_dir + '/roles/k8s/registry/files/ghcr-mirror-prune.sh') | indent(4, true) }}
+---
+# Prune and collect the ghcr-mirror store (#5541). A registry in proxy mode refuses manifest
+# DELETE, so the prune edits the store offline, inside the same scaled-to-zero window as the
+# push store's GC, and runs beside the Job above rather than after it so the window does not grow.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: registry-gc-ghcr-mirror
+  namespace: {{ k8s_namespace }}
+spec:
+  # One attempt, for the reason the push store's Job gives.
+  backoffLimit: 0
+  activeDeadlineSeconds: {{ registry_k8s_gc_deadline_s }}
+  ttlSecondsAfterFinished: {{ registry_k8s_gc_ttl_s }}
+  template:
+    spec:
+      restartPolicy: Never
+      # registry-ghcr-mirror is RWO and attached where the registry pod runs.
+      nodeSelector:
+        kubernetes.io/hostname: {{ k8s_registry_node }}
+      securityContext:
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      initContainers:
+        # alpine, because the registry image carries no shell. The netpol probe already pins it.
+        - name: prune
+          image: {{ registry_k8s_netpol_probe_image }}
+          command: ["sh", "/prune/ghcr-mirror-prune.sh"]
+{{ hardened_security_context(read_only=true, non_root=true) }}
+          env:
+            - name: MIRROR_ROOT
+              value: /var/lib/registry
+            - name: KEEP_FILE
+              value: /keep/digests
+            - name: KEEP_NEWEST
+              value: "{{ registry_k8s_ghcr_mirror_keep_revisions }}"
+          volumeMounts:
+            - name: ghcr-mirror-data
+              mountPath: /var/lib/registry
+            - name: prune-script
+              mountPath: /prune
+              readOnly: true
+            - name: keep
+              mountPath: /keep
+              readOnly: true
+            - name: tmp
+              mountPath: /tmp
+{{ container_resources(cpu_limit='500m', mem_limit='128Mi', cpu_request='50m', mem_request='16Mi') }}
+      containers:
+        - name: gc
+          image: {{ registry_k8s_image }}
+          command: ["/bin/registry"]
+          # Plain garbage-collect, WITHOUT --delete-untagged. The proxy stores a digest-pinned
+          # pull as a revision with no tag, so that flag would delete nearly every cached image.
+          # The prune above has already unlinked what should go; this sweeps the blobs only those
+          # revisions referenced.
+          args:
+            - "garbage-collect"
+            - "/etc/distribution/config.yml"
+{{ hardened_security_context(read_only=true, non_root=true) }}
+          env:
+            - name: REGISTRY_STORAGE_FILESYSTEM_ROOTDIRECTORY
+              value: /var/lib/registry
+            - name: REGISTRY_STORAGE_DELETE_ENABLED
+              value: "true"
+          volumeMounts:
+            - name: ghcr-mirror-data
+              mountPath: /var/lib/registry
+{{ container_resources(cpu_limit='1', mem_limit='512Mi', cpu_request='100m', mem_request='64Mi') }}
+      volumes:
+        - name: ghcr-mirror-data
+          persistentVolumeClaim:
+            claimName: {{ registry_k8s_ghcr_mirror_claim }}
+        - name: prune-script
+          configMap:
+            name: registry-gc-ghcr-mirror-prune
+        # registry-gc.sh deletes this ConfigMap and writes it afresh on each run. Optional, so a
+        # run whose keep set could not be read starts the prune with no file, which prunes
+        # nothing, rather than with last week's set.
+        - name: keep
+          configMap:
+            name: registry-gc-ghcr-mirror-keep
+            optional: true
+        - name: tmp
+          emptyDir:
+            medium: Memory
+            sizeLimit: 16Mi
