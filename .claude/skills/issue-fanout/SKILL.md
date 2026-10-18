@@ -165,7 +165,10 @@ whose primary checkout lags `origin/master` still runs the current one. Another 
 runs the copy in its own snapshot of this repo's `origin/master`, which `launch` archives into
 the batch's `.fanout/server`. The snapshot also supplies that batch's system prompt and
 `fanout-stop` hook.
-The agent stops at its PR on every host, and the pipeline decides what happens next. A fresh reviewer then reads only the issue text and the diff, and returns findings with
+The agent stops at its PR on every host, and the pipeline decides what happens next. In
+this repo the agent opens that PR as a draft, and `ci.yml` runs no job on a draft. The pipeline
+marks the PR ready after the review and its fix round, so CI runs once, on the head that lands
+(#5563). A fresh reviewer then reads only the issue text and the diff, and returns findings with
 a severity and a confidence. A finding of severity medium or worse, or a test the reviewer
 marks vacuous at any severity, resumes the agent for one fix round when its
 confidence is 0.5 or more, and a second reviewer reads only the fix. A finding of

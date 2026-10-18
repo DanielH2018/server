@@ -1,11 +1,9 @@
-"""n8n's inert verify Job: its script fails on any answer from n8n, and its render passes the census.
+"""n8n's verify Job: its script fails on any answer from n8n, and its render passes the census.
 
 The script tests run `n8n_verify.main` against local ports: an HTTP server stands in for a port
 that answers, and a port nothing listens on stands in for one the fence refuses. The render
-tests copy the n8n role, move `templates/verify-inert/` to `templates/verify/` as the flip PR
-will, and render the copy, so the Job is checked as Flux will receive it while the tree's own
-render still emits no `n8n-verify`. The plan is docs/target-architecture/deploy/d5-bulk-move.md,
-*A verify conversion lands as inert code*.
+tests render a copy of the n8n role, so one test can edit the policy and leave the tree alone.
+The plan is docs/target-architecture/deploy/d5-bulk-move.md.
 
 Run: uv run pytest ansible/roles/k8s/n8n/tests/test_n8n_verify.py
 """
@@ -143,10 +141,9 @@ def stubs(tmp_path_factory):
 
 
 def _flip(roles, stubs, edit_policy=False) -> cluster.RenderedTag:
-    """Render a copy of the role whose Job has left `verify-inert/`, as the flip PR moves it."""
+    """Render a copy of the role, its policy edited when `edit_policy` is set."""
     shutil.copytree(K8S_ROLES / TAG, roles / TAG)
     templates = roles / TAG / "templates"
-    (templates / "verify-inert").rename(templates / "verify")
     if edit_policy:
         policy = templates / "networkpolicy.yaml.j2"
         policy.write_text(policy.read_text() + "# a policy-only edit\n")
@@ -183,8 +180,9 @@ def _env_of(job: dict) -> dict[str, str]:
     return {e["name"]: e["value"] for e in container["env"]}
 
 
-def test_the_tree_renders_no_n8n_verify_while_ansible_owns_n8n(stubs):
-    assert cluster.render_tag(TAG, stubs).verify == {}
+def test_the_tree_renders_n8n_verify(stubs, flipped_tag):
+    """The flip moved the Job to `templates/verify/`, so the tree's own render emits it."""
+    assert cluster.render_tag(TAG, stubs).verify == flipped_tag.verify != {}
 
 
 def test_the_flipped_job_passes_every_job_census_row(flipped):
@@ -340,9 +338,9 @@ def test_the_staged_job_reads_no_other_roles_file():
     """The helper and the image come from `render_tag`, never a lookup into another role.
 
     The deployer redeploys a role when a file it `lookup()`s in another role changes, and its
-    scan reads `verify-inert/` too. tdarr's test has the red case for this scan.
+    scan reads `verify/` too. tdarr's test has the red case for this scan.
     """
-    staged = sorted((K8S_ROLES / TAG / "templates" / "verify-inert").glob("*.j2"))
+    staged = sorted((K8S_ROLES / TAG / "templates" / "verify").glob("*.j2"))
     assert [p.name for p in staged] == ["job.yaml.j2", "rbac.yaml.j2"]
     assert [
         (path.name, role)

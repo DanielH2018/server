@@ -25,7 +25,9 @@ from lib import yaml_fast
 
 CI_WORKFLOW = REPO / ".github" / "workflows" / "ci.yml"
 GATE_NAME = "prek (lint + validate + tests + secrets)"
-PROOF_CONDITION = "!cancelled() && needs.prove.outputs.proven != 'true'"
+# The draft arm skips every job on a draft PR (#5563); `test_ci_skips_draft_prs` below says why.
+DRAFT_ARM = "github.event.pull_request.draft != true"
+PROOF_CONDITION = f"!cancelled() && needs.prove.outputs.proven != 'true' && {DRAFT_ARM}"
 DEPENDENTS = (
     "hooks",
     "pytest",
@@ -95,7 +97,35 @@ def test_every_repeated_job_waits_for_the_proof_and_skips_on_it():
             f"{job} does not skip on the proof, or does not survive a skipped `prove`"
         )
     # renovate-config skips on a push already, and the ruleset requires it on a PR.
-    assert _normal(jobs["renovate-config"]["if"]) == "github.event_name != 'push'"
+    assert (
+        _normal(jobs["renovate-config"]["if"])
+        == f"github.event_name != 'push' && {DRAFT_ARM}"
+    )
+
+
+def test_ci_skips_draft_prs_and_runs_when_one_is_marked_ready():
+    """A draft PR runs no job, and `ready_for_review` starts its first real run (#5563).
+
+    A fan-out batch opens its PR as a draft and pushes while it is reviewed. A job without the
+    draft arm would run on every such push. Without `ready_for_review` in `types`, marking the
+    PR ready would start nothing, and the PR would reach the landing with no CI at all.
+    """
+    pull_request = yaml_fast.safe_load(CI_WORKFLOW.read_text())[True]["pull_request"]
+    assert pull_request["types"] == [
+        "opened",
+        "synchronize",
+        "reopened",
+        "ready_for_review",
+    ]
+    jobs = _jobs()
+    assert {"prek", "renovate-config", *DEPENDENTS} <= set(jobs)
+    # `prove` runs on a push only, which never carries a pull request.
+    unguarded = [
+        name
+        for name, job in jobs.items()
+        if name != "prove" and DRAFT_ARM not in _normal(job.get("if"))
+    ]
+    assert unguarded == []
 
 
 def test_the_statuses_write_permission_is_on_the_gate_alone():
@@ -138,7 +168,7 @@ def _all(result: str, **override: str) -> dict[str, str]:
 def test_the_gate_keeps_its_required_name_and_always_runs():
     gate = _jobs()["prek"]
     assert gate["name"] == GATE_NAME
-    assert _normal(gate["if"]) == "always()"
+    assert _normal(gate["if"]) == f"always() && {DRAFT_ARM}"
     assert "prove" in gate["needs"]
 
 

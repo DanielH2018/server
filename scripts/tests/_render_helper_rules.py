@@ -26,6 +26,9 @@ def bare_jinja_envs(source: str) -> list[str]:
     A name counts only when it was imported from `jinja2` or `jinja2.nativetypes`, so
     `liquid.Environment()` — a different template language — is not a hit.
     """
+    # An import is an identifier, so a module that never spells `jinja2` imports neither (#5501).
+    if "jinja2" not in source:
+        return []
     tree = ast.parse(source)
     bound: set[str] = set()
     modules: set[str] = set()
@@ -97,6 +100,8 @@ def _eval_file_path(node: ast.expr, module: Path) -> Path | None:
 
 def local_repo_roots(source: str, module: Path, repo: Path = REPO) -> list[str]:
     """The names `source` binds to `repo` by walking up from `__file__` at `module`."""
+    if "__file__" not in source:
+        return []
     found = []
     for node in ast.walk(ast.parse(source)):
         if isinstance(node, ast.Assign):
@@ -409,6 +414,25 @@ def _source_read_calls(
     return found
 
 
+def _mentions_a_shell_template(tree: ast.Module) -> bool:
+    """Whether `tree` holds a `.sh.j2` string or names a template resolver.
+
+    Every clause below needs one or the other, and most test modules have neither, so one walk
+    here spares them the scope-by-scope descent: ~4s of the static-ratchet-tests hook over
+    ~1400 modules (#5501). It reads the parsed constants rather than the source text, because
+    `"drill.sh" ".j2"` is one `.sh.j2` constant that no substring of the text spells.
+    """
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Constant) and isinstance(node.value, str):
+            if ".sh.j2" in node.value:
+                return True
+        elif isinstance(node, ast.Name) and node.id in _TEMPLATE_RESOLVERS:
+            return True
+        elif isinstance(node, ast.Attribute) and node.attr in _TEMPLATE_RESOLVERS:
+            return True
+    return False
+
+
 def shell_template_source_reads(source: str) -> list[str]:
     """The expressions in `source` that read a `*.sh.j2`'s SOURCE text, by how they spell it.
 
@@ -416,5 +440,7 @@ def shell_template_source_reads(source: str) -> list[str]:
     so a receiver naming it is not a hit: the validator's tests build synthetic trees.
     """
     tree = ast.parse(source)
+    if not _mentions_a_shell_template(tree):
+        return []
     bound = {**_shell_template_paths(tree), **_resolver_fed_names(tree)}
     return sorted(set(_source_read_calls(tree, bound, _reading_helpers(tree))))
