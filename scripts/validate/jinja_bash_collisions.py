@@ -35,6 +35,7 @@ from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 
+from lib.cli_help import answer_help
 from lib.repo_paths import ANSIBLE, REPO
 
 # The collision itself. Deliberately narrow: `${` on its own is ordinary Jinja-safe shell, and
@@ -97,12 +98,13 @@ def templates(root: Path = ANSIBLE) -> list[Path]:
     return sorted(p for p in root.rglob("*.j2") if not p.is_relative_to(vendored))
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
     """Scan every template and report each `${#` collision.
 
     Returns:
         0 if no template carries the collision, 1 otherwise.
     """
+    answer_help(__doc__, argv)
     found = 0
     scanned = templates()
     for tpl in scanned:
