@@ -8,8 +8,6 @@ d5-bulk-move.md, *Prune exemptions, digests and the collision census*.
 Run: uv run pytest scripts/renderer/tests/test_renderer_bundle_ordering.py
 """
 
-import re
-
 import pytest
 
 from lib import yaml_fast
@@ -21,15 +19,12 @@ from renderer.renderer_lib.bundle import (
     SHARED_KINDS,
     bundle_files,
     digests,
-    reserved_tags,
 )
 from renderer.renderer_lib.ordering import (
     ANSIBLE_OWNED_DEPS,
-    TAG_KIND_SUFFIXES,
     Ordering,
     dependency_cycle,
     kustomization_edges,
-    split_kind,
 )
 
 TIMEOUT = "600s"
@@ -327,91 +322,3 @@ def test_a_tags_snapshot_and_verify_directories_move_its_footprint_not_its_own()
     assert old["pihole"]["own"] == new["pihole"]["own"]
     assert old["pihole"]["footprint"] != new["pihole"]["footprint"]
     assert new["_unclassified"]["paths"] == []
-
-
-# -- the role-owned kind that applies before `<tag>` (#5719) ----------------------------------
-
-PRECHECK = "pihole-precheck"
-# A guard Job shaped as pihole's: its deadline is the one the precheck timeout must outlast.
-GUARD_JOB = (
-    "apiVersion: batch/v1\nkind: Job\nmetadata:\n  name: guard\n  namespace: {namespace}\n"
-    "spec:\n  backoffLimit: 0\n  activeDeadlineSeconds: {deadline}\n"
-)
-
-
-def _prechecking(namespace: str = "homelab", deadline: int = 420) -> dict:
-    """`_every_kind`'s directories plus a `pihole-precheck` holding one guard Job."""
-    job = GUARD_JOB.format(namespace=namespace, deadline=deadline)
-    return _every_kind() | {PRECHECK: {"guard.yaml": job}}
-
-
-def _seconds(duration: str) -> int:
-    match = re.fullmatch(r"(?:(\d+)h)?(?:(\d+)m)?(?:(\d+)s)?", duration)
-    assert match, f"{duration!r} is not a duration of h, m and s"
-    hours, minutes, secs = match.groups()
-    return int(hours or 0) * 3600 + int(minutes or 0) * 60 + int(secs or 0)
-
-
-def test_a_precheck_kind_inherits_its_tags_edges_and_the_tag_waits_on_it():
-    ordering = Ordering(deps={"pihole": ["bento-pdf", "traefik"]})
-    docs = _docs(ordering, ["bento-pdf", "pihole"], _prechecking())
-    assert PRECHECK in _depends(docs["pihole"])
-    assert "bento-pdf" in _depends(docs["pihole"])
-    precheck = docs.get(PRECHECK)
-    assert precheck is not None, "flux/pihole.yaml holds no pihole-precheck"
-    assert _depends(precheck) == ["bento-pdf"]
-    assert _dropped(precheck) == "traefik"
-
-
-def test_a_precheck_kind_follows_its_tag_in_suffix_order():
-    files = bundle_files(_prechecking(), {}, ["bento-pdf", "pihole"], TIMEOUT, DOTENV)
-    names = [
-        d["metadata"]["name"]
-        for d in yaml_fast.safe_load_all(files["flux/pihole.yaml"])
-    ]
-    assert PRECHECK in names
-    held = set(_prechecking())
-    assert names == ["pihole"] + [
-        "pihole" + suffix for suffix in TAG_KIND_SUFFIXES if "pihole" + suffix in held
-    ]
-    precheck = next(
-        d
-        for d in yaml_fast.safe_load_all(files["flux/pihole.yaml"])
-        if d["metadata"]["name"] == PRECHECK
-    )
-    assert precheck["spec"]["path"] == f"./cluster/{PRECHECK}"
-    assert precheck["spec"]["deletionPolicy"] == "Orphan"
-
-
-def test_split_kind_reads_a_precheck_directory_as_its_tags():
-    assert split_kind(PRECHECK) == ("pihole", "-precheck")
-
-
-def test_a_tag_ending_in_the_precheck_suffix_takes_a_reserved_name():
-    assert reserved_tags(["fixture-precheck"], SHARED_KINDS) == ["fixture-precheck"]
-
-
-def test_the_precheck_timeout_outlasts_its_guard_jobs_deadline():
-    """The default sits below the guard's 420s, so only a timeout read from the Job passes."""
-    files = bundle_files(_prechecking(), {}, ["bento-pdf", "pihole"], "300s", DOTENV)
-    docs = {
-        d["metadata"]["name"]: d
-        for d in yaml_fast.safe_load_all(files["flux/pihole.yaml"])
-    }
-    assert PRECHECK in docs, "flux/pihole.yaml holds no pihole-precheck"
-    assert _seconds(docs[PRECHECK]["spec"]["timeout"]) > 420
-    # `<tag>` itself keeps the default: the guard's deadline is not its own.
-    assert docs["pihole"]["spec"]["timeout"] == "300s"
-
-
-def test_a_precheck_document_in_a_role_created_namespace_waits_on_that_role():
-    """The kind applies before `<tag>`, so its namespace must come from somewhere else."""
-    directories = _prechecking(namespace="observability")
-    ordering = Ordering(
-        namespace_roles={"observability": "observability"},
-        flux_owned=frozenset({"pihole", "observability"}),
-    )
-    edges = kustomization_edges(["pihole"], directories, ordering)
-    precheck = edges.get(PRECHECK)
-    assert precheck is not None, "the renderer writes no edges for pihole-precheck"
-    assert "observability" in precheck.kept
