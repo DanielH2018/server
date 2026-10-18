@@ -18,7 +18,9 @@ A placeholder render with `--role` writes, for each tag it names:
 - `DIR/flux/kustomization.yaml`, which lists every other file in `DIR/flux/`, so the root
   Kustomization `homelab` applies each of them;
 - `DIR/digests.json`, each published name's `own` and `footprint` digest, and each tag's
-  `claims` and `suspended` (C1 *Cluster output*, D5.1a2).
+  `claims` and `suspended` (C1 *Cluster output*, D5.1a2);
+- `DIR/README.md`, a static note on the bundle's layout (`BUNDLE_README`). No Kustomization's
+  path reaches it, and it lands under `_unclassified`.
 
 `SHARED_KINDS` names every Kustomization that belongs to no deploy tag. D3.3a adds the first,
 `cluster-vars`. Its directory holds a copy of the cluster file and a `secretGenerator` that
@@ -59,6 +61,7 @@ import yaml
 
 from lib.k8s_roles import role_fields, snapshot_claims
 from lib.repo_paths import K8S_ROLES
+from renderer.renderer_lib.bundle_readme import BUNDLE_README, README
 from renderer.renderer_lib.suspension import refuse_suspend_false, suspends_tag
 from renderer.renderer_lib.ordering import (
     ANSIBLE_OWNED_DEPS,
@@ -569,6 +572,7 @@ def bundle_files(
     # The soak sizes its wait from the other Kustomizations, so it renders after them.
     soak, published = soak_pair(revision, tags, directories, ordering.suspended, files)
     files |= shared | published
+    files[README] = BUNDLE_README
     refuse_suspend_false({**cluster, **files})
     # `soak` is digested at the normalised SHA, so R's own SHA never moves its footprint (C1).
     digested = {**cluster, **files, **soak}
