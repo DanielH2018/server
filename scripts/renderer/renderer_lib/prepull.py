@@ -13,9 +13,9 @@ holds:
   container per distinct image those workloads run, init containers included, with
   `imagePullPolicy: IfNotPresent`. A container starts only once the kubelet has its image, so
   the Job completes exactly when every image is on the node;
-- the ConfigMap `prepull-<tag>-<content digest8>` holding the script each container runs, which
-  exits at once. The Job census requires every Job container to run a mounted script, so
-  even a no-op is delivered that way.
+- the ConfigMap `prepull-<tag>-<content digest8>` holding the shell script each container
+  runs, which exits at once. The Job census requires every Job container to run a mounted
+  script, so even a no-op is delivered that way.
 
 `ordering.py` gives `<tag>-prepull` the edges of `<tag>` and makes `<tag>` depend on it, so the
 old pod keeps serving through the pull. The Kustomization's `timeout` is the role's
@@ -33,8 +33,15 @@ applies `<tag>`.
 Each Job's spec carries the image refs and the placement, so a content-tag change renames the
 Job and Flux runs it again, while a revision that leaves the images alone keeps the completed
 Job. The scheduler places the Job and the workload's new pod separately, so a node that is
-cordoned between the two still pays a cold pull. Every image must carry `python3`, which runs
-the script.
+cordoned between the two still pays a cold pull. Every image must carry `sh`, which runs the
+script.
+
+DECIDED: the no-op is a shell script, not Python. The kubelet runs each pulled image, so the
+interpreter must be in every image a workload names. n8n's image and the runners' `alpine`
+init container carry no `python3` (#5546), and a container that cannot start fails the Job
+the way a deadline would. Every image the pre-pull roles name carries `sh`. The script runs
+no network call, so the Job census holds it byte-identical to `SCRIPT` instead of reading it
+the way it reads a Python script.
 """
 
 import sys as _sys
@@ -65,12 +72,12 @@ from renderer.renderer_lib.ordering import prepull_timeouts
 HOSTNAME = "kubernetes.io/hostname"
 WORKLOADS = frozenset({"Deployment", "StatefulSet"})
 MOUNT = "/opt/prepull"
-SCRIPT_NAME = "prepull.py"
+SCRIPT_NAME = "prepull.sh"
 SCRIPT = (
-    '"""Exits at once: this container started, so the kubelet holds its image (#5525)."""\n'
-    "\n"
-    'print("image present on this node")\n'
+    "# Exits at once: this container started, so the kubelet holds its image (#5525).\n"
+    'echo "image present on this node"\n'
 )
+COMMAND = ["sh", f"{MOUNT}/{SCRIPT_NAME}"]
 
 
 def _pod_specs(files: Mapping[str, str]) -> list[dict]:
@@ -206,10 +213,7 @@ def prepull_files(tag: str, pulls: Iterable[tuple[dict, list[str]]]) -> dict[str
                                 "name": f"pull-{index}",
                                 "image": ref,
                                 "imagePullPolicy": "IfNotPresent",
-                                "command": ["python3", f"{MOUNT}/{SCRIPT_NAME}"],
-                                "env": [
-                                    {"name": "PYTHONDONTWRITEBYTECODE", "value": "1"}
-                                ],
+                                "command": list(COMMAND),
                                 "resources": {
                                     "requests": {"cpu": "10m", "memory": "16Mi"},
                                     "limits": {"memory": "64Mi"},

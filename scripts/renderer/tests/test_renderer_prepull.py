@@ -15,9 +15,10 @@ from lib import yaml_fast
 from lib.exit_codes import OK, RENDER_OK
 from renderer import homelab_render
 from renderer.renderer_lib.bundle import CLUSTER_VARS_FILE
+from renderer.renderer_lib.digest8 import configmap_digest8, job_spec_digest8
 from renderer.renderer_lib.environment import RenderError
 from renderer.renderer_lib.ordering import Ordering, prepull_timeouts
-from renderer.renderer_lib.prepull import prepull_files, targets
+from renderer.renderer_lib.prepull import SCRIPT, SCRIPT_NAME, prepull_files, targets
 
 DOTENV = "peanut_password=ENC[AES256_GCM,data:eA==,iv:aQ==,tag:dA==,type:str]\n"
 TAG = "code-server"
@@ -87,6 +88,8 @@ def test_the_job_pulls_the_deployments_ghcr_ref_under_its_placement(rendered):
     assert container["image"] == deployment["containers"][0]["image"]
     assert container["image"].startswith("ghcr.io/")
     assert container["imagePullPolicy"] == "IfNotPresent"
+    # `sh`, not `python3`: n8n's image and the runners' alpine init container lack python3.
+    assert container["command"] == ["sh", "/opt/prepull/prepull.sh"]
 
 
 def test_the_job_sets_no_deadline_so_a_slow_pull_never_fails_it(rendered):
@@ -136,7 +139,10 @@ def test_each_distinct_placement_gets_a_job_pulling_each_of_its_images():
     }
     pulls = targets("app", files)
     assert [images for _, images in pulls] == [["app:1", "side:2"], ["other:3"]]
-    jobs = yaml_fast.safe_load_all(prepull_files("app", pulls)["job.yaml"])
+    text = prepull_files("app", pulls)["job.yaml"]
+    # Containers sharing one command list would dump as a YAML anchor and its aliases.
+    assert "&id" not in text
+    jobs = yaml_fast.safe_load_all(text)
     specs = [j["spec"]["template"]["spec"] for j in jobs]
     assert specs[0]["affinity"]["nodeAffinity"][
         "requiredDuringSchedulingIgnoredDuringExecution"
@@ -145,6 +151,36 @@ def test_each_distinct_placement_gets_a_job_pulling_each_of_its_images():
     assert specs[1]["tolerations"] == [{"key": "gpu", "operator": "Exists"}]
     # A copied anti-affinity would repel the Job from the node it should pull onto.
     assert "affinity" not in specs[1]
+
+
+def _census_rows(script: str = SCRIPT, kind: str = "prepull") -> set[str]:
+    """The Job census rows a rendered pre-pull fails once its script and kind are swapped."""
+    files = prepull_files("app", [({"nodeSelector": {"h": "a"}}, ["app:1"])])
+    configmap = yaml_fast.safe_load(files["configmap.yaml"])
+    job = yaml_fast.safe_load(files["job.yaml"])
+    configmap["data"][SCRIPT_NAME] = script
+    configmap["metadata"]["name"] = f"prepull-app-{configmap_digest8(configmap)}"
+    job["metadata"]["annotations"]["homelab/job-kind"] = kind
+    job["spec"]["template"]["spec"]["volumes"][0]["configMap"]["name"] = configmap[
+        "metadata"
+    ]["name"]
+    job["metadata"]["name"] = f"prepull-app-{job_spec_digest8(job)}"
+    bundle = {f"app-{'prepull' if kind == 'prepull' else 'verify'}": [job, configmap]}
+    return {line.split(":", 1)[0] for line in problems(bundle)}
+
+
+def test_the_rendered_shell_no_op_passes_the_job_census():
+    assert _census_rows() == set()
+
+
+def test_a_prepull_shell_script_other_than_the_renderers_is_flagged():
+    # The helper row reads no shell, so a byte-identical script is all that stops a
+    # pre-pull from opening a connection.
+    assert _census_rows(script=SCRIPT + "wget -qO- http://n8n:5678/\n") == {"delivery"}
+
+
+def test_a_verify_job_running_the_shell_no_op_is_flagged():
+    assert _census_rows(kind="verify") == {"delivery"}
 
 
 def _job_name(image: str) -> str:
