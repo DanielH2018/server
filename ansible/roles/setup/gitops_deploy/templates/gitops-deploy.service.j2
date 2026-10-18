@@ -145,3 +145,7 @@ ExecStart=/usr/bin/flock -w 180 -E 75 {{ server_git_tree_lock }} /usr/local/bin/
 # scripts/deploy_tools/gitops_tick.sh greps for the parenthesised phrase; ansible/tests/
 # test_gitops_manual_trigger.py pins the two together. Do not reword it in isolation.
 ExecStopPost=/bin/sh -c 'test "$EXIT_STATUS" = 75 && echo "gitops-deploy: tick skipped (lock contention) — {{ server_git_tree_lock }} was held for the full flock wait; nothing deployed, last_run untouched" || true'
+# The same skip as a metric (#5676). gitops_deploy.py never ran, so it cannot count the tick
+# itself, and this adds one to gitops_tick_runs_total{outcome="skipped-lock"}. It is a second
+# line rather than a longer first one, so the marker line above stays the contract it is.
+ExecStopPost=/bin/sh -c 'test "$EXIT_STATUS" = 75 && /usr/local/bin/uv run --no-project --python {{ host_python_version }} /opt/gitops-deploy/gitops_tick_metrics.py skipped-lock || true'
