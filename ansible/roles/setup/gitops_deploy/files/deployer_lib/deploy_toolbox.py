@@ -205,6 +205,10 @@ class DeployTools:
     # `datetime.now`, NOT a zero-argument clock: `deploy_handlers.handle_dirty` calls it with
     # `CHICAGO`, so a `lambda: datetime.now()` adapter would change what that call receives.
     now: Callable[..., datetime] = datetime.now
+    # Where a phase names how the tick ended, one of `gitops_tick_metrics.OUTCOMES` (#5676).
+    # `entrypoint()` binds it to a list for the tick's textfile metric; the last label wins.
+    # A no-op by default, so a phase called outside a tick records nothing.
+    note_outcome: Callable[[str], None] = lambda _outcome: None
 
 
 def default_tools(config: Config) -> DeployTools:

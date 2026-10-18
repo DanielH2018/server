@@ -49,6 +49,9 @@ ALLOWED: dict[str, set[str] | None] = {
     # The hold and the rule that clears it (#3658). The deploy UI installs it beside the two
     # modules above, so it may import nothing else.
     "gitops_hold": {"gitops_ledger", "gitops_markers"},
+    # The tick's textfile metric (#5676). The unit's `ExecStopPost=` runs it as a script on a
+    # tick that never reached the entry point, so it reads the behind marker and nothing more.
+    "gitops_tick_metrics": {"gitops_markers"},
     # The k8s release records, read to discharge a `k8s_unapplied` line, and the shadow log's
     # `log` from `deploy_config`, a leaf. `deploy_toolbox` imports it for the `release_commit`
     # default, so an import of `deploy_toolbox` or anything reaching it would be a cycle; so

@@ -83,6 +83,14 @@
     kuma_check_cron_name: "GitHub interaction limit"
     kuma_check_cron_file: github-interaction-limit
 
+# The tick's metrics file (#5676), so a retired deployer stops reporting its last counts.
+- name: Remove the GitOps tick metrics textfile
+  tags: [gitops-deploy-teardown]
+  ansible.builtin.file:
+    path: /var/lib/node-exporter-textfile/gitops_tick.prom
+    state: absent
+  become: true
+
 - name: Remove the GitHub drift-check scripts
   tags: [gitops-deploy-teardown]
   ansible.builtin.file:
