@@ -1260,8 +1260,8 @@ old pod keeps serving through the pull and the rollout pays only the container s
 - **Kubelet image garbage collection can still remove the image** between the pull and the
   rollout if the node passes its disk high-water mark, which the rollout budget also covers.
 
-code-server and n8n set it. n8n's `n8n-prepull` renders, because n8n is flux-owned;
-code-server's renders once that role is.
+code-server and n8n set it, and both are flux-owned, so the bundle holds `code-server-prepull`
+and `n8n-prepull`.
 
 ### The snapshot Job
 

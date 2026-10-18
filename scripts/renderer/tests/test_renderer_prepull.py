@@ -1,8 +1,7 @@
 """A pre-pull role's `<tag>-prepull`: its Jobs, its edges and its timeout (#5525).
 
-The fixture renders code-server, the real role that sets `flux_prepull_timeout`, through the
-real CLI as if the inventory marked it `owner: flux`. code-server is not flux-owned on master,
-so no live tag renders `<tag>-prepull` yet.
+The fixture renders code-server, a real role that sets `flux_prepull_timeout`, through the
+real CLI with only that tag marked `owner: flux`, so the render holds no other tag.
 
 Run: uv run pytest scripts/renderer/tests/test_renderer_prepull.py
 """
