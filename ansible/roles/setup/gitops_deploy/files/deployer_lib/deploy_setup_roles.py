@@ -42,6 +42,16 @@ ROUTING_SCRIPT = "scripts/deploy_tools/setup_routing.py"
 ROUTING_TIMEOUT_S = 30.0
 # A grep per changed key: 0.4s measured over PR #5405's commit, so the routing bound serves.
 SECRET_READERS_SCRIPT = "scripts/deploy_tools/secret_setup_readers.py"
+# The script's deliberate refusal, distinct from 1, which a traceback exits with. This unit
+# cannot import `lib.exit_codes`, so `test_narrow_secret_keys.py` pins it to `DEPLOY_BROAD`.
+SECRET_READERS_REFUSED_EXIT = 3
+
+
+class SecretReadersRefused(RuntimeError):
+    """The reader script answered that it cannot say which setup roles read a moved key.
+
+    A deterministic answer, unlike a timeout or a crash: a retry reads the same tree.
+    """
 
 
 class SetupRoute(NamedTuple):
@@ -147,8 +157,9 @@ def secret_setup_readers(
 
     Raises:
         subprocess.TimeoutExpired: the child outlived `ROUTING_TIMEOUT_S`.
-        RuntimeError: the child exited non-zero, which is its refusal; the message is its
-            stderr.
+        SecretReadersRefused: the child exited `SECRET_READERS_REFUSED_EXIT`; the message is
+            its stderr.
+        RuntimeError: the child exited non-zero otherwise, with its stderr as the message.
         ValueError: its stdout is not that JSON object.
         OSError: the child could not be started.
     """
@@ -160,6 +171,8 @@ def secret_setup_readers(
         timeout=ROUTING_TIMEOUT_S,
         check=False,
     )
+    if r.returncode == SECRET_READERS_REFUSED_EXIT:
+        raise SecretReadersRefused(r.stderr.strip() or "refused")
     if r.returncode != 0:
         raise RuntimeError(r.stderr.strip() or f"exited {r.returncode}")
     data = json.loads(r.stdout)

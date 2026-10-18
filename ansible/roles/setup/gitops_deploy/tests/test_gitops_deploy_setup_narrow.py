@@ -17,7 +17,10 @@ which is the refusal every test written before this slice relies on.
 Run: uv run pytest ansible/roles/setup/gitops_deploy/tests/test_gitops_deploy_setup_narrow.py
 """
 
+import subprocess
+
 from deployer_lib import deploy_narrow
+from deployer_lib.deploy_setup_roles import SecretReadersRefused
 from gitops_ledger import OWED_HOLD_PLANE, owed_line
 
 from _deploy_fakes import receipt_applied
@@ -373,18 +376,30 @@ def test_a_reader_another_playbook_applies_is_recorded_not_applied(
     assert [e.role for e in state.manual_plane_pending()] == ["k3s"]
 
 
-def test_a_failed_reader_derivation_applies_no_setup_role(
+def test_a_refused_reader_derivation_merges_and_applies_no_setup_role(
     gitops_deploy, tick, capsys, state
 ):
-    """The rejecting half: a refusal routes nothing, so the range behaves as before #5436."""
+    """A refusal routes nothing, so the range behaves as before #5436: merged and paged."""
     tick.paths = [SECRETS]
     tick.secret_readers = [CLAUDE_TRIAGE_TASKS]
-    tick.secret_readers_error = RuntimeError("cannot say (a play-level reader)")
+    tick.secret_readers_error = SecretReadersRefused("cannot say (a play-level reader)")
     assert gitops_deploy.main(tick.tools, tick.config, state) == 0
     assert tick.playbooks == []
     assert tick.merges == [ORIGIN]
     assert any("`secrets.yml` changed" in post for post in tick.posts)
-    assert "no setup role routed for the secrets.yml change" in capsys.readouterr().out
+    assert "no setup role routed" in capsys.readouterr().out
+
+
+def test_a_reader_derivation_that_times_out_parks_the_range(
+    gitops_deploy, tick, capsys, state
+):
+    """A timeout is not an answer: merged, no later range would carry the key again."""
+    tick.paths = [SECRETS]
+    tick.secret_readers = [CLAUDE_TRIAGE_TASKS]
+    tick.secret_readers_error = subprocess.TimeoutExpired(["uv"], 30)
+    assert gitops_deploy.main(tick.tools, tick.config, state) == 0
+    assert tick.merges == [] and tick.playbooks == []
+    assert "parked, nothing merged" in capsys.readouterr().out
 
 
 def test_a_shipper_that_reads_none_of_the_secrets_keys_is_not_applied(

@@ -59,6 +59,7 @@ from deployer_lib.deploy_changes import (
     tick_applies_setup_role,
 )
 from deployer_lib.deploy_config import WARNING, Config, log
+from deployer_lib.deploy_setup_roles import SecretReadersRefused
 from deployer_lib.deploy_remediation import (
     broad_park_reason,
     broad_remediation,
@@ -182,16 +183,12 @@ def route_secret_readers(
 ) -> None:
     """Route the setup roles reading a `secrets.yml` key the range moved into `cs` (#5436).
 
-    `setup_tags_for` derives setup tags from paths, and `secrets.yml` sits under no setup
-    role, so PR #5405's new key for `claude_code` applied nothing and the role ran by hand.
-    Each reader path goes through `setup_roles_for`, as a changed path would, less the
-    shippers of a vars file that read none of its secret-built keys, and the roles
-    join `cs.setup_roles` with the plane flags set: `handle_broad` then applies the ones this
-    host runs and records the rest in `manual_plane`, exactly as for a role's own edit.
-
-    Any failure of the subprocess, a refusal included, routes nothing and logs why. That is
-    the behaviour before #5436, and the `secrets` page still names every consumer. Runs after
-    `drop_deleted_setup_roles`, which can classify the range again and would lose the roles.
+    `secrets.yml` sits under no setup role, so PR #5405's key for `claude_code` applied
+    nothing. Each reader path goes through `setup_roles_for`, less the shippers of a vars file
+    that read none of its secret-built keys, and `handle_broad` then applies or records each
+    role as for its own edit. A refusal routes nothing and the `secrets` page names the
+    consumers. Any other failure parks: once merged, no later range carries the change again.
+    Runs after `drop_deleted_setup_roles`, whose reclassification would lose the roles.
     """
     if not cs.secrets:
         return
@@ -199,12 +196,12 @@ def route_secret_readers(
         paths, unread = tools.secret_setup_readers(
             config.repo, target.local, target.origin
         )
+    except SecretReadersRefused as exc:
+        log(f"secret-readers: no setup role routed ({exc})")
+        return
     except Exception as exc:
-        log(
-            f"secret-readers: no setup role routed for the secrets.yml change "
-            f"({type(exc).__name__}: {exc}) — the secrets page names its consumers",
-            level=WARNING,
-        )
+        log(f"secret-readers: {type(exc).__name__}: {exc} — parking", level=WARNING)
+        cs.secret_readers_failed = cs.broad = True
         return
     roles = {r for p in paths for r in setup_roles_for(p) - set(unread.get(p, ()))}
     if not roles:
@@ -280,7 +277,9 @@ def parks_the_tick(cs, setup_tags: set[str], pending: list[str]) -> bool:
     unroutable and nameless at once. Fast-forwarding it would apply nothing, record nothing
     and say nothing.
     """
-    if cs.broad_manual or (cs.setup_roles and routing_failed()):
+    if cs.broad_manual or cs.secret_readers_failed:
+        return True
+    if cs.setup_roles and routing_failed():
         return True
     return cs.broad_setup and not setup_tags and not pending
 

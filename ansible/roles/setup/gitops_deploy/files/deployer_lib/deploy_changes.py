@@ -177,10 +177,9 @@ _BROAD_MANUAL_PREFIXES = (
     "ansible/k3s-bringup.yml",
     "ansible/initial_setup.yml",
 )
-# The SOPS-encrypted secrets file, which maps to no plane by path. `plan_tick` applies the
-# setup roles reading a key it moved (#5436), the deploy-plane narrowing redeploys its k8s
-# readers (#5409), and the `secrets` page names every other consumer. NOT in _BROAD_PREFIXES:
-# the /add-secret flow ships it WITH the consuming template, a scoped single-service deploy.
+# The SOPS-encrypted secrets file, mapped to no plane by path: `plan_tick` routes the setup
+# readers of a key it moved (#5436), the deploy-plane narrowing its k8s readers (#5409). Not in
+# _BROAD_PREFIXES: /add-secret ships it WITH the consuming template, a single-service deploy.
 _SECRETS_FILE = "ansible/vars/secrets.yml"
 
 # `key: |` / `key: >-` and their chomping/indent modifiers, with or without a trailing comment.
@@ -334,8 +333,9 @@ class ChangeSet:
     # nothing to `setup_roles`, and without this the command fell back to `<role>` (#4282).
     manual_playbooks: set[str] = field(default_factory=set)
     secrets: bool = False
-    # The setup roles reading a `secrets.yml` key the range moved (#5436), from `plan_tick`.
+    # From `plan_tick` (#5436): the setup roles reading a moved key, and a lookup that failed.
     secret_setup_roles: set[str] = field(default_factory=set)
+    secret_readers_failed: bool = False
     pi_shared: bool = False  # a `_PI_SHARED_PREFIX` change: merged, never applied here
     # `tasks` is the defer-and-alert channel for a service's structural, not-auto-deployed dirs:
     # tasks/ plus the role-root catch-all (defaults/, vars/, handlers/, …), named for history.

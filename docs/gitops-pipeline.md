@@ -844,8 +844,10 @@ those tags (a failed bump on a broad tick writes one) and leaves any other broad
   `narrow_setup.role_tags` gives each the whole-role tag, because which of its tasks read the
   key is not derived. A role another playbook applies, such as `k3s` for `wifi_password`, is
   recorded in `manual_plane`. A key a play, a shared template or an inventory value reads
-  refuses, as for the deploy plane, and the range then routes no setup role. The page still
-  fires on every one of these ticks: it names `secret_rotation.py consumers`, which prints the
+  refuses, as for the deploy plane, and the range then routes no setup role. A timeout or
+  a crash is no answer, so the range parks without a fast-forward and the next tick derives
+  again: once merged, no later range carries the key. The page fires on every tick that
+  merges the range: it names `secret_rotation.py consumers`, which prints the
   apply command of every consumer that no derivation reached.
 - **k8s-platform roles are auto-deployed ONLY for an image-pin bump to a non-denylisted service;
   every other k8s change defers-and-alerts.** `deploy_logic.split_k8s_auto_deploy` decides

@@ -13,6 +13,8 @@ import pytest
 import narrow_setup
 import secret_setup_readers
 from deploy_tools.narrow_lib import broad as narrow_broad
+from deployer_lib.deploy_setup_roles import SECRET_READERS_REFUSED_EXIT
+from lib.exit_codes import DEPLOY_BROAD, FAILED
 
 from _narrow_fixtures import GROUP_VARS, Tree, _refs, build_tree
 
@@ -153,7 +155,7 @@ def test_a_key_the_play_reads_refuses_the_setup_answer(tree: Tree, capsys):
     tree.write("ansible/deploy.yml", PLAY + "    k: '{{ setup_only_token }}'\n")
     tree.commit("the play reads a secret")
     tree.write(SECRETS, _with(BASE_SECRETS, "setup_only_token", "xxx"))
-    assert _setup_readers(tree, capsys) == (secret_setup_readers.FAILED, {})
+    assert _setup_readers(tree, capsys) == (DEPLOY_BROAD, {})
 
 
 CLAUDE_DEFAULTS = "ansible/roles/setup/claude_code/defaults/main.yml"
@@ -254,3 +256,8 @@ def test_a_shipper_reading_none_of_the_secrets_keys_keeps_its_narrow_answer(
             str(tree.root),
             "ansible/initial_setup.yml",
         )
+
+
+def test_the_deployer_reads_the_scripts_refusal_code_and_no_crash_shares_it():
+    """The tick merges on a refusal and parks on a crash, which Python exits 1 with."""
+    assert SECRET_READERS_REFUSED_EXIT == DEPLOY_BROAD != FAILED

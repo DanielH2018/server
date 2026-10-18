@@ -13,9 +13,11 @@ none of its keys built from a moved secret, which the deployer leaves out. `narr
 holds the derivation, beside the deploy-plane half that maps the same keys to deploy tags.
 
 WHO CALLS IT. `deployer_lib.deploy_setup_roles.secret_setup_readers` runs it as a SUBPROCESS,
-because it parses YAML and the deployer's unit runs under `uv run --no-project`. Exit 1 is a
-refusal, with the reason on stderr. The tick then applies no setup role for the range, which
-is the behaviour before #5436.
+because it parses YAML and the deployer's unit runs under `uv run --no-project`. Exit
+`DEPLOY_BROAD` (3), the code `deploy_tags.py narrow` refuses with, is a refusal, with the
+reason on stderr, and the tick then applies no
+setup role for the range, which is the behaviour before #5436. Any other non-zero exit, such
+as a traceback's 1, is a failure the tick parks on and retries.
 
 Usage: secret_setup_readers.py [--repo PATH] OLD NEW
 """
@@ -31,7 +33,7 @@ import sys
 
 from deploy_tools.narrow_lib import broad, secret_keys
 from lib.cli_help import ArgumentParser
-from lib.exit_codes import FAILED, OK
+from lib.exit_codes import DEPLOY_BROAD, OK
 from lib.narrow_git import CannotNarrow
 
 
@@ -55,7 +57,7 @@ def main(argv: list[str] | None = None) -> int:
         found = secret_keys.setup_reader_paths(args.old, ctx, rules)
     except (CannotNarrow, subprocess.CalledProcessError) as exc:
         print(f"secret-readers: cannot say ({exc})", file=sys.stderr)
-        return FAILED
+        return DEPLOY_BROAD
     unread = {path: sorted(roles) for path, roles in sorted(found.unread.items())}
     print(json.dumps({"paths": sorted(found.paths), "unread": unread}))
     return OK
