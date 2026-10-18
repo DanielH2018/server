@@ -92,7 +92,7 @@ same convention in plain text. Both read `heartbeatJSON.msg`, `monitorJSON.descr
 ## The weekly reboot's maintenance window is reconciled over the API
 
 `kuma-maintenance-sync` (hourly) declares ONE Kuma maintenance — `Weekly system restart` — over
-every monitor, so the Sunday reboot stops paging Discord for the ~85 tiles it takes down (#2802).
+every monitor, so the Sunday reboot stops paging Discord for the tiles it takes down (#2802).
 The operator accepted the cost on 2026-09-28: an outage in the window is silent.
 
 - **Derived from the reboot cron, never written twice** — the four `weekly_reboot_*` values in

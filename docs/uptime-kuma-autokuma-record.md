@@ -372,7 +372,7 @@ alert on the result, and `probe.py monitors` lists each firing ingress alert wit
 The move followed a shadow soak in which the probes caught every outage the tiles caught
 (`docs/target-architecture/monitoring/m4-blackbox-ingress.md`).
 
-- **AutoKuma deleted the 26 monitors and their history** on the deploy, under
+- **AutoKuma deletes the 26 monitors and their history** when the change deploys, under
   `ON_DELETE=delete`. Nothing restores that history.
 - **Kuma no longer sees an ingress outage.** Homepage's `uptimekuma` widget and the status page
   lose those tiles. `probe.py monitors` reads the ingress alerts beside Kuma's down-monitor summary, so it

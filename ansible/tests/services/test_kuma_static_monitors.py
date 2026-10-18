@@ -197,7 +197,8 @@ EMAIL_TIER = {
     # 2026-10-04 (#3480): the house or SSO is down. The template derives these from each
     # entry's containers_list `tier`, so they are named here as the members it must produce.
     # The ingress tiles of Authelia, Zigbee2MQTT and Home Assistant left Kuma in M4's PR 4
-    # (#5625). `IngressProbeFailedCritical` pages for those three instead.
+    # (#5625). blackbox-exporter probes those three, and `IngressProbeFailedCritical` alerts
+    # on them, routed to the blackhole receiver until M4's PR 5 drops its `shadow` label.
     "k3s Mosquitto (VIP)",
     "Pi-hole k8s DNS",
 }
