@@ -3,7 +3,9 @@
 Each case runs the role's real `tasks/stale-checkout-guard.yml` and `stale-checkout-check.yml`
 in a real `ansible-playbook`, against a stub `k3s` that answers the inventory read from a
 script of answers. ansible-core's own tag selection decides which instances run, so the
-selection cases test the per-tag-set design rather than a model of it. The plan is
+selection cases test the per-tag-set design rather than a model of it. Cases that share a
+selection and a guard run as separate inventory hosts of one `ansible-playbook`, each with
+its own stub, which halves the module's run time (#5578). The plan is
 docs/target-architecture/host/h1-cluster-config-to-flux.md, *Verification*, *Stale-checkout
 guard*.
 
@@ -11,10 +13,12 @@ Run: uv run pytest ansible/tests/setup/test_k3s_stale_checkout_guard.py
 """
 
 import json
+import re
 import shutil
 import subprocess
 import sys
 from pathlib import Path
+from typing import NamedTuple
 
 import pytest
 import yaml
@@ -86,17 +90,43 @@ def _inventory(owned: dict[str, list[str]]) -> dict:
     return {"items": items}
 
 
+class Case(NamedTuple):
+    """One host of a run: the stub's script of answers and the inventory it serves."""
+
+    answers: list[str]
+    owned: dict[str, list[str]] | None = None
+    binary: bool = True
+    retries: int = 2  # three tries
+
+
+class Outcome(NamedTuple):
+    """One host's result: whether it failed, its own output lines, and the reads it made."""
+
+    failed: bool
+    output: str
+    calls: int
+
+
+# A recap line: `<host> : ok=3 changed=0 unreachable=0 failed=1 skipped=2 rescued=1 ...`.
+_RECAP = re.compile(
+    r"^(\S+)\s+:\s+ok=\d+\s+changed=\d+\s+unreachable=\d+\s+failed=(\d+)", re.M
+)
+
+
 def _run(
     tmp_path: Path,
-    answers: list[str],
-    owned: dict[str, list[str]] | None = None,
+    cases: dict[str, Case],
     *,
     args: tuple[str, ...] = (),
     guard: list | None = None,
-    binary: bool = True,
-    retries: int = 2,  # three tries
-) -> tuple[subprocess.CompletedProcess[str], int]:
-    """Run the guard once and return the run and how many reads the stub answered."""
+) -> dict[str, Outcome]:
+    """Run the guard once, one inventory host per case, and return each host's outcome.
+
+    The hosts share the selection (`args`) and the guard, and differ in what their stub
+    answers. Forks run them in parallel, and a host that fails does not stop the others, so
+    a run of six cases costs about what a run of one does. Each module task is ~0.15s of
+    ansible-core importing its own module_utils, which no setting removes (#5578).
+    """
     tasks = tmp_path / "tasks"
     tasks.mkdir(parents=True)
     shutil.copy(TASKS / "stale-checkout-check.yml", tasks)
@@ -104,31 +134,37 @@ def _run(
         shutil.copy(GUARD, tasks)
     else:
         (tasks / GUARD.name).write_text(yaml.safe_dump(guard, sort_keys=False))
-    bin_dir = fake_bin(tmp_path / "bin", k3s=_K3S, fake_become=_BECOME)
-    (bin_dir / "answers").write_text("\n".join(answers) + "\n")
-    (bin_dir / "refuse.txt").write_text(REFUSED + "\n")
-    (bin_dir / "no-flux.txt").write_text(NO_FLUX + "\n")
-    (bin_dir / "inventory.json").write_text(json.dumps(_inventory(owned or {})))
+    # The role defaults as inventory group vars, so each host's vars below outrank them. A
+    # play's `vars_files` would outrank host vars, and so would `-e`.
+    (tmp_path / "group_vars").mkdir()
+    shutil.copy(K3S_DEFAULTS, tmp_path / "group_vars" / "all.yml")
+    hosts = {}
+    for name, case in cases.items():
+        bin_dir = fake_bin(tmp_path / name, k3s=_K3S, fake_become=_BECOME)
+        (bin_dir / "answers").write_text("\n".join(case.answers) + "\n")
+        (bin_dir / "refuse.txt").write_text(REFUSED + "\n")
+        (bin_dir / "no-flux.txt").write_text(NO_FLUX + "\n")
+        (bin_dir / "inventory.json").write_text(
+            json.dumps(_inventory(case.owned or {}))
+        )
+        hosts[name] = {
+            "ansible_connection": "local",
+            "ansible_become_exe": str(bin_dir / "fake_become"),
+            "k3s_stale_checkout_binary": str(
+                bin_dir / "k3s" if case.binary else tmp_path / "absent" / "k3s"
+            ),
+            "k3s_stale_checkout_retries": case.retries,
+        }
+    (tmp_path / "hosts.yml").write_text(yaml.safe_dump({"all": {"hosts": hosts}}))
     play = [
         {
-            "hosts": "localhost",
-            "connection": "local",
+            "hosts": "all",
             "gather_facts": False,
-            "vars_files": [str(K3S_DEFAULTS)],
             "tasks": [{"ansible.builtin.import_tasks": str(tasks / GUARD.name)}],
         }
     ]
     (tmp_path / "play.yml").write_text(yaml.safe_dump(play, sort_keys=False))
-    # Extra vars, because a play's `vars_files` outrank its `vars`.
-    extra = {
-        "ansible_become_exe": str(bin_dir / "fake_become"),
-        "k3s_stale_checkout_binary": str(
-            bin_dir / "k3s" if binary else tmp_path / "absent" / "k3s"
-        ),
-        "k3s_stale_checkout_retries": retries,
-        "k3s_stale_checkout_delay": 0,
-        "k3s_manage_backup_targets": True,
-    }
+    extra = {"k3s_stale_checkout_delay": 0, "k3s_manage_backup_targets": True}
     env = scrubbed_env()
     env["ANSIBLE_FILTER_PLUGINS"] = str(ANSIBLE / "filter_plugins")
     env["ANSIBLE_PYTHON_INTERPRETER"] = sys.executable
@@ -139,7 +175,9 @@ def _run(
             "ansible-playbook",
             "play.yml",
             "-i",
-            "localhost,",
+            "hosts.yml",
+            "--forks",
+            str(len(cases)),
             "-e",
             json.dumps(extra),
             *args,
@@ -151,19 +189,39 @@ def _run(
         timeout=180,
         check=False,
     )
-    calls = bin_dir / "calls"
-    return result, len(calls.read_text().splitlines()) if calls.exists() else 0
-
-
-def _failed_naming(result: subprocess.CompletedProcess[str], *needles: str) -> None:
     output = result.stdout + result.stderr
-    assert result.returncode != 0, output
+    # A selection that runs no task prints an empty recap, so a host it omits passed. The
+    # exit code is 2 exactly when some host failed, which catches a recap this regex misread.
+    failed = dict.fromkeys(cases, False)
+    failed.update((host, int(n) > 0) for host, n in _RECAP.findall(output))
+    assert set(failed) == set(cases), f"an unknown host in the recap:\n{output}"
+    assert result.returncode == (2 if any(failed.values()) else 0), output
+    outcomes = {}
+    for name in cases:
+        calls = tmp_path / name / "calls"
+        own = "\n".join(line for line in output.splitlines() if f"[{name}]" in line)
+        outcomes[name] = Outcome(
+            failed[name],
+            own,
+            len(calls.read_text().splitlines()) if calls.exists() else 0,
+        )
+    return outcomes
+
+
+def _run_one(tmp_path: Path, case: Case, **kwargs) -> Outcome:
+    return _run(tmp_path, {"case": case}, **kwargs)["case"]
+
+
+def _failed_naming(outcome: Outcome, *needles: str) -> None:
+    assert outcome.failed, outcome.output
     for needle in needles:
-        assert needle in output, f"{needle!r} not in the failure:\n{output}"
+        assert needle in outcome.output, (
+            f"{needle!r} not in the failure:\n{outcome.output}"
+        )
 
 
-def _passed(result: subprocess.CompletedProcess[str]) -> None:
-    assert result.returncode == 0, result.stdout + result.stderr
+def _passed(outcome: Outcome) -> None:
+    assert not outcome.failed, outcome.output
 
 
 pytestmark = pytest.mark.skipif(
@@ -171,30 +229,63 @@ pytestmark = pytest.mark.skipif(
 )
 
 
-def test_a_checkout_holding_install_metallb_fails_while_flux_owns_the_speaker(tmp_path):
-    result, _ = _run(
-        tmp_path, ["inventory"], {"metallb": [SPEAKER]}, args=("--tags", "metallb")
+# Two shared runs, one host per case: the whole-file run, and the `--tags kubeconfig` run of
+# the real guard. Every other case needs its own selection or its own guard, so runs alone.
+@pytest.fixture(scope="module")
+def whole_file(tmp_path_factory) -> dict[str, Outcome]:
+    return _run(
+        tmp_path_factory.mktemp("whole-file"),
+        {
+            "unmapped": Case(["inventory"], {"jellyfin": [UNMAPPED]}),
+            "no-k3s": Case(["refuse"], binary=False),
+        },
     )
-    _failed_naming(result, "Install MetalLB", SPEAKER, "Kustomization metallb")
 
 
-def test_an_inventory_holding_no_mapped_id_passes(tmp_path):
-    result, calls = _run(tmp_path, ["inventory"], {"jellyfin": [UNMAPPED]})
-    _passed(result)
-    assert calls == 8, "every instance reads the inventory under a whole-file run"
+@pytest.fixture(scope="module")
+def kubeconfig(tmp_path_factory) -> dict[str, Outcome]:
+    owned = {"cluster-base": [READONLY_SA]}
+    return _run(
+        tmp_path_factory.mktemp("kubeconfig"),
+        {
+            "owned": Case(["inventory"], owned),
+            "no-flux": Case(["no-flux"]),
+            "never-answers": Case(["refuse"], retries=3),
+            "refusals-then-clean": Case(
+                ["refuse", "refuse", "inventory"], {"jellyfin": [UNMAPPED]}
+            ),
+            "refusals-then-owned": Case(["refuse", "refuse", "inventory"], owned),
+        },
+        args=("--tags", "kubeconfig"),
+    )
+
+
+def test_a_checkout_holding_install_metallb_fails_while_flux_owns_the_speaker(tmp_path):
+    outcome = _run_one(
+        tmp_path,
+        Case(["inventory"], {"metallb": [SPEAKER]}),
+        args=("--tags", "metallb"),
+    )
+    _failed_naming(outcome, "Install MetalLB", SPEAKER, "Kustomization metallb")
+
+
+def test_an_inventory_holding_no_mapped_id_passes(whole_file):
+    _passed(whole_file["unmapped"])
+    assert whole_file["unmapped"].calls == 8, (
+        "every instance reads the inventory under a whole-file run"
+    )
 
 
 def test_a_row_whose_task_name_is_a_template_names_it_as_written(tmp_path):
     # The weekly-shard rows keep `{{ shard }}` literal with `{% raw %}`; a run that rendered
     # it again would fail on an undefined `shard` instead of naming the task.
-    result, _ = _run(
+    outcome = _run_one(
         tmp_path,
-        ["inventory"],
-        {"longhorn-reconcile": [RECONCILE]},
+        Case(["inventory"], {"longhorn-reconcile": [RECONCILE]}),
         args=("--tags", "longhorn"),
     )
     _failed_naming(
-        result, "Move volumes whose weekday changed out of shard d{{ shard }}"
+        outcome, "Move volumes whose weekday changed out of shard d{{ shard }}"
     )
 
 
@@ -222,84 +313,71 @@ def test_a_checkout_whose_coredns_writers_are_gone_passes_while_flux_owns_coredn
     guard = _without(
         "Point cluster DNS at Pi-hole first", "Run the CoreDNS image k3s bundles"
     )
-    result, calls = _run(
+    outcome = _run_one(
         tmp_path,
-        ["inventory"],
-        {"coredns": [COREDNS]},
+        Case(["inventory"], {"coredns": [COREDNS]}),
         args=("--tags", "coredns"),
         guard=guard,
     )
-    _passed(result)
-    assert calls == 1, "the coredns instance read the inventory and matched nothing"
+    _passed(outcome)
+    assert outcome.calls == 1, (
+        "the coredns instance read the inventory and matched nothing"
+    )
 
 
 def test_the_read_only_identity_fails_only_while_its_writer_is_in_the_checkout(
-    tmp_path,
+    tmp_path, kubeconfig
 ):
-    owned = {"cluster-base": [READONLY_SA]}
-    host_half_only, calls = _run(
-        tmp_path / "a",
-        ["inventory"],
-        owned,
+    host_half_only = _run_one(
+        tmp_path,
+        Case(["inventory"], {"cluster-base": [READONLY_SA]}),
         args=("--tags", "kubeconfig"),
         guard=_without("Apply the read-only cluster identity"),
     )
     _passed(host_half_only)
-    assert calls == 1, "the kubeconfig instance read the inventory and matched nothing"
-    restored, _ = _run(
-        tmp_path / "b", ["inventory"], owned, args=("--tags", "kubeconfig")
+    assert host_half_only.calls == 1, (
+        "the kubeconfig instance read the inventory and matched nothing"
     )
-    _failed_naming(restored, "Apply the read-only cluster identity", READONLY_SA)
-
-
-def test_an_api_without_flux_passes_on_the_first_try(tmp_path):
-    result, calls = _run(tmp_path, ["no-flux"], args=("--tags", "kubeconfig"))
-    _passed(result)
-    assert calls == 1
-
-
-def test_a_host_without_k3s_passes_without_reading(tmp_path):
-    result, calls = _run(tmp_path, ["refuse"], binary=False)
-    _passed(result)
-    assert calls == 0
-
-
-def test_an_api_that_never_answers_fails_after_the_bounded_retry(tmp_path):
-    result, calls = _run(tmp_path, ["refuse"], args=("--tags", "kubeconfig"), retries=3)
-    _failed_naming(result, "the k3s API is unreachable", "was refused")
-    assert calls == 4, "`retries: 3` is the first try plus three retries"
-
-
-def test_two_refusals_then_a_clean_inventory_pass(tmp_path):
-    result, calls = _run(
-        tmp_path,
-        ["refuse", "refuse", "inventory"],
-        {"jellyfin": [UNMAPPED]},
-        args=("--tags", "kubeconfig"),
+    _failed_naming(
+        kubeconfig["owned"], "Apply the read-only cluster identity", READONLY_SA
     )
-    _passed(result)
-    assert calls == 3
 
 
-def test_two_refusals_then_a_mapped_id_fail_and_name_the_task(tmp_path):
-    result, _ = _run(
-        tmp_path,
-        ["refuse", "refuse", "inventory"],
-        {"cluster-base": [READONLY_SA]},
-        args=("--tags", "kubeconfig"),
+def test_an_api_without_flux_passes_on_the_first_try(kubeconfig):
+    _passed(kubeconfig["no-flux"])
+    assert kubeconfig["no-flux"].calls == 1
+
+
+def test_a_host_without_k3s_passes_without_reading(whole_file):
+    _passed(whole_file["no-k3s"])
+    assert whole_file["no-k3s"].calls == 0
+
+
+def test_an_api_that_never_answers_fails_after_the_bounded_retry(kubeconfig):
+    outcome = kubeconfig["never-answers"]
+    _failed_naming(outcome, "the k3s API is unreachable", "was refused")
+    assert outcome.calls == 4, "`retries: 3` is the first try plus three retries"
+
+
+def test_two_refusals_then_a_clean_inventory_pass(kubeconfig):
+    _passed(kubeconfig["refusals-then-clean"])
+    assert kubeconfig["refusals-then-clean"].calls == 3
+
+
+def test_two_refusals_then_a_mapped_id_fail_and_name_the_task(kubeconfig):
+    _failed_naming(
+        kubeconfig["refusals-then-owned"], "Apply the read-only cluster identity"
     )
-    _failed_naming(result, "Apply the read-only cluster identity")
 
 
 def test_a_check_run_still_reads_and_fails(tmp_path):
-    result, calls = _run(
+    outcome = _run_one(
         tmp_path,
-        ["inventory"],
-        {"cluster-base": [READONLY_SA]},
+        Case(["inventory"], {"cluster-base": [READONLY_SA]}),
         args=("--tags", "kubeconfig", "--check"),
     )
-    _failed_naming(result, "Apply the read-only cluster identity")
-    assert calls == 1
+    _failed_naming(outcome, "Apply the read-only cluster identity")
+    assert outcome.calls == 1
 
 
 # ── Selection: ansible-core's own --tags and --skip-tags decide which instances run ──
@@ -307,30 +385,23 @@ def test_a_check_run_still_reads_and_fails(tmp_path):
 
 def test_a_host_only_tag_reaches_no_instance_with_the_api_down(tmp_path):
     # A guard that regains `always`, or a union tag set naming node-address, reads here.
-    result, calls = _run(tmp_path, ["refuse"], args=("--tags", "node-address"))
-    _passed(result)
-    assert calls == 0
+    outcome = _run_one(tmp_path, Case(["refuse"]), args=("--tags", "node-address"))
+    _passed(outcome)
+    assert outcome.calls == 0
 
 
-def test_tags_kubeconfig_runs_the_kubeconfig_instance(tmp_path):
-    result, calls = _run(
-        tmp_path,
-        ["inventory"],
-        {"cluster-base": [READONLY_SA]},
-        args=("--tags", "kubeconfig"),
-    )
-    _failed_naming(result, "Apply the read-only cluster identity")
-    assert calls == 1, "only the kubeconfig instance is selected"
+def test_tags_kubeconfig_runs_the_kubeconfig_instance(kubeconfig):
+    _failed_naming(kubeconfig["owned"], "Apply the read-only cluster identity")
+    assert kubeconfig["owned"].calls == 1, "only the kubeconfig instance is selected"
 
 
 def test_skip_tags_kubeconfig_still_runs_the_metallb_instance(tmp_path):
     # fact: ansible/roles/setup/k3s/CLAUDE.md#Notable
     # Bring-up step 1. One guard tagged with the union of the writers' tags would be skipped
     # here while the metallb writers still ran.
-    result, _ = _run(
+    outcome = _run_one(
         tmp_path,
-        ["inventory"],
-        {"metallb": [SPEAKER]},
+        Case(["inventory"], {"metallb": [SPEAKER]}),
         args=("--skip-tags", "kubeconfig"),
     )
-    _failed_naming(result, "Install MetalLB", SPEAKER)
+    _failed_naming(outcome, "Install MetalLB", SPEAKER)

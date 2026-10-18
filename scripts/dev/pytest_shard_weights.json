@@ -711,7 +711,7 @@
  "ansible/tests/setup/test_k3s_oidc_trusts_authelia.py": 0.07,
  "ansible/tests/setup/test_k3s_server_hosts.py": 0.0,
  "ansible/tests/setup/test_k3s_stage_gates.py": 0.0,
- "ansible/tests/setup/test_k3s_stale_checkout_guard.py": 22.95,
+ "ansible/tests/setup/test_k3s_stale_checkout_guard.py": 10.98,
  "ansible/tests/setup/test_k3s_stale_checkout_map.py": 0.04,
  "ansible/tests/setup/test_k3s_unit_logging.py": 0.0,
  "ansible/tests/setup/test_k3s_version_guard.py": 0.0,
