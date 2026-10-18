@@ -101,8 +101,9 @@ both, and nothing renders it until that role's flip moves the directory to `temp
 - **The Job reruns once per revision that rolls the app**, because its spec embeds a digest of
   the rendered Deployment. A webhook rotation alone renames nothing, so the rotated URL reaches
   the app on the next revision that rolls it.
-- **The fence peers are not in yet.** The Job's pod carries `app: <app>-verify`, which neither
-  app's `netpol_from` admits until the inventory PR before the flips.
+- **The fence peers land ahead of the flips.** The Job's pod carries `app: <app>-verify`, and
+  each app's `netpol_from` lists that label (#5535). `tests/test_seed_job.py` checks that the
+  flipped Job's pod is one its app's fence admits.
 
 ## Tests
 

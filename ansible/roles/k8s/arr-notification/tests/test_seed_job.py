@@ -272,3 +272,43 @@ def test_a_second_run_changes_nothing(flipped, tmp_path, app, start):
         DEFAULTS["arr_notification_triggers"]
     )
     assert URL not in first.stdout + first.stderr + second.stdout + second.stderr
+
+
+def _admits(policy: dict, pod: dict, namespace: str) -> bool:
+    """Whether a `podSelector` peer of `policy` matches `pod` in `namespace`.
+
+    A bare `podSelector` peer matches pods in the policy's own namespace only, so a Job that
+    moved namespace would be refused however its labels read.
+    """
+    if namespace != policy["metadata"]["namespace"]:
+        return False
+    labels = pod["metadata"]["labels"]
+    return any(
+        (peer.get("podSelector") or {}).get("matchLabels", {}).items() <= labels.items()
+        for rule in policy["spec"].get("ingress") or []
+        for peer in rule.get("from") or []
+        if "podSelector" in peer and "namespaceSelector" not in peer
+    )
+
+
+@pytest.mark.parametrize("app", APPS)
+def test_the_apps_fence_admits_every_flipped_job(flipped, stubs, app):
+    """Each Job in `<app>-verify` dials the app's API, so the app's own fence must admit its pod.
+
+    The fence is the NetworkPolicy the tree renders for the app today, with the `<app>-verify`
+    peer its `netpol_from` lists ahead of the flip (#5535).
+    """
+    (policy,) = [
+        doc
+        for text in cluster.render_tag(app, stubs).files.values()
+        for doc in yaml_fast.safe_load_all(text)
+        if doc and doc.get("kind") == "NetworkPolicy" and doc["metadata"]["name"] == app
+    ]
+    jobs = [doc for doc in flipped[app] if doc["kind"] == "Job"]
+    assert jobs
+    refused = [
+        job["metadata"]["name"]
+        for job in jobs
+        if not _admits(policy, job["spec"]["template"], job["metadata"]["namespace"])
+    ]
+    assert refused == []

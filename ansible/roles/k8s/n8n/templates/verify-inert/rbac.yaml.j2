@@ -1,0 +1,13 @@
+{#
+  The verify Job's identity, INERT until n8n's flip, as `job.yaml.j2` beside it is.
+
+  It is a ServiceAccount with no Role. The Job dials traefik and n8n over the pod network and
+  execs into no pod, so it needs no Kubernetes grant, and its pod mounts no token.
+#}
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: n8n-verify
+  namespace: {{ k8s_namespace }}
+automountServiceAccountToken: false

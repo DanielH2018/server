@@ -341,6 +341,7 @@ extra-paths = [
   "ansible/roles/k8s/home-assistant/files",
   "ansible/roles/k8s/tdarr/files",
   "ansible/roles/k8s/sonarr/files",
+  "ansible/roles/k8s/n8n/files",
   "scripts/backup/tests",
   "scripts/deploy_tools/tests",
   "scripts/docs/tests",

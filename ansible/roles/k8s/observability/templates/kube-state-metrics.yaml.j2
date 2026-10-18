@@ -60,6 +60,12 @@ rules:
   - apiGroups: [""]
     resources: [nodes]
     verbs: [list, watch]
+  # Services, for kube_service_status_load_balancer_ingress alone: the address MetalLB gave each
+  # LoadBalancer Service, which files/rules/k8s-services.yaml holds to its pinned VIP. A Service
+  # carries no secret material. The Prometheus job drops every other kube_service_* family.
+  - apiGroups: [""]
+    resources: [services]
+    verbs: [list, watch]
   # The two Flux kinds in observability_ksm_flux_resource_state (defaults/main.yml), for
   # gotk_resource_info. The custom-resource-state collector also watches the CRDs themselves, to
   # start a kind's reflector once its CRD exists, so it needs customresourcedefinitions too. A CRD
@@ -113,7 +119,7 @@ spec:
           args:
             # Must match the ClusterRole above, as must --custom-resource-state-config below.
             # Restricting the set also drops the metric cardinality this stack has no use for.
-            - --resources=pods,deployments,replicasets,statefulsets,daemonsets,nodes
+            - --resources=pods,deployments,replicasets,statefulsets,daemonsets,nodes,services
             # homelab/role and kustomize.toolkit.fluxcd.io/name name the deploy tag that applied
             # a Deployment or DaemonSet. They reach Prometheus as label_homelab_role and
             # label_kustomize_toolkit_fluxcd_io_name on kube_<kind>_labels, which the

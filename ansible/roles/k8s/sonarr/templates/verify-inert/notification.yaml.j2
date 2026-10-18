@@ -45,7 +45,7 @@ template:
   metadata:
     labels:
       # The verify Jobs' label, so the one `<app>-verify` peer in the app's `netpol_from`
-      # admits this Job too. That peer lands in its own PR before the flip.
+      # admits this Job too.
       app: {{ app }}-verify
   spec:
     serviceAccountName: {{ app }}-verify

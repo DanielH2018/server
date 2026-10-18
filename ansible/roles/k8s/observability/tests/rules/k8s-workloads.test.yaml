@@ -292,6 +292,7 @@ tests:
               service: dri-device-plugin
               severity: warning
               shadow: "true"
+              verify: "true"
             exp_annotations:
               summary: No node advertises the devic.es/dri GPU resource.
               description: "No node reports allocatable resource=\"devic_es_dri\" above 0 for 5 minutes, so jellyfin and tdarr cannot schedule. Check the dri-device-plugin DaemonSet."
