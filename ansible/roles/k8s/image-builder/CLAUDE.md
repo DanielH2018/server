@@ -80,8 +80,8 @@ while reporting success.
   under `DIR/images/<name>/`, refuses one that differs from `tags.json`, and pushes
   `ghcr.io/danielh2018/<name>:<content tag>` only when GHCR does not serve that tag
   (`scripts/deploy_tools/ci_images.py`). A served tag is never rebuilt, so the tag stays
-  immutable. D5.4b points flux-owned consumers there. Until D5.4b lands, every consumer
-  builds here.
+  immutable. Since D5.4b, every flux-owned consumer pulls its image from GHCR, and only an
+  Ansible-owned consumer builds here.
 - **`image_builder_force` has no Flux-era use.** The plan's rule for a package refresh that
   no pin moves is a hand PR that bumps a `rebuild_stamp` data key in the context, which moves
   the content tag. No context carries that key yet.
