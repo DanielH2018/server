@@ -41,7 +41,6 @@ _CONTEXT_DATA = (
 # set them, as the tasks file and the fact.
 SET_FACTS = {
     "janitorr": (("main.yml", "janitorr_dry_run"),),
-    "monitor-bridge": (("main.yml", "monitor_bridge_script_checksum"),),
     "uptime-kuma": (("main.yml", "kuma_declarations"),),
 }
 
@@ -50,7 +49,6 @@ SET_FACTS = {
 TASK_COMPUTED = frozenset(
     {
         BUILT_IMAGE_TAGS,
-        "monitor_bridge_script_checksum",
         "kuma_declarations",
         "janitorr_dry_run",
     }

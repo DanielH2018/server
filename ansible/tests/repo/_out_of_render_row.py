@@ -39,7 +39,6 @@ def _role_task_files() -> list[str]:
 
 
 _K8S = "ansible/roles/k8s/"
-_CONFIGMAP = "D5: the imperative script ConfigMap becomes a rendered ConfigMap"
 _PROBE = "D5: the probe Job becomes a Job in `<tag>-verify`"
 _VERIFY = "D5: the verify task's exec or pod check is converted or granted"
 
@@ -70,7 +69,6 @@ ALLOW = {
     _K8S + "janitorr/tasks/verify.yml": _VERIFY,
     _K8S + "jellyfin/tasks/main.yml": "D5: the snapshot-size patch becomes a Job",
     _K8S + "media-volume/tasks/main.yml": _PROBE,
-    _K8S + "monitor-bridge/tasks/main.yml": _CONFIGMAP,
     _K8S + "n8n/tasks/main.yml": "D5: `n8n-netpol-probe` becomes `n8n-verify`",
     _K8S + "netpol-baseline/tasks/main.yml": (
         "D4 makes the deferred apply `netpol-baseline-deferred`; " + _PROBE
@@ -134,7 +132,7 @@ OUT_OF_RENDER = Census(
     min_matches=50,
     must_find=frozenset(
         {
-            _K8S + "monitor-bridge/tasks/main.yml",
+            _K8S + "observability/tasks/dashboards.yml",
             _K8S + "cronjob-gate/tasks/main.yml",
             _K8S + "qbittorrent/tasks/verify.yml",
         }

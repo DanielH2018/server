@@ -16,10 +16,8 @@ two different ways, and only one of them needs an annotation:
       from this file.
 
   (b) Staged outside the cycle. A role's `tasks/*.yml` runs `kubectl create configmap
-      --from-file` (`from_file_configmap_roles()` below) and applies the result itself with
-      its own `kubectl apply --server-side` task
-      (`test_script_configmaps_apply_server_side.py` covers THAT half) — entirely outside
-      `manifests_files`. `manifests_render is changed` never sees this ConfigMap, so nothing
+      --from-file` (`from_file_configmap_roles()` below) and applies the result itself —
+      entirely outside `manifests_files`. `manifests_render is changed` never sees this ConfigMap, so nothing
       restarts the pod unless the role adds its own trigger via
       `ansible/templates/checksum-annotation.yml.j2`. THIS is the census's subject.
 
@@ -51,8 +49,7 @@ def from_file_configmap_roles(roles_dir: Path = K8S_ROLES) -> set[str]:
     """Every role whose tasks stage a ConfigMap with `kubectl create configmap --from-file`.
 
     Derived from the tree rather than listed, so a role that starts doing this joins the
-    census the day it appears — the same shape `test_script_configmaps_apply_server_side.py`
-    uses for its own (narrower — one exact task name) version of this predicate.
+    census the day it appears.
 
     Reads the command each task runs, not the file's text: a task file can document a
     `kubectl create configmap` command its callers run, and a text scan would count it as one
@@ -95,7 +92,6 @@ CENSUS = sorted(from_file_configmap_roles())
 # parametrized check below on zero cases.
 KNOWN_FLOOR = {
     "observability",
-    "monitor-bridge",
 }
 
 

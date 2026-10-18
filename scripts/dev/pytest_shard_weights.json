@@ -378,7 +378,6 @@
  "ansible/tests/k8s/test_root_needs_dac_capability.py": 0.69,
  "ansible/tests/k8s/test_root_security_context_is_written_out_in_full.py": 0.01,
  "ansible/tests/k8s/test_scrape_jobs_derive_from_containers_list.py": 0.44,
- "ansible/tests/k8s/test_script_configmaps_apply_server_side.py": 0.0,
  "ansible/tests/k8s/test_secret_consumer_census.py": 0.09,
  "ansible/tests/k8s/test_secret_digest_reads_no_content.py": 0.0,
  "ansible/tests/k8s/test_secret_key_census_follows_values.py": 0.69,
