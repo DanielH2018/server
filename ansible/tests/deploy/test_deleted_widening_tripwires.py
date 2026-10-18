@@ -193,15 +193,12 @@ def test_a_sibling_path_import_is_flagged(tmp_path):
 def test_the_tasks_file_census_is_not_empty():
     """Non-vacuity. A glob that matched nothing would make the clean test pass over nothing.
 
-    configarr and janitorr both import a tasks file by path — the CROSS-PLANE form, which is not
-    the shape this class is about. Naming them holds the census and the discriminator at once.
+    janitorr imports a tasks file by path — the CROSS-PLANE form, which is not the shape this
+    class is about. Naming it holds the census and the discriminator at once.
     """
     seen = {p.relative_to(REPO).as_posix() for p in k8s_tasks_files()}
     assert len(seen) >= 50, f"the k8s tasks-file census collapsed to {len(seen)} files"
-    for name in (
-        "ansible/roles/k8s/configarr/tasks/main.yml",
-        "ansible/roles/k8s/janitorr/tasks/main.yml",
-    ):
+    for name in ("ansible/roles/k8s/janitorr/tasks/main.yml",):
         assert name in seen, f"the census no longer reads {name}"
         assert "../" in (REPO / name).read_text(), (
             f"{name} no longer imports a tasks file by path, so it no longer holds the "

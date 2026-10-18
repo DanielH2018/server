@@ -47,7 +47,6 @@ MUST_INCLUDE = frozenset(
         "ansible/roles/setup/gitops_deploy/files/gitops_deploy.py",
         "ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_io.py",
         "ansible/roles/setup/deploy_ui/files/deploy_ui.py",
-        "ansible/roles/k8s/configarr/files/configarr_health.py",
         "ansible/roles/k8s/janitorr/files/janitorr_health.py",
         "ansible/roles/k8s/crowdsec/files/bouncer_prune.py",
         "ansible/roles/k8s/crowdsec/files/remote_allowlist.py",
