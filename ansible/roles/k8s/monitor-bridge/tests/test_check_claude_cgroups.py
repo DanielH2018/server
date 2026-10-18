@@ -50,7 +50,7 @@ HEALTHY_MEMORY = [({"origin": "daniel-box"}, 30.0), ({"origin": "daniel-server"}
 
 @pytest.fixture
 def armed(cfg):
-    """A config with the arm switched on, as templates/env-secret.yaml.j2 switches it on.
+    """A config with the arm switched on, as templates/config/env.yaml.j2 switches it on.
 
     No `CLAUDE_CGROUP_EXPECTED`: these series carry no `origin` label, so arm 4 judges the
     cgroup names alone. test_check_claude_cgroup_origins.py drives the per-host form.
@@ -288,7 +288,7 @@ def test_a_malformed_expected_entry_is_a_config_problem():
 def test_claude_cgroup_expected_follows_the_inventory(cfg):
     """Every `has_claude_code` host requires fleet, and claude-rc only where its RC unit runs.
 
-    A literal in the env-secret, so this is what makes it follow the inventory: a host that
+    A literal in config/env.yaml.j2, so this is what makes it follow the inventory: a host that
     gains Claude Code without joining the list is a writer nothing checks, and a host whose RC
     unit is switched off would page for a cgroup it legitimately lacks.
     """

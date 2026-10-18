@@ -14,7 +14,7 @@
 # The token is still a gate, not a replacement for one.
 #
 # Since 2026-09-17 the file fences 5678 as well (#1926): the same policy, two ports, two peer
-# sets. netpol-probe-job.yaml.j2 proves both fences on every deploy.
+# sets. The n8n-verify Job (templates/verify/job.yaml.j2) proves both fences on every apply.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:

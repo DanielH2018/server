@@ -93,6 +93,10 @@ def raw_git_calls(source: str) -> list[str]:
     A list or a tuple opening with the literal `"git"`. Read from the AST, so a docstring
     naming the old form is prose rather than a hit.
     """
+    # A hit calls through the bare `subprocess` name, an identifier no module can spell
+    # any other way (#5501).
+    if "subprocess" not in source:
+        return []
     found = []
     for node in ast.walk(ast.parse(source)):
         if not (
@@ -183,6 +187,10 @@ def handwritten_executables(source: str) -> list[str]:
     what makes it a fake binary, so the chmodded path must also be written in the same
     function, either as the same expression or as a join under the same directory.
     """
+    # A hit needs a `.chmod(` call, and most test modules have none. Walking each function
+    # scope twice cost ~3s of the static-ratchet-tests hook over ~1400 modules (#5501).
+    if "chmod" not in source:
+        return []
     found = []
     for scope in ast.walk(ast.parse(source)):
         if not isinstance(scope, ast.FunctionDef | ast.AsyncFunctionDef | ast.Module):

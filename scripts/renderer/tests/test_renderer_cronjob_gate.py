@@ -7,6 +7,7 @@ defaults opt its CronJob in. No role opts in on master, so no live tag renders a
 Run: uv run pytest scripts/renderer/tests/test_renderer_cronjob_gate.py
 """
 
+import copy
 import fnmatch
 import json
 import re
@@ -28,6 +29,7 @@ from renderer.renderer_lib.cronjob_gate import (
     gate_job,
     gate_name,
 )
+from renderer.renderer_lib.cronjob_gate import is_gate_copy
 from renderer.renderer_lib.digest8 import job_spec_digest8
 from renderer.renderer_lib.environment import RenderError
 from renderer.renderer_lib.ordering import Ordering, cronjob_gates, verify_timeout
@@ -38,8 +40,8 @@ VERIFY = f"{TAG}-verify"
 GATE_FILE = f"{TAG}-deploy-gate.yaml"
 PULL_SCRIPT = K8S_ROLES / TAG / "files" / "pull-pi-peers.sh"
 OPT_IN = f"\nflux_cronjob_gates:\n  {TAG}:\n    kind: verify\n"
-# The census rows a gate Job copied from a CronJob meets. `delivery` and `helper` read the
-# Job's command and scripts, which pi-peer-backup's image carries, so its flip PR owns them.
+# The census rows a gate Job copied from a CronJob meets. It skips `delivery` and `helper`,
+# which read a mounted script, because it runs pi-peer-backup's own image (#5562).
 GATE_ROWS = ("kind", "ttl", "name", "backoff", "rerun-safe")
 
 
@@ -128,6 +130,36 @@ def test_the_gate_passes_check_bundle_and_the_job_census_rows_it_owns(rendered):
     assert report(rendered, [TAG], rendered.parent / "roles") == OK
     bundle = {VERIFY: load(rendered)[VERIFY]}
     assert [p for p in problems(bundle) if p.split(":")[0] in GATE_ROWS] == []
+
+
+# The rows a gate Job is exempt from once its pod template equals its CronJob's (#5562).
+EXEMPT_ROWS = ("delivery", "helper")
+
+
+def _exempt_lines(bundle) -> list[str]:
+    return [
+        p
+        for p in problems(bundle)
+        if p.split(":")[0] in EXEMPT_ROWS and f" {VERIFY}/" in p
+    ]
+
+
+def test_the_census_reports_no_delivery_or_helper_line_for_the_gate(rendered):
+    assert _exempt_lines(load(rendered)) == []
+
+
+def test_a_gate_whose_pod_template_differs_from_its_cronjobs_is_not_exempt(rendered):
+    bundle = load(rendered)
+    altered = copy.deepcopy(_gate(rendered))
+    altered["spec"]["template"]["spec"]["containers"][0]["image"] = "busybox:1.36"
+    altered["metadata"]["name"] = gate_name(TAG, job_spec_digest8(altered))
+    bundle[VERIFY].append(altered)
+    flagged = {
+        p.split(": ")[1].split("/")[1]
+        for p in _exempt_lines(bundle)
+        if p.startswith("delivery:")
+    }
+    assert flagged == {altered["metadata"]["name"]}
 
 
 def test_check_bundle_refuses_the_verify_directory_of_a_role_without_the_opt_in(
@@ -255,3 +287,16 @@ def test_a_gate_copying_a_dollar_from_a_plain_directory_keeps_it():
 def test_the_verify_timeout_rises_only_above_a_deadline_plus_the_margin(deadline, want):
     spec = "{}" if deadline is None else f"{{activeDeadlineSeconds: {deadline}}}"
     assert verify_timeout({"job.yaml": f"kind: Job\nspec: {spec}\n"}, "10m") == want
+
+
+def test_a_gate_from_a_pod_template_without_metadata_is_still_its_cronjobs_copy():
+    container = {"name": "sync", "image": "sync:1", "command": ["/sync"]}
+    template = {"spec": {"containers": [container], "restartPolicy": "Never"}}
+    cronjob = {
+        "kind": "CronJob",
+        "metadata": {"name": "sync", "namespace": "sync"},
+        "spec": {"jobTemplate": {"spec": {"template": template}}},
+    }
+    job = gate_job(cronjob, "0123abcd", {"kind": "verify"})
+    assert is_gate_copy(job, "sync-verify", {"sync": [cronjob]})
+    assert not is_gate_copy(job, "sync-verify", {"sync": []})

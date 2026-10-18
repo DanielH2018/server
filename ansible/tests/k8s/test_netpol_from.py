@@ -77,6 +77,13 @@ UNRENDERED_CALLERS = {
 }
 
 
+# Callers whose pods render only from a role's `templates/verify-inert/`, which nothing renders
+# until that role's Flux flip moves it to `templates/verify/`. Each maps to that role, whose fence
+# lists the caller ahead of the flip so the Job is admitted on its first run (#5535).
+STAGED_CALLERS = {
+    "prowlarr-verify": "prowlarr",
+}
+
 # Callers whose pods render only from a role's `templates/verify/`, which the renderer emits into
 # `<tag>-verify` and `rendered_docs()` does not read. Named so the derivation below cannot
 # quietly stop reaching a role: each must be a pod label `verify_pod_labels` returns.
@@ -230,9 +237,25 @@ def test_every_caller_is_a_label_some_rendered_pod_carries(verify_pod_labels):
         (name, caller)
         for name, fence in declared_fences().items()
         for caller in fence["callers"]
-        if caller not in labels and caller not in UNRENDERED_CALLERS
+        if caller not in labels
+        and caller not in UNRENDERED_CALLERS
+        and caller not in STAGED_CALLERS
     }
     assert unknown == set()
+
+
+def test_each_staged_caller_is_still_staged_and_listed_by_its_role():
+    """An exemption that outlives the flip would hide a caller nothing labels any more."""
+    fences = declared_fences()
+    for caller, role in STAGED_CALLERS.items():
+        templates = K8S_ROLES / role / "templates"
+        staged = (templates / "verify-inert").is_dir()
+        assert staged and not (templates / "verify").exists(), (
+            f"{role} has flipped; drop {caller} from STAGED_CALLERS so the rendered label is checked"
+        )
+        assert caller in fences[role]["callers"], (
+            f"{role}'s netpol_from no longer lists {caller}"
+        )
 
 
 def test_each_unrendered_caller_is_still_labelled_by_its_task():

@@ -53,8 +53,10 @@ heartbeat survives. A check's row names its gate in the `gate` column, with the 
 and the checks page for why a number is what it is. Three conventions hold across all of them:
 an empty credential or URL disables a check, which stays `up` rather than paging about its own
 configuration; an unreachable source pages through `_evaluate` unless the check names a streak;
-and every threshold, window and streak is an env var in `templates/env-secret.yaml.j2`, so read
-the template rather than the constant.
+and every threshold, window and streak is an env var in `templates/config/env.yaml.j2`, so read
+the template rather than the constant. `templates/deployment.yaml.j2` renders each entry as an
+`env` value, and `templates/env-secret.yaml.j2` holds only credentials: Flux's typed patch reads
+a Secret's quoted `"300"` back as a number and refuses it (#5574).
 
 Two push-side rules bind as widely. **Every push monitor has `max_retries=0`**, so widen
 `uptime_kuma_k8s_bridge_push_interval` to fix post-boot flapping and never add retries
@@ -79,7 +81,7 @@ group pages on them. `docs/flux-deploy-plane.md` says what each alert means.
 - **A failed read exports no series for the gauges it feeds, never a 0.** Each cycle logs one
   `deploy-pipeline:` line with the values and any failed read.
 - **The reboot-window gauge reads no remote state.** It derives from the `WEEKLY_REBOOT_*` env
-  keys, which the env-secret renders from the `weekly_reboot_*` group vars, so PromotionStalled
+  keys, which `templates/config/env.yaml.j2` renders from the `weekly_reboot_*` group vars, so PromotionStalled
   stays quiet while `promote` defers across the weekly reboot (#5458).
 - **`--once`, `--dry-run` and `--check` neither serve nor read it**, so a hand-run beside the
   pod never contends for the port.
@@ -113,7 +115,7 @@ the checksum.
 `check.run_once`, which passes it to every gate, check body and `bridge.net` helper that reads a
 URL; a test states the registry, the `Gates` and its I/O (a `FakeSources` as `src`).
 Building the config MUST NOT raise: `_int`/`_num` record a malformed or missing value in `CONFIG_PROBLEMS`, and
-`main()` exits 2. **A key the env-secret renders has no Python default**; the `cfg` fixture is
+`main()` exits 2. **A key the pod's environment renders has no Python default**; the `cfg` fixture is
 that render. A default argument cannot read the config (it evaluates at import), and a
 `verdicts/` module reads no `cfg` at all. The internals page has the test-side rules.
 

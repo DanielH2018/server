@@ -22,7 +22,7 @@ Job and its directory:
   `<path>::<function>`, that exists in the tree;
 - `delivery`: every container runs `python3 <mount>/<key>.py`, where `<mount>` mounts a
   ConfigMap whole and `<key>` is one of its keys. No other command, `-c` or `-m` included,
-  so every script the Job runs is one the `helper` row reads;
+  so every script the Job runs is one the `helper` row reads, or a prepull Job's shell no-op;
 - `helper`: no Python script in a ConfigMap the Job mounts opens a connection except through
   `flux_job_connect.py`, which must sit beside it as a byte-identical copy. A script imports
   only the modules in `ALLOWED_IMPORTS`, none of which opens a connection, and uses no name
@@ -33,6 +33,8 @@ Job and its directory:
   reach around those two rules. The row guards against a mistake, not an
   adversary: a name spelled out at run time passes it. A `SIBLINGS` copy is byte-identical.
 
+A CronJob's gate Job (`cronjob_gate.is_gate_copy`) skips `delivery` and `helper`.
+
 The test module is `test_renderer_job_census.py`.
 """
 
@@ -40,15 +42,14 @@ import ast
 import json
 import re
 from collections.abc import Callable, Iterator, Mapping
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 from lib import yaml_fast
 from lib.repo_paths import REPO
-from pathlib import PurePosixPath
-
 from renderer.renderer_lib.bundle import CLUSTER_DIR
+from renderer.renderer_lib.cronjob_gate import is_gate_copy
 from renderer.renderer_lib.digest8 import configmap_digest8, job_spec_digest8
-from renderer.renderer_lib import ordering
+from renderer.renderer_lib import ordering, prepull
 
 # DECIDED: a Job declares its kind in this annotation on the Job's own `metadata`, which the
 # plan does not name. Verify and mutation Jobs share `<tag>-verify`, so nothing else tells a
@@ -312,12 +313,12 @@ def delivery_offence(job: Mapping, directory: str, docs: list[dict]) -> list[str
     volumes = {v.get("name"): v for v in pod.get("volumes") or []}
     configmaps = _configmap_docs(job, docs)
     offences = []
+    shell = _annotations(job).get(JOB_KIND) == "prepull"
     for container in _containers(job):
         label = f"container {container.get('name')}"
-        command = container.get("command")
-        if (
-            not isinstance(command, list)
-            or len(command) != 2
+        command = container.get("command") or []
+        if not (shell and command == prepull.COMMAND) and (
+            len(command) != 2
             or command[0] not in PYTHONS
             or not str(command[1]).endswith(".py")
         ):
@@ -341,6 +342,8 @@ def delivery_offence(job: Mapping, directory: str, docs: list[dict]) -> list[str
                 f"{label} runs {script}, which is no key of a ConfigMap mounted whole at "
                 f"{script.parent}"
             )
+        elif script.suffix == ".sh" and data[script.name] != prepull.SCRIPT:
+            offences.append(f"{label} runs {script}, which is not prepull.SCRIPT")
     return offences
 
 
@@ -494,5 +497,6 @@ def problems(bundle: Bundle, rows: Mapping[str, Offence] = ROWS) -> list[str]:
         f"{row}: {directory}/{job['metadata']['name']}: {line}"
         for directory, job, docs in jobs(bundle)
         for row, offence in rows.items()
+        if row not in ("delivery", "helper") or not is_gate_copy(job, directory, bundle)
         for line in offence(job, directory, docs)
     ]

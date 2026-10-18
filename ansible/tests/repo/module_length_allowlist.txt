@@ -33,8 +33,9 @@ ansible/roles/setup/gitops_deploy/tests/test_deploy_changes_planes.py 533
 ansible/roles/setup/renovate_notify/tests/test_notify_logic.py 552
 ansible/tests/deploy/test_cronjob_gate_decision.py 535
 ansible/tests/longhorn/test_longhorn_restore_drill.py 502
-ansible/tests/setup/test_cron_scripts_publish_via_pr.py 673
+ansible/tests/setup/test_cron_scripts_publish_via_pr.py 672
 scripts/backup/tests/test_longhorn_reap_logic.py 668
 scripts/deploy_tools/tests/test_deploy_detach_notify.py 508
 scripts/dev/fanout_lib/review/review.py 645  # conjoined: the red phase and green gate read the pipeline state and call _claude, _git and the argv builders only Pipeline defines (the RedPhase mixin until this entry); reaping every test run it starts took it to 663 (#4508); moving the hold reports and the CI wait out took it to 647 (#4737)
 scripts/lib/exit_codes.py 817  # conjoined: each family's constants and its CONTRACTS row are held to each other by test_exit_codes.py, so a family split out would import _c and Code from here and CONTRACTS would import it back; the readers of CONTRACTS live in exit_messages.py. The shadow_diff.py family took it to 807, and deploy.sh's exit 5 (DEPLOY_FLUX_OWNED, D2.1b) to 817
+scripts/renderer/tests/_job_census.py 502  # conjoined: every row reads the census's private _annotations, _containers and _configmap_docs, so a split module would only re-export them

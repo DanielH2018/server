@@ -74,8 +74,8 @@ _DIRECTORY_LITERALS = {
 # operator sent looking for a page that never came. `GITOPS_BEHIND_MAX_MIN` is NOT pinned:
 # the banner's behind threshold is deliberately shorter than the pod's.
 _CONTENTION_ENV = (
-    "ansible/roles/k8s/monitor-bridge/templates/env-secret.yaml.j2",
-    re.compile(r'^  GITOPS_CONTENTION_MAX_MIN: "(\d+)"$', re.M),
+    "ansible/roles/k8s/monitor-bridge/templates/config/env.yaml.j2",
+    re.compile(r'^GITOPS_CONTENTION_MAX_MIN: "(\d+)"$', re.M),
 )
 
 

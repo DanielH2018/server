@@ -326,7 +326,7 @@ ROWS = (
         min_matches=5,
         must_find=frozenset(
             {
-                "ansible/roles/k8s/monitor-bridge/templates/env-secret.yaml.j2",
+                "ansible/roles/k8s/monitor-bridge/templates/config/env.yaml.j2",
                 "ansible/roles/k8s/cloudflare-ddns/templates/deployment-direct.yaml.j2",
                 "ansible/roles/k8s/pi-peer-backup/templates/secret.yaml.j2",
             }

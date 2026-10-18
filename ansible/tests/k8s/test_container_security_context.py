@@ -282,7 +282,6 @@ _UNMEASURED_SHORT_LIVED = {
     ("headlamp", "probe"),
     ("homepage", "seed-config"),
     ("livesync", "seed-config"),
-    ("n8n", "probe"),
     ("n8n", "wait-for-broker"),
     ("netpol-baseline", "probe"),
     ("peanut", "seed-config"),

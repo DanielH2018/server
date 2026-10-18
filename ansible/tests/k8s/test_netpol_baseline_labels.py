@@ -196,7 +196,6 @@ SLICE_45C_ROLES = {role for role, _name in SLICE_45C_WORKLOADS}
 # it neither widens nor narrows the gate, it just rots.
 UNFENCED_BY_DESIGN_WORKLOADS = {
     ("prowlarr", "flaresolverr-netpol-probe"),
-    ("n8n", "n8n-netpol-probe"),
 }
 
 

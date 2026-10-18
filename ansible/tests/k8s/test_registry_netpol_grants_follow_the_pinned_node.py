@@ -128,3 +128,30 @@ def test_the_rendered_policy_carries_both_grants():
         assert grant in cidrs, (
             f"{grant} is a role default but no rendered rule admits it: {sorted(cidrs)}"
         )
+
+
+def test_the_ghcr_mirror_port_is_admitted_only_from_the_node_grants():
+    """containerd pulls through the ghcr.io mirror from the same two host sources.
+
+    A mirror port missing from the ipBlock rule drops every pull, containerd falls back to
+    ghcr.io without a word, and the mirror stays empty. A pod-network rule that admitted it
+    would let any admitted pod fill the shared volume with arbitrary public images.
+    """
+    rendered = _render(
+        K8S / ROLE / "templates" / "networkpolicy.yaml.j2",
+        **_role_context(ROLE, domain="example.com"),
+    )
+    (policy,) = [d for d in yaml_fast.safe_load_all(rendered) if d]
+    mirror = DEFAULTS["k8s_registry_ghcr_mirror_port"]
+    admitting = [
+        rule
+        for rule in policy["spec"]["ingress"]
+        if mirror in {p["port"] for p in rule.get("ports", [])}
+    ]
+    assert len(admitting) == 1, f"{len(admitting)} rules admit port {mirror}"
+    peers = admitting[0]["from"]
+    assert all("ipBlock" in peer for peer in peers), peers
+    assert {peer["ipBlock"]["cidr"] for peer in peers} == {
+        DEFAULTS["registry_k8s_netpol_cni_gateway"],
+        DEFAULTS["registry_k8s_netpol_agent_flannel"],
+    }, peers

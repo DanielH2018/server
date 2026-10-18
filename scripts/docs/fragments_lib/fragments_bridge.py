@@ -10,7 +10,7 @@ Three fragments, all derived from the monitor-bridge role without importing it:
 - `bridge-checks`: one row per `CHECKS` entry in `check_table.py`, in registry order.
 - `bridge-gate-sets`: the members of each gate set, from the `gate` column of those rows. The
   set names come from the `NAME = _members("<gate>")` assignments in `gates.py`.
-- `bridge-thresholds`: the numeric and duration literals the env-secret template renders.
+- `bridge-thresholds`: the numeric and duration literals the settings template renders.
   A value built from a role variable (`{{ ... }}`) is skipped, so a secret never reaches a page.
 """
 
@@ -33,7 +33,9 @@ from py_table import py_table
 BRIDGE_ROLE = K8S_ROLES / "monitor-bridge"
 CHECK_TABLE = MONITOR_BRIDGE_FILES / "check_table.py"
 GATES = MONITOR_BRIDGE_FILES / "gates.py"
-ENV_SECRET = BRIDGE_ROLE / "templates" / "env-secret.yaml.j2"
+# The settings the Deployment renders into its `env`; the env-secret holds only credentials
+# since #5574.
+ENV_SETTINGS = BRIDGE_ROLE / "templates" / "config" / "env.yaml.j2"
 
 # The gate value that names no gate row: a reach-out check held `up` through its first down
 # cycles instead of suppressed (`bridge/streaks.py:apply_startup_grace`).
@@ -41,8 +43,8 @@ STARTUP_GRACE_GATE = "startup_grace"
 
 # An env value that is a number or a duration (`300`, `0.02`, `2h`, `30m`).
 _TUNABLE_VALUE = re.compile(r"^-?\d+(?:\.\d+)?[smhd]?$")
-# `  KEY: value` at the Secret's `stringData` indent; a comment or a `{% %}` line never matches.
-_ENV_LINE = re.compile(r"^  ([A-Z][A-Z0-9_]*): (.*)$")
+# `KEY: value` at the mapping's column 0; a comment or a `{% %}` line never matches.
+_ENV_LINE = re.compile(r"^([A-Z][A-Z0-9_]*): (.*)$")
 # Process settings, not thresholds.
 _NOT_TUNABLE_PREFIXES = ("PYTHON",)
 _NOT_TUNABLE_KEYS = frozenset({"TZ"})
@@ -85,7 +87,7 @@ def read_gate_set_names(source: str) -> dict[str, str]:
 
 
 def read_env_tunables(template: str) -> list[tuple[str, str]]:
-    """(key, value) for each numeric or duration literal the env-secret renders, in order."""
+    """(key, value) for each numeric or duration literal the settings template renders, in order."""
     tunables = []
     for line in template.splitlines():
         match = _ENV_LINE.match(line)
@@ -170,7 +172,7 @@ def render_gate_sets(rows: list[dict], set_names: dict[str, str]) -> str:
 
 
 def render_bridge_thresholds(tunables: list[tuple[str, str]]) -> str:
-    """Renders the threshold table: env key -> the value the env-secret template renders.
+    """Renders the threshold table: env key -> the value the settings template renders.
 
     Args:
         tunables: (key, value) pairs from `read_env_tunables`, in template order.
@@ -195,8 +197,8 @@ def _bridge_gate_sets() -> tuple[str, list[str]]:
 
 
 def _bridge_thresholds() -> tuple[str, list[str]]:
-    tunables = read_env_tunables(ENV_SECRET.read_text())
-    return render_bridge_thresholds(tunables), [_rel(ENV_SECRET)]
+    tunables = read_env_tunables(ENV_SETTINGS.read_text())
+    return render_bridge_thresholds(tunables), [_rel(ENV_SETTINGS)]
 
 
 # name -> () -> (body, sources). The name is the file stem a page includes.
