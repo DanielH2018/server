@@ -21,6 +21,7 @@ from deployer_lib.deploy_changes import (
     setup_role_playbook,
     setup_role_tag,
 )
+from deployer_lib.deploy_setup_roles import setup_role_agent_hosts
 from gitops_ledger import OWED_MANUAL_PLANE
 from gitops_markers import (
     MAXIMAL_ROLE_GATED_TAGS,
@@ -375,7 +376,42 @@ def _role_command(
     # Parenthesised, not appended after a dash: `manual_plane_remediation` adds ", then
     # <clear command>" after this list, and an unbracketed warning made that clause read
     # as a continuation of the warning's own last sentence.
-    return f"{cmd} (WARNING: {warning})" if warning else cmd
+    out = f"{cmd} (WARNING: {warning})" if warning else cmd
+    if not narrowed and role in _AGENT_JOIN_TAGS:
+        out = " and ".join([out, *_agent_commands(role, playbook)])
+    return out
+
+
+# Setup roles whose playbook applies a second half to other hosts through an opt-in play,
+# and the tag that selects it. `k3s-bringup.yml` runs `tasks/agent.yml` only from the join
+# plays, which match no host without `-e join_agent=<host>`, so `--tags k3s` on daniel-box
+# leaves every agent node unapplied (#5606).
+#
+# DECIDED: the agent command goes beside the WHOLE-ROLE tag only, never beside a narrowed one.
+# `narrow_setup.py` refuses any path that reaches `tasks/agent.yml`, because no static import
+# from the role's `tasks/main.yml` reaches that file, and a refusal is what leaves the role's
+# row empty. A narrowed row therefore never touches the agent: `tasks/server.yml` alone
+# narrows to `k3s_server`. The cost is that an agent-only change prints the server command
+# too, which applies more than it needs and never less. Pinned by
+# test_deploy_remediation_agent.py::test_a_change_reaching_agent_yml_refuses_to_narrow.
+_AGENT_JOIN_TAGS = {"k3s": "k3s_agent"}
+
+
+def _agent_commands(role: str, playbook: str) -> list[str]:
+    """One join-play command per agent host of `role`, or a placeholder when none is known.
+
+    The hosts come from the inventory through the routing (`setup_role_agent_hosts`). A
+    routing that carries none, such as one an older `setup_routing.py` printed, gets a
+    visible placeholder rather than a guessed host. No `target_arg`: `-e target=` selects a
+    host's vars and still runs on the operator's machine, while the join play opens its own
+    SSH connection to the host `join_agent` names.
+    """
+    tag = _AGENT_JOIN_TAGS[role]
+    hosts = setup_role_agent_hosts(role) or ("<agent host>",)
+    return [
+        f"`{PLAYBOOK_CMD} {playbook} -e join_agent={host} --tags {tag}`"
+        for host in hosts
+    ]
 
 
 def _consumers_command(role: str) -> str:
