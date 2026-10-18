@@ -100,6 +100,7 @@ _RECREATE = {
     ("wg-easy", "wg-easy"): "owns a wireguard interface",
     ("qbittorrent", "qbittorrent"): "VPN killswitch iptables live in the pod netns",
     ("registry", "registry"): "hostPort is node-exclusive",
+    ("registry", "ghcr-mirror"): "hostPort is node-exclusive",
     # ── in-process state ──
     (
         "monitor-bridge",

@@ -6,8 +6,10 @@ function that logs each call and answers from canned output.
   * `write_mirror_keep_set()` fails closed. The offline prune keeps only the N newest revisions
     plus this set, so a set written from a failed read would let rank alone delete images live
     pods run.
-  * `scale_up_and_report()` journals the prune's lines before anything else, and deletes the
+  * `restore_mirror_store()` journals the prune's lines before anything else, and deletes the
     mirror Job only when it has not finished, so a failure keeps the log its message names.
+  * each store's phase scales only its own Deployment. The mirror's GC never scales the push
+    store (the operator's ruling on #5680), and the push store's never takes the mirror down.
 """
 
 import os
@@ -85,24 +87,54 @@ def test_a_cluster_with_no_digest_writes_no_keep_set(tmp_path):
     assert "skipped" in note, note
 
 
-SCALE_UP = rendered_shell_function(
-    "k8s", "registry", "registry-gc.sh.j2", "scale_up_and_report"
+RESTORE = rendered_shell_function(
+    "k8s", "registry", "registry-gc.sh.j2", "restore_mirror_store"
 )
+START = rendered_shell_function("k8s", "registry", "registry-gc.sh.j2", "start_deploy")
+STOP = rendered_shell_function("k8s", "registry", "registry-gc.sh.j2", "stop_deploy")
 JOURNAL = rendered_shell_function(
     "k8s", "registry", "registry-gc.sh.j2", "journal_mirror_prune"
 )
+REPORT = rendered_shell_function(
+    "k8s", "registry", "registry-gc.sh.j2", "report_mirror_job"
+)
+COLLECT_MIRROR = rendered_shell_function(
+    "k8s", "registry", "registry-gc.sh.j2", "collect_mirror_store"
+)
+COLLECT_PUSH = rendered_shell_function(
+    "k8s", "registry", "registry-gc.sh.j2", "collect_push_store"
+)
 PRUNED_LINE = f"pruned danielh2018/nut@{LIVE} tags=none"
 
+# Every phase test runs with these, the values the rendered script assigns.
+_VARS = """
+KUBECTL="k3s kubectl -n homelab"
+NS=homelab
+DEPLOY=registry
+MIRROR_DEPLOY=ghcr-mirror
+JOB=registry-gc
+MIRROR_JOB=registry-gc-ghcr-mirror
+MIRROR_KEEP_CM=registry-gc-ghcr-mirror-keep
+JOB_MANIFEST=/m/gc-job.yaml
+MIRROR_JOB_MANIFEST=/m/ghcr-mirror-gc-job.yaml
+MIRROR_STARTED=0
+MIRROR_DONE=0
+MIRROR_DOWN=0
+PUSH_DOWN=0
+MIRROR_NOTE=""
+MIRROR_MSG=""
+PUSH_MSG=""
+PRUNED=0
+"""
 
-def _scale_up(tmp_path: Path, finished: str) -> list[str]:
-    """Run scale_up_and_report after a run that stopped early; return every call in order."""
+
+def _restore(tmp_path: Path, finished: str) -> list[str]:
+    """Run restore_mirror_store after a mirror phase that stopped early; return every call."""
     calls = tmp_path / "calls"
     script = f"""
-KUBECTL="k3s kubectl -n homelab"
-DEPLOY=registry
-MIRROR_JOB=registry-gc-ghcr-mirror
+{_VARS}
 MIRROR_STARTED=1
-MIRROR_DONE=0
+MIRROR_DOWN=1
 k3s() {{
   printf '%s\\n' "$*" >> {shlex.quote(str(calls))}
   case "$*" in
@@ -111,10 +143,10 @@ k3s() {{
   esac
 }}
 logger() {{ printf 'logger %s\\n' "$(cat)" >> {shlex.quote(str(calls))}; }}
-finish() {{ :; }}
 {JOURNAL}
-{SCALE_UP}
-scale_up_and_report
+{START}
+{RESTORE}
+restore_mirror_store
 """
     env = {**os.environ, "FINISHED": finished, "PRUNED_LINE": PRUNED_LINE}
     run(["bash", "-c", script], env=env, check=True)
@@ -127,60 +159,98 @@ def _index(calls: list[str], needle: str) -> int:
 
 
 def test_an_unfinished_mirror_job_is_journaled_then_deleted_before_scale_up(tmp_path):
-    calls = _scale_up(tmp_path, finished="")
+    calls = _restore(tmp_path, finished="")
 
     assert f"logger {PRUNED_LINE}" in calls, calls
     journal = _index(calls, f"logger {PRUNED_LINE}")
     delete = _index(calls, "delete job registry-gc-ghcr-mirror")
-    scale = _index(calls, "scale deploy/registry --replicas=1")
+    scale = _index(calls, "scale deploy/ghcr-mirror --replicas=1")
     assert journal < delete < scale, calls
+    assert not any("deploy/registry" in c for c in calls), calls
 
 
 def test_a_finished_mirror_job_is_journaled_and_kept_for_its_log(tmp_path):
-    calls = _scale_up(tmp_path, finished="1")
+    calls = _restore(tmp_path, finished="1")
 
     assert f"logger {PRUNED_LINE}" in calls, calls
     assert not any("delete job" in c for c in calls), calls
 
 
-REPORT = rendered_shell_function(
-    "k8s", "registry", "registry-gc.sh.j2", "report_mirror_job"
-)
-
-
-def _report(tmp_path: Path, note: str) -> tuple[str, str]:
-    """Run report_mirror_job after a completed mirror Job; return STATUS and MSG."""
+def _phase(tmp_path: Path, function: str) -> list[str]:
+    """Run one store's whole GC phase against a cluster where every call succeeds."""
+    calls = tmp_path / "calls"
+    body = f'{{"items": [{{"imageID": "ghcr.io/x@{LIVE}"}}]}}'
     script = f"""
-KUBECTL="k3s kubectl -n homelab"
-NS=homelab
-MIRROR_JOB=registry-gc-ghcr-mirror
-APPLIED_AT=$SECONDS
-STATUS=up
-MSG="gc completed"
+{_VARS}
+k3s() {{
+  printf '%s\\n' "$*" >> {shlex.quote(str(calls))}
+  case "$*" in
+    *" get "*) printf '%s' "$GET_BODY" ;;
+    *" logs "*" prune"*) printf '%s\\n' "$PRUNED_LINE" ;;
+  esac
+}}
+logger() {{ cat > /dev/null; }}
+prune_content_tags() {{ :; }}
+{KEEP_SET}
+{STOP}
+{JOURNAL}
+{REPORT}
+{COLLECT_MIRROR}
+{COLLECT_PUSH}
+{function}
+"""
+    env = {**os.environ, "GET_BODY": body, "PRUNED_LINE": PRUNED_LINE}
+    run(["bash", "-c", script], env=env, check=True)
+    return calls.read_text().splitlines()
+
+
+def test_the_mirror_phase_scales_only_the_mirror_deployment(tmp_path):
+    """The operator's ruling on #5680: the mirror's GC never scales the push store."""
+    calls = _phase(tmp_path, "collect_mirror_store")
+
+    down = _index(calls, "scale deploy/ghcr-mirror --replicas=0")
+    applied = _index(calls, "apply -f /m/ghcr-mirror-gc-job.yaml")
+    assert down < applied, calls
+    assert any("wait --for=delete pod -l app=ghcr-mirror" in c for c in calls), calls
+    assert not any("deploy/registry" in c or "app=registry" in c for c in calls), calls
+
+
+def test_the_push_phase_leaves_the_mirror_serving(tmp_path):
+    calls = _phase(tmp_path, "collect_push_store")
+
+    assert any("scale deploy/registry --replicas=0" in c for c in calls), calls
+    assert not any("ghcr-mirror" in c for c in calls), calls
+
+
+def _report(tmp_path: Path, note: str) -> tuple[int, str]:
+    """Run report_mirror_job after a completed mirror Job; return its rc and MIRROR_MSG."""
+    script = f"""
+{_VARS}
 MIRROR_NOTE="$NOTE"
 k3s() {{ case "$*" in *" logs "*" prune"*) printf '%s\\n' "$PRUNED_LINE" ;; esac; }}
 logger() {{ cat > /dev/null; }}
 {JOURNAL}
 {REPORT}
 report_mirror_job
-printf '%s\\n%s' "$STATUS" "$MSG"
+rc=$?
+printf '%s\\n%s' "$rc" "$MIRROR_MSG"
 """
     env = {**os.environ, "NOTE": note, "PRUNED_LINE": PRUNED_LINE}
-    status, msg = run(["bash", "-c", script], env=env, check=True).stdout.split("\n", 1)
-    return status, msg
+    rc, msg = run(["bash", "-c", script], env=env, check=True).stdout.split("\n", 1)
+    return int(rc), msg
 
 
 def test_a_completed_prune_keeps_the_run_up(tmp_path):
-    status, msg = _report(tmp_path, "")
+    rc, msg = _report(tmp_path, "")
 
-    assert status == "up", msg
+    assert rc == 0, msg
     assert "ghcr-mirror: 1 revision(s) pruned" in msg, msg
 
 
 def test_a_skipped_prune_reports_the_run_down(tmp_path):
     """A persistent keep-set fault would otherwise skip every week behind a green tile."""
     note = "ghcr-mirror prune skipped, workloads unreadable"
-    status, msg = _report(tmp_path, note)
+    rc, msg = _report(tmp_path, note)
 
-    assert status == "down", msg
+    assert rc == 1, msg
     assert note in msg, msg

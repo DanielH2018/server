@@ -1,11 +1,14 @@
-"""The registry pod's ghcr.io pull-through mirror (D5 Open question 2, ruled 2026-10-16).
+"""The registry role's ghcr.io pull-through mirror (D5 Open question 2, ruled 2026-10-16).
 
 The mirror gives a node a LAN copy of a flux-owned GHCR image, so nut can cold-start during a
-WAN outage. Five properties keep it from being decorative or from breaking the push store:
+WAN outage. These properties keep it from being decorative or from breaking the push store:
 
-  * the mirror is its OWN container. A registry with `REGISTRY_PROXY_REMOTEURL` refuses every
+  * the mirror is its OWN Deployment. A registry with `REGISTRY_PROXY_REMOTEURL` refuses every
     manifest Put and Delete, so the setting on the push store would break every image-builder
-    push and registry-gc.sh's untag DELETEs;
+    push and registry-gc.sh's untag DELETEs. And a mirror inside the push store's pod could be
+    collected only by scaling that pod, which the operator ruled out on #5680;
+  * it keeps the address every consumer names: the loopback hostPort on the registry node, and
+    the pinned ClusterIP through a Service that routes each port to one Deployment by name;
   * its TTL is zero. The 168h default drops nut's image a week after its last rebuild;
   * it binds neither the push store's port nor the baked config's debug port :5001, which the
     two containers would otherwise both claim in the shared pod netns;
@@ -18,8 +21,11 @@ The `registries.yaml` half is `ansible/tests/setup/test_k3s_registries_mirror_gh
 NetworkPolicy half is in `ansible/tests/k8s/test_registry_netpol_grants_follow_the_pinned_node.py`.
 """
 
+import re
+
 from lib import yaml_fast
 from _manifest_guards import K8S, _render, _role_context
+from _shell_render import rendered_shell_text
 
 ROLE = "registry"
 CTX = _role_context(ROLE, domain="example.com")
@@ -30,11 +36,17 @@ def _docs(template: str) -> list[dict]:
     return [d for d in yaml_fast.safe_load_all(rendered) if d]
 
 
-def _containers() -> dict[str, dict]:
-    (deployment,) = [
-        d for d in _docs("deployment.yaml.j2") if d["kind"] == "Deployment"
-    ]
-    return {c["name"]: c for c in deployment["spec"]["template"]["spec"]["containers"]}
+def _deployments() -> dict[str, dict]:
+    return {
+        d["metadata"]["name"]: d
+        for template in ("deployment.yaml.j2", "ghcr-mirror.yaml.j2")
+        for d in _docs(template)
+        if d["kind"] == "Deployment"
+    }
+
+
+def _pod(deployment: dict) -> dict:
+    return deployment["spec"]["template"]["spec"]
 
 
 def _env(container: dict) -> dict[str, str]:
@@ -43,7 +55,10 @@ def _env(container: dict) -> dict[str, str]:
 
 def _mirror() -> dict:
     mirrors = [
-        c for c in _containers().values() if "REGISTRY_PROXY_REMOTEURL" in _env(c)
+        c
+        for d in _deployments().values()
+        for c in _pod(d)["containers"]
+        if "REGISTRY_PROXY_REMOTEURL" in _env(c)
     ]
     assert len(mirrors) == 1, (
         f"expected exactly one container proxying ghcr.io, found {[c['name'] for c in mirrors]}"
@@ -59,11 +74,38 @@ def test_one_container_mirrors_ghcr_with_no_expiry():
     assert env.get("REGISTRY_PROXY_TTL") in {"0", "0s"}, env
 
 
-def test_the_push_store_is_not_a_proxy():
-    """A proxy refuses Put and Delete, so the push store must carry no REGISTRY_PROXY_*."""
-    push = _containers()["registry"]
+def test_the_mirror_is_its_own_deployment():
+    """The operator's ruling on #5680: the mirror's GC must never scale the push store.
+
+    A mirror container inside deploy/registry's pod can only be taken offline by scaling that
+    Deployment, so the push store's pod must carry no proxy container at all.
+    """
+    deployments = _deployments()
+    (push,) = _pod(deployments["registry"])["containers"]
     proxied = sorted(k for k in _env(push) if k.startswith("REGISTRY_PROXY_"))
     assert not proxied, f"the push store carries {proxied}; it would refuse every push"
+    (mirror,) = _pod(deployments["ghcr-mirror"])["containers"]
+    assert mirror == _mirror(), mirror["name"]
+
+
+def test_the_mirror_renders_no_replica_count():
+    """registry-gc.sh scales deploy/ghcr-mirror to zero for the prune. A rendered `replicas`
+    would give the apply, and later Flux, a claim on the field that restores the pod mid-GC."""
+    assert "replicas" not in _deployments()["ghcr-mirror"]["spec"]
+
+
+def test_the_mirror_answers_on_the_address_consumers_name():
+    """daniel-box's registries.yaml names `localhost:<port>`, so the mirror keeps the loopback
+    hostPort on the registry node. Moving either is a setup-plane change on every node."""
+    pod = _pod(_deployments()["ghcr-mirror"])
+    assert pod["nodeSelector"] == {"kubernetes.io/hostname": CTX["k8s_registry_node"]}
+    (port,) = _mirror()["ports"]
+    assert (
+        port["hostPort"]
+        == port["containerPort"]
+        == CTX["k8s_registry_ghcr_mirror_port"]
+    )
+    assert port["hostIP"] == CTX["k8s_registry_host_ip"], port
 
 
 def test_the_mirror_binds_its_own_ports():
@@ -85,19 +127,12 @@ def test_the_mirror_stores_on_its_own_claim():
     store's GC Job mounts only the push store's claim, so its `--delete-untagged` never walks
     the cache.
     """
-    (deployment,) = [
-        d for d in _docs("deployment.yaml.j2") if d["kind"] == "Deployment"
-    ]
+    pod = _pod(_deployments()["ghcr-mirror"])
     volumes = {
-        v["name"]: v["persistentVolumeClaim"]["claimName"]
-        for v in deployment["spec"]["template"]["spec"]["volumes"]
+        v["name"]: v["persistentVolumeClaim"]["claimName"] for v in pod["volumes"]
     }
-
-    def claims(container: dict) -> set[str]:
-        return {volumes[m["name"]] for m in container.get("volumeMounts", [])}
-
-    mirror = claims(_mirror())
-    assert mirror, "the mirror mounts no claim"
+    mirror = {volumes[m["name"]] for m in _mirror().get("volumeMounts", [])}
+    assert mirror == {CTX["registry_k8s_ghcr_mirror_claim"]}, mirror
     assert CTX["registry_k8s_claim"] not in mirror, mirror
     gc_claims = _job_claims(_gc_jobs()["registry-gc"])
     assert not mirror & gc_claims, (mirror, gc_claims)
@@ -105,8 +140,24 @@ def test_the_mirror_stores_on_its_own_claim():
 
 def _gc_jobs() -> dict[str, dict]:
     return {
-        d["metadata"]["name"]: d for d in _docs("gc-job.yaml.j2") if d["kind"] == "Job"
+        d["metadata"]["name"]: d
+        for template in ("gc-job.yaml.j2", "ghcr-mirror-gc-job.yaml.j2")
+        for d in _docs(template)
+        if d["kind"] == "Job"
     }
+
+
+def test_each_gc_job_file_holds_one_store():
+    """registry-gc.sh applies each file with only that store's Deployment scaled down."""
+    push = {
+        d["metadata"]["name"] for d in _docs("gc-job.yaml.j2") if d["kind"] == "Job"
+    }
+    mirror = {
+        d["metadata"]["name"]
+        for d in _docs("ghcr-mirror-gc-job.yaml.j2")
+        if d["kind"] == "Job"
+    }
+    assert (push, mirror) == ({"registry-gc"}, {"registry-gc-ghcr-mirror"})
 
 
 def _job_claims(job: dict) -> set[str]:
@@ -143,7 +194,7 @@ def test_the_mirror_prune_reads_an_optional_keep_set_and_the_script_verbatim():
     }, volumes["ghcr-mirror-keep"]
     (script,) = [
         d
-        for d in _docs("gc-job.yaml.j2")
+        for d in _docs("ghcr-mirror-gc-job.yaml.j2")
         if d["kind"] == "ConfigMap"
         and d["metadata"]["name"]
         == volumes["ghcr-mirror-prune-script"]["configMap"]["name"]
@@ -152,9 +203,67 @@ def test_the_mirror_prune_reads_an_optional_keep_set_and_the_script_verbatim():
     assert script["data"]["ghcr-mirror-prune.sh"] == source
 
 
-def test_the_service_exposes_the_mirror_on_the_pinned_cluster_ip():
+def test_the_service_routes_each_port_to_one_deployment_by_name():
+    """One Service fronts both Deployments, so agents keep the pinned ClusterIP.
+
+    The EndpointSlice controller leaves a pod out of a port whose NAMED targetPort it does not
+    declare. A numeric targetPort, or a name both pods declare, would send part of the push
+    traffic to the mirror pod or the reverse.
+    """
     (service,) = _docs("service.yaml.j2")
     assert service["spec"]["clusterIP"] == CTX["k8s_registry_cluster_ip"], service
-    ports = {p["port"]: p["targetPort"] for p in service["spec"]["ports"]}
-    mirror = CTX["k8s_registry_ghcr_mirror_port"]
-    assert ports.get(mirror) == mirror, ports
+    selector = service["spec"]["selector"]
+    deployments = _deployments()
+    for name, deployment in deployments.items():
+        labels = deployment["spec"]["template"]["metadata"]["labels"]
+        assert selector.items() <= labels.items(), (name, selector, labels)
+    routed = {}
+    for port in service["spec"]["ports"]:
+        target = port["targetPort"]
+        assert isinstance(target, str), f"targetPort {target!r} is not a port name"
+        declaring = {
+            name: p["containerPort"]
+            for name, d in deployments.items()
+            for c in _pod(d)["containers"]
+            for p in c.get("ports", [])
+            if p.get("name") == target
+        }
+        assert len(declaring) == 1, (target, declaring)
+        ((owner, container_port),) = declaring.items()
+        assert container_port == port["port"], (target, container_port, port)
+        routed[port["port"]] = owner
+    assert routed == {
+        CTX["k8s_registry_port"]: "registry",
+        CTX["k8s_registry_ghcr_mirror_port"]: "ghcr-mirror",
+    }, routed
+
+
+def test_registry_gc_applies_the_mirror_manifest_the_deploy_stages():
+    """The mirror's Job is its own file, which the cron reads at GC time (#1669)."""
+    (read,) = re.findall(
+        r"^MIRROR_JOB_MANIFEST=(\S+)$",
+        rendered_shell_text("k8s", "registry", "registry-gc.sh.j2"),
+        re.MULTILINE,
+    )
+    tasks = (K8S / ROLE / "tasks" / "main.yml").read_text()
+    assert f"dest: {read}\n" in tasks, (
+        f"no task stages {read}, the file the cron applies"
+    )
+
+
+def test_a_deploy_restores_a_mirror_a_stopped_gc_left_at_zero():
+    """With no rendered `replicas:`, an apply never undoes a GC that died after its scale-down.
+
+    The deploy scales the mirror back only from zero and only while no mirror GC Job runs, and
+    does it before the rollout wait, which would otherwise pass on 0/0.
+    """
+    tasks = yaml_fast.safe_load((K8S / ROLE / "tasks" / "main.yml").read_text())
+    names = [t["name"] for t in tasks]
+    (restore,) = [t for t in tasks if "scale deploy/ghcr-mirror" in str(t)]
+    cmd = restore["ansible.builtin.command"]["cmd"]
+    assert "--current-replicas=0" in cmd and "--replicas=1" in cmd, cmd
+    when = " ".join(restore["when"])
+    assert "registry_mirror_replicas.stdout | trim == '0'" in when, when
+    assert "registry_mirror_gc_active.stdout" in when, when
+    wait = names.index("Wait for the ghcr-mirror rollout before probing its policy")
+    assert names.index(restore["name"]) < wait, names
