@@ -1178,8 +1178,8 @@ checks each gate suppresses.
 
 Checks that left `CHECKS` push their monitors from elsewhere, with the same tokens, so each
 monitor keeps its history. The direct pushers are the `pi-peer-backup` k8s CronJob (WG Pi Peer
-Backup), the `crowdsec` role's allowlist cron (CrowdSec Home Allowlist),
-`crowdsec-appsec-verify.sh.j2` (CrowdSec AppSec), the `fake_remux` setup role's
+Backup), the `crowdsec` role's home allowlist cron (CrowdSec Home Allowlist), the
+`crowdsec-jobs` sidecar in the CrowdSec pod (CrowdSec AppSec), the `fake_remux` setup role's
 `fake-remux-health.sh` (Fake Remux Scan / Replace), `renovate-notify`'s `ExecStartPost`
 (Renovate Notifier — Alive), and the configarr and janitorr roles' health crons (Configarr
 Sync, Janitorr Errors). Disk Autoprune retired with the Docker daemon and has no successor.

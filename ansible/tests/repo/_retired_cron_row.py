@@ -52,6 +52,9 @@ H2_FRAGMENTS = {
 RETIRED = frozenset(
     {
         "Cloudflare IP drift",
+        "CrowdSec AppSec verify",
+        "CrowdSec bouncer prune",
+        "CrowdSec remote allowlist",
         "configarr sync health",
         "configarr",
         "janitorr error health",

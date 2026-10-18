@@ -13,7 +13,8 @@ import pytest
 
 from lib import yaml_fast
 from lib.exit_codes import RENDER_OK
-from renderer import homelab_render
+from render_share import sharing_placeholder_renders
+from renderer import homelab_render, standalone_map
 from renderer.renderer_lib.cluster import RenderedTag, RenderError, flux_owned_tags
 from renderer.renderer_lib.placeholders import PlaceholderRender, sentinel
 from renderer.renderer_lib.restart import (
@@ -116,6 +117,32 @@ def test_a_secret_placeholder_in_a_config_map_moves_the_checksum_on_rotation():
         return restart_values("f", {"f": files}, {"edge": ALL}, KEYS, source)["edge"]
 
     assert value(SOURCE) != value({**SOURCE, "alpha_token": "c" * 64})
+
+
+READER = (
+    "apiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: grafana\nspec:\n"
+    "  template:\n    spec:\n      containers:\n        - name: app\n"
+    "      volumes:\n        - name: boards\n          configMap:\n"
+    "            name: grafana-dashboards-apps\n        - name: settings\n"
+    "          configMap:\n            name: settings\n"
+)
+
+
+def _reader_value(boards: str, settings: str) -> str:
+    files = {
+        "boards.yaml": "apiVersion: v1\nkind: ConfigMap\nmetadata:\n"
+        f"  name: grafana-dashboards-apps\ndata:\n  a.json: '{boards}'\n",
+        "settings.yaml": "apiVersion: v1\nkind: ConfigMap\nmetadata:\n"
+        f"  name: settings\ndata:\n  s.yaml: '{settings}'\n",
+        "deploy.yaml": READER,
+    }
+    return restart_values("f", {"f": files}, {"grafana": ALL}, KEYS, SOURCE)["grafana"]
+
+
+def test_a_config_map_its_reader_reloads_in_place_moves_nothing():
+    """Grafana re-reads a dashboard ConfigMap from its mount, so a board edit rolls nothing."""
+    assert _reader_value("{}", "a: 1") == _reader_value('{"edited": 1}', "a: 1")
+    assert _reader_value("{}", "a: 1") != _reader_value("{}", "a: 2")
 
 
 INCLUDE = """- name: Deploy fixture
@@ -342,7 +369,8 @@ def outside_references(
 
 @pytest.fixture(scope="module")
 def fleet():
-    return fleet_render()
+    with sharing_placeholder_renders(standalone_map):
+        return fleet_render()
 
 
 def test_no_flux_owned_pod_names_another_roles_secret_or_config_map_is_clean(fleet):

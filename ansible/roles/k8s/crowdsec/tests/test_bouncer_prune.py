@@ -1,4 +1,4 @@
-"""The bouncer-prune cron's decision: which rows `cscli bouncers prune` removes, and when a run
+"""The bouncer prune's decision: which rows `cscli bouncers prune` removes, and when a run
 refuses because the prune could delete the last row holding the edge's key (`files/bouncer_prune.py`).
 
 Run: uv run pytest ansible/roles/k8s/crowdsec/tests/test_bouncer_prune.py
@@ -115,7 +115,9 @@ def test_main_reports_what_the_second_list_shows_not_what_it_planned(capsys):
     lists = iter([OBSERVED, after])
 
     def runner(argv):
-        calls.append(argv[argv.index("cscli") + 1 :])
+        # The sidecar runs its own cscli, never `kubectl exec` into the engine container.
+        assert argv[0] == bp.CSCLI
+        calls.append(argv[1:])
         return json.dumps(next(lists)) if argv[-1] == "json" else ""
 
     assert bp.main(runner, now=NOW) == 0
@@ -134,7 +136,8 @@ def test_main_skips_the_prune_when_nothing_is_stale(capsys):
     calls = []
 
     def runner(argv):
-        calls.append(argv[argv.index("cscli") + 1 :])
+        assert argv[0] == bp.CSCLI
+        calls.append(argv[1:])
         return json.dumps([LIVE])
 
     assert bp.main(runner, now=NOW) == 0
@@ -147,7 +150,8 @@ def test_main_refuses_without_pruning(capsys):
     stale = [_row("k8straefik@10.42.0.207", pulled=timedelta(hours=3))]
 
     def runner(argv):
-        calls.append(argv[argv.index("cscli") + 1 :])
+        assert argv[0] == bp.CSCLI
+        calls.append(argv[1:])
         return json.dumps(stale)
 
     assert bp.main(runner, now=NOW) == 1

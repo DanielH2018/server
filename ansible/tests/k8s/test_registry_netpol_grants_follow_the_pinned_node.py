@@ -130,26 +130,40 @@ def test_the_rendered_policy_carries_both_grants():
         )
 
 
+def _policies() -> dict[str, dict]:
+    ctx = _role_context(ROLE, domain="example.com")
+    return {
+        d["metadata"]["name"]: d
+        for template in ("networkpolicy.yaml.j2", "ghcr-mirror.yaml.j2")
+        for d in yaml_fast.safe_load_all(
+            _render(K8S / ROLE / "templates" / template, **ctx)
+        )
+        if d and d["kind"] == "NetworkPolicy"
+    }
+
+
 def test_the_ghcr_mirror_port_is_admitted_only_from_the_node_grants():
     """containerd pulls through the ghcr.io mirror from the same two host sources.
 
-    A mirror port missing from the ipBlock rule drops every pull, containerd falls back to
-    ghcr.io without a word, and the mirror stays empty. A pod-network rule that admitted it
-    would let any admitted pod fill the shared volume with arbitrary public images.
+    The mirror is its own pod, so its own policy has to admit them. A mirror port missing from
+    it drops every pull, containerd falls back to ghcr.io without a word, and the mirror stays
+    empty. A pod-network rule that admitted it would let any admitted pod fill the mirror's
+    claim with arbitrary public images.
     """
-    rendered = _render(
-        K8S / ROLE / "templates" / "networkpolicy.yaml.j2",
-        **_role_context(ROLE, domain="example.com"),
-    )
-    (policy,) = [d for d in yaml_fast.safe_load_all(rendered) if d]
     mirror = DEFAULTS["k8s_registry_ghcr_mirror_port"]
     admitting = [
-        rule
+        (name, rule)
+        for name, policy in _policies().items()
         for rule in policy["spec"]["ingress"]
         if mirror in {p["port"] for p in rule.get("ports", [])}
     ]
-    assert len(admitting) == 1, f"{len(admitting)} rules admit port {mirror}"
-    peers = admitting[0]["from"]
+    assert [name for name, _ in admitting] == ["ghcr-mirror"], (
+        f"port {mirror} is admitted by {admitting}"
+    )
+    assert _policies()["ghcr-mirror"]["spec"]["podSelector"] == {
+        "matchLabels": {"app": "ghcr-mirror"}
+    }
+    peers = admitting[0][1]["from"]
     assert all("ipBlock" in peer for peer in peers), peers
     assert {peer["ipBlock"]["cidr"] for peer in peers} == {
         DEFAULTS["registry_k8s_netpol_cni_gateway"],

@@ -33,6 +33,7 @@ the worktree. The pipeline derives the set at start and ships it beside the held
 """
 
 import json
+import os
 import shlex
 import shutil
 import subprocess
@@ -68,7 +69,32 @@ HELD_TREES = (
     (Path(".claude") / "agents", "*.md"),
 )
 
+# The xdist worker ceiling every phase's pytest runs under: a quarter of the host's cores,
+# between 2 and 4. The user settings pin 4 for every session, and `--settings` overrides that
+# for one phase. Measured on 2026-10-18, the guard set took 48s at 4 workers and 80s at 2, and
+# a whole-suite run held 2.3 GiB at 4. daniel-server has 8 cores and fits the most batches by
+# memory, so its batches run at 2; daniel-box has 16 and keeps 4. Interactive sessions keep
+# the host's `claude_code_rc_pytest_workers`, which this does not read.
+PYTEST_WORKERS_ENV = "PYTEST_XDIST_AUTO_NUM_WORKERS"
+
 Runner = Callable[[list[str], str | None], subprocess.CompletedProcess]
+
+
+def pytest_workers(cores: int | None) -> int:
+    """The xdist worker ceiling for a host with `cores` cores, or 4 when the count is unknown."""
+    return max(2, min(4, cores // 4)) if cores else 4
+
+
+def with_batch_env(settings: dict, cores: int | None = None) -> dict:
+    """`settings` with the host's pytest worker ceiling added to its `env`.
+
+    Args:
+        settings: A `--settings` value. It is not changed.
+        cores: The host's core count; None reads this host's.
+    """
+    cores = cores or os.process_cpu_count()
+    env = {**settings.get("env", {}), PYTEST_WORKERS_ENV: str(pytest_workers(cores))}
+    return {**settings, "env": env}
 
 
 def read_hooks(root: Path) -> dict[str, bytes]:
@@ -109,7 +135,8 @@ def pointed_settings(settings: str, root: Path) -> dict:
     """The project settings text `settings`, with every hook command run from `root`'s copy.
 
     The set already registers `fanout-stop`, so a phase given it needs no separate Stop hook.
-    It drops the `UNHELD_EVENTS` hooks.
+    It drops the `UNHELD_EVENTS` hooks and adds the host's pytest worker ceiling
+    (`with_batch_env`).
     """
     held = json.loads(settings)
     for event in UNHELD_EVENTS:
@@ -119,7 +146,7 @@ def pointed_settings(settings: str, root: Path) -> dict:
         for group in groups:
             for hook in group.get("hooks", []):
                 hook["command"] = hook["command"].replace(PROJECT_HOOKS, hooks)
-    return held
+    return with_batch_env(held)
 
 
 def held_secret_paths(run: Runner, root: Path) -> dict[str, bytes]:

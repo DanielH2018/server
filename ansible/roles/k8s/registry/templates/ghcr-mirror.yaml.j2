@@ -1,0 +1,147 @@
+{% from 'container-resources.yml.j2' import container_resources with context %}
+{% from 'security-context.yml.j2' import hardened_security_context with context %}
+{% from 'workload-shell.yml.j2' import spec_shell, pod_shell with context %}
+---
+# The pull-through mirror of ghcr.io (D5 Open question 2). k3s's registries.yaml names it as the
+# `ghcr.io` mirror, so containerd pulls a flux-owned GHCR image through it and a node keeps a LAN
+# copy for a cold start during a WAN outage. nut is the reason: its pod is half of the UPS
+# shutdown chain, and WAN outages arrive with power events.
+#
+# DECIDED: its own Deployment, not REGISTRY_PROXY_* on the push store and not a second container
+# in its pod (operator ruling on #5680, 2026-10-18). A registry in proxy mode refuses every
+# manifest Put and Delete (`proxyManifestStore` returns ErrUnsupported in distribution v3.1.2),
+# which would break every image-builder push and registry-gc.sh's untag DELETEs. As a sidecar it
+# shared the push store's pod, so the mirror's weekly GC had to scale `deploy/registry` to zero,
+# and once Flux renders that Deployment's `replicas: 1` a second writer on that field restores
+# the pod mid-GC. Its own Deployment gives the mirror a GC that scales only this one, and a
+# mirror that cannot start no longer takes the push store's endpoint down with it. It keeps
+# every consumer's address: the same loopback hostPort on the same node, and the same pinned
+# ClusterIP through the shared Service in service.yaml.j2.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ghcr-mirror
+  namespace: {{ k8s_namespace }}
+spec:
+  # Recreate, for the push store's two reasons: the claim is ReadWriteOnce and the hostPort is
+  # node-exclusive. The hostPort also orders the move out of the registry pod. The new pod stays
+  # Pending until the old registry pod, which held this port, has exited, so two registry
+  # processes never write the store at once.
+{{ spec_shell('Recreate') }}
+  # No `replicas:`, on purpose. registry-gc.sh scales this Deployment to zero while it prunes the
+  # store, and a rendered field would give the apply, and later Flux, a claim on it that restores
+  # the pod mid-GC. Unset, the API server defaults it to 1 at creation and the GC is its only
+  # writer.
+  selector:
+    matchLabels:
+      app: ghcr-mirror
+  template:
+    metadata:
+      labels:
+        app: ghcr-mirror
+        registry-service: "true"
+        # Opted OUT of the namespace baseline for the push store's reason: the policy below is
+        # tighter than the baseline, and the baseline is additive.
+        netpol-baseline-exempt: "true"
+    spec:
+      # On the registry node, because daniel-box's registries.yaml reaches this mirror on its
+      # own loopback hostPort.
+      nodeSelector:
+        kubernetes.io/hostname: {{ k8s_registry_node }}
+{{ pod_shell(containers_list | tier_priority_class('registry'), run_as_user=1000, run_as_group=1000, fs_group=1000) }}
+      containers:
+        - name: ghcr-mirror
+          image: {{ registry_k8s_image }}
+          ports:
+            # Named for the Service's targetPort, as the push store's port is.
+            - name: ghcr-mirror
+              containerPort: {{ k8s_registry_ghcr_mirror_port }}
+              # Loopback only. Without hostIP this binds 0.0.0.0 and an unauthenticated
+              # pull-through cache of every public ghcr.io image becomes open to the LAN.
+              hostIP: {{ k8s_registry_host_ip }}
+              hostPort: {{ k8s_registry_ghcr_mirror_port }}
+{{ hardened_security_context(read_only=true, non_root=true) }}
+          env:
+            - name: REGISTRY_LOG_LEVEL
+              value: info
+            - name: REGISTRY_HTTP_ADDR
+              value: ":{{ k8s_registry_ghcr_mirror_port }}"
+            # Loopback only. The baked config binds the debug server to :5001 on every address,
+            # and nothing outside the pod reads it.
+            - name: REGISTRY_HTTP_DEBUG_ADDR
+              value: "127.0.0.1:{{ registry_k8s_ghcr_mirror_debug_port }}"
+            - name: REGISTRY_STORAGE_FILESYSTEM_ROOTDIRECTORY
+              value: /var/lib/registry
+{#
+  A blob that takes longer than about 8 to 10 minutes to fetch never completes through this
+  mirror (#5654). ghcr.io redirects each blob to an Azure SAS URL, whose `se` expiry read
+  7 minutes after issue, and the transfer is cut at the next 10 MiB boundary after that.
+  Measured from daniel-box on 2026-10-18 with curl, on a 223460165-byte flaresolverr layer:
+  HTTP/2 was cut at 200 MiB after 608s, HTTP/1.1 at 210 MiB after 572s, and HTTP/2 limited
+  to 120 KB/s at 60 MiB after 513s. The cap is time-based and not HTTP/2, so
+  `GODEBUG=http2client=0` would not help. distribution's proxy refetches from byte 0 on each
+  request and never resumes, so retries die at the same point. A Jinja comment, so that
+  editing it renames no verify Job and rolls nothing.
+#}
+            - name: REGISTRY_PROXY_REMOTEURL
+              value: https://ghcr.io
+            # Never expire. The default 168h would drop nut's image a week after its last
+            # rebuild, which is the cold pull during a WAN outage this mirror exists for.
+            # distribution's proxyregistry.go reads a zero TTL as "never expire". The weekly
+            # GC's offline prune (files/ghcr-mirror-prune.sh) is what bounds the store instead.
+            - name: REGISTRY_PROXY_TTL
+              value: "0s"
+          # Its own claim, not registry-data. Every ghcr.io image in the cluster pulls through
+          # here, not only danielh2018's, and nothing expires them, so a shared volume would
+          # fill and fail the push store's builds too. The push store's GC Job mounts only
+          # registry-data; the mirror's own GC Job mounts only this.
+          volumeMounts:
+            - name: ghcr-mirror-data
+              mountPath: /var/lib/registry
+          # `/v2/` answers from the local handler, so neither probe depends on ghcr.io being
+          # reachable. A probe that did would mark the mirror unready in a WAN outage, the one
+          # time it is needed.
+          readinessProbe:
+            httpGet:
+              path: /v2/
+              port: {{ k8s_registry_ghcr_mirror_port }}
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /v2/
+              port: {{ k8s_registry_ghcr_mirror_port }}
+            initialDelaySeconds: 15
+            periodSeconds: 30
+{{ container_resources(cpu_limit='500m', mem_limit='256Mi', cpu_request='20m', mem_request='32Mi') }}
+      volumes:
+        - name: ghcr-mirror-data
+          persistentVolumeClaim:
+            claimName: {{ registry_k8s_ghcr_mirror_claim }}
+---
+# The mirror is a pull path only, reached by the two host sources networkpolicy.yaml.j2 admits
+# to the push store's pull path: daniel-box's containerd through the loopback hostPort, and
+# daniel-server's across the overlay to the pinned ClusterIP. That file has the SNAT evidence
+# for both addresses. No pod-network rule admits it: a pod has no reason to pull through it, and
+# one that could would be able to fill the claim with arbitrary public images.
+# netpol-probe-job.yaml.j2 checks a pod is refused on this port on every deploy.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: ghcr-mirror
+  namespace: {{ k8s_namespace }}
+spec:
+  podSelector:
+    matchLabels:
+      app: ghcr-mirror
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - ipBlock:
+            cidr: {{ registry_k8s_netpol_cni_gateway }}
+        - ipBlock:
+            cidr: {{ registry_k8s_netpol_agent_flannel }}
+      ports:
+        - protocol: TCP
+          port: {{ k8s_registry_ghcr_mirror_port }}

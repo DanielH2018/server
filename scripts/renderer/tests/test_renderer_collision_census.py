@@ -21,6 +21,7 @@ from lib import yaml_fast
 from lib.ansible_inventory import K8S_HOST
 from lib.exit_codes import RENDER_OK
 from lib.repo_paths import HOST_VARS
+from render_share import placeholder_renderer
 from renderer import homelab_render
 from renderer.renderer_lib.bundle import CLUSTER_VARS_FILE, KUSTOMIZATION
 from renderer.renderer_lib.ordering import split_kind
@@ -103,9 +104,10 @@ def test_no_two_render_targets_render_one_object(tmp_path):
     cluster_file = tmp_path / CLUSTER_VARS_FILE
     cluster_file.write_text(DOTENV)
     out = tmp_path / "out"
-    assert (
-        homelab_render.cluster(out, None, None, cluster_file=cluster_file) == RENDER_OK
+    code = homelab_render.cluster(
+        out, None, None, render=placeholder_renderer(), cluster_file=cluster_file
     )
+    assert code == RENDER_OK
     # rglob, because a vendoring tag such as traefik-crds keeps its files under upstream/.
     directories = {
         d.name: {

@@ -62,8 +62,14 @@ def live_batch_cap(host: str) -> int:
     return LIVE_BATCH_CAP_BY_HOST.get(host, MAX_LIVE_BATCHES_PER_HOST)
 
 
-def over_ssh_budget(placed: list[tuple[str, str]]) -> bool:
-    """Print and return True when the placement puts too many batches on one remote host."""
+def over_ssh_budget(placed: list[tuple[str, str]], multiplexed: bool = False) -> bool:
+    """Print and return True when the placement puts too many batches on one remote host.
+
+    A `multiplexed` transport spends one connection per host however many batches it
+    launches (`transport.mux_opts`), so the budget does not bind and nothing is refused.
+    """
+    if multiplexed:
+        return False
     counts: dict[str, int] = {}
     for _, host in placed:
         counts[host] = counts.get(host, 0) + 1

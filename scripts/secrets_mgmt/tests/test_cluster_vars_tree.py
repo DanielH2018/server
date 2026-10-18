@@ -8,10 +8,13 @@ regenerating the cluster files fails here. It decrypts nothing.
 Run: uv run pytest scripts/secrets_mgmt/tests/test_cluster_vars_tree.py
 """
 
+from render_share import sharing_placeholder_renders
+from renderer.renderer_lib import placeholders
 from secrets_mgmt.cluster_vars import main
 
 
 def test_the_committed_cluster_files_pass_check(capsys):
-    code = main(["check"])
+    with sharing_placeholder_renders(placeholders):
+        code = main(["check"])
     err = capsys.readouterr().err
     assert code == 0, err

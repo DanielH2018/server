@@ -2642,50 +2642,56 @@ sizes its batch of roles against that projection.
           (R2 *`mullvad_account` becomes a dedicated Secret*). The API server refuses an
           int as a `stringData` value, so a flip without either could leave qbittorrent's
           Kustomization unable to apply.
-    - registry: the self-test and netpol probe Jobs become `registry-verify`. **The GC is
-      retired, not moved,** in a conversion PR while registry is still Ansible-owned. Its
-      script scales `deploy/registry`, whose `replicas: 1` Flux renders, so under Flux the
-      drift correction would restore the replica during a GC run, the corruption the script's
-      "STOP-THE-WORLD" comment exists to prevent. By Wave D every image consumer pulls from
-      GHCR, so no build pushes to the registry, and nothing new needs collecting. The
-      self-test copies a small `alpine:3.22` image, so the store gains one copy per upstream
-      rebuild of that tag. The PR:
-        - sets the existing lever `registry_k8s_manage_gc: false`. Its off arm removes only
-          `gc-job.yaml` today, so the PR extends it with absent arms for the `registry-gc`
-          cron file, `/usr/local/bin/registry-gc.sh` and `/var/lib/registry-gc`. Those arms
-          move to `k8s_host_files` with the other host rows, and flipping the lever back is
-          the way to re-arm GC while registry is Ansible-owned;
-        - removes the Kuma `Registry GC` tile and its group rule in uptime-kuma, the
-          `registry-gc` healthchecks.io entry in monitor-bridge's defaults, the
-          `registry_gc_push_token` entry in `ansible/secret_rotation.yml`, and the cron in
-          `scripts/validate/validate_lib/cron_targets.py`, with the tests that cite them;
-        - removes whichever registry-gc monitor exists at its base. M6's B6 also lists
-          registry-gc, and a cross-slice note asks M6 to drop it. If B6 merged first anyway,
-          this PR also removes the textfile rule and timer B6 built for it. The PR body
-          quotes `grep -rn 'registry.gc' ansible/roles/k8s/uptime-kuma
-          ansible/roles/k8s/monitor-bridge ansible/roles/k8s/observability
-          ansible/secret_rotation.yml` printing nothing;
-        - deletes the check at healthchecks.io, **operator-only** if no code manages it;
+    - registry: the self-test and netpol probe Jobs become `registry-verify`. **The push
+      store's GC is retired, not moved,** in a conversion PR while registry is still
+      Ansible-owned. Its phase of `registry-gc.sh` scales `deploy/registry`, whose
+      `replicas: 1` Flux renders, so under Flux the drift correction would restore the replica
+      during a GC run, the corruption the script's "STOP-THE-WORLD" comment exists to prevent.
+      By Wave D every image consumer pulls from GHCR, so no build pushes to the push store, and
+      nothing new needs collecting there. The self-test copies a small `alpine:3.22` image, so
+      the push store gains one copy per upstream rebuild of that tag.
+
+      **The `ghcr-mirror` store still needs collecting, and keeps its own GC** (operator
+      ruling on #5680, 2026-10-18). Its `REGISTRY_PROXY_TTL` is `0s` for the WAN-outage cold
+      start, so nothing expires a cached image, and the store grows with every upgrade of any
+      ghcr.io image in the cluster. #5714 moved the mirror into its own Deployment,
+      `deploy/ghcr-mirror`, on its own claim. `registry-gc.sh` collects it in a phase of its
+      own that scales only `deploy/ghcr-mirror`: it writes the keep set, runs the offline prune
+      and `garbage-collect` Job, and scales the mirror back. That Deployment renders no
+      `replicas:`, so neither the apply nor Flux claims the field and the GC stays its only
+      writer. A host script scaling a Flux-rendered Deployment is still contract C4's
+      second-writer shape, so that field-ownership argument awaits a ruling (#5732), and
+      `HOST_SCRIPT_WRITES` allows the script on it until then. The mirror store is therefore bounded by its weekly prune, which keeps the
+      `registry_k8s_ghcr_mirror_keep_revisions` newest revisions per repository plus every
+      digest or tag a workload names, inside the claim's 30Gi. The PR:
+        - removes the push store's phase from `registry-gc.sh`: the content-tag prune,
+          `collect_push_store`, `restore_push_store`, the in-flight build check and
+          `gc-job.yaml.j2` with its render task. It adds an absent arm for the staged
+          `gc-job.yaml`, which moves to `k8s_host_files` with the other host rows;
+        - keeps the `registry-gc` cron, the script, `/var/lib/registry-gc`, the Kuma
+          `Registry GC` tile, the `registry-gc` healthchecks.io entry and
+          `registry_gc_push_token`, because the mirror's phase still reports through them.
+          `registry_k8s_manage_gc: false` remains the way to disarm the whole GC;
         - states the precondition, quoted: no `image-builder` caller is Ansible-owned;
-        - quotes its live check after `land.sh` deploys it: `ls /usr/local/bin/registry-gc.sh
-          /var/lib/registry-gc` on daniel-box reports both missing. The cron file sits in
-          `/etc/cron.d`, which only root can list, so the operator confirms it is gone
-          (**operator-only**).
+        - quotes its live check after `land.sh` deploys it: the next Sunday's `registry-gc`
+          journal shows the mirror's phase and no `scale deploy/registry` line, and
+          `kubectl -n homelab get deploy registry -o jsonpath='{.spec.replicas}'` reads 1
+          throughout.
 
       **D5 is the only owner of registry GC** (Open question 15). H2.6a and H2.6b would move
       the GC into an orchestrator CronJob that scales the same Deployment. Under Flux that is
       a second writer on `spec.replicas`, with the same drift-correction hazard as the host
       cron. So H2 drops both PRs and the `registry-gc` row from its exit list, and the host
-      cron runs as today until this PR retires it. registry's flip therefore waits on no H2
-      PR. Open question 2 rules on the registry's own fate before nut's Wave C PR.
+      cron runs as today until this PR retires its push half. registry's flip therefore waits
+      on no H2 PR. Open question 2 rules on the registry's own fate before nut's Wave C PR.
 
       **Status, 2026-10-18.** The push self-test and the netpol probe have their inert Jobs in
-      `ansible/roles/k8s/registry/templates/verify-inert/` (#5651). The pull self-tests have no
-      Job form: their proof is the pod's own image, which holds no Python, so the census's
-      `delivery` row refuses it. The GC retirement waits on #5680. karakeep and
-      pi-peer-backup still push to the store, and since #5541 the same GC window is the only
-      thing that bounds the `ghcr-mirror` store, so "nothing new needs collecting" no longer
-      holds.
+      `ansible/roles/k8s/registry/templates/verify-inert/` (#5651). The pull self-tests become
+      a verify Job whose image is the fleet's python Job image re-pushed to `localhost:5000`,
+      so the pod's own pull proves the containerd path and its `python3 <script>` satisfies
+      the census's `delivery` row (ruling on #5680). karakeep and pi-peer-backup flipped in
+      #5688, so the push store's GC retirement no longer waits. #5714 split the mirror out;
+      the retirement and the pull verify Job follow in one PR, which closes #5680 and #5651.
     - traefik: the CRDs come from a URL in the role's `tasks/main.yml`, which no render may
       fetch under C1, so they get an in-tree copy pinned by `traefik_k8s_crd_version`. The
       cluster RBAC carries `kustomize.toolkit.fluxcd.io/prune: disabled` before the move, so
@@ -2784,8 +2790,12 @@ sizes its batch of roles against that projection.
       netpol-baseline with a refused `pihole` row in the probe table. Instance 2 already
       renders into `pihole-deferred`, which waits on `pihole`, and a test pins that order on
       pihole's own render. The live exercise of that order is still the flip PR's, because
-      Ansible applies both instances until then. `roll_one.yml`'s sibling gate has no Flux
-      form: `pihole` rolls instance 1 whatever state instance 2 is in (#5695).
+      Ansible applies both instances until then. `roll_one.yml`'s sibling gate became an
+      inert guard Job in `ansible/roles/k8s/pihole/templates/guard-inert/guard.yaml.j2`
+      (#5695). It reads `pihole-2-web`'s EndpointSlices and fails while pihole-2 has no ready
+      endpoint, so Flux holds `pihole`. It passes when `pihole` has no EndpointSlice, which is
+      a first apply. It must run before `pihole`, and
+      no role-owned kind does yet, so the flip needs one first (#5719).
     - **Before the first Wave D flip**, the session measures one revision that changes at
       least ten flux-owned tags, from `prod`'s move to the last status, and compares it with
       the derived verify timeout. A measurement above half the timeout raises the timeout
@@ -3845,6 +3855,9 @@ includes valheim's initContainer.
       same PR adds the `ghcr.io` entry to `registries.yaml.j2`. The precondition's manifest GET
       therefore reads `http://10.43.51.14:5002/v2/danielh2018/nut/manifests/<content tag>` on
       daniel-server. The registry deploy goes first, then the hand apply of `k3s-bringup.yml`.
+      #5714 later moved the mirror into its own Deployment, `ghcr-mirror`, on the same port,
+      hostPort and pinned ClusterIP, so its GC never scales the push store (step 26's registry
+      bullet).
 3. **Is the soak's Prometheus reach a new exposure?** It is one more caller on an existing
    fence. Resolution: reviewed in D5.3a against ADR-0009.
     - **Reviewed 2026-10-16 in #5315: no new exposure.** The soak is one more read-only caller

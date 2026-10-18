@@ -17,11 +17,12 @@ together with D5's run-once cleanup PR. It merged at `471397804`. daniel-box's t
 both scripts at 01:41 UTC, and the peer sync cron rewrote its lock at 01:45:01, the first slot
 after. On daniel-server, `initial_setup.yml --tags claude_code` read `ok=123 changed=4
 failed=0`. The node gate kept both crons off that host, and `Restart claude-rc` did not run.
-H2.4b and H2.4c wait on *Open questions* 2, which only the operator can decide. Every one of
-crowdsec's four crons reaches `cscli` through `kubectl exec deploy/crowdsec`. A CronJob of that
-shape needs a `pods/exec` grant, and D5 *Open questions* 14 makes each such grant an operator
-decision. A fan-out session on 2026-10-18 (#5649) found no exec-free form and stopped.
-#5655 asks the operator for the ruling.
+PR H2.4b, crowdsec's three API jobs, worked under #5649. The operator ruled on
+2026-10-18 that crowdsec's jobs run in a sidecar of the LAPI pod (*Open questions* 2). The
+remote allowlist, the AppSec verify and the bouncer prune run in the `crowdsec-jobs` sidecar,
+and their three root crons become absent arms. No `pods/exec` grant is made.
+H2.4c, the home allowlist, waits on #5701. The sidecar shares the pod's IPv4-only network, so it
+cannot see the home IPv6 /64 the job keeps allowlisted, and the operator picks its form.
 Depends on: H1, D3 and H6, per PR. H2.2a needs H1.5a and H1.6. H2.3b needs H1.5a and the C3
 row of *Open questions* 12. H2.8a needs H1.7b (and through it D3) and H6.4b, with the
 region-key gate of *Open questions* 11. No other H2 PR waits outside H2 (*Open questions*
@@ -1392,6 +1393,11 @@ change at merge time*).
     (**operator-only**). A one-time `rm -r /var/lib/longhorn-restore-drill` follows
     (**operator-only**, root).
 11. **H2.4b CrowdSec, three API-only jobs** (Ansible, in a home-edge window).
+    - **As landed:** a `crowdsec-jobs` sidecar of the LAPI pod, not three CronJobs, by the
+      operator's ruling in *Open questions* 2. It needs no exec grant. Its ServiceAccount
+      keeps the remote allowlist's `pods/log` and IngressRoute reads, and uptime-kuma's
+      `netpol_from` admits `crowdsec`, the pod's label. The bullets below are the CronJob
+      plan the ruling replaced, kept for the review trail.
     - Gate: the operator has decided *Open questions* 2 for each of the three jobs.
     - Add the remote allowlist, bouncer prune and AppSec verify CronJobs with their RBAC,
       images and the two Python entry points. In the same commit, add the three jobs' labels
@@ -1409,6 +1415,8 @@ change at merge time*).
       again right before `land.sh`, run *Landing a `containers_list` edit* (Design).
     - *Open questions* 2 is decided here.
 12. **H2.4c CrowdSec home allowlist** (Ansible, in a home-edge window).
+    - **Blocked on #5701.** The sidecar form the operator ruled has no IPv6, so the home /64
+      cannot be discovered from it, and the operator picks the form.
     - Gate: the operator has decided *Open questions* 2 for the home allowlist.
     - Add the host-network CronJob, with its state kept in the allowlist itself, and
       `monitor_bridge_home_allowlist_push_token` in the role's Secret. It needs no
@@ -2074,6 +2082,24 @@ carries `prune: disabled`.
    no cron is retired and no `netpol_from` label is added, because a retired cron with no
    running replacement would let the home address be banned and would remove the only check
    that the WAF enforces.
+   **Operator ruling, 2026-10-18 (#5655): the sidecar form, for all four jobs.** They run in a
+   sidecar of the crowdsec LAPI pod that shares its `crowdsec-db` and config volumes and runs
+   `cscli` locally. No `pods/exec` grant is made, and no Job mounts `crowdsec-db` from outside
+   the pod. The suggested shape keeps both Python modules and gives a `python:3.14-alpine`
+   sidecar the `cscli` binary from the crowdsec image, copied by an initContainer. Porting the
+   helpers to shell in the crowdsec image was the fallback if the copied binary did not run.
+   **Measured 2026-10-18 (H2.4b):** `file` on `/usr/local/bin/cscli` in the amd64 layer of the
+   pinned `crowdsec_k8s_image` digest reads `statically linked`, and the extracted binary runs
+   `cscli version` (`v1.8.1-909b5157`) outside its image. So the Python variant holds.
+   H2.4b runs the three API jobs in the `crowdsec-jobs` sidecar under one scheduler,
+   `files/crowdsec_jobs.py`, with the AppSec verify ported to Python because the image has no
+   `jq`. The two Python modules change only their transport: `cscli` and `kubectl` run from the
+   sidecar's `/tools` instead of through `k3s kubectl exec`. The sidecar's memory request is
+   64 MiB against a measured worst case near 250 MB (`crowdsec_k8s_jobs_*` in the role's
+   defaults), the cost the resolution above asked to weigh against the exec grant.
+   **The home allowlist does not fit the sidecar.** A container in the LAPI pod sees the pod's
+   IPv4-only network (`podCIDRs: ["10.42.0.0/24"]` on daniel-box), so it cannot discover the
+   home IPv6 /64. #5701 puts the options for H2.4c to the operator.
 3. **Backup health and the B2 pair stay on the host.** design.md's host-plane section says
    about 15 cluster-reading crons become CronJobs. This plan retires ten cron files from
    daniel-box, D5 retires registry GC, and these three stay.

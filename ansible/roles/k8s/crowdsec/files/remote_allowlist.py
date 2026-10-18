@@ -28,20 +28,21 @@ private, loopback and CGNAT addresses never enter, so an Authelia LAN bypass rul
 it. The way out is `cscli allowlists remove remote-ips <ip>`, or letting the entry lapse; the
 way to see it is `cscli allowlists inspect remote-ips`.
 
-Runs from the cron wrapper `crowdsec-update-remote-allowlist.sh` as root on daniel-box; the
-wrapper owns the Kuma push and the syslog line, this module owns the decision. Its last
-stdout line is the summary the wrapper pushes. The functions above `main` are pure and are
-what `tests/test_remote_allowlist.py` exercises.
+Runs every 5 minutes in the `crowdsec-jobs` sidecar of the crowdsec pod, started by
+`crowdsec_jobs.py`, which owns the Kuma push and the log line. This module owns the decision.
+Its last stdout line is the summary the scheduler pushes. The functions above `main` are pure
+and are what `tests/test_remote_allowlist.py` exercises.
 
 Usage:
 
-    uv run --no-project --python <pin> /opt/crowdsec-remote-allowlist/remote_allowlist.py
+    python3 /jobs/remote_allowlist.py
 
 Takes no arguments and reads no environment variables. It reads Traefik's access log and
-the IngressRoutes through `k3s kubectl` and edits the allowlist through `cscli` in the
-crowdsec pod, so it needs root on daniel-box. Exit 0 means the list is current. Exit 1 means
-the list is at its cap or a kubectl or cscli call failed, and the last stdout line says why.
-`-h` and `--help` print this text and exit 0.
+the IngressRoutes through the sidecar's `kubectl`, as the pod's `crowdsec-jobs`
+ServiceAccount (`templates/jobs-rbac.yaml.j2`). It edits the allowlist through the sidecar's
+own copy of `cscli`, which reads the LAPI's database from the shared `crowdsec-db` volume.
+Exit 0 means the list is current. Exit 1 means the list is at its cap or a kubectl or cscli
+call failed, and the last stdout line says why. `-h` and `--help` print this text and exit 0.
 """
 
 import hashlib
@@ -51,6 +52,7 @@ import subprocess
 import sys
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 
 ALLOWLIST = "remote-ips"
 AUTH_MIDDLEWARE = "authelia"
@@ -68,7 +70,10 @@ REFRESH_BELOW = TTL / 2
 # the number of exits one operator uses in a week; hitting it means something is feeding the
 # list that is not the operator, and the DOWN message lists the entries so that can be read.
 CAP = 8
-K3S = "/usr/local/bin/k3s"
+# The sidecar's initContainers copy both binaries into the shared `tools` emptyDir
+# (`templates/deployment.yaml.j2`).
+CSCLI = "/tools/cscli"
+KUBECTL = "/tools/kubectl"
 OK_STATUSES = frozenset(range(200, 300)) | {304}
 
 
@@ -199,27 +204,13 @@ def run(argv):
 
 
 def cscli(runner, *args):
-    return runner(
-        [
-            K3S,
-            "kubectl",
-            "-n",
-            NAMESPACE,
-            "exec",
-            "deploy/crowdsec",
-            "-c",
-            "crowdsec",
-            "--",
-            "cscli",
-            *args,
-        ]
-    )
+    return runner([CSCLI, *args])
 
 
 def main(runner=run, now=None):
     now = now or datetime.now(UTC)
     ingressroutes = json.loads(
-        runner([K3S, "kubectl", "get", "ingressroute", "-A", "-o", "json"])
+        runner([KUBECTL, "get", "ingressroute", "-A", "-o", "json"])
     )
     routers = authenticated_routers(ingressroutes)
     if not routers:
@@ -229,8 +220,7 @@ def main(runner=run, now=None):
         return 1
     log = runner(
         [
-            K3S,
-            "kubectl",
+            KUBECTL,
             "-n",
             NAMESPACE,
             "logs",
@@ -279,9 +269,8 @@ if __name__ == "__main__":
         tail = (exc.stderr or exc.stdout or "").strip().splitlines()
         # Name the verb that failed (`cscli allowlists add`, `kubectl logs`), never the
         # address it was given — the summary line lands in Kuma and syslog.
-        words = list(exc.cmd)
-        start = words.index("cscli") if "cscli" in words else 1
-        verb = " ".join(w for w in words[start : start + 3] if not w.startswith("-"))
+        words = [Path(exc.cmd[0]).name, *exc.cmd[1:]]
+        verb = " ".join([w for w in words if not w.startswith("-")][:3])
         print(
             f"{verb} failed rc={exc.returncode}: {tail[-1] if tail else 'no output'}",
             file=sys.stderr,

@@ -36,6 +36,11 @@ _NO_READINESS = {
     ): "sidecar; a tail/rotate hiccup must never gate the edge proxy's Service",
     ("authelia", "crowdsec-agent"): "same shape as traefik's sidecar; would gate SSO",
     (
+        "crowdsec",
+        "crowdsec-jobs",
+    ): "sidecar running the crowdsec maintenance jobs; a probe would let a job's fault pull the "
+    "LAPI out of its Service, so each job reports through its own Kuma tile instead",
+    (
         "uptime-kuma",
         "autokuma",
     ): "sidecar; readiness on /health would gate uptime-kuma's own Service until the first "

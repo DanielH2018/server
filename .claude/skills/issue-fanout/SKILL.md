@@ -146,7 +146,8 @@ was placed: every claim was refused (step 2), or one of three placement refusals
 claim nothing. Exit 7 is a launch that started batches but dropped a refused claim. The
 placement refusals: neither host has a
 reservation's worth of headroom; the placement would put more
-than three batches on one remote host in this run (the ssh budget); or it would leave a host
+than three batches on one remote host in this run (the ssh budget, which binds only when the
+transport cannot share one connection per host, `transport.control_dir`); or it would leave a host
 holding more RUNNING batches than its cap, counting every earlier run not yet cleaned (the memory
 cap — a five-minute-old agent still holds its 2.5 GiB while the headroom read underprices it).
 The cap is three on daniel-box and four on daniel-server (`launch_gates.live_batch_cap`, #5667).

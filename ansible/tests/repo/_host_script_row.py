@@ -193,8 +193,8 @@ def _host_scripts() -> list[str]:
     )
 
 
-# The scale-down registry-gc.sh.j2 runs for its GC, held here because the template goes with
-# the GC (Wave D's registry bullet).
+# The shape of registry-gc.sh.j2's scale-down, held as a red case. The script's
+# ghcr-mirror phase outlives registry's flip, so its allow entry below rests on #5732.
 _REGISTRY_GC_SCALE = (
     '  $KUBECTL scale "deploy/${DEPLOY}" --replicas=0 >/dev/null 2>&1\n'
 )
@@ -246,8 +246,10 @@ HOST_SCRIPT_WRITES = Census(
     must_find=frozenset({_K8S + "registry/templates/registry-gc.sh.j2"}),
     allow={
         _K8S + "registry/templates/registry-gc.sh.j2": (
-            "D5 retires the registry GC before registry flips (Wave D's registry bullet, Open "
-            "question 15), and the template goes with it"
+            "D5 retires the push store's GC phase before registry flips (Wave D's registry "
+            "bullet). The ghcr-mirror phase stays and scales deploy/ghcr-mirror, which renders "
+            "no `replicas:`, so no Flux apply owns the field it writes. That exception to C4 "
+            "awaits the operator's ruling on #5732"
         ),
     },
 )

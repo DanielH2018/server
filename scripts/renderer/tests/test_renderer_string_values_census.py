@@ -24,12 +24,12 @@ from yaml.resolver import Resolver
 from deploy_tools.render_targets import render_targets
 from lib import yaml_fast
 from lib.ansible_inventory import K8S_HOST
+from render_share import placeholder_renderer
 from renderer import homelab_render
 from renderer.renderer_lib.cluster import RenderedTag
 from renderer.renderer_lib.placeholders import (
     PlaceholderRender,
     apply_placeholders,
-    render_placeholders,
     sentinel,
 )
 
@@ -130,7 +130,7 @@ def test_strings_that_stay_strings_and_unsubstituted_literals_are_clean():
 @functools.cache
 def _live() -> tuple[list[str], set[tuple[str, str]]]:
     tags = sorted(render_targets(K8S_HOST))
-    return census(render_placeholders(tags, homelab_render.secret_keys()))
+    return census(placeholder_renderer()(tags, homelab_render.secret_keys()))
 
 
 def test_no_substituting_directory_holds_a_value_that_unquotes_to_a_non_string():

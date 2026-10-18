@@ -44,6 +44,16 @@ REPO = SERVER_CHECKOUT
 # from its own worktree, and that worktree's copy is the one whose `--repo` it just used.
 FINDINGS = str(_Path(__file__).resolve().parents[1] / "findings.py")
 SSH_OPTS = ["-o", "BatchMode=yes", "-o", "ConnectTimeout=8"]
+# Every ssh call to one host rides one connection (#5667's follow-up). `ufw limit ssh`
+# rejects a sixth NEW connection within 30s and counts nothing that reuses one, so with
+# a master open a run's reads and launches cost one connection however many batches it
+# places. Measured to daniel-server on 2026-10-18: eight calls in a row through one
+# socket all answered, the first in 0.22s and each later one in 0.01s, and no call
+# waited on the backgrounded master's pipes. ServerAlive bounds a master whose network
+# went away, which every call riding it would otherwise wait on. ssh falls back to a
+# fresh connection when the socket is dead, as after a reboot.
+MUX_PERSIST_S = 60
+CONTROL_DIR_NAME = "fanout-ssh"
 READ_TIMEOUT_S = 20.0
 GH_TIMEOUT_S = 30.0
 # The one read every host gets: READ_COMMAND's four memory lines and live-agent count, plus
@@ -75,21 +85,62 @@ def this_host() -> str:
     return socket.gethostname()
 
 
-def _argv(host: str, command: str, local_host: str) -> list[str]:
+def mux_opts(control: str) -> list[str]:
+    """The ssh options that share one connection per host through sockets in `control`."""
+    return [
+        "-o", "ControlMaster=auto", "-o", f"ControlPath={control}/%C",
+        "-o", f"ControlPersist={MUX_PERSIST_S}",
+        "-o", "ServerAliveInterval=10", "-o", "ServerAliveCountMax=3",
+    ]  # fmt: skip
+
+
+def control_dir(environ: dict[str, str], uid: int) -> str | None:
+    """The private directory for this user's ssh control sockets, creating it, or None.
+
+    It sits in the user's runtime directory, which systemd keeps mode 0700 and empties at
+    logout. A socket there is a live shell on the remote host, so a directory this user does
+    not own, or one other users can enter, is refused rather than used. None, for a refused
+    or missing directory, means ssh opens a connection per call, as before.
+    """
+    runtime = environ.get("XDG_RUNTIME_DIR") or f"/run/user/{uid}"
+    if not os.path.isdir(runtime):
+        return None
+    path = os.path.join(runtime, CONTROL_DIR_NAME)
+    try:
+        os.makedirs(path, mode=0o700, exist_ok=True)
+        info = os.lstat(path)
+    except OSError:
+        return None
+    if info.st_uid != uid or info.st_mode & 0o077 or not os.path.isdir(path):
+        return None
+    return path
+
+
+def ssh_multiplexed() -> bool:
+    """Whether this user's ssh calls share one connection per host."""
+    return control_dir(dict(os.environ), os.getuid()) is not None
+
+
+def _argv(
+    host: str, command: str, local_host: str, control: str | None = None
+) -> list[str]:
     """The argv to run `command` on `host`: local `bash -c` when `host` is `local_host`, else ssh.
 
     Args:
         host: the target host.
         command: the shell command to run.
         local_host: the name `host` is compared against to decide local vs. remote.
+        control: the control-socket directory, or None for a connection per call.
 
     Returns:
         `["bash", "-c", command]` when `host == local_host`, else
-        `["ssh", *SSH_OPTS, host, command]`.
+        `["ssh", *SSH_OPTS, *mux_opts(control), host, command]`, without the mux
+        options when `control` is None.
     """
     if host == local_host:
         return ["bash", "-c", command]
-    return ["ssh", *SSH_OPTS, host, command]
+    mux = mux_opts(control) if control else []
+    return ["ssh", *SSH_OPTS, *mux, host, command]
 
 
 def local_env(environ: dict[str, str], uid: int) -> dict[str, str]:
@@ -144,7 +195,9 @@ def run_command(
     Returns:
         The finished `subprocess.CompletedProcess` (never raises on a non-zero exit).
     """
-    argv = _argv(host, command, local_host or this_host())
+    local = local_host or this_host()
+    control = None if host == local else control_dir(dict(os.environ), os.getuid())
+    argv = _argv(host, command, local, control)
     env = local_env(dict(os.environ), os.getuid()) if argv[0] == "bash" else None
     return subprocess.run(
         argv,
@@ -330,6 +383,8 @@ class Tools:
         default_ref: read a checkout's remote default branch, for `target.resolve`.
         head_branch: read the orchestrator's own branch, which holds this repo's claims.
         comment: post a comment on an issue in a repo, for the `Worked by` record.
+        multiplexed: whether ssh calls share one connection per host, which lifts the
+            per-run ssh budget `launch_gates.over_ssh_budget` enforces.
     """
 
     run: Callable[..., subprocess.CompletedProcess] = run_command
@@ -340,6 +395,7 @@ class Tools:
     default_ref: Callable[[str], str | None] = default_ref
     head_branch: Callable[[], str] = head_branch
     comment: Callable[[int, str, str], bool] = comment_issue
+    multiplexed: Callable[[], bool] = ssh_multiplexed
 
 
 def read_host(

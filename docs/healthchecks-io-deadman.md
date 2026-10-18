@@ -17,7 +17,7 @@ it is a second destination for the handful of jobs whose silence actually matter
 | `etcd-snapshot-offbox` | `roles/setup/k3s/templates/etcd-snapshot-offbox.sh.j2` | the snapshot or its R2 upload failed, the credentials file is missing or incomplete, or snapshots are disarmed |
 | `manifest-prune-check` | `roles/setup/k3s/templates/manifest-prune-check.sh.j2` | any of its three arms: live routing or workload objects absent from the staged manifests; a `copy:`-deployed artifact differing byte-for-byte from the repo; or a `template:`-rendered setup script whose source checksum no longer matches the render manifest this host wrote. A read that failed pings `/fail` too: a `kubectl get` for any checked kind, the read of Flux's Kustomizations in `flux-system`, or the declared-set read of the staged manifests |
 | `pi-peer-backup` | `roles/k8s/pi-peer-backup/files/pull-pi-peers.sh` | rsync failed, or fewer than 2 peer files landed |
-| `registry-gc` | `roles/k8s/registry/templates/registry-gc.sh.j2` | GC job exceeded its deadline, the registry pod would not terminate, the job manifest failed to apply, or the registry did not come back afterwards |
+| `registry-gc` | `roles/k8s/registry/templates/registry-gc.sh.j2` | either store's GC job exceeded its deadline, the registry or ghcr-mirror pod would not terminate, a job manifest failed to apply, either Deployment did not come back afterwards, or the ghcr-mirror keep set could not be built |
 | `uptime-kuma-alive` | `roles/setup/k3s/templates/longhorn-backup-health.sh.j2` | that script's Kuma push returned non-zero — see *Watching the spine itself* below |
 | `alertmanager-watchdog` | the `healthchecks` receiver in `roles/k8s/observability/templates/alertmanager-secret.yaml.j2`, fed by the `Watchdog` rule in `roles/k8s/observability/files/rules/alerting-meta.yaml` | never: Alertmanager sends no resolved notification, and silence is the failure — see *Alertmanager's watcher* below |
 | `weekly-reboot-<host>` | the `Weekly system restart` cron in `roles/setup/initial_setup/tasks/crons.yml`, one slug per host | never: it pings before the reboot, and silence means the cron did not run |
@@ -208,9 +208,9 @@ these steps, and no new secret, because one project ping key covers every check.
 2. **Match the schedule type to the job.** A cron-driven job takes the console's **Cron** type
    with the same expression and timezone, so the two cannot drift. An interval job takes Simple.
    A check whose period disagrees with its cron fires false alarms, and false alarms get ignored.
-3. **Size the grace to the slowest legitimate run.** `registry-gc` allows an hour because its
-   own deadline is 20 minutes, plus up to 120 s for the registry pod to terminate and 180 s for
-   the rollout back up. `etcd-snapshot-offbox` allows an hour because nothing bounds how long
+3. **Size the grace to the slowest legitimate run.** `registry-gc` allows an hour because it
+   collects two stores one after the other, each bounded by a 20-minute Job deadline plus up to
+   120 s for its pod to terminate and 180 s for the rollout back up. `etcd-snapshot-offbox` allows an hour because nothing bounds how long
    `k3s etcd-snapshot save` may block, so the grace is what separates a slow run from a hung one.
 4. **Add the slug to the table, the fragment's cron variable and
    `monitor_bridge_healthchecks_expected` in the same PR**, as *The console drifts* below says.

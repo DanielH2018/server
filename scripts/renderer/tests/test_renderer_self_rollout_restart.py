@@ -4,7 +4,9 @@ pihole and observability restart their own workloads in Ansible tasks, which a f
 never runs. The renderer stamps each `manifests_self_rollouts` entry instead. The module
 renders both roles as flux-owned through `homelab_render.cluster`, once as committed and once
 with an Alertmanager Secret edit and a pihole ConfigMap edit, against a fixture `.source` that
-records every secret key. The plan is docs/target-architecture/deploy/d5-bulk-move.md,
+records every secret key. A third render drops `grafana-dashboards.yaml` from observability's
+`manifests_exclude_files`, the flip's edit, and holds grafana and Prometheus still across an
+edit to a ConfigMap each reloads in place (#5679). The plan is docs/target-architecture/deploy/d5-bulk-move.md,
 *Restart annotations for self-rolled workloads (D5.1e)*.
 
 Run: uv run pytest scripts/renderer/tests/test_renderer_self_rollout_restart.py
@@ -27,6 +29,7 @@ from renderer.renderer_lib.restart import (
     pod_references,
     pod_template,
     restart_targets,
+    restart_values,
     self_rollouts,
 )
 from renderer.renderer_lib.task_inputs import include_vars
@@ -199,3 +202,54 @@ def test_a_pihole_config_map_edit_moves_both_instances(renders):
     assert set(before) == {"pihole", "pihole-2"}
     assert all(before.values())
     assert all(before[name] != after[name] for name in before)
+
+
+DASHBOARDS = "grafana-dashboards.yaml"
+
+
+def _flipped_values(
+    tmp_path: Path, edit: bool
+) -> tuple[dict[str, str], dict[str, str]]:
+    """observability's restart values with the flip's edit, and its rendered directory.
+
+    The tree links every role but observability, which is a copy without the exclusion.
+    `edit` adds a board to one dashboard ConfigMap and a rule file to `prometheus-rules`.
+    """
+    roles = tmp_path / ("edited" if edit else "base")
+    roles.mkdir()
+    for role in K8S_ROLES.iterdir():
+        if role.name != "observability":
+            (roles / role.name).symlink_to(role)
+    shutil.copytree(K8S_ROLES / "observability", roles / "observability")
+    tasks = roles / "observability" / "tasks" / "main.yml"
+    tasks.write_text(
+        _edit(tasks.read_text(), f"[service.yaml, {DASHBOARDS}]", "[service.yaml]")
+    )
+    keys = homelab_render.secret_keys()
+    (tag,) = render_placeholders(["observability"], keys, roles=roles).tags
+    if edit:
+        for name in (DASHBOARDS, "prometheus-rules.yaml"):
+            tag.files[name] = _edit(
+                tag.files[name], "\ndata:\n", '\ndata:\n  edit.json: "{}"\n'
+            )
+    context = tag_context(K8S_ROLES / "observability", "observability", {})
+    values = restart_values(
+        "observability",
+        tag.directories(),
+        restart_targets("observability", context),
+        keys,
+        {key: "d" * 64 for key in keys},
+    )
+    return values, tag.files
+
+
+def test_a_board_or_rule_edit_after_the_flip_moves_no_restart_value(tmp_path):
+    """Grafana and Prometheus re-read these ConfigMaps in place; Ansible never rolled them."""
+    # fact: ansible/roles/k8s/observability/CLAUDE.md#One config change, one restart
+    before, base = _flipped_values(tmp_path, edit=False)
+    after, edited = _flipped_values(tmp_path, edit=True)
+    assert DASHBOARDS in base
+    assert edited[DASHBOARDS] != base[DASHBOARDS]
+    assert edited["prometheus-rules.yaml"] != base["prometheus-rules.yaml"]
+    assert set(before) == OBSERVABILITY_STAMPED
+    assert after == before

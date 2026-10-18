@@ -24,12 +24,13 @@
 #
 # Usage: registry-gc.sh (no arguments)
 # Runs from the registry-gc root cron on daniel-box, weekly at the time set by
-# registry_k8s_gc_cron_weekday, _hour and _minute. It scales the registry Deployment to 0, runs
-# the two Jobs in /etc/rancher/k3s/manifests/registry-jobs/gc-job.yaml (the push store's
-# garbage-collect, and the ghcr-mirror store's prune and garbage-collect), scales it back, and
-# pushes the result to Kuma when registry_gc_push_token is set. It reads
-# /etc/rancher/k3s/k3s.yaml and /usr/local/lib/kuma-push-lib.sh, and keeps its state in
-# /var/lib/registry-gc.
+# registry_k8s_gc_cron_weekday, _hour and _minute. It collects the two stores one after the
+# other, and each phase scales only its own Deployment. The push store's phase scales
+# deploy/registry to 0 and runs /etc/rancher/k3s/manifests/registry-jobs/gc-job.yaml. The
+# ghcr-mirror store's phase scales deploy/ghcr-mirror to 0 and runs ghcr-mirror-gc-job.yaml from
+# the same directory, the prune and garbage-collect. It pushes the combined result to Kuma when
+# registry_gc_push_token is set. It reads /etc/rancher/k3s/k3s.yaml and
+# /usr/local/lib/kuma-push-lib.sh, and keeps its state in /var/lib/registry-gc.
 
 set -uo pipefail
 
@@ -53,6 +54,7 @@ export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
 NS="{{ k8s_namespace }}"
 KUBECTL="k3s kubectl -n ${NS}"
 DEPLOY=registry
+MIRROR_DEPLOY=ghcr-mirror
 JOB=registry-gc
 MIRROR_JOB=registry-gc-ghcr-mirror
 MIRROR_KEEP_CM=registry-gc-ghcr-mirror-keep
@@ -60,6 +62,14 @@ MIRROR_STARTED=0
 MIRROR_DONE=0
 MIRROR_NOTE=""
 JOB_MANIFEST=/etc/rancher/k3s/manifests/registry-jobs/gc-job.yaml
+MIRROR_JOB_MANIFEST=/etc/rancher/k3s/manifests/registry-jobs/ghcr-mirror-gc-job.yaml
+# Set while that phase's Deployment may be scaled down, so the EXIT trap knows what to restore.
+PUSH_DOWN=0
+MIRROR_DOWN=0
+PUSH_MSG=""
+MIRROR_MSG=""
+FAILED=0
+COMPLETED=0
 STATE_DIR=/var/lib/registry-gc
 STATE_FILE="${STATE_DIR}/state.json"
 
@@ -112,15 +122,35 @@ finish() {
   fi
 }
 
-# The registry MUST come back even if GC dies, the deadline trips, or cron kills us. Without
-# this a failed run leaves the cluster unable to pull any locally-built image until a human
-# notices — a worse outage than the full disk this fixes.
-scale_up_and_report() {
-  # The mirror Job mounts the same RWO claim the registry pod does, and both land on one node,
-  # so nothing stops the pod starting while the prune is still unlinking revisions. A Job not
-  # known to have finished is deleted, and waited for, before the registry serves the store
-  # again. One that succeeded or failed stays until its TTL, so the log a failure MSG names is
-  # still there. Either way its prune lines reach the journal first.
+# Scales Deployment $1 to zero and waits for its pod to exit. Scaling returns immediately, and
+# GC must not start while the old process still holds the store. Each Deployment's pods carry
+# `app: <its name>`.
+stop_deploy() {
+  $KUBECTL scale "deploy/${1}" --replicas=0 >/dev/null 2>&1
+  $KUBECTL wait --for=delete pod -l app="${1}" --timeout=120s >/dev/null 2>&1
+}
+
+start_deploy() {
+  $KUBECTL scale "deploy/${1}" --replicas=1 >/dev/null 2>&1
+  $KUBECTL rollout status "deploy/${1}" --timeout=180s >/dev/null 2>&1
+}
+
+restore_push_store() {
+  [[ "$PUSH_DOWN" == 1 ]] || return 0
+  PUSH_DOWN=0
+  start_deploy "$DEPLOY" && return 0
+  PUSH_MSG="${PUSH_MSG:-push store not collected}; registry did NOT come back — check deploy/${DEPLOY}"
+  return 1
+}
+
+# The mirror Job mounts the same RWO claim the ghcr-mirror pod does, and both land on one node,
+# so nothing stops the pod starting while the prune is still unlinking revisions. A Job not
+# known to have finished is deleted, and waited for, before the mirror serves the store again.
+# One that succeeded or failed stays until its TTL, so the log a failure MSG names is still
+# there. Either way its prune lines reach the journal first.
+restore_mirror_store() {
+  [[ "$MIRROR_DOWN" == 1 ]] || return 0
+  MIRROR_DOWN=0
   if [[ "$MIRROR_STARTED" == 1 && "$MIRROR_DONE" != 1 ]]; then
     journal_mirror_prune >/dev/null
     local finished
@@ -131,9 +161,25 @@ scale_up_and_report() {
         --timeout=120s >/dev/null 2>&1
     fi
   fi
-  $KUBECTL scale "deploy/${DEPLOY}" --replicas=1 >/dev/null 2>&1
-  $KUBECTL rollout status "deploy/${DEPLOY}" --timeout=180s >/dev/null 2>&1 \
-    || { STATUS=down; MSG="${MSG}; registry did NOT come back — check deploy/${DEPLOY}"; }
+  start_deploy "$MIRROR_DEPLOY" && return 0
+  MIRROR_MSG="${MIRROR_MSG:-ghcr-mirror store not collected}; ghcr-mirror did NOT come back — check deploy/${MIRROR_DEPLOY}"
+  return 1
+}
+
+# Both stores MUST come back even if GC dies, the deadline trips, or cron kills us. Without this
+# a failed run leaves the cluster unable to pull any locally-built image, or any ghcr.io image
+# during a WAN outage, until a human notices — a worse outage than the full disk this fixes.
+scale_up_and_report() {
+  restore_mirror_store || FAILED=1
+  restore_push_store || FAILED=1
+  if [[ "$COMPLETED" == 1 && "$FAILED" == 0 ]]; then
+    STATUS=up
+  else
+    STATUS=down
+  fi
+  if [[ -n "$PUSH_MSG" || -n "$MIRROR_MSG" ]]; then
+    MSG="${PUSH_MSG:-push store: did not run}; ${MIRROR_MSG:-ghcr-mirror: did not run}"
+  fi
   finish
 }
 trap scale_up_and_report EXIT
@@ -148,19 +194,6 @@ journal_mirror_prune() {
   logger -t registry-gc <<<"$lines"
   printf '%s\n' "$lines"
 }
-
-# A build in flight is the exact race the scale-down exists to prevent: buildkit pushes blobs
-# whose manifest is not written yet, and GC would see them as unreferenced. Jobs are named
-# build-<image> by the image-builder role.
-ACTIVE_BUILDS=$($KUBECTL get jobs -o \
-  jsonpath='{range .items[?(@.status.active)]}{.metadata.name}{"\n"}{end}' 2>/dev/null \
-  | grep -c '^build-' )
-if [[ "$ACTIVE_BUILDS" -gt 0 ]]; then
-  STATUS=up
-  MSG="skipped — ${ACTIVE_BUILDS} image build(s) in flight"
-  trap finish EXIT   # nothing was scaled down, so do not touch the Deployment
-  exit 0
-fi
 
 # ── Content-tag prune ────────────────────────────────────────────────────────────────────────
 # Every build pushes an immutable `sha-<12 hex>` tag beside `latest` (see k8s/image-builder's
@@ -256,8 +289,6 @@ prune_content_tags() {
   done <<<"$repos"
 }
 
-prune_content_tags
-
 # ── ghcr-mirror keep set ─────────────────────────────────────────────────────────────────────
 # The ghcr-mirror container's store is pruned offline by the second Job in gc-job.yaml
 # (files/ghcr-mirror-prune.sh in the k8s/registry role, #5541), which has no API access. It
@@ -281,8 +312,8 @@ prune_content_tags
 write_mirror_keep_set() {
   local json keep tags
   if ! $KUBECTL delete configmap "$MIRROR_KEEP_CM" --ignore-not-found >/dev/null 2>&1; then
-    MSG="could not delete the previous ghcr-mirror keep set (configmap/${MIRROR_KEEP_CM}) — aborted before scaling down"
-    exit 1
+    MIRROR_MSG="could not delete the previous ghcr-mirror keep set (configmap/${MIRROR_KEEP_CM}) — aborted before scaling down"
+    return 1
   fi
   if ! json=$($KUBECTL get pods,deployments,statefulsets,daemonsets,cronjobs,jobs -A -o json \
                 2>/dev/null); then
@@ -303,63 +334,91 @@ write_mirror_keep_set() {
   fi
 }
 
-write_mirror_keep_set
-[[ -n "$MIRROR_NOTE" ]] && logger -t registry-gc "$MIRROR_NOTE"
-
-$KUBECTL scale "deploy/${DEPLOY}" --replicas=0 >/dev/null 2>&1
-# Wait for the pod to actually exit. Scaling returns immediately, and GC must not start while
-# the old process still holds the store.
-if ! $KUBECTL wait --for=delete pod -l app="${DEPLOY}" --timeout=120s >/dev/null 2>&1; then
-  MSG="registry pod did not terminate within 120s — aborted before touching the blob store"
-  exit 1
-fi
-
-$KUBECTL delete job "$JOB" "$MIRROR_JOB" --ignore-not-found >/dev/null 2>&1
-APPLIED_AT=$SECONDS
-MIRROR_STARTED=1
-if ! $KUBECTL apply -f "$JOB_MANIFEST" >/dev/null 2>&1; then
-  MSG="could not apply ${JOB_MANIFEST}"
-  exit 1
-fi
-
-if $KUBECTL wait --for=condition=complete "job/${JOB}" \
-     --timeout={{ registry_k8s_gc_deadline_s }}s >/dev/null 2>&1; then
+# ── The push store's phase ───────────────────────────────────────────────────────────────────
+# Scales only deploy/registry. Its replica comes back in the main sequence below, before the
+# mirror's phase starts, so the push store is down only for its own collection.
+collect_push_store() {
+  local deleted links
+  prune_content_tags
+  PUSH_DOWN=1
+  if ! stop_deploy "$DEPLOY"; then
+    PUSH_MSG="registry pod did not terminate within 120s — aborted before touching the blob store"
+    return 1
+  fi
+  $KUBECTL delete job "$JOB" --ignore-not-found >/dev/null 2>&1
+  if ! $KUBECTL apply -f "$JOB_MANIFEST" >/dev/null 2>&1; then
+    PUSH_MSG="could not apply ${JOB_MANIFEST}"
+    return 1
+  fi
+  if ! $KUBECTL wait --for=condition=complete "job/${JOB}" \
+         --timeout={{ registry_k8s_gc_deadline_s }}s >/dev/null 2>&1; then
+    PUSH_MSG="gc job did not complete within {{ registry_k8s_gc_deadline_s }}s — see: kubectl -n ${NS} logs job/${JOB}"
+    return 1
+  fi
   # Count what GC actually removed, from its own log. Longhorn's actualSize was the obvious
   # metric here and it is the WRONG one: it reports blocks allocated to the volume, not
   # filesystem usage, so it stays flat after a deletion until something trims the volume. The
   # first real run deleted 209 blobs and read as "10719551488 -> 10722729984 bytes" — an
   # unchanged, slightly larger number, which reads as a failed run.
-  DELETED=$($KUBECTL logs "job/${JOB}" 2>/dev/null | grep -c 'Deleting blob')
-  LINKS=$($KUBECTL logs "job/${JOB}" 2>/dev/null | grep -c 'Deleting layer link')
-  STATUS=up
-  MSG="gc completed; ${PRUNED} content tag(s) untagged, ${DELETED} blob(s) and ${LINKS} layer link(s) deleted"
-else
-  MSG="gc job did not complete within {{ registry_k8s_gc_deadline_s }}s — see: kubectl -n ${NS} logs job/${JOB}"
-  exit 1
-fi
+  deleted=$($KUBECTL logs "job/${JOB}" 2>/dev/null | grep -c 'Deleting blob')
+  links=$($KUBECTL logs "job/${JOB}" 2>/dev/null | grep -c 'Deleting layer link')
+  PUSH_MSG="gc completed; ${PRUNED} content tag(s) untagged, ${deleted} blob(s) and ${links} layer link(s) deleted"
+}
 
-# Waits for the mirror Job and appends its result to MSG. It started with the push store's Job,
-# so it waits only for what is left of the shared deadline; its own activeDeadlineSeconds fails
-# it at the same point. Returns 1 when the Job did not complete.
+# Waits for the mirror Job and records its result in MIRROR_MSG. Returns 1 when the Job did not
+# complete, or when the keep set was skipped.
 report_mirror_job() {
-  local wait_s pruned blobs
-  wait_s=$(( {{ registry_k8s_gc_deadline_s }} - (SECONDS - APPLIED_AT) ))
-  (( wait_s < 30 )) && wait_s=30
+  local pruned blobs
   if ! $KUBECTL wait --for=condition=complete "job/${MIRROR_JOB}" \
-         --timeout="${wait_s}s" >/dev/null 2>&1; then
-    STATUS=down
-    MSG="${MSG}; ghcr-mirror job did not complete — see: kubectl -n ${NS} logs job/${MIRROR_JOB} -c prune"
+         --timeout={{ registry_k8s_gc_deadline_s }}s >/dev/null 2>&1; then
+    MIRROR_MSG="ghcr-mirror job did not complete — see: kubectl -n ${NS} logs job/${MIRROR_JOB} -c prune"
     return 1
   fi
   MIRROR_DONE=1
   pruned=$(journal_mirror_prune | grep -c '^pruned ')
   blobs=$($KUBECTL logs "job/${MIRROR_JOB}" -c gc 2>/dev/null | grep -c 'Deleting blob')
-  MSG="${MSG}; ghcr-mirror: ${pruned} revision(s) pruned, ${blobs} blob(s) deleted"
-  # The push store collected, but a skipped prune is a fault write_mirror_keep_set explains.
+  MIRROR_MSG="ghcr-mirror: ${pruned} revision(s) pruned, ${blobs} blob(s) deleted"
+  # The store collected, but a skipped prune is a fault write_mirror_keep_set explains.
   if [[ -n "$MIRROR_NOTE" ]]; then
-    STATUS=down
-    MSG="${MSG} (${MIRROR_NOTE})"
+    MIRROR_MSG="${MIRROR_MSG} (${MIRROR_NOTE})"
+    return 1
   fi
 }
 
-report_mirror_job || exit 1
+# ── The ghcr-mirror store's phase ────────────────────────────────────────────────────────────
+# Scales only deploy/ghcr-mirror, never the push store (operator ruling on #5680). containerd
+# falls back to ghcr.io while it is down.
+collect_mirror_store() {
+  write_mirror_keep_set || return 1
+  [[ -n "$MIRROR_NOTE" ]] && logger -t registry-gc "$MIRROR_NOTE"
+  MIRROR_DOWN=1
+  if ! stop_deploy "$MIRROR_DEPLOY"; then
+    MIRROR_MSG="ghcr-mirror pod did not terminate within 120s — aborted before touching its store"
+    return 1
+  fi
+  $KUBECTL delete job "$MIRROR_JOB" --ignore-not-found >/dev/null 2>&1
+  MIRROR_STARTED=1
+  if ! $KUBECTL apply -f "$MIRROR_JOB_MANIFEST" >/dev/null 2>&1; then
+    MIRROR_MSG="could not apply ${MIRROR_JOB_MANIFEST}"
+    return 1
+  fi
+  report_mirror_job
+}
+
+# A build in flight is the exact race the push store's scale-down exists to prevent: buildkit
+# pushes blobs whose manifest is not written yet, and GC would see them as unreferenced. Jobs
+# are named build-<image> by the image-builder role. No build touches the mirror's store, so its
+# phase still runs.
+ACTIVE_BUILDS=$($KUBECTL get jobs -o \
+  jsonpath='{range .items[?(@.status.active)]}{.metadata.name}{"\n"}{end}' 2>/dev/null \
+  | grep -c '^build-' )
+if [[ "$ACTIVE_BUILDS" -gt 0 ]]; then
+  PUSH_MSG="push store skipped — ${ACTIVE_BUILDS} image build(s) in flight"
+else
+  collect_push_store || FAILED=1
+  restore_push_store || FAILED=1
+fi
+
+collect_mirror_store || FAILED=1
+restore_mirror_store || FAILED=1
+COMPLETED=1

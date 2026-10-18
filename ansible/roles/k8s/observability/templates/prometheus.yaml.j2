@@ -950,6 +950,8 @@ spec:
             # --config.auto-reload, and the prometheus-rules ConfigMap carries no checksum
             # annotation, so the edit never rolls Prometheus. A roll of this Recreate pod costs
             # an evaluation gap and a WAL replay, and every monitoring slice edits rules.
+            # Once the role is flux-owned, the renderer's checksum/restart skips this ConfigMap
+            # too (RELOADED_IN_PLACE in scripts/renderer/renderer_lib/restart.py).
             # prometheus.yml keeps its checksum and still rolls the pod. Two things hold it:
             # the mount is a whole directory, because a subPath mount never sees a ConfigMap
             # update, and it sits beside /etc/prometheus, which is the prometheus-config

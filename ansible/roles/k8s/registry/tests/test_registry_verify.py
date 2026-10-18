@@ -346,11 +346,27 @@ def test_the_fence_admits_the_push_job_on_the_push_port(flipped, policy):
     assert _may_admit_on(policy, "registry-not-admitted") == []
 
 
-def test_the_isolation_job_dials_every_port_the_fence_covers(flipped, policy):
-    """A port the Job skipped would be a fence hole nothing checks."""
+@pytest.fixture(scope="module")
+def mirror_policy(flipped_tag) -> dict:
+    (policy,) = [
+        doc
+        for doc in _docs(flipped_tag.files)
+        if doc["kind"] == "NetworkPolicy" and doc["metadata"]["name"] == "ghcr-mirror"
+    ]
+    return policy
+
+
+def test_the_isolation_job_dials_every_port_the_fence_covers(
+    flipped, policy, mirror_policy
+):
+    """A port the Job skipped would be a fence hole nothing checks.
+
+    The Service fronts both pods, so the fence is the push store's policy and the mirror's.
+    """
     fenced = {
         int(port["port"])
-        for rule in policy["spec"]["ingress"]
+        for fence in (policy, mirror_policy)
+        for rule in fence["spec"]["ingress"]
         for port in rule["ports"]
     }
     urls = [
@@ -361,11 +377,12 @@ def test_the_isolation_job_dials_every_port_the_fence_covers(flipped, policy):
     assert {u.port for u in urls} == fenced == {5000, 5002}
 
 
-def test_the_fence_does_not_admit_the_isolation_job(flipped, policy):
+def test_the_fence_does_not_admit_the_isolation_job(flipped, policy, mirror_policy):
     """Admitting `registry-verify` would open the hole the Job proves closed."""
     label = _label(_job(flipped, "isolation"))
     assert label == "registry-verify"
     assert _may_admit_on(policy, label) == []
+    assert _may_admit_on(mirror_policy, label) == []
 
 
 @pytest.mark.parametrize(

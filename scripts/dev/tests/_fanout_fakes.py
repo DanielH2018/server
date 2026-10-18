@@ -83,6 +83,7 @@ def fake_tools(
     findings_exit=0,
     refused_claims=(),
     head="worktree-orch",
+    multiplexed=False,
 ) -> tuple[Tools, FakeRun]:
     """Build a Tools whose boundaries answer from tables, plus the FakeRun behind it.
 
@@ -101,6 +102,7 @@ def fake_tools(
             in the FakeRun's `calls` under the pseudo-host `findings`.
         refused_claims: issue numbers whose `claim` exits 3 instead, refused.
         head: what `head_branch` answers, or an exception it raises instead.
+        multiplexed: what `multiplexed` answers; True lifts the per-run ssh budget.
 
     Returns:
         The Tools and the FakeRun it holds, so a test can script and read the calls.
@@ -154,6 +156,8 @@ def fake_tools(
         comment=lambda number, body, repo: (
             run.comments.append((number, body, repo)) is None
         ),
+        # Unmultiplexed, so the per-run ssh budget the launch tests pin still binds.
+        multiplexed=lambda: multiplexed,
     ), run
 
 

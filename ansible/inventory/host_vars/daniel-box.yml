@@ -876,6 +876,7 @@ containers_list:
       - kuma-maintenance-sync    # KUMA__URL (uptime-kuma's maintenance-sync CronJob)
       - configarr-health         # push_url (configarr/templates/health-secret.yaml.j2), a CronJob (H2.5b)
       - janitorr-health          # push_url (janitorr/templates/health-secret.yaml.j2), a CronJob (H2.5c)
+      - crowdsec                 # push URLs (crowdsec/templates/jobs-secret.yaml.j2), the crowdsec-jobs sidecar (H2.4b)
 
   # Runs WITHOUT docker plumbing — no DOCKER_HOST, so no in-IDE docker CLI or devcontainers.
   # CI's `images` job builds the image from the role's own Dockerfile and pushes it to GHCR.
