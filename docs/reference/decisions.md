@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/decisions.py
-generated_at: 2026-10-18 18:56 UTC
-generated_sha: 69b7772f1
+generated_at: 2026-10-18 19:05 UTC
+generated_sha: 08eea10ed
 ---
 
 !!! warning "Generated file — do not edit"
@@ -12,7 +12,7 @@ generated_sha: 69b7772f1
 
 # Decisions
 
-802 `DECIDED:` marker(s) found across the tree. A marker is a settled trade-off recorded as a comment at the line it governs, per CLAUDE.md's "Review & Memory Hygiene" section — written so a reviewer trips over the reasoning before re-opening a decision that already has one. A reviewer brief greps the literal marker text before flagging something as new; this page exists so a human can browse the same set instead of guessing a phrase to grep.
+803 `DECIDED:` marker(s) found across the tree. A marker is a settled trade-off recorded as a comment at the line it governs, per CLAUDE.md's "Review & Memory Hygiene" section — written so a reviewer trips over the reasoning before re-opening a decision that already has one. A reviewer brief greps the literal marker text before flagging something as new; this page exists so a human can browse the same set instead of guessing a phrase to grep.
 
 !!! warning "Possible duplicates"
     Two markers below have a near-identical first sentence once case and whitespace are normalised — usually the same trade-off decided twice, or a marker copied and never specialised. Worth a look, not a verdict.
@@ -569,6 +569,7 @@ generated_sha: 69b7772f1
 | the copies of artifacts' variables sit in this block's vars, not in this role's defaults. Role defaults are play-wide in initial_setup.yml, so a defaults copy becomes a cross-role read for any setup role that names the key (#5472). test_k8s_host_files_pairs.py holds each copy equal to roles/k8s/artifacts/defaults/main.yml. | `ansible/roles/setup/k8s_host_files/tasks/artifacts.yml:9` | 2026-10-18 |
 | the copy of docs' `docs_host_site_dir` sits in task vars, not in this role's defaults. Role defaults are play-wide in initial_setup.yml, so a defaults copy becomes a read by initial_setup's docs-refresh.sh.j2 and needs a deployer cross-role row. test_k8s_host_files_pairs.py holds this copy equal to roles/k8s/docs/defaults/main.yml. | `ansible/roles/setup/k8s_host_files/tasks/docs.yml:16` | 2026-10-17 |
 | the copies sit in task vars, not in this role's defaults. play-wide in initial_setup.yml, so a defaults copy becomes a cross-role read for any setup role that names the key (#5472). puid and pgid are group_vars keys copied for routing: a change to group_vars routes to the deploy plane only, which never re-applies this task. test_k8s_host_files_pairs.py holds each copy equal to its source. | `ansible/roles/setup/k8s_host_files/tasks/media-volume.yml:23` | 2026-10-18 |
+| the copy of pi-peer-backup's `pi_peer_backup_src_dir` sits in the block's vars, not in this role's defaults. Role defaults are play-wide in initial_setup.yml, so a defaults copy becomes a cross-role read (#5472). The CronJob's PI_SRC reads the k8s role's copy, and the wrapper refuses any other path, so the two must agree: test_k8s_host_files_pairs.py holds this copy equal to roles/k8s/pi-peer-backup. | `ansible/roles/setup/k8s_host_files/tasks/pi-peer-backup.yml:11` | 2026-10-18 |
 | 0700 root:root, not 0755 — the cron below is its only caller and runs as root. The script renders NO credential: it reads the upsmon endpoint out of /etc/nut/upsmon.conf at runtime with a field-scoped awk, and names nut_monitor_password only in a comment saying why that read is field-scoped. The 0700 is still ENFORCED, because scripts/secrets_mgmt/secret_bearing_host_paths.py matches that comment mention and its census errs toward denying (a false deny costs a prompt, a false permit costs a token) — test_secret_bearing_host_paths.py pins this path for exactly that reason. | `ansible/roles/setup/nut_host/tasks/main.yml:118` | 2026-09-18 |
 | FINALDELAY stays 5 on every host, and is deliberately NOT parameterised to stagger the two poweroffs. The tempting design is to let daniel-box shut down before daniel-server, whose pod hosts upsd, so it cannot be stranded when upsd disappears. It is unnecessary: a secondary needs upsd only to OBSERVE FSD, not to complete SHUTDOWNCMD, and both hosts observe it within one POLLFREQALERT (5 s) of the pod's `upsmon -c fsd` — long before daniel-server's poweroff reaches containerd. Staggering would also rest on FINALDELAY applying in secondary mode, which upsmon.conf(5) documents for primary mode only. Full reasoning in roles/k8s/nut/CLAUDE.md. | `ansible/roles/setup/nut_host/templates/host-upsmon.conf.j2:30` | 2026-08-28 |
 | ` marker holds | `ansible/roles/setup/optimize_pi/CLAUDE.md:43` | 2026-09-30 |
