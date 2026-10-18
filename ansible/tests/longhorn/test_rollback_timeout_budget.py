@@ -48,8 +48,8 @@ rollback_budget` below closes it by reading the per-tick cap, and it takes the r
 reality, since only one service's rollout wait is ever the binding one (k8s/manifests/tasks/drain.yml
 batches them).
 
-IN-ROLE WAITS ARE A THIRD TERM. What a role waits for in its own `tasks/` — prowlarr's
-flaresolverr isolation probe waits 300s for a Job — runs before the drain and adds to it, so a
+IN-ROLE WAITS ARE A THIRD TERM. What a role waits for in its own `tasks/` — netpol-baseline's
+probe Job waits 310s — runs before the drain and adds to it, so a
 derivation that counts the drain alone undercounts. `_role_tasks.in_role_wait_s` reads the term and
 excludes an inline `rollout status` gate, which waits for a rollout the drain also waits for.
 """
@@ -194,7 +194,7 @@ def test_batch_of_claim_services_fits_the_rollback_budget():
     # The cost key is the whole per-service cost, not the claim count alone. Every promoted
     # claim-declaring role declares exactly one claim, so a claims-only key leaves every
     # candidate tied and `sorted` picks the alphabetically first — bazarr, at the shared
-    # rollout default — while prowlarr costs 980s more.
+    # rollout default — while prowlarr costs 180s more.
     per_claim = snapshot_timeout + 3 * (state_timeout + api_timeout)
 
     def cost(role: str, claims: int) -> int:

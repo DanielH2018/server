@@ -34,13 +34,13 @@ prowlarr_k8s_size: 2Gi
 # prowlarr's own 80 MB image in 3m40.96s, both uncached. The 300s default fails the deploy after
 # its apply while the old flaresolverr pod serves throughout. That pod starts 535s after it is
 # scheduled.
-# DECIDED: 780s, the most the rollback budget allows. A failed auto-deploy's rollback run must fit
-# the snapshot, the revert, the netpol probe's own 300s wait, this wait and the stabilisation soak
-# inside gitops_deploy_k8s_rollback_timeout_s (1620s), and those other terms take 840s.
-# test_k8s_rollback_budget_covers_the_worst_single_promoted_service enforces that sum, and counts
-# the probe wait since #2399. 780s leaves 245s over the one measured pull. A slower link needs the
-# rollback budget raised first, and that budget is already at the ceiling the four tree-lock
-# waiters clear. A cached image rolls in seconds, so the budget costs time only on a real hang.
+# DECIDED: 780s, the most the rollback budget allowed while the netpol probe ran. A failed
+# auto-deploy's rollback run must fit the snapshot, the revert, this wait and the stabilisation
+# soak inside gitops_deploy_k8s_rollback_timeout_s (1620s). The probe's own 300s wait was a fourth
+# term until prowlarr's flip deleted the probe (#5594), so the other terms take 540s and leave
+# 300s unspent. test_k8s_rollback_budget_covers_the_worst_single_promoted_service enforces that
+# sum. 780s leaves 245s over the one measured pull. A cached image rolls in seconds, so the budget
+# costs time only on a real hang.
 # The literal is `manifests_rollout_timeout` because the renderer reads a role's Flux
 # Kustomization `timeout` only from a literal role default (`role_fields` in
 # scripts/lib/k8s_roles.py); as an include var it would render Flux's 600s default (#5464).
@@ -56,15 +56,12 @@ prowlarr_k8s_rollout_timeout: "{{ manifests_rollout_timeout }}"
 # networkpolicy-flaresolverr.yaml.j2 holds it narrow: ingress on 8191 from pods labelled
 # app=prowlarr only. INGRESS is the enforced direction on this cluster — n8n-broker proves it,
 # and B3 proved egress policies here do nothing — so this is a control that actually holds, and
-# the probe beside it says so rather than assuming.
+# the prowlarr-verify Job (templates/verify/) says so rather than assuming.
 #
 # Tag KEPT alongside the digest (repo:latest@sha256) so Renovate's k8s-defaults manager still
 # tracks it for digest-bump PRs — a bare repo@sha256 would freeze it with zero update signal.
 prowlarr_k8s_flaresolverr_image: ghcr.io/flaresolverr/flaresolverr:latest@sha256:c80ae007ce2ccdcd217a12426e4f039ef763ff90738c808d38810c3e59323767
 prowlarr_k8s_flaresolverr_port: 8191
-
-# busybox nc is all the isolation probe needs.
-prowlarr_k8s_probe_image: alpine:3.24@sha256:294b683cb724975bec92580e1e685676bd4b50bda910ddb8c51d4cabeaec77e6
 
 # Blast-radius caps for prowlarr itself; flaresolverr's own pair is below.
 prowlarr_k8s_cpu_limit: "1"

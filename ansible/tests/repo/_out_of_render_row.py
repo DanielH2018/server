@@ -87,9 +87,6 @@ ALLOW = {
     _K8S + "pihole/tasks/roll_one.yml": (
         "D5.1e: a restart annotation replaces the rollout restart"
     ),
-    _K8S + "prowlarr/tasks/main.yml": (
-        _PROBE + "; the one-shot PVC delete goes with prowlarr's flip"
-    ),
     _K8S + "qbittorrent/tasks/verify.yml": _VERIFY,
     _K8S + "registry/tasks/main.yml": (
         "D5: the self-test and netpol probe Jobs become `registry-verify`"

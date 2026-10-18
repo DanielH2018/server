@@ -2,13 +2,12 @@
 # monitor-bridge: every check runs here, the gitops pair against daniel-box's own deployer
 # via hostPath. check.py lives in this role's files/.
 
-# The script ConfigMaps are templates/script-configmap.yaml.j2, rendered and applied with the
-# rest of the manifests, so a module edit rolls the pod through the shared role's restart.
+# The script ConfigMaps are templates/script-configmap.yaml.j2, rendered with the rest of the
+# manifests, so a module edit rolls the pod through the renderer's restart checksum.
 #
-# The single `monitor-bridge-script` ConfigMap the retired tasks applied is unlabelled, so the
-# prune never selects it and the first deploy of this shape leaves it orphaned. No task here
-# deletes it, because a cluster write from a task is what D5 removes; the operator deletes it
-# and the old staging directory once, after the deploy (#5548).
+# Flux applies this role through `promote` since #5594, so no Flux path runs this include; it
+# stays for the handback. The unlabelled `monitor-bridge-script` ConfigMap the retired tasks
+# applied was deleted by hand once (#5548).
 - name: Deploy monitor-bridge to the cluster
   ansible.builtin.include_role:
     name: k8s/manifests

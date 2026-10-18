@@ -14,18 +14,25 @@ test-patching rules.
 
 ## At a glance
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates, tasks or containers_list entry, or the k3s role's Longhorn tier lists. -->
-- **Deploy tag:** `--tags "monitor-bridge"`
+- **Applied by:** Flux, through `promote` (`owner: flux`); `deploy.sh` refuses
+  `--tags=monitor-bridge` with exit 5
 - **Image:** `python` (`monitor_bridge_k8s_image`)
 - **Route:** none (no `templates/ingressroute.yaml.j2`)
 - **Claims:** none (no PVC)
-- **Auto-deploy:** denylisted (`k8s_autodeploy: false`) — observability — this IS the alert
-  pipeline; a broken deploy cannot page about being broken. ALSO no readinessProbe (probe-less)
-  — two independent reasons
 <!-- /generated_from -->
 
 **Host:** daniel-box, pinned by `nodeSelector` because the gitops checks read the deployer's
 state directory over a hostPath. Every source is reached by in-cluster Service name, so no VIP,
 Traefik or gate sits in a probe's path.
+
+**Flux applies it, not Ansible** (#5594, a Wave D PR with prowlarr). Its `containers_list`
+entry carries `owner: flux`, so `deploy.sh`, the play and the GitOps deployer all skip it, and a
+merged change reaches the cluster when `promote` publishes and verifies the next bundle. To give
+it back to Ansible, follow the two-PR handback in `docs/flux-deploy-plane.md`; a plain revert of
+the flag leaves two writers on the objects. Its Secrets substitute from `homelab-cluster-vars`,
+so a new push token reaches the pod only after `cluster_vars.py write` (operator-only).
+`tasks/main.yml` holds only the `k8s/manifests` include, which no Flux path runs; it stays for
+the handback, and the Kustomization's `wait` replaces the rollout wait.
 
 ## Gates and hysteresis
 

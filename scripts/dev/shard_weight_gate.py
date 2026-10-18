@@ -61,8 +61,9 @@ RUNNER_HEAVY_FAIL_SECONDS = 15.0
 # WHY A RATIO AND NOT A DELTA. The table holds workstation seconds and the report holds runner
 # seconds, and the two are not the same scale. Controls measured on daniel-server
 # ran 1.10x to 1.46x their recorded values, so anything under about 3x is that scale
-# difference rather than a stale entry. FIVE leaves room above that noise while still catching
-# the 190x case, and a gate set nearer the noise would turn into a weekly chore.
+# difference rather than a stale entry. FIVE leaves room above that noise, and a bound set
+# nearer the noise would turn into a weekly chore. Five is where the arm ANNOTATES; it fails
+# only at `STALE_WEIGHT_FAIL_RATIO`, because a busy recording host overshoots five on its own.
 #
 # WHY A FLOOR ON THE RECORDED VALUE. The parser's own floor is pytest's 0.005s, so a file
 # recorded at 0.05s and measuring 0.005s is a 10x ratio and pure rounding. The floor is what
@@ -82,6 +83,21 @@ RUNNER_HEAVY_FAIL_SECONDS = 15.0
 # shape that occurs in practice.
 STALE_WEIGHT_RATIO = 5.0
 STALE_WEIGHT_FLOOR_SECONDS = 3.0
+
+# The ratio at which an over-recorded weight FAILS the run. Between `STALE_WEIGHT_RATIO` and
+# this it annotates, as the under-recorded arm's band below does.
+#
+# WHY TWENTY. A weight recorded on a host busy with fan-out batches comes out up to about nine
+# times what the runner measures, and FIVE failed three PRs on such entries (#5616):
+# `test_fanout_clean_chain.py` recorded 5.23s and measured 0.99s (5.3x), and a re-record on the
+# same busy host gave 9.14s (9.2x); `test_media_volume_verify.py` recorded 4.86s and measured
+# 0.97s (5.0x); `test_session_health.py` recorded 4.00s and measured 0.77s (5.2x). Each red
+# cost a CI round and a hand edit to the table. A module recorded 5x to 9x high costs a few
+# seconds of balance in a shard that projects around 40s, which is what this arm is about.
+# `UNDER_WEIGHT_RATIO` uses twenty for the same runner-versus-workstation variance, and the
+# 190x entry this arm exists for still fails. An entry in the band stays visible as an
+# annotation, and the docs-refresh cron's `--refresh-drifted` rewrites it.
+STALE_WEIGHT_FAIL_RATIO = 20.0
 
 # How many times its recorded weight a module may measure on the runner before the shard gate
 # reads the entry as too LOW. The arm fails the run at the unweighted arm's bound and annotates
@@ -223,6 +239,17 @@ def heavy_underweighted(
     return sorted(flagged, key=lambda item: (-item[2], item[0]))
 
 
+def _stale_complaint(stale: list[tuple[str, float, float]], ratio: float) -> str:
+    listed = ", ".join(
+        f"{f} (recorded {rec:.2f}s, measured {got:.2f}s)" for f, rec, got in stale
+    )
+    return (
+        f"recorded at {ratio:.0f}x or more of what it measured on this runner, so the "
+        f"shard split reserves time the file does not cost: {listed}. "
+        f"Repair (seconds): {RECORD_FILES_HINT}"
+    )
+
+
 def _heavy_complaint(heavy: list[tuple[str, float]], threshold: float) -> str:
     listed = ", ".join(f"{f} ({s:.1f}s)" for f, s in heavy)
     return (
@@ -254,14 +281,17 @@ def durations_warnings(
     fail_above: float = RUNNER_HEAVY_FAIL_SECONDS,
     under_ratio: float = UNDER_WEIGHT_RATIO,
     under_threshold: float = UNDER_WEIGHT_WARN_SECONDS,
+    ratio: float = STALE_WEIGHT_RATIO,
+    stale_fail_ratio: float = STALE_WEIGHT_FAIL_RATIO,
 ) -> list[str]:
     """The complaints about a durations report that annotate the run and do not fail it.
 
     An unweighted module measuring `threshold` or more but under `fail_above`: runner variance
     alone moves a module across `threshold` (see `RUNNER_HEAVY_FAIL_SECONDS`). An
     under-recorded module annotates from `under_threshold` instead (see
-    `UNDER_WEIGHT_WARN_SECONDS`). Empty when the report parses to nothing, which
-    `durations_problems` already fails on.
+    `UNDER_WEIGHT_WARN_SECONDS`). An over-recorded entry annotates from `ratio` up to
+    `stale_fail_ratio` (see `STALE_WEIGHT_FAIL_RATIO`). Empty when the report parses to
+    nothing, which `durations_problems` already fails on.
     """
     warnings = []
     margin = [
@@ -276,6 +306,13 @@ def durations_warnings(
     ]
     if under:
         warnings.append(_under_complaint(under, under_threshold, under_ratio))
+    stale = [
+        row
+        for row in stale_overweight(text, weights, ratio)
+        if row[1] < stale_fail_ratio * max(row[2], _DURATIONS_MIN_SECONDS)
+    ]
+    if stale:
+        warnings.append(_stale_complaint(stale, ratio))
     return warnings
 
 
@@ -286,6 +323,7 @@ def durations_problems(
     ratio: float = STALE_WEIGHT_RATIO,
     fail_above: float = RUNNER_HEAVY_FAIL_SECONDS,
     under_ratio: float = UNDER_WEIGHT_RATIO,
+    stale_fail_ratio: float = STALE_WEIGHT_FAIL_RATIO,
 ) -> list[str]:
     """What is wrong with a shard's durations report, as readable complaints that fail the run.
 
@@ -316,15 +354,9 @@ def durations_problems(
         problems.append(_heavy_complaint(heavy, fail_bound))
     if under := heavy_underweighted(text, weights, fail_bound, under_ratio):
         problems.append(_under_complaint(under, fail_bound, under_ratio))
-    if stale := stale_overweight(text, weights, ratio):
-        listed = ", ".join(
-            f"{f} (recorded {rec:.2f}s, measured {got:.2f}s)" for f, rec, got in stale
-        )
-        problems.append(
-            f"recorded at {ratio:.0f}x or more of what it measured on this runner, so the "
-            f"shard split reserves time the file does not cost: {listed}. "
-            f"Repair (seconds): {RECORD_FILES_HINT}"
-        )
+    stale_bound = max(ratio, stale_fail_ratio)
+    if stale := stale_overweight(text, weights, stale_bound):
+        problems.append(_stale_complaint(stale, stale_bound))
     return problems
 
 
@@ -385,19 +417,21 @@ def gate_complaints(
     if changed is None or changed & GATE_INPUTS or not parse_durations(text):
         return (
             durations_problems(text, weights, threshold, ratio, fail_above),
-            durations_warnings(text, weights, threshold, fail_above),
+            durations_warnings(text, weights, threshold, fail_above, ratio=ratio),
         )
     inside, outside = split_by_diff(text, changed)
     problems, warnings = [], []
     if inside:
         problems = durations_problems(inside, weights, threshold, ratio, fail_above)
-        warnings = durations_warnings(inside, weights, threshold, fail_above)
+        warnings = durations_warnings(
+            inside, weights, threshold, fail_above, ratio=ratio
+        )
     if outside:
         warnings += [
             f"{OUTSIDE_DIFF_NOTE}: {complaint}"
             for complaint in durations_problems(
                 outside, weights, threshold, ratio, fail_above
             )
-            + durations_warnings(outside, weights, threshold, fail_above)
+            + durations_warnings(outside, weights, threshold, fail_above, ratio=ratio)
         ]
     return problems, warnings
