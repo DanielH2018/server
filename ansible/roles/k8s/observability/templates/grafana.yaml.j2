@@ -138,6 +138,50 @@ spec:
       # Tier 4; `DECIDED: observability tiers` in this role's CLAUDE.md names the tier-1
       # exceptions.
 {{ pod_shell('homelab-best-effort', run_as_user=472, run_as_group=472, fs_group=472) }}
+      initContainers:
+        # Writes the SOPS admin password into Grafana's database before the server starts.
+        # GF_SECURITY_ADMIN_PASSWORD below is read only when Grafana initialises a NEW
+        # database, so without this a rotated grafana_admin_password rolls the pod and the
+        # admin login keeps the old one. `reset-admin-password` writes the DB directly and needs
+        # no knowledge of the current password. A rotation reaches it through the role's
+        # secret restart (`restart_secrets` names grafana-secret.yaml), and once the tag is
+        # flux-owned through `checksum/restart`; every other start re-applies the same value.
+        #
+        # No server runs beside it: grafana is Recreate, so the old pod is gone before this
+        # one's init runs, and the CLI's own `Migrate` pass has the SQLite file to itself.
+        # Checked on grafana/grafana:13.2.3 (2026-10-18): against a DB a stopped server had
+        # initialised, the CLI exited 0 and the next boot accepted the new password and
+        # refused the old one, though the server's env still carried the old. On an empty
+        # data directory it creates the DB and the admin user, so a fresh PVC boots too.
+        # Peak RSS was 196 MiB.
+        #
+        # The password goes in on stdin, not argv, so it never appears in the process list.
+        #
+        # DECIDED: a failed reset blocks Grafana's start, with no `|| true`. Swallowing the
+        # exit would let Grafana serve with a stale admin password and say nothing, which is
+        # the silent divergence this initContainer exists to remove. The CLI's inputs are the
+        # image, the Secret and the database. A change to the first two rolls the pod in a
+        # deploy, so a failure shows up at that deploy's rollout wait, not at a later eviction.
+        # Grafana is not the paging path: Alertmanager pages without it. Not-ready dashboards
+        # are therefore an outage the operator sees, and that is the trade taken over a login
+        # that quietly stops working.
+        - name: admin-password
+          image: {{ observability_k8s_grafana_image }}
+{{ hardened_security_context(non_root=true) }}
+          command:
+            - sh
+            - -c
+            - printf %s "$GF_SECURITY_ADMIN_PASSWORD" | grafana cli admin reset-admin-password --password-from-stdin
+          env:
+            - name: GF_SECURITY_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: grafana-admin
+                  key: password
+          volumeMounts:
+            - name: grafana-data
+              mountPath: /var/lib/grafana
+{{ container_resources(cpu_limit='500m', mem_limit='512Mi', cpu_request='50m', mem_request='128Mi') }}
       containers:
         - name: grafana
           image: {{ observability_k8s_grafana_image }}

@@ -138,7 +138,7 @@ def test_gate_fails_on_a_resolved_workload_that_is_absent():
             "observability: 1 of 6 workloads FAILED the gate — Deployment homelab/grafana",
         )
 
-    ok, lines = notify_mod.gate(
+    ok, lines, _ = notify_mod.gate(
         ["observability"], ansible_ok=True, tools=notify_mod.NotifyTools(run=run)
     )
     assert ok is False
@@ -256,7 +256,7 @@ def test_gate_fails_fast_on_ansible_failure_without_health_checking():
         called["n"] += 1
         return _result(0, "jellyfin: ok")
 
-    ok, lines = notify_mod.gate(
+    ok, lines, _ = notify_mod.gate(
         ["jellyfin"], ansible_ok=False, tools=notify_mod.NotifyTools(run=run)
     )
     assert ok is False
@@ -268,7 +268,7 @@ def test_gate_settled_when_all_tags_healthy():
     def run(argv, **kwargs):
         return _result(0, f"{argv[5]}: 1/1 ready, restarts=0")
 
-    ok, lines = notify_mod.gate(
+    ok, lines, _ = notify_mod.gate(
         ["jellyfin", "sonarr"], ansible_ok=True, tools=notify_mod.NotifyTools(run=run)
     )
     assert ok is True
@@ -282,7 +282,7 @@ def test_gate_unsettled_when_one_tag_is_unhealthy():
             return _result(1, "sonarr: 0/1 ready — rollout incomplete")
         return _result(0, f"{tag}: 1/1 ready, restarts=0")
 
-    ok, _lines = notify_mod.gate(
+    ok, _lines, _ = notify_mod.gate(
         ["jellyfin", "sonarr"], ansible_ok=True, tools=notify_mod.NotifyTools(run=run)
     )
     assert ok is False
@@ -296,7 +296,7 @@ def test_gate_skipped_tag_does_not_fail_the_verdict():
             )
         return _result(1, "config: no Deployment or DaemonSet in this namespace")
 
-    ok, lines = notify_mod.gate(
+    ok, lines, _ = notify_mod.gate(
         ["config"], ansible_ok=True, tools=notify_mod.NotifyTools(run=run)
     )
     assert ok is True
@@ -304,7 +304,7 @@ def test_gate_skipped_tag_does_not_fail_the_verdict():
 
 
 def test_gate_degrades_gracefully_with_no_tags():
-    ok, lines = notify_mod.gate([], ansible_ok=True)
+    ok, lines, _ = notify_mod.gate([], ansible_ok=True)
     assert ok is True
     assert any("no --tags given" in line for line in lines)
 
@@ -376,7 +376,7 @@ def test_notify_leaves_sys_path_as_it_found_it_when_the_post_succeeds(
 
 def _gate(settled, lines):
     """A `gate` stub for tests about main's OUTPUT; `test_gate_render_source.py` has the rest."""
-    return lambda *_a, **_k: (settled, lines)
+    return lambda *_a, **_k: notify_mod.GateResult(settled, lines)
 
 
 def test_main_returns_nonzero_on_unsettled_deploy(monkeypatch, capsys):
@@ -400,7 +400,7 @@ def test_main_parses_empty_tags_to_empty_list(monkeypatch):
 
     def fake_gate(tags, _ok, **_k):
         captured["tags"] = tags
-        return True, []
+        return notify_mod.GateResult(True, [])
 
     monkeypatch.setattr(notify_mod, "gate", fake_gate)
     monkeypatch.setattr(notify_mod, "notify", lambda content: None)

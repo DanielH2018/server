@@ -12,10 +12,12 @@ import sys as _sys
 from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
+from deploy_tools.deploy_lib.detach_notify import GateResult
 from deploy_tools.land_lib import promotion, tick
 from deploy_tools.land_lib.landing import Landing, TickState
 from deploy_tools.land_lib.outcome import (
     ABANDONED_WATCH_NOTE,
+    UNREADABLE_GATE_NOTE,
     Cause,
     Verdict,
     hold_clear_hint,
@@ -34,7 +36,7 @@ def _primary_carries(ln: Landing, sha: str) -> bool:
     return ln.git("merge-base", "--is-ancestor", sha, "HEAD").returncode == 0
 
 
-def gate_from_the_deployed_tree(ln: Landing) -> tuple[bool, list[str]]:
+def gate_from_the_deployed_tree(ln: Landing) -> GateResult:
     """Ask the health gate, rendering the role's manifests from the tree that was deployed.
 
     `probe.py health <tag>` enumerates the workloads to gate by rendering the role's
@@ -59,16 +61,22 @@ def gate_from_the_deployed_tree(ln: Landing) -> tuple[bool, list[str]]:
                 "checkout already carries it, so rendering there instead"
             )
             return ln.tools.gate(promotion.gated_tags(ln))
-        return False, [
-            f"could not snapshot {ln.deployed_at[:12]} for the health gate, and the primary "
-            "checkout does not carry it yet -- nothing here can enumerate what was deployed, "
-            "so this landing is NOT reported healthy. Re-run it once the tick has "
-            "fast-forwarded, or check the workloads by hand."
-        ]
+        return GateResult(
+            False,
+            [
+                f"could not snapshot {ln.deployed_at[:12]} for the health gate, and the primary "
+                "checkout does not carry it yet -- nothing here can enumerate what was deployed, "
+                "so this landing is NOT reported healthy. Re-run it once the tick has "
+                "fast-forwarded, or check the workloads by hand."
+            ],
+        )
 
 
-def _regate_after_later_deploys(ln: Landing) -> bool:
-    """After a failed gate, gate again if a later deploy re-rolled the workloads; settled?
+def _regate_after_later_deploys(ln: Landing) -> GateResult | None:
+    """After a failed gate, gate again if a later deploy re-rolled the workloads.
+
+    Returns None when no later deploy re-rolled a tag, and otherwise the second gate's result,
+    whose `settled` this function narrows as below.
 
     A later deploy of the same service can roll its pods under the gate's one sample, once
     this landing's deploy has released the service lock (#3812). This gates again once that
@@ -81,17 +89,17 @@ def _regate_after_later_deploys(ln: Landing) -> bool:
     """
     rerolled = ln.tools.later_deploys(ln.resolved_tags, ln.deploy_ended_at)
     if not rerolled:
-        return False
+        return None
     ln.regated = ",".join(rerolled)
     say(
         f"{ln.regated}: a later deploy rolled this out again after this landing's own "
         "deploy; gating the generation that deploy left"
     )
-    settled, lines = gate_from_the_deployed_tree(ln)
-    for line in lines:
+    result = gate_from_the_deployed_tree(ln)
+    for line in result.lines:
         say(line)
-    if not settled:
-        return False
+    if not result.settled:
+        return result
     without = {
         tag: commit
         for tag, commit in rerolled.items()
@@ -104,17 +112,19 @@ def _regate_after_later_deploys(ln: Landing) -> bool:
             f"{tag}: the later deploy rendered {rendered}, which is not proved to contain "
             f"{ln.merge_sha[:12]} -- this change may no longer be live"
         )
-    return not without
+    return result._replace(settled=not without)
 
 
 def health(ln: Landing) -> NoReturn:
     """Gate every deployed tag, then settle, or name what is still open."""
     pr, sha, tags = ln.opts.pr, ln.merge_sha, ",".join(promotion.gated_tags(ln))
-    settled, lines = gate_from_the_deployed_tree(ln)
-    for line in lines:
+    result = gate_from_the_deployed_tree(ln)
+    for line in result.lines:
         say(line)
-    if not settled:
-        settled = _regate_after_later_deploys(ln)
+    # An unreadable gate saw no pods rolled under it; it saw nothing at all, so there is no
+    # later deploy to wait out.
+    if not result.settled and not result.unreadable:
+        result = _regate_after_later_deploys(ln) or result
         if ln.regated:
             tags += f" (re-gated after a later deploy of {ln.regated})"
     # Before any verdict, so every exit below has asked: the gate is the wait that lets a
@@ -131,7 +141,15 @@ def health(ln: Landing) -> NoReturn:
         # not re-verdicted — `Landing.tick_half_open_lines` carries why.
         for line in ln.tick_half_open_lines():
             print(line)
-    if not settled:
+    if result.unreadable:
+        print(UNREADABLE_GATE_NOTE)
+        ln.finish(
+            Verdict.DEFERRED,
+            75,
+            f"PR #{pr}, {sha}, tags: {tags} — deployed, but the health gate could not "
+            "read its store",
+        )
+    if not result.settled:
         ln.finish(Verdict.UNHEALTHY, 1, f"PR #{pr}, {sha}, tags: {tags}")
     if ln.plane:
         ln.finish(

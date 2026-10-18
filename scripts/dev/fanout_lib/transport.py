@@ -8,7 +8,8 @@ import json
 import os
 import socket
 import subprocess
-from collections.abc import Callable
+import dataclasses
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 
 # Reach the sibling package: a directly-invoked script gets only its own directory on
@@ -24,7 +25,9 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 from fanout_lib import signing
 from fanout_lib.brief import WORKED_BY, Comment, Issue
 from fanout_lib.placement import READ_COMMAND, HostReading, parse_reading
+from fanout_lib.manifest import Batch
 from fanout_lib.target import SERVER, SERVER_CHECKOUT
+from fanout_lib.unit_state import appended_command, split_reply
 from findings_lib.issue_model import (
     _CLAIM_RE,
     _RELEASE_RE,
@@ -339,14 +342,25 @@ class Tools:
     comment: Callable[[int, str, str], bool] = comment_issue
 
 
-def read_host(tools: Tools, host: str) -> HostReading | str:
+def read_host(
+    tools: Tools, host: str, standing: Sequence[Batch] = ()
+) -> HostReading | str:
     """Take the headroom reading for `host`, or return why it could not be taken.
 
     Never guesses: an unreachable host, a timeout, or an unparseable reply all come back
     as a one-line string rather than a fabricated `HostReading`.
+
+    Args:
+        tools: the process boundary.
+        host: the host to read.
+        standing: the host's uncleaned batches. Their unit states ride this same connection,
+            behind `unit_state.MARKER`, because the ssh budget has no connection to spare for
+            a read of their own (#5506). They come back on `HostReading.unit_states`.
     """
     try:
-        proc = tools.run(host, HOST_READ_COMMAND, READ_TIMEOUT_S, None)
+        proc = tools.run(
+            host, HOST_READ_COMMAND + appended_command(standing), READ_TIMEOUT_S, None
+        )
     except subprocess.TimeoutExpired:
         return "%s: headroom read timed out" % host
     # The signing-key read runs last and always exits 0, so a non-zero status is the
@@ -358,10 +372,12 @@ def read_host(tools: Tools, host: str) -> HostReading | str:
             proc.returncode,
             " ".join(proc.stderr.split()),
         )
+    reply, units = split_reply(proc.stdout)
     try:
-        return parse_reading(host, proc.stdout)
+        reading = parse_reading(host, reply)
     except ValueError as exc:
         return str(exc)
+    return dataclasses.replace(reading, unit_states=units)
 
 
 def error_text(exc: BaseException) -> str:

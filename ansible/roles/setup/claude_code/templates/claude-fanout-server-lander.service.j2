@@ -1,0 +1,32 @@
+[Unit]
+Description=Land the safe PRs of finished daniel-server fan-out batches
+After=network-online.target
+Wants=network-online.target
+OnFailure=claude-fanout-server-lander-alert.service
+
+[Service]
+Type=oneshot
+# The operator's user, because land.sh deploys: it decrypts secrets and runs Ansible with
+# become. The batches' PRs are this account's, and the review records are read from this
+# account's state directory on daniel-server over ssh.
+User={{ sys_user }}
+WorkingDirectory={{ claude_code_rc_workdir }}
+Environment=HOME=/home/{{ sys_user }}
+Environment=PATH=/home/{{ sys_user }}/.local/bin:/usr/local/bin:/usr/bin:/bin
+Environment=PYTHONDONTWRITEBYTECODE=1
+# land.sh's own policy, behind the command's checks (scripts/deploy_tools/land_lib/policy.py).
+# With the prefix set it also refuses while the deployer holds a SHA, and pins the merge to the
+# head it checked, so a push after the checks fails the merge instead of landing unchecked.
+Environment=LAND_REQUIRE_BRANCH_PREFIX={{ claude_code_fanout_server_lander_branch_prefix }}
+Environment=LAND_REQUIRE_AUTHOR={{ claude_code_fanout_server_lander_author }}
+# This host's journald stores notice and above (MaxLevelStore=notice), so stdout logs at notice.
+# Without it the one line per candidate PR is dropped.
+SyslogLevel=notice
+# DECIDED: KillMode=process. `land.sh --detach` forks each landing out of the caller's tree, but
+# `detach_fork.leave_unit_cgroup` moves it out of a USER-manager service only, and this is a
+# system unit. With the default control-group mode, systemd would kill every landing the moment
+# this oneshot exits, mid-merge or mid-deploy. `process` kills only the main process.
+KillMode=process
+# Room for two checkouts, each a `git worktree add` and a first `uv run` sync, and two starts.
+TimeoutStartSec=30min
+ExecStart=/usr/local/bin/uv run --no-python-downloads python scripts/dev/fanout.py land-server --primary {{ claude_code_rc_workdir }}

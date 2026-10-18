@@ -1,0 +1,77 @@
+---
+# The timer that lands a finished daniel-server fan-out batch's PR when its review record and
+# its PR both say it is safe (issue #5496). The rule is scripts/dev/fanout_lib/autoland.py and
+# this role's CLAUDE.md contract. Imported from main.yml. Armed only in daniel-box's host_vars;
+# the alert unit reads the webhook file claude-rc writes.
+
+- name: Install the server-batch lander units
+  tags: [claude_code]
+  ansible.builtin.template:
+    src: "{{ item }}.j2"
+    dest: "/etc/systemd/system/{{ item }}"
+    owner: root
+    group: root
+    mode: "0644"
+  loop:
+    - claude-fanout-server-lander.service
+    - claude-fanout-server-lander.timer
+  become: true
+  when: claude_code_fanout_server_lander_enabled
+  notify: Reload systemd
+
+- name: Install the server-batch lander failure alert
+  tags: [claude_code]
+  when: claude_code_fanout_server_lander_enabled
+  ansible.builtin.import_tasks: "{{ role_path }}/../common/tasks/alert_unit.yml"
+  vars:
+    alert_unit_name: claude-fanout-server-lander
+    alert_unit_description: Alert when the server-batch lander fails
+    alert_unit_message: "claude-fanout-server-lander failed on {{ inventory_hostname }}: GitHub could not be read or the run crashed, so finished daniel-server batches wait at their PRs. Check `journalctl -u claude-fanout-server-lander`."
+    alert_unit_env_dir: /etc/claude-rc
+
+- name: Enable and start the server-batch lander timer
+  tags: [claude_code]
+  ansible.builtin.systemd:
+    name: claude-fanout-server-lander.timer
+    enabled: true
+    state: started
+    daemon_reload: true
+  become: true
+  when: claude_code_fanout_server_lander_enabled
+
+# The way out: false stops the timer and removes all three units, so a disarmed host starts no
+# landing and every daniel-server batch stops at its PR again. A landing already started keeps
+# running to its verdict; its log's first line names the scope to stop.
+- name: Check whether a server-batch lander timer is installed
+  tags: [claude_code]
+  ansible.builtin.stat:
+    path: /etc/systemd/system/claude-fanout-server-lander.timer
+  register: claude_code_fanout_server_lander_timer_file
+  become: true
+  when: not claude_code_fanout_server_lander_enabled
+
+# Guarded on the file: systemd refuses to stop a unit it has never heard of, which is every
+# host that was never armed.
+- name: Stop and disable the server-batch lander timer when disarmed
+  tags: [claude_code]
+  ansible.builtin.systemd:
+    name: claude-fanout-server-lander.timer
+    enabled: false
+    state: stopped
+  become: true
+  when:
+    - not claude_code_fanout_server_lander_enabled
+    - claude_code_fanout_server_lander_timer_file.stat.exists
+
+- name: Remove the server-batch lander units when disarmed
+  tags: [claude_code]
+  ansible.builtin.file:
+    path: "/etc/systemd/system/{{ item }}"
+    state: absent
+  loop:
+    - claude-fanout-server-lander.service
+    - claude-fanout-server-lander.timer
+    - claude-fanout-server-lander-alert.service
+  become: true
+  when: not claude_code_fanout_server_lander_enabled
+  notify: Reload systemd

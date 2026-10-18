@@ -1,0 +1,9 @@
+[Unit]
+Description=Land the safe PRs of finished daniel-server fan-out batches every {{ claude_code_fanout_server_lander_interval }}
+
+[Timer]
+OnBootSec=5min
+OnUnitActiveSec={{ claude_code_fanout_server_lander_interval }}
+
+[Install]
+WantedBy=timers.target

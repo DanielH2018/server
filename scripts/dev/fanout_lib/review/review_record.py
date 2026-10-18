@@ -95,6 +95,11 @@ class Record:
     # `failed`, `needs-input` or `no-pr` before a PR exists, then `pr` once one does, or
     # `failed` / `needs-input` when the last phase says so.
     outcome: str = ""
+    # The head the last reviewer read: the head the first review read, or the fix round's head
+    # when a delta review read that (#5496). `fanout_lib.autoland` lands a PR unattended only
+    # while GitHub still shows this head, so a push after the review stops at the PR. "" in a
+    # record written before this field existed.
+    head: str = ""
     # The VERDICT line of the landing the pipeline ran (#3960), "" when it ran none.
     verdict: str = ""
     # The CI wait a batch that does not land runs (#4737): "" when it ran none, else its

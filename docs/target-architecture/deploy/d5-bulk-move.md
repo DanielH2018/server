@@ -856,6 +856,11 @@ pass each time, because no pod is created after T0.
   `Recreate` (`spec_shell('Recreate')` in `grafana.yaml.j2`), so no server runs beside the
   initContainer. observability's conversion PR checks on the pinned image that the CLI works
   against the database with no server running.
+  The initContainer landed live under Ansible ahead of the flip (#5262), and the role's
+  restart task rolls grafana on a rotation until the flip. That PR deleted "Sync the live
+  Grafana admin password with SOPS" and kept the restart task. On `grafana/grafana:13.2.3`,
+  the CLI reset the password in a database that a stopped server had initialised. It also
+  created the database and the admin user on an empty data directory.
 - **Tests in `scripts/renderer/tests/`.** An Alertmanager Secret edit moves alertmanager's
   annotation and no other workload's. A pihole ConfigMap edit moves both instance templates,
   instance 2's inside `pihole-deferred`. D3's tests already cover cloudflare-ddns and a YAML
