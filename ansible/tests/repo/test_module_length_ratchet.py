@@ -98,6 +98,10 @@ def base() -> str | None:
     return base_of(run_git)
 
 
+# Two tests read the census, each ~3s over the tree, and neither mutates it (#5501).
+patch_counts = cache(monkeypatch_counts)
+
+
 def _base_ref() -> str:
     """`base()` for a reader the caller has already skipped when there is none."""
     ref = base()
@@ -367,7 +371,7 @@ def test_no_module_is_longer_than_its_cap_or_its_allowlist_entry():
 
 
 def test_no_test_module_patches_more_modules_than_its_allowlist_entry():
-    offenders = PATCHES.violations(monkeypatch_counts(), PATCHES.allowlist())
+    offenders = PATCHES.violations(patch_counts(), PATCHES.allowlist())
     assert not offenders, "\n".join(offenders)
 
 
@@ -472,7 +476,7 @@ def test_the_live_length_ratchet_flags_a_lowered_entry():
 
 
 def test_the_live_monkeypatch_ratchet_flags_a_lowered_entry():
-    _assert_a_lowered_entry_is_flagged(PATCHES, monkeypatch_counts())
+    _assert_a_lowered_entry_is_flagged(PATCHES, patch_counts())
 
 
 def _assert_a_lowered_entry_is_flagged(ratchet: Ratchet, counts: Mapping[str, int]):

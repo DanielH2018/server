@@ -238,6 +238,8 @@ ROWS = (
                 '(ROLES / "setup" / "k3s" / "templates" / "drill.sh.j2").read_text()\n',
             ),
             Subject("d.py", 'for p in TEMPLATES.glob("*.sh.j2"):\n    pass\n'),
+            # One `.sh.j2` constant that no substring of the source text spells (#5501).
+            Subject("k2.py", 'T = ROLES / "t" / "drill.sh" ".j2"\nT.read_text()\n'),
             # A resolver hands back paths, so the module names no `*.sh.j2` anywhere.
             Subject(
                 "e.py",

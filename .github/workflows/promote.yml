@@ -166,6 +166,8 @@ jobs:
       # With no published tag the step passes --shared-only, because `cluster` without `--role`
       # renders every tag. The bundle then holds the shared kinds and a root listing them, so
       # the first decryption of the cluster file gets a revision of its own (D3.3a).
+      # A --role render writes only the named tags' image contexts, so the tag branch passes
+      # --all-images: the `images` job builds and pushes all ten from out/images/ (#5374).
       # ansible/tests/repo/test_promote_workflow_bundle.py fails a no-tag branch without it.
       - name: Build the bundle
         id: build
@@ -178,7 +180,7 @@ jobs:
           else
             roles=()
             while read -r tag; do roles+=(--role "$tag"); done <<< "$listed"
-            uv run python scripts/renderer/homelab_render.py cluster --out out "${roles[@]}"
+            uv run python scripts/renderer/homelab_render.py cluster --out out --all-images "${roles[@]}"
           fi
 
       # The publish census: flux/ holds exactly the published tags' files, and the root lists
