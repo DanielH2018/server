@@ -23,7 +23,13 @@ from _k8s_render import render_role_template
 from lib import yaml_fast
 from secrets_mgmt.rotation_tools import sops_names
 
-MOVED_ROLES = ("configarr", "janitorr")
+# Role -> (the Secret template its moved job reads, a secrets.yml key that Secret renders).
+# The second half is the positive control's: that key's sentinel must reach that render.
+MOVED_ROLES = {
+    "configarr": ("health-secret.yaml.j2", "monitor_bridge_configarr_push_token"),
+    "janitorr": ("health-secret.yaml.j2", "monitor_bridge_janitorr_push_token"),
+    "qbittorrent": ("prefs-check-secret.yaml.j2", "qbittorrent_password"),
+}
 
 # The red fixture: the line the retired configarr-health.sh.j2 carried, staged into a
 # ConfigMap the way a careless move would stage it.
@@ -73,20 +79,20 @@ def moved_configmap_renders() -> dict[tuple[str, str], str]:
 
 def test_the_render_reaches_the_known_configmaps() -> None:
     """The named members: configarr's and janitorr's health reader code, staged at H2.5b and
-    H2.5c."""
+    H2.5c, and qbittorrent's prefs check, staged at H2.5d."""
     assert ("configarr", "health-configmap.yaml.j2") in moved_configmap_renders()
     assert ("janitorr", "health-configmap.yaml.j2") in moved_configmap_renders()
+    assert ("qbittorrent", "prefs-check-configmap.yaml.j2") in moved_configmap_renders()
     assert len(sentinels()) >= 100
 
 
 def test_the_sentinels_reach_the_render() -> None:
-    """The positive control: the Secret beside the ConfigMap does carry the token's sentinel.
+    """The positive control: the Secret beside the ConfigMap does carry the secret's sentinel.
 
     Without it, a binding that never reached the templates would leave every ConfigMap clean.
     """
-    for role in MOVED_ROLES:
-        token = sentinels()[f"monitor_bridge_{role}_push_token"]
-        assert token in render_role_template(role, "health-secret.yaml.j2", sentinels())
+    for role, (template, key) in MOVED_ROLES.items():
+        assert sentinels()[key] in render_role_template(role, template, sentinels())
 
 
 def test_a_moved_roles_configmaps_carry_no_secret_value_is_clean() -> None:

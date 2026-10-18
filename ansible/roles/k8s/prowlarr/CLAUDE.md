@@ -5,13 +5,13 @@ rendering attacker-supplied pages in a headless browser.
 
 ## At a glance
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates, tasks or containers_list entry, or the k3s role's Longhorn tier lists. -->
-- **Deploy tag:** `--tags "prowlarr"`
+- **Applied by:** Flux, through `promote` (`owner: flux`); `deploy.sh` refuses
+  `--tags=prowlarr` with exit 5
 - **Images:** `lscr.io/linuxserver/prowlarr` (`prowlarr_k8s_image`),
-  `ghcr.io/flaresolverr/flaresolverr` (`prowlarr_k8s_flaresolverr_image`), `alpine`
-  (`prowlarr_k8s_probe_image`), `ghcr.io/onedr0p/exportarr` (`prowlarr_k8s_exportarr_image`)
+  `ghcr.io/flaresolverr/flaresolverr` (`prowlarr_k8s_flaresolverr_image`),
+  `ghcr.io/onedr0p/exportarr` (`prowlarr_k8s_exportarr_image`)
 - **Route:** `prowlarr.<domain>` · `prowlarr.local.<domain>`, Authelia one_factor
 - **Claim:** `prowlarr-config` (weekly -> B2 (default target))
-- **Auto-deploy:** eligible (`k8s_autodeploy: true`)
 <!-- /generated_from -->
 
 - **The `-lsNN` linuxserver tag scheme** means a breaking bump can hide as a routine patch
@@ -21,8 +21,23 @@ rendering attacker-supplied pages in a headless browser.
   keys. flaresolverr's browser profile is disposable and sits on an emptyDir.
 - **Secrets:** `prowlarr_api_key` (also reused as the exportarr sidecar's credential —
   Prowlarr has no scoped read-only key to mint instead).
-- **`Recreate` strategy, auto-deployed anyway** — protected by a pre-apply Longhorn snapshot (`k8s_autodeploy_snapshot_pvcs: [prowlarr-config]`) that
-  `k8s/manifests` reverts to on a failed deploy.
+- **Flux applies it, not Ansible** (#5594, a Wave D PR with monitor-bridge). Its
+  `containers_list` entry carries `owner: flux`, so `deploy.sh`, the play and the GitOps
+  deployer all skip it, and a merged change reaches the cluster when `promote` publishes and
+  verifies the next bundle. To give it back to Ansible, follow the two-PR handback in
+  `docs/flux-deploy-plane.md`; a plain revert of the flag leaves two writers on the objects.
+  authelia and traefik stay Ansible-owned, so the Kustomization records them in its
+  `homelab/ansible-owned-deps` annotation, not in `dependsOn`.
+- **The `prowlarr-snapshot` Job snapshots `prowlarr-config` before each revision applies**
+  (`k8s_autodeploy_snapshot_pvcs: [prowlarr-config]`). The prowlarr Kustomization depends on
+  it, so a revision applies only after the snapshot is ready. The Deployment is `Recreate`. A
+  failed revision writes the stateful hold, and nothing reverts the claim on its own: the
+  operator follows the revert runbook in `docs/volume-snapshot-drills.md`.
+  `k8s_autodeploy: true` still lets Renovate automerge the image bump.
+- **Where the tasks went.** `tasks/main.yml` holds the `k8s/manifests` include, which no Flux
+  path runs; it stays for the handback. The Kustomization's `wait` replaces the rollout wait
+  for both Deployments. The flaresolverr isolation probe became the `prowlarr-verify` Job,
+  and its five tasks and `netpol-probe-job.yaml.j2` were deleted.
 
 ## Notable
 - **A revert desyncs indexer IDs.** Unlike sonarr/radarr/bazarr/jellyfin, which self-heal a
@@ -31,16 +46,14 @@ rendering attacker-supplied pages in a headless browser.
 - **flaresolverr is fenced to ingress from prowlarr alone**, via
   `templates/networkpolicy-flaresolverr.yaml.j2` — a deliberate narrowing from the Compose-era
   isolated network, since egress policies on this cluster don't hold but ingress does.
-- **`templates/verify-inert/` is the Flux form of the flaresolverr isolation probe, and nothing
-  renders it yet.** Ansible still applies `flaresolverr-netpol-probe` from `tasks/main.yml` on
-  every deploy. prowlarr's flip PR renames the directory to `templates/verify/`, which makes the
-  renderer emit `prowlarr-verify`, and deletes the probe tasks. The Job runs
+- **`templates/verify/job.yaml.j2` proves flaresolverr's fence holds.** The renderer emits it
+  into `prowlarr-verify`, which Flux applies once `prowlarr` is Ready. The Job runs
   `files/prowlarr_verify.py`: prowlarr's port must answer, as the control, and flaresolverr's
   must refuse. Its pod carries `app: prowlarr-verify`, which prowlarr's `netpol_from` lists
-  ahead of the flip and flaresolverr's fence must never admit. Its spec embeds a digest of
-  flaresolverr's rendered NetworkPolicy and Deployment, so an edit to either makes Flux run it
-  again. `job.yaml.j2` carries the caller census, and `tests/test_prowlarr_verify.py` renders
-  the renamed copy through the Job census and checks both fences against the pod.
+  and flaresolverr's fence must never admit. Its spec embeds a digest of flaresolverr's
+  rendered NetworkPolicy and Deployment, so an edit to either makes Flux run it again.
+  `job.yaml.j2` carries the caller census, and `tests/test_prowlarr_verify.py` renders the
+  directory through the Job census and checks both fences against the pod.
 - **Both Deployments wait 780s, above the shared default.** A cold pull on daniel-server took 8m54s for the
   292 MB flaresolverr image and 3m41s for prowlarr's own (#2369). The budget is the literal
   `ansible/roles/k8s/prowlarr/defaults/main.yml:manifests_rollout_timeout`, which Flux's

@@ -39,8 +39,10 @@ And a recorded number can go wrong in the other direction, which no arm asking "
 MISSING" ever sees:
 a recorded 17.31s against 0.09s measured makes the greedy split place the file first, so one
 shard carries 17s of phantom weight. The gate
-answers that as a RATIO — see `shard_weight_gate.STALE_WEIGHT_RATIO` — and `--record-files` is its repair, since
-`--record-missing` only fills gaps. A third arm takes the opposite direction: a module that grew
+answers that as a RATIO: it annotates at `shard_weight_gate.STALE_WEIGHT_RATIO` and fails at
+`STALE_WEIGHT_FAIL_RATIO`, since a host busy with fan-out batches records up to about 9x what the
+runner measures (#5616). `--record-files` is its repair, since `--record-missing` only fills
+gaps. A third arm takes the opposite direction: a module that grew
 after its weight was recorded measured 45.67s against 0.48s, and the split packed it as free.
 `shard_weight_gate.UNDER_WEIGHT_RATIO` bounds it, and `--record-files` repairs it too.
 

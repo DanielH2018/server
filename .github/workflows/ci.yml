@@ -654,6 +654,9 @@ jobs:
       # and nobody can apply the repair on master (#3604). On a PR an unweighted module
       # measuring between `RUNNER_HEAVY_SECONDS` and `RUNNER_HEAVY_FAIL_SECONDS` annotates
       # too, since the same variance put one either side of the bound on a rerun (#4010).
+      # A recorded weight 5x to 20x what it measured annotates too, and fails only at 20x: a
+      # host busy with fan-out batches records up to about 9x the runner's figure, and that
+      # failed three PRs on a few seconds of shard balance (#5616).
       # On a pull_request it fails only for a module the PR's diff adds or changes
       # (`--changed-files`). A module outside the diff annotates, because its author is not the
       # one reading the run and the docs-refresh cron re-records it: 4 of 16 gate failures in

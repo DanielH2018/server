@@ -247,12 +247,13 @@ def _rollout_timeout_s(role: str) -> int:
     return manifests_rollout_timeout_s(_K8S_ROLES_DIR / role)
 
 
-# The role whose in-role wait this derivation must find. prowlarr's flaresolverr isolation probe
-# waits `--timeout=300s` for a Job, before the batch drain runs and on top of it. Named rather
-# than counted: the reader
+# The roles whose in-role waits this derivation must find. registry waits for its self-test and
+# netpol probe Jobs, and netpol-baseline for its probe Job, before the batch drain runs and on
+# top of it. prowlarr's 300s flaresolverr probe was the first member until its flip deleted the
+# probe (#5594). Named rather than counted: the reader
 # finds its subject by pattern, so a rename or a moved task would otherwise leave the sum
 # quietly smaller and every assertion here still green.
-_IN_ROLE_WAIT_CENSUS = {"prowlarr": 300, "netpol-baseline": 310}
+_IN_ROLE_WAIT_CENSUS = {"registry": 540, "netpol-baseline": 310}
 
 
 def test_the_in_role_wait_census_is_non_vacuous():
@@ -353,11 +354,12 @@ _FORWARD_OVERHEAD_S = 60
 # an empty `manifests_rollout` — so a rename or a moved task would leave the sum quietly smaller
 # with every assertion below still green, the failure `_IN_ROLE_WAIT_CENSUS` above exists for.
 #
-#   prowlarr:        the worst promoted role, and the one the cap is sized against.
+#   prowlarr:        the worst promoted role, and the one the cap was sized against while its
+#                    300s isolation probe still ran (#5594 deleted it, leaving 960s).
 #   netpol-baseline: the role with the most in-role waiting in the repo and NO rollout to wait
 #                    on. It is here because it is the shape that breaks the derivation, not
 #                    because it is close to the cap.
-_FORWARD_CEILING_CENSUS = {"prowlarr": 1260, "netpol-baseline": 370}
+_FORWARD_CEILING_CENSUS = {"prowlarr": 960, "netpol-baseline": 370}
 
 
 def _waits_for_a_rollout(role: str) -> bool:

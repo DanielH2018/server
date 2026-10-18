@@ -55,6 +55,7 @@ if __name__ == "__main__":
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from deployer_lib import deploy_alert_text
 from deployer_lib import deploy_alerts
+from deployer_lib import deploy_broad_k8s
 from deployer_lib import deploy_defer
 from deployer_lib import deploy_handlers
 from deployer_lib import deploy_k8s_owed
@@ -303,6 +304,7 @@ def main(tools: DeployTools, config: Config, state: deploy_state.DeployerState) 
         deploy_handlers.alert_red_tip(tools, state, config, target)
 
     plan = deploy_phases.plan_tick(tools, state, config, target)
+    plan = deploy_broad_k8s.route_secret_k8s_readers(tools, config, target, plan)
     # DECIDED: the ledger drop runs here, before the ff-merge, although every other k8s ledger
     # write runs on an exit that leaves the range merged. A range a busy lock resets or a
     # manual plane parks is re-crossed by a later tick, and `deploy.sh` refuses a tree behind

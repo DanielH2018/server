@@ -57,6 +57,7 @@ RETIRED = frozenset(
         "janitorr error health",
         "janitorr",
         "k3s-longhorn-reap",
+        "qbittorrent prefs drift check",
     }
 )
 
