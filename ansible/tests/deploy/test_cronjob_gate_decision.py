@@ -47,14 +47,11 @@ Three further limits, stated rather than papered over:
     reasons this module assumes. That last hop is still unexercised.
 """
 
-import re
 import shlex
 import shutil
-from pathlib import Path
 
 import pytest
 from _helpers import K8S_ROLES, jinja_env, load_tasks, load_defaults, task_named
-from _role_census import role_dirs
 from _kubectl_seam import kubectl_has_a_cluster_configured, no_cluster_to_ask
 from lib.proc_testing import run
 
@@ -337,149 +334,6 @@ def test_the_jsonpath_parses_against_the_live_api() -> None:
         f"kubectl rejected the role's jsonpath: {done.stderr.strip()!r}. The expression is "
         "wrong, or the argv form lost a token boundary."
     )
-
-
-def _gate_include(role: Path) -> dict | None:
-    """The task in this role that includes k8s/cronjob-gate, or None.
-
-    Matched on the include's own `name` after a yaml.safe_load, not by searching the file for
-    the string. A raw substring match pulls in a role that merely MENTIONS the role in a
-    comment, and then checks its unrelated `activeDeadlineSeconds` values against a timeout it
-    never sets — a false failure rather than a missed one, but still a guard that fires on the
-    wrong role. Parsing also makes the lookup order-independent: `vars:` above
-    `ansible.builtin.include_role:` is valid YAML that Ansible runs identically.
-
-    The cheap substring check stays as a PREFILTER so only real candidates are parsed. Every
-    role's tasks file must parse for Ansible to run it, but a guard that yaml-loads all ~50 of
-    them would start failing on a role it has no business reading.
-    """
-    tasks = role / "tasks/main.yml"
-    if not tasks.is_file() or "k8s/cronjob-gate" not in tasks.read_text():
-        return None
-    for task in load_tasks(tasks):
-        if (task.get("ansible.builtin.include_role") or {}).get("name") == (
-            "k8s/cronjob-gate"
-        ):
-            return task
-    return None
-
-
-def _cronjob_gate_callers() -> list[Path]:
-    """Roles that actually include k8s/cronjob-gate, comments excluded."""
-    return [role for role in role_dirs(_ROLE.parent) if _gate_include(role) is not None]
-
-
-def _effective_timeout(role: Path) -> int:
-    """`cronjob_gate_timeout` as this caller will actually see it."""
-    include = _gate_include(role)
-    override = ((include or {}).get("vars") or {}).get("cronjob_gate_timeout")
-    if override is not None:
-        return int(override)
-    return int(load_defaults(_ROLE)["cronjob_gate_timeout"])
-
-
-_DEADLINE = re.compile(r"^\s*activeDeadlineSeconds:\s*(.+?)\s*$", re.MULTILINE)
-_JINJA_VAR = re.compile(r"^\{\{\s*([\w.]+)\s*\}\}$")
-
-
-def _active_deadlines(role: Path) -> list[tuple[str, int]]:
-    """Every `activeDeadlineSeconds` the role renders, as (template, seconds).
-
-     Resolves a single-variable Jinja value against the role's own defaults — configarr writes
-     `activeDeadlineSeconds: {{ configarr_k8s_timeout }}`. Anything else raises rather than being
-     skipped: a deadline this cannot read is a deadline the rule below silently stops covering,
-    .
-    """
-    out: list[tuple[str, int]] = []
-    defaults = load_defaults(role)
-    tdir = role / "templates"
-    for template in sorted(tdir.glob("*.j2")) if tdir.is_dir() else []:
-        for raw in _DEADLINE.findall(template.read_text()):
-            if raw.isdigit():
-                out.append((template.name, int(raw)))
-                continue
-            var = _JINJA_VAR.match(raw)
-            resolved = defaults.get(var.group(1)) if var else None
-            if resolved is None:
-                raise AssertionError(
-                    f"{role.name}/{template.name}: activeDeadlineSeconds is {raw!r}, which this "
-                    "guard cannot resolve to a number. Make it a literal or a plain variable "
-                    "from the role's defaults — an unreadable deadline is one the timeout rule "
-                    "stops covering, silently."
-                )
-            out.append((template.name, int(resolved)))
-    return out
-
-
-def test_gate_timeout_exceeds_every_callers_active_deadline() -> None:
-    """The gate must outlast the Job's own deadline, for every caller.
-
-    Set the other way round, the poll's retries run out first and Ansible aborts the play with a
-    bare "ran out of retries" — no role-authored message, no container states, no log. Set this
-    way, the Job reaches a terminal `Failed` condition first, the poll returns, and the operator
-    gets the role's own failure text saying what it could and could not read.
-
-    Executable rather than prose: a rule a machine enforces beats a paragraph an agent has to
-    remember.
-
-    Scoped to roles that actually include the gate, so it starts covering a caller on the commit
-    that wires it rather than needing to be remembered then.
-    """
-    callers = _cronjob_gate_callers()
-    assert callers, (
-        "no role includes k8s/cronjob-gate, so this guard is checking nothing — either the "
-        "callers were removed or the include was renamed"
-    )
-    offenders = []
-    for role in callers:
-        timeout = _effective_timeout(role)
-        for template, deadline in _active_deadlines(role):
-            if timeout <= deadline:
-                offenders.append(
-                    f"{role.name}: cronjob_gate_timeout {timeout}s does not exceed "
-                    f"{template}'s activeDeadlineSeconds {deadline}s"
-                )
-    assert not offenders, (
-        "Caller(s) whose gate gives up before their own Job's deadline can fire, so the failure "
-        "arrives as retry exhaustion with no message and no log. Raise cronjob_gate_timeout "
-        "(the default, or a per-caller override in the include's vars):\n  "
-        + "\n  ".join(offenders)
-    )
-
-
-def test_a_comment_mentioning_the_gate_does_not_make_a_role_a_caller(
-    tmp_path: Path,
-) -> None:
-    """Only a real include counts, so the timeout guard fires on the right roles.
-
-    A raw substring search over tasks/main.yml would pull in any role that merely NAMES
-    k8s/cronjob-gate — a comment, a TODO, a note about why it is not used — and then check
-    that role's unrelated activeDeadlineSeconds against a timeout it never sets. That is
-    over-inclusive rather than unsafe, but a guard that fails on a role it has no business reading is a guard
-    people learn to skip.
-    """
-    role = tmp_path / "widget"
-    (role / "tasks").mkdir(parents=True)
-    (role / "tasks" / "main.yml").write_text(
-        "# widget's CronJob could use k8s/cronjob-gate once it is idempotent\n"
-        "- name: Deploy widget\n"
-        "  ansible.builtin.include_role:\n"
-        "    name: k8s/manifests\n"
-        "  vars:\n"
-        "    manifests_service: widget\n"
-    )
-    assert _gate_include(role) is None
-
-    (role / "tasks" / "main.yml").write_text(
-        "- name: Gate the widget deploy on a one-off run\n"
-        "  vars:\n"
-        "    cronjob_gate_name: widget\n"
-        "    cronjob_gate_timeout: 900\n"
-        "  ansible.builtin.include_role:\n"
-        "    name: k8s/cronjob-gate\n"
-    )
-    assert _gate_include(role) is not None
-    assert _effective_timeout(role) == 900
 
 
 def test_no_operator_message_carries_an_embedded_newline() -> None:

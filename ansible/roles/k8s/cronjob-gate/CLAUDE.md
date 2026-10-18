@@ -92,12 +92,15 @@ after the fact — an operator hitting it should look at the *arr, not at the im
 
 ## Callers, and the gate a flux-owned role gets instead
 
-Two Ansible-owned roles still include this one: configarr gates `configarr` and
-`configarr-health`, and qbittorrent gates `qbittorrent-prefs-check`. Flux runs no task of a
-flux-owned role, so such a role names its CronJobs in `flux_cronjob_gates` instead, and
+No role includes this one. Flux runs no task of a flux-owned role, so such a role names its
+CronJobs in `flux_cronjob_gates` instead, and
 `scripts/renderer/renderer_lib/cronjob_gate.py` copies each into a Job in `<tag>-verify` that
 runs once per role revision. pi-peer-backup's gate, a verify, and karakeep's
 `karakeep-archive-pruner` gate, a mutation, moved there when both roles flipped to Flux (#5652).
+The last three moved at the flip of configarr and qbittorrent: the `configarr` reconcile, a
+mutation whose Job is `configarr-deploy-gate-<spec digest8>`, and the `configarr-health` and
+`qbittorrent-prefs-check` gates, both verifies. A role handed back to Ansible includes this role
+again.
 
 The copy differs from this role's run in two ways, and each role's flip states both:
 

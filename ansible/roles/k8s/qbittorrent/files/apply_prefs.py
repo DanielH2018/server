@@ -7,14 +7,13 @@ image applies only `WEBUI_PORT` and `TORRENTING_PORT` from the environment. So t
 live state: a WebUI change no Ansible run reproduces, and a Longhorn restore silently
 reverts. This script is the repo-side source of truth for them.
 
-WHY IT IS NOT WIRED INTO THE DEPLOY. `deploy.sh --tags qbittorrent` renders manifests,
-which fires the central rollout-restart (roles/k8s/manifests/tasks/main.yml). The
-replacement pod is gated by the wireguard sidecar's startupProbe — failureThreshold 60 x
-5s, so up to five minutes before qBittorrent's container starts at all. A prefs task in
-the deploy path would have to wait out that window every time, and an lscr.io hiccup
-during it (the 9h/107-restart incident in this role's CLAUDE.md) would surface as a
-FAILED DEPLOY rather than as the mod-fetch problem it is. Run this by hand instead —
-after a PVC restore, or when changing a value here.
+WHY THIS IS NOT THE DEPLOY'S APPLY. While Ansible owned qbittorrent, a prefs task in the
+deploy path would have waited out the wireguard sidecar's startupProbe — failureThreshold
+60 x 5s, so up to five minutes before qBittorrent's container starts at all — and an
+lscr.io hiccup during it (the 9h/107-restart incident in this role's CLAUDE.md) would have
+surfaced as a FAILED DEPLOY rather than as the mod-fetch problem it is. Flux owns the role
+since its flip, and the apply on a roll is the Job below. Run this by hand after a PVC
+restore, or to check drift without waiting for the next roll.
 
 REACHING THE WEBUI. The pod's NetworkPolicy admits only traefik, sonarr, radarr,
 homepage, the reach probe and the qbittorrent-prefs-check CronJob, and the public route is
@@ -22,8 +21,8 @@ Authelia-gated — but the WebUI is reachable directly from the node over the po
 ClusterIP, which is what a hand run uses. Verified 2026-08-26: `curl
 http://<pod-ip>:8080/` returns 200 from daniel-box.
 
-UNDER FLUX, A JOB RUNS A COPY. templates/verify-inert/prefs.yaml.j2 applies DESIRED from
-files/qbittorrent_job.py once qbittorrent's flip renders it, after the pod is Ready. The Job
+UNDER FLUX, A JOB RUNS A COPY. templates/verify/prefs.yaml.j2 applies DESIRED from
+files/qbittorrent_job.py on every revision that rolls the pod, after the pod is Ready. The Job
 census refuses this file's cookie jar and opener, so that script holds its own copy of DESIRED,
 and tests/test_qbittorrent_job.py holds the two equal. Change a value in both.
 

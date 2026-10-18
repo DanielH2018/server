@@ -1,10 +1,10 @@
 {#
-  tdarr's verify Job and the ConfigMap that carries its script, INERT until tdarr's flip.
+  tdarr's verify Job and the ConfigMap that carries its script.
 
-  This directory is `verify-inert/`, which neither reader globs: the manifests role takes only
-  top-level `templates/*.yaml.j2`, and `verify_files` takes only `templates/verify/*.yaml.j2`.
-  tdarr's flip PR moves the directory to `templates/verify/`, and the renderer then emits it
-  into `tdarr-verify` (D5, *A verify conversion lands as inert code*).
+  The renderer emits `templates/verify/*.yaml.j2` into `tdarr-verify` (`verify_files`), which
+  Flux applies once the `tdarr` Kustomization reads Ready. The manifests role takes only
+  top-level `templates/*.yaml.j2`, so no Ansible path renders it. The Job replaced the two exec
+  checks of `tasks/verify.yml` in tdarr's flip.
 
   Both names end in a digest, as the Job census requires (D5, *Rules for every Job Flux
   applies*): the ConfigMap's in `configmap_digest8` of its data, the Job's in
@@ -14,7 +14,7 @@
 
   DECIDED: the spec embeds a digest of tdarr's rendered Deployment, not the role's `digest8`.
   The plan has a Job that must run once per role revision embed `digest8`, so that a new
-  revision renames the Job and Flux runs it again, as Ansible runs `verify.yml` on every
+  revision renames the Job and Flux runs it again, as Ansible ran `verify.yml` on every
   deploy. `digest8` is known only after the renderer's later passes, which a template cannot
   see. The Deployment's render is what rolls tdarr's pod, so keying on it reruns the Job on
   every roll. A revision that changes only the Service or the route does not rerun it, and

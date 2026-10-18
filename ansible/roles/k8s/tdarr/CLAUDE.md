@@ -6,14 +6,12 @@ shared conventions.
 
 ## At a glance
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates, tasks or containers_list entry, or the k3s role's Longhorn tier lists. -->
-- **Deploy tag:** `--tags "tdarr"`
+- **Applied by:** Flux, through `promote` (`owner: flux`); `deploy.sh` refuses `--tags=tdarr`
+  with exit 5
 - **Image:** `ghcr.io/haveagitgat/tdarr` (`tdarr_k8s_image`)
 - **Route:** `tdarr.<domain>` · `tdarr.local.<domain>`, Authelia one_factor
 - **Claims:** `tdarr-server` (weekly -> B2 (default target)), `tdarr-configs` (weekly -> B2
   (default target)), `media-data` (not Longhorn (media-local))
-- **Auto-deploy:** denylisted (`k8s_autodeploy: false`) — state coupled outside the volume —
-  rewrites media-data (shared RWX, not reverted) in place, an irreversible transcode the
-  snapshot/revert can't undo; ALSO non-atomic two-claim revert (tdarr-configs, tdarr-server)
 <!-- /generated_from -->
 
 - **`tdarr-server`** (3Gi, `longhorn`, backed up — the 204MB library/transcode
@@ -40,43 +38,35 @@ shared conventions.
 - `tdarr_k8s_server_port` (8266, the internal-node control channel) is deliberately
   **not** in the Service — exposing it would publish an unauthenticated channel for a
   process that rewrites media.
-- `tasks/verify.yml` gates on `rollout status`, not a readiness wait: every Deployment
-  here is single-replica with `maxUnavailable: 0`, so the OLD pod satisfies readiness
-  through the whole rollout and a readiness-based check would silently verify the pod
-  being replaced.
-- **`templates/verify-inert/` is tdarr's verify Job for Flux, and nothing renders it yet.**
-  Neither the manifests role nor the renderer's `verify_files` reads that directory. tdarr's
-  flip PR renames it to `templates/verify/`, which makes the renderer emit `tdarr-verify`.
-  The Job runs `files/tdarr_verify.py`, which replaces `tasks/verify.yml`'s two exec checks:
-  the render node opens, and the library is writable. Its pod is built like tdarr's, with the
-  same device request, render group, PUID and `media-data` subPath, so it checks that wiring
-  and not the live pod. Its spec embeds a digest of tdarr's rendered Deployment, so every
-  change that rolls tdarr renames the Job and Flux runs it again.
+- **Flux owns tdarr (D5, Wave D).** `promote` applies it, and no Ansible run reaches
+  `tasks/main.yml`. Its checks run in three places, each on every roll:
+    - `tdarr-prepull` pulls the image onto the node before `tdarr` applies;
+    - the Deployment's `vaapi-encode` initContainer runs the encode;
+    - the `tdarr-verify` Job proves the render node opens and the library is writable.
+- **`templates/verify/` is the `tdarr-verify` Job.** The renderer emits it once the `tdarr`
+  Kustomization reads Ready. The Job runs `files/tdarr_verify.py`, which replaced the two exec
+  checks of the Ansible verify tasks: the render node opens, and the library is writable. Its
+  pod is built like tdarr's, with the same device request, render group, PUID and `media-data`
+  subPath, so it checks that wiring and not the live pod. Its spec embeds a digest of tdarr's
+  rendered Deployment, so every change that rolls tdarr renames the Job and Flux runs it again.
   The VAAPI encode through tdarr's own ffmpeg has no Job form, because the Job image has no
   ffmpeg and the Job census forbids spawning a process and opening a socket.
-  `tests/test_tdarr_verify.py` renders the renamed copy and runs the Job census over it.
+  `tests/test_tdarr_verify.py` renders the role and runs the Job census over the Job.
 - **The VAAPI encode is the Deployment's `vaapi-encode` initContainer (#5451, option 1).** It
   runs tdarr's own ffmpeg in tdarr's image, as tdarr's PUID, with the same device request, so
-  a broken driver or ffmpeg build keeps tdarr from starting. Under Ansible that shows as the
-  `rollout status` gate in `tasks/verify.yml` failing on a pod stuck in Init, not as a fast
-  exec failure; read the init container's log for the ffmpeg error. It runs on every roll
-  under Ansible and Flux alike, so the flip loses no check.
-- **Every rollout waits 3000s, five times the shared default.** A cold pull of the 1432 MiB
-  image took 25m37s on 2026-10-08 and failed the old 300s gate (#3689).
-  The budget is the literal `ansible/roles/k8s/tdarr/defaults/main.yml:manifests_rollout_timeout`,
-  which Flux's `timeout` and the drain's wait read. The `verify.yml` gate and the template's
-  `progressDeadlineSeconds` read it through `tdarr_k8s_rollout_timeout`. The deadline has to move with the wait, or `rollout status` fails
-  at the 600s default anyway.
-- **`tasks/main.yml` pulls the image onto the node before the apply (#3875).** `Recreate` stops
-  the old pod first, so without the pre-pull tdarr is down for the whole 25-minute pull. The pull
-  runs locally with `k3s crictl`, which reaches the right node only because the `media-data` PV
-  pins tdarr to `inventory_hostname`; the role asserts that pin before it pulls. The 3000s budget
-  stays: it bounds the pre-pull task, and it is the rollout's backstop if the kubelet's image
-  garbage collection removes the image before the new pod starts.
-- **Flux's form of the pre-pull is `flux_prepull_timeout`, inert until the flip.** The renderer
-  adds `tdarr-prepull` for a published tag alone (`scripts/renderer/renderer_lib/prepull.py`),
-  and its Job copies the Deployment's placement. That is why the Deployment carries a required
-  node affinity to `inventory_hostname`, the node the `media-data` PV already pins it to: the
-  renderer refuses a pre-pull for a workload that names no node. tdarr's flip PR deletes the
-  crictl tasks and their test, and drops `manifests_rollout_timeout` to the 600s default (D5
-  step 26).
+  a broken driver or ffmpeg build keeps tdarr from starting. A failed encode holds the pod in
+  Init, so the `tdarr` Kustomization fails its health check at the timeout; read the init
+  container's log for the ffmpeg error.
+- **The rollout budget is the 600s default.** The literal
+  `ansible/roles/k8s/tdarr/defaults/main.yml:manifests_rollout_timeout` is Flux's `timeout`,
+  and the template's `progressDeadlineSeconds` reads it through `tdarr_k8s_rollout_timeout`,
+  so the deadline moves with the wait. It was 3000s until the flip, because a cold pull of the
+  1432 MiB image took 25m37s on 2026-10-08 (#3689) and Ansible's pre-pull shared the budget.
+- **`tdarr-prepull` pulls the image before the Recreate (#3875).** `Recreate` stops the old pod
+  first, so without the pre-pull tdarr is down for the whole 25-minute pull. The renderer adds
+  the Kustomization because `ansible/roles/k8s/tdarr/defaults/main.yml:flux_prepull_timeout`
+  is set (`scripts/renderer/renderer_lib/prepull.py`), and `tdarr` depends on it. Its Job
+  copies the Deployment's placement. That is why the Deployment carries a required node
+  affinity to `inventory_hostname`, the node the `media-data` PV already pins it to: the
+  renderer refuses a pre-pull for a workload that names no node.
+  `ansible/tests/services/test_tdarr_prepulls_its_image.py` holds both halves.

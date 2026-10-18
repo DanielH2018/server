@@ -1,9 +1,8 @@
 """configarr's two gate Jobs for Flux: a re-run changes nothing, and the render passes the census.
 
 `flux_cronjob_gates` in this role's defaults opts both CronJobs into a gate Job that the
-renderer copies into `configarr-verify` (D5, *`cronjob-gate`'s gate Job*). The key is inert
-while configarr is Ansible-owned, so the render tests render the real role as if the inventory
-marked it `owner: flux`.
+renderer copies into `configarr-verify` (D5, *`cronjob-gate`'s gate Job*). Flux owns configarr
+since its flip, so the render tests render the real role as a flux-owned tag.
 
 configarr's gate is a post-apply mutation, and its `homelab/rerun-safe` annotation names
 `test_a_second_sync_reports_no_change`. configarr overwrites each value it manages with the one
@@ -19,6 +18,7 @@ import re
 
 import pytest
 
+from configarr_lib.configarr_health_logic import is_configarr_job
 from lib import yaml_fast
 from lib.exit_codes import RENDER_OK
 from lib.k8s_roles import K8S_ROLES
@@ -124,6 +124,7 @@ def _gate(out, cronjob: str) -> dict:
 
 
 def test_the_reconcile_gate_is_a_rerun_safe_mutation_the_health_reader_counts(rendered):
+    # fact: ansible/roles/k8s/configarr/CLAUDE.md#At a glance
     job = _gate(rendered, "configarr")
     assert job["metadata"]["name"].startswith(f"configarr{GATE_INFIX}")
     assert job["metadata"]["annotations"] == {
@@ -132,8 +133,10 @@ def test_the_reconcile_gate_is_a_rerun_safe_mutation_the_health_reader_counts(re
         "::test_a_second_sync_reports_no_change",
     }
     # configarr_health.py lists Jobs by `-l app=configarr` and picks the latest by finish time,
-    # so the Job label, not the name, is what keeps a gate run counted.
+    # so the Job label, not the name, is what keeps a gate run counted. The reader's own
+    # predicate judges the renamed Job, as it judges the one `k8s/cronjob-gate` created.
     assert job["metadata"]["labels"] == {"app": "configarr"}
+    assert is_configarr_job(job, "configarr")
     assert job["spec"]["template"]["metadata"]["labels"]["app"] == "configarr"
     # The CronJob's own value, kept: a retried sync would report a transient outage as clean.
     assert job["spec"]["backoffLimit"] == 0
@@ -144,6 +147,26 @@ def test_the_health_gate_is_a_verify_outside_the_readers_selector(rendered):
     assert job["metadata"]["annotations"] == {"homelab/job-kind": "verify"}
     assert job["spec"]["template"]["metadata"]["labels"]["app"] == "configarr-health"
     assert job["spec"]["backoffLimit"] == 0
+
+
+def test_the_reconcile_waits_for_both_arrs_to_read_ready(tmp_path):
+    """The barrier the Ansible drain was: configarr applies only after sonarr and radarr do.
+
+    configarr's gate reconciles against both *arrs over HTTP. Rendered with the live
+    ordering, so the edge exists only while sonarr and radarr are flux-owned as well; Flux
+    holds `configarr`, and so `configarr-verify`, until both Kustomizations read Ready, which
+    under `wait: true` includes their rollouts.
+    """
+    out = tmp_path / "out"
+    assert homelab_render.cluster(out, [TAG], None) == RENDER_OK
+    docs = {
+        d["metadata"]["name"]: d["spec"]
+        for d in yaml_fast.safe_load_all((out / "flux" / f"{TAG}.yaml").read_text())
+    }
+    assert {"name": "sonarr"} in docs[TAG]["dependsOn"]
+    assert {"name": "radarr"} in docs[TAG]["dependsOn"]
+    assert docs[TAG]["wait"] is True
+    assert docs[VERIFY]["dependsOn"] == [{"name": TAG}]
 
 
 def test_both_gates_pass_the_job_census(rendered):

@@ -371,7 +371,6 @@
  "ansible/tests/k8s/test_k8s_manifests_metallb.py": 0.0,
  "ansible/tests/k8s/test_k8s_manifests_rbac.py": 0.06,
  "ansible/tests/k8s/test_k8s_manifests_routes.py": 2.79,
- "ansible/tests/k8s/test_kubectl_run_pod_names.py": 0.0,
  "ansible/tests/k8s/test_loki_read_route_admits_probe_py.py": 0.03,
  "ansible/tests/k8s/test_manifest_declares.py": 0.09,
  "ansible/tests/k8s/test_manifest_roles_include_the_shared_render.py": 0.02,

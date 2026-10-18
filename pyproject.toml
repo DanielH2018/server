@@ -81,6 +81,9 @@ testpaths = [                        # single source of truth for WHAT runs; exc
 # -p leakguard fails any test that reaches the network, the cluster or the host. It is
 # registered here rather than from a conftest so it covers every `testpaths` entry at once;
 # ansible/tests is on `pythonpath` below, which is what makes the bare module name resolve.
+# -p xdist_width narrows `-n auto` to the run's selection: one worker per 15 test modules,
+# capped at the core count, so one file runs on one worker rather than sixteen. The whole
+# suite and a CI shard keep every core. Its module docstring has the measurements.
 #
 # No `-q` here, deliberately. `-q` is what a reader adds on the command line to shorten a scoped
 # run, and pytest COUNTS the flag: with `-q` already in addopts, a hand-typed `-q` becomes `-qq`,
@@ -90,7 +93,7 @@ testpaths = [                        # single source of truth for WHAT runs; exc
 # run that collected nothing read exactly like one that passed. Reviewers had to override
 # addopts to get a count back. The default verbosity
 # costs ~2 header lines per xdist worker and prints the count every time.
-addopts = "-n auto --dist loadscope -m 'not ui' --strict-markers --strict-config -p leakguard"
+addopts = "-n auto --dist loadscope -m 'not ui' --strict-markers --strict-config -p leakguard -p xdist_width"
 # Every warning is a failure. Measured before enabling: the only classes that
 # fired were ResourceWarnings, each a real leak — HTTPError test doubles built on a tempfile
 # nothing closed, an sqlite connection the Valheim store never closed, and the deployer's

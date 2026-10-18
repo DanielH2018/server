@@ -24,7 +24,7 @@
 # baseline continuing to admit traefik on all ports: if that baseline rule is ever port-scoped, or
 # this pod template loses the label, this line is what keeps the UI up.
 #
-# qbittorrent-reach-probe (tasks/verify.yml, "Reach the WebUI from a pod, as Traefik does") is
+# qbittorrent-reach-probe (the `qbittorrent-verify` Job, templates/verify/job.yaml.j2) is
 # load-bearing here, not incidental: it exists to prove qbittorrent is reachable from the POD
 # CIDR specifically, despite the Mullvad kill-switch's iptables rules on the wireguard sidecar —
 # the one source address that can detect the kill-switch having eaten the cluster's return path
@@ -32,9 +32,9 @@
 # silently inverting what it asserts: a REACHED would mean nothing, and the one real regression
 # this test exists to catch (the kill-switch swallowing pod-CIDR traffic) would read as green.
 # Same shape as roles/k8s/registry/templates/networkpolicy.yaml.j2 admitting its own
-# registry-selftest-push/registry-selftest-pull Jobs. The probe pod carries this app label only
-# because tasks/verify.yml's `kubectl run` sets it with `--labels` — kubectl's default `run:`
-# label would not match a podSelector on `app`.
+# registry-selftest-push/registry-selftest-pull Jobs. The Job's pod carries this app label, the
+# label of the `kubectl run` probe it replaced at qbittorrent's flip; the template's DECIDED
+# note says why it kept it.
 #
 # homepage's dashboard widget authenticates to the WebUI over the ClusterIP
 # (roles/k8s/homepage/templates/config/services.yaml.j2). It goes direct rather than through Traefik
