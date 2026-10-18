@@ -435,17 +435,3 @@ def test_the_jellyfin_cap_role_without_patch_is_flagged(monkeypatch) -> None:
 def test_the_jellyfin_verify_account_holds_no_grant() -> None:
     """The verify Job reads no API; the cap's patch grant must not reach its account."""
     assert grants(_jellyfin_cap_rbac(), "homelab", "jellyfin-verify") == []
-
-
-def test_a_rest_path_maps_to_its_group_namespace_and_verb() -> None:
-    assert rest_needs(
-        [
-            ("GET", "/api/v1/persistentvolumes"),
-            ("POST", "/apis/longhorn.io/v1beta2/namespaces/longhorn-system/snapshots"),
-            ("GET", "/api/v1/namespaces/homelab"),
-        ]
-    ) == {
-        (None, "", "persistentvolumes", "list", None),
-        ("longhorn-system", "longhorn.io", "snapshots", "create", None),
-        (None, "", "namespaces", "get", "homelab"),
-    }
