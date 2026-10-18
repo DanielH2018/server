@@ -24,7 +24,7 @@ Environment=LAND_REQUIRE_AUTHOR=app/renovate
 # applies waits on the soak, so this leaves land-wait room for `verify`'s wait on the rendered
 # soak plus promote's `render`, `images` and `publish`, after the merge and CI waits (#5427,
 # #5466).
-Environment=LAND_DEADLINE=18000
+Environment=LAND_DEADLINE=21600
 # /var/lib/renovate-agent-land/<n>.verdict is the one thing the session reads back, so the
 # directory is world-readable and only this unit writes it.
 StateDirectory=renovate-agent-land
@@ -34,7 +34,7 @@ SyslogLevel=notice
 # reports a slow landing itself rather than systemd killing it inside an Ansible run. systemd
 # counts the lock wait too: a landing queued 40 minutes behind another would otherwise be
 # killed 20 minutes in, with no verdict line (#5203).
-TimeoutStartSec=310min
+TimeoutStartSec=370min
 # Replaces any earlier run's verdict before the lock wait. land_renovate_pr.py writes PENDING only
 # once it holds the lock, so a wait that times out would otherwise leave yesterday's verdict for
 # this PR for the session to read as today's. The prompt stops landing on any VERDICT line but

@@ -6,18 +6,52 @@ it is built from (`templates/Dockerfile.j2` + `files/extensions.sh`); the invent
 
 ## At a glance
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates, tasks or containers_list entry, or the k3s role's Longhorn tier lists. -->
-- **Deploy tag:** `--tags "code-server"`
+- **Applied by:** Flux, through `promote` (`owner: flux`); `deploy.sh` refuses
+  `--tags=code-server` with exit 5
 - **Image:** `<k8s_registry_pull_host>/code-server` (`code_server_k8s_image`)
 - **Route:** `code-server.<domain>` · `code-server.local.<domain>`, Authelia two_factor
 - **Claims:** `code-server-config` (no backup (listed in k3s_longhorn_nobackup_volumes)),
   `code-server-workspace` (weekly -> B2 (default target))
-- **Auto-deploy:** denylisted (`k8s_autodeploy: false`) — in-cluster-built registry image with
-  no upstream version scheme — Renovate can never generate an update PR for it, so there is no
-  bump event to auto-deploy regardless of the migrating-state PVC shape below
 <!-- /generated_from -->
 
-- **Image:** built in-cluster by k8s/image-builder from `templates/Dockerfile.j2`
-- **Host:** daniel-box (k3s) · **Port:** 8443
+- **Image:** built by the promote workflow's `images` job from `templates/Dockerfile.j2`,
+  pushed to `ghcr.io/danielh2018/code-server:<content tag>` (D5.4). In-cluster by
+  k8s/image-builder before D5.16.
+- **Host:** daniel-box (k3s), by a soft node-affinity preference · **Port:** 8443
+- **Flux applies it, not Ansible** (D5.16, Wave C). Its `containers_list` entry carries
+  `owner: flux`, so `deploy.sh`, the play and the GitOps deployer all skip it, and a merged
+  change reaches the cluster when `promote` publishes and verifies the next bundle. To give it
+  back to Ansible, follow the two-PR handback in `docs/flux-deploy-plane.md`; a plain revert of
+  the flag leaves two writers on the objects. `k8s_autodeploy: false` still stops Renovate's
+  automerge of a base-image or build-pin bump.
+- **Both claims are snapshotted before each revision applies.** The role declares
+  `k8s_autodeploy_snapshot_pvcs`, so the render adds the `code-server-snapshot` Kustomization,
+  and `code-server` depends on it. Its Job, `snapshot-code-server-<digest8>`, snapshots
+  `code-server-config` and `code-server-workspace` and must pass before `code-server` applies
+  (`docs/flux-deploy-plane.md`, *The snapshot Job*). It is the first live snapshot role, so it
+  is also the first tag the stateful hold covers: a failed revision that changes code-server
+  holds `DEPLOY_HOLD` without a reset, and the way out is the operator's revert runbook in
+  `docs/volume-snapshot-drills.md`.
+- **The password Secret substitutes from `homelab-cluster-vars`.** `code_server_password` and
+  `code_server_sudo_password` are `${<key>}` placeholders in the published render. Flux
+  substitutes the values from the `homelab-cluster-vars` Secret, which it decrypts from the
+  SOPS cluster file in `ansible/vars/`. The Kustomization depends on `cluster-vars`, so a
+  rotated value is live before code-server reconciles. A rotation reaches the cluster only
+  through `cluster_vars.py write`. The renderer stamps a restart checksum on the Deployment, so
+  a changed value rolls the pod.
+- **Every image change is a slow pull and an outage.** The pod pulls from GHCR, which served
+  both nodes at 0.2-0.5 MB/s on 2026-10-17. A claude-code CLI bump invalidates about 377 MB of
+  layers, and a base-image bump about 851 MB, so a roll takes roughly 20 to 50 minutes. The
+  Deployment is `Recreate`, so the old pod stops before the pull starts, and the editor is down
+  for the whole pull. `manifests_rollout_timeout: 3600s` in `defaults/main.yml` sets both the
+  Kustomization's `timeout` and `progressDeadlineSeconds`; the measurement is beside it.
+- **Where the tasks went.** `tasks/main.yml` holds two includes, `k8s/image-builder` and
+  `k8s/manifests`, and no Flux path runs either. They stay for the handback. The glance reads
+  the defaults, so it still shows `<k8s_registry_pull_host>/code-server`; the renderer rewrites
+  both refs to the GHCR one with `imagePullPolicy: IfNotPresent`
+  (`scripts/renderer/renderer_lib/images.py:ghcr_refs`). The snapshot Job replaces
+  k8s/volume-snapshot's pre-apply snapshot, and the Kustomization's `wait` replaces the rollout
+  wait.
 - **Ported WITHOUT docker plumbing** (operator decision 2026-08-10): no DOCKER_HOST, so the
   in-IDE docker CLI and devcontainers are gone; docker-proxy-codeserver and the `codeserver`
   net dissolved with the Docker copy (`has_code_server: false` in daniel-server host_vars).
@@ -81,8 +115,11 @@ it is built from (`templates/Dockerfile.j2` + `files/extensions.sh`); the invent
   two-thirds full. Since 2026-10-12 the volume also holds the Rust build output and the crate
   cache, so delete the tree before Rust builds fill the remaining third. (Longhorn's `actualSize` reads ~96% because it counts the snapshot chain, not
   filesystem usage.)
-- Because the image is built, bump it by redeploying the k8s role — there is no registry tag
-  for Renovate to track (`code_server_k8s_image` is in the REGISTRY_BUILT_IMAGES carve-out).
+- Because the image is built, there is no registry tag for Renovate to track
+  (`code_server_k8s_image` is in the REGISTRY_BUILT_IMAGES carve-out). A merged change to a
+  build input moves the content tag, the `images` job pushes it, and `promote` rolls the pod.
+  A package refresh that no pin moves is a hand PR that bumps a `rebuild_stamp` data key in
+  the context (`ansible/roles/k8s/image-builder/CLAUDE.md`).
 
 ## Editing
 - Image: `templates/Dockerfile.j2`, `files/extensions.sh` · Workload: `ansible/roles/k8s/code-server/`

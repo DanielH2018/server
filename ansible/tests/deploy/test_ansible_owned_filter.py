@@ -141,13 +141,14 @@ def test_the_batch_loop_skips_owned_entries_that_templates_still_see():
     # bento-pdf has carried `owner: flux` since D2.7, peanut since D3.6, texbrain since D4.5,
     # the three Wave A exporters since D5.5, deploy-ui, littlelink and longhorn-ui since D5.6,
     # homepage and node-exporter since D5.7, loki-homelab, navidrome and scrutiny since D5.8,
-    # homelab-mcp and ical-proxy since D5.14, and terraria and valheim since D5.15, so the
-    # live list holds owned entries too.
+    # homelab-mcp and ical-proxy since D5.14, terraria and valheim since D5.15, and code-server
+    # since D5.16, so the live list holds owned entries too.
     owned = {"fixture-flux", "fixture-released"} | {
         c["name"] for c in live if "owner" in c
     }
     assert {
         "bento-pdf",
+        "code-server",
         "deploy-ui",
         "gpu-exporter",
         "homelab-mcp",

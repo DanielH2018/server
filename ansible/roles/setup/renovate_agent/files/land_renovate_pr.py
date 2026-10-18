@@ -56,7 +56,7 @@ FILE_CAP = 100
 # land.sh waits on the PR's CI, the merge, master CI, the tick, the deploy and the health gate.
 # The unit's TimeoutStartSec sits above this plus its flock wait, so the script reports a
 # timeout before systemd kills it mid-deploy.
-LAND_TIMEOUT_S = 18000
+LAND_TIMEOUT_S = 21600
 PR_FIELDS = (
     "author,isCrossRepository,baseRefName,state,headRefName,files,statusCheckRollup"
 )

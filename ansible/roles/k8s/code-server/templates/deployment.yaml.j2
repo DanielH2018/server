@@ -12,6 +12,9 @@ metadata:
 spec:
   # RWO config PVC on single-replica Longhorn — a rolling update deadlocks on the volume.
 {{ spec_shell('Recreate') }}
+  # Moves with the Kustomization's `timeout`: manifests_rollout_timeout in defaults/main.yml
+  # has the GHCR pull measurement behind the value.
+  progressDeadlineSeconds: {{ code_server_k8s_rollout_timeout[:-1] | int }}
   replicas: 1
   selector:
     matchLabels:
@@ -35,8 +38,8 @@ spec:
       initContainers:
         - name: seed-workspace-claim
           image: {{ code_server_k8s_image }}
-          # Built in-cluster to a mutable :latest; explicit for the reason terraria's
-          # deployment records.
+          # Under Flux the renderer rewrites this ref to GHCR's content tag with IfNotPresent
+          # (scripts/renderer/renderer_lib/images.py:ghcr_refs); `Always` holds after a handback.
           imagePullPolicy: Always
           command:
             - /bin/sh

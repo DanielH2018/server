@@ -44,18 +44,18 @@ renovate_agent_permission_mode: auto
 renovate_agent_budget_usd: 25
 
 # Wall clock for the session itself. It must outlast one landing of a tag Flux applies, which
-# waits on the soak and can take the lander's whole TimeoutStartSec (310min, #5427, #5466). A landing
+# waits on the soak and can take the lander's whole TimeoutStartSec (370min, #5427, #5466, #5512). A landing
 # Ansible deploys is a ~15min CI wait plus a ~20min deploy, so several of those still fit, and
 # the unit's TimeoutStartSec sits above this as the backstop. The wrapper kills the
 # session at this figure and still posts a digest saying so; systemd's ceiling posts nothing but
 # the OnFailure alert, so this one should always trip first.
-renovate_agent_run_timeout_s: 21600
-renovate_agent_unit_timeout: 370min
+renovate_agent_run_timeout_s: 25200
+renovate_agent_unit_timeout: 430min
 
 # The longest Bash call the session may make, in ms. A landing blocks in `systemctl start` for up
-# to the lander's 310-minute TimeoutStartSec, and Claude Code's own cap is 10 minutes. The unit
+# to the lander's 370-minute TimeoutStartSec, and Claude Code's own cap is 10 minutes. The unit
 # sets it as BASH_MAX_TIMEOUT_MS and the prompt quotes it.
-renovate_agent_bash_timeout_ms: 18900000
+renovate_agent_bash_timeout_ms: 22500000
 
 # 06:00 America/Chicago — after Renovate's own "before 6am" cycle (UTC, so it closes at
 # midnight/1am CT depending on DST) has opened the day's PRs. This runs BEFORE the 13:00

@@ -891,8 +891,8 @@ edges, and `<tag>` then depends on `<tag>-snapshot`, so the role applies only af
 snapshot is taken. `<tag>-verify` depends on the tag's last Kustomization: `<tag>-deferred` when the
 tag has one, `<tag>` otherwise. A `K8S_APPLIES_LAST` tag waits on no other tag's
 `-snapshot` or `-verify`. A published tag whose role declares `k8s_autodeploy_snapshot_pvcs`
-renders `<tag>-snapshot` (*The snapshot Job* below). No published role declares one yet, and
-no role renders `<tag>-verify`.
+renders `<tag>-snapshot` (*The snapshot Job* below). code-server, published since D5.16, is
+the first such role, and no role renders `<tag>-verify`.
 
 ### Which Kustomizations substitute
 

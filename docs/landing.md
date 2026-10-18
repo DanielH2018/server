@@ -372,13 +372,15 @@ Instead it reads the cluster every 30 seconds:
   starts by which the landing must print its verdict. The wait then gives up 10 minutes
   before that deadline, whatever is in flight, and the landing still ends `deferred` with a
   ledger line (#5199). So on a lander unit the wait can give up before twice `verify`'s wait.
-  `claude-land@.service` and `renovate-agent-land@.service` each set 18000. After the merge
+  `claude-land@.service` and `renovate-agent-land@.service` each set 21600. After the merge
   and master CI budgets, that leaves the wait room for `verify`'s wait on the rendered soak,
   once, and the `promote` workflow's `render`, `images` and `publish` jobs at their
   timeouts. It also covers one measured rebuild of every built image by a commit queued ahead
   (#5431). `images` counts at its 20 minutes because published tags build images since D5.14
-  handed ical-proxy and homelab-mcp to Flux (#5466). With the 16 tags published at
-  `0758aa3f5`, 6476 seconds of headroom remain (#5482).
+  handed ical-proxy and homelab-mcp to Flux (#5466). D5.16 raised the deadline from 18000,
+  because code-server's 3600s rollout budget, which covers its image's slow pull from GHCR,
+  put the soak's `timeout` at 11190s and left the wait 664 seconds short. With the 19 tags
+  published once D5.16 lands, 2936 seconds of headroom remain (#5512).
   `ansible/tests/setup/test_lander_deadlines_cover_the_soak.py` renders the published bundle
   and fails once a newly published tag outgrows that headroom (#5427).
 

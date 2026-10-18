@@ -1,13 +1,14 @@
 {
-  "checksum": "17ca27336440e0d9cfa6b52220399f1d424960f85fc29e400f4bd62d9c67f941",
+  "checksum": "1923ca4394ad0a569ac64fff7882eba7ff4ef70f0f10c11c83619bdb04c31a48",
   "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
   "key": "ansible/roles/k8s/code-server/CLAUDE.md#Notable",
   "row": {
     "atoms": {
+      "ansible/roles/k8s/image-builder/CLAUDE.md": "74fa64ab1f9350c28a3699dc0a984d3e9e013f4eb75b55be7898a9ab45b4afbc",
       "ansible/tests/services/test_code_server_build_is_pinned.py": "007d28cd2ed5a7e428452d8063377822aae1b160a8175836aba63d63357ce9f0",
       "ansible/tests/services/test_code_server_build_is_pinned.py::test_cargo_writes_stay_off_the_backed_up_claim": "fccf2456f5cbc6bf52e84811976e196049592728f56a73711fddf3c4f9645ba3"
     },
     "python": "3.14",
-    "verified_sha": "d7a76d705"
+    "verified_sha": "ca9961a5a"
   }
 }
