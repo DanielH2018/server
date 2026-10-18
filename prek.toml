@@ -583,13 +583,15 @@ exclude = "^(docs/assets/generated/|scripts/dev/pytest_shard_weights\\.json$|eva
 #
 # Cost, `prek run static-ratchet-tests --all-files`, back to back against the parent commit on
 # 2026-10-18 (#5501), three runs a side. On daniel-box at load average 3.2-4.7, it took
-# 9.2-9.4s against 19.0-19.2s. On daniel-server at load average 7.5-12.8, under other
-# sessions' test runs, it took 21.4-34.7s against 40.5-65.9s. #5501 had measured 27.6s at load
-# 3.3 and 49.0s at load 7.0 there. The census detectors over the test modules held most of the
-# cost, re-walking modules that could not match; each now skips a module that cannot spell a
-# hit. The slowest module, the render-and-path census, takes about 6.5s alone with `-n0` on
-# daniel-box. `--dist loadscope` keeps it on one worker, so it bounds the hook. `--dist load`
-# measured no faster on daniel-box.
+# 9.2-9.4s against 19.0-19.2s. On daniel-server at load average 4.6-6.5, it took 14.3-16.8s
+# against 31.5-45.5s; at 7.5-12.8, under other sessions' test runs, 21.4-34.7s against
+# 40.5-65.9s. #5501 had measured 27.6s at load 3.3 and 49.0s at load 7.0 there. The census
+# detectors over the test modules held most of the cost, re-walking modules that could not
+# match; each now skips a module that cannot spell a hit. The slowest module, the
+# render-and-path census, takes about 6.5s alone with `-n0` on daniel-box. `--dist loadscope`
+# keeps it on one worker, so it bounds the hook. `--dist load` measured no faster on
+# daniel-box. Moving the two test-module census files to a sibling hook is the next lever
+# (#5599).
 #
 # It sits after `tighten-ratchet-allowlists` and `facts-reverify-changed` because the ratchet
 # and facts tests read the files those two rewrite. `files` is wider than `.py`: a `moved`
