@@ -78,10 +78,12 @@ the initContainer writes the new password. grafana is `Recreate`, so no server h
 SQLite file while the CLI runs. Once the tag is flux-owned, the renderer's restart annotation
 rolls grafana instead (D5.1e).
 
-The rule files are the one ConfigMap no annotation hashes. Prometheus mounts `prometheus-rules`
+Two kinds of ConfigMap carry no hash. Prometheus mounts `prometheus-rules`
 as a directory and runs with `--config.auto-reload`, so a rule edit reloads in place and never
 rolls the `Recreate` pod
 (`ansible/roles/k8s/observability/templates/prometheus.yaml.j2:DECIDED: rules reload in place`).
+Grafana's file provisioner re-reads the dashboard ConfigMaps from their mounts every 30
+seconds, so a board edit rolls nothing either.
 
 Every entry declares `restart_on: []`, so the shared release record stamps `restart: false`
 for each workload. After its rollout wait, the role raises that to `restart: true` through
