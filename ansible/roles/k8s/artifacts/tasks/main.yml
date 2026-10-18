@@ -1,45 +1,7 @@
 ---
-# ── host side: the trees the pod mounts ────────────────────────────────────────────────
-# Every directory below must exist before the Deployment starts: the hostPath volumes are
-# `type: Directory`, so a missing path leaves the pod stuck in ContainerCreating rather
-# than serving an empty index.
-- name: Ensure the local artifacts directory exists
-  tags: [config]
-  ansible.builtin.file:
-    path: "{{ artifacts_host_dir }}"
-    state: directory
-    owner: "{{ sys_user }}"
-    group: "{{ sys_user }}"
-    mode: "0750"
-  when: not k8s_dry_run | bool
-
-- name: Ensure a peer directory exists for every synced host
-  tags: [config]
-  ansible.builtin.file:
-    path: "{{ artifacts_peer_dir }}/{{ item.name }}"
-    state: directory
-    owner: "{{ sys_user }}"
-    group: "{{ sys_user }}"
-    mode: "0750"
-  loop: "{{ artifacts_peer_sources }}"
-  loop_control:
-    label: "{{ item.name }}"
-  when: not k8s_dry_run | bool
-
-# 0755, not 0750: the agent user's prune reads the star list as `claude`. The pod writes it as
-# puid:pgid, which is sys_user, so sys_user owns the directory.
-- name: Ensure the star list directory exists
-  tags: [config]
-  ansible.builtin.file:
-    path: "{{ artifacts_stars_dir }}"
-    state: directory
-    owner: "{{ sys_user }}"
-    group: "{{ sys_user }}"
-    mode: "0755"
-  become: true
-  when: not k8s_dry_run | bool
-
-# ── cluster side ───────────────────────────────────────────────────────────────────────
+# The trees the pod mounts are host writes, so roles/setup/k8s_host_files/tasks/artifacts.yml
+# creates them through the setup plane (D5's conversion PR for artifacts). A Flux-owned role runs
+# no task, so a host write left here would stop at the flip.
 - name: Deploy the artifacts browser to the cluster
   ansible.builtin.include_role:
     name: k8s/manifests

@@ -19,7 +19,7 @@ It skips every artifact whose line carries its own label.
   it, and a rename onto a single-file bind mount fails with EBUSY. The rename also means a
   prune never reads a half-written list, which would drop stars for that sweep.
 - **The list lives outside `/home/ubuntu`.** The agent user's prune reads the same file as
-  `claude`, and `claude` cannot traverse `/home/ubuntu` (`0750`). The role creates the
+  `claude`, and `claude` cannot traverse `/home/ubuntu` (`0750`). `k8s_host_files` creates the
   directory `0755`, and the server writes the file `0644`. It holds file names, not secrets.
 - **The dotfiles name the same path.** `settings.base.json` there sets daniel-box's
   `CLAUDE_ARTIFACT_STARS_FILE` to it, so moving the file means changing both repos.

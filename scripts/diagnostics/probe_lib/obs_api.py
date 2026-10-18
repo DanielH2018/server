@@ -12,8 +12,9 @@ nor any `sys.path` bootstrap exists. A first-party import here breaks that pod a
 which no host-side test notices. `test_obs_api.py` imports this file with `scripts/` off
 `sys.path` to catch exactly that.
 
-An edit here maps to no deploy tag. The homelab-mcp image keeps the previous copy until its
-next deploy, so deploy it with `./scripts/deploy.sh --tags "homelab-mcp"` after changing this.
+This file is part of homelab-mcp's image build context. homelab-mcp is flux-owned, so a merged
+edit here alone moves its content tag, and the next promotion builds the image and rolls the
+pod. No deploy.sh run is needed: `deploy.sh` refuses the homelab-mcp tag with exit 5.
 """
 
 import json

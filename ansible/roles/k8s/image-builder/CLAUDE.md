@@ -80,8 +80,8 @@ while reporting success.
   under `DIR/images/<name>/`, refuses one that differs from `tags.json`, and pushes
   `ghcr.io/danielh2018/<name>:<content tag>` only when GHCR does not serve that tag
   (`scripts/deploy_tools/ci_images.py`). A served tag is never rebuilt, so the tag stays
-  immutable. D5.4b points flux-owned consumers there. Until D5.4b lands, every consumer
-  builds here.
+  immutable. Since D5.4b, every flux-owned consumer pulls its image from GHCR, and only an
+  Ansible-owned consumer builds here.
 - **`image_builder_force` has no Flux-era use.** The plan's rule for a package refresh that
   no pin moves is a hand PR that bumps a `rebuild_stamp` data key in the context, which moves
   the content tag. No context carries that key yet.
@@ -90,5 +90,7 @@ while reporting success.
 ## Editing
 - Task logic: `tasks/main.yml` · Job/ConfigMap shape: `templates/build-job.yaml.j2`,
   `templates/context-configmap.yaml.j2`.
-- Not deployed standalone — deploy a caller instead, e.g.
-  `./scripts/deploy.sh --tags "ical-proxy"`.
+- Not deployed standalone — deploy an Ansible-owned caller instead, e.g.
+  `./scripts/deploy.sh --tags "n8n"`. A flux-owned caller, such as ical-proxy, never reaches
+  this role: promote's `images` job builds its image, and `deploy.sh` refuses its tag with
+  exit 5.

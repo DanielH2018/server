@@ -22,6 +22,13 @@ documents how it behaves.
   (`~/.claude/artifacts`, daniel-box's own) and `artifacts_peer_dir`
   (`~/.claude/artifacts-peer`, everything pulled from peers). Stdlib only — no build, no
   extra deps.
+- **This role's deploy creates none of the host directories it mounts.**
+  `ansible/roles/setup/k8s_host_files/tasks/artifacts.yml` creates `artifacts_host_dir`, one
+  peer directory per `artifacts_peer_sources` entry and `artifacts_stars_dir` through the
+  setup plane, because a Flux-owned role runs no task (D5). Each is a `type: Directory`
+  hostPath, so on a fresh host `initial_setup.yml --tags k8s_host_files` runs before the
+  first `artifacts` deploy. Its copies of those four keys, in the block's `vars:`, must equal
+  this role's, which `ansible/tests/setup/test_k8s_host_files_pairs.py` holds.
 - **The agent user's tree is a third source.** `artifacts_agent_dir`
   (`/var/lib/claude/.claude/artifacts`, set only while `claude_code_agent_user_enabled` is true)
   mounts read-only at `/srv/artifacts/daniel-box-claude`, so the index lists it as the host

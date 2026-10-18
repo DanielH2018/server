@@ -32,8 +32,9 @@ Each conversion PR adds one task file per source role, named after that role, an
 from `tasks/main.yml` with `ansible.builtin.import_tasks`. The import is static so the play's
 `k8s_host_files` tag reaches every task in the file. docs' conversion PR wrote the first,
 `tasks/docs.yml`, which creates the site directory docs' Deployment mounts as a hostPath of
-`type: Directory`. A row drops its source role's `when: not k8s_dry_run` guard, because
-`initial_setup.yml` has no dry-run mode.
+`type: Directory`. artifacts' PR wrote `tasks/artifacts.yml`, which creates the three trees
+artifacts' Deployment mounts the same way. A row drops its source role's `when: not
+k8s_dry_run` guard and its `config` tag, because `initial_setup.yml` has no dry-run mode.
 
 - **The playbook entry is gated to daniel-box by a literal.** `setup_routing.py` places a role
   whose gate admits only another host as a hand apply, so the tick could never run a Pi-gated
@@ -46,11 +47,13 @@ from `tasks/main.yml` with `ansible.builtin.import_tasks`. The import is static 
   k8s role's own name. A change then edits both, and each half routes to its own plane. A
   shared key in `group_vars/all.yml` routes to the deploy plane only, which never runs
   `initial_setup.yml`.
-- **docs' copy sits in its task's `vars:`, not in this role's defaults.** Role defaults are
-  play-wide in `initial_setup.yml`, and `initial_setup`'s `docs-refresh.sh.j2` reads
-  `docs_host_site_dir`. A defaults copy would make that a cross-role read, which
+- **A copy sits in its task's `vars:`, never in this role's defaults.** A task file with
+  several tasks wraps them in one `block:` and puts the copies in the block's `vars:`, as
+  `tasks/artifacts.yml` does. Role defaults are play-wide in `initial_setup.yml`, so a
+  defaults copy of a key another setup role names becomes a cross-role read, which
   `ansible/tests/setup/test_setup_cross_role_reads.py` refuses without a row in the deployer's
-  cross-role table.
+  cross-role table (#5472). A copy of `sys_user` or another `group_vars` key would make
+  this role's defaults read by nearly every setup role. Task vars reach only the task.
 
 Two tests in `ansible/tests/setup/` hold those rules:
 
@@ -60,7 +63,10 @@ Two tests in `ansible/tests/setup/` hold those rules:
   yet, so the test asserts the rendered set is empty; Wave C's PR adds its first named member.
 - `ansible/tests/setup/test_k8s_host_files_pairs.py` derives every key this role's defaults or
   imported task `vars:` share with a k8s role's defaults or `group_vars/all.yml`, and asserts
-  that each copy equals its source. docs' PR added the first pair, `docs_host_site_dir`.
+  that each copy equals its source. docs' PR added the first pair, `docs_host_site_dir`, and
+  artifacts' PR added `artifacts_host_dir`, `artifacts_peer_dir`, `artifacts_peer_sources`
+  and `artifacts_stars_dir`. It also holds `docs-refresh.sh.j2`'s `SITE_DIR` equal to docs'
+  default, the third copy of that path.
 
 A third test, `ansible/tests/setup/test_k8s_host_files_rows.py`, names every moved row by task
 file and task name with its whole argument map. It fails when a row is no longer imported or
