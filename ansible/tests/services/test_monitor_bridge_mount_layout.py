@@ -9,13 +9,13 @@ in the pod, on the one workload that cannot page about its own failure.
 
 WHAT THIS PINS, exactly: the RENDERED `items:` list against `monitor_bridge_modules`, and that
 the result imports. The key half of the mapping is RE-DERIVED here (`m.replace("/", "_")`)
-rather than read back from the `--from-file` line in tasks/main.yml, so a `--from-file` line
-that stopped agreeing with that rule would not fail this test. The staging copy task is
-likewise unread. `ansible/tests/services/test_monitor_bridge_modules.py` is what keeps the
-ship list itself honest against the tree.
+rather than read back from the rendered ConfigMaps;
+`scripts/renderer/tests/test_renderer_monitor_bridge_script.py` holds those to the source
+files. `ansible/tests/services/test_monitor_bridge_modules.py` is what keeps the ship list
+itself honest against the tree.
 
 This lays out a directory exactly as the RENDERED Deployment's `items:` says the kubelet will,
-from the same source files the copy task stages, then imports the entrypoint (`cli`) from it in a
+from the same source files the ConfigMaps embed, then imports the entrypoint (`cli`) from it in a
 fresh interpreter whose only sys.path entry is that directory. That is the pod's import graph,
 proven before the deploy. Both bridges are covered: autofix-bridge mounts the shared
 `bridge/common.py` the same way.
@@ -37,13 +37,22 @@ AUTOFIX_BRIDGE = K8S_ROLES / "autofix-bridge"
 
 
 def _script_items(role: str, volume: str) -> list[tuple[str, str]]:
-    """(key, path) pairs the rendered Deployment mounts for `volume`."""
+    """(key, path) pairs the rendered Deployment mounts for `volume`.
+
+    monitor-bridge projects one ConfigMap per module into the volume, and autofix-bridge mounts
+    one ConfigMap, so this reads the items of either shape.
+    """
     for r, _, doc in rendered_docs():
         if r != role or doc.get("kind") != "Deployment":
             continue
         for vol in doc["spec"]["template"]["spec"]["volumes"]:
-            if vol["name"] == volume:
-                return [(i["key"], i["path"]) for i in vol["configMap"]["items"]]
+            if vol["name"] != volume:
+                continue
+            if "projected" in vol:
+                maps = [s["configMap"] for s in vol["projected"]["sources"]]
+            else:
+                maps = [vol["configMap"]]
+            return [(i["key"], i["path"]) for cm in maps for i in cm["items"]]
     raise AssertionError(f"{role}: no Deployment volume named {volume}")
 
 
