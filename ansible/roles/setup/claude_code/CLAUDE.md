@@ -217,7 +217,11 @@ batch runs as `ubuntu` on `worktree-fanout-<batch>`.
   `eligible` or `ineligible` with the reason. Each landing's own `VERDICT:` is in its
   `land<pr>-*.log`, and `cc-wait land <pr> --log-dir ~/.local/state/fanout-server-lander/logs`
   waits on it. An unreadable daniel-server logs a line and exits 0, because the host is off for
-  maintenance; an unreadable GitHub exits 1 and pages.
+  maintenance; an unreadable GitHub exits 1 and pages. A pass that read both also writes
+  `homelab_awaiting_operator{reason}` and its `_oldest_seconds` twin to
+  `/var/lib/node-exporter-textfile/fanout_operator_waits.prom`: the PRs and batches that wait
+  on a person, and the owed manual-plane applies (`scripts/dev/fanout_lib/operator_waits.py`).
+  Disarming removes the file.
 - **Next-run review:** before raising the pace cap or widening the rule, read a week of
   `ineligible` reasons and the verdicts of the landings it started.
 
