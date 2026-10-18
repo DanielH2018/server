@@ -157,7 +157,14 @@ def test_the_stale_ratio_decides():
     report = REPORT.replace(stale, "0.09s call     " + stale.split()[-1])
     weights = RECORDED | {NEW_MODULE: 26.4}
     assert shard_weight_gate.durations_problems(report, weights, ratio=1000.0) == []
-    assert shard_weight_gate.durations_problems(report, weights, ratio=2.0) != []
+    assert (
+        shard_weight_gate.durations_problems(report, weights, stale_fail_ratio=1000.0)
+        == []
+    )
+    assert (
+        shard_weight_gate.durations_problems(report, weights, stale_fail_ratio=100.0)
+        != []
+    )
 
 
 # `test_media_volume_verify.py` on #5598: recorded 4.86s on a host busy with fan-out batches,
@@ -166,16 +173,21 @@ BUSY_HOST_MODULE = "ansible/roles/k8s/media-volume/tests/test_media_volume_verif
 BUSY_HOST_REPORT = f"0.97s call     {BUSY_HOST_MODULE}::test_verify\n"
 
 
-def test_an_entry_a_busy_host_over_recorded_annotates_rather_than_fails():
+# 4.86s is #5598's entry (5.0x). 19.30s sits just under 20x, so the pair pins the fail bound
+# at `STALE_WEIGHT_FAIL_RATIO` rather than anywhere above 5x.
+@pytest.mark.parametrize("recorded", [4.86, 19.30])
+def test_an_entry_a_busy_host_over_recorded_annotates_rather_than_fails(recorded):
     """Under `STALE_WEIGHT_FAIL_RATIO`, a pull request that changed the module still passes
     (no problem, so `main` exits 0), and the entry stays visible as an annotation naming its
     repair."""
-    weights = {BUSY_HOST_MODULE: 4.86}
+    weights = {BUSY_HOST_MODULE: recorded}
     problems, warnings = shard_weight_gate.gate_complaints(
         BUSY_HOST_REPORT, weights, {BUSY_HOST_MODULE}
     )
     assert problems == [] and len(warnings) == 1
-    assert "recorded 4.86s" in warnings[0] and "--record-files" in warnings[0]
+    assert (
+        f"recorded {recorded:.2f}s" in warnings[0] and "--record-files" in warnings[0]
+    )
 
 
 def test_an_entry_recorded_twenty_times_what_it_measured_still_fails():
