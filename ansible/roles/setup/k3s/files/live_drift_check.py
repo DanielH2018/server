@@ -218,8 +218,10 @@ def subset_diff(live, applied, path: str = "") -> list[tuple[str, object, object
                 # An explicit null is dropped on admission rather than stored, so
                 # absent-live against null-applied is the API server agreeing with the
                 # manifest, not a missing field. longhorn-frontend's `nodePort: null` is
-                # the live instance of this.
-                if want is None:
+                # the live instance of this. An empty string in an omitempty field is
+                # dropped the same way: monitor-bridge's `LOG_ERROR_IGNORE: ""` env entry
+                # is stored without its `value`.
+                if want is None or want == "":
                     continue
                 diffs.append((child, "<absent>", want))
             else:
