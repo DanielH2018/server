@@ -88,10 +88,13 @@ def unresolved(err: BaseException) -> bool:
     return isinstance(code, int) and code < 0
 
 
-def _dial(url: str, timeout: float, retry_seconds: float) -> BaseException | None:
+def _dial(
+    url: str, timeout: float, retry_seconds: float, method: str = "GET"
+) -> BaseException | None:
     """Open `url` once its connect succeeds or stops retrying; the error, or None on 2xx."""
     try:
-        with open_url(url, timeout=timeout, retry_seconds=retry_seconds):
+        request = Request(url, method=method)
+        with open_url(request, timeout=timeout, retry_seconds=retry_seconds):
             return None
     except Exception as err:
         _close(err)
@@ -206,7 +209,10 @@ def isolated(row: Mapping) -> str:
             is no refusal, such as a DNS error.
     """
     url = row["url"]
-    err = _dial(url, TIMEOUT, 0)
+    # OPTIONS, because urllib follows a redirect only for GET, HEAD and POST and raises
+    # `HTTPError` for any other method. A target that accepts and redirects to an address that
+    # refuses would otherwise read as refused, where the `nc -z` this replaces saw the accept.
+    err = _dial(url, TIMEOUT, 0, method="OPTIONS")
     if err is not None and refused(err):
         return f"isolated: {url} unreachable from an unlisted caller"
     if err is None or not unresolved(err):

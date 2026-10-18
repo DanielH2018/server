@@ -36,14 +36,18 @@ STAGED = K8S_ROLES / TAG / "templates" / "verify-inert"
 ROLE_PATH = re.compile(r"/roles/k8s/([^/'\"]+)/")
 
 
-def _serve(status=200):
-    """A local server that answers every GET with `status`."""
+def _serve(status=200, location=None):
+    """A local server that answers every GET and OPTIONS with `status`, and `location` if given."""
 
     class Handler(BaseHTTPRequestHandler):
         def do_GET(self):
             self.send_response(status)
+            if location:
+                self.send_header("Location", location)
             self.send_header("Content-Length", "0")
             self.end_headers()
+
+        do_OPTIONS = do_GET
 
         def log_message(self, format, *args):
             pass
@@ -63,8 +67,8 @@ def _url(server) -> str:
 def servers():
     started = []
 
-    def start(status=200):
-        started.append(_serve(status))
+    def start(status=200, location=None):
+        started.append(_serve(status, location))
         return _url(started[-1])
 
     yield start
@@ -152,6 +156,16 @@ def test_an_http_answer_on_a_refused_row_fails(servers, closed_url, status):
     """Any answer is a connection the target accepted, an HTTP error status included."""
     env = _env(servers, closed_url, [_row(servers(status))])
     with pytest.raises(verify.Failed, match=r"POLICY NOT ENFORCED.*HINT"):
+        _legs(env)
+
+
+@pytest.mark.parametrize("status", [301, 302, 307])
+def test_a_redirect_to_a_refusing_address_fails_a_refused_row(
+    servers, closed_url, status
+):
+    """The target accepted the connection; where its redirect points proves nothing."""
+    env = _env(servers, closed_url, [_row(servers(status, location=closed_url))])
+    with pytest.raises(verify.Failed, match="POLICY NOT ENFORCED"):
         _legs(env)
 
 
