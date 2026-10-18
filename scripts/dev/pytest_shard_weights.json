@@ -402,6 +402,7 @@
  "ansible/tests/k8s/test_standalone_guard_tasks.py": 3.58,
  "ansible/tests/k8s/test_tls_cert_resolver_optional.py": 0.08,
  "ansible/tests/k8s/test_traefik_cloudflare_realip.py": 0.09,
+ "ansible/tests/k8s/test_traefik_crds.py": 0.12,
  "ansible/tests/k8s/test_traefik_netpol_https_origin_lock.py": 0.0,
  "ansible/tests/k8s/test_uncovered_roles_justifications_resolve.py": 0.01,
  "ansible/tests/k8s/test_vendored_manifests_match_their_pins.py": 0.01,
