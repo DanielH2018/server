@@ -25,6 +25,7 @@ from fanout_lib.brief import lands
 from fanout_lib.manifest import Batch, Manifest
 from fanout_lib.transport import Tools
 from fanout_lib.target import SERVER
+from fanout_lib.unit_state import unit_props_command
 
 STATUS_TIMEOUT_S = 30.0
 PR_URL = re.compile(r"https://github\.com/[\w.-]+/[\w.-]+/pull/\d+")
@@ -81,8 +82,7 @@ class BatchStatus:
 
 def _one(b: Batch) -> str:
     return (
-        f"echo '=== {b.batch}'; "
-        f"systemctl --user show {b.unit} -p ActiveState -p Result -p ExecMainStatus; "
+        f"{unit_props_command(b)}; "
         f"echo '--- stderr'; tail -c 2000 {b.worktree}/.fanout/stderr.log 2>/dev/null; "
         f"echo; echo '--- report'; cat {b.worktree}/.fanout/report.json 2>/dev/null; "
         # The landing's own record, read because a batch can land correctly and still not

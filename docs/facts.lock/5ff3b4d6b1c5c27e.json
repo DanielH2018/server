@@ -1,5 +1,5 @@
 {
-  "checksum": "fb0b46fd962fe95903b4c680e82572ef5aca0f26daffa9932446b03a04a70ec8",
+  "checksum": "3611d157855d691b21a6df49909dcd745f900c32a25a156ef8a00a3723b0d80a",
   "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
   "key": "ansible/roles/k8s/radarr/CLAUDE.md#Notable",
   "row": {
@@ -9,6 +9,6 @@
       "ansible/roles/k8s/sonarr/CLAUDE.md": "9adba8ab7b06041dc54f88cb17b73dec5b9af73868a0388aca338c16ea7365a3"
     },
     "python": "3.14",
-    "verified_sha": "a80b2ca8d"
+    "verified_sha": "dc22417c5"
   }
 }

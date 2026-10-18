@@ -3,7 +3,10 @@
 This role renders no manifest and starts no workload. It declares one *arr app's Discord
 "Connect" notification over the app's own API, so the notification is repo state rather than
 UI state. sonarr and radarr include it at the end of their own `tasks/main.yml` with
-`arr_notification_app`; every other var has a default here.
+`arr_notification_app`; every other var has a default here. Since their Flux flip (D5.20) no
+Ansible path runs those includes, which stay for a handback. Under Flux the declaration runs as
+a seed Job in each app's `templates/verify/` (*The Job form*, below), which reads this role's
+script and defaults.
 
 **Why it exists.** A Connect notification is a row in `sonarr.db` / `radarr.db` on the app's
 config PVC. No manifest reproduces it, so a Longhorn revert past its creation, or anyone
@@ -50,7 +53,9 @@ name, so a CustomScript that happened to share the name is left alone.
 - **ClusterIP, not Traefik and not cluster DNS.** Neither app has an Authelia bypass for
   `/api/*`, so a routed request 302s at the middleware without reaching the app; and the
   Ansible controller is not in the cluster, so `sonarr.homelab.svc` does not resolve. Same
-  finding, same workaround as `scripts/diagnostics/probe_lib/arr.py`.
+  finding, same workaround as `scripts/diagnostics/probe_lib/arr.py`. The rule binds the
+  Ansible path only. The seed Job runs inside the cluster, so it dials the app's Service by its
+  cluster name, `<app>.homelab.svc.cluster.local`, and never reaches Traefik either.
 - **`no_log` on the seed task, with the diagnostics coming back out through a second task.**
   The environment carries the API key and the webhook URL, so the task is `no_log: true`. That
   censors the failure message too, so the task is `failed_when: false` and a following `fail`
@@ -81,14 +86,14 @@ uv run python ansible/roles/k8s/arr-notification/files/seed_arr_notification.py 
 `PYTHONPATH` is there because the script opens every connection through
 `flux_job_connect.py`, which lives in `k8s/manifests`. `tasks/main.yml` sets the same path.
 
-## The Job form, inert until sonarr's and radarr's flips
+## The Job form
 
 Under Flux the seed runs as a post-apply mutation Job in `sonarr-verify` and `radarr-verify`.
-`templates/verify-inert/notification.yaml.j2` in each app's role holds it, byte-identical in
-both, and nothing renders it until that role's flip moves the directory to `templates/verify/`.
+`templates/verify/notification.yaml.j2` in each app's role holds it, byte-identical in both.
+It landed inert in `templates/verify-inert/`, and the apps' flip (D5.20) moved it.
 
 - **The script is the one this role ships**, read by a cross-role `lookup()`, so a change here
-  redeploys both apps, as the `include_role` already does. The template also reads
+  changes both apps' renders, as the Ansible `include_role` redeployed both before the flip. The template also reads
   `arr_notification_name`, `arr_notification_triggers` and
   `arr_notification_include_health_warnings` from `defaults/main.yml` as literals, and spells
   `arr_notification_username` as the app's name capitalised.
@@ -101,9 +106,9 @@ both, and nothing renders it until that role's flip moves the directory to `temp
 - **The Job reruns once per revision that rolls the app**, because its spec embeds a digest of
   the rendered Deployment. A webhook rotation alone renames nothing, so the rotated URL reaches
   the app on the next revision that rolls it.
-- **The fence peers land ahead of the flips.** The Job's pod carries `app: <app>-verify`, and
+- **The fence peers landed ahead of the flip.** The Job's pod carries `app: <app>-verify`, and
   each app's `netpol_from` lists that label (#5535). `tests/test_seed_job.py` checks that the
-  flipped Job's pod is one its app's fence admits.
+  Job's pod is one its app's fence admits.
 
 ## Tests
 

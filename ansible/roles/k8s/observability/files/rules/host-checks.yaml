@@ -88,6 +88,45 @@ groups:
             a file in /var/lib/node-exporter-textfile is malformed or unreadable, and every
             series in it is gone. Read node_textfile_mtime_seconds for the files it still sees,
             and the node-exporter pod's log.
+      # One rule per k3s node whose host_vars set k3s_node_static_link, reading that link. Each
+      # such node falls back to WiFi when the link drops (docs/k3s-node-plane-crons-and-incidents.md),
+      # so it stays Ready on a slower link and nothing else reports it. The carrier arm catches
+      # a pulled cable or a dead switch port. The `up` arm catches a link that is
+      # administratively down, where node_exporter serves no carrier series at all. A warning,
+      # not a page: the node still serves. ansible/tests/services/test_host_plane_rule_literals.py
+      # holds the set to host_vars and prints the rule a new node needs.
+      - alert: WiredLinkDown
+        expr: |
+          node_network_carrier{device="eno1",origin="daniel-box"} == 0
+            or
+          node_network_up{device="eno1",origin="daniel-box"} == 0
+        for: 5m
+        labels:
+          severity: warning
+          service: daniel-box
+        annotations:
+          summary: daniel-box's wired link eno1 is down, so the node runs on WiFi.
+          description: >-
+            eno1 on daniel-box has had no carrier, or has been down, for 5 minutes. The node
+            routes over its WiFi fallback, which carries Longhorn replication and media at a
+            fraction of the wired rate. Check the cable and the switch port, then run `ip link
+            show eno1` and `ip route get 1.1.1.1` on daniel-box.
+      - alert: WiredLinkDown
+        expr: |
+          node_network_carrier{device="enp88s0",origin="daniel-server"} == 0
+            or
+          node_network_up{device="enp88s0",origin="daniel-server"} == 0
+        for: 5m
+        labels:
+          severity: warning
+          service: daniel-server
+        annotations:
+          summary: daniel-server's wired link enp88s0 is down, so the node runs on WiFi.
+          description: >-
+            enp88s0 on daniel-server has had no carrier, or has been down, for 5 minutes. The
+            node routes over its WiFi fallback, which carries Longhorn replication and media at
+            a fraction of the wired rate. Check the cable and the switch port, then run `ip
+            link show enp88s0` and `ip route get 1.1.1.1` on daniel-server.
       # One rule per inventory host, so `service` stays a literal. The updater writes
       # homelab_host_reconcile_ok 0 on every run while the host holds, so the rule pages a hold
       # that stands for 15 minutes, not one failed run.

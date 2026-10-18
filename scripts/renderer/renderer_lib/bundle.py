@@ -71,6 +71,7 @@ from renderer.renderer_lib.ordering import (
     PREPULL_SUFFIX,
     SUSPENDED_DEPS,
     TAG_KIND_SUFFIXES,
+    VERIFY_SUFFIX,
     Edges,
     Ordering,
     dependency_cycle,
@@ -78,6 +79,7 @@ from renderer.renderer_lib.ordering import (
     prepull_timeouts,
     split_kind,
     substitution,
+    verify_timeout,
 )
 
 KUSTOMIZATION = "kustomization.yaml"
@@ -311,7 +313,8 @@ def flux_files(
         decrypting: The published tags whose role lists `render_sops_manifests`.
         edges: Each Kustomization's generated edges; a name it does not map has none.
         fields: Each tag's per-role fields: `prune` and `timeout` (`role_fields`) for `<tag>`
-            and `<tag>-deferred`, `prepull_timeout` for `<tag>-prepull`, `suspend` for all.
+            and `<tag>-deferred`, `prepull_timeout` for `<tag>-prepull`, `verify_timeout`
+            for `<tag>-verify` (`verify_timeout`), `suspend` for all.
         contents: Each tag's `own` digest, stamped on `<tag>` alone.
     """
     decrypting = frozenset(decrypting)
@@ -326,6 +329,7 @@ def flux_files(
         role_own = {tag, tag + DEFERRED_SUFFIX}
         timeouts = {name: own.get("timeout", timeout) for name in role_own}
         timeouts[tag + PREPULL_SUFFIX] = own.get("prepull_timeout", timeout)
+        timeouts[tag + VERIFY_SUFFIX] = own.get("verify_timeout", timeout)
         docs = [
             tag_kustomization(
                 name,
@@ -507,6 +511,10 @@ def bundle_files(
     pulls, unread = prepull_timeouts(tags, roles)
     problems += unread
     fields |= {t: {**fields.get(t, {}), "prepull_timeout": v} for t, v in pulls.items()}
+    for tag in tags:
+        if tag + VERIFY_SUFFIX in directories:
+            waits = verify_timeout(directories[tag + VERIFY_SUFFIX], timeout)
+            fields[tag] = {**fields.get(tag, {}), "verify_timeout": waits}
     if problems:
         raise ValueError("; ".join(problems))
     per_directory, substituting = substitution(tags, directories, key_sets)

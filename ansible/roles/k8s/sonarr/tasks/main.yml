@@ -1,5 +1,6 @@
 ---
-# ── the config database ─────────────────────────────────────────────────────────────────────
+# Flux applies sonarr (D5.20), and no Ansible path reaches this file; it stays for the handback.
+# The verify reads became the Job in templates/verify/.
 - name: Deploy sonarr to the cluster
   ansible.builtin.include_role:
     name: k8s/manifests
@@ -7,12 +8,10 @@
   # reads it for Flux's `timeout` and k8s/manifests reads it for the rollout wait. An include
   # var of that name would override the default and loop through `sonarr_k8s_rollout_timeout`.
 
-- name: Prove the library survived the move
-  tags: [deploy]
-  ansible.builtin.include_tasks: verify.yml
-
 # The Discord Connect notification is a row in sonarr.db, not a manifest — live state a
 # Longhorn revert or a recreated claim drops silently. roles/k8s/arr-notification declares it.
+# Under Flux the seed Job in templates/verify/notification.yaml.j2 runs the same script; this
+# include is the Ansible path a handback restores.
 - name: Declare sonarr's Discord notification
   tags: [deploy]
   ansible.builtin.include_role:
