@@ -165,11 +165,13 @@ _SYSLOG_LINE_RE = re.compile(
 # lost: `push failed (http=<code> rc=<rc>) (status=<up|down>: <msg>)`, after its retries, or
 # `push failed (status=...)` with no code on the Pi and in the pre-retry library. Since #1803
 # the http/rc pair carries ` by=kuma` when the answer was Kuma's own JSON rather than the
-# edge's page, so the pair is `http=… rc=…` followed by any further `k=v` words. The
+# edge's page, so the pair is `http=… rc=…` followed by any further `k=v` words. The Python
+# twin, setup/common's kuma_push.py, logs `http=<code>[ by=kuma]` with no rc, or
+# `error=<exception class>` for a transport failure, so `rc=` is one of the optional words. The
 # transient-retry line reads `push failed transiently (...)` and matches neither.
 _RUN_RE = re.compile(r"^status=(?P<status>up|down)\b")
 _SWALLOWED_RE = re.compile(
-    r"^push failed \((?:(?P<detail>http=\S+ rc=\S+(?: [a-z]+=\S+)*)\) \()?"
+    r"^push failed \((?:(?P<detail>(?:http|error)=\S+(?: [a-z]+=\S+)*)\) \()?"
     r"status=(?P<status>up|down):\s*(?P<msg>.*?)\)?$"
 )
 # The word kuma-push-lib.sh appends when the response was `application/json`: Kuma's push
