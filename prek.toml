@@ -581,6 +581,16 @@ exclude = "^(docs/assets/generated/|scripts/dev/pytest_shard_weights\\.json$|eva
 # to back, the eight measured 14.4-14.9s and all twelve 15.0-15.2s. The whole suite left prek
 # on 2026-10-02 because it cost 89-235s, and still runs only in CI and the two crons.
 #
+# Cost, `prek run static-ratchet-tests --all-files`, back to back against the parent commit on
+# 2026-10-18 (#5501), three runs a side. On daniel-box at load average 3.2-4.7, it took
+# 9.2-9.4s against 19.0-19.2s. On daniel-server at load average 7.5-12.8, under other
+# sessions' test runs, it took 21.4-34.7s against 40.5-65.9s. #5501 had measured 27.6s at load
+# 3.3 and 49.0s at load 7.0 there. The census detectors over the test modules held most of the
+# cost, re-walking modules that could not match; each now skips a module that cannot spell a
+# hit. The slowest module, the render-and-path census, takes about 6.5s alone with `-n0` on
+# daniel-box. `--dist loadscope` keeps it on one worker, so it bounds the hook. `--dist load`
+# measured no faster on daniel-box.
+#
 # It sits after `tighten-ratchet-allowlists` and `facts-reverify-changed` because the ratchet
 # and facts tests read the files those two rewrite. `files` is wider than `.py`: a `moved`
 # facts atom is often a YAML key or a `DECIDED:` marker in a template, and the doc fragments
@@ -597,7 +607,7 @@ exclude = "^(docs/assets/generated/|scripts/dev/pytest_shard_weights\\.json$|eva
 #   a tracked one.
 # The macro row reads every Markdown doc under docs/ and .claude/ and every CLAUDE.md, and only
 # the CLAUDE.md files, the skills and the agents are gated. A docs/ page or a .claude/rules/
-# file that names a deleted macro goes red in CI instead. Gating all Markdown would charge every docs-only commit the 15s above, and
+# file that names a deleted macro goes red in CI instead. Gating all Markdown would charge every docs-only commit the cost above, and
 # the edit that usually breaks the row deletes a macro template, which `.j2` already gates.
 #
 # CI skips it on both `prek run` steps, because its `pytest` job runs the same twelve files.
