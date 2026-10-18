@@ -1046,6 +1046,10 @@ has_claude_code: true
 # The only memory store sessions write; claude-memory-sync.timer copies it, one-way and
 # overwriting, to daniel-server (issue #3123, the operator's decision of 2026-10-01).
 claude_code_memory_sync_enabled: true
+# Lands a finished daniel-server fan-out batch's PR when its review record and its PR both pass
+# autoland.py's rule (issue #5496, the operator's go-ahead of 2026-10-18). False removes the
+# timer and its units, and every server batch stops at its PR again.
+claude_code_fanout_server_lander_enabled: true
 # The D5 flip pre-merge checks as one sudoers-granted wrapper (issue #5494); daniel-box holds the
 # cluster-admin kubeconfig. False removes the grant, the wrapper, the flux copy and the state dir.
 claude_code_takeover_check_enabled: true

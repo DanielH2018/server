@@ -65,6 +65,16 @@ def test_a_failed_gate_ends_the_wait_as_failed(tmp_path):
     }
 
 
+def test_an_ungraded_gate_reports_its_headline(tmp_path):
+    """#5543: a probe that could not read heads the log UNGRADED, and that line is the detail."""
+    headline = "deploy --detach UNGRADED (ansible exit 0)"
+    log = deploy(tmp_path, f"{headline}\n", rc=1)
+    assert deploy_probe.read(log) == {
+        "state": "failed",
+        "detail": f"exit code 1: {headline}",
+    }
+
+
 def test_a_crashed_child_reports_its_exception(tmp_path):
     log = deploy(
         tmp_path,
