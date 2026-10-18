@@ -1125,7 +1125,7 @@
  "scripts/lib/tests/test_detach_fork.py": 0.51,
  "scripts/lib/tests/test_doc_freshness.py": 1.04,
  "scripts/lib/tests/test_docs_provenance.py": 0.0,
- "scripts/lib/tests/test_entry_points_answer_help.py": 17.26,
+ "scripts/lib/tests/test_entry_points_answer_help.py": 8.07,
  "scripts/lib/tests/test_estate.py": 0.0,
  "scripts/lib/tests/test_exit_codes.py": 0.01,
  "scripts/lib/tests/test_facts_atoms.py": 0.01,

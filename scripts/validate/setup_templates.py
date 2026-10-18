@@ -57,6 +57,7 @@ from pathlib import Path as _Path
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 
 from validate.validate_lib.ok_lines import ok_printer
+from lib.cli_help import answer_help
 from lib import yaml_fast
 from lib.ansible_jinja_env import template_env
 from lib.render_context import render_context
@@ -270,6 +271,7 @@ def main(argv: Sequence[str] = ()) -> int:
     Returns:
         0 if every template rendered clean, 1 if any failed.
     """
+    answer_help(__doc__, list(argv))
     ok = ok_printer(argv)
     known = secret_names() | runtime_vars() | inventory_names()
     templates = discover_templates()
