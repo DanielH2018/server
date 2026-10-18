@@ -10,6 +10,14 @@ Claude Code runs on the **host**, not in a container, and exports to `127.0.0.1:
 and Tempo carry the same `hostIP` pin on 3100/9090/3200 for `otelq`, another host process.
 Tempo's otlp-grpc 4317 skips the pin: two hostPorts on one number wedge a pod in `Pending`.
 
+The deploy reads the pin back from the live DaemonSet and fails without it. That readback has
+a Flux form in `templates/verify-inert/`, which nothing renders yet: the flip PR renames the
+directory to `templates/verify/`, the renderer then emits `observability-verify`, and the PR
+deletes the two readback tasks. The Job runs `files/observability_verify.py` with `get` on
+the `otel-collector` DaemonSet and no other grant.
+`ansible/roles/k8s/observability/tests/test_observability_verify.py` renders the renamed copy
+through the Job census and fails it on the collector render with its `hostIP` removed.
+
 The working-out lives in `docs/observability-dashboards.md`.
 
 ## At a glance
