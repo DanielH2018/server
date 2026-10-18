@@ -24,7 +24,7 @@
   (`files/janitorr_health.py`) reads the logs of the first Running pod labelled
   `app=janitorr`, so a Job pod under that label could be the pod it reads. The reach leg
   therefore proves the apps answer `janitorr-verify`, not `janitorr`; the render test holds
-  sonarr's and radarr's fences admitting both labels.
+  sonarr's and radarr's fences admitting `janitorr`.
 
   DECIDED: the media mounts copy jellyfin's two `media` subPath mounts as literals, made
   read-write, and are not looked up from the jellyfin role. A lookup into another role would
@@ -34,9 +34,11 @@
 
   The caller census (D5, *A fence admits every Job that dials through it*). The pod is
   `app: janitorr-verify` in `k8s_namespace`. It execs into nothing and dials:
-    - sonarr:8989, through sonarr's role-owned fence, whose `netpol_from` lists
-      `janitorr-verify`. netpol-baseline's sonarr row (`expect: refused`) shows that fence
-      refuses an unlisted pod;
+    - sonarr:8989, through sonarr's role-owned fence, whose `netpol_from` must list
+      `janitorr-verify` before the flip. #5709 adds the peer in a PR of its own, because
+      `scripts/validate/cross_plane_order.py` refuses one PR that changes janitorr and the
+      flux-owned sonarr it depends on. netpol-baseline's sonarr row (`expect: refused`)
+      shows that fence refuses an unlisted pod;
     - radarr:7878, the same through radarr's fence and its netpol-baseline row;
     - jellyfin:8096, which `networkpolicy-jellyfin.yaml.j2` opens to every source for jellyfin's
       LAN clients, so it has no peer to add and no refused leg to show.
