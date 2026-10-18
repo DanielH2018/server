@@ -7,17 +7,32 @@ replaced the retired Kopia scope for the Pi.
 
 ## At a glance
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates, tasks or containers_list entry, or the k3s role's Longhorn tier lists. -->
-- **Deploy tag:** `--tags "pi-peer-backup"`
+- **Applied by:** Flux, through `promote` (`owner: flux`); `deploy.sh` refuses
+  `--tags=pi-peer-backup` with exit 5
 - **Image:** `<k8s_registry_pull_host>/pi-peer-backup` (`pi_peer_backup_k8s_image`)
 - **Route:** none (no `templates/ingressroute.yaml.j2`)
 - **Claim:** `pi-peer-backup-data` (weekly -> B2 (default target))
-- **Auto-deploy:** eligible (`k8s_autodeploy: true`)
 <!-- /generated_from -->
 
+- **Flux applies it, not Ansible** (#5652, Wave C). Its `containers_list` entry carries
+  `owner: flux`, so `deploy.sh`, the play and the GitOps deployer all skip it. A merged change
+  reaches the cluster when `promote` publishes and verifies the next bundle. To give it back
+  to Ansible, follow the two-PR handback in `docs/flux-deploy-plane.md`; a plain revert of the
+  flag leaves two writers on the objects. Its Kustomization renders `decryption`, because the
+  private key arrives as the SOPS manifest `pi-peer-backup.ssh-key-secret.sops.yaml`.
 - **Shape:** CronJob 23:00 (America/Chicago), built image (alpine + rsync/ssh/curl + the
-  script), any node (post-re-plumb registry pulls work everywhere).
+  script), any node. The promote workflow's `images` job builds the image and pushes
+  `ghcr.io/danielh2018/pi-peer-backup` under its content tag. The glance reads the defaults, so
+  it still shows `<k8s_registry_pull_host>`; the renderer rewrites the ref to GHCR with
+  `imagePullPolicy: IfNotPresent`. The image is 8.9 MB, so a cold pull is short.
+- **The Pi half is in the setup plane.** The forced-command wrapper and the authorized public
+  key are installed on daniel-pi by `setup/k8s_host_files`
+  (`ansible/roles/setup/k8s_host_files/tasks/pi-peer-backup.yml`), which the GitOps tick
+  applies through `initial_setup.yml`, delegated to daniel-pi. Both files moved there at the
+  flip, and that task holds a copy of `pi_peer_backup_src_dir`, which
+  `ansible/tests/setup/test_k8s_host_files_pairs.py` holds equal to this role's default.
 - **Auth:** dedicated ed25519 key (`pi_peer_backup_ssh_key` in SOPS; public half
-  authorized on the Pi by this role). The private key has a Secret of its own,
+  authorized on the Pi by `setup/k8s_host_files`). The private key has a Secret of its own,
   `pi-peer-backup-ssh-key`, rendered from `templates/ssh-key-secret.yaml.j2`, because Flux
   strips the newlines from a placeholder's value (target slice R2, PR 6). The role lists that
   file in `render_sops_manifests`, so a placeholder render leaves it out. The CronJob projects
@@ -26,10 +41,11 @@ replaced the retired Kopia scope for the Pi.
   `pi-peer-backup-ssh` renders from git alone (target slice R3); the job runs
   `StrictHostKeyChecking=yes` — never TOFU. To re-pin after the Pi is re-keyed, read the key
   over the operator's trusted connection with
-  `ssh daniel-pi cat /etc/ssh/ssh_host_ed25519_key.pub`, commit it, and deploy.
+  `ssh daniel-pi cat /etc/ssh/ssh_host_ed25519_key.pub`, commit it, and merge; `promote`
+  applies the new `pi-peer-backup-ssh` Secret.
 - **The key is pinned to one operation.** sshd authorizes it with
   `restrict,command="/usr/local/bin/pi-peer-backup-shell <src dir>"`; the wrapper
-  (`files/pi-peer-backup-shell.sh`, root-owned on the Pi) re-derives one
+  (`ansible/roles/setup/k8s_host_files/files/pi-peer-backup-shell.sh`, root-owned on the Pi) re-derives one
   `sudo rsync --server --sender` of `pi_peer_backup_src_dir` from `SSH_ORIGINAL_COMMAND` and
   refuses a login, a receiver, another path, any long option but `--timeout=N`, and `-s`
   (`--secluded-args`, which re-reads the path from the protocol stream and would bypass the
@@ -58,20 +74,34 @@ replaced the retired Kopia scope for the Pi.
   so monitor-bridge's Swallowed Push Verdicts check reads this pusher too, through its
   `{container="pi-peer-backup"}` selector (#1943) — a Kuma-rejected push here pages within one bridge cycle.
   **What the monitor means:** "the nightly 23:00 run happened," not "some run happened
-  recently." `k8s/cronjob-gate` runs a one-off Job (`pi-peer-backup-deploy-gate`) on every
-  deploy of this role to prove a bumped image still starts; `files/pull-pi-peers.sh`
-  recognizes that Job by its pod's hostname prefix and skips both pushes for it, so a routine
-  Renovate-driven deploy can't mask a missed scheduled firing or page from a deploy-time probe
-  instead of the backup itself. `configarr` — the other `k8s/cronjob-gate` caller — takes the
-  OPPOSITE position: its health reader counts a gate run like any other finished Job, because a
-  configarr gate run genuinely performs the reconcile, where this role's gate run is a dead-man
-  push about a specific 23:00 firing. See `ansible/roles/k8s/configarr/CLAUDE.md`.
+  recently." The gate run below skips both pushes, so a routine promotion can't mask a missed
+  scheduled firing or page from a deploy-time run instead of the backup itself. `configarr`
+  takes the OPPOSITE position: its health reader counts a gate run like any other finished
+  Job, because a configarr gate run genuinely performs the reconcile, where this role's gate
+  run is a dead-man push about a specific 23:00 firing. See
+  `ansible/roles/k8s/configarr/CLAUDE.md`.
+- **The gate Job, in `pi-peer-backup-verify`.** `defaults/main.yml` names the CronJob in
+  `flux_cronjob_gates` as a verify gate, so the renderer copies it into the Job
+  `pi-peer-backup-deploy-gate-<spec digest8>` (`scripts/renderer/renderer_lib/cronjob_gate.py`).
+  Flux runs it once per role revision, after the `pi-peer-backup` Kustomization reads Ready.
+  `files/pull-pi-peers.sh` recognizes the run by its pod's `pi-peer-backup-deploy-gate-`
+  hostname prefix, the same prefix `k8s/cronjob-gate`'s Job carried before the flip. Two
+  things changed with the move, and the flip accepted both:
+    - **A failed run now holds the revision.** The gate sets `backoffLimit: 0`, and any
+      non-zero exit fails the `-verify` Kustomization, so a Pi that is down or unreachable
+      during a promotion holds it. `k8s/cronjob-gate` only reported a non-zero exit.
+    - **`Forbid` no longer keeps a scheduled firing off a gate run.** The copy carries no
+      ownerReference to the CronJob, so the two can overlap in both directions. The mirror is
+      retention-free and idempotent. The claim is ReadWriteOnce, so two pods on different
+      nodes give the second a Multi-Attach wait until its 600s `activeDeadlineSeconds`, and
+      the verify Kustomization's 660s `timeout` reports that as a failed gate.
 - **Manual run/proof:** `kubectl -n homelab create job ppb-manual --from=cronjob/pi-peer-backup`
   (this bypasses the gate-run hostname check, so a manual proof run DOES push — same as a
   scheduled run).
 
 ## Editing
-- Script: `files/pull-pi-peers.sh` (baked into the image — redeploy rebuilds)
-- Deploy-time gate: `k8s/cronjob-gate`, included after the manifests deploy task. Its default
-  timeout (660s) exceeds this CronJob's `activeDeadlineSeconds` (600s); see
-  `ansible/roles/k8s/cronjob-gate/CLAUDE.md` for what it proves and does not prove.
+- Script: `files/pull-pi-peers.sh` (baked into the image — a merged edit moves the content tag,
+  and `promote` builds the image and runs the gate).
+- Gate: `flux_cronjob_gates` in `defaults/main.yml`. `tasks/main.yml` keeps the image-builder
+  and manifests includes for a handback, and no Flux path runs them.
+- Pi half: `ansible/roles/setup/k8s_host_files/tasks/pi-peer-backup.yml`, with its two files.

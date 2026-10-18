@@ -240,14 +240,10 @@ HOST_SCRIPT_WRITES = Census(
         ),
     ),
     # 24 installed scripts, modules and files when the row landed (2026-10-16). H2's family PRs
-    # move most of them to setup roles, so the floor and the members are the two only D5 moves.
-    min_matches=2,
-    must_find=frozenset(
-        {
-            _K8S + "pi-peer-backup/files/pi-peer-backup-shell.sh",
-            _K8S + "registry/templates/registry-gc.sh.j2",
-        }
-    ),
+    # move most of them to setup roles, so the floor and the member are the one only D5 moves.
+    # pi-peer-backup's forced-command wrapper, the other, moved to `k8s_host_files` at its flip.
+    min_matches=1,
+    must_find=frozenset({_K8S + "registry/templates/registry-gc.sh.j2"}),
     allow={
         _K8S + "registry/templates/registry-gc.sh.j2": (
             "D5 retires the registry GC before registry flips (Wave D's registry bullet, Open "

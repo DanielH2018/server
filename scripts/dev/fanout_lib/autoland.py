@@ -59,6 +59,7 @@ _sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 _sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from fanout_lib import operator_waits
+from fanout_lib.launch_gates import LOCAL_HOST, MAX_LIVE_BATCHES_PER_HOST
 from fanout_lib.review.api import LAND_SH, login
 from fanout_lib.target import SERVER, SERVER_CHECKOUT
 from fanout_lib.transport import Tools
@@ -173,6 +174,7 @@ class Boundaries:
         READER
     )
     owed: Callable[[], str] = lambda: operator_waits.read_owed()
+    open_issues: Callable[[], list[dict]] = lambda: read_open_issues()
     clock: Callable[[], float] = time.time
 
 
@@ -190,6 +192,18 @@ def read_open_prs() -> list[dict]:
     if not isinstance(data, list):
         raise ValueError("gh pr list did not print a list")
     return [p for p in data if isinstance(p, dict)]
+
+
+def read_open_issues() -> list[dict]:
+    """Every open `claude` issue with its labels, for the queue gauge; raises on a failed read."""
+    out = gh(
+        "issue", "list", "--repo", SERVER, "--label", "claude", "--state", "open",
+        "--limit", "1000", "--json", "number,labels", timeout=GH_TIMEOUT_S,
+    )  # fmt: skip
+    data = json.loads(out.stdout)
+    if not isinstance(data, list):
+        raise ValueError("gh issue list did not print a list")
+    return [i for i in data if isinstance(i, dict)]
 
 
 def newest_per_pr(records: Sequence[dict]) -> dict[int, dict]:
@@ -437,8 +451,18 @@ def write_waits(
         [(problems(r, prs[n]), r) for n, r in box.items()],
         operator_waits.owed_manual_planes(b.owed()),
     )
+    body = operator_waits.render(starts, b.clock())
     try:
-        wrote = operator_waits.write(gauge, operator_waits.render(starts, b.clock()))
+        today = time.strftime("%Y-%m-%d", time.gmtime(b.clock()))
+        states = operator_waits.issue_states(b.open_issues(), today)
+        capacity = dict.fromkeys((LOCAL_HOST, SERVER_HOST), MAX_LIVE_BATCHES_PER_HOST)
+        body += operator_waits.render_queue(states, capacity)
+    except (OSError, ValueError, subprocess.SubprocessError) as exc:
+        # The waits still stand; the queue families stay absent, so the idle rule reads
+        # nothing rather than a free count of zero.
+        out(f"issue queue not read: {tail(str(exc))}")
+    try:
+        wrote = operator_waits.write(gauge, body)
     except OSError as exc:
         out(f"waiting gauge not written: {tail(str(exc))}")
         return

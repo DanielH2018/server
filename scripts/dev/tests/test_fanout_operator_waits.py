@@ -20,11 +20,20 @@ from fanout_lib.autoland import Boundaries
 SAVED = 1792285200.0
 NOW = SAVED + 3600
 SAMPLE = re.compile(
-    r'^homelab_awaiting_operator(_oldest_seconds)?\{reason="[a-z-]+"\} \d+$'
+    r"^(homelab_awaiting_operator(_oldest_seconds)?\{reason|findings_issues\{state"
+    r'|fanout_batch_capacity\{host)="[a-z-]+"\} \d+$'
 )
 
 
-def _gauge(tmp_path, server, prs, box=(), owed="", ssh=None):
+def _issue(number, *labels):
+    return {"number": number, "labels": [{"name": n} for n in ("claude", *labels)]}
+
+
+def _no_issues():
+    return []
+
+
+def _gauge(tmp_path, server, prs, box=(), owed="", ssh=None, issues=_no_issues):
     answer = ssh or subprocess.CompletedProcess([], 0, json.dumps(server), "")
     tools, _ = fake_tools(answers={autoland.SERVER_HOST: answer})
     b = Boundaries(
@@ -36,6 +45,7 @@ def _gauge(tmp_path, server, prs, box=(), owed="", ssh=None):
         running=lambda n: False,
         local_records=lambda: list(box),
         owed=lambda: owed,
+        open_issues=issues,
         clock=lambda: NOW,
     )
     gauge = tmp_path / "textfile" / "fanout_operator_waits.prom"
@@ -147,7 +157,9 @@ def test_a_dry_run_writes_no_gauge(tmp_path):
     tools, _ = fake_tools(
         answers={autoland.SERVER_HOST: subprocess.CompletedProcess([], 0, "[]", "")}
     )
-    b = Boundaries(tools=tools, open_prs=lambda: [], local_records=list, owed=str)
+    b = Boundaries(
+        tools=tools, open_prs=lambda: [], local_records=list, owed=str, open_issues=list
+    )
     gauge = tmp_path / "fanout_operator_waits.prom"
     autoland.run(b, tmp_path, tmp_path, dry_run=True, out=lambda _: None, gauge=gauge)
     assert not gauge.exists()
@@ -156,3 +168,44 @@ def test_a_dry_run_writes_no_gauge(tmp_path):
 def test_the_written_file_is_world_readable(tmp_path):
     gauge, _ = _gauge(tmp_path, [], [])
     assert gauge.stat().st_mode & 0o777 == 0o644
+
+
+def test_each_issue_lands_in_one_state_and_manual_wins():
+    issues = [
+        _issue(1),
+        _issue(2, "claimed"),
+        _issue(3, "not-before:2026-10-20"),
+        _issue(4, "not-before:2026-10-17"),
+        _issue(5, "manual", "claimed"),
+        _issue(6, "manual", "not-before:2026-10-20"),
+    ]
+    assert operator_waits.issue_states(issues, "2026-10-18") == {
+        "free": 2,
+        "claimed": 1,
+        "deferred": 1,
+        "manual": 2,
+    }
+
+
+def test_the_pass_writes_the_queue_and_each_hosts_capacity(tmp_path):
+    gauge, _ = _gauge(
+        tmp_path, [], [], issues=lambda: [_issue(1), _issue(2, "claimed")]
+    )
+    text = gauge.read_text()
+    assert 'findings_issues{state="free"} 1' in text
+    assert 'findings_issues{state="claimed"} 1' in text
+    for host in (autoland.LOCAL_HOST, autoland.SERVER_HOST):
+        assert f'fanout_batch_capacity{{host="{host}"}} 3' in text
+
+
+def test_a_failed_issue_read_keeps_the_waits_and_drops_the_queue(tmp_path):
+    def broken():
+        raise OSError("gh: HTTP 502")
+
+    gauge, text = _gauge(
+        tmp_path, [_record(5001, outcome="needs-input")], [_pr(5001)], issues=broken
+    )
+    body = gauge.read_text()
+    assert "issue queue not read: gh: HTTP 502" in text
+    assert _count(body, "needs-input") == 1
+    assert "findings_issues" not in body

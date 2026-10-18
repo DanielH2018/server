@@ -13,10 +13,13 @@ direction, a row coming back to its k8s role, is the host-write census's
 (`ansible/tests/repo/_host_write_rows.py`): the move drops the role's `allow` entry, so a host
 write there fails `k8s-role-tasks-write-no-host`.
 
+pi-peer-backup's two rows write daniel-pi, and the play runs on daniel-box, so
+`undelegated_pi_rows` also holds each to `delegate_to: daniel-pi`.
+
 Red-proof: a fixture role under `tmp_path` whose `main.yml` no longer imports the file, one
-whose task writes a different path, one whose task drops its owner, and one whose loop drops a
-directory, and one whose absent arm turns back into an install, must each be flagged; a faithful
-copy must not.
+whose task writes a different path, one whose task drops its owner, one whose loop drops a
+directory, one whose absent arm turns back into an install, and one whose pi-peer-backup block
+drops its delegation, must each be flagged; a faithful copy must not.
 
 Run: uv run pytest ansible/tests/setup/test_k8s_host_files_rows.py
 """
@@ -77,6 +80,32 @@ EXPECTED_ROWS: dict[str, dict[str, tuple[str, dict[str, str]]]] = {
             },
         ),
     },
+    # The wrapper first, then the key pinned to it: the reverse order leaves a forced command
+    # that does not exist. Both run on daniel-pi through the block's `delegate_to`.
+    "pi-peer-backup.yml": {
+        "Install the forced-command wrapper on daniel-pi": (
+            "ansible.builtin.copy",
+            {
+                "src": "pi-peer-backup-shell.sh",
+                "dest": "/usr/local/bin/pi-peer-backup-shell",
+                "owner": "root",
+                "group": "root",
+                "mode": "0755",
+            },
+        ),
+        "Authorize the pull key on daniel-pi": (
+            "ansible.posix.authorized_key",
+            {
+                "user": "{{ hostvars['daniel-pi'].ansible_user | default('ubuntu') }}",
+                "key": "{{ lookup('file', 'pi-peer-backup.pub') }}",
+                "key_options": (
+                    'restrict,command="/usr/local/bin/pi-peer-backup-shell '
+                    '{{ pi_peer_backup_src_dir }}"'
+                ),
+                "state": "present",
+            },
+        ),
+    },
     # No mode, on purpose: the library keeps the directory modes it came with.
     "media-volume.yml": {
         "Create the media volume directories on the node": (
@@ -113,6 +142,22 @@ EXPECTED_ROWS: dict[str, dict[str, tuple[str, dict[str, str]]]] = {
             {"path": "/usr/local/bin/cloudflare-ip-drift.sh", "state": "absent"},
         ),
     },
+    # The absent arms H2.5d left for the retired prefs drift check's host cron and script.
+    "qbittorrent.yml": {
+        "Remove the retired qbittorrent prefs drift check cron": (
+            "ansible.builtin.cron",
+            {
+                "name": "qbittorrent prefs drift check",
+                "user": "{{ sys_user }}",
+                "cron_file": "qbittorrent-prefs-check",
+                "state": "absent",
+            },
+        ),
+        "Remove the retired qbittorrent prefs-check script from the host": (
+            "ansible.builtin.file",
+            {"path": "{{ item }}", "state": "absent"},
+        ),
+    },
 }
 
 # {(task file, task name): its `loop`} for every looped row. A row absent here must not loop.
@@ -132,6 +177,10 @@ EXPECTED_LOOPS: dict[tuple[str, str], object] = {
         "/etc/rancher/k3s/dashboards-annotated",
         "/etc/rancher/k3s/dashboard-manifests",
     ],
+    (
+        "qbittorrent.yml",
+        "Remove the retired qbittorrent prefs-check script from the host",
+    ): ["/usr/local/bin/qbittorrent-prefs-check.sh", "/opt/qbittorrent-prefs-check"],
 }
 
 
@@ -176,6 +225,10 @@ def test_a_task_file_main_no_longer_imports_is_flagged(tmp_path):
         "docs.yml: Ensure the built docs site directory exists",
         "media-volume.yml: Create the media volume directories on the node",
         "observability.yml: Remove the retired dashboard staging trees",
+        "pi-peer-backup.yml: Authorize the pull key on daniel-pi",
+        "pi-peer-backup.yml: Install the forced-command wrapper on daniel-pi",
+        "qbittorrent.yml: Remove the retired qbittorrent prefs drift check cron",
+        "qbittorrent.yml: Remove the retired qbittorrent prefs-check script from the host",
         "traefik.yml: Remove the Cloudflare IP drift cron",
         "traefik.yml: Remove the Cloudflare IP drift script",
     ]
@@ -218,6 +271,38 @@ def test_a_media_volume_row_that_drops_a_directory_from_its_loop_is_flagged(tmp_
     media.write_text(media.read_text().replace(line, ""))
     assert missing_rows(role_dir) == [
         "media-volume.yml: Create the media volume directories on the node"
+    ]
+
+
+def undelegated_pi_rows(role_dir: Path = ROLE) -> list[str]:
+    """Each pi-peer-backup row that would run on daniel-box, the play's host, not daniel-pi.
+
+    The playbook entry is gated to daniel-box, so a row whose task and enclosing block both
+    lose `delegate_to: daniel-pi` installs the wrapper and the key on the wrong host.
+    """
+    path = role_dir / "tasks" / "pi-peer-backup.yml"
+    found = []
+    for wrapper in load_tasks(path):
+        for task in wrapper.get("block") or [wrapper]:
+            host = task.get("delegate_to", wrapper.get("delegate_to"))
+            if host != "daniel-pi":
+                found.append(f"pi-peer-backup.yml: {task.get('name')}")
+    return found
+
+
+def test_the_pi_peer_backup_rows_run_on_daniel_pi():
+    assert undelegated_pi_rows() == []
+
+
+def test_a_pi_peer_backup_block_that_drops_its_delegation_is_flagged(tmp_path):
+    role_dir = _fixture_role(tmp_path)
+    pi = role_dir / "tasks" / "pi-peer-backup.yml"
+    line = "  delegate_to: daniel-pi\n"
+    assert line in pi.read_text()
+    pi.write_text(pi.read_text().replace(line, ""))
+    assert undelegated_pi_rows(role_dir) == [
+        "pi-peer-backup.yml: Install the forced-command wrapper on daniel-pi",
+        "pi-peer-backup.yml: Authorize the pull key on daniel-pi",
     ]
 
 

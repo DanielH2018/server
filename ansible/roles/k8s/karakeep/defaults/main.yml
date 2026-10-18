@@ -128,3 +128,13 @@ k8s_claims:  # noqa var-naming[no-role-prefix]
   - name: "{{ karakeep_k8s_meili_claim }}"
     storage_class: "{{ karakeep_k8s_meili_storage_class }}"
     size: "{{ karakeep_k8s_meili_size }}"
+
+# Under Flux the renderer copies the pruner CronJob into one Job per role revision, in
+# `karakeep-verify` (scripts/renderer/renderer_lib/cronjob_gate.py). It replaces the
+# k8s/cronjob-gate include in tasks/main.yml, which runs only after a handback. With
+# karakeep_k8s_pruner_apply true the run deletes, so it is a mutation, and the named test shows
+# a second run changes nothing.
+flux_cronjob_gates:  # noqa var-naming[no-role-prefix]
+  karakeep-archive-pruner:
+    kind: mutation
+    rerun_safe: ansible/roles/k8s/karakeep/tests/test_archive_pruner.py::test_a_second_run_changes_nothing

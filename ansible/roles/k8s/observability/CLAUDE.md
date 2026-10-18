@@ -135,6 +135,9 @@ prints the rule a new entry needs. `docs/host-packages.md` is the runbook for bo
 group also carries one `WiredLinkDown` warning per node whose host_vars set
 `k3s_node_static_link`, reading that link's carrier and operstate (#5124). The same test
 module holds that set to host_vars, so a node that pins a new link needs a rule edit too.
+It also carries `FanoutSlotsIdleWithFreeWork`, in shadow until #5658 is ruled: free issues
+for an hour with no fan-out batch live on either node, read from the server lander's
+`findings_issues` gauge and the per-batch cgroup series.
 
 **The `blackbox-ingress` job probes every ingress tile through blackbox-exporter.** It is
 hand-written in `prometheus.yaml.j2` and renders one target per tile the

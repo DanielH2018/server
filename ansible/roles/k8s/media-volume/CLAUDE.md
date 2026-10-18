@@ -6,13 +6,19 @@ route — infra role, no Deployment of its own.
 
 ## At a glance
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates, tasks or containers_list entry, or the k3s role's Longhorn tier lists. -->
-- **Deploy tag:** `--tags "media-volume"`
-- **Image:** `alpine` (`media_volume_k8s_probe_image`)
+- **Applied by:** Flux, through `promote` (`owner: flux`); `deploy.sh` refuses
+  `--tags=media-volume` with exit 5
 - **Route:** none (no `templates/ingressroute.yaml.j2`)
 - **Claim:** `media-data` (not Longhorn (media-local))
-- **Auto-deploy:** eligible (`k8s_autodeploy: true`)
 <!-- /generated_from -->
 
+- **Flux applies it, not Ansible** (#5652, Wave D). Its `containers_list` entry carries
+  `owner: flux`, so `deploy.sh`, the play and the GitOps deployer all skip it. A merged change
+  reaches the cluster when `promote` publishes and verifies the next bundle. To give it back
+  to Ansible, follow the two-PR handback in `docs/flux-deploy-plane.md`; a plain revert of the
+  flag leaves two writers on the objects. The claim carries
+  `kustomize.toolkit.fluxcd.io/prune: disabled`, so neither a revert nor a removal from the
+  bundle can delete it.
 - **Must run before any role that mounts `media-data`** — the seven mounters (`sonarr`,
   `qbittorrent`, `radarr`, `bazarr`, `jellyfin`, `tdarr`, `janitorr`) each carry
   `depends_on: [media-volume]` on their `containers_list` entry, and every pair is pinned by
@@ -31,21 +37,18 @@ route — infra role, no Deployment of its own.
   tasks (`tasks/sync.yml`) rather than move them. Nothing backs the library up.
 
 ## Notable
-- Every deploy renders `changed=2`, not `changed=0`, on purpose: a hardlink probe Job
-  (`hardlink-probe-job.yaml.j2`) re-runs on every apply to catch cluster-state regressions a
-  quiet deploy could otherwise hide (a split volume, a claim rebound elsewhere). It also proves
-  the PVC actually binds — with `WaitForFirstConsumer`, a `Pending` timeout here means the
-  PV/nodeAffinity pair is wrong, not the hardlinks.
-- The probe's manifest is rendered into its own directory
-  (`/etc/rancher/k3s/manifests/media-volume-probe`), never beside the PV manifests — a Job's pod
-  template is immutable, so a re-applied Job there is a no-op or an outright error.
+- **The hardlink check is the Job in `media-volume-verify`.** The renderer emits
+  `templates/verify/` into that Kustomization, which Flux applies once `media-volume` reads
+  Ready. The Job runs `files/media_volume_verify.py`, which links a file in `torrents/` into
+  `media/` with `os.link` and fails unless the link count reads 2. It also proves the claim
+  binds: with `WaitForFirstConsumer`, a pod that stays `Pending` until its 300s deadline means
+  the PV's node pin is wrong, not the hardlinks. Its name embeds a digest of the rendered PV
+  and StorageClass, so Flux re-runs it only when those change, where the Ansible probe it
+  replaced re-ran on every deploy; `job.yaml.j2`'s `DECIDED:` note has why.
+  `tests/test_media_volume_verify.py` renders the role and runs the Job census over it.
+- **HISTORY —** until the flip, a hardlink probe Job rendered into
+  `/etc/rancher/k3s/manifests/media-volume-probe` on daniel-box and ran on every deploy. The
+  flip deleted its tasks and template. The staged file stays on the node with no reader; k3s
+  auto-applies only its own server manifests directory, so it changes nothing.
 - Directory `mode:` is deliberately unset on the host paths: the library keeps the modes it
   came with from daniel-server, and pinning one would flip them on every apply.
-- **`templates/verify-inert/` is the hardlink probe's Flux form, and nothing renders it yet.**
-  Neither the manifests role nor the renderer's `verify_files` reads that directory.
-  media-volume's flip PR renames it to `templates/verify/`, which makes the renderer emit
-  `media-volume-verify`, and deletes the probe tasks. The Job runs
-  `files/media_volume_verify.py`, which makes the probe's check with `os.link`. Its name embeds
-  a digest of the rendered PV and StorageClass, so Flux re-runs it only when those change, not
-  on every apply as Ansible does; `job.yaml.j2`'s `DECIDED:` note has why.
-  `tests/test_media_volume_verify.py` renders the renamed copy and runs the Job census over it.

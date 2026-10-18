@@ -1,0 +1,150 @@
+{#
+  registry's two verify Jobs and the ConfigMap that carries their script, INERT until
+  registry's flip.
+
+  This directory is `verify-inert/`, which neither reader globs: the manifests role takes only
+  top-level `templates/*.yaml.j2`, and `verify_files` takes only `templates/verify/*.yaml.j2`.
+  registry's flip PR moves the directory to `templates/verify/`, and the renderer then emits
+  it into `registry-verify` (D5, *A verify conversion lands as inert code*). The same PR
+  deletes the self-test and netpol probe tasks with `selftest-push-job.yaml.j2` and
+  `netpol-probe-job.yaml.j2`, which these Jobs replace.
+
+  NO JOB FORM for `selftest-pull-job.yaml.j2`. Its proof is that containerd on each node pulls
+  the pod's own image from `{{ k8s_registry_pull_host }}`. The Job census requires every
+  container to run `python3 <mount>/<script>.py`, and the probe image holds no Python, so no
+  Job here can make that proof. registry's flip has to decide what replaces it (#5680).
+
+  Both names end in a digest, as the Job census requires (D5, *Rules for every Job Flux
+  applies*): the ConfigMap's in `configmap_digest8` of its data, each Job's in
+  `job_spec_digest8` of its spec. Each is computed here from the same JSON those functions
+  hash, so each spec is written once as YAML text, parsed for the hash and emitted verbatim.
+  The renderer passes `flux_job_image` and `flux_job_connect`, the helper's text, to every
+  `templates/verify/` file (`render_tag`).
+
+  DECIDED: both specs embed a digest of the rendered NetworkPolicy, Deployment and Service.
+  The fence is what the isolation Job tests, and the Deployment and Service are what the push
+  Job dials, so an edit to any of them renames both Jobs and makes Flux run them again. The
+  Ansible tasks re-run on every deploy; these re-run only when that render changes.
+
+  The caller census (D5, *A fence admits every Job that dials through it*). Both pods run in
+  `k8s_namespace` and exec into nothing:
+    - `registry-verify-push-<digest>` carries `app: registry-selftest-push` and dials
+      registry:{{ k8s_registry_port }}. `networkpolicy.yaml.j2` already admits that label,
+      because the Ansible self-test it replaces carries it, so it needs no new peer;
+    - `registry-verify-isolation-<digest>` carries `app: registry-verify` and dials
+      registry:{{ k8s_registry_port }} and registry:{{ k8s_registry_ghcr_mirror_port }}, both
+      of which must REFUSE it. No peer is added: admitting `registry-verify` would open the
+      hole the Job proves closed. tests/test_registry_verify.py fails if the fence admits it.
+#}
+{% set script_name = 'registry_verify.py' %}
+{% set script_dir = '/verify' %}
+{% set data = {
+  script_name: lookup('file', playbook_dir + '/roles/k8s/registry/files/' + script_name, rstrip=False),
+  'flux_job_connect.py': flux_job_connect,
+} %}
+{% set configmap_name = 'registry-verify-' + ({'data': data, 'binaryData': {}} | to_json(sort_keys=True, separators=(',', ':')) | hash('sha256'))[:8] %}
+{% set render_digest8 = ((lookup('template', 'networkpolicy.yaml.j2') + lookup('template', 'deployment.yaml.j2') + lookup('template', 'service.yaml.j2')) | hash('sha256'))[:8] %}
+{% set registry_service = 'registry.' + k8s_namespace + '.svc.cluster.local' %}
+{% set checks = [
+  {
+    'name': 'push',
+    'app': 'registry-selftest-push',
+    'deadline': 180,
+    'env': {
+      'CHECK': 'push',
+      'REGISTRY_URL': 'http://' + k8s_registry_push_host,
+      'REPO': registry_k8s_probe_repo,
+      'TAG': 'verify',
+    },
+  },
+  {
+    'name': 'isolation',
+    'app': 'registry-verify',
+    'deadline': 120,
+    'env': {
+      'CHECK': 'isolation',
+      'ISOLATED_URLS': 'http://' + registry_service + ':' + (k8s_registry_port | string) + '/v2/ http://' + registry_service + ':' + (k8s_registry_ghcr_mirror_port | string) + '/v2/',
+    },
+  },
+] %}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ configmap_name }}
+  namespace: {{ k8s_namespace }}
+data:
+{% for key, text in data | dictsort %}
+  {{ key }}: {{ text | to_json }}
+{% endfor %}
+{% for check in checks %}
+{% set spec_text %}
+# A flaky check fails rather than passing on a retry.
+backoffLimit: 0
+# Below the 600s `manifests_rollout_timeout_default` every `<tag>-verify` Kustomization takes.
+activeDeadlineSeconds: {{ check.deadline }}
+template:
+  metadata:
+    labels:
+      app: {{ check.app }}
+  spec:
+    serviceAccountName: registry-verify
+    # The Job reads no Kubernetes API, so its pod holds no token.
+    automountServiceAccountToken: false
+    restartPolicy: Never
+    enableServiceLinks: false
+    securityContext:
+      runAsNonRoot: true
+      runAsUser: 65534
+      runAsGroup: 65534
+      seccompProfile:
+        type: RuntimeDefault
+    containers:
+      - name: verify
+        image: {{ flux_job_image }}
+        command:
+          - python3
+          - {{ script_dir }}/{{ script_name }}
+        env:
+{% for key, value in check.env | dictsort %}
+          - name: {{ key }}
+            value: {{ value | to_json }}
+{% endfor %}
+          # Renames the Job whenever the fence, Deployment or Service changes; see the note above.
+          - name: REGISTRY_RENDER_DIGEST8
+            value: "{{ render_digest8 }}"
+          - name: PYTHONDONTWRITEBYTECODE
+            value: "1"
+        resources:
+          requests:
+            cpu: 10m
+            memory: 32Mi
+          limits:
+            memory: 64Mi
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+              - ALL
+        volumeMounts:
+          - name: script
+            mountPath: {{ script_dir }}
+            readOnly: true
+    volumes:
+      - name: script
+        configMap:
+          name: {{ configmap_name }}
+{% endset %}
+{% set spec = spec_text | from_yaml %}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: registry-verify-{{ check.name }}-{{ (spec | to_json(sort_keys=True, separators=(',', ':')) | hash('sha256'))[:8] }}
+  namespace: {{ k8s_namespace }}
+  annotations:
+    homelab/job-kind: verify
+spec:
+{{ spec_text | indent(2, true) }}
+{% endfor %}

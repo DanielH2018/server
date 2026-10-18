@@ -148,6 +148,58 @@ def render(starts: Mapping[str, list[float]], now: float) -> str:
     return "\n".join(lines) + "\n"
 
 
+ISSUE_STATES = ("free", "claimed", "deferred", "manual")
+
+
+def issue_states(issues: Iterable[Mapping], today: str) -> dict[str, int]:
+    """How many open `claude` issues sit in each state, read from their labels alone (#5672).
+
+    `manual` wins, then a `not-before:<date>` label later than `today` (`deferred`), then
+    `claimed`; the rest are `free`. This is an approximation of `findings.py next`, which
+    needs ssh to each batch's host to judge a claim and a PR read to withhold an issue an
+    open PR closes. A stale claim counts as `claimed` here, so the count can read low, and an
+    issue an open PR closes counts as `free`, so it can read high. On 2026-10-18 it read 54
+    against `next`'s 56; the idle rule asks only whether the count is above 0.
+    """
+    out = dict.fromkeys(ISSUE_STATES, 0)
+    for issue in issues:
+        names = {
+            str(lbl.get("name"))
+            for lbl in issue.get("labels") or []
+            if isinstance(lbl, dict)
+        }
+        later = [n for n in names if n.startswith("not-before:") and n[11:] > today]
+        if "manual" in names:
+            out["manual"] += 1
+        elif later:
+            out["deferred"] += 1
+        elif "claimed" in names:
+            out["claimed"] += 1
+        else:
+            out["free"] += 1
+    return out
+
+
+def render_queue(states: Mapping[str, int], capacity: Mapping[str, int]) -> str:
+    """The issue-queue and batch-capacity families that `FanoutSlotsIdleWithFreeWork` reads.
+
+    The live batch count is not written here: `claude_fanout_batch_pids_current`, from
+    `claude-cgroup-metrics.sh`, already has one series per running batch on each host.
+    """
+    lines = [
+        "# HELP findings_issues Open claude-labelled issues by state, from their labels.",
+        "# TYPE findings_issues gauge",
+        *(f'findings_issues{{state="{s}"}} {states.get(s, 0)}' for s in ISSUE_STATES),
+        "# HELP fanout_batch_capacity The live fan-out batches a host admits.",
+        "# TYPE fanout_batch_capacity gauge",
+        *(
+            f'fanout_batch_capacity{{host="{h}"}} {n}'
+            for h, n in sorted(capacity.items())
+        ),
+    ]
+    return "\n".join(lines) + "\n"
+
+
 def write(path: Path, body: str) -> bool:
     """Write `body` to `path` atomically, readable by node-exporter; False when the directory is gone.
 

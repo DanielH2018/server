@@ -1,0 +1,41 @@
+---
+# Moved from roles/k8s/pi-peer-backup by its D5 flip PR (Wave C). H7.4's `pi-peer-backup-target`
+# component replaces it.
+#
+# pi-peer-backup's CronJob pulls daniel-pi's wg-easy peer configs over ssh with a key that
+# sshd pins to one forced command. Both halves of that pin live on the Pi, so both tasks run
+# there through `delegate_to`: the playbook entry is gated to daniel-box (its comment in
+# initial_setup.yml has why).
+- name: Pin pi-peer-backup's pull key to its forced command on daniel-pi
+  delegate_to: daniel-pi
+  # DECIDED: the copy of pi-peer-backup's `pi_peer_backup_src_dir` sits in the block's vars,
+  # not in this role's defaults. Role defaults are play-wide in initial_setup.yml, so a
+  # defaults copy becomes a cross-role read (#5472). The CronJob's PI_SRC reads the k8s
+  # role's copy, and the wrapper refuses any other path, so the two must agree:
+  # test_k8s_host_files_pairs.py holds this copy equal to roles/k8s/pi-peer-backup.
+  vars:
+    pi_peer_backup_src_dir: "/home/{{ sys_user }}/server/containers/wg-easy/config/"
+  block:
+    # The wrapper lands BEFORE the key is pinned to it: the reverse order would leave a key
+    # whose forced command does not exist, and the nightly would fail until the next task ran.
+    # Root-owned so the key holder, who reaches only this script, cannot rewrite what it allows.
+    - name: Install the forced-command wrapper on daniel-pi
+      become: true
+      ansible.builtin.copy:
+        src: pi-peer-backup-shell.sh
+        dest: /usr/local/bin/pi-peer-backup-shell
+        owner: root
+        group: root
+        mode: "0755"
+
+    # `restrict` drops pty, port/agent/X11 forwarding and user-rc; `command=` replaces whatever
+    # the client asked for with the wrapper, which re-derives one `sudo rsync --server --sender`
+    # from SSH_ORIGINAL_COMMAND and refuses everything else. Ansible reaches the Pi over a
+    # different key (`ubuntu@daniel-server-ansible`), so pinning this one cannot lock the
+    # apply out. A rotated key adds its line and leaves the old one (docs/secret-rotation.md).
+    - name: Authorize the pull key on daniel-pi
+      ansible.posix.authorized_key:
+        user: "{{ hostvars['daniel-pi'].ansible_user | default('ubuntu') }}"
+        key: "{{ lookup('file', 'pi-peer-backup.pub') }}"
+        key_options: 'restrict,command="/usr/local/bin/pi-peer-backup-shell {{ pi_peer_backup_src_dir }}"'
+        state: present
