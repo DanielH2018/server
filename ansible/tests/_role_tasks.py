@@ -9,8 +9,8 @@ for the inline-gate half.
 
 It sits at the `ansible/tests/` root rather than under `deploy/` because a second suite reads
 it: `in_role_wait_s` below feeds gitops_deploy's rollback budget, whose tests live in the
-role. Both callers need the same expansion — prowlarr's isolation probe and sonarr's
-gate are each several include levels down from `main.yml`.
+role. Both callers need the same expansion — pihole's gate and netpol-baseline's probe wait
+are each several include levels down from `main.yml`.
 """
 
 import re
@@ -211,8 +211,8 @@ def in_role_wait_s(role: str) -> int:
 
     `k8s/manifests/tasks/drain.yml` runs once at the end of a batch, so everything a role waits
     for in its own `tasks/` is spent before the drain starts and adds to it. Counting the drain
-    alone would score prowlarr 300s short: its flaresolverr isolation probe waits
-    `--timeout=300s` for a Job that has nothing to do with any rollout.
+    alone would score registry 540s short: its self-test and netpol probe Jobs wait three
+    `--timeout=180s` that have nothing to do with any rollout.
 
     An inline `rollout status` gate is EXCLUDED, and that is the only exclusion. Such a gate
     waits for a rollout the drain also waits for, so the two are alternatives on one timeline —
