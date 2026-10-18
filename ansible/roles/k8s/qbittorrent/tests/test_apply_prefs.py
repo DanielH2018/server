@@ -6,7 +6,12 @@ without a socket. Testing the HTTP transport instead would prove only that urlli
 and would leave the comparison — the part with the trap in it — unexercised.
 """
 
+import io
+from email.message import Message
+import urllib.error
+
 import apply_prefs
+import pytest
 
 
 def test_no_changes_when_everything_matches() -> None:
@@ -74,12 +79,24 @@ def test_checking_memory_use_leaves_room_under_the_container_memory_limit() -> N
     assert apply_prefs.DESIRED["checking_memory_use"] <= 256
 
 
-class _StubClient:
-    """Stands in for QbtClient so main()'s --dry-run exit code is tested without a socket."""
+class _StubClient(apply_prefs.QbtClient):
+    """Stands in for QbtClient so main()'s --dry-run exit code is tested without a socket.
 
-    def __init__(self, preferences: dict[str, object]) -> None:
+    `answers` is the poll's script: each call pops the next value, and the last one repeats.
+    It skips the base __init__, so it builds no opener and can open no connection.
+    """
+
+    def __init__(
+        self, preferences: dict[str, object], answers: tuple[bool, ...] = (True,)
+    ) -> None:
         self._preferences = preferences
+        self._answers = list(answers)
+        self.answer_calls = 0
         self.login_calls: list[tuple[str, str]] = []
+
+    def answers(self) -> bool:
+        self.answer_calls += 1
+        return self._answers.pop(0) if len(self._answers) > 1 else self._answers[0]
 
     def login(self, username: str, password: str) -> None:
         self.login_calls.append((username, password))
@@ -88,13 +105,38 @@ class _StubClient:
         return self._preferences
 
 
-def _run_dry_run(monkeypatch, current_preferences: dict[str, object]) -> int:
+class _FakeClock:
+    """A monotonic clock that only `sleep` advances."""
+
+    def __init__(self) -> None:
+        self.now = 0.0
+        self.sleeps: list[float] = []
+
+    def __call__(self) -> float:
+        return self.now
+
+    def sleep(self, seconds: float) -> None:
+        self.sleeps.append(seconds)
+        self.now += seconds
+
+
+def _run_dry_run(
+    monkeypatch,
+    current_preferences: dict[str, object],
+    *extra: str,
+    client: _StubClient | None = None,
+    clock: _FakeClock | None = None,
+) -> int:
     monkeypatch.setenv("QBT_USERNAME", "admin")
     monkeypatch.setenv("QBT_PASSWORD", "hunter2")
-    monkeypatch.setattr(
-        apply_prefs, "QbtClient", lambda base_url: _StubClient(current_preferences)
+    stub = client or _StubClient(current_preferences)
+    clock = clock or _FakeClock()
+    return apply_prefs.main(
+        ["--dry-run", "--url", "http://qbittorrent.test:8080", *extra],
+        client_factory=lambda base_url: stub,
+        sleep=clock.sleep,
+        clock=clock,
     )
-    return apply_prefs.main(["--dry-run", "--url", "http://qbittorrent.test:8080"])
 
 
 # THE MUTATION: a cron branching on exit code must be able to tell "found drift" from "nothing
@@ -119,3 +161,67 @@ def test_missing_credentials_exits_bad_args(monkeypatch) -> None:
     monkeypatch.delenv("QBT_USERNAME", raising=False)
     monkeypatch.delenv("QBT_PASSWORD", raising=False)
     assert apply_prefs.main(["--dry-run"]) == apply_prefs.EXIT_BAD_ARGS
+
+
+# The connect retry (the H2 plan's *Who applies each grant*): a CronJob pod's first dials can
+# be dropped through an open fence, so the check polls without credentials for up to 60 s, and
+# then logs in exactly once, because every answered bad login counts against qBittorrent's
+# web_ui_max_auth_fail_count of 5.
+def test_connect_wait_polls_until_the_webui_answers_then_logs_in_once(
+    monkeypatch,
+) -> None:
+    stub = _StubClient(dict(apply_prefs.DESIRED), answers=(False, False, True))
+    clock = _FakeClock()
+    exit_code = _run_dry_run(
+        monkeypatch, {}, "--connect-wait", "60", client=stub, clock=clock
+    )
+    assert exit_code == apply_prefs.EXIT_OK
+    assert stub.answer_calls == 3
+    assert clock.sleeps == [5.0, 5.0]
+    assert stub.login_calls == [("admin", "hunter2")]
+
+
+def test_connect_wait_gives_up_at_its_bound_without_logging_in(monkeypatch) -> None:
+    stub = _StubClient(dict(apply_prefs.DESIRED), answers=(False,))
+    clock = _FakeClock()
+    exit_code = _run_dry_run(
+        monkeypatch, {}, "--connect-wait", "60", client=stub, clock=clock
+    )
+    assert exit_code == apply_prefs.EXIT_UNREACHABLE
+    assert clock.now == 60.0
+    assert stub.login_calls == []
+
+
+def test_a_login_that_got_an_answer_is_never_retried(monkeypatch) -> None:
+    class _RejectingClient(_StubClient):
+        def login(self, username: str, password: str) -> None:
+            super().login(username, password)
+            raise SystemExit("qBittorrent login failed: Fails.")
+
+    stub = _RejectingClient(dict(apply_prefs.DESIRED))
+    with pytest.raises(SystemExit, match="Fails"):
+        _run_dry_run(monkeypatch, {}, "--connect-wait", "60", client=stub)
+    assert len(stub.login_calls) == 1
+
+
+def test_without_connect_wait_main_does_not_poll(monkeypatch) -> None:
+    stub = _StubClient(dict(apply_prefs.DESIRED), answers=(False,))
+    assert _run_dry_run(monkeypatch, {}, client=stub) == apply_prefs.EXIT_OK
+    assert stub.answer_calls == 0
+
+
+def test_an_http_error_status_counts_as_an_answer() -> None:
+    """A 403 to the unauthenticated poll proves the connection carried, so polling stops."""
+
+    class _Forbidden(apply_prefs.QbtClient):
+        def _get(self, path: str) -> str:
+            raise urllib.error.HTTPError(
+                path, 403, "Forbidden", Message(), io.BytesIO()
+            )
+
+    class _Refused(apply_prefs.QbtClient):
+        def _get(self, path: str) -> str:
+            raise urllib.error.URLError(ConnectionRefusedError(111, "refused"))
+
+    assert _Forbidden("http://qbittorrent.test:8080").answers() is True
+    assert _Refused("http://qbittorrent.test:8080").answers() is False

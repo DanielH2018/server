@@ -89,12 +89,29 @@ qbittorrent_k8s_mem_limit: 2048Mi
 qbittorrent_k8s_cpu_request: "100m"
 qbittorrent_k8s_mem_request: 256Mi
 
-# Daily, not */10 like the cluster-side health crons: a WebUI edit or a Longhorn restore that
-# reverts files/apply_prefs.py's eight throughput settings is rare, and there is no Kuma
-# watchdog interval this needs to stay under (see prefs-check.sh.j2 — it logs, it does not
+# The qbittorrent-prefs-check CronJob's schedule, read on Etc/UTC. Until H2.5d
+# (docs/target-architecture/host/h2-shrink-host-plane.md, Steps item 15) it was a daniel-box
+# host cron, whose clock is UTC; tasks/main.yml keeps the absent arms that remove it. The host
+# cron's fields, unchanged. Daily, not */10 like the health readers: a WebUI edit or a Longhorn
+# restore that reverts files/apply_prefs.py's eight throughput settings is rare, and there is
+# no Kuma watchdog interval this needs to stay under (files/prefs_check.py logs, it does not
 # push).
-qbittorrent_k8s_prefs_check_cron_hour: "6"
-qbittorrent_k8s_prefs_check_cron_minute: "37"
+qbittorrent_k8s_prefs_check_schedule: "37 6 * * *"
+
+# The repo's pinned python image, the same digest as configarr's and janitorr's health
+# readers (configarr_k8s_health_image), whose defaults record the evidence. The check calls
+# no kubectl, so it needs no alpine/k8s init container.
+qbittorrent_k8s_prefs_check_image: python:3.14-alpine@sha256:f6a589d43c42b9e7f7dc67a12d37132491f362859a5d750607710cc56da3bc72
+
+# Above the check's worst case: the 60 s connect wait (files/prefs_check.py:CONNECT_WAIT_S),
+# then a login and a preferences read at 15 s each, plus a cold image pull. Below
+# cronjob_gate_timeout (660), which ansible/tests/deploy/test_cronjob_gate_decision.py holds.
+qbittorrent_k8s_prefs_check_deadline_seconds: 300
+
+qbittorrent_k8s_prefs_check_cpu_limit: "200m"
+qbittorrent_k8s_prefs_check_mem_limit: 128Mi
+qbittorrent_k8s_prefs_check_cpu_request: "10m"
+qbittorrent_k8s_prefs_check_mem_request: 32Mi
 
 # The claim k8s/manifests renders and applies for this role, ahead of the pre-apply snapshot.
 # media-data is not here: it is the shared media claim, mounted by this role and owned elsewhere.
