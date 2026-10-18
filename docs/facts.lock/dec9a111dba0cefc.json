@@ -1,15 +1,15 @@
 {
-  "checksum": "6ae8b7a0422fc36867aad6deb2c50475c036da544587337036d33854103816f6",
+  "checksum": "544af8cea6c49e3f8e74314474c6be030442064018475af27dcd9b4d6643235d",
   "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
   "key": "ansible/roles/k8s/flux/CLAUDE.md#How the render meets the fleet guards",
   "row": {
     "atoms": {
       "ansible/filter_plugins/flux_components.py": "285b5c28333e119e355a082c3b72eb7e39a5290408951c36887d178a13c8b71a",
-      "ansible/tests/k8s/test_deploy_strategy.py:_RECREATE": "846ddd159f8b8e55dc8a669ded8641bf68dad7f620ed73d0a867bbd13887dbab",
+      "ansible/tests/k8s/test_deploy_strategy.py:_RECREATE": "dd7f15ebf6c0c4dedca0231a66498cd89bd07bdfda5d511bb5faf4e781b0162d",
       "docs/flux-deploy-plane.md": "807c3deb44c3178e7a6f9fc0bc398a3b748b95c468b14ce9b1b890c8684535d9",
       "scripts/deploy_tools/chained_timeout.py:CONCURRENT": "2fd83f4e2cb6a80f4a30f3d88bd745e722e041f2e57dda14c664c8fa768f4a74"
     },
     "python": "3.14",
-    "verified_sha": "e9cb97abb"
+    "verified_sha": "5f59446d0"
   }
 }

@@ -20,6 +20,9 @@ spec:
     metadata:
       labels:
         app: registry
+        # The pinned `registry` Service selects on this label, which the ghcr-mirror pod
+        # carries too. service.yaml.j2 says why.
+        registry-service: "true"
         # Opted OUT of the namespace baseline (slice 5). `networkpolicy.yaml.j2` is tighter than
         # the baseline, and the baseline is additive — selecting this pod would widen it.
         netpol-baseline-exempt: "true"
@@ -37,7 +40,10 @@ spec:
         - name: registry
           image: {{ registry_k8s_image }}
           ports:
-            - containerPort: {{ k8s_registry_port }}
+            # Named, because the Service's targetPort names it. A pod that declares no port of
+            # that name gets no endpoint for it, which keeps the ghcr-mirror pod off this port.
+            - name: registry
+              containerPort: {{ k8s_registry_port }}
               # Loopback only. Without hostIP this binds 0.0.0.0 and an unauthenticated,
               # plain-HTTP registry becomes writable by anything on the LAN.
               hostIP: {{ k8s_registry_host_ip }}
@@ -77,86 +83,7 @@ spec:
             initialDelaySeconds: 15
             periodSeconds: 30
 {{ container_resources(cpu_limit='500m', mem_limit='512Mi', cpu_request='50m', mem_request='64Mi') }}
-        # The pull-through mirror of ghcr.io (D5 Open question 2). k3s's registries.yaml names
-        # it as the `ghcr.io` mirror, so containerd pulls a flux-owned GHCR image through it and
-        # a node keeps a LAN copy for a cold start during a WAN outage. nut is the reason: its
-        # pod is half of the UPS shutdown chain, and WAN outages arrive with power events.
-        #
-        # DECIDED: a second container, not REGISTRY_PROXY_* on the one above. A registry in
-        # proxy mode refuses every manifest Put and Delete (`proxyManifestStore` returns
-        # ErrUnsupported in distribution v3.1.2), which would break every image-builder push
-        # and registry-gc.sh's untag DELETEs. A sidecar rather than its own Deployment keeps
-        # the pinned ClusterIP, the node pin, the NetworkPolicy and the PVC this role already
-        # has. Two costs. registry-gc.sh scales this pod to zero for up to
-        # registry_k8s_gc_deadline_s every Sunday, and containerd falls back to ghcr.io then.
-        # And a mirror container that cannot start leaves the whole pod unready, which takes
-        # the push store's Service endpoint down with it.
-        - name: ghcr-mirror
-          image: {{ registry_k8s_image }}
-          ports:
-            - containerPort: {{ k8s_registry_ghcr_mirror_port }}
-              # Loopback only, for the same reason as the push store's hostPort above.
-              hostIP: {{ k8s_registry_host_ip }}
-              hostPort: {{ k8s_registry_ghcr_mirror_port }}
-{{ hardened_security_context(read_only=true, non_root=true) }}
-          env:
-            - name: REGISTRY_LOG_LEVEL
-              value: info
-            - name: REGISTRY_HTTP_ADDR
-              value: ":{{ k8s_registry_ghcr_mirror_port }}"
-            # The baked config binds the debug server to :5001, and both containers share the
-            # pod's network namespace. Without this the second bind fails and the mirror
-            # crash-loops.
-            - name: REGISTRY_HTTP_DEBUG_ADDR
-              value: "127.0.0.1:{{ registry_k8s_ghcr_mirror_debug_port }}"
-            - name: REGISTRY_STORAGE_FILESYSTEM_ROOTDIRECTORY
-              value: /var/lib/registry
-{#
-  A blob that takes longer than about 8 to 10 minutes to fetch never completes through this
-  mirror (#5654). ghcr.io redirects each blob to an Azure SAS URL, whose `se` expiry read
-  7 minutes after issue, and the transfer is cut at the next 10 MiB boundary after that.
-  Measured from daniel-box on 2026-10-18 with curl, on a 223460165-byte flaresolverr layer:
-  HTTP/2 was cut at 200 MiB after 608s, HTTP/1.1 at 210 MiB after 572s, and HTTP/2 limited
-  to 120 KB/s at 60 MiB after 513s. The cap is time-based and not HTTP/2, so
-  `GODEBUG=http2client=0` would not help. distribution's proxy refetches from byte 0 on each
-  request and never resumes, so retries die at the same point. A Jinja comment, so that
-  editing it renames no verify Job and rolls nothing.
-#}
-            - name: REGISTRY_PROXY_REMOTEURL
-              value: https://ghcr.io
-            # Never expire. The default 168h would drop nut's image a week after its last
-            # rebuild, which is the cold pull during a WAN outage this mirror exists for.
-            # distribution's proxyregistry.go reads a zero TTL as "never expire". The weekly
-            # GC's offline prune (files/ghcr-mirror-prune.sh) is what bounds the store instead.
-            - name: REGISTRY_PROXY_TTL
-              value: "0s"
-          # Its own claim, not registry-data. Every ghcr.io image in the cluster pulls through
-          # here, not only danielh2018's, and nothing expires them, so a shared volume would
-          # fill and fail the push store's builds too. The push store's GC Job mounts only
-          # registry-data; the mirror's own GC Job mounts only this.
-          volumeMounts:
-            - name: ghcr-mirror-data
-              mountPath: /var/lib/registry
-          # `/v2/` answers from the local handler, so neither probe depends on ghcr.io being
-          # reachable. A probe that did would mark the whole pod unready in a WAN outage and
-          # take the push store's Service endpoint down with it.
-          readinessProbe:
-            httpGet:
-              path: /v2/
-              port: {{ k8s_registry_ghcr_mirror_port }}
-            initialDelaySeconds: 5
-            periodSeconds: 10
-          livenessProbe:
-            httpGet:
-              path: /v2/
-              port: {{ k8s_registry_ghcr_mirror_port }}
-            initialDelaySeconds: 15
-            periodSeconds: 30
-{{ container_resources(cpu_limit='500m', mem_limit='256Mi', cpu_request='20m', mem_request='32Mi') }}
       volumes:
         - name: registry-data
           persistentVolumeClaim:
             claimName: {{ registry_k8s_claim }}
-        - name: ghcr-mirror-data
-          persistentVolumeClaim:
-            claimName: {{ registry_k8s_ghcr_mirror_claim }}

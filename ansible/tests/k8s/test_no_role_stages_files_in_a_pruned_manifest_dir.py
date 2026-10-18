@@ -340,6 +340,7 @@ KNOWN_PRUNED_DIRS = frozenset({"n8n", "registry", "traefik", "authelia", "jellyf
 KNOWN_STAGED_FILES = frozenset(
     {
         ("registry-jobs", "gc-job.yaml"),
+        ("registry-jobs", "ghcr-mirror-gc-job.yaml"),
         ("headlamp-netpol", "netpol-probe-job.yaml"),
     }
 )

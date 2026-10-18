@@ -1,6 +1,6 @@
 {% from 'netpol-probe-job.yml.j2' import netpol_probe_job with context %}
 ---
-# The negative test for networkpolicy.yaml.j2: a pod carrying neither `netpol-role:
+# The negative test for networkpolicy.yaml.j2 and ghcr-mirror.yaml.j2's policy: a pod carrying neither `netpol-role:
 # image-builder` nor an admitted selftest label must be refused on {{ k8s_registry_port }}.
 # Those two are the only things the policy admits over the pod network (the ipBlock rule is for
 # host-originated pull traffic and cannot be exercised from inside a pod at all).
@@ -38,7 +38,8 @@
               if nc -w 5 -z registry {{ k8s_registry_ghcr_mirror_port }}; then
                 echo "POLICY NOT ENFORCED: reached the ghcr.io mirror on"
                 echo "registry:{{ k8s_registry_ghcr_mirror_port }} from a pod. Only the nodes'"
-                echo "containerd may pull through it."
+                echo "containerd may pull through it, so NetworkPolicy ghcr-mirror is not"
+                echo "taking effect."
                 exit 1
               fi
               echo "isolated: registry:{{ k8s_registry_ghcr_mirror_port }} refused, as intended"
