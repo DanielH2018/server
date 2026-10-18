@@ -1202,7 +1202,7 @@
  "scripts/renderer/tests/test_renderer_prepull.py": 2.01,
  "scripts/renderer/tests/test_renderer_prune_label.py": 2.87,
  "scripts/renderer/tests/test_renderer_restart.py": 13.72,
- "scripts/renderer/tests/test_renderer_roundtrip.py": 21.84,
+ "scripts/renderer/tests/test_renderer_roundtrip.py": 16.74,
  "scripts/renderer/tests/test_renderer_secret_aliases.py": 0.08,
  "scripts/renderer/tests/test_renderer_secret_checks.py": 0.04,
  "scripts/renderer/tests/test_renderer_secret_checks_tree.py": 9.45,
