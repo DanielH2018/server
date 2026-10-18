@@ -156,6 +156,15 @@ spec:
         # Peak RSS was 196 MiB.
         #
         # The password goes in on stdin, not argv, so it never appears in the process list.
+        #
+        # DECIDED: a failed reset blocks Grafana's start, with no `|| true`. Swallowing the
+        # exit would let Grafana serve with a stale admin password and say nothing, which is
+        # the silent divergence this initContainer exists to remove. The CLI's inputs are the
+        # image, the Secret and the database. A change to the first two rolls the pod in a
+        # deploy, so a failure shows up at that deploy's rollout wait, not at a later eviction.
+        # Grafana is not the paging path: Alertmanager pages without it. Not-ready dashboards
+        # are therefore an outage the operator sees, and that is the trade taken over a login
+        # that quietly stops working.
         - name: admin-password
           image: {{ observability_k8s_grafana_image }}
 {{ hardened_security_context(non_root=true) }}
