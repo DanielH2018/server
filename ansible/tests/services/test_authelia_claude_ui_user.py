@@ -19,6 +19,7 @@ from lib import yaml_fast
 from _helpers import K8S_ROLES
 from _k8s_render import render_role_template, rendered_docs
 from lib.render_context import render_context
+from renderer.renderer_lib.placeholders import Sentinels, placeholder_vars
 
 OPERATOR_PLACEHOLDER = "$argon2id$v=19$m=65536,t=3,p=4$operator"
 CLAUDE_PLACEHOLDER = "$argon2id$v=19$m=65536,t=3,p=4$claudeui"
@@ -223,3 +224,77 @@ def test_a_cluster_that_does_not_manage_the_agent_user_renders_no_such_account()
     )
     users = users_database([("authelia", "config-secret.yaml.j2", secret)])
     assert agent not in users and len(users) == 2, sorted(users)
+
+
+# ── the TOTP seed (target slice D5, step 26) ────────────────────────────────────────────────
+
+_TOTP_KEY = "authelia_claude_totp_secret"
+
+
+@pytest.mark.parametrize("manage_claude", [True, False])
+def test_the_placeholder_render_places_the_totp_secret_only_for_a_managed_claude_user(
+    manage_claude,
+):
+    """`cluster_vars.py write` refuses an empty value only for a key the render places.
+
+    That refusal succeeds "Fail if the claude-ui credentials are missing" once authelia is
+    flux-owned, so the render must place the TOTP secret under the assert's own condition.
+    """
+    text = render_role_template(
+        "authelia",
+        "config-secret.yaml.j2",
+        {
+            **placeholder_vars({_TOTP_KEY}),
+            "authelia_k8s_manage_claude_user": manage_claude,
+        },
+    )
+    placed = Sentinels({_TOTP_KEY}).key_set({"config-secret.yaml": text})
+    assert placed == ({_TOTP_KEY} if manage_claude else set())
+
+
+def _seed_container(manage_claude):
+    deployment = yaml_fast.safe_load(
+        render_role_template(
+            "authelia",
+            "deployment.yaml.j2",
+            {"authelia_k8s_manage_claude_user": manage_claude},
+        )
+    )
+    inits = deployment["spec"]["template"]["spec"].get("initContainers") or []
+    return [c for c in inits if c["name"] == "seed-claude-totp"]
+
+
+def test_the_seed_init_container_reads_the_key_the_secret_renders():
+    """The init container replaced an exec into the running pod, so it must find its input.
+
+    A `secretKeyRef` naming a key the Secret does not carry leaves the pod in
+    CreateContainerConfigError, which under Recreate is an SSO outage.
+    """
+    (seed,) = _seed_container(True)
+    secret = yaml_fast.safe_load(
+        render_role_template("authelia", "config-secret.yaml.j2")
+    )
+    refs = [
+        e["valueFrom"]["secretKeyRef"]
+        for e in seed["env"]
+        if "secretKeyRef" in e.get("valueFrom", {})
+    ]
+    assert refs == [{"name": "authelia-config", "key": "claude-totp-secret"}], refs
+    assert secret["metadata"]["name"] == "authelia-config"
+    assert "claude-totp-secret" in secret["stringData"], sorted(secret["stringData"])
+
+
+def test_the_seed_migrates_first_and_keeps_the_otpauth_uri_out_of_the_log():
+    """`totp generate` refuses an outdated schema, and it prints the secret on stdout."""
+    (seed,) = _seed_container(True)
+    script = seed["command"][-1]
+    migrate = script.index("authelia storage migrate up")
+    generate = script.index("authelia storage user totp generate")
+    assert migrate < generate, script
+    assert "schema already up to date" in script[migrate:generate], script
+    after = script[generate:]
+    assert ">/dev/null" in after[: after.index("then")], script
+
+
+def test_a_cluster_that_does_not_manage_the_claude_user_renders_no_seed():
+    assert _seed_container(False) == []

@@ -188,9 +188,15 @@ without a code typed off a phone. `authelia_k8s_claude_user` in `defaults/main.y
 reasoning; `scripts/diagnostics/ui_login.py` is the consumer.
 
 Its TOTP registration is **not** in the rendered `users_database.yml`. Authelia keeps
-registrations in its SQLite database whatever the authentication backend is, so the deploy
-seeds it with `authelia storage user totp generate --force` against the running pod, from
-`authelia_claude_totp_secret`. The secret is fixed, so re-seeding writes an identical row.
+registrations in its SQLite database whatever the authentication backend is. So the
+`seed-claude-totp` init container in `templates/deployment.yaml.j2` runs `authelia storage user
+totp generate --force` on every pod start, from the `claude-totp-secret` key of the
+`authelia-config` Secret, which renders `authelia_claude_totp_secret`. The secret is fixed, so
+re-seeding writes an identical row. It runs `authelia storage migrate up` first, because `totp
+generate` refuses a schema older than its binary. The seed fails open: a failure logs to the
+container's stderr and the portal still starts, so a missing row shows as the UI tier's
+`two_factor` login failing rather than as an SSO outage. It replaced a deploy task that exec'd
+into the running pod (target slice D5, step 26).
 
 **Rotating a password means minting its digest too.** Each user's argon2 digest is its own SOPS
 key, `authelia_password_argon2` and its two siblings, and the role renders those, never the
@@ -199,7 +205,8 @@ recap is green and the portal goes on accepting the old password. The operator-o
 *Authelia user passwords* in `docs/secret-rotation.md`, mints and validates the new digest and
 stores it beside the plaintext.
 
-Rotating `authelia_claude_totp_secret` needs no flag — the seeding task re-seeds every deploy.
+Rotating `authelia_claude_totp_secret` needs no flag. The changed Secret rolls the portal, and
+the init container re-seeds the row on the new pod's start.
 
 **The hashing parameters are configured twice, and only one of them verifies anything.**
 `authentication_backend.file.password` in `templates/config-secret.yaml.j2` builds the hasher

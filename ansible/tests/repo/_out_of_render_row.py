@@ -45,9 +45,6 @@ _VERIFY = "D5: the verify task's exec or pod check is converted or granted"
 # Each writing task file, with the slice whose document moves what it writes. Two owners where
 # the file's tasks split between slices.
 ALLOW = {
-    _K8S + "authelia/tasks/main.yml": (
-        "R3 removes the `kubectl run` hashing pods; D5 makes the TOTP seed an initContainer"
-    ),
     _K8S + "cronjob-gate/tasks/main.yml": (
         "D5: the gate Job becomes a Job in `<tag>-verify` copied from the jobTemplate"
     ),

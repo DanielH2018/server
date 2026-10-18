@@ -291,20 +291,27 @@ def test_claude_user_matches_the_authelia_role_default():
     assert ui_login.CLAUDE_USER == match.group(1)
 
 
-def test_totp_parameters_match_the_seeding_task():
+def test_totp_parameters_match_the_seed_init_container():
     """The derivation and the registration must use one set of TOTP parameters.
 
     They are stated on both sides rather than defaulted, so this is what holds them
     together: a code derived at a different period or width is simply rejected, with
     nothing in the failure naming the mismatch.
     """
-    tasks = os.path.join(
-        REPO_ROOT, "ansible", "roles", "k8s", "authelia", "tasks", "main.yml"
+    deployment = os.path.join(
+        REPO_ROOT,
+        "ansible",
+        "roles",
+        "k8s",
+        "authelia",
+        "templates",
+        "deployment.yaml.j2",
     )
-    with open(tasks) as f:
+    with open(deployment) as f:
         seed = f.read()
     assert "authelia storage user totp generate" in seed, (
-        "the TOTP seeding task is gone; derive_totp now has nothing to agree with"
+        "the seed-claude-totp init container is gone; derive_totp now has nothing to "
+        "agree with"
     )
     assert f"--digits {ui_login.TOTP_DIGITS}" in seed
     assert f"--period {ui_login.TOTP_PERIOD}" in seed
