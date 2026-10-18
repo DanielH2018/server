@@ -40,7 +40,7 @@ MUST_FIND = frozenset(
         "ansible/roles/setup/k8s_host_files/files/pi-peer-backup-shell.sh",
         ".claude/hooks/run-hook.sh",
         "setup/k3s/longhorn-backup-health.sh.j2",
-        "k8s/crowdsec/crowdsec-prune-bouncers.sh.j2",
+        "k8s/crowdsec/crowdsec-update-home-allowlist.sh.j2",
         "setup/initial_setup/docs-refresh.sh.j2",
     }
 )
@@ -101,7 +101,7 @@ def test_the_census_still_finds_the_scripts_it_is_measured_against():
     missing = MUST_FIND - found
     assert not missing, f"the shell census lost {sorted(missing)}"
     assert len(TRACKED) >= 12, len(TRACKED)
-    assert len(TEMPLATES) >= 30, len(TEMPLATES)
+    assert len(TEMPLATES) >= 27, len(TEMPLATES)
 
 
 def test_every_exemption_is_still_a_tracked_script():

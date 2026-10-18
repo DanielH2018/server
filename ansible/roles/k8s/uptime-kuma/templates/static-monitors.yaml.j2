@@ -204,7 +204,7 @@ stringData:
   crowdsec-home-allowlist.json: |
     {"type": "push", "name": "CrowdSec Home Allowlist", "description": "A daniel-box cron runs every 5 min: it looks up the home public IPv4 and IPv6 prefix via ipify and keeps them in the cluster LAPI home-ips allowlist via cscli. DOWN means an ipify lookup or cscli allowlists add failed; the message says which. Check syslog tag crowdsec-home-allowlist and the crowdsec pod.", "interval": 600, "max_retries": 0, "resendInterval": {{ uptime_kuma_k8s_push_resend_down_beats }}, "push_token": "{{ monitor_bridge_home_allowlist_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
   crowdsec-remote-allowlist.json: |
-    {"type": "push", "name": "CrowdSec Remote Allowlist", "description": "A daniel-box cron runs every 5 min: it reads Traefik's access log for 2xx responses on Authelia-protected routers and keeps each public client address in the cluster LAPI remote-ips allowlist for 7 days via cscli. DOWN means kubectl or cscli failed, no router carries the authelia middleware, or the list is at its cap; the message says which. Check syslog tag crowdsec-remote-allowlist and cscli allowlists inspect remote-ips.", "interval": 600, "max_retries": 0, "resendInterval": {{ uptime_kuma_k8s_push_resend_down_beats }}, "push_token": "{{ crowdsec_remote_allowlist_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
+    {"type": "push", "name": "CrowdSec Remote Allowlist", "description": "The crowdsec-jobs sidecar in the crowdsec pod runs every 5 min: it reads Traefik's access log for 2xx responses on Authelia-protected routers and keeps each public client address in the cluster LAPI remote-ips allowlist for 7 days via cscli. DOWN means kubectl or cscli failed, no router carries the authelia middleware, or the list is at its cap; the message says which. Read the crowdsec-jobs container log for crowdsec-remote-allowlist lines, and cscli allowlists inspect remote-ips.", "interval": 600, "max_retries": 0, "resendInterval": {{ uptime_kuma_k8s_push_resend_down_beats }}, "push_token": "{{ crowdsec_remote_allowlist_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
   # DECIDED: 360s, not 300 — the deadline must exceed the producer's PERIOD, and the period
   # is the cron plus the work. Both DDNS pods run the image's default UPDATE_CRON=@every 5m
   # and ping Kuma at the END of each cycle, after IP detection and the record check, so a
@@ -471,7 +471,8 @@ stringData:
     {"type": "push", "name": "WG Pi Peer Backup", "description": "The pi-peer-backup CronJob rsyncs daniel-pi wg-easy peer configs into a Longhorn PVC nightly at 23:30 and pushes its verdict. DOWN means rsync failed or fewer than 2 files came back; silence for 2.5 days means the Job did not run. Run kubectl -n homelab logs on the newest pi-peer-backup Job.", "interval": 216000, "max_retries": 0, "resendInterval": {{ uptime_kuma_k8s_push_resend_down_beats }}, "push_token": "{{ monitor_bridge_pi_peers_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
   # E7 (2026-08-13): DOCKER-USER Origin Lock retired with the public 80/443 it guarded.
   # CrowdSec AppSec stays — its feeder moved to daniel-box (k8s/crowdsec's
-  # crowdsec-appsec-verify.sh cron, pushing directly; same token).
+  # crowdsec-appsec-verify.sh cron), then at H2.4b into the crowdsec pod's crowdsec-jobs
+  # sidecar (files/appsec_verify.py). Same token.
   # 90000s (25h): fed by a DAILY cron (setup/gitops_deploy's github-ruleset-drift.sh), so the interval gives one missed run of
   # slack. Watches the merge gate the deployer's CI verdict rests on — a required context
   # removed in the GitHub UI otherwise changes what can reach master with no commit anywhere.
@@ -502,7 +503,7 @@ stringData:
   # of the time = 600/900) with `max_retries: 0` turning each expiry straight into DOWN.
   # 1800 = two cron periods, the same one-missed-run slack 600 gives the 300s bridge loop.
   crowdsec-appsec.json: |
-    {"type": "push", "name": "CrowdSec AppSec", "description": "A daniel-box cron runs every 15 min and asserts the crowdsec engine has at least one enabled appsec-config and one enabled appsec-rule. DOWN means the inline WAF is not loaded and the edge is ban-list-only, since the bouncer fails open; an unreachable LAPI stays UP. Run cscli appsec-configs list in the crowdsec pod.", "interval": 1800, "max_retries": 0, "resendInterval": {{ uptime_kuma_k8s_push_resend_down_beats }}, "push_token": "{{ monitor_bridge_appsec_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
+    {"type": "push", "name": "CrowdSec AppSec", "description": "The crowdsec-jobs sidecar in the crowdsec pod runs every 15 min and asserts the crowdsec engine has at least one enabled appsec-config and one enabled appsec-rule. DOWN means the inline WAF is not loaded and the edge is ban-list-only, since the bouncer fails open; an unreachable LAPI stays UP. Run cscli appsec-configs list in the crowdsec pod.", "interval": 1800, "max_retries": 0, "resendInterval": {{ uptime_kuma_k8s_push_resend_down_beats }}, "push_token": "{{ monitor_bridge_appsec_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
   # Host flip 2 (2026-08-14): pushed once daily by renovate-notify's ExecStartPost on
   # daniel-box (13:00 timer), not every bridge cycle — 36h window = one missed run +
   # slack, the same tolerance the retired renovate_alive check applied. Same token.

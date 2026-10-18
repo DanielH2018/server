@@ -9,6 +9,9 @@ grants to derive. Until then the real drill is the
 named member: its derived set must hold `get` on its backup target and the `watch` its teardown
 needs, or the derivation reads nothing.
 
+A script that calls the API through a REST client rather than kubectl, such as D5's jellyfin
+cap and pihole guard, has its case in test_rbac_against_rest_script.py instead.
+
 Run: uv run pytest ansible/tests/k8s/test_rbac_against_script.py
 """
 
@@ -23,7 +26,6 @@ from _script_rbac import (
     grants,
     missing,
     recorded_needs,
-    rest_needs,
     shell_needs,
 )
 from _shell_render import render_shell_script
@@ -371,69 +373,47 @@ def test_the_janitorr_health_role_grants_every_call_its_reader_makes(
     assert missing(needs, grants(docs, "homelab", "janitorr-health")) == []
 
 
-def _jellyfin_cap_calls(monkeypatch) -> list[tuple[str, str]]:
-    """D5's jellyfin cap: the Job script's calls on an uncapped volume, its longest path.
+def test_the_crowdsec_jobs_role_grants_every_call_the_remote_allowlist_makes(
+    monkeypatch,
+) -> None:
+    """H2.4b: remote_allowlist.py's main, run with a recording runner, against the sidecar's RBAC.
 
-    The replies hold the claim bound and the cap unset, so the script goes on from the reads
-    to the patch and every call it can make is recorded.
+    The other two jobs in the crowdsec-jobs sidecar run only cscli, which reads the LAPI's
+    database from a shared volume and calls no Kubernetes API, so this module is the only one
+    with grants to derive.
     """
-    monkeypatch.syspath_prepend(str(K8S_ROLES / "jellyfin" / "files"))
-    script = importlib.import_module("jellyfin_snapshot_cap")
-    calls = []
+    monkeypatch.syspath_prepend(str(K8S_ROLES / "crowdsec" / "files"))
+    module = importlib.import_module("remote_allowlist")
+    argvs = []
 
-    class Recorder(script.Kube):
-        def __init__(self):
-            super().__init__("https://api", "token")
+    def record(argv: list[str]) -> str:
+        if argv[0] == module.KUBECTL:
+            argvs.append(["kubectl", *argv[1:]])
+        if "ingressroute" in argv:
+            route = {"match": "Host(`x`)", "middlewares": [{"name": "authelia"}]}
+            return json.dumps(
+                {
+                    "items": [
+                        {
+                            "metadata": {"namespace": "homelab", "name": "x"},
+                            "spec": {"routes": [route]},
+                        }
+                    ]
+                }
+            )
+        return ""
 
-        def call(self, method: str, path: str, body=None) -> tuple[int, dict]:
-            calls.append((method, path))
-            if path.endswith("/jellyfin-config"):
-                return 200, {"spec": {"volumeName": "pvc-4f1c"}}
-            return 200, {"spec": {"snapshotMaxSize": "0"}}
-
-    env = {
-        "CAP_NAMESPACE": "homelab",
-        "CAP_CLAIM": "jellyfin-config",
-        "CAP_MAX_SIZE": "17179869184",
-    }
-    assert script.main([], env, Recorder()) == 0
-    assert [method for method, _ in calls] == ["GET", "GET", "PATCH"]
-    return calls
-
-
-def _jellyfin_cap_rbac() -> list[dict]:
-    return list(
-        yaml_fast.safe_load_all(
-            render_role_template("jellyfin", "verify-inert/rbac.yaml.j2")
-        )
+    assert module.main(runner=record) == 0
+    docs = list(
+        yaml_fast.safe_load_all(render_role_template("crowdsec", "jobs-rbac.yaml.j2"))
     )
-
-
-def test_the_jellyfin_cap_role_grants_every_call_its_script_makes(monkeypatch) -> None:
-    needs = rest_needs(_jellyfin_cap_calls(monkeypatch))
-    # The plan's grant set for the cap (*jellyfin's cap*), so a recorder that stopped
-    # recording cannot pass on an empty set.
-    assert needs == {
-        ("homelab", "", "persistentvolumeclaims", "get", "jellyfin-config"),
-        ("longhorn-system", "longhorn.io", "volumes", "get", "pvc-4f1c"),
-        ("longhorn-system", "longhorn.io", "volumes", "patch", "pvc-4f1c"),
+    needs = recorded_needs(argvs)
+    # The calls the plan derives this job's grants from (*CrowdSec*), less the exec the sidecar
+    # replaced, so a recorder that stopped recording cannot pass on an empty set.
+    assert {need[:4] for need in needs} == {
+        (ALL_NAMESPACES, "traefik.io", "ingressroutes", "list"),
+        ("homelab", "apps", "deployments", "get"),
+        ("homelab", "", "pods", "list"),
+        ("homelab", "", "pods/log", "get"),
     }
-    granted = grants(_jellyfin_cap_rbac(), "homelab", "jellyfin-snapshot-cap")
-    assert missing(needs, granted) == []
-
-
-def test_the_jellyfin_cap_role_without_patch_is_flagged(monkeypatch) -> None:
-    needs = rest_needs(_jellyfin_cap_calls(monkeypatch))
-    docs = _jellyfin_cap_rbac()
-    for doc in docs:
-        for rule in doc.get("rules") or []:
-            if rule["resources"] == ["volumes"]:
-                rule["verbs"].remove("patch")
-    assert missing(needs, grants(docs, "homelab", "jellyfin-snapshot-cap")) == [
-        ("longhorn-system", "longhorn.io", "volumes", "patch", "pvc-4f1c")
-    ]
-
-
-def test_the_jellyfin_verify_account_holds_no_grant() -> None:
-    """The verify Job reads no API; the cap's patch grant must not reach its account."""
-    assert grants(_jellyfin_cap_rbac(), "homelab", "jellyfin-verify") == []
+    assert missing(needs, grants(docs, "homelab", "crowdsec-jobs")) == []

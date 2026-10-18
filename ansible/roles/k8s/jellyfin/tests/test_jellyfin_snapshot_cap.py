@@ -3,7 +3,7 @@
 `World` answers the script's three calls from a dict of objects and records every call, so a
 test can read what the script asked for and what it wrote. The render of the Job itself is
 tested in test_jellyfin_verify.py, and its RBAC against these calls in
-ansible/tests/k8s/test_rbac_against_script.py.
+ansible/tests/k8s/test_rbac_against_rest_script.py.
 
 Run: uv run pytest ansible/roles/k8s/jellyfin/tests/test_jellyfin_snapshot_cap.py
 """

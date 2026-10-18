@@ -109,8 +109,6 @@ MAILS_ONLY_ON_FAILURE = {
         "its verdict is a Kuma push (#2516)"
     ),
     "Claude Code telemetry health": _KUMA,
-    "CrowdSec remote allowlist": _KUMA,
-    "CrowdSec AppSec verify": _KUMA,
     "Registry garbage collection": _KUMA + ", plus a Healthchecks /fail ping",
     "fake-remux health": _KUMA,
     "Longhorn backup health": _KUMA + ", plus a Healthchecks /fail ping",

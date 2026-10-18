@@ -1,0 +1,79 @@
+{#
+  The crowdsec-jobs sidecar's identity. Only the remote allowlist calls the Kubernetes API; the
+  other two jobs run cscli alone. Its rules are the grant set the H2 plan's *CrowdSec* derives
+  from the calls remote_allowlist.py makes, less the exec grant the sidecar replaces:
+
+    logs deploy/traefik -c access-log-rotate   get on deployments.apps, list on pods,
+                                               get on pods/log, in homelab
+    get ingressroute -A                        get and list on ingressroutes.traefik.io,
+                                               cluster-wide
+
+  The ClusterRole is cluster-wide because routes live in three namespaces. Narrowing the read
+  to homelab would change which routers count as authelia-gated, so the grant follows the
+  script.
+
+  `pods/log` cannot name the Traefik pod, whose name changes on every rollout, so the grant
+  reads every homelab pod's log. That is why the token reaches the sidecar alone, through a
+  projected volume, and never the engine container (deployment.yaml.j2).
+  ansible/tests/k8s/test_rbac_against_script.py runs the module's main with a recording runner
+  and holds these rules to the calls it records.
+#}
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: crowdsec-jobs
+  namespace: {{ k8s_namespace }}
+automountServiceAccountToken: false
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: crowdsec-jobs
+  namespace: {{ k8s_namespace }}
+rules:
+  - apiGroups: [apps]
+    resources: [deployments]
+    verbs: [get]
+  - apiGroups: [""]
+    resources: [pods]
+    verbs: [list]
+  - apiGroups: [""]
+    resources: [pods/log]
+    verbs: [get]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: crowdsec-jobs
+  namespace: {{ k8s_namespace }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: crowdsec-jobs
+subjects:
+  - kind: ServiceAccount
+    name: crowdsec-jobs
+    namespace: {{ k8s_namespace }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: crowdsec-jobs
+rules:
+  - apiGroups: [traefik.io]
+    resources: [ingressroutes]
+    verbs: [get, list]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: crowdsec-jobs
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: crowdsec-jobs
+subjects:
+  - kind: ServiceAccount
+    name: crowdsec-jobs
+    namespace: {{ k8s_namespace }}

@@ -83,6 +83,28 @@ def test_a_whole_suite_run_outside_a_batch_is_allowed(tmp_path, monkeypatch):
     assert _decide("uv run pytest -q", other) is None
 
 
+def test_a_session_worktree_whose_name_starts_with_fanout_is_not_a_batch(
+    tmp_path, monkeypatch
+):
+    """A batch id is issue numbers, so a session's own `fanout-ssh-...` tree keeps the suite."""
+    monkeypatch.delenv("CLAUDE_PROJECT_DIR", raising=False)
+    for name in ("fanout-ssh-connection-reuse", "fanout-queue-gauge"):
+        tree = tmp_path / ".claude" / "worktrees" / name
+        tree.mkdir(parents=True)
+        assert _decide("uv run pytest -q", tree) is None, name
+
+
+@pytest.mark.parametrize(
+    "name",
+    ["fanout-5666-5668", "fanout-dotfiles-763", "claude+fanout-work-laptop-config-12"],
+)
+def test_every_batch_name_shape_is_a_batch(tmp_path, monkeypatch, name):
+    monkeypatch.delenv("CLAUDE_PROJECT_DIR", raising=False)
+    tree = tmp_path / ".claude" / "worktrees" / name
+    tree.mkdir(parents=True)
+    assert _decide("uv run pytest -q", tree) is not None
+
+
 def test_the_agent_users_batch_and_the_project_dir_both_count(tmp_path, monkeypatch):
     agent = tmp_path / ".claude" / "worktrees" / "claude+fanout-12"
     agent.mkdir(parents=True)

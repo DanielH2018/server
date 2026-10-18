@@ -13,6 +13,8 @@ from dataclasses import replace
 import pytest
 
 from _cluster_vars_fixture import EXPECTED
+from render_share import sharing_placeholder_renders
+from renderer.renderer_lib import placeholders
 from secrets_mgmt.cluster_vars import fleet_expected, main
 from secrets_mgmt.cluster_vars_check import (
     SourceLine,
@@ -383,7 +385,8 @@ def test_the_real_render_names_its_known_members():
     `domain` is published (C3) and must not be a cluster key; `email` stays one. peanut is
     D3's first flux-owned Secret. The four `render_sops_manifests` entries are R2's.
     """
-    expected = fleet_expected()
+    with sharing_placeholder_renders(placeholders):
+        expected = fleet_expected()
     assert {"email", "peanut_password", "peanut_username", "nut_ha_password"} <= (
         expected.keys
     )

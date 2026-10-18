@@ -207,8 +207,8 @@ def consumer_tags(name: str) -> tuple[str, ...]:
         # unattended rotation while the audit still reports it registered.
         pusher = "registry"
     elif name == "crowdsec_remote_allowlist_push_token":
-        # Same shape as registry_gc: the crowdsec role renders the daniel-box cron that pushes,
-        # the tile is a static entity in k8s/uptime-kuma.
+        # The crowdsec role renders the crowdsec-jobs Secret its sidecar pushes with, and the
+        # tile is a static entity in k8s/uptime-kuma.
         pusher = "crowdsec"
     else:
         # anything else unrecognised -> manual
