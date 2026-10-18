@@ -8,7 +8,8 @@ traefik_k8s_image: traefik:v3.7.13@sha256:24841fe2de7304c149343d877d2923b4c8800a
 
 # The CRDs are an in-tree copy, files/crds/kubernetes-crd-definition-v1.yml, byte for byte
 # what `traefik_k8s_crd_url` serves, and `traefik_k8s_crd_sha256` is the hash of those bytes.
-# No render may fetch a URL (D5, C1), so the copy is what the flip PR renders into the bundle.
+# No render may fetch a URL (D5, C1), so the copy is what the flip PR renders, from the
+# `traefik-crds` role it moves the copy into (#5666).
 # The version is an immutable release tag, and its minor must equal the image's: a minor image
 # bump fails ansible/tests/k8s/test_traefik_crds.py until the copy is refreshed. A patch bump
 # leaves the copy alone. To refresh, set the tag, then

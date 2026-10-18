@@ -2686,9 +2686,27 @@ sizes its batch of roles against that projection.
           daniel-box with no reader, which is accepted. It is root-owned, holds no secret,
           and k3s auto-applies only `/var/lib/rancher/k3s/server/manifests/`, so it changes
           nothing.
-        - **traefik's tag renders `prune: false`.** The flip PR is the first whose render puts
+        - **The CRDs render in a tag of their own, `traefik-crds`** (#5666, ruled
+          2026-10-18). `cluster.py:attach_vendored` refuses a tag that vendors
+          `files/upstream/` while its own render holds a placeholder, and traefik's holds six.
+          Three shapes were weighed, and only the separate tag clears the refusal:
+            - Moving traefik's secret-reading templates to a tag of their own leaves the
+              refusal standing. `email` is read by `static-config.yaml.j2`'s ConfigMap and by
+              `deployment.yaml.j2`'s env, so the move would take the Deployment with it.
+              Listing the Secret templates in `render_sops_manifests` fails the same way.
+            - Rendering the CRDs as templates puts 4,601 lines of upstream bytes under the
+              fleet guards and the escaping pass. The render then stops matching
+              `traefik_k8s_crd_sha256`, which C1 *Vendored files* exists to keep.
+            - `traefik-crds` is a k8s role whose only content is `files/upstream/` holding the
+              in-tree copy, so its render holds no placeholder. The flip PR creates it, gives
+              it a `containers_list` entry, and declares `traefik-crds` in traefik's
+              `depends_on`. The pin variables and `test_traefik_crds.py` move with the copy.
+              Every routed role keeps its derived edge to `traefik`, so it reaches the CRDs
+              through traefik. Both tags flip in the same PR, in traefik's own window.
+        - **`traefik-crds` renders `prune: false`.** The flip PR is the first whose render puts
           the CRDs under a Flux Kustomization. It sets H1.1a's `flux_prune: false` in
-          traefik's defaults, which is C3's per-role `prune: false`. Its precondition, quoted
+          `traefik-crds`'s defaults, which is C3's per-role `prune: false`. traefik's own tag
+          holds no CRD and keeps the default. Its precondition, quoted
           in the PR body, is that H1.1a has merged. Under `prune: true`, a render that
           dropped a CRD file would delete that CRD, for example a `traefik_k8s_crd_version`
           bump whose upstream definitions drop a kind. The API server then deletes every
@@ -2697,15 +2715,18 @@ sizes its batch of roles against that projection.
           an object the render dropped.
         - **The CRD census.** The flip PR adds a renderer test that fails on a
           CustomResourceDefinition in any tag whose Kustomization renders `prune: true`.
-          traefik is a named member that the test must find carrying CRDs and `prune: false`.
-          The red fixture is traefik's render with `flux_prune` removed. This is D6.19's CRD
+          `traefik-crds` is a named member that the test must find carrying CRDs and
+          `prune: false`. The red fixture is `traefik-crds`'s render with `flux_prune`
+          removed. This is D6.19's CRD
           guard landing early, without D6's exception for `flux`.
         - **The rejected alternative** is a `kustomize.toolkit.fluxcd.io/prune: disabled`
-          label on every rendered CRD. It would keep pruning for traefik's other objects.
-          But D6.19's guard keys on the tag's `prune` value, so traefik's tag would fail it.
-        - **The cost:** an object dropped from traefik's render, such as a retired
-          Middleware, stays live until the operator deletes it (**operator-only**). The
-          same cost holds for H1's five plumbing tags.
+          label on every rendered CRD. D6.19's guard keys on the tag's `prune` value, so the
+          CRDs' tag would fail it. The separate tag already keeps pruning for traefik's other
+          objects.
+        - **The cost:** an object dropped from `traefik-crds`'s render, such as a CRD a later
+          upstream release retires, stays live until the operator deletes it
+          (**operator-only**). The same cost holds for H1's five plumbing tags. traefik's own
+          objects, such as a retired Middleware, prune as every other role's do.
     - crowdsec: its first conversion PR lands the Pi timer, the Alloy metrics stage and the
       inert `crowdsec-verify` Job. Its flip wires the Job.
     - netpol-baseline's PR repeats D4's drill on itself. A workload change that fails leaves
@@ -3127,7 +3148,7 @@ kubectl -n observability get deploy prometheus grafana alertmanager \
   -o jsonpath='{range .items[*]}{.metadata.name}{" "}{.spec.template.metadata.annotations.checksum/restart}{"\n"}{end}'
 
 # The two tags that ship CRDs render prune: false. Each line reads `<name> false`.
-kubectl -n flux-system get kustomization traefik flux \
+kubectl -n flux-system get kustomization traefik-crds flux \
   -o jsonpath='{range .items[*]}{.metadata.name}{" "}{.spec.prune}{"\n"}{end}'
 
 # Exit 6, inside the second speedtest drill, after one interval of flux-deferred and the root.
@@ -3254,7 +3275,7 @@ includes valheim's initContainer.
 - **The reboot window.** `promote`'s first Sunday run inside the window ends `deferred`, and
   the scheduled run at the window's end promotes master's tip with `verify`'s full derived
   timeout, read from the run's log.
-- **The CRD census.** traefik's render with `flux_prune` removed fails it, and so does
+- **The CRD census.** `traefik-crds`'s render with `flux_prune` removed fails it, and so does
   `flux`'s after the flux PR.
 - **The recovery runbook.** Each hand-apply branch with its hold moved after the apply fails
   the flux PR's text test, and so does the sync-object branch without `--force-conflicts`.
@@ -3306,7 +3327,7 @@ includes valheim's initContainer.
   revert, so Ansible runs them again on its next deploy. A Job the role added is orphaned
   under `deletionPolicy: Orphan`, and a completed Job is harmless. A host task file moved to
   `k8s_host_files` stays there until its own conversion PR is reverted.
-- **The prune setting on traefik and `flux`.** Never revert `flux_prune: false` on its own
+- **The prune setting on `traefik-crds` and `flux`.** Never revert `flux_prune: false` on its own
   while the role is flux-owned, and the CRD census fails such a revert in CI. A handback
   reverts the flip PR whole. The Kustomization then leaves the bundle under `deletionPolicy:
   Orphan`, so the CRDs and their objects stay.
@@ -3507,7 +3528,7 @@ includes valheim's initContainer.
 - **A dropped CRD deletes every object of its kind** (failure class 5). Prune and the
   render are two steps that the plan must not treat as one: a render that drops a CRD file
   makes the next apply delete the CRD, and the API server then deletes every custom object
-  of that kind. traefik's tag holds IngressRoute and Middleware, and `flux` holds Flux's own
+  of that kind. `traefik-crds` holds IngressRoute and Middleware, and `flux` holds Flux's own
   kinds. Mitigation: both render `prune: false` through H1.1a's lever, and the CRD census
   fails a CRD in any tag that renders `prune: true`. The cost is that an object dropped from
   either render stays live until the operator deletes it.
@@ -3662,8 +3683,8 @@ includes valheim's initContainer.
   'render-records' ansible/tests ansible/roles/k8s/uptime-kuma/tests` finds them, for example
   `ansible/tests/setup/test_kuma_check_timer.py`, whose `KNOWN_CHECKS` names the check. The
   role's own tests in `ansible/roles/setup/render_records/tests/` gain the absent default.
-- traefik's flip: the role `CLAUDE.md` says the tag renders `prune: false` and why, and
-  the CRD census lands with traefik as its named member.
+- traefik's flip: `traefik-crds`'s `CLAUDE.md` says the tag renders `prune: false` and why,
+  and the CRD census lands with `traefik-crds` as its named member.
 - The flux PR: the flux role's `CLAUDE.md`, which D1 creates, gains the `prune: false`
   reason. The recovery runbook gains its two hold-first hand-apply branches and the text
   test over them. The PR also edits the comment above `render_records_enabled` in
@@ -3703,7 +3724,8 @@ includes valheim's initContainer.
   `decide` shares; a fence peer per verify or
   mutation Job; seven census rows (host writes, host scripts, Job rules, Job connections,
   GHCR pull policy, publish layout, restart annotations, the last replacing D3's interim
-  one); `prune: false` on traefik and `flux` through H1.1a's existing lever, and one
+  one); one `traefik-crds` role and tag; `prune: false` on `traefik-crds` and `flux` through
+  H1.1a's existing lever, and one
   renderer CRD census, which D6.19's guard would otherwise add later; one text test over
   the flux recovery runbook. D5.3b2's observe-only set in `verify` is added and then
   removed by D5.3b3, so it nets to zero. One `land-wait` read of `flux/soak` and one
