@@ -119,8 +119,8 @@ def register_ansible_filters(env: Environment) -> Environment:
     Prometheus config renders its plain scrape jobs through ``scrape_jobs``, and each owning
     role reads its exporter's port through ``metrics_port``; both raise on a malformed
     ``metrics`` item. Its hand-written jobs read their entry's own port through ``entry_port``,
-    which raises on an entry name it cannot find. uptime-kuma's ingress tiles derive from
-    ``kuma_ingress_monitors``, which raises on a malformed ``kuma`` key. Every caller fence
+    which raises on an entry name it cannot find. observability's ingress probe targets derive
+    from ``kuma_ingress_monitors``, which raises on a malformed ``kuma`` key. Every caller fence
     reads its callers through ``netpol_callers``, and netpol-baseline's fences come from
     ``netpol_caller_fences``. artifacts, monitor-bridge, pihole and uptime-kuma collect names,
     ports and hostnames through ``entry_fields``' filters. homepage's tiles build their links and

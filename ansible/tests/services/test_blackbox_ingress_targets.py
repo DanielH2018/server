@@ -16,7 +16,6 @@ Run: uv run pytest ansible/tests/services/test_blackbox_ingress_targets.py
 import copy
 
 from _k8s_render import host_context, render_role_template
-from _kuma_entities import _entities
 from kuma_monitors import kuma_ingress_monitors
 from lib import yaml_fast
 from service_tier import in_service_tier
@@ -45,7 +44,7 @@ def job_targets(containers_list: list[dict] | None = None) -> dict[str, dict]:
 
 
 def tile_url(hostname: str, domain: str) -> str:
-    """The URL Kuma's ingress tile probes, built the way its template builds it."""
+    """The URL a target probes: the entry's ingress name on the LAN domain."""
     return f"https://{hostname}.local.{domain}"
 
 
@@ -76,17 +75,6 @@ def test_the_targets_are_the_filters_tiles_string_for_string():
     services = {labels["service"] for labels in targets.values()}
     assert REQUIRED_SERVICES <= services, sorted(REQUIRED_SERVICES - services)
     assert unprobed_hostnames(targets, ctx["containers_list"]) == []
-
-
-def test_the_targets_equal_kumas_ingress_tile_urls():
-    """The soak-join check: the soak queries join Kuma's `monitor_url` to the alert's
-    `instance`, so the two strings must match. M4's PR 4 deletes Kuma's loop and this test."""
-    cl = host_context()["containers_list"]
-    entities = _entities()
-    kuma_urls = [
-        entities[tile["id"] + ".json"]["url"] for tile in kuma_ingress_monitors(cl)
-    ]
-    assert list(job_targets()) == kuma_urls
 
 
 def test_each_targets_labels_follow_its_entry_sso_and_tier():
