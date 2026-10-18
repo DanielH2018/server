@@ -1,7 +1,7 @@
 """monitor-bridge's etcd quota threshold and k3s's actual backend quota must name one value.
 
 `check_etcd_db_size` measures `apiserver_storage_size_bytes` against `ETCD_DB_QUOTA_BYTES`
-(monitor-bridge's env-secret), and that number is only right while etcd runs its OWN default
+(monitor-bridge's Deployment env), and that number is only right while etcd runs its OWN default
 quota. `k3s_server_args` carries no `--etcd-arg=quota-backend-bytes`, so it does. Add one there
 and the check silently measures against a quota the cluster does not have — a threshold too low
 pages on a healthy DB, one too high stays green past the point etcd goes read-only. Neither
@@ -24,19 +24,19 @@ OVERRIDE_FLAG = "quota-backend-bytes"
 
 
 def deployed_quota() -> int:
-    """`ETCD_DB_QUOTA_BYTES` as the role's env-secret renders it.
+    """`ETCD_DB_QUOTA_BYTES` as the role's Deployment env renders it.
 
     Read off the render rather than the template's text, so a threshold that moves into a role
     default is still the number this guard compares. Against the source a moved value leaves
     the regex matching `{{ ... }}` instead of digits (#3202).
     """
     match = re.search(
-        r'^\s*ETCD_DB_QUOTA_BYTES:\s*"?(\d+)"?\s*$',
-        rendered_k8s_text("monitor-bridge", "env-secret.yaml.j2"),
+        r'^\s*- name: ETCD_DB_QUOTA_BYTES\n\s*value:\s*"?(\d+)"?\s*$',
+        rendered_k8s_text("monitor-bridge", "deployment.yaml.j2"),
         re.M,
     )
     assert match, (
-        "monitor-bridge's env-secret no longer declares ETCD_DB_QUOTA_BYTES, so the check falls "
+        "monitor-bridge's Deployment env no longer declares ETCD_DB_QUOTA_BYTES, so the check falls "
         "back to its in-code default and nothing here pins it to the cluster"
     )
     return int(match.group(1))

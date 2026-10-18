@@ -116,10 +116,10 @@ def test_a_covered_cycle_resets_the_streak(cfg):
 
 def test_cadvisor_floor_is_overridable_from_the_env_secret():
     env_secret = (
-        Path(__file__).resolve().parents[1] / "templates" / "env-secret.yaml.j2"
+        Path(__file__).resolve().parents[1] / "templates" / "config" / "env.yaml.j2"
     )
     assert 'CADVISOR_PODS_MIN: "20"' in env_secret.read_text(), (
-        "CADVISOR_PODS_MIN must be rendered in env-secret.yaml.j2 so an operator can tune it "
+        "CADVISOR_PODS_MIN must be rendered in config/env.yaml.j2 so an operator can tune it "
         "without a code change, like HOST_ORIGINS_MIN"
     )
 

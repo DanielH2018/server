@@ -62,7 +62,7 @@ mounted at `/textfile` and read by `--collector.textfile.directory`. A host prod
   `ansible/roles/k8s/monitor-bridge/files/verdicts/host_cgroups.py:claude_cgroup_verdict`
   fails when an expected cgroup stops reporting. Arm 3 takes `expected_by_origin`, which
   pairs each host with the cgroups that host must report, so it judges each host on its own
-  list. The check fills it from `CLAUDE_CGROUP_EXPECTED` in monitor-bridge's env-secret
+  list. The check fills it from `CLAUDE_CGROUP_EXPECTED` in monitor-bridge's settings
   template, which expects `claude-rc` only on a host that runs the RC unit. A writer that
   stops on one node therefore pages from Kuma while the other node still reports, and so
   does a file that is missing or malformed on one host.
