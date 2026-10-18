@@ -1,0 +1,39 @@
+{#
+  The verify Job's identity, INERT until netpol-baseline's flip, as `job.yaml.j2` beside it is.
+
+  The gate initContainer lists EndpointSlices in every namespace the target table dials, so
+  each gets a Role and a RoleBinding to the ServiceAccount in `k8s_namespace`. `list` alone:
+  the gate reads by label selector and never by name, and it writes nothing.
+#}
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: netpol-baseline-verify
+  namespace: {{ k8s_namespace }}
+{% for namespace in netpol_baseline_probe_namespaces.values() | unique | sort %}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: netpol-baseline-verify
+  namespace: {{ namespace }}
+rules:
+  - apiGroups: ["discovery.k8s.io"]
+    resources: ["endpointslices"]
+    verbs: ["list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: netpol-baseline-verify
+  namespace: {{ namespace }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: netpol-baseline-verify
+subjects:
+  - kind: ServiceAccount
+    name: netpol-baseline-verify
+    namespace: {{ k8s_namespace }}
+{% endfor %}
