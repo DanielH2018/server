@@ -14,7 +14,7 @@ from deploy_tools.bundle_census import census
 from deploy_tools.bundle_gates import source
 from lib import yaml_fast
 from lib.exit_codes import RENDER_FAILED, RENDER_OK
-from lib.k8s_roles import role_fields
+from lib.k8s_roles import K8S_ROLES, role_fields
 from renderer import homelab_render, shadow_diff
 from renderer.renderer_lib.bundle import CLUSTER_VARS_FILE, bundle_files
 from renderer.renderer_lib.roundtrip import render_sides, stub_passes
@@ -28,6 +28,7 @@ from renderer.renderer_lib.cluster import (
 from renderer.renderer_lib.bundle import write_bundle
 from renderer.renderer_lib.environment import RenderError
 from renderer.renderer_lib.placeholders import apply_placeholders, sentinel
+from renderer.renderer_lib.task_inputs import include_vars
 
 TAG = "metallb"
 TIMEOUT = "600s"
@@ -160,6 +161,41 @@ def test_a_role_that_sets_neither_field_keeps_prune_and_the_default_timeout(tmp_
 
 def test_a_roles_rollout_timeout_renders_as_its_kustomization_timeout(tmp_path):
     assert _spec(tmp_path, "manifests_rollout_timeout: 1200s\n")["timeout"] == "1200s"
+
+
+# valheim's include var leaves in D5.15's flip, PR #5468. Drop the name once that lands.
+PENDING_INCLUDE_TIMEOUTS = frozenset({"valheim"})
+
+
+def _include_timeouts(roles) -> tuple[set[str], set[str]]:
+    """The roles whose k8s/manifests include was read, and those passing a rollout timeout."""
+    read, passing = set(), set()
+    for role in sorted(p for p in roles.iterdir() if (p / "tasks").is_dir()):
+        try:
+            include = include_vars(role)
+        except ValueError:
+            continue
+        read.add(role.name)
+        if "manifests_rollout_timeout" in include:
+            passing.add(role.name)
+    return read, passing
+
+
+def test_no_role_passes_its_rollout_timeout_as_an_include_var():
+    """`role_fields` reads Flux's `timeout` from defaults alone, so an include var renders 600s (#5464)."""
+    read, passing = _include_timeouts(K8S_ROLES)
+    assert {"sonarr", "radarr", "prowlarr", "karakeep", "tdarr"} <= read
+    assert passing - PENDING_INCLUDE_TIMEOUTS == set()
+
+
+def test_a_rollout_timeout_passed_as_an_include_var_is_found(tmp_path):
+    tasks = tmp_path / TAG / "tasks"
+    tasks.mkdir(parents=True)
+    (tasks / "main.yml").write_text(
+        "- ansible.builtin.include_role:\n    name: k8s/manifests\n"
+        "  vars:\n    manifests_rollout_timeout: 900s\n"
+    )
+    assert _include_timeouts(tmp_path) == ({TAG}, {TAG})
 
 
 @pytest.mark.parametrize(

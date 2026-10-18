@@ -220,8 +220,8 @@ section says. The sweep command in *Verification* prints 125 such lines outside 
 - D3.2 adds one sentence on the cluster secrets file to *Secrets Management*.
 - R4 PR 2 edits *Adding a New Service*, and R4 PR 7 removes the manifests-role row and the
   config-restart row from *Where to Look*.
-- D6.8 rewrites *After a PR Merges* and *When to wait*. `d6-delete-old-path.md`, in its risk
-  *Coordination with G5 and R4*, already says D6.8 runs after G5 if G5 has started.
+- D6.21 rewrites *After a PR Merges* and *When to wait*. `d6-delete-old-path.md`, in its risk
+  *Coordination with G5 and R4*, already says D6.21 runs after G5 if G5 has started.
 - H7.15 drops `-e target=daniel-pi` from the host list in *Project Overview*.
 - H1.9 edits `CLAUDE.md` prose that names `host_vars/daniel-box.yml` as the service list.
 
@@ -386,7 +386,7 @@ into two destinations.
 - Whichever PR lands second rebases onto the other's text. Neither waits.
 - A slice that lands after G5 adds a pointer to the trimmed section, not prose. D2.3 and
   D3.2 each add one sentence, which fits that rule.
-- D6.8 rewrites *After a PR Merges* and *When to wait* as they stand when it runs, as
+- D6.21 rewrites *After a PR Merges* and *When to wait* as they stand when it runs, as
   `d6-delete-old-path.md` already plans.
 
 ```diff
@@ -624,7 +624,7 @@ Each risk is checked against `docs/failure-classes.md`.
       edited.
 - **Line count is met by joining lines.** The character ceiling in the exit criterion
   prevents it.
-- **Other slices rewrite the same sections.** D2.3, D3.2, D6.8, H1.9, H7.15, and R4 PRs 2 and
+- **Other slices rewrite the same sections.** D2.3, D3.2, D6.21, H1.9, H7.15, and R4 PRs 2 and
   7 edit sections G5 trims. *Baseline* lists each.
     - Mitigation: the *Ordering with other slices* rule in *Design*. Whichever lands second
       rebases, and a later slice adds a pointer rather than prose.
@@ -707,10 +707,10 @@ Raised: 3 high, 7 medium. Fixed: all 10. Refuted: one claim inside G5-R1-03.
   arithmetic is restated (PRs 1 to 3 reach about 218, PR 4 about 192). **Refuted in part:**
   the evidence said the D6 and H7 plan files do not exist, but `ls docs/target-architecture/deploy
   docs/target-architecture/host` lists `d6-delete-old-path.md` and `h7-delete-ansible.md`.
-  D6's risk *Coordination with G5 and R4* already says D6.8 runs after G5 if G5 has started,
+  D6's risk *Coordination with G5 and R4* already says D6.21 runs after G5 if G5 has started,
   which supports option (b).
 - **G5-R1-04 (medium)**: other slices edit the same sections. **Fixed.** *Baseline* lists
-  D2.3, D3.2, D6.8, H1.9, H7.15, and R4 PRs 2 and 7. *Design* states the ordering rule. The
+  D2.3, D3.2, D6.21, H1.9, H7.15, and R4 PRs 2 and 7. *Design* states the ordering rule. The
   stale `fact_status.py verify` steps in D2, D3, D6, H1, H2, H7 and M1 are reported as
   cross-slice notes.
 - **G5-R1-05 (medium)**: the one-home test does not prove a moved paragraph has one home.

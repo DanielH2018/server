@@ -6,21 +6,20 @@ longer exists. `k8s/terraria` is the sibling this role copies.
 
 ## At a glance
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates, tasks or containers_list entry, or the k3s role's Longhorn tier lists. -->
-- **Deploy tag:** `--tags "valheim"`
+- **Applied by:** Flux, through `promote` (`owner: flux`); `deploy.sh` refuses `--tags=valheim`
+  with exit 5
 - **Images:** `ghcr.io/community-valheim-tools/valheim-server` (`valheim_k8s_image`),
   `<k8s_registry_pull_host>/valheim` (`valheim_k8s_mods_image`)
 - **Route:** none (no `templates/ingressroute.yaml.j2`)
 - **Claims:** `valheim-config` (weekly -> B2 (default target)), `valheim-server` (no backup
   (StorageClass longhorn-nobackup))
-- **Auto-deploy:** denylisted (`k8s_autodeploy: false`) — two reasons: (1) probe-less — no
-  readinessProbe at all; (2) migrating state — Recreate + RWO PVC holding worlds
 <!-- /generated_from -->
 
 - **Version-pinned**, and **the tag pins the wrapper, not the game** — SteamCMD fetches the
   current Valheim build on every start, so the game runs the newest release either way.
 - **Mods:** BepInEx, with 12 plugins pinned in `defaults/main.yml` (2 live, 10 disabled) —
-  see *Modding* below. The second image is built in-cluster from `templates/Dockerfile.j2`
-  and holds only the plugin DLLs.
+  see *Modding* below. The second image is built from `templates/Dockerfile.j2` by the
+  promote workflow's `images` job, and holds only the plugin DLLs.
 - **Host:** daniel-box, by a hard `nodeSelector` — a member of the **VIP unit** with traefik,
   pihole, mosquitto and terraria. The pin and the MetalLB L2Advertisement nodeSelector move
   together or not at all (`roles/setup/k3s/templates/metallb-pool.yaml.j2`).
@@ -37,6 +36,31 @@ longer exists. `k8s/terraria` is the sibling this role copies.
   (#1875).
 - **Auth:** none possible — a raw UDP game protocol reaches no Traefik, Authelia or CrowdSec
   chain, so the join password is the only access control.
+- **Flux applies it, not Ansible** (D5.15, Wave C). Its `containers_list` entry carries
+  `owner: flux`, so `deploy.sh`, the play and the GitOps deployer all skip it, and a merged
+  change reaches the cluster when `promote` publishes and verifies the next bundle. To give it
+  back to Ansible, follow the two-PR handback in `docs/flux-deploy-plane.md`; a plain revert of
+  the flag leaves two writers on the objects. `k8s_autodeploy: false` still stops Renovate's
+  automerge of the wrapper bump. The Deployment is `Recreate`, so a change that rolls it takes
+  the server down until the new pod passes its startup probe: 2m16s from pod start to Ready on
+  the 2026-10-14 roll, with the install claim already populated. Every roll restarts the
+  console that game-stats' `valheim-stats` tails, which closes each open session at the
+  restart line.
+- **The join-password Secret substitutes from `homelab-cluster-vars`.** `valheim_server_pass`
+  is a `${<key>}` placeholder in the published render. Flux substitutes the value from the
+  `homelab-cluster-vars` Secret, which it decrypts from `ansible/vars/cluster-vars.sops.env`.
+  The Kustomization depends on `cluster-vars`, so a rotated value is live before valheim
+  reconciles. A rotation reaches the cluster only through `cluster_vars.py write`, which the
+  operator runs after a hand rotation. The renderer stamps a restart checksum on the
+  Deployment, so a changed value rolls the pod.
+- **Where the tasks went.** `tasks/main.yml` holds two includes, `k8s/image-builder` and
+  `k8s/manifests`, and no Flux path runs either. They stay for the handback. The mods build
+  became the `images` job (D5.4), which pushes `ghcr.io/danielh2018/valheim:<content tag>`.
+  The glance reads the defaults, so it still shows `<k8s_registry_pull_host>/valheim`; the
+  renderer rewrites the `mods` initContainer's ref to the GHCR one with
+  `imagePullPolicy: IfNotPresent` (`scripts/renderer/renderer_lib/images.py:ghcr_refs`). The
+  server image is third-party and keeps its own ref. The Kustomization's `wait` replaces the
+  rollout wait.
 
 ## Notable
 - **The join password lives in SOPS as `valheim_server_pass`.** The value it replaced was
@@ -52,8 +76,10 @@ longer exists. `k8s/terraria` is the sibling this role copies.
   same reason wg-easy's tunnel has no tile. Pod death surfaces through k3s Workload Health
   instead, and a port monitor added here would sit permanently red on a closed TCP port.
 - **First rollout is slow** — SteamCMD downloads ~1.8 G before anything binds, and
-  `ansible/roles/k8s/valheim/defaults/main.yml:valheim_k8s_rollout_timeout` is the budget both
-  the drain's `rollout status --timeout` and `progressDeadlineSeconds` read (#2409).
+  `ansible/roles/k8s/valheim/defaults/main.yml:manifests_rollout_timeout` is the budget that
+  Flux's `timeout` and `progressDeadlineSeconds` both read (#2409). It is a literal role
+  default because the renderer reads no include var: as an include var, the flip would have
+  left Flux at the 600s default. `valheim_k8s_rollout_timeout` names it for the template.
   `/opt/valheim` is a PVC so that download happens once.
 - **The hourly world zips go to the NOBACKUP claim** (`BACKUPS_DIRECTORY`). At the image's
   default they sat on the backed-up claim, and every weekly Longhorn backup re-uploaded the
@@ -95,4 +121,4 @@ like success.
 
 ## Editing
 - Manifests: `templates/*.yaml.j2` · Defaults: `defaults/main.yml`
-- Deploy: `./scripts/deploy.sh --tags "valheim"`
+- Deploy: merge, and `promote` applies it. `./scripts/deploy.sh --tags "valheim"` exits 5.

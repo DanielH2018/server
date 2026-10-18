@@ -1,0 +1,149 @@
+{#
+  arr-notification's seed as a post-apply mutation Job, INERT until this role's flip.
+
+  This file is byte-identical in sonarr's and radarr's `templates/verify-inert/`, so the app is
+  `container_item.name` and never a literal. The flip PR moves the directory to
+  `templates/verify/`, and the renderer then emits the Job into `<app>-verify` beside the verify
+  Jobs. That Kustomization starts only once `<app>` is applied and Ready, which is the order
+  `tasks/main.yml` gives the Ansible seed today (D5, *Post-apply mutation Jobs share
+  `<tag>-verify`*).
+
+  DECIDED: the script and the declared values come from arr-notification by `lookup()`, not
+  from the renderer. A cross-role lookup makes the deployer's scan redeploy sonarr and radarr
+  when arr-notification changes, and today's `include_role` of arr-notification already has
+  that coupling, so the lookup changes no routing. A renderer argument for one role's script
+  would be a special case for two readers.
+
+  DECIDED: the API key comes from `<app>-exportarr`, which `<app>`'s own render applies, as
+  sonarr's verify Job does (its `job.yaml.j2` says why). The webhook has no such Secret, so
+  `<app>-notification` below carries it by substitution. That placeholder makes `<app>-verify`
+  substitute, which gives it `substituteFrom` and the `cluster-vars` edge; the key is already
+  in the cluster file because autofix-bridge reads it.
+
+  The spec embeds a digest of the rendered Deployment, so the seed runs again on every revision
+  that rolls the app, as the Ansible seed runs on every deploy. A webhook rotation alone renames
+  nothing, so the rotated URL reaches the app on the next revision that rolls it.
+#}
+{% set app = container_item.name %}
+{% set seed_defaults = lookup('file', playbook_dir + '/roles/k8s/arr-notification/defaults/main.yml') | from_yaml %}
+{% set script_name = 'seed_arr_notification.py' %}
+{% set script_dir = '/seed' %}
+{% set data = {
+  script_name: lookup('file', playbook_dir + '/roles/k8s/arr-notification/files/seed_arr_notification.py'),
+  'flux_job_connect.py': flux_job_connect,
+} %}
+{% set configmap_name = app + '-notification-seed-' + ({'data': data, 'binaryData': {}} | to_json(sort_keys=True, separators=(',', ':')) | hash('sha256'))[:8] %}
+{% set deployment_digest8 = (lookup('template', 'deployment.yaml.j2') | hash('sha256'))[:8] %}
+{% set spec_text %}
+# One retry. The seed adopts and never deletes, so a second run after a transient error reads
+# the row again and writes only what is still missing.
+backoffLimit: 1
+# Below the 600s `manifests_rollout_timeout_default` every `<tag>-verify` Kustomization takes.
+# At most three API calls of 30s each, plus the helper's 60s of retries on the first connect.
+activeDeadlineSeconds: 300
+template:
+  metadata:
+    labels:
+      # The verify Jobs' label, so the one `<app>-verify` peer in the app's `netpol_from`
+      # admits this Job too. That peer lands in its own PR before the flip.
+      app: {{ app }}-verify
+  spec:
+    serviceAccountName: {{ app }}-verify
+    # The Job reads the app's API, not the Kubernetes API, so its pod holds no token.
+    automountServiceAccountToken: false
+    restartPolicy: Never
+    enableServiceLinks: false
+    securityContext:
+      runAsNonRoot: true
+      runAsUser: 65534
+      runAsGroup: 65534
+      seccompProfile:
+        type: RuntimeDefault
+    containers:
+      - name: seed
+        image: {{ flux_job_image }}
+        command:
+          - python3
+          - {{ script_dir }}/{{ script_name }}
+        env:
+          - name: ARR_APP
+            value: {{ app | to_json }}
+          # The Service by its cluster name; the script appends the app's port.
+          - name: ARR_HOST
+            value: {{ (app + '.' + k8s_namespace + '.svc.cluster.local') | to_json }}
+          - name: ARR_API_KEY
+            valueFrom:
+              secretKeyRef:
+                name: {{ app }}-exportarr
+                key: api_key
+          - name: ARR_DISCORD_WEBHOOK_URL
+            valueFrom:
+              secretKeyRef:
+                name: {{ app }}-notification
+                key: webhook_url
+          - name: ARR_NOTIFICATION_NAME
+            value: {{ seed_defaults.arr_notification_name | to_json }}
+          # arr-notification's `arr_notification_username` default, evaluated for this app.
+          - name: ARR_NOTIFICATION_USERNAME
+            value: {{ app | capitalize | to_json }}
+          - name: ARR_NOTIFICATION_TRIGGERS
+            value: {{ seed_defaults.arr_notification_triggers | to_json | to_json }}
+          - name: ARR_NOTIFICATION_INCLUDE_HEALTH_WARNINGS
+            value: {{ seed_defaults.arr_notification_include_health_warnings | string | lower | to_json }}
+          # Renames the Job whenever the app's Deployment changes; see the note above.
+          - name: ARR_DEPLOYMENT_DIGEST8
+            value: "{{ deployment_digest8 }}"
+          - name: PYTHONDONTWRITEBYTECODE
+            value: "1"
+        resources:
+          requests:
+            cpu: 10m
+            memory: 32Mi
+          limits:
+            memory: 64Mi
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+              - ALL
+        volumeMounts:
+          - name: script
+            mountPath: {{ script_dir }}
+            readOnly: true
+    volumes:
+      - name: script
+        configMap:
+          name: {{ configmap_name }}
+{% endset %}
+{% set spec = spec_text | from_yaml %}
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ app }}-notification
+  namespace: {{ k8s_namespace }}
+type: Opaque
+stringData:
+  webhook_url: "{{ arr_discord_webhook_url }}"
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ configmap_name }}
+  namespace: {{ k8s_namespace }}
+data:
+{% for key, text in data | dictsort %}
+  {{ key }}: {{ text | to_json }}
+{% endfor %}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ app }}-notification-seed-{{ (spec | to_json(sort_keys=True, separators=(',', ':')) | hash('sha256'))[:8] }}
+  namespace: {{ k8s_namespace }}
+  annotations:
+    homelab/job-kind: mutation
+    homelab/rerun-safe: ansible/roles/k8s/arr-notification/tests/test_seed_job.py::test_a_second_run_changes_nothing
+spec:
+{{ spec_text | indent(2, true) }}

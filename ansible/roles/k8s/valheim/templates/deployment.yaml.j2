@@ -12,8 +12,8 @@ spec:
   # update, and two servers writing one world would be worse than the deadlock.
 {{ spec_shell('Recreate') }}
   replicas: 1
-  # The same budget as the drain's rollout wait, which is why both read one variable. See
-  # valheim_k8s_rollout_timeout in defaults/main.yml for the 2026-08-13 measurement behind it
+  # The same budget as Flux's health-check `timeout`, which is why both read one variable. See
+  # manifests_rollout_timeout in defaults/main.yml for the 2026-08-13 measurement behind it
   # and for why the deadline and the wait have to move together.
   progressDeadlineSeconds: {{ valheim_k8s_rollout_timeout[:-1] | int }}
   selector:

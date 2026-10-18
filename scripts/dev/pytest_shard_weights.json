@@ -37,6 +37,7 @@
  ".claude/hooks/tests/test_strip_cd_cwd.py": 0.0,
  ".claude/hooks/tests/test_uv_python.py": 0.06,
  "ansible/roles/k8s/arr-notification/tests/test_seed_arr_notification.py": 0.0,
+ "ansible/roles/k8s/arr-notification/tests/test_seed_job.py": 3.46,
  "ansible/roles/k8s/artifacts/tests/test_artifact_server.py": 0.09,
  "ansible/roles/k8s/artifacts/tests/test_artifact_stars.py": 0.12,
  "ansible/roles/k8s/autofix-bridge/tests/test_autofix.py": 0.0,

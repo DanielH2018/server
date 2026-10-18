@@ -66,10 +66,9 @@
 - name: Deploy tdarr to the cluster
   ansible.builtin.include_role:
     name: k8s/manifests
-  vars:
-    # A cold pull of the 1.4 GiB image outlasts the shared default; the measurement is in
-    # defaults/main.yml because the template's progressDeadlineSeconds reads it too.
-    manifests_rollout_timeout: "{{ tdarr_k8s_rollout_timeout }}"
+  # No `manifests_rollout_timeout` include var: defaults/main.yml sets it, where the renderer
+  # reads it for Flux's `timeout` and k8s/manifests reads it for the rollout wait. An include
+  # var of that name would override the default and loop through `tdarr_k8s_rollout_timeout`.
 
 - name: Prove the GPU and the library are reachable from inside the pod
   tags: [deploy]

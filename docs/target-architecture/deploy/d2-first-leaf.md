@@ -411,7 +411,7 @@ find in the set. Its red fixture is a template that reads `entry.owner`, as the 
 harness requires.
 
 **An added or removed entry that is not Ansible-owned (D2.1c).** H1, H2 and H6 add Flux-born
-entries before D6.1 removes the deployer's k8s arms. Each such addition reaches the 23 reader
+entries before D6.12 removes the deployer's k8s arms. Each such addition reaches the 23 reader
 tags today. D2.1c records such an entry by its fields instead of returning None:
 
 - `changed_fields` records the entry under its name, with every field it carries other than
@@ -448,7 +448,7 @@ because their output then names the new service.
 
 The entry's own tag alone, which X2-06 proposed, is not sound, because the bare-entry render
 moves artifacts' `known_services.json`. So the narrowing shrinks the apply but does not empty
-it. Every PR that adds or removes a k8s entry before D6.1 still quotes its narrow output and
+it. Every PR that adds or removes a k8s entry before D6.12 still quotes its narrow output and
 runs D1.2's stop rule over the reader tags that output names, as M4 does. A failed apply of
 those tags takes D1's way out of a hold (D1 *Rollback*). The slices that add
 the entries own that step: H1, H2 and H6. Open question 10 states the output they
@@ -708,7 +708,7 @@ D1 builds the split. D2 adds its steps to the render job, and it adds the `verif
       commit that carries the trailer releases the walk.
     - A tag whose whole Kustomization leaves the bundle is exempt, such as at a handback's
       `owner: released`. `deletionPolicy: Orphan` prunes none of its objects. The exemption
-      holds while C3's Orphan policy does, and D6.7's switch must remove it.
+      holds while C3's Orphan policy does, and D6.20's switch must remove it.
     - D5 generalises its PR-time `Removes-Workload` check to `Removes-Object` in parallel,
       with the same trailer grammar. The PR-time check stops the PR, and `decide` stops a
       commit that reaches master without one.
@@ -1722,7 +1722,7 @@ later slices size against:
   emitter that closes the gap observes cluster state on daniel-box, not a landing. It reads
   each Kustomization's `status.lastAppliedOriginRevision` with the read-only `kubectl` and
   writes one `source=promote` line per revision change, which also removes the duplicate.
-  D2 hands that emitter to D6, because D6.1 deletes the deployer that could host it, and it
+  D2 hands that emitter to D6, because D6.12 deletes the deployer that could host it, and it
   should land before D5 moves the bulk. Until it lands, `land-wait`'s line covers only the
   landings that `land.sh` makes.
 - **A placeholder render could mislead a reviewer** (failure class 2). A green `check-bundle`
@@ -1793,7 +1793,7 @@ later slices size against:
   series against M1's budget.
 - **Removed:** nothing yet. Each skip exists only until D6 deletes the path it guards. The
   withdrawn `homelab-identifiers` Secret leaves nothing to retire. `digests.json`
-  replaces D6.1's `--moved-tags` mode before D6 writes it (C1).
+  replaces D6.12's `--moved-tags` mode before D6 writes it (C1).
 - **Net, for an operator:** one more hold to clear, `DEPLOY_HOLD`, beside `hold_sha` until
   D6. A hold names what failed, and it pages daily while it stands. One more token to
   mint and rotate, read-only. Three more alerts to read. One ruling on the revert rule,
@@ -1951,7 +1951,7 @@ in other documents, which this round hands to their owners.
   without `land-wait`. The emitter that reads each Kustomization's
   `status.lastAppliedOriginRevision` from daniel-box is handed to D6, to land before D5
   moves the bulk. The required fix's second point, an emitter built in D2, is not taken.
-  Its deployer-tick candidate would die with the deployer at D6.1, and a daniel-box timer
+  Its deployer-tick candidate would die with the deployer at D6.12, and a daniel-box timer
   is D6's design to make.
 - **D2-I1-03 (medium): D2.1c's census compared template paths, but pihole's member reads
   the list only through an include.** Confirmed:
