@@ -5,3 +5,6 @@
 # play's `k8s_host_files` tag reaches every task in the file.
 - name: Docs' site directory
   ansible.builtin.import_tasks: docs.yml
+
+- name: Artifacts' host directories
+  ansible.builtin.import_tasks: artifacts.yml

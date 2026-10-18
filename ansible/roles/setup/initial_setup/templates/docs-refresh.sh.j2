@@ -79,7 +79,9 @@ done
 
 REPO="/home/{{ sys_user }}/server"
 UV="/home/{{ sys_user }}/.local/bin/uv"
-SITE_DIR="{{ docs_host_site_dir | default('/home/' + sys_user + '/docs-site') }}"
+# A copy of roles/k8s/docs' docs_host_site_dir, which no setup play loads.
+# ansible/tests/setup/test_k8s_host_files_pairs.py holds it equal to that role's default.
+SITE_DIR="/home/{{ sys_user }}/docs-site"
 PR_BRANCH_PREFIX="docs-refresh/"
 
 # State this script keeps ACROSS runs, and it lives OUTSIDE $REPO deliberately: an untracked file
