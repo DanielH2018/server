@@ -148,12 +148,13 @@ def test_all_images_writes_all_ten_whatever_the_role_names(tmp_path):
 
 @pytest.mark.parametrize("other", [["--shared-only"], ["--secret-stubs", "s.yml"]])
 def test_all_images_beside_a_mode_that_writes_no_image_is_a_usage_error(
-    tmp_path, other
+    tmp_path, capsys, other
 ):
     argv = ["cluster", "--out", str(tmp_path), "--all-images", *other]
     with pytest.raises(SystemExit) as exc:
         homelab_render.main(argv)
     assert exc.value.code == RENDER_BAD_ARGS
+    assert "takes neither --shared-only nor --secret-stubs" in capsys.readouterr().err
 
 
 @pytest.mark.parametrize("name", sorted(TEN))
