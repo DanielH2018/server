@@ -849,6 +849,18 @@ those tags (a failed bump on a broad tick writes one) and leaves any other broad
   again: once merged, no later range carries the key. The page fires on every tick that
   merges the range: it names `secret_rotation.py consumers`, which prints the
   apply command of every consumer that no derivation reached.
+- **A k8s role reading a changed secret is applied on a range with no deploy-plane path**
+  (#5577). The narrowing above runs only when a deploy-plane path sends the range to it, so
+  until #5577 a rotation alone merged, paged, and left every k8s reader on the old value.
+  `deploy_broad_k8s.route_secret_k8s_readers` runs `secret_setup_readers.py --deploy-tags`,
+  which asks `secret_keys.reached` the same question for the secrets half alone and keeps the
+  fleet-coverage ceiling. When it names a reader, the range goes to `handle_broad`, which
+  applies `deploy.yml --tags <readers>` after any setup plan, less each Flux-owned tag. A
+  refusal at the ceiling names its readers, and they are deferred to `k8s_unapplied`. A
+  refusal that names none, a timeout or a crash merges and pages as before: a park on a
+  failure that repeats would hold every landing, and an unnamed deferral would owe the whole
+  fleet for one key. One cost comes with the route: an image bump promoted in the same range
+  deploys through the broad arm, forward-only, rather than with `handle_k8s`'s rollback.
 - **k8s-platform roles are auto-deployed ONLY for an image-pin bump to a non-denylisted service;
   every other k8s change defers-and-alerts.** `deploy_logic.split_k8s_auto_deploy` decides
   eligibility, **diff-shape first, identity second**. Gating on the service name alone would be
