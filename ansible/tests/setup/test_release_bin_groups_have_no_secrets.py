@@ -8,9 +8,9 @@ still readable on disk, which turns a rollback convenience into a credential arc
 occurrence of the general class ends in a rotation
 (`grep-on-a-script-prints-the-secret-it-embeds`).
 
-Five host scripts render a credential inline and carry `no_log: true` where they are
-deployed — the two secret-rotation wrappers, claude-otel-health, registry-gc and
-qbittorrent-prefs-check. None of them belongs in a group. Scripts that
+Four host scripts render a credential inline and carry `no_log: true` where they are
+deployed — the two secret-rotation wrappers, claude-otel-health and registry-gc. None of
+them belongs in a group. Scripts that
 SOURCE a token from a separate env file (the kuma-push pattern) hold no secret themselves and
 are what these groups are for.
 
