@@ -89,6 +89,13 @@ EXPECTED_ROWS: dict[str, dict[str, tuple[str, dict[str, str]]]] = {
             },
         ),
     },
+    # An absent arm, so it carries no owner or mode.
+    "observability.yml": {
+        "Remove the retired dashboard staging trees": (
+            "ansible.builtin.file",
+            {"path": "{{ item }}", "state": "absent"},
+        ),
+    },
     # Absent arms: the whole map pins `state: absent`, so an arm turned back into an install
     # fails here as well as in the retired-cron census.
     "traefik.yml": {
@@ -119,6 +126,11 @@ EXPECTED_LOOPS: dict[tuple[str, str], object] = {
         "{{ media_volume_host_path }}",
         "{{ media_volume_host_path }}/media",
         "{{ media_volume_host_path }}/torrents",
+    ],
+    ("observability.yml", "Remove the retired dashboard staging trees"): [
+        "/etc/rancher/k3s/dashboards",
+        "/etc/rancher/k3s/dashboards-annotated",
+        "/etc/rancher/k3s/dashboard-manifests",
     ],
 }
 
@@ -163,6 +175,7 @@ def test_a_task_file_main_no_longer_imports_is_flagged(tmp_path):
         "artifacts.yml: Ensure the star list directory exists",
         "docs.yml: Ensure the built docs site directory exists",
         "media-volume.yml: Create the media volume directories on the node",
+        "observability.yml: Remove the retired dashboard staging trees",
         "traefik.yml: Remove the Cloudflare IP drift cron",
         "traefik.yml: Remove the Cloudflare IP drift script",
     ]

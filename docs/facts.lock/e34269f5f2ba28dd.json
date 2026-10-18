@@ -1,12 +1,13 @@
 {
-  "checksum": "7933e30a66cb4ba950c599bcc9bd5d165581e7f0083c2a9eb81fc89082debc1e",
+  "checksum": "c0bfab359bd37fc554f77b98be58438a6a265327130936a10a436631733454b7",
   "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
   "key": "ansible/roles/k8s/observability/CLAUDE.md#Dashboards",
   "row": {
     "atoms": {
+      "ansible/tests/services/test_dashboard_configmaps.py": "00767c80d3d27535ae10b44840fc4f4103340e3c1c26020c1a764aebc897c0e7",
       "scripts/grafana/export_grafana_dashboards.py": "6493fdbe446a14722fb81c9f06acd769cc4cf9927ae1eddd13a5f5e5a6b8c60e"
     },
     "python": "3.14",
-    "verified_sha": "7f5047711"
+    "verified_sha": "e6323a1c6"
   }
 }

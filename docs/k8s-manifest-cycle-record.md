@@ -222,19 +222,15 @@ A ConfigMap/Secret a role's template builds with `lookup('file'|'template', ...)
 extra: the content the lookup returns is IN the rendered manifest, so a content change changes
 `manifests_render`'s bytes and the rollout-restart fires on its own.
 
-A role that instead stages its ConfigMap with `kubectl create configmap --from-file` —
-monitor-bridge, autofix-bridge, valheim-stats and terraria-stats, all for a script too
-Jinja-hostile to template (exposition strings full of curly braces, PromQL selectors) — applies it with
-its own `kubectl apply --server-side` task, entirely outside `manifests_files`, so
-`manifests_render is changed` never sees it and the pod keeps running the code it started with.
-Those roles add a `checksum/<name>` pod-template annotation instead, rendered by the shared
-`checksum_annotation(name, value=...)` / `checksum_annotation(name, path=...)` macro in
-`ansible/templates/checksum-annotation.yml.j2` (value mode renders an already-computed checksum
-verbatim; path mode hashes one file's raw bytes inline via `lookup('file', path, rstrip=False) |
-hash('sha1')`). `ansible/tests/k8s/test_checksum_annotation_census.py` is the guard: every role
-that stages a ConfigMap this way either carries the annotation or is named in that test's `DEBT`
-dict with the reason it does not need one (observability's dashboards poll on their own, per
-Grafana's `updateIntervalSeconds`).
+**HISTORY —** roles once staged a ConfigMap with `kubectl create configmap --from-file` and
+applied it with their own `kubectl apply --server-side` task, entirely outside
+`manifests_files`, so `manifests_render is changed` never saw it. monitor-bridge,
+autofix-bridge, valheim-stats and terraria-stats did it for scripts, and observability for its
+Grafana dashboards. Each moved to a rendered ConfigMap for D5, observability's dashboards last
+(#5644), and the census that held them to a `checksum/<name>` annotation retired with its
+subject. The shared `checksum_annotation(name, value=...)` / `checksum_annotation(name,
+path=...)` macro in `ansible/templates/checksum-annotation.yml.j2` stays for content that
+reaches the cluster another way.
 
 ## Why stale Secret keys are patched out rather than applied away
 

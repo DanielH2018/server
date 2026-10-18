@@ -10,6 +10,14 @@ Claude Code runs on the **host**, not in a container, and exports to `127.0.0.1:
 and Tempo carry the same `hostIP` pin on 3100/9090/3200 for `otelq`, another host process.
 Tempo's otlp-grpc 4317 skips the pin: two hostPorts on one number wedge a pod in `Pending`.
 
+The deploy reads the pin back from the live DaemonSet and fails without it. That readback has
+a Flux form in `templates/verify-inert/`, which nothing renders yet: the flip PR renames the
+directory to `templates/verify/`, the renderer then emits `observability-verify`, and the PR
+deletes the two readback tasks. The Job runs `files/observability_verify.py` with `get` on
+the `otel-collector` DaemonSet and no other grant.
+`ansible/roles/k8s/observability/tests/test_observability_verify.py` renders the renamed copy
+through the Job census and fails it on the collector render with its `hostIP` removed.
+
 The working-out lives in `docs/observability-dashboards.md`.
 
 ## At a glance
@@ -70,10 +78,16 @@ the initContainer writes the new password. grafana is `Recreate`, so no server h
 SQLite file while the CLI runs. Once the tag is flux-owned, the renderer's restart annotation
 rolls grafana instead (D5.1e).
 
-The rule files are the one ConfigMap no annotation hashes. Prometheus mounts `prometheus-rules`
+Two kinds of ConfigMap carry no hash. Prometheus mounts `prometheus-rules`
 as a directory and runs with `--config.auto-reload`, so a rule edit reloads in place and never
 rolls the `Recreate` pod
 (`ansible/roles/k8s/observability/templates/prometheus.yaml.j2:DECIDED: rules reload in place`).
+Grafana's file provisioner re-reads the dashboard ConfigMaps from their mounts every 30
+seconds, so while Ansible owns the role a board edit rolls nothing either. That stops at the
+flip. The restart annotation the renderer stamps on grafana hashes every ConfigMap the pod mounts
+(`scripts/renderer/renderer_lib/restart.py:pod_references`), so once the dashboards join the
+bundle a board edit restarts the `Recreate` pod, and so does a rule edit for Prometheus.
+#5679 tracks the exemption the flip PR needs.
 
 Every entry declares `restart_on: []`, so the shared release record stamps `restart: false`
 for each workload. After its rollout wait, the role raises that to `restart: true` through
@@ -175,14 +189,23 @@ that are written twice. `docs/observability-dashboards.md` has each rule in full
 
 ## Dashboards
 
-`files/dashboards/**/*.json` is the source of truth for every board, in the folders
-`observability_dashboard_folders` lists. To change one: edit the JSON, or edit it in the UI and
-round-trip with `scripts/grafana/export_grafana_dashboards.py`, then deploy
-**observability**. Three editing rules each otherwise leave a green deploy behind a blank board:
-a board in an unlisted folder is provisioned nowhere; a hand-edited board must stay in the
-writers' form; every datasource ref must resolve to a uid `templates/grafana.yaml.j2` declares.
-Two tests and the `validate-grafana-dashboards` prek hook enforce them. Read the dashboards
-page first.
+`files/dashboards/**/*.json` is the source of truth for every board, in the folders and board
+lists `observability_dashboard_folders` holds. To change one: edit the JSON, or edit it in the
+UI and round-trip with `scripts/grafana/export_grafana_dashboards.py`, then deploy
+**observability**. A new board file also needs its name under its folder in that map. Three
+editing rules each otherwise leave a green deploy behind a blank board: a board in an unlisted
+folder is provisioned nowhere; a hand-edited board must stay in the writers' form; every
+datasource ref must resolve to a uid `templates/grafana.yaml.j2` declares. Three tests and the
+`validate-grafana-dashboards` prek hook enforce them. Read the dashboards page first.
+
+**The dashboard ConfigMaps are a render.** `templates/grafana-dashboards.yaml.j2` renders one
+per folder and passes each board through the `grafana_deploy_annotated` filter, which adds the
+two deploy-annotation queries. The file is in `manifests_exclude_files`, because the shared
+role's client-side apply cannot carry the Infrastructure folder past the 262144-byte annotation
+cap. `tasks/dashboards.yml` renders it into its own directory and applies it server-side. The
+flip PR drops the exclusion, so the file joins the `observability` bundle, and deletes
+`tasks/dashboards.yml`. `ansible/tests/services/test_dashboard_configmaps.py` renders that
+flipped copy and holds every ConfigMap under the 1 MiB object cap.
 
 ## The trap: an idle stack is indistinguishable from a broken one
 

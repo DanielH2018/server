@@ -1,0 +1,14 @@
+---
+# The absent arm D5's dashboard conversion left for roles/k8s/observability. Its old
+# `tasks/dashboards.yml` staged the boards in two trees under /etc/rancher/k3s/ and wrote the
+# ConfigMap manifests to a third, outside the manifests directory. The ConfigMaps now render
+# from templates/grafana-dashboards.yaml.j2, so nothing reads the three trees. They are
+# root-owned and hold only dashboard JSON, and a tree that is gone already is a no-op.
+- name: Remove the retired dashboard staging trees
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - /etc/rancher/k3s/dashboards
+    - /etc/rancher/k3s/dashboards-annotated
+    - /etc/rancher/k3s/dashboard-manifests

@@ -17,15 +17,17 @@ the shipper does not emit and reported "no ip_ban events" through a window conta
 """
 
 import ast
+import json
 import re
 
 from _helpers import REPO, load_defaults
 from _k8s_render import rendered_texts
+from lib import yaml_fast
 
 _REPO = REPO
 _ROLE = _REPO / "ansible/roles/k8s/observability"
 _GRAFANA = "grafana.yaml.j2"
-_DASHBOARDS_TASKS = _ROLE / "tasks/dashboards.yml"
+_DASHBOARDS = "grafana-dashboards.yaml.j2"
 # deploy.sh's locked halves: the foreground's and --detach's both call `annotate`.
 _DEPLOY_UNDER_LOCKS = _REPO / "scripts/deploy_tools/deploy_lib/under_locks.py"
 _DEPLOY_PLAYBOOK = _REPO / "scripts/deploy_tools/deploy_lib/playbook.py"
@@ -69,10 +71,10 @@ def test_the_expr_parses_the_fields_the_annotation_renders():
     of the service list — degraded rather than broken, and easy to miss.
     """
 
-    import inject_dashboard_annotations as inject
+    import grafana_dashboards
 
     expr = load_defaults(_ROLE)["observability_deploy_annotation_expr"]
-    annotation = inject.build_annotation("x", expr)
+    annotation = grafana_dashboards.build_annotation("x", expr)
 
     field = re.fullmatch(r"\{\{(\w+)\}\}", annotation["textFormat"])
     assert field, "textFormat should render a single parsed field"
@@ -187,46 +189,42 @@ def test_annotating_can_never_fail_a_good_deploy():
     )
 
 
-def test_the_configmap_is_built_from_the_injected_tree():
-    """The whole mechanism is inert if the ConfigMap still reads the pristine staged tree.
+def test_the_template_injects_both_queries_into_every_board():
+    """The whole mechanism is inert if the ConfigMap template stops calling the filter.
 
     It renders, it applies, and Grafana simply gets boards with no annotation — green
-    everywhere. Reading the staged path here is the single most likely way to half-land this.
+    everywhere. So the rendered ConfigMaps are read back, and every board in them must carry
+    both queries with the role's own expressions.
     """
-    tasks = _DASHBOARDS_TASKS.read_text()
-
-    build = tasks.split("Build a ConfigMap manifest per dashboard folder", 1)
-    assert len(build) == 2
-    block = build[1].split("- name:", 1)[0]
-
-    assert "--from-file=/etc/rancher/k3s/dashboards-annotated/" in block, (
-        "the ConfigMap must be built from the injector's output tree, not the staged source"
+    defaults = load_defaults(_ROLE)
+    rendered = next(
+        text
+        for role, name, text in rendered_texts()
+        if (role, name) == ("observability", _DASHBOARDS)
     )
-
-
-def test_the_injector_writes_a_derived_tree_not_the_staged_one():
-    """Injecting in place makes the staging copy task fight the injector.
-
-    It restores the pristine JSON every deploy, the injector re-injects, and Grafana rolls every
-    time.
-    """
-    tasks = _DASHBOARDS_TASKS.read_text()
-    step = tasks.split("Inject the deploy-annotation query", 1)
-    assert len(step) == 2, "dashboards.yml no longer injects the annotation"
-    block = step[1].split("- name:", 1)[0]
-
-    src = re.search(r"--src\s+(\S+)", block)
-    dest = re.search(r"--dest\s+(\S+)", block)
-    assert src and dest, "the injector needs both --src and --dest"
-    assert src.group(1) != dest.group(1), (
-        "src and dest must differ — an in-place edit makes the staging copy task and the "
-        "injector overwrite each other on every deploy"
-    )
+    boards = [
+        json.loads(body)
+        for doc in yaml_fast.safe_load_all(rendered)
+        if doc
+        for body in doc["data"].values()
+    ]
+    assert len(boards) >= 20, "the dashboard ConfigMaps rendered almost no boards"
+    want = {
+        "Deploys": defaults["observability_deploy_annotation_expr"],
+        "Flux deploys": defaults["observability_flux_deploy_annotation_expr"],
+    }
+    for board in boards:
+        found = {
+            e["name"]: e["target"]["expr"]
+            for e in board["annotations"]["list"]
+            if e["name"] in want
+        }
+        assert found == want, board.get("title")
 
 
 def test_the_flux_query_matches_what_the_soak_job_prints():
     """The second query's join: its line filter, its parsed field and its container."""
-    import inject_dashboard_annotations as inject
+    import grafana_dashboards
     from renderer.renderer_lib import soak
 
     expr = load_defaults(_ROLE)["observability_flux_deploy_annotation_expr"]
@@ -234,15 +232,7 @@ def test_the_flux_query_matches_what_the_soak_job_prints():
     literals = re.findall(r'\|=\s*"([^"]+)"', expr)
     assert literals and all(literal in text for literal in literals), expr
     field = re.fullmatch(
-        r"\{\{(\w+)\}\}", inject.build_annotation("x", expr)["textFormat"]
+        r"\{\{(\w+)\}\}", grafana_dashboards.build_annotation("x", expr)["textFormat"]
     )
     assert field and "logfmt" in expr and f"{field.group(1)}=" in text
     assert f'container="{soak.SOAK}"' in expr and 'namespace="flux-system"' in expr
-
-
-def test_dashboards_pass_the_flux_query_as_the_second_annotation():
-    block = _DASHBOARDS_TASKS.read_text().split("Inject the deploy-annotation", 1)[1]
-    block = block.split("- name:", 1)[0]
-    assert (
-        "--flux-expr {{ observability_flux_deploy_annotation_expr | quote }}" in block
-    )

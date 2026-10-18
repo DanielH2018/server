@@ -51,8 +51,8 @@ glob returned by a function, a glob inside a comprehension the function returns,
 globs, and a `@pytest.mark.parametrize` whose values are the glob. Seven modules were reading
 source behind them, every one of them listed below — two because a render erases the macro call
 they are about, four because the file set they read is wider than any one render covers (#3223,
-#3224). The fifth, the checksum-annotation census, now reads its template half out of
-`_k8s_render` and keeps a source fallback for the templates no render covers (#3225).
+#3224). The fifth, the checksum-annotation census, read its template half out of
+`_k8s_render` (#3225) until it retired with its last subject (#5644).
 
 `ansible/tests/repo/_render_gate.py` holds the detector itself — which spellings of a read it
 resolves, and the one it deliberately does not treat as a read (a glob that only yields

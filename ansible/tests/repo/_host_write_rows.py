@@ -118,16 +118,10 @@ _H2_THEN_D5 = (
     "H2's family PR for the role moves the live crons and scripts, then D5's `k8s_host_files` "
     "conversion PR for the role moves the absent arms it leaves"
 )
-_CONFIGMAP = (
-    "D5's Wave D PR for the role: the imperative ConfigMap's node staging under "
-    "/etc/rancher/k3s/ becomes a rendered ConfigMap"
-)
-
 HOST_WRITE_ALLOW = {
     _K8S + "configarr/tasks/main.yml": _H2_THEN_D5,
     _K8S + "crowdsec/tasks/main.yml": _H2_THEN_D5,
     _K8S + "janitorr/tasks/main.yml": _H2_THEN_D5,
-    _K8S + "observability/tasks/dashboards.yml": _CONFIGMAP,
     _K8S + "pi-peer-backup/tasks/main.yml": (
         "pi-peer-backup's Wave C PR moves both daniel-pi writes to `k8s_host_files`"
     ),
