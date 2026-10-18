@@ -437,3 +437,61 @@ def test_the_jellyfin_cap_role_without_patch_is_flagged(monkeypatch) -> None:
 def test_the_jellyfin_verify_account_holds_no_grant() -> None:
     """The verify Job reads no API; the cap's patch grant must not reach its account."""
     assert grants(_jellyfin_cap_rbac(), "homelab", "jellyfin-verify") == []
+
+
+def _pihole_guard_calls(monkeypatch) -> list[tuple[str, str]]:
+    """D5's pihole sibling guard: its calls when instance 1 serves, its longest path.
+
+    Instance 1's list answers with a ready endpoint, so the script goes on to read pihole-2's
+    slices, and every call it can make is recorded.
+    """
+    monkeypatch.syspath_prepend(str(K8S_ROLES / "pihole" / "files"))
+    script = importlib.import_module("pihole_sibling_guard")
+    calls = []
+
+    class Recorder(script.Kube):
+        def __init__(self):
+            super().__init__("https://api", "token")
+
+        def get(self, path: str) -> tuple[int, dict]:
+            calls.append(("GET", path))
+            ready = {"conditions": {"ready": True}}
+            return 200, {"items": [{"endpoints": [ready]}]}
+
+    env = {
+        "GUARD_NAMESPACE": "homelab",
+        "GUARD_INSTANCE_SERVICE": "pihole",
+        "GUARD_SIBLING_SERVICE": "pihole-2-web",
+        "GUARD_WAIT_SECONDS": "300",
+    }
+    assert script.main([], env, Recorder()) == 0
+    assert len(calls) == 2
+    return calls
+
+
+def _pihole_guard_rbac() -> list[dict]:
+    return list(
+        yaml_fast.safe_load_all(
+            render_role_template("pihole", "guard-inert/rbac.yaml.j2")
+        )
+    )
+
+
+def test_the_pihole_guard_role_grants_every_call_its_script_makes(monkeypatch) -> None:
+    needs = rest_needs(_pihole_guard_calls(monkeypatch))
+    # The operator's grant on #5695, so a recorder that stopped recording cannot pass on an
+    # empty set.
+    assert needs == {("homelab", "discovery.k8s.io", "endpointslices", "list", None)}
+    granted = grants(_pihole_guard_rbac(), "homelab", "pihole-sibling-guard")
+    assert missing(needs, granted) == []
+
+
+def test_the_pihole_guard_role_without_list_is_flagged(monkeypatch) -> None:
+    needs = rest_needs(_pihole_guard_calls(monkeypatch))
+    docs = _pihole_guard_rbac()
+    for doc in docs:
+        for rule in doc.get("rules") or []:
+            rule["verbs"].remove("list")
+    assert missing(needs, grants(docs, "homelab", "pihole-sibling-guard")) == [
+        ("homelab", "discovery.k8s.io", "endpointslices", "list", None)
+    ]
