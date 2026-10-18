@@ -131,21 +131,25 @@ def test_the_projected_volume_names_exactly_the_rendered_config_maps(rendered):
     assert "monitor-bridge-script-checks-b2" in held
 
 
-def test_every_config_map_stays_under_the_annotation_budget(rendered):
+def _over_budget(config_maps: list[dict]) -> dict[str, int]:
+    """Each ConfigMap whose JSON is longer than `ANNOTATION_BUDGET`, mapped to that length."""
+    sizes = {cm["metadata"]["name"]: len(json.dumps(cm)) for cm in config_maps}
+    return {name: size for name, size in sizes.items() if size > ANNOTATION_BUDGET}
+
+
+def test_every_config_map_stays_under_the_annotation_budget_is_clean(rendered):
     files, _ = rendered
-    sizes = {cm["metadata"]["name"]: len(json.dumps(cm)) for cm in _config_maps(files)}
-    over = {name: size for name, size in sizes.items() if size > ANNOTATION_BUDGET}
-    assert not over, (
-        f"{over} exceed {ANNOTATION_BUDGET} bytes as JSON; split the module, which the 600-line "
-        "rule in this role's CLAUDE.md asks for anyway"
+    assert _over_budget(_config_maps(files)) == {}, (
+        f"these exceed {ANNOTATION_BUDGET} bytes as JSON; split the module, which the "
+        "600-line rule in this role's CLAUDE.md asks for anyway"
     )
 
 
-def test_one_config_map_for_every_module_would_be_refused_is_flagged(rendered):
+def test_one_config_map_for_every_module_is_flagged(rendered):
     """The red case for the budget: the pre-conversion shape, every module in one object.
 
-    Its client-side apply would store more than the annotation cap, which is why the render
-    ships one ConfigMap per module.
+    Its client-side apply would store more than the annotation cap itself, which is why the
+    render ships one ConfigMap per module.
     """
     files, _ = rendered
     merged = {
@@ -154,7 +158,9 @@ def test_one_config_map_for_every_module_would_be_refused_is_flagged(rendered):
         "metadata": {"name": "monitor-bridge-script", "namespace": "homelab"},
         "data": {k: v for cm in _config_maps(files) for k, v in cm["data"].items()},
     }
-    assert len(json.dumps(merged)) > ANNOTATION_CAP
+    flagged = _over_budget([merged])
+    assert list(flagged) == ["monitor-bridge-script"]
+    assert flagged["monitor-bridge-script"] > ANNOTATION_CAP
 
 
 def test_the_stamped_checksum_covers_the_config_maps(rendered):

@@ -99,7 +99,7 @@ def _import_from(app: Path, module: str) -> subprocess.CompletedProcess:
 
 
 def test_monitor_bridge_items_agree_with_the_ship_list():
-    """The three derivations read one list; this pins that they still say the same thing."""
+    """The two templates' derivations read one list; this pins that they still agree."""
     items = _script_items("monitor-bridge", "monitor-bridge-script")
     sources = _monitor_bridge_sources()
     assert dict(items) == {
