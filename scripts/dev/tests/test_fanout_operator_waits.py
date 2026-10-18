@@ -194,8 +194,9 @@ def test_the_pass_writes_the_queue_and_each_hosts_capacity(tmp_path):
     text = gauge.read_text()
     assert 'findings_issues{state="free"} 1' in text
     assert 'findings_issues{state="claimed"} 1' in text
-    for host in (autoland.LOCAL_HOST, autoland.SERVER_HOST):
-        assert f'fanout_batch_capacity{{host="{host}"}} 3' in text
+    # Each host's own launch cap (#5667), which the idle-slots rule reads as capacity.
+    assert 'fanout_batch_capacity{host="daniel-box"} 3' in text
+    assert 'fanout_batch_capacity{host="daniel-server"} 4' in text
 
 
 def test_a_failed_issue_read_keeps_the_waits_and_drops_the_queue(tmp_path):

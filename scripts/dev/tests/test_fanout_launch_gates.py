@@ -39,12 +39,14 @@ def test_live_batches_from_an_earlier_run_count_against_the_hosts_cap(tmp_path, 
     budget has no room for, so its batches stay counted until `clean` runs.
     """
     remote = _another_host()
-    earlier = [Batch(f"{n}", remote, "/w", "b", "u", [n], "t") for n in (91, 92, 93)]
+    # Four, so the host is full whichever one `remote` is: daniel-server's cap is 4 (#5667).
+    numbers = (91, 92, 93, 94)
+    earlier = [Batch(f"{n}", remote, "/w", "b", "u", [n], "t") for n in numbers]
     save(Manifest("20260101T000010Z", "o", earlier), root=tmp_path)
     tools, run = fake_tools(answers={remote: ok(HEADROOM)}, issues=CLAIMED)
     assert _launch(tools, tmp_path, "--host", remote, "--batch", "1,2") == 3
     err = capsys.readouterr().err
-    assert f"{remote} already holds 3 live batch(es)" in err
+    assert f"{remote} already holds 4 live batch(es)" in err
     assert "91 in run 20260101T000010Z" in err
     assert "run `clean <run-id>`" in err
     # The headroom read happened; no launch call did.
@@ -132,19 +134,47 @@ def test_reading_the_unit_states_makes_no_extra_ssh_call(tmp_path):
     assert not any("systemctl --user show" in command for _, command, _ in rest)
 
 
-def test_three_running_batches_still_refuse_the_launch(tmp_path, capsys):
-    remote = "daniel-server"
-    _three_uncleaned(tmp_path, remote)
-    reply = _headroom_with(*(_unit_state(str(n), running=True) for n in (91, 92, 93)))
-    code, run = _launch_pinned(tmp_path, remote, reply)
+def _running(tmp_path, host, count):
+    """`count` uncleaned batches on `host`, each reported running by the headroom read."""
+    numbers = range(91, 91 + count)
+    earlier = [Batch(f"{n}", host, "/w", "b", "u", [n], "t") for n in numbers]
+    save(Manifest("20260101T000010Z", "o", earlier), root=tmp_path)
+    return _headroom_with(*(_unit_state(str(n), running=True) for n in numbers))
+
+
+def test_three_running_batches_refuse_a_fourth_on_daniel_box(tmp_path, capsys):
+    reply = _running(tmp_path, "daniel-box", 3)
+    code, run = _launch_pinned(tmp_path, "daniel-box", reply)
     assert code == 3
-    assert f"{remote} already holds 3 live batch(es)" in capsys.readouterr().err
+    err = capsys.readouterr().err
+    assert "daniel-box already holds 3 live batch(es)" in err
+    assert "over the 3 that" in err
+    assert len(run.host_calls) == 1
+
+
+def test_daniel_server_admits_a_fourth_running_batch(tmp_path):
+    """#5667: the server's cap is 4, so the box's refusal above is per host, not global."""
+    reply = _running(tmp_path, "daniel-server", 3)
+    code, _ = _launch_pinned(tmp_path, "daniel-server", reply)
+    assert code == 0
+
+
+def test_four_running_batches_refuse_a_fifth_on_daniel_server(tmp_path, capsys):
+    reply = _running(tmp_path, "daniel-server", 4)
+    code, run = _launch_pinned(tmp_path, "daniel-server", reply)
+    assert code == 3
+    err = capsys.readouterr().err
+    assert "daniel-server already holds 4 live batch(es)" in err
+    assert "over the 4 that" in err
     assert len(run.host_calls) == 1
 
 
 def test_a_unit_state_that_cannot_be_read_counts_as_running(tmp_path, capsys):
-    """Fail closed: no marker, an empty section and a missing block each leave the batch counted."""
-    remote = "daniel-server"
+    """Fail closed: no marker, an empty section and a missing block each leave the batch counted.
+
+    On daniel-box, whose cap of 3 is what the arithmetic below is written against.
+    """
+    remote = "daniel-box"
     replies = (
         ok(HEADROOM),
         _headroom_with(),
