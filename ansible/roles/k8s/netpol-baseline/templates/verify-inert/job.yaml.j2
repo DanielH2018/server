@@ -33,10 +33,19 @@
   certificate, could not run in the same container. The census admits no `ssl` import that
   would give each request its own context.
 
+  The exempt-set check is the Flux form of the two "Fail if the live exempt set is not exactly
+  ..." tasks in `tasks/main.yml` (#5685). `exempt_sets` holds one row per namespace whose scope
+  lever is `namespace`, because those tasks run only under namespace scope. Under Flux the
+  check runs after the apply, so drift fails this Job and the revision's soak acts on it,
+  where the task refused the apply. The levers have no form here, because a post-apply Job
+  sees only the render they already coerced. tests/test_netpol_baseline_flux_gates.py checks
+  them at render time instead.
+
   The caller census (D5, *A fence admits every Job that dials through it*). The pod is
   `app: netpol-baseline-verify` and `netpol-probe: control` in `k8s_namespace`. It execs into
   nothing, and it dials:
-    - kubernetes.default.svc:443, from the gate. The API server runs on the host network,
+    - kubernetes.default.svc:443, from the gate, for EndpointSlices and the exempt pods'
+      metadata. The API server runs on the host network,
       where no NetworkPolicy selects it, so no peer is added;
     - traefik:80, the control, which `networkpolicy-traefik.yaml.j2` admits from every source;
     - speedtest:80, the sentinel, which `networkpolicy-netpol-sentinel.yaml.j2` admits by the
@@ -73,6 +82,13 @@
   + lookup('template', 'networkpolicy-wg-easy.yaml.j2') %}
 {% set render_digest8 = (policies | hash('sha256'))[:8] %}
 {% set homelab = netpol_baseline_enforced | bool %}
+{% set exempt_sets = [] %}
+{% if netpol_baseline_scope == 'namespace' %}
+{%   set _ = exempt_sets.append({'namespace': k8s_namespace, 'variable': 'netpol_baseline_exempt_workloads', 'apps': netpol_baseline_exempt_workloads | sort}) %}
+{% endif %}
+{% if netpol_baseline_obs_scope == 'namespace' %}
+{%   set _ = exempt_sets.append({'namespace': k8s_observability_namespace, 'variable': 'netpol_baseline_obs_exempt_workloads', 'apps': netpol_baseline_obs_exempt_workloads | sort}) %}
+{% endif %}
 {% set gate_rows = [] %}
 {% set leg_rows = [] %}
 {% for t in netpol_baseline_probe_active %}
@@ -129,6 +145,8 @@ template:
             value: gate
           - name: GATE_TARGETS
             value: {{ gate_rows | to_json | to_json }}
+          - name: EXEMPT_SETS
+            value: {{ exempt_sets | to_json | to_json }}
           - name: SSL_CERT_FILE
             value: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
           # Renames the Job whenever a policy changes; see the DECIDED note above.

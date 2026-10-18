@@ -45,7 +45,8 @@ tighter or looser allow-list than the baseline. Deploys no workload of its own.
   and the probe tasks' `when:`, so a typo like `fasle` is silently `False` on both sides: the
   allow-all body renders, the verifying probe skips, and the deploy reports green while
   nothing is fenced. `tasks/main.yml` asserts both are literally `true`/`false` before it
-  reads the cluster or applies anything.
+  reads the cluster or applies anything. Under Flux no task runs, so
+  `tests/test_netpol_baseline_flux_gates.py` applies the same predicate to the render context.
 - **The exempt-workload list is read as an exact set, live** — a name absent from the cluster
   is a widening about to happen; a cluster workload missing from the list is fenced by
   nothing. The two disagreed for ~16 hours during slice 4.5;
@@ -69,7 +70,8 @@ tighter or looser allow-list than the baseline. Deploys no workload of its own.
   `files/netpol_baseline_verify.py` twice. Its `gate` initContainer reads the targets'
   EndpointSlices through the API server, and its main container dials the probe's legs
   through `flux_job_connect`. Both read the same `netpol_baseline_probe_active` table. The
-  lever asserts and the exempt-set gates are not in it, because they run before the apply.
+  `gate` also runs the exempt-set check, which is the successor of the two live exempt-set
+  tasks. It runs after the apply, so drift fails the Job rather than blocking the apply.
   `job.yaml.j2` carries the caller census and the `DECIDED:` notes on the digest and the
   initContainer. `tests/test_netpol_baseline_verify.py` renders the renamed copy and runs the
   Job census over it.

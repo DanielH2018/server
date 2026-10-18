@@ -26,6 +26,9 @@
 #   netpol_baseline_obs_enforced — the observability twin of netpol_baseline_enforced, same
 #     `| bool` trap on both the template's `if` and the probe tasks' `when:`. A typo here is silent in the same direction: allow-all renders, the probe
 #     skips, and the deploy reports green while observability is unfenced.
+#
+# Its Flux form is tests/test_netpol_baseline_flux_gates.py, which applies this predicate to
+# the render context (#5685). Keep the two predicates the same.
 - name: Check the netpol-baseline levers
   ansible.builtin.assert:
     that:
@@ -51,6 +54,9 @@
 #
 # Runs only under namespace scope: under label scope the exemption selects nothing, so there is
 # nothing to be wrong about.
+#
+# Its Flux form, and the observability twin's, is `exempt` in files/netpol_baseline_verify.py,
+# which the verify Job's `gate` initContainer runs after the apply (#5685).
 - name: Read the workloads live-exempt from the baseline
   tags: [deploy]
   when:
