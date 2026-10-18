@@ -85,6 +85,8 @@ ALLOWED: dict[str, set[str] | None] = {
         "deploy_config",
         "deploy_narrow",
         "deploy_remediation",
+        # `SecretReadersRefused`, the reader script's refusal (#5436); a stdlib leaf.
+        "deploy_setup_roles",
         "deploy_state",
         "deploy_tick_types",
         "deploy_toolbox",

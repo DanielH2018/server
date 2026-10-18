@@ -11,6 +11,12 @@ spec:
   clusterIP: {{ k8s_registry_cluster_ip }}
   selector:
     app: registry
+  # Named because a Service with two ports requires it. The second is the ghcr.io
+  # pull-through mirror, which agents' registries.yaml reaches on this same ClusterIP.
   ports:
-    - port: {{ k8s_registry_port }}
+    - name: registry
+      port: {{ k8s_registry_port }}
       targetPort: {{ k8s_registry_port }}
+    - name: ghcr-mirror
+      port: {{ k8s_registry_ghcr_mirror_port }}
+      targetPort: {{ k8s_registry_ghcr_mirror_port }}

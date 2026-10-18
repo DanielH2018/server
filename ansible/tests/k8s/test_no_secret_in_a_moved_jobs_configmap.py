@@ -23,7 +23,7 @@ from _k8s_render import render_role_template
 from lib import yaml_fast
 from secrets_mgmt.rotation_tools import sops_names
 
-MOVED_ROLES = ("configarr",)
+MOVED_ROLES = ("configarr", "janitorr")
 
 # The red fixture: the line the retired configarr-health.sh.j2 carried, staged into a
 # ConfigMap the way a careless move would stage it.
@@ -72,8 +72,10 @@ def moved_configmap_renders() -> dict[tuple[str, str], str]:
 
 
 def test_the_render_reaches_the_known_configmaps() -> None:
-    """The named member: configarr's health reader code, staged at H2.5b."""
+    """The named members: configarr's and janitorr's health reader code, staged at H2.5b and
+    H2.5c."""
     assert ("configarr", "health-configmap.yaml.j2") in moved_configmap_renders()
+    assert ("janitorr", "health-configmap.yaml.j2") in moved_configmap_renders()
     assert len(sentinels()) >= 100
 
 
@@ -82,10 +84,9 @@ def test_the_sentinels_reach_the_render() -> None:
 
     Without it, a binding that never reached the templates would leave every ConfigMap clean.
     """
-    token = sentinels()["monitor_bridge_configarr_push_token"]
-    assert token in render_role_template(
-        "configarr", "health-secret.yaml.j2", sentinels()
-    )
+    for role in MOVED_ROLES:
+        token = sentinels()[f"monitor_bridge_{role}_push_token"]
+        assert token in render_role_template(role, "health-secret.yaml.j2", sentinels())
 
 
 def test_a_moved_roles_configmaps_carry_no_secret_value_is_clean() -> None:

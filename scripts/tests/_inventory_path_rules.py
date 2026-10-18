@@ -79,20 +79,49 @@ def _module_file(
     the `pythonpath` roots. A file in `sources` counts as present. Every directory searched
     is in the repo, so whatever resolves is first-party.
     """
-    dirs: list[Path] = []
-    if importer is not None and importer.is_relative_to(REPO):
-        dirs = [importer.parent, importer.parent.parent / "files"]
-    for directory in dirs + list(_import_roots()):
-        if sources:
-            fixture = next(
-                (c for c in _candidates(directory, dotted) if c in sources), None
-            )
-            if fixture is not None:
-                return fixture
+    parent = (
+        importer.parent
+        if importer is not None and importer.is_relative_to(REPO)
+        else None
+    )
+    # A file in `sources` is a candidate only under the import's last segment. The census
+    # passes its red subject's sibling to every module on disk, so this is usually no match.
+    leaf = dotted.rpartition(".")[2]
+    if not any(p.stem == leaf or p.parent.name == leaf for p in sources):
+        return _first_on_disk(parent, dotted)
+    for directory in _search_dirs(parent):
+        fixture = next(
+            (c for c in _candidates(directory, dotted) if c in sources), None
+        )
+        if fixture is not None:
+            return fixture
         found = _on_disk(directory, dotted)
         if found is not None:
             return found
     return None
+
+
+def _search_dirs(parent: Path | None) -> tuple[Path, ...]:
+    """The directories an import from a module in `parent` searches, in `_module_file`'s order."""
+    own = () if parent is None else (parent, parent.parent / "files")
+    return own + _import_roots()
+
+
+# The census resolves ~22000 imports across ~1400 modules, mostly the same few helpers and
+# the standard library, which misses every root. Searching every root per import cost ~5s of
+# the static-ratchet-tests hook before these caches (#5501).
+def _first_on_disk(parent: Path | None, dotted: str) -> Path | None:
+    own = () if parent is None else (parent, parent.parent / "files")
+    return next(
+        (f for d in own if (f := _on_disk(d, dotted)) is not None), None
+    ) or _on_import_roots(dotted)
+
+
+@cache
+def _on_import_roots(dotted: str) -> Path | None:
+    return next(
+        (f for d in _import_roots() if (f := _on_disk(d, dotted)) is not None), None
+    )
 
 
 # A module's resolved names, by its path on disk. A census reads every test module, and they
@@ -305,14 +334,15 @@ def inline_inventory_paths(
     """
     tree = ast.parse(source)
     names = _local_anchors(tree, module, sources or {})
-    inner = {
-        id(node.left)
+    joins = [
+        node
         for node in ast.walk(tree)
         if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Div)
-    }
+    ]
+    inner = {id(node.left) for node in joins}
     found = []
-    for node in ast.walk(tree):
-        if not isinstance(node, ast.BinOp) or id(node) in inner:
+    for node in joins:
+        if id(node) in inner:
             continue
         chain = _chain(node, names, module)
         if chain is None:

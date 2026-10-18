@@ -653,6 +653,13 @@ k8s_registry_pull_host: "localhost:{{ k8s_registry_port }}"
 # the flannel vxlan, unencrypted — accepted for the homelab tier (both endpoints are our own
 # hosts on our own switch; the alternative is a CA + cert rotation for one hop).
 k8s_registry_cluster_ip: 10.43.51.14
+# The registry pod's second listener: a pull-through mirror of ghcr.io (D5 Open question 2,
+# ruled 2026-10-16), so a node can cold-pull a flux-owned GHCR image while the WAN is down.
+# A second PORT on the same pod and Service rather than this one, because a registry in proxy
+# mode refuses every push and delete — the push store has to stay a separate instance. 5002,
+# not 5001: the image's baked config already binds its debug server to :5001 in the shared pod
+# netns. The mirror KEY in registries.yaml is `ghcr.io`; this port is only its endpoint.
+k8s_registry_ghcr_mirror_port: 5002
 # The node that runs the registry Deployment (nodeSelector) and therefore resolves the
 # mirror to its own loopback hostPort. Follows the cluster: a staging deploy must push and
 # pull its own images, never the prod registry, where a staging build could overwrite a tag

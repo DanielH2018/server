@@ -101,8 +101,11 @@ def test_ci_verdict_treats_cancelled_as_no_verdict_not_failure():
 
 
 def test_ci_verdict_skipped_and_neutral_count_as_green():
-    assert ci_verdict([_run(_PREK, conclusion="skipped")], _REQUIRED) == "pass"
+    other = "renovate config validator"
+    assert ci_verdict([_run(other, conclusion="skipped")], {other}) == "pass"
     assert ci_verdict([_run(_PREK, conclusion="neutral")], _REQUIRED) == "pass"
+    # Except a skipped gate: only a draft PR's run skips it, and that run tested nothing (#5563).
+    assert ci_verdict([_run(_PREK, conclusion="skipped")], _REQUIRED) == "pending"
 
 
 def test_ci_verdict_failure_wins_over_a_second_run_of_the_same_name():

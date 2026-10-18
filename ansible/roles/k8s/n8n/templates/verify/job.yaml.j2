@@ -1,11 +1,10 @@
 {#
-  n8n's verify Job and the ConfigMap that carries its script, INERT until n8n's flip.
+  n8n's verify Job and the ConfigMap that carries its script.
 
-  This directory is `verify-inert/`, which neither reader globs: the manifests role takes only
-  top-level `templates/*.yaml.j2`, and `verify_files` takes only `templates/verify/*.yaml.j2`.
-  n8n's flip PR moves the directory to `templates/verify/`, and the renderer then emits it
-  into `n8n-verify` (D5, *A verify conversion lands as inert code*). The same PR deletes the
-  `n8n-netpol-probe` tasks and `netpol-probe-job.yaml.j2`, which this Job replaces.
+  The renderer emits `templates/verify/*.yaml.j2` into `n8n-verify` (`verify_files`), which
+  Flux applies once the `n8n` Kustomization reads Ready. The manifests role takes only
+  top-level `templates/*.yaml.j2`, so no Ansible path renders it. The Job replaced the
+  `n8n-netpol-probe` tasks and `netpol-probe-job.yaml.j2` in n8n's flip (#5546).
 
   Both names end in a digest, as the Job census requires (D5, *Rules for every Job Flux
   applies*): the ConfigMap's in `configmap_digest8` of its data, the Job's in

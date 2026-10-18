@@ -1,21 +1,23 @@
 #!/usr/bin/env python3
 """janitorr health reader — the cluster-side replacement for monitor-bridge's check_janitorr.
 
-Reads the running janitorr pod through the read-only ServiceAccount kubeconfig and prints one
-tab-separated line, `up<TAB>msg` or `down<TAB>msg`, for the wrapper to push to Kuma. It never exits
-nonzero on a bad verdict: a DOWN is data to report, not a crash, and the wrapper needs the message
-either way.
+Reads the running janitorr pod and its log, then pushes a verdict to the "Janitorr Errors" Kuma
+push monitor. It never exits nonzero on a bad verdict: a DOWN is data to report, not a crash.
 
-Runs on daniel-box via `uv run --no-project --python <pin>` (host_python_version in
-ansible/inventory/group_vars/all.yml). The push URL carries a token, so it stays in the
-templated wrapper and never appears here; this file is plaintext in git.
+Runs as the janitorr-health CronJob (templates/health-cronjob.yaml.j2), in the repo's pinned
+python image, with kubectl copied in by an init container and the pod's own ServiceAccount
+(templates/health-rbac.yaml.j2) as its credential. host_lib.py and kuma_push.py sit beside it
+in the same ConfigMap. The push URL, which carries the token, reaches it as KUMA_PUSH_URL from
+the janitorr-health Secret through `secretKeyRef`, so the token is never in the ConfigMap or in
+this file.
 
 Usage:
 
-    uv run --no-project --python <pin> /opt/janitorr-health/janitorr_health.py
+    python3 /config/janitorr_health.py
 
-Takes no arguments. The cron wrapper janitorr-health.sh runs it and pushes its output to
-Kuma. `-h` and `--help` print this text and exit 0.
+Takes no arguments. `-h` and `--help` print this text and exit 0. With KUMA_PUSH_URL empty,
+or naming no `/api/push/<token>` path, it pushes nothing and prints one tab-separated line,
+`up<TAB>msg` or `down<TAB>msg`, which is how a hand run reads the verdict.
 
 Environment (all optional):
 
@@ -24,6 +26,7 @@ Environment (all optional):
     JANITORR_STARTUP_GRACE_S     seconds after a pod start before errors count (default 600)
     JANITORR_KUBECTL             kubectl command line (default "k3s kubectl")
     JANITORR_KUBECTL_TIMEOUT_S   seconds allowed per kubectl call (default 30)
+    KUMA_PUSH_URL                the Janitorr Errors push monitor's URL, `<base>/api/push/<token>`
 """
 
 from __future__ import annotations
@@ -31,6 +34,7 @@ from __future__ import annotations
 import os
 import sys
 import time
+from collections.abc import Callable
 from datetime import datetime, timezone
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -42,25 +46,30 @@ WINDOW_S = float(os.environ.get("JANITORR_WINDOW_H", "12")) * 3600
 GRACE_S = float(os.environ.get("JANITORR_STARTUP_GRACE_S", "600"))
 KUBECTL = os.environ.get("JANITORR_KUBECTL", "k3s kubectl")
 TIMEOUT = int(os.environ.get("JANITORR_KUBECTL_TIMEOUT_S", "30"))
+# The pod log is the evidence, in the `<tag>: <message>` shape the host script's `logger -t`
+# lines had (the H2 plan's *Evidence goes to stdout*).
+TAG = "janitorr-health"
+
+KUBECTL_RUNNER = host_lib.kubectl_runner(KUBECTL, NAMESPACE, TIMEOUT)
 
 
-kubectl = host_lib.kubectl_runner(KUBECTL, NAMESPACE, TIMEOUT)
-
-
-def uptime_seconds(started_at: str) -> float:
-    """Seconds since an RFC 3339 timestamp. Kubernetes always emits UTC with a trailing Z."""
+def uptime_seconds(started_at: str, now: float) -> float:
+    """Seconds from an RFC 3339 timestamp to `now`. Kubernetes always emits UTC with a Z."""
     started = datetime.strptime(started_at, "%Y-%m-%dT%H:%M:%SZ").replace(
         tzinfo=timezone.utc
     )
-    return time.time() - started.timestamp()
+    return now - started.timestamp()
 
 
-def main() -> int:
-    """Reads the running janitorr pod's error rate and prints an `up\\tmsg` / `down\\tmsg` verdict.
+def verdict(kubectl: Callable[..., tuple[int, str]], now: float) -> tuple[bool, str]:
+    """Reads the running janitorr pod's error count and returns `(ok, msg)`.
 
-    Always exits 0: a down verdict is printed output for the wrapper to push to Kuma, not a
-    process failure, so every failure path (unreadable pod, unparseable start time, unreadable
-    logs) prints a `down` line and returns 0 rather than raising.
+    Every failure path it can name (unreadable pod, unparseable start time, unreadable logs)
+    returns a DOWN verdict rather than raising.
+
+    Args:
+        kubectl: `kubectl(*args) -> (rc, output)`, as `host_lib.kubectl_runner` returns.
+        now: the current time as a Unix timestamp, which the container's uptime is measured to.
     """
     # The CONTAINER's startedAt, not the pod's: a container that crash-looped inside a long-lived
     # pod restarts its own clock, and the boot race restarts with it. Using the pod's start time
@@ -76,35 +85,62 @@ def main() -> int:
         "jsonpath={.items[0].status.containerStatuses[0].state.running.startedAt}",
     )
     if rc != 0:
-        print(
-            "down\tcannot read the janitorr pod in %s: %s"
-            % (NAMESPACE, out.strip()[:200])
+        return False, "cannot read the janitorr pod in %s: %s" % (
+            NAMESPACE,
+            out.strip()[:200],
         )
-        return 0
 
     started_at = out.strip()
     if not started_at:
-        ok, msg = logic.janitorr_errors_ok(None, None, WINDOW_S, GRACE_S)
-        print("%s\t%s" % ("up" if ok else "down", msg))
-        return 0
+        return logic.janitorr_errors_ok(None, None, WINDOW_S, GRACE_S)
 
     try:
-        uptime_s = uptime_seconds(started_at)
+        uptime_s = uptime_seconds(started_at, now)
     except ValueError as e:
-        print("down\tunparseable container start time %r: %s" % (started_at, e))
-        return 0
+        return False, "unparseable container start time %r: %s" % (started_at, e)
 
     count = None
     if uptime_s > GRACE_S:
         window = logic.effective_window_s(uptime_s, WINDOW_S, GRACE_S)
         log_rc, logs = kubectl("logs", "deploy/janitorr", "--since=%ds" % int(window))
         if log_rc != 0:
-            print("down\tcannot read janitorr logs: %s" % logs.strip()[:200])
-            return 0
+            return False, "cannot read janitorr logs: %s" % logs.strip()[:200]
         count = sum(1 for line in logs.splitlines() if logic.ERROR_MATCH in line)
 
-    ok, msg = logic.janitorr_errors_ok(count, uptime_s, WINDOW_S, GRACE_S)
-    print("%s\t%s" % ("up" if ok else "down", msg))
+    return logic.janitorr_errors_ok(count, uptime_s, WINDOW_S, GRACE_S)
+
+
+def main(
+    kubectl: Callable[..., tuple[int, str]] = KUBECTL_RUNNER,
+    push: Callable[..., bool] = host_lib.kuma_push,
+    now: Callable[[], float] = time.time,
+) -> int:
+    """Pushes the verdict to Kuma, or prints it as `up\\tmsg` / `down\\tmsg` with no token.
+
+    Always exits 0. A reader that raises pushes a DOWN naming the exception, which is what
+    the host script's wrapper did for a reader that crashed: an absent push would leave the
+    tile to time out with no explanation.
+
+    Args:
+        kubectl: the kubectl transport; a test passes a recorder.
+        push: `kuma_push`'s signature; a test passes a stub.
+        now: the clock the container's uptime is measured on.
+    """
+    try:
+        ok, msg = verdict(kubectl, now())
+    except Exception as e:  # any crash is reported as the verdict
+        ok, msg = False, "janitorr health reader failed: %s: %s" % (type(e).__name__, e)
+    status = "up" if ok else "down"
+    # One URL rather than a base and a token, so the Secret's value is not a whole-scalar
+    # placeholder: one would join k8s/manifests' standalone guard map, and a change to that
+    # map fans a landing's narrowed apply out to every role that includes k8s/manifests.
+    base, _, token = os.environ.get("KUMA_PUSH_URL", "").partition("/api/push/")
+    if not base or not token:
+        print("%s\t%s" % (status, msg))
+        return 0
+    print("%s: status=%s %s" % (TAG, status, msg))
+    if push(status, msg, base, token, log=lambda line: print("%s: %s" % (TAG, line))):
+        print("%s: pushed" % TAG)
     return 0
 
 

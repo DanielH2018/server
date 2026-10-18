@@ -6,9 +6,13 @@ probe's resolver corpus it replays what the pinned CLI v2.9.6 returned, `MEASURE
 the comparison, the reporting and the refusals, and proves nothing about Flux: CI's
 `flux_roundtrip` job runs both subcommands against the pinned CLI.
 
+Most of the module's time is the real renderer, so each tag set renders once per module
+through `_render_sides` (#5582).
+
 Run: uv run pytest scripts/renderer/tests/test_renderer_roundtrip.py
 """
 
+import copy
 import json
 import re
 import sys
@@ -17,10 +21,14 @@ import pytest
 
 from lib.proc_testing import fake_bin
 from renderer import homelab_render, shadow_diff
-from renderer.renderer_lib.cluster import render_tag
+from renderer.renderer_lib.cluster import RenderedTag, render_tag
 from renderer.renderer_lib.flux_probe import RESOLVER_CORPUS, TYPES_FIXTURE_MANIFEST
 from renderer.renderer_lib import roundtrip
-from renderer.renderer_lib.placeholders import read_guard_map
+from renderer.renderer_lib.placeholders import (
+    PlaceholderRender,
+    read_guard_map,
+    render_placeholders,
+)
 from renderer.renderer_lib.roundtrip import (
     compare_sides,
     guarded_keys,
@@ -104,8 +112,35 @@ def flux_on_path(tmp_path, monkeypatch):
     return str(bin_dir / "flux")
 
 
+# Each render the module has made: placeholder mode per tag set, stub mode per tag and pass
+# values. Every read is a deep copy, because a test edits a render in place.
+_PLACEHOLDERS: dict[tuple, PlaceholderRender] = {}
+_STUBS: dict[tuple[str, str], RenderedTag] = {}
+
+
+def _placeholder_once(tags: list[str], keys: list[str]) -> PlaceholderRender:
+    key = (tuple(tags), tuple(keys))
+    if key not in _PLACEHOLDERS:
+        _PLACEHOLDERS[key] = render_placeholders(tags, keys)
+    return copy.deepcopy(_PLACEHOLDERS[key])
+
+
+def _stub_once(tag: str, values: dict) -> RenderedTag:
+    key = (tag, json.dumps(values, sort_keys=True, default=str))
+    if key not in _STUBS:
+        _STUBS[key] = render_tag(tag, values)
+    return copy.deepcopy(_STUBS[key])
+
+
+def _render_sides(root, tags, keys, passes, stub_render=_stub_once):
+    """`render_sides`, reusing every render an earlier test in the module made."""
+    return render_sides(
+        root, tags, keys, passes, stub_render, placeholder_render=_placeholder_once
+    )
+
+
 def _main(*args):
-    return shadow_diff.main([*args])
+    return shadow_diff.main([*args], render=_render_sides)
 
 
 def test_roundtrip_over_equal_renders_is_clean(flux_on_path, tmp_path, capsys):
@@ -128,7 +163,7 @@ def test_a_one_byte_edit_to_a_secret_value_is_flagged(flux_on_path, tmp_path):
     keys = homelab_render.secret_keys()
     guarded = guarded_keys(read_guard_map())
     passes = stub_passes(shadow_diff.stub_vars(), keys, guarded)
-    sides = render_sides(tmp_path / "rt", ["configarr"], keys, passes)
+    sides = _render_sides(tmp_path / "rt", ["configarr"], keys, passes)
     secret = sides.cluster("placeholder") / "configarr" / "config-secret.yaml"
     text = secret.read_text()
     assert "api_key: ${" in text
@@ -205,7 +240,7 @@ def test_observability_with_one_checksum_annotation_changed_is_flagged(
     # changes one hashed value on the placeholder side and requires the round trip to see it.
     keys = homelab_render.secret_keys()
     passes = stub_passes(shadow_diff.stub_vars(), keys, guarded_keys(read_guard_map()))
-    sides = render_sides(tmp_path / "rt", ["observability"], keys, passes)
+    sides = _render_sides(tmp_path / "rt", ["observability"], keys, passes)
     annotation = re.compile(r"(checksum/config: )\S+")
     (path, *_) = [
         p
@@ -334,7 +369,7 @@ def test_roundtrip_dropping_a_document_more_than_the_entries_is_flagged(
     flux_on_path, tmp_path
 ):
     def two_documents(tag, values):
-        rendered = render_tag(tag, values)
+        rendered = _stub_once(tag, values)
         extra = rendered.files["google-sa-secret.yaml"]
         rendered.files["google-sa-secret.yaml"] += "---\n" + extra.replace(
             "home-assistant-google-sa", "home-assistant-hidden"
@@ -343,7 +378,7 @@ def test_roundtrip_dropping_a_document_more_than_the_entries_is_flagged(
 
     keys = homelab_render.secret_keys()
     passes = stub_passes(shadow_diff.stub_vars(), keys, guarded_keys(read_guard_map()))
-    sides = render_sides(
+    sides = _render_sides(
         tmp_path / "rt", ["home-assistant"], keys, passes, two_documents
     )
 

@@ -216,7 +216,11 @@ def red_proof(stub_pass: StubPass, sides: Sides) -> tuple[str, StubPass]:
 
 
 def _roundtrip(
-    out: Path, roles: list[str] | None, with_red_proof: bool, guard_map: Path
+    out: Path,
+    roles: list[str] | None,
+    with_red_proof: bool,
+    guard_map: Path,
+    render: Callable[[Path, list[str], list[str], list[StubPass]], Sides],
 ) -> int:
     try:
         flux = find_flux()
@@ -230,7 +234,7 @@ def _roundtrip(
     # Every failure before the builds is a refusal, never exit 1. CI's red half accepts only
     # exit 1, so a setup failure or an empty substituting set cannot pass as a red proof.
     try:
-        sides = render_sides(out, select_tags(roles), keys, passes)
+        sides = render(out, select_tags(roles), keys, passes)
         if not sides.placeholder.substituting():
             raise RenderRefused(
                 "no rendered directory substitutes, so the round trip would prove nothing "
@@ -260,13 +264,21 @@ def _fluxprobe(out: Path, red_proof: bool) -> int:
     return report.exit_code()
 
 
-def main(argv: list[str] | None = None, tags: Callable[[], TagSets] = tag_sets) -> int:
+def main(
+    argv: list[str] | None = None,
+    tags: Callable[[], TagSets] = tag_sets,
+    render: Callable[
+        [Path, list[str], list[str], list[StubPass]], Sides
+    ] = render_sides,
+) -> int:
     """Run one subcommand and return its exit code.
 
     Args:
         argv: The command line, or `sys.argv[1:]` when None.
         tags: Returns the render targets and the flux-owned ones `compare` reads. The
             default reads the inventory; a test passes fixture sets.
+        render: `roundtrip`'s `render_sides`. A test passes one that reuses a tag's renders
+            across its tests, which a fresh process never could.
     """
     parser = ArgumentParser(description=__doc__.splitlines()[0])
     commands = parser.add_subparsers(dest="command", required=True)
@@ -337,7 +349,7 @@ def main(argv: list[str] | None = None, tags: Callable[[], TagSets] = tag_sets) 
     if args.command == "digest":
         return _digest(args.dir)
     if args.command == "roundtrip":
-        return _roundtrip(args.out, args.roles, args.red_proof, args.guard_map)
+        return _roundtrip(args.out, args.roles, args.red_proof, args.guard_map, render)
     if args.command == "fluxprobe":
         return _fluxprobe(args.out, args.red_proof)
     args.out.write_text(stub_file_text())

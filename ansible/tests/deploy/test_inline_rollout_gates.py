@@ -361,7 +361,6 @@ _GATE_BUDGETS = {
     ),
     "janitorr": (300, "default"),
     "jellyfin": (300, "default"),
-    "n8n": (300, "default"),
     "pihole": (300, "default"),
     "qbittorrent": (
         480,

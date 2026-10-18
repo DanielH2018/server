@@ -69,7 +69,6 @@ ALLOW = {
     _K8S + "janitorr/tasks/verify.yml": _VERIFY,
     _K8S + "jellyfin/tasks/main.yml": "D5: the snapshot-size patch becomes a Job",
     _K8S + "media-volume/tasks/main.yml": _PROBE,
-    _K8S + "n8n/tasks/main.yml": "D5: `n8n-netpol-probe` becomes `n8n-verify`",
     _K8S + "netpol-baseline/tasks/main.yml": (
         "D4 makes the deferred apply `netpol-baseline-deferred`; " + _PROBE
     ),
@@ -128,8 +127,9 @@ OUT_OF_RENDER = Census(
     count=lambda s: len(_writing_chunks(s)),
     red=(Subject("widget/tasks/main.yml", _APPLY),),
     green=(Subject("widget/tasks/main.yml", _APPLY.replace(" apply -f", " get -f")),),
-    # 58 writing tasks in 28 files of 23 roles when the row landed (2026-10-13).
-    min_matches=50,
+    # 58 writing tasks in 28 files of 23 roles when the row landed (2026-10-13); 49 once
+    # n8n's flip deleted its probe tasks (#5546).
+    min_matches=45,
     must_find=frozenset(
         {
             _K8S + "observability/tasks/dashboards.yml",

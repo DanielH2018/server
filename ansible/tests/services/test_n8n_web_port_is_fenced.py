@@ -1,4 +1,4 @@
-"""n8n's web port admits traefik and monitor-bridge only, and the deploy probe proves it.
+"""n8n's web port admits traefik and monitor-bridge only.
 
 `n8n-broker` (roles/k8s/n8n/templates/networkpolicy.yaml.j2) is the ONLY thing fencing the n8n
 pod: `netpol-baseline-exempt: "true"` takes it out of the namespace baseline, so a rule there
@@ -6,14 +6,11 @@ with no `from:` admits every pod in the cluster, so karakeep's headless Chrome, 
 the n8n runners could dial `n8n:5678` directly, skipping Traefik and with it Authelia's
 two_factor, the CrowdSec bouncer and the rate-limit.
 
-Two invariants, each a predicate with a passing and a rejecting input, then applied to the real
-rendered manifests:
-
-- **The 5678 rule names exactly the two callers.** traefik (where the auth middleware runs) and
-  monitor-bridge (check_n8n dials the API with X-N8N-API-KEY). A rule with no `from:` is the
-  hole; a rule with an extra peer is a widening nobody asked for.
-- **The probe Job asserts 5678 REFUSED, and its control is not n8n.** A control on n8n's own
-  port and a fence on that port cannot both hold.
+The 5678 rule names exactly the two callers: traefik, where the auth middleware runs, and
+monitor-bridge, whose check_n8n dials the API with X-N8N-API-KEY. A rule with no `from:` is the
+hole; a rule with an extra peer is a widening nobody asked for. The predicate has a passing and
+a rejecting input, then runs on the real rendered policy. The `n8n-verify` Job proves the fence
+live, and `ansible/roles/k8s/n8n/tests/test_n8n_verify.py` holds that Job to it.
 
 Run: uv run pytest ansible/tests/services/test_n8n_web_port_is_fenced.py
 """
@@ -50,15 +47,6 @@ def peers_admitted_on(policy: dict, port: int) -> set[str] | None:
 
 def web_port_is_fenced(policy: dict) -> bool:
     return peers_admitted_on(policy, WEB_PORT) == set(WEB_PEERS)
-
-
-def probe_asserts_web_port_refused(script: str) -> bool:
-    """True when the script fails on a SUCCESSFUL connect to n8n:5678 and never uses it as control."""
-    return (
-        f"if nc -w 5 -z n8n {WEB_PORT}" in script
-        and f"if ! nc -w 5 -z n8n {WEB_PORT}" not in script
-        and "nc -w 5 -z traefik 80" in script
-    )
 
 
 # --- red proofs -----------------------------------------------------------------------
@@ -101,24 +89,6 @@ def test_the_open_shapes_are_flagged(rules):
     assert not web_port_is_fenced(_policy(rules))
 
 
-def test_the_inverted_probe_is_clean():
-    script = (
-        "if ! nc -w 5 -z traefik 80; then exit 1; fi\n"
-        f"if nc -w 5 -z n8n {WEB_PORT}; then exit 1; fi\n"
-        f"if nc -w 5 -z n8n {BROKER_PORT}; then exit 1; fi\n"
-    )
-    assert probe_asserts_web_port_refused(script)
-
-
-def test_the_pre_1926_probe_is_flagged():
-    """n8n:5678 as the CONTROL asserts the hole on every deploy."""
-    script = (
-        f"if ! nc -w 5 -z n8n {WEB_PORT}; then exit 1; fi\n"
-        f"if nc -w 5 -z n8n {BROKER_PORT}; then exit 1; fi\n"
-    )
-    assert not probe_asserts_web_port_refused(script)
-
-
 # --- applied to the rendered manifests -------------------------------------------------
 
 
@@ -147,21 +117,3 @@ def test_n8n_broker_still_fences_the_broker_to_the_runners():
     """The broker stays fenced to the runners beside the web-port rule."""
     policy = _n8n_doc("NetworkPolicy", "n8n-broker")
     assert peers_admitted_on(policy, BROKER_PORT) == {"n8n-runners"}
-
-
-def test_the_probe_proves_the_fence_rather_than_the_hole():
-    job = _n8n_doc("Job", "n8n-netpol-probe")
-    containers = job["spec"]["template"]["spec"]["containers"]
-    script = "\n".join("\n".join(c.get("command", [])) for c in containers)
-    assert probe_asserts_web_port_refused(script), (
-        "n8n-netpol-probe must lead with a control on traefik:80 and fail when n8n:5678 "
-        "ACCEPTS a connection from the unlabelled probe pod. Rendered script:\n"
-        + script
-    )
-
-
-def test_the_probe_pod_carries_no_admitted_label():
-    """A probe labelled `app: traefik` would join traefik's Endpoints and pass for the wrong reason."""
-    job = _n8n_doc("Job", "n8n-netpol-probe")
-    app = job["spec"]["template"]["metadata"]["labels"].get("app")
-    assert app not in WEB_PEERS | {"n8n-runners"}, f"probe pod is labelled app={app}"
