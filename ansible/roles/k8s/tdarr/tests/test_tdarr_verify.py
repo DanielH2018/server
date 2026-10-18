@@ -1,10 +1,8 @@
-"""tdarr's inert verify Job: its script fails each broken check, and its render passes the census.
+"""tdarr's verify Job: its script fails each broken check, and its render passes the census.
 
 The script tests run `tdarr_verify.main` against a temporary device and library. The render
-tests copy the tdarr role, move `templates/verify-inert/` to `templates/verify/` as the flip PR
-will, and render the copy, so the Job is checked as Flux will receive it while the tree's own
-render still emits no `tdarr-verify`. The plan is docs/target-architecture/deploy/d5-bulk-move.md,
-*A verify conversion lands as inert code*.
+tests render a copy of the tdarr role, so one test can change the image and leave the tree
+alone. The plan is docs/target-architecture/deploy/d5-bulk-move.md.
 
 Run: uv run pytest ansible/roles/k8s/tdarr/tests/test_tdarr_verify.py
 """
@@ -81,14 +79,15 @@ def stubs(tmp_path_factory):
     return load_stubs(path)
 
 
+def _flipped_render(stubs, roles, overrides=None):
+    shutil.copytree(K8S_ROLES / TAG, roles / TAG)
+    return cluster.render_tag(TAG, {**stubs, **(overrides or {})}, roles=roles)
+
+
 @pytest.fixture(scope="module")
 def flipped(stubs, tmp_path_factory) -> dict[str, list[dict]]:
-    """The `tdarr-verify` directory a copy of the role renders once its Job leaves `verify-inert/`."""
-    roles = tmp_path_factory.mktemp("roles")
-    shutil.copytree(K8S_ROLES / TAG, roles / TAG)
-    templates = roles / TAG / "templates"
-    (templates / "verify-inert").rename(templates / "verify")
-    rendered = cluster.render_tag(TAG, stubs, roles=roles)
+    """The `tdarr-verify` directory a copy of the role renders."""
+    rendered = _flipped_render(stubs, tmp_path_factory.mktemp("roles"))
     return {
         f"{TAG}-verify": [
             doc
@@ -100,8 +99,10 @@ def flipped(stubs, tmp_path_factory) -> dict[str, list[dict]]:
     }
 
 
-def test_the_tree_renders_no_tdarr_verify_while_ansible_owns_tdarr(stubs):
-    assert cluster.render_tag(TAG, stubs).verify == {}
+def test_the_tree_renders_tdarr_verify(stubs, tmp_path):
+    """The flip moved the Job to `templates/verify/`, so the tree's own render emits it."""
+    own = cluster.render_tag(TAG, stubs).verify
+    assert own == _flipped_render(stubs, tmp_path).verify != {}
 
 
 def test_the_flipped_job_passes_every_job_census_row(flipped):
@@ -142,7 +143,7 @@ def test_the_staged_job_reads_no_other_roles_file():
     (`deploy_cross_role._K8S_LOOKUP_RE`) misses a lookup that passes keyword arguments, so
     this reads every role path the staged templates name, in any form.
     """
-    staged = sorted((K8S_ROLES / TAG / "templates" / "verify-inert").glob("*.j2"))
+    staged = sorted((K8S_ROLES / TAG / "templates" / "verify").glob("*.j2"))
     assert [p.name for p in staged] == ["job.yaml.j2", "rbac.yaml.j2"]
     assert [
         (path.name, role)
@@ -165,12 +166,8 @@ def test_a_deployment_change_renames_the_job(stubs, tmp_path):
         "ghcr.io/haveagitgat/tdarr:3.00.00",
         "ghcr.io/haveagitgat/tdarr:3.00.01",
     ):
-        roles = tmp_path / image.rsplit(":", 1)[1]
-        shutil.copytree(K8S_ROLES / TAG, roles / TAG)
-        templates = roles / TAG / "templates"
-        (templates / "verify-inert").rename(templates / "verify")
-        rendered = cluster.render_tag(
-            TAG, {**stubs, "tdarr_k8s_image": image}, roles=roles
+        rendered = _flipped_render(
+            stubs, tmp_path / image.rsplit(":", 1)[1], {"tdarr_k8s_image": image}
         )
         docs = yaml_fast.safe_load_all(rendered.verify["job.yaml"])
         names.append(

@@ -2,17 +2,16 @@
 # is a CronJob, not a Deployment, and its health is reported by a second CronJob,
 # configarr-health, that READS the last Job through its own ServiceAccount and pushes Kuma.
 # Until H2.5b (docs/target-architecture/host/h2-shrink-host-plane.md, Steps item 13) that reader
-# was a daniel-box host cron; tasks/main.yml keeps the absent arms that remove it.
+# was a daniel-box host cron; setup/k8s_host_files keeps the absent arms that remove it.
 configarr_k8s_image: ghcr.io/raydak-labs/configarr:1.35.0@sha256:13ef4d9a6ebc13178c8c74813dd12e11ea7331e186a492d79d938513887b96d4
 
 # Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
 k8s_autodeploy: true  # noqa var-naming[no-role-prefix]
 k8s_autodeploy_reason: "CronJob gated at deploy time by k8s/cronjob-gate, which proves the new image RUNS (a container that never starts fails the deploy) but deliberately does not enforce a successful sync; concurrencyPolicy Forbid is set, and the reconciler is convergent, so even if the gate's one-off run does overlap a scheduled one, running the same sync twice is harmless; the configarr-health CronJob is gated the same way, and an extra run of it only re-reads the last Job and re-pushes its verdict"  # noqa var-naming[no-role-prefix]
 
-# The gate Jobs Flux runs in `configarr-verify` once configarr flips, one per CronJob, which the
-# renderer copies from each jobTemplate (scripts/renderer/renderer_lib/cronjob_gate.py). Inert
-# until then: the renderer and the bundle census read this key for flux-owned tags only, and
-# k8s/cronjob-gate runs both gates while Ansible applies the role.
+# The gate Jobs Flux runs in `configarr-verify`, one per CronJob, which the renderer copies from
+# each jobTemplate (scripts/renderer/renderer_lib/cronjob_gate.py). They replaced the two
+# k8s/cronjob-gate runs in tasks/main.yml at configarr's flip.
 # - configarr's gate run performs the reconcile, so it is a post-apply mutation. The sync
 #   converges on its config, so a second run reports no change; the rerun_safe test fails the
 #   rendered config on the shapes that would break that. It keeps the CronJob's backoffLimit: 0, and its Job keeps
@@ -54,8 +53,8 @@ configarr_k8s_health_schedule: "*/10 * * * *"
 configarr_k8s_health_image: python:3.14-alpine@sha256:f6a589d43c42b9e7f7dc67a12d37132491f362859a5d750607710cc56da3bc72
 configarr_k8s_health_kubectl_image: alpine/k8s:1.37.1@sha256:712dc5385d1c1a3f83b747fa9e40f64d433a97f72ff42f9755ff7dd1f62846e4
 
-# Above the reader's worst case and below k8s/cronjob-gate's cronjob_gate_timeout (660), the
-# ordering ansible/tests/deploy/test_cronjob_gate_decision.py holds. The worst case is two 30 s
+# Above the reader's worst case; the gate Job copies it, and `bundle.flux_files` raises the
+# `configarr-verify` timeout above it. The worst case is two 30 s
 # kubectl calls (CONFIGARR_KUBECTL_TIMEOUT_S) plus kuma_push's three 10 s attempts and its two
 # 30 s waits, 150 s, and the landing's gate run is the one that spends all of it: its push meets
 # uptime-kuma's fence before netpol-baseline admits the new label. The rest is the cold pull of

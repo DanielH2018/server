@@ -1,11 +1,11 @@
 {#
-  The throughput preferences apply as a post-apply mutation Job, INERT until qbittorrent's
-  flip, as `job.yaml.j2` beside it is.
+  The throughput preferences apply as a post-apply mutation Job, rendered into
+  `qbittorrent-verify` beside `job.yaml.j2`.
 
   It runs `files/qbittorrent_job.py` with `QBT_JOB=apply-prefs`, which writes the keys of its
-  `DESIRED` that differ from the live preferences and reads them back. Under Ansible the same
-  apply is `files/apply_prefs.py`, run by hand, because a deploy task would have waited out the
-  sidecar's five-minute startup window. `qbittorrent-verify` starts only once the
+  `DESIRED` that differ from the live preferences and reads them back. While Ansible owned the
+  role the same apply was `files/apply_prefs.py`, run by hand, because a deploy task would have
+  waited out the sidecar's five-minute startup window. `qbittorrent-verify` starts only once the
   `qbittorrent` Kustomization reads Ready, which is after that window, so the Job meets a
   serving WebUI (D5, *Post-apply mutation Jobs share `<tag>-verify`*).
 

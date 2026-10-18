@@ -14,9 +14,11 @@ simply never ran:
   * `deploy.yml` loses the post_tasks gate -> rollouts are waited on but never soaked, which is
     a pod crashlooping on a liveness 404 behind clean logs and failed=0;
   * the drain stops clearing the queue -> later batches re-wait earlier workloads, and the
-    restart snapshot is taken twice for the same service;
-  * `configarr` loses its drain -> its reconcile Job fires into sonarr's ~5-minute startup and
-    reconciles against a dead API.
+    restart snapshot is taken twice for the same service.
+
+configarr drained the queue before its reconcile until its Flux flip. Its Kustomization's
+`dependsOn` on sonarr and radarr is that barrier now, and
+ansible/roles/k8s/configarr/tests/test_configarr_gate.py holds it.
 """
 
 from lib import yaml_fast
@@ -31,7 +33,6 @@ from _role_census import manifests_service_of, task_files_by_role
 
 _MANIFESTS = _REPO / "ansible/roles/k8s/manifests/tasks/main.yml"
 _DRAIN = _REPO / "ansible/roles/k8s/manifests/tasks/drain.yml"
-_CONFIGARR = _REPO / "ansible/roles/k8s/configarr/tasks/main.yml"
 _GATE = _REPO / "ansible/post_tasks/k8s_stabilise_gate.yml"
 _BATCH = _REPO / "ansible/tasks/k8s_batch.yml"
 
@@ -251,40 +252,6 @@ def test_drain_and_gate_tasks_are_tagged_always() -> None:
                 f"{path.name}: task {task.get('name')!r} is tagged {tags}, not [always]. "
                 "A tag-filtered deploy would skip it and the gate would silently not run."
             )
-
-
-def test_configarr_drains_before_reconciling() -> None:
-    """configarr reconciles against sonarr/radarr over HTTP and is listed after them."""
-    tasks = _tasks(_CONFIGARR)
-    drain_at = next(
-        (
-            i
-            for i, t in enumerate(tasks)
-            if _is_drain(t.get("ansible.builtin.include_role") or {})
-        ),
-        None,
-    )
-    assert drain_at is not None, (
-        "configarr no longer drains pending rollouts before reconciling. Its Job would fire into "
-        "sonarr's ~5-minute startup and reconcile against a dead API."
-    )
-    # The reconcile Job is created by k8s/cronjob-gate, not by an inline `kubectl create
-    # job` in this role, so the ordering is asserted against the include that reaches it.
-    gate_at = next(
-        (
-            i
-            for i, t in enumerate(tasks)
-            if "k8s/cronjob-gate" in str(t.get("ansible.builtin.include_role", ""))
-        ),
-        None,
-    )
-    assert gate_at is not None, (
-        "configarr no longer gates its deploy on a one-off run, so a bad image would deploy "
-        "unobserved until the next 04:30 firing."
-    )
-    assert drain_at < gate_at, (
-        "configarr's rollout drain must come BEFORE the one-off reconcile Job."
-    )
 
 
 def test_batch_applies_the_service_tag_to_the_included_role() -> None:
