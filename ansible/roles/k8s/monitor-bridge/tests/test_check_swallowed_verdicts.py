@@ -263,6 +263,12 @@ _CRONJOB = (
     / "templates"
     / "cronjob.yaml.j2"
 )
+_CROWDSEC_DEPLOYMENT = (
+    Path(__file__).resolve().parents[2]
+    / "crowdsec"
+    / "templates"
+    / "deployment.yaml.j2"
+)
 
 
 def test_the_pod_logql_names_both_pod_pushers_containers():
@@ -271,9 +277,7 @@ def test_the_pod_logql_names_both_pod_pushers_containers():
     # matching nothing and the check permanently green for this pusher.
     names = re.findall(r"^\s+- name: (\S+)\n\s+image:", _CRONJOB.read_text(), re.M)
     assert names == ["pi-peer-backup"], names
-    # crowdsec's H2.4b PR (#5711) adds the `crowdsec-jobs` container, and with it the
-    # assertion that the Deployment names it. This selector lands first, because CI's
-    # cross-plane gate refuses monitor-bridge and crowdsec's netpol peers in one PR.
+    assert "- name: crowdsec-jobs\n" in _CROWDSEC_DEPLOYMENT.read_text()
     assert (
         '{container=~"pi-peer-backup|crowdsec-jobs"}'
         in checks.logs.SWALLOWED_VERDICTS_POD_LOGQL

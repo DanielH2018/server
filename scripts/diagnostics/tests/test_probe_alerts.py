@@ -180,6 +180,43 @@ def test_alerts_surfaces_a_host_cron_episode_the_bridge_stream_cannot_see(
     assert "backed-up volumes stale or missing" in out
 
 
+# crowdsec's crowdsec-jobs sidecar (H2.4b): the syslog shape with the pod name as host, a
+# bouncer-prune refusal (no Kuma tile) and a lost push in kuma_push.py's no-rc form.
+SIDECAR_PRUNE_DOWN = (
+    "2026-10-18T13:17:02Z crowdsec-6f9c-x2 crowdsec-bouncer-prune: "
+    "status=down refused: no k8straefik row pulled in the last 50 minutes"
+)
+SIDECAR_PUSH_LOST = (
+    "2026-10-18T13:15:40Z crowdsec-6f9c-x2 crowdsec-appsec-verify: "
+    "push failed (http=404 by=kuma) (status=down: no enabled appsec-configs)"
+)
+
+
+def test_alerts_reads_the_crowdsec_jobs_sidecar_stream(monkeypatch, capsys):
+    minute = int(60 * 1e9)
+    seen = _route_alert_fetch(
+        monkeypatch,
+        {
+            alerts.ALERT_LOGQL: [],
+            alerts.SYSLOG_ALERT_LOGQL: [],
+            alerts.POD_ALERT_LOGQL: [
+                (minute, SIDECAR_PRUNE_DOWN),
+                (2 * minute, SIDECAR_PUSH_LOST),
+            ],
+        },
+    )
+    ns = cli_parser._build_parser().parse_args(["alerts", "--days", "3"])
+    assert alerts.run_alerts(ns) == 0
+    assert alerts.POD_ALERT_LOGQL in [_query_params(u)["query"][0] for u in seen]
+    out = capsys.readouterr().out
+    assert "crowdsec-bouncer-prune" in out
+    assert "no k8straefik row pulled" in out
+    assert alerts.parse_syslog_down_line(SIDECAR_PUSH_LOST) == (
+        "crowdsec-appsec-verify",
+        "push failed: no enabled appsec-configs",
+    )
+
+
 def test_alerts_check_filter_matches_a_host_cron_tag(monkeypatch, capsys):
     # `--check` has to keep working across both streams, which it does only because the syslog
     # tag is a machine name like monitor-bridge's own check names. Kuma's monitor_name is a

@@ -344,9 +344,9 @@ it first means debugging slices 2–4 with the monitoring possibly impaired.
   it before writing the selector**, and admit both the podSelector and the node `ipBlock`
   until observed. Home Assistant also reaches it, configured in HA's `.storage` and
   therefore invisible to grep.
-- **Three host crons dial Traefik** from the node — `cloudflare-ip-drift.sh`,
-  `crowdsec-appsec-verify.sh`, `crowdsec-update-home-allowlist.sh`. Node-sourced, so they
-  need the `ipBlock` entries, not a podSelector.
+- **Host crons dial Traefik** from the node, such as
+  `crowdsec-update-home-allowlist.sh`. Node-sourced, so they need the `ipBlock` entries, not
+  a podSelector.
 
 ## Verification, and what it does not cover
 

@@ -137,9 +137,9 @@ def test_main_writes_exactly_the_plan_and_refuses_with_no_authelia_router():
 
     def runner(argv):
         calls.append(argv)
-        if argv[1:3] == ["kubectl", "get"]:
+        if argv[:2] == [ra.KUBECTL, "get"]:
             return json.dumps(IRS)
-        if argv[1:3] == ["kubectl", "-n"] and "logs" in argv:
+        if argv[0] == ra.KUBECTL and "logs" in argv:
             return (
                 _line(AUTH_ROUTER, 200, "173.249.254.219")
                 + "\n"
@@ -150,10 +150,11 @@ def test_main_writes_exactly_the_plan_and_refuses_with_no_authelia_router():
         return ""
 
     assert ra.main(runner=runner, now=NOW) == 0
+    # The sidecar's own binaries only: no `k3s kubectl exec` into the engine container.
+    assert {argv[0] for argv in calls} == {ra.KUBECTL, ra.CSCLI}
+    assert not any("exec" in argv for argv in calls)
     writes = [
-        argv[argv.index("cscli") + 1 :]
-        for argv in calls
-        if "cscli" in argv and "inspect" not in argv
+        argv[1:] for argv in calls if argv[0] == ra.CSCLI and "inspect" not in argv
     ]
     assert writes == [
         ["allowlists", "remove", ra.ALLOWLIST, "8.8.8.8"],
@@ -170,6 +171,6 @@ def test_main_writes_exactly_the_plan_and_refuses_with_no_authelia_router():
     ]
 
     def no_authelia(argv):
-        return json.dumps({"items": []}) if argv[1:3] == ["kubectl", "get"] else ""
+        return json.dumps({"items": []}) if argv[:2] == [ra.KUBECTL, "get"] else ""
 
     assert ra.main(runner=no_authelia, now=NOW) == 1

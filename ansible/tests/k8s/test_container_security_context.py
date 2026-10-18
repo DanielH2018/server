@@ -255,6 +255,10 @@ _ROOT_OWNED_DATA = {
     ("freshrss", "nginx"),
     # Measured uid 0 (`tini -- /bin/sh -c /bin/meilisearch`), writing a PVC it owns as root.
     ("karakeep", "meilisearch"),
+    # The crowdsec-jobs sidecar's cscli writes allowlist rows and prunes bouncer rows in the
+    # engine's root-owned SQLite file, beside the root engine container. Every capability is
+    # dropped; the owner's write bit is all it uses.
+    ("crowdsec", "crowdsec-jobs"),
 }
 
 # Empty by design. Kept as a named set rather than deleted, because the category is the thing worth

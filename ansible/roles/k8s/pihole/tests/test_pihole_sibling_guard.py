@@ -6,7 +6,7 @@ back mid-wait. The render tests copy the role and move `templates/guard-inert/` 
 `templates/verify/`, the one role-owned directory the renderer reads, so the guard is checked
 as the renderer emits it. That placement is only the render vehicle: under Flux the guard must
 run before `pihole`, in a kind the renderer does not have yet (#5719). Its RBAC is tested
-against the script's calls in ansible/tests/k8s/test_rbac_against_script.py.
+against the script's calls in ansible/tests/k8s/test_rbac_against_rest_script.py.
 
 Run: uv run pytest ansible/roles/k8s/pihole/tests/test_pihole_sibling_guard.py
 """

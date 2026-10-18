@@ -24,18 +24,19 @@ re-adds `k8straefik` from `BOUNCER_KEY_k8straefik` at every engine start when th
 missing, and `api_key` carries no unique constraint to refuse it. The retired
 `dockertraefik`, which never pulled, is pruned on the first run.
 
-Runs from the cron wrapper `crowdsec-prune-bouncers.sh` as root on daniel-box. The wrapper owns
-the syslog line; this module owns the decision, and its last stdout line is the summary. The
-functions above `main` are pure and are what `tests/test_bouncer_prune.py` exercises.
+Runs hourly at minute 17 in the `crowdsec-jobs` sidecar of the crowdsec pod, started by
+`crowdsec_jobs.py`, which owns the log line. This module owns the decision, and its last stdout
+line is the summary. The functions above `main` are pure and are what
+`tests/test_bouncer_prune.py` exercises.
 
 Usage:
 
-    uv run --no-project --python <pin> /opt/crowdsec-bouncer-prune/bouncer_prune.py
+    python3 /jobs/bouncer_prune.py
 
-Takes no arguments and reads no environment variables. It runs `cscli` through
-`k3s kubectl exec deploy/crowdsec` in the homelab namespace, so it needs root on daniel-box.
-Exit 0 means it pruned or had nothing to prune. Exit 1 means it refused or a cscli call failed,
-and the last stdout line says why. `-h` and `--help` print this text and exit 0.
+Takes no arguments and reads no environment variables. It runs the sidecar's own copy of
+`cscli`, which reads the LAPI's database from the shared `crowdsec-db` volume. Exit 0 means it
+pruned or had nothing to prune. Exit 1 means it refused or a cscli call failed, and the last
+stdout line says why. `-h` and `--help` print this text and exit 0.
 """
 
 import json
@@ -45,8 +46,9 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 
 EDGE_BOUNCER = "k8straefik"
-NAMESPACE = "homelab"
-K3S = "/usr/local/bin/k3s"
+# The sidecar's initContainer copies the binary into the shared `tools` emptyDir
+# (`templates/deployment.yaml.j2`).
+CSCLI = "/tools/cscli"
 # The plugin pulls every 60s (`updateIntervalSeconds`), and the longest silent gap measured was
 # the metrics-ticker stall #2752 removed: 1200s. An hour is three times that, and with an hourly
 # cron a restarted pod's old row is gone within two hours of its last pull.
@@ -126,21 +128,7 @@ def run(argv):
 
 
 def cscli(runner, *args):
-    return runner(
-        [
-            K3S,
-            "kubectl",
-            "-n",
-            NAMESPACE,
-            "exec",
-            "deploy/crowdsec",
-            "-c",
-            "crowdsec",
-            "--",
-            "cscli",
-            *args,
-        ]
-    )
+    return runner([CSCLI, *args])
 
 
 def main(runner=run, now=None):
@@ -168,9 +156,9 @@ if __name__ == "__main__":
         sys.exit(main())
     except subprocess.CalledProcessError as exc:
         tail = (exc.stderr or exc.stdout or "").strip().splitlines()
-        words = list(exc.cmd)
-        start = words.index("cscli") if "cscli" in words else 1
-        verb = " ".join(w for w in words[start : start + 3] if not w.startswith("-"))
+        verb = " ".join(
+            ["cscli", *[w for w in exc.cmd[1:] if not w.startswith("-")]][:3]
+        )
         print(
             f"{verb} failed rc={exc.returncode}: {tail[-1] if tail else 'no output'}",
             file=sys.stderr,

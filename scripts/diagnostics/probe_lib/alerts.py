@@ -108,6 +108,11 @@ def parse_down_line(line):
 # is four tokens and parses as nothing. Changing either side alone silently drops every Pi
 # episode, which is why ansible/tests/setup/test_pi_health_log_line_shape.py pins the pair.
 SYSLOG_ALERT_LOGQL = '{job="syslog"} |= "status=down"'
+# crowdsec's crowdsec-jobs sidecar runs three former host crons since H2.4b and prints their
+# lines in the same rsyslog shape, with the pod name as the host, so one parser reads both. Its
+# own selector, because `container` and `job` share no label name to OR on. The bouncer prune
+# has no Kuma tile, so this is the only episode view of its refusals.
+POD_ALERT_LOGQL = '{container="crowdsec-jobs"} |= "status=down"'
 _SYSLOG_LINE_RE = re.compile(
     r"^\S+\s+\S+\s+(?P<name>[A-Za-z0-9_.-]+?)(?:\[\d+\])?:\s+(?P<rest>.*status=down.*)$"
 )
@@ -120,9 +125,10 @@ _SYSLOG_LINE_RE = re.compile(
 # record (the final line follows it, or the push lands and the cron's own `status=` line is
 # the record), so it is dropped rather than listed as an episode of its own; monitor-bridge's
 # check_swallowed_verdicts excludes it in LogQL for the same reason. The pair may be followed
-# by further `k=v` words — ` by=kuma` when Kuma itself answered the push.
+# by further `k=v` words — ` by=kuma` when Kuma itself answered the push. The Python twin,
+# setup/common's kuma_push.py, logs `http=<code>[ by=kuma]` with no rc, or `error=<class>`.
 _SYSLOG_PUSH_FAILED_RE = re.compile(
-    r"^push failed \((?:http=\S+ rc=\S+(?: [a-z]+=\S+)*\) \()?status=down:\s*(?P<msg>.*?)\)?$"
+    r"^push failed \((?:(?:http|error)=\S+(?: [a-z]+=\S+)*\) \()?status=down:\s*(?P<msg>.*?)\)?$"
 )
 _SYSLOG_TRANSIENT_RE = re.compile(r"^push failed transiently \(")
 _SYSLOG_STATUS_RE = re.compile(r"^status=down\s*(?P<msg>.*)$")
@@ -163,12 +169,13 @@ def parse_syslog_down_line(line):
     return m["name"], rest.strip()
 
 
-# Each alert stream with the parser that reads its line shape. run_alerts queries both and
+# Each alert stream with the parser that reads its line shape. run_alerts queries each and
 # merges the rows: LogQL cannot OR two stream selectors that share no label name, and
-# `container` (monitor-bridge) and `job` (syslog) share none.
+# `container` (monitor-bridge, crowdsec-jobs) and `job` (syslog) share none.
 ALERT_SOURCES = (
     (ALERT_LOGQL, parse_down_line),
     (SYSLOG_ALERT_LOGQL, parse_syslog_down_line),
+    (POD_ALERT_LOGQL, parse_syslog_down_line),
 )
 
 

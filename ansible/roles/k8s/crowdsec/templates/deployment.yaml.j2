@@ -25,7 +25,12 @@ spec:
       # has why.
       nodeSelector:
         kubernetes.io/hostname: {{ k8s_primary_node }}
-{{ pod_shell(containers_list | tier_priority_class('crowdsec')) }}
+      # The ServiceAccount is the crowdsec-jobs sidecar's (jobs-rbac.yaml.j2). Its token is not
+      # automounted: the crowdsec-jobs-token volume projects it into the sidecar alone, so the
+      # engine container holds no Kubernetes credential. That volume sits off the default path,
+      # which the rendered-property row no-mount-shadows-the-serviceaccount-token keeps free, and
+      # the sidecar's kubectl finds it through the kubeconfig in the crowdsec-jobs ConfigMap.
+{{ pod_shell(containers_list | tier_priority_class('crowdsec'), service_account='crowdsec-jobs', automount=false) }}
       initContainers:
         # /etc/crowdsec is an emptyDir the image entrypoint populates with defaults on
         # start; this seeds our config first so the entrypoint treats it as existing
@@ -50,6 +55,27 @@ spec:
             - name: crowdsec-etc
               mountPath: /etc/crowdsec
 {{ container_resources(cpu_limit='250m', mem_limit='128Mi', cpu_request='10m', mem_request='16Mi') }}
+        # The crowdsec-jobs sidecar's two binaries, copied into the shared tools emptyDir. cscli
+        # comes from the engine's own image, so the jobs run the same cscli as the LAPI. It is
+        # statically linked, which is why it runs in the python image (defaults/main.yml).
+        - name: jobs-cscli
+          image: {{ crowdsec_k8s_image }}
+          command: ["cp", "/usr/local/bin/cscli", "/tools/cscli"]
+          # nobody: the emptyDir is world-writable and the copy keeps its 0755, so the root
+          # sidecar runs it as `other`.
+{{ hardened_security_context(read_only=true, non_root=true, run_as_user=65534, run_as_group=65534) }}
+          volumeMounts:
+            - name: crowdsec-jobs-tools
+              mountPath: /tools
+{{ container_resources(cpu_limit='100m', mem_limit='64Mi', cpu_request='10m', mem_request='16Mi') }}
+        - name: jobs-kubectl
+          image: {{ crowdsec_k8s_jobs_kubectl_image }}
+          command: ["cp", "/usr/bin/kubectl", "/tools/kubectl"]
+{{ hardened_security_context(read_only=true, non_root=true, run_as_user=65534, run_as_group=65534) }}
+          volumeMounts:
+            - name: crowdsec-jobs-tools
+              mountPath: /tools
+{{ container_resources(cpu_limit='100m', mem_limit='64Mi', cpu_request='10m', mem_request='16Mi') }}
       containers:
         - name: crowdsec
           image: {{ crowdsec_k8s_image }}
@@ -97,6 +123,65 @@ spec:
             periodSeconds: 60
             timeoutSeconds: 10
 {{ container_resources(cpu_limit=crowdsec_k8s_cpu_limit, mem_limit=crowdsec_k8s_mem_limit, cpu_request=crowdsec_k8s_cpu_request, mem_request=crowdsec_k8s_mem_request) }}
+        # The remote allowlist, the AppSec verify and the bouncer prune, each on its old host
+        # cron's schedule (files/crowdsec_jobs.py). They need cscli against the LAPI's own
+        # database, and a container in this pod reaches it with no `pods/exec` grant: the
+        # operator's ruling of 2026-10-18 on #5655. It shares the engine's config and database
+        # volumes, and cscli reads them here as it does in the engine container.
+        #
+        # Root, like the engine container: the SQLite file and its directory belong to root, and
+        # cscli writes allowlist rows and prunes bouncer rows there. Every capability is dropped,
+        # because the owner's write bit is all it needs. /etc/crowdsec is mounted read-only, so
+        # a job cannot change the engine's config.
+        #
+        # No probe. A running container counts as ready, and a crash takes the pod out of Ready
+        # and the LAPI out of its Service until the restart. So the scheduler never exits on a
+        # job's failure, and its memory limit is twice the measured peak.
+        - name: crowdsec-jobs
+          image: {{ crowdsec_k8s_jobs_image }}
+          command: ["python3", "/jobs/crowdsec_jobs.py"]
+          env:
+            # kubectl's discovery cache goes under $HOME.
+            - name: HOME
+              value: /tmp
+            # The ConfigMap mount is read-only, so Python cannot write __pycache__ there.
+            - name: PYTHONDONTWRITEBYTECODE
+              value: "1"
+            # A pipe is block-buffered, and an OOM kill discards the buffer, so every verdict
+            # line reaches the container log as it is printed.
+            - name: PYTHONUNBUFFERED
+              value: "1"
+            - name: KUBECONFIG
+              value: /jobs/kubeconfig
+            - name: REMOTE_ALLOWLIST_PUSH_URL
+              valueFrom:
+                secretKeyRef:
+                  name: crowdsec-jobs
+                  key: remote_allowlist_push_url
+            - name: APPSEC_PUSH_URL
+              valueFrom:
+                secretKeyRef:
+                  name: crowdsec-jobs
+                  key: appsec_push_url
+{{ hardened_security_context(read_only=true) }}
+          volumeMounts:
+            - name: crowdsec-etc
+              mountPath: /etc/crowdsec
+              readOnly: true
+            - name: crowdsec-db
+              mountPath: /var/lib/crowdsec/data
+            - name: crowdsec-jobs-code
+              mountPath: /jobs
+              readOnly: true
+            - name: crowdsec-jobs-tools
+              mountPath: /tools
+              readOnly: true
+            - name: crowdsec-jobs-token
+              mountPath: /var/run/crowdsec-jobs
+              readOnly: true
+            - name: crowdsec-jobs-tmp
+              mountPath: /tmp
+{{ container_resources(cpu_limit=crowdsec_k8s_jobs_cpu_limit, mem_limit=crowdsec_k8s_jobs_mem_limit, cpu_request=crowdsec_k8s_jobs_cpu_request, mem_request=crowdsec_k8s_jobs_mem_request) }}
       volumes:
         - name: crowdsec-seed
           secret:
@@ -108,3 +193,23 @@ spec:
             claimName: {{ crowdsec_k8s_claim }}
         - name: crowdsec-tmp
           emptyDir: {}
+        - name: crowdsec-jobs-code
+          configMap:
+            name: crowdsec-jobs
+        - name: crowdsec-jobs-tools
+          emptyDir: {}
+        - name: crowdsec-jobs-tmp
+          emptyDir: {}
+        # What automounting would give every container, given to the sidecar alone: a bound
+        # token and the cluster CA, which jobs-configmap.yaml.j2's kubeconfig names.
+        - name: crowdsec-jobs-token
+          projected:
+            sources:
+              - serviceAccountToken:
+                  path: token
+                  expirationSeconds: 3607
+              - configMap:
+                  name: kube-root-ca.crt
+                  items:
+                    - key: ca.crt
+                      path: ca.crt
