@@ -1,13 +1,15 @@
 #!/usr/bin/env python3
 """What `land.sh` asks `land_tags` BEYOND the tag list, to reach a verdict.
 
-Two questions, each behind a landing that read as success over unfinished work:
+Three questions, the first two each behind a landing that read as success over unfinished work:
 
 * `service_tags_at` -- which tags exist AT A REF. Asked of a checkout, a role the
   PR itself registers reads as UNREGISTERED, which is what a role nobody registered reads as
   too, so the landing prints the expensive remedy for work one `--tags` run does.
 * `self_applied_command` -- what a hand runs when the tick CONVERGED without applying the PR
   (issue #1537).
+* `plane_note` on a rotation -- which k8s readers of a changed key the tick applies itself, so
+  the operator does not repeat its apply (#5610).
 
 Its own module rather than test_land_tags.py: that file pins the DERIVATION against a fixture
 and patches `declared_tags` away, while these read real git and the real remediation text.
@@ -148,3 +150,32 @@ def test_the_command_is_empty_for_a_pr_the_tick_never_applies(files):
     command here would send an operator at a plane apply their PR never needed."""
     assert land_tags.self_applied_command(files) == ""
     assert land_tags.self_applied(files) is False
+
+
+def test_a_secrets_only_rotation_leaves_the_k8s_readers_to_the_tick():
+    """A secrets-only range routes its k8s readers through the tick (#5577).
+
+    The note asked for a hand redeploy of every consumer, so the operator repeated the tick's
+    `deploy.yml --tags <readers>` apply, or ran it beside the tick.
+    """
+    note = land_tags.plane_note(["ansible/vars/secrets.yml"])
+    assert "#5577" in note and "secret-readers:" in note, (
+        "the note must say the tick applies the k8s readers, and where to read which"
+    )
+    assert "redeploy each k8s consumer by hand" not in note
+
+
+def test_a_secrets_rotation_beside_a_k8s_role_keeps_the_k8s_readers_owed():
+    """The tick routes no k8s reader for a range that also changes a k8s role.
+
+    `deploy_broad_k8s.route_secret_k8s_readers` skips that range, so the note must not claim
+    the tick applied the readers.
+    """
+    note = land_tags.plane_note(
+        [
+            "ansible/vars/secrets.yml",
+            "ansible/roles/k8s/authelia/templates/config-secret.yaml.j2",
+        ]
+    )
+    assert "redeploy each k8s consumer by hand" in note
+    assert "secret-readers:" not in note

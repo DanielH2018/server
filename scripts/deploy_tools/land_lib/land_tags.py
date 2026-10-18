@@ -87,14 +87,31 @@ from deploy_tools.land_lib.land_shared import (  # noqa: F401  (`role_of` has an
 # constant is operator prose and holds no credential.
 _ROTATION_NOTE = (
     "`ansible/vars/secrets.yml` changed, and a secret's VALUE lives in no role's template — so "
-    "a rotation **maps to no deploy tag by construction** and every consumer keeps rendering "
-    "the OLD value until its own role is redeployed. Resolve them: `uv run python "
+    "a rotation **maps to no deploy tag by construction**, and a consumer keeps rendering the "
+    "OLD value until its own role renders again. Resolve them: `uv run python "
     "scripts/secrets_mgmt/secret_rotation.py consumers <secret>` greps the tree for who now "
     "holds a stale copy and prints the exact repair command per plane. Where it names a "
     "`CROSS_HOST_PUSH_TOKENS` member — the set `consumer_tags()` in that same file returns "
     "EMPTY for — the two halves sit on different hosts or planes, so no single redeploy covers "
     "both and each carries a written reason for what to run instead. The GitOps tick applies "
     "a setup role that reads a changed key and that its own host runs (#5436)."
+)
+
+# Which k8s consumers the tick applies itself, appended to `_ROTATION_NOTE`. The tick routes a
+# secrets-only range to the k8s roles reading a moved key (#5577), and skips that route when the
+# range also changes a k8s role (`deploy_broad_k8s.route_secret_k8s_readers`). The lander sees
+# only this PR's paths, not the tick's range, so the first note names the case where the tick
+# routes nothing after all, and where to read what it applied.
+_TICK_K8S_READERS_NOTE = (
+    "It also applies each k8s role that reads a changed key (#5577), except one Flux owns and "
+    "one the reader lookup refuses, which it records in `k8s_unapplied`. It applies none when "
+    "its range also carries another session's k8s role change. Its `secret-readers:` line in "
+    "`journalctl -u gitops-deploy` names what it applied, so redeploy by hand only the "
+    "consumers that line leaves out."
+)
+_NO_TICK_K8S_READERS_NOTE = (
+    "This PR also changes a k8s role, so the tick applies no k8s role that reads a changed "
+    "key (#5577): redeploy each k8s consumer by hand."
 )
 
 # The two files whose change moves the Secret `homelab-cluster-vars`, which every
@@ -303,7 +320,17 @@ def plane_note(
         # `ansible/secret_rotation.yml` carries names and dates but no values, and
         # `ansible/vars/secrets-staging.yml` belongs to daniel-stage, which land.sh never
         # deploys. Both are correctly outside it.
+        #
+        # The k8s half mirrors the tick's own skip, from this PR's paths alone: a range changing
+        # a k8s role routes no reader, so the operator still owes every k8s consumer. A
+        # Flux-owned role over-asks here, because the tick moves it to `cs.flux` before that
+        # skip and so does route the readers. Asking for a redeploy the tick also ran costs a
+        # duplicate apply; claiming one it skipped leaves a credential stale.
+        changes_k8s_role = cs.k8s or cs.k8s_deploy or cs.k8s_consumers
         notes.append(_ROTATION_NOTE)
+        notes.append(
+            _NO_TICK_K8S_READERS_NOTE if changes_k8s_role else _TICK_K8S_READERS_NOTE
+        )
     return " ".join(notes)
 
 
