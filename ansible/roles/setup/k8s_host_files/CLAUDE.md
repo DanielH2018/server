@@ -95,8 +95,8 @@ census in `ansible/tests/repo/_host_write_rows.py`, whose `allow` entry the move
 ## Autonomous-role contract (it will install a timer and remove crons with no human in the loop)
 
 The GitOps tick applies the role as `initial_setup.yml --tags k8s_host_files` on every merge
-that touches it. It holds host directories, configarr's absent arms and pi-peer-backup's two
-daniel-pi writes so far, and installs no timer yet.
+that touches it. It holds host directories, configarr's and janitorr's absent arms and
+pi-peer-backup's two daniel-pi writes so far, and installs no timer yet.
 
 - **Scope / exclusions:** host files, directories and units that a k8s role's Ansible apply
   owned before its flip, plus the absent arms that remove a retired role's crons. **Never** a
