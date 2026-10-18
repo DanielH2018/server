@@ -118,6 +118,32 @@ def test_a_secret_placeholder_in_a_config_map_moves_the_checksum_on_rotation():
     assert value(SOURCE) != value({**SOURCE, "alpha_token": "c" * 64})
 
 
+READER = (
+    "apiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: grafana\nspec:\n"
+    "  template:\n    spec:\n      containers:\n        - name: app\n"
+    "      volumes:\n        - name: boards\n          configMap:\n"
+    "            name: grafana-dashboards-apps\n        - name: settings\n"
+    "          configMap:\n            name: settings\n"
+)
+
+
+def _reader_value(boards: str, settings: str) -> str:
+    files = {
+        "boards.yaml": "apiVersion: v1\nkind: ConfigMap\nmetadata:\n"
+        f"  name: grafana-dashboards-apps\ndata:\n  a.json: '{boards}'\n",
+        "settings.yaml": "apiVersion: v1\nkind: ConfigMap\nmetadata:\n"
+        f"  name: settings\ndata:\n  s.yaml: '{settings}'\n",
+        "deploy.yaml": READER,
+    }
+    return restart_values("f", {"f": files}, {"grafana": ALL}, KEYS, SOURCE)["grafana"]
+
+
+def test_a_config_map_its_reader_reloads_in_place_moves_nothing():
+    """Grafana re-reads a dashboard ConfigMap from its mount, so a board edit rolls nothing."""
+    assert _reader_value("{}", "a: 1") == _reader_value('{"edited": 1}', "a: 1")
+    assert _reader_value("{}", "a: 1") != _reader_value("{}", "a: 2")
+
+
 INCLUDE = """- name: Deploy fixture
   ansible.builtin.include_role:
     name: k8s/manifests

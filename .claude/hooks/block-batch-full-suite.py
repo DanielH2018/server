@@ -27,8 +27,11 @@ broad directories to get round the first arm meets the second. `--collect-only` 
 informational flags (`--help`, `--version`, `--markers`, `--fixtures`) are allowed.
 
 A batch is recognised by its worktree: the payload's `cwd`, or `CLAUDE_PROJECT_DIR`, lies
-inside `.claude/worktrees/fanout-<batch>` or `.claude/worktrees/claude+fanout-<batch>`. Every
-other session keeps the whole suite.
+inside `.claude/worktrees/fanout-<batch>`, optionally with a `claude+` prefix and another
+repo's name before the batch (`fanout-dotfiles-763`). A batch id is issue numbers joined by
+`-` (`fanout_lib.claims`), so the name must end in one. A session's own worktree named
+`fanout-ssh-connection-reuse` is not a batch, and the first version of this pattern refused
+its whole-suite run. Every other session keeps the whole suite.
 """
 
 import os
@@ -48,7 +51,9 @@ from _hook_common import (
 # suite about 1,337.
 MAX_MODULES = 300
 
-_BATCH_TREE = re.compile(r"/\.claude/worktrees/(?:claude\+)?fanout-[^/]+(?:/|$)")
+_BATCH_TREE = re.compile(
+    r"/\.claude/worktrees/(?:claude\+)?fanout-(?:[A-Za-z][\w.-]*-)?\d+(?:-\d+)*(?:/|$)"
+)
 
 # Words that may stand before `pytest` in a stage: the launchers and their flags.
 _LAUNCHERS = frozenset(

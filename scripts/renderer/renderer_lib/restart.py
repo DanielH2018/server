@@ -24,6 +24,9 @@ A target's value is one SHA-256 over:
 - for a Secret shipped as a SOPS manifest, the `.source` digest of its key, never its
   ciphertext.
 
+A ConfigMap whose name matches `RELOADED_IN_PLACE` is never an input: its reader re-reads
+the mount by itself, so an edit to it rolls nothing, as it rolled nothing under Ansible.
+
 A target that names no ConfigMap or Secret of its own render gets no annotation. Both render
 modes hash the placeholder-form documents, never a stub, so a stub render and a placeholder
 render of one tag carry the same value. `stamp` inserts the annotation as text, at the place
@@ -41,6 +44,7 @@ from pathlib import Path as _Path
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
 import ast
+import fnmatch
 import hashlib
 import json
 from collections.abc import Iterable, Mapping
@@ -69,6 +73,14 @@ SELF_KEY = "manifests_self_rollouts"
 DEFAULT_TRIGGERS = frozenset({"config", "secret", "image"})
 # Each signal to the kind of input it admits into the value.
 TRIGGER_KINDS = {"config": "ConfigMap", "secret": "Secret"}
+
+# DECIDED: these ConfigMaps never move `checksum/restart`. Their reader re-reads the mount by
+# itself, and a roll of either reader costs an outage, because both are `Recreate`. Grafana's file
+# provisioner re-reads each `grafana-dashboards-<folder>` every `updateIntervalSeconds` (30).
+# Prometheus reloads `prometheus-rules` under `--config.auto-reload` (the `DECIDED: rules reload
+# in place` marker in observability's prometheus.yaml.j2). Under Ansible neither edit rolled its
+# pod (#5679). `pod_references` still reports them, for the outside-role reference test.
+RELOADED_IN_PLACE = ("grafana-dashboards-*", "prometheus-rules")
 
 Ref = tuple[str, str]
 
@@ -299,7 +311,7 @@ def restart_values(
         inputs = []
         admitted = frozenset(targets[name])
         for kind, ref in sorted(pod_references(workloads[name])):
-            if kind not in admitted:
+            if kind not in admitted or reloaded_in_place(kind, ref):
                 continue
             held = set()
             if (kind, ref) in own:
@@ -323,6 +335,13 @@ def restart_values(
         if inputs:
             values[name] = hashlib.sha256("\n".join(inputs).encode()).hexdigest()
     return values
+
+
+def reloaded_in_place(kind: str, name: str) -> bool:
+    """Whether ConfigMap `name` is one its reader re-reads in place (`RELOADED_IN_PLACE`)."""
+    return kind == "ConfigMap" and any(
+        fnmatch.fnmatchcase(name, pattern) for pattern in RELOADED_IN_PLACE
+    )
 
 
 def _child(node: yaml.Node | None, key: str) -> yaml.Node | None:
