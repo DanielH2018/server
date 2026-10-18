@@ -53,11 +53,27 @@ def test_a_template_both_halves_render_prints_server_then_agent_then_clear():
     _ordered(broad, "git merge --ff-only", "k3s-bringup.yml --tags k3s`", *joins)
 
 
-def test_a_server_only_change_prints_no_agent_command():
-    """`tasks/server.yml` narrows to `k3s_server`, which the agent never reads."""
-    cmd = manual_plane_remediation({"k3s"}, {"k3s": frozenset({"k3s_server"})})
-    assert "--tags k3s_server" in cmd
-    assert "join_agent" not in cmd
+def test_a_server_only_change_set_prints_no_agent_command_once_narrowed():
+    """The change set `tasks/server.yml` alone, with its row from the real derivation.
+
+    The ledger surfaces print from the row the narrowing recorded, and `tags_of` is what
+    `narrow_setup.path_tags` asks of a changed `tasks/` file, so the row is derived here
+    rather than written in. `broad_remediation` over the same change set has no row, and
+    prints the whole role with the join beside it: the over-apply the `DECIDED:` marker at
+    `_AGENT_JOIN_TAGS` accepts for `deploy.sh --changed` and `land.sh`'s fallback.
+    """
+    path = f"{K3S}/tasks/server.yml"
+    cs = services_from_changed_paths([path])
+    assert cs.setup_roles == {"k3s"}
+    index = narrow_setup_index.RoleIndex("k3s", "HEAD", str(REPO))
+    row = {"k3s": index.tags_of(path.removeprefix(f"{K3S}/"))}
+    narrowed = manual_plane_remediation(cs.setup_roles, row)
+    assert "--tags k3s_server" in narrowed
+    assert "join_agent" not in narrowed
+    whole = broad_remediation(
+        cs.broad_deploy, cs.broad_setup, cs.setup_roles, playbooks=cs.manual_playbooks
+    )
+    assert "-e join_agent=" in whole
 
 
 def test_a_routing_with_no_agent_hosts_prints_a_placeholder_not_a_host():
