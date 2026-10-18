@@ -14,8 +14,14 @@
   moved. Both names end in a digest, as the Job census requires: the ConfigMap's in
   `configmap_digest8` of its data, the Job's in `job_spec_digest8` of its spec.
 
-  The spec embeds a digest of qbittorrent's rendered Deployment, so every change that rolls the
-  pod renames the Job and Flux runs it again, as Ansible runs `verify.yml` on every deploy.
+  The spec embeds a digest of the inputs that roll the pod, the ones `checksum/restart`
+  hashes under Flux (`scripts/renderer/renderer_lib/restart.py`): the rendered Deployment, the
+  `qbittorrent-netns-reset` ConfigMap, the two Secret templates the pod names, and the
+  `cluster-vars.source` digest of each key those templates read. The Deployment alone would
+  miss a netns-reset edit and a key rotation, both of which roll the pod.
+  `tests/test_qbittorrent_job.py` fails if a ConfigMap or Secret the pod names drops out.
+  So every change that rolls the pod renames the Job, and Flux runs it again, as Ansible runs
+  `verify.yml` on every deploy.
 
   DECIDED: the pod carries `app: qbittorrent-reach-probe`, the label of the `kubectl run` pod
   this Job replaces, not `qbittorrent-verify`. qbittorrent's `netpol_from` already lists that
@@ -41,7 +47,20 @@
   'flux_job_connect.py': flux_job_connect,
 } %}
 {% set configmap_name = 'qbittorrent-verify-' + ({'data': data, 'binaryData': {}} | to_json(sort_keys=True, separators=(',', ':')) | hash('sha256'))[:8] %}
-{% set deployment_digest8 = (lookup('template', 'deployment.yaml.j2') | hash('sha256'))[:8] %}
+{#- The pod's roll inputs, as `checksum/restart` hashes them; see the note above. The Secret
+    templates are read raw, never rendered, and `cluster-vars.source` holds a digest of each
+    key's ciphertext, so no value enters the hash. -#}
+{% set roll = namespace(
+  text=lookup('template', 'deployment.yaml.j2') + lookup('template', 'configmap-netns-reset.yaml.j2'),
+  secrets='',
+) %}
+{% for name in ['secret.yaml.j2', 'mullvad-account-secret.yaml.j2'] %}
+{% set roll.secrets = roll.secrets + lookup('file', playbook_dir + '/roles/k8s/qbittorrent/templates/' + name) %}
+{% endfor %}
+{% for line in lookup('file', playbook_dir + '/vars/cluster-vars.source').splitlines() if line and not line.startswith('#') and ('{{ ' + line.split()[0] + ' ') in roll.secrets %}
+{% set roll.text = roll.text + line %}
+{% endfor %}
+{% set roll_digest8 = ((roll.text + roll.secrets) | hash('sha256'))[:8] %}
 {% set spec_text %}
 # A flaky check fails rather than passing on a retry, and a retry would log in again.
 backoffLimit: 0
@@ -97,9 +116,9 @@ template:
             value: {{ qbittorrent_k8s_verify_egress_url | to_json }}
           - name: MODCACHE_DIR
             value: /modcache
-          # Renames the Job whenever qbittorrent's Deployment changes; see the note above.
-          - name: QBITTORRENT_DEPLOYMENT_DIGEST8
-            value: "{{ deployment_digest8 }}"
+          # Renames the Job whenever qbittorrent's pod rolls; see the note above.
+          - name: QBITTORRENT_ROLL_DIGEST8
+            value: "{{ roll_digest8 }}"
           - name: PYTHONDONTWRITEBYTECODE
             value: "1"
         resources:

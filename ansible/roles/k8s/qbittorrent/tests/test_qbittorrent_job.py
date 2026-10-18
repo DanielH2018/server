@@ -24,9 +24,11 @@ import apply_prefs
 import qbittorrent_job
 from lib import yaml_fast
 from lib.k8s_roles import K8S_ROLES
+from lib.repo_paths import ANSIBLE
 from renderer import shadow_diff
 from renderer.renderer_lib import cluster
 from renderer.renderer_lib.context import load_stubs
+from renderer.renderer_lib.restart import pod_references
 from renderer.tests._job_census import problems
 
 TAG = "qbittorrent"
@@ -325,6 +327,91 @@ def test_the_verify_job_mounts_the_sidecars_modcache_from_the_config_claim(
     sidecar = modcache_source(deployment["spec"]["template"]["spec"], "wireguard")
     assert sidecar == ("qbittorrent-config", "modcache")
     assert modcache_source(job_pod, "verify") == sidecar
+
+
+def _roll_digests(flipped_docs: list[dict]) -> set[str]:
+    """The `QBITTORRENT_ROLL_DIGEST8` each flipped Job carries."""
+    return {
+        env["value"]
+        for job in _jobs(flipped_docs).values()
+        for env in job["spec"]["template"]["spec"]["containers"][0]["env"]
+        if env["name"] == "QBITTORRENT_ROLL_DIGEST8"
+    }
+
+
+def _render_tree_copy(tmp_path, stubs, edit=None) -> list[dict]:
+    """The flipped `qbittorrent-verify` of a copy of the role and of `cluster-vars.source`.
+
+    `edit(tree)` changes the copy first. `playbook_dir` rides in the stubs, which outrank every
+    other layer, so the Jobs' lookups read the copy rather than the tree.
+    """
+    tree = tmp_path / "ansible"
+    shutil.copytree(K8S_ROLES / TAG, tree / "roles" / "k8s" / TAG)
+    (tree / "vars").mkdir()
+    shutil.copy(ANSIBLE / "vars" / "cluster-vars.source", tree / "vars")
+    templates = tree / "roles" / "k8s" / TAG / "templates"
+    (templates / "verify-inert").rename(templates / "verify")
+    if edit:
+        edit(tree)
+    copied = {**stubs, "playbook_dir": str(tree)}
+    return _docs(cluster.render_tag(TAG, copied, roles=tree / "roles" / "k8s").verify)
+
+
+def _edit_netns_reset(tree) -> None:
+    script = tree / "roles" / "k8s" / TAG / "files" / "netns-reset.sh"
+    script.write_text(script.read_text() + "# a reset-only edit\n")
+
+
+def _rotate_the_wireguard_key(tree) -> None:
+    source = tree / "vars" / "cluster-vars.source"
+    lines = source.read_text().splitlines()
+    (row,) = [
+        n
+        for n, line in enumerate(lines)
+        if line.startswith("wireguard_interface_private_key ")
+    ]
+    key, _digest, *rest = lines[row].split()
+    lines[row] = " ".join([key, "0" * 64, *rest])
+    source.write_text("\n".join(lines) + "\n")
+
+
+@pytest.mark.parametrize(
+    "edit",
+    [_edit_netns_reset, _rotate_the_wireguard_key],
+    ids=["netns-reset", "rotation"],
+)
+def test_a_change_that_rolls_the_pod_renames_both_jobs(edit, stubs, tmp_path):
+    """Each rolls qbittorrent through `checksum/restart` and leaves the Deployment's text alone."""
+    before = _render_tree_copy(tmp_path / "a", stubs)
+    after = _render_tree_copy(tmp_path / "b", stubs, edit)
+    assert len(_roll_digests(before)) == 1
+    assert _roll_digests(before) != _roll_digests(after)
+    names = {doc["metadata"]["name"] for doc in before if doc["kind"] == "Job"}
+    assert names.isdisjoint(
+        doc["metadata"]["name"] for doc in after if doc["kind"] == "Job"
+    )
+
+
+def test_every_input_the_pod_names_is_one_the_roll_digest_reads(flipped_tag):
+    """A ConfigMap or Secret the pod gains moves `checksum/restart`, so the digest must read it."""
+    sources = {
+        (doc["kind"], doc["metadata"]["name"]): f"{name}.j2"
+        for name, text in flipped_tag.files.items()
+        for doc in yaml_fast.safe_load_all(text)
+        if doc and doc.get("kind") in ("ConfigMap", "Secret")
+    }
+    (deployment,) = [
+        doc for doc in _docs(flipped_tag.files) if doc["kind"] == "Deployment"
+    ]
+    named = {sources[ref] for ref in pod_references(deployment["spec"]["template"])}
+    assert named == {
+        "configmap-netns-reset.yaml.j2",
+        "mullvad-account-secret.yaml.j2",
+        "secret.yaml.j2",
+    }
+    for job in ("job.yaml.j2", "prefs.yaml.j2"):
+        text = (K8S_ROLES / TAG / "templates" / "verify-inert" / job).read_text()
+        assert {name for name in named if f"'{name}'" not in text} == set(), job
 
 
 def test_the_jobs_read_no_other_roles_file():
