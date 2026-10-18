@@ -159,9 +159,10 @@ also depends on H2's family PRs for six roles, as *Host-side rows* lists, and ne
 - H1.1a gates traefik's flip and the flux PR, because H1.1a defines the `flux_prune` lever
   that both set (*How each kind of task moves*). H1 depends on D2 and D4 only, so the edge
   adds no loop.
-- D3's `cluster_vars.py write` refusals gate two flips: the `{{` and argon2 refusals gate
-  authelia's, and the `mqtt_password_hash` colon refusal gates mosquitto's (*How each kind of
-  task moves*).
+- `cluster_vars.py write` refusals gate three flips: D3's `{{` and argon2 refusals gate
+  authelia's, D3's `mqtt_password_hash` colon refusal gates mosquitto's, and the `_push_token`
+  format refusal from uptime-kuma's conversion PR (#5712) gates uptime-kuma's (*How each kind
+  of task moves*).
 - M2's PR 4b gates dri-device-plugin's flip. dri-device-plugin's verify is M2's
   `K8sExtendedResourceMissing`, which carries `verify="true"` and `shadow: "true"`. The soak
   reads neither a shadow rule's `for:` nor its alert, so the verify is inert until PR 4b drops
@@ -1811,7 +1812,7 @@ every row one class:
 | restart on config or Secret change | cloudflare-ddns's `manifests_extra_rollouts`; observability's secret restart; pihole's `roll_one.yml` | `checksum/restart` per workload: D3's rule for cloudflare-ddns, widened by D5.1e to the self-rolled workloads of observability and pihole |
 | stale Secret keys | `k8s/manifests`' `verify_secret_keys.yml` | Flux's server-side apply removes a field it owns and no longer declares; D3.5 hands each Secret's fields to kustomize-controller first |
 | host-side, moved by H2 | the live crons, scripts and modules of crowdsec, configarr, janitorr, qbittorrent, artifacts and observability | H2's family PR for the role (H2.4b, H2.4c, H2.5b, H2.7), landed before the flip, which waits on it; the absent arms it leaves are the next row's |
-| host-side, moved by D5 | docs's site directory, pi-peer-backup's two Pi writes, traefik's absent arm, registry's GC absent arms; the absent arms H2 leaves in crowdsec, configarr, janitorr and qbittorrent; artifacts' three directory tasks; media-volume's three media directories | the setup role `k8s_host_files`, in a conversion PR before the flip, until H5 or H7 takes each row; sources and variables move with the task (below) |
+| host-side, moved by D5 | docs's site directory, pi-peer-backup's two Pi writes, traefik's absent arm, registry's GC absent arms; the absent arms H2 leaves in crowdsec, configarr, janitorr and qbittorrent; artifacts' three directory tasks; media-volume's three media directories; uptime-kuma's autokuma-claims staging-directory absent arm | the setup role `k8s_host_files`, in a conversion PR before the flip, until H5 or H7 takes each row; sources and variables move with the task (below) |
 | host-side cleanup that has already run | game-stats' pre-#2813 record cleanup; observability's claude-otel record cleanup; media-volume's opt-in seeding rsync, `tasks/sync.yml` | deleted by D5's run-once cleanup PR before either role flips (below); media-volume's by its own conversion PR, because its source, daniel-server's `containers/data`, no longer exists |
 | manifest staged outside the manifests directory | traefik's RBAC, `/etc/rancher/k3s/traefik-clusterrole.yaml` | rendered into the bundle by traefik's flip PR, which deletes the staging and apply tasks (Wave D's traefik bullet) |
 | host-side that writes a flux-owned object | registry's GC cron and manifest | retired before the flip (Wave D's registry bullet) |
@@ -2611,6 +2612,17 @@ sizes its batch of roles against that projection.
       `mqtt_password_hash`, merged before the flip. R2's colon-count assert stops running once
       Flux renders mosquitto. Without the refusal, a value holding `:` would reach the
       password file with its prefix stripped, and every MQTT client would fail to log in.
+    - uptime-kuma: its conversion PR (#5712) lands both successors of the declaration
+      checks before the flip. The index-populated assert becomes
+      `tests/test_declaration_index_flux_form.py`, which evaluates the assert's `that:` over
+      the rendered `static-monitors` Secret in CI. The push-token assert becomes a
+      `cluster_vars.py write` refusal of any `_push_token` value that is not 32 letters and
+      digits, because the render carries placeholder tokens only. Under AutoKuma's
+      `ON_DELETE=delete`, the first stops an empty declaration set deleting every monitor,
+      and the second stops a token AutoKuma refuses from leaving a tile that never appears.
+      Neither CronJob carries a `k8s/cronjob-gate` include, so the role declares no
+      `flux_cronjob_gates`. The flip PR moves the index assert's `that:` into the test as a
+      literal and deletes `tasks/main.yml`.
     - qbittorrent: the flip has three preconditions, because R2 PR 7b moves `mullvad_account`
       out of qbittorrent's Secret into the dedicated SOPS Secret `qbittorrent-mullvad-account`,
       the fourth `render_sops_manifests` entry (R2 *`mullvad_account` becomes a dedicated

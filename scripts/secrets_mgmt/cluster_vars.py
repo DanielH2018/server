@@ -113,6 +113,15 @@ ARGON2_DIGEST = re.compile(
 )
 
 
+# AutoKuma's push-token rule, "32 characters and only letters and numbers". It is the successor
+# of uptime-kuma's "Check every push token is in the format AutoKuma accepts" assert, which
+# stops running once D5 moves uptime-kuma to Flux (#5712). Under Flux the render carries only
+# placeholders, so `write` is the one step that reads the real token.
+# `ansible/tests/services/test_kuma_push_token_format.py` holds it equal to
+# `kuma_monitors._PUSH_TOKEN`, and holds every rendered push token to the `_push_token` suffix.
+PUSH_TOKEN = re.compile(r"[A-Za-z0-9]{32}")
+
+
 class SopsFailed(RuntimeError):
     """A sops call exited non-zero. Its message names the file, never what sops printed."""
 
@@ -250,7 +259,8 @@ def successor_refusals(values: dict, placed: frozenset[str]) -> list[str]:
     Only a key `write` places is checked. authelia's template names the claude-ui and
     claude-agent digests only behind `authelia_k8s_manage_claude_user` and
     `authelia_k8s_manage_agent_user`, so the render places them under the same conditions the
-    deploy's digest assert checks them. An absent or non-scalar key is left to
+    deploy's digest assert checks them. A push token is a key ending `_push_token`, the name
+    every token the static-monitors render places carries. An absent or non-scalar key is left to
     `value_refusals`, which already refuses it. Each line names keys and never a value.
     """
     held = {
@@ -273,6 +283,12 @@ def successor_refusals(values: dict, placed: frozenset[str]) -> list[str]:
             out.append(
                 f"{key}: holds the same digest as {', '.join(same)}, so the users share "
                 "one password"
+            )
+    for key, value in sorted(held.items()):
+        if key.endswith("_push_token") and not PUSH_TOKEN.fullmatch(value):
+            out.append(
+                f"{key}: not 32 letters and digits, so AutoKuma never creates its push "
+                "monitor; mint it again with `openssl rand -hex 16`"
             )
     if ":" in held.get("mqtt_password_hash", ""):
         out.append(

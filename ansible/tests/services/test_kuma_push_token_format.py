@@ -4,6 +4,10 @@ AutoKuma rejects a `push_token` that is not 32 letters and digits with one WARN 
 never creates the monitor, so its pusher gets HTTP 404 and nothing pages. These guards evaluate
 the role's own assert expression, through the `kuma_malformed_push_tokens` filter, over the
 declarations the real template renders.
+
+Under Flux the render carries only placeholder tokens, so the assert's successor is the
+`_push_token` refusal in `cluster_vars.py write` (#5712). The last two tests hold that refusal
+to the same rule and run it over every key the render places in a `push_token` field.
 """
 
 import copy
@@ -13,7 +17,8 @@ import pytest
 
 from _helpers import ANSIBLE, jinja_env, load_tasks, task_named
 from _kuma_entities import _entities
-from kuma_monitors import FilterModule, kuma_malformed_push_tokens
+from kuma_monitors import _PUSH_TOKEN, FilterModule, kuma_malformed_push_tokens
+from secrets_mgmt import cluster_vars
 
 _TASK = task_named(
     load_tasks(ANSIBLE / "roles/k8s/uptime-kuma/tasks/main.yml"),
@@ -101,3 +106,30 @@ def test_the_check_covers_every_rendered_push_tile():
     assert _INCIDENT_TILE in push_ids
     assert len(push_ids) >= 40, f"the push-tile census went thin: {len(push_ids)}"
     assert kuma_malformed_push_tokens(declarations) == push_ids
+
+
+def test_the_cluster_file_refusal_uses_autokumas_rule():
+    assert cluster_vars.PUSH_TOKEN.pattern == _PUSH_TOKEN.pattern
+
+
+def test_cluster_vars_refuses_a_malformed_value_in_every_rendered_push_token():
+    # Under the test render each token is `stub-<variable>`, so the variables are the keys the
+    # cluster file holds. Feeding each one a base64 token through the real refusal ties the
+    # check to how `successor_refusals` selects keys, not to a restated suffix.
+    variables = {
+        entity["push_token"].removeprefix("stub-")
+        for entity in _entities().values()
+        if entity["type"] == "push"
+    }
+    # Named members: a hand-written tile's token and one from monitor-bridge's lookup loop.
+    assert {
+        "homelab_eval_push_token",
+        "monitor_bridge_cpu_push_token",
+    } <= variables
+    base64_token = "QUJD" * 10 + "QQ+="
+    refusals = cluster_vars.successor_refusals(
+        dict.fromkeys(variables, base64_token), frozenset(variables)
+    )
+    refused = {line.split(":", 1)[0] for line in refusals}
+    assert sorted(variables - refused) == []
+    assert all(base64_token not in line for line in refusals)

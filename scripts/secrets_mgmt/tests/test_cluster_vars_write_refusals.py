@@ -1,4 +1,4 @@
-"""D3.2d's per-key refusals, each run through `cluster_vars.py write` on a fixture tree.
+"""D3.2d's per-key refusals and D5's successors, each run through `cluster_vars.py write` on a fixture tree.
 
 Every test runs the real `sops` against a throwaway age key from `_cluster_vars_fixture.py`.
 The digests are literals in the base64 alphabet, never copied from the real `secrets.yml`.
@@ -35,6 +35,7 @@ GOOD = {
     "authelia_claude_password_argon2": CLAUDE,
     "authelia_agent_password_argon2": AGENT,
     "mqtt_password_hash": "$7$abc",
+    "fixture_tile_push_token": "a" * 32,
 }
 PLACED = replace(EXPECTED, keys=EXPECTED.keys | set(GOOD))
 NOT_A_DIGEST = "not an argon2id digest"
@@ -65,8 +66,24 @@ def test_a_distinct_well_formed_set_and_a_bare_mosquitto_hash_are_clean(tmp_path
         ("authelia_agent_password_argon2", "fixture-plain-password-q4", NOT_A_DIGEST),
         ("authelia_agent_password_argon2", ADMIN, "the same digest as"),
         ("mqtt_password_hash", "user:$7$abc", "holds a `:`"),
+        # The shape a base64 mint produces: 44 characters, padded with `=`.
+        ("fixture_tile_push_token", "QUJD" * 10 + "QQ+=", "not 32 letters and digits"),
+        (
+            "fixture_tile_push_token",
+            "0123456789abcdef-0123456789abcd",
+            "not 32 letters",
+        ),
     ],
-    ids=["t=2", "Digest-prefix", "trailing-space", "plaintext", "equal", "mqtt-colon"],
+    ids=[
+        "t=2",
+        "Digest-prefix",
+        "trailing-space",
+        "plaintext",
+        "equal",
+        "mqtt-colon",
+        "push-base64",
+        "push-hyphen",
+    ],
 )
 def test_a_refused_value_changes_no_file_and_names_only_the_key(
     written, capfd, key, value, reason
