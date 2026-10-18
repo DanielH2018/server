@@ -49,6 +49,9 @@ cluster, and roll the tree and service back on a failed health gate.
   per deploy, rollback, hold and deferral, and a `hold_sha` that pages **GitOps Deploy — Status**.
 - **Next-run review:** before widening scope, read the last week's Discord log for the holds and
   rollbacks that fired; the record page lists what an earlier widening cost.
+  `increase(gitops_tick_runs_total[7d])` counts the same week by outcome, lock skips and
+  parks included. `files/gitops_tick_metrics.py` writes it each tick, and the unit's second
+  `ExecStopPost=` writes it for a tick `flock` skipped.
 
 ## Safety
 
