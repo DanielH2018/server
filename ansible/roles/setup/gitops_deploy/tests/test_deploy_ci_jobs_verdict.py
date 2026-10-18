@@ -98,3 +98,25 @@ def test_the_job_rule_applies_only_when_the_gate_is_required():
     other = "renovate config validator"
     runs = _push_run() + [_run(other, status="queued", conclusion=None)]
     assert ci_verdict(runs, frozenset({other})) == "pending"
+
+
+def _draft_run():
+    """A draft PR's run (#5563): every job skips, the gate included."""
+    return (
+        [_run(CI_PROVE_JOB, conclusion="skipped")]
+        + _jobs("skipped")
+        + [_run(CI_GATE_NAME, conclusion="skipped")]
+    )
+
+
+def test_a_head_whose_only_gate_is_a_draft_runs_skipped_gate_is_pending():
+    """`land.sh` must not merge a PR marked ready before its ready run registers."""
+    assert ci_verdict(_draft_run(), _REQUIRED) == "pending"
+
+
+def test_the_ready_run_decides_a_head_the_draft_run_also_reported_on():
+    ready = [_run(CI_PROVE_JOB, conclusion="skipped")] + _jobs()
+    assert ci_verdict(_draft_run() + ready + [_run(CI_GATE_NAME)], _REQUIRED) == "pass"
+    assert ci_verdict(_draft_run() + ready + [_QUEUED_GATE], _REQUIRED) == "pass"
+    red = ready + [_run(CI_GATE_NAME, conclusion="failure")]
+    assert ci_verdict(_draft_run() + red, _REQUIRED) == "fail"

@@ -215,7 +215,13 @@ def test_a_draft_pr_is_marked_ready_and_the_ci_wait_starts_after_the_ready_run(
     (ready,) = run.readied
     assert ready[3:] == ["4000", "-R", "DanielH2018/server"]
     assert clock.sleeps == [READY_POLL_S]
-    assert len(run.ci_calls) == 1
+    assert run.log == [
+        ("runs", [1]),
+        ("ready",),
+        ("runs", [1]),
+        ("runs", [1, 2]),
+        ("gh-ci",),
+    ]
 
 
 def test_a_ready_pr_whose_ci_run_never_starts_ends_needs_input_without_a_wait(
@@ -225,11 +231,12 @@ def test_a_ready_pr_whose_ci_run_never_starts_ends_needs_input_without_a_wait(
     run.draft = True
     final = pipeline.run_all()
     assert final["result"].startswith(
-        f"needs input: PR #4000 is marked ready, but no CI run started on bbb within "
-        f"{READY_WAIT_S}s."
+        f"needs input: no CI run started on PR #4000's head bbb within {READY_WAIT_S}s of "
+        "marking it ready; the PR is back to a draft."
     )
     assert run.ci_calls == [] and run.lands == []
-    assert len(run.readied) == 1 and sum(clock.sleeps) == READY_WAIT_S
+    assert run.log[1] == ("ready",) and run.log[-1] == ("undo",)
+    assert sum(clock.sleeps) == READY_WAIT_S
 
 
 def test_a_draft_held_for_its_findings_is_still_marked_ready(tmp_path):

@@ -259,9 +259,13 @@ def ready_for_ci(
         if now is not None and now - before:
             return ""
         sleep(READY_POLL_S)
+    # A ready PR whose only checks are the draft run's skipped ones reads green to GitHub's
+    # ruleset and to auto-merge, so the PR goes back to a draft, which GitHub refuses to merge.
+    undo = run(["gh", "pr", "ready", pr, "-R", repo, "--undo"], None)
+    state = "back to a draft" if undo.returncode == 0 else "still ready, NOT a draft"
     return (
-        f"PR #{pr} is marked ready, but no CI run started on {sha[:8]} within "
-        f"{READY_WAIT_S}s"
+        f"no CI run started on PR #{pr}'s head {sha[:8]} within {READY_WAIT_S}s of "
+        f"marking it ready; the PR is {state}. Run `gh pr ready {pr}` once Actions is up"
     )
 
 

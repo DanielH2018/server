@@ -96,7 +96,8 @@ def jobs_verdict(check_runs: list[dict]) -> str:
         job = states.get(name)
         if job is None or "pending" in job:
             return "pending"
-        if "skipped" in job:
+        # A draft run's skip beside the ready run's pass on the same head is a pass (#5563).
+        if "skipped" in job and "pass" not in job:
             skipped += 1
     if not skipped:
         return "pass"
@@ -122,7 +123,8 @@ def ci_verdict(check_runs: list[dict], required: frozenset[str] | set[str]) -> s
     the caller defers the tick and retries in 30 minutes.
 
     The gate job's own name is the exception to "missing or still running is pending": while it
-    has not concluded, `jobs_verdict` decides from the jobs it aggregates (#5507).
+    has not concluded, `jobs_verdict` decides from the jobs it aggregates (#5507). A skipped gate
+    has not concluded either: only a draft PR's run skips it (#5563).
     """
     if not required:
         return "pass"
@@ -130,6 +132,10 @@ def ci_verdict(check_runs: list[dict], required: frozenset[str] | set[str]) -> s
     for run in check_runs:
         name = run.get("name")
         if name not in required:
+            continue
+        # The gate skips only on a draft PR (#5563), and a draft run tested nothing. Its gate is
+        # left out, so a head whose only gate is a draft's reads as the jobs decide: pending.
+        if name == CI_GATE_NAME and run.get("conclusion") == "skipped":
             continue
         if run.get("status") != "completed":
             state = "pending"

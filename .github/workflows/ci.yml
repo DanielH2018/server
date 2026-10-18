@@ -1261,8 +1261,10 @@ jobs:
     needs: [prove, hooks, pytest, ansible_lint, deck_mod, flux_roundtrip, sops_manifest_type_proof, host_packages]
     # On a draft the gate skips with its dependents. A red gate there would pin the head red
     # for every reader that takes the worst check run per name (`deploy_git.ci_verdict`), even
-    # after the ready run passes. The skipped gate is safe because GitHub refuses to merge a
-    # draft, and `review_ci.ready_for_ci` waits for the ready run before any CI wait starts.
+    # after the ready run passes. The skipped gate is not a pass: GitHub refuses to merge a
+    # draft, `deploy_git.ci_verdict` (which `land.sh` reads) leaves a skipped gate out, and
+    # `review_ci.ready_for_ci` waits for the ready run and turns the PR back into a draft if
+    # none starts.
     if: ${{ always() && github.event.pull_request.draft != true }}
     # `statuses: write` is for the record step below, on a pull request only. The job runs no
     # checkout and no repository code.
