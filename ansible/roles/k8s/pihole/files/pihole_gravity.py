@@ -57,8 +57,10 @@ GRAVITY_READ_TIMEOUT = 300
 REACH_RETRY_SECONDS = 60
 # The comment on every row the reconcile adds. It matches the rows the Ansible task wrote.
 COMMENT = "ansible-declared"
-# The line gravity.sh prints once the new database has replaced the old one. A run that fails
-# earlier leaves the old database in place and never prints it.
+# The line gravity.sh prints once the new database has replaced the old one
+# (`gravity_swap_databases`: `echo -e "${OVER}  ${TICK} ${str}"`). A run that fails earlier
+# leaves the old database in place and never prints it. FTL sets FORCE_COLOR only for
+# `?color=true`, which this script never sends, so TICK is the plain `[✓]`.
 GRAVITY_DONE = "[✓] Swapping databases"
 
 

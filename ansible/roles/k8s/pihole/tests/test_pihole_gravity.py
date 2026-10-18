@@ -25,6 +25,7 @@ from renderer import shadow_diff
 from renderer.renderer_lib import cluster
 from renderer.renderer_lib.bundle import bundle_files
 from renderer.renderer_lib.context import load_stubs
+from renderer.renderer_lib.restart import pod_references
 from renderer.tests._job_census import problems
 
 TAG = "pihole"
@@ -367,9 +368,9 @@ def _edit_dnsmasq(role) -> None:
 
 def _edit_declaration(role) -> None:
     defaults = role / "defaults" / "main.yml"
-    defaults.write_text(
-        defaults.read_text() + "pihole_k8s_regex_deny: ['(\\.|^)x\\.example$']\n"
-    )
+    text = defaults.read_text()
+    assert "ads\\.samsung\\.com" in text
+    defaults.write_text(text.replace("ads\\.samsung\\.com", "ads\\.example\\.com"))
 
 
 @pytest.mark.parametrize(
@@ -382,6 +383,33 @@ def test_a_change_that_rolls_a_pihole_or_moves_the_declaration_renames_the_job(
     before = _job(_docs(_render_tree_copy(tmp_path / "a", stubs).verify))
     after = _job(_docs(_render_tree_copy(tmp_path / "b", stubs, edit).verify))
     assert before["metadata"]["name"] != after["metadata"]["name"]
+
+
+def test_every_input_either_pod_names_is_one_the_roll_digest_reads(flipped_tag):
+    """A ConfigMap or Secret a Pi-hole pod gains moves `checksum/restart`, so the digest must read it."""
+    sources = {
+        (doc["kind"], doc["metadata"]["name"]): f"{name}.j2"
+        for name, text in flipped_tag.files.items()
+        for doc in yaml_fast.safe_load_all(text)
+        if doc and doc.get("kind") in ("ConfigMap", "Secret")
+    }
+    deployments = [
+        doc
+        for files in (flipped_tag.files, flipped_tag.deferred)
+        for doc in _docs(files)
+        if doc["kind"] == "Deployment"
+    ]
+    assert len(deployments) == 2
+    named = {
+        sources[ref]
+        for deployment in deployments
+        for ref in pod_references(deployment["spec"]["template"])
+    }
+    assert named == {"configmap.yaml.j2", "secret.yaml.j2"}
+    text = (
+        K8S_ROLES / TAG / "templates" / "verify-inert" / "gravity.yaml.j2"
+    ).read_text()
+    assert {name for name in named if f"{name}'" not in text} == set()
 
 
 def test_the_pihole_fence_admits_the_gravity_job_on_the_web_port(flipped_tag, stubs):
