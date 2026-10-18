@@ -119,7 +119,6 @@ _H2_THEN_D5 = (
     "conversion PR for the role moves the absent arms it leaves"
 )
 HOST_WRITE_ALLOW = {
-    _K8S + "configarr/tasks/main.yml": _H2_THEN_D5,
     _K8S + "crowdsec/tasks/main.yml": _H2_THEN_D5,
     _K8S + "janitorr/tasks/main.yml": _H2_THEN_D5,
     _K8S + "registry/tasks/main.yml": (
