@@ -1096,7 +1096,7 @@
  "scripts/docs/tests/test_gen_reference_freshness.py": 0.0,
  "scripts/docs/tests/test_gen_reference_hosts.py": 0.0,
  "scripts/docs/tests/test_gen_reference_networking.py": 0.0,
- "scripts/docs/tests/test_gen_reference_scripts.py": 31.09,
+ "scripts/docs/tests/test_gen_reference_scripts.py": 5.06,
  "scripts/docs/tests/test_gen_reference_scripts_markdown.py": 9.0,
  "scripts/docs/tests/test_gen_reference_secrets.py": 0.0,
  "scripts/docs/tests/test_gen_reference_state.py": 0.5,
