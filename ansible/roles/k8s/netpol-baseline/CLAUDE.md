@@ -62,6 +62,17 @@ tighter or looser allow-list than the baseline. Deploys no workload of its own.
   `ansible/filter_plugins/toposort.py` gives it an edge onto every other k8s entry, whatever
   its position in `containers_list`. In a run of
   `--tags netpol-baseline` alone the queue is empty and the drain does nothing.
+- **`templates/verify-inert/` is the probe's Flux form, and nothing renders it yet.** Neither
+  the manifests role nor the renderer's `verify_files` reads that directory. The flip PR
+  renames it to `templates/verify/`, which makes the renderer emit `netpol-baseline-verify`,
+  and deletes the probe tasks and `netpol-probe-job.yaml.j2`. The Job runs
+  `files/netpol_baseline_verify.py` twice. Its `gate` initContainer reads the targets'
+  EndpointSlices through the API server, and its main container dials the probe's legs
+  through `flux_job_connect`. Both read the same `netpol_baseline_probe_active` table. The
+  lever asserts and the exempt-set gates are not in it, because they run before the apply.
+  `job.yaml.j2` carries the caller census and the `DECIDED:` notes on the digest and the
+  initContainer. `tests/test_netpol_baseline_verify.py` renders the renamed copy and runs the
+  Job census over it.
 
 ## Where a per-workload policy lives
 

@@ -15,7 +15,8 @@ write there fails `k8s-role-tasks-write-no-host`.
 
 Red-proof: a fixture role under `tmp_path` whose `main.yml` no longer imports the file, one
 whose task writes a different path, one whose task drops its owner, and one whose loop drops a
-directory, must each be flagged; a faithful copy must not.
+directory, and one whose absent arm turns back into an install, must each be flagged; a faithful
+copy must not.
 
 Run: uv run pytest ansible/tests/setup/test_k8s_host_files_rows.py
 """
@@ -88,6 +89,30 @@ EXPECTED_ROWS: dict[str, dict[str, tuple[str, dict[str, str]]]] = {
             },
         ),
     },
+    # An absent arm, so it carries no owner or mode.
+    "observability.yml": {
+        "Remove the retired dashboard staging trees": (
+            "ansible.builtin.file",
+            {"path": "{{ item }}", "state": "absent"},
+        ),
+    },
+    # Absent arms: the whole map pins `state: absent`, so an arm turned back into an install
+    # fails here as well as in the retired-cron census.
+    "traefik.yml": {
+        "Remove the Cloudflare IP drift cron": (
+            "ansible.builtin.cron",
+            {
+                "name": "Cloudflare IP drift",
+                "user": "root",
+                "cron_file": "cloudflare-ip-drift",
+                "state": "absent",
+            },
+        ),
+        "Remove the Cloudflare IP drift script": (
+            "ansible.builtin.file",
+            {"path": "/usr/local/bin/cloudflare-ip-drift.sh", "state": "absent"},
+        ),
+    },
 }
 
 # {(task file, task name): its `loop`} for every looped row. A row absent here must not loop.
@@ -101,6 +126,11 @@ EXPECTED_LOOPS: dict[tuple[str, str], object] = {
         "{{ media_volume_host_path }}",
         "{{ media_volume_host_path }}/media",
         "{{ media_volume_host_path }}/torrents",
+    ],
+    ("observability.yml", "Remove the retired dashboard staging trees"): [
+        "/etc/rancher/k3s/dashboards",
+        "/etc/rancher/k3s/dashboards-annotated",
+        "/etc/rancher/k3s/dashboard-manifests",
     ],
 }
 
@@ -145,6 +175,9 @@ def test_a_task_file_main_no_longer_imports_is_flagged(tmp_path):
         "artifacts.yml: Ensure the star list directory exists",
         "docs.yml: Ensure the built docs site directory exists",
         "media-volume.yml: Create the media volume directories on the node",
+        "observability.yml: Remove the retired dashboard staging trees",
+        "traefik.yml: Remove the Cloudflare IP drift cron",
+        "traefik.yml: Remove the Cloudflare IP drift script",
     ]
 
 
@@ -185,4 +218,18 @@ def test_a_media_volume_row_that_drops_a_directory_from_its_loop_is_flagged(tmp_
     media.write_text(media.read_text().replace(line, ""))
     assert missing_rows(role_dir) == [
         "media-volume.yml: Create the media volume directories on the node"
+    ]
+
+
+def test_a_traefik_arm_turned_back_into_an_install_is_flagged(tmp_path):
+    """An arm whose `state` reads `present` reinstalls the cron it exists to remove."""
+    role_dir = _fixture_role(tmp_path)
+    traefik = role_dir / "tasks" / "traefik.yml"
+    line = "    cron_file: cloudflare-ip-drift\n    state: absent\n"
+    assert line in traefik.read_text()
+    traefik.write_text(
+        traefik.read_text().replace(line, line.replace("absent", "present"))
+    )
+    assert missing_rows(role_dir) == [
+        "traefik.yml: Remove the Cloudflare IP drift cron"
     ]

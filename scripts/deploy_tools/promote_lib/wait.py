@@ -109,14 +109,16 @@ POLL_S = 30
 # reads*). `_TAGS_S` is the tags' share: `cluster-vars`'s 10m, one requeue hop and the tag's
 # 10m on the path, one 10m queueing round, the 1m OCIRepository interval and the 2m
 # `retryInterval`. `verify` expects `soak` too (D5.3b3), whose `timeout` the renderer sets to
-# `_TAGS_S` plus W, 3m for a tag with no `for:`, and two 1m margins; that term is the longest,
-# so the total adds the interval and the `retryInterval` again. test_promote_land_wait_deadline.py
-# pins this to `chained_timeout.promote_timeout` (#5155). `land-wait` gives up at twice it
+# `_TAGS_S` plus W (below) and two 1m margins; that term is the longest, so the total adds the
+# interval and the `retryInterval` again. test_promote_land_wait_deadline.py pins this to
+# `chained_timeout.promote_timeout` (#5155). `land-wait` gives up at twice it
 # (contract C6): the second half covers `promote.yml`'s `render` and `publish`, 10m each.
 # The soak's chain counts every Kustomization in the bundle, so `land_wait` raises the deadline
 # from the live `soak` Kustomization's `timeout` too (`soak_deadline_s`).
 _TAGS_S = 10 * 60 + 30 + 10 * 60 + 10 * 60 + 60 + 2 * 60
-PROMOTE_TIMEOUT_S = _TAGS_S + 3 * 60 + 2 * 60 + 60 + 2 * 60
+# W is 4m. `IngressProbeFailedCritical` pages at `for: 2m` with no `service` label, so since M4's
+# PR 5 dropped its `shadow` it counts for every tag: W = max(stabilise, 2m) + 2m scrape-and-eval.
+PROMOTE_TIMEOUT_S = _TAGS_S + 4 * 60 + 2 * 60 + 60 + 2 * 60
 LAND_WAIT_TIMEOUT_S = 2 * PROMOTE_TIMEOUT_S
 
 # How long M's `decide` waits on an earlier commit's verification before it gives up as
