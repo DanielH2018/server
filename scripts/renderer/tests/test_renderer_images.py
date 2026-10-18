@@ -122,6 +122,19 @@ def test_the_render_writes_all_ten_contexts_and_tags_json(out):
         assert (out / images.IMAGES_DIR / name / "Dockerfile").is_file(), name
 
 
+def test_a_render_of_every_target_builds_all_ten():
+    """A render without `--role` names `select_tags(None)`, which must hold every builder.
+
+    A builder role that left the render targets would drop its context from the full render,
+    and from `cluster_vars.py` and `standalone_map.py`, which render the same tag set.
+    """
+    keys = homelab_render.secret_keys()
+    built = images.render_images(
+        placeholders.placeholder_vars(keys), tags=cluster.select_tags(None)
+    )
+    assert set(built) == TEN
+
+
 def test_a_role_render_writes_only_the_contexts_its_roles_build(tmp_path):
     """A consumer reads only its own role's images, so `--role` builds no other (#5374)."""
     out = tmp_path / "out"
