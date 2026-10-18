@@ -11,7 +11,8 @@ import pytest
 from _land_fakes import MERGE_SHA, Fakes, receipt
 from gitops_ledger import OWED_K8S_UNAPPLIED, owed_line
 from gitops_markers import MARKERS
-from deploy_tools.land_lib import health_verdict
+from deploy_tools.deploy_lib.detach_notify import GateResult
+from deploy_tools.land_lib import health_verdict, outcome
 from deploy_tools.land_lib.outcome import Outcome
 from deploy_tools.land_lib.landing import Classification
 
@@ -116,6 +117,40 @@ def test_unhealthy_when_the_gate_fails(landing):
     with pytest.raises(Outcome) as exc:
         health_verdict.health(ln)
     assert (exc.value.rc, exc.value.verdict) == (1, "unhealthy")
+
+
+def _gates(ln, *results):
+    """Answer the landing's successive gates with `results`, which may be unreadable."""
+    answers = iter(results)
+    ln.tools = replace(ln.tools, gate=lambda tags, cwd=None: next(answers))
+
+
+NOT_GRADED = ["sonarr: not graded -- probe.py health could not read its store"]
+
+
+def test_an_unreadable_gate_defers_without_asking_about_later_deploys(landing, capsys):
+    """#5543: no reading is no failure, and nothing rolled under a gate that saw nothing."""
+    ln, calls = _deployed(landing, Fakes(later_deploys={"sonarr": "c0ffee"}))
+    _gates(ln, GateResult(False, NOT_GRADED, unreadable=True))
+    with pytest.raises(Outcome) as exc:
+        health_verdict.health(ln)
+    assert (exc.value.rc, exc.value.verdict) == (75, "deferred")
+    assert "could not read its store" in exc.value.detail
+    assert outcome.UNREADABLE_GATE_NOTE in capsys.readouterr().out
+    assert not any(c[0] == "later_deploys" for c in calls)
+
+
+def test_a_re_gate_that_cannot_read_defers_rather_than_failing(landing):
+    ln, _ = _deployed(landing, Fakes(later_deploys={"sonarr": "c0ffee"}))
+    _gates(
+        ln,
+        GateResult(False, ["sonarr: 0/1 ready, 0 updated — rollout incomplete"]),
+        GateResult(False, NOT_GRADED, unreadable=True),
+    )
+    with pytest.raises(Outcome) as exc:
+        health_verdict.health(ln)
+    assert (exc.value.rc, exc.value.verdict) == (75, "deferred")
+    assert "re-gated after a later deploy of sonarr" in exc.value.detail
 
 
 def test_needs_manual_apply_when_a_plane_remains(landing, capsys):

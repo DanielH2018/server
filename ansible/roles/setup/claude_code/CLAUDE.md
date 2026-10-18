@@ -22,9 +22,10 @@ uv run ansible-playbook ansible/initial_setup.yml --tags claude_code
 - **Crons (2):**
   - `Sync peer Claude artifacts` — `*/5 * * * *`
   - `Claude Code telemetry health` — `*/10 * * * *`
-- **Timers (6):** `claude-cgroup-metrics.timer` (`OnBootSec=30s`, `OnUnitActiveSec=30s`),
+- **Timers (7):** `claude-cgroup-metrics.timer` (`OnBootSec=30s`, `OnUnitActiveSec=30s`),
   `claude-clone-sync.timer` (`OnBootSec=10min`, `OnUnitActiveSec=15min`),
   `claude-dotfiles-sync.timer` (`OnBootSec=10min`, `OnUnitActiveSec=15min`),
+  `claude-fanout-server-lander.timer` (`OnBootSec=5min`, `OnUnitActiveSec=10min`),
   `claude-memory-sync.timer` (`OnBootSec=5min`, `OnUnitActiveSec=15min`),
   `claude-rc-restart.timer` (`OnCalendar=weekly`), `claude-triage-poll.timer`
   (`OnBootSec=5min`, `OnUnitActiveSec=2min`)
@@ -184,6 +185,44 @@ the sync behaves, and the heartbeat's template carries why it is a host cron at 
 - **Abort valve:** the clone sync skips unless the clone is a clean `master`; the dotfiles sync
   refuses a source without the agent variant.
 - **Evidence:** `journalctl -u <name>-{clone,dotfiles}-sync`; a failure pages Discord.
+
+## Autonomous-role contract (`claude-fanout-server-lander`, a landing with no session behind it)
+
+Issue #5496. A daniel-server fan-out batch stops at its PR, and this timer lands the PRs that
+qualify. The operator approved it on 2026-10-18. `claude-land@` cannot do it: that unit admits
+only the `claude` user and pins the author and branch prefix of the agent's PRs, while a server
+batch runs as `ubuntu` on `worktree-fanout-<batch>`.
+
+- **Scope:** every 10 minutes, `fanout.py land-server` reads the review records of the last 48
+  hours from daniel-server in one ssh call, reads the repo's open PRs in one `gh` call, and
+  starts `land.sh --pr <n> --arm-merge --await-merge --detach` for each PR that passes
+  `scripts/dev/fanout_lib/autoland.py:problems`. That means a batch that ran its review phase,
+  ended `pr`, passed its CI gate and left no finding, whose PR is open, not a draft, still at
+  the head the review read, with no unchecked box under an operator or before-merge heading and
+  no `needs input` or `Do not merge` text. A `--no-review` batch writes no record, so it never
+  lands. Neither does a PR touching the landing path's code (`scripts/deploy_tools/`, `scripts/lib/`), the
+  fan-out tooling, the deployer, `ansible/vars/`, `.github/`, `.claude/` or this role. Each landing runs from its own `origin/master` worktree under
+  `~/.local/state/fanout-server-lander/checkouts/`, never from the primary checkout.
+- **Mode:** `claude_code_fanout_server_lander_enabled`, true only in daniel-box's host_vars.
+  Setting it to false and applying the role stops the timer and removes the units, and every
+  server batch stops at its PR again. `fanout.py land-server --dry-run` judges and logs without
+  starting anything.
+- **Abort valves:** at most 2 landings start per run (#5526: CI demand already exceeds the
+  runner cap). A PR is started once: a log in `~/.local/state/fanout-server-lander/logs/`, or
+  a live `land.py --pr <n>` process anywhere, skips it. `land.sh` holds no per-PR lock, so
+  this check is the only guard against a second landing. The unit sets
+  `LAND_REQUIRE_BRANCH_PREFIX`, which makes `land.sh` refuse while the deployer holds a SHA and
+  pin the merge to the head it checked, and `LAND_REQUIRE_AUTHOR`.
+- **Evidence:** `journalctl -u claude-fanout-server-lander` has one line per candidate PR,
+  `eligible` or `ineligible` with the reason. Each landing's own `VERDICT:` is in its
+  `land<pr>-*.log`, and `cc-wait land <pr> --log-dir ~/.local/state/fanout-server-lander/logs`
+  waits on it. An unreadable daniel-server logs a line and exits 0, because the host is off for
+  maintenance; an unreadable GitHub exits 1 and pages.
+- **Next-run review:** before raising the pace cap or widening the rule, read a week of
+  `ineligible` reasons and the verdicts of the landings it started.
+
+`KillMode=process` in the unit is load-bearing. The detached landing leaves a user-manager
+service's cgroup only, so a system unit's default kill would end it when the oneshot exits.
 
 ## The takeover check
 

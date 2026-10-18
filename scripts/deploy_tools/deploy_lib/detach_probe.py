@@ -22,7 +22,8 @@ callers, and `Run.label` cuts a long list short.
 
 THE EXIT CODE IS THE AUTHORITY. The detached child records the notifier's exit code beside the
 log (`deploy_detach.child`): 0 when the health gate settled, 1 when the playbook or the gate
-failed. The notifier's `deploy --detach settled|FAILED (...)` headline is the detail. A child
+failed. The notifier's `deploy --detach settled|FAILED|UNGRADED (...)` headline is the
+detail; UNGRADED is a gate whose probe could not read its store (#5543). A child
 that died without recording a code is `died`, through the pid the parent recorded. A log with
 neither a pid nor a code that has not changed for `detach_fork.START_GRACE_S` is `died` too:
 the parent never recorded a child, so nothing will ever write the code (#4513).
@@ -52,7 +53,9 @@ LOG_DIR = Path(f"/tmp/homelab-deploy-logs-{pwd.getpwuid(os.geteuid()).pw_name}")
 # Each terminal state -> the exit code cc-wait ends with.
 TERMINAL = {"settled": 0, "failed": 1, "died": 1}
 
-_HEADLINE = re.compile(r"^deploy --detach (?:settled|FAILED) .*$", re.MULTILINE)
+_HEADLINE = re.compile(
+    r"^deploy --detach (?:settled|FAILED|UNGRADED) .*$", re.MULTILINE
+)
 _TASK = re.compile(r"^(?:TASK|PLAY) \[(.+?)\]", re.MULTILINE)
 
 

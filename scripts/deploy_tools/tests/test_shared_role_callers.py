@@ -11,15 +11,16 @@ from lib.repo_paths import REPO
 
 
 # DECIDED: this drives the real tree through the argv the deployer builds. The tick's fakes
-# replace the subprocess, so only this sees a flag the CLI does not take, and arr-notification's
-# two callers are the named members a broken caller walk would lose.
+# replace the subprocess, so only this sees a flag the CLI does not take. arr-notification's
+# two callers, sonarr and radarr, are both flux-owned since D5.20, so the role is `owned_only`;
+# a broken caller walk would find no tag and leave it out of `owned_only` too.
 def test_the_deployers_argv_is_one_main_accepts(capsys):
     argv = deploy_narrow.shared_callers_argv({"arr-notification"})
     assert argv[4] == deploy_narrow.SHARED_CALLERS_SCRIPT
     assert shared_role_callers.main([*argv[5:], "--repo", str(REPO)]) == 0
     assert json.loads(capsys.readouterr().out) == {
-        "callers": {"arr-notification": ["radarr", "sonarr"]},
-        "owned_only": [],
+        "callers": {"arr-notification": []},
+        "owned_only": ["arr-notification"],
     }
 
 

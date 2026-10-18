@@ -6,7 +6,8 @@
 - one `HostUpdateStale` per entry of `observability_expected_hosts`, equal to the rule
   `update_stale_rule` builds from the entry. `tests/rules/fixtures/host-update-stale.yaml`
   holds that rule for `FIXTURE_HOSTS`, the one-host map `host-checks.test.yaml` fires it from,
-  so the shape has promtool cases while the shipped map is empty.
+  so the shape has promtool cases while the shipped map is empty;
+- one `WiredLinkDown` per host whose host_vars set `k3s_node_static_link`, reading that link.
 
 Run: uv run pytest ansible/tests/services/test_host_plane_rule_literals.py
 """
@@ -17,6 +18,7 @@ import yaml
 from _helpers import K8S_ROLES, load_defaults
 from lib import yaml_fast
 from lib.ansible_inventory import inventory_hosts
+from lib.repo_paths import HOST_VARS
 
 ROLE = K8S_ROLES / "observability"
 RULES = ROLE / "files" / "rules" / "host-checks.yaml"
@@ -25,6 +27,8 @@ FIXTURE = ROLE / "tests" / "rules" / "fixtures" / "host-update-stale.yaml"
 FIXTURE_HOSTS = {"fixture-host": {"job": "node-fixture", "limit_seconds": 11400}}
 # Non-vacuity: the hosts hosts.ini must keep declaring for the reconcile census to mean much.
 FLEET = frozenset({"daniel-box", "daniel-server", "daniel-pi"})
+# Non-vacuity: the k3s nodes that pin their address on a wired link with a WiFi fallback.
+WIRED_NODES = frozenset({"daniel-box", "daniel-server"})
 
 
 def update_stale_rule(host: str, job: str, limit_seconds: int) -> dict:
@@ -125,8 +129,56 @@ def reconcile_failed_problems(rules: list[dict], hosts: set[str]) -> list[str]:
     return problems
 
 
+def wired_link_expr(host: str, link: str) -> str:
+    """The `WiredLinkDown` expression for `host`'s static link, whitespace squashed."""
+    match = f'device="{link}",origin="{host}"'
+    return f"node_network_carrier{{{match}}} == 0 or node_network_up{{{match}}} == 0"
+
+
+def wired_link_problems(rules: list[dict], links: dict[str, str]) -> list[str]:
+    """Why the `WiredLinkDown` rules differ from one per static link, or nothing.
+
+    Args:
+        rules: The `WiredLinkDown` rules a rule file holds.
+        links: Each host's `k3s_node_static_link`, for the hosts that set one.
+    """
+    problems = []
+    named = set()
+    for rule in rules:
+        host = rule["labels"]["service"]
+        named.add(host)
+        if host not in links:
+            continue
+        want = wired_link_expr(host, links[host])
+        if _squash(rule["expr"]) != want or rule.get("for") != "5m":
+            problems.append(
+                f"WiredLinkDown for {host} reads {rule['expr']!r} for "
+                f"{rule.get('for')!r}, not {want!r} for '5m'"
+            )
+    problems += [
+        f"{host} sets k3s_node_static_link {links[host]} and no WiredLinkDown rule names it"
+        for host in sorted(links.keys() - named)
+    ]
+    problems += [
+        f"WiredLinkDown names {host}, whose host_vars set no k3s_node_static_link"
+        for host in sorted(named - links.keys())
+    ]
+    return problems
+
+
 def _hosts() -> set[str]:
     return {host.name for host in inventory_hosts()}
+
+
+def _static_links() -> dict[str, str]:
+    """Each inventory host's `k3s_node_static_link`, for the hosts that set one."""
+    links = {}
+    for host in sorted(_hosts()):
+        path = HOST_VARS / f"{host}.yml"
+        hv = (yaml_fast.safe_load(path.read_text()) if path.exists() else None) or {}
+        if hv.get("k3s_node_static_link"):
+            links[host] = hv["k3s_node_static_link"]
+    return links
 
 
 def test_the_shipped_update_stale_rules_match_the_expected_host_map_is_clean():
@@ -175,3 +227,30 @@ def test_a_reconcile_rule_reading_another_host_is_flagged():
     [rule, *_] = _rules(RULES, "HostReconcileFailed")
     crossed = {**rule, "expr": 'homelab_host_reconcile_ok{origin="elsewhere"} == 0'}
     assert reconcile_failed_problems([crossed], {rule["labels"]["service"]})
+
+
+def test_every_static_link_has_its_wired_link_rule_is_clean():
+    links = _static_links()
+    assert WIRED_NODES <= links.keys()
+    assert wired_link_problems(_rules(RULES, "WiredLinkDown"), links) == []
+
+
+def test_a_static_link_with_no_rule_is_flagged():
+    links = {**_static_links(), "daniel-new": "eth0"}
+    assert wired_link_problems(_rules(RULES, "WiredLinkDown"), links) == [
+        "daniel-new sets k3s_node_static_link eth0 and no WiredLinkDown rule names it"
+    ]
+
+
+def test_a_rule_reading_a_link_the_host_no_longer_pins_is_flagged():
+    links = {**_static_links(), "daniel-box": "enp1s0"}
+    [problem] = wired_link_problems(_rules(RULES, "WiredLinkDown"), links)
+    assert problem.startswith("WiredLinkDown for daniel-box reads")
+    assert 'device="enp1s0"' in problem
+
+
+def test_a_rule_for_a_host_with_no_static_link_is_flagged():
+    links = {k: v for k, v in _static_links().items() if k != "daniel-server"}
+    assert wired_link_problems(_rules(RULES, "WiredLinkDown"), links) == [
+        "WiredLinkDown names daniel-server, whose host_vars set no k3s_node_static_link"
+    ]

@@ -100,8 +100,8 @@ def _stale_sonarr_fixture(tmp_path: Path) -> tuple[Path, Callable[..., list[str]
     estate = g.Estate(Inventory(host_vars=tmp_path))
     doc = roles / "sonarr" / "CLAUDE.md"
     text = doc.read_text()
-    assert '`--tags "sonarr"`' in text
-    doc.write_text(text.replace('`--tags "sonarr"`', '`--tags "sonar"`', 1))
+    assert "`--tags=sonarr`" in text
+    doc.write_text(text.replace("`--tags=sonarr`", "`--tags=sonar`", 1))
     return doc, functools.partial(g.stale_k8s_docs, estate=estate, k8s_roles=roles)
 
 
@@ -109,7 +109,7 @@ def test_fix_mode_rewrites_a_stale_doc_and_fails(tmp_path, capsys):
     doc, find_stale = _stale_sonarr_fixture(tmp_path)
     assert g.main(["--fix"], find_stale=find_stale) == 1
     assert "k8s/sonarr" in capsys.readouterr().out
-    assert '`--tags "sonarr"`' in doc.read_text()
+    assert "`--tags=sonarr`" in doc.read_text()
     assert find_stale(write=False) == []
 
 

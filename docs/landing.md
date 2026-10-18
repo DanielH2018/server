@@ -554,6 +554,17 @@ reads `skipped` — green, on the landing that most needs a gate. That worktree 
 it cannot be made at all, the landing reports `unhealthy` rather than gating the primary — the
 one exception being a primary that already contains the commit.
 
+A gate that could not read is not a failed gate. `probe.py health` exits 75
+(`PROBE_UNREADABLE`) when it cannot reach the store it reads, such as Traefik answering `no
+available server` while Prometheus rolls. The workload was not graded, healthy or not. When no
+other tag reads unhealthy, the landing ends `deferred`, exit 75, and prints
+`outcome.UNREADABLE_GATE_NOTE`. It skips the later-deploy re-gate below, because a gate that
+read nothing saw no pods roll under it. No tick gates health, so `cc-wait land` reports this
+deferral as `gave-up`: re-run `land.sh` to grade the deploy. PR #5533's landing read
+`unhealthy` this way on 2026-10-18 while its pod was `1/1 Running` (#5543). `land.sh` does not
+retry the gate itself. The store's roll takes about 30s, and a re-run of `land.sh` is the
+resume point that already exists.
+
 A failed gate is asked once more whether a later deploy re-rolled the workload. The landing's
 deploy releases the service lock before the gate runs, so another landing or a tick can deploy
 the same service under the gate's one sample. A `Recreate` workload then reads `0/1 ready`
@@ -581,11 +592,13 @@ primary checkout before believing `behind_since`, because the tick lands at the 
 ancestor and so sits behind the TIP on most ticks while working normally (issue #1786). A held
 `hold_sha` is `deploy-failed`. If the verdict says the run stopped watching a tick that was
 still applying, the markers were read mid-apply and a hold cannot be ruled out (issue #1607):
-re-run, because no later tick crosses a hold.
+re-run, because no later tick crosses a hold. A `deferred` from the health gate means
+`probe.py health` could not read its store (see *The health gate*); re-run that one too.
 
 `cc-wait land` tells the two apart for its caller (#3932). A plain `deferred` ends the wait as
 state `deferred`, exit 4. A `deferred` that abandoned a mid-apply tick ends it as `gave-up`,
-exit 3, the same as every other `LAND_GAVE_UP` that asks for a re-run of `land.sh`.
+exit 3, the same as every other `LAND_GAVE_UP` that asks for a re-run of `land.sh`. So does
+a `deferred` whose health gate could not read.
 
 **Converging is not applying.** `behind_since` empty says local == origin, which any session's
 `git merge --ff-only` produces too — and once it holds, `next_action()` returns `noop` for every

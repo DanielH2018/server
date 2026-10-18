@@ -1,10 +1,10 @@
 """sonarr's verify Job: prove the library resolves inside sonarr's pod, read through its API.
 
-Inert until sonarr's flip: `templates/verify-inert/` holds the Job, and the flip PR moves it to
-`templates/verify/`, where the renderer emits it into `sonarr-verify` (target slice D5, *A
-verify conversion lands as inert code*). It replaces `tasks/verify.yml`'s two API reads and
-their asserts, "Fail if a root folder does not resolve inside the pod" and "Fail if the
-cluster library is not intact", with the same predicates. Sonarr answers both from its own
+`templates/verify/job.yaml.j2` holds the Job, and the renderer emits it into `sonarr-verify`
+(target slice D5, *A verify conversion lands as inert code*). It carries the same predicates as
+the two Ansible asserts it replaced, "Fail if a root folder does not resolve inside the pod" and
+"Fail if the cluster library is not intact", which sonarr's flip (D5.20) deleted with their API
+reads. Sonarr answers both from its own
 pod, so unlike tdarr's Job this one checks the live pod and not a copy of its wiring.
 
 Inputs come from the Job's environment: `SONARR_URL`, the Service's in-cluster address, and

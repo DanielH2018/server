@@ -16,6 +16,14 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
 from fanout_lib.review.red_gate import review_flags
 from fanout_lib.review.review import STATE_DIR, Pipeline
+from fanout_lib.review.review_land import LAND_SH, login
 from fanout_lib.review.review_record import CONFIDENCE_FLOOR
 
-__all__ = ["CONFIDENCE_FLOOR", "STATE_DIR", "Pipeline", "review_flags"]
+__all__ = [
+    "CONFIDENCE_FLOOR",
+    "LAND_SH",
+    "STATE_DIR",
+    "Pipeline",
+    "login",
+    "review_flags",
+]

@@ -37,7 +37,7 @@
       {{ observability_stabilise_workloads
          | map('combine', {'namespace': k8s_observability_namespace}) | list }}
 
-# The per-file signal the restart, the snapshot and the Grafana password sync read. The shared
+# The per-file signal the restart and the snapshot read. The shared
 # role's `manifests_secret_render` is one register over every Secret file this role renders,
 # so `is changed` on it fires for any of them: an Alertmanager config edit restarted Prometheus
 # and Grafana and exec'd the Grafana CLI. Its loop runs in `manifests_secret_files_resolved`
@@ -172,10 +172,9 @@
 # these workloads for the remainder of the run.
 #
 # Roles on the normal path get this snapshot from roles/k8s/manifests/tasks/drain.yml, which never sees these
-# workloads because nothing queued them into k8s_pending_rollouts. Queueing them there instead is not
-# an option: the drain runs at the END of the batch, and "Sync the live Grafana admin password"
-# below `kubectl exec`s into deploy/grafana, so it needs the rollout above to have already
-# finished. The wait stays; only the pause moves.
+# workloads because nothing queued them into k8s_pending_rollouts. Queueing them there instead
+# would move the wait to the END of the batch, behind the amend above, which must follow the
+# wait. The wait stays; only the pause moves.
 - name: Snapshot the telemetry workloads' restart counts for the end-of-play gate
   tags: [deploy]
   # AFTER the wait above, never before. Reading restart counts while the old pod is still
@@ -260,45 +259,6 @@
   loop_control:
     label: "{{ item.item.name }}"
   when: not k8s_no_mutate
-
-# GF_SECURITY_ADMIN_PASSWORD (the grafana-admin Secret) is only consulted when Grafana
-# initialises its database, so on an existing install a rotated grafana_admin_password
-# never reaches the live admin user — SOPS and the actual login diverge silently.
-# `grafana cli admin reset-admin-password` writes straight to the DB and needs no knowledge of the CURRENT password. Gated on
-# `grafana-secret.yaml` changing, the one Secret file that renders `grafana_admin_password`. An
-# edit to any other Secret file, Alertmanager's config included, never execs the CLI, whose
-# `Migrate` pass contends with the live server (below).
-#
-# A POLL, not convertible to `kubectl wait`. The condition is the exit status of a process
-# exec'd inside the container, which no API object carries.
-#
-# The retry does not wait for the server's schema migrations. `sqlstore.ProvideService` runs
-# `Migrate` before it returns, and `HTTPServer` takes the store as a dependency
-# (pkg/services/sqlstore/sqlstore.go, pkg/api/http_server.go), so `/api/health` — the readiness
-# probe the `rollout status` loop above already waited on — answers only after the server's
-# migrations are done. What the retry covers is the CLI: `reset-admin-password` runs under
-# `runRunnerCommand` → `initializeRunner` → `server.InitializeForCLI`
-# (pkg/cmd/grafana-cli/commands/commands.go), which constructs a SECOND store and runs its own
-# `Migrate` pass on the same SQLite file the live server holds open, so the two contend for
-# the file and the CLI can lose to a write the server has in flight.
-- name: Sync the live Grafana admin password with SOPS # noqa no-handler
-  tags: [deploy]
-  ansible.builtin.command:
-    cmd: >-
-      k3s kubectl -n {{ k8s_observability_namespace }} exec deploy/grafana --
-      grafana cli admin reset-admin-password {{ grafana_admin_password }}
-  become: true
-  # NOT under --check or a dry run, unlike the read-only probe below: this resets a live
-  # credential. It is also latently broken there — check mode skips the command, so `rc` is
-  # undefined, the `until` below can never match, and the run would die after 5 retries. That
-  # only stays hidden while the secret happens not to differ, which is the condition guarding it.
-  when: "'grafana-secret.yaml' in observability_changed_secret_files and not k8s_no_mutate"
-  register: observability_admin_password_sync
-  until: (observability_admin_password_sync.rc | default(1)) == 0
-  retries: 5
-  delay: 10
-  changed_when: (observability_admin_password_sync.rc | default(1)) == 0
-  no_log: true
 
 - name: Read back the OTLP listener's bind address
   tags: [deploy]
