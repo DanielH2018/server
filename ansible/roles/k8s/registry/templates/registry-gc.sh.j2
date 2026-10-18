@@ -117,11 +117,19 @@ finish() {
 # notices — a worse outage than the full disk this fixes.
 scale_up_and_report() {
   # The mirror Job mounts the same RWO claim the registry pod does, and both land on one node,
-  # so nothing stops the pod starting while the prune is still unlinking revisions. A Job that
-  # has not completed is deleted, and waited for, before the registry serves the store again.
+  # so nothing stops the pod starting while the prune is still unlinking revisions. A Job not
+  # known to have finished is deleted, and waited for, before the registry serves the store
+  # again. One that succeeded or failed stays until its TTL, so the log a failure MSG names is
+  # still there. Either way its prune lines reach the journal first.
   if [[ "$MIRROR_STARTED" == 1 && "$MIRROR_DONE" != 1 ]]; then
-    $KUBECTL delete job "$MIRROR_JOB" --ignore-not-found --cascade=foreground --wait=true \
-      --timeout=120s >/dev/null 2>&1
+    journal_mirror_prune >/dev/null
+    local finished
+    finished=$($KUBECTL get job "$MIRROR_JOB" \
+                 -o jsonpath='{.status.succeeded}{.status.failed}' 2>/dev/null)
+    if [[ -z "$finished" ]]; then
+      $KUBECTL delete job "$MIRROR_JOB" --ignore-not-found --cascade=foreground --wait=true \
+        --timeout=120s >/dev/null 2>&1
+    fi
   fi
   $KUBECTL scale "deploy/${DEPLOY}" --replicas=1 >/dev/null 2>&1
   $KUBECTL rollout status "deploy/${DEPLOY}" --timeout=180s >/dev/null 2>&1 \
@@ -129,6 +137,17 @@ scale_up_and_report() {
   finish
 }
 trap scale_up_and_report EXIT
+
+# Copies the mirror prune's per-revision lines to the journal and prints them. The prune names
+# every revision it removed, and the Job log goes when the Job's TTL runs out.
+journal_mirror_prune() {
+  local lines
+  lines=$($KUBECTL logs "job/${MIRROR_JOB}" -c prune 2>/dev/null \
+            | grep -E '^(pruned|keeping|could not) ')
+  [[ -n "$lines" ]] || return 0
+  logger -t registry-gc <<<"$lines"
+  printf '%s\n' "$lines"
+}
 
 # A build in flight is the exact race the scale-down exists to prevent: buildkit pushes blobs
 # whose manifest is not written yet, and GC would see them as unreferenced. Jobs are named
@@ -315,11 +334,7 @@ MIRROR_WAIT=$(( {{ registry_k8s_gc_deadline_s }} - (SECONDS - APPLIED_AT) ))
 if $KUBECTL wait --for=condition=complete "job/${MIRROR_JOB}" \
      --timeout="${MIRROR_WAIT}s" >/dev/null 2>&1; then
   MIRROR_DONE=1
-  # The prune names every revision it removed. The Job log goes when the Job's TTL runs out, so
-  # the names go to the journal as well.
-  MIRROR_LOG=$($KUBECTL logs "job/${MIRROR_JOB}" -c prune 2>/dev/null)
-  grep -E '^(pruned|keeping|could not) ' <<<"$MIRROR_LOG" | logger -t registry-gc
-  MIRROR_PRUNED=$(grep -c '^pruned ' <<<"$MIRROR_LOG")
+  MIRROR_PRUNED=$(journal_mirror_prune | grep -c '^pruned ')
   MIRROR_BLOBS=$($KUBECTL logs "job/${MIRROR_JOB}" -c gc 2>/dev/null | grep -c 'Deleting blob')
   MSG="${MSG}; ghcr-mirror: ${MIRROR_PRUNED} revision(s) pruned, ${MIRROR_BLOBS} blob(s) deleted"
   [[ -n "$MIRROR_NOTE" ]] && MSG="${MSG} (${MIRROR_NOTE})"
