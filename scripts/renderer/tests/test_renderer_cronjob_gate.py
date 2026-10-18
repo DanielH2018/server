@@ -7,6 +7,7 @@ defaults opt its CronJob in. No role opts in on master, so no live tag renders a
 Run: uv run pytest scripts/renderer/tests/test_renderer_cronjob_gate.py
 """
 
+import copy
 import fnmatch
 import json
 import re
@@ -128,6 +129,36 @@ def test_the_gate_passes_check_bundle_and_the_job_census_rows_it_owns(rendered):
     assert report(rendered, [TAG], rendered.parent / "roles") == OK
     bundle = {VERIFY: load(rendered)[VERIFY]}
     assert [p for p in problems(bundle) if p.split(":")[0] in GATE_ROWS] == []
+
+
+# The rows a gate Job is exempt from once its pod template equals its CronJob's (#5562).
+EXEMPT_ROWS = ("delivery", "helper")
+
+
+def _exempt_lines(bundle) -> list[str]:
+    return [
+        p
+        for p in problems(bundle)
+        if p.split(":")[0] in EXEMPT_ROWS and f" {VERIFY}/" in p
+    ]
+
+
+def test_the_census_reports_no_delivery_or_helper_line_for_the_gate(rendered):
+    assert _exempt_lines(load(rendered)) == []
+
+
+def test_a_gate_whose_pod_template_differs_from_its_cronjobs_is_not_exempt(rendered):
+    bundle = load(rendered)
+    altered = copy.deepcopy(_gate(rendered))
+    altered["spec"]["template"]["spec"]["containers"][0]["image"] = "busybox:1.36"
+    altered["metadata"]["name"] = gate_name(TAG, job_spec_digest8(altered))
+    bundle[VERIFY].append(altered)
+    flagged = {
+        p.split(": ")[1].split("/")[1]
+        for p in _exempt_lines(bundle)
+        if p.startswith("delivery:")
+    }
+    assert flagged == {altered["metadata"]["name"]}
 
 
 def test_check_bundle_refuses_the_verify_directory_of_a_role_without_the_opt_in(
