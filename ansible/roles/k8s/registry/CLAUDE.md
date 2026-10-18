@@ -100,6 +100,11 @@ registry round trip. See repo-root `CLAUDE.md` for shared conventions.
   the prune left a window in which GC failed on a missing manifest. Nothing sweeps
   `registry-jobs/`, so a host with `registry_k8s_manage_gc: false` gets an explicit removal
   task outside the GC block.
+- **`templates/verify-inert/` holds the Flux form of the push self-test and the netpol probe**,
+  and nothing renders it yet. The flip PR renames it to `templates/verify/` and deletes the
+  tasks. `files/registry_verify.py` pushes a fixed image through the distribution API, or
+  proves both ports refuse `app: registry-verify`. The pull self-tests have no Job form, and
+  the GC retirement is blocked (#5680).
 - `registry-gc.sh` proves itself with `crane` push/pull round trips
   (`registry_k8s_probe_source`, `registry_k8s_probe_repo`) rather than trusting the GC
   ran clean.
