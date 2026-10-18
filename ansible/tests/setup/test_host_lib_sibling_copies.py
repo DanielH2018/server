@@ -66,6 +66,11 @@ EXPECTED_CONSUMERS = frozenset(
 # visible, and checked below so the lender still installs a copy.
 BORROWING_CONSUMERS = {"render_records": "gitops_deploy"}
 
+# Consumers whose script runs in a pod, mapped to the template that stages host_lib.py into the
+# pod's ConfigMap. No host copy exists for them, so no include applies. configarr's health
+# reader moved from a daniel-box cron into a CronJob at H2.5b.
+POD_STAGED_CONSUMERS = {"configarr": "k8s/configarr/templates/health-configmap.yaml.j2"}
+
 # roles/setup/common OWNS host_lib.py; it does not import it as a sibling. Excluded by name
 # rather than by a path heuristic so the exemption is visible.
 OWNER_ROLE = "common"
@@ -194,7 +199,17 @@ def _role(name: str) -> Path:
 
 
 def test_the_census_finds_exactly_the_known_consumers():
-    assert consumers(ROLES) == set(EXPECTED_CONSUMERS) | set(BORROWING_CONSUMERS)
+    assert consumers(ROLES) == (
+        set(EXPECTED_CONSUMERS) | set(BORROWING_CONSUMERS) | set(POD_STAGED_CONSUMERS)
+    )
+
+
+def test_every_pod_staged_consumer_stages_host_lib_into_its_configmap():
+    for role, template in POD_STAGED_CONSUMERS.items():
+        text = (ROLES / template).read_text()
+        assert "/roles/setup/common/files/host_lib.py" in text, (
+            f"{role} imports host_lib in a pod, but {template} no longer stages it"
+        )
 
 
 def test_every_borrowing_consumer_reads_a_role_that_installs_host_lib():
