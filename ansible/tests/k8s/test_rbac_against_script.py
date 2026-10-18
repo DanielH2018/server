@@ -437,3 +437,49 @@ def test_the_jellyfin_cap_role_without_patch_is_flagged(monkeypatch) -> None:
 def test_the_jellyfin_verify_account_holds_no_grant() -> None:
     """The verify Job reads no API; the cap's patch grant must not reach its account."""
     assert grants(_jellyfin_cap_rbac(), "homelab", "jellyfin-verify") == []
+
+
+def test_the_crowdsec_jobs_role_grants_every_call_the_remote_allowlist_makes(
+    monkeypatch,
+) -> None:
+    """H2.4b: remote_allowlist.py's main, run with a recording runner, against the sidecar's RBAC.
+
+    The other two jobs in the crowdsec-jobs sidecar run only cscli, which reads the LAPI's
+    database from a shared volume and calls no Kubernetes API, so this module is the only one
+    with grants to derive.
+    """
+    monkeypatch.syspath_prepend(str(K8S_ROLES / "crowdsec" / "files"))
+    module = importlib.import_module("remote_allowlist")
+    argvs = []
+
+    def record(argv: list[str]) -> str:
+        if argv[0] == module.KUBECTL:
+            argvs.append(["kubectl", *argv[1:]])
+        if "ingressroute" in argv:
+            route = {"match": "Host(`x`)", "middlewares": [{"name": "authelia"}]}
+            return json.dumps(
+                {
+                    "items": [
+                        {
+                            "metadata": {"namespace": "homelab", "name": "x"},
+                            "spec": {"routes": [route]},
+                        }
+                    ]
+                }
+            )
+        return ""
+
+    assert module.main(runner=record) == 0
+    docs = list(
+        yaml_fast.safe_load_all(render_role_template("crowdsec", "jobs-rbac.yaml.j2"))
+    )
+    needs = recorded_needs(argvs)
+    # The calls the plan derives this job's grants from (*CrowdSec*), less the exec the sidecar
+    # replaced, so a recorder that stopped recording cannot pass on an empty set.
+    assert {need[:4] for need in needs} == {
+        (ALL_NAMESPACES, "traefik.io", "ingressroutes", "list"),
+        ("homelab", "apps", "deployments", "get"),
+        ("homelab", "", "pods", "list"),
+        ("homelab", "", "pods/log", "get"),
+    }
+    assert missing(needs, grants(docs, "homelab", "crowdsec-jobs")) == []

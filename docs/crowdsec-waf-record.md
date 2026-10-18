@@ -50,9 +50,10 @@ an IP with no row, LAPI creates `k8straefik@<ip>` and never touches the old row 
 Traefik restart brings a new pod IP, and by 2026-09-27 that had left 80 rows, each a valid
 identity for the one key (#2762).
 
-`crowdsec-prune-bouncers.sh` runs `files/bouncer_prune.py` hourly as root on daniel-box, and the
-module runs `cscli bouncers prune -d 60m --force`. That includes the base `k8straefik` row, which
-the image entrypoint re-adds from `BOUNCER_KEY_k8straefik` at the next engine start.
+The `crowdsec-jobs` sidecar in the CrowdSec pod runs `files/bouncer_prune.py` hourly at minute
+17, and the module runs `cscli bouncers prune -d 60m --force`. That includes the base
+`k8straefik` row, which the image entrypoint re-adds from `BOUNCER_KEY_k8straefik` at the next
+engine start. Until H2.4b the job was a daniel-box root cron, `crowdsec-prune-bouncers.sh`.
 
 - `cscli bouncers delete k8straefik@<ip>` cannot do this. It exits 0 without deleting an
   auto-created row, and deleting the parent deletes every row that holds the key.
@@ -61,12 +62,12 @@ the image entrypoint re-adds from `BOUNCER_KEY_k8straefik` at the next engine st
 - Pruning the last row that holds the key makes LAPI answer 403 to the edge, which is why the
   module refuses to prune unless a `k8straefik*` row pulled in the last 50 minutes.
 
-Each run logs one line under the `crowdsec-bouncer-prune` syslog tag, taken from a second `cscli
-bouncers list` after the prune. It names the rows deleted, the count of `k8straefik` rows left and
-the oldest `last_pull` among them; a refusal starts `status=down`. There is no Kuma monitor,
+Each run logs one `crowdsec-bouncer-prune: status=<up|down> <summary>` line to the sidecar's
+container log, taken from a second `cscli bouncers list` after the prune. It names the rows deleted, the count of `k8straefik` rows left and
+the oldest `last_pull` among them; a refusal reads `status=down`. There is no Kuma monitor,
 because a failed run only lets rows accumulate until the next run succeeds. To stop pruning,
-remove the "Schedule the bouncer prune" task and set its cron `state: absent` once — a hand delete
-of `/etc/cron.d/crowdsec-bouncer-prune` lasts only until the next `crowdsec` deploy.
+delete the `crowdsec-bouncer-prune` row from `JOBS` in `files/crowdsec_jobs.py` and deploy
+the `crowdsec` tag.
 
 ## The partial-line read behind `UnmarshalJSON : unexpected end of JSON input`
 

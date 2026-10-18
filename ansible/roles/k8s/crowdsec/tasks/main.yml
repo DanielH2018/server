@@ -1,4 +1,55 @@
 ---
+# The remote allowlist, the bouncer prune and the AppSec verify were daniel-box root crons
+# until H2.4b (docs/target-architecture/host/h2-shrink-host-plane.md, Steps item 11). They run
+# in the engine pod's crowdsec-jobs sidecar instead (templates/deployment.yaml.j2). These absent
+# arms remove the crons and their files ahead of the k8s/manifests include, so each host cron
+# is gone before the sidecar that replaces it starts. They stay until D5's conversion PR moves them into
+# setup/k8s_host_files, and H7 deletes them. ansible/tests/repo/_retired_cron_row.py holds the
+# crons' arms to the tree.
+- name: Remove the retired remote-allowlist cron
+  tags: [cron]
+  ansible.builtin.cron:
+    name: "CrowdSec remote allowlist"
+    user: root
+    cron_file: crowdsec-remote-allowlist
+    state: absent
+  become: true
+  when: not k8s_dry_run | bool
+
+- name: Remove the retired bouncer-prune cron
+  tags: [cron]
+  ansible.builtin.cron:
+    name: "CrowdSec bouncer prune"
+    user: root
+    cron_file: crowdsec-bouncer-prune
+    state: absent
+  become: true
+  when: not k8s_dry_run | bool
+
+- name: Remove the retired AppSec verify cron
+  tags: [cron]
+  ansible.builtin.cron:
+    name: "CrowdSec AppSec verify"
+    user: root
+    cron_file: crowdsec-appsec-verify
+    state: absent
+  become: true
+  when: not k8s_dry_run | bool
+
+- name: Remove the retired crowdsec cron scripts from the host
+  tags: [cron]
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - /usr/local/bin/crowdsec-update-remote-allowlist.sh
+    - /opt/crowdsec-remote-allowlist
+    - /usr/local/bin/crowdsec-prune-bouncers.sh
+    - /opt/crowdsec-bouncer-prune
+    - /usr/local/bin/crowdsec-appsec-verify.sh
+  become: true
+  when: not k8s_dry_run | bool
+
 # The claim is `k8s_claims` in defaults/main.yml; k8s/manifests renders and applies it.
 - name: Deploy crowdsec to the cluster
   ansible.builtin.include_role:
@@ -152,132 +203,13 @@
   ansible.builtin.command:
     cmd: >-
       k3s kubectl -n {{ k8s_namespace }} exec deploy/crowdsec -c crowdsec --
-      cscli allowlists create remote-ips --description 'Authenticated remote exits, TTL-managed by crowdsec-update-remote-allowlist.sh'
+      cscli allowlists create remote-ips --description 'Authenticated remote exits, TTL-managed by remote_allowlist.py'
   register: crowdsec_k8s_remote_allowlist_create
   become: true
   failed_when:
     - crowdsec_k8s_remote_allowlist_create.rc != 0
     - "'already exist' not in (crowdsec_k8s_remote_allowlist_create.stderr | default('') | lower)"
   changed_when: crowdsec_k8s_remote_allowlist_create.rc == 0
-
-- name: Create the remote-allowlist module directory
-  tags: [cron]
-  ansible.builtin.file:
-    path: /opt/crowdsec-remote-allowlist
-    state: directory
-    mode: "0755"
-    owner: root
-    group: root
-  become: true
-  when: not k8s_dry_run | bool
-
-- name: Install the remote-allowlist decision module
-  tags: [cron]
-  ansible.builtin.copy:
-    src: remote_allowlist.py
-    dest: /opt/crowdsec-remote-allowlist/remote_allowlist.py
-    mode: "0755"
-    owner: root
-    group: root
-  become: true
-  when: not k8s_dry_run | bool
-
-- name: Deploy the remote-allowlist updater
-  tags: [cron]
-  ansible.builtin.template:
-    src: crowdsec-update-remote-allowlist.sh.j2
-    dest: /usr/local/bin/crowdsec-update-remote-allowlist.sh
-    mode: "0750"
-    owner: root
-    group: root
-  become: true
-  no_log: true  # renders the Kuma push token
-  when: not k8s_dry_run | bool
-
-- name: Schedule the remote-allowlist updater
-  tags: [cron]
-  # root, for the same reason as the home-allowlist cron: it execs into the engine pod.
-  ansible.builtin.cron:
-    name: "CrowdSec remote allowlist"
-    minute: "*/5"
-    user: root
-    job: "/usr/local/bin/crowdsec-update-remote-allowlist.sh"
-    cron_file: crowdsec-remote-allowlist
-  become: true
-  when: not k8s_dry_run | bool
-
-- name: Create the bouncer-prune module directory
-  tags: [cron]
-  ansible.builtin.file:
-    path: /opt/crowdsec-bouncer-prune
-    state: directory
-    mode: "0755"
-    owner: root
-    group: root
-  become: true
-  when: not k8s_dry_run | bool
-
-- name: Install the bouncer-prune decision module
-  tags: [cron]
-  ansible.builtin.copy:
-    src: bouncer_prune.py
-    dest: /opt/crowdsec-bouncer-prune/bouncer_prune.py
-    mode: "0755"
-    owner: root
-    group: root
-  become: true
-  when: not k8s_dry_run | bool
-
-- name: Deploy the bouncer-prune wrapper
-  tags: [cron]
-  ansible.builtin.template:
-    src: crowdsec-prune-bouncers.sh.j2
-    dest: /usr/local/bin/crowdsec-prune-bouncers.sh
-    mode: "0750"
-    owner: root
-    group: root
-  become: true
-  when: not k8s_dry_run | bool
-
-- name: Schedule the bouncer prune
-  tags: [cron]
-  # root, for the same reason as the allowlist crons: it execs into the engine pod. Hourly,
-  # matching the module's 60-minute window. The wrapper logs its own summary; the
-  # pipe catches anything else, such as a uv error, rather than mailing it.
-  ansible.builtin.cron:
-    name: "CrowdSec bouncer prune"
-    minute: "17"
-    user: root
-    job: "/usr/local/bin/crowdsec-prune-bouncers.sh 2>&1 | logger -t crowdsec-bouncer-prune"
-    cron_file: crowdsec-bouncer-prune
-  become: true
-  when: not k8s_dry_run | bool
-
-- name: Deploy the AppSec verifier
-  tags: [cron]
-  # This is the estate's only WAF-actually-enforcing signal (the bouncer fails open).
-  ansible.builtin.template:
-    src: crowdsec-appsec-verify.sh.j2
-    dest: /usr/local/bin/crowdsec-appsec-verify.sh
-    mode: "0750"
-    owner: root
-    group: root
-  become: true
-  no_log: true  # renders the Kuma push token
-  when: not k8s_dry_run | bool
-
-- name: Schedule the AppSec verifier
-  tags: [cron]
-  # root, not sys_user: execs into the engine pod via the root kubeconfig. Every 15 min;
-  # pushes the "CrowdSec AppSec" monitor directly.
-  ansible.builtin.cron:
-    name: "CrowdSec AppSec verify"
-    minute: "*/15"
-    user: root
-    job: "/usr/local/bin/crowdsec-appsec-verify.sh"
-    cron_file: crowdsec-appsec-verify
-  become: true
-  when: not k8s_dry_run | bool
 
 - name: Enforcement gate (opt-in via --tags b1-gate)
   # NOT UNDER --check. The gate proves enforcement by mutating real state — it bans a real

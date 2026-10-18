@@ -1,0 +1,30 @@
+{#
+  The crowdsec-jobs sidecar's code: the scheduler, its three jobs, and kuma_push.py from
+  setup/common, which the scheduler imports. Python puts the scheduler's own directory on
+  sys.path, so the files sit flat at the mount.
+
+  No secret goes in here. The push URLs reach the sidecar from the crowdsec-jobs Secret through
+  `secretKeyRef` (the H2 plan's *No secret in a ConfigMap*), and
+  ansible/tests/k8s/test_no_secret_in_a_moved_jobs_configmap.py renders this file with every
+  secrets.yml key bound to a sentinel and fails on any sentinel it finds.
+
+  A change here changes the role's render, so the shared rollout restart restarts the whole
+  engine pod, LAPI included. That restart is the cost of every job edit.
+#}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: crowdsec-jobs
+  namespace: {{ k8s_namespace }}
+data:
+  crowdsec_jobs.py: |
+{{ lookup('file', playbook_dir + '/roles/k8s/crowdsec/files/crowdsec_jobs.py') | indent(4, true) }}
+  remote_allowlist.py: |
+{{ lookup('file', playbook_dir + '/roles/k8s/crowdsec/files/remote_allowlist.py') | indent(4, true) }}
+  appsec_verify.py: |
+{{ lookup('file', playbook_dir + '/roles/k8s/crowdsec/files/appsec_verify.py') | indent(4, true) }}
+  bouncer_prune.py: |
+{{ lookup('file', playbook_dir + '/roles/k8s/crowdsec/files/bouncer_prune.py') | indent(4, true) }}
+  kuma_push.py: |
+{{ lookup('file', playbook_dir + '/roles/setup/common/files/kuma_push.py') | indent(4, true) }}

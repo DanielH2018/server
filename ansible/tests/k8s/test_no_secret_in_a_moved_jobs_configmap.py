@@ -27,6 +27,7 @@ from secrets_mgmt.rotation_tools import sops_names
 # The second half is the positive control's: that key's sentinel must reach that render.
 MOVED_ROLES = {
     "configarr": ("health-secret.yaml.j2", "monitor_bridge_configarr_push_token"),
+    "crowdsec": ("jobs-secret.yaml.j2", "monitor_bridge_appsec_push_token"),
     "janitorr": ("health-secret.yaml.j2", "monitor_bridge_janitorr_push_token"),
     "qbittorrent": ("prefs-check-secret.yaml.j2", "qbittorrent_password"),
 }
@@ -79,8 +80,10 @@ def moved_configmap_renders() -> dict[tuple[str, str], str]:
 
 def test_the_render_reaches_the_known_configmaps() -> None:
     """The named members: configarr's and janitorr's health reader code, staged at H2.5b and
-    H2.5c, and qbittorrent's prefs check, staged at H2.5d."""
+    H2.5c, crowdsec's sidecar jobs, staged at H2.4b, and qbittorrent's prefs check, staged at
+    H2.5d."""
     assert ("configarr", "health-configmap.yaml.j2") in moved_configmap_renders()
+    assert ("crowdsec", "jobs-configmap.yaml.j2") in moved_configmap_renders()
     assert ("janitorr", "health-configmap.yaml.j2") in moved_configmap_renders()
     assert ("qbittorrent", "prefs-check-configmap.yaml.j2") in moved_configmap_renders()
     assert len(sentinels()) >= 100

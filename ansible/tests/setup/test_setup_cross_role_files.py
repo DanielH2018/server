@@ -93,6 +93,7 @@ KNOWN_K8S_EDGES = {
     "ansible/roles/setup/common/files/kuma_push.py": {
         "autofix-bridge",
         "configarr",
+        "crowdsec",
         "janitorr",
         "uptime-kuma",
     },

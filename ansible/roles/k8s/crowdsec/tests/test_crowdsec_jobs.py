@@ -1,0 +1,233 @@
+"""The crowdsec-jobs sidecar's scheduler, and the pod layout it runs from.
+
+`files/crowdsec_jobs.py` runs the remote allowlist, the AppSec verify and the bouncer prune in
+the crowdsec pod since H2.4b, on the schedules their host crons had. The first tests drive its
+schedule and its verdict handling with stubs. The last ones read the rendered Deployment and
+ConfigMap, build the sidecar's `/jobs` directory exactly as the kubelet mounts it, and run every
+module from it, so a module the ConfigMap stops carrying fails here rather than in the pod.
+
+Run: uv run pytest ansible/roles/k8s/crowdsec/tests/test_crowdsec_jobs.py
+"""
+
+import subprocess
+import sys
+
+import pytest
+from _k8s_render import render_role_template
+from lib import yaml_fast
+
+import appsec_verify
+import bouncer_prune
+import crowdsec_jobs as cj
+import remote_allowlist
+
+JOBS = {job.tag: job for job in cj.JOBS}
+
+
+def _minutes(tag: str) -> list[int]:
+    return [minute for minute in range(60) if cj.due(JOBS[tag], minute)]
+
+
+def test_each_job_keeps_its_host_crons_utc_minutes():
+    # The retired crons: `*/5`, `*/15` and `17` in their minute fields.
+    assert _minutes("crowdsec-remote-allowlist") == list(range(0, 60, 5))
+    assert _minutes("crowdsec-appsec-verify") == [0, 15, 30, 45]
+    assert _minutes("crowdsec-bouncer-prune") == [17]
+
+
+def test_every_timeout_ends_a_hung_run_before_its_next_slot():
+    for job in cj.JOBS:
+        assert job.timeout_s < job.period * 60, job.tag
+
+
+def _run(job_tag, returncode=0, stdout="", raises=None):
+    """Runs one job through `run_job` with a stubbed child and push; returns (printed, pushes)."""
+    printed, pushes = [], []
+
+    def runner(argv, **kwargs):
+        assert argv == [sys.executable, str(cj.JOBS_DIR / JOBS[job_tag].script)]
+        assert kwargs["timeout"] == JOBS[job_tag].timeout_s
+        if raises:
+            raise raises
+        return subprocess.CompletedProcess(argv, returncode, stdout)
+
+    def push(status, msg, base, token, log):
+        pushes.append((status, msg, base, token))
+        return True
+
+    env = {
+        "REMOTE_ALLOWLIST_PUSH_URL": "http://kuma:3001/api/push/tok-remote",
+        "APPSEC_PUSH_URL": "http://kuma:3001/api/push/tok-appsec",
+    }
+    rc = cj.run_job(
+        JOBS[job_tag], runner=runner, push=push, env=env, out=printed.append
+    )
+    return rc, printed, pushes
+
+
+def test_a_clean_run_pushes_up_with_its_last_line():
+    rc, printed, pushes = _run(
+        "crowdsec-remote-allowlist", stdout="noise\nremote-ips: 2 live\n"
+    )
+    assert rc == 0
+    assert printed == ["crowdsec-remote-allowlist: status=up remote-ips: 2 live"]
+    assert pushes == [("up", "remote-ips: 2 live", "http://kuma:3001", "tok-remote")]
+
+
+def test_a_failed_run_pushes_down_and_logs_the_lines_above_its_summary():
+    rc, printed, pushes = _run(
+        "crowdsec-appsec-verify",
+        returncode=1,
+        stdout="Traceback line\nno enabled appsec-configs\n",
+    )
+    assert rc == 1
+    assert printed == [
+        "crowdsec-appsec-verify: Traceback line",
+        "crowdsec-appsec-verify: status=down no enabled appsec-configs",
+    ]
+    assert pushes == [
+        ("down", "no enabled appsec-configs", "http://kuma:3001", "tok-appsec")
+    ]
+
+
+def test_a_run_with_no_output_names_its_script_and_exit_code():
+    _, _, pushes = _run("crowdsec-appsec-verify", returncode=2)
+    assert pushes[0][:2] == ("down", "appsec_verify.py exited 2 with no output")
+
+
+def test_a_run_past_its_timeout_is_down():
+    _, _, pushes = _run(
+        "crowdsec-remote-allowlist",
+        raises=subprocess.TimeoutExpired(cmd="x", timeout=1),
+    )
+    assert pushes[0][:2] == (
+        "down",
+        "remote_allowlist.py killed after its 180s timeout",
+    )
+
+
+def test_the_bouncer_prune_logs_and_pushes_nothing():
+    _, printed, pushes = _run(
+        "crowdsec-bouncer-prune", returncode=1, stdout="refused: no live row\n"
+    )
+    assert pushes == []
+    assert printed == ["crowdsec-bouncer-prune: status=down refused: no live row"]
+
+
+class _Alive:
+    def __init__(self, alive):
+        self.alive = alive
+
+    def is_alive(self):
+        return self.alive
+
+
+def test_a_job_still_running_at_its_next_slot_is_skipped():
+    started, printed = [], []
+
+    def start(job):
+        started.append(job.tag)
+        return _Alive(True)
+
+    running: dict[str, cj.Running] = {"crowdsec-remote-allowlist": _Alive(True)}
+    cj.tick(0, running, start=start, out=printed.append)
+    assert started == ["crowdsec-appsec-verify"]
+    assert printed == [
+        "crowdsec-remote-allowlist: skipped minute 00, the previous run is still going"
+    ]
+    running["crowdsec-remote-allowlist"] = _Alive(False)
+    cj.tick(5, running, start=start)
+    assert started == ["crowdsec-appsec-verify", "crowdsec-remote-allowlist"]
+
+
+def test_no_job_starts_in_the_startup_grace_and_minutes_come_from_the_boundary():
+    # The clock starts at 12:59:30 UTC and wakes 1 ms early once, which must not re-run 12:59.
+    now = [1792303170.0]
+    wakes = iter([-0.001])
+
+    def sleep(seconds):
+        now[0] += seconds + next(wakes, 0.0)
+
+    started = []
+
+    def start(job):
+        started.append((job.tag, int(now[0] // 60) % 60))
+        return _Alive(False)
+
+    cj.main(clock=lambda: now[0], sleep=sleep, start=start, minutes=7)
+    # 13:00 and 13:01 fall inside the 120 s grace from 12:59:30; 13:05 is the first slot after.
+    assert started == [("crowdsec-remote-allowlist", 5)]
+
+
+@pytest.fixture(scope="module")
+def pod():
+    [deployment] = yaml_fast.safe_load_all(
+        render_role_template("crowdsec", "deployment.yaml.j2")
+    )
+    return deployment["spec"]["template"]["spec"]
+
+
+def _mounts(container):
+    return {m["mountPath"]: m["name"] for m in container["volumeMounts"]}
+
+
+def test_the_sidecar_runs_the_scheduler_from_the_configmap_with_the_tools_the_modules_name(
+    pod,
+):
+    [sidecar] = [c for c in pod["containers"] if c["name"] == "crowdsec-jobs"]
+    assert sidecar["command"] == ["python3", "/jobs/crowdsec_jobs.py"]
+    volumes = {v["name"]: v for v in pod["volumes"]}
+    mounts = _mounts(sidecar)
+    assert volumes[mounts["/jobs"]]["configMap"]["name"] == "crowdsec-jobs"
+    # The paths each module runs its binaries from are the copies the initContainers make.
+    copies = {
+        c["command"][-1]: _mounts(c)["/tools"]
+        for c in pod["initContainers"]
+        if c["name"].startswith("jobs-")
+    }
+    for path in (
+        appsec_verify.CSCLI,
+        bouncer_prune.CSCLI,
+        remote_allowlist.CSCLI,
+        remote_allowlist.KUBECTL,
+    ):
+        assert copies[path] == mounts["/tools"]
+    # The engine's config and database, which cscli reads in the sidecar as in the engine.
+    [engine] = [c for c in pod["containers"] if c["name"] == "crowdsec"]
+    for path in ("/etc/crowdsec", "/var/lib/crowdsec/data"):
+        assert mounts[path] == _mounts(engine)[path]
+    # Each pushing job's variable reaches the sidecar from the crowdsec-jobs Secret.
+    env = {e["name"]: e.get("valueFrom", {}) for e in sidecar["env"]}
+    for job in cj.JOBS:
+        if job.push_env:
+            assert env[job.push_env]["secretKeyRef"]["name"] == "crowdsec-jobs"
+
+
+def test_the_pod_runs_as_the_jobs_service_account_with_its_token_mounted(pod):
+    # kubectl reads the automounted token; a pod that stopped mounting it would fail every
+    # remote allowlist run with an anonymous-user Forbidden.
+    assert pod["serviceAccountName"] == "crowdsec-jobs"
+    assert pod["automountServiceAccountToken"] is True
+
+
+def test_every_module_imports_from_the_pods_mounted_layout(tmp_path):
+    [configmap] = yaml_fast.safe_load_all(
+        render_role_template("crowdsec", "jobs-configmap.yaml.j2")
+    )
+    for key, text in configmap["data"].items():
+        (tmp_path / key).write_text(text)
+    assert {job.script for job in cj.JOBS} <= set(configmap["data"])
+    # `--help` returns after every module-level import has run, so exit 0 proves the import
+    # closure resolves from the mounted files alone. The pod runs `python3 /jobs/<script>`,
+    # which puts the script's own directory on sys.path, so this does too. `-S` drops the
+    # venv's site-packages, because the pod's bare python image has no wheels, and `-E` and
+    # `-s` drop PYTHONPATH and the user site.
+    for script in ["crowdsec_jobs.py", *(job.script for job in cj.JOBS)]:
+        proc = subprocess.run(
+            [sys.executable, "-E", "-s", "-S", str(tmp_path / script), "--help"],
+            cwd=tmp_path,
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+        assert proc.returncode == 0, (script, proc.stderr)
