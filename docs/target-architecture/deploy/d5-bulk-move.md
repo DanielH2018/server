@@ -2675,7 +2675,9 @@ sizes its batch of roles against that projection.
     - traefik: the CRDs come from a URL in the role's `tasks/main.yml`, which no render may
       fetch under C1, so they get an in-tree copy pinned by `traefik_k8s_crd_version`. The
       cluster RBAC carries `kustomize.toolkit.fluxcd.io/prune: disabled` before the move, so
-      a later revert of the move cannot prune the ClusterRole (R4's Open question 4).
+      a later revert of the move cannot prune the ClusterRole (R4's Open question 4). The
+      label sits on the ClusterRole, the ClusterRoleBinding and each watched namespace's Role
+      and RoleBinding (#5668), because traefik's own tag prunes (below).
         - **The RBAC moves into the bundle at the flip.** `rbac.yaml.j2` is not in traefik's
           `manifests_files`. Its task templates it to
           `/etc/rancher/k3s/traefik-clusterrole.yaml`, outside the manifests directory, and
@@ -2700,13 +2702,17 @@ sizes its batch of roles against that projection.
             - `traefik-crds` is a k8s role whose only content is `files/upstream/` holding the
               in-tree copy, so its render holds no placeholder. The flip PR creates it, gives
               it a `containers_list` entry, and declares `traefik-crds` in traefik's
-              `depends_on`. The pin variables and `test_traefik_crds.py` move with the copy.
+              `depends_on`. Its `k8s/manifests` include sets `manifests_files: []`, so the
+              render holds the kustomization and the vendored file alone; no role renders
+              that shape yet, so the flip PR's render is its first proof. The pin variables
+              and `test_traefik_crds.py` move with the copy.
               Every routed role keeps its derived edge to `traefik`, so it reaches the CRDs
               through traefik. Both tags flip in the same PR, in traefik's own window.
         - **`traefik-crds` renders `prune: false`.** The flip PR is the first whose render puts
           the CRDs under a Flux Kustomization. It sets H1.1a's `flux_prune: false` in
           `traefik-crds`'s defaults, which is C3's per-role `prune: false`. traefik's own tag
-          holds no CRD and keeps the default. Its precondition, quoted
+          holds no CRD, so C3 does not allow it the field, and it keeps the default. Its
+          precondition, quoted
           in the PR body, is that H1.1a has merged. Under `prune: true`, a render that
           dropped a CRD file would delete that CRD, for example a `traefik_k8s_crd_version`
           bump whose upstream definitions drop a kind. The API server then deletes every
@@ -3528,7 +3534,7 @@ includes valheim's initContainer.
 - **A dropped CRD deletes every object of its kind** (failure class 5). Prune and the
   render are two steps that the plan must not treat as one: a render that drops a CRD file
   makes the next apply delete the CRD, and the API server then deletes every custom object
-  of that kind. `traefik-crds` holds IngressRoute and Middleware, and `flux` holds Flux's own
+  of that kind. `traefik-crds` holds the IngressRoute and Middleware CRDs, and `flux` holds Flux's own
   kinds. Mitigation: both render `prune: false` through H1.1a's lever, and the CRD census
   fails a CRD in any tag that renders `prune: true`. The cost is that an object dropped from
   either render stays live until the operator deletes it.

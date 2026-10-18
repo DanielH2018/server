@@ -90,6 +90,10 @@ kind: Role
 metadata:
   name: traefik-ingress-controller
   namespace: {{ ns }}
+  # Exempt from prune like the ClusterRole above. After the flip traefik's tag prunes, and a
+  # pruned Role drops the Secrets grant, the fail-green outage in the header.
+  labels:
+    kustomize.toolkit.fluxcd.io/prune: disabled
 rules:
   - apiGroups:
       - ""
@@ -156,6 +160,8 @@ kind: RoleBinding
 metadata:
   name: traefik-ingress-controller
   namespace: {{ ns }}
+  labels:
+    kustomize.toolkit.fluxcd.io/prune: disabled
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: Role
