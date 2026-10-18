@@ -20,9 +20,13 @@
   The Deployment is in the digest because a roll replaces the pod the policy selects.
 
   The caller census (D5, *A fence admits every Job that dials through it*). The pod is
-  `app: n8n-verify` in `k8s_namespace`, and it dials three Services and execs into nothing:
+  `app: n8n-verify` in `k8s_namespace`, and it dials four ports and execs into nothing:
     - traefik:80, the control. netpol-baseline's `networkpolicy-traefik.yaml.j2` admits its
       pod port 8000 with no `from:`, so any pod reaches it, and no peer is added;
+    - traefik:443, because :80 answers with a redirect to `https://traefik/` and urllib
+      follows it. The same policy admits pod port 8443 from `k3s_pod_cidr`, one of
+      `netpol_baseline_traefik_https_sources`. If that admission went, the redirect's
+      connect would be refused and the control would fail, so the Job fails closed;
     - n8n:<web port> and n8n:<broker port>. `n8n-broker` must REFUSE this pod on both, so
       no peer is added there either: admitting `n8n-verify` would open the hole the Job
       proves closed. ansible/roles/k8s/n8n/tests/test_n8n_verify.py fails if either port

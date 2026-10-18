@@ -5,7 +5,7 @@ Inert until n8n's flip: `templates/verify-inert/` holds the Job, and the flip PR
 conversion lands as inert code*). It replaces the `n8n-netpol-probe` Job that `tasks/main.yml`
 applies, and keeps that probe's three legs:
 
-- the control: `traefik:80` must answer, so a pod with no network or no DNS cannot pass;
+- the control: `traefik:80` must answer, so a pod with no network cannot pass;
 - `n8n:<web port>` must refuse, or the pod skipped Authelia, CrowdSec and the rate-limit;
 - `n8n:<broker port>` must refuse, or the pod could register a task runner.
 
@@ -13,7 +13,8 @@ The pod's `app: n8n-verify` label is a peer of neither n8n port, so the last two
 only on a refusal. Inverted on purpose: an isolation leg passes when its connect is refused or
 times out, which `flux_job_connect.refused` decides, and fails on any answer at all. An HTTP
 error status, a reset after accept and a read timeout all mean n8n accepted the connection.
-Any other error also fails the leg, because it proves nothing about the policy.
+Any other error also fails the leg, because it proves nothing about the policy, so a pod
+whose DNS lookups fail fails here rather than at the control.
 
 The control retries a refusal for 60 seconds, the helper's default, while kube-router learns
 the new pod. traefik's web entrypoint answers with a redirect to https, which urllib follows, so the
