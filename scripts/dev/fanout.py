@@ -9,6 +9,7 @@ Usage::
     fanout.py probe [--describe] <run-id>...
     fanout.py review --batch 1345-1386 --repo DanielH2018/server [--red-green] < .fanout/brief.md
     fanout.py stats [--dir DIR ...] [--since YYYY-MM-DD] [--json]
+    fanout.py land-server [--dry-run]
 
 `fanout.py <command> --help` prints that command's own options. Each command's logic is one
 module under `fanout_lib/`, named in `COMMANDS`. This file imports only the module the command
@@ -37,6 +38,7 @@ COMMANDS = {
     "probe": "fanout_lib.wait_probe",
     "review": "fanout_lib.review_unit",
     "stats": "fanout_lib.review_stats",
+    "land-server": "fanout_lib.autoland",
 }
 
 _HELP = {
@@ -44,6 +46,7 @@ _HELP = {
     "probe": "the `fanout` source for cc-wait",
     "review": "run one `launch --review` batch: implement, review, fix, land",
     "stats": "sum the fan-out review records",
+    "land-server": "land the safe PRs of finished daniel-server batches",
 }
 
 
@@ -53,7 +56,7 @@ def _parser() -> argparse.ArgumentParser:
         description=__doc__.splitlines()[0],
         allow_abbrev=False,
         formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="\n".join(f"  {name:<8}{text}" for name, text in _HELP.items()),
+        epilog="\n".join(f"  {name:<13}{text}" for name, text in _HELP.items()),
     )
     p.add_argument("command", choices=list(COMMANDS))
     return p

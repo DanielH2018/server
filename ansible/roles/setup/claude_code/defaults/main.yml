@@ -531,6 +531,19 @@ claude_code_triage_poll_streak: 2
 # More keys than this falling in one poll make one storm episode instead of one per key.
 claude_code_triage_poll_storm_size: 3
 
+# ── The server-batch lander (issue #5496) ───────────────────────────────────────────────
+# A daniel-server fan-out batch stops at its PR. The median wait for a landing was 5.5 minutes
+# and the 90th percentile 350 (2026-10-15 to 10-17, 58 batches). This timer runs
+# `fanout.py land-server` on daniel-box, which lands the PRs whose review record and PR both
+# pass scripts/dev/fanout_lib/autoland.py:problems. True only in daniel-box's host_vars. False
+# stops the timer and removes its units, and every server batch stops at its PR again.
+claude_code_fanout_server_lander_enabled: false
+claude_code_fanout_server_lander_interval: 10min
+# land.sh's policy for these landings (LAND_REQUIRE_*). autoland.py holds the same two values,
+# and ansible/tests/setup/test_claude_fanout_server_lander.py holds them equal.
+claude_code_fanout_server_lander_branch_prefix: worktree-fanout-
+claude_code_fanout_server_lander_author: DanielH2018
+
 # ── The fan-out alert ───────────────────────────────────────────────────────────────────
 # fanout-alert@<unit>:<state>.service pages Discord when a fan-out batch's unit stops on any
 # state but `done` (#4602). The batch's ExecStopPost= starts it

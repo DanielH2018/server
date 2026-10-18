@@ -473,6 +473,11 @@
   tags: [claude_code]
   ansible.builtin.import_tasks: fanout_alert.yml
 
+# ── The server-batch lander ─────────────────────────────────────────────────────────────
+- name: Install the server-batch lander timer, or take it back
+  tags: [claude_code]
+  ansible.builtin.import_tasks: fanout_server_lander.yml
+
 # ── The agent's lander ──────────────────────────────────────────────────────────────────
 # In its own file, because that file is on the lander's approval list and pins the lander's
 # settings against an inventory override (tasks/lander.yml).
@@ -522,6 +527,8 @@
       - ansible/roles/setup/claude_code/templates/fleet-slice-caps.conf.j2
       - ansible/roles/setup/claude_code/templates/login-slice-caps.conf.j2
       - ansible/roles/setup/claude_code/templates/pytest-fanout-cap.conf.j2
+      - ansible/roles/setup/claude_code/templates/claude-fanout-server-lander.service.j2
+      - ansible/roles/setup/claude_code/templates/claude-fanout-server-lander.timer.j2
       - ansible/roles/setup/claude_code/templates/claude-memory-sync.service.j2
       - ansible/roles/setup/claude_code/templates/claude-memory-sync.timer.j2
       - ansible/roles/setup/claude_code/templates/claude-clone-sync.service.j2
