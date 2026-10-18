@@ -17,10 +17,10 @@ from lib.k8s_roles import k8s_entries, role_callers
 # The helper roles: every role under ansible/roles/k8s/ that another role reaches and that has
 # no containers_list entry of its own. Named, not counted -- a rename or a moved tasks file
 # leaves a count-based assertion passing over a map that lost the member it was checking.
+# cronjob-gate left the set when configarr and qbittorrent, its last callers, flipped to Flux.
 _HELPERS = frozenset(
     {
         "arr-notification",
-        "cronjob-gate",
         "image-builder",
         "longhorn-api",
         "manifests",

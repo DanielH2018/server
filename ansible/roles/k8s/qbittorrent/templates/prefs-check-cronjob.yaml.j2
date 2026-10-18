@@ -10,14 +10,15 @@
   It calls no Kubernetes API, so it has no ServiceAccount of its own and mounts no token.
 
   The labels are `app: qbittorrent-prefs-check`, never `app: qbittorrent`. The WebUI Service,
-  the compat `wireguard` Service and tasks/verify.yml's pod lookup all select `app=qbittorrent`,
+  the compat `wireguard` Service and the reach checks all select `app=qbittorrent`,
   so that label here would route WebUI traffic to this pod. qbittorrent's `netpol_from` admits
   `qbittorrent-prefs-check`, and this role renders that fence itself (netpol_role_owned), so the
   fence and this CronJob arrive in the same apply.
 
-  k8s/cronjob-gate runs this CronJob once per deploy, after tasks/verify.yml has waited out the
-  rollout. An extra run reads the same preferences and logs the same verdict, so it is
-  idempotent.
+  Flux runs a copy of this CronJob's jobTemplate once per role revision, in
+  `qbittorrent-verify` (`flux_cronjob_gates` in defaults/main.yml), which starts once the
+  `qbittorrent` Kustomization reads Ready. An extra run reads the same preferences and logs the
+  same verdict, so it is idempotent.
 #}
 ---
 apiVersion: batch/v1

@@ -1,11 +1,9 @@
-"""qbittorrent's inert Flux Jobs: each check fails its broken case, the apply is safe to re-run.
+"""qbittorrent's Flux Jobs: each check fails its broken case, the apply is safe to re-run.
 
 The script tests run `qbittorrent_job.main` against a stateful local stand-in for the WebUI,
-which also echoes a fixed address as the egress service does. The render tests copy the role,
-move `templates/verify-inert/` to `templates/verify/` as the flip PR will, and render the copy,
-so both Jobs are checked as Flux will receive them while the tree's own render still emits no
-`qbittorrent-verify`. The plan is docs/target-architecture/deploy/d5-bulk-move.md, *A verify
-conversion lands as inert code*.
+which also echoes a fixed address as the egress service does. The render tests render a copy
+of the role, so a test can edit the copy and leave the tree alone. The plan is
+docs/target-architecture/deploy/d5-bulk-move.md.
 
 Run: uv run pytest ansible/roles/k8s/qbittorrent/tests/test_qbittorrent_job.py
 """
@@ -230,11 +228,9 @@ def stubs(tmp_path_factory):
 
 @pytest.fixture(scope="module")
 def flipped_tag(stubs, tmp_path_factory) -> cluster.RenderedTag:
-    """The render of a copy of the role whose Jobs have left `verify-inert/`."""
+    """The render of a copy of the role."""
     roles = tmp_path_factory.mktemp("roles")
     shutil.copytree(K8S_ROLES / TAG, roles / TAG)
-    templates = roles / TAG / "templates"
-    (templates / "verify-inert").rename(templates / "verify")
     return cluster.render_tag(TAG, stubs, roles=roles)
 
 
@@ -261,8 +257,9 @@ def _jobs(docs: list[dict]) -> dict[str, dict]:
     }
 
 
-def test_the_tree_renders_no_qbittorrent_verify_while_ansible_owns_it(stubs):
-    assert cluster.render_tag(TAG, stubs).verify == {}
+def test_the_tree_renders_qbittorrent_verify(stubs, flipped_tag):
+    """The flip moved both Jobs to `templates/verify/`, so the tree's own render emits them."""
+    assert cluster.render_tag(TAG, stubs).verify == flipped_tag.verify != {}
 
 
 def test_the_flipped_jobs_pass_every_job_census_row(flipped):
@@ -349,8 +346,6 @@ def _render_tree_copy(tmp_path, stubs, edit=None) -> list[dict]:
     shutil.copytree(K8S_ROLES / TAG, tree / "roles" / "k8s" / TAG)
     (tree / "vars").mkdir()
     shutil.copy(ANSIBLE / "vars" / "cluster-vars.source", tree / "vars")
-    templates = tree / "roles" / "k8s" / TAG / "templates"
-    (templates / "verify-inert").rename(templates / "verify")
     if edit:
         edit(tree)
     copied = {**stubs, "playbook_dir": str(tree)}
@@ -410,13 +405,13 @@ def test_every_input_the_pod_names_is_one_the_roll_digest_reads(flipped_tag):
         "secret.yaml.j2",
     }
     for job in ("job.yaml.j2", "prefs.yaml.j2"):
-        text = (K8S_ROLES / TAG / "templates" / "verify-inert" / job).read_text()
+        text = (K8S_ROLES / TAG / "templates" / "verify" / job).read_text()
         assert {name for name in named if f"'{name}'" not in text} == set(), job
 
 
 def test_the_jobs_read_no_other_roles_file():
     """The helper and the image come from `render_tag`, never a lookup into another role."""
-    staged = sorted((K8S_ROLES / TAG / "templates" / "verify-inert").glob("*.j2"))
+    staged = sorted((K8S_ROLES / TAG / "templates" / "verify").glob("*.j2"))
     assert [p.name for p in staged] == ["job.yaml.j2", "prefs.yaml.j2", "rbac.yaml.j2"]
     assert [
         (path.name, role)

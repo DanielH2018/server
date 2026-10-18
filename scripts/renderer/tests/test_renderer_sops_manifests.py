@@ -10,6 +10,7 @@ Run: uv run pytest scripts/renderer/tests/test_renderer_sops_manifests.py
 
 import pytest
 
+from lib import yaml_fast
 from renderer import homelab_render, shadow_diff
 from renderer.renderer_lib.bundle import KUSTOMIZATION, SUBSTITUTE_OPT_OUT
 from renderer.renderer_lib.cluster import RenderedTag, select_tags
@@ -86,6 +87,28 @@ def test_a_stub_render_keeps_the_entries(tmp_path):
     assert homelab_render.main(args) == 0
     for role, (entry, _key) in ENTRIES.items():
         assert (out / "cluster" / role / entry).is_file()
+
+
+def test_the_live_qbittorrent_kustomization_renders_decryption(tmp_path):
+    """The named member D5's qbittorrent flip requires: its Kustomization decrypts its entry.
+
+    Rendered with the live inventory's ownership, so the tag publishes a Kustomization only
+    once qbittorrent carries `owner: flux`, and `bundle.py` adds `decryption` to it because
+    the role lists `render_sops_manifests`.
+    """
+    out = tmp_path / "out"
+    assert homelab_render.cluster(out, ["qbittorrent"], None) == 0
+    entry, _key = ENTRIES["qbittorrent"]
+    sops_copy = f"qbittorrent.{entry.removesuffix('.yaml')}.sops.yaml"
+    assert (out / "cluster" / "qbittorrent" / sops_copy).is_file()
+    flux = out / "flux" / "qbittorrent.yaml"
+    docs = {d["metadata"]["name"]: d for d in yaml_fast.safe_load_all(flux.read_text())}
+    assert docs["qbittorrent"]["spec"]["decryption"] == {
+        "provider": "sops",
+        "secretRef": {"name": "sops-age"},
+    }
+    # Only the tag whose directory holds the SOPS copy decrypts.
+    assert "decryption" not in docs["qbittorrent-verify"]["spec"]
 
 
 def test_an_entry_of_one_secret_of_a_sops_manifest_key_is_clean():

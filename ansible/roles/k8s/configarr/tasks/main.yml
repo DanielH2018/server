@@ -4,6 +4,12 @@
 # No Deployment, no Service, no route: configarr runs, reconciles the two *arrs, and exits. This
 # role deploys the CronJob plus the configarr-health CronJob that reads it; the config itself is
 # rendered from templates/config/config.yml.j2, so the grab policy has exactly one source.
+#
+# Flux owns configarr (D5, Wave D), so no Ansible run reaches this file. The two gate runs that
+# followed this include are the gate Jobs `flux_cronjob_gates` in defaults/main.yml puts in
+# `configarr-verify`, and `configarr`'s `depends_on: [sonarr, radarr]` is a Flux `dependsOn`
+# edge, which waits for both Kustomizations to read Ready where the drain waited for their
+# rollouts.
 
 - name: Deploy configarr to the cluster
   ansible.builtin.include_role:
@@ -14,51 +20,4 @@
     manifests_rollout: ""
     # The prune k8s/manifests arms by default (its manifests_prune DECIDED comment). The
     # render stamps homelab/role on the CronJob and the Secret; the fixed allowlist never names
-    # Secret, so config-secret is applied but never pruned. The deploy-gate Job k8s/cronjob-gate
-    # creates is a Job made with `kubectl create job --from=cronjob`, never staged here, and
-    # batch/v1 Job is not in the allowlist, so the prune cannot reach it.
-
-# ONE OF TWO CONSUMER-SIDE BARRIERS IN THE k8s PLAY; netpol-baseline's first task is the other.
-# The reconcile below runs against sonarr and radarr over HTTP, and configarr's
-# `depends_on: [sonarr, radarr]` sorts both BEFORE it. That ordering does not guarantee they are
-# live, because roles/k8s/manifests defers its rollout wait to the end of the batch. Without
-# this drain the Job
-# fires into sonarr's ~5-minute startup (its unpinned striptracks DOCKER_MODS reinstalls on every
-# boot, which is why it carries manifests_rollout_timeout: 660s) and reconciles against a dead API.
-#
-# Draining HERE rather than making sonarr/radarr wait inline is what keeps the batching worth
-# having: they still roll concurrently with their batch, and this pays max(sonarr, radarr) once
-# instead of sonarr + radarr serially.
-- name: Wait for the *arrs to finish rolling out before reconciling against them
-  ansible.builtin.include_role:
-    name: k8s/manifests
-    tasks_from: drain.yml
-
-# A CronJob has no rollout to wait on, so an image bump would otherwise deploy unobserved: the
-# apply reports success and the first thing to actually run the new image is the 04:30 firing,
-# hours later. A config.yml edit that only took effect at the next 04:30 would also leave a
-# deploy reporting success while the *arrs still run yesterday's policy.
-#
-# What makes the extra out-of-band run safe is that configarr is a convergent reconciler —
-# running the same sync twice changes nothing. Not concurrencyPolicy: Forbid, which is set but
-# only covers one direction: the gate run suppresses the next SCHEDULED firing (a
-# `--from=cronjob` Job does carry a controller ownerReference), while a gate run
-# created into an already-running scheduled one still overlaps. That window is about 26s.
-# See ansible/roles/k8s/cronjob-gate/CLAUDE.md.
-- name: Gate the configarr deploy on a one-off run
-  tags: [deploy]
-  ansible.builtin.include_role:
-    name: k8s/cronjob-gate
-  vars:
-    cronjob_gate_name: configarr
-
-# After the configarr gate, so its run reads the Job that gate just finished. Its push proves
-# the reader runs in its image with its ServiceAccount; on a landing that adds the reader's
-# label to uptime-kuma's netpol_from, the fence admits it only after netpol-baseline applies,
-# and the gate counts the started container as a run either way.
-- name: Gate the configarr-health deploy on a one-off run
-  tags: [deploy]
-  ansible.builtin.include_role:
-    name: k8s/cronjob-gate
-  vars:
-    cronjob_gate_name: configarr-health
+    # Secret, so config-secret is applied but never pruned.

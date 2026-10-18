@@ -1,13 +1,15 @@
 {
-  "checksum": "c96b73394c7f44493bc16de4b32de205253056556f5228e5a58f8678c50fa128",
+  "checksum": "4c2cd185fe6e0094cf62a8902e03cebe0e770022f0ffb4c55745c2b1323edc1c",
   "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
   "key": "ansible/roles/k8s/tdarr/CLAUDE.md#Notable",
   "row": {
     "atoms": {
-      "ansible/roles/k8s/tdarr/defaults/main.yml:manifests_rollout_timeout": "a14d61cc97b23876cbcfbefbfe821020069152b67fb64ae5093bd7368361725d",
+      "ansible/roles/k8s/tdarr/defaults/main.yml:flux_prepull_timeout": "a14d61cc97b23876cbcfbefbfe821020069152b67fb64ae5093bd7368361725d",
+      "ansible/roles/k8s/tdarr/defaults/main.yml:manifests_rollout_timeout": "f6a68e15a5e8b35e3c0acc6971cf64cfcb30bb54f5117b2e09a9ea81d82cc5bd",
+      "ansible/tests/services/test_tdarr_prepulls_its_image.py": "7113767a52dad0149051bcc63d46a33b39e97c52c26fb56300c237903bdb32c1",
       "scripts/renderer/renderer_lib/prepull.py": "e7ac93b89615b8deca1e9e4b9cdeca899c494f53bbbd5a5b1760ac0c91410bc3"
     },
     "python": "3.14",
-    "verified_sha": "69b7772f1"
+    "verified_sha": "4f52381e6"
   }
 }
