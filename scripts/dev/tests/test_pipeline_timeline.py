@@ -3,11 +3,19 @@
 import json
 
 from pipeline_timeline import (
+    ci_by_branch,
     concurrency,
+    job_times,
     join,
     load_reviews,
     parse_holds,
     parse_landings,
+    rates,
+    reverts,
+)
+
+GAPS_EMPTY = dict.fromkeys(
+    ("issue_to_batch", "batch_to_pr", "pr_to_land", "land_to_merge", "merge_to_done")
 )
 
 # Two attempts on one PR, copied in shape from daniel-box's `landing-annotation` journal.
@@ -55,6 +63,7 @@ def test_review_start_is_the_save_time_minus_the_phases(tmp_path):
     record = {
         "pr": "https://github.com/DanielH2018/server/pull/5633",
         "durations": {"implement": 600, "review": 120.0, "note": "not a number"},
+        "findings": [{"title": "a"}, {"title": "b"}],
     }
     (tmp_path / "5610-20261018T173246Z.json").write_text(json.dumps(record))
     (tmp_path / "5611-20261018T173246Z.json").write_text(json.dumps({"pr": ""}))
@@ -68,6 +77,8 @@ def test_review_start_is_the_save_time_minus_the_phases(tmp_path):
             "issue": 5610,
             "batch_start": saved - 720,
             "phases_min": {"implement": 10.0, "review": 2.0},
+            "review_findings": 2,
+            "fix_rounds": 0,
         }
     }
 
@@ -122,3 +133,98 @@ def test_concurrency_counts_overlapping_batches_and_skips_non_fanout_rows():
     rows = [row(0, 10), row(5, 20), {"batch_start": None, "land_end": 3, "merged": 3}]
 
     assert concurrency(rows) == {0: 0.0, 1: 0.75, 2: 0.25}
+
+
+def _run(n, branch, conclusion, hour):
+    return {
+        "databaseId": n,
+        "headBranch": branch,
+        "conclusion": conclusion,
+        "createdAt": f"2026-10-18T{hour:02d}:00:00Z",
+    }
+
+
+def test_first_ci_is_the_first_run_that_reached_a_verdict():
+    """A draft's `skipped` run and a `cancelled` one judged nothing, so neither is first."""
+    table = ci_by_branch(
+        [
+            _run(4, "b", "success", 4),
+            _run(1, "b", "skipped", 1),
+            _run(3, "b", "failure", 3),
+            _run(2, "b", "cancelled", 2),
+            _run(5, "c", "skipped", 1),
+        ]
+    )
+    assert table["b"] == {"first_ci": "failure", "ci_runs": 2, "last_run": 4}
+    assert table["c"] == {"first_ci": None, "ci_runs": 0, "last_run": 5}
+
+
+def _job(created, started, completed):
+    return {
+        "created_at": f"2026-10-18T19:{created}Z",
+        "started_at": started and f"2026-10-18T19:{started}Z",
+        "completed_at": completed and f"2026-10-18T19:{completed}Z",
+    }
+
+
+def test_the_queue_is_the_longest_wait_any_job_had_for_a_runner():
+    jobs = [
+        _job("29:37", "29:40", "32:37"),
+        _job("29:37", "35:37", "38:37"),
+        _job("29:37", None, None),
+    ]
+    assert job_times(jobs) == {"ci_queue_min": 6.0, "ci_wall_min": 9.0}
+    assert job_times([]) == {"ci_queue_min": None, "ci_wall_min": None}
+
+
+def test_a_revert_names_the_pr_it_reverted_and_a_mention_does_not():
+    prs = [
+        {"number": 5664, "title": 'Revert "Point the probe"', "body": "Reverts DanielH2018/server#5650"},
+        {
+            "number": 5390,
+            "title": "Revert the images job until n8n-runners builds again",
+            "body": "Promote run 38992066819, the first after #5378 merged, failed in `images`.",
+        },
+        {"number": 5403, "title": "Land the images job again", "body": "Relands #5378 after #5392."},
+    ]  # fmt: skip
+    assert reverts(prs) == {5650: 5664, 5378: 5390}
+
+
+def test_join_carries_the_ci_and_revert_fields_to_the_reverted_pr():
+    prs = [
+        {"number": 5378, "title": "D5.4a2", "createdAt": None, "mergedAt": None,
+         "headRefName": "worktree-ci-images", "body": ""},
+        {"number": 5390, "title": "Revert the images job", "createdAt": None, "mergedAt": None,
+         "headRefName": "revert-5378", "body": "Reverts DanielH2018/server#5378"},
+    ]  # fmt: skip
+    ci = ci_by_branch([_run(9, "worktree-ci-images", "failure", 1)])
+    jobs = {9: {"ci_queue_min": 6.0, "ci_wall_min": 9.0}}
+    original, revert = join(prs, [], {}, {}, {}, ci, jobs)
+    assert original["reverted_by"] == 5390
+    assert (original["first_ci"], original["ci_queue_min"]) == ("failure", 6.0)
+    assert revert["reverted_by"] is None
+    assert revert["first_ci"] is None
+
+
+def test_the_summary_prints_the_change_failure_and_first_time_green_rates():
+    def row(first_ci, reverted_by, queue, wall):
+        return {
+            **GAPS_EMPTY,
+            "pr": 5378 if reverted_by else 1,
+            "first_ci": first_ci,
+            "reverted_by": reverted_by,
+            "ci_queue_min": queue,
+            "ci_wall_min": wall,
+        }
+
+    lines = rates(
+        [
+            row("success", None, 6.0, 9.0),
+            row("failure", 5390, 2.0, 5.0),
+            row(None, None, None, None),
+            row("success", None, None, None),
+        ]
+    )
+    assert lines[0] == "first-time green: 2 of 3 judged (67%)"
+    assert lines[1] == "reverted: 1 of 4 (25.0%), #5378 by #5390"
+    assert lines[2] == "CI queue min (slowest job, final head): median 4.0, p90 6.0"

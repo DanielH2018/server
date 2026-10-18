@@ -1736,7 +1736,7 @@ promotion, an automerged one included, without having to page.
       selects `{job="syslog"}`, and a LogQL log query has one stream selector. So D5.3b3 adds
       a second default, `observability_flux_deploy_annotation_expr`, which reads
       `{job="k8s", namespace="flux-system", container="soak"} |= "event=deploy" | logfmt`.
-      `scripts/grafana/inject_dashboard_annotations.py` injects both. The renderer names the
+      `ansible/filter_plugins/grafana_dashboards.py` injects both. The renderer names the
       soak Job's one container `soak`, so the selector reads a fixed value. The stream selector
       scopes the query, so a dashboard load reads only the soak's lines, never every pod's.
     - **Tests.** `test_deploy_annotations.py` pins the soak's line shape and its
@@ -2664,6 +2664,14 @@ sizes its batch of roles against that projection.
       cron. So H2 drops both PRs and the `registry-gc` row from its exit list, and the host
       cron runs as today until this PR retires it. registry's flip therefore waits on no H2
       PR. Open question 2 rules on the registry's own fate before nut's Wave C PR.
+
+      **Status, 2026-10-18.** The push self-test and the netpol probe have their inert Jobs in
+      `ansible/roles/k8s/registry/templates/verify-inert/` (#5651). The pull self-tests have no
+      Job form: their proof is the pod's own image, which holds no Python, so the census's
+      `delivery` row refuses it. The GC retirement waits on #5680. karakeep and
+      pi-peer-backup still push to the store, and since #5541 the same GC window is the only
+      thing that bounds the `ghcr-mirror` store, so "nothing new needs collecting" no longer
+      holds.
     - traefik: the CRDs come from a URL in the role's `tasks/main.yml`, which no render may
       fetch under C1, so they get an in-tree copy pinned by `traefik_k8s_crd_version`. The
       cluster RBAC carries `kustomize.toolkit.fluxcd.io/prune: disabled` before the move, so

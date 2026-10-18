@@ -5,32 +5,8 @@
 # The config claim is `k8s_claims` in defaults/main.yml, which k8s/manifests renders and applies
 # ahead of the workload (#3387).
 
-# The prefs drift check was a daniel-box host cron until H2.5d
-# (docs/target-architecture/host/h2-shrink-host-plane.md, Steps item 15). These absent arms
-# remove it, ahead of the k8s/manifests include, so the host cron is gone before the CronJob
-# that replaces it exists. They stay until D5's conversion PR moves them into
-# setup/k8s_host_files, and H7 deletes them. ansible/tests/repo/_retired_cron_row.py holds the
-# cron's arm to the tree. The role never stamped a setup-deployed fragment, so none is removed.
-- name: Remove the retired qbittorrent prefs drift check cron
-  tags: [cron]
-  ansible.builtin.cron:
-    name: "qbittorrent prefs drift check"
-    user: "{{ sys_user }}"
-    cron_file: qbittorrent-prefs-check
-    state: absent
-  become: true
-  when: not k8s_dry_run | bool
-
-- name: Remove the retired qbittorrent prefs-check script from the host
-  tags: [config]
-  ansible.builtin.file:
-    path: "{{ item }}"
-    state: absent
-  loop:
-    - /usr/local/bin/qbittorrent-prefs-check.sh
-    - /opt/qbittorrent-prefs-check
-  become: true
-  when: not k8s_dry_run | bool
+# The absent arms that remove the retired prefs drift host cron, and its script, moved to
+# setup/k8s_host_files (tasks/qbittorrent.yml there) in D5's conversion PR for qbittorrent.
 
 - name: Deploy qbittorrent to the cluster
   ansible.builtin.include_role:

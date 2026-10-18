@@ -10,6 +10,11 @@ qbittorrent_k8s_wireguard_image: lscr.io/linuxserver/wireguard:latest@sha256:437
 # invisible to Renovate's k8s-defaults manager, so the pin would never get a PR.
 qbittorrent_k8s_probe_image: alpine:3.24@sha256:294b683cb724975bec92580e1e685676bd4b50bda910ddb8c51d4cabeaec77e6
 
+# Where the inert verify Job (templates/verify-inert/job.yaml.j2) reads its own public
+# address, to compare with the one qBittorrent's peers see. The same service tasks/verify.yml
+# asks for the host's address.
+qbittorrent_k8s_verify_egress_url: https://api.ipify.org
+
 # Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
 # DENIED for state coupling, not missing recovery. The snapshot and revert machinery work
 # fine here; the problem is that the config volume's state is coupled to something a snapshot
