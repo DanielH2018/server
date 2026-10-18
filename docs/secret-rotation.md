@@ -251,12 +251,15 @@ not rotated again by the weekly cron. Examples:
   only with a new Google project.
 - `pi_peer_backup_ssh_key`: generate a new ed25519 keypair, store the private half with
   `sops set`, and commit the public half over
-  `ansible/roles/k8s/pi-peer-backup/files/pi-peer-backup.pub`. The private key is multi-line,
+  `ansible/roles/setup/k8s_host_files/files/pi-peer-backup.pub`. The private key is multi-line,
   so it has a Secret of its own, `pi-peer-backup-ssh-key`, rendered from
-  `ansible/roles/k8s/pi-peer-backup/templates/ssh-key-secret.yaml.j2`. A rotation changes that
-  one small Secret, and `--tags pi-peer-backup` redeploys it and authorizes the new public half
-  on the Pi. The role's `authorized_key` task adds the new line and leaves the old one, so
-  remove the old key from the Pi's `authorized_keys` after the next nightly run succeeds.
+  `ansible/roles/k8s/pi-peer-backup/templates/ssh-key-secret.yaml.j2`. Flux owns pi-peer-backup,
+  so that Secret reaches the cluster as the SOPS manifest `cluster_vars.py write` regenerates
+  (operator-run), which `promote` applies once the change merges. The public half is in the
+  setup plane: the GitOps tick applies `initial_setup.yml --tags k8s_host_files`, whose
+  `authorized_key` task authorizes it on the Pi. That task adds the new line and leaves the
+  old one, so remove the old key from the Pi's `authorized_keys` after the next nightly run
+  succeeds.
 - `authelia_oidc_rsa_key_content`: generate a new RSA private key in PEM form, such as with
   `openssl genrsa 4096`, and store it with `sops set`. The value is multi-line, so it has a
   Secret of its own, `authelia-oidc-jwk`, rendered from

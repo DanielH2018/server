@@ -65,12 +65,13 @@ ALLOW = {
     ),
     _K8S + "janitorr/tasks/verify.yml": _VERIFY,
     _K8S + "jellyfin/tasks/main.yml": "D5: the snapshot-size patch becomes a Job",
-    _K8S + "media-volume/tasks/main.yml": _PROBE,
     _K8S + "netpol-baseline/tasks/main.yml": (
         "D4 makes the deferred apply `netpol-baseline-deferred`; " + _PROBE
     ),
     _K8S + "observability/tasks/dashboards.yml": (
-        "D5: the dashboard ConfigMaps become rendered ConfigMaps"
+        "D5: observability's flip drops grafana-dashboards.yaml from "
+        "`manifests_exclude_files`, so the rendered ConfigMaps join the bundle, and deletes "
+        "the server-side apply"
     ),
     _K8S + "observability/tasks/main.yml": (
         "D5.1e: a restart annotation replaces the rollout restart"
@@ -122,8 +123,10 @@ OUT_OF_RENDER = Census(
     red=(Subject("widget/tasks/main.yml", _APPLY),),
     green=(Subject("widget/tasks/main.yml", _APPLY.replace(" apply -f", " get -f")),),
     # 58 writing tasks in 28 files of 23 roles when the row landed (2026-10-13); 49 once
-    # n8n's flip deleted its probe tasks (#5546).
-    min_matches=45,
+    # n8n's flip deleted its probe tasks (#5546); 44 once media-volume's flip deleted its
+    # hardlink probe tasks (#5652); 43 once authelia's TOTP seed became an initContainer
+    # (#5647).
+    min_matches=43,
     must_find=frozenset(
         {
             _K8S + "observability/tasks/dashboards.yml",

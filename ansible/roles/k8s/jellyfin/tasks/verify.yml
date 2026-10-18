@@ -3,6 +3,10 @@
 # encode works from inside the running Jellyfin pod. They do NOT prove Jellyfin's own transcode path works: that needs a real
 # playback with a bitrate that forces a transcode, and it is checked by hand. Keep the two
 # claims apart; a green run here is a starting line.
+#
+# The library and render-node checks have a Job form for Flux in templates/verify-inert/
+# (job.yaml.j2), which nothing renders until jellyfin's flip. The VAAPI encode and the
+# tone-mapping check have none, and wait on #5451.
 
 # WITHOUT THIS, EVERY PROOF BELOW RUNS AGAINST THE OUTGOING POD. k8s/manifests does not wait
 # for a rollout — it QUEUES it for k8s/manifests/tasks/drain.yml, which drains the whole batch at the end.

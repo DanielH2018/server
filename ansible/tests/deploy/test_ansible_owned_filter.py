@@ -144,8 +144,8 @@ def test_the_batch_loop_skips_owned_entries_that_templates_still_see():
     # homelab-mcp and ical-proxy since D5.14, bazarr, freshrss, livesync and speedtest since D5.9,
     # terraria and valheim since D5.15, code-server since D5.16, mosquitto, radarr and sonarr
     # since D5.20, n8n since #5546, nut since D5.17, artifacts, autofix-bridge, cloudflare-ddns,
-    # docs and game-stats since D5.19, and monitor-bridge and prowlarr since #5594, so the live
-    # list holds owned entries too.
+    # docs and game-stats since D5.19, monitor-bridge and prowlarr since #5594, and karakeep,
+    # media-volume and pi-peer-backup since #5652, so the live list holds owned entries too.
     owned = {"fixture-flux", "fixture-released"} | {
         c["name"] for c in live if "owner" in c
     }
@@ -164,11 +164,13 @@ def test_the_batch_loop_skips_owned_entries_that_templates_still_see():
         "homelab-mcp",
         "homepage",
         "ical-proxy",
+        "karakeep",
         "littlelink",
         "livesync",
         "loki-homelab",
         "mosquitto",
         "longhorn-ui",
+        "media-volume",
         "monitor-bridge",
         "n8n",
         "navidrome",
@@ -176,6 +178,7 @@ def test_the_batch_loop_skips_owned_entries_that_templates_still_see():
         "nut",
         "nut-exporter",
         "peanut",
+        "pi-peer-backup",
         "pihole-exporter",
         "prowlarr",
         "radarr",

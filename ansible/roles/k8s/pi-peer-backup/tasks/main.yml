@@ -2,34 +2,11 @@
 # A nightly CronJob rsyncs daniel-pi's wg-easy peer configs into a Longhorn PVC (the
 # 03:30 daily-backup group carries it to B2) and pushes the "WG Pi Peer Backup" Kuma
 # monitor directly.
-
-# The wrapper lands BEFORE the key is pinned to it: the reverse order would leave a key whose
-# forced command does not exist, and the nightly would fail until the next task ran. Root-owned
-# so the key holder, who reaches only this script, cannot rewrite what it allows.
-- name: Install the forced-command wrapper on daniel-pi
-  tags: [config]
-  delegate_to: daniel-pi
-  become: true
-  ansible.builtin.copy:
-    src: pi-peer-backup-shell.sh
-    dest: /usr/local/bin/pi-peer-backup-shell
-    owner: root
-    group: root
-    mode: "0755"
-  when: not k8s_dry_run | bool
-
-# `restrict` drops pty, port/agent/X11 forwarding and user-rc; `command=` replaces whatever the
-# client asked for with the wrapper, which re-derives one `sudo rsync --server --sender` from
-# SSH_ORIGINAL_COMMAND and refuses everything else. Ansible reaches the Pi over a different key
-# (`ubuntu@daniel-server-ansible`), so pinning this one cannot lock the deploy out.
-- name: Authorize the pull key on daniel-pi
-  tags: [config]
-  delegate_to: daniel-pi
-  ansible.posix.authorized_key:
-    user: "{{ hostvars['daniel-pi'].ansible_user | default('ubuntu') }}"
-    key: "{{ lookup('file', role_path ~ '/files/pi-peer-backup.pub') }}"
-    key_options: 'restrict,command="/usr/local/bin/pi-peer-backup-shell {{ pi_peer_backup_src_dir }}"'
-    state: present
+#
+# Flux owns this role, so no Flux path runs either include below; they stay for a handback
+# (docs/flux-deploy-plane.md). promote's `images` job builds the image, and the renderer's
+# gate Job in `pi-peer-backup-verify` replaced the k8s/cronjob-gate include this file held.
+# The two daniel-pi writes moved to roles/setup/k8s_host_files/tasks/pi-peer-backup.yml.
 
 - name: Build the pi-peer-backup image
   ansible.builtin.include_role:
@@ -52,28 +29,5 @@
     # The prune k8s/manifests arms by default (its manifests_prune DECIDED comment). The
     # render stamps homelab/role on the CronJob, both Secrets and the k8s_claims claim; the fixed
     # allowlist names neither Secret nor PersistentVolumeClaim, so those two are applied but
-    # never pruned. The deploy-gate Job k8s/cronjob-gate creates is made with
-    # `kubectl create job --from=cronjob` and never staged here, and batch/v1 Job is not in the
-    # allowlist, so the prune cannot reach it. k8s/image-builder
-    # stages its build Job and ConfigMap under `build-pi-peer-backup/`, outside this directory.
-
-# A CronJob has no rollout to wait on, so an image bump would otherwise deploy unobserved.
-# pi-peer-backup is a retention-free rsync mirror and sets concurrencyPolicy: Forbid.
-# `kubectl create job --from=cronjob` DOES set a controller ownerReference, so the gate run
-# lands in the CronJob's `.status.active` and Forbid suppresses the next scheduled firing
-# while it is in flight. The reverse direction is not protected: a gate run created into an
-# already-running scheduled run still overlaps. That window is this CronJob's own run
-# duration (21s measured), and the mirror is idempotent across it. Idempotence is not the whole story inside
-# that window, though: the PVC is ReadWriteOnce and neither pod carries a node constraint, so
-# two coexisting pods on different nodes give the second a Multi-Attach wedge until
-# activeDeadlineSeconds (600s) kills it — the controller then deletes the pod, cronjob-gate
-# reads no container state, and the deploy fails closed with "No container state was readable"
-# (the class in memory as seed-pod-multiattach-blocks-deploys). A 21s exposure per deploy, and
-# a loud failure rather than a silent one. See ansible/roles/k8s/cronjob-gate/CLAUDE.md for
-# both directions.
-- name: Gate the pi-peer-backup deploy on a one-off run
-  tags: [deploy]
-  ansible.builtin.include_role:
-    name: k8s/cronjob-gate
-  vars:
-    cronjob_gate_name: pi-peer-backup
+    # never pruned. k8s/image-builder stages its build Job and ConfigMap under
+    # `build-pi-peer-backup/`, outside this directory.

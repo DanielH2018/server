@@ -90,6 +90,23 @@ cause, two outcomes, decided by how the dependency fails rather than by what it 
 asymmetry survived the extraction from configarr and is a real limit of reading terminal state
 after the fact — an operator hitting it should look at the *arr, not at the image.
 
+## Callers, and the gate a flux-owned role gets instead
+
+Two Ansible-owned roles still include this one: configarr gates `configarr` and
+`configarr-health`, and qbittorrent gates `qbittorrent-prefs-check`. Flux runs no task of a
+flux-owned role, so such a role names its CronJobs in `flux_cronjob_gates` instead, and
+`scripts/renderer/renderer_lib/cronjob_gate.py` copies each into a Job in `<tag>-verify` that
+runs once per role revision. pi-peer-backup's gate, a verify, and karakeep's
+`karakeep-archive-pruner` gate, a mutation, moved there when both roles flipped to Flux (#5652).
+
+The copy differs from this role's run in two ways, and each role's flip states both:
+
+- **`Forbid` protects neither direction.** The copy carries no ownerReference to the CronJob,
+  whose UID is unknown at render time, so a scheduled firing can start while the gate runs.
+  Property 2 above is then the whole of the safety.
+- **Any non-zero exit fails the `-verify` Kustomization** and holds the revision, where this
+  role reports the exit and lets the deploy continue.
+
 ## The design decisions behind it
 
 `docs/cronjob-gate-design.md` carries the working-out, and a change to this role's behaviour

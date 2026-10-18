@@ -1,13 +1,10 @@
 ---
-# Builds the Grafana dashboard ConfigMaps. roles/k8s/observability/files/dashboards is the one
-# source of truth for the JSON.
+# Renders and applies the Grafana dashboard ConfigMaps. roles/k8s/observability/files/dashboards
+# is the one source of truth for the JSON, and templates/grafana-dashboards.yaml.j2 renders one
+# ConfigMap per folder from it, with the deploy-annotation queries injected.
 #
-# Built with `kubectl create configmap --from-file --dry-run=client` rather than a Jinja template.
-# Inlining the JSON in a raw block does not scale here: ~730 KB across sixteen files, none of which contains any Jinja to render.
-# Generating the YAML instead keeps the dashboards as dashboards and leaves nothing to escape.
-#
-# Applied SERVER-SIDE, in their own directory, deliberately kept out of the one the manifests role
-# applies. Client-side `kubectl apply` records the whole object in the
+# Applied SERVER-SIDE, from their own directory, deliberately kept out of the one the manifests
+# role applies. Client-side `kubectl apply` records the whole object in the
 # kubectl.kubernetes.io/last-applied-configuration annotation, and annotations are capped at
 # 262144 bytes — so the first attempt failed with:
 #
@@ -15,25 +12,23 @@
 #   metadata.annotations: Too long: may not be more than 262144 bytes
 #
 # The cap is on the ANNOTATION, not the ConfigMap (1 MiB), so splitting the folder further does not
-# help: node-exporter-full.json is 442 KB on its own and would breach it alone. Server-side apply
+# help: node-exporter-full.json is 413 KB on its own and would breach it alone. Server-side apply
 # does not write that annotation at all, which is precisely the problem it was introduced to solve.
 # Scoped to these objects rather than switching the shared manifests role wholesale — every other
 # manifest in this repo is small and client-side apply is fine for them.
+#
+# Once observability is flux-owned none of this runs: the template renders into the role's bundle
+# and Flux applies it server-side. The staging trees the old tasks wrote under /etc/rancher/k3s/
+# are removed by roles/setup/k8s_host_files/tasks/observability.yml.
 
-- name: Create the directories for the dashboard ConfigMap manifests
+- name: Create the directory for the dashboard ConfigMap manifests
   tags: [config]
   ansible.builtin.file:
-    path: "{{ item }}"
+    path: /etc/rancher/k3s/manifests/observability-dashboards
     state: directory
     mode: "0700"
     owner: root
     group: root
-  loop:
-    - /etc/rancher/k3s/manifests/observability
-    - /etc/rancher/k3s/dashboard-manifests
-    # The injector's output tree. Created here rather than left to the script so its
-    # ownership and mode match every other node-side directory this role writes.
-    - /etc/rancher/k3s/dashboards-annotated
   become: true
 
 - name: Remove dashboard ConfigMaps from the client-side apply directory
@@ -45,7 +40,7 @@
   ansible.builtin.file:
     path: "/etc/rancher/k3s/manifests/observability/grafana-dashboards-{{ item | lower }}.yaml"
     state: absent
-  loop: "{{ observability_dashboard_folders }}"
+  loop: "{{ observability_dashboard_folders | list }}"
   become: true
 
 - name: Remove the retired vendored Claude Code dashboard manifest
@@ -70,133 +65,14 @@
   register: observability_vendored_cm_removed
   changed_when: "'deleted' in observability_vendored_cm_removed.stdout"
 
-- name: Stage the shared Grafana dashboards on the node
+- name: Render the dashboard ConfigMap manifests
   tags: [config]
-  ansible.builtin.copy:
-    src: "dashboards/{{ item }}/"
-    dest: "/etc/rancher/k3s/dashboards/{{ item }}/"
+  ansible.builtin.template:
+    src: grafana-dashboards.yaml.j2
+    dest: /etc/rancher/k3s/manifests/observability-dashboards/grafana-dashboards.yaml
     mode: "0644"
     owner: root
     group: root
-  loop: "{{ observability_dashboard_folders }}"
-  become: true
-  register: observability_dashboards_staged
-
-# `copy` with a directory source never deletes anything at the destination, so a dashboard removed
-# or RENAMED in the repo leaves its old file here forever — and the ConfigMap below is built
-# `--from-file` this tree, so the retired board keeps being provisioned. Dropping a file from the
-# source "only stops it being RE-RENDERED", as the vendored-manifest task above describes.
-- name: Find the staged dashboards that no longer exist in the role
-  tags: [config]
-  ansible.builtin.find:
-    paths: "/etc/rancher/k3s/dashboards/{{ item }}"
-    patterns: "*.json"
-  loop: "{{ observability_dashboard_folders }}"
-  become: true
-  changed_when: false
-  register: observability_staged_found
-
-- name: Build the staged paths the role's own files justify
-  tags: [config]
-  ansible.builtin.set_fact:
-    observability_valid_staged: >-
-      {{ observability_valid_staged | default([]) + (
-         lookup('ansible.builtin.fileglob', role_path ~ '/files/dashboards/' ~ item ~ '/*.json', wantlist=True)
-         | map('basename')
-         | map('regex_replace', '^', '/etc/rancher/k3s/dashboards/' ~ item ~ '/')
-         | list) }}
-  loop: "{{ observability_dashboard_folders }}"
-
-- name: Remove staged dashboards with no file behind them
-  tags: [config]
-  ansible.builtin.file:
-    path: "{{ item }}"
-    state: absent
-  loop: >-
-    {{ observability_staged_found.results | map(attribute='files') | flatten
-       | map(attribute='path') | difference(observability_valid_staged) }}
-  become: true
-
-# Grafana has no global annotation setting — the query lives in each dashboard's own JSON, and
-# all of these ship an empty annotations list. Injecting here covers every board, present and
-# future, from one place instead of sixteen hand-edits that would drift.
-#
-# Reads the STAGED tree and writes a DERIVED one, deliberately. Editing the staged copy in place
-# would make the copy task above see a checksum mismatch next deploy, restore the pristine JSON,
-# and the injector would re-inject — `changed` forever, and a Grafana rollout on every deploy.
-# The script is a pure function of its input, so this tree is stable when nothing changed.
-- name: Inject the deploy-annotation query into the staged dashboards
-  tags: [config]
-  ansible.builtin.command:
-    cmd: >-
-      {{ ansible_playbook_python }} {{ playbook_dir }}/../scripts/grafana/inject_dashboard_annotations.py
-      --src /etc/rancher/k3s/dashboards
-      --dest /etc/rancher/k3s/dashboards-annotated
-      --uid {{ observability_loki_homelab_uid }}
-      --expr {{ observability_deploy_annotation_expr | quote }}
-      --flux-expr {{ observability_flux_deploy_annotation_expr | quote }}
-  become: true
-  register: observability_dashboards_annotated
-  # The script writes a file only when its content actually differs, so the tree is the honest
-  # signal — but the command itself cannot report that. The ConfigMap build below reads this
-  # tree and the manifest write after it carries the real changed verdict.
-  changed_when: false
-
-# The injector writes a file per input and never removes one, so the annotated tree needs the same
-# prune as the staged tree it derives from — otherwise pruning only the staged copy moves the stale
-# file one hop down the chain and the ConfigMap, built from THIS directory, is unchanged.
-- name: Find the annotated dashboards that no longer have a staged source
-  tags: [config]
-  ansible.builtin.find:
-    paths: "/etc/rancher/k3s/dashboards-annotated/{{ item }}"
-    patterns: "*.json"
-  loop: "{{ observability_dashboard_folders }}"
-  become: true
-  changed_when: false
-  register: observability_annotated_found
-
-- name: Remove annotated dashboards with no staged source
-  tags: [config]
-  ansible.builtin.file:
-    path: "{{ item }}"
-    state: absent
-  loop: >-
-    {{ observability_annotated_found.results | map(attribute='files') | flatten
-       | map(attribute='path')
-       | difference(observability_valid_staged
-                    | map('regex_replace', '/dashboards/', '/dashboards-annotated/') | list) }}
-  become: true
-
-- name: Build a ConfigMap manifest per dashboard folder
-  tags: [config]
-  # Generation only — writes nothing and touches no cluster state, hence changed_when: false.
-  # The apply that follows (in the manifests role) is what can change anything.
-  ansible.builtin.command:
-    cmd: >-
-      k3s kubectl create configmap grafana-dashboards-{{ item | lower }}
-      --namespace {{ k8s_observability_namespace }}
-      --from-file=/etc/rancher/k3s/dashboards-annotated/{{ item }}
-      --dry-run=client -o yaml
-  loop: "{{ observability_dashboard_folders }}"
-  become: true
-  changed_when: false
-  register: observability_dashboard_configmaps
-
-- name: Write the dashboard ConfigMap manifests
-  tags: [config]
-  # Not under --check. The build above is a check-mode skip, and it is left one on
-  # purpose: it reads dashboards-annotated/, which the inject step only simulated, so a
-  # check-mode build would diff last run's JSON and report no change for an edited board.
-  when: not ansible_check_mode
-  ansible.builtin.copy:
-    content: "{{ item.stdout }}\n"
-    dest: "/etc/rancher/k3s/dashboard-manifests/grafana-dashboards-{{ item.item | lower }}.yaml"
-    mode: "0644"
-    owner: root
-    group: root
-  loop: "{{ observability_dashboard_configmaps.results }}"
-  loop_control:
-    label: "{{ item.item }}"
   become: true
   register: observability_dashboard_manifests
 
@@ -209,29 +85,21 @@
   ansible.builtin.command:
     cmd: >-
       k3s kubectl apply --server-side --force-conflicts
-      -f /etc/rancher/k3s/dashboard-manifests/
+      -f /etc/rancher/k3s/manifests/observability-dashboards/
   become: true
   register: observability_dashboards_applied
   # Server-side apply prints `serverside-applied` for every object whether or not it changed
   # anything, so its output cannot be read for a changed verdict the way the client-side apply's
-  # created/configured/unchanged can. The manifest write above is the honest signal: these
-  # ConfigMaps' contents change exactly when the files generated from the dashboard JSON change.
-  # The apply itself still runs unconditionally, so drift is corrected either way — this only
-  # governs what gets REPORTED as changed.
+  # created/configured/unchanged can. The render above is the honest signal: these ConfigMaps'
+  # contents change exactly when the rendered manifest changes. The apply itself still runs
+  # unconditionally, so drift is corrected either way — this only governs what gets REPORTED as
+  # changed.
   changed_when: observability_dashboard_manifests is changed
 
 # ── prune keys the apply above cannot remove ──────────────────────────────────────────────────
-# A BACKSTOP, not the fix. The stale `backups.json` key was caused by the two derived trees never
-# being pruned (see the two prune pairs above) — the ConfigMap was rebuilt `--from-file` a directory
-# that still held the file, so the key was regenerated legitimately every run. This task was written
-# first on the theory that server-side apply could not drop a key owned by the old
-# `kubectl-client-side-apply` manager; that theory was wrong, and this task was inert on its own,
-# skipping because the live keys and the annotated tree agreed with each other.
-#
-# It earns its place anyway: SSA prunes a field only when the same manager owns it, so if a key ever
-# IS orphaned — a hand-applied board, a manager change — the tree prunes above cannot see it, since
-# they only compare files to files. Keeping it means the two failure modes have one owner each
-# rather than a shared assumption. It writes nothing when the sets agree, which is the normal case.
+# A BACKSTOP. Server-side apply prunes a field only when the same manager owns it, so if a key is
+# ever orphaned — a hand-applied board, a manager change — the apply above leaves it in place. It
+# writes nothing when the live keys and the listed boards agree, which is the normal case.
 - name: Read the live dashboard ConfigMap keys
   tags: [deploy]
   ansible.builtin.command:
@@ -239,35 +107,26 @@
       k3s kubectl get configmap grafana-dashboards-{{ item | lower }}
       --namespace {{ k8s_observability_namespace }}
       --ignore-not-found -o jsonpath={.data}
-  loop: "{{ observability_dashboard_folders }}"
+  loop: "{{ observability_dashboard_folders | list }}"
   become: true
   changed_when: false
   register: observability_dashboard_live_keys
 
-- name: Find the dashboard files each ConfigMap should carry
-  tags: [deploy]
-  ansible.builtin.find:
-    paths: "/etc/rancher/k3s/dashboards-annotated/{{ item }}"
-    patterns: "*.json"
-  loop: "{{ observability_dashboard_folders }}"
-  become: true
-  register: observability_dashboard_source_files
-
 # A merge patch setting each stale key to null, which is how a strategic/merge patch deletes a map
 # entry. Skipped entirely when the difference is empty, so a clean cluster issues no write and
 # reports unchanged — the normal case, and the reason this is safe to run on every deploy.
-- name: Remove dashboard keys with no file behind them
+- name: Remove dashboard keys with no board behind them
   tags: [deploy]
   vars:
     live_keys: "{{ (observability_dashboard_live_keys.results[idx].stdout | default('{}', true) | from_json).keys() | list }}"
-    want_keys: "{{ observability_dashboard_source_files.results[idx].files | map(attribute='path') | map('basename') | list }}"
+    want_keys: "{{ observability_dashboard_folders[item] }}"
     stale_keys: "{{ live_keys | difference(want_keys) }}"
   ansible.builtin.command:
     cmd: >-
       k3s kubectl patch configmap grafana-dashboards-{{ item | lower }}
       --namespace {{ k8s_observability_namespace }} --type=merge
       -p {{ {'data': dict(stale_keys | zip([None] * (stale_keys | length)))} | to_json | quote }}
-  loop: "{{ observability_dashboard_folders }}"
+  loop: "{{ observability_dashboard_folders | list }}"
   loop_control:
     index_var: idx
     label: "{{ item }}: {{ stale_keys | join(', ') | default('nothing stale', true) }}"

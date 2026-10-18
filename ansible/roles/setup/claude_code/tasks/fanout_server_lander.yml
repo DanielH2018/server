@@ -75,3 +75,13 @@
   become: true
   when: not claude_code_fanout_server_lander_enabled
   notify: Reload systemd
+
+# Each pass writes this gauge (#5671); a disarmed lander must not leave its last reading
+# standing as if it were current.
+- name: Remove the server-batch lander's waiting gauge when disarmed
+  tags: [claude_code]
+  ansible.builtin.file:
+    path: /var/lib/node-exporter-textfile/fanout_operator_waits.prom
+    state: absent
+  become: true
+  when: not claude_code_fanout_server_lander_enabled

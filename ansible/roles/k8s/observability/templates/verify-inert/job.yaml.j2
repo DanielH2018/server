@@ -1,0 +1,119 @@
+{#
+  observability's verify Job and the ConfigMap that carries its script, INERT until
+  observability's flip.
+
+  This directory is `verify-inert/`, which neither reader globs: the manifests role takes only
+  top-level `templates/*.yaml.j2`, and `verify_files` takes only `templates/verify/*.yaml.j2`.
+  observability's flip PR moves the directory to `templates/verify/`, and the renderer then
+  emits it into `observability-verify` (D5, *A verify conversion lands as inert code*). The
+  same PR deletes the "Read back the OTLP listener's bind address" and "Fail if the OTLP
+  receiver is not pinned to loopback" tasks, which this Job replaces.
+
+  Both names end in a digest, as the Job census requires (D5, *Rules for every Job Flux
+  applies*): the ConfigMap's in `configmap_digest8` of its data, the Job's in
+  `job_spec_digest8` of its spec. Each is computed here from the same JSON those functions
+  hash, so the spec is written once as YAML text, parsed for the hash and emitted verbatim.
+  The renderer passes `flux_job_image` and `flux_job_connect`, the helper's text, to every
+  `templates/verify/` file (`render_tag`).
+
+  The spec embeds a digest of the rendered `collector.yaml`, so an edit to the DaemonSet the
+  Job reads renames the Job and makes Flux run it again.
+
+  The caller census (D5, *A fence admits every Job that dials through it*). The pod is
+  `app: observability-verify` in `k8s_observability_namespace`. It dials the API server only,
+  which no NetworkPolicy fences, and it dials no pod and execs into nothing, so no fence needs
+  a peer for it. Its one grant is `get` on the `otel-collector` DaemonSet (`rbac.yaml.j2`).
+#}
+{% set script_name = 'observability_verify.py' %}
+{% set script_dir = '/verify' %}
+{% set data = {
+  script_name: lookup('file', playbook_dir + '/roles/k8s/observability/files/' + script_name, rstrip=False),
+  'flux_job_connect.py': flux_job_connect,
+} %}
+{% set configmap_name = 'observability-verify-' + ({'data': data, 'binaryData': {}} | to_json(sort_keys=True, separators=(',', ':')) | hash('sha256'))[:8] %}
+{% set render_digest8 = (lookup('template', 'collector.yaml.j2') | hash('sha256'))[:8] %}
+{% set spec_text %}
+# A flaky check fails rather than passing on a retry.
+backoffLimit: 0
+# Below the 600s `manifests_rollout_timeout_default` every `<tag>-verify` Kustomization takes.
+# One API read with a 10s timeout, plus the helper's 60s of connect retries.
+activeDeadlineSeconds: 120
+template:
+  metadata:
+    labels:
+      app: observability-verify
+  spec:
+    serviceAccountName: observability-verify
+    # The Job reads the DaemonSet through the API, so its pod mounts the account's token.
+    automountServiceAccountToken: true
+    restartPolicy: Never
+    enableServiceLinks: false
+    securityContext:
+      runAsNonRoot: true
+      runAsUser: 65534
+      runAsGroup: 65534
+      seccompProfile:
+        type: RuntimeDefault
+    containers:
+      - name: verify
+        image: {{ flux_job_image }}
+        command:
+          - python3
+          - {{ script_dir }}/{{ script_name }}
+        env:
+          - name: OTLP_NAMESPACE
+            value: {{ k8s_observability_namespace }}
+          - name: OTLP_DAEMONSET
+            value: otel-collector
+          - name: OTLP_HOST_IP
+            value: "{{ observability_otlp_host_ip }}"
+          # Renames the Job whenever the collector's render changes; see the note above.
+          - name: OBSERVABILITY_RENDER_DIGEST8
+            value: "{{ render_digest8 }}"
+          # The API server's certificate is signed by the cluster CA the token mount carries.
+          - name: SSL_CERT_FILE
+            value: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+          - name: PYTHONDONTWRITEBYTECODE
+            value: "1"
+        resources:
+          requests:
+            cpu: 10m
+            memory: 32Mi
+          limits:
+            memory: 64Mi
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+              - ALL
+        volumeMounts:
+          - name: script
+            mountPath: {{ script_dir }}
+            readOnly: true
+    volumes:
+      - name: script
+        configMap:
+          name: {{ configmap_name }}
+{% endset %}
+{% set spec = spec_text | from_yaml %}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ configmap_name }}
+  namespace: {{ k8s_observability_namespace }}
+data:
+{% for key, text in data | dictsort %}
+  {{ key }}: {{ text | to_json }}
+{% endfor %}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: observability-verify-{{ (spec | to_json(sort_keys=True, separators=(',', ':')) | hash('sha256'))[:8] }}
+  namespace: {{ k8s_observability_namespace }}
+  annotations:
+    homelab/job-kind: verify
+spec:
+{{ spec_text | indent(2, true) }}

@@ -9,6 +9,7 @@ added without its grant fails a test rather than a 04:10 UTC run.
 - `shell_needs` reads every `$KUBECTL` line of a shell script, and the `kind:` lines of its
   heredocs for an `apply`.
 - `argv_needs` reads the argv lists a Python module's recording runner captured.
+- `rest_needs` reads the `(method, path)` calls a Job script made straight to the API server.
 - `missing` names each need no grant covers.
 
 A need is `(namespace, apiGroup, resource, verb, name)`. The name is the object the call names,
@@ -293,6 +294,34 @@ def recorded_needs(
     for argv in argvs:
         start = argv.index("kubectl") + 1 if "kubectl" in argv else 0
         found |= argv_needs(argv[start:], namespaces)
+    return found
+
+
+# The RBAC verb of each HTTP method a script sends; GET is `get` on a named object, else `list`.
+_REST_VERBS = {"POST": "create", "PATCH": "patch", "PUT": "update", "DELETE": "delete"}
+
+
+def rest_needs(calls: Sequence[tuple[str, str]]) -> set[tuple]:
+    """Every need of the `(method, path)` calls a script made to the API server's REST paths.
+
+    `/api/v1/...` is the core group and `/apis/<group>/<version>/...` any other. A path with no
+    `namespaces/<ns>` segment is cluster-scoped, so its namespace is None.
+
+    Raises:
+      KeyError: a method this module cannot map to a verb.
+    """
+    found = set()
+    for method, path in calls:
+        parts = path.split("?", 1)[0].strip("/").split("/")
+        group, rest = ("", parts[2:]) if parts[0] == "api" else (parts[1], parts[3:])
+        namespace = None
+        if rest[0] == "namespaces" and len(rest) > 2:
+            namespace, rest = rest[1], rest[2:]
+        resource, name = rest[0], rest[1] if len(rest) > 1 else None
+        verb = (
+            "get" if method == "GET" and name else "list" if method == "GET" else None
+        )
+        found.add((namespace, group, resource, verb or _REST_VERBS[method], name))
     return found
 
 

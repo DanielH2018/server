@@ -10,15 +10,14 @@
 groups:
   - name: ingress-probes
     rules:
-      # SHADOW UNTIL M4's PR 5. Kuma's generated ingress tile pages the same failure until
-      # M4's PR 4 deletes it. `for: 2m` at the job's 60s interval matches the tile's
+      # The ingress pager since M4's PR 5, which dropped `shadow` once PR 4 deleted Kuma's
+      # generated ingress tiles. `for: 2m` at the job's 60s interval keeps the tiles'
       # three-strikes timing (interval 60, maxretries 2).
       - alert: IngressProbeFailedCritical
         expr: probe_success{job="blackbox-ingress", page_tier="critical"} == 0
         for: 2m
         labels:
           severity: critical
-          shadow: "true"
         annotations:
           summary: The ingress probe of {{ $labels.service }} is failing.
           description: >-
@@ -27,13 +26,12 @@ groups:
             Authelia's 302, which proves the edge and the middleware answer, not that the
             backend is up, so a pass there does not clear the backend. Read
             probe_http_status_code for this instance, then the Traefik and Authelia logs.
-      # SHADOW UNTIL M4's PR 5, as above, for every service outside home-critical.
+      # The same, for every service outside home-critical.
       - alert: IngressProbeFailed
         expr: probe_success{job="blackbox-ingress", page_tier="warning"} == 0
         for: 2m
         labels:
           severity: warning
-          shadow: "true"
         annotations:
           summary: The ingress probe of {{ $labels.service }} is failing.
           description: >-

@@ -1,14 +1,16 @@
 ---
-# CRDs come from the pinned upstream by URL, exactly as the k3s setup role installs Longhorn
-# and MetalLB. They are a large, versioned, third-party set — not ours to hand-maintain. Only
-# the ClusterRoleBinding is authored locally (see templates/rbac.yaml.j2 for why).
+# The CRDs come from the role's in-tree copy of the upstream release's definitions, pinned by
+# `traefik_k8s_crd_version` and `traefik_k8s_crd_sha256` (defaults/main.yml). They are
+# upstream's bytes, never hand-edited. No render may fetch a URL under D5, and the flip PR
+# renders this same file into traefik's bundle. Only the RBAC is authored locally (see
+# templates/rbac.yaml.j2 for why).
+# The path is the role's own files/ on the controller, which is the node: daniel-box runs
+# Ansible with connection=local.
 - name: Install the Traefik CRDs
   when: not k8s_no_mutate
   tags: [config]
   ansible.builtin.command:
-    cmd: >-
-      k3s kubectl apply -f
-      https://raw.githubusercontent.com/traefik/traefik/{{ traefik_k8s_crd_version }}/docs/content/reference/dynamic-configuration/kubernetes-crd-definition-v1.yml
+    cmd: k3s kubectl apply -f {{ role_path }}/files/crds/kubernetes-crd-definition-v1.yml
   register: traefik_k8s_crd_apply
   become: true
   changed_when: "'created' in traefik_k8s_crd_apply.stdout or 'configured' in traefik_k8s_crd_apply.stdout"
@@ -109,26 +111,3 @@
       {{ k3s_metallb_ingress_vip }}. MetalLB does not re-evaluate an existing allocation when
       pools or annotations change — delete the Service and redeploy to force reallocation.
     success_msg: "Traefik holds the reserved ingress VIP {{ k3s_metallb_ingress_vip }}"
-
-# The Cloudflare IP drift check lives in monitor-bridge
-# (roles/k8s/monitor-bridge/files/checks/cloudflare_ips.py): it reads no host state, and the
-# bridge re-probes a failure every cycle. These two tasks remove the host cron that used to run
-# it, and stay until every cluster host has seen a traefik deploy since the move. Ungated on purpose: removing this
-# cron is right on any host, whichever cluster it serves.
-- name: Remove the Cloudflare IP drift cron
-  tags: [cron]
-  ansible.builtin.cron:
-    name: "Cloudflare IP drift"
-    user: root
-    cron_file: cloudflare-ip-drift
-    state: absent
-  become: true
-  when: not k8s_dry_run | bool
-
-- name: Remove the Cloudflare IP drift script
-  tags: [cron]
-  ansible.builtin.file:
-    path: /usr/local/bin/cloudflare-ip-drift.sh
-    state: absent
-  become: true
-  when: not k8s_dry_run | bool

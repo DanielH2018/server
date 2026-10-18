@@ -1,10 +1,9 @@
 """media-volume's verify Job: prove /data/torrents and /data/media are one filesystem.
 
-Inert until media-volume's flip: `templates/verify-inert/` holds the Job, and the flip PR moves
-it to `templates/verify/`, where the renderer emits it into `media-volume-verify` (target slice
-D5, *A verify conversion lands as inert code*). It replaces the hardlink probe Job that
-`tasks/main.yml` applies on every deploy, and makes the same check: a file in torrents/ is
-hardlinked into media/, and the link count must read 2.
+`templates/verify/` holds the Job, and the renderer emits it into `media-volume-verify`, which
+Flux applies after `media-volume` (target slice D5). It replaced the hardlink probe Job that
+`tasks/main.yml` applied on every deploy until media-volume's flip, and makes the same check: a
+file in torrents/ is hardlinked into media/, and the link count must read 2.
 
 sonarr and radarr fall back to COPYING when an import crosses a filesystem boundary, with no
 error and no warning. So a split volume shows up only as double the space, months later. With

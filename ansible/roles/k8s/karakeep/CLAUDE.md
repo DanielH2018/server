@@ -6,7 +6,8 @@ loop to auto-tag bookmarks.
 
 ## At a glance
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates, tasks or containers_list entry, or the k3s role's Longhorn tier lists. -->
-- **Deploy tag:** `--tags "karakeep"`
+- **Applied by:** Flux, through `promote` (`owner: flux`); `deploy.sh` refuses
+  `--tags=karakeep` with exit 5
 - **Images:** `ghcr.io/karakeep-app/karakeep` (`karakeep_k8s_image`),
   `ghcr.io/karakeep-app/karakeep-chrome` (`karakeep_k8s_chrome_image`), `getmeili/meilisearch`
   (`karakeep_k8s_meili_image`), `<k8s_registry_pull_host>/karakeep`
@@ -14,13 +15,19 @@ loop to auto-tag bookmarks.
 - **Route:** `karakeep.<domain>` · `karakeep.local.<domain>`, Authelia one_factor
 - **Claims:** `karakeep-meili` (no backup (StorageClass longhorn-nobackup)), `karakeep-data`
   (weekly -> B2 (default target))
-- **Auto-deploy:** denylisted (`k8s_autodeploy: false`) — three reasons: (1) stateful —
-  meilisearch migrates its index in place on a bump, non-atomically; (2) probe-less time-tagger
-  sub-deployment; (3) migrating state — Recreate + RWO PVC. COUPLING NOTE for a future
-  promotion: karakeep-meili is deliberately excluded from the snapshot, so reverting
-  karakeep-data alone desyncs the search index until a manual reindex
 <!-- /generated_from -->
 
+- **Flux applies it, not Ansible** (#5652, Wave C). Its `containers_list` entry carries
+  `owner: flux`, so `deploy.sh`, the play and the GitOps deployer all skip it. A merged change
+  reaches the cluster when `promote` publishes and verifies the next bundle. To give it back
+  to Ansible, follow the two-PR handback in `docs/flux-deploy-plane.md`; a plain revert of the
+  flag leaves two writers on the objects. `k8s_autodeploy: false` still stops Renovate's
+  automerge of a pin bump.
+- **Three Kustomizations.** `karakeep-snapshot` snapshots `karakeep-data` before `karakeep`
+  applies, so the stateful hold (D5.2b1) covers every revision that moves it. `karakeep`
+  waits up to its 1200s `manifests_rollout_timeout`. `karakeep-verify` then runs the archive
+  pruner's gate (below). `tasks/main.yml` keeps the image-builder and manifests includes for
+  a handback, and no Flux path runs them.
 - **The Authelia bypass:** `/api/v1/`, `/api/trpc/` and `/api/assets`, deliberately public (Bearer-token auth; the
   browser extension and mobile app can't pass 2FA, and they speak tRPC, not the REST API).
   `/api/auth/*` (next-auth's password login) stays behind Authelia on both names: the bypass
@@ -53,9 +60,12 @@ loop to auto-tag bookmarks.
   manifest change, not just a Secret change — `MEILI_MASTER_KEY` and
   `KARAKEEP_PYTHON_API_KEY` are env vars, injected once at container start, so a key rotation
   that doesn't also roll these two sidecars leaves them on the old value while `karakeep`
-  itself gets the new one.
+  itself gets the new one. Under Flux the renderer reads the same list and stamps its restart
+  checksum annotation on `karakeep`, `karakeep-meilisearch` and `karakeep-time-tagger`, so a
+  change to the role's render rolls all three.
 - `karakeep-chrome` is listed too, with `restart_on: []` (#4564). The drain waits on the roll
   a `karakeep_k8s_chrome_image` bump makes, and no karakeep edit restarts chrome mid-crawl.
+  The renderer honours the empty list, so chrome gets no restart checksum.
   `ansible/tests/services/test_karakeep_chrome_rollout.py` pins both.
 - **The time-tagger's image is built in-cluster**, from `templates/Dockerfile.j2`, since #2672
   — one `chown` layer over the pinned `ghcr.io/astral-sh/uv` digest, plus `UV_CACHE_DIR=/uv-cache`.
@@ -64,9 +74,15 @@ loop to auto-tag bookmarks.
   image's own site-packages on every container start, and the uv cache was mounted at
   `/root/.cache/uv`, behind Debian's 0700 `/root`. The relocation is why the mount path and
   `UV_CACHE_DIR` have to move together. The base digest moved out of `defaults/main.yml` into
-  that `FROM` line, where Renovate's dockerfile manager reads it — a bump is realised by a
-  rebuild (`./scripts/deploy.sh --tags karakeep`), never by a pull, and `renovate.json`'s
-  denylist-marker rule lists the file because this role is `k8s_autodeploy: false`.
+  that `FROM` line, where Renovate's dockerfile manager reads it. A merged bump moves the
+  content tag, and promote's `images` job builds `ghcr.io/danielh2018/karakeep` and rolls the
+  pods that run it. `renovate.json`'s denylist-marker rule lists the file because this role
+  is `k8s_autodeploy: false`. The glance still shows `<k8s_registry_pull_host>`, because it
+  reads the defaults; the renderer rewrites the ref to GHCR with `imagePullPolicy:
+  IfNotPresent`. The image is 91.3 MB in six layers. On 2026-10-18 its largest layer
+  (28.2 MB) pulled from GHCR at 0.32-0.34 MB/s, so a cold pull takes about 270-290s, inside
+  the 1200s budget. `karakeep` is `Recreate`, so the pod is down for that pull whenever the
+  content tag moves, and no pre-pull covers it.
   The image is named `karakeep`, not `karakeep-time-tagger`: `k8s/manifests` keys
   `k8s_rebuilt_images` on `manifests_service`. The pod the rebuild has to roll is the tagger's,
   which `manifests_extra_rollouts` already covers.
@@ -77,6 +93,21 @@ loop to auto-tag bookmarks.
   pins it to the commit URL and sha256 the retired Docker role verified.
 - **`karakeep-archive-pruner`** (CronJob) prunes archived bookmarks by age, and only logs a
   dry run while `karakeep_k8s_pruner_apply` is false. Rules: `files/karakeep_archive_pruner.py`.
+- **The pruner's gate Job, in `karakeep-verify`.** `defaults/main.yml` names the CronJob in
+  `flux_cronjob_gates`, so the renderer copies it into the Job
+  `karakeep-archive-pruner-deploy-gate-<spec digest8>`, which Flux runs once per role revision
+  after `karakeep` reads Ready. It replaced `k8s/cronjob-gate`'s run. With
+  `karakeep_k8s_pruner_apply` true the run deletes, so the gate is a mutation and names its
+  rerun-safe test,
+  `ansible/roles/k8s/karakeep/tests/test_archive_pruner.py::test_a_second_run_changes_nothing`.
+  It keeps the CronJob's `app: karakeep-archive-pruner` label, which karakeep's `netpol_from`
+  already admits. Two things changed with the move, and the flip accepted both:
+    - **A failed run now holds the revision.** Any non-zero exit fails `karakeep-verify`,
+      including the pruner's deliberate abort on a bookmark that comes back without its tags.
+      `k8s/cronjob-gate` only reported a non-zero exit.
+    - **`Forbid` no longer keeps the 05:15 firing off a gate run.** The copy carries no
+      ownerReference to the CronJob. The rules key on age, so an overlapping run acts only on
+      what is already due.
 - The snapshot/revert pair (`k8s/volume-snapshot`/`k8s/volume-revert`) covers `karakeep-data`
   only — reverting it alone desyncs the search index until a manual reindex.
 - `karakeep-chrome` runs on a read-only root, so every path headless chromium writes needs its

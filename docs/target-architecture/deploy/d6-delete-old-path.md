@@ -138,7 +138,7 @@ reader that D6 does not delete.
     - **The annotation chain is host syslog.** Two emitters write a `deploy-annotation`
       line through `logger`: `deploy_io.emit_deploy_annotation` and `deploy.sh`'s
       `deploy_lib/playbook.py:annotate`. Alloy ships host syslog to loki-homelab, and
-      `scripts/grafana/inject_dashboard_annotations.py` adds one query to every provisioned
+      `ansible/filter_plugins/grafana_dashboards.py` adds one query to every provisioned
       dashboard, `ansible/roles/k8s/observability/defaults/main.yml:observability_deploy_annotation_expr`,
       which reads `{job="syslog"} |= "event=deploy" | logfmt`. The comment above that key
       names `deployer_lib/deploy_io.py` and "the emit_deploy_annotation comments", and
@@ -817,7 +817,7 @@ stream from D6.1 on, as D2 *Risks* hands it over, and D6.1b closes the gap below
   are three such promotions (D2 *Risks*). The `event=landing` line does not close the gap,
   because it marks the merge rather than the apply and only the Landings board reads it
   (Baseline). D6.1b adds a second annotation query beside
-  `observability_deploy_annotation_expr`, and `scripts/grafana/inject_dashboard_annotations.py`
+  `observability_deploy_annotation_expr`, and `ansible/filter_plugins/grafana_dashboards.py`
   adds both to every dashboard.
     - **The source is kustomize-controller's own log.** loki-homelab's Alloy DaemonSet ships
       every pod's logs, `flux-system`'s included. The query matches the line that
@@ -1377,7 +1377,7 @@ than writing a second.
                                                     scenario (D6.7c)
   ansible/roles/k8s/observability/defaults/main.yml + the kustomize-controller marker
                                                     query (D6.1b)
-  scripts/grafana/inject_dashboard_annotations.py   adds both queries (D6.1b)
+  ansible/filter_plugins/grafana_dashboards.py      adds both queries (D6.1b)
 + docs/adr/<next free>-the-cluster-deploys-from-a-ci-rendered-artifact-through-flux.md
   docs/adr/0010-pull-based-gitops-over-argo-and-flux.md   status: Superseded by ADR-NNNN
 ```
@@ -1918,7 +1918,7 @@ The steps merged in this order.
       for an apply that changed objects and one for a reconcile that changed nothing.
     - Add the second annotation query beside `observability_deploy_annotation_expr`, with
       its `job` label from `loki_streams`, and have
-      `scripts/grafana/inject_dashboard_annotations.py` add both queries.
+      `ansible/filter_plugins/grafana_dashboards.py` add both queries.
     - Add a clean and flagged pair to `ansible/tests/deploy/test_deploy_annotations.py`
       over the two captured lines. The apply line matches once, and the no-change line
       matches nothing. The red half is the matcher without its changed-object clause,
@@ -2782,7 +2782,7 @@ Each risk names the failure class from `docs/failure-classes.md` where one fits.
       which names the two emitters that remain (*Grafana's deploy markers after D6*);
     - the regenerated monitor-bridge copy of `gitops_markers.py`.
 - **D6.1b:** the marker pair in `ansible/tests/deploy/test_deploy_annotations.py`,
-  `scripts/grafana/inject_dashboard_annotations.py` and its test, and the comment above
+  `ansible/filter_plugins/grafana_dashboards.py` and its test, and the comment above
   `observability_deploy_annotation_expr`.
 - **D6.2a:**
     - the deployer-denylist tests, and the `denylist_rendered` row of

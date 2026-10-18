@@ -1,0 +1,39 @@
+{#
+  The verify Job's identity, INERT until observability's flip, as `job.yaml.j2` beside it is.
+
+  The Job reads one object, the `otel-collector` DaemonSet, so its Role grants `get` on that
+  name alone. It execs into nothing and lists nothing. The ServiceAccount mounts no token by
+  default; the Job's pod opts in, because it is the only pod that runs as this account.
+#}
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: observability-verify
+  namespace: {{ k8s_observability_namespace }}
+automountServiceAccountToken: false
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: observability-verify
+  namespace: {{ k8s_observability_namespace }}
+rules:
+  - apiGroups: ["apps"]
+    resources: ["daemonsets"]
+    resourceNames: ["otel-collector"]
+    verbs: ["get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: observability-verify
+  namespace: {{ k8s_observability_namespace }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: observability-verify
+subjects:
+  - kind: ServiceAccount
+    name: observability-verify
+    namespace: {{ k8s_observability_namespace }}

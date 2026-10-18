@@ -44,3 +44,9 @@ k8s_claims:  # noqa var-naming[no-role-prefix]
   - name: "{{ pi_peer_backup_k8s_claim }}"
     storage_class: "{{ pi_peer_backup_k8s_storage_class }}"
     size: "{{ pi_peer_backup_k8s_size }}"
+
+# Under Flux the renderer copies the CronJob into one verify Job per role revision, in
+# `pi-peer-backup-verify` (scripts/renderer/renderer_lib/cronjob_gate.py). It replaces the
+# k8s/cronjob-gate include in tasks/main.yml, which runs only after a handback.
+flux_cronjob_gates:  # noqa var-naming[no-role-prefix]
+  pi-peer-backup: {kind: verify}

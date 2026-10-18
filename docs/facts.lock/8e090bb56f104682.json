@@ -1,15 +1,20 @@
 {
-  "checksum": "cf38818c3212c18b3ba12d8827ea6b5e6734482ec71490c4c40bf4dff146acb7",
+  "checksum": "337f0ab8ebce77bd0734be8ca0493a6c1398ad8c23ea162616753fd586ea7905",
   "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
   "key": "ansible/roles/k8s/pi-peer-backup/CLAUDE.md#At a glance",
   "row": {
     "atoms": {
       "ansible/roles/k8s/configarr/CLAUDE.md": "99369e88f0ba7e1be6a3365fbab602c3d0c65e37c56a8f3ff924bb432e9e902b",
+      "ansible/roles/setup/k8s_host_files/files/pi-peer-backup-shell.sh": "f40a8b9e5ddd1043ead1335d89082179fa25b5772a010c691dd25521e97b9770",
+      "ansible/roles/setup/k8s_host_files/tasks/pi-peer-backup.yml": "1cacd6317f8ded990f3fc9bca1d63fc0e5c918700443ed57fd87be70fd3a5a70",
       "ansible/tests/services/test_pi_peer_backup_forced_command.py": "d9bcc82f5677a86c745d782326cf7cf6141f5262085061d7bd51946f0ab8115d",
       "ansible/tests/services/test_pi_peer_backup_host_key_failure.py": "3394838c1da615070808b74e086e196b990f174304550bca469781ebf9c1c7a8",
-      "docs/healthchecks-io-deadman.md": "16d890ed479e05acd6df8e8ba2f32ed2143b557828899827402414c016029c16"
+      "ansible/tests/setup/test_k8s_host_files_pairs.py": "d206ec0dc4cd0a817a9aef3f3a3edef2b10c565cf997ce16cc4bfbd4db3bafec",
+      "docs/flux-deploy-plane.md": "807c3deb44c3178e7a6f9fc0bc398a3b748b95c468b14ce9b1b890c8684535d9",
+      "docs/healthchecks-io-deadman.md": "16d890ed479e05acd6df8e8ba2f32ed2143b557828899827402414c016029c16",
+      "scripts/renderer/renderer_lib/cronjob_gate.py": "4eaddbf67a332ed20dd32ae71779223f8b69a824de4c64ddb0bd356536119847"
     },
     "python": "3.14",
-    "verified_sha": "1776466f3"
+    "verified_sha": "69b7772f1"
   }
 }
