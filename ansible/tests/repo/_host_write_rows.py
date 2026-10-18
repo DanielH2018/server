@@ -130,7 +130,6 @@ HOST_WRITE_ALLOW = {
     _K8S + "media-volume/tasks/main.yml": (
         "D5's `k8s_host_files` conversion PR for media-volume moves the media directories"
     ),
-    _K8S + "monitor-bridge/tasks/main.yml": _CONFIGMAP,
     _K8S + "observability/tasks/dashboards.yml": _CONFIGMAP,
     _K8S + "pi-peer-backup/tasks/main.yml": (
         "pi-peer-backup's Wave C PR moves both daniel-pi writes to `k8s_host_files`"

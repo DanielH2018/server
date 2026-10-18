@@ -31,6 +31,8 @@ A published tag whose role lists `render_sops_manifests` gets a byte copy of eac
 under `ansible/vars/cluster-manifests/` in `DIR/cluster/<tag>/`, and `decryption` on its
 Kustomization (D3.3c); a manifest without the substitute-disabled annotation fails the render.
 One with snapshot claims gets its snapshot Job in `DIR/cluster/<tag>-snapshot/` (`snapshot.py`).
+One whose role sets `flux_prepull_timeout` gets its pre-pull Jobs in `DIR/cluster/<tag>-prepull/`
+(`prepull.py`).
 A placeholder render also writes every image context `k8s/image-builder` builds, whatever
 tags it names: `DIR/images/<name>/` and `DIR/images/tags.json`, whose content tags each
 consumer's ref reads in the same render (`renderer_lib/images.py`, D5.4a1).
@@ -102,6 +104,7 @@ from renderer.renderer_lib.cluster import (
 from renderer.renderer_lib.images import TAGS_FILE, check_images, image_files
 from renderer.renderer_lib.images import ghcr_refs
 from renderer.renderer_lib.prune_label import label_tags
+from renderer.renderer_lib.prepull import attach_prepulls
 from renderer.renderer_lib.snapshot import attach_snapshots
 from renderer.renderer_lib.restart import restart_targets, restart_values, stamp
 from renderer.renderer_lib.restart import source_digests
@@ -342,6 +345,7 @@ def _placeholder_cluster(
         )
         tags = attach_vendored(tags, result.key_sets, vendored)
         tags = attach_snapshots(tags, published, rollout_timeout_default(), vendored)
+        tags = attach_prepulls(tags, published, vendored)
         bundle = (
             _bundle(
                 tags, result, out, published, cluster_file, ordering(owned), revision

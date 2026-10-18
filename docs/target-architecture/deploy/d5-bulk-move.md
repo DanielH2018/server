@@ -855,6 +855,11 @@ pass each time, because no pod is created after T0.
   `Recreate` (`spec_shell('Recreate')` in `grafana.yaml.j2`), so no server runs beside the
   initContainer. observability's conversion PR checks on the pinned image that the CLI works
   against the database with no server running.
+  The initContainer landed live under Ansible ahead of the flip (#5262), and the role's
+  restart task rolls grafana on a rotation until the flip. That PR deleted "Sync the live
+  Grafana admin password with SOPS" and kept the restart task. On `grafana/grafana:13.2.3`,
+  the CLI reset the password in a database that a stopped server had initialised. It also
+  created the database and the admin user on an empty data directory.
 - **Tests in `scripts/renderer/tests/`.** An Alertmanager Secret edit moves alertmanager's
   annotation and no other workload's. A pihole ConfigMap edit moves both instance templates,
   instance 2's inside `pihole-deferred`. D3's tests already cover cloudflare-ddns and a YAML
@@ -3941,6 +3946,12 @@ includes valheim's initContainer.
     `timeout` bounds that wait, and a failed pre-pull delays only tdarr. Resolution:
     tdarr's conversion PR names the kind, and the publish census admits it in the same PR.
     The suffix needs a C3 per-tag-kind amendment and a reserved name in D5.1a1's list.
+    **Answered by #5525** for code-server, whose GHCR pull hit the same outage first. The
+    kind is `<tag>-prepull`, and any role opts in with `flux_prepull_timeout` in its
+    defaults, so tdarr's conversion PR sets that key rather than naming a kind. C3 carries the
+    amendment and the reserved suffix. The Job copies the workload's placement rather than
+    pinning a node, and it sets no deadline, so a slow pull delays the tag instead of wedging
+    it (`docs/flux-deploy-plane.md`, *The pre-pull Job*).
 
 ## Review log
 

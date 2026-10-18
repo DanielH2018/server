@@ -17,6 +17,7 @@ import flux_soak
 from _soak_world import OTHER, R, T0, W, World, alert, iso, run
 from renderer.renderer_lib.ordering import (
     DEFERRED_SUFFIX,
+    PREPULL_SUFFIX,
     SNAPSHOT_SUFFIX,
     VERIFY_SUFFIX,
 )
@@ -169,5 +170,6 @@ def test_the_reserved_suffixes_match_the_renderers():
     assert set(flux_soak.RESERVED_SUFFIXES) == {
         DEFERRED_SUFFIX,
         SNAPSHOT_SUFFIX,
+        PREPULL_SUFFIX,
         VERIFY_SUFFIX,
     }
