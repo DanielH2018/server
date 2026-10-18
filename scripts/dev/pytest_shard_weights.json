@@ -977,6 +977,7 @@
  "scripts/dev/tests/test_fanout_clean_convergence.py": 0.0,
  "scripts/dev/tests/test_fanout_clean_real_git.py": 0.18,
  "scripts/dev/tests/test_fanout_cli.py": 0.0,
+ "scripts/dev/tests/test_fanout_effort.py": 0.12,
  "scripts/dev/tests/test_fanout_entrypoint.py": 0.87,
  "scripts/dev/tests/test_fanout_git_state.py": 0.23,
  "scripts/dev/tests/test_fanout_green_gate_test_code.py": 8.39,

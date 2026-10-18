@@ -322,7 +322,7 @@ class Pipeline:
             *(prefix or self._stop_hook()),
             "-p", "--model", "opus", "--permission-mode", "auto",
             "--output-format", "json", "--max-budget-usd", str(BUDGET_USD),
-            "--append-system-prompt", self.headless_prompt + prompt,
+            "--append-system-prompt", self.headless_prompt + prompt, "--effort", "medium",
         ]  # fmt: skip
 
     def _red_author(self) -> list[str]:
@@ -330,7 +330,7 @@ class Pipeline:
             *self._stop_hook(),
             "-p", "--model", "opus", "--permission-mode", "auto",
             "--output-format", "json", "--max-budget-usd", str(REVIEW_BUDGET_USD),
-            "--json-schema", json.dumps(RED_SCHEMA),
+            "--json-schema", json.dumps(RED_SCHEMA), "--effort", "medium",
         ]  # fmt: skip
 
     def _resume(self) -> list[str]:
