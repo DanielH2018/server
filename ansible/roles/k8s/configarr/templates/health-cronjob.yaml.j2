@@ -86,13 +86,11 @@ spec:
                 # The ConfigMap mount is read-only, so Python cannot write __pycache__ there.
                 - name: PYTHONDONTWRITEBYTECODE
                   value: "1"
-                - name: KUMA_URL
-                  value: http://uptime-kuma.{{ k8s_namespace }}.svc.cluster.local:{{ containers_list | entry_port('uptime-kuma') }}
-                - name: KUMA_PUSH_TOKEN
+                - name: KUMA_PUSH_URL
                   valueFrom:
                     secretKeyRef:
                       name: configarr-health
-                      key: kuma_push_token
+                      key: push_url
 {{ job_hardened_security_context(read_only=true) }}
               volumeMounts:
                 - name: configarr-health-code

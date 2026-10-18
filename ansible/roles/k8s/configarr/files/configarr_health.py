@@ -7,15 +7,16 @@ monitor. It never exits nonzero on a bad verdict: a DOWN is data to report, not 
 Runs as the configarr-health CronJob (templates/health-cronjob.yaml.j2), in the repo's pinned
 python image, with kubectl copied in by an init container and the pod's own ServiceAccount
 (templates/health-rbac.yaml.j2) as its credential. host_lib.py and kuma_push.py sit beside it
-in the same ConfigMap. The push token reaches it as KUMA_PUSH_TOKEN, from the configarr-health
-Secret through `secretKeyRef`, so it is never in the ConfigMap or in this file.
+in the same ConfigMap. The push URL, which carries the token, reaches it as KUMA_PUSH_URL from
+the configarr-health Secret through `secretKeyRef`, so the token is never in the ConfigMap or in
+this file.
 
 Usage:
 
     python3 /config/configarr_health.py
 
-Takes no arguments. `-h` and `--help` print this text and exit 0. With KUMA_URL or
-KUMA_PUSH_TOKEN empty it pushes nothing and prints one tab-separated line, `up<TAB>msg` or
+Takes no arguments. `-h` and `--help` print this text and exit 0. With KUMA_PUSH_URL empty,
+or naming no `/api/push/<token>` path, it pushes nothing and prints one tab-separated line, `up<TAB>msg` or
 `down<TAB>msg`, which is how a hand run reads the verdict.
 
 Environment (all optional):
@@ -25,8 +26,7 @@ Environment (all optional):
     CONFIGARR_MAX_AGE_H          hours before the last finished Job counts as stale (default 26)
     CONFIGARR_KUBECTL            kubectl command line (default "k3s kubectl")
     CONFIGARR_KUBECTL_TIMEOUT_S  seconds allowed per kubectl call (default 30)
-    KUMA_URL                     base URL of Uptime Kuma, such as its in-cluster Service
-    KUMA_PUSH_TOKEN              token of the Configarr Sync push monitor
+    KUMA_PUSH_URL                the Configarr Sync push monitor's URL, `<base>/api/push/<token>`
 """
 
 from __future__ import annotations
@@ -133,8 +133,10 @@ def main(
             ),
         )
     status = "up" if ok else "down"
-    base = os.environ.get("KUMA_URL", "")
-    token = os.environ.get("KUMA_PUSH_TOKEN", "")
+    # One URL rather than a base and a token, so the Secret's value is not a whole-scalar
+    # placeholder: one would join k8s/manifests' standalone guard map, and a change to that
+    # map fans a landing's narrowed apply out to every role that includes k8s/manifests.
+    base, _, token = os.environ.get("KUMA_PUSH_URL", "").partition("/api/push/")
     if not base or not token:
         print("%s\t%s" % (status, msg))
         return 0

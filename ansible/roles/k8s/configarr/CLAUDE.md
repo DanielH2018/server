@@ -40,8 +40,11 @@ x265 re-encode instead, which made Jellyfin buffer and seek slowly.
 - **The health reader was a daniel-box host cron until H2.5b.** `tasks/main.yml` keeps absent
   arms for the cron, `/opt/configarr-health`, `/usr/local/bin/configarr-health.sh` and the
   `configarr` drift fragment, ahead of the manifests include.
-- **The push token lives in its own Secret, `configarr-health`** (`templates/health-secret.yaml.j2`),
-  and reaches the pod as `KUMA_PUSH_TOKEN` through `secretKeyRef`. The reader's code ships in the
+- **The push URL, token included, lives in its own Secret, `configarr-health`**
+  (`templates/health-secret.yaml.j2`), and reaches the pod as `KUMA_PUSH_URL` through
+  `secretKeyRef`. It is a whole URL rather than a bare token so that it stays out of
+  `ansible/roles/k8s/manifests/files/standalone_secret_keys.json`: a change to that file fans a
+  narrowed apply out to every `k8s/manifests` caller. The reader's code ships in the
   `configarr-health` ConfigMap, beside `host_lib.py` and `kuma_push.py` from `setup/common`, and
   no secret goes in it (`ansible/tests/k8s/test_no_secret_in_a_moved_jobs_configmap.py`).
 - **The health pod carries `app: configarr-health`, never `app: configarr`.** The reader judges

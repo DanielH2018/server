@@ -146,8 +146,8 @@ def test_a_substitute_value_changed_by_one_byte_is_flagged(
     )
     printed = capsys.readouterr().out
     assert "changed by one byte" in printed
-    # The proof changes configarr's first standalone key, the Kuma push token, which only the
-    # configarr-health Secret carries.
+    # The proof changes configarr's first secret key in sorted order, the Kuma push token,
+    # which only the configarr-health Secret carries.
     assert "configarr: Secret/homelab/configarr-health differs" in printed
 
 

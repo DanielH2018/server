@@ -36,8 +36,10 @@ _NOW = 1792301426.0
 @pytest.fixture
 def pushes(monkeypatch) -> list[tuple]:
     """Sets the push environment; each push the stub below receives lands in the list."""
-    monkeypatch.setenv("KUMA_URL", "http://uptime-kuma.homelab.svc.cluster.local:3001")
-    monkeypatch.setenv("KUMA_PUSH_TOKEN", "tok")
+    monkeypatch.setenv(
+        "KUMA_PUSH_URL",
+        "http://uptime-kuma.homelab.svc.cluster.local:3001/api/push/tok",
+    )
     return []
 
 
@@ -53,7 +55,7 @@ def _replies(replies: dict[str, tuple[int, str]]):
     return lambda *argv: replies[argv[0]]
 
 
-def test_a_clean_sync_is_pushed_up_with_the_token_from_the_environment(pushes, capsys):
+def test_a_clean_sync_is_pushed_up_to_the_url_from_the_environment(pushes, capsys):
     kubectl = _replies({"get": (0, json.dumps(_JOBS)), "logs": (0, "Done\n")})
     assert _main(pushes, kubectl) == 0
     [(status, msg, base, token)] = pushes
@@ -79,7 +81,7 @@ def test_a_reader_that_raises_pushes_down_naming_the_exception(pushes):
 def test_with_no_token_it_prints_the_verdict_and_pushes_nothing(
     monkeypatch, pushes, capsys
 ):
-    monkeypatch.setenv("KUMA_PUSH_TOKEN", "")
+    monkeypatch.setenv("KUMA_PUSH_URL", "")
     assert _main(pushes, _replies({"get": (1, "Forbidden")})) == 0
     assert pushes == []
     assert capsys.readouterr().out == "down\tcannot read Jobs in homelab: Forbidden\n"

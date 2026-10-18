@@ -314,7 +314,7 @@ def test_the_configarr_health_role_grants_every_call_its_reader_makes(
         argvs.append(["kubectl", "-n", "homelab", *args])
         return 0, replies[args[0]]
 
-    monkeypatch.delenv("KUMA_PUSH_TOKEN", raising=False)
+    monkeypatch.delenv("KUMA_PUSH_URL", raising=False)
     assert reader.main(kubectl=record) == 0
     assert [argv[3] for argv in argvs] == ["get", "logs"]
     docs = list(
