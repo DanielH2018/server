@@ -104,9 +104,10 @@ def _clear(tmp_path):
 def test_finished_batches_do_not_count_against_the_cap_on_either_host(tmp_path):
     """#5497 and #5506: 3 uncleaned batches, 2 finished, so 1 running and the launch places.
 
-    Run on this host and on the other, because only the other costs an ssh connection.
+    Run on both fleet hosts by name rather than by the hostname of the machine running the
+    test, which is not a fleet host on a CI runner.
     """
-    for host in (socket.gethostname(), _another_host()):
+    for host in ("daniel-box", "daniel-server"):
         _three_uncleaned(tmp_path, host)
         reply = _headroom_with(
             _unit_state("91", running=False),
@@ -120,7 +121,7 @@ def test_finished_batches_do_not_count_against_the_cap_on_either_host(tmp_path):
 
 def test_reading_the_unit_states_makes_no_extra_ssh_call(tmp_path):
     """The ssh budget is 5 per 30s: headroom, health, one launch is 3, with units or not."""
-    remote = _another_host()
+    remote = "daniel-server"
     _three_uncleaned(tmp_path, remote)
     reply = _headroom_with(*(_unit_state(str(n), running=False) for n in (91, 92, 93)))
     code, run = _launch_pinned(tmp_path, remote, reply)
@@ -132,7 +133,7 @@ def test_reading_the_unit_states_makes_no_extra_ssh_call(tmp_path):
 
 
 def test_three_running_batches_still_refuse_the_launch(tmp_path, capsys):
-    remote = _another_host()
+    remote = "daniel-server"
     _three_uncleaned(tmp_path, remote)
     reply = _headroom_with(*(_unit_state(str(n), running=True) for n in (91, 92, 93)))
     code, run = _launch_pinned(tmp_path, remote, reply)
@@ -143,7 +144,7 @@ def test_three_running_batches_still_refuse_the_launch(tmp_path, capsys):
 
 def test_a_unit_state_that_cannot_be_read_counts_as_running(tmp_path, capsys):
     """Fail closed: no marker, an empty section and a missing block each leave the batch counted."""
-    remote = _another_host()
+    remote = "daniel-server"
     replies = (
         ok(HEADROOM),
         _headroom_with(),
