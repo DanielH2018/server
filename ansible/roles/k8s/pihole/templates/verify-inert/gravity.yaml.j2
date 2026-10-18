@@ -1,0 +1,140 @@
+{#
+  The gravity reconcile as a post-apply mutation Job, INERT until pihole's flip. Nothing renders
+  `templates/verify-inert/`; the flip PR renames it to `templates/verify/`, and the renderer
+  then emits this file into `pihole-verify`. That Kustomization depends on `pihole-deferred`
+  with `wait: true`, so the Job starts once both instances are Ready, as the Ansible tasks run
+  after `roll_one.yml` (D5, *Post-apply mutation Jobs share `<tag>-verify`*).
+
+  It runs `files/pihole_gravity.py` against each FTL's REST API, so it needs neither
+  `pods/exec` (D5 Open question 14) nor any RBAC: the API is reached through the two web
+  Services, `pihole` and `pihole-2-web`, each of which selects one instance.
+
+  DECIDED: the spec embeds a digest of the inputs that roll either instance, the ones
+  `checksum/restart` hashes under Flux (`scripts/renderer/renderer_lib/restart.py`): both
+  rendered Deployments, the `pihole-dns-config` ConfigMap, the `pihole-env` Secret template, and
+  the `cluster-vars.source` digest of each key it reads. So the reconcile runs on every revision
+  that rolls a Pi-hole, and the declaration itself renames the ConfigMap and with it the Job.
+  A run that finds everything declared writes nothing and rebuilds nothing. The accepted gap:
+  a lost `pihole-etc` volume with no roll gets no reconcile until the next revision, because
+  nothing in the render moves.
+
+  DECIDED: the pod carries `app: pihole-gravity`, which netpol-baseline's
+  `networkpolicy-pihole.yaml.j2` admits on port 80. The caller census is two dials, to
+  pihole:80 and pihole-2-web:80, both through that one fence. No exec remains.
+#}
+{% set script_name = 'pihole_gravity.py' %}
+{% set script_dir = '/job' %}
+{% set declared = {
+  'adlists': pihole_k8s_adlists,
+  'regex_deny': pihole_k8s_regex_deny,
+} %}
+{% set data = {
+  script_name: lookup('file', playbook_dir + '/roles/k8s/pihole/files/' + script_name, rstrip=False),
+  'flux_job_connect.py': flux_job_connect,
+  'declared.json': declared | to_json(sort_keys=True),
+} %}
+{% set configmap_name = 'pihole-gravity-' + ({'data': data, 'binaryData': {}} | to_json(sort_keys=True, separators=(',', ':')) | hash('sha256'))[:8] %}
+{#- The roll inputs of both instances, as `checksum/restart` hashes them; see the note above.
+    The Secret template is read raw, never rendered, and `cluster-vars.source` holds a digest of
+    each key's ciphertext, so no value enters the hash. -#}
+{% set roll = namespace(
+  text=lookup('template', 'deployment.yaml.j2') + lookup('template', 'deployment-2.yaml.j2')
+    + lookup('template', 'configmap.yaml.j2'),
+  secrets=lookup('file', playbook_dir + '/roles/k8s/pihole/templates/secret.yaml.j2'),
+) %}
+{% for line in lookup('file', playbook_dir + '/vars/cluster-vars.source').splitlines() if line and not line.startswith('#') and ('{{ ' + line.split()[0] + ' ') in roll.secrets %}
+{% set roll.text = roll.text + line %}
+{% endfor %}
+{% set roll_digest8 = ((roll.text + roll.secrets) | hash('sha256'))[:8] %}
+{% set spec_text %}
+# No retry. A retry logs in again, and a mutation that failed partway is safer read by a
+# person than repeated. A failed reconcile waits for the next revision or a hand run.
+backoffLimit: 0
+# Two logins and two reads, then, after a change, two gravity rebuilds of one to two minutes
+# each. `<tag>-verify`'s timeout rises to this plus 60s (`ordering.verify_timeout`).
+activeDeadlineSeconds: 600
+template:
+  metadata:
+    labels:
+      # A peer of the pihole fence; see the DECIDED note above.
+      app: pihole-gravity
+  spec:
+    serviceAccountName: pihole-verify
+    # The Job reads FTL's API, not the Kubernetes API, so its pod holds no token.
+    automountServiceAccountToken: false
+    restartPolicy: Never
+    enableServiceLinks: false
+    securityContext:
+      runAsNonRoot: true
+      runAsUser: 65534
+      runAsGroup: 65534
+      seccompProfile:
+        type: RuntimeDefault
+    containers:
+      - name: gravity
+        image: {{ flux_job_image }}
+        command:
+          - python3
+          - {{ script_dir }}/{{ script_name }}
+        env:
+          - name: PIHOLE_TARGETS
+            value: >-
+              pihole=http://pihole.{{ k8s_namespace }}.svc.cluster.local:{{ container_item.port }}
+              pihole-2=http://pihole-2-web.{{ k8s_namespace }}.svc.cluster.local:{{ container_item.port }}
+          # FTL's own admin password, from the Secret both instances read, as pihole-exporter
+          # reads it. A secretKeyRef keeps the value out of the spec and its digest.
+          - name: PIHOLE_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: pihole-env
+                key: FTLCONF_webserver_api_password
+          - name: DECLARED_PATH
+            value: {{ script_dir }}/declared.json
+          # Renames the Job whenever either Pi-hole rolls; see the note above.
+          - name: PIHOLE_ROLL_DIGEST8
+            value: "{{ roll_digest8 }}"
+          - name: PYTHONDONTWRITEBYTECODE
+            value: "1"
+        resources:
+          requests:
+            cpu: 10m
+            memory: 32Mi
+          limits:
+            memory: 64Mi
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+              - ALL
+        volumeMounts:
+          - name: script
+            mountPath: {{ script_dir }}
+            readOnly: true
+    volumes:
+      - name: script
+        configMap:
+          name: {{ configmap_name }}
+{% endset %}
+{% set spec = spec_text | from_yaml %}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ configmap_name }}
+  namespace: {{ k8s_namespace }}
+data:
+{% for key, text in data | dictsort %}
+  {{ key }}: {{ text | to_json }}
+{% endfor %}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: pihole-gravity-{{ (spec | to_json(sort_keys=True, separators=(',', ':')) | hash('sha256'))[:8] }}
+  namespace: {{ k8s_namespace }}
+  annotations:
+    homelab/job-kind: mutation
+    homelab/rerun-safe: ansible/roles/k8s/pihole/tests/test_pihole_gravity.py::test_a_second_run_writes_nothing_and_rebuilds_nothing
+spec:
+{{ spec_text | indent(2, true) }}

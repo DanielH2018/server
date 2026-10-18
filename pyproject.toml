@@ -325,6 +325,7 @@ extra-paths = [
   "ansible/roles/k8s/configarr/files",
   "ansible/roles/k8s/janitorr/files",
   "ansible/roles/k8s/qbittorrent/files",
+  "ansible/roles/k8s/pihole/files",
   "ansible/roles/k8s/arr-notification/files",
   "ansible/roles/k8s/manifests/files",
   "ansible/roles/setup/fake_remux/files",
