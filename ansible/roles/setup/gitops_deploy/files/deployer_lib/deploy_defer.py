@@ -184,7 +184,8 @@ def route_secret_readers(
 
     `setup_tags_for` derives setup tags from paths, and `secrets.yml` sits under no setup
     role, so PR #5405's new key for `claude_code` applied nothing and the role ran by hand.
-    Each reader path goes through `setup_roles_for`, as a changed path would, and the roles
+    Each reader path goes through `setup_roles_for`, as a changed path would, less the
+    shippers of a vars file that read none of its secret-built keys, and the roles
     join `cs.setup_roles` with the plane flags set: `handle_broad` then applies the ones this
     host runs and records the rest in `manual_plane`, exactly as for a role's own edit.
 
@@ -195,7 +196,9 @@ def route_secret_readers(
     if not cs.secrets:
         return
     try:
-        paths = tools.secret_setup_readers(config.repo, target.local, target.origin)
+        paths, unread = tools.secret_setup_readers(
+            config.repo, target.local, target.origin
+        )
     except Exception as exc:
         log(
             f"secret-readers: no setup role routed for the secrets.yml change "
@@ -203,7 +206,7 @@ def route_secret_readers(
             level=WARNING,
         )
         return
-    roles = {role for p in paths for role in setup_roles_for(p)}
+    roles = {r for p in paths for r in setup_roles_for(p) - set(unread.get(p, ()))}
     if not roles:
         return
     log(

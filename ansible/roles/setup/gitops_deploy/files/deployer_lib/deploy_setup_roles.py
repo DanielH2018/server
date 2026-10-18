@@ -40,6 +40,7 @@ ROUTING_SCRIPT = "scripts/deploy_tools/setup_routing.py"
 # Three playbooks and the vars files, parsed once: 0.8s measured under a loaded suite run.
 # Thirty seconds is the wedged case, as for the setup narrowing (`NARROW_SETUP_TIMEOUT_S`).
 ROUTING_TIMEOUT_S = 30.0
+# A grep per changed key: 0.4s measured over PR #5405's commit, so the routing bound serves.
 SECRET_READERS_SCRIPT = "scripts/deploy_tools/secret_setup_readers.py"
 
 
@@ -133,18 +134,22 @@ def derive_routing(
     return routes_from_json(r.stdout)
 
 
-def secret_setup_readers(repo: str, old: str, new: str) -> list[str]:
+def secret_setup_readers(
+    repo: str, old: str, new: str
+) -> tuple[list[str], dict[str, list[str]]]:
     """Run `secret_setup_readers.py` over `old..new` in `repo`.
 
     Returns:
-        Every file under `ansible/roles/setup/` at `new` naming a `secrets.yml` key whose
-        ciphertext differs across the range. Empty when no key moved, or none a setup role reads.
+        (paths, unread). `paths` is every file under `ansible/roles/setup/` at `new` naming a
+        `secrets.yml` key whose ciphertext differs across the range, empty when none does.
+        `unread` maps a shipped vars file among them to the shippers that read no key of it
+        built from a moved secret.
 
     Raises:
         subprocess.TimeoutExpired: the child outlived `ROUTING_TIMEOUT_S`.
         RuntimeError: the child exited non-zero, which is its refusal; the message is its
             stderr.
-        ValueError: its stdout is not a JSON list of strings.
+        ValueError: its stdout is not that JSON object.
         OSError: the child could not be started.
     """
     r = subprocess.run(
@@ -157,10 +162,17 @@ def secret_setup_readers(repo: str, old: str, new: str) -> list[str]:
     )
     if r.returncode != 0:
         raise RuntimeError(r.stderr.strip() or f"exited {r.returncode}")
-    paths = json.loads(r.stdout)
-    if not isinstance(paths, list) or not all(isinstance(p, str) for p in paths):
-        raise ValueError(f"not a JSON list of paths: {r.stdout.strip()[:200]!r}")
-    return paths
+    data = json.loads(r.stdout)
+    paths = data.get("paths") if isinstance(data, dict) else None
+    unread = data.get("unread") if isinstance(data, dict) else None
+    if not (
+        isinstance(paths, list)
+        and all(isinstance(p, str) for p in paths)
+        and isinstance(unread, dict)
+        and all(isinstance(v, list) for v in unread.values())
+    ):
+        raise ValueError(f"not the secret-readers JSON: {r.stdout.strip()[:200]!r}")
+    return paths, unread
 
 
 def current_routing() -> dict[str, SetupRoute] | None:

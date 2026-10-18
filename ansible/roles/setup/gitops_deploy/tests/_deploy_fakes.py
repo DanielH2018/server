@@ -109,6 +109,8 @@ class ScriptedTick:
         # What `secret_setup_readers.py` answers: the setup files naming a moved secrets.yml
         # key. Empty by default, which is a range whose keys no setup role reads.
         self.secret_readers: list[str] = []
+        # Its `unread` half: the shippers of a reader vars file that read none of its keys.
+        self.secret_unread: dict[str, list[str]] = {}
         # Raised instead of answering, for `route_secret_readers`'s fallback.
         self.secret_readers_error: Exception | None = None
         self.discord_ok = True
@@ -275,7 +277,9 @@ class ScriptedTick:
             raise self.narrow_setup_error
         return self.narrow_setup.get(role, (1, ""))
 
-    def secret_setup_readers(self, _repo: str, old: str, new: str) -> list[str]:
+    def secret_setup_readers(
+        self, _repo: str, old: str, new: str
+    ) -> tuple[list[str], dict[str, list[str]]]:
         """The scripted reader paths, asserted against THIS tick's own range."""
         assert (old, new) == (self.local, self.origin), (
             f"the secret readers were asked about {old[:8]}..{new[:8]}, not this tick's "
@@ -284,7 +288,7 @@ class ScriptedTick:
         self.log.append(("secret_readers", [old, new]))
         if self.secret_readers_error is not None:
             raise self.secret_readers_error
-        return list(self.secret_readers)
+        return list(self.secret_readers), dict(self.secret_unread)
 
     def emit_deploy_annotation(self, services: set[str], _sha: str) -> None:
         self.log.append(("annotation", set(services)))

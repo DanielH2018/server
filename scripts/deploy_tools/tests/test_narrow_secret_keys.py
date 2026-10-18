@@ -6,6 +6,8 @@ Each value stands in for ciphertext, which SOPS leaves byte-identical for a key 
 not touch.
 """
 
+import json
+
 import pytest
 
 import narrow_setup
@@ -124,11 +126,12 @@ SETUP_PLAY = """\
 """
 
 
-def _setup_readers(tree: Tree, capsys) -> tuple[int, str]:
+def _setup_readers(tree: Tree, capsys) -> tuple[int, dict]:
     """`secret_setup_readers.py` over the tree's last commit, as the tick runs it."""
     old, new = _refs(tree)
     rc = secret_setup_readers.main([old, new, "--repo", str(tree.root)])
-    return rc, capsys.readouterr().out.strip()
+    out = capsys.readouterr().out.strip()
+    return rc, json.loads(out) if out else {}
 
 
 def test_a_new_key_a_setup_role_reads_names_that_roles_file(tree: Tree, capsys):
@@ -136,13 +139,13 @@ def test_a_new_key_a_setup_role_reads_names_that_roles_file(tree: Tree, capsys):
     tree.write(SECRETS, _with(BASE_SECRETS, "new_setup_token", "eee"))
     assert _setup_readers(tree, capsys) == (
         0,
-        '["ansible/roles/setup/claude_code/templates/env.j2"]',
+        {"paths": ["ansible/roles/setup/claude_code/templates/env.j2"], "unread": {}},
     )
 
 
 def test_a_key_only_a_k8s_role_reads_names_no_setup_file(tree: Tree, capsys):
     tree.write(SECRETS, _with(BASE_SECRETS, "jellyfin_api_key", "zzz"))
-    assert _setup_readers(tree, capsys) == (0, "[]")
+    assert _setup_readers(tree, capsys) == (0, {"paths": [], "unread": {}})
 
 
 def test_a_key_the_play_reads_refuses_the_setup_answer(tree: Tree, capsys):
@@ -150,7 +153,42 @@ def test_a_key_the_play_reads_refuses_the_setup_answer(tree: Tree, capsys):
     tree.write("ansible/deploy.yml", PLAY + "    k: '{{ setup_only_token }}'\n")
     tree.commit("the play reads a secret")
     tree.write(SECRETS, _with(BASE_SECRETS, "setup_only_token", "xxx"))
-    assert _setup_readers(tree, capsys) == (secret_setup_readers.FAILED, "")
+    assert _setup_readers(tree, capsys) == (secret_setup_readers.FAILED, {})
+
+
+CLAUDE_DEFAULTS = "ansible/roles/setup/claude_code/defaults/main.yml"
+
+
+def _ship_claude_defaults(tree: Tree, initial_setup_reads: str) -> None:
+    """claude_code's defaults build one key from a secret, and initial_setup ships the file.
+
+    The shape is the real tree's row in `SETUP_FILES_SHIPPED_BY_OTHER_ROLES` (#4303), which
+    this reads unpatched: a change to that row changes what these tests exercise.
+    """
+    tree.write(
+        CLAUDE_DEFAULTS,
+        'claude_built_token: "{{ setup_only_token }}"\nclaude_plain: 1\n',
+    )
+    tree.write(
+        "ansible/roles/setup/initial_setup/tasks/main.yml",
+        f"- name: Read\n  debug: {{msg: '{{{{ {initial_setup_reads} }}}}'}}\n",
+    )
+    tree.commit("a shipped defaults file")
+    tree.write(SECRETS, _with(BASE_SECRETS, "setup_only_token", "xxx"))
+
+
+def test_a_shipper_reading_none_of_the_secrets_keys_is_unread(tree: Tree, capsys):
+    """initial_setup ships claude_code's defaults for one plain key, so a secret skips it."""
+    _ship_claude_defaults(tree, "claude_plain")
+    rc, out = _setup_readers(tree, capsys)
+    assert rc == 0 and out["unread"] == {CLAUDE_DEFAULTS: ["initial_setup"]}
+
+
+def test_a_shipper_reading_a_key_built_from_the_secret_is_a_reader(tree: Tree, capsys):
+    """The rejecting half: the key built from the secret reaches initial_setup's task."""
+    _ship_claude_defaults(tree, "claude_built_token")
+    rc, out = _setup_readers(tree, capsys)
+    assert rc == 0 and CLAUDE_DEFAULTS in out["paths"] and out["unread"] == {}
 
 
 def _role_tags(tree: Tree, old: str, new: str) -> frozenset[str]:
@@ -195,3 +233,24 @@ def test_a_secret_the_role_does_not_read_leaves_its_answer(setup_tree: Tree):
     setup_tree.write(SECRETS, _with(BASE_SECRETS, "jellyfin_api_key", "zzz"))
     with pytest.raises(narrow_setup.NothingToApply):
         _role_tags(setup_tree, *_refs(setup_tree))
+
+
+def test_a_shipper_reading_none_of_the_secrets_keys_keeps_its_narrow_answer(
+    tree: Tree,
+):
+    """`role_tags` takes the routing's rule: initial_setup's prose edit still needs nothing."""
+    _ship_claude_defaults(tree, "claude_plain")
+    tree.write(
+        "ansible/initial_setup.yml", SETUP_PLAY.replace("claude_code", "initial_setup")
+    )
+    tree.write("ansible/roles/setup/initial_setup/CLAUDE.md", "# initial_setup\n")
+    old, new = _refs(tree)
+    with pytest.raises(narrow_setup.NothingToApply):
+        narrow_setup.role_tags(
+            "initial_setup",
+            "initial_setup",
+            old,
+            new,
+            str(tree.root),
+            "ansible/initial_setup.yml",
+        )

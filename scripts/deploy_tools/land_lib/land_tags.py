@@ -93,7 +93,8 @@ _ROTATION_NOTE = (
     "holds a stale copy and prints the exact repair command per plane. Where it names a "
     "`CROSS_HOST_PUSH_TOKENS` member — the set `consumer_tags()` in that same file returns "
     "EMPTY for — the two halves sit on different hosts or planes, so no single redeploy covers "
-    "both and each carries a written reason for what to run instead."
+    "both and each carries a written reason for what to run instead. The GitOps tick applies "
+    "a setup role that reads a changed key and that its own host runs (#5436)."
 )
 
 # The two files whose change moves the Secret `homelab-cluster-vars`, which every

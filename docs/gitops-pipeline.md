@@ -836,7 +836,11 @@ those tags (a failed bump on a broad tick writes one) and leaves any other broad
   tick, with or without a deploy-plane path. `deploy_defer.route_secret_readers` runs
   `scripts/deploy_tools/secret_setup_readers.py`, which greps `roles/setup/` at origin for each
   key whose ciphertext changed. Each hit goes through `setup_roles_for`, so the role joins
-  `cs.setup_roles` as its own edit would. `handle_broad` applies the ones this host runs, and
+  `cs.setup_roles` as its own edit would. A role shipping another role's `defaults/` or
+  `vars/` file joins only when it names a key of that file built from the secret
+  (`secret_keys.reads_through`): `initial_setup` ships `claude_code`'s defaults for one
+  unrelated key, and without the check every `claude_code` rotation applied all of
+  `--tags initial_setup`. `handle_broad` applies the ones this host runs, and
   `narrow_setup.role_tags` gives each the whole-role tag, because which of its tasks read the
   key is not derived. A role another playbook applies, such as `k3s` for `wifi_password`, is
   recorded in `manual_plane`. A key a play, a shared template or an inventory value reads

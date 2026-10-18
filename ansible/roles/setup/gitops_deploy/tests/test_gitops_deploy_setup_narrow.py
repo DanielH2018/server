@@ -385,3 +385,16 @@ def test_a_failed_reader_derivation_applies_no_setup_role(
     assert tick.merges == [ORIGIN]
     assert any("`secrets.yml` changed" in post for post in tick.posts)
     assert "no setup role routed for the secrets.yml change" in capsys.readouterr().out
+
+
+def test_a_shipper_that_reads_none_of_the_secrets_keys_is_not_applied(
+    gitops_deploy, tick, state
+):
+    """claude_code's defaults name four secrets, and initial_setup ships the file for one
+    unrelated key. Without `unread` the rotation applied all of `--tags initial_setup`."""
+    claude_defaults = "ansible/roles/setup/claude_code/defaults/main.yml"
+    tick.paths = [SECRETS]
+    tick.secret_readers = [claude_defaults]
+    tick.secret_unread = {claude_defaults: ["initial_setup"]}
+    assert gitops_deploy.main(tick.tools, tick.config, state) == 0
+    assert _playbook_argv(tick)[-1] == "claude_code"

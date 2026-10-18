@@ -192,7 +192,7 @@ class DeployTools:
     )
     # The setup-role files naming a `secrets.yml` key the range moved (#5436): a subprocess
     # that parses YAML, and a field so a tick test scripts the answer.
-    secret_setup_readers: Callable[[str, str, str], list[str]] = (
+    secret_setup_readers: Callable[..., tuple[list[str], dict[str, list[str]]]] = (
         deploy_setup_roles.secret_setup_readers
     )
     emit_deploy_annotation: Callable[[set[str], str], None] = (
