@@ -2,9 +2,13 @@
 
 `k8s/manifests` registers `manifests_secret_render` over every Secret file the role renders,
 so `is changed` on it fires for any one of them. observability pairs each result's `changed`
-flag with its file, as `observability_changed_secret_files`, and three tasks read that fact:
-the private restart, the restart-count snapshot and the Grafana password sync. Each entry of
+flag with its file, as `observability_changed_secret_files`, and two tasks read that fact:
+the private restart and the restart-count snapshot. Each entry of
 `observability_stabilise_workloads` names the files its pod reads in `restart_secrets`.
+
+A rotated Grafana admin password reaches the database through that restart: grafana's
+initContainer runs `grafana cli admin reset-admin-password` before every start, and the role
+runs no CLI of its own.
 
 The pairs below render each task's own `when` against the role's real defaults. The first
 test runs a real `no_log` loop through `ansible-playbook`, because the pairing is only as good
@@ -25,6 +29,7 @@ from pathlib import Path
 
 import pytest
 import yaml
+from lib import yaml_fast
 from lib.git_testing import scrubbed_env
 
 from _helpers import ANSIBLE, load_tasks, load_yaml, render_expr, task_named, walk_tasks
@@ -35,7 +40,7 @@ from _release_expectation import (
     observability_self_rollouts,
 )
 from _release_expectation import rollouts as stamped_rollouts
-from _k8s_render import render_role_template
+from _k8s_render import pod_spec, render_role_template
 
 TASKS = load_tasks(OBSERVABILITY / "tasks/main.yml")
 WORKLOADS = load_yaml(OBSERVABILITY / "defaults/main.yml")[
@@ -48,7 +53,6 @@ CHANGED_FILES = task_named(TASKS, "List the Secret files whose render changed")
 RESTART = task_named(TASKS, "Restart the telemetry workloads whose secret changed")
 AMEND = task_named(TASKS, "Record the telemetry workloads the secret restart rolled")
 SNAPSHOT = task_named(TASKS, "Snapshot the telemetry workloads' restart counts")
-SYNC = task_named(TASKS, "Sync the live Grafana admin password with SOPS")
 RENDER = task_named(MAIN, "Render secret manifests")
 AMEND_REWRITE = task_named(
     load_tasks(ANSIBLE / "roles/k8s/manifests/tasks/rollout_amend.yml"),
@@ -249,26 +253,17 @@ def test_a_grafana_password_rotation_soaks_grafana_alone() -> None:
     assert _snapshotted(["grafana-secret.yaml"]) == {"grafana"}
 
 
-def _syncs(changed: list[str]) -> bool:
-    return render_expr(
-        "{{ " + SYNC["when"] + " }}",
-        k8s_no_mutate=False,
-        observability_changed_secret_files=changed,
-    )
+def test_a_grafana_password_rotation_restarts_grafana_alone() -> None:
+    assert _restarted(["grafana-secret.yaml"]) == {"grafana"}
 
 
-def test_a_grafana_secret_edit_syncs_the_admin_password() -> None:
-    assert _syncs(["grafana-secret.yaml"]) is True
-
-
-def test_an_alertmanager_config_edit_never_execs_the_grafana_cli() -> None:
-    assert _syncs(["alertmanager-secret.yaml"]) is False
-
-
-def test_the_sync_names_the_one_secret_file_that_renders_the_admin_password() -> None:
-    """A rename of the template, or a second Secret carrying the password, would leave the
-    sync keyed on a file that never changes for a rotation. Rendered with a sentinel, so the
-    census finds the password's value however a template reaches it."""
+def test_grafana_restarts_on_the_one_secret_file_that_renders_the_admin_password() -> (
+    None
+):
+    """A rename of the template, or a second Secret carrying the password, would leave grafana
+    restarting on a file that never changes for a rotation, and the initContainer would never
+    rerun. Rendered with a sentinel, so the census finds the password's value however a
+    template reaches it."""
     sentinel = "sentinel-grafana-admin-password"
     templates = sorted((OBSERVABILITY / "templates").glob("*secret*.yaml.j2"))
     assert len(templates) >= 3, templates
@@ -281,7 +276,59 @@ def test_the_sync_names_the_one_secret_file_that_renders_the_admin_password() ->
         )
     ]
     assert rendering == ["grafana-secret.yaml"]
-    assert f"'{rendering[0]}' in observability_changed_secret_files" in SYNC["when"]
+    grafana = next(w for w in WORKLOADS if w["name"] == "grafana")
+    assert rendering[0] in grafana["restart_secrets"]
+
+
+def _grafana_pod() -> dict:
+    docs = yaml_fast.safe_load_all(
+        render_role_template("observability", "grafana.yaml.j2")
+    )
+    return pod_spec(
+        next(
+            d
+            for d in docs
+            if d and d["kind"] == "Deployment" and d["metadata"]["name"] == "grafana"
+        )
+    )
+
+
+def test_grafana_resets_the_admin_password_from_the_secret_before_it_starts() -> None:
+    """GF_SECURITY_ADMIN_PASSWORD seeds only a new database, so a rotation needs the CLI.
+
+    The initContainer reads the password from the Secret the server reads, on stdin, so the
+    value never lands in the pod spec or the process list, and it writes the same volume the
+    server mounts as its data directory.
+    """
+    pod = _grafana_pod()
+    server = next(c for c in pod["containers"] if c["name"] == "grafana")
+    [init] = [
+        c
+        for c in pod.get("initContainers") or []
+        if "reset-admin-password" in " ".join(c["command"])
+    ]
+    assert init["image"] == server["image"]
+    script = init["command"][-1]
+    assert "--password-from-stdin" in script
+    assert '"$GF_SECURITY_ADMIN_PASSWORD"' in script
+    [password] = [e for e in init["env"] if e["name"] == "GF_SECURITY_ADMIN_PASSWORD"]
+    assert password["valueFrom"]["secretKeyRef"] == {
+        "name": "grafana-admin",
+        "key": "password",
+    }
+    data = next(m for m in server["volumeMounts"] if m["name"] == "grafana-data")
+    assert {"name": "grafana-data", "mountPath": data["mountPath"]} in init[
+        "volumeMounts"
+    ]
+
+
+def test_the_role_runs_no_grafana_cli_of_its_own() -> None:
+    """The initContainer replaced the task that exec'd the CLI into the running server, where
+    its own migration pass contended with the server's for the SQLite file."""
+    commands = [str(t) for t in walk_tasks(TASKS)]
+    assert not [
+        c for c in commands if "reset-admin-password" in c or "exec deploy/grafana" in c
+    ]
 
 
 def test_the_amend_raises_only_the_workloads_the_restart_ran_for() -> None:
