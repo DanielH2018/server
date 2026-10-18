@@ -268,3 +268,70 @@ def test_an_empty_watch_list_writes_no_uid_series(tmp_path: Path) -> None:
     _proc(procroot, 10, "claude", 1000)
     out = _run_watching(tmp_path, procroot, "")
     assert "claude_uid_processes" not in out, out
+
+
+def _write_batch_unit(cgroot: Path, rel: str, *, stat: bool = True) -> None:
+    d = cgroot / rel
+    d.mkdir(parents=True)
+    if stat:
+        (d / "memory.stat").write_text("anon 48394240\nfile 315789312\nkernel 9000\n")
+    (d / "memory.peak").write_text("6121443328\n")
+    (d / "cpu.stat").write_text("usage_usec 1585000000\nuser_usec 1\n")
+    (d / "pids.current").write_text("12\n")
+
+
+def _run_batches(tmp_path: Path) -> str:
+    textfile_dir = tmp_path / "textfile"
+    textfile_dir.mkdir()
+    result = _run(tmp_path / "cgroup", textfile_dir)
+    assert result.returncode == 0, result.stderr
+    return (textfile_dir / "claude_cgroup.prom").read_text()
+
+
+def test_a_fanout_batch_unit_under_any_user_manager_gets_its_series(
+    tmp_path: Path,
+) -> None:
+    """The named member: a batch under another uid's manager, in a nested slice, is found.
+
+    anon and file are split because memory.current and the peak both count page cache, and
+    the reservation has to cover anon.
+    """
+    _write_batch_unit(
+        tmp_path / "cgroup",
+        "user.slice/user-1001.slice/user@1001.service/app.slice/fanout-5651-5654.service",
+    )
+    out = _run_batches(tmp_path)
+    for line in (
+        'claude_fanout_batch_memory_bytes{batch="5651-5654",kind="anon"} 48394240',
+        'claude_fanout_batch_memory_bytes{batch="5651-5654",kind="file"} 315789312',
+        'claude_fanout_batch_memory_bytes{batch="5651-5654",kind="peak"} 6121443328',
+        'claude_fanout_batch_cpu_usage_usec_total{batch="5651-5654"} 1585000000',
+        'claude_fanout_batch_pids_current{batch="5651-5654"} 12',
+    ):
+        assert line in out, out
+    assert 'kind="kernel"' not in out, out
+
+
+def test_a_unit_that_is_not_a_fanout_batch_gets_no_batch_series(tmp_path: Path) -> None:
+    _write_batch_unit(
+        tmp_path / "cgroup",
+        "user.slice/user-1000.slice/user@1000.service/app.slice/claude-rc-session.service",
+    )
+    out = _run_batches(tmp_path)
+    assert "claude_fanout_batch_memory_bytes{" not in out, out
+    assert "# TYPE claude_fanout_batch_memory_bytes gauge" in out, out
+
+
+def test_a_batch_stopping_mid_scan_leaves_its_other_series_and_the_file(
+    tmp_path: Path,
+) -> None:
+    """A unit whose memory.stat is gone, as when it stops between the glob and the read."""
+    _write_batch_unit(
+        tmp_path / "cgroup",
+        "user.slice/user-1000.slice/user@1000.service/app.slice/fanout-77.service",
+        stat=False,
+    )
+    out = _run_batches(tmp_path)
+    assert 'kind="anon"' not in out, out
+    assert 'claude_fanout_batch_memory_bytes{batch="77",kind="peak"} 6121443328' in out
+    assert 'claude_fanout_batch_pids_current{batch="77"} 12' in out, out
