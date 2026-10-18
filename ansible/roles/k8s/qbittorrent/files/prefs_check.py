@@ -11,8 +11,10 @@ It never writes to qBittorrent and pushes no Kuma monitor: a low-urgency drift c
 earn a push token. Applying a changed DESIRED value stays a human decision, made by hand.
 
 The exit status follows apply_prefs.py's contract. Drift (EXIT_DRIFT, 3) is a result, not a
-failure, so it exits 0 as a match does. An unreachable WebUI, a missing credential or any other
-exit leaves the Job Failed, which k8s/cronjob-gate reports without failing the deploy.
+failure, so it exits 0 as a match does. An unreachable WebUI, a rejected login, a missing
+credential or any other exit leaves the Job Failed, which k8s/cronjob-gate reports without
+failing the deploy. Every outcome still prints its tagged line, as the host script's `2>&1`
+captured every outcome, so a rejected login or a read timeout is never an untagged traceback.
 
 Environment:
     QBT_CREDENTIALS  the WebUI username, a newline, then the password (the
@@ -76,9 +78,21 @@ def run(
     else:
         os.environ["QBT_USERNAME"], os.environ["QBT_PASSWORD"] = creds
         buffer = io.StringIO()
-        with contextlib.redirect_stdout(buffer), contextlib.redirect_stderr(buffer):
-            status = check(["--dry-run", "--connect-wait", str(CONNECT_WAIT_S)])
+        status: int | None = None
+        failure = ""
+        try:
+            with contextlib.redirect_stdout(buffer), contextlib.redirect_stderr(buffer):
+                status = check(["--dry-run", "--connect-wait", str(CONNECT_WAIT_S)])
+        # apply_prefs.QbtClient.login raises SystemExit with its message on a rejected login,
+        # and urllib lets a read timeout or a dropped response escape main() unwrapped.
+        except SystemExit as exc:
+            failure = f"login rejected: {exc.code}"
+        except Exception as exc:
+            failure = f"unexpected error: {type(exc).__name__}: {exc}"
         output = " ".join(buffer.getvalue().split())
+        if status is None:
+            emit(f"{TAG}: {failure}: {output}" if output else f"{TAG}: {failure}")
+            return 1
     message, code = _VERDICTS.get(status, (f"unexpected exit {status}", 1))
     emit(f"{TAG}: {message}: {output}" if output else f"{TAG}: {message}")
     return code
