@@ -181,6 +181,9 @@ netpol_baseline_probe_targets:
   - {service: crowdsec, plane: homelab, port: 8080, expect: refused, policy: networkpolicy-crowdsec.yaml.j2}
   - {service: nut, plane: homelab, port: 3493, expect: refused, policy: networkpolicy-nut.yaml.j2}
   - {service: mosquitto, plane: homelab, port: 1883, expect: refused, policy: networkpolicy-mosquitto.yaml.j2}
+  # The admin API, which admits pihole-exporter and pihole's gravity Job by label. :53 is open
+  # to every source, so only the web port can show the fence going red.
+  - {service: pihole, plane: homelab, port: 80, expect: refused, policy: networkpolicy-pihole.yaml.j2}
   # One target per fencing shape the last rollout slice introduced: a fan-in app
   # (home-assistant, uptime-kuma), a cross-namespace one (loki-homelab), a sub-workload behind a
   # parent (karakeep-meilisearch), and one whose Service name differs from its pod label

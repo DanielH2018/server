@@ -1,0 +1,13 @@
+{#
+  The identity of pihole's Flux Job, INERT until pihole's flip, as `gravity.yaml.j2` beside it is.
+
+  It is a ServiceAccount with no Role. The Job reads FTL's API and execs into no pod, so it
+  needs no grant, and its pod mounts no token.
+#}
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: pihole-verify
+  namespace: {{ k8s_namespace }}
+automountServiceAccountToken: false
