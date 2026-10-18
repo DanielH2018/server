@@ -16,18 +16,24 @@
   non-terminating pihole-2 endpoint, as `roll_one.yml` waits for its sibling, then fails.
 
   DECIDED: a failed guard holds `pihole`, and with it `pihole-deferred`, which depends on
-  `pihole`. That is parity with `roll_one.yml`, which refuses at instance 1's sibling check
-  before `apply_instance_2.yml` runs. The cost is the case where pihole-2 is down for a reason
-  a later revision fixes: that revision cannot reach pihole-2 while the guard fails, and
-  deleting the failed Job does not help, because Flux recreates it under the same name. No
-  break-glass exists under Flux yet; #5719 asks the flip for one. `backoffLimit: 0` keeps a
-  failed check failed, and the 300s wait inside the Job covers a pihole-2 restart that is
-  already under way. Instance 1 keeps serving through the hold.
+  `pihole`. That matches `roll_one.yml` for a revision that rolls instance 1: it refuses at
+  instance 1's sibling check before `apply_instance_2.yml` runs. The cost is a down pihole-2
+  that a later revision rolling instance 1 would fix: that revision cannot reach pihole-2 while
+  the guard fails, and deleting the failed Job does not help, because Flux recreates it under
+  the same name. No break-glass exists under Flux yet; #5719 asks the flip for one.
+  `backoffLimit: 0` keeps a failed check failed, and the 300s wait inside the Job covers a
+  pihole-2 restart that is already under way. Instance 1 keeps serving through the hold.
 
-  DECIDED: the spec embeds the same roll digest as `templates/verify-inert/gravity.yaml.j2`,
-  computed the same way, so the guard runs on every revision that rolls a Pi-hole. A guard that
-  kept its name would satisfy `dependsOn` with the previous revision's pass.
-  `tests/test_pihole_sibling_guard.py` holds the two digests equal.
+  DECIDED: the spec embeds a digest of instance 1's roll inputs alone, the ones
+  `checksum/restart` hashes for it under Flux: its rendered Deployment, the `pihole-dns-config`
+  ConfigMap, the `pihole-env` Secret template, and the `cluster-vars.source` digest of each key
+  that template reads. So the guard runs on every revision that rolls instance 1, and a guard
+  that kept its name would satisfy `dependsOn` with the previous revision's pass. A revision
+  that changes only `deployment-2.yaml.j2` keeps the name, so a fix to a down pihole-2 is not
+  held by the pihole-2 it fixes; `tasks/main.yml` skips instance 1's sibling check for that
+  change too. The two rendered manifests are hashed parsed, so a YAML-comment edit, which
+  rolls nothing, renames nothing. This is not the gravity Job's digest, which also reads
+  instance 2's Deployment because the reconcile must follow either roll.
 
   It dials only the API server, which no egress fence guards on this cluster, so it needs no
   fence peer. Its RBAC is `rbac.yaml.j2` beside it.
@@ -39,10 +45,12 @@
   'flux_job_connect.py': flux_job_connect,
 } %}
 {% set configmap_name = 'pihole-sibling-guard-' + ({'data': data, 'binaryData': {}} | to_json(sort_keys=True, separators=(',', ':')) | hash('sha256'))[:8] %}
-{#- The roll inputs of both instances, as `gravity.yaml.j2` reads them; see the note above. -#}
+{#- Instance 1's roll inputs; see the DECIDED note above. The Secret template is read raw, never
+    rendered, and `cluster-vars.source` holds a digest of each key's ciphertext, so no value
+    enters the hash. -#}
 {% set roll = namespace(
-  text=lookup('template', 'deployment.yaml.j2') + lookup('template', 'deployment-2.yaml.j2')
-    + lookup('template', 'configmap.yaml.j2'),
+  text=(lookup('template', 'deployment.yaml.j2') | from_yaml | to_json(sort_keys=True))
+    + (lookup('template', 'configmap.yaml.j2') | from_yaml | to_json(sort_keys=True)),
   secrets=lookup('file', playbook_dir + '/roles/k8s/pihole/templates/secret.yaml.j2'),
 ) %}
 {% for line in lookup('file', playbook_dir + '/vars/cluster-vars.source').splitlines() if line and not line.startswith('#') and ('{{ ' + line.split()[0] + ' ') in roll.secrets %}
@@ -85,8 +93,8 @@ template:
           # `roll_one.yml` waits 300s for its sibling.
           - name: GUARD_WAIT_SECONDS
             value: "300"
-          # Renames the Job whenever either Pi-hole rolls; see the note above.
-          - name: PIHOLE_ROLL_DIGEST8
+          # Renames the Job whenever instance 1 rolls; see the note above.
+          - name: PIHOLE_INSTANCE_1_ROLL_DIGEST8
             value: "{{ roll_digest8 }}"
           - name: SSL_CERT_FILE
             value: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt

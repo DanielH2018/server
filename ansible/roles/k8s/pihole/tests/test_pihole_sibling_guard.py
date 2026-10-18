@@ -12,7 +12,7 @@ Run: uv run pytest ansible/roles/k8s/pihole/tests/test_pihole_sibling_guard.py
 """
 
 import shutil
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 
 import pytest
 
@@ -32,7 +32,7 @@ ENV = {
     "GUARD_INSTANCE_SERVICE": "pihole",
     "GUARD_SIBLING_SERVICE": "pihole-2-web",
     "GUARD_WAIT_SECONDS": "300",
-    "PIHOLE_ROLL_DIGEST8": "abcd1234",
+    "PIHOLE_INSTANCE_1_ROLL_DIGEST8": "abcd1234",
 }
 READY = {"addresses": ["10.42.0.7"], "conditions": {"ready": True}}
 NOT_READY = {"addresses": ["10.42.0.7"], "conditions": {"ready": False}}
@@ -59,18 +59,26 @@ class Slices(pihole_sibling_guard.Kube):
     back is one answer.
     """
 
-    def __init__(self, instance: list[dict], sibling: list[dict], status: int = 200):
+    def __init__(
+        self,
+        instance: list[dict],
+        sibling: list[dict],
+        statuses: Sequence[int] = (200,),
+    ):
         super().__init__("https://api", "token")
         self.answers = {"pihole": instance, "pihole-2-web": sibling}
-        self.status = status
+        # One status per read, across both Services, the last repeating like an answer.
+        self.statuses = list(statuses)
         self.reads: list[str] = []
 
     def get(self, path: str) -> tuple[int, dict]:
         for service, queue in self.answers.items():
             if path == pihole_sibling_guard.slices_path(NAMESPACE, service):
                 self.reads.append(service)
-                if self.status != 200:
-                    return self.status, {"message": "endpointslices is forbidden"}
+                statuses = self.statuses
+                status = statuses.pop(0) if len(statuses) > 1 else statuses[0]
+                if status != 200:
+                    return status, {"message": "endpointslices is forbidden"}
                 return 200, queue.pop(0) if len(queue) > 1 else queue[0]
         raise AssertionError(f"unexpected read {path}")
 
@@ -144,10 +152,35 @@ def test_an_instance_1_serving_nothing_still_waits_on_the_sibling(instance):
 
 
 def test_an_api_error_fails_at_once(capsys):
-    kube = Slices([_list(READY)], [_list(READY)], status=403)
+    kube = Slices([_list(READY)], [_list(READY)], statuses=[403])
     assert _main(kube) == 1
     assert kube.reads == ["pihole"]
     assert "answered HTTP 403: endpointslices is forbidden" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize("status", [0, 429, 503], ids=["no-answer", "429", "503"])
+def test_a_transient_read_is_retried_inside_the_wait(status):
+    """An API blip must not fail a guard whose sibling is serving: its name would not change."""
+    kube = Slices([_list(READY)], [_list(READY)], statuses=[200, status, status, 200])
+    assert _main(kube) == 0
+    assert kube.reads == ["pihole", "pihole-2-web", "pihole-2-web", "pihole-2-web"]
+
+
+def test_a_read_that_never_answers_fails_at_the_end_of_the_wait(capsys):
+    kube = Slices([_list(READY)], [_list(READY)], statuses=[200, 0])
+    assert _main(kube) == 1
+    assert "pihole-2-web's EndpointSlices got no answer" in capsys.readouterr().err
+    assert kube.reads.count("pihole-2-web") > 1
+
+
+def test_a_transport_error_reads_as_no_answer():
+    """`open_url` re-raises a read timeout or a reset; `get` turns it into status 0."""
+
+    def opener(request, timeout):
+        raise TimeoutError("timed out")
+
+    kube = pihole_sibling_guard.Kube("https://api", "token", opener)
+    assert kube.get("/apis") == (0, {"message": "TimeoutError('timed out')"})
 
 
 @pytest.fixture(scope="module")
@@ -157,10 +190,12 @@ def stubs(tmp_path_factory):
     return load_stubs(path)
 
 
-@pytest.fixture(scope="module")
-def guard_tag(stubs, tmp_path_factory) -> cluster.RenderedTag:
-    """The render of a role copy whose verify directory holds both Job forms."""
-    tree = tmp_path_factory.mktemp("guard") / "ansible"
+def _render_copy(tmp_path, stubs, edit=None) -> cluster.RenderedTag:
+    """The render of a role copy whose verify directory holds both Job forms.
+
+    `edit(role)` changes the copied role first.
+    """
+    tree = tmp_path / "ansible"
     role = tree / "roles" / "k8s" / TAG
     shutil.copytree(K8S_ROLES / TAG, role)
     (tree / "vars").mkdir()
@@ -168,8 +203,15 @@ def guard_tag(stubs, tmp_path_factory) -> cluster.RenderedTag:
     (role / "templates" / "verify-inert").rename(role / "templates" / "verify")
     for path in (role / "templates" / "guard-inert").iterdir():
         path.rename(role / "templates" / "verify" / f"guard-{path.name}")
+    if edit:
+        edit(role)
     copied = {**stubs, "playbook_dir": str(tree)}
     return cluster.render_tag(TAG, copied, roles=tree / "roles" / "k8s")
+
+
+@pytest.fixture(scope="module")
+def guard_tag(stubs, tmp_path_factory) -> cluster.RenderedTag:
+    return _render_copy(tmp_path_factory.mktemp("guard"), stubs)
 
 
 @pytest.fixture(scope="module")
@@ -248,9 +290,50 @@ def test_the_guard_reads_the_two_single_instance_services(guard_tag, guard_rende
     assert services["pihole-2-web"]["instance"] == "pihole-2"
 
 
-def test_the_guard_renames_with_the_gravity_job(guard_render):
-    """Both Jobs embed one roll digest, so a revision that re-runs one re-runs the other."""
-    jobs = _jobs(guard_render)
-    assert set(jobs) == {"pihole-gravity", "pihole-sibling-guard"}
-    digests = {name: _env(job)["PIHOLE_ROLL_DIGEST8"] for name, job in jobs.items()}
-    assert len(set(digests.values())) == 1, digests
+def _edit(name: str, old: str, new: str):
+    def edit(role) -> None:
+        path = role / "templates" / name
+        text = path.read_text()
+        assert old in text, name
+        path.write_text(text.replace(old, new))
+
+    return edit
+
+
+# Each edit, and whether it rolls instance 1 under Flux.
+EDITS = {
+    "instance-1-deployment": (
+        _edit("deployment.yaml.j2", "pihole_k8s_claim)", "'pihole-etc-moved')"),
+        True,
+    ),
+    "shared-config": (
+        _edit("config/pihole-dnsmasq.conf.j2", "\n", "\n# a dnsmasq-only edit\n"),
+        True,
+    ),
+    "instance-2-deployment": (
+        _edit("deployment-2.yaml.j2", "pihole_k8s_claim_2)", "'pihole-etc-2-moved')"),
+        False,
+    ),
+    "yaml-comment": (
+        _edit("deployment.yaml.j2", "---\n", "---\n# a comment that rolls nothing\n"),
+        False,
+    ),
+}
+
+
+@pytest.mark.parametrize("case", sorted(EDITS))
+def test_the_guard_renames_exactly_when_instance_1_rolls(
+    case, stubs, guard_tag, tmp_path
+):
+    """An instance-2-only fix keeps the name, so a down pihole-2 cannot hold its own fix."""
+    edit, renames = EDITS[case]
+    before = _jobs(guard_tag.verify)
+    after = _jobs(_render_copy(tmp_path, stubs, edit).verify)
+    # The edit reached the render: the gravity Job reads every roll input of both instances.
+    if case != "yaml-comment":
+        assert after["pihole-gravity"] != before["pihole-gravity"]
+    renamed = (
+        after["pihole-sibling-guard"]["metadata"]["name"]
+        != before["pihole-sibling-guard"]["metadata"]["name"]
+    )
+    assert renamed is renames

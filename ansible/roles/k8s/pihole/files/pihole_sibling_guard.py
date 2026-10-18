@@ -21,9 +21,12 @@ does.
   `GUARD_WAIT_SECONDS`, as `roll_one.yml` waits 300s for its sibling. It then fails.
 
 It talks to the API server with the pod's ServiceAccount token, through `flux_job_connect`, and
-the API server's CA reaches `urlopen` through `SSL_CERT_FILE`, which the Job sets. An error
-answer from the API server fails the Job at once; only an empty read is retried.
-`PIHOLE_ROLL_DIGEST8` is in the spec only to rename the Job, and the script prints it.
+the API server's CA reaches `urlopen` through `SSL_CERT_FILE`, which the Job sets. A read that
+gets no answer, a 429 or a 5xx is retried inside the same wait, because `backoffLimit: 0` and
+an unchanged Job name would turn one API blip into a hold that lasts until the next revision.
+Retrying a read cannot pass the check on its own: only a ready pihole-2 endpoint passes it.
+Any other error answer, such as a 403 from a missing grant, fails the Job at once.
+`PIHOLE_INSTANCE_1_ROLL_DIGEST8` is in the spec only to rename the Job, and the script prints it.
 Exit 0 when instance 1 may roll, 1 when it may not or a call fails, naming why.
 
 Run: python3 pihole_sibling_guard.py (in the Job; it takes no arguments)
@@ -50,10 +53,16 @@ SERVICE_LABEL = "kubernetes.io/service-name"
 CALL_TIMEOUT = 10
 # The pause between two reads of the sibling's slices, in seconds.
 POLL_SECONDS = 5
+# The statuses a read retries: 0 is a read that got no answer at all (`Kube.get`).
+RETRIED = frozenset({0, 429})
 
 
 class Failed(Exception):
     """A call failed; the message names the object and the answer."""
+
+
+class Transient(Failed):
+    """A read got no answer, a 429 or a 5xx, so a later read may succeed."""
 
 
 class Kube:
@@ -71,7 +80,11 @@ class Kube:
         self.opener = opener
 
     def get(self, path: str) -> tuple[int, dict]:
-        """GET `path`; the HTTP status and the parsed body, an error status included."""
+        """GET `path`; the HTTP status and the parsed body, an error status included.
+
+        A connection that fails, a read that times out or a TLS error returns status 0, with
+        the error as the body's `message`, so the caller decides whether to retry.
+        """
         headers = {
             "Authorization": f"Bearer {self.token}",
             "Accept": "application/json",
@@ -83,6 +96,8 @@ class Kube:
         except urllib.error.HTTPError as err:
             with err:
                 return err.code, _parse(err.read())
+        except OSError as err:
+            return 0, {"message": repr(err)}
 
 
 def _parse(raw: bytes) -> dict:
@@ -106,15 +121,17 @@ def slices(kube: Kube, namespace: str, service: str) -> list[dict]:
     """`service`'s EndpointSlices in `namespace`.
 
     Raises:
-        Failed: The list answered with an error status.
+        Transient: The list got no answer, a 429 or a 5xx.
+        Failed: The list answered with any other error status.
     """
     status, body = kube.get(slices_path(namespace, service))
-    if status != 200:
-        raise Failed(
-            f"listing {service}'s EndpointSlices answered HTTP {status}: "
-            f"{body.get('message', '')}"
-        )
-    return body.get("items") or []
+    if status == 200:
+        return body.get("items") or []
+    answer = f"answered HTTP {status}" if status else "got no answer"
+    message = f"listing {service}'s EndpointSlices {answer}: {body.get('message', '')}"
+    if status in RETRIED or status >= 500:
+        raise Transient(message)
+    raise Failed(message)
 
 
 def serving(items: list[dict]) -> int:
@@ -140,19 +157,34 @@ def run(
     """Decide whether instance 1 may roll, and return one report line each.
 
     Raises:
-        Failed: A list failed, or the sibling served nothing for the whole wait.
+        Failed: A list answered with an error that is not retried, a read failed for the
+            whole wait, or the sibling served nothing for the whole wait.
     """
     namespace = env["GUARD_NAMESPACE"]
     instance, sibling = env["GUARD_INSTANCE_SERVICE"], env["GUARD_SIBLING_SERVICE"]
-    lines = [f"guarding pihole's roll {env.get('PIHOLE_ROLL_DIGEST8', 'unknown')}"]
-    if not slices(kube, namespace, instance):
+    wait = env["GUARD_WAIT_SECONDS"]
+    deadline = clock() + float(wait)
+
+    def read(service: str) -> list[dict]:
+        while True:
+            try:
+                return slices(kube, namespace, service)
+            except Transient as err:
+                if clock() >= deadline:
+                    raise Failed(f"{err}, for the whole {wait}s wait") from err
+            sleep(POLL_SECONDS)
+
+    lines = [
+        "guarding instance 1's roll "
+        f"{env.get('PIHOLE_INSTANCE_1_ROLL_DIGEST8', 'unknown')}"
+    ]
+    if not read(instance):
         return [
             *lines,
             f"{instance} has no EndpointSlice, so this is its first apply",
         ]
-    deadline = clock() + float(env["GUARD_WAIT_SECONDS"])
     while True:
-        count = serving(slices(kube, namespace, sibling))
+        count = serving(read(sibling))
         if count:
             return [
                 *lines,
@@ -160,7 +192,7 @@ def run(
             ]
         if clock() >= deadline:
             raise Failed(
-                f"{sibling} had no ready endpoint for {env['GUARD_WAIT_SECONDS']}s, "
+                f"{sibling} had no ready endpoint for {wait}s, "
                 f"so rolling {instance} would leave the LAN with no resolver"
             )
         sleep(POLL_SECONDS)
