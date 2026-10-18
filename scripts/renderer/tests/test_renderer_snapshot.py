@@ -2,8 +2,9 @@
 
 The fixture renders speedtest, a real role that declares one snapshot claim, through the real
 CLI as if the inventory marked it `owner: flux`, with a fixture ordering that gives it one
-flux-owned upstream. No role is flux-owned with a snapshot claim yet, so no live tag renders
-`<tag>-snapshot`. The plan is docs/target-architecture/deploy/d5-bulk-move.md, step 11.
+flux-owned upstream, so the cases hold whatever the live inventory publishes. code-server is the
+first live tag that renders `<tag>-snapshot`, since D5.16. The plan is
+docs/target-architecture/deploy/d5-bulk-move.md, step 11.
 
 Run: uv run pytest scripts/renderer/tests/test_renderer_snapshot.py
 """

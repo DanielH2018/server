@@ -393,7 +393,10 @@ def _read_dir(path: Path) -> dict[str, str]:
 
 
 def snapshot(
-    tree: Path, roles: Iterable[str] = (), python: str = sys.executable
+    tree: Path,
+    roles: Iterable[str] = (),
+    python: str = sys.executable,
+    targets: Callable[[str, Path, Path], list[str]] = render_targets,
 ) -> Snapshot:
     """Render `tree` with its own renderer and read what the gate judges.
 
@@ -407,6 +410,9 @@ def snapshot(
 
     Args:
         roles: The tags to render, or none for every render target of `tree`.
+        targets: How the render targets are found when `roles` is empty, called with the
+            host, `tree`'s host_vars directory and its k8s roles directory. A test narrows
+            it to keep the no-roles path without rendering every tag.
 
     Raises:
         RenderFailed: The render exited non-zero.
@@ -414,9 +420,7 @@ def snapshot(
     entries = yaml_fast.safe_load((tree / HOST_VARS).read_text())
     k8s = filter_by_platform(entries.get("containers_list") or [], "k8s")
     names = {e["name"] for e in k8s}
-    roles = list(roles) or render_targets(
-        K8S_HOST, tree / HOST_VARS.parent, tree / K8S_ROLES
-    )
+    roles = list(roles) or targets(K8S_HOST, tree / HOST_VARS.parent, tree / K8S_ROLES)
     with tempfile.TemporaryDirectory(prefix="cross-plane-") as out:
         # DECIDED: both sides run under the PR's interpreter, not each commit's own `uv run
         # --frozen` environment. A dependency bump that changes the render is then invisible

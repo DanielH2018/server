@@ -1,8 +1,7 @@
-"""arr-notification's seed as an inert Job in sonarr-verify and radarr-verify (target slice D5).
+"""arr-notification's seed as a Job in sonarr-verify and radarr-verify (target slice D5).
 
-The render tests copy each app's role, move `templates/verify-inert/` to `templates/verify/` as
-the flip PR will, and render the copy, so the Job is checked as Flux will receive it while the
-tree's own render still emits no `<app>-verify`. The run tests write out the rendered
+The render tests render each app's `templates/verify/` through `render_tag`, so the Job is
+checked as Flux receives it in `<app>-verify`. The run tests write out the rendered
 ConfigMap's two files, the seed and its `flux_job_connect.py` copy, and run them as the Job's
 container does, against a local server that keeps notifications the way the *arr API does.
 The plan is docs/target-architecture/deploy/d5-bulk-move.md, *arr-notification's seed*.
@@ -12,7 +11,6 @@ Run: uv run pytest ansible/roles/k8s/arr-notification/tests/test_seed_job.py
 
 import json
 import re
-import shutil
 import subprocess
 import sys
 import threading
@@ -29,7 +27,7 @@ from renderer.renderer_lib.context import load_stubs
 from renderer.tests._job_census import problems
 
 APPS = ("sonarr", "radarr")
-TEMPLATE = "templates/verify-inert/notification.yaml.j2"
+TEMPLATE = "templates/verify/notification.yaml.j2"
 DEFAULTS = yaml_fast.safe_load(
     (K8S_ROLES / "arr-notification/defaults/main.yml").read_text()
 )
@@ -63,15 +61,11 @@ def stubs(tmp_path_factory):
 
 
 @pytest.fixture(scope="module")
-def flipped(stubs, tmp_path_factory) -> dict[str, list[dict]]:
-    """Each app's `<app>-verify` documents, rendered from a copy whose Jobs left `verify-inert/`."""
-    roles = tmp_path_factory.mktemp("roles")
+def flipped(stubs) -> dict[str, list[dict]]:
+    """Each app's `<app>-verify` documents, as the renderer emits them."""
     docs = {}
     for app in APPS:
-        shutil.copytree(K8S_ROLES / app, roles / app)
-        templates = roles / app / "templates"
-        (templates / "verify-inert").rename(templates / "verify")
-        rendered = cluster.render_tag(app, stubs, roles=roles)
+        rendered = cluster.render_tag(app, stubs)
         docs[app] = [
             doc
             for name, text in sorted(rendered.verify.items())
@@ -272,3 +266,43 @@ def test_a_second_run_changes_nothing(flipped, tmp_path, app, start):
         DEFAULTS["arr_notification_triggers"]
     )
     assert URL not in first.stdout + first.stderr + second.stdout + second.stderr
+
+
+def _admits(policy: dict, pod: dict, namespace: str) -> bool:
+    """Whether a `podSelector` peer of `policy` matches `pod` in `namespace`.
+
+    A bare `podSelector` peer matches pods in the policy's own namespace only, so a Job that
+    moved namespace would be refused however its labels read.
+    """
+    if namespace != policy["metadata"]["namespace"]:
+        return False
+    labels = pod["metadata"]["labels"]
+    return any(
+        (peer.get("podSelector") or {}).get("matchLabels", {}).items() <= labels.items()
+        for rule in policy["spec"].get("ingress") or []
+        for peer in rule.get("from") or []
+        if "podSelector" in peer and "namespaceSelector" not in peer
+    )
+
+
+@pytest.mark.parametrize("app", APPS)
+def test_the_apps_fence_admits_every_flipped_job(flipped, stubs, app):
+    """Each Job in `<app>-verify` dials the app's API, so the app's own fence must admit its pod.
+
+    The fence is the NetworkPolicy the tree renders for the app, with the `<app>-verify` peer
+    its `netpol_from` lists (#5535).
+    """
+    (policy,) = [
+        doc
+        for text in cluster.render_tag(app, stubs).files.values()
+        for doc in yaml_fast.safe_load_all(text)
+        if doc and doc.get("kind") == "NetworkPolicy" and doc["metadata"]["name"] == app
+    ]
+    jobs = [doc for doc in flipped[app] if doc["kind"] == "Job"]
+    assert jobs
+    refused = [
+        job["metadata"]["name"]
+        for job in jobs
+        if not _admits(policy, job["spec"]["template"], job["metadata"]["namespace"])
+    ]
+    assert refused == []

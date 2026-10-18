@@ -48,6 +48,7 @@ from pathlib import Path as _Path
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 
 from validate.validate_lib.ok_lines import ok_printer
+from lib.cli_help import answer_help
 from lib.ansible_inventory import K8S_HOST_VARS
 from lib.k8s_context import resolve_vars
 from lib.render_context import UnresolvedVarsError, render_context
@@ -190,6 +191,7 @@ def main(argv: Sequence[str] = ()) -> int:
     Returns:
         0 if every template rendered, parsed and schema-checked clean; 1 otherwise.
     """
+    answer_help(__doc__, list(argv))
     ok = ok_printer(argv)
     entries = k8s_entries()
 

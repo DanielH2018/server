@@ -1,5 +1,5 @@
 {
-  "checksum": "49a457ce3161a159f62db0b9eeae47b482bca16fb8539d96eca9ca8bef08fd4c",
+  "checksum": "79f6d833112b4e9ee12f4141d75d952bfe6bb40026d8fae012ae001f14e286fd",
   "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
   "key": "ansible/roles/k8s/sonarr/CLAUDE.md#Notable",
   "row": {
@@ -10,6 +10,6 @@
       "ansible/tests/services/test_exportarr_sidecars.py::test_the_image_pins_stay_in_lockstep": "f3e695a6d3fd29e04faa710d3b029d1d85bac8aede4ae2e6f29dea3287ba842d"
     },
     "python": "3.14",
-    "verified_sha": "a80b2ca8d"
+    "verified_sha": "dc22417c5"
   }
 }

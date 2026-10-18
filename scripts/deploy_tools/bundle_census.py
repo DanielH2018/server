@@ -11,7 +11,8 @@ nothing and `prod` stays where it was. `report` runs the source, host and no-stu
   then each per-tag kind its role's inputs call for, in `TAG_KIND_SUFFIXES` order, each with
   path `./cluster/<name><suffix>` (the per-file rule, D4.3 and D5.1a1): `-deferred` when the
   role passes `manifests_deferred_files`, `-snapshot` when it declares
-  `k8s_autodeploy_snapshot_pvcs`, and `-verify` when it ships `templates/verify/`;
+  `k8s_autodeploy_snapshot_pvcs`, `-prepull` when it sets `flux_prepull_timeout`, and
+  `-verify` when it ships `templates/verify/`;
 - each published tag and each shared kind has its directory `cluster/<name>/`, and each
   per-tag kind its directory `cluster/<name><suffix>/`, each with a `kustomization.yaml`;
 - no published tag takes a reserved name (`reserved_tags`), so a tag named
@@ -28,8 +29,10 @@ The allowlist comes from the renderer's inputs, never from its output, so a rend
 cannot widen it: the tags the inventory marks `owner: flux` (`published_tags`), the literal
 `SHARED_KINDS`, and the published tags whose role passes `manifests_deferred_files` to its
 `k8s/manifests` include (`deferring_tags`), read as the renderer reads the include, and those
-whose role declares snapshot claims (`snapshot_tags`), and those whose role ships verify or
-post-apply mutation Jobs as `templates/verify/*.yaml.j2` (`verifying_tags`). A tag marked
+whose role declares snapshot claims (`snapshot_tags`), those whose role sets
+`flux_prepull_timeout` (`prepull_tags`), and those whose role ships verify or post-apply
+mutation Jobs as `templates/verify/*.yaml.j2` (`verifying_tags`) or opts a CronJob into a gate
+Job with `flux_cronjob_gates` (`gating_tags`). A tag marked
 `owner: released` is left out of both the bundle and the allowlist (C4).
 
 The plan is docs/target-architecture/deploy/d2-first-leaf.md, *Publication and verification*,
@@ -70,9 +73,12 @@ from renderer.renderer_lib.bundle import (
 )
 from renderer.renderer_lib.ordering import (
     DEFERRED_SUFFIX,
+    PREPULL_SUFFIX,
     SNAPSHOT_SUFFIX,
     TAG_KIND_SUFFIXES,
     VERIFY_SUFFIX,
+    cronjob_gates,
+    prepull_timeouts,
     verify_files,
 )
 from renderer.renderer_lib.task_inputs import include_vars
@@ -125,11 +131,36 @@ def snapshot_tags(
     return frozenset(tag for tag, names in claims.items() if names), problems
 
 
+def prepull_tags(
+    published: Iterable[str], roles: Path = K8S_ROLES
+) -> tuple[frozenset[str], list[str]]:
+    """The published tags whose role sets `flux_prepull_timeout`, and one line per problem.
+
+    That default alone calls for `<tag>-prepull` (#5525). It reads `prepull_timeouts`, the
+    reader the renderer reads too.
+    """
+    timeouts, problems = prepull_timeouts(published, roles)
+    return frozenset(timeouts), problems
+
+
+def gating_tags(
+    published: Iterable[str], roles: Path = K8S_ROLES
+) -> tuple[frozenset[str], list[str]]:
+    """The published tags whose role sets `flux_cronjob_gates`, and one line per problem.
+
+    That default calls for `<tag>-verify`, which holds the gate Jobs (`cronjob_gate.py`). It
+    reads `cronjob_gates`, the reader the renderer reads too.
+    """
+    gates, problems = cronjob_gates(published, roles)
+    return frozenset(gates), problems
+
+
 def verifying_tags(published: Iterable[str], roles: Path = K8S_ROLES) -> frozenset[str]:
     """The published tags whose role ships verify or post-apply mutation Jobs.
 
-    A role ships them as `templates/verify/*.yaml.j2`, which alone makes the renderer write
-    `cluster/<tag>-verify/` and the Kustomization `<tag>-verify` (D5.1a1). It reads
+    A role ships them as `templates/verify/*.yaml.j2`, which makes the renderer write
+    `cluster/<tag>-verify/` and the Kustomization `<tag>-verify` (D5.1a1). A gate Job
+    (`gating_tags`) is the one other input that does. It reads
     `verify_files`, the reader the renderer renders that directory from too.
     """
     return frozenset(
@@ -223,6 +254,7 @@ def census(
     deferring: Iterable[str] = (),
     snapshotting: Iterable[str] = (),
     verifying: Iterable[str] = (),
+    prepulling: Iterable[str] = (),
 ) -> list[str]:
     """Every way the bundle at `out` differs from the allowlist, one line each.
 
@@ -232,6 +264,8 @@ def census(
         kinds: The shared kinds.
         deferring: The published tags that defer files, from their roles (`deferring_tags`).
         snapshotting: The published tags that declare snapshot claims (`snapshot_tags`).
+        prepulling: The published tags whose role sets `flux_prepull_timeout`
+            (`prepull_tags`).
         verifying: The published tags with a verify or post-apply mutation Job
             (`verifying_tags`).
 
@@ -241,6 +275,7 @@ def census(
     granted = {
         DEFERRED_SUFFIX: set(deferring) & published,
         SNAPSHOT_SUFFIX: set(snapshotting) & published,
+        PREPULL_SUFFIX: set(prepulling) & published,
         VERIFY_SUFFIX: set(verifying) & published,
     }
     suffixes = {
@@ -376,12 +411,17 @@ def report(out: Path, published: list[str], roles: Path = K8S_ROLES) -> int:
     deferring, problems = deferring_tags(published, roles)
     snapshotting, unjudged = snapshot_tags(published, roles)
     problems += unjudged
+    prepulling, unjudged = prepull_tags(published, roles)
+    problems += unjudged
+    gating, unjudged = gating_tags(published, roles)
+    problems += unjudged
     problems += census(
         out,
         published,
         deferring=deferring,
         snapshotting=snapshotting,
-        verifying=verifying_tags(published, roles),
+        verifying=verifying_tags(published, roles) | gating,
+        prepulling=prepulling,
     )
     problems += member_census(out, published)
     problems += bundle_gates.gates(out, published)

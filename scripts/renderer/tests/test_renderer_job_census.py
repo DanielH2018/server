@@ -36,11 +36,12 @@ THIS_TEST = (
 )
 DIRECTORY = {
     "snapshot": "sonarr-snapshot",
+    "prepull": "sonarr-prepull",
     "soak": "soak",
     "verify": "sonarr-verify",
     "mutation": "sonarr-verify",
 }
-BACKOFF = {"snapshot": 1, "soak": 0, "verify": 0, "mutation": 2}
+BACKOFF = {"snapshot": 1, "prepull": 0, "soak": 0, "verify": 0, "mutation": 2}
 THROUGH_HELPER = (
     "import json\nimport re\n\nfrom flux_job_connect import Request, open_url\n\n"
     "request = Request('http://sonarr.media.svc:8989/ping')\n"
@@ -475,4 +476,9 @@ def test_the_live_bundle_passes_every_row(live_bundle):
     assert set(tags) | SHARED_KINDS <= bundle.keys()
     assert {"bento-pdf", "cluster-vars", "soak"} <= bundle.keys()
     assert any(doc["kind"] == "Job" for doc in bundle["soak"]), "the soak Job is gone"
+    # The first verify directories, from sonarr's and radarr's flip (D5.20).
+    for verify in ("sonarr-verify", "radarr-verify"):
+        assert any(doc["kind"] == "Job" for doc in bundle[verify]), (
+            f"{verify} has no Job"
+        )
     assert all(bundle[tag] for tag in tags), "a tag directory parsed to no documents"

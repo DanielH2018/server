@@ -15,7 +15,7 @@ from pathlib import Path
 
 import pytest
 
-from deploy_tools.land_lib import land_probe
+from deploy_tools.land_lib import land_probe, outcome
 from deploy_tools.land_lib.outcome import ABANDONED_WATCH_NOTE, PROMOTE_TIMEOUT_NOTE
 
 _SHIM = Path(__file__).resolve().parents[3] / ".claude" / "wait-sources" / "land"
@@ -74,6 +74,16 @@ def test_a_deferral_no_promotion_covered_still_gave_up(tmp_path):
     log = landing(
         tmp_path,
         f"{PROMOTE_TIMEOUT_NOTE}\nVERDICT: deferred (PR #939 — no promotion covered it)\n",
+        rc=75,
+    )
+    assert land_probe.read(log)["state"] == "gave-up"
+
+
+def test_a_deferral_whose_health_gate_could_not_read_still_gave_up(tmp_path):
+    """#5543: no tick gates health again, so only a re-run of land.sh grades the deploy."""
+    log = landing(
+        tmp_path,
+        f"{outcome.UNREADABLE_GATE_NOTE}\nVERDICT: deferred (PR #939 — gate unreadable)\n",
         rc=75,
     )
     assert land_probe.read(log)["state"] == "gave-up"

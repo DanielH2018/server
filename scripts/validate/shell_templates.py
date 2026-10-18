@@ -46,6 +46,7 @@ from pathlib import Path as _Path
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 
 from validate.validate_lib.ok_lines import ok_printer
+from lib.cli_help import answer_help
 from validate.validate_lib.cron_checks import (
     cron_kubeconfig_error,
     cron_path_error,
@@ -202,6 +203,7 @@ def main(
         0 if every template rendered clean and passed both linters, 1 otherwise (including
         when shellcheck is missing from PATH or no templates were found).
     """
+    answer_help(__doc__, list(argv))
     ok = ok_printer(argv)
     shellcheck_bin = find_shellcheck(which)
     if not shellcheck_bin:

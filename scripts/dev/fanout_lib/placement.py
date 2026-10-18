@@ -75,6 +75,11 @@ class HostReading:
     # key — a test double, or a future caller that forgets it — must fail the gate closed
     # rather than pass it for want of a value.
     signing_key: str = ""
+    # The unit blocks `transport.read_host` appended to the headroom command for the host's
+    # uncleaned batches, as `unit_state.MARKER` delimits them; empty when none were asked for or
+    # none came back. Raw rather than parsed: reading them is `status.parse_status`'s job, and
+    # this module imports neither it nor the manifest. Never scored here.
+    unit_states: str = ""
 
 
 class NoHeadroom(Exception):

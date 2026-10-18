@@ -193,18 +193,24 @@ def entities_with(overrides: dict) -> dict[str, dict]:
 
 @lru_cache(maxsize=1)
 def bridge_env() -> dict[str, str]:
-    """monitor-bridge's env-secret as the bridge pod receives it: env var -> value.
+    """monitor-bridge's environment as the bridge pod receives it: env var -> value.
 
-    Every threshold, window and cadence the loop reads is one key here, so a guard comparing a
-    tile's deadline against the loop that feeds it reads the rendered value rather than regexing
-    the template for it.
+    The Deployment's `env` settings over the env-secret's credentials (#5574). Every threshold,
+    window and cadence the loop reads is one key here, so a guard comparing a tile's deadline
+    against the loop that feeds it reads the rendered value rather than regexing the template
+    for it.
     """
     secret = yaml_fast.safe_load(_render("monitor-bridge", "env-secret.yaml.j2"))
     assert secret.get("kind") == "Secret", (
         f"{BRIDGE_ENV_SECRET.name} no longer renders a Secret, got {secret.get('kind')!r}"
     )
-    data = secret["stringData"]
-    assert "INTERVAL" in data, "the bridge env-secret declares no INTERVAL"
+    workload = yaml_fast.safe_load(_render("monitor-bridge", "deployment.yaml.j2"))
+    container = workload["spec"]["template"]["spec"]["containers"][0]
+    data = {
+        **secret["stringData"],
+        **{e["name"]: e["value"] for e in container.get("env", []) if "value" in e},
+    }
+    assert "INTERVAL" in data, "the bridge's environment declares no INTERVAL"
     return data
 
 

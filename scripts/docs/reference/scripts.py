@@ -125,9 +125,20 @@ def _exit_codes_cell(rel_path: str) -> str:
     return f"[{', '.join(str(c.value) for c in codes)}](#{anchor})"
 
 
-def build_rows(scripts: Path = SCRIPTS, repo: Path = REPO) -> list[dict[str, str]]:
-    """One row per first-party script, sorted by name."""
-    verdicts = classify(repo, scripts)
+def build_rows(
+    scripts: Path = SCRIPTS,
+    repo: Path = REPO,
+    verdicts: dict[str, tuple[str, str]] | None = None,
+) -> list[dict[str, str]]:
+    """One row per first-party script, sorted by name.
+
+    Args:
+        scripts: The directory whose scripts get a row.
+        repo: The tree `classify` reads for how each script is run.
+        verdicts: `classify(repo, scripts)`'s answer, when the caller already holds it.
+    """
+    if verdicts is None:
+        verdicts = classify(repo, scripts)
     rows = []
     for path in candidates(scripts):
         if path.suffix == ".py":

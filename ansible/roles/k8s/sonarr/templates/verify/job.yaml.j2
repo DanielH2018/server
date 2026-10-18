@@ -1,10 +1,10 @@
 {#
-  sonarr's verify Job and the ConfigMap that carries its script, INERT until sonarr's flip.
+  sonarr's verify Job and the ConfigMap that carries its script.
 
-  This directory is `verify-inert/`, which neither reader globs: the manifests role takes only
-  top-level `templates/*.yaml.j2`, and `verify_files` takes only `templates/verify/*.yaml.j2`.
-  sonarr's flip PR moves the directory to `templates/verify/`, and the renderer then emits it
-  into `sonarr-verify` (D5, *A verify conversion lands as inert code*).
+  The renderer's `verify_files` takes `templates/verify/*.yaml.j2` and emits them into
+  `sonarr-verify`; the manifests role takes only top-level `templates/*.yaml.j2`, so Ansible
+  never applies this file. The Job landed inert in `templates/verify-inert/` and sonarr's flip
+  (D5.20) moved it here (D5, *A verify conversion lands as inert code*).
 
   Both names end in a digest, as the Job census requires (D5, *Rules for every Job Flux
   applies*): the ConfigMap's in `configmap_digest8` of its data, the Job's in
@@ -39,8 +39,7 @@ activeDeadlineSeconds: 300
 template:
   metadata:
     labels:
-      # The label a `sonarr-verify` entry in sonarr's `netpol_from` admits. Neither that fence
-      # nor netpol-baseline admits it yet; the peer lands in its own PR before the flip.
+      # The label the `sonarr-verify` entry in sonarr's `netpol_from` admits.
       app: sonarr-verify
   spec:
     serviceAccountName: sonarr-verify

@@ -155,6 +155,11 @@ data:
           - source_labels: [__name__]
             action: drop
             regex: kube_replicaset_(annotations|created|labels|metadata_generation|spec_replicas|status_fully_labeled_replicas|status_observed_generation|status_ready_replicas|status_replicas|status_terminating_replicas)
+          # Services are collected for kube_service_status_load_balancer_ingress alone, which
+          # files/rules/k8s-services.yaml reads. The other seven v2.20 families have no reader.
+          - source_labels: [__name__]
+            action: drop
+            regex: kube_service_(annotations|created|deletion_timestamp|info|labels|spec_external_ip|spec_type)
       # The three Flux controllers' own metrics, on the `http-prom` container port (8080). No
       # Service exposes that port, so this job discovers the pods, and scrape_jobs.py leaves a
       # job needing pod discovery hand-written. The flux role's flux-allow-prometheus policy

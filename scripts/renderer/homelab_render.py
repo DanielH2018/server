@@ -3,8 +3,7 @@
 
 `cluster` renders each deploy tag into `DIR/cluster/<tag>/`, with a `kustomization.yaml`
 listing its files. It reads the git tree and, in stub mode, the stub file, and never contacts
-a cluster, a host, a registry or a decryption key. Ansible stays the only writer to the
-cluster.
+a cluster, a host, a registry or a decryption key. Ansible stays the only writer to the cluster.
 
 Without `--secret-stubs`, `cluster` renders in placeholder mode (target slice R2): every secret
 reference renders as `${<key>}`, and a directory whose render holds one escapes every other `$`
@@ -31,9 +30,13 @@ A published tag whose role lists `render_sops_manifests` gets a byte copy of eac
 under `ansible/vars/cluster-manifests/` in `DIR/cluster/<tag>/`, and `decryption` on its
 Kustomization (D3.3c); a manifest without the substitute-disabled annotation fails the render.
 One with snapshot claims gets its snapshot Job in `DIR/cluster/<tag>-snapshot/` (`snapshot.py`).
-A placeholder render also writes every image context `k8s/image-builder` builds, whatever
-tags it names: `DIR/images/<name>/` and `DIR/images/tags.json`, whose content tags each
-consumer's ref reads in the same render (`renderer_lib/images.py`, D5.4a1).
+One whose role sets `flux_prepull_timeout` gets its pre-pull Jobs in `DIR/cluster/<tag>-prepull/`
+(`prepull.py`); one setting `flux_cronjob_gates`, its gate Jobs in `<tag>-verify/` (`cronjob_gate.py`).
+A placeholder render also writes the context of each image its tags' roles build with
+`k8s/image-builder`: `DIR/images/<name>/` and `DIR/images/tags.json`, whose content tags each
+consumer's ref reads in the same render (`renderer_lib/images.py`, D5.4a1). A full render
+writes all ten. `--all-images` writes all ten whatever `--role` names, which the publish job
+passes because its `images` job builds every context (#5374).
 In both modes, every flux-owned tag's restart targets get `checksum/restart`, hashed from the
 placeholder-form documents and `ansible/vars/cluster-vars.source`
 (`renderer_lib/restart.py`), and its claims and Namespaces the prune label (`prune_label.py`).
@@ -59,11 +62,9 @@ Run: uv run python scripts/renderer/homelab_render.py cluster --out /tmp/r2-rend
      uv run pytest scripts/renderer/tests
 """
 
-import os
 import sys
-import tempfile
-from collections.abc import Callable, Generator
-from contextlib import contextmanager
+from collections.abc import Callable
+from functools import partial
 from pathlib import Path
 
 import sys as _sys
@@ -99,13 +100,15 @@ from renderer.renderer_lib.cluster import (
     tag_context,
     write_cluster,
 )
-from renderer.renderer_lib.images import TAGS_FILE, check_images, image_files
-from renderer.renderer_lib.images import ghcr_refs
+from renderer.renderer_lib.images import TAGS_FILE, check_images, ghcr_refs, image_files
 from renderer.renderer_lib.prune_label import label_tags
+from renderer.renderer_lib.cronjob_gate import attach_gates
+from renderer.renderer_lib.prepull import attach_prepulls
 from renderer.renderer_lib.snapshot import attach_snapshots
 from renderer.renderer_lib.restart import restart_targets, restart_values, stamp
 from renderer.renderer_lib.restart import source_digests
 from renderer.renderer_lib.context import load_stubs
+from renderer.renderer_lib.environment import ansible_local_temp
 from renderer.renderer_lib.host import render_host, render_package, write_packages
 from renderer.renderer_lib.sops_entries import (
     copy_sops_manifests,
@@ -342,6 +345,8 @@ def _placeholder_cluster(
         )
         tags = attach_vendored(tags, result.key_sets, vendored)
         tags = attach_snapshots(tags, published, rollout_timeout_default(), vendored)
+        tags = attach_prepulls(tags, published, vendored)
+        tags = attach_gates(tags, published, vendored, result.key_sets)
         bundle = (
             _bundle(
                 tags, result, out, published, cluster_file, ordering(owned), revision
@@ -488,27 +493,6 @@ def packages(out: Path, host: str | None, name: str | None) -> int:
     return RENDER_OK
 
 
-@contextmanager
-def ansible_local_temp() -> Generator[None]:
-    """Point ansible-core's local temp directory at the system temp directory for the block.
-
-    ansible-core creates its local temp directory when the render first imports its
-    constants, under `~/.ansible/tmp` by default. The system temp directory keeps the home
-    directory untouched, and ansible-core removes its own subdirectory at exit. A value the
-    caller already set is left alone. The block restores the environment on exit, so an
-    in-process caller such as a pytest worker does not hand the variable to every later
-    test and subprocess (#5002).
-    """
-    if "ANSIBLE_LOCAL_TEMP" in os.environ:
-        yield
-        return
-    os.environ["ANSIBLE_LOCAL_TEMP"] = tempfile.gettempdir()
-    try:
-        yield
-    finally:
-        os.environ.pop("ANSIBLE_LOCAL_TEMP", None)
-
-
 def main(argv: list[str] | None = None) -> int:
     parser = ArgumentParser(description=__doc__.splitlines()[0])
     commands = parser.add_subparsers(dest="command", required=True)
@@ -542,6 +526,12 @@ def main(argv: list[str] | None = None) -> int:
         "--secret-stubs",
     )
     render.add_argument(
+        "--all-images",
+        action="store_true",
+        help="write every image context and tags.json, not only those the named tags' "
+        "roles build: the publish job's render, whose images job builds all ten",
+    )
+    render.add_argument(
         "--revision",
         metavar="SHA",
         help="the commit the soak Job judges. Default: HEAD",
@@ -570,6 +560,11 @@ def main(argv: list[str] | None = None) -> int:
             "--shared-only renders no tag and only publishes, so it takes neither --role "
             "nor --secret-stubs"
         )
+    if getattr(args, "all_images", False) and (args.shared_only or args.secret_stubs):
+        parser.error(
+            "--all-images writes image contexts, which only a placeholder render of tags "
+            "writes, so it takes neither --shared-only nor --secret-stubs"
+        )
     with ansible_local_temp():
         if args.command != "cluster":
             return packages(
@@ -587,6 +582,7 @@ def main(argv: list[str] | None = None) -> int:
             args.out,
             args.roles,
             args.secret_stubs,
+            render=partial(render_placeholders, all_images=args.all_images),
             shared_only=args.shared_only,
             revision=revision,
         )

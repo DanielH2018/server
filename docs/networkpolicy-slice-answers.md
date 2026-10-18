@@ -57,8 +57,9 @@ Deployed 2026-08-17. Ten workloads labelled, four per-workload allow policies li
 ### 3. Host → ClusterIP is admitted by the baseline's `cni0` `/32`s — only on the caller's own node
 
 Slice 2 was built as the experiment for this rather than pre-allowing both address forms.
-`roles/k8s/sonarr/tasks/verify.yml` calls sonarr's ClusterIP from the Ansible controller on
-daniel-box on every deploy; with sonarr fenced and **no node-IP ipBlock in its policy**, that verify
+sonarr's Ansible verify tasks called sonarr's ClusterIP from the Ansible controller on
+daniel-box on every deploy, until sonarr's Flux flip (D5.20) replaced them with the in-cluster
+`sonarr-verify` Job; with sonarr fenced and **no node-IP ipBlock in its policy**, that verify
 passed and returned real data (14 series, 20.8 GiB measured through the mount). So a host caller
 does arrive as the node's `cni0` address, and the baseline's existing `10.42.0.1/32` and
 `10.42.1.1/32` entries cover it — **when the pod is on the same node as the caller, and only then.**
@@ -99,18 +100,18 @@ right, so treat the list as the deliverable and the method as insufficient.
 
 Host → ClusterIP callers targeting a **fenced** pod:
 
-1. `roles/k8s/sonarr/tasks/verify.yml` → sonarr, from daniel-box.
-2. `roles/setup/fake_remux/tasks/main.yml` → sonarr, from daniel-box.
-   Both are same-node and stay that way: sonarr is pinned to daniel-box by the `media-data` PV's
+1. `roles/setup/fake_remux/tasks/main.yml` → sonarr, from daniel-box. sonarr's own Ansible
+   verify tasks were a second caller until sonarr's Flux flip (D5.20) moved the reads in-cluster.
+   It is same-node and stays that way: sonarr is pinned to daniel-box by the `media-data` PV's
    *required* `nodeAffinity` (`roles/k8s/media-volume/templates/pv.yaml.j2`).
-3. **containerd on daniel-server → `registry`, cross-node, and working.**
+2. **containerd on daniel-server → `registry`, cross-node, and working.**
    `roles/setup/k3s/templates/registries.yaml.j2` renders
    `endpoint: http://{{ k8s_registry_cluster_ip }}:{{ k8s_registry_port }}` on every host that is
    not the registry node, installed by `roles/setup/k3s/tasks/agent.yml`. registry is fenced and
    runs on daniel-box. This is the cross-node host path succeeding in production, and it is the
    evidence above.
 
-A fourth targets `prometheus` in `observability`, which no policy selects until slice 3 — the warning
+A third targets `prometheus` in `observability`, which no policy selects until slice 3 — the warning
 below.
 
 **The census method that missed one, and why.** Two passes used

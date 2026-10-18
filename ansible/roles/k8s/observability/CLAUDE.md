@@ -59,9 +59,16 @@ names the rendered files its pod reads in `restart_secrets`, in
 `scrape-credentials-secret.yaml` for prometheus, `grafana-secret.yaml` for grafana and
 `alertmanager-secret.yaml` for alertmanager. The role pairs each result of the shared
 `manifests_secret_render` loop with its file as `observability_changed_secret_files`. One Secret
-edit then restarts its readers alone, soaks them alone in the play gate, and runs the Grafana
-password sync only for `grafana-secret.yaml`. An Alertmanager config edit restarts and soaks
-Alertmanager and never execs the Grafana CLI.
+edit then restarts its readers alone and soaks them alone in the play gate. An Alertmanager
+config edit restarts and soaks Alertmanager alone.
+
+**An initContainer writes Grafana's admin password.** `GF_SECURITY_ADMIN_PASSWORD` seeds only a
+new database, so the `admin-password` initContainer in `grafana.yaml.j2` runs `grafana cli
+admin reset-admin-password` from the `grafana-admin` Secret before every Grafana start. A
+rotated `grafana_admin_password` changes `grafana-secret.yaml`, the restart rolls grafana, and
+the initContainer writes the new password. grafana is `Recreate`, so no server holds the
+SQLite file while the CLI runs. Once the tag is flux-owned, the renderer's restart annotation
+rolls grafana instead (D5.1e).
 
 The rule files are the one ConfigMap no annotation hashes. Prometheus mounts `prometheus-rules`
 as a directory and runs with `--config.auto-reload`, so a rule edit reloads in place and never
@@ -110,7 +117,10 @@ walks the routing tree to prove the alerts reach the mute.
 `HostUpdateStale` per entry of `observability_expected_hosts`, each from the shape in
 `tests/rules/fixtures/host-update-stale.yaml`, which `host-checks.test.yaml` fires.
 `ansible/tests/services/test_host_plane_rule_literals.py` holds both sets to their sources and
-prints the rule a new entry needs. `docs/host-packages.md` is the runbook for both pages.
+prints the rule a new entry needs. `docs/host-packages.md` is the runbook for both pages. The
+group also carries one `WiredLinkDown` warning per node whose host_vars set
+`k3s_node_static_link`, reading that link's carrier and operstate (#5124). The same test
+module holds that set to host_vars, so a node that pins a new link needs a rule edit too.
 
 **The `blackbox-ingress` job probes every ingress tile through blackbox-exporter.** It is
 hand-written in `prometheus.yaml.j2` and renders one target per tile the

@@ -1,6 +1,5 @@
 {% from 'container-resources.yml.j2' import container_resources with context %}
 {% from 'security-context.yml.j2' import hardened_security_context with context %}
-{% from 'checksum-annotation.yml.j2' import checksum_annotation with context %}
 {% from 'workload-shell.yml.j2' import spec_shell, pod_shell with context %}
 ---
 apiVersion: apps/v1
@@ -22,12 +21,6 @@ spec:
       labels:
         app: monitor-bridge
         netpol-baseline: enforced
-      annotations:
-        # Recreate the pod when any bridge module's source changes — the scripts are not
-        # manifests, so the manifests role's own change detection never sees them. The fact
-        # is a hash over every module in monitor_bridge_modules, so a change confined to a
-        # split-out module rolls the pod too.
-        {{ checksum_annotation('check-script', value=monitor_bridge_script_checksum) }}
     spec:
       # Secret-volume files are root-owned; without fsGroup the 0440 credential files
       # below are unreadable to this non-root uid and both file-mounted checks silently
@@ -45,6 +38,16 @@ spec:
             - name: metrics
               containerPort: {{ monitor_bridge_deploy_pipeline_port }}
 {{ hardened_security_context(read_only=true) }}
+          # The settings, one plain value per entry of config/env.yaml.j2; the credentials come
+          # from env-secret.yaml.j2. A quoted number belongs there, never in the Secret: Flux's
+          # typed patch reads a Secret's "300" back as a number and refuses it (#5574).
+          # `to_json` writes each value as the double-quoted string the file holds, so a value
+          # that file left unquoted as a number renders as one and the apply refuses it.
+          env:
+{% for name, value in lookup('template', playbook_dir + '/roles/k8s/monitor-bridge/templates/config/env.yaml.j2') | from_yaml | dictsort %}
+            - name: {{ name }}
+              value: {{ value | to_json }}
+{% endfor %}
           envFrom:
             - secretRef:
                 name: monitor-bridge-env
@@ -83,17 +86,20 @@ spec:
           # the underlying condition rather than the threshold.
 {{ container_resources(cpu_limit='1', mem_limit='96Mi', cpu_request='20m', mem_request='32Mi') }}
       volumes:
+        # One ConfigMap per module (templates/script-configmap.yaml.j2 has why), projected into
+        # one /app. The keys are flat (a ConfigMap key cannot contain `/`); `items:` puts each
+        # one back at its path, and Kubernetes creates the directories a path names. Derived
+        # from the same list the ConfigMap template reads, so the two cannot disagree about
+        # where a module lives.
         - name: monitor-bridge-script
-          configMap:
-            name: monitor-bridge-script
-            # The keys are flat (a ConfigMap key cannot contain `/`); `items:` puts each one
-            # back at its path under /app, and Kubernetes creates the directories a path
-            # names. Derived from the same list the staging loop and --from-file read, so the
-            # three cannot disagree about where a module lives.
-            items:
+          projected:
+            sources:
 {% for module in monitor_bridge_modules %}
-              - key: {{ module | replace('/', '_') }}
-                path: {{ module }}
+              - configMap:
+                  name: monitor-bridge-script-{{ module[:-3] | replace('/', '-') | replace('_', '-') }}
+                  items:
+                    - key: {{ module | replace('/', '_') }}
+                      path: {{ module }}
 {% endfor %}
         - name: monitor-bridge-credentials
           # Deliberately NOT monitor-bridge-env: that Secret is consumed by envFrom, which

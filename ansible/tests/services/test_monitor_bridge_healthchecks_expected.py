@@ -124,12 +124,15 @@ def test_a_cron_moved_without_the_expectation_is_flagged():
 
 def test_only_pi_peer_backup_runs_in_the_containers_timezone():
     # pi-peer-backup is a k8s CronJob scheduled in `tz`; every other slug is a UTC host cron.
-    # Both sides are read as rendered: the expectation as the bridge's env Secret carries it,
+    # Both sides are read as rendered: the expectation as the bridge's Deployment env carries it,
     # the zone from the CronJob's spec.
     expected = cron_zone = None
     for role, _tpl, doc in rendered_docs():
-        if role == "monitor-bridge" and doc.get("kind") == "Secret":
-            raw = (doc.get("stringData") or {}).get("HEALTHCHECKS_EXPECTED")
+        if role == "monitor-bridge" and doc.get("kind") == "Deployment":
+            env = doc["spec"]["template"]["spec"]["containers"][0].get("env", [])
+            raw = next(
+                (e["value"] for e in env if e["name"] == "HEALTHCHECKS_EXPECTED"), None
+            )
             expected = json.loads(raw) if raw else expected
         elif role == "pi-peer-backup" and doc.get("kind") == "CronJob":
             cron_zone = doc["spec"]["timeZone"]

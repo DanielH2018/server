@@ -68,7 +68,7 @@ checks each gate suppresses.
   weekly Sunday restart takes a node's exporter away against a 1m scrape and a 5m loop. The
   shortfall is reported AFTER each check's own breach scan, because a reporting host that is
   genuinely out of memory outranks a complaint about the absent one. `HOST_ORIGINS_MIN` is
-  rendered in `templates/env-secret.yaml.j2` so a planned single-node maintenance window can lower
+  rendered in `templates/config/env.yaml.j2` so a planned single-node maintenance window can lower
   it and put it back. **At 1 the arm is inert**, which is the original failure, so treat it as a
   temporary setting rather than a fix for a noisy tile.
 - **Claude Code cgroups** — not a monitor of its own either, but a third arm inside **Memory**
@@ -89,7 +89,7 @@ checks each gate suppresses.
   throttling is the cap working, and its value belongs to `roles/setup/claude_code`, so an arm
   keyed on it would move whenever those caps move. It is graphed instead on the
   `AI/claude-code-host-cgroups` board, which carries an `origin` template variable.
-  `CLAUDE_CGROUPS` (rendered in `templates/env-secret.yaml.j2`, `claude-rc,fleet`) is the set
+  `CLAUDE_CGROUPS` (rendered in `templates/config/env.yaml.j2`, `claude-rc,fleet`) is the set
   whose ABSENCE is a fault, not the set that is judged. The queries filter by metric, so
   `user-1000-slice` is watched whenever it exists and its absence never pages, because that cgroup
   only exists once somebody has logged in since boot. **Empty disables the whole arm.** The full
@@ -972,7 +972,7 @@ checks each gate suppresses.
 - **Loki Log Ingestion** (three-arm LogQL freshness against the cluster `loki-homelab` through its
   in-cluster Service. `down` if ANY arm is silent: a dead Alloy→Loki pipeline (a relabel
   regression, positions-file corruption, a stale `/var/log` mount) that Loki's `/ready` Kuma probe
-  stays green through. `templates/env-secret.yaml.j2` renders every selector from the
+  stays green through. `templates/config/env.yaml.j2` renders every selector from the
   `loki_streams` label owner in `group_vars/all.yml` (#3740).
   **Arm 1, cluster file-tail union** `sum(count_over_time({job=~"authlog|syslog", machine!="daniel-pi"}[3h]))`
   (`LOKI_STREAM`). It counts the cluster hosts' file-tailed streams together, so if Alloy's file
@@ -1221,7 +1221,7 @@ Cluster Prometheus Reachable retired as a gate (#2825), and its four members are
   check reaches the evaluation path each cycle and its streak advances. A test against `CHECKS`
   guards both invariants. `GRACE_CYCLES` is env-tunable, and pure
   `bridge.streaks.apply_startup_grace()` is unit-tested.
-- Thresholds are env-tunable in `templates/env-secret.yaml.j2`, the only place each value is
+- Thresholds are env-tunable in `templates/config/env.yaml.j2`, the only place each value is
   written. *Threshold defaults* below tabulates the numeric ones from that template, and the
   per-check prose above gives the reason for a number. A failed query or unreachable source makes
   that monitor `down` with an explanatory `msg`, so a broken exporter is surfaced and not silently

@@ -4,8 +4,11 @@ Each image `k8s/image-builder` builds gets `DIR/images/<name>/`, one file per ke
 context ConfigMap's `data`, written byte for byte. `DIR/images/tags.json` maps each name to its
 content tag, `sha-<12 hex>` over that `data` as `image_builder_content_tag` computes it.
 
-The contexts render from every role that includes `k8s/image-builder`, whatever tags the render
-names, so a `--role` render still writes all ten. Each renders with its role's play context and
+The contexts render from each role among the render's tags that includes `k8s/image-builder`,
+because a consumer reads only the images its own role builds (`role_tags`). A full render
+names every builder, so it writes all ten. A `--role` render writes the named builders'
+contexts alone, and no `DIR/images/` when it names none; `--all-images` renders all ten
+whatever it names, as the publish job's `images` job needs (#5374). Each renders with its role's play context and
 the include's `image_builder_*` vars (`task_inputs.image_contexts`). The consumer pass reads the
 same `ImageContext` tags (`render_tag`'s `built`), so a consumer's ref and `tags.json` come from
 one computation. `ref_mismatches` holds them equal, and `paths_into_images` holds that no
@@ -84,14 +87,24 @@ def builder_roles(roles: Path = K8S_ROLES) -> list[str]:
     )
 
 
-def render_images(overrides: dict, host: str = K8S_HOST) -> dict[str, BuiltImage]:
-    """Every built image's context and tag, rendered with `overrides` over each role's context.
+def render_images(
+    overrides: dict, host: str = K8S_HOST, tags: Iterable[str] | None = None
+) -> dict[str, BuiltImage]:
+    """Each built image's context and tag, rendered with `overrides` over its role's context.
+
+    Args:
+        overrides: The extra vars that outrank every other layer.
+        host: The inventory host whose context each role renders in.
+        tags: The deploy tags whose roles' images to build, or None for every builder role.
 
     Raises:
         RenderError: A context fails to render, or two builds name the same image.
     """
+    wanted = None if tags is None else set(tags)
     images: dict[str, BuiltImage] = {}
     for role in builder_roles():
+        if wanted is not None and role not in wanted:
+            continue
         try:
             ctx = tag_context(K8S_ROLES / role, role, overrides, host)
             built = image_contexts(K8S_ROLES / role, ctx)
@@ -296,9 +309,13 @@ def paths_into_images(files: Mapping[str, str]) -> list[str]:
     and every `resources`, `components` and `patches[].path` entry of any
     `kustomization.yaml`, the flux index included, read from its directory. `../` and a
     leading `/` are resolved first, so `./cluster/../images/nut` and `/images/nut` count.
+    A file that is not YAML, such as the bundle's `README.md`, holds no Kustomization and is
+    not read.
     """
     found = []
     for path, text in sorted(files.items()):
+        if not path.endswith((".yaml", ".yml")):
+            continue
         parts = path.split("/")
         base = posixpath.dirname(path)
         for doc in yaml_fast.safe_load_all(text):
@@ -342,13 +359,13 @@ def check_images(
     """Refuse a render whose image refs or Kustomization paths break C1's image rules.
 
     Raises:
-        RenderRefused: `out/images/` already holds a file.
+        RenderRefused: `out/images/` already holds a file, even when this render builds no
+            image: a narrowed render would leave the stale contexts for the `images` job.
         RenderError: A rendered ref names a built image with a tag other than `tags.json`'s,
             a GHCR content-tag ref pulls `Always` or sets no policy, or a Kustomization path
             reaches `DIR/images/`.
     """
-    if images:
-        refuse_occupied(out)
+    refuse_occupied(out)
     directories = {name: f for t in tags for name, f in t.directories().items()}
     tag_map = {name: image.tag for name, image in images.items()}
     cluster_files = {

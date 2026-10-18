@@ -66,3 +66,11 @@ def test_the_landing_and_the_deployer_name_the_same_map():
     from deployer_lib.deploy_k8s_owed import STANDALONE_GUARD_MAP
 
     assert GUARD_MAP == STANDALONE_GUARD_MAP
+
+
+def test_the_landing_and_the_ticks_narrow_name_the_same_map():
+    """`deploy_tags.py narrow` applies the same row rule for the tick (#5571), and a copy
+    naming another path would leave the tick fanning the real map out to every caller."""
+    from deploy_tools.narrow_lib.guard_map import GUARD_MAP as NARROW_GUARD_MAP
+
+    assert GUARD_MAP == NARROW_GUARD_MAP

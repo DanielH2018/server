@@ -7,16 +7,17 @@ non-tag Kustomizations, is every directory there. It has seven rows, each a pred
 Job and its directory:
 
 - `kind`: the Job's `homelab/job-kind` annotation is a kind its directory admits.
-  `<tag>-snapshot/` admits `snapshot`, `soak/` admits `soak`, and `<tag>-verify/` admits
-  `verify` and `mutation`. Any other directory admits no Job. Verify and mutation Jobs share
-  a directory, so only the annotation tells them apart, and a Job without it fails;
+  `<tag>-snapshot/` admits `snapshot`, `<tag>-prepull/` admits `prepull`, `soak/` admits
+  `soak`, and `<tag>-verify/` admits `verify` and `mutation` (`ADMITTED`). Any other
+  directory admits no Job. Verify and mutation Jobs share a directory, so only the annotation
+  tells them apart, and a Job without it fails;
 - `ttl`: no `spec.ttlSecondsAfterFinished`, because Flux re-creates a Job its TTL deleted;
 - `name`: the name ends in `-<job_spec_digest8>`, because a Job's pod template is immutable,
   and the spec holds no `${...}` placeholder, which Flux would substitute after the digest.
   Each ConfigMap the Job mounts ends its name in `-<configmap_digest8>`, so the spec digest
   covers the script and a script fix renames the Job;
-- `backoff`: `spec.backoffLimit` is set, to 1 for a snapshot Job and 0 for a soak or verify
-  Job. A mutation Job states its own value;
+- `backoff`: `spec.backoffLimit` is set, to 1 for a snapshot Job and 0 for a prepull, soak or
+  verify Job. A mutation Job states its own value;
 - `rerun-safe`: a mutation Job's `homelab/rerun-safe` annotation names a test, as
   `<path>::<function>`, that exists in the tree;
 - `delivery`: every container runs `python3 <mount>/<key>.py`, where `<mount>` mounts a
@@ -32,6 +33,8 @@ Job and its directory:
   reach around those two rules. The row guards against a mistake, not an
   adversary: a name spelled out at run time passes it. A `SIBLINGS` copy is byte-identical.
 
+A CronJob's gate Job (`cronjob_gate.is_gate_copy`) skips `delivery` and `helper`.
+
 The test module is `test_renderer_job_census.py`.
 """
 
@@ -39,15 +42,14 @@ import ast
 import json
 import re
 from collections.abc import Callable, Iterator, Mapping
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 from lib import yaml_fast
 from lib.repo_paths import REPO
-from pathlib import PurePosixPath
-
 from renderer.renderer_lib.bundle import CLUSTER_DIR
+from renderer.renderer_lib.cronjob_gate import is_gate_copy
 from renderer.renderer_lib.digest8 import configmap_digest8, job_spec_digest8
-from renderer.renderer_lib.ordering import SNAPSHOT_SUFFIX, VERIFY_SUFFIX, split_kind
+from renderer.renderer_lib import ordering
 
 # DECIDED: a Job declares its kind in this annotation on the Job's own `metadata`, which the
 # plan does not name. Verify and mutation Jobs share `<tag>-verify`, so nothing else tells a
@@ -58,7 +60,12 @@ JOB_KIND = "homelab/job-kind"
 RERUN_SAFE = "homelab/rerun-safe"
 SOAK = "soak"
 # The `backoffLimit` each kind must set. A mutation Job is absent: it states its own value.
-BACKOFF = {"snapshot": 1, SOAK: 0, "verify": 0}
+BACKOFF = {"snapshot": 1, "prepull": 0, SOAK: 0, "verify": 0}
+ADMITTED = {
+    ordering.SNAPSHOT_SUFFIX: frozenset({"snapshot"}),
+    ordering.PREPULL_SUFFIX: frozenset({"prepull"}),
+    ordering.VERIFY_SUFFIX: frozenset({"verify", "mutation"}),
+}
 HELPER = REPO / "ansible/roles/k8s/manifests/files/flux_job_connect.py"
 # Modules a script may import, each carried beside it (`IMPORTS`) as a byte-identical copy.
 CHANGED_SET = REPO / "scripts/deploy_tools/changed_set.py"
@@ -195,12 +202,7 @@ def admitted(directory: str) -> frozenset[str]:
     """The Job kinds a Kustomization directory may hold."""
     if directory == SOAK:
         return frozenset({SOAK})
-    suffix = split_kind(directory)[1]
-    if suffix == SNAPSHOT_SUFFIX:
-        return frozenset({"snapshot"})
-    if suffix == VERIFY_SUFFIX:
-        return frozenset({"verify", "mutation"})
-    return frozenset()
+    return ADMITTED.get(ordering.split_kind(directory)[1], frozenset())
 
 
 def _annotations(doc: Mapping) -> Mapping:
@@ -493,5 +495,6 @@ def problems(bundle: Bundle, rows: Mapping[str, Offence] = ROWS) -> list[str]:
         f"{row}: {directory}/{job['metadata']['name']}: {line}"
         for directory, job, docs in jobs(bundle)
         for row, offence in rows.items()
+        if row not in ("delivery", "helper") or not is_gate_copy(job, directory, bundle)
         for line in offence(job, directory, docs)
     ]

@@ -3,14 +3,14 @@
 monitor_bridge_k8s_image: python:3.14-alpine@sha256:f6a589d43c42b9e7f7dc67a12d37132491f362859a5d750607710cc56da3bc72
 
 # The deploy-pipeline exporter's listener (files/deploy_pipeline.py), the one thing this pod
-# serves rather than pushes. The env-secret hands it to the process, the Service and the
+# serves rather than pushes. config/env.yaml.j2 hands it to the process, the Service and the
 # container port read it, and observability's deploy-pipeline scrape job targets it as a literal,
 # because role defaults do not cross the deploy play's include_role loop.
 # ansible/tests/services/test_deploy_pipeline_scrape.py holds that literal to this value.
 monitor_bridge_deploy_pipeline_port: 9180
 
-# The host-package builder's two page bounds (h3-pi-pilot.md, *Builder arms*), rendered into the
-# env-secret as BUILDER_MAX_LAG_S and BUILDER_MAX_FETCH_AGE_S for the `host_packages` row.
+# The host-package builder's two page bounds (h3-pi-pilot.md, *Builder arms*), rendered into
+# config/env.yaml.j2 as BUILDER_MAX_LAG_S and BUILDER_MAX_FETCH_AGE_S for the `host_packages` row.
 # Lag: how long master may sit unbuilt (a trust, keyring or tools refusal, a rewritten master,
 # a hold, an open rollout gate, a master that stays red) before the tile pages: 2 hours, against
 # a ~103 s master CI run. Fetch age: how old the builder's last successful `git fetch` may be,
@@ -27,11 +27,12 @@ monitor_bridge_builder_max_fetch_age_s: 1800
 # and conftest.py, which must not reach the image.
 # ENFORCED by ansible/tests/services/test_monitor_bridge_modules.py, which fails when a runtime module
 # in files/ is absent here.
-# Paths relative to files/. The ConfigMap key for each is the path with `/` replaced by
-# `_` (a key cannot contain a slash), and the Deployment's `items:` mounts that key back at
-# the path, so `checks/b2.py` ships as key `checks_b2.py` and lands at /app/checks/b2.py.
-# Both derivations sit in tasks/main.yml and templates/deployment.yaml.j2; the copy loop
-# below creates the subdirectories first.
+# Paths relative to files/. Each module ships in its own ConfigMap, named from the path with
+# `.py` dropped and `/` and `_` replaced by `-`. Its key is the path with `/` replaced by `_`
+# (a key cannot contain a slash), and the Deployment's `items:` mounts that key back at the
+# path, so `checks/b2.py` ships in `monitor-bridge-script-checks-b2` as key `checks_b2.py`
+# and lands at /app/checks/b2.py. Both derivations sit in templates/script-configmap.yaml.j2
+# and templates/deployment.yaml.j2.
 monitor_bridge_modules:
   - cli.py
   - check.py

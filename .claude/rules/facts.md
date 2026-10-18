@@ -80,9 +80,10 @@ grade. Some lint rules therefore read the prose itself.
   whether or not the branch edited that section. The branch runs from the merge base with
   `<ref>` to the working tree, so a commit that fixes its own sentence stays silent. Versions
   are exempt because `version-as-fact` owns them. To resolve a finding, edit the sentence or
-  mark it as history. A name that the tree builds from parts, such as
-  `checksum_annotation('check-script')`, never appears literally, so a doc naming the
-  rendered `checksum/check-script` reads as vanished. Name it as the tree spells it.
+  mark it as history. A name that the tree builds from parts, such as the
+  `monitor-bridge-script-` prefix a template joins to each module's name, never appears
+  literally, so a doc naming one rendered ConfigMap reads as vanished. Name it as the tree
+  spells it.
 
 A paragraph or bullet that opens with `**HISTORY —` is history, and every prose rule skips it.
 A sentence such as "it lived on the staging guest until 2026-09-28" is correct exactly because

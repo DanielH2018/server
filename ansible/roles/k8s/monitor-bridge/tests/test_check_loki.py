@@ -37,7 +37,7 @@ from _loki_streams import (
 # keeps the ban itself from being silent.
 # Two limits, so this guard is not over-trusted:
 #   1. It reads each selector off the `cfg` fixture, which since #3659 is the rendered
-#      env-secret, so the deployed LOKI_STREAM is what is checked. A selector built at runtime
+#      pod environment, so the deployed LOKI_STREAM is what is checked. A selector built at runtime
 #      from other values is not.
 #   2. The vocabulary in ansible/tests/_loki_streams.py came from one k8s pod stream. LOKI_STREAM selects file-tail streams,
 #      which may legitimately carry labels this set does not list. Widen the set against a live
@@ -75,7 +75,7 @@ def _logql_selector_names(cfg):
 
 
 def _deployed_selector_values():
-    """LogQL selector values that actually deploy, read from the rendered env-secret.
+    """LogQL selector values that actually deploy, read from the rendered pod environment.
 
     `_logql_selector_names()` reads the `Config` fields. This reads every key the render
     produces instead, so a selector written into a new key is checked even before any `Config`

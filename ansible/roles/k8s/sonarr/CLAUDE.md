@@ -6,21 +6,43 @@ conventions.
 
 ## At a glance
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates, tasks or containers_list entry, or the k3s role's Longhorn tier lists. -->
-- **Deploy tag:** `--tags "sonarr"`
+- **Applied by:** Flux, through `promote` (`owner: flux`); `deploy.sh` refuses `--tags=sonarr`
+  with exit 5
 - **Images:** `lscr.io/linuxserver/sonarr` (`sonarr_k8s_image`), `ghcr.io/onedr0p/exportarr`
   (`sonarr_k8s_exportarr_image`)
 - **Route:** `sonarr.<domain>` · `sonarr.local.<domain>`, Authelia one_factor
 - **Claims:** `sonarr-config` (weekly -> B2 (default target)), `media-data` (not Longhorn
   (media-local))
-- **Auto-deploy:** eligible (`k8s_autodeploy: true`)
 <!-- /generated_from -->
 
 - **`sonarr-config`** (2Gi, `longhorn`, backed up) holds the library DB and absolute
   root-folder paths; `media-data` is the shared claim (mounted, not owned).
-- **Auto-deploy since slice 7b:** `Recreate` + an RWO config PVC is now protected by a pre-apply Longhorn snapshot and revert (`k8s_autodeploy_snapshot_pvcs:
-  [sonarr-config]`). `media-data` is mounted but explicitly **not** reverted
-  (`k8s_autodeploy_unreverted_claims`) — a revert can desync import/rename history from
-  files left in place, recoverable by a library rescan.
+- **Flux applies it, not Ansible** (D5.20, a Wave D PR with radarr and mosquitto). Its
+  `containers_list` entry carries `owner: flux`, so `deploy.sh`, the play and the GitOps
+  deployer all skip it, and a merged change reaches the cluster when `promote` publishes and
+  verifies the next bundle. Its image-bump PRs therefore draw no `land-wait` and no `probe.py
+  health` run. To give it back to Ansible, follow the two-PR handback in
+  `docs/flux-deploy-plane.md`; a plain revert of the flag leaves two writers on the objects.
+  authelia, media-volume and traefik stay Ansible-owned, so the Kustomization records them in
+  its `homelab/ansible-owned-deps` annotation, not in `dependsOn`. The Deployment is
+  `Recreate`, so a change that rolls it takes the service down briefly.
+- **The `sonarr-snapshot` Job snapshots `sonarr-config` before each revision applies**
+  (D5.2a). The sonarr Kustomization depends on `sonarr-snapshot`, so a revision applies only
+  after the snapshot is ready; `docs/flux-deploy-plane.md` lists the Job's checks. A failed
+  revision that changes sonarr writes the stateful hold, and `promote` does not reset `prod`,
+  because the failed image may already have migrated the database. Nothing reverts the claim
+  on its own: the operator follows the revert runbook in `docs/volume-snapshot-drills.md`.
+  `k8s_autodeploy: true` still lets Renovate automerge the image bump, which is safe for the
+  same reason it was under Ansible: a bad swap can be reverted to the snapshot.
+- **`media-data` is neither snapshotted nor reverted** (`k8s_autodeploy_unreverted_claims`). A
+  revert can desync import/rename history from files left in place, recoverable by a library
+  rescan.
+- **Where the tasks went.** `tasks/main.yml` holds two includes, `k8s/manifests` and
+  `k8s/arr-notification`, and no Flux path runs them. They stay for the handback. The
+  pre-apply snapshot through `k8s/volume-snapshot` became the `sonarr-snapshot` Job, and the
+  Kustomization's `wait` replaces the rollout wait. The library reads of `tasks/verify.yml`,
+  deleted here, became the `sonarr-verify` Job. arr-notification's seed Job beside it runs the
+  same script as the include (*Notable*).
 
 ## Notable
 - `sonarr_k8s_log_level: info` / `rotate: "10"` overrides upstream's debug-level default
@@ -39,33 +61,22 @@ conventions.
 - **`templates/deployment.yaml.j2` is one call to a shared macro.** The body sonarr and
   radarr share lives in `ansible/templates/arr-deployment.yml.j2` (#2871); the two roles
   differ only in the arguments they pass. `additional_metrics=true` is sonarr's alone.
-- `tasks/verify.yml` reads the Sonarr API through the Service ClusterIP (not the
-  ingress, which Authelia would intercept) to check the library actually loaded — a
-  running pod alone proves nothing about a broken import.
-- **`templates/verify-inert/` is sonarr's verify Job for Flux, and nothing renders it yet.**
-  Neither the manifests role nor the renderer's `verify_files` reads that directory. sonarr's
-  flip PR renames it to `templates/verify/`, which makes the renderer emit `sonarr-verify`.
-  The Job runs `files/sonarr_verify.py`, which makes `verify.yml`'s two API reads and asserts
-  against the Service's cluster name, through the `flux_job_connect` helper. It reads the key
-  from the `sonarr-exportarr` Secret; the `DECIDED:` note in `job.yaml.j2` says why. Its pod
-  carries `app: sonarr-verify`, which sonarr's fence does not admit yet: that `netpol_from`
-  peer lands in its own PR before the flip. `tests/test_sonarr_verify.py` renders the renamed
-  copy, runs the Job census over it, and runs the rendered script against a fixture API.
-  `notification.yaml.j2` beside it is arr-notification's seed Job, which shares the
-  directory, the ServiceAccount and the pod label; `ansible/roles/k8s/arr-notification/CLAUDE.md`
+- **`templates/verify/job.yaml.j2` is sonarr's verify Job, which proves the library loaded.**
+  A running pod alone proves nothing about a broken import. The renderer emits the Job into
+  `sonarr-verify`, which Flux applies once `sonarr` is Ready. It runs `files/sonarr_verify.py`,
+  which reads the root folders and the series through the Service's cluster name, not the
+  ingress, which Authelia would intercept. Every root folder must be accessible under `/data/`,
+  and the series must measure files through the mount. Its first connection goes through the
+  `flux_job_connect` helper. It reads the key from the `sonarr-exportarr` Secret; the
+  `DECIDED:` note in `job.yaml.j2` says why. Its pod carries `app: sonarr-verify`, which
+  sonarr's `netpol_from` lists (#5535), so the fence admits it. `tests/test_sonarr_verify.py`
+  renders the directory, runs the Job census over it, and runs the rendered script against a
+  fixture API. `notification.yaml.j2` beside it is arr-notification's seed Job, which shares
+  the directory, the ServiceAccount and the pod label; `ansible/roles/k8s/arr-notification/CLAUDE.md`
   has its design.
-- **`verify.yml` skips its API reads under a secret stub file.** The two `uri` reads and
-  the two asserts on their registers carry `when: not (homelab_secret_stubs | default(false)
-  | bool)`. `scripts/renderer/shadow_diff.py stubs` writes that sentinel into the stub file.
-  A stub API key draws a 401 from Sonarr, which would stop a shadow-render dry run. The guard
-  is not `k8s_dry_run`, because an ordinary dry run still evaluates the reads with the real
-  key.
-- **`verify.yml` opens with its own `rollout status` gate**, because `k8s/manifests` queues
-  the rollout for `k8s/manifests/tasks/drain.yml` at the end of the batch rather than waiting. Until
-  2026-09-22 the rootfolder read covered that rollout with a 12-sample `until:` poll, whose
-  120s budget was a fifth of the rollout's own — so a slow first boot failed a rollout that
-  would have succeeded (#2235). `ansible/roles/k8s/sonarr/defaults/main.yml:manifests_rollout_timeout` is the one
-  place that budget is written, as a literal role default because the renderer reads Flux's
-  `timeout` only from one (#5464). The gate, k8s/manifests' rollout wait and the template's
-  `progressDeadlineSeconds` read it through `sonarr_k8s_rollout_timeout`. The deadline has to move with the budget, or `rollout status` fails at the 600s
-  Kubernetes default whatever `--timeout` says (#2370).
+- **The rollout budget is 660s.** A first boot installing the striptracks DOCKER_MODS takes up
+  to 10 minutes. `ansible/roles/k8s/sonarr/defaults/main.yml:manifests_rollout_timeout` is the
+  one place that budget is written, as a literal role default because the renderer reads Flux's
+  `timeout` only from one (#5464). The template's `progressDeadlineSeconds` reads it through
+  `sonarr_k8s_rollout_timeout`. The deadline has to move with the budget, or the rollout fails
+  at the 600s Kubernetes default whatever the wait allows (#2370).

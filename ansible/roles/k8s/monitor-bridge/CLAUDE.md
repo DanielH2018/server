@@ -53,8 +53,10 @@ heartbeat survives. A check's row names its gate in the `gate` column, with the 
 and the checks page for why a number is what it is. Three conventions hold across all of them:
 an empty credential or URL disables a check, which stays `up` rather than paging about its own
 configuration; an unreachable source pages through `_evaluate` unless the check names a streak;
-and every threshold, window and streak is an env var in `templates/env-secret.yaml.j2`, so read
-the template rather than the constant.
+and every threshold, window and streak is an env var in `templates/config/env.yaml.j2`, so read
+the template rather than the constant. `templates/deployment.yaml.j2` renders each entry as an
+`env` value, and `templates/env-secret.yaml.j2` holds only credentials: Flux's typed patch reads
+a Secret's quoted `"300"` back as a number and refuses it (#5574).
 
 Two push-side rules bind as widely. **Every push monitor has `max_retries=0`**, so widen
 `uptime_kuma_k8s_bridge_push_interval` to fix post-boot flapping and never add retries
@@ -79,7 +81,7 @@ group pages on them. `docs/flux-deploy-plane.md` says what each alert means.
 - **A failed read exports no series for the gauges it feeds, never a 0.** Each cycle logs one
   `deploy-pipeline:` line with the values and any failed read.
 - **The reboot-window gauge reads no remote state.** It derives from the `WEEKLY_REBOOT_*` env
-  keys, which the env-secret renders from the `weekly_reboot_*` group vars, so PromotionStalled
+  keys, which `templates/config/env.yaml.j2` renders from the `weekly_reboot_*` group vars, so PromotionStalled
   stays quiet while `promote` defers across the weekly reboot (#5458).
 - **`--once`, `--dry-run` and `--check` neither serve nor read it**, so a hand-run beside the
   pod never contends for the port.
@@ -95,10 +97,17 @@ taking its inputs as arguments). `check_table.py` imports only `bridge.types` an
 but `fn` are literals: `ansible/filter_plugins/py_table.py` parses the table without running
 it. Modules split at 600 lines; the internals page has the per-module table.
 
-**Adding a module means adding its path to `monitor_bridge_modules`** in `defaults/main.yml`, a
-flat ConfigMap key mounted back at its path by the Deployment's `items:`. A module missing from
-it kills the pod at import on its next roll;
-`ansible/tests/services/test_monitor_bridge_modules.py` and its mount-layout sibling catch that.
+**Adding a module means adding its path to `monitor_bridge_modules`** in `defaults/main.yml`.
+`templates/script-configmap.yaml.j2` renders each entry as its own ConfigMap, and the
+Deployment's projected volume mounts every one back at its path under `/app`. One ConfigMap per
+module, because the shared role's client-side apply caps each object near 256 KiB and the
+modules total about 700 KB. A module missing from the list kills the pod at import on its next
+roll; `ansible/tests/services/test_monitor_bridge_modules.py` and its mount-layout sibling catch
+that. A module edit changes the render, so the shared role's rollout restart rolls the pod, and
+under Flux the renderer's restart annotation (`RESTART_ANNOTATION` in
+`scripts/renderer/renderer_lib/restart.py`) hashes every ConfigMap the volume names.
+`scripts/renderer/tests/test_renderer_monitor_bridge_script.py` holds the embed, the size and
+the checksum.
 
 ## Configuration is a parameter, not a module global
 
@@ -106,7 +115,7 @@ it kills the pod at import on its next roll;
 `check.run_once`, which passes it to every gate, check body and `bridge.net` helper that reads a
 URL; a test states the registry, the `Gates` and its I/O (a `FakeSources` as `src`).
 Building the config MUST NOT raise: `_int`/`_num` record a malformed or missing value in `CONFIG_PROBLEMS`, and
-`main()` exits 2. **A key the env-secret renders has no Python default**; the `cfg` fixture is
+`main()` exits 2. **A key the pod's environment renders has no Python default**; the `cfg` fixture is
 that render. A default argument cannot read the config (it evaluates at import), and a
 `verdicts/` module reads no `cfg` at all. The internals page has the test-side rules.
 

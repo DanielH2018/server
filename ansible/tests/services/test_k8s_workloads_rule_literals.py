@@ -11,7 +11,7 @@ the bridge arms, each literal is held to its bridge source:
 - the crash-loop `1h`, `3` and `30m` equal `K8S_RESTART_WINDOW`, `K8S_RESTART_MAX` and
   `K8S_RESTART_RECENT_WINDOW`.
 
-A bridge value comes from the rendered env-secret when it renders one, and otherwise from the
+A bridge value comes from the rendered pod environment when it renders one, and otherwise from the
 Python default in `bridge/config_cluster.py`, which is what the pod runs with.
 
 Two checks survive PR 4a, because they hold the rule to the estate rather than to the bridge:
@@ -122,8 +122,8 @@ def _python_defaults() -> dict[str, str]:
 
 
 def bridge_values() -> dict[str, str]:
-    """The bridge's value for each key the rules mirror: rendered when the env-secret renders
-    it, else the Python default the pod runs with."""
+    """The bridge's value for each key the rules mirror: rendered when the pod environment
+    carries it, else the Python default the pod runs with."""
     keys = {
         "INTERVAL",
         *(k for k in HOLDS.values() if k),
@@ -134,7 +134,9 @@ def bridge_values() -> dict[str, str]:
     }
     values = {**_python_defaults(), **bridge_env()}
     missing = keys - values.keys()
-    assert not missing, f"neither the env-secret nor config_cluster.py sets {missing}"
+    assert not missing, (
+        f"neither the pod environment nor config_cluster.py sets {missing}"
+    )
     return {key: values[key] for key in keys}
 
 

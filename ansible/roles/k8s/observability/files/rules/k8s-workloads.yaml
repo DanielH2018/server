@@ -219,6 +219,9 @@ groups:
       # ansible/tests/services/test_dri_resource_name_agrees.py holds this literal to the
       # name dri-device-plugin advertises. The bridge reports INERT when no allocatable series
       # exists at all; K8sNodeAllocatableMissing pages that case instead.
+      # verify="true" makes this dri-device-plugin's soak verify, D5's successor to the role's
+      # "Read back the advertised device resource" task. The soak skips a shadow rule, so the
+      # verify takes effect when M2's PR 4b drops `shadow` from this file.
       - alert: K8sExtendedResourceMissing
         expr: |
           absent(kube_node_status_allocatable{resource="devic_es_dri"} > 0)
@@ -229,6 +232,7 @@ groups:
           severity: warning
           service: dri-device-plugin
           shadow: "true"
+          verify: "true"
         annotations:
           summary: No node advertises the devic.es/dri GPU resource.
           description: >-

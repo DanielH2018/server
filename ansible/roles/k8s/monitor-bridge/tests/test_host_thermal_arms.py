@@ -89,7 +89,7 @@ def streaks():
 
 # ── undervoltage: the arm, including the source gate ──────────────────────────────────────────
 
-# The arm tests take conftest's `cfg` fixture — the rendered env-secret, so every knob holds the
+# The arm tests take conftest's `cfg` fixture — the rendered pod environment, so every knob holds the
 # deployed value — rather than a hand-written stub class. A stub would let these tests keep
 # passing against thresholds the deployed config no longer uses, which is the drift this repo
 # treats as a green-but-wrong test. `dataclasses.replace` narrows one field where a test needs to.

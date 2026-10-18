@@ -1,6 +1,6 @@
 """loki-homelab's `job` label values have one owner: `loki_streams` in group_vars/all.yml (#3740).
 
-Both Alloy configs stamp their streams from it, and monitor-bridge's env-secret renders its
+Both Alloy configs stamp their streams from it, and monitor-bridge's settings render its
 selectors from it. Neither direction is checked by the render alone, so this holds both:
 
 - every `job` value the owner lists is one an Alloy config emits, and every value an Alloy config
@@ -30,7 +30,7 @@ import pytest
 
 from _compose_render import rendered_text
 from _helpers import ALL_VARS, load_yaml
-from _k8s_render import render_role_template
+from _k8s_render import render_pod_env, render_role_template
 from _loki_streams import (
     LOKI_STREAM_LABELS,
     _PI_STREAMS,
@@ -85,12 +85,9 @@ def _alloy_configs() -> dict[str, str]:
 
 
 def _monitor_bridge_selectors() -> dict[str, str]:
-    doc = yaml_fast.safe_load(
-        render_role_template("monitor-bridge", "env-secret.yaml.j2")
-    )
     return {
-        "env-secret " + key: str(value)
-        for key, value in doc["stringData"].items()
+        "env " + key: str(value)
+        for key, value in render_pod_env("monitor-bridge").items()
         if str(value).startswith("{") and "}" in str(value)
     }
 
@@ -212,8 +209,8 @@ def test_an_owner_value_nothing_emits_is_flagged():
 def test_the_consumer_census_finds_its_named_members():
     consumers = _consumers()
     for name in (
-        "env-secret LOKI_STREAM",
-        "env-secret LOG_ERROR_SELECTOR",
+        "env LOKI_STREAM",
+        "env LOG_ERROR_SELECTOR",
         "logs.py SWALLOWED_VERDICTS_LOGQL",
         "alerts.py SYSLOG_ALERT_LOGQL",
         "observability_deploy_annotation_expr",

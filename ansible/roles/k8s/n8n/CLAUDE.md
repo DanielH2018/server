@@ -54,7 +54,10 @@ n8n with an external task-runner sidecar. See repo-root `CLAUDE.md`.
   any pod could reach the web port and skip Authelia, CrowdSec and the rate-limit.
   The `n8n-netpol-probe` Job (`templates/netpol-probe-job.yaml.j2`, applied by
   `tasks/main.yml`) verifies both fences on every deploy — `n8n_runner_auth_token` is the
-  second layer, not the only one.
+  second layer, not the only one. Its Flux form, the `n8n-verify` Job running
+  `files/n8n_verify.py`, sits in `templates/verify-inert/`, which nothing renders until n8n's
+  flip renames it to `templates/verify/` and deletes the probe tasks. `job.yaml.j2` there
+  carries its caller census.
 - **Config in:** `defaults/main.yml` — images, sizing, claims and the auto-deploy stance. The
   `containers_list` entry in `ansible/inventory/host_vars/daniel-box.yml` selects the role, and
   carries deploy metadata only.

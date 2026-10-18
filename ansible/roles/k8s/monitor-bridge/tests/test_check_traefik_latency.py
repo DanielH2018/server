@@ -12,7 +12,7 @@ arithmetic.
 
 from verdicts.cluster import traefik_latency_verdict
 
-# The deployed values, from templates/env-secret.yaml.j2 and bridge/config_service.py.
+# The deployed values, from templates/config/env.yaml.j2 and bridge/config_service.py.
 MIN_RPS = 0.05
 SLOW_PCT = 5.0
 BUCKET = "5.0"

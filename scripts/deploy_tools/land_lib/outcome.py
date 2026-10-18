@@ -233,6 +233,18 @@ PROMOTE_TIMEOUT_NOTE = (
 )
 
 
+# What a `deferred` from step 6 means, printed by `health_verdict.health` when `probe.py health`
+# could not read its store for a tag and found no other tag unhealthy (#5543). No tick re-gates
+# health, so this deferral never ends on its own: `land_probe` reads the note and reports the
+# landing as `gave-up`, a resume point, as it does for PROMOTE_TIMEOUT_NOTE.
+UNREADABLE_GATE_NOTE = (
+    "  The health gate could not read its store, so the deployed workloads were not graded. "
+    "This is NOT the ordinary deferral: no tick gates health.\n"
+    "  Re-run land.sh to gate again once the store answers; Prometheus rolling is the usual "
+    "cause."
+)
+
+
 def unrecorded_apply_note(behind_since: str | None) -> str:
     """What "no broad apply covers this PR" means, given whether the tick is still behind.
 

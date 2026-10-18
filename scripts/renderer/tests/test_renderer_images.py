@@ -18,7 +18,7 @@ import pytest
 from _image_builder_tag import templar_content_tag
 from dataclasses import replace
 
-from lib.exit_codes import RENDER_FAILED, RENDER_OK, RENDER_REFUSED
+from lib.exit_codes import RENDER_BAD_ARGS, RENDER_FAILED, RENDER_OK, RENDER_REFUSED
 from lib.render_guard import BUILT_IMAGE_TAG_STUBS
 from deploy_tools import ci_images
 from lib import yaml_fast
@@ -67,6 +67,10 @@ def _tags(out) -> dict[str, str]:
     return json.loads((out / images.TAGS_FILE).read_text())
 
 
+def _contexts(out) -> set[str]:
+    return {p.name for p in (out / images.IMAGES_DIR).iterdir() if p.is_dir()}
+
+
 def _container(path, name: str) -> dict:
     """The container `name` of the Deployment in `path`."""
     (doc,) = [d for d in yaml_fast.safe_load_all(path.read_text()) if d]
@@ -113,16 +117,57 @@ def _oracle_tag(context, name: str) -> str:
 
 def test_the_render_writes_all_ten_contexts_and_tags_json(out):
     assert set(_tags(out)) == TEN
-    written = {p.name for p in (out / images.IMAGES_DIR).iterdir() if p.is_dir()}
-    assert written == TEN
+    assert _contexts(out) == TEN
     for name in TEN:
         assert (out / images.IMAGES_DIR / name / "Dockerfile").is_file(), name
 
 
-def test_a_render_of_one_unrelated_tag_still_carries_all_ten():
-    """The publish job renders only the flux-owned tags, none of which builds an image."""
+def test_a_render_of_every_target_builds_all_ten():
+    """A render without `--role` names `select_tags(None)`, which must hold every builder.
+
+    A builder role that left the render targets would drop its context from the full render,
+    and from `cluster_vars.py` and `standalone_map.py`, which render the same tag set.
+    """
     keys = homelab_render.secret_keys()
-    assert set(placeholders.render_placeholders(["speedtest"], keys).images) == TEN
+    built = images.render_images(
+        placeholders.placeholder_vars(keys), tags=cluster.select_tags(None)
+    )
+    assert set(built) == TEN
+
+
+def test_a_role_render_writes_only_the_contexts_its_roles_build(tmp_path):
+    """A consumer reads only its own role's images, so `--role` builds no other (#5374)."""
+    out = tmp_path / "out"
+    argv = ["cluster", "--out", str(out), "--role", "pihole", "--role", "n8n"]
+    assert homelab_render.main(argv) == RENDER_OK
+    assert set(_tags(out)) == _contexts(out) == {"n8n", "n8n-runners"}
+
+
+def test_a_role_render_that_names_no_builder_writes_no_images(tmp_path):
+    out = tmp_path / "out"
+    argv = ["cluster", "--out", str(out), "--role", "pihole"]
+    assert homelab_render.main(argv) == RENDER_OK
+    assert (out / "cluster" / "pihole").is_dir()
+    assert not (out / images.IMAGES_DIR).exists()
+
+
+def test_all_images_writes_all_ten_whatever_the_role_names(tmp_path):
+    """The publish job renders only the flux-owned tags, and its images job builds all ten."""
+    out = tmp_path / "out"
+    argv = ["cluster", "--out", str(out), "--role", "pihole", "--all-images"]
+    assert homelab_render.main(argv) == RENDER_OK
+    assert set(_tags(out)) == _contexts(out) == TEN
+
+
+@pytest.mark.parametrize("other", [["--shared-only"], ["--secret-stubs", "s.yml"]])
+def test_all_images_beside_a_mode_that_writes_no_image_is_a_usage_error(
+    tmp_path, capsys, other
+):
+    argv = ["cluster", "--out", str(tmp_path), "--all-images", *other]
+    with pytest.raises(SystemExit) as exc:
+        homelab_render.main(argv)
+    assert exc.value.code == RENDER_BAD_ARGS
+    assert "takes neither --shared-only nor --secret-stubs" in capsys.readouterr().err
 
 
 @pytest.mark.parametrize("name", sorted(TEN))
@@ -197,6 +242,11 @@ def test_no_kustomization_path_reaches_images(out):
 )
 def test_a_kustomization_path_into_images_is_flagged(path, text):
     assert images.paths_into_images({path: text}) != []
+
+
+def test_a_file_that_is_not_yaml_is_not_read():
+    # The bundle's README.md is Markdown that a YAML parser rejects.
+    assert images.paths_into_images({"README.md": "# Title\n\n- a: b: c\n"}) == []
 
 
 def test_a_kustomization_path_into_cluster_is_clean():
