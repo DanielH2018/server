@@ -12,7 +12,8 @@ defaults copy would be read by `initial_setup`'s `docs-refresh.sh.j2` as well.
 
 The pairs are DERIVED: every copied key that a `roles/k8s/*` defaults file or
 `group_vars/all.yml` also defines. `EXPECTED_PAIRS` names them, so a new pair joins the census
-by name. docs' conversion PR added the first, `docs_host_site_dir`, and artifacts' added four.
+by name. docs' conversion PR added the first, `docs_host_site_dir`, artifacts' added four, and
+media-volume's added `media_volume_host_path` with the `group_vars` keys `puid` and `pgid`.
 
 docs-refresh.sh, the setup plane's site build, holds a third copy of `docs_host_site_dir` as
 its `SITE_DIR`, because no setup play loads docs' defaults. The rendered script's value must
@@ -50,6 +51,9 @@ EXPECTED_PAIRS: frozenset[str] = frozenset(
         "artifacts_peer_sources",
         "artifacts_stars_dir",
         "docs_host_site_dir",
+        "media_volume_host_path",
+        "pgid",
+        "puid",
     }
 )
 

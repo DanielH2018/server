@@ -1,7 +1,16 @@
 name: CI
 
 on:
+  # A draft PR runs no job; `ready_for_review` starts its first real run (#5563). A fan-out
+  # batch opens its PR as a draft and pushes again while its review runs. From 2026-10-16 to
+  # 2026-10-18, 27 PR runs were cancelled by a push made before the review ended: 359
+  # runner-minutes, 37% of all cancelled PR runner-minutes. 50 more finished on a head such a
+  # push replaced: 1,075 runner-minutes. Setting `types` replaces GitHub's default list, so
+  # the first three are that default restated. Every job below carries
+  # `github.event.pull_request.draft != true`, which is true on a push, a dispatch and a
+  # merge_group run, where the field is unset.
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
   # Inert. Merge queues are not offered on user-owned repositories, so the push run below
   # stays the only full sweep a merge commit gets. The
   # trigger is harmless and would do the right thing if the repo ever moved to an org: every
@@ -168,7 +177,7 @@ jobs:
   # too. Don't read either as the steady state.
   hooks:
     needs: prove
-    if: ${{ !cancelled() && needs.prove.outputs.proven != 'true' }}
+    if: ${{ !cancelled() && needs.prove.outputs.proven != 'true' && github.event.pull_request.draft != true }}
     name: hooks (lint + validate + secrets + docs)
     # A versioned runner label, not the `-latest` alias: the `language: system` hooks run whatever
     # shellcheck, Go and systemd-analyze the image preinstalls, and GitHub rolls the alias to a
@@ -415,7 +424,7 @@ jobs:
   # install` before linting — warm that is a 0.4s no-op, cold a ~40 MB download.
   ansible_lint:
     needs: prove
-    if: ${{ !cancelled() && needs.prove.outputs.proven != 'true' }}
+    if: ${{ !cancelled() && needs.prove.outputs.proven != 'true' && github.event.pull_request.draft != true }}
     name: ansible-lint
     runs-on: ubuntu-26.04
     timeout-minutes: 20  # cap a wedged ansible-galaxy install so it can't burn to the 6h default
@@ -477,7 +486,7 @@ jobs:
   # checks in ~61s, and `land.sh` already waits on this job through the `prek` gate.
   pytest:
     needs: prove
-    if: ${{ !cancelled() && needs.prove.outputs.proven != 'true' }}
+    if: ${{ !cancelled() && needs.prove.outputs.proven != 'true' && github.event.pull_request.draft != true }}
     name: pytest (shard ${{ matrix.shard }} of ${{ strategy.job-total }})
     runs-on: ubuntu-26.04
     timeout-minutes: 20
@@ -645,6 +654,9 @@ jobs:
       # and nobody can apply the repair on master (#3604). On a PR an unweighted module
       # measuring between `RUNNER_HEAVY_SECONDS` and `RUNNER_HEAVY_FAIL_SECONDS` annotates
       # too, since the same variance put one either side of the bound on a rerun (#4010).
+      # A recorded weight 5x to 20x what it measured annotates too, and fails only at 20x: a
+      # host busy with fan-out batches records up to about 9x the runner's figure, and that
+      # failed three PRs on a few seconds of shard balance (#5616).
       # On a pull_request it fails only for a module the PR's diff adds or changes
       # (`--changed-files`). A module outside the diff annotates, because its author is not the
       # one reading the run and the docs-refresh cron re-records it: 4 of 16 gate failures in
@@ -678,7 +690,7 @@ jobs:
   # change. A dispatch still runs it, as every job here does.
   deck_mod:
     needs: prove
-    if: ${{ !cancelled() && needs.prove.outputs.proven != 'true' }}
+    if: ${{ !cancelled() && needs.prove.outputs.proven != 'true' && github.event.pull_request.draft != true }}
     name: deck mod (claude plugin validate + test)
     runs-on: ubuntu-26.04
     timeout-minutes: 10
@@ -731,7 +743,7 @@ jobs:
   # on the pinned binary as well as green.
   flux_roundtrip:
     needs: prove
-    if: ${{ !cancelled() && needs.prove.outputs.proven != 'true' }}
+    if: ${{ !cancelled() && needs.prove.outputs.proven != 'true' && github.event.pull_request.draft != true }}
     name: flux round trip (placeholder render against stub render)
     runs-on: ubuntu-26.04
     timeout-minutes: 30
@@ -818,7 +830,7 @@ jobs:
   # because the `prek` gate requires `success` and a skipped job reports `skipped`.
   sops_manifest_type_proof:
     needs: prove
-    if: ${{ !cancelled() && needs.prove.outputs.proven != 'true' }}
+    if: ${{ !cancelled() && needs.prove.outputs.proven != 'true' && github.event.pull_request.draft != true }}
     name: sops-manifest-type-proof (an all-digit stringData value stays a string)
     runs-on: ubuntu-26.04
     timeout-minutes: 20
@@ -1021,7 +1033,7 @@ jobs:
   # wrong digest or a 404 URL would reach master green.
   host_packages:
     needs: prove
-    if: ${{ !cancelled() && needs.prove.outputs.proven != 'true' }}
+    if: ${{ !cancelled() && needs.prove.outputs.proven != 'true' && github.event.pull_request.draft != true }}
     runs-on: ubuntu-26.04
     # The image build fetches from snapshot.ubuntu.com, which answers 5xx often enough that
     # apt's retries can take minutes, and the cases boot three containers per leg.
@@ -1250,7 +1262,13 @@ jobs:
     name: prek (lint + validate + tests + secrets)
     runs-on: ubuntu-26.04
     needs: [prove, hooks, pytest, ansible_lint, deck_mod, flux_roundtrip, sops_manifest_type_proof, host_packages]
-    if: always()
+    # On a draft the gate skips with its dependents. A red gate there would pin the head red
+    # for every reader that takes the worst check run per name (`deploy_git.ci_verdict`), even
+    # after the ready run passes. The skipped gate is not a pass: GitHub refuses to merge a
+    # draft, `deploy_git.ci_verdict` (which `land.sh` reads) leaves a skipped gate out, and
+    # `review_ci.ready_for_ci` waits for the ready run and turns the PR back into a draft if
+    # none starts.
+    if: ${{ always() && github.event.pull_request.draft != true }}
     # `statuses: write` is for the record step below, on a pull request only. The job runs no
     # checkout and no repository code.
     permissions:
@@ -1317,7 +1335,7 @@ jobs:
     # renovate-config-canary.yml. This job is the required merge context,
     # so it stays on every PR and self-scopes below; merge_group is treated like a PR whose
     # scope step found nothing to diff, the same as every other job here.
-    if: github.event_name != 'push'
+    if: github.event_name != 'push' && github.event.pull_request.draft != true
     runs-on: ubuntu-26.04
     timeout-minutes: 20  # six install attempts at 60s, plus a wedged fetch
     steps:

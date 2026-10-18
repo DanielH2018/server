@@ -199,10 +199,10 @@ with the reason.
   hand applies, since `k3s` runs from `k3s-bringup.yml` and `optimize_pi` runs on daniel-pi only,
   so it routes `common` to `manual_plane`, whose remediation names both commands.
 
-A k8s role can import a `common` file too. `janitorr` and `configarr` copy `host_lib.py` through
-`install_host_lib.yml` and stamp it through `stamp_deployed.yml`, and
-`K8S_ROLES_IMPORTING_SETUP_FILES` puts both in `ChangeSet.k8s` when one of those three files
-changes. The deployer applies a k8s role only for an image-pin bump, so each one defer-and-alerts
+A k8s role can read a `common` file too. `configarr` and `janitorr` stage `host_lib.py` and
+`kuma_push.py` into their health CronJobs' ConfigMaps, and `autofix-bridge` and `uptime-kuma`
+stage `kuma_push.py`. `K8S_ROLES_IMPORTING_SETUP_FILES` puts each in `ChangeSet.k8s` when a file
+it stages changes. The deployer applies a k8s role only for an image-pin bump, so each one defer-and-alerts
 and records a `k8s_unapplied` line. The same test holds that table to the k8s roles' tasks.
 
 The third class is the bring-up playbooks, which run by hand by construction. The deployer's own
@@ -820,9 +820,10 @@ those tags (a failed bump on a broad tick writes one) and leaves any other broad
     class too, through `lib.deployer_park`, and names a pending role from the moment it is
     recorded.
 - **Secrets-only pushes** (`ansible/vars/secrets.yml` changed with no service template — a
-  rotation pushed from another machine) are fast-forwarded but **not** redeployed: the new
-  value only reaches a container on its next deploy, so the deployer alerts (once per SHA,
-  the `secrets` slot of `alerted_shas`) to redeploy the consumers. On a broad tick that page fires
+  rotation pushed from another machine) are fast-forwarded, and the tick applies only the
+  readers the two bullets below derive. The new value reaches any other consumer only on its
+  next deploy, so the deployer alerts (once per SHA, the `secrets` slot of `alerted_shas`) to
+  redeploy the consumers. On a broad tick that page fires
   from every exit that leaves the range merged (#2383), because `alert_once` advances its marker
   on detection and a skipped page is never sent. The contention arm sends nothing, because it
   resets the tree (#2459). `secrets.yml` is deliberately NOT in the broad list: the `/add-secret`
@@ -831,8 +832,38 @@ those tags (a failed bump on a broad tick writes one) and leaves any other broad
   deploy-plane path, the narrowing maps each key whose ciphertext changed to the roles that
   read it (`scripts/deploy_tools/narrow_lib/secret_keys.py`, #5409). A key that only a setup
   role reads reaches no deploy tag, so it no longer defers the whole k8s plane to
-  `k8s_unapplied`. The tick still does not apply that setup role (#5436). The page above says so,
-  and names `secret_rotation.py consumers`, which prints the setup role's own apply command.
+  `k8s_unapplied`.
+- **A setup role reading a changed secret is applied as a setup-plane change** (#5436), on any
+  tick, with or without a deploy-plane path. `deploy_defer.route_secret_readers` runs
+  `scripts/deploy_tools/secret_setup_readers.py`, which greps `roles/setup/` at origin for each
+  key whose ciphertext changed. Each hit goes through `setup_roles_for`, so the role joins
+  `cs.setup_roles` as its own edit would. A role shipping another role's `defaults/` or
+  `vars/` file joins only when it names a key of that file built from the secret
+  (`secret_keys.reads_through`): `initial_setup` ships `claude_code`'s defaults for one
+  unrelated key, and without the check every `claude_code` rotation applied all of
+  `--tags initial_setup`. `handle_broad` applies the ones this host runs, and
+  `narrow_setup.role_tags` gives each the whole-role tag, because which of its tasks read the
+  key is not derived. A role another playbook applies, such as `k3s` for `wifi_password`, is
+  recorded in `manual_plane`. A key a play, a shared template or an inventory value reads
+  refuses, as for the deploy plane, and the range then routes no setup role. A timeout or
+  a crash is no answer, so the range parks without a fast-forward and the next tick derives
+  again: once merged, no later range carries the key. The page fires on every tick that
+  merges the range: it names `secret_rotation.py consumers`, which prints the
+  apply command of every consumer that no derivation reached.
+- **A k8s role reading a changed secret is applied on a range with no deploy-plane path**
+  (#5577). The narrowing above runs only when a deploy-plane path sends the range to it, so
+  until #5577 a rotation alone merged, paged, and left every k8s reader on the old value.
+  `deploy_broad_k8s.route_secret_k8s_readers` runs `secret_setup_readers.py --deploy-tags`,
+  which asks `secret_keys.reached` the same question for the secrets half alone and keeps the
+  fleet-coverage ceiling. When it names a reader, the range goes to `handle_broad`, which
+  applies `deploy.yml --tags <readers>` after any setup plan, less each Flux-owned tag. A
+  refusal at the ceiling names its readers, and they are deferred to `k8s_unapplied`. A
+  refusal that names none, a timeout or a crash merges and pages as before: a park on a
+  failure that repeats would hold every landing, and an unnamed deferral would owe the whole
+  fleet for one key. A range that also carries a k8s role change or a promoted image bump
+  routes nothing and pages as before: the secret plan applies each reader's whole render, so
+  it would ship a hand-edited template past defer-and-alert, and `cs.broad` would move the
+  bump off `handle_k8s`'s snapshot and rollback.
 - **k8s-platform roles are auto-deployed ONLY for an image-pin bump to a non-denylisted service;
   every other k8s change defers-and-alerts.** `deploy_logic.split_k8s_auto_deploy` decides
   eligibility, **diff-shape first, identity second**. Gating on the service name alone would be
@@ -1510,9 +1541,10 @@ ceiling = claims x (volume_snapshot_timeout + 3 x volume_revert_state_timeout + 
 ```
 
 A role's own `tasks/` run before `k8s/manifests/tasks/drain.yml`, so anything they wait for adds
-to the drain instead of overlapping it. prowlarr waits 300 s for its flaresolverr isolation probe
-Job on top of a 780 s rollout, which makes it the worst promoted service at 480 + 300 + 780 + 60
-= 1620 s. An inline `rollout status` gate is not an in-role wait, because it waits for the same
+to the drain instead of overlapping it. prowlarr waited 300 s for its flaresolverr isolation probe
+Job on top of a 780 s rollout, which made it the worst promoted service at 480 + 300 + 780 + 60
+= 1620 s, the value the budget keeps. prowlarr's flip deleted the probe (#5594), so it is still
+the worst, at 1320 s. An inline `rollout status` gate is not an in-role wait, because it waits for the same
 rollout the drain waits for.
 `ansible/roles/setup/gitops_deploy/tests/test_gitops_deploy_timeout_budgets.py::test_k8s_rollback_budget_covers_the_worst_single_promoted_service`
 computes the ceiling from role sources, so a rollout-timeout bump or a new promoted

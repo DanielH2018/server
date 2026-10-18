@@ -52,12 +52,14 @@ from deployer_lib.deploy_changes import (
     routing_failed,
     services_from_changed_paths,
     setup_role_host,
+    setup_roles_for,
     setup_role_playbook,
     setup_role_tag,
     tag_selects_an_off_host_role,
     tick_applies_setup_role,
 )
 from deployer_lib.deploy_config import WARNING, Config, log
+from deployer_lib.deploy_setup_roles import SecretReadersRefused
 from deployer_lib.deploy_remediation import (
     broad_park_reason,
     broad_remediation,
@@ -176,6 +178,56 @@ def drop_deleted_setup_roles(
     return kept
 
 
+def route_secret_readers(
+    tools: DeployTools, config: Config, target: TickTarget, cs: ChangeSet
+) -> None:
+    """Route the setup roles reading a `secrets.yml` key the range moved into `cs` (#5436).
+
+    `secrets.yml` sits under no setup role, so PR #5405's key for `claude_code` applied
+    nothing. Each reader path goes through `setup_roles_for`, less the shippers of a vars file
+    that read none of its secret-built keys, and `handle_broad` then applies or records each
+    role as for its own edit. A refusal routes nothing and the `secrets` page names the
+    consumers. Any other failure parks, as no later range carries the change again. Runs
+    after `drop_deleted_setup_roles`, whose reclassification would lose the roles.
+    """
+    if not cs.secrets:
+        return
+    try:
+        paths, unread = tools.secret_setup_readers(
+            config.repo, target.local, target.origin
+        )
+    except SecretReadersRefused as exc:
+        log(f"secret-readers: no setup role routed ({exc})")
+        return
+    except Exception as exc:
+        log(f"secret-readers: {type(exc).__name__}: {exc} — parking", level=WARNING)
+        cs.secret_readers_failed = cs.broad = True
+        return
+    roles = {r for p in paths for r in setup_roles_for(p) - set(unread.get(p, ()))}
+    if not roles:
+        return
+    log(
+        f"secret-readers: secrets.yml moved a key {', '.join(sorted(roles))} reads "
+        f"({', '.join(sorted(paths))}) — routing them as setup-plane changes"
+    )
+    cs.secret_setup_roles |= roles
+    cs.setup_roles |= roles
+    cs.broad = cs.broad_setup = True
+
+
+def secret_reader_tags(cs: ChangeSet) -> set[str]:
+    """The `initial_setup.yml` tags of the `cs.secret_setup_roles` the tick's run applies.
+
+    The other half of `setup_tags_for(paths)`, with its filter: a role gated off this host or
+    applied by another playbook gets no tag here and is recorded in `manual_plane` instead.
+    """
+    return {
+        setup_role_tag(role)
+        for role in cs.secret_setup_roles
+        if tick_applies_setup_role(role)
+    }
+
+
 def drop_deleted_manual_plane(
     tools: DeployTools, state: DeployerState, config: Config
 ) -> set[str]:
@@ -225,7 +277,9 @@ def parks_the_tick(cs, setup_tags: set[str], pending: list[str]) -> bool:
     unroutable and nameless at once. Fast-forwarding it would apply nothing, record nothing
     and say nothing.
     """
-    if cs.broad_manual or (cs.setup_roles and routing_failed()):
+    if cs.broad_manual or cs.secret_readers_failed:
+        return True
+    if cs.setup_roles and routing_failed():
         return True
     return cs.broad_setup and not setup_tags and not pending
 
@@ -240,6 +294,7 @@ def park(
         cs.setup_roles,
         config.branch,
         playbooks=cs.manual_playbooks,
+        secret_readers_failed=cs.secret_readers_failed,
     )
     # Say so in the JOURNAL, every tick. `alert_once` below throttles the Discord page to one
     # per SHA, and until 2026-09-09 that throttle also decided what the journal said: from the
@@ -249,19 +304,19 @@ def park(
     # journal when `land.sh` exits 4, and a page they already received an hour ago is not there.
     log(
         f"park: origin {origin[:8]}: parked, nothing merged — {broad_park_reason(cs)}. "
-        f"Apply by hand: {remediation}"
+        f"{'' if cs.secret_readers_failed else 'Apply by hand: '}{remediation}"
     )
-    # A park doesn't ff-merge, so it re-evals next tick — the per-SHA marker (inside
-    # alert_once) stops a re-queue while the pending queue owns redelivery. Name the RIGHT
-    # playbook per plane: deploy.yml applies only container roles, so a setup-plane change
-    # needs initial_setup.yml (2026-07-16 review M1).
+    # A park doesn't ff-merge, so it re-evals next tick; the per-SHA marker (inside alert_once)
+    # stops a re-queue. The remediation names the RIGHT playbook per plane (2026-07-16 M1).
     deploy_alerts.alert_once(
         tools,
         state,
         config,
         "broad",
         origin,
-        deploy_alert_text.broad_deferred_alert(origin, remediation),
+        deploy_alert_text.broad_deferred_alert(
+            origin, remediation, cs.secret_readers_failed
+        ),
     )
 
 

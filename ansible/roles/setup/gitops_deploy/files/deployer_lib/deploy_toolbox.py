@@ -190,6 +190,15 @@ class DeployTools:
     setup_routing: Callable[[str, str, str], tuple[dict, dict]] = (
         deploy_setup_roles.derive_routing
     )
+    # The setup-role files naming a `secrets.yml` key the range moved (#5436): a subprocess
+    # that parses YAML, and a field so a tick test scripts the answer.
+    secret_setup_readers: Callable[..., tuple[list[str], dict[str, list[str]]]] = (
+        deploy_setup_roles.secret_setup_readers
+    )
+    # Its deploy-plane half, the k8s tags reading a moved key (#5577), for the same reasons.
+    secret_k8s_readers: Callable[[str, str, str], tuple[int, str]] = (
+        deploy_setup_roles.secret_k8s_readers
+    )
     emit_deploy_annotation: Callable[[set[str], str], None] = (
         deploy_io.emit_deploy_annotation
     )

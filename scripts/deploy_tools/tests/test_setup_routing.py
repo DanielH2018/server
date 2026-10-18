@@ -66,6 +66,23 @@ def test_a_bring_up_role_routes_to_its_playbook_and_not_the_tick(tmp_path):
     assert out["routes"]["k3s"]["on_tick_host"] is False
 
 
+def test_the_k3s_route_carries_the_inventorys_agent_hosts(tmp_path):
+    """The join command's host comes from `k3s_agent_hosts`, never from a literal (#5606)."""
+    root = _tree(tmp_path, {INITIAL: [], BRINGUP: [{"role": "k3s", "tags": ["k3s"]}]})
+    all_vars = root / "ansible/inventory/group_vars/all.yml"
+    all_vars.write_text(all_vars.read_text() + "k3s_agent_hosts: [node-a, node-b]\n")
+    assert setup_routing.routes(root)["routes"]["k3s"]["agent_hosts"] == [
+        "node-a",
+        "node-b",
+    ]
+
+
+def test_a_tree_without_the_agent_list_routes_k3s_with_no_agent_hosts(tmp_path):
+    """No list means no host to name, so the remediation prints its placeholder instead."""
+    out = _route(tmp_path, {INITIAL: [], BRINGUP: [{"role": "k3s", "tags": ["k3s"]}]})
+    assert out["routes"]["k3s"]["agent_hosts"] == []
+
+
 def test_initial_setup_wins_over_bootstrap(tmp_path):
     entry = {"role": "sops_setup", "tags": ["sops_setup"]}
     out = _route(tmp_path, {INITIAL: [entry], BOOTSTRAP: [entry]})

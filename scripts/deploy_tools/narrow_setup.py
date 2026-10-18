@@ -91,6 +91,7 @@ from pathlib import Path
 
 from deploy_tools.narrow_lib import filters as narrow_filters
 from deploy_tools.narrow_lib import paths as narrow_paths
+from deploy_tools.narrow_lib import secret_keys
 from lib.cli_help import ArgumentParser
 from lib.git import git
 from lib.repo_paths import GITOPS_DEPLOY_FILES
@@ -280,6 +281,27 @@ def plugin_tags(
     return frozenset(tags)
 
 
+def secrets_read(
+    index: RoleIndex, shipped: list[str], old: str, new: str, repo: str
+) -> list[str]:
+    """The `secrets.yml` keys `old..new` moved that the role reads, sorted (#5436).
+
+    A key named under the role's own tree, or in a file it ships other than a vars file,
+    counts. A shipped `defaults/` or `vars/` file counts only through
+    `secret_keys.reads_through`, as the tick's routing does.
+
+    Raises:
+        CannotNarrow: `secrets.yml` does not parse at either ref, or `git grep` failed.
+    """
+    own = [index.prefix, *(p for p in shipped if not secret_keys.is_vars_file(p))]
+    moved = set(secret_keys.keys_named_in(own, old, new, repo))
+    for path in (p for p in shipped if secret_keys.is_vars_file(p)):
+        for key in secret_keys.keys_named_in([path], old, new, repo):
+            if secret_keys.reads_through(index, path, key, new, repo):
+                moved.add(key)
+    return sorted(moved)
+
+
 def role_tags(
     role: str, role_tag: str, old: str, new: str, repo: str, playbook: str
 ) -> frozenset[str]:
@@ -331,14 +353,21 @@ def role_tags(
             f"`git diff {old}..{new} -- {prefix}` failed: {r.stderr.strip()}"
         )
     changed = [line for line in r.stdout.splitlines() if line]
-    if not changed:
-        raise CannotNarrow(
-            f"{old}..{new} changes nothing under {prefix} or in a file it ships"
-        )
     playbook_text = show_at(new, playbook, repo)
     if not playbook_applies_role(playbook_text, role):
         raise CannotNarrow(f"no play in {playbook} lists {role} under roles:")
     index = RoleIndex(role, new, repo)
+    # A secret the role reads moves no path under it, yet reaches the host only when the role
+    # renders again (#5436). Which of its tags read the key is not derived, so the role tag.
+    moved = secrets_read(index, shipped, old, new, repo)
+    if moved:
+        raise CannotNarrow(
+            f"the range changes the secret {', '.join(moved)}, which {role} reads"
+        )
+    if not changed:
+        raise CannotNarrow(
+            f"{old}..{new} changes nothing under {prefix} or in a file it ships"
+        )
     tags: set[str] = set()
     for path in changed:
         if path.startswith(prefix):

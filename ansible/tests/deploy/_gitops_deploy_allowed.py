@@ -70,9 +70,12 @@ ALLOWED: dict[str, set[str] | None] = {
     "deploy_locks": set(),
     # `gitops_ledger` for the `manual_plane` class name its clear command prints (#3547), and
     # `deploy_cross_role`, a leaf, for the roles that render `common`'s files (#4316).
+    # `deploy_setup_roles`, a stdlib leaf, for the agent hosts the k3s join command names
+    # (#5606); `deploy_changes` re-exports its other names but sits at its length cap.
     "deploy_remediation": {
         "deploy_changes",
         "deploy_cross_role",
+        "deploy_setup_roles",
         "gitops_ledger",
         "gitops_markers",
     },
@@ -85,6 +88,8 @@ ALLOWED: dict[str, set[str] | None] = {
         "deploy_config",
         "deploy_narrow",
         "deploy_remediation",
+        # `SecretReadersRefused`, the reader script's refusal (#5436); a stdlib leaf.
+        "deploy_setup_roles",
         "deploy_state",
         "deploy_tick_types",
         "deploy_toolbox",
@@ -102,7 +107,8 @@ ALLOWED: dict[str, set[str] | None] = {
         "gitops_markers",
     },
     "deploy_tick_types": {"deploy_changes"},
-    # The k8s half of a broad range: applying the promoted bumps a plane did not.
+    # The k8s half of a broad range: applying the promoted bumps a plane did not, and the
+    # `BroadPlan` for a moved secret's k8s readers with the reader script's refusal code (#5577).
     "deploy_broad_k8s": {
         "deploy_alert_text",
         "deploy_alerts",
@@ -112,6 +118,8 @@ ALLOWED: dict[str, set[str] | None] = {
         "deploy_io",
         "deploy_k8s_owed",
         "deploy_locks",
+        "deploy_narrow",
+        "deploy_setup_roles",
         "deploy_state",
         "deploy_tick_types",
         "deploy_toolbox",

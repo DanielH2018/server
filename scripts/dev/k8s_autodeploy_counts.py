@@ -23,6 +23,7 @@ from lib.repo_paths import ANSIBLE, FILTER_PLUGINS, K8S_ROLES
 sys.path.insert(0, str(FILTER_PLUGINS))
 
 from lib import yaml_fast
+from lib.cli_help import answer_help
 from lib.k8s_roles import role_dirs
 from k8s_autodeploy import SHARED_ROLES, k8s_autodeploy_denylist
 
@@ -62,7 +63,8 @@ def autodeploy_stances() -> tuple[list[str], list[str], list[str]]:
     return eligible, denied, not_declaring
 
 
-def main() -> None:
+def main(argv: list[str] | None = None) -> None:
+    answer_help(__doc__, argv)
     eligible, denied, not_declaring = autodeploy_stances()
     print(f"eligible: {len(eligible)}")
     print(f"denylist: {len(denied)}")

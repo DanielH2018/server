@@ -21,9 +21,14 @@ route — infra role, no Deployment of its own.
   (`/srv/media`, 400Gi advisory only — no quota behind it), deliberately not a dynamic
   `local-path` PVC — see `defaults/main.yml` for the three reasons (naming, reclaim policy,
   `WaitForFirstConsumer` chicken-and-egg).
-- **Seeding is opt-in** (`media_volume_sync: false` by default) — a one-time rsync from
-  `daniel-server:/home/ubuntu/server/containers/data`, never automatic; see `tasks/sync.yml`'s
-  warning before setting it true.
+- **The host directories belong to the setup plane.** `/srv/media` and its `media/` and
+  `torrents/` subdirectories are created by `setup/k8s_host_files` (`tasks/media-volume.yml`
+  there), which the GitOps tick applies through `initial_setup.yml`. That task holds a copy of
+  `media_volume_host_path`, and `ansible/tests/setup/test_k8s_host_files_pairs.py` holds the
+  copy equal to this role's default.
+- **HISTORY —** the library was seeded once, at the 2026-08 migration, by an opt-in rsync from
+  daniel-server's `containers/data`. That directory no longer exists, so D5 deleted the seeding
+  tasks (`tasks/sync.yml`) rather than move them. Nothing backs the library up.
 
 ## Notable
 - Every deploy renders `changed=2`, not `changed=0`, on purpose: a hardlink probe Job
@@ -34,5 +39,13 @@ route — infra role, no Deployment of its own.
 - The probe's manifest is rendered into its own directory
   (`/etc/rancher/k3s/manifests/media-volume-probe`), never beside the PV manifests — a Job's pod
   template is immutable, so a re-applied Job there is a no-op or an outright error.
-- Directory `mode:` is deliberately unset on the host paths: rsync's `-p` imposes
-  daniel-server's modes, and pinning one here would fight it every deploy.
+- Directory `mode:` is deliberately unset on the host paths: the library keeps the modes it
+  came with from daniel-server, and pinning one would flip them on every apply.
+- **`templates/verify-inert/` is the hardlink probe's Flux form, and nothing renders it yet.**
+  Neither the manifests role nor the renderer's `verify_files` reads that directory.
+  media-volume's flip PR renames it to `templates/verify/`, which makes the renderer emit
+  `media-volume-verify`, and deletes the probe tasks. The Job runs
+  `files/media_volume_verify.py`, which makes the probe's check with `os.link`. Its name embeds
+  a digest of the rendered PV and StorageClass, so Flux re-runs it only when those change, not
+  on every apply as Ansible does; `job.yaml.j2`'s `DECIDED:` note has why.
+  `tests/test_media_volume_verify.py` renders the renamed copy and runs the Job census over it.

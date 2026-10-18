@@ -84,8 +84,10 @@ Each arm is a rule and the function that holds it; the record page has its incid
   `config.env`. A flux-owned role takes nothing from this tick, so `flux_suspend: true` in its
   defaults is how you stop it: it suspends every Kustomization of the tag
   (`docs/flux-deploy-plane.md`, *Stopping one service*).
-- **Pi Docker changes are never auto-deployed**, and an encrypted-vars-only push merges without
-  redeploying, alerting once per SHA.
+- **Pi Docker changes are never auto-deployed**, and an encrypted-vars-only push merges and
+  alerts once per SHA. It applies only the setup roles reading a key it changed, which
+  `deploy_defer.route_secret_readers` routes (#5436), and the k8s roles reading one, which
+  `deploy_broad_k8s.route_secret_k8s_readers` routes (#5577).
 - **A k8s tag whose `containers_list` entry sets `owner` goes to `cs.flux`**, beside `cs.k8s`.
   Flux applies it, so the tick merges and logs it and never applies, defers, alerts on or owes
   it. The deploy plane drops it before its empty check. Ownership is read at the commit being

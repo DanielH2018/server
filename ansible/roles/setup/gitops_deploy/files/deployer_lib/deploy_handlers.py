@@ -149,7 +149,7 @@ def handle_broad(
 ) -> int:
     """A change to a whole plane: defer it, or ff-merge and apply the playbook it names."""
     cs, origin = plan.cs, target.origin
-    setup_tags = setup_tags_for(plan.paths)
+    setup_tags = setup_tags_for(plan.paths) | deploy_defer.secret_reader_tags(cs)
     pending = deploy_defer.unapplyable_setup_roles(cs)
     # DECIDED: a bring-up playbook (and a setup path naming no role) still parks; a setup ROLE
     # this deployer cannot apply no longer does — it fast-forwards and leaves the durable
@@ -199,6 +199,9 @@ def handle_broad(
         if applies
         else []
     )
+    # The k8s readers of a moved secret on a range `narrow` never saw (#5577). After the
+    # setup plan, so the deploy plane still applies second.
+    plans += plan.secret_plans
     tools.run(["git", "merge", "--ff-only", origin], cwd=config.repo)
     log_pi_changes(cs)
     # Recorded at the ff-merge, which is the moment the role becomes merged-and-unapplied —

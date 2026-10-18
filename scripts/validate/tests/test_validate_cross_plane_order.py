@@ -9,6 +9,7 @@ Run: uv run pytest scripts/validate/tests/test_validate_cross_plane_order.py
 """
 
 import re
+import shutil
 import subprocess
 from pathlib import Path
 
@@ -189,14 +190,17 @@ def head_snapshot(head_tree) -> gate.Snapshot:
     return gate.snapshot(head_tree, ROLES)
 
 
-def edited(tmp_path: Path, edits: dict[str, tuple[str, str]]) -> gate.Snapshot:
-    """HEAD's tree with each `path: (old, new)` replacement made once, rendered."""
-    gate.extract("HEAD", tmp_path, ("ansible", "scripts"))
+def edited(dest: Path, head: Path, edits: dict[str, tuple[str, str]]) -> gate.Snapshot:
+    """A copy of `head` at `dest` with each `path: (old, new)` replacement made once, rendered.
+
+    The copy costs a third of a second `git archive` of the same commit.
+    """
+    shutil.copytree(head, dest, symlinks=True, dirs_exist_ok=True)
     for path, (old, new) in edits.items():
-        text = (tmp_path / path).read_text()
+        text = (dest / path).read_text()
         assert text.count(old) >= 1, f"{path} no longer holds {old!r}"
-        (tmp_path / path).write_text(text.replace(old, new, 1))
-    return gate.snapshot(tmp_path, ROLES)
+        (dest / path).write_text(text.replace(old, new, 1))
+    return gate.snapshot(dest, ROLES)
 
 
 def _bento_entry_edit(field: str, value: str, new: str) -> tuple[str, str]:
@@ -209,26 +213,28 @@ def _bento_entry_edit(field: str, value: str, new: str) -> tuple[str, str]:
 
 
 def test_an_inventory_edit_that_moves_bento_pdf_and_authelia_is_flagged(
-    tmp_path, head_snapshot
+    tmp_path, head_tree, head_snapshot
 ):
     edit = _bento_entry_edit("hostname", '"bento-pdf"', '"pdf"')
-    head = edited(tmp_path, {str(gate.HOST_VARS): edit})
+    head = edited(tmp_path, head_tree, {str(gate.HOST_VARS): edit})
     assert gate.counted(head_snapshot, head, [], {}) == {"bento-pdf", "authelia"}
     flagged = gate.problems(head_snapshot, head, [str(gate.HOST_VARS)], {})
     assert len(flagged) == 1 and flagged[0].startswith("arm 1: bento-pdf (flux)")
 
 
-def test_an_auth_tier_edit_that_moves_authelia_alone_is_clean(tmp_path, head_snapshot):
+def test_an_auth_tier_edit_that_moves_authelia_alone_is_clean(
+    tmp_path, head_tree, head_snapshot
+):
     edit = _bento_entry_edit("auth_tier", "one_factor", "two_factor")
-    head = edited(tmp_path, {str(gate.HOST_VARS): edit})
+    head = edited(tmp_path, head_tree, {str(gate.HOST_VARS): edit})
     assert gate.counted(head_snapshot, head, [], {}) == {"authelia"}
     assert gate.problems(head_snapshot, head, [str(gate.HOST_VARS)], {}) == []
 
 
 def test_a_shared_template_change_reaching_both_planes_is_flagged(
-    tmp_path, head_snapshot
+    tmp_path, head_tree, head_snapshot
 ):
-    head = edited(tmp_path, {SHELL: SHELL_EDIT})
+    head = edited(tmp_path, head_tree, {SHELL: SHELL_EDIT})
     assert gate.counted(head_snapshot, head, [SHELL], {}) == {"bento-pdf", "authelia"}
     assert gate.problems(head_snapshot, head, [SHELL], {})
 
@@ -240,13 +246,9 @@ def test_step_1_of_copy_and_migrate_is_clean(tmp_path, head_tree, head_snapshot)
     (tmp_path / "ansible/templates").mkdir(parents=True)
     (tmp_path / copy).write_text(text.replace(*SHELL_EDIT))
     imports = ("'workload-shell.yml.j2'", "'workload-shell-next.yml.j2'")
-    head = edited(
-        tmp_path,
-        {
-            "ansible/roles/k8s/authelia/templates/deployment.yaml.j2": imports,
-            "ansible/roles/k8s/authelia/templates/deployment-redis.yaml.j2": imports,
-        },
-    )
+    importers = ("deployment.yaml.j2", "deployment-redis.yaml.j2")
+    edits = {f"ansible/roles/k8s/authelia/templates/{t}": imports for t in importers}
+    head = edited(tmp_path, head_tree, edits)
     assert gate.counted(head_snapshot, head, [copy], {}) == {"authelia"}
     assert gate.problems(head_snapshot, head, [copy], {}) == []
 

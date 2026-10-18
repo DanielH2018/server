@@ -6,9 +6,15 @@ Each value stands in for ciphertext, which SOPS leaves byte-identical for a key 
 not touch.
 """
 
+import json
+
 import pytest
 
+import narrow_setup
+import secret_setup_readers
 from deploy_tools.narrow_lib import broad as narrow_broad
+from deployer_lib.deploy_setup_roles import SECRET_READERS_REFUSED_EXIT
+from lib.exit_codes import DEPLOY_BROAD, FAILED
 
 from _narrow_fixtures import GROUP_VARS, Tree, _refs, build_tree
 
@@ -111,3 +117,188 @@ def test_a_key_the_play_reads_is_flagged(tree: Tree):
     tree.write(SECRETS, _with(BASE_SECRETS, "bazarr_api_key", "xxx"))
     with pytest.raises(narrow_broad.CannotNarrow, match="bazarr_api_key"):
         tree.narrow(*_refs(tree))
+
+
+# ── the setup plane's half (#5436) ────────────────────────────────────────────────────────────
+SETUP_PLAY = """\
+- name: Apply claude_code
+  hosts: localhost
+  roles:
+    - { role: claude_code, tags: ["claude_code"] }
+"""
+
+
+def _setup_readers(tree: Tree, capsys) -> tuple[int, dict]:
+    """`secret_setup_readers.py` over the tree's last commit, as the tick runs it."""
+    old, new = _refs(tree)
+    rc = secret_setup_readers.main([old, new, "--repo", str(tree.root)])
+    out = capsys.readouterr().out.strip()
+    return rc, json.loads(out) if out else {}
+
+
+def test_a_new_key_a_setup_role_reads_names_that_roles_file(tree: Tree, capsys):
+    """PR #5405's key: the deploy plane maps it to nothing, and the tick needs the role."""
+    tree.write(SECRETS, _with(BASE_SECRETS, "new_setup_token", "eee"))
+    assert _setup_readers(tree, capsys) == (
+        0,
+        {"paths": ["ansible/roles/setup/claude_code/templates/env.j2"], "unread": {}},
+    )
+
+
+def test_a_key_only_a_k8s_role_reads_names_no_setup_file(tree: Tree, capsys):
+    tree.write(SECRETS, _with(BASE_SECRETS, "jellyfin_api_key", "zzz"))
+    assert _setup_readers(tree, capsys) == (0, {"paths": [], "unread": {}})
+
+
+def test_a_key_the_play_reads_refuses_the_setup_answer(tree: Tree, capsys):
+    """A play-level reader may feed a setup role under another name, so this cannot say."""
+    tree.write("ansible/deploy.yml", PLAY + "    k: '{{ setup_only_token }}'\n")
+    tree.commit("the play reads a secret")
+    tree.write(SECRETS, _with(BASE_SECRETS, "setup_only_token", "xxx"))
+    assert _setup_readers(tree, capsys) == (DEPLOY_BROAD, {})
+
+
+# ── the deploy plane's half for a range `narrow` never sees (#5577) ──────────────────────────
+
+
+def _deploy_tags(tree: Tree, capsys) -> tuple[int, str]:
+    """`secret_setup_readers.py --deploy-tags` over the tree's last commit, as the tick runs it."""
+    old, new = _refs(tree)
+    rc = secret_setup_readers.main(
+        ["--deploy-tags", old, new, "--repo", str(tree.root)]
+    )
+    return rc, capsys.readouterr().out.strip()
+
+
+def test_deploy_tags_names_the_k8s_reader_of_a_rotated_key(tree: Tree, capsys):
+    tree.write(SECRETS, _with(BASE_SECRETS, "jellyfin_api_key", "zzz"))
+    assert _deploy_tags(tree, capsys) == (0, "jellyfin")
+
+
+def test_deploy_tags_is_empty_for_a_key_only_a_setup_role_reads(tree: Tree, capsys):
+    tree.write(SECRETS, _with(BASE_SECRETS, "new_setup_token", "eee"))
+    assert _deploy_tags(tree, capsys) == (0, "")
+
+
+def test_deploy_tags_refuses_a_key_the_play_reads_naming_nothing(tree: Tree, capsys):
+    tree.write("ansible/deploy.yml", PLAY + "    k: '{{ bazarr_api_key }}'\n")
+    tree.commit("the play reads a secret")
+    tree.write(SECRETS, _with(BASE_SECRETS, "bazarr_api_key", "xxx"))
+    assert _deploy_tags(tree, capsys) == (DEPLOY_BROAD, "")
+
+
+def test_deploy_tags_refuses_most_of_the_fleet_naming_it(tree: Tree, capsys):
+    """`narrow`'s coverage ceiling: four of the six declared services read the key."""
+    for role in ("sonarr", "radarr", "lidarr"):
+        tree.write(
+            f"ansible/roles/k8s/{role}/templates/token.yaml.j2",
+            "t: {{ bazarr_api_key }}\n",
+        )
+    tree.commit("three more readers")
+    tree.write(SECRETS, _with(BASE_SECRETS, "bazarr_api_key", "xxx"))
+    assert _deploy_tags(tree, capsys) == (DEPLOY_BROAD, "bazarr,lidarr,radarr,sonarr")
+
+
+CLAUDE_DEFAULTS = "ansible/roles/setup/claude_code/defaults/main.yml"
+
+
+def _ship_claude_defaults(tree: Tree, initial_setup_reads: str) -> None:
+    """claude_code's defaults build one key from a secret, and initial_setup ships the file.
+
+    The shape is the real tree's row in `SETUP_FILES_SHIPPED_BY_OTHER_ROLES` (#4303), which
+    this reads unpatched: a change to that row changes what these tests exercise.
+    """
+    tree.write(
+        CLAUDE_DEFAULTS,
+        'claude_built_token: "{{ setup_only_token }}"\nclaude_plain: 1\n',
+    )
+    tree.write(
+        "ansible/roles/setup/initial_setup/tasks/main.yml",
+        f"- name: Read\n  debug: {{msg: '{{{{ {initial_setup_reads} }}}}'}}\n",
+    )
+    tree.commit("a shipped defaults file")
+    tree.write(SECRETS, _with(BASE_SECRETS, "setup_only_token", "xxx"))
+
+
+def test_a_shipper_reading_none_of_the_secrets_keys_is_unread(tree: Tree, capsys):
+    """initial_setup ships claude_code's defaults for one plain key, so a secret skips it."""
+    _ship_claude_defaults(tree, "claude_plain")
+    rc, out = _setup_readers(tree, capsys)
+    assert rc == 0 and out["unread"] == {CLAUDE_DEFAULTS: ["initial_setup"]}
+
+
+def test_a_shipper_reading_a_key_built_from_the_secret_is_a_reader(tree: Tree, capsys):
+    """The rejecting half: the key built from the secret reaches initial_setup's task."""
+    _ship_claude_defaults(tree, "claude_built_token")
+    rc, out = _setup_readers(tree, capsys)
+    assert rc == 0 and CLAUDE_DEFAULTS in out["paths"] and out["unread"] == {}
+
+
+def _role_tags(tree: Tree, old: str, new: str) -> frozenset[str]:
+    return narrow_setup.role_tags(
+        "claude_code",
+        "claude_code",
+        old,
+        new,
+        str(tree.root),
+        "ansible/initial_setup.yml",
+    )
+
+
+@pytest.fixture
+def setup_tree(tree: Tree) -> Tree:
+    """`tree` plus a playbook applying claude_code, whose own tasks render its template."""
+    tree.write("ansible/initial_setup.yml", SETUP_PLAY)
+    tree.write(
+        "ansible/roles/setup/claude_code/tasks/main.yml",
+        "- name: Render\n  template: {src: env.j2, dest: /x}\n  tags: [claude-env]\n",
+    )
+    tree.write("ansible/roles/setup/claude_code/CLAUDE.md", "# claude_code\n")
+    tree.commit("a setup role")
+    return tree
+
+
+def test_a_secret_the_role_reads_widens_it_to_the_whole_role(setup_tree: Tree):
+    """A prose edit alone needs no tag; a key the role reads beside it needs the role tag."""
+    setup_tree.write(
+        "ansible/roles/setup/claude_code/CLAUDE.md", "# claude_code, edited\n"
+    )
+    setup_tree.write(SECRETS, _with(BASE_SECRETS, "setup_only_token", "xxx"))
+    with pytest.raises(narrow_setup.CannotNarrow, match="setup_only_token"):
+        _role_tags(setup_tree, *_refs(setup_tree))
+
+
+def test_a_secret_the_role_does_not_read_leaves_its_answer(setup_tree: Tree):
+    """The accepting half: jellyfin's key is not claude_code's, so the prose edit needs nothing."""
+    setup_tree.write(
+        "ansible/roles/setup/claude_code/CLAUDE.md", "# claude_code, edited\n"
+    )
+    setup_tree.write(SECRETS, _with(BASE_SECRETS, "jellyfin_api_key", "zzz"))
+    with pytest.raises(narrow_setup.NothingToApply):
+        _role_tags(setup_tree, *_refs(setup_tree))
+
+
+def test_a_shipper_reading_none_of_the_secrets_keys_keeps_its_narrow_answer(
+    tree: Tree,
+):
+    """`role_tags` takes the routing's rule: initial_setup's prose edit still needs nothing."""
+    _ship_claude_defaults(tree, "claude_plain")
+    tree.write(
+        "ansible/initial_setup.yml", SETUP_PLAY.replace("claude_code", "initial_setup")
+    )
+    tree.write("ansible/roles/setup/initial_setup/CLAUDE.md", "# initial_setup\n")
+    old, new = _refs(tree)
+    with pytest.raises(narrow_setup.NothingToApply):
+        narrow_setup.role_tags(
+            "initial_setup",
+            "initial_setup",
+            old,
+            new,
+            str(tree.root),
+            "ansible/initial_setup.yml",
+        )
+
+
+def test_the_deployer_reads_the_scripts_refusal_code_and_no_crash_shares_it():
+    """The tick merges on a refusal and parks on a crash, which Python exits 1 with."""
+    assert SECRET_READERS_REFUSED_EXIT == DEPLOY_BROAD != FAILED

@@ -1,0 +1,31 @@
+---
+# Moved from roles/k8s/media-volume by D5's conversion PR for media-volume. H7.9b replaces it
+# with tmpfiles.d lines in daniel-box's host tree.
+#
+# media-volume's static PersistentVolume names `media_volume_host_path` as its local path on
+# daniel-box, the node the PV pins. media/ and torrents/ are created here so the hardlink probe
+# has somewhere to link between on a volume nothing has written to yet.
+#
+# noqa risky-file-permissions: the omitted `mode` is the point — see the comment below.
+- name: Create the media volume directories on the node # noqa risky-file-permissions
+  # DELIBERATELY NO `mode:`. The library came from daniel-server with its directory modes
+  # intact, and the media stack has kept them since; a mode here would flip them on every
+  # apply. Ownership is enforced, because every media workload runs as {{ puid }}:{{ pgid }}.
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: "{{ puid }}"
+    group: "{{ pgid }}"
+  loop:
+    - "{{ media_volume_host_path }}"
+    - "{{ media_volume_host_path }}/media"
+    - "{{ media_volume_host_path }}/torrents"
+  # DECIDED: the copies sit in task vars, not in this role's defaults. Role defaults are
+  # play-wide in initial_setup.yml, so a defaults copy becomes a cross-role read for any setup
+  # role that names the key (#5472). puid and pgid are group_vars keys copied for routing: a
+  # change to group_vars routes to the deploy plane only, which never re-applies this task.
+  # test_k8s_host_files_pairs.py holds each copy equal to its source.
+  vars:
+    media_volume_host_path: /srv/media
+    puid: 1000
+    pgid: 1000

@@ -286,6 +286,7 @@ containers_list:
       - sonarr                   # download client, app DB host `wireguard` (compat Service)
       - radarr                   # same as sonarr
       - qbittorrent-reach-probe  # tasks/verify.yml pod-CIDR reachability check
+      - qbittorrent-prefs-check  # the daily log-only drift check CronJob, files/prefs_check.py
     # homepage's qBittorrent widget dials the ClusterIP; this key adds homepage to the callers.
     homepage_widget: true
   - name: radarr
@@ -326,6 +327,10 @@ containers_list:
   # ingress is the direction actually enforced on this cluster.
   - name: prowlarr
     platform: k8s
+    # Flux applies prowlarr through `promote`, and its flaresolverr isolation check runs in
+    # `prowlarr-verify` (#5594). The handback is two PRs, `owner: released` then removing
+    # `owner`: docs/flux-deploy-plane.md.
+    owner: flux
     weekly_backup_claims: {prowlarr-config: 4}  # Thu
     hostname: "prowlarr"
     port: 9696
@@ -346,8 +351,7 @@ containers_list:
       - monitor-bridge
       - sonarr
       - radarr
-      - flaresolverr-netpol-probe  # control leg of this role's own isolation probe
-      - prowlarr-verify            # templates/verify-inert/ Job, staged for the flip — see the policy's header
+      - prowlarr-verify            # templates/verify/ Job's control leg — see the policy's header
   - name: bazarr
     platform: k8s
     # Flux applies bazarr through `promote`, and every Ansible path skips it (D5.9). The
@@ -463,6 +467,10 @@ containers_list:
   # Headless DDNS client: no web UI, no Traefik route.
   - name: cloudflare-ddns
     platform: k8s
+    # Flux applies cloudflare-ddns through `promote` and substitutes its API-token and Kuma
+    # push-token Secret from homelab-cluster-vars (D5.19). The handback is two PRs,
+    # `owner: released` then removing `owner`: docs/flux-deploy-plane.md.
+    owner: flux
   - name: freshrss
     platform: k8s
     # Flux applies freshrss through `promote`, and every Ansible path skips it (D5.9). The
@@ -557,6 +565,9 @@ containers_list:
   # reader is.
   - name: artifacts
     platform: k8s
+    # Flux applies artifacts through `promote`; its host directories are k8s_host_files' (D5.19).
+    # The handback is two PRs, `owner: released` then removing `owner`: docs/flux-deploy-plane.md.
+    owner: flux
     hostname: "artifacts"
     port: 8080
     use_authelia: true
@@ -567,6 +578,9 @@ containers_list:
   # Authelia. The role's ingressroute template records why it stopped being LAN-only.
   - name: docs
     platform: k8s
+    # Flux applies docs through `promote`; its site directory is k8s_host_files' (D5.19). The
+    # handback is two PRs, `owner: released` then removing `owner`: docs/flux-deploy-plane.md.
+    owner: flux
     hostname: "docs"
     port: 8080
     use_authelia: true
@@ -647,6 +661,9 @@ containers_list:
   # and monitor-bridge's check_n8n rides the API-key route.
   - name: n8n
     platform: k8s
+    # Flux applies n8n through `promote`, and every Ansible path skips it (#5546). The
+    # handback is two PRs, `owner: released` then removing `owner`: docs/flux-deploy-plane.md.
+    owner: flux
     weekly_backup_claims: {n8n-data: 0, n8n-files: 5}  # Sun, Fri
     hostname: "n8n"
     port: 5678
@@ -829,6 +846,7 @@ containers_list:
       - kuma-status-page-sync    # KUMA__URL + deadman push (uptime-kuma's status-page-sync CronJob)
       - kuma-maintenance-sync    # KUMA__URL (uptime-kuma's maintenance-sync CronJob)
       - configarr-health         # push_url (configarr/templates/health-secret.yaml.j2), a CronJob (H2.5b)
+      - janitorr-health          # push_url (janitorr/templates/health-secret.yaml.j2), a CronJob (H2.5c)
 
   # Runs WITHOUT docker plumbing — no DOCKER_HOST, so no in-IDE docker CLI or devcontainers.
   # CI's `images` job builds the image from the role's own Dockerfile and pushes it to GHCR.
@@ -898,6 +916,9 @@ containers_list:
   # Loki. No web UI and no route; each exporter's Service is scraped in-cluster.
   - name: game-stats
     platform: k8s
+    # Flux applies game-stats through `promote` (D5.19). The handback is two PRs, `owner:
+    # released` then removing `owner`: docs/flux-deploy-plane.md.
+    owner: flux
     weekly_backup_claims: {terraria-stats-data: 0, valheim-stats-data: 1}  # Sun, Mon
     depends_on: [loki-homelab]
     # One job per game, each a single replica behind its own Service. terraria-stats runs as
@@ -915,6 +936,10 @@ containers_list:
   # every metric/API check; autofix-bridge is the *arr remediation loop.
   - name: monitor-bridge
     platform: k8s
+    # Flux applies monitor-bridge through `promote`, and every Ansible path skips it (#5594).
+    # The handback is two PRs, `owner: released` then removing `owner`:
+    # docs/flux-deploy-plane.md.
+    owner: flux
     tier: platform
   # Host metrics for BOTH nodes.
   - name: node-exporter
@@ -924,12 +949,20 @@ containers_list:
     owner: flux
   - name: autofix-bridge
     platform: k8s
+    # Flux applies autofix-bridge through `promote` and substitutes its env Secret from
+    # homelab-cluster-vars (D5.19). The handback is two PRs, `owner: released` then removing
+    # `owner`: docs/flux-deploy-plane.md.
+    owner: flux
   # The NUT primary (upsd + usbhid-ups + upsmon). The pod is pinned to daniel-server, the
   # UPS's USB host — a physical pin that never unwinds. The host's secondary upsmon, the
   # thing that actually powers daniel-server off on FSD, is the nut_host role and keeps its
   # 127.0.0.1:3493 target via hostPort.
   - name: nut
     platform: k8s
+    # Flux applies nut through `promote` and pulls its image from GHCR, first through the
+    # in-cluster ghcr.io mirror (D5.17). The handback is two PRs, `owner: released` then
+    # removing `owner`: docs/flux-deploy-plane.md.
+    owner: flux
     tier: platform
   # The Prometheus face of the same upsd, as its own workload rather than a sidecar: the nut pod
   # is privileged and USB-pinned, and a sidecar there would restart the shutdown chain on every

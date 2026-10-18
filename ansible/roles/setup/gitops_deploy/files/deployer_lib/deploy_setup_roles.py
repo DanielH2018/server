@@ -22,6 +22,10 @@ changes*). So a role the routing does not place is never guessed at, and
 It reads alone. It imports no sibling module, it takes the routing from a subprocess, and it
 answers for a role name, where `deploy_changes` answers for a changed path. `deploy_changes`
 re-exports every name, so its readers keep their imports.
+
+`secret_setup_readers` is the one question here about a range rather than a role: which
+setup-role files name a `secrets.yml` key the range moved (#5436). It is a YAML-parsing
+subprocess for the same reason, and `deploy_defer.route_secret_readers` maps its paths.
 """
 
 from __future__ import annotations
@@ -36,6 +40,19 @@ ROUTING_SCRIPT = "scripts/deploy_tools/setup_routing.py"
 # Three playbooks and the vars files, parsed once: 0.8s measured under a loaded suite run.
 # Thirty seconds is the wedged case, as for the setup narrowing (`NARROW_SETUP_TIMEOUT_S`).
 ROUTING_TIMEOUT_S = 30.0
+# A grep per changed key: 0.4s measured over PR #5405's commit, and 0.25s for the `--deploy-tags`
+# half over the last three commits to the file, so the routing bound serves both.
+SECRET_READERS_SCRIPT = "scripts/deploy_tools/secret_setup_readers.py"
+# The script's deliberate refusal, distinct from 1, which a traceback exits with. This unit
+# cannot import `lib.exit_codes`, so `test_narrow_secret_keys.py` pins it to `DEPLOY_BROAD`.
+SECRET_READERS_REFUSED_EXIT = 3
+
+
+class SecretReadersRefused(RuntimeError):
+    """The reader script answered that it cannot say which setup roles read a moved key.
+
+    A deterministic answer, unlike a timeout or a crash: a retry reads the same tree.
+    """
 
 
 class SetupRoute(NamedTuple):
@@ -47,12 +64,16 @@ class SetupRoute(NamedTuple):
         on_tick_host: whether its `when:` admits the tick's host.
         host: the one host its gate admits, for a role the tick's host does not run, else
             None. The printed remediation appends `-e target=<host>` from it.
+        agent_hosts: the hosts its playbook's opt-in join plays apply the agent half to,
+            from the routing's `agent_hosts` key (#5606). Empty for every role but `k3s`,
+            and for a routing script too old to emit the key.
     """
 
     playbook: str | None
     tag: str
     on_tick_host: bool
     host: str | None
+    agent_hosts: tuple[str, ...] = ()
 
 
 # None until a tick installs routing or a reader first asks; see `routing`.
@@ -98,7 +119,10 @@ def _route(role: str, r: dict) -> SetupRoute:
         raise ValueError(f"{role}: malformed playbook {playbook!r}")
     if host is not None and not isinstance(host, str):
         raise ValueError(f"{role}: malformed host {host!r}")
-    return SetupRoute(playbook, tag, r["on_tick_host"], host)
+    agents = r.get("agent_hosts", [])
+    if not isinstance(agents, list) or not all(isinstance(h, str) for h in agents):
+        raise ValueError(f"{role}: malformed agent_hosts {agents!r}")
+    return SetupRoute(playbook, tag, r["on_tick_host"], host, tuple(agents))
 
 
 def derive_routing(
@@ -126,6 +150,82 @@ def derive_routing(
     if r.returncode != 0:
         raise RuntimeError(r.stderr.strip() or f"exited {r.returncode}")
     return routes_from_json(r.stdout)
+
+
+def secret_setup_readers(
+    repo: str, old: str, new: str
+) -> tuple[list[str], dict[str, list[str]]]:
+    """Run `secret_setup_readers.py` over `old..new` in `repo`.
+
+    Returns:
+        (paths, unread). `paths` is every file under `ansible/roles/setup/` at `new` naming a
+        `secrets.yml` key whose ciphertext differs across the range, empty when none does.
+        `unread` maps a shipped vars file among them to the shippers that read no key of it
+        built from a moved secret.
+
+    Raises:
+        subprocess.TimeoutExpired: the child outlived `ROUTING_TIMEOUT_S`.
+        SecretReadersRefused: the child exited `SECRET_READERS_REFUSED_EXIT`; the message is
+            its stderr.
+        RuntimeError: the child exited non-zero otherwise, with its stderr as the message.
+        ValueError: its stdout is not that JSON object.
+        OSError: the child could not be started.
+    """
+    r = subprocess.run(
+        ["uv", "run", "--frozen", "python", SECRET_READERS_SCRIPT, old, new],
+        cwd=repo,
+        capture_output=True,
+        text=True,
+        timeout=ROUTING_TIMEOUT_S,
+        check=False,
+    )
+    if r.returncode == SECRET_READERS_REFUSED_EXIT:
+        raise SecretReadersRefused(r.stderr.strip() or "refused")
+    if r.returncode != 0:
+        raise RuntimeError(r.stderr.strip() or f"exited {r.returncode}")
+    data = json.loads(r.stdout)
+    paths = data.get("paths") if isinstance(data, dict) else None
+    unread = data.get("unread") if isinstance(data, dict) else None
+    if not (
+        isinstance(paths, list)
+        and all(isinstance(p, str) for p in paths)
+        and isinstance(unread, dict)
+        and all(isinstance(v, list) for v in unread.values())
+    ):
+        raise ValueError(f"not the secret-readers JSON: {r.stdout.strip()[:200]!r}")
+    return paths, unread
+
+
+def secret_k8s_readers(repo: str, old: str, new: str) -> tuple[int, str]:
+    """Run `secret_setup_readers.py --deploy-tags` over `old..new` in `repo` (#5577).
+
+    Returns:
+        (exit code, stdout): the deploy tags reading a `secrets.yml` key the range moved,
+        comma-joined. Exit 0 answers, with an empty stdout when no k8s role reads one; exit
+        `SECRET_READERS_REFUSED_EXIT` refuses, naming the tags only when it knows them.
+
+    Raises:
+        subprocess.TimeoutExpired: the child outlived `ROUTING_TIMEOUT_S`.
+        OSError: the child could not be started.
+    """
+    r = subprocess.run(
+        [
+            "uv",
+            "run",
+            "--frozen",
+            "python",
+            SECRET_READERS_SCRIPT,
+            "--deploy-tags",
+            old,
+            new,
+        ],
+        cwd=repo,
+        capture_output=True,
+        text=True,
+        timeout=ROUTING_TIMEOUT_S,
+        check=False,
+    )
+    return r.returncode, r.stdout.strip()
 
 
 def current_routing() -> dict[str, SetupRoute] | None:
@@ -220,6 +320,12 @@ def setup_role_host(role: str) -> str | None:
     """The one host a role the tick's host does not run is gated onto, else None."""
     route = routing().get(role)
     return route.host if route else None
+
+
+def setup_role_agent_hosts(role: str) -> tuple[str, ...]:
+    """The hosts `role`'s playbook joins as agents, or () when it has no agent half."""
+    route = routing().get(role)
+    return route.agent_hosts if route else ()
 
 
 def keys_naming_no_role(keys: set[str], present: set[str]) -> set[str]:

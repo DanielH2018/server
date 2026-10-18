@@ -32,6 +32,7 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 
 from validate.validate_lib.ok_lines import ok_printer
 from lib import yaml_fast
+from lib.cli_help import answer_help
 from lib.ansible_jinja_env import template_env
 from lib.ansible_inventory import containers_entries_in
 from lib.render_context import render_context
@@ -317,6 +318,7 @@ def main(argv: Sequence[str] = ()) -> int:
         0 if every template rendered and parsed as YAML, 1 if any failed or no host_vars
         were found.
     """
+    answer_help(__doc__, list(argv))
     ok = ok_printer(argv)
     host_files = sorted(HOST_VARS.glob("*.yml"))
     if not host_files:

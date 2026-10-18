@@ -113,27 +113,41 @@ uv run python ansible/roles/k8s/qbittorrent/files/apply_prefs.py --dry-run
 ## Why the prefs plane is shaped the way it is
 
 Nothing used to re-run `apply_prefs.py` or notice when the PVC's live preferences drifted from
-`DESIRED` (2026-08-27 review, Medium). The daily cron closed that, and three decisions inside it
-are deliberate:
+`DESIRED` (2026-08-27 review, Medium). A daily check closed that. It ran as a daniel-box host
+cron until H2.5d, and runs as the `qbittorrent-prefs-check` CronJob since
+(`ansible/roles/k8s/qbittorrent/templates/prefs-check-cronjob.yaml.j2`, 06:37 UTC). Its entry
+point, `files/prefs_check.py`, runs `apply_prefs.py --dry-run --connect-wait 60` and prints one
+`qbittorrent-prefs-check: <verdict>` line to the pod log. Read the verdicts with
+`uv run python scripts/diagnostics/probe.py loki-query '{container="qbittorrent-prefs-check"}' --since 48h`.
+Five decisions inside it are deliberate:
 
 - **Not a Kuma monitor.** The 2026-08-27 review that found this gap also found six live Kuma push
-  tokens leaking into `curl` argv across the estate, one world-readable — adding a seventh for a
-  low-urgency drift check would grow the exact class being remediated in the same review. `logger`
-  writes to the `{job="syslog"}` Loki stream instead, which `scripts/diagnostics/probe.py alerts`
-  already reads. That is also why `prefs-check.sh.j2` is absent from
-  `ansible/tests/setup/test_cron_scripts_publish_via_pr.py`'s push-script corpus: it holds neither
-  `api/push` nor `PUSH_URL`, so it is not a push script and does not belong in the shared
-  `kuma-push-lib.sh` contract.
+  tokens leaking into `curl` argv across the estate, one world-readable. Adding a seventh for a
+  low-urgency drift check would grow the exact class being remediated in the same review, so the
+  check pushes nothing and the pod log is the record.
 - **No new SOPS surface.** It reuses the `qbittorrent_username`/`qbittorrent_password` keys that
-  `homepage`'s widget already renders, projected into
-  `/usr/local/bin/qbittorrent-prefs-check.sh` at 0700 owner `{{ sys_user }}` — the same shape as
-  `janitorr-health.sh.j2`'s Kuma token, interpolated directly rather than split into an env file,
-  since only one user ever needs to read this one.
-- **The exit codes became a contract**: `EXIT_OK` (0), `EXIT_UNREACHABLE` (1), `EXIT_BAD_ARGS` (2),
+  `homepage`'s widget already renders. They reach the pod from the `qbittorrent-prefs-check`
+  Secret as one value, `QBT_CREDENTIALS`, the username and the password on two lines. One value
+  rather than a key each, because a key whose whole value is one secret is a standalone Flux
+  placeholder. That would add both keys to
+  `ansible/roles/k8s/manifests/files/standalone_secret_keys.json`, and a change to that file fans
+  the landing's narrowed apply out to every `k8s/manifests` caller. The ConfigMap that stages the
+  code holds no secret (`ansible/tests/k8s/test_no_secret_in_a_moved_jobs_configmap.py`).
+- **The exit codes are a contract**: `EXIT_OK` (0), `EXIT_UNREACHABLE` (1), `EXIT_BAD_ARGS` (2),
   `EXIT_DRIFT` (3, `--dry-run` only). Before 2026-08-27, `--dry-run` returned 0 whether or not
-  anything had drifted, which is why the cron could not previously have branched on it. No caller
-  shelled out to the script before that date, so this widened the contract rather than breaking
-  one.
+  anything had drifted, so a scheduled caller could not have branched on it. `prefs_check.py`
+  reads drift as a result and exits 0 for it, as for a match. Any other exit leaves the Job
+  Failed, which `k8s/cronjob-gate` reports without failing the deploy.
+- **The connect retry polls, and the login runs once.** A new pod's first dials can be dropped
+  even through an open fence, because kube-router learns a new pod's labels late.
+  `--connect-wait 60` retries an unauthenticated `GET /` that gets no response at all for up to
+  60 seconds. Any HTTP answer, an error status included, ends the poll. The login that follows is
+  never retried, because `web_ui_max_auth_fail_count` is 5.
+- **The deploy runs it once, after the rollout.** `tasks/main.yml` includes `k8s/cronjob-gate`
+  after `verify.yml`, which waits out the rollout the render queued. A gate run straight after
+  the apply would meet the replacement pod inside the sidecar's startup window and log
+  `cannot reach`. qbittorrent's `netpol_from` admits the `qbittorrent-prefs-check` label, and the
+  role renders that fence itself, so the fence and the CronJob arrive in one apply.
 
 **Why the values themselves.** The pod egresses through Mullvad, which forwards no ports, so
 the client can only pair with peers it dials itself. Every raised limit is about dialing faster

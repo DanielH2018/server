@@ -27,7 +27,7 @@ LAUNCH_TIMEOUT_S = 120.0
 SYSTEM_PROMPT_FILE = "scripts/dev/fanout_lib/headless_system_prompt.md"
 CLAUDE_ARGS_PREFIX = (
     "claude -p --model opus --permission-mode auto --output-format json"
-    " --max-budget-usd {budget} --append-system-prompt-file {prompt}"
+    " --max-budget-usd {budget} --append-system-prompt-file {prompt} --effort medium"
 )
 # A runaway bound, not a tight one. Over 84 fan-out sessions the largest read 64M cached
 # tokens and wrote 152k output tokens: about $18 at Opus 5.5's list prices ($0.20 per

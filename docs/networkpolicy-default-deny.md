@@ -152,7 +152,7 @@ other label and so would pass that check while still breaking:
 
 - **`podSelector: {}` fences each probe's control target, not the probe pod itself.** Every probe
   leg in this repo is **outbound** (`netpol-baseline/templates/netpol-probe-job.yaml.j2`, which merged the five
-  per-slice probes in #3813; `prowlarr/netpol-probe-job.yaml.j2:53,64`; `sonarr/tasks/main.yml`) — nothing needs a
+  per-slice probes in #3813; prowlarr's probe until #5594 replaced it with `prowlarr-verify`; `sonarr/tasks/main.yml`) — nothing needs a
   probe pod to be reachable *inbound*. An Ingress-only policy selecting a probe pod governs what
   reaches it, not what it can reach, and return traffic rides conntrack, so being selected as a
   target cannot break an outbound assertion. What actually breaks is the mirror image:
@@ -164,9 +164,9 @@ other label and so would pass that check while still breaking:
   its own NEGATIVE CONTROL leg (dialing homepage): "by construction there is no unfenced pod left"
   once slice 5 lands. Slice 5 must apply the same fix to every probe's control leg: admit the probe
   pod as an explicit peer **on its control target's policy** — the shape
-  `prowlarr/templates/networkpolicy-prowlarr.yaml.j2:24-27` already uses, where prowlarr's own policy admits
-  `flaresolverr-netpol-probe` as a caller because that probe's control leg dials `prowlarr` before
-  asserting flaresolverr is unreachable.
+  `prowlarr/templates/networkpolicy-prowlarr.yaml.j2` uses, where prowlarr's own policy admits
+  `prowlarr-verify` (until #5594, `flaresolverr-netpol-probe`) as a caller because that Job's
+  control leg dials `prowlarr` before asserting flaresolverr is unreachable.
 
   **Superseded — this half of the bullet no longer holds.** The premise is that traefik's policy
   admits only `app: traefik`, `prometheus` and the two cni0 `/32`s. Slice 4 then gave traefik an

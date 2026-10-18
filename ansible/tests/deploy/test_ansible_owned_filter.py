@@ -142,17 +142,24 @@ def test_the_batch_loop_skips_owned_entries_that_templates_still_see():
     # the three Wave A exporters since D5.5, deploy-ui, littlelink and longhorn-ui since D5.6,
     # homepage and node-exporter since D5.7, loki-homelab, navidrome and scrutiny since D5.8,
     # homelab-mcp and ical-proxy since D5.14, bazarr, freshrss, livesync and speedtest since D5.9,
-    # terraria and valheim since D5.15, code-server since D5.16, and mosquitto, radarr and sonarr
-    # since D5.20, so the live list holds owned entries too.
+    # terraria and valheim since D5.15, code-server since D5.16, mosquitto, radarr and sonarr
+    # since D5.20, n8n since #5546, nut since D5.17, artifacts, autofix-bridge, cloudflare-ddns,
+    # docs and game-stats since D5.19, and monitor-bridge and prowlarr since #5594, so the live
+    # list holds owned entries too.
     owned = {"fixture-flux", "fixture-released"} | {
         c["name"] for c in live if "owner" in c
     }
     assert {
+        "artifacts",
+        "autofix-bridge",
         "bazarr",
         "bento-pdf",
+        "cloudflare-ddns",
         "code-server",
         "deploy-ui",
+        "docs",
         "freshrss",
+        "game-stats",
         "gpu-exporter",
         "homelab-mcp",
         "homepage",
@@ -162,11 +169,15 @@ def test_the_batch_loop_skips_owned_entries_that_templates_still_see():
         "loki-homelab",
         "mosquitto",
         "longhorn-ui",
+        "monitor-bridge",
+        "n8n",
         "navidrome",
         "node-exporter",
+        "nut",
         "nut-exporter",
         "peanut",
         "pihole-exporter",
+        "prowlarr",
         "radarr",
         "scrutiny",
         "sonarr",
