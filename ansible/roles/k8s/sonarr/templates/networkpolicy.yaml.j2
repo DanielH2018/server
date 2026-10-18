@@ -37,12 +37,10 @@
 # because sonarr's public route is Authelia-gated and its monitoring IngressRoute exposes only
 # that one path — so this entry is the whole grant, and fencing it out breaks the widget.
 #
-# sonarr-verify is the pod label of the Jobs in templates/verify-inert/ (its verify Job and arr-notification's seed Job).
-# Nothing renders that directory while Ansible owns sonarr, so no pod carries the label yet and the
-# entry admits nothing today. It is here ahead of sonarr's Flux flip, which moves the directory to
-# templates/verify/: from then the Jobs dial sonarr's API over the ClusterIP from the `sonarr-verify`
-# Kustomization, and without this entry the fence would refuse them. ansible/tests/k8s/test_netpol_from.py
-# holds it in STAGED_CALLERS until the flip.
+# sonarr-verify is the pod label of the Jobs in templates/verify/ (its verify Job and arr-notification's seed Job).
+# The renderer emits them into the `sonarr-verify` Kustomization, and they dial sonarr's API over
+# the ClusterIP, so without this entry the fence would refuse them. The entry landed ahead of the
+# Flux flip (#5535), so the Jobs were admitted on their first run.
 #
 # The caller list is `netpol_from:` on this role's containers_list entry
 # (inventory/host_vars/daniel-box.yml), each caller's reason beside it. The entry's

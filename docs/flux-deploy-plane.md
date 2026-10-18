@@ -892,8 +892,9 @@ snapshot is taken. `<tag>-prepull` does the same beside it, never after it (*The
 below). `<tag>-verify` depends on the tag's last Kustomization: `<tag>-deferred` when the
 tag has one, `<tag>` otherwise. A `K8S_APPLIES_LAST` tag waits on no other tag's
 `-snapshot` or `-verify`. A published tag whose role declares `k8s_autodeploy_snapshot_pvcs`
-renders `<tag>-snapshot` (*The snapshot Job* below). No published role declares one yet, and
-no role renders `<tag>-verify`. `<tag>-verify` keeps the bundle's default `timeout` unless a
+renders `<tag>-snapshot` (*The snapshot Job* below). A published tag whose role ships
+`templates/verify/*.yaml.j2` renders `<tag>-verify`; sonarr and radarr were the first, in D5.20.
+`<tag>-verify` keeps the bundle's default `timeout` unless a
 Job in it sets an `activeDeadlineSeconds` within 60 seconds of it, and then takes that deadline
 plus 60 seconds, so a hung Job fails on its own deadline (`ordering.verify_timeout`).
 
@@ -1137,8 +1138,9 @@ never from the render, so a renderer bug cannot widen it. Each per-tag kind has 
 - `-deferred` when the role passes a non-empty `manifests_deferred_files` to its
   `k8s/manifests` include;
 - `-snapshot` when the role's defaults declare a non-empty `k8s_autodeploy_snapshot_pvcs`;
-- `-verify` when the role ships `templates/verify/*.yaml.j2` (`verify_files`) or opts a
-  CronJob into a gate Job with `flux_cronjob_gates` (`cronjob_gates`). No role does either yet.
+- `-verify` when the role ships `templates/verify/*.yaml.j2` (`verifying_tags`, which reads the
+  same `verify_files` the renderer reads), or opts a CronJob into a gate Job with
+  `flux_cronjob_gates` (`cronjob_gates`). sonarr and radarr do the first; no role does the second yet.
 
 It fails when:
 

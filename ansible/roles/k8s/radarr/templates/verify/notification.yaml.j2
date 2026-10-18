@@ -1,17 +1,16 @@
 {#
-  arr-notification's seed as a post-apply mutation Job, INERT until this role's flip.
+  arr-notification's seed as a post-apply mutation Job.
 
-  This file is byte-identical in sonarr's and radarr's `templates/verify-inert/`, so the app is
-  `container_item.name` and never a literal. The flip PR moves the directory to
-  `templates/verify/`, and the renderer then emits the Job into `<app>-verify` beside the verify
-  Jobs. That Kustomization starts only once `<app>` is applied and Ready, which is the order
-  `tasks/main.yml` gives the Ansible seed today (D5, *Post-apply mutation Jobs share
-  `<tag>-verify`*).
+  This file is byte-identical in sonarr's and radarr's `templates/verify/`, so the app is
+  `container_item.name` and never a literal. The renderer emits the Job into `<app>-verify`
+  beside the verify Jobs. That Kustomization starts only once `<app>` is applied and Ready,
+  which is the order `tasks/main.yml` gave the Ansible seed before the flip (D5, *Post-apply
+  mutation Jobs share `<tag>-verify`*).
 
   DECIDED: the script and the declared values come from arr-notification by `lookup()`, not
   from the renderer. A cross-role lookup makes the deployer's scan redeploy sonarr and radarr
-  when arr-notification changes, and today's `include_role` of arr-notification already has
-  that coupling, so the lookup changes no routing. A renderer argument for one role's script
+  when arr-notification changes, the coupling the Ansible `include_role` of arr-notification
+  had before the flip, so the lookup changed no routing. A renderer argument for one role's script
   would be a special case for two readers.
 
   DECIDED: the API key comes from `<app>-exportarr`, which `<app>`'s own render applies, as
