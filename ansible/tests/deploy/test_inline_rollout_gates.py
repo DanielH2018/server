@@ -91,10 +91,6 @@ from _inline_rollout_targets import (
 _MUST_GATE = {
     "crowdsec": "crowdsec",
     "registry": "registry",
-    # sonarr reads its library over the Service ClusterIP with `uri`, not through kubectl, so
-    # the derived half below cannot see the inspection at all — the same blind spot registry is
-    # here for..
-    "sonarr": "sonarr",
 }
 
 
@@ -334,9 +330,9 @@ def test_no_role_gates_with_a_readiness_wait_on_its_own_pods() -> None:
 # share: a gate waits as long as ITS workload's first boot takes. `manifests_rollout_timeout` is
 # passed as a var at each role's own call site, so for most roles there is nothing in scope for
 # the `verify.yml` where the gate lives to reference, and inventing a shared constant would mean
-# plumbing it through six roles to remove one literal. sonarr is the exception and shows the
-# shape when it IS worth it: the same budget is needed twice in one role, so it declares
-# `sonarr_k8s_rollout_timeout` in its own defaults and both readers take it from there. The
+# plumbing it through six roles to remove one literal. tdarr is the exception and shows the
+# shape when it IS worth it: the same budget is needed several times in one role, so it declares
+# `tdarr_k8s_rollout_timeout` in its own defaults and every reader takes it from there. The
 # census below resolves that reference (`_helpers.rollout_seconds`), so a role spelling its
 # budget as a variable stays inside this check rather than dropping out of it.
 #
@@ -379,12 +375,6 @@ _GATE_BUDGETS = {
         "gates talks HTTP to that same Deployment. It entered this census on 2026-09-22: the "
         "literal-only `--timeout=` regex could not see a templated budget, so this gate sat "
         "outside the check from the day it was written",
-    ),
-    "sonarr": (
-        660,
-        "declared once as `sonarr_k8s_rollout_timeout` and read by this gate AND by the "
-        "manifests call site; a first boot installing the striptracks DOCKER_MODS takes up "
-        "to 10 minutes, which is also why radarr's manifests wait is 660s",
     ),
     "tdarr": (
         3000,
@@ -448,11 +438,11 @@ def test_every_inline_gate_waits_its_declared_budget() -> None:
 
 def test_a_templated_gate_budget_resolves_and_a_bad_one_does_not() -> None:
     # Red proof for the resolution above, which is only ever observed succeeding. The accept
-    # half is sonarr's live spelling; the reject half is what a budget nothing can read must
+    # half is tdarr's live spelling; the reject half is what a budget nothing can read must
     # return, so the assertion in `_inline_gate_budgets` can actually fire.
-    sonarr = _K8S_ROLES / "sonarr"
-    assert rollout_seconds("{{ sonarr_k8s_rollout_timeout }}", sonarr) == 660
-    assert rollout_seconds("{{ sonarr_k8s_no_such_timeout }}", sonarr) is None
+    tdarr = _K8S_ROLES / "tdarr"
+    assert rollout_seconds("{{ tdarr_k8s_rollout_timeout }}", tdarr) == 3000
+    assert rollout_seconds("{{ tdarr_k8s_no_such_timeout }}", tdarr) is None
 
 
 def test_a_drifted_gate_budget_is_flagged() -> None:

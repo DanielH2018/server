@@ -18,10 +18,16 @@ Jinja: a text scan of the inventory says what was declared, not what renders.
 Run: uv run pytest ansible/tests/k8s/test_netpol_from.py
 """
 
+import pytest
+
 from _helpers import K8S_ROLES
 from _k8s_render import host_context, pod_template, rendered_docs
 from homepage_tiles import netpol_callers
+from lib import yaml_fast
 from lib.ansible_inventory import containers_entries_in
+from renderer import shadow_diff
+from renderer.renderer_lib import cluster
+from renderer.renderer_lib.context import load_stubs
 
 # Entries this guard must find, by the policy name each renders, with its renderer. Named rather
 # than counted: if the key were renamed, the census below would go empty and every `all()` here
@@ -71,14 +77,26 @@ UNRENDERED_CALLERS = {
 }
 
 
-# Callers whose pods render only from a role's `templates/verify-inert/`, which nothing renders
-# until that role's Flux flip moves it to `templates/verify/`. Each maps to that role, whose fence
-# lists the caller ahead of the flip so the Job is admitted on its first run (#5535).
-# arr-notification's tests/test_seed_job.py renders the flipped copy and checks the fence admits it.
-STAGED_CALLERS = {
-    "sonarr-verify": "sonarr",
-    "radarr-verify": "radarr",
-}
+# Callers whose pods render only from a role's `templates/verify/`, which the renderer emits into
+# `<tag>-verify` and `rendered_docs()` does not read. Named so the derivation below cannot
+# quietly stop reaching a role: each must be a pod label `verify_pod_labels` returns.
+VERIFY_CALLERS = frozenset({"sonarr-verify", "radarr-verify"})
+
+
+@pytest.fixture(scope="module")
+def verify_pod_labels(tmp_path_factory) -> set[str]:
+    """The `app` label of every pod a role's `templates/verify/` renders, as Flux receives it."""
+    path = tmp_path_factory.mktemp("stubs") / "stubs.yml"
+    assert shadow_diff.main(["stubs", "--out", str(path)]) == 0
+    stubs = load_stubs(path)
+    labels = set()
+    for templates in sorted(K8S_ROLES.glob("*/templates/verify")):
+        rendered = cluster.render_tag(templates.parent.parent.name, stubs)
+        for name, text in rendered.verify.items():
+            for doc in yaml_fast.safe_load_all(text):
+                if name != "kustomization.yaml" and doc and doc["kind"] == "Job":
+                    labels.add(pod_template(doc)["metadata"]["labels"]["app"])
+    return labels
 
 
 def declared_fences() -> dict[str, dict]:
@@ -197,9 +215,14 @@ def test_each_entry_renders_one_fence_from_its_owner_admitting_its_callers():
         assert rendered[name][0] == owner
 
 
-def test_every_caller_is_a_label_some_rendered_pod_carries():
+def test_every_verify_caller_is_a_label_a_verify_job_carries(verify_pod_labels):
+    """Non-vacuity for the verify render the test below adds to the manifests' labels."""
+    assert VERIFY_CALLERS <= verify_pod_labels
+
+
+def test_every_caller_is_a_label_some_rendered_pod_carries(verify_pod_labels):
     """A caller naming no pod admits nothing, and the real caller stays denied."""
-    labels = {
+    labels = verify_pod_labels | {
         (pod_template(doc).get("metadata") or {}).get("labels", {}).get("app")
         for _role, _template, doc in rendered_docs()
     }
@@ -207,25 +230,9 @@ def test_every_caller_is_a_label_some_rendered_pod_carries():
         (name, caller)
         for name, fence in declared_fences().items()
         for caller in fence["callers"]
-        if caller not in labels
-        and caller not in UNRENDERED_CALLERS
-        and caller not in STAGED_CALLERS
+        if caller not in labels and caller not in UNRENDERED_CALLERS
     }
     assert unknown == set()
-
-
-def test_each_staged_caller_is_still_staged_and_listed_by_its_role():
-    """An exemption that outlives the flip would hide a caller nothing labels any more."""
-    fences = declared_fences()
-    for caller, role in STAGED_CALLERS.items():
-        templates = K8S_ROLES / role / "templates"
-        staged = (templates / "verify-inert").is_dir()
-        assert staged and not (templates / "verify").exists(), (
-            f"{role} has flipped; drop {caller} from STAGED_CALLERS so the rendered label is checked"
-        )
-        assert caller in fences[role]["callers"], (
-            f"{role}'s netpol_from no longer lists {caller}"
-        )
 
 
 def test_each_unrendered_caller_is_still_labelled_by_its_task():

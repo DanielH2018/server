@@ -1,13 +1,13 @@
 {#
-  The verify Job's identity, INERT until sonarr's flip, as `job.yaml.j2` beside it is.
+  The `radarr-verify` Jobs' identity, rendered beside `notification.yaml.j2`.
 
-  It is a ServiceAccount with no Role. The Job reads sonarr's API over the pod network and
+  It is a ServiceAccount with no Role. The seed Job reads radarr's API over the pod network and
   execs into no pod, so it needs no Kubernetes grant, and its pod mounts no token.
 #}
 ---
 apiVersion: v1
 kind: ServiceAccount
 metadata:
-  name: sonarr-verify
+  name: radarr-verify
   namespace: {{ k8s_namespace }}
 automountServiceAccountToken: false

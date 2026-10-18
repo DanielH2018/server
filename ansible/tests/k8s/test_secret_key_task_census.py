@@ -91,8 +91,9 @@ EXEMPT: dict[str, str] = {
     ),
 }
 
-# Must be selected, because it names `sonarr_api_key`, and must pass on its guard.
-MUST_FIND_GUARDED = "sonarr/verify.yml::Read the cluster copy's root folders"
+# Must be selected, because it names `authelia_password_argon2`, and must pass on its guard.
+# sonarr's root-folder read held this place until sonarr's Flux flip (D5.20) deleted it.
+MUST_FIND_GUARDED = "authelia/main.yml::Fail if a stored Authelia digest is malformed"
 # No role default or inventory variable derives from a secret key since `domain` was published,
 # so `derived_variables` has no real-tree member. Its fixture pair is
 # `test_a_task_naming_a_derived_variable_is_flagged`.
@@ -288,10 +289,16 @@ def _role(tmp_path: Path, **files: str) -> Path:
 
 
 def _sonarr_root_folder_read(drop_when: bool) -> list[dict]:
-    tasks = yaml_fast.safe_load((K8S_ROLES / "sonarr/tasks/verify.yml").read_text())
-    task = next(
-        t for t in tasks if t.get("name") == "Read the cluster copy's root folders"
-    )
+    """The guarded read sonarr's `tasks/verify.yml` held until its Flux flip (D5.20) deleted it."""
+    task = {
+        "name": "Read the cluster copy's root folders",
+        "no_log": True,
+        "ansible.builtin.uri": {
+            "url": "http://{{ sonarr_k8s_svc.stdout }}:8989/api/v3/rootfolder",
+            "headers": {"X-Api-Key": "{{ sonarr_api_key }}"},
+        },
+        "when": "not (homelab_secret_stubs | default(false) | bool)",
+    }
     if drop_when:
         task = {k: v for k, v in task.items() if k != "when"}
     return [task]
