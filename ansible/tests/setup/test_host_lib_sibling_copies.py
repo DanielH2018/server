@@ -49,7 +49,6 @@ INSTALLED_SRCS = {
 # is exactly what this exists to catch, and `<=` would wave it through.
 EXPECTED_CONSUMERS = frozenset(
     {
-        "configarr",
         "fake_remux",
         "gitops_deploy",
         "homelab_builder",

@@ -1,34 +1,55 @@
----
 # configarr is not a service: it is a nightly reconcile that reads the *arrs and exits. So it
-# is a CronJob, not a Deployment, and its health is reported by a host cron on this node that READS the last Job and pushes Kuma —
-# the same shape as longhorn-backup-health.sh and telemetry-health.sh, and for the same reason
-# (monitor-bridge has no ServiceAccount and never calls the Kubernetes API).
+# is a CronJob, not a Deployment, and its health is reported by a second CronJob,
+# configarr-health, that READS the last Job through its own ServiceAccount and pushes Kuma.
+# Until H2.5b (docs/target-architecture/host/h2-shrink-host-plane.md, Steps item 13) that reader
+# was a daniel-box host cron; tasks/main.yml keeps the absent arms that remove it.
 configarr_k8s_image: ghcr.io/raydak-labs/configarr:1.35.0@sha256:13ef4d9a6ebc13178c8c74813dd12e11ea7331e186a492d79d938513887b96d4
 
 # Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
 k8s_autodeploy: true  # noqa var-naming[no-role-prefix]
-k8s_autodeploy_reason: "CronJob gated at deploy time by k8s/cronjob-gate, which proves the new image RUNS (a container that never starts fails the deploy) but deliberately does not enforce a successful sync; concurrencyPolicy Forbid is set, and the reconciler is convergent, so even if the gate's one-off run does overlap a scheduled one, running the same sync twice is harmless"  # noqa var-naming[no-role-prefix]
+k8s_autodeploy_reason: "CronJob gated at deploy time by k8s/cronjob-gate, which proves the new image RUNS (a container that never starts fails the deploy) but deliberately does not enforce a successful sync; concurrencyPolicy Forbid is set, and the reconciler is convergent, so even if the gate's one-off run does overlap a scheduled one, running the same sync twice is harmless; the configarr-health CronJob is gated the same way, and an extra run of it only re-reads the last Job and re-pushes its verdict"  # noqa var-naming[no-role-prefix]
 
-# The health cron below reads whatever the last run produced,
+# The health reader below reads whatever the last run produced,
 # so the two schedules are independent — this one can move without touching monitoring.
 configarr_k8s_schedule: "30 4 * * *"
 
 configarr_k8s_timeout: 300
 
 # Deliberately kept: `kubectl logs job/<n>` is the only record of what a run did, and the health
-# cron reads it. History limits, not ttlSecondsAfterFinished — a TTL deletes a Succeeded Job on
-# its own clock, and a health cron that finds no Job at all reports DOWN.
+# reader reads it. History limits, not ttlSecondsAfterFinished — a TTL deletes a Succeeded Job on
+# its own clock, and a health reader that finds no Job at all reports DOWN.
 configarr_k8s_successful_history: 3
 configarr_k8s_failed_history: 3
 
 # 26 h ceiling, so a daily 04:30 sync that skips one night goes red rather than coasting on yesterday's log.
 configarr_k8s_max_age_hours: 26
 
-# */10 like the other two k8s-side health crons, and for a reason that is easy to miss: the
+# */10 like the other k8s-side health readers, and for a reason that is easy to miss: the
 # Kuma monitor is a PUSH monitor with an interval, so it needs a push far more often than the
-# sync runs. Each tick re-reads the same Job and re-reports it; the age gate above is what
-# turns a stale one red.
-configarr_k8s_health_cron_minute: "*/10"
+# sync runs. Each run re-reads the same Job and re-reports it; the age gate above is what
+# turns a stale one red. The host cron's UTC minute field, unchanged.
+configarr_k8s_health_schedule: "*/10 * * * *"
+
+# The health reader runs in the repo's pinned python image and gets kubectl from an init
+# container of alpine/k8s, which keeps the binary at /usr/bin/kubectl (its upstream Dockerfile,
+# and the layer listing of this digest's linux/amd64 manifest, 2026-10-18). Its kubectl minor
+# matches the server's v1.37.
+configarr_k8s_health_image: python:3.14-alpine@sha256:f6a589d43c42b9e7f7dc67a12d37132491f362859a5d750607710cc56da3bc72
+configarr_k8s_health_kubectl_image: alpine/k8s:1.37.1@sha256:712dc5385d1c1a3f83b747fa9e40f64d433a97f72ff42f9755ff7dd1f62846e4
+
+# Above the reader's worst case and below k8s/cronjob-gate's cronjob_gate_timeout (660), the
+# ordering ansible/tests/deploy/test_cronjob_gate_decision.py holds. The worst case is two 30 s
+# kubectl calls (CONFIGARR_KUBECTL_TIMEOUT_S) plus kuma_push's three 10 s attempts and its two
+# 30 s waits, 150 s, and the landing's gate run is the one that spends all of it: its push meets
+# uptime-kuma's fence before netpol-baseline admits the new label. The rest is the cold pull of
+# both images, which counts against the deadline too. A deadline that fires before the
+# container starts fails the deploy.
+configarr_k8s_health_deadline_seconds: 420
+
+configarr_k8s_health_cpu_limit: "200m"
+configarr_k8s_health_mem_limit: 128Mi
+configarr_k8s_health_cpu_request: "10m"
+configarr_k8s_health_mem_request: 32Mi
 
 # Mirrors resources('0.50', '256M', '0.05', '16M').
 configarr_k8s_cpu_limit: "500m"

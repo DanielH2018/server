@@ -1,0 +1,125 @@
+{% from 'container-resources.yml.j2' import job_container_resources with context %}
+{% from 'security-context.yml.j2' import job_hardened_security_context with context %}
+{#
+  The configarr sync health reader, every 10 minutes: read the newest finished configarr Job
+  and its log, then push the verdict to the "Configarr Sync" Kuma push monitor. It replaced the
+  daniel-box host cron `configarr sync health` at H2.5b
+  (docs/target-architecture/host/h2-shrink-host-plane.md, Steps item 13).
+
+  Two containers, because the reader is Python and kubectl ships in neither image alone. The
+  init container copies kubectl out of alpine/k8s into an emptyDir, and the reader runs it from
+  there with the pod's own ServiceAccount (health-rbac.yaml.j2) as its credential. That is why
+  this pod mounts its ServiceAccount token, where the configarr pod does not.
+
+  The labels are `app: configarr-health`, never `app: configarr`. The reader selects the Jobs
+  it judges by `app=configarr`, so that label here would make it judge its own runs as syncs.
+  uptime-kuma's `netpol_from` admits `configarr-health`, which is how the push reaches Kuma's
+  Service.
+
+  k8s/cronjob-gate runs this CronJob once per deploy. An extra run re-reads the same Job and
+  re-pushes the same verdict, so it is idempotent. The landing's gate run is the one run whose
+  push meets uptime-kuma's fence before netpol-baseline admits this label; the gate counts a
+  started container as a run, so that lost push does not change the deploy's verdict.
+#}
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: configarr-health
+  namespace: {{ k8s_namespace }}
+spec:
+  schedule: "{{ configarr_k8s_health_schedule }}"
+  # The host cron's fields were UTC, and */10 reads the same in any zone.
+  timeZone: Etc/UTC
+  concurrencyPolicy: Forbid
+  # A run missed by more than one period is not made up: the next one reports the same Job.
+  startingDeadlineSeconds: 300
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 2
+  jobTemplate:
+    metadata:
+      labels:
+        app: configarr-health
+    spec:
+      activeDeadlineSeconds: {{ configarr_k8s_health_deadline_seconds }}
+      # No retry: the next run is ten minutes away and re-reads the same state.
+      backoffLimit: 0
+      template:
+        metadata:
+          labels:
+            app: configarr-health
+            netpol-baseline: enforced
+        spec:
+          restartPolicy: Never
+          enableServiceLinks: false
+          serviceAccountName: configarr-health
+          automountServiceAccountToken: true
+          securityContext:
+            runAsUser: {{ puid }}
+            runAsGroup: {{ pgid }}
+            runAsNonRoot: true
+          priorityClassName: homelab-best-effort
+          initContainers:
+            - name: kubectl
+              image: {{ configarr_k8s_health_kubectl_image }}
+              command: ["cp", "/usr/bin/kubectl", "/kubectl/kubectl"]
+{{ job_hardened_security_context(read_only=true) }}
+              volumeMounts:
+                - name: configarr-health-kubectl
+                  mountPath: /kubectl
+{{ job_container_resources(cpu_limit=configarr_k8s_health_cpu_limit, mem_limit=configarr_k8s_health_mem_limit, cpu_request=configarr_k8s_health_cpu_request, mem_request=configarr_k8s_health_mem_request) }}
+          containers:
+            - name: configarr-health
+              image: {{ configarr_k8s_health_image }}
+              command: ["python3", "/config/configarr_health.py"]
+              env:
+                - name: CONFIGARR_NAMESPACE
+                  value: "{{ k8s_namespace }}"
+                - name: CONFIGARR_MAX_AGE_H
+                  value: "{{ configarr_k8s_max_age_hours }}"
+                - name: CONFIGARR_KUBECTL
+                  value: /kubectl/kubectl
+                # kubectl's discovery cache goes under $HOME, and the root filesystem is
+                # read-only.
+                - name: HOME
+                  value: /tmp
+                # The ConfigMap mount is read-only, so Python cannot write __pycache__ there.
+                - name: PYTHONDONTWRITEBYTECODE
+                  value: "1"
+                - name: KUMA_URL
+                  value: http://uptime-kuma.{{ k8s_namespace }}.svc.cluster.local:{{ containers_list | entry_port('uptime-kuma') }}
+                - name: KUMA_PUSH_TOKEN
+                  valueFrom:
+                    secretKeyRef:
+                      name: configarr-health
+                      key: kuma_push_token
+{{ job_hardened_security_context(read_only=true) }}
+              volumeMounts:
+                - name: configarr-health-code
+                  mountPath: /config
+                  readOnly: true
+                - name: configarr-health-kubectl
+                  mountPath: /kubectl
+                  readOnly: true
+                - name: configarr-health-tmp
+                  mountPath: /tmp
+{{ job_container_resources(cpu_limit=configarr_k8s_health_cpu_limit, mem_limit=configarr_k8s_health_mem_limit, cpu_request=configarr_k8s_health_cpu_request, mem_request=configarr_k8s_health_mem_request) }}
+          volumes:
+            - name: configarr-health-code
+              configMap:
+                name: configarr-health
+                items:
+                  - key: configarr_health.py
+                    path: configarr_health.py
+                  - key: configarr_health_logic.py
+                    path: configarr_lib/configarr_health_logic.py
+                  - key: configarr_status.py
+                    path: configarr_lib/configarr_status.py
+                  - key: host_lib.py
+                    path: host_lib.py
+                  - key: kuma_push.py
+                    path: kuma_push.py
+            - name: configarr-health-kubectl
+              emptyDir: {}
+            - name: configarr-health-tmp
+              emptyDir: {}

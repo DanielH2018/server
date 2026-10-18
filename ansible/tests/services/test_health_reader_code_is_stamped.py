@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""configarr and janitorr must stamp every health-reader script they `copy:` onto daniel-box.
+"""janitorr must stamp every health-reader script it ships with `copy:` onto daniel-box.
 
-Both roles deploy host code — a reader, its verdict logic, and the shared `host_lib.py` — into
+The role deploys host code — a reader, its verdict logic, and the shared `host_lib.py` — into
 `/opt/<role>-health`, where a cron runs it. `setup-drift-lib.sh`'s deployed-code arm compares
 only the pairs a role declared in `/var/lib/homelab/setup-deployed-manifest.d/`, so a script
 that is copied but not declared runs stale behind a check reporting "deployed code matches the
@@ -10,7 +10,7 @@ repo".
 WHY A DERIVATION RATHER THAN A LIST. The copy tasks already name the scripts, in a `src:` or a
 `loop:` an author edits when they add one. Reading those means a new reader is in scope the moment it
 is added, where an enumeration here would go quiet exactly when the role grows. `_ROLES` is the
-non-vacuity assertion over the derivation: it names the two roles the scan must find, so a
+non-vacuity assertion over the derivation: it names the role the scan must find, so a
 renamed task or a moved `/opt` directory fails by name instead of scanning nothing.
 
 host_lib itself is guarded from the other direction by
@@ -30,7 +30,6 @@ HOST_LIB_SRC = "ansible/roles/setup/common/files/host_lib.py"
 # role name -> the /opt directory its reader runs from. Named, not derived: a role that stopped
 # deploying host code would otherwise drop out of the scan silently.
 _ROLES = {
-    "configarr": "/opt/configarr-health",
     "janitorr": "/opt/janitorr-health",
 }
 

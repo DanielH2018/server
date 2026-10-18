@@ -1,0 +1,12 @@
+{
+  "checksum": "9f4d019bc88688fa264df0aa137fe213d658d4cd1cfbb018586dc9060aa3e92f",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "ansible/roles/k8s/configarr/CLAUDE.md#At a glance",
+  "row": {
+    "atoms": {
+      "ansible/tests/k8s/test_no_secret_in_a_moved_jobs_configmap.py": "494173af32f38dace06c496ad7031f6391f146cc6271c8facd621309eb0e267e"
+    },
+    "python": "3.14",
+    "verified_sha": "f30895784"
+  }
+}
