@@ -20,7 +20,7 @@ Run: uv run pytest ansible/roles/setup/gitops_deploy/tests/test_gitops_deploy_se
 import subprocess
 
 from deployer_lib import deploy_narrow
-from deployer_lib.deploy_setup_roles import SecretReadersRefused
+from deployer_lib.deploy_setup_roles import SECRET_READERS_SCRIPT, SecretReadersRefused
 from gitops_ledger import OWED_HOLD_PLANE, owed_line
 
 from _deploy_fakes import receipt_applied
@@ -412,4 +412,55 @@ def test_a_shipper_that_reads_none_of_the_secrets_keys_is_not_applied(
     tick.secret_readers = [claude_defaults]
     tick.secret_unread = {claude_defaults: ["initial_setup"]}
     assert gitops_deploy.main(tick.tools, tick.config, state) == 0
+    assert _playbook_argv(tick)[-1] == "claude_code"
+
+
+def _park_on_a_failed_reader_lookup(gitops_deploy, tick, state, error):
+    """One tick over a `secrets.yml` range whose reader lookup raises `error`."""
+    tick.paths = [SECRETS]
+    tick.secret_readers = [CLAUDE_TRIAGE_TASKS]
+    tick.secret_readers_error = error
+    assert gitops_deploy.main(tick.tools, tick.config, state) == 0
+    assert tick.merges == []
+
+
+def test_a_parked_reader_failure_logs_the_lookup_as_the_reason(
+    gitops_deploy, tick, capsys, state
+):
+    """The journal reason is load-bearing (#1467): it must not read as the nameless-path park."""
+    _park_on_a_failed_reader_lookup(
+        gitops_deploy, tick, state, OSError("uv: not found")
+    )
+    parked = [ln for ln in capsys.readouterr().out.splitlines() if "park:" in ln]
+    assert len(parked) == 1, parked
+    assert "secret-reader lookup failed" in parked[0]
+    assert "names no role" not in parked[0]
+
+
+def test_a_parked_reader_failure_pages_the_retry_and_never_a_merge(
+    gitops_deploy, tick, capsys, state
+):
+    """An operator who merges past the `secrets.yml` change loses the key for good."""
+    _park_on_a_failed_reader_lookup(
+        gitops_deploy, tick, state, OSError("uv: not found")
+    )
+    pages = [post for post in tick.posts if ORIGIN[:8] in post]
+    assert len(pages) == 1, tick.posts
+    assert "git merge --ff-only" not in pages[0]
+    assert "next tick retries" in pages[0]
+    assert SECRET_READERS_SCRIPT in pages[0]
+    assert "git merge --ff-only" not in capsys.readouterr().out
+
+
+def test_a_transient_reader_failure_is_retried_by_the_next_tick(
+    gitops_deploy, tick, state
+):
+    """The park leaves the range unmerged, so the next tick looks the readers up again."""
+    _park_on_a_failed_reader_lookup(
+        gitops_deploy, tick, state, subprocess.TimeoutExpired(["uv"], 30)
+    )
+    assert tick.playbooks == []
+    tick.secret_readers_error = None
+    assert gitops_deploy.main(tick.tools, tick.config, state) == 0
+    assert tick.merges == [ORIGIN]
     assert _playbook_argv(tick)[-1] == "claude_code"

@@ -121,8 +121,19 @@ def broad_failure_alert(
     )
 
 
-def broad_deferred_alert(origin: str, remediation: str) -> str:
-    """The post for a broad change this deployer will not apply itself."""
+def broad_deferred_alert(
+    origin: str, remediation: str, secret_readers_failed: bool = False
+) -> str:
+    """The post for a broad change this deployer will not apply itself.
+
+    A park on a failed `secrets.yml` reader lookup (#5436) says "run X to clear it" nowhere,
+    because X would be a hand merge past the key. `remediation` is the retry text there.
+    """
+    if secret_readers_failed:
+        return (
+            f"⚠️ gitops-deploy: `{origin[:8]}` parked, nothing merged — the lookup of which "
+            f"setup role reads the changed `secrets.yml` key failed. {remediation}"
+        )
     return (
         f"⚠️ gitops-deploy: broad change needing a hand in `{origin[:8]}` — "
         f"deferring to a manual deploy. On the host, run "

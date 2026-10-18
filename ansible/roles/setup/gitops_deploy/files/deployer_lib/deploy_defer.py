@@ -187,8 +187,8 @@ def route_secret_readers(
     nothing. Each reader path goes through `setup_roles_for`, less the shippers of a vars file
     that read none of its secret-built keys, and `handle_broad` then applies or records each
     role as for its own edit. A refusal routes nothing and the `secrets` page names the
-    consumers. Any other failure parks: once merged, no later range carries the change again.
-    Runs after `drop_deleted_setup_roles`, whose reclassification would lose the roles.
+    consumers. Any other failure parks, as no later range carries the change again. Runs
+    after `drop_deleted_setup_roles`, whose reclassification would lose the roles.
     """
     if not cs.secrets:
         return
@@ -294,6 +294,7 @@ def park(
         cs.setup_roles,
         config.branch,
         playbooks=cs.manual_playbooks,
+        secret_readers_failed=cs.secret_readers_failed,
     )
     # Say so in the JOURNAL, every tick. `alert_once` below throttles the Discord page to one
     # per SHA, and until 2026-09-09 that throttle also decided what the journal said: from the
@@ -303,19 +304,19 @@ def park(
     # journal when `land.sh` exits 4, and a page they already received an hour ago is not there.
     log(
         f"park: origin {origin[:8]}: parked, nothing merged — {broad_park_reason(cs)}. "
-        f"Apply by hand: {remediation}"
+        f"{'' if cs.secret_readers_failed else 'Apply by hand: '}{remediation}"
     )
-    # A park doesn't ff-merge, so it re-evals next tick — the per-SHA marker (inside
-    # alert_once) stops a re-queue while the pending queue owns redelivery. Name the RIGHT
-    # playbook per plane: deploy.yml applies only container roles, so a setup-plane change
-    # needs initial_setup.yml (2026-07-16 review M1).
+    # A park doesn't ff-merge, so it re-evals next tick; the per-SHA marker (inside alert_once)
+    # stops a re-queue. The remediation names the RIGHT playbook per plane (2026-07-16 M1).
     deploy_alerts.alert_once(
         tools,
         state,
         config,
         "broad",
         origin,
-        deploy_alert_text.broad_deferred_alert(origin, remediation),
+        deploy_alert_text.broad_deferred_alert(
+            origin, remediation, cs.secret_readers_failed
+        ),
     )
 
 
