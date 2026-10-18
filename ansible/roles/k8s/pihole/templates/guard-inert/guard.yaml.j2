@@ -1,0 +1,135 @@
+{#
+  `roll_one.yml`'s sibling check as a pre-apply Job, INERT until pihole's flip (#5695). Nothing
+  renders `templates/guard-inert/`.
+
+  The operator's ruling on #5695 puts this Job in `pihole`'s dependsOn chain, the way a
+  `<tag>-snapshot` Job sits in front of its tag: while it fails, Flux holds `pihole`, and
+  instance 1 keeps serving at its old revision. The renderer has no role-owned kind that
+  precedes `<tag>` yet. `-snapshot` and `-prepull` are the renderer's own Jobs, and
+  `templates/verify/` renders into `<tag>-verify`, which runs after `pihole-deferred` and so
+  guards nothing. The flip PR therefore needs that kind first (#5719).
+
+  It runs `files/pihole_sibling_guard.py`, which reads the EndpointSlices of `pihole` and
+  `pihole-2-web`, the two web Services that each select one instance. It passes at once when
+  instance 1 serves nothing, so a first apply cannot deadlock on an instance 2 that only
+  `pihole-deferred` creates. Otherwise it waits up to 300s for one ready, non-terminating
+  pihole-2 endpoint, as `roll_one.yml` waits for its sibling, then fails.
+
+  DECIDED: a failed guard holds `pihole` until the next revision renames this Job, or until a
+  person deletes it. `backoffLimit: 0` keeps a failed Job failed under its name, and the census
+  takes 0 for a check. The 300s wait inside the Job covers a pihole-2 restart that is already
+  under way; a pihole-2 that stays down longer is the outage the hold exists to keep instance 1
+  out of. Instance 1 keeps serving through the hold, so its cost is a revision that waits.
+
+  DECIDED: the spec embeds the same roll digest as `templates/verify-inert/gravity.yaml.j2`,
+  computed the same way, so the guard runs on every revision that rolls a Pi-hole. A guard that
+  kept its name would satisfy `dependsOn` with the previous revision's pass.
+  `tests/test_pihole_sibling_guard.py` holds the two digests equal.
+
+  It dials only the API server, which no egress fence guards on this cluster, so it needs no
+  fence peer. Its RBAC is `rbac.yaml.j2` beside it.
+#}
+{% set script_name = 'pihole_sibling_guard.py' %}
+{% set script_dir = '/guard' %}
+{% set data = {
+  script_name: lookup('file', playbook_dir + '/roles/k8s/pihole/files/' + script_name, rstrip=False),
+  'flux_job_connect.py': flux_job_connect,
+} %}
+{% set configmap_name = 'pihole-sibling-guard-' + ({'data': data, 'binaryData': {}} | to_json(sort_keys=True, separators=(',', ':')) | hash('sha256'))[:8] %}
+{#- The roll inputs of both instances, as `gravity.yaml.j2` reads them; see the note above. -#}
+{% set roll = namespace(
+  text=lookup('template', 'deployment.yaml.j2') + lookup('template', 'deployment-2.yaml.j2')
+    + lookup('template', 'configmap.yaml.j2'),
+  secrets=lookup('file', playbook_dir + '/roles/k8s/pihole/templates/secret.yaml.j2'),
+) %}
+{% for line in lookup('file', playbook_dir + '/vars/cluster-vars.source').splitlines() if line and not line.startswith('#') and ('{{ ' + line.split()[0] + ' ') in roll.secrets %}
+{% set roll.text = roll.text + line %}
+{% endfor %}
+{% set roll_digest8 = ((roll.text + roll.secrets) | hash('sha256'))[:8] %}
+{% set spec_text %}
+# No retry. A check that fails must not pass on its second try; see the note above.
+backoffLimit: 0
+# The 300s wait, plus two API reads of 10s each and the helper's 60s of connect retries.
+activeDeadlineSeconds: 420
+template:
+  metadata:
+    labels:
+      app: pihole-sibling-guard
+  spec:
+    serviceAccountName: pihole-sibling-guard
+    restartPolicy: Never
+    enableServiceLinks: false
+    securityContext:
+      runAsNonRoot: true
+      runAsUser: 65534
+      runAsGroup: 65534
+      seccompProfile:
+        type: RuntimeDefault
+    containers:
+      - name: guard
+        image: {{ flux_job_image }}
+        command:
+          - python3
+          - {{ script_dir }}/{{ script_name }}
+        env:
+          - name: GUARD_NAMESPACE
+            value: {{ k8s_namespace | to_json }}
+          # Each web Service selects one instance; `pihole-dns` selects both.
+          - name: GUARD_INSTANCE_SERVICE
+            value: pihole
+          - name: GUARD_SIBLING_SERVICE
+            value: pihole-2-web
+          # `roll_one.yml` waits 300s for its sibling.
+          - name: GUARD_WAIT_SECONDS
+            value: "300"
+          # Renames the Job whenever either Pi-hole rolls; see the note above.
+          - name: PIHOLE_ROLL_DIGEST8
+            value: "{{ roll_digest8 }}"
+          - name: SSL_CERT_FILE
+            value: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+          - name: PYTHONDONTWRITEBYTECODE
+            value: "1"
+        resources:
+          requests:
+            cpu: 10m
+            memory: 32Mi
+          limits:
+            memory: 64Mi
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+              - ALL
+        volumeMounts:
+          - name: script
+            mountPath: {{ script_dir }}
+            readOnly: true
+    volumes:
+      - name: script
+        configMap:
+          name: {{ configmap_name }}
+{% endset %}
+{% set spec = spec_text | from_yaml %}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ configmap_name }}
+  namespace: {{ k8s_namespace }}
+data:
+{% for key, text in data | dictsort %}
+  {{ key }}: {{ text | to_json }}
+{% endfor %}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: pihole-sibling-guard-{{ (spec | to_json(sort_keys=True, separators=(',', ':')) | hash('sha256'))[:8] }}
+  namespace: {{ k8s_namespace }}
+  annotations:
+    # A read-only check, so it takes a verify Job's `backoffLimit`. The pre-apply kind the flip
+    # needs names its own Job kind; until then this is the census row that fits.
+    homelab/job-kind: verify
+spec:
+{{ spec_text | indent(2, true) }}

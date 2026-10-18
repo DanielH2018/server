@@ -1,0 +1,38 @@
+{#
+  The identity of pihole's sibling guard, INERT until pihole's flip, as `guard.yaml.j2` beside
+  it is.
+
+  The guard lists EndpointSlices by label, so it needs `list`; `get` is the read the operator's
+  ruling on #5695 names with it. RBAC cannot narrow a `list` by label, so the Role covers every
+  EndpointSlice in pihole's namespace, read-only, and nothing outside it.
+#}
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: pihole-sibling-guard
+  namespace: {{ k8s_namespace }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: pihole-sibling-guard
+  namespace: {{ k8s_namespace }}
+rules:
+  - apiGroups: [discovery.k8s.io]
+    resources: [endpointslices]
+    verbs: [get, list]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: pihole-sibling-guard
+  namespace: {{ k8s_namespace }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: pihole-sibling-guard
+subjects:
+  - kind: ServiceAccount
+    name: pihole-sibling-guard
+    namespace: {{ k8s_namespace }}

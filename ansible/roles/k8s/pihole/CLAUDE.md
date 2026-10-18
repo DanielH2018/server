@@ -88,9 +88,9 @@ continuity. Coexisted with a Docker-era copy through the DNS cutover; that copy 
 ## The Flux forms wait in `templates/verify-inert/`
 
 D5 step 26 converts this role before its Wave D flip. The conversion is inert: Ansible still
-deploys pihole, and nothing renders `templates/verify-inert/`. The flip PR renames it to
-`templates/verify/`, which makes the renderer emit `pihole-verify`, and deletes the tasks the
-forms below replace.
+deploys pihole, and nothing renders `templates/verify-inert/` or `templates/guard-inert/`. The
+flip PR renames the first to `templates/verify/`, which makes the renderer emit
+`pihole-verify`, and deletes the tasks the forms below replace.
 
 - **The gravity reconcile is `gravity.yaml.j2`, a mutation Job.** It runs
   `files/pihole_gravity.py` against each FTL's v6 REST API, through the `pihole` and
@@ -117,10 +117,19 @@ forms below replace.
   observability. Its address is a literal, so moving `dns_k8s_vip` is an edit to that rule
   too. `ansible/tests/services/test_lan_address_rules_agree.py` holds the literal to the
   rendered Service.
-- **One check has no Flux form yet.** `roll_one.yml` refuses to roll an instance while its
-  sibling is not Ready or is terminating. Under Flux, `pihole` rolls instance 1 whatever state
-  instance 2 is in, and `pihole` cannot depend on `pihole-deferred` without a cycle (#5695).
-  `tests/test_pihole_gravity.py` covers the Job and the ordering.
+- **`roll_one.yml`'s sibling check becomes a guard Job, in `templates/guard-inert/`.** Under
+  Flux, `pihole` rolls instance 1 whatever state instance 2 is in, and `pihole` cannot depend
+  on `pihole-deferred` without a cycle (#5695). `files/pihole_sibling_guard.py` reads the
+  EndpointSlices of `pihole` and `pihole-2-web`, which each select one instance. It fails
+  while instance 1 serves and pihole-2 has no ready, non-terminating endpoint for 300s, so Flux
+  holds `pihole` and instance 1 keeps serving. It passes at once when instance 1 serves
+  nothing, so a first apply cannot deadlock on an instance 2 that only `pihole-deferred`
+  creates. Its Role grants `get` and `list` on EndpointSlices in pihole's namespace.
+- **The guard's place does not exist yet.** It must run before `pihole`, and
+  `templates/verify/` renders after `pihole-deferred`. The flip PR needs a role-owned kind
+  that `<tag>` depends on first (#5719), and moves `guard-inert/` into it.
+  `tests/test_pihole_sibling_guard.py` covers the guard, and `tests/test_pihole_gravity.py`
+  the gravity Job and the ordering.
 
 ## Editing
 Adlists/regex: `defaults/main.yml`.
