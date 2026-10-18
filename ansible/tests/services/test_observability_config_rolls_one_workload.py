@@ -73,7 +73,9 @@ _CONFIGMAP_DATA_KEYS = {
 _RULES_CONFIGMAP = "prometheus-rules"
 _RULES_RELOAD_FLAG = "--config.auto-reload"
 # The dashboard ConfigMaps, one key per board, which Grafana's file provisioner re-reads from the
-# mount every `updateIntervalSeconds` without a restart. Exempt from the key count too.
+# mount every `updateIntervalSeconds`. Exempt from the key count too: this guard covers the
+# Ansible-era `checksum/config` capture only. Once observability is flux-owned the renderer's
+# `checksum/restart` hashes these and rolls grafana on a board edit, which #5679 tracks.
 _DASHBOARD_CONFIGMAPS = "grafana-dashboards-"
 
 _WORKLOAD_KINDS = {"Deployment", "DaemonSet", "StatefulSet"}
