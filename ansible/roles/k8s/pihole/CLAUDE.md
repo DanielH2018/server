@@ -121,10 +121,14 @@ flip PR renames the first to `templates/verify/`, which makes the renderer emit
   Flux, `pihole` rolls instance 1 whatever state instance 2 is in, and `pihole` cannot depend
   on `pihole-deferred` without a cycle (#5695). `files/pihole_sibling_guard.py` reads the
   EndpointSlices of `pihole` and `pihole-2-web`, which each select one instance. It fails
-  while instance 1 serves and pihole-2 has no ready, non-terminating endpoint for 300s, so Flux
-  holds `pihole` and instance 1 keeps serving. It passes at once when instance 1 serves
-  nothing, so a first apply cannot deadlock on an instance 2 that only `pihole-deferred`
-  creates. Its Role grants `get` and `list` on EndpointSlices in pihole's namespace.
+  while pihole-2 has no ready, non-terminating endpoint for 300s, so Flux holds `pihole` and
+  instance 1 keeps serving. It passes at once when `pihole` has no EndpointSlice at all, so a
+  first apply cannot deadlock on an instance 2 that only `pihole-deferred` creates. Its Role
+  grants `get` and `list` on EndpointSlices in pihole's namespace.
+- **A failed guard also holds `pihole-deferred`**, which depends on `pihole`, as
+  `roll_one.yml` refuses before `apply_instance_2.yml` runs. A revision that would fix a down
+  pihole-2 cannot reach it then, and deleting the failed Job does not help, because Flux
+  recreates it under the same name. No break-glass exists under Flux yet (#5719).
 - **The guard's place does not exist yet.** It must run before `pihole`, and
   `templates/verify/` renders after `pihole-deferred`. The flip PR needs a role-owned kind
   that `<tag>` depends on first (#5719), and moves `guard-inert/` into it.

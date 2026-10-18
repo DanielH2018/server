@@ -48,6 +48,10 @@ def _list(*endpoints: Mapping) -> dict:
     return {"items": [{"endpoints": list(endpoints)}] if endpoints else []}
 
 
+# The empty slice the EndpointSlice controller keeps for a Service with no endpoints.
+PLACEHOLDER = {"items": [{"endpoints": None}]}
+
+
 class Slices(pihole_sibling_guard.Kube):
     """A fixture API server: each Service's list answers come off its own queue.
 
@@ -99,8 +103,8 @@ def test_a_ready_sibling_lets_instance_1_roll(capsys):
 
 @pytest.mark.parametrize(
     "sibling",
-    [_list(), _list(NOT_READY), _list(TERMINATING)],
-    ids=["no-slice", "not-ready", "terminating"],
+    [_list(), PLACEHOLDER, _list(NOT_READY), _list(TERMINATING)],
+    ids=["no-slice", "placeholder", "not-ready", "terminating"],
 )
 def test_a_sibling_with_no_ready_endpoint_holds_instance_1(sibling, capsys):
     kube = Slices([_list(READY)], [sibling])
@@ -119,17 +123,24 @@ def test_a_sibling_that_comes_back_inside_the_wait_lets_instance_1_roll():
     assert kube.reads == ["pihole", "pihole-2-web", "pihole-2-web", "pihole-2-web"]
 
 
-@pytest.mark.parametrize(
-    "instance", [_list(), _list(NOT_READY)], ids=["first-apply", "not-serving"]
-)
-def test_instance_1_serving_nothing_passes_without_reading_the_sibling(
-    instance, capsys
-):
-    """A first apply: pihole-2 exists only after `pihole-deferred`, which waits on `pihole`."""
-    kube = Slices([instance], [_list()])
+def test_a_first_apply_passes_without_reading_the_sibling(capsys):
+    """No slice for `pihole`: pihole-2 exists only after `pihole-deferred`, which waits on `pihole`."""
+    kube = Slices([_list()], [_list()])
     assert _main(kube) == 0
     assert kube.reads == ["pihole"]
-    assert "rolling it takes no DNS away" in capsys.readouterr().out
+    assert "pihole has no EndpointSlice, so this is its first apply" in (
+        capsys.readouterr().out
+    )
+
+
+@pytest.mark.parametrize(
+    "instance", [PLACEHOLDER, _list(NOT_READY)], ids=["placeholder", "not-ready"]
+)
+def test_an_instance_1_serving_nothing_still_waits_on_the_sibling(instance):
+    """Only a missing slice is a first apply; a Service with no ready pod is held too."""
+    kube = Slices([instance], [_list()])
+    assert _main(kube) == 1
+    assert kube.reads.count("pihole-2-web") > 1
 
 
 def test_an_api_error_fails_at_once(capsys):

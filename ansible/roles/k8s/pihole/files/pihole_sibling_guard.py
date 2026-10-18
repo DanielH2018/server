@@ -12,9 +12,11 @@ counts as serving when its `ready` condition is not false and it is not `termina
 sibling inside its grace period counts as gone, as `roll_one.yml`'s `deletionTimestamp` check
 does.
 
-- Instance 1 serving nothing passes at once. Rolling it then takes no DNS away, and refusing
-  would deadlock a first apply: pihole-2 exists only after `pihole-deferred`, which waits on
-  `pihole`, which would wait on this Job.
+- No EndpointSlice for `pihole` passes at once. That is a first apply, or a rebuild, where the
+  Service does not exist yet; the EndpointSlice controller keeps an empty placeholder slice for
+  a Service with no endpoints, so an existing Service always has one. Refusing would deadlock:
+  pihole-2 exists only after `pihole-deferred`, which waits on `pihole`, which would wait on
+  this Job. It is the Flux form of `roll_one.yml` skipping the instance its apply just created.
 - Otherwise the Job polls pihole-2's slices until one serving endpoint appears, for
   `GUARD_WAIT_SECONDS`, as `roll_one.yml` waits 300s for its sibling. It then fails.
 
@@ -100,10 +102,8 @@ def slices_path(namespace: str, service: str) -> str:
     )
 
 
-def serving(kube: Kube, namespace: str, service: str) -> int:
-    """How many endpoints behind `service` are ready and not terminating.
-
-    The API reads a missing `ready` as true and a missing `terminating` as false.
+def slices(kube: Kube, namespace: str, service: str) -> list[dict]:
+    """`service`'s EndpointSlices in `namespace`.
 
     Raises:
         Failed: The list answered with an error status.
@@ -114,9 +114,17 @@ def serving(kube: Kube, namespace: str, service: str) -> int:
             f"listing {service}'s EndpointSlices answered HTTP {status}: "
             f"{body.get('message', '')}"
         )
+    return body.get("items") or []
+
+
+def serving(items: list[dict]) -> int:
+    """How many endpoints in the slices `items` are ready and not terminating.
+
+    The API reads a missing `ready` as true and a missing `terminating` as false.
+    """
     return sum(
         1
-        for item in body.get("items") or []
+        for item in items
         for endpoint in item.get("endpoints") or []
         if (endpoint.get("conditions") or {}).get("ready") is not False
         and not (endpoint.get("conditions") or {}).get("terminating")
@@ -137,14 +145,14 @@ def run(
     namespace = env["GUARD_NAMESPACE"]
     instance, sibling = env["GUARD_INSTANCE_SERVICE"], env["GUARD_SIBLING_SERVICE"]
     lines = [f"guarding pihole's roll {env.get('PIHOLE_ROLL_DIGEST8', 'unknown')}"]
-    if not serving(kube, namespace, instance):
+    if not slices(kube, namespace, instance):
         return [
             *lines,
-            f"{instance} has no ready endpoint, so rolling it takes no DNS away",
+            f"{instance} has no EndpointSlice, so this is its first apply",
         ]
     deadline = clock() + float(env["GUARD_WAIT_SECONDS"])
     while True:
-        count = serving(kube, namespace, sibling)
+        count = serving(slices(kube, namespace, sibling))
         if count:
             return [
                 *lines,

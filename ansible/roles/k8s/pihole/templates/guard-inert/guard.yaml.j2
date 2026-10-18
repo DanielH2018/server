@@ -11,15 +11,18 @@
 
   It runs `files/pihole_sibling_guard.py`, which reads the EndpointSlices of `pihole` and
   `pihole-2-web`, the two web Services that each select one instance. It passes at once when
-  instance 1 serves nothing, so a first apply cannot deadlock on an instance 2 that only
-  `pihole-deferred` creates. Otherwise it waits up to 300s for one ready, non-terminating
-  pihole-2 endpoint, as `roll_one.yml` waits for its sibling, then fails.
+  `pihole` has no EndpointSlice, which is a first apply, so it cannot deadlock on an instance 2
+  that only `pihole-deferred` creates. Otherwise it waits up to 300s for one ready,
+  non-terminating pihole-2 endpoint, as `roll_one.yml` waits for its sibling, then fails.
 
-  DECIDED: a failed guard holds `pihole` until the next revision renames this Job, or until a
-  person deletes it. `backoffLimit: 0` keeps a failed Job failed under its name, and the census
-  takes 0 for a check. The 300s wait inside the Job covers a pihole-2 restart that is already
-  under way; a pihole-2 that stays down longer is the outage the hold exists to keep instance 1
-  out of. Instance 1 keeps serving through the hold, so its cost is a revision that waits.
+  DECIDED: a failed guard holds `pihole`, and with it `pihole-deferred`, which depends on
+  `pihole`. That is parity with `roll_one.yml`, which refuses at instance 1's sibling check
+  before `apply_instance_2.yml` runs. The cost is the case where pihole-2 is down for a reason
+  a later revision fixes: that revision cannot reach pihole-2 while the guard fails, and
+  deleting the failed Job does not help, because Flux recreates it under the same name. No
+  break-glass exists under Flux yet; #5719 asks the flip for one. `backoffLimit: 0` keeps a
+  failed check failed, and the 300s wait inside the Job covers a pihole-2 restart that is
+  already under way. Instance 1 keeps serving through the hold.
 
   DECIDED: the spec embeds the same roll digest as `templates/verify-inert/gravity.yaml.j2`,
   computed the same way, so the guard runs on every revision that rolls a Pi-hole. A guard that
