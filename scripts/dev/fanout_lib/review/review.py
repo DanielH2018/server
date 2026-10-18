@@ -88,6 +88,7 @@ from fanout_lib.review.held_hooks import (
     held_secret_paths,
     pointed_settings,
     read_hooks,
+    with_batch_env,
     write_hooks,
 )
 from fanout_lib.review.review_prompts import (
@@ -291,12 +292,13 @@ class Pipeline:
         return self.run(["git", "-C", str(self.worktree), *args], None).stdout.strip()
 
     def _stop_hook(self) -> list[str]:
-        """The prefix that runs `claude` under the Stop hook held since start.
+        """The prefix that runs `claude` under the held Stop hook and this host's pytest width.
 
-        `launch.claude_args` names the hook by path inside a tree the agent can write, so a
-        later phase would run whatever the agent left there.
+        `launch.claude_args` names the hook inside a tree the agent can write, so a later phase
+        would run whatever the agent left there. It runs on the placing host, which knows the
+        wrong core count.
         """
-        settings = json.dumps(stop_hook_settings(str(self.hook_root)))
+        settings = json.dumps(with_batch_env(stop_hook_settings(str(self.hook_root))))
         return ["claude", "--settings", settings]
 
     def _held_settings(self) -> list[str]:
@@ -310,10 +312,8 @@ class Pipeline:
         """
         if not self.project_settings:
             return self._stop_hook()
-        settings = pointed_settings(self.project_settings, self.hook_root)
-        return [
-            "claude", "--setting-sources", "user", "--settings", json.dumps(settings),
-        ]  # fmt: skip
+        settings = json.dumps(pointed_settings(self.project_settings, self.hook_root))
+        return ["claude", "--setting-sources", "user", "--settings", settings]
 
     def _implementer(
         self, prefix: list[str] | None = None, prompt: str = ""
