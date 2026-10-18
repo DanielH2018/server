@@ -526,7 +526,7 @@ class Pipeline:
         self.record.pr = pr.group(0)
         self.session = str(impl.report.get("session_id") or "")
         base = self._git("merge-base", "HEAD", self.target.base)
-        head = self._git("rev-parse", "HEAD")
+        head = self.record.head = self._git("rev-parse", "HEAD")
 
         passing = self._unproven(base, head, red)
         review = self._claude(
@@ -551,7 +551,7 @@ class Pipeline:
                 ),
             )
             last = fix if PR_URL.search(fix.text) else impl
-            after = self._git("rev-parse", "HEAD")
+            after = self.record.head = self._git("rev-parse", "HEAD")
             if after == head:
                 self.record.remaining = list(self.record.actionable)
             else:
