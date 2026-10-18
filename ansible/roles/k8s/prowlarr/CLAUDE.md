@@ -18,7 +18,7 @@ rendering attacker-supplied pages in a headless browser.
   bump. `prowlarr_k8s_flaresolverr_image` and `prowlarr_k8s_exportarr_image` are sidecars.
 - **Port:** 9696
 - **Persists:** `prowlarr-config` PVC (`longhorn`, ~84Mi) — indexer definitions and their API
-  keys — plus a separate `prowlarr-flaresolverr-config` for the disposable browser profile.
+  keys. flaresolverr's browser profile is disposable and sits on an emptyDir.
 - **Secrets:** `prowlarr_api_key` (also reused as the exportarr sidecar's credential —
   Prowlarr has no scoped read-only key to mint instead).
 - **`Recreate` strategy, auto-deployed anyway** — protected by a pre-apply Longhorn snapshot (`k8s_autodeploy_snapshot_pvcs: [prowlarr-config]`) that
@@ -31,6 +31,16 @@ rendering attacker-supplied pages in a headless browser.
 - **flaresolverr is fenced to ingress from prowlarr alone**, via
   `templates/networkpolicy-flaresolverr.yaml.j2` — a deliberate narrowing from the Compose-era
   isolated network, since egress policies on this cluster don't hold but ingress does.
+- **`templates/verify-inert/` is the Flux form of the flaresolverr isolation probe, and nothing
+  renders it yet.** Ansible still applies `flaresolverr-netpol-probe` from `tasks/main.yml` on
+  every deploy. prowlarr's flip PR renames the directory to `templates/verify/`, which makes the
+  renderer emit `prowlarr-verify`, and deletes the probe tasks. The Job runs
+  `files/prowlarr_verify.py`: prowlarr's port must answer, as the control, and flaresolverr's
+  must refuse. Its pod carries `app: prowlarr-verify`, which prowlarr's `netpol_from` lists
+  ahead of the flip and flaresolverr's fence must never admit. Its spec embeds a digest of
+  flaresolverr's rendered NetworkPolicy and Deployment, so an edit to either makes Flux run it
+  again. `job.yaml.j2` carries the caller census, and `tests/test_prowlarr_verify.py` renders
+  the renamed copy through the Job census and checks both fences against the pod.
 - **Both Deployments wait 780s, above the shared default.** A cold pull on daniel-server took 8m54s for the
   292 MB flaresolverr image and 3m41s for prowlarr's own (#2369). The budget is the literal
   `ansible/roles/k8s/prowlarr/defaults/main.yml:manifests_rollout_timeout`, which Flux's

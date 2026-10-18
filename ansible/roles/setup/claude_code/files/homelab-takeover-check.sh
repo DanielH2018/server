@@ -8,7 +8,8 @@
 #   --render  `homelab_render.py cluster --out DIR` of the PR head; must resolve under the home
 #             of the user who ran sudo
 #   --src     a checkout of the PR head, for takeover_census.py; same rule
-#   --tags    the tags the PR flips, comma separated, `<tag>-snapshot` directories included
+#   --tags    the tags the PR flips, comma separated, `<tag>-snapshot`, `-verify` and `-deferred`
+#             directories included
 #
 # Exit codes: 0 every step ran; 1 a step failed; 2 an argument was refused; 3 the host lacks a
 # binary or the kubeconfig. Nothing is persisted on the cluster: every kubectl and flux call
@@ -142,6 +143,28 @@ copy_file() {
   [ -f "$2" ] && [ ! -L "$2" ]
 }
 
+# The first document on stdin whose metadata.name is $1, printed whole. Top-level keys end the
+# metadata block, so a nested `name:` under spec never matches.
+own_document() {
+  awk -v want="$1" -v q="'" '
+    function flush() {
+      if (name == want && !done) { printf "%s", doc; done = 1 }
+      doc = ""; name = ""; inmeta = 0
+    }
+    /^---[[:space:]]*$/ { flush(); next }
+    { doc = doc $0 "\n" }
+    /^[^[:space:]#]/ { inmeta = ($0 ~ /^metadata:[[:space:]]*$/) }
+    inmeta && /^  name:/ {
+      v = $0
+      sub(/^  name:[[:space:]]*/, "", v)
+      sub(/[[:space:]]*$/, "", v)
+      gsub("^[\"" q "]|[\"" q "]$", "", v)
+      name = v
+    }
+    END { flush() }
+  '
+}
+
 failed=0
 echo "##### $label"
 for tag in "${tag_list[@]}"; do
@@ -173,17 +196,26 @@ for tag in "${tag_list[@]}"; do
     continue
   fi
 
-  # A snapshot role's flux file holds two documents, the tag's Kustomization and then
-  # `<tag>-snapshot`'s, and `flux diff` wants the tag's own. A `<tag>-snapshot` directory has
-  # no flux file of its own, so it takes the kubectl stand-in below.
+  # A tag's Kustomization is the document of its flux file whose metadata.name is the tag. A
+  # `<tag>-snapshot`, `-verify` or `-deferred` directory has no flux file of its own: its
+  # Kustomization is a later document of `flux/<base>.yaml` (#5575). With no document of that
+  # name, `own` stays empty and the tag takes the kubectl stand-in below.
+  fluxname=$tag
+  if [ ! -e "$render/flux/$fluxname.yaml" ] && [ ! -L "$render/flux/$fluxname.yaml" ]; then
+    case "$tag" in
+      *-snapshot) fluxname=${tag%-snapshot} ;;
+      *-verify) fluxname=${tag%-verify} ;;
+      *-deferred) fluxname=${tag%-deferred} ;;
+    esac
+  fi
   own="$full/$tag.kustomization.yaml"
   : > "$own"
-  if [ -e "$render/flux/$tag.yaml" ]; then
-    fluxsrc=$(under_home "$render/flux/$tag.yaml") || fluxsrc=""
+  if [ -e "$render/flux/$fluxname.yaml" ] || [ -L "$render/flux/$fluxname.yaml" ]; then
+    fluxsrc=$(under_home "$render/flux/$fluxname.yaml") || fluxsrc=""
     if [ -n "$fluxsrc" ] && copy_file "$fluxsrc" "$full/$tag.flux-source.yaml"; then
-      awk '/^---$/ { if (seen) exit; next } { seen = 1; print }' "$full/$tag.flux-source.yaml" > "$own"
+      own_document "$tag" < "$full/$tag.flux-source.yaml" > "$own"
     else
-      echo "=== $tag: refused, flux/$tag.yaml is not a regular file under $home"
+      echo "=== $tag: refused, flux/$fluxname.yaml is not a regular file under $home"
       failed=1
       continue
     fi

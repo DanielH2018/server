@@ -1,0 +1,112 @@
+{% from 'container-resources.yml.j2' import job_container_resources with context %}
+{% from 'security-context.yml.j2' import job_hardened_security_context with context %}
+{#
+  The janitorr error health reader, every 10 minutes: read the running janitorr pod's start
+  time and, past the startup grace, count the cleanup errors in its log, then push the verdict
+  to the "Janitorr Errors" Kuma push monitor. It replaced the daniel-box host cron `janitorr
+  error health` at H2.5c (docs/target-architecture/host/h2-shrink-host-plane.md, Steps item 14).
+
+  Two containers, because the reader is Python and kubectl ships in neither image alone. The
+  init container copies kubectl out of alpine/k8s into an emptyDir, and the reader runs it from
+  there with the pod's own ServiceAccount (health-rbac.yaml.j2) as its credential. That is why
+  this pod mounts its ServiceAccount token.
+
+  The labels are `app: janitorr-health`, never `app: janitorr`. The reader and tasks/verify.yml
+  both take the first Running pod labelled `app=janitorr`, so that label here could make either
+  read this pod instead of janitorr's. uptime-kuma's `netpol_from` admits `janitorr-health`,
+  which is how the push reaches Kuma's Service.
+
+  No k8s/cronjob-gate run: janitorr sets `k8s_autodeploy: false`, so no batch gate is required,
+  and the H2 plan's *Who applies each grant* records the first scheduled run instead.
+#}
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: janitorr-health
+  namespace: {{ k8s_namespace }}
+spec:
+  schedule: "{{ janitorr_k8s_health_schedule }}"
+  # The host cron's fields were UTC, and */10 reads the same in any zone.
+  timeZone: Etc/UTC
+  concurrencyPolicy: Forbid
+  # A run missed by more than one period is not made up: the next one reads the same pod.
+  startingDeadlineSeconds: 300
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 2
+  jobTemplate:
+    metadata:
+      labels:
+        app: janitorr-health
+    spec:
+      activeDeadlineSeconds: {{ janitorr_k8s_health_deadline_seconds }}
+      # No retry: the next run is ten minutes away and re-reads the same state.
+      backoffLimit: 0
+      template:
+        metadata:
+          labels:
+            app: janitorr-health
+            netpol-baseline: enforced
+        spec:
+          restartPolicy: Never
+          enableServiceLinks: false
+          serviceAccountName: janitorr-health
+          automountServiceAccountToken: true
+          securityContext:
+            runAsUser: {{ puid }}
+            runAsGroup: {{ pgid }}
+            runAsNonRoot: true
+          priorityClassName: homelab-best-effort
+          initContainers:
+            - name: kubectl
+              image: {{ janitorr_k8s_health_kubectl_image }}
+              command: ["cp", "/usr/bin/kubectl", "/kubectl/kubectl"]
+{{ job_hardened_security_context(read_only=true) }}
+              volumeMounts:
+                - name: janitorr-health-kubectl
+                  mountPath: /kubectl
+{{ job_container_resources(cpu_limit=janitorr_k8s_health_cpu_limit, mem_limit=janitorr_k8s_health_mem_limit, cpu_request=janitorr_k8s_health_cpu_request, mem_request=janitorr_k8s_health_mem_request) }}
+          containers:
+            - name: janitorr-health
+              image: {{ janitorr_k8s_health_image }}
+              command: ["python3", "/config/janitorr_health.py"]
+              env:
+                - name: JANITORR_NAMESPACE
+                  value: "{{ k8s_namespace }}"
+                - name: JANITORR_WINDOW_H
+                  value: "{{ janitorr_k8s_error_window_hours }}"
+                - name: JANITORR_STARTUP_GRACE_S
+                  value: "{{ janitorr_k8s_startup_grace_seconds }}"
+                - name: JANITORR_KUBECTL
+                  value: /kubectl/kubectl
+                # kubectl's discovery cache goes under $HOME, and the root filesystem is
+                # read-only.
+                - name: HOME
+                  value: /tmp
+                # The ConfigMap mount is read-only, so Python cannot write __pycache__ there.
+                - name: PYTHONDONTWRITEBYTECODE
+                  value: "1"
+                - name: KUMA_PUSH_URL
+                  valueFrom:
+                    secretKeyRef:
+                      name: janitorr-health
+                      key: push_url
+{{ job_hardened_security_context(read_only=true) }}
+              volumeMounts:
+                - name: janitorr-health-code
+                  mountPath: /config
+                  readOnly: true
+                - name: janitorr-health-kubectl
+                  mountPath: /kubectl
+                  readOnly: true
+                - name: janitorr-health-tmp
+                  mountPath: /tmp
+{{ job_container_resources(cpu_limit=janitorr_k8s_health_cpu_limit, mem_limit=janitorr_k8s_health_mem_limit, cpu_request=janitorr_k8s_health_cpu_request, mem_request=janitorr_k8s_health_mem_request) }}
+          volumes:
+            - name: janitorr-health-code
+              configMap:
+                name: janitorr-health
+            - name: janitorr-health-kubectl
+              emptyDir: {}
+            - name: janitorr-health-tmp
+              emptyDir: {}

@@ -290,8 +290,9 @@ class PlaceholderRender:
         sops_manifests: Each rendered tag with `render_sops_manifests` entries, mapped to
             each entry's sentinel render, which no directory holds; None where the role
             rendered no such file.
-        images: Every built image's context and content tag, for `DIR/images/`. Each
-            rendered tag's refs read the same tags. Empty for a render built from fixtures.
+        images: Each built image's context and content tag, for `DIR/images/`: those the
+            rendered tags' roles build, or every one under `all_images`. Each rendered
+            tag's refs read the same tags. Empty for a render built from fixtures.
     """
 
     tags: list[RenderedTag]
@@ -339,22 +340,27 @@ def render_placeholders(
     keys: list[str],
     host: str = K8S_HOST,
     entries: Callable[[str], list[str]] = sops_manifests,
-    contexts: Callable[[dict, str], dict[str, BuiltImage]] = render_images,
+    contexts: Callable[
+        [dict, str, list[str] | None], dict[str, BuiltImage]
+    ] = render_images,
     roles: Path = K8S_ROLES,
+    all_images: bool = False,
 ) -> PlaceholderRender:
-    """Render every one of `tags` in placeholder mode, and every built image's context.
+    """Render every one of `tags` in placeholder mode, and the contexts of the images they build.
 
     Each tag's `render_sops_manifests` files, as `entries` reads them, are dropped before
     pass 2. The image contexts, as `contexts` renders them, render first with the same
-    sentinels, and each tag's refs read their tags (D5.4a1). A test passes its own `entries`
-    and `contexts`, and its own `roles` tree for the tags' templates.
+    sentinels, and each tag's refs read their tags (D5.4a1). Only the roles among `tags`
+    build, since a consumer reads its own role's images alone; `all_images` builds every
+    builder role's, for the publish job that pushes all ten (#5374). A test passes its own
+    `entries` and `contexts`, and its own `roles` tree for the tags' templates.
 
     Raises:
         RenderError: A template fails to render, or an image context holds a secret's
             sentinel. CI builds a context in the open, so no context may read a secret.
     """
     overrides = placeholder_vars(keys)
-    images = contexts(overrides, host)
+    images = contexts(overrides, host, None if all_images else list(tags))
     leaked = Sentinels(keys).key_set(image_files(images))
     if leaked:
         raise RenderError(

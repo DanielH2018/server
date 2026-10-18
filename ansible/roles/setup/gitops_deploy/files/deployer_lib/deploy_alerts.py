@@ -187,7 +187,7 @@ def alert_secrets_deferred(
     origin: str,
     cs: ChangeSet,
 ) -> None:
-    """Alert (once per SHA) that `secrets.yml` was ff-merged with no consumer redeployed.
+    """Alert (once per SHA) that `secrets.yml` was ff-merged, for the consumers no apply reached.
 
     Split out of the no-services branch on 2026-08-24 so the k8s auto-deploy path can fire it too.
     That path ff-merges, deploys the promoted service and returns without ever reading cs.secrets,

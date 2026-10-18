@@ -106,6 +106,13 @@ class ScriptedTick:
         self.narrow_setup: dict[str, tuple[int, str]] = {}
         # Raised instead of answering, for `narrow_tags_for`'s `except Exception` arm.
         self.narrow_setup_error: Exception | None = None
+        # What `secret_setup_readers.py` answers: the setup files naming a moved secrets.yml
+        # key. Empty by default, which is a range whose keys no setup role reads.
+        self.secret_readers: list[str] = []
+        # Its `unread` half: the shippers of a reader vars file that read none of its keys.
+        self.secret_unread: dict[str, list[str]] = {}
+        # Raised instead of answering, for `route_secret_readers`'s fallback.
+        self.secret_readers_error: Exception | None = None
         self.discord_ok = True
         self.releases: dict[str, str] = {}
         self.log: list[tuple] = []
@@ -270,6 +277,19 @@ class ScriptedTick:
             raise self.narrow_setup_error
         return self.narrow_setup.get(role, (1, ""))
 
+    def secret_setup_readers(
+        self, _repo: str, old: str, new: str
+    ) -> tuple[list[str], dict[str, list[str]]]:
+        """The scripted reader paths, asserted against THIS tick's own range."""
+        assert (old, new) == (self.local, self.origin), (
+            f"the secret readers were asked about {old[:8]}..{new[:8]}, not this tick's "
+            f"{self.local[:8]}..{self.origin[:8]}"
+        )
+        self.log.append(("secret_readers", [old, new]))
+        if self.secret_readers_error is not None:
+            raise self.secret_readers_error
+        return list(self.secret_readers), dict(self.secret_unread)
+
     def emit_deploy_annotation(self, services: set[str], _sha: str) -> None:
         self.log.append(("annotation", set(services)))
 
@@ -350,6 +370,7 @@ def build_tools(scripted: ScriptedTick) -> DeployTools:
         narrow_deploy_plane=scripted.narrow_deploy_plane,
         narrow_setup_role=scripted.narrow_setup_role,
         setup_routing=lambda _repo, _ref, _host: checkout_routing(),
+        secret_setup_readers=scripted.secret_setup_readers,
         # The host's render records, read for a log line alone, so no tick test reads them.
         digest_diff=lambda _ref: {},
         # The host's release records, which a tick that records `k8s_unapplied` reads to drop

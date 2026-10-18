@@ -6,8 +6,8 @@
 # host-originated pull traffic and cannot be exercised from inside a pod at all).
 #
 # Unlike n8n's and flaresolverr's probes, there is no always-open port on this Deployment to use
-# as a TCP-reachability control — {{ k8s_registry_port }} is the only port this Service exposes,
-# and it is the one under test. So the control here is DNS resolution, the same shape sonarr's
+# as a TCP-reachability control — the Service's two ports, {{ k8s_registry_port }} and the ghcr.io
+# mirror's {{ k8s_registry_ghcr_mirror_port }}, are both under test. So the control here is DNS resolution, the same shape sonarr's
 # isolation probe uses: `getent hosts registry` only proves the Service name resolves, which an
 # INGRESS NetworkPolicy never touches (it does not gate traffic to kube-dns) — but it does rule
 # out "this probe pod has no working network at all" as a false-positive "isolated" result.
@@ -35,4 +35,11 @@
                 exit 1
               fi
               echo "isolated: registry:{{ k8s_registry_port }} refused, as intended"
+              if nc -w 5 -z registry {{ k8s_registry_ghcr_mirror_port }}; then
+                echo "POLICY NOT ENFORCED: reached the ghcr.io mirror on"
+                echo "registry:{{ k8s_registry_ghcr_mirror_port }} from a pod. Only the nodes'"
+                echo "containerd may pull through it."
+                exit 1
+              fi
+              echo "isolated: registry:{{ k8s_registry_ghcr_mirror_port }} refused, as intended"
 {% endcall %}

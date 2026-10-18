@@ -149,7 +149,7 @@ def handle_broad(
 ) -> int:
     """A change to a whole plane: defer it, or ff-merge and apply the playbook it names."""
     cs, origin = plan.cs, target.origin
-    setup_tags = setup_tags_for(plan.paths)
+    setup_tags = setup_tags_for(plan.paths) | deploy_defer.secret_reader_tags(cs)
     pending = deploy_defer.unapplyable_setup_roles(cs)
     # DECIDED: a bring-up playbook (and a setup path naming no role) still parks; a setup ROLE
     # this deployer cannot apply no longer does — it fast-forwards and leaves the durable

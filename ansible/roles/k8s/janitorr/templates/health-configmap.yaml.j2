@@ -1,0 +1,25 @@
+{#
+  The janitorr-health CronJob's code: the reader, its verdict module, and the two setup/common
+  modules it imports, host_lib.py and kuma_push.py. The reader puts its own directory on
+  sys.path, so the four files sit flat at the mount, as they did in /opt/janitorr-health.
+
+  No secret goes in here. The push token reaches the pod from the janitorr-health Secret
+  through `secretKeyRef` (the H2 plan's *No secret in a ConfigMap*), and
+  ansible/tests/k8s/test_no_secret_in_a_moved_jobs_configmap.py renders this file with every
+  secrets.yml key bound to a sentinel and fails on any sentinel it finds.
+#}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: janitorr-health
+  namespace: {{ k8s_namespace }}
+data:
+  janitorr_health.py: |
+{{ lookup('file', playbook_dir + '/roles/k8s/janitorr/files/janitorr_health.py') | indent(4, true) }}
+  janitorr_health_logic.py: |
+{{ lookup('file', playbook_dir + '/roles/k8s/janitorr/files/janitorr_health_logic.py') | indent(4, true) }}
+  host_lib.py: |
+{{ lookup('file', playbook_dir + '/roles/setup/common/files/host_lib.py') | indent(4, true) }}
+  kuma_push.py: |
+{{ lookup('file', playbook_dir + '/roles/setup/common/files/kuma_push.py') | indent(4, true) }}

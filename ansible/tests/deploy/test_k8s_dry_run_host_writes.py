@@ -72,7 +72,6 @@ _ROLES_THAT_WRITE_THE_HOST = frozenset(
         "image-builder",
         "janitorr",
         "media-volume",
-        "n8n",
         "netpol-baseline",
         "pi-peer-backup",
         "prowlarr",

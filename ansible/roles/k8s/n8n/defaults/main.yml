@@ -1,25 +1,12 @@
 ---
-# Built in-cluster by this role's two image-builder includes (tasks/main.yml) and pulled from the
-# node-local registry, from templates/Dockerfile.j2 and Dockerfile-runners.j2 (an extra JS
-# package, the runners config file); no upstream tag carries either, so the cluster builds them.
+# Built from templates/Dockerfile.j2 and Dockerfile-runners.j2 (an extra JS package, the runners
+# config file); no upstream tag carries either. Since n8n's flip (#5546) Flux applies this role:
+# the promote workflow's `images` job builds both and pushes them to GHCR under their content
+# tags, and the renderer points these refs there with `imagePullPolicy: IfNotPresent`.
 #
-# `:latest` on the LOCAL registry tag is correct rather than lazy: the tag is mutable by design and
-# a rebuild pushes over it. That is unrelated to the UPSTREAM base, which is pinned — see the
-# Dockerfile headers in templates/ for why a floating FROM has no updater.
-#
-# BUILD AND ROLL IN ONE PLAY — which `./scripts/deploy.sh --tags n8n` is, because this role
-# includes both builds:
-#
-# A rebuild under an unchanged tag changes no manifest, and `imagePullPolicy: Always` is consulted
-# only when a pod is CREATED — so nothing about the rebuild alone would roll the Deployment. The
-# image-builder role closes that: it reads the tag's digest before and after the build and appends
-# the image to `k8s_rebuilt_images`, which roles/k8s/manifests turns into `manifests_image_changed`
-# and rolls on.
-#
-# The constraint is SCOPE: `k8s_rebuilt_images` is a play-scoped fact, so the rebuild
-# and the rollout must happen in the SAME ansible-playbook run. Two separate runs lose the fact and
-# leave the old pods up. Hence one role. Rolling by hand is the fallback if they do get separated:
-#     k3s kubectl -n homelab rollout restart deploy/n8n deploy/n8n-runners
+# The `:latest` fallback is what an Ansible render without the `k8s_built_image_tags` fact gets.
+# tasks/main.yml still builds both images ahead of the render, for the handback to Ansible; no
+# Flux path runs it.
 #
 # Renovate cannot track the two vars below (they are local registry refs, not upstream ones) — the
 # FROM lines in the Dockerfiles are what actually moves, and Renovate's built-in dockerfile manager
@@ -78,6 +65,20 @@ k8s_claims:  # noqa var-naming[no-role-prefix]
 # same Service, so N8N_RUNNERS_TASK_BROKER_URI stays http://n8n:5679 and the runners image
 # needs no change.
 n8n_k8s_broker_port: 5679
+
+# The budget of the n8n-prepull Kustomization, whose Job pulls both Deployments' images onto
+# their node before the n8n Kustomization applies (scripts/renderer/renderer_lib/prepull.py).
+# `n8n` is `Recreate`, so without it the old pod stops before the new pod's pull starts and n8n
+# is down for the whole pull. With it, the old pod keeps serving while the images arrive.
+# MEASURED 2026-10-18 (#5546): a Renovate base bump re-pulls nearly both images from GHCR,
+# n8n's 273.4 MB and n8n-runners' 191.4 MB, 464.8 MB in all; the kubelet pulls them one after
+# the other. Eight 20-30s samples of one blob ran 0.145-0.359 MB/s across both nodes, so the
+# full re-pull takes about 1300s at the fastest and 3205s at the slowest. 3600s covers it
+# down to 0.129 MB/s. The Job has no deadline, so a pull slower still costs that revision its
+# verdict, the Job keeps pulling, and Flux applies n8n on a later retry. Only Flux reads it:
+# the renderer adds the Kustomization for a published tag alone, so an Ansible deploy
+# ignores it.
+flux_prepull_timeout: 3600s  # noqa var-naming[no-role-prefix]
 
 # The runners' readiness gate (see deployment-runners.yaml.j2). alpine because busybox `nc -z`
 # is all it needs and the image is already the fleet's small-utility choice.
