@@ -1,0 +1,14 @@
+{
+  "checksum": "3c71195a24ff25f918b5bae6075034e8ad6e6f98a42ac52fa7a39e6d2639de6d",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "ansible/roles/k8s/livesync/CLAUDE.md#At a glance",
+  "row": {
+    "atoms": {
+      "ansible/vars/cluster-vars.sops.env": "8c24a130c690763aef1567c818f7b90a44a3ec816552b84e3d4dde2b759654dd",
+      "docs/flux-deploy-plane.md": "807c3deb44c3178e7a6f9fc0bc398a3b748b95c468b14ce9b1b890c8684535d9",
+      "docs/volume-snapshot-drills.md": "065c3fed1513022fe8e3b8848f85ca3b5527c7a34f0d50d3b1dad708b176b193"
+    },
+    "python": "3.14",
+    "verified_sha": "e00d00e4e"
+  }
+}

@@ -39,8 +39,7 @@ activeDeadlineSeconds: 300
 template:
   metadata:
     labels:
-      # The label a `sonarr-verify` entry in sonarr's `netpol_from` admits. Neither that fence
-      # nor netpol-baseline admits it yet; the peer lands in its own PR before the flip.
+      # The label the `sonarr-verify` entry in sonarr's `netpol_from` admits.
       app: sonarr-verify
   spec:
     serviceAccountName: sonarr-verify

@@ -1519,7 +1519,7 @@ fails. Exit 2 shows that the same object was read and reconciled.
       repeated name, and for a change in the relative order of the entries both lists hold.
       Each of those reaches the 23 readers and `flux`.
     - D2.1c shrinks the apply but does not empty it. So every PR that adds or removes a k8s
-      entry before D6.1 runs D1.2's stop rule over the tags its narrow output names, with
+      entry before D6.12 runs D1.2's stop rule over the tags its narrow output names, with
       its refusal and hold exits, and quotes that output and both release runs, as M4 does
       (D2, *An added or removed entry that is not Ansible-owned*). The rule does not end
       when D2.1c lands.
@@ -2191,7 +2191,7 @@ contracts.md are handed to them.
 Raised: D1-I1-01 at high, and D1-I1-02, D1-I1-03 and D1-I1-04 at medium. Each was checked
 against the tree at `70591c307` and against the other slices' text. All four are fixed, and
 none is refuted. Two refine the finding: the park in D1-I1-01 blocks the service as well as
-the timer, and the window in D1-I1-02 ends at D5's flux PR rather than D6.1.
+the timer, and the window in D1-I1-02 ends at D5's flux PR rather than D6.12.
 
 - **D1-I1-01 (high), an unattended tick can apply the flux role during H1's DR window, and
   the lever-off render resumes the root before the restores. Fixed.** Confirmed:
@@ -2225,7 +2225,7 @@ the timer, and the window in D1-I1-02 ends at D5's flux PR rather than D6.1.
 - **D1-I1-03 (medium), the X2-06 fix named the wrong deployer PR and ended the stop rule
   when it landed. Fixed.** Confirmed against D2's *An added or removed entry that is not
   Ansible-owned* and its step D2.1c. *Risks* and Open question 10 name D2.1c and state
-  D2's rule: every entry add or remove before D6.1 runs the stop rule over the tags its
+  D2's rule: every entry add or remove before D6.12 runs the stop rule over the tags its
   narrow output names. The X2-06 log entry carries a correction.
 - **D1-I1-04 (medium), Open questions 7 and 9 and the hold bullet misstated contracts.md.
   Fixed.** Confirmed: C2's *Promotion target* reads `none`, its *`DEPLOY_HOLD`'s values*

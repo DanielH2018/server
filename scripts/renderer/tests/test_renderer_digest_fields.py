@@ -14,6 +14,7 @@ import yaml
 from changed_set import changed_set
 from deploy_tools.bundle_census import snapshot_tags
 from lib.k8s_roles import snapshot_claims
+from renderer.renderer_lib.bundle_readme import BUNDLE_README
 from renderer.renderer_lib.bundle import (
     CLUSTER_VARS,
     DIGESTS,
@@ -97,3 +98,16 @@ def test_a_claims_value_that_is_not_a_literal_list_is_flagged(tmp_path):
     claims, problems = snapshot_claims(["sonarr"], tmp_path)
     assert claims == {}
     assert problems and "not a literal list" in problems[0]
+
+
+def test_the_bundle_readme_is_the_one_unclassified_path_and_a_change_widens_the_set():
+    files = bundle_files(DIRECTORIES, {}, list(DIRECTORIES), TIMEOUT, DOTENV)
+    assert files["README.md"] == BUNDLE_README
+    old = json.loads(files[DIGESTS])
+    assert old[UNCLASSIFIED]["paths"] == ["README.md"]
+    new = {**old, UNCLASSIFIED: {**old[UNCLASSIFIED], "footprint": "other"}}
+    graph = {name: [] for name in DIRECTORIES}
+    assert changed_set(old, old, graph).names == frozenset()
+    widened = changed_set(new, old, graph)
+    assert widened.names == {*DIRECTORIES, CLUSTER_VARS, "soak"}
+    assert UNCLASSIFIED in widened.widened

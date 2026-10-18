@@ -288,7 +288,7 @@ def test_a_snapshot_document_for_a_tag_that_declares_no_claims_is_flagged(tmp_pa
 
 
 def test_every_kind_in_suffix_order_is_clean(tmp_path):
-    kinds = ["pihole-snapshot", "pihole-verify"]
+    kinds = ["pihole-snapshot", "pihole-prepull", "pihole-verify"]
     out = _bundle(tmp_path, ["pihole"], deferring=["pihole"], kinds=kinds)
     assert (
         bundle_census.census(
@@ -297,6 +297,7 @@ def test_every_kind_in_suffix_order_is_clean(tmp_path):
             deferring=["pihole"],
             snapshotting=["pihole"],
             verifying=["pihole"],
+            prepulling=["pihole"],
         )
         == []
     )

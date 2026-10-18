@@ -41,7 +41,7 @@ TimeoutStartSec=7h
 # land-wait room for `verify`'s wait on the rendered soak plus promote's `render`, `images`
 # and `publish`, after the merge and CI waits: ansible/tests/setup/test_lander_deadlines_cover_the_soak.py
 # renders the published bundle and fails when it does not (#5427). `images` counts since
-# published tags build images (#5466). 21600 since code-server's 3600s rollout budget joined
+# published tags build images (#5466). 21600 since code-server's 4500s pre-pull joined
 # the soak (#5512).
 Environment=LAND_DEADLINE=21600
 # One of the agent's landings at a time, so a second waits for the first's deploy rather than

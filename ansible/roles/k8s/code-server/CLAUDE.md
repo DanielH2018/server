@@ -17,7 +17,7 @@ it is built from (`templates/Dockerfile.j2` + `files/extensions.sh`); the invent
 - **Image:** built by the promote workflow's `images` job from `templates/Dockerfile.j2`,
   pushed to `ghcr.io/danielh2018/code-server:<content tag>` (D5.4). In-cluster by
   k8s/image-builder before D5.16.
-- **Host:** daniel-box (k3s), by a soft node-affinity preference · **Port:** 8443
+- **Host:** daniel-box (k3s), pinned by a required node affinity · **Port:** 8443
 - **Flux applies it, not Ansible** (D5.16, Wave C). Its `containers_list` entry carries
   `owner: flux`, so `deploy.sh`, the play and the GitOps deployer all skip it, and a merged
   change reaches the cluster when `promote` publishes and verifies the next bundle. To give it
@@ -39,12 +39,13 @@ it is built from (`templates/Dockerfile.j2` + `files/extensions.sh`); the invent
   rotated value is live before code-server reconciles. A rotation reaches the cluster only
   through `cluster_vars.py write`. The renderer stamps a restart checksum on the Deployment, so
   a changed value rolls the pod.
-- **Every image change is a slow pull and an outage.** The pod pulls from GHCR, which served
-  both nodes at 0.2-0.5 MB/s on 2026-10-17. A claude-code CLI bump invalidates about 377 MB of
-  layers, and a base-image bump about 851 MB, so a roll takes roughly 20 to 50 minutes. The
-  Deployment is `Recreate`, so the old pod stops before the pull starts, and the editor is down
-  for the whole pull. `manifests_rollout_timeout: 3600s` in `defaults/main.yml` sets both the
-  Kustomization's `timeout` and `progressDeadlineSeconds`; the measurement is beside it.
+- **Every image change is a slow pull, and the pre-pull keeps it off the outage.** The pod
+  pulls from GHCR, which served both nodes at 0.2-0.5 MB/s on 2026-10-17. A claude-code CLI
+  bump invalidates about 377 MB of layers, and a base-image bump about 851 MB, so a pull takes
+  roughly 20 to 50 minutes. The Deployment is `Recreate`. The `code-server-prepull`
+  Kustomization (below) pulls the image onto the node while the old pod still serves, so the
+  Deployment keeps the default rollout budget and the editor is down only for the container
+  start.
 - **Where the tasks went.** `tasks/main.yml` holds two includes, `k8s/image-builder` and
   `k8s/manifests`, and no Flux path runs either. They stay for the handback. The glance reads
   the defaults, so it still shows `<k8s_registry_pull_host>/code-server`; the renderer rewrites
@@ -91,6 +92,16 @@ it is built from (`templates/Dockerfile.j2` + `files/extensions.sh`); the invent
 - **`extensions.sh` installs but does not prune**, so removing an extension from the image
   leaves it live on the config volume. Retiring one means adding its id to `RETIRED_EXTS` in
   that script, not just deleting it from the Dockerfile.
+- **Under Flux, the new image is pulled before the old pod stops** (#5525). The role sets
+  `flux_prepull_timeout: 4500s`, so the render adds the `code-server-prepull` Kustomization,
+  and `code-server` depends on it. Its Job runs the Deployment's GHCR ref under the
+  Deployment's own node affinity. The affinity is required (operator ruling 2026-10-18,
+  #5547), so the Job always lands on daniel-box, the node the pod will run on, and completes
+  once the kubelet holds the image. A cordoned daniel-box leaves the pod unschedulable
+  instead of moving it to daniel-server. The
+  `Recreate` rollout then pays only the container start, not the 20-50 minute GHCR pull.
+  `docs/flux-deploy-plane.md`, *The pre-pull Job*, has the mechanism. An Ansible deploy
+  ignores the key.
 - **Two claims, and only the small one is backed up** (2026-08-16). `code-server-config`
   (10 Gi) holds derived state and is in this role's `containers_list` entry's
   `no_backup_claims`, so in `k3s_longhorn_nobackup_volumes`;

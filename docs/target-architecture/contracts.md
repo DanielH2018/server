@@ -24,7 +24,7 @@ merged.
 | R1 | Shadow render with zero diff | — |
 | R2 | Secret placeholders and CI secret checks | R1 |
 | R3 | Remove the pre-apply live reads | R1 |
-| R4 | Delete the k8s Ansible path | D6, per PR. R4.1 needs only D6.1 and D5's tail, R4.5 also D6.4, and R4.7 the whole of D6 |
+| R4 | Delete the k8s Ansible path | D6, per PR. R4.1 needs only D6.12 and D5's tail, R4.5 also D6.18, and R4.7 the whole of D6 |
 | D1 | Flux installed, owning nothing | —. D1.6b, the `flux` rule group, also M1 |
 | D2 | One stateless leaf end to end on production | D1, R1, and R2's PRs 1 and 2 (placeholder mode and the five rules). D2.6d also M1. D2.7 also D4.0, M1, and PR 2b of R2's *Publish `domain`* item (C3) |
 | D3 | Secrets through Flux | D2, R2. D3.0 to D3.3 need only D2.1 to D2.6c, which include D2.6b's empty `SHARED_KINDS` and census |
@@ -106,7 +106,10 @@ every entry is flux-owned then waits for C-2b, through the uptime-kuma edge.
     `own` digest from `digests.json`, which C6 exports and C7 reads (#5338).
   - `DIR/flux/<name>.yaml` and `DIR/cluster/<name>/` hold a shared kind, see C3.
   - `DIR/flux/kustomization.yaml` lists every file in `DIR/flux/`.
-  - From D5.1a1, `DIR/cluster/<tag>-snapshot/` and `DIR/cluster/<tag>-verify/`.
+  - `DIR/README.md` at the bundle root, a static note on the layout. No Kustomization's path
+    reaches it, and it counts for no name (see `_unclassified` below).
+  - From D5.1a1, `DIR/cluster/<tag>-snapshot/` and `DIR/cluster/<tag>-verify/`. From #5525,
+    `DIR/cluster/<tag>-prepull/`.
   - From D2's first publishing PR, `DIR/digests.json` at the bundle root. No Kustomization's
     path reaches it. It maps each deploy tag and each member of `SHARED_KINDS` to an object.
     Every object holds two SHA-256 digests, and from D5.1a2 a deploy tag's object holds two
@@ -126,7 +129,7 @@ every entry is flux-owned then waits for C-2b, through the uptime-kuma edge.
     Any other path that counts for no name is recorded under the reserved key
     `_unclassified`, and a change there counts as every name changed. The renderer computes
     both digests in the render's own process, and no reader recomputes them. C2's changed
-    set and C6's `land.sh` wait read `footprint`. These rules replace D6.1's `--moved-tags`
+    set and C6's `land.sh` wait read `footprint`. These rules replace D6.12's `--moved-tags`
     mode. They apply the classification that D6's *What a footprint counts* defines.
   - From D5.4a1, `DIR/images/<name>/` holds each rendered image context, and
     `DIR/images/tags.json` maps each name to its content tag. No Kustomization's path reaches
@@ -360,6 +363,12 @@ every entry is flux-owned then waits for C-2b, through the uptime-kuma edge.
     and sets `wait: true` (R4, D5).
   - D5.1a1 adds `<tag>-snapshot` for a role that declares snapshot claims. It inherits
     `<tag>`'s `dependsOn`, less the edge to itself (D5).
+  - #5525 adds `<tag>-prepull` for a role that sets `flux_prepull_timeout`, the kind D5's
+    Open question 21 asks for. Its Jobs pull the tag's images under its workloads' own
+    placement, so a `Recreate` rollout pays only the container start. It inherits `<tag>`'s
+    `dependsOn` the same way, `<tag>` depends on it, and it never depends on `<tag>-snapshot`
+    or the reverse. Its `timeout` is the role's `flux_prepull_timeout`. Its document follows
+    `<tag>-snapshot`'s and precedes `<tag>-verify`'s.
 - **Per-role fields.** Five fields of a role's own Kustomization vary by role. A role may set
   four of them from its defaults:
   - `prune: false`, for a plumbing tag (H1) or a tag whose render holds a
@@ -391,14 +400,14 @@ every entry is flux-owned then waits for C-2b, through the uptime-kuma edge.
   Kustomization's name. It also fails on a deploy tag that equals a member of `SHARED_KINDS`
   or ends in `-deferred`. D5.1a1 reserves `-snapshot`, `-verify`, `soak` and
   `homelab-namespace` too, so no deploy tag takes `soak` or `homelab-namespace` before its
-  kind joins the set.
+  kind joins the set. #5525 reserves `-prepull`.
 - **Publish census.** The files under `flux/` must equal the flux-owned tags plus the members
   of `SHARED_KINDS`, and each tag's file holds exactly `<tag>` and the suffixed kinds its
   role's inputs call for. The census computes this allowlist from the renderer's inputs, never
   from its output, so a renderer bug cannot widen it (D2.6b). A mismatch fails the publish,
   and nothing is pushed.
 - **Deletion policy.** Every Kustomization the bundle publishes sets `deletionPolicy: Orphan`.
-  D6.7 switches the per-tag Kustomizations to the default policy, if the operator approves it
+  D6.20 switches the per-tag Kustomizations to the default policy, if the operator approves it
   (D6 Open question 7).
 - **Ordering.** `dependsOn` is generated, and no slice hand-writes it. Its edges come from
   `ansible/filter_plugins/toposort.py`, or from a renderer rule that the adding slice names,
@@ -709,7 +718,7 @@ No request on the slice index is open.
 
 - **The commit input** (R4 Open question 10). *Modes* names `homelab-render cluster --commit
   SHA`. The publish job passes the commit it publishes, and the render-diff job passes the PR
-  head's SHA to both renders. Gate: before R4's PR 1 merges. D6.1 no longer renders twice
+  head's SHA to both renders. Gate: before R4's PR 1 merges. D6.12 no longer renders twice
   once C1's footprint replaces `--moved-tags`, so D6 Open question 13 is withdrawn.
 - **Host-mode placeholders** (H4 Open question 6, with H3's *Host mode renders no secret*).
   Host mode renders a secret reference as `${<key>}` in two kinds of file, a component's
@@ -756,15 +765,15 @@ No request on the slice index is open.
   reserves the suffix. No gate is named.
 - **Wider prune exemptions.**
     - PersistentVolumes and StorageClasses join PVCs and Namespaces (D6 Open question 12).
-      Gate: before D6.7b merges. Without the amendment, D6.7b refuses to remove a tag whose
+      Gate: before D6.19 merges. Without the amendment, D6.19 refuses to remove a tag whose
       render at `prod` holds a PersistentVolume, and the rename procedure excludes
       media-volume.
     - "and a ConfigMap that holds state no render restores, named by its slice", with H2's
       restore-drill stamp ConfigMap as its member (H2 Open question 12). Gate: before H2.3b
       merges.
-- **The deletion policy's kept set** (D6 Open question 7). If D6.7 merges, it switches every
+- **The deletion policy's kept set** (D6 Open question 7). If D6.20 merges, it switches every
   `<tag>` except `flux`. `flux`, every `<tag>-deferred` and every shared kind keep `Orphan`.
-  Gate: before D6.7 merges.
+  Gate: before D6.20 merges.
 
 ### Requests on C5
 
@@ -791,7 +800,7 @@ No request on C6 is open.
 ### Requests on the slice document format
 
 - **Deletion PRs** (D6 Open question 6, R4 Open question 11). Exempt a pure deletion from the
-  100–200 line guide, or split D6.1, D6.4 and D6.5b by module. R4's PRs 6 and 8 rely on the
+  100–200 line guide, or split D6.12, D6.18 by module. R4's PRs 6 and 8 rely on the
   exemption, and R4 names its split if the exemption is refused. No gate is named.
 
 ## Review log
@@ -922,7 +931,7 @@ checked against the slice text it quotes before the change.
       text and its second gate, before H1.1i; H3 Open question 7; H4 Open questions 4 and 6;
       H7 Open question 1; M2 Open questions 1, 3 and 5; M5 Open questions 1 and 2; R4 Open
       question 10. M6's C7 row now counts six departures, not five. The deletion-PR row
-      names D6.5b and R4's PRs 6 and 8.
+      names D6.18 and R4's PRs 6 and 8.
     - *Not changed here.* H6's tag `timeout` is 100 minutes (H6 Open question 5). contracts.md
       states no timeout value, so the worst case that takes it is D4's to restate.
 
@@ -948,10 +957,10 @@ checked against the slice text it quotes before the change.
 ### Cross-slice follow-up (2026-10-12)
 
 - Cross-slice note from D6, sent twice: *Requests on C1*, *The commit input*, is now gated
-  before D6.1 or R4's PR 1, whichever merges first, because D6.1's `--moved-tags` mode passes
+  before D6.12 or R4's PR 1, whichever merges first, because D6.12's `--moved-tags` mode passes
   the head's SHA to both renders and R4 waits on D6.
 - Cross-slice note from D6: C3 *Shared kinds* says that each member needs a
-  `--moved-tags` rule from D6.1, and that a census test enforces it.
+  `--moved-tags` rule from D6.12, and that a census test enforces it.
 - Cross-slice note from H1 to D5: the D5 index row adds H1.7b as a gate of the flux PR,
   following D5's header.
 
@@ -968,7 +977,7 @@ should cover every section that carries this heading, in every slice.
 Applied to this page:
 
 - **C1.** `digests.json` moves to D2's first publishing PR and gains a `footprint` digest.
-  The footprint replaces D6.1's `--moved-tags` mode. The renderer classifies once, and no
+  The footprint replaces D6.12's `--moved-tags` mode. The renderer classifies once, and no
   reader renders a second time. That supersedes the two `--moved-tags` notes in the
   cross-slice follow-up above.
 - **C2.**

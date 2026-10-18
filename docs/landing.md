@@ -378,9 +378,10 @@ Instead it reads the cluster every 30 seconds:
   timeouts. It also covers one measured rebuild of every built image by a commit queued ahead
   (#5431). `images` counts at its 20 minutes because published tags build images since D5.14
   handed ical-proxy and homelab-mcp to Flux (#5466). D5.16 raised the deadline from 18000,
-  because code-server's 3600s rollout budget, which covers its image's slow pull from GHCR,
-  put the soak's `timeout` at 11190s and left the wait 664 seconds short. With the 19 tags
-  published once D5.16 lands, 2936 seconds of headroom remain (#5512).
+  because code-server's `code-server-prepull` Kustomization, which covers its image's slow
+  pull from GHCR at a 4500s `timeout`, put the soak's `timeout` at 14070s and left the wait
+  3544 seconds short. With the 23 tags published once D5.16 lands, 56 seconds of headroom
+  remain (#5512).
   `ansible/tests/setup/test_lander_deadlines_cover_the_soak.py` renders the published bundle
   and fails once a newly published tag outgrows that headroom (#5427).
 

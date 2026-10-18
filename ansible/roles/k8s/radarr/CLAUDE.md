@@ -40,7 +40,8 @@ when both paths share one mount.
 - **`templates/verify-inert/` holds arr-notification's seed Job for Flux, and nothing renders
   it yet.** radarr's flip PR renames it to `templates/verify/`, so `radarr-verify` holds only
   that Job and its `radarr-verify` ServiceAccount: radarr has no `tasks/verify.yml` to convert.
-  `ansible/roles/k8s/arr-notification/CLAUDE.md` has the Job's design.
+  The Job's pod carries `app: radarr-verify`, which radarr's `netpol_from` lists ahead of the
+  flip (#5535). `ansible/roles/k8s/arr-notification/CLAUDE.md` has the Job's design.
 - **Log churn, not log size, drives PVC growth** — `radarr_k8s_log_level`/`_log_rotate` cap
   upstream's noisier defaults; see `roles/k8s/sonarr/defaults/main.yml` for the shared
   rationale across all three *arr roles.

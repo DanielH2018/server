@@ -199,6 +199,11 @@ def test_a_kustomization_path_into_images_is_flagged(path, text):
     assert images.paths_into_images({path: text}) != []
 
 
+def test_a_file_that_is_not_yaml_is_not_read():
+    # The bundle's README.md is Markdown that a YAML parser rejects.
+    assert images.paths_into_images({"README.md": "# Title\n\n- a: b: c\n"}) == []
+
+
 def test_a_kustomization_path_into_cluster_is_clean():
     files = {
         "flux/nut.yaml": "kind: Kustomization\nspec:\n  path: ./cluster/nut\n",

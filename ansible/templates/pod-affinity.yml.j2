@@ -26,3 +26,25 @@
                     values:
                       - {{ hostname }}
 {%- endmacro %}
+
+{#
+  nodeAffinity pin for a pod that must run on one node. The `required` rule makes the pod
+  unschedulable when that node is cordoned or full, which is the point: the pre-pull Job
+  (`scripts/renderer/renderer_lib/prepull.py`) copies the pod placement, so a pin guarantees
+  the image is pulled onto the node the pod runs on. A caller says why it pins in a comment
+  at its call site.
+
+  Arguments:
+    hostname  the node `kubernetes.io/hostname` value
+#}
+{% macro node_affinity_required(hostname) %}
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: kubernetes.io/hostname
+                    operator: In
+                    values:
+                      - {{ hostname }}
+{%- endmacro %}

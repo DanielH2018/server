@@ -50,8 +50,8 @@ _HOST_WRITE_MODULES = (
 )
 
 # A `command`/`shell` that redirects into an absolute path writes the host as surely as `copy`
-# does. monitor-bridge's script-ConfigMap render is exactly this shape:
-# `kubectl create configmap --dry-run=client -o yaml > <file>`.
+# does. The script-ConfigMap renders the k8s roles ran before D5 rendered them were exactly
+# this shape: `kubectl create configmap --dry-run=client -o yaml > <file>`.
 _HOST_REDIRECT = re.compile(r">>?\s*/(?:etc|opt|usr|var|srv)/")
 
 # Roles whose host writes are the dry-run MECHANISM rather than a side effect of it.
@@ -65,7 +65,6 @@ _HOST_WRITE_EXEMPT = frozenset({"manifests"})
 # rather than the role getting clean — check before editing the list.
 _ROLES_THAT_WRITE_THE_HOST = frozenset(
     {
-        "artifacts",
         "observability",
         "configarr",
         "crowdsec",
@@ -73,7 +72,6 @@ _ROLES_THAT_WRITE_THE_HOST = frozenset(
         "image-builder",
         "janitorr",
         "media-volume",
-        "monitor-bridge",
         "n8n",
         "netpol-baseline",
         "pi-peer-backup",
@@ -202,7 +200,7 @@ def test_a_guarded_host_write_is_clean(tmp_path: Path) -> None:
 
 
 def test_a_shell_redirect_into_a_host_path_counts_as_a_write(tmp_path: Path) -> None:
-    """monitor-bridge's script-ConfigMap render writes the node with no file module in sight."""
+    """A script-ConfigMap render into a node path writes the node with no file module in sight."""
     redirect = (
         "- name: Render the script ConfigMap manifest\n"
         "  ansible.builtin.shell:\n"

@@ -27,11 +27,12 @@ monitor_bridge_builder_max_fetch_age_s: 1800
 # and conftest.py, which must not reach the image.
 # ENFORCED by ansible/tests/services/test_monitor_bridge_modules.py, which fails when a runtime module
 # in files/ is absent here.
-# Paths relative to files/. The ConfigMap key for each is the path with `/` replaced by
-# `_` (a key cannot contain a slash), and the Deployment's `items:` mounts that key back at
-# the path, so `checks/b2.py` ships as key `checks_b2.py` and lands at /app/checks/b2.py.
-# Both derivations sit in tasks/main.yml and templates/deployment.yaml.j2; the copy loop
-# below creates the subdirectories first.
+# Paths relative to files/. Each module ships in its own ConfigMap, named from the path with
+# `.py` dropped and `/` and `_` replaced by `-`. Its key is the path with `/` replaced by `_`
+# (a key cannot contain a slash), and the Deployment's `items:` mounts that key back at the
+# path, so `checks/b2.py` ships in `monitor-bridge-script-checks-b2` as key `checks_b2.py`
+# and lands at /app/checks/b2.py. Both derivations sit in templates/script-configmap.yaml.j2
+# and templates/deployment.yaml.j2.
 monitor_bridge_modules:
   - cli.py
   - check.py

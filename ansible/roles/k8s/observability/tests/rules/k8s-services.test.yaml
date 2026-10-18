@@ -1,0 +1,91 @@
+# promtool unit tests for files/rules/k8s-services.yaml. Run with
+# `scripts/validate/alert_tools.sh promtool test rules <this file>`; the validate-alert-rules
+# hook runs it on every commit that touches the rules.
+#
+# The kube-state-metrics series carry the labels v2.20 gives them (job, instance, uid), so a
+# matcher that a live series would not satisfy fails here as it would live.
+rule_files:
+  - ../../files/rules/k8s-services.yaml
+evaluation_interval: 1m
+tests:
+  # The zero-series case: no input at all, so the kube-state-metrics job is missing from the
+  # config. MosquittoLanAddressNotPinned fires through its first arm.
+  - interval: 1m
+    input_series: []
+    alert_rule_test:
+      - eval_time: 6m
+        alertname: MosquittoLanAddressNotPinned
+        exp_alerts:
+          - exp_labels:
+              job: kube-state-metrics
+              service: mosquitto
+              severity: warning
+              verify: "true"
+            exp_annotations: &annotations
+              summary: The mosquitto-lan Service does not hold its pinned LAN address.
+              description: "kube-state-metrics reports no LoadBalancer ingress at the pinned VIP on homelab/mosquitto-lan for 5 minutes, or Prometheus has no kube-state-metrics scrape job. Home Assistant and the LAN publishers cannot reach the broker on the VIP. MetalLB does not re-evaluate an existing allocation, so delete the Service and redeploy mosquitto to force reallocation."
+
+  # MetalLB gave mosquitto-lan an auto-assigned address. The rule holds 5 minutes, then fires.
+  - interval: 1m
+    input_series:
+      - series: 'up{job="kube-state-metrics", instance="kube-state-metrics:8080"}'
+        values: '1x10'
+      - series: 'kube_service_status_load_balancer_ingress{job="kube-state-metrics", instance="kube-state-metrics:8080", namespace="homelab", service="mosquitto-lan", uid="u1", ip="10.0.0.200"}'
+        values: '1x10'
+    alert_rule_test:
+      - alertname: MosquittoLanAddressNotPinned
+        eval_time: 4m
+        exp_alerts: []
+      - alertname: MosquittoLanAddressNotPinned
+        eval_time: 6m
+        exp_alerts:
+          - exp_labels:
+              namespace: homelab
+              service: mosquitto
+              ip: 10.0.0.242
+              job: kube-state-metrics
+              severity: warning
+              verify: "true"
+            exp_annotations: *annotations
+
+  # The pinned address is held: nothing fires.
+  - interval: 1m
+    input_series:
+      - series: 'up{job="kube-state-metrics", instance="kube-state-metrics:8080"}'
+        values: '1x10'
+      - series: 'kube_service_status_load_balancer_ingress{job="kube-state-metrics", instance="kube-state-metrics:8080", namespace="homelab", service="mosquitto-lan", uid="u1", ip="10.0.0.242"}'
+        values: '1x10'
+    alert_rule_test:
+      - alertname: MosquittoLanAddressNotPinned
+        eval_time: 6m
+        exp_alerts: []
+
+  # The pinned address on a different Service does not satisfy the rule.
+  - interval: 1m
+    input_series:
+      - series: 'up{job="kube-state-metrics", instance="kube-state-metrics:8080"}'
+        values: '1x10'
+      - series: 'kube_service_status_load_balancer_ingress{job="kube-state-metrics", instance="kube-state-metrics:8080", namespace="homelab", service="pihole-dns", uid="u2", ip="10.0.0.242"}'
+        values: '1x10'
+    alert_rule_test:
+      - alertname: MosquittoLanAddressNotPinned
+        eval_time: 6m
+        exp_alerts:
+          - exp_labels:
+              namespace: homelab
+              service: mosquitto
+              ip: 10.0.0.242
+              job: kube-state-metrics
+              severity: warning
+              verify: "true"
+            exp_annotations: *annotations
+
+  # A failed kube-state-metrics scrape pages through the Cluster Scrape Targets tile, not here.
+  - interval: 1m
+    input_series:
+      - series: 'up{job="kube-state-metrics", instance="kube-state-metrics:8080"}'
+        values: '0x10'
+    alert_rule_test:
+      - alertname: MosquittoLanAddressNotPinned
+        eval_time: 6m
+        exp_alerts: []

@@ -51,7 +51,7 @@ LANDERS = {
 # What each unit set before D5.14 counted `images` (#5466), for the red half against the same
 # render. #5427 had raised them from 5400 and 3300.
 BEFORE_IMAGES = {"claude-land": 10800, "renovate-agent-land": 10800}
-# What each unit set before D5.16 handed code-server to Flux with a 3600s rollout budget (#5512).
+# What each unit set before D5.16 handed code-server to Flux with a 4500s pre-pull (#5512).
 BEFORE_CODE_SERVER = {"claude-land": 18000, "renovate-agent-land": 18000}
 # The promote jobs a promotion waits on, each counted at its `timeout-minutes`.
 PIPELINE = ("render", "images", "publish")
@@ -151,7 +151,7 @@ def test_the_deadlines_before_images_counted_fall_short_of_the_same_render(
 
 @pytest.mark.parametrize("lander", LANDERS)
 def test_the_deadlines_before_code_server_fall_short_of_the_same_render(lander, soak):
-    """The red half: code-server's 3600s `timeout` on the chain outgrew 18000's headroom."""
+    """The red half: code-server's 4500s pre-pull `timeout` on the chain outgrew 18000's headroom."""
     assert "code-server" in published_tags()
     assert shortfall(BEFORE_CODE_SERVER[lander], soak) > 0
 
