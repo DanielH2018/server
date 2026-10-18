@@ -581,7 +581,7 @@ The exit criterion has three parts:
   scheduled run: the Job name, its `status.succeeded` and its log tail with the push's
   result.
 
-### Landing a `containers_list` edit (until D6.1)
+### Landing a `containers_list` edit (until D6.12)
 
 Five H2 PRs edit `containers_list`. H2.4b, H2.5b and H2.5c each add a label to
 uptime-kuma's `netpol_from`, and H2.5d adds one to qbittorrent's. H2.3b adds the drill's
@@ -590,7 +590,7 @@ deploy-plane, so the tick applies a narrowed `deploy.yml`, forward-only, and
 `k8s_autodeploy: false` does not stop it (Baseline, *A field edit to a `containers_list`
 entry narrows*). That apply also ships any change of a named tag that is on `origin/master`
 and not yet applied, and a failing verify task in any named tag writes `hold_sha` over the
-deploy plane. This holds until D6.1 deletes the deployer's k8s arms.
+deploy plane. This holds until D6.12 deletes the deployer's k8s arms.
 
 The narrow output each PR expects, measured at `a5abf8581` with `deploy_tags.py narrow`.
 One scratch commit appended a label to both uptime-kuma's and qbittorrent's `netpol_from`,
@@ -1342,7 +1342,7 @@ change at merge time*).
       so the tick applies the four, unattended and forward-only. Three of them are
       denylisted: blackbox-exporter, pihole and uptime-kuma. D2.1c is on `origin/master` before this PR, because H2 needs
       H1 and H1 needs D2. No output is accepted as a reason to skip the stop rule, which
-      binds until D6.1.
+      binds until D6.12.
     - Before the PR, and again right before `land.sh`, run *Landing a `containers_list`
       edit* (Design): the narrow quote, the stop rule over every tag the output names, the
       `--dry-run` quote without the drill's tag, and D1.2's landing paths.
@@ -1519,7 +1519,7 @@ kubectl -n longhorn-system get backups.longhorn.io --sort-by=.metadata.creationT
   -o custom-columns=VOLUME:.status.volumeName,CREATED:.metadata.creationTimestamp \
   | grep '<canary volume>' | tail -n 2
 
-# H2.3b, H2.4b and H2.5b to H2.5d, and each one's revert, before D6.1: the tags the tick
+# H2.3b, H2.4b and H2.5b to H2.5d, and each one's revert, before D6.12: the tags the tick
 # applies, then the stop rule. After the landing, the second command names none of them.
 uv run python scripts/deploy_tools/deploy_tags.py narrow origin/master HEAD
 uv run python scripts/diagnostics/probe.py releases --stale-only
@@ -1658,7 +1658,7 @@ stays open for that evidence.
   missing drop-in or key is flagged, and so is `etcd-s3: false`. A drop-in `sys_user` cannot
   read is flagged with its own message, `drop-in unreadable`, not as missing.
 - *A `containers_list` edit's landing (H2.3b, H2.4b, H2.5b to H2.5d and their reverts,
-  before D6.1).* The stop rule refuses on a name, never on an exit code. A tag whose role
+  before D6.12).* The stop rule refuses on a name, never on an exit code. A tag whose role
   moved on `origin/master` past its applied commit appears in the `--stale-only` lines, and
   one running a worktree's commit reads `unmerged` in the plain table. Either refuses the
   merge. The red case is a stale uptime-kuma. While uptime-kuma's role has a merged change
@@ -1707,11 +1707,11 @@ carries `prune: disabled`.
   to `last-good` (C2) and needs no fix forward.
 - **H2.3b:** revert only after H2.3d and H2.3c are reverted, because the host script of H2.3c
   writes the ConfigMap. The revert removes the tag, and C3's `deletionPolicy: Orphan` leaves
-  the ConfigMap live until D6.7; after D6.7 switches the policy, its `prune: disabled`
+  the ConfigMap live until D6.20; after D6.20 switches the policy, its `prune: disabled`
   annotation keeps it. It holds the drill's state, so it is kept until the operator decides
   to delete it (**operator-only**). The revert removes the `containers_list` entry. D2.1c
   records a removed Flux-born entry by its fields, as it records an added one, so before
-  D6.1 the revert reaches the same four readers as the forward PR. The revert PR therefore
+  D6.12 the revert reaches the same four readers as the forward PR. The revert PR therefore
   runs *Landing a `containers_list` edit* (Design) and lands in a quiet window.
 - **H2.3d and H2.3e:** revert H2.3e first, so Flux applies `suspend: true` before any revert
   restores the host cron. Then revert H2.3d and run its hand apply (**operator-only**), which
@@ -1773,7 +1773,7 @@ carries `prune: disabled`.
   behind it. Recovery is a fix
   forward, and clearing the hold is **operator-only** (C2; H1, *Forward-only tags and the
   promote rule*). Each of these PRs is small for that reason, and none rides with a pin bump.
-- **A `containers_list` edit applies denylisted tags unattended (until D6.1)** (failure
+- **A `containers_list` edit applies denylisted tags unattended (until D6.12)** (failure
   class 4). H2.3b adds the drill's entry. H2.4b, H2.5b, H2.5c and H2.5d each edit a
   `netpol_from` field, and every revert of the five edits the list again. A field edit
   narrows, and so does an added Flux-born entry once D2.1c has landed, but neither empties
@@ -1785,7 +1785,7 @@ carries `prune: disabled`.
   rule keeps another session's unlanded change from riding along, and the `--dry-run` quote
   names the renders that move. A tag's own verify tasks still run, so a flaky gate in one of
   them fails the landing and holds the deploy plane until D1's way out of a hold. The
-  obligation ends only at D6.1, when the deployer's k8s arms go.
+  obligation ends only at D6.12, when the deployer's k8s arms go.
 - **`pods/exec` on CrowdSec.** A Role that grants exec into the namespace is broader than the
   four commands need. It is bound to one ServiceAccount per job and used only by these
   CronJobs. *Open questions* 2 covers the sidecar alternative.
@@ -1984,7 +1984,7 @@ carries `prune: disabled`.
       in `longhorn-reconcile`, one of them bounded until H2.2b;
     - one Flux-born role and tag, `longhorn-restore-drill`, whose entry's landing applies
       four readers of `containers_list`, three of them denylisted, until
-      D6.1 deletes the deployer's k8s arms;
+      D6.12 deletes the deployer's k8s arms;
     - one stamp ConfigMap, and a drill whose state lives in it;
     - four census rows, three trim-label fixtures in existing reader tests, the
       RBAC-against-script test, one host-package secret test, two
@@ -1996,7 +1996,7 @@ carries `prune: disabled`.
     - two image shapes, one of them a community image, and an image leg in each shell job's
       script tests;
     - about six `netpol_from` entries, whose four PRs each run D1.2's stop rule over the
-      edited role, the edited entry's tag and netpol-baseline until D6.1.
+      edited role, the edited entry's tag and netpol-baseline until D6.12.
 - **Removed:**
     - ten host cron files from daniel-box, with their scripts under `/usr/local/bin` and
       `/opt`, and two `setup-deployed-manifest.d` fragments;
@@ -2116,8 +2116,8 @@ carries `prune: disabled`.
     passes, and a reader with no stamp reports a failure. Resolution: C3's prune-exemption
     line gains "and a ConfigMap that holds state no render restores, named by its slice", with
     this one as its member. Gate: before H2.3b merges. Neither revert in *Rollback* depends on
-    the annotation until D6.7: H2.3d's keeps the ConfigMap in the render, and H2.3b's removes
-    the whole tag, which C3's `deletionPolicy: Orphan` leaves live. Once D6.7 switches
+    the annotation until D6.20: H2.3d's keeps the ConfigMap in the render, and H2.3b's removes
+    the whole tag, which C3's `deletionPolicy: Orphan` leaves live. Once D6.20 switches
     per-tag Kustomizations to the default policy, the annotation is what keeps it.
 13. **Who stops a `containers_list` edit from applying denylisted readers.** Settled by
     D2.1c, and the earlier request is withdrawn. D2.1c is on `origin/master` before any H2
@@ -2130,7 +2130,7 @@ carries `prune: disabled`.
     Three of the four remain denylisted. A `netpol_from` field edit reaches netpol-baseline
     alone on that tree (Baseline, *A field edit to a `containers_list` entry narrows*). Resolution: every H2 PR that edits the
     list, and every revert of one, runs *Landing a `containers_list` edit* (Design). No
-    narrow output exempts a PR from the stop rule. The obligation ends at D6.1.
+    narrow output exempts a PR from the stop rule. The obligation ends at D6.12.
 
 ## Review log
 
@@ -2695,7 +2695,7 @@ The H1 and D2 parts go in cross-slice notes.
   it, so H2.3b expects `longhorn-restore-drill` plus the five readers. Changes:
     - H2.3b drops the branch that accepted a single-tag output and states that expected list.
     - *Verification*'s red-proof bullet, *Risks* and *Complexity delta* say that the stop-rule
-      obligation ends only at D6.1.
+      obligation ends only at D6.12.
     - *Open questions* 13 cites D2.1c as landed policy, quotes D2's reason and withdraws the
       own-tag request.
     - *Rollback* H2.3b no longer says `changed_fields` returns None for the removed entry.

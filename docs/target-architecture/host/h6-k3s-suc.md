@@ -955,7 +955,7 @@ running node, so its verification ends with `gitops_state.py clear-owed manual_p
       carries `name`, `platform` and `owner` reaches artifacts, blackbox-exporter, pihole
       and uptime-kuma, three of them `k8s_autodeploy: false` (D2 Open question 10). The
       tick applies them unattended and forward-only, because D2.2 drops the
-      `system-upgrade` tag, until D6.1 retires its k8s arms. The own-tag-only outcome is
+      `system-upgrade` tag, until D6.12 retires its k8s arms. The own-tag-only outcome is
       refuted: artifacts' `known_services.json` names every entry. H6.1b therefore follows
       D1.2's procedure, as M4's PR 1 does:
         - Before the PR, run `uv run python scripts/deploy_tools/deploy_tags.py narrow
@@ -1457,7 +1457,7 @@ which journald does not store on these hosts, so it reads zero on every run.
   prune-exempt, and the operator deletes them by hand if the role is abandoned. The pin
   returns to `setup/k3s`. The revert removes the `system-upgrade` entry from
   `containers_list`. D2.1c records a removed Flux-born entry by its fields too, so the
-  revert reaches the same readers as H6.1b and no own tag. Before D6.1, the revert
+  revert reaches the same readers as H6.1b and no own tag. Before D6.12, the revert
   therefore follows H6.1b's narrow procedure: the recorded narrow output,
   D1.2's stop rule before the PR and before `land.sh`, and the same refusal exit.
 - **H6.1c:** the drill's own revert is part of the step.
@@ -1576,7 +1576,7 @@ which journald does not store on these hosts, so it reads zero on every run.
   four reader tags of `containers_list`, three of them `k8s_autodeploy: false` (*Steps*,
   H6.1b), and the deploy plane ignores that flag. The mitigation is D1.2's: a recorded
   narrow output, the stop rule before the PR and before `land.sh`, and its refusal exit.
-  The revert carries the same procedure. The risk ends at D6.1 (*Open questions* 11).
+  The revert carries the same procedure. The risk ends at D6.12 (*Open questions* 11).
 - **A Flux status that predates the apply.** The expressions close the race for a version
   change only. A selector-only change can post `success` on `flux/system-upgrade` before
   SUC runs a Job, so H6.3c, H6.3d and exit 1 verify by the node label instead.
@@ -1853,7 +1853,7 @@ which journald does not store on these hosts, so it reads zero on every run.
     entry, and its revert removes it. Settled by D2.1c, and the own-tag request is
     withdrawn. D2 refuses the own-tag mapping because the bare-entry render moves
     artifacts' `known_services.json` (D2 Open question 10). D2.1c instead records the entry
-    by its fields, so before D6.1 the deployer narrows either PR to the readers of those
+    by its fields, so before D6.12 the deployer narrows either PR to the readers of those
     fields: artifacts, blackbox-exporter, pihole and uptime-kuma at `a5abf8581`
     (*Steps*, H6.1b). Resolution: H6.1b and its revert record their narrow output and carry
     D1.2's stop rule and refusal exit over every tag it names. D2.1c's render census,

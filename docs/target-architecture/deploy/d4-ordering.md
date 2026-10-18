@@ -1344,13 +1344,13 @@ Each bound below says how long a PR can be reverted alone.
     hold and any other non-empty value as a hold, and C6 ends `land.sh`'s wait on a value
     other than `none`. D4's preconditions, its clear steps and its *Verification* follow
     that rule (*What `promote` reads*).
-12. **Does the cross-plane gate share D6.1's layout?** *The cross-plane gate* says that
+12. **Does the cross-plane gate share D6.12's layout?** *The cross-plane gate* says that
     `cross_plane_order.py` renders the cluster at the base and at the head, and names no
-    layout. D6.1 gives the renamed `render_diff_gates.py` a layout function for
+    layout. D6.12 gives the renamed `render_diff_gates.py` a layout function for
     `--moved-tags`. It runs `git archive <sha>` into a `moved-tags-` temporary directory
     outside the repository, and it runs each commit's own renderer with `uv run --frozen` and
     one commit value. Resolution, low priority: D4 adopts that function for its CI arms, or
-    accepts that D6.1 makes it the module's single layout, so that the CI gate and the
+    accepts that D6.12 makes it the module's single layout, so that the CI gate and the
     host-side mode cannot diverge. C1 replaces the `--moved-tags` mode with the `footprint`
     digests in `digests.json`, so the question covers only the gate's own two renders. D6's
     owner says whether a shared layout function survives that change.
@@ -1600,7 +1600,7 @@ Refuted: none.
 
 ### Cross-slice follow-up (2026-10-12)
 
-- Cross-slice note from D6: Open question 12 records D6.1's layout function as the
+- Cross-slice note from D6: Open question 12 records D6.12's layout function as the
   candidate layout for the cross-plane gate.
 
 ### Pillar review fold (2026-10-12)

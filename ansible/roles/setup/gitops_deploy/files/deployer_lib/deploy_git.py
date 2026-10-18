@@ -21,6 +21,91 @@ _CI_NO_VERDICT_CONCLUSIONS = frozenset(
     {"cancelled", "stale", "skipped_by_concurrency", None}
 )
 
+# DECIDED: the verdict readers apply the gate job's own rule to the jobs' check-runs when the gate
+# job has not concluded (#5507). The gate aggregates its `needs` in about 3 seconds but needs a
+# runner of its own: master run 39074978426 finished every real job at 22:39:45Z, and the gate then
+# sat queued past 22:51, so two landings gave up with `ci-timeout`. GitHub has no queue priority,
+# so creating the gate job earlier would not help. The gate job stays, for branch protection, and
+# a concluded gate is always believed. The rule lives in THIS module because it is the one module
+# both runtimes import: the deployer ships only its role's `files/`, so a rule under `scripts/`
+# would not exist on the host, while `scripts/deploy_tools/await_ci.py` already imports this file.
+# ENFORCED: `ansible/tests/repo/test_ci_jobs_verdict_matches_gate.py` holds the names below equal
+# to the gate's `needs` in .github/workflows/ci.yml and runs the gate's own script against
+# `jobs_verdict`.
+CI_GATE_NAME = "prek (lint + validate + tests + secrets)"
+# The check-run name of the `prove` job, whose `proven` output the gate reads.
+CI_PROVE_JOB = "prove the pushed tree was tested"
+# The check-run name of every other job in the gate's `needs`. GitHub names a matrix leg's
+# check-run after the leg, so each leg is listed.
+CI_GATE_NEEDS_JOBS = frozenset(
+    {
+        "hooks (lint + validate + secrets + docs)",
+        "pytest (shard 1 of 6)",
+        "pytest (shard 2 of 6)",
+        "pytest (shard 3 of 6)",
+        "pytest (shard 4 of 6)",
+        "pytest (shard 5 of 6)",
+        "pytest (shard 6 of 6)",
+        "ansible-lint",
+        "deck mod (claude plugin validate + test)",
+        "flux round trip (placeholder render against stub render)",
+        "sops-manifest-type-proof (an all-digit stringData value stays a string)",
+        "host_packages (24.04, 3.12)",
+        "host_packages (26.04, 3.14)",
+    }
+)
+
+
+def _run_state(run: dict) -> str:
+    """`pass` / `skipped` / `pending` / `fail` for one check-run."""
+    if run.get("status") != "completed":
+        return "pending"
+    conclusion = run.get("conclusion")
+    if conclusion == "success":
+        return "pass"
+    if conclusion == "skipped":
+        return "skipped"
+    if conclusion in _CI_NO_VERDICT_CONCLUSIONS:
+        return "pending"
+    return "fail"
+
+
+def jobs_verdict(check_runs: list[dict]) -> str:
+    """The gate job's own pass condition, applied to the check-runs of the jobs it aggregates.
+
+    Mirrors the `run:` script of the `prek` job in ci.yml. A job passes when it succeeded. A
+    skipped job passes only when `prove` succeeded and every dependent skipped: each dependent
+    carries `if: !cancelled() && needs.prove.outputs.proven != 'true'`, so a skip means `proven`
+    was true, and a check-run cannot show that output itself. `prove` is skipped on a run that
+    is not a push. Fail-closed: any failure is `fail`, a missing or unfinished job is
+    `pending`, and a skipped job without that proof is `pending`, so the gate job's own
+    conclusion decides it.
+    """
+    states: dict[str, set[str]] = {}
+    for run in check_runs:
+        name = run.get("name")
+        if name == CI_PROVE_JOB or name in CI_GATE_NEEDS_JOBS:
+            states.setdefault(name, set()).add(_run_state(run))
+    if any("fail" in s for s in states.values()):
+        return "fail"
+    prove = states.get(CI_PROVE_JOB)
+    if prove is None or "pending" in prove:
+        return "pending"
+    skipped = 0
+    for name in CI_GATE_NEEDS_JOBS:
+        job = states.get(name)
+        if job is None or "pending" in job:
+            return "pending"
+        if "skipped" in job:
+            skipped += 1
+    if not skipped:
+        return "pass"
+    # The proven path skips EVERY dependent. A lone skip beside a success is not a state the
+    # workflow produces, so it is not read as proof.
+    if prove == {"pass"} and skipped == len(CI_GATE_NEEDS_JOBS):
+        return "pass"
+    return "pending"
+
 
 def ci_verdict(check_runs: list[dict], required: frozenset[str] | set[str]) -> str:
     """Reduce GitHub's check-runs for ONE commit to `pass` / `pending` / `fail`.
@@ -35,6 +120,9 @@ def ci_verdict(check_runs: list[dict], required: frozenset[str] | set[str]) -> s
     outright failure makes the whole verdict `fail`, and a name that is missing, still running, or
     has only no-verdict conclusions holds the verdict at `pending`. Pending is the safe direction —
     the caller defers the tick and retries in 30 minutes.
+
+    The gate job's own name is the exception to "missing or still running is pending": while it
+    has not concluded, `jobs_verdict` decides from the jobs it aggregates (#5507).
     """
     if not required:
         return "pass"
@@ -52,6 +140,9 @@ def ci_verdict(check_runs: list[dict], required: frozenset[str] | set[str]) -> s
         else:
             state = "fail"
         states.setdefault(name, set()).add(state)
+    gate = states.get(CI_GATE_NAME, {"pending"})
+    if CI_GATE_NAME in required and "fail" not in gate and "pending" in gate:
+        states[CI_GATE_NAME] = {jobs_verdict(check_runs)}
     if any("fail" in s for s in states.values()):
         return "fail"
     # A name with no runs at all is a freshly-pushed SHA whose workflow hasn't registered yet.
