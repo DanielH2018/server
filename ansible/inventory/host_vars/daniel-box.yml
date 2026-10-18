@@ -646,6 +646,9 @@ containers_list:
   # and monitor-bridge's check_n8n rides the API-key route.
   - name: n8n
     platform: k8s
+    # Flux applies n8n through `promote`, and every Ansible path skips it (#5546). The
+    # handback is two PRs, `owner: released` then removing `owner`: docs/flux-deploy-plane.md.
+    owner: flux
     weekly_backup_claims: {n8n-data: 0, n8n-files: 5}  # Sun, Fri
     hostname: "n8n"
     port: 5678

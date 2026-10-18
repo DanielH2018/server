@@ -1,9 +1,8 @@
 """n8n's verify Job: prove the `n8n-broker` NetworkPolicy refuses a pod it does not name.
 
-Inert until n8n's flip: `templates/verify-inert/` holds the Job, and the flip PR moves it to
-`templates/verify/`, where the renderer emits it into `n8n-verify` (target slice D5, *A verify
-conversion lands as inert code*). It replaces the `n8n-netpol-probe` Job that `tasks/main.yml`
-applies, and keeps that probe's three legs:
+`templates/verify/` holds the Job, and the renderer emits it into `n8n-verify`, which Flux
+applies after `n8n` (target slice D5). It replaced the `n8n-netpol-probe` Job that
+`tasks/main.yml` applied until n8n's flip (#5546), and keeps that probe's three legs:
 
 - the control: `traefik:80` must answer, so a pod with no network cannot pass;
 - `n8n:<web port>` must refuse, or the pod skipped Authelia, CrowdSec and the rate-limit;
