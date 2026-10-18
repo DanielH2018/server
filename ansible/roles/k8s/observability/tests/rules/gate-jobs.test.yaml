@@ -1,0 +1,42 @@
+# promtool unit tests for files/rules/gate-jobs.yaml. Run with
+# `scripts/validate/alert_tools.sh promtool test rules <this file>`; the validate-alert-rules
+# hook runs it on every commit that touches the rules.
+#
+# The series carry the labels kube-state-metrics gives a Job: `namespace` and `job_name`.
+rule_files:
+  - ../../files/rules/gate-jobs.yaml
+evaluation_interval: 1m
+tests:
+  # One series per finished gate Job, labelled with its gate. Nothing for a gate Job still
+  # running (soak-ea9ed2c7 has no completion time), and nothing for a CronJob's Job
+  # (configarr), which is the red case for a widened name match.
+  - interval: 1m
+    input_series:
+      - series: 'kube_job_status_start_time{namespace="flux-system", job_name="soak-5602724c"}'
+        values: '1000x3'
+      - series: 'kube_job_status_completion_time{namespace="flux-system", job_name="soak-5602724c"}'
+        values: '1206x3'
+      - series: 'kube_job_status_start_time{namespace="flux-system", job_name="snapshot-sonarr-99f842a1"}'
+        values: '2000x3'
+      - series: 'kube_job_status_completion_time{namespace="flux-system", job_name="snapshot-sonarr-99f842a1"}'
+        values: '2010x3'
+      - series: 'kube_job_status_start_time{namespace="homelab", job_name="sonarr-verify-0e298cd8"}'
+        values: '3000x3'
+      - series: 'kube_job_status_completion_time{namespace="homelab", job_name="sonarr-verify-0e298cd8"}'
+        values: '3005x3'
+      - series: 'kube_job_status_start_time{namespace="flux-system", job_name="soak-ea9ed2c7"}'
+        values: '4000x3'
+      - series: 'kube_job_status_start_time{namespace="homelab", job_name="configarr-29340000"}'
+        values: '5000x3'
+      - series: 'kube_job_status_completion_time{namespace="homelab", job_name="configarr-29340000"}'
+        values: '5030x3'
+    promql_expr_test:
+      - expr: homelab:gate_job_duration_seconds
+        eval_time: 2m
+        exp_samples:
+          - labels: 'homelab:gate_job_duration_seconds{namespace="flux-system", job_name="soak-5602724c", gate="soak"}'
+            value: 206
+          - labels: 'homelab:gate_job_duration_seconds{namespace="flux-system", job_name="snapshot-sonarr-99f842a1", gate="snapshot"}'
+            value: 10
+          - labels: 'homelab:gate_job_duration_seconds{namespace="homelab", job_name="sonarr-verify-0e298cd8", gate="verify"}'
+            value: 5
