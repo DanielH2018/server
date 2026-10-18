@@ -2,7 +2,7 @@
 """observability's LAN-address rules name the Service and address each role renders.
 
 Each rule is its role's soak verify: it fires when kube-state-metrics reports no LoadBalancer
-ingress at the pinned VIP on the role's `-lan` Service. A rule file is never Jinja, so the
+ingress at the pinned VIP on the role's LoadBalancer Service. A rule file is never Jinja, so the
 namespace, the Service name and the address are literals in its selector. Move the VIP in
 group_vars, or rename the Service, and the rule fires on every revision while the workload is
 healthy. Drop the ingress family from the scrape and the rule reads the drop as a missing
@@ -27,6 +27,7 @@ _MATCHER = re.compile(r'(\w+)="([^"]*)"')
 RULES = [
     ("MosquittoLanAddressNotPinned", "mosquitto"),
     ("JellyfinLanAddressNotPinned", "jellyfin"),
+    ("PiholeLanAddressNotPinned", "pihole"),
 ]
 
 

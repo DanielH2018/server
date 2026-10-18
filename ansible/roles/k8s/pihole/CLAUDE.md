@@ -105,6 +105,18 @@ forms below replace.
   `wait: true`. A shared ConfigMap edit moves the restart annotation the renderer stamps on
   both instances, and instance 2 rolls only after instance 1 is Ready. `pihole-verify` depends on `pihole-deferred`, so the
   reconcile meets two Ready instances.
+- **The ready-endpoint check is deleted at the flip, with no successor.** `Verify both Pi-hole
+  instances have a ready DNS endpoint` counts the Ready pods behind `pihole-dns`. Under Flux,
+  `wait: true` on `pihole` holds instance 1 Ready and `wait: true` on `pihole-deferred` holds
+  instance 2 Ready. `pihole-dns` selects both by `app: pihole`, so two Ready Deployments are
+  two ready endpoints.
+- **The pinned-VIP assert becomes observability's `PiholeLanAddressNotPinned` rule.** The rule
+  reads `pihole-dns`'s LoadBalancer ingress from kube-state-metrics, at `warning` with
+  `verify="true"`, so the soak checks it on every revision. It lands while observability is
+  Ansible-owned, so the flip PR deletes the two LAN-address tasks without touching
+  observability. Its address is a literal, so moving `dns_k8s_vip` is an edit to that rule
+  too. `ansible/tests/services/test_lan_address_rules_agree.py` holds the literal to the
+  rendered Service.
 - **One check has no Flux form yet.** `roll_one.yml` refuses to roll an instance while its
   sibling is not Ready or is terminating. Under Flux, `pihole` rolls instance 1 whatever state
   instance 2 is in, and `pihole` cannot depend on `pihole-deferred` without a cycle (#5695).
