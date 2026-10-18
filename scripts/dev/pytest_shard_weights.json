@@ -148,6 +148,7 @@
  "ansible/roles/k8s/uptime-kuma/tests/test_status_page_sync_retry_budget.py": 0.07,
  "ansible/roles/setup/claude_code/tests/test_claude_triage_poll.py": 0.0,
  "ansible/roles/setup/claude_code/tests/test_claude_triage_run.py": 0.0,
+ "ansible/roles/setup/claude_code/tests/test_takeover_check_flux_selection.py": 0.7,
  "ansible/roles/setup/common/tests/test_host_lib.py": 0.01,
  "ansible/roles/setup/common/tests/test_host_lib_discord_spool.py": 0.01,
  "ansible/roles/setup/common/tests/test_kuma_push.py": 0.0,
