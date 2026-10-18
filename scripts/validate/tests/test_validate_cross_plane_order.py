@@ -15,6 +15,7 @@ from pathlib import Path
 import pytest
 
 from deploy_tools.object_loss import PRUNE_KEY, prune_disabled
+from deploy_tools.render_targets import render_targets
 from validate import cross_plane_order as gate
 from toposort import build_k8s_dep_map
 
@@ -419,8 +420,15 @@ def test_suspending_a_tag_in_the_same_pr_as_a_change_is_clean():
 def test_the_gates_own_snapshot_reads_digests_json(head_tree):
     """With no roles, as `render_side` calls it, `snapshot` still passes every render target
     with `--role`, so the bundle's `digests.json` is there to read. A render without `--role`
-    writes no bundle, and arm 5 would read no tag as suspended."""
-    snapshot = gate.snapshot(head_tree)
+    writes no bundle, and arm 5 would read no tag as suspended. The real target list is
+    narrowed to two of its tags: the `--role` contract holds per tag, and every tag cost 13s."""
+
+    def two_targets(*args):
+        found = render_targets(*args)
+        assert set(ROLES) <= set(found), found
+        return list(ROLES)
+
+    snapshot = gate.snapshot(head_tree, targets=two_targets)
     assert snapshot.digests["bento-pdf"]["suspended"] is False
     assert "authelia" in snapshot.renders
 

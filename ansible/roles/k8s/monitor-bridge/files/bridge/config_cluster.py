@@ -5,7 +5,7 @@ workload floors, Longhorn and the PVC fullness arm.
 
 Most of these are FLOORS rather than limits, and the comments beside them say what an absent
 series would otherwise read as. Field justifications sit beside the declarations, env var names
-beside the reads, and the values in `templates/env-secret.yaml.j2`. Composed into `Config` by `bridge/config.py`; imports nothing
+beside the reads, and the values in `templates/config/env.yaml.j2`. Composed into `Config` by `bridge/config.py`; imports nothing
 from it.
 """
 
@@ -108,7 +108,7 @@ def cluster_config(
         # was, which is the whole mechanism behind the blind restarts/oom/cpu checks fixed the
         # same day. A reviewer checking that finding against this comment would have cleared it,
         # so the stale half is corrected here rather than left to be re-derived.
-        # The deployed TARGETS_MIN is 1 (env-secret.yaml.j2), which matches that single job and
+        # The deployed TARGETS_MIN is 1 (config/env.yaml.j2), which matches that single job and
         # still fails closed: targets_verdict tests `len(vec) < min_targets`, so an empty vector
         # is 0 < 1 and reports UNKNOWN. A floor of 1 cannot detect a PARTIAL shortfall, but with
         # one expected series there is no partial case to detect.
@@ -273,7 +273,7 @@ def cluster_config(
         # pages. 2 GiB is etcd's OWN default and it is what is in force: `k3s_server_args`
         # (setup/k3s defaults) carries no `--etcd-arg=quota-backend-bytes`. Add one there and
         # this number moves with it, or the check measures against a quota the cluster does not
-        # have. Deployed value in monitor-bridge's env-secret.yaml.j2.
+        # have. Deployed value in monitor-bridge's config/env.yaml.j2.
         ETCD_DB_QUOTA_BYTES=_int("ETCD_DB_QUOTA_BYTES"),
         # 80%, in the PVC_MAX_PCT percent form rather than SNAPSHOT_CAP_WARN_RATIO's ratio.
         # The DB read 2.6% of the quota on 2026-09-25, so a breach is pathological growth rather

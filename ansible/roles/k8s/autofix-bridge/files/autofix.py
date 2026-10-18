@@ -22,7 +22,7 @@ Usage:
 The deployment runs it as the container command with no arguments, and it loops forever.
 `--once` runs a single cycle and exits. `-h` and `--help` print this text and exit 0.
 
-Environment (all optional; the deployment sets them from env-secret.yaml.j2):
+Environment (all optional; deployment.yaml.j2 sets them, the credentials from env-secret.yaml.j2):
 
     INTERVAL                   seconds between cycles (default 300)
     DRY_RUN                    true unless set to 0, false or no (default true)
@@ -46,7 +46,7 @@ from kuma_push import kuma_push
 
 INTERVAL = int(_env("INTERVAL", "300"))
 HEARTBEAT_FILE = _env("HEARTBEAT_FILE", "/tmp/heartbeat")
-# No default: the env-secret renders it from the uptime-kuma entry's port, the only source.
+# No default: deployment.yaml.j2 renders it from the uptime-kuma entry's port, the only source.
 KUMA_URL = _env("KUMA_URL", "").rstrip("/")
 KUMA_PUSH = _env("KUMA_PUSH_ARR_AUTOBLOCK", "")
 

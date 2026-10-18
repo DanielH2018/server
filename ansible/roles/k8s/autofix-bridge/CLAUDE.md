@@ -90,8 +90,10 @@ here must satisfy this summary.
   the pod. Under Flux the renderer's restart annotation (`RESTART_ANNOTATION` in
   `scripts/renderer/renderer_lib/restart.py`) hashes the ConfigMap into the pod template. `scripts/renderer/tests/test_renderer_autofix_bridge_script.py` holds both the
   embed and the checksum.
-- Manifests: `templates/deployment.yaml.j2`, `templates/env-secret.yaml.j2` and
-  `templates/script-configmap.yaml.j2`
+- Manifests: `templates/deployment.yaml.j2`, which carries every setting as an `env` value,
+  `templates/env-secret.yaml.j2`, which carries only the credentials, and
+  `templates/script-configmap.yaml.j2`. A setting never goes in the Secret: Flux's typed patch
+  reads a Secret's quoted `"300"` back as a number and refuses it (#5574).
 - The two fake-remux crons live in `ansible/roles/setup/fake_remux/files/`;
   `docs/autofix-bridge-actuators.md` carries the command that runs either by hand safely.
 - Tests: `uv run pytest ansible/roles/k8s/autofix-bridge/tests` and `uv run pytest

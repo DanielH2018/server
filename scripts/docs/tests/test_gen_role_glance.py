@@ -369,10 +369,8 @@ def test_a_hand_edited_block_is_flagged(tmp_path):
     assert g.stale_k8s_docs(write=False, estate=estate, k8s_roles=roles) == []
 
     doc = (dst / "CLAUDE.md").read_text()
-    assert '`--tags "sonarr"`' in doc
-    (dst / "CLAUDE.md").write_text(
-        doc.replace('`--tags "sonarr"`', '`--tags "sonar"`', 1)
-    )
+    assert "`--tags=sonarr`" in doc
+    (dst / "CLAUDE.md").write_text(doc.replace("`--tags=sonarr`", "`--tags=sonar`", 1))
     assert g.stale_k8s_docs(write=False, estate=estate, k8s_roles=roles) == [
         "k8s/sonarr"
     ]

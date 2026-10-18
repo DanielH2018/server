@@ -84,6 +84,7 @@ from findings_lib.tracked_paths import tracked_files
 from fanout_lib.review.api import review_flags
 from fanout_lib.launch_gates import (
     live_elsewhere,
+    live_by_host,
     over_live_batch_cap,
     over_ssh_budget,
     refuse_shared_files,
@@ -122,10 +123,12 @@ HEALTH_CMD = (
 )
 
 
-def _readings(tools: Tools, hosts):
+def _readings(tools: Tools, hosts, root=None):
+    """Read each host's headroom; the unit states of `root`'s batches ride it (#5506)."""
+    live = live_by_host(root) if root else {}
     good, bad = [], []
     for host in hosts:
-        r = read_host(tools, host)
+        r = read_host(tools, host, [b for _, b in live.get(host, [])])
         (bad if isinstance(r, str) else good).append(r)
     return good, bad
 
@@ -217,7 +220,7 @@ def cmd_launch(args, tools: Tools) -> int:
         error(f"{registered} — refusing to launch")
         return FANOUT_PLACE_NO_SIGNING_HOST
     hosts = [args.host] if args.host else list(HOSTS)
-    good, bad = _readings(tools, hosts)
+    good, bad = _readings(tools, hosts, args.manifest_root)
     for msg in bad:
         warn(f"placing without {msg}")
     if not good:
@@ -236,9 +239,7 @@ def cmd_launch(args, tools: Tools) -> int:
     except NoHeadroom as exc:
         error(str(exc))
         return FANOUT_PLACE_NOTHING_PLACED
-    if over_ssh_budget(placed) or over_live_batch_cap(
-        placed, args.manifest_root, tools, this_host()
-    ):
+    if over_ssh_budget(placed) or over_live_batch_cap(placed, args.manifest_root, good):
         return FANOUT_PLACE_NOTHING_PLACED
     # Only the hosts a batch landed on. Reading every host placement looked at spends an ssh
     # connection (`ufw limit ssh` allows 5 per 30s) on a host the signing gate or a failed

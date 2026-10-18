@@ -1,4 +1,5 @@
 ---
+# Flux applies radarr (D5.20), and no Ansible path reaches this file; it stays for the handback.
 - name: Deploy radarr to the cluster
   ansible.builtin.include_role:
     name: k8s/manifests
@@ -8,6 +9,8 @@
 
 # The Discord Connect notification is a row in radarr.db, not a manifest — live state a
 # Longhorn revert or a recreated claim drops silently. roles/k8s/arr-notification declares it.
+# Under Flux the seed Job in templates/verify/notification.yaml.j2 runs the same script; this
+# include is the Ansible path a handback restores.
 - name: Declare radarr's Discord notification
   tags: [deploy]
   ansible.builtin.include_role:

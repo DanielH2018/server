@@ -1,8 +1,7 @@
-"""sonarr's inert verify Job: its script fails each broken library, and its render passes the census.
+"""sonarr's verify Job: its script fails each broken library, and its render passes the census.
 
-The render tests copy the sonarr role, move `templates/verify-inert/` to `templates/verify/` as
-the flip PR will, and render the copy, so the Job is checked as Flux will receive it while the
-tree's own render still emits no `sonarr-verify`. The script tests run the rendered ConfigMap's
+The render tests render the role's `templates/verify/` through `render_tag`, so the Job is
+checked as Flux receives it in `sonarr-verify`. The script tests run the rendered ConfigMap's
 two files, the script and its `flux_job_connect.py` copy, as the Job's container runs them,
 against a local HTTP server that answers like sonarr's API. The plan is
 docs/target-architecture/deploy/d5-bulk-move.md, *A verify conversion lands as inert code*.
@@ -12,7 +11,6 @@ Run: uv run pytest ansible/roles/k8s/sonarr/tests/test_sonarr_verify.py
 
 import json
 import re
-import shutil
 import subprocess
 import sys
 import threading
@@ -45,12 +43,9 @@ def stubs(tmp_path_factory):
     return load_stubs(path)
 
 
-def _flip(roles, stubs, overrides=None) -> list[dict]:
-    """The `sonarr-verify` documents a copy of the role renders once its Job leaves `verify-inert/`."""
-    shutil.copytree(K8S_ROLES / TAG, roles / TAG)
-    templates = roles / TAG / "templates"
-    (templates / "verify-inert").rename(templates / "verify")
-    rendered = cluster.render_tag(TAG, {**stubs, **(overrides or {})}, roles=roles)
+def _flip(stubs, overrides=None) -> list[dict]:
+    """The `sonarr-verify` documents the role renders."""
+    rendered = cluster.render_tag(TAG, {**stubs, **(overrides or {})})
     return [
         doc
         for name, text in sorted(rendered.verify.items())
@@ -61,8 +56,8 @@ def _flip(roles, stubs, overrides=None) -> list[dict]:
 
 
 @pytest.fixture(scope="module")
-def flipped(stubs, tmp_path_factory) -> list[dict]:
-    return _flip(tmp_path_factory.mktemp("roles"), stubs)
+def flipped(stubs) -> list[dict]:
+    return _flip(stubs)
 
 
 def _job(docs: list[dict]) -> dict:
@@ -206,10 +201,6 @@ def test_an_answer_that_is_not_a_list_fails_the_job(script_dir):
     assert "answered with JSON that is not a list" in result.stderr
 
 
-def test_the_tree_renders_no_sonarr_verify_while_ansible_owns_sonarr(stubs):
-    assert cluster.render_tag(TAG, stubs).verify == {}
-
-
 def test_the_flipped_job_passes_every_job_census_row(flipped):
     assert sorted(doc["kind"] for doc in flipped) == [
         "ConfigMap",
@@ -306,9 +297,7 @@ def test_a_secret_sonarr_does_not_render_is_flagged(flipped, stubs):
 def test_a_deployment_change_renames_the_job(stubs, tmp_path):
     """A new sonarr image changes the Deployment, so Flux runs the renamed Job again."""
     names = [
-        _job(_flip(tmp_path / str(n), stubs, {"sonarr_k8s_image": image}))["metadata"][
-            "name"
-        ]
+        _job(_flip(stubs, {"sonarr_k8s_image": image}))["metadata"]["name"]
         for n, image in enumerate(
             ("lscr.io/linuxserver/sonarr:4.0.20", "lscr.io/linuxserver/sonarr:4.0.21")
         )
@@ -320,11 +309,11 @@ def test_the_staged_job_reads_no_other_roles_file():
     """The helper and the image come from `render_tag`, never a lookup into another role.
 
     The deployer redeploys a role when a file it `lookup()`s in another role changes, and its
-    scan reads `verify-inert/` too. tdarr's test has the same guard and its red case.
+    scan reads `templates/verify/` too. tdarr's test has the same guard and its red case.
     `notification.yaml.j2` is arr-notification's seed Job, and its lookups into that role are
     deliberate: arr-notification's own test_seed_job.py pins them.
     """
-    staged = sorted((K8S_ROLES / TAG / "templates" / "verify-inert").glob("*.j2"))
+    staged = sorted((K8S_ROLES / TAG / "templates" / "verify").glob("*.j2"))
     assert [p.name for p in staged] == [
         "job.yaml.j2",
         "notification.yaml.j2",

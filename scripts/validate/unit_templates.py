@@ -77,6 +77,7 @@ from pathlib import Path as _Path
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 
 from validate.validate_lib.ok_lines import ok_printer
+from lib.cli_help import answer_help
 from lib.ansible_jinja_env import template_env
 from lib.render_context import render_context
 from renderer.renderer_lib import host as host_mode
@@ -398,6 +399,7 @@ def main(argv: Sequence[str] = ()) -> int:
         clean or was skipped, 1 otherwise (including when systemd-analyze is missing from PATH
         or no unit templates were found).
     """
+    answer_help(__doc__, list(argv))
     ok = ok_printer(argv)
     systemd_analyze_bin = shutil.which("systemd-analyze")
     if not systemd_analyze_bin:

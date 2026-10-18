@@ -11,7 +11,7 @@ from _bridge_env import bridge_env
 def cfg():
     """The configuration a check runs under, built from the env the pod gets.
 
-    `_bridge_env.bridge_env()` renders `templates/env-secret.yaml.j2`, so every field holds the
+    `_bridge_env.bridge_env()` renders the pod's environment from `templates/`, so every field holds the
     deployed value: `bridge/config*.py` carries no second default for a rendered key (#3659). A
     test that needs a different value narrows this with `dataclasses.replace(cfg, X=...)`, and
     one that is about the READ itself — a malformed number, a derived field, a `_FILE`-mounted

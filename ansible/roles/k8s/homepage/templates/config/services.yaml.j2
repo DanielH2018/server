@@ -224,7 +224,7 @@
         # These three therefore address the ClusterIP directly, which bypasses Traefik and
         # Authelia entirely and leaves `monitoring_route` (ansible/templates/ingressroute.yml.j2)
         # as narrow as it was. Same URL shape monitor-bridge already uses
-        # (roles/k8s/monitor-bridge/templates/env-secret.yaml.j2).
+        # (roles/k8s/monitor-bridge/templates/config/env.yaml.j2).
         #
         # Reaching a ClusterIP is pod → pod, so each target's NetworkPolicy must admit
         # `app: homepage` on that port. `homepage_widget: true` on each entry does that, through

@@ -400,7 +400,7 @@ found and the tree still had. An entry that no longer matched failed the check, 
 shrank only through fixes, and PR 9 deleted it once it was empty. Admitting a violation now
 means changing the rule itself. R2's PRs 6 and 7 removed rule 4 on pi-peer-backup's and authelia's Secrets and rule 5's
 `indent`s on their keys, by moving each key into a Secret of its own. R2's PR 4 removed qbittorrent's two `trim`s and
-mosquitto's `string`, and mosquitto's deploy refuses a stored hash that holds a colon.
+mosquitto's `string`, and `cluster_vars.py write` refuses a stored hash that holds a colon.
 R2's PR 5 removed Home Assistant's two entries, the `from_json` parse and
 the Secret that embedded its output through `indent`. R2's PR 3 removed the 24 truthiness
 tests, each now `{% if K is defined %}`. Domain PR 2b removed the `hash('sha1')` on

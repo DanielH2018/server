@@ -9,7 +9,7 @@ k8s_autodeploy_reason: "renders no manifest and starts no workload — a shared 
 
 # The caller passes arr_notification_app (sonarr | radarr). Everything below has a default.
 #
-# The seed Job in sonarr's and radarr's templates/verify-inert/notification.yaml.j2 reads
+# The seed Job in sonarr's and radarr's templates/verify/notification.yaml.j2 reads
 # arr_notification_name, arr_notification_triggers and arr_notification_include_health_warnings
 # from this file as YAML, so those three stay literals. A Jinja value would reach the Job as text.
 
