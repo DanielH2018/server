@@ -21,8 +21,9 @@ from pathlib import Path as _Path
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 
 import ast
+import functools
 import tomllib
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from pathlib import Path
 
 __all__ = ["import_graph", "is_test_file"]
@@ -100,14 +101,14 @@ def _path_expr(node: ast.AST, path: Path) -> Path | None:
     return None
 
 
-def _path_inserts(tree: ast.AST, path: Path) -> list[Path]:
-    """The directories `path` puts on `sys.path` itself, in source order."""
+def _path_inserts(nodes: list[ast.AST], path: Path) -> list[Path]:
+    """The directories `path` puts on `sys.path` itself, in source order, from its walked nodes."""
     # DECIDED: an insert whose argument is a name (`GITOPS_DEPLOY_FILES`, `HOST_LIB_FILES`,
     # `FILTER_PLUGINS`) is skipped rather than evaluated. Every such insert in the tree points
     # outside `scripts/`, or at `scripts/` itself, which `_roots` already covers. An import only
     # such an insert explains resolves outside the tree, so it credits nothing here (#3038).
     found: list[Path] = []
-    for node in ast.walk(tree):
+    for node in nodes:
         if not (
             isinstance(node, ast.Call)
             and isinstance(node.func, ast.Attribute)
@@ -155,7 +156,7 @@ def _roots(path: Path, scripts: Path) -> list[Path]:
     return roots
 
 
-def _head(dotted: str, roots: list[Path], scripts: Path) -> str:
+def _head(dotted: str, roots: Sequence[Path], scripts: Path) -> str:
     """The module stem an absolute import names, from the first root that holds it.
 
     A root outside `scripts/` that holds the module means the import resolves there, so it
@@ -169,7 +170,7 @@ def _head(dotted: str, roots: list[Path], scripts: Path) -> str:
     return ""
 
 
-def _package(dotted: str, roots: list[Path], scripts: Path) -> Path | None:
+def _package(dotted: str, roots: Sequence[Path], scripts: Path) -> Path | None:
     """The package directory under `scripts/` a dotted module part names, if any root holds it."""
     for root in roots:
         package = root.joinpath(*dotted.split("."))
@@ -187,24 +188,31 @@ def import_graph(scripts: Path, keep: Callable[[Path], bool]) -> dict[str, set[s
     """
     stems = {p.stem for p in _all_py(scripts)}
     pythonpath = _pytest_pythonpath(scripts)
+    # Memoised for this call only: most imports name a few shared modules from the same roots,
+    # and each answer is a chain of stat calls. A later call, such as a test's on an edited
+    # synthetic tree, resolves afresh.
+    head_of = functools.cache(lambda dotted, roots: _head(dotted, roots, scripts))
+    package_of = functools.cache(lambda dotted, roots: _package(dotted, roots, scripts))
     found: dict[str, set[str]] = {}
     for path in _all_py(scripts):
         if not keep(path):
             continue
         try:
-            tree = ast.parse(path.read_text())
+            # One walk serves both scans below: walking the tree is most of the cost.
+            nodes = list(ast.walk(ast.parse(path.read_text())))
         except SyntaxError, ValueError, UnicodeDecodeError:
             continue
         # `_roots` first, then what the file puts on `sys.path` itself, then, for a test,
         # pytest's `pythonpath`. An import none of them explains resolves outside `scripts/`
         # (the stdlib, a role's `files/`) and credits nothing: matching on the bare name
         # credited `scripts/docs/reference/secrets.py` with `import secrets`.
-        roots = _roots(path, scripts) + _path_inserts(tree, path)
+        roots = _roots(path, scripts) + _path_inserts(nodes, path)
         if is_test_file(path):
             roots += pythonpath
-        for node in ast.walk(tree):
+        roots = tuple(roots)
+        for node in nodes:
             if isinstance(node, ast.Import):
-                names = [_head(alias.name, roots, scripts) for alias in node.names]
+                names = [head_of(alias.name, roots) for alias in node.names]
             elif isinstance(node, ast.ImportFrom):
                 # A relative import resolves against the package directory `node.level` says,
                 # and against nothing else. `from .citations import Citation` in
@@ -226,12 +234,12 @@ def import_graph(scripts: Path, keep: Callable[[Path], bool]) -> dict[str, set[s
                 elif not node.module:
                     names = []
                 else:
-                    head = _head(node.module, roots, scripts)
+                    head = head_of(node.module, roots)
                     # `from diagnostics.probe_lib import core` names only directories in the
                     # module part, so the modules imported are the aliases, and only the ones
                     # that directory holds: `from ansible.plugins.filter import core` names no
                     # script, whatever else under `scripts/` is called `core.py`.
-                    package = None if head else _package(node.module, roots, scripts)
+                    package = None if head else package_of(node.module, roots)
                     names = (
                         [head]
                         if head
