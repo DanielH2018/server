@@ -105,3 +105,13 @@ def test_a_manifests_test_beside_the_guard_map_still_narrows_to_the_moved_row(
         GUARD_ROWS.replace('"radarr_api_key"', '"radarr_api_key", "radarr_push"'),
     )
     assert _narrow(tree, *_refs(tree)) == {"radarr"}
+
+
+def test_a_manifests_task_edit_beside_a_guard_map_row_keeps_every_caller(tree: Tree):
+    """A non-test `manifests` path changes what every caller runs, so the row rule must not
+    narrow the range to the one moved row."""
+    tree.write("ansible/roles/k8s/manifests/tasks/main.yml", "- debug: {msg: x}\n")
+    tree.write(
+        GUARD_MAP, GUARD_ROWS.replace("{\n", '{\n  "bazarr": ["bazarr_api_key"],\n')
+    )
+    assert str(_narrow(tree, *_refs(tree))).startswith("refused:")
