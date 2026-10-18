@@ -7,13 +7,11 @@ and contract unchanged.
 
 ## At a glance
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates, tasks or containers_list entry, or the k3s role's Longhorn tier lists. -->
-- **Deploy tag:** `--tags "autofix-bridge"`
+- **Applied by:** Flux, through `promote` (`owner: flux`); `deploy.sh` refuses
+  `--tags=autofix-bridge` with exit 5
 - **Image:** `python` (`autofix_bridge_k8s_image`)
 - **Route:** none (no `templates/ingressroute.yaml.j2`)
 - **Claims:** none (no PVC)
-- **Auto-deploy:** denylisted (`k8s_autodeploy: false`) — observability — auto-remediation
-  loop; a broken deploy silently stops fixing arr issues. ALSO no readinessProbe (probe-less) —
-  two independent reasons
 <!-- /generated_from -->
 
 - **Stdlib only**, no web UI, no Authelia
@@ -22,6 +20,24 @@ and contract unchanged.
 - **Reaches:** `sonarr:8989` and `radarr:7878` (queue read, blocklist and search writes),
   uptime-kuma at its entry's `port` (push), and the *arr Discord webhook
 - **Depends on:** sonarr, radarr and uptime-kuma, at runtime
+- **Flux applies it, not Ansible** (D5.19, the first Wave D PR). Its `containers_list` entry
+  carries `owner: flux`, so `deploy.sh`, the play and the GitOps deployer all skip it, and a
+  merged change reaches the cluster when `promote` publishes and verifies the next bundle. To
+  give it back to Ansible, follow the two-PR handback in `docs/flux-deploy-plane.md`; a plain
+  revert of the flag leaves two writers on the objects. The Deployment is `Recreate` with one
+  replica, so a roll stops the loop until the new pod starts. It has no readinessProbe, so the
+  Kustomization's `wait` reads the pod Ready as soon as its container starts, as the Ansible
+  rollout wait did.
+- **The env Secret substitutes from `homelab-cluster-vars`.** The Kuma push token, the
+  Discord webhook and the two *arr API keys are `${<key>}` placeholders in the published
+  render. Flux substitutes the values from the `homelab-cluster-vars` Secret, which it
+  decrypts from `ansible/vars/cluster-vars.sops.env`. The Kustomization depends on
+  `cluster-vars`, so a rotated value is live before autofix-bridge reconciles, and the restart
+  checksum rolls the pod. A rotation reaches the cluster only through `cluster_vars.py write`.
+- **Where the task went.** `tasks/main.yml` holds one task, the include of `k8s/manifests`
+  with `manifests_rollout: autofix-bridge`, and no Flux path runs it. It stays for the
+  handback. The Kustomization's `wait` replaces the rollout wait, and the restart checksum
+  replaces the shared restart.
 
 ## Autonomous-role contract (it changes state with no human in the loop)
 This is a **change-producing autonomous role**, so its authority is written down and a change
@@ -33,7 +49,8 @@ here must satisfy this summary.
   empties the queue rather than filling it with errors.
 - **Mode (per actuator, explicit + reversible):** sidecar `DRY_RUN` (live) and fake-remux
   `FAKE_REMUX_REPLACE_MODE` (off/shadow/live, run `live` by host_vars). Returning either
-  plane to report-only is one env flip and a redeploy — preserve that.
+  plane to report-only is one env flip, merged (the sidecar's reaches the pod through
+  `promote`) or deployed (fake-remux's through its setup role) — preserve that.
 - **Authoritative sources:** the *arr `/api/v3/queue` and ffprobe truth, never a cached
   guess.
 - **Abort valves:** `GRACE_CYCLES`, plus `MAX_ACTIONS_PER_CYCLE` / `MAX_PER_SCAN` — a mass
