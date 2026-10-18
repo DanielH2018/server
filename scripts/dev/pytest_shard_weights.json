@@ -1131,7 +1131,6 @@
  "scripts/docs/tests/test_service_catalog.py": 0.0,
  "scripts/grafana/tests/test_export_grafana_dashboards.py": 0.0,
  "scripts/grafana/tests/test_fetch_grafana_dashboards.py": 0.0,
- "scripts/grafana/tests/test_inject_dashboard_annotations.py": 0.0,
  "scripts/home_assistant/tests/test_ha_state_checks.py": 0.46,
  "scripts/home_assistant/tests/test_ha_state_model.py": 0.38,
  "scripts/home_assistant/tests/test_validate_ha_config.py": 0.73,

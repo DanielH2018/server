@@ -11,3 +11,6 @@
 
 - name: Media-volume's media directories
   ansible.builtin.import_tasks: media-volume.yml
+
+- name: Observability's retired dashboard staging trees
+  ansible.builtin.import_tasks: observability.yml

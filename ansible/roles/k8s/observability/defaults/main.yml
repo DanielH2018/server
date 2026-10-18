@@ -181,30 +181,58 @@ observability_tempo_cluster_ip: 10.43.4.147
 # 744h (31d). Retention matters more here than in a normal log store: every prompt and
 # response is retained verbatim for this window.
 observability_loki_retention: 744h
-# Dashboard folders. These are the subdirectories of roles/k8s/observability/files/dashboards,
-# which is the single source of truth for the JSON.
-# DECIDED: this list has no folder-level prune, and that is deliberate (operator 2026-08-28).
-# Dropping a name here removes the folder's volume and volumeMount from grafana.yaml.j2 (both
+# Dashboard folders, each with the boards it provisions. The folders are the subdirectories of
+# roles/k8s/observability/files/dashboards, which is the single source of truth for the JSON.
+# templates/grafana-dashboards.yaml.j2 renders one ConfigMap per folder holding the boards listed
+# here, so a board on disk that is not listed reaches no Grafana, and a listed board with no file
+# fails the render. ansible/tests/services/test_dashboard_configmaps.py holds the lists to the
+# files, and names the entry a new board needs.
+# DECIDED: this map has no folder-level prune, and that is deliberate (operator 2026-08-28).
+# Dropping a folder here removes its volume and volumeMount from grafana.yaml.j2 (both
 # rendered by `{% for folder in observability_dashboard_folders %}`, at the volumeMounts and volumes
-# blocks) but leaves the staged dir, the annotated dir and the live grafana-dashboards-<folder>
-# ConfigMap behind. That orphan is INERT: the mount is by explicit per-folder volume name, so an
-# unlisted ConfigMap is never mounted and never reaches Grafana. Adding a prune would trade an
-# inert orphan for deletion behaviour that can remove a live ConfigMap — a worse failure than the
-# one it closes, and the reason the 2026-08-28 review's fix-skeptic pass rejected it. Reopen only
-# with a case where the orphan is reachable, not merely present.
+# blocks) but leaves the live grafana-dashboards-<folder> ConfigMap behind. That orphan is INERT:
+# the mount is by explicit per-folder volume name, so an unlisted ConfigMap is never mounted and
+# never reaches Grafana. Adding a prune would trade an inert orphan for deletion behaviour that
+# can remove a live ConfigMap — a worse failure than the one it closes, and the reason the
+# 2026-08-28 review's fix-skeptic pass rejected it. Reopen only with a case where the orphan is
+# reachable, not merely present.
 observability_dashboard_folders:
-  - AI
-  - Apps
-  - Infrastructure
-  - Logs
-  - Networking
-  - Security
+  AI:
+    - claude-code-host-cgroups.json
+    - claude-code-pipeline-health-cost-by-host.json
+    - claude-code-usage-observability.json
+  Apps:
+    - exportarr-arr-stack.json
+    - home-assistant-overview.json
+    - speedtest-tracker.json
+    - terraria-player-stats.json
+    - uptime-kuma-monitors.json
+    - valheim-player-stats.json
+  Infrastructure:
+    - alert-history.json
+    - docker-and-system-monitoring.json
+    - hardware-thermal.json
+    - landings.json
+    - longhorn-storage.json
+    - node-exporter-full.json
+    - ups-power-battery.json
+  Logs:
+    - logs.json
+    - loki-internals.json
+  Networking:
+    - traefik-custom.json
+  Security:
+    - crowdsec-details-per-machine.json
+    - crowdsec-insight.json
+    - crowdsec-overview.json
+    - lapi-metrics.json
 
 # ── deploy annotations ────────────────────────────────────────────────────────────────────────
 # Host-side deploys are recorded as syslog lines (deploy_lib/playbook.annotate and
 # deployer_lib/deploy_io.py both call `logger`), and a Flux promotion as a line the soak Job
 # prints. Alloy ships both to loki-homelab, and every dashboard gets one annotation query per
-# source injected at deploy time by scripts/grafana/inject_dashboard_annotations.py. No Grafana API call, so no pinned ClusterIP and
+# source injected at render time by the grafana_deploy_annotated filter
+# (ansible/filter_plugins/grafana_dashboards.py). No Grafana API call, so no pinned ClusterIP and
 # no standing write credential — see the emit_deploy_annotation comments.
 #
 # The uid MUST equal the `loki-homelab` datasource uid in templates/grafana.yaml.j2. A wrong one

@@ -131,7 +131,10 @@ def register_ansible_filters(env: Environment) -> Environment:
     through ``weekly_backup_group``, which raises on a shard outside 0-6, and the restore drill
     names the label prefix, the opt-out group and the B2 target through ``longhorn_backup_name``.
     The flux role fits its vendored install to the workload guards through ``flux_components``,
-    which raises on a Deployment volume it has no rename for. Registering the real ones makes
+    which raises on a Deployment volume it has no rename for. observability's dashboard
+    ConfigMaps inject the deploy-annotation queries into each board through
+    ``grafana_deploy_annotated``, which raises on a board that is not a JSON object.
+    Registering the real ones makes
     those failures reach the guard.
 
     ``homelab_role_label`` is the filter ``ansible/templates/role-labelled.yaml.j2`` stamps
@@ -158,6 +161,7 @@ def register_ansible_filters(env: Environment) -> Environment:
         _sys.path.insert(0, str(FILTER_PLUGINS))
     from authelia_access import authelia_service_rules
     import flux_components
+    import grafana_dashboards
     from entry_fields import entry_names, lan_hostnames, published_ports
     import homepage_tiles
     import kuma_monitors
@@ -209,6 +213,9 @@ def register_ansible_filters(env: Environment) -> Environment:
     env.filters["metrics_port"] = scrape_filters["metrics_port"]
     env.filters["entry_port"] = scrape_filters["entry_port"]
     env.filters["py_table"] = py_table.FilterModule().filters()["py_table"]
+    env.filters["grafana_deploy_annotated"] = (
+        grafana_dashboards.FilterModule().filters()["grafana_deploy_annotated"]
+    )
     env.filters["homelab_role_label"] = role_label.FilterModule().filters()[
         "homelab_role_label"
     ]

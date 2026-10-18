@@ -182,14 +182,23 @@ that are written twice. `docs/observability-dashboards.md` has each rule in full
 
 ## Dashboards
 
-`files/dashboards/**/*.json` is the source of truth for every board, in the folders
-`observability_dashboard_folders` lists. To change one: edit the JSON, or edit it in the UI and
-round-trip with `scripts/grafana/export_grafana_dashboards.py`, then deploy
-**observability**. Three editing rules each otherwise leave a green deploy behind a blank board:
-a board in an unlisted folder is provisioned nowhere; a hand-edited board must stay in the
-writers' form; every datasource ref must resolve to a uid `templates/grafana.yaml.j2` declares.
-Two tests and the `validate-grafana-dashboards` prek hook enforce them. Read the dashboards
-page first.
+`files/dashboards/**/*.json` is the source of truth for every board, in the folders and board
+lists `observability_dashboard_folders` holds. To change one: edit the JSON, or edit it in the
+UI and round-trip with `scripts/grafana/export_grafana_dashboards.py`, then deploy
+**observability**. A new board file also needs its name under its folder in that map. Three
+editing rules each otherwise leave a green deploy behind a blank board: a board in an unlisted
+folder is provisioned nowhere; a hand-edited board must stay in the writers' form; every
+datasource ref must resolve to a uid `templates/grafana.yaml.j2` declares. Three tests and the
+`validate-grafana-dashboards` prek hook enforce them. Read the dashboards page first.
+
+**The dashboard ConfigMaps are a render.** `templates/grafana-dashboards.yaml.j2` renders one
+per folder and passes each board through the `grafana_deploy_annotated` filter, which adds the
+two deploy-annotation queries. The file is in `manifests_exclude_files`, because the shared
+role's client-side apply cannot carry the Infrastructure folder past the 262144-byte annotation
+cap. `tasks/dashboards.yml` renders it into its own directory and applies it server-side. The
+flip PR drops the exclusion, so the file joins the `observability` bundle, and deletes
+`tasks/dashboards.yml`. `ansible/tests/services/test_dashboard_configmaps.py` renders that
+flipped copy and holds every ConfigMap under the 1 MiB object cap.
 
 ## The trap: an idle stack is indistinguishable from a broken one
 
