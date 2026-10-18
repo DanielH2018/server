@@ -476,7 +476,8 @@ with it; the `-m ui` tests for those three mint their own the same way. Neither 
 only for the headless browser, and both of its credentials — `authelia_claude_password` and
 `authelia_claude_totp_secret` — are SOPS values, so `ui_login.py` derives the code rather than
 reading one off a phone. The TOTP registration is seeded into Authelia's SQLite database by the
-role's own deploy (`authelia storage user totp generate`), not templated.
+authelia pod's `seed-claude-totp` init container (`authelia storage user totp generate`), not
+templated.
 
 Deriving a code puts the second factor under the same age key as the first. The dedicated
 identity makes that acceptable: the operator's enrollment is untouched, revoking Claude's reach

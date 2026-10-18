@@ -6,7 +6,9 @@
   tags: [config]
   # The role default is an empty stand-in, so a cluster that manages this user and does NOT
   # hold the SOPS value resolves it to '' rather than failing on an undefined name. Without
-  # this assert the seeding task below registers an empty TOTP secret, behind a green recap.
+  # this assert the `seed-claude-totp` init container in templates/deployment.yaml.j2 registers
+  # an empty TOTP secret, behind a green recap. After D5's flip for authelia this task stops
+  # running, and `cluster_vars.py write` refusing an empty substituted value is its successor.
   ansible.builtin.assert:
     that:
       - authelia_claude_totp_secret | default('') | length > 0
@@ -146,44 +148,3 @@
     manifests_extra_rollouts: >-
       {{ [{'name': 'authelia-redis', 'restart_on': []}]
          if authelia_k8s_redis_sessions | bool else [] }}
-
-# TOTP registrations live in Authelia's SQLite database, not in the rendered
-# users_database.yml, so `claude-ui`'s second factor cannot be templated with the rest of
-# the user. It is seeded through Authelia's own CLI against the running pod instead.
-- name: Wait for Authelia to be rolled out before seeding the claude-ui TOTP
-  tags: [config]
-  ansible.builtin.command:
-    cmd: >-
-      k3s kubectl -n {{ k8s_namespace }} rollout status deploy/authelia --timeout=300s
-  become: true
-  changed_when: false
-  # A read of rollout state, but `rollout status` blocks on a Deployment a no-mutation run
-  # never created, so it stays out of one. 300s is this tree's default inline-gate budget.
-  when: authelia_k8s_manage_claude_user | bool and not (k8s_no_mutate | bool)
-
-- name: Seed the claude-ui TOTP registration
-  tags: [config]
-  # Re-seeded on every deploy with --force rather than guarded by a read-back. The secret is
-  # fixed in SOPS, so the row this writes is identical each run — idempotent in effect, and
-  # `changed_when: false` says so. The alternative, `authelia storage user totp export`,
-  # would print live TOTP secrets into the Ansible output to decide whether to skip.
-  #
-  # --config, not --encryption-key: the pod's own configuration.yml already names the SQLite
-  # path and the storage encryption key, so neither reaches argv here. The shared secret
-  # still must — `--secret` has no file or env form — so it arrives on stdin and is expanded
-  # by the in-pod shell, the same shape as the mint command in docs/secret-rotation.md.
-  #
-  # The three TOTP parameters are stated rather than left to the CLI defaults. ui_login.py
-  # derives its codes from the same three constants, and a default that moved in a later
-  # Authelia would put the two out of step with nothing but a rejected login to say so.
-  ansible.builtin.command:
-    cmd: >-
-      k3s kubectl -n {{ k8s_namespace }} exec -i deploy/authelia -c authelia --
-      sh -c 'IFS= read -r s; authelia storage user totp generate {{ authelia_k8s_claude_user }}
-      --config /secrets/configuration.yml --secret "$s" --force
-      --algorithm SHA1 --digits 6 --period 30'
-    stdin: "{{ authelia_claude_totp_secret }}"
-  become: true
-  changed_when: false
-  no_log: true
-  when: authelia_k8s_manage_claude_user | bool and not (k8s_no_mutate | bool)

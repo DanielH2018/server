@@ -157,10 +157,10 @@ authelia_k8s_claude_groups:
 #
 # The TOTP row lives in Authelia's SQLite database (a PVC), not in the rendered
 # users_database.yml — Authelia keeps registrations there whatever the authentication
-# backend is. So it is seeded by `authelia storage user totp generate` against the running
-# pod rather than templated, and re-seeded on every deploy with `--force`: the secret is
-# fixed in SOPS, so the row it writes is byte-identical each time and the task is
-# idempotent in effect.
+# backend is. So the `seed-claude-totp` init container in templates/deployment.yaml.j2 seeds
+# it with `authelia storage user totp generate --force` on every pod start rather than
+# templating it: the secret is fixed in SOPS, so the row it writes is byte-identical each
+# time and the seed is idempotent in effect.
 authelia_k8s_manage_claude_user: true
 
 # Empty stand-ins, NOT values. SOPS supplies both on a cluster that manages the user, and
