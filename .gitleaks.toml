@@ -73,3 +73,23 @@ paths = ['''^docs/facts\.lock/[0-9a-f]+\.json$''']
 description = "Kubernetes schema SOURCE.json holds sha256 digests of public upstream files"
 targetRules = ["generic-api-key"]
 paths = ['''^scripts/validate/schemas/kubernetes\.io/v[0-9.]+/SOURCE\.json$''']
+
+# A rendered workload names the Secret keys it reads, and those names are not values. A Secret
+# volume's `items` list and a `secretKeyRef` both carry `key: <name>`, and `generic-api-key`
+# reads `key` plus a high-entropy token as a credential: monitor-bridge's
+# `- key: b2_probe_application_key` tripped it at entropy 3.77 and failed promote's render on
+# 2026-10-18, the first run after monitor-bridge joined the bundle (#5623). The template's
+# `# gitleaks:allow` on that line does not help, because the renderer drops YAML comments and the
+# bundle line arrives bare. The line regex admits
+# only a snake_case name with at least one underscore, the shape of every SOPS key name. A hex,
+# base62 or JWT credential has no underscore and still trips, and so does every other rule on the
+# same line. It needs both the bundle path and the line (`condition = "AND"`), and `regexTarget =
+# "line"` works in the bundle scan's `gitleaks dir` mode, unlike the pre-commit diff mode.
+# ENFORCED: ansible/tests/repo/test_gitleaks_secret_key_name_allowlist.py.
+[[allowlists]]
+description = "A rendered manifest's Secret key names (`key: <snake_case_name>`) are names, not values"
+condition = "AND"
+targetRules = ["generic-api-key"]
+paths = ['''^out/cluster/[^/]+/[^/]+\.yaml$''']
+regexTarget = "line"
+regexes = ['''^\s*-?\s*key: [a-z][a-z0-9]*(?:_[a-z0-9]+)+\s*$''']

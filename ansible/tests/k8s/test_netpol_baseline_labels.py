@@ -193,10 +193,9 @@ SLICE_45C_ROLES = {role for role, _name in SLICE_45C_WORKLOADS}
 # policy" — these are fenced by nothing, on purpose.
 #
 # Entries are used only as a subtrahend, so one that matches no rendered doc is a silent no-op —
-# it neither widens nor narrows the gate, it just rots.
-UNFENCED_BY_DESIGN_WORKLOADS = {
-    ("prowlarr", "flaresolverr-netpol-probe"),
-}
+# it neither widens nor narrows the gate, it just rots. Empty since prowlarr's flip deleted
+# flaresolverr-netpol-probe, the last member (#5594); its successor runs in `prowlarr-verify`.
+UNFENCED_BY_DESIGN_WORKLOADS: frozenset[tuple[str, str]] = frozenset()
 
 
 def _pod_template_labels(doc: dict) -> dict:

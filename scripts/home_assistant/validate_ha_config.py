@@ -45,6 +45,7 @@ from jinja2.exceptions import TemplateSyntaxError
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from lib import yaml_fast
+from lib.cli_help import answer_help
 
 from lib.repo_paths import K8S_ROLES
 
@@ -477,8 +478,9 @@ def validate(role_dir: Path = ROLE_DIR) -> list[str]:
         return errors
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
     """Run `validate()`, print its errors (if any), and exit 1 if it found one."""
+    answer_help(__doc__, argv)
     errors = validate()
     if errors:
         print("Home Assistant config validation FAILED:", file=sys.stderr)

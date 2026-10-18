@@ -1,12 +1,11 @@
 {#
-  prowlarr's verify Job and the ConfigMap that carries its script, INERT until prowlarr's flip.
+  prowlarr's verify Job and the ConfigMap that carries its script.
 
-  This directory is `verify-inert/`, which neither reader globs: the manifests role takes only
-  top-level `templates/*.yaml.j2`, and `verify_files` takes only `templates/verify/*.yaml.j2`.
-  prowlarr's flip PR moves the directory to `templates/verify/`, and the renderer then emits it
-  into `prowlarr-verify` (D5, *A verify conversion lands as inert code*). The same PR deletes
-  the `flaresolverr-netpol-probe` tasks and `netpol-probe-job.yaml.j2`, which this Job replaces,
-  and drops that probe's peer from prowlarr's `netpol_from`.
+  The renderer emits `templates/verify/*.yaml.j2` into `prowlarr-verify` (`verify_files`), which
+  Flux applies once the `prowlarr` Kustomization reads Ready. The manifests role takes only
+  top-level `templates/*.yaml.j2`, so no Ansible path renders it. The Job replaced the
+  `flaresolverr-netpol-probe` tasks and `netpol-probe-job.yaml.j2` in prowlarr's flip (#5594),
+  which also dropped that probe's peer from prowlarr's `netpol_from`.
 
   Both names end in a digest, as the Job census requires (D5, *Rules for every Job Flux
   applies*): the ConfigMap's in `configmap_digest8` of its data, the Job's in
@@ -25,8 +24,8 @@
   `app: prowlarr-verify` in `k8s_namespace`, and it dials two ports and execs into nothing:
     - prowlarr:<port>, the control. prowlarr's role-owned fence,
       `networkpolicy-prowlarr.yaml.j2`, admits only its `netpol_from` list, so prowlarr's
-      `containers_list` entry lists `prowlarr-verify` ahead of the flip.
-      `ansible/tests/k8s/test_netpol_from.py` holds the label in STAGED_CALLERS until then.
+      `containers_list` entry lists `prowlarr-verify`. `ansible/tests/k8s/test_netpol_from.py`
+      reads the label from this render in VERIFY_CALLERS.
       If that peer went, the control would be refused and the Job would fail closed;
     - flaresolverr:<port>. `networkpolicy-flaresolverr.yaml.j2` must REFUSE this pod, so no
       peer is added there: admitting `prowlarr-verify` would open the hole the Job proves

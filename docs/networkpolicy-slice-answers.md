@@ -165,9 +165,10 @@ something:
    The census recorded only the query direction. Fenced, both would silently keep stale indexers —
    and monitor-bridge would not notice, because its "Prowlarr Indexers" monitor reads prowlarr's
    *own* status endpoint.
-2. **A probe's CONTROL leg.** `prowlarr/templates/netpol-probe-job.yaml.j2` retries
+2. **A probe's CONTROL leg.** prowlarr's `netpol-probe-job.yaml.j2` retried
    `nc -z prowlarr` for up to 150s from a pod labelled `app: flaresolverr-netpol-probe`. The census
-   looked for assertions, not controls.
+   looked for assertions, not controls. prowlarr's Flux flip (#5594) replaced that probe with the
+   `prowlarr-verify` Job, whose control leg prowlarr's fence admits the same way.
 3. **A pod created by `kubectl run` inside a verify task.** `qbittorrent/tasks/verify.yml` creates
    an unlabelled probe pod whose stated purpose is proving qbittorrent is reachable *from the pod
    CIDR* despite the Mullvad kill-switch — which the policy would have silently inverted.

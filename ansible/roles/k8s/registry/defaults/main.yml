@@ -24,11 +24,16 @@ registry_k8s_size: 10Gi
 
 # The ghcr.io pull-through mirror's store (the `ghcr-mirror` container in deployment.yaml.j2).
 # Its own claim, because every ghcr.io image in the cluster pulls through it: 27 distinct
-# images on 2026-10-18, tdarr's and valheim's among them. Nothing collects it, because its TTL
-# is zero so nut's image survives a long gap between rebuilds (#5541 is the prune). Losing it
-# costs re-pulls from ghcr.io, not data, hence longhorn-nobackup.
+# images on 2026-10-18, tdarr's and valheim's among them. Its TTL is zero so nut's image
+# survives a long gap between rebuilds, which leaves the weekly GC's offline prune
+# (files/ghcr-mirror-prune.sh, #5541) as the only thing that reclaims it. Losing it costs
+# re-pulls from ghcr.io, not data, hence longhorn-nobackup.
 registry_k8s_ghcr_mirror_claim: registry-ghcr-mirror
 registry_k8s_ghcr_mirror_size: 30Gi
+# How many cached manifest revisions per repository the prune keeps, newest first, beyond every
+# digest a pod resolved or a workload pins. Three matches registry_k8s_keep_content_tags: the
+# image in service plus the two before it, which is what a rollback during a WAN outage needs.
+registry_k8s_ghcr_mirror_keep_revisions: 3
 # Pod-local, loopback-bound; only moved off the baked :5001 the push store's debug server holds.
 registry_k8s_ghcr_mirror_debug_port: 5003
 

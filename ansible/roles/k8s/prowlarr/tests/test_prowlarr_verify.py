@@ -1,10 +1,9 @@
-"""prowlarr's inert verify Job: its script fails on any answer from flaresolverr, and its render passes the census.
+"""prowlarr's verify Job: its script fails on any answer from flaresolverr, and its render passes the census.
 
 The script tests run `prowlarr_verify.main` against local ports: an HTTP server stands in for a
 port that answers, and a port nothing listens on stands in for one the fence refuses. The render
-tests copy the prowlarr role, move `templates/verify-inert/` to `templates/verify/` as the flip PR
-will, and render the copy, so the Job is checked as Flux will receive it while the tree's own
-render still emits no `prowlarr-verify`. The plan is
+tests render the role's `templates/verify/` through `render_tag`, so the Job is checked as Flux
+receives it in `prowlarr-verify`. The plan is
 docs/target-architecture/deploy/d5-bulk-move.md, *A verify conversion lands as inert code*.
 
 Run: uv run pytest ansible/roles/k8s/prowlarr/tests/test_prowlarr_verify.py
@@ -122,13 +121,11 @@ def stubs(tmp_path_factory):
     return load_stubs(path)
 
 
-def _flip(roles, stubs, edit_policy=False) -> cluster.RenderedTag:
-    """Render a copy of the role whose Job has left `verify-inert/`, as the flip PR moves it."""
+def _render_copy(roles, stubs, edit_policy=False) -> cluster.RenderedTag:
+    """Render a copy of the role, with flaresolverr's policy edited when `edit_policy`."""
     shutil.copytree(K8S_ROLES / TAG, roles / TAG)
-    templates = roles / TAG / "templates"
-    (templates / "verify-inert").rename(templates / "verify")
     if edit_policy:
-        policy = templates / "networkpolicy-flaresolverr.yaml.j2"
+        policy = roles / TAG / "templates" / "networkpolicy-flaresolverr.yaml.j2"
         policy.write_text(policy.read_text() + "# a policy-only edit\n")
     return cluster.render_tag(TAG, stubs, roles=roles)
 
@@ -144,8 +141,8 @@ def _docs(texts: dict[str, str]) -> list[dict]:
 
 
 @pytest.fixture(scope="module")
-def flipped_tag(stubs, tmp_path_factory) -> cluster.RenderedTag:
-    return _flip(tmp_path_factory.mktemp("roles"), stubs)
+def flipped_tag(stubs) -> cluster.RenderedTag:
+    return cluster.render_tag(TAG, stubs)
 
 
 @pytest.fixture(scope="module")
@@ -170,10 +167,6 @@ def _policy(rendered: cluster.RenderedTag, name: str) -> dict:
         if doc["kind"] == "NetworkPolicy" and doc["metadata"]["name"] == name
     ]
     return policy
-
-
-def test_the_tree_renders_no_prowlarr_verify_while_ansible_owns_prowlarr(stubs):
-    assert cluster.render_tag(TAG, stubs).verify == {}
 
 
 def test_the_flipped_job_passes_every_job_census_row(flipped):
@@ -273,8 +266,8 @@ def test_a_flaresolverr_fence_that_admits_the_verify_pod_is_flagged(peer):
 def test_prowlarrs_fence_admits_the_control(flipped, stubs):
     """The control dials prowlarr's port, which its role-owned fence opens only to `netpol_from`.
 
-    The fence is the one the tree renders for prowlarr today, with the `prowlarr-verify` peer
-    its `netpol_from` lists ahead of the flip.
+    The fence is the one the tree renders for prowlarr, with the `prowlarr-verify` peer its
+    `netpol_from` lists.
     """
     job = _job(flipped)
     labels = job["spec"]["template"]["metadata"]["labels"]
@@ -308,7 +301,7 @@ def test_the_flipped_job_runs_the_flux_job_image_without_a_token(flipped):
 def test_a_flaresolverr_policy_only_change_renames_the_job(stubs, tmp_path):
     """The policy is what the Job tests, so editing it alone makes Flux run the Job again."""
     names = [
-        _job(_docs(_flip(tmp_path / str(n), stubs, edit_policy=edit).verify))[
+        _job(_docs(_render_copy(tmp_path / str(n), stubs, edit_policy=edit).verify))[
             "metadata"
         ]["name"]
         for n, edit in enumerate((False, True))
@@ -316,13 +309,13 @@ def test_a_flaresolverr_policy_only_change_renames_the_job(stubs, tmp_path):
     assert names[0] != names[1]
 
 
-def test_the_staged_job_reads_no_other_roles_file():
+def test_the_verify_job_reads_no_other_roles_file():
     """The helper and the image come from `render_tag`, never a lookup into another role.
 
     The deployer redeploys a role when a file it `lookup()`s in another role changes, and its
-    scan reads `verify-inert/` too. tdarr's test has the red case for this scan.
+    scan reads `verify/` too. tdarr's test has the red case for this scan.
     """
-    staged = sorted((K8S_ROLES / TAG / "templates" / "verify-inert").glob("*.j2"))
+    staged = sorted((K8S_ROLES / TAG / "templates" / "verify").glob("*.j2"))
     assert [p.name for p in staged] == ["job.yaml.j2", "rbac.yaml.j2"]
     assert [
         (path.name, role)

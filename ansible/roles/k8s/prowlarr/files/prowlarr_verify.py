@@ -1,9 +1,8 @@
 """prowlarr's verify Job: prove the `flaresolverr` NetworkPolicy refuses a pod that is not prowlarr.
 
-Inert until prowlarr's flip: `templates/verify-inert/` holds the Job, and the flip PR moves it to
-`templates/verify/`, where the renderer emits it into `prowlarr-verify` (target slice D5, *A
-verify conversion lands as inert code*). It replaces the `flaresolverr-netpol-probe` Job that
-`tasks/main.yml` applies, and keeps that probe's two legs:
+`templates/verify/` holds the Job, and the renderer emits it into `prowlarr-verify` (target
+slice D5, *A verify conversion lands as inert code*). It replaced the `flaresolverr-netpol-probe`
+Job that `tasks/main.yml` applied until prowlarr's flip (#5594), and keeps that probe's two legs:
 
 - the control: `prowlarr:<port>` must answer, so a pod with no network cannot pass;
 - `flaresolverr:<port>` must refuse, or the headless browser that renders hostile pages is

@@ -327,6 +327,10 @@ containers_list:
   # ingress is the direction actually enforced on this cluster.
   - name: prowlarr
     platform: k8s
+    # Flux applies prowlarr through `promote`, and its flaresolverr isolation check runs in
+    # `prowlarr-verify` (#5594). The handback is two PRs, `owner: released` then removing
+    # `owner`: docs/flux-deploy-plane.md.
+    owner: flux
     weekly_backup_claims: {prowlarr-config: 4}  # Thu
     hostname: "prowlarr"
     port: 9696
@@ -347,8 +351,7 @@ containers_list:
       - monitor-bridge
       - sonarr
       - radarr
-      - flaresolverr-netpol-probe  # control leg of this role's own isolation probe
-      - prowlarr-verify            # templates/verify-inert/ Job, staged for the flip — see the policy's header
+      - prowlarr-verify            # templates/verify/ Job's control leg — see the policy's header
   - name: bazarr
     platform: k8s
     # Flux applies bazarr through `promote`, and every Ansible path skips it (D5.9). The
@@ -933,6 +936,10 @@ containers_list:
   # every metric/API check; autofix-bridge is the *arr remediation loop.
   - name: monitor-bridge
     platform: k8s
+    # Flux applies monitor-bridge through `promote`, and every Ansible path skips it (#5594).
+    # The handback is two PRs, `owner: released` then removing `owner`:
+    # docs/flux-deploy-plane.md.
+    owner: flux
     tier: platform
   # Host metrics for BOTH nodes.
   - name: node-exporter

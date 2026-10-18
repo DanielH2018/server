@@ -1541,9 +1541,10 @@ ceiling = claims x (volume_snapshot_timeout + 3 x volume_revert_state_timeout + 
 ```
 
 A role's own `tasks/` run before `k8s/manifests/tasks/drain.yml`, so anything they wait for adds
-to the drain instead of overlapping it. prowlarr waits 300 s for its flaresolverr isolation probe
-Job on top of a 780 s rollout, which makes it the worst promoted service at 480 + 300 + 780 + 60
-= 1620 s. An inline `rollout status` gate is not an in-role wait, because it waits for the same
+to the drain instead of overlapping it. prowlarr waited 300 s for its flaresolverr isolation probe
+Job on top of a 780 s rollout, which made it the worst promoted service at 480 + 300 + 780 + 60
+= 1620 s, the value the budget keeps. prowlarr's flip deleted the probe (#5594), so it is still
+the worst, at 1320 s. An inline `rollout status` gate is not an in-role wait, because it waits for the same
 rollout the drain waits for.
 `ansible/roles/setup/gitops_deploy/tests/test_gitops_deploy_timeout_budgets.py::test_k8s_rollback_budget_covers_the_worst_single_promoted_service`
 computes the ceiling from role sources, so a rollout-timeout bump or a new promoted

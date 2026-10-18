@@ -1079,9 +1079,11 @@ API server with the pod's ServiceAccount token, and Prometheus or an app over HT
 - **Names.** Every Job's name ends in its spec digest, the soak Job included: it is
   `soak-<spec digest8>`, and its spec embeds R's SHA.
 - **A first connection retries.** A brand-new pod admitted by a selector peer can be refused
-  until kube-router learns its address (the MEMORY note on kube-router's source-pod lag,
-  enforced only for the netpol probe's control leg by
-  `ansible/tests/k8s/test_netpol_probe_race.py`). Every Job that reads a fenced Service opens
+  until kube-router learns its address (the MEMORY note on kube-router's source-pod lag). A
+  test once enforced it for prowlarr's netpol probe alone, and prowlarr's flip retired both
+  (#5594);
+  `ansible/roles/k8s/manifests/tests/test_flux_job_connect.py::test_a_refused_connect_is_retried_until_the_server_listens`
+  holds the helper below to it. Every Job that reads a fenced Service opens
   its first connection through one shared helper, which retries a refused or timed-out
   connection for 60 seconds. The helper tells a refusal apart from an empty answer, and never
   retries the second.
@@ -2125,8 +2127,10 @@ sizes its batch of roles against that projection.
 - **Windows, as the operator ruled on 2026-10-17.** A flip needs no weekday or hour. A
   `Recreate` role's takeover roll takes that one service down briefly, and the operator accepts
   that at any hour. Seven roles each take a window of their own: wg-easy, zigbee2mqtt,
-  home-assistant, crowdsec, traefik, authelia and pihole. An own window is an hour, agreed with
-  the operator and announced in the deploy channel, in which no other flip lands. wg-easy's
+  home-assistant, crowdsec, traefik, authelia and pihole. An own window means the role's flip
+  PR carries that role alone, and it merges only while the operator is present. The session
+  tells the operator before it merges the PR. As the operator ruled on 2026-10-18, a window
+  reserves no hour: the next flip can land as soon as this one has promoted. wg-easy's window
   also needs the operator on the LAN. The plan first held every `Recreate` flip to the hour
   after M2's `weekly-reboot` mute ends, Sunday 08:15 to 09:15 UTC, and the ruling drops that:
   the hour was a maintenance slot, and no flip depends on it.
@@ -3336,7 +3340,7 @@ includes valheim's initContainer.
 ## Risks
 
 - **Downtime for `Recreate` roles at takeover.** Each rolls once. Mitigation: the soak judges
-  each roll, and the seven own-window roles each land alone in an announced hour.
+  each roll, and the seven own-window roles each land alone, with the operator present.
 - **Verification lost at the move** (failure class 2). A verify task stops running the moment
   its role is flux-owned. Mitigation: the class table, which never lets `probe.py health`
   alone succeed an eligible role's verify, and the census-quote precondition.
