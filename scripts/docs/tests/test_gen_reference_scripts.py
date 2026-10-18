@@ -16,11 +16,20 @@ def _write(path, body):
     path.write_text(textwrap.dedent(body))
 
 
+def _build(scripts):
+    """`build_rows` over a synthetic tree, classified against that tree alone.
+
+    These tests read the summary, usage and tests columns. Classifying against the real repo
+    read every cron, hook and workflow in it once per test, for verdicts none of them checks.
+    """
+    return g.build_rows(scripts, repo=scripts)
+
+
 def test_the_summary_is_the_docstrings_first_line(tmp_path):
     _write(
         tmp_path / "probe.py", '"""Read-only homelab diagnostics.\n\nMore prose.\n"""\n'
     )
-    rows = {r["name"]: r for r in g.build_rows(tmp_path)}
+    rows = {r["name"]: r for r in _build(tmp_path)}
     assert rows["probe.py"]["summary"] == "Read-only homelab diagnostics."
 
 
@@ -31,21 +40,21 @@ def test_a_script_is_never_imported_to_read_its_docstring(tmp_path):
     on every docs refresh — including anything that dials a host or takes a lock.
     """
     _write(tmp_path / "boom.py", '"""Summary."""\nraise SystemExit("imported")\n')
-    rows = {r["name"]: r for r in g.build_rows(tmp_path)}
+    rows = {r["name"]: r for r in _build(tmp_path)}
     assert rows["boom.py"]["summary"] == "Summary."
 
 
 def test_a_script_that_does_not_parse_is_reported_not_skipped(tmp_path):
     """Silently dropping it would make the page quietly incomplete."""
     _write(tmp_path / "broken.py", '"""Summary."""\ndef (\n')
-    rows = {r["name"]: r for r in g.build_rows(tmp_path)}
+    rows = {r["name"]: r for r in _build(tmp_path)}
     assert "broken.py" in rows
     assert "could not be parsed" in rows["broken.py"]["summary"]
 
 
 def test_a_script_with_no_docstring_says_so(tmp_path):
     _write(tmp_path / "bare.py", "x = 1\n")
-    rows = {r["name"]: r for r in g.build_rows(tmp_path)}
+    rows = {r["name"]: r for r in _build(tmp_path)}
     assert "no module docstring" in rows["bare.py"]["summary"]
 
 
@@ -53,7 +62,7 @@ def test_test_files_and_private_modules_are_excluded(tmp_path):
     _write(tmp_path / "test_probe.py", '"""x"""\n')
     _write(tmp_path / "conftest.py", '"""x"""\n')
     _write(tmp_path / "_private_helper.py", '"""x"""\n')
-    assert g.build_rows(tmp_path) == []
+    assert _build(tmp_path) == []
 
 
 def test_shell_scripts_use_their_leading_comment_block(tmp_path):
@@ -61,7 +70,7 @@ def test_shell_scripts_use_their_leading_comment_block(tmp_path):
         tmp_path / "deploy.sh",
         "#!/usr/bin/env bash\n# Deploy a service under the git-tree lock.\n# More detail.\nset -e\n",
     )
-    rows = {r["name"]: r for r in g.build_rows(tmp_path)}
+    rows = {r["name"]: r for r in _build(tmp_path)}
     assert rows["deploy.sh"]["summary"] == "Deploy a service under the git-tree lock."
 
 
@@ -70,7 +79,7 @@ def test_the_usage_block_is_extracted_when_present(tmp_path):
         tmp_path / "probe.py",
         '"""Summary.\n\nUsage::\n\n    uv run python scripts/diagnostics/probe.py targets\n"""\n',
     )
-    rows = {r["name"]: r for r in g.build_rows(tmp_path)}
+    rows = {r["name"]: r for r in _build(tmp_path)}
     assert (
         "uv run python scripts/diagnostics/probe.py targets"
         in rows["probe.py"]["usage"]
@@ -79,14 +88,14 @@ def test_the_usage_block_is_extracted_when_present(tmp_path):
 
 def test_a_script_with_no_usage_block_has_an_empty_usage(tmp_path):
     _write(tmp_path / "probe.py", '"""Summary."""\n')
-    rows = {r["name"]: r for r in g.build_rows(tmp_path)}
+    rows = {r["name"]: r for r in _build(tmp_path)}
     assert rows["probe.py"]["usage"] == ""
 
 
 def test_a_script_with_a_test_file_names_it(tmp_path):
     _write(tmp_path / "probe.py", '"""Summary."""\n')
     _write(tmp_path / "test_probe.py", '"""x"""\n')
-    rows = {r["name"]: r for r in g.build_rows(tmp_path)}
+    rows = {r["name"]: r for r in _build(tmp_path)}
     assert rows["probe.py"]["tests"] == "test_probe.py"
 
 
@@ -96,7 +105,7 @@ def test_a_package_module_names_the_test_beside_its_entrypoint(tmp_path):
         tmp_path / "docs" / "fragments_lib" / "fragments_hosts.py", '"""Summary."""\n'
     )
     _write(tmp_path / "docs" / "tests" / "test_fragments_hosts.py", '"""x"""\n')
-    rows = {r["name"]: r for r in g.build_rows(tmp_path)}
+    rows = {r["name"]: r for r in _build(tmp_path)}
     assert rows["fragments_hosts.py"]["tests"] == "test_fragments_hosts.py"
 
 
@@ -110,34 +119,38 @@ def test_a_package_module_names_a_test_named_after_its_family(tmp_path):
     _write(tmp_path / "deploy_tools" / "land_lib" / "ci.py", '"""Summary."""\n')
     _write(tmp_path / "deploy_tools" / "tests" / "test_deploy_tools_ci.py", '"""x"""\n')
     _write(tmp_path / "deploy_tools" / "tests" / "test_land_ci.py", '"""x"""\n')
-    rows = {r["name"]: r for r in g.build_rows(tmp_path)}
+    rows = {r["name"]: r for r in _build(tmp_path)}
     assert rows["ci.py"]["tests"] == "test_land_ci.py"
 
 
 def test_only_a_lib_package_reaches_into_the_parents_tests(tmp_path):
     _write(tmp_path / "docs" / "reference" / "backlog.py", '"""Summary."""\n')
     _write(tmp_path / "docs" / "tests" / "test_backlog.py", '"""x"""\n')
-    rows = {r["name"]: r for r in g.build_rows(tmp_path)}
+    rows = {r["name"]: r for r in _build(tmp_path)}
     assert rows["backlog.py"]["tests"] == ""
 
 
 def test_a_script_with_no_test_file_is_reported_as_such(tmp_path):
     """An untested script is a fact worth surfacing, not an omission to hide."""
     _write(tmp_path / "probe.py", '"""Summary."""\n')
-    rows = {r["name"]: r for r in g.build_rows(tmp_path)}
+    rows = {r["name"]: r for r in _build(tmp_path)}
     assert rows["probe.py"]["tests"] == ""
 
 
 def test_rows_are_sorted_by_name(tmp_path):
     for name in ("zeta.py", "alpha.py", "mid.py"):
         _write(tmp_path / name, '"""Summary."""\n')
-    names = [r["name"] for r in g.build_rows(tmp_path)]
+    names = [r["name"] for r in _build(tmp_path)]
     assert names == sorted(names)
 
 
-def test_the_real_scripts_directory_yields_the_known_shape():
-    """Guards the exclusion rules against the live tree, not just fixtures."""
-    rows = g.build_rows()
+def test_the_real_scripts_directory_yields_the_known_shape(live_verdicts):
+    """Guards the exclusion rules against the live tree, not just fixtures.
+
+    The rows come from `candidates()`, not from the verdicts, so the session's classification
+    of the same tree stands in for a second one.
+    """
+    rows = g.build_rows(verdicts=live_verdicts)
     names = {r["name"] for r in rows}
     assert "probe.py" in names
     assert "deploy.sh" in names
@@ -437,5 +450,5 @@ def test_a_subpackage_module_names_a_test_named_after_its_family(tmp_path):
     )
     _write(tmp_path / "dev" / "tests" / "test_fanout_red_gate.py", '"""x"""\n')
     _write(tmp_path / "dev" / "tests" / "test_review_red_gate.py", '"""x"""\n')
-    rows = {r["name"]: r for r in g.build_rows(tmp_path)}
+    rows = {r["name"]: r for r in _build(tmp_path)}
     assert rows["red_gate.py"]["tests"] == "test_fanout_red_gate.py"
