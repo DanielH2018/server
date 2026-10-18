@@ -102,8 +102,8 @@ forms below replace.
   port 80.
 - **`roll_one.yml`'s one-at-a-time roll becomes Kustomization order.** Instance 1 renders in
   `pihole`, instance 2 in `pihole-deferred`, and `pihole-deferred` depends on `pihole` with
-  `wait: true`. A shared ConfigMap edit moves the restart annotation the renderer stamps on both instances, and instance 2
-  rolls only after instance 1 is Ready. `pihole-verify` depends on `pihole-deferred`, so the
+  `wait: true`. A shared ConfigMap edit moves the restart annotation the renderer stamps on
+  both instances, and instance 2 rolls only after instance 1 is Ready. `pihole-verify` depends on `pihole-deferred`, so the
   reconcile meets two Ready instances.
 - **One check has no Flux form yet.** `roll_one.yml` refuses to roll an instance while its
   sibling is not Ready or is terminating. Under Flux, `pihole` rolls instance 1 whatever state
