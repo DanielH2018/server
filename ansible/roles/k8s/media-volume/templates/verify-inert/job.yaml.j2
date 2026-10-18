@@ -19,8 +19,8 @@
   the role renders no Deployment whose roll could rename the Job. Those two documents are what
   the probe tests: the path, the node pin and the binding. The Ansible probe re-runs on every
   deploy, and this Job re-runs only when that render changes. A regression with no render
-  change, such as a claim rebound by hand, waits for the next one. The mounters' own verify
-  Jobs mount the same claim, so a claim that no longer binds still fails a Job.
+  change, such as a claim rebound by hand, waits for the next one. tdarr's verify Job mounts
+  the same claim, so a claim that no longer binds still fails a Job on tdarr's next roll.
 
   The caller census (D5, *A fence admits every Job that dials through it*): the pod dials
   nothing and execs into nothing, so it needs no fence peer.
