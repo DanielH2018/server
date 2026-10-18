@@ -998,7 +998,7 @@
       "automerge": false
     },
     {
-      "description": "homelab-mcp's pip pins (#2150). No automerge for the reason n8n's rule gives: the image is built, so a bump that merged itself would sit undeployed while reading as shipped — `deploy.sh --tags homelab-mcp` is what realises it. The role is auto-deploy ELIGIBLE, so no k8s_autodeploy marker here; the guard in ansible/tests/deploy/test_renovate_automerge_follows_the_autodeploy_denylist.py asserts the marker appears only where a denied role owns the pin.",
+      "description": "homelab-mcp's pip pins (#2150). No automerge: homelab-mcp is flux-owned (D5.14), so a merged bump moves the image's content tag and the next promotion builds the image and rolls the pod with nobody watching. A pip bump can break the app at import time, as mcp 2.0.0 did on the 2026-08-09 rebuild, so a person reads each bump before it merges. The role is auto-deploy ELIGIBLE, so no k8s_autodeploy marker here; the guard in ansible/tests/deploy/test_renovate_automerge_follows_the_autodeploy_denylist.py asserts the marker appears only where a denied role owns the pin.",
       "matchManagers": [
         "custom.regex"
       ],
@@ -1008,7 +1008,7 @@
       "matchDatasources": [
         "pypi"
       ],
-      "groupName": "homelab-mcp pip deps (manual — built image; rebuild with deploy.sh --tags homelab-mcp)",
+      "groupName": "homelab-mcp pip deps (manual — built image; promote rebuilds it after merge)",
       "rebaseWhen": "conflicted",
       "schedule": [
         "before 6am on monday"
