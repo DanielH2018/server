@@ -199,10 +199,10 @@ with the reason.
   hand applies, since `k3s` runs from `k3s-bringup.yml` and `optimize_pi` runs on daniel-pi only,
   so it routes `common` to `manual_plane`, whose remediation names both commands.
 
-A k8s role can import a `common` file too. `janitorr` and `configarr` copy `host_lib.py` through
-`install_host_lib.yml` and stamp it through `stamp_deployed.yml`, and
-`K8S_ROLES_IMPORTING_SETUP_FILES` puts both in `ChangeSet.k8s` when one of those three files
-changes. The deployer applies a k8s role only for an image-pin bump, so each one defer-and-alerts
+A k8s role can read a `common` file too. `configarr` and `janitorr` stage `host_lib.py` and
+`kuma_push.py` into their health CronJobs' ConfigMaps, and `autofix-bridge` and `uptime-kuma`
+stage `kuma_push.py`. `K8S_ROLES_IMPORTING_SETUP_FILES` puts each in `ChangeSet.k8s` when a file
+it stages changes. The deployer applies a k8s role only for an image-pin bump, so each one defer-and-alerts
 and records a `k8s_unapplied` line. The same test holds that table to the k8s roles' tasks.
 
 The third class is the bring-up playbooks, which run by hand by construction. The deployer's own
@@ -831,8 +831,24 @@ those tags (a failed bump on a broad tick writes one) and leaves any other broad
   deploy-plane path, the narrowing maps each key whose ciphertext changed to the roles that
   read it (`scripts/deploy_tools/narrow_lib/secret_keys.py`, #5409). A key that only a setup
   role reads reaches no deploy tag, so it no longer defers the whole k8s plane to
-  `k8s_unapplied`. The tick still does not apply that setup role (#5436). The page above says so,
-  and names `secret_rotation.py consumers`, which prints the setup role's own apply command.
+  `k8s_unapplied`.
+- **A setup role reading a changed secret is applied as a setup-plane change** (#5436), on any
+  tick, with or without a deploy-plane path. `deploy_defer.route_secret_readers` runs
+  `scripts/deploy_tools/secret_setup_readers.py`, which greps `roles/setup/` at origin for each
+  key whose ciphertext changed. Each hit goes through `setup_roles_for`, so the role joins
+  `cs.setup_roles` as its own edit would. A role shipping another role's `defaults/` or
+  `vars/` file joins only when it names a key of that file built from the secret
+  (`secret_keys.reads_through`): `initial_setup` ships `claude_code`'s defaults for one
+  unrelated key, and without the check every `claude_code` rotation applied all of
+  `--tags initial_setup`. `handle_broad` applies the ones this host runs, and
+  `narrow_setup.role_tags` gives each the whole-role tag, because which of its tasks read the
+  key is not derived. A role another playbook applies, such as `k3s` for `wifi_password`, is
+  recorded in `manual_plane`. A key a play, a shared template or an inventory value reads
+  refuses, as for the deploy plane, and the range then routes no setup role. A timeout or
+  a crash is no answer, so the range parks without a fast-forward and the next tick derives
+  again: once merged, no later range carries the key. The page fires on every tick that
+  merges the range: it names `secret_rotation.py consumers`, which prints the
+  apply command of every consumer that no derivation reached.
 - **k8s-platform roles are auto-deployed ONLY for an image-pin bump to a non-denylisted service;
   every other k8s change defers-and-alerts.** `deploy_logic.split_k8s_auto_deploy` decides
   eligibility, **diff-shape first, identity second**. Gating on the service name alone would be

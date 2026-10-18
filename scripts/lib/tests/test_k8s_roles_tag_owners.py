@@ -40,17 +40,24 @@ def test_any_other_owner_value_raises(tmp_path, value: str):
 
 
 def test_the_entries_d2_to_d5_moved_are_live_and_owned_by_flux():
-    """D2.7 through D5.20, n8n's flip (#5546) and nut's (D5.17) moved these twenty-eight to Flux.
+    """D2.7 through D5.20, n8n's flip (#5546) and nut's (D5.17) moved these thirty-three to Flux.
+
+    D5.19 moved artifacts, autofix-bridge, cloudflare-ddns, docs and game-stats.
 
     A floor, not an equality: from D5.5 on the scaffolder writes `owner: flux` on every new
     entry, so the live set grows with each new service.
     """
     assert {
+        "artifacts",
+        "autofix-bridge",
         "bazarr",
         "bento-pdf",
+        "cloudflare-ddns",
         "code-server",
         "deploy-ui",
+        "docs",
         "freshrss",
+        "game-stats",
         "gpu-exporter",
         "homelab-mcp",
         "homepage",

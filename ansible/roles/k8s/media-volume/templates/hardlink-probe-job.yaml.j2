@@ -48,11 +48,8 @@ spec:
               M=/data/media/.hardlink-probe
               rm -f "$T" "$M"
               mkdir -p /data/torrents /data/media
-              # Creating and deleting a file bumps its directory's mtime, and the volume is
-              # verified against daniel-server with `rsync -n`, which reports a changed
-              # directory time as a difference. Without this the probe leaves a clean volume
-              # looking permanently out of sync — measured: `.d..t...... media/` and
-              # `.d..t...... torrents/` on the very first run after B2's copy.
+              # Creating and deleting a file bumps its directory's mtime. The probe puts both
+              # times back so it leaves the library as it found it.
               touch -r /data/torrents /tmp/ref-torrents
               touch -r /data/media /tmp/ref-media
               echo probe > "$T"

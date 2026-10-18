@@ -3,7 +3,7 @@
 
 `roles/setup/common/files/host_lib.py` has no single home on a host. Each consumer is a
 directly-invoked script, so it gets its own directory on `sys.path` and nothing else, and the
-file has to be copied in beside it. Seven roles do that, at eight sites, through
+file has to be copied in beside it. Six roles do that, at seven sites, through
 `roles/setup/common/tasks/install_host_lib.yml`, which owns the source path, the `host_lib.py`
 basename and the 0755 mode.
 
@@ -15,7 +15,7 @@ list someone maintains, so a new consumer is in scope the moment it imports the 
 
 WHY THE SHARED FILE DOES NOT WRITE THE STAMP PAIR, and this test asserts it instead. A
 `stamp_deployed` fragment is named per group and holds that group's whole pair list, so a
-second fragment written from inside the shared file would overwrite the caller's. All eight
+second fragment written from inside the shared file would overwrite the caller's. All seven
 sites record a host_lib pair in a group their own role declares, and which pairs belong in that
 group is the caller's knowledge, not the shared file's. The copy and the pair are therefore
 joined here rather than in the task file, in both directions:
@@ -52,7 +52,6 @@ EXPECTED_CONSUMERS = frozenset(
         "fake_remux",
         "gitops_deploy",
         "homelab_builder",
-        "janitorr",
         "k3s",
         "renovate_agent",
         "renovate_notify",
@@ -67,9 +66,12 @@ EXPECTED_CONSUMERS = frozenset(
 BORROWING_CONSUMERS = {"render_records": "gitops_deploy"}
 
 # Consumers whose script runs in a pod, mapped to the template that stages host_lib.py into the
-# pod's ConfigMap. No host copy exists for them, so no include applies. configarr's health
-# reader moved from a daniel-box cron into a CronJob at H2.5b.
-POD_STAGED_CONSUMERS = {"configarr": "k8s/configarr/templates/health-configmap.yaml.j2"}
+# pod's ConfigMap. No host copy exists for them, so no include applies. configarr's and
+# janitorr's health readers moved from daniel-box crons into CronJobs at H2.5b and H2.5c.
+POD_STAGED_CONSUMERS = {
+    "configarr": "k8s/configarr/templates/health-configmap.yaml.j2",
+    "janitorr": "k8s/janitorr/templates/health-configmap.yaml.j2",
+}
 
 # roles/setup/common OWNS host_lib.py; it does not import it as a sibling. Excluded by name
 # rather than by a path heuristic so the exemption is visible.
