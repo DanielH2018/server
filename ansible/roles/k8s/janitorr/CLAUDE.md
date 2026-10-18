@@ -99,10 +99,10 @@ Nothing renders that directory while Ansible owns janitorr. The flip PR renames 
 `tasks/verify.yml` with no `pods/exec` grant. `files/verify_janitorr.py` reads the mounted
 `application.yml`, dials sonarr, radarr and jellyfin over HTTP, and writes, reads and removes
 the leaving-soon probe link through jellyfin's mount layout; its docstring maps each proof.
-Its pod is `app: janitorr-verify`, which sonarr's and radarr's `netpol_from` must list before
-the flip; #5709 adds both peers in a PR of their own, because the cross-plane gate refuses them
-beside a janitorr change. `tests/test_verify_janitorr.py` renders the renamed directory through the Job census and
-holds the Job's mounts to janitorr's and jellyfin's.
+Its pod is `app: janitorr-verify`, which sonarr's and radarr's `netpol_from` list ahead of the
+flip (#5709). Those peers landed in a PR of their own, because the cross-plane gate refuses them
+beside a janitorr change. `tests/test_verify_janitorr.py` renders the renamed directory through the Job census,
+checks that both fences admit the Job's pod, and holds the Job's mounts to janitorr's and jellyfin's.
 
 ## Editing
 - Rules: `templates/config/application.yml.j2` (rendered into the k8s Secret by `roles/k8s/janitorr`)
