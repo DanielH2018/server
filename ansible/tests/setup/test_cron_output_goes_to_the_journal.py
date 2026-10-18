@@ -111,9 +111,6 @@ MAILS_ONLY_ON_FAILURE = {
     "Claude Code telemetry health": _KUMA,
     "CrowdSec remote allowlist": _KUMA,
     "CrowdSec AppSec verify": _KUMA,
-    "qbittorrent prefs drift check": (
-        "captures the reader's output and reports drift through logger alone"
-    ),
     "Registry garbage collection": _KUMA + ", plus a Healthchecks /fail ping",
     "fake-remux health": _KUMA,
     "Longhorn backup health": _KUMA + ", plus a Healthchecks /fail ping",

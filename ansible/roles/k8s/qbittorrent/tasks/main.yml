@@ -5,6 +5,33 @@
 # The config claim is `k8s_claims` in defaults/main.yml, which k8s/manifests renders and applies
 # ahead of the workload (#3387).
 
+# The prefs drift check was a daniel-box host cron until H2.5d
+# (docs/target-architecture/host/h2-shrink-host-plane.md, Steps item 15). These absent arms
+# remove it, ahead of the k8s/manifests include, so the host cron is gone before the CronJob
+# that replaces it exists. They stay until D5's conversion PR moves them into
+# setup/k8s_host_files, and H7 deletes them. ansible/tests/repo/_retired_cron_row.py holds the
+# cron's arm to the tree. The role never stamped a setup-deployed fragment, so none is removed.
+- name: Remove the retired qbittorrent prefs drift check cron
+  tags: [cron]
+  ansible.builtin.cron:
+    name: "qbittorrent prefs drift check"
+    user: "{{ sys_user }}"
+    cron_file: qbittorrent-prefs-check
+    state: absent
+  become: true
+  when: not k8s_dry_run | bool
+
+- name: Remove the retired qbittorrent prefs-check script from the host
+  tags: [config]
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - /usr/local/bin/qbittorrent-prefs-check.sh
+    - /opt/qbittorrent-prefs-check
+  become: true
+  when: not k8s_dry_run | bool
+
 - name: Deploy qbittorrent to the cluster
   ansible.builtin.include_role:
     name: k8s/manifests
@@ -13,55 +40,14 @@
   tags: [deploy]
   ansible.builtin.include_tasks: verify.yml
 
-# LOG-ONLY drift check for files/apply_prefs.py's DESIRED throughput preferences. No Kuma monitor and no push token — see prefs-check.sh.j2's header. Same
-# shape as janitorr's own cron pair below: an install dir + copied script, then a rendered
-# wrapper that carries the credential and is scheduled separately.
-
-- name: Install the qbittorrent prefs-check directory
-  tags: [config]
-  ansible.builtin.file:
-    path: /opt/qbittorrent-prefs-check
-    state: directory
-    owner: "{{ sys_user }}"
-    group: "{{ sys_user }}"
-    mode: "0755"
-  become: true
-  when: not k8s_dry_run | bool
-
-- name: Install the qbittorrent prefs-check script
-  tags: [config]
-  ansible.builtin.copy:
-    src: apply_prefs.py
-    dest: /opt/qbittorrent-prefs-check/apply_prefs.py
-    owner: "{{ sys_user }}"
-    group: "{{ sys_user }}"
-    mode: "0755"
-  become: true
-  when: not k8s_dry_run | bool
-
-- name: Deploy the qbittorrent prefs-check wrapper
-  tags: [cron]
-  ansible.builtin.template:
-    src: prefs-check.sh.j2
-    dest: /usr/local/bin/qbittorrent-prefs-check.sh
-    # DECIDED: 0700 owned by sys_user, not 0755 — the script interpolates the qBittorrent WebUI
-    # password directly (same shape as janitorr-health.sh.j2's Kuma token), and at 0755 any
-    # local account could read it.
-    mode: "0700"
-    owner: "{{ sys_user }}"
-    group: "{{ sys_user }}"
-  become: true
-  no_log: true  # renders qbittorrent_username / qbittorrent_password
-  when: not k8s_dry_run | bool
-
-- name: Schedule the qbittorrent prefs-check drift check
-  tags: [cron]
-  ansible.builtin.cron:
-    name: "qbittorrent prefs drift check"
-    hour: "{{ qbittorrent_k8s_prefs_check_cron_hour }}"
-    minute: "{{ qbittorrent_k8s_prefs_check_cron_minute }}"
-    user: "{{ sys_user }}"
-    job: "/usr/local/bin/qbittorrent-prefs-check.sh"
-    cron_file: qbittorrent-prefs-check
-  become: true
-  when: not k8s_dry_run | bool
+# After verify.yml, which waits out the rollout the render just queued. A gate run straight
+# after the apply would meet the replacement pod inside the sidecar's startup window, up to
+# five minutes, and always log "cannot reach". The fence that admits the check's label came
+# with the CronJob in the apply above. An extra run reads the same preferences and logs the
+# same verdict, and writes nothing.
+- name: Gate the qbittorrent-prefs-check deploy on a one-off run
+  tags: [deploy]
+  ansible.builtin.include_role:
+    name: k8s/cronjob-gate
+  vars:
+    cronjob_gate_name: qbittorrent-prefs-check

@@ -99,7 +99,7 @@ SOURCE_FALLBACK_REASONS = {
 # breaks fails as a missing member rather than passing over an empty set.
 SOURCE_FALLBACK_MEMBERS = {
     "image-builder/templates/build-job.yaml.j2": "unrendered-role",
-    "qbittorrent/templates/prefs-check.sh.j2": "shell",
+    "registry/templates/registry-gc.sh.j2": "shell",
     "code-server/templates/Dockerfile.j2": "build",
     "homepage/templates/config/services.yaml.j2": "nested",
 }
