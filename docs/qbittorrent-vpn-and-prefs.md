@@ -95,9 +95,13 @@ mod. The script says so itself: "If no other containers are using this mod you m
 
 ## The rollout-gate exposure was not unique to this role
 
-`roles/k8s/manifests` queues a rollout and runs `rollout status` for the whole batch afterwards, so a role's own `verify.yml` runs before its rollout finishes and `get pod -l app=<x>` returns the outgoing pod. `wait --for=condition=Available`, `wait --for=condition=ready pod` and `--field-selector status.phase=Running` all return instantly mid-roll, because the old pod satisfies each of them.
+`roles/k8s/manifests` queues a rollout and runs `rollout status` for the whole batch afterwards, so a role's own `verify.yml` runs before its rollout finishes and `get pod -l app=<x>` returns the outgoing pod. qbittorrent's verify tasks gated on `rollout status` for that reason until its Flux flip replaced them with the `qbittorrent-verify` Job, which starts only once the `qbittorrent` Kustomization reads Ready. `wait --for=condition=Available`, `wait --for=condition=ready pod` and `--field-selector status.phase=Running` all return instantly mid-roll, because the old pod satisfies each of them.
 
 ## The whole `apply_prefs.py` command
+
+Flux applies `DESIRED` on every revision that rolls the pod, through the `prefs.yaml.j2` Job
+in `qbittorrent-verify`. A hand run is for a PVC restore that no roll follows, or to read
+drift between rolls.
 
 Run this from the repo root, against the live pod's IP, with `--dry-run` first. It is
 **operator-only**: the agent guard denies `sops -d`, `--extract` included, because the
@@ -137,17 +141,20 @@ Five decisions inside it are deliberate:
   `EXIT_DRIFT` (3, `--dry-run` only). Before 2026-08-27, `--dry-run` returned 0 whether or not
   anything had drifted, so a scheduled caller could not have branched on it. `prefs_check.py`
   reads drift as a result and exits 0 for it, as for a match. Any other exit leaves the Job
-  Failed, which `k8s/cronjob-gate` reports without failing the deploy.
+  Failed. On the gate run that fails `qbittorrent-verify` and holds the revision; on a
+  scheduled run it is a Failed Job and nothing more.
 - **The connect retry polls, and the login runs once.** A new pod's first dials can be dropped
   even through an open fence, because kube-router learns a new pod's labels late.
   `--connect-wait 60` retries an unauthenticated `GET /` that gets no response at all for up to
   60 seconds. Any HTTP answer, an error status included, ends the poll. The login that follows is
   never retried, because `web_ui_max_auth_fail_count` is 5.
-- **The deploy runs it once, after the rollout.** `tasks/main.yml` includes `k8s/cronjob-gate`
-  after `verify.yml`, which waits out the rollout the render queued. A gate run straight after
-  the apply would meet the replacement pod inside the sidecar's startup window and log
-  `cannot reach`. qbittorrent's `netpol_from` admits the `qbittorrent-prefs-check` label, and the
-  role renders that fence itself, so the fence and the CronJob arrive in one apply.
+- **Each revision runs it once, after the rollout.** `flux_cronjob_gates` in the role's defaults
+  makes the renderer copy the CronJob into a gate Job in `qbittorrent-verify`, which starts
+  once the `qbittorrent` Kustomization reads Ready. A gate run straight after the apply would
+  meet the replacement pod inside the sidecar's startup window and log `cannot reach`.
+  qbittorrent's `netpol_from` admits the `qbittorrent-prefs-check` label, and the role renders
+  that fence itself, so the fence and the CronJob arrive in one apply. Until the Flux flip,
+  `tasks/main.yml` ran the same gate through `k8s/cronjob-gate` after the verify tasks.
 
 **Why the values themselves.** The pod egresses through Mullvad, which forwards no ports, so
 the client can only pair with peers it dials itself. Every raised limit is about dialing faster

@@ -75,6 +75,7 @@ _HERE = os.path.dirname(os.path.abspath(__file__))
 _DECISION_ARMS = (
     ("block-protected-bash", "block_protected_bash"),
     ("block-footguns", "block_footguns"),
+    ("block-batch-full-suite", "block_batch_full_suite"),
 )
 _CONTEXT_ARM = ("inject-nested-docs", "inject_nested_docs")
 

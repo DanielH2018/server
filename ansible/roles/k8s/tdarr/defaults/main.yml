@@ -13,34 +13,24 @@
 # turns automerge off for every role the auto-deploy denylist holds, this one included.
 tdarr_k8s_image: ghcr.io/haveagitgat/tdarr:3.00.00@sha256:7ba5325ea64951181a30f2a8d5bbc4fc0985e4c275ea1d09d15491b47b4cd8d6
 
-# The rollout budget, declared once. Read as Flux's health-check `timeout` and by THREE
-# places, so none of them can drift: k8s/manifests' rollout wait, the inline `rollout
-# status` gate in tasks/verify.yml, and `progressDeadlineSeconds` in templates/deployment.yaml.j2.
-# The deadline has to move with the budget: at the 600s Kubernetes default, `rollout status`
-# fails on ProgressDeadlineExceeded whatever `--timeout` says.
-#
-# The image is 1432 MiB compressed (node status `sizeBytes`, 2026-10-09), five times
-# flaresolverr's. Its pull on daniel-box took 25m37s on 2026-10-08 (`Pulling` at 23:50:48,
-# container started 00:16:25, #3689), about 0.93 MiB/s. That is not a one-evening ghcr.io
-# outlier: prowlarr's 278 MiB flaresolverr pull took 8m54s (#2369), about 0.52 MiB/s, so a
-# tdarr pull sits between 1537s and roughly 2750s on this line. 3000s covers the slow end, the
-# rule manifests_rollout_timeout_default states. The Deployment is `Recreate`, so tasks/main.yml
-# pulls the image before the apply and the old pod serves through the pull (#3875). The budget
-# still covers a cold pull: it also bounds that pre-pull task.
+# The rollout budget, declared once. Read as Flux's health-check `timeout` and by
+# `progressDeadlineSeconds` in templates/deployment.yaml.j2, so the two cannot drift. 600s is
+# the shared default (manifests_rollout_timeout_default): the `tdarr-prepull` Kustomization
+# below puts the image on the node before the `tdarr` Kustomization applies, so a roll pays
+# only the container start and the `vaapi-encode` initContainer, and a stuck tdarr holds a Flux
+# worker for 10 minutes. Until the flip it was 3000s, because Ansible's crictl pre-pull and
+# the rollout wait shared it (D5 step 26).
 # The literal is `manifests_rollout_timeout` because the renderer reads a role's Flux
 # Kustomization `timeout` only from a literal role default (`role_fields` in
 # scripts/lib/k8s_roles.py); as an include var it would render Flux's 600s default (#5464).
-manifests_rollout_timeout: 3000s  # noqa var-naming[no-role-prefix]
+manifests_rollout_timeout: 600s  # noqa var-naming[no-role-prefix]
 tdarr_k8s_rollout_timeout: "{{ manifests_rollout_timeout }}"
 
 # The budget of the tdarr-prepull Kustomization, whose Job pulls tdarr's image onto its node
-# before the tdarr Kustomization applies (scripts/renderer/renderer_lib/prepull.py). It is the
-# Flux form of the crictl pre-pull in tasks/main.yml (#3875). Only Flux reads it: the renderer
-# adds the Kustomization for a published tag alone, so an Ansible deploy ignores it and the
-# crictl task keeps running until tdarr's flip. The flip PR deletes that task and drops
-# manifests_rollout_timeout above to the 600s default, so a stuck tdarr then holds a Flux
-# worker for 10 minutes rather than 50 (D5 step 26).
-# 3000s is the cold-pull budget measured above: the 1432 MiB pull took 25m37s on 2026-10-08.
+# before the tdarr Kustomization applies (scripts/renderer/renderer_lib/prepull.py), so the
+# Recreate stops the old pod only once the new image is present (#3875). The image is
+# 1432 MiB compressed (node status `sizeBytes`, 2026-10-09).
+# 3000s is the cold-pull budget: the 1432 MiB pull took 25m37s on 2026-10-08 (#3689).
 # It covers a pull down to 0.5 MB/s. GHCR served daniel-box at 0.21-0.33 MB/s on 2026-10-17
 # (#5525), which would take 4550-7150s here. The Job has no deadline, so a pull that slow
 # costs that revision its verdict, the Job keeps pulling, and Flux applies tdarr on a later

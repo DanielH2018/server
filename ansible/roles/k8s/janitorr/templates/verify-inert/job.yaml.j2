@@ -34,8 +34,8 @@
 
   The caller census (D5, *A fence admits every Job that dials through it*). The pod is
   `app: janitorr-verify` in `k8s_namespace`. It execs into nothing and dials:
-    - sonarr:8989, through sonarr's role-owned fence, whose `netpol_from` must list
-      `janitorr-verify` before the flip. #5709 adds the peer in a PR of its own, because
+    - sonarr:8989, through sonarr's role-owned fence, whose `netpol_from` lists
+      `janitorr-verify` ahead of the flip. #5709 added the peer in a PR of its own, because
       `scripts/validate/cross_plane_order.py` refuses one PR that changes janitorr and the
       flux-owned sonarr it depends on. netpol-baseline's sonarr row (`expect: refused`)
       shows that fence refuses an unlisted pod;

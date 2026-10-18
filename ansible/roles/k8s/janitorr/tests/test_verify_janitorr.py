@@ -268,11 +268,11 @@ def test_the_census_fails_a_flipped_job_once_its_spec_moves(flipped):
 
 @pytest.mark.parametrize("fence,port", [("sonarr", 8989), ("radarr", 7878)])
 def test_the_arr_fences_admit_janitorr(fence, port, flipped, stubs):
-    """The Job proves the apps answer `janitorr-verify`, so this holds `janitorr` admitted.
+    """Each fence admits the Job's pod and janitorr's own, on the app's port.
 
-    The fences do not list `janitorr-verify` yet: the cross-plane gate refuses those peers in
-    the PR that changes janitorr, so they land in #5709, which extends this test to require
-    the Job's label too.
+    The Job proves the apps answer `janitorr-verify`, so this also holds `janitorr` admitted.
+    The `janitorr-verify` peers landed in a PR of their own (#5709), because the cross-plane
+    gate refuses them beside a janitorr change.
     """
     (policy,) = [
         doc
@@ -288,7 +288,7 @@ def test_the_arr_fences_admit_janitorr(fence, port, flipped, stubs):
     }
     job_app = _job(flipped)["spec"]["template"]["metadata"]["labels"]["app"]
     assert job_app == "janitorr-verify"
-    assert (TAG, port) in admitted
+    assert {(TAG, port), (job_app, port)} <= admitted
 
 
 def test_the_job_sees_the_library_where_janitorr_writes_and_jellyfin_reads(

@@ -1,17 +1,15 @@
 {#
-  qbittorrent's verify Job and the ConfigMap that carries its script, INERT until qbittorrent's
-  flip.
+  qbittorrent's verify Job and the ConfigMap that carries its script.
 
-  This directory is `verify-inert/`, which neither reader globs: the manifests role takes only
-  top-level `templates/*.yaml.j2`, and `verify_files` takes only `templates/verify/*.yaml.j2`.
-  qbittorrent's flip PR moves the directory to `templates/verify/`, and the renderer then emits
-  it into `qbittorrent-verify` (D5, *A verify conversion lands as inert code*). The renderer
-  passes `flux_job_image` and `flux_job_connect`, the helper's text, to every
-  `templates/verify/` file (`render_tag`).
+  The renderer emits `templates/verify/*.yaml.j2` into `qbittorrent-verify` (`verify_files`),
+  which Flux applies once the `qbittorrent` Kustomization reads Ready. The manifests role takes
+  only top-level `templates/*.yaml.j2`, so no Ansible path renders it. The renderer passes
+  `flux_job_image` and `flux_job_connect`, the helper's text, to every `templates/verify/` file
+  (`render_tag`).
 
-  The Job runs `files/qbittorrent_job.py` with `QBT_JOB=verify`, which replaces the three proofs
-  of `tasks/verify.yml` with no `pods/exec` grant; the script's docstring names how each one
-  moved. Both names end in a digest, as the Job census requires: the ConfigMap's in
+  The Job runs `files/qbittorrent_job.py` with `QBT_JOB=verify`, which replaced the three proofs
+  of `tasks/verify.yml` at qbittorrent's flip, with no `pods/exec` grant; the script's
+  docstring names how each one moved. Both names end in a digest, as the Job census requires: the ConfigMap's in
   `configmap_digest8` of its data, the Job's in `job_spec_digest8` of its spec.
 
   The spec embeds a digest of the inputs that roll the pod, the ones `checksum/restart`
@@ -20,14 +18,14 @@
   `cluster-vars.source` digest of each key those templates read. The Deployment alone would
   miss a netns-reset edit and a key rotation, both of which roll the pod.
   `tests/test_qbittorrent_job.py` fails if a ConfigMap or Secret the pod names drops out.
-  So every change that rolls the pod renames the Job, and Flux runs it again, as Ansible runs
+  So every change that rolls the pod renames the Job, and Flux runs it again, as Ansible ran
   `verify.yml` on every deploy.
 
   DECIDED: the pod carries `app: qbittorrent-reach-probe`, the label of the `kubectl run` pod
   this Job replaces, not `qbittorrent-verify`. qbittorrent's `netpol_from` already lists that
   label, so the fence admits the Job with no inventory edit, and the label still names one
-  caller doing one thing: dialing the WebUI from the pod CIDR. The flip PR updates the
-  `netpol_from` comment that names `tasks/verify.yml`.
+  caller doing one thing: dialing the WebUI from the pod CIDR. The `netpol_from` comment in
+  daniel-box.yml names this Job.
 
   The caller census (D5, *A fence admits every Job that dials through it*). The pod is
   `app: qbittorrent-reach-probe` in `k8s_namespace`. It execs into nothing and dials:
