@@ -476,15 +476,19 @@ tests:
                 media at a fraction of the wired rate. Check the cable and the switch port,
                 then run `ip link show enp88s0` and `ip route get 1.1.1.1` on daniel-server.
 
-  # A three-minute flap, as a switch reboot leaves, ends inside the 5-minute hold, so
-  # WiredLinkDown never fires.
+  # A three-minute flap, as a switch reboot leaves, reads carrier 0 at minutes 3 to 5 and
+  # ends inside the 5-minute hold. The 5m evaluation sits inside the flap, so it fails if
+  # the hold is dropped. The 9m evaluation shows the alert never fires after recovery.
   - interval: 1m
     input_series:
       - series: 'node_network_carrier{device="eno1", instance="daniel-box", job="node", origin="daniel-box"}'
-        values: '1x2 0x2 1x10'
+        values: '1x2 0x3 1x10'
       - series: 'node_network_up{device="eno1", instance="daniel-box", job="node", origin="daniel-box"}'
-        values: '1x14'
+        values: '1x15'
     alert_rule_test:
+      - eval_time: 5m
+        alertname: WiredLinkDown
+        exp_alerts: []
       - eval_time: 9m
         alertname: WiredLinkDown
         exp_alerts: []
