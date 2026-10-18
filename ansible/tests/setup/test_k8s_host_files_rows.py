@@ -157,6 +157,23 @@ EXPECTED_ROWS: dict[str, dict[str, tuple[str, dict[str, str]]]] = {
             {"path": "/usr/local/bin/cloudflare-ip-drift.sh", "state": "absent"},
         ),
     },
+    # The absent arms H2.5c left for the retired health reader's host cron, its code and the
+    # drift fragment it stamped.
+    "janitorr.yml": {
+        "Remove the retired janitorr error heartbeat cron": (
+            "ansible.builtin.cron",
+            {
+                "name": "janitorr error health",
+                "user": "{{ sys_user }}",
+                "cron_file": "janitorr-health",
+                "state": "absent",
+            },
+        ),
+        "Remove the retired janitorr health reader from the host": (
+            "ansible.builtin.file",
+            {"path": "{{ item }}", "state": "absent"},
+        ),
+    },
     # The absent arms H2.5d left for the retired prefs drift check's host cron and script.
     "qbittorrent.yml": {
         "Remove the retired qbittorrent prefs drift check cron": (
@@ -197,6 +214,12 @@ EXPECTED_LOOPS: dict[tuple[str, str], object] = {
         "/etc/rancher/k3s/dashboards",
         "/etc/rancher/k3s/dashboards-annotated",
         "/etc/rancher/k3s/dashboard-manifests",
+    ],
+    # The fragment as well as the code: a fragment left behind turns setup drift DOWN.
+    ("janitorr.yml", "Remove the retired janitorr health reader from the host"): [
+        "/usr/local/bin/janitorr-health.sh",
+        "/opt/janitorr-health",
+        "/var/lib/homelab/setup-deployed-manifest.d/janitorr",
     ],
     (
         "qbittorrent.yml",
@@ -246,6 +269,8 @@ def test_a_task_file_main_no_longer_imports_is_flagged(tmp_path):
         "configarr.yml: Remove the retired configarr health reader from the host",
         "configarr.yml: Remove the retired configarr sync heartbeat cron",
         "docs.yml: Ensure the built docs site directory exists",
+        "janitorr.yml: Remove the retired janitorr error heartbeat cron",
+        "janitorr.yml: Remove the retired janitorr health reader from the host",
         "media-volume.yml: Create the media volume directories on the node",
         "observability.yml: Remove the retired dashboard staging trees",
         "pi-peer-backup.yml: Authorize the pull key on daniel-pi",

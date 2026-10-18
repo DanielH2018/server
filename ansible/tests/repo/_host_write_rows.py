@@ -120,7 +120,6 @@ _H2_THEN_D5 = (
 )
 HOST_WRITE_ALLOW = {
     _K8S + "crowdsec/tasks/main.yml": _H2_THEN_D5,
-    _K8S + "janitorr/tasks/main.yml": _H2_THEN_D5,
     _K8S + "registry/tasks/main.yml": (
         "D5's GC retirement (Wave D's registry bullet), whose absent arms then move with "
         "the rest"
