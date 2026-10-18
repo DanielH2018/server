@@ -44,6 +44,49 @@
   become: true
   changed_when: false
 
+# The way back from a GC that died mid-run. ghcr-mirror.yaml.j2 renders no `replicas:`, so an
+# apply never resets a count registry-gc.sh left at zero, and only that script scales it back.
+# The EXIT trap that does so cannot run after a SIGKILL, an OOM kill or a power loss. A mirror
+# stuck at 0/0 is invisible: rollout status passes, the netpol probe's mirror leg is refused
+# as intended, monitor-bridge's zero-available check skips a Deployment that wants zero, and
+# containerd falls back to ghcr.io until the WAN outage the mirror exists for. So every deploy
+# restores it, unless the mirror's GC Job is running right now.
+- name: Read the ghcr-mirror replica count
+  when: not k8s_no_mutate
+  tags: [deploy]
+  ansible.builtin.command:
+    cmd: >-
+      k3s kubectl -n {{ k8s_namespace }} get deploy ghcr-mirror -o jsonpath={.spec.replicas}
+  become: true
+  changed_when: false
+  register: registry_mirror_replicas
+
+- name: Read whether the ghcr-mirror GC Job is running
+  when: not k8s_no_mutate
+  tags: [deploy]
+  ansible.builtin.command:
+    cmd: >-
+      k3s kubectl -n {{ k8s_namespace }} get job registry-gc-ghcr-mirror --ignore-not-found
+      -o jsonpath={.status.active}
+  become: true
+  changed_when: false
+  register: registry_mirror_gc_active
+
+# `--current-replicas=0` makes the API server refuse the write if anything moved the count
+# since the read above.
+- name: Restore a ghcr-mirror replica a stopped GC left at zero
+  when:
+    - not k8s_no_mutate
+    - registry_mirror_replicas.stdout | trim == '0'
+    - registry_mirror_gc_active.stdout | trim in ['', '0']
+  tags: [deploy]
+  ansible.builtin.command:
+    cmd: >-
+      k3s kubectl -n {{ k8s_namespace }} scale deploy/ghcr-mirror --current-replicas=0
+      --replicas=1
+  become: true
+  changed_when: true
+
 # The netpol probe below dials the mirror's port and passes when the dial is refused, which a
 # mirror with no endpoint yet also produces. Waiting here makes that leg a test of the policy.
 - name: Wait for the ghcr-mirror rollout before probing its policy

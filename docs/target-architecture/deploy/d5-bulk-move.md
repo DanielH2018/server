@@ -2659,7 +2659,9 @@ sizes its batch of roles against that projection.
       own that scales only `deploy/ghcr-mirror`: it writes the keep set, runs the offline prune
       and `garbage-collect` Job, and scales the mirror back. That Deployment renders no
       `replicas:`, so neither the apply nor Flux claims the field and the GC stays its only
-      writer. The mirror store is therefore bounded by its weekly prune, which keeps the
+      writer. A host script scaling a Flux-rendered Deployment is still contract C4's
+      second-writer shape, so that field-ownership argument awaits a ruling (#5732), and
+      `HOST_SCRIPT_WRITES` allows the script on it until then. The mirror store is therefore bounded by its weekly prune, which keeps the
       `registry_k8s_ghcr_mirror_keep_revisions` newest revisions per repository plus every
       digest or tag a workload names, inside the claim's 30Gi. The PR:
         - removes the push store's phase from `registry-gc.sh`: the content-tag prune,
