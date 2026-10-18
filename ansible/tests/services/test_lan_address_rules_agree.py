@@ -28,6 +28,7 @@ RULES = [
     ("MosquittoLanAddressNotPinned", "mosquitto"),
     ("JellyfinLanAddressNotPinned", "jellyfin"),
     ("PiholeLanAddressNotPinned", "pihole"),
+    ("TraefikIngressAddressNotPinned", "traefik"),
 ]
 
 

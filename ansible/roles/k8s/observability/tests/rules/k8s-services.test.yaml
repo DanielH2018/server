@@ -251,3 +251,54 @@ tests:
       - alertname: PiholeLanAddressNotPinned
         eval_time: 6m
         exp_alerts: []
+
+  # TraefikIngressAddressNotPinned: the zero-series case fires it through its first arm.
+  - interval: 1m
+    input_series: []
+    alert_rule_test:
+      - eval_time: 6m
+        alertname: TraefikIngressAddressNotPinned
+        exp_alerts:
+          - exp_labels:
+              job: kube-state-metrics
+              service: traefik
+              severity: warning
+              verify: "true"
+            exp_annotations: &traefik_annotations
+              summary: The traefik Service does not hold the reserved ingress VIP.
+              description: "kube-state-metrics reports no LoadBalancer ingress at the reserved ingress VIP on homelab/traefik for 5 minutes, or Prometheus has no kube-state-metrics scrape job. Cloudflare, the router's port-forward and the LAN DNS cannot reach the edge on the VIP. MetalLB does not re-evaluate an existing allocation, so the operator deletes the Service and Flux re-applies it with a fresh allocation."
+
+  # MetalLB gave traefik an auto-assigned address. The rule holds 5 minutes, then fires.
+  - interval: 1m
+    input_series:
+      - series: 'up{job="kube-state-metrics", instance="kube-state-metrics:8080"}'
+        values: '1x10'
+      - series: 'kube_service_status_load_balancer_ingress{job="kube-state-metrics", instance="kube-state-metrics:8080", namespace="homelab", service="traefik", uid="u3", ip="10.0.0.245"}'
+        values: '1x10'
+    alert_rule_test:
+      - alertname: TraefikIngressAddressNotPinned
+        eval_time: 4m
+        exp_alerts: []
+      - alertname: TraefikIngressAddressNotPinned
+        eval_time: 6m
+        exp_alerts:
+          - exp_labels:
+              namespace: homelab
+              service: traefik
+              ip: 10.0.0.240
+              job: kube-state-metrics
+              severity: warning
+              verify: "true"
+            exp_annotations: *traefik_annotations
+
+  # The reserved VIP is held: nothing fires.
+  - interval: 1m
+    input_series:
+      - series: 'up{job="kube-state-metrics", instance="kube-state-metrics:8080"}'
+        values: '1x10'
+      - series: 'kube_service_status_load_balancer_ingress{job="kube-state-metrics", instance="kube-state-metrics:8080", namespace="homelab", service="traefik", uid="u3", ip="10.0.0.240"}'
+        values: '1x10'
+    alert_rule_test:
+      - alertname: TraefikIngressAddressNotPinned
+        eval_time: 6m
+        exp_alerts: []

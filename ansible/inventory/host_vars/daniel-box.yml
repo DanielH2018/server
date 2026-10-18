@@ -115,10 +115,21 @@ containers_list:
     metrics:
       - job: crowdsec
         port: 6060
+  # The IngressRoute, Middleware and TLSOption CRDs, alone in their tag so it can render
+  # prune: false and its directory never substitutes (#5666). traefik's tier keeps it out of
+  # the shed set.
+  - name: traefik-crds
+    platform: k8s
+    # Flux applies traefik-crds and traefik through `promote`, and every Ansible path skips
+    # them (D5, traefik's own window). The handback is two PRs, `owner: released` then
+    # removing `owner`: docs/flux-deploy-plane.md.
+    owner: flux
+    tier: home-edge
   - name: traefik
     platform: k8s
+    owner: flux
     port: 8080
-    depends_on: [crowdsec]
+    depends_on: [crowdsec, traefik-crds]
     # The k8s edge's traefik_* metrics, through the dedicated traefik-metrics ClusterIP: the
     # internal :8080 entrypoint must not ride the LoadBalancer Service onto the LAN VIP.
     # 8080 is Traefik's own default for that entrypoint, so this records it rather than

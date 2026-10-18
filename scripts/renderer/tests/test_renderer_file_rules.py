@@ -196,7 +196,11 @@ def test_every_reader_of_a_set_fact_value_derives_it():
 def test_every_default_tag_renders_under_the_strict_undefined(tag, stubs):
     """The verify-by of R1's PR 3: every tag `cluster` renders by default renders clean."""
     rendered = cluster.render_tag(tag, stubs)
-    assert set(rendered.files) - {cluster.KUSTOMIZATION}, tag
+    # A tag whose only content is vendored, traefik-crds, renders no template of its own;
+    # attach_vendored adds its files later.
+    assert set(rendered.files) - {cluster.KUSTOMIZATION} or cluster.vendored_files(
+        tag
+    ), tag
 
 
 def test_the_default_tag_set_is_every_render_target():

@@ -45,7 +45,7 @@ def test_play_containers_list_drops_docker_entries_and_sorts_a_reordered_list():
     assert view != _names(reversed(raw))
     position = {name: i for i, name in enumerate(view)}
     deps = build_k8s_dep_map(raw, str(ANSIBLE))
-    assert deps["traefik"] == ["crowdsec"]
+    assert deps["traefik"] == ["crowdsec", "traefik-crds"]
     assert all(position[d] < position[n] for n, ds in deps.items() for d in ds)
 
 

@@ -72,6 +72,19 @@ def vendored_targets(role_dir, default_namespace, kinds):
     return {(namespace, kind, name) for (kind, name), namespace in found.items()}
 
 
+def _only_crds(files):
+    """True when every document in `files` is a CustomResourceDefinition."""
+    from lib import yaml_fast
+
+    docs = [
+        doc
+        for path in files
+        for doc in yaml_fast.safe_load_all(path.read_text())
+        if isinstance(doc, dict)
+    ]
+    return bool(docs) and all(d.get("kind") == "CustomResourceDefinition" for d in docs)
+
+
 def require_a_vendored_workload(role_dir, workload_targets):
     """Raise when `role_dir` ships vendored files and `workload_targets` is empty.
 
@@ -81,10 +94,17 @@ def require_a_vendored_workload(role_dir, workload_targets):
     cluster. The message carries none of `detach_notify.NOT_APPLICABLE_MARKERS`, so the deploy
     notifier reports a failure rather than a skip.
 
+    A role whose vendored files declare only CustomResourceDefinitions, such as
+    `traefik-crds`, runs no workload by design, so it passes with nothing to check.
+
     Raises:
-        RuntimeError: the role ships vendored files and resolves no workload.
+        RuntimeError: the role ships vendored files, resolves no workload, and declares
+            something other than a CRD.
     """
-    if not workload_targets and vendored_files(role_dir):
+    if workload_targets:
+        return
+    files = vendored_files(role_dir)
+    if files and not _only_crds(files):
         raise RuntimeError(
             f"{role_dir.name} ships vendored files but they resolve no Deployment, "
             "DaemonSet or StatefulSet"

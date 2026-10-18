@@ -124,11 +124,6 @@ HOST_WRITE_ALLOW = {
         "D5's GC retirement (Wave D's registry bullet), whose absent arms then move with "
         "the rest"
     ),
-    _K8S + "traefik/tasks/main.yml": (
-        f"traefik's flip PR renders the RBAC it stages outside {_MANIFESTS} into its bundle "
-        "and deletes the staging task; the Cloudflare drift absent arms already moved to "
-        "`k8s_host_files`"
-    ),
 }
 
 
@@ -223,13 +218,14 @@ HOST_WRITES = Census(
             "    k3s kubectl get pod x -o name 2>/dev/null >/dev/null 2>&1\n",
         ),
     ),
-    # The writes the must_find member keeps until its D5 PRs: traefik's RBAC staging and its two
-    # Cloudflare drift absent arms. docs's, artifacts' and media-volume's directories and
-    # pi-peer-backup's two Pi writes moved to `k8s_host_files`.
+    # The writes the must_find member keeps until its D5 PR: registry's GC cron, its scripts
+    # and their absent arms. docs's, artifacts' and media-volume's directories and
+    # pi-peer-backup's two Pi writes moved to `k8s_host_files`, and traefik's flip rendered
+    # its RBAC staging into the bundle.
     min_matches=3,
     # Only a D5 PR moves this member, so the row fails when it stops matching rather than when
     # the selector drifts. The D5 PR that moves a member drops it here in the same commit.
-    must_find=frozenset({_K8S + "traefik/tasks/main.yml"}),
+    must_find=frozenset({_K8S + "registry/tasks/main.yml"}),
     allow=HOST_WRITE_ALLOW,
     count=lambda subject: len(host_writes(subject)),
 )

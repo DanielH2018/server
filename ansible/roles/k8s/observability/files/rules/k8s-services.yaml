@@ -9,6 +9,8 @@
 # fires. The address is a literal because a rule file is never Jinja;
 # ansible/tests/services/test_lan_address_rules_agree.py holds it, the namespace and the
 # Service name to the rendered Service.
+# TraefikIngressAddressNotPinned is the same conversion of traefik's "Fail if Traefik did not
+# get the reserved ingress VIP", at traefik's flip.
 groups:
   - name: k8s-services
     rules:
@@ -82,3 +84,25 @@ groups:
             job. LAN clients that took the VIP from DHCP have no DNS resolver. MetalLB does not
             re-evaluate an existing allocation, so delete the Service and redeploy pihole to
             force reallocation.
+      # The same failure on the ingress edge: Cloudflare's origin, the router's port-forward
+      # and the LAN DNS all hardcode the reserved ingress VIP. A Traefik Service that came up on
+      # an auto-assigned address serves nothing those clients dial, behind a Ready pod.
+      - alert: TraefikIngressAddressNotPinned
+        expr: >-
+          absent(up{job="kube-state-metrics"})
+          or
+          (absent(kube_service_status_load_balancer_ingress{job="kube-state-metrics", namespace="homelab", service="traefik", ip="10.0.0.240"})
+          and on() (up{job="kube-state-metrics"} == 1))
+        for: 5m
+        labels:
+          severity: warning
+          service: traefik
+          verify: "true"
+        annotations:
+          summary: The traefik Service does not hold the reserved ingress VIP.
+          description: >-
+            kube-state-metrics reports no LoadBalancer ingress at the reserved ingress VIP on
+            homelab/traefik for 5 minutes, or Prometheus has no kube-state-metrics scrape job.
+            Cloudflare, the router's port-forward and the LAN DNS cannot reach the edge on the
+            VIP. MetalLB does not re-evaluate an existing allocation, so the operator deletes the
+            Service and Flux re-applies it with a fresh allocation.

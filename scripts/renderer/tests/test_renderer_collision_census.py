@@ -106,10 +106,14 @@ def test_no_two_render_targets_render_one_object(tmp_path):
     assert (
         homelab_render.cluster(out, None, None, cluster_file=cluster_file) == RENDER_OK
     )
+    # rglob, because a vendoring tag such as traefik-crds keeps its files under upstream/.
     directories = {
-        d.name: {f.name: f.read_text() for f in d.iterdir()}
+        d.name: {
+            str(f.relative_to(d)): f.read_text() for f in d.rglob("*") if f.is_file()
+        }
         for d in (out / "cluster").iterdir()
     }
+    assert len(directories) >= 50
     found = owners(directories)
     # A walk that reached nothing would pass, so the render must hold every target and
     # objects from two named roles.
