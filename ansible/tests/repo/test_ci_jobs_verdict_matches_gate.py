@@ -103,9 +103,12 @@ def test_a_skipped_dependent_can_only_mean_the_tree_was_proven():
         condition = (
             str(job["if"]).strip().removeprefix("${{").removesuffix("}}").strip()
         )
-        assert condition == "!cancelled() && needs.prove.outputs.proven != 'true'", (
-            job_id
-        )
+        # The draft arm adds no skip `jobs_verdict` can see: a draft PR's head is never a
+        # master commit, and the gate skips with its dependents there (#5563).
+        assert condition == (
+            "!cancelled() && needs.prove.outputs.proven != 'true'"
+            " && github.event.pull_request.draft != true"
+        ), job_id
 
 
 def _all(result: str, **override: str) -> dict[str, str]:
