@@ -137,9 +137,9 @@ HOST_WRITE_ALLOW = {
         "the rest"
     ),
     _K8S + "traefik/tasks/main.yml": (
-        "D5's `k8s_host_files` conversion PR for traefik moves the Cloudflare drift absent "
-        f"arms; traefik's flip PR renders the RBAC it stages outside {_MANIFESTS} into "
-        "its bundle and deletes the staging task"
+        f"traefik's flip PR renders the RBAC it stages outside {_MANIFESTS} into its bundle "
+        "and deletes the staging task; the Cloudflare drift absent arms already moved to "
+        "`k8s_host_files`"
     ),
 }
 

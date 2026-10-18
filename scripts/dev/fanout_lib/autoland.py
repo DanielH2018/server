@@ -48,6 +48,7 @@ import re
 import shutil
 import subprocess
 import sys as _sys
+import time
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -57,6 +58,7 @@ from pathlib import Path
 _sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 _sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
+from fanout_lib import operator_waits
 from fanout_lib.review.api import LAND_SH, login
 from fanout_lib.target import SERVER, SERVER_CHECKOUT
 from fanout_lib.transport import Tools
@@ -150,6 +152,9 @@ class Boundaries:
         start: run the landing's start command in a checkout, with its log directory.
         release: remove a checkout.
         running: whether a live `land.py` names this PR.
+        local_records: daniel-box's own recent review records, for the waiting gauge.
+        owed: the deployer's `owed.jsonl`, for the waiting gauge.
+        clock: the epoch second now.
     """
 
     tools: Tools = field(default_factory=Tools)
@@ -164,6 +169,11 @@ class Boundaries:
         primary, path
     )
     running: Callable[[int], bool] = lambda pr: landing_running(pr)
+    local_records: Callable[[], list[dict]] = lambda: operator_waits.read_local_records(
+        READER
+    )
+    owed: Callable[[], str] = lambda: operator_waits.read_owed()
+    clock: Callable[[], float] = time.time
 
 
 class CheckoutFailed(Exception):
@@ -359,10 +369,13 @@ def run(
     state: Path = STATE_DIR,
     dry_run: bool = False,
     out: Callable[[str], None] = print,
+    gauge: Path | None = None,
 ) -> int:
     """One pass: read, judge every candidate PR, start at most `MAX_STARTS` landings.
 
-    Prints one line per candidate PR. Returns 0, or 1 when GitHub could not be read.
+    Prints one line per candidate PR. Returns 0, or 1 when GitHub could not be read. With
+    `gauge`, a pass that read both sources also writes the waiting gauge there
+    (`fanout_lib/operator_waits.py`); a dry run writes nothing.
     """
     log_dir = state / "logs"
     try:
@@ -405,7 +418,32 @@ def run(
         else:
             started += 1
             hand_off(b, primary, state, log_dir, number, label, out)
+    if gauge is not None and not dry_run:
+        write_waits(b, candidates, prs, gauge, out)
     return 0
+
+
+def write_waits(
+    b: Boundaries,
+    server: dict[int, dict],
+    prs: dict[int, dict],
+    gauge: Path,
+    out: Callable[[str], None],
+) -> None:
+    """Write the gauge of what waits on a person, from this pass's reads and two local ones."""
+    box = {n: r for n, r in newest_per_pr(b.local_records()).items() if n in prs}
+    starts = operator_waits.waits(
+        [(problems(r, prs[n]), r) for n, r in server.items()],
+        [(problems(r, prs[n]), r) for n, r in box.items()],
+        operator_waits.owed_manual_planes(b.owed()),
+    )
+    try:
+        wrote = operator_waits.write(gauge, operator_waits.render(starts, b.clock()))
+    except OSError as exc:
+        out(f"waiting gauge not written: {tail(str(exc))}")
+        return
+    if not wrote:
+        out(f"waiting gauge not written: {gauge.parent} is missing")
 
 
 def hand_off(
@@ -449,7 +487,13 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--primary", type=Path, default=Path(SERVER_CHECKOUT))
     p.add_argument("--state-dir", type=Path, default=STATE_DIR)
     args = p.parse_args(argv)
-    return run(Boundaries(), args.primary, args.state_dir, args.dry_run)
+    return run(
+        Boundaries(),
+        args.primary,
+        args.state_dir,
+        args.dry_run,
+        gauge=operator_waits.TEXTFILE,
+    )
 
 
 if __name__ == "__main__":

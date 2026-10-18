@@ -1,0 +1,22 @@
+---
+# Moved from roles/k8s/traefik by D5's conversion PR for traefik. H7.18c turns both into legacy
+# entries and deletes them.
+#
+# The Cloudflare IP drift check lives in monitor-bridge
+# (roles/k8s/monitor-bridge/files/checks/cloudflare_ips.py): it reads no host state, and the
+# bridge re-probes a failure every cycle. These two absent arms remove the host cron that used
+# to run it and its script. They have nothing left to remove after their first apply, and they
+# stay as the retired-cron census's arm for the name (ansible/tests/repo/_retired_cron_row.py).
+- name: Remove the Cloudflare IP drift cron
+  ansible.builtin.cron:
+    name: "Cloudflare IP drift"
+    user: root
+    cron_file: cloudflare-ip-drift
+    state: absent
+  become: true
+
+- name: Remove the Cloudflare IP drift script
+  ansible.builtin.file:
+    path: /usr/local/bin/cloudflare-ip-drift.sh
+    state: absent
+  become: true
