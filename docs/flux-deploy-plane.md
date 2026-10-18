@@ -1202,7 +1202,7 @@ under *Rules for every Job Flux applies (D5.1a3)*.
   through a Secret.
 - **Script delivery.** Every container runs `python3 <mount>/<script>.py`, where `<mount>`
   mounts a ConfigMap whole and `<script>.py` is one of its keys. No `-c`, no `-m` and no
-  shell. Each ConfigMap a Job mounts ends its name in `-<digest8>` of its content
+  shell. The one exception is the pre-pull Job's fixed no-op (*The pre-pull Job*). Each ConfigMap a Job mounts ends its name in `-<digest8>` of its content
   (`configmap_digest8`). The Job's spec names the ConfigMap, so a script fix renames the Job.
 - **`backoffLimit`.** Every Job sets one: 1 for a snapshot Job, 0 for a soak or verify Job,
   and a mutation Job's own value, with its reason beside it.
@@ -1252,13 +1252,16 @@ old pod keeps serving through the pull and the rollout pays only the container s
 - **The Job and the pod are scheduled separately.** A node cordoned between the two sends the
   pod elsewhere, and there the rollout pays the cold pull. The rollout's own budget stays the
   backstop for that case.
-- **Every image must carry `python3`**, because the Job census requires each container to run
-  a mounted script.
+- **Every image must carry `sh`.** Each container runs `sh /opt/prepull/prepull.sh`, a
+  mounted script that echoes one line. It is a shell script because n8n's image and the
+  `alpine` init container of its runners carry no `python3` (#5546), and a container that
+  cannot start fails the Job. The census's script-delivery rule admits the shell form only in
+  a pre-pull Job, and only when the script is byte-identical to `SCRIPT` in `prepull.py`.
 - **Kubelet image garbage collection can still remove the image** between the pull and the
   rollout if the node passes its disk high-water mark, which the rollout budget also covers.
 
-code-server is the one role that sets it. Its `<tag>-prepull` renders once the role is
-flux-owned.
+code-server and n8n set it, and both are flux-owned, so the bundle holds `code-server-prepull`
+and `n8n-prepull`.
 
 ### The snapshot Job
 
