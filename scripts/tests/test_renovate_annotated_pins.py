@@ -50,7 +50,13 @@ KNOWN_ANNOTATED = frozenset(
 )
 
 # Version keys a pin's URL renders from that no manager tracks, on purpose.
-UNTRACKED_BY_DECISION: dict[str, str] = {}
+UNTRACKED_BY_DECISION: dict[str, str] = {
+    # The pin covers traefik's in-tree CRD copy, which Renovate cannot rewrite: a bump of this
+    # key alone would leave the file and its sha256 on the old release. The image pin is the
+    # tracked one, and ansible/tests/k8s/test_traefik_crds.py fails a minor image bump until
+    # the copy, this key and the hash are refreshed together.
+    "traefik_k8s_crd_version": "follows traefik_k8s_image's minor; refreshed by hand",
+}
 
 _ANNOTATION_LINE = re.compile(r"^\s*#\s*renovate:", re.MULTILINE)
 
