@@ -19,6 +19,9 @@ web UI, no route — infra role.
   `ansible/tests/deploy/test_k8s_toposort.py::test_documented_pairwise_ordering_survives_an_adversarial_list`.
 - **LAN address:** a MetalLB LoadBalancer Service pinned to `mqtt_k8s_vip` (`group_vars`, so
   daniel-server's Docker-side clients can render the same value), asserted after apply.
+  observability's `MosquittoLanAddressNotPinned` rule watches the same address from
+  kube-state-metrics, at `warning` with `verify="true"`, so the soak checks it once mosquitto
+  flips to Flux. Its address is a literal, so moving the VIP is an edit to that rule too.
 - **Persists:** `mosquitto-data` (`longhorn-nobackup`, 1Gi) — retained messages and QoS session
   state only, which the three known clients republish on reconnect; nothing worth a B2
   transaction.

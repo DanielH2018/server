@@ -140,6 +140,33 @@ def test_an_unreadable_for_fails_the_render(tmp_path):
         soak.longest_for(rules)
 
 
+def test_the_shipped_rules_give_mosquitto_its_metric_verify():
+    """D5's verify-on-a-metric conversion: MosquittoLanAddressNotPinned, a 5m warning."""
+    assert soak.longest_for().get("mosquitto") == 300
+
+
+def test_dri_device_plugins_verify_waits_only_on_m2_dropping_shadow(tmp_path):
+    """K8sExtendedResourceMissing carries `verify`, and `shadow` alone keeps the soak off it.
+
+    M2's PR 4b drops `shadow` from k8s-workloads. With the label stripped, the census counts
+    dri-device-plugin at the rule's 5m; with it, the census skips the rule, as the soak's
+    alert filter does.
+    """
+    shipped = soak.RULES / "k8s-workloads.yaml"
+    groups = yaml_fast.safe_load(shipped.read_text())["groups"]
+    rule = next(
+        r
+        for g in groups
+        for r in g["rules"]
+        if r.get("alert") == "K8sExtendedResourceMissing"
+    )
+    assert rule["labels"].get("verify") == "true"
+    assert "dri-device-plugin" not in soak.longest_for()
+    del rule["labels"]["shadow"]
+    (tmp_path / "k8s-workloads.yaml").write_text(yaml.safe_dump({"groups": groups}))
+    assert soak.longest_for(tmp_path).get("dri-device-plugin") == 300
+
+
 def test_the_map_names_each_tags_namespaces_its_deferred_ones_included():
     services = soak.service_map(TAGS, DIRECTORIES, {})
     assert services["bento-pdf"]["namespaces"] == ["homelab"]

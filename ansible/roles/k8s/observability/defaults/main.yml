@@ -267,6 +267,7 @@ observability_rule_groups:
   - alerting-meta
   - workload-service
   - k8s-workloads
+  - k8s-services
   - loki-homelab
   - flux
   - ingress-probes
