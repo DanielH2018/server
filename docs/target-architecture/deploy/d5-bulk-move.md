@@ -2701,8 +2701,9 @@ sizes its batch of roles against that projection.
               `traefik_k8s_crd_sha256`, which C1 *Vendored files* exists to keep.
             - `traefik-crds` is a k8s role whose only content is `files/upstream/` holding the
               in-tree copy, so its render holds no placeholder. The flip PR creates it, gives
-              it a `containers_list` entry, and declares `traefik-crds` in traefik's
-              `depends_on`. Its `k8s/manifests` include sets `manifests_files: []`, so the
+              it a `containers_list` entry declaring traefik's `tier: home-edge`, and declares
+              `traefik-crds` in traefik's `depends_on`. The tier keeps the tag out of the shed
+              set without a `NEVER_SHED` entry (H1's *The set cannot drift*). Its `k8s/manifests` include sets `manifests_files: []`, so the
               render holds the kustomization and the vendored file alone; no role renders
               that shape yet, so the flip PR's render is its first proof. The pin variables
               and `test_traefik_crds.py` move with the copy.

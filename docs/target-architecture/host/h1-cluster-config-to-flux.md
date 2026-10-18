@@ -446,9 +446,9 @@ writer.
       land without its disposition, and the set cannot name a tag that prunes or a tiered
       tag.
     - **Why untiered only.** `shed_entries` already keeps every tiered entry. D5 sets
-      `flux_prune: false` on traefik, whose entry declares `tier: home-edge` in
-      `ansible/inventory/host_vars/daniel-box.yml`, and on `flux`, whose entry D1 gives
-      `tier: platform`. Neither is a shed candidate, so neither joins `NEVER_SHED`, and
+      `flux_prune: false` on `traefik-crds`, the tag that carries traefik's CRDs, whose entry
+      declares traefik's `tier: home-edge` in `ansible/inventory/host_vars/daniel-box.yml`,
+      and on `flux`, whose entry D1 gives `tier: platform`. Neither is a shed candidate, so neither joins `NEVER_SHED`, and
       neither PR needs a shed ruling or an order against H1.1d. An untiered tag that a
       later slice exempts from pruning fails the test until its PR adds it to `NEVER_SHED`
       or gives it a tier.
