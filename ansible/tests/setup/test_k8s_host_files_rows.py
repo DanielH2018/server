@@ -88,6 +88,22 @@ EXPECTED_ROWS: dict[str, dict[str, tuple[str, dict[str, str]]]] = {
             },
         ),
     },
+    # The absent arms H2.5d left for the retired prefs drift check's host cron and script.
+    "qbittorrent.yml": {
+        "Remove the retired qbittorrent prefs drift check cron": (
+            "ansible.builtin.cron",
+            {
+                "name": "qbittorrent prefs drift check",
+                "user": "{{ sys_user }}",
+                "cron_file": "qbittorrent-prefs-check",
+                "state": "absent",
+            },
+        ),
+        "Remove the retired qbittorrent prefs-check script from the host": (
+            "ansible.builtin.file",
+            {"path": "{{ item }}", "state": "absent"},
+        ),
+    },
 }
 
 # {(task file, task name): its `loop`} for every looped row. A row absent here must not loop.
@@ -102,6 +118,10 @@ EXPECTED_LOOPS: dict[tuple[str, str], object] = {
         "{{ media_volume_host_path }}/media",
         "{{ media_volume_host_path }}/torrents",
     ],
+    (
+        "qbittorrent.yml",
+        "Remove the retired qbittorrent prefs-check script from the host",
+    ): ["/usr/local/bin/qbittorrent-prefs-check.sh", "/opt/qbittorrent-prefs-check"],
 }
 
 
@@ -145,6 +165,8 @@ def test_a_task_file_main_no_longer_imports_is_flagged(tmp_path):
         "artifacts.yml: Ensure the star list directory exists",
         "docs.yml: Ensure the built docs site directory exists",
         "media-volume.yml: Create the media volume directories on the node",
+        "qbittorrent.yml: Remove the retired qbittorrent prefs drift check cron",
+        "qbittorrent.yml: Remove the retired qbittorrent prefs-check script from the host",
     ]
 
 

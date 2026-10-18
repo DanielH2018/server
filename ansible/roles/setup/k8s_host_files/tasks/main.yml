@@ -11,3 +11,6 @@
 
 - name: Media-volume's media directories
   ansible.builtin.import_tasks: media-volume.yml
+
+- name: Qbittorrent's retired prefs drift check
+  ansible.builtin.import_tasks: qbittorrent.yml

@@ -106,9 +106,10 @@ the docs page has why.
   ConfigMap that stages the code holds no secret.
 - **The deploy gates it after `verify.yml`**, through `k8s/cronjob-gate`, so the gate run meets
   a rolled-out pod rather than the sidecar's startup window.
-- **It was a daniel-box host cron until H2.5d.** `tasks/main.yml` keeps absent arms for the
-  cron, `/usr/local/bin/qbittorrent-prefs-check.sh` and `/opt/qbittorrent-prefs-check`, ahead of
-  the manifests include.
+- **It was a daniel-box host cron until H2.5d.** The absent arms for the cron,
+  `/usr/local/bin/qbittorrent-prefs-check.sh` and `/opt/qbittorrent-prefs-check` sit in
+  `ansible/roles/setup/k8s_host_files/tasks/qbittorrent.yml`, which the setup plane applies
+  through `initial_setup.yml`. D5's conversion PR moved them there from `tasks/main.yml`.
 
 ### The login trap
 qBittorrent 5.2.3 answers a successful `POST /api/v2/auth/login` with **HTTP 204 and an empty

@@ -1,0 +1,25 @@
+---
+# Moved from roles/k8s/qbittorrent by D5's conversion PR for qbittorrent. H7 deletes both rows,
+# with the RETIRED entry for the cron in ansible/tests/repo/_retired_cron_row.py.
+#
+# The prefs drift check was a daniel-box host cron until H2.5d
+# (docs/target-architecture/host/h2-shrink-host-plane.md, Steps item 15), and the
+# qbittorrent-prefs-check CronJob replaced it. These absent arms remove the cron and its script
+# from a host that still carries them. qbittorrent never stamped a setup-deployed fragment, so
+# none is removed.
+- name: Remove the retired qbittorrent prefs drift check cron
+  ansible.builtin.cron:
+    name: "qbittorrent prefs drift check"
+    user: "{{ sys_user }}"
+    cron_file: qbittorrent-prefs-check
+    state: absent
+  become: true
+
+- name: Remove the retired qbittorrent prefs-check script from the host
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - /usr/local/bin/qbittorrent-prefs-check.sh
+    - /opt/qbittorrent-prefs-check
+  become: true

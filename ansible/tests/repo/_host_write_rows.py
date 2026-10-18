@@ -131,7 +131,6 @@ HOST_WRITE_ALLOW = {
     _K8S + "pi-peer-backup/tasks/main.yml": (
         "pi-peer-backup's Wave C PR moves both daniel-pi writes to `k8s_host_files`"
     ),
-    _K8S + "qbittorrent/tasks/main.yml": _H2_THEN_D5,
     _K8S + "registry/tasks/main.yml": (
         "D5's GC retirement (Wave D's registry bullet), whose absent arms then move with "
         "the rest"
