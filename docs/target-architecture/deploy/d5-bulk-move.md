@@ -3842,6 +3842,9 @@ includes valheim's initContainer.
       same PR adds the `ghcr.io` entry to `registries.yaml.j2`. The precondition's manifest GET
       therefore reads `http://10.43.51.14:5002/v2/danielh2018/nut/manifests/<content tag>` on
       daniel-server. The registry deploy goes first, then the hand apply of `k3s-bringup.yml`.
+      #5714 later moved the mirror into its own Deployment, `ghcr-mirror`, on the same port,
+      hostPort and pinned ClusterIP, so its GC never scales the push store (step 26's registry
+      bullet).
 3. **Is the soak's Prometheus reach a new exposure?** It is one more caller on an existing
    fence. Resolution: reviewed in D5.3a against ADR-0009.
     - **Reviewed 2026-10-16 in #5315: no new exposure.** The soak is one more read-only caller
