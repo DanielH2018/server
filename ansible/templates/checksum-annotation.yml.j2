@@ -1,9 +1,8 @@
 {#
   checksum/<name> pod-template annotation — the trigger a Deployment/DaemonSet needs to
   restart on content it mounts but `ansible.builtin.template` never rendered. A ConfigMap
-  staged by `kubectl create configmap --from-file` (monitor-bridge, valheim-stats and
-  terraria-stats all do this for a Jinja-hostile script) sits outside the
-  manifests role's own render/apply cycle, so `manifests_render is changed`
+  staged by `kubectl create configmap --from-file` (observability's Grafana dashboards are the
+  one left) sits outside the manifests role's own render/apply cycle, so `manifests_render is changed`
   (roles/k8s/manifests/tasks/main.yml) never fires for it and the pod keeps running the code
   it started with. See "A config edit won't restart the pod (k3s)" in the repo CLAUDE.md.
 
@@ -12,25 +11,24 @@
   the embed changes the rendered manifest's bytes, `manifests_render is changed` fires on its
   own, and the central rollout-restart covers it. Reach for this macro only for content that
   reaches the cluster some other way. autofix-bridge's templates/script-configmap.yaml.j2 is
-  the worked example of the embed.
+  the worked example of the embed, and monitor-bridge's splits one per module to stay under
+  the client-side apply's annotation cap.
 
   Two call shapes, matching the two ways a caller computes its value:
 
     checksum_annotation('name', value=<already-computed checksum>)
       Renders the value verbatim, `| default('unstaged')`. Use this when the value comes from
-      a task — a `copy` register, a fact hashing several files together (monitor-bridge,
-      valheim-stats and terraria-stats each stage TWO modules and hash
-      both into one trigger — see their tasks/main.yml) — anything other than one file's
-      raw bytes, so a role's own
-      computation is preserved exactly rather than approximated by this macro's own hashing.
+      a task or a rendered value — a `copy` register, a fact hashing several files together,
+      observability's hash of a ConfigMap body — anything other than one file's raw bytes,
+      so a role's own computation is preserved exactly rather than approximated by this
+      macro's own hashing.
 
     checksum_annotation('name', path=<absolute path to one file>)
       Hashes the file's raw bytes inline: `lookup('file', path, rstrip=False) | hash('sha1')`.
       `rstrip=False` is load-bearing — the file lookup's default strips trailing whitespace,
       which would hash different bytes than the file on disk and diverge from a `copy` task's
-      own (unstripped) checksum of the same file. No caller uses this mode, since a second
-      staged module (stats_lib.py) means one file's bytes are no longer the whole story, but
-      it stays correct for a role that stages exactly one file.
+      own (unstripped) checksum of the same file. No caller uses this mode, but it stays
+      correct for a role that stages exactly one file.
 
   `unstaged` is the value every existing checksum/ annotation falls back to on a config-only
   run (`--skip-tags deploy`), a `--dry-run` validator render, or a register/fact that never
@@ -42,7 +40,7 @@
 
   Invoke at the annotations block's indent, e.g.:
       annotations:
-        {{ checksum_annotation('check-script', value=monitor_bridge_script_checksum) }}
+        {{ checksum_annotation('config', value=observability_grafana_config | hash('sha1')) }}
 #}
 {% macro checksum_annotation(name, value=None, path=None) -%}
 checksum/{{ name }}: "{{ (value if path is none else (lookup('file', path, rstrip=False) | hash('sha1'))) | default('unstaged') }}"

@@ -16,8 +16,9 @@ Three things can silently break that, and none of them fails a deploy:
     every workload but that one, reporting green for the one that crashloops.
   * **The inline wait gets queued into the drain.** It looks like the obvious next speedup —
     it is 54s of serial waiting that `k8s/manifests/tasks/drain.yml` would collapse to a max(). It cannot
-    move: "Sync the live Grafana admin password" `kubectl exec`s into `deploy/grafana`, and the
-    drain does not run until the end of the batch. Same shape as the two roles guarded in
+    move: the amend that raises the release record's `restart: true` must follow the wait, and
+    the drain does not run until the end of the batch
+    (test_observability_secret_restarts.py::test_the_amend_runs_after_the_rollout_wait). Same shape as the two roles guarded in
     test_inline_rollout_gates.py, but keyed on a templated loop rather than a literal target.
   * **The snapshot drifts ahead of the wait.** Restart counts read while the old pod is still
     terminating are the OUTGOING pod's, and its replacement starts at zero — so the gate's
@@ -82,25 +83,6 @@ def test_the_role_lists_its_workloads_the_same_way_everywhere() -> None:
             f"gate. Rolled: {sorted(loop)}. Declared in observability_stabilise_workloads: "
             f"{sorted(declared)}. The gate would silently watch fewer workloads than rolled."
         )
-
-
-def test_the_role_still_waits_inline_before_exec_ing_into_grafana() -> None:
-    wait = _index_of(lambda t: "rollout status" in _cmd(t))
-    exec_grafana = _index_of(lambda t: "exec deploy/grafana" in _cmd(t))
-
-    assert wait >= 0, (
-        "observability no longer waits on its own rollout. It cannot be queued into "
-        "k8s/manifests/tasks/drain.yml: the drain runs at the end of the batch, and the Grafana admin "
-        "password sync execs into deploy/grafana before then."
-    )
-    assert exec_grafana >= 0, (
-        "nothing execs into deploy/grafana any more — re-check whether the inline wait is "
-        "still needed, and delete this guard with it if not."
-    )
-    assert wait < exec_grafana, (
-        f"the rollout wait runs at task {wait}, after the Grafana exec at task {exec_grafana}. "
-        "The exec would hit a pod that is still terminating."
-    )
 
 
 def _wait_runs(**ctx) -> bool:

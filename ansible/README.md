@@ -296,9 +296,9 @@ route to drive, so items 1-2 are structurally manual. Home Assistant's `/api/onb
 is drivable, but minting a long-lived token isn't, and seeding `.storage/` by hand corrupts
 installs. The *arr keys are deliberately left manual: writing `config.xml` under a running
 container is the kind of stateful surgery that silently breaks an app.
-**Grafana is no longer on this list** — the role now runs `grafana cli admin
-reset-admin-password` whenever the SOPS password file changes, so a rotation reaches the live
-admin user on the next deploy with no UI step.
+**Grafana is no longer on this list.** An initContainer on the grafana pod runs `grafana cli
+admin reset-admin-password` from the SOPS password before every start, and a password change
+restarts the pod, so a rotation reaches the live admin user on the next deploy with no UI step.
 
 External prerequisites, none of them IaC-managed: the Cloudflare DNS records (including the
 hand-created grey-cloud `*.local.<domain>` wildcard that all internal routing depends on — see

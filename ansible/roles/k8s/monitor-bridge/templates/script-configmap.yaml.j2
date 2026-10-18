@@ -1,0 +1,38 @@
+{#
+  The bridge's Python modules, ONE ConfigMap per monitor_bridge_modules entry, each holding the
+  module under its flat key. The Deployment's projected `monitor-bridge-script` volume mounts
+  every one back at its path under /app.
+
+  Rendered here rather than staged on the node and applied by a task (D5's imperative-ConfigMap
+  row, #5536), so the ConfigMaps are part of this role's manifests. Under Ansible a module edit
+  changes the render and the shared role's rollout restart rolls the pod. Under Flux the
+  renderer's `checksum/restart` hashes every ConfigMap the pod's projected volume names.
+  scripts/renderer/tests/test_renderer_monitor_bridge_script.py holds both halves.
+
+  One per module, not one for all: k8s/manifests applies client-side, which copies each object
+  into a `last-applied-configuration` annotation capped at 262144 bytes. The modules total about
+  700 KB as JSON and the largest package about 200 KB, so neither one ConfigMap nor one per
+  package stays clear of the cap as the bridge grows. One module stays far under it, because
+  modules split at 600 lines. The renderer test holds every one under half the cap.
+
+  The name derivation (`.py` dropped, `/` and `_` to `-`) is repeated in deployment.yaml.j2;
+  the renderer test fails when a projected source names a ConfigMap this file does not render.
+
+  `lookup('file')` strips trailing whitespace, and the `|` block puts back exactly one newline,
+  so each key equals its source file's bytes. The lookup's text is not templated again, so the
+  PromQL braces in the modules reach the pod as written.
+
+  Keep comments at column 0 and above the documents: an indented comment between two keys would
+  land inside the preceding block scalar.
+#}
+{% for module in monitor_bridge_modules %}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: monitor-bridge-script-{{ module[:-3] | replace('/', '-') | replace('_', '-') }}
+  namespace: {{ k8s_namespace }}
+data:
+  {{ module | replace('/', '_') }}: |
+{{ lookup('file', playbook_dir ~ '/roles/k8s/monitor-bridge/files/' ~ module) | indent(4, true) }}
+{% endfor %}

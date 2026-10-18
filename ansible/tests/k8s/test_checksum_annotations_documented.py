@@ -51,8 +51,8 @@ ANNOTATION_KEY_RE = re.compile(
 )
 
 # `checksum_annotation('foo', ...)` — the shared macro (ansible/templates/checksum-
-# annotation.yml.j2) that monitor-bridge and observability
-# call instead of writing `checksum/foo:` literally. Scoped to the SOURCE half of the census:
+# annotation.yml.j2) that observability
+# calls instead of writing `checksum/foo:` literally. Scoped to the SOURCE half of the census:
 # the render expands the macro into the literal key that ANNOTATION_KEY_RE already matches, so
 # a rendered template needs this pattern for nothing. A template the render does
 # not reach — a nested `templates/config/*.j2`, a role with no `containers_list` entry — can
@@ -107,10 +107,9 @@ SOURCE_FALLBACK_MEMBERS = {
 
 # One annotation per role that genuinely defines one, so narrowing the read cannot empty the
 # census and pass over nothing. Every member here arrives through the render: the macro writes
-# the literal key, and these are the only two roles that call it.
+# the literal key, and observability is the only role that calls it.
 CENSUS_MEMBERS = {
     "observability": "config",
-    "monitor-bridge": "check-script",
 }
 
 
@@ -220,26 +219,24 @@ def test_root_claude_md_checksum_names_exist_somewhere():
 def test_the_render_carries_the_macro_built_annotation():
     """The widening, as a named member: the macro's own output is visible on the render.
 
-    `monitor-bridge/templates/deployment.yaml.j2` writes
-    `checksum_annotation('check-script', ...)` and the literal `checksum/check-script` appears
-    nowhere in its source, so this name is found only because the census reads the render. It
-    is the whole reason the macro pattern no longer has to stand in for the render.
+    `observability/templates/grafana.yaml.j2` writes `checksum_annotation('config', ...)` and
+    the literal `checksum/config` key appears nowhere in its source, so this name is found
+    only because the census reads the render. It is the whole reason the macro pattern no
+    longer has to stand in for the render.
     """
-    role = K8S_ROLES / "monitor-bridge"
-    rendered = _rendered_by_role().get("monitor-bridge", {})
-    assert "deployment.yaml.j2" in rendered, (
-        "monitor-bridge's Deployment is not among the rendered manifests, so this guard's "
-        f"corpus is empty: {sorted(rendered)}"
+    role = K8S_ROLES / "observability"
+    rendered = _rendered_by_role().get("observability", {})
+    assert "grafana.yaml.j2" in rendered, (
+        "observability's Grafana manifest is not among the rendered manifests, so this "
+        f"guard's corpus is empty: {sorted(rendered)}"
     )
-    assert "check-script" not in ANNOTATION_KEY_RE.findall(
-        (role / "templates" / "deployment.yaml.j2").read_text()
+    assert "config" not in ANNOTATION_KEY_RE.findall(
+        (role / "templates" / "grafana.yaml.j2").read_text()
     ), (
         "the source now spells the annotation out, so it no longer proves the render is read"
     )
-    assert "check-script" in set(
-        ANNOTATION_KEY_RE.findall(rendered["deployment.yaml.j2"])
-    ), (
-        "the render of monitor-bridge's Deployment no longer carries checksum/check-script; "
+    assert "config" in set(ANNOTATION_KEY_RE.findall(rendered["grafana.yaml.j2"])), (
+        "the render of observability's Grafana manifest no longer carries checksum/config; "
         "the macro's output is what this census reads"
     )
 
