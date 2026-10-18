@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Cgroup resource metrics for claude-rc.service and user-1000.slice — managed by Ansible
-# (claude_code role); edits overwritten.
+# Cgroup resource metrics for claude-rc.service, user-1000.slice and each live fan-out batch
+# unit — managed by Ansible (claude_code role); edits overwritten.
 #
 # Issue #1238: claude-rc.service is bounded (MemoryHigh/MemorySwapMax) and user-1000.slice
 # (sessions started with `claude agents` from an SSH shell, #1213) is not — but neither
@@ -118,6 +118,47 @@ trap 'rm -f "$TMP"' EXIT
   for label in "${!CGROUPS[@]}"; do
     f="$CGROOT/${CGROUPS[$label]}/pids.current"
     [ -r "$f" ] && printf 'claude_cgroup_pids_current{cgroup="%s"} %s\n' "$label" "$(cat "$f")"
+  done
+
+  # One series set per live fan-out batch unit (fanout-<batch>.service), wherever a user
+  # manager put it, so each batch's use can be set against placement.py's RESERVATION_BYTES.
+  # memory.current and systemd's "memory peak" both count page cache: a live batch read 46 MiB
+  # anon beside 1.2 GiB file and a 7.8 GiB peak (2026-10-18). So anon and file are split here,
+  # because anon is what the reservation has to cover. A unit's cgroup goes when it stops, so
+  # its last sample is the one before; systemd's "Consumed" journal line keeps the total.
+  # The batch label adds about 50 short-lived series a day per family (#4808).
+  batch_dirs=("$CGROOT"/user.slice/user-*.slice/user@*.service/*/fanout-*.service)
+  batch_label() { local unit=${1##*/}; unit=${unit#fanout-}; printf '%s' "${unit%.service}"; }
+
+  printf '# HELP claude_fanout_batch_memory_bytes A fan-out batch unit'"'"'s memory: anon and file from memory.stat, peak from memory.peak.\n'
+  printf '# TYPE claude_fanout_batch_memory_bytes gauge\n'
+  for d in "${batch_dirs[@]}"; do
+    [ -d "$d" ] || continue
+    b=$(batch_label "$d")
+    # The shell opens the file, so a unit stopping mid-scan fails the redirect quietly
+    # instead of making awk fatal (the trap the uid block below describes).
+    awk -v b="$b" '
+      $1 == "anon" || $1 == "file" {
+        printf "claude_fanout_batch_memory_bytes{batch=\"%s\",kind=\"%s\"} %s\n", b, $1, $2
+      }' 2>/dev/null < "$d/memory.stat"
+    peak=$(cat "$d/memory.peak" 2>/dev/null)
+    [ -n "$peak" ] && printf 'claude_fanout_batch_memory_bytes{batch="%s",kind="peak"} %s\n' "$b" "$peak"
+  done
+
+  printf '# HELP claude_fanout_batch_cpu_usage_usec_total Cumulative CPU usage (cpu.stat usage_usec) of a fan-out batch unit.\n'
+  printf '# TYPE claude_fanout_batch_cpu_usage_usec_total counter\n'
+  for d in "${batch_dirs[@]}"; do
+    [ -d "$d" ] || continue
+    usage=$(awk '$1=="usage_usec"{print $2}' 2>/dev/null < "$d/cpu.stat")
+    [ -n "$usage" ] && printf 'claude_fanout_batch_cpu_usage_usec_total{batch="%s"} %s\n' "$(batch_label "$d")" "$usage"
+  done
+
+  printf '# HELP claude_fanout_batch_pids_current Current pids.current of a fan-out batch unit.\n'
+  printf '# TYPE claude_fanout_batch_pids_current gauge\n'
+  for d in "${batch_dirs[@]}"; do
+    [ -d "$d" ] || continue
+    pids=$(cat "$d/pids.current" 2>/dev/null)
+    [ -n "$pids" ] && printf 'claude_fanout_batch_pids_current{batch="%s"} %s\n' "$(batch_label "$d")" "$pids"
   done
 
   # Slice 6 of docs/claude-agent-user.md: a uid listed in CLAUDE_WATCH_UIDS (the unit sets it

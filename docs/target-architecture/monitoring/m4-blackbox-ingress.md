@@ -194,7 +194,8 @@ PR 5 is recorded as supporting evidence only, under the rule in *Verification*.
   template:
     - `ansible/tests/services/test_kuma_ingress_monitors.py`, which renders Kuma's entities;
     - the `_INGRESS_LOOP_RE` arm of `scripts/diagnostics/probe_lib/kuma_table_loop.py`, and
-      `scripts/diagnostics/tests/test_probe_monitors.py::test_the_real_template_declares_every_ingress_tile_ungated`;
+      the test `test_the_real_template_declares_every_ingress_tile_ungated` in
+      `scripts/diagnostics/tests/test_probe_monitors.py`, both retired by PR 4;
     - a branch of `ansible/roles/k8s/uptime-kuma/tests/test_status_page_groups.py:declarations`,
       whose
       `ansible/roles/k8s/uptime-kuma/tests/test_status_page_groups.py::test_the_declaration_census_finds_every_known_monitor`

@@ -42,8 +42,17 @@ def _finding(title, severity="high", confidence=0.9, category="correctness"):
 
 
 def unprefixed(argv):
-    """`argv` from its `git`, past the `env` settings `hardened_runs.hardened` puts before it."""
-    return argv[argv.index("git") :] if argv[0] == "env" else argv
+    """`argv` from its command, past a leading `env K=V ...`.
+
+    `hardened_runs.hardened` puts one before `git`, and `Review._claude` one before `claude`
+    carrying the OTEL attributes.
+    """
+    if argv[0] != "env":
+        return argv
+    rest = argv[1:]
+    while rest and "=" in rest[0]:
+        rest = rest[1:]
+    return rest
 
 
 class FakeRunner:

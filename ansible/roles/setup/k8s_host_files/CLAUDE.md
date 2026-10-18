@@ -37,8 +37,9 @@ artifacts' Deployment mounts the same way. media-volume's PR wrote `tasks/media-
 which creates the directory media-volume's static PersistentVolume names and its `media/` and
 `torrents/` subdirectories, with no mode. observability's dashboard conversion wrote
 `tasks/observability.yml`, an absent arm over the three trees its old `tasks/dashboards.yml`
-staged under `/etc/rancher/k3s/`. A row drops its source role's `when: not
-k8s_dry_run` guard and its `config` tag, because `initial_setup.yml` has no dry-run mode.
+staged under `/etc/rancher/k3s/`. traefik's PR wrote `tasks/traefik.yml`, the two absent arms
+that remove the retired Cloudflare IP drift cron and its script. A row drops its source role's
+`when: not k8s_dry_run` guard and its `config` tag, because `initial_setup.yml` has no dry-run mode.
 
 - **The playbook entry is gated to daniel-box by a literal.** `setup_routing.py` places a role
   whose gate admits only another host as a hand apply, so the tick could never run a Pi-gated

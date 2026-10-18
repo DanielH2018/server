@@ -14,3 +14,6 @@
 
 - name: Observability's retired dashboard staging trees
   ansible.builtin.import_tasks: observability.yml
+
+- name: Traefik's Cloudflare IP drift absent arms
+  ansible.builtin.import_tasks: traefik.yml

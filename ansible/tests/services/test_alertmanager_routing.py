@@ -6,12 +6,12 @@ Alertmanager does, children in order, stopping at the first match unless `contin
 and reads each route the walk ends on. Each label set carries one expected outcome:
 
 - `muted` (`PAGING`): every route the set reaches carries the `weekly-reboot` mute. The
-  k8s-workloads sets stand for those alerts once they drop `shadow`, and M4's
-  `IngressProbesMissing` pages from the start.
+  k8s-workloads sets stand for those alerts once they drop `shadow`. M4's
+  `IngressProbesMissing` pages from the start, and its two `IngressProbeFailed*` sets since
+  its PR 5.
 - `blackhole` (`SHADOW`): every route the set reaches has the `blackhole` receiver. A rule
   that runs in parallel with a Kuma tile carries `shadow="true"`, and this is the proof that
-  it pages nobody. M4's two `IngressProbeFailed*` sets move to `PAGING` in its PR 5, and
-  `BlackboxExporterDown` moves in M6's batch A3. M3's two `DiskHealth*` sets move in its PR 5,
+  it pages nobody. M4's `BlackboxExporterDown` moves to `PAGING` in M6's batch A3. M3's two `DiskHealth*` sets move in its PR 5,
   and the two `TextfileCollectorError` sets in M6's batch A1. H3's host-plane rules page from
   the start: each `HostReconcileFailed`, and each `HostUpdateStale` once
   `observability_expected_hosts` lists a host and `host-checks.yaml` carries its rule (H3.9c).
@@ -118,6 +118,11 @@ PAGING = {
         ["discord", "email"],
     ),
     "ingress-probes-missing": (ingress_set("IngressProbesMissing"), ["discord"]),
+    "ingress-probe-failed": (ingress_set("IngressProbeFailed"), ["discord"]),
+    "ingress-probe-failed-critical": (
+        ingress_set("IngressProbeFailedCritical"),
+        ["discord", "email"],
+    ),
     "deploy-hold-active": (deploy_pipeline_set("DeployHoldActive"), ["discord"]),
     "promotion-stalled": (deploy_pipeline_set("PromotionStalled"), ["discord"]),
     "prod-moved-outside-promote": (
@@ -140,8 +145,6 @@ PAGING = {
 DEPLOY_HOLD, _ = PAGING["deploy-hold-active"]
 # The shadow sets, as M4's ingress-probes rules and M3's host-checks rules ship them.
 SHADOW = {
-    "ingress-probe-failed": ingress_set("IngressProbeFailed"),
-    "ingress-probe-failed-critical": ingress_set("IngressProbeFailedCritical"),
     "blackbox-exporter-down": ingress_set("BlackboxExporterDown"),
     **host_sets(shadow=True),
 }
