@@ -1038,6 +1038,14 @@ API server with the pod's ServiceAccount token, and Prometheus or an app over HT
 - **Script delivery.** A ConfigMap in the same Kustomization, whose name ends in the digest of
   the script. The Job's spec names the ConfigMap, so the Job's spec digest covers the script,
   and a script fix renames the Job.
+    - A CronJob's gate Job is the one exception. It runs the CronJob's own image and
+      command, so the census skips its `delivery` and `helper` rows. The census takes a Job
+      for a gate when it sits in `<tag>-verify`, carries `homelab/role-digest8`, and its pod
+      template less that annotation equals the `jobTemplate` pod template of a CronJob in
+      `<tag>`. This holds for a verify gate and a mutation gate alike, because both run
+      the copied image. A gate whose template differs in any other field, such as its
+      image, meets every row. `scripts/renderer/renderer_lib/cronjob_gate.py:is_gate_copy`
+      is the predicate (#5562).
 - **Namespace.** Snapshot and soak Jobs run in `flux-system`. Verify and mutation Jobs run in
   their tag's namespace, because they probe as callers from that namespace.
 - **A fence admits every Job that dials through it.** Today's verifies run as the node or
@@ -1882,8 +1890,8 @@ assertion becomes a standing rule.
   `{kind: mutation, rerun_safe: <path>::<function>}`. The renderer embeds the role's `digest8`
   as the pod-template annotation `homelab/role-digest8`. When the longest Job deadline in
   `-verify` plus 60 seconds exceeds the default `timeout`, the renderer raises the timeout to
-  that sum. The census row `delivery` still refuses a copied
-  gate Job, which runs its own image's command (#5562).
+  that sum. The Job census exempts the gate Job from its `delivery` and `helper` rows, by
+  the rule under *Script delivery* above (#5562).
     - **The gate loses `Forbid`'s protection.** `kubectl create job --from=cronjob` sets a
       controller ownerReference to the CronJob, and `concurrencyPolicy: Forbid` keys on it to
       suppress a scheduled firing while a gate runs. `cronjob-gate`'s `CLAUDE.md` calls that

@@ -33,6 +33,8 @@ Job and its directory:
   reach around those two rules. The row guards against a mistake, not an
   adversary: a name spelled out at run time passes it. A `SIBLINGS` copy is byte-identical.
 
+A CronJob's gate Job (`cronjob_gate.is_gate_copy`) skips `delivery` and `helper`.
+
 The test module is `test_renderer_job_census.py`.
 """
 
@@ -40,13 +42,12 @@ import ast
 import json
 import re
 from collections.abc import Callable, Iterator, Mapping
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 from lib import yaml_fast
 from lib.repo_paths import REPO
-from pathlib import PurePosixPath
-
 from renderer.renderer_lib.bundle import CLUSTER_DIR
+from renderer.renderer_lib.cronjob_gate import is_gate_copy
 from renderer.renderer_lib.digest8 import configmap_digest8, job_spec_digest8
 from renderer.renderer_lib import ordering
 
@@ -494,5 +495,6 @@ def problems(bundle: Bundle, rows: Mapping[str, Offence] = ROWS) -> list[str]:
         f"{row}: {directory}/{job['metadata']['name']}: {line}"
         for directory, job, docs in jobs(bundle)
         for row, offence in rows.items()
+        if row not in ("delivery", "helper") or not is_gate_copy(job, directory, bundle)
         for line in offence(job, directory, docs)
     ]

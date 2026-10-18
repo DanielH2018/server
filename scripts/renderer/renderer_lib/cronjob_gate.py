@@ -40,7 +40,7 @@ from renderer.renderer_lib.bundle import KUSTOMIZATION, kustomization_text
 from renderer.renderer_lib.cluster import RenderedTag
 from renderer.renderer_lib.digest8 import job_spec_digest8
 from renderer.renderer_lib.environment import RenderError
-from renderer.renderer_lib.ordering import cronjob_gates
+from renderer.renderer_lib.ordering import VERIFY_SUFFIX, cronjob_gates, split_kind
 from renderer.renderer_lib.snapshot import role_digest8
 
 # The Job census's annotations (`scripts/renderer/tests/_job_census.py`).
@@ -101,6 +101,49 @@ def gate_job(cronjob: Mapping, digest8: str, gate: Mapping) -> dict:
             "would not carry its name as a prefix"
         )
     return job
+
+
+def _pod_template(template: Mapping) -> dict:
+    """`template` without `ROLE_DIGEST8`, and without the metadata that leaves empty."""
+    template = copy.deepcopy(dict(template))
+    meta = template.get("metadata") or {}
+    (meta.get("annotations") or {}).pop(ROLE_DIGEST8, None)
+    if "annotations" in meta and not meta["annotations"]:
+        del meta["annotations"]
+    if "metadata" in template and not meta:
+        del template["metadata"]
+    return template
+
+
+def is_gate_copy(
+    job: Mapping, directory: str, bundle: Mapping[str, list[dict]]
+) -> bool:
+    """Whether `job` is a gate Job that `gate_job` copied from a CronJob in the bundle.
+
+    The Job census exempts such a Job from its `delivery` and `helper` rows (#5562): it runs
+    the CronJob's own image and command, so it has no mounted script for those rows to read.
+    A copy sits in `<tag>-verify`, carries `homelab/role-digest8`, and its pod template less
+    that annotation equals the `jobTemplate` pod template of a CronJob in `<tag>`. Any other
+    edit to the pod template, such as another image, makes it an ordinary Job again.
+
+    Args:
+        job: A Job document from the bundle.
+        directory: The `cluster/` directory that holds it.
+        bundle: Each `cluster/` directory of the bundle, mapped to its documents.
+    """
+    tag, suffix = split_kind(directory)
+    template = (job.get("spec") or {}).get("template") or {}
+    annotations = (template.get("metadata") or {}).get("annotations") or {}
+    if suffix != VERIFY_SUFFIX or ROLE_DIGEST8 not in annotations:
+        return False
+    own = _pod_template(template)
+    for doc in bundle.get(tag, []):
+        if doc.get("kind") != "CronJob":
+            continue
+        spec = ((doc.get("spec") or {}).get("jobTemplate") or {}).get("spec") or {}
+        if own == _pod_template(spec.get("template") or {}):
+            return True
+    return False
 
 
 def _cronjobs(files: Mapping[str, str]) -> dict[str, dict]:
