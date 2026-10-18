@@ -10,7 +10,8 @@
 # ansible/tests/services/test_lan_address_rules_agree.py holds it, the namespace and the
 # Service name to the rendered Service.
 # TraefikIngressAddressNotPinned is the same conversion of traefik's "Fail if Traefik did not
-# get the reserved ingress VIP", at traefik's flip.
+# get the reserved ingress VIP". It lands ahead of traefik's flip, while observability is still
+# Ansible-owned, so the flip PR does not change observability (the cross-plane gate's arm 1).
 groups:
   - name: k8s-services
     rules:
@@ -105,4 +106,4 @@ groups:
             homelab/traefik for 5 minutes, or Prometheus has no kube-state-metrics scrape job.
             Cloudflare, the router's port-forward and the LAN DNS cannot reach the edge on the
             VIP. MetalLB does not re-evaluate an existing allocation, so the operator deletes the
-            Service and Flux re-applies it with a fresh allocation.
+            Service and the next apply of traefik re-creates it with a fresh allocation.

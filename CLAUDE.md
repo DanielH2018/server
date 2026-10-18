@@ -292,7 +292,9 @@ and census test files, which caused most of the PR reds that the author's own co
 (#3605, #4008, #4904, #5481). Each sibling carries its own `files` gate, so a commit runs
 only the siblings whose inputs it touches. CI's `pytest` job runs the
 suite whole on every PR, and `land.sh` waits on that job before it merges. To see a red test
-before CI does, run `uv run pytest` yourself. A pre-push hook that re-ran the suite was removed on 2026-10-02: it
+before CI does, run `uv run pytest` yourself. A fan-out batch is the exception: it names test
+paths, and `.claude/hooks/block-batch-full-suite.py` refuses its whole-suite run, because a
+local full run held 2.3 GiB and CI's run is the one the pipeline waits on. A pre-push hook that re-ran the suite was removed on 2026-10-02: it
 cost 89s on an idle daniel-box and 235s under load on every push, for a verdict CI repeats
 in about 61s.
 The `validate-compose-templates` hook shells out to `uv` (see **Python & Tests**), so uv must be

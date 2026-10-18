@@ -78,6 +78,11 @@ artifacts_platform_services:
   - coredns
   - unbound
   - cert-manager
+  # traefik's flip adds a `traefik-crds` containers_list entry. Naming it here first keeps that
+  # flip from moving this role's render while artifacts gains `dependsOn: [traefik]`, which CI's
+  # cross-plane gate refuses in one PR (arm 2, #5720). Once the entry exists, this line is
+  # redundant, and dropping it moves nothing, because the list is deduplicated.
+  - traefik-crds
 
 # Services no inventory lists, but that older artifacts are about — a document reviewing the
 # kopia retirement is only findable by service if the name is still recognised. Retiring a

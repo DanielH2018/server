@@ -156,6 +156,7 @@
  "ansible/roles/k8s/registry/tests/test_registry_verify.py": 3.19,
  "ansible/roles/k8s/sonarr/tests/test_sonarr_verify.py": 6.27,
  "ansible/roles/k8s/tdarr/tests/test_tdarr_verify.py": 0.9,
+ "ansible/roles/k8s/uptime-kuma/tests/test_declaration_index_flux_form.py": 0.82,
  "ansible/roles/k8s/uptime-kuma/tests/test_maintenance_window.py": 0.78,
  "ansible/roles/k8s/uptime-kuma/tests/test_render_maintenance.py": 0.0,
  "ansible/roles/k8s/uptime-kuma/tests/test_render_status_page.py": 0.0,

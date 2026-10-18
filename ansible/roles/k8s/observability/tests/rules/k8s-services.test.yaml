@@ -266,7 +266,7 @@ tests:
               verify: "true"
             exp_annotations: &traefik_annotations
               summary: The traefik Service does not hold the reserved ingress VIP.
-              description: "kube-state-metrics reports no LoadBalancer ingress at the reserved ingress VIP on homelab/traefik for 5 minutes, or Prometheus has no kube-state-metrics scrape job. Cloudflare, the router's port-forward and the LAN DNS cannot reach the edge on the VIP. MetalLB does not re-evaluate an existing allocation, so the operator deletes the Service and Flux re-applies it with a fresh allocation."
+              description: "kube-state-metrics reports no LoadBalancer ingress at the reserved ingress VIP on homelab/traefik for 5 minutes, or Prometheus has no kube-state-metrics scrape job. Cloudflare, the router's port-forward and the LAN DNS cannot reach the edge on the VIP. MetalLB does not re-evaluate an existing allocation, so the operator deletes the Service and the next apply of traefik re-creates it with a fresh allocation."
 
   # MetalLB gave traefik an auto-assigned address. The rule holds 5 minutes, then fires.
   - interval: 1m
