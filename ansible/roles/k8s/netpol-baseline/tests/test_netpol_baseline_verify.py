@@ -49,7 +49,9 @@ def _serve(status=200):
             pass
 
     server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
-    threading.Thread(target=server.serve_forever, daemon=True).start()
+    threading.Thread(
+        target=server.serve_forever, kwargs={"poll_interval": 0.01}, daemon=True
+    ).start()
     return server
 
 
@@ -71,13 +73,16 @@ def servers():
         server.server_close()
 
 
-@pytest.fixture
-def closed_url() -> str:
-    """A URL on a local port nothing listens on, so a connect to it is refused."""
+def _closed_port() -> int:
+    """A local port nothing listens on, so a connect to it is refused."""
     with socket.socket() as sock:
         sock.bind(("127.0.0.1", 0))
-        port = sock.getsockname()[1]
-    return f"http://127.0.0.1:{port}/"
+        return sock.getsockname()[1]
+
+
+@pytest.fixture
+def closed_url() -> str:
+    return f"http://127.0.0.1:{_closed_port()}/"
 
 
 @pytest.fixture
@@ -122,13 +127,15 @@ def _env(servers, closed_url, rows=None, **over) -> dict[str, str]:
 
 
 def _legs(env):
-    return verify.legs(env, control_retry_seconds=0, sentinel_retry_seconds=0)
+    """The legs with no retries, and the DNS leg dialling a closed port rather than this host's 53."""
+    return verify.legs(
+        env, control_retry_seconds=0, sentinel_retry_seconds=0, dns_port=_closed_port()
+    )
 
 
-def test_a_fenced_cluster_passes(servers, closed_url, capsys):
+def test_a_fenced_cluster_passes(servers, closed_url):
     rows = [_row(closed_url), _row(servers(), expect="open")]
-    assert verify.main([], _env(servers, closed_url, rows)) == 0
-    out = capsys.readouterr().out
+    out = "\n".join(_legs(_env(servers, closed_url, rows)))
     for line in (
         "control ok",
         "sentinel control ok",
@@ -275,7 +282,9 @@ def test_the_gate_reads_the_api_with_the_pod_token(tmp_path):
             pass
 
     server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
-    threading.Thread(target=server.serve_forever, daemon=True).start()
+    threading.Thread(
+        target=server.serve_forever, kwargs={"poll_interval": 0.01}, daemon=True
+    ).start()
     try:
         get = verify.api_reader("tok", base=_url(server).rstrip("/"))
         assert verify.gate(GATE_ROWS[:1], get)

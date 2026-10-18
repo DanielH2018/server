@@ -58,6 +58,9 @@ CONTROL_RETRY_SECONDS = 60
 # old failed one immediate attempt with the policy, the labels and the target all correct
 # (measured 2026-08-20).
 SENTINEL_RETRY_SECONDS = 120
+# The port the DNS leg dials once a name resolves. Only the resolution is the test, so any
+# port serves; a test passes a closed local one.
+DNS_DIAL_PORT = 53
 
 
 class Failed(Exception):
@@ -230,10 +233,11 @@ def open_port(row: Mapping) -> str:
     return f"open port ok: {row['url']} reachable from an unlisted caller, as designed"
 
 
-def dns(names: list[str], port: int = 53) -> str:
+def dns(names: list[str], port: int = DNS_DIAL_PORT) -> str:
     """Prove pihole resolves one of `names`, which no other resolver can answer.
 
-    The connect after a resolution may succeed or fail; only the resolver's error fails.
+    The connect to `port` after a resolution may succeed or fail; only the resolver's
+    error fails.
 
     Raises:
         Failed: No name resolved.
@@ -253,6 +257,7 @@ def legs(
     env: Mapping[str, str],
     control_retry_seconds: float = CONTROL_RETRY_SECONDS,
     sentinel_retry_seconds: float = SENTINEL_RETRY_SECONDS,
+    dns_port: int = DNS_DIAL_PORT,
 ) -> list[str]:
     """Run every leg in the probe's order, and return one report line each.
 
@@ -282,7 +287,7 @@ def legs(
     for row in json.loads(env["TARGETS"]):
         lines.append(isolated(row) if row["expect"] == "refused" else open_port(row))
     if names := [n for n in env.get("DNS_NAMES", "").split(",") if n]:
-        lines.append(dns(names))
+        lines.append(dns(names, dns_port))
     return lines
 
 
