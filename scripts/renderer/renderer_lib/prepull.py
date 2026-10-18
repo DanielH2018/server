@@ -6,9 +6,11 @@ whose image is large and whose registry is slow is down for the whole pull. code
 `flux_prepull_timeout` in its `defaults/main.yml` gets `DIR/cluster/<tag>-prepull/`, which
 holds:
 
-- one Job `prepull-<tag>-<spec digest8>` in `flux-system` per node the tag's workloads name in
-  their node selector or node affinity. Each Job is pinned to its node and runs one container
-  per distinct image the workloads run, init containers included, with
+- one Job `prepull-<tag>-<spec digest8>` in `flux-system` per distinct placement among the
+  tag's workloads. A placement is the pod's `nodeSelector`, node affinity and tolerations,
+  copied onto the Job, so the scheduler puts the Job where it would put the workload: on the
+  preferred node, or on another one when that node is cordoned or full. Each Job runs one
+  container per distinct image those workloads run, init containers included, with
   `imagePullPolicy: IfNotPresent`. A container starts only once the kubelet has its image, so
   the Job completes exactly when every image is on the node;
 - the ConfigMap `prepull-<tag>-<content digest8>` holding the script each container runs, which
@@ -17,15 +19,22 @@ holds:
 
 `ordering.py` gives `<tag>-prepull` the edges of `<tag>` and makes `<tag>` depend on it, so the
 old pod keeps serving through the pull. The Kustomization's `timeout` is the role's
-`flux_prepull_timeout` (`bundle.flux_files`), and each Job's `activeDeadlineSeconds` sits
-`DEADLINE_MARGIN_S` below it. The wait is moved, not removed: the pull still holds a
-kustomize-controller worker and still sits on `verify`'s chained timeout.
+`flux_prepull_timeout` (`bundle.flux_files`). The wait is moved, not removed: the pull still
+holds a kustomize-controller worker and still sits on `verify`'s chained timeout.
 
-Each Job's spec carries the image refs and the node, so a content-tag change renames the Job
-and Flux runs it again, while a revision that leaves the images alone keeps the completed Job.
+DECIDED: the Job sets no `activeDeadlineSeconds`. A slow pull never fails a Pod: it waits in
+`ContainerCreating` or `ImagePullBackOff`. So a deadline is the only way the Job could fail,
+and Flux never re-runs a failed Job under the same name. Every later revision that kept the
+image would then hold `<tag>` at `DependencyNotReady` until a new content tag renamed the
+Job. Without a deadline, a pull that outlasts the Kustomization's `timeout` costs that
+revision its verdict, and the Job keeps pulling. Flux's next retry finds it complete and
+applies `<tag>`.
 
-A workload pinned only by a preference can still land on another node, and there the rollout
-pays the cold pull as before. Every image must carry `python3`, which runs the script.
+Each Job's spec carries the image refs and the placement, so a content-tag change renames the
+Job and Flux runs it again, while a revision that leaves the images alone keeps the completed
+Job. The scheduler places the Job and the workload's new pod separately, so a node that is
+cordoned between the two still pays a cold pull. Every image must carry `python3`, which runs
+the script.
 """
 
 import sys as _sys
@@ -36,6 +45,8 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 from collections.abc import Iterable, Mapping
 from dataclasses import replace
 from pathlib import Path
+
+import json
 
 import yaml
 
@@ -50,7 +61,6 @@ from renderer.renderer_lib.cluster import RenderedTag
 from renderer.renderer_lib.digest8 import configmap_digest8, job_spec_digest8
 from renderer.renderer_lib.environment import RenderError
 from renderer.renderer_lib.ordering import prepull_timeouts
-from renderer.renderer_lib.snapshot import DEADLINE_MARGIN_S, seconds
 
 HOSTNAME = "kubernetes.io/hostname"
 WORKLOADS = frozenset({"Deployment", "StatefulSet"})
@@ -106,11 +116,28 @@ def images(spec: Mapping) -> list[str]:
     return list(dict.fromkeys(str(c["image"]) for c in containers if c.get("image")))
 
 
-def targets(tag: str, files: Mapping[str, str]) -> tuple[list[str], list[str]]:
-    """The nodes to pull onto and the images to pull, read from `tag`'s rendered workloads.
+def placement(spec: Mapping) -> dict:
+    """The fields of a pod spec that decide its node: `nodeSelector`, node affinity, tolerations.
+
+    Pod affinity is left out, because a Job that copied a workload's anti-affinity to its own
+    pods would repel itself from the node it should pull onto.
+    """
+    found: dict = {}
+    if spec.get("nodeSelector"):
+        found["nodeSelector"] = spec["nodeSelector"]
+    node_affinity = (spec.get("affinity") or {}).get("nodeAffinity")
+    if node_affinity:
+        found["affinity"] = {"nodeAffinity": node_affinity}
+    if spec.get("tolerations"):
+        found["tolerations"] = spec["tolerations"]
+    return found
+
+
+def targets(tag: str, files: Mapping[str, str]) -> list[tuple[dict, list[str]]]:
+    """Each distinct placement among `tag`'s rendered workloads, with the images run there.
 
     Raises:
-        RenderError: The render holds no Deployment or StatefulSet, or none names a node.
+        RenderError: The render holds no Deployment or StatefulSet, or one names no node.
     """
     specs = _pod_specs(files)
     if not specs:
@@ -118,25 +145,26 @@ def targets(tag: str, files: Mapping[str, str]) -> tuple[list[str], list[str]]:
             f"{tag} sets flux_prepull_timeout, and its render holds no Deployment or "
             "StatefulSet whose images a pre-pull could fetch"
         )
-    found_nodes = list(dict.fromkeys(n for s in specs for n in nodes(s)))
-    if not found_nodes:
+    if not all(nodes(s) for s in specs):
         raise RenderError(
-            f"{tag} sets flux_prepull_timeout, and no workload in its render names a node by "
+            f"{tag} sets flux_prepull_timeout, and a workload in its render names no node by "
             f"{HOSTNAME}, so the pre-pull cannot tell where the pod will run"
         )
-    return found_nodes, list(dict.fromkeys(i for s in specs for i in images(s)))
+    grouped: dict[str, tuple[dict, list[str]]] = {}
+    for spec in specs:
+        where = placement(spec)
+        held = grouped.setdefault(json.dumps(where, sort_keys=True), (where, []))[1]
+        held += [i for i in images(spec) if i not in held]
+    return list(grouped.values())
 
 
-def prepull_files(
-    tag: str, node_names: Iterable[str], image_refs: list[str], deadline: int
-) -> dict[str, str]:
+def prepull_files(tag: str, pulls: Iterable[tuple[dict, list[str]]]) -> dict[str, str]:
     """The files of `cluster/<tag>-prepull/`, by name, `kustomization.yaml` included.
 
     Args:
         tag: The deploy tag.
-        node_names: The nodes to pull onto, one Job each.
-        image_refs: The images each Job pulls, one container each.
-        deadline: Each Job's `activeDeadlineSeconds`, below its Kustomization's `timeout`.
+        pulls: Each placement to pull under, one Job each, with the images that Job pulls,
+            one container each (`targets`).
     """
     base = f"prepull-{tag}"
     configmap: dict = {
@@ -147,7 +175,7 @@ def prepull_files(
     }
     configmap["metadata"]["name"] = f"{base}-{configmap_digest8(configmap)}"
     jobs = []
-    for node in node_names:
+    for where, image_refs in pulls:
         job: dict = {
             "apiVersion": "batch/v1",
             "kind": "Job",
@@ -157,14 +185,13 @@ def prepull_files(
                 "annotations": {"homelab/job-kind": "prepull"},
             },
             "spec": {
-                # An image that cannot be pulled leaves the pod waiting, not failed, so only
-                # the deadline ends it and a retry would add nothing.
+                # A slow or failing pull leaves the pod waiting, not failed, so a retry
+                # would add nothing. No deadline: the module docstring's DECIDED says why.
                 "backoffLimit": 0,
-                "activeDeadlineSeconds": deadline,
                 "template": {
                     "metadata": {"labels": {"app": base}},
                     "spec": {
-                        "nodeSelector": {HOSTNAME: node},
+                        **where,
                         "restartPolicy": "Never",
                         "enableServiceLinks": False,
                         "automountServiceAccountToken": False,
@@ -235,8 +262,8 @@ def attach_prepulls(
         roles: The role tree whose defaults set `flux_prepull_timeout`.
 
     Raises:
-        RenderError: A tag's timeout cannot be read or leaves the Job no time, or its render
-            names no node or no workload.
+        RenderError: A tag's timeout cannot be read, or its render holds no workload or one
+            that names no node.
     """
     timeouts, problems = prepull_timeouts(
         set(published) & {t.tag for t in rendered}, roles
@@ -245,19 +272,9 @@ def attach_prepulls(
         raise RenderError("; ".join(problems))
     attached = []
     for tag in rendered:
-        timeout = timeouts.get(tag.tag)
-        if timeout is None:
+        if tag.tag not in timeouts:
             attached.append(tag)
             continue
-        deadline = seconds(timeout) - DEADLINE_MARGIN_S
-        if deadline <= 0:
-            raise RenderError(
-                f"{tag.tag}'s flux_prepull_timeout of {timeout} leaves the pre-pull Job no time"
-            )
-        node_names, image_refs = targets(tag.tag, tag.files)
-        attached.append(
-            replace(
-                tag, prepull=prepull_files(tag.tag, node_names, image_refs, deadline)
-            )
-        )
+        pulls = targets(tag.tag, tag.files)
+        attached.append(replace(tag, prepull=prepull_files(tag.tag, pulls)))
     return attached

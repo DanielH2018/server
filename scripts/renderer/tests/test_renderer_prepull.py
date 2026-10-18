@@ -15,10 +15,9 @@ from lib import yaml_fast
 from lib.exit_codes import OK, RENDER_OK
 from renderer import homelab_render
 from renderer.renderer_lib.bundle import CLUSTER_VARS_FILE
-from renderer.renderer_lib.cluster import RenderedTag
 from renderer.renderer_lib.environment import RenderError
 from renderer.renderer_lib.ordering import Ordering, prepull_timeouts
-from renderer.renderer_lib.prepull import attach_prepulls, prepull_files, targets
+from renderer.renderer_lib.prepull import prepull_files, targets
 
 DOTENV = "peanut_password=ENC[AES256_GCM,data:eA==,iv:aQ==,tag:dA==,type:str]\n"
 TAG = "code-server"
@@ -72,19 +71,28 @@ def test_the_tag_waits_on_its_prepull_and_its_snapshot_side_by_side(rendered):
 
 def test_the_prepull_kustomization_takes_the_roles_prepull_timeout(rendered):
     docs = _kustomizations(rendered)
-    assert docs[f"{TAG}-prepull"]["spec"]["timeout"] == "3600s"
+    assert docs[f"{TAG}-prepull"]["spec"]["timeout"] == "4500s"
     assert docs[f"{TAG}-snapshot"]["spec"]["timeout"] == "600s"
 
 
-def test_the_job_pulls_the_deployments_ghcr_ref_onto_its_preferred_node(rendered):
+def test_the_job_pulls_the_deployments_ghcr_ref_under_its_placement(rendered):
     deployment = _pod_spec(rendered / "cluster" / TAG / "deployment.yaml")
     job = _pod_spec(rendered / "cluster" / f"{TAG}-prepull" / "job.yaml")
-    assert job["nodeSelector"] == {"kubernetes.io/hostname": "daniel-box"}
+    # The preference, not a pin: with daniel-box cordoned, the Job follows the pod's
+    # placement to the other node instead of waiting on daniel-box.
+    assert job["affinity"] == deployment["affinity"]
+    assert "nodeSelector" not in job
     # The init container and the server run one image, so the Job pulls it once.
     [container] = job["containers"]
     assert container["image"] == deployment["containers"][0]["image"]
     assert container["image"].startswith("ghcr.io/")
     assert container["imagePullPolicy"] == "IfNotPresent"
+
+
+def test_the_job_sets_no_deadline_so_a_slow_pull_never_fails_it(rendered):
+    """A failed Job is never re-run under its name, so a deadline would wedge `<tag>`."""
+    text = (rendered / "cluster" / f"{TAG}-prepull" / "job.yaml").read_text()
+    assert "activeDeadlineSeconds" not in yaml_fast.safe_load(text)["spec"]
 
 
 def test_the_prepull_directory_passes_the_job_census_and_check_bundle(rendered):
@@ -114,18 +122,33 @@ PINNED = (
 )
 
 
-def test_every_named_node_gets_a_job_pulling_each_distinct_image():
-    nodes, images = targets("app", _deployment(PINNED))
-    assert (nodes, images) == (["a", "b"], ["app:1", "side:2"])
-    jobs = yaml_fast.safe_load_all(prepull_files("app", nodes, images, 60)["job.yaml"])
-    assert [j["spec"]["template"]["spec"]["nodeSelector"] for j in jobs] == [
-        {"kubernetes.io/hostname": "a"},
-        {"kubernetes.io/hostname": "b"},
+SELECTED = (
+    "      nodeSelector: {kubernetes.io/hostname: c}\n"
+    "      tolerations: [{key: gpu, operator: Exists}]\n"
+    "      affinity:\n        podAntiAffinity: {}\n"
+    "      containers:\n        - {name: other, image: 'other:3'}\n"
+)
+
+
+def test_each_distinct_placement_gets_a_job_pulling_each_of_its_images():
+    files = _deployment(PINNED) | {
+        "other.yaml": _deployment(SELECTED)["deployment.yaml"]
+    }
+    pulls = targets("app", files)
+    assert [images for _, images in pulls] == [["app:1", "side:2"], ["other:3"]]
+    jobs = yaml_fast.safe_load_all(prepull_files("app", pulls)["job.yaml"])
+    specs = [j["spec"]["template"]["spec"] for j in jobs]
+    assert specs[0]["affinity"]["nodeAffinity"][
+        "requiredDuringSchedulingIgnoredDuringExecution"
     ]
+    assert specs[1]["nodeSelector"] == {"kubernetes.io/hostname": "c"}
+    assert specs[1]["tolerations"] == [{"key": "gpu", "operator": "Exists"}]
+    # A copied anti-affinity would repel the Job from the node it should pull onto.
+    assert "affinity" not in specs[1]
 
 
 def _job_name(image: str) -> str:
-    text = prepull_files("app", ["a"], [image], 60)["job.yaml"]
+    text = prepull_files("app", [({"nodeSelector": {"h": "a"}}, [image])])["job.yaml"]
     return yaml_fast.safe_load(text)["metadata"]["name"]
 
 
@@ -139,7 +162,7 @@ def test_the_job_name_moves_with_the_image_and_holds_without_it():
     [
         (
             _deployment("      containers:\n        - {name: app, image: 'app:1'}\n"),
-            "names a node",
+            "names no node",
         ),
         (
             {"configmap.yaml": "kind: ConfigMap\nmetadata:\n  name: x\n"},
@@ -150,15 +173,6 @@ def test_the_job_name_moves_with_the_image_and_holds_without_it():
 def test_a_render_the_prepull_cannot_place_fails(files, message):
     with pytest.raises(RenderError, match=message):
         targets("app", files)
-
-
-def test_a_timeout_that_leaves_the_job_no_time_fails_the_render(tmp_path):
-    defaults = tmp_path / "app" / "defaults"
-    defaults.mkdir(parents=True)
-    (defaults / "main.yml").write_text("flux_prepull_timeout: 60s\n")
-    tag = RenderedTag("app", _deployment(PINNED))
-    with pytest.raises(RenderError, match="leaves the pre-pull Job no time"):
-        attach_prepulls([tag], ["app"], tmp_path)
 
 
 def test_the_prepull_tags_are_the_roles_that_set_a_prepull_timeout():

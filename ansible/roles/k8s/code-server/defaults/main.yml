@@ -171,6 +171,9 @@ k8s_claims:  # noqa var-naming[no-role-prefix]
 # starts, and the editor is down for the whole pull. With it, the old pod keeps serving while
 # the image arrives. MEASURED 2026-10-17 (#5525): GHCR serves daniel-box at 0.21-0.33 MB/s; a
 # claude-code CLI bump re-pulls about 377 MB (about 22 minutes) and a base bump about 851 MB
-# (about 50 minutes). 3600s covers the full re-pull down to 0.24 MB/s. Only Flux reads it: the
-# renderer adds the Kustomization for a published tag alone, so an Ansible deploy ignores it.
-flux_prepull_timeout: 3600s  # noqa var-naming[no-role-prefix]
+# (about 50 minutes). 4500s covers the full re-pull down to 0.19 MB/s, below the measured low:
+# at 0.21 MB/s it takes about 4050s. The Job has no deadline, so a pull slower still costs
+# that revision its verdict, the Job keeps pulling, and Flux applies code-server on a later
+# retry. Only Flux reads it: the renderer adds the Kustomization for a published tag alone,
+# so an Ansible deploy ignores it.
+flux_prepull_timeout: 4500s  # noqa var-naming[no-role-prefix]

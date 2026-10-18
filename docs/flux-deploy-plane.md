@@ -1224,23 +1224,30 @@ minutes down (#5525).
 
 A role that sets `flux_prepull_timeout` in its `defaults/main.yml` gets
 `cluster/<tag>-prepull/` and the Kustomization `<tag>-prepull`
-(`scripts/renderer/renderer_lib/prepull.py`). The directory holds one Job per node the tag's
-Deployments and StatefulSets name by `kubernetes.io/hostname`, in a `nodeSelector` or a
-required or preferred node affinity. Each Job runs one container per distinct image those
+(`scripts/renderer/renderer_lib/prepull.py`). The directory holds one Job per distinct
+placement among the tag's Deployments and StatefulSets. A placement is the pod's
+`nodeSelector`, node affinity and `tolerations`, and the Job copies it, so the scheduler puts
+the Job where it would put the workload. A workload that names no node by
+`kubernetes.io/hostname` fails the render. Each Job runs one container per distinct image those
 workloads run, with `imagePullPolicy: IfNotPresent` and a script that exits at once, so the
 Job completes when the kubelet holds every image. `<tag>` depends on `<tag>-prepull`, so the
 old pod keeps serving through the pull and the rollout pays only the container start.
 
 - **The wait moves, it does not go away.** `<tag>-prepull`'s `timeout` is the role's
-  `flux_prepull_timeout`, its Job's deadline sits 60s under it, and it holds a
+  `flux_prepull_timeout`, and it holds a
   `kustomize-controller` worker for the pull. It sits on `verify`'s chained timeout like any
   other Kustomization, so the pull's budget stays on the critical path. What changes is
   that the service keeps serving through it.
+- **The Job has no deadline.** A slow pull never fails a Pod, so a deadline is the only way
+  the Job could fail. Flux never re-runs a failed Job under the same name, so every later
+  revision that kept the image would hold `<tag>` at `DependencyNotReady`. Without one, a
+  pull that outlasts the `timeout` costs that revision its verdict, the Job keeps pulling,
+  and a later retry applies `<tag>`.
 - **A revision that keeps the images keeps the Job.** The Job's name carries a digest of its
-  spec, image refs and node included, so only a content-tag change runs a new pull.
-- **A preference is not a pin.** A workload placed by a preferred affinity can land on
-  another node when its preferred node is cordoned or full, and there the rollout pays the
-  cold pull as before. The rollout's own budget stays the backstop for that case.
+  spec, image refs and placement included, so only a content-tag change runs a new pull.
+- **The Job and the pod are scheduled separately.** A node cordoned between the two sends the
+  pod elsewhere, and there the rollout pays the cold pull. The rollout's own budget stays the
+  backstop for that case.
 - **Every image must carry `python3`**, because the Job census requires each container to run
   a mounted script.
 - **Kubelet image garbage collection can still remove the image** between the pull and the

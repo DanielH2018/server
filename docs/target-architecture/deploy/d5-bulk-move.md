@@ -3944,9 +3944,9 @@ includes valheim's initContainer.
     **Answered by #5525** for code-server, whose GHCR pull hit the same outage first. The
     kind is `<tag>-prepull`, and any role opts in with `flux_prepull_timeout` in its
     defaults, so tdarr's conversion PR sets that key rather than naming a kind. C3 carries the
-    amendment and the reserved suffix. One Job per node the workloads name, not only the
-    pinned one, so a preferred affinity is covered where it points
-    (`docs/flux-deploy-plane.md`, *The pre-pull Job*).
+    amendment and the reserved suffix. The Job copies the workload's placement rather than
+    pinning a node, and it sets no deadline, so a slow pull delays the tag instead of wedging
+    it (`docs/flux-deploy-plane.md`, *The pre-pull Job*).
 
 ## Review log
 

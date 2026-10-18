@@ -364,8 +364,8 @@ every entry is flux-owned then waits for C-2b, through the uptime-kuma edge.
   - D5.1a1 adds `<tag>-snapshot` for a role that declares snapshot claims. It inherits
     `<tag>`'s `dependsOn`, less the edge to itself (D5).
   - #5525 adds `<tag>-prepull` for a role that sets `flux_prepull_timeout`, the kind D5's
-    Open question 21 asks for. Its Jobs pull the tag's images onto the node its workloads
-    name, so a `Recreate` rollout pays only the container start. It inherits `<tag>`'s
+    Open question 21 asks for. Its Jobs pull the tag's images under its workloads' own
+    placement, so a `Recreate` rollout pays only the container start. It inherits `<tag>`'s
     `dependsOn` the same way, `<tag>` depends on it, and it never depends on `<tag>-snapshot`
     or the reverse. Its `timeout` is the role's `flux_prepull_timeout`. Its document follows
     `<tag>-snapshot`'s and precedes `<tag>-verify`'s.

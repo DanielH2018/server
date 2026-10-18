@@ -58,11 +58,11 @@ it is built from (`templates/Dockerfile.j2` + `files/extensions.sh`); the invent
   leaves it live on the config volume. Retiring one means adding its id to `RETIRED_EXTS` in
   that script, not just deleting it from the Dockerfile.
 - **Under Flux, the new image is pulled before the old pod stops** (#5525). The role sets
-  `flux_prepull_timeout: 3600s`, so the render adds the `code-server-prepull` Kustomization,
-  and `code-server` depends on it. Its Job runs the Deployment's GHCR ref on daniel-box, the
-  node the affinity prefers, and completes once the kubelet holds the image. The `Recreate`
-  rollout then pays only the container start, not the 20-50 minute GHCR pull. A pod the
-  scheduler places on daniel-server, with daniel-box cordoned or full, still pulls cold.
+  `flux_prepull_timeout: 4500s`, so the render adds the `code-server-prepull` Kustomization,
+  and `code-server` depends on it. Its Job runs the Deployment's GHCR ref under the
+  Deployment's own node affinity, so it lands on daniel-box, or on daniel-server when
+  daniel-box is cordoned or full, and completes once the kubelet holds the image. The
+  `Recreate` rollout then pays only the container start, not the 20-50 minute GHCR pull.
   `docs/flux-deploy-plane.md`, *The pre-pull Job*, has the mechanism. An Ansible deploy
   ignores the key.
 - **Two claims, and only the small one is backed up** (2026-08-16). `code-server-config`
