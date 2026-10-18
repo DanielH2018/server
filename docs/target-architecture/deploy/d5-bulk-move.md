@@ -2003,8 +2003,13 @@ one task file per source role, in a conversion PR before that role flips:
   that only the host files read moves to `k8s_host_files`' `defaults/main.yml`. No task
   `include_vars` another role's defaults.
     - **A variable both sides read stays in the k8s role, with a test-held copy.** The k8s
-      role's defaults keep it, `k8s_host_files`' defaults hold a copy under that role's
-      prefix, and a test in `ansible/tests/setup/` holds each pair equal. A change then edits
+      role's defaults keep it, the moved task's `vars:` hold a copy under the k8s role's own
+      name, and a test in `ansible/tests/setup/` holds each pair equal. A task file with
+      several tasks puts the copies in one `block:`'s `vars:`. The copy never goes in
+      `k8s_host_files`' defaults: role defaults are play-wide in `initial_setup.yml`, so a
+      defaults copy of a key another setup role names is a cross-role read, which
+      `ansible/tests/setup/test_setup_cross_role_reads.py` refuses without a deployer table
+      row (#5472). A change then edits
       both, and each half routes to its own plane: the copy to the setup plane, which the tick
       applies. A shared key in `group_vars/all.yml` would route to the deploy plane only
       (Baseline), which never runs `initial_setup.yml`, so the host half would never
@@ -2014,15 +2019,15 @@ one task file per source role, in a conversion PR before that role flips:
       all four, and so do the three directory tasks. media-volume's conversion PR adds `media_volume_host_path`,
       which `ansible/roles/k8s/media-volume/templates/pv.yaml.j2` and the directory task both
       read. The task's owner reads `puid` and `pgid` from `group_vars/all.yml`, the shared-key
-      case above, so the same PR copies them into `k8s_host_files`' defaults as pairs too.
+      case above, so the same PR copies them into the task's `vars:` as pairs too.
     - A test in `ansible/tests/setup/` renders every template in `k8s_host_files` with that
       role's defaults and `group_vars`, under `StrictUndefined`, through
       `scripts/lib/ansible_jinja_env.py`. Its red half is a fixture template that reads a
       variable defined only in a `roles/k8s/` defaults file. D5.1h lands it while the role
       has no template, so until then it asserts that the set it renders is empty. Wave C's
       pi-peer-backup PR adds the first template, and with it the test's named member.
-    - The pair test lands in D5.1h too, asserting an empty set of pairs. artifacts'
-      conversion PR adds its first pairs and names them as its members.
+    - The pair test lands in D5.1h too, asserting an empty set of pairs. docs' conversion PR
+      added its first pair, and artifacts' added four more.
 - **D5.1h enters the role into the setup plane, alone.** Its `initial_setup.yml` entry parks
   the tick once, and the operator clears it (*The `k8s_host_files` role enters the setup
   plane once*). From then on the tick applies every `k8s_host_files` PR and `land.sh` follows
