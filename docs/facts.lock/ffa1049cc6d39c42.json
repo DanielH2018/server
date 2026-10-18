@@ -1,0 +1,12 @@
+{
+  "checksum": "ed7055a3161f9051d7391c66193489ce3efa853436110abba5f508827a44ed75",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "ansible/roles/k8s/qbittorrent/CLAUDE.md#The daily drift check is log-only, and does not apply anything",
+  "row": {
+    "atoms": {
+      "ansible/roles/k8s/qbittorrent/defaults/main.yml:qbittorrent_k8s_prefs_check_schedule": "ee95d45d3de050413114c225ddfd520ef7aef9d3de27b06a15f22c710680c559"
+    },
+    "python": "3.14",
+    "verified_sha": "b36aa79a5"
+  }
+}

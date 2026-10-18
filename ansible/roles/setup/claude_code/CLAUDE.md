@@ -239,6 +239,10 @@ only, where `claude_code_takeover_check_enabled` is true.
 - **What root never runs:** anything the invoking user can write, and kustomize over the user's
   files. `kubectl kustomize` builds each tag as `SUDO_USER`, and root diffs only the built file.
   The census, which is the user's Python, runs as `SUDO_USER` through `runuser`.
+- **Which diff a tag gets:** `flux diff` when the tag's own Kustomization carries `postBuild`,
+  so Flux's substitution is exercised; `kubectl diff` otherwise. The wrapper finds that
+  Kustomization by `metadata.name` in `flux/<tag>.yaml`. A `-snapshot`, `-verify` or `-deferred`
+  directory has no flux file of its own, so its search runs over the base tag's file (#5575).
 - **What it prints:** object names, field paths and exit codes. Full outputs stay in
   `/var/lib/homelab-takeover-check/<label>/`, mode 0700.
 - **To take it back:** set `claude_code_takeover_check_enabled: false` and apply the role. The

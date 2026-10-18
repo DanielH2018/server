@@ -1,0 +1,20 @@
+{#
+  The qbittorrent-prefs-check CronJob's code: its entry point, files/prefs_check.py, and the
+  files/apply_prefs.py it imports, mounted side by side so the import resolves.
+
+  No secret goes in here. The WebUI login reaches the pod from the qbittorrent-prefs-check
+  Secret through `secretKeyRef` (the H2 plan's *No secret in a ConfigMap*), and
+  ansible/tests/k8s/test_no_secret_in_a_moved_jobs_configmap.py renders this file with every
+  secrets.yml key bound to a sentinel and fails on any sentinel it finds.
+#}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: qbittorrent-prefs-check
+  namespace: {{ k8s_namespace }}
+data:
+  prefs_check.py: |
+{{ lookup('file', playbook_dir + '/roles/k8s/qbittorrent/files/prefs_check.py') | indent(4, true) }}
+  apply_prefs.py: |
+{{ lookup('file', playbook_dir + '/roles/k8s/qbittorrent/files/apply_prefs.py') | indent(4, true) }}
