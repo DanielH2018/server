@@ -28,7 +28,7 @@ Environment=PYTHONDONTWRITEBYTECODE=1
 # run_worktree.prepare_worktree syncs this tree's `.venv` before the session starts.
 Environment=RUN_HOOK_PROJECT_DIR={{ renovate_agent_clone_dir }}/.claude/worktrees/{{ renovate_agent_worktree }}
 Environment=RUN_HOOK_UV={{ renovate_agent_home }}/.local/bin/uv
-# A landing blocks in `systemctl start` for up to the lander's 190-minute TimeoutStartSec, and
+# A landing blocks in `systemctl start` for up to the lander's 430-minute TimeoutStartSec, and
 # Claude Code caps a Bash call at 10 minutes unless this raises it. A call killed early leaves
 # the landing running, but the session would then read a verdict file the lander has not yet
 # rewritten (it writes PENDING only once it holds its lock).
