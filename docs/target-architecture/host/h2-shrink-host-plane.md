@@ -2065,9 +2065,10 @@ carries `prune: disabled`.
     - a Job that runs `cscli` from the crowdsec image against `crowdsec-db` mounted directly.
       That PVC is ReadWriteOnce on Longhorn, so the Job must schedule on the LAPI's node. It
       would also write the SQLite file beside a running LAPI, which nothing here measures.
-   The sidecar cannot host the remote allowlist as it stands. `remote_allowlist.py` is Python
-   and also reads IngressRoutes and Traefik's access log through `kubectl`, and the crowdsec
-   image carries neither Python nor `kubectl`. The AppSec verify checks what the live engine
+   The sidecar cannot host either Python job as it stands, because the crowdsec image carries
+   no Python. `bouncer_prune.py` and `remote_allowlist.py` are both Python modules, so each
+   needs a port to shell or an image that adds an interpreter. `remote_allowlist.py` also
+   reads IngressRoutes and Traefik's access log through `kubectl`, which the image lacks too. The AppSec verify checks what the live engine
    loaded, so only an exec or a sidecar in the engine's pod reads the same thing. The
    operator picks the form per job in the H2.4b PR's review (**operator-only**). Until then
    no cron is retired and no `netpol_from` label is added, because a retired cron with no
