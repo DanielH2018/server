@@ -33,12 +33,16 @@ def _declared():
         return monitors.parse_declared_monitors(f.read())
 
 
-def _stub_kuma(monkeypatch, tmp_path, silent_tile, stored_status, live_status=None):
+def _stub_kuma(
+    monkeypatch, tmp_path, silent_tile, stored_status, live_status=None, alerts=()
+):
     """Prometheus exports every declared tile but `silent_tile`, all UP.
 
     `live_status` instead exports `silent_tile` too, with that status: a beat that landed
     after the restart. Kuma's status page holds every declared tile with an id. Its heartbeat
     endpoint holds one beat per tile: UP for all of them, and `stored_status` for `silent_tile`.
+    The ingress-alert query returns one firing series per `alerts` label set, or, when
+    `alerts` is None, fails at curl.
     """
     exported = {name: "1" for name in _declared() if name != silent_tile}
     if live_status is not None:
@@ -103,7 +107,22 @@ def _stub_kuma(monkeypatch, tmp_path, silent_tile, stored_status, live_status=No
         }
     )
 
+    firing = json.dumps(
+        {
+            "status": "success",
+            "data": {
+                "resultType": "vector",
+                "result": [
+                    {"metric": {"__name__": "ALERTS", **labels}, "value": [1, "1"]}
+                    for labels in alerts or ()
+                ],
+            },
+        }
+    )
+
     def body_for(url):
+        if "ALERTS" in url:
+            return firing
         if "/api/status-page/heartbeat/" in url:
             return heartbeats
         if "/api/status-page/" in url:
@@ -125,6 +144,8 @@ def _stub_kuma(monkeypatch, tmp_path, silent_tile, stored_status, live_status=No
 
     def fake_run(argv, *args, **kwargs):
         tool = os.path.basename(argv[0])
+        if tool == "curl" and alerts is None and "ALERTS" in argv[-1]:
+            return subprocess.CompletedProcess(argv, 7, stdout="", stderr="refused")
         if tool == "curl":
             # get_status asks curl to append the status code on its own line.
             out = body_for(argv[-1]) + ("\n200" if "-w" in argv else "")
@@ -192,6 +213,33 @@ def test_monitors_labels_a_stored_down_apart_from_a_live_one(
     assert any("DOWN" in line for line in live), live
     assert any("DOWN" in line for line in stored), stored
     assert not set(stored) & set(live), (stored, live)
+
+
+def test_monitors_prints_a_firing_ingress_alerts_service_and_exits_nonzero(
+    monkeypatch, capsys, tmp_path
+):
+    # M4's PR 4 Verify-by: every Kuma tile is UP, and one IngressProbeFailed fires.
+    alert = {
+        "alertname": "IngressProbeFailed",
+        "alertstate": "firing",
+        "service": "homepage",
+        "shadow": "true",
+    }
+    _stub_kuma(monkeypatch, tmp_path, "", stored_status=1, alerts=[alert])
+    code = monitors.run_monitors(cli_parser._build_parser().parse_args(["monitors"]))
+    out = capsys.readouterr().out
+    assert "  homepage: IngressProbeFailed firing" in out.splitlines(), out
+    assert code == 1
+
+
+def test_monitors_does_not_read_a_failed_ingress_alert_query_as_clean(
+    monkeypatch, capsys, tmp_path
+):
+    _stub_kuma(monkeypatch, tmp_path, "", stored_status=1, alerts=None)
+    code = monitors.run_monitors(cli_parser._build_parser().parse_args(["monitors"]))
+    err = capsys.readouterr().err
+    assert "ingress probe alerts unread:" in err, err
+    assert code == monitors.PROBE_UNREADABLE
 
 
 def test_kuma_drift_names_the_stored_down_of_a_not_yet_due_tile(

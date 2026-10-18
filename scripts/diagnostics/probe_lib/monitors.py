@@ -41,8 +41,7 @@ from lib.k8s_roles import K8S_ROLES
 from lib.render_context import render_context
 from lib.render_guard import make_env
 from lib.repo_paths import ANSIBLE, REPO
-from diagnostics.probe_lib import kuma_live
-from diagnostics.probe_lib import kuma_pi
+from diagnostics.probe_lib import firing_ingress, kuma_live, kuma_pi
 from diagnostics.probe_lib.kuma_table_loop import TableLoop
 
 # Kuma's own numeric status codes, from the exporter that feeds monitor_status.
@@ -114,7 +113,7 @@ def format_monitor_status(data, declared_total=None, stored=None):
 # it validates the declaration file against itself and never asks what is live.
 #
 # Declared names are read straight out of the template rather than rendered through Jinja: every
-# `"name"` in it is a literal, or a field of a row in one of the two table loops
+# `"name"` in it is a literal, or a field of a row in the table loop
 # `kuma_table_loop` reads, and parsing beats standing up a Jinja environment with a stub for every push token
 # just to recover strings that were never templated.
 STATIC_MONITORS_PATH = os.path.join(
@@ -560,11 +559,12 @@ def run_kuma_drift(ns, now=None):
 
 
 def run_monitors(ns):
-    """Print Kuma's down-monitors rollup, stored DOWNs included (exit 0 = all up)."""
+    """Print Kuma's down-monitors rollup, then the firing ingress alerts (exit 0 = all up)."""
     base, pin = prom_endpoint()
     url = prom_query_url(base, "monitor_status")
     if ns.dry_run:
         core.print_dry_run(url, resolve=pin)
+        core.print_dry_run(firing_ingress.query_url(base), resolve=pin)
         core.print_dry_run(*kuma_live.status_page_url())
         return core.print_dry_run(*kuma_live.heartbeat_url())
     data, err = core.fetch_json(url, resolve=pin)
@@ -576,7 +576,7 @@ def run_monitors(ns):
         kuma_live.last_stored_beats() if data.get("data", {}).get("result") else None,
     )
     print(text, file=_sys.stderr if code == PROBE_UNREADABLE else _sys.stdout)
-    return code
+    return firing_ingress.report(base, pin, code)
 
 
 def declared_monitor_count(path=STATIC_MONITORS_PATH):
