@@ -226,16 +226,26 @@ def test_the_flipped_job_dials_the_two_ports_n8n_broker_fences(flipped, flipped_
     } == {"n8n.homelab.svc.cluster.local"}
 
 
+def _may_admit(peer: dict, label: str) -> bool:
+    """Whether `peer` may admit a pod labelled `app: <label>`, failing closed.
+
+    The only peer that provably excludes the pod is a `podSelector` whose `matchLabels` name
+    another `app`, with no `matchExpressions`. An empty selector, an `ipBlock` (the pod CIDR
+    holds every pod) and a `matchExpressions` selector all count as admitting.
+    """
+    selector = peer.get("podSelector")
+    if selector is None or selector.get("matchExpressions"):
+        return True
+    app = (selector.get("matchLabels") or {}).get("app")
+    return app is None or app == label
+
+
 def _admits(policy: dict, label: str) -> list[int]:
-    """The ports on which `policy` admits a pod labelled `app: <label>`, a from-less rule included."""
+    """The ports on which `policy` may admit a pod labelled `app: <label>`, failing closed."""
     return [
         int(port["port"])
         for rule in policy["spec"]["ingress"]
-        if "from" not in rule
-        or any(
-            peer.get("podSelector", {}).get("matchLabels", {}).get("app") == label
-            for peer in rule["from"]
-        )
+        if "from" not in rule or any(_may_admit(peer, label) for peer in rule["from"])
         for port in rule["ports"]
     ]
 
@@ -252,15 +262,35 @@ def test_n8n_broker_admits_the_verify_pod_on_neither_port(flipped, flipped_tag):
     assert _admits(policy, label) == []
 
 
-def test_a_policy_that_admits_the_verify_pod_is_flagged():
-    """The red case: a peer for `n8n-verify` on the web port shows up as that port."""
+@pytest.mark.parametrize(
+    "peer",
+    [
+        {"podSelector": {"matchLabels": {"app": "n8n-verify"}}},
+        {"podSelector": {}},
+        {"ipBlock": {"cidr": "10.42.0.0/16"}},
+        {
+            "podSelector": {
+                "matchExpressions": [
+                    {"key": "app", "operator": "In", "values": ["n8n-verify"]}
+                ]
+            }
+        },
+        {"namespaceSelector": {}},
+    ],
+    ids=[
+        "match-labels",
+        "empty-selector",
+        "ip-block",
+        "match-expressions",
+        "namespace",
+    ],
+)
+def test_a_policy_that_admits_the_verify_pod_is_flagged(peer):
+    """The red cases: each peer shape that can admit `n8n-verify` shows up as its port."""
     policy = {
         "spec": {
             "ingress": [
-                {
-                    "from": [{"podSelector": {"matchLabels": {"app": "n8n-verify"}}}],
-                    "ports": [{"port": 5678}],
-                },
+                {"from": [peer], "ports": [{"port": 5678}]},
                 {
                     "from": [{"podSelector": {"matchLabels": {"app": "n8n-runners"}}}],
                     "ports": [{"port": 5679}],
