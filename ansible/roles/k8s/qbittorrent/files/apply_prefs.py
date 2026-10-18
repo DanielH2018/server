@@ -17,10 +17,13 @@ FAILED DEPLOY rather than as the mod-fetch problem it is. Run this by hand inste
 after a PVC restore, or when changing a value here.
 
 REACHING THE WEBUI. The pod's NetworkPolicy admits only traefik, sonarr, radarr,
-homepage and the reach probe, and the public route is Authelia-gated — but the WebUI is
-reachable directly from the node over the pod IP or the ClusterIP, which is what this
-script uses. Verified 2026-08-26: `curl http://<pod-ip>:8080/` returns 200 from
-daniel-box.
+homepage, the reach probe and the qbittorrent-prefs-check CronJob, and the public route is
+Authelia-gated — but the WebUI is reachable directly from the node over the pod IP or the
+ClusterIP, which is what a hand run uses. Verified 2026-08-26: `curl
+http://<pod-ip>:8080/` returns 200 from daniel-box.
+
+THE SCHEDULED CALLER. The qbittorrent-prefs-check CronJob runs files/prefs_check.py, which
+calls main() with `--dry-run --connect-wait 60` and logs the verdict. It never writes.
 
 Credentials come from the environment, never from a SOPS call inside this script, so
 nothing here can print a secret:
@@ -37,16 +40,15 @@ import http.cookiejar
 import json
 import os
 import sys
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 
-# Exit codes. 0/1/2 predate this constant and are read by nothing but a human's shell prompt
-# today (verified 2026-08-27: no caller in the repo shells out to this script), so widening the
-# contract here is additive, not a break. EXIT_DRIFT is what a scheduled --dry-run caller
-# branches on — see templates/prefs-check.sh.j2 — because a bare `--dry-run` cannot otherwise
-# tell "nothing to do" from "found changes but wrote none" without parsing stdout.
+# Exit codes. EXIT_DRIFT is what a scheduled --dry-run caller branches on — see
+# files/prefs_check.py — because a bare `--dry-run` cannot otherwise tell "nothing to do" from
+# "found changes but wrote none" without parsing stdout.
 EXIT_OK = 0
 EXIT_UNREACHABLE = 1
 EXIT_BAD_ARGS = 2
@@ -146,6 +148,21 @@ class QbtClient:
         with self._opener.open(req, timeout=15) as resp:
             return resp.read().decode()
 
+    def answers(self) -> bool:
+        """Returns whether the WebUI sends any HTTP response to an unauthenticated GET.
+
+        An error status is an answer too: it proves the connection carried. Only a
+        connection that got no response at all, refused, reset or timed out, returns False.
+        """
+        try:
+            self._get("/")
+        except urllib.error.HTTPError as exc:
+            exc.close()
+            return True
+        except urllib.error.URLError, OSError:
+            return False
+        return True
+
     def login(self, username: str, password: str) -> None:
         """Logs in and raises SystemExit if qBittorrent did not set a session cookie.
 
@@ -180,6 +197,40 @@ class QbtClient:
         self._post("/api/v2/app/setPreferences", {"json": json.dumps(values)})
 
 
+def wait_until_answering(
+    client: QbtClient,
+    bound_s: float,
+    *,
+    sleep: Callable[[float], None] = time.sleep,
+    clock: Callable[[], float] = time.monotonic,
+    interval_s: float = 5.0,
+) -> bool:
+    """Polls `client.answers()` until it is True or `bound_s` seconds have passed.
+
+    The poll sends no credentials, which is why it may repeat: a CronJob pod's first dials
+    can be dropped even through an open fence, because kube-router learns a new pod's labels
+    late. The login that follows runs once, since every answered bad login counts against
+    `web_ui_max_auth_fail_count` (5).
+
+    Args:
+        client: The WebUI client to poll.
+        bound_s: How long to keep polling, in seconds. 0 polls once.
+        sleep: Waits between polls; injected by tests.
+        clock: A monotonic clock in seconds; injected by tests.
+        interval_s: The wait between polls, in seconds.
+
+    Returns:
+        True once the WebUI answered, False if it never did within the bound.
+    """
+    deadline = clock() + bound_s
+    while True:
+        if client.answers():
+            return True
+        if clock() >= deadline:
+            return False
+        sleep(min(interval_s, max(deadline - clock(), 0.0)))
+
+
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     """Parses --url and --dry-run, defaulting --url from the QBT_URL environment variable.
 
@@ -206,10 +257,24 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="Report what would change without writing anything. Exits "
         f"{EXIT_DRIFT} if a preference has drifted, {EXIT_OK} if none has.",
     )
+    parser.add_argument(
+        "--connect-wait",
+        type=float,
+        default=0.0,
+        metavar="SECONDS",
+        help="Before logging in, retry a connection that gets no response for up to this "
+        "many seconds. The login itself is never retried. Default 0, one attempt.",
+    )
     return parser.parse_args(argv)
 
 
-def main(argv: list[str] | None = None) -> int:
+def main(
+    argv: list[str] | None = None,
+    *,
+    client_factory: Callable[[str], QbtClient] = QbtClient,
+    sleep: Callable[[float], None] = time.sleep,
+    clock: Callable[[], float] = time.monotonic,
+) -> int:
     """Logs into qBittorrent, diffs live preferences against DESIRED, and applies drift.
 
     Reads QBT_USERNAME/QBT_PASSWORD from the environment. In --dry-run mode, reports drift
@@ -219,6 +284,9 @@ def main(argv: list[str] | None = None) -> int:
 
     Args:
         argv: Argument list to parse; defaults to sys.argv[1:] when None.
+        client_factory: Builds the WebUI client from the base URL; injected by tests.
+        sleep: Waits between --connect-wait polls; injected by tests.
+        clock: A monotonic clock for --connect-wait; injected by tests.
 
     Returns:
         EXIT_OK if nothing needed changing or the apply succeeded and confirmed, EXIT_BAD_ARGS
@@ -236,7 +304,16 @@ def main(argv: list[str] | None = None) -> int:
         )
         return EXIT_BAD_ARGS
 
-    client = QbtClient(args.url)
+    client = client_factory(args.url)
+    if args.connect_wait > 0 and not wait_until_answering(
+        client, args.connect_wait, sleep=sleep, clock=clock
+    ):
+        print(
+            f"cannot reach qBittorrent at {args.url}: no response within "
+            f"{args.connect_wait:g}s",
+            file=sys.stderr,
+        )
+        return EXIT_UNREACHABLE
     try:
         client.login(username, password)
         current = client.preferences()

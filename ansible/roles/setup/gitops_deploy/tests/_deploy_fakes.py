@@ -113,6 +113,9 @@ class ScriptedTick:
         self.secret_unread: dict[str, list[str]] = {}
         # Raised instead of answering, for `route_secret_readers`'s fallback.
         self.secret_readers_error: Exception | None = None
+        # What `--deploy-tags` answers (#5577): (exit code, stdout). No k8s reader by default.
+        self.secret_k8s: tuple[int, str] = (0, "")
+        self.secret_k8s_error: Exception | None = None
         self.discord_ok = True
         self.releases: dict[str, str] = {}
         self.log: list[tuple] = []
@@ -290,6 +293,16 @@ class ScriptedTick:
             raise self.secret_readers_error
         return list(self.secret_readers), dict(self.secret_unread)
 
+    def secret_k8s_readers(self, _repo: str, old: str, new: str) -> tuple[int, str]:
+        """The scripted deploy tags reading a moved key, asserted against THIS tick's range."""
+        assert (old, new) == (self.local, self.origin), (
+            f"the secret k8s readers were asked about {old[:8]}..{new[:8]}"
+        )
+        self.log.append(("secret_k8s", [old, new]))
+        if self.secret_k8s_error is not None:
+            raise self.secret_k8s_error
+        return self.secret_k8s
+
     def emit_deploy_annotation(self, services: set[str], _sha: str) -> None:
         self.log.append(("annotation", set(services)))
 
@@ -371,6 +384,7 @@ def build_tools(scripted: ScriptedTick) -> DeployTools:
         narrow_setup_role=scripted.narrow_setup_role,
         setup_routing=lambda _repo, _ref, _host: checkout_routing(),
         secret_setup_readers=scripted.secret_setup_readers,
+        secret_k8s_readers=scripted.secret_k8s_readers,
         # The host's render records, read for a log line alone, so no tick test reads them.
         digest_diff=lambda _ref: {},
         # The host's release records, which a tick that records `k8s_unapplied` reads to drop

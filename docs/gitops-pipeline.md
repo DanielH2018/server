@@ -820,9 +820,10 @@ those tags (a failed bump on a broad tick writes one) and leaves any other broad
     class too, through `lib.deployer_park`, and names a pending role from the moment it is
     recorded.
 - **Secrets-only pushes** (`ansible/vars/secrets.yml` changed with no service template — a
-  rotation pushed from another machine) are fast-forwarded but **not** redeployed: the new
-  value only reaches a container on its next deploy, so the deployer alerts (once per SHA,
-  the `secrets` slot of `alerted_shas`) to redeploy the consumers. On a broad tick that page fires
+  rotation pushed from another machine) are fast-forwarded, and the tick applies only the
+  readers the two bullets below derive. The new value reaches any other consumer only on its
+  next deploy, so the deployer alerts (once per SHA, the `secrets` slot of `alerted_shas`) to
+  redeploy the consumers. On a broad tick that page fires
   from every exit that leaves the range merged (#2383), because `alert_once` advances its marker
   on detection and a skipped page is never sent. The contention arm sends nothing, because it
   resets the tree (#2459). `secrets.yml` is deliberately NOT in the broad list: the `/add-secret`
@@ -849,6 +850,20 @@ those tags (a failed bump on a broad tick writes one) and leaves any other broad
   again: once merged, no later range carries the key. The page fires on every tick that
   merges the range: it names `secret_rotation.py consumers`, which prints the
   apply command of every consumer that no derivation reached.
+- **A k8s role reading a changed secret is applied on a range with no deploy-plane path**
+  (#5577). The narrowing above runs only when a deploy-plane path sends the range to it, so
+  until #5577 a rotation alone merged, paged, and left every k8s reader on the old value.
+  `deploy_broad_k8s.route_secret_k8s_readers` runs `secret_setup_readers.py --deploy-tags`,
+  which asks `secret_keys.reached` the same question for the secrets half alone and keeps the
+  fleet-coverage ceiling. When it names a reader, the range goes to `handle_broad`, which
+  applies `deploy.yml --tags <readers>` after any setup plan, less each Flux-owned tag. A
+  refusal at the ceiling names its readers, and they are deferred to `k8s_unapplied`. A
+  refusal that names none, a timeout or a crash merges and pages as before: a park on a
+  failure that repeats would hold every landing, and an unnamed deferral would owe the whole
+  fleet for one key. A range that also carries a k8s role change or a promoted image bump
+  routes nothing and pages as before: the secret plan applies each reader's whole render, so
+  it would ship a hand-edited template past defer-and-alert, and `cs.broad` would move the
+  bump off `handle_k8s`'s snapshot and rollback.
 - **k8s-platform roles are auto-deployed ONLY for an image-pin bump to a non-denylisted service;
   every other k8s change defers-and-alerts.** `deploy_logic.split_k8s_auto_deploy` decides
   eligibility, **diff-shape first, identity second**. Gating on the service name alone would be

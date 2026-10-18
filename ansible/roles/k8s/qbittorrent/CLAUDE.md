@@ -11,7 +11,7 @@ finding and why the prefs plane is shaped this way.
 - **Deploy tag:** `--tags "qbittorrent"`
 - **Images:** `lscr.io/linuxserver/qbittorrent` (`qbittorrent_k8s_image`),
   `lscr.io/linuxserver/wireguard` (`qbittorrent_k8s_wireguard_image`), `alpine`
-  (`qbittorrent_k8s_probe_image`)
+  (`qbittorrent_k8s_probe_image`), `python` (`qbittorrent_k8s_prefs_check_image`)
 - **Route:** `qbittorrent.<domain>` · `qbittorrent.local.<domain>`, Authelia one_factor
 - **Claims:** `qbittorrent-config` (weekly -> B2 (default target)), `media-data` (not Longhorn
   (media-local))
@@ -90,12 +90,25 @@ window every time and turn an lscr.io blip into a failed deploy. Keep the apply 
 
 ### The daily drift check is log-only, and does not apply anything
 
-`tasks/main.yml` installs a daily daniel-box cron
-(`qbittorrent_k8s_prefs_check_cron_hour`/`_minute`, `cron_file: qbittorrent-prefs-check`) that runs
-`files/apply_prefs.py --dry-run` from `templates/prefs-check.sh.j2` and `logger`s the result under
-the `qbittorrent-prefs-check` tag. **It never writes to qBittorrent** — applying a changed value
-stays manual. It is deliberately not a Kuma monitor and reads the script's exit codes as a contract
-(`EXIT_DRIFT` is 3, `--dry-run` only); the docs page has why.
+The `qbittorrent-prefs-check` CronJob (`templates/prefs-check-cronjob.yaml.j2`, schedule
+`ansible/roles/k8s/qbittorrent/defaults/main.yml:qbittorrent_k8s_prefs_check_schedule` on
+Etc/UTC) runs `files/prefs_check.py`, which runs `files/apply_prefs.py --dry-run` against the
+WebUI Service and prints one `qbittorrent-prefs-check: <verdict>` line to the pod log. **It never
+writes to qBittorrent** — applying a changed value stays manual. It is deliberately not a Kuma
+monitor and reads the script's exit codes as a contract (`EXIT_DRIFT` is 3, `--dry-run` only);
+the docs page has why.
+
+- **The pod carries `app: qbittorrent-prefs-check`, never `app: qbittorrent`.** The WebUI
+  Service, the compat `wireguard` Service and `verify.yml` all select `app=qbittorrent`.
+  qbittorrent's `netpol_from` admits the check's label, and this role renders that fence.
+- **The login reaches it from the `qbittorrent-prefs-check` Secret** as one two-line value,
+  `QBT_CREDENTIALS` (`templates/prefs-check-secret.yaml.j2` says why it is not a key each). The
+  ConfigMap that stages the code holds no secret.
+- **The deploy gates it after `verify.yml`**, through `k8s/cronjob-gate`, so the gate run meets
+  a rolled-out pod rather than the sidecar's startup window.
+- **It was a daniel-box host cron until H2.5d.** `tasks/main.yml` keeps absent arms for the
+  cron, `/usr/local/bin/qbittorrent-prefs-check.sh` and `/opt/qbittorrent-prefs-check`, ahead of
+  the manifests include.
 
 ### The login trap
 qBittorrent 5.2.3 answers a successful `POST /api/v2/auth/login` with **HTTP 204 and an empty

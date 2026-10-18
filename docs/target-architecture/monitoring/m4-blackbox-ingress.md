@@ -4,6 +4,39 @@ Status: IN PROGRESS
 
 PR 3, the probe job and its rules: [#4837](https://github.com/DanielH2018/server/pull/4837).
 
+PR 3's shadow soak passed both reads, so exit criterion 3 holds and PR 4 may follow
+([#4839](https://github.com/DanielH2018/server/issues/4839)). The soak clock started at
+2026-10-13T06:19Z, when `count(probe_success{job="blackbox-ingress"} == 1)` first read 26. The
+soak ended after the 2026-10-18 Sunday reboot, as the operator's 2026-10-17 shortening in
+PR 3's **Soak** bullet allows.
+
+- **Day 3, to 2026-10-16T06:19Z (`[72h:1m]`).** Query 1 and query 2 both returned no
+  minutes. No tile read DOWN and no shadow alert fired. The
+  [day-3 read](https://github.com/DanielH2018/server/issues/4839#issuecomment-6209564137) has the
+  output.
+- **After the Sunday reboot, to 2026-10-18T16:19Z (`[130h:1m]`).** Query 2 returned no
+  minutes. Query 1 returned one minute, on Home Assistant at 2026-10-17T11:59Z, and it is
+  explained. Home Assistant was down from 06:25Z to 11:58Z after the `2026.10.2-ls257` bump
+  ([#4188](https://github.com/DanielH2018/server/issues/4188)). Both sides caught the outage.
+  `IngressProbeFailedCritical` fired at 06:26:21Z, before Kuma's first DOWN at 06:27Z, and
+  stayed firing for 332 minutes against Kuma's 333 DOWN minutes. At 11:59Z the probe already
+  read 1 and the alert had resolved, while Kuma still read 0. It read 1 at 12:00Z. The
+  minute is Kuma's lag at recovery, not a missed alert.
+- **The reboot window.** Kuma read maintenance (3) on all 26 tiles from 07:26Z to 08:16Z and
+  DOWN on none, so query 1 dropped the window by itself. No ingress alert reached even
+  `pending` in it. Prometheus restarted at 07:43:20Z with the reboot, so about ten minutes
+  of the window hold no samples from either side. The claim holds for every sampled minute.
+- **Short failures that did not escalate.** Home Assistant returned 503 for one minute at
+  2026-10-13T20:47Z. Authelia returned 503 for one minute at 2026-10-15T13:40Z and again at
+  2026-10-16T15:33Z, and SSO probes failed with 500 in the same minutes. Kuma read pending
+  on overlapping tiles and DOWN on none. No alert got past `pending`, because each failure
+  cleared inside `for: 2m`.
+- **Configuration.** Prometheus also restarted at 2026-10-15T15:29Z, 2026-10-18T00:03Z and
+  2026-10-18T00:46Z. Each restart left a gap of at most two scrapes, too short to hide a
+  `for: 2m` firing. No commit after PR 3's deploy changed `ingress-probes.yaml`, the
+  `blackbox-ingress` job or the blackbox-exporter role, so the soak measured PR 3's
+  configuration.
+
 PR 2, the validator's third `service` source: [#4798](https://github.com/DanielH2018/server/pull/4798).
 
 PR 1, the blackbox-exporter role: [#4834](https://github.com/DanielH2018/server/pull/4834).

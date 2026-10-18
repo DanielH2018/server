@@ -19,7 +19,14 @@ reason on stderr, and the tick then applies no
 setup role for the range, which is the behaviour before #5436. Any other non-zero exit, such
 as a traceback's 1, is a failure the tick parks on and retries.
 
-Usage: secret_setup_readers.py [--repo PATH] OLD NEW
+WITH `--deploy-tags` it prints the deploy plane's half instead (#5577): the comma-joined
+`deploy.yml` tags whose render reads a moved key, as `deploy_tags.py narrow` does for a range
+carrying a deploy-plane path. The tick asks it only for a range with no such path, which
+`narrow` never sees. Exit 0 with empty stdout is the answer "no k8s role reads one". Exit
+`DEPLOY_BROAD` is a refusal; its stdout names the tags when the refusal is the fleet-coverage
+ceiling, and is empty when the derivation could not say at all.
+
+Usage: secret_setup_readers.py [--repo PATH] [--deploy-tags] OLD NEW
 """
 
 import sys as _sys
@@ -44,15 +51,22 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--repo", default=".", help="the checkout to read (default: the cwd)"
     )
+    parser.add_argument(
+        "--deploy-tags",
+        action="store_true",
+        help="print the deploy tags reading a moved key instead of the setup files",
+    )
     args = parser.parse_args(argv)
 
     def explain(message: str) -> None:
         print(message, file=sys.stderr)
 
-    ctx = broad.Context(_Path(args.repo), args.new, set(), {}, explain)
     rules = secret_keys.Rules(
         broad._grep, broad._sort_hits, broad.template_importers, broad._role_tags
     )
+    if args.deploy_tags:
+        return _deploy_tags(args.old, args.new, _Path(args.repo), rules, explain)
+    ctx = broad.Context(_Path(args.repo), args.new, set(), {}, explain)
     try:
         found = secret_keys.setup_reader_paths(args.old, ctx, rules)
     except (CannotNarrow, subprocess.CalledProcessError) as exc:
@@ -60,6 +74,32 @@ def main(argv: list[str] | None = None) -> int:
         return DEPLOY_BROAD
     unread = {path: sorted(roles) for path, roles in sorted(found.unread.items())}
     print(json.dumps({"paths": sorted(found.paths), "unread": unread}))
+    return OK
+
+
+def _deploy_tags(old: str, new: str, repo: _Path, rules, explain) -> int:
+    """Print the deploy tags reading a key `old..new` moved; exit `DEPLOY_BROAD` to refuse."""
+    try:
+        ctx = broad.context_for(new, repo, explain=explain)
+        tags = secret_keys.reached(old, ctx, rules)
+    except (CannotNarrow, subprocess.CalledProcessError) as exc:
+        print(f"secret-readers: cannot say ({exc})", file=sys.stderr)
+        reached = getattr(exc, "reached", ())
+        if reached:
+            print(",".join(sorted(reached)))
+        return DEPLOY_BROAD
+    # `broad.narrow`'s own ceiling, for its reason: a list covering most of the fleet saves
+    # none of the full run's time and adds a way to miss what the full run would apply.
+    if len(tags) * 2 > len(ctx.declared):
+        print(
+            f"secret-readers: cannot say ({len(tags)} of {len(ctx.declared)} services — "
+            "most of the fleet, which is not a narrowing)",
+            file=sys.stderr,
+        )
+        print(",".join(sorted(tags)))
+        return DEPLOY_BROAD
+    if tags:
+        print(",".join(sorted(tags)))
     return OK
 
 

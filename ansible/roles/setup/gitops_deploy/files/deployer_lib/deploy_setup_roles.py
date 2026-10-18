@@ -40,7 +40,8 @@ ROUTING_SCRIPT = "scripts/deploy_tools/setup_routing.py"
 # Three playbooks and the vars files, parsed once: 0.8s measured under a loaded suite run.
 # Thirty seconds is the wedged case, as for the setup narrowing (`NARROW_SETUP_TIMEOUT_S`).
 ROUTING_TIMEOUT_S = 30.0
-# A grep per changed key: 0.4s measured over PR #5405's commit, so the routing bound serves.
+# A grep per changed key: 0.4s measured over PR #5405's commit, and 0.25s for the `--deploy-tags`
+# half over the last three commits to the file, so the routing bound serves both.
 SECRET_READERS_SCRIPT = "scripts/deploy_tools/secret_setup_readers.py"
 # The script's deliberate refusal, distinct from 1, which a traceback exits with. This unit
 # cannot import `lib.exit_codes`, so `test_narrow_secret_keys.py` pins it to `DEPLOY_BROAD`.
@@ -186,6 +187,38 @@ def secret_setup_readers(
     ):
         raise ValueError(f"not the secret-readers JSON: {r.stdout.strip()[:200]!r}")
     return paths, unread
+
+
+def secret_k8s_readers(repo: str, old: str, new: str) -> tuple[int, str]:
+    """Run `secret_setup_readers.py --deploy-tags` over `old..new` in `repo` (#5577).
+
+    Returns:
+        (exit code, stdout): the deploy tags reading a `secrets.yml` key the range moved,
+        comma-joined. Exit 0 answers, with an empty stdout when no k8s role reads one; exit
+        `SECRET_READERS_REFUSED_EXIT` refuses, naming the tags only when it knows them.
+
+    Raises:
+        subprocess.TimeoutExpired: the child outlived `ROUTING_TIMEOUT_S`.
+        OSError: the child could not be started.
+    """
+    r = subprocess.run(
+        [
+            "uv",
+            "run",
+            "--frozen",
+            "python",
+            SECRET_READERS_SCRIPT,
+            "--deploy-tags",
+            old,
+            new,
+        ],
+        cwd=repo,
+        capture_output=True,
+        text=True,
+        timeout=ROUTING_TIMEOUT_S,
+        check=False,
+    )
+    return r.returncode, r.stdout.strip()
 
 
 def current_routing() -> dict[str, SetupRoute] | None:
