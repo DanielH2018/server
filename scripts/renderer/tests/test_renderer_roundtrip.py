@@ -55,10 +55,11 @@ MEASURED = {
 
 FAKE_FLUX = """#!{python}
 import json, os, pathlib, re, sys, yaml
+from yaml import CSafeDumper as Dumper, CSafeLoader as Loader
 args = sys.argv[1:]
 path = pathlib.Path(args[args.index("--path") + 1])
 kfile = pathlib.Path(args[args.index("--kustomization-file") + 1])
-values = (yaml.safe_load(kfile.read_text())["spec"].get("postBuild") or {{}}).get("substitute")
+values = (yaml.load(kfile.read_text(), Loader)["spec"].get("postBuild") or {{}}).get("substitute")
 replay = json.loads(os.environ.get("FAKE_FLUX_REPLAY", "{{}}"))
 if values and "probe_n" in values and values["probe_n"] in replay:
     scalar = replay[values["probe_n"]]
@@ -66,11 +67,11 @@ if values and "probe_n" in values and values["probe_n"] in replay:
         sys.exit("envsubst error: YAMLToJSON: json: unsupported value")
     print({manifest!r}.replace('"${{probe_n}}"', scalar), end="")
     sys.exit(0)
-resources =yaml.safe_load((path / "kustomization.yaml").read_text())["resources"]
+resources = yaml.load((path / "kustomization.yaml").read_text(), Loader)["resources"]
 out = []
 for resource in resources:
-    for doc in yaml.safe_load_all((path / resource).read_text()):
-        text = yaml.safe_dump(doc, sort_keys=True, width=4096)
+    for doc in yaml.load_all((path / resource).read_text(), Loader):
+        text = yaml.dump(doc, Dumper=Dumper, sort_keys=True, width=4096)
         meta = doc.get("metadata") or {{}}
         opted_out = "disabled" in (
             (meta.get("labels") or {{}}).get("kustomize.toolkit.fluxcd.io/substitute"),
@@ -83,8 +84,9 @@ for resource in resources:
                 if m.group(1) not in values:
                     sys.exit(f"variable not set (strict mode): {{m.group(1)}}")
                 return values[m.group(1)]
-            text = yaml.safe_dump(
-                yaml.safe_load(re.sub(r"\\$\\$|\\$\\{{(\\w+)\\}}", sub, text)),
+            text = yaml.dump(
+                yaml.load(re.sub(r"\\$\\$|\\$\\{{(\\w+)\\}}", sub, text), Loader),
+                Dumper=Dumper,
                 sort_keys=True,
                 width=4096,
             )
