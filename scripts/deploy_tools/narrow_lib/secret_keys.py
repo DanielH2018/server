@@ -23,6 +23,10 @@ question of the whole tree, so the two answers cannot drift:
   - its cross-role `lookup()` readers: uptime-kuma renders every bridge push token out of
     monitor-bridge's `files/`, so a token rotated there reaches both tags.
 
+The same keys reach the setup plane through `setup_reader_paths` (#5436), which the GitOps
+tick runs through `secret_setup_readers.py`: a key `setup/claude_code` reads applies that role
+there, because no deploy tag ever will.
+
 The file is read with `git cat-file blob`, never `git show` or `git diff`. `.gitattributes`
 gives it `diff=sops`, a textconv that decrypts, and no value may reach the journal.
 
@@ -43,9 +47,11 @@ from secrets_mgmt.consumers import _CENSUS_SKIP_FILES
 
 _sys.path.insert(0, str(GITOPS_DEPLOY_FILES))
 
+from deployer_lib.deploy_changes import _is_test_only_path, is_doc
 from deployer_lib.deploy_cross_role import k8s_lookup_map
 
 SECRETS_FILE = "ansible/vars/secrets.yml"
+SETUP_TREE = "ansible/roles/setup/"
 # SOPS's own metadata — the MAC and `lastmodified` move on every edit and name no secret.
 _SOPS_METADATA = "sops"
 
@@ -117,3 +123,74 @@ def reached(old_ref: str, ctx, rules: Rules) -> set[str]:
     for key in sorted(keys):
         tags |= key_tags(key, ctx, lookups, rules)
     return tags
+
+
+def setup_reader_paths(old_ref: str, ctx, rules: Rules) -> set[str]:
+    """The files under `roles/setup/` at `ctx.ref` naming a key `old_ref..ctx.ref` moved (#5436).
+
+    Paths rather than roles, so the deployer maps each through its own `setup_roles_for`, the
+    edge that sends a file another role ships to that role too. A `.md`, a test file and a
+    `_CENSUS_SKIP_FILES` name drop, as they do for `key_tags`.
+
+    Raises:
+        CannotNarrow: a key some reader outside the role trees names, where this grep cannot
+            follow it to a setup role. That is a play-level file, an inventory value other
+            than a comment (`rules.sort_hits` refuses both, as for the deploy plane), or a
+            shared template, which a setup role may import. The tick then applies no setup
+            role for the range and the `secrets` page stays its only signal.
+    """
+    found: set[str] = set()
+    for key in sorted(changed_keys(old_ref, ctx.ref, ctx.cwd)):
+        outside = rules.sort_hits(
+            [
+                h
+                for h in rules.grep(ctx, key, word=True, inventory=True)
+                if h.rsplit("/", 1)[-1] not in _CENSUS_SKIP_FILES
+            ],
+            f"the secret {key}",
+            ctx,
+            key,
+        )
+        if outside.templates:
+            raise CannotNarrow(
+                f"the secret {key} is named by the shared template "
+                f"{', '.join(sorted(outside.templates))}, which a setup role may import"
+            )
+        hits = readers(key, ctx.ref, ctx.cwd, [SETUP_TREE])
+        ctx.explain(f"secret-readers: {key} -> {', '.join(hits) or '(no setup role)'}")
+        found |= set(hits)
+    return found
+
+
+def keys_named_in(pathspecs: list[str], old_ref: str, new_ref: str, cwd) -> list[str]:
+    """The keys `old_ref..new_ref` moved that some file in `pathspecs` names at `new_ref`.
+
+    `narrow_setup.role_tags` asks it for one role's own tree and the files it ships.
+    """
+    keys = changed_keys(old_ref, new_ref, cwd)
+    return [k for k in sorted(keys) if readers(k, new_ref, cwd, pathspecs)]
+
+
+def readers(key: str, ref: str, cwd, pathspecs: list[str]) -> list[str]:
+    """The tracked paths in `pathspecs` at `ref` naming `key` as a word, sorted.
+
+    A `.md`, a test file and a `_CENSUS_SKIP_FILES` name reach no host, so they drop.
+
+    Raises:
+        CannotNarrow: `git grep` failed.
+    """
+    r = git(
+        "grep", "-l", "-w", "-F", "-e", key, ref, "--", *pathspecs,
+        cwd=cwd, check=False,
+    )  # fmt: skip
+    if r.returncode > 1:
+        raise CannotNarrow(f"`git grep {key}` failed: {r.stderr.strip()}")
+    prefix = f"{ref}:"
+    hits = (line[len(prefix) :] for line in r.stdout.splitlines() if line)
+    return sorted(
+        h
+        for h in hits
+        if not is_doc(h)
+        and not _is_test_only_path(h)
+        and h.rsplit("/", 1)[-1] not in _CENSUS_SKIP_FILES
+    )

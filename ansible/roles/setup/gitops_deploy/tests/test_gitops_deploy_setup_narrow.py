@@ -334,3 +334,54 @@ def test_a_range_no_setup_role_needs_a_tag_for_runs_no_playbook(
         "ansible/initial_setup.yml": (deploy_narrow.NARROWED_TO_NOTHING,)
     }
     assert [e.role for e in state.manual_plane_pending()] == ["k3s"]
+
+
+# ── a secrets.yml key a setup role reads (#5436) ──────────────────────────────────────────────
+SECRETS = "ansible/vars/secrets.yml"
+CLAUDE_TRIAGE_TASKS = "ansible/roles/setup/claude_code/tasks/triage.yml"
+
+
+def test_a_secrets_only_range_applies_the_setup_role_reading_its_key(
+    gitops_deploy, tick, state
+):
+    """PR #5405's shape: one new key `claude_code` reads, and no path under the role.
+
+    Before #5436 the range took the no-services branch, so it merged, paged, and applied
+    nothing. The page still goes out, because no derivation sees a consumer it refused.
+    """
+    tick.paths = [SECRETS]
+    tick.secret_readers = [CLAUDE_TRIAGE_TASKS]
+    assert gitops_deploy.main(tick.tools, tick.config, state) == 0
+    assert _playbook_argv(tick)[-3:] == [
+        "ansible/initial_setup.yml",
+        "--tags",
+        "claude_code",
+    ]
+    assert tick.merges == [ORIGIN]
+    assert any("`secrets.yml` changed" in post for post in tick.posts)
+
+
+def test_a_reader_another_playbook_applies_is_recorded_not_applied(
+    gitops_deploy, tick, state
+):
+    """A key only k3s reads: `k3s-bringup.yml` applies k3s, so the tick records it for a hand."""
+    tick.paths = [SECRETS]
+    tick.secret_readers = ["ansible/roles/setup/k3s/templates/registries.yaml.j2"]
+    assert gitops_deploy.main(tick.tools, tick.config, state) == 0
+    assert tick.playbooks == []
+    assert tick.merges == [ORIGIN]
+    assert [e.role for e in state.manual_plane_pending()] == ["k3s"]
+
+
+def test_a_failed_reader_derivation_applies_no_setup_role(
+    gitops_deploy, tick, capsys, state
+):
+    """The rejecting half: a refusal routes nothing, so the range behaves as before #5436."""
+    tick.paths = [SECRETS]
+    tick.secret_readers = [CLAUDE_TRIAGE_TASKS]
+    tick.secret_readers_error = RuntimeError("cannot say (a play-level reader)")
+    assert gitops_deploy.main(tick.tools, tick.config, state) == 0
+    assert tick.playbooks == []
+    assert tick.merges == [ORIGIN]
+    assert any("`secrets.yml` changed" in post for post in tick.posts)
+    assert "no setup role routed for the secrets.yml change" in capsys.readouterr().out

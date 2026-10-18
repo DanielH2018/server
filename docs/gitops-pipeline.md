@@ -831,8 +831,18 @@ those tags (a failed bump on a broad tick writes one) and leaves any other broad
   deploy-plane path, the narrowing maps each key whose ciphertext changed to the roles that
   read it (`scripts/deploy_tools/narrow_lib/secret_keys.py`, #5409). A key that only a setup
   role reads reaches no deploy tag, so it no longer defers the whole k8s plane to
-  `k8s_unapplied`. The tick still does not apply that setup role (#5436). The page above says so,
-  and names `secret_rotation.py consumers`, which prints the setup role's own apply command.
+  `k8s_unapplied`.
+- **A setup role reading a changed secret is applied as a setup-plane change** (#5436), on any
+  tick, with or without a deploy-plane path. `deploy_defer.route_secret_readers` runs
+  `scripts/deploy_tools/secret_setup_readers.py`, which greps `roles/setup/` at origin for each
+  key whose ciphertext changed. Each hit goes through `setup_roles_for`, so the role joins
+  `cs.setup_roles` as its own edit would. `handle_broad` applies the ones this host runs, and
+  `narrow_setup.role_tags` gives each the whole-role tag, because which of its tasks read the
+  key is not derived. A role another playbook applies, such as `k3s` for `wifi_password`, is
+  recorded in `manual_plane`. A key a play, a shared template or an inventory value reads
+  refuses, as for the deploy plane, and the range then routes no setup role. The page still
+  fires on every one of these ticks: it names `secret_rotation.py consumers`, which prints the
+  apply command of every consumer that no derivation reached.
 - **k8s-platform roles are auto-deployed ONLY for an image-pin bump to a non-denylisted service;
   every other k8s change defers-and-alerts.** `deploy_logic.split_k8s_auto_deploy` decides
   eligibility, **diff-shape first, identity second**. Gating on the service name alone would be

@@ -91,6 +91,7 @@ from pathlib import Path
 
 from deploy_tools.narrow_lib import filters as narrow_filters
 from deploy_tools.narrow_lib import paths as narrow_paths
+from deploy_tools.narrow_lib import secret_keys
 from lib.cli_help import ArgumentParser
 from lib.git import git
 from lib.repo_paths import GITOPS_DEPLOY_FILES
@@ -331,6 +332,13 @@ def role_tags(
             f"`git diff {old}..{new} -- {prefix}` failed: {r.stderr.strip()}"
         )
     changed = [line for line in r.stdout.splitlines() if line]
+    # A secret the role reads moves no path under it, yet reaches the host only when the role
+    # renders again (#5436). Which of its tags read the key is not derived, so the role tag.
+    moved = secret_keys.keys_named_in([prefix, *shipped], old, new, repo)
+    if moved:
+        raise CannotNarrow(
+            f"the range changes the secret {', '.join(moved)}, which {role} reads"
+        )
     if not changed:
         raise CannotNarrow(
             f"{old}..{new} changes nothing under {prefix} or in a file it ships"

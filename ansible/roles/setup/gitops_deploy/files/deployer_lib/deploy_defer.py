@@ -52,6 +52,7 @@ from deployer_lib.deploy_changes import (
     routing_failed,
     services_from_changed_paths,
     setup_role_host,
+    setup_roles_for,
     setup_role_playbook,
     setup_role_tag,
     tag_selects_an_off_host_role,
@@ -174,6 +175,57 @@ def drop_deleted_setup_roles(
     kept = services_from_changed_paths([p for p in paths if not gone(p)])
     kept.setup_roles -= deleted
     return kept
+
+
+def route_secret_readers(
+    tools: DeployTools, config: Config, target: TickTarget, cs: ChangeSet
+) -> None:
+    """Route the setup roles reading a `secrets.yml` key the range moved into `cs` (#5436).
+
+    `setup_tags_for` derives setup tags from paths, and `secrets.yml` sits under no setup
+    role, so PR #5405's new key for `claude_code` applied nothing and the role ran by hand.
+    Each reader path goes through `setup_roles_for`, as a changed path would, and the roles
+    join `cs.setup_roles` with the plane flags set: `handle_broad` then applies the ones this
+    host runs and records the rest in `manual_plane`, exactly as for a role's own edit.
+
+    Any failure of the subprocess, a refusal included, routes nothing and logs why. That is
+    the behaviour before #5436, and the `secrets` page still names every consumer. Runs after
+    `drop_deleted_setup_roles`, which can classify the range again and would lose the roles.
+    """
+    if not cs.secrets:
+        return
+    try:
+        paths = tools.secret_setup_readers(config.repo, target.local, target.origin)
+    except Exception as exc:
+        log(
+            f"secret-readers: no setup role routed for the secrets.yml change "
+            f"({type(exc).__name__}: {exc}) — the secrets page names its consumers",
+            level=WARNING,
+        )
+        return
+    roles = {role for p in paths for role in setup_roles_for(p)}
+    if not roles:
+        return
+    log(
+        f"secret-readers: secrets.yml moved a key {', '.join(sorted(roles))} reads "
+        f"({', '.join(sorted(paths))}) — routing them as setup-plane changes"
+    )
+    cs.secret_setup_roles |= roles
+    cs.setup_roles |= roles
+    cs.broad = cs.broad_setup = True
+
+
+def secret_reader_tags(cs: ChangeSet) -> set[str]:
+    """The `initial_setup.yml` tags of the `cs.secret_setup_roles` the tick's run applies.
+
+    The other half of `setup_tags_for(paths)`, with its filter: a role gated off this host or
+    applied by another playbook gets no tag here and is recorded in `manual_plane` instead.
+    """
+    return {
+        setup_role_tag(role)
+        for role in cs.secret_setup_roles
+        if tick_applies_setup_role(role)
+    }
 
 
 def drop_deleted_manual_plane(
