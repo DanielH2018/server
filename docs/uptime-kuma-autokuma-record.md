@@ -362,6 +362,24 @@ announces itself as the Sunday Discord burst it exists to stop.
 Loki, and a window suppresses notifications without stopping monitor-bridge logging `DOWN <name>`.
 The episodes still appear; the absent Discord message is the evidence.
 
+## The ingress tiles moved to blackbox-exporter
+
+Until 2026-10, `static-monitors.yaml.j2` rendered one HTTP tile per routed `containers_list`
+entry from the `kuma_ingress_monitors` filter (#3690), 26 tiles on `https://<hostname>.local.<domain>`.
+M4's PR 4 (#5625) removed that loop. blackbox-exporter probes the same URLs through
+observability's `blackbox-ingress` job, built from the same filter. The `ingress-probes` rules
+alert on the result, and `probe.py monitors` lists each firing ingress alert with its `service`.
+The move followed a shadow soak in which the probes caught every outage the tiles caught
+(`docs/target-architecture/monitoring/m4-blackbox-ingress.md`).
+
+- **AutoKuma deleted the 26 monitors and their history** on the deploy, under
+  `ON_DELETE=delete`. Nothing restores that history.
+- **Kuma no longer sees an ingress outage.** Homepage's `uptimekuma` widget and the status page
+  lose those tiles. `probe.py monitors` reads the ingress alerts beside Kuma's down-monitor summary, so it
+  still answers what is down.
+- **The tiles that probe something other than a bare ingress URL stay in Kuma.** Each such
+  service's entry carries `kuma: false`, which also drops it from the probe job.
+
 ## See also
 
 - `ansible/roles/k8s/uptime-kuma/CLAUDE.md` — the rules, the guards that hold them, and the

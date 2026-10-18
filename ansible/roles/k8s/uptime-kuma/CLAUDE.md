@@ -83,7 +83,11 @@ same convention in plain text. Both read `heartbeatJSON.msg`, `monitorJSON.descr
 - **A tile aimed at a path-only route uses a hostname no IngressRoute claims**, because Traefik
   ranks routers by rule length — hence `edge-selfcheck.local.<domain>`.
 - **A new monitor needs a group rule** (`test_every_declared_monitor_lands_in_a_named_group`);
-  a bridge row or a `kuma_ingress_monitors` tile has one.
+  a bridge row has one.
+- **No tile probes a service's bare ingress URL.** blackbox-exporter's `blackbox-ingress` job
+  probes one per routed `containers_list` entry, and the `ingress-probes` rules alert on it
+  (`docs/uptime-kuma-autokuma-record.md`, *The ingress tiles moved to blackbox-exporter*). A
+  tile here probes something else: a path, a VIP, a ClusterIP or another status.
 
 ## The weekly reboot's maintenance window is reconciled over the API
 

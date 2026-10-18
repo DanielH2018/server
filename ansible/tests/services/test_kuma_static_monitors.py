@@ -196,10 +196,9 @@ EMAIL_TIER = {
     # A home-critical service's own availability tile, put on the tier by the operator on
     # 2026-10-04 (#3480): the house or SSO is down. The template derives these from each
     # entry's containers_list `tier`, so they are named here as the members it must produce.
-    "k3s Authelia Portal",
+    # The ingress tiles of Authelia, Zigbee2MQTT and Home Assistant left Kuma in M4's PR 4
+    # (#5625). `IngressProbeFailedCritical` pages for those three instead.
     "k3s Mosquitto (VIP)",
-    "k3s Zigbee2MQTT",
-    "k3s Home Assistant",
     "Pi-hole k8s DNS",
 }
 
