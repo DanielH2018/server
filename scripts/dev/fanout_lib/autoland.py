@@ -59,7 +59,7 @@ _sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 _sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from fanout_lib import operator_waits
-from fanout_lib.launch_gates import LOCAL_HOST, MAX_LIVE_BATCHES_PER_HOST
+from fanout_lib.launch_gates import LOCAL_HOST, live_batch_cap
 from fanout_lib.review.api import LAND_SH, login
 from fanout_lib.target import SERVER, SERVER_CHECKOUT
 from fanout_lib.transport import Tools
@@ -455,7 +455,7 @@ def write_waits(
     try:
         today = time.strftime("%Y-%m-%d", time.gmtime(b.clock()))
         states = operator_waits.issue_states(b.open_issues(), today)
-        capacity = dict.fromkeys((LOCAL_HOST, SERVER_HOST), MAX_LIVE_BATCHES_PER_HOST)
+        capacity = {h: live_batch_cap(h) for h in (LOCAL_HOST, SERVER_HOST)}
         body += operator_waits.render_queue(states, capacity)
     except (OSError, ValueError, subprocess.SubprocessError) as exc:
         # The waits still stand; the queue families stay absent, so the idle rule reads

@@ -9,8 +9,12 @@ from dataclasses import dataclass
 
 # DECIDED: 2.5 GiB per agent. daniel-box's 24h peak for user-1000.slice was 7.2 GiB
 # (claude_code defaults/main.yml derivation) with three to four `claude` processes live, so
-# ~2 GiB each at peak; 2.5 GiB adds a pytest fan-out's worth (4 workers x ~150 MB). Confirm
-# against claude_cgroup_memory_current_bytes / claude_cgroup_pids_current before raising.
+# ~2 GiB each at peak; 2.5 GiB adds a pytest fan-out's worth (4 workers x ~150 MB). The
+# per-batch series confirmed it on 2026-10-18 (#5667): the 12 batches measured since #5665
+# peaked at 2473 MiB of anon on daniel-server and 2352 MiB on daniel-box, so the reservation
+# sits about 90 MiB above the largest. Do not lower it on that sample, and raise it if a
+# week of `max_over_time(claude_fanout_batch_memory_bytes{kind="anon"}[1w])` passes it.
+# The `peak` kind counts page cache (p95 about 6 GiB) and is not what this reserves.
 RESERVATION_BYTES = 2_684_354_560
 
 # SIX lines, in this fixed order: user.slice's memory.current and memory.high, then the
