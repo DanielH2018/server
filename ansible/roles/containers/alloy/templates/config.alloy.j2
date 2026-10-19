@@ -139,3 +139,55 @@ loki.source.file "pi_health" {
   targets    = local.file_match.pi_health.targets
   forward_to = [loki.write.homelab.receiver]
 }
+
+// crowdsec's off-cluster verify reads its evidence here (D5, *crowdsec's verify from outside
+// the cluster*, and its Open question 9, confirmed by the operator on 2026-10-18). The
+// crowdsec-edge-probe timer (roles/setup/k8s_host_files/tasks/crowdsec.yml) appends
+// `<time> http=<code>` once a minute, and this stage counts each line by status. Prometheus
+// scrapes the counter straight off this container as `alloy-pi`, a pull to the Pi's LAN
+// address. The ban the verify places makes Traefik refuse every push from the Pi, so a Loki
+// line would be dropped, but the count happens here when the line is read, whatever happens
+// to any push.
+//
+// The file is `.status`, outside the `*.log` glob above, and the drop stage below discards
+// every line once counted: one line a minute is evidence for a counter, not a log. Prometheus
+// sees it as `loki_process_custom_crowdsec_edge_probe_total{status="<code>"}`.
+// `max_idle_duration` keeps a status series alive between bans, so the first 403s of a verify
+// window increase an existing series instead of creating one Prometheus has never sampled.
+local.file_match "crowdsec_edge_probe" {
+  path_targets = [{"__path__" = "/var/log/pi-health/crowdsec-edge-probe.status"}]
+}
+
+loki.source.file "crowdsec_edge_probe" {
+  targets    = local.file_match.crowdsec_edge_probe.targets
+  forward_to = [loki.process.crowdsec_edge_probe.receiver]
+}
+
+loki.process "crowdsec_edge_probe" {
+  stage.regex {
+    expression = "http=(?P<status>[0-9]{3})$"
+  }
+
+  stage.labels {
+    values = {
+      status = "",
+    }
+  }
+
+  stage.metrics {
+    metric.counter {
+      name              = "crowdsec_edge_probe_total"
+      description       = "Edge VIP probes from daniel-pi, by the HTTP status the edge answered."
+      match_all         = true
+      action            = "inc"
+      max_idle_duration = "168h"
+    }
+  }
+
+  stage.drop {
+    expression          = ".*"
+    drop_counter_reason = "crowdsec_edge_probe_counted"
+  }
+
+  forward_to = []
+}

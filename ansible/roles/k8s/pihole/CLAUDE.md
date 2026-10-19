@@ -132,10 +132,12 @@ flip PR renames the first to `templates/verify/`, which makes the renderer emit
   `roll_one.yml` refuses before `apply_instance_2.yml` runs. A revision that rolls instance 1
   and would also fix a down pihole-2 cannot reach it then, and deleting the failed Job does not
   help, because Flux recreates it under the same name. No break-glass exists under Flux yet
-  (#5719). An API read that gets no answer, a 429 or a 5xx is retried inside the 300s wait.
-- **The guard's place does not exist yet.** It must run before `pihole`, and
-  `templates/verify/` renders after `pihole-deferred`. The flip PR needs a role-owned kind
-  that `<tag>` depends on first (#5719), and moves `guard-inert/` into it.
+  (#5740). An API read that gets no answer, a 429 or a 5xx is retried inside the 300s wait.
+- **The guard's place is `templates/precheck/`, and the flip PR moves it there.** The
+  renderer writes that directory to `pihole-precheck`, which `pihole` depends on, with a
+  timeout above the guard's deadline (#5719). `templates/verify/` would be wrong: it renders
+  after `pihole-deferred`. `tests/test_pihole_precheck.py` renders a role copy with the move
+  made.
   `tests/test_pihole_sibling_guard.py` covers the guard, and `tests/test_pihole_gravity.py`
   the gravity Job and the ordering.
 

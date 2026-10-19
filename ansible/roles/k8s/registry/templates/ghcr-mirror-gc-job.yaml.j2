@@ -21,7 +21,9 @@ metadata:
   name: registry-gc-ghcr-mirror
   namespace: {{ k8s_namespace }}
 spec:
-  # One attempt, for the reason the push store's Job in gc-job.yaml.j2 gives.
+  # One attempt. A retry would restart the prune and GC against a store the previous attempt
+  # was partway through mutating, and the script's scale-back-up runs on a timer it can't
+  # extend, so a silent retry could still be deleting blobs after the mirror is serving again.
   backoffLimit: 0
   activeDeadlineSeconds: {{ registry_k8s_gc_deadline_s }}
   ttlSecondsAfterFinished: {{ registry_k8s_gc_ttl_s }}

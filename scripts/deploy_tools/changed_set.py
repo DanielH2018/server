@@ -15,6 +15,10 @@ holds:
 It leaves out a name absent from the newer file, which the newer commit removes, and every
 suspended Kustomization. A Kustomization that no `digests.json` keys, such as a tag's
 `<tag>-deferred` or `<tag>-verify`, is not a removal: it joins through its `dependsOn` chain.
+A per-tag kind that `<tag>` depends on, such as `<tag>-precheck`, sits above its tag in that
+chain, so no chain reaches it. Its files count in `<tag>`'s footprint, so it joins as a direct
+member whenever that footprint moves: an unkeyed Kustomization that a moved tag depends on and
+that is named `<tag>-...`.
 
 A file that is missing or malformed counts as every name changed, and the result says it
 widened. Widening is the safe direction: a reader waits on more names than the commit moved,
@@ -181,6 +185,14 @@ def changed_set(
         name
         for name, footprint in new_prints.items()
         if name != UNCLASSIFIED and old_prints.get(name) != footprint
+    }
+    # A moved tag's own predecessors, `-snapshot`, `-prepull` and `-precheck`. Without them
+    # the chained timeout counted a precheck Job's wait as an unchanged ancestor's, zero.
+    moved |= {
+        dep
+        for name in moved
+        for dep in depends_on.get(name, ())
+        if dep not in keyed and dep.startswith(f"{name}-")
     }
     # A dependent the newer bundle removes is not expected either.
     reached = dependents(moved, depends_on) & universe

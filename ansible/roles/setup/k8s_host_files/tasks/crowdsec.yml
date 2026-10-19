@@ -1,0 +1,107 @@
+---
+# Added by crowdsec's first D5 conversion PR (#5650), while Ansible still owns crowdsec. H5.14
+# moves the probe into the Pi package.
+#
+# The evidence half of crowdsec's off-cluster verify (D5, *crowdsec's verify from outside the
+# cluster*): a timer on daniel-pi probes the edge VIP every minute and appends the HTTP status
+# to a file the Pi's Alloy counts by status. The `crowdsec-verify` Job that bans the Pi and
+# reads the count is inert until crowdsec's flip (roles/k8s/crowdsec/templates/verify-inert/).
+# The playbook entry is gated to daniel-box, so every task runs on the Pi through
+# `delegate_to`, as pi-peer-backup's block does.
+- name: Install crowdsec's edge probe timer on daniel-pi
+  delegate_to: daniel-pi
+  become: true
+  # DECIDED: the service reads `domain` and `k3s_metallb_ingress_vip` straight from
+  # group_vars, with no copy here as media-volume's puid and pgid have. The VIP is a LAN fact,
+  # which test_lan_facts_have_one_source.py allows in one place only. The cost: a group_vars
+  # change routes to the deploy plane, which never re-applies this task, so moving the VIP or
+  # the domain needs a hand apply of this role as well.
+  block:
+    - name: Install the edge probe script on daniel-pi
+      ansible.builtin.copy:
+        src: crowdsec-edge-probe.sh
+        dest: /usr/local/bin/crowdsec-edge-probe
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Install the edge probe service on daniel-pi
+      ansible.builtin.template:
+        src: crowdsec-edge-probe.service.j2
+        dest: /etc/systemd/system/crowdsec-edge-probe.service
+        owner: root
+        group: root
+        mode: "0644"
+
+    - name: Install the edge probe timer on daniel-pi
+      ansible.builtin.template:
+        src: crowdsec-edge-probe.timer.j2
+        dest: /etc/systemd/system/crowdsec-edge-probe.timer
+        owner: root
+        group: root
+        mode: "0644"
+
+    - name: Enable the edge probe timer on daniel-pi
+      ansible.builtin.systemd:
+        name: crowdsec-edge-probe.timer
+        enabled: true
+        state: started
+        daemon_reload: true
+
+# Moved from roles/k8s/crowdsec by D5's second crowdsec conversion PR (#5742). H7 deletes them
+# with their RETIRED entries in ansible/tests/repo/_retired_cron_row.py.
+#
+# The remote allowlist, the bouncer prune and the AppSec verify were daniel-box root crons until
+# H2.4b, and the home allowlist until H2.4c (docs/target-architecture/host/h2-shrink-host-plane.md,
+# Steps items 11 and 12). The crowdsec-jobs sidecar and the crowdsec-home-ips CronJob run them
+# since. In crowdsec's role these arms had to run ahead of its manifests, so no host cron
+# outlived the sidecar that replaced it. That ordering stopped mattering once H2.4c deployed on
+# 2026-10-19 and the arms had removed every cron, so they run on daniel-box here, outside the
+# Pi block above, and remove nothing from a host that no longer carries them.
+- name: Remove the retired remote-allowlist cron
+  ansible.builtin.cron:
+    name: "CrowdSec remote allowlist"
+    user: root
+    cron_file: crowdsec-remote-allowlist
+    state: absent
+  become: true
+
+- name: Remove the retired bouncer-prune cron
+  ansible.builtin.cron:
+    name: "CrowdSec bouncer prune"
+    user: root
+    cron_file: crowdsec-bouncer-prune
+    state: absent
+  become: true
+
+- name: Remove the retired AppSec verify cron
+  ansible.builtin.cron:
+    name: "CrowdSec AppSec verify"
+    user: root
+    cron_file: crowdsec-appsec-verify
+    state: absent
+  become: true
+
+- name: Remove the retired home allowlist cron
+  ansible.builtin.cron:
+    name: "CrowdSec home allowlist"
+    user: root
+    cron_file: crowdsec-home-allowlist
+    state: absent
+  become: true
+
+- name: Remove the retired crowdsec cron scripts from the host
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - /usr/local/bin/crowdsec-update-remote-allowlist.sh
+    - /opt/crowdsec-remote-allowlist
+    - /usr/local/bin/crowdsec-prune-bouncers.sh
+    - /opt/crowdsec-bouncer-prune
+    - /usr/local/bin/crowdsec-appsec-verify.sh
+    - /usr/local/bin/crowdsec-update-home-allowlist.sh
+    - /opt/crowdsec-home-allowlist
+    # The host cron's last values. The allowlist itself holds the stored entries since H2.4c.
+    - /var/lib/crowdsec-home-allowlist
+  become: true

@@ -1,7 +1,8 @@
 """The crowdsec-jobs sidecar's scheduler, and the pod layout it runs from.
 
 `files/crowdsec_jobs.py` runs the remote allowlist, the AppSec verify and the bouncer prune in
-the crowdsec pod since H2.4b, on the schedules their host crons had. The first tests drive its
+the crowdsec pod since H2.4b, and the home allowlist since H2.4c, on the schedules their host
+crons had. The first tests drive its
 schedule and its verdict handling with stubs. The last ones read the rendered Deployment and
 ConfigMap, build the sidecar's `/jobs` directory exactly as the kubelet mounts it, and run every
 module from it, so a module the ConfigMap stops carrying fails here rather than in the pod.
@@ -20,6 +21,7 @@ from lib import yaml_fast
 import appsec_verify
 import bouncer_prune
 import crowdsec_jobs as cj
+import home_allowlist
 import remote_allowlist
 
 JOBS = {job.tag: job for job in cj.JOBS}
@@ -34,6 +36,12 @@ def test_each_job_keeps_its_host_crons_utc_minutes():
     assert _minutes("crowdsec-remote-allowlist") == list(range(0, 60, 5))
     assert _minutes("crowdsec-appsec-verify") == [0, 15, 30, 45]
     assert _minutes("crowdsec-bouncer-prune") == [17]
+
+
+def test_the_home_allowlist_runs_a_minute_after_each_discovery_slot(cronjob):
+    # The CronJob writes at minutes 0, 5, ...; the job reads one minute later.
+    period = int(cronjob["spec"]["schedule"].split()[0].removeprefix("*/"))
+    assert _minutes("crowdsec-home-allowlist") == list(range(1, 60, period))
 
 
 def test_every_timeout_ends_a_hung_run_before_its_next_slot():
@@ -156,8 +164,12 @@ def test_no_job_starts_in_the_startup_grace():
         return _Alive(False)
 
     cj.main(clock=lambda: now[0], sleep=sleep, start=start, minutes=7)
-    # 13:00 and 13:01 fall inside the 120 s grace from 12:59:30; 13:05 is the first slot after.
-    assert started == [("crowdsec-remote-allowlist", 5)]
+    # 13:00 and 13:01 fall inside the 120 s grace from 12:59:30; 13:05 is the first slot after,
+    # and 13:06 is the home allowlist's.
+    assert started == [
+        ("crowdsec-remote-allowlist", 5),
+        ("crowdsec-home-allowlist", 6),
+    ]
 
 
 def test_a_late_wake_still_runs_the_minute_it_slept_to():
@@ -178,6 +190,14 @@ def test_a_late_wake_still_runs_the_minute_it_slept_to():
 
     cj.main(clock=lambda: now[0], sleep=sleep, start=start, minutes=2, grace_s=0)
     assert started == ["crowdsec-remote-allowlist"]
+
+
+@pytest.fixture(scope="module")
+def cronjob():
+    [doc] = yaml_fast.safe_load_all(
+        render_role_template("crowdsec", "home-ips-cronjob.yaml.j2")
+    )
+    return doc
 
 
 @pytest.fixture(scope="module")
@@ -211,6 +231,8 @@ def test_the_sidecar_runs_the_scheduler_from_the_configmap_with_the_tools_the_mo
         bouncer_prune.CSCLI,
         remote_allowlist.CSCLI,
         remote_allowlist.KUBECTL,
+        home_allowlist.CSCLI,
+        home_allowlist.KUBECTL,
     ):
         assert copies[path] == mounts["/tools"]
     # The engine's config and database, which cscli reads in the sidecar as in the engine.
@@ -317,3 +339,70 @@ def test_every_module_imports_from_the_pods_mounted_layout(tmp_path):
             timeout=60,
         )
         assert proc.returncode == 0, (script, proc.stderr)
+
+
+def test_the_sidecar_pages_a_lookup_older_than_three_cronjob_periods(pod, cronjob):
+    [sidecar] = [c for c in pod["containers"] if c["name"] == "crowdsec-jobs"]
+    env = {e["name"]: e.get("value") for e in sidecar["env"]}
+    period = int(cronjob["spec"]["schedule"].split()[0].removeprefix("*/"))
+    assert int(env["HOME_IPS_STALE_AFTER_S"]) == 3 * period * 60
+    assert env["HOME_IPS_CONFIGMAP"] == "crowdsec-home-ips"
+
+
+def test_the_discovery_imports_from_the_files_its_cronjob_mounts(cronjob, tmp_path):
+    """The CronJob mounts two keys of the crowdsec-jobs ConfigMap; the module needs no other."""
+    [configmap] = yaml_fast.safe_load_all(
+        render_role_template("crowdsec", "jobs-configmap.yaml.j2")
+    )
+    pod = cronjob["spec"]["jobTemplate"]["spec"]["template"]["spec"]
+    [volume] = pod["volumes"]
+    assert volume["configMap"]["name"] == configmap["metadata"]["name"]
+    for item in volume["configMap"]["items"]:
+        (tmp_path / item["path"]).write_text(configmap["data"][item["key"]])
+    [container] = pod["containers"]
+    assert container["command"] == ["python3", "/jobs/home_ips_discover.py"]
+    proc = subprocess.run(
+        [
+            sys.executable,
+            "-E",
+            "-s",
+            "-S",
+            str(tmp_path / "home_ips_discover.py"),
+            "--help",
+        ],
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+        timeout=60,
+    )
+    assert proc.returncode == 0, proc.stderr
+
+
+def test_the_discovery_runs_on_the_host_network_of_the_primary_node(cronjob):
+    pod = cronjob["spec"]["jobTemplate"]["spec"]["template"]["spec"]
+    assert pod["hostNetwork"] is True
+    assert pod["dnsPolicy"] == "ClusterFirstWithHostNet"
+    assert pod["nodeSelector"] == {"kubernetes.io/hostname": "daniel-box"}
+
+
+def fields_an_apply_would_own(configmap: dict) -> list[str]:
+    """The data keys a rendered ConfigMap hands to Ansible's and Flux's apply.
+
+    The CronJob is the only writer of crowdsec-home-ips' data (the DECIDED marker in
+    templates/home-ips-configmap.yaml.j2). A key in the render would be reset on every deploy,
+    clobbering the lookup the CronJob wrote.
+    """
+    return sorted({**configmap.get("data", {}), **configmap.get("binaryData", {})})
+
+
+def test_the_home_ips_configmap_renders_no_field_the_cronjob_writes():
+    [configmap] = yaml_fast.safe_load_all(
+        render_role_template("crowdsec", "home-ips-configmap.yaml.j2")
+    )
+    assert configmap["metadata"]["name"] == "crowdsec-home-ips"
+    assert fields_an_apply_would_own(configmap) == []
+
+
+def test_a_placeholder_data_key_in_the_render_is_flagged():
+    placeholder = {"metadata": {"name": "crowdsec-home-ips"}, "data": {"ipv4": ""}}
+    assert fields_an_apply_would_own(placeholder) == ["ipv4"]

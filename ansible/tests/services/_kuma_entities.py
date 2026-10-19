@@ -219,7 +219,7 @@ def bridge_push_tokens() -> set[str]:
 
     Derived from the rendered env-secret, not listed: several monitors carry a `monitor_bridge_*`
     token name while being fed by something else entirely (CrowdSec Home Allowlist is fed by a
-    cron on daniel-box, and the two Pi monitors and Arr Auto-Block are not bridge checks). A
+    job in the crowdsec pod, and the two Pi monitors and Arr Auto-Block are not bridge checks). A
     hand-kept list here would put those on the bridge's heartbeat window and relax a tile whose
     feeder runs on another clock.
     """

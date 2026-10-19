@@ -40,7 +40,7 @@ crowdsec_k8s_collections: >-
 
 # The engine pod's own in-pod agent registers itself via the image entrypoint under this
 # name; the app-sidecar machines (crowdsec_k8s_sidecar_agents in group_vars) are
-# registered by this role's post-deploy task. All use SOPS crowdsec_k8s_agent_password.
+# registered by the lapi-register initContainer. All use SOPS crowdsec_k8s_agent_password.
 crowdsec_k8s_engine_machine: engine-local
 
 crowdsec_k8s_cpu_limit: "1"
@@ -80,7 +80,30 @@ crowdsec_k8s_jobs_kubectl_image: alpine/k8s:1.37.1@sha256:712dc5385d1c1a3f83b747
 # the scheduler, about 250 MB at worst. The limit doubles that, because an OOM kill here takes
 # the whole pod out of Ready, and with it the LAPI out of its Service, until the container
 # restarts. The request is the idle scheduler with headroom.
+#
+# H2.4c's home allowlist (python, then kubectl, then cscli, one at a time) starts one minute
+# later. It overlaps those two only when they outlive a minute, which their 180s and 300s
+# timeouts allow. All three at their peak is about 400 MB, inside the limit with no doubling.
+# Not re-measured with the fourth job; read the container's peak with `probe.py metric
+# 'container_memory_working_set_bytes{container="crowdsec-jobs"}'` after the deploy.
 crowdsec_k8s_jobs_cpu_limit: "500m"
 crowdsec_k8s_jobs_mem_limit: 512Mi
 crowdsec_k8s_jobs_cpu_request: "10m"
 crowdsec_k8s_jobs_mem_request: 64Mi
+
+# ── home allowlist ──────────────────────────────────────────────────────────────────────
+# The home public IPv4 and IPv6 /64 reach the `home-ips` allowlist in two halves, the
+# operator's ruling of 2026-10-18 on #5701 (H2.4c). The crowdsec-home-ips CronJob runs on
+# daniel-box's host network, the only place the /64 is visible, and writes both into the
+# crowdsec-home-ips ConfigMap (files/home_ips_discover.py). The crowdsec-jobs sidecar syncs the
+# allowlist from it (files/home_allowlist.py). The host cron's period, every 5 minutes.
+crowdsec_k8s_home_ips_period_minutes: 5
+crowdsec_k8s_home_ips_configmap: crowdsec-home-ips
+# Below the period, so a hung run ends before the next slot, and below k8s/cronjob-gate's
+# cronjob_gate_timeout, so a hung gate run fails the deploy with the gate's own message. A run
+# takes at most 150s: ipify and the ConfigMap patch at 10s each plus 60s of connect retries,
+# and the two WAN probes at 5s each with none.
+crowdsec_k8s_home_ips_deadline_seconds: 240
+# Three CronJob periods: the sidecar's home allowlist pushes down once the ConfigMap's lookup
+# time is older, so a dead discovery pages.
+crowdsec_k8s_home_ips_stale_after_seconds: "{{ crowdsec_k8s_home_ips_period_minutes * 60 * 3 }}"

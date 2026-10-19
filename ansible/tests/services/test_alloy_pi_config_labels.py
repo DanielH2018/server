@@ -31,6 +31,10 @@ REQUIRED_FRAGMENTS = (
     '"__path__" = "/var/log/pi-health/*.log"',
     '"job" = "syslog"',
     '"machine" = "daniel-pi"',
+    # crowdsec's edge probe, counted by status for its off-cluster verify and never shipped.
+    '"__path__" = "/var/log/pi-health/crowdsec-edge-probe.status"',
+    'name              = "crowdsec_edge_probe_total"',
+    'expression = "http=(?P<status>[0-9]{3})$"',
     # The push-only door on the LAN route.
     f'url = "https://loki-homelab.local.{_DOMAIN}/loki/api/v1/push"',
 )

@@ -1,0 +1,37 @@
+# The registry role's own alerts. Plain YAML, never Jinja: prometheus-rules.yaml.j2 carries this
+# file verbatim.
+#
+# GhcrMirrorScaledToZero covers the case nothing else sees. registry-gc.sh scales the ghcr-mirror
+# Deployment to zero every Sunday and back when it ends, and the Deployment renders no
+# `replicas:`, so a run killed between the two leaves it at 0/0. That passes rollout status,
+# K8sDeploymentZeroAvailable (which wants spec replicas above zero) and the registry deploy's
+# netpol probe, and containerd falls back to ghcr.io until a WAN outage finds the mirror gone.
+# The registry deploy restores it while Ansible owns registry, and the next GC run restores it
+# from its stamp, which can be a week away. The 2h hold is well past the GC's longest hold of
+# the mirror: registry_k8s_gc_deadline_s (1200s) plus the scale-down and scale-up waits.
+groups:
+  - name: registry
+    rules:
+      # The second arm is conjoined with up == 1, so a failed kube-state-metrics scrape, which
+      # the Cluster Scrape Targets tile pages, does not page here a second time. The first arm
+      # is the zero-series alert: with no scrape job, nothing can see the count.
+      - alert: GhcrMirrorScaledToZero
+        expr: >-
+          absent(up{job="kube-state-metrics"})
+          or
+          (kube_deployment_spec_replicas{job="kube-state-metrics", namespace="homelab", deployment="ghcr-mirror"} == 0
+          and on() (up{job="kube-state-metrics"} == 1))
+        for: 2h
+        labels:
+          severity: warning
+          service: registry
+        annotations:
+          summary: The ghcr-mirror Deployment has wanted zero replicas for 2 hours.
+          description: >-
+            homelab/ghcr-mirror has been scaled to zero for 2 hours, or Prometheus has no
+            kube-state-metrics scrape job. registry-gc.sh holds it at zero for at most about 25
+            minutes, so a run probably died before its restore. Until the mirror serves again,
+            containerd pulls ghcr.io images straight from GHCR and a WAN outage leaves no source
+            to pull them from. Check `journalctl -t registry-gc` on daniel-box and that no
+            registry-gc.sh is running, then `kubectl -n homelab scale deploy/ghcr-mirror
+            --replicas=1` or a registry deploy.

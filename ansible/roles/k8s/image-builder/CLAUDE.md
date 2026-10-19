@@ -43,8 +43,9 @@ while reporting success.
     - A render outside a play has no fact at all. `scripts/lib/render_guard.py:BUILT_IMAGE_TAG_STUBS`
       seeds one for every rendered-manifest guard, which would otherwise check `:latest` while
       production renders the hash.
-  - `registry-gc.sh` prunes superseded content tags (`registry_k8s_keep_content_tags`), since
-    a tag is a real manifest reference that `garbage-collect --delete-untagged` never reclaims.
+  - Nothing prunes superseded content tags from the push store. registry's GC of that store
+    was retired once no caller of this role was Ansible-owned (D5, Wave D's registry bullet),
+    so no build reaches it. The registry verify Job's seed still writes there (#5752).
 - Skips the actual build when the rendered context is byte-identical to the last run's and
   the registry already serves BOTH tags — saved ~106s across the seven original callers.
   `image_builder_force=true` overrides it, for a base-image CVE bump nothing here can see.

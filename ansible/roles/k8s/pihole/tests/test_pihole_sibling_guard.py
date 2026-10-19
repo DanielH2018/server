@@ -4,8 +4,9 @@ The script tests run `pihole_sibling_guard.main` against `Slices`, a fixture API
 answers each EndpointSlice list from a queue per Service, so a test can script pihole-2 coming
 back mid-wait. The render tests copy the role and move `templates/guard-inert/` into
 `templates/verify/`, the one role-owned directory the renderer reads, so the guard is checked
-as the renderer emits it. That placement is only the render vehicle: under Flux the guard must
-run before `pihole`, in a kind the renderer does not have yet (#5719). Its RBAC is tested
+as the renderer emits it. That placement is only the render vehicle: under Flux the guard
+runs before `pihole`, from `templates/precheck/`, which test_pihole_precheck.py renders
+(#5719). Its RBAC is tested
 against the script's calls in ansible/tests/k8s/test_rbac_against_rest_script.py.
 
 Run: uv run pytest ansible/roles/k8s/pihole/tests/test_pihole_sibling_guard.py
@@ -254,10 +255,9 @@ def test_the_tree_renders_no_guard_while_ansible_owns_pihole(stubs):
 
 
 def test_the_guard_passes_every_job_census_row_but_kind(guard_render):
-    """`kind` is out: the pre-apply kind the guard belongs in does not exist yet (#5719).
+    """`kind` is out: the guard is a `precheck` Job, which `<tag>-verify` does not admit.
 
-    Rendered into `<tag>-verify`, the guard would pass `kind` as a verify Job, which is the
-    wrong place for it, so a pass there would prove nothing about where it runs.
+    test_pihole_precheck.py checks every row, `kind` included, in `pihole-precheck` (#5719).
     """
     docs = _guard_docs(guard_render)
     assert sorted(doc["kind"] for doc in docs) == [
