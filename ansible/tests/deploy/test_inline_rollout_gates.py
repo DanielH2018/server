@@ -179,8 +179,8 @@ _KNOWN_SELF_POD_ROLES = {
     "pihole",
 }
 
-# 30 resolved self-pod inspections across those roles. A floor far below
-# the real count cannot tell "one role changed shape" from "the matcher broke and half the
+# 27 resolved self-pod inspections across those roles, since crowdsec's three registration
+# execs became an initContainer (#5741). A floor far below the real count cannot tell "one role changed shape" from "the matcher broke and half the
 # corpus stopped being read".
 _MIN_SELF_POD_INSPECTIONS = 24
 

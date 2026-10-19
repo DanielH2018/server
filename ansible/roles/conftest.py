@@ -18,12 +18,19 @@ still share one `sys.path`; the `no-two-import-roots-share-a-module-basename` ro
 
 `scripts/tests/test_test_module_bootstraps_present.py` loads `role_files_dir` from this file,
 credits the directory it names, and refuses an insert of it as redundant.
+
+A role test that needs its observed output in CI's job log records it with
+`record_property(JOB_LOG_PROPERTY, text)`. pytest shows captured stdout only for a failing
+test, and under xdist only the controller writes the log, so a print in a passing test reaches
+nothing. xdist carries a report's `user_properties` back to the controller, and
+`pytest_terminal_summary` here prints each passed test's text under its node id.
 """
 
 import sys
 from pathlib import Path
 
 ROLES = Path(__file__).resolve().parent
+JOB_LOG_PROPERTY = "job_log"
 
 
 def role_files_dir(path: Path, roles: Path = ROLES) -> Path | None:
@@ -45,3 +52,18 @@ def pytest_collect_file(file_path: Path, parent):
     files = role_files_dir(file_path)
     if files is not None and str(files) not in sys.path:
         sys.path.insert(0, str(files))
+
+
+def job_log_lines(reports) -> list[str]:
+    """The lines `pytest_terminal_summary` prints for `reports`: each `job_log` text, headed."""
+    lines = []
+    for report in reports:
+        for name, text in report.user_properties:
+            if name == JOB_LOG_PROPERTY:
+                lines += [f"--- job log: {report.nodeid}", *str(text).splitlines()]
+    return lines
+
+
+def pytest_terminal_summary(terminalreporter):
+    for line in job_log_lines(terminalreporter.stats.get("passed", [])):
+        terminalreporter.write_line(line)
