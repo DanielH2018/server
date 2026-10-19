@@ -308,7 +308,9 @@ PROPERTIES = (
             more_red=(("pi-peer-backup", {}),),
             # 15 Jobs and CronJobs render. Close enough to notice a contraction.
             min_matches=12,
-            must_find=frozenset({"CronJob/pi-peer-backup", "Job/registry-gc"}),
+            must_find=frozenset(
+                {"CronJob/pi-peer-backup", "Job/registry-gc-ghcr-mirror"}
+            ),
         ),
     )
     + CONFIG_PROPERTIES
