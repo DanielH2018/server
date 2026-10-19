@@ -1,34 +1,49 @@
 #!/usr/bin/env bash
 # Registry garbage collection — managed by Ansible (k8s/registry role); edits overwritten.
 #
-# WHY THIS EXISTS: deployment.yaml.j2 sets REGISTRY_STORAGE_DELETE_ENABLED=true, which only
-# PERMITS deletes — the registry never collects on its own. Nothing ever ran garbage-collect, so
-# every rebuild's superseded layers accumulated until registry-data hit 99.8% of 10 GiB on
-# 2026-08-15 and every image build in the cluster failed with "no space left on device". At that
-# point all eight repositories held exactly one tag each, so the live content was a handful of
-# images and the rest was orphaned blobs.
+# WHY THIS EXISTS: the ghcr-mirror Deployment (ghcr-mirror.yaml.j2) runs with REGISTRY_PROXY_TTL
+# 0s, so nothing expires an image it cached, and its store grows with every upgrade of any
+# ghcr.io image in the cluster until the 30Gi claim fills (#5541). The registry never collects
+# on its own, so this weekly run prunes the store offline and garbage-collects it.
 #
 # STOP-THE-WORLD, NOT OPTIONAL. Upstream: "You should ensure that the registry is in read-only
 # mode or not running at all. If you were to upload an image while garbage collection is running,
 # there is the risk that the image's layers are mistakenly deleted leading to a corrupted image."
-# That failure is worse than it sounds here: a corrupt image still PULLS, and only crashloops the
-# workload later, with nothing pointing back at GC. The volume is longhorn-nobackup because
-# losing it costs a rebuild rather than data — that tolerance covers losing the volume, NOT
-# silently serving a broken image. Hence scale-to-0 for the duration.
+# A pull-through mirror uploads into its own store on every cache miss, so the same holds here.
+# A corrupt image still PULLS, and only crashloops the workload later, with nothing pointing back
+# at GC. Hence scale-to-0 for the duration. containerd falls back to ghcr.io meanwhile.
+#
+# THE PUSH STORE IS NOT COLLECTED. Its phase scaled deploy/registry, whose `replicas: 1` Flux
+# renders after registry's flip, so Flux would restore the pod mid-GC. No image-builder caller is
+# Ansible-owned any more, so no build reaches that store, and D5 retired its GC rather than
+# moving it (docs/target-architecture/deploy/d5-bulk-move.md, Wave D's registry bullet). The
+# verify Job's seed still adds about 20 MB per flux_job_image pin, which nothing reclaims (#5752).
+#
+# deploy/ghcr-mirror renders no `replicas:`, so neither the Ansible apply nor Flux's server-side
+# apply owns `spec.replicas`, and this script is that field's only writer. The operator accepted
+# that exception to contract C4 on field ownership (#5732).
 #
 # ROOT KUBECONFIG, unlike every sibling script deployed by this repo. disk-health.sh,
 # longhorn-backup-health.sh and manifest-prune-check.sh all use the read-only ServiceAccount
 # precisely so a bug there cannot mutate the cluster. This one MUST scale a Deployment, so it
-# holds a credential that can. Everything it does is scoped to the registry Deployment and its
-# own Job; keep it that way.
+# holds a credential that can. Everything it does is scoped to deploy/ghcr-mirror, its own Job
+# and its keep-set ConfigMap; keep it that way.
+#
+# ONE LOCK FOR THE WHOLE RUN. The script holds an flock on registry_k8s_gc_lock_file from
+# before the scale-down until after the restore, and the registry deploy restores a mirror it
+# finds at zero only under the same lock (tasks/main.yml), so the deploy can never put the pod
+# back while this run prunes the store (#5736). The kernel drops the lock when the process
+# dies, however it dies.
+#
+# A STAMP THAT OUTLIVES THE RUN. /var/lib/registry-gc/ghcr-mirror-down exists from just before
+# the scale-down until the mirror is serving again. A run killed in between leaves it behind,
+# and the next run starts by restoring that mirror. After registry's flip no deploy restores it.
 #
 # Usage: registry-gc.sh (no arguments)
 # Runs from the registry-gc root cron on daniel-box, weekly at the time set by
-# registry_k8s_gc_cron_weekday, _hour and _minute. It collects the two stores one after the
-# other, and each phase scales only its own Deployment. The push store's phase scales
-# deploy/registry to 0 and runs /etc/rancher/k3s/manifests/registry-jobs/gc-job.yaml. The
-# ghcr-mirror store's phase scales deploy/ghcr-mirror to 0 and runs ghcr-mirror-gc-job.yaml from
-# the same directory, the prune and garbage-collect. It pushes the combined result to Kuma when
+# registry_k8s_gc_cron_weekday, _hour and _minute. It scales deploy/ghcr-mirror to 0, runs
+# /etc/rancher/k3s/manifests/registry-jobs/ghcr-mirror-gc-job.yaml, the prune and
+# garbage-collect, and scales the mirror back. It pushes the result to Kuma when
 # registry_gc_push_token is set. It reads /etc/rancher/k3s/k3s.yaml and
 # /usr/local/lib/kuma-push-lib.sh, and keeps its state in /var/lib/registry-gc.
 
@@ -53,36 +68,27 @@ export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
 
 NS="{{ k8s_namespace }}"
 KUBECTL="k3s kubectl -n ${NS}"
-DEPLOY=registry
 MIRROR_DEPLOY=ghcr-mirror
-JOB=registry-gc
 MIRROR_JOB=registry-gc-ghcr-mirror
 MIRROR_KEEP_CM=registry-gc-ghcr-mirror-keep
 MIRROR_STARTED=0
 MIRROR_DONE=0
 MIRROR_NOTE=""
-JOB_MANIFEST=/etc/rancher/k3s/manifests/registry-jobs/gc-job.yaml
 MIRROR_JOB_MANIFEST=/etc/rancher/k3s/manifests/registry-jobs/ghcr-mirror-gc-job.yaml
-# Set while that phase's Deployment may be scaled down, so the EXIT trap knows what to restore.
-PUSH_DOWN=0
+# Set while deploy/ghcr-mirror may be scaled down, so the EXIT trap knows to restore it.
 MIRROR_DOWN=0
-PUSH_MSG=""
 MIRROR_MSG=""
 FAILED=0
 COMPLETED=0
 STATE_DIR=/var/lib/registry-gc
 STATE_FILE="${STATE_DIR}/state.json"
+# The stamp and the lock the header describes. tasks/main.yml names the lock too.
+MIRROR_STAMP="${STATE_DIR}/ghcr-mirror-down"
+LOCK_FILE={{ registry_k8s_gc_lock_file }}
 
 KUMA_HOST="uptime-kuma.local.{{ domain }}"
 KUMA_RESOLVE_IP="{{ k3s_metallb_ingress_vip }}"
 PUSH_TOKEN="{{ registry_gc_push_token | default('') }}"
-
-# The registry's own HTTP API, reached the way the image-builder role's registry reads reach it:
-# the hostPort on the loopback address. Untagging is an API call, not something the GC binary does.
-REG="http://{{ k8s_registry_host_ip }}:{{ k8s_registry_port }}"
-MANIFEST_ACCEPT='application/vnd.oci.image.manifest.v1+json,application/vnd.docker.distribution.manifest.v2+json'
-KEEP_CONTENT_TAGS={{ registry_k8s_keep_content_tags }}
-PRUNED=0
 
 STATUS=down
 MSG="did not complete"
@@ -135,14 +141,6 @@ start_deploy() {
   $KUBECTL rollout status "deploy/${1}" --timeout=180s >/dev/null 2>&1
 }
 
-restore_push_store() {
-  [[ "$PUSH_DOWN" == 1 ]] || return 0
-  PUSH_DOWN=0
-  start_deploy "$DEPLOY" && return 0
-  PUSH_MSG="${PUSH_MSG:-push store not collected}; registry did NOT come back — check deploy/${DEPLOY}"
-  return 1
-}
-
 # The mirror Job mounts the same RWO claim the ghcr-mirror pod does, and both land on one node,
 # so nothing stops the pod starting while the prune is still unlinking revisions. A Job not
 # known to have finished is deleted, and waited for, before the mirror serves the store again.
@@ -161,25 +159,25 @@ restore_mirror_store() {
         --timeout=120s >/dev/null 2>&1
     fi
   fi
-  start_deploy "$MIRROR_DEPLOY" && return 0
+  if start_deploy "$MIRROR_DEPLOY"; then
+    rm -f "$MIRROR_STAMP"
+    return 0
+  fi
   MIRROR_MSG="${MIRROR_MSG:-ghcr-mirror store not collected}; ghcr-mirror did NOT come back — check deploy/${MIRROR_DEPLOY}"
   return 1
 }
 
-# Both stores MUST come back even if GC dies, the deadline trips, or cron kills us. Without this
-# a failed run leaves the cluster unable to pull any locally-built image, or any ghcr.io image
-# during a WAN outage, until a human notices — a worse outage than the full disk this fixes.
+# The mirror MUST come back even if GC dies, the deadline trips, or cron kills us. Without this
+# a failed run leaves the cluster unable to pull any ghcr.io image during a WAN outage until a
+# human notices, which is the outage the mirror exists to prevent.
 scale_up_and_report() {
   restore_mirror_store || FAILED=1
-  restore_push_store || FAILED=1
   if [[ "$COMPLETED" == 1 && "$FAILED" == 0 ]]; then
     STATUS=up
   else
     STATUS=down
   fi
-  if [[ -n "$PUSH_MSG" || -n "$MIRROR_MSG" ]]; then
-    MSG="${PUSH_MSG:-push store: did not run}; ${MIRROR_MSG:-ghcr-mirror: did not run}"
-  fi
+  [[ -n "$MIRROR_MSG" ]] && MSG="$MIRROR_MSG"
   finish
 }
 trap scale_up_and_report EXIT
@@ -195,102 +193,8 @@ journal_mirror_prune() {
   printf '%s\n' "$lines"
 }
 
-# ── Content-tag prune ────────────────────────────────────────────────────────────────────────
-# Every build pushes an immutable `sha-<12 hex>` tag beside `latest` (see k8s/image-builder's
-# --output). A tag is a real manifest reference, so `garbage-collect --delete-untagged` below can
-# never reclaim one: without this step the store gains one permanent manifest per rebuild, and the
-# buildcache comment in build-job.yaml.j2 stops being able to claim that the store is bounded by
-# the NUMBER of built images rather than by how often they are rebuilt.
-#
-# BEFORE the scale-down, not after, and the order is load-bearing. Untagging goes through the
-# SERVING registry (`DELETE /v2/<repo>/manifests/<digest>`, permitted by the
-# REGISTRY_STORAGE_DELETE_ENABLED this file's header describes), while the GC Job runs the binary
-# directly against a store with nothing serving it. Reversed, every prune would fail on a refused
-# connection and only the blob sweep would run — silently, since the prune is best-effort.
-#
-# WHAT IS NEVER UNTAGGED: any tag that is not `sha-<12 hex>`, which is what keeps `latest` and
-# `buildcache` safe; the digest `latest` currently resolves to; and any digest a running pod
-# resolved. The last one matters because every built image runs imagePullPolicy: Always
-# (the `built-images-pull-always` row of ansible/tests/k8s/_workload_property_rows.py), so a
-# pod re-fetches by tag on each start —
-# untagging the manifest a live pod came from turns its next restart into an ImagePullBackOff.
-#
-# AN UNRANKABLE TAG IS KEPT. Ordering needs each manifest's config-blob `created`, because the tag
-# names are content hashes and carry no chronology, so a tag whose config blob cannot be read has
-# no place in that order. The asymmetry is the one k8s/image-builder's build gate rests on: keeping
-# a superseded tag costs disk, untagging a live one costs an outage.
-
-# The digest a tag resolves to, from the registry's own header rather than from hashing the body.
-manifest_digest() {
-  curl -fsS -I --max-time 10 -H "Accept: ${MANIFEST_ACCEPT}" \
-    "${REG}/v2/${1}/manifests/${2}" 2>/dev/null \
-    | tr -d '\r' | sed -n 's/^[Dd]ocker-[Cc]ontent-[Dd]igest: //p'
-}
-
-# Every image digest a running container resolved, one per line. Scoped to {{ k8s_namespace }},
-# which is where every consumer of this registry runs — a workload in another namespace pulling
-# from here would be invisible to the keep rule below.
-live_digests() {
-  $KUBECTL get pods -o \
-    jsonpath='{range .items[*]}{range .status.containerStatuses[*]}{.imageID}{"\n"}{end}{end}' \
-    2>/dev/null | grep -o 'sha256:[0-9a-f]\{64\}' | sort -u
-}
-
-# `created<TAB>tag<TAB>digest` for every content tag in one repository, newest first. A row whose
-# created or digest could not be read is still emitted — the caller keeps it rather than ranking it.
-content_tag_rows() {
-  local repo=$1 tag body digest cfg created
-  curl -fsS --max-time 10 "${REG}/v2/${repo}/tags/list" 2>/dev/null \
-    | jq -r '.tags[]?' | grep -E '^sha-[0-9a-f]{12}$' \
-    | while read -r tag; do
-        digest=$(manifest_digest "$repo" "$tag")
-        body=$(curl -fsS --max-time 15 -H "Accept: ${MANIFEST_ACCEPT}" \
-                 "${REG}/v2/${repo}/manifests/${tag}" 2>/dev/null)
-        cfg=$(jq -r '.config.digest // empty' <<<"$body" 2>/dev/null)
-        created=""
-        if [[ -n "$cfg" ]]; then
-          created=$(curl -fsS --max-time 15 "${REG}/v2/${repo}/blobs/${cfg}" 2>/dev/null \
-                      | jq -r '.created // empty' 2>/dev/null)
-        fi
-        printf '%s\t%s\t%s\n' "$created" "$tag" "$digest"
-      done | sort -r
-}
-
-prune_content_tags() {
-  local live repos repo keep_digest rank created tag digest
-  live=$(live_digests)
-  repos=$(curl -fsS --max-time 10 "${REG}/v2/_catalog?n=1000" 2>/dev/null | jq -r '.repositories[]?')
-  if [[ -z "$repos" ]]; then
-    logger -t registry-gc "prune: registry catalog unreadable — skipped"
-    return 0
-  fi
-
-  while read -r repo; do
-    [[ -n "$repo" ]] || continue
-    keep_digest=$(manifest_digest "$repo" latest)
-    rank=0
-    while IFS=$'\t' read -r created tag digest; do
-      [[ -n "$tag" ]] || continue
-      rank=$((rank + 1))
-      if [[ -z "$created" || -z "$digest" ]]; then
-        logger -t registry-gc "prune: keeping ${repo}:${tag} — created or digest unreadable"
-        continue
-      fi
-      [[ "$rank" -le "$KEEP_CONTENT_TAGS" ]] && continue
-      [[ -n "$keep_digest" && "$digest" == "$keep_digest" ]] && continue
-      grep -qxF "$digest" <<<"$live" && continue
-      if curl -fsS -X DELETE --max-time 20 \
-           "${REG}/v2/${repo}/manifests/${digest}" >/dev/null 2>&1; then
-        PRUNED=$((PRUNED + 1))
-      else
-        logger -t registry-gc "prune: could not untag ${repo}:${tag} (${digest})"
-      fi
-    done < <(content_tag_rows "$repo")
-  done <<<"$repos"
-}
-
 # ── ghcr-mirror keep set ─────────────────────────────────────────────────────────────────────
-# The ghcr-mirror container's store is pruned offline by the second Job in gc-job.yaml
+# The ghcr-mirror container's store is pruned offline by ghcr-mirror-gc-job.yaml's Job
 # (files/ghcr-mirror-prune.sh in the k8s/registry role, #5541), which has no API access. It
 # reads the digests to keep from a ConfigMap this function writes before the scale-down.
 #
@@ -334,37 +238,6 @@ write_mirror_keep_set() {
   fi
 }
 
-# ── The push store's phase ───────────────────────────────────────────────────────────────────
-# Scales only deploy/registry. Its replica comes back in the main sequence below, before the
-# mirror's phase starts, so the push store is down only for its own collection.
-collect_push_store() {
-  local deleted links
-  prune_content_tags
-  PUSH_DOWN=1
-  if ! stop_deploy "$DEPLOY"; then
-    PUSH_MSG="registry pod did not terminate within 120s — aborted before touching the blob store"
-    return 1
-  fi
-  $KUBECTL delete job "$JOB" --ignore-not-found >/dev/null 2>&1
-  if ! $KUBECTL apply -f "$JOB_MANIFEST" >/dev/null 2>&1; then
-    PUSH_MSG="could not apply ${JOB_MANIFEST}"
-    return 1
-  fi
-  if ! $KUBECTL wait --for=condition=complete "job/${JOB}" \
-         --timeout={{ registry_k8s_gc_deadline_s }}s >/dev/null 2>&1; then
-    PUSH_MSG="gc job did not complete within {{ registry_k8s_gc_deadline_s }}s — see: kubectl -n ${NS} logs job/${JOB}"
-    return 1
-  fi
-  # Count what GC actually removed, from its own log. Longhorn's actualSize was the obvious
-  # metric here and it is the WRONG one: it reports blocks allocated to the volume, not
-  # filesystem usage, so it stays flat after a deletion until something trims the volume. The
-  # first real run deleted 209 blobs and read as "10719551488 -> 10722729984 bytes" — an
-  # unchanged, slightly larger number, which reads as a failed run.
-  deleted=$($KUBECTL logs "job/${JOB}" 2>/dev/null | grep -c 'Deleting blob')
-  links=$($KUBECTL logs "job/${JOB}" 2>/dev/null | grep -c 'Deleting layer link')
-  PUSH_MSG="gc completed; ${PRUNED} content tag(s) untagged, ${deleted} blob(s) and ${links} layer link(s) deleted"
-}
-
 # Waits for the mirror Job and records its result in MIRROR_MSG. Returns 1 when the Job did not
 # complete, or when the keep set was skipped.
 report_mirror_job() {
@@ -387,10 +260,15 @@ report_mirror_job() {
 
 # ── The ghcr-mirror store's phase ────────────────────────────────────────────────────────────
 # Scales only deploy/ghcr-mirror, never the push store (operator ruling on #5680). containerd
-# falls back to ghcr.io while it is down.
+# falls back to ghcr.io while it is down. The stamp goes down before the scale-down, so a run
+# killed at any point after it is one the next run repairs.
 collect_mirror_store() {
   write_mirror_keep_set || return 1
   [[ -n "$MIRROR_NOTE" ]] && logger -t registry-gc "$MIRROR_NOTE"
+  if ! mkdir -p "$STATE_DIR" || ! : > "$MIRROR_STAMP"; then
+    MIRROR_MSG="could not write ${MIRROR_STAMP} — aborted before scaling down"
+    return 1
+  fi
   MIRROR_DOWN=1
   if ! stop_deploy "$MIRROR_DEPLOY"; then
     MIRROR_MSG="ghcr-mirror pod did not terminate within 120s — aborted before touching its store"
@@ -405,20 +283,27 @@ collect_mirror_store() {
   report_mirror_job
 }
 
-# A build in flight is the exact race the push store's scale-down exists to prevent: buildkit
-# pushes blobs whose manifest is not written yet, and GC would see them as unreferenced. Jobs
-# are named build-<image> by the image-builder role. No build touches the mirror's store, so its
-# phase still runs.
-ACTIVE_BUILDS=$($KUBECTL get jobs -o \
-  jsonpath='{range .items[?(@.status.active)]}{.metadata.name}{"\n"}{end}' 2>/dev/null \
-  | grep -c '^build-' )
-if [[ "$ACTIVE_BUILDS" -gt 0 ]]; then
-  PUSH_MSG="push store skipped — ${ACTIVE_BUILDS} image build(s) in flight"
-else
-  collect_push_store || FAILED=1
-  restore_push_store || FAILED=1
-fi
+# A previous run that died between its scale-down and its restore left the stamp. Its Job may
+# still be pruning, so restore_mirror_store deletes an unfinished one before the pod returns.
+restore_stranded_mirror() {
+  [[ -e "$MIRROR_STAMP" ]] || return 0
+  logger -t registry-gc "a previous run left deploy/${MIRROR_DEPLOY} scaled down — restoring it first"
+  MIRROR_STARTED=1
+  MIRROR_DOWN=1
+  restore_mirror_store
+}
 
+# Waits up to a minute: the registry deploy holds the lock only for one `kubectl scale`.
+take_lock() {
+  exec 9>"$LOCK_FILE" && flock -w 60 9
+}
+
+if ! take_lock; then
+  MIRROR_MSG="could not take ${LOCK_FILE} — another registry-gc run, or a registry deploy, holds it"
+  exit 1
+fi
+restore_stranded_mirror || exit 1
+MIRROR_STARTED=0
 collect_mirror_store || FAILED=1
 restore_mirror_store || FAILED=1
 COMPLETED=1

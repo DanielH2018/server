@@ -6,32 +6,31 @@ Kustomization's path, so the census's scope, the Jobs in a flux-owned tag's rend
 non-tag Kustomizations, is every directory there. It has seven rows, each a predicate over one
 Job and its directory:
 
-- `kind`: the Job's `homelab/job-kind` annotation is a kind its directory admits.
-  `<tag>-snapshot/` admits `snapshot`, `<tag>-prepull/` admits `prepull`, `soak/` admits
-  `soak`, and `<tag>-verify/` admits `verify` and `mutation` (`ADMITTED`). Any other
-  directory admits no Job. Verify and mutation Jobs share a directory, so only the annotation
-  tells them apart, and a Job without it fails;
+- `kind`: the Job's `homelab/job-kind` annotation is a kind its directory admits (`ADMITTED`):
+  `snapshot` in `<tag>-snapshot/`, `prepull` in `<tag>-prepull/`, `soak` in `soak/`, `precheck`
+  in `<tag>-precheck/`, `verify` and `mutation` in `<tag>-verify/`, and none elsewhere. Only
+  the annotation tells a verify Job from a mutation Job, and a Job without it fails;
 - `ttl`: no `spec.ttlSecondsAfterFinished`, because Flux re-creates a Job its TTL deleted;
 - `name`: the name ends in `-<job_spec_digest8>`, because a Job's pod template is immutable,
   and the spec holds no `${...}` placeholder, which Flux would substitute after the digest.
   Each ConfigMap the Job mounts ends its name in `-<configmap_digest8>`, so the spec digest
   covers the script and a script fix renames the Job;
-- `backoff`: `spec.backoffLimit` is set, to 1 for a snapshot Job and 0 for a prepull, soak or
-  verify Job. A mutation Job states its own value;
+- `backoff`: `spec.backoffLimit` is set, to 1 for a snapshot Job and 0 for a prepull, soak,
+  precheck or verify Job. A mutation Job states its own value;
 - `rerun-safe`: a mutation Job's `homelab/rerun-safe` annotation names a test, as
   `<path>::<function>`, that exists in the tree;
 - `delivery`: every container runs `python3 <mount>/<key>.py`, where `<mount>` mounts a
-  ConfigMap whole and `<key>` is one of its keys. No other command, `-c` or `-m` included,
-  so every script the Job runs is one the `helper` row reads, or a prepull Job's shell no-op;
+  ConfigMap whole and `<key>` is one of its keys. No other command, `-c` or `-m` included, so
+  every script the Job runs is one the `helper` row reads, or a prepull Job's shell no-op;
 - `helper`: no Python script in a ConfigMap the Job mounts opens a connection except through
   `flux_job_connect.py`, which must sit beside it as a byte-identical copy. A script imports
-  only the modules in `ALLOWED_IMPORTS`, none of which opens a connection, and uses no name
-  in `FORBIDDEN`. It reads from `flux_job_connect` only the names in the helper's `__all__`,
-  and reaches `urllib` only through a submodule `ALLOWED_IMPORTS` holds, so it cannot walk
-  through an allowed module to `urllib.request`. It uses neither module as a value and reads
-  no dunder, as an attribute or a string, so `getattr`, `vars` and `__globals__` cannot
-  reach around those two rules. The row guards against a mistake, not an
-  adversary: a name spelled out at run time passes it. A `SIBLINGS` copy is byte-identical.
+  only the modules in `ALLOWED_IMPORTS`, none of which opens a connection, and uses no name in
+  `FORBIDDEN`. It reads from `flux_job_connect` only the names in the helper's `__all__`, and
+  reaches `urllib` only through a submodule `ALLOWED_IMPORTS` holds, so it cannot walk through
+  an allowed module to `urllib.request`. It uses neither module as a value and reads no dunder,
+  as an attribute or a string, so `getattr`, `vars` and `__globals__` cannot reach around those
+  two rules. The row guards against a mistake, not an adversary: a name spelled out at run time
+  passes it. A `SIBLINGS` copy is byte-identical.
 
 A CronJob's gate Job (`cronjob_gate.is_gate_copy`) skips `delivery` and `helper`.
 
@@ -60,10 +59,11 @@ JOB_KIND = "homelab/job-kind"
 RERUN_SAFE = "homelab/rerun-safe"
 SOAK = "soak"
 # The `backoffLimit` each kind must set. A mutation Job is absent: it states its own value.
-BACKOFF = {"snapshot": 1, "prepull": 0, SOAK: 0, "verify": 0}
+BACKOFF = {"snapshot": 1, "prepull": 0, SOAK: 0, "precheck": 0, "verify": 0}
 ADMITTED = {
     ordering.SNAPSHOT_SUFFIX: frozenset({"snapshot"}),
     ordering.PREPULL_SUFFIX: frozenset({"prepull"}),
+    ordering.PRECHECK_SUFFIX: frozenset({"precheck"}),
     ordering.VERIFY_SUFFIX: frozenset({"verify", "mutation"}),
 }
 HELPER = REPO / "ansible/roles/k8s/manifests/files/flux_job_connect.py"

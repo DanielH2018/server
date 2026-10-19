@@ -423,12 +423,6 @@ _CURL_CONFIG_FLAG = re.compile(r"(?<![\w-])-K(?![\w-])")
 
 # Sources kuma-push-lib.sh (any install path), with the reason each exemption is honest.
 _LIBRARY_EXEMPT = {
-    "crowdsec-update-home-allowlist.sh.j2": (
-        "keeps its own curl for the `--retry 3 --retry-all-errors` its # DECIDED: marker "
-        "records. Those retries are measured against this monitor specifically (push-type, "
-        "max_retries 0); kuma_push has ten other callers and none of them measured it. It "
-        "reproduces the -K stdin form inline, so the argv assertion still binds it."
-    ),
     "renovate-notify.service.j2": (
         "a systemd ExecStartPost running /bin/sh, which is dash on Ubuntu. kuma-push-lib.sh is "
         "bash-shaped, so sourcing it would trade an argv leak for a shell-dialect dependency "
@@ -440,7 +434,6 @@ _LIBRARY_EXEMPT = {
 # changed. Every one is a template that can invoke curl against a push URL.
 _EXPECTED_IN_CORPUS = {
     "ansible/roles/setup/claude_code/templates/telemetry-health.sh.j2",
-    "ansible/roles/k8s/crowdsec/templates/crowdsec-update-home-allowlist.sh.j2",
     "ansible/roles/k8s/registry/templates/registry-gc.sh.j2",
     "ansible/roles/setup/fake_remux/templates/fake-remux-health.sh.j2",
     "ansible/roles/setup/initial_setup/templates/secret-rotate.sh.j2",

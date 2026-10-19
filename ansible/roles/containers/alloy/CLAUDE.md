@@ -20,7 +20,15 @@ verdict lines to loki-homelab. See repo-root `CLAUDE.md` for shared conventions.
   `/metrics` needs basic auth (`DECIDED:` marker on `ports:` in the compose template).
 - **Sources:** container logs through docker-proxy (`job="pi"`), and
   `/var/log/pi-health/*.log` (`job="syslog"`, `machine="daniel-pi"`). The label contract is
-  guarded by `ansible/tests/services/test_alloy_pi_config_labels.py`. The label values render
+  guarded by `ansible/tests/services/test_alloy_pi_config_labels.py`.
+- **One source is counted, not shipped.** `/var/log/pi-health/crowdsec-edge-probe.status`
+  holds the edge probe's once-a-minute HTTP status for crowdsec's off-cluster verify. A
+  `stage.metrics` counter turns it into `loki_process_custom_crowdsec_edge_probe_total` by
+  `status`, which Prometheus reads through the `alloy-pi` scrape, and a drop stage discards
+  every line. The verify's ban makes Traefik refuse this container's Loki pushes, so the
+  count must not depend on them. The timer that writes the file is
+  `ansible/roles/setup/k8s_host_files/tasks/crowdsec.yml`, and the same label test pins the
+  stage. The label values render
   from `loki_streams` in `group_vars/all.yml`, which the cluster's Alloy and monitor-bridge's
   selectors also read; `ansible/tests/services/test_loki_stream_labels.py` holds the consumers
   to it.

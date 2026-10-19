@@ -47,13 +47,13 @@ k8s_claims:  # noqa var-naming[no-role-prefix]
     storage_class: "{{ registry_k8s_storage_class }}"
     size: "{{ registry_k8s_ghcr_mirror_size }}"
 
-# ── garbage collection (registry-gc.sh, gc-job.yaml) ───────────────────────────────────────
-# DELETE_ENABLED only permits deletes, and the registry never collects on its own. Every rebuild
-# pushes the same `latest` tag, which orphans the previous manifest, so the store grows until it
-# fills and every cluster image build fails. Weekly is sized to the observed fill rate with room
-# to spare.
-# The weekly garbage collection: the gc-job manifest, the script, its state directory and the
-# cron that runs it. False for a cluster Kuma does not watch — registry-gc.sh pushes its result
+# ── garbage collection (registry-gc.sh, ghcr-mirror-gc-job.yaml) ───────────────────────────
+# Only the ghcr-mirror store is collected. The push store's GC was retired once no image-builder
+# caller was Ansible-owned, because under Flux its scale-down of deploy/registry would have a
+# second writer on `spec.replicas` (D5, Wave D's registry bullet).
+#
+# The weekly garbage collection: the ghcr-mirror-gc-job manifest, the script, its state directory
+# and the cron that runs it. False for a cluster Kuma does not watch — registry-gc.sh pushes its result
 # to `uptime-kuma.local.<domain>`, so leaving it on elsewhere reports a foreign registry's
 # health to a real operator, which is what k3s_manage_health_crons exists to prevent.
 #
@@ -65,29 +65,23 @@ registry_k8s_manage_gc: true
 
 #
 # Sunday 04:20 — after the 03:30 Longhorn backup group and the weekly 07:30 host reboot's blast
-# radius, and off the 30-min gitops-deploy tick's busiest hours. GC takes the registry offline
+# radius, and off the 30-min gitops-deploy tick's busiest hours. GC takes the ghcr-mirror offline
 # for its duration, so this wants the quietest window available.
 registry_k8s_gc_cron_weekday: "0"
 registry_k8s_gc_cron_hour: "4"
 registry_k8s_gc_cron_minute: "20"
 
-# The registry stays DOWN for up to this long, so it bounds an outage rather than just a job.
+# The ghcr-mirror stays DOWN for up to this long, so it bounds an outage rather than just a job.
 # Observed full-store GC over ~10 GiB is minutes; 20 min is generous without being open-ended.
 registry_k8s_gc_deadline_s: 1200
 # Keep the finished Job around long enough that the next weekly run's operator can still read
 # what the last one deleted — the Job log is the only authoritative record of that.
 registry_k8s_gc_ttl_s: 604800
 
-# How many superseded `sha-<12 hex>` content tags registry-gc.sh keeps per repository, newest
-# first. Every build pushes one (k8s/image-builder's --output), and a tag is a real manifest
-# reference that `garbage-collect --delete-untagged` will never reclaim — so without a prune the
-# store grows by one manifest per rebuild forever.
-#
-# Three, not one: a content tag is what a rollback names. Keeping only the tag in service would
-# mean the previous build is unnameable the moment the next one lands, which is the whole property
-# a content-addressed tag buys. Three covers the last two rebuilds plus the one running. Nothing
-# in service is ever untagged regardless of this number — see the prune's keep rules.
-registry_k8s_keep_content_tags: 3
+# registry-gc.sh holds this flock for its whole run, and the deploy's ghcr-mirror restore takes it
+# without waiting, so the deploy never scales the mirror back mid-GC (#5736). /run/lock exists on
+# every host, so the deploy can take it where registry_k8s_manage_gc is false.
+registry_k8s_gc_lock_file: /run/lock/registry-gc.lock
 
 # The proof-of-loop pair (see tasks/main.yml). crane rather than docker or skopeo: it is a
 # static binary in a distroless image, needs no daemon, and copies between registries directly

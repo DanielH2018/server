@@ -137,6 +137,8 @@ _LIVE_API_TESTS = frozenset(
         # skip where docker is missing and CI is unset.
         "ansible/roles/k8s/crowdsec/tests/test_jobs_image.py::test_the_appsec_verify_runs_in_the_jobs_image_against_a_stub_cscli",
         "ansible/roles/k8s/crowdsec/tests/test_jobs_image.py::test_the_engines_cscli_runs_in_the_jobs_image",
+        "ansible/roles/k8s/crowdsec/tests/test_jobs_image.py::test_the_home_allowlist_runs_in_the_jobs_image_against_stub_tools",
+        "ansible/roles/k8s/crowdsec/tests/test_jobs_image.py::test_the_lapi_register_init_runs_against_a_fresh_database_with_no_lapi",
     }
 )
 
