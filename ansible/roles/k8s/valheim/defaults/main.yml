@@ -6,7 +6,7 @@
 # This tag pins the WRAPPER, not the game. SteamCMD fetches the current Valheim build on every
 # start, so the server is always on the latest release regardless of what this says; the tag
 # is the wrapper's own release.
-valheim_k8s_image: ghcr.io/community-valheim-tools/valheim-server:1.4.1@sha256:f34d67ba8023e343b10ffda0144759a8c8d986f276510460315a01051bed8a6d
+valheim_k8s_image: ghcr.io/community-valheim-tools/valheim-server:1.4.0@sha256:f3ccde9a4e292663cf5096d502ff33cc9617015f6d70b6a9ca0968543f165ef2
 
 # The first-boot budget for this server, declared ONCE, as `manifests_rollout_timeout` below.
 # Three readers take it. The renderer sets it as the valheim Kustomization's `timeout`, Flux's
@@ -52,7 +52,7 @@ valheim_k8s_bepinex: "{{ 'true' if valheim_k8s_mods | length > 0 else 'false' }}
 # so a rebuilt image rolls the Deployment only when the built image's name matches the role's.
 valheim_k8s_mods_image: "{{ k8s_registry_pull_host }}/valheim:{{ k8s_built_image_tags.get('valheim', 'latest') }}"
 
-# ── The mod set, and the four-fifths of it that Valheim 1.0 broke ───────────────────────
+# ── The mod set ─────────────────────────────────────────────────────────────────────────
 # Every entry is a Thunderstore release, pinned by version AND sha256 — the build verifies the
 # checksum before it unpacks, so a re-uploaded archive fails the build instead of reaching the
 # server. To bump one, read the new version and URL from
@@ -61,70 +61,35 @@ valheim_k8s_mods_image: "{{ k8s_registry_pull_host }}/valheim:{{ k8s_built_image
 #
 # BepInExPack is NOT listed: the image installs and updates it on its own.
 #
-# EVERY MOD HERE IS CLIENT-SIDE TOO. Azumatt's use ServerSync, which pushes the server's config
+# EVERY MOD HERE IS CLIENT-SIDE TOO. Some mods use ServerSync, which pushes the server's config
 # to matching clients and can refuse a client whose version differs. Players need the same
 # versions installed locally.
 #
 # ORE THROUGH PORTALS NEEDS NO MOD. `valheim_k8s_server_args` sets the vanilla `portals casual`
-# world modifier, which is why AdvancedPortals being disabled costs nothing.
+# world modifier.
 #
 # The prose below lives ABOVE the list rather than beside each entry: ansible-lint's YAML
 # parser rejects a long comment run inside a collection ("too many consecutive comments before
 # resolving collection entry"), while `yaml.safe_load` accepts it.
 #
-# WHY EACH DISABLED ENTRY IS DISABLED, measured on `l-1.0.7` unless noted. Each
-# error was attributed by reading the boot log between consecutive `Loading [...]` lines, so
-# it belongs to the plugin named above it.
-#
-#   MouseTweaks 1.0.3
-#       Worked on l-1.0.7 and breaks on l-1.0.12 (SteamCMD auto-update): TypeLoadException,
-#       "Could not resolve type with token 01000021 from typeref (expected class 'Element' in
-#       assembly '')". No newer Thunderstore release exists to bump to — 1.0.3 is the latest
-#       published version. This is the UPDATE_CRON risk, not a mod that failed vetting.
-#   AAABuildMenu 1.0.1
-#       Same cause as MouseTweaks (l-1.0.12): ArgumentException, "Undefined target method for patch method
-#       static void AAABuildMenu.EnhancedBuildMenuPatches::Player_PlacePiece_TrackUsage",
-#       rethrown as a HarmonyException. No newer release exists; 1.0.1 is still latest.
-#   Jotunn 2.29.3 (ReefTeam fork)
-#       Works, and is disabled only because nothing needs it — it is a dependency of
-#       AdvancedPortals and MultiUserChest, never a request. Upstream ValheimModding-Jotunn
-#       2.29.2 does NOT work: it buffers the join handshake and its `SynchronizeInitialData`
-#       throws on `ZRoutedRpc.Everybody`, leaving the player connected but frozen with the
-#       camera shaking. If Jotunn comes back, take the fork until ValheimModding ships its own
-#       1.0 build (fix merged to `dev`, PR #483), and never list both — same GUID, higher
-#       version wins.
-#   AdvancedPortals 1.2.0
-#       Loads cleanly; superseded by the vanilla portals modifier above.
-#   MultiUserChest 0.6.1
-#       BadImageFormatException: Expected reference type but got type kind 17 — an IL-level
-#       mismatch against the 1.0 assemblies. Also needs Jotunn.
-#   AzuCraftyBoxes 1.8.15
-#       TypeInitializationException on `ZRoutedRpc.Everybody`; the plugin type never
-#       initialises, so it is inert rather than degraded.
-#   AzuExtendedPlayerInventory 2.4.8
-#       HarmonyException, `Undefined target method` for `InventoryPatches.AddItem_XY_Guard`.
-#   AAA_Crafting 2.1.6
-#       HarmonyException, `Undefined target method` for `RecipeTracking.InventoryAddItemPatch`.
-#   Serverside_Simulations 1.1.9
-#       MissingMethodException on `ZoneSystem.GetZone(Vector3)` from
-#       `ZNetScene.CreateDestroyObjects`, EVERY FRAME — 4431 in three minutes.
-#   AzuAutoStore 3.0.14
-#       Never deployed. Its assembly still references `ZRoutedRpc.Everybody`, the signature
-#       that leaves AzuCraftyBoxes dead, so adding it would reintroduce a known-broken plugin.
+# TEN MODS THAT FAILED ON VALHEIM 1.0 WERE REMOVED ON 2026-10-19. They had sat commented out
+# below this list. Seven threw on load, one was never deployed because its assembly carried
+# the same broken reference, and two loaded cleanly but nothing needed them. Each
+# one's pinned version, sha256 and recorded boot-log error are in #5776, the PR that removed
+# them. Check that history before re-adding any of them.
 #
 # A SERVERSYNC VERSION LINE IS NOT PROOF A MOD WORKS. The log prints
-# `Sending AzuCraftyBoxes version 1.8.15 ... to the client` on every join because ServerSync
-# registers statically — it kept printing for a plugin whose type initializer had thrown.
+# `Sending <mod> version <x> ... to the client` on every join because ServerSync registers
+# statically. It kept printing for a plugin whose type initializer had thrown.
 #
 # Vet each entry before adding it, by checking each assembly for a `ZRoutedRpc.Everybody`
-# reference. That is necessary, NOT sufficient: the Harmony
-# `Undefined target method` failures above are invisible to any string check, so the boot log
-# is what decides. Re-enable a disabled entry ONE AT A TIME and read the log between its own
-# `Loading [...]` line and the next before adding another.
+# reference. That is necessary, NOT sufficient: a Harmony `Undefined target method` failure is
+# invisible to any string check, so the boot log is what decides. Add one entry AT A TIME and
+# read the log between its own `Loading [...]` line and the next before adding another.
 valheim_k8s_mods:
   # Vetted by checking that neither DLL references ZRoutedRpc.Everybody, the field l-1.0.7
-  # removed that killed five sibling mods (see the block above). Necessary, not sufficient — confirm by the boot log's `Loading [...]`
-  # lines, not by pod Ready.
+  # removed. Necessary, not sufficient — confirm by the boot log's `Loading [...]` lines, not
+  # by pod Ready.
   - name: Server_devcommands
     version: 1.113.0
     url: https://thunderstore.io/package/download/JereKuusela/Server_devcommands/1.113.0/
@@ -133,47 +98,6 @@ valheim_k8s_mods:
     version: 0.3.2
     url: https://thunderstore.io/package/download/MidnightMods/AchievementEnabler/0.3.2/
     sha256: 2e7346d86a975f9c1c8a3e3a7d4599fcad186114e0ccea1078e24ea17fd07d46
-  # Disabled — see the block above for the per-mod evidence.
-  # - name: MouseTweaks
-  #   version: 1.0.3
-  #   url: https://thunderstore.io/package/download/Azumatt/MouseTweaks/1.0.3/
-  #   sha256: cfb2a7a3dc35ca12b8425ea78385d28cf621f85f202fd05de6a74e1989cdab2c
-  # - name: AAABuildMenu
-  #   version: 1.0.1
-  #   url: https://thunderstore.io/package/download/Azumatt/AAABuildMenu/1.0.1/
-  #   sha256: 673bfffbc519d6722a7b8190072987a56396118eebe706b151353f0b700b3c3d
-  # - name: Jotunn
-  #   version: 2.29.3
-  #   url: https://thunderstore.io/package/download/ReefTeam/Jotunn/2.29.3/
-  #   sha256: 8e4449cfbad8a57c6542d9a5110e9f4e85475f3747050166dc0cf9a98e724f56
-  # - name: AdvancedPortals
-  #   version: 1.2.0
-  #   url: https://thunderstore.io/package/download/RandyKnapp/AdvancedPortals/1.2.0/
-  #   sha256: a57f237a1aad1ecb297706870e132d2939c3b55dba47e27bdea74ce318e4cb01
-  # - name: MultiUserChest
-  #   version: 0.6.1
-  #   url: https://thunderstore.io/package/download/MSchmoecker/MultiUserChest/0.6.1/
-  #   sha256: d12ce19bf48bbacb422fee1ea20d876ee03a4f986a68f0246e3711d7ce37213f
-  # - name: AzuCraftyBoxes
-  #   version: 1.8.15
-  #   url: https://thunderstore.io/package/download/Azumatt/AzuCraftyBoxes/1.8.15/
-  #   sha256: 042c6821d35079fe30c01c0b817da06f0ec337aec33a956b33ad23b8adc26d91
-  # - name: AzuExtendedPlayerInventory
-  #   version: 2.4.8
-  #   url: https://thunderstore.io/package/download/Azumatt/AzuExtendedPlayerInventory/2.4.8/
-  #   sha256: edc0048b3d5d82c2b77b4cb9285d4653d3610173cad0dcd6b9eb385864411af6
-  # - name: AAA_Crafting
-  #   version: 2.1.6
-  #   url: https://thunderstore.io/package/download/Azumatt/AAA_Crafting/2.1.6/
-  #   sha256: 00c2a93046fb6f8de0a85e21888e3d44fe4ddfd39f5386dfeac9d15292f13667
-  # - name: Serverside_Simulations
-  #   version: 1.1.9
-  #   url: https://thunderstore.io/package/download/mvp/Serverside_Simulations/1.1.9/
-  #   sha256: 429c02d48f5f45c7eb9f7347e11259cd2d878f70fb15f712313363d41db156a5
-  # - name: AzuAutoStore
-  #   version: 3.0.14
-  #   url: https://thunderstore.io/package/download/Azumatt/AzuAutoStore/3.0.14/
-  #   sha256: 33b3dfd672da55938b7b99f4f6e8bd1e31ea66f6dc8e6dfe336c05fea2980a9b
 # Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
 # Two independent reasons: (1) probe-less — the
 # Deployment renders no readinessProbe at all, same shape as terraria; (2) migrating state —

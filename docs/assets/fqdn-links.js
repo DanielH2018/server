@@ -41,7 +41,10 @@
     for (var i = 0; i < spans.length; i++) {
       var span = spans[i];
       var host = span.getAttribute("data-host");
-      if (!host) {
+      // The attribute becomes the authority of an href, so anything beyond DNS labels -- a
+      // "/", "@" or "#" -- would let it pick a different host or path than the one shown.
+      // The generators only ever write labels; anything else keeps its placeholder text.
+      if (!host || !/^[a-z0-9-]+(\.[a-z0-9-]+)*$/i.test(host)) {
         continue;
       }
       var fqdn = host + "." + domain;
