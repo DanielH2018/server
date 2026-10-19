@@ -1,7 +1,7 @@
 # crowdsec — WAF / behavioural bouncer in front of Traefik
 
-CrowdSec LAPI plus remote agents; the role registers the agent machines on the LAPI after
-applying the manifests.
+CrowdSec LAPI plus remote agents. The LAPI pod's `lapi-register` initContainer registers the
+agent machines and creates the two operator allowlists before the LAPI serves.
 
 This file holds the rules; `docs/crowdsec-waf-record.md` holds the record behind them — the
 rollout race, the stalled bouncer pull, the partial-line measurements, the removed Metabase
@@ -57,7 +57,8 @@ sudo k3s kubectl -n homelab exec deploy/crowdsec -c crowdsec -- cscli decisions 
 cron's UTC schedule: the remote allowlist every 5 minutes, the AppSec verify every 15, the
 bouncer prune at minute 17, and the home allowlist every 5 minutes from minute 1. All four were
 daniel-box root crons that ran `cscli` through `kubectl exec`, until H2.4b for the first three
-and H2.4c for the home allowlist. `tasks/main.yml` keeps their absent arms. The operator chose
+and H2.4c for the home allowlist. Their absent arms are in
+`ansible/roles/setup/k8s_host_files/tasks/crowdsec.yml`. The operator chose
 the sidecar over a `pods/exec` grant on 2026-10-18 (#5655).
 
 - **cscli in the sidecar is a copy of the engine's own**, made by the `jobs-cscli` initContainer
@@ -144,18 +145,29 @@ PR renames it to `templates/verify/`. The operator confirmed its evidence channe
   `crowdsec` and `prometheus` rows are their refused legs.
 - **The spec carries a digest of the pod's roll inputs**, so every change that rolls the
   crowdsec pod renames the Job. The template's header lists the inputs.
-- **Before the flip:** register the `crowdsec-verify` machine (the LAPI initContainer's job).
-  The flip PR states the hop-2 trade above. `tests/test_crowdsec_verify.py` holds the red
-  fixtures and renders the flipped copy through the Job census.
+- **The `lapi-register` initContainer registers the `crowdsec-verify` machine**, so the
+  flipped Job can log in. The flip PR states the hop-2 trade above.
+  `tests/test_crowdsec_verify.py` holds the red fixtures and renders the flipped copy
+  through the Job census.
 
 ## Traps
 
 ### A crowdsec deploy races its own rollout
-The LAPI-registration task in `ansible/roles/k8s/crowdsec/tasks/main.yml` execs into the running
-pod, and `k8s/manifests`' rollout-restart deliberately does not wait. **The `rollout status` gate
-ahead of the LAPI tasks is the deliberate exception to the drain's "never wait inline" rule** —
-removing it as apparent drift brings the race back (PR #229). `no_log: true` censors the failure to
-a bare non-zero return code, so the docs page carries its signature.
+The b1-gate in `ansible/roles/k8s/crowdsec/tasks/verify.yml` execs into the running pod, and the
+`crowdsec-home-ips` gate run writes the ConfigMap the new pod's sidecar reads, while
+`k8s/manifests`' rollout-restart deliberately does not wait. **The `rollout status` gate ahead of
+them is the deliberate exception to the drain's "never wait inline" rule.** Removing it as
+apparent drift brings the race back (PR #229).
+
+### The `lapi-register` initContainer holds the LAPI down if it fails
+Machine registration and the two allowlist creates run in the `lapi-register` initContainer of
+`ansible/roles/k8s/crowdsec/templates/deployment.yaml.j2`, against `crowdsec-db` before the LAPI
+serves (#5741). cscli writes the SQLite file directly, and
+`ansible/roles/k8s/crowdsec/tests/test_jobs_image.py::test_the_lapi_register_init_runs_against_a_fresh_database_with_no_lapi`
+runs the rendered script in the pinned image with no network. The script tolerates only an
+allowlist that already exists. Any other failure leaves the pod in `Init:Error`, the LAPI out
+of its Service for every bouncer, and the deploy's rollout wait red. Read
+`kubectl -n homelab logs deploy/crowdsec -c lapi-register` first.
 
 ### `--check` skips the whole b1-gate rather than failing in it
 You cannot demonstrate a ban is enforced without taking the ban, so
@@ -204,8 +216,8 @@ plus AppSec), `crowdsec-node-agents` (the DaemonSet), `crowdsec-traefik-agent` a
 `crowdsec-authelia-agent` (the two sidecars). The `crowdsec` job renders from the `metrics`
 item on this role's `containers_list` entry, which is also where the engine's `:6060` is
 defined. The sidecar jobs render one per entry of
-`ansible/inventory/group_vars/all.yml:crowdsec_k8s_sidecar_agents`, which this role's
-registration loop also reads; `crowdsec-node-agents` is hand-written.
+`ansible/inventory/group_vars/all.yml:crowdsec_k8s_sidecar_agents`, which the
+`lapi-register` initContainer also reads; `crowdsec-node-agents` is hand-written.
 
 Read the job before writing a CrowdSec query: `node` is not a CrowdSec label and only the
 DaemonSet job attaches one, so a per-node selector on an engine or sidecar metric matches nothing

@@ -40,7 +40,7 @@ crowdsec_k8s_collections: >-
 
 # The engine pod's own in-pod agent registers itself via the image entrypoint under this
 # name; the app-sidecar machines (crowdsec_k8s_sidecar_agents in group_vars) are
-# registered by this role's post-deploy task. All use SOPS crowdsec_k8s_agent_password.
+# registered by the lapi-register initContainer. All use SOPS crowdsec_k8s_agent_password.
 crowdsec_k8s_engine_machine: engine-local
 
 crowdsec_k8s_cpu_limit: "1"

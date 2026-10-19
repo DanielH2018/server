@@ -14,7 +14,7 @@ from _host_write_rows import HOST_WRITE_ALLOW, flipped_allow_entries
 from _shell_render import rendered_shell_text
 from lib.k8s_roles import k8s_entries
 
-CROWDSEC = "ansible/roles/k8s/crowdsec/tasks/main.yml"
+REGISTRY = "ansible/roles/k8s/registry/tasks/main.yml"
 
 
 def test_no_flux_owned_role_keeps_a_host_write_allow_entry():
@@ -22,10 +22,10 @@ def test_no_flux_owned_role_keeps_a_host_write_allow_entry():
 
 
 def test_a_flip_that_keeps_its_allow_entry_is_flagged_without_a_write():
-    """The flip moved crowdsec's writes but left the entry: the entry alone is refused."""
+    """The flip moved registry's writes but left the entry: the entry alone is refused."""
     entries = k8s_entries()
-    entries["crowdsec"] = {**entries["crowdsec"], "owner": "flux"}
-    assert flipped_allow_entries(HOST_WRITE_ALLOW, entries) == [CROWDSEC]
+    entries["registry"] = {**entries["registry"], "owner": "flux"}
+    assert flipped_allow_entries(HOST_WRITE_ALLOW, entries) == [REGISTRY]
 
 
 def test_the_registry_gc_red_case_is_the_scale_line_the_script_keeps():
