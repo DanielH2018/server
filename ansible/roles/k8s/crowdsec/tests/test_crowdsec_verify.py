@@ -8,17 +8,20 @@ Every path after the ban must lift it.
 
 The render tests copy the role, move `templates/verify-inert/` to `templates/verify/` as the
 flip PR will, and render the copy, while the tree's own render still emits no
-`crowdsec-verify`.
+`crowdsec-verify`. The machine the flipped Job logs in as must be one the LAPI pod's
+`lapi-register` initContainer registers.
 
 Run: uv run pytest ansible/roles/k8s/crowdsec/tests/test_crowdsec_verify.py
 """
 
+import re
 import shutil
 import urllib.parse
 
 import pytest
 
 import crowdsec_verify as cv
+from _k8s_render import render_role_template
 from lib import yaml_fast
 from lib.k8s_roles import K8S_ROLES
 from lib.repo_paths import ANSIBLE
@@ -241,3 +244,19 @@ def test_the_flipped_job_bans_the_pi_and_reads_the_alloy_pi_counter(flipped):
     env = {e["name"]: e.get("value") for e in container["env"]}
     assert env["BAN_IP"] == PI
     assert env["PROMETHEUS_URL"].startswith("http://prometheus.observability.svc")
+
+
+def test_the_lapi_pod_registers_the_machine_the_flipped_job_logs_in_as(flipped):
+    (job,) = [doc for doc in flipped if doc["kind"] == "Job"]
+    (container,) = job["spec"]["template"]["spec"]["containers"]
+    env = {e["name"]: e.get("value") for e in container["env"]}
+    [deployment] = yaml_fast.safe_load_all(
+        render_role_template(TAG, "deployment.yaml.j2")
+    )
+    [script] = [
+        c["command"][-1]
+        for c in deployment["spec"]["template"]["spec"]["initContainers"]
+        if c["name"] == "lapi-register"
+    ]
+    [machines] = re.findall(r"^for machine in (.+); do$", script, re.MULTILINE)
+    assert env["LAPI_MACHINE"] in machines.split()

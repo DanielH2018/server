@@ -9,11 +9,16 @@ its CronJob gives it. The real `cscli`,
 copied out of `crowdsec_k8s_image` as the `jobs-cscli` initContainer copies it, must run in the
 python image too, which is the linkage the operator's ruling on #5655 asked to check.
 
-Neither leg reaches a LAPI. What the sidecar's `cscli` reads from the live engine's
+The `lapi-register` initContainer's script, taken from the rendered Deployment, runs in
+`crowdsec_k8s_image` twice against a fresh database directory with no network, so no LAPI can
+answer it. That is D5's check that `cscli machines add` and `cscli allowlists create` work with
+no LAPI running (#5741).
+
+No leg reaches a LAPI. What the sidecar's `cscli` reads from the live engine's
 `/etc/crowdsec` and database is checked by the post-landing `--run` in the role's CLAUDE.md.
 
 The legs skip when `docker` is missing and `CI` is unset, and fail when `CI` is set, so CI
-always runs them. Both are in `_LIVE_API_TESTS` in ansible/tests/leakguard.py, which hands
+always runs them. Each is in `_LIVE_API_TESTS` in ansible/tests/leakguard.py, which hands
 them the real PATH. Every other test gets leakguard's `docker` shim, which exits 127.
 
 Run: uv run pytest ansible/roles/k8s/crowdsec/tests/test_jobs_image.py
@@ -21,6 +26,7 @@ Run: uv run pytest ansible/roles/k8s/crowdsec/tests/test_jobs_image.py
 
 import os
 import shutil
+import sqlite3
 import subprocess
 
 import pytest
@@ -184,3 +190,98 @@ def test_the_engines_cscli_runs_in_the_jobs_image(docker, jobs, tmp_path):
     assert proc.returncode == 0, proc.stderr
     # cscli prints `version: v1.8.1-909b5157` at the pinned digest: lower case, then its tag.
     assert "version: v" in (proc.stdout + proc.stderr).lower()
+
+
+def _lapi_register_command() -> list[str]:
+    [deployment] = yaml_fast.safe_load_all(
+        render_role_template("crowdsec", "deployment.yaml.j2")
+    )
+    [init] = [
+        c
+        for c in deployment["spec"]["template"]["spec"]["initContainers"]
+        if c["name"] == "lapi-register"
+    ]
+    return init["command"]
+
+
+def _lapi_machines() -> set[str]:
+    group_vars = yaml_fast.safe_load(ALL_VARS.read_text())
+    defaults = yaml_fast.safe_load(
+        (ANSIBLE / "roles/k8s/crowdsec/defaults/main.yml").read_text()
+    )
+    return {
+        *group_vars["crowdsec_k8s_sidecar_agents"].values(),
+        *defaults["crowdsec_k8s_node_agent_machines"],
+        "crowdsec-verify",
+    }
+
+
+def _run_in_engine_image(docker, data, etc, *command) -> subprocess.CompletedProcess:
+    """`command` in the engine's image, mounted and confined as the initContainer runs it."""
+    entrypoint, *args = command
+    return subprocess.run(
+        [
+            docker,
+            "run",
+            "--rm",
+            "--read-only",
+            "--cap-drop=ALL",
+            "--security-opt=no-new-privileges",
+            "--network=none",
+            "--tmpfs=/tmp",
+            "-e",
+            "AGENT_PASSWORD=a-test-password-0",
+            "-v",
+            f"{data}:/var/lib/crowdsec/data",
+            "-v",
+            f"{etc}:/etc/crowdsec:ro",
+            f"--entrypoint={entrypoint}",
+            CROWDSEC_IMAGE,
+            *args,
+        ],
+        capture_output=True,
+        text=True,
+        timeout=_DOCKER_TIMEOUT_S,
+    )
+
+
+def test_the_lapi_register_init_runs_against_a_fresh_database_with_no_lapi(
+    docker, tmp_path
+):
+    # fact: ansible/roles/k8s/crowdsec/CLAUDE.md#The `lapi-register` initContainer holds the LAPI down if it fails
+    # The pod's /etc/crowdsec holds no config.yaml when initContainers run.
+    etc = tmp_path / "etc"
+    etc.mkdir()
+    # Root with every capability dropped writes only where the mode lets `other` write.
+    data = tmp_path / "data"
+    data.mkdir()
+    data.chmod(0o777)
+    command = _lapi_register_command()
+    first = _run_in_engine_image(docker, data, etc, *command)
+    print(first.stdout, first.stderr)
+    assert first.returncode == 0, first.stderr
+    again = _run_in_engine_image(docker, data, etc, *command)
+    print(again.stdout, again.stderr)
+    assert (again.returncode, again.stdout) == (0, ""), again.stderr
+    listed = _run_in_engine_image(
+        docker,
+        data,
+        etc,
+        *("cscli", "-c", "/staging/etc/crowdsec/config.yaml"),
+        *("machines", "list", "-o", "raw"),
+    )
+    assert listed.returncode == 0, listed.stderr
+    machines = {line.split(",")[0] for line in listed.stdout.splitlines()[1:]}
+    assert machines == _lapi_machines()
+    # cscli lists allowlists only through the LAPI, so the database is read here instead. Its
+    # file is root's at 0640, which a non-root runner cannot open until it is opened up.
+    subprocess.run(
+        [docker, "run", "--rm", "-v", f"{data}:/data", "--entrypoint=chmod"]
+        + [CROWDSEC_IMAGE, "-R", "a+rX", "/data"],
+        capture_output=True,
+        timeout=_DOCKER_TIMEOUT_S,
+        check=True,
+    )
+    with sqlite3.connect(data / "crowdsec.db") as db:
+        allowlists = {name for (name,) in db.execute("select name from allow_lists")}
+    assert allowlists == {"home-ips", "remote-ips"}

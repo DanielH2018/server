@@ -51,8 +51,10 @@ retirement wrote `tasks/registry.yml`, the absent arm for the `gc-job.yaml` mani
 reads any more. crowdsec's first conversion
 PR wrote `tasks/crowdsec.yml`, which installs the edge probe's script, service and timer on
 daniel-pi for crowdsec's off-cluster verify. It is the role's first timer and its first
-templates. crowdsec's absent arms stay in its own `tasks/main.yml` until a later conversion
-PR, because they must run before crowdsec's manifests apply. A row drops its source role's `when: not k8s_dry_run` guard and its `config` tag,
+templates. crowdsec's second conversion PR (#5742) added the absent arms for the four crons
+H2.4b and H2.4c retired and their scripts. They run on daniel-box, outside the file's
+daniel-pi block. They moved only after H2.4c deployed, because in crowdsec's own role they ran
+ahead of its manifests, and the setup plane cannot order itself against a k8s deploy. A row drops its source role's `when: not k8s_dry_run` guard and its `config` tag,
 because `initial_setup.yml` has no dry-run mode.
 
 - **The playbook entry is gated to daniel-box by a literal.** `setup_routing.py` places a role

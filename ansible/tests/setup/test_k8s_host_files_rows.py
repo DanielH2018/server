@@ -5,21 +5,22 @@ source role (D5's *Host-side rows*). A row that drops out of the role, or whose 
 longer imported from `tasks/main.yml`, stops running on the next apply, and no deploy says so:
 a missing directory surfaces only when a pod waits in ContainerCreating on its hostPath.
 
-`EXPECTED_ROWS` names each moved row by task file and task name, with the module and the whole
-argument map it must keep: path, state, owner, group and mode. A looped row's path reads
-`item`, so `EXPECTED_LOOPS` pins its loop too. Each conversion PR adds its rows in the same
-commit as the move. The other
+`EXPECTED_ROWS` in `_k8s_host_files_expected.py` names each moved row by task file and task
+name, with the module and the whole argument map it must keep: path, state, owner, group and
+mode. A looped row's path reads `item`, so `EXPECTED_LOOPS` pins its loop too. Each conversion
+PR adds its rows in the same commit as the move. The other
 direction, a row coming back to its k8s role, is the host-write census's
 (`ansible/tests/repo/_host_write_rows.py`): the move drops the role's `allow` entry, so a host
 write there fails `k8s-role-tasks-write-no-host`.
 
-pi-peer-backup's two rows write daniel-pi, and the play runs on daniel-box, so
-`undelegated_pi_rows` also holds each to `delegate_to: daniel-pi`.
+pi-peer-backup's two rows and crowdsec's edge probe rows write daniel-pi, and the play runs on
+daniel-box, so `rows_on_the_wrong_host` also holds each to `delegate_to: daniel-pi`, and
+crowdsec's absent arms, which clean daniel-box, to no delegation.
 
 Red-proof: a fixture role under `tmp_path` whose `main.yml` no longer imports the file, one
 whose task writes a different path, one whose task drops its owner, one whose loop drops a
-directory, one whose absent arm turns back into an install, and one whose pi-peer-backup block
-drops its delegation, must each be flagged; a faithful copy must not.
+directory, one whose absent arm turns back into an install, one whose Pi block drops its
+delegation, and one whose crowdsec arm gains it, must each be flagged; a faithful copy must not.
 
 Run: uv run pytest ansible/tests/setup/test_k8s_host_files_rows.py
 """
@@ -28,263 +29,9 @@ import shutil
 from pathlib import Path
 
 from _helpers import SETUP_ROLES, imported_task_files, leaf_tasks, load_tasks
+from _k8s_host_files_expected import CROWDSEC_ARMS, EXPECTED_LOOPS, EXPECTED_ROWS
 
 ROLE = SETUP_ROLES / "k8s_host_files"
-
-# {task file: {task name: (module, its args)}}, one file per source role. The args are the
-# task's whole argument map, so an owner, group or mode change fails the row as well as a path:
-# docs' directory exists to be owned by sys_user, which the docs-refresh build writes as.
-EXPECTED_ROWS: dict[str, dict[str, tuple[str, dict[str, str | bool]]]] = {
-    "artifacts.yml": {
-        "Ensure the local artifacts directory exists": (
-            "ansible.builtin.file",
-            {
-                "path": "{{ artifacts_host_dir }}",
-                "state": "directory",
-                "owner": "{{ sys_user }}",
-                "group": "{{ sys_user }}",
-                "mode": "0750",
-            },
-        ),
-        "Ensure a peer directory exists for every synced host": (
-            "ansible.builtin.file",
-            {
-                "path": "{{ artifacts_peer_dir }}/{{ item.name }}",
-                "state": "directory",
-                "owner": "{{ sys_user }}",
-                "group": "{{ sys_user }}",
-                "mode": "0750",
-            },
-        ),
-        # 0755, not 0750: the agent user's prune reads the star list as `claude`.
-        "Ensure the star list directory exists": (
-            "ansible.builtin.file",
-            {
-                "path": "{{ artifacts_stars_dir }}",
-                "state": "directory",
-                "owner": "{{ sys_user }}",
-                "group": "{{ sys_user }}",
-                "mode": "0755",
-            },
-        ),
-    },
-    "configarr.yml": {
-        "Remove the retired configarr sync heartbeat cron": (
-            "ansible.builtin.cron",
-            {
-                "name": "configarr sync health",
-                "user": "{{ sys_user }}",
-                "cron_file": "configarr-health",
-                "state": "absent",
-            },
-        ),
-        "Remove the retired configarr health reader from the host": (
-            "ansible.builtin.file",
-            {"path": "{{ item }}", "state": "absent"},
-        ),
-    },
-    "docs.yml": {
-        "Ensure the built docs site directory exists": (
-            "ansible.builtin.file",
-            {
-                "path": "{{ docs_host_site_dir }}",
-                "state": "directory",
-                "owner": "{{ sys_user }}",
-                "group": "{{ sys_user }}",
-                "mode": "0755",
-            },
-        ),
-    },
-    # The wrapper first, then the key pinned to it: the reverse order leaves a forced command
-    # that does not exist. Both run on daniel-pi through the block's `delegate_to`.
-    "pi-peer-backup.yml": {
-        "Install the forced-command wrapper on daniel-pi": (
-            "ansible.builtin.copy",
-            {
-                "src": "pi-peer-backup-shell.sh",
-                "dest": "/usr/local/bin/pi-peer-backup-shell",
-                "owner": "root",
-                "group": "root",
-                "mode": "0755",
-            },
-        ),
-        "Authorize the pull key on daniel-pi": (
-            "ansible.posix.authorized_key",
-            {
-                "user": "{{ hostvars['daniel-pi'].ansible_user | default('ubuntu') }}",
-                "key": "{{ lookup('file', 'pi-peer-backup.pub') }}",
-                "key_options": (
-                    'restrict,command="/usr/local/bin/pi-peer-backup-shell '
-                    '{{ pi_peer_backup_src_dir }}"'
-                ),
-                "state": "present",
-            },
-        ),
-    },
-    # Every row runs on daniel-pi through the block's `delegate_to`.
-    "crowdsec.yml": {
-        "Install the edge probe script on daniel-pi": (
-            "ansible.builtin.copy",
-            {
-                "src": "crowdsec-edge-probe.sh",
-                "dest": "/usr/local/bin/crowdsec-edge-probe",
-                "owner": "root",
-                "group": "root",
-                "mode": "0755",
-            },
-        ),
-        "Install the edge probe service on daniel-pi": (
-            "ansible.builtin.template",
-            {
-                "src": "crowdsec-edge-probe.service.j2",
-                "dest": "/etc/systemd/system/crowdsec-edge-probe.service",
-                "owner": "root",
-                "group": "root",
-                "mode": "0644",
-            },
-        ),
-        "Install the edge probe timer on daniel-pi": (
-            "ansible.builtin.template",
-            {
-                "src": "crowdsec-edge-probe.timer.j2",
-                "dest": "/etc/systemd/system/crowdsec-edge-probe.timer",
-                "owner": "root",
-                "group": "root",
-                "mode": "0644",
-            },
-        ),
-        "Enable the edge probe timer on daniel-pi": (
-            "ansible.builtin.systemd",
-            {
-                "name": "crowdsec-edge-probe.timer",
-                "enabled": True,
-                "state": "started",
-                "daemon_reload": True,
-            },
-        ),
-    },
-    # No mode, on purpose: the library keeps the directory modes it came with.
-    "media-volume.yml": {
-        "Create the media volume directories on the node": (
-            "ansible.builtin.file",
-            {
-                "path": "{{ item }}",
-                "state": "directory",
-                "owner": "{{ puid }}",
-                "group": "{{ pgid }}",
-            },
-        ),
-    },
-    # An absent arm, so it carries no owner or mode.
-    "observability.yml": {
-        "Remove the retired dashboard staging trees": (
-            "ansible.builtin.file",
-            {"path": "{{ item }}", "state": "absent"},
-        ),
-    },
-    # Absent arms: the whole map pins `state: absent`, so an arm turned back into an install
-    # fails here as well as in the retired-cron census.
-    "traefik.yml": {
-        "Remove the Cloudflare IP drift cron": (
-            "ansible.builtin.cron",
-            {
-                "name": "Cloudflare IP drift",
-                "user": "root",
-                "cron_file": "cloudflare-ip-drift",
-                "state": "absent",
-            },
-        ),
-        "Remove the Cloudflare IP drift script": (
-            "ansible.builtin.file",
-            {"path": "/usr/local/bin/cloudflare-ip-drift.sh", "state": "absent"},
-        ),
-    },
-    # The absent arm for the push store's GC manifest, which nothing reads since its retirement.
-    "registry.yml": {
-        "Remove the retired push store's garbage-collection job manifest": (
-            "ansible.builtin.file",
-            {
-                "path": "/etc/rancher/k3s/manifests/registry-jobs/gc-job.yaml",
-                "state": "absent",
-            },
-        ),
-    },
-    # The absent arms H2.5c left for the retired health reader's host cron, its code and the
-    # drift fragment it stamped.
-    "janitorr.yml": {
-        "Remove the retired janitorr error heartbeat cron": (
-            "ansible.builtin.cron",
-            {
-                "name": "janitorr error health",
-                "user": "{{ sys_user }}",
-                "cron_file": "janitorr-health",
-                "state": "absent",
-            },
-        ),
-        "Remove the retired janitorr health reader from the host": (
-            "ansible.builtin.file",
-            {"path": "{{ item }}", "state": "absent"},
-        ),
-    },
-    # The absent arm for the k8s/volume-claim staging directory autokuma-data left behind.
-    "uptime-kuma.yml": {
-        "Remove the k8s/volume-claim staging directory autokuma-data left behind": (
-            "ansible.builtin.file",
-            {"path": "/etc/rancher/k3s/manifests/autokuma-claims", "state": "absent"},
-        ),
-    },
-    # The absent arms H2.5d left for the retired prefs drift check's host cron and script.
-    "qbittorrent.yml": {
-        "Remove the retired qbittorrent prefs drift check cron": (
-            "ansible.builtin.cron",
-            {
-                "name": "qbittorrent prefs drift check",
-                "user": "{{ sys_user }}",
-                "cron_file": "qbittorrent-prefs-check",
-                "state": "absent",
-            },
-        ),
-        "Remove the retired qbittorrent prefs-check script from the host": (
-            "ansible.builtin.file",
-            {"path": "{{ item }}", "state": "absent"},
-        ),
-    },
-}
-
-# {(task file, task name): its `loop`} for every looped row. A row absent here must not loop.
-# media-volume's hardlink probe links between media/ and torrents/, so both must exist.
-# configarr's arm removes three host paths.
-EXPECTED_LOOPS: dict[tuple[str, str], object] = {
-    (
-        "artifacts.yml",
-        "Ensure a peer directory exists for every synced host",
-    ): "{{ artifacts_peer_sources }}",
-    ("configarr.yml", "Remove the retired configarr health reader from the host"): [
-        "/usr/local/bin/configarr-health.sh",
-        "/opt/configarr-health",
-        "/var/lib/homelab/setup-deployed-manifest.d/configarr",
-    ],
-    ("media-volume.yml", "Create the media volume directories on the node"): [
-        "{{ media_volume_host_path }}",
-        "{{ media_volume_host_path }}/media",
-        "{{ media_volume_host_path }}/torrents",
-    ],
-    ("observability.yml", "Remove the retired dashboard staging trees"): [
-        "/etc/rancher/k3s/dashboards",
-        "/etc/rancher/k3s/dashboards-annotated",
-        "/etc/rancher/k3s/dashboard-manifests",
-    ],
-    # The fragment as well as the code: a fragment left behind turns setup drift DOWN.
-    ("janitorr.yml", "Remove the retired janitorr health reader from the host"): [
-        "/usr/local/bin/janitorr-health.sh",
-        "/opt/janitorr-health",
-        "/var/lib/homelab/setup-deployed-manifest.d/janitorr",
-    ],
-    (
-        "qbittorrent.yml",
-        "Remove the retired qbittorrent prefs-check script from the host",
-    ): ["/usr/local/bin/qbittorrent-prefs-check.sh", "/opt/qbittorrent-prefs-check"],
-}
 
 
 def missing_rows(role_dir: Path = ROLE) -> list[str]:
@@ -331,6 +78,11 @@ def test_a_task_file_main_no_longer_imports_is_flagged(tmp_path):
         "crowdsec.yml: Install the edge probe script on daniel-pi",
         "crowdsec.yml: Install the edge probe service on daniel-pi",
         "crowdsec.yml: Install the edge probe timer on daniel-pi",
+        "crowdsec.yml: Remove the retired AppSec verify cron",
+        "crowdsec.yml: Remove the retired bouncer-prune cron",
+        "crowdsec.yml: Remove the retired crowdsec cron scripts from the host",
+        "crowdsec.yml: Remove the retired home allowlist cron",
+        "crowdsec.yml: Remove the retired remote-allowlist cron",
         "docs.yml: Ensure the built docs site directory exists",
         "janitorr.yml: Remove the retired janitorr error heartbeat cron",
         "janitorr.yml: Remove the retired janitorr health reader from the host",
@@ -410,28 +162,33 @@ def test_a_media_volume_row_that_drops_a_directory_from_its_loop_is_flagged(tmp_
     ]
 
 
-# The task files whose every row writes on daniel-pi.
-PI_TASK_FILES = ("crowdsec.yml", "pi-peer-backup.yml")
+# {task file: the rows in it that write on daniel-pi}. Every other row there runs on the play's
+# host, daniel-box.
+PI_ROWS = {
+    "crowdsec.yml": set(EXPECTED_ROWS["crowdsec.yml"]) - set(CROWDSEC_ARMS),
+    "pi-peer-backup.yml": set(EXPECTED_ROWS["pi-peer-backup.yml"]),
+}
 
 
-def undelegated_pi_rows(role_dir: Path = ROLE) -> list[str]:
-    """Each daniel-pi row that would run on daniel-box, the play's host, not daniel-pi.
+def rows_on_the_wrong_host(role_dir: Path = ROLE) -> list[str]:
+    """Each row in a file that writes daniel-pi which runs on the other host.
 
-    The playbook entry is gated to daniel-box, so a row whose task and enclosing block both
-    lose `delegate_to: daniel-pi` installs its file on the wrong host.
+    The playbook entry is gated to daniel-box, so a daniel-pi row whose task and enclosing
+    block both lose `delegate_to: daniel-pi` installs its file on the wrong host. A daniel-box
+    row moved inside the Pi block removes its cron and files from the Pi instead.
     """
     found = []
-    for name in PI_TASK_FILES:
+    for name, pi_rows in PI_ROWS.items():
         for wrapper in load_tasks(role_dir / "tasks" / name):
             for task in wrapper.get("block") or [wrapper]:
                 host = task.get("delegate_to", wrapper.get("delegate_to"))
-                if host != "daniel-pi":
+                if (host == "daniel-pi") != (task.get("name") in pi_rows):
                     found.append(f"{name}: {task.get('name')}")
     return found
 
 
 def test_the_daniel_pi_rows_run_on_daniel_pi():
-    assert undelegated_pi_rows() == []
+    assert rows_on_the_wrong_host() == []
 
 
 def test_a_crowdsec_probe_block_that_drops_its_delegation_is_flagged(tmp_path):
@@ -440,8 +197,24 @@ def test_a_crowdsec_probe_block_that_drops_its_delegation_is_flagged(tmp_path):
     line = "  delegate_to: daniel-pi\n"
     assert line in probe.read_text()
     probe.write_text(probe.read_text().replace(line, ""))
-    assert undelegated_pi_rows(role_dir) == [
-        f"crowdsec.yml: {name}" for name in EXPECTED_ROWS["crowdsec.yml"]
+    assert rows_on_the_wrong_host(role_dir) == [
+        f"crowdsec.yml: {name}"
+        for name in EXPECTED_ROWS["crowdsec.yml"]
+        if name not in CROWDSEC_ARMS
+    ]
+
+
+def test_a_crowdsec_arm_delegated_to_the_pi_is_flagged(tmp_path):
+    """The arms remove daniel-box's crons, so one delegated to the Pi removes nothing."""
+    role_dir = _fixture_role(tmp_path)
+    tasks = role_dir / "tasks" / "crowdsec.yml"
+    line = "- name: Remove the retired home allowlist cron\n"
+    assert line in tasks.read_text()
+    tasks.write_text(
+        tasks.read_text().replace(line, line + "  delegate_to: daniel-pi\n")
+    )
+    assert rows_on_the_wrong_host(role_dir) == [
+        "crowdsec.yml: Remove the retired home allowlist cron"
     ]
 
 
@@ -451,7 +224,7 @@ def test_a_pi_peer_backup_block_that_drops_its_delegation_is_flagged(tmp_path):
     line = "  delegate_to: daniel-pi\n"
     assert line in pi.read_text()
     pi.write_text(pi.read_text().replace(line, ""))
-    assert undelegated_pi_rows(role_dir) == [
+    assert rows_on_the_wrong_host(role_dir) == [
         "pi-peer-backup.yml: Install the forced-command wrapper on daniel-pi",
         "pi-peer-backup.yml: Authorize the pull key on daniel-pi",
     ]

@@ -15,8 +15,6 @@
   digest, as the Job census requires: the ConfigMap's of its data, the Job's of its spec.
 
   What the flip PR must land first, none of which this file can do while it is inert:
-    - the `crowdsec-verify` machine registered on LAPI, by the LAPI initContainer that replaces
-      the registration task in `tasks/main.yml`;
     - the fence peers below;
     - the spec digest of the inputs that roll the crowdsec pod, so every revision that rolls it
       renames the Job, as janitorr's verify Job does.
