@@ -49,7 +49,7 @@
  "ansible/roles/k8s/crowdsec/tests/test_bouncer_prune.py": 0.0,
  "ansible/roles/k8s/crowdsec/tests/test_crowdsec_jobs.py": 0.24,
  "ansible/roles/k8s/crowdsec/tests/test_ipv6_prefix.py": 0.03,
- "ansible/roles/k8s/crowdsec/tests/test_jobs_image.py": 0.0,
+ "ansible/roles/k8s/crowdsec/tests/test_jobs_image.py": 16.0,
  "ansible/roles/k8s/crowdsec/tests/test_remote_allowlist.py": 0.0,
  "ansible/roles/k8s/game-stats/tests/test_stats.py": 0.03,
  "ansible/roles/k8s/game-stats/tests/test_stats_lib.py": 1.0,
