@@ -68,6 +68,7 @@ from renderer.renderer_lib.ordering import (
     DEFERRED_SUFFIX,
     NO_EDGES,
     NO_ORDERING,
+    PRECHECK_SUFFIX,
     PREPULL_SUFFIX,
     SUSPENDED_DEPS,
     TAG_KIND_SUFFIXES,
@@ -164,7 +165,8 @@ def reserved_tags(
 
     A reserved name is the root's, a shared kind's, one in `RESERVED_NAMES`, or any name
     ending in a per-tag kind's suffix, so no tag's Kustomization can collide with another
-    tag's `-deferred`, `-snapshot`, `-prepull` or `-verify` one (D4.2, D5.1a1).
+    tag's `-deferred`, `-snapshot`, `-prepull`, `-precheck` or `-verify` one (D4.2, D5.1a1,
+    #5719).
     """
     names = {ROOT} | set(kinds) | RESERVED_NAMES
     return sorted(t for t in set(tags) if t in names or t.endswith(TAG_KIND_SUFFIXES))
@@ -314,7 +316,8 @@ def flux_files(
         edges: Each Kustomization's generated edges; a name it does not map has none.
         fields: Each tag's per-role fields: `prune` and `timeout` (`role_fields`) for `<tag>`
             and `<tag>-deferred`, `prepull_timeout` for `<tag>-prepull`, `verify_timeout`
-            for `<tag>-verify` (`verify_timeout`), `suspend` for all.
+            for `<tag>-verify` and `precheck_timeout` for `<tag>-precheck`
+            (`verify_timeout`), `suspend` for all.
         contents: Each tag's `own` digest, stamped on `<tag>` alone.
     """
     decrypting = frozenset(decrypting)
@@ -330,6 +333,7 @@ def flux_files(
         timeouts = {name: own.get("timeout", timeout) for name in role_own}
         timeouts[tag + PREPULL_SUFFIX] = own.get("prepull_timeout", timeout)
         timeouts[tag + VERIFY_SUFFIX] = own.get("verify_timeout", timeout)
+        timeouts[tag + PRECHECK_SUFFIX] = own.get("precheck_timeout", timeout)
         docs = [
             tag_kustomization(
                 name,
@@ -512,9 +516,13 @@ def bundle_files(
     problems += unread
     fields |= {t: {**fields.get(t, {}), "prepull_timeout": v} for t, v in pulls.items()}
     for tag in tags:
-        if tag + VERIFY_SUFFIX in directories:
-            waits = verify_timeout(directories[tag + VERIFY_SUFFIX], timeout)
-            fields[tag] = {**fields.get(tag, {}), "verify_timeout": waits}
+        for suffix, key in (
+            (VERIFY_SUFFIX, "verify_timeout"),
+            (PRECHECK_SUFFIX, "precheck_timeout"),
+        ):
+            if tag + suffix in directories:
+                waits = verify_timeout(directories[tag + suffix], timeout)
+                fields[tag] = {**fields.get(tag, {}), key: waits}
     if problems:
         raise ValueError("; ".join(problems))
     per_directory, substituting = substitution(tags, directories, key_sets)

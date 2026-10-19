@@ -193,11 +193,11 @@ def _host_scripts() -> list[str]:
     )
 
 
-# The shape of registry-gc.sh.j2's scale-down, held as a red case. The script's
-# ghcr-mirror phase outlives registry's flip, so its allow entry below rests on #5732.
-_REGISTRY_GC_SCALE = (
-    '  $KUBECTL scale "deploy/${DEPLOY}" --replicas=0 >/dev/null 2>&1\n'
-)
+# registry-gc.sh.j2's scale-down, held as a red case. The script's ghcr-mirror phase outlives
+# registry's flip, so its allow entry below rests on the operator's ruling on #5732.
+# ansible/tests/services/test_registry_gc_ghcr_mirror.py holds this line to the template's.
+REGISTRY_GC_SCALE = '  $KUBECTL scale "deploy/${1}" --replicas=0 >/dev/null 2>&1\n'
+
 
 HOST_SCRIPT_WRITES = Census(
     name="host-scripts-write-no-cluster-object",
@@ -210,7 +210,7 @@ HOST_SCRIPT_WRITES = Census(
     files=_host_scripts,
     offence=kubectl_writes,
     red=(
-        Subject("registry-gc.sh.j2", "#!/bin/bash\n" + _REGISTRY_GC_SCALE),
+        Subject("registry-gc.sh.j2", "#!/bin/bash\n" + REGISTRY_GC_SCALE),
         Subject("x.sh.j2", "k3s kubectl -n homelab rollout restart deploy/x\n"),
         Subject("x.sh", "${KUBECTL} --namespace=homelab annotate pod x a=b\n"),
         # A boolean flag must not swallow the verb as its value.
@@ -246,10 +246,12 @@ HOST_SCRIPT_WRITES = Census(
     must_find=frozenset({_K8S + "registry/templates/registry-gc.sh.j2"}),
     allow={
         _K8S + "registry/templates/registry-gc.sh.j2": (
-            "D5 retires the push store's GC phase before registry flips (Wave D's registry "
-            "bullet). The ghcr-mirror phase stays and scales deploy/ghcr-mirror, which renders "
-            "no `replicas:`, so no Flux apply owns the field it writes. That exception to C4 "
-            "awaits the operator's ruling on #5732"
+            "The script scales only deploy/ghcr-mirror, since D5 retired the push store's GC "
+            "phase. ghcr-mirror.yaml.j2 renders no `replicas:`, so neither the Ansible apply "
+            "nor Flux's server-side apply owns `spec.replicas`, the one field the script "
+            "writes, and Flux reverts nothing it sets. The operator accepted this exception "
+            "to C4 on that field ownership (#5732), so the mirror's GC stays a host script "
+            "after the flip"
         ),
     },
 )

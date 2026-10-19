@@ -55,6 +55,66 @@ spec:
             - name: crowdsec-etc
               mountPath: /etc/crowdsec
 {{ container_resources(cpu_limit='250m', mem_limit='128Mi', cpu_request='10m', mem_request='16Mi') }}
+        # Registers every agent machine that logs in to this LAPI and creates the two operator
+        # allowlists, in crowdsec-db, before the LAPI serves. The entrypoint registers only its
+        # own pod's agent (AGENT_USERNAME). The machines are the app-pod sidecars, the node
+        # agents and the crowdsec-verify Job (templates/verify-inert/job.yaml.j2), all on the one
+        # agent password.
+        #
+        # cscli needs no LAPI for either: it writes the SQLite file directly, as the
+        # entrypoint's own `machines add` does before the engine starts. test_jobs_image.py runs
+        # this script in the pinned image with no network. The config is the image's staging
+        # copy, because the entrypoint writes /etc/crowdsec/config.yaml only after
+        # initContainers run.
+        #
+        # A re-run adds nothing. A machine is added only when absent, with no `--force`, so a
+        # rotated password needs the registrations deleted first (docs/secret-rotation.md). An
+        # allowlist that already exists is the one failure tolerated. Any other failure exits
+        # non-zero and holds the pod, which the deploy's rollout wait reports.
+        #
+        # The password reaches `cscli` in argv, which root on the node can read in `ps` while
+        # the loop runs. The entrypoint passes AGENT_PASSWORD the same way for its own agent.
+        - name: lapi-register
+          image: {{ crowdsec_k8s_image }}
+          command:
+            - /bin/sh
+            - -c
+            - |
+              set -e
+              cs() { cscli -c /staging/etc/crowdsec/config.yaml "$@"; }
+              for machine in {{ ((crowdsec_k8s_sidecar_agents.values() | list) + crowdsec_k8s_node_agent_machines + ['crowdsec-verify']) | join(' ') }}; do
+                if ! cs machines list -o raw | grep -q "^$machine,"; then
+                  cs machines add "$machine" --password "$AGENT_PASSWORD" -f /dev/null
+                fi
+              done
+              allowlist() {
+                if ! out=$(cs allowlists create "$1" --description "$2" 2>&1); then
+                  case "$out" in
+                    *"already exist"*) ;;
+                    *) echo "$out" >&2; exit 1 ;;
+                  esac
+                fi
+              }
+              allowlist home-ips 'Home IPs'
+              allowlist remote-ips 'Authenticated remote exits, TTL-managed by remote_allowlist.py'
+          env:
+            - name: AGENT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: crowdsec-env
+                  key: AGENT_PASSWORD
+          # Root, with every capability dropped: crowdsec-db and its SQLite file belong to root,
+          # so the owner's write bit is all cscli needs, as for the crowdsec-jobs sidecar.
+{{ hardened_security_context(read_only=true) }}
+          volumeMounts:
+            - name: crowdsec-etc
+              mountPath: /etc/crowdsec
+              readOnly: true
+            - name: crowdsec-db
+              mountPath: /var/lib/crowdsec/data
+            - name: crowdsec-tmp
+              mountPath: /tmp
+{{ container_resources(cpu_limit='250m', mem_limit='128Mi', cpu_request='10m', mem_request='16Mi') }}
         # The crowdsec-jobs sidecar's two binaries, copied into the shared tools emptyDir. cscli
         # comes from the engine's own image, so the jobs run the same cscli as the LAPI. It is
         # statically linked, which is why it runs in the python image (defaults/main.yml).
@@ -123,8 +183,8 @@ spec:
             periodSeconds: 60
             timeoutSeconds: 10
 {{ container_resources(cpu_limit=crowdsec_k8s_cpu_limit, mem_limit=crowdsec_k8s_mem_limit, cpu_request=crowdsec_k8s_cpu_request, mem_request=crowdsec_k8s_mem_request) }}
-        # The remote allowlist, the AppSec verify and the bouncer prune, each on its old host
-        # cron's schedule (files/crowdsec_jobs.py). They need cscli against the LAPI's own
+        # The remote allowlist, the AppSec verify, the bouncer prune and the home allowlist, each
+        # on its old host cron's schedule (files/crowdsec_jobs.py). They need cscli against the LAPI's own
         # database, and a container in this pod reaches it with no `pods/exec` grant: the
         # operator's ruling of 2026-10-18 on #5655. It shares the engine's config and database
         # volumes, and cscli reads them here as it does in the engine container.
@@ -163,6 +223,17 @@ spec:
                 secretKeyRef:
                   name: crowdsec-jobs
                   key: appsec_push_url
+            - name: HOME_ALLOWLIST_PUSH_URL
+              valueFrom:
+                secretKeyRef:
+                  name: crowdsec-jobs
+                  key: home_allowlist_push_url
+            # The home allowlist reads the addresses the crowdsec-home-ips CronJob writes, and
+            # pushes down once their lookup time is older than three of its periods.
+            - name: HOME_IPS_CONFIGMAP
+              value: "{{ crowdsec_k8s_home_ips_configmap }}"
+            - name: HOME_IPS_STALE_AFTER_S
+              value: "{{ crowdsec_k8s_home_ips_stale_after_seconds }}"
 {{ hardened_security_context(read_only=true) }}
           volumeMounts:
             - name: crowdsec-etc

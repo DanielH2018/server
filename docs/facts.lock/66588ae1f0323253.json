@@ -1,5 +1,5 @@
 {
-  "checksum": "03fc9dfd7bb92284bcbefd162e10e6bfddd1b8a5b7d0bd219bfe280bd7940a26",
+  "checksum": "4d207c2dbc3087192469012ce66e53b472d237b25aafb655b39d48caf1221c07",
   "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
   "key": "ansible/roles/k8s/registry/CLAUDE.md#Notable",
   "row": {
@@ -7,10 +7,10 @@
       "ansible/roles/k8s/registry/templates/ghcr-mirror.yaml.j2:DECIDED: its own Deployment": "6e33927e149323bf80fe83b6fef8fff9ed2af5b888eff954b667d474e4a6622d",
       "ansible/roles/k8s/registry/templates/service.yaml.j2:DECIDED: one Service fronting two": "0ba203af92a2af9a379e714e7aaa2e3a7ad79dc3773a4760955409237d96a2ee",
       "ansible/roles/setup/k3s/templates/registries.yaml.j2": "84acc4687f537d52798e72653d71265ac192c40d3cddc15967d19a26887f355f",
-      "scripts/renderer/renderer_lib/images.py:ghcr_refs": "7f71afd8cebd89ff8e89e654db90b7bc266ebb6840203bca245b7a484e16a14f",
+      "ansible/roles/setup/k8s_host_files/tasks/registry.yml": "9072729272d46e1723d45ad5d4e2494f06f08f152d925765912d6613bc945a0e",
       "scripts/renderer/renderer_lib/images.py:ghcr_text": "2d355f1d1aa99f59d01f5bf5c6ab179e1efa8f7d41400ae0b043aeb259ff760d"
     },
     "python": "3.14",
-    "verified_sha": "5f59446d0"
+    "verified_sha": "b4c3a6ec4"
   }
 }

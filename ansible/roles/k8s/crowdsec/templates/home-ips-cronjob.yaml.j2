@@ -1,0 +1,104 @@
+{% from 'container-resources.yml.j2' import job_container_resources with context %}
+{% from 'security-context.yml.j2' import job_hardened_security_context with context %}
+{#
+  The home allowlist's discovery half: look up the home public IPv4 address and IPv6 /64 and
+  write them into the crowdsec-home-ips ConfigMap. The crowdsec-jobs sidecar syncs the
+  `home-ips` allowlist from it. It replaced the daniel-box root cron `CrowdSec home allowlist`
+  at H2.4c (docs/target-architecture/host/h2-shrink-host-plane.md, Steps item 12), by the
+  operator's ruling of 2026-10-18 on #5701.
+
+  `hostNetwork: true` on daniel-box, because the pod network is IPv4-only and the /64 is
+  visible only in the host's network namespace, where the job reads `/proc/net/if_inet6`. The
+  consequences, from the H2 plan's *CrowdSec*:
+    - the namespace's `pod-security.kubernetes.io/warn: baseline` label records a warning on
+      apply, and nothing refuses it;
+    - the pod leaves from the node's address, outside NetworkPolicy selection, so it needs no
+      `netpol_from` grant. It talks only to ipify, the WAN probe endpoints and the API server,
+      and pushes nothing: the sidecar owns the Kuma tile.
+  `ClusterFirstWithHostNet` keeps `kubernetes.default.svc` resolvable from the host network.
+
+  It runs no cscli and execs into nothing. Its ServiceAccount may `patch` the one ConfigMap
+  (home-ips-rbac.yaml.j2). k8s/cronjob-gate runs it once per deploy (tasks/main.yml), and an
+  extra run writes the same values again.
+
+  Its code is the crowdsec-jobs ConfigMap, which the sidecar mounts too. The `items` list
+  mounts only the two files this job runs.
+#}
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: crowdsec-home-ips
+  namespace: {{ k8s_namespace }}
+spec:
+  schedule: "*/{{ crowdsec_k8s_home_ips_period_minutes }} * * * *"
+  # The host cron's fields were UTC, and */5 reads the same in any zone.
+  timeZone: Etc/UTC
+  concurrencyPolicy: Forbid
+  # A missed run is not made up: the next one looks the addresses up again.
+  startingDeadlineSeconds: {{ crowdsec_k8s_home_ips_period_minutes * 60 }}
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 2
+  jobTemplate:
+    metadata:
+      labels:
+        app: crowdsec-home-ips
+    spec:
+      activeDeadlineSeconds: {{ crowdsec_k8s_home_ips_deadline_seconds }}
+      # No retry: the next run is one period away, and the sidecar pages a stale lookup.
+      backoffLimit: 0
+      template:
+        metadata:
+          labels:
+            app: crowdsec-home-ips
+            # Inert on the host network, as on node-exporter's DaemonSet, and carried because
+            # every pod of a fenced role carries it (test_netpol_baseline_labels.py).
+            netpol-baseline: enforced
+        spec:
+          restartPolicy: Never
+          enableServiceLinks: false
+          hostNetwork: true
+          dnsPolicy: ClusterFirstWithHostNet
+          nodeSelector:
+            kubernetes.io/hostname: {{ k8s_primary_node }}
+          serviceAccountName: crowdsec-home-ips
+          automountServiceAccountToken: true
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 65534
+            runAsGroup: 65534
+            seccompProfile:
+              type: RuntimeDefault
+          priorityClassName: homelab-best-effort
+          containers:
+            - name: crowdsec-home-ips
+              image: {{ crowdsec_k8s_jobs_image }}
+              command: ["python3", "/jobs/home_ips_discover.py"]
+              env:
+                - name: HOME_IPS_NAMESPACE
+                  value: "{{ k8s_namespace }}"
+                - name: HOME_IPS_CONFIGMAP
+                  value: "{{ crowdsec_k8s_home_ips_configmap }}"
+                - name: WAN_PROBE_URLS
+                  value: "{{ wan_probe_urls | join(' ') }}"
+                # The API server's CA, which the automounted token volume carries.
+                - name: SSL_CERT_FILE
+                  value: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+                # The ConfigMap mount is read-only, so Python cannot write __pycache__ there.
+                - name: PYTHONDONTWRITEBYTECODE
+                  value: "1"
+{{ job_hardened_security_context(read_only=true) }}
+              volumeMounts:
+                - name: crowdsec-home-ips-code
+                  mountPath: /jobs
+                  readOnly: true
+{{ job_container_resources(cpu_limit='100m', mem_limit='64Mi', cpu_request='10m', mem_request='32Mi') }}
+          volumes:
+            - name: crowdsec-home-ips-code
+              configMap:
+                name: crowdsec-jobs
+                items:
+                  - key: home_ips_discover.py
+                    path: home_ips_discover.py
+                  - key: flux_job_connect.py
+                    path: flux_job_connect.py

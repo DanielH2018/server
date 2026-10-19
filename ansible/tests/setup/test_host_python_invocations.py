@@ -383,9 +383,7 @@ def test_a_script_run_through_uv_is_clean():
 # of shell grammar stays one shape short. A path (`/usr/bin/python3`) and a package or flag
 # name (`python3-venv`, `--python 3.14.6`) do not match.
 _BARE_PYTHON3 = re.compile(r"(?<![\w./@-])python3(?:\.\d+)?(?![\w./:@-])")
-_HOME_ALLOWLIST = (
-    _REPO / "ansible/roles/k8s/crowdsec/templates/crowdsec-update-home-allowlist.sh.j2"
-)
+_REGISTRY_GC = _REPO / "ansible/roles/k8s/registry/templates/registry-gc.sh.j2"
 _K8S = ROLES / "k8s"
 
 
@@ -415,8 +413,8 @@ def _bare_python3_lines(text: str) -> list[int]:
 
 def test_no_host_invocation_runs_a_bare_python3():
     candidates = [p for p in _candidate_files() if not _runs_in_a_container(p)]
-    # Non-vacuous: the template #4605 named must be in the census this scans.
-    assert _HOME_ALLOWLIST in candidates
+    # Non-vacuous: a host script beside the k8s manifests must be in the census this scans.
+    assert _REGISTRY_GC in candidates
     offenders = sorted(
         f"{path.relative_to(_REPO)}:{n}: {path.read_text().splitlines()[n - 1].strip()[:100]}"
         for path in candidates
@@ -467,8 +465,8 @@ def test_python3_through_uv_or_as_a_name_is_clean(line):
 
 
 def test_a_k8s_manifest_runs_in_a_container_and_a_host_script_beside_it_does_not():
-    templates = _K8S / "crowdsec/templates"
+    templates = _K8S / "registry/templates"
     assert _runs_in_a_container(templates / "deployment.yaml.j2")
     assert _runs_in_a_container(_K8S / "configarr/templates/config/config.yml.j2")
-    assert not _runs_in_a_container(_HOME_ALLOWLIST)
+    assert not _runs_in_a_container(_REGISTRY_GC)
     assert not _runs_in_a_container(ROLES / "setup/x/templates/y.yml.j2")

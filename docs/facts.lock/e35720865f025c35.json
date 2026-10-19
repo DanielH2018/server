@@ -1,13 +1,14 @@
 {
-  "checksum": "dba638b9aaa2c4e0f1b2da9a114ea6162ad7dbc0acf31110eb7797d598a6827c",
+  "checksum": "cace167dc2148aa06fdd41307e676a7f9ea2a9a2fed0d2f78a35c304886ee957",
   "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
   "key": "ansible/roles/containers/alloy/CLAUDE.md#At a glance",
   "row": {
     "atoms": {
+      "ansible/roles/setup/k8s_host_files/tasks/crowdsec.yml": "6551a956b06355ad705419d9b56127da48cf62a285f157809fd12a2ba9ed065a",
       "ansible/tests/services/test_alloy_pi_config_labels.py": "a25976762426b6d6616b573c5679c22778311e8b875d0ea6eea7bc34e0308f50",
       "ansible/tests/services/test_loki_stream_labels.py": "51ff4081ca2a5406c15b209f6f6e20cbfa6d3920b1716dd732322e5f642acda3"
     },
     "python": "3.14",
-    "verified_sha": "0ec968402"
+    "verified_sha": "b4c3a6ec4"
   }
 }

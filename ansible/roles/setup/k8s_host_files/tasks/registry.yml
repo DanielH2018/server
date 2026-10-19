@@ -1,0 +1,12 @@
+---
+# Written by D5's push-store GC retirement for registry (Wave D's registry bullet). H7.18c turns
+# it into a legacy entry and deletes it.
+#
+# registry-gc.sh read this manifest at cron time to collect the push store, and nothing reads it
+# since that phase was retired. k8s/manifests never sweeps `registry-jobs/`, so this absent arm
+# removes the file a host still holds. It has nothing left to remove after its first apply.
+- name: Remove the retired push store's garbage-collection job manifest
+  ansible.builtin.file:
+    path: /etc/rancher/k3s/manifests/registry-jobs/gc-job.yaml
+    state: absent
+  become: true

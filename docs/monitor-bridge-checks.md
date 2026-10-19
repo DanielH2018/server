@@ -729,12 +729,15 @@ checks each gate suppresses.
   `kuma_notify_failures` and `swallowed_verdicts` are not members either: both read in-cluster
   Loki, so the Loki gate owns their source, and what failed for them was Kuma's own outbound send,
   a real fault the tile should report.
-  **The four HOST crons are covered by a separate half** (#2793). `crowdsec-home-allowlist`,
-  `github-ruleset-drift`, `release-staleness-check` and `docs-refresh` run on the host and push
-  their own tiles, so this gate structurally cannot suppress them. Each consults `wan_reachable`
+  **The HOST crons are covered by a separate half** (#2793). `github-ruleset-drift`,
+  `release-staleness-check` and `docs-refresh` run on the host and push their own tiles, so this
+  gate structurally cannot suppress them. `crowdsec-home-allowlist` was a fourth until H2.4c moved
+  it into the cluster. Its `crowdsec-home-ips` CronJob, on daniel-box's host network, probes
+  the same endpoints in `home_ips_discover.py` and marks a failed lookup `WAN unreachable`.
+  The CrowdSec sidecar's job reports that as an `up` skip. Each host cron consults `wan_reachable`
   in `ansible/roles/setup/initial_setup/files/kuma-push-lib.sh` on the failure path that reached
   the internet, and reports `skipped: WAN unreachable` as an `up` when neither provider answers.
-  The probe classifies, not the error text: parsing curl exit codes and git stderr across four
+  The probe classifies, not the error text: parsing curl exit codes and git stderr across
   heterogeneous crons is the "green and inert" shape that library's header records paying for
   twice, and a GitHub 403 while the link is up makes the probe succeed, so that tile still pages.
   The endpoint list is `ansible/inventory/group_vars/all.yml:wan_probe_urls`, pinned equal to this
@@ -1109,16 +1112,16 @@ checks each gate suppresses.
   rejection is either a token no live monitor holds or a Kuma-side error, such as the 2026-10-11
   `SQLITE_CONSTRAINT` on `stat_hourly` that a redeploy did not clear (#4481). The library logs
   Kuma's own `msg` on a `push rejected by kuma (http=<code>): <msg>` line just before the
-  failure line, with the push token redacted, and the page names that line. The CrowdSec
-  home-allowlist cron writes it to the journal too, and pi-peer-backup to its pod log. A token mismatch
+  failure line, with the push token redacted, and the page names that line. The `crowdsec-jobs`
+  sidecar writes the same line to its container log, as pi-peer-backup does to its pod log. A token mismatch
   reads `Monitor not found or not active.`, and its verdicts are lost for as long as the cron
   and the static monitors carry different tokens. A burst of `http=404` lines from Traefik rejecting every router belongs to
   Traefik 404 Flood (#1322).
   In `LOKI_DEPENDENT`. A fetch that hits the 5000-line cap says so in the message. Two pushers
-  bypass the library's shape and are read by a second selector (#1943): the CrowdSec
-  home-allowlist cron keeps its own curl but logs the library's line shape, and pi-peer-backup's
-  CronJob, a pod with no `logger`, echoes its `status=` and `push failed (` lines in the syslog
-  prefix shape to stdout. `SWALLOWED_VERDICTS_POD_LOGQL` (`{container="pi-peer-backup"}`) reads
+  bypass the library's shape and are read by a second selector (#1943): the `crowdsec-jobs`
+  sidecar of the CrowdSec engine pod and pi-peer-backup's CronJob. Neither pod has a `logger`, so each
+  echoes its `status=` and `push failed (` lines in the syslog prefix shape to stdout.
+  `SWALLOWED_VERDICTS_POD_LOGQL` (`{container=~"pi-peer-backup|crowdsec-jobs"}`) reads
   them, and the two fetches are merged before the verdict. The selector is not
   `job=~"syslog|k8s"`, because the cap was sized against the syslog stream alone.)
 - **Kuma Notification Delivery** (a notification Kuma tried to send and dropped, #1891. Kuma logs
@@ -1178,8 +1181,8 @@ checks each gate suppresses.
 
 Checks that left `CHECKS` push their monitors from elsewhere, with the same tokens, so each
 monitor keeps its history. The direct pushers are the `pi-peer-backup` k8s CronJob (WG Pi Peer
-Backup), the `crowdsec` role's home allowlist cron (CrowdSec Home Allowlist), the
-`crowdsec-jobs` sidecar in the CrowdSec pod (CrowdSec AppSec), the `fake_remux` setup role's
+Backup), the `crowdsec-jobs` sidecar in the CrowdSec pod (CrowdSec Home Allowlist, CrowdSec
+Remote Allowlist and CrowdSec AppSec), the `fake_remux` setup role's
 `fake-remux-health.sh` (Fake Remux Scan / Replace), `renovate-notify`'s `ExecStartPost`
 (Renovate Notifier — Alive), and the configarr and janitorr roles' health crons (Configarr
 Sync, Janitorr Errors). Disk Autoprune retired with the Docker daemon and has no successor.

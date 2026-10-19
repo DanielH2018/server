@@ -13,9 +13,13 @@
 # runs in flux-system: the soak Job (D5.3, docs/target-architecture/deploy/d5-bulk-move.md,
 # *Reaching Prometheus*). It reads M2's `homelab:pod_service:info` and the critical alerts to
 # decide whether a promotion is healthy. Its name moves with each revision's SHA, so the peer
-# selects the stable pod label `app: soak` instead of `job-name`. prometheus itself is ALSO read on host loopback
+# selects the stable pod label `app: soak` instead of `job-name`. A fifth runs in
+# {{ k8s_namespace }}: crowdsec's verify Job, `app: crowdsec-verify`
+# (roles/k8s/crowdsec/templates/verify-inert/job.yaml.j2), which reads the edge's answers to
+# daniel-pi's probe from here. Its peer lands before crowdsec's Flux flip, so the Job is admitted
+# the first time it runs. prometheus itself is ALSO read on host loopback
 # by `otelq` (a workstation host process — see observability/CLAUDE.md), covered the same way as
-# tempo/otel-collector below, not by this file. Headlamp's Prometheus plugin is a fifth
+# tempo/otel-collector below, not by this file. Headlamp's Prometheus plugin is a sixth
 # in-cluster reader that this file also does NOT admit, on purpose: it queries through the API
 # server's service proxy (roles/k8s/headlamp/templates/rbac.yaml.j2), so the hop that reaches
 # the pod is the API server's, from the node's cni0/flannel.1 address — the same node-CIDR peer
@@ -54,7 +58,7 @@ spec:
         # namespaceSelector and podSelector are SIBLING KEYS in ONE list item, so they AND
         # together: one of the named apps, but only inside {{ k8s_namespace }}. As two
         # separate list items they would OR, admitting the entire {{ k8s_namespace }} namespace
-        # (or any pod anywhere carrying one of these labels) rather than just these three
+        # (or any pod anywhere carrying one of these labels) rather than just these four
         # callers. The soak peer below follows the same rule.
         - namespaceSelector:
             matchLabels:
@@ -63,7 +67,7 @@ spec:
             matchExpressions:
               - key: app
                 operator: In
-                values: [monitor-bridge, homelab-mcp, homepage]
+                values: [monitor-bridge, homelab-mcp, homepage, crowdsec-verify]
         # The soak Job, as ONE item for the same reason: `app: soak`, but only inside
         # flux-system. Split in two, the namespaceSelector alone would admit every pod in
         # flux-system. D5.3b2's Job template sets the label on its POD template, because a
@@ -79,7 +83,7 @@ spec:
       # because Prometheus runs today without --web.enable-admin-api, --web.enable-lifecycle or
       # --web.enable-remote-write-receiver (all three absent from observability/prometheus.yaml.j2
       # as of this writing). If any of those flags is ever added, this grant silently becomes a
-      # write/admin grant to all four callers with no NetworkPolicy-side change to
+      # write/admin grant to all five callers with no NetworkPolicy-side change to
       # flag in review — check for that when reviewing a future flag addition. homepage is the
       # caller that makes that check matter most: its widget proxy fetches whatever URL its
       # rendered config names, so its reach here is only ever as narrow as services.yaml.j2.

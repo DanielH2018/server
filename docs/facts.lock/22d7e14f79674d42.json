@@ -1,0 +1,14 @@
+{
+  "checksum": "5369aa1a8d8825c26e9542559f81b4c5a26ffbcadcf259825214cf4b597aed84",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "ansible/roles/k8s/crowdsec/CLAUDE.md#The `crowdsec-jobs` sidecar runs four jobs beside the LAPI",
+  "row": {
+    "atoms": {
+      "ansible/roles/k8s/crowdsec/defaults/main.yml:crowdsec_k8s_jobs_mem_limit": "ca59077d6440bd5dc90ee9c004074062d92f88e9274e9f3dcde58892a9c038f0",
+      "ansible/roles/k8s/crowdsec/templates/deployment.yaml.j2": "19a9cd1ee321f31da60d0386b98c019cb1f8606e381e6f1fe914538e4f9fc68a",
+      "ansible/roles/setup/k8s_host_files/tasks/crowdsec.yml": "6551a956b06355ad705419d9b56127da48cf62a285f157809fd12a2ba9ed065a"
+    },
+    "python": "3.14",
+    "verified_sha": "ab684ae22"
+  }
+}

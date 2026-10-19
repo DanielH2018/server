@@ -123,9 +123,8 @@ def test_the_mirror_binds_its_own_ports():
 def test_the_mirror_stores_on_its_own_claim():
     """Every ghcr.io image pulls through the mirror and none expires, so it gets its own volume.
 
-    On the push store's claim the cache would fill it and fail every image build. The push
-    store's GC Job mounts only the push store's claim, so its `--delete-untagged` never walks
-    the cache.
+    On the push store's claim the cache would fill it, and the mirror's GC would have to take
+    the push store offline to collect it.
     """
     pod = _pod(_deployments()["ghcr-mirror"])
     volumes = {
@@ -134,30 +133,24 @@ def test_the_mirror_stores_on_its_own_claim():
     mirror = {volumes[m["name"]] for m in _mirror().get("volumeMounts", [])}
     assert mirror == {CTX["registry_k8s_ghcr_mirror_claim"]}, mirror
     assert CTX["registry_k8s_claim"] not in mirror, mirror
-    gc_claims = _job_claims(_gc_jobs()["registry-gc"])
-    assert not mirror & gc_claims, (mirror, gc_claims)
 
 
 def _gc_jobs() -> dict[str, dict]:
     return {
         d["metadata"]["name"]: d
-        for template in ("gc-job.yaml.j2", "ghcr-mirror-gc-job.yaml.j2")
-        for d in _docs(template)
-        if d["kind"] == "Job"
-    }
-
-
-def test_each_gc_job_file_holds_one_store():
-    """registry-gc.sh applies each file with only that store's Deployment scaled down."""
-    push = {
-        d["metadata"]["name"] for d in _docs("gc-job.yaml.j2") if d["kind"] == "Job"
-    }
-    mirror = {
-        d["metadata"]["name"]
         for d in _docs("ghcr-mirror-gc-job.yaml.j2")
         if d["kind"] == "Job"
     }
-    assert (push, mirror) == ({"registry-gc"}, {"registry-gc-ghcr-mirror"})
+
+
+def test_only_the_mirror_store_has_a_gc_job():
+    """The push store's GC is retired (D5, Wave D's registry bullet): under Flux its scale-down
+    of deploy/registry would be a second writer on a field Flux renders."""
+    templates = sorted(
+        p.name for p in (K8S / ROLE / "templates").glob("*gc-job.yaml.j2")
+    )
+    assert templates == ["ghcr-mirror-gc-job.yaml.j2"]
+    assert set(_gc_jobs()) == {"registry-gc-ghcr-mirror"}
 
 
 def _job_claims(job: dict) -> set[str]:

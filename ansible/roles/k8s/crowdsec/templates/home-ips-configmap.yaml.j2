@@ -1,0 +1,17 @@
+{#
+  The home addresses the crowdsec-home-ips CronJob looks up, and the crowdsec-jobs sidecar's
+  home allowlist reads (files/home_ips_discover.py, files/home_allowlist.py).
+
+  DECIDED: rendered with no `data` keys, so each field has one writer. The object must exist
+  before the first run, because RBAC cannot narrow `create` by name and the CronJob's Role
+  grants `patch` on this one name only. With no `data` in the render, Ansible's client-side
+  apply records none in its last-applied annotation, and a later Flux server-side apply owns
+  none, so neither removes or reverts a field the CronJob wrote. The operator accepted the same
+  field-ownership argument for deploy/ghcr-mirror on #5732.
+#}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ crowdsec_k8s_home_ips_configmap }}
+  namespace: {{ k8s_namespace }}

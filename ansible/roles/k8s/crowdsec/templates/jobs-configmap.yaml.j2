@@ -1,7 +1,11 @@
 {#
-  The crowdsec-jobs sidecar's code: the scheduler, its three jobs, kuma_push.py from
+  The crowdsec-jobs sidecar's code: the scheduler, its four jobs, kuma_push.py from
   setup/common, which the scheduler imports, and kubectl's kubeconfig. Python puts the scheduler's own directory on
   sys.path, so the files sit flat at the mount.
+
+  The crowdsec-home-ips CronJob mounts two keys of it too (home-ips-cronjob.yaml.j2): its
+  module, home_ips_discover.py, and flux_job_connect.py from k8s/manifests, which that module
+  imports for every connection it opens.
 
   No secret goes in here. The push URLs reach the sidecar from the crowdsec-jobs Secret through
   `secretKeyRef` (the H2 plan's *No secret in a ConfigMap*), and
@@ -47,5 +51,11 @@ data:
 {{ lookup('file', playbook_dir + '/roles/k8s/crowdsec/files/appsec_verify.py') | indent(4, true) }}
   bouncer_prune.py: |
 {{ lookup('file', playbook_dir + '/roles/k8s/crowdsec/files/bouncer_prune.py') | indent(4, true) }}
+  home_allowlist.py: |
+{{ lookup('file', playbook_dir + '/roles/k8s/crowdsec/files/home_allowlist.py') | indent(4, true) }}
+  home_ips_discover.py: |
+{{ lookup('file', playbook_dir + '/roles/k8s/crowdsec/files/home_ips_discover.py') | indent(4, true) }}
+  flux_job_connect.py: |
+{{ lookup('file', playbook_dir + '/roles/k8s/manifests/files/flux_job_connect.py') | indent(4, true) }}
   kuma_push.py: |
 {{ lookup('file', playbook_dir + '/roles/setup/common/files/kuma_push.py') | indent(4, true) }}

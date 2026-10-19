@@ -21,9 +21,11 @@ apply them:
 
 One rule is the renderer's alone: a role's `templates/verify/*.yaml.j2` (`verify_files`) render
 unlabelled into `DIR/cluster/<tag>-verify/`, the verify and post-apply mutation Jobs Flux runs
-once the tag is applied (D5.1a1). Ansible never reads that directory. Those templates also see
-`flux_job_image`, the image every such Job runs, and `flux_job_connect`, the text of the helper
-a Job script that dials a Service carries beside it.
+once the tag is applied (D5.1a1). Its `templates/precheck/*.yaml.j2` (`precheck_files`) render
+the same way into `DIR/cluster/<tag>-precheck/`, the check Jobs the tag waits on (#5719).
+Ansible never reads either directory. Those templates also see `flux_job_image`, the image
+every such Job runs, and `flux_job_connect`, the text of the helper a Job script that dials a
+Service carries beside it.
 
 A role's vendored files are no template, and `attach_vendored` adds them to `DIR/cluster/<tag>/`
 byte for byte after every pass that edits rendered text (H1.1a). `rendered_docs()` in
@@ -76,11 +78,14 @@ from renderer.renderer_lib.environment import (
 )
 from renderer.renderer_lib.ordering import (
     DEFERRED_SUFFIX,
+    PRECHECK_SUFFIX,
+    PRECHECK_TEMPLATES_DIR,
     PREPULL_SUFFIX,
     SNAPSHOT_SUFFIX,
     VERIFY_SUFFIX,
     VERIFY_TEMPLATES_DIR,
     Ordering,
+    precheck_files,
     verify_files,
 )
 from renderer.renderer_lib.task_inputs import derived_facts, include_vars
@@ -134,6 +139,8 @@ class RenderedTag:
             adds, for a published tag whose role sets `flux_prepull_timeout` (#5525).
         verify: The same for `DIR/cluster/<tag>-verify/`, empty for a role that ships no
             `templates/verify/` (D5.1a1).
+        precheck: The same for `DIR/cluster/<tag>-precheck/`, empty for a role that ships no
+            `templates/precheck/` (#5719).
     """
 
     tag: str
@@ -142,6 +149,7 @@ class RenderedTag:
     snapshot: dict[str, str] = field(default_factory=dict)
     prepull: dict[str, str] = field(default_factory=dict)
     verify: dict[str, str] = field(default_factory=dict)
+    precheck: dict[str, str] = field(default_factory=dict)
 
     def directories(self) -> dict[str, dict[str, str]]:
         """Each directory name under `DIR/cluster/` mapped to the files it holds."""
@@ -152,6 +160,8 @@ class RenderedTag:
             dirs[self.tag + SNAPSHOT_SUFFIX] = self.snapshot
         if self.prepull:
             dirs[self.tag + PREPULL_SUFFIX] = self.prepull
+        if self.precheck:
+            dirs[self.tag + PRECHECK_SUFFIX] = self.precheck
         if self.verify:
             dirs[self.tag + VERIFY_SUFFIX] = self.verify
         return dirs
@@ -169,6 +179,7 @@ class RenderedTag:
             snapshot=dirs.get(self.tag + SNAPSHOT_SUFFIX, {}),
             prepull=dirs.get(self.tag + PREPULL_SUFFIX, {}),
             verify=dirs.get(self.tag + VERIFY_SUFFIX, {}),
+            precheck=dirs.get(self.tag + PRECHECK_SUFFIX, {}),
         )
 
 
@@ -187,7 +198,7 @@ def select_tags(
         RenderRefused: A requested tag is not one of `host`'s render targets, or a tag to
             render takes a reserved name: the root Kustomization's, `homelab`, a member of
             `kinds` or of `RESERVED_NAMES`, or any name ending in `-deferred`, `-snapshot`,
-            `-prepull` or `-verify` (C3 *Reserved names*, D4.2, D5.1a1).
+            `-prepull`, `-precheck` or `-verify` (C3 *Reserved names*, D4.2, D5.1a1).
     """
     targets = set(render_targets(host, host_vars))
     tags = sorted(set(requested or targets))
@@ -196,7 +207,8 @@ def select_tags(
         raise RenderRefused(
             f"{reserved} take a name the bundle reserves for a Kustomization that is no "
             "deploy tag's: the root homelab, a SHARED_KINDS or RESERVED_NAMES member, or "
-            "a name ending in -deferred, -snapshot, -prepull or -verify, which a tag's own "
+            "a name ending in -deferred, -snapshot, -prepull, -precheck or -verify, which a "
+            "tag's own "
             "kinds take"
         )
     unknown = sorted(set(tags) - targets)
@@ -311,7 +323,8 @@ def render_tag(
 ) -> RenderedTag:
     """Render every file the manifests role writes for `tag`, with a `kustomization.yaml` each.
 
-    The role's `templates/verify/` renders too, into `RenderedTag.verify`.
+    The role's `templates/verify/` and `templates/precheck/` render too, into
+    `RenderedTag.verify` and `RenderedTag.precheck`.
 
     Args:
         tag: The deploy tag.
@@ -392,24 +405,41 @@ def render_tag(
     # DECIDED: `-verify` renders whatever owns the tag, as `-deferred` does. Only a published
     # tag gets the Kustomization that applies it, and the shadow diff reports the directory
     # of an Ansible-owned tag as C1-only, so a role adds `templates/verify/` in the PR that
-    # hands its tag to Flux (D5's *How a role declares a verify Job*).
-    verify = {}
+    # hands its tag to Flux (D5's *How a role declares a verify Job*). `-precheck` follows
+    # the same rule.
     verifying = set(verify_files([tag], roles)[tag])
+    checking = set(precheck_files([tag], roles)[tag])
     # Every Job Flux applies runs `flux_job_image`, a flux role default no other role's
     # context holds. Passing it here keeps a verify template from `lookup()`ing the flux
     # defaults, which the deployer's cross-role scan would read as the role depending on them.
     # The helper's text comes the same way, so a helper fix does not redeploy every verifying role.
-    image = _flux_job_image() if verifying else None
-    helper = FLUX_JOB_CONNECT.read_text() if verifying else None
-    for name, src in _sources(
-        tag, verifying, True, templates / VERIFY_TEMPLATES_DIR
-    ).items():
-        verify[name] = render(
-            src, name, False, item=name, flux_job_image=image, flux_job_connect=helper
-        )
-    if verify:
-        verify[KUSTOMIZATION] = kustomization_text(list(verify))
-    return RenderedTag(tag, rendered, later, verify=verify)
+    image = _flux_job_image() if verifying or checking else None
+    helper = FLUX_JOB_CONNECT.read_text() if verifying or checking else None
+    jobs = {}
+    for kind, names in (
+        (VERIFY_TEMPLATES_DIR, verifying),
+        (PRECHECK_TEMPLATES_DIR, checking),
+    ):
+        jobs[kind] = {
+            name: render(
+                src,
+                name,
+                False,
+                item=name,
+                flux_job_image=image,
+                flux_job_connect=helper,
+            )
+            for name, src in _sources(tag, names, True, templates / kind).items()
+        }
+        if jobs[kind]:
+            jobs[kind][KUSTOMIZATION] = kustomization_text(list(jobs[kind]))
+    return RenderedTag(
+        tag,
+        rendered,
+        later,
+        verify=jobs[VERIFY_TEMPLATES_DIR],
+        precheck=jobs[PRECHECK_TEMPLATES_DIR],
+    )
 
 
 def _flux_job_image() -> str:

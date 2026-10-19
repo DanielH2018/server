@@ -175,7 +175,6 @@ def test_an_unrendered_dockerfile_is_named_rather_than_missed() -> None:
 # member rather than as a guard over an empty set.
 GUARDED_SHELL_TEMPLATES = frozenset(
     {
-        ("k8s", "crowdsec", "crowdsec-update-home-allowlist.sh.j2"),
         ("setup", "claude_code", "sync-artifacts.sh.j2"),
         ("setup", "k3s", "longhorn-restore-drill.sh.j2"),
         ("setup", "k3s", "longhorn-backup-health.sh.j2"),
@@ -253,8 +252,8 @@ def test_a_shell_template_that_is_not_in_the_tree_fails_the_caller() -> None:
 def test_a_shell_function_the_script_does_not_define_is_named() -> None:
     with pytest.raises(AssertionError, match=r"no_such_function\(\) is gone"):
         rendered_shell_function(
-            "k8s",
-            "crowdsec",
-            "crowdsec-update-home-allowlist.sh.j2",
+            "setup",
+            "k3s",
+            "longhorn-restore-drill.sh.j2",
             "no_such_function",
         )
