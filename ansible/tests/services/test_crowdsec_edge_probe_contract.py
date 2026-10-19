@@ -19,6 +19,7 @@ Run: uv run pytest ansible/tests/services/test_crowdsec_edge_probe_contract.py
 import os
 import re
 import subprocess
+import sys
 
 import pytest
 
@@ -26,24 +27,16 @@ from _compose_render import rendered_text
 from _helpers import K8S_ROLES, SETUP_ROLES
 from lib.proc_testing import write_exec
 
+# crowdsec's verify module ships from its role's files/, which pytest puts on sys.path only for
+# that role's own tests.
+sys.path.insert(0, str(K8S_ROLES / "crowdsec" / "files"))
+
+import crowdsec_verify
+
 PROBE = SETUP_ROLES / "k8s_host_files" / "files" / "crowdsec-edge-probe.sh"
 # Alloy's `loki.process` prefixes every `stage.metrics` name with this (its `metrics_prefix`
 # default), which is what Prometheus scrapes off `alloy-pi`.
 ALLOY_METRICS_PREFIX = "loki_process_custom_"
-
-
-@pytest.fixture(scope="module")
-def verify(monkeypatch_module):
-    monkeypatch_module.syspath_prepend(str(K8S_ROLES / "crowdsec" / "files"))
-    import crowdsec_verify
-
-    return crowdsec_verify
-
-
-@pytest.fixture(scope="module")
-def monkeypatch_module():
-    with pytest.MonkeyPatch.context() as patch:
-        yield patch
 
 
 def _block(config: str, kind: str, label: str) -> str:
@@ -101,13 +94,13 @@ def alloy() -> str:
     return rendered_text("alloy", "config.alloy.j2")
 
 
-def test_alloy_counts_the_metric_the_verify_job_queries(alloy, verify):
-    assert contract(alloy)["metric"] == verify.COUNTER
+def test_alloy_counts_the_metric_the_verify_job_queries(alloy):
+    assert contract(alloy)["metric"] == crowdsec_verify.COUNTER
 
 
-def test_a_renamed_alloy_counter_is_flagged(alloy, verify):
+def test_a_renamed_alloy_counter_is_flagged(alloy):
     renamed = alloy.replace('"crowdsec_edge_probe_total"', '"crowdsec_probe_total"')
-    assert contract(renamed)["metric"] != verify.COUNTER
+    assert contract(renamed)["metric"] != crowdsec_verify.COUNTER
 
 
 def test_alloy_tails_the_file_the_probe_writes_and_parses_its_line(alloy, tmp_path):
