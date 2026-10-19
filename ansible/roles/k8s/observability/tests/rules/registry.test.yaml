@@ -1,0 +1,59 @@
+# promtool unit tests for files/rules/registry.yaml. Run with
+# `scripts/validate/alert_tools.sh promtool test rules <this file>`; the validate-alert-rules
+# hook runs it on every commit that touches the rules.
+#
+# The kube-state-metrics series carry the labels v2.20 gives them (job, instance), so a matcher
+# that a live series would not satisfy fails here as it would live.
+rule_files:
+  - ../../files/rules/registry.yaml
+evaluation_interval: 1m
+tests:
+  # The zero-series case: no input at all, so the kube-state-metrics job is missing.
+  - interval: 1m
+    input_series: []
+    alert_rule_test:
+      - eval_time: 121m
+        alertname: GhcrMirrorScaledToZero
+        exp_alerts:
+          - exp_labels:
+              job: kube-state-metrics
+              service: registry
+              severity: warning
+            exp_annotations: &annotations
+              summary: The ghcr-mirror Deployment has wanted zero replicas for 2 hours.
+              description: "homelab/ghcr-mirror has been scaled to zero for 2 hours, or Prometheus has no kube-state-metrics scrape job. registry-gc.sh holds it at zero for at most about 25 minutes, so a run probably died before its restore. Until the mirror serves again, containerd pulls ghcr.io images straight from GHCR and a WAN outage leaves no source to pull them from. Check `journalctl -t registry-gc` on daniel-box and that no registry-gc.sh is running, then `kubectl -n homelab scale deploy/ghcr-mirror --replicas=1` or a registry deploy."
+
+  # A GC run holds the mirror at zero for 25 minutes and restores it: nothing fires.
+  - interval: 1m
+    input_series:
+      - series: 'up{job="kube-state-metrics", instance="kube-state-metrics:8080"}'
+        values: '1x180'
+      - series: 'kube_deployment_spec_replicas{job="kube-state-metrics", instance="kube-state-metrics:8080", namespace="homelab", deployment="ghcr-mirror"}'
+        values: '0x25 1x155'
+    alert_rule_test:
+      - alertname: GhcrMirrorScaledToZero
+        eval_time: 180m
+        exp_alerts: []
+
+  # A run killed before its restore leaves the mirror at zero. It fires after the 2h hold.
+  - interval: 1m
+    input_series:
+      - series: 'up{job="kube-state-metrics", instance="kube-state-metrics:8080"}'
+        values: '1x180'
+      - series: 'kube_deployment_spec_replicas{job="kube-state-metrics", instance="kube-state-metrics:8080", namespace="homelab", deployment="ghcr-mirror"}'
+        values: '0x180'
+    alert_rule_test:
+      - alertname: GhcrMirrorScaledToZero
+        eval_time: 119m
+        exp_alerts: []
+      - alertname: GhcrMirrorScaledToZero
+        eval_time: 121m
+        exp_alerts:
+          - exp_labels:
+              job: kube-state-metrics
+              instance: kube-state-metrics:8080
+              namespace: homelab
+              deployment: ghcr-mirror
+              service: registry
+              severity: warning
+            exp_annotations: *annotations

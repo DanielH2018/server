@@ -86,6 +86,20 @@ def test_a_role_without_vendored_files_may_resolve_no_workload(tmp_path):
     require_a_vendored_workload(tmp_path / "plain", [])
 
 
+def test_a_vendored_role_of_crds_alone_may_resolve_no_workload(tmp_path):
+    """traefik-crds vendors CRDs and runs nothing, so it passes with nothing to check."""
+    crd = _manifest("CustomResourceDefinition", "widgets.example.io")
+    require_a_vendored_workload(_role(tmp_path, upstream={"crds.yml": crd}), [])
+
+
+def test_a_vendored_role_of_crds_and_a_configmap_still_raises(tmp_path):
+    crds = _manifest("CustomResourceDefinition", "widgets.example.io")
+    config = _manifest("ConfigMap", "config")
+    role_dir = _role(tmp_path, upstream={"crds.yml": crds, "app.yaml": config})
+    with pytest.raises(RuntimeError, match="resolve no Deployment"):
+        require_a_vendored_workload(role_dir, [])
+
+
 def test_a_patch_naming_an_undeclared_workload_raises(tmp_path):
     role_dir = _role(
         tmp_path,

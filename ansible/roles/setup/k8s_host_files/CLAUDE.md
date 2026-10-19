@@ -46,7 +46,9 @@ both files into `files/`. qbittorrent's PR wrote `tasks/qbittorrent.yml`, which 
 the absent arms for the prefs drift check's retired host cron and script. traefik's PR wrote
 `tasks/traefik.yml`, the two absent arms that remove the retired Cloudflare IP drift cron and
 its script. uptime-kuma's PR wrote `tasks/uptime-kuma.yml`, the absent arm that removes
-the directory k8s/volume-claim staged autokuma-data's claim under. crowdsec's first conversion
+the directory k8s/volume-claim staged autokuma-data's claim under. registry's push-store GC
+retirement wrote `tasks/registry.yml`, the absent arm for the `gc-job.yaml` manifest nothing
+reads any more. crowdsec's first conversion
 PR wrote `tasks/crowdsec.yml`, which installs the edge probe's script, service and timer on
 daniel-pi for crowdsec's off-cluster verify. It is the role's first timer and its first
 templates. crowdsec's absent arms stay in its own `tasks/main.yml` until a later conversion

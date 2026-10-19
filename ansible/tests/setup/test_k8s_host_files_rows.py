@@ -199,6 +199,16 @@ EXPECTED_ROWS: dict[str, dict[str, tuple[str, dict[str, str | bool]]]] = {
             {"path": "/usr/local/bin/cloudflare-ip-drift.sh", "state": "absent"},
         ),
     },
+    # The absent arm for the push store's GC manifest, which nothing reads since its retirement.
+    "registry.yml": {
+        "Remove the retired push store's garbage-collection job manifest": (
+            "ansible.builtin.file",
+            {
+                "path": "/etc/rancher/k3s/manifests/registry-jobs/gc-job.yaml",
+                "state": "absent",
+            },
+        ),
+    },
     # The absent arms H2.5c left for the retired health reader's host cron, its code and the
     # drift fragment it stamped.
     "janitorr.yml": {
@@ -330,6 +340,7 @@ def test_a_task_file_main_no_longer_imports_is_flagged(tmp_path):
         "pi-peer-backup.yml: Install the forced-command wrapper on daniel-pi",
         "qbittorrent.yml: Remove the retired qbittorrent prefs drift check cron",
         "qbittorrent.yml: Remove the retired qbittorrent prefs-check script from the host",
+        "registry.yml: Remove the retired push store's garbage-collection job manifest",
         "traefik.yml: Remove the Cloudflare IP drift cron",
         "traefik.yml: Remove the Cloudflare IP drift script",
         "uptime-kuma.yml: Remove the k8s/volume-claim staging directory autokuma-data left behind",

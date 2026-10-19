@@ -36,7 +36,7 @@ from _helpers import (
 from lib.repo_paths import ALL_VARS, K3S_FILES
 from _k8s_render import render_role_template, rendered_texts
 from lib import yaml_fast
-from lib.k8s_roles import declared_manifest_files, manifest_template
+from lib.k8s_roles import declared_manifest_files, manifest_template, tag_owners
 from role_label import ROLE_LABEL, homelab_role_label
 
 sys.path.insert(0, str(K3S_FILES))
@@ -206,6 +206,7 @@ def _armed_roles() -> dict[str, dict]:
 
 
 _ARMED_ROLES = frozenset(_armed_roles())
+_OWNED = frozenset(tag_owners())  # Flux applies these with no `-n`.
 
 
 def test_no_role_widens_the_allowlist_or_keeps_a_kinds_list() -> None:
@@ -446,7 +447,7 @@ def test_an_armed_role_renders_nothing_outside_the_prune_namespace() -> None:
     armed = {role: _prune_namespace(role, v) for role, v in _armed_roles().items()}
     checked, offenders = set(), []
     for role, name, text in rendered_texts():
-        if role not in armed or name not in _staged_templates(role):
+        if role not in armed or role in _OWNED or name not in _staged_templates(role):
             continue
         checked.add(role)
         offenders += [

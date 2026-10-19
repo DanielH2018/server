@@ -11,18 +11,15 @@ emits no `registry-verify`. The plan is docs/target-architecture/deploy/d5-bulk-
 Run: uv run pytest ansible/roles/k8s/registry/tests/test_registry_verify.py
 """
 
-import hashlib
 import re
 import shutil
 import socket
-import threading
-from typing import cast
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from urllib.parse import parse_qs, urlsplit
+from urllib.parse import urlsplit
 
 import pytest
 
 import registry_verify
+from _registry_fakes import serving
 from lib import yaml_fast
 from lib.k8s_roles import K8S_ROLES
 from renderer import shadow_diff
@@ -31,95 +28,17 @@ from renderer.renderer_lib.context import load_stubs
 from renderer.tests._job_census import problems
 
 TAG = "registry"
+SEED_TAG = "python-0123456789ab"
 # A path into a role's tree, as any lookup names it; group 1 is the role.
 ROLE_PATH = re.compile(r"/roles/k8s/([^/'\"]+)/")
 
 
-class FakeRegistry(ThreadingHTTPServer):
-    """An in-memory registry speaking the part of the distribution API the push uses.
-
-    Attributes:
-        blobs: The stored blobs, by digest.
-        manifests: The stored manifests, by `<repo>:<tag>`.
-        uploads: How many blob uploads completed.
-        corrupt: When set, a manifest GET serves these bytes instead of the stored ones.
-    """
-
-    def __init__(self):
-        self.blobs: dict[str, bytes] = {}
-        self.manifests: dict[str, bytes] = {}
-        self.uploads = 0
-        self.corrupt: bytes | None = None
-        super().__init__(("127.0.0.1", 0), _RegistryHandler)
-
-
-class _RegistryHandler(BaseHTTPRequestHandler):
-    @property
-    def registry(self) -> FakeRegistry:
-        return cast(FakeRegistry, self.server)
-
-    def _send(self, status, headers=None, body=b""):
-        self.send_response(status)
-        for key, value in (headers or {}).items():
-            self.send_header(key, value)
-        self.send_header("Content-Length", str(len(body)))
-        self.end_headers()
-        if self.command != "HEAD":
-            self.wfile.write(body)
-
-    def _body(self) -> bytes:
-        return self.rfile.read(int(self.headers.get("Content-Length") or 0))
-
-    def do_HEAD(self):
-        digest = self.path.rsplit("/", 1)[-1]
-        self._send(200 if digest in self.registry.blobs else 404)
-
-    def do_POST(self):
-        self._body()
-        repo = self.path.split("/")[2]
-        self._send(202, {"Location": f"/v2/{repo}/blobs/uploads/abc?state=x"})
-
-    def do_PUT(self):
-        url = urlsplit(self.path)
-        body = self._body()
-        if "/blobs/uploads/" in url.path:
-            digest = parse_qs(url.query)["digest"][0]
-            if "sha256:" + hashlib.sha256(body).hexdigest() != digest:
-                self._send(400)
-                return
-            self.registry.blobs[digest] = body
-            self.registry.uploads += 1
-            self._send(201)
-            return
-        _, _, repo, _, tag = url.path.split("/")
-        self.registry.manifests[f"{repo}:{tag}"] = body
-        self._send(201)
-
-    def do_GET(self):
-        _, _, repo, _, tag = self.path.split("/")
-        body = self.registry.manifests.get(f"{repo}:{tag}")
-        if body is None:
-            self._send(404)
-            return
-        served = self.registry.corrupt or body
-        digest = "sha256:" + hashlib.sha256(served).hexdigest()
-        self._send(200, {"Docker-Content-Digest": digest}, served)
-
-    def log_message(self, format, *args):
-        pass
-
-
-def _url(server) -> str:
-    return f"http://127.0.0.1:{server.server_address[1]}"
-
-
 @pytest.fixture
 def registry():
-    server = FakeRegistry()
-    threading.Thread(target=server.serve_forever, daemon=True).start()
-    yield server
-    server.shutdown()
-    server.server_close()
+    """The push store, already serving the seed tag, so a push test reads no upstream."""
+    with serving() as server:
+        server.hold("registry-selftest", SEED_TAG, b"{}", registry_verify.MANIFEST_TYPE)
+        yield server
 
 
 @pytest.fixture
@@ -137,29 +56,32 @@ def _push_env(url) -> dict[str, str]:
         "REGISTRY_URL": url,
         "REPO": "registry-selftest",
         "TAG": "verify",
+        "SOURCE_IMAGE": "python:3.14-alpine@sha256:" + "0" * 64,
+        "PLATFORM": "linux/amd64",
+        "SEED_TAG": SEED_TAG,
         "REGISTRY_RENDER_DIGEST8": "abcd1234",
     }
 
 
 def test_a_push_round_trip_passes(registry, capsys):
-    assert registry_verify.main([], _push_env(_url(registry))) == 0
+    assert registry_verify.main([], _push_env(registry.url)) == 0
     _, manifest = registry_verify.image()
-    assert registry.manifests == {"registry-selftest:verify": manifest}
+    assert registry.manifests["registry-selftest:verify"] == manifest
     assert len(registry.blobs) == 2
     assert "pushed and read back registry-selftest:verify" in capsys.readouterr().out
 
 
 def test_a_second_push_uploads_nothing(registry, capsys):
     """Fixed bytes mean the store gains nothing however often the Job runs."""
-    assert registry_verify.main([], _push_env(_url(registry))) == 0
-    assert registry_verify.main([], _push_env(_url(registry))) == 0
+    assert registry_verify.main([], _push_env(registry.url)) == 0
+    assert registry_verify.main([], _push_env(registry.url)) == 0
     assert registry.uploads == 2
     assert capsys.readouterr().out.count("already present") == 2
 
 
 def test_a_tag_that_reads_back_as_another_digest_fails_the_job(registry, capsys):
     registry.corrupt = b'{"schemaVersion":2}'
-    assert registry_verify.main([], _push_env(_url(registry))) == 1
+    assert registry_verify.main([], _push_env(registry.url)) == 1
     assert "did not store what was pushed" in capsys.readouterr().err
 
 
@@ -186,7 +108,7 @@ def test_an_answer_on_either_port_fails_the_isolation_check(
 ):
     """The fake registry answers `/v2/` with 404, an error status, which still is an answer."""
     urls = [closed_url, closed_url]
-    urls[answering] = f"{_url(registry)}/v2/"
+    urls[answering] = f"{registry.url}/v2/"
     assert registry_verify.main([], _isolation_env(*urls)) == 1
     assert "registry accepted the connection" in capsys.readouterr().err
 
@@ -200,12 +122,22 @@ def test_a_leg_that_fails_on_dns_fails_the_isolation_check(capsys):
 
 @pytest.mark.parametrize(
     "env",
-    [{"CHECK": "isolation", "ISOLATED_URLS": " "}, {"CHECK": "pull"}],
-    ids=["no-urls", "unknown-check"],
+    [
+        {"CHECK": "isolation", "ISOLATED_URLS": " "},
+        {"CHECK": "pull", "PULLED_IMAGE": ""},
+        {"CHECK": "pull-everything"},
+    ],
+    ids=["no-urls", "no-pulled-image", "unknown-check"],
 )
 def test_a_job_that_would_check_nothing_fails(env):
     with pytest.raises(registry_verify.Failed):
         registry_verify.run(env)
+
+
+def test_a_pull_job_with_no_image_is_refused_by_the_pull_check():
+    """The pull check's own refusal, not the unknown-CHECK fallback it would otherwise hit."""
+    with pytest.raises(registry_verify.Failed, match="PULLED_IMAGE is empty"):
+        registry_verify.run({"CHECK": "pull", "PULLED_IMAGE": ""})
 
 
 @pytest.fixture(scope="module")
@@ -250,7 +182,9 @@ def _job(docs: list[dict], check: str) -> dict:
         doc
         for doc in docs
         if doc["kind"] == "Job"
-        and doc["metadata"]["name"].startswith(f"registry-verify-{check}-")
+        and re.fullmatch(
+            f"registry-verify-{check}-[0-9a-f]{{8}}", doc["metadata"]["name"]
+        )
     ]
     return job
 
@@ -281,8 +215,7 @@ def test_the_tree_renders_no_registry_verify_while_ansible_owns_it(stubs):
 def test_the_flipped_jobs_pass_every_job_census_row(flipped):
     assert sorted(doc["kind"] for doc in flipped) == [
         "ConfigMap",
-        "Job",
-        "Job",
+        *["Job"] * 4,
         "ServiceAccount",
     ]
     assert problems({f"{TAG}-verify": flipped}) == []
@@ -414,14 +347,44 @@ def test_a_fence_that_admits_the_isolation_job_is_flagged(peer):
     assert _may_admit_on(policy, "registry-verify") == [5000]
 
 
+FLUX_JOB_IMAGE = yaml_fast.safe_load(
+    (K8S_ROLES / "flux/defaults/main.yml").read_text()
+)["flux_job_image"]
+
+
 def test_the_flipped_jobs_run_the_flux_job_image_without_a_token(flipped):
-    flux = yaml_fast.safe_load((K8S_ROLES / "flux/defaults/main.yml").read_text())
     for check in ("push", "isolation"):
         pod = _job(flipped, check)["spec"]["template"]["spec"]
         (container,) = pod["containers"]
         assert pod["automountServiceAccountToken"] is False
         assert pod["securityContext"]["runAsNonRoot"] is True
-        assert container["image"] == flux["flux_job_image"]
+        assert container["image"] == FLUX_JOB_IMAGE
+
+
+@pytest.mark.parametrize(
+    "check, node", [("pull", "daniel-box"), ("pull-agent", "daniel-server")]
+)
+def test_each_pull_job_runs_the_seeded_copy_from_the_push_store_on_its_node(
+    flipped, check, node
+):
+    """The pod's own pull is the proof, so its image is the copy the push Job seeds."""
+    seed_env = _env_of(_job(flipped, "push"))
+    assert seed_env["SOURCE_IMAGE"] == FLUX_JOB_IMAGE
+    assert seed_env["SEED_TAG"] == "python-" + FLUX_JOB_IMAGE.split("@sha256:")[1][:12]
+    pod = _job(flipped, check)["spec"]["template"]["spec"]
+    (container,) = pod["containers"]
+    image = f"localhost:5000/{seed_env['REPO']}:{seed_env['SEED_TAG']}"
+    assert container["image"] == _env_of(_job(flipped, check))["PULLED_IMAGE"] == image
+    assert container["imagePullPolicy"] == "Always"
+    assert pod["nodeSelector"] == {"kubernetes.io/hostname": node}
+    assert _label(_job(flipped, check)) == "registry-verify"
+
+
+def test_the_pull_deadline_outlasts_the_push_plus_kubelets_pull_backoff(flipped):
+    """kubelet's sixth pull attempt lands about 310s in, after a push of up to its deadline."""
+    push = _job(flipped, "push")["spec"]["activeDeadlineSeconds"]
+    pull = _job(flipped, "pull")["spec"]["activeDeadlineSeconds"]
+    assert push <= 10 + 20 + 40 + 80 + 160 < pull < 600
 
 
 def test_a_policy_only_change_renames_both_jobs(stubs, tmp_path):

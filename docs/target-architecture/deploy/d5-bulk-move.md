@@ -317,8 +317,9 @@ own-window roles' (*Waves and windows*).
       (`flaresolverr-netpol-probe`) and registry (`registry-netpol-probe`);
     - `media-volume-hardlink-probe` (media-volume);
     - registry's `registry-selftest-push`, `registry-selftest-pull` and
-      `registry-selftest-pull-agent`, and `registry-gc`, whose manifest the host cron
-      `registry-gc.sh` reads at run time.
+      `registry-selftest-pull-agent`, and `registry-gc-ghcr-mirror`, whose manifest the host
+      cron `registry-gc.sh` reads at run time. The push store's `registry-gc` was retired
+      with its GC phase.
 - **Imperative ConfigMaps.** autofix-bridge, game-stats, monitor-bridge and observability run
   `kubectl create configmap --from-file` in their tasks.
 - **Host writes inside k8s roles.** Twelve roles write outside `/etc/rancher/k3s/manifests/`.
@@ -807,9 +808,11 @@ reconciliation of a flux-owned role. D5.1b rewrites the sentence in
   (`scale`, `patch`, `apply`, `create`, `delete`, `annotate`, `label`, `replace`, `set` or
   `rollout restart`). A host script that writes an object Flux renders is a second writer
   under C4. `kubectl exec` into an app writes no object and passes. The red fixture is a copy
-  of `registry-gc.sh.j2`'s `scale` call, held in the test, because the template itself goes
-  with the GC. That call is why D5 retires the GC rather than moving it, to the host or into
-  the cluster (Wave D's registry bullet, Open question 15).
+  of `registry-gc.sh.j2`'s `scale` call, held in the test, which
+  `ansible/tests/repo/test_host_write_rows.py` holds to the template's line. That call on
+  `deploy/registry` is why D5 retires the push store's GC rather than moving it, to the host
+  or into the cluster (Wave D's registry bullet, Open question 15). The same call on
+  `deploy/ghcr-mirror` stays, under the operator's field-ownership exception (#5732).
 - **Concurrency.** kustomize-controller's `--concurrent` equals `k8s_rollout_batch_width`,
   patched over the vendored components in the flux role. This keeps the rollout concurrency
   the play has today.
@@ -1099,8 +1102,8 @@ a Job script that opens a connection without the shared helper. Their red fixtur
 of each kind, and a script that calls `urllib.request.urlopen` directly. **Its scope** is the
 Jobs in the render of a flux-owned tag and in the non-tag Kustomizations. An Ansible-owned
 role's Jobs are conversion rows, listed in the baseline, and each moves in its role's PR to the
-`<tag>-verify` class below. registry-gc's manifest leaves with its cron (Wave D's registry
-bullet).
+`<tag>-verify` class below. registry-gc's push-store manifest left with its phase, and the
+mirror's stays with its cron (Wave D's registry bullet).
 
 ### Snapshots as a Job per role revision (D5.2a)
 
@@ -2647,9 +2650,10 @@ sizes its batch of roles against that projection.
       Ansible-owned. Its phase of `registry-gc.sh` scales `deploy/registry`, whose
       `replicas: 1` Flux renders, so under Flux the drift correction would restore the replica
       during a GC run, the corruption the script's "STOP-THE-WORLD" comment exists to prevent.
-      By Wave D every image consumer pulls from GHCR, so no build pushes to the push store, and
-      nothing new needs collecting there. The self-test copies a small `alpine:3.22` image, so
-      the push store gains one copy per upstream rebuild of that tag.
+      By Wave D every image consumer pulls from GHCR, so no build pushes to the push store.
+      The crane self-test copies a small `alpine:3.22` image, so the push store gains one copy
+      per upstream rebuild of that tag. The pull verify Jobs' seed adds about 20 MB per
+      `flux_job_image` pin, and nothing bounds that growth yet (#5752).
 
       **The `ghcr-mirror` store still needs collecting, and keeps its own GC** (operator
       ruling on #5680, 2026-10-18). Its `REGISTRY_PROXY_TTL` is `0s` for the WAN-outage cold
@@ -2659,9 +2663,9 @@ sizes its batch of roles against that projection.
       own that scales only `deploy/ghcr-mirror`: it writes the keep set, runs the offline prune
       and `garbage-collect` Job, and scales the mirror back. That Deployment renders no
       `replicas:`, so neither the apply nor Flux claims the field and the GC stays its only
-      writer. A host script scaling a Flux-rendered Deployment is still contract C4's
-      second-writer shape, so that field-ownership argument awaits a ruling (#5732), and
-      `HOST_SCRIPT_WRITES` allows the script on it until then. The mirror store is therefore bounded by its weekly prune, which keeps the
+      writer. The operator accepted that exception to contract C4 on field ownership (#5732),
+      so `HOST_SCRIPT_WRITES` allows the script and the mirror's GC stays a host script after
+      the flip. The mirror store is therefore bounded by its weekly prune, which keeps the
       `registry_k8s_ghcr_mirror_keep_revisions` newest revisions per repository plus every
       digest or tag a workload names, inside the claim's 30Gi. The PR:
         - removes the push store's phase from `registry-gc.sh`: the content-tag prune,
@@ -2685,13 +2689,17 @@ sizes its batch of roles against that projection.
       cron runs as today until this PR retires its push half. registry's flip therefore waits
       on no H2 PR. Open question 2 rules on the registry's own fate before nut's Wave C PR.
 
-      **Status, 2026-10-18.** The push self-test and the netpol probe have their inert Jobs in
-      `ansible/roles/k8s/registry/templates/verify-inert/` (#5651). The pull self-tests become
-      a verify Job whose image is the fleet's python Job image re-pushed to `localhost:5000`,
-      so the pod's own pull proves the containerd path and its `python3 <script>` satisfies
-      the census's `delivery` row (ruling on #5680). karakeep and pi-peer-backup flipped in
-      #5688, so the push store's GC retirement no longer waits. #5714 split the mirror out;
-      the retirement and the pull verify Job follow in one PR, which closes #5680 and #5651.
+      **Status, 2026-10-18.** Every self-test and the netpol probe have their inert Jobs in
+      `ansible/roles/k8s/registry/templates/verify-inert/` (#5651). The pull Jobs run the
+      fleet's python Job image from `localhost:5000`, so the pod's own pull proves the
+      containerd path and its `python3 <script>` satisfies the census's `delivery` row (ruling
+      on #5680). The push Job seeds that copy, and the pull Jobs wait for it in kubelet's
+      ImagePullBackOff retry inside their deadline. karakeep and pi-peer-backup flipped in
+      #5688, so no `image-builder` caller is Ansible-owned. #5714 split the mirror out, and
+      #5737 retired the push store's GC and landed the pull Jobs. The deploy's mirror restore
+      runs under the lock `registry-gc.sh` holds for its whole run (#5736). After the flip,
+      the script restores a mirror its stamp shows it left at zero, and observability's
+      `GhcrMirrorScaledToZero` pages one left there for 2h.
     - traefik: the CRDs come from a URL in the role's `tasks/main.yml`, which no render may
       fetch under C1, so they get an in-tree copy pinned by `traefik_k8s_crd_version`. The
       cluster RBAC carries `kustomize.toolkit.fluxcd.io/prune: disabled` before the move, so
@@ -2754,6 +2762,13 @@ sizes its batch of roles against that projection.
           upstream release retires, stays live until the operator deletes it
           (**operator-only**). The same cost holds for H1's five plumbing tags. traefik's own
           objects, such as a retired Middleware, prune as every other role's do.
+
+      **Status, 2026-10-18.** The flip PR (#5707) creates `traefik-crds`, marks both tags
+      `owner: flux`, renders `rbac.yaml.j2` into traefik's bundle and deletes the CRD, RBAC
+      and VIP tasks. The VIP assert became the verify rule `TraefikIngressAddressNotPinned`
+      in observability's `k8s-services` group. traefik has no check that needs `pods/exec`.
+      The CRD census exempts `flux` until the flux PR, and only while `flux` is
+      Ansible-owned. The PR waits for the operator to be present before it merges.
     - crowdsec: its first conversion PR lands the Pi timer, the Alloy metrics stage and the
       inert `crowdsec-verify` Job. Its flip wires the Job.
     - netpol-baseline's PR repeats D4's drill on itself. A workload change that fails leaves
@@ -2787,8 +2802,10 @@ sizes its batch of roles against that projection.
       inert guard Job in `ansible/roles/k8s/pihole/templates/guard-inert/guard.yaml.j2`
       (#5695). It reads `pihole-2-web`'s EndpointSlices and fails while pihole-2 has no ready
       endpoint, so Flux holds `pihole`. It passes when `pihole` has no EndpointSlice, which is
-      a first apply. It must run before `pihole`, and
-      no role-owned kind does yet, so the flip needs one first (#5719).
+      a first apply. It must run before `pihole`, so the flip moves it into
+      `templates/precheck/`, the role-owned kind that renders into `<tag>-precheck`, which
+      `<tag>` depends on (#5719). The flip also names a break-glass for a guard that holds
+      a fix to a down pihole-2 (#5740).
     - **Before the first Wave D flip**, the session measures one revision that changes at
       least ten flux-owned tags, from `prod`'s move to the last status, and compares it with
       the derived verify timeout. A measurement above half the timeout raises the timeout
