@@ -91,7 +91,7 @@ def _traefik_credential_findings(doc: dict) -> list[str]:
 
 
 def _traefik_objects(role: str, tpl: str, doc: dict):
-    if str(doc.get("apiVersion", "")).startswith("traefik.io/"):
+    if str(doc.get("apiVersion", "")).partition("/")[0] == "traefik.io":
         yield f"{doc['kind']}/{role}/{doc.get('metadata', {}).get('name', '')}", doc
 
 
