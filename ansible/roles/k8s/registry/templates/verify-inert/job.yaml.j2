@@ -15,7 +15,8 @@
   `python3 <mount>/<script>.py`, so the image they pull must hold Python. The push Job writes
   that copy: after its round trip it copies `flux_job_image`'s linux/amd64 image into
   `{{ registry_k8s_probe_repo }}:<seed tag>`, which names the pin's digest. A new pin is a new
-  tag, so the pull Jobs rename with it and Flux runs all of them again.
+  tag, so the pull Jobs rename with it and Flux runs all of them again. Each new pin adds about
+  20 MB to the push store, which nothing reclaims since its GC was retired (#5752).
 
   DECIDED: the pull Jobs wait for the seed by kubelet's image-pull retry, not by an ordering
   Flux would have to express. Flux applies every Job in `registry-verify` at once, and on a

@@ -94,10 +94,11 @@ registry round trip. See repo-root `CLAUDE.md` for shared conventions.
 - **The push store is not collected** (D5, Wave D's registry bullet). Its GC scaled
   `deploy/registry`, whose `replicas: 1` Flux renders after the flip, so Flux would restore
   the pod mid-GC, the corruption the stop-the-world rule exists to prevent. Every
-  `k8s/image-builder` caller is flux-owned and pulls from GHCR, so nothing new reaches the
-  store. Its self-tests rewrite the same tags, so the store grows only with each new
-  `flux_job_image` pin the verify Job seeds and each upstream rebuild of
-  `registry_k8s_probe_source`.
+  `k8s/image-builder` caller is flux-owned and pulls from GHCR, so no build reaches the store.
+  It still grows, with no bound. The verify Job's seed adds each new `flux_job_image` pin, 20.38
+  MB compressed when measured on 2026-10-19, under a new tag. Each upstream rebuild of
+  `registry_k8s_probe_source` adds a copy too. Nothing reclaims either, because only
+  `garbage-collect` frees blobs (#5752).
 - The GC run reports twice: the `Registry GC` Kuma push tile (`registry_gc_push_token`,
   static in `k8s/uptime-kuma`, deadline one hour past the weekly period) and the off-site
   healthchecks.io `registry-gc` dead-man. The token existed nowhere but the script until

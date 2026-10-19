@@ -108,6 +108,10 @@ REPORT = rendered_shell_function(
 COLLECT_MIRROR = rendered_shell_function(
     "k8s", "registry", "registry-gc.sh.j2", "collect_mirror_store"
 )
+TAKE_LOCK = rendered_shell_function("k8s", "registry", "registry-gc.sh.j2", "take_lock")
+# The script's top-level sequence, everything after take_lock's definition, as cron runs it.
+_SCRIPT = rendered_shell_text("k8s", "registry", "registry-gc.sh.j2")
+MAIN = _SCRIPT[_SCRIPT.index("\n}\n", _SCRIPT.index("take_lock() {")) + 3 :]
 STRANDED = rendered_shell_function(
     "k8s", "registry", "registry-gc.sh.j2", "restore_stranded_mirror"
 )
@@ -186,16 +190,19 @@ def test_a_finished_mirror_job_is_journaled_and_kept_for_its_log(tmp_path):
 def _phase(tmp_path: Path, function: str) -> list[str]:
     """Run the mirror's whole GC phase against a cluster where every call succeeds.
 
-    Each call is logged with whether the stamp existed when it was made.
+    Each call is logged with whether the GC lock was held and whether the stamp existed
+    when it was made.
     """
     calls = tmp_path / "calls"
     body = f'{{"items": [{{"imageID": "ghcr.io/x@{LIVE}"}}]}}'
     script = f"""
 {_VARS}
 {_state(tmp_path)}
+LOCK_FILE={shlex.quote(str(tmp_path / "registry-gc.lock"))}
 k3s() {{
-  printf '%s stamp=%s\\n' "$*" "$([[ -e $MIRROR_STAMP ]] && echo 1 || echo 0)" \\
-    >> {shlex.quote(str(calls))}
+  printf '%s lock=%s stamp=%s\\n' "$*" \\
+    "$(flock -n "$LOCK_FILE" true 2>/dev/null && echo 0 || echo 1)" \\
+    "$([[ -e $MIRROR_STAMP ]] && echo 1 || echo 0)" >> {shlex.quote(str(calls))}
   case "$*" in
     *" get job "*) ;;
     *" get "*) printf '%s' "$GET_BODY" ;;
@@ -211,6 +218,7 @@ logger() {{ cat > /dev/null; }}
 {RESTORE}
 {COLLECT_MIRROR}
 {STRANDED}
+{TAKE_LOCK}
 {function}
 """
     env = {**os.environ, "GET_BODY": body, "PRUNED_LINE": PRUNED_LINE}
@@ -238,6 +246,16 @@ def test_the_stamp_spans_the_scale_down_to_the_restore(tmp_path):
         "stamp=1"
     ), calls
     assert not (tmp_path / "ghcr-mirror-down").exists()
+
+
+def test_the_run_holds_the_lock_from_the_scale_down_to_the_restore(tmp_path):
+    """#5736: the deploy's restore backs off only while the lock is held, so it must span both."""
+    calls = _phase(tmp_path, MAIN)
+
+    down = calls[_index(calls, "scale deploy/ghcr-mirror --replicas=0")]
+    up = calls[_index(calls, "scale deploy/ghcr-mirror --replicas=1")]
+    assert " lock=1 " in down, calls
+    assert " lock=1 " in up, calls
 
 
 def test_a_run_that_finds_the_stamp_restores_the_mirror_first(tmp_path):

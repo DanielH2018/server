@@ -15,8 +15,9 @@
 #
 # THE PUSH STORE IS NOT COLLECTED. Its phase scaled deploy/registry, whose `replicas: 1` Flux
 # renders after registry's flip, so Flux would restore the pod mid-GC. No image-builder caller is
-# Ansible-owned any more, so nothing new reaches that store, and D5 retired its GC rather than
-# moving it (docs/target-architecture/deploy/d5-bulk-move.md, Wave D's registry bullet).
+# Ansible-owned any more, so no build reaches that store, and D5 retired its GC rather than
+# moving it (docs/target-architecture/deploy/d5-bulk-move.md, Wave D's registry bullet). The
+# verify Job's seed still adds about 20 MB per flux_job_image pin, which nothing reclaims (#5752).
 #
 # deploy/ghcr-mirror renders no `replicas:`, so neither the Ansible apply nor Flux's server-side
 # apply owns `spec.replicas`, and this script is that field's only writer. The operator accepted

@@ -45,7 +45,7 @@ while reporting success.
       production renders the hash.
   - Nothing prunes superseded content tags from the push store. registry's GC of that store
     was retired once no caller of this role was Ansible-owned (D5, Wave D's registry bullet),
-    so nothing new reaches it.
+    so no build reaches it. The registry verify Job's seed still writes there (#5752).
 - Skips the actual build when the rendered context is byte-identical to the last run's and
   the registry already serves BOTH tags — saved ~106s across the seven original callers.
   `image_builder_force=true` overrides it, for a base-image CVE bump nothing here can see.

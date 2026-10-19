@@ -2650,9 +2650,10 @@ sizes its batch of roles against that projection.
       Ansible-owned. Its phase of `registry-gc.sh` scales `deploy/registry`, whose
       `replicas: 1` Flux renders, so under Flux the drift correction would restore the replica
       during a GC run, the corruption the script's "STOP-THE-WORLD" comment exists to prevent.
-      By Wave D every image consumer pulls from GHCR, so no build pushes to the push store, and
-      nothing new needs collecting there. The self-test copies a small `alpine:3.22` image, so
-      the push store gains one copy per upstream rebuild of that tag.
+      By Wave D every image consumer pulls from GHCR, so no build pushes to the push store.
+      The crane self-test copies a small `alpine:3.22` image, so the push store gains one copy
+      per upstream rebuild of that tag. The pull verify Jobs' seed adds about 20 MB per
+      `flux_job_image` pin, and nothing bounds that growth yet (#5752).
 
       **The `ghcr-mirror` store still needs collecting, and keeps its own GC** (operator
       ruling on #5680, 2026-10-18). Its `REGISTRY_PROXY_TTL` is `0s` for the WAN-outage cold

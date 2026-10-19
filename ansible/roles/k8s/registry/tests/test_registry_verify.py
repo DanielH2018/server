@@ -134,6 +134,12 @@ def test_a_job_that_would_check_nothing_fails(env):
         registry_verify.run(env)
 
 
+def test_a_pull_job_with_no_image_is_refused_by_the_pull_check():
+    """The pull check's own refusal, not the unknown-CHECK fallback it would otherwise hit."""
+    with pytest.raises(registry_verify.Failed, match="PULLED_IMAGE is empty"):
+        registry_verify.run({"CHECK": "pull", "PULLED_IMAGE": ""})
+
+
 @pytest.fixture(scope="module")
 def stubs(tmp_path_factory):
     path = tmp_path_factory.mktemp("stubs") / "stubs.yml"
