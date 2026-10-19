@@ -3,7 +3,7 @@
 # and opens digest-bump PRs. A bare repo@sha256 with NO tag is DIGEST_PINNED_EXEMPT
 # (scripts/tests/test_renovate_managers.py) and gets ZERO Renovate tracking — the fully-manual
 # pull-digest-redeploy loop tdarr is on.
-karakeep_k8s_image: ghcr.io/karakeep-app/karakeep:release@sha256:151cdd6b5f2e21635645983e126f411675bfa35becb02c028c1a727f45f899c6
+karakeep_k8s_image: ghcr.io/karakeep-app/karakeep:release@sha256:b069e4307dec06ea06d16989c6861c30a1ff208568be44ed5fb5d422cd3e950c
 # karakeep's own headless-shell build. karakeep publishes the sidecar its app is tested against
 # (docker/chrome/Dockerfile: chromedp/headless-shell pinned by digest, plus USER 65534:65534), so
 # the browser tracks the app's release cadence instead of a third party's.
