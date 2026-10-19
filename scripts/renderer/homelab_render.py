@@ -32,6 +32,8 @@ Kustomization (D3.3c); a manifest without the substitute-disabled annotation fai
 One with snapshot claims gets its snapshot Job in `DIR/cluster/<tag>-snapshot/` (`snapshot.py`).
 One whose role sets `flux_prepull_timeout` gets its pre-pull Jobs in `DIR/cluster/<tag>-prepull/`
 (`prepull.py`); one setting `flux_cronjob_gates`, its gate Jobs in `<tag>-verify/` (`cronjob_gate.py`).
+One whose role ships `templates/precheck/` gets those check Jobs in `<tag>-precheck/`, which the
+tag waits on (#5719).
 A placeholder render also writes the context of each image its tags' roles build with
 `k8s/image-builder`: `DIR/images/<name>/` and `DIR/images/tags.json`, whose content tags each
 consumer's ref reads in the same render (`renderer_lib/images.py`, D5.4a1). A full render
