@@ -539,7 +539,9 @@ notification-controller posts on T:
 - **What it expects.** `flux/homelab`, plus `flux/<name>` for every name in T's changed set.
   `changed_set.changed_set` computes the set from T's `digests.json` and `prod`'s, as it does
   for `land.sh`'s wait. The set holds each name whose `footprint` moved, and every
-  Kustomization whose `dependsOn` chain reaches one, such as a tag's `-deferred`. A suspended
+  Kustomization whose `dependsOn` chain reaches one, such as a tag's `-deferred`. It also holds
+  each per-tag kind a moved tag depends on, such as its `-prepull` or `-precheck`: those sit
+  above the tag in the chain, so only the tag's footprint brings them in. A suspended
   Kustomization is left out: one whose document sets `spec.suspend: true`, and every
   Kustomization of a tag that T's `digests.json` marks `suspended`. A change under `_unclassified`, or a bundle with no
   `digests.json`, expects every name, and an empty set expects `flux/homelab` alone. The set

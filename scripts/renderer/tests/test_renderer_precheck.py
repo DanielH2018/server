@@ -9,6 +9,7 @@ other kinds' ordering tests are in test_renderer_bundle_ordering.py.
 Run: uv run pytest scripts/renderer/tests/test_renderer_precheck.py
 """
 
+import json
 import re
 import shutil
 
@@ -16,6 +17,9 @@ import pytest
 from _job_census import HELPER, JOB_KIND, problems
 
 from deploy_tools import bundle_census
+from deploy_tools.changed_set import changed_set
+from deploy_tools.chained_timeout import promote_timeout
+from deploy_tools.kustomizations import kustomization_graph
 from lib import yaml_fast
 from lib.exit_codes import FAILED, OK, RENDER_OK
 from lib.repo_paths import K8S_ROLES
@@ -273,3 +277,44 @@ def test_a_precheck_in_a_namespace_its_own_tag_creates_fails_the_render():
     ordering = Ordering(namespace_roles={"homelab": "pihole"})
     with pytest.raises(ValueError, match="pihole-precheck -> pihole"):
         _docs(ordering, ["bento-pdf", "pihole"], _prechecking())
+
+
+def test_a_revision_that_reruns_the_guard_counts_its_wait_in_verifys_timeout():
+    """The guard's files count in `pihole`'s footprint, so its wait sits on the chain.
+
+    A new deadline renames the guard Job, as a revision that rolls instance 1 does.
+    """
+
+    def bundle(deadline: int) -> dict[str, str]:
+        directories = _prechecking(deadline=deadline)
+        return bundle_files(directories, {}, ["bento-pdf", "pihole"], TIMEOUT, DOTENV)
+
+    old, new = bundle(420), bundle(480)
+    docs = [
+        doc
+        for path, text in new.items()
+        if path.startswith("flux/") and path != "flux/kustomization.yaml"
+        for doc in yaml_fast.safe_load_all(text)
+        if doc.get("kind") == "Kustomization"
+    ]
+    depends_on, _ = kustomization_graph(docs)
+    changed = changed_set(
+        json.loads(new["digests.json"]), json.loads(old["digests.json"]), depends_on
+    )
+    print(
+        "DBG",
+        changed,
+        depends_on,
+        {d["metadata"]["name"]: d["spec"].get("timeout") for d in docs},
+    )
+    assert PIHOLE_PRECHECK in changed.direct
+    # The soak's own timeout is a parallel floor that would hide the chain, so it is left
+    # out. `pihole-snapshot` is the precheck's sibling on the same path: both leave together.
+    names = changed.names - {"soak"}
+    without = promote_timeout(docs, names - {PIHOLE_PRECHECK, "pihole-snapshot"})
+    precheck_timeout = next(
+        _seconds(d["spec"]["timeout"])
+        for d in docs
+        if d["metadata"]["name"] == PIHOLE_PRECHECK
+    )
+    assert promote_timeout(docs, names) >= without + precheck_timeout

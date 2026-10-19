@@ -230,7 +230,9 @@ every entry is flux-owned then waits for C-2b, through the uptime-kuma edge.
   in T's *changed set* (D2.5).
     - **The changed set** holds the names whose `footprint` digest (C1) differs between T's
       `digests.json` and the one on `prod`'s commit before the move. It also holds every
-      Kustomization whose `dependsOn` chain reaches one of those names. Suspended
+      Kustomization whose `dependsOn` chain reaches one of those names, and each per-tag
+      kind a moved tag depends on (`-snapshot`, `-prepull`, `-precheck`), whose files count
+      in that tag's footprint and which no chain reaches (#5719). Suspended
       Kustomizations are left out, and so is a name absent from T's `digests.json`, which
       T removes. Any change under `_unclassified` puts every name in the set.
     - **`soak` joins any set that holds a tag.** `soak` carries no `dependsOn` edges (D5
