@@ -17,7 +17,7 @@ it is a second destination for the handful of jobs whose silence actually matter
 | `etcd-snapshot-offbox` | `roles/setup/k3s/templates/etcd-snapshot-offbox.sh.j2` | the snapshot or its R2 upload failed, the credentials file is missing or incomplete, or snapshots are disarmed |
 | `manifest-prune-check` | `roles/setup/k3s/templates/manifest-prune-check.sh.j2` | any of its three arms: live routing or workload objects absent from the staged manifests; a `copy:`-deployed artifact differing byte-for-byte from the repo; or a `template:`-rendered setup script whose source checksum no longer matches the render manifest this host wrote. A read that failed pings `/fail` too: a `kubectl get` for any checked kind, the read of Flux's Kustomizations in `flux-system`, or the declared-set read of the staged manifests |
 | `pi-peer-backup` | `roles/k8s/pi-peer-backup/files/pull-pi-peers.sh` | rsync failed, or fewer than 2 peer files landed |
-| `registry-gc` | `roles/k8s/registry/templates/registry-gc.sh.j2` | either store's GC job exceeded its deadline, the registry or ghcr-mirror pod would not terminate, a job manifest failed to apply, either Deployment did not come back afterwards, or the ghcr-mirror keep set could not be built |
+| `registry-gc` | `roles/k8s/registry/templates/registry-gc.sh.j2` | the ghcr-mirror GC job exceeded its deadline, the ghcr-mirror pod would not terminate, the job manifest failed to apply, the Deployment did not come back afterwards, the keep set could not be built, or another run held the lock |
 | `uptime-kuma-alive` | `roles/setup/k3s/templates/longhorn-backup-health.sh.j2` | that script's Kuma push returned non-zero — see *Watching the spine itself* below |
 | `alertmanager-watchdog` | the `healthchecks` receiver in `roles/k8s/observability/templates/alertmanager-secret.yaml.j2`, fed by the `Watchdog` rule in `roles/k8s/observability/files/rules/alerting-meta.yaml` | never: Alertmanager sends no resolved notification, and silence is the failure — see *Alertmanager's watcher* below |
 | `weekly-reboot-<host>` | the `Weekly system restart` cron in `roles/setup/initial_setup/tasks/crons.yml`, one slug per host | never: it pings before the reboot, and silence means the cron did not run |
@@ -162,7 +162,7 @@ internal infrastructure, and some send no body at all:
 | `etcd-snapshot-offbox` | none | Status only. Its failure message can carry the R2 bucket name and k3s's own error text; the bucket is the same one every Longhorn backup lives in, so nothing about it goes off-site. The detail is in Kuma. |
 | `manifest-prune-check` | generic | Its message names live IngressRoute/Middleware objects — internal service and hostname fragments. |
 | `pi-peer-backup` | generic | An rsync failure echoes `PI_SRC`, which carries the Pi's LAN IP and ssh user. |
-| `registry-gc` | full message | A blob/link count, or a failure naming the cluster namespace and the `registry` Deployment. Low value to an outsider and it is what makes the failure actionable. |
+| `registry-gc` | full message | A revision and blob count, or a failure naming the cluster namespace and the `ghcr-mirror` Deployment. Low value to an outsider and it is what makes the failure actionable. |
 | `uptime-kuma-alive` | none | Status only, and status is the whole signal — it reports on Kuma, not on what Kuma found. |
 | `alertmanager-watchdog` | `{"status": "firing"}` | The receiver's `payload` carries the alert's status alone, so no label, annotation or URL goes off-site. |
 | `weekly-reboot-<host>`, `<host>-docker-prune` | none | Status only. The ping discards curl's output, and the cron sends no body. |
@@ -276,16 +276,16 @@ The `/10`-minute checks report within ten minutes of the deploy. To force the da
 sudo /usr/local/bin/manifest-prune-check.sh
 sudo /usr/local/bin/etcd-snapshot-offbox.sh   # takes and uploads a real snapshot
 sudo k3s kubectl -n homelab create job ppb-manual --from=cronjob/pi-peer-backup
-sudo /usr/local/bin/registry-gc.sh   # scales the registry down for the duration — see below
+sudo /usr/local/bin/registry-gc.sh   # scales the ghcr-mirror down for the duration — see below
 ```
 
 Forcing `etcd-snapshot-offbox` is safe — it adds one more snapshot to R2 and the retention
 setting ages the oldest out — but it is not free either: it is a real etcd read plus an upload,
 so do not loop it.
 
-Forcing `registry-gc` is not free: it takes the registry offline while the GC job runs, so
-nothing in the cluster can pull a locally built image until it scales back up. Run it when no
-build is in flight (it skips and reports `up` if one is), or just wait for Sunday.
+Forcing `registry-gc` is not free: it takes the ghcr-mirror offline while the GC job runs, so
+containerd pulls every ghcr.io image straight from GHCR until it scales back up, and a WAN
+outage in that window leaves no source to pull them from. Run it with the WAN up, or wait for Sunday.
 
 A failed ping is logged locally (`logger -t <script>`, or the job's stderr) and nowhere else,
 which is deliberate — a ping that cannot leave the house is precisely the case Healthchecks.io
