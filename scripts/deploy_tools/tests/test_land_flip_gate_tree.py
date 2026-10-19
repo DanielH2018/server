@@ -177,3 +177,17 @@ def test_a_flip_whose_merge_commit_cannot_be_read_is_not_settled(monkeypatch, ca
     )
     assert "VERDICT: settled" not in out, out
     assert rc != 0
+
+
+def test_a_flip_whose_snapshot_failed_gates_in_a_primary_that_carries_it(
+    monkeypatch, capsys
+):
+    """The fallback half: a primary holding the merge answers, and the probe runs IN it.
+
+    land.sh's own checkout predates the flip, so a fallback that gated there instead would
+    read traefik NOT ROLLED.
+    """
+    rc, out = _land(monkeypatch, capsys, _flip(gate_snapshot=None, merge_applied_rc=0))
+    assert "already carries it" in out, out
+    assert "VERDICT: settled" in out, out
+    assert rc == 0

@@ -465,7 +465,8 @@ def test_a_snapshot_that_failed_over_a_primary_that_has_the_commit_gates_there(
     ln.deployed_at = MERGE_SHA
     with pytest.raises(Outcome):
         health_verdict.health(ln)
-    assert next(c for c in calls if c[0] == "gate")[2] == {"cwd": None}
+    # The primary itself, not land.sh's own checkout, which may predate the commit (#5744).
+    assert next(c for c in calls if c[0] == "gate")[2] == {"cwd": ln.opts.primary}
     assert "already carries it" in capsys.readouterr().out
 
 
