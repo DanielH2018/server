@@ -63,7 +63,7 @@ ORIGIN_KEY = "org.opencontainers.image.revision"
 DIGESTS_FILE = "digests.json"
 SOAK = "soak"
 # C3's reserved suffixes. A changed-set name with one strips to its tag.
-RESERVED_SUFFIXES = ("-deferred", "-snapshot", "-prepull", "-verify")
+RESERVED_SUFFIXES = ("-deferred", "-snapshot", "-prepull", "-precheck", "-verify")
 WORKLOADS = frozenset({"Deployment", "DaemonSet", "StatefulSet"})
 UNMAPPED = "unmapped"
 # The kube-state-metrics scrape and the rule evaluation that W adds to the longest `for:`.
