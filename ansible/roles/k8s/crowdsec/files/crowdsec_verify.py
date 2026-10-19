@@ -158,12 +158,18 @@ class Lapi:
         leaves the ban to lapse at its duration.
         """
         query = urllib.parse.urlencode({"ip": ip})
-        status, _ = self.http.call(
-            "DELETE", f"{self.base}/v1/decisions?{query}", headers=self.auth
-        )
-        if status != 200:
+        try:
+            status, _ = self.http.call(
+                "DELETE", f"{self.base}/v1/decisions?{query}", headers=self.auth
+            )
+            why = "" if status == 200 else f"HTTP {status}"
+        except OSError as err:
+            # A refused connect past open_url's retries, a timeout or a dropped reply. Raising
+            # it out of the `finally` would replace the verdict with a traceback.
+            why = f"no answer ({err!r})"
+        if why:
             print(
-                f"crowdsec-verify: LAPI refused the lift on {ip}: HTTP {status}; the ban"
+                f"crowdsec-verify: LAPI did not lift the ban on {ip}: {why}; the ban"
                 " lapses at its duration",
                 file=sys.stderr,
             )
@@ -267,6 +273,14 @@ def main(
         line = run(os.environ if env is None else env, http or Http())
     except Failed as err:
         print(f"crowdsec-verify: {err}", file=sys.stderr)
+        return 1
+    except OSError as err:
+        # A transport failure on any hop: say so as a verdict rather than dying with a
+        # traceback. The `finally` in `run` has already tried the lift.
+        print(
+            f"crowdsec-verify: a call got no answer: {err!r}",
+            file=sys.stderr,
+        )
         return 1
     print(f"crowdsec-verify: {line}")
     return 0

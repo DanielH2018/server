@@ -383,3 +383,26 @@ def test_the_discovery_runs_on_the_host_network_of_the_primary_node(cronjob):
     assert pod["hostNetwork"] is True
     assert pod["dnsPolicy"] == "ClusterFirstWithHostNet"
     assert pod["nodeSelector"] == {"kubernetes.io/hostname": "daniel-box"}
+
+
+def fields_an_apply_would_own(configmap: dict) -> list[str]:
+    """The data keys a rendered ConfigMap hands to Ansible's and Flux's apply.
+
+    The CronJob is the only writer of crowdsec-home-ips' data (the DECIDED marker in
+    templates/home-ips-configmap.yaml.j2). A key in the render would be reset on every deploy,
+    clobbering the lookup the CronJob wrote.
+    """
+    return sorted({**configmap.get("data", {}), **configmap.get("binaryData", {})})
+
+
+def test_the_home_ips_configmap_renders_no_field_the_cronjob_writes():
+    [configmap] = yaml_fast.safe_load_all(
+        render_role_template("crowdsec", "home-ips-configmap.yaml.j2")
+    )
+    assert configmap["metadata"]["name"] == "crowdsec-home-ips"
+    assert fields_an_apply_would_own(configmap) == []
+
+
+def test_a_placeholder_data_key_in_the_render_is_flagged():
+    placeholder = {"metadata": {"name": "crowdsec-home-ips"}, "data": {"ipv4": ""}}
+    assert fields_an_apply_would_own(placeholder) == ["ipv4"]

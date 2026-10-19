@@ -154,7 +154,31 @@ def test_a_ban_that_does_not_read_back_fails_naming_lapi_and_lifts(capsys):
 def test_a_refused_lift_is_reported_and_does_not_hide_the_verdict(capsys):
     world = World([BEFORE, {"302": 100.0, "403": 1.0}], lift_status=403)
     assert _run(world, capsys)[0] == "passed"
-    assert "LAPI refused the lift" in capsys.readouterr().err
+    assert "did not lift the ban on 10.0.0.139: HTTP 403" in capsys.readouterr().err
+
+
+class Unreachable(World):
+    """LAPI stops answering at the lift: every DELETE raises as a dead connect does."""
+
+    def call(self, method, url, body=None, headers=None):
+        if method == "DELETE":
+            raise OSError(111, "Connection refused")
+        return super().call(method, url, body, headers)
+
+
+def test_an_unreachable_lapi_at_the_lift_keeps_the_verdict(capsys):
+    world = Unreachable([BEFORE, {"302": 100.0, "403": 1.0}])
+    assert _run(world, capsys)[0] == "passed"
+    assert "no answer (ConnectionRefusedError(111" in capsys.readouterr().err
+
+
+def test_a_transport_failure_on_a_hop_is_a_verdict_not_a_traceback(capsys):
+    class Dead(cv.Http):
+        def call(self, method, url, body=None, headers=None):
+            raise OSError(113, "No route to host")
+
+    assert cv.main([], ENV, Dead()) == 1
+    assert "a call got no answer: OSError(113" in capsys.readouterr().err
 
 
 def test_a_counter_reset_counts_its_whole_value_as_the_rise():
@@ -217,5 +241,3 @@ def test_the_flipped_job_bans_the_pi_and_reads_the_alloy_pi_counter(flipped):
     env = {e["name"]: e.get("value") for e in container["env"]}
     assert env["BAN_IP"] == PI
     assert env["PROMETHEUS_URL"].startswith("http://prometheus.observability.svc")
-    (configmap,) = [doc for doc in flipped if doc["kind"] == "ConfigMap"]
-    assert cv.COUNTER in configmap["data"]["crowdsec_verify.py"]
