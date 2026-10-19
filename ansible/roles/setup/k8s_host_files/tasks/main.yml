@@ -18,7 +18,7 @@
 - name: Configarr's retired host health reader
   ansible.builtin.import_tasks: configarr.yml
 
-- name: Crowdsec's edge probe timer on daniel-pi
+- name: Crowdsec's edge probe timer on daniel-pi and its retired host cron absent arms
   ansible.builtin.import_tasks: crowdsec.yml
 
 - name: Observability's retired dashboard staging trees

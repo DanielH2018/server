@@ -23,11 +23,9 @@
   target too, but the Job tests the LAPI and the edge, not the agents, so its inputs stay out.
   `tests/test_crowdsec_verify.py` fails if a ConfigMap or Secret the pod names drops out.
 
-  What the flip PR must land first, which this file cannot do while it is inert: the
-  `crowdsec-verify` machine registered on LAPI, by the LAPI initContainer that replaces the
-  registration task in `tasks/main.yml`. The flip PR also states the hop-2 trade: the gate's
-  `last_pull` wait has no Job form, so a missing 403 no longer says which of its two causes
-  happened.
+  The `lapi-register` initContainer on the crowdsec pod registers the `crowdsec-verify`
+  machine this Job logs in as. The flip PR states the hop-2 trade: the gate's `last_pull`
+  wait has no Job form, so a missing 403 no longer says which of its two causes happened.
 
   The caller census (D5, *A fence admits every Job that dials through it*). The pod is
   `app: crowdsec-verify` in `k8s_namespace`. It execs into nothing and dials:

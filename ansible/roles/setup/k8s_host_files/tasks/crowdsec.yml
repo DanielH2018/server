@@ -8,9 +8,6 @@
 # reads the count is inert until crowdsec's flip (roles/k8s/crowdsec/templates/verify-inert/).
 # The playbook entry is gated to daniel-box, so every task runs on the Pi through
 # `delegate_to`, as pi-peer-backup's block does.
-#
-# The absent arms H2.4b and H2.4c left in crowdsec's tasks/main.yml stay there for now: they
-# must run before crowdsec's manifests apply, which the setup plane cannot order.
 - name: Install crowdsec's edge probe timer on daniel-pi
   delegate_to: daniel-pi
   become: true
@@ -50,3 +47,61 @@
         enabled: true
         state: started
         daemon_reload: true
+
+# Moved from roles/k8s/crowdsec by D5's second crowdsec conversion PR (#5742). H7 deletes them
+# with their RETIRED entries in ansible/tests/repo/_retired_cron_row.py.
+#
+# The remote allowlist, the bouncer prune and the AppSec verify were daniel-box root crons until
+# H2.4b, and the home allowlist until H2.4c (docs/target-architecture/host/h2-shrink-host-plane.md,
+# Steps items 11 and 12). The crowdsec-jobs sidecar and the crowdsec-home-ips CronJob run them
+# since. In crowdsec's role these arms had to run ahead of its manifests, so no host cron
+# outlived the sidecar that replaced it. That ordering stopped mattering once H2.4c deployed on
+# 2026-10-19 and the arms had removed every cron, so they run on daniel-box here, outside the
+# Pi block above, and remove nothing from a host that no longer carries them.
+- name: Remove the retired remote-allowlist cron
+  ansible.builtin.cron:
+    name: "CrowdSec remote allowlist"
+    user: root
+    cron_file: crowdsec-remote-allowlist
+    state: absent
+  become: true
+
+- name: Remove the retired bouncer-prune cron
+  ansible.builtin.cron:
+    name: "CrowdSec bouncer prune"
+    user: root
+    cron_file: crowdsec-bouncer-prune
+    state: absent
+  become: true
+
+- name: Remove the retired AppSec verify cron
+  ansible.builtin.cron:
+    name: "CrowdSec AppSec verify"
+    user: root
+    cron_file: crowdsec-appsec-verify
+    state: absent
+  become: true
+
+- name: Remove the retired home allowlist cron
+  ansible.builtin.cron:
+    name: "CrowdSec home allowlist"
+    user: root
+    cron_file: crowdsec-home-allowlist
+    state: absent
+  become: true
+
+- name: Remove the retired crowdsec cron scripts from the host
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - /usr/local/bin/crowdsec-update-remote-allowlist.sh
+    - /opt/crowdsec-remote-allowlist
+    - /usr/local/bin/crowdsec-prune-bouncers.sh
+    - /opt/crowdsec-bouncer-prune
+    - /usr/local/bin/crowdsec-appsec-verify.sh
+    - /usr/local/bin/crowdsec-update-home-allowlist.sh
+    - /opt/crowdsec-home-allowlist
+    # The host cron's last values. The allowlist itself holds the stored entries since H2.4c.
+    - /var/lib/crowdsec-home-allowlist
+  become: true
