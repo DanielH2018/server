@@ -80,6 +80,12 @@ crowdsec_k8s_jobs_kubectl_image: alpine/k8s:1.37.1@sha256:712dc5385d1c1a3f83b747
 # the scheduler, about 250 MB at worst. The limit doubles that, because an OOM kill here takes
 # the whole pod out of Ready, and with it the LAPI out of its Service, until the container
 # restarts. The request is the idle scheduler with headroom.
+#
+# H2.4c's home allowlist (python, then kubectl, then cscli, one at a time) starts one minute
+# later. It overlaps those two only when they outlive a minute, which their 180s and 300s
+# timeouts allow. All three at their peak is about 400 MB, inside the limit with no doubling.
+# Not re-measured with the fourth job; read the container's peak with `probe.py metric
+# 'container_memory_working_set_bytes{container="crowdsec-jobs"}'` after the deploy.
 crowdsec_k8s_jobs_cpu_limit: "500m"
 crowdsec_k8s_jobs_mem_limit: 512Mi
 crowdsec_k8s_jobs_cpu_request: "10m"
