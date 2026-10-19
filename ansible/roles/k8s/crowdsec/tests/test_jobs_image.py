@@ -17,6 +17,9 @@ no LAPI running (#5741).
 No leg reaches a LAPI. What the sidecar's `cscli` reads from the live engine's
 `/etc/crowdsec` and database is checked by the post-landing `--run` in the role's CLAUDE.md.
 
+The `lapi-register` leg records what each cscli run printed as its `job_log` property, which
+`ansible/roles/conftest.py` prints to CI's job log when the leg passes.
+
 The legs skip when `docker` is missing and `CI` is unset, and fail when `CI` is set, so CI
 always runs them. Each is in `_LIVE_API_TESTS` in ansible/tests/leakguard.py, which hands
 them the real PATH. Every other test gets leakguard's `docker` shim, which exits 127.
@@ -24,10 +27,12 @@ them the real PATH. Every other test gets leakguard's `docker` shim, which exits
 Run: uv run pytest ansible/roles/k8s/crowdsec/tests/test_jobs_image.py
 """
 
+import importlib.util
 import os
 import shutil
 import sqlite3
 import subprocess
+from types import SimpleNamespace
 
 import pytest
 from _helpers import ANSIBLE
@@ -35,6 +40,16 @@ from lib.proc_testing import write_exec
 from lib.repo_paths import ALL_VARS
 from _k8s_render import render_role_template
 from lib import yaml_fast
+
+# The conftest whose summary hook prints a passed leg's `job_log` property to the job log.
+_SPEC = importlib.util.spec_from_file_location(
+    "_roles_conftest", ANSIBLE / "roles" / "conftest.py"
+)
+assert _SPEC and _SPEC.loader
+_ROLES_CONFTEST = importlib.util.module_from_spec(_SPEC)
+_SPEC.loader.exec_module(_ROLES_CONFTEST)
+# The property name that hook prints, `JOB_LOG_PROPERTY` there.
+JOB_LOG_PROPERTY = "job_log"
 
 _DOCKER_TIMEOUT_S = 300
 _STUB_CSCLI = """#!/bin/sh
@@ -255,7 +270,7 @@ def _run_in_engine_image(docker, data, etc, *command) -> subprocess.CompletedPro
 
 
 def test_the_lapi_register_init_runs_against_a_fresh_database_with_no_lapi(
-    docker, tmp_path
+    docker, tmp_path, record_property
 ):
     # fact: ansible/roles/k8s/crowdsec/CLAUDE.md#The `lapi-register` initContainer holds the LAPI down if it fails
     # The pod's /etc/crowdsec holds no config.yaml when initContainers run.
@@ -271,10 +286,8 @@ def test_the_lapi_register_init_runs_against_a_fresh_database_with_no_lapi(
     assert linked.returncode == 0, linked.stderr
     command = _lapi_register_command()
     first = _run_in_engine_image(docker, data, etc, *command)
-    print(first.stdout, first.stderr)
     assert first.returncode == 0, first.stderr
     again = _run_in_engine_image(docker, data, etc, *command)
-    print(again.stdout, again.stderr)
     assert (again.returncode, again.stdout) == (0, ""), again.stderr
     listed = _run_in_engine_image(
         docker,
@@ -298,3 +311,24 @@ def test_the_lapi_register_init_runs_against_a_fresh_database_with_no_lapi(
     with sqlite3.connect(data / "crowdsec.db") as db:
         allowlists = {name for (name,) in db.execute("select name from allow_lists")}
     assert allowlists == {"home-ips", "remote-ips"}
+    record_property(
+        JOB_LOG_PROPERTY,
+        f"image: {CROWDSEC_IMAGE}\n"
+        f"first run rc={first.returncode}\n{first.stdout}{first.stderr}"
+        f"second run rc={again.returncode}\n{again.stdout}{again.stderr}"
+        f"machines list -o raw rc={listed.returncode}\n{listed.stdout}"
+        f"allow_lists: {sorted(allowlists)}",
+    )
+
+
+def test_a_passed_legs_job_log_is_printed_under_its_node_id():
+    report = SimpleNamespace(
+        nodeid="t.py::leg", user_properties=[(JOB_LOG_PROPERTY, "rc=0\nadded")]
+    )
+    lines = _ROLES_CONFTEST.job_log_lines([report])
+    assert lines == ["--- job log: t.py::leg", "rc=0", "added"]
+
+
+def test_another_property_prints_nothing():
+    report = SimpleNamespace(nodeid="t.py::leg", user_properties=[("other", "x")])
+    assert _ROLES_CONFTEST.job_log_lines([report]) == []
