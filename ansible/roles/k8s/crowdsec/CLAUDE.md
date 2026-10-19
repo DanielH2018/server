@@ -140,9 +140,15 @@ PR renames it to `templates/verify/`. The operator confirmed its evidence channe
 - **The gate's hop 2, the bouncer's pull, has no Job form.** LAPI v1.8.1 serves no bouncer
   route to a machine, so a missing 403 names both causes, a pull that never came and an edge
   that does not consult the bouncer.
-- **Before the flip:** add the fence peers the template's caller census names, and give the
-  spec a digest of the pod's roll inputs. `tests/test_crowdsec_verify.py` holds the red fixtures and renders the
-  flipped copy through the Job census.
+- **The fence peers are in place.** netpol-baseline's LAPI fence admits `crowdsec-verify` on
+  the LAPI port alone, and `prometheus-callers` admits it from `homelab`. The probe table's
+  `crowdsec` and `prometheus` rows are their refused legs.
+- **The spec carries a digest of the pod's roll inputs**, so every change that rolls the
+  crowdsec pod renames the Job. The template's header lists the inputs.
+- **The `lapi-register` initContainer registers the `crowdsec-verify` machine**, so the
+  flipped Job can log in. The flip PR states the hop-2 trade above.
+  `tests/test_crowdsec_verify.py` holds the red fixtures and renders the flipped copy
+  through the Job census.
 
 ## Traps
 

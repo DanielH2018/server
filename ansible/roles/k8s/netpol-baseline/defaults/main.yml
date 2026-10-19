@@ -168,6 +168,7 @@ netpol_baseline_probe_targets:
   # Cross-namespace callers. Ports from observability/templates/prometheus.yaml.j2 and loki.yaml.j2.
   # grafana and tempo admit only the intra-namespace `podSelector: {}` peer, which a probe in the
   # homelab namespace cannot exercise. They are gated so the observability plane is proved up.
+  # prometheus-callers admits crowdsec's verify Job, `crowdsec-verify`, from homelab alone.
   - {service: prometheus, plane: observability, port: 9090, expect: refused, policy: networkpolicy-prometheus.yaml.j2}
   - {service: loki, plane: observability, port: 3100, expect: refused, policy: networkpolicy-loki.yaml.j2}
   # Two policies select alertmanager and either could widen it. The observability baseline
@@ -179,6 +180,7 @@ netpol_baseline_probe_targets:
   - {service: tempo, plane: observability}
   # The infra tier.
   - {service: authelia, plane: homelab, port: 9091, expect: refused, policy: "authelia's netpol_from (host_vars/daniel-box.yml)"}
+  # The LAPI, which admits crowdsec's verify Job, `crowdsec-verify`, by label beside the agents.
   - {service: crowdsec, plane: homelab, port: 8080, expect: refused, policy: networkpolicy-crowdsec.yaml.j2}
   - {service: nut, plane: homelab, port: 3493, expect: refused, policy: networkpolicy-nut.yaml.j2}
   - {service: mosquitto, plane: homelab, port: 1883, expect: refused, policy: networkpolicy-mosquitto.yaml.j2}

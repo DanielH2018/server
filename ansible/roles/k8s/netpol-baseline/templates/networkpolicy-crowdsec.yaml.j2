@@ -53,6 +53,13 @@ spec:
         - podSelector:
             matchLabels:
               app: authelia
+        # crowdsec-verify is crowdsec's verify Job (crowdsec/templates/verify-inert/job.yaml.j2),
+        # which logs in to the LAPI as a machine and bans daniel-pi. It lands before crowdsec's
+        # Flux flip, so the Job is admitted the first time it runs, and it sits here rather than
+        # in traefik's rule because it never dials AppSec.
+        - podSelector:
+            matchLabels:
+              app: crowdsec-verify
       ports:
         - port: 8080
           protocol: TCP
