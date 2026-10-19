@@ -219,13 +219,15 @@ CI can run, such as crowdsec's image legs, re-measures to 0s locally.
 gives the Job a digest of the pod's roll inputs.
 [#5765](https://github.com/DanielH2018/server/pull/5765) registers crowdsec's LAPI machines
 and creates its two allowlists in a `lapi-register` initContainer, and moves H2's absent arms
-into `k8s_host_files`. It is green and unmerged, because it lands in crowdsec's own window.
-CI ran the rendered `lapi-register` script twice in the pinned image with no network. The
-first run added the five machines and both allowlists, and the second printed nothing, so
-D5's `pods/exec` Job fallback is not needed. #5765 carries #5764's head unchanged on a
-`worktree-claude+` branch, the only kind the `claude` user's GitHub account can update.
-`land.sh` updates a PR branch whose base went stale, so #5764 could not land from that
-account.
+into `k8s_host_files`. It landed `settled` in crowdsec's window at `c7ce725f6`. CI had run
+the rendered `lapi-register` script twice in the pinned image with no network: the first run
+added the five machines and both allowlists, and the second printed nothing, so D5's
+`pods/exec` Job fallback is not needed. Live, `lapi-register` added only `crowdsec-verify`,
+because the four agents were already registered, and the new pod read `2/2 Running`. The
+edge answered the Pi's probe 403 once during the roll, as it did for #5753 (#5761). #5765
+carries #5764's head unchanged on a `worktree-claude+` branch, the only kind the `claude`
+user's GitHub account can update, because `land.sh` updates a PR branch whose base went
+stale.
 
 Where each role still on Ansible stands:
 
@@ -233,7 +235,7 @@ Where each role still on Ansible stands:
 |---|---|---|
 | authelia | done (#5691) | own window |
 | blackbox-exporter | none needed | Wave A's last PR, on or after 2026-10-20T06:19Z |
-| crowdsec | done: H2.4b (#5711, #5739), H2.4c and the inert verify with its Pi channel (#5753), verify's fence peers (#5762); LAPI initContainer and arm move green in #5765, unmerged | own window; land #5765 first, then the flip renames `templates/verify-inert/` to `templates/verify/` and states the hop-2 trade |
+| crowdsec | done: H2.4b (#5711, #5739), H2.4c and the inert verify with its Pi channel (#5753), verify's fence peers (#5762), LAPI initContainer and arm move (#5765) | own window; the flip renames `templates/verify-inert/` to `templates/verify/` and states the hop-2 trade |
 | dri-device-plugin | done (#5529) | waits on M2's PR 4b (#5527) |
 | headlamp | done (#5681) | after observability |
 | home-assistant | none needed | own window |
@@ -247,13 +249,12 @@ Where each role still on Ansible stands:
 | wg-easy | none needed | own window, operator on the LAN |
 | zigbee2mqtt | none needed | own window |
 
-**Every D5 conversion but one has landed, and the work continues as the `claude` user
-(2026-10-19).** The one left is #5765, crowdsec's LAPI initContainer: its CI is green, and it
-lands in crowdsec's own window with the operator present. What is left after it is the flips,
-then step 27. Four things learned in this stretch bear on them:
-- #5765 is the first live run of `lapi-register`. If the initContainer fails, the LAPI pod
-  sits in `Init:Error`, and the edge bouncer answers 403 once five of its 60-second updates
-  have failed (`updateMaxFailure: 5`). Read
+**Every D5 conversion has landed, and the work continues as the `claude` user
+(2026-10-19).** The last was #5765. What is left is the flips, then step 27. Four things
+learned in this stretch bear on them:
+- `lapi-register` holds the LAPI pod in `Init:Error` if it fails, and the edge bouncer then
+  answers 403 once five of its 60-second updates have failed (`updateMaxFailure: 5`). On a
+  crowdsec roll that does not settle, read
   `kubectl -n homelab logs deploy/crowdsec -c lapi-register` first.
 - A PR that edits a file under `ansible/roles/k8s/manifests/` that no Ansible render reads,
   such as `files/flux_soak.py`, still derives every tag in `land.sh`. Land it with
