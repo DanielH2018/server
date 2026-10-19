@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/backlog.py
-generated_at: 2026-10-19 06:17 UTC
-generated_sha: ddc360330
+generated_at: 2026-10-19 15:19 UTC
+generated_sha: ec1a9d5de
 ---
 
 !!! warning "Generated file — do not edit"
@@ -17,7 +17,7 @@ Findings Claude confirmed and did not fix in the session that found them, filed 
 | # | Severity | Kind | Domain | Finding | First seen | Re-observed | Claim | Verify-by |
 |---|---|---|---|---|---|---|---|---|
 | [#5126](https://github.com/DanielH2018/server/issues/5126) | high | gap | security | The DanielClaudeBot account reads as nonexistent on GitHub, so agent PRs are invisible and cannot land | 2026-10-15 | 0 | - | - |
-| [#5704](https://github.com/DanielH2018/server/issues/5704) | high | gap | cicd | A reset leaves the held revision's soak Job running to its deadline, blocking every later promotion | 2026-10-18 | 0 | - | ✓ |
+| [#5704](https://github.com/DanielH2018/server/issues/5704) | high | gap | cicd | A reset leaves the held revision's soak Job running to its deadline, blocking every later promotion | 2026-10-18 | 1 | - | ✓ |
 | [#4188](https://github.com/DanielH2018/server/issues/4188) | medium | gap | container | Home Assistant was down 28 minutes when the tick deployed 2026.10.0, and its hold still stands | 2026-10-10 | 1 | - | ✓ |
 | [#4599](https://github.com/DanielH2018/server/issues/4599) | medium | improvement | security | The AIDE check cannot page on an unexplained file change | 2026-10-12 | 0 | - | ✓ |
 | [#4786](https://github.com/DanielH2018/server/issues/4786) | medium | addition | backup-observability | Target architecture M2: read the k8s-workloads shadow soak on days 3 and 7 before PR 4a | 2026-10-13 | 0 | - | ✓ |
@@ -34,13 +34,14 @@ Findings Claude confirmed and did not fix in the session that found them, filed 
 | [#5552](https://github.com/DanielH2018/server/issues/5552) | medium | gap | container | Let the pre-pull Job retry a failed Pod so an eviction cannot wedge code-server | 2026-10-18 | 0 | - | ✓ |
 | [#5569](https://github.com/DanielH2018/server/issues/5569) | medium | gap | backup-observability | Swallowed Push Verdicts does not read the configarr-health pod's push failures | 2026-10-18 | 1 | - | - |
 | [#5627](https://github.com/DanielH2018/server/issues/5627) | medium | gap | cicd | The banner, probe.py gitops and monitor-bridge print the k3s server apply without the agent join | 2026-10-18 | 0 | - | ✓ |
-| [#5650](https://github.com/DanielH2018/server/issues/5650) | medium | improvement | container | Target architecture D5: convert crowdsec's Pi timer, Alloy stage, verify Job, LAPI init and host writes | 2026-10-18 | 0 | - | ✓ |
-| [#5654](https://github.com/DanielH2018/server/issues/5654) | medium | gap | container | ghcr-mirror cannot finish a large uncached blob: ghcr.io resets its HTTP/2 stream at 50-100 MiB | 2026-10-18 | 0 | - | ✓ |
+| [#5654](https://github.com/DanielH2018/server/issues/5654) | medium | gap | container | ghcr-mirror cannot finish a large uncached blob: ghcr.io resets its HTTP/2 stream at 50-100 MiB | 2026-10-18 | 2 | - | ✓ |
 | [#5655](https://github.com/DanielH2018/server/issues/5655) | medium | gap | security | Decide crowdsec's exec form per job so H2.4b and H2.4c can land | 2026-10-18 | 0 | - | ✓ |
 | [#5658](https://github.com/DanielH2018/server/issues/5658) | medium | improvement | cicd | Fan-out slots sit idle while issues wait 1151h in total for a batch to start | 2026-10-18 | 0 | - | - |
 | [#5659](https://github.com/DanielH2018/server/issues/5659) | medium | improvement | cicd | The server autolander holds lander-surface PRs overnight, about 10h each, for paths it never executes | 2026-10-18 | 0 | - | - |
 | [#5740](https://github.com/DanielH2018/server/issues/5740) | medium | gap | network | Give pihole's Flux sibling guard a break-glass for a down pihole-2 | 2026-10-18 | 0 | - | ✓ |
-| [#5741](https://github.com/DanielH2018/server/issues/5741) | medium | improvement | security | D5: crowdsec's machine registration and allowlist creates as a LAPI initContainer, measured on the pinned image | 2026-10-19 | 0 | - | ✓ |
+| [#5769](https://github.com/DanielH2018/server/issues/5769) | medium | gap | container | valheim's PRE_BEPINEX_CONFIG_HOOK fails every updater tick since the 1.4.0 wrapper | 2026-10-19 | 0 | - | ✓ |
+| [#5778](https://github.com/DanielH2018/server/issues/5778) | medium | gap | container | karakeep has no pre-pull, so a Recreate rollout is down for the whole image pull | 2026-10-19 | 0 | - | ✓ |
+| [#5781](https://github.com/DanielH2018/server/issues/5781) | medium | gap | container | karakeep v0.34.0 crashes at s6 init under drop ALL and needs a planned auth migration | 2026-10-19 | 0 | - | ✓ |
 | [#2124](https://github.com/DanielH2018/server/issues/2124) | low | gap | security | CrowdSec agent drops Traefik access-log lines with UnmarshalJSON errors | 2026-09-19 | 0 | - | ✓ |
 | [#3778](https://github.com/DanielH2018/server/issues/3778) | low | improvement | cicd | Switch the CI setup action's callers to the self-repository uses syntax once actionlint accepts it | 2026-10-09 | 0 | - | ✓ |
 | [#3865](https://github.com/DanielH2018/server/issues/3865) | low | gap | cicd | Red/green batches: a process the red author starts outside the pipeline's process tree survives the reap | 2026-10-09 | 0 | - | ✓ |
@@ -98,11 +99,10 @@ Findings Claude confirmed and did not fix in the session that found them, filed 
 | [#5716](https://github.com/DanielH2018/server/issues/5716) | low | improvement | cicd | k8s/cronjob-gate has no callers left after configarr and qbittorrent moved to Flux | 2026-10-18 | 0 | - | ✓ |
 | [#5721](https://github.com/DanielH2018/server/issues/5721) | low | gap | cicd | probe.py takeover ignores a tag's vendored files, so a vendored-only tag checks nothing | 2026-10-18 | 0 | - | ✓ |
 | [#5723](https://github.com/DanielH2018/server/issues/5723) | low | gap | cicd | Host-write census exempts every write under the k8s manifests directory, not only the render | 2026-10-18 | 0 | - | ✓ |
-| [#5742](https://github.com/DanielH2018/server/issues/5742) | low | improvement | security | D5: move crowdsec's H2 absent arms into k8s_host_files after H2.4c deploys | 2026-10-19 | 0 | - | ✓ |
 | [#5751](https://github.com/DanielH2018/server/issues/5751) | low | improvement | docs | kuma-push-lib.sh comments still cite crowdsec's retired home allowlist cron | 2026-10-19 | 0 | - | ✓ |
 | [#5752](https://github.com/DanielH2018/server/issues/5752) | low | gap | container | registry's push store grows by one python image per flux_job_image pin, with no GC to reclaim it | 2026-10-19 | 0 | - | ✓ |
 | [#5756](https://github.com/DanielH2018/server/issues/5756) | low | gap | cicd | pytest_shard re-measures crowdsec's docker-only image legs to 0s, so CI's durations check fails PRs | 2026-10-19 | 0 | - | ✓ |
-| [#5761](https://github.com/DanielH2018/server/issues/5761) | low | gap | network | The edge answered daniel-pi's probe 403 once during crowdsec's LAPI restart | 2026-10-19 | 0 | - | ✓ |
+| [#5761](https://github.com/DanielH2018/server/issues/5761) | low | gap | network | The edge answered daniel-pi's probe 403 once during crowdsec's LAPI restart | 2026-10-19 | 1 | - | ✓ |
 | [#5763](https://github.com/DanielH2018/server/issues/5763) | low | improvement | docs | daniel-box.yml's crowdsec ordering comment names a post-deploy registration task that is now an initContainer | 2026-10-19 | 0 | - | ✓ |
 
 ## Settled findings — do not re-flag

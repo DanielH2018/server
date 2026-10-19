@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/freshness.py
-generated_at: 2026-10-19 06:17 UTC
-generated_sha: ddc360330
+generated_at: 2026-10-19 15:19 UTC
+generated_sha: ec1a9d5de
 ---
 
 !!! warning "Generated file — do not edit"
@@ -30,32 +30,33 @@ generated_sha: ddc360330
 | [target-architecture/deploy/d2-first-leaf.md](../target-architecture/deploy/d2-first-leaf.md) | 2026-10-17 | 80 | 26 | `ansible/roles/k8s/netpol-baseline/defaults/main.yml` (2026-10-19) |
 | [target-architecture/monitoring/m2-first-bridge-family.md](../target-architecture/monitoring/m2-first-bridge-family.md) | 2026-10-17 | 77 | 26 | `ansible/roles/k8s/uptime-kuma/templates/static-monitors.yaml.j2` (2026-10-19) |
 | [target-architecture/host/h4-secrets-unit.md](../target-architecture/host/h4-secrets-unit.md) | 2026-10-15 | 51 | 24 | `ansible/roles/k8s/uptime-kuma/templates/static-monitors.yaml.j2` (2026-10-19) |
-| [target-architecture/docs-guard/g5-shrink-root-claude-md.md](../target-architecture/docs-guard/g5-shrink-root-claude-md.md) | 2026-10-17 | 64 | 21 | `CLAUDE.md` (2026-10-18) |
+| [target-architecture/docs-guard/g5-shrink-root-claude-md.md](../target-architecture/docs-guard/g5-shrink-root-claude-md.md) | 2026-10-17 | 64 | 21 | `docs/reference/services.md` (2026-10-19) |
 | [python-code-organization.md](../python-code-organization.md) | 2026-10-11 | 37 | 19 | `ansible/tests/repo/module_length_allowlist.txt` (2026-10-19) |
 | [target-architecture/monitoring/m3-textfile-timer.md](../target-architecture/monitoring/m3-textfile-timer.md) | 2026-10-17 | 45 | 19 | `ansible/roles/k8s/uptime-kuma/templates/static-monitors.yaml.j2` (2026-10-19) |
 | [target-architecture/deploy/d4-ordering.md](../target-architecture/deploy/d4-ordering.md) | 2026-10-17 | 51 | 18 | `ansible/roles/k8s/netpol-baseline/templates/networkpolicy-prometheus.yaml.j2` (2026-10-19) |
 | [target-architecture/host/h6-k3s-suc.md](../target-architecture/host/h6-k3s-suc.md) | 2026-10-17 | 67 | 17 | `renovate.json` (2026-10-18) |
-| [target-architecture/docs-guard/g4-drop-size-test.md](../target-architecture/docs-guard/g4-drop-size-test.md) | 2026-10-12 | 32 | 16 | `docs/reference/decisions.md` (2026-10-19) |
+| [target-architecture/docs-guard/g4-drop-size-test.md](../target-architecture/docs-guard/g4-drop-size-test.md) | 2026-10-12 | 32 | 16 | `docs/reference/backlog.md` (2026-10-19) |
 | [host-baseline-record.md](../host-baseline-record.md) | 2026-10-13 | 41 | 15 | `ansible/tests/repo/test_census_rows_roles.py` (2026-10-19) |
 | [target-architecture/docs-guard/g2-retire-lock.md](../target-architecture/docs-guard/g2-retire-lock.md) | 2026-10-17 | 52 | 15 | `docs/reference/decisions.md` (2026-10-19) |
 | [claude-agent-user.md](../claude-agent-user.md) | 2026-10-17 | 51 | 13 | `scripts/deploy_tools/land_lib/policy.py` (2026-10-18) |
 | [target-architecture/docs-guard/g1-diff-notice.md](../target-architecture/docs-guard/g1-diff-notice.md) | 2026-10-17 | 28 | 9 | `ansible/roles/k8s/image-builder/CLAUDE.md` (2026-10-19) |
 | [setup-role-loop-measurement.md](../setup-role-loop-measurement.md) | 2026-10-11 | 12 | 8 | `scripts/deploy_tools/narrow_setup.py` (2026-10-18) |
-| [break-glass.md](../break-glass.md) | 2026-10-17 | 28 | 8 | `docs/healthchecks-io-deadman.md` (2026-10-19) |
+| [break-glass.md](../break-glass.md) | 2026-10-17 | 28 | 8 | `docs/reference/secrets.md` (2026-10-19) |
 | [target-architecture/design.md](../target-architecture/design.md) | 2026-10-17 | 29 | 8 | `ansible/roles/k8s/uptime-kuma/templates/static-monitors.yaml.j2` (2026-10-19) |
 | [target-architecture/docs-guard/g3-freshness-reviewer.md](../target-architecture/docs-guard/g3-freshness-reviewer.md) | 2026-10-17 | 25 | 8 | `ansible/roles/k8s/image-builder/CLAUDE.md` (2026-10-19) |
-| [failure-classes.md](../failure-classes.md) | 2026-10-10 | 17 | 7 | `docs/reference/backlog.md` (2026-10-18) |
+| [failure-classes.md](../failure-classes.md) | 2026-10-10 | 17 | 7 | `docs/reference/backlog.md` (2026-10-19) |
 | [claude-shell-permissions.md](../claude-shell-permissions.md) | 2026-10-11 | 13 | 7 | `CLAUDE.md` (2026-10-18) |
 | [volume-revert-drill-and-sizing.md](../volume-revert-drill-and-sizing.md) | 2026-10-10 | 8 | 6 | `ansible/roles/setup/gitops_deploy/files/gitops_deploy.py` (2026-10-18) |
 | [k3s-etcd-restore.md](../k3s-etcd-restore.md) | 2026-10-11 | 10 | 6 | `docs/healthchecks-io-deadman.md` (2026-10-19) |
 | [longhorn-backup-tiering.md](../longhorn-backup-tiering.md) | 2026-10-11 | 10 | 6 | `scripts/diagnostics/probe.py` (2026-10-18) |
-| [longhorn-disaster-recovery.md](../longhorn-disaster-recovery.md) | 2026-10-16 | 20 | 6 | `docs/target-architecture/host/h2-shrink-host-plane.md` (2026-10-19) |
+| [longhorn-disaster-recovery.md](../longhorn-disaster-recovery.md) | 2026-10-16 | 20 | 6 | `docs/reference/state.md` (2026-10-19) |
 | [cronjob-gate-design.md](../cronjob-gate-design.md) | 2026-10-05 | 5 | 5 | `ansible/roles/k8s/cronjob-gate/CLAUDE.md` (2026-10-18) |
 | [autofix-bridge-actuators.md](../autofix-bridge-actuators.md) | 2026-10-11 | 13 | 5 | `ansible/roles/k8s/autofix-bridge/CLAUDE.md` (2026-10-18) |
 | [alert-triggered-diagnosis.md](../alert-triggered-diagnosis.md) | 2026-10-12 | 8 | 5 | `scripts/diagnostics/probe_lib/alerts.py` (2026-10-19) |
 | [deploying.md](../deploying.md) | 2026-10-16 | 15 | 5 | `ansible/roles/setup/gitops_deploy/tests/test_gitops_deploy_timeout_budgets.py` (2026-10-18) |
 | [claude-tooling.md](../claude-tooling.md) | 2026-10-18 | 73 | 5 | `docs/flux-deploy-plane.md` (2026-10-19) |
 | [homelab-render.md](../homelab-render.md) | 2026-10-18 | 59 | 5 | `scripts/renderer/homelab_render.py` (2026-10-19) |
+| [target-architecture/deploy/d6-delete-old-path.md](../target-architecture/deploy/d6-delete-old-path.md) | 2026-10-18 | 189 | 5 | `ansible/roles/k8s/uptime-kuma/templates/static-monitors.yaml.j2` (2026-10-19) |
 | [adr/0001-mkdocs-site-with-generated-reference.md](../adr/0001-mkdocs-site-with-generated-reference.md) | 2026-09-02 | 4 | 4 | `CLAUDE.md` (2026-10-18) |
 | [claude-memory-sync.md](../claude-memory-sync.md) | 2026-10-10 | 4 | 4 | `CLAUDE.md` (2026-10-18) |
 | [homepage-widgets-and-layout.md](../homepage-widgets-and-layout.md) | 2026-10-10 | 10 | 4 | `ansible/roles/k8s/netpol-baseline/templates/networkpolicy-prometheus.yaml.j2` (2026-10-19) |
@@ -63,9 +64,8 @@ generated_sha: ddc360330
 | [n8n-community-packages.md](../n8n-community-packages.md) | 2026-10-10 | 4 | 4 | `ansible/roles/k8s/n8n/CLAUDE.md` (2026-10-18) |
 | [host-packages.md](../host-packages.md) | 2026-10-16 | 12 | 4 | `ansible/tests/repo/test_lan_facts_have_one_source.py` (2026-10-18) |
 | [k3s-upgrade.md](../k3s-upgrade.md) | 2026-10-16 | 17 | 4 | `scripts/diagnostics/probe.py` (2026-10-18) |
-| [issue-claiming-and-fanout.md](../issue-claiming-and-fanout.md) | 2026-10-17 | 20 | 4 | `scripts/dev/fanout.py` (2026-10-18) |
+| [issue-claiming-and-fanout.md](../issue-claiming-and-fanout.md) | 2026-10-17 | 20 | 4 | `docs/reference/scripts.md` (2026-10-19) |
 | [volume-snapshot-drills.md](../volume-snapshot-drills.md) | 2026-10-17 | 17 | 4 | `docs/monitor-bridge-checks.md` (2026-10-19) |
-| [target-architecture/deploy/d6-delete-old-path.md](../target-architecture/deploy/d6-delete-old-path.md) | 2026-10-18 | 189 | 4 | `ansible/roles/k8s/uptime-kuma/templates/static-monitors.yaml.j2` (2026-10-19) |
 | [adr/0011-one-lock-serialises-every-deploy-path.md](../adr/0011-one-lock-serialises-every-deploy-path.md) | 2026-09-12 | 3 | 3 | `ansible/roles/setup/gitops_deploy/tests/test_gitops_deploy_timeout_budgets.py` (2026-10-18) |
 | [adr/0018-the-repository-stays-public-and-ci-stays-hosted.md](../adr/0018-the-repository-stays-public-and-ci-stays-hosted.md) | 2026-10-03 | 4 | 3 | `ansible/vars/secrets.yml` (2026-10-17) |
 | [traefik-plugins-and-startup.md](../traefik-plugins-and-startup.md) | 2026-10-10 | 11 | 3 | `ansible/roles/k8s/traefik/CLAUDE.md` (2026-10-18) |
@@ -88,6 +88,7 @@ generated_sha: ddc360330
 | [landing.md](../landing.md) | 2026-10-18 | 45 | 2 | `scripts/deploy_tools/changed_set.py` (2026-10-19) |
 | [monitor-bridge-internals.md](../monitor-bridge-internals.md) | 2026-10-18 | 32 | 2 | `docs/monitor-bridge-checks.md` (2026-10-19) |
 | [target-architecture/deploy/d1-flux-installed.md](../target-architecture/deploy/d1-flux-installed.md) | 2026-10-18 | 71 | 2 | `ansible/roles/k8s/netpol-baseline/defaults/main.yml` (2026-10-19) |
+| [target-architecture/monitoring/m4-blackbox-ingress.md](../target-architecture/monitoring/m4-blackbox-ingress.md) | 2026-10-18 | 45 | 2 | `ansible/roles/k8s/uptime-kuma/templates/static-monitors.yaml.j2` (2026-10-19) |
 | [adr/0002-k3s-over-docker-compose-for-the-cluster-nodes.md](../adr/0002-k3s-over-docker-compose-for-the-cluster-nodes.md) | 2026-08-24 | 1 | 1 | `scripts/diagnostics/probe.py` (2026-10-18) |
 | [adr/0005-traefik-is-the-edge-with-ingressroute-crds.md](../adr/0005-traefik-is-the-edge-with-ingressroute-crds.md) | 2026-08-24 | 1 | 1 | `ansible/templates/ingressroute.yml.j2` (2026-10-01) |
 | [adr/0007-backup-tiering-r2-daily-b2-weekly.md](../adr/0007-backup-tiering-r2-daily-b2-weekly.md) | 2026-08-24 | 1 | 1 | `ansible/roles/setup/k3s/defaults/main.yml` (2026-10-16) |
@@ -105,7 +106,6 @@ generated_sha: ddc360330
 | [gitops-pipeline.md](../gitops-pipeline.md) | 2026-10-18 | 103 | 1 | `ansible/tests/repo/test_census_rows_roles.py` (2026-10-19) |
 | [renovate-agent-bounds-and-digest.md](../renovate-agent-bounds-and-digest.md) | 2026-10-18 | 26 | 1 | `ansible/roles/k8s/uptime-kuma/templates/static-monitors.yaml.j2` (2026-10-19) |
 | [secret-rotation.md](../secret-rotation.md) | 2026-10-18 | 29 | 1 | `ansible/roles/k8s/crowdsec/CLAUDE.md` (2026-10-19) |
-| [target-architecture/monitoring/m4-blackbox-ingress.md](../target-architecture/monitoring/m4-blackbox-ingress.md) | 2026-10-18 | 45 | 1 | `ansible/roles/k8s/uptime-kuma/templates/static-monitors.yaml.j2` (2026-10-19) |
 | [uptime-kuma-autokuma-record.md](../uptime-kuma-autokuma-record.md) | 2026-10-18 | 25 | 1 | `ansible/roles/k8s/uptime-kuma/templates/static-monitors.yaml.j2` (2026-10-19) |
 | [adr/0004-authelia-is-the-single-sign-on-layer.md](../adr/0004-authelia-is-the-single-sign-on-layer.md) | 2026-09-02 | 0 | 0 | — |
 | [index.md](../index.md) | 2026-09-28 | 0 | 0 | — |

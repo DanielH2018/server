@@ -182,8 +182,7 @@ def test_the_valheim_defaults_split_into_live_and_disabled_mods():
             (h.VALHEIM_ROLE / "defaults" / "main.yml").read_text()
         )
     }
-    assert "Server_devcommands" in live
-    assert "Jotunn" in disabled
+    assert {"Server_devcommands", "AchievementEnabler"} <= live
     assert not live & disabled
 
 
