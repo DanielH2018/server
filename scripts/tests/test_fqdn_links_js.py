@@ -138,6 +138,13 @@ def test_a_span_with_no_data_host_is_skipped():
     assert _linkify("docs.example.com", "") is None
 
 
+def test_a_data_host_that_is_not_dns_labels_is_skipped():
+    """The attribute becomes the href's authority, so a "/" or "@" in it would send the
+    link somewhere other than the text it shows."""
+    assert _linkify("docs.example.com", "evil.test/x#") is None
+    assert _linkify("docs.example.com", "user@evil.test") is None
+
+
 def test_links_open_in_a_new_tab_without_leaking_the_opener():
     link = _link("docs.example.com", "sonarr")
     assert link["target"] == "_blank"
