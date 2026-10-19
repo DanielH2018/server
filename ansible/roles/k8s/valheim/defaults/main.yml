@@ -73,7 +73,8 @@ valheim_k8s_mods_image: "{{ k8s_registry_pull_host }}/valheim:{{ k8s_built_image
 # resolving collection entry"), while `yaml.safe_load` accepts it.
 #
 # TEN MODS THAT FAILED ON VALHEIM 1.0 WERE REMOVED ON 2026-10-19. They had sat commented out
-# below this list. Eight threw on load, and two loaded cleanly but nothing needed them. Each
+# below this list. Seven threw on load, one was never deployed because its assembly carried
+# the same broken reference, and two loaded cleanly but nothing needed them. Each
 # one's pinned version, sha256 and recorded boot-log error are in the PR that removed them;
 # docs/valheim-modding.md names it. Check that history before re-adding any of them.
 #

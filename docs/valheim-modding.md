@@ -42,11 +42,13 @@ commented-out entry for any disabled one):
 
 MouseTweaks 1.0.3 and AAABuildMenu 1.0.1 were live from 2026-09-09 until SteamCMD
 auto-updated the game from `l-1.0.7` to `l-1.0.12` and broke both. No newer Thunderstore
-release exists for either. Eight further mods were requested on 2026-09-09. Each one either
-failed on `l-1.0.7` or was needed only by one that did. All ten sat commented out in
-`defaults/main.yml` until 2026-10-19, when they were removed. The PR that removed them
-carries each one's pinned version, sha256 and recorded boot-log error. Read it before
-re-adding any of them. BepInExPack is not listed, because the image installs it itself.
+release exists for either. Eight further mods were requested on 2026-09-09. Five failed on
+`l-1.0.7`, and AzuAutoStore was never deployed because its assembly carries the reference
+that killed AzuCraftyBoxes. Jotunn and AdvancedPortals loaded cleanly, but Jotunn was needed
+only by mods that failed, and the vanilla portals modifier replaced AdvancedPortals. All ten
+sat commented out in `defaults/main.yml` until 2026-10-19, when they were removed. The PR
+that removed them carries each one's pinned version, sha256 and recorded boot-log error. Read
+it before re-adding any of them. BepInExPack is not listed, because the image installs it itself.
 
 **`UPDATE_CRON` still runs at its default `*/15`, so the game can update out from under the
 mods.** A Valheim release the mods have not caught up with can break them with no repo change
