@@ -37,7 +37,7 @@ def _primary_carries(ln: Landing, sha: str) -> bool:
 
 
 def _gated_tree(ln: Landing) -> str:
-    """The commit the gate renders from, or "" for land.sh's own checkout.
+    """The commit the gate renders from, or "" for the primary checkout as it stands.
 
     `deployed_at` when deploy.sh deployed a snapshot. Otherwise the merge commit, when a
     promotion applied any gated tag: `probe.py health` reads `owner` from the tree it runs in
@@ -61,7 +61,9 @@ def gate_from_the_deployed_tree(ln: Landing) -> GateResult:
     A landing that deployed a snapshot of its merge commit (`deployed_at`) has not moved the
     primary checkout, so gating from there enumerates nothing for a role that commit ADDS and
     the whole gate reads `skipped`. A landing whose promotion applied a tag gates from its
-    merge commit for the same reason, even when no deploy.sh ran (`_gated_tree`).
+    merge commit for the same reason, even when no deploy.sh ran (`_gated_tree`). With
+    neither, deploy.sh rendered the primary, and the gate runs there too, never in land.sh's
+    own checkout, which may predate the merge.
 
     A snapshot that could not be taken FAILS THE GATE, unless the primary already contains the
     commit. Falling back to the primary unconditionally is what the first cut did, and it
@@ -72,7 +74,9 @@ def gate_from_the_deployed_tree(ln: Landing) -> GateResult:
     """
     at = _gated_tree(ln)
     if not at:
-        return ln.tools.gate(promotion.gated_tags(ln))
+        # deploy.sh rendered the primary, which the tick fast-forwarded. land.sh's own
+        # checkout may predate the merge and see none of a role it adds.
+        return ln.tools.gate(promotion.gated_tags(ln), cwd=ln.opts.primary)
     with ln.tools.snapshot(ln.opts.primary, at) as snap:
         if snap is not None:
             return ln.tools.gate(promotion.gated_tags(ln), cwd=snap)

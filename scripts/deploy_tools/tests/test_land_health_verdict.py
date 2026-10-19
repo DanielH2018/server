@@ -429,12 +429,16 @@ def test_the_gate_renders_the_tree_that_was_deployed(landing):
 
 
 def test_a_deploy_from_the_primary_gates_the_primary(landing):
-    """CLEAN half: the fallback path keeps the gate call it has always made."""
+    """CLEAN half: no snapshot, and the probe runs in the primary that deploy.sh rendered.
+
+    Not in land.sh's own checkout, which may predate the merge and so see none of a role
+    the PR adds: `check_one` would read `skipped` and the landing `settled` (#5754).
+    """
     ln, calls = _deployed(landing)
     with pytest.raises(Outcome):
         health_verdict.health(ln)
     assert "snapshot" not in [c[0] for c in calls]
-    assert next(c for c in calls if c[0] == "gate")[2] == {"cwd": None}
+    assert next(c for c in calls if c[0] == "gate")[2] == {"cwd": ln.opts.primary}
 
 
 def test_a_snapshot_that_could_not_be_taken_fails_the_gate(landing, capsys):
