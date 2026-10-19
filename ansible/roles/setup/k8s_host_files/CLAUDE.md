@@ -4,9 +4,9 @@ This role holds the host writes that D5 moves out of the k8s roles before each r
 Flux: docs's site directory, pi-peer-backup's two Pi writes, traefik's absent arm, registry's
 GC absent arms, the absent arms H2 leaves in crowdsec, configarr, janitorr and qbittorrent,
 artifacts' three directory tasks (the star list directory among them), media-volume's media
-directories, observability's retired dashboard staging trees and uptime-kuma's stale
-autokuma-claims staging directory. A Flux-owned role has no Ansible apply left to carry them, so each lands here in
-its own conversion PR. The plan is
+directories, observability's retired dashboard staging trees, uptime-kuma's stale
+autokuma-claims staging directory and crowdsec's edge probe timer on daniel-pi. A Flux-owned
+role has no Ansible apply left to carry them, so each lands here in its own conversion PR. The plan is
 `docs/target-architecture/deploy/d5-bulk-move.md`, sections *Host-side rows* and *The
 `k8s_host_files` role enters the setup plane once (D5.1h)*.
 
@@ -23,8 +23,7 @@ The redirect is what a shell with non-blocking stdio needs.
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's tasks, timer templates, defaults or playbook entry, or a schedule var in group_vars/all.yml. -->
 - **Applied by:** `initial_setup.yml --tags "k8s_host_files"` when `inventory_hostname ==
   'daniel-box'`
-- **Crons / timers:** none (no `ansible.builtin.cron` task in `tasks/`, no
-  `templates/*.timer.j2`)
+- **Timer:** `crowdsec-edge-probe.timer` (`OnBootSec=1min`, `OnUnitActiveSec=1min`)
 <!-- /generated_from -->
 
 ## What it holds
@@ -47,7 +46,11 @@ both files into `files/`. qbittorrent's PR wrote `tasks/qbittorrent.yml`, which 
 the absent arms for the prefs drift check's retired host cron and script. traefik's PR wrote
 `tasks/traefik.yml`, the two absent arms that remove the retired Cloudflare IP drift cron and
 its script. uptime-kuma's PR wrote `tasks/uptime-kuma.yml`, the absent arm that removes
-the directory k8s/volume-claim staged autokuma-data's claim under. A row drops its source role's `when: not k8s_dry_run` guard and its `config` tag,
+the directory k8s/volume-claim staged autokuma-data's claim under. crowdsec's first conversion
+PR wrote `tasks/crowdsec.yml`, which installs the edge probe's script, service and timer on
+daniel-pi for crowdsec's off-cluster verify. It is the role's first timer and its first
+templates. crowdsec's absent arms stay in its own `tasks/main.yml` until a later conversion
+PR, because they must run before crowdsec's manifests apply. A row drops its source role's `when: not k8s_dry_run` guard and its `config` tag,
 because `initial_setup.yml` has no dry-run mode.
 
 - **The playbook entry is gated to daniel-box by a literal.** `setup_routing.py` places a role
@@ -74,9 +77,8 @@ Two tests in `ansible/tests/setup/` hold those rules:
 
 - `ansible/tests/setup/test_k8s_host_files_render.py` renders every template here under
   `StrictUndefined`, with this role's defaults and the inventory. A template reading a
-  variable that only a `roles/k8s/` defaults file defines fails it. The role has no template
-  yet, so the test asserts the rendered set is empty; the PR that moves the first adds it as a
-  named member.
+  variable that only a `roles/k8s/` defaults file defines fails it. crowdsec's edge probe
+  units are its named members.
 - `ansible/tests/setup/test_k8s_host_files_pairs.py` derives every key this role's defaults or
   imported task `vars:` share with a k8s role's defaults or `group_vars/all.yml`, and asserts
   that each copy equals its source. docs' PR added the first pair, `docs_host_site_dir`, and
@@ -84,21 +86,23 @@ Two tests in `ansible/tests/setup/` hold those rules:
   and `artifacts_stars_dir`. media-volume's PR added `media_volume_host_path` and the
   `group_vars` keys `puid` and `pgid`, copied so that the setup plane re-applies the owner
   when they change, and pi-peer-backup's flip added `pi_peer_backup_src_dir`, the one
-  directory the wrapper lets the key read. It also holds `docs-refresh.sh.j2`'s `SITE_DIR` equal to docs'
-  default, the third copy of that path.
+  directory the wrapper lets the key read. crowdsec's edge probe copies nothing: its service
+  reads the VIP from `group_vars`, its one allowed source, so moving the VIP needs a hand apply
+  of this role. It also holds
+  `docs-refresh.sh.j2`'s `SITE_DIR` equal to docs' default, the third copy of that path.
 
 A third test, `ansible/tests/setup/test_k8s_host_files_rows.py`, names every moved row by task
 file and task name with its whole argument map. It fails when a row is no longer imported or
 its path, owner, group or mode changes, and pins a looped row's `loop`. It also holds
-pi-peer-backup's two rows to `delegate_to: daniel-pi`. Each
+pi-peer-backup's two rows and crowdsec's four to `delegate_to: daniel-pi`. Each
 conversion PR adds its rows there. A row that moves back to its k8s role fails the host-write
 census in `ansible/tests/repo/_host_write_rows.py`, whose `allow` entry the move dropped.
 
 ## Autonomous-role contract (it will install a timer and remove crons with no human in the loop)
 
 The GitOps tick applies the role as `initial_setup.yml --tags k8s_host_files` on every merge
-that touches it. It holds host directories, configarr's and janitorr's absent arms and
-pi-peer-backup's two daniel-pi writes so far, and installs no timer yet.
+that touches it. It holds host directories, configarr's and janitorr's absent arms,
+pi-peer-backup's two daniel-pi writes and crowdsec's edge probe timer on daniel-pi.
 
 - **Scope / exclusions:** host files, directories and units that a k8s role's Ansible apply
   owned before its flip, plus the absent arms that remove a retired role's crons. **Never** a
@@ -113,7 +117,11 @@ pi-peer-backup's two daniel-pi writes so far, and installs no timer yet.
   `hold_plane` entry naming `initial_setup.yml`, and the tick applies nothing more until the
   hold clears.
 - **Required evidence:** the tick's receipt and `land.sh`'s `VERDICT:` line for every PR that
-  changes this role. Once crowdsec's probe timer moves in, it appends its HTTP status to a
-  file under `/var/log/pi-health/`, which the Pi's Alloy tails.
+  changes this role. crowdsec's probe timer appends `<time> http=<code>` once a minute to
+  `/var/log/pi-health/crowdsec-edge-probe.status`, which the Pi's Alloy counts by status.
+  Read the file's tail over `ssh daniel-pi`, or the counter with `probe.py metric
+  'loki_process_custom_crowdsec_edge_probe_total'`. To stop the probe, revert
+  `tasks/crowdsec.yml`, then disable `crowdsec-edge-probe.timer` on the Pi by hand
+  (operator-only). The file then stops growing and stays bounded.
 - **Next-run review:** before moving a new row in, run `--list-tasks` with
   `--tags k8s_host_files` and read the recap of the last apply.

@@ -3,7 +3,7 @@
 Target slice H2.1 lands the derivation in `_script_rbac.py` before any cron moves. Each H2 family
 PR that turns a host cron into a CronJob adds a case here that derives its script's needs and
 checks them against that job's rendered Role or ClusterRole: the drill at H2.3c, the CrowdSec
-jobs at H2.4b and H2.4c, and the *arr checks at H2.5b and H2.5c. H2.5d's qbittorrent prefs check
+sidecar's remote allowlist at H2.4b and its home allowlist at H2.4c, and the *arr checks at H2.5b and H2.5c. H2.5d's qbittorrent prefs check
 adds no case: it calls no Kubernetes API and runs with no ServiceAccount token, so it has no
 grants to derive. Until then the real drill is the
 named member: its derived set must hold `get` on its backup target and the `watch` its teardown
@@ -17,6 +17,7 @@ Run: uv run pytest ansible/tests/k8s/test_rbac_against_script.py
 
 import importlib
 import json
+from datetime import UTC, datetime
 
 import pytest
 from _helpers import K8S_ROLES
@@ -417,3 +418,50 @@ def test_the_crowdsec_jobs_role_grants_every_call_the_remote_allowlist_makes(
         ("homelab", "", "pods/log", "get"),
     }
     assert missing(needs, grants(docs, "homelab", "crowdsec-jobs")) == []
+
+
+def _home_allowlist_argvs(monkeypatch) -> list[list[str]]:
+    """H2.4c: home_allowlist.py's main on a fresh lookup, which reads its ConfigMap once."""
+    monkeypatch.syspath_prepend(str(K8S_ROLES / "crowdsec" / "files"))
+    module = importlib.import_module("home_allowlist")
+    argvs = []
+
+    def record(argv: list[str]) -> str:
+        if argv[0] == module.KUBECTL:
+            argvs.append(["kubectl", *argv[1:]])
+            return json.dumps({"data": {"looked_up_at": "2026-10-18T13:05:00Z"}})
+        return ""
+
+    env = {"HOME_IPS_CONFIGMAP": "crowdsec-home-ips", "HOME_IPS_STALE_AFTER_S": "900"}
+    now = datetime(2026, 10, 18, 13, 6, tzinfo=UTC)
+    assert module.main(runner=record, env=env, now=now) == 0
+    return argvs
+
+
+def test_the_crowdsec_jobs_role_grants_every_call_the_home_allowlist_makes(
+    monkeypatch,
+) -> None:
+    needs = recorded_needs(_home_allowlist_argvs(monkeypatch))
+    # The operator's grant on #5701: `get` on the one ConfigMap the CronJob writes.
+    assert needs == {("homelab", "", "configmaps", "get", "crowdsec-home-ips")}
+    docs = list(
+        yaml_fast.safe_load_all(render_role_template("crowdsec", "jobs-rbac.yaml.j2"))
+    )
+    assert missing(needs, grants(docs, "homelab", "crowdsec-jobs")) == []
+
+
+def test_the_crowdsec_jobs_role_without_its_configmap_rule_is_flagged(
+    monkeypatch,
+) -> None:
+    needs = recorded_needs(_home_allowlist_argvs(monkeypatch))
+    docs = [
+        {**doc, "rules": [r for r in doc["rules"] if r["resources"] != ["configmaps"]]}
+        if doc.get("rules")
+        else doc
+        for doc in yaml_fast.safe_load_all(
+            render_role_template("crowdsec", "jobs-rbac.yaml.j2")
+        )
+    ]
+    assert missing(needs, grants(docs, "homelab", "crowdsec-jobs")) == [
+        ("homelab", "", "configmaps", "get", "crowdsec-home-ips")
+    ]

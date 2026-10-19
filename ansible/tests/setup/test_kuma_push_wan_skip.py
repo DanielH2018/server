@@ -2,9 +2,9 @@
 
 monitor-bridge's `wan_reachable` gate suppresses the four bridge checks that reach the internet,
 so one WAN outage pages once. It cannot reach the crons that run on the host and push their own
-tiles: they are outside its loop. During a WAN outage those crons light four more tiles
-beside the WAN tile — crowdsec-home-allowlist, github-ruleset-drift, release-staleness-check
-and docs-refresh.
+tiles: they are outside its loop. During the 2026-09-18 WAN outage those crons lit four more
+tiles beside the WAN tile — crowdsec-home-allowlist (a host cron then, a pod job since),
+github-ruleset-drift, release-staleness-check and docs-refresh.
 
 `wan_reachable` and `reachout_verdict` are the host-side half. The behaviour that has to stay
 true, each held by an accept/reject pair so a rule that stopped matching fails its own test:
@@ -110,16 +110,13 @@ def test_an_unreachable_wan_turns_the_failure_into_a_named_skip(tmp_path):
     assert "note=[skipped: WAN unreachable — ]" in out
 
 
-# The four crons that push their own tiles, and the function each one has to reach the gate
+# The crons that push their own tiles, and the function each one has to reach the gate
 # through. A frozen census rather than a glob: a cron renamed or a wiring silently dropped is the
 # regression this guard exists to name, and an `all()` over an empty census passes.
 WIRED_CRONS = {
     "roles/setup/k3s/templates/release-staleness-check.sh.j2": "reachout_verdict",
     "roles/setup/gitops_deploy/templates/github-ruleset-drift.sh.j2": "reachout_verdict",
     "roles/setup/initial_setup/templates/docs-refresh.sh.j2": "reachout_verdict",
-    # Self-contained by design (its own tuned push curl), so it carries its own copy — held equal
-    # to the library's by ansible/tests/services/test_crowdsec_allowlist_wan_skip.py.
-    "roles/k8s/crowdsec/templates/crowdsec-update-home-allowlist.sh.j2": "wan_reachable",
 }
 
 
@@ -138,8 +135,4 @@ def test_every_internet_fetching_cron_consults_the_wan_gate(path, fn):
 def test_every_wired_cron_renders_the_shared_endpoint_list(path):
     # The URLs are arguments, not a library constant, so a cron that hardcoded its own pair would
     # pass the test above while probing something the bridge never agreed to.
-    if path.startswith("roles/k8s/crowdsec/"):
-        pytest.skip(
-            "renders one curl per URL from the list; its own guard reads that shape"
-        )
     assert "wan_probe_urls" in (ANSIBLE / path).read_text()

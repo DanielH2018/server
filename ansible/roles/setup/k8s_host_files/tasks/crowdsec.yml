@@ -1,0 +1,52 @@
+---
+# Added by crowdsec's first D5 conversion PR (#5650), while Ansible still owns crowdsec. H5.14
+# moves the probe into the Pi package.
+#
+# The evidence half of crowdsec's off-cluster verify (D5, *crowdsec's verify from outside the
+# cluster*): a timer on daniel-pi probes the edge VIP every minute and appends the HTTP status
+# to a file the Pi's Alloy counts by status. The `crowdsec-verify` Job that bans the Pi and
+# reads the count is inert until crowdsec's flip (roles/k8s/crowdsec/templates/verify-inert/).
+# The playbook entry is gated to daniel-box, so every task runs on the Pi through
+# `delegate_to`, as pi-peer-backup's block does.
+#
+# The absent arms H2.4b and H2.4c left in crowdsec's tasks/main.yml stay there for now: they
+# must run before crowdsec's manifests apply, which the setup plane cannot order.
+- name: Install crowdsec's edge probe timer on daniel-pi
+  delegate_to: daniel-pi
+  become: true
+  # DECIDED: the service reads `domain` and `k3s_metallb_ingress_vip` straight from
+  # group_vars, with no copy here as media-volume's puid and pgid have. The VIP is a LAN fact,
+  # which test_lan_facts_have_one_source.py allows in one place only. The cost: a group_vars
+  # change routes to the deploy plane, which never re-applies this task, so moving the VIP or
+  # the domain needs a hand apply of this role as well.
+  block:
+    - name: Install the edge probe script on daniel-pi
+      ansible.builtin.copy:
+        src: crowdsec-edge-probe.sh
+        dest: /usr/local/bin/crowdsec-edge-probe
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Install the edge probe service on daniel-pi
+      ansible.builtin.template:
+        src: crowdsec-edge-probe.service.j2
+        dest: /etc/systemd/system/crowdsec-edge-probe.service
+        owner: root
+        group: root
+        mode: "0644"
+
+    - name: Install the edge probe timer on daniel-pi
+      ansible.builtin.template:
+        src: crowdsec-edge-probe.timer.j2
+        dest: /etc/systemd/system/crowdsec-edge-probe.timer
+        owner: root
+        group: root
+        mode: "0644"
+
+    - name: Enable the edge probe timer on daniel-pi
+      ansible.builtin.systemd:
+        name: crowdsec-edge-probe.timer
+        enabled: true
+        state: started
+        daemon_reload: true

@@ -34,7 +34,7 @@ ROLE = SETUP_ROLES / "k8s_host_files"
 # {task file: {task name: (module, its args)}}, one file per source role. The args are the
 # task's whole argument map, so an owner, group or mode change fails the row as well as a path:
 # docs' directory exists to be owned by sys_user, which the docs-refresh build writes as.
-EXPECTED_ROWS: dict[str, dict[str, tuple[str, dict[str, str]]]] = {
+EXPECTED_ROWS: dict[str, dict[str, tuple[str, dict[str, str | bool]]]] = {
     "artifacts.yml": {
         "Ensure the local artifacts directory exists": (
             "ansible.builtin.file",
@@ -118,6 +118,48 @@ EXPECTED_ROWS: dict[str, dict[str, tuple[str, dict[str, str]]]] = {
                     '{{ pi_peer_backup_src_dir }}"'
                 ),
                 "state": "present",
+            },
+        ),
+    },
+    # Every row runs on daniel-pi through the block's `delegate_to`.
+    "crowdsec.yml": {
+        "Install the edge probe script on daniel-pi": (
+            "ansible.builtin.copy",
+            {
+                "src": "crowdsec-edge-probe.sh",
+                "dest": "/usr/local/bin/crowdsec-edge-probe",
+                "owner": "root",
+                "group": "root",
+                "mode": "0755",
+            },
+        ),
+        "Install the edge probe service on daniel-pi": (
+            "ansible.builtin.template",
+            {
+                "src": "crowdsec-edge-probe.service.j2",
+                "dest": "/etc/systemd/system/crowdsec-edge-probe.service",
+                "owner": "root",
+                "group": "root",
+                "mode": "0644",
+            },
+        ),
+        "Install the edge probe timer on daniel-pi": (
+            "ansible.builtin.template",
+            {
+                "src": "crowdsec-edge-probe.timer.j2",
+                "dest": "/etc/systemd/system/crowdsec-edge-probe.timer",
+                "owner": "root",
+                "group": "root",
+                "mode": "0644",
+            },
+        ),
+        "Enable the edge probe timer on daniel-pi": (
+            "ansible.builtin.systemd",
+            {
+                "name": "crowdsec-edge-probe.timer",
+                "enabled": True,
+                "state": "started",
+                "daemon_reload": True,
             },
         ),
     },
@@ -275,6 +317,10 @@ def test_a_task_file_main_no_longer_imports_is_flagged(tmp_path):
         "artifacts.yml: Ensure the star list directory exists",
         "configarr.yml: Remove the retired configarr health reader from the host",
         "configarr.yml: Remove the retired configarr sync heartbeat cron",
+        "crowdsec.yml: Enable the edge probe timer on daniel-pi",
+        "crowdsec.yml: Install the edge probe script on daniel-pi",
+        "crowdsec.yml: Install the edge probe service on daniel-pi",
+        "crowdsec.yml: Install the edge probe timer on daniel-pi",
         "docs.yml: Ensure the built docs site directory exists",
         "janitorr.yml: Remove the retired janitorr error heartbeat cron",
         "janitorr.yml: Remove the retired janitorr health reader from the host",
@@ -353,24 +399,39 @@ def test_a_media_volume_row_that_drops_a_directory_from_its_loop_is_flagged(tmp_
     ]
 
 
+# The task files whose every row writes on daniel-pi.
+PI_TASK_FILES = ("crowdsec.yml", "pi-peer-backup.yml")
+
+
 def undelegated_pi_rows(role_dir: Path = ROLE) -> list[str]:
-    """Each pi-peer-backup row that would run on daniel-box, the play's host, not daniel-pi.
+    """Each daniel-pi row that would run on daniel-box, the play's host, not daniel-pi.
 
     The playbook entry is gated to daniel-box, so a row whose task and enclosing block both
-    lose `delegate_to: daniel-pi` installs the wrapper and the key on the wrong host.
+    lose `delegate_to: daniel-pi` installs its file on the wrong host.
     """
-    path = role_dir / "tasks" / "pi-peer-backup.yml"
     found = []
-    for wrapper in load_tasks(path):
-        for task in wrapper.get("block") or [wrapper]:
-            host = task.get("delegate_to", wrapper.get("delegate_to"))
-            if host != "daniel-pi":
-                found.append(f"pi-peer-backup.yml: {task.get('name')}")
+    for name in PI_TASK_FILES:
+        for wrapper in load_tasks(role_dir / "tasks" / name):
+            for task in wrapper.get("block") or [wrapper]:
+                host = task.get("delegate_to", wrapper.get("delegate_to"))
+                if host != "daniel-pi":
+                    found.append(f"{name}: {task.get('name')}")
     return found
 
 
-def test_the_pi_peer_backup_rows_run_on_daniel_pi():
+def test_the_daniel_pi_rows_run_on_daniel_pi():
     assert undelegated_pi_rows() == []
+
+
+def test_a_crowdsec_probe_block_that_drops_its_delegation_is_flagged(tmp_path):
+    role_dir = _fixture_role(tmp_path)
+    probe = role_dir / "tasks" / "crowdsec.yml"
+    line = "  delegate_to: daniel-pi\n"
+    assert line in probe.read_text()
+    probe.write_text(probe.read_text().replace(line, ""))
+    assert undelegated_pi_rows(role_dir) == [
+        f"crowdsec.yml: {name}" for name in EXPECTED_ROWS["crowdsec.yml"]
+    ]
 
 
 def test_a_pi_peer_backup_block_that_drops_its_delegation_is_flagged(tmp_path):

@@ -45,7 +45,6 @@ PLANES = ("k8s", "setup")
 # set silently, and the assertion below would pass over nothing.
 KNOWN_SECRET_SCRIPTS = frozenset(
     {
-        ("k8s", "crowdsec", "crowdsec-update-home-allowlist.sh.j2"),
         ("k8s", "registry", "registry-gc.sh.j2"),
         ("setup", "initial_setup", "docs-refresh.sh.j2"),
         ("setup", "gitops_deploy", "github-ruleset-drift.sh.j2"),

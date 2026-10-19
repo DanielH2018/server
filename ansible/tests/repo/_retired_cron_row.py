@@ -54,6 +54,7 @@ RETIRED = frozenset(
         "Cloudflare IP drift",
         "CrowdSec AppSec verify",
         "CrowdSec bouncer prune",
+        "CrowdSec home allowlist",
         "CrowdSec remote allowlist",
         "configarr sync health",
         "configarr",
@@ -180,9 +181,10 @@ RETIRED_CRON_ARMS = Census(
     # A name whose roles hold no tracked task file was never read, so it is not a member.
     count=lambda s: 1 if isinstance(s, RetiredName) and s.tasks else 0,
     red=(
-        # A family PR that deletes crowdsec's home allowlist cron rather than flipping it.
+        # A PR that deletes crowdsec's home allowlist cron without leaving an absent arm.
         _subject("cron", _HOME, "k8s/crowdsec", _UNRELATED),
         # A retired cron whose arm went back to installing it.
+        _subject("cron", _HOME, "k8s/crowdsec", _cron(_HOME)),
         _subject(
             "cron",
             "Cloudflare IP drift",
@@ -202,7 +204,8 @@ RETIRED_CRON_ARMS = Census(
         ),
     ),
     green=(
-        _subject("cron", _HOME, "k8s/crowdsec", _cron(_HOME)),
+        # A cron not yet retired may still install itself.
+        _subject("cron", "Example cron", "k8s/crowdsec", _cron("Example cron")),
         _subject("cron", _HOME, "k8s/crowdsec", _cron(_HOME, "    state: absent\n")),
         _subject(
             "fragment",

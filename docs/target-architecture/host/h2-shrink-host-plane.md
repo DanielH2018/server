@@ -21,8 +21,10 @@ PR H2.4b, crowdsec's three API jobs, worked under #5649. The operator ruled on
 2026-10-18 that crowdsec's jobs run in a sidecar of the LAPI pod (*Open questions* 2). The
 remote allowlist, the AppSec verify and the bouncer prune run in the `crowdsec-jobs` sidecar,
 and their three root crons become absent arms. No `pods/exec` grant is made.
-H2.4c, the home allowlist, waits on #5701. The sidecar shares the pod's IPv4-only network, so it
-cannot see the home IPv6 /64 the job keeps allowlisted, and the operator picks its form.
+H2.4c, the home allowlist, worked under #5738. The operator ruled on 2026-10-18 (#5701, *Open
+questions* 2) that a host-network CronJob looks the addresses up into a ConfigMap and the
+`crowdsec-jobs` sidecar syncs the allowlist from it. The home allowlist's root cron becomes an
+absent arm.
 Depends on: H1, D3 and H6, per PR. H2.2a needs H1.5a and H1.6. H2.3b needs H1.5a and the C3
 row of *Open questions* 12. H2.8a needs H1.7b (and through it D3) and H6.4b, with the
 region-key gate of *Open questions* 11. No other H2 PR waits outside H2 (*Open questions*
@@ -569,8 +571,8 @@ The exit criterion has three parts:
 - **First run.** `k8s/cronjob-gate` proves at deploy time that a job's image runs. It gates
   three jobs, each idempotent under an extra run:
     - the qbittorrent prefs check, whose fence applies in the role's own apply;
-    - the home allowlist, which uses the host network, pushes through Traefik and needs no
-      grant (*CrowdSec*);
+    - the home allowlist's discovery CronJob, which uses the host network, pushes nothing
+      and needs no grant (*CrowdSec*);
     - configarr health, because configarr sets `k8s_autodeploy: true`, and
       `ansible/tests/deploy/test_k8s_autodeploy_batch_gates.py::test_auto_deployable_roles_gate_every_batch_workload_they_render`
       refuses an ungated CronJob in such a role. Its landing's gate run is the one run whose
@@ -999,22 +1001,34 @@ agent join and the storage smoke test behind it.
   become Python entry points that push with `kuma_push.py`, since the Python image has no
   `jq`. The AppSec verify keeps its bash and `jq` and pushes through the staged
   `kuma-push-lib.sh`.
-- **The home allowlist needs the host's IPv6.** The pod network is IPv4-only, so a pod there
-  sees no global IPv6 address. Its CronJob therefore runs with `hostNetwork: true`,
-  `dnsPolicy: ClusterFirstWithHostNet` and a `nodeSelector` for daniel-box, as node-exporter's
-  DaemonSet does. Its grants are those of the three API jobs' `exec`. The consequences:
+- **The home allowlist needs the host's IPv6, so it splits in two** (*Open questions* 2, the
+  operator's form of 2026-10-18). The pod network is IPv4-only, so a pod there sees no global
+  IPv6 address. A discovery CronJob, `crowdsec-home-ips`, therefore runs with `hostNetwork:
+  true`, `dnsPolicy: ClusterFirstWithHostNet` and a `nodeSelector` for daniel-box, as
+  node-exporter's DaemonSet does. It looks up the IPv4 address from ipify and the /64 from
+  `/proc/net/if_inet6`, and writes both, with the lookup time, into the `crowdsec-home-ips`
+  ConfigMap. It runs no `cscli` and execs into nothing. Its ServiceAccount has `patch` on that
+  one ConfigMap by `resourceNames`; the merge patch needs no `get`. The `crowdsec-jobs`
+  sidecar's fourth job, `crowdsec-home-allowlist`, reads the ConfigMap through its own
+  ServiceAccount, which gains `get` on it, and syncs `home-ips` with its local `cscli`. The
+  consequences:
     - The namespace's `pod-security.kubernetes.io/warn: baseline` label records a warning on
       apply. No `enforce` label exists, so nothing refuses it.
     - A host-network pod leaves from the node's address, outside pod NetworkPolicy selection,
-      as the host cron does today. It therefore pushes through Traefik to the `.local.`
-      hostname with its inline `curl`, the host cron's path, and not to Kuma's Service, whose
-      `netpol_from` fence would not admit the node address.
-    - It therefore needs no `netpol_from` grant, and H2.4c gates it with `k8s/cronjob-gate`.
-    - It reads the host's global IPv6 addresses from `/proc/net/if_inet6` in the shared
-      network namespace.
-- **The allowlist's state moves into the allowlist.** Each run reads the stored entries with
-  `cscli allowlists inspect home-ips` in place of `/var/lib/crowdsec-home-allowlist/`. The rule
-  stays: an empty or failed IPv6 discovery never removes a stored /64.
+      as the host cron did. The CronJob pushes nothing, so it needs no `netpol_from` grant.
+      The sidecar pushes the Kuma tile through Kuma's Service, as the other three jobs do,
+      under the `crowdsec` label uptime-kuma's fence already admits.
+    - H2.4c gates the CronJob with `k8s/cronjob-gate`. An extra run writes the same values.
+    - The ConfigMap is rendered with no `data` keys, so it exists before the first run and
+      no apply owns a field the CronJob writes: the field-ownership argument the operator
+      accepted for `deploy/ghcr-mirror` on #5732.
+    - The sidecar's verdict is down once the lookup time is older than three CronJob periods,
+      so a dead discovery pages.
+- **The allowlist's state moves into the allowlist.** Each sidecar run reads the stored
+  entries with `cscli allowlists inspect home-ips` in place of
+  `/var/lib/crowdsec-home-allowlist/`. The rule stays: an empty or failed IPv6 discovery never
+  removes a stored /64. The CronJob writes a failed family's error field and leaves its value
+  alone, and the sidecar treats an empty value as "remove nothing".
 - **Window.** crowdsec is a home-edge role with `k8s_autodeploy: false`. H2.4b and H2.4c each
   land in a window, as D5's *Waves and windows* defines for that role.
 
@@ -1415,15 +1429,19 @@ change at merge time*).
       again right before `land.sh`, run *Landing a `containers_list` edit* (Design).
     - *Open questions* 2 is decided here.
 12. **H2.4c CrowdSec home allowlist** (Ansible, in a home-edge window).
-    - **Blocked on #5701.** The sidecar form the operator ruled has no IPv6, so the home /64
-      cannot be discovered from it, and the operator picks the form.
-    - Gate: the operator has decided *Open questions* 2 for the home allowlist.
-    - Add the host-network CronJob, with its state kept in the allowlist itself, and
-      `monitor_bridge_home_allowlist_push_token` in the role's Secret. It needs no
-      `netpol_from` grant, and it is gated with `k8s/cronjob-gate`. Its tests gain the image
-      leg.
+    - Gate: the operator has decided *Open questions* 2 for the home allowlist. **Decided
+      2026-10-18 (#5701):** discovery and the write split, as *CrowdSec* describes.
+    - Add the host-network `crowdsec-home-ips` CronJob, its RBAC and the dataless
+      `crowdsec-home-ips` ConfigMap, gated with `k8s/cronjob-gate`. It needs no `netpol_from`
+      grant.
+    - Add the sidecar's fourth job, with its state kept in the allowlist itself, `get` on the
+      ConfigMap in the sidecar's Role, and `monitor_bridge_home_allowlist_push_token` in the
+      `crowdsec-jobs` Secret. Both scripts' tests gain the image leg.
     - Turn the home allowlist's cron and script tasks into absent arms, with one for
       `/var/lib/crowdsec-home-allowlist`.
+    - The PR body names the checks to read after the deploy: the first scheduled run's
+      ConfigMap contents, addresses redacted to their family and prefix length, and the
+      sidecar's first `home-ips` sync line.
 13. **H2.5b configarr health** (Ansible).
     - Add the CronJob, gated with `k8s/cronjob-gate`, with
       `monitor_bridge_configarr_push_token` in the role's Secret, and its label in
@@ -2099,7 +2117,13 @@ carries `prune: disabled`.
    defaults), the cost the resolution above asked to weigh against the exec grant.
    **The home allowlist does not fit the sidecar.** A container in the LAPI pod sees the pod's
    IPv4-only network (`podCIDRs: ["10.42.0.0/24"]` on daniel-box), so it cannot discover the
-   home IPv6 /64. #5701 puts the options for H2.4c to the operator.
+   home IPv6 /64. #5701 put the options for H2.4c to the operator.
+   **Operator ruling, 2026-10-18 (#5701, its option 2): split discovery from the write.** A
+   small `hostNetwork: true` CronJob on daniel-box looks up the home IPv4 address and the IPv6
+   /64 and writes them into one ConfigMap. It runs no `cscli` and execs into nothing. The
+   `crowdsec-jobs` sidecar reads that ConfigMap through its own ServiceAccount and syncs the
+   `home-ips` allowlist with its local `cscli`, as a fourth job beside the three H2.4b moved.
+   No `pods/exec` grant is made. H2.4c (#5738) builds that form, as *CrowdSec* describes.
 3. **Backup health and the B2 pair stay on the host.** design.md's host-plane section says
    about 15 cluster-reading crons become CronJobs. This plan retires ten cron files from
    daniel-box, D5 retires registry GC, and these three stay.
