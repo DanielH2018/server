@@ -576,6 +576,7 @@
  "ansible/tests/services/test_committed_dashboards_are_a_fixed_point_of_the_exporter.py": 0.01,
  "ansible/tests/services/test_crowdsec_ban_gate.py": 0.01,
  "ansible/tests/services/test_crowdsec_config_install_seeds_staged_tree.py": 0.0,
+ "ansible/tests/services/test_crowdsec_edge_probe_contract.py": 0.11,
  "ansible/tests/services/test_crowdsec_hub_install_stages_the_hub_tree.py": 0.0,
  "ansible/tests/services/test_crowdsec_optional.py": 1.89,
  "ansible/tests/services/test_dashboard_configmaps.py": 1.08,
