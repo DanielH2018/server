@@ -3,7 +3,7 @@
 #
 # The prune k8s/manifests arms by default (its manifests_prune DECIDED comment). The render
 # stamps homelab/role on every document, the k8s_claims claim included; the fixed allowlist
-# never names PersistentVolumeClaim, so the claims are applied but never pruned. The five
+# never names PersistentVolumeClaim, so the claims are applied but never pruned. The four
 # `*-job.yaml` templates stay out of this include's derived list by their suffix.
 - name: Deploy the image registry to the cluster
   ansible.builtin.include_role:
@@ -50,7 +50,11 @@
 # stuck at 0/0 is invisible: rollout status passes, the netpol probe's mirror leg is refused
 # as intended, monitor-bridge's zero-available check skips a Deployment that wants zero, and
 # containerd falls back to ghcr.io until the WAN outage the mirror exists for. So every deploy
-# restores it, unless the mirror's GC Job is running right now.
+# restores it, unless a GC run holds the store.
+#
+# Only while Ansible owns registry. After the flip, registry-gc.sh's own stamp restores it at
+# the start of the next run, and observability's GhcrMirrorScaledToZero pages a mirror left at
+# zero for 2h.
 - name: Read the ghcr-mirror replica count
   when: not k8s_no_mutate
   tags: [deploy]
@@ -61,6 +65,8 @@
   changed_when: false
   register: registry_mirror_replicas
 
+# A GC run killed after it applied its Job has released its lock, and the Job may still be
+# pruning, so the Job's own state gates the restore as well.
 - name: Read whether the ghcr-mirror GC Job is running
   when: not k8s_no_mutate
   tags: [deploy]
@@ -72,8 +78,13 @@
   changed_when: false
   register: registry_mirror_gc_active
 
+# Under registry-gc.sh's lock (#5736). The script holds it from before its scale-down until
+# after its restore, and it scales the mirror down before it creates its Job, so the Job read
+# above is empty for the first two minutes of every run. `--nonblock` makes a held lock exit
+# 75 at once, which means a GC run owns the mirror and this deploy leaves it alone.
 # `--current-replicas=0` makes the API server refuse the write if anything moved the count
-# since the read above.
+# since the read. The lock lives in /run/lock, which every host has, so a host with
+# registry_k8s_manage_gc false takes it too.
 - name: Restore a ghcr-mirror replica a stopped GC left at zero
   when:
     - not k8s_no_mutate
@@ -82,10 +93,13 @@
   tags: [deploy]
   ansible.builtin.command:
     cmd: >-
+      flock --nonblock --conflict-exit-code 75 {{ registry_k8s_gc_lock_file }}
       k3s kubectl -n {{ k8s_namespace }} scale deploy/ghcr-mirror --current-replicas=0
       --replicas=1
   become: true
-  changed_when: true
+  register: registry_mirror_restore
+  changed_when: registry_mirror_restore.rc == 0
+  failed_when: registry_mirror_restore.rc not in [0, 75]
 
 # The netpol probe below dials the mirror's port and passes when the dial is refused, which a
 # mirror with no endpoint yet also produces. Waiting here makes that leg a test of the policy.
@@ -112,17 +126,17 @@
 
 # THE JOB MANIFESTS GO IN THEIR OWN DIRECTORY, not `manifests/registry/`. That directory
 # belongs to `k8s/manifests`, whose prune task deletes every file in it that the caller does
-# not name in `manifests_files`/`manifests_secret_files`. These five are this role's own files
+# not name in `manifests_files`/`manifests_secret_files`. These four are this role's own files
 # rather than manifests of the workload, so no caller names them and the prune would delete
-# all five at the start of every registry deploy. The `manifests_prune` default is the
+# all four at the start of every registry deploy. The `manifests_prune` default is the
 # LIVE-object prune and is orthogonal to that staged-file prune.
 #
-# `gc-job.yaml` is why this is more than cosmetic. `registry-gc.sh` reads it at CRON time, not
-# at deploy time, so a prune before the re-render opens a window in which a GC run fails on a
-# missing manifest. With `registry_k8s_manage_gc: false` (daniel-stage) the render is skipped,
+# `ghcr-mirror-gc-job.yaml` is why this is more than cosmetic. `registry-gc.sh` reads it at CRON
+# time, not at deploy time, so a prune before the re-render opens a window in which a GC run
+# fails on a missing manifest. With `registry_k8s_manage_gc: false` (daniel-stage) the render is skipped,
 # so the window would be permanent.
 #
-# ONE directory for all five, rather than a `-selftest`/`-netpol`/`-gc` split. The reason
+# ONE directory for all four, rather than a `-selftest`/`-netpol`/`-gc` split. The reason
 # headlamp gives for a probe's own directory is that `kubectl apply -f <dir>` sweeps a whole
 # directory; registry applies each of these per-FILE, so that reason does not bite here, and
 # every additional sibling name is another reservation under the manifest root that nothing
@@ -285,45 +299,32 @@
       selftests above prove the admitted pods can.
 
 # ── garbage collection ──────────────────────────────────────────────────────
-# Scheduled, not run on deploy. GC takes the registry down for its duration, and a deploy is
-# exactly when a build is most likely to want it — the two must not share a window.
+# Scheduled, not run on deploy. GC takes the ghcr-mirror down for its duration, and the deploy's
+# own restore above and its netpol probe both want it serving.
 #
 # Gated as one block: the script pushes its result into Kuma, so on a cluster that is not the
-# one Kuma watches these four tasks install a cron that reports a foreign registry's health to
+# one Kuma watches these tasks install a cron that reports a foreign registry's health to
 # a real operator. Same reasoning as k3s_manage_health_crons, and the same shape — the gate is on the
 # whole unit, because a GC script with no cron and a cron with no script are both worse than neither.
 # The inverse of the block below, and OUTSIDE it — a task inside a `when:`-guarded block can
 # never run when the flag is false. Nothing sweeps `registry-jobs/`, so the removal is explicit.
-# daniel-stage sets the flag false.
-- name: Remove the registry garbage-collection job manifests where GC is unmanaged
+# daniel-stage sets the flag false. The retired push store's `gc-job.yaml` has its own absent
+# arm in roles/setup/k8s_host_files/tasks/registry.yml.
+- name: Remove the registry garbage-collection job manifest where GC is unmanaged
   tags: [config, registry-gc]
   when:
     - not (registry_k8s_manage_gc | bool)
     - not k8s_dry_run | bool
   ansible.builtin.file:
-    path: "{{ item }}"
+    path: /etc/rancher/k3s/manifests/registry-jobs/ghcr-mirror-gc-job.yaml
     state: absent
-  loop:
-    - /etc/rancher/k3s/manifests/registry-jobs/gc-job.yaml
-    - /etc/rancher/k3s/manifests/registry-jobs/ghcr-mirror-gc-job.yaml
   become: true
 
 - name: Manage the registry garbage collection
   when: registry_k8s_manage_gc | bool
   block:
-    - name: Render the registry garbage-collection job
-      tags: [config, registry-gc]
-      ansible.builtin.template:
-        src: gc-job.yaml.j2
-        dest: /etc/rancher/k3s/manifests/registry-jobs/gc-job.yaml
-        mode: "0644"
-        owner: root
-        group: root
-      become: true
-      when: not k8s_dry_run | bool
-
-    # Its own file, because registry-gc.sh applies it in its own phase, with only
-    # deploy/ghcr-mirror scaled down.
+    # The push store's `gc-job.yaml` is retired (D5, Wave D's registry bullet): only the
+    # mirror's store is collected.
     - name: Render the ghcr-mirror garbage-collection job
       tags: [config, registry-gc]
       ansible.builtin.template:
@@ -338,7 +339,7 @@
     - name: Deploy the registry garbage-collection script
       tags: [config, registry-gc]
       # Root-owned and root-run: unlike the read-only heartbeats in roles/setup/k3s, this one
-      # uses the root kubeconfig because it must scale the registry Deployment. 0700 so the
+      # uses the root kubeconfig because it must scale the ghcr-mirror Deployment. 0700 so the
       # credential path it implies isn't readable by other local accounts.
       ansible.builtin.template:
         src: registry-gc.sh.j2

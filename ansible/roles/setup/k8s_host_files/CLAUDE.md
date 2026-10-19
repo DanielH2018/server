@@ -47,7 +47,9 @@ both files into `files/`. qbittorrent's PR wrote `tasks/qbittorrent.yml`, which 
 the absent arms for the prefs drift check's retired host cron and script. traefik's PR wrote
 `tasks/traefik.yml`, the two absent arms that remove the retired Cloudflare IP drift cron and
 its script. uptime-kuma's PR wrote `tasks/uptime-kuma.yml`, the absent arm that removes
-the directory k8s/volume-claim staged autokuma-data's claim under. A row drops its source role's `when: not k8s_dry_run` guard and its `config` tag,
+the directory k8s/volume-claim staged autokuma-data's claim under. registry's push-store GC
+retirement wrote `tasks/registry.yml`, the absent arm for the `gc-job.yaml` manifest nothing
+reads any more. A row drops its source role's `when: not k8s_dry_run` guard and its `config` tag,
 because `initial_setup.yml` has no dry-run mode.
 
 - **The playbook entry is gated to daniel-box by a literal.** `setup_routing.py` places a role

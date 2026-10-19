@@ -1,18 +1,31 @@
 {#
-  registry's two verify Jobs and the ConfigMap that carries their script, INERT until
-  registry's flip.
+  registry's verify Jobs and the ConfigMap that carries their script, INERT until registry's
+  flip.
 
   This directory is `verify-inert/`, which neither reader globs: the manifests role takes only
   top-level `templates/*.yaml.j2`, and `verify_files` takes only `templates/verify/*.yaml.j2`.
   registry's flip PR moves the directory to `templates/verify/`, and the renderer then emits
   it into `registry-verify` (D5, *A verify conversion lands as inert code*). The same PR
-  deletes the self-test and netpol probe tasks with `selftest-push-job.yaml.j2` and
-  `netpol-probe-job.yaml.j2`, which these Jobs replace.
+  deletes the self-test and netpol probe tasks with `selftest-push-job.yaml.j2`,
+  `selftest-pull-job.yaml.j2` and `netpol-probe-job.yaml.j2`, which these Jobs replace.
 
-  NO JOB FORM for `selftest-pull-job.yaml.j2`. Its proof is that containerd on each node pulls
-  the pod's own image from `{{ k8s_registry_pull_host }}`. The Job census requires every
-  container to run `python3 <mount>/<script>.py`, and the probe image holds no Python, so no
-  Job here can make that proof. registry's flip has to decide what replaces it (#5680).
+  THE PULL JOBS RUN A COPY OF THE FLEET'S PYTHON JOB IMAGE FROM THE PUSH STORE (ruling on
+  #5680). Their proof is that containerd on each node pulls the pod's own image from
+  `{{ k8s_registry_pull_host }}`, and the Job census requires every container to run
+  `python3 <mount>/<script>.py`, so the image they pull must hold Python. The push Job writes
+  that copy: after its round trip it copies `flux_job_image`'s linux/amd64 image into
+  `{{ registry_k8s_probe_repo }}:<seed tag>`, which names the pin's digest. A new pin is a new
+  tag, so the pull Jobs rename with it and Flux runs all of them again.
+
+  DECIDED: the pull Jobs wait for the seed by kubelet's image-pull retry, not by an ordering
+  Flux would have to express. Flux applies every Job in `registry-verify` at once, and on a
+  first run, or the first after a pin bump, the pull pods start before the push has written
+  their image. Such a pod waits in ImagePullBackOff, which is Pending and spends no
+  `backoffLimit`. kubelet retries after 10, 20, 40, 80 and 160s, so its sixth attempt lands
+  about 310s in. The push's deadline is 240s, so that attempt finds the image whenever the
+  push succeeded. The pull deadline, 450s, covers it and the pull itself, and sits below the
+  Kustomization's 600s. A failed push leaves the pull Jobs to fail on their deadline as well,
+  which names the same fault twice rather than hiding it.
 
   Both names end in a digest, as the Job census requires (D5, *Rules for every Job Flux
   applies*): the ConfigMap's in `configmap_digest8` of its data, each Job's in
@@ -26,11 +39,17 @@
   Job dials, so an edit to any of them renames both Jobs and makes Flux run them again. The
   Ansible tasks re-run on every deploy; these re-run only when that render changes.
 
-  The caller census (D5, *A fence admits every Job that dials through it*). Both pods run in
-  `k8s_namespace` and exec into nothing:
+  The caller census (D5, *A fence admits every Job that dials through it*). Every pod runs in
+  `k8s_namespace` and execs into nothing:
     - `registry-verify-push-<digest>` carries `app: registry-selftest-push` and dials
       registry:{{ k8s_registry_port }}. `networkpolicy.yaml.j2` already admits that label,
-      because the Ansible self-test it replaces carries it, so it needs no new peer;
+      because the Ansible self-test it replaces carries it, so it needs no new peer. Its seed
+      also reads `flux_job_image`'s registry over the WAN, which no fence here covers, because
+      egress is not enforced on this cluster (ADR-0009);
+    - `registry-verify-pull-<digest>` and, on a cluster with an agent node,
+      `registry-verify-pull-agent-<digest>` carry `app: registry-verify` and dial nothing.
+      Their image pull is containerd's, which arrives SNAT'd to a node grant the fence already
+      holds, so they need no peer either;
     - `registry-verify-isolation-<digest>` carries `app: registry-verify` and dials
       registry:{{ k8s_registry_port }} and registry:{{ k8s_registry_ghcr_mirror_port }}, both
       of which must REFUSE it. No peer is added: admitting `registry-verify` would open the
@@ -45,17 +64,31 @@
 {% set configmap_name = 'registry-verify-' + ({'data': data, 'binaryData': {}} | to_json(sort_keys=True, separators=(',', ':')) | hash('sha256'))[:8] %}
 {% set render_digest8 = ((lookup('template', 'networkpolicy.yaml.j2') + lookup('template', 'deployment.yaml.j2') + lookup('template', 'service.yaml.j2')) | hash('sha256'))[:8] %}
 {% set registry_service = 'registry.' + k8s_namespace + '.svc.cluster.local' %}
+{% set seed_tag = 'python-' + (flux_job_image.split('@sha256:')[1])[:12] %}
+{% set pulled_image = k8s_registry_pull_host + '/' + registry_k8s_probe_repo + ':' + seed_tag %}
+{% set pull_env = {'CHECK': 'pull', 'PULLED_IMAGE': pulled_image} %}
 {% set checks = [
   {
     'name': 'push',
     'app': 'registry-selftest-push',
-    'deadline': 180,
+    'deadline': 240,
     'env': {
       'CHECK': 'push',
       'REGISTRY_URL': 'http://' + k8s_registry_push_host,
       'REPO': registry_k8s_probe_repo,
       'TAG': 'verify',
+      'SOURCE_IMAGE': flux_job_image,
+      'PLATFORM': 'linux/amd64',
+      'SEED_TAG': seed_tag,
     },
+  },
+  {
+    'name': 'pull',
+    'app': 'registry-verify',
+    'deadline': 450,
+    'image': pulled_image,
+    'node': k8s_registry_node,
+    'env': pull_env,
   },
   {
     'name': 'isolation',
@@ -67,6 +100,22 @@
     },
   },
 ] %}
+{#
+  The agent node's pull path: its containerd resolves the mirror to the pinned ClusterIP and
+  is admitted by the fence's flannel.1 ipBlock, the grant this leg fails on if that SNAT
+  assumption breaks. Rendered only where `k3s_agent_node_ips` names an agent, as
+  `selftest-pull-job.yaml.j2`'s agent half is: a single-node cluster could never schedule it.
+#}
+{% if k3s_agent_node_ips | default([]) | length > 0 %}
+{% set checks = checks + [{
+    'name': 'pull-agent',
+    'app': 'registry-verify',
+    'deadline': 450,
+    'image': pulled_image,
+    'node': 'daniel-server',
+    'env': pull_env,
+  }] %}
+{% endif %}
 ---
 apiVersion: v1
 kind: ConfigMap
@@ -93,6 +142,10 @@ template:
     automountServiceAccountToken: false
     restartPolicy: Never
     enableServiceLinks: false
+{% if check.node is defined %}
+    nodeSelector:
+      kubernetes.io/hostname: {{ check.node }}
+{% endif %}
     securityContext:
       runAsNonRoot: true
       runAsUser: 65534
@@ -101,7 +154,14 @@ template:
         type: RuntimeDefault
     containers:
       - name: verify
+{% if check.image is defined %}
+        image: {{ check.image }}
+        # A cached copy would let the pod start with the registry down, the one thing it
+        # must not do.
+        imagePullPolicy: Always
+{% else %}
         image: {{ flux_job_image }}
+{% endif %}
         command:
           - python3
           - {{ script_dir }}/{{ script_name }}

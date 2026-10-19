@@ -52,13 +52,11 @@ registry round trip. See repo-root `CLAUDE.md` for shared conventions.
     apply, and later Flux, a claim on it that restores the pod mid-GC.
   - It caches every `ghcr.io` image in the cluster, not only `danielh2018`'s, because a
     `registries.yaml` mirror covers the whole host. Its store is therefore its own claim,
-    `registry_k8s_ghcr_mirror_claim` (30Gi, `longhorn-nobackup`), which the push store's GC
-    Job never mounts.
+    `registry_k8s_ghcr_mirror_claim` (30Gi, `longhorn-nobackup`).
   - The TTL is zero, so only the weekly GC reclaims the store (#5541). A proxy refuses
     manifest DELETE, so `ghcr-mirror-gc-job.yaml.j2`'s Job, `registry-gc-ghcr-mirror`, edits
-    the store offline. `registry-gc.sh` runs it in its own phase, with only
-    `deploy/ghcr-mirror` scaled to zero, after the push store's phase has brought
-    `deploy/registry` back. Its `prune` initContainer runs `files/ghcr-mirror-prune.sh`, and its
+    the store offline. `registry-gc.sh` runs it with only `deploy/ghcr-mirror` scaled to zero.
+    Its `prune` initContainer runs `files/ghcr-mirror-prune.sh`, and its
     `gc` container then runs plain `garbage-collect`.
   - The prune's unit is a manifest revision, not a tag. A third-party ghcr.io image is pinned
     by digest, and the proxy caches a digest pull with no tag, so `--delete-untagged` on this
@@ -79,48 +77,50 @@ registry round trip. See repo-root `CLAUDE.md` for shared conventions.
     mirror. ghcr.io's signed blob URL expires mid-transfer on HTTP/1.1 and HTTP/2 alike,
     and the proxy never resumes (#5654). The measurement is in the comment above
     `REGISTRY_PROXY_REMOTEURL` in `templates/ghcr-mirror.yaml.j2`.
-  - containerd falls back to `ghcr.io` while the GC scales the mirror to zero. A build in
-    flight skips only the push store's phase, since no build writes the mirror's store.
-- A weekly garbage collection (`gc-job.yaml.j2`, Sunday 04:20) takes the push store
-  offline for up to 20 minutes — nothing else reclaims space, and every rebuild pushing
-  the same `latest` tag orphans the previous manifest.
-- **`registry-gc.sh` untags superseded content tags BEFORE it scales the registry down**, and
-  that order is load-bearing. Every build also pushes an immutable `sha-<12 hex>` tag
-  (`k8s/image-builder`), which is a real manifest reference `garbage-collect
-  --delete-untagged` can never reclaim — so without the prune the store gains one permanent
-  manifest per rebuild. Untagging is an HTTP `DELETE` against the SERVING registry, while the
-  GC Job runs the binary against a store with nothing serving it; reversed, every prune fails
-  on a refused connection and only the blob sweep runs.
-  - It keeps `registry_k8s_keep_content_tags` (3) newest per repository, the digest `latest`
-    resolves to, and any digest a running pod resolved. That last one is not belt-and-braces:
-    every Ansible-owned consumer pulls from here with `imagePullPolicy: Always`, so a pod
-    re-fetches by tag on each start and untagging the manifest it came from turns its next
-    restart into an ImagePullBackOff. `Always` stays while Ansible owns the consumer, because this
-    store's tags are mutable: `latest` moves on every build, and a forced rebuild re-pushes an
-    unchanged content tag with new bytes, so a node's cached copy can be stale. A flux-owned
-    consumer pulls its GHCR content tag with `IfNotPresent` instead
-    (`scripts/renderer/renderer_lib/images.py:ghcr_refs`). GHCR never re-pushes a tag it serves,
-    so a cached copy is always right. That pull goes through the `ghcr-mirror` Deployment above,
-    never through this store.
-  - An unrankable tag is KEPT. Ordering needs each manifest's config-blob `created`, because
-    the tag names are content hashes and carry no chronology.
+  - containerd falls back to `ghcr.io` while the GC scales the mirror to zero. No build writes
+    the mirror's store, so the GC does not wait for builds.
+  - **Nothing but `registry-gc.sh` writes the mirror's `spec.replicas`**, so the operator
+    accepted it as the one exception to contract C4 on field ownership (#5732). The script
+    stays a host cron after the flip.
+  - **The deploy never restores the mirror mid-GC** (#5736). The script holds an flock on
+    `registry_k8s_gc_lock_file` for its whole run, and the deploy's restore runs under the same
+    lock with `--nonblock`, so a held lock skips it. The Job-active read stays beside it for a
+    run killed after it applied its Job.
+  - **A run killed mid-phase is repaired by the next one.** The stamp
+    `/var/lib/registry-gc/ghcr-mirror-down` exists from before the scale-down until the mirror
+    serves again, and a run that finds it restores the mirror first. The deploy restores a
+    stranded mirror only while Ansible owns registry, so observability's
+    `GhcrMirrorScaledToZero` (`files/rules/registry.yaml` there) pages one left at zero for 2h.
+- **The push store is not collected** (D5, Wave D's registry bullet). Its GC scaled
+  `deploy/registry`, whose `replicas: 1` Flux renders after the flip, so Flux would restore
+  the pod mid-GC, the corruption the stop-the-world rule exists to prevent. Every
+  `k8s/image-builder` caller is flux-owned and pulls from GHCR, so nothing new reaches the
+  store. Its self-tests rewrite the same tags, so the store grows only with each new
+  `flux_job_image` pin the verify Job seeds and each upstream rebuild of
+  `registry_k8s_probe_source`.
 - The GC run reports twice: the `Registry GC` Kuma push tile (`registry_gc_push_token`,
   static in `k8s/uptime-kuma`, deadline one hour past the weekly period) and the off-site
   healthchecks.io `registry-gc` dead-man. The token existed nowhere but the script until
   2026-09-18 (#1937), so before that only the dead-man saw a run.
-- **The five job manifests stage in `/etc/rancher/k3s/manifests/registry-jobs/`, not in this
+- **The four job manifests stage in `/etc/rancher/k3s/manifests/registry-jobs/`, not in this
   role's own manifest directory** (#1669). `k8s/manifests` prunes every file in
-  `manifests/registry/` outside the role's file list, which deleted all four on every deploy.
-  Their `-job.yaml` suffix keeps them out of the derived list. `gc-job.yaml` and
-  `ghcr-mirror-gc-job.yaml` are the ones that matter: `registry-gc.sh` reads them at cron time, so
-  the prune left a window in which GC failed on a missing manifest. Nothing sweeps
-  `registry-jobs/`, so a host with `registry_k8s_manage_gc: false` gets an explicit removal
-  task outside the GC block.
-- **`templates/verify-inert/` holds the Flux form of the push self-test and the netpol probe**,
+  `manifests/registry/` outside the role's file list, which deleted them on every deploy.
+  Their `-job.yaml` suffix keeps them out of the derived list. `ghcr-mirror-gc-job.yaml` is
+  the one that matters: `registry-gc.sh` reads it at cron time, so the prune left a window in
+  which GC failed on a missing manifest. Nothing sweeps `registry-jobs/`, so a host with
+  `registry_k8s_manage_gc: false` gets an explicit removal task outside the GC block. The
+  retired push store's `gc-job.yaml` has its absent arm in
+  `ansible/roles/setup/k8s_host_files/tasks/registry.yml`.
+- **`templates/verify-inert/` holds the Flux form of the self-tests and the netpol probe**,
   and nothing renders it yet. The flip PR renames it to `templates/verify/` and deletes the
-  tasks. `files/registry_verify.py` pushes a fixed image through the distribution API, or
-  proves both ports refuse `app: registry-verify`. The pull self-tests have no Job form yet,
-  and the push store's GC retirement follows in its own PR (#5680).
-- `registry-gc.sh` proves itself with `crane` push/pull round trips
-  (`registry_k8s_probe_source`, `registry_k8s_probe_repo`) rather than trusting the GC
-  ran clean.
+  tasks with their three Job templates. `files/registry_verify.py` runs one check per Job:
+  - `push` writes a fixed image through the distribution API, then seeds the pull Jobs'
+    image. It copies `flux_job_image`'s linux/amd64 image into the push store under a tag
+    named for the pin's digest, reading Docker Hub only when the store lacks that tag.
+  - `pull`, and `pull-agent` on a cluster with an agent node, run that copy from
+    `k8s_registry_pull_host`, so the pod starting is the proof (ruling on #5680). On a first
+    run they wait in ImagePullBackOff until the push has seeded it. The `DECIDED:` comment
+    in `templates/verify-inert/job.yaml.j2` has the deadline arithmetic.
+  - `isolation` proves both ports refuse `app: registry-verify`.
+- The deploy proves the push and pull loop with `crane` round trips
+  (`registry_k8s_probe_source`, `registry_k8s_probe_repo`) before trusting a rollout.
