@@ -219,6 +219,35 @@ def _lapi_register_command() -> list[str]:
     return init["command"]
 
 
+def _seed_etc(etc) -> None:
+    """Install the config Secret's files into `etc` where config-install puts them.
+
+    crowdsec-etc is an emptyDir, so lapi-register reads exactly this set and no config.yaml.
+    discord.yaml is left out: it carries the webhook, and `cscli machines` never reads it.
+    """
+    [seed] = [
+        doc["stringData"]
+        for doc in yaml_fast.safe_load_all(
+            render_role_template("crowdsec", "config-secret.yaml.j2")
+        )
+        if doc["metadata"]["name"] == "crowdsec-config"
+    ]
+    enrich = etc / "parsers" / "s02-enrich"
+    enrich.mkdir(parents=True)
+    # config-install's modes, set rather than left to the runner's umask: root with every
+    # capability dropped reads these through their `other` bits.
+    for directory in (etc, etc / "parsers", enrich):
+        directory.chmod(0o755)
+    for name, directory in (
+        ("acquis.yaml", etc),
+        ("profiles.yaml", etc),
+        ("whitelist.yaml", enrich),
+        ("trusted-remote-whitelist.yaml", enrich),
+    ):
+        (directory / name).write_text(seed[name])
+        (directory / name).chmod(0o644)
+
+
 def _lapi_machines() -> set[str]:
     group_vars = yaml_fast.safe_load(ALL_VARS.read_text())
     defaults = yaml_fast.safe_load(
@@ -273,9 +302,11 @@ def test_the_lapi_register_init_runs_against_a_fresh_database_with_no_lapi(
     docker, tmp_path, record_property
 ):
     # fact: ansible/roles/k8s/crowdsec/CLAUDE.md#The `lapi-register` initContainer holds the LAPI down if it fails
-    # The pod's /etc/crowdsec holds no config.yaml when initContainers run.
+    # The pod's /etc/crowdsec holds config-install's seed and no config.yaml when
+    # lapi-register runs. cscli opens profiles.yaml from it before any `machines` command.
     etc = tmp_path / "etc"
     etc.mkdir()
+    _seed_etc(etc)
     # Root with every capability dropped writes only where the mode lets `other` write.
     data = tmp_path / "data"
     data.mkdir()
