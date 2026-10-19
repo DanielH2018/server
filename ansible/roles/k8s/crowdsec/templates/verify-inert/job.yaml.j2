@@ -14,19 +14,30 @@
   says how each hop moved, and why the bouncer-pull hop has no Job form. Both names end in a
   digest, as the Job census requires: the ConfigMap's of its data, the Job's of its spec.
 
-  What the flip PR must land first, none of which this file can do while it is inert:
-    - the `crowdsec-verify` machine registered on LAPI, by the LAPI initContainer that replaces
-      the registration task in `tasks/main.yml`;
-    - the fence peers below;
-    - the spec digest of the inputs that roll the crowdsec pod, so every revision that rolls it
-      renames the Job, as janitorr's verify Job does.
+  The spec embeds a digest of the inputs that roll the crowdsec pod, the ones `checksum/restart`
+  hashes under Flux (`scripts/renderer/renderer_lib/restart.py`): the rendered Deployment and
+  `crowdsec-jobs` ConfigMap, the `crowdsec-config`, `crowdsec-env` and `crowdsec-jobs` Secret
+  templates with every file `crowdsec-config` embeds, and the `cluster-vars.source` digest of
+  each key those Secrets read. So every change that rolls the pod renames the Job, and Flux runs
+  it again, as Ansible runs `verify.yml` on every deploy. The node-agent DaemonSet is a restart
+  target too, but the Job tests the LAPI and the edge, not the agents, so its inputs stay out.
+  `tests/test_crowdsec_verify.py` fails if a ConfigMap or Secret the pod names drops out.
+
+  What the flip PR must land first, which this file cannot do while it is inert: the
+  `crowdsec-verify` machine registered on LAPI, by the LAPI initContainer that replaces the
+  registration task in `tasks/main.yml`. The flip PR also states the hop-2 trade: the gate's
+  `last_pull` wait has no Job form, so a missing 403 no longer says which of its two causes
+  happened.
 
   The caller census (D5, *A fence admits every Job that dials through it*). The pod is
   `app: crowdsec-verify` in `k8s_namespace`. It execs into nothing and dials:
     - crowdsec:{{ crowdsec_k8s_lapi_port }}, the LAPI, through the LAPI fence in
-      netpol-baseline's `networkpolicy-crowdsec.yaml.j2`, which must list `crowdsec-verify`;
+      netpol-baseline's `networkpolicy-crowdsec.yaml.j2`, which lists `crowdsec-verify` on the
+      LAPI port alone. netpol-baseline's crowdsec row (`expect: refused`) shows that fence
+      refuses an unlisted pod;
     - prometheus.{{ k8s_observability_namespace }}:9090, through the `homelab` peers of
-      netpol-baseline's `networkpolicy-prometheus.yaml.j2`, which must list it too.
+      netpol-baseline's `networkpolicy-prometheus.yaml.j2`, which list it too, with
+      netpol-baseline's prometheus row as its refused leg.
   Without a peer, the helper's 60 seconds of refused connects run out and the Job fails
   closed, naming the channel or the LAPI login.
 #}
@@ -37,6 +48,24 @@
   'flux_job_connect.py': flux_job_connect,
 } %}
 {% set configmap_name = 'crowdsec-verify-' + ({'data': data, 'binaryData': {}} | to_json(sort_keys=True, separators=(',', ':')) | hash('sha256'))[:8] %}
+{#- The pod's roll inputs, as `checksum/restart` hashes them; see the note above. The Secret
+    templates and the files they embed are read raw, never rendered, and `cluster-vars.source`
+    holds a digest of each key's ciphertext, so no value enters the hash. The ConfigMap holds no
+    secret (`ansible/tests/k8s/test_no_secret_in_a_moved_jobs_configmap.py`), so it renders. -#}
+{% set role_dir = playbook_dir + '/roles/k8s/crowdsec/' %}
+{% set roll = namespace(
+  text=lookup('template', 'deployment.yaml.j2') + lookup('template', 'jobs-configmap.yaml.j2'),
+  secrets=lookup('file', role_dir + 'templates/config-secret.yaml.j2')
+    + lookup('file', role_dir + 'templates/jobs-secret.yaml.j2')
+    + lookup('file', role_dir + 'templates/config/crowdsec-discord.yaml.j2')
+    + lookup('file', role_dir + 'files/crowdsec-profiles.yaml')
+    + lookup('file', role_dir + 'files/crowdsec-whitelist.yaml')
+    + lookup('file', role_dir + 'files/crowdsec-trusted-remote-whitelist.yaml'),
+) %}
+{% for line in lookup('file', playbook_dir + '/vars/cluster-vars.source').splitlines() if line and not line.startswith('#') and ('{{ ' + line.split()[0] + ' ') in roll.secrets %}
+{% set roll.text = roll.text + line %}
+{% endfor %}
+{% set roll_digest8 = ((roll.text + roll.secrets) | hash('sha256'))[:8] %}
 {% set spec_text %}
 # A retry would ban the Pi a second time, and a flaky check must fail rather than pass on it.
 backoffLimit: 0
@@ -87,6 +116,9 @@ template:
           # One 1-minute probe period, one 1-minute scrape and its 30s timeout, with slack.
           - name: WINDOW_SECONDS
             value: "300"
+          # Renames the Job whenever the crowdsec pod rolls; see the note above.
+          - name: CROWDSEC_ROLL_DIGEST8
+            value: "{{ roll_digest8 }}"
           - name: PYTHONDONTWRITEBYTECODE
             value: "1"
         resources:
