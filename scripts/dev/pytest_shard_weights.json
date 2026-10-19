@@ -158,6 +158,7 @@
  "ansible/roles/k8s/qbittorrent/tests/test_qbittorrent_job.py": 1.67,
  "ansible/roles/k8s/registry/tests/test_ghcr_mirror_prune.py": 0.22,
  "ansible/roles/k8s/registry/tests/test_registry_verify.py": 3.19,
+ "ansible/roles/k8s/registry/tests/test_registry_verify_seed.py": 4.53,
  "ansible/roles/k8s/sonarr/tests/test_sonarr_verify.py": 6.27,
  "ansible/roles/k8s/tdarr/tests/test_tdarr_verify.py": 0.9,
  "ansible/roles/k8s/uptime-kuma/tests/test_declaration_index_flux_form.py": 0.82,
