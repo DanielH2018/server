@@ -138,3 +138,25 @@ def test_a_bundle_without_soak_never_gains_it():
     new = _with_soak(bento_pdf="b", sonarr="s", cluster_vars="v", _unclassified="u")
     old = _with_soak(bento_pdf="a", sonarr="s", cluster_vars="v", _unclassified="u")
     assert changed_set(new, old, GRAPH).names == {"bento-pdf"}
+
+
+def test_a_moved_tags_own_predecessor_kinds_join_the_set_as_direct_members():
+    """`<tag>-precheck` sits above `<tag>` in the chain, so only the tag's footprint brings it in."""
+    graph = {
+        **GRAPH,
+        "bento-pdf": ["bento-pdf-precheck", "bento-pdf-prepull"],
+        "bento-pdf-precheck": [],
+        "bento-pdf-prepull": [],
+        "sonarr": ["sonarr-precheck", "bento-pdf"],
+        "sonarr-precheck": [],
+    }
+    new = digests(bento_pdf="b", sonarr="s", cluster_vars="v", _unclassified="u")
+    result = changed_set(new, OLD, graph)
+    # sonarr joins as a dependent, and its own precheck, whose files did not move, stays out.
+    assert result.names == {
+        "bento-pdf",
+        "bento-pdf-precheck",
+        "bento-pdf-prepull",
+        "sonarr",
+    }
+    assert result.direct == {"bento-pdf", "bento-pdf-precheck", "bento-pdf-prepull"}
