@@ -17,14 +17,21 @@ together with D5's run-once cleanup PR. It merged at `471397804`. daniel-box's t
 both scripts at 01:41 UTC, and the peer sync cron rewrote its lock at 01:45:01, the first slot
 after. On daniel-server, `initial_setup.yml --tags claude_code` read `ok=123 changed=4
 failed=0`. The node gate kept both crons off that host, and `Restart claude-rc` did not run.
-PR H2.4b, crowdsec's three API jobs, worked under #5649. The operator ruled on
-2026-10-18 that crowdsec's jobs run in a sidecar of the LAPI pod (*Open questions* 2). The
-remote allowlist, the AppSec verify and the bouncer prune run in the `crowdsec-jobs` sidecar,
-and their three root crons become absent arms. No `pods/exec` grant is made.
-H2.4c, the home allowlist, worked under #5738. The operator ruled on 2026-10-18 (#5701, *Open
+PR H2.4b, crowdsec's three API jobs: [#5711](https://github.com/DanielH2018/server/pull/5711).
+It merged at `b74d3b367`. The operator ruled on 2026-10-18 that crowdsec's jobs run in a
+sidecar of the LAPI pod (*Open questions* 2). The remote allowlist, the AppSec verify and the
+bouncer prune run in the `crowdsec-jobs` sidecar, and their three root crons became absent
+arms. No `pods/exec` grant is made. Every `cscli` call in the sidecar failed with `mkdir
+/var/lib/crowdsec/data/trace: file exists` until
+[#5739](https://github.com/DanielH2018/server/pull/5739) (`afbdd6e6f`) mounted an emptyDir at
+the engine image's staged `trace` link.
+PR H2.4c, the home allowlist: [#5753](https://github.com/DanielH2018/server/pull/5753). It
+merged at `ab684ae22`, in crowdsec's window. The operator ruled on 2026-10-18 (#5701, *Open
 questions* 2) that a host-network CronJob looks the addresses up into a ConfigMap and the
-`crowdsec-jobs` sidecar syncs the allowlist from it. The home allowlist's root cron becomes an
-absent arm.
+`crowdsec-jobs` sidecar syncs the allowlist from it. The home allowlist's root cron became an
+absent arm. After the deploy, the `crowdsec-home-ips` ConfigMap held an IPv4 address and a
+/64, and the sidecar logged `crowdsec-home-allowlist: status=up`. D5's #5765 moves the four
+cron arms and the file arm into `k8s_host_files`.
 Depends on: H1, D3 and H6, per PR. H2.2a needs H1.5a and H1.6. H2.3b needs H1.5a and the C3
 row of *Open questions* 12. H2.8a needs H1.7b (and through it D3) and H6.4b, with the
 region-key gate of *Open questions* 11. No other H2 PR waits outside H2 (*Open questions*
