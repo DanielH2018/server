@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/crons.py
-generated_at: 2026-10-18 18:17 UTC
-generated_sha: 2aac6355a
+generated_at: 2026-10-19 06:17 UTC
+generated_sha: ddc360330
 ---
 
 !!! warning "Generated file — do not edit"
@@ -12,7 +12,7 @@ generated_sha: 2aac6355a
 
 # Scheduled jobs
 
-34 cron entrie(s) installed across the roles.
+30 cron entrie(s) installed across the roles.
 
 !!! warning "The state column is a heuristic"
     It is judged from the command text, and nothing in a cron task declares its own blast radius. A job that runs a wrapper script reads as "read the script" rather than being guessed at. Treat it as a pointer, not an authority.
@@ -24,10 +24,6 @@ generated_sha: 2aac6355a
 | Claude Code telemetry health | `*/10 * * * *` | every host in the play | `ubuntu` | read the script | `ansible/roles/setup/claude_code/tasks/node_crons.yml` |
 | Clean unused Docker images | `30 6 * * *` | conditional (has_docker) | `{{ ansible_facts.user_id }}` | yes (prune) | `ansible/roles/setup/initial_setup/tasks/crons.yml` |
 | Clear ansible log file | `0 6 * * 0` | conditional (has_repo_checkout) | `root` | yes (truncate) | `ansible/roles/setup/initial_setup/tasks/crons.yml` |
-| CrowdSec AppSec verify | `*/15 * * * *` | conditional (not k8s_dry_run \| bool) | `root` | read the script | `ansible/roles/k8s/crowdsec/tasks/main.yml` |
-| CrowdSec bouncer prune | `17 * * * *` | conditional (not k8s_dry_run \| bool) | `root` | yes (prune) | `ansible/roles/k8s/crowdsec/tasks/main.yml` |
-| CrowdSec home allowlist | `*/5 * * * *` | conditional (not k8s_dry_run \| bool) | `root` | read the script | `ansible/roles/k8s/crowdsec/tasks/main.yml` |
-| CrowdSec remote allowlist | `*/5 * * * *` | conditional (not k8s_dry_run \| bool) | `root` | read the script | `ansible/roles/k8s/crowdsec/tasks/main.yml` |
 | Full etcd restore drill in a throwaway guest | `20 11 1 * *` | every host in the play | `root` | no (read-only by its command) | `ansible/roles/setup/hypervisor/tasks/etcd_drill.yml` |
 | Homelab eval sweep | `0 2 * * 0` | daniel-box | `ubuntu` | read the script | `ansible/roles/setup/initial_setup/tasks/crons.yml` |
 | Longhorn backup health | `*/10 * * * *` | every host in the play | `ubuntu` | yes (backup) | `ansible/roles/setup/k3s/tasks/health-crons.yml` |
