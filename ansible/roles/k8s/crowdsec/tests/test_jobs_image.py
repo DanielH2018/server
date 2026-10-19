@@ -10,8 +10,8 @@ copied out of `crowdsec_k8s_image` as the `jobs-cscli` initContainer copies it, 
 python image too, which is the linkage the operator's ruling on #5655 asked to check.
 
 The `lapi-register` initContainer's script, taken from the rendered Deployment, runs in
-`crowdsec_k8s_image` twice against a fresh database directory with no network, so no LAPI can
-answer it. That is D5's check that `cscli machines add` and `cscli allowlists create` work with
+`crowdsec_k8s_image` twice with no network, so no LAPI can answer it. Its database directory
+holds the entrypoint's links into the image's read-only `/staging` and no database yet. That is D5's check that `cscli machines add` and `cscli allowlists create` work with
 no LAPI running (#5741).
 
 No leg reaches a LAPI. What the sidecar's `cscli` reads from the live engine's
@@ -216,6 +216,15 @@ def _lapi_machines() -> set[str]:
     }
 
 
+# The image entrypoint's own loop over the staged data files (docker_start.sh).
+_ENTRYPOINT_LINKS = """
+for target in /staging/var/lib/crowdsec/data/*; do
+  case "${target##*/}" in crowdsec.db*) continue ;; esac
+  ln -s "$target" "/var/lib/crowdsec/data/${target##*/}"
+done
+"""
+
+
 def _run_in_engine_image(docker, data, etc, *command) -> subprocess.CompletedProcess:
     """`command` in the engine's image, mounted and confined as the initContainer runs it."""
     entrypoint, *args = command
@@ -256,6 +265,10 @@ def test_the_lapi_register_init_runs_against_a_fresh_database_with_no_lapi(
     data = tmp_path / "data"
     data.mkdir()
     data.chmod(0o777)
+    # The live claim's shape: the entrypoint has linked every staged data entry but the database
+    # into it, so cscli reaches `trace` through a link into the read-only root filesystem.
+    linked = _run_in_engine_image(docker, data, etc, "/bin/sh", "-c", _ENTRYPOINT_LINKS)
+    assert linked.returncode == 0, linked.stderr
     command = _lapi_register_command()
     first = _run_in_engine_image(docker, data, etc, *command)
     print(first.stdout, first.stderr)
