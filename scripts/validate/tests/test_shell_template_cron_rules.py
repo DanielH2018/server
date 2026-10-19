@@ -4,14 +4,10 @@ Split out of `test_validate_shell_templates.py`, which keeps the validator machi
 rules and one resolver live here: `validate.validate_lib.cron_targets.cron_job_scripts` (which templates a cron
 actually installs), `validate.validate_lib.cron_checks.cron_path_error` (cron inherits no PATH) and
 `validate.validate_lib.cron_checks.cron_kubeconfig_error` (cron inherits no KUBECONFIG, and k3s.yaml is
-root-only), plus the crowdsec home-allowlist curl-retry pins.
+root-only).
 
-The curl-retry pins read a RENDER (`_shell_render.rendered_shell_text`), because a retry count
-that moves into a role default would leave them pinning a brace. The three cron rules read the
-SOURCE on purpose: a rule's second argument IS the template text, so the tree-wide runs below
-hand it exactly what `shell_templates.py` hands it in production. That is why this module keeps
-its entry in `SHELL_SOURCE_READERS` permanently (#3189) — an entry the rule only started
-requiring once it learned to see a resolver-fed read (#3200).
+The cron rules read the SOURCE on purpose: a rule's second argument IS the template text, so
+the tree-wide runs below hand it exactly what `shell_templates.py` hands it in production.
 
 The module-scoped `cron_map` fixture is why these four guards stay in ONE file: pytest runs
 with `--dist loadscope`, so a module-scoped fixture is re-evaluated once per module, and
@@ -20,11 +16,9 @@ splitting its consumers would pay the ~0.6s tree walk again per file.
 Run: uv run pytest scripts/validate/tests/test_shell_template_cron_rules.py
 """
 
-import re
 from pathlib import Path
 
 import pytest
-from _shell_render import rendered_shell_text
 from validate import shell_templates as v
 from validate.validate_lib import cron_checks as cc
 from validate.validate_lib import cron_targets as ct
@@ -163,69 +157,6 @@ def test_no_cron_job_template_in_the_tree_violates_the_path_rule(cron_map):
         )
     }
     assert offenders == set()
-
-
-# Rendered, not read: a `--retry` count that moves into a role default leaves the source
-# matching `--retry {{ ... }}`, and `_RETRY_COUNT` then pins a brace rather than a number
-# (#3189). The accessor renders through this very validator, so what is pinned here is what
-# the shellcheck gate lints.
-HOME_ALLOWLIST = ("k8s", "crowdsec", "crowdsec-update-home-allowlist.sh.j2")
-
-# How WIDE the retry has to be is a separate question with its own budget, and it lives in
-# ansible/tests/services/test_crowdsec_allowlist_push_retry.py. This guard only pins that a
-# count is there at all, so the two do not both have to move when the width is retuned.
-_RETRY_COUNT = re.compile(r"--retry\s+\d+")
-
-
-def test_home_allowlist_curls_all_retry():
-    # The monitor this script pushes is push-type with max_retries 0, so ONE transient curl
-    # failure is an immediate DOWN — 9 down/up cycles in 3 days, none of them
-    # a real allowlist problem. Both `bash -n` and shellcheck pass a script with the flags
-    # stripped, so the DECIDED comment above them is the only thing holding them today, and a
-    # comment is not enforcement. Pin every curl instead.
-    #
-    # The WAN probes are the ONE exemption, and it is a different rule rather than a hole in this
-    # one. Their failure is not a lost verdict to ride out — it IS the verdict the script
-    # reads, so a retry would delay the answer and spend budget the */5 period does not have.
-    # `ansible/tests/services/test_crowdsec_allowlist_wan_skip.py` pins their flags equal to
-    # kuma-push-lib.sh's copy, including the absence of `--retry`, so the exemption is enforced
-    # rather than merely allowed.
-    lines = [
-        ln.strip()
-        for ln in rendered_shell_text(*HOME_ALLOWLIST).splitlines()
-        if "curl " in ln and not ln.lstrip().startswith("#")
-    ]
-    assert lines, "no curl invocations found — did the script move or get rewritten?"
-    probes = [ln for ln in lines if "--max-time 5" in ln]
-    assert probes, (
-        "the WAN-probe curls went missing — the exemption below matches nothing"
-    )
-    for ln in lines:
-        if ln in probes:
-            continue
-        assert _RETRY_COUNT.search(ln), f"curl without a --retry count: {ln}"
-        # --retry-all-errors is what covers connection-refused, and a rollout's 404. Measured on
-        # curl 8.5.0: bare --retry returns instantly on a refused port (exit 7) and on a 404; it
-        # DOES retry a DNS failure.
-        assert "--retry-all-errors" in ln, f"curl without --retry-all-errors: {ln}"
-
-
-def test_a_home_allowlist_curl_with_the_retry_flags_stripped_is_flagged():
-    stripped = 'curl -fsS --max-time 10 -G -K - --data-urlencode "status=$1"'
-    assert not _RETRY_COUNT.search(stripped)
-    assert "--retry-all-errors" not in stripped
-
-
-def test_home_allowlist_fail_logs_the_status_down_prefix():
-    # `probe.py alerts` reconstructs host-cron episodes from `{job="syslog"} |= "status=down"`
-    # (parse_syslog_down_line). A script that logs a bare message leaves zero rows there, and
-    # nothing to diagnose from once Kuma's current state clears.
-    fail_line = next(
-        ln
-        for ln in rendered_shell_text(*HOME_ALLOWLIST).splitlines()
-        if ln.startswith("fail()")
-    )
-    assert 'logger -t crowdsec-home-allowlist "status=down $1"' in fail_line, fail_line
 
 
 # ── cron_kubeconfig_error (cron inherits no KUBECONFIG, and k3s.yaml is root-only) ──
@@ -457,4 +388,4 @@ def test_the_real_tree_has_no_uv_interpreter_violation():
             offenders.append(tpl.name)
     assert offenders == [], offenders
     # Non-vacuity: the rule must be examining the root cron it was written for.
-    assert "crowdsec-update-home-allowlist.sh.j2" in root_crons
+    assert "longhorn-restore-drill.sh.j2" in root_crons

@@ -1,9 +1,11 @@
 ---
 # The remote allowlist, the bouncer prune and the AppSec verify were daniel-box root crons
-# until H2.4b (docs/target-architecture/host/h2-shrink-host-plane.md, Steps item 11). They run
-# in the engine pod's crowdsec-jobs sidecar instead (templates/deployment.yaml.j2). These absent
-# arms remove the crons and their files ahead of the k8s/manifests include, so each host cron
-# is gone before the sidecar that replaces it starts. They stay until D5's conversion PR moves them into
+# until H2.4b (docs/target-architecture/host/h2-shrink-host-plane.md, Steps item 11), and the
+# home allowlist until H2.4c (Steps item 12). They run in the engine pod's crowdsec-jobs sidecar
+# instead (templates/deployment.yaml.j2), and the home allowlist's address lookup in the
+# crowdsec-home-ips CronJob (templates/home-ips-cronjob.yaml.j2). These absent arms remove the
+# crons and their files ahead of the k8s/manifests include, so each host cron is gone before
+# the sidecar that replaces it starts. They stay until D5's conversion PR moves them into
 # setup/k8s_host_files, and H7 deletes them. ansible/tests/repo/_retired_cron_row.py holds the
 # crons' arms to the tree.
 - name: Remove the retired remote-allowlist cron
@@ -36,6 +38,16 @@
   become: true
   when: not k8s_dry_run | bool
 
+- name: Remove the retired home allowlist cron
+  tags: [cron]
+  ansible.builtin.cron:
+    name: "CrowdSec home allowlist"
+    user: root
+    cron_file: crowdsec-home-allowlist
+    state: absent
+  become: true
+  when: not k8s_dry_run | bool
+
 - name: Remove the retired crowdsec cron scripts from the host
   tags: [cron]
   ansible.builtin.file:
@@ -47,6 +59,10 @@
     - /usr/local/bin/crowdsec-prune-bouncers.sh
     - /opt/crowdsec-bouncer-prune
     - /usr/local/bin/crowdsec-appsec-verify.sh
+    - /usr/local/bin/crowdsec-update-home-allowlist.sh
+    - /opt/crowdsec-home-allowlist
+    # The host cron's last values. The allowlist itself holds the stored entries since H2.4c.
+    - /var/lib/crowdsec-home-allowlist
   become: true
   when: not k8s_dry_run | bool
 
@@ -135,68 +151,6 @@
     - "'already exist' not in (crowdsec_k8s_allowlist_create.stderr | default('') | lower)"
   changed_when: crowdsec_k8s_allowlist_create.rc == 0
 
-- name: Create the home-allowlist state directory
-  tags: [cron]
-  ansible.builtin.file:
-    path: /var/lib/crowdsec-home-allowlist
-    state: directory
-    mode: "0755"
-    owner: root
-    group: root
-  become: true
-  when: not k8s_dry_run | bool
-
-- name: Create the home-allowlist module directory
-  tags: [cron]
-  ansible.builtin.file:
-    path: /opt/crowdsec-home-allowlist
-    state: directory
-    mode: "0755"
-    owner: root
-    group: root
-  become: true
-  when: not k8s_dry_run | bool
-
-- name: Install the home-allowlist IPv6 masking module
-  tags: [cron]
-  ansible.builtin.copy:
-    src: ipv6_prefix.py
-    dest: /opt/crowdsec-home-allowlist/ipv6_prefix.py
-    mode: "0755"
-    owner: root
-    group: root
-  become: true
-  when: not k8s_dry_run | bool
-
-- name: Deploy the home-allowlist updater
-  tags: [cron]
-  ansible.builtin.template:
-    src: crowdsec-update-home-allowlist.sh.j2
-    dest: /usr/local/bin/crowdsec-update-home-allowlist.sh
-    mode: "0750"
-    owner: root
-    group: root
-  become: true
-  no_log: true  # renders the Kuma push token
-  when: not k8s_dry_run | bool
-
-- name: Schedule the home-allowlist updater
-  tags: [cron]
-  # root, not sys_user: the script execs into the engine pod, which needs the root
-  # kubeconfig — the readonly SA cannot exec. Every 5 min; it pushes the Kuma monitor
-  # directly (no monitor-bridge hop).
-  # Output goes to the journal under the script's own tag: cscli prints on every
-  # home-IP change and curl on a retried push, and neither is a failure. A failure is the
-  # Kuma monitor going down.
-  ansible.builtin.cron:
-    name: "CrowdSec home allowlist"
-    minute: "*/5"
-    user: root
-    job: "/usr/local/bin/crowdsec-update-home-allowlist.sh 2>&1 | logger -t crowdsec-home-allowlist"
-    cron_file: crowdsec-home-allowlist
-  become: true
-  when: not k8s_dry_run | bool
-
 - name: Create the remote-ips allowlist on the LAPI
   when: not k8s_no_mutate
   tags: [deploy]
@@ -211,6 +165,16 @@
     - crowdsec_k8s_remote_allowlist_create.rc != 0
     - "'already exist' not in (crowdsec_k8s_remote_allowlist_create.stderr | default('') | lower)"
   changed_when: crowdsec_k8s_remote_allowlist_create.rc == 0
+
+# After the rollout wait, so the run's lookup lands in the ConfigMap the sidecar of the new pod
+# reads. An extra run looks the same addresses up and writes them again. The CronJob is on the
+# host network and needs no fence, so the gate run's patch meets no NetworkPolicy.
+- name: Gate the crowdsec-home-ips deploy on a one-off run
+  tags: [deploy]
+  ansible.builtin.include_role:
+    name: k8s/cronjob-gate
+  vars:
+    cronjob_gate_name: crowdsec-home-ips
 
 - name: Enforcement gate (opt-in via --tags b1-gate)
   # NOT UNDER --check. The gate proves enforcement by mutating real state — it bans a real

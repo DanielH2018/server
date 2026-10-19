@@ -139,3 +139,58 @@ def test_the_pihole_guard_role_without_list_is_flagged(monkeypatch) -> None:
     assert missing(needs, grants(docs, "homelab", "pihole-sibling-guard")) == [
         ("homelab", "discovery.k8s.io", "endpointslices", "list", None)
     ]
+
+
+def _home_ips_calls(monkeypatch) -> list[tuple[str, str]]:
+    """H2.4c: the crowdsec-home-ips CronJob's calls on a good lookup, its one write."""
+    monkeypatch.syspath_prepend(str(K8S_ROLES / "crowdsec" / "files"))
+    script = importlib.import_module("home_ips_discover")
+    calls = []
+
+    class Recorder(script.Kube):
+        def __init__(self):
+            super().__init__("https://api", "token")
+
+        def call(self, method: str, path: str, body=None) -> tuple[int, dict]:
+            calls.append((method, path))
+            return 200, {}
+
+    env = {"HOME_IPS_NAMESPACE": "homelab", "HOME_IPS_CONFIGMAP": "crowdsec-home-ips"}
+    assert (
+        script.main(
+            [],
+            env,
+            Recorder(),
+            opener=lambda *a, **k: (_ for _ in ()).throw(OSError("offline")),
+            read_if_inet6=lambda: "",
+        )
+        == 0
+    )
+    return calls
+
+
+def _home_ips_rbac() -> list[dict]:
+    return list(
+        yaml_fast.safe_load_all(
+            render_role_template("crowdsec", "home-ips-rbac.yaml.j2")
+        )
+    )
+
+
+def test_the_home_ips_role_grants_every_call_its_script_makes(monkeypatch) -> None:
+    needs = rest_needs(_home_ips_calls(monkeypatch))
+    # The operator's grant on #5701, less the `get` the merge patch never needs.
+    assert needs == {("homelab", "", "configmaps", "patch", "crowdsec-home-ips")}
+    granted = grants(_home_ips_rbac(), "homelab", "crowdsec-home-ips")
+    assert missing(needs, granted) == []
+
+
+def test_the_home_ips_role_without_patch_is_flagged(monkeypatch) -> None:
+    needs = rest_needs(_home_ips_calls(monkeypatch))
+    docs = _home_ips_rbac()
+    for doc in docs:
+        for rule in doc.get("rules") or []:
+            rule["verbs"] = ["get"]
+    assert missing(needs, grants(docs, "homelab", "crowdsec-home-ips")) == [
+        ("homelab", "", "configmaps", "patch", "crowdsec-home-ips")
+    ]

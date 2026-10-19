@@ -123,8 +123,8 @@ spec:
             periodSeconds: 60
             timeoutSeconds: 10
 {{ container_resources(cpu_limit=crowdsec_k8s_cpu_limit, mem_limit=crowdsec_k8s_mem_limit, cpu_request=crowdsec_k8s_cpu_request, mem_request=crowdsec_k8s_mem_request) }}
-        # The remote allowlist, the AppSec verify and the bouncer prune, each on its old host
-        # cron's schedule (files/crowdsec_jobs.py). They need cscli against the LAPI's own
+        # The remote allowlist, the AppSec verify, the bouncer prune and the home allowlist, each
+        # on its old host cron's schedule (files/crowdsec_jobs.py). They need cscli against the LAPI's own
         # database, and a container in this pod reaches it with no `pods/exec` grant: the
         # operator's ruling of 2026-10-18 on #5655. It shares the engine's config and database
         # volumes, and cscli reads them here as it does in the engine container.
@@ -163,6 +163,17 @@ spec:
                 secretKeyRef:
                   name: crowdsec-jobs
                   key: appsec_push_url
+            - name: HOME_ALLOWLIST_PUSH_URL
+              valueFrom:
+                secretKeyRef:
+                  name: crowdsec-jobs
+                  key: home_allowlist_push_url
+            # The home allowlist reads the addresses the crowdsec-home-ips CronJob writes, and
+            # pushes down once their lookup time is older than three of its periods.
+            - name: HOME_IPS_CONFIGMAP
+              value: "{{ crowdsec_k8s_home_ips_configmap }}"
+            - name: HOME_IPS_STALE_AFTER_S
+              value: "{{ crowdsec_k8s_home_ips_stale_after_seconds }}"
 {{ hardened_security_context(read_only=true) }}
           volumeMounts:
             - name: crowdsec-etc

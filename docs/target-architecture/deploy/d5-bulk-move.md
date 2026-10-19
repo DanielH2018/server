@@ -3930,7 +3930,10 @@ includes valheim's initContainer.
    the Pi's node_exporter, which `optimize_pi` runs with `--no-collector.textfile` today, read
    through the `node-pi` scrape. M4's blackbox_exporter fits only if it gains a probe outside
    the cluster. Resolution: crowdsec's first conversion PR confirms the channel, and crowdsec
-   does not flip without it.
+   does not flip without it. **Confirmed by the operator on 2026-10-18 (#5650): the plan's
+   choice.** The Pi timer is the vantage point, a metrics stage in the Pi's Alloy counts its
+   probe results, and Prometheus reads the counter through its direct `alloy-pi` scrape.
+   crowdsec's first conversion PR (#5650, with H2.4c's #5738) records it here.
 10. **C1's output layout grows by two digest fields and the image contexts.** C1 already
     lists the shared-kind files and directories, `DIR/cluster/<tag>-snapshot/` and
     `DIR/cluster/<tag>-verify/`. It dates `DIR/digests.json` from D2's first publishing PR,

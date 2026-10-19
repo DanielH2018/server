@@ -1,0 +1,133 @@
+{#
+  crowdsec's verify Job and the ConfigMap that carries its script, INERT until crowdsec's flip.
+
+  This directory is `verify-inert/`, which neither reader globs: the manifests role takes only
+  top-level `templates/*.yaml.j2`, and `verify_files` takes only `templates/verify/*.yaml.j2`.
+  crowdsec's flip PR moves the directory to `templates/verify/`, and the renderer then emits it
+  into `crowdsec-verify` (D5, *A verify conversion lands as inert code*). The renderer passes
+  `flux_job_image` and `flux_job_connect`, the helper's text, to every `templates/verify/` file
+  (`render_tag`).
+
+  The Job runs `files/crowdsec_verify.py`, the successor of `tasks/verify.yml`'s gate, with no
+  `pods/exec` grant: it bans daniel-pi through LAPI's machine API, reads the edge's answers to
+  the Pi's probe from Prometheus, and lifts the ban in every exit path. The script's docstring
+  says how each hop moved, and why the bouncer-pull hop has no Job form. Both names end in a
+  digest, as the Job census requires: the ConfigMap's of its data, the Job's of its spec.
+
+  What the flip PR must land first, none of which this file can do while it is inert:
+    - the `crowdsec-verify` machine registered on LAPI, by the LAPI initContainer that replaces
+      the registration task in `tasks/main.yml`;
+    - the fence peers below;
+    - the spec digest of the inputs that roll the crowdsec pod, so every revision that rolls it
+      renames the Job, as janitorr's verify Job does.
+
+  The caller census (D5, *A fence admits every Job that dials through it*). The pod is
+  `app: crowdsec-verify` in `k8s_namespace`. It execs into nothing and dials:
+    - crowdsec:{{ crowdsec_k8s_lapi_port }}, the LAPI, through the LAPI fence in
+      netpol-baseline's `networkpolicy-crowdsec.yaml.j2`, which must list `crowdsec-verify`;
+    - prometheus.{{ k8s_observability_namespace }}:9090, through the `homelab` peers of
+      netpol-baseline's `networkpolicy-prometheus.yaml.j2`, which must list it too.
+  Without a peer, the helper's 60 seconds of refused connects run out and the Job fails
+  closed, naming the channel or the LAPI login.
+#}
+{% set script_name = 'crowdsec_verify.py' %}
+{% set script_dir = '/job' %}
+{% set data = {
+  script_name: lookup('file', playbook_dir + '/roles/k8s/crowdsec/files/' + script_name, rstrip=False),
+  'flux_job_connect.py': flux_job_connect,
+} %}
+{% set configmap_name = 'crowdsec-verify-' + ({'data': data, 'binaryData': {}} | to_json(sort_keys=True, separators=(',', ':')) | hash('sha256'))[:8] %}
+{% set spec_text %}
+# A retry would ban the Pi a second time, and a flaky check must fail rather than pass on it.
+backoffLimit: 0
+# Below the 600s `manifests_rollout_timeout_default` every `<tag>-verify` Kustomization takes:
+# the login, the ban and its read-back at 10s each plus 60s of connect retries on the first,
+# then the 300s window.
+activeDeadlineSeconds: 480
+template:
+  metadata:
+    labels:
+      app: crowdsec-verify
+  spec:
+    serviceAccountName: crowdsec-verify
+    # The Job reads no Kubernetes API, so its pod holds no token.
+    automountServiceAccountToken: false
+    restartPolicy: Never
+    enableServiceLinks: false
+    securityContext:
+      runAsNonRoot: true
+      runAsUser: 65534
+      runAsGroup: 65534
+      seccompProfile:
+        type: RuntimeDefault
+    containers:
+      - name: verify
+        image: {{ flux_job_image }}
+        command:
+          - python3
+          - {{ script_dir }}/{{ script_name }}
+        env:
+          - name: LAPI_URL
+            value: "http://crowdsec.{{ k8s_namespace }}.svc.cluster.local:{{ crowdsec_k8s_lapi_port }}"
+          - name: LAPI_MACHINE
+            value: crowdsec-verify
+          - name: LAPI_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: crowdsec-verify
+                key: lapi_password
+          # daniel-pi's address, the client address Traefik sees for the Pi's probe.
+          - name: BAN_IP
+            value: "{{ hostvars['daniel-pi'].server_ip }}"
+          # The decision outlives the window, and the script lifts it the moment it ends.
+          - name: BAN_DURATION
+            value: 15m
+          - name: PROMETHEUS_URL
+            value: "http://prometheus.{{ k8s_observability_namespace }}.svc.cluster.local:9090"
+          # One 1-minute probe period, one 1-minute scrape and its 30s timeout, with slack.
+          - name: WINDOW_SECONDS
+            value: "300"
+          - name: PYTHONDONTWRITEBYTECODE
+            value: "1"
+        resources:
+          requests:
+            cpu: 10m
+            memory: 32Mi
+          limits:
+            memory: 64Mi
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+              - ALL
+        volumeMounts:
+          - name: script
+            mountPath: {{ script_dir }}
+            readOnly: true
+    volumes:
+      - name: script
+        configMap:
+          name: {{ configmap_name }}
+{% endset %}
+{% set spec = spec_text | from_yaml %}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ configmap_name }}
+  namespace: {{ k8s_namespace }}
+data:
+{% for key, text in data | dictsort %}
+  {{ key }}: {{ text | to_json }}
+{% endfor %}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: crowdsec-verify-{{ (spec | to_json(sort_keys=True, separators=(',', ':')) | hash('sha256'))[:8] }}
+  namespace: {{ k8s_namespace }}
+  annotations:
+    homelab/job-kind: verify
+spec:
+{{ spec_text | indent(2, true) }}

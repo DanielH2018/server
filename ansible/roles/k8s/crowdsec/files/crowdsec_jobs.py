@@ -4,14 +4,16 @@
 The `crowdsec-jobs` sidecar of the crowdsec Deployment runs this module as its only process.
 Each job needs `cscli` against the LAPI's own database, and only a container in the LAPI's pod
 can run that without a `pods/exec` grant. So the jobs run here, beside the engine, rather than
-as CronJobs or as daniel-box root crons (the operator's ruling of 2026-10-18 on #5655, recorded
-in the H2 plan's *Open questions* 2).
+as CronJobs or as daniel-box root crons (the operator's rulings of 2026-10-18 on #5655 and
+#5701, recorded in the H2 plan's *Open questions* 2).
 
-Three jobs run, each on its old host cron's UTC schedule:
+Four jobs run, each on its old host cron's UTC schedule:
 
     crowdsec-remote-allowlist  remote_allowlist.py  every 5 minutes  pushes CrowdSec Remote Allowlist
     crowdsec-appsec-verify     appsec_verify.py     every 15 minutes pushes CrowdSec AppSec
     crowdsec-bouncer-prune     bouncer_prune.py     at minute 17     logs only
+    crowdsec-home-allowlist    home_allowlist.py    every 5 minutes, pushes CrowdSec Home Allowlist
+                                                    one minute after the crowdsec-home-ips CronJob
 
 Each run is a child `python3` process, so a job that crashes or hangs cannot stop this one. A
 run that outlives its timeout is killed and reported as down. A job still running when its next
@@ -111,6 +113,16 @@ JOBS = (
         offset=17,
         timeout_s=600,
         push_env=None,
+    ),
+    # One minute after each crowdsec-home-ips CronJob slot, so each run reads the lookup that
+    # slot wrote rather than the one before it.
+    Job(
+        "crowdsec-home-allowlist",
+        "home_allowlist.py",
+        period=5,
+        offset=1,
+        timeout_s=180,
+        push_env="HOME_ALLOWLIST_PUSH_URL",
     ),
 )
 

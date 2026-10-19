@@ -3,7 +3,9 @@
 The other tests run the modules under the repo's interpreter. These run them where the pod
 does: in `crowdsec_k8s_jobs_image`, with the rendered ConfigMap mounted read-only at `/jobs`,
 the root filesystem read-only, and every capability dropped, as `templates/deployment.yaml.j2`
-runs the sidecar. The AppSec verify runs end to end against a stub `cscli`. The real `cscli`,
+runs the sidecar. The AppSec verify and the home allowlist run end to end against stub `cscli`
+and `kubectl` binaries, and the home-ips discovery answers `--help` under the same confinement
+its CronJob gives it. The real `cscli`,
 copied out of `crowdsec_k8s_image` as the `jobs-cscli` initContainer copies it, must run in the
 python image too, which is the linkage the operator's ruling on #5655 asked to check.
 
@@ -59,7 +61,22 @@ JOBS_IMAGE = _image(
 CROWDSEC_IMAGE = _image("crowdsec_k8s_image", ALL_VARS)
 
 
-def _run_in_jobs_image(docker, jobs, tools, *command) -> subprocess.CompletedProcess:
+# The ConfigMap the stub kubectl returns. The leg cannot set the container's clock, so it
+# passes a stale-after far past the age of this fixed stamp.
+_STUB_KUBECTL = """#!/bin/sh
+echo '{"data": {"looked_up_at": "2026-10-18T13:05:00Z", "ipv4": "98.42.7.9", "ipv6_prefix": "2601:600:a:b::/64"}}'
+"""
+_STUB_ALLOWLIST_CSCLI = """#!/bin/sh
+case "$2" in
+  inspect) echo '{"items": [{"value": "98.42.7.9"}, {"value": "2601:600:a:b::/64"}]}' ;;
+  *) exit 2 ;;
+esac
+"""
+
+
+def _run_in_jobs_image(
+    docker, jobs, tools, *command, env=()
+) -> subprocess.CompletedProcess:
     """`command` in the sidecar's image, mounted and confined as the pod runs it."""
     return subprocess.run(
         [
@@ -72,6 +89,7 @@ def _run_in_jobs_image(docker, jobs, tools, *command) -> subprocess.CompletedPro
             "--network=none",
             "-e",
             "PYTHONDONTWRITEBYTECODE=1",
+            *(arg for pair in env for arg in ("-e", pair)),
             "-v",
             f"{jobs}:/jobs:ro",
             "-v",
@@ -109,11 +127,38 @@ def test_the_appsec_verify_runs_in_the_jobs_image_against_a_stub_cscli(
         0,
         "1 appsec-configs enabled, 2 enabled rules loaded\n",
     ), proc.stderr
-    for script in ("crowdsec_jobs.py", "remote_allowlist.py", "bouncer_prune.py"):
+    for script in (
+        "crowdsec_jobs.py",
+        "remote_allowlist.py",
+        "bouncer_prune.py",
+        "home_allowlist.py",
+        "home_ips_discover.py",
+    ):
         proc = _run_in_jobs_image(
             docker, jobs, tools, "python3", f"/jobs/{script}", "--help"
         )
         assert proc.returncode == 0, (script, proc.stderr)
+
+
+def test_the_home_allowlist_runs_in_the_jobs_image_against_stub_tools(
+    docker, jobs, tmp_path
+):
+    tools = tmp_path / "tools"
+    tools.mkdir()
+    write_exec(tools / "kubectl", _STUB_KUBECTL)
+    write_exec(tools / "cscli", _STUB_ALLOWLIST_CSCLI)
+    proc = _run_in_jobs_image(
+        docker,
+        jobs,
+        tools,
+        "python3",
+        "/jobs/home_allowlist.py",
+        env=(
+            "HOME_IPS_CONFIGMAP=crowdsec-home-ips",
+            "HOME_IPS_STALE_AFTER_S=999999999",
+        ),
+    )
+    assert (proc.returncode, proc.stdout) == (0, "home IPs unchanged\n"), proc.stderr
 
 
 def test_the_engines_cscli_runs_in_the_jobs_image(docker, jobs, tmp_path):
