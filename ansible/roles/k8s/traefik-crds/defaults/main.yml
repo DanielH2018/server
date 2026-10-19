@@ -1,0 +1,27 @@
+---
+# The CRDs are an in-tree copy, files/upstream/kubernetes-crd-definition-v1.yml, byte for byte
+# what the item's `url` serves. No render may fetch a URL (D5, C1), so the renderer attaches the
+# copy to this tag's bundle verbatim, and `sha256` still describes what Flux applies.
+# scripts/dev/vendor_manifest.py owns the item's shape and the refresh:
+#   uv run python scripts/dev/vendor_manifest.py traefik-crds
+# The version is an immutable release tag, and its minor must equal traefik_k8s_image's: a minor
+# image bump fails ansible/tests/k8s/test_traefik_crds.py until the copy is refreshed. A patch
+# bump leaves the copy alone.
+traefik_crds_k8s_version: v3.7.13
+traefik_crds_vendored_manifests:
+  - name: kubernetes-crd-definition-v1.yml
+    url: "https://raw.githubusercontent.com/traefik/traefik/{{ traefik_crds_k8s_version }}/docs/content/reference/dynamic-configuration/kubernetes-crd-definition-v1.yml"
+    fetched_url: "https://raw.githubusercontent.com/traefik/traefik/v3.7.13/docs/content/reference/dynamic-configuration/kubernetes-crd-definition-v1.yml"
+    sha256: "1d5e8558803804562238b0d4a57174aadd6d87c36e3c4c55199ebcc356a9406c"
+
+# DECIDED: never pruned. A render that dropped a CRD would make Flux delete it, and the API
+# server then deletes every IngressRoute or Middleware of that kind: the whole edge goes down.
+# The cost is that a CRD a later upstream release retires stays live until the operator deletes
+# it. scripts/renderer/tests/test_renderer_crd_census.py fails a CRD in any tag that renders
+# prune: true. Full analysis: d5-bulk-move.md, step 26's traefik bullet.
+flux_prune: false  # noqa var-naming[no-role-prefix]
+
+# Auto-deploy stance. Flux applies the tag, so this gates no apply; it is traefik's stance,
+# because the CRDs are the edge's own kinds and a bad apply takes every route with them.
+k8s_autodeploy: false  # noqa var-naming[no-role-prefix]
+k8s_autodeploy_reason: "platform — the IngressRoute, Middleware and TLSOption kinds every route depends on; a bad CRD apply removes the ingress edge, and host probes stay green through that kind of outage"  # noqa var-naming[no-role-prefix]

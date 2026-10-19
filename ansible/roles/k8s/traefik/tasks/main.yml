@@ -1,76 +1,25 @@
 ---
-# The CRDs come from the role's in-tree copy of the upstream release's definitions, pinned by
-# `traefik_k8s_crd_version` and `traefik_k8s_crd_sha256` (defaults/main.yml). They are
-# upstream's bytes, never hand-edited. No render may fetch a URL under D5, and the flip PR
-# moves this same file into the `traefik-crds` role, whose bundle renders it. Only the RBAC is
-# authored locally (see
-# templates/rbac.yaml.j2 for why).
-# The path is the role's own files/ on the controller, which is the node: daniel-box runs
-# Ansible with connection=local.
-- name: Install the Traefik CRDs
-  when: not k8s_no_mutate
-  tags: [config]
-  ansible.builtin.command:
-    cmd: k3s kubectl apply -f {{ role_path }}/files/crds/kubernetes-crd-definition-v1.yml
-  register: traefik_k8s_crd_apply
-  become: true
-  changed_when: "'created' in traefik_k8s_crd_apply.stdout or 'configured' in traefik_k8s_crd_apply.stdout"
-
-- name: Wait for the Traefik CRDs to be established
-  tags: [config]
-  # Without this the first run races: the Middleware and TLSOption objects in dynamic.yaml
-  # are applied against an API server that has not finished registering their kinds yet, and
-  # fail with "no matches for kind".
-  ansible.builtin.command:
-    cmd: >-
-      k3s kubectl wait --for condition=established --timeout=60s
-      crd/ingressroutes.traefik.io crd/middlewares.traefik.io crd/tlsoptions.traefik.io
-  become: true
-  changed_when: false
-
-# Templated, not copied: the file carries one namespaced Role +
-# RoleBinding per watched namespace alongside the cluster-scoped role, and those need
-# k8s_namespace / k8s_observability_namespace / k8s_longhorn_namespace.
-#
-# Both halves ship in ONE manifest and ONE apply on purpose. Applying them as two tasks would
-# leave a window in which the cluster-wide grant is already gone and the namespaced Roles are
-# not yet in place — Traefik's Secret informers would lose their watch mid-flight, and it fails
-# green (see the header in templates/rbac.yaml.j2).
-- name: Install the Traefik RBAC (cluster-scoped role + per-namespace roles)
-  tags: [config]
-  ansible.builtin.template:
-    src: rbac.yaml.j2
-    dest: /etc/rancher/k3s/traefik-clusterrole.yaml
-    mode: "0644"
-    owner: root
-    group: root
-  become: true
-  when: not k8s_dry_run | bool
-
-- name: Apply the Traefik RBAC
-  when: not k8s_no_mutate
-  tags: [config]
-  ansible.builtin.command:
-    cmd: k3s kubectl apply -f /etc/rancher/k3s/traefik-clusterrole.yaml
-  register: traefik_k8s_rbac_apply
-  become: true
-  changed_when: "'created' in traefik_k8s_rbac_apply.stdout or 'configured' in traefik_k8s_rbac_apply.stdout"
-
+# Flux applies traefik through `promote` (`owner: flux`), and no Flux path runs this file. It
+# stays for the handback (docs/flux-deploy-plane.md). The tasks it held before the flip moved:
+# - the CRD install and its "established" wait: the `traefik-crds` tag renders the CRDs, and
+#   traefik's Kustomization depends on it, so Flux applies traefik only once that tag is Ready;
+# - the RBAC staging under /etc/rancher/k3s and its apply: rbac.yaml.j2 renders into this
+#   tag's bundle like any other manifest;
+# - the reserved-VIP assert: observability's TraefikIngressAddressNotPinned rule, which carries
+#   verify="true", so the soak fails a revision that changes traefik while it fires.
 - name: Deploy Traefik to the cluster
   ansible.builtin.include_role:
     name: k8s/manifests
   vars:
-    # The ClusterRoleBinding in rbac-binding.yaml is cluster-scoped, so the namespaced prune
-    # allowlist in k8s/manifests never selects it; dropping it still leaves it live. The Roles
-    # rbac.yaml.j2 places in other namespaces are applied by the task above, outside this
-    # directory, so the armed `-n` apply never reads them. The TLSOptions and Secrets are
-    # outside the allowlist too.
+    # rbac.yaml holds the cluster-scoped role and one Role and RoleBinding per watched
+    # namespace, in ONE file so a single apply moves both halves (see its header).
     # The ACME Secret is concatenated rather than listed, because dropping its name is the only
     # way traefik_k8s_manage_acme reaches it — the manifest has no template branch to gate. The
     # ACME claim is `k8s_claims` in defaults/main.yml, gated on the same flag there.
     manifests_files: >-
-      {{ ['rbac-binding.yaml', 'static-config.yaml', 'dynamic.yaml', 'deployment.yaml',
-          'service.yaml', 'metrics-service.yaml', 'dashboard-ingressroute.yaml']
+      {{ ['rbac.yaml', 'rbac-binding.yaml', 'static-config.yaml', 'dynamic.yaml',
+          'deployment.yaml', 'service.yaml', 'metrics-service.yaml',
+          'dashboard-ingressroute.yaml']
          + (['edge-selfcheck-ingressroute.yaml'] if traefik_k8s_manage_crowdsec | bool else [])
          + (['cloudflare-realip-plugin.yaml'] if traefik_k8s_manage_crowdsec | bool else []) }}
     manifests_secret_files: >-
@@ -78,37 +27,3 @@
          + (['cf-token-secret.yaml'] if traefik_k8s_manage_acme | bool else [])
          + (['crowdsec-secret.yaml'] if traefik_k8s_manage_crowdsec | bool else [])
          + (['livesync-gate-secret.yaml'] if traefik_k8s_manage_livesync_gate | bool else []) }}
-
-# `wait` returns the moment MetalLB writes the address, and `-o jsonpath` prints that field
-# once the condition holds — one watch instead of a 12x5s sampling loop.
-- name: Read the address MetalLB assigned to the Traefik Service
-  tags: [deploy]
-  ansible.builtin.command:
-    cmd: >-
-      k3s kubectl -n {{ k8s_namespace }} wait svc/traefik
-      --for=jsonpath={.status.loadBalancer.ingress[0].ip} --timeout=60s
-      -o jsonpath={.status.loadBalancer.ingress[0].ip}
-  register: traefik_k8s_lb_ip
-  become: true
-  changed_when: false
-  # Runs under --check too: this only reads. Without it the command is skipped, stdout is
-  # empty, and the VIP assertion below dies with it — the one thing --check could usefully
-  # have checked.
-  check_mode: false
-
-- name: Fail if Traefik did not get the reserved ingress VIP
-  tags: [deploy]
-  # Kubernetes accepts any annotation key and MetalLB ignores the ones it does not recognise,
-  # so a wrong or misspelled request annotation costs nothing at apply time: the Service comes
-  # up, an address is assigned out of the auto-assign pool, every pod is healthy and the
-  # deploy is green — on the wrong address. Assert the address, not the spelling of the
-  # prefix (metallb.io/ is correct as of MetalLB v0.15, universe.tf/ deprecated).
-  # The address is the one thing DNS and the router port-forward both hardcode, so
-  # assert it rather than trusting the annotation was honoured.
-  ansible.builtin.assert:
-    that: traefik_k8s_lb_ip.stdout == k3s_metallb_ingress_vip
-    fail_msg: >-
-      Traefik holds {{ traefik_k8s_lb_ip.stdout }}, not the reserved ingress VIP
-      {{ k3s_metallb_ingress_vip }}. MetalLB does not re-evaluate an existing allocation when
-      pools or annotations change — delete the Service and redeploy to force reallocation.
-    success_msg: "Traefik holds the reserved ingress VIP {{ k3s_metallb_ingress_vip }}"

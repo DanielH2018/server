@@ -1,0 +1,14 @@
+{
+  "checksum": "5d10d18437562b7998a70cdc32620bd06051590a9b181d0caa2d5238ee3b9c62",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "ansible/roles/k8s/traefik/CLAUDE.md#Flux applies it",
+  "row": {
+    "atoms": {
+      "ansible/roles/k8s/traefik-crds/CLAUDE.md": "c6684438964b54ffcaf20079e383695ebc8754ef2478b7f6ae6dc5bc23c72b10",
+      "ansible/tests/k8s/test_traefik_crds.py": "d0fd5c7612af4434bbc63c53d470b0c94a7af12cfb737ca138c48315c2a3ddf5",
+      "docs/flux-deploy-plane.md": "807c3deb44c3178e7a6f9fc0bc398a3b748b95c468b14ce9b1b890c8684535d9"
+    },
+    "python": "3.14",
+    "verified_sha": "d980d6e47"
+  }
+}

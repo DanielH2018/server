@@ -11,8 +11,9 @@ nothing and `prod` stays where it was. `report` runs the source, host and no-stu
   then each per-tag kind its role's inputs call for, in `TAG_KIND_SUFFIXES` order, each with
   path `./cluster/<name><suffix>` (the per-file rule, D4.3 and D5.1a1): `-deferred` when the
   role passes `manifests_deferred_files`, `-snapshot` when it declares
-  `k8s_autodeploy_snapshot_pvcs`, `-prepull` when it sets `flux_prepull_timeout`, and
-  `-verify` when it ships `templates/verify/`;
+  `k8s_autodeploy_snapshot_pvcs`, `-prepull` when it sets `flux_prepull_timeout`,
+  `-precheck` when it ships `templates/precheck/` (#5719), and `-verify` when it ships
+  `templates/verify/`;
 - each published tag and each shared kind has its directory `cluster/<name>/`, and each
   per-tag kind its directory `cluster/<name><suffix>/`, each with a `kustomization.yaml`;
 - no published tag takes a reserved name (`reserved_tags`), so a tag named
@@ -30,7 +31,8 @@ cannot widen it: the tags the inventory marks `owner: flux` (`published_tags`), 
 `SHARED_KINDS`, and the published tags whose role passes `manifests_deferred_files` to its
 `k8s/manifests` include (`deferring_tags`), read as the renderer reads the include, and those
 whose role declares snapshot claims (`snapshot_tags`), those whose role sets
-`flux_prepull_timeout` (`prepull_tags`), and those whose role ships verify or post-apply
+`flux_prepull_timeout` (`prepull_tags`), those whose role ships pre-apply check Jobs as
+`templates/precheck/*.yaml.j2` (`prechecking_tags`), and those whose role ships verify or post-apply
 mutation Jobs as `templates/verify/*.yaml.j2` (`verifying_tags`) or opts a CronJob into a gate
 Job with `flux_cronjob_gates` (`gating_tags`). A tag marked
 `owner: released` is left out of both the bundle and the allowlist (C4).
@@ -73,11 +75,13 @@ from renderer.renderer_lib.bundle import (
 )
 from renderer.renderer_lib.ordering import (
     DEFERRED_SUFFIX,
+    PRECHECK_SUFFIX,
     PREPULL_SUFFIX,
     SNAPSHOT_SUFFIX,
     TAG_KIND_SUFFIXES,
     VERIFY_SUFFIX,
     cronjob_gates,
+    precheck_files,
     prepull_timeouts,
     verify_files,
 )
@@ -153,6 +157,19 @@ def gating_tags(
     """
     gates, problems = cronjob_gates(published, roles)
     return frozenset(gates), problems
+
+
+def prechecking_tags(
+    published: Iterable[str], roles: Path = K8S_ROLES
+) -> frozenset[str]:
+    """The published tags whose role ships pre-apply check Jobs as `templates/precheck/`.
+
+    That directory alone calls for `<tag>-precheck` (#5719). It reads `precheck_files`, the
+    reader the renderer renders that directory from too.
+    """
+    return frozenset(
+        tag for tag, names in precheck_files(published, roles).items() if names
+    )
 
 
 def verifying_tags(published: Iterable[str], roles: Path = K8S_ROLES) -> frozenset[str]:
@@ -255,6 +272,7 @@ def census(
     snapshotting: Iterable[str] = (),
     verifying: Iterable[str] = (),
     prepulling: Iterable[str] = (),
+    prechecking: Iterable[str] = (),
 ) -> list[str]:
     """Every way the bundle at `out` differs from the allowlist, one line each.
 
@@ -268,6 +286,7 @@ def census(
             (`prepull_tags`).
         verifying: The published tags with a verify or post-apply mutation Job
             (`verifying_tags`).
+        prechecking: The published tags with a pre-apply check Job (`prechecking_tags`).
 
     A shared kind has no per-tag kind.
     """
@@ -276,6 +295,7 @@ def census(
         DEFERRED_SUFFIX: set(deferring) & published,
         SNAPSHOT_SUFFIX: set(snapshotting) & published,
         PREPULL_SUFFIX: set(prepulling) & published,
+        PRECHECK_SUFFIX: set(prechecking) & published,
         VERIFY_SUFFIX: set(verifying) & published,
     }
     suffixes = {
@@ -422,6 +442,7 @@ def report(out: Path, published: list[str], roles: Path = K8S_ROLES) -> int:
         snapshotting=snapshotting,
         verifying=verifying_tags(published, roles) | gating,
         prepulling=prepulling,
+        prechecking=prechecking_tags(published, roles),
     )
     problems += member_census(out, published)
     problems += bundle_gates.gates(out, published)

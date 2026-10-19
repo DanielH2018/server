@@ -1,0 +1,17 @@
+{
+  "checksum": "c7b33c7b6e7774e391a3a8496616b544bc734ce740e49b02ad3a9f617a507a9f",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "ansible/roles/k8s/traefik-crds/CLAUDE.md#At a glance",
+  "row": {
+    "atoms": {
+      "ansible/filter_plugins/service_tier.py": "4f5e784e468e22de5c3736acba1c47934e1d5e2794af865159bdaeeff9171f1e",
+      "ansible/tests/k8s/test_traefik_crds.py": "d0fd5c7612af4434bbc63c53d470b0c94a7af12cfb737ca138c48315c2a3ddf5",
+      "docs/flux-deploy-plane.md": "807c3deb44c3178e7a6f9fc0bc398a3b748b95c468b14ce9b1b890c8684535d9",
+      "scripts/dev/vendor_manifest.py": "f0c0c9df684a1ed3d858ec17f02c8e7c279dbb7595180eb00d70a50e42a9d7ef",
+      "scripts/renderer/renderer_lib/cluster.py:attach_vendored": "c962ec861063a89c6eb36e79e6914f99a2f4dd70a2ba3fc90b2678aa0f7f9c0f",
+      "scripts/renderer/tests/test_renderer_crd_census.py": "7fa9c323c1792f6a53133bd2b9c79da13b3f8314adc5516a32d64e2acd22e5e9"
+    },
+    "python": "3.14",
+    "verified_sha": "d980d6e47"
+  }
+}

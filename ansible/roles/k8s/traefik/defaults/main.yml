@@ -6,19 +6,9 @@
 # pairs in place, as it does for wg_easy_k8s_image.
 traefik_k8s_image: traefik:v3.7.13@sha256:24841fe2de7304c149343d877d2923b4c8800a38ba015dea9174c23b20e344a0
 
-# The CRDs are an in-tree copy, files/crds/kubernetes-crd-definition-v1.yml, byte for byte
-# what `traefik_k8s_crd_url` serves, and `traefik_k8s_crd_sha256` is the hash of those bytes.
-# No render may fetch a URL (D5, C1), so the copy is what the flip PR renders, from the
-# `traefik-crds` role it moves the copy into (#5666).
-# The version is an immutable release tag, and its minor must equal the image's: a minor image
-# bump fails ansible/tests/k8s/test_traefik_crds.py until the copy is refreshed. A patch bump
-# leaves the copy alone. To refresh, set the tag, then
-#   curl -fsSo ansible/roles/k8s/traefik/files/crds/kubernetes-crd-definition-v1.yml <rendered url>
-# and write the file's `sha256sum` here. `scripts/validate/asset_pins.py` re-fetches the URL
-# and checks the hash.
-traefik_k8s_crd_version: v3.7.13
-traefik_k8s_crd_url: "https://raw.githubusercontent.com/traefik/traefik/{{ traefik_k8s_crd_version }}/docs/content/reference/dynamic-configuration/kubernetes-crd-definition-v1.yml"
-traefik_k8s_crd_sha256: 1d5e8558803804562238b0d4a57174aadd6d87c36e3c4c55199ebcc356a9406c
+# The CRDs are a role of their own, `traefik-crds`, whose defaults pin its in-tree copy of
+# upstream's definitions (#5666). That copy's version must share this image's minor:
+# ansible/tests/k8s/test_traefik_crds.py fails a minor bump here until the copy is refreshed.
 
 # Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
 # Platform: this is the ingress edge everything else routes through. A failed deploy removes

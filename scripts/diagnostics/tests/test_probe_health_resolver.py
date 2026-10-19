@@ -31,6 +31,7 @@ _ROLES_WITH_NO_WORKLOAD = {
     "media-volume": "a StorageClass, PV, PVC and a one-shot Job — storage, not a workload",
     "netpol-baseline": "NetworkPolicies plus the Job that probes them",
     "pi-peer-backup": "a CronJob, its PVC and its Secret",
+    "traefik-crds": "upstream Traefik's CustomResourceDefinitions, vendored; no workload",
 }
 
 # Roles where the tag is NOT the name of every workload to check. Pinned as a LOWER bound: the

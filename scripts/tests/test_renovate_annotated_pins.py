@@ -55,7 +55,7 @@ UNTRACKED_BY_DECISION: dict[str, str] = {
     # key alone would leave the file and its sha256 on the old release. The image pin is the
     # tracked one, and ansible/tests/k8s/test_traefik_crds.py fails a minor image bump until
     # the copy, this key and the hash are refreshed together.
-    "traefik_k8s_crd_version": "follows traefik_k8s_image's minor; refreshed by hand",
+    "traefik_crds_k8s_version": "follows traefik_k8s_image's minor; refreshed by hand",
 }
 
 _ANNOTATION_LINE = re.compile(r"^\s*#\s*renovate:", re.MULTILINE)

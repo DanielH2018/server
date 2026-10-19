@@ -88,9 +88,6 @@ ALLOW = {
     _K8S + "registry/tasks/main.yml": (
         "D5: the self-test and netpol probe Jobs become `registry-verify`"
     ),
-    _K8S + "traefik/tasks/main.yml": (
-        "D5: the CRDs get an in-tree copy, and the cluster RBAC moves with the role"
-    ),
     _K8S + "volume-revert/tasks/claim.yml": (
         "H7.16b: a task-free command replaces the revert runbook"
     ),
@@ -123,8 +120,9 @@ OUT_OF_RENDER = Census(
     # 58 writing tasks in 28 files of 23 roles when the row landed (2026-10-13); 49 once
     # n8n's flip deleted its probe tasks (#5546); 44 once media-volume's flip deleted its
     # hardlink probe tasks (#5652); 43 once authelia's TOTP seed became an initContainer
-    # (#5647); 41 once the flip of tdarr and qbittorrent deleted their verify tasks.
-    min_matches=41,
+    # (#5647); 41 once the flip of tdarr and qbittorrent deleted their verify tasks; 39 once
+    # traefik's flip rendered its CRDs and RBAC (#5707).
+    min_matches=39,
     must_find=frozenset(
         {
             _K8S + "observability/tasks/dashboards.yml",

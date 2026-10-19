@@ -2762,6 +2762,13 @@ sizes its batch of roles against that projection.
           upstream release retires, stays live until the operator deletes it
           (**operator-only**). The same cost holds for H1's five plumbing tags. traefik's own
           objects, such as a retired Middleware, prune as every other role's do.
+
+      **Status, 2026-10-18.** The flip PR (#5707) creates `traefik-crds`, marks both tags
+      `owner: flux`, renders `rbac.yaml.j2` into traefik's bundle and deletes the CRD, RBAC
+      and VIP tasks. The VIP assert became the verify rule `TraefikIngressAddressNotPinned`
+      in observability's `k8s-services` group. traefik has no check that needs `pods/exec`.
+      The CRD census exempts `flux` until the flux PR, and only while `flux` is
+      Ansible-owned. The PR waits for the operator to be present before it merges.
     - crowdsec: its first conversion PR lands the Pi timer, the Alloy metrics stage and the
       inert `crowdsec-verify` Job. Its flip wires the Job.
     - netpol-baseline's PR repeats D4's drill on itself. A workload change that fails leaves
@@ -2795,8 +2802,10 @@ sizes its batch of roles against that projection.
       inert guard Job in `ansible/roles/k8s/pihole/templates/guard-inert/guard.yaml.j2`
       (#5695). It reads `pihole-2-web`'s EndpointSlices and fails while pihole-2 has no ready
       endpoint, so Flux holds `pihole`. It passes when `pihole` has no EndpointSlice, which is
-      a first apply. It must run before `pihole`, and
-      no role-owned kind does yet, so the flip needs one first (#5719).
+      a first apply. It must run before `pihole`, so the flip moves it into
+      `templates/precheck/`, the role-owned kind that renders into `<tag>-precheck`, which
+      `<tag>` depends on (#5719). The flip also names a break-glass for a guard that holds
+      a fix to a down pihole-2 (#5740).
     - **Before the first Wave D flip**, the session measures one revision that changes at
       least ten flux-owned tags, from `prod`'s move to the last status, and compares it with
       the derived verify timeout. A measurement above half the timeout raises the timeout
