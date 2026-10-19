@@ -108,8 +108,9 @@ def parse_down_line(line):
 # is four tokens and parses as nothing. Changing either side alone silently drops every Pi
 # episode, which is why ansible/tests/setup/test_pi_health_log_line_shape.py pins the pair.
 SYSLOG_ALERT_LOGQL = '{job="syslog"} |= "status=down"'
-# crowdsec's crowdsec-jobs sidecar runs three former host crons since H2.4b and prints their
-# lines in the same rsyslog shape, with the pod name as the host, so one parser reads both. Its
+# crowdsec's crowdsec-jobs sidecar runs four jobs that were host crons (H2.4b, H2.4c) and
+# prints their lines in the same rsyslog shape, with the pod name as the host, so one parser
+# reads both. Its
 # own selector, because `container` and `job` share no label name to OR on. The bouncer prune
 # has no Kuma tile, so this is the only episode view of its refusals.
 POD_ALERT_LOGQL = '{container="crowdsec-jobs"} |= "status=down"'

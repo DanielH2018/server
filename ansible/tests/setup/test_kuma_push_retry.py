@@ -18,7 +18,7 @@ rejection — HTTP 401 or 403 — and stops only on those. Everything else retri
 failing before a response exists (couldn't connect / timeout / TLS), a 5xx *response*, and
 any OTHER 4xx, in particular the 404 above. A no-router 404 and a bad-token 404 share a
 code, so a genuinely bad token burns the retry budget before its log line appears — the
-same trade the sibling cron `crowdsec-update-home-allowlist.sh.j2` accepts. The final line
+same trade the Python twin `ansible/roles/setup/common/files/kuma_push.py` accepts. The final line
 says which of the two it was: Kuma's own rejection is `application/json`, Traefik's
 no-router page is `text/plain`, and the library appends `by=kuma` from the content type. Kuma
 answers 404 for any exception, so on a final `by=kuma` failure the library also logs Kuma's own
@@ -277,8 +277,8 @@ def test_retries_survive_a_set_dash_e_caller(tmp_path):
 
 def test_retry_budget_is_well_under_the_fastest_affected_cron_period():
     # THE derivation. Three attempts at --max-time 10 plus two 30s backoffs is the worst case;
-    # the fastest cron this fix touches is the CrowdSec home-allowlist updater at */5 (300s,
-    # ansible/roles/k8s/crowdsec/tasks/main.yml). Stated as a floor, and the attempt count is
+    # the fastest cron this fix touched was the CrowdSec home-allowlist updater at */5 (300s),
+    # which has since moved into a pod. Stated as a floor, and the attempt count is
     # derived from the file text rather than a bare literal, so a future change to any of the
     # three constants has to argue with the arithmetic, not just read as "still small."
     text = LIB.read_text()
@@ -297,8 +297,8 @@ def test_retry_window_covers_close_to_twice_the_observed_outage():
     # short of 2x the 31s outage) is under the 31s longest endpoint-less window measured,
     # so a lone retry could still land inside a live outage. Two 30s backoffs land
     # the last attempt at t=60s — under the observed outage's exact double (62s) but within 2s
-    # of it, the same order-of-magnitude margin the crowdsec sibling script sized its own retry
-    # window to (ansible/tests/services/test_crowdsec_allowlist_push_retry.py). Asserted as a
+    # of it, the same order-of-magnitude margin the crowdsec home-allowlist cron sized its own
+    # retry window to before it left the host. Asserted as a
     # floor rather than the bare "2x" the file's comments use loosely, so this stays accurate if
     # either constant moves.
     observed_outage_s = 31

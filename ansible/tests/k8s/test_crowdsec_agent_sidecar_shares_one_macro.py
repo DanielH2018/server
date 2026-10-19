@@ -7,21 +7,20 @@ each pod.
 
 `crowdsec_k8s_sidecar_agents` in group_vars maps each host app to the LAPI machine its agent
 logs in as. Four readers derive from it, in roles that cannot see each other's defaults: the
-sidecar's AGENT_USERNAME, the crowdsec role's machine registration loop, observability's
+sidecar's AGENT_USERNAME, the crowdsec LAPI pod's `lapi-register` initContainer, observability's
 `crowdsec-<app>-agent` scrape jobs and netpol-baseline's :6060 grant, which
 `test_crowdsec_sidecars_are_scraped.py` covers. A machine one reader names and another does not is an agent
 that cannot log in, or one nothing scrapes.
 
 The caller guard is textual, because a call and a written-out copy render the same manifest,
-so only the source tells them apart. The map's readers are checked on the render, and the
-registration loop by evaluating its own `loop:` expression.
+so only the source tells them apart. The map's readers are checked on the render.
 
 Run: uv run pytest ansible/tests/k8s/test_crowdsec_agent_sidecar_shares_one_macro.py
 """
 
 import re
 
-from _helpers import K8S_ROLES, load_tasks, render_expr, task_named
+from _helpers import K8S_ROLES
 from _k8s_render import host_context, rendered_docs
 from lib import yaml_fast
 
@@ -113,18 +112,16 @@ def test_each_sidecar_logs_in_as_its_mapped_machine():
     assert usernames == _agents()
 
 
-def test_the_lapi_registration_loop_registers_every_mapped_machine():
-    task = task_named(
-        load_tasks(K8S_ROLES / "crowdsec" / "tasks" / "main.yml"),
-        "Register the remote agent machines on the LAPI",
-    )
-    context = host_context()
-    registered = render_expr(
-        task["loop"],
-        crowdsec_k8s_sidecar_agents=context["crowdsec_k8s_sidecar_agents"],
-        crowdsec_k8s_node_agent_machines=["node-machine"],
-    )
-    assert sorted(registered) == sorted([*_agents().values(), "node-machine"])
+def test_the_lapi_register_init_registers_every_mapped_machine():
+    [script] = [
+        init["command"][-1]
+        for role, _template, doc in rendered_docs()
+        if role == "crowdsec" and doc.get("kind") == "Deployment"
+        for init in doc["spec"]["template"]["spec"]["initContainers"]
+        if init["name"] == "lapi-register"
+    ]
+    [machines] = re.findall(r"^for machine in (.+); do$", script, re.MULTILINE)
+    assert set(_agents().values()) <= set(machines.split())
 
 
 def test_each_mapped_app_has_a_scrape_job():

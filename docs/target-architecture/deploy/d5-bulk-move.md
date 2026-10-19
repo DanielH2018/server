@@ -142,6 +142,129 @@ than a gated landing. [#5430](https://github.com/DanielH2018/server/pull/5430) r
 `8592dd71a`: `claude-land@` to `TimeoutStartSec=4h` and `renovate-agent-land@` to `190min`, each
 with `LAND_DEADLINE=10800`.
 
+**Status, 2026-10-19: Waves B to D, and the conversions.** These PRs moved roles to Flux after
+#5433:
+
+| PR | Merge | Roles |
+|---|---|---|
+| [#5440](https://github.com/DanielH2018/server/pull/5440) | `7d8a1ecea` | loki-homelab, navidrome, scrutiny |
+| [#5450](https://github.com/DanielH2018/server/pull/5450) | `9240a27ec` | bazarr, freshrss, livesync, speedtest |
+| [#5466](https://github.com/DanielH2018/server/pull/5466) | `6230cc3c3` | ical-proxy, homelab-mcp |
+| [#5468](https://github.com/DanielH2018/server/pull/5468) | `ca2e3d94c` | terraria, valheim |
+| [#5523](https://github.com/DanielH2018/server/pull/5523) | `271874af3` | cloudflare-ddns, docs, autofix-bridge |
+| [#5531](https://github.com/DanielH2018/server/pull/5531) | `3b3c75a7d` | code-server |
+| [#5566](https://github.com/DanielH2018/server/pull/5566) | `5aa02a653` | sonarr, radarr, mosquitto |
+| [#5589](https://github.com/DanielH2018/server/pull/5589) | `50e73cacf` | n8n |
+| [#5607](https://github.com/DanielH2018/server/pull/5607) | `2ac7024f1` | nut |
+| [#5623](https://github.com/DanielH2018/server/pull/5623) | `abe8a5838` | prowlarr, monitor-bridge |
+| [#5688](https://github.com/DanielH2018/server/pull/5688) | `98a84d0a6` | karakeep, pi-peer-backup, media-volume |
+| [#5717](https://github.com/DanielH2018/server/pull/5717) | `5f71ed2f1` | tdarr, configarr, qbittorrent |
+| [#5720](https://github.com/DanielH2018/server/pull/5720) | `82349f878` | traefik, traefik-crds (own window) |
+
+The operator's rulings over the same two days:
+- Flips land at any hour; seven roles keep an own window (#5441), and an own-window flip lands
+  whenever the operator is present (#5639). A flip PR carries three to five roles and skips
+  its model review (#5469). The M2 to M5 soaks and G1's are shortened (#5470).
+- crowdsec's three API jobs run in a sidecar of the LAPI pod, with no `pods/exec` grant
+  (#5655). Its home allowlist splits discovery from the write: a host-network CronJob writes
+  the addresses into one ConfigMap and the sidecar syncs `home-ips` (#5701).
+- crowdsec's off-cluster verify is the Pi timer, read through the Pi's Alloy (*Open
+  questions* 9, below).
+- tdarr's VAAPI encode check is an initContainer, and jellyfin's flip drops its two VAAPI
+  checks (#5451).
+- pihole's sibling check is a guard Job that fails while pihole-2 has no ready endpoint
+  (#5695).
+- The registry's ghcr-mirror gets its own Deployment, claim and GC, and keeps its `0s`
+  `REGISTRY_PROXY_TTL`. The push-store GC retires, and the pull self-test becomes a verify Job
+  that runs the fleet python Job image from the push store (#5680, #5651). The mirror's GC
+  stays a host script after the flip, because its Deployment renders no `replicas:` and the
+  GC writes no field an apply owns (#5732).
+
+**The Wave B revert drill ran on speedtest.** #5605 (`dcd6d5515`) pointed speedtest's
+readiness probe at a missing path. The soak failed it and held `dcd6d551 stateful=speedtest`.
+Branch 1 applied: the session read digest8 `1a3314a0` from the snapshot's name, not from the
+Job name's hash, and the operator reset `last-good` to `69b7772f1`. The revert, #5664
+(`e6a148773`), promoted and was verified at 19:12, and the hold returned to `none`.
+
+**A stale soak blocks promotion until its deadline** (#5704). After a reset, the held
+revision's soak Job waits for a revision that never arrives. kustomize-controller has no
+`CancelHealthCheckOnNewRevision`, so the soak Kustomization holds every later promotion until
+its timeout, 17130s at the time. The workaround is operator-only: delete the soak pod, and
+`backoffLimit: 0` fails the Job, which ends the health check.
+
+**traefik's flip landed `unhealthy`, and the workload was healthy** (#5744). The health gate
+read tag ownership from a checkout older than the flip, so it applied the restart expectation
+of Ansible's last apply. Run from the merge commit, `probe.py health traefik` read `ok`, and
+`flux/soak`, `flux/traefik` and `flux/traefik-crds` read `success`. #5720 added
+`traefik-crds` to the PriorityClass census's `_CLASS_AT_DERIVATION` with `tier: home-edge`
+(#5703). [#5755](https://github.com/DanielH2018/server/pull/5755) (`1b9062fd7`) makes the
+gate render from the merge commit, so the next own-window flip is its first live test.
+
+**Conversion work after the traefik flip:**
+[#5745](https://github.com/DanielH2018/server/pull/5745) (`4730ef21d`) gives a role a
+`<tag>-precheck` kind that `<tag>` depends on, for pihole's guard.
+[#5746](https://github.com/DanielH2018/server/pull/5746) (`766ec76b4`) retires the registry
+push store's GC, moves the pull self-test into the inert verify Job, and holds the mirror
+restore under the GC's `flock`. [#5753](https://github.com/DanielH2018/server/pull/5753)
+(`ab684ae22`) landed in crowdsec's window. After its deploy, the `crowdsec-home-ips`
+ConfigMap held an IPv4 address and a /64, the sidecar logged `crowdsec-home-allowlist:
+status=up`, `up{job="alloy-pi"}` read 1, and the edge-probe counter read `status=302` five
+times. It also read one `403` at 01:07:09, during the LAPI restart (#5761).
+[#5739](https://github.com/DanielH2018/server/pull/5739) (`afbdd6e6f`) fixed the sidecar,
+whose every `cscli` call failed after #5711. The engine's entrypoint links `trace` into the
+data volume from `/staging`, which the python image lacks. #5756 records that a module only
+CI can run, such as crowdsec's image legs, re-measures to 0s locally.
+[#5762](https://github.com/DanielH2018/server/pull/5762) (`96d33ba37`) admits
+`crowdsec-verify` through the LAPI fence on 8080 and the Prometheus fence from `homelab`, and
+gives the Job a digest of the pod's roll inputs.
+[#5765](https://github.com/DanielH2018/server/pull/5765) registers crowdsec's LAPI machines
+and creates its two allowlists in a `lapi-register` initContainer, and moves H2's absent arms
+into `k8s_host_files`. It landed `settled` in crowdsec's window at `c7ce725f6`. CI had run
+the rendered `lapi-register` script twice in the pinned image with no network: the first run
+added the five machines and both allowlists, and the second printed nothing, so D5's
+`pods/exec` Job fallback is not needed. Live, `lapi-register` added only `crowdsec-verify`,
+because the four agents were already registered, and the new pod read `2/2 Running`. The
+edge answered the Pi's probe 403 once during the roll, as it did for #5753 (#5761). #5765
+carries #5764's head unchanged on a `worktree-claude+` branch, the only kind the `claude`
+user's GitHub account can update, because `land.sh` updates a PR branch whose base went
+stale.
+
+Where each role still on Ansible stands:
+
+| Role | Conversion | Flip |
+|---|---|---|
+| authelia | done (#5691) | own window |
+| blackbox-exporter | none needed | Wave A's last PR, on or after 2026-10-20T06:19Z |
+| crowdsec | done: H2.4b (#5711, #5739), H2.4c and the inert verify with its Pi channel (#5753), verify's fence peers (#5762), LAPI initContainer and arm move (#5765) | own window; the flip renames `templates/verify-inert/` to `templates/verify/` and states the hop-2 trade |
+| dri-device-plugin | done (#5529) | waits on M2's PR 4b (#5527) |
+| headlamp | done (#5681) | after observability |
+| home-assistant | none needed | own window |
+| janitorr | done (#5602, #5706, #5715) | ready |
+| jellyfin | done (#5620, #5708) | ready; drops its VAAPI checks |
+| netpol-baseline | done (#5687, #5700) | last |
+| observability | done (#5681, #5728) | ready |
+| pihole | done (#5702, #5710, #5727, #5745) | own window; the flip moves the guard into `templates/precheck/` and adds the break-glass (#5740) |
+| registry | done (#5689, #5729, #5746) | ready |
+| uptime-kuma | done (#5724) | ready |
+| wg-easy | none needed | own window, operator on the LAN |
+| zigbee2mqtt | none needed | own window |
+
+**Every D5 conversion has landed, and the work continues as the `claude` user
+(2026-10-19).** The last was #5765. What is left is the flips, then step 27. Four things
+learned in this stretch bear on them:
+- `lapi-register` holds the LAPI pod in `Init:Error` if it fails, and the edge bouncer then
+  answers 403 once five of its 60-second updates have failed (`updateMaxFailure: 5`). On a
+  crowdsec roll that does not settle, read
+  `kubectl -n homelab logs deploy/crowdsec -c lapi-register` first.
+- A PR that edits a file under `ansible/roles/k8s/manifests/` that no Ansible render reads,
+  such as `files/flux_soak.py`, still derives every tag in `land.sh`. Land it with
+  `--tags <one flux-owned tag>`, as #5745 did, so the landing waits on the promotion and
+  re-applies no Ansible role.
+- A PR body's closing keyword must sit on its own `Closes #N` line. "This PR closes #N" or
+  "does not close #N" in a sentence makes `land.sh --arm-merge` refuse the landing.
+- A stale soak still blocks promotion until its deadline (#5704). The workaround, deleting
+  the soak pod, is operator-only.
+
 Related issues:
 
 - [#4564](https://github.com/DanielH2018/server/issues/4564): karakeep-chrome's rollout wait, superseded by Flux `wait`.
@@ -2731,7 +2854,10 @@ sizes its batch of roles against that projection.
               in-tree copy, so its render holds no placeholder. The flip PR creates it, gives
               it a `containers_list` entry declaring traefik's `tier: home-edge`, and declares
               `traefik-crds` in traefik's `depends_on`. The tier keeps the tag out of the shed
-              set without a `NEVER_SHED` entry (H1's *The set cannot drift*). Its `k8s/manifests` include sets `manifests_files: []`, so the
+              set without a `NEVER_SHED` entry (H1's *The set cannot drift*). The tier
+              also enters the PriorityClass census, so the flip adds `traefik-crds:
+              homelab-critical` to `_CLASS_AT_DERIVATION` in
+              `ansible/tests/k8s/test_priority_class_is_derived_from_tier.py` (#5703). Its `k8s/manifests` include sets `manifests_files: []`, so the
               render holds the kustomization and the vendored file alone; no role renders
               that shape yet, so the flip PR's render is its first proof. The pin variables
               and `test_traefik_crds.py` move with the copy.
@@ -3930,7 +4056,10 @@ includes valheim's initContainer.
    the Pi's node_exporter, which `optimize_pi` runs with `--no-collector.textfile` today, read
    through the `node-pi` scrape. M4's blackbox_exporter fits only if it gains a probe outside
    the cluster. Resolution: crowdsec's first conversion PR confirms the channel, and crowdsec
-   does not flip without it.
+   does not flip without it. **Confirmed by the operator on 2026-10-18 (#5650): the plan's
+   choice.** The Pi timer is the vantage point, a metrics stage in the Pi's Alloy counts its
+   probe results, and Prometheus reads the counter through its direct `alloy-pi` scrape.
+   crowdsec's first conversion PR (#5650, with H2.4c's #5738) records it here.
 10. **C1's output layout grows by two digest fields and the image contexts.** C1 already
     lists the shared-kind files and directories, `DIR/cluster/<tag>-snapshot/` and
     `DIR/cluster/<tag>-verify/`. It dates `DIR/digests.json` from D2's first publishing PR,

@@ -170,7 +170,7 @@ ROWS = (
             {
                 "ansible/roles/setup/gitops_deploy/tasks/code.yml",
                 "ansible/roles/setup/k3s/tasks/health-crons.yml",
-                "ansible/roles/k8s/crowdsec/tasks/main.yml",
+                "ansible/roles/setup/fake_remux/tasks/main.yml",
             }
         ),
     ),

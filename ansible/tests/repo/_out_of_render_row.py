@@ -48,9 +48,6 @@ ALLOW = {
     _K8S + "cronjob-gate/tasks/main.yml": (
         "D5: the gate Job becomes a Job in `<tag>-verify` copied from the jobTemplate"
     ),
-    _K8S + "crowdsec/tasks/main.yml": (
-        "D5: machine registration and the two allowlists become an initContainer"
-    ),
     _K8S + "crowdsec/tasks/verify.yml": (
         "D5: the ban-and-lift check becomes the `crowdsec-verify` Job"
     ),
@@ -121,8 +118,9 @@ OUT_OF_RENDER = Census(
     # n8n's flip deleted its probe tasks (#5546); 44 once media-volume's flip deleted its
     # hardlink probe tasks (#5652); 43 once authelia's TOTP seed became an initContainer
     # (#5647); 41 once the flip of tdarr and qbittorrent deleted their verify tasks; 39 once
-    # traefik's flip rendered its CRDs and RBAC (#5707).
-    min_matches=39,
+    # traefik's flip rendered its CRDs and RBAC (#5707); 37 once crowdsec's machine
+    # registration and allowlists became an initContainer (#5741).
+    min_matches=37,
     must_find=frozenset(
         {
             _K8S + "observability/tasks/dashboards.yml",

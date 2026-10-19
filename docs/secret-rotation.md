@@ -203,12 +203,14 @@ not rotated again by the weekly cron. Examples:
   deploy refuses a stored hash that holds a colon, before the apply.
 - **CrowdSec bouncer keys** (`crowdsec_k8s_bouncer_api_key`, the cluster edge's — the only
   bouncer since E7 retired the Docker edge and its `dockertraefik` key) and the agent password
-  (`crowdsec_k8s_agent_password`, shared by all four agents). Since slice-6 B2 the single
-  LAPI lives in the cluster. Bouncer registration is DECLARATIVE — the engine reads
-  `BOUNCER_KEY_*` from its env rather than running `cscli`. Agent registration is not: the role
-  runs `cscli machines add`, and that task adds a machine only when it is absent. It passes no
+  (`crowdsec_k8s_agent_password`, shared by all four agents and the `crowdsec-verify` machine).
+  Since slice-6 B2 the single LAPI lives in the cluster. Bouncer registration is DECLARATIVE —
+  the engine reads `BOUNCER_KEY_*` from its env rather than running `cscli`. Agent
+  registration is not: the LAPI pod's `lapi-register` initContainer runs `cscli machines add`
+  on every pod start, and adds a machine only when it is absent (#5741). It passes no
   `--force` and has no update path, so a rotation that skips the deletes leaves every machine on
-  the old password. Rotation is therefore: `sops set` the new value → delete the old
+  the old password. A deleted machine comes back only when the engine pod next starts.
+  Rotation is therefore: `sops set` the new value → delete the old
   registrations on the engine → redeploy `--tags crowdsec` on daniel-box → redeploy the
   consumers (`--tags traefik`/`--tags authelia` on daniel-box for the sidecars). The delete is
   required because re-registration never UPDATES an existing key. For the bouncer key that is
@@ -220,16 +222,17 @@ not rotated again by the weekly cron. Examples:
   The engine restart registers the new key either way, because the base name is missing. The
   bouncer-prune section of `ansible/roles/k8s/crowdsec/CLAUDE.md` has the mechanism.
   For the agent password it is one `cscli machines delete <name>` per machine, and there are
-  four: `k8s-traefik-agent`, `k8s-authelia-agent`, `k8s-node-agent-daniel-box` and
-  `k8s-node-agent-daniel-server`. The last two are per-node and come from
+  five: `k8s-traefik-agent`, `k8s-authelia-agent`, `k8s-node-agent-daniel-box`,
+  `k8s-node-agent-daniel-server` and `crowdsec-verify`. The two node agents come from
   `crowdsec_k8s_node_agent_machines` in the role's `defaults/main.yml`; a node joining the
   cluster adds a name there. The `--tags crowdsec` redeploy restarts the node-agent DaemonSet,
   because the role names `crowdsec-node-agent` in `manifests_extra_rollouts`. That restart is
   what rotates them: `AGENT_PASSWORD` arrives through a `secretKeyRef`, and env resolves once at
   pod start, so only a new pod reads the new value. Expect the node agents to fail their LAPI
-  login for a few minutes in the middle of that deploy. The restart fires before the
-  re-registration task, so the machines are deleted and not yet re-added. They converge without
-  help: each agent's liveness probe converges it, restarting the container until registration
+  login for a few minutes in the middle of that deploy. The node agents restart while the
+  engine pod is still rolling, so the machines are deleted and not yet re-added until the new
+  engine pod's `lapi-register` runs. The changed Secret is what rolls the engine pod. The
+  agents converge without help: each agent's liveness probe converges it, restarting the container until registration
   lands. **Do NOT just `sops set`**: the plugin hot-reloads the new key
   while the LAPI still holds the old hash, and it fails OPEN — a silent WAF bypass. The
   traefik deploy now fails loudly on a rejected key (its probe task), which is the guard.

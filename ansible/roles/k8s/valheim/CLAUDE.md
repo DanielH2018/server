@@ -17,8 +17,7 @@ longer exists. `k8s/terraria` is the sibling this role copies.
 
 - **Version-pinned**, and **the tag pins the wrapper, not the game** — SteamCMD fetches the
   current Valheim build on every start, so the game runs the newest release either way.
-- **Mods:** BepInEx, with 12 plugins pinned in `defaults/main.yml` (2 live, 10 disabled) —
-  see *Modding* below. The second image is built from `templates/Dockerfile.j2` by the
+- **Mods:** BepInEx, with 2 plugins pinned in `defaults/main.yml` — see *Modding* below. The second image is built from `templates/Dockerfile.j2` by the
   promote workflow's `images` job, and holds only the plugin DLLs.
 - **Host:** daniel-box, by a hard `nodeSelector` — a member of the **VIP unit** with traefik,
   pihole, mosquitto and terraria. The pin and the MetalLB L2Advertisement nodeSelector move
@@ -108,9 +107,10 @@ it; it is mutually exclusive with `VALHEIM_PLUS`, unused here.
   with zero plugins loaded. `grep -i 'Loading \[.*\]'` over the pod log should name one per
   live entry in `valheim_k8s_mods`, and **loading is not working**: a plugin can log itself
   installed and then throw every frame.
-- **Enable one mod at a time and read the boot log before adding the next.** The live set is
-  two because Valheim 1.0's rolling updates keep breaking the rest, and `UPDATE_CRON` runs at
-  its default `*/15` — the game can update out from under the mods with nothing failing.
+- **Enable one mod at a time and read the boot log before adding the next.** The set is two
+  because Valheim 1.0's rolling updates broke the rest. The ten that failed were removed
+  rather than left commented out. `UPDATE_CRON` runs at its default `*/15`, so the game can
+  update out from under the mods with nothing failing.
 - **Ore through portals is a vanilla world modifier, not a mod** — `valheim_k8s_server_args`
   passes `-modifier portals casual`. A modifier applies at launch and is not written into the
   world, so changing that line and redeploying is the whole procedure, both ways.

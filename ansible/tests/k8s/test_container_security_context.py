@@ -262,6 +262,9 @@ _ROOT_OWNED_DATA = {
     # engine's root-owned SQLite file, beside the root engine container. Every capability is
     # dropped; the owner's write bit is all it uses.
     ("crowdsec", "crowdsec-jobs"),
+    # The lapi-register initContainer's cscli adds machine and allowlist rows to the same
+    # root-owned SQLite file before the engine starts, with every capability dropped.
+    ("crowdsec", "lapi-register"),
 }
 
 # Empty by design. Kept as a named set rather than deleted, because the category is the thing worth

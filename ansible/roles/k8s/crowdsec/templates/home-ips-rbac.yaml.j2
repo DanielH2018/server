@@ -1,0 +1,38 @@
+{#
+  The crowdsec-home-ips CronJob's identity: `patch` on its one ConfigMap and nothing else. The
+  job writes that ConfigMap with a JSON merge patch and makes no other API call
+  (files/home_ips_discover.py), so it needs no `get`.
+  ansible/tests/k8s/test_rbac_against_rest_script.py runs the module's main with a recording
+  client and holds this Role to the calls it records.
+#}
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: crowdsec-home-ips
+  namespace: {{ k8s_namespace }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: crowdsec-home-ips
+  namespace: {{ k8s_namespace }}
+rules:
+  - apiGroups: [""]
+    resources: [configmaps]
+    verbs: [patch]
+    resourceNames: [{{ crowdsec_k8s_home_ips_configmap }}]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: crowdsec-home-ips
+  namespace: {{ k8s_namespace }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: crowdsec-home-ips
+subjects:
+  - kind: ServiceAccount
+    name: crowdsec-home-ips
+    namespace: {{ k8s_namespace }}
