@@ -130,6 +130,7 @@ def _flip(**kwargs: object) -> Fakes:
         narrowed=",".join(FLIPPED),
         narrowed_rc=0,
         owners={MERGE_SHA: dict.fromkeys(FLIPPED, "flux")},
+        kustomizations=set(FLIPPED),
         state=receipt({"ansible/deploy.yml": ["narrowed-to-nothing"]}),
     )
     return replace(fakes, **kwargs)
