@@ -32,6 +32,11 @@
 !/var/lib/rancher/k3s/server/db/
 # Pod volumes: emptyDirs and projected Secrets and ConfigMaps
 !/var/lib/kubelet/pods/
+# CSI volume mounts (the Longhorn driver stages every attached volume's filesystem here, so this
+# is live application data) and kubelet's own state files, rewritten on every pod change. 30 of
+# daniel-server's 53 aideinit warnings on 2026-10-20 (#5794).
+!/var/lib/kubelet/plugins/
+!/var/lib/kubelet/[a-z_]+_state$
 # Container logs
 !/var/log/pods/
 !/var/log/containers/
@@ -46,8 +51,19 @@
 # per-session review scratch, all rewritten by ordinary use. ~/.local/share stays checked,
 # because the uv-managed Pythons, uv tools and node versions there are executables.
 !/home/[^/]+/\.cache/
+!/home/[^/]+/\.kube/cache/
 !/home/[^/]+/\.npm/
 !/home/[^/]+/\.local/state/
+
+# The media library: 432 GB on daniel-box's root filesystem on 2026-10-20, under
+# fake_remux_host_data_root. Every file there gets AIDE's Full rule (about ten digests), which
+# kept the 2026-10-20 aideinit on daniel-box running past an hour where daniel-server, without
+# a library, finished in 28 minutes. Video files carry nothing an integrity check protects, and
+# the *arr stack replaces them routinely.
+!/srv/media/
+# Swap files: rewritten by the kernel continuously, 8 GB each on the cluster nodes.
+!/swap\.img$
+!/swapfile$
 
 # Virtual/pseudo filesystems — not real files, cause inflated read counts
 !/proc/
