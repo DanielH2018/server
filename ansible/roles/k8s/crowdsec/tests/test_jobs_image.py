@@ -339,8 +339,14 @@ def test_the_lapi_register_init_runs_against_a_fresh_database_with_no_lapi(
         timeout=_DOCKER_TIMEOUT_S,
         check=True,
     )
-    with sqlite3.connect(data / "crowdsec.db") as db:
+    # Closed by hand: a connection's `with` block commits but never closes, and the open
+    # connection's ResourceWarning then fires at garbage collection inside whichever test is
+    # running, failing that one instead (#5789).
+    db = sqlite3.connect(data / "crowdsec.db")
+    try:
         allowlists = {name for (name,) in db.execute("select name from allow_lists")}
+    finally:
+        db.close()
     assert allowlists == {"home-ips", "remote-ips"}
     record_property(
         JOB_LOG_PROPERTY,
