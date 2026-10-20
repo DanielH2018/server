@@ -1249,7 +1249,7 @@
  "scripts/renderer/tests/test_renderer_host_package_rules.py": 0.13,
  "scripts/renderer/tests/test_renderer_host_update_limits.py": 0.32,
  "scripts/renderer/tests/test_renderer_images.py": 6.36,
- "scripts/renderer/tests/test_renderer_job_census.py": 4.98,
+ "scripts/renderer/tests/test_renderer_job_census.py": 11.43,
  "scripts/renderer/tests/test_renderer_live_read_census.py": 2.87,
  "scripts/renderer/tests/test_renderer_monitor_bridge_script.py": 3.1,
  "scripts/renderer/tests/test_renderer_placeholders.py": 0.24,
@@ -1282,7 +1282,7 @@
  "scripts/secrets_mgmt/tests/test_departed_secrets_are_accounted_for.py": 0.76,
  "scripts/secrets_mgmt/tests/test_rotation_tools.py": 0.0,
  "scripts/secrets_mgmt/tests/test_secret_bearing_host_paths.py": 0.42,
- "scripts/secrets_mgmt/tests/test_secret_bearing_host_scripts_are_not_world_readable.py": 1.58,
+ "scripts/secrets_mgmt/tests/test_secret_bearing_host_scripts_are_not_world_readable.py": 0.74,
  "scripts/secrets_mgmt/tests/test_secret_classify.py": 0.0,
  "scripts/secrets_mgmt/tests/test_secret_consumers.py": 0.1,
  "scripts/secrets_mgmt/tests/test_secret_git_dates.py": 0.0,
@@ -1353,6 +1353,6 @@
  "scripts/validate/tests/test_validate_root_ignored_files.py": 0.04,
  "scripts/validate/tests/test_validate_setup_templates.py": 1.61,
  "scripts/validate/tests/test_validate_shell_templates.py": 2.74,
- "scripts/validate/tests/test_validate_unit_templates.py": 3.66,
+ "scripts/validate/tests/test_validate_unit_templates.py": 6.29,
  "scripts/z2m/tests/test_set_device_option.py": 4.08
 }
