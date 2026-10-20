@@ -237,6 +237,38 @@ def test_worktrees_and_caches_are_excluded_and_their_neighbours_are_not():
     assert [p for p in CHECKED if _excluded(p, conf)] == []
 
 
+# Debian's /etc/aide/aide.conf: `@@x_include /etc/aide/aide.conf.d ^[a-zA-Z0-9_-]+$`. A
+# conf.d file whose name fails this is skipped silently, and `aide --config-check` still passes.
+DEBIAN_INCLUDE_NAME = re.compile(r"^[a-zA-Z0-9_-]+$")
+
+
+def _aide_local_dest() -> str:
+    dests = [
+        task["ansible.builtin.template"]["dest"]
+        for task in walk_tasks(load_tasks(INTEGRITY))
+        if (task.get("ansible.builtin.template") or {}).get("src")
+        == "98_aide_local.conf.j2"
+    ]
+    assert len(dests) == 1, (
+        f"expected one task deploying 98_aide_local.conf.j2, got {dests}"
+    )
+    return dests[0]
+
+
+def test_the_include_pattern_skips_a_dotted_name_and_loads_a_plain_one():
+    assert not DEBIAN_INCLUDE_NAME.match("98_aide_local.conf")
+    assert DEBIAN_INCLUDE_NAME.match("98_aide_local")
+
+
+def test_the_exclusions_deploy_under_a_name_aide_loads():
+    """From 2026-05-31 to 2026-10-20 the file was `98_aide_local.conf` and no rule in it ran."""
+    dest = _aide_local_dest()
+    assert dest.startswith("/etc/aide/aide.conf.d/"), dest
+    assert DEBIAN_INCLUDE_NAME.match(dest.rsplit("/", 1)[1]), (
+        f"{dest} fails aide.conf's include pattern, so AIDE never reads it"
+    )
+
+
 def test_the_check_still_runs_when_no_token_is_set(tmp_path):
     """A host whose secret is missing keeps its weekly check; only the push is skipped."""
     _, pushed, logged, ran = _run_check(tmp_path, CLEAN_REPORT, rc=0, token="")

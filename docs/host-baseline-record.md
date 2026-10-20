@@ -129,6 +129,12 @@ extras from `unattended_upgrades_origins_patterns`, which is `[]` for security-o
   hardware watchdog is stopped around it, because heavy apt on a 512 MB Zero 2 W OOMs without
   disk swap. Pi-only packages gate on `has_raspi_kernel` instead — the board and its memory are
   two separate facts.
+- **The AIDE exclusions deploy as `/etc/aide/aide.conf.d/98_aide_local`, with no dot.**
+  Debian's `aide.conf` includes that directory with the name pattern `^[a-zA-Z0-9_-]+$`, so a
+  dotted name is skipped silently and `aide --config-check` still passes. The file was
+  `98_aide_local.conf` from 2026-05-31 to 2026-10-20, and AIDE read none of its rules: the
+  weekly check hashed Longhorn replicas, kubelet volumes and every container root filesystem
+  (#5785). `aide --path-check=f:<path>` shows whether a path is in or out.
 - Two templates carry host-specific config: `templates/98_aide_local.conf.j2`, the AIDE
   exclusions for high-churn paths (the Pi's Docker tree, app data, pseudo filesystems, on
   the cluster nodes the Longhorn, containerd, etcd, pod-volume and pod-log paths, every running
