@@ -18,6 +18,15 @@
 !/var/lib/longhorn/
 # containerd image layers and container snapshots
 !/var/lib/rancher/k3s/agent/containerd/
+# The same container filesystems again, mounted: containerd mounts every running container's
+# root filesystem as an overlay under its runtime state directory, so the snapshot exclusion
+# above does not keep AIDE out of them. daniel-box held 176 such mounts on 2026-10-20, and the
+# 2026-10-19 scan was still hashing files inside them 35 hours in (#5785). The Pi's Docker
+# containerd keeps its runtime state under /run/containerd.
+!/run/k3s/
+!/run/containerd/
+# Network namespace handles, one per pod: nsfs mounts, not files
+!/run/netns/
 # The embedded etcd's data and its local snapshots
 !/var/lib/rancher/k3s/server/db/
 # Pod volumes: emptyDirs and projected Secrets and ConfigMaps
