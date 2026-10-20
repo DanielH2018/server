@@ -1,13 +1,13 @@
 {
-  "checksum": "88dedbee56eb9f4ba954244a8ab1529f82d56e7f7edc8d1566bd6c957f8519f4",
+  "checksum": "1e71f084e8cba2f4c4e37d117e50fe4b1535d98b2414ef0ea6312a245de49789",
   "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
   "key": "ansible/roles/k8s/crowdsec/CLAUDE.md#The `lapi-register` initContainer holds the LAPI down if it fails",
   "row": {
     "atoms": {
       "ansible/roles/k8s/crowdsec/templates/deployment.yaml.j2": "19a9cd1ee321f31da60d0386b98c019cb1f8606e381e6f1fe914538e4f9fc68a",
-      "ansible/roles/k8s/crowdsec/tests/test_jobs_image.py::test_the_lapi_register_init_runs_against_a_fresh_database_with_no_lapi": "3c30931111167a5e5df66fa5345aafea49ec7e9b78a701fdc3e32c2c7e6321c9"
+      "ansible/roles/k8s/crowdsec/tests/test_jobs_image.py::test_the_lapi_register_init_runs_against_a_fresh_database_with_no_lapi": "74e561b4ed7ac82685f7b93a79712d29f3864aed4a9a8cdec06fedfd36e52b22"
     },
     "python": "3.14",
-    "verified_sha": "3582e0841"
+    "verified_sha": "1c2b42217"
   }
 }

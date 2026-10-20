@@ -17,7 +17,9 @@ with nothing wrong, and one past two weeks lets a second missed run go unreporte
 Run: uv run pytest ansible/tests/setup/test_aide_check.py
 """
 
+import fcntl
 import os
+import re
 
 from lib.proc_testing import fake_bin, run, write_exec
 from _helpers import ROLES, load_tasks, walk_tasks
@@ -42,6 +44,7 @@ REAL_LIB = "/usr/local/lib/kuma-push-lib.sh"
 REAL_ENV = "/etc/homelab/aide-kuma-push.env"
 REAL_AIDE = "/usr/bin/nice -n19 /usr/bin/ionice -c3 /usr/bin/aide"
 REAL_CAP = "REPORT_MAX_LINES=2000"
+REAL_LOCK = "LOCK_FILE=/run/lock/aide-check.lock"
 
 CLEAN_REPORT = """\
 Start timestamp: 2026-10-19 03:00:01 +0000 (AIDE 0.18.6)
@@ -91,19 +94,25 @@ fi
 
 
 def _run_check(
-    tmp_path, report: str, rc: int, token: str = "stubtoken", cap: int = 2000
+    tmp_path,
+    report: str,
+    rc: int,
+    token: str = "stubtoken",
+    cap: int = 2000,
+    lock_held: bool = False,
 ):
     """Render aide-check.sh and run it with aide stubbed to print `report` and exit `rc`.
 
-    Only absolute paths are repointed: the push lib (a recording stub), the token env file and
-    the nice/ionice/aide invocation. Returns (exit code, pushed lines or None, logged lines,
-    whether aide ran).
+    Only absolute paths are repointed: the push lib (a recording stub), the token env file, the
+    lock file and the nice/ionice/aide invocation. `lock_held` holds the lock from this process
+    for the run, as a scan still running from the previous week would. Returns (exit code,
+    pushed lines or None, logged lines, whether aide ran).
     """
     body = render_shell_script(
         *SCRIPT,
         overrides={"domain": "example.test", "k3s_metallb_ingress_vip": "10.0.0.240"},
     )
-    for needle in (REAL_LIB, REAL_ENV, REAL_AIDE, REAL_CAP):
+    for needle in (REAL_LIB, REAL_ENV, REAL_AIDE, REAL_CAP, REAL_LOCK):
         assert needle in body, (
             f"{needle} is no longer in aide-check.sh; this harness repoints it"
         )
@@ -114,6 +123,7 @@ def _run_check(
     )
     env_file = tmp_path / "push.env"
     env_file.write_text(f"AIDE_PUSH_TOKEN={token}\n")
+    lock_file = tmp_path / "aide-check.lock"
     report_file = tmp_path / "report"
     report_file.write_text(report)
     aide = write_exec(
@@ -125,19 +135,23 @@ def _run_check(
         .replace(REAL_ENV, str(env_file))
         .replace(REAL_AIDE, str(aide))
         .replace(REAL_CAP, f"REPORT_MAX_LINES={cap}")
+        .replace(REAL_LOCK, f"LOCK_FILE={lock_file}")
     )
     script = write_exec(tmp_path / "aide-check.sh", body)
     pushed, logged, ran = (tmp_path / n for n in ("pushed", "logged", "ran"))
-    result = run(
-        [str(script)],
-        env={
-            **os.environ,
-            "KUMA_PUSH_OUT": str(pushed),
-            "LOGGER_OUT": str(logged),
-            "AIDE_RAN": str(ran),
-        },
-        stub_bin=fake_bin(tmp_path / "bin", logger=LOGGER_STUB),
-    )
+    with open(lock_file, "w") as holder:
+        if lock_held:
+            fcntl.flock(holder, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        result = run(
+            [str(script)],
+            env={
+                **os.environ,
+                "KUMA_PUSH_OUT": str(pushed),
+                "LOGGER_OUT": str(logged),
+                "AIDE_RAN": str(ran),
+            },
+            stub_bin=fake_bin(tmp_path / "bin", logger=LOGGER_STUB),
+        )
     return (
         result.returncode,
         pushed.read_text().splitlines() if pushed.exists() else None,
@@ -169,6 +183,54 @@ def test_an_error_exit_pushes_down_with_aides_error_line(tmp_path):
     assert code == 1
     # The durable record `probe.py alerts` reconstructs the episode from.
     assert any(line.startswith("aide-check: status=down ") for line in logged), logged
+
+
+def test_a_held_lock_pushes_down_without_starting_a_second_scan(tmp_path):
+    """A scan still running from last week holds the lock, so this week's run reports it (#5785)."""
+    code, pushed, logged, ran = _run_check(tmp_path, CLEAN_REPORT, rc=0, lock_held=True)
+    assert not ran, "a second aide scan started beside the one holding the lock"
+    assert pushed[0] == "down", pushed
+    assert "previous aide-check run still holds" in pushed[1]
+    assert any(line.startswith("aide-check: status=down") for line in logged), logged
+    assert code == 1
+
+
+def test_a_free_lock_lets_the_scan_run(tmp_path):
+    code, pushed, _, ran = _run_check(tmp_path, CLEAN_REPORT, rc=0, lock_held=False)
+    assert ran and pushed[0] == "up" and code == 0, pushed
+
+
+# Paths AIDE must skip, and paths beside them it must still check (#5785). The second list is
+# what keeps an exclusion from widening: the primary checkout, the repo's hooks and the
+# executables under ~/.local all sit next to an excluded directory.
+EXCLUDED = (
+    "/home/ubuntu/server/.claude/worktrees/fix-5785/.venv/bin/python",
+    "/home/ubuntu/.cache/uv/archive-v0/x/lib.py",
+    "/home/ubuntu/.npm/_npx/a1/node_modules/x/index.js",
+    "/home/ubuntu/.local/state/fanout-review/5685-stop-hook/out.json",
+)
+CHECKED = (
+    "/home/ubuntu/server/ansible/deploy.yml",
+    "/home/ubuntu/server/.claude/hooks/block-footguns.py",
+    "/home/ubuntu/.local/share/uv/python/cpython-3.14/bin/python3",
+    "/home/ubuntu/.local/bin/uv",
+    "/etc/passwd",
+)
+
+
+def _excluded(path: str, conf: str) -> bool:
+    """Whether a `!` rule in `conf` matches `path`, matched the way AIDE does: a regex anchored at
+    the path's start."""
+    rules = [line[1:] for line in conf.splitlines() if line.startswith("!")]
+    return any(re.match(rule, path) for rule in rules)
+
+
+def test_worktrees_and_caches_are_excluded_and_their_neighbours_are_not():
+    conf = render_setup_text(
+        "initial_setup", "98_aide_local.conf.j2", {"sys_user": "ubuntu"}
+    )
+    assert [p for p in EXCLUDED if not _excluded(p, conf)] == []
+    assert [p for p in CHECKED if _excluded(p, conf)] == []
 
 
 def test_the_check_still_runs_when_no_token_is_set(tmp_path):
