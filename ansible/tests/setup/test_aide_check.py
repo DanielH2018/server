@@ -211,6 +211,12 @@ EXCLUDED = (
     "/run/k3s/containerd/io.containerd.runtime.v2.task/k8s.io/d98e30b5/rootfs/app/index.js",
     "/run/containerd/io.containerd.runtime.v2.task/moby/4f1c/config.json",
     "/run/netns/cni-289be4cb-2e30-a45f-2d8d-70d64532ae4f",
+    "/var/lib/kubelet/plugins/kubernetes.io/csi/driver.longhorn.io/x/globalmount/db",
+    "/var/lib/kubelet/allocated_pods_state",
+    "/home/ubuntu/.kube/cache/discovery/127.0.0.1_6443/v1/serverresources.json",
+    "/srv/media/media/movies/Film (2026)/Film.mkv",
+    "/swap.img",
+    "/swapfile",
 )
 CHECKED = (
     "/home/ubuntu/server/ansible/deploy.yml",
@@ -219,6 +225,11 @@ CHECKED = (
     "/home/ubuntu/.local/bin/uv",
     "/etc/passwd",
     "/var/lib/rancher/k3s/data/current/bin/k3s",
+    "/var/lib/kubelet/config.yaml",
+    "/home/ubuntu/.kube/config",
+    "/home/ubuntu/.claude/settings.json",
+    "/srv/other/file",
+    "/swap.img.bak",
 )
 
 
