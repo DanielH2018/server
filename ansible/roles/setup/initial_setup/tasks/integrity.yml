@@ -240,10 +240,23 @@
   tags: [aide]
   ansible.builtin.template:
     src: 98_aide_local.conf.j2
-    dest: /etc/aide/aide.conf.d/98_aide_local.conf
+    # No dot in the name: Debian's aide.conf includes this directory with
+    # `@@x_include /etc/aide/aide.conf.d ^[a-zA-Z0-9_-]+$`, so a file named
+    # `98_aide_local.conf` is skipped without a word. It was, from 2026-05-31 to 2026-10-20,
+    # and every exclusion below went unread while `aide --config-check` passed (#5785).
+    dest: /etc/aide/aide.conf.d/98_aide_local
     owner: root
     group: root
     mode: "0644"
+  become: true
+
+- name: Remove the AIDE exclusions file AIDE never loaded
+  tags: [aide]
+  # The dotted name the task above used until #5785. Left in place it is inert, but it reads
+  # as the live config to anyone who opens the directory.
+  ansible.builtin.file:
+    path: /etc/aide/aide.conf.d/98_aide_local.conf
+    state: absent
   become: true
 
 - name: Initialize AIDE database with progress monitoring

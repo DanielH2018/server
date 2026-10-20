@@ -1,5 +1,6 @@
 # Local AIDE exclusions for Docker homelab.
-# Named 98_* so it loads before 99_aide_root's "/ Full" catch-all.
+# Named 98_* so it loads before 99_aide_root's "/ Full" catch-all, and deployed WITHOUT a dot:
+# aide.conf only includes conf.d names matching ^[a-zA-Z0-9_-]+$ (tasks/integrity.yml).
 # AIDE uses first-match-wins, so these exclusions take precedence.
 
 # Docker image layers and overlay2 filesystem — change on every pull/deploy
