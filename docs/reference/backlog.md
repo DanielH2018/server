@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/backlog.py
-generated_at: 2026-10-19 15:19 UTC
-generated_sha: ec1a9d5de
+generated_at: 2026-10-20 13:59 UTC
+generated_sha: 0d8f7e831
 ---
 
 !!! warning "Generated file — do not edit"
@@ -18,6 +18,7 @@ Findings Claude confirmed and did not fix in the session that found them, filed 
 |---|---|---|---|---|---|---|---|---|
 | [#5126](https://github.com/DanielH2018/server/issues/5126) | high | gap | security | The DanielClaudeBot account reads as nonexistent on GitHub, so agent PRs are invisible and cannot land | 2026-10-15 | 0 | - | - |
 | [#5704](https://github.com/DanielH2018/server/issues/5704) | high | gap | cicd | A reset leaves the held revision's soak Job running to its deadline, blocking every later promotion | 2026-10-18 | 1 | - | ✓ |
+| [#5783](https://github.com/DanielH2018/server/issues/5783) | high | gap | cicd | CI gate marks master red when the prove job times out | 2026-10-20 | 0 | - | - |
 | [#4188](https://github.com/DanielH2018/server/issues/4188) | medium | gap | container | Home Assistant was down 28 minutes when the tick deployed 2026.10.0, and its hold still stands | 2026-10-10 | 1 | - | ✓ |
 | [#4599](https://github.com/DanielH2018/server/issues/4599) | medium | improvement | security | The AIDE check cannot page on an unexplained file change | 2026-10-12 | 0 | - | ✓ |
 | [#4786](https://github.com/DanielH2018/server/issues/4786) | medium | addition | backup-observability | Target architecture M2: read the k8s-workloads shadow soak on days 3 and 7 before PR 4a | 2026-10-13 | 0 | - | ✓ |
@@ -42,6 +43,9 @@ Findings Claude confirmed and did not fix in the session that found them, filed 
 | [#5769](https://github.com/DanielH2018/server/issues/5769) | medium | gap | container | valheim's PRE_BEPINEX_CONFIG_HOOK fails every updater tick since the 1.4.0 wrapper | 2026-10-19 | 0 | - | ✓ |
 | [#5778](https://github.com/DanielH2018/server/issues/5778) | medium | gap | container | karakeep has no pre-pull, so a Recreate rollout is down for the whole image pull | 2026-10-19 | 0 | - | ✓ |
 | [#5781](https://github.com/DanielH2018/server/issues/5781) | medium | gap | container | karakeep v0.34.0 crashes at s6 init under drop ALL and needs a planned auth migration | 2026-10-19 | 0 | - | ✓ |
+| [#5784](https://github.com/DanielH2018/server/issues/5784) | medium | gap | cicd | Staleness test reads the live deployer state dir and fails while the deployer is parked | 2026-10-20 | 0 | - | - |
+| [#5785](https://github.com/DanielH2018/server/issues/5785) | medium | gap | security | AIDE weekly check on daniel-box runs for days: worktrees unexcluded, baseline stale, no lock | 2026-10-20 | 0 | - | - |
+| [#5786](https://github.com/DanielH2018/server/issues/5786) | medium | gap | cicd | Host-package builder caches a CI fail verdict forever, so a green re-run never unblocks it | 2026-10-20 | 0 | - | - |
 | [#2124](https://github.com/DanielH2018/server/issues/2124) | low | gap | security | CrowdSec agent drops Traefik access-log lines with UnmarshalJSON errors | 2026-09-19 | 0 | - | ✓ |
 | [#3778](https://github.com/DanielH2018/server/issues/3778) | low | improvement | cicd | Switch the CI setup action's callers to the self-repository uses syntax once actionlint accepts it | 2026-10-09 | 0 | - | ✓ |
 | [#3865](https://github.com/DanielH2018/server/issues/3865) | low | gap | cicd | Red/green batches: a process the red author starts outside the pipeline's process tree survives the reap | 2026-10-09 | 0 | - | ✓ |
