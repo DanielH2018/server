@@ -50,6 +50,34 @@ AIDE_PUSH_TOKEN=""
 # shellcheck source=/dev/null
 [[ -r /etc/homelab/aide-kuma-push.env ]] && . /etc/homelab/aide-kuma-push.env
 
+# Logs the verdict, then pushes it. The `|| logger` inside kuma_push only fires when the curl
+# fails, so a successfully-pushed DOWN would otherwise leave no durable record and
+# `probe.py alerts` could never reconstruct this monitor. NOTICE rather than INFO — journald here
+# caps MaxLevelStore=notice, so an info line is dropped from the journal and from forwarding.
+report() {
+  logger -p daemon.notice -t aide-check "status=${STATUS} ${MSG}"
+  if [[ -z "$AIDE_PUSH_TOKEN" ]]; then
+    # Names the ENV VAR, not the registry secret: the release-group secrets guard whole-word
+    # matches registry names against raw template text and cannot tell a log line from a render.
+    logger -t aide-check "AIDE_PUSH_TOKEN not set — skipping push (see /add-secret)"
+  else
+    kuma_push "$STATUS" "$MSG" "https://${KUMA_HOST}/api/push/${AIDE_PUSH_TOKEN}" \
+      "$KUMA_HOST" "$KUMA_RESOLVE_IP" aide-check
+  fi
+}
+
+# One scan at a time. A scan that outlives its week would otherwise have the next Monday's start a
+# second full scan beside it. The run that finds the lock held pushes DOWN, which also turns a scan
+# that never ends into a page a week after it started (#5785).
+LOCK_FILE=/run/lock/aide-check.lock
+exec 8>"$LOCK_FILE"
+if ! flock -n 8; then
+  STATUS=down
+  MSG="the previous aide-check run still holds ${LOCK_FILE}, so this week's check did not start; ps -C aide shows how long it has run"
+  report
+  exit 1
+fi
+
 # Captured whole rather than piped, because a pipeline's exit status is its last command's, which
 # is how the old cron lost it. nice and ionice exit with the status of the command they run.
 # --config is required: AIDE 0.18 has no default config path, and a bare `aide --check` exits
@@ -103,20 +131,7 @@ else
   MSG="aide exited ${RC}, so the check did not complete: ${DETAIL:-no output} (run ${RUN_TIME}); journalctl -t aide"
 fi
 
-# Unconditional and before the push: the `|| logger` inside kuma_push only fires when the curl
-# fails, so a successfully-pushed DOWN would otherwise leave no durable record and
-# `probe.py alerts` could never reconstruct this monitor. NOTICE rather than INFO — journald here
-# caps MaxLevelStore=notice, so an info line is dropped from the journal and from forwarding.
-logger -p daemon.notice -t aide-check "status=${STATUS} ${MSG}"
-
-if [[ -z "$AIDE_PUSH_TOKEN" ]]; then
-  # Names the ENV VAR, not the registry secret: the release-group secrets guard whole-word
-  # matches registry names against raw template text and cannot tell a log line from a render.
-  logger -t aide-check "AIDE_PUSH_TOKEN not set — skipping push (see /add-secret)"
-else
-  kuma_push "$STATUS" "$MSG" "https://${KUMA_HOST}/api/push/${AIDE_PUSH_TOKEN}" \
-    "$KUMA_HOST" "$KUMA_RESOLVE_IP" aide-check
-fi
+report
 
 # Cron ignores the exit code; it is non-zero after a DOWN so a run by hand reads the same way.
 [[ "$STATUS" == up ]] || exit 1

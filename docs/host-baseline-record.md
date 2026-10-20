@@ -111,6 +111,11 @@ extras from `unattended_upgrades_origins_patterns`, which is `[]` for security-o
   `docs/security-tools.md` has the exit-code table. The script runs from the cron rather than
   from a `kuma-check-*` timer, because a timer reruns a red check, and each rerun here is
   another full-filesystem scan.
+- **`aide-check.sh` runs one scan at a time.** It takes `/run/lock/aide-check.lock` with
+  `flock -n`, and a run that finds the lock held pushes DOWN without starting a second scan.
+  The tile's deadline counts from its last push, so a scan that never finishes stays silent
+  until then; the lock makes the next Monday's run report it instead. On 2026-10-19 daniel-box
+  started a scan that was still running 35 hours later, killed by hand (#5785).
 - **`rkhunter-check.sh` reads completion from `/var/log/rkhunter.log`, not from the exit code**
   (#4598). rkhunter exits 1 on a warning and on an error alike, so a scan completed only if this
   run rewrote the log and the log holds its summary. It pushes one "rkhunter Scan" tile per host:
@@ -125,8 +130,9 @@ extras from `unattended_upgrades_origins_patterns`, which is `[]` for security-o
   disk swap. Pi-only packages gate on `has_raspi_kernel` instead — the board and its memory are
   two separate facts.
 - Two templates carry host-specific config: `templates/98_aide_local.conf.j2`, the AIDE
-  exclusions for high-churn paths (the Pi's Docker tree, app data, pseudo filesystems, and on
-  the cluster nodes the Longhorn, containerd, etcd, pod-volume and pod-log paths), and `templates/fail2ban_homelab.conf.j2`, the fail2ban
+  exclusions for high-churn paths (the Pi's Docker tree, app data, pseudo filesystems, on
+  the cluster nodes the Longhorn, containerd, etcd, pod-volume and pod-log paths, and on every
+  host the Claude Code worktrees and the per-user caches), and `templates/fail2ban_homelab.conf.j2`, the fail2ban
   jail. Pi-only tasks are individually `when:`-guarded rather than block-scoped, so a server run
   simply skips them.
 

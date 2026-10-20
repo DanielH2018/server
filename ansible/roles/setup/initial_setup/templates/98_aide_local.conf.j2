@@ -26,6 +26,19 @@
 !/var/log/pods/
 !/var/log/containers/
 
+# Claude Code worktrees: each is a full checkout of this repo with its own .venv, created and
+# removed by agent sessions every day. On 2026-10-20 daniel-box held 83 of them, 2.19M of the
+# 5.1M inodes on its root filesystem, and the weekly check ran 35 hours without finishing
+# (#5785). The primary checkout beside them stays checked.
+!/home/{{ sys_user }}/server/\.claude/worktrees/
+
+# Per-user caches and session state: package-manager download caches (uv, prek, npm) and
+# per-session review scratch, all rewritten by ordinary use. ~/.local/share stays checked,
+# because the uv-managed Pythons, uv tools and node versions there are executables.
+!/home/[^/]+/\.cache/
+!/home/[^/]+/\.npm/
+!/home/[^/]+/\.local/state/
+
 # Virtual/pseudo filesystems — not real files, cause inflated read counts
 !/proc/
 !/sys/
