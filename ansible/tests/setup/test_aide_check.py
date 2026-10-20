@@ -208,6 +208,9 @@ EXCLUDED = (
     "/home/ubuntu/.cache/uv/archive-v0/x/lib.py",
     "/home/ubuntu/.npm/_npx/a1/node_modules/x/index.js",
     "/home/ubuntu/.local/state/fanout-review/5685-stop-hook/out.json",
+    "/run/k3s/containerd/io.containerd.runtime.v2.task/k8s.io/d98e30b5/rootfs/app/index.js",
+    "/run/containerd/io.containerd.runtime.v2.task/moby/4f1c/config.json",
+    "/run/netns/cni-289be4cb-2e30-a45f-2d8d-70d64532ae4f",
 )
 CHECKED = (
     "/home/ubuntu/server/ansible/deploy.yml",
@@ -215,6 +218,7 @@ CHECKED = (
     "/home/ubuntu/.local/share/uv/python/cpython-3.14/bin/python3",
     "/home/ubuntu/.local/bin/uv",
     "/etc/passwd",
+    "/var/lib/rancher/k3s/data/current/bin/k3s",
 )
 
 
