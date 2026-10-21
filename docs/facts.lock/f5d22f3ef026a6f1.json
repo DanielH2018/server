@@ -1,9 +1,10 @@
 {
-  "checksum": "06e32ce2b8a9ab3b79314fabf41db2ab34faa53846c9c20d6c1e8a5e4fe87973",
+  "checksum": "8eaab30acefac920b8a1bb33331183596e85a166b7f57a0c44f6f06eae201ec0",
   "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
   "key": "ansible/roles/k8s/flux/CLAUDE.md#The vendored install",
   "row": {
     "atoms": {
+      ".github/workflows/bootstrap-drill.yml": "b40f73b60d87d0abf6b30be5b812f382764a5eba94fe0e0641e50d2874b85565",
       ".github/workflows/ci.yml": "b803fcb7f17ed9235f1e5cb1fcd2f5d3b2838429d4368ae4c57ce4436577f03f",
       ".github/workflows/promote.yml": "e5ab57a220924d9818afbeee4bf25a06ebe32c416ff9b779fab1dd49da60265d",
       "ansible/tests/k8s/test_aggregated_clusterroles.py": "0e42ce03add78918f9c355bc6cafdabfefd25ab3a0f4e3f1c38d06aad8c8d387",
@@ -12,6 +13,6 @@
       "scripts/tests/test_renovate_flux_cli.py": "fab02b5fa0c2adc230be891502ddab3e2248d5934ea1b893a6d3bc84d8f47e64"
     },
     "python": "3.14",
-    "verified_sha": "40fdf906e"
+    "verified_sha": "17f0c5317"
   }
 }

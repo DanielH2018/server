@@ -1,0 +1,233 @@
+name: Bootstrap drill
+
+# Rehearses the order of the rebuilt-cluster Flux procedure (target slice D5, step 28, in
+# docs/target-architecture/deploy/d5-bulk-move.md) on a throwaway kind cluster. The numbered
+# comments below are that procedure's steps. Longhorn, the backupstore sync and the DR gate
+# (steps 7 and 8) are not drilled: a stand-in creates one claim, so the drill proves the
+# order, not a restore. Signature verification is not drilled either: the OCIRepository is
+# patched to a local registry without its `verify` block, and production's pull on every
+# promotion proves keyless verification.
+#
+# Three legs share the steps:
+#   green         the whole order. The stateful tag's claim keeps the stand-in's uid and gains
+#                 the root's ownership label.
+#   no-sops-age   skips step 4. Passes only when `cluster-vars` fails to decrypt.
+#   root-first    applies the root before the stand-in. Passes only when the claim check
+#                 fails, because the root created the claim first.
+#
+# Before this file is on the default branch, a pull request whose changed paths match the
+# filter below starts it; `gh workflow run` finds only workflows on the default branch. After
+# the merge, `gh workflow run bootstrap-drill.yml --ref <branch>` runs it on any branch, so
+# R4's PR 8 can run it on its own head.
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - .github/workflows/bootstrap-drill.yml
+      - scripts/deploy_tools/bootstrap_drill.py
+      - scripts/renderer/**
+      - ansible/roles/k8s/flux/**
+      - ansible/roles/k8s/manifests/**
+      - ansible/filter_plugins/flux_components.py
+
+permissions:
+  contents: read
+
+concurrency:
+  group: bootstrap-drill-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  drill:
+    name: drill (${{ matrix.leg }})
+    runs-on: ubuntu-26.04
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        leg: [green, no-sops-age, root-first]
+    env:
+      REGISTRY: kind-registry:5000
+      LEG: ${{ matrix.leg }}
+      # `--field-manager` of every hand apply in steps 3, 5, 6 and 9: the root's own manager.
+      APPLY: kubectl apply --server-side --field-manager=kustomize-controller
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      - uses: ./.github/actions/setup  # zizmor: ignore[self-repository] -- see the action's header
+
+      # The same CLI version as ci.yml's flux_roundtrip job. It pushes the fixture artifact.
+      - uses: fluxcd/flux2/action@b9c17924adb533d3617ec7de97a7b0f4acc07b39 # v2.9.6
+        with:
+          # renovate: datasource=github-releases depName=fluxcd/flux2
+          version: v2.9.6
+
+      # sops, kind and the node image come from the pins ci.yml's sops_manifest_type_proof job
+      # reads, so this file holds no copy that could drift. age comes from apt.
+      - name: Install sops, age and kind
+        run: |
+          set -euo pipefail
+          defaults=ansible/roles/setup/sops_setup/defaults/main.yml
+          sops_version=$(awk -F'"' '/^sops_setup_version:/ {print $2}' "$defaults")
+          sops_sha256=$(awk '/^sops_setup_binary_amd64_sha256:/ {print $2}' "$defaults")
+          kind_version=$(awk '/KIND_VERSION:/ {print $2; exit}' .github/workflows/ci.yml)
+          kind_sha256=$(awk '/KIND_SHA256:/ {print $2; exit}' .github/workflows/ci.yml)
+          [ -n "$sops_version" ] && [ -n "$sops_sha256" ] && [ -n "$kind_version" ] && [ -n "$kind_sha256" ]
+          mkdir -p "$RUNNER_TEMP/bin"
+          curl --retry 3 -fsSLo "$RUNNER_TEMP/bin/sops" \
+            "https://github.com/getsops/sops/releases/download/$sops_version/sops-$sops_version.linux.amd64"
+          echo "$sops_sha256  $RUNNER_TEMP/bin/sops" | sha256sum -c --strict
+          curl --retry 3 -fsSLo "$RUNNER_TEMP/bin/kind" \
+            "https://github.com/kubernetes-sigs/kind/releases/download/$kind_version/kind-linux-amd64"
+          echo "$kind_sha256  $RUNNER_TEMP/bin/kind" | sha256sum -c --strict
+          chmod +x "$RUNNER_TEMP/bin/sops" "$RUNNER_TEMP/bin/kind"
+          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+          sudo apt-get install -y --no-install-recommends age \
+            || { sudo apt-get update -q && sudo apt-get install -y --no-install-recommends age; }
+
+      # The registry sits on kind's docker network, so source-controller reaches it by
+      # container name and the runner pushes through the published port.
+      - name: Create the kind cluster and the registry
+        run: |
+          set -euo pipefail
+          node_image=$(awk '/KIND_NODE_IMAGE: / {print $2; exit}' .github/workflows/ci.yml)
+          registry_image=$(awk '/^registry_k8s_image:/ {print $2}' ansible/roles/k8s/registry/defaults/main.yml)
+          [ -n "$node_image" ] && [ -n "$registry_image" ]
+          kind create cluster --name drill --image "$node_image" --wait 120s
+          docker run -d --name kind-registry --network kind -p 127.0.0.1:5001:5000 "$registry_image"
+
+      # The render of the Flux role at this commit, in placeholder mode. `flux` is still
+      # Ansible-owned here, so `cluster/flux-deferred/` comes from the role directly.
+      - name: Render the Flux role
+        run: uv run python scripts/renderer/homelab_render.py cluster --out "$RUNNER_TEMP/out" --role flux
+
+      - name: Build the throwaway age key and the fixture bundle
+        run: |
+          set -euo pipefail
+          age-keygen -o "$RUNNER_TEMP/age.agekey" 2>/dev/null
+          uv run python scripts/deploy_tools/bootstrap_drill.py build \
+            --sync "$RUNNER_TEMP/out/cluster/flux-deferred/sync.yaml" --registry "$REGISTRY" \
+            --age-recipient "$(age-keygen -y "$RUNNER_TEMP/age.agekey")" --out "$RUNNER_TEMP/drill"
+          flux push artifact oci://127.0.0.1:5001/drill:drill --path="$RUNNER_TEMP/drill/bundle" \
+            --source=bootstrap-drill --revision="drill@sha1:$GITHUB_SHA" --insecure-registry
+
+      # 3. The Flux components. cluster/flux/secret.yaml holds `${...}` placeholders that only
+      # the `flux` tag's Kustomization fills, so the drill applies components.yaml alone. Whether
+      # the procedure says the same is an open ruling (see the PR body).
+      - name: "Step 3: apply the Flux components"
+        run: |
+          set -euo pipefail
+          $APPLY -f "$RUNNER_TEMP/out/cluster/flux/components.yaml"
+          for d in source-controller kustomize-controller notification-controller; do
+            kubectl -n flux-system rollout status "deployment/$d" --timeout=180s
+          done
+
+      - name: "Step 4: create flux-system/sops-age"
+        if: matrix.leg != 'no-sops-age'
+        run: kubectl -n flux-system create secret generic sops-age --from-file=age.agekey="$RUNNER_TEMP/age.agekey"
+
+      # 5. Only the OCIRepository. The root Kustomization is withheld until step 9.
+      - name: "Step 5: apply the OCIRepository and nothing else"
+        run: |
+          set -euo pipefail
+          $APPLY -f "$RUNNER_TEMP/drill/hand/ocirepository.yaml"
+          kubectl -n flux-system wait ocirepository/homelab --for=condition=Ready --timeout=180s
+          kubectl -n flux-system get kustomization homelab && exit 1 || echo "the root does not exist yet"
+
+      - name: "Step 6: apply the plumbing closure"
+        run: |
+          set -euo pipefail
+          while read -r file; do $APPLY -f "$file"; done < "$RUNNER_TEMP/drill/hand/step6.txt"
+          if [ "$LEG" != no-sops-age ]; then
+            kubectl -n flux-system wait kustomization/cluster-vars kustomization/drill-plumbing \
+              --for=condition=Ready --timeout=240s
+          fi
+
+      # The leg that skips step 4 ends here, on the decryption verdict.
+      - name: Judge the missing key
+        if: matrix.leg == 'no-sops-age'
+        run: |
+          set -euo pipefail
+          for _ in $(seq 40); do
+            if kubectl get kustomization.kustomize.toolkit.fluxcd.io -A -o json \
+                | uv run python scripts/deploy_tools/bootstrap_drill.py check no-decrypt; then
+              exit 0
+            fi
+            sleep 3
+          done
+          echo "::error::cluster-vars never failed on decryption"
+          exit 1
+
+      - name: "Step 9 first (root-first leg only)"
+        if: matrix.leg == 'root-first'
+        run: |
+          set -euo pipefail
+          $APPLY -f "$RUNNER_TEMP/drill/hand/root.yaml"
+          for _ in $(seq 60); do
+            kubectl -n drill get pvc drill-data && exit 0
+            sleep 3
+          done
+          echo "::error::the root never created the claim, so the leg cannot judge the order"
+          exit 1
+
+      # 8. The stand-in for the restores: the claim from the fixture's own render, labelled,
+      # under a different field manager so the root's apply cannot remove the label.
+      - name: "Step 8: restore stand-in"
+        if: matrix.leg != 'no-sops-age'
+        run: |
+          set -euo pipefail
+          kubectl apply --server-side --field-manager=restore-standin -f "$RUNNER_TEMP/drill/hand/standin-claim.yaml"
+          kubectl -n drill get pvc drill-data -o 'jsonpath={.metadata.uid}' > "$RUNNER_TEMP/standin.uid"
+
+      - name: Judge the claim before the root
+        if: matrix.leg != 'no-sops-age'
+        run: |
+          set -euo pipefail
+          kinds=kustomization.kustomize.toolkit.fluxcd.io,configmap,persistentvolumeclaim
+          if [ "$LEG" = root-first ]; then
+            # The leg passes only on the claim-specific problem: Flux owns a claim the
+            # stand-in did not create. Any other failure leaves the leg red.
+            if out=$(kubectl get "$kinds" -A -o json \
+                | uv run python scripts/deploy_tools/bootstrap_drill.py check before-root); then
+              echo "::error::the root-first leg passed the claim check, so the check cannot see a root that ran early"
+              exit 1
+            fi
+            printf '%s\n' "$out"
+            printf '%s\n' "$out" | grep -q "already carries"
+            echo "the claim check failed on the claim, as it must when the root created it first"
+          else
+            kubectl get "$kinds" -A -o json \
+              | uv run python scripts/deploy_tools/bootstrap_drill.py check before-root
+          fi
+
+      # 9. The root, from the render. It adopts what step 6 applied and creates the stateful
+      # tag, which binds the stand-in's claim.
+      - name: "Step 9: apply the root"
+        if: matrix.leg == 'green'
+        run: |
+          set -euo pipefail
+          $APPLY -f "$RUNNER_TEMP/drill/hand/root.yaml"
+          for _ in $(seq 60); do
+            kubectl -n flux-system get kustomization drill-stateful && break
+            sleep 3
+          done
+          kubectl -n flux-system wait kustomization/drill-stateful kustomization/drill-plumbing \
+            --for=condition=Ready --timeout=240s
+
+      - name: Judge the cluster after the root
+        if: matrix.leg == 'green'
+        run: |
+          set -euo pipefail
+          kubectl get kustomization.kustomize.toolkit.fluxcd.io,configmap,persistentvolumeclaim,secret -A -o json \
+            | uv run python scripts/deploy_tools/bootstrap_drill.py check after-root \
+              --standin-uid "$(cat "$RUNNER_TEMP/standin.uid")"
+
+      - name: Dump the Flux objects and controller logs
+        if: failure()
+        run: |
+          kubectl -n flux-system get ocirepository,kustomization -o yaml || true
+          kubectl -n flux-system logs deployment/source-controller --tail=100 || true
+          kubectl -n flux-system logs deployment/kustomize-controller --tail=200 || true
