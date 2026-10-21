@@ -95,7 +95,9 @@ resumed `<s>` re-applies whatever `prod` names.
    `master@sha1:<last-good SHA>`:
    `kubectl -n flux-system get ocirepository homelab -o jsonpath='{.status.artifact.metadata.org\.opencontainers\.image\.revision}'`.
    The `revision` field of the artifact holds a digest, not a commit, so it cannot answer
-   this wait.
+   this wait. The held revision's soak Job then fails by itself within one poll (15s),
+   because `homelab` no longer holds its commit. Before that fix a reset left the Job
+   running to its deadline, and deleting its pod was the only way to end it (#5704).
 4. **Resume each reverted role, in the post's order.** Resume `<s>-snapshot`, then `<s>`:
 
     ```bash
