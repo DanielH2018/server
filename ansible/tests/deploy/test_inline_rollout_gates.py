@@ -172,17 +172,17 @@ def test_the_gate_is_tagged_with_what_it_protects() -> None:
 # derivation and the hand-written set agree on, so the two halves are checked against each
 # other on every run.
 _KNOWN_SELF_POD_ROLES = {
-    "observability",
     "crowdsec",
     "janitorr",
     "jellyfin",
     "pihole",
 }
 
-# 27 resolved self-pod inspections across those roles, since crowdsec's three registration
-# execs became an initContainer (#5741). A floor far below the real count cannot tell "one role changed shape" from "the matcher broke and half the
+# 20 resolved self-pod inspections across those roles, since observability's flip deleted its
+# tasks (27 before it; crowdsec's three registration execs had already become an initContainer,
+# #5741). A floor far below the real count cannot tell "one role changed shape" from "the matcher broke and half the
 # corpus stopped being read".
-_MIN_SELF_POD_INSPECTIONS = 24
+_MIN_SELF_POD_INSPECTIONS = 17
 
 # Pod inspections whose target is a Jinja expression this file cannot resolve, each excused
 # with the reason. An entry here is NOT "assume it is fine" — it is a claim that the ordering
@@ -339,10 +339,6 @@ def test_no_role_gates_with_a_readiness_wait_on_its_own_pods() -> None:
 # dri-device-plugin below it) could not tell a considered budget from a typo without going and
 # looking, and for dri-device-plugin looking does not answer it.
 _GATE_BUDGETS = {
-    "observability": (
-        300,
-        "default; one looped gate covering all six telemetry workloads",
-    ),
     "cloudflare-ddns": (300, "default"),
     "flux": (300, "default; one looped gate covering the three Flux controllers"),
     "crowdsec": (300, "default"),

@@ -90,14 +90,16 @@ def _include_vars(role_tasks: Path) -> list[dict]:
     return out
 
 
-def _extra_rollout_names(variables: dict, role_dir: Path) -> set[str]:
+def _extra_rollout_names(
+    variables: dict, role_dir: Path, key: str = "manifests_extra_rollouts"
+) -> set[str]:
     """The names in an include's `manifests_extra_rollouts`, resolved when it is an expression.
 
     authelia builds its list with a Jinja expression gated on a role default, so the value
     arrives as a string. It resolves against the role's defaults and inventory vars, as the
     deploy resolves it.
     """
-    extras = variables.get("manifests_extra_rollouts") or []
+    extras = variables.get(key) or []
     if isinstance(extras, str):
         extras = render_expr(extras, **render_context(role_dir)) or []
     return {entry["name"] for entry in extras}
@@ -120,8 +122,7 @@ def _includes_the_render(tasks: Path) -> bool:
 def _restarts_privately(role_dir: Path) -> bool:
     """Does the role run its own `rollout restart`, anywhere in its task files?
 
-    Two roles legitimately do: observability rolls a Deployment and a DaemonSet together in a
-    private loop, and pihole rolls its two instances one at a time from an included
+    One role legitimately does: pihole rolls its two instances one at a time from an included
     `roll_one.yml`. Searching the whole `tasks/` tree rather than `main.yml` is the point —
     pihole's restart lives in the include, so a main.yml-only check would call it broken.
 
@@ -206,6 +207,9 @@ def uncovered_env_secret_workloads(role_dir: Path) -> list[tuple[str, str]]:
             variables.get("manifests_rollout", variables.get("manifests_service"))
         }
         covered |= _extra_rollout_names(variables, role_dir)
+        # A flux-owned role's renderer stamps `checksum/restart` on each self-rollout entry
+        # (D5.1e), which is how observability's Secret readers roll without a task.
+        covered |= _extra_rollout_names(variables, role_dir, "manifests_self_rollouts")
         uncovered += [
             (role_dir.name, name)
             for name in _env_secret_workloads(role_dir)
@@ -398,7 +402,7 @@ def test_a_second_workload_mounting_the_secret_as_a_volume_is_clean(tmp_path):
 
 
 def test_a_role_restarting_its_workloads_privately_is_clean(tmp_path):
-    """observability and pihole roll their own workloads; the exemption must keep working."""
+    """pihole rolls its own workloads; the exemption must keep working."""
     role = _write_role(
         tmp_path,
         "widget",
@@ -438,15 +442,11 @@ def test_a_role_naming_rollout_restart_outside_a_command_is_still_flagged(tmp_pa
 def test_the_roles_that_restart_privately_still_read_as_exempt():
     """The named members of the exemption: both live private restarts are found in a command.
 
-    observability runs its restart from a folded `cmd: >-` and pihole from an included
-    `roll_one.yml`, so a command parse that missed either shape would flag them both.
+    pihole runs its restart from an included `roll_one.yml`, so a command parse that missed
+    that shape would flag it.
     """
-    exempt = {
-        role
-        for role in ("observability", "pihole")
-        if _restarts_privately(K8S_ROLES / role)
-    }
-    assert exempt == {"observability", "pihole"}, exempt
+    exempt = {role for role in ("pihole",) if _restarts_privately(K8S_ROLES / role)}
+    assert exempt == {"pihole"}, exempt
 
 
 def test_the_extra_rollouts_restart_is_not_gated_on_manifests_rollout():

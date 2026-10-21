@@ -315,40 +315,34 @@ observability_rule_groups:
 #   daniel-pi: {job: node-pi, limit_seconds: 11400}
 observability_expected_hosts: {}
 
-# The telemetry workloads, as the {kind, name} pairs post_tasks/k8s_stabilise_gate.yml reads.
-# A variable rather than a second inline copy of the list: tasks/main.yml still spells it out
-# once (the wait loop; the restart loop reads this variable), and the stabilisation tasks that
-# consume it must iterate the SAME set or the gate silently watches fewer workloads than rolled.
-# ansible/tests/services/test_observability_stabilise_coverage.py holds the three in step.
+# The telemetry workloads, as the {kind, name} pairs tasks/main.yml passes to the include as
+# `manifests_self_rollouts`. The renderer stamps `checksum/restart` on each one's pod template
+# (scripts/renderer/renderer_lib/restart.py), so a Secret or ConfigMap change rolls the
+# workload that reads it.
 #
-# `restart_on` names which of roles/k8s/manifests's three change signals queues a
-# `rollout restart` for that workload, and so which makes the release record expect a fresh
-# `restartedAt` from it (`manifests_restart_triggers_default`, that role's defaults/main.yml).
-# The shared default `[config, secret, image]` would restart all of them for one workload's
-# edit: `manifests_render is changed` fires when ANY of this role's manifests changed.
+# `restart_on` is the Ansible release record's field, and the renderer ignores it for a
+# self-rollout entry (restart.py). Every entry is `[]`: a `secret` trigger would hold a reader
+# to a roll that another Secret file's edit never made. A ConfigMap is hashed into its own pod
+# template (`checksum/config`), so the apply moves the pod template and rolls the pod by
+# itself; kube-state-metrics renders no ConfigMap at all, and every input it does have already
+# lives in the pod template.
 #
-# Every entry is `[]`: nothing the shared role decides needs a restart for any of them. A
-# ConfigMap is hashed into its own pod template (`checksum/config`), so the apply moves the pod
-# template and rolls the pod by itself; kube-state-metrics renders no ConfigMap at all, and every
-# input it does have already lives in the pod template.
+# `restart_secrets` names the rendered Secret files a workload's pod reads. prometheus
+# file-mounts `prometheus-scrape-credentials`, grafana reads `grafana-admin` through
+# `env.valueFrom`, and alertmanager file-mounts `alertmanager-config`, its whole config. The
+# renderer derives the restart from the Secrets the pod template names, so an alertmanager
+# config edit rolls alertmanager alone. The key stays as the declaration
+# ansible/tests/services/test_observability_config_rolls_one_workload.py holds equal to the
+# Secrets each pod reads. `origin-pull-secret.yaml` restarts nothing, because only a Traefik
+# middleware reads it.
 #
-# `restart_secrets` is the one case the annotation cannot cover: the rendered Secret files a
-# workload's pod reads. prometheus file-mounts `prometheus-scrape-credentials`, grafana reads
-# `grafana-admin` through `env.valueFrom`, and alertmanager file-mounts `alertmanager-config`,
-# its whole config. Hashing a Secret's bytes into a world-readable annotation would open a read
-# path over it, so tasks/main.yml restarts an entry whose `restart_secrets` names a file whose
-# render changed, and nothing else: an alertmanager config edit restarts alertmanager alone.
-# `origin-pull-secret.yaml` restarts nothing, because only a Traefik middleware reads it.
-#
-# DECIDED: no rolled_by_role on these entries, though the release record's `restart` comes
-# from the role's own amend after its private restart, as pihole-2's does. The shared role drops
-# every entry carrying `rolled_by_role` from the pod-template fingerprints (the task "List the
-# workloads whose pod template is fingerprinted" in roles/k8s/manifests/tasks/main.yml). These
-# workloads are applied BY the shared apply, so their fingerprints are right and the restart's
-# "the apply already rolled it" skip needs them: without it, an image bump and a Secret edit in
-# one deploy roll a Recreate pod twice, deleting it mid-pull (#3115). `restart_on: []` gets the
-# stamp's `restart: false` instead. The M1 plan
-# (docs/target-architecture/monitoring/m1-alertmanager.md), PR 5, has the ruling.
+# DECIDED: no rolled_by_role on these entries. The shared role drops every entry carrying
+# `rolled_by_role` from the pod-template fingerprints (the task "List the workloads whose pod
+# template is fingerprinted" in roles/k8s/manifests/tasks/main.yml), and the renderer's restart
+# target does not exempt such an entry either. The ruling dates from the Ansible restart,
+# where the skip of a workload the apply already rolled needed the fingerprints (#3115); the
+# entries stay unmarked so a handback to Ansible keeps that skip. The M1 plan
+# (docs/target-architecture/monitoring/m1-alertmanager.md), PR 5, has the original ruling.
 observability_stabilise_workloads:
   - { kind: deploy, name: loki, restart_on: [] }
   - kind: deploy

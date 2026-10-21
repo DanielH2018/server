@@ -1,32 +1,26 @@
-"""The two roles that roll their own workloads follow the record and the apply.
+"""The roles that declare `manifests_self_rollouts` follow the record and the apply.
 
-observability (its restart loop) and pihole (roll_one.yml) set `manifests_rollout: ''`, opt out
-of the shared restart and the batch drain, and restart their workloads through a private task
-after `k8s/manifests` returns. These properties are pinned here, over the harness in
-`_release_expectation.py`:
+pihole (roll_one.yml) sets `manifests_rollout: ''`, opts out of the shared restart and the
+batch drain, and restarts its workloads through a private task after `k8s/manifests` returns.
+observability declares its workloads the same way, but it is flux-owned, so the renderer's
+restart annotation rolls them and no task of its own does (D5.1e). These properties are pinned
+here, over the harness in `_release_expectation.py`:
 
 They declare those workloads to the record as `manifests_self_rollouts`, and
-three things hold -- the record decides `restart` for them from the same facts (the red-proof
-pair: a changed render names grafana `restart: true`, an unchanged one `false`), each role's
-declaration equals the loop its private restart iterates (a workload added to the loop
-alone re-opens the gap with both halves of the pair still green), and the private restart runs
-after the include_role that writes the record.
+two things hold -- the record decides `restart` for them from the same facts (the red-proof
+pair: a changed render names grafana `restart: true`, an unchanged one `false`), and pihole's
+private restart runs after the include_role that writes the record.
 
-The skip the shared restart takes when the apply rolled a workload reaches those two private
-restarts. The pod-template fingerprints cover every `manifests_self_rollouts` entry, each private
-restart reads `manifests_rolled_by_apply` for its own workload, and observability's entries
-carry the namespace the fingerprints must read in -- the fingerprints default to
+The pod-template fingerprints cover every `manifests_self_rollouts` entry, and observability's
+entries carry the namespace the fingerprints must read in -- the fingerprints default to
 `k8s_namespace`, its workloads live in `observability`, and a read in the wrong namespace
 fails on both sides and reads as "not rolled", which is the double roll.
 pihole's gate sits on the restart task inside roll_one.yml rather than on the include, so the
 sibling check and the rollout wait still follow a roll the apply started.
 
 Observability's entries all declare `restart_on: []`, so the record stamps `restart: false`
-for each. Its ConfigMaps are hashed into their own pod templates, so the apply rolls those, and
-a Secret edit restarts only the workloads whose `restart_secrets` names the changed file. The
-role raises the record for those through `rollout_amend.yml` after its wait;
-test_observability_secret_restarts.py pins that half. The entries carry no `rolled_by_role`,
-which would drop them from the fingerprints the restart's skip reads.
+for each. Its ConfigMaps are hashed into their own pod templates, so the apply rolls those.
+The entries carry no `rolled_by_role`, which would drop them from the fingerprints.
 
 The shared apply carries `deployment.yaml`, which holds `pihole` alone: `pihole-2` is applied
 later, by tasks/apply_instance_2.yml, and the record is written before that task runs -- so a
@@ -48,8 +42,6 @@ Run: uv run pytest ansible/tests/k8s/test_self_rollouts_follow_the_apply.py
 from _helpers import load_tasks, load_yaml, render_expr, task_named, walk_tasks
 from lib.repo_paths import ALL_VARS
 from _release_expectation import (
-    OBSERVABILITY,
-    FACT_EXPR,
     LOOP_EXPR,
     MAIN,
     OBSERVABILITY_NAMESPACE,
@@ -62,13 +54,6 @@ from _release_expectation import (
 
 def _pairs(entries):
     return {(e["kind"], e["name"]) for e in entries}
-
-
-def _observability_private_restart():
-    return task_named(
-        load_tasks(OBSERVABILITY / "tasks/main.yml"),
-        "Restart the telemetry workloads whose secret changed",
-    )
 
 
 def _pihole_private_restart():
@@ -147,8 +132,7 @@ def test_observability_a_changed_secret_expects_only_its_secret_readers_to_roll(
     """The stamp leaves a Secret's restart to the role. `manifests_secret_render` changes for
     any one Secret file, so a stamp that decided from it would hold every reader to a roll
     that an Alertmanager config edit never made. Every entry is stamped `restart: false`, and
-    the role's amend raises the readers of the changed file alone, which
-    test_observability_secret_restarts.py pins."""
+    the renderer's restart annotation rolls the readers of the changed Secret alone."""
     rollouts = _observability_rollouts(
         manifests_render={"changed": False},
         manifests_secret_render={"changed": True},
@@ -166,48 +150,6 @@ def test_observability_an_unchanged_render_expects_nothing_to_roll():
     assert not any(r["restart"] for r in rollouts.values()), rollouts
 
 
-def test_observability_declares_the_same_workloads_its_private_restart_rolls():
-    """A workload added to the restart loop alone would re-open the gap with the pair
-    above still green. The loop and the declaration read ONE variable, so they
-    cannot drift — assert that rather than comparing two literals, which would pass vacuously
-    once one of them stopped being a literal."""
-    assert (
-        _observability_private_restart()["loop"]
-        == "{{ observability_stabilise_workloads }}"
-    )
-    declared = _pairs(observability_self_rollouts())
-    assert declared == _pairs(
-        load_yaml(OBSERVABILITY / "defaults/main.yml")[
-            "observability_stabilise_workloads"
-        ]
-    )
-    assert ("deploy", "grafana") in declared
-
-
-def test_observability_private_restart_reads_the_same_facts_as_the_record():
-    """The restart skips what the record skips: a workload the apply created or rolled. It
-    selects its targets by the changed Secret FILE, which the record cannot read, so every
-    entry leaves the record's decision to the amend with `restart_on: []`."""
-    when = " ".join(_observability_private_restart()["when"])
-    ingredient = "manifests_rolled_by_apply.get("
-    assert ingredient in when and ingredient in FACT_EXPR
-    assert " created" in when
-    assert "manifests_rolled_by_apply.get(item.name, false)" in when
-    assert "item.restart_secrets" in when
-    assert "observability_changed_secret_files" in when
-    assert {e["name"]: e["restart_on"] for e in observability_self_rollouts()} == {
-        e["name"]: [] for e in observability_self_rollouts()
-    }
-    for per_role in (
-        "manifests_render is changed",
-        "manifests_secret_render is changed",
-    ):
-        assert per_role not in when, (
-            f"the restart task is back on `{per_role}`, a per-ROLE signal that restarts every "
-            "reader for one file's edit — the regressions #2858 and M1 PR 5 fixed."
-        )
-
-
 def test_observability_declares_the_namespace_the_fingerprints_must_read():
     """Its workloads live outside k8s_namespace, which the fingerprints default to. A
     declaration without the namespace passes every other test here and double-rolls in the
@@ -218,44 +160,6 @@ def test_observability_declares_the_namespace_the_fingerprints_must_read():
     assert OBSERVABILITY_NAMESPACE != load_yaml(ALL_VARS)["k8s_namespace"], (
         "the trap this test guards no longer exists"
     )
-    private = _observability_private_restart()["ansible.builtin.command"]["cmd"]
-    assert "-n {{ k8s_observability_namespace }}" in private, private
-
-
-def test_observability_skips_its_private_restart_of_a_workload_the_apply_rolled():
-    """The accept/reject pair, rendered through the private restart's own `when`:
-    the template moved (an image bump) skips the restart; a Secret-only change, where the
-    template held, still fires it."""
-    # The new clause alone: the `created` clause beside it carries a `\.apps/` regex
-    # escape that Ansible's templar accepts and plain Jinja rejects, and the ingredient test
-    # above already holds the clause list.
-    (clause,) = [
-        c for c in _observability_private_restart()["when"] if "rolled_by_apply" in c
-    ]
-    item = {"kind": "deploy", "name": "grafana"}
-    rolled = dict(item=item, manifests_rolled_by_apply={"grafana": True})
-    held = dict(item=item, manifests_rolled_by_apply={"grafana": False})
-    unseen = dict(item=item, manifests_rolled_by_apply={})
-    assert not render_expr("{{ " + clause + " }}", **rolled)
-    assert render_expr("{{ " + clause + " }}", **held)
-    assert render_expr("{{ " + clause + " }}", **unseen)
-    # And the record agrees, so `probe.py health` expects no `restartedAt` of the skip. The
-    # stamp says `restart: false` for every entry, so the agreement is the amend's: it loops the
-    # restart's register minus its skip results, and the skip above is one of those.
-    amend = task_named(
-        load_tasks(OBSERVABILITY / "tasks/main.yml"),
-        "Record the telemetry workloads the secret restart rolled",
-    )
-    register = _observability_private_restart()["register"]
-
-    def amended(grafana_result):
-        results = [{"changed": True, "item": {"name": "prometheus"}}, grafana_result]
-        looped = render_expr(amend["loop"], **{register: {"results": results}})
-        return {r["item"]["name"] for r in looped}
-
-    skipped = {"changed": False, "skipped": True, "item": item}
-    assert amended(skipped) == {"prometheus"}
-    assert amended({"changed": True, "item": item}) == {"prometheus", "grafana"}
 
 
 def test_pihole_an_image_bump_expects_instance_one_to_roll():
@@ -396,7 +300,6 @@ def test_the_private_restarts_run_after_the_record_is_written():
     """The gate compares `applied_at` against `restartedAt`, so the include_role that writes
     the record must precede the private restart in each role."""
     for role_dir, restart_name in (
-        (OBSERVABILITY, "Restart the telemetry workloads whose secret changed"),
         (PIHOLE, "Roll the Pi-hole instances one at a time"),
     ):
         names = [

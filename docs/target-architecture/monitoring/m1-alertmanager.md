@@ -106,7 +106,7 @@ else.
     - `ansible/roles/k8s/netpol-baseline/templates/networkpolicy-observability.yaml.j2`: "all
       seven pods carry the opt-in label already".
     - Test docstrings and failure messages: "six workloads" and "these six" in
-      `ansible/tests/services/test_observability_stabilise_coverage.py`; "its six workloads",
+      `test_observability_stabilise_coverage.py`; "its six workloads",
       "the two workloads that read one", "names the six", "restarts all six" and "Five of the
       six" in `ansible/tests/k8s/test_self_rollouts_follow_the_apply.py`; "eight manifests"
       in `ansible/tests/services/test_observability_config_rolls_one_workload.py`.
@@ -156,7 +156,7 @@ else.
   `test_a_workload_mounting_a_role_configmap_carries_the_checksum_annotation` asserts that the
   workloads it checked are a superset of `_EXPECTED_WORKLOADS` minus `kube-state-metrics`, the
   one workload that mounts no role ConfigMap. `observability_stabilise_workloads` in the role
-  defaults lists the same six. `ansible/tests/services/test_observability_stabilise_coverage.py:test_the_role_lists_its_workloads_the_same_way_everywhere`
+  defaults lists the same six. `test_observability_stabilise_coverage.py:test_the_role_lists_its_workloads_the_same_way_everywhere`
   requires every literal `{kind, name}` loop in the role's `tasks/main.yml` to equal that
   list as a set. The task "Wait for the telemetry workloads to roll out" is such a literal
   six-item loop. The restart-count snapshot after it must run after that wait, or it reads
@@ -1098,7 +1098,7 @@ and those edits must land with the workload.
       `test_observability_a_changed_secret_expects_only_its_secret_readers_to_roll`, under
       PR 2's name, and `test_observability_private_restart_reads_the_same_facts_as_the_record`.
       That file is near the 500-line cap, so the new pairs go in
-      `ansible/tests/k8s/test_observability_secret_restarts.py`. A pair is rendered through
+      `test_observability_secret_restarts.py`. A pair is rendered through
       the restart task's `when` with a fixture register: a change to
       `alertmanager-secret.yaml` alone selects Alertmanager and not Prometheus, and a change to
       `scrape-credentials-secret.yaml` selects Prometheus.
@@ -1387,7 +1387,7 @@ Each risk names its class from `docs/failure-classes.md`.
       `_EXPECTED_WORKLOADS` and `_EXPECTED_SECRET_READERS` gain `alertmanager`, and the
       checksum census's superset assertion exempts it. The wait loop in `tasks/main.yml`
       gains `alertmanager`, which keeps
-      `ansible/tests/services/test_observability_stabilise_coverage.py` green. The
+      `test_observability_stabilise_coverage.py` green. The
       `alertmanager` row joins `netpol_baseline_probe_targets`, under PR 1's `policy` test.
       `ansible/tests/k8s/test_pod_template_hygiene.py` passes unchanged, because the tier is
       one of its four classes. The validator gains the Go-template survival pair.
@@ -1433,7 +1433,7 @@ Each risk names its class from `docs/failure-classes.md`.
     - Tests: the two rewritten tests (the secret-readers test under PR 2's name) in
       `ansible/tests/k8s/test_self_rollouts_follow_the_apply.py`; the per-Secret pair, the
       snapshot pair, the Grafana password sync pair, the `no_log` run and the fingerprint pair
-      in `ansible/tests/k8s/test_observability_secret_restarts.py`; and the `restart_secrets`
+      in `test_observability_secret_restarts.py`; and the `restart_secrets`
       census in
       `ansible/tests/services/test_observability_config_rolls_one_workload.py::test_every_workload_reading_a_role_secret_names_its_file_in_restart_secrets`.
     - Docs: the observability role's `CLAUDE.md`, *One config change, one restart*. In

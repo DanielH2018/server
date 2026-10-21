@@ -305,11 +305,11 @@ def test_each_role_that_defines_an_annotation_is_still_credited_with_it(
 def test_a_prose_mention_in_a_task_file_is_flagged_as_not_an_annotation():
     """The red half of #3229: observability's prose no longer satisfies its own CLAUDE.md.
 
-    `observability/tasks/main.yml` and `observability/defaults/main.yml` discuss
-    `checksum/config` in comments, and the role's CLAUDE.md promises that annotation. Reading
-    the plain-YAML half with the prose pattern therefore cleared the claim from a comment that
-    rolls no pod. The second assertion is the non-vacuity leg: the mention really is in those
-    files, so an empty result means the narrowing worked rather than that the subject moved.
+    `observability/defaults/main.yml` discusses `checksum/config` in a comment, and the role's
+    CLAUDE.md promises that annotation. Reading the plain-YAML half with the prose pattern
+    therefore cleared the claim from a comment that rolls no pod. The second assertion is the
+    non-vacuity leg: the mention really is in that file, so an empty result means the
+    narrowing worked rather than that the subject moved.
     """
     role = K8S_ROLES / "observability"
     assert _annotations_in_plain_yaml(role) == set(), (
@@ -317,10 +317,12 @@ def test_a_prose_mention_in_a_task_file_is_flagged_as_not_an_annotation():
         "the role defines all of its own in templates"
     )
     prose = set(
-        CHECKSUM_RE.findall((role / "tasks" / "main.yml").read_text(errors="replace"))
+        CHECKSUM_RE.findall(
+            (role / "defaults" / "main.yml").read_text(errors="replace")
+        )
     )
     assert "config" in prose, (
-        "observability/tasks/main.yml no longer mentions checksum/config, so this guard has "
+        "observability/defaults/main.yml no longer mentions checksum/config, so this guard has "
         "lost the prose it exists to refuse — point it at another prose mention or drop it"
     )
 

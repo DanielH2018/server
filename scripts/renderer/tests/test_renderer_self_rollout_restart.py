@@ -207,26 +207,13 @@ def test_a_pihole_config_map_edit_moves_both_instances(renders):
 DASHBOARDS = "grafana-dashboards.yaml"
 
 
-def _flipped_values(
-    tmp_path: Path, edit: bool
-) -> tuple[dict[str, str], dict[str, str]]:
-    """observability's restart values with the flip's edit, and its rendered directory.
+def _flipped_values(edit: bool) -> tuple[dict[str, str], dict[str, str]]:
+    """observability's restart values, and its rendered directory.
 
-    The tree links every role but observability, which is a copy without the exclusion.
     `edit` adds a board to one dashboard ConfigMap and a rule file to `prometheus-rules`.
     """
-    roles = tmp_path / ("edited" if edit else "base")
-    roles.mkdir()
-    for role in K8S_ROLES.iterdir():
-        if role.name != "observability":
-            (roles / role.name).symlink_to(role)
-    shutil.copytree(K8S_ROLES / "observability", roles / "observability")
-    tasks = roles / "observability" / "tasks" / "main.yml"
-    tasks.write_text(
-        _edit(tasks.read_text(), f"[service.yaml, {DASHBOARDS}]", "[service.yaml]")
-    )
     keys = homelab_render.secret_keys()
-    (tag,) = render_placeholders(["observability"], keys, roles=roles).tags
+    (tag,) = render_placeholders(["observability"], keys).tags
     if edit:
         for name in (DASHBOARDS, "prometheus-rules.yaml"):
             tag.files[name] = _edit(
@@ -243,11 +230,11 @@ def _flipped_values(
     return values, tag.files
 
 
-def test_a_board_or_rule_edit_after_the_flip_moves_no_restart_value(tmp_path):
+def test_a_board_or_rule_edit_after_the_flip_moves_no_restart_value():
     """Grafana and Prometheus re-read these ConfigMaps in place; Ansible never rolled them."""
     # fact: ansible/roles/k8s/observability/CLAUDE.md#One config change, one restart
-    before, base = _flipped_values(tmp_path, edit=False)
-    after, edited = _flipped_values(tmp_path, edit=True)
+    before, base = _flipped_values(edit=False)
+    after, edited = _flipped_values(edit=True)
     assert DASHBOARDS in base
     assert edited[DASHBOARDS] != base[DASHBOARDS]
     assert edited["prometheus-rules.yaml"] != base["prometheus-rules.yaml"]

@@ -1,20 +1,15 @@
 {#
-  observability's verify Job and the ConfigMap that carries its script, INERT until
-  observability's flip.
+  observability's verify Job and the ConfigMap that carries its script.
 
-  This directory is `verify-inert/`, which neither reader globs: the manifests role takes only
-  top-level `templates/*.yaml.j2`, and `verify_files` takes only `templates/verify/*.yaml.j2`.
-  observability's flip PR moves the directory to `templates/verify/`, and the renderer then
-  emits it into `observability-verify` (D5, *A verify conversion lands as inert code*). The
-  same PR deletes the "Read back the OTLP listener's bind address" and "Fail if the OTLP
-  receiver is not pinned to loopback" tasks, which this Job replaces.
+  The renderer emits this directory into `observability-verify` (`templates/verify/`), which
+  Flux runs after it applies `observability`. It replaces the Ansible tasks that read the
+  collector's bind address back. The renderer passes `flux_job_image` and `flux_job_connect`,
+  the helper's text, to every `templates/verify/` file (`render_tag`).
 
   Both names end in a digest, as the Job census requires (D5, *Rules for every Job Flux
   applies*): the ConfigMap's in `configmap_digest8` of its data, the Job's in
   `job_spec_digest8` of its spec. Each is computed here from the same JSON those functions
   hash, so the spec is written once as YAML text, parsed for the hash and emitted verbatim.
-  The renderer passes `flux_job_image` and `flux_job_connect`, the helper's text, to every
-  `templates/verify/` file (`render_tag`).
 
   The spec embeds a digest of the rendered `collector.yaml`, so an edit to the DaemonSet the
   Job reads renames the Job and makes Flux run it again.

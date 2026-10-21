@@ -143,9 +143,9 @@ spec:
         # GF_SECURITY_ADMIN_PASSWORD below is read only when Grafana initialises a NEW
         # database, so without this a rotated grafana_admin_password rolls the pod and the
         # admin login keeps the old one. `reset-admin-password` writes the DB directly and needs
-        # no knowledge of the current password. A rotation reaches it through the role's
-        # secret restart (`restart_secrets` names grafana-secret.yaml), and once the tag is
-        # flux-owned through `checksum/restart`; every other start re-applies the same value.
+        # no knowledge of the current password. A rotation reaches it through
+        # `checksum/restart`, which moves with the Secret; every other start re-applies the same
+        # value.
         #
         # No server runs beside it: grafana is Recreate, so the old pod is gone before this
         # one's init runs, and the CLI's own `Migrate` pass has the SQLite file to itself.

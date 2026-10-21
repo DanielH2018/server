@@ -437,6 +437,11 @@ containers_list:
 
   - name: observability
     platform: k8s
+    # Flux applies observability through `promote`, restarts a workload whose Secret changed
+    # through the renderer's restart annotation, and reads the OTLP bind address back in
+    # `observability-verify` (D5, Wave D). The handback is two PRs, `owner: released` then
+    # removing `owner`: docs/flux-deploy-plane.md.
+    owner: flux
     # `hostname`/`port` describe Grafana — the only routed workload here. The OTEL
     # collector, Loki, Prometheus and Tempo are reached on the node's loopback via hostPort
     # so `otelq`, which hardcodes 127.0.0.1, can read them from the host. Content logging is

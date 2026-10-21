@@ -1,10 +1,9 @@
 """observability's verify Job: its script fails an unpinned OTLP hostPort, and its render passes the census.
 
 The script tests run `observability_verify.main` with a stand-in for the API read, and one test
-serves an HTTP error from a local port to reach `read_daemonset` itself. The render tests copy
-the role, move `templates/verify-inert/` to `templates/verify/` as the flip PR will, and render
-the copy through `render_tag`, so the Job is checked as Flux will receive it in
-`observability-verify` while the tree's own render still emits none. The plan is
+serves an HTTP error from a local port to reach `read_daemonset` itself. The render tests render
+the tree through `render_tag`, so the Job is checked as Flux receives it in
+`observability-verify`, and render a copy with the collector edited for the rename test. The plan is
 docs/target-architecture/deploy/d5-bulk-move.md, *A verify conversion lands as inert code*.
 
 Run: uv run pytest ansible/roles/k8s/observability/tests/test_observability_verify.py
@@ -115,10 +114,9 @@ def stubs(tmp_path_factory):
 
 
 def _flipped_copy(roles: Path, stubs, edit_collector=False) -> cluster.RenderedTag:
-    """Render a copy of the role with its Job moved to `templates/verify/`, as the flip PR will."""
+    """Render a copy of the role, with the collector edited when asked."""
     shutil.copytree(K8S_ROLES / TAG, roles / TAG)
     templates = roles / TAG / "templates"
-    (templates / "verify-inert").rename(templates / "verify")
     if edit_collector:
         collector = templates / "collector.yaml.j2"
         collector.write_text(collector.read_text() + "# a collector-only edit\n")
@@ -164,9 +162,9 @@ def _collector(rendered: cluster.RenderedTag) -> dict:
     return ds
 
 
-def test_the_tree_renders_no_verify_job_while_ansible_owns_observability(stubs):
-    """Inert: the Ansible readback still owns the check until the flip moves the directory."""
-    assert cluster.render_tag(TAG, stubs).verify == {}
+def test_the_tree_renders_observability_verify(stubs):
+    """The renderer emits the Job that replaced the Ansible readback."""
+    assert cluster.render_tag(TAG, stubs).verify != {}
 
 
 def test_the_flipped_job_passes_every_job_census_row(flipped):
@@ -259,7 +257,7 @@ def test_the_verify_job_reads_no_other_roles_file():
     The deployer redeploys a role when a file it `lookup()`s in another role changes, and its
     scan reads `verify/` too. tdarr's test has the red case for this scan.
     """
-    staged = sorted((K8S_ROLES / TAG / "templates" / "verify-inert").glob("*.j2"))
+    staged = sorted((K8S_ROLES / TAG / "templates" / "verify").glob("*.j2"))
     assert [p.name for p in staged] == ["job.yaml.j2", "rbac.yaml.j2"]
     assert [
         (path.name, role)
