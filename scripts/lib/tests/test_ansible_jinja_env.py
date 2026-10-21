@@ -234,3 +234,15 @@ def test_a_guard_refusal_names_its_filter_as_a_deploy_does(name: str, args: tupl
         env.filters[name](*args)
     assert isinstance(caught.value, AnsibleFilterError), type(caught.value)
     assert str(caught.value).startswith(f"{name}: "), str(caught.value)
+
+
+def test_template_env_reads_a_file_lookup_and_refuses_any_other_plugin(tmp_path):
+    """A setup template inlines a file with `lookup('file', ...)`; no other plugin has a stand-in."""
+    data = tmp_path / "data.txt"
+    data.write_text("line\n\n")
+    (tmp_path / "inline.j2").write_text("{{ lookup('file', path) }}|\n")
+    (tmp_path / "other.j2").write_text("{{ lookup('pipe', 'date') }}\n")
+    env = aje.template_env(tmp_path)
+    assert env.get_template("inline.j2").render(path=str(data)) == "line|\n"
+    with pytest.raises(ValueError, match="no stand-in"):
+        env.get_template("other.j2").render()

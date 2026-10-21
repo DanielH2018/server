@@ -434,7 +434,7 @@ _LIBRARY_EXEMPT = {
 # changed. Every one is a template that can invoke curl against a push URL.
 _EXPECTED_IN_CORPUS = {
     "ansible/roles/setup/claude_code/templates/telemetry-health.sh.j2",
-    "ansible/roles/k8s/registry/templates/registry-gc.sh.j2",
+    "ansible/roles/setup/k8s_host_files/templates/registry-gc.sh.j2",
     "ansible/roles/setup/fake_remux/templates/fake-remux-health.sh.j2",
     "ansible/roles/setup/initial_setup/templates/secret-rotate.sh.j2",
     "ansible/roles/setup/initial_setup/templates/secret-rotation-audit.sh.j2",

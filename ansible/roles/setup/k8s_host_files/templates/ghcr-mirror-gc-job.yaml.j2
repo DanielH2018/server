@@ -9,7 +9,7 @@ metadata:
   namespace: {{ k8s_namespace }}
 data:
   ghcr-mirror-prune.sh: |
-{{ lookup('file', playbook_dir + '/roles/k8s/registry/files/ghcr-mirror-prune.sh') | indent(4, true) }}
+{{ lookup('file', playbook_dir + '/roles/setup/k8s_host_files/files/ghcr-mirror-prune.sh') | indent(4, true) }}
 ---
 # Prune and collect the ghcr-mirror store (#5541). A registry in proxy mode refuses manifest
 # DELETE, so the prune edits the store offline. registry-gc.sh scales only deploy/ghcr-mirror to

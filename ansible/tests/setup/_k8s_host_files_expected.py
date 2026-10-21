@@ -200,8 +200,62 @@ EXPECTED_ROWS: dict[str, dict[str, tuple[str, dict[str, str | bool]]]] = {
             {"path": "/usr/local/bin/cloudflare-ip-drift.sh", "state": "absent"},
         ),
     },
-    # The absent arm for the push store's GC manifest, which nothing reads since its retirement.
+    # The absent arm for the push store's GC manifest, which nothing reads since its retirement,
+    # and the ghcr-mirror GC's host side: the Job manifest the cron applies, the script, its state
+    # directory and the cron.
     "registry.yml": {
+        "Create the registry job manifest directory": (
+            "ansible.builtin.file",
+            {
+                "path": "/etc/rancher/k3s/manifests/registry-jobs",
+                "state": "directory",
+                "mode": "0700",
+                "owner": "root",
+                "group": "root",
+            },
+        ),
+        "Render the ghcr-mirror garbage-collection job": (
+            "ansible.builtin.template",
+            {
+                "src": "ghcr-mirror-gc-job.yaml.j2",
+                "dest": "/etc/rancher/k3s/manifests/registry-jobs/ghcr-mirror-gc-job.yaml",
+                "mode": "0644",
+                "owner": "root",
+                "group": "root",
+            },
+        ),
+        "Deploy the registry garbage-collection script": (
+            "ansible.builtin.template",
+            {
+                "src": "registry-gc.sh.j2",
+                "dest": "/usr/local/bin/registry-gc.sh",
+                "mode": "0700",
+                "owner": "root",
+                "group": "root",
+            },
+        ),
+        "Create the registry garbage-collection state directory": (
+            "ansible.builtin.file",
+            {
+                "path": "/var/lib/registry-gc",
+                "state": "directory",
+                "mode": "0755",
+                "owner": "root",
+                "group": "root",
+            },
+        ),
+        "Schedule the registry garbage collection": (
+            "ansible.builtin.cron",
+            {
+                "name": "Registry garbage collection",
+                "weekday": "{{ registry_k8s_gc_cron_weekday }}",
+                "minute": "{{ registry_k8s_gc_cron_minute }}",
+                "hour": "{{ registry_k8s_gc_cron_hour }}",
+                "user": "root",
+                "job": "/usr/local/bin/registry-gc.sh",
+                "cron_file": "registry-gc",
+            },
+        ),
         "Remove the retired push store's garbage-collection job manifest": (
             "ansible.builtin.file",
             {
