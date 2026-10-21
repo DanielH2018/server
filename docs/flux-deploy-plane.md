@@ -1316,7 +1316,8 @@ from. The Job's exit is the `flux/soak` status. The design is D5's *The soak as 
 - **No `dependsOn`.** The Job waits at run time until every Kustomization R changed reads
   Ready with `lastAppliedOriginRevision` at R. A suspended tag is outside its scope, and the
   Kustomization's `homelab/suspended-deps` annotation names the suspended tag's
-  Kustomizations. `kustomize-controller` runs one worker more than the rollout width, because
+  Kustomizations. Each poll of that wait re-reads `homelab`, and the Job exits 1 once it
+  no longer holds R, as after a reset (#5704). `kustomize-controller` runs one worker more than the rollout width, because
   the soak holds one from the start of the rollout.
 - **R's SHA moves the Job, not the footprint.** The Job's arguments carry R's SHA, so its name
   changes on every commit. `digests.json` records `soak` over a render at an all-zero SHA, so a
