@@ -1074,6 +1074,10 @@ containers_list:
   # No depends_on: the plan states no order against observability.
   - name: blackbox-exporter
     platform: k8s
+    # Flux applies blackbox-exporter through `promote`, and every Ansible path skips it (D5, Wave
+    # A's last PR). The handback is two PRs, `owner: released` then removing `owner`:
+    # docs/flux-deploy-plane.md.
+    owner: flux
     port: 9115
   # Deploys LAST: every workload role must finish before this role fences the namespace
   # (docs/networkpolicy-slice-answers.md). K8S_APPLIES_LAST in filter_plugins/toposort.py gives
