@@ -87,6 +87,18 @@ def test_every_kustomization_ready_at_r_proceeds_without_polling(world, tmp_path
     assert flux_soak.POLL_SECONDS not in world.sleeps
 
 
+def test_a_reset_that_moves_homelab_off_r_ends_the_wait_within_one_poll(
+    world, tmp_path
+):
+    # The 2026-10-18 shape (#5704): the Kustomizations apply last-good, so none names R.
+    world.kustomizations[0] = kustomization("authelia", revision=OTHER)
+    world.on_sleep = lambda w: setattr(w, "homelab_revision", OTHER)
+    code, message = run(world, tmp_path, wait_seconds=100_000)
+    assert code == 1
+    assert "master@sha1:" + R in message
+    assert len(world.sleeps) == 1
+
+
 def test_the_deadline_fails_naming_every_kustomization_not_ready_at_r(world, tmp_path):
     world.kustomizations = [
         kustomization("authelia", revision=OTHER),
