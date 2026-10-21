@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/backlog.py
-generated_at: 2026-10-20 13:59 UTC
-generated_sha: 0d8f7e831
+generated_at: 2026-10-21 06:17 UTC
+generated_sha: ec4480019
 ---
 
 !!! warning "Generated file — do not edit"
@@ -44,7 +44,6 @@ Findings Claude confirmed and did not fix in the session that found them, filed 
 | [#5778](https://github.com/DanielH2018/server/issues/5778) | medium | gap | container | karakeep has no pre-pull, so a Recreate rollout is down for the whole image pull | 2026-10-19 | 0 | - | ✓ |
 | [#5781](https://github.com/DanielH2018/server/issues/5781) | medium | gap | container | karakeep v0.34.0 crashes at s6 init under drop ALL and needs a planned auth migration | 2026-10-19 | 0 | - | ✓ |
 | [#5784](https://github.com/DanielH2018/server/issues/5784) | medium | gap | cicd | Staleness test reads the live deployer state dir and fails while the deployer is parked | 2026-10-20 | 0 | - | - |
-| [#5785](https://github.com/DanielH2018/server/issues/5785) | medium | gap | security | AIDE weekly check on daniel-box runs for days: worktrees unexcluded, baseline stale, no lock | 2026-10-20 | 0 | - | - |
 | [#5786](https://github.com/DanielH2018/server/issues/5786) | medium | gap | cicd | Host-package builder caches a CI fail verdict forever, so a green re-run never unblocks it | 2026-10-20 | 0 | - | - |
 | [#2124](https://github.com/DanielH2018/server/issues/2124) | low | gap | security | CrowdSec agent drops Traefik access-log lines with UnmarshalJSON errors | 2026-09-19 | 0 | - | ✓ |
 | [#3778](https://github.com/DanielH2018/server/issues/3778) | low | improvement | cicd | Switch the CI setup action's callers to the self-repository uses syntax once actionlint accepts it | 2026-10-09 | 0 | - | ✓ |
@@ -108,6 +107,8 @@ Findings Claude confirmed and did not fix in the session that found them, filed 
 | [#5756](https://github.com/DanielH2018/server/issues/5756) | low | gap | cicd | pytest_shard re-measures crowdsec's docker-only image legs to 0s, so CI's durations check fails PRs | 2026-10-19 | 0 | - | ✓ |
 | [#5761](https://github.com/DanielH2018/server/issues/5761) | low | gap | network | The edge answered daniel-pi's probe 403 once during crowdsec's LAPI restart | 2026-10-19 | 1 | - | ✓ |
 | [#5763](https://github.com/DanielH2018/server/issues/5763) | low | improvement | docs | daniel-box.yml's crowdsec ordering comment names a post-deploy registration task that is now an initContainer | 2026-10-19 | 0 | - | ✓ |
+| [#5796](https://github.com/DanielH2018/server/issues/5796) | low | improvement | backup-observability | The Homelab Evals tile pages on one-trial eval noise as a regression | 2026-10-20 | 0 | - | - |
+| [#5797](https://github.com/DanielH2018/server/issues/5797) | low | gap | cicd | homelab-cicd-reviewer flags littlelink's digest-pinned :latest as drift in most eval trials | 2026-10-20 | 0 | - | - |
 
 ## Settled findings — do not re-flag
 

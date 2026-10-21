@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/freshness.py
-generated_at: 2026-10-20 18:17 UTC
-generated_sha: 7197702e0
+generated_at: 2026-10-21 06:17 UTC
+generated_sha: ec4480019
 ---
 
 !!! warning "Generated file — do not edit"
@@ -18,7 +18,7 @@ generated_sha: 7197702e0
 |---|---|---|---|---|
 | [target-architecture/monitoring/m6-retire-kuma.md](../target-architecture/monitoring/m6-retire-kuma.md) | 2026-10-17 | 188 | 61 | `scripts/dev/pytest_shard_weights.json` (2026-10-20) |
 | [target-architecture/host/h7-delete-ansible.md](../target-architecture/host/h7-delete-ansible.md) | 2026-10-17 | 219 | 47 | `docs/host-baseline-record.md` (2026-10-20) |
-| [target-architecture/host/h5-pi-compose.md](../target-architecture/host/h5-pi-compose.md) | 2026-10-12 | 74 | 41 | `docs/reference/decisions.md` (2026-10-19) |
+| [target-architecture/host/h5-pi-compose.md](../target-architecture/host/h5-pi-compose.md) | 2026-10-12 | 74 | 41 | `docs/reference/decisions.md` (2026-10-20) |
 | [target-architecture/render/r2-secret-placeholders.md](../target-architecture/render/r2-secret-placeholders.md) | 2026-10-15 | 90 | 39 | `ansible/roles/k8s/uptime-kuma/templates/static-monitors.yaml.j2` (2026-10-19) |
 | [target-architecture/render/r1-shadow-render.md](../target-architecture/render/r1-shadow-render.md) | 2026-10-14 | 73 | 38 | `scripts/dev/pytest_shard_weights.json` (2026-10-20) |
 | [target-architecture/host/h3-pi-pilot.md](../target-architecture/host/h3-pi-pilot.md) | 2026-10-17 | 112 | 36 | `ansible/roles/k8s/observability/defaults/main.yml` (2026-10-19) |
@@ -27,8 +27,8 @@ generated_sha: 7197702e0
 | [target-architecture/render/r3-remove-live-reads.md](../target-architecture/render/r3-remove-live-reads.md) | 2026-10-17 | 62 | 29 | `ansible/roles/k8s/image-builder/CLAUDE.md` (2026-10-19) |
 | [target-architecture/monitoring/m5-loki-ruler.md](../target-architecture/monitoring/m5-loki-ruler.md) | 2026-10-17 | 68 | 28 | `ansible/roles/k8s/netpol-baseline/templates/networkpolicy-prometheus.yaml.j2` (2026-10-19) |
 | [target-architecture/deploy/d3-secrets.md](../target-architecture/deploy/d3-secrets.md) | 2026-10-16 | 51 | 27 | `docs/host-baseline-record.md` (2026-10-20) |
-| [target-architecture/monitoring/m2-first-bridge-family.md](../target-architecture/monitoring/m2-first-bridge-family.md) | 2026-10-17 | 77 | 27 | `ansible/roles/k8s/uptime-kuma/templates/static-monitors.yaml.j2` (2026-10-19) |
-| [target-architecture/deploy/d2-first-leaf.md](../target-architecture/deploy/d2-first-leaf.md) | 2026-10-17 | 80 | 26 | `ansible/roles/k8s/netpol-baseline/defaults/main.yml` (2026-10-19) |
+| [target-architecture/deploy/d2-first-leaf.md](../target-architecture/deploy/d2-first-leaf.md) | 2026-10-17 | 80 | 27 | `ansible/roles/k8s/bento-pdf/defaults/main.yml` (2026-10-21) |
+| [target-architecture/monitoring/m2-first-bridge-family.md](../target-architecture/monitoring/m2-first-bridge-family.md) | 2026-10-17 | 77 | 27 | `docs/reference/decisions.md` (2026-10-20) |
 | [target-architecture/host/h4-secrets-unit.md](../target-architecture/host/h4-secrets-unit.md) | 2026-10-15 | 51 | 24 | `.github/workflows/ci.yml` (2026-10-19) |
 | [target-architecture/docs-guard/g5-shrink-root-claude-md.md](../target-architecture/docs-guard/g5-shrink-root-claude-md.md) | 2026-10-17 | 64 | 21 | `docs/secret-rotation.md` (2026-10-19) |
 | [python-code-organization.md](../python-code-organization.md) | 2026-10-11 | 37 | 19 | `ansible/tests/repo/module_length_allowlist.txt` (2026-10-19) |
@@ -36,7 +36,7 @@ generated_sha: 7197702e0
 | [target-architecture/deploy/d4-ordering.md](../target-architecture/deploy/d4-ordering.md) | 2026-10-17 | 51 | 18 | `ansible/roles/k8s/netpol-baseline/templates/networkpolicy-prometheus.yaml.j2` (2026-10-19) |
 | [target-architecture/host/h6-k3s-suc.md](../target-architecture/host/h6-k3s-suc.md) | 2026-10-17 | 67 | 17 | `docs/secret-rotation.md` (2026-10-19) |
 | [target-architecture/docs-guard/g4-drop-size-test.md](../target-architecture/docs-guard/g4-drop-size-test.md) | 2026-10-12 | 32 | 16 | `docs/reference/backlog.md` (2026-10-20) |
-| [target-architecture/docs-guard/g2-retire-lock.md](../target-architecture/docs-guard/g2-retire-lock.md) | 2026-10-17 | 52 | 15 | `scripts/dev/pytest_shard_weights.json` (2026-10-20) |
+| [target-architecture/docs-guard/g2-retire-lock.md](../target-architecture/docs-guard/g2-retire-lock.md) | 2026-10-17 | 52 | 15 | `docs/reference/decisions.md` (2026-10-20) |
 | [claude-agent-user.md](../claude-agent-user.md) | 2026-10-17 | 51 | 13 | `docs/secret-rotation.md` (2026-10-19) |
 | [target-architecture/docs-guard/g1-diff-notice.md](../target-architecture/docs-guard/g1-diff-notice.md) | 2026-10-17 | 28 | 9 | `.github/workflows/ci.yml` (2026-10-19) |
 | [setup-role-loop-measurement.md](../setup-role-loop-measurement.md) | 2026-10-11 | 12 | 8 | `scripts/deploy_tools/narrow_setup.py` (2026-10-18) |
