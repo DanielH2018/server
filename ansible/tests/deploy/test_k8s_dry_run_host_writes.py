@@ -66,7 +66,6 @@ _ROLES_THAT_WRITE_THE_HOST = frozenset(
     {
         "image-builder",
         "netpol-baseline",
-        "registry",
     }
 )
 

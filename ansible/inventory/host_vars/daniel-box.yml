@@ -716,6 +716,11 @@ containers_list:
   # the LAN.
   - name: registry
     platform: k8s
+    # Flux applies registry through `promote`, and the `registry-verify` Jobs replace the
+    # self-tests and the netpol probe (D5, Wave D). `registry-gc.sh` stays a host cron and the
+    # one writer of ghcr-mirror's replicas (#5732). The handback is two PRs, `owner: released`
+    # then removing `owner`: docs/flux-deploy-plane.md.
+    owner: flux
     tier: platform
   # two_factor even on the LAN: arbitrary workflow execution on a stolen
   # password alone. /webhook/ below is unaffected — that route carries no forward-auth at all,
