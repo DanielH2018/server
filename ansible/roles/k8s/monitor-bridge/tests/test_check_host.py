@@ -264,50 +264,6 @@ def test_a_breaching_present_host_outranks_the_coverage_complaint(cfg):
     assert "99" in msg
 
 
-def test_crash_loop_arm_gates_on_a_recent_restart_not_just_the_hour_window(cfg):
-    """A recovered pod must drop out of the arm instead of holding the tile red for an hour.
-
-    `increase(...[1h]) > 3` is a pure lookback, so a recovered pod keeps `k3s Workload Health`
-    DOWN on `restarts in window: 9` until the hour passes. The recency clause is the fix and it
-    is invisible to k8s_workloads_verdict, which receives the offenders as an already-filtered
-    list — the query text is the only place it can be enforced.
-    """
-    src = FakeSources(
-        prom_vector=lambda promql, *a, **k: [],
-        prom_scalar=lambda *a, **k: 66.0,
-    )
-    checks.cluster.check_k8s_workloads(cfg, src)
-
-    restart_queries = [
-        q for q in src.queries("prom_vector") if "status_restarts_total" in q
-    ]
-    assert len(restart_queries) == 1
-    q = restart_queries[0]
-    # Both windows present, and the recency one joined with `and` so it filters rather than
-    # replaces — an `or` here would widen the arm instead of narrowing it.
-    assert "[%s]" % cfg.K8S_RESTART_WINDOW in q
-    assert "[%s]) > 0" % cfg.K8S_RESTART_RECENT_WINDOW in q
-    assert " and " in q
-    assert " or " not in q
-
-
-def test_the_recency_window_is_wider_than_the_worst_observed_restart_spacing(cfg):
-    """Below the spacing the arm flaps, and `k3s Workload Health` is max_retries: 0.
-
-    A crash-looping pod restarts ~15-19 min apart. A recency window inside that spacing goes
-    UP in the gaps, and every flap is an immediate DOWN plus a notification. Pin the
-    floor so a later "make it clear faster" edit cannot cross it silently.
-    """
-    # 30m, not 20m: the observed spacing RANGE tops out at ~19 min, so a 20m floor sits at the
-    # edge of the flapping band rather than outside it — and would let a later edit to 20m or
-    # 25m pass the very test written to stop it.
-    assert bridge.parsing.duration_seconds(cfg.K8S_RESTART_RECENT_WINDOW) >= 30 * 60
-    # And it must still be shorter than the evidence window, or it gates nothing.
-    assert bridge.parsing.duration_seconds(
-        cfg.K8S_RESTART_RECENT_WINDOW
-    ) < bridge.parsing.duration_seconds(cfg.K8S_RESTART_WINDOW)
-
-
 def test_host_origins_floor_defaults_to_both_nodes(cfg):
     """The floor is 2 because node-exporter is a DaemonSet on both nodes.
 

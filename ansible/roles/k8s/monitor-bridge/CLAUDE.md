@@ -137,9 +137,6 @@ production code to `_runtime_modules()`. Smoke test one pass with
 
 Each came from an incident; the checks page's *Traps* section holds the evidence.
 
-- **kube-state-metrics sanitizes resource names into labels:** `devic.es/dri` arrives as
-  `resource="devic_es_dri"`. Sanitize at query time (`ksm_resource_label`) and name both forms
-  in the message.
 - **The Alloy k8s pod streams have no `app` label** — they carry `container` / `pod` / `job` /
   `namespace` / `service_name`, so a selector written from the `-l app=` habit matches nothing
   and a fail-open arm reads that as health. `LOKI_STREAM_LABELS` and

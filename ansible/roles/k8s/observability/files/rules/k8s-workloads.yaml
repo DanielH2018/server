@@ -1,11 +1,10 @@
-# The Kubernetes arms of monitor-bridge's k8s_workloads check, as rules. Plain YAML, never
+# The Kubernetes arms of monitor-bridge's former k8s_workloads check, as rules. Plain YAML, never
 # Jinja: prometheus-rules.yaml.j2 carries this file verbatim. The design is
 # docs/target-architecture/monitoring/m2-first-bridge-family.md, "The rules".
 #
 # EVERY ALERT HERE IS SHADOW. Each carries shadow="true", which Alertmanager routes to the
-# blackhole receiver, because the bridge's "k3s Workload Health" tile still pages this family.
-# M2's PR 4b drops the label once PR 4a has narrowed the bridge, so the family never pages
-# from both sides.
+# blackhole receiver. M2's PR 4a removed these arms from the bridge, so until PR 4b drops the
+# label the family pages from neither side. The family never pages from both.
 #
 # THE JOIN SHAPE. A per-workload alert takes its C7 `service` label from workload-service's
 # recording rules. Each one is written as
@@ -17,14 +16,14 @@
 # so a missing or failed mapping changes the alert's service to `unmapped` and never removes
 # the alert. The mapping series have value 1, so the product keeps EXPR's value.
 #
-# `for:` IS N x 300s, the reading bridge/config_cluster.py gives each streak of N cycles at
-# INTERVAL=300. An arm the bridge pages on one sample has N = 1. The bridge pages on its Nth bad
-# sample, (N - 1) x 300s after the first, so a rule at N x 300s drops an episode shorter than
-# that, which is the bridge's measured noise. The crash-loop arm has no `for:`, because its 1h
-# and 30m windows already hold it.
+# `for:` IS N x 300s, the reading the bridge gave each streak of N cycles at INTERVAL=300. An
+# arm the bridge paged on one sample had N = 1. The bridge paged on its Nth bad sample,
+# (N - 1) x 300s after the first, so a rule at N x 300s drops an episode shorter than that, which
+# was the bridge's measured noise. The crash-loop arm has no `for:`, because its 1h and 30m
+# windows already hold it.
 #
-# ansible/tests/services/test_k8s_workloads_rule_literals.py holds every literal the bridge
-# also carries to the bridge's value: the floors, the holds and the crash-loop windows.
+# ansible/tests/services/test_k8s_workloads_rule_literals.py holds the DaemonSet floor to the
+# estate and the crash-loop recency window to its floor.
 groups:
   - name: k8s-workloads
     rules:
@@ -118,7 +117,18 @@ groups:
           description: >-
             {{ $labels.deployment }} has had fewer updated replicas than it wants for 15 minutes.
       # The 1h window is the evidence and the 30m window the recency gate: a pod that crash
-      # looped and then recovered stops firing about 30 minutes after its last restart. A pod
+      # looped and then recovered stops firing about 30 minutes after its last restart.
+      #
+      # DECIDED: 30m, and the floor is the worst inter-restart SPACING, not the
+      # CrashLoopBackOff 5-min backoff cap. The 2026-08-13 homepage incident spread 31 restarts
+      # over a night, ~15-19 min apart; a window inside that spacing resolves in the gaps and
+      # refires, and every resolve and refire is a notification. 30m clears two spacings. The
+      # spacing could not be re-measured, because cluster Prometheus retains 7d and the
+      # incident is older, so this is the conservative floor.
+      # ansible/tests/services/test_k8s_workloads_rule_literals.py holds the window at 30m or
+      # more.
+      #
+      # A pod
       # outside homelab:pod_service:info's domain, such as a Job's pod, fires with
       # service="unmapped", which WorkloadServiceUnmapped does not flag.
       - alert: K8sContainerCrashLooping
@@ -217,8 +227,11 @@ groups:
             11 is the estate's DaemonSet count, fixed in the rule, so a DaemonSet has gone or
             kube-state-metrics stopped collecting daemonsets. Held 5 minutes where the bridge paged
             one sample.
-      # kube-state-metrics sanitises a resource name into its label: devic.es/dri arrives as
-      # resource="devic_es_dri", and the unsanitised name matches nothing.
+      # kube-state-metrics sanitises every character outside [a-zA-Z0-9_] in a resource name
+      # into `_`: devic.es/dri, the name `kubectl describe node` prints, arrives as
+      # resource="devic_es_dri", and the unsanitised name matches nothing. A query on the
+      # unsanitised name reads as the device plugin having deregistered, a false page on a
+      # healthy cluster (live 18:05 to 18:35 UTC on 2026-08-20).
       # ansible/tests/services/test_dri_resource_name_agrees.py holds this literal to the
       # name dri-device-plugin advertises. The bridge reports INERT when no allocatable series
       # exists at all; K8sNodeAllocatableMissing pages that case instead.

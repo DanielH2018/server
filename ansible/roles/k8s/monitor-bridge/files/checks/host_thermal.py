@@ -163,7 +163,7 @@ def scrutiny_wear_devices(
     """One /api/device/<wwn>/details fetch per non-archived device.
 
     The wear attributes are not in /api/summary, which is what makes this N calls per cycle rather
-    than none — same shape as check_k8s_workloads' six Prometheus queries. Each payload is ~19 KB
+    than none — the same shape as any check that reads several sources per cycle. Each payload is ~19 KB
     and only smart_results[0] is read. A failing fetch raises out of `src.get_json` and the runner
     reports DOWN; that is deliberate and must not be caught here.
     """

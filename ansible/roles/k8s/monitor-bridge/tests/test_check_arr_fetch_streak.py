@@ -2,7 +2,7 @@
 
 While k3s replaces a *arr pod, the API refuses connections for a cycle or two and the monitor
 reports `arr_queue check error: radarr.homelab.svc.cluster.local:7878: <urlopen error
-[Errno 111]`, co-timed with a `k8s_workloads ... radarr(1)` episode. `ARR_FETCH_CONSECUTIVE`
+[Errno 111]`, co-timed with a k3s Workload Health `radarr(1)` episode. `ARR_FETCH_CONSECUTIVE`
 holds `up` through that.
 
 The pairs here have to separate the two halves of the check, because a streak over the whole
