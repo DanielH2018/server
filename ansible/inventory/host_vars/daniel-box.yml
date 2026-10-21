@@ -147,6 +147,10 @@ containers_list:
     backup_claims: [traefik-acme]
   - name: authelia
     platform: k8s
+    # Flux applies authelia through `promote`, and every Ansible path skips it (D5, authelia's
+    # own window). The handback is two PRs, `owner: released` then removing `owner`:
+    # docs/flux-deploy-plane.md.
+    owner: flux
     # This portal's name is the OIDC issuer Jellyfin's SSO plugin points at.
     hostname: "auth"
     kuma: {id: auth, name: k3s Authelia Portal}

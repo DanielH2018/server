@@ -5,7 +5,7 @@ The digests are literals in the base64 alphabet, never copied from the real `sec
 
 `authelia_k8s_manage_claude_user: false` reaches `write` only as a render that does not
 reference the claude-ui digest, so the test of that case drops the key from `Expected`.
-`ansible/tests/services/test_authelia_digest_assert.py` holds the real render to that.
+`ansible/tests/services/test_authelia_claude_ui_user.py` holds the real render to that.
 
 Run: uv run pytest scripts/secrets_mgmt/tests/test_cluster_vars_write_refusals.py
 """
@@ -116,7 +116,7 @@ def test_two_equal_digests_name_both_keys(tmp_path, capfd):
 def test_a_malformed_claude_digest_is_checked_only_when_placed(tmp_path, placed, code):
     """With `authelia_k8s_manage_claude_user` false, the render places no claude-ui digest.
 
-    `ansible/tests/services/test_authelia_digest_assert.py` holds the render to that.
+    `ansible/tests/services/test_authelia_claude_ui_user.py` holds the render to that.
     """
     sops_tree = make_sops_tree(
         tmp_path,

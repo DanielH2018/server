@@ -283,11 +283,9 @@ Each Authelia user has two SOPS keys: the plaintext password and its argon2 dige
 `authelia_password` pairs with `authelia_password_argon2`, and `authelia_claude_password` and
 `authelia_agent_password` pair with their `_argon2` keys the same way.
 `ansible/roles/k8s/authelia/templates/config-secret.yaml.j2` reads only the digests. A changed
-plaintext alone therefore changes no login. The deploy asserts each digest's form before the
-apply ("Fail if a stored Authelia digest is malformed"), but it cannot check that a digest
-matches its plaintext. This procedure does. `scripts/secrets_mgmt/cluster_vars.py write`
+plaintext alone therefore changes no login. `scripts/secrets_mgmt/cluster_vars.py write`
 refuses a malformed or duplicated `_argon2` digest and a `:` in `mqtt_password_hash`, and names
-the key only.
+the key only. It cannot check that a digest matches its plaintext. This procedure does.
 
 Each step handles a plaintext password, so the whole procedure is **operator-only**. Run it in a
 worktree on a branch, never in the primary checkout. Below, `KEY` stands for the plaintext's
@@ -322,28 +320,14 @@ SOPS name.
    `cluster_vars.py check` refuses the PR until `write` runs. `write` also refuses a malformed
    or duplicated digest, naming the key only. Commit both SOPS values and the cluster files
    `write` rewrote in one commit, then open the PR.
-4. Land the PR. Which command depends on who owns authelia: the `owner:` of authelia's entry
-   in `containers_list`.
-
-    - **While Ansible owns authelia**, run `land.sh` with `--tags authelia`. A rotation PR
-      changes no role file, so `land.sh` derives no deploy tag from it. Without `--tags`,
-      `scripts/deploy_tools/land_lib/land_tags.py:plane_note` adds `_ROTATION_NOTE`, which
-      says that a rotation maps to no deploy tag by construction. `deploy.py:no_tag_outcome`
-      in the same package then ends the landing `needs-manual-apply`, exit 1, and nothing is
-      deployed. Authelia keeps verifying the old digest. With `--tags authelia`,
-      `classify.py:classify` leaves that note unread, and `deploy.py:deploy_phase` deploys
-      authelia at the merge commit through the health gate. If a landing already ran without
-      `--tags`, deploy `--tags authelia` from a checkout at that merge commit, not from the
-      rotation worktree, whose branch can be behind master.
-    - **After D5's flip for authelia**, run `land.sh` without `--tags`. `deploy.sh` exits 5
-      on a flux-owned tag. Flux carries the value instead: the PR changes the cluster file,
-      so `land.sh` waits on the `cluster-vars` Kustomization and on every Kustomization that
-      depends on it, as step 4 of *Rotating a value read by both planes* describes. The
-      renderer stamps a `checksum/restart` annotation on the authelia pod, which hashes the
-      `.source` line of each key its Secret references. So the portal rolls in the revision
-      that carries the new value.
-      D3's exit criterion 3 showed the same path for peanut
-      (`docs/target-architecture/deploy/d3-secrets.md`).
+4. Run `land.sh` without `--tags`. Flux owns authelia, and `deploy.sh` exits 5 on a
+   flux-owned tag. The PR changes the cluster file, so `land.sh` waits on the `cluster-vars`
+   Kustomization and on every Kustomization that depends on it, as step 4 of *Rotating a
+   value read by both planes* describes. The renderer stamps a `checksum/restart` annotation
+   on the authelia pod, which hashes the `.source` line of each key its Secret references.
+   The portal therefore rolls in the revision that carries the new value. D3's exit
+   criterion 3 showed the same path for peanut
+   (`docs/target-architecture/deploy/d3-secrets.md`).
 5. A `claude-agent` rotation also needs the `claude_code` apply, which writes the new
    plaintext into the agent user's home. Run it only after authelia has converged on the new
    digest: step 4's landing reads `settled`. If the authelia deploy failed, the old digest is
@@ -354,8 +338,7 @@ SOPS name.
 
 **To roll back a rotation,** revert the rotation commit, which restores both encrypted values
 and the cluster files together. The revert is a secrets-only PR too, so land it as in step 4,
-and repeat step 5 for a `claude-agent` rotation. While Ansible owns authelia, the deploy-time
-assert checks the reverted value too.
+and repeat step 5 for a `claude-agent` rotation.
 
 **`authelia_claude_totp_secret` follows the same path without the minting step.** Set it with
 `sops set`, run `cluster_vars.py write`, and land as in step 4. The changed `authelia-config`
