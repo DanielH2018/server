@@ -1,0 +1,12 @@
+{
+  "checksum": "ebe419f762f1b637f913569534a9c4c2149adc1c3e06a02085b15b689ded2bbb",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "ansible/roles/k8s/wg-easy/CLAUDE.md#At a glance",
+  "row": {
+    "atoms": {
+      "docs/flux-deploy-plane.md": "807c3deb44c3178e7a6f9fc0bc398a3b748b95c468b14ce9b1b890c8684535d9"
+    },
+    "python": "3.14",
+    "verified_sha": "5a3ffbef1"
+  }
+}

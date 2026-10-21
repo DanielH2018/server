@@ -91,4 +91,5 @@ def test_the_entries_d2_to_d5_moved_are_live_and_owned_by_flux():
         "texbrain",
         "valheim",
         "zigbee2mqtt",
+        "wg-easy",
     } <= tag_owners().keys()
