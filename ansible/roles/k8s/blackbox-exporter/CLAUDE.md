@@ -9,13 +9,11 @@ conventions.
 
 ## At a glance
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates, tasks or containers_list entry, or the k3s role's Longhorn tier lists. -->
-- **Deploy tag:** `--tags "blackbox-exporter"`
+- **Applied by:** Flux, through `promote` (`owner: flux`); `deploy.sh` refuses
+  `--tags=blackbox-exporter` with exit 5
 - **Image:** `prom/blackbox-exporter` (`blackbox_exporter_k8s_image`)
 - **Route:** none (no `templates/ingressroute.yaml.j2`)
 - **Claims:** none (no PVC)
-- **Auto-deploy:** denylisted (`k8s_autodeploy: false`) — observability — the ingress pager
-  once M4 cuts over; a broken deploy cannot page about being broken. Its readinessProbe
-  (/-/healthy) proves the process runs, not that a probe succeeds
 <!-- /generated_from -->
 
 ## Notable
@@ -36,9 +34,18 @@ conventions.
   behind this role's readiness. The plan's *No deploy-order edge* has the full reasoning. The
   entry sits above `netpol-baseline` in `containers_list` only because that role must stay
   last.
-- **Auto-deploy is denylisted** because this role becomes the ingress pager. `/-/healthy`
-  proves the process answers, not that a module still probes correctly, so an image bump
-  lands by hand through `land.sh`.
+- **Flux applies it, not Ansible** (D5, Wave A's last PR). Its `containers_list` entry
+  carries `owner: flux`, so `deploy.sh`, the play and the GitOps deployer all skip it, and a
+  merged change reaches the cluster when `promote` publishes and verifies the next bundle. To
+  give it back to Ansible, follow the two-PR handback in `docs/flux-deploy-plane.md`; a plain
+  revert of the flag leaves two writers on the objects. The Kustomization's `wait` replaces
+  the rollout gate, and the restart checksum the renderer stamps on the Deployment replaces
+  the shared restart. `tasks/main.yml` holds one task, the include of `k8s/manifests`, and no
+  Flux path runs it. It stays for the handback.
+- **Auto-deploy is denylisted** (`k8s_autodeploy: false`) because this role is the ingress
+  pager. `/-/healthy` proves the process answers, not that a module still probes correctly.
+  Renovate therefore does not automerge an image bump, and the PR is reviewed and merged by
+  hand. `promote` applies it after the merge.
 - **`netpol-baseline: enforced`, with no route.** Its only caller is the `prometheus` pod,
   which the baseline admits. The probes are egress, which the baseline does not fence.
 
