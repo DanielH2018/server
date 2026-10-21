@@ -9,15 +9,13 @@ ConfigMaps become a render, so observability's flip can hand them to Flux.
   listed board with no file fails the render.
 - Each rendered key is the filter's output for its file, so both deploy-annotation queries
   reach every board.
-- The file stays out of the role's Flux bundle while Ansible owns observability, and a copy with
-  the flip's one-line edit renders the same ConfigMaps into it, each under the API server's
-  1 MiB object cap.
+- The role's Flux bundle holds the same ConfigMaps, each under the API server's 1 MiB object
+  cap.
 
 Run: uv run pytest ansible/tests/services/test_dashboard_configmaps.py
 """
 
 import json
-import shutil
 from pathlib import Path
 
 import pytest
@@ -116,25 +114,13 @@ def stubs(tmp_path_factory):
     return load_stubs(path)
 
 
-def test_the_bundle_leaves_the_configmaps_out_while_ansible_owns_observability(stubs):
-    """Ansible's server-side apply in dashboards.yml owns them until the flip."""
-    assert RENDERED not in cluster.render_tag("observability", stubs).files
-
-
-def test_the_flips_edit_renders_the_configmaps_into_the_bundle_under_the_cap(
-    stubs, rendered, tmp_path
-):
-    """Dropping the exclusion is all the flip needs: the same ConfigMaps reach `observability`."""
-    shutil.copytree(ROLE, tmp_path / "observability")
-    tasks = tmp_path / "observability" / "tasks" / "main.yml"
-    text = tasks.read_text()
-    assert f"[service.yaml, {RENDERED}]" in text
-    tasks.write_text(text.replace(f"[service.yaml, {RENDERED}]", "[service.yaml]"))
-    bundle = cluster.render_tag("observability", stubs, roles=tmp_path).files
-    flipped = _configmaps(bundle[RENDERED])
-    assert {name: doc["data"] for name, doc in flipped.items()} == {
+def test_the_bundle_renders_the_configmaps_under_the_cap(stubs, rendered):
+    """Flux applies the ConfigMaps server-side from the bundle, each under the object cap."""
+    bundle = cluster.render_tag("observability", stubs).files
+    in_bundle = _configmaps(bundle[RENDERED])
+    assert {name: doc["data"] for name, doc in in_bundle.items()} == {
         name: doc["data"] for name, doc in rendered.items()
     }
-    sizes = {name: len(json.dumps(doc).encode()) for name, doc in flipped.items()}
+    sizes = {name: len(json.dumps(doc).encode()) for name, doc in in_bundle.items()}
     assert sizes["grafana-dashboards-infrastructure"] > 256 * 1024
     assert max(sizes.values()) < OBJECT_CAP, sizes

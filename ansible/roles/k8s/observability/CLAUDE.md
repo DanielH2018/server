@@ -10,19 +10,23 @@ Claude Code runs on the **host**, not in a container, and exports to `127.0.0.1:
 and Tempo carry the same `hostIP` pin on 3100/9090/3200 for `otelq`, another host process.
 Tempo's otlp-grpc 4317 skips the pin: two hostPorts on one number wedge a pod in `Pending`.
 
-The deploy reads the pin back from the live DaemonSet and fails without it. That readback has
-a Flux form in `templates/verify-inert/`, which nothing renders yet: the flip PR renames the
-directory to `templates/verify/`, the renderer then emits `observability-verify`, and the PR
-deletes the two readback tasks. The Job runs `files/observability_verify.py` with `get` on
-the `otel-collector` DaemonSet and no other grant.
-`ansible/roles/k8s/observability/tests/test_observability_verify.py` renders the renamed copy
-through the Job census and fails it on the collector render with its `hostIP` removed.
+Flux applies the role (`owner: flux`), and no Ansible path runs it. `tasks/main.yml` holds the
+include of `k8s/manifests` alone, which the renderer reads for the role's vars. To give the role
+back to Ansible, follow the two-PR handback in `docs/flux-deploy-plane.md`; a plain revert of
+the flag leaves two writers on the objects.
+
+The `observability-verify` Job reads the pin back from the live DaemonSet and fails without it.
+It lives in `templates/verify/` and runs `files/observability_verify.py` with `get` on the
+`otel-collector` DaemonSet and no other grant.
+`ansible/roles/k8s/observability/tests/test_observability_verify.py` renders it through the
+Job census and fails it on the collector render with its `hostIP` removed.
 
 The working-out lives in `docs/observability-dashboards.md`.
 
 ## At a glance
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates, tasks or containers_list entry, or the k3s role's Longhorn tier lists. -->
-- **Deploy tag:** `--tags "observability"`
+- **Applied by:** Flux, through `promote` (`owner: flux`); `deploy.sh` refuses
+  `--tags=observability` with exit 5
 - **Images:** `otel/opentelemetry-collector-contrib` (`observability_k8s_collector_image`),
   `grafana/loki` (`observability_k8s_loki_image`), `prom/prometheus`
   (`observability_k8s_prometheus_image`), `prom/alertmanager`
@@ -35,12 +39,6 @@ The working-out lives in `docs/observability-dashboards.md`.
   (no backup (StorageClass longhorn-nobackup)), `loki-data` (no backup (StorageClass
   longhorn-nobackup)), `prometheus-data` (no backup (StorageClass longhorn-nobackup)),
   `tempo-data` (no backup (StorageClass longhorn-nobackup))
-- **Auto-deploy:** denylisted (`k8s_autodeploy: false`) — observability — the cluster metrics
-  plane and Claude Code's own telemetry stack, one sub-image per workload across several
-  Deployments. ALSO each stateful component (loki/grafana/prometheus/tempo/alertmanager) is
-  Recreate + its own PVC — compounding, not single-component. COUPLING NOTE for a future
-  promotion: UI-edited Grafana dashboards live only in the PVC until an export script
-  round-trips them to git; a revert discards unsaved edits
 <!-- /generated_from -->
 
 **`probe.py health observability` gates every workload in the role**, none of them named observability.
@@ -57,26 +55,27 @@ of the four classes.
 
 ## One config change, one restart
 
-This role sets `manifests_rollout: ''`: `k8s/manifests` neither waits nor restarts for it, and
-each workload carries its own trigger (#2858). A ConfigMap edit rolls its own pod: the
-template hashes the ConfigMap body into that pod template as `checksum/config`
-(`ansible/templates/checksum-annotation.yml.j2`). A Secret edit goes through the role's own
-restart task instead, since hashing one into an annotation would expose it. Each Secret reader
-names the rendered files its pod reads in `restart_secrets`, in
-`ansible/roles/k8s/observability/defaults/main.yml:observability_stabilise_workloads`:
+This role sets `manifests_rollout: ''`, and each workload carries its own trigger (#2858). A
+ConfigMap edit rolls its own pod: the template hashes the ConfigMap body into that pod template
+as `checksum/config` (`ansible/templates/checksum-annotation.yml.j2`). A Secret edit rolls
+through the renderer's restart annotation, which hashes the Secrets a pod template
+names without putting their bytes in the annotation. The role passes its workloads to the
+include as `manifests_self_rollouts`, from
+`ansible/roles/k8s/observability/defaults/main.yml:observability_stabilise_workloads`. Each
+Secret reader names the rendered files its pod reads in `restart_secrets`:
 `scrape-credentials-secret.yaml` for prometheus, `grafana-secret.yaml` for grafana and
-`alertmanager-secret.yaml` for alertmanager. The role pairs each result of the shared
-`manifests_secret_render` loop with its file as `observability_changed_secret_files`. One Secret
-edit then restarts its readers alone and soaks them alone in the play gate. An Alertmanager
-config edit restarts and soaks Alertmanager alone.
+`alertmanager-secret.yaml` for alertmanager.
+`ansible/tests/services/test_observability_config_rolls_one_workload.py` holds that
+declaration equal to the Secrets each pod reads. One Secret edit then rolls its readers alone.
+An Alertmanager config edit rolls Alertmanager alone.
 
 **An initContainer writes Grafana's admin password.** `GF_SECURITY_ADMIN_PASSWORD` seeds only a
 new database, so the `admin-password` initContainer in `grafana.yaml.j2` runs `grafana cli
 admin reset-admin-password` from the `grafana-admin` Secret before every Grafana start. A
-rotated `grafana_admin_password` changes `grafana-secret.yaml`, the restart rolls grafana, and
-the initContainer writes the new password. grafana is `Recreate`, so no server holds the
-SQLite file while the CLI runs. Once the tag is flux-owned, the renderer's restart annotation
-rolls grafana instead (D5.1e).
+rotated `grafana_admin_password` changes `grafana-secret.yaml`, the annotation rolls grafana,
+and the initContainer writes the new password. grafana is `Recreate`, so no server holds the
+SQLite file while the CLI runs. The renderer's restart annotation rolls grafana when the
+Secret changes (D5.1e).
 
 Two kinds of ConfigMap carry no hash. Prometheus mounts `prometheus-rules`
 as a directory and runs with `--config.auto-reload`, so a rule edit reloads in place and never
@@ -91,23 +90,15 @@ would restart Prometheus.
 `scripts/renderer/tests/test_renderer_self_rollout_restart.py::test_a_board_or_rule_edit_after_the_flip_moves_no_restart_value`
 renders the flipped role and holds both values still across such an edit.
 
-Every entry declares `restart_on: []`, so the shared release record stamps `restart: false`
-for each workload. After its rollout wait, the role raises that to `restart: true` through
-`ansible/roles/k8s/manifests/tasks/rollout_amend.yml` for each workload its restart rolled. A
-wrong raise lands as a red deploy, because `probe.py health observability` reads a
-`restart: true` with no newer `restartedAt` as NOT ROLLED. The entries carry no
-`rolled_by_role`, because the shared role drops a marked entry from the pod-template
-fingerprints, and the restart's skip of a workload the apply already rolled reads them (#3115).
-`ansible/roles/k8s/observability/defaults/main.yml:DECIDED: no rolled_by_role` has the
-ruling.
+Every entry declares `restart_on: []`, which the renderer ignores for a self-rollout entry.
+The entries carry no `rolled_by_role`, because the shared role drops a marked entry from the
+pod-template fingerprints (#3115). The ruling is
+`ansible/roles/k8s/observability/defaults/main.yml:DECIDED: no rolled_by_role`.
 
 **Widen the capture when you add a `data:` key.** Every capture but Grafana's holds ONE key's
 body, so a second key in `prometheus.yaml.j2` lands outside the hash and the pod never rolls.
 `ansible/tests/services/test_observability_config_rolls_one_workload.py` guards the three ways
 this goes QUIET.
-
-The snapshot handing these workloads to the play gate fires for a ConfigMap edit only when both
-render and apply change, so a comment-only edit buys no soak (#3133).
 
 ## Alert plane
 
@@ -207,12 +198,15 @@ datasource ref must resolve to a uid `templates/grafana.yaml.j2` declares. Three
 
 **The dashboard ConfigMaps are a render.** `templates/grafana-dashboards.yaml.j2` renders one
 per folder and passes each board through the `grafana_deploy_annotated` filter, which adds the
-two deploy-annotation queries. The file is in `manifests_exclude_files`, because the shared
-role's client-side apply cannot carry the Infrastructure folder past the 262144-byte annotation
-cap. `tasks/dashboards.yml` renders it into its own directory and applies it server-side. The
-flip PR drops the exclusion, so the file joins the `observability` bundle, and deletes
-`tasks/dashboards.yml`. `ansible/tests/services/test_dashboard_configmaps.py` renders that
-flipped copy and holds every ConfigMap under the 1 MiB object cap.
+two deploy-annotation queries. The file joins the `observability` bundle, and Flux applies it
+server-side, which the 262144-byte annotation cap on a client-side apply of the Infrastructure
+folder needs. `ansible/tests/services/test_dashboard_configmaps.py` renders the bundle and holds
+every ConfigMap under the 1 MiB object cap.
+
+**Flux applies every key of a dashboard ConfigMap.** The Ansible task that deleted a key no
+listed board justified went with `tasks/dashboards.yml`. A board dropped from
+`observability_dashboard_folders` leaves the ConfigMap at the next Flux apply, because Flux
+applies the whole object.
 
 ## The trap: an idle stack is indistinguishable from a broken one
 

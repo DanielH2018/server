@@ -65,14 +65,6 @@ ALLOW = {
     _K8S + "netpol-baseline/tasks/main.yml": (
         "D4 makes the deferred apply `netpol-baseline-deferred`; " + _PROBE
     ),
-    _K8S + "observability/tasks/dashboards.yml": (
-        "D5: observability's flip drops grafana-dashboards.yaml from "
-        "`manifests_exclude_files`, so the rendered ConfigMaps join the bundle, and deletes "
-        "the server-side apply"
-    ),
-    _K8S + "observability/tasks/main.yml": (
-        "D5.1e: a restart annotation replaces the rollout restart"
-    ),
     _K8S + "pihole/tasks/apply_instance_2.yml": (
         "D4 makes instance 2 `pihole-deferred`"
     ),
@@ -119,11 +111,11 @@ OUT_OF_RENDER = Census(
     # hardlink probe tasks (#5652); 43 once authelia's TOTP seed became an initContainer
     # (#5647); 41 once the flip of tdarr and qbittorrent deleted their verify tasks; 39 once
     # traefik's flip rendered its CRDs and RBAC (#5707); 37 once crowdsec's machine
-    # registration and allowlists became an initContainer (#5741).
-    min_matches=37,
+    # registration and allowlists became an initContainer (#5741); 33 once observability's
+    # flip deleted its dashboard apply and its restart tasks.
+    min_matches=33,
     must_find=frozenset(
         {
-            _K8S + "observability/tasks/dashboards.yml",
             _K8S + "cronjob-gate/tasks/main.yml",
             _K8S + "registry/tasks/main.yml",
         }

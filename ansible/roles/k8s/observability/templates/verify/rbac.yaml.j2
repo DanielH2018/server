@@ -1,5 +1,5 @@
 {#
-  The verify Job's identity, INERT until observability's flip, as `job.yaml.j2` beside it is.
+  The verify Job's identity, rendered into `observability-verify` with `job.yaml.j2` beside it.
 
   The Job reads one object, the `otel-collector` DaemonSet, so its Role grants `get` on that
   name alone. It execs into nothing and lists nothing. The ServiceAccount mounts no token by
