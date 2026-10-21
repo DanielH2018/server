@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/decisions.py
-generated_at: 2026-10-22 01:37 UTC
-generated_sha: 1d5eb31f8
+generated_at: 2026-10-22 01:54 UTC
+generated_sha: cba774b7f
 ---
 
 !!! warning "Generated file — do not edit"
@@ -12,7 +12,7 @@ generated_sha: 1d5eb31f8
 
 # Decisions
 
-834 `DECIDED:` marker(s) found across the tree. A marker is a settled trade-off recorded as a comment at the line it governs, per CLAUDE.md's "Review & Memory Hygiene" section — written so a reviewer trips over the reasoning before re-opening a decision that already has one. A reviewer brief greps the literal marker text before flagging something as new; this page exists so a human can browse the same set instead of guessing a phrase to grep.
+832 `DECIDED:` marker(s) found across the tree. A marker is a settled trade-off recorded as a comment at the line it governs, per CLAUDE.md's "Review & Memory Hygiene" section — written so a reviewer trips over the reasoning before re-opening a decision that already has one. A reviewer brief greps the literal marker text before flagging something as new; this page exists so a human can browse the same set instead of guessing a phrase to grep.
 
 !!! warning "Possible duplicates"
     Two markers below have a near-identical first sentence once case and whitespace are normalised — usually the same trade-off decided twice, or a marker copied and never specialised. Worth a look, not a verdict.
@@ -316,11 +316,9 @@ generated_sha: 1d5eb31f8
 | 2 hops, and it must not drop to 1. routing; it makes n8n attribute every request to the wrong client IP, which is what its login throttling and audit log key on. The two hops on a public request are Cloudflare and the cluster Traefik — Cloudflare's ranges sit in `forwardedHeaders.trustedIPs` on both entrypoints (see the traefik role's cloudflare-ip-drift.sh.j2), so it is a trusted proxy that sets X-Forwarded-For and counts. This is NOT a leftover from the Docker edge Traefik uninstalled 2026-08-14; that host was never one of these two. An earlier version of this comment said the opposite and invited exactly the change that breaks it. | `ansible/roles/k8s/n8n/templates/deployment.yaml.j2:84` | 2026-08-22 |
 | 60 s, the same value deployment-runners.yaml.j2 gives the runners. timeouts apply: this one is the BROKER's limit (upstream default 300 s, dropping to 60), and the runner aborts a task at its own. They held 300 and 60 until the operator chose 60 on 2026-10-02 (#3258): the runners pod executes arbitrary workflow code, and a short task limit backs up its resource cap as the DoS guard. To let Code nodes run longer, raise BOTH, or the lower one still wins. | `ansible/roles/k8s/n8n/templates/deployment.yaml.j2:177` | 2026-10-02 |
 | the spec embeds a digest of n8n's rendered NetworkPolicy and Deployment, not only | `ansible/roles/k8s/n8n/templates/verify/job.yaml.j2:16` | 2026-10-18 |
-| ` notes on the digest and the | `ansible/roles/k8s/netpol-baseline/CLAUDE.md:75` | 2026-10-18 |
-| ` marker naming the | `ansible/roles/k8s/netpol-baseline/CLAUDE.md:88` | 2026-10-09 |
-| terraria's row stays a hand toggle and is not derived from `terraria_k8s_replicas` (#3848). Its `expect: open` leg opens a TCP connection to :7777, and on 1.4.5.7 a bare TCP connect can crash the server (#822). Scaling to 1 is only the first step of #822's restore checklist, so a row that followed the replica count would dial a server that is not yet safe to dial, on every netpol-baseline deploy. Add the row once the image is past 1.4.5.7, the same condition that restores the Kuma port monitor: `{service: terraria, plane: homelab, port: 7777, expect: open, policy: networkpolicy-terraria.yaml.j2}`. `ansible/tests/k8s/test_netpol_probe_targets.py` fails if the row is present while the count is 0. | `ansible/roles/k8s/netpol-baseline/defaults/main.yml:151` | 2026-10-09 |
-| probe pods need no per-node placement; ingress NetworkPolicy is enforced on the DESTINATION node, and the probe targets schedule onto daniel-server. | `ansible/roles/k8s/netpol-baseline/tasks/main.yml:178` | 2026-09-30 |
-| one probe Job driven by `netpol_baseline_probe_targets`, not one Job per rollout slice (#3813). The five slice Jobs recorded the order the default-deny rollout happened in, which no probe needs. They stayed hand-copied while there were five, because folding them into an `include_tasks` loop breaks `_batch_gated_names` in `ansible/tests/deploy/_autodeploy_batch.py`: it credits a Job only against a LITERAL `wait --for=condition=complete job/<name>`, and a looped wait reads `job/netpol-baseline-probe{{ suffix }}`. One Job has one literal wait, so the guard still reads it. Add a target as a table row, never as a second Job. | `ansible/roles/k8s/netpol-baseline/tasks/main.yml:181` | 2026-10-09 |
+| ` notes on the digest and the initContainer. | `ansible/roles/k8s/netpol-baseline/CLAUDE.md:78` | 2026-10-22 |
+| ` marker naming the | `ansible/roles/k8s/netpol-baseline/CLAUDE.md:90` | 2026-10-09 |
+| terraria's row stays a hand toggle and is not derived from `terraria_k8s_replicas` (#3848). Its `expect: open` leg opens a TCP connection to :7777, and on 1.4.5.7 a bare TCP connect can crash the server (#822). Scaling to 1 is only the first step of #822's restore checklist, so a row that followed the replica count would dial a server that is not yet safe to dial, on every netpol-baseline deploy. Add the row once the image is past 1.4.5.7, the same condition that restores the Kuma port monitor: `{service: terraria, plane: homelab, port: 7777, expect: open, policy: networkpolicy-terraria.yaml.j2}`. `ansible/tests/k8s/test_netpol_probe_targets.py` fails if the row is present while the count is 0. | `ansible/roles/k8s/netpol-baseline/defaults/main.yml:148` | 2026-10-09 |
 | alertmanager-callers sits in the observability namespace and admits loki-homelab | `ansible/roles/k8s/netpol-baseline/templates/networkpolicy-alertmanager.yaml.j2:1` | 2026-10-13 |
 | an entry with `netpol_role_owned: true` is skipped here, because its own role | `ansible/roles/k8s/netpol-baseline/templates/networkpolicy-callers.yaml.j2:13` | 2026-10-04 |
 | the CrowdSec agent sidecars' :6060 grant admits prometheus from the observability | `ansible/roles/k8s/netpol-baseline/templates/networkpolicy-crowdsec-sidecars.yaml.j2:1` | 2026-10-10 |
@@ -338,8 +336,8 @@ generated_sha: 1d5eb31f8
 | traefik's fence is an ipBlock origin lock on :8443, a from-less :8000 and a | `ansible/roles/k8s/netpol-baseline/templates/networkpolicy-traefik.yaml.j2:1` | 2026-10-09 |
 | valheim opens two UDP ports to every source, so this fence stays bespoke. | `ansible/roles/k8s/netpol-baseline/templates/networkpolicy-valheim.yaml.j2:1` | 2026-10-09 |
 | wg-easy's 51820/UDP listener is open to the internet, so this fence stays bespoke. | `ansible/roles/k8s/netpol-baseline/templates/networkpolicy-wg-easy.yaml.j2:1` | 2026-10-09 |
-| the spec embeds a digest of this role's rendered NetworkPolicies, every | `ansible/roles/k8s/netpol-baseline/templates/verify-inert/job.yaml.j2:19` | 2026-10-18 |
-| the readiness gate is an initContainer, not a step of the main container's script. | `ansible/roles/k8s/netpol-baseline/templates/verify-inert/job.yaml.j2:30` | 2026-10-18 |
+| the spec embeds a digest of this role's rendered NetworkPolicies, every | `ansible/roles/k8s/netpol-baseline/templates/verify/job.yaml.j2:15` | 2026-10-18 |
+| the readiness gate is an initContainer, not a step of the main container's script. | `ansible/roles/k8s/netpol-baseline/templates/verify/job.yaml.j2:26` | 2026-10-18 |
 | ` marker at `FINALDELAY` in `roles/setup/nut_host/templates/host-upsmon.conf.j2`. | `ansible/roles/k8s/nut/CLAUDE.md:81` | 2026-09-17 |
 | nut stays off `manifests_prune` (#3388, operator decision 2026-10-05). adds the role label to this Deployment and restarts the UPS monitor once, which leaves about a minute without power-cut shutdown coverage. #3388 counts nut as deliberately excluded. The prune is armed by default since #3662, so this line is the opt-out. Flux owns nut since D5.17, so this include runs only after a handback. The renderer still reads the line and leaves the role label off nut's objects; Flux's own prune tracks them by its inventory, not by that label. | `ansible/roles/k8s/nut/tasks/main.yml:22` | 2026-10-05 |
 | these apt packages resolve at build time. archive supersedes it (the pool keeps only the current deb) and nothing bumps it, and a snapshot mirror freezes security updates with no Renovate datasource to raise a PR. The base digest above is the pin; #2211 holds the evidence and the operator's decision. | `ansible/roles/k8s/nut/templates/Dockerfile.j2:7` | 2026-09-22 |

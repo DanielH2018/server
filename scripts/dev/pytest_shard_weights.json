@@ -295,7 +295,6 @@
  "ansible/tests/deploy/test_deploy_annotations.py": 0.0,
  "ansible/tests/deploy/test_deploy_runs_from_a_snapshot_under_service_locks.py": 0.0,
  "ansible/tests/deploy/test_deploy_sh_takes_the_locks_deploy_locks_plans.py": 1.33,
- "ansible/tests/deploy/test_drain_before_live_tasks.py": 0.0,
  "ansible/tests/deploy/test_drain_zero_replica_exemption.py": 0.0,
  "ansible/tests/deploy/test_dual_tagged_producers.py": 0.07,
  "ansible/tests/deploy/test_entry_fields_filter.py": 0.0,

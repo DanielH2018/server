@@ -247,22 +247,9 @@ def _rollout_timeout_s(role: str) -> int:
     return manifests_rollout_timeout_s(_K8S_ROLES_DIR / role)
 
 
-# The roles whose in-role waits this derivation must find. netpol-baseline waits for its probe
-# Job before the batch drain runs and on top of it. prowlarr's 300s flaresolverr probe was the
-# first member until its flip deleted the probe (#5594), and registry's 540s of self-test and
-# netpol probe waits went with its flip. Named rather than counted: the reader
-# finds its subject by pattern, so a rename or a moved task would otherwise leave the sum
-# quietly smaller and every assertion here still green.
-_IN_ROLE_WAIT_CENSUS = {"netpol-baseline": 310}
-
-
-def test_the_in_role_wait_census_is_non_vacuous():
-    for role, seconds in _IN_ROLE_WAIT_CENSUS.items():
-        assert in_role_wait_s(role) >= seconds, (
-            f"{role} no longer contributes {seconds}s of in-role waiting, so the budget "
-            "derivations below are sizing against the drain alone again — find where that "
-            "wait went before trusting a green run"
-        )
+# The in-role waits this derivation must find were netpol-baseline's probe Job, prowlarr's 300s
+# flaresolverr probe (#5594) and registry's 540s of self-test and netpol probe waits. Each
+# flip deleted its waits, and no Ansible-owned role waits in-role now.
 
 
 def test_k8s_rollback_budget_covers_the_worst_single_promoted_service():
@@ -356,10 +343,10 @@ _FORWARD_OVERHEAD_S = 60
 #
 #   prowlarr:        the worst promoted role, and the one the cap was sized against while its
 #                    300s isolation probe still ran (#5594 deleted it, leaving 960s).
-#   netpol-baseline: the role with the most in-role waiting in the repo and NO rollout to wait
-#                    on. It is here because it is the shape that breaks the derivation, not
-#                    because it is close to the cap.
-_FORWARD_CEILING_CENSUS = {"prowlarr": 960, "netpol-baseline": 370}
+#
+# netpol-baseline was a second member, the shape with in-role waits and NO rollout to wait on
+# (370s). Its flip deleted the waits, so no Ansible-owned role has that shape now.
+_FORWARD_CEILING_CENSUS = {"prowlarr": 960}
 
 
 def _waits_for_a_rollout(role: str) -> bool:

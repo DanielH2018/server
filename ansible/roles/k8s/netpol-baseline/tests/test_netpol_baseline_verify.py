@@ -1,12 +1,9 @@
-"""netpol-baseline's inert verify Job: its script fails each way the probe did, and its render passes the census.
+"""netpol-baseline's verify Job: its script fails each way the probe did, and its render passes the census.
 
 The script tests run `netpol_baseline_verify` against local ports: an HTTP server stands in for
 a port that answers, a raw TCP server for a non-HTTP port that accepts, and a port nothing
-listens on for one the fence refuses. The render tests copy the role, move
-`templates/verify-inert/` to `templates/verify/` as the flip PR will, and render the copy, so
-the Job is checked as Flux will receive it while the tree's own render emits no
-`netpol-baseline-verify`. The plan is docs/target-architecture/deploy/d5-bulk-move.md, *A
-verify conversion lands as inert code*.
+listens on for one the fence refuses. The render tests render the tag as Flux receives it and
+run the Job census over the result. The plan is docs/target-architecture/deploy/d5-bulk-move.md.
 
 Run: uv run pytest ansible/roles/k8s/netpol-baseline/tests/test_netpol_baseline_verify.py
 """
@@ -20,15 +17,15 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import pytest
 from _k8s_render import rendered_docs
-from _netpol_baseline_flipped import STAGED, TAG, write_stubs
-from _netpol_baseline_flipped import docs as _docs
-from _netpol_baseline_flipped import env_of as _env_of
-from _netpol_baseline_flipped import flipped_render as _flipped_render
-from _netpol_baseline_flipped import job as _job
+from _netpol_baseline_render import TAG, VERIFY_DIR, write_stubs
+from _netpol_baseline_render import docs as _docs
+from _netpol_baseline_render import env_of as _env_of
+from _netpol_baseline_render import job as _job
+from _netpol_baseline_render import verify_render as _verify_render
 
 import netpol_baseline_verify as verify
+from lib import yaml_fast
 from lib.k8s_roles import K8S_ROLES
-from renderer.renderer_lib import cluster
 from renderer.tests._job_census import problems
 
 # A path into a role's tree, as any lookup names it; group 1 is the role.
@@ -318,13 +315,14 @@ def stubs(tmp_path_factory):
 
 
 @pytest.fixture(scope="module")
-def flipped(stubs, tmp_path_factory) -> list[dict]:
-    """The `netpol-baseline-verify` documents a copy of the role renders once its Job leaves `verify-inert/`."""
-    return _docs(_flipped_render(stubs, tmp_path_factory.mktemp("roles")))
+def flipped(stubs) -> list[dict]:
+    """The `netpol-baseline-verify` documents the tree renders."""
+    return _docs(_verify_render(stubs))
 
 
-def test_the_tree_renders_no_netpol_baseline_verify_while_ansible_owns_it(stubs):
-    assert cluster.render_tag(TAG, stubs).verify == {}
+def test_the_tree_renders_netpol_baseline_verify(stubs):
+    """The flip moved the Job to `templates/verify/`, so the tree's own render emits it."""
+    assert any(doc["kind"] == "Job" for doc in _docs(_verify_render(stubs)))
 
 
 def test_the_flipped_job_passes_every_job_census_row(flipped):
@@ -380,8 +378,8 @@ def test_the_flipped_job_carries_the_whole_target_table(flipped):
     assert labels == {"app": "netpol-baseline-verify", "netpol-probe": "control"}
 
 
-def test_the_homelab_lever_off_drops_its_rows_and_legs(stubs, tmp_path):
-    docs = _docs(_flipped_render(stubs, tmp_path, {"netpol_baseline_enforced": False}))
+def test_the_homelab_lever_off_drops_its_rows_and_legs(stubs):
+    docs = _docs(_verify_render(stubs, {"netpol_baseline_enforced": False}))
     legs_env = _env_of(_job(docs)["spec"]["template"]["spec"]["containers"][0])
     assert legs_env["LIVENESS_URL"] == "" and legs_env["DNS_NAMES"] == ""
     assert not any(".homelab." in row["url"] for row in json.loads(legs_env["TARGETS"]))
@@ -410,7 +408,7 @@ def test_every_policy_template_renames_the_job():
     listed = set(
         re.findall(
             r"lookup\('template', '(networkpolicy[\w-]*\.yaml\.j2)'\)",
-            (STAGED / "job.yaml.j2").read_text(),
+            (VERIFY_DIR / "job.yaml.j2").read_text(),
         )
     )
     present = {
@@ -420,14 +418,10 @@ def test_every_policy_template_renames_the_job():
     assert listed == present
 
 
-def test_a_policy_change_renames_the_job(stubs, tmp_path):
+def test_a_policy_change_renames_the_job(stubs):
     names = []
-    for n, cidrs in enumerate((["10.42.0.1/32"], ["10.42.0.2/32"])):
-        docs = _docs(
-            _flipped_render(
-                stubs, tmp_path / str(n), {"netpol_baseline_node_cidrs": cidrs}
-            )
-        )
+    for cidrs in (["10.42.0.1/32"], ["10.42.0.2/32"]):
+        docs = _docs(_verify_render(stubs, {"netpol_baseline_node_cidrs": cidrs}))
         names.append(_job(docs)["metadata"]["name"])
     assert names[0] != names[1]
 
@@ -443,9 +437,9 @@ def test_no_rendered_policy_admits_the_verify_pod():
     assert admitting == []
 
 
-def test_the_staged_job_reads_no_other_roles_file():
+def test_the_verify_job_reads_no_other_roles_file():
     """The deployer redeploys a role when a file it `lookup()`s in another role changes."""
-    staged = sorted(STAGED.glob("*.j2"))
+    staged = sorted(VERIFY_DIR.glob("*.j2"))
     assert [p.name for p in staged] == ["job.yaml.j2", "rbac.yaml.j2"]
     assert [
         (path.name, role)
@@ -453,3 +447,52 @@ def test_the_staged_job_reads_no_other_roles_file():
         for role in ROLE_PATH.findall(path.read_text())
         if role != TAG
     ] == []
+
+
+def _legs(docs) -> dict:
+    return _job(docs)["spec"]["template"]["spec"]["containers"][0]
+
+
+def _dialled_namespaces(stubs, levers) -> set[str]:
+    """The namespaces of the URLs the legs container dials under `levers`."""
+    rows = json.loads(_env_of(_legs(_docs(_verify_render(stubs, levers))))["TARGETS"])
+    return {
+        namespace
+        for row in rows
+        for namespace in re.findall(r"\.([\w-]+)\.svc\.cluster\.local", row["url"])
+    }
+
+
+@pytest.mark.parametrize(
+    ("levers", "namespaces"),
+    [
+        ({}, {"homelab", "observability", "flux-system"}),
+        ({"netpol_baseline_enforced": False}, {"observability", "flux-system"}),
+        ({"netpol_baseline_obs_enforced": False}, {"homelab", "flux-system"}),
+        (
+            {"netpol_baseline_enforced": False, "netpol_baseline_obs_enforced": False},
+            {"flux-system"},
+        ),
+    ],
+    ids=["both-on", "homelab-off", "observability-off", "both-off"],
+)
+def test_each_lever_drops_only_its_own_plane(stubs, levers, namespaces):
+    """The flux role owns flux-system's fence, so neither lever of this role turns it off."""
+    assert _dialled_namespaces(stubs, levers) == namespaces
+
+
+def test_a_service_port_row_dials_the_service_port(stubs):
+    """A flux Service maps port 80 to another pod port, and a leg on the pod port reaches nothing."""
+    defaults = yaml_fast.safe_load(
+        (K8S_ROLES / TAG / "defaults" / "main.yml").read_text()
+    )
+    rows = [r for r in defaults["netpol_baseline_probe_targets"] if "service_port" in r]
+    assert {r["service"] for r in rows} >= {"source-controller"}
+    dialled = {
+        row["url"]
+        for row in json.loads(_env_of(_legs(_docs(_verify_render(stubs))))["TARGETS"])
+    }
+    for row in rows:
+        host = f"http://{row['service']}.flux-system.svc.cluster.local"
+        assert f"{host}:{row['service_port']}/" in dialled, row
+        assert f"{host}:{row['port']}/" not in dialled, row
