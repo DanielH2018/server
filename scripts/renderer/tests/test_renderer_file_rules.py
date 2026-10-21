@@ -84,7 +84,11 @@ def test_a_deferred_file_renders_unlabelled_into_its_own_directory(stubs):
         assert labels and set(labels) == {None}, name
     kustomization = yaml_fast.safe_load(rendered.deferred[cluster.KUSTOMIZATION])
     assert kustomization["resources"] == sorted(deferred)
-    assert sorted(rendered.directories()) == ["headlamp", "headlamp-deferred"]
+    assert sorted(rendered.directories()) == [
+        "headlamp",
+        "headlamp-deferred",
+        "headlamp-verify",
+    ]
 
 
 def test_a_role_with_two_claims_writes_two_labelled_claim_files(stubs):

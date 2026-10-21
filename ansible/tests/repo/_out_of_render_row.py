@@ -54,9 +54,6 @@ ALLOW = {
     _K8S + "flux/tasks/main.yml": (
         "D5's flux PR: the sync objects come from the artifact, and the drill delete goes"
     ),
-    _K8S + "headlamp/tasks/main.yml": (
-        "D4 makes the deferred apply `headlamp-deferred`; " + _PROBE
-    ),
     _K8S + "image-builder/tasks/main.yml": (
         "D5.4: CI builds and pushes each image by its content tag"
     ),
@@ -111,8 +108,9 @@ OUT_OF_RENDER = Census(
     # traefik's flip rendered its CRDs and RBAC (#5707); 37 once crowdsec's machine
     # registration and allowlists became an initContainer (#5741); 33 once observability's
     # flip deleted its dashboard apply and its restart tasks; 30 once the flip of janitorr and
-    # jellyfin deleted their verify and cap tasks.
-    min_matches=30,
+    # jellyfin deleted their verify and cap tasks; 27 once headlamp's flip deleted its
+    # observability RBAC apply and its isolation probe.
+    min_matches=27,
     must_find=frozenset(
         {
             _K8S + "cronjob-gate/tasks/main.yml",

@@ -1,103 +1,18 @@
 ---
-# rbac.yaml is applied before the Deployment in the same `kubectl apply -f <dir>/` sweep;
-# ordering within the sweep does not matter because the pod retries until its SA exists.
+# Flux owns headlamp (D5, Wave D), so no Ansible run reaches this file. It stays for the
+# handback (docs/flux-deploy-plane.md), and the renderer reads the include's vars. The tasks it
+# held before the flip moved:
+# - the observability-namespace RBAC apply: `rbac-observability.yaml` renders into
+#   `headlamp-deferred`, whose Kustomization `dependsOn` observability;
+# - the isolation probe (`headlamp-netpol-probe`): the `headlamp-verify` Job
+#   (templates/verify/).
 - name: Deploy headlamp to the cluster
   ansible.builtin.include_role:
     name: k8s/manifests
   vars:
     # The Prometheus proxy Role and RoleBinding live in the observability namespace, which the
-    # armed apply's `-n homelab` refuses (#3575). The shared role renders, prunes and digests
-    # them in their own directory, and the task below applies them.
+    # armed apply's `-n homelab` refuses (#3575). The renderer emits them as the deferred
+    # document `headlamp-deferred`.
     manifests_deferred_files:
       - rbac-observability.yaml
     manifests_deferred_dir_name: headlamp-observability
-
-# No --prune and no -n: each document names its own namespace. The shared role prunes this
-# directory's staged files from `manifests_deferred_files`. A dry run skips this apply, so the
-# server-side dry run never sees these two documents, the same gap pihole's instance 2 has.
-- name: Apply headlamp's observability RBAC
-  when: not k8s_no_mutate
-  tags: [deploy]
-  ansible.builtin.command:
-    cmd: "k3s kubectl apply -f {{ manifests_deferred_dir }}/"
-  become: true
-  register: headlamp_k8s_observability_apply
-  changed_when: >-
-    'created' in headlamp_k8s_observability_apply.stdout
-    or 'configured' in headlamp_k8s_observability_apply.stdout
-
-# ── prove the policy is enforced, rather than merely applied ────────────────────────────────
-# Its own directory: `kubectl apply -f <dir>` reads every file in the directory it is given, and
-# a Job's pod template is immutable, so a Job left beside the Deployments would be re-applied as
-# either a no-op or an error.
-- name: Create the headlamp probe manifest directory
-  tags: [config]
-  ansible.builtin.file:
-    path: /etc/rancher/k3s/manifests/headlamp-netpol
-    state: directory
-    mode: "0700"
-    owner: root
-    group: root
-  become: true
-  when: not k8s_dry_run | bool
-
-- name: Render the headlamp isolation probe
-  tags: [config]
-  ansible.builtin.template:
-    src: netpol-probe-job.yaml.j2
-    dest: /etc/rancher/k3s/manifests/headlamp-netpol/netpol-probe-job.yaml
-    mode: "0644"
-    owner: root
-    group: root
-  become: true
-  when: not k8s_dry_run | bool
-
-- name: Clear the previous headlamp probe run
-  when: not k8s_no_mutate
-  tags: [deploy]
-  ansible.builtin.command:
-    cmd: >-
-      k3s kubectl -n {{ k8s_namespace }} delete job headlamp-netpol-probe
-      --ignore-not-found --wait=true
-  become: true
-  changed_when: true
-
-- name: Run the headlamp isolation probe
-  when: not k8s_no_mutate
-  tags: [deploy]
-  ansible.builtin.command:
-    cmd: >-
-      k3s kubectl apply -f
-      /etc/rancher/k3s/manifests/headlamp-netpol/netpol-probe-job.yaml
-  become: true
-  changed_when: true
-
-- name: Wait for the headlamp isolation probe
-  when: not k8s_no_mutate
-  tags: [deploy]
-  ansible.builtin.command:
-    cmd: >-
-      k3s kubectl -n {{ k8s_namespace }} wait --for=condition=complete
-      job/headlamp-netpol-probe --timeout=120s
-  become: true
-  changed_when: false
-  register: headlamp_k8s_netpol_probe
-  failed_when: headlamp_k8s_netpol_probe.rc != 0
-
-- name: Report the headlamp isolation probe
-  when: not k8s_no_mutate
-  tags: [deploy]
-  ansible.builtin.command:
-    cmd: "k3s kubectl -n {{ k8s_namespace }} logs job/headlamp-netpol-probe"
-  become: true
-  changed_when: false
-  register: headlamp_k8s_netpol_log
-
-- name: Show the headlamp isolation result
-  tags: [deploy]
-  # The whole probe chain above is `command` tasks, so `--check` creates no Job and reads no
-  # logs. This debug is the only task left running, onto a skip result with no
-  # `stdout_lines`.
-  when: not k8s_no_mutate
-  ansible.builtin.debug:
-    msg: "{{ headlamp_k8s_netpol_log.stdout_lines }}"
