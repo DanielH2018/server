@@ -794,6 +794,9 @@ containers_list:
   # the role defaults (pihole_k8s_adlists) and everything else in /etc/pihole regenerates.
   - name: pihole
     platform: k8s
+    # Flux applies pihole through `promote`, and every Ansible path skips it (D5.26). The
+    # handback is two PRs, `owner: released` then removing `owner`: docs/flux-deploy-plane.md.
+    owner: flux
     hostname: "pihole"
     # A hand-written tile in uptime-kuma's static-monitors.yaml.j2 covers it: pihole-k8s-dns, a DNS query against the VIP.
     kuma: false

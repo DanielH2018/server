@@ -110,8 +110,8 @@ def test_the_guard_is_actually_present_somewhere() -> None:
             exempted += every - sum(
                 len(UNGUARDED.findall(e)) for _, e in _expressions(doc)
             )
-    assert guarded >= 4, (
-        f"expected at least the four known rollout consumers to carry the guard, found {guarded} "
+    assert guarded >= 3, (
+        f"expected at least the three known rollout consumers to carry the guard, found {guarded} "
         "— if a consumer was removed on purpose, lower this number deliberately"
     )
     assert exempted >= 1, (

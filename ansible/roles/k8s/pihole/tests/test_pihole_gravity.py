@@ -1,10 +1,9 @@
 """pihole's Flux forms: the gravity reconcile Job, and instance 2's apply after instance 1.
 
 The script tests run `pihole_gravity.main` against two stateful local stand-ins for FTL's v6
-REST API, one per instance. The render tests copy the role, move `templates/verify-inert/` to
-`templates/verify/` as the flip PR will, and render the copy, so the Job is checked as Flux will
-receive it while the tree's own render still emits no `pihole-verify`. The plan is
-docs/target-architecture/deploy/d5-bulk-move.md, *A verify conversion lands as inert code*.
+REST API, one per instance. The render tests render a copy of the role, so an edit to a
+template or a default reaches the Job as Flux receives it. The plan is
+docs/target-architecture/deploy/d5-bulk-move.md, step 26.
 
 Run: uv run pytest ansible/roles/k8s/pihole/tests/test_pihole_gravity.py
 """
@@ -301,7 +300,7 @@ def stubs(tmp_path_factory):
 
 
 def _render_tree_copy(tmp_path, stubs, edit=None) -> cluster.RenderedTag:
-    """The flipped render of a copy of the role and of `cluster-vars.source`.
+    """The render of a copy of the role and of `cluster-vars.source`.
 
     `edit(role)` changes the copied role first. `playbook_dir` rides in the stubs, which outrank
     every other layer, so the Job's lookups read the copy rather than the tree.
@@ -311,7 +310,6 @@ def _render_tree_copy(tmp_path, stubs, edit=None) -> cluster.RenderedTag:
     shutil.copytree(K8S_ROLES / TAG, role)
     (tree / "vars").mkdir()
     shutil.copy(ANSIBLE / "vars" / "cluster-vars.source", tree / "vars")
-    (role / "templates" / "verify-inert").rename(role / "templates" / "verify")
     if edit:
         edit(role)
     copied = {**stubs, "playbook_dir": str(tree)}
@@ -336,10 +334,6 @@ def flipped_tag(stubs, tmp_path_factory) -> cluster.RenderedTag:
 def _job(docs: list[dict]) -> dict:
     (job,) = [doc for doc in docs if doc["kind"] == "Job"]
     return job
-
-
-def test_the_tree_renders_no_pihole_verify_while_ansible_owns_it(stubs):
-    assert cluster.render_tag(TAG, stubs).verify == {}
 
 
 def test_the_flipped_job_passes_every_job_census_row(flipped_tag):
@@ -406,9 +400,7 @@ def test_every_input_either_pod_names_is_one_the_roll_digest_reads(flipped_tag):
         for ref in pod_references(deployment["spec"]["template"])
     }
     assert named == {"configmap.yaml.j2", "secret.yaml.j2"}
-    text = (
-        K8S_ROLES / TAG / "templates" / "verify-inert" / "gravity.yaml.j2"
-    ).read_text()
+    text = (K8S_ROLES / TAG / "templates" / "verify" / "gravity.yaml.j2").read_text()
     assert {name for name in named if f"{name}'" not in text} == set()
 
 

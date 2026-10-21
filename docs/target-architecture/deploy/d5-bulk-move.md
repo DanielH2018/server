@@ -2939,6 +2939,11 @@ sizes its batch of roles against that projection.
       `templates/precheck/`, the role-owned kind that renders into `<tag>-precheck`, which
       `<tag>` depends on (#5719). The flip also names a break-glass for a guard that holds
       a fix to a down pihole-2 (#5740).
+
+      **Flip PR.** The guard moved to `templates/precheck/` and the gravity Job to
+      `templates/verify/`. The break-glass is the role default `pihole_k8s_sibling_guard`: set
+      `false` in a PR, it renders no guard Job, and the restore PR sets it back to `true`. The
+      role's `CLAUDE.md` has the procedure.
     - **Before the first Wave D flip**, the session measures one revision that changes at
       least ten flux-owned tags, from `prod`'s move to the last status, and compares it with
       the derived verify timeout. A measurement above half the timeout raises the timeout
