@@ -249,7 +249,7 @@ not rotated again by the weekly cron. Examples:
   Google Cloud console, then store the whole downloaded JSON with `sops set`. The value is
   multi-line, so it has a Secret of its own, `home-assistant-google-sa`, rendered from
   `ansible/roles/k8s/home-assistant/templates/google-sa-secret.yaml.j2`. A rotation changes
-  that one small Secret, and `--tags home-assistant` redeploys it. Delete the old key in the
+  that one small Secret. Flux applies it once `cluster_vars.py write` has updated the cluster file. Delete the old key in the
   console only after HA has restarted on the new one. `google_assistant_project_id` changes
   only with a new Google project.
 - `pi_peer_backup_ssh_key`: generate a new ed25519 keypair, store the private half with

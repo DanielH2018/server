@@ -95,6 +95,10 @@ containers_list:
   # is the one first-run ordering failure we accept, because the credential constraint wins.
   - name: crowdsec
     platform: k8s
+    # Flux applies crowdsec through `promote` and runs its ban-and-lift check as the
+    # `crowdsec-verify` Job (D5, crowdsec's own window). The handback is two PRs,
+    # `owner: released` then removing `owner`: docs/flux-deploy-plane.md.
+    owner: flux
     # Decisions expire and re-derive from logs; Metabase dashboards are provisioned.
     no_backup_claims: [crowdsec-db]
     # daniel-server's agent and its traefik bouncer authenticate here with machine/bouncer
@@ -763,6 +767,10 @@ containers_list:
   # the gate. Reaches mosquitto by Service name.
   - name: home-assistant
     platform: k8s
+    # Flux applies home-assistant through `promote`, and substitutes its Google project id and
+    # Google service-account Secret from homelab-cluster-vars (D5.11, own window). The handback
+    # is two PRs, `owner: released` then removing `owner`: docs/flux-deploy-plane.md.
+    owner: flux
     hostname: "home-assistant"
     kuma: {name: k3s Home Assistant}
     # Records HA's own listener rather than setting it: HA binds 8123 by default, and

@@ -18,8 +18,9 @@
   `ClusterFirstWithHostNet` keeps `kubernetes.default.svc` resolvable from the host network.
 
   It runs no cscli and execs into nothing. Its ServiceAccount may `patch` the one ConfigMap
-  (home-ips-rbac.yaml.j2). k8s/cronjob-gate runs it once per deploy (tasks/main.yml), and an
-  extra run writes the same values again.
+  (home-ips-rbac.yaml.j2). Flux runs it once per role revision as a gate Job in
+  `crowdsec-verify` (`flux_cronjob_gates` in defaults/main.yml), and an extra run writes the same
+  values again.
 
   Its code is the crowdsec-jobs ConfigMap, which the sidecar mounts too. The `items` list
   mounts only the two files this job runs.

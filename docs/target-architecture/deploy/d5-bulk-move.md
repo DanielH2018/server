@@ -235,7 +235,7 @@ Where each role still on Ansible stands:
 |---|---|---|
 | authelia | done (#5691) | own window |
 | blackbox-exporter | none needed | Wave A's last PR, on or after 2026-10-20T06:19Z |
-| crowdsec | done: H2.4b (#5711, #5739), H2.4c and the inert verify with its Pi channel (#5753), verify's fence peers (#5762), LAPI initContainer and arm move (#5765) | own window; the flip renames `templates/verify-inert/` to `templates/verify/` and states the hop-2 trade |
+| crowdsec | done: H2.4b (#5711, #5739), H2.4c and the inert verify with its Pi channel (#5753), verify's fence peers (#5762), LAPI initContainer and arm move (#5765) | own window; the flip PR renames `templates/verify-inert/` to `templates/verify/`, states the hop-2 trade and merges only with the operator present; a follow-up PR deletes `tasks/` |
 | dri-device-plugin | done (#5529) | waits on M2's PR 4b (#5527) |
 | headlamp | done (#5681) | after observability |
 | home-assistant | none needed | own window |
@@ -2897,6 +2897,13 @@ sizes its batch of roles against that projection.
       Ansible-owned. The PR waits for the operator to be present before it merges.
     - crowdsec: its first conversion PR lands the Pi timer, the Alloy metrics stage and the
       inert `crowdsec-verify` Job. Its flip wires the Job.
+
+      **Status, 2026-10-21.** The flip PR marks crowdsec `owner: flux`, renames
+      `templates/verify-inert/` to `templates/verify/` and turns the `crowdsec-home-ips`
+      `k8s/cronjob-gate` include into a `flux_cronjob_gates` entry. The hop-2 trade is that
+      the Job cannot read the bouncer's `last_pull`, so a missing 403 names both causes. The
+      deletions of the wait, the gate include and `tasks/verify.yml` pass 200 lines, so they
+      go in a follow-up PR, as this section's flip-size rule says.
     - netpol-baseline's PR repeats D4's drill on itself. A workload change that fails leaves
       the new policies unapplied, which is D4's exit criterion on the real policies-first
       edge. Its probe Job becomes `netpol-baseline-verify`, which depends on
