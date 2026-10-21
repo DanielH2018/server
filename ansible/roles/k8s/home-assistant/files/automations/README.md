@@ -10,11 +10,8 @@ removed here disappears from the pod, and an edit made in the HA UI does not sur
 deploy. The UI shows these automations as read-only, because a directory include leaves the
 automation editor no file to write to.
 
-To change one, edit the file and run:
-
-```
-./scripts/deploy.sh --tags home-assistant
-```
+To change one, edit the file and merge the change; Flux's `promote` applies it, because
+`deploy.sh --tags home-assistant` refuses a Flux-owned tag with exit 5.
 
 To add a file, also add its name to `home_assistant_automation_files` in
 `defaults/main.yml`. That list is what the ConfigMap carries and the init container installs, and
