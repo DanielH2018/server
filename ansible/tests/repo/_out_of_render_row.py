@@ -60,15 +60,6 @@ ALLOW = {
     _K8S + "netpol-baseline/tasks/main.yml": (
         "D4 makes the deferred apply `netpol-baseline-deferred`; " + _PROBE
     ),
-    _K8S + "pihole/tasks/apply_instance_2.yml": (
-        "D4 makes instance 2 `pihole-deferred`"
-    ),
-    _K8S + "pihole/tasks/main.yml": (
-        "D5: the gravity reconcile becomes a Job or an initContainer"
-    ),
-    _K8S + "pihole/tasks/roll_one.yml": (
-        "D5.1e: a restart annotation replaces the rollout restart"
-    ),
     _K8S + "registry/tasks/main.yml": (
         "D5: the self-test and netpol probe Jobs become `registry-verify`"
     ),
@@ -109,8 +100,9 @@ OUT_OF_RENDER = Census(
     # registration and allowlists became an initContainer (#5741); 33 once observability's
     # flip deleted its dashboard apply and its restart tasks; 30 once the flip of janitorr and
     # jellyfin deleted their verify and cap tasks; 27 once headlamp's flip deleted its
-    # observability RBAC apply and its isolation probe.
-    min_matches=27,
+    # observability RBAC apply and its isolation probe; 21 once pihole's flip deleted its
+    # roll, apply and gravity tasks.
+    min_matches=21,
     must_find=frozenset(
         {
             _K8S + "cronjob-gate/tasks/main.yml",

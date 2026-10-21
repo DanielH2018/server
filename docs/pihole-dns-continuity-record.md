@@ -5,6 +5,11 @@ them apart, and the restart triggers each instance reads, are worked out here.
 `ansible/roles/k8s/pihole/CLAUDE.md` keeps the operating rules, within the inject hook's
 character budget, and a session reads this page when it edits that role.
 
+Both sections below describe the Ansible-era roll. pihole is flux-owned since its own-window
+flip, and those tasks (`roll_one.yml`, `apply_instance_2.yml`) are deleted; Flux orders the two
+instances with `dependsOn` and `wait: true`. The record stays because returning pihole to Ansible restores them
+(`docs/flux-deploy-plane.md`) and their derivations carry over.
+
 ## Where the roll expectation for pihole-2 comes from
 
 - **`probe.py health pihole` holds a roll expectation for pihole-2 only because `roll_one.yml`

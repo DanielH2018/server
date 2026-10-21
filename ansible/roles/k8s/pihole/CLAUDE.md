@@ -5,16 +5,14 @@ continuity. Coexisted with a Docker-era copy through the DNS cutover; that copy 
 
 ## At a glance
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates, tasks or containers_list entry, or the k3s role's Longhorn tier lists. -->
-- **Deploy tag:** `--tags "pihole"`
+- **Applied by:** Flux, through `promote` (`owner: flux`); `deploy.sh` refuses `--tags=pihole`
+  with exit 5
 - **Images:** `pihole/pihole` (`pihole_k8s_image`), `klutchell/unbound`
   (`pihole_k8s_unbound_image`)
 - **Route:** `pihole.<domain>` · `pihole.local.<domain>`, Authelia one_factor
 - **Claims:** `pihole-etc` (no backup (StorageClass longhorn-nobackup)), `pihole-etc-2` (no
   backup (StorageClass longhorn-nobackup)), plus the claims a template loop declares (`{{ claim
   }}`)
-- **Auto-deploy:** denylisted (`k8s_autodeploy: false`) — platform — LAN DNS resolver; a failed
-  deploy breaks name resolution fleet-wide, and host probes stay green through that kind of
-  outage
 <!-- /generated_from -->
 
 - **The unbound sidecar** listens on `pihole_k8s_unbound_port` inside the pod; FTL owns `:53`
@@ -27,47 +25,19 @@ continuity. Coexisted with a Docker-era copy through the DNS cutover; that copy 
   `pihole.toml` from the `FTLCONF` env, `pihole-FTL.db` is query history, not state.
 
 ## Notable
-- **Blocklist state is declared, not volume-seeded.** `tasks/main.yml` reconciles
-  `pihole_k8s_adlists`/`pihole_k8s_regex_deny` into `gravity.db` with idempotent
-  INSERT/UPDATE, then rebuilds gravity only on a change — `pihole-FTL.db` moves on every DNS
-  query, so a coexistence seed could never pass a quiescent-state verification.
-- **Both the apply and the restart are sequenced by hand, not left to the shared batch drain.**
-  The two pods are restarted one at a time (`manifests_rollout: ''` plus `tasks/roll_one.yml`)
-  so a rollout never takes both Pi-holes down together, which is the whole reason a second
-  instance exists.
-- **Instance 2's Deployment is applied separately, from `/etc/rancher/k3s/manifests/pihole-instance-2/`.**
-  Sequencing the restarts was not enough: `kubectl apply -f <dir>/` applies every file in a
-  directory in one request, so while both Deployments rendered into one `deployment.yaml` an
-  image-pin bump changed both pod templates in the same second and the controller Recreate-cycled
-  both instances before any restart task ran (2026-09-28, issue #2884 — 52s of LAN DNS
-  downtime, and both new pods failed their image pull against the resolver they had just
-  replaced). `templates/deployment.yaml.j2` now carries instance 1 and
-  `templates/deployment-2.yaml.j2` instance 2, both from one macro body in
-  `templates/pihole-deployment.yaml.j2`, and `tasks/apply_instance_2.yml` applies the second only
-  after `roll_one.yml` has proved the first is serving.
-- **The shared role still renders instance 2, and still digests it; only the apply is this
-  role's.** `manifests_deferred_files: [deployment-2.yaml]` with
-  `manifests_deferred_dir_name: pihole-instance-2` is that contract (#2899). Rendering it here
-  instead left its bytes outside `manifests_digest`, so a change to `deployment-2.yaml.j2` moved
-  no digest at all and `probe.py releases --stale-only` fell back to paths and diffs for half
-  this role's workload. One cost remains, deliberately: a dry run renders instance 2's manifest
-  but never shows it to the API server, because `kubectl apply -f <dir>/` is not recursive and a
-  dry run must not write the node outside `roles/k8s/manifests` (#2611/#2614). The macro keeps
-  that gap small — instance 1's dry run exercises the schema instance 2 renders.
-- **`probe.py health pihole` holds a roll expectation for pihole-2 only because `roll_one.yml`
-  writes one.** `rolled_by_role: true` on the `manifests_self_rollouts` entry records
-  `restart: false` and hands the decision to `roll_one.yml`, which raises it through
-  `tasks/rollout_amend.yml` only where it issued a `rollout restart` (#2902). Deploy time is
-  covered either way: `roll_one.yml` blocks on pihole-2's `rollout status`, and `Verify both
-  Pi-hole instances have a ready DNS endpoint` refuses fewer than two ready endpoints.
-- **Each private restart needs the render AND the matching apply's own `changed` (#3127,
-  mirroring #3115).** `manifests_render is changed` compares rendered bytes alone, so on its own
-  it rolled the LAN resolvers for a YAML-comment edit. `roll_one.yml` now pairs each render
-  check with the apply that carries those bytes. The per-trigger derivation is in
-  `docs/pihole-dns-continuity-record.md`.
-- **`roll_one.yml` refuses a sibling that is terminating.** A pod keeps phase `Running` and
-  condition `Ready` for its whole grace period, so `kubectl wait` alone reported a
-  half-gone sibling as a serving one. The check reads `deletionTimestamp` and fails the play.
+- **Blocklist state is declared, not volume-seeded.** `pihole_k8s_adlists` and
+  `pihole_k8s_regex_deny` are the declaration, and `templates/verify/gravity.yaml.j2` reconciles
+  them into each FTL. `pihole-FTL.db` moves on every DNS query, so a coexistence seed could never
+  pass a quiescent-state verification.
+- **The two Deployments render in separate Kustomizations on purpose.** Instance 1 is
+  `templates/deployment.yaml.j2` in `pihole`, and instance 2 is `templates/deployment-2.yaml.j2`
+  in `pihole-deferred`, both from one macro body in `templates/pihole-deployment.yaml.j2`. With
+  both in one directory an image-pin bump changed both pod templates in the same second and the
+  controller Recreate-cycled both instances (2026-09-28, #2884: 52s of LAN DNS downtime, and both
+  new pods failed their image pull against the resolver they had just replaced).
+  `manifests_deferred_files: [deployment-2.yaml]` with `manifests_deferred_dir_name:
+  pihole-instance-2` is the contract (#2899). Why the Ansible-era roll was sequenced by hand is
+  in `docs/pihole-dns-continuity-record.md`.
 - **LAN reverse-DNS is forwarded to the router, with `server=` rather than `rev-server=`.**
   `templates/config/pihole-dnsmasq.conf.j2` forwards the zone `lan_subnet` implies to
   `lan_router_ip`, so PTR lookups for DHCP clients return the names the router leased them.
@@ -85,14 +55,18 @@ continuity. Coexisted with a Docker-era copy through the DNS cutover; that copy 
   forwards there rather than to the LAN VIP, since the VIP is subject to
   `externalTrafficPolicy: Local`. Recreating the Service needs a new address chosen deliberately.
 
-## The Flux forms wait in `templates/verify-inert/`
+## Flux applies it
 
-D5 step 26 converts this role before its Wave D flip. The conversion is inert: Ansible still
-deploys pihole, and nothing renders `templates/verify-inert/` or `templates/guard-inert/`. The
-flip PR renames the first to `templates/verify/`, which makes the renderer emit
-`pihole-verify`, and deletes the tasks the forms below replace.
-
-- **The gravity reconcile is `gravity.yaml.j2`, a mutation Job.** It runs
+- **Flux applies pihole, not Ansible** (D5, pihole's own window). Its `containers_list` entry
+  carries `owner: flux`, so `deploy.sh`, the play and the GitOps deployer all skip it, and a
+  merged change reaches the cluster when `promote` publishes and verifies the next bundle. To
+  give it back to Ansible, follow the two-PR handback in `docs/flux-deploy-plane.md`. A plain
+  revert of the flag leaves two writers on the objects, and the handback restores `roll_one.yml`,
+  `apply_instance_2.yml` and the gravity tasks from the commit before the flip.
+- **Where the tasks went.** `tasks/main.yml` holds the include of `k8s/manifests` alone, and no
+  Flux path runs it. The include keeps `manifests_self_rollouts` because the renderer reads it to
+  stamp the restart annotation on both instances.
+- **The gravity reconcile is `templates/verify/gravity.yaml.j2`, a mutation Job.** It runs
   `files/pihole_gravity.py` against each FTL's v6 REST API, through the `pihole` and
   `pihole-2-web` Services, with the password from `pihole-env`. So it needs no `pods/exec` and
   no Role. It adds what is absent, sets `enabled` where it differs, reads the result back, and
@@ -100,46 +74,47 @@ flip PR renames the first to `templates/verify/`, which makes the renderer emit
   it, so an invalid pattern in `pihole_k8s_regex_deny` fails the Job rather than sitting unused.
   netpol-baseline's `networkpolicy-pihole.yaml.j2` admits its label, `app: pihole-gravity`, on
   port 80.
-- **`roll_one.yml`'s one-at-a-time roll becomes Kustomization order.** Instance 1 renders in
+- **`roll_one.yml`'s one-at-a-time roll is Kustomization order.** Instance 1 renders in
   `pihole`, instance 2 in `pihole-deferred`, and `pihole-deferred` depends on `pihole` with
   `wait: true`. A shared ConfigMap edit moves the restart annotation the renderer stamps on
-  both instances, and instance 2 rolls only after instance 1 is Ready. `pihole-verify` depends on `pihole-deferred`, so the
-  reconcile meets two Ready instances.
-- **The ready-endpoint check is deleted at the flip, with no successor.** `Verify both Pi-hole
-  instances have a ready DNS endpoint` counts the Ready pods behind `pihole-dns`. Under Flux,
-  `wait: true` on `pihole` holds instance 1 Ready and `wait: true` on `pihole-deferred` holds
-  instance 2 Ready. `pihole-dns` selects both by `app: pihole`, so two Ready Deployments are
-  two ready endpoints.
-- **The pinned-VIP assert becomes observability's `PiholeLanAddressNotPinned` rule.** The rule
+  both instances, and instance 2 rolls only after instance 1 is Ready. `pihole-verify` depends
+  on `pihole-deferred`, so the reconcile meets two Ready instances.
+  `tests/test_pihole_gravity.py` pins that order.
+- **The ready-endpoint check has no successor.** `wait: true` on `pihole` holds instance 1
+  Ready and `wait: true` on `pihole-deferred` holds instance 2 Ready. `pihole-dns` selects both
+  by `app: pihole`, so two Ready Deployments are two ready endpoints.
+- **The pinned-VIP assert is observability's `PiholeLanAddressNotPinned` rule.** The rule
   reads `pihole-dns`'s LoadBalancer ingress from kube-state-metrics, at `warning` with
-  `verify="true"`, so the soak checks it on every revision. It lands while observability is
-  Ansible-owned, so the flip PR deletes the two LAN-address tasks without touching
-  observability. Its address is a literal, so moving `dns_k8s_vip` is an edit to that rule
-  too. `ansible/tests/services/test_lan_address_rules_agree.py` holds the literal to the
-  rendered Service.
-- **`roll_one.yml`'s sibling check becomes a guard Job, in `templates/guard-inert/`.** Under
-  Flux, `pihole` rolls instance 1 whatever state instance 2 is in, and `pihole` cannot depend
-  on `pihole-deferred` without a cycle (#5695). `files/pihole_sibling_guard.py` reads the
-  EndpointSlices of `pihole` and `pihole-2-web`, which each select one instance. It fails
-  while pihole-2 has no ready, non-terminating endpoint for 300s, so Flux holds `pihole` and
-  instance 1 keeps serving. It passes at once when `pihole` has no EndpointSlice at all, so a
-  first apply cannot deadlock on an instance 2 that only `pihole-deferred` creates. Its Role
-  grants `get` and `list` on EndpointSlices in pihole's namespace.
+  `verify="true"`, so the soak checks it on every revision. Its address is a literal, so moving
+  `dns_k8s_vip` is an edit to that rule too.
+  `ansible/tests/services/test_lan_address_rules_agree.py` holds the literal to the rendered
+  Service.
+
+## The sibling guard and its break-glass
+
+- **`roll_one.yml`'s sibling check is `templates/precheck/guard.yaml.j2`.** Under Flux,
+  `pihole` rolls instance 1 whatever state instance 2 is in, and `pihole` cannot depend on
+  `pihole-deferred` without a cycle (#5695). The renderer writes `templates/precheck/` to
+  `pihole-precheck`, which `pihole` depends on (#5719). `files/pihole_sibling_guard.py` reads the
+  EndpointSlices of `pihole` and `pihole-2-web`, which each select one instance. It fails while
+  pihole-2 has no ready, non-terminating endpoint for 300s, so Flux holds `pihole` and instance 1
+  keeps serving. It passes at once when `pihole` has no EndpointSlice at all, so a first apply
+  cannot deadlock on an instance 2 that only `pihole-deferred` creates. An API read that gets no
+  answer, a 429 or a 5xx is retried inside the 300s wait. Its Role grants `get` and `list` on
+  EndpointSlices in pihole's namespace.
 - **The guard re-runs only on a revision that rolls instance 1.** Its name embeds a digest of
   instance 1's parsed Deployment, the shared ConfigMap and the Secret template, so a change to
   `deployment-2.yaml.j2` alone keeps the name and reaches pihole-2 past a passed guard.
-- **A failed guard also holds `pihole-deferred`**, which depends on `pihole`, as
-  `roll_one.yml` refuses before `apply_instance_2.yml` runs. A revision that rolls instance 1
-  and would also fix a down pihole-2 cannot reach it then, and deleting the failed Job does not
-  help, because Flux recreates it under the same name. No break-glass exists under Flux yet
-  (#5740). An API read that gets no answer, a 429 or a 5xx is retried inside the 300s wait.
-- **The guard's place is `templates/precheck/`, and the flip PR moves it there.** The
-  renderer writes that directory to `pihole-precheck`, which `pihole` depends on, with a
-  timeout above the guard's deadline (#5719). `templates/verify/` would be wrong: it renders
-  after `pihole-deferred`. `tests/test_pihole_precheck.py` renders a role copy with the move
-  made.
-  `tests/test_pihole_sibling_guard.py` covers the guard, and `tests/test_pihole_gravity.py`
-  the gravity Job and the ordering.
+- **A failed guard also holds `pihole-deferred`**, which depends on `pihole`. A revision that
+  rolls instance 1 and would also fix a down pihole-2 cannot reach it while the guard fails.
+  Deleting the failed Job does not help, because Flux recreates it under the same name.
+- **Break-glass: set `pihole_k8s_sibling_guard: false` in `defaults/main.yml` (#5740).** The
+  render then holds no guard ConfigMap and no guard Job, `pihole-precheck` keeps only the guard's
+  RBAC, and Flux prunes the failed Job. Merge that change, wait for the revision to reach
+  pihole-2 and for pihole-2 to be Ready, then restore `true` in a second PR. The restore renders
+  the same Job name as before the bypass, and the pruned Job is gone, so the guard runs fresh and
+  passes against a serving pihole-2. Flux takes no `-e`, so the switch is a git revision, and the
+  two PRs record when the guard was off. `tests/test_pihole_precheck.py` pins both renders.
 
 ## Editing
 Adlists/regex: `defaults/main.yml`.
