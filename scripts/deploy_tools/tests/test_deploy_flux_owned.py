@@ -105,6 +105,40 @@ def test_an_owner_outside_the_known_values_refuses_is_flagged(tmp_path, monkeypa
     assert _deployed(calls) == []
 
 
+# -- deploy.sh --tags T -e target=<host> ---------------------------------------------------
+
+
+def _two_host_repo(tmp_path):
+    """daniel-box applies `wg-easy` through Flux; daniel-pi lists a Docker `wg-easy` (#5815)."""
+    repo = make_snapshot_repo(tmp_path / "repo")
+    box = repo / HOST_FILE
+    box.write_text(
+        box.read_text() + "  - { name: wg-easy, platform: k8s, owner: flux }\n"
+    )
+    (repo / "ansible/inventory/host_vars/daniel-pi.yml").write_text(
+        "containers_list:\n  - { name: wg-easy, platform: docker }\n"
+    )
+    return repo
+
+
+@pytest.mark.parametrize(
+    ("extra", "code"),
+    [
+        (["-e", "target=daniel-pi"], None),
+        (["--extra-vars", "x=1 target=daniel-pi"], None),
+        (["-e", "target=daniel-box"], DEPLOY_FLUX_OWNED),
+        ([], DEPLOY_FLUX_OWNED),
+    ],
+)
+def test_a_tag_both_hosts_list_is_refused_only_for_the_host_that_flux_owns(
+    extra, code, tmp_path, monkeypatch
+):
+    repo = _two_host_repo(tmp_path)
+    got, calls = run_front_half(monkeypatch, repo, ["--tags", "wg-easy", *extra])
+    assert got == code
+    assert bool(_deployed(calls)) == (code is None)
+
+
 # -- deploy.sh --changed -------------------------------------------------------------------
 
 
