@@ -21,7 +21,7 @@ tests:
               severity: warning
             exp_annotations: &annotations
               summary: The ghcr-mirror Deployment has wanted zero replicas for 2 hours.
-              description: "homelab/ghcr-mirror has been scaled to zero for 2 hours, or Prometheus has no kube-state-metrics scrape job. registry-gc.sh holds it at zero for at most about 25 minutes, so a run probably died before its restore. Until the mirror serves again, containerd pulls ghcr.io images straight from GHCR and a WAN outage leaves no source to pull them from. Check `journalctl -t registry-gc` on daniel-box and that no registry-gc.sh is running, then `kubectl -n homelab scale deploy/ghcr-mirror --replicas=1` or a registry deploy."
+              description: "homelab/ghcr-mirror has been scaled to zero for 2 hours, or Prometheus has no kube-state-metrics scrape job. registry-gc.sh holds it at zero for at most about 25 minutes, so a run probably died before its restore. Until the mirror serves again, containerd pulls ghcr.io images straight from GHCR and a WAN outage leaves no source to pull them from. Check `journalctl -t registry-gc` on daniel-box and that no registry-gc.sh is running, then `kubectl -n homelab scale deploy/ghcr-mirror --replicas=1`."
 
   # A GC run holds the mirror at zero for 25 minutes and restores it: nothing fires.
   - interval: 1m
