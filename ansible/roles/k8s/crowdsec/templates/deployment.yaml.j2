@@ -58,7 +58,7 @@ spec:
         # Registers every agent machine that logs in to this LAPI and creates the two operator
         # allowlists, in crowdsec-db, before the LAPI serves. The entrypoint registers only its
         # own pod's agent (AGENT_USERNAME). The machines are the app-pod sidecars, the node
-        # agents and the crowdsec-verify Job (templates/verify-inert/job.yaml.j2), all on the one
+        # agents and the crowdsec-verify Job (templates/verify/job.yaml.j2), all on the one
         # agent password.
         #
         # cscli needs no LAPI for either: it writes the SQLite file directly, as the

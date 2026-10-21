@@ -95,6 +95,10 @@ containers_list:
   # is the one first-run ordering failure we accept, because the credential constraint wins.
   - name: crowdsec
     platform: k8s
+    # Flux applies crowdsec through `promote` and runs its ban-and-lift check as the
+    # `crowdsec-verify` Job (D5, crowdsec's own window). The handback is two PRs,
+    # `owner: released` then removing `owner`: docs/flux-deploy-plane.md.
+    owner: flux
     # Decisions expire and re-derive from logs; Metabase dashboards are provisioned.
     no_backup_claims: [crowdsec-db]
     # daniel-server's agent and its traefik bouncer authenticate here with machine/bouncer

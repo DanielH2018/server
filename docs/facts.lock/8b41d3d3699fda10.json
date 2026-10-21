@@ -1,12 +1,12 @@
 {
-  "checksum": "d7f477564904d3d7cd6f68fb72b188ecee3faf419da85ab6d09c4a5153ad912a",
+  "checksum": "aaba8c44a382761c3c27bc6038925a5273c5b332298b2f70c130f07c8437bae1",
   "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
-  "key": "ansible/roles/k8s/crowdsec/CLAUDE.md#The Flux verify Job waits in `templates/verify-inert/`",
+  "key": "ansible/roles/k8s/crowdsec/CLAUDE.md#The `crowdsec-verify` Job proves the edge enforces a ban",
   "row": {
     "atoms": {
       "ansible/roles/setup/k8s_host_files/tasks/crowdsec.yml": "6551a956b06355ad705419d9b56127da48cf62a285f157809fd12a2ba9ed065a"
     },
     "python": "3.14",
-    "verified_sha": "b4c3a6ec4"
+    "verified_sha": "ff5cc95cb"
   }
 }
