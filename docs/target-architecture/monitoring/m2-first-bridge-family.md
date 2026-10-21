@@ -329,7 +329,7 @@ arm is the exception: its 1h and 30m windows already hold it, so it has no `for:
 | Arm | Alert | Expression, in words | `for` | `service` |
 |---|---|---|---|---|
 | Unavailable replicas | `K8sDeploymentReplicasUnavailable` | unavailable > 0 | 15m (N=3) | joined |
-| Zero available | `K8sDeploymentZeroAvailable` | available == 0 and desired > 0 | 10m (N=2) | joined |
+| Zero available | `K8sDeploymentZeroAvailable` | available == 0 and desired > 0 | 10m (N=2), held 5m past a recovery by `keep_firing_for` | joined |
 | Stalled rollout | `K8sDeploymentRolloutStalled` | updated < desired | 15m (N=3) | joined |
 | Crash loop | `K8sContainerCrashLooping` | the bridge's two-window restart test | — | joined through `homelab:pod_service:info` |
 | DaemonSet unavailable | `K8sDaemonSetUnavailable` | number_unavailable > 0 | 5m (N=1) | joined |
