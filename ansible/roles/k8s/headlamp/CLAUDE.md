@@ -5,12 +5,12 @@ groups it doesn't cover. See repo-root `CLAUDE.md`.
 
 ## At a glance
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates, tasks or containers_list entry, or the k3s role's Longhorn tier lists. -->
-- **Deploy tag:** `--tags "headlamp"`
+- **Applied by:** Flux, through `promote` (`owner: flux`); `deploy.sh` refuses
+  `--tags=headlamp` with exit 5
 - **Images:** `ghcr.io/headlamp-k8s/headlamp` (`headlamp_k8s_image`), `alpine`
   (`headlamp_k8s_netpol_probe_image`)
 - **Route:** `headlamp.<domain>` · `headlamp.local.<domain>`, Authelia one_factor
 - **Claims:** none (no PVC)
-- **Auto-deploy:** eligible (`k8s_autodeploy: true`)
 <!-- /generated_from -->
 
 - **Eligible for auto-deploy because** it is a stateless RollingUpdate Deployment with a
@@ -93,23 +93,21 @@ trust in Authelia (`roles/setup/k3s`), the Authelia client, and these defaults.
   sample. Charts are off per browser too, in localStorage; no IaC can pre-enable them.
 
 ## Notable
-- Ships a **negative** self-test: `templates/netpol-probe-job.yaml.j2` is a Job that must
-  FAIL to reach headlamp from a non-traefik pod, proving `networkpolicy.yaml.j2` fences it. It
-  probes a traefik control connection first, so a failure is attributable to the policy rather
-  than to DNS or a dead pod.
-- **`templates/verify-inert/` is the Flux form of that probe, and nothing renders it yet.**
-  Ansible still applies `headlamp-netpol-probe` from `tasks/main.yml` on every deploy.
-  headlamp's flip PR renames the directory to `templates/verify/`, which makes the renderer
-  emit `headlamp-verify`, and deletes the probe tasks. The Job runs `files/headlamp_verify.py`:
-  traefik's port must answer, as the control, and headlamp's must refuse. Its pod carries
-  `app: headlamp-verify`, which headlamp's fence must never admit. Its spec embeds a digest of
-  headlamp's rendered NetworkPolicy and Deployment, so an edit to either makes Flux run it
-  again. `job.yaml.j2` carries the caller census, and `tests/test_headlamp_verify.py` renders
-  the renamed copy through the Job census and checks both fences against the pod.
-- **The observability RBAC already has its Flux form.** The renderer emits
-  `rbac-observability.yaml` into `headlamp-deferred`, which depends on `headlamp` and, once
-  both are flux-owned, on `observability`. The flip deletes the "Apply headlamp's observability
-  RBAC" task, the deferred apply's Ansible half.
+- Flux applies the role (`owner: flux`), and no Ansible path runs it. `tasks/main.yml` holds the
+  include of `k8s/manifests` alone, which the renderer reads for the role's vars. To give the
+  role back to Ansible, follow the two-PR handback in `docs/flux-deploy-plane.md`; a plain
+  revert of the flag leaves two writers on the objects.
+- Ships a **negative** self-test: the `headlamp-verify` Job in `templates/verify/` must FAIL to
+  reach headlamp from a non-traefik pod, proving `networkpolicy.yaml.j2` fences it. The Job runs
+  `files/headlamp_verify.py`: traefik's port must answer, as the control, so a failure is
+  attributable to the policy rather than to DNS or a dead pod, and headlamp's must refuse. Its
+  pod carries `app: headlamp-verify`, which headlamp's fence must never admit. Its spec embeds a
+  digest of headlamp's rendered NetworkPolicy and Deployment, so an edit to either makes Flux run
+  it again. `job.yaml.j2` carries the caller census, and `tests/test_headlamp_verify.py` renders
+  the Job through the Job census and checks both fences against the pod.
+- **The observability RBAC is the `headlamp-deferred` document.** The renderer emits
+  `rbac-observability.yaml` into `headlamp-deferred`, whose Kustomization depends on `headlamp`
+  and on `observability`, which is flux-owned and so exists as a Kustomization.
 - `headlamp_k8s_session_ttl: 86400` — how long a browser session survives before Headlamp
   re-reads the ServiceAccount token.
 
