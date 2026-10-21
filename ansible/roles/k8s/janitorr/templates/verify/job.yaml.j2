@@ -1,15 +1,14 @@
 {#
-  janitorr's verify Job and the ConfigMap that carries its script, INERT until janitorr's flip.
+  janitorr's verify Job and the ConfigMap that carries its script.
 
-  This directory is `verify-inert/`, which neither reader globs: the manifests role takes only
-  top-level `templates/*.yaml.j2`, and `verify_files` takes only `templates/verify/*.yaml.j2`.
-  janitorr's flip PR moves the directory to `templates/verify/`, and the renderer then emits it
-  into `janitorr-verify` (D5, *A verify conversion lands as inert code*). The renderer passes
+  The renderer emits `templates/verify/*.yaml.j2` into `janitorr-verify` (`verify_files`), which
+  Flux applies once the `janitorr` Kustomization reads Ready. The manifests role takes only
+  top-level `templates/*.yaml.j2`, so no Ansible path renders it. The renderer passes
   `flux_job_image` and `flux_job_connect`, the helper's text, to every `templates/verify/` file
   (`render_tag`).
 
-  The Job runs `files/verify_janitorr.py`, which replaces the three proofs of
-  `tasks/verify.yml` with no `pods/exec` grant; the script's docstring names how each one
+  The Job runs `files/verify_janitorr.py`, which replaced the three proofs of `tasks/verify.yml`
+  at janitorr's flip, with no `pods/exec` grant; the script's docstring names how each one
   moved. Both names end in a digest, as the Job census requires: the ConfigMap's in
   `configmap_digest8` of its data, the Job's in `job_spec_digest8` of its spec.
 

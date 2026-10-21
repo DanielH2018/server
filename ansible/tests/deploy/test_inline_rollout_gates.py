@@ -24,7 +24,7 @@ incident.
 
 The derived half recognises three shapes of "inspects a pod", all of them via `kubectl`:
 
-  1. `get pod -l app=<workload>`     — jellyfin, janitorr
+  1. `get pod -l app=<workload>`     — no live member since jellyfin and janitorr flipped
   2. `get pod -l <anylabel>=<value>` — pihole, which selects an instance by the pod-only
                                        `instance` label because both its Deployments share
                                        `app: pihole` in an immutable selector
@@ -173,16 +173,15 @@ def test_the_gate_is_tagged_with_what_it_protects() -> None:
 # other on every run.
 _KNOWN_SELF_POD_ROLES = {
     "crowdsec",
-    "janitorr",
-    "jellyfin",
     "pihole",
 }
 
-# 20 resolved self-pod inspections across those roles, since observability's flip deleted its
-# tasks (27 before it; crowdsec's three registration execs had already become an initContainer,
-# #5741). A floor far below the real count cannot tell "one role changed shape" from "the matcher broke and half the
-# corpus stopped being read".
-_MIN_SELF_POD_INSPECTIONS = 17
+# 10 resolved self-pod inspections across those roles, since observability's flip deleted its
+# tasks and janitorr's and jellyfin's verify tasks went at their flip (27 before them; crowdsec's
+# three registration execs had already become an initContainer, #5741). A floor far below the
+# real count cannot tell "one role changed shape" from "the matcher broke and half the corpus
+# stopped being read".
+_MIN_SELF_POD_INSPECTIONS = 8
 
 # Pod inspections whose target is a Jinja expression this file cannot resolve, each excused
 # with the reason. An entry here is NOT "assume it is fine" — it is a claim that the ordering
@@ -348,8 +347,6 @@ _GATE_BUDGETS = {
         "no first-boot work does roll out well inside 180s, so this is plausible rather than "
         "verified; it is recorded as undocumented, not endorsed. Raise it if it ever times out",
     ),
-    "janitorr": (300, "default"),
-    "jellyfin": (300, "default"),
     "pihole": (300, "default"),
     "registry": (300, "default"),
     "arr-notification": (

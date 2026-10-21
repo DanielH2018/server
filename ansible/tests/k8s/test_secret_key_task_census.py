@@ -18,8 +18,9 @@ A derived variable comes from two places. `derived_variables` reads role default
 vars. `role_derived_facts` reads the `set_fact` and `register:` tasks of every role beside this
 one, since both are play-scoped: a name whose task names a secret-bearing name, or looks up a role
 template whose Jinja names one, is derived too. That is how uptime-kuma's `kuma_declarations`, a
-parse of a template embedding every push token, reaches the push-token assert (#4850), and how
-sonarr's asserts on its API reads' registers are selected (#4862).
+parse of a template embedding every push token, reached the push-token assert until uptime-kuma's
+flip deleted it (#4850), and how sonarr's asserts on its API reads' registers were selected
+(#4862).
 
 A guard counts only negated (`not k8s_no_mutate`), because `when: k8s_dry_run | bool` runs the
 task under a dry run alone. It is read from the parsed `when:`, so a guard word in a command
@@ -85,9 +86,6 @@ _SIDE_EFFECT_FREE = {
 EXEMPT: dict[str, str] = {
     "authelia/main.yml::Fail if the claude-ui credentials are missing": (
         "checks only that the TOTP secret is non-empty, and a stub is never empty"
-    ),
-    "uptime-kuma/main.yml::Check the declaration index is populated": (
-        "counts the parsed declarations, and a stub token changes no count"
     ),
 }
 
@@ -187,10 +185,10 @@ def test_every_exemption_names_a_task_the_census_would_flag() -> None:
 
 
 # "<role>/<task file>::<task name>" of each task that FAILS on a stub value. sonarr's two asserts
-# on its API reads' registers left this list once the census followed a register (#4862).
-STUB_REFUSING = (
-    "uptime-kuma/main.yml::Check every push token is in the format AutoKuma accepts",
-)
+# on its API reads' registers left this list once the census followed a register (#4862), and
+# uptime-kuma's push-token assert left it when the flip deleted the assert. No live task refuses
+# a stub today, so the fixture tests below are the check's proof that it can go red.
+STUB_REFUSING: tuple[str, ...] = ()
 
 
 def stub_refusers_without_the_guard(roles: Path, task_ids: Iterable[str]) -> list[str]:
@@ -223,7 +221,6 @@ def stub_refusers_without_the_guard(roles: Path, task_ids: Iterable[str]) -> lis
 
 
 def test_every_stub_refusing_task_is_skipped_under_stubs() -> None:
-    # fact: ansible/roles/k8s/uptime-kuma/CLAUDE.md#Traps
     assert stub_refusers_without_the_guard(K8S_ROLES, STUB_REFUSING) == [], (
         "these tasks fail on a stub value, so a shadow dry run stops at them. Give each "
         "`when: not (homelab_secret_stubs | default(false) | bool)`, never a k8s_dry_run guard"
@@ -234,12 +231,13 @@ _PUSH_TOKEN_CHECK = "Check every push token is in the format AutoKuma accepts"
 
 
 def _push_token_role(tmp_path: Path, when: str | None) -> Path:
-    """A role holding uptime-kuma's real push-token assert, with `when` replacing its guard."""
-    tasks = yaml_fast.safe_load((K8S_ROLES / "uptime-kuma/tasks/main.yml").read_text())
-    task = {
-        k: v
-        for k, v in next(t for t in tasks if t.get("name") == _PUSH_TOKEN_CHECK).items()
-        if k != "when"
+    """A role holding uptime-kuma's push-token assert as the deploy ran it, with `when` as its guard."""
+    task: dict = {
+        "name": _PUSH_TOKEN_CHECK,
+        "tags": ["deploy"],
+        "ansible.builtin.assert": {
+            "that": "kuma_declarations | kuma_malformed_push_tokens | length == 0",
+        },
     }
     if when is not None:
         task["when"] = when

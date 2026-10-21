@@ -1,6 +1,6 @@
 """jellyfin's snapshot-cap Job: set `spec.snapshotMaxSize` on the Longhorn volume behind its claim.
 
-Inert until jellyfin's flip, beside the verify Job in `templates/verify-inert/` (target slice
+Beside the verify Job in `templates/verify/` (target slice
 D5, *jellyfin's cap* and *Post-apply mutation Jobs share `<tag>-verify`*). It replaces the
 three cap tasks in `tasks/main.yml`, and makes the same three calls they make through `kubectl`:
 read the claim's `spec.volumeName`, read the volume's cap, and patch the cap only when it

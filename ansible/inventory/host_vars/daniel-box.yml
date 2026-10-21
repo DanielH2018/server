@@ -276,7 +276,7 @@ containers_list:
       - bazarr          # app DB, bare name — see the policy's header
       - prowlarr        # Application Sync writes indexers in — see the policy's header
       - sonarr-verify   # templates/verify/ Jobs — see the policy's header
-      - janitorr-verify # janitorr's templates/verify-inert/ Job, staged for its flip — see the policy's header
+      - janitorr-verify # janitorr's templates/verify/ Job — see the policy's header
     # homepage's Sonarr widget dials the ClusterIP; this key adds homepage to the callers above.
     homepage_widget: true
   # Runs a WireGuard/Mullvad sidecar sharing the pod's netns, gating qbittorrent's start so
@@ -336,7 +336,7 @@ containers_list:
       - bazarr
       - prowlarr        # Application Sync writes indexers in — see the policy's header
       - radarr-verify   # templates/verify/ Job — see the policy's header
-      - janitorr-verify # janitorr's templates/verify-inert/ Job, staged for its flip — see the policy's header
+      - janitorr-verify # janitorr's templates/verify/ Job — see the policy's header
     # homepage's Radarr widget dials the ClusterIP; this key adds homepage to the callers above.
     homepage_widget: true
   # Brings a second workload with it — flaresolverr, which renders attacker-supplied
@@ -392,6 +392,10 @@ containers_list:
   # clients are TV and phone apps that cannot complete a web SSO flow.
   - name: jellyfin
     platform: k8s
+    # Flux applies jellyfin through `promote`, caps its snapshot space and checks the render node
+    # and the library in `jellyfin-verify` (D5, Wave D). The handback is two PRs, `owner:
+    # released` then removing `owner`: docs/flux-deploy-plane.md.
+    owner: flux
     weekly_backup_claims: {jellyfin-config: 1}  # Mon
     # dri-device-plugin advertises the `devic.es/dri` resource this pod requests.
     depends_on: [media-volume, dri-device-plugin]
@@ -433,6 +437,10 @@ containers_list:
   # by bare Service name, and its verify step reads a symlink from inside the jellyfin pod.
   - name: janitorr
     platform: k8s
+    # Flux applies janitorr through `promote` and checks its dry-run state, its reach and its
+    # leaving-soon links in `janitorr-verify` (D5, Wave D). The handback is two PRs, `owner:
+    # released` then removing `owner`: docs/flux-deploy-plane.md.
+    owner: flux
     depends_on: [media-volume, sonarr, radarr, jellyfin]
 
   - name: observability
@@ -852,6 +860,9 @@ containers_list:
 
   - name: uptime-kuma
     platform: k8s
+    # Flux applies uptime-kuma through `promote` (D5, Wave D). The handback is two PRs, `owner:
+    # released` then removing `owner`: docs/flux-deploy-plane.md.
+    owner: flux
     # Monitors + notifications regenerate from the git-rendered static-monitors Secret, and
     # autokuma's state rebuilds from the same Secret. DR caveat: the first-run admin is
     # recreated by hand and status HISTORY is not kept anywhere.

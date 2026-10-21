@@ -1,17 +1,16 @@
 {
-  "checksum": "01951514a44a860ca24af8f7f39546773f39cfaa258f9c8de620c6ffb4108770",
+  "checksum": "48e8d08e0cca7377e4e5804fcb6283baf71a2152b89eac65bce2b1ee1f2b8715",
   "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
   "key": "ansible/roles/k8s/uptime-kuma/CLAUDE.md#Traps",
   "row": {
     "atoms": {
       "ansible/roles/setup/k8s_host_files/tasks/uptime-kuma.yml": "cc9c66024d6c4b3e6ae084a987c8e6d69afe8904c619a8842511bc8d1d07aceb",
       "ansible/templates/ingress-host-aliases.yml.j2": "bfce7418f18065b88027443cb4c7426917f1fca83449d07f34e91e43ea5b1b74",
-      "ansible/tests/k8s/test_secret_key_task_census.py::test_every_stub_refusing_task_is_skipped_under_stubs": "52d2db10242d45418d819353a1515df296555edcec4cf1c0622d3684694cd0ce",
       "ansible/tests/services/test_kuma_static_monitors.py::test_autokuma_pin_carries_resend_interval_on_push_monitors": "861e6235e0d5da8268e7ab2a14cece7360fbbdfd912b68de10c7cac99d7ff55d",
       "ansible/tests/setup/test_kuma_check_timer.py": "681c1867a51d5de668b53f4b608b6bc0ce05391b87c4d6157a9661452454d13b",
       "scripts/secrets_mgmt/cluster_vars.py": "f4a39b84c34b6a63e328f364d726d5dfaed51f82cf8512a5c4e7cb739be07a4b"
     },
     "python": "3.14",
-    "verified_sha": "269778bd3"
+    "verified_sha": "ff5cc95cb"
   }
 }

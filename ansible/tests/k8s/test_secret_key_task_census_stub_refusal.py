@@ -66,15 +66,6 @@ def _run(
 _ASSERT_ID = "widget/main.yml::Check the token is well formed"
 
 
-def test_the_live_census_selects_the_push_token_check() -> None:
-    """kuma_declarations is a set_fact over a template carrying every push token."""
-    selected, _ = census_mod._live_census()
-    assert (
-        "uptime-kuma/main.yml::Check every push token is in the format AutoKuma accepts"
-        in selected
-    )
-
-
 def test_an_unguarded_assert_on_a_template_derived_fact_is_flagged(
     tmp_path: Path,
 ) -> None:

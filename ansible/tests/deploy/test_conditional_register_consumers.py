@@ -71,7 +71,6 @@ _COREDNS = K3S_ROLE / "tasks" / "coredns.yml"
 _KNOWN_TASK_FILES = frozenset(
     {
         "setup/k3s/tasks/coredns.yml",
-        "k8s/jellyfin/tasks/verify.yml",
         # Each of these holds a consumer flagged through the `stdout_lines`/`stderr_lines`/`delta`
         # entries in SKIP_MISSING or through a when-gated producer under the check-mode rule.
         "k8s/authelia/tasks/main.yml",

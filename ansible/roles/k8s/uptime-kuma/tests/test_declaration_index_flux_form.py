@@ -1,7 +1,7 @@
 """The Flux form of uptime-kuma's "Check the declaration index is populated" assert (#5712).
 
-`tasks/main.yml` parses the rendered `static-monitors` Secret back into an index of AutoKuma
-declarations and refuses a deploy whose index is thin. Under AutoKuma's `ON_DELETE=delete`, an
+The Ansible deploy parsed the rendered `static-monitors` Secret back into an index of AutoKuma
+declarations and refused a deploy whose index was thin. Under AutoKuma's `ON_DELETE=delete`, an
 empty declaration set applied cleanly would delete every monitor. Under Flux no task runs, so
 this module evaluates the task's own `that:` over the Secret the renderer emits for the tag,
 the bytes Flux applies. CI runs it on every PR, so a template change that empties the index is
@@ -21,31 +21,18 @@ import pytest
 
 from lib import yaml_fast
 from lib.ansible_jinja_env import make_ansible_env
-from lib.k8s_roles import K8S_ROLES
 from renderer import shadow_diff
 from renderer.renderer_lib import cluster
 from renderer.renderer_lib.context import load_stubs
 
 TAG = "uptime-kuma"
-TASKS = K8S_ROLES / TAG / "tasks" / "main.yml"
-TASK = "Check the declaration index is populated"
-
-
-def index_assert() -> str:
-    """The `that:` of the index assert, read from tasks/main.yml rather than restated.
-
-    uptime-kuma's flip PR deletes that file, and moves this expression into this module as a
-    literal in the same PR.
-    """
-    task = next(
-        t for t in yaml_fast.safe_load(TASKS.read_text()) if t.get("name") == TASK
-    )
-    return task["ansible.builtin.assert"]["that"]
+# The `that:` of the assert the flip deleted from tasks/main.yml, kept as it ran.
+INDEX_ASSERT = "kuma_declarations | length > 50"
 
 
 def index_passes(declarations: dict) -> bool:
     env = make_ansible_env(undefined_cls=jinja2.StrictUndefined)
-    passed = env.compile_expression(index_assert())(kuma_declarations=declarations)
+    passed = env.compile_expression(INDEX_ASSERT)(kuma_declarations=declarations)
     assert isinstance(passed, bool), f"the assert evaluated to {passed!r}, not a bool"
     return passed
 

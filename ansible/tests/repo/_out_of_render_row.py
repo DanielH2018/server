@@ -60,8 +60,6 @@ ALLOW = {
     _K8S + "image-builder/tasks/main.yml": (
         "D5.4: CI builds and pushes each image by its content tag"
     ),
-    _K8S + "janitorr/tasks/verify.yml": _VERIFY,
-    _K8S + "jellyfin/tasks/main.yml": "D5: the snapshot-size patch becomes a Job",
     _K8S + "netpol-baseline/tasks/main.yml": (
         "D4 makes the deferred apply `netpol-baseline-deferred`; " + _PROBE
     ),
@@ -112,8 +110,9 @@ OUT_OF_RENDER = Census(
     # (#5647); 41 once the flip of tdarr and qbittorrent deleted their verify tasks; 39 once
     # traefik's flip rendered its CRDs and RBAC (#5707); 37 once crowdsec's machine
     # registration and allowlists became an initContainer (#5741); 33 once observability's
-    # flip deleted its dashboard apply and its restart tasks.
-    min_matches=33,
+    # flip deleted its dashboard apply and its restart tasks; 30 once the flip of janitorr and
+    # jellyfin deleted their verify and cap tasks.
+    min_matches=30,
     must_find=frozenset(
         {
             _K8S + "cronjob-gate/tasks/main.yml",
