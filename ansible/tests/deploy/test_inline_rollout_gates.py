@@ -178,10 +178,10 @@ _KNOWN_SELF_POD_ROLES = {
 
 # 10 resolved self-pod inspections across those roles, since observability's flip deleted its
 # tasks and janitorr's and jellyfin's verify tasks went at their flip (27 before them; crowdsec's
-# three registration execs had already become an initContainer, #5741). A floor far below the
-# real count cannot tell "one role changed shape" from "the matcher broke and half the corpus
+# three registration execs had already become an initContainer, #5741). The floor is the measured
+# count: a lower floor cannot tell "one role changed shape" from "the matcher broke and half the corpus
 # stopped being read".
-_MIN_SELF_POD_INSPECTIONS = 8
+_MIN_SELF_POD_INSPECTIONS = 10
 
 # Pod inspections whose target is a Jinja expression this file cannot resolve, each excused
 # with the reason. An entry here is NOT "assume it is fine" — it is a claim that the ordering
