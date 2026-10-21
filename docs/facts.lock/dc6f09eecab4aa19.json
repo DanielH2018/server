@@ -1,0 +1,13 @@
+{
+  "checksum": "9f681bdae5424b620b6882a31250d21bc26f94a10b16b80193d83170eddcb2fd",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "ansible/roles/k8s/dri-device-plugin/CLAUDE.md#At a glance",
+  "row": {
+    "atoms": {
+      "ansible/roles/k8s/observability/files/rules/k8s-workloads.yaml": "59cc71c09328c6094a0447e762ad359fe0d82ae09a0185140e92d980ddde9ea9",
+      "docs/flux-deploy-plane.md": "807c3deb44c3178e7a6f9fc0bc398a3b748b95c468b14ce9b1b890c8684535d9"
+    },
+    "python": "3.14",
+    "verified_sha": "48ae33648"
+  }
+}
