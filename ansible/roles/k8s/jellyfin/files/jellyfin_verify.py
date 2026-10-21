@@ -1,9 +1,8 @@
 """jellyfin's verify Job: prove the render node opens and the library sits where its database looks.
 
-Inert until jellyfin's flip: `templates/verify-inert/` holds the Job, and the flip PR moves it
-to `templates/verify/`, where the renderer emits it into `jellyfin-verify` (target slice D5, *A
-verify conversion lands as inert code*). It replaces two of `tasks/verify.yml`'s four `kubectl
-exec` checks. The Job's pod requests the same `devic.es/dri` device, adds the same render-node
+`templates/verify/` holds the Job, and the renderer emits it into `jellyfin-verify` (target
+slice D5). It replaced two of `tasks/verify.yml`'s four `kubectl exec` checks at jellyfin's
+flip. The Job's pod requests the same `devic.es/dri` device, adds the same render-node
 group, mounts `media-data` read-only at the same two paths and runs as jellyfin's PUID and PGID.
 So it proves the wiring of a pod built like jellyfin's, not of the live jellyfin pod, which
 nothing here can reach without `pods/exec`.
@@ -17,8 +16,8 @@ error.
 The other two checks, a VAAPI encode and the HDR tone-mapping path through jellyfin's own
 ffmpeg, have no form this Job can take. The Job's image carries no ffmpeg, and the Job census
 forbids spawning a process and opening a socket, so an exec through the API is not open to it
-either. Ansible runs both until the flip; after it nothing runs them unless the operator's
-choice in #5451 lands first.
+either. The operator ruled on #5451 that jellyfin drops both at the flip. The render-node open
+and M2's `K8sExtendedResourceMissing` remain as the hardware signal.
 
 The Job reaches no Service and no API, so it imports no `flux_job_connect`. Inputs come from
 the Job's environment: `VERIFY_DEVICE`, the render node, and `VERIFY_DATA`, the library mount.

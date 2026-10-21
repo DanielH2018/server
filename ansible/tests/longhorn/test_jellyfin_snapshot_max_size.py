@@ -16,12 +16,17 @@ rewritten-and-wrong one does not.
 Run: uv run pytest ansible/tests/longhorn/test_jellyfin_snapshot_max_size.py
 """
 
+import re
+
 import pytest
 
 from _helpers import ANSIBLE, load_defaults, render_expr
+from renderer import shadow_diff
+from renderer.renderer_lib import cluster
+from renderer.renderer_lib.context import load_stubs
 
 JELLYFIN = ANSIBLE / "roles" / "k8s" / "jellyfin"
-TASKS = ANSIBLE / "roles" / "k8s" / "jellyfin" / "tasks" / "main.yml"
+CAP_SCRIPT = JELLYFIN / "files" / "jellyfin_snapshot_cap.py"
 
 GIB = 1024**3
 
@@ -39,7 +44,7 @@ def _assert_cap_is_legal(expression: str, size: str) -> None:
         f"jellyfin_k8s_snapshot_max_size resolves to {resolved} bytes against a "
         f"jellyfin_k8s_size of {size} ({floor} bytes is the floor).\nLonghorn refuses a "
         f"non-zero snapshotMaxSize below twice the volume size, so this value would fail the "
-        f"patch in tasks/main.yml on every jellyfin deploy."
+        f"patch in the cap Job on every jellyfin revision."
     )
     assert resolved != 0, (
         "jellyfin_k8s_snapshot_max_size resolves to 0, which is Longhorn's UNCAPPED value — "
@@ -104,14 +109,21 @@ def test_the_guard_rejects_a_cap_longhorn_would_refuse(what, expression, size):
         _assert_cap_is_legal(expression, size)
 
 
-def test_the_deploy_actually_applies_the_cap():
+def test_the_cap_job_actually_applies_the_cap(tmp_path):
     """A var nothing reads is a decision recorded and never enforced."""
-    tasks = TASKS.read_text()
-
-    assert "jellyfin_k8s_snapshot_max_size" in tasks, (
-        "jellyfin/tasks/main.yml no longer reads jellyfin_k8s_snapshot_max_size — the cap is "
+    stubs_file = tmp_path / "stubs.yml"
+    assert shadow_diff.main(["stubs", "--out", str(stubs_file)]) == 0
+    defaults = load_defaults(JELLYFIN)
+    cap = render_expr(
+        defaults["jellyfin_k8s_snapshot_max_size"],
+        jellyfin_k8s_size=defaults["jellyfin_k8s_size"],
+    )
+    job = cluster.render_tag("jellyfin", load_stubs(stubs_file)).verify["cap.yaml"]
+    assert re.search(rf"name: CAP_MAX_SIZE\s+value: ['\"]?{cap}['\"]?\s", job), (
+        "the rendered cap Job no longer carries jellyfin_k8s_snapshot_max_size — the cap is "
         "declared in defaults and applied to nothing, so the live volume stays uncapped"
     )
-    assert "snapshotMaxSize" in tasks, (
-        "jellyfin/tasks/main.yml no longer patches spec.snapshotMaxSize on the Longhorn volume"
+    assert "snapshotMaxSize" in CAP_SCRIPT.read_text(), (
+        "files/jellyfin_snapshot_cap.py no longer patches spec.snapshotMaxSize on the Longhorn "
+        "volume"
     )

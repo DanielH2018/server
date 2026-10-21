@@ -258,13 +258,13 @@ def test_deploy_applied_at_reads_the_release_stamp(tmp_path, monkeypatch):
     from diagnostics.probe_lib import releases
 
     monkeypatch.setattr(releases, "RELEASE_DIR", tmp_path)
-    # janitorr, an Ansible-owned CronJob role: a flux-owned one reads no release record.
-    (tmp_path / "janitorr.json").write_text('{"applied_at": "2026-08-16T09:00:00Z"}')
-    assert health._deploy_applied_at("janitorr") == "2026-08-16T09:00:00Z"
+    # crowdsec, an Ansible-owned CronJob role: a flux-owned one reads no release record.
+    (tmp_path / "crowdsec.json").write_text('{"applied_at": "2026-08-16T09:00:00Z"}')
+    assert health._deploy_applied_at("crowdsec") == "2026-08-16T09:00:00Z"
 
 
 def test_deploy_applied_at_is_none_when_unreadable(tmp_path, monkeypatch):
     from diagnostics.probe_lib import releases
 
     monkeypatch.setattr(releases, "RELEASE_DIR", tmp_path)
-    assert health._deploy_applied_at("janitorr") is None
+    assert health._deploy_applied_at("crowdsec") is None

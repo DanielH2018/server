@@ -1,6 +1,6 @@
 {#
-  jellyfin's snapshot-space cap as a post-apply mutation Job, INERT until jellyfin's flip, as
-  `job.yaml.j2` beside it is.
+  jellyfin's snapshot-space cap as a post-apply mutation Job, beside
+  `job.yaml.j2`.
 
   It replaces the three cap tasks in `tasks/main.yml`: resolve the volume from the claim's
   `spec.volumeName`, read `spec.snapshotMaxSize`, and patch it to the rendered value only when

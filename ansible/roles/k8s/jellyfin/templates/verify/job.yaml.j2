@@ -1,10 +1,9 @@
 {#
-  jellyfin's verify Job and the ConfigMap that carries its script, INERT until jellyfin's flip.
+  jellyfin's verify Job and the ConfigMap that carries its script.
 
-  This directory is `verify-inert/`, which neither reader globs: the manifests role takes only
-  top-level `templates/*.yaml.j2`, and `verify_files` takes only `templates/verify/*.yaml.j2`.
-  jellyfin's flip PR moves the directory to `templates/verify/`, and the renderer then emits it
-  into `jellyfin-verify` (D5, *A verify conversion lands as inert code*).
+  The renderer emits `templates/verify/*.yaml.j2` into `jellyfin-verify` (`verify_files`), which
+  Flux applies once the `jellyfin` Kustomization reads Ready. The manifests role takes only
+  top-level `templates/*.yaml.j2`, so no Ansible path renders it.
 
   Both names end in a digest, as the Job census requires (D5, *Rules for every Job Flux
   applies*): the ConfigMap's in `configmap_digest8` of its data, the Job's in

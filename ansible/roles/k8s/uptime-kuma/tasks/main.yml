@@ -23,44 +23,14 @@
       {{ (lookup('template', playbook_dir + '/roles/k8s/uptime-kuma/templates/static-monitors.yaml.j2')
           | from_yaml).stringData }}
 
-# The index is built by parsing a render, so a change to how that template is shaped could leave
-# it EMPTY — and an empty index renders a valid ConfigMap, applies cleanly, and gives the sync a
-# page with no monitors on it. A census that finds nothing has to fail here rather than deploy.
+# Both declaration checks the Ansible deploy ran are gone with the flip (D5, Wave D, #5712). The
+# index check is tests/test_declaration_index_flux_form.py, which holds its `that:` as a literal
+# and runs it over the static-monitors Secret the renderer emits. The push-token check is the
+# `_push_token` refusal in scripts/secrets_mgmt/cluster_vars.py's `successor_refusals`.
 #
-# Its Flux form is tests/test_declaration_index_flux_form.py, which evaluates this `that:` over
-# the static-monitors Secret the renderer emits, in CI before a merge (#5712).
-- name: Check the declaration index is populated
-  tags: [deploy]
-  ansible.builtin.assert:
-    that: kuma_declarations | length > 50
-    fail_msg: >-
-      parsed only {{ kuma_declarations | length }} AutoKuma declarations out of
-      static-monitors.yaml.j2; the status page would be rendered from an empty index
-
-# AutoKuma refuses a push token that is not 32 letters and digits with one WARN per sync and
-# never creates the monitor, so its pusher gets 404 and nothing pages (#3985). A token added by
-# hand through sops is checked by nothing else.
-#
-# Its Flux form is the `_push_token` refusal in scripts/secrets_mgmt/cluster_vars.py's
-# `successor_refusals`: the renderer emits placeholder tokens, so `cluster_vars.py write` is
-# the one Flux-era step that reads the real ones (#5712).
-#
-# DECIDED: no no_log on this assert, though it reads kuma_declarations. The filter returns
-# AutoKuma ids only, never a token, and no_log would hide the ids its message exists to name.
-- name: Check every push token is in the format AutoKuma accepts
-  tags: [deploy]
-  ansible.builtin.assert:
-    that: kuma_declarations | kuma_malformed_push_tokens | length == 0
-    fail_msg: >-
-      AutoKuma would refuse these push monitors, because each push_token is not 32 letters and
-      digits: {{ kuma_declarations | kuma_malformed_push_tokens | join(', ') }}. Re-mint each
-      token with `openssl rand -hex 16` (the add-secret skill has the sops command).
-  # Skipped under a secret stub file (`homelab_secret_stubs`, written by
-  # scripts/renderer/shadow_diff.py stubs). Every push token there is a stub, which is never 32
-  # letters and digits, so the assert would stop a shadow-render dry run at this role. The stub
-  # keeps its stub form rather than a token-shaped value, because stubcheck finds stubs by it.
-  # NOT on k8s_dry_run: an ordinary dry run still checks the real tokens.
-  when: not (homelab_secret_stubs | default(false) | bool)
+# This file stays because the renderer evaluates the set_fact above
+# (scripts/renderer/renderer_lib/task_inputs.py) and reads `manifests_*` vars from the include
+# below.
 
 - name: Deploy uptime-kuma to the cluster
   ansible.builtin.include_role:

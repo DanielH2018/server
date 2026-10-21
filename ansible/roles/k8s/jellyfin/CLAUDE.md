@@ -9,13 +9,13 @@ the Trakt and SSO-Auth decisions, and why the snapshot cap is the number it is.
 
 ## At a glance
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates, tasks or containers_list entry, or the k3s role's Longhorn tier lists. -->
-- **Deploy tag:** `--tags "jellyfin"`
+- **Applied by:** Flux, through `promote` (`owner: flux`); `deploy.sh` refuses
+  `--tags=jellyfin` with exit 5
 - **Images:** `lscr.io/linuxserver/jellyfin` (`jellyfin_k8s_image`), `python`
   (`jellyfin_k8s_plugin_init_image`)
 - **Route:** `jellyfin.<domain>` · `jellyfin.local.<domain>`, no Authelia
 - **Claims:** `jellyfin-config` (weekly -> B2 (default target)), `media-data` (not Longhorn
   (media-local))
-- **Auto-deploy:** eligible (`k8s_autodeploy: true`)
 <!-- /generated_from -->
 
 - **The image is pinned in lockstep with the `targetAbi` of every installed plugin** — ani-sync,
@@ -31,14 +31,16 @@ the Trakt and SSO-Auth decisions, and why the snapshot cap is the number it is.
   decision, not a fix.
 - **Persists:** `jellyfin-config` (`longhorn`, backed up, 8Gi) — the library database, artwork
   and trickplay data. `media-data` (from `k8s/media-volume`) is mounted read-only, twice.
-- **GPU:** requests the `devic.es/dri` extended resource. `verify.yml` proves it is reachable
-  from inside the pod as part of every deploy.
+- **GPU:** requests the `devic.es/dri` extended resource. `jellyfin-verify` opens the render node
+  from a pod built like jellyfin's on every revision that rolls it. The flip dropped the VAAPI encode and
+  the HDR tone-mapping checks, which needed `pods/exec` (operator ruling on #5451). M2's
+  `K8sExtendedResourceMissing` is the other hardware signal.
 - **LAN address:** a MetalLB LoadBalancer Service on a fixed IP, typed into TV and phone clients
   by hand and asserted after apply — a MetalLB misconfiguration otherwise moves the Service to an
   auto-assigned address with the pod still healthy. observability's
   `JellyfinLanAddressNotPinned` rule watches the same address from kube-state-metrics, at
-  `warning` with `verify="true"`, so the soak checks it on every revision. It is the assert's
-  successor at the flip, which deletes the two `tasks/main.yml` tasks. Its address is a
+  `warning` with `verify="true"`, so the soak checks it on every revision. It replaces the
+  two `tasks/main.yml` tasks the flip deleted. Its address is a
   literal, so moving the VIP is an edit to that rule too.
 
 ## Notable
@@ -71,40 +73,40 @@ the Trakt and SSO-Auth decisions, and why the snapshot cap is the number it is.
   the download, so a failed install leaves the working version in place.
   `ansible/tests/services/test_jellyfin_plugin_pins_hold_across_a_restart.py` runs all five
   installers against a seeded directory.
-- **`templates/verify-inert/` holds jellyfin's two Jobs for Flux, and nothing renders them yet.**
-  Neither the manifests role nor the renderer's `verify_files` reads that directory. jellyfin's
-  flip PR renames it to `templates/verify/`, which makes the renderer emit `jellyfin-verify`.
-  - `job.yaml.j2` runs `files/jellyfin_verify.py`, which replaces two of `tasks/verify.yml`'s
-    exec checks: the render node opens, and the library sits at the depth Jellyfin's database
-    expects, with a real file readable. Its pod is built like jellyfin's, with the same device
-    request, render group, PUID and both read-only `media-data` mounts, so it checks that wiring
-    and not the live pod. It dials no Service and no API, so it needs no fence peer and no Role.
+- **`templates/verify/` holds jellyfin's two Jobs**, which the renderer emits into
+  `jellyfin-verify`.
+  - `job.yaml.j2` runs `files/jellyfin_verify.py`, which replaced two of the retired
+    `tasks/verify.yml`'s exec checks: the render node opens, and the library sits at the depth
+    Jellyfin's database expects, with a real file readable. Its pod is built like jellyfin's, with
+    the same device request, render group, PUID and both read-only `media-data` mounts, so it
+    checks that wiring and not the live pod. It dials no Service and no API, so it needs no fence
+    peer and no Role.
   - The VAAPI encode and the HDR tone-mapping check have no Job form: the Job image has no
-    ffmpeg, and the Job census forbids spawning a process and opening a socket. Ansible runs
-    both until the flip; after that they are lost unless the operator's choice in #5451 lands
-    first.
+    ffmpeg, and the Job census forbids spawning a process and opening a socket. The operator
+    ruled on #5451 that the flip drops both.
   - `cap.yaml.j2` is the snapshot cap below, as a mutation Job.
   - Both Jobs' specs embed a digest of jellyfin's rendered Deployment, so every change that
     rolls jellyfin renames them and Flux runs them again. `tests/test_jellyfin_verify.py`
-    renders the renamed copy through the Job census.
+    renders the Jobs through the Job census.
 - **Read the live plugin census from the pod's log**, not from this file:
   `kubectl -n homelab logs <pod> -c jellyfin | grep 'Loaded plugin:'`. The image bundles five of its
   own, which move with `jellyfin_k8s_image` and need no pin here.
 
 ## The snapshot-space cap on `jellyfin-config`
-`tasks/main.yml` patches `spec.snapshotMaxSize` on the volume backing `jellyfin-config`, to
+The `jellyfin-snapshot-cap` Job patches `spec.snapshotMaxSize` on the volume backing `jellyfin-config`, to
 `jellyfin_k8s_snapshot_max_size` — 2 × `jellyfin_k8s_size`, 16 GiB today. Longhorn's default is
 `"0"`, uncapped, and this role snapshots before every deploy — so without the patch the backend grows
 behind a PVC that is itself capped.
 
-- **The patch runs after `k8s/manifests`, so a new volume's first snapshot is uncapped.** The
-  `DECIDED:` marker on the cap task has why (#3387).
-- **Under Flux the cap is a mutation Job, `templates/verify-inert/cap.yaml.j2`.** It runs
+- **The patch runs after the claim applies, so a rebuilt volume stays uncapped until the next
+  revision that rolls jellyfin.** The `DECIDED:` marker in `templates/verify/cap.yaml.j2` has why
+  (#3387).
+- **The cap is a mutation Job, `templates/verify/cap.yaml.j2`.** It runs
   `files/jellyfin_snapshot_cap.py` in `jellyfin-verify`, after the claim applies. It resolves
   the volume from the claim's `spec.volumeName` and patches only a differing cap, so a re-run
   writes nothing. Its Role in `longhorn-system` grants `get` and `patch` on every Longhorn
   volume, because the renderer cannot know the volume's generated name; that is the stated
-  trade. The template's `DECIDED:` note has what changes about the first-snapshot gap.
+  trade.
 
 - **Longhorn picks the number, not you.** It accepts `"0"` or a value no smaller than
   `Volume.Spec.Size` × 2, so the var stays derived: a hardcoded one goes illegal the moment the PVC

@@ -1,13 +1,14 @@
 ---
 # No Service, no route, no PVC: janitorr has no web UI and keeps no state of its own. What it
-# has is write access to the whole media tree, which is why verify.yml is a gate rather than a
-# formality.
+# has is write access to the whole media tree, which is why the `janitorr-verify` Job
+# (templates/verify/) gates its revision.
 
 # Read by templates/config/application.yml.j2 through lookup('template'), which defaults it to
 # false. A set_fact rather than an include_role var because the render
 # happens inside the manifests role, and an include var there would have to carry that role's
 # `manifests_` prefix to satisfy ansible-lint — which would put janitorr's deletion switch under
-# a name that says nothing about janitorr.
+# a name that says nothing about janitorr. The renderer evaluates this fact from here too
+# (scripts/renderer/renderer_lib/task_inputs.py), so the task stays after the flip.
 - name: Select the dry-run mode janitorr's config renders with
   tags: [config]
   ansible.builtin.set_fact:
@@ -20,10 +21,3 @@
 - name: Deploy janitorr to the cluster
   ansible.builtin.include_role:
     name: k8s/manifests
-
-- name: Verify janitorr
-  ansible.builtin.import_tasks: verify.yml
-  # Every proof in verify.yml is about the pod this deploy rolled out. --check rolls nothing
-  # out and skips the rollout wait, so the proofs would test the running pod and their reports
-  # would error on check-mode skip results.
-  when: not ansible_check_mode

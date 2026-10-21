@@ -6,18 +6,14 @@ reading behind each rule below.
 
 ## At a glance
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates, tasks or containers_list entry, or the k3s role's Longhorn tier lists. -->
-- **Deploy tag:** `--tags "uptime-kuma"`
+- **Applied by:** Flux, through `promote` (`owner: flux`); `deploy.sh` refuses
+  `--tags=uptime-kuma` with exit 5
 - **Images:** `louislam/uptime-kuma` (`uptime_kuma_k8s_image`), `ghcr.io/bigboot/autokuma`
   (`uptime_kuma_k8s_autokuma_image`), `ghcr.io/bigboot/kuma` (`uptime_kuma_k8s_cli_image`),
   `python` (`uptime_kuma_k8s_status_page_sync_image`)
 - **Route:** `uptime-kuma.<domain>` · `uptime-kuma.local.<domain>`, Authelia one_factor
 - **Claims:** `uptime-kuma-data` (no backup (listed in k3s_longhorn_nobackup_volumes)),
   `autokuma-data` (no backup (listed in k3s_longhorn_nobackup_volumes))
-- **Auto-deploy:** denylisted (`k8s_autodeploy: false`) — observability — the alerting spine; a
-  broken deploy cannot page about being broken. ALSO Recreate + RWO PVC (migrating-state shape)
-  — two independent reasons. COUPLING NOTE for a future promotion: two PVCs (uptime-kuma-data,
-  autokuma-data) that must revert together; a partial revert desyncs AutoKuma's entity-ID map
-  from Kuma's DB, the same shape as the recorded KD5 migration finding
 <!-- /generated_from -->
 
 - **Both claims are in the no-backup tier** — monitors and notifications regenerate from the
@@ -45,14 +41,9 @@ reading behind each rule below.
   `Restart=on-failure` reruns it. The `DECIDED:` marker above the drift tiles in
   `templates/static-monitors.yaml.j2` keeps those deadlines. ENFORCED:
   `ansible/tests/setup/test_kuma_check_timer.py`.
-- **The push-token format check skips under a secret stub file**, on `when: not
-  (homelab_secret_stubs | default(false) | bool)`. A stub token is never 32 letters and digits,
-  so the check stopped the first shadow-render dry run here. The guard is not `k8s_dry_run`,
-  because an ordinary dry run still checks the real tokens. ENFORCED:
-  `ansible/tests/k8s/test_secret_key_task_census.py::test_every_stub_refusing_task_is_skipped_under_stubs`.
-- **Both declaration checks in `tasks/main.yml` have a Flux form, landed before the flip
-  (#5712).** The index check's is `tests/test_declaration_index_flux_form.py`, which runs the
-  assert's `that:` over the Secret the renderer emits. The push-token check's is the
+- **Both declaration checks the Ansible deploy ran have a Flux form (#5712).** The index
+  check is `tests/test_declaration_index_flux_form.py`, which runs the assert's `that:` over
+  the Secret the renderer emits. The push-token check's is the
   `_push_token` refusal in `scripts/secrets_mgmt/cluster_vars.py`, because the render
   carries placeholder tokens and only `cluster_vars.py write` reads the real ones. The
   `autokuma-claims` staging-directory absent arm moved to

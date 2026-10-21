@@ -1,0 +1,12 @@
+{
+  "checksum": "715a77b0e58309098eb0cfa0fc25f0af1b01cb8dcc699b581f0b6a7429a245e1",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "ansible/roles/k8s/janitorr/CLAUDE.md#The Flux verify Job",
+  "row": {
+    "atoms": {
+      "scripts/renderer/renderer_lib/task_inputs.py": "e0f1c9a63f7d68cf8e3a9f49ea6bf73b1d7077eaa8f651f5988afcfa126bb3b0"
+    },
+    "python": "3.14",
+    "verified_sha": "ff5cc95cb"
+  }
+}
