@@ -735,6 +735,10 @@ containers_list:
   # coordinator accepts one client, hence `strategy: Recreate` in the role.
   - name: zigbee2mqtt
     platform: k8s
+    # Flux applies zigbee2mqtt through `promote`, and substitutes its network key and MQTT
+    # credentials from homelab-cluster-vars (D5.10, own window). The handback is two PRs,
+    # `owner: released` then removing `owner`: docs/flux-deploy-plane.md.
+    owner: flux
     depends_on: [mosquitto]
     hostname: "zigbee2mqtt"
     kuma: {name: k3s Zigbee2MQTT}
