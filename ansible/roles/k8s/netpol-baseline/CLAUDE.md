@@ -57,10 +57,12 @@ tighter or looser allow-list than the baseline. Deploys no workload of its own.
 - **`netpol_baseline_node_cidrs` are `/32` host addresses on purpose** — a `/16` here would
   silently cancel the whole policy.
 - **Flux orders the role last.** `K8S_APPLIES_LAST` in `ansible/filter_plugins/toposort.py`
-  gives the role an edge onto every other k8s entry, and the renderer's ordering makes
-  `netpol-baseline-deferred` depend on every other tag's `-deferred` Kustomization.
-  `netpol-baseline-verify` depends on `netpol-baseline-deferred`. The Ansible tasks drained
-  queued rollouts first, and Flux's `wait` and that ordering replace the drain.
+  gives the role an edge onto every other k8s entry. The renderer's ordering turns that into
+  a dependency of `netpol-baseline` on every other flux-owned tag and on every other tag's
+  `-deferred` Kustomization. `netpol-baseline-deferred` depends on `netpol-baseline`, and
+  `netpol-baseline-verify` on `netpol-baseline-deferred`. The Ansible tasks drained queued
+  rollouts first, and Flux's `wait` and that ordering replace the drain. An edge onto an
+  Ansible-owned role is dropped, which is why this role flips after every other.
 - **A failed workload change leaves these policies unapplied.** The role depends on every
   other tag, so a revision whose workload change fails its `wait` never reaches
   `netpol-baseline` or its verify Job. The flip PR repeats D4's drill on this edge.
