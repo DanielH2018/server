@@ -27,7 +27,7 @@ task under a dry run alone. It is read from the parsed `when:`, so a guard word 
 or a comment is not credited.
 
 The exemptions are per task, which is why this is its own module: a `Census` row's `allow` map
-is keyed by file and would exempt all of authelia's `tasks/main.yml`.
+is keyed by file and would exempt every task in a role's `tasks/main.yml`.
 
 A second check covers the tasks a stub makes fail rather than act. `STUB_REFUSING` names each,
 and each must carry the `homelab_secret_stubs` guard itself. It predates the assert rule above,
@@ -83,15 +83,14 @@ _SIDE_EFFECT_FREE = {
 
 # "<role>/<task file>::<task name>" -> why the task may act under a stub file. For an `assert` or
 # `fail`, why it passes on any stub value. A stub is `homelab_secret_stub`'s label, never empty.
-EXEMPT: dict[str, str] = {
-    "authelia/main.yml::Fail if the claude-ui credentials are missing": (
-        "checks only that the TOTP secret is non-empty, and a stub is never empty"
-    ),
-}
+EXEMPT: dict[str, str] = {}
 
-# Must be selected, because it names `authelia_password_argon2`, and must pass on its guard.
-# sonarr's root-folder read held this place until sonarr's Flux flip (D5.20) deleted it.
-MUST_FIND_GUARDED = "authelia/main.yml::Fail if a stored Authelia digest is malformed"
+# Must be selected, because it names a secret key, and must pass on its
+# guard. sonarr's root-folder read held this place until sonarr's Flux flip (D5.20) deleted it,
+# authelia's digest assert until authelia's (D5), and uptime-kuma's push-token assert until its.
+MUST_FIND_GUARDED = (
+    "arr-notification/main.yml::Declare the Discord notification in {{ arr_notification_app }}"
+)
 # No role default or inventory variable derives from a secret key since `domain` was published,
 # so `derived_variables` has no real-tree member. Its fixture pair is
 # `test_a_task_naming_a_derived_variable_is_flagged`.

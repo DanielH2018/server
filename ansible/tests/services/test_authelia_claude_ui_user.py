@@ -243,11 +243,47 @@ def _placed_totp_keys(manage_claude):
     return Sentinels({_TOTP_KEY}).key_set({"config-secret.yaml": text})
 
 
+_DIGEST_KEYS = {
+    "authelia_password_argon2",
+    "authelia_claude_password_argon2",
+    "authelia_agent_password_argon2",
+}
+
+
+@pytest.mark.parametrize(
+    ("manage_claude", "manage_agent"),
+    [(True, True), (False, True), (True, False), (False, False)],
+)
+def test_the_placeholder_render_places_a_managed_users_digest_only(
+    manage_claude, manage_agent
+):
+    """`cluster_vars.py write` checks a digest only when the placeholder render places it.
+
+    The refusal succeeds the deploy-time digest assert, which checked each managed user's
+    digest under the manage flags. The template must name each digest under the same flag.
+    """
+    flags = {
+        "authelia_k8s_manage_claude_user": manage_claude,
+        "authelia_k8s_manage_agent_user": manage_agent,
+    }
+    text = render_role_template(
+        "authelia",
+        "config-secret.yaml.j2",
+        {**placeholder_vars(_DIGEST_KEYS), **flags},
+    )
+    placed = Sentinels(_DIGEST_KEYS).key_set({"config-secret.yaml": text})
+    checked = {"authelia_password_argon2"}
+    checked |= {"authelia_claude_password_argon2"} if manage_claude else set()
+    checked |= {"authelia_agent_password_argon2"} if manage_agent else set()
+    assert placed == checked
+
+
 def test_the_placeholder_render_places_the_totp_secret_only_for_a_managed_claude_user():
     """`cluster_vars.py write` refuses an empty value only for a key the render places.
 
-    That refusal succeeds "Fail if the claude-ui credentials are missing" once authelia is
-    flux-owned, so the render must place the TOTP secret under the assert's own condition.
+    That refusal succeeds the deploy-time "Fail if the claude-ui credentials are missing"
+    assert, which checked the secret under `authelia_k8s_manage_claude_user`, so the render
+    must place the TOTP secret under the same condition.
     """
     assert _placed_totp_keys(True) == {_TOTP_KEY}
     assert _placed_totp_keys(False) == set()

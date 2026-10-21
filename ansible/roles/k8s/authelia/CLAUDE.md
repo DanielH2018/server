@@ -7,12 +7,11 @@ redis incident, the notifier's history and the OIDC derivations are in
 
 ## At a glance
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates, tasks or containers_list entry, or the k3s role's Longhorn tier lists. -->
-- **Deploy tag:** `--tags "authelia"`
+- **Applied by:** Flux, through `promote` (`owner: flux`); `deploy.sh` refuses
+  `--tags=authelia` with exit 5
 - **Images:** `authelia/authelia` (`authelia_k8s_image`), `redis` (`authelia_k8s_redis_image`)
 - **Route:** `auth.<domain>` · `auth.local.<domain>`, no Authelia
 - **Claim:** `authelia-config` (daily -> R2)
-- **Auto-deploy:** denylisted (`k8s_autodeploy: false`) — platform — SSO/OIDC gate; a failed
-  deploy locks out access to everything behind it, including the tools to fix it
 <!-- /generated_from -->
 
 - **`use_authelia: false` on its own route**, since it is the middleware every other route calls.
@@ -77,9 +76,8 @@ session, remember-me included.
   takes SSO down for the fleet. The `DECIDED:` marker sits at the line. ENFORCED:
   `ansible/tests/services/test_smtp_wiring.py`.
 - **With OIDC on, the config file is a Go template, so it may hold one `{{` only.** A secret value
-  holding `{{` would stop Authelia starting. "Fail unless the jwks key expression is the
-  configuration's only template action" counts them in the real render and stops the deploy
-  before the apply. `oidc-jwk-secret.yaml` must stay in the `manifests_secret_files` expression,
+  holding `{{` would stop Authelia starting. `cluster_vars.py write` refuses a `{{` in any
+  value, naming the key and never the value. `oidc-jwk-secret.yaml` must stay in the `manifests_secret_files` expression,
   because a passed list wins whole. Log level `trace` writes each filtered config, the key
   included, to the log as base64. ENFORCED:
   `ansible/tests/services/test_authelia_oidc_jwk_secret.py`.
@@ -113,10 +111,19 @@ the container in `templates/deployment.yaml.j2`. ENFORCED:
   from SOPS, `authelia_password_argon2` and its two siblings, never the plaintext. So
   `sops set authelia_password` plus an ordinary deploy changes nothing while the recap reads
   green. The operator-only procedure is *Authelia user passwords* in `docs/secret-rotation.md`.
-- **"Fail if a stored Authelia digest is malformed" stops the deploy before the apply.** It
-  requires each managed user's digest to be the hashing block's argon2id PHC form, and no two to
-  be equal. Only a stubbed shadow run skips it, so an ordinary dry run checks the stored digests.
-  ENFORCED: `ansible/tests/services/test_authelia_digest_assert.py`.
+- **`cluster_vars.py write` refuses a bad digest before it reaches the cluster.** It requires
+  each of the three `_argon2` keys to be the hashing block's argon2id PHC form, and no two to be
+  equal. A bad digest locks every user out of SSO. The refusal names the key and never the value.
+  ENFORCED: `scripts/secrets_mgmt/tests/test_cluster_vars_write_refusals.py`, and `scripts/secrets_mgmt/tests/test_cluster_vars_write.py` for the `{{` refusal. A digest checks
+  only when the placeholder render places it, which
+  `ansible/tests/services/test_authelia_claude_ui_user.py` holds to the manage flags.
+- **Flux applies authelia, not Ansible** (D5, authelia's own window). Its `containers_list`
+  entry carries `owner: flux`, so `deploy.sh`, the play and the GitOps deployer all skip it, and
+  a merged change reaches the cluster when `promote` publishes and verifies the next bundle.
+  `tasks/main.yml` holds the include of `k8s/manifests` alone, and no Flux path runs it. To give
+  authelia back to Ansible, follow the two-PR handback in `docs/flux-deploy-plane.md`; a plain
+  revert of the flag leaves two writers on the objects. A rotation lands without `--tags`, as
+  step 4 of *Authelia user passwords* in `docs/secret-rotation.md` describes.
 - **The hashing block must render the nested form with `variant: argon2id`** — the legacy flat form
   multiplied `memory` by 1024 and passed validation silently (#1621). ENFORCED:
   `ansible/tests/services/test_authelia_config_schema.py`.
