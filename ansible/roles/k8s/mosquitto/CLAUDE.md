@@ -17,7 +17,7 @@ web UI, no route — infra role.
   deployer all skip it, and a merged change reaches the cluster when `promote` publishes and
   verifies the next bundle. To give it back to Ansible, follow the two-PR handback in
   `docs/flux-deploy-plane.md`; a plain revert of the flag leaves two writers on the objects.
-  zigbee2mqtt stays Ansible-owned and depends on it. The Deployment is `Recreate`, so a change
+  zigbee2mqtt is Flux-owned too and depends on it. The Deployment is `Recreate`, so a change
   that rolls it drops every MQTT client briefly. `mosquitto-data` is on `longhorn-nobackup`,
   and the role declares no snapshot claim, so the tag renders no `-snapshot` Job.
 - **Where the tasks went.** `tasks/main.yml` holds one task, the include of `k8s/manifests`,
