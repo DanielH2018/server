@@ -71,6 +71,15 @@ def test_plan_loki_query_step_reaches_the_url(fake_k8s_endpoint):
     assert "&step=5m" in stages[0][-1]
 
 
+def test_plan_loki_query_until_and_timeout_reach_the_argv(fake_k8s_endpoint):
+    stages = curl_pipeline.plan(
+        ["loki-query", "up", "--since", "2d", "--until", "1d", "--timeout", "90"],
+        fake_k8s_endpoint,
+    )
+    assert stages[0][stages[0].index("--max-time") + 1] == "90"
+    assert "&end=" in stages[0][-1] and "&start=" in stages[0][-1]
+
+
 def test_plan_loki_query_without_step_leaves_it_to_loki(fake_k8s_endpoint):
     stages = curl_pipeline.plan(
         ["loki-query", 'count_over_time({job="x"}[5m])'], fake_k8s_endpoint
