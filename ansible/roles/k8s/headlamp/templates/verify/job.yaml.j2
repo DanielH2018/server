@@ -1,11 +1,10 @@
 {#
-  headlamp's verify Job and the ConfigMap that carries its script, INERT until headlamp's flip.
+  headlamp's verify Job and the ConfigMap that carries its script.
 
-  This directory is `verify-inert/`, which neither reader globs: the manifests role takes only
-  top-level `templates/*.yaml.j2`, and `verify_files` takes only `templates/verify/*.yaml.j2`.
-  headlamp's flip PR moves the directory to `templates/verify/`, and the renderer then emits it
-  into `headlamp-verify` (D5, *A verify conversion lands as inert code*). The same PR deletes
-  the `headlamp-netpol-probe` tasks and `netpol-probe-job.yaml.j2`, which this Job replaces.
+  The manifests role takes only top-level `templates/*.yaml.j2`, and `verify_files` takes only
+  `templates/verify/*.yaml.j2`, so the renderer emits this directory into `headlamp-verify` (D5,
+  *A verify conversion lands as inert code*). It replaced the `headlamp-netpol-probe` Job, whose
+  tasks and `netpol-probe-job.yaml.j2` the flip deleted.
 
   Both names end in a digest, as the Job census requires (D5, *Rules for every Job Flux
   applies*): the ConfigMap's in `configmap_digest8` of its data, the Job's in

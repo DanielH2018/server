@@ -1,9 +1,8 @@
 """headlamp's verify Job: prove the `headlamp` NetworkPolicy refuses a pod that is not traefik.
 
-`templates/verify-inert/` holds the Job, and nothing renders it while Ansible owns headlamp.
-headlamp's flip PR moves it to `templates/verify/`, and the renderer then emits it into
-`headlamp-verify` (target slice D5, *A verify conversion lands as inert code*). It replaces the
-`headlamp-netpol-probe` Job that `tasks/main.yml` applies, and keeps that probe's two legs:
+`templates/verify/` holds the Job, and the renderer emits it into `headlamp-verify` (target
+slice D5, *A verify conversion lands as inert code*). It replaced the `headlamp-netpol-probe`
+Job that `tasks/main.yml` applied, and keeps that probe's two legs:
 
 - the control: `traefik:<port>` must answer, so a pod with no network cannot pass;
 - `headlamp:<port>` must refuse, or every pod in the namespace can browse the cluster as the

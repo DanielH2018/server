@@ -189,6 +189,11 @@ containers_list:
   # browser and the dashboard's (read-only) cluster identity.
   - name: headlamp
     platform: k8s
+    # Flux applies headlamp through `promote`, and `headlamp-verify` runs the isolation probe the
+    # deleted tasks ran. Its observability RBAC is `headlamp-deferred`, which waits on observability
+    # (D5, Wave D). The handback is two PRs, `owner: released` then removing `owner`:
+    # docs/flux-deploy-plane.md.
+    owner: flux
     hostname: "headlamp"
     kuma: {name: k3s Headlamp}
     port: 4466
