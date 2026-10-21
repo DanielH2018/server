@@ -40,11 +40,11 @@ def test_any_other_owner_value_raises(tmp_path, value: str):
 
 
 def test_the_entries_d2_to_d5_moved_are_live_and_owned_by_flux():
-    """D2.7 through D5.20, n8n's flip (#5546), nut's (D5.17), #5594 and #5652 moved these forty.
+    """D2.7 through D5.20, n8n's flip (#5546), nut's (D5.17), #5594 and #5652 moved these forty-one.
 
     D5.19 moved artifacts, autofix-bridge, cloudflare-ddns, docs and game-stats, #5594 moved
     monitor-bridge and prowlarr, #5652 moved karakeep, media-volume and pi-peer-backup, Wave A's last PR moved
-    blackbox-exporter, and D5.10 moved zigbee2mqtt.
+    blackbox-exporter, D5.10 moved zigbee2mqtt, and D5.11 moved home-assistant.
 
     A floor, not an equality: from D5.5 on the scaffolder writes `owner: flux` on every new
     entry, so the live set grows with each new service.
@@ -62,6 +62,7 @@ def test_the_entries_d2_to_d5_moved_are_live_and_owned_by_flux():
         "freshrss",
         "game-stats",
         "gpu-exporter",
+        "home-assistant",
         "homelab-mcp",
         "homepage",
         "ical-proxy",

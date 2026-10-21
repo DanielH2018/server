@@ -145,7 +145,7 @@ def test_the_batch_loop_skips_owned_entries_that_templates_still_see():
     # terraria and valheim since D5.15, code-server since D5.16, mosquitto, radarr and sonarr
     # since D5.20, n8n since #5546, nut since D5.17, artifacts, autofix-bridge, cloudflare-ddns,
     # docs and game-stats since D5.19, monitor-bridge and prowlarr since #5594, and karakeep,
-    # media-volume and pi-peer-backup since #5652, blackbox-exporter since D5's last Wave A PR, and zigbee2mqtt since D5.10, so the live list holds owned entries too.
+    # media-volume and pi-peer-backup since #5652, blackbox-exporter since D5's last Wave A PR, zigbee2mqtt since D5.10, and home-assistant since D5.11, so the live list holds owned entries too.
     owned = {"fixture-flux", "fixture-released"} | {
         c["name"] for c in live if "owner" in c
     }
