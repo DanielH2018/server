@@ -88,9 +88,7 @@ EXEMPT: dict[str, str] = {}
 # Must be selected, because it names a secret key, and must pass on its
 # guard. sonarr's root-folder read held this place until sonarr's Flux flip (D5.20) deleted it,
 # authelia's digest assert until authelia's (D5), and uptime-kuma's push-token assert until its.
-MUST_FIND_GUARDED = (
-    "arr-notification/main.yml::Declare the Discord notification in {{ arr_notification_app }}"
-)
+MUST_FIND_GUARDED = "arr-notification/main.yml::Declare the Discord notification in {{ arr_notification_app }}"
 # No role default or inventory variable derives from a secret key since `domain` was published,
 # so `derived_variables` has no real-tree member. Its fixture pair is
 # `test_a_task_naming_a_derived_variable_is_flagged`.
