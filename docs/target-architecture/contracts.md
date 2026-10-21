@@ -596,6 +596,13 @@ every entry is flux-owned then waits for C-2b, through the uptime-kuma edge.
   `service="deploy-pipeline"`, on the deploy-pipeline exporter's alerts. It names no deploy
   tag and no host, so no health gate reads it, and a standing hold cannot fail the `flux`
   tag's own gate (D2 Open question 12).
+  Two more values are named outside the deploy-tag rule. `service="k3s"` is the setup role's
+  tag, and it labels the cluster add-ons (coredns, metallb, longhorn and the like), whose
+  workloads belong to no `deploy.sh` tag. `service="unmapped"` is the fallback when M2's
+  workload-service mapping cannot resolve a workload. It is neither a deploy tag nor a host
+  name, so `probe.py health <tag>` never matches it. For a workload in the mapping's domain,
+  `WorkloadServiceUnmapped` pages with `service="observability"` at the same time. A
+  restarting pod outside the domain pages on its own.
 - **Watchdog.** A rule named `Watchdog` always fires. It routes to the Healthchecks.io ping.
 - **Deploy-pipeline rules.** The deploy pipeline pages through Alertmanager like any other
   service, from D2.7, which waits on M1. notification-controller's Discord alerts stay as a
@@ -804,11 +811,6 @@ No request on C6 is open.
 - **Where Alertmanager lives** (M5 Open question 2). Alertmanager lives in `observability`
   and is reached on its Service at port 9093. D5's Kustomizations for `loki-homelab`,
   `observability` and `netpol-baseline` keep that edge. Gate: before M5's PR 2a merges.
-- **`service="k3s"` for cluster add-ons** (M2 Open question 3). C7 confirms `k3s`, the setup
-  role's tag, or names the host. Gate: before M2's PR 4b merges.
-- **`service="unmapped"`** (M2 Open question 5). C7 records `unmapped` as the one value
-  outside its rule, and names `WorkloadServiceUnmapped`, which pages with
-  `service="observability"` alongside it. Gate: before M2's PR 4b merges.
 
 ### Requests on the slice document format
 
@@ -1260,3 +1262,12 @@ Applied to this page:
   the first word a SHA, as C2's `<T> unverified` does. The operator confirmed it on
   2026-10-17 in D5.2b1's review, with the two co-batched cases. No row in *Requested
   amendments not yet applied* preceded it.
+
+### Applied requests (2026-10-21)
+
+- **`service="k3s"` for cluster add-ons** (M2 Open question 3). C7 *Rule labels* confirms
+  `k3s`, the setup role's tag, rather than naming the host. M2's workload-service rules and
+  their promtool cases already emit it. This clears the gate before M2's PR 4b merges.
+- **`service="unmapped"`** (M2 Open question 5). C7 *Rule labels* records `unmapped` as a
+  value outside the deploy-tag rule and names `WorkloadServiceUnmapped`, which pages with
+  `service="observability"` alongside it. This clears the gate before M2's PR 4b merges.
