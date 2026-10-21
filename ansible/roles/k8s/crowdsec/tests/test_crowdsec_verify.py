@@ -6,9 +6,8 @@ red fixtures are D5's (*crowdsec's verify from outside the cluster*): an edge th
 while banned fails naming the edge, and a blocked evidence channel fails naming the channel.
 Every path after the ban must lift it.
 
-The render tests copy the role, move `templates/verify-inert/` to `templates/verify/` as the
-flip PR will, and render the copy, while the tree's own render still emits no
-`crowdsec-verify`. The machine the flipped Job logs in as must be one the LAPI pod's
+The render tests render the role's `templates/verify/`, from the tree and from a copy the red
+fixtures edit. The machine the flipped Job logs in as must be one the LAPI pod's
 `lapi-register` initContainer registers.
 
 Run: uv run pytest ansible/roles/k8s/crowdsec/tests/test_crowdsec_verify.py
@@ -223,7 +222,6 @@ def _render_tree_copy(tmp_path, stubs, edit=None) -> cluster.RenderedTag:
     (tree / "roles" / "k8s" / "manifests").symlink_to(K8S_ROLES / "manifests")
     (tree / "vars").mkdir()
     shutil.copy(ANSIBLE / "vars" / "cluster-vars.source", tree / "vars")
-    (role / "templates" / "verify-inert").rename(role / "templates" / "verify")
     if edit:
         edit(role)
     copied = {**stubs, "playbook_dir": str(tree)}
@@ -250,8 +248,9 @@ def _env_of(job: dict) -> dict[str, str]:
     return {e["name"]: e.get("value") for e in container["env"]}
 
 
-def test_the_tree_renders_no_crowdsec_verify_while_ansible_owns_it(stubs):
-    assert cluster.render_tag(TAG, stubs).verify == {}
+def test_the_tree_renders_crowdsec_verify(stubs):
+    verify = cluster.render_tag(TAG, stubs).verify
+    assert _job(_docs(verify))["metadata"]["name"].startswith("crowdsec-verify-")
 
 
 def test_the_flipped_job_passes_every_job_census_row(flipped):
@@ -403,5 +402,5 @@ def test_every_input_the_pod_names_is_one_the_roll_digest_reads(flipped_tag):
         "jobs-configmap.yaml.j2",
         "jobs-secret.yaml.j2",
     }
-    text = (K8S_ROLES / TAG / "templates" / "verify-inert" / "job.yaml.j2").read_text()
+    text = (K8S_ROLES / TAG / "templates" / "verify" / "job.yaml.j2").read_text()
     assert {name for name in named if f"{name}'" not in text} == set()
