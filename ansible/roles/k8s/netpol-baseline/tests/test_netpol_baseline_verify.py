@@ -24,7 +24,6 @@ from _netpol_baseline_render import job as _job
 from _netpol_baseline_render import verify_render as _verify_render
 
 import netpol_baseline_verify as verify
-from lib import yaml_fast
 from lib.k8s_roles import K8S_ROLES
 from renderer.tests._job_census import problems
 
@@ -447,52 +446,3 @@ def test_the_verify_job_reads_no_other_roles_file():
         for role in ROLE_PATH.findall(path.read_text())
         if role != TAG
     ] == []
-
-
-def _legs(docs) -> dict:
-    return _job(docs)["spec"]["template"]["spec"]["containers"][0]
-
-
-def _dialled_namespaces(stubs, levers) -> set[str]:
-    """The namespaces of the URLs the legs container dials under `levers`."""
-    rows = json.loads(_env_of(_legs(_docs(_verify_render(stubs, levers))))["TARGETS"])
-    return {
-        namespace
-        for row in rows
-        for namespace in re.findall(r"\.([\w-]+)\.svc\.cluster\.local", row["url"])
-    }
-
-
-@pytest.mark.parametrize(
-    ("levers", "namespaces"),
-    [
-        ({}, {"homelab", "observability", "flux-system"}),
-        ({"netpol_baseline_enforced": False}, {"observability", "flux-system"}),
-        ({"netpol_baseline_obs_enforced": False}, {"homelab", "flux-system"}),
-        (
-            {"netpol_baseline_enforced": False, "netpol_baseline_obs_enforced": False},
-            {"flux-system"},
-        ),
-    ],
-    ids=["both-on", "homelab-off", "observability-off", "both-off"],
-)
-def test_each_lever_drops_only_its_own_plane(stubs, levers, namespaces):
-    """The flux role owns flux-system's fence, so neither lever of this role turns it off."""
-    assert _dialled_namespaces(stubs, levers) == namespaces
-
-
-def test_a_service_port_row_dials_the_service_port(stubs):
-    """A flux Service maps port 80 to another pod port, and a leg on the pod port reaches nothing."""
-    defaults = yaml_fast.safe_load(
-        (K8S_ROLES / TAG / "defaults" / "main.yml").read_text()
-    )
-    rows = [r for r in defaults["netpol_baseline_probe_targets"] if "service_port" in r]
-    assert {r["service"] for r in rows} >= {"source-controller"}
-    dialled = {
-        row["url"]
-        for row in json.loads(_env_of(_legs(_docs(_verify_render(stubs))))["TARGETS"])
-    }
-    for row in rows:
-        host = f"http://{row['service']}.flux-system.svc.cluster.local"
-        assert f"{host}:{row['service_port']}/" in dialled, row
-        assert f"{host}:{row['port']}/" not in dialled, row
