@@ -1,11 +1,10 @@
 {#
-  The identities of jellyfin's two staged Jobs, INERT until jellyfin's flip, as `job.yaml.j2`
-  and `cap.yaml.j2` beside it are.
+  The identities of jellyfin's two Jobs, as `job.yaml.j2` and `cap.yaml.j2` beside it.
 
   `jellyfin-verify` is a ServiceAccount with no Role. The verify Job reads no API and execs into
   no pod, so it needs no grant, and its pod mounts no token. The VAAPI encode and the
-  tone-mapping check are the two that would need `pods/exec`, and they stay Ansible tasks until
-  the operator's choice in #5451.
+  tone-mapping check would need `pods/exec`, and the flip dropped both (operator ruling on
+  #5451).
 
   `jellyfin-snapshot-cap` reads the one claim by name, then reads and patches its volume. The
   volume's name is Longhorn's `pvc-<uid>`, generated when the claim binds, so the renderer

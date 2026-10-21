@@ -1,9 +1,9 @@
-"""The uptime-kuma deploy refuses a push token AutoKuma would refuse (#3985).
+"""The push-token check refuses a push token AutoKuma would refuse (#3985).
 
 AutoKuma rejects a `push_token` that is not 32 letters and digits with one WARN per sync and
 never creates the monitor, so its pusher gets HTTP 404 and nothing pages. These guards evaluate
-the role's own assert expression, through the `kuma_malformed_push_tokens` filter, over the
-declarations the real template renders.
+the assert expression the Ansible deploy ran, through the `kuma_malformed_push_tokens` filter,
+over the declarations the real template renders.
 
 Under Flux the render carries only placeholder tokens, so the assert's successor is the
 `_push_token` refusal in `cluster_vars.py write` (#5712). The last two tests hold that refusal
@@ -15,15 +15,13 @@ import secrets
 
 import pytest
 
-from _helpers import ANSIBLE, jinja_env, load_tasks, task_named
+from _helpers import jinja_env
 from _kuma_entities import _entities
 from kuma_monitors import _PUSH_TOKEN, FilterModule, kuma_malformed_push_tokens
 from secrets_mgmt import cluster_vars
 
-_TASK = task_named(
-    load_tasks(ANSIBLE / "roles/k8s/uptime-kuma/tasks/main.yml"),
-    "push token is in the format AutoKuma accepts",
-)
+# The `that:` of the assert the flip deleted from uptime-kuma's tasks/main.yml.
+_ASSERT = "kuma_declarations | kuma_malformed_push_tokens | length == 0"
 
 # The tile whose hand-minted token was refused on 2026-10-09. It is gated on its token, so it
 # drops out of the render if the seed stops opening that gate.
@@ -48,8 +46,7 @@ def _declarations(token_for) -> dict[str, dict]:
 def _assert_passes(declarations: dict[str, dict]) -> bool:
     env = jinja_env()
     env.filters.update(FilterModule().filters())
-    that = _TASK["ansible.builtin.assert"]["that"]
-    passed = env.from_string("{{ " + that + " }}").render(
+    passed = env.from_string("{{ " + _ASSERT + " }}").render(
         kuma_declarations=declarations
     )
     assert isinstance(passed, bool), f"the assert rendered {passed!r}, not a bool"

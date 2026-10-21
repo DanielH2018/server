@@ -73,18 +73,16 @@ def fence_name(entry: dict) -> str:
 # `<tag>-verify` and `rendered_docs()` does not read. Named so the derivation below cannot
 # quietly stop reaching a role: each must be a pod label `verify_pod_labels` returns.
 # qbittorrent's verify Job keeps the label of the `kubectl run` probe it replaced at the flip.
+# janitorr's tests/test_verify_janitorr.py also checks that sonarr's and radarr's fences admit its Job.
 VERIFY_CALLERS = frozenset(
-    {"sonarr-verify", "radarr-verify", "prowlarr-verify", "qbittorrent-reach-probe"}
+    {
+        "sonarr-verify",
+        "radarr-verify",
+        "prowlarr-verify",
+        "qbittorrent-reach-probe",
+        "janitorr-verify",
+    }
 )
-
-
-# Callers whose pods render only from a role's `templates/verify-inert/`, which nothing renders
-# until that role's Flux flip moves it to `templates/verify/`. Each maps to that role and to the
-# fences that list the caller ahead of the flip, so the Job is admitted on its first run (#5709).
-# janitorr's tests/test_verify_janitorr.py renders the flipped copy and checks both fences admit it.
-STAGED_CALLERS = {
-    "janitorr-verify": ("janitorr", ("sonarr", "radarr")),
-}
 
 
 @pytest.fixture(scope="module")
@@ -234,21 +232,6 @@ def test_every_caller_is_a_label_some_rendered_pod_carries(verify_pod_labels):
         (name, caller)
         for name, fence in declared_fences().items()
         for caller in fence["callers"]
-        if caller not in labels and caller not in STAGED_CALLERS
+        if caller not in labels
     }
     assert unknown == set()
-
-
-def test_each_staged_caller_is_still_staged_and_listed_by_its_fences():
-    """An exemption that outlives the flip would hide a caller nothing labels any more."""
-    fences = declared_fences()
-    for caller, (role, fenced) in STAGED_CALLERS.items():
-        templates = K8S_ROLES / role / "templates"
-        staged = (templates / "verify-inert").is_dir()
-        assert staged and not (templates / "verify").exists(), (
-            f"{role} has flipped; drop {caller} from STAGED_CALLERS so the rendered label is checked"
-        )
-        for fence in fenced:
-            assert caller in fences[fence]["callers"], (
-                f"{fence}'s netpol_from no longer lists {caller}"
-            )
