@@ -139,7 +139,9 @@ def test_the_real_map_is_honest():
     # fact: ansible/roles/setup/k3s/CLAUDE.md#Notable
     files = _role_files()
     writers = _writers(_role_texts())
-    assert "Install Longhorn" in writers and len(writers) >= 30, sorted(writers)
+    assert "Set the default Longhorn replica count" in writers and len(writers) >= 29, (
+        sorted(writers)
+    )
     assert map_problems(files[GUARD], task_tags(files), writers) == []
 
 

@@ -1,0 +1,21 @@
+---
+# Gives longhorn-manager a memory REQUEST (no limit) so it leaves BestEffort. Upstream ships the
+# container with `resources: {}`, which is BestEffort QoS and oom_score_adj 1000: the kernel's
+# first pick under memory pressure. A request alone moves it to Burstable without a new OOM-by-
+# limit kill path. The value is k3s_longhorn_manager_memory_request in defaults/main.yml; a
+# kustomize patch is copied verbatim and cannot read a variable, so a test holds the two equal
+# (ansible/tests/longhorn/test_longhorn_control_plane_resources.py). The strategic merge names the
+# one container, so the sidecars and every other field of the pod spec stay upstream's.
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: longhorn-manager
+  namespace: longhorn-system
+spec:
+  template:
+    spec:
+      containers:
+        - name: longhorn-manager
+          resources:
+            requests:
+              memory: 256Mi
