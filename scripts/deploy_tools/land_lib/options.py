@@ -35,6 +35,10 @@ HANDOFF_ENV = "LAND_HANDOFF_UNIT"
 # caller kills it at a fixed time sets it, so a long promotion wait ends `deferred` rather than
 # in a kill that writes no verdict (#5199).
 DEADLINE_ENV = "LAND_DEADLINE"
+# Seconds the weekly reboot's no-promotion window may add to LAND_DEADLINE's promotion wait,
+# so a landing that merges into the window waits out the deferral (#5457). A lander sets it
+# only when its caller's kill leaves that much room past LAND_DEADLINE.
+WINDOW_GRACE_ENV = "LAND_WINDOW_GRACE"
 # Named as a set so the deploy-tools tests can clear all of them: the renovate agent's unit
 # exports LAND_REQUIRE_AUTHOR, and a test that inherited it exercised a refusal rather than the
 # landing it was written for.
@@ -47,6 +51,7 @@ ENV_KNOBS = (
     APPROVER_ENV,
     HANDOFF_ENV,
     DEADLINE_ENV,
+    WINDOW_GRACE_ENV,
 )
 
 
@@ -95,6 +100,8 @@ class Options:
     approver: str = ""
     # `LAND_DEADLINE`, in seconds after the landing starts, or 0 for none.
     deadline: int = 0
+    # `LAND_WINDOW_GRACE`, the seconds the reboot window may add to the promotion wait.
+    window_grace: int = 0
     # Where to write PENDING, then the landing's one-line result, for a unit to hand on.
     verdict_file: str = ""
     # Sized for a PR run plus queueing behind other PRs' runs; a PR still open after this is
@@ -215,6 +222,7 @@ def parse_args(argv: list[str] | None, description: str) -> Options:
         approval_paths=os.environ.get(APPROVAL_PATHS_ENV) or "",
         approver=os.environ.get(APPROVER_ENV) or "",
         deadline=int(os.environ.get(DEADLINE_ENV) or 0),
+        window_grace=int(os.environ.get(WINDOW_GRACE_ENV) or 0),
         verdict_file=ns.verdict_file,
         merge_poll=_merge_poll_from_env(),
         primary=_primary_from_env(),

@@ -47,6 +47,10 @@ the Trakt and SSO-Auth decisions, and why the snapshot cap is the number it is.
 - `k8s_autodeploy: true` despite `Recreate` + RWO storage — the pre-apply Longhorn snapshot
   `k8s/volume-snapshot` takes on `jellyfin-config` (restorable by `k8s/volume-revert`) is what makes
   that safe. `media-data` is mounted but **not** covered by that revert.
+- **The `jellyfin-prepull` Kustomization pulls the images before the `Recreate`**, so the old pod
+  serves through a 340 MB pull from GHCR (`flux_prepull_timeout` in `defaults/main.yml`, #5855).
+  The pull Job copies the pod's placement, so the pod names its node with a required affinity
+  on the same `inventory_hostname` media-data's PV pins. That pin moves no pod.
 - SSDP/DLNA discovery is deliberately unsupported: MetalLB's L2 mode does not carry multicast,
   so this pod stays off `hostNetwork`.
 - **The newest plugin release is routinely the wrong one.** Intro Skipper tags `10.11/v…` and

@@ -38,6 +38,9 @@ may promote a newer commit. The plan is docs/target-architecture/deploy/d2-first
 - Inside the weekly reboot's no-promotion window `decide` defers (D5.2b2), so each poll inside
   it moves the deadline to LAND_WAIT_TIMEOUT_S past the window's end and prints that end. The
   window is the widest any T has, VERIFY_CAP_S, since a later T than M may promote M.
+  The first such poll also moves `land.sh`'s cap by the window's remaining length, up to
+  `window_grace_s`, so a lander whose unit leaves room for the window waits the deferral out
+  rather than giving up on a promotion nothing has failed (#5457).
 - It reads the Kustomizations with the read-only `kubectl`, ancestry with
   `git merge-base --is-ancestor`, DEPLOY_HOLD with `gh variable get`, R's `flux/soak` status
   once the Kustomizations have settled, and `prod` and `last-good` from GHCR. A read that fails keeps the wait
@@ -316,6 +319,7 @@ def land_wait(
     poll_s: int = POLL_S,
     also: frozenset[str] = frozenset(),
     cap_s: float | None = None,
+    window_grace_s: int = 0,
 ) -> WaitResult:
     """Poll until a promotion covers `merge`, DEPLOY_HOLD holds, or `timeout_s` passes.
 
@@ -330,9 +334,13 @@ def land_wait(
         also: names to wait on whatever the digests say, each with its live dependents.
         cap_s: the seconds after which it gives up whatever an in-flight verification says,
             or None for no cap. `land.sh` passes what its own deadline leaves.
+        window_grace_s: the most the reboot's no-promotion window may add to `cap_s`. The
+            first poll inside the window adds the window's remaining seconds, up to this.
     """
     started = reads.clock()
     deadline = started + timeout_s
+    cap_end = None if cap_s is None else started + cap_s
+    window_seen = False
     # The earlier commit last read in flight, and when it was first read so.
     earlier, earlier_since = "", 0.0
     expected = _Expected(reads, merge)
@@ -410,11 +418,17 @@ def land_wait(
         left, window_note = _reboot_window(reads)
         if left is not None:
             deadline = max(deadline, now + left + timeout_s)
+            # DECIDED: once per wait. A cap is hours long and windows are a week apart, so a
+            # wait never meets a second one; adding on every poll would count the window again
+            # each time.
+            if cap_end is not None and not window_seen:
+                cap_end += min(left, window_grace_s)
+            window_seen = True
         line += note + window_note
         if line != last:
             print(f"  promote.py land-wait: {line}", flush=True)
             last = line
-        if now >= deadline or (cap_s is not None and now - started >= cap_s):
+        if now >= deadline or (cap_end is not None and now >= cap_end):
             return WaitResult(
                 "gave-up",
                 TIMEOUT_CAUSE,

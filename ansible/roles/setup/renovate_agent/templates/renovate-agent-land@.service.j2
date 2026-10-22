@@ -25,6 +25,11 @@ Environment=LAND_REQUIRE_AUTHOR=app/renovate
 # soak plus promote's `render`, `images` and `publish`, after the merge and CI waits (#5427,
 # #5466).
 Environment=LAND_DEADLINE=28800
+# DECIDED: no LAND_WINDOW_GRACE, unlike claude-land. The session starts at 06:00
+# America/Chicago, 11:00 or 12:00 UTC, and runs at most renovate_agent_run_timeout_s, so none
+# of its landings reaches the weekly reboot's Sunday window, which closes at 08:15 UTC. Room for
+# the window would raise LAND_TIMEOUT_S, this TimeoutStartSec and the session's three bounds by
+# 22200s for a landing the schedule never starts (#5457).
 # /var/lib/renovate-agent-land/<n>.verdict is the one thing the session reads back, so the
 # directory is world-readable and only this unit writes it.
 StateDirectory=renovate-agent-land

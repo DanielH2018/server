@@ -2,6 +2,18 @@
 # DOCKER_MODS rides along (HACS).
 home_assistant_k8s_image: lscr.io/linuxserver/homeassistant:2026.10.2-ls257@sha256:38ca271323058a45cefa5829d58a15761df669f598862ae084d41e0a11d211d2
 
+# The budget of the home-assistant-prepull Kustomization, whose Job pulls this role's images onto
+# its node before the home-assistant Kustomization applies
+# (scripts/renderer/renderer_lib/prepull.py). The Deployment is `Recreate`, so without it the old
+# pod stops before the new pod's pull starts, and HA is down for the whole pull. With it, the old
+# pod keeps serving while the image arrives. MEASURED 2026-10-22 (#5855): the pinned amd64 image
+# is 720.85 MB compressed, and GHCR, which serves lscr.io, has served this homelab at 0.145-0.53
+# MB/s. 4500s, code-server's budget, covers a full re-pull down to 0.16 MB/s. The Job has no
+# deadline, so a pull slower still costs that revision its verdict, the Job keeps pulling, and
+# Flux applies home-assistant on a later retry. Only Flux reads it: the renderer adds the
+# Kustomization for a published tag alone, so an Ansible deploy ignores it.
+flux_prepull_timeout: 4500s  # noqa var-naming[no-role-prefix]
+
 # Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
 # Migrating state — the sharpest case in the fleet: strategy is Recreate and the config volume
 # is a ReadWriteOnce `k8s_claims` entry below, so a bad image swap can migrate
