@@ -10,8 +10,10 @@ the role refused.
 No setup role carries such a file, so the demo tree is the only subject these have; the
 `_LOADED_EXTENSIONS` census is what ties the predicate back to Ansible's own list.
 
-The last group covers a task file reached only through `include_tasks`, which narrows when the
-include applies a tag it also carries (#4384).
+Two groups cover a task file `tasks/main` does not import. One reached only through
+`include_tasks` narrows when the include applies a tag it also carries (#4384). One reached only
+from a play's `include_role ... tasks_from:` narrows to the include's tag when every task in
+it carries that tag too (#5628).
 
 Run: uv run pytest scripts/deploy_tools/tests/test_narrow_setup_task_file_kinds.py
 """
@@ -25,7 +27,15 @@ import narrow_setup
 from deploy_tools.narrow_lib import setup_index as narrow_setup_index
 from lib.repo_paths import REPO
 
-from _setup_role_fixtures import MAIN, ROLE, Tree, build, narrow
+from _setup_role_fixtures import (
+    MAIN,
+    PLAYBOOK,
+    PLAYBOOK_TEXT,
+    ROLE,
+    Tree,
+    build,
+    narrow,
+)
 
 # A second renderer of `alpha.conf.j2` under its own tag. The template is already rendered by
 # `alpha.yml`, so a skipped second reader shows up as a missing tag rather than a refusal.
@@ -249,3 +259,55 @@ def test_an_included_file_holding_a_never_task_is_flagged(tree):
     opt_in = "- name: Opt-in work\n  ansible.builtin.debug: {}\n  tags: [never]\n"
     with pytest.raises(narrow_setup.CannotNarrow, match="special tag never"):
         _touch_the_included_file(tree, include, SHARD + opt_in)
+
+
+# ── a file reached only from a play's `include_role ... tasks_from:` (#5628) ─────────────
+
+# Every task tagged, like `k3s/tasks/agent.yml`: `include_role` is dynamic, so the include's
+# tag selects the include and each task inside must carry it to run.
+JOIN = """\
+---
+- name: Join this host
+  ansible.builtin.debug:
+    msg: join
+  tags: [demo_join]
+"""
+
+JOIN_PLAY = """\
+- name: Join an opted-in host
+  hosts: "{{ join_host | default([]) }}"
+  tasks:
+    - name: Join this host
+      ansible.builtin.include_role:
+        name: demo
+        tasks_from: join
+%s"""
+
+
+def _touch_the_play_included_file(
+    tree: Tree, include_extra: str = "      tags: [demo_join]\n", join: str = JOIN
+) -> frozenset[str]:
+    """Commit a join play including `tasks/join.yml`, edit that file, narrow it."""
+    tree.write(f"{ROLE}/tasks/join.yml", join)
+    tree.write(PLAYBOOK, PLAYBOOK_TEXT + JOIN_PLAY % include_extra)
+    old = tree.commit("add the join play")
+    tree.write(f"{ROLE}/tasks/join.yml", join + "# touched\n")
+    return narrow(tree, old, tree.commit("touch the join file"))
+
+
+def test_a_play_include_whose_tag_every_task_carries_narrows_to_that_tag(tree):
+    """The k3s join play's shape: `agent.yml` narrows to `k3s_agent`, not the whole role."""
+    assert _touch_the_play_included_file(tree) == frozenset({"demo_join"})
+
+
+def test_a_play_included_file_with_a_task_missing_the_tag_is_flagged(tree):
+    """`--tags demo_join` runs the include, then skips the untagged task inside it."""
+    untagged = "- name: Untagged step\n  ansible.builtin.debug: {}\n"
+    with pytest.raises(narrow_setup.CannotNarrow, match="not every task in it carries"):
+        _touch_the_play_included_file(tree, join=JOIN + untagged)
+
+
+def test_a_play_include_with_no_tags_is_flagged(tree):
+    """No tag on the include means no `--tags` value selects it without the whole play."""
+    with pytest.raises(narrow_setup.CannotNarrow, match="carries no tags"):
+        _touch_the_play_included_file(tree, include_extra="")

@@ -10,7 +10,8 @@ export type DeckRun = {
 
 // One owed `manual_plane` role. `line` is the SessionStart banner's sentence; the rest are its
 // parts. `apply` is "" for a role no printed playbook applies, and `by_hand` says what to do.
-// `agents` holds the join-play commands that apply the agent half after `apply` (#5627).
+// `agents` holds the join-play commands that apply the agent half after `apply` (#5627); a row
+// reaching only the agent half has `apply` "" and `agents` alone (#5628).
 export type DeckManualPlane = {
   role: string
   line: string

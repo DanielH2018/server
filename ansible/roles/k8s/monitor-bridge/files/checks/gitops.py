@@ -33,6 +33,7 @@ from gitops_markers import (
     owed_clear_cmd,
     parse_behind,
     parse_contention,
+    server_tags,
     target_arg,
 )
 from gitops_ledger import (
@@ -67,20 +68,22 @@ def _apply_and_clear(pending, narrow) -> str:
     for role in sorted(oldest):
         entry = oldest[role]
         selected = narrow.get(role) or {role}
-        warning = maximal_apply_warning(role, selected)
-        how = by_hand(entry.playbook) or "apply `%s %s --tags %s%s` by hand%s%s" % (
-            PLAYBOOK_CMD,
-            entry.playbook,
-            ",".join(sorted(selected)),
-            target_arg(entry.host),
-            " (WARNING: %s)" % warning if warning else "",
-            "".join(
-                " and `%s`" % a
-                for a in agent_join_cmds(
-                    role, entry.playbook, selected, entry.agent_hosts
-                )
-            ),
-        )
+        server = server_tags(role, selected)
+        warning = maximal_apply_warning(role, server)
+        agents = agent_join_cmds(role, entry.playbook, selected, entry.agent_hosts)
+        how = by_hand(entry.playbook)
+        if not how and server:
+            how = "apply `%s %s --tags %s%s` by hand%s%s" % (
+                PLAYBOOK_CMD,
+                entry.playbook,
+                ",".join(sorted(server)),
+                target_arg(entry.host),
+                " (WARNING: %s)" % warning if warning else "",
+                "".join(" and `%s`" % a for a in agents),
+            )
+        elif not how:
+            # A row reaching only the agent half: the server play would select nothing.
+            how = "apply %s by hand" % " and ".join("`%s`" % a for a in agents)
         parts.append(
             "%s, then `%s`" % (how, owed_clear_cmd(OWED_MANUAL_PLANE, role, selected))
         )
