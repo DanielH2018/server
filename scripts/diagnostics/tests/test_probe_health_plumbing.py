@@ -51,14 +51,24 @@ parameters:
 
 
 class _Reader:
-    """A `read` that answers from {(resource, name): doc}, None for anything else."""
+    """A `read` that answers from {(resource, name): doc}, None for anything else.
+
+    Like `kubectl get -o json`, it strips `metadata.managedFields` unless the argv carries
+    `--show-managed-fields`, so a read that drops the flag loses the Corefile write time (#5935).
+    """
 
     def __init__(self, objects):
         self.objects, self.calls = objects, []
 
     def __call__(self, args):
         self.calls.append(args)
-        return self.objects.get((args[1], args[2]))
+        doc = self.objects.get((args[1], args[2]))
+        if doc is None or "--show-managed-fields" in args:
+            return doc
+        metadata = {
+            k: v for k, v in (doc.get("metadata") or {}).items() if k != "managedFields"
+        }
+        return {**doc, "metadata": metadata}
 
 
 _PROD_NODES = {"items": [{"metadata": {"name": "daniel-box"}}]}
