@@ -326,12 +326,14 @@ def _behind_stale(
     spell=lambda sha: sha,
     edit=lambda path: "v2\n",
     render_first=False,
+    revert=False,
 ):
     """littlelink applied at `base`, `at_r` moved by R, `after_r` by the ref, a render at R.
 
     With `side`, the render names a child of R that master never merged. `spell` rewrites the
     commit the render records, for a spelling git would still resolve. `edit` gives each
-    `at_r` path its text at R. With `render_first`, R is the v1 commit and the apply is a
+    `at_r` path its text at R, and `revert` puts each back to v1 at the tip. With
+    `render_first`, R is the v1 commit and the apply is a
     child of it, so `at_r` moves after both.
     """
     repo = tmp_path / "repo"
@@ -345,7 +347,13 @@ def _behind_stale(
     if side:
         r = git_out(repo, "commit-tree", "HEAD^{tree}", "-p", r, "-m", "side")
     _set_origin_master(
-        repo, _commit(repo, {p: "v3\n" for p in (_OTHER, *after_r)}, "tip")
+        repo,
+        _commit(
+            repo,
+            {p: "v3\n" for p in (_OTHER, *after_r)}
+            | ({p: "v1\n" for p in at_r} if revert else {}),
+            "tip",
+        ),
     )
     records, hits = [_release("littlelink", base)], {}
     stale = pr.compute_stale(
@@ -423,6 +431,12 @@ def test_a_mismatch_behind_the_ref_an_unseen_change_may_explain_keeps_the_path_v
         render_first=render_first,
     )
     assert stale == {"littlelink": rr.path_reason(sorted(at_r))}
+
+
+def test_a_mismatch_behind_the_ref_from_an_edit_the_tip_reverts_is_flagged(tmp_path):
+    """apply.yml's edit at R explains R's mismatch, though C and the tip agree on it."""
+    stale = _behind_stale(tmp_path, [_RENDERER], [], digest="cafef00d", revert=True)
+    assert stale == {"littlelink": rr.path_reason([_RENDERER])}
 
 
 def test_a_volume_claim_hit_a_render_behind_the_ref_holds_is_flagged(tmp_path):

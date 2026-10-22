@@ -424,7 +424,8 @@ A mismatch at R keeps the service stale, but the path reason can name a hit that
 bytes (#5903). homelab-mcp read `changed since applied: .../release_stamp.yml`, a comment-only
 edit, while a build-context file no path rule read had moved its image tag. So when no hit
 could have moved the bytes, the reader reports the drift as unexplained instead. A hit could
-not have moved them when its whole change since the applied commit is comment-only:
+not have moved them when its change since the applied commit is comment-only both at R and
+at the tip, so an edit at R that the tip reverts still counts as the cause:
 Ansible-read YAML whose content lines are equal, or a template whose edit is Jinja comments
 only. A hit under a shared role the digest does not cover always counts. The claim also needs
 the applied commit to be R or an ancestor of it, because a render older than the apply

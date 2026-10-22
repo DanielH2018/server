@@ -56,9 +56,11 @@ reason can name a hit that moved no bytes. #4840's homelab-mcp read `changed sin
 path rule read. So `unexplained_behind` asks whether ANY hit could have moved the bytes, and
 when none could, `apply_verdicts` replaces the path reason with `_UNEXPLAINED_REASON`. The
 service stays stale and keeps its place; only the reason changes. A hit could have moved the
-bytes unless its whole change from the release record's commit C to the ref is inert:
+bytes unless its change from the release record's commit C is inert both at R and at the ref:
 Ansible-read YAML whose content lines are equal at both ends, or a template whose edit is
-Jinja comments only. An `undigested_hits` hit always counts, since it acts outside the digest.
+Jinja comments only. R is the end that matters, since R's render is the one that mismatched;
+the ref is checked too so the reason never hides a hit the path verdict would name. An edit
+at R that the ref reverts is therefore still a cause. An `undigested_hits` hit always counts, since it acts outside the digest.
 The claim also needs C to be an ancestor of R, or R itself: a render older than the apply
 mismatches because of R..C, which no hit names. This reads `manifests/tasks` comments, which
 `releases_diff` declines to narrow, and that is safe here because the answer changes a label,
@@ -346,7 +348,7 @@ def unexplained_behind(records, renders, ref_sha, verdicts, hits, repo_root=REPO
     That is a service `verdicts` leaves `UNKNOWN` whose render's commit R is a full SHA, an
     ancestor of `ref_sha`, and `DRIFTED` at R by `digest_verdict`'s rules. Its release record's
     commit C is a full SHA from a clean tree, and C is R or an ancestor of it. Every hit in
-    `hits` is inert from C to `ref_sha`, by `_inert`, and none is one `undigested_hits` keeps.
+    `hits` is inert from C to R and from C to `ref_sha`, by `_inert`, and none is one `undigested_hits` keeps.
     The module docstring says why each condition is there.
     """
     found, inert = set(), {}
@@ -371,9 +373,14 @@ def unexplained_behind(records, renders, ref_sha, verdicts, hits, repo_root=REPO
         if not _is_ancestor(base, commit, repo_root):
             continue
         for path in {_hit_path(h) for h in service_hits}:
-            if (path, base) not in inert:
-                inert[path, base] = _inert(path, base, ref_sha, repo_root)
-        if all(inert[_hit_path(h), base] for h in service_hits):
+            for end in (commit, ref_sha):
+                if (path, base, end) not in inert:
+                    inert[path, base, end] = _inert(path, base, end, repo_root)
+        if all(
+            inert[_hit_path(h), base, end]
+            for h in service_hits
+            for end in (commit, ref_sha)
+        ):
             found.add(service)
     return found
 
@@ -383,14 +390,16 @@ def _inert(path, old_ref, new_ref, repo_root=REPO_ROOT):
 
     True for Ansible-read YAML whose content lines are equal at both refs, by the deployer's
     own `_content_unchanged`, and for a `.j2` whose edit is Jinja comments only, by
-    `narrow_lib.templates.comment_only`. False for every other path, and for a side git
-    cannot read.
+    `narrow_lib.templates.comment_only`. True for any path whose text is identical at both
+    refs. False for every other path, and for a side git cannot read.
     """
     from lib.narrow_git import show_at
 
     before, after = (show_at(ref, path, repo_root) for ref in (old_ref, new_ref))
     if before is None or after is None:
         return False
+    if before == after:
+        return True
     if path.endswith(".j2"):
         from deploy_tools.narrow_lib.templates import comment_only
 
