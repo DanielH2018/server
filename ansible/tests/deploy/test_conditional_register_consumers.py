@@ -92,9 +92,7 @@ _KNOWN_TASK_FILES = frozenset(
         "k8s/headlamp/tasks/main.yml",
         "k8s/prowlarr/tasks/main.yml",
         "setup/hypervisor/tasks/teardown.yml",
-        "setup/k3s/tasks/longhorn.yml",
         "setup/k3s/tasks/longhorn-backup.yml",
-        "setup/k3s/tasks/longhorn-weekly-shard.yml",
     }
 )
 

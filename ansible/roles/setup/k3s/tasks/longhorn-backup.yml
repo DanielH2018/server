@@ -83,9 +83,35 @@
   become: true
   changed_when: "'no change' not in k3s_longhorn_target_secret.stdout"
 
+- name: Set the Longhorn backup-store poll interval
+  tags: [longhorn, longhorn_backup]
+  # Rate-limits the only recurring B2 caller in the cluster. See the variable's comment in
+  # defaults/main.yml — at upstream's 300s this exhausts Backblaze's Class C transaction
+  # allowance and takes every backup tier down.
+  #
+  # Lives on the BackupTarget CR, not in settings: v1.8.0 moved backup-target config out of
+  # the global settings and onto backuptargets.longhorn.io as part of supporting more than
+  # one target. The `backupstore-poll-interval` setting no longer exists, and patching it
+  # fails NotFound. The CR takes a duration string, where the setting took bare seconds.
+  #
+  # Tagged `longhorn` as well as `longhorn_backup` so that `k3s-bringup.yml --tags longhorn`,
+  # which the repo's runbooks name, still applies it. It stays here until H1.7b moves the
+  # `default` BackupTarget to the `longhorn-backup` role, where `pollInterval` is a field of the
+  # template. It follows the two patches above because the target must exist before it is patched.
+  ansible.builtin.command:
+    cmd: >-
+      k3s kubectl -n longhorn-system patch backuptargets.longhorn.io
+      {{ 'b2_target' | longhorn_backup_name }}
+      --type=merge -p {{ poll_patch | quote }}
+  vars:
+    poll_patch: '{"spec":{"pollInterval":"{{ k3s_longhorn_backupstore_poll_interval }}s"}}'
+  register: k3s_longhorn_poll_interval
+  become: true
+  changed_when: "'no change' not in k3s_longhorn_poll_interval.stdout"
+
 # Skipped while disarmed: a blank target is never `available`, so this gate would fail the
-# play before the recurring-job and label-reconcile tasks below it — which must keep
-# converging exactly when the target is deliberately down.
+# play before the recurring-job tasks below it — which must keep converging exactly when the
+# target is deliberately down.
 - name: Check whether Longhorn can reach the backup target
   tags: [longhorn_backup]
   ansible.builtin.command:

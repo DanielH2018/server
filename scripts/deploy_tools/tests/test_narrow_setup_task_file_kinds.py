@@ -25,7 +25,6 @@ import pytest
 
 import narrow_setup
 from deploy_tools.narrow_lib import setup_index as narrow_setup_index
-from lib.repo_paths import REPO
 
 from _setup_role_fixtures import (
     MAIN,
@@ -188,7 +187,8 @@ def test_the_predicate_accepts_what_ansible_loads(rel, loaded):
 
 # ── a file reached only through `include_tasks` (#4384) ─────────────────────────────────
 
-# Untagged, like `k3s/tasks/longhorn-weekly-shard.yml`: the include site supplies its tags.
+# Untagged, like the weekly-shard file `setup/k3s` held until H1.6: the include site supplies its
+# tags.
 SHARD = """\
 ---
 - name: Reconcile shard {{ shard }}
@@ -215,7 +215,8 @@ def _touch_the_included_file(
 
 
 def test_an_include_applying_its_own_tag_narrows_to_that_tag(tree):
-    """The k3s shape: the include carries `alpha` and applies `alpha` to what it pulls in."""
+    """The shape `setup/k3s`'s weekly-shard include had (#4384), now a fixture tree: the include
+    carries `alpha` and applies `alpha` to what it pulls in."""
     include = (
         "  tags: [alpha]\n  ansible.builtin.include_tasks:\n    file: shard.yml\n"
         "    apply:\n      tags: [alpha]\n"
@@ -241,13 +242,6 @@ def test_an_include_under_never_is_flagged(tree):
     )
     with pytest.raises(narrow_setup.CannotNarrow, match="special tag"):
         _touch_the_included_file(tree, include)
-
-
-def test_the_real_k3s_weekly_shard_file_narrows_to_longhorn():
-    """Named member: the file whose refusal turned every `longhorn_groups.py` edit into `--tags k3s`."""
-    index = narrow_setup.RoleIndex("k3s", "HEAD", str(REPO))
-    assert index.tags_of("tasks/longhorn-weekly-shard.yml") == frozenset({"longhorn"})
-    assert "longhorn" in index.key_readers("weekly_backup_group")
 
 
 def test_an_included_file_holding_a_never_task_is_flagged(tree):

@@ -10,8 +10,8 @@
 # so a host task that also carried `longhorn` would be skipped with them and a rebuilt node
 # would never get open-iscsi. ansible/tests/setup/test_k3s_longhorn_host_tasks.py holds this.
 #
-# main.yml imports this file ahead of longhorn.yml. The agent flow keeps its own copies of the
-# three tasks in agent.yml.
+# main.yml imports this file ahead of longhorn-backup.yml. The agent flow keeps its own copies of
+# the three tasks in agent.yml.
 
 - name: Install Longhorn prerequisites
   tags: [longhorn_host]

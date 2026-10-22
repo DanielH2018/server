@@ -64,8 +64,10 @@ docs/ page — `docs/longhorn-backup-tiering.md`, `docs/longhorn-disaster-recove
 ## Autonomous-role contract (the crons that change state with no human in the loop)
 
 `tasks/health-crons.yml` installs a dozen crons; most read the cluster and push a Kuma tile.
-Three change state, and so do the Longhorn RecurringJobs `tasks/longhorn.yml` applies. The
-authority of those four actuators is written here so a later edit cannot quietly widen it.
+Three change state, and so do the Longhorn RecurringJobs `tasks/longhorn-backup.yml` applies. The
+authority of those four actuators is written here so a later edit cannot quietly widen it. The
+fifth state-changing actuator, the volume-label and CSI-request reconcile, left this role at
+H1.6: its contract is the `longhorn-reconcile` role's `CLAUDE.md`.
 
 - **Scope, per actuator.** The **trim** (`longhorn-trim-volumes.sh`, daily) discards blocks ext4
   already freed and reaches no live data. The **restore drill** (`longhorn-restore-drill.sh`,

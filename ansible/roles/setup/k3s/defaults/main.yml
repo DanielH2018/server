@@ -299,19 +299,6 @@ k3s_agent_longhorn_scheduling: true
 # itself burns transactions and eats into the next day's allowance.
 k3s_longhorn_backupstore_poll_interval: 0
 
-# Memory REQUEST only (no limit) for the csi-* sidecar Deployments. longhorn-manager's request,
-# k3s_longhorn_manager_memory_request, is the `longhorn` role's (H1.5a).
-# Upstream's deploy/longhorn.yaml ships longhorn-manager with an empty `resources: {}`, and
-# longhorn-driver-deployer creates the csi-* Deployments the same way, which gives BestEffort QoS
-# and oom_score_adj 1000 — the worst possible score, so the kernel eats the storage control plane
-# first under any memory pressure. Measured at the OOM kill: a csi-* sidecar held 97 MB anon-rss,
-# while instance-manager (already Burstable) survived untouched. A REQUEST alone moves the pod to
-# Burstable and drops oom_score_adj without adding a new kill path — a LIMIT set too low would
-# trade "killed by badness" for "killed by cgroup cap". Headroom is roughly double the measured
-# RSS: enough to absorb ordinary growth without inflating node allocatable so far that real
-# pressure elsewhere goes unschedulable.
-k3s_longhorn_csi_sidecar_memory_request: 192Mi
-
 # Restore drill — proves the backups come BACK, which nothing else here checks. The heartbeat
 # watches Longhorn's own objects, and none of them can tell you whether the bytes in B2 restore.
 #
@@ -576,9 +563,9 @@ k3s_longhorn_r2_volumes: "{{ containers_list | tier_backup_claims('home-critical
 # naming its own shard (filter_plugins/longhorn_groups.py, #4207). To change the set, edit the
 # entry. The shard used to be the volume's index mod 7 in a hand list here, so removing one
 # volume moved every volume below it to another weekday; a declared shard moves only itself.
-# The reconcile in tasks/longhorn.yml swaps each volume's recurring-job group label, so a PVC
-# recreated from the `longhorn` StorageClass reverts to daily until the next deploy: drift in
-# the over-backed-up direction, caught by the reconcile rerun.
+# The `longhorn-reconcile` CronJob swaps each volume's recurring-job group label, so a PVC
+# recreated from the `longhorn` StorageClass reverts to daily until its next hourly run: drift in
+# the over-backed-up direction, caught by the next run.
 # No `default({})` on containers_list, for the R2 expression's reason: an empty result returns
 # every weekly volume to the daily B2 group, so an undefined list must fail the play instead.
 k3s_longhorn_weekly_volumes: "{{ containers_list | longhorn_weekly_claims(k8s_namespace) }}"

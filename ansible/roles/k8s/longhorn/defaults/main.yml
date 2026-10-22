@@ -30,7 +30,7 @@ longhorn_vendored_manifests:
 # too low would trade "killed by badness" for "killed by cgroup cap". Headroom is roughly double
 # the measured RSS: enough to absorb ordinary growth without inflating node allocatable so far
 # that real pressure elsewhere goes unschedulable. The csi-* sidecars' request,
-# k3s_longhorn_csi_sidecar_memory_request, stays in setup/k3s until H1.6.
+# k3s_longhorn_csi_sidecar_memory_request, is the `longhorn-reconcile` role's (H1.6).
 k3s_longhorn_manager_memory_request: 256Mi  # noqa var-naming[no-role-prefix]
 
 # The seven Longhorn Settings this role renders (templates/settings.yaml.j2), each under the name

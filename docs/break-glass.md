@@ -157,8 +157,9 @@ daniel-server keeps its own SOPS key, so decryption still works without the reco
    (`--skip-tags kubeconfig,longhorn,longhorn_backup`), because the `longhorn` Kustomization
    installs Longhorn and, from H1.5b, its Settings. Once it reads `Ready`, the operator runs
    `k3s-bringup.yml --tags longhorn,longhorn_backup` with both arm variables set (that
-   document's step (f2)). From H1.5b that run applies the backup targets, the RecurringJob, the
-   CSI sidecar requests and the label reconcile, and no Setting.
+   document's step (f2)). From H1.6 that run applies the backup targets, the RecurringJob and
+   the poll interval, and no Setting. The CSI sidecar requests and the label reconcile are the
+   `longhorn-reconcile` CronJob's, which the root applies once it resumes.
 2. Decide whether cluster **objects** (Deployments, Secrets, PVC bindings) are also lost —
    if so, restore etcd first per `docs/k3s-etcd-restore.md` (needs item 2, the cluster
    token, if this is a genuinely new host rather than the same disk).

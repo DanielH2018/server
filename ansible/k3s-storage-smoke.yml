@@ -16,8 +16,9 @@
 # in `default`, so no backup carries its name. From H1.5a until H1.7b the first run also skips
 # `longhorn` and `longhorn_backup`, and the operator's step (f2) applies them once the `longhorn`
 # Kustomization reads `Ready`. From H1.5b the Settings come from that Kustomization at step (f),
-# and (f2) applies the backup targets, the RecurringJob and the label reconcile. This playbook
-# runs after (f2), so the Settings are in place when the claim binds.
+# and from H1.6 (f2) applies the poll interval, the backup targets and the RecurringJob, and the
+# label reconcile and the CSI sidecar requests are the `longhorn-reconcile` CronJob's. This
+# playbook runs after (f2), so the Settings are in place when the claim binds.
 #
 # ITS OWN PLAYBOOK, not a fourth play in k3s-bringup.yml.
 # That playbook's first play takes `hosts: {{ target | default(lookup('pipe','hostname')) }}`

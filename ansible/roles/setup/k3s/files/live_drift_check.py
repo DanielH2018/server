@@ -135,7 +135,7 @@ CONTROLLER_OBJECTS = frozenset({"kube-root-ca.crt"})
 # about the object.
 PATCH_MAINTAINED = {
     ("configmap", "longhorn-system", "longhorn-storageclass"): (
-        "written by `kubectl patch --type=merge` at roles/setup/k3s/tasks/longhorn.yml:197, "
+        "written by `kubectl patch --type=merge` by the task H1.5a moved to the `longhorn` Flux tag, "
         'so its baseline is still Longhorn\'s upstream bundle (numberOfReplicas: "3")'
     ),
 }

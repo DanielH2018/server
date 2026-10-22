@@ -2,7 +2,7 @@
 
 Two mechanisms decide a volume's backup cadence and target, and neither names the other. The
 daily job selects group `default` (`templates/longhorn-recurringjob.yaml.j2`); the label
-reconcile in `tasks/longhorn.yml` moves the weekly and no-backup lists OUT of `default` and
+reconcile job (`longhorn-reconcile`, H1.6) moves the weekly and no-backup lists OUT of `default` and
 returns everything else to it, so daily membership is "every `longhorn`-class PVC in neither
 list". The r2 list, read by `tasks/longhorn-backup.yml`, decides only which BackupTarget a
 volume points at. Today the two sets are identical: the daily tier is the R2 tier and the
@@ -15,12 +15,14 @@ that follows from them, and the two structural facts it rests on.
 Run: uv run pytest ansible/tests/longhorn/test_daily_group_membership_is_the_r2_list.py
 """
 
-from _helpers import load_defaults, load_tasks, task_named
+import importlib
+
+from _helpers import load_defaults
 from _setup_render import rendered_setup_text
 from lib import yaml_fast
 from lib.service_tiers import resolved_tier_lists
 from test_every_longhorn_pvc_has_a_tier import _longhorn_class_pvcs
-from lib.repo_paths import K3S_ROLE
+from lib.repo_paths import K3S_ROLE, K8S_ROLES
 
 RECURRING_JOB = "longhorn-recurringjob.yaml.j2"
 LEAVES_DEFAULT = ("k3s_longhorn_nobackup_volumes", "k3s_longhorn_weekly_volumes")
@@ -72,17 +74,31 @@ def test_no_other_recurring_job_claims_the_default_group():
     assert on_default == ["daily-backup"], on_default
 
 
-def test_the_reconcile_returns_only_the_unlisted_volumes_to_default():
-    task = task_named(
-        load_tasks(K3S_ROLE / "tasks" / "longhorn.yml"), "Return volumes to the default"
-    )
-    conditions = task["when"]
-    for name in LEAVES_DEFAULT:
-        assert f"not in {name}" in " ".join(conditions), name
-    assert "k3s_longhorn_r2_volumes" not in " ".join(conditions), (
-        "the r2 list decides the target, not the group; keying the group on it would let a "
-        "volume in no list fall out of every backup"
-    )
+def test_the_reconcile_returns_only_the_unlisted_volumes_to_default(monkeypatch):
+    """The script's default-group rule: a `no-backup` volume returns to `default` only when its
+    PVC is `longhorn`-class and on neither the weekly nor the no-backup list."""
+    monkeypatch.syspath_prepend(str(K8S_ROLES / "longhorn-reconcile" / "files"))
+    script = importlib.import_module("longhorn_reconcile")
+    tiers = {
+        "r2": ["ns/r2-only"],
+        "weekly": {"ns/weekly": 2},
+        "nobackup": {"ns/listed-out"},
+    }
+    longhorn_class = {"ns/r2-only", "ns/weekly", "ns/listed-out", "ns/plain"}
+    leaving = {"recurring-job-group.longhorn.io/no-backup": "enabled"}
+
+    def groups(claim: str, classes=longhorn_class) -> set[str]:
+        after = script.desired_labels(leaving, claim, tiers, classes)
+        return {k.removeprefix(script.LABEL_PREFIX) for k in after}
+
+    assert groups("ns/plain") == {"default"}
+    # The r2 list decides the target, not the group: keying the group on it would let a volume
+    # in no list fall out of every backup.
+    assert groups("ns/r2-only") == {"default"}
+    assert groups("ns/listed-out") == {"no-backup"}
+    assert groups("ns/weekly") == {"no-backup"}
+    # A claim whose class is not `longhorn` never returns: the class is the intent.
+    assert groups("ns/plain", classes=set()) == {"no-backup"}
 
 
 def test_a_pvc_in_no_list_and_a_pvc_in_two_lists_both_break_the_identity():

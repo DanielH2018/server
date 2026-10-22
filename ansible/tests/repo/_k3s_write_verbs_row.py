@@ -27,14 +27,6 @@ K3S_WRITE_ALLOW = {
         "stays: the opt-in smoke test creates and deletes a throwaway PVC, which no Flux tag "
         "declares"
     ),
-    _TASKS + "longhorn.yml": (
-        "H1.5a deletes the install, the manager patch and the StorageClass tasks, H1.5b the "
-        "Settings, `longhorn-nobackup` and the NetworkPolicy, and H1.6 the label and CSI tasks "
-        "with the rest of the file"
-    ),
-    _TASKS + "longhorn-weekly-shard.yml": (
-        "H1.6 deletes the file; `longhorn-reconcile` takes the shard labels over"
-    ),
     _TASKS + "longhorn-backup.yml": (
         "H1.7a deletes the volume routing, and H1.7b the credentials, targets and "
         "RecurringJobs with the rest of the file"

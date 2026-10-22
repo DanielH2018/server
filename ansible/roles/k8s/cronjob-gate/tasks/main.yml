@@ -85,8 +85,7 @@
 # specified", rc=1, which `failed_when: false` below swallows into an empty stdout. That reads
 # as "no state readable", which is fatal, so the ENTIRE non-fatal branch below becomes dead
 # code and every application failure fails the deploy. argv invokes
-# no shell and has no quoting layer to get wrong; roles/setup/k3s/tasks/longhorn.yml:272 is the
-# other instance of the same fix, and its comment says the same thing.
+# no shell and has no quoting layer to get wrong.
 #
 # jsonpath rather than `-o json` piped through from_json: it flattens both container lists into
 # one newline-separated stream of reasons, which the classification below reads with stock
