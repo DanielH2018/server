@@ -135,7 +135,7 @@ every context. Every placeholder render refuses an `--out` whose `images/` alrea
 file. A consumer's ref reads its tag
 from the same computation, never from `render_guard.py:BUILT_IMAGE_TAG_STUBS`. No
 Kustomization's path reaches `DIR/images/`, and the bundle's footprints leave it out. A stub
-render and `--shared-only` write no image context. `scripts/renderer/renderer_lib/images.py`
+render writes no image context, and `--shared-only` writes one only beside `--all-images`. `scripts/renderer/renderer_lib/images.py`
 holds the writer and the checks. No job builds the contexts yet. D5.4a2 adds the `images`
 job that builds and pushes them, and D5.4b points the flux-owned consumers at GHCR.
 
@@ -153,7 +153,8 @@ tag's render stays byte-equal to Ansible's for `shadow_diff.py compare`.
 `scripts/renderer/renderer_lib/prune_label.py` holds the rule.
 
 `cluster --out DIR --shared-only` writes the shared kinds, a root listing them and
-`digests.json`, and renders no tag. The publish job calls it when no tag is flux-owned. It
+`digests.json`, and renders no tag. The publish job calls it when no tag is flux-owned, with
+`--all-images`, so the `images` job still finds every context and `tags.json` (#5593). It
 takes neither `--role` nor `--secret-stubs`, and either beside it is a usage error. The
 `cluster-vars` kind copies the cluster file, `ansible/vars/cluster-vars.sops.env`, byte for
 byte.

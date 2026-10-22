@@ -37,8 +37,8 @@ tag waits on (#5719).
 A placeholder render also writes the context of each image its tags' roles build with
 `k8s/image-builder`: `DIR/images/<name>/` and `DIR/images/tags.json`, whose content tags each
 consumer's ref reads in the same render (`renderer_lib/images.py`, D5.4a1). A full render
-writes all ten. `--all-images` writes all ten whatever `--role` names, which the publish job
-passes because its `images` job builds every context (#5374).
+writes all ten. `--all-images` writes all ten whatever `--role` names, or beside `--shared-only`,
+which the publish job passes because its `images` job builds every context (#5374, #5593).
 In both modes, every flux-owned tag's restart targets get `checksum/restart`, hashed from the
 placeholder-form documents and `ansible/vars/cluster-vars.source`
 (`renderer_lib/restart.py`), and its claims and Namespaces the prune label (`prune_label.py`).
@@ -178,8 +178,8 @@ def cluster(
         kinds: The shared kinds, whose names no deploy tag may take; a test passes others.
         cluster_file: The cluster file the `cluster-vars` kind copies; a test passes a
             fixture.
-        shared_only: Write the shared kinds and the root alone, and render no tag. The
-            caller rejects it beside `roles` or `secret_stubs`.
+        shared_only: Write the shared kinds, the root and the image contexts `render`
+            builds for no tag. The caller rejects it beside `roles` or `secret_stubs`.
         source_file: `cluster-vars.source`, whose digests `checksum/restart` hashes; a test
             passes a fixture.
         manifests_dir: The SOPS manifests a published tag's directory copies; a test passes
@@ -190,7 +190,7 @@ def cluster(
         revision: The commit the soak Job judges; None renders it at the normalised SHA.
     """
     if shared_only:
-        return _shared_cluster(out, cluster_file, revision)
+        return _shared_cluster(out, cluster_file, revision, render)
     if select_mode(secret_stubs) is Mode.STUB and secret_stubs is not None:
         return _stub_cluster(
             out, roles, secret_stubs, kinds, render, flux_owned, source_file, vendored
@@ -459,20 +459,24 @@ def _shared_bundle(
         raise RenderRefused(str(exc)) from exc
 
 
-def _shared_cluster(out: Path, cluster_file: Path, revision: str | None) -> int:
+def _shared_cluster(
+    out: Path, cluster_file: Path, revision: str | None, render: Callable
+) -> int:
     """Write the shared kinds, a root listing them and `digests.json`, and no tag.
 
     The publish job calls it when no tag is flux-owned, because `cluster` without `--role`
-    renders every tag. It renders no template and reads no secret key, so it needs no
-    Ansible.
+    renders every tag. `render` renders no tag, so it renders no template unless it was
+    given `--all-images`. Then it writes every image context and `tags.json`, which the
+    `images` job refuses to run without (#5593).
     """
     try:
-        written = write_bundle(
-            _shared_bundle(out, {}, {}, [], cluster_file, revision=revision), out
-        )
-    except RenderRefused as exc:
+        built = render([], secret_keys()).images
+        bundle = _shared_bundle(out, {}, {}, [], cluster_file, revision=revision)
+        check_images([], bundle, built, out)
+        written = write_bundle({**bundle, **(image_files(built) if built else {})}, out)
+    except (RenderRefused, RenderError) as exc:
         print(f"homelab-render: {exc}. Nothing was written.", file=sys.stderr)
-        return RENDER_REFUSED
+        return RENDER_REFUSED if isinstance(exc, RenderRefused) else RENDER_FAILED
     print(
         f"homelab-render: shared kinds only, {', '.join(sorted(SHARED_KINDS))}: "
         f"{len(written)} files under {out}"
@@ -526,14 +530,15 @@ def main(argv: list[str] | None = None) -> int:
         "--shared-only",
         action="store_true",
         help="write the shared kinds, a root listing them and digests.json, and no tag: "
-        "the publish job's bundle when no tag is flux-owned. Takes neither --role nor "
-        "--secret-stubs",
+        "the publish job's bundle when no tag is flux-owned, with every image context "
+        "under --all-images. Takes neither --role nor --secret-stubs",
     )
     render.add_argument(
         "--all-images",
         action="store_true",
         help="write every image context and tags.json, not only those the named tags' "
-        "roles build: the publish job's render, whose images job builds all ten",
+        "roles build: the publish job's render, whose images job builds all ten. "
+        "--shared-only takes it too",
     )
     render.add_argument(
         "--revision",
@@ -564,10 +569,10 @@ def main(argv: list[str] | None = None) -> int:
             "--shared-only renders no tag and only publishes, so it takes neither --role "
             "nor --secret-stubs"
         )
-    if getattr(args, "all_images", False) and (args.shared_only or args.secret_stubs):
+    if getattr(args, "all_images", False) and args.secret_stubs:
         parser.error(
-            "--all-images writes image contexts, which only a placeholder render of tags "
-            "writes, so it takes neither --shared-only nor --secret-stubs"
+            "--all-images writes image contexts, which a stub-mode render never writes, "
+            "so it does not take --secret-stubs"
         )
     with ansible_local_temp():
         if args.command != "cluster":
