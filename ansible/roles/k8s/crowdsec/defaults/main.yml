@@ -74,6 +74,18 @@ crowdsec_k8s_node_agent_collections: "crowdsecurity/linux crowdsecurity/whitelis
 crowdsec_k8s_jobs_image: python:3.14-alpine@sha256:f6a589d43c42b9e7f7dc67a12d37132491f362859a5d750607710cc56da3bc72
 crowdsec_k8s_jobs_kubectl_image: alpine/k8s:1.37.1@sha256:712dc5385d1c1a3f83b747fa9e40f64d433a97f72ff42f9755ff7dd1f62846e4
 
+# The budget of the crowdsec-prepull Kustomization, whose Job pulls the engine pod's three images
+# onto k8s_primary_node before the crowdsec Kustomization applies
+# (scripts/renderer/renderer_lib/prepull.py). The Deployment is `Recreate`, so without it the
+# LAPI is down for the whole pull. MEASURED 2026-10-22 (#5867): the pinned amd64 images are
+# alpine/k8s's 320.8 MB, crowdsec_k8s_image's 169.3 MB and python's 20.4 MB, 510.5 MB in all,
+# every one from Docker Hub. Docker Hub served a 420 MB layer at 23.5-25.2 MB/s on daniel-box,
+# about 22s for the set. 600s covers it down to 0.85 MB/s. The Job has no deadline, so a pull
+# slower still costs that revision its verdict, the Job keeps pulling, and Flux applies crowdsec
+# on a later retry. Only Flux reads it: the renderer adds the Kustomization for a published tag
+# alone, so an Ansible deploy ignores it.
+flux_prepull_timeout: 600s  # noqa var-naming[no-role-prefix]
+
 # Sized from peak RSS measured with `/usr/bin/time -f %M` on 2026-10-18: python 12 MB, the
 # pinned cscli 61-63 MB, kubectl 136 MB. At minutes 0, 15, 30 and 45 the remote allowlist
 # (python, then kubectl or cscli) and the AppSec verify (python, then cscli) run at once beside

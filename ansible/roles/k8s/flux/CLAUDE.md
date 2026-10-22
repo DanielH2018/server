@@ -41,8 +41,8 @@ so a regeneration diffs as the pipeline plus upstream's change.
   Renovate cannot regenerate the file, so its PR is manual (`renovate.json`'s `fluxcd/flux2`
   rule) and the header test fails until the file is regenerated. The same PR moves the
   `version:` of all three `fluxcd/flux2/action` steps in `.github/workflows/promote.yml`, of the
-  two in `.github/workflows/ci.yml`'s `flux_roundtrip` and `sops_manifest_type_proof` jobs, and
-  the action's commit pin, so the CLI that pushes and tags the artifact and the CLI that proves
+  two in `.github/workflows/ci.yml`'s `flux_roundtrip` and `sops_manifest_type_proof` jobs, the
+  one in `.github/workflows/bootstrap-drill.yml`, and the action's commit pin, so the CLI that pushes and tags the artifact and the CLI that proves
   the round trip move with the controllers. `sops_manifest_type_proof` also applies this file
   as it stands to a kind cluster, so a regeneration re-runs D3.3d's in-cluster proof on the
   new controller images. A `# renovate:` comment above each input is what Renovate reads, and

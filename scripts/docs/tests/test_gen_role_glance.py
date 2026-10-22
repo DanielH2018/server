@@ -83,6 +83,29 @@ PLAYBOOK = """\
 """
 
 
+@pytest.mark.parametrize(
+    ("owner", "name", "repository"),
+    [
+        ("flux", "terraria", "ghcr.io/danielh2018/terraria"),
+        (None, "terraria", "<k8s_registry_pull_host>/terraria"),
+        # Mid-handback, the render no longer moves the ref, so neither does the glance.
+        ("ansible", "terraria", "<k8s_registry_pull_host>/terraria"),
+        # Only a built image moves to GHCR; no role builds this one.
+        ("flux", "selftest", "<k8s_registry_pull_host>/selftest"),
+    ],
+)
+def test_pulled_repository_moves_only_a_flux_owned_built_image(owner, name, repository):
+    ref = f"{{{{ k8s_registry_pull_host }}}}/{name}:sha-0123456789ab"
+    built = frozenset({"terraria"})
+    assert g.pulled_repository(ref, owner=owner, built=built) == repository
+
+
+def test_the_ghcr_prefix_matches_the_renderers():
+    from renderer.renderer_lib import images
+
+    assert g.GHCR == images.GHCR
+
+
 def test_setup_appliers_reads_role_entries_and_include_role_tasks(tmp_path):
     _write(tmp_path / "initial_setup.yml", PLAYBOOK)
     assert f.setup_appliers("widget", tmp_path, ("initial_setup.yml",)) == [

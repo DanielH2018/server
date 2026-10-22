@@ -308,19 +308,12 @@ def test_no_role_gates_with_a_readiness_wait_on_its_own_pods() -> None:
 #
 # The table holds the reason the values differ. Everything else about these gates is pinned
 # above — that one exists, that it precedes the pod inspection, that it is `rollout status` and
-# not a readiness wait. A reader meeting an outlier (arr-notification above the 300s default,
-# dri-device-plugin below it) could not tell a considered budget from a typo without going and
-# looking, and for dri-device-plugin looking does not answer it.
+# not a readiness wait. A reader meeting an outlier (arr-notification above the 300s default)
+# could not tell a considered budget from a typo without going and looking.
 _GATE_BUDGETS = {
     "cloudflare-ddns": (300, "default"),
     "flux": (300, "default; one looped gate covering the three Flux controllers"),
     "crowdsec": (300, "default"),
-    "dri-device-plugin": (
-        180,
-        "BELOW the default, and the call site does not say why. A single-node DaemonSet with "
-        "no first-boot work does roll out well inside 180s, so this is plausible rather than "
-        "verified; it is recorded as undocumented, not endorsed. Raise it if it ever times out",
-    ),
     "arr-notification": (
         660,
         "`arr_notification_rollout_timeout`, matching sonarr's budget because the seed it "

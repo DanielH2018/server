@@ -1025,9 +1025,11 @@ checks each gate suppresses.
   Traefik 404 Flood (#1322).
   Gated by `startup_grace`, and it fails open on a Loki error. A fetch that hits the 5000-line cap says so in the message. Two pushers
   bypass the library's shape and are read by a second selector (#1943): the `crowdsec-jobs`
-  sidecar of the CrowdSec engine pod and pi-peer-backup's CronJob. Neither pod has a `logger`, so each
+  sidecar of the CrowdSec engine pod and the pi-peer-backup, configarr-health and
+  janitorr-health CronJobs (#5569). No such pod has a `logger`, so each
   echoes its `status=` and `push failed (` lines in the syslog prefix shape to stdout.
-  `SWALLOWED_VERDICTS_POD_LOGQL` (`{container=~"pi-peer-backup|crowdsec-jobs"}`) reads
+  `SWALLOWED_VERDICTS_POD_LOGQL`
+  (`{container=~"pi-peer-backup|crowdsec-jobs|configarr-health|janitorr-health"}`) reads
   them, and the two fetches are merged before the verdict. The selector is not
   `job=~"syslog|k8s"`, because the cap was sized against the syslog stream alone.)
 - **Discord Delivery** (GET-verifies **all five** Discord notification webhooks: Kuma's own

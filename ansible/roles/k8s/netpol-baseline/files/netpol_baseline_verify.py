@@ -1,15 +1,15 @@
 """netpol-baseline's verify Job: prove the policies are enforced, not merely applied.
 
-`templates/verify-inert/job.yaml.j2` holds the Job, and nothing renders it while Ansible owns
-the role (target slice D5, *A verify conversion lands as inert code*). It carries the checks
-of the `netpol-baseline-probe` Job and the readiness gate `tasks/main.yml` runs before it.
+`templates/verify/job.yaml.j2` holds the Job, which the renderer emits as
+`netpol-baseline-verify`. It carries the checks of the `netpol-baseline-probe` Job and the
+readiness gate the role's tasks ran before it.
 The pod stands in for a compromised workload: its `app: netpol-baseline-verify` label is on no
 caller list, so every `refused` row must refuse it. The Job runs this script twice, once per
 stage, which `NETPOL_VERIFY_STAGE` names.
 
 - `gate`, the initContainer. First, under each namespace-scoped baseline, the pods carrying
   `netpol-baseline-exempt` must be exactly the apps `EXEMPT_SETS` expects, the check
-  `tasks/main.yml` ran before its apply. Here it runs after the apply, so a mismatch is a
+  the role's tasks ran before their apply. Here it runs after the apply, so a mismatch is a
   detection the revision's soak acts on rather than a gate. Then every active row of `netpol_baseline_probe_targets` must have an
   EndpointSlice endpoint whose `conditions.ready` is `true`. Most legs are inverted, so a
   target that is down would read as fenced. It reads the API server with the pod's

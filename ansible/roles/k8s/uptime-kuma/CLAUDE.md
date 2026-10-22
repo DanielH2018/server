@@ -18,6 +18,12 @@ reading behind each rule below.
 
 - **Both claims are in the no-backup tier** — monitors and notifications regenerate from the
   rendered static-monitors Secret; status history is kept nowhere.
+- **The `uptime-kuma-prepull` Kustomization pulls both images before the `Recreate`**, so the old
+  pod serves through the pull (`flux_prepull_timeout` in `defaults/main.yml`, #5867). The Job
+  copies the pod's *preferred* affinity for daniel-server, so it usually lands where the pod
+  does. A pod the scheduler sends to daniel-box after the Job ran pays the cold pull, up to
+  about 250 s, most of it autokuma's 32 MB from GHCR. Pinning the pod with a required affinity would close that gap at the
+  cost of failover, an operator choice this role has not made.
 
 ## Traps
 

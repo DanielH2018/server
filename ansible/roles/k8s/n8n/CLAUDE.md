@@ -12,9 +12,8 @@ n8n with an external task-runner sidecar. See repo-root `CLAUDE.md`.
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates, tasks or containers_list entry, or the k3s role's Longhorn tier lists. -->
 - **Applied by:** Flux, through `promote` (`owner: flux`); `deploy.sh` refuses `--tags=n8n`
   with exit 5
-- **Images:** `<k8s_registry_pull_host>/n8n` (`n8n_k8s_image`),
-  `<k8s_registry_pull_host>/n8n-runners` (`n8n_k8s_runners_image`), `alpine`
-  (`n8n_k8s_wait_image`)
+- **Images:** `ghcr.io/danielh2018/n8n` (`n8n_k8s_image`), `ghcr.io/danielh2018/n8n-runners`
+  (`n8n_k8s_runners_image`), `alpine` (`n8n_k8s_wait_image`)
 - **Route:** `n8n.<domain>` · `n8n.local.<domain>`, Authelia two_factor
 - **Claims:** `n8n-data` (weekly -> B2 (default target)), `n8n-files` (weekly -> B2 (default
   target))
@@ -29,8 +28,8 @@ n8n with an external task-runner sidecar. See repo-root `CLAUDE.md`.
 - **Built by CI.** The promote workflow's `images` job builds both images and pushes
   `ghcr.io/danielh2018/n8n` and `ghcr.io/danielh2018/n8n-runners` under their content tags. A
   changed build input moves the `sha-…` tag, so the pod template changes and Flux rolls the
-  pod. The glance reads the defaults, so it still shows `<k8s_registry_pull_host>`; the
-  renderer rewrites each built ref to its GHCR one with `imagePullPolicy: IfNotPresent`
+  pod. The defaults name `<k8s_registry_pull_host>`; the renderer rewrites each built ref to
+  its GHCR one with `imagePullPolicy: IfNotPresent`
   (`scripts/renderer/renderer_lib/images.py:ghcr_refs`).
 - **The new images are pulled before the old pod stops.** `n8n` is `Recreate`, and a base
   bump re-pulls about 465 MB from GHCR at 0.15-0.36 MB/s, so the role sets
