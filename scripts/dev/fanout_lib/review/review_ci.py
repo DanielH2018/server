@@ -323,7 +323,9 @@ def ci_gate(pipe: "Pipeline", last: Phase) -> tuple[Phase, dict | None]:
         fix = pipe._claude(
             "ci-fix",
             pipe._resume(),
-            ci_fix_prompt(record.pr, result.line, result.failures),
+            ci_fix_prompt(
+                record.pr, result.line, result.failures, record.green_contest
+            ),
         )
         last = fix if PR_URL.search(fix.text) else last
         result = wait()

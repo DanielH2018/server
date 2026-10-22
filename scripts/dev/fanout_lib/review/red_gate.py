@@ -37,19 +37,19 @@ would otherwise pass a gate the pushed head fails (#3821). Every pytest config f
 patch registry may change only in lines naming a file the red commits added (#4875). A
 `conftest.py` may only lose what no red test requests (`red_lock.forbidden_conftest_change`,
 #4542). In a red `test_*.py`, what the red commits wrote and what it reaches must be unchanged,
-and anything else may only be a test, a helper, a fixture, an import or a constant;
-`red_lock.forbidden_change` defines both (#4214, #4517). What a red test reaches includes
-every fixture in its closure, builtin ones included, as the red gate's setup plan listed it
-(#4548). No untracked config file may exist, and every red node must pass in a fresh clone of
-HEAD, in every one of the pipeline's `RUNS` runs. The clone is what makes the verdict HEAD's:
-the implementer controls the worktree's index and git config, so a skip-worktree entry, an
-`info/exclude` line or `status.showUntrackedFiles=no` each hides an edit from `git status`.
-The clone reads none of that repo's config or `info/attributes`, so a smudge filter cannot
-rewrite a test on checkout either, and it is a repository, so a red test
-that runs `git ls-files` passes there as it would in CI (#3837). Its `origin/master` is the
-SHA the red gate read, so a test that diffs against it sees the same base at both gates
-(#3845). It shares the worktree's
-object store, which the agent can also write; CI's run is the backstop there too.
+less a helper the issue names (`Gate.subjects`), and anything else may only be a test, a
+helper, a fixture, an import or a constant; `red_lock.forbidden_change` defines both (#4214,
+#4517, #5400). What a red test reaches includes every fixture in its closure, builtin ones
+included, as the red gate's setup plan listed it (#4548). No untracked config file may exist,
+and every red node must pass in a fresh clone of HEAD, in every one of the pipeline's `RUNS`
+runs. The clone is what makes the verdict HEAD's: the implementer controls the worktree's index
+and git config, so a skip-worktree entry, an `info/exclude` line or
+`status.showUntrackedFiles=no` each hides an edit from `git status`. The clone reads none of
+that repo's config or `info/attributes`, so a smudge filter cannot rewrite a test on checkout
+either, and it is a repository, so a red test that runs `git ls-files` passes there as it would
+in CI (#3837). Its `origin/master` is the SHA the red gate read, so a test that diffs against
+it sees the same base at both gates (#3845). It shares the worktree's object store, which the
+agent can also write; CI's run is the backstop there too.
 
 Both gates run pytest with `-c pyproject.toml`, so the root configuration decides every run.
 Every process here runs as the agent's own user, so a determined agent can still edit the
@@ -76,8 +76,8 @@ _sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 
 from fanout_lib.brief import fence_for
 from fanout_lib.review import red_lock
+from fanout_lib.review.red_registry import REGISTRIES, forbidden_registry_change
 from fanout_lib.review.red_tests import red_by_absence, stale_suppressions
-
 from fanout_lib.review.hardened_runs import (
     ORIGIN_MASTER,
     Runner,
@@ -88,7 +88,6 @@ from fanout_lib.review.hardened_runs import (
     pytest_argv,
     worktree_git,
 )
-
 
 # The label an issue carries to get a red phase. `findings.py open` applies it to a finding
 # whose every cited path is code the suite runs (`findings_lib.red_green`).
@@ -155,6 +154,8 @@ class Gate:
     base: str = ""
     # Each node's fixture closure at `red`, builtin and plugin fixtures included (#4548).
     closures: dict[str, list[str]] = field(default_factory=dict)
+    # The names the issue spells in backticks; a helper among them is the fix's (#5400).
+    subjects: set[str] = field(default_factory=set)
 
     @property
     def passed(self) -> bool:
@@ -269,13 +270,10 @@ def _red_file_change(
 ) -> str:
     """How the fix changed `path` beyond what `red_lock` allows, or "".
 
-    A red `test_*.py` may gain tests (#4214), and what the red tests do not reach in it may
-    change (#4517). A `conftest.py` may lose what no red test requests (#4542). A patch
-    registry may change only lines naming a file the red commits added (#4875). No other red
-    data file, pytest config file or `leakguard` may change, and no red file may be deleted.
+    The module docstring's green gate says what each kind of file may change.
     """
     conftest = PurePosixPath(path).name == "conftest.py"
-    registry = bool(gate.base) and path in red_lock.REGISTRIES and path in gate.files
+    registry = bool(gate.base) and path in REGISTRIES and path in gate.files
     if not (conftest or registry or (path in gate.files and path.endswith(".py"))):
         return path
     blobs = [_blob(run, worktree, rev, path) for rev in (red, "HEAD")]
@@ -285,7 +283,7 @@ def _red_file_change(
     tests = [f for f in gate.files if f.endswith(".py")]
     if registry:
         added = [f for f in gate.files if _blob(run, worktree, gate.base, f) is None]
-        problem = red_lock.forbidden_registry_change(red_src, head_src, added)
+        problem = forbidden_registry_change(red_src, head_src, added)
     elif conftest:
         red_files = [_blob(run, worktree, red, f) or "" for f in tests]
         conftests = _conftests(run, worktree, red, tests)
@@ -302,7 +300,7 @@ def _red_file_change(
             *(v for n, v in gate.closures.items() if n.startswith(f"{path}::"))
         )
         problem = red_lock.forbidden_change(
-            base_src or "", red_src, head_src, names, conftests, closure
+            base_src or "", red_src, head_src, names, conftests, closure, gate.subjects
         )
     return f"{path} {problem}" if problem else ""
 
@@ -554,7 +552,9 @@ update like any other test, for example where your change drops a parameter it p
 constant bound to literal data that was there before and that only such older code reads, not
 a red test itself. You may delete from a `conftest.py` a fixture no red test requests, and the
 helpers, constants and imports only it used, but change nothing else there. Where a red test
-is wrong, say why in the PR body instead. The red nodes:
+is wrong, contest it in your reply to the green gate's finding: name the node and cite the
+`file:line` that contradicts its premise, and a fresh reviewer judges it. A helper the issue
+names in backticks, in the file before the red commit, is yours to change. The red nodes:
 {fence}
 {nodes}
 {fence}

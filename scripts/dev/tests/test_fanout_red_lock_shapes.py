@@ -9,6 +9,8 @@ Run: uv run pytest scripts/dev/tests/test_fanout_red_lock_shapes.py
 
 import importlib
 
+import pytest
+
 from fanout_lib.review.red_lock import forbidden_change
 
 # #5229: the red commits added `RENDERER_ONLY` and a test that reads it, and the fix appended
@@ -83,3 +85,30 @@ def test_a_helper_the_issue_names_as_its_subject_is_the_fixs_to_change():
     # Naming the helper frees it, never the red test that calls it.
     weakened = RED.replace("assert _twice(1) == 4", "assert True")
     assert check(BASE, RED, weakened, {"test_two"}, subjects={"_twice"}) != ""
+
+
+def test_a_named_helper_the_red_commits_wrote_stays_locked():
+    """The issue names the code under test, never what the red author wrote to check it."""
+    red = RED + "\n\ndef _thrice(x):\n    return _once(_twice(x))\n"
+    red += "\n\ndef test_three():\n    assert _thrice(1) == 8\n"
+    edited = red.replace("return _once(_twice(x))", "return 8")
+    assert forbidden_change(
+        BASE, red, edited, {"test_three"}, subjects={"_thrice"}
+    ) == ("changes or removes `def _thrice`")
+
+
+@pytest.mark.parametrize(
+    ("appended", "name"),
+    [
+        ("from os import sep\n\nNEW = sep + []", "sep"),
+        ("NEW = [UNBOUND]", "UNBOUND"),
+        ("A = [1]\nfrom os import sep as A\nNEW = A + []", "A"),
+    ],
+    ids=["an-import", "unbound", "a-constant-an-import-rebinds"],
+)
+def test_an_appended_constant_reading_a_name_no_constant_binds_is_flagged(
+    appended, name
+):
+    """An imported object's `__add__` would run the fix's code at import (#5229)."""
+    problem = _renderer_change(f"{RENDERER_RED}\n\n{appended}\n")
+    assert problem.endswith(f"reads `{name}`, which no constant above it binds")

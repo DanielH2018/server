@@ -140,6 +140,12 @@ may argue a finding is wrong; report it again only if the argument does not hold
 new defect the fix introduces as well, including one that only shows against the rest of the
 change.
 
+A finding on `(red/green gate)` says a red test, written from the issue text before the fix,
+still fails. The reply may contest that test by citing a `file:line` that contradicts its
+premise. Open the cited line and judge the premise against the tree. Report the finding
+again, with its file, unless the citation shows the test is wrong and the change is right:
+an unanswered gate finding with no report from you lets the PR go on with that test failing.
+
 {_as_data("The earlier findings", asked)}
 
 {_as_data("The author's reply", reply)}
@@ -156,9 +162,13 @@ def fix_prompt(found: list[dict], pr: str, red: str = "") -> str:
         "A red test file may gain new test functions, fixtures, helpers and imports. What the "
         "red commit wrote in it, and anything there a red test calls or requests, may not "
         "change; a test that was already in the file and that no red test calls is yours to "
-        "update like any other. Where a finding says a red test is too weak, "
+        "update like any other, and so is a helper the issue names in backticks that was in the "
+        "file before the red commit. Where a finding says a red test is too weak, "
         "keep it and append a test that checks what the finding asks for. Where a finding says "
-        "a red test is wrong, answer it in one sentence instead.\n"
+        "a red test is wrong, or the green gate fails on a red test whose premise the tree "
+        "contradicts, contest it in one sentence that names the node and cites the `file:line` "
+        "showing the premise is false, and leave the test as it is. A fresh reviewer judges the "
+        "contest.\n"
         if red
         else ""
     )
@@ -225,13 +235,23 @@ End your final message with the PR URL.
 """
 
 
-def ci_fix_prompt(pr: str, line: str, failures: "Sequence[Failure]") -> str:
+def ci_fix_prompt(
+    pr: str, line: str, failures: "Sequence[Failure]", contest: str = ""
+) -> str:
     """The prompt that resumes the implementer after its PR's CI went red (`review_ci`).
 
     The pipeline waited for CI, so this session never saw it. It gets each failed check's name
-    and the end of its job's log, as data: a log can echo text a PR author wrote.
+    and the end of its job's log, as data: a log can echo text a PR author wrote. `contest` is
+    the record's `green_contest`; an upheld one lets this round correct the red tests it names.
     """
     failed = [{"check": f.name, "log_tail": f.tail} for f in failures]
+    verdict, _, nodes = contest.partition(": ")
+    upheld = (
+        f"\nA fresh reviewer upheld your contest of these red tests: {nodes}. Where one of "
+        "them fails here, correct it to the fact you cited; no green gate runs after this.\n"
+        if verdict == "upheld"
+        else ""
+    )
     return f"""CI ran on {pr} after the review, and it is red:
 
 {line}
@@ -242,6 +262,6 @@ Reproduce each failure locally with the command the failed job ran, fix the caus
 push. Run the checks that cover what you change. A failure that the log shows is unrelated to
 this PR (a flaky service, a runner fault) needs no fix: say so in one sentence. Do not merge,
 land or close anything.
-
+{upheld}
 End your final message with the PR URL.
 """
