@@ -107,7 +107,8 @@ from renderer.renderer_lib.prune_label import label_tags
 from renderer.renderer_lib.cronjob_gate import attach_gates
 from renderer.renderer_lib.prepull import attach_prepulls
 from renderer.renderer_lib.snapshot import attach_snapshots
-from renderer.renderer_lib.restart import restart_targets, restart_values, stamp
+from renderer.renderer_lib.restart import outside_secrets, restart_targets
+from renderer.renderer_lib.restart import restart_values, stamp
 from renderer.renderer_lib.restart import source_digests
 from renderer.renderer_lib.context import load_stubs
 from renderer.renderer_lib.environment import ansible_local_temp
@@ -247,6 +248,7 @@ def stamp_restarts(
             keys,
             source,
             placeholder.sops_manifests.get(tag.tag),
+            outside_secrets(tag.tag),
         )
         dirs = {
             name: {
