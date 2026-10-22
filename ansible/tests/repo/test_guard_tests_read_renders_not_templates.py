@@ -215,11 +215,6 @@ TEMPLATE_SOURCE_READERS = {
         "render, and `test_every_source_fallback_is_a_template_no_render_covers` holds that "
         "nothing else falls back"
     ),
-    "setup/test_registry_selftest_single_node.py": (
-        "whether the agent-Job gate carries `| default([])`, which decides what happens on a "
-        "host whose inventory does not define `k3s_agent_node_ips`. Every render context "
-        "defines it, so no render can show the undefined case the filter covers"
-    ),
     "setup/test_nut_host_secondary.py": (
         "whether the two push-token expressions carry `| mandatory`, which decides whether an "
         "undefined token fails the play or renders empty. A render resolves every secret to "
@@ -288,7 +283,6 @@ KNOWN_MEMBERS = frozenset(
         "setup/test_k3s_control_plane_hardening.py",
         "setup/test_loki_route_witness.py",
         "setup/test_nut_host_secondary.py",
-        "setup/test_registry_selftest_single_node.py",
     }
 )
 

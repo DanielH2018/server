@@ -270,16 +270,33 @@ _CROWDSEC_DEPLOYMENT = (
     / "deployment.yaml.j2"
 )
 
+# configarr's and janitorr's health readers, host crons until H2.5b and H2.5c (#5569).
+_HEALTH_CRONJOBS = {
+    name: Path(__file__).resolve().parents[2]
+    / role
+    / "templates"
+    / "health-cronjob.yaml.j2"
+    for role, name in (
+        ("configarr", "configarr-health"),
+        ("janitorr", "janitorr-health"),
+    )
+}
 
-def test_the_pod_logql_names_both_pod_pushers_containers():
+
+def test_the_pod_logql_names_every_pod_pushers_container():
     # The container name is the only thing tying the second selector to that CronJob, so it is
     # read from the template rather than trusted: a rename there would leave the selector
     # matching nothing and the check permanently green for this pusher.
     names = re.findall(r"^\s+- name: (\S+)\n\s+image:", _CRONJOB.read_text(), re.M)
     assert names == ["pi-peer-backup"], names
     assert "- name: crowdsec-jobs\n" in _CROWDSEC_DEPLOYMENT.read_text()
+    for name, template in _HEALTH_CRONJOBS.items():
+        # `containers:` comes after `initContainers:`, so the last named container is the
+        # reader itself rather than its kubectl copier.
+        names = re.findall(r"^\s+- name: (\S+)\n\s+image:", template.read_text(), re.M)
+        assert names == ["kubectl", name], (template, names)
     assert (
-        '{container=~"pi-peer-backup|crowdsec-jobs"}'
+        '{container=~"pi-peer-backup|crowdsec-jobs|configarr-health|janitorr-health"}'
         in checks.logs.SWALLOWED_VERDICTS_POD_LOGQL
     )
     assert '!= "push failed transiently"' in checks.logs.SWALLOWED_VERDICTS_POD_LOGQL

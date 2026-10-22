@@ -252,7 +252,7 @@ EDGE_PROPERTIES = (
         name="traefik-crds-carry-no-inline-credential",
         reason=(
             'The readonly ServiceAccount holds `resources: ["*"]` on the traefik.io group '
-            "(roles/setup/k3s/templates/readonly-rbac.yaml.j2) while Secrets are withheld. So a "
+            "(roles/k8s/cluster-base/templates/readonly-rbac.yaml.j2) while Secrets are withheld. So a "
             "credential written into a Middleware or an IngressRoute is readable by anything "
             "holding the readonly kubeconfig, and the Secret it should have lived in is not. "
             "The row keys on field and header NAMES, never on values, because the render stubs "

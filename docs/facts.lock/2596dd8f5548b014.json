@@ -1,0 +1,13 @@
+{
+  "checksum": "1d47aec87eb041907ffad44c0ea3a01a4052552ca35756a0093c48ad5d803f45",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "ansible/roles/k8s/pihole/CLAUDE.md#Flux applies it",
+  "row": {
+    "atoms": {
+      "ansible/tests/services/test_lan_address_rules_agree.py": "7f174509839ee8bf6e08438e37a6da989a4ecae974cee1b67a4f7309e93c5b9a",
+      "docs/flux-deploy-plane.md": "807c3deb44c3178e7a6f9fc0bc398a3b748b95c468b14ce9b1b890c8684535d9"
+    },
+    "python": "3.14",
+    "verified_sha": "ff5cc95cb"
+  }
+}

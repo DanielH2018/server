@@ -5,6 +5,7 @@ Status: IN PROGRESS
 PR 1, the workload-service mapping: [#4777](https://github.com/DanielH2018/server/pull/4777).
 PR 2, the k8s-workloads rules in shadow: [#4779](https://github.com/DanielH2018/server/pull/4779). Its soak starts at its deploy, and PR 4a waits 7 days from that time.
 PR 3, the weekly-reboot mute: [#4793](https://github.com/DanielH2018/server/pull/4793). PR 4a waits until it records the three Alertmanager series after its deploy.
+Soak reads, [#4786](https://github.com/DanielH2018/server/issues/4786): day 3 passed on 2026-10-16. Day 7, read on 2026-10-21 over 2026-10-13T00:15:51Z to 2026-10-20T00:15:51Z, returned 58 minutes for query 1 and 55 for query 2 ([the read](https://github.com/DanielH2018/server/issues/4786#issuecomment-6326523507)). Attribution ([comment](https://github.com/DanielH2018/server/issues/4786#issuecomment-6326681270)) explains 51 of the 58 minutes under the plan's kinds: the log-pattern arm, and an episode shorter than the rule's `for:`. It leaves 7 minutes (home-assistant, 2026-10-17 06:43 to 06:49), where a 2-minute dip in `kube_deployment_spec_replicas` reset `K8sDeploymentZeroAvailable`'s `for:` while the bridge kept paging. The tuning is `keep_firing_for: 5m` on that rule ([#5811](https://github.com/DanielH2018/server/pull/5811), live in the `prometheus-rules` ConfigMap), so no unexplained minute remains and PR 4a is unblocked.
 Soak note, 2026-10-17: D5's Wave A moved eight roles to Flux inside this soak's window. Six of the takeovers rolled their workload once:
 - gpu-exporter, nut-exporter and pihole-exporter from 15:52:58Z (D5.5, #5417);
 - littlelink after 17:01Z (D5.6, #5420);
@@ -711,9 +712,11 @@ one-commit rule, and the bound is stated under PR 4a.
 - Gates: PR 4a's verification is recorded, PR 3's reload check and routing pytest have
   passed, and C7's amendments for Open questions 3 and 5 have landed in contracts.md, because
   this PR is the one that makes `service="k3s"` and `service="unmapped"` page.
-- **Deploy.** The default `land.sh` flow deploys `observability` alone, because
-  `scripts/deploy_tools/reach.py:role_for` maps a `.md` under a role to no role. Prometheus loads the rules within its 30s auto-reload, and only
-  the rules ConfigMap changes, so nothing rolls. Run `probe.py health observability`.
+- **Deploy.** `observability` is Flux-owned (`owner: flux`), so `land.sh` does not deploy it:
+  the rules ConfigMap ships when `promote` verifies the merged bundle. The role's `.md` edit
+  rolls no pod. Prometheus loads the rules within its 30s auto-reload, and only the rules
+  ConfigMap changes, so nothing rolls. Run `probe.py health observability` after `promote`
+  verifies.
 - Any deploy at master's tip from here on ships the narrowed bridge and live rules, so no
   interleaving pages twice.
 - Two-writer check: in this commit the Kubernetes arms page from Alertmanager only, and the

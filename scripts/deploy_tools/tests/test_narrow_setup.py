@@ -199,9 +199,14 @@ def test_a_shipped_file_no_task_of_the_role_names_is_flagged(ships):
 
 
 def test_the_real_k3s_role_still_maps_readonly_rbac_to_kubeconfig():
+    """The identity's own template and CRD-group key moved to `cluster-base` in H1.2, so the pair
+    this case holds is the kubeconfig's: `readonly-kubeconfig.j2` and the server key it reads,
+    both read only under the `kubeconfig` tag."""
     index = narrow_setup.RoleIndex("k3s", "HEAD", str(REPO))
-    assert index.readers_of("readonly-rbac.yaml.j2") == frozenset({"kubeconfig"})
-    assert index.key_readers("k3s_readonly_crd_api_groups") == frozenset({"kubeconfig"})
+    assert index.readers_of("readonly-kubeconfig.j2") == frozenset({"kubeconfig"})
+    assert index.key_readers("k3s_readonly_kubeconfig_server") == frozenset(
+        {"kubeconfig"}
+    )
 
 
 def test_the_real_k3s_roles_untagged_task_files_are_named_as_such():

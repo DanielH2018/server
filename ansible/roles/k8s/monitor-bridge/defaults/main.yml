@@ -62,8 +62,6 @@ monitor_bridge_modules:
   - checks/host_thermal.py
   - checks/host_edge.py
   - checks/cluster.py
-  - checks/cluster_rollout.py
-  - checks/cluster_zero.py
   - checks/cluster_etcd.py
   - checks/cluster_traefik.py
   - checks/service.py

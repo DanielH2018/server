@@ -116,6 +116,9 @@ server-side `kubectl diff` as kustomize-controller. Only gpu-exporter's DaemonSe
 `checksum/restart`. Soak Job `soak-cc85dbec` judged the three tags and `flux/soak` read `success`.
 The operator kept pihole-exporter with an exemption: a `pihole_password` rotation does not roll it
 under Flux, and the operator rolls it by hand ([#5416](https://github.com/DanielH2018/server/issues/5416)).
+The fix for #5416 removed the exemption: the exporter declares `pihole-env` under
+`manifests_outside_secrets`, and the renderer hashes `pihole_password`'s digest into its
+`checksum/restart`.
 PR D5.6: [#5420](https://github.com/DanielH2018/server/pull/5420). It moved littlelink,
 longhorn-ui and deploy-ui to Flux at `88a31914c`. The operator's diff showed no change for any of
 the three, and `deploy.sh --tags <tag>` exited 5 for each after the merge. Soak Job
@@ -235,7 +238,7 @@ Where each role still on Ansible stands:
 |---|---|---|
 | authelia | done (#5691) | own window |
 | blackbox-exporter | none needed | Wave A's last PR, on or after 2026-10-20T06:19Z |
-| crowdsec | done: H2.4b (#5711, #5739), H2.4c and the inert verify with its Pi channel (#5753), verify's fence peers (#5762), LAPI initContainer and arm move (#5765) | own window; the flip renames `templates/verify-inert/` to `templates/verify/` and states the hop-2 trade |
+| crowdsec | done: H2.4b (#5711, #5739), H2.4c and the inert verify with its Pi channel (#5753), verify's fence peers (#5762), LAPI initContainer and arm move (#5765) | own window; the flip PR renames `templates/verify-inert/` to `templates/verify/`, states the hop-2 trade and merges only with the operator present; a follow-up PR deletes `tasks/` |
 | dri-device-plugin | done (#5529) | waits on M2's PR 4b (#5527) |
 | headlamp | done (#5681) | after observability |
 | home-assistant | none needed | own window |
@@ -474,7 +477,7 @@ own-window roles' (*Waves and windows*).
       key on daniel-pi", both `delegate_to: daniel-pi`.
     - qbittorrent: the prefs-check script and its cron.
     - registry: the job manifest directory and the GC cron. The cron's script,
-      `ansible/roles/k8s/registry/templates/registry-gc.sh.j2`, runs `kubectl scale
+      `ansible/roles/setup/k8s_host_files/templates/registry-gc.sh.j2`, runs `kubectl scale
       deploy/registry --replicas=0` for the GC ("STOP-THE-WORLD, NOT OPTIONAL") and scales
       back in `scale_up_and_report`. The rendered Deployment sets `replicas: 1`. The GC is
       monitored by the Kuma `Registry GC` tile, the healthchecks.io `registry-gc` check in
@@ -2823,6 +2826,12 @@ sizes its batch of roles against that projection.
       runs under the lock `registry-gc.sh` holds for its whole run (#5736). After the flip,
       the script restores a mirror its stamp shows it left at zero, and observability's
       `GhcrMirrorScaledToZero` pages one left there for 2h.
+      The `k8s_host_files` conversion PR moved the GC's host side (the script,
+      `/var/lib/registry-gc`, the `registry-gc` cron and `ghcr-mirror-gc-job.yaml`) into
+      `tasks/registry.yml` and dropped registry's host-write `allow` entry, so the flip PR has
+      no host row left to move. The setup plane applies it. Its live check is the cron file and
+      the script's hash unchanged on daniel-box, and the next Sunday `registry-gc` journal
+      showing the mirror phase.
     - traefik: the CRDs come from a URL in the role's `tasks/main.yml`, which no render may
       fetch under C1, so they get an in-tree copy pinned by `traefik_k8s_crd_version`. The
       cluster RBAC carries `kustomize.toolkit.fluxcd.io/prune: disabled` before the move, so
@@ -2897,6 +2906,13 @@ sizes its batch of roles against that projection.
       Ansible-owned. The PR waits for the operator to be present before it merges.
     - crowdsec: its first conversion PR lands the Pi timer, the Alloy metrics stage and the
       inert `crowdsec-verify` Job. Its flip wires the Job.
+
+      **Status, 2026-10-21.** The flip PR marks crowdsec `owner: flux`, renames
+      `templates/verify-inert/` to `templates/verify/` and turns the `crowdsec-home-ips`
+      `k8s/cronjob-gate` include into a `flux_cronjob_gates` entry. The hop-2 trade is that
+      the Job cannot read the bouncer's `last_pull`, so a missing 403 names both causes. The
+      deletions of the wait, the gate include and `tasks/verify.yml` pass 200 lines, so they
+      go in a follow-up PR, as this section's flip-size rule says.
     - netpol-baseline's PR repeats D4's drill on itself. A workload change that fails leaves
       the new policies unapplied, which is D4's exit criterion on the real policies-first
       edge. Its probe Job becomes `netpol-baseline-verify`, which depends on
@@ -2932,6 +2948,11 @@ sizes its batch of roles against that projection.
       `templates/precheck/`, the role-owned kind that renders into `<tag>-precheck`, which
       `<tag>` depends on (#5719). The flip also names a break-glass for a guard that holds
       a fix to a down pihole-2 (#5740).
+
+      **Flip PR.** The guard moved to `templates/precheck/` and the gravity Job to
+      `templates/verify/`. The break-glass is the role default `pihole_k8s_sibling_guard`: set
+      `false` in a PR, it renders no guard Job, and the restore PR sets it back to `true`. The
+      role's `CLAUDE.md` has the procedure.
     - **Before the first Wave D flip**, the session measures one revision that changes at
       least ten flux-owned tags, from `prod`'s move to the last status, and compares it with
       the derived verify timeout. A measurement above half the timeout raises the timeout

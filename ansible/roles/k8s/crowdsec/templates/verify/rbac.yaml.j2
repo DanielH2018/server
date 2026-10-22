@@ -1,0 +1,23 @@
+{#
+  The identity of crowdsec's Flux verify Job, as `job.yaml.j2` beside it.
+
+  It is a ServiceAccount with no Role. The Job talks to LAPI as a CrowdSec machine and to
+  Prometheus over HTTP, and calls no Kubernetes API, so it needs no grant and its pod mounts no
+  token. Its LAPI credential is the agents' shared password, in the `crowdsec-verify` Secret.
+#}
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: crowdsec-verify
+  namespace: {{ k8s_namespace }}
+automountServiceAccountToken: false
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: crowdsec-verify
+  namespace: {{ k8s_namespace }}
+type: Opaque
+stringData:
+  lapi_password: "{{ crowdsec_k8s_agent_password }}"

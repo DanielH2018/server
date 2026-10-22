@@ -32,6 +32,7 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
 from diagnostics.probe_lib.cli_parser import cert_stages, _build_parser
 from diagnostics.probe_lib.core import (
+    DEFAULT_TIMEOUT,
     curl_argv,
     observability_loki_ip,
     k8s_endpoint,
@@ -73,12 +74,15 @@ def plan(
         if note:
             print(note, file=_sys.stderr)
         base, pin = loki_endpoint(store, k8s_endpoint, observability_loki_ip)
-        start, end = since_window_ns(getattr(ns, "since", None))
+        start, end = since_window_ns(
+            getattr(ns, "since", None), getattr(ns, "until", None)
+        )
         return [
             curl_argv(
                 loki_query_url(
                     base, ns.logql, ns.limit, start=start, end=end, step=ns.step
                 ),
+                timeout=getattr(ns, "timeout", None) or DEFAULT_TIMEOUT,
                 resolve=pin,
             )
         ]

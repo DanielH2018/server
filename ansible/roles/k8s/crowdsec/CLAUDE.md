@@ -9,22 +9,27 @@ dashboard and the dashboard findings.
 
 ## At a glance
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates, tasks or containers_list entry, or the k3s role's Longhorn tier lists. -->
-- **Deploy tag:** `--tags "crowdsec"`
+- **Applied by:** Flux, through `promote` (`owner: flux`); `deploy.sh` refuses
+  `--tags=crowdsec` with exit 5
 - **Images:** `python` (`crowdsec_k8s_jobs_image`), `alpine/k8s`
   (`crowdsec_k8s_jobs_kubectl_image`), `crowdsecurity/crowdsec` (`crowdsec_k8s_image`)
 - **Route:** `crowdsec-lapi.local.<domain>` (LAN only), no Authelia
 - **Claim:** `crowdsec-db` (no backup (listed in k3s_longhorn_nobackup_volumes))
-- **Auto-deploy:** denylisted (`k8s_autodeploy: false`) — platform — LAPI/AppSec/decision
-  engine every bouncer queries; a failed deploy can open or close traffic unpredictably
-  fleet-wide. COUPLING NOTE for a future promotion: crowdsec-db also holds LAPI machine
-  registrations; a revert past an agent registration leaves that agent's stored password valid
-  but the machine unknown
 <!-- /generated_from -->
 
+- **Flux applies it, not Ansible** (D5, crowdsec's own window). Its `containers_list` entry
+  carries `owner: flux`, so `deploy.sh`, the play and the GitOps deployer all skip it. A merged
+  change reaches the cluster when `promote` publishes and verifies the next bundle. To give it
+  back to Ansible, follow the two-PR handback in `docs/flux-deploy-plane.md`; a plain revert of
+  the flag leaves two writers on the objects.
 - **Traefik's entry declares `depends_on: [crowdsec]`**, so the LAPI is up before the bouncer
   that needs its credential.
 - **`use_authelia: false`** — bouncers authenticate with their own API keys, and `crowdsec-db`
   is on the no-backup tier because decisions expire and re-derive from logs.
+- **The `crowdsec-prepull` Kustomization pulls the engine pod's three images before the
+  `Recreate`**, so the LAPI serves through a 510 MB Docker Hub pull (`flux_prepull_timeout` in
+  `defaults/main.yml`, #5867). The pod's `nodeSelector` pins it to `k8s_primary_node`, and the
+  Job copies that pin, so the images land on the node the pod runs on.
 
 ## The two operator allowlists, and how to unban yourself
 
@@ -101,7 +106,7 @@ operator split the job in two on 2026-10-18 (#5701):
   the IPv4 address from ipify and the /64 from the host's global addresses in
   `/proc/net/if_inet6`. It writes both, with `looked_up_at`, into the `crowdsec-home-ips`
   ConfigMap. Its ServiceAccount may `patch` that one ConfigMap and nothing else, and it runs no
-  `cscli`. `k8s/cronjob-gate` runs it once per deploy.
+  `cscli`. Flux runs it once per role revision as a gate Job in `crowdsec-verify`.
 - **The ConfigMap's `data` has one writer.** The role renders the object with no `data` keys
   (the `DECIDED:` marker in `templates/home-ips-configmap.yaml.j2`), so no apply owns a field
   the CronJob writes. Read it with `kubectl -n homelab get configmap crowdsec-home-ips -o yaml`.
@@ -123,12 +128,11 @@ operator split the job in two on 2026-10-18 (#5701):
   for the sync, and the newest `crowdsec-home-ips-*` Job's log for the lookup. The lookup's log
   line names each family's outcome and never an address.
 
-## The Flux verify Job waits in `templates/verify-inert/`
+## The `crowdsec-verify` Job proves the edge enforces a ban
 
-D5's successor to the ban gate in `tasks/verify.yml` is inert code that no render emits. The
-manifests role and the renderer's `verify_files` both skip that directory, and crowdsec's flip
-PR renames it to `templates/verify/`. The operator confirmed its evidence channel on
-2026-10-18 (D5 *Open questions* 9).
+`templates/verify/` holds the Job. The renderer emits it into `crowdsec-verify`, which depends on
+the `crowdsec` Kustomization's `wait: true`, so it starts after the new pod is Ready. The
+operator confirmed its evidence channel on 2026-10-18 (D5 *Open questions* 9).
 
 - **`files/crowdsec_verify.py` bans daniel-pi through LAPI's machine API**, with no
   `pods/exec`. It sends the same `POST /v1/alerts` that `cscli decisions add` sends, reads it
@@ -139,25 +143,32 @@ PR renames it to `templates/verify/`. The operator confirmed its evidence channe
   `status`, and Prometheus scrapes it as `alloy-pi`, a path that never crosses Traefik.
 - **The gate's hop 2, the bouncer's pull, has no Job form.** LAPI v1.8.1 serves no bouncer
   route to a machine, so a missing 403 names both causes, a pull that never came and an edge
-  that does not consult the bouncer.
+  that does not consult the bouncer. The Ansible gate named the hop. To tell the two apart,
+  read the LAPI log's `GET /v1/decisions/stream` lines from the traefik pod. They are absent
+  when the plugin's metrics ticker stalled or the traefik pod cannot reach LAPI.
+- **One edge 403 beside a LAPI restart is expected until #5761 is decided.** The probe
+  recorded one 403 during the roll of #5753 and of #5765, and neither cause is settled. The Job
+  starts after the `crowdsec` Kustomization reads Ready, so the restart window should not
+  reach it. A lone 403 in the probe file at a roll is that window, not an enforcement result.
 - **The fence peers are in place.** netpol-baseline's LAPI fence admits `crowdsec-verify` on
   the LAPI port alone, and `prometheus-callers` admits it from `homelab`. The probe table's
   `crowdsec` and `prometheus` rows are their refused legs.
 - **The spec carries a digest of the pod's roll inputs**, so every change that rolls the
   crowdsec pod renames the Job. The template's header lists the inputs.
-- **The `lapi-register` initContainer registers the `crowdsec-verify` machine**, so the
-  flipped Job can log in. The flip PR states the hop-2 trade above.
-  `tests/test_crowdsec_verify.py` holds the red fixtures and renders the flipped copy
-  through the Job census.
+- **The `lapi-register` initContainer registers the `crowdsec-verify` machine**, so the Job
+  can log in. `tests/test_crowdsec_verify.py` holds the red fixtures and runs the Job census
+  over the render.
+- **The `crowdsec-home-ips` CronJob's one-off run is a second gate Job** in `crowdsec-verify`,
+  from `flux_cronjob_gates` in `defaults/main.yml`. It replaced the `k8s/cronjob-gate`
+  include. The Job keeps no ownerReference to the CronJob, so a scheduled firing can overlap
+  it, and both patch the same ConfigMap with one lookup's values.
+- **A failed Job holds the revision.** The old gate reported a non-zero exit from the home-ips
+  run and continued. Under Flux any non-zero exit fails `crowdsec-verify`, and the soak does
+  not pass.
+- **`tasks/` still holds the Ansible forms** until a follow-up PR deletes them. No run reaches
+  them, because Flux owns the role.
 
 ## Traps
-
-### A crowdsec deploy races its own rollout
-The b1-gate in `ansible/roles/k8s/crowdsec/tasks/verify.yml` execs into the running pod, and the
-`crowdsec-home-ips` gate run writes the ConfigMap the new pod's sidecar reads, while
-`k8s/manifests`' rollout-restart deliberately does not wait. **The `rollout status` gate ahead of
-them is the deliberate exception to the drain's "never wait inline" rule.** Removing it as
-apparent drift brings the race back (PR #229).
 
 ### The `lapi-register` initContainer holds the LAPI down if it fails
 Machine registration and the two allowlist creates run in the `lapi-register` initContainer of
@@ -166,27 +177,8 @@ serves (#5741). cscli writes the SQLite file directly, and
 `ansible/roles/k8s/crowdsec/tests/test_jobs_image.py::test_the_lapi_register_init_runs_against_a_fresh_database_with_no_lapi`
 runs the rendered script in the pinned image with no network. The script tolerates only an
 allowlist that already exists. Any other failure leaves the pod in `Init:Error`, the LAPI out
-of its Service for every bouncer, and the deploy's rollout wait red. Read
+of its Service for every bouncer, and the `crowdsec` Kustomization's wait red. Read
 `kubectl -n homelab logs deploy/crowdsec -c lapi-register` first.
-
-### `--check` skips the whole b1-gate rather than failing in it
-You cannot demonstrate a ban is enforced without taking the ban, so
-`ansible/roles/k8s/crowdsec/tasks/main.yml` gates its `import_tasks: verify.yml` on
-`not k8s_no_mutate`, covering `k8s_dry_run` too. The `when` reaches every task in
-`ansible/roles/k8s/crowdsec/tasks/verify.yml`, nested ones included — keep it when adding one.
-
-### The ban gate waits for the edge bouncer's pull, not a timer
-
-The gate proves three hops in order, and its rescue names the hop that failed: the decision reads
-back from LAPI; the edge bouncer's newest `last_pull` moves past its value read just after the ban
-(every `k8straefik` and `k8straefik@*` row, because the base row never pulls); the edge answers 403
-to the Pi. The ban, checks and probe sit in one block with the lift in its `always`, so a failed
-gate leaves no ban behind.
-
-**A failure at hop 2 means the plugin's metrics-ticker stall is back, or the traefik pod cannot
-reach LAPI** — the LAPI log's `GET /v1/decisions/stream` lines from the traefik pod tell those
-apart. `ansible/tests/services/test_crowdsec_ban_gate.py` pins the hop-2 wait, the order and the
-lift.
 
 ### LAPI adds a bouncer row per Traefik pod IP, and an hourly job prunes them
 

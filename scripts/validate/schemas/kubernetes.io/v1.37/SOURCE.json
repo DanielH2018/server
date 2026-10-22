@@ -9,6 +9,7 @@
     "apis__discovery.k8s.io__v1_openapi.json": "ec495888f7179b410d365dca5491d3d928028330ace1337c507c29e800303155",
     "apis__networking.k8s.io__v1_openapi.json": "253b343c3cae24b9c42df30842b55f54d0aed3b30d91c35aa25bf0511f6c7848",
     "apis__rbac.authorization.k8s.io__v1_openapi.json": "58efa60097c0c4bfbde12e27bc14c00bbfd86e927feea109e5e368baee5c6fc0",
+    "apis__scheduling.k8s.io__v1_openapi.json": "c95d06aaea2dbf186b67bd7d1854ee7d06b0be37a8441eb264c6d5db05c33259",
     "apis__storage.k8s.io__v1_openapi.json": "96c4f09112d51adc3d64c73f782927e88956ba6db4fa74b12fff2cf23ea7e5fe"
   }
 }

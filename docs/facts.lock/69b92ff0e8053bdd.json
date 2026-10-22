@@ -1,15 +1,17 @@
 {
-  "checksum": "51b3441d7f60fca09fdfc87639350caa83612a102a29dcb9d0201455d4463e38",
+  "checksum": "30dcb7e45068fcbcbaf4d5f0a43c889e32b3914db3272e738378bfebb5013d3a",
   "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
   "key": "ansible/roles/k8s/authelia/CLAUDE.md#The `claude-ui` user",
   "row": {
     "atoms": {
       "ansible/tests/services/test_authelia_claude_ui_user.py": "f86eb313b2b9d5b672f33e63f697fff289a3534569db71b1311e210256e70f3b",
       "ansible/tests/services/test_authelia_config_schema.py": "1280a6c02b949c15a99934c3d61193d264a48d9fab4b39bf148480e51cc4ef0f",
-      "ansible/tests/services/test_authelia_digest_assert.py": "103dcd4cdd8075472ebb0a199b521ef9c6e144775ae462c95db3216feda0f579",
-      "docs/secret-rotation.md": "93a2e8492581420545568d5dd82c559f37746c8c974d1211a4a676a3fca0c2f8"
+      "docs/flux-deploy-plane.md": "807c3deb44c3178e7a6f9fc0bc398a3b748b95c468b14ce9b1b890c8684535d9",
+      "docs/secret-rotation.md": "93a2e8492581420545568d5dd82c559f37746c8c974d1211a4a676a3fca0c2f8",
+      "scripts/secrets_mgmt/tests/test_cluster_vars_write.py": "85f2fd75839f7feb1b04900e9926eaf86e84e89ee4e409d8d7e577b09be5ba04",
+      "scripts/secrets_mgmt/tests/test_cluster_vars_write_refusals.py": "d286c4866f525e1ad0b86895b2d078218868945daa156580556778eadaf9a09f"
     },
     "python": "3.14",
-    "verified_sha": "16935de91"
+    "verified_sha": "ff5cc95cb"
   }
 }

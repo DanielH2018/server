@@ -249,7 +249,7 @@ def test_log_error_ignore_list_is_case_insensitive():
 
 
 def test_log_error_burst_wins_the_message_over_healthy_workloads(cfg):
-    """A Ready-but-failing workload pages even though every Kubernetes arm reads healthy.
+    """A Ready-but-failing workload pages even though the verdict it folds into reads healthy.
 
     That combination IS the finding: readiness asks whether the port is open.
     """
@@ -269,7 +269,7 @@ def test_log_error_burst_wins_the_message_over_healthy_workloads(cfg):
 
 
 def test_log_error_arm_fails_open_on_a_loki_outage(cfg):
-    """A Loki outage must not blind the three Kubernetes arms, which do not depend on it.
+    """A Loki outage must not turn the folded verdict into a page about Loki.
 
     This is why the check is NOT in LOKI_DEPENDENT: membership there suppresses the whole
     check, and Loki Reachable already owns that root cause.
@@ -286,6 +286,33 @@ def test_log_error_arm_fails_open_on_a_loki_outage(cfg):
     assert not ok, "the workload verdict survives the arm being unavailable"
     assert "2 workloads unavailable" in msg
     assert "log-error arm unavailable" in msg, "the arm must say it could not evaluate"
+
+
+def test_workload_log_errors_pages_on_a_burst(cfg):
+    """The Workload Log Errors row is DOWN when one container logs more fatal lines than the max."""
+    cfg = replace(cfg, LOG_ERROR_SELECTOR='{job=~"k8s|pi"}', LOG_ERROR_IGNORE="")
+    src = FakeSources(
+        loki_vector=lambda q: [({"container": "grafana"}, 91.0)],
+        loki_count=lambda selector, window: 5000,
+    )
+
+    ok, msg = checks.logs.check_workload_log_errors(cfg, src)
+
+    assert not ok
+    assert msg.startswith("fatal log lines")
+
+
+def test_workload_log_errors_stays_up_on_a_loki_error(cfg):
+    """A Loki error is Loki Reachable's page, so this row reports up and says it could not read."""
+    cfg = replace(cfg, LOG_ERROR_SELECTOR='{job=~"k8s|pi"}')
+
+    def boom(*a, **k):
+        raise RuntimeError("loki query status=error")
+
+    ok, msg = checks.logs.check_workload_log_errors(cfg, FakeSources(loki_vector=boom))
+
+    assert ok
+    assert "log-error arm unavailable" in msg
 
 
 def _loki_scalar(val):

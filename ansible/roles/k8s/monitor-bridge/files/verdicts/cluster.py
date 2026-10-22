@@ -4,12 +4,11 @@ These decide; check.py fetches. Each takes its inputs as arguments and reads no 
 config, which is what makes it safe to live here — see bridge/parsing.py's header for the rule
 and why breaking it fails silently rather than loudly.
 
-`k8s_workloads_verdict`'s fail-closed reasoning is why this logic is worth isolating:
-`unavailable > 0` returns an empty vector both when every workload is healthy AND when there
-are no series at all, so the count floors are what stop a blind check reading green.
+`cadvisor_coverage_shortfall`'s fail-closed reasoning is why this logic is worth isolating: a
+query that matches no pod reads as a clean result unless a coverage floor says otherwise.
 """
 
-from collections.abc import Collection, Mapping, Sequence
+from collections.abc import Collection, Mapping
 
 
 def targets_verdict(
@@ -24,8 +23,8 @@ def targets_verdict(
     Prometheus stops remote-writing. `len(down) == 0` is then trivially true and this reports
     "all 0 targets up" — green, and blind to an entire estate having vanished.
 
-    Same fail-closed shape as the k8s workload floor: count first, and treat "fewer series than
-    could possibly be right" as UNKNOWN rather than healthy.
+    Fail-closed shape: count first, and treat "fewer series than could possibly be right" as
+    UNKNOWN rather than healthy.
 
     This is NOT a sentinel for restarts/oom/cpu, though it claimed to be until 2026-08-27. It
     watches `up`, and `up` was entirely healthy from the Phase G retarget to 2026-08-24 while an
@@ -80,200 +79,6 @@ def cadvisor_coverage_shortfall(
     )
 
 
-def ksm_resource_label(resource: str) -> str:
-    """Turn a Kubernetes resource name into the `resource` label kube-state-metrics emits.
-
-    KSM replaces every character outside [a-zA-Z0-9_] with `_`, so `devic_es_dri` is the only form
-    that matches a series — while `devic.es/dri` is what `kubectl describe node` prints and what an
-    operator would configure. Querying the unsanitised name matches nothing, and this check reads
-    "matches nothing" as the device plugin having deregistered. That is a DOWN on a healthy
-    cluster, which is what it did live from 18:05 to 18:35 UTC on 2026-08-20.
-    """
-    return "".join(c if c.isalnum() or c == "_" else "_" for c in resource)
-
-
-def extended_resource_verdict(
-    expected: Sequence[str],
-    advertised: Mapping[str, float],
-    allocatable_series: float | None,
-) -> tuple[bool, str]:
-    """Pure: (ok, msg) for extended resources that must stay advertised by some node.
-
-    `advertised` maps resource name -> number of nodes advertising a NON-ZERO quantity.
-    `allocatable_series` is the total count of kube_node_status_allocatable series, and it is what
-    separates the two ways this can come back empty:
-
-      - no series at all  -> kube-state-metrics is not collecting `nodes`, so the question was
-        never asked. Reported as INERT rather than as a fault, and named in the message: a check
-        that cannot read its input must not answer as though it did, in either direction. Silently
-        passing would be the failure this arm exists to fix; silently failing would page for a
-        collector change nobody made.
-      - series exist, resource absent -> the resource is genuinely gone. That is the fault.
-
-    A resource advertised by zero nodes is identical to one that never appears, and both are a
-    fault once the collector is confirmed running: the pods that need it cannot schedule either way.
-    """
-    if not expected:
-        return True, "no extended resources watched"
-    if not allocatable_series:
-        return True, (
-            "extended-resource check INERT: no kube_node_status_allocatable series "
-            "(kube-state-metrics is not collecting `nodes`); %s unwatched"
-            % ", ".join(expected)
-        )
-    missing = [r for r in expected if not advertised.get(r)]
-    if missing:
-        return False, (
-            "extended resource(s) advertised by no node: %s — the device plugin is Running but "
-            "its resource is deregistered; pods requesting it cannot schedule"
-            % ", ".join(
-                "%s (kube-state-metrics label %s)" % (r, ksm_resource_label(r))
-                for r in missing
-            )
-        )
-    return True, "extended resource(s) advertised: %s" % ", ".join(
-        "%s on %d node(s)" % (r, advertised.get(r, 0)) for r in expected
-    )
-
-
-def replica_offender_names(offenders: Sequence[tuple[dict, float]]) -> str:
-    """Name an unavailable-replica vector as `deployment(n), deployment(n)`, sorted by name.
-
-    Shared with checks/cluster.py's replica streak, which names the same offenders in the note
-    it holds `up` with. Two formatters would drift, and the held note and the page that follows
-    it three cycles later have to name the same workloads for the sequence to read as one event.
-    """
-    return ", ".join(
-        "%s(%d)" % (labels.get("deployment", "?"), int(value))
-        for labels, value in sorted(offenders, key=lambda o: o[0].get("deployment", ""))
-    )
-
-
-def stalled_rollout_names(offenders: Sequence[tuple[dict, float]]) -> str:
-    """Name a stalled-rollout vector as `deployment(updated/desired)`, sorted by name.
-
-    The value carried alongside the labels is the UPDATED replica count; the desired count comes
-    from the `desired` label the check attaches, because a `<` comparison in PromQL returns the
-    left-hand series alone. A bare `authelia(0)` would read as "zero replicas", which is a
-    different fault from "zero of one replicas carry the new spec".
-    """
-    return ", ".join(
-        "%s(%d/%s)"
-        % (
-            labels.get("deployment", "?"),
-            int(value),
-            labels.get("desired", "?"),
-        )
-        for labels, value in sorted(offenders, key=lambda o: o[0].get("deployment", ""))
-    )
-
-
-def k8s_workloads_verdict(
-    total: float | None,
-    offenders: list[tuple[dict, float]],
-    min_workloads: float,
-    restart_offenders: Sequence[tuple[dict, float]] = (),
-    ds_total: float | None = None,
-    ds_offenders: Sequence[tuple[dict, float]] = (),
-    min_daemonsets: float | None = None,
-    stalled_offenders: Sequence[tuple[dict, float]] = (),
-    zero_offenders: Sequence[tuple[dict, float]] = (),
-) -> tuple[bool, str]:
-    """Pure: (ok, msg) from the deployment-series COUNT and the unavailable-replica offenders.
-
-    The count argument is what makes this fail closed. `unavailable > 0` returning nothing is
-    ambiguous — it means either "every workload is healthy" or "there are no series at all" —
-    and only the second is a fault. Reading the first interpretation onto both is how a monitor
-    goes green while blind, so the count is checked BEFORE the offender list is trusted.
-
-    restart_offenders is the crash-loop arm (2026-08-13): a CrashLoopBackOff pod passes its
-    readiness probe for a brief window each backoff cycle, so replica availability AND a 60s
-    HTTP tile both mostly read healthy — homepage crash-looped 31 times overnight with this
-    check green. A restart counter that climbed past the threshold is down regardless of what
-    readiness says right now.
-
-    ds_total/ds_offenders/min_daemonsets are the DaemonSet arm (2026-08-13): a DaemonSet has no
-    Deployment-arm equivalent, so an absent or unschedulable DS pod (a node NotReady, a
-    node-selector mismatch, a node lacking a required resource) was invisible. Same fail-closed
-    shape as the deployment arm; min_daemonsets left None means the caller didn't supply
-    DaemonSet data (existing callers/tests), so this arm is skipped rather than treated as zero
-    DaemonSets.
-
-    stalled_offenders is the stalled-rollout arm (2026-09-11, #1783). Every arm above measures
-    whether the pods a Deployment HAS are healthy, and a rollout whose new ReplicaSet never gets
-    a pod satisfies all of them: the old pod stays Ready, so `unavailable` is 0, nothing
-    restarts, and the tile reads "N k8s workloads healthy" while the cluster runs the PREVIOUS
-    spec. `updated` is the only series that moves in that state.
-
-    It is the complement of the shape the 2026-09-10 Authelia stall took, not a second reading of
-    it: kube-state-metrics has authelia at updated=1, available=0, unavailable=1 from 12:52 to
-    13:03 that day, so that Deployment replaced its pod (Recreate) and failed to bring the new
-    one up. The unavailable-replica arm sees that shape; nothing saw this one. The caller gates
-    this arm on a streak, because mid-rollout `updated < desired` is the normal state of every
-    healthy Deployment.
-
-    zero_offenders is the zero-available arm (2026-09-17, #1802): the same Deployments the
-    unavailable arm sees, restricted to `available == 0`, which the caller holds for a shorter
-    streak. It is judged before `offenders` so the stronger statement wins the message once
-    both streaks have run out — a Deployment at zero is in both sets.
-    """
-    if total is None:
-        return False, (
-            "kube_deployment_status_replicas_unavailable is absent from the cluster Prometheus "
-            "— kube-state-metrics is not being scraped, so workload health is UNKNOWN, not OK"
-        )
-    if total < min_workloads:
-        return False, (
-            "only %d deployment series in the cluster Prometheus, below the floor of %d — "
-            "kube-state-metrics is partially loaded, so workload health is UNKNOWN, not OK"
-            % (int(total), min_workloads)
-        )
-    if min_daemonsets is not None:
-        if ds_total is None:
-            return False, (
-                "kube_daemonset_status_number_unavailable is absent from the cluster Prometheus "
-                "— kube-state-metrics is not being scraped, so daemonset health is UNKNOWN, not OK"
-            )
-        if ds_total < min_daemonsets:
-            return False, (
-                "only %d daemonset series in the cluster Prometheus, below the floor of %d — "
-                "kube-state-metrics is partially loaded, so daemonset health is UNKNOWN, not OK"
-                % (int(ds_total), min_daemonsets)
-            )
-    if zero_offenders:
-        return False, (
-            "k8s workloads with NO available replicas (available/desired): %s"
-            % stalled_rollout_names(zero_offenders)
-        )
-    if offenders:
-        return False, "k8s workloads with unavailable replicas: %s" % (
-            replica_offender_names(offenders)
-        )
-    if stalled_offenders:
-        return False, (
-            "k8s rollout stalled (updated/desired replicas): %s — the Deployment's new "
-            "ReplicaSet is not coming up, so the running pods serve the PREVIOUS spec"
-            % stalled_rollout_names(stalled_offenders)
-        )
-    if ds_offenders:
-        named = ", ".join(
-            "%s(%d)" % (labels.get("daemonset", "?"), int(value))
-            for labels, value in sorted(
-                ds_offenders, key=lambda o: o[0].get("daemonset", "")
-            )
-        )
-        return False, "k8s daemonsets with unavailable pods: %s" % named
-    if restart_offenders:
-        named = ", ".join(
-            "%s(%d)" % (labels.get("pod", "?"), int(value))
-            for labels, value in sorted(
-                restart_offenders, key=lambda o: o[0].get("pod", "")
-            )
-        )
-        return False, "k8s pods crash-looping (restarts in window): %s" % named
-    return True, "%d k8s workloads healthy" % int(total)
-
-
 def log_error_verdict(
     matches: list[tuple[dict, float]],
     total: float | None,
@@ -283,14 +88,13 @@ def log_error_verdict(
 ) -> tuple[bool, str]:
     """Per-container counts of fatal log lines -> a verdict. Pure.
 
-    A cluster verdict rather than a service one: it folds into k8s Workload Health, and it
-    answers the question that check's other three arms structurally cannot. They read replicas,
-    restarts and allocatable — every one of which reports a container that is Ready while
-    failing at its actual job as healthy, because by their measure it is. Readiness asks whether
-    the port is open.
+    The Workload Log Errors row's verdict. It answers the question Kubernetes state structurally
+    cannot: replicas, restarts and allocatable all report a container that is Ready while failing
+    at its actual job as healthy, because by their measure it is. Readiness asks whether the port
+    is open.
 
     `total` is the selector's own volume, and it is what keeps this honest. The arm fails OPEN
-    (see check.py's with_log_errors), so a selector matching no stream returns no matches and
+    (see checks/logs.py's with_log_errors), so a selector matching no stream returns no matches and
     reads exactly like a healthy estate — the trap that shipped HA_BAN_SELECTOR with an `app`
     label the log shipper does not emit and reported "no ip_ban events" through a window containing a
     real ban. Counting the volume separates "nothing is wrong" from "I asked the wrong

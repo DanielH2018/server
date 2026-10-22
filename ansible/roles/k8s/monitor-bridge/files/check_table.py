@@ -76,7 +76,7 @@ CHECKS: tuple[PushCheck, ...] = (
         description="node-exporter via monitor-bridge: host memory pressure on a cluster node, a Claude Code cgroup stalling or OOM-killing, or one node missing from the census. Claude Code running as a uid the host retired is named in the message without paging. The message names host and cgroup.",
     ),
     # restarts, oom and cpu re-armed 2026-08-14 (Phase G) against kubernetes-cadvisor, grouped by
-    # pod, on their Docker-era tokens. They add OOM and throttle depth to k8s_workloads' crashloops.
+    # pod, on their Docker-era tokens. They add OOM and throttle depth to the K8sContainerCrashLooping rule.
     PushCheck(
         name="restarts", fn=cluster.check_restarts, token="monitor_bridge_restarts_push_token",
         kuma_id="k3s-container-restarts", display="k3s Container Restarts", status_group="Cluster Health", gate="prometheus",
@@ -274,13 +274,17 @@ CHECKS: tuple[PushCheck, ...] = (
         kuma_id="monitor-bridge-b2-storage", display="B2 Free Tier Headroom", status_group="Backups & Storage", gate="b2_reachable", critical=True, runbook="longhorn-backup-tiering",
         description="monitor-bridge reads B2's bucket usage against the free tier, gated behind B2 Reachable so a cap incident pages once. DOWN: storage past the threshold. A drain is nearly free; a prune pays per deleted backup, so read longhorn-backup-tiering before deleting.",
     ),
-    # k8s_workloads, cluster_targets and pvc_fullness sat behind a second gate until #2825 folded
-    # it into `prometheus`. Each keeps its own fail-closed floor for "Prometheus answers but
+    # cluster_targets and pvc_fullness sat behind a second gate until #2825 folded it into
+    # `prometheus`. Each keeps its own fail-closed floor for "Prometheus answers but
     # kube-state-metrics or the kubelet stats are not scraped", which no gate can see.
+    # The Kubernetes arms of the old k8s_workloads row now live in the k8s-workloads rules. This
+    # row keeps only the log-pattern arm, which reads Loki; M6's batch A7 ports it to loki-homelab.
+    # `startup_grace` rather than a gate: the row reads no Prometheus, and the arm fails open on a
+    # Loki error by itself, so it names neither `prometheus` nor `loki_reachable`.
     PushCheck(
-        name="k8s_workloads", fn=cluster.check_k8s_workloads, token="monitor_bridge_k8s_workloads_push_token",
-        kuma_id="monitor-bridge-k8s-workloads", display="k3s Workload Health", status_group="Cluster Health", gate="prometheus",
-        description="kube-state-metrics via monitor-bridge: a Deployment or DaemonSet with unavailable replicas (held 3 cycles for a rollout), a crash loop, a stalled rollout, zero available replicas, or a deregistered `devic.es/dri`. The message names the workload. `probe.py health <svc>` for the rollout state; roles/k8s/monitor-bridge/CLAUDE.md.",
+        name="workload_log_errors", fn=logs.check_workload_log_errors, token="monitor_bridge_k8s_workloads_push_token",
+        kuma_id="monitor-bridge-k8s-workloads", display="Workload Log Errors", status_group="Cluster Health", gate="startup_grace",
+        description="Loki via monitor-bridge: a container logged more than LOG_ERROR_MAX (20) lines matching panic, fatal, traceback or out of memory in the last hour. The message names the container. The Kubernetes arms of the old k3s Workload Health tile are the k8s-workloads alert rules.",
     ),
     PushCheck(
         name="cluster_targets", fn=cluster.check_cluster_targets, token="monitor_bridge_cluster_targets_push_token",

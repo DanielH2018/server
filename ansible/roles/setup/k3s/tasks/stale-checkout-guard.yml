@@ -19,18 +19,6 @@
 # row naming a missing task, on an instance whose tags differ from its rows' tasks, and on a
 # flagged writer with no row.
 
-- name: Guard the PriorityClass writer against a stale checkout
-  ansible.builtin.import_tasks: stale-checkout-check.yml
-  tags: [priorityclass]
-  vars:
-    k3s_stale_checkout_rows:
-      - task: Apply the workload-tier PriorityClasses
-        ids:
-          - _homelab-critical_scheduling.k8s.io_PriorityClass
-          - _homelab-automation_scheduling.k8s.io_PriorityClass
-          - _homelab-standard_scheduling.k8s.io_PriorityClass
-          - _homelab-best-effort_scheduling.k8s.io_PriorityClass
-
 - name: Guard the MetalLB writers against a stale checkout
   ansible.builtin.import_tasks: stale-checkout-check.yml
   tags: [metallb]
@@ -45,19 +33,6 @@
           - metallb-system_homelab-pool_metallb.io_IPAddressPool
           - metallb-system_ingress-pool_metallb.io_IPAddressPool
           - metallb-system_homelab-l2_metallb.io_L2Advertisement
-
-- name: Guard the read-only identity writer against a stale checkout
-  ansible.builtin.import_tasks: stale-checkout-check.yml
-  tags: [kubeconfig]
-  vars:
-    k3s_stale_checkout_rows:
-      - task: Apply the read-only cluster identity
-        ids:
-          - "{{ k3s_readonly_sa_namespace }}_{{ k3s_readonly_sa_name }}__ServiceAccount"
-          - "{{ k3s_readonly_sa_namespace }}_{{ k3s_readonly_sa_name }}-token__Secret"
-          - "_{{ k3s_readonly_sa_name }}_rbac.authorization.k8s.io_ClusterRole"
-          - "_{{ k3s_readonly_sa_name }}_rbac.authorization.k8s.io_ClusterRoleBinding"
-          - "_{{ k3s_readonly_sa_name }}-view_rbac.authorization.k8s.io_ClusterRoleBinding"
 
 - name: Guard the CoreDNS writers against a stale checkout
   ansible.builtin.import_tasks: stale-checkout-check.yml

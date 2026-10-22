@@ -183,7 +183,7 @@ checks each gate suppresses.
   `check_n8n`/`check_scrutiny`, which let the error bubble to `_evaluate` and page at once. The
   *arrs are Deployments this same bridge watches rolling, so their API refuses connections every
   time k3s replaces the pod, and three of this monitor's DOWN episodes in the 30 days to
-  2026-09-11 were a fetch error co-timed with a `k8s_workloads ... radarr(1)` episode, one rollout
+  2026-09-11 were a fetch error co-timed with a k3s Workload Health `radarr(1)` episode, one rollout
   reported twice. The streak covers the FETCH only: a queue item needing review pages on the cycle
   it is seen, because a poisoned release in the queue is not a transient. **The streak REPLACED
   `arr_queue`'s `STARTUP_GRACE` membership** rather than stacking on it, since that grace covered
@@ -749,85 +749,24 @@ checks each gate suppresses.
   when it gained the Prometheus gate (#2004): the two sets must stay disjoint so a graced check
   reaches the evaluation path every cycle, and the gate covers the post-boot transient the grace
   covered plus the outage it never could. Empty `WAN_PROBE_URLS` disables the gate.)
-- **k3s Workload Health** (`kube_deployment_status_replicas_unavailable` from kube-state-metrics.
-  It is the only monitor the seven routeless k8s workloads have, and the reason the metric is read
-  at all: `registry`, both `cloudflare-ddns` copies, karakeep's `chrome`/`meilisearch`/`time-tagger`,
-  and `n8n-runners`, which executes every workflow's code. Three expose only a ClusterIP
-  (unreachable from daniel-server) and four expose no Service at all, so their health is a
-  Kubernetes API property and nothing here can probe them directly.
-  **Fails closed on an absent series.** `unavailable > 0` returns an empty vector both when every
-  workload is healthy AND when there are no series at all, so the check `count()`s the series
-  FIRST and reports `UNKNOWN, not OK` when the count is missing or below `K8S_MIN_WORKLOADS` (5).
-  Reading the healthy meaning onto both is how a monitor goes green while blind. The floor also
-  covers a partially loaded kube-state-metrics: its ClusterRole is deliberately scoped, so dropping
-  `apps` would take every deployment series away while the pod stays up and Ready, which the
-  reachability gate cannot see.
-  **`K8S_WORKLOADS_CONSECUTIVE` (3) gates the unavailable-replica arm ALONE** (#1780). A rolling
-  Deployment has one unavailable replica by definition, so that arm reported every ordinary
-  rollout: of 48 DOWN episodes in 30 days, the replica ones were all single-cycle and named one
-  workload (`unavailable replicas: uptime-kuma(1)`). A held cycle appends a `down streak n/N
-  (rollout)` note to the tile rather than reading plain green. **Every other arm keeps no grace**:
-  a crash loop is already a multi-cycle condition by the time `increase()` sees it, and a floor
-  breach means the check is blind. `test_check_k8s_workload_replicas.py` proves the selectivity by
-  running a crash loop and a rolling replica in ONE cycle, because a blanket streak would pass a
-  naive accept/reject pair while delaying every crash-loop page.
-  **A stalled rollout is its own arm** (#1783): `kube_deployment_status_replicas_updated <
-  on(namespace, deployment) kube_deployment_spec_replicas`, gated by
-  `K8S_ROLLOUT_STALL_CONSECUTIVE` (3). The unavailable arm counts the replicas a Deployment HAS,
-  while this arm counts the replicas carrying the CURRENT spec. A ReplicaSet that never gets a pod
-  while the old one keeps serving moves the second and not the first, so every other arm reads `N
-  k8s workloads healthy` while the cluster runs the previous spec. It is the complement of the
-  2026-09-10 Authelia stall (`updated=1, available=0, unavailable=1` for 11 minutes, the
-  unavailable arm's shape). The gate came from the series: over 16.9 days of retention, `updated <
-  spec` lasted 1-2 five-minute samples at a time and NEVER three consecutive ones, so 3 cycles had
-  no false page, and 3 cycles is longer than the 300 s the playbook itself waits. The desired count
-  comes from a SECOND query, because a PromQL `<` returns the left-hand series alone:
-  `authelia(0/1)` reads as "zero of one replicas carry the new spec," where a bare `authelia(0)`
-  would read as a different fault. The stall helpers and BOTH replica streak gates live in
-  `checks/cluster_rollout.py`, because `checks/cluster.py` is at the 600-line module cap.
-  **A Deployment at ZERO available replicas is its own arm** (#1802):
-  `kube_deployment_status_replicas_available == 0 and on(namespace, deployment)
-  kube_deployment_spec_replicas > 0`, gated by `K8S_ZERO_AVAILABLE_CONSECUTIVE` (2), in
-  `checks/cluster_zero.py`. Zero available is down, not rolling, and the unavailable arm's
-  15-minute grace held the two alike. The census that set 2 rather than 1: over 16 days of
-  retention, every zero-available episode of two or more 5-minute samples was a crash loop the
-  restart arm had paged on its first cycle, a 20-minute cold start after a node event (paged by
-  the 3-cycle arm), or the 2026-09-05 outage. A routine Recreate swap is one sample, and at 1
-  cycle this arm would page each of them. The streak is separate from the unavailable arm's, so a
-  Deployment at zero is held with two notes (`cold start` and `rollout`), pages here on its second
-  cycle, and is named again by the unavailable arm on its third. The `desired` count comes from the
-  stall arm's second query, so the message reads `authelia(0/1)`.
-  **A second arm covers DaemonSets**: `kube_daemonset_status_number_unavailable`, with its own
-  `K8S_MIN_DAEMONSETS` floor (11) and the same fail-closed-on-absent-series logic. A
-  Deployment-shaped census cannot see the Alloy log shipper, node-exporter or the `otel`
-  collector, which run one pod per node and are the workloads a node problem takes out first.
-  **A third arm reports crash-looping restarts**: `increase(...[K8S_RESTART_WINDOW]) >
-  K8S_RESTART_MAX` (1h / 3), **and** a restart inside `K8S_RESTART_RECENT_WINDOW` (30m). The
-  recency clause lets a RECOVERED pod leave the arm: `increase` is a pure lookback, so without it
-  the restarts that already happened hold the monitor DOWN for the rest of the hour (zigbee2mqtt
-  read `restarts in window: 9` after it recovered). The 30m floor is the worst observed
-  inter-restart SPACING, not the 5-min backoff cap: homepage spaced 31 restarts ~15-19 min apart,
-  and a window inside that spacing goes up in the gaps and flaps, which at `max_retries: 0` is a
-  notification per transition.
-  **A fourth arm watches extended resources** (PR #281): every name in `K8S_EXTENDED_RESOURCES`
-  (comma-separated, default `devic.es/dri`) must still be advertised at non-zero quantity by at
-  least one node, read from `kube_node_status_allocatable`. This is the blast radius of a wedged
-  device plugin, not the plugin's own liveness. `dri-device-plugin` has no `readinessProbe`, and a
-  container without one is Ready the instant it starts, so a plugin whose gRPC registration hangs
-  keeps a Running, Ready, fully available DaemonSet while kubelet deregisters `devic.es/dri`,
-  invisible to the DaemonSet arm. **A socket-stat probe is worse than nothing** (rationale in
-  commit `1b2aa497`): the registration socket file persists through the wedge, so the probe reads
-  green through the fault, and kubelet clears that directory on restart, so the same probe
-  restart-loops a healthy plugin. `ksm_resource_label()` sanitizes the configured Kubernetes name
-  into the label kube-state-metrics emits (`devic.es/dri` becomes `devic_es_dri`), because
-  querying the unsanitised name matches no series and the arm would read it as a deregistered
-  resource (the 2026-08-20 false page in **Traps** below). The arm needs kube-state-metrics'
-  `nodes` collector: with no `kube_node_status_allocatable` series at all it reports **INERT** and
-  names what it is not watching. It is folded into this monitor because a new Kuma monitor needs a
-  new push token in SOPS and this arm answers the DaemonSet arm's question. A resource fault wins
-  the message and keeps the workload arm's text after it. Pure `k8s_workloads_verdict()` and
-  `extended_resource_verdict()` are unit-tested, and `PROM_DEPENDENT` is guarded against the live
-  `CHECKS` and asserted disjoint from the other skip sets.)
+- **Workload Log Errors** (the log-pattern arm of the former k3s Workload Health monitor. It
+  counts, per container, the lines matching `LOG_ERROR_PATTERN` (`panic:`, `fatal`, `traceback`,
+  `out of memory`) over `LOG_ERROR_WINDOW` (1h) in the `LOG_ERROR_SELECTOR` streams, and pages
+  when one container exceeds `LOG_ERROR_MAX` (20). A container that is Ready while failing at its
+  job reads healthy to every Kubernetes-state check, which is why this arm exists. It keeps the
+  tile and push token the whole monitor had (`kuma_id` `monitor-bridge-k8s-workloads`), so the
+  tile's history survives its rename.
+  **The Kubernetes arms are gone from the bridge.** Unavailable replicas, a stalled rollout, zero
+  available replicas, DaemonSets, crash loops and a deregistered `devic.es/dri` are the
+  `k8s-workloads` rules in observability (`files/rules/k8s-workloads.yaml`), whose comments carry
+  the hold, floor and window reasoning that used to live here.
+  **The row's gate is `startup_grace`**, not `prometheus`: it reads no Prometheus, and the arm
+  fails open on a Loki error by itself (`with_log_errors`), so it names no reachability gate. The
+  cost of the grace is one held cycle, so the row pages on its second consecutive bad cycle. A
+  burst stays in the 1h window far longer than that: the two bursts the `DECIDED: stays at 20`
+  marker records held the tile red for 46 and 43 minutes.
+  The row is temporary. M6's batch A7 ports the arm to a LogQL rule on `loki-homelab` and deletes
+  the row, `check_workload_log_errors` and `with_log_errors`.)
 - **Cluster Scrape Targets** (`up{origin!="daniel-server"}`, the complement of Scrape Targets'
   `origin="daniel-server"` pin, so every `up` series belongs to exactly one of the two. Same
   fail-closed floor (`CLUSTER_TARGETS_MIN`, 3): an emptied `up` reads as UNKNOWN rather than as
@@ -1119,9 +1058,11 @@ checks each gate suppresses.
   Traefik 404 Flood (#1322).
   In `LOKI_DEPENDENT`. A fetch that hits the 5000-line cap says so in the message. Two pushers
   bypass the library's shape and are read by a second selector (#1943): the `crowdsec-jobs`
-  sidecar of the CrowdSec engine pod and pi-peer-backup's CronJob. Neither pod has a `logger`, so each
+  sidecar of the CrowdSec engine pod and the pi-peer-backup, configarr-health and
+  janitorr-health CronJobs (#5569). No such pod has a `logger`, so each
   echoes its `status=` and `push failed (` lines in the syslog prefix shape to stdout.
-  `SWALLOWED_VERDICTS_POD_LOGQL` (`{container=~"pi-peer-backup|crowdsec-jobs"}`) reads
+  `SWALLOWED_VERDICTS_POD_LOGQL`
+  (`{container=~"pi-peer-backup|crowdsec-jobs|configarr-health|janitorr-health"}`) reads
   them, and the two fetches are merged before the verdict. The selector is not
   `job=~"syslog|k8s"`, because the cap was sized against the syslog stream alone.)
 - **Kuma Notification Delivery** (a notification Kuma tried to send and dropped, #1891. Kuma logs
@@ -1255,12 +1196,11 @@ arm paged for 24 minutes with `extended resource(s) advertised by no node: devic
 both nodes advertised the resource at capacity 4. Fail-closed is right: a typo pages instead of
 going green.
 
-The arm sanitizes the configured name at query time, keeps the operator-facing name the one
-`kubectl` prints, and names both forms in the fault message, so the next mismatch is diagnosable
-from the alert alone. Before trusting a metric-backed check, run its exact query against live
+The `K8sExtendedResourceMissing` rule in `k8s-workloads.yaml` writes the sanitised label, and
+its comment carries this trap. Before trusting a metric-backed check, run its exact query against live
 Prometheus and confirm it returns rows. The unit tests mock the payload, so they prove the verdict
-logic and nothing about the selector. Guarded by `ksm_resource_label` in
-`files/verdicts/cluster.py` and its test in `tests/test_check_longhorn.py` (PR #286).
+logic and nothing about the selector. Guarded by
+`ansible/tests/services/test_dri_resource_name_agrees.py`.
 
 ### The k8s log streams have no `app` label
 `kubectl` selects pods with `-l app=home-assistant`, so a LogQL selector written from that habit

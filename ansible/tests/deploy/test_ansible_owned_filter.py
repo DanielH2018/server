@@ -190,6 +190,7 @@ def test_the_batch_loop_skips_owned_entries_that_templates_still_see():
         "texbrain",
         "valheim",
         "zigbee2mqtt",
+        "wg-easy",
     } <= owned
     assert visited == [n for n in _names(fact) if n not in owned]
 

@@ -257,15 +257,20 @@ def test_a_green_second_parent_is_never_chosen(lab):
     assert last_built(state) is None
 
 
-def test_a_cached_final_verdict_makes_no_second_request(lab):
+def test_a_cached_pass_makes_no_second_request(lab):
+    # A render that fails leaves the green tip unbuilt, so the second run grades it again.
     origin, _, _, github = lab
-    red = origin.commit("a")
-    pending = origin.commit("b")
-    github.runs = {red: RED, pending: PENDING}
-    builder(lab).main()
-    builder(lab).main()
-    assert github.asked.count(red) == 1
-    assert github.asked.count(pending) == 2, "a pending verdict is asked again"
+    green = origin.commit("a")
+    github.runs = {green: GREEN}
+
+    def run() -> None:
+        b = builder(lab)
+        b.render_exit = 2
+        b.main()
+
+    run()
+    run()
+    assert github.asked.count(green) == 1, "a cached pass is asked again"
 
 
 def test_a_walk_with_no_green_commit_exits_0_and_reads_no_green(lab):

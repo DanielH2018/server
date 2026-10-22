@@ -16,10 +16,13 @@
   uptime-kuma's `netpol_from` admits `configarr-health`, which is how the push reaches Kuma's
   Service.
 
-  k8s/cronjob-gate runs this CronJob once per deploy. An extra run re-reads the same Job and
-  re-pushes the same verdict, so it is idempotent. The landing's gate run is the one run whose
-  push meets uptime-kuma's fence before netpol-baseline admits this label; the gate counts a
-  started container as a run, so that lost push does not change the deploy's verdict.
+  Flux runs this CronJob once per role revision, as the gate Job
+  `configarr-health-deploy-gate-<spec digest8>` in `configarr-verify`. An extra run re-reads
+  the same Job and re-pushes the same verdict, so it is idempotent. It starts together with
+  configarr's own gate, so it can push the previous sync's verdict; defaults/main.yml's
+  DECIDED marker at `flux_cronjob_gates` says why that is accepted. The landing's gate run is
+  the one run whose push meets uptime-kuma's fence before netpol-baseline admits this label;
+  the reader always exits 0, so that lost push does not change the revision's verdict.
 #}
 ---
 apiVersion: batch/v1

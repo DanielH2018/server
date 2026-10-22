@@ -16,10 +16,11 @@ from lib.exit_codes import RENDER_OK
 from render_share import sharing_placeholder_renders
 from renderer import homelab_render, standalone_map
 from renderer.renderer_lib.cluster import RenderedTag, RenderError, flux_owned_tags
-from renderer.renderer_lib.placeholders import PlaceholderRender, sentinel
+from renderer.renderer_lib.placeholders import PlaceholderRender, references, sentinel
 from renderer.renderer_lib.restart import (
     RESTART_ANNOTATION,
     any_pod_template,
+    outside_secrets,
     pod_references,
     restart_targets,
     restart_values,
@@ -209,6 +210,30 @@ def test_a_secret_shipped_as_a_sops_manifest_hashes_its_keys_source_digest():
     assert value(SOURCE) != value({**SOURCE, "alpha_token": "c" * 64})
 
 
+def _outside_value(source, outside=None):
+    """The value of a Deployment reading `pihole-env`, a Secret no file of its tag renders."""
+    files = {"deploy.yaml": DEPLOYMENT.format(name="one", secret="pihole-env")}
+    outside = {"pihole-env": ["alpha_token"]} if outside is None else outside
+    return restart_values(
+        "fixture", {"f": files}, {"one": ALL}, KEYS, source, outside=outside
+    )
+
+
+def test_a_secret_another_role_renders_moves_the_checksum_with_its_declared_key():
+    before = _outside_value(SOURCE)
+    assert before["one"] != _outside_value({**SOURCE, "alpha_token": "c" * 64})["one"]
+    assert before == _outside_value({**SOURCE, "beta_token": "c" * 64})
+
+
+def test_an_undeclared_secret_another_role_renders_moves_nothing():
+    assert _outside_value(SOURCE, outside={}) == {}
+
+
+def test_an_outside_secret_no_target_reads_is_flagged():
+    with pytest.raises(RenderError, match="no restart target reads"):
+        _outside_value(SOURCE, outside={"pihole-env": ["alpha_token"], "gone": ["x"]})
+
+
 def test_stamp_inserts_one_line_and_keeps_every_other_byte():
     text = DEPLOYMENT.format(name="one", secret="a").replace(
         "  template:\n", "  template:\n    metadata:\n      labels:\n        app: one\n"
@@ -322,11 +347,10 @@ def test_bento_pdf_gets_no_annotation_and_renders_as_if_unowned(
 # (tag, kind, name), each with its reason. `checksum/restart` cannot see such an object, so a
 # change to it rolls nothing; an entry here accepts that for its pod.
 OUTSIDE_ROLE_EXEMPT: dict[tuple[str, str, str], str] = {
-    ("pihole-exporter", "Secret", "pihole-env"): (
-        "D5.5. The exporter reads FTL's own admin password from the pihole role's Secret, so "
-        "the cluster holds one copy of it. Ansible never rolled this pod on a rotation either: "
-        "the pihole role restarts only its two FTL pods. A stale password shows as "
-        'up{job="pihole"} == 0 (ansible/roles/k8s/pihole-exporter/CLAUDE.md).'
+    ("crowdsec", "ConfigMap", "kube-root-ca.crt"): (
+        "D5. The crowdsec-jobs sidecar's projected token volume reads the cluster CA from the "
+        "ConfigMap the API server publishes in every namespace. No role renders it, and its "
+        "ca.crt changes only when the cluster CA is rotated, which is a rebuild."
     ),
 }
 
@@ -336,7 +360,8 @@ def outside_references(
 ) -> list[tuple[str, str, str]]:
     """Each `(tag, kind, name)` a pod of `tags` names and its own render does not hold.
 
-    A Secret the tag ships as a SOPS manifest counts as its own.
+    A Secret the tag ships as a SOPS manifest counts as its own, and so does one its
+    `manifests_outside_secrets` declares, whose keys `checksum/restart` hashes (#5416).
     """
     found = []
     forms = {t.tag: t for t in render.tags}
@@ -355,6 +380,7 @@ def outside_references(
             if isinstance(obj, dict)
         ]
         own = {(d.get("kind"), (d.get("metadata") or {}).get("name")) for d in docs}
+        own |= {("Secret", name) for name in outside_secrets(tag)}
         for obj in docs:
             template = any_pod_template(obj)
             for kind, name in sorted(pod_references(template or {})):
@@ -381,6 +407,33 @@ def test_every_outside_role_exemption_is_still_a_live_flux_owned_reference(fleet
     """An entry whose tag left Flux, or whose pod stopped naming the object, is stale."""
     found = set(outside_references(fleet, flux_owned_tags(), exempt={}))
     assert set(OUTSIDE_ROLE_EXEMPT) <= found, sorted(set(OUTSIDE_ROLE_EXEMPT) - found)
+
+
+def test_every_outside_secret_declares_the_keys_its_owning_role_renders(fleet):
+    """A declared key list that drifts from the Secret's own placeholders hashes the wrong keys.
+
+    pihole-exporter is the named member: it reads `pihole_password` from pihole's `pihole-env`.
+    """
+    # fact: ansible/roles/k8s/pihole-exporter/CLAUDE.md#It holds no credential of its own
+    secrets = {
+        (obj.get("metadata") or {}).get("name"): (t.tag, set(references(text)))
+        for t in fleet.tags
+        for text in t.files.values()
+        for obj in yaml_fast.safe_load_all(text)
+        if isinstance(obj, dict) and obj.get("kind") == "Secret"
+    }
+    declared = {
+        (tag, name): set(keys)
+        for tag in flux_owned_tags()
+        for name, keys in outside_secrets(tag).items()
+    }
+    assert declared[("pihole-exporter", "pihole-env")] == {"pihole_password"}
+    for (tag, name), keys in declared.items():
+        owner, held = secrets[name]
+        assert owner != tag, f"{tag} renders {name} itself"
+        assert keys == held, (
+            f"{tag} declares {sorted(keys)} for {name}, which holds {held}"
+        )
 
 
 def test_the_outside_role_test_resolves_peanuts_three_references(fleet):

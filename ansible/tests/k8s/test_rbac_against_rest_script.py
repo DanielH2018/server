@@ -114,9 +114,7 @@ def _pihole_guard_calls(monkeypatch) -> list[tuple[str, str]]:
 
 def _pihole_guard_rbac() -> list[dict]:
     return list(
-        yaml_fast.safe_load_all(
-            render_role_template("pihole", "guard-inert/rbac.yaml.j2")
-        )
+        yaml_fast.safe_load_all(render_role_template("pihole", "precheck/rbac.yaml.j2"))
     )
 
 
