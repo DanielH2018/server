@@ -28,11 +28,8 @@ K3S_WRITE_ALLOW = {
         "declares"
     ),
     _TASKS + "cluster-addons.yml": (
-        "H1.2 hands the PriorityClasses to `cluster-base` and H1.3 hands MetalLB to `metallb`; "
-        "each deletes its writers"
-    ),
-    _TASKS + "kubeconfig.yml": (
-        "H1.2 hands the read-only identity to `cluster-base`; the file keeps its host half"
+        "H1.3 hands MetalLB to `metallb` and deletes its writers; H1.2 already handed the "
+        "PriorityClasses to `cluster-base`"
     ),
     _TASKS + "coredns.yml": (
         "H1.4 hands the Corefile key and the Deployment to `coredns`; the file keeps the read "

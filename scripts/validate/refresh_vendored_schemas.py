@@ -69,6 +69,7 @@ CORE_GROUP_FILES = [
     "apis__discovery.k8s.io__v1_openapi.json",
     "apis__networking.k8s.io__v1_openapi.json",
     "apis__rbac.authorization.k8s.io__v1_openapi.json",
+    "apis__scheduling.k8s.io__v1_openapi.json",
     "apis__storage.k8s.io__v1_openapi.json",
 ]
 

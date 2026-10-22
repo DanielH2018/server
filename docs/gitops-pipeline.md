@@ -431,7 +431,7 @@ A second role gated off the tick's host is derived the same way, with no table t
 
 `--tags k3s` is the whole `setup/k3s` role: it reapplies MetalLB, Longhorn, the backup targets,
 the crons, CoreDNS and the node config, and arms three gated control-plane tasks. A three-line
-edit to `templates/readonly-rbac.yaml.j2` needs only `--tags kubeconfig`. The printed command
+edit to `templates/readonly-kubeconfig.j2` needs only `--tags kubeconfig`. The printed command
 therefore names the narrowest tags the change reaches.
 
 **One derivation, four surfaces.** `deploy_defer.record` asks

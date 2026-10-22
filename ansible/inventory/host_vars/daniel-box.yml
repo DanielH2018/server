@@ -119,6 +119,12 @@ containers_list:
     metrics:
       - job: crowdsec
         port: 6060
+  # The workload-tier PriorityClasses and the read-only cluster identity (H1.2). Flux applies the
+  # tag through `promote` and every Ansible path skips it. It renders prune: false, and it is
+  # untiered, so `NEVER_SHED` keeps it out of the lost-node shed set.
+  - name: cluster-base
+    platform: k8s
+    owner: flux
   # The IngressRoute, Middleware and TLSOption CRDs, alone in their tag so it can render
   # prune: false and its directory never substitutes (#5666). traefik's tier keeps it out of
   # the shed set.

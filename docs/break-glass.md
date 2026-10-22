@@ -146,7 +146,10 @@ daniel-server keeps its own SOPS key, so decryption still works without the reco
 
 1. Follow `docs/longhorn-disaster-recovery.md` → *Procedure (fresh host, total loss)*,
    through *Cluster bring-up*: bring up a replacement daniel-box with `ansible/bootstrap.yml`, add its
-   pubkey to `ansible/.sops.yaml`, `sops updatekeys` from daniel-server, commit, pull.
+   pubkey to `ansible/.sops.yaml`, `sops updatekeys` from daniel-server, commit, pull. The
+   bring-up has hand steps since H1.2: the first `k3s-bringup.yml` run skips the `kubeconfig`
+   tag, the operator applies `cluster-base` by hand, and the root `homelab` Kustomization stays
+   suspended until the volumes are restored (that document's *Order from H1.2*).
 2. Decide whether cluster **objects** (Deployments, Secrets, PVC bindings) are also lost —
    if so, restore etcd first per `docs/k3s-etcd-restore.md` (needs item 2, the cluster
    token, if this is a genuinely new host rather than the same disk).

@@ -110,6 +110,53 @@ the per-volume map and each exclusion's rationale:
    target at the bucket), and `k3s_longhorn_r2_armed: true` for the R2 target — the four
    volumes in the table above restore from *that* one, so a B2-only bring-up leaves them
    with nothing to restore from.
+   **Order from H1.2.** `cluster-base` (the PriorityClasses and the read-only identity) is
+   Flux-owned, and two of its objects are needed before Flux can run. Flux's controllers name
+   `homelab-critical`, and `setup/k3s`'s `kubeconfig.yml` reads the token Secret. So step 2
+   runs in the order below on a new cluster, and the root `homelab` Kustomization stays
+   suspended until the volumes are restored (step 4). Once the root runs, every Flux-owned
+   stateful tag provisions fresh empty PVCs under the backed-up names. Steps (a), (c) and (g)
+   run playbooks or patches that need `become`, so the operator runs them.
+
+    - (a) `uv run ansible-playbook ansible/k3s-bringup.yml --skip-tags kubeconfig`. It installs
+      k3s, and k3s creates its bundled CoreDNS. The play skips the token wait, which would fail
+      here.
+    - (b) **Operator-only.** Render `cluster-base` and apply it under `kustomize-controller`'s own
+      field manager, so Flux's first apply finds its own fields:
+      `uv run python scripts/renderer/homelab_render.py cluster --out <out> --role cluster-base`,
+      then
+      `sudo k3s kubectl apply --server-side --field-manager=kustomize-controller -k <out>/cluster/cluster-base`.
+      The directory substitutes nothing, so the placeholder-mode render applies as it stands.
+    - (c) `uv run ansible-playbook ansible/k3s-bringup.yml --tags kubeconfig`. The token Secret
+      exists, so the bounded wait passes.
+    - (d) Run the `flux` role with `flux_sync_suspend: true`, which renders `suspend: true` on
+      the `OCIRepository` `homelab` and on the root Kustomization. Its pods admit, because (b)
+      created `homelab-critical`. Then, **operator-only**, resume the `OCIRepository` alone so the
+      children have a source:
+      `sudo k3s kubectl -n flux-system patch ocirepository homelab --type merge --field-manager=homelab-operator -p '{"spec":{"suspend":false}}'`.
+      Do not run the `flux` role again before (g): a run with the role's defaults resumes the
+      root before the restores.
+    - (e) **Operator-only.** Create `flux-system/sops-age` from the password manager (item 10
+      of the recovery kit in `docs/break-glass.md`).
+    - (f) **Operator-only.** Hold promotions and fix the revision. Wait until no run of the
+      `promote` workflow is queued or in progress. Read `prod`'s commit from the
+      `org.opencontainers.image.revision` key of `prod`'s manifest in GHCR. When `DEPLOY_HOLD`
+      reads `none`, set `gh variable set DEPLOY_HOLD --body dr-restore -R DanielH2018/server`.
+      A merge during the restores would otherwise promote, time out in `verify` with the root
+      suspended, and reset `prod` to `last-good`. Then render the plumbing tags at that commit
+      and apply their `flux/<tag>.yaml` with
+      `sudo k3s kubectl apply --server-side --field-manager=kustomize-controller -f <file>`.
+      That is the root's own field manager, so the root adopts them. Wait until each reads
+      `Ready`.
+    - (g) After the restores of step 4, **operator-only**, resume the root with the same patch
+      form:
+      `sudo k3s kubectl -n flux-system patch kustomization homelab --type merge --field-manager=homelab-operator -p '{"spec":{"suspend":false}}'`.
+      Once every status on `prod`'s commit reads `success`, clear the hold with
+      `gh variable set DEPLOY_HOLD --body none -R DanielH2018/server`.
+
+   Before H1.2 there is no step (b): k3s bring-up applies the PriorityClasses and the identity
+   itself. Steps 3 and 4 below sit between (f) and (g). D5's flux PR replaces this block with a
+   pointer to its own bootstrap section.
 3. **Wait for the backupstore sync** — `kubectl -n longhorn-system get backuptarget`
    `AVAILABLE true`, then Backup CRs appear. **The poll interval is `0`** — polling is
    OFF (`k3s_longhorn_backupstore_poll_interval` is 0, because even a 1h interval exhausted
