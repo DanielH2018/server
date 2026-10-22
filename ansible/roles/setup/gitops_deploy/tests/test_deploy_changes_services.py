@@ -342,16 +342,30 @@ def test_a_kuma_check_template_change_reaches_the_roles_importing_its_task_file(
     assert setup_tags_for([path]) == consumers
 
 
-def test_an_initial_setup_defaults_change_reaches_claude_code():
+def test_an_initial_setup_defaults_change_reaches_its_readers():
     """claude_code puts every agent in `initial_setup_worktree_holders_group` (#4303), so a
-    rename re-applied only initial_setup and left the agents in the old group."""
+    rename re-applied only initial_setup and left the agents in the old group. claude_code,
+    renovate_agent and homelab_builder each copy the uv `initial_setup_uv_version` pins, so a
+    uv bump left their copies on the old version (#5945)."""
     path = "ansible/roles/setup/initial_setup/defaults/main.yml"
     assert services_from_changed_paths([path]).setup_roles == {
         "initial_setup",
         "claude_code",
+        "homelab_builder",
+        "renovate_agent",
     }
-    assert setup_roles_for(path) == {"initial_setup", "claude_code"}
-    assert setup_tags_for([path]) == {"initial_setup", "claude_code"}
+    assert setup_roles_for(path) == {
+        "initial_setup",
+        "claude_code",
+        "homelab_builder",
+        "renovate_agent",
+    }
+    assert setup_tags_for([path]) == {
+        "initial_setup",
+        "claude_code",
+        "homelab_builder",
+        "renovate_agent",
+    }
     tasks = "ansible/roles/setup/initial_setup/tasks/crons.yml"
     assert setup_roles_for(tasks) == {"initial_setup"}
 

@@ -19,6 +19,9 @@
 #                         home without hiding this one
 #   agent_user_clone_dir  its own clone, never the primary checkout
 #   agent_user_repo       OWNER/NAME of the repo to clone
+#   agent_user_uv_version the uv version initial_setup pins, `initial_setup_uv_version`. The
+#                         caller names that key in its own file, so a pin bump re-applies it
+#                         (deploy_cross_role.SETUP_FILES_SHIPPED_BY_OTHER_ROLES, #5945)
 #
 # Every module runs as root, and the last task hands the home to the agent. Not
 # `become_user`: a module run as the agent needs an interpreter it can execute, and the
@@ -71,6 +74,29 @@
     - "{{ agent_user_home }}/.local/share/claude-guard"
     - "{{ agent_user_home }}/.local/share/claude-worktree"
   become: true
+
+- name: Read the operator's uv version
+  # As the operator, through runuser like every command here: the binary sits under the 0750
+  # /home/{{ sys_user }}, and the read writes nothing.
+  ansible.builtin.command:
+    argv: [runuser, -u, "{{ sys_user }}", --, "/home/{{ sys_user }}/.local/bin/uv", --version]
+  register: common_agent_user_operator_uv
+  changed_when: false
+  check_mode: false
+  become: true
+
+- name: Refuse to copy a uv the pin has moved past
+  # initial_setup's `tooling` block installs the pin, and initial_setup.yml applies it before
+  # either caller, so a mismatch means that apply was skipped on this host. Copying anyway
+  # would hand the agent the old binary under a run that reads green. Check mode installs
+  # nothing, so the operator's uv there is still the old one.
+  ansible.builtin.assert:
+    that: common_agent_user_operator_uv.stdout.split()[1:2] == [agent_user_uv_version]
+    fail_msg: >-
+      The operator's uv is '{{ common_agent_user_operator_uv.stdout }}', and the pin is
+      {{ agent_user_uv_version }}. Apply `initial_setup.yml --tags tooling` on this host first.
+    quiet: true
+  when: not ansible_check_mode
 
 - name: Give the agent user the operator's pinned uv and uvx
   # The agent's own uv, on the PATH its login shell and units set, where ProtectHome= hides

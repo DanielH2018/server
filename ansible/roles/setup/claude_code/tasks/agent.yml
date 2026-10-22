@@ -18,6 +18,7 @@
     agent_user_home: "{{ claude_code_agent_user_home }}"
     agent_user_clone_dir: "{{ claude_code_agent_user_clone_dir }}"
     agent_user_repo: "{{ claude_code_agent_user_repo }}"
+    agent_user_uv_version: "{{ initial_setup_uv_version }}"
 
 # The reverse of the expiry the switched-off arm below sets.
 - name: Lift the agent user's account expiry

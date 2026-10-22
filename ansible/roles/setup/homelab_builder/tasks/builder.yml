@@ -87,8 +87,32 @@
   become: true
 
 # The uv and Python steps of common/tasks/agent_user.yml, not the whole file, which also installs
-# Claude Code. A copy of the uv binary initial_setup pins, so a uv bump reaches the builder on the
-# next apply of this role. Root-owned, for the reason the code directory is.
+# Claude Code. A copy of the uv binary initial_setup pins. Naming `initial_setup_uv_version` here
+# is what makes a pin bump re-apply this role: deploy_cross_role.SETUP_FILES_SHIPPED_BY_OTHER_ROLES
+# routes initial_setup's defaults to it, and narrow_setup keeps this tag for that key (#5945).
+- name: Read the operator's uv version for the builder
+  tags: [homelab-builder-install]
+  ansible.builtin.command:
+    argv: ["/home/{{ sys_user }}/.local/bin/uv", --version]
+  register: homelab_builder_operator_uv
+  changed_when: false
+  check_mode: false
+  become: false
+
+- name: Refuse to give the builder a uv the pin has moved past
+  tags: [homelab-builder-install]
+  # initial_setup.yml applies initial_setup's `tooling` block first, so a mismatch means that
+  # apply was skipped on this host, and the copy below would ship the old binary. Check mode
+  # installs nothing, so the operator's uv there is still the old one.
+  ansible.builtin.assert:
+    that: homelab_builder_operator_uv.stdout.split()[1:2] == [initial_setup_uv_version]
+    fail_msg: >-
+      The operator's uv is '{{ homelab_builder_operator_uv.stdout }}', and the pin is
+      {{ initial_setup_uv_version }}. Apply `initial_setup.yml --tags tooling` on this host first.
+    quiet: true
+  when: not ansible_check_mode
+
+# Root-owned, for the reason the code directory is.
 - name: Give the builder the operator's pinned uv
   tags: [homelab-builder-install]
   ansible.builtin.copy:
