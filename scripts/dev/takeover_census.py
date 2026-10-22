@@ -158,7 +158,10 @@ def declares_nothing(obj_key, live):
         lines.append(
             f"    {manager}  (cleaned: the flip deletes {len(paths)} field(s))"
         )
-        lines += [f"      {format_path(p)}" for p in sorted(paths, key=format_path)]
+        lines += [
+            f"      {format_path(p)}{'  (expected)' if p == LAST_APPLIED_PATH else ''}"
+            for p in sorted(paths, key=format_path)
+        ]
     return lines, failed
 
 
@@ -216,8 +219,8 @@ def report(live_objs, dryrun_objs):
         )
     if all(declared_paths(dry_by_key[k]) is None for k in shared):
         raise CensusError(
-            f"no dry-run object has a {FLUX_MANAGER} Apply entry, so the dry run was not "
-            f"applied with --field-manager={FLUX_MANAGER}"
+            f"no dry-run object has a {FLUX_MANAGER} Apply entry: either the dry run was not "
+            f"applied with --field-manager={FLUX_MANAGER}, or every object declares nothing"
         )
     lines = []
     for only, where in (
