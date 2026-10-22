@@ -213,9 +213,8 @@ def load_config(env: Mapping[str, str], problems: list[str] | None = None) -> Co
         # became direct pushers at the host flips). The CHECKS_ONLY/CHECKS_SKIP mechanism stays —
         # it is how any future split would be expressed, and check.py's guards keep it honest.
         # CHECKS_ONLY (comma-separated names) enables exactly that set; CHECKS_SKIP drops names
-        # from whatever is otherwise enabled. The four reachability gates participate under the
-        # names their monitors push as (prometheus, loki_reachable, b2_reachable,
-        # wan_reachable). A filter that enables a gated check while disabling its gate would
+        # from whatever is otherwise enabled. The three reachability gates participate under the
+        # names their monitors push as (prometheus, b2_reachable, wan_reachable). A filter that enables a gated check while disabling its gate would
         # reintroduce the alert storm the gate exists to prevent, so check.py's main() refuses to
         # start on one (validate_check_filter) — a crash-looping bridge is loud, a mis-gated one
         # lies quietly.

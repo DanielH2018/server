@@ -16,8 +16,10 @@ reason it is a member. The table lists the members, generated from that column.
 
 The rules below shaped those memberships.
 
-- **`LOKI_DEPENDENT`**: `ha_heartbeat` is deliberately NOT a member. Its ban arm fails open on a
-  Loki error, so the heartbeat verdict survives a Loki outage.
+- **There is no Loki gate.** The `loki_reachable` gate left with M5's PR 4a, and a Loki fault
+  pages from the `loki-homelab` ruler's `LokiHomelabMetricsMissing`. `ha_heartbeat`,
+  `swallowed_verdicts` and `workload_log_errors` read Loki and fail open on a Loki error, so
+  each keeps its own verdict, and none sits in a gate set.
 - **`B2_DEPENDENT`**: the gate runs one `b2_authorize_account` per `B2_PROBE_INTERVAL_S`
   (1800 s) with a BILLED outcome cached, because the fault it detects is a transaction cap. A
   failure that never reached B2 takes the short `B2_TRANSPORT_RETRY_S` TTL.
@@ -30,9 +32,8 @@ The rules below shaped those memberships.
 - **`STARTUP_GRACE`** is disjoint from every skip set, so a check that gains a gate leaves
   this set; a test holds both.
 - **`workload_log_errors`** is in `STARTUP_GRACE` and in no gate set. It reads Loki, not
-  Prometheus, so `PROM_DEPENDENT` does not apply. It is not in `LOKI_DEPENDENT` either, because
-  its arm fails open on a Loki error (`with_log_errors`) and Loki Reachable owns that page. It
-  is the only caller of `with_log_errors`, and M6's batch A7 deletes the row.
+  Prometheus, so `PROM_DEPENDENT` does not apply. Its arm fails open on a Loki error
+  (`with_log_errors`), so a Loki fault pages from the ruler. It is the only caller of `with_log_errors`, and M6's batch A7 deletes the row.
 - **The retired second Prometheus gate.** `Cluster Prometheus Reachable` gated a
   `CLUSTER_DEPENDENT` set reading `CLUSTER_PROMETHEUS_URL` until 2026-09-28. Both URLs named one
   cluster Service after the Docker plane retired (2026-08-14), so its tile could not go red on its

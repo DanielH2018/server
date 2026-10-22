@@ -21,14 +21,8 @@ def test_prom_dependent_set_matches_real_checks():
     assert gates.PROM_DEPENDENT <= names
 
 
-def test_loki_dependent_set_matches_real_checks():
-    # Guard (mirrors PROM_DEPENDENT): every name in LOKI_DEPENDENT is a real check.
-    names = {c.name for c in registry.build_checks()}
-    assert gates.LOKI_DEPENDENT <= names
-
-
 def test_b2_dependent_set_matches_real_checks():
-    # Guard (mirrors PROM_DEPENDENT/LOKI_DEPENDENT): every name in B2_DEPENDENT is a real check.
+    # Guard (mirrors PROM_DEPENDENT): every name in B2_DEPENDENT is a real check.
     names = {c.name for c in registry.build_checks()}
     assert gates.B2_DEPENDENT <= names
 
@@ -43,22 +37,21 @@ def _dependents_are_real_checks(dependents_map: dict, names: set) -> bool:
 
 
 def test_gate_dependents_maps_real_gates_to_real_checks():
-    """Guard (mirrors the four *_DEPENDENT sets above): both halves of GATE_DEPENDENTS are real.
+    """Guard (mirrors the *_DEPENDENT sets above): both halves of GATE_DEPENDENTS are real.
 
     validate_check_filter reads this map to refuse a CHECKS_ONLY/CHECKS_SKIP filter that turns a
     gate off while leaving its dependents on. A typo on either side stops guarding one gate and
     changes nothing else, so the filter would accept exactly the configuration the gate exists to
-    prevent — silently, since the four sets it is built from each have their own guard and would
+    prevent — silently, since the sets it is built from each have their own guard and would
     still pass.
     """
     names = {c.name for c in registry.build_checks()}
     assert _dependents_are_real_checks(gates.GATE_DEPENDENTS, names)
-    # The KEYS are deliberately NOT check names. The four reachability gates are evaluated by
+    # The KEYS are deliberately NOT check names. The three reachability gates are evaluated by
     # run_once directly and have no registry entry, which is why validate_check_filter unions them
     # into `known` separately — so they are pinned against the gates run_once actually evaluates.
     assert set(gates.GATE_DEPENDENTS) == {
         "prometheus",
-        "loki_reachable",
         "b2_reachable",
         "wan_reachable",
     }
@@ -89,7 +82,7 @@ def test_exporter_dependent_union_is_real_checks_and_not_empty():
 def test_a_gates_value_validates_against_its_own_dependent_sets():
     """`Gates.gate_dependents()` is what the filter is validated against, not the module table.
 
-    `run_once` suppresses by the four sets on the VALUE it is handed, so a filter validated
+    `run_once` suppresses by the three sets on the VALUE it is handed, so a filter validated
     against `GATE_DEPENDENTS` instead would accept a configuration the run loop then treats
     differently. A `Gates` whose Prometheus gate suppresses nothing must therefore leave
     `--check disk` alone, where the module table unions `prometheus` in.
