@@ -84,8 +84,9 @@ merges it outside `land.sh`, runs `land.sh --regate <pr>` for it, then clears th
 3. **Merge through `land.sh`.** The merge is the apply, in place of `k3s-bringup.yml --tags longhorn`.
    On daniel-box, run the command the `land-after-merge` skill gives for this PR. `land.sh` runs
    the gates above, posts `homelab/upgrade-gates`, merges, and follows the merge until `promote`
-   has applied it. The `longhorn` Kustomization waits for the manager DaemonSet, within the
-   `manifests_rollout_timeout` in the role's defaults. Then wait for the driver deployer, which
+   has applied it. The `longhorn` Kustomization renders `wait: true`, so Flux waits for every
+   object it applies, the manager DaemonSet and the driver deployer among them, within the
+   `manifests_rollout_timeout` in the role's defaults. Then confirm the driver deployer, which
    the old play waited on:
    ```bash
    kubectl -n longhorn-system rollout status deploy/longhorn-driver-deployer --timeout=600s

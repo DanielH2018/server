@@ -81,8 +81,11 @@ host probes stay green.
   are immutable, and the Ansible task that deleted the class when its parameters differed is
   gone. If the manager does not replace a class whose ConfigMap changed, the fix is an
   **operator-only** delete of the class, which the manager recreates from the ConfigMap.
-- **`manifests_rollout_timeout` is `2m`, measured 2026-10-22** (`defaults/main.yml`, #5922). The
-  DaemonSet rolls with `maxUnavailable: 100%`, so both manager pods are replaced at once.
+- **`manifests_rollout_timeout` is `10m`** (`defaults/main.yml`). The DaemonSet rolls with
+  `maxUnavailable: 100%`, so both manager pods are replaced at once, and a cached restart
+  measured 36s on 2026-10-22 (#5922). A version bump also cold-pulls the image on every node,
+  and the Kustomization's `wait: true` waits for the driver deployer and both Deployments too.
+  A timeout on this forward-only tag writes `DEPLOY_HOLD`, so the value carries that headroom.
 - **`NEVER_SHED` names the tag** in `ansible/filter_plugins/service_tier.py`. The role is
   untiered, and the lost-node break-glass must not scale the storage control plane down.
   `ansible/tests/k8s/test_shed_set_is_derived_from_tier.py::test_never_shed_matches_the_untiered_roles_that_never_prune`

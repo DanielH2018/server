@@ -151,8 +151,12 @@ k3s_longhorn_node_down_pod_deletion_policy: do-nothing  # noqa var-naming[no-rol
 # two. The literal is `manifests_rollout_timeout` because the renderer reads a role's Flux
 # timeout from that key.
 # Measured 2026-10-22: 36s from deleting both manager pods to both replacements Ready (30s of it
-# termination grace), doubled and rounded up to a minute. Cited in #5922.
-manifests_rollout_timeout: 2m  # noqa var-naming[no-role-prefix]
+# termination grace). Cited in #5922. That was a restart with the image cached. A version bump
+# is slower: every node cold-pulls the new manager image, the manager runs its upgrade path, and
+# the Kustomization renders `wait: true`, so the timeout also covers longhorn-driver-deployer
+# (which the old play waited on for 600s), longhorn-ui and longhorn-global-manager. A timeout on
+# a forward-only tag writes DEPLOY_HOLD, so the value is the manifests default of 600s, not 2m.
+manifests_rollout_timeout: 10m  # noqa var-naming[no-role-prefix]
 
 # DECIDED: never pruned. Under prune: true, a render that dropped the manager DaemonSet or a CRD
 # would make Flux delete it, and deleting a Longhorn CRD deletes every Volume, Engine and Replica
