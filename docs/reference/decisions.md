@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/decisions.py
-generated_at: 2026-10-22 22:24 UTC
-generated_sha: 0d13eae7e
+generated_at: 2026-10-22 22:34 UTC
+generated_sha: f0cf27898
 ---
 
 !!! warning "Generated file — do not edit"
@@ -12,7 +12,7 @@ generated_sha: 0d13eae7e
 
 # Decisions
 
-874 `DECIDED:` marker(s) found across the tree. A marker is a settled trade-off recorded as a comment at the line it governs, per CLAUDE.md's "Review & Memory Hygiene" section — written so a reviewer trips over the reasoning before re-opening a decision that already has one. A reviewer brief greps the literal marker text before flagging something as new; this page exists so a human can browse the same set instead of guessing a phrase to grep.
+881 `DECIDED:` marker(s) found across the tree. A marker is a settled trade-off recorded as a comment at the line it governs, per CLAUDE.md's "Review & Memory Hygiene" section — written so a reviewer trips over the reasoning before re-opening a decision that already has one. A reviewer brief greps the literal marker text before flagging something as new; this page exists so a human can browse the same set instead of guessing a phrase to grep.
 
 !!! warning "Possible duplicates"
     Two markers below have a near-identical first sentence once case and whitespace are normalised — usually the same trade-off decided twice, or a marker copied and never specialised. Worth a look, not a verdict.
@@ -198,6 +198,7 @@ generated_sha: 0d13eae7e
     * `docs/monitor-bridge-checks.md:921` and `prek.toml:517`
     * `docs/security-tools.md:25` and `docs/security-tools.md:89`
     * `docs/target-architecture/contracts.md:313` and `docs/target-architecture/deploy/d2-first-leaf.md:755`
+    * `scripts/deploy_tools/tests/test_chained_timeout.py:263` and `scripts/deploy_tools/tests/test_chained_timeout.py:279`
     * `scripts/deploy_tools/tests/test_shared_role_reach.py:111` and `scripts/deploy_tools/tests/test_shared_role_reach.py:125`
     * `scripts/dev/fanout_lib/brief.py:357` and `scripts/dev/findings_lib/history_cli.py:200`
     * `scripts/dev/findings_lib/claim_cli.py:30` and `scripts/dev/findings_lib/export_cli.py:37`
@@ -672,6 +673,7 @@ generated_sha: 0d13eae7e
 | the stamp is read, and both halves are shipped. `--list-only` weekly under the `etcd-snapshot` tag (k3s_etcd_restore_drill_cron, Monday 10:20), run in place from the primary checkout, since 2026-08-28 (PR #531). The fail-closed staleness reader is `check_etcd_restore_drill` in monitor-bridge/check.py, since PR #535: it reads `last-success-list-only` from this STAMP_DIR and pushes the `etcd Restore Drill` Kuma monitor. | `scripts/backup/etcd_restore_drill.sh:158` | 2026-09-02 |
 | the nearest finished descendant's verdict stands in for a merge commit GitHub never ran CI for. That descendant's run tested a tree that contains every change in the merge commit, which is the rule the tick already deploys by (it fast-forwards to the newest green ancestor of the tip). What it does not prove is the merge commit's own tree, the one land.sh deploys with `deploy.sh --at`. Nothing can prove that once the push event is gone, and the alternative is a landing no re-run converges (#4621). A RED one ends the walk rather than being stepped over: a later green commit may hold the fix the merge commit lacks, so its green says nothing about the tree deployed. Neither verdict changes once both exist, so `wait` ends that case on CI_UNPROVEN, not on CI_RED: CI_RED's resume is a re-run, and every re-run reads the same red (#4649). `green_after` finds the later green, and the CI_UNPROVEN line says to deploy the tip. While a later one has no verdict yet, `wait` keeps polling rather than ending red. | `scripts/deploy_tools/await_ci.py:268` | 2026-10-12 |
 | the first red ends the walk. `ci-unproven` case (see `descendant_verdict`), so the caller falls back. | `scripts/deploy_tools/await_ci.py:314` | 2026-10-17 |
+| the clamp stands although the published bundle's all-changed chain is past it (#5868: 32016s with 111 Kustomizations, against 19800s; it was 31920s until Longhorn v1.13.0 raised the `longhorn` timeout from 2m to 10m, #5972). `verify`'s own wait is the same `promote_timeout`, so it stops at this cap too. Lifting only the soak's rendered wait would let the soak outlast a `verify` that has already written `failed=<names>`, and would pass no promotion. The soak's wait cannot shrink to the chain of what changed either: the render cannot know R's changed set (renderer_lib/soak.py). A narrow revision stays well under the cap. A revision that changes every tag at once, such as a renderer change, can fail at the cap, and the hold names the Kustomizations that had not settled. The remedy is a `verify` that re-enters rather than holding one runner, which is d4-ordering.md's Open question 14. | `scripts/deploy_tools/chained_timeout.py:45` | 2026-10-22 |
 | the read-back requires that GHCR serves the tag, not that it serves the build metadata's digest. The job builds on the runner's default `docker` driver, whose `containerimage.digest` can be the config digest rather than the manifest digest GHCR serves. docker/setup-buildx-action would move the build cache out of reach of the `docker system prune` that lets ten builds fit on one runner. | `scripts/deploy_tools/ci_images.py:279` | 2026-10-17 |
 | the two halves of this gate come from different trees, and that is accepted. | `scripts/deploy_tools/deploy_lib/detach_run.py:118` | 2026-09-24 |
 | this gate fails OPEN on anything but a usage error, as `expand_shared_roles` does. Ansible's CLI classes are not a published API, so a moved import or a changed exit code leaves the deploy running exactly as it did before this gate existed. Refusing every deploy over a renamed ansible module would be a worse failure than the one being fixed. | `scripts/deploy_tools/deploy_lib/flags.py:77` | 2026-10-03 |
@@ -728,6 +730,11 @@ generated_sha: 0d13eae7e
 | every caller counts, including one whose deploy writes no release record (#3057). Until #3057 the deployer's caller set kept only tags whose deploy also ran `manifests`, because a caller with no record could never discharge a line and would keep it forever. No declared entry has that shape — `volume-snapshot` and `volume-revert`, the two roles that never include `k8s/manifests`, are both shared — so the filter dropped nothing and cost a second walk. Should one appear, its shared roles' lines stay until a hand clears them, which names the gap rather than discharging past a caller nothing proved. `grep -rL k8s/manifests ansible/roles/k8s/*/tasks/main.yml` against the declared entries re-derives whether one has. | `scripts/deploy_tools/shared_role_callers.py:211` | 2026-10-01 |
 | ` comment to | `scripts/deploy_tools/shared_role_reach.py:22` | 2026-09-25 |
 | per KEY, not per role and not per subdirectory. | `scripts/deploy_tools/shared_role_reach.py:26` | 2026-09-25 |
+| ` marker at VERIFY_CAP_S records why the clamp stands. | `scripts/deploy_tools/tests/test_chained_timeout.py:263` | 2026-10-22 |
+| " in line] | `scripts/deploy_tools/tests/test_chained_timeout.py:276` | 2026-10-22 |
+| ` marker above VERIFY_CAP_S records why the clamp stands" | `scripts/deploy_tools/tests/test_chained_timeout.py:279` | 2026-10-22 |
+| ` at VERIFY_CAP_S records the all-changed chain it accepts (#5868). | `scripts/deploy_tools/tests/test_chained_timeout.py:284` | 2026-10-22 |
+| ` at VERIFY_CAP_S accepted; re-decide the clamp and record the new figure" | `scripts/deploy_tools/tests/test_chained_timeout.py:308` | 2026-10-22 |
 | a comment and nothing else.\n" + TASKS) | `scripts/deploy_tools/tests/test_land_tags_cli.py:50` | 2026-10-14 |
 | these two drive `narrow_setup.main` with the argv `deploy_narrow.narrow_setup_argv` builds, and that function is the capability — there is no earlier signature to separate the defect from (#2363). The defect they name is a flag mismatch across the subprocess boundary, and they catch it: spelling `--role-tag` as `--role-tags` in the builder fails both with argparse's `unrecognized arguments`, measured 2026-09-24. | `scripts/deploy_tools/tests/test_narrow_setup.py:472` | 2026-09-24 |
 | `role_tags`' `playbook` argument IS the capability under test, so no input separates this rule from the signature (#2363). `foreign_tags` needs the playbook to know which other roles are in scope; a `role_tags` without it cannot refuse a shared tag at all. Today's behaviour is what the pair below holds, and it does: making `role_tags` intersect against an empty set instead of `foreign_tags(...)` fails `test_a_tag_another_role_in_the_playbook_declares_is_flagged` with DID NOT RAISE and leaves its accepting half green, measured 2026-09-24. | `scripts/deploy_tools/tests/test_narrow_setup_edges.py:356` | 2026-09-24 |
@@ -947,6 +954,7 @@ generated_sha: 0d13eae7e
 | ` comment on | `docs/break-glass.md:179` | 2026-10-04 |
 | no | `docs/crowdsec-waf-record.md:32` | 2026-09-29 |
 | ` marker on that tolerance in | `docs/crowdsec-waf-record.md:163` | 2026-10-10 |
+| ` at `chained_timeout.py:VERIFY_CAP_S` records | `docs/flux-deploy-plane.md:1244` | 2026-10-22 |
 | ` marker above `_BROAD_MANUAL_PREFIXES` in | `docs/gitops-pipeline.md:219` | 2026-10-10 |
 | ` marker. | `docs/gitops-pipeline.md:635` | 2026-10-10 |
 | ` on | `docs/gitops-pipeline.md:737` | 2026-10-10 |
