@@ -270,10 +270,10 @@ data:
         static_configs:
           - targets: ['home-assistant.{{ k8s_namespace }}.svc:{{ containers_list | entry_port('home-assistant') }}']
       # The ingress probes (docs/target-architecture/monitoring/m4-blackbox-ingress.md): one
-      # target per tile Kuma's ingress loop renders, from the same `kuma_ingress_monitors`
-      # filter, so an entry with a `hostname` gets a probe with no edit here and `kuma: false`
-      # opts it out of both. The target is the exact URL Kuma's tile probes, and the rewrite
-      # below keeps it as `instance`, which the soak queries join on.
+      # target per tile the `kuma_ingress_monitors` filter yields, so an entry with a
+      # `hostname` gets a probe with no edit here and `kuma: false` opts it out. These are the
+      # only probes of the ingress names since M4's PR 4 removed Kuma's ingress tiles. The
+      # rewrite below keeps the probed URL as `instance`, which the alert descriptions name.
       #
       # Each target sets `service` (the entry, which is its deploy tag), so the
       # ingress-probes rules take `service` from this job rather than from a literal.
