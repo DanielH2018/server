@@ -9,6 +9,7 @@ ConfigMap stops carrying fails here rather than in the next scheduled pod.
 Run: uv run pytest ansible/roles/k8s/janitorr/tests/test_janitorr_health.py
 """
 
+import re
 import subprocess
 import sys
 
@@ -22,6 +23,11 @@ import janitorr_health
 _NOW = 1792301426.0
 _STARTED = "2026-10-18T04:30:26Z"
 _ERROR = "ERROR Unexpected error occurred in scheduled task\n"
+
+
+# monitor-bridge's Swallowed Push Verdicts check parses `<ts> <host> <tag>: ` and nothing
+# shorter, so a line without the two leading tokens is read by its LogQL and never counted.
+_SYSLOG_UP = r"\S+ \S+ janitorr-health: status=up "
 
 
 @pytest.fixture
@@ -56,7 +62,20 @@ def test_a_clean_log_is_pushed_up_to_the_url_from_the_environment(pushes, capsys
         "tok",
     )
     assert msg == "no janitorr errors (up 1.0h)"
-    assert capsys.readouterr().out.startswith("janitorr-health: status=up ")
+    assert re.match(_SYSLOG_UP, capsys.readouterr().out), "not in the syslog shape"
+
+
+def test_a_push_kuma_rejects_is_logged_in_the_syslog_shape(pushes, capsys):
+    def push(status, msg, base, token, *, log):
+        log("push failed (http=404 by=kuma) (status=%s: %s)" % (status, msg))
+        return False
+
+    kubectl = _replies({"get": (0, _STARTED), "logs": (0, "INFO cleanup done\n")})
+    janitorr_health.main(kubectl=kubectl, push=push, now=lambda: _NOW)
+    *_, last = capsys.readouterr().out.splitlines()
+    assert re.match(
+        r"\S+ \S+ janitorr-health: push failed \(http=404 by=kuma\) ", last
+    ), last
 
 
 def test_a_cleanup_error_past_the_grace_is_pushed_down(pushes):
