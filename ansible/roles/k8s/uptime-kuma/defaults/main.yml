@@ -13,6 +13,19 @@ uptime_kuma_k8s_image: louislam/uptime-kuma:2.5.5@sha256:c74379ac4509ce2d2c2633f
 # Dockerfile's ARG FEATURES is empty.
 uptime_kuma_k8s_autokuma_image: ghcr.io/bigboot/autokuma:2.1.0-rc.2@sha256:12ed0e5085feeac65db760c1a3e3d4fa3acea0e7dc4c0e601e2ea64d82485a45
 
+# The budget of the uptime-kuma-prepull Kustomization, whose Job pulls both images onto the
+# node before the uptime-kuma Kustomization applies (scripts/renderer/renderer_lib/prepull.py).
+# The Deployment is `Recreate`, so without it the old pod stops before the new pod's pull
+# starts, and the alerting spine is down for the whole pull. MEASURED 2026-10-22 (#5867): the
+# pinned amd64 images are 602.3 MB from Docker Hub and 31.9 MB from GHCR. Docker Hub served a
+# 420 MB layer at 23.5-25.2 MB/s on daniel-box and 42.5-53.8 MB/s on daniel-server; GHCR has
+# served this homelab at 0.145-0.53 MB/s. The kubelet pulls them one after the other, so the
+# slowest measured rates take about 250s. 900s covers both images down to 0.7 MB/s. The Job has
+# no deadline, so a pull slower still costs that revision its verdict, the Job keeps pulling,
+# and Flux applies uptime-kuma on a later retry. Only Flux reads it: the renderer adds the
+# Kustomization for a published tag alone, so an Ansible deploy ignores it.
+flux_prepull_timeout: 900s  # noqa var-naming[no-role-prefix]
+
 # Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
 # Observability: this IS the alerting spine every push/HTTP monitor and the Discord chain depend
 # on — a broken deploy cannot page about being broken. It ALSO independently matches the

@@ -93,23 +93,23 @@ validation catches Jinja-syntax and structural errors, but NOT HA schema or enti
 path here. **Prefer the live REST API over the recorder DB.** This section is also the entry
 point when an automation didn't fire, or when you need ground-truth live HA state.
 
-HA runs in the k3s cluster on `daniel-box`, so deploy from daniel-box. The `--tags
-home-assistant` deploy ships the config via the k8s role (ConfigMaps + Secret, then a rollout
-restart). A restart is ~60-120s.
+HA runs in the k3s cluster on `daniel-box` and is Flux-owned: `deploy.sh --tags
+home-assistant` exits 5 (`DEPLOY-VERDICT: flux-owned`). The change reaches the cluster when
+its PR merges and `promote` publishes it (ConfigMaps + Secret, then a rollout restart of
+~60-120s).
 
 1. **A new config file must be added to its `home_assistant_*_files` list in the role's
    `defaults/main.yml`** — the ConfigMap loops over those lists and the init container installs
    whatever the ConfigMap holds. A file no list names never reaches `/config`, and
    `validate_ha_config.py` fails on the disagreement.
 
-2. **Commit (step 6), then deploy.** `deploy.sh` deploys `HEAD`, not the working tree.
+2. **Commit (step 6), push, open the PR, then land it.** Merging is what deploys, and
+   `land.sh` follows the promotion:
    ```
-   ./scripts/deploy.sh --tags "home-assistant"
+   ./scripts/deploy_tools/land.sh --pr <n> --arm-merge --await-merge --detach
+   cc-wait land <n>
    ```
-   **Exit 75 means the deploy lock stayed busy and nothing was deployed** — not a playbook
-   failure. Use `uv run ansible-playbook ansible/deploy.yml --tags "home-assistant" --check`
-   for an unlocked dry run if the change is risky. There is no config-only mode for the k8s
-   role: the config *is* the ConfigMap, so shipping it is the rollout.
+   There is no config-only mode: the config *is* the ConfigMap, so shipping it is the rollout.
 
 3. **Gate on health:** `kubectl -n homelab get pods -l app=home-assistant` shows 1/1 Running.
    The "could not validate that the sqlite3 database was shutdown cleanly" line on boot is

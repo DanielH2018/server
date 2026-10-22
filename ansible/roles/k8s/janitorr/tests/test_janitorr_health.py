@@ -9,8 +9,12 @@ ConfigMap stops carrying fails here rather than in the next scheduled pod.
 Run: uv run pytest ansible/roles/k8s/janitorr/tests/test_janitorr_health.py
 """
 
+import importlib.util
+import re
+import socket
 import subprocess
 import sys
+from pathlib import Path
 
 import pytest
 from _k8s_render import render_role_template
@@ -22,6 +26,25 @@ import janitorr_health
 _NOW = 1792301426.0
 _STARTED = "2026-10-18T04:30:26Z"
 _ERROR = "ERROR Unexpected error occurred in scheduled task\n"
+
+
+# monitor-bridge's own parser, loaded by path: the reader's line must parse there, and a copy of
+# its regex here would go on passing after the two drifted apart. It imports only `re`.
+_PARSER_SPEC = importlib.util.spec_from_file_location(
+    "_monitor_bridge_verdict_logs",
+    Path(__file__).resolve().parents[2]
+    / "monitor-bridge"
+    / "files"
+    / "verdicts"
+    / "logs.py",
+)
+assert _PARSER_SPEC and _PARSER_SPEC.loader
+_PARSER = importlib.util.module_from_spec(_PARSER_SPEC)
+_PARSER_SPEC.loader.exec_module(_PARSER)
+
+# monitor-bridge's Swallowed Push Verdicts check parses `<ts> <host> <tag>: ` and nothing
+# shorter, so a line without the two leading tokens is read by its LogQL and never counted.
+_SYSLOG_UP = r"\S+ \S+ janitorr-health: status=up "
 
 
 @pytest.fixture
@@ -56,7 +79,26 @@ def test_a_clean_log_is_pushed_up_to_the_url_from_the_environment(pushes, capsys
         "tok",
     )
     assert msg == "no janitorr errors (up 1.0h)"
-    assert capsys.readouterr().out.startswith("janitorr-health: status=up ")
+    assert re.match(_SYSLOG_UP, capsys.readouterr().out), "not in the syslog shape"
+
+
+def test_a_push_kuma_rejects_parses_as_a_rejection_in_monitor_bridge(pushes, capsys):
+    def push(status, msg, base, token, *, log):
+        log("push failed (http=404 by=kuma) (status=%s: %s)" % (status, msg))
+        return False
+
+    janitorr_health.main(
+        kubectl=_replies({"get": (0, _STARTED), "logs": (0, "INFO cleanup done\n")}),
+        push=push,
+        now=lambda: _NOW,
+    )
+    *_, last = capsys.readouterr().out.splitlines()
+    assert _PARSER.parse_push_line(last)[:4] == (
+        "janitorr-health",
+        socket.gethostname(),
+        "rejected",
+        "up",
+    ), last
 
 
 def test_a_cleanup_error_past_the_grace_is_pushed_down(pushes):
