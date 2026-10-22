@@ -158,7 +158,7 @@
   loop: [service, timer]
   become: true
   when: claude_code_agent_dotfiles
-  notify: Reload systemd
+  notify: Reload systemd for claude_code
 
 # Shares claude-rc's webhook file in /etc/claude-rc, which the role creates on every host.
 - name: Install the agent user's dotfiles sync failure alert
@@ -207,4 +207,4 @@
     - dotfiles-sync-alert.service
   become: true
   when: not claude_code_agent_dotfiles
-  notify: Reload systemd
+  notify: Reload systemd for claude_code

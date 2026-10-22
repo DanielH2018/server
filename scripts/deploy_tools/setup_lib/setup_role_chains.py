@@ -306,8 +306,8 @@ def handler_notifier_chains(role_dir: Path, handlers_file: Path) -> list[tuple] 
     leaf task.
 
     Matches a handler name exactly, never as a substring: `docker_install` defines `Reload
-    systemd after docker teardown`, and a substring test would let that satisfy another
-    role's `Reload systemd`.
+    systemd after docker teardown`, and a substring test would let that satisfy a notify of
+    a shorter name such as `Reload systemd`.
 
     Keeps `var_consumer_chains`'s asymmetry. Returns None -- caller keeps the role-level
     answer -- unless EVERY handler defined here has at least one notifying task, so a
