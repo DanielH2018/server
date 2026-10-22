@@ -9,7 +9,7 @@ without a cycle.
 # a week after the cutover that frees it, because a revert of the cutover needs the token and a
 # retired key cannot come back by revert. Each name has no consumer until then:
 # `consumers.consumer_tags` returns nothing for it, and `cluster_vars_check.names_problems`
-# does not demand a cluster render for it. M5's PR 5 (PR_5_URL) retires the keys, not before the
+# does not demand a cluster render for it. M5's PR 5 (draft PR #5856) retires the keys, not before the
 # `monitor-bridge` deploy of PR 4a plus 7 days, and deletes this set in the same commit.
 PENDING_RETIREMENT: frozenset[str] = frozenset(
     {

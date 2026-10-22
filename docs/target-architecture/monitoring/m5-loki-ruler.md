@@ -14,6 +14,8 @@ Soak read, [#4824](https://github.com/DanielH2018/server/issues/4824): passed on
 
 PR 4a, the Kuma side goes (PR 5 is its own PR, by the operator's ruling of 2026-10-22): [#5852](https://github.com/DanielH2018/server/pull/5852).
 
+PR 5, the token retirement, a draft until 4a's `monitor-bridge` deploy plus 7 days: [#5856](https://github.com/DanielH2018/server/pull/5856).
+
 Depends on: M1, and M2's PR 3 (the `weekly-reboot` mute) before the cutover. Two
 contracts.md rows also gate PRs here: the row *Open questions* 2 requests gates PR 2a, and
 the row *Open questions* 1 requests gates PR 4b. contracts.md's *Requests on C7* holds both
