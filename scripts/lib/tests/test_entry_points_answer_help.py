@@ -30,6 +30,7 @@ regardless, and the test could not see the one failure a cron hits first (#3296)
 Run: uv run pytest scripts/lib/tests/test_entry_points_answer_help.py
 """
 
+import ast
 import importlib
 import os
 import subprocess
@@ -96,6 +97,40 @@ def _pythonpath_without_scripts():
     )
 
 
+def _doc_first_line(path):
+    """The first line of an entry point's docstring, or "" when it has none.
+
+    A Python module's docstring is its own. A shell script's is its leading comment block,
+    which every shell entry point here prints for `--help`: the first comment line after the
+    shebang that carries text.
+    """
+    text = path.read_text()
+    if path.suffix == ".py":
+        doc = (ast.get_docstring(ast.parse(text)) or "").strip()
+        return doc.splitlines()[0].strip() if doc else ""
+    for line in text.splitlines()[1:]:
+        if not line.startswith("#"):
+            return ""
+        if line.lstrip("#").strip():
+            return line.lstrip("#").strip()
+    return ""
+
+
+def _answers_help(stdout, path):
+    """Whether `stdout` is a help answer rather than a job's output.
+
+    exit 0 with any output is what a script that ignores `--help` and runs its whole check
+    gives too (#5579), so the answer must carry the docstring's first line, which
+    `answer_help` prints, or a `usage:` line, which argparse and the shell scripts print.
+    """
+    first = _doc_first_line(path)
+    if first and first in stdout:
+        return True
+    return any(
+        line.strip().lower().startswith("usage:") for line in stdout.splitlines()
+    )
+
+
 def test_the_census_still_finds_the_entry_points_it_is_measured_against():
     missing = MUST_FIND - set(ENTRY_POINTS)
     assert not missing, f"the entry-point census lost {sorted(missing)}"
@@ -130,6 +165,11 @@ def test_the_entry_point_answers_help_with_exit_zero(name):
         f"environment.\nstdout: {r.stdout[-400:]}\nstderr: {r.stderr[-400:]}"
     )
     assert r.stdout.strip(), f"{name} --help exited 0 and printed nothing to stdout"
+    assert _answers_help(r.stdout, path), (
+        f"{name} --help exited 0, but its stdout carries neither its docstring's first line "
+        "nor a `usage:` line, so it ran its job instead of answering (#5579). Put "
+        f"`lib.cli_help.answer_help` ahead of that work.\nstdout: {r.stdout[-400:]}"
+    )
 
 
 # The entry points the test above once waited on: each ignored `--help` and ran its whole check,
@@ -216,6 +256,17 @@ def test_either_help_flag_is_recognised(flag):
 def test_a_flag_that_merely_contains_help_is_not_a_help_request():
     """The reject half. `--helpful` and `--no-help` are somebody else's flags."""
     assert not wants_help(["--helpful", "--no-help", "help"])
+
+
+def test_a_shell_entry_point_answers_with_its_header_comment(tmp_path):
+    """The shell half of `_answers_help`: the header comment counts, a job's output does not."""
+    script = tmp_path / "fake.sh"
+    script.write_text(
+        "#!/usr/bin/env bash\n#\n# Check the fakes.\n#\n# More.\nexit 0\n"
+    )
+    assert _doc_first_line(script) == "Check the fakes."
+    assert _answers_help("Check the fakes.\n\nMore.\n", script)
+    assert not _answers_help("4 template(s) checked, 0 failure(s).\n", script)
 
 
 def test_answer_help_prints_the_doc_and_exits_zero(capsys):
