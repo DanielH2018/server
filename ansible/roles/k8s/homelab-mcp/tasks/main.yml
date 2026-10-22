@@ -20,7 +20,8 @@
       "{{ playbook_dir }}/roles/k8s/homelab-mcp/files/k8s_reads.py": k8s_reads.py
       # The Prometheus/Loki client probe.py shares. It lives outside this role. Under Flux an
       # edit to it moves the content tag, so promote rebuilds the image. After a handback to
-      # Ansible, an edit to it alone maps to no deploy tag: redeploy homelab-mcp after it.
+      # Ansible, the deployer's K8S_BUILD_CONTEXT_FILES maps an edit to it to this role's tag
+      # (#4840); a census test holds that table equal to this list.
       "{{ playbook_dir }}/../scripts/diagnostics/probe_lib/obs_api.py": obs_api.py
 
 - name: Deploy homelab-mcp to the cluster

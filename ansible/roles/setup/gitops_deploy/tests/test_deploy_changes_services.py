@@ -370,3 +370,13 @@ def test_a_host_lib_change_defers_the_k8s_roles_importing_it():
         assert services_from_changed_paths([path]).k8s == set()
     timer = ["ansible/roles/setup/common/tasks/kuma_check_timer.yml"]
     assert services_from_changed_paths(timer).k8s == set()
+
+
+def test_a_build_context_file_outside_every_role_defers_the_role_embedding_it():
+    """homelab-mcp's image embeds `obs_api.py` from `scripts/` (#4840). The edit moves the
+    image's content tag, so the role lands in `cs.k8s` and earns a `k8s_unapplied` line, as an
+    edit under the role would. A sibling under `probe_lib/` that no image embeds names none."""
+    obs = ["scripts/diagnostics/probe_lib/obs_api.py"]
+    assert services_from_changed_paths(obs).k8s == {"homelab-mcp"}
+    sibling = ["scripts/diagnostics/probe_lib/releases.py"]
+    assert services_from_changed_paths(sibling).k8s == set()
