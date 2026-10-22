@@ -129,8 +129,9 @@ stands. Four lessons carry to the next hop:
   from settings to `backuptargets.longhorn.io`). Remove or rename the Setting in the `longhorn`
   role's `templates/settings.yaml.j2` and land that, because Flux owns the object and reverts a
   hand edit.
-- **Run every tag the role owns after a hop, not only the one you upgraded under.** Tasks
-  tagged `longhorn_backup` alone were not exercised by `--tags longhorn`.
+- **Check the backup targets after a hop, not only the manager.** The `longhorn-backup`
+  Kustomization owns the targets and the RecurringJobs. `probe.py health longhorn-backup` reads
+  each target's `status.available`.
 - **Read the release notes for image and Kubernetes floors.** v1.10 fully qualified image
   refs, so every node re-pulls and shows a transient `ImagePullBackOff`. v1.11 requires
   Kubernetes ≥ v1.34.

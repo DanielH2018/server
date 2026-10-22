@@ -19,42 +19,5 @@
 # row naming a missing task, on an instance whose tags differ from its rows' tasks, and on a
 # flagged writer with no row.
 
-# The three instances below cover only tasks/longhorn-backup.yml, which main.yml imports under
-# this same `when:`, so an instance runs exactly when its writers do.
-- name: Guard the Longhorn writers that also serve backups against a stale checkout
-  ansible.builtin.import_tasks: stale-checkout-check.yml
-  tags: [longhorn, longhorn_backup]
-  when: k3s_manage_backup_targets | bool
-  vars:
-    k3s_stale_checkout_rows:
-      - task: Set the Longhorn backup-store poll interval
-        ids: ["longhorn-system_{{ 'b2_target' | longhorn_backup_name }}_longhorn.io_BackupTarget"]
-
-- name: Guard the Longhorn backup writers against a stale checkout
-  ansible.builtin.import_tasks: stale-checkout-check.yml
-  tags: [longhorn_backup]
-  when: k3s_manage_backup_targets | bool
-  vars:
-    k3s_stale_checkout_rows:
-      - task: Reconcile the Longhorn backup credential
-        ids: [longhorn-system_longhorn-b2__Secret]
-      - task: Point Longhorn at the backup target (or enforce the blanked target)
-        ids: ["longhorn-system_{{ 'b2_target' | longhorn_backup_name }}_longhorn.io_BackupTarget"]
-      - task: Point Longhorn at the backup credential
-        ids: ["longhorn-system_{{ 'b2_target' | longhorn_backup_name }}_longhorn.io_BackupTarget"]
-      - task: Apply the Longhorn recurring backup job
-        ids: [longhorn-system_daily-backup_longhorn.io_RecurringJob]
-      # The retired job is in no inventory; the RecurringJob set Flux takes over is.
-      - task: Remove the retired flat weekly-backup recurring job
-        ids: [longhorn-system_daily-backup_longhorn.io_RecurringJob]
-
-- name: Guard the Longhorn R2 writers against a stale checkout
-  ansible.builtin.import_tasks: stale-checkout-check.yml
-  tags: [longhorn_backup, longhorn_r2]
-  when: k3s_manage_backup_targets | bool
-  vars:
-    k3s_stale_checkout_rows:
-      - task: Reconcile the Longhorn R2 credential
-        ids: [longhorn-system_longhorn-r2__Secret]
-      - task: Apply the R2 backup target
-        ids: ["longhorn-system_{{ 'r2_target' | longhorn_backup_name }}_longhorn.io_BackupTarget"]
+# No k3s task writes a Flux-owned object after H1.7b; a new writer adds its instance here.
+[]

@@ -1,20 +1,18 @@
-"""The group-label filters and the BackupTarget tasks render the live names (#3946).
+"""The group-label filters and the BackupTarget templates render the live names (#3946).
 
 The label TASKS that took their labels from the `longhorn_groups` filters moved to the
 `longhorn-reconcile` role's `files/longhorn_reconcile.py` at H1.6, and the two R2 routing tasks
 followed at H1.7a. Their typed-out cases moved with them
 (`ansible/roles/k8s/longhorn-reconcile/tests/`). What stays here is the filters the reconcile
-ConfigMap and the RecurringJob template still call, and the tasks that write the BackupTarget
-names. The expectations are typed out, not built from the module's constants: an expectation
-derived from the same constant as the render would follow a rename and pass.
+ConfigMap and the RecurringJob template still call, and the templates that write the
+BackupTarget names (the `longhorn-backup` role's, since H1.7b). The expectations are typed out,
+not built from the module's constants: an expectation derived from the same constant as the
+render would follow a rename and pass.
 """
 
-import re
-
 import pytest
-from jinja2 import StrictUndefined
 
-from _helpers import load_tasks
+from lib import yaml_fast
 from lib.ansible_jinja_env import make_ansible_env
 from longhorn_groups import (
     backup_group_label,
@@ -24,14 +22,9 @@ from longhorn_groups import (
     weekly_backup_group,
     weekly_backup_shard,
 )
-from lib.repo_paths import K3S_ROLE
+from lib.repo_paths import K8S_ROLES
 
-ENV = make_ansible_env(undefined_cls=StrictUndefined)
-
-
-def _command_text(task: dict) -> str:
-    command = task["ansible.builtin.command"]
-    return command["cmd"] if "cmd" in command else " ".join(command["argv"])
+BACKUP_TEMPLATES = K8S_ROLES / "longhorn-backup" / "templates"
 
 
 def test_a_weekly_volume_shards_on_the_shard_its_entry_declares():
@@ -109,15 +102,25 @@ def test_the_bare_names_are_the_live_ones():
         longhorn_backup_name("no-backup")
 
 
-def test_the_b2_target_tasks_name_the_live_target():
-    tasks = load_tasks(K3S_ROLE / "tasks" / "longhorn-backup.yml")
-    # Up to `--type`: the patch body after it goes through Ansible's `quote`, which ENV lacks.
-    commands = [
-        ENV.from_string(_command_text(t).split("--type")[0]).render()
-        for t in tasks
-        if "ansible.builtin.command" in t
-        and re.search(r"backuptargets?(\.longhorn\.io)? ", _command_text(t))
-    ]
-    assert len(commands) == 4, commands
-    for text in commands:
-        assert re.search(r"backuptargets?(\.longhorn\.io)? default ", text), text
+def test_the_backup_target_templates_name_the_live_targets():
+    """The `longhorn-backup` role's two target templates render the names the cluster holds."""
+    env = make_ansible_env([BACKUP_TEMPLATES])
+    context = {
+        "k3s_longhorn_backup_armed": False,
+        "k3s_longhorn_r2_armed": False,
+        "k3s_longhorn_backupstore_poll_interval": 0,
+        "k3s_longhorn_r2_poll_interval": 0,
+    }
+    names = {
+        template: yaml_fast.safe_load(env.get_template(template).render(**context))[
+            "metadata"
+        ]["name"]
+        for template in (
+            "longhorn-backuptarget-default.yaml.j2",
+            "longhorn-backuptarget-r2.yaml.j2",
+        )
+    }
+    assert names == {
+        "longhorn-backuptarget-default.yaml.j2": "default",
+        "longhorn-backuptarget-r2.yaml.j2": "r2",
+    }

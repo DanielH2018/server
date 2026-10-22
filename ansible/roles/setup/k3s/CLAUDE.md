@@ -1,11 +1,12 @@
 # `setup/k3s` — the cluster's host plane: k3s itself, Longhorn, and the backup crons
 
 The role that turns a host into a k3s node and declares the cluster's own plumbing: the server
-install, the agent join, Longhorn's backup targets and the packages it needs on
-the node, the read-only kubeconfig, the marker that releases k3s's CoreDNS addon, and the host
-crons that watch and exercise backups. `daniel-box` is the server and `daniel-server` an agent
-(`tasks/agent.yml`). The CoreDNS objects belong to the k8s `coredns` role and the Longhorn
-install to the k8s `longhorn` role, and Flux applies both.
+install, the agent join, the packages Longhorn needs on the node, the read-only kubeconfig, the
+marker that releases k3s's CoreDNS addon, and the host crons that watch and exercise backups.
+`daniel-box` is the server and `daniel-server` an agent (`tasks/agent.yml`). The CoreDNS objects
+belong to the k8s `coredns` role and the Longhorn install to the k8s `longhorn` role, and Flux
+applies both. The Longhorn backup targets, their credentials and the RecurringJobs are the
+`longhorn-backup` role's (H1.7b).
 
 `ansible/k3s-bringup.yml` applies it, and that is one of the `_BROAD_MANUAL_PREFIXES` playbooks
 the GitOps deployer never runs itself, so every change here is a hand apply. The drill's bounds,
@@ -64,19 +65,17 @@ docs/ page — `docs/longhorn-backup-tiering.md`, `docs/longhorn-disaster-recove
 ## Autonomous-role contract (the crons that change state with no human in the loop)
 
 `tasks/health-crons.yml` installs a dozen crons; most read the cluster and push a Kuma tile.
-Three change state, and so do the Longhorn RecurringJobs `tasks/longhorn-backup.yml` applies. The
-authority of those four actuators is written here so a later edit cannot quietly widen it. The
-fifth state-changing actuator, the volume-label reconcile, left this role at H1.6: its
-contract is the `longhorn-reconcile` role's `CLAUDE.md`.
+Three change state. The authority of those three actuators is written here so a later edit
+cannot quietly widen it. Two state-changing actuators left this role. The volume-label
+reconcile left at H1.6, and its contract is the `longhorn-reconcile` role's `CLAUDE.md`. The
+Longhorn RecurringJobs left at H1.7b, and their contract is the `longhorn-backup` role's
+`CLAUDE.md`.
 
 - **Scope, per actuator.** The **trim** (`longhorn-trim-volumes.sh`, daily) discards blocks ext4
   already freed and reaches no live data. The **restore drill** (`longhorn-restore-drill.sh`,
   daily) restores ONE volume's newest backup into a NEW volume, proves it in a throwaway pod and
   tears it down, never touching the live volume. The **off-box etcd snapshot**
-  (`etcd-snapshot-offbox.sh`, daily) uploads the snapshot and never the cluster token. The
-  **RecurringJobs** delete old backups through their `retain` counts, and their `default` group
-  covers every volume with no job of its own, so opting OUT is the explicit act — the `no-backup`
-  group, assigned by the `longhorn` role's `templates/storageclass-nobackup.yaml.j2`.
+  (`etcd-snapshot-offbox.sh`, daily) uploads the snapshot and never the cluster token.
 - **The drill's three bounds** — an operator pin, an empty-restore waiver with a size ceiling and
   one retry per failure — are derived on the docs page, each held by a test. ENFORCED:
   `ansible/tests/longhorn/test_longhorn_restore_drill_operator_pin.py::test_argv_pin_drills_that_volume_not_the_rotations_pick`,
@@ -88,10 +87,9 @@ contract is the `longhorn-reconcile` role's `CLAUDE.md`.
   subcommands of `scripts/backup/longhorn_reap.py` and run from the repo checkout, so this role
   installs nothing of theirs. ENFORCED:
   `ansible/tests/longhorn/test_longhorn_reap_never_scheduled.py::test_no_setup_role_schedules_a_reaper`.
-- **Mode / arming:** `k3s_manage_health_crons` withholds the whole set,
-  `k3s_manage_backup_targets` the R2/B2 targets and the RecurringJobs, and
-  `k3s_etcd_restore_drill_armed` the weekly etcd drill, which runs `--list-only` here. Both
-  `k3s_manage_*` flags default to `true`, and no host overrides either.
+- **Mode / arming:** `k3s_manage_health_crons` withholds the whole set, and
+  `k3s_etcd_restore_drill_armed` the weekly etcd drill, which runs `--list-only` here. The
+  `k3s_manage_health_crons` flag defaults to `true`, and no host overrides it.
 - **Abort valves:** the drill tears down on EVERY exit path, the trim aborts when the node's
   longhorn-manager pod is not ready or the volume list fails, and the weekly B2 tier is sharded across weekdays so no
   day's deletions reach the B2 transaction cap.
@@ -127,6 +125,8 @@ contract is the `longhorn-reconcile` role's `CLAUDE.md`.
   once per tag set that the role's cluster writers carry, directly after `server.yml`. Each
   instance reads every Kustomization's inventory and fails when an id one of its rows names is
   there. A host-only tag such as `node-address` selects no instance, so it never reads the API.
-  An H1 PR that deletes a writer task deletes its row in the same commit. ENFORCED:
+  An H1 PR that deletes a writer task deletes its row in the same commit. Since H1.7b no task
+  here writes a Flux-owned object, so the file is an empty task list where a new writer
+  registers its instance, and the guard's behaviour tests run a fixture instance. ENFORCED:
   `ansible/tests/setup/test_k3s_stale_checkout_map.py::test_the_real_map_is_honest`,
-  `ansible/tests/setup/test_k3s_stale_checkout_guard.py::test_skip_tags_kubeconfig_still_runs_the_r2_instance`.
+  `ansible/tests/setup/test_k3s_stale_checkout_guard.py::test_skip_tags_kubeconfig_still_runs_a_fixture_writer_instance`.

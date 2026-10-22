@@ -35,8 +35,8 @@ kubectl -n longhorn-system get volumes.longhorn.io \
   -o custom-columns=VOL:.metadata.name,PVC:.status.kubernetesStatus.pvcName,TARGET:.spec.backupTargetName
 ```
 
-Arming is independent per target (`k3s_longhorn_backup_armed`, `k3s_longhorn_r2_armed`),
-and step 3's cap caveat applies to B2 only — R2's free tier has no transaction cap, and its
+Arming is independent per target (`k3s_longhorn_backup_armed`, `k3s_longhorn_r2_armed`, both in
+the `longhorn-backup` role's defaults and applied by Flux), and step 3's cap caveat applies to B2 only — R2's free tier has no transaction cap, and its
 own headroom is watched by monitor-bridge's **R2 Free Tier Headroom** monitor.
 
 A disarm does not turn the backup-health monitor red. The reader takes each target's arm
@@ -45,10 +45,13 @@ The verdict says `DISARMED: <target> (<n> volume(s) not checked)`, which names w
 suppresses. A failed read of the target list, or a list without `default` or `r2`, reads as a
 problem and never as a disarm.
 
-Until H1.7b, a URL blanked by hand while the flag says armed reads the same way, where it used to
-read red. The next `k3s-bringup.yml` apply of the backup tag restores the URL. H1.7b adds the
-annotation check that reports a held break-glass as a problem, and no step in these runbooks
-blanks a target by hand.
+A URL blanked by hand while the flag says armed does not read as a disarm. Flux's next apply of
+the `longhorn-backup` tag restores the URL, so only a target that carries
+`kustomize.toolkit.fluxcd.io/reconcile=disabled` can stay blank against git. The reader reports a
+target that carries the annotation as a problem, and the monitor stays red until step 4 of the
+BackupTarget break-glass (`docs/break-glass.md`) removes it. `probe.py health longhorn-backup`
+reads each target's `status.available`, skips a disarmed target, and fails when no target is
+named `default`.
 
 ## The off-site recovery kit
 
@@ -116,12 +119,14 @@ the per-volume map and each exclusion's rationale:
    uv, run `ansible/bootstrap.yml` on the new host, add its age pubkey to
    `ansible/.sops.yaml`, `sops updatekeys` from a host that can decrypt (or use the
    off-box recovery key if no host survives), commit, pull.
-2. **Cluster bring-up**: `uv run ansible-playbook ansible/k3s-bringup.yml`. Set
-   `k3s_longhorn_backup_armed: true` so the B2 target arms (it renders the `longhorn-b2`
-   credential Secret from `longhorn_b2_key_id`/`longhorn_b2_application_key` and points the
-   target at the bucket), and `k3s_longhorn_r2_armed: true` for the R2 target — the four
-   volumes in the table above restore from *that* one, so a B2-only bring-up leaves them
-   with nothing to restore from.
+2. **Cluster bring-up**: `uv run ansible-playbook ansible/k3s-bringup.yml`. From H1.7b the
+   `longhorn-backup` Kustomization creates both backup targets and their credential Secrets
+   (`longhorn-b2`, `longhorn-r2`, substituted from `homelab-cluster-vars`), and the arm flags
+   `k3s_longhorn_backup_armed` and `k3s_longhorn_r2_armed` are git, in that role's defaults.
+   Both must be `true` in the render at `prod`: the four volumes in the table above restore
+   from the R2 target, so a B2-only bring-up leaves them with nothing to restore from. Both
+   default to `true`. If `prod` disarms one, as a B2 cap incident can leave it, the arm PR
+   merges and promotes first (step (f) below).
    **Order from H1.2.** `cluster-base` (the PriorityClasses and the read-only identity) is
    Flux-owned, and two of its objects are needed before Flux can run. Flux's controllers name
    `homelab-critical`, and `setup/k3s`'s `kubeconfig.yml` reads the token Secret. So step 2
@@ -132,10 +137,10 @@ the per-volume map and each exclusion's rationale:
 
     - (a) `uv run ansible-playbook ansible/k3s-bringup.yml --skip-tags kubeconfig`. It installs
       k3s, and k3s creates its bundled CoreDNS. The play skips the token wait, which would fail
-      here. **From H1.5a until H1.7b, skip two more tags:**
-      `--skip-tags kubeconfig,longhorn,longhorn_backup`. The Longhorn window below gives the
-      reason. The packages Longhorn needs on the node still install, because they carry the tag
-      `longhorn_host` alone.
+      here. The packages Longhorn needs on the node still install, because they carry the tag
+      `longhorn_host` alone. The play selects no task that reads or writes a Longhorn object,
+      because the `longhorn`, `longhorn-reconcile` and `longhorn-backup` Kustomizations own them
+      all.
     - (b) **Operator-only.** Render `cluster-base` and apply it under `kustomize-controller`'s own
       field manager, so Flux's first apply finds its own fields:
       `uv run python scripts/renderer/homelab_render.py cluster --out <out> --role cluster-base`,
@@ -159,43 +164,25 @@ the per-volume map and each exclusion's rationale:
       reads `none`, set `gh variable set DEPLOY_HOLD --body dr-restore -R DanielH2018/server`.
       A merge during the restores would otherwise promote, time out in `verify` with the root
       suspended, and reset `prod` to `last-good`. Then render the plumbing tags at that commit
-      and apply their `flux/<tag>.yaml` with
+      and apply their `flux/<tag>.yaml`, and `flux/cluster-vars.yaml`, which `longhorn-backup`
+      substitutes from, with
       `sudo k3s kubectl apply --server-side --field-manager=kustomize-controller -f <file>`.
       That is the root's own field manager, so the root adopts them. Wait until each reads
-      `Ready`.
+      `Ready`. The `longhorn-backup` Kustomization waits on `longhorn` and creates both backup
+      targets and their credential Secrets, so step 3's sync finds them with no further step.
+      **Operator-only, before that apply:** confirm that the render of `longhorn-backup` at
+      `prod`'s commit arms both targets, with
+      `grep -E '^k3s_longhorn_(backup|r2)_armed:' ansible/roles/k8s/longhorn-backup/defaults/main.yml`
+      from a checkout of that commit. If it disarms one, the arm PR merges and promotes first.
+      A promotion needs `DEPLOY_HOLD` to read `none`, so clear a stray hold with the command in
+      (g) before the arm PR merges. The arm PR's verify cannot pass while the root is suspended,
+      so the revision holds and leaves `prod` on the arm commit, because `longhorn-backup` is
+      forward-only. That hold stays until (g).
     - (g) After the restores of step 4, **operator-only**, resume the root with the same patch
       form:
       `sudo k3s kubectl -n flux-system patch kustomization homelab --type merge --field-manager=homelab-operator -p '{"spec":{"suspend":false}}'`.
       Once every status on `prod`'s commit reads `success`, clear the hold with
       `gh variable set DEPLOY_HOLD --body none -R DanielH2018/server`.
-    - (f2) **From H1.5a until H1.7b only. Operator-only.** Once `longhorn` reads `Ready` at (f),
-      and before the smoke test and step 3, run the window's own step:
-      `uv run ansible-playbook ansible/k3s-bringup.yml --tags longhorn,longhorn_backup`, with
-      `k3s_longhorn_backup_armed` and `k3s_longhorn_r2_armed` set to `true` as step 2 says. The
-      run applies what (a) skipped. That is the backup-store poll interval, both backup
-      credentials, both backup targets and the RecurringJob. The Longhorn Settings, the
-      `longhorn-nobackup` class and the metrics NetworkPolicy are not in this list: the
-      `longhorn` Kustomization applies them at (f), so the replica count is in place before the
-      smoke test binds its volume. The CSI sidecar memory requests are one of those Settings
-      (#5958): longhorn-driver-deployer reads it when it creates the four Deployments, so they
-      start with the request. The recurring-job label reconcile is not in the list either. From
-      H1.6 it is the `longhorn-reconcile` CronJob's, which the root applies once (g) resumes
-      it, and its gate Job runs the reconcile once at that apply. Run (f2)
-      from a checkout at the commit `prod` names, which (f) read. Each H1 PR deletes a task's
-      guard-map row in the commit that hands the task's objects to Flux, so a checkout older
-      than `prod` fails the stale-checkout guard, and a newer one would skip the objects it
-      already handed over. The sync of step 3 finds both targets once (f2) has run. H1.7b
-      removes (f2) and the two extra skips of (a).
-
-   **The Longhorn window, H1.5a until H1.7b.** H1.5a deletes `Install Longhorn`, so Longhorn
-   first reaches a new cluster at (f), through Flux. Until H1.7b, `setup/k3s` still holds tasks
-   that read or write Longhorn objects, all in `tasks/longhorn-backup.yml`. Most carry
-   `longhorn_backup`, and the poll interval carries `longhorn` as well, so `--tags longhorn`
-   still selects it. An unchanged (a) would run them against
-   a cluster with no `longhorn-system` namespace and no Longhorn CRDs, and fail. So (a) skips
-   both tags and (f2) applies them. The three host tasks in `tasks/longhorn-host.yml` carry
-   `longhorn_host` alone, because a `--skip-tags` exclusion matches any tag a task carries.
-   `ansible/tests/setup/test_k3s_longhorn_host_tasks.py` holds that.
 
    **MetalLB from H1.3.** The `metallb` tag is Flux-owned, so (a) no longer installs MetalLB or
    its address pool. The Kustomization `metallb` installs both at (f), once the plumbing tags
@@ -209,13 +196,18 @@ the per-volume map and each exclusion's rationale:
 
    **Longhorn from H1.5a.** The `longhorn` tag is Flux-owned, so (a) no longer installs
    Longhorn. The Kustomization `longhorn` installs it at (f), with the manager memory request
-   and the `longhorn` StorageClass built in. Before H1.5a, (a) installs Longhorn and creates
-   the backup targets, and the play's variables arm them, as step 2 says.
+   and the `longhorn` StorageClass built in. Before H1.5a, (a) installs Longhorn.
+
+   **The backup targets from H1.7b.** The `longhorn-backup` tag is Flux-owned, so no play
+   creates the credentials, the targets or the RecurringJobs. The Kustomization applies them at
+   (f), once `longhorn` reads `Ready`, and the arm flags are git. No step applies them by hand.
 
    Before H1.2 there is no step (b): k3s bring-up applies the PriorityClasses and the identity
    itself. Steps 3 and 4 below sit between (f) and (g). D5's flux PR replaces this block with a
    pointer to its own bootstrap section.
-3. **Wait for the backupstore sync** — `kubectl -n longhorn-system get backuptarget`
+3. **Wait for the backupstore sync** — `uv run python scripts/diagnostics/probe.py health longhorn-backup`
+   reports both targets available (it skips a target disarmed on purpose and fails when no
+   target is named `default`), or `kubectl -n longhorn-system get backuptarget` shows
    `AVAILABLE true`, then Backup CRs appear. **The poll interval is `0`** — polling is
    OFF (`k3s_longhorn_backupstore_poll_interval` is 0, because even a 1h interval exhausted
    B2's Class-B cap), so the sync does not happen on its
@@ -229,8 +221,10 @@ the per-volume map and each exclusion's rationale:
    `cannot find volume.cfg in backupstore` — which reads exactly like the backup is
    missing, that is, like data loss, at the worst possible moment. That is what the first
    drill hit (below). If you see it, check the caps in the B2 console **before**
-   concluding anything about the backup: stop, blank the target
-   (`k3s_longhorn_backup_armed: false` + deploy), and resume after the 00:00 UTC reset.
+   concluding anything about the backup: stop, blank the target (a
+   `k3s_longhorn_backup_armed: false` PR, or the BackupTarget break-glass in
+   `docs/break-glass.md` when the PR cannot reach the cluster), and resume after the 00:00 UTC
+   reset.
 4. **Restore volumes BEFORE any deploy** — deploying first would provision fresh
    empty PVCs under the same names. Before the first restore, run the gates: both targets
    armed and available, a `BackupVolume` on each (the sync happened), and no backed-up PVC

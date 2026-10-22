@@ -144,7 +144,7 @@ OUTPUT=$(k3s etcd-snapshot save \
   --s3-bucket "$ETCD_S3_BUCKET" \
   --s3-folder "{{ k3s_etcd_s3_folder }}" \
   --s3-endpoint "$ETCD_S3_ENDPOINT" \
-  --s3-region "{{ k3s_longhorn_r2_region }}" \
+  --s3-region "{{ k3s_etcd_s3_region }}" \
   --s3-retention {{ k3s_etcd_s3_retention }} 2>&1)
 RC=$?
 

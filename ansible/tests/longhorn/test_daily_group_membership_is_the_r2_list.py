@@ -4,7 +4,7 @@ Two mechanisms decide a volume's backup cadence and target, and neither names th
 daily job selects group `default` (`templates/longhorn-recurringjob.yaml.j2`); the label
 reconcile job (`longhorn-reconcile`, H1.6) moves the weekly and no-backup lists OUT of `default` and
 returns everything else to it, so daily membership is "every `longhorn`-class PVC in neither
-list". The r2 list, read by `tasks/longhorn-backup.yml`, decides only which BackupTarget a
+list". The r2 list, read by the `longhorn-reconcile` job, decides only which BackupTarget a
 volume points at. Today the two sets are identical: the daily tier is the R2 tier and the
 weekly tier is the B2 tier (`docs/longhorn-backup-tiering.md`). A PVC added to the tree and
 routed into no list, or listed under r2 AND weekly, would split them — daily backups landing
@@ -18,7 +18,7 @@ Run: uv run pytest ansible/tests/longhorn/test_daily_group_membership_is_the_r2_
 import importlib
 
 from _helpers import load_defaults
-from _setup_render import rendered_setup_text
+from _k8s_render import render_role_template
 from lib import yaml_fast
 from lib.service_tiers import resolved_tier_lists
 from test_every_longhorn_pvc_has_a_tier import _longhorn_class_pvcs
@@ -29,13 +29,15 @@ LEAVES_DEFAULT = ("k3s_longhorn_nobackup_volumes", "k3s_longhorn_weekly_volumes"
 
 
 def recurring_jobs() -> dict[str, dict]:
-    """Every RecurringJob the k3s role applies, by `metadata.name`, out of the RENDER.
+    """Every RecurringJob the `longhorn-backup` role renders, by `metadata.name`, out of the RENDER.
 
     Read from `_setup_render` rather than from the template's text: the cron and the retain
     counts are role defaults, and the weekly tier's seven shards only exist after the
     `{% for %}` runs, so the source carries neither the group names nor the job count.
     """
-    docs = yaml_fast.safe_load_all(rendered_setup_text("k3s", RECURRING_JOB))
+    docs = yaml_fast.safe_load_all(
+        render_role_template("longhorn-backup", RECURRING_JOB)
+    )
     return {d["metadata"]["name"]: d for d in docs if d}
 
 

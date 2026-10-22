@@ -20,7 +20,7 @@ The fifth is H1's: the break-glass procedures annotate named plumbing objects wi
 `kustomize.toolkit.fluxcd.io/reconcile=disabled` so kustomize-controller skips them, and the
 line names each one that still carries it. A cluster-wide search for an annotation is not one
 call, so the read covers the objects a runbook tells an operator to annotate
-(`RECONCILE_MEMBERS`). H1.4 lists the CoreDNS Deployment, ConfigMap and Service, and H1.7b adds
+(`RECONCILE_MEMBERS`). H1.4 lists the CoreDNS Deployment, ConfigMap and Service, and H1.7b lists
 both BackupTargets.
 
 Run: imported only, by `landing_blockers.py`.
@@ -64,6 +64,10 @@ RECONCILE_DISABLED = "disabled"
 # Add a row in the PR that adds the runbook step. These are the named members of the listing.
 RECONCILE_MEMBERS = {
     "kube-system": ("deployment/coredns", "configmap/coredns", "service/kube-dns"),
+    "longhorn-system": (
+        "backuptargets.longhorn.io/default",
+        "backuptargets.longhorn.io/r2",
+    ),
 }
 
 

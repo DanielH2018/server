@@ -88,6 +88,8 @@ VENDORED = [
     ("metallb.io", "ipaddresspool", "v1beta1"),
     ("metallb.io", "l2advertisement", "v1beta1"),
     ("longhorn.io", "setting", "v1beta2"),
+    ("longhorn.io", "backuptarget", "v1beta2"),
+    ("longhorn.io", "recurringjob", "v1beta2"),
 ]
 
 # Authelia publishes a JSON Schema per MINOR release of its own configuration file, and it sets

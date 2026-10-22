@@ -276,8 +276,9 @@ each one refuses, are in `scripts/deploy_tools/narrow_lib/broad.py`.
   the setup plane beside the deploy plane. The tick applies an `initial_setup.yml` caller such as
   `gitops_deploy`, and records a `k3s-bringup.yml` caller such as `k3s` as a `manual_plane` line.
   `narrow_setup.plugin_tags` narrows each caller to the readers of the vars key whose value calls
-  one of the plugin's filters, so a `service_tier.py` change names `longhorn_backup,longhorn_r2`
-  rather than `--tags k3s`. An inventory value that calls a filter refuses, and so does a role
+  one of the plugin's filters, so a `longhorn_groups.py` change names the host crons' tags
+  (`backup-health`, `disk-health`, `etcd-snapshot` and the rest of the readers of
+  `longhorn_backup_name`) rather than `--tags k3s`. An inventory value that calls a filter refuses, and so does a role
   that names none of them. A refusal falls back to the whole-role tag.
 
 **Every deploy-plane tick also logs a render-digest shadow line.** The `narrow-shadow:` line names

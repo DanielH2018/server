@@ -16,8 +16,7 @@ Run: uv run pytest ansible/tests/longhorn/test_longhorn_reap_opt_out_groups.py
 import json
 
 from lib import yaml_fast
-from _k8s_render import rendered_docs
-from _setup_render import rendered_setup_text
+from _k8s_render import render_role_template, rendered_docs
 
 from longhorn_reap_lib import logic
 
@@ -26,7 +25,9 @@ from longhorn_reap_lib import logic
 # StorageClasses move role, and an `all(...)` over nothing passes.
 EXPECTED_STORAGECLASSES = frozenset({"longhorn-nobackup"})
 
-RECURRING_JOB_TEMPLATE = "longhorn-recurringjob.yaml.j2"
+RECURRING_JOB_TEMPLATE = (
+    "longhorn-recurringjob.yaml.j2"  # the longhorn-backup role's (H1.7b)
+)
 
 
 def _selected_groups() -> dict[str, set[str]]:
@@ -52,12 +53,14 @@ def _selected_groups() -> dict[str, set[str]]:
 
 
 def _groups_with_a_recurringjob() -> set[str]:
-    """Every group a RecurringJob the k3s role applies claims.
+    """Every group a RecurringJob the `longhorn-backup` role renders claims.
 
     Read from the RENDER, not the template source: the weekly tier's seven shards and the
     groups they claim only exist after the `{% for %}` runs.
     """
-    docs = yaml_fast.safe_load_all(rendered_setup_text("k3s", RECURRING_JOB_TEMPLATE))
+    docs = yaml_fast.safe_load_all(
+        render_role_template("longhorn-backup", RECURRING_JOB_TEMPLATE)
+    )
     claimed: set[str] = set()
     for doc in docs:
         if doc:

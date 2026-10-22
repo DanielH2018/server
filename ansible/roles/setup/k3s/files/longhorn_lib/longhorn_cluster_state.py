@@ -17,22 +17,31 @@ from __future__ import annotations
 
 from longhorn_lib import longhorn_backups as backups
 
+# The annotation the BackupTarget break-glass puts on both targets so kustomize-controller skips
+# them (docs/break-glass.md). Flux's next apply restores a URL blanked by hand, so only a target
+# that carries it can stay blank against the repository.
+RECONCILE_ANNOTATION = "kustomize.toolkit.fluxcd.io/reconcile"
+RECONCILE_DISABLED = "disabled"
+
 
 def target_state(item: dict) -> dict:
-    """One BackupTarget item as the availability check reads it: {"armed", "raw", "reason"}.
+    """One BackupTarget item as the availability check reads it: {"armed", "held", "raw", "reason"}.
 
     A target is armed while `spec.backupTargetURL` holds anything but whitespace. `raw` is
     `status.available` as the string `check_target_availability` compares ("true" or "false", or
     "unreported" when the status has no `available`), and `reason` is the first condition's
-    message, which that check shows only for a target that is not available.
+    message, which that check shows only for a target that is not available. `held` is true while
+    the target carries the reconcile-disabled annotation, which means a break-glass is in force.
     """
     spec, status = item.get("spec") or {}, item.get("status") or {}
     available = status.get("available")
     raw = "unreported" if available is None else str(bool(available)).lower()
     conditions = status.get("conditions") or []
     message = (conditions[0] or {}).get("message", "") if conditions else ""
+    annotations = (item.get("metadata") or {}).get("annotations") or {}
     return {
         "armed": bool(str(spec.get("backupTargetURL") or "").strip()),
+        "held": annotations.get(RECONCILE_ANNOTATION) == RECONCILE_DISABLED,
         "raw": raw,
         "reason": str(message)[:160],
     }
@@ -55,13 +64,29 @@ def watch_plan(
     when the list failed (`targets` is None), stays WATCHED: an unreadable cluster must never
     suppress a target's volumes from the checks. A target missing from a list that did arrive is
     a rank-1 problem, so the list failing and the list lacking a target both read DOWN.
+
+    A target that carries the reconcile-disabled annotation is a rank-1 problem and never a
+    disarm (H1.7b). The annotation means a break-glass is in force, and Flux does not enforce the
+    repository on that target, so its URL says nothing about what the repository holds. The
+    monitor stays red until step 4 of the break-glass removes the annotation, which keeps a
+    forgotten break-glass from sitting behind a green monitor. The target stays watched, so its
+    volumes are checked too.
     """
     watched: list[str] = []
     disarmed: list[str] = []
     problems: list[tuple[int, str]] = []
     for name in (backups.B2_TARGET, backups.R2_TARGET):
         state = (targets or {}).get(name)
-        if state is not None and not state["armed"]:
+        if state is not None and state["held"]:
+            problems.append(
+                (
+                    1,
+                    f"backup target {name} carries {RECONCILE_ANNOTATION}={RECONCILE_DISABLED}: "
+                    "a break-glass is in force and Flux is not enforcing it; remove the "
+                    "annotation at step 4 of the BackupTarget break-glass (docs/break-glass.md)",
+                )
+            )
+        elif state is not None and not state["armed"]:
             disarmed.append(name)
             continue
         watched.append(name)

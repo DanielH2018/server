@@ -53,7 +53,7 @@ WEEKLY_SHARDS = 7
 DAILY_JOB = "daily-backup"
 
 # The BackupTarget names. Longhorn ships a target called `default`, and
-# `tasks/longhorn-backup.yml` points it at B2, so a reader that means "B2" says B2_TARGET rather
+# the `longhorn-backup` role's `default` BackupTarget points it at B2, so a reader that means "B2" says B2_TARGET rather
 # than the word `default`.
 B2_TARGET = "default"
 R2_TARGET = "r2"

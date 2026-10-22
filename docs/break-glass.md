@@ -153,14 +153,12 @@ daniel-server keeps its own SOPS key, so decryption still works without the reco
    bring-up installs no MetalLB: the `metallb` Kustomization does, once Flux applies the plumbing tags.
    Since H1.4 the `coredns` Kustomization owns the CoreDNS objects, and the bring-up keeps only
    the marker that releases k3s's bundled add-on.
-   From H1.5a until H1.7b the first run also skips `longhorn` and `longhorn_backup`
-   (`--skip-tags kubeconfig,longhorn,longhorn_backup`), because the `longhorn` Kustomization
-   installs Longhorn and, from H1.5b, its Settings. Once it reads `Ready`, the operator runs
-   `k3s-bringup.yml --tags longhorn,longhorn_backup` with both arm variables set (that
-   document's step (f2)). From H1.6 that run applies the backup targets, the RecurringJob and
-   the poll interval, and no Setting. The CSI sidecar requests are a Setting the `longhorn`
-   Kustomization applies. The label reconcile is the `longhorn-reconcile` CronJob's, which the
-   root applies once it resumes.
+   From H1.5a the `longhorn` Kustomization installs Longhorn and its Settings, and from H1.7b the
+   `longhorn-backup` Kustomization creates the backup credentials, both backup targets and the
+   RecurringJobs, once `longhorn` reads `Ready`. No `k3s-bringup.yml` run applies them: the first
+   run selects no task that reads or writes a Longhorn object. The CSI sidecar requests are a
+   Setting the `longhorn` Kustomization applies. The label reconcile is the
+   `longhorn-reconcile` CronJob's, which the root applies once it resumes.
 2. Decide whether cluster **objects** (Deployments, Secrets, PVC bindings) are also lost —
    if so, restore etcd first per `docs/k3s-etcd-restore.md` (needs item 2, the cluster
    token, if this is a genuinely new host rather than the same disk).
@@ -278,6 +276,38 @@ suspended before it is scaled and resumed rather than redeployed.
    Redeploy each Ansible-owned service with `./scripts/deploy.sh --tags <svc>`, as before.
    The deploy applies the replica count its manifests declare, so it scales the service back
    up.
+
+### Scenario: Longhorn backups must stop and the disarm PR cannot reach the cluster
+
+The normal lever is a PR that sets `k3s_longhorn_backup_armed: false` (or
+`k3s_longhorn_r2_armed: false`) in `ansible/roles/k8s/longhorn-backup/defaults/main.yml`. Promote
+applies it like any revision, and a failed revision never resets across it, because
+`longhorn-backup` is forward-only. Three cases defeat that path: `DEPLOY_HOLD` holds a value other
+than `none`, a transaction-cap spiral outruns a merge, and `longhorn` is not Ready, so the
+`longhorn-backup` Kustomization applies nothing. For those, every step below is
+**operator-only**:
+
+1. Annotate both BackupTargets, so `kustomize-controller` skips them:
+   `sudo k3s kubectl -n longhorn-system annotate backuptargets.longhorn.io/default backuptargets.longhorn.io/r2 kustomize.toolkit.fluxcd.io/reconcile=disabled`.
+2. Patch each `backupTargetURL` blank:
+   `sudo k3s kubectl -n longhorn-system patch backuptargets.longhorn.io/default --type merge -p '{"spec":{"backupTargetURL":""}}'`,
+   then the same for `backuptargets.longhorn.io/r2`.
+3. Land the disarm PR, then clear the hold:
+   `gh variable set DEPLOY_HOLD --body none -R DanielH2018/server`.
+4. Wait until `longhorn-backup`'s `status.lastAppliedOriginRevision` names the disarm commit or a
+   descendant of it. Read the revision with
+   `sudo k3s kubectl -n flux-system get kustomization longhorn-backup -o jsonpath='{.status.lastAppliedOriginRevision}'`,
+   which prints `master@sha1:<sha>`, and check it with
+   `git merge-base --is-ancestor <disarm-sha> <sha>`. Only then remove the annotation from
+   each target:
+   `sudo k3s kubectl -n longhorn-system annotate backuptargets.longhorn.io/default backuptargets.longhorn.io/r2 kustomize.toolkit.fluxcd.io/reconcile-`.
+   `prod` carrying the disarm is not enough, because the tag applies nothing while `longhorn` is
+   not Ready. Removing the annotation earlier lets Flux restore the armed URL from the
+   repository.
+
+Until step 4, the backup-health monitor reads each annotated target as a problem, and
+`probe.py health longhorn-backup` fails and names it. A forgotten break-glass therefore cannot sit
+behind a green monitor. `docs/adr/0007-backup-tiering-r2-daily-b2-weekly.md` records the choice.
 
 ### Scenario: the laptop/machine holding your working access is dead, the lab hosts are fine
 

@@ -26,8 +26,9 @@ It takes no arm flag and no schedule from the shim. Each backup target's arm sta
 cluster: a blank `spec.backupTargetURL` is a disarmed target (H1.7a). The daily and weekly run
 times, which size the first-run grace, come from the `spec.cron` of the live RecurringJobs. Both
 are one list call each, so the reader reports what the cluster holds, whichever tool wrote it:
-the `setup/k3s` tasks until H1.7b moves the targets and jobs, the `longhorn-backup` tag after.
-No baked copy of a flag or a schedule can disagree with it.
+Flux, through the `longhorn-backup` tag, or an operator's break-glass. No baked copy of a flag or
+a schedule can disagree with it. A target that carries the reconcile-disabled annotation is a
+problem the reader reports, never a disarm (H1.7b).
 Prints `up<TAB>msg` or `down<TAB>msg` and exits 0.
 """
 

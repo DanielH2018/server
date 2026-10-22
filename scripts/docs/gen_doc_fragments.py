@@ -93,7 +93,14 @@ from lib.cli_help import ArgumentParser
 from lib.docs_provenance import write_if_body_changed
 from lib.ansible_inventory import K8S_HOST, K8S_HOST_VARS, PI_HOST, PI_HOST_VARS
 from lib.estate import Estate
-from lib.repo_paths import ALL_VARS, K3S_ROLE, K8S_ROLES, REPO, ROLES
+from lib.repo_paths import (
+    ALL_VARS,
+    K3S_ROLE,
+    K8S_ROLES,
+    LONGHORN_BACKUP_ROLE,
+    REPO,
+    ROLES,
+)
 from lib.service_tiers import resolved_tier_lists
 
 SELF = "scripts/docs/gen_doc_fragments.py"
@@ -126,8 +133,12 @@ def header(sources: list[str]) -> str:
 
 
 def _longhorn() -> tuple[str, list[str]]:
-    return render_longhorn_tiers(resolved_tier_lists(Estate().role_vars(K3S_ROLE))), [
-        "ansible/roles/setup/k3s/defaults/main.yml"
+    estate = Estate()
+    # The arm flags and schedules are `longhorn-backup`'s since H1.7b, the host cron keys `setup/k3s`'s.
+    merged = {**estate.role_vars(K3S_ROLE), **estate.role_vars(LONGHORN_BACKUP_ROLE)}
+    return render_longhorn_tiers(resolved_tier_lists(merged)), [
+        "ansible/roles/k8s/longhorn-backup/defaults/main.yml",
+        "ansible/roles/k8s/longhorn-reconcile/defaults/main.yml",
     ]
 
 

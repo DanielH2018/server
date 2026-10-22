@@ -1,13 +1,14 @@
-"""The Longhorn host tasks survive bring-up step 1's skip (H1.5a).
+"""The Longhorn host tasks carry `longhorn_host` and no tag that names a Flux-owned object (H1.5a).
 
-From H1.5a until H1.7b, `k3s-bringup.yml --skip-tags kubeconfig,longhorn,longhorn_backup` is the
-first step of a rebuild. The two extra skips keep the tasks that read `longhorn-system` objects
-away from a cluster Flux has not installed Longhorn into yet. A `--skip-tags` exclusion matches
-any tag a task carries, so a host task that also carried `longhorn` or `longhorn_backup` would be
-skipped with them, and a rebuilt node would never get `open-iscsi`.
+From H1.5a until H1.7b, `k3s-bringup.yml --skip-tags kubeconfig,longhorn,longhorn_backup` was the
+first step of a rebuild, and a `--skip-tags` exclusion matches any tag a task carries. A host task
+that also carried `longhorn` or `longhorn_backup` would have been skipped with them, and a rebuilt
+node would never have got `open-iscsi`. H1.7b closed that window: no task carries either tag, and
+step 1 skips only `kubeconfig`.
 
-`tasks/longhorn-host.yml` therefore holds three named tasks that carry `longhorn_host` and neither
-skipped tag, counting the tags their import in `main.yml` adds. The plan is
+`tasks/longhorn-host.yml` still holds three named tasks that carry `longhorn_host` and neither
+retired tag, counting the tags their import in `main.yml` adds. A task that regained one of those
+tags would again name an object that Flux owns. The plan is
 docs/target-architecture/host/h1-cluster-config-to-flux.md, *The Longhorn window, H1.5a until H1.7b*.
 
 Run: uv run pytest ansible/tests/setup/test_k3s_longhorn_host_tasks.py
@@ -18,7 +19,7 @@ from lib.repo_paths import K3S_ROLE
 
 TASKS = K3S_ROLE / "tasks"
 HOST_FILE = "longhorn-host.yml"
-SKIPPED_TAGS = frozenset({"longhorn", "longhorn_backup"})
+RETIRED_TAGS = frozenset({"longhorn", "longhorn_backup"})
 # The three tasks the plan moves; the test must find each by name.
 MEMBERS = (
     "Install Longhorn prerequisites",
@@ -55,9 +56,9 @@ def problems(host_tasks: list[dict], main: list[dict]) -> list[str]:
         effective = _tags(task) | _tags(imported)
         if "longhorn_host" not in effective:
             found.append(f"{name!r} does not carry longhorn_host")
-        if effective & SKIPPED_TAGS:
+        if effective & RETIRED_TAGS:
             found.append(
-                f"{name!r} carries {sorted(effective & SKIPPED_TAGS)}, which step 1 skips"
+                f"{name!r} carries {sorted(effective & RETIRED_TAGS)}, a retired tag"
             )
     return found
 
@@ -69,22 +70,14 @@ def _real() -> tuple[list[dict], list[dict]]:
     )
 
 
-def test_the_host_tasks_carry_longhorn_host_and_neither_skipped_tag():
+def test_the_host_tasks_carry_longhorn_host_and_neither_retired_tag():
     assert problems(*_real()) == []
-
-
-def test_main_imports_the_host_file_ahead_of_longhorn_backup_yml():
-    main = _real()[1]
-    imports = [
-        t[key] for t in main for key in _IMPORTS if key in t and isinstance(t[key], str)
-    ]
-    assert imports.index(HOST_FILE) < imports.index("longhorn-backup.yml")
 
 
 def test_a_task_tagged_longhorn_is_flagged():
     host, main = _real()
     host[0]["tags"] = ["longhorn_host", "longhorn"]
-    assert any("step 1 skips" in p for p in problems(host, main))
+    assert any("a retired tag" in p for p in problems(host, main))
 
 
 def test_a_tag_added_by_the_import_is_flagged():
@@ -92,7 +85,7 @@ def test_a_tag_added_by_the_import_is_flagged():
     imported = _import_of(main, HOST_FILE)
     assert imported is not None
     imported["tags"] = ["longhorn_backup"]
-    assert any("step 1 skips" in p for p in problems(host, main))
+    assert any("a retired tag" in p for p in problems(host, main))
 
 
 def test_a_missing_member_and_a_missing_import_are_flagged():

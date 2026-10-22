@@ -136,11 +136,16 @@ def _writers(files: dict[str, str]) -> set[str]:
 
 
 def test_the_real_map_is_honest():
+    """No mapped writer is left, and the empty guard map agrees.
+
+    H1.7b deleted the last writer that needed a row, so the set is exactly empty. An exact
+    equality, unlike a floor, goes red the moment a writer appears outside UNMAPPED, which is
+    when that writer needs a row and its instance in the guard.
+    """
     # fact: ansible/roles/setup/k3s/CLAUDE.md#Notable
     files = _role_files()
     writers = _writers(_role_texts())
-    named = "Set the Longhorn backup-store poll interval"
-    assert named in writers and len(writers) >= 8, sorted(writers)
+    assert writers == set(), sorted(writers)
     assert map_problems(files[GUARD], task_tags(files), writers) == []
 
 
