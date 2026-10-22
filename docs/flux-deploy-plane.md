@@ -1240,9 +1240,10 @@ A wait shorter than a verification is safe and costs a promotion. `decide` gives
   `IN_FLIGHT_WAIT_S`;
 - a revision that changes every importer of `workload-shell.yml.j2` queues in rounds of up
   to each role's `timeout`, so it can reach the cap. The soak's own chain already does: on
-  2026-10-22 the published bundle's 111 Kustomizations, all counted as changed, chain to
-  32016s against the cap's 19800s. Longhorn v1.13.0 raised the `longhorn` timeout from 2m to
-  10m, which moved the chain from 31920s (#5972). The soak's wait is therefore clamped at the
+  2026-10-22 the published bundle's 114 Kustomizations, all counted as changed, chain to
+  32256s against the cap's 19800s. Longhorn v1.13.0 raised the `longhorn` timeout from 2m to
+  10m, which moved the chain from 31920s (#5972), and D5 step 29's `flux` and
+  `flux-deferred` moved it from 32016s. The soak's wait is therefore clamped at the
   cap, as `verify`'s is, and the `# DECIDED:` at `chained_timeout.py:VERIFY_CAP_S` records
   why the clamp stands (#5868).
 
