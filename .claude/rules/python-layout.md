@@ -62,7 +62,7 @@ module shared across roles goes on `pythonpath` instead.
 supplies. Every such path lands in the one session a full run shares, so a top-level `files/*.py` needs a basename no other role's
 `files/` or `pythonpath` root uses. Two roles' `app.py` failed six tests only in a full run
 (#2608). A `scripts/<dir>` holding a `tests/` counts as a root too, because its tests may
-insert it: `scripts/validate/grafana_dashboards.py` hid the filter plugin of that name from
+insert it: the uid validator, then `scripts/validate/grafana_dashboards.py`, hid the filter plugin from
 `pytest scripts` (#5956). The `no-two-import-roots-share-a-module-basename` row of
 `ansible/tests/repo/test_census_rows_python.py` enforces it. A role that ships a `files/*.py`
 with logic gets a `tests/` directory, which the `ansible/roles/*/*/tests` glob in `testpaths` collects.
