@@ -49,6 +49,12 @@ manifests_rollout_timeout: 2m  # noqa var-naming[no-role-prefix]
 # plan's *Plumbing tags are never pruned*.
 flux_prune: false  # noqa var-naming[no-role-prefix]
 
+# Forward-only (the H1 plan's *Forward-only tags and the promote rule*). Longhorn supports no
+# downgrade, so a promote that fails on a revision changing this tag holds without resetting
+# `prod`. H1.5a (#5922) omitted this flag; the H1 plan names longhorn, so #5927 sets it.
+# scripts/deploy_tools/promote_lib/forward_only.py reads the flag from a top-level line.
+flux_forward_only: true  # noqa var-naming[no-role-prefix]
+
 # Auto-deploy stance. Flux applies the tag, so this gates no apply; the reason records why a bad
 # merge here is not a routine bump.
 k8s_autodeploy: false  # noqa var-naming[no-role-prefix]
