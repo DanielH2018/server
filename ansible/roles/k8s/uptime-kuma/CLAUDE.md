@@ -73,7 +73,7 @@ same convention in plain text. Both read `heartbeatJSON.msg`, `monitorJSON.descr
 - **A monitor names a tag by the entity's AutoKuma id** — `tag-severity`, the filename minus
   `.json` — never the display name. Removing one takes two deploys: references first.
 - **`webhookAdditionalHeaders` carries `Content-Type: application/json`**, the id stays `discord`,
-  and the name stays `Homelab Alerts`, which monitor-bridge reads out of Kuma's failure line.
+  and the name stays `Homelab Alerts`, which Kuma prints in its failure line. The loki-homelab rule `KumaNotificationDropped` filters on that line's text and names no notification.
 
 ## The status page's groups are synced by a CronJob, not by AutoKuma
 

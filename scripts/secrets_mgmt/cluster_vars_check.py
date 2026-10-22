@@ -32,6 +32,7 @@ from pathlib import Path as _Path
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))  # scripts/
 
 from lib import yaml_fast
+from secrets_mgmt.pending_retirement import PENDING_RETIREMENT
 
 # Printed after every failing check, because the obvious response to a dropped key, deleting
 # its line by hand, keeps the names green and breaks the SOPS MAC.
@@ -459,7 +460,7 @@ def names_problems(dotenv: set[str], keys: frozenset[str]) -> list[str]:
     ]
     out += [
         f"the cluster file holds {k}, and no cluster render references it"
-        for k in sorted(dotenv - keys)
+        for k in sorted(dotenv - keys - PENDING_RETIREMENT)
     ]
     return out
 
