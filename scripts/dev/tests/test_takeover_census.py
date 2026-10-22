@@ -138,7 +138,9 @@ def test_inputs_with_no_object_in_common_fail():
 
 def test_a_dry_run_not_applied_as_kustomize_controller_fails():
     live = deployment(entry("kubectl-rollout", "Update", RESTART))
-    with pytest.raises(tc.CensusError, match="no kustomize-controller Apply entry"):
+    with pytest.raises(
+        tc.CensusError, match="no dry-run object has a kustomize-controller Apply entry"
+    ):
         run(live, copy.deepcopy(live))
 
 
