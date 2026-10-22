@@ -10,8 +10,7 @@ Run: uv run pytest scripts/dev/tests/test_fanout_green_contest.py
 
 from _review_fakes import PR, _finding, _pipeline, _report
 from fanout_lib.review.red_gate import Gate, Gates, green_finding
-from fanout_lib.review.green_contest import contested
-from fanout_lib.review.review_prompts import ci_fix_prompt
+from fanout_lib.review.green_contest import contested, judgment
 
 RED_NODE = "t.py::test_a_cgroup_missing_on_one_host_is_flagged_and_named"
 UNMET = f"pytest exited 1; not passing: {RED_NODE} (FAILED)"
@@ -138,7 +137,62 @@ def test_the_green_gate_gets_the_names_the_issue_spells_in_backticks(tmp_path):
     assert RED_GATE.subjects == set()
 
 
-def test_the_ci_round_after_an_upheld_contest_may_correct_the_red_test():
-    prompt = ci_fix_prompt(PR, "WAIT: failed", [], f"upheld: {RED_NODE}")
-    assert f"upheld your contest of these red tests: {RED_NODE}" in prompt
-    assert "upheld your contest" not in ci_fix_prompt(PR, "WAIT: failed", [])
+def test_a_fix_reply_that_names_its_test_and_cites_its_change_is_no_contest():
+    """Every fix reply names the test it made pass; only `is wrong` disputes one."""
+    fixed = f"Fixed: {RED_NODE} now passes after the change at scripts/foo.py:40. {PR}"
+    assert contested(UNMET, fixed, RED_GATE) == []
+    # A version number is not a citation.
+    versioned = f"{RED_NODE} is wrong under python3.12:1. {PR}"
+    assert contested(UNMET, versioned, RED_GATE) == []
+    by_name = CONTEST.replace(RED_NODE, RED_NODE.rsplit("::", 1)[-1])
+    assert contested(UNMET, by_name, RED_GATE) == [RED_NODE]
+
+
+def test_ci_red_after_an_upheld_contest_holds_for_a_hand_without_a_resume(tmp_path):
+    """A resume that rewrote the contested red test would face no gate and no reviewer."""
+    reports = [
+        _report(structured={"behaviours": [{"behaviour": "b", "tests": [RED_NODE]}]}),
+        _report(f"Opened {PR}"),
+        _report(structured={"summary": "", "findings": []}),
+        _report(CONTEST),
+        _report(structured={"summary": "", "findings": []}),
+        *[_report(structured={"summary": "", "findings": []})] * 3,
+    ]
+    gates = Gates(red=lambda *_: RED_GATE, green=lambda *_: UNMET)
+    pipeline, run = _pipeline(
+        tmp_path, reports, heads=("base", "red1", "aaa", "bbb"), gates=gates
+    )
+    run.ci = [(1, "WAIT: failed abcd1234: pytest failed\n")]
+    result = pipeline.run_all()["result"]
+    assert result.startswith("needs input: CI is not green on a PR whose contest of")
+    assert RED_NODE in result
+    assert "ci-fix" not in [phase for _, _, phase in run.claude]
+    assert run.lands == []
+
+
+def test_a_hold_with_no_fix_round_counts_the_first_reviews_findings(tmp_path):
+    """With no session to resume, the delta review never ran to leave anything."""
+    reports = [
+        _report(structured={"behaviours": [{"behaviour": "b", "tests": [RED_NODE]}]}),
+        _report(f"Opened {PR}", session=""),
+        _report(
+            structured={"summary": "", "findings": [_finding("misses daniel-server")]}
+        ),
+    ]
+    gates = Gates(red=lambda *_: RED_GATE, green=lambda *_: UNMET)
+    pipeline, _ = _pipeline(
+        tmp_path, reports, heads=("base", "red1", "aaa"), gates=gates
+    )
+    result = pipeline.run_all()["result"]
+    assert "The reviewers also left 1 finding(s) against the fix." in result
+
+
+def test_a_lock_hold_never_points_at_the_red_tests_premise():
+    lock = (
+        "the fix changed what the red tests stand on: t.py changes or removes `def f`"
+    )
+    assert (
+        judgment(lock, [], "", [])
+        == "The reviewers left no other finding against the fix."
+    )
+    assert "premise" in judgment(UNMET, [], "", [])

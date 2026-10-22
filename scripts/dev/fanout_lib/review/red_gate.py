@@ -552,8 +552,8 @@ update like any other test, for example where your change drops a parameter it p
 constant bound to literal data that was there before and that only such older code reads, not
 a red test itself. You may delete from a `conftest.py` a fixture no red test requests, and the
 helpers, constants and imports only it used, but change nothing else there. Where a red test
-is wrong, contest it in your reply to the green gate's finding: name the node and cite the
-`file:line` that contradicts its premise, and a fresh reviewer judges it. A helper the issue
+is wrong, contest it in your reply to the green gate's finding as `<node> is wrong:`, citing
+the `file:line` that contradicts its premise; a fresh reviewer judges it. A helper the issue
 names in backticks, in the file before the red commit, is yours to change. The red nodes:
 {fence}
 {nodes}

@@ -9,9 +9,7 @@ Run: uv run pytest scripts/dev/tests/test_fanout_red_lock_shapes.py
 
 import importlib
 
-import pytest
-
-from fanout_lib.review.red_lock import forbidden_change, forbidden_conftest_change
+from fanout_lib.review.red_lock import forbidden_change
 
 # #5229: the red commits added `RENDERER_ONLY` and a test that reads it, and the fix appended
 # a second constant built from it for its own test.
@@ -97,6 +95,9 @@ def test_a_named_helper_the_red_commits_wrote_stays_locked():
     ) == ("changes or removes `def _thrice`")
 
 
+import pytest  # noqa: E402
+
+
 @pytest.mark.parametrize(
     ("appended", "name"),
     [
@@ -113,6 +114,8 @@ def test_an_appended_constant_reading_a_name_no_constant_binds_is_flagged(
     problem = _renderer_change(f"{RENDERER_RED}\n\n{appended}\n")
     assert problem.endswith(f"reads `{name}`, which no constant above it binds")
 
+
+from fanout_lib.review.red_lock import forbidden_conftest_change  # noqa: E402
 
 # An older helper the red test calls reads `SEPS`, whose value reads an import.
 SEP_BASE = (

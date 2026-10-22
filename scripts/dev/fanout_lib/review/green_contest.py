@@ -5,8 +5,9 @@ about the tree. In #4874 the red author assumed `claude-rc.service` ran on every
 runs only on daniel-box, so the correct fix failed the red test. The implementer had no way
 to say so that the pipeline read, the green gate held the PR, and it was landed by hand.
 
-THE CONTEST. A fix round's reply contests the green gate when it names every red node the
-gate's last run reports not passing and cites at least one `path:line` (`contested`). The
+THE CONTEST. A fix round's reply contests the green gate when it says `<node> is wrong` of
+every red node the gate's last run reports not passing and cites at least one `path:line`
+(`contested`). Naming a node is not enough, since a fix reply names the test it made pass. The
 delta reviewer is a fresh session that never saw the implementer's transcript, and
 `review_prompts.delta_prompt` tells it to report the green gate's finding again when the cited
 fact does not hold. A contest is upheld when the green gate's finding was among those the fix
@@ -21,9 +22,14 @@ not taken: the red author already reads the tree, and #4874's premise was one it
 to check. A second reader who sees the cited line catches that; a stricter brief does not.
 
 AFTER. An upheld contest goes on past the failing red test, and the PR comment says so. CI runs
-the whole suite on the PR, so the contested test fails there, and `review_ci.ci_gate` resumes
-the implementer once with the failure and the nodes the reviewer upheld. No green gate runs
-after that round, so it may correct the red test to the cited fact.
+the whole suite on the PR, so the contested test fails there, and `review_ci.ci_hold` holds the
+PR for a hand to correct the test rather than resuming the implementer. A resume that rewrote a
+red test would face no green gate and no reviewer, and CI passing a test its author just
+rewrote proves nothing.
+
+A HOLD says what the reviewers made of the fix (`judgment`). It counts the findings the delta
+review left, or the first review's when no fix round ran, and it points at the red test's
+premise only when the gate failed on the red tests themselves (`unmet`).
 """
 
 import re
@@ -41,9 +47,12 @@ from fanout_lib.review.red_gate import GREEN_FILE, Gate, green_cause
 if TYPE_CHECKING:
     from fanout_lib.review.review_record import Record
 
-# A `path:line` citation: a file name with an extension, one colon, then the line number. The
-# single colon keeps a node id's `::` out, and the extension keeps a URL's scheme out.
-CITATION = re.compile(r"[\w./-]+\.\w+:\d+\b")
+# A `path:line` citation: a file name with an extension that starts with a letter, one colon,
+# then the line number. The single colon keeps a node id's `::` out, the extension a URL's
+# scheme, and its letter a version such as `python3.12:1`.
+CITATION = re.compile(r"[\w./-]+\.[A-Za-z]\w*:\d+\b")
+# What a contest says of each node it disputes, right after naming it: `<node> is wrong`.
+DISPUTE = r"`?\s+is\s+wrong\b"
 
 
 def contested(reason: str, reply: str, gate: Gate | None) -> list[str]:
@@ -57,14 +66,19 @@ def contested(reason: str, reply: str, gate: Gate | None) -> list[str]:
     if gate is None or green_cause(reason) != "unmet" or not CITATION.search(reply):
         return []
     failing = [n for n in gate.nodes if f"{n} (" in reason]
-    named = [n for n in failing if n in reply or _names_test(reply, n)]
-    return failing if failing and named == failing else []
+    disputed = [n for n in failing if _disputes(reply, n)]
+    return failing if failing and disputed == failing else []
 
 
-def _names_test(reply: str, node: str) -> bool:
-    """Whether `reply` names the node's test function as a whole word."""
+def _disputes(reply: str, node: str) -> bool:
+    """Whether `reply` says `<node> is wrong`, by its id or its test name as a whole word.
+
+    A fix reply names the test it made pass and cites the line it changed as a matter of
+    course, so naming the node alone is no contest.
+    """
     name = re.escape(node.rsplit("::", 1)[-1])
-    return re.search(rf"(?<![\w:]){name}(?![\w\[])", reply) is not None
+    spelled = rf"(?:{re.escape(node)}|(?<![\w:]){name}(?![\w\[]))"
+    return re.search(spelled + DISPUTE, reply) is not None
 
 
 def upheld(
@@ -96,11 +110,20 @@ def settle(record: "Record", reason: str, reply: str, gate: Gate) -> str:
     return reason
 
 
-def judgment(remaining: list[dict], review_error: str, rejected: list[str]) -> str:
-    """What a green-gate hold says about the reviewers' view of the fix.
+def judgment(
+    reason: str, findings: list[dict], review_error: str, rejected: list[str]
+) -> str:
+    """What a green-gate hold on `reason` says about the reviewers' view of the fix.
 
     A hold with no other finding left is where a red test may be wrong, so the operator reads
     the two kinds of hold differently.
+
+    Args:
+        reason: the green gate's refusal.
+        findings: the findings the reviewers left: the delta review's after a fix round, the
+            first review's actionable ones when none ran.
+        review_error: why a review did not complete, "" when every one did.
+        rejected: the red nodes a fresh reviewer refused the implementer's contest of.
     """
     if review_error:
         return "The review did not complete, so no reviewer judged the fix."
@@ -109,9 +132,11 @@ def judgment(remaining: list[dict], review_error: str, rejected: list[str]) -> s
             "A fresh reviewer rejected the implementer's contest of "
             f"{', '.join(rejected)}."
         )
-    others = [f for f in remaining if f.get("file") != GREEN_FILE]
+    others = [f for f in findings if f.get("file") != GREEN_FILE]
     if others:
         return f"The reviewers also left {len(others)} finding(s) against the fix."
+    if green_cause(reason) != "unmet":
+        return "The reviewers left no other finding against the fix."
     return (
         "The reviewers judged the fix correct and left no finding against it, so check the "
         "red test's premise."

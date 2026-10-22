@@ -54,7 +54,7 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
 from fanout_lib.review.review_land import WAIT_MARGIN_S, login
 from fanout_lib.review.review_prompts import ci_fix_prompt
-from fanout_lib.review.review_record import Phase
+from fanout_lib.review.review_record import Phase, Record
 from fanout_lib.brief import drafts_pr
 from fanout_lib.status import PR_URL
 from fanout_lib.target import Target
@@ -318,14 +318,17 @@ def ci_gate(pipe: "Pipeline", last: Phase) -> tuple[Phase, dict | None]:
         )
 
     result = wait()
+    # After an upheld contest, the red test CI fails on is wrong, and a resume that rewrote it
+    # would face no green gate and no reviewer. A hand corrects it instead (#5400).
+    contest = record.green_contest.removeprefix("upheld: ")
+    if contest != record.green_contest:
+        return last, ci_hold(record, result, contest)
     if result.state == FAILED and pipe.session:
         record.ci_resumed = True
         fix = pipe._claude(
             "ci-fix",
             pipe._resume(),
-            ci_fix_prompt(
-                record.pr, result.line, result.failures, record.green_contest
-            ),
+            ci_fix_prompt(record.pr, result.line, result.failures),
         )
         last = fix if PR_URL.search(fix.text) else last
         result = wait()
@@ -343,8 +346,24 @@ def ci_gate(pipe: "Pipeline", last: Phase) -> tuple[Phase, dict | None]:
             f"CI gave no verdict{again} within its wait ({detail}). Check the PR's runs, "
             f"and re-run `cc-wait gh-ci --pr <n> --repo {pipe.target.repo}`"
         )
+    return last, _needs_input(record, why)
+
+
+def ci_hold(record: Record, result: "CiResult", contest: str) -> dict | None:
+    """A hold on a PR whose CI is not green after an upheld contest, or None when it is green."""
+    if result.state == PASSED:
+        record.ci_gate = "passed"
+        return None
+    record.ci_gate = f"held after an upheld contest: {result.line or 'no state'}"
+    why = (
+        f"CI is not green on a PR whose contest of {contest} a fresh reviewer upheld. Correct "
+        f"those red tests to the cited fact by hand, then land it: {result.line or 'no state'}"
+    )
+    return _needs_input(record, why)
+
+
+def _needs_input(record: Record, why: str) -> dict:
     # `status` reads any `https://…/pull/N` in the text as `done`, so the hold names the PR
     # without its scheme.
     pr = record.pr.removeprefix("https://")
-    report = {"type": "result", "is_error": False}
-    return last, {**report, "result": f"needs input: {why}.\n{pr}"}
+    return {"type": "result", "is_error": False, "result": f"needs input: {why}.\n{pr}"}

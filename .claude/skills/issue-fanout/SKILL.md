@@ -218,8 +218,9 @@ delete a `conftest.py` fixture that no red test requests (`fanout_lib/review/red
 what is locked). A refused red commit is
 dropped and the batch runs as usual. A PR that still fails the green gate after the fix round
 is not landed, and its `needs input:` line says whether the reviewers faulted the fix. The
-exception is a red test whose premise is false: the fix round may contest it with a cited
-`file:line`, and a contest the fresh delta reviewer upholds goes on to CI
+exception is a red test whose premise is false: the fix round may write `<node> is wrong:` with
+a cited `file:line`, and a contest the fresh delta reviewer upholds goes on to CI. A red CI run
+there holds the PR for a hand to correct the test, with no resume
 (`fanout_lib/review/green_contest.py`). Once it passes, each hunk of the fix is reverted on its own under the red tests,
 and the record names the hunks no red test noticed (`scripts/dev/fanout_lib/review/hunk_check.py`).
 To see whether the red phase earns its cost, run `uv run python

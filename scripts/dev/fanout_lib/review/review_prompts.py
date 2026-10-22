@@ -166,9 +166,9 @@ def fix_prompt(found: list[dict], pr: str, red: str = "") -> str:
         "file before the red commit. Where a finding says a red test is too weak, "
         "keep it and append a test that checks what the finding asks for. Where a finding says "
         "a red test is wrong, or the green gate fails on a red test whose premise the tree "
-        "contradicts, contest it in one sentence that names the node and cites the `file:line` "
-        "showing the premise is false, and leave the test as it is. A fresh reviewer judges the "
-        "contest.\n"
+        "contradicts, contest it in one sentence of the form `<node> is wrong: <why>` that cites "
+        "the `file:line` showing the premise is false, and leave the test as it is. A fresh "
+        "reviewer judges the contest. Say `is wrong` of a red test only to contest it.\n"
         if red
         else ""
     )
@@ -235,23 +235,13 @@ End your final message with the PR URL.
 """
 
 
-def ci_fix_prompt(
-    pr: str, line: str, failures: "Sequence[Failure]", contest: str = ""
-) -> str:
+def ci_fix_prompt(pr: str, line: str, failures: "Sequence[Failure]") -> str:
     """The prompt that resumes the implementer after its PR's CI went red (`review_ci`).
 
     The pipeline waited for CI, so this session never saw it. It gets each failed check's name
-    and the end of its job's log, as data: a log can echo text a PR author wrote. `contest` is
-    the record's `green_contest`; an upheld one lets this round correct the red tests it names.
+    and the end of its job's log, as data: a log can echo text a PR author wrote.
     """
     failed = [{"check": f.name, "log_tail": f.tail} for f in failures]
-    verdict, _, nodes = contest.partition(": ")
-    upheld = (
-        f"\nA fresh reviewer upheld your contest of these red tests: {nodes}. Where one of "
-        "them fails here, correct it to the fact you cited; no green gate runs after this.\n"
-        if verdict == "upheld"
-        else ""
-    )
     return f"""CI ran on {pr} after the review, and it is red:
 
 {line}
@@ -262,6 +252,6 @@ Reproduce each failure locally with the command the failed job ran, fix the caus
 push. Run the checks that cover what you change. A failure that the log shows is unrelated to
 this PR (a flaky service, a runner fault) needs no fix: say so in one sentence. Do not merge,
 land or close anything.
-{upheld}
+
 End your final message with the PR URL.
 """

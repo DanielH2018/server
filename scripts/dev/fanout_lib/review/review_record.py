@@ -205,7 +205,9 @@ def held_for_green(record: Record, reason: str) -> dict:
     """
     verdict, _, nodes = record.green_contest.partition(": ")
     rejected = nodes.split(", ") if verdict == "rejected" else []
-    why = judgment(record.remaining, record.review_error, rejected)
+    # `remaining` is the delta review's verdict, and stays empty when no fix round ran.
+    left = record.remaining if "fix" in record.durations else record.actionable
+    why = judgment(reason, left, record.review_error, rejected)
     return {
         "type": "result",
         "is_error": False,
