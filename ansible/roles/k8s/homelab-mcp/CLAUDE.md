@@ -8,15 +8,15 @@ routed tenant of the retired Docker edge. See repo-root `CLAUDE.md` for shared c
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates, tasks or containers_list entry, or the k3s role's Longhorn tier lists. -->
 - **Applied by:** Flux, through `promote` (`owner: flux`); `deploy.sh` refuses
   `--tags=homelab-mcp` with exit 5
-- **Image:** `<k8s_registry_pull_host>/homelab-mcp` (`homelab_mcp_k8s_image`)
+- **Image:** `ghcr.io/danielh2018/homelab-mcp` (`homelab_mcp_k8s_image`)
 - **Route:** none (no `templates/ingressroute.yaml.j2`)
 - **Claims:** none (no PVC)
 <!-- /generated_from -->
 
 - **Flux's render pulls `ghcr.io/danielh2018/homelab-mcp:<content tag>`**, with
-  `imagePullPolicy: IfNotPresent` (D5.4b). The *Image* line above prints the Ansible default,
-  which names the in-cluster registry. promote's `images` job builds the image from
-  `templates/Dockerfile.j2` and the files below.
+  `imagePullPolicy: IfNotPresent` (D5.4b), and the *Image* line above names that repository.
+  The role's defaults still name the in-cluster registry, for the handback. promote's `images`
+  job builds the image from `templates/Dockerfile.j2` and the files below.
 - **No IngressRoute** — routed through the k8s edge's file-provider gate Secret (`roles/k8s/traefik/templates/livesync-gate-secret.yaml.j2`)
   instead, so its bearer token stays out of CRD objects the readonly kubeconfig can list.
   **Two routers there, not one.** `homelab-mcp-local` carries the bearer predicate and serves
