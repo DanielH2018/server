@@ -12,7 +12,7 @@ PR 3, the log rules in shadow and the ruler-watching alerts: [#4821](https://git
 
 Soak read, [#4824](https://github.com/DanielH2018/server/issues/4824): passed on 2026-10-21, over the operator's shortened window of 2026-10-13T04:15:51Z to 2026-10-18T08:15Z ([the read](https://github.com/DanielH2018/server/issues/4824#issuecomment-6326741916)). `LokiHostLogsSilent`, `LokiPiLogsSilent` and `LokiPodLogsSilent` each returned no silent sample. `KumaNotificationDropped` fired in one episode (2026-10-16 18:55 to 22:00) that matches 185 minutes of `Kuma Notification Delivery` DOWN. `LokiRulerEvaluationFailing` and `Loki Reachable` were both empty, and neither bridge tile was ever DOWN. The Sunday reboot opened no silent window. PR 4a is unblocked.
 
-PR 4a, the Kuma side goes (PR 5 folded in): [#5852](https://github.com/DanielH2018/server/pull/5852).
+PR 4a, the Kuma side goes (PR 5 is its own PR, by the operator's ruling of 2026-10-22): [#5852](https://github.com/DanielH2018/server/pull/5852).
 
 Depends on: M1, and M2's PR 3 (the `weekly-reboot` mute) before the cutover. Two
 contracts.md rows also gate PRs here: the row *Open questions* 2 requests gates PR 2a, and
@@ -458,7 +458,7 @@ stays until M6's A7, and `test_loki_selectors_use_real_stream_labels` stays with
 
 ```diff
  ansible/
-~  vars/secrets.yml                       loses three push tokens (PR 4a, operator-only)
+~  vars/secrets.yml                       loses three push tokens (PR 5, operator-only)
 ~  secret_rotation.yml                    their three rows deleted (PR 4a, the operator's commit)
  ansible/roles/k8s/uptime-kuma/
 ~  templates/static-monitors.yaml.j2      the discord comment's reason for the name (PR 4a)
@@ -534,9 +534,8 @@ helper that PR 3 adds is not in the tree above, because its path followed
 
 PR 4 and PR 5 keep the numbers that M2 cites. The ruler and the grant are PR 2a and PR 2b. The
 cutover is two PRs, PR 4a and PR 4b, for the reason M2's *The cutover is two PRs* gives. A
-citation of M5's PR 4 in another slice means the pair, and PR 4a deletes the Loki gate. PR 4a
-also retires the three push tokens, so a citation of M5's PR 5 means PR 4a's token part
-(*PR 5*).
+citation of M5's PR 4 in another slice means the pair, and PR 4a deletes the Loki gate. PR 5
+retires the three push tokens a week after PR 4a's `monitor-bridge` deploy (*PR 5*).
 
 Before each deploy, a PR checks every tag it names against M1 convention 8. A flux-owned tag
 is applied by the merge's `promote` run, and `land.sh` deploys the rest. Only PR 4a's order
@@ -737,6 +736,80 @@ depends on which tags are flux-owned, and PR 4a states each case.
 
   The `regen-doc-fragments` hook rewrites the bridge fragments on that commit, the gate-set
   fragment among them, and fails once. Stage the rewritten fragments and commit again.
+- **The three push tokens stay, for a week.** Operator ruling, 2026-10-22: a token retirement
+  lands a week after the cutover that frees it, because a revert of this PR needs the tokens
+  and a retired key cannot come back by revert. So this PR leaves `monitor_bridge_loki_push_token`,
+  `monitor_bridge_kuma_notify_failures_push_token` and `monitor_bridge_loki_reachable_push_token`
+  in `secrets.yml`, `secret_rotation.yml` and the cluster files exactly as on `master`. The
+  censuses that would fail on a key with no row take one allowance, `PENDING_RETIREMENT` in
+  `scripts/secrets_mgmt/pending_retirement.py`: `consumer_tags` returns nothing for a name in it,
+  `cluster_vars_check.names_problems` does not demand a cluster render for it, and
+  `test_every_auto_tier_token_resolves_a_consumer_or_is_known_manual` counts it as known manual.
+  A test holds the set to names `secrets.yml` still holds. PR 5 retires the keys and deletes the
+  set. `monitor_bridge_swallowed_verdicts_push_token` stays, because its row stays until M6's C-7.
+- Requires M2's PR 3, because PR 4b must follow inside the no-pager bound below.
+- **Deploy plane.** `monitor-bridge` and `uptime-kuma` are both `owner: flux` on `master`, so
+  `land.sh` deploys neither. The merge's `promote` run applies both, in the order of D4's
+  generated `dependsOn`, and the *Both are flux-owned* case below governs the order.
+- **Order.** The tiles must go before the pushes stop, or each tile goes DOWN 1200s after its
+  last push (*Baseline*). That is a false page, not a second pager, because every rule is
+  shadow. By convention 8, four cases:
+    - **Both tags deploy through Ansible.** `land.sh` deploys `uptime-kuma`, then
+      `monitor-bridge`. The toposort puts `uptime-kuma` first (M6's *The cutover order*).
+    - **`uptime-kuma` is flux-owned.** The merge's `promote` run deletes the tiles, then
+      `land.sh` deploys `monitor-bridge`. The order is the same. Meanwhile the old bridge pushes
+      into three deleted tokens, and no check reads those refusals (*Baseline*).
+    - **`monitor-bridge` is flux-owned and `uptime-kuma` is not.** The `promote` run stops the
+      three pushes at merge. Run `land.sh` at once, so that `uptime-kuma` deploys inside
+      1200s. A later deploy sends one false DOWN page per tile.
+    - **Both are flux-owned.** The `promote` run applies them in the order of D4's generated
+      `dependsOn`. If that order puts `monitor-bridge` first, the 1200s bound of the case
+      above applies.
+- Record that `monitor_status{monitor_name=~"Loki Log Ingestion|Loki Reachable|Kuma Notification Delivery"}`
+  returns nothing and that `probe.py health monitor-bridge` passes. Record the time the new
+  `monitor-bridge` started, from its deploy or its `promote` run.
+- **The no-pager bound.** PR 4b is open and green, stacked on this PR, before this PR merges.
+  It lands as soon as the reads above pass. If PR 4b has not deployed within two hours of this
+  PR's `monitor-bridge` start, revert this PR. The rules are still shadow, so the revert
+  restores Kuma as the only pager. Two hours is M2's PR 4a bound, which M6's cutovers also
+  use. Master holds this PR as one squash commit, so the revert restores the three keys'
+  ciphertext and their registry rows together. If a later commit edited `secrets.yml`, the
+  revert conflicts there, and the revert waits for the operator's `sops` step in *Rollback*.
+- Two-writer check: from this commit until PR 4b deploys, the two ported checks and a Loki
+  query fault page from neither side. That is the safe direction of convention 5. A Loki
+  outage pages from Kuma's `Cluster Scrape Targets` tile only. `swallowed_verdicts` pages from
+  Kuma only.
+
+### PR 4b — The rules page (about 25 lines)
+
+- Drop `shadow: "true"` from `homelab-logs.yaml`, `LokiRulerNotEvaluating` and
+  `LokiRulerEvaluationFailing`. `LokiHomelabDown` keeps it until M6's A3 Cutover-b deletes
+  the rule.
+- Add to M2's routing pytest, which asserts that every route reached carries `weekly-reboot`,
+  the label sets of the eight M5 alerts that page from this PR: the four log alerts,
+  `LokiHomelabMetricsMissing`, `LokiRulerEvaluationFailing`, `LokiRulerNotEvaluating` and
+  `LokiRulerNotificationsFailing`. Two of them page from PR 1 and PR 3. M2's PR 3 adds the
+  pytest, and this PR is the first M5 PR that requires it.
+- Requires PR 4a's recorded reads, M2's PR 3, and the C7 row *Open questions* 1 requests.
+- Deploys `loki-homelab` and `observability`, in either order, through `land.sh` or the
+  `promote` run. The Kuma side is already gone, so ownership and order do not matter here.
+- Two-writer check: from this commit, the two ported checks and a Loki query fault page from
+  Alertmanager only.
+
+### PR 5 — Retire the three push tokens
+
+PR 5 is its own PR, by the operator's ruling of 2026-10-22, and not part of PR 4a. It lands not
+before the `monitor-bridge` deploy of PR 4a plus 7 days. Until then a revert of PR 4a still has
+its tokens. The sops removal and `cluster_vars.py write` are operator-only.
+
+- Remove the three keys from `ansible/vars/secrets.yml` with `sops` (**operator-only**), delete
+  their rows from `ansible/secret_rotation.yml` by hand, add the names to
+  `scripts/secrets_mgmt/git_dates.py:RETIRED`, regenerate `standalone_secret_keys.json` with
+  `scripts/renderer/standalone_map.py`, run `cluster_vars.py write` (**operator-only**) so the
+  cluster files lose the names, and delete `PENDING_RETIREMENT` with the test that holds it.
+- The recipe, as PR 4a first stated it when it carried the retirement, follows. Read "this PR"
+  as PR 5 and "the agent's commit" as the commit that adds the `RETIRED` names.
+
 - **Retire the three push tokens in the same PR**, or CI fails. `land.sh` merges with
   `merge_method=squash` (`scripts/deploy_tools/land_lib/merge.py:_merge_past_review`), so
   master holds PR 4a as one commit.
@@ -816,62 +889,6 @@ depends on which tags are flux-owned, and PR 4a states each case.
       token PR lands first.
     - `git diff --stat origin/master -- ansible/vars/secrets.yml`. Plain `git diff` on that
       file prints plaintext.
-- Requires M2's PR 3, because PR 4b must follow inside the no-pager bound below.
-- **Deploy plane.** `monitor-bridge` and `uptime-kuma` are both `owner: flux` on `master`, so
-  `land.sh` deploys neither. The merge's `promote` run applies both, in the order of D4's
-  generated `dependsOn`, and the *Both are flux-owned* case below governs the order.
-- **Order.** The tiles must go before the pushes stop, or each tile goes DOWN 1200s after its
-  last push (*Baseline*). That is a false page, not a second pager, because every rule is
-  shadow. By convention 8, four cases:
-    - **Both tags deploy through Ansible.** `land.sh` deploys `uptime-kuma`, then
-      `monitor-bridge`. The toposort puts `uptime-kuma` first (M6's *The cutover order*).
-    - **`uptime-kuma` is flux-owned.** The merge's `promote` run deletes the tiles, then
-      `land.sh` deploys `monitor-bridge`. The order is the same. Meanwhile the old bridge pushes
-      into three deleted tokens, and no check reads those refusals (*Baseline*).
-    - **`monitor-bridge` is flux-owned and `uptime-kuma` is not.** The `promote` run stops the
-      three pushes at merge. Run `land.sh` at once, so that `uptime-kuma` deploys inside
-      1200s. A later deploy sends one false DOWN page per tile.
-    - **Both are flux-owned.** The `promote` run applies them in the order of D4's generated
-      `dependsOn`. If that order puts `monitor-bridge` first, the 1200s bound of the case
-      above applies.
-- Record that `monitor_status{monitor_name=~"Loki Log Ingestion|Loki Reachable|Kuma Notification Delivery"}`
-  returns nothing and that `probe.py health monitor-bridge` passes. Record the time the new
-  `monitor-bridge` started, from its deploy or its `promote` run.
-- **The no-pager bound.** PR 4b is open and green, stacked on this PR, before this PR merges.
-  It lands as soon as the reads above pass. If PR 4b has not deployed within two hours of this
-  PR's `monitor-bridge` start, revert this PR. The rules are still shadow, so the revert
-  restores Kuma as the only pager. Two hours is M2's PR 4a bound, which M6's cutovers also
-  use. Master holds this PR as one squash commit, so the revert restores the three keys'
-  ciphertext and their registry rows together. If a later commit edited `secrets.yml`, the
-  revert conflicts there, and the revert waits for the operator's `sops` step in *Rollback*.
-- Two-writer check: from this commit until PR 4b deploys, the two ported checks and a Loki
-  query fault page from neither side. That is the safe direction of convention 5. A Loki
-  outage pages from Kuma's `Cluster Scrape Targets` tile only. `swallowed_verdicts` pages from
-  Kuma only.
-
-### PR 4b — The rules page (about 25 lines)
-
-- Drop `shadow: "true"` from `homelab-logs.yaml`, `LokiRulerNotEvaluating` and
-  `LokiRulerEvaluationFailing`. `LokiHomelabDown` keeps it until M6's A3 Cutover-b deletes
-  the rule.
-- Add to M2's routing pytest, which asserts that every route reached carries `weekly-reboot`,
-  the label sets of the eight M5 alerts that page from this PR: the four log alerts,
-  `LokiHomelabMetricsMissing`, `LokiRulerEvaluationFailing`, `LokiRulerNotEvaluating` and
-  `LokiRulerNotificationsFailing`. Two of them page from PR 1 and PR 3. M2's PR 3 adds the
-  pytest, and this PR is the first M5 PR that requires it.
-- Requires PR 4a's recorded reads, M2's PR 3, and the C7 row *Open questions* 1 requests.
-- Deploys `loki-homelab` and `observability`, in either order, through `land.sh` or the
-  `promote` run. The Kuma side is already gone, so ownership and order do not matter here.
-- Two-writer check: from this commit, the two ported checks and a Loki query fault page from
-  Alertmanager only.
-
-### PR 5 — Folded into PR 4a
-
-PR 5 has no PR of its own. Its four-part token retirement is in PR 4a, because
-`test_secret_consumer_census.py` fails on a key whose last row has left `check_table.py`
-(PR 4a's *Retire the three push tokens* bullet). The four parts span PR 4a's two commits, the
-agent's and the operator's, and master holds them as one squash commit. The number stays so that other slices'
-citations of M5's PR 5 still resolve.
 
 ## Verification
 
@@ -979,7 +996,7 @@ restart: PR 2a and PR 3 restart Loki anyway.
 
   In both cases, re-run the failed deploy inside PR 4a's two-hour bound. Otherwise revert PR
   4b, then PR 4a.
-- **PR 5.** It has no commit of its own, so PR 4a's rollback covers the three tokens.
+- **PR 5.** Revert it to restore the three keys, unless a later commit edited `secrets.yml` (*PR 5*'s recipe).
 
 ## Risks
 
@@ -1125,7 +1142,7 @@ restart: PR 2a and PR 3 restart Loki anyway.
       `test_departed_secrets_are_accounted_for.py` pass unchanged on the PR's tip, because the
       keys leave `sops_names` in the same PR. Both are red on the agent's commit alone.
 - **PR 4b.** M2's routing pytest gains the label sets of the eight alerts that page.
-- **PR 5.** Nothing: its token part is in PR 4a.
+- **PR 5.** The census allowance `PENDING_RETIREMENT` and the test that holds it.
 
 ## Complexity delta
 
@@ -1133,7 +1150,7 @@ restart: PR 2a and PR 3 restart Loki anyway.
     - A ruler block of about 10 lines, one ConfigMap, one mount, and one role default listing
       the rule groups, with an agreement check in `alert_rules.py`.
     - The cutover is PR 4a and PR 4b, with a no-pager window of at most two hours between
-      them. PR 5's token retirement folds into PR 4a, so the slice keeps six PRs.
+      them. PR 5's token retirement is its own PR a week later (operator ruling, 2026-10-22).
     - An operator commit on PR 4a's branch, holding the `sops` removal and the deletion of
       the three registry rows, before PR 4a can merge. Another operator `sops` step follows for a revert of PR 4a
       after a later `secrets.yml` commit.
