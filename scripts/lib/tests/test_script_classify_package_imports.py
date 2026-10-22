@@ -113,6 +113,17 @@ def test_a_guardless_module_a_role_ships_is_a_library(tmp_path):
     assert "carried by deploy: ansible/roles/k8s/svc/tasks/main.yml" in evidence
 
 
+def test_a_guardless_module_a_roles_python_table_names_is_a_library(tmp_path):
+    """The deployer keys `K8S_BUILD_CONTEXT_FILES` by `obs_api.py`'s path (#4840), which the
+    argv reading of a `.py` file takes for a run."""
+    repo, scripts = _package(tmp_path, '"""Summary."""\n')
+    _shipped_by_a_role(repo, '"""Summary."""\nVALUE = 1\n')
+    lib = repo / "ansible" / "roles" / "setup" / "svc" / "files" / "pkg"
+    lib.mkdir(parents=True)
+    (lib / "table.py").write_text('TABLE = {"scripts/dev/pkg/leaf.py": "svc"}\n')
+    assert sc.classify(repo, scripts)["leaf.py"][0] == "library"
+
+
 def test_a_guarded_script_a_role_names_is_a_deploy_gate(tmp_path):
     """The reject half: a script with a `__main__` guard named by a role's tasks runs there."""
     repo, scripts = _package(tmp_path, '"""Summary."""\n')

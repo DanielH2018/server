@@ -44,6 +44,13 @@ def test_tags_adds_a_lookup_reader_and_changes_does_not():
     assert "uptime-kuma" in r.touched()
 
 
+def test_a_build_context_file_outside_every_role_tags_the_role_embedding_it():
+    """An `obs_api.py`-only landing deploys homelab-mcp, whose image embeds it (#4840)."""
+    r = reach(["scripts/diagnostics/probe_lib/obs_api.py"])
+    assert r.tags({"homelab-mcp", "sonarr"}) == {"homelab-mcp"}
+    assert "homelab-mcp" in r.touched()
+
+
 def test_tags_keeps_only_declared_roles_and_drops_role_tests():
     r = reach([_SERVICE, "ansible/roles/k8s/sonarr/tests/test_sonarr.py"])
     assert r.tags({"sonarr"}) == {"sonarr"}

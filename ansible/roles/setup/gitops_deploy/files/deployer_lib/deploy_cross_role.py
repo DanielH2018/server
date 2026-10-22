@@ -7,8 +7,9 @@ role calling a changed filter plugin's filters. They are static because every ca
 paths alone, and `ansible/tests/setup/test_setup_cross_role_files.py` holds each one to the
 tree.
 
-The k8s plane needs no table: `k8s_lookup_readers` derives its readers from the templates and
-tasks that name another role's file in a `lookup()`.
+The k8s plane needs one table, `K8S_BUILD_CONTEXT_FILES`, for a file outside `ansible/roles/k8s/`
+that a role's image embeds. Every other k8s reader is derived: `k8s_lookup_readers` reads the
+templates and tasks that name another role's file in a `lookup()`.
 
 A module of its own, not part of `deploy_changes`, because the tick and `land.sh` parse
 another commit's copy of THIS file by path (`tables_in`, `CROSS_ROLE_FILE`). Nothing else may
@@ -123,6 +124,18 @@ K8S_ROLES_IMPORTING_SETUP_FILES: dict[str, frozenset[str]] = {
 }
 
 
+# A file outside `ansible/roles/k8s/` that a k8s role's `image_builder_context_files` embeds in
+# its image, mapped to those roles (#4840). image-builder hashes the build context into the
+# content tag the Deployment names, so an edit here moves the role's applied bytes. The path
+# sits under no role, so without this row it mapped to no deploy tag and wrote no
+# `k8s_unapplied` line, and `probe.py releases` blamed whichever unrelated path also moved.
+# A Flux-owned role still lands here first; `deploy_inventory.route_not_ansible_owned` then
+# moves it to `cs.flux`. `ansible/tests/setup/test_setup_cross_role_files.py` holds it to the tree.
+K8S_BUILD_CONTEXT_FILES: dict[str, frozenset[str]] = {
+    "scripts/diagnostics/probe_lib/obs_api.py": frozenset({"homelab-mcp"}),
+}
+
+
 # A filter plugin mapped to the setup roles whose rendered state calls one of its filters
 # (#3874). `ansible/deploy.yml` runs no setup role, so no deploy-plane apply, narrowed or
 # whole, re-renders these. `setup_roles_for` returns them, and the tick
@@ -146,6 +159,7 @@ CROSS_ROLE_FILE = (
     "ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_cross_role.py"
 )
 TABLE_NAMES = (
+    "K8S_BUILD_CONTEXT_FILES",
     "K8S_ROLES_IMPORTING_SETUP_FILES",
     "SETUP_FILES_ROUTED_TO_OWNER",
     "SETUP_FILES_SHIPPED_BY_OTHER_ROLES",
@@ -256,6 +270,18 @@ def _collection(value, kinds):
 def current_tables() -> dict[str, object]:
     """The tables this module holds, by name, in the shape `use_tables` takes."""
     return {name: globals()[name] for name in TABLE_NAMES}
+
+
+def k8s_roles_holding(path: str) -> frozenset[str]:
+    """The k8s roles holding a copy of `path` from outside their own tree.
+
+    That is a setup file one imports (`K8S_ROLES_IMPORTING_SETUP_FILES`) or a file its image
+    embeds (`K8S_BUILD_CONTEXT_FILES`). Read from this module's globals, so a copy
+    `use_tables` adopted answers.
+    """
+    return globals()["K8S_ROLES_IMPORTING_SETUP_FILES"].get(
+        path, frozenset()
+    ) | globals()["K8S_BUILD_CONTEXT_FILES"].get(path, frozenset())
 
 
 def owner_routed_consumers(owner: str) -> frozenset[str]:

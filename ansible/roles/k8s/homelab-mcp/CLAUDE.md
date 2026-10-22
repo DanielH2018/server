@@ -76,7 +76,9 @@ routed tenant of the retired Docker edge. See repo-root `CLAUDE.md` for shared c
   flat at `/app/obs_api.py`, so it stays stdlib-only with no first-party import;
   `scripts/diagnostics/tests/test_obs_api.py` imports it with `scripts/` off the path. The file
   is part of the build context, so a merged edit to it alone moves homelab-mcp's content tag,
-  and the next promotion builds the image and rolls the pod.
+  and the next promotion builds the image and rolls the pod. After a handback, the deployer's
+  `K8S_BUILD_CONTEXT_FILES` table maps an edit to it to homelab-mcp's tag, and `probe.py
+  releases` names it as the cause of homelab-mcp's drift (#4840).
 - The Dockerfile path is built from `playbook_dir`, not `role_path`: that render happens
   **inside** `k8s/image-builder`, where `role_path` resolves to the wrong role (bit the first
   deploy, 2026-08-13). It matters again only after a handback.
