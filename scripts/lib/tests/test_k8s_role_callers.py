@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""`role_callers` — which k8s roles reach another role's tasks, read from the live tree.
+"""`role_callers` — which k8s roles include or `lookup()` another role, read from the live tree.
 
 The consumer is `scripts/deploy_tools/land_lib/land_tags.py`: a helper role whose callers were ALL
 deployed is already applied, and reporting it as `needs-manual-apply` sends an operator at a
@@ -61,8 +61,12 @@ def test_a_template_lookup_into_another_role_is_an_edge(tmp_path):
     assert role_callers(tmp_path) == {"helper": {"reader"}}
 
 
-def test_a_service_role_is_not_a_callee(callers):
-    """The reject half: a walk matching any `k8s/` string would call sonarr a helper."""
+def test_a_role_nothing_includes_or_looks_up_is_not_a_callee(callers):
+    """The reject half: a walk matching any `k8s/` string would call sonarr a helper.
+
+    A service can be a callee: crowdsec and monitor-bridge are, through other roles' lookups.
+    sonarr and jellyfin are named because nothing includes them or reads their files.
+    """
     assert "sonarr" not in callers
     assert "jellyfin" not in callers
 

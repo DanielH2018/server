@@ -1,5 +1,5 @@
 {
-  "checksum": "1374a74f50c06b88133bd45524fd8c281f368c0fde46baf97ad9951debddbc30",
+  "checksum": "85acdb98ec750890de501f127bf446dd4158b8ac736e9c02a42ea08bcfa106a0",
   "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
   "key": "ansible/roles/k8s/radarr/CLAUDE.md#At a glance",
   "row": {
@@ -7,9 +7,9 @@
       "ansible/tests/services/test_exportarr_sidecars.py::test_the_image_pins_stay_in_lockstep": "f3e695a6d3fd29e04faa710d3b029d1d85bac8aede4ae2e6f29dea3287ba842d",
       "docs/flux-deploy-plane.md": "807c3deb44c3178e7a6f9fc0bc398a3b748b95c468b14ce9b1b890c8684535d9",
       "docs/volume-snapshot-drills.md": "065c3fed1513022fe8e3b8848f85ca3b5527c7a34f0d50d3b1dad708b176b193",
-      "scripts/lib/k8s_role_callers.py:role_callers": "24099296b0ddf153a295cd70f721754f1f0e422f7ac9edfa2d6a453e762b33fb"
+      "scripts/lib/k8s_role_callers.py:role_callers": "6487aaabe2d2d952b888af3ac4bbf0eb23e56f47e8e88141a160036f6b8575b4"
     },
     "python": "3.14",
-    "verified_sha": "fdae34795"
+    "verified_sha": "53a8a1634"
   }
 }

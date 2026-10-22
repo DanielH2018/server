@@ -9,5 +9,5 @@
   # var of that name would override the default and loop through `sonarr_k8s_rollout_timeout`.
 
 # The Discord Connect notification runs as the seed Job in templates/verify/notification.yaml.j2.
-# The `k8s/arr-notification` include that declared it went in #5561, so a handback re-adds it
+# The arr-notification include that declared it went in #5561, so a handback re-adds it
 # (`arr_notification_app: sonarr`) as well as reverting the D5.20 flip.

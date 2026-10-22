@@ -102,11 +102,15 @@ def role_callers(repo: Path | str | None = None) -> dict[str, set[str]]:
     """
     roles_dir = K8S_ROLES if repo is None else Path(repo) / K8S_ROLES.relative_to(REPO)
     callers: dict[str, set[str]] = {}
+    if not roles_dir.is_dir():
+        return callers
     # DECIDED: a lookup into a DECLARED role is an edge too (uptime-kuma -> monitor-bridge,
-    # authelia and traefik -> crowdsec), rather than filtered out. Every reader follows an edge
-    # only out of a role with no containers_list entry and stops at a declared one, so those
-    # edges are never read; filtering them would need the walked tree's host_vars, which the
-    # throwaway tree a test walks does not have.
+    # authelia and traefik -> crowdsec), rather than filtered out. Filtering would need the
+    # walked tree's host_vars, which the throwaway tree a test walks does not have. The
+    # landing, the deployer, the broad narrowing and the `--tags` expansion stop at a declared
+    # role, so they never read such an edge. `releases_consumers._closure` does not stop, and
+    # it reads the edge only for a census role whose closure passes through crowdsec or
+    # monitor-bridge. `manifests` is the one such role, and that reader skips it by name.
     for role_dir in sorted(p for p in roles_dir.iterdir() if p.is_dir()):
         caller = role_dir.name
         reached = _looked_up(role_dir)
