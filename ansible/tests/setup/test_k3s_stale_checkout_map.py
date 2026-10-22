@@ -139,7 +139,8 @@ def test_the_real_map_is_honest():
     # fact: ansible/roles/setup/k3s/CLAUDE.md#Notable
     files = _role_files()
     writers = _writers(_role_texts())
-    assert "Install Longhorn" in writers and len(writers) >= 30, sorted(writers)
+    named = "Give the Longhorn CSI sidecars a memory request so they leave BestEffort"
+    assert named in writers and len(writers) >= 18, sorted(writers)
     assert map_problems(files[GUARD], task_tags(files), writers) == []
 
 

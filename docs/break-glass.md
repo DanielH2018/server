@@ -153,6 +153,12 @@ daniel-server keeps its own SOPS key, so decryption still works without the reco
    bring-up installs no MetalLB: the `metallb` Kustomization does, once Flux applies the plumbing tags.
    Since H1.4 the `coredns` Kustomization owns the CoreDNS objects, and the bring-up keeps only
    the marker that releases k3s's bundled add-on.
+   From H1.5a until H1.7b the first run also skips `longhorn` and `longhorn_backup`
+   (`--skip-tags kubeconfig,longhorn,longhorn_backup`), because the `longhorn` Kustomization
+   installs Longhorn and, from H1.5b, its Settings. Once it reads `Ready`, the operator runs
+   `k3s-bringup.yml --tags longhorn,longhorn_backup` with both arm variables set (that
+   document's step (f2)). From H1.5b that run applies the backup targets, the RecurringJob, the
+   CSI sidecar requests and the label reconcile, and no Setting.
 2. Decide whether cluster **objects** (Deployments, Secrets, PVC bindings) are also lost —
    if so, restore etcd first per `docs/k3s-etcd-restore.md` (needs item 2, the cluster
    token, if this is a genuinely new host rather than the same disk).
@@ -181,7 +187,7 @@ What happens without any action:
   keep working. Do not chase DNS errors in that window.
 - **Pods with a Longhorn RWO volume stay Terminating.** Longhorn's
   `node-down-pod-deletion-policy` is `do-nothing`, and the `DECIDED:` comment on
-  `k3s_longhorn_node_down_pod_deletion_policy` in `ansible/roles/setup/k3s/defaults/main.yml`
+  `k3s_longhorn_node_down_pod_deletion_policy` in `ansible/roles/k8s/longhorn/defaults/main.yml`
   says why. Their volumes stay attached to the dead node until step 2 below.
 - **`nut` cannot move.** It is pinned to daniel-server because the UPS is USB-attached there.
   While daniel-server is down, daniel-box gets no power-loss shutdown signal and runs to battery

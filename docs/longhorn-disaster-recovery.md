@@ -120,7 +120,10 @@ the per-volume map and each exclusion's rationale:
 
     - (a) `uv run ansible-playbook ansible/k3s-bringup.yml --skip-tags kubeconfig`. It installs
       k3s, and k3s creates its bundled CoreDNS. The play skips the token wait, which would fail
-      here.
+      here. **From H1.5a until H1.7b, skip two more tags:**
+      `--skip-tags kubeconfig,longhorn,longhorn_backup`. The Longhorn window below gives the
+      reason. The packages Longhorn needs on the node still install, because they carry the tag
+      `longhorn_host` alone.
     - (b) **Operator-only.** Render `cluster-base` and apply it under `kustomize-controller`'s own
       field manager, so Flux's first apply finds its own fields:
       `uv run python scripts/renderer/homelab_render.py cluster --out <out> --role cluster-base`,
@@ -153,6 +156,29 @@ the per-volume map and each exclusion's rationale:
       `sudo k3s kubectl -n flux-system patch kustomization homelab --type merge --field-manager=homelab-operator -p '{"spec":{"suspend":false}}'`.
       Once every status on `prod`'s commit reads `success`, clear the hold with
       `gh variable set DEPLOY_HOLD --body none -R DanielH2018/server`.
+    - (f2) **From H1.5a until H1.7b only. Operator-only.** Once `longhorn` reads `Ready` at (f),
+      and before the smoke test and step 3, run the window's own step:
+      `uv run ansible-playbook ansible/k3s-bringup.yml --tags longhorn,longhorn_backup`, with
+      `k3s_longhorn_backup_armed` and `k3s_longhorn_r2_armed` set to `true` as step 2 says. The
+      run applies what (a) skipped. That is the CSI sidecar memory requests, the recurring-job
+      label reconcile, the backup-store poll interval, both backup credentials, both backup
+      targets and the RecurringJob. The Longhorn Settings, the `longhorn-nobackup` class and
+      the metrics NetworkPolicy are not in this list: the `longhorn` Kustomization applies them
+      at (f), so the replica count is in place before the smoke test binds its volume. Run (f2)
+      from a checkout at the commit `prod` names, which (f) read. Each H1 PR deletes a task's
+      guard-map row in the commit that hands the task's objects to Flux, so a checkout older
+      than `prod` fails the stale-checkout guard, and a newer one would skip the objects it
+      already handed over. The sync of step 3 finds both targets once (f2) has run. H1.6
+      shortens this list again, and H1.7b removes (f2) and the two extra skips of (a).
+
+   **The Longhorn window, H1.5a until H1.7b.** H1.5a deletes `Install Longhorn`, so Longhorn
+   first reaches a new cluster at (f), through Flux. Until H1.7b, `setup/k3s` still holds tasks
+   that read or write Longhorn objects, tagged `longhorn` (in `tasks/longhorn.yml`) or
+   `longhorn_backup` (in `tasks/longhorn-backup.yml`). An unchanged (a) would run them against
+   a cluster with no `longhorn-system` namespace and no Longhorn CRDs, and fail. So (a) skips
+   both tags and (f2) applies them. The three host tasks in `tasks/longhorn-host.yml` carry
+   `longhorn_host` alone, because a `--skip-tags` exclusion matches any tag a task carries.
+   `ansible/tests/setup/test_k3s_longhorn_host_tasks.py` holds that.
 
    **MetalLB from H1.3.** The `metallb` tag is Flux-owned, so (a) no longer installs MetalLB or
    its address pool. The Kustomization `metallb` installs both at (f), once the plumbing tags
@@ -163,6 +189,11 @@ the per-volume map and each exclusion's rationale:
    Kustomization `coredns` takes the Deployment, the Service, the RBAC and the `Corefile` key
    over at (f). Flux resolves GHCR through that DNS, so a CoreDNS that k3s has not yet created
    would leave Flux unable to fetch the bundle.
+
+   **Longhorn from H1.5a.** The `longhorn` tag is Flux-owned, so (a) no longer installs
+   Longhorn. The Kustomization `longhorn` installs it at (f), with the manager memory request
+   and the `longhorn` StorageClass built in. Before H1.5a, (a) installs Longhorn and creates
+   the backup targets, and the play's variables arm them, as step 2 says.
 
    Before H1.2 there is no step (b): k3s bring-up applies the PriorityClasses and the identity
    itself. Steps 3 and 4 below sit between (f) and (g). D5's flux PR replaces this block with a

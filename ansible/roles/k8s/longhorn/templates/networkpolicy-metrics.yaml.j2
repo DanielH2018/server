@@ -9,10 +9,12 @@
 # — degraded volumes, a replica rebuild that never finishes — were unwatched, on the storage layer
 # every PVC in the cluster sits on.
 #
-# This is additive, not a patch of the upstream object. Editing theirs in place would be undone by
-# the next `kubectl apply -f .../longhorn.yaml`, which is how the role installs and upgrades
-# Longhorn; NetworkPolicies are additive by design (a pod is reachable if ANY policy selecting it
-# allows the traffic), so a separate object survives the upgrade and needs no reconciliation.
+# This is additive, not a patch of the upstream object. Editing theirs in place would be undone
+# by the next refresh of files/upstream/longhorn.yaml, and NetworkPolicies are additive by design
+# (a pod is reachable if ANY policy selecting it allows the traffic), so a separate object
+# survives a Longhorn upgrade and needs no reconciliation. Flux applies it with the rest of the
+# tag, and it lives in this role's bundle so the policy and the upstream ones it reopens a hole in
+# arrive together.
 #
 # Scoped to the metrics port and the observability namespace: this reopens the manager's :9500 to
 # Prometheus, and nothing else to anyone else.
@@ -21,8 +23,6 @@ kind: NetworkPolicy
 metadata:
   name: longhorn-manager-allow-metrics-scrape
   namespace: longhorn-system
-  labels:
-    app.kubernetes.io/managed-by: ansible
 spec:
   podSelector:
     matchLabels:

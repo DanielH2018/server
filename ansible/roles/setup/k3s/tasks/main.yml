@@ -12,7 +12,12 @@
 # runs ahead of the guard. ansible/tests/setup/test_k3s_stale_checkout_map.py holds the order.
 - name: Refuse a stale checkout that would write a Flux-owned object
   ansible.builtin.import_tasks: stale-checkout-guard.yml
-- name: Install Longhorn and reconcile its recurring-job groups
+# The host half of Longhorn, tagged `longhorn_host` alone so bring-up step 1 can skip `longhorn`
+# and `longhorn_backup` and still run it. Directly ahead of longhorn.yml; the `longhorn` Flux tag
+# installs Longhorn itself (H1.5a).
+- name: Install the packages Longhorn needs on the node
+  ansible.builtin.import_tasks: longhorn-host.yml
+- name: Wait for the Longhorn driver and reconcile its recurring-job groups
   ansible.builtin.import_tasks: longhorn.yml
 - name: Configure the Longhorn backup targets and job
   ansible.builtin.import_tasks: longhorn-backup.yml
