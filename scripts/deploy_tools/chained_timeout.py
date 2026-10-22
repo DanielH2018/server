@@ -42,6 +42,15 @@ CONCURRENT = 5
 # which names no Kustomization. Capping here makes `verify` print `failed` first, naming the
 # names (d4-ordering.md, *The cap*). The three workflow limits are sized from this figure
 # (ansible/tests/repo/test_promote_workflow_verify.py).
+# DECIDED: the clamp stands although the published bundle's all-changed chain is past it
+# (#5868: 31920s with 111 Kustomizations, against 19800s). `verify`'s own wait is the same
+# `promote_timeout`, so it stops at this cap too. Lifting only the soak's rendered wait would
+# let the soak outlast a `verify` that has already written `failed=<names>`, and would pass no
+# promotion. The soak's wait cannot shrink to the chain of what changed either: the render
+# cannot know R's changed set (renderer_lib/soak.py). A narrow revision stays well under the
+# cap. A revision that changes every tag at once, such as a renderer change, can fail at the
+# cap, and the hold names the Kustomizations that had not settled. The remedy is a `verify`
+# that re-enters rather than holding one runner, which is d4-ordering.md's Open question 14.
 VERIFY_CAP_S = 330 * 60
 
 _DURATION = re.compile(r"(?:(\d+)h)?(?:(\d+)m)?(?:(\d+)s)?")

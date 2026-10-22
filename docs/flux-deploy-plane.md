@@ -867,7 +867,11 @@ A wait shorter than a verification is safe and costs a promotion. `decide` gives
   it, so `land-wait` counts its timeout again from each poll that reads one, for up to
   `IN_FLIGHT_WAIT_S`;
 - a revision that changes every importer of `workload-shell.yml.j2` queues in rounds of up
-  to each role's `timeout`, so it can reach the cap.
+  to each role's `timeout`, so it can reach the cap. The soak's own chain already does: on
+  2026-10-22 the published bundle's 111 Kustomizations, all counted as changed, chain to
+  31920s against the cap's 19800s. The soak's wait is therefore clamped at the cap, as
+  `verify`'s is, and the `# DECIDED:` at `chained_timeout.py:VERIFY_CAP_S` records why the
+  clamp stands (#5868).
 
 ## The bundle
 
