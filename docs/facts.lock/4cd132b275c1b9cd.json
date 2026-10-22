@@ -1,12 +1,12 @@
 {
-  "checksum": "01cd27a477090eebe604c22fe42f429371d4500d924ad914caf572c0dfcdfde4",
+  "checksum": "7b1e4561f2dc101a64d51d602dc04ad98a7f3bf3342f6d1300787607b180908a",
   "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
-  "key": "ansible/roles/k8s/longhorn/CLAUDE.md#The Longhorn window, H1.5a until H1.7b",
+  "key": "ansible/roles/k8s/longhorn-backup/CLAUDE.md#Notable",
   "row": {
     "atoms": {
       "docs/longhorn-disaster-recovery.md": "4c9a4a63c6856b47fb7c612953def99d6b299477412a04fc9369539f36398ef3"
     },
     "python": "3.14",
-    "verified_sha": "14cf76620"
+    "verified_sha": "8ab0ff874"
   }
 }

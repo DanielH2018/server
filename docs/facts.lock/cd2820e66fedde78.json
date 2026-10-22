@@ -1,0 +1,12 @@
+{
+  "checksum": "2f9dc79884710cd9b48477533c9c5d21bdac1737a34aac31225ad29c1f934f76",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "ansible/roles/k8s/longhorn-backup/CLAUDE.md#The incident levers (what the arm flags do)",
+  "row": {
+    "atoms": {
+      "docs/break-glass.md": "2823d12d9954147d9b7ad124362e31f2b81927d3aa6c036577400846c35a627c"
+    },
+    "python": "3.14",
+    "verified_sha": "8ab0ff874"
+  }
+}

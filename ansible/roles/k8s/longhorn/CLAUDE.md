@@ -16,8 +16,8 @@ host probes stay green.
 - **Flux applies it, not Ansible** (H1.5a). Its `containers_list` entry carries `owner: flux`
   from its first commit. `tasks/main.yml` holds the include of `k8s/manifests` and no Flux path
   runs it. A rebuilt cluster gets it from the `longhorn` Kustomization at step 7 of
-  `docs/longhorn-disaster-recovery.md`'s *Order from H1.2*, and the backup targets that
-  `setup/k3s` still writes come after it (*The Longhorn window*, below).
+  `docs/longhorn-disaster-recovery.md`'s *Order from H1.2*. The `longhorn-backup` Kustomization
+  depends on it and creates the backup targets once it reads `Ready`.
 - **The workloads are `files/upstream/longhorn.yaml`**, upstream's file byte for byte, pinned by
   `k3s_longhorn_version` and the `longhorn_vendored_manifests` item in `defaults/main.yml`.
   `scripts/dev/vendor_manifest.py` checks the pin and refreshes the copy. The refresh command
@@ -88,14 +88,11 @@ host probes stay green.
   `ansible/tests/k8s/test_shed_set_is_derived_from_tier.py::test_never_shed_matches_the_untiered_roles_that_never_prune`
   holds the set equal to the untiered roles that set `flux_prune: false`.
 
-## The Longhorn window, H1.5a until H1.7b
-`setup/k3s` still holds the tasks that write Longhorn's backup targets, the backup-store poll
-interval and the RecurringJobs, and they fail on a cluster where Flux has not yet created
-`longhorn-system`. The volume-label reconcile left `setup/k3s` at H1.6 and is the
-`longhorn-reconcile` role's CronJob. The CSI sidecar requests left with it, and since #5958 they
-are this role's `system-managed-csi-components-resource-limits` Setting. Bring-up step 1 therefore skips the
-`longhorn` and `longhorn_backup` tags, and step 7a applies them once the `longhorn`
-Kustomization reads `Ready`. The host tasks `setup/k3s` keeps for
-Longhorn (`open-iscsi`, `nfs-common` and the multipathd blacklist) carry the tag
-`longhorn_host` alone, so step 1 still runs them. `docs/longhorn-disaster-recovery.md`, *Order
-from H1.2*, has the steps.
+## Host tasks and the backup plane
+The host tasks `setup/k3s` keeps for Longhorn (`open-iscsi`, `nfs-common` and the multipathd
+blacklist) carry the tag `longhorn_host` alone. No `setup/k3s` task writes a Longhorn object that
+Flux owns: this role owns the Settings and classes, the CSI sidecar requests among them
+(#5958), `longhorn-reconcile` the labels, and `longhorn-backup` the credentials, the backup
+targets and the RecurringJobs. The stale-checkout guard holds no Longhorn row, and bring-up
+step 1 skips only `kubeconfig`. `docs/longhorn-disaster-recovery.md`, *Order from H1.2*, has
+the steps.

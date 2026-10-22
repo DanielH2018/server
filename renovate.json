@@ -636,6 +636,7 @@
         "ansible/roles/k8s/loki-homelab/defaults/main.yml",
         "ansible/roles/k8s/longhorn/defaults/main.yml",
         "ansible/roles/k8s/longhorn-api/defaults/main.yml",
+        "ansible/roles/k8s/longhorn-backup/defaults/main.yml",
         "ansible/roles/k8s/longhorn-ui/defaults/main.yml",
         "ansible/roles/k8s/metallb/defaults/main.yml",
         "ansible/roles/k8s/monitor-bridge/defaults/main.yml",

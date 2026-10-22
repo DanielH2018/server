@@ -1,17 +1,18 @@
 ---
 # The second backup target. Longhorn has supported more than one since v1.8.0, and a volume
 # picks its target through its own spec.backupTargetName — RecurringJob has no target field,
-# so daily-backup and weekly-backup keep scheduling exactly as before and each volume's
+# so daily-backup and the weekly shards keep scheduling exactly as before and each volume's
 # backups simply land wherever it points.
 #
 # Named `r2` rather than replacing `default`: `default` stays B2's, so the routing lists in
-# defaults/main.yml are the only thing that decides where a volume goes, and emptying
-# k3s_longhorn_r2_volumes returns everything to B2 without touching this object.
+# the `longhorn-reconcile` role's defaults are the only thing that decides where a volume goes,
+# and emptying k3s_longhorn_r2_volumes returns everything to B2 without touching this object.
 #
 # Armed independently of B2. k3s_longhorn_backup_armed is the incident lever for B2's
 # transaction caps; R2 has its own allowance and its own failure modes, so one being blanked
-# must not blank the other. Same enforcement semantics though — a disarmed run writes an
-# empty backupTargetURL rather than leaving whatever is live.
+# must not blank the other. Same enforcement semantics though — a disarmed render writes an
+# empty backupTargetURL, and Flux enforces it. The URL's `${r2_bucket}` placeholder is admitted
+# in a BackupTarget by `PLACEHOLDER_KIND_EXEMPT` (scripts/renderer/renderer_lib/secret_checks.py).
 apiVersion: longhorn.io/v1beta2
 kind: BackupTarget
 metadata:

@@ -27,10 +27,6 @@ K3S_WRITE_ALLOW = {
         "stays: the opt-in smoke test creates and deletes a throwaway PVC, which no Flux tag "
         "declares"
     ),
-    _TASKS + "longhorn-backup.yml": (
-        "H1.7a deletes the volume routing, and H1.7b the credentials, targets and "
-        "RecurringJobs with the rest of the file"
-    ),
 }
 
 

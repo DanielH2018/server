@@ -13,13 +13,11 @@
 # (docs/longhorn-disaster-recovery.md, *Order from H1.2*): a first bring-up run that skips
 # `kubeconfig`, the operator's hand apply of `cluster-base`, the `kubeconfig` run, Flux with the
 # root Kustomization suspended, then the restores. The smoke test creates and deletes its claim
-# in `default`, so no backup carries its name. From H1.5a until H1.7b the first run also skips
-# `longhorn` and `longhorn_backup`, and the operator's step (f2) applies them once the `longhorn`
-# Kustomization reads `Ready`. From H1.5b the Settings come from that Kustomization at step (f),
-# and from H1.6 (f2) applies the poll interval, the backup targets and the RecurringJob, and the
-# label reconcile is the `longhorn-reconcile` CronJob's. The CSI sidecar requests are a Setting
-# from that Kustomization too (#5958). This
-# playbook runs after (f2), so the Settings are in place when the claim binds.
+# in `default`, so no backup carries its name. The `longhorn` Kustomization installs Longhorn and
+# its Settings at step (f), the CSI sidecar requests among them (#5958), the `longhorn-backup`
+# Kustomization creates the backup credentials, both targets and the RecurringJobs there too
+# (H1.7b), and the label reconcile is the `longhorn-reconcile` CronJob's. This playbook runs
+# after (f), so the Settings are in place when the claim binds.
 #
 # ITS OWN PLAYBOOK, not a fourth play in k3s-bringup.yml.
 # That playbook's first play takes `hosts: {{ target | default(lookup('pipe','hostname')) }}`

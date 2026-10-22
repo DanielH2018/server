@@ -162,3 +162,35 @@ def test_a_list_without_a_target_is_flagged(tmp_path, logger_calls, missing):
     out = _run(tmp_path, stub, STUB_DROP_TARGET=missing)
     assert out.startswith("down\t"), out
     assert f"backup target {missing} is not in the cluster" in logger_calls.read_text()
+
+
+def test_a_blank_target_held_by_the_break_glass_annotation_is_flagged_and_named(
+    tmp_path, logger_calls
+):
+    """H1.7b: the annotation means a break-glass is in force, so the blank is not a disarm.
+
+    Only the stub differs from the clean blank-URL case above. `default` carries the annotation
+    Flux's apply skips, and the monitor reads DOWN until step 4 of the break-glass removes it.
+    """
+    stub = _green_path_stub_kubectl(tmp_path, _rfc3339(NOW - 60))
+    out = _run(
+        tmp_path,
+        stub,
+        STUB_DEFAULT_AVAILABLE="false",
+        STUB_DEFAULT_URL="",
+        STUB_DEFAULT_ANNOTATION="1",
+    )
+    assert out.startswith("down\t"), out
+    logged = logger_calls.read_text()
+    assert (
+        "backup target default carries kustomize.toolkit.fluxcd.io/reconcile=disabled"
+        in logged
+    )
+    assert "DISARMED: default" not in logged, logged
+
+
+def test_the_same_blank_target_without_the_annotation_stays_clean(tmp_path):
+    stub = _green_path_stub_kubectl(tmp_path, _rfc3339(NOW - 60))
+    out = _run(tmp_path, stub, STUB_DEFAULT_AVAILABLE="false", STUB_DEFAULT_URL="")
+    assert out.startswith("up\t"), out
+    assert "DISARMED: default" in out

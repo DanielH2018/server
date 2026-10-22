@@ -152,6 +152,15 @@ containers_list:
     platform: k8s
     owner: flux
     depends_on: [longhorn]
+  # The two credential Secrets, the BackupTargets `default` and `r2`, and the RecurringJobs
+  # (H1.7b). The `longhorn` vendored file defines the BackupTarget and RecurringJob CRDs, so the
+  # edge stops a first apply on a new cluster from failing on unknown kinds. It renders prune:
+  # false and is forward-only, and it is untiered, so `NEVER_SHED` keeps it out of the lost-node
+  # shed set.
+  - name: longhorn-backup
+    platform: k8s
+    owner: flux
+    depends_on: [longhorn]
   # The IngressRoute, Middleware and TLSOption CRDs, alone in their tag so it can render
   # prune: false and its directory never substitutes (#5666). traefik's tier keeps it out of
   # the shed set.

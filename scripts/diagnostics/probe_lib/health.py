@@ -54,6 +54,7 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 from diagnostics.probe_lib import core
 from diagnostics.probe_lib.core import PI_HOST
 from diagnostics.probe_lib import health_alerts, health_checkout, health_plumbing
+from diagnostics.probe_lib import health_backup_targets
 from diagnostics.probe_lib.health_cronjob import format_cronjob_health, latest_owned_job
 from diagnostics.probe_lib.health_docker import (
     declared_on_pi,
@@ -534,6 +535,10 @@ def run_health(
         )
         print(text)
         return code
+
+    if not targets and container == health_backup_targets.BACKUP_ROLE:
+        # No workload; the gate is the targets' availability (H1.7b).
+        return health_backup_targets.run(cluster, tools, prom, _read, _with_alert_plane)
 
     if not targets:
         # No Deployment/DaemonSet/StatefulSet — the CronJob-only path, the read-only analog

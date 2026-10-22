@@ -81,6 +81,9 @@ K3S_ROLE = ROLES / "setup" / "k3s"
 # The three Longhorn tier lists, `k3s_longhorn_{r2,weekly,nobackup}_volumes`, live in this
 # role's defaults since H1.7a. Python readers resolve them through `lib.service_tiers`.
 LONGHORN_RECONCILE_ROLE = K8S_ROLES / "longhorn-reconcile"
+# The Longhorn arm flags, backup schedules, retain counts and targets' prefixes live in this role's
+# defaults since H1.7b. The k3s role's defaults keep the host crons' keys.
+LONGHORN_BACKUP_ROLE = K8S_ROLES / "longhorn-backup"
 K3S_DEFAULTS = K3S_ROLE / "defaults" / "main.yml"
 # `longhorn_lib/longhorn_backups.py` lives here because the backup-health cron ships it; the
 # reapers, probe.py and the runbook gates, which run from the checkout, put this directory on

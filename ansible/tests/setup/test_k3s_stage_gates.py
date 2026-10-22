@@ -1,13 +1,14 @@
 """Every gate on a k3s topic import must default to running it.
 
-`roles/setup/k3s/tasks/main.yml` imports eight topic files. Two of them are gated so a
-staging cluster can decline work that only makes sense against prod — `longhorn-backup.yml`
-holds the B2/R2 credentials, `health-crons.yml` pushes into prod's Kuma and Healthchecks.io.
+`roles/setup/k3s/tasks/main.yml` imports its topic files. One of them is gated so a staging
+cluster can decline work that only makes sense against prod — `health-crons.yml` pushes into
+prod's Kuma and Healthchecks.io. `longhorn-backup.yml`, the other gated file until H1.7b, held the
+B2/R2 credentials and left with `k3s_manage_backup_targets`.
 
 The hazard is direction. A gate whose default is false silently stops doing prod's work,
 and nothing else in the repo would notice: ansible-lint parses the file without evaluating
 the conditional, `--list-tasks` lists tasks statically, and `--check` skips the apply. The
-first evidence would be a backup target that quietly stopped being reconciled.
+first evidence would be a heartbeat cron that quietly stopped being installed.
 
 So the invariant is that prod's behaviour is the role's behaviour with nothing overridden.
 A staging host turns things off in its own host_vars; the defaults never do.

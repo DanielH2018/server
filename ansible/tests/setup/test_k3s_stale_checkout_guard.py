@@ -31,12 +31,39 @@ from lib.repo_paths import K3S_DEFAULTS, K3S_ROLE
 TASKS = K3S_ROLE / "tasks"
 GUARD = TASKS / "stale-checkout-guard.yml"
 
-# Inventory ids the role's real rows name, at the role's defaults. COREDNS is the id no row
-# names any more: H1.4 deleted the CoreDNS writers with their instance.
+# Inventory ids of objects Flux took over. No real row names any of them: H1.4 deleted the
+# CoreDNS writers and H1.7b the Longhorn backup writers, each with its instances.
 COREDNS = "kube-system_coredns_apps_Deployment"
 R2_TARGET = "longhorn-system_r2_longhorn.io_BackupTarget"
+DAILY_JOB = "longhorn-system_daily-backup_longhorn.io_RecurringJob"
 RECONCILE = "longhorn-system_longhorn-reconcile_batch_CronJob"
 UNMAPPED = "homelab_jellyfin_apps_Deployment"
+
+# The real guard holds no instance after H1.7b, so the cases that need a reading instance run
+# this fixture, as H1.6 did for the templated task name. It keeps the last real shape: two
+# instances whose tag sets differ, so `--tags longhorn_r2` selects exactly one of them.
+FIXTURE_GUARD = [
+    {
+        "name": "Guard a backup writer against a stale checkout",
+        "ansible.builtin.import_tasks": "stale-checkout-check.yml",
+        "tags": ["longhorn_backup"],
+        "vars": {
+            "k3s_stale_checkout_rows": [
+                {"task": "Apply the Longhorn recurring backup job", "ids": [DAILY_JOB]}
+            ]
+        },
+    },
+    {
+        "name": "Guard an R2 writer against a stale checkout",
+        "ansible.builtin.import_tasks": "stale-checkout-check.yml",
+        "tags": ["longhorn_backup", "longhorn_r2"],
+        "vars": {
+            "k3s_stale_checkout_rows": [
+                {"task": "Apply the R2 backup target", "ids": [R2_TARGET]}
+            ]
+        },
+    },
+]
 
 REFUSED = (
     "The connection to the server 127.0.0.1:6443 was refused - "
@@ -163,7 +190,7 @@ def _run(
         }
     ]
     (tmp_path / "play.yml").write_text(yaml.safe_dump(play, sort_keys=False))
-    extra = {"k3s_stale_checkout_delay": 0, "k3s_manage_backup_targets": True}
+    extra = {"k3s_stale_checkout_delay": 0}
     env = scrubbed_env()
     env["ANSIBLE_FILTER_PLUGINS"] = str(ANSIBLE / "filter_plugins")
     env["ANSIBLE_PYTHON_INTERPRETER"] = sys.executable
@@ -228,8 +255,9 @@ pytestmark = pytest.mark.skipif(
 )
 
 
-# Two shared runs, one host per case: the whole-file run, and the `--tags longhorn_r2` run of
-# the real guard. Every other case needs its own selection or its own guard, so runs alone.
+# Two shared runs, one host per case: the whole-file run of the real guard, and the
+# `--tags longhorn_r2` run of the fixture guard. Every other case needs its own selection or
+# its own guard, so runs alone.
 @pytest.fixture(scope="module")
 def whole_file(tmp_path_factory) -> dict[str, Outcome]:
     return _run(
@@ -237,9 +265,12 @@ def whole_file(tmp_path_factory) -> dict[str, Outcome]:
         {
             "unmapped": Case(["inventory"], {"jellyfin": [UNMAPPED]}),
             "no-k3s": Case(["refuse"], binary=False),
-            # A checkout whose coredns.yml holds only the read and the marker task: no row
-            # names CoreDNS, so Flux owning it fails nothing.
-            "coredns-owned": Case(["inventory"], {"coredns": [COREDNS]}),
+            # Flux owns every object a deleted writer used to write. No row names any of
+            # them, so Flux owning them fails nothing.
+            "handed-owned": Case(
+                ["inventory"],
+                {"coredns": [COREDNS], "longhorn-backup": [R2_TARGET, DAILY_JOB]},
+            ),
         },
     )
 
@@ -259,13 +290,17 @@ def r2(tmp_path_factory) -> dict[str, Outcome]:
             "refusals-then-owned": Case(["refuse", "refuse", "inventory"], owned),
         },
         args=("--tags", "longhorn_r2"),
+        guard=FIXTURE_GUARD,
     )
 
 
 def test_an_inventory_holding_no_mapped_id_passes(whole_file):
     _passed(whole_file["unmapped"])
-    assert whole_file["unmapped"].calls == 3, (
-        "every instance reads the inventory under a whole-file run"
+    # Zero, not one per instance: after H1.7b no k3s task writes a Flux-owned object, so the
+    # real guard holds no instance and a whole-file run never reads the API. A writer that
+    # registers an instance again moves this count.
+    assert whole_file["unmapped"].calls == 0, (
+        "the real guard holds no instance, so nothing reads the inventory"
     )
 
 
@@ -299,15 +334,14 @@ def test_a_row_whose_task_name_is_a_template_names_it_as_written(tmp_path):
     )
 
 
-def test_a_checkout_whose_coredns_writers_are_gone_passes_while_flux_owns_coredns(
+def test_a_checkout_whose_writers_are_gone_passes_while_flux_owns_their_objects(
     whole_file,
 ):
-    # H1.4 deleted the CoreDNS writers and their instance, so no row names the Deployment. A
-    # row that named it again would fail here once Flux's inventory lists it.
-    _passed(whole_file["coredns-owned"])
-    assert whole_file["coredns-owned"].calls == 3, (
-        "every instance read and matched nothing"
-    )
+    # H1.4 deleted the CoreDNS writers and H1.7b the Longhorn backup writers, each with its
+    # instances, so no row names those objects. A row that named one again would fail here
+    # once Flux's inventory lists it.
+    _passed(whole_file["handed-owned"])
+    assert whole_file["handed-owned"].calls == 0, "no instance is left to read"
 
 
 def test_an_api_without_flux_passes_on_the_first_try(r2):
@@ -340,6 +374,7 @@ def test_a_check_run_still_reads_and_fails(tmp_path):
         tmp_path,
         Case(["inventory"], {"longhorn-backup": [R2_TARGET]}),
         args=("--tags", "longhorn_r2", "--check"),
+        guard=FIXTURE_GUARD,
     )
     _failed_naming(outcome, "Apply the R2 backup target")
     assert outcome.calls == 1
@@ -358,19 +393,21 @@ def test_a_host_only_tag_reaches_no_instance_with_the_api_down(tmp_path, tag):
     assert outcome.calls == 0
 
 
-def test_tags_longhorn_r2_runs_the_r2_instance(r2):
+def test_tags_longhorn_r2_runs_only_the_fixture_r2_instance(r2):
     _failed_naming(r2["owned"], "Apply the R2 backup target", R2_TARGET)
     assert r2["owned"].calls == 1, "only the r2 instance is selected"
 
 
-def test_skip_tags_kubeconfig_still_runs_the_r2_instance(tmp_path):
+def test_skip_tags_kubeconfig_still_runs_a_fixture_writer_instance(tmp_path):
     # fact: ansible/roles/setup/k3s/CLAUDE.md#Notable
     # Bring-up step 1. One guard tagged with the union of the writers' tags would be skipped
-    # here while the r2 writers still ran. H1.4 moved the check here from the coredns
-    # instance, which went with its writers.
+    # here while the writers still ran. H1.4 moved the check from the coredns instance to the
+    # r2 one, and H1.7b, which deleted the r2 instance with its writers, to the fixture.
     outcome = _run_one(
         tmp_path,
         Case(["inventory"], {"longhorn-backup": [R2_TARGET]}),
         args=("--skip-tags", "kubeconfig"),
+        guard=FIXTURE_GUARD,
     )
     _failed_naming(outcome, "Apply the R2 backup target", R2_TARGET)
+    assert outcome.calls == 2, "both fixture instances run and read"

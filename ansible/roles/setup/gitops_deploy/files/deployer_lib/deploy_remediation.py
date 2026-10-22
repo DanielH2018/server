@@ -257,8 +257,6 @@ def manual_plane_clear_for(
 # nothing, which is the silent-success failure `setup_tags_for` also guards against.
 _K3S_NARROWER_TAGS = (
     "kubeconfig",
-    "longhorn",
-    "longhorn_backup",
     "coredns",
     "node-dns",
     "backup-health",

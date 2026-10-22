@@ -99,7 +99,7 @@ def test_changing_the_setter_task_file_names_the_consumers_tag(tree):
 
 
 def test_a_fact_only_a_template_reads_names_that_templates_readers(tree):
-    """The live shape: `k3s_longhorn_b2_region` is set in a task and read in a template.
+    """The live shape: a fact such as `k3s_coredns_corefile` is set in a task and read elsewhere.
 
     The fact's consumer is `beta.conf.j2`, which `beta.yml` renders, so the walk has to cross
     the template edge to reach a tag rather than stopping at the task files.
@@ -143,9 +143,10 @@ def test_two_task_files_deriving_facts_from_each_other_terminate(tree):
 
 # ── the census that keeps the module docstring's "widens nothing today" claim true ──────
 
-# `setup/k3s` is the role the whole narrowing exists for, and these are the facts it derives.
-# A frozenset rather than a count, so a rename or a move fails by name.
-K3S_FACTS = frozenset({"k3s_longhorn_b2_region"})
+# `setup/k3s` is the role the whole narrowing exists for, and these are the facts it derives:
+# none, since H1.4 moved the CoreDNS facts to Flux and H1.7b deleted the task that derived the
+# B2 region. An exact set rather than a count, so a fact that returns fails by name.
+K3S_FACTS: frozenset[str] = frozenset()
 
 
 def _facts_of(role_dir) -> dict[str, set[str]]:
@@ -165,7 +166,11 @@ def _facts_of(role_dir) -> dict[str, set[str]]:
 
 
 def test_the_k3s_role_derives_exactly_the_facts_this_census_names():
-    """Non-vacuity: the census below has a live subject in the role it was written for."""
+    """The real role derives no fact, so a new `set_fact` there fails here by name.
+
+    The census below keeps its live subjects in `MEASURED_SETTERS`, and the derivation keeps
+    its exercise in `test_the_derivation_follows_a_fact_through_the_role_index`.
+    """
     found = _facts_of(K3S_ROLE)
     assert set(found) == K3S_FACTS, sorted(found)
 
@@ -182,7 +187,6 @@ ROLES_WITHOUT_AN_ENTRY_POINT = frozenset({"common"})
 MEASURED_SETTERS = frozenset(
     {
         "initial_setup:tasks/host-basics.yml",
-        "k3s:tasks/longhorn-backup.yml",
         "optimize_pi:tasks/main.yml",
         "sops_setup:tasks/main.yml",
     }
@@ -195,8 +199,8 @@ def test_the_fact_edge_widens_no_real_setup_role_today():
     That is what `narrow_setup`'s docstring means by the edge being inert for those files, and
     it is the claim a census over task-file text alone cannot make: `key_readers` follows a
     fact named in a template to whichever task file renders THAT template, which need not be
-    the setter. `k3s_longhorn_b2_region` takes exactly that path, so the comparison has to run
-    through `tags_of` rather than over the sources.
+    the setter. The B2 region took exactly that path until H1.7b deleted the task that derived
+    it, so the comparison has to run through `tags_of` rather than over the sources.
 
     A widening is a prompt to re-read the answer, not a defect: the wider one is correct. What
     it must not do is arrive unannounced.
@@ -236,21 +240,18 @@ def test_every_setup_role_this_census_skips_really_has_no_entry_point():
             narrow_setup_index.RoleIndex(role, "HEAD", str(REPO))
 
 
-def test_the_derivation_follows_a_fact_in_the_real_k3s_role():
-    """The edge is wired to the real tree, not only to the demo fixture.
+def test_the_derivation_follows_a_fact_through_the_role_index(tree):
+    """The role index records a derived fact and follows it to every reader's tag.
 
-    `k3s_longhorn_b2_region` is read in `templates/longhorn-b2-secret.yaml.j2`, so asking the
-    real role's index for the fact's readers has to come back with tags.
+    This ran against the real k3s role until H1.7b deleted its last fact (the B2 region), so
+    it runs on the demo fixture: `alpha.yml` derives the fact and `beta.yml` reads it.
     """
-    index = narrow_setup_index.RoleIndex("k3s", "HEAD", str(REPO))
-    assert index.facts["tasks/longhorn-backup.yml"] == frozenset(
-        {"k3s_longhorn_b2_region"}
-    )
-    # `longhorn` is the poll-interval task H1.6 moved into the same file: a file's tags are the
-    # union over its tasks, so that task's tag joins every reader of the file.
-    assert index.key_readers("k3s_longhorn_b2_region") == frozenset(
-        {"longhorn", "longhorn_backup", "longhorn_r2"}
-    )
+    tree.write(f"{ROLE}/tasks/alpha.yml", ALPHA_SETS_A_FACT)
+    tree.write(f"{ROLE}/tasks/beta.yml", BETA_READS_THE_FACT)
+    tree.commit("beta reads alpha's fact")
+    index = narrow_setup_index.RoleIndex("demo", "HEAD", str(tree.root))
+    assert index.facts["tasks/alpha.yml"] == frozenset({"demo_shared_mode"})
+    assert index.key_readers("demo_shared_mode") == frozenset({"alpha", "beta"})
 
 
 def test_a_set_fact_option_is_not_read_as_a_fact():

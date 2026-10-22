@@ -104,7 +104,7 @@ class LonghornTiers:
 
     A volume in none of them and on a backup-asking StorageClass falls into the `default`
     RecurringJob group (daily, to B2) — see
-    ansible/roles/setup/k3s/templates/longhorn-recurringjob.yaml.j2.
+    ansible/roles/k8s/longhorn-backup/templates/longhorn-recurringjob.yaml.j2.
     """
 
     r2: frozenset[str] = field(default_factory=frozenset)
