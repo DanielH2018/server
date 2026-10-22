@@ -43,7 +43,7 @@
     - staging-backfill.service
     - staging-backfill.timer
     - staging-backfill-alert.service
-  notify: Reload systemd
+  notify: Reload systemd for gitops_deploy
 
 - name: Remove the manual-trigger polkit rule
   tags: [gitops-deploy-teardown]
