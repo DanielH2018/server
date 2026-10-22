@@ -5,9 +5,9 @@ argument (`bridge.sources.Sources`), so a test hands in a fake; the verdicts it 
 are patched on THIS module (`monkeypatch.setattr(checks.logs, "log_error_verdict", ...)`), because this is
 where they are bound. Rule and enforcement: bridge/config.py's header.
 
-`with_log_errors` lives here rather than beside `check_k8s_workloads`, its only caller,
-because it is a Loki arm folded into a cluster verdict — the caller reaches it as
-`checks.logs.with_log_errors` and test_check_loki.py patches it here.
+`check_workload_log_errors` is the one caller of `with_log_errors`. The Kubernetes arms it was
+once folded into are the k8s-workloads alert rules, so it is a Loki arm on a row of its own.
+test_check_loki.py patches `with_log_errors` here, where it is bound.
 """
 
 from collections.abc import Callable
@@ -229,18 +229,26 @@ def check_loki_reachable(cfg: Config, src: Sources) -> tuple[bool, str]:
     return True, "Loki reachable"
 
 
-def with_log_errors(cfg: Config, src: Sources, ok: bool, msg: str) -> tuple[bool, str]:
-    """Fold the log-pattern arm into the workload verdict, a burst winning the message.
+def check_workload_log_errors(cfg: Config, src: Sources) -> tuple[bool, str]:
+    """Pages when a container logs a burst of fatal lines, however healthy its pod reads.
 
-    Folded here rather than given its own monitor, for the reason the extended-resource and
-    ip_ban arms were: a new Kuma monitor needs a new push token in SOPS, and this arm answers
-    the question the other arms leave open. They read Kubernetes state — replicas, restarts,
-    allocatable — and every one of them reports a container that is Ready while failing at its
-    job as healthy, because by their measure it is.
+    The Kubernetes readiness arms moved to the k8s-workloads alert rules. This arm stays because
+    it reads Loki, and the log rules belong on the loki-homelab ruler (M6's batch A7 ports it).
+    The row's gate is `startup_grace`, so the arm pages on its second consecutive bad cycle.
+    """
+    return with_log_errors(cfg, src, True, "workload logs")
+
+
+def with_log_errors(cfg: Config, src: Sources, ok: bool, msg: str) -> tuple[bool, str]:
+    """Fold the log-pattern arm into a verdict, a burst winning the message.
+
+    A container that is Ready while failing at its job reads healthy to every arm that measures
+    Kubernetes state, because by their measure it is. A burst of fatal log lines is the signal
+    those arms cannot see.
 
     FAILS OPEN on a Loki error, and is deliberately NOT in LOKI_DEPENDENT: membership there
-    suppresses the WHOLE check during a Loki outage, which would blind the three Kubernetes
-    arms that have nothing to do with Loki. Same reasoning as ha_heartbeat's ban arm.
+    suppresses the WHOLE check during a Loki outage, and the row's own gate is `startup_grace`.
+    Same reasoning as ha_heartbeat's ban arm.
     """
     if not cfg.LOG_ERROR_SELECTOR:
         return ok, msg

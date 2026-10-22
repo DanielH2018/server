@@ -111,8 +111,8 @@ def scrutiny_wear_verdict(
     A list rather than a dict because both live drives report `device_name` "nvme0" — one per
     host — so keying by name would collapse them into one entry.
 
-    Unreadable wear reports as INERT and names the drives it is not watching, the shape
-    `extended_resource_verdict` uses: a check that cannot read its input must not answer as though
+    Unreadable wear reports as INERT and names the drives it is not watching, a shape
+    other fail-closed checks share: a check that cannot read its input must not answer as though
     it did, in either direction. DOWN-on-missing-field would page for every non-NVMe disk.
     """
     if not wear_max:

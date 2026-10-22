@@ -36,7 +36,7 @@
 | Cloudflare IP Drift | `cloudflare_ips_drift` | `wan_reachable` |  | Hosts & Power |  |
 | Healthchecks.io Console Drift | `healthchecks_drift` | `wan_reachable` |  | Automation & Drift |  |
 | B2 Free Tier Headroom | `b2_storage` | `b2_reachable` | yes | Backups & Storage | `longhorn-backup-tiering` |
-| k3s Workload Health | `k8s_workloads` | `prometheus` |  | Cluster Health |  |
+| Workload Log Errors | `workload_log_errors` | `startup_grace` |  | Cluster Health |  |
 | Cluster Scrape Targets | `cluster_targets` | `prometheus` |  | Observability |  |
 | Longhorn Volume Redundancy | `longhorn_volumes` | `prometheus` | yes | Backups & Storage | `longhorn-disaster-recovery` |
 | k3s PVC Fullness | `pvc_fullness` | `prometheus` | yes | Backups & Storage | `longhorn-disaster-recovery` |

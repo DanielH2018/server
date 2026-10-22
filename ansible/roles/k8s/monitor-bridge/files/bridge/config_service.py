@@ -178,7 +178,7 @@ def service_config(
         # the fetch alone; a queue item needing review still pages on the cycle it is seen.
         # A rolling radarr refuses connections for as long as its pod takes to come back, and
         # three of this monitor's DOWN episodes in the 30 days to 2026-09-11 were exactly that,
-        # each co-timed with a `k8s_workloads ... radarr(1)` episode. 3 cycles = 15 min at
+        # each co-timed with a k3s Workload Health `radarr(1)` episode. 3 cycles = 15 min at
         # INTERVAL=300, which outlasts a rollout and still names a genuinely dead *arr inside
         # the hour. This REPLACED arr_queue's STARTUP_GRACE membership rather than stacking on
         # it: that grace covered the same transient at 2 cycles and covered the queue verdict
