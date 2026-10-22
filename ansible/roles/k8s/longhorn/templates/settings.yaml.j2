@@ -1,0 +1,63 @@
+# The seven Longhorn Settings this repo pins, one object each. A Setting is a namespaced value
+# longhorn-manager reads, and the manager creates every one with its upstream default, so Flux
+# server-side applies `value` over a live object. The manager keeps its own annotation and status
+# on each one, and this render declares neither, so Flux never takes them.
+#
+# The value of a DataEngineSpecific setting is a JSON map serialised as a STRING
+# (`{"v1":"2","v2":"2"}`), not a bare string. The manager stores that shape for
+# `default-replica-count` and both `snapshot-data-integrity` settings, so those three render it:
+# the first `to_json` renders the map in the compact form the manager stores, and the second
+# quotes it as a YAML string. A bare value would store the wrong thing, and Longhorn would
+# ignore it. ENFORCED by
+# ansible/tests/longhorn/test_snapshot_data_integrity_patch_is_a_json_map.py. Every other value
+# is a quoted string, because the Setting schema types `value` as a string.
+#
+# The reason for each value is the comment above its key in this role's defaults/main.yml.
+apiVersion: longhorn.io/v1beta2
+kind: Setting
+metadata:
+  name: default-replica-count
+  namespace: longhorn-system
+value: {{ {"v1": k3s_longhorn_replica_count | string, "v2": k3s_longhorn_replica_count | string} | to_json(separators=(',', ':')) | to_json }}
+---
+apiVersion: longhorn.io/v1beta2
+kind: Setting
+metadata:
+  name: snapshot-data-integrity
+  namespace: longhorn-system
+value: {{ {"v1": k3s_longhorn_snapshot_data_integrity, "v2": k3s_longhorn_snapshot_data_integrity} | to_json(separators=(',', ':')) | to_json }}
+---
+apiVersion: longhorn.io/v1beta2
+kind: Setting
+metadata:
+  name: snapshot-data-integrity-cronjob
+  namespace: longhorn-system
+value: {{ {"v1": k3s_longhorn_snapshot_data_integrity_cronjob, "v2": k3s_longhorn_snapshot_data_integrity_cronjob} | to_json(separators=(',', ':')) | to_json }}
+---
+apiVersion: longhorn.io/v1beta2
+kind: Setting
+metadata:
+  name: allow-recurring-job-while-volume-detached
+  namespace: longhorn-system
+value: "{{ k3s_longhorn_backup_detached_volumes }}"
+---
+apiVersion: longhorn.io/v1beta2
+kind: Setting
+metadata:
+  name: default-backup-block-size
+  namespace: longhorn-system
+value: "{{ k3s_longhorn_backup_block_size }}"
+---
+apiVersion: longhorn.io/v1beta2
+kind: Setting
+metadata:
+  name: concurrent-automatic-engine-upgrade-per-node-limit
+  namespace: longhorn-system
+value: "{{ k3s_longhorn_concurrent_engine_upgrade }}"
+---
+apiVersion: longhorn.io/v1beta2
+kind: Setting
+metadata:
+  name: node-down-pod-deletion-policy
+  namespace: longhorn-system
+value: "{{ k3s_longhorn_node_down_pod_deletion_policy }}"

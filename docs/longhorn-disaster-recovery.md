@@ -160,16 +160,16 @@ the per-volume map and each exclusion's rationale:
       and before the smoke test and step 3, run the window's own step:
       `uv run ansible-playbook ansible/k3s-bringup.yml --tags longhorn,longhorn_backup`, with
       `k3s_longhorn_backup_armed` and `k3s_longhorn_r2_armed` set to `true` as step 2 says. The
-      run applies what (a) skipped. That is the Longhorn settings, the metrics NetworkPolicy,
-      the CSI sidecar memory requests, the `longhorn-nobackup` class, the recurring-job label
-      reconcile, the backup-store poll interval, both backup credentials, both backup targets
-      and the RecurringJob. Run it from a checkout at the commit `prod` names, which (f) read.
-      Each H1 PR deletes a task's guard-map row in the commit that hands the task's objects to
-      Flux, so a checkout older than `prod` fails the stale-checkout guard, and a newer one
-      would skip the objects it already handed over. The settings, including the replica count,
-      are then in place before the smoke test binds its volume, and the sync of step 3 finds
-      both targets. H1.5b and H1.6 each shorten this list, and H1.7b removes (f2) and the two
-      extra skips of (a).
+      run applies what (a) skipped. That is the CSI sidecar memory requests, the recurring-job
+      label reconcile, the backup-store poll interval, both backup credentials, both backup
+      targets and the RecurringJob. The Longhorn Settings, the `longhorn-nobackup` class and
+      the metrics NetworkPolicy are not in this list: the `longhorn` Kustomization applies them
+      at (f), so the replica count is in place before the smoke test binds its volume. Run (f2)
+      from a checkout at the commit `prod` names, which (f) read. Each H1 PR deletes a task's
+      guard-map row in the commit that hands the task's objects to Flux, so a checkout older
+      than `prod` fails the stale-checkout guard, and a newer one would skip the objects it
+      already handed over. The sync of step 3 finds both targets once (f2) has run. H1.6
+      shortens this list again, and H1.7b removes (f2) and the two extra skips of (a).
 
    **The Longhorn window, H1.5a until H1.7b.** H1.5a deletes `Install Longhorn`, so Longhorn
    first reaches a new cluster at (f), through Flux. Until H1.7b, `setup/k3s` still holds tasks

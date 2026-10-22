@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Guards that the Longhorn StorageClass never pins a replica count.
 
-The k3s role patches `settings.longhorn.io default-replica-count` to
-k3s_longhorn_replica_count, and that patch applies cleanly — reading the setting back
-returns the patched value. But a StorageClass parameter beats the global setting, so
+The `longhorn` role renders a `Setting` named `default-replica-count` from
+k3s_longhorn_replica_count, and Flux applies it cleanly — reading the setting back
+returns the rendered value. But a StorageClass parameter beats the global setting, so
 every PVC can still bind at 3 replicas:
 
     kubectl -n longhorn-system get settings.longhorn.io default-replica-count  -> 1
@@ -28,13 +28,14 @@ from lib.service_tiers import resolved_tier_lists
 
 from _k8s_render import rendered_docs
 
-from _helpers import imported_tasks, load_defaults
-from lib.repo_paths import K3S_DEFAULTS, K3S_ROLE, K8S_ROLES
+from _helpers import load_defaults
+from lib.repo_paths import K3S_ROLE, K8S_ROLES
 
 LONGHORN_ROLE = K8S_ROLES / "longhorn"
 CLASS_PATCH = LONGHORN_ROLE / "files" / "patches" / "longhorn-storageclass.yaml"
 UPSTREAM = LONGHORN_ROLE / "files" / "upstream" / "longhorn.yaml"
 CLASS_KEY = "storageclass.yaml"
+LONGHORN_DEFAULTS = LONGHORN_ROLE / "defaults" / "main.yml"
 
 
 def _class_in(configmap: dict) -> dict:
@@ -74,25 +75,13 @@ def _drift_from_upstream(upstream: dict, ours: dict) -> list[str]:
     ]
 
 
-def _tasks():
-    """Every task the role runs, in the order it runs them."""
-    return imported_tasks(K3S_ROLE)
-
-
-def _commands(tasks: list[dict]) -> list[str]:
-    """The `cmd:` of every command task, positionally aligned with `tasks`."""
-    return [t.get("ansible.builtin.command", {}).get("cmd", "") for t in tasks]
-
-
-def _index_of(commands: list[str], matches) -> int:
-    """Position of the first matching command, as a failed assert rather than a raise."""
-    for i, cmd in enumerate(commands):
-        if matches(cmd):
-            return i
-    raise AssertionError(
-        "No k3s role task runs a command matching this predicate — a task was renamed "
-        "or restructured, and the ordering guarantee below is no longer being checked."
-    )
+def _rendered_setting_names() -> set[str]:
+    """The name of every Longhorn `Setting` the `longhorn` role renders."""
+    return {
+        doc["metadata"]["name"]
+        for role, _tpl, doc in rendered_docs()
+        if role == "longhorn" and doc.get("kind") == "Setting"
+    }
 
 
 def test_storageclass_does_not_pin_a_replica_count():
@@ -100,7 +89,7 @@ def test_storageclass_does_not_pin_a_replica_count():
     sc = _class_in(_patched_configmap())
     assert "numberOfReplicas" not in sc.get("parameters", {}), (
         "files/patches/longhorn-storageclass.yaml must not set numberOfReplicas. A StorageClass "
-        "parameter overrides the default-replica-count setting the role patches, so "
+        "parameter overrides the default-replica-count setting the role renders, so "
         "pinning it here silently ignores k3s_longhorn_replica_count."
     )
 
@@ -109,7 +98,7 @@ def test_storageclass_does_not_pin_a_backup_block_size():
     """Same trap as numberOfReplicas, one setting along.
 
     `backupBlockSize` became a StorageClass parameter in Longhorn 1.10, and a parameter beats
-    the `default-backup-block-size` setting the role patches — so declaring it here would
+    the `default-backup-block-size` setting the role renders — so declaring it here would
     silently ignore k3s_longhorn_backup_block_size. Worse than the replica case, because
     StorageClass parameters are immutable AND a volume's block size is immutable: correcting a
     wrong value would mean recreating the class and then every volume provisioned through it.
@@ -117,18 +106,15 @@ def test_storageclass_does_not_pin_a_backup_block_size():
     sc = _class_in(_patched_configmap())
     assert "backupBlockSize" not in sc.get("parameters", {}), (
         "files/patches/longhorn-storageclass.yaml must not set backupBlockSize. A StorageClass parameter "
-        "overrides the default-backup-block-size setting the role patches, so pinning it "
+        "overrides the default-backup-block-size setting the role renders, so pinning it "
         "here silently ignores k3s_longhorn_backup_block_size."
     )
 
 
-def test_role_patches_the_backup_block_size_setting():
+def test_role_renders_the_backup_block_size_setting():
     """With the parameter absent, the setting is the only lever that reaches new volumes."""
-    commands = _commands(_tasks())
-    assert any(
-        "settings.longhorn.io default-backup-block-size" in c for c in commands
-    ), (
-        "The role must patch default-backup-block-size. Every B2 cost Longhorn incurs is "
+    assert "default-backup-block-size" in _rendered_setting_names(), (
+        "The longhorn role must render default-backup-block-size. Every B2 cost Longhorn incurs is "
         "priced per block — prune, backup and restore alike — so this is the one setting "
         "that moves all three, and it reaches volumes only at creation time."
     )
@@ -136,10 +122,10 @@ def test_role_patches_the_backup_block_size_setting():
 
 def test_backup_block_size_is_a_value_longhorn_accepts():
     """Longhorn takes 2 or 16 MiB and nothing between; a typo here is silently wrong."""
-    defaults = yaml_fast.safe_load(K3S_DEFAULTS.read_text())
+    defaults = yaml_fast.safe_load(LONGHORN_DEFAULTS.read_text())
     assert defaults["k3s_longhorn_backup_block_size"] in (2, 16), (
         "k3s_longhorn_backup_block_size must be 2 or 16 (MiB). Longhorn rejects other "
-        "values, and the patch reports success regardless."
+        "values, and the Setting reports success regardless."
     )
 
 
@@ -155,11 +141,10 @@ def test_storageclass_stays_the_cluster_default():
     )
 
 
-def test_role_still_patches_the_default_replica_count_setting():
+def test_role_still_renders_the_default_replica_count_setting():
     """With the parameter gone, the setting is the only lever left."""
-    commands = _commands(_tasks())
-    assert any("settings.longhorn.io default-replica-count" in c for c in commands), (
-        "The role must keep patching default-replica-count. Since the StorageClass no "
+    assert "default-replica-count" in _rendered_setting_names(), (
+        "The longhorn role must keep rendering default-replica-count. Since the StorageClass no "
         "longer pins numberOfReplicas, that setting is what k3s_longhorn_replica_count "
         "actually reaches volumes through."
     )

@@ -80,7 +80,7 @@ merges it outside `land.sh`, runs `land.sh --regate <pr>` for it, then clears th
    `default-replica-count` is the single source of truth.
    `ansible/tests/longhorn/test_longhorn_storageclass.py` fails if the parameter reappears, and
    fails if the patched class differs from upstream's in anything but that parameter. Apply the same
-   diff to `ansible/roles/setup/k3s/files/longhorn-storageclass-nobackup.yaml`.
+   diff to `ansible/roles/k8s/longhorn/templates/storageclass-nobackup.yaml.j2`.
 3. **Merge through `land.sh`.** The merge is the apply, in place of `k3s-bringup.yml --tags longhorn`.
    On daniel-box, run the command the `land-after-merge` skill gives for this PR. `land.sh` runs
    the gates above, posts `homelab/upgrade-gates`, merges, and follows the merge until `promote`
@@ -96,13 +96,20 @@ merges it outside `land.sh`, runs `land.sh --regate <pr>` for it, then clears th
    If they differ, the fix is an **operator-only** delete of the class, which the manager
    recreates from the ConfigMap. Deleting a class is safe, because parameters are read at
    provision time only.
-4. **Upgrade the engines.** `concurrent-automatic-engine-upgrade-per-node-limit` is `0`, so engines
-   do *not* follow the manager automatically. Upgrade them, then confirm the previous engine image
-   has dropped to zero references before starting the next hop — otherwise engine lag compounds
-   across hops:
+4. **Wait for the engines to follow the manager.** Upstream ships
+   `concurrent-automatic-engine-upgrade-per-node-limit` at `0`, which leaves engines on the old
+   image. This repo sets it to `3` (`k3s_longhorn_concurrent_engine_upgrade` in the `longhorn`
+   role's defaults), so Longhorn upgrades the engines of healthy volumes by itself, three per
+   node at a time. A read-only `kubectl -n longhorn-system get settings.longhorn.io
+   concurrent-automatic-engine-upgrade-per-node-limit -o jsonpath='{.value}'` printed `3` on
+   2026-10-22, and `ansible/tests/longhorn/test_engine_upgrade_limit_is_positive.py` fails a
+   render that sets it to `0`. Wait until the previous engine image holds zero references
+   before starting the next hop, because otherwise engine lag compounds across hops:
    ```bash
    kubectl -n longhorn-system get engineimages.longhorn.io
    ```
+   Longhorn skips a degraded volume, so a volume that stays on the old image needs its own
+   look before the next hop.
 5. **Verify** before declaring the hop done: every volume healthy, the StorageClass still carries no
    `numberOfReplicas`, and `default-replica-count` still reads its expected value.
 
@@ -117,10 +124,11 @@ stands. Four lessons carry to the next hop:
   the class when the whole live parameter map differed from the rendered class. That task is gone,
   and the manager creates the class from the ConfigMap. Step 3 above says what to do when the live
   class differs. Deleting is safe, because parameters are read at provision time only.
-- **The manager manifest applies at the merge, before anything runs the role's settings
-  patches.** A removed or renamed setting fails after the new version is live (v1.8 moved
-  backup-target configuration from settings to `backuptargets.longhorn.io`). Fix the task and
-  re-run it by hand with `k3s-bringup.yml --tags longhorn`.
+- **The manager manifest and the Settings apply in the same revision.** A removed or renamed
+  setting fails to apply after the new version is live (v1.8 moved backup-target configuration
+  from settings to `backuptargets.longhorn.io`). Remove or rename the Setting in the `longhorn`
+  role's `templates/settings.yaml.j2` and land that, because Flux owns the object and reverts a
+  hand edit.
 - **Run every tag the role owns after a hop, not only the one you upgraded under.** Tasks
   tagged `longhorn_backup` alone were not exercised by `--tags longhorn`.
 - **Read the release notes for image and Kubernetes floors.** v1.10 fully qualified image

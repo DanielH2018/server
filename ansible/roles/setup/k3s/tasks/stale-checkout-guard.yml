@@ -24,25 +24,10 @@
   tags: [longhorn]
   vars:
     k3s_stale_checkout_rows:
-      - task: Apply the Longhorn metrics NetworkPolicy
-        ids:
-          - longhorn-system_longhorn-manager-allow-metrics-scrape_networking.k8s.io_NetworkPolicy
       # The CSI Deployments exist only at runtime; the longhorn-reconcile CronJob takes the
       # patch over.
       - task: Give the Longhorn CSI sidecars a memory request so they leave BestEffort
         ids: [longhorn-system_longhorn-reconcile_batch_CronJob]
-      - task: Set the default Longhorn replica count
-        ids: [longhorn-system_default-replica-count_longhorn.io_Setting]
-      - task: Set the Longhorn snapshot data-integrity mode
-        ids: [longhorn-system_snapshot-data-integrity_longhorn.io_Setting]
-      - task: Set the Longhorn snapshot data-integrity cron schedule
-        ids: [longhorn-system_snapshot-data-integrity-cronjob_longhorn.io_Setting]
-      - task: Let volume engines follow the Longhorn manager version
-        ids: [longhorn-system_concurrent-automatic-engine-upgrade-per-node-limit_longhorn.io_Setting]
-      - task: Set what Longhorn does with a down node's pods
-        ids: [longhorn-system_node-down-pod-deletion-policy_longhorn.io_Setting]
-      - task: Apply the no-backup Longhorn StorageClass
-        ids: [_longhorn-nobackup_storage.k8s.io_StorageClass]
       # Volume CRs are runtime objects; the longhorn-reconcile CronJob takes the label
       # reconcile over, the two weekly-shard tasks included.
       - task: Move excluded volumes into the no-backup recurring-job group
@@ -69,10 +54,6 @@
     k3s_stale_checkout_rows:
       - task: Set the Longhorn backup-store poll interval
         ids: ["longhorn-system_{{ 'b2_target' | longhorn_backup_name }}_longhorn.io_BackupTarget"]
-      - task: Allow recurring backups of detached volumes
-        ids: [longhorn-system_allow-recurring-job-while-volume-detached_longhorn.io_Setting]
-      - task: Set the backup block size for new volumes
-        ids: [longhorn-system_default-backup-block-size_longhorn.io_Setting]
 
 # The two instances below cover only tasks/longhorn-backup.yml, which main.yml imports under
 # this same `when:`, so an instance runs exactly when its writers do.
