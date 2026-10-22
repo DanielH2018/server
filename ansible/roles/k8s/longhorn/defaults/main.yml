@@ -37,10 +37,9 @@ k3s_longhorn_manager_memory_request: 256Mi  # noqa var-naming[no-role-prefix]
 # maxUnavailable 100%, so both pods are replaced at once and the wait is one pod's start time, not
 # two. The literal is `manifests_rollout_timeout` because the renderer reads a role's Flux
 # timeout from that key.
-# MEASURE: operator-only. In a window, delete both longhorn-manager pods at once, time the gap
-# until both replacements are Ready, and set this to twice that, rounded up to a minute. The
-# placeholder below is the shared default, `manifests_rollout_timeout_default`, not a measurement.
-manifests_rollout_timeout: 600s  # noqa var-naming[no-role-prefix]
+# Measured 2026-10-22: 36s from deleting both manager pods to both replacements Ready (30s of it
+# termination grace), doubled and rounded up to a minute. Cited in #5922.
+manifests_rollout_timeout: 2m  # noqa var-naming[no-role-prefix]
 
 # DECIDED: never pruned. Under prune: true, a render that dropped the manager DaemonSet or a CRD
 # would make Flux delete it, and deleting a Longhorn CRD deletes every Volume, Engine and Replica
