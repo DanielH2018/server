@@ -147,7 +147,7 @@ RECORD_MISSING_HINT = (
 RECORD_FILES_HINT = (
     "re-measure just those files with `uv run python scripts/dev/pytest_shard.py "
     "--record-files <path>...` and commit scripts/dev/pytest_shard_weights.json; for a "
-    "path in pytest_shard.py's CI_ONLY_WEIGHTS, set its pin to the measured seconds instead"
+    "path in pytest_shard.py's CI_ONLY_WEIGHTS, first set its pin to the measured seconds"
 )
 
 

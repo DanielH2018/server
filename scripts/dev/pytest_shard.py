@@ -139,12 +139,13 @@ _SLICE_PERIOD_SECONDS = 12 * 60 * 60
 # Weights only CI can measure, which every write to the table keeps. A module whose expensive
 # legs skip on every host here and run on CI records about 0s from any local re-measure, so
 # `--record-files`, the gate's own repair, would write back the number the gate rejected, and
-# `--refresh-drifted` would undo a hand fix within days (#5756). Set a pin from the module's
-# line in CI's `--durations` report, and update it there when the gate names the module.
+# `--refresh-drifted` would undo a hand fix within days (#5756). Set a pin to the sum of the
+# module's lines in CI's `--durations` report, then run `--record-files` on it so the table,
+# which is all CI reads, carries the pin too.
 CI_ONLY_WEIGHTS = {
-    # Three `docker run` legs; no host here has docker. CI hands them the real PATH through
-    # `ansible/tests/leakguard.py:_LIVE_API_TESTS`. Measured 15.8s on CI with two legs (#5746).
-    "ansible/roles/k8s/crowdsec/tests/test_jobs_image.py": 22.0,
+    # Four legs run the jobs image under docker, which no host here has. CI hands them the real
+    # PATH through `ansible/tests/leakguard.py:_LIVE_API_TESTS`. 22.8s on master run 39813591673.
+    "ansible/roles/k8s/crowdsec/tests/test_jobs_image.py": 22.8,
 }
 
 

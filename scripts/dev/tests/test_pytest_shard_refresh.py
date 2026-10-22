@@ -116,3 +116,6 @@ def test_every_ci_only_pin_names_a_module_the_shards_run():
     pins = pytest_shard.CI_ONLY_WEIGHTS
     assert "ansible/roles/k8s/crowdsec/tests/test_jobs_image.py" in pins
     assert sorted(set(pins) - set(pytest_shard.census())) == []
+    # CI reads only the table, so a pin the table does not carry has no effect there.
+    table = pytest_shard.load_weights()
+    assert {p: table.get(p) for p in pins} == pins
