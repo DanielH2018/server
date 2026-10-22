@@ -237,6 +237,7 @@ def manual_plane_rows(owed: str | None, now: float) -> list[dict]:
             "apply": r.apply,
             "by_hand": r.by_hand,
             "warning": r.warning,
+            "agents": list(r.agents),
             "clear": r.clear,
         }
         for r, line in zip(remedies, lines, strict=True)

@@ -59,16 +59,13 @@ from deployer_lib.deploy_changes import (
     tick_applies_setup_role,
 )
 from deployer_lib.deploy_config import WARNING, Config, log
-from deployer_lib.deploy_setup_roles import SecretReadersRefused
+from deployer_lib.deploy_setup_roles import SecretReadersRefused, setup_role_agent_hosts
 from deployer_lib.deploy_remediation import (
     broad_park_reason,
     broad_remediation,
     manual_plane_remediation,
 )
-from deployer_lib.deploy_state import (
-    NO_PLAYBOOK,
-    DeployerState,
-)
+from deployer_lib.deploy_state import NO_PLAYBOOK, DeployerState
 from gitops_markers import UNROUTED_PLAYBOOK
 from deployer_lib.deploy_tick_types import TickTarget
 from deployer_lib.deploy_toolbox import DeployTools
@@ -473,6 +470,7 @@ def record(
             setup_role_tag(role),
             now,
             setup_role_host(role),
+            setup_role_agent_hosts(role),
         )
     ]
     for role in roles:
