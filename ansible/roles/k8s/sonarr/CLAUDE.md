@@ -37,12 +37,14 @@ conventions.
 - **`media-data` is neither snapshotted nor reverted** (`k8s_autodeploy_unreverted_claims`). A
   revert can desync import/rename history from files left in place, recoverable by a library
   rescan.
-- **Where the tasks went.** `tasks/main.yml` holds two includes, `k8s/manifests` and
-  `k8s/arr-notification`, and no Flux path runs them. They stay for the handback. The
-  pre-apply snapshot through `k8s/volume-snapshot` became the `sonarr-snapshot` Job, and the
-  Kustomization's `wait` replaces the rollout wait. The library reads of `tasks/verify.yml`,
-  deleted here, became the `sonarr-verify` Job. arr-notification's seed Job beside it runs the
-  same script as the include (*Notable*).
+- **Where the tasks went.** `tasks/main.yml` holds one include, `k8s/manifests`, and no Flux
+  path runs it. It stays for the handback. The pre-apply snapshot through `k8s/volume-snapshot`
+  became the `sonarr-snapshot` Job, and the Kustomization's `wait` replaces the rollout wait.
+  The library reads of `tasks/verify.yml`, deleted here, became the `sonarr-verify` Job.
+  arr-notification's seed Job beside it declares the Discord notification (*Notable*). Its
+  `k8s/arr-notification` include went in #5561, so a handback re-adds it as well as reverting
+  the flip. The seed Job's `lookup()`s are what make sonarr a caller of arr-notification in
+  `scripts/lib/k8s_role_callers.py:role_callers`.
 
 ## Notable
 - `sonarr_k8s_log_level: info` / `rotate: "10"` overrides upstream's debug-level default

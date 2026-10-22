@@ -42,7 +42,23 @@ def test_every_named_helper_has_at_least_one_caller(callers):
 
 
 def test_the_include_role_form_resolves(callers):
+    assert {"code-server", "n8n"} <= callers["image-builder"]
+
+
+def test_the_lookup_form_resolves(callers):
+    """sonarr and radarr reach arr-notification only through their seed Jobs' `lookup()`s."""
     assert callers["arr-notification"] == {"radarr", "sonarr"}
+
+
+def test_a_template_lookup_into_another_role_is_an_edge(tmp_path):
+    """The accept half on a throwaway tree; a lookup of the reader's own file is no edge."""
+    verify = tmp_path / "ansible" / "roles" / "k8s" / "reader" / "templates" / "verify"
+    verify.mkdir(parents=True)
+    (verify / "job.yaml.j2").write_text(
+        "data: {{ lookup('file', playbook_dir + '/roles/k8s/helper/files/x.py') }}\n"
+        "own: {{ lookup('file', playbook_dir ~ '/roles/k8s/reader/files/y.py') }}\n"
+    )
+    assert role_callers(tmp_path) == {"helper": {"reader"}}
 
 
 def test_a_service_role_is_not_a_callee(callers):
