@@ -51,7 +51,7 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 # globals with a `from core import ...` would take a snapshot the patch never reaches.
 from diagnostics.probe_lib import core
 from diagnostics.probe_lib.core import PI_HOST
-from diagnostics.probe_lib import health_alerts
+from diagnostics.probe_lib import health_alerts, health_checkout
 from diagnostics.probe_lib.health_cronjob import format_cronjob_health, latest_owned_job
 from diagnostics.probe_lib.health_docker import (
     declared_on_pi,
@@ -460,12 +460,14 @@ def run_health(
     tools=DEFAULT_TOOLS,
     roles_dir=K8S_ROLES,
     prom=health_alerts.DEFAULT_PROM,
+    on_origin=health_checkout.role_on_origin,
 ):
     """k8s workload health by default, the Pi's Docker container with --docker.
 
     k8s first because that is where ~50 of the ~55 services live. `tools` is the kubectl
     boundary of the k8s reads, injectable so a test can fail them without patching.
-    `roles_dir` is where the k8s roles live, injectable so a test can resolve a fixture role.
+    `roles_dir` is where the k8s roles live, injectable so a test can resolve a fixture role;
+    `on_origin` is the git read behind the stale-checkout refusal (`health_checkout`).
     `prom` is the alert plane's Prometheus boundary, read for a role-resolved tag only: the
     Pi's `--docker` path and a guessed workload name stay on the rollout verdict alone.
     """
@@ -520,6 +522,10 @@ def run_health(
         return 1
 
     if targets is None:
+        stale = health_checkout.stale_checkout_reason(container, roles_dir, on_origin)
+        if stale:
+            print(f"{container}: {stale}", file=_sys.stderr)
+            return PROBE_UNREADABLE
         # Not a k8s role, so the tag is the only name available. A miss here means "this tag
         # is not a k8s workload name", which is exactly what lets --docker take over.
         workload, pods = _fetch_workload(container, ns, cluster, tools)
