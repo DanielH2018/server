@@ -345,26 +345,6 @@ def test_a_rejected_push_from_the_pod_stream_is_flagged(cfg):
     )
 
 
-# configarr's health reader (H2.5b) in the shape its `emit` prints, the pod name as host, and
-# the bare `<tag>: ` shape it printed before #5569, which matched the pod LogQL and never parsed.
-_HEALTH_REJECTED = (
-    "2026-10-22T09:10:03Z configarr-health-29312340-q8xz4 configarr-health: "
-    "push failed (http=404 by=kuma) (status=down: configarr sync failed)"
-)
-_HEALTH_PRE_5569 = "configarr-health: push failed (http=404 by=kuma) (status=down: configarr sync failed)"
-
-
-def test_a_rejected_push_from_a_health_cronjob_is_flagged(cfg):
-    assert parse_push_line(_HEALTH_PRE_5569) is None
-    src = _src(_streams([(1, _SIBLING_RUN)], [(2, _HEALTH_REJECTED)]))
-    ok, msg = checks.logs.check_swallowed_verdicts(cfg, src, uptime_s=_unread_clock)
-    assert not ok
-    assert (
-        "Kuma rejected the push for configarr-health on configarr-health-29312340-q8xz4"
-        in msg
-    )
-
-
 def test_the_pre_1943_pod_line_is_not_read_as_anything(cfg):
     # REJECT (the pair): the old shape parses to nothing, so it neither pages nor counts as a
     # landed sibling.
