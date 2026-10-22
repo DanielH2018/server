@@ -483,7 +483,7 @@ def role_fields(
     so on 2026-10-22 for D5 step 29, where `flux-deferred`'s prune deletes the `verify-drill`
     OCIRepository once the drill is off. A plumbing role that adds deferred files later
     therefore gets deferred objects that Flux prunes. `bundle.flux_files` makes the split, and
-    its `DECIDED:` marker carries the reasoning. `timeout` goes on both `<tag>` and
+    its decision marker carries the reasoning. `timeout` goes on both `<tag>` and
     `<tag>-deferred`, the Kustomizations that apply the role's own manifests. The renderer's
     `-snapshot` kind keeps the defaults, and `-verify` rises above its Jobs' deadlines
     (`ordering.verify_timeout`). `suspend` goes on every kind,

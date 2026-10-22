@@ -142,7 +142,7 @@ statuses and Discord errors. `docs/flux-deploy-plane.md` describes each object.
   delete of the Kustomization itself. The cost is traefik-crds': an object a later upgrade
   drops stays until the operator deletes it (**operator-only**).
   `scripts/renderer/tests/test_renderer_crd_census.py` names `flux` as a member. The lever
-  reaches `flux` alone (`scripts/renderer/renderer_lib/bundle.py:flux_files`, its `DECIDED:`
+  reaches `flux` alone (`scripts/renderer/renderer_lib/bundle.py:flux_files`, its decision
   marker), so a sync object the render drops is pruned.
 - **The source is pinned to D1's values.**
   `scripts/renderer/tests/test_renderer_bootstrap_documents.py` fails a render whose

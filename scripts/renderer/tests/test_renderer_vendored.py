@@ -154,7 +154,7 @@ def prune_split_problems(pair: list[tuple[str, bool, str]]) -> list[str]:
     """What breaks the operator's ruling of 2026-10-22 for a role setting `flux_prune: false`.
 
     `flux_prune` reaches `<tag>` alone and `<tag>-deferred` keeps `prune: true`, while the role's
-    timeout reaches both (`bundle.flux_files`, its `DECIDED:` marker).
+    timeout reaches both (`bundle.flux_files`, its decision marker).
     """
     want = [(TAG, False, "1200s"), (f"{TAG}-deferred", True, "1200s")]
     return [] if pair == want else [f"rendered {pair}, want {want}"]
