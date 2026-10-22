@@ -13,8 +13,9 @@
 #      loads the session cookie ui_login.py mints. The operator logs in with SOPS values. The
 #      agent user, which has no age key, logs in as its own Authelia account from
 #      ~/.config/homelab-ui/credentials.json (see ui_login.py).
-#   3. The domain is SOPS-encrypted, so neither of the above can be written into
-#      ~/.claude.json. The config is generated at launch into a 0600 file instead.
+#   3. The domain, the ingress VIP and the session-state path are looked up at launch, so
+#      neither of the above can be written into ~/.claude.json. The config is generated at
+#      launch into a 0600 file instead.
 #
 # Node comes from fnm's `default` alias rather than $PATH: a Claude session inherits an
 # ephemeral /run/user/1000/fnm_multishells/<pid>_<ts> path that dies with the shell that
@@ -72,8 +73,8 @@ else
 
   STATE_PATH="$(uv --directory "$REPO_ROOT" run python scripts/diagnostics/ui_login.py --path "${TIER_ARGS[@]}")"
 fi
-# From ui_login.py rather than from SOPS directly: the agent user has no age key, and its
-# domain comes from the same credentials file its login does.
+# From ui_login.py rather than from inventory directly: the agent user's domain comes from
+# the same credentials file its login does, and ui_login.py falls back to group_vars.
 DOMAIN="$(uv --directory "$REPO_ROOT" run python scripts/diagnostics/ui_login.py --domain)"
 VIP="$(awk -F': *' '/^k3s_metallb_ingress_vip:/ {print $2; exit}' \
   "$REPO_ROOT/ansible/inventory/group_vars/all.yml")"
@@ -88,7 +89,7 @@ fi
 mkdir -p "$RUNTIME_DIR"
 chmod 700 "$RUNTIME_DIR"
 
-# 0600 before any content: the file carries the domain, which is a SOPS secret.
+# 0600 before any content: the file names the session-state file that holds the login cookie.
 umask 077
 cat >"$CONFIG_PATH" <<EOF
 {

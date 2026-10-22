@@ -209,7 +209,6 @@ def test_an_owner_value_nothing_emits_is_flagged():
 def test_the_consumer_census_finds_its_named_members():
     consumers = _consumers()
     for name in (
-        "env LOKI_STREAM",
         "env LOG_ERROR_SELECTOR",
         "logs.py SWALLOWED_VERDICTS_LOGQL",
         "alerts.py SYSLOG_ALERT_LOGQL",

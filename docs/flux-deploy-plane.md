@@ -853,11 +853,13 @@ marking is the first PR of handing a service back (*Handing a service back*).
 The build step passes each published tag to the renderer with `--role` and no
 `--secret-stubs`. No `--secret-stubs` is what selects placeholder mode, the only mode that
 publishes (`docs/homelab-render.md`, *Placeholder mode*). With no published tag the step runs
-`homelab_render.py cluster --out out --shared-only` instead, because `cluster` without
-`--role` renders every tag. That bundle holds the shared kinds and a root listing them, and no
-tag, so the first decryption of the cluster file gets a revision of its own.
+`homelab_render.py cluster --out out --shared-only --all-images` instead, because `cluster`
+without `--role` renders every tag. That bundle holds the shared kinds and a root listing them,
+and no tag, so the first decryption of the cluster file gets a revision of its own. Both
+branches pass `--all-images`, because the `images` job refuses a render without
+`images/tags.json` and `publish` needs that job (#5593).
 `ansible/tests/repo/test_promote_workflow_bundle.py` fails a no-tag branch without
-`--shared-only`.
+`--shared-only` or `--all-images`.
 
 After the census, the step `ciphertext` runs `cluster_vars.py check --ciphertext-only` on
 every `*.sops.*` file under `out/cluster/`, and fails when it finds none. `.gitleaks.toml`

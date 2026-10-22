@@ -13,6 +13,7 @@ from pathlib import Path
 
 from py_table import py_table
 
+from secrets_mgmt.pending_retirement import PENDING_RETIREMENT
 from secrets_mgmt.consumers import (
     CROSS_HOST_PUSH_TOKENS,
     FLUX_PATH,
@@ -97,7 +98,7 @@ def test_every_auto_tier_token_resolves_a_consumer_or_is_known_manual():
     # Derived from the module's own CROSS_HOST_PUSH_TOKENS (single source — the fifth
     # cross-host token, daniel_box_disk, is when the hand-list here moved there): each entry
     # documents its pusher/label host pair beside the name.
-    known_manual = CROSS_HOST_PUSH_TOKENS
+    known_manual = CROSS_HOST_PUSH_TOKENS | PENDING_RETIREMENT
     reg = load_registry()
     auto = [n for n, m in reg["entries"].items() if m.get("tier") == "auto"]
     assert auto  # sanity: the registry has auto-tier tokens

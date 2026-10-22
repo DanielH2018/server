@@ -11,9 +11,9 @@
       - authelia_agent_password | default('') | length > 0
       - domain | default('') | length > 0
     fail_msg: >-
-      claude_code_agent_user_enabled is true, but authelia_agent_password or domain is not in
-      secrets.yml. Add the password with `sops` first, and deploy the authelia role so the
-      account exists.
+      claude_code_agent_user_enabled is true, but authelia_agent_password is not in
+      secrets.yml or domain is not in group_vars/all.yml. Add the password with `sops` first,
+      and deploy the authelia role so the account exists.
     quiet: true
   no_log: true
 
