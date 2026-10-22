@@ -199,6 +199,18 @@ def _build_parser():
         "than 'you did not ask far enough back'.",
     )
     lq.add_argument(
+        "--until",
+        help="where the window ends, parsed like --since: how far back from now, e.g. "
+        "3h/2d. `--since 8d --until 3d` reads from 8 days ago to 3 days ago. Unset, the "
+        "window ends now. A long metric range is slow, so read it in chunks of this.",
+    )
+    lq.add_argument(
+        "--timeout",
+        type=int,
+        help="curl --max-time in seconds for the formatted view (default 10). `--json` and "
+        "`--dry-run` run the stream path, which uses the 10s default.",
+    )
+    lq.add_argument(
         "--step",
         help="evaluation step of a metric query, e.g. 5m. Unset, Loki picks range/250, so "
         "--since 7d samples once every 2419s and steps over anything shorter.",
