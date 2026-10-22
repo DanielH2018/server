@@ -29,6 +29,9 @@ def test_a_flip_that_keeps_its_allow_entry_is_flagged_without_a_write():
     """
     entries = k8s_entries()
     kept = {REGISTRY: "kept past the flip"}
+    entries["registry"] = {
+        key: value for key, value in entries["registry"].items() if key != "owner"
+    }
     assert flipped_allow_entries(kept, entries) == []
     entries["registry"] = {**entries["registry"], "owner": "flux"}
     assert flipped_allow_entries(kept, entries) == [REGISTRY]

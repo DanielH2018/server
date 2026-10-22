@@ -1,13 +1,9 @@
 {#
-  registry's verify Jobs and the ConfigMap that carries their script, INERT until registry's
-  flip.
+  registry's verify Jobs and the ConfigMap that carries their script.
 
-  This directory is `verify-inert/`, which neither reader globs: the manifests role takes only
-  top-level `templates/*.yaml.j2`, and `verify_files` takes only `templates/verify/*.yaml.j2`.
-  registry's flip PR moves the directory to `templates/verify/`, and the renderer then emits
-  it into `registry-verify` (D5, *A verify conversion lands as inert code*). The same PR
-  deletes the self-test and netpol probe tasks with `selftest-push-job.yaml.j2`,
-  `selftest-pull-job.yaml.j2` and `netpol-probe-job.yaml.j2`, which these Jobs replace.
+  The renderer emits `templates/verify/*.yaml.j2` into the `registry-verify` Kustomization once
+  `registry` reads Ready (D5, Wave D). These Jobs replaced the self-test and netpol probe
+  tasks and their three Job templates, which registry's flip deleted.
 
   THE PULL JOBS RUN A COPY OF THE FLEET'S PYTHON JOB IMAGE FROM THE PUSH STORE (ruling on
   #5680). Their proof is that containerd on each node pulls the pod's own image from
@@ -105,7 +101,7 @@
   The agent node's pull path: its containerd resolves the mirror to the pinned ClusterIP and
   is admitted by the fence's flannel.1 ipBlock, the grant this leg fails on if that SNAT
   assumption breaks. Rendered only where `k3s_agent_node_ips` names an agent, as
-  `selftest-pull-job.yaml.j2`'s agent half is: a single-node cluster could never schedule it.
+  the deleted Ansible agent half was: a single-node cluster could never schedule it.
 #}
 {% if k3s_agent_node_ips | default([]) | length > 0 %}
 {% set checks = checks + [{

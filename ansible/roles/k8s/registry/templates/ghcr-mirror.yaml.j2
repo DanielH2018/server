@@ -124,7 +124,7 @@ spec:
 # daniel-server's across the overlay to the pinned ClusterIP. That file has the SNAT evidence
 # for both addresses. No pod-network rule admits it: a pod has no reason to pull through it, and
 # one that could would be able to fill the claim with arbitrary public images.
-# netpol-probe-job.yaml.j2 checks a pod is refused on this port on every deploy.
+# The `isolation` check in templates/verify/ checks a pod is refused on this port on every roll.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:

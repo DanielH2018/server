@@ -1,12 +1,7 @@
-"""Render netpol-baseline's inert verify Job as its flip PR will emit it.
+"""Render netpol-baseline's verify Job for the tests that read it.
 
-The helpers copy the role, move `templates/verify-inert/` to `templates/verify/`, and render
-the copy, so a test reads the Job Flux will receive while the tree's own render emits no
-`netpol-baseline-verify`. Shared by test_netpol_baseline_verify.py and
-test_netpol_baseline_flux_gates.py.
+Shared by test_netpol_baseline_verify.py and test_netpol_baseline_flux_gates.py.
 """
-
-import shutil
 
 from lib import yaml_fast
 from lib.k8s_roles import K8S_ROLES
@@ -15,7 +10,7 @@ from renderer.renderer_lib import cluster
 from renderer.renderer_lib.context import load_stubs
 
 TAG = "netpol-baseline"
-STAGED = K8S_ROLES / TAG / "templates" / "verify-inert"
+VERIFY_DIR = K8S_ROLES / TAG / "templates" / "verify"
 
 
 def write_stubs(tmp_path_factory) -> dict:
@@ -25,11 +20,9 @@ def write_stubs(tmp_path_factory) -> dict:
     return load_stubs(path)
 
 
-def flipped_render(stubs, roles, overrides=None):
-    shutil.copytree(K8S_ROLES / TAG, roles / TAG)
-    templates = roles / TAG / "templates"
-    (templates / "verify-inert").rename(templates / "verify")
-    return cluster.render_tag(TAG, {**stubs, **(overrides or {})}, roles=roles)
+def verify_render(stubs, overrides=None):
+    """The tag's render under `overrides`; its `verify` holds the Job and its ConfigMap."""
+    return cluster.render_tag(TAG, {**stubs, **(overrides or {})})
 
 
 def docs(rendered) -> list[dict]:

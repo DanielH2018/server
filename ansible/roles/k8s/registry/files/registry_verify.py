@@ -1,8 +1,8 @@
 """registry's verify Jobs: push, pull through containerd, and prove the fence refuses others.
 
-`templates/verify-inert/` holds the Jobs, which no render emits while Ansible owns registry
-(target slice D5, *A verify conversion lands as inert code*). They replace the checks
-`tasks/main.yml` runs on every deploy. `CHECK` in the Job's environment picks one:
+`templates/verify/` holds the Jobs, which the renderer emits into `registry-verify` (target
+slice D5). They replaced the checks `tasks/main.yml` ran on every Ansible deploy. `CHECK` in
+the Job's environment picks one:
 
 - `push` replaces `registry-selftest-push`. It pushes a fixed two-blob image to
   `REGISTRY_URL` as `<REPO>:<TAG>` through the distribution API, then reads the tag back and
