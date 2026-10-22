@@ -83,7 +83,7 @@ ALLOWLIST: list[tuple[str, str]] = [
         "generated fragment; gen_doc_fragments.py reads group_vars, not a hand copy",
     ),
     (
-        r"^ansible/roles/setup/k3s/defaults/main\.yml$",
+        r"^ansible/roles/k8s/metallb/defaults/main\.yml$",
         "k3s_metallb_pool is the definition site for the ingress pool's own address range "
         "(10.0.0.241-10.0.0.250), a distinct fact from the six named LAN facts this guard "
         "tracks — not a duplicate of any single VIP or host address (#975 removed this "

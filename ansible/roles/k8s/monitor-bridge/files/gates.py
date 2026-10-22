@@ -1,18 +1,18 @@
 """The reachability gates: which checks a single outage suppresses, and how one gate is run.
 
 A gate differs from an ordinary check only in what its verdict is used for. `run_once` in
-`check.py` evaluates the four gates first and uses each verdict to suppress that gate's
+`check.py` evaluates the three gates first and uses each verdict to suppress that gate's
 dependents, so one root cause pages once instead of storming across every monitor reading the
 same source. This module owns the membership sets, the filter rules that keep a gate from being
 disabled underneath its dependents, and the `Gates` seam that lets a test STATE a gate
 configuration instead of patching module globals.
 
 It is a leaf: it imports `bridge.*`, `check_table` (the `gate` column every set below derives
-from) and the four gate probe bodies out of `checks.*`, and never `check`, `registry` or `cli`.
+from) and the three gate probe bodies out of `checks.*`, and never `check`, `registry` or `cli`.
 
 `apply_startup_grace` is NOT here — it lives in `bridge/streaks.py` beside the `down_streak`
 hysteresis it is built on, and its counters are `State.grace_streaks`, read as
-`src.state.grace_streaks`. The startup grace is a gate in the same sense the other four are (it
+`src.state.grace_streaks`. The startup grace is a gate in the same sense the other three are (it
 holds a verdict back rather than reporting it), which is why the membership set `STARTUP_GRACE`
 is here and the mechanism is there.
 """
@@ -28,7 +28,6 @@ from bridge.types import Check, CheckFn, CheckResult, push_env
 from check_table import CHECKS
 from checks.b2 import check_b2_reachable
 from checks.cluster import check_prometheus
-from checks.logs import check_loki_reachable
 from checks.wan import check_wan_reachable
 
 
@@ -80,16 +79,7 @@ EXPORTER_DEPENDENT = {
     "node-pi": frozenset({"host_temp", "pi_pressure"}),
 }
 
-# Loki-reachability gate — the peer of the Prometheus gate for the Loki-querying checks. A single
-# Loki outage makes loki_count raise in ALL of them at once (Loki Log Ingestion + Janitorr Errors)
-# -> a 2-monitor storm for one root cause. run_once probes Loki first
-# (check_loki_reachable -> its own "Loki Reachable" monitor) and, when it's unreachable, SUPPRESSES
-# these (pushes `up` with a skip msg so their push heartbeats stay alive) so only Loki Reachable
-# pages. Loki being UP but a shipper not shipping is a different signal Loki Log Ingestion still
-# surfaces (it evaluates whenever Loki is reachable).
-LOKI_DEPENDENT = _members("loki_reachable")
-
-# B2-reachability gate — the third peer of the Prometheus and Loki gates (see check_b2_reachable /
+# B2-reachability gate — the second peer of the Prometheus gate (see check_b2_reachable /
 # b2_reachable in run_once), and the fix for G2/G4 of docs/archive/b2-transaction-cap-monitoring-gaps.md.
 # It used to gate five kopia-era checks that read B2 health from state files written by periodic
 # crons, so they reported the LAST SUCCESSFUL RUN rather than current health: on 2026-08-02 they
@@ -104,7 +94,7 @@ LOKI_DEPENDENT = _members("loki_reachable")
 # must not light two monitors.
 B2_DEPENDENT = _members("b2_reachable")
 
-# WAN-reachability gate — the fourth peer, and the one whose absence cost the most. An internet
+# WAN-reachability gate — the third peer, and the one whose absence cost the most. An internet
 # outage had no gate at all, so every check reaching the internet paged on its own: on
 # 2026-09-18 from 05:05 a single WAN outage turned 11 tiles red inside 90 minutes (#2784).
 # run_once probes two independent providers by hostname (checks/wan.py) and, when NEITHER
@@ -115,9 +105,9 @@ B2_DEPENDENT = _members("b2_reachable")
 # names run_once iterates, not gates it evaluates. Two tiles for a WAN outage instead of one is
 # the accepted cost; the alternative is building gate-of-a-gate for one caller.
 #
-# kuma_notify_failures and swallowed_verdicts also went red on 2026-09-18 and are NOT here:
-# both read Loki, which is in-cluster, so the Loki gate already owns their source. What failed
-# for them was Kuma's own outbound Discord send, which is a real fault the tiles should report.
+# swallowed_verdicts also went red on 2026-09-18 and is NOT here: it reads Loki, which is
+# in-cluster, and the failure was Kuma's own outbound Discord send, a real fault the tile should
+# report.
 WAN_DEPENDENT = _members("wan_reachable")
 
 # Reach-out checks that poll a live app dependency (n8n/sonarr/radarr/prowlarr/scrutiny/the
@@ -129,7 +119,7 @@ WAN_DEPENDENT = _members("wan_reachable")
 # and pages (then recovers next cycle). run_once holds each of these `up` for the first
 # GRACE_CYCLES-1 consecutive down cycles; the GRACE_CYCLES'th straight down still pages a
 # genuinely-dead dependency. Must be DISJOINT from the run_once skip sets
-# (PROM_DEPENDENT/LOKI_DEPENDENT/EXPORTER_DEPENDENT) so a graced check reaches the eval path every
+# (PROM_DEPENDENT/EXPORTER_DEPENDENT) so a graced check reaches the eval path every
 # cycle. Guarded by a test against the registry: the "real check name" guard PLUS a completeness
 # guard that every un-gated _get_json reach-out check is in here (prowlarr_indexers/scrutiny were
 # added 2026-07-14 after they were found missing — the weekly-reboot flap's original set omitted
@@ -147,7 +137,7 @@ GATE_DEPENDENTS = {row.name: _members(row.name) for row in CHECKS if row.is_gate
 class Gates:
     """Everything `run_once` needs to know about suppression, as one injectable value.
 
-    The membership sets and the four probe bodies used to be module globals `run_once` read
+    The membership sets and the three probe bodies used to be module globals `run_once` read
     directly, so a test that wanted a two-entry PROM_DEPENDENT or a stubbed Prometheus probe had
     to `monkeypatch.setattr` this module — ~25 sites in the gates suite alone, each one a
     process-wide mutation that a typo turns into a silent no-op. A test now STATES the gate
@@ -164,12 +154,10 @@ class Gates:
         `frozen=True` blocks rebinding the FIELD, never mutation THROUGH it, so
         `Gates().exporter_dependent[job] = ...` edits the module table for the whole
         process. A test that wants its own map states one; nothing may mutate this one.
-      loki_dependent: Checks suppressed when the Loki gate is down.
       b2_dependent: Checks suppressed when the B2 gate is down.
       wan_dependent: Checks suppressed when neither WAN endpoint answers.
       startup_grace: Reach-out checks held `up` through their first consecutive down cycles.
       probe_prometheus: The Prometheus gate's body.
-      probe_loki: The Loki gate's body.
       probe_b2: The B2 gate's body.
       probe_wan: The WAN gate's body.
     """
@@ -180,26 +168,23 @@ class Gates:
         # the one module table rather than a copy, so the default really is the module's own map.
         default_factory=lambda: EXPORTER_DEPENDENT
     )
-    loki_dependent: frozenset[str] = LOKI_DEPENDENT
     b2_dependent: frozenset[str] = B2_DEPENDENT
     wan_dependent: frozenset[str] = WAN_DEPENDENT
     startup_grace: frozenset[str] = STARTUP_GRACE
     probe_prometheus: CheckFn = check_prometheus
-    probe_loki: CheckFn = check_loki_reachable
     probe_b2: CheckFn = check_b2_reachable
     probe_wan: CheckFn = check_wan_reachable
 
     def gate_dependents(self) -> dict[str, frozenset[str]]:
         """This value's own gate -> dependents map, in GATE_DEPENDENTS' shape.
 
-        `run_once` reads the four dependent sets through this instance, so the startup filter
+        `run_once` reads the three dependent sets through this instance, so the startup filter
         validation must read them from the same place. Reading the module table there instead
         would validate a stated `Gates` against rules the run loop does not use — the asymmetry
         would only show up as a filter accepted at startup and then behaving differently.
         """
         return {
             "prometheus": self.prom_dependent,
-            "loki_reachable": self.loki_dependent,
             "b2_reachable": self.b2_dependent,
             "wan_reachable": self.wan_dependent,
         }

@@ -239,7 +239,7 @@ def test_the_real_guard_import_sits_directly_after_server_yml():
 
 def test_a_guard_moved_to_the_top_of_main_yml_is_flagged():
     # A whole-role run with the API down would fail the read before server.yml reinstalls k3s.
-    main = _main(GUARD, "server.yml", "cluster-addons.yml")
+    main = _main(GUARD, "server.yml", "longhorn.yml")
     assert placement_problems(main, _SERVER)
 
 

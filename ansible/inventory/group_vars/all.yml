@@ -38,8 +38,7 @@ server_git_tree_lock: /var/lock/server-git-tree.lock
 
 # The homelab's domain. It is not a secret (operator ruling, 2026-10-14: "domain is not secret,
 # it's a var for flexibility just in case of future changes"), and it lives here so it changes
-# in one place. `secrets.yml` still holds the same value, and its `include_vars` precedence
-# outranks this file, so both must match until R2's domain PR 3 deletes the SOPS copy
+# in one place. This is its only definition: #5087 deleted the old copy from `secrets.yml`
 # (docs/target-architecture/render/r2-secret-placeholders.md, step 10).
 domain: daniel-hunter.com
 

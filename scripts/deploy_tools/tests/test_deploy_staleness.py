@@ -31,6 +31,16 @@ def _commit(repo: Path, name: str) -> None:
     commit(repo, name, **{name: name})
 
 
+def _no_state(clone: Path) -> str:
+    """An empty deployer state directory beside `clone`, so no test reads the host's (#5784).
+
+    `main` reads `behind_since` from `--state-dir`, whose default is the live
+    `/var/lib/gitops-deploy`. On daniel-box while the deployer is parked, that marker adds
+    the park hint to the refusal and fails assertions about its wording.
+    """
+    return str(clone.parent / "no-gitops-state")
+
+
 @pytest.fixture
 def repos(tmp_path):
     """An 'origin' with one commit, and a clone tracking it. Returns (origin, clone)."""
@@ -77,20 +87,27 @@ def test_the_incident_shape_is_behind_and_ahead(repos):
 
 def test_main_exits_zero_when_current(repos):
     _origin, clone = repos
-    assert main(["--repo", str(clone), "--no-fetch"]) == 0
+    assert (
+        main(["--repo", str(clone), "--no-fetch", "--state-dir", _no_state(clone)]) == 0
+    )
 
 
 def test_main_exits_zero_when_only_ahead(repos):
     _origin, clone = repos
     _commit(clone, "mine")
-    assert main(["--repo", str(clone), "--no-fetch"]) == 0
+    assert (
+        main(["--repo", str(clone), "--no-fetch", "--state-dir", _no_state(clone)]) == 0
+    )
 
 
 def test_main_refuses_when_behind(repos):
     origin, clone = repos
     _commit(origin, "theirs")
     git_out(clone, "fetch", "-q", "origin")
-    assert main(["--repo", str(clone), "--no-fetch"]) == DEPLOY_STALE
+    assert (
+        main(["--repo", str(clone), "--no-fetch", "--state-dir", _no_state(clone)])
+        == DEPLOY_STALE
+    )
 
 
 def test_refusal_names_the_count_and_the_fix(repos):
@@ -127,7 +144,17 @@ def test_a_tree_behind_on_an_unrelated_role_still_deploys(repos, capsys):
     """The whole point of the slice: the tick fast-forwards to the newest green commit, so a
     tail that touches nothing this deploy renders must not refuse it."""
     clone = _behind_on(repos, RADARR)
-    rc = main(["--repo", str(clone), "--no-fetch", "--tags", "sonarr"])
+    rc = main(
+        [
+            "--repo",
+            str(clone),
+            "--no-fetch",
+            "--state-dir",
+            _no_state(clone),
+            "--tags",
+            "sonarr",
+        ]
+    )
     assert rc == 0
     assert "1 commit(s) behind" in capsys.readouterr().err
 
@@ -135,7 +162,17 @@ def test_a_tree_behind_on_an_unrelated_role_still_deploys(repos, capsys):
 def test_a_tree_behind_on_the_role_being_deployed_is_refused(repos, capsys):
     """The rejecting half: that commit renders the role's templates."""
     clone = _behind_on(repos, SONARR)
-    rc = main(["--repo", str(clone), "--no-fetch", "--tags", "sonarr,radarr"])
+    rc = main(
+        [
+            "--repo",
+            str(clone),
+            "--no-fetch",
+            "--state-dir",
+            _no_state(clone),
+            "--tags",
+            "sonarr,radarr",
+        ]
+    )
     err = capsys.readouterr().err
     assert rc == DEPLOY_STALE
     assert SONARR in err and "sonarr" in err
@@ -144,7 +181,17 @@ def test_a_tree_behind_on_the_role_being_deployed_is_refused(repos, capsys):
 def test_a_tree_behind_on_a_broad_path_is_refused_whatever_the_tags(repos, capsys):
     """`ansible/inventory/` reaches every service's rendered output, so no tag list clears it."""
     clone = _behind_on(repos, INVENTORY)
-    rc = main(["--repo", str(clone), "--no-fetch", "--tags", "sonarr"])
+    rc = main(
+        [
+            "--repo",
+            str(clone),
+            "--no-fetch",
+            "--state-dir",
+            _no_state(clone),
+            "--tags",
+            "sonarr",
+        ]
+    )
     assert rc == DEPLOY_STALE
     assert INVENTORY in capsys.readouterr().err
 
@@ -157,7 +204,17 @@ def test_a_tree_behind_on_a_shared_k8s_role_is_refused(repos, capsys):
     deploy renders, whichever service it names.
     """
     clone = _behind_on(repos, SHARED_K8S)
-    rc = main(["--repo", str(clone), "--no-fetch", "--tags", "sonarr"])
+    rc = main(
+        [
+            "--repo",
+            str(clone),
+            "--no-fetch",
+            "--state-dir",
+            _no_state(clone),
+            "--tags",
+            "sonarr",
+        ]
+    )
     err = capsys.readouterr().err
     assert rc == DEPLOY_STALE
     assert SHARED_K8S in err and "shared k8s role manifests" in err
@@ -171,7 +228,17 @@ def test_a_tree_behind_on_the_secrets_file_is_refused(repos, capsys):
     consult.
     """
     clone = _behind_on(repos, SECRETS)
-    rc = main(["--repo", str(clone), "--no-fetch", "--tags", "sonarr"])
+    rc = main(
+        [
+            "--repo",
+            str(clone),
+            "--no-fetch",
+            "--state-dir",
+            _no_state(clone),
+            "--tags",
+            "sonarr",
+        ]
+    )
     err = capsys.readouterr().err
     assert rc == DEPLOY_STALE
     assert SECRETS in err and "SOPS value" in err
@@ -183,7 +250,17 @@ def test_a_block_tag_falls_back_to_the_unscoped_rule(repos, capsys):
     The accept half is the unrelated-role test above: a real service tag still narrows.
     """
     clone = _behind_on(repos, RADARR)
-    rc = main(["--repo", str(clone), "--no-fetch", "--tags", "config"])
+    rc = main(
+        [
+            "--repo",
+            str(clone),
+            "--no-fetch",
+            "--state-dir",
+            _no_state(clone),
+            "--tags",
+            "config",
+        ]
+    )
     err = capsys.readouterr().err
     assert rc == DEPLOY_STALE
     assert "not narrowing" in err and "config names no single service" in err
@@ -204,7 +281,10 @@ def test_unreadable_host_vars_refuses_to_narrow_at_all():
 def test_a_full_run_is_refused_for_any_commit_behind(repos):
     """No tags means the deploy is unscoped, so today's rule stands: any tail refuses."""
     clone = _behind_on(repos, RADARR)
-    assert main(["--repo", str(clone), "--no-fetch"]) == DEPLOY_STALE
+    assert (
+        main(["--repo", str(clone), "--no-fetch", "--state-dir", _no_state(clone)])
+        == DEPLOY_STALE
+    )
 
 
 def _behind_marker(tmp_path: Path, age_s: float, now: float = 2_000_000_000.0) -> Path:
@@ -257,7 +337,18 @@ def test_an_unresolvable_ref_does_not_refuse(repos, capsys):
     """
     _origin, clone = repos
     assert (
-        main(["--repo", str(clone), "--no-fetch", "--ref", "origin/nonexistent"]) == 0
+        main(
+            [
+                "--repo",
+                str(clone),
+                "--no-fetch",
+                "--state-dir",
+                _no_state(clone),
+                "--ref",
+                "origin/nonexistent",
+            ]
+        )
+        == 0
     )
     assert "staleness check was skipped" in capsys.readouterr().err
 
@@ -274,7 +365,19 @@ def test_a_deploy_of_the_incoming_commit_is_not_behind_on_it(repos, capsys):
     """The landing shape: the primary is behind, but the commit being deployed is the tip."""
     clone = _behind_on(repos, SONARR)
     tip = git_out(clone, "rev-parse", "origin/master")
-    rc = main(["--repo", str(clone), "--no-fetch", "--sha", tip, "--tags", "sonarr"])
+    rc = main(
+        [
+            "--repo",
+            str(clone),
+            "--no-fetch",
+            "--state-dir",
+            _no_state(clone),
+            "--sha",
+            tip,
+            "--tags",
+            "sonarr",
+        ]
+    )
     assert rc == 0, capsys.readouterr().err
 
 
@@ -283,7 +386,19 @@ def test_a_sha_that_is_itself_behind_still_refuses(repos, capsys):
     names the commit rather than calling it 'this tree'."""
     clone = _behind_on(repos, SONARR)
     head = git_out(clone, "rev-parse", "HEAD")
-    rc = main(["--repo", str(clone), "--no-fetch", "--sha", head, "--tags", "sonarr"])
+    rc = main(
+        [
+            "--repo",
+            str(clone),
+            "--no-fetch",
+            "--state-dir",
+            _no_state(clone),
+            "--sha",
+            head,
+            "--tags",
+            "sonarr",
+        ]
+    )
     err = capsys.readouterr().err
     assert rc == DEPLOY_STALE
     assert head[:12] in err and "this tree is" not in err

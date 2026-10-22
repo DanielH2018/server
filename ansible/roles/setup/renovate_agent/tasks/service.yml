@@ -73,7 +73,7 @@
     - renovate-agent.timer
     - renovate-agent-land@.service
   become: true
-  notify: Reload systemd
+  notify: Reload systemd for renovate_agent
 
 - name: Let the agent's user start a landing and nothing else (polkit)
   tags: [renovate-agent-service]

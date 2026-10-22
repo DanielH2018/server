@@ -9,7 +9,7 @@
 // The host JOURNAL is readable now and still not shipped. Promtail's arm64 build was a
 // journal stub; this image is not — measured 2026-09-02, loki.source.journal read 6,573
 // lines in ten minutes off /var/log/journal and they landed in Loki. What is shipped is the
-// two health crons' verdict lines, via the pi_health source below: the narrow slice
+// two health timers' verdict lines, via the pi_health source below: the narrow slice
 // `probe.py alerts` needs, at ~576 lines/day against the journal's ~38k. Turning the journal
 // on is one `loki.source.journal` block with a relabel setting `job` (its default job label is
 // the component id) — not a capability gap any more. What decided against it is this
@@ -120,10 +120,10 @@ loki.source.docker "pi" {
   refresh_interval = "60s"
 }
 
-// The two host health crons' verdict lines — the ONLY host logs shipped from this box, and
+// The two host health timers' verdict lines — the ONLY host logs shipped from this box, and
 // deliberately not the journal (see the header). `probe.py alerts` reconstructs DOWN
 // episodes from `{job="syslog"} |= "status=down"`, and until this source existed every
-// daniel-pi cron was invisible to it: a real "Daniel Pi Recovery" outage on 2026-08-29
+// daniel-pi health check was invisible to it: a real "Daniel Pi Recovery" outage on 2026-08-29
 // (autoheal down ~50 min) left no episode anywhere.
 //
 // `job = "syslog"` matches the label the cluster hosts' syslog stream already carries, so

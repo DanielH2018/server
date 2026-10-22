@@ -75,9 +75,11 @@ def jobs_verdict(check_runs: list[dict]) -> str:
 
     Mirrors the `run:` script of the `prek` job in ci.yml. A job passes when it succeeded. A
     skipped job passes only when `prove` succeeded and every dependent skipped: each dependent
-    carries `if: !cancelled() && needs.prove.outputs.proven != 'true'`, so a skip means `proven`
-    was true, and a check-run cannot show that output itself. `prove` is skipped on a run that
-    is not a push. Fail-closed: any failure is `fail`, a missing or unfinished job is
+    skips only on `needs.prove.outputs.proven == 'true'` or a cancelled run, so a skip means
+    `proven` was true, and a check-run cannot show that output itself. `prove` is skipped on a
+    run that is not a push. A cancelled or failed `prove` (a runner fault) runs every dependent
+    whatever `proven` says, so they must all pass.
+    Fail-closed: any failure is `fail`, a missing or unfinished job is
     `pending`, and a skipped job without that proof is `pending`, so the gate job's own
     conclusion decides it.
     """
@@ -85,7 +87,14 @@ def jobs_verdict(check_runs: list[dict]) -> str:
     for run in check_runs:
         name = run.get("name")
         if name == CI_PROVE_JOB or name in CI_GATE_NEEDS_JOBS:
-            states.setdefault(name, set()).add(_run_state(run))
+            # A cancelled or failed `prove` broke on the runner, and every dependent ran (#5783).
+            unproven = name == CI_PROVE_JOB and run.get("conclusion") in (
+                "cancelled",
+                "failure",
+            )
+            states.setdefault(name, set()).add(
+                "unproven" if unproven else _run_state(run)
+            )
     if any("fail" in s for s in states.values()):
         return "fail"
     prove = states.get(CI_PROVE_JOB)

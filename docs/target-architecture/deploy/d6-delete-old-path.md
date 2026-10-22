@@ -164,6 +164,9 @@ reader that D6 does not delete.
       `gitops_ledger.py` to the deploy_ui and renovate_agent installs.
     - `K8S_ROLES_IMPORTING_SETUP_FILES` and `k8s_lookup_readers` are k8s-only. Their
       readers are `deploy_changes.py`, `deploy_phases.py` and `scripts/deploy_tools/reach.py`.
+    - `K8S_BUILD_CONTEXT_FILES` is k8s-only too (#4840). Its readers are `deploy_changes.py`
+      and `reach.py` through `k8s_roles_holding`, and the release census's
+      `releases_consumers.py:role_paths_for`.
     - `k8s_lookup_map` stays. `scripts/secrets_mgmt/consumers.py:_census_corpus` calls it for
       the secret-consumer census, which Flux-rendered roles still need.
 - **Other deployer files that shrink.**
@@ -974,7 +977,7 @@ daniel-box to `setup_drift_check_hosts` before D6.5 disarms manifest-prune-check
 - `setup-drift-check.sh` reads the same `setup-drift-lib.sh` against the same stamp
   directories. The box keeps one detector throughout.
 - **By D6, setup drift is a textfile check, not a Kuma tile.** D6 opens only after M6's
-  C-2b deletes Kuma (M6 *When D5 flips a role M6 edits*). M6's B2 has by then made
+  C-2b deletes Kuma (contracts.md, D6's row). M6's B2 has by then made
   `setup-drift-check.sh` write `setup-drift-check.prom` on each armed host, and given it
   M3's two rules, `<Check>Failed` and `<Check>NotReporting`. Each rule names one `origin`.
   B2 ran while daniel-server was the only armed host, so its rules name daniel-server
@@ -1349,6 +1352,7 @@ than writing a second.
                                                       k8s role path
   ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_cross_role.py
                                                     - K8S_ROLES_IMPORTING_SETUP_FILES,
+                                                      K8S_BUILD_CONTEXT_FILES,
                                                       k8s_lookup_readers
   ansible/roles/setup/gitops_deploy/files/{gitops_markers,gitops_ledger}.py
                                                     - the k8s ledger classes
@@ -1514,8 +1518,8 @@ D6.12, three chains run side by side: D6.13 and D6.14, D6.16 to D6.18, and D6.15
     - **Waits on:** D5, *live*. Old D6.0's checks read it: the deploy-tag label amendment
       (M2 Open question 1), a footprint in `prod`'s `digests.json` for every deploy tag and
       every `SHARED_KINDS` member, a clean `probe.py gitops-state`, and `render_records`
-      disarmed by D5's disarm PR. Through D5's uptime-kuma edge, this PR also waits on M6's
-      C-2b.
+      disarmed by D5's disarm PR. Through D6's index edge to M6's C-2b, this PR also
+      waits on C-2b.
     - **Operator gates:** a hold or a ledger line that a precondition or the post-tick check
       finds is cleared with `gitops_state.py clear-hold` or `clear-owed`
       (**operator-only**). On a crash or a partial apply, the operator re-applies the
@@ -2111,8 +2115,8 @@ The steps merged in this order.
    (Baseline).
     - **The Kuma side is M6's, not D6's (#4609).** M6's B1 converts the three checks to
       textfile checks and retires their tiles, their push tokens and every consumer of the
-      tokens. M6's C-2b then deletes Kuma. D6 opens only after C-2b, because uptime-kuma
-      never becomes flux-owned (M6 *When D5 flips a role M6 edits*). So D6.5 removes no
+      tokens. M6's C-2b then deletes Kuma. D6 opens only after C-2b, on D6's index edge to
+      it (contracts.md, D6's row). So D6.5 removes no
       tile, no token and no cluster-file placeholder. Before merge, the PR body quotes
       `git grep -n -E 'manifest_prune_push_token|release_staleness_push_token|live_drift_push_token'`
       at its base, expected to print nothing. A hit means B1 left a consumer. The session

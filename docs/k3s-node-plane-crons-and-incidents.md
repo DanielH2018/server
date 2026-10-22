@@ -285,7 +285,7 @@ kubectl sweeps do not land on the API server at once. Keep a new sweep off those
 
 ## What opens the three control-plane gates under `--tags k3s`
 
-The maximal tag reapplies MetalLB, Longhorn, the backup targets, the health crons, CoreDNS and
+The maximal tag reapplies Longhorn, the backup targets, the health crons, CoreDNS and
 the node config, and makes three gated tasks reachable. Each is gated, so the tag *can* take the
 control plane down rather than always doing so:
 

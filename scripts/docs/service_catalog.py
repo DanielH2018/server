@@ -25,8 +25,8 @@ FIELD NOTES (what is genuinely undecidable from the repo alone, and why):
 
   - Route domain suffix. `ingressroute.yml.j2` builds the hostname as
     "{{ hostname }}.local.{{ domain }}" (and, when k8s_public_route is on and the role
-    does not pass public=false, also the bare domain). `domain` is SOPS-sourced with no
-    static default, so the catalog writes the suffix as the literal "<domain>". On the
+    does not pass public=false, also the bare domain). A baked suffix would pick one tier
+    for every reader, so the catalog writes the suffix as the literal "<domain>". On the
     docs site those placeholders become links, resolved in the browser against the URL
     the reader is on — see scripts/docs/catalog_lib/route_facts.py. WHICH names a service answers on is
     derivable and is stated outright; only the suffix is not.

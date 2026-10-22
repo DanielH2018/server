@@ -60,7 +60,7 @@ def test_a_server_only_change_set_prints_no_agent_command_once_narrowed():
     `narrow_setup.path_tags` asks of a changed `tasks/` file, so the row is derived here
     rather than written in. `broad_remediation` over the same change set has no row, and
     prints the whole role with the join beside it: the over-apply the `DECIDED:` marker at
-    `_AGENT_JOIN_TAGS` accepts for `deploy.sh --changed` and `land.sh`'s fallback.
+    `gitops_markers.AGENT_JOIN_TAGS` accepts for `deploy.sh --changed` and `land.sh`'s fallback.
     """
     path = f"{K3S}/tasks/server.yml"
     cs = services_from_changed_paths([path])

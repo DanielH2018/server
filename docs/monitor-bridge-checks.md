@@ -658,7 +658,7 @@ checks each gate suppresses.
   artifact is the **Discord notification** Kuma fires on the down transition, not the monitor's
   colour. When one fires, read `/config/ip_bans.yaml` by hand rather than waiting for the monitor
   to clear.
-  **`ha_heartbeat` is deliberately NOT in `LOKI_DEPENDENT`**: membership suppresses the WHOLE check
+  **`ha_heartbeat` is deliberately not gated on Loki**: a Loki gate would suppress the WHOLE check
   during a Loki outage, which would blind the real heartbeat. The ban arm fails open on a Loki
   error and keeps the heartbeat's own verdict. Pure `ha_ban_verdict()` is unit-tested.)
 - **k3s Speedtest** (speedtest-tracker's `/api/v1/results`, newest row only, Bearer
@@ -702,18 +702,11 @@ checks each gate suppresses.
   manual UI toggle that `roles/k8s/speedtest/CLAUDE.md` records as impossible to set from config
   at the pinned build, on a `longhorn-nobackup` PVC, a human step this alert path should not
   acquire. The scrape stays what #996 added it for: history in Grafana.)
-- **Loki Reachable** (a fixed `/loki/api/v1/labels` probe: the root-cause GATE for the
-  Loki-querying checks, the peer of Prometheus Reachable. When Loki is unreachable the
-  `LOKI_DEPENDENT` checks (`loki_ingestion`, `swallowed_verdicts`, `kuma_notify_failures`) are
-  **suppressed** (pushed `up` with a "skipped — Loki unreachable" `msg`) and only THIS monitor
-  pages. One Loki outage would otherwise fire every dependent at once. Loki being UP but the log
-  shipper (Alloy) not shipping is a different signal that Loki Log Ingestion surfaces. A test
-  guards `LOKI_DEPENDENT` against the live `CHECKS`.)
 - **WAN Reachable** (two provider URLs fetched by hostname, tried in order: the root-cause GATE for
-  the internet-reaching checks, and the peer of Prometheus/Loki/B2 Reachable. An internet outage
+  the internet-reaching checks, and the peer of Prometheus and B2 Reachable. An internet outage
   had no gate until a single WAN outage on 2026-09-18 turned 11 tiles red inside 90 minutes,
-  including four host crons and `b2_reachable`, `r2_usage`, `discord`, `kuma_notify_failures`,
-  `cloudflare-ip-drift`, `swallowed_verdicts` and `gitops_alive`. It gates `WAN_DEPENDENT`:
+  including four host crons and `b2_reachable`, `r2_usage`, `discord`, the since-deleted Kuma
+  Notification Delivery tile, `cloudflare-ip-drift`, `swallowed_verdicts` and `gitops_alive`. It gates `WAN_DEPENDENT`:
   `r2_usage`, `cloudflare_ips_drift`, `healthchecks_drift`, `discord`.
   **DOWN only when NEITHER endpoint answers.** One provider's outage is that provider's problem,
   and suppressing on it would turn Cloudflare's own tiles green during a Cloudflare outage. The
@@ -726,9 +719,8 @@ checks each gate suppresses.
   `b2_reachable` is the tile's PEER rather than a member: it is itself a gate, and
   `GATE_DEPENDENTS`' values are check names `run_once` iterates, not gates it evaluates. Two tiles
   for a WAN outage is the accepted cost of not building gate-of-a-gate for one caller.
-  `kuma_notify_failures` and `swallowed_verdicts` are not members either: both read in-cluster
-  Loki, so the Loki gate owns their source, and what failed for them was Kuma's own outbound send,
-  a real fault the tile should report.
+  `swallowed_verdicts` is not a member either: it reads in-cluster Loki, and what failed for it
+  was Kuma's own outbound send, a real fault the tile should report.
   **The HOST crons are covered by a separate half** (#2793). `github-ruleset-drift`,
   `release-staleness-check` and `docs-refresh` run on the host and push their own tiles, so this
   gate structurally cannot suppress them. `crowdsec-home-allowlist` was a fourth until H2.4c moved
@@ -911,32 +903,6 @@ checks each gate suppresses.
   the Longhorn `Backup` CRs that locate the volume backups, so a restore nobody can prove puts the
   rest of the recovery chain at risk. No gate and no streak: a file read has no upstream to wait
   on, and a stale stamp does not heal by itself. Runbook: `k3s-etcd-restore`.)
-- **Loki Log Ingestion** (three-arm LogQL freshness against the cluster `loki-homelab` through its
-  in-cluster Service. `down` if ANY arm is silent: a dead Alloy→Loki pipeline (a relabel
-  regression, positions-file corruption, a stale `/var/log` mount) that Loki's `/ready` Kuma probe
-  stays green through. `templates/config/env.yaml.j2` renders every selector from the
-  `loki_streams` label owner in `group_vars/all.yml` (#3740).
-  **Arm 1, cluster file-tail union** `sum(count_over_time({job=~"authlog|syslog", machine!="daniel-pi"}[3h]))`
-  (`LOKI_STREAM`). It counts the cluster hosts' file-tailed streams together, so if Alloy's file
-  sources die they fall silent together while syslog's routine volume keeps a quiet night alive.
-  The window is tolerant because file-tail volume is low and dips overnight (a lone
-  `{job="syslog"}` over 10m false-paged on a 15m35s idle gap). The arm EXCLUDES the pod streams,
-  because they dwarf the file-tail streams and a healthy pod stream would mask a total file-tail
-  outage. It also EXCLUDES `machine="daniel-pi"`: the Pi's heartbeats ship under the same
-  `job="syslog"` (~72 lines per 3h), so without the filter a total cluster file-tail outage never
-  reaches zero (#3739).
-  **Arm 2, cluster pod streams** `sum(count_over_time({job="k8s"}[30m]))` (`LOKI_DOCKER_STREAM`):
-  every pod's stdout, the stream arm 1 excludes. A pod-source break silences every container log
-  while the file-tail streams keep flowing, and the tight window catches a total Alloy death fast.
-  The selector is `{job="k8s"}` and not `{container=~".+"}`, which also matched the Pi's container
-  streams (~1,940 lines per 30m), so the Pi alone kept the arm non-zero (#3739).
-  **Arm 3, daniel-pi** `sum(count_over_time({job="pi"}[3h]))` (`LOKI_PI_STREAM`): arms 1 and 2
-  count cluster streams only, so the Pi's own Alloy could die with both arms green. It uses the
-  tolerant window (`LOKI_FILETAIL_WINDOW`, same as arm 1) because the Pi is a Zero 2 W running
-  five LAN-only containers, so its log volume is low and bursty. Selectors and windows are tunable
-  via `LOKI_STREAM`/`LOKI_FILETAIL_WINDOW`/`LOKI_DOCKER_STREAM`/`LOKI_WINDOW`/`LOKI_PI_STREAM`.
-  `test_cluster_arm_counts_no_pi_stream` holds arms 1 and 2 off every Pi stream. Pure
-  `loki_ingestion_fresh()` and `loki_count()` are unit-tested.)
 - **Log Shipper Dropped Entries** (three arms, #993. Two log-pipe arms, and `down` fires on
   whichever counted MORE. **Arm 1, client-side:**
   `sum(increase({__name__=~"loki_write_dropped_entries_total"}[1h]))` from Prometheus, which
@@ -953,7 +919,8 @@ checks each gate suppresses.
   clock/backfill problem, and every other reason is throughput or limits. 1000 held a 1020-entry
   hour red for 51 minutes, and the client counter is non-zero in 26 of ~336 hours with NOTHING
   between 1020 and 6261; the derivation and the rejected streak are at the `DECIDED:` marker in
-  `bridge/config_io.py`. Where **Loki Log Ingestion** catches TOTAL silence, this surfaces PARTIAL
+  `bridge/config_io.py`. Where the `loki-homelab` silence rules (`LokiHostLogsSilent`, `LokiPodLogsSilent`,
+  `LokiPiLogsSilent`) catch TOTAL silence, this surfaces PARTIAL
   loss, shipper-side or Loki-side. `increase()` handles counter resets, and no series on either
   arm gives 0 and `up` (a dead shipper scrape is Scrape Targets' page). **Prom-dependent**, so the
   Prometheus gate suppresses it. Pure `shipper_dropped()` is unit-tested.
@@ -1056,7 +1023,7 @@ checks each gate suppresses.
   reads `Monitor not found or not active.`, and its verdicts are lost for as long as the cron
   and the static monitors carry different tokens. A burst of `http=404` lines from Traefik rejecting every router belongs to
   Traefik 404 Flood (#1322).
-  In `LOKI_DEPENDENT`. A fetch that hits the 5000-line cap says so in the message. Two pushers
+  Gated by `startup_grace`, and it fails open on a Loki error. A fetch that hits the 5000-line cap says so in the message. Two pushers
   bypass the library's shape and are read by a second selector (#1943): the `crowdsec-jobs`
   sidecar of the CrowdSec engine pod and the pi-peer-backup, configarr-health and
   janitorr-health CronJobs (#5569). No such pod has a `logger`, so each
@@ -1065,28 +1032,6 @@ checks each gate suppresses.
   (`{container=~"pi-peer-backup|crowdsec-jobs|configarr-health|janitorr-health"}`) reads
   them, and the two fetches are merged before the verdict. The selector is not
   `job=~"syslog|k8s"`, because the cap was sized against the syslog stream alone.)
-- **Kuma Notification Delivery** (a notification Kuma tried to send and dropped, #1891. Kuma logs
-  `Cannot send notification to <name>` and does not retry, so the transition behind that line
-  reached nobody (both observed cases were Discord HTTP 429s during the qbittorrent lockout).
-  Discord Delivery GET-verifies the webhook and cannot see a dropped POST.
-  `check_kuma_notify_failures` reads Kuma's line out of `{container="uptime-kuma"}` over
-  `KUMA_NOTIFY_FAILURES_WINDOW_S` (3h) through `src.loki_lines`, and `down` names each
-  notification with its drop count and the reasons Kuma recorded (`reasons: HTTP 429 Too Many
-  Requests x2`). The reason is Kuma's NEXT line, also at ERROR level (#1895: all 74 drops in 14
-  days had one, 69 x 429 and 5 x 400), so the LogQL fetches both lines and counts reasons as a
-  set beside the drops rather than joining them one to one. A drop with no reason in the window
-  reads `reason not logged`. An HTTP reason is reduced to its status before it reaches the tile,
-  because the axios message can carry the request URL and Discord's is the webhook secret.
-  Raising Kuma's log level is neither needed nor safe (uptime-kuma/CLAUDE.md, the debug-logging
-  trap).
-  A 400 is an oversized push `msg`: Kuma puts a push monitor's `msg` into a Discord embed field
-  capped at 1024 chars and never truncates it. `bridge.net.push` and `kuma-push-lib.sh` therefore
-  cap the `msg` at 900 chars (`PUSH_MSG_MAX`, keeping a trailing `(N cycles)`, #2013), and the
-  release-staleness-check producer pushes names only.
-  The window is the whole hysteresis: a drop pages for 3h and clears on its own. The tile
-  notifies EMAIL as well as Discord, on purpose, because a page for a dropped Discord send that
-  goes only over the same webhook is the failure it reports. In `LOKI_DEPENDENT`; a fetch that
-  hits the 500-line cap says so in the message.)
 - **Discord Delivery** (GET-verifies **all five** Discord notification webhooks: Kuma's own
   `monitor_discord_webhook_url`; CrowdSec's `crowdsec_discord_webhook_url`, which CrowdSec posts
   ban alerts to *directly*, not via Kuma; `gitops_deploy_discord_webhook`, which delivers the
@@ -1155,7 +1100,7 @@ Cluster Prometheus Reachable retired as a gate (#2825), and its four members are
 - **`STARTUP_GRACE` holds the reach-out checks that have no reachability gate and no per-check
   hysteresis**: **n8n Prod Workflows**, **Bazarr Health**, **Prowlarr Indexers** and **SMART Data /
   Health**. It is a hysteresis, not a suppression, and it is the peer of
-  `PROM_DEPENDENT`/`LOKI_DEPENDENT`. The cause is the weekly Sunday 07:30 host reboot: the
+  `PROM_DEPENDENT`. The cause is the weekly Sunday 07:30 host reboot: the
   bridge's first cycle runs before those heavy apps finish starting, so each un-graced
   `max_retries=0` monitor flipped DOWN for one cycle (`Connection refused`, n8n `HTTP 404`) and
   recovered on the next. `apply_startup_grace()` in `run_once` holds each `up` for the first

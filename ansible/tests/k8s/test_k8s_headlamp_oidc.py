@@ -19,9 +19,9 @@ from _manifest_guards import (
 def _headlamp_pod_spec(**overrides) -> dict:
     """The rendered pod spec.
 
-    `domain` is a SOPS value, so the URL defaults that read it expand against the render
-    context's `example.com` stub. The assertions below are therefore about each URL's SHAPE —
-    which name it pins and which path it ends on — which is the property that has to hold anyway.
+    The URL defaults expand against group_vars' real `domain`, but the assertions below are
+    about each URL's SHAPE — which name it pins and which path it ends on — so they hold for
+    any domain the inventory carries.
     """
     context = _role_context(
         "headlamp",

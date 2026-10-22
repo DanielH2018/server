@@ -498,6 +498,11 @@ def services_from_changed_paths(paths: list[str]) -> ChangeSet:
         if p == _SECRETS_FILE:
             cs.secrets = True
             continue
+        # A k8s role holding a copy of a file outside its own tree defer-and-alerts like its
+        # own change would: a setup file it imports, or a file its image embeds (#4840). Here
+        # rather than in `plan_tick`, because `k8s_change_commits` reads `.k8s` from this
+        # function alone to name the commit each `k8s_unapplied` line records (#3111).
+        cs.k8s |= deploy_cross_role.k8s_roles_holding(p)
         # Tested FIRST, and it does not `continue` past the plane flags below: the manual
         # set overlaps _BROAD_SETUP_PREFIXES (the bring-up playbooks sit in both), and the
         # alert still needs to name the right remediation playbook.
@@ -512,12 +517,6 @@ def services_from_changed_paths(paths: list[str]) -> ChangeSet:
             cs.broad = True
             cs.broad_setup = True
             cs.setup_roles |= setup_roles_for(p)
-            # A k8s role importing this setup file defer-and-alerts like its own change would.
-            # Here rather than in `plan_tick`, because `k8s_change_commits` reads `.k8s` from
-            # this function alone to name the commit each `k8s_unapplied` line records (#3111).
-            cs.k8s |= deploy_cross_role.K8S_ROLES_IMPORTING_SETUP_FILES.get(
-                p, frozenset()
-            )
             continue
         if p.startswith(_PI_SHARED_PREFIX):
             cs.pi_shared = True

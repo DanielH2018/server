@@ -160,14 +160,12 @@ class Reach(NamedTuple):
         A changed setup-role file also maps to every k8s role that ships a copy of it. Those
         are `K8S_ROLES_IMPORTING_SETUP_FILES`, the table `changes` reads. The table is read
         directly rather than through `changes.k8s`, which also holds each path's own role
-        before `tag_for` drops a role test (#4136).
+        before `tag_for` drops a role test (#4136). A file a k8s role's image embeds from
+        outside every role maps to that role the same way, by `K8S_BUILD_CONTEXT_FILES` (#4840).
         """
         readers = deploy_cross_role.k8s_lookup_readers(self.loud, repo)
         holders = set().union(
-            *(
-                deploy_cross_role.K8S_ROLES_IMPORTING_SETUP_FILES.get(p, frozenset())
-                for p in self.loud
-            )
+            *(deploy_cross_role.k8s_roles_holding(p) for p in self.loud)
         )
         return {t for p in self.loud if (t := tag_for(p, declared))} | (
             (readers | holders) & declared

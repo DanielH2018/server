@@ -69,6 +69,13 @@ PUSH_ONLY_JOBS = frozenset({"prove"})
 # The proof arm of a dependent job's condition. `prove` is skipped on a dispatch, so its output
 # is empty and the comparison is true there; the evaluator reads the arm that way.
 _PROOF_ARM = "needs.prove.outputs.proven != 'true'"
+# The run arm of a dependent job's condition (#5783). A dispatch is not cancelled and `prove`
+# is skipped, so the inner arm is true and so is the whole. It is replaced whole, because
+# `truthy` splits on `||` and does not read parentheses.
+_CANCEL_ARM = (
+    "(needs.prove.result == 'cancelled' || needs.prove.result == 'failure'"
+    " || (!cancelled() && needs.prove.outputs.proven != 'true'))"
+)
 # The draft arm of every job's condition. A dispatch carries no pull request, so the field is
 # unset and the comparison is true there.
 _DRAFT_ARM = "github.event.pull_request.draft != true"
@@ -125,7 +132,8 @@ def _job_runs_on_dispatch(condition: str | None) -> bool:
     if "always()" in condition:
         return True
     condition = (
-        condition.replace(_PROOF_ARM, "true")
+        condition.replace(_CANCEL_ARM, "true")
+        .replace(_PROOF_ARM, "true")
         .replace(_DRAFT_ARM, "true")
         .replace("!cancelled()", "true")
     )

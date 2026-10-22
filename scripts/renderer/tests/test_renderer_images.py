@@ -20,7 +20,7 @@ from dataclasses import replace
 
 from lib.exit_codes import RENDER_BAD_ARGS, RENDER_FAILED, RENDER_OK, RENDER_REFUSED
 from lib.render_guard import BUILT_IMAGE_TAG_STUBS
-from deploy_tools import ci_images
+from deploy_tools import bundle_census, ci_images
 from lib import yaml_fast
 from renderer import homelab_render
 from renderer.renderer_lib import cluster, images, placeholders
@@ -159,15 +159,29 @@ def test_all_images_writes_all_ten_whatever_the_role_names(tmp_path):
     assert set(_tags(out)) == _contexts(out) == TEN
 
 
-@pytest.mark.parametrize("other", [["--shared-only"], ["--secret-stubs", "s.yml"]])
-def test_all_images_beside_a_mode_that_writes_no_image_is_a_usage_error(
-    tmp_path, capsys, other
-):
-    argv = ["cluster", "--out", str(tmp_path), "--all-images", *other]
+def test_all_images_beside_secret_stubs_is_a_usage_error(tmp_path, capsys):
+    argv = [
+        "cluster",
+        "--out",
+        str(tmp_path),
+        "--all-images",
+        "--secret-stubs",
+        "s.yml",
+    ]
     with pytest.raises(SystemExit) as exc:
         homelab_render.main(argv)
     assert exc.value.code == RENDER_BAD_ARGS
-    assert "takes neither --shared-only nor --secret-stubs" in capsys.readouterr().err
+    assert "does not take --secret-stubs" in capsys.readouterr().err
+
+
+def test_a_shared_only_render_with_all_images_passes_the_images_jobs_plan(tmp_path):
+    """The publish job's no-tag render: the `images` job's plan refuses one without tags.json,
+    and `publish` needs that job (#5593). The census still passes the bundle beside it."""
+    out = tmp_path / "out"
+    argv = ["cluster", "--out", str(out), "--shared-only", "--all-images"]
+    assert homelab_render.main(argv) == RENDER_OK
+    assert {name for name, _ in ci_images.plan(out)} == TEN
+    assert bundle_census.census(out, []) == []
 
 
 @pytest.mark.parametrize("name", sorted(TEN))

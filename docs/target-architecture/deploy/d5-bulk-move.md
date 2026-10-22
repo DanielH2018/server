@@ -232,25 +232,26 @@ carries #5764's head unchanged on a `worktree-claude+` branch, the only kind the
 user's GitHub account can update, because `land.sh` updates a PR branch whose base went
 stale.
 
-Where each role still on Ansible stands:
+Where each role that was on Ansible on 2026-10-19 stands. Every one has flipped, and the
+dates are UTC:
 
 | Role | Conversion | Flip |
 |---|---|---|
-| authelia | done (#5691) | own window |
-| blackbox-exporter | none needed | Wave A's last PR, on or after 2026-10-20T06:19Z |
-| crowdsec | done: H2.4b (#5711, #5739), H2.4c and the inert verify with its Pi channel (#5753), verify's fence peers (#5762), LAPI initContainer and arm move (#5765) | own window; the flip PR renames `templates/verify-inert/` to `templates/verify/`, states the hop-2 trade and merges only with the operator present; a follow-up PR deletes `tasks/` |
-| dri-device-plugin | done (#5529) | waits on M2's PR 4b (#5527) |
-| headlamp | done (#5681) | after observability |
-| home-assistant | none needed | own window |
-| janitorr | done (#5602, #5706, #5715) | ready |
-| jellyfin | done (#5620, #5708) | ready; drops its VAAPI checks |
-| netpol-baseline | done (#5687, #5700) | last |
-| observability | done (#5681, #5728) | ready |
-| pihole | done (#5702, #5710, #5727, #5745) | own window; the flip moves the guard into `templates/precheck/` and adds the break-glass (#5740) |
-| registry | done (#5689, #5729, #5746) | ready |
-| uptime-kuma | done (#5724) | ready |
-| wg-easy | none needed | own window, operator on the LAN |
-| zigbee2mqtt | none needed | own window |
+| authelia | done (#5691) | flipped 2026-10-21 in its own window (#5813) |
+| blackbox-exporter | none needed | flipped 2026-10-21, Wave A's last PR (#5807) |
+| crowdsec | done: H2.4b (#5711, #5739), H2.4c and the inert verify with its Pi channel (#5753), verify's fence peers (#5762), LAPI initContainer and arm move (#5765) | flipped 2026-10-21 in its own window (#5814); a follow-up PR deletes `tasks/` |
+| dri-device-plugin | done (#5529) | flipped 2026-10-22 (#5832) |
+| headlamp | done (#5681) | flipped 2026-10-21 (#5822) |
+| home-assistant | none needed | flipped 2026-10-21 in its own window (#5812) |
+| janitorr | done (#5602, #5706, #5715) | flipped 2026-10-21 (#5820) |
+| jellyfin | done (#5620, #5708) | flipped 2026-10-21 (#5820) |
+| netpol-baseline | done (#5687, #5700) | flipped 2026-10-22, the last Wave D flip (#5833) |
+| observability | done (#5681, #5728) | flipped 2026-10-21 (#5816) |
+| pihole | done (#5702, #5710, #5727, #5745) | flipped 2026-10-21 in its own window, with a break-glass for the sibling guard (#5818) |
+| registry | done (#5689, #5729, #5746) | flipped 2026-10-22 (#5830) |
+| uptime-kuma | done (#5724) | flipped 2026-10-21 (#5820) |
+| wg-easy | none needed | flipped 2026-10-22 in its own window (#5831) |
+| zigbee2mqtt | none needed | flipped 2026-10-21 in its own window (#5808) |
 
 **Every D5 conversion has landed, and the work continues as the `claude` user
 (2026-10-19).** The last was #5765. What is left is the flips, then step 27. Four things
@@ -267,6 +268,48 @@ learned in this stretch bear on them:
   "does not close #N" in a sentence makes `land.sh --arm-merge` refuse the landing.
 - A stale soak still blocks promotion until its deadline (#5704). The workaround, deleting
   the soak pod, is operator-only.
+
+**Status, 2026-10-22: Wave D is complete (step 26), and step 28 has landed.** These PRs moved
+the last roles to Flux after #5765. traefik's own window landed earlier, in #5720.
+
+| PR | Merge | Roles |
+|---|---|---|
+| [#5807](https://github.com/DanielH2018/server/pull/5807) | `5a3ffbef1` | blackbox-exporter |
+| [#5816](https://github.com/DanielH2018/server/pull/5816) | `839918e40` | observability |
+| [#5820](https://github.com/DanielH2018/server/pull/5820) | `48ae33648` | janitorr, jellyfin, uptime-kuma |
+| [#5822](https://github.com/DanielH2018/server/pull/5822) | `7c3d055d6` | headlamp |
+| [#5808](https://github.com/DanielH2018/server/pull/5808) | `c84549c66` | zigbee2mqtt (own window) |
+| [#5812](https://github.com/DanielH2018/server/pull/5812) | `3a82e729a` | home-assistant (own window) |
+| [#5814](https://github.com/DanielH2018/server/pull/5814) | `8b49b6ced` | crowdsec (own window) |
+| [#5813](https://github.com/DanielH2018/server/pull/5813) | `07ebc40cf` | authelia (own window) |
+| [#5818](https://github.com/DanielH2018/server/pull/5818) | `aff5bf9cd` | pihole (own window) |
+| [#5831](https://github.com/DanielH2018/server/pull/5831) | `fea806faa` | wg-easy (own window) |
+| [#5830](https://github.com/DanielH2018/server/pull/5830) | `cba774b7f` | registry |
+| [#5832](https://github.com/DanielH2018/server/pull/5832) | `176888332` | dri-device-plugin |
+| [#5833](https://github.com/DanielH2018/server/pull/5833) | `4cb9eb2ad` | netpol-baseline, merged 2026-10-22 at 02:34Z |
+
+- **The operator overrode M6 for uptime-kuma.** On 2026-10-21 the operator ruled that D5 flips
+  uptime-kuma at once, with janitorr and jellyfin (#5820). That overrides M6's rule that
+  uptime-kuma never flips. [#5821](https://github.com/DanielH2018/server/issues/5821) tracked
+  the M6 amendment, and [#5884](https://github.com/DanielH2018/server/pull/5884) landed it
+  on 2026-10-22.
+- **`render_targets.py daniel-box` prints `flux` alone.** After #5833, `uv run python
+  scripts/deploy_tools/render_targets.py daniel-box` printed `flux`, and `grep -c 'owner:
+  flux' ansible/inventory/host_vars/daniel-box.yml` printed 59. The first output is step 27's
+  precondition.
+- **Step 27 is open and waits on an operator step.** The render-records disarm,
+  [#5839](https://github.com/DanielH2018/server/pull/5839), fails
+  `test_the_committed_cluster_files_pass_check`, because removing the Kuma tile leaves the
+  cluster file holding `render_records_push_token` with no cluster render that references it.
+  The step now says which command clears it.
+- **Step 28 landed.** The bootstrap drill,
+  [#5824](https://github.com/DanielH2018/server/pull/5824), merged on 2026-10-22 at `fdae34795`.
+  Its kind drill legs ran green.
+- **Steps 29 and 30 wait on H1 through H1.7b**
+  (`docs/target-architecture/host/h1-cluster-config-to-flux.md`). H1.2 landed as
+  [#5847](https://github.com/DanielH2018/server/pull/5847) (`7ca56d11e`). H1.3, MetalLB
+  ([#5862](https://github.com/DanielH2018/server/pull/5862)), is a draft that waits on the
+  operator's pre-merge census.
 
 Related issues:
 
@@ -2979,6 +3022,14 @@ sizes its batch of roles against that projection.
       follows both.
     - **Live check.** After the tick, `systemctl list-unit-files 'kuma-check-render-records*'`
       lists no unit, as exit 1 reads it.
+    - **The cluster file needs an operator regeneration.** Removing the tile drops the last
+      cluster render that substitutes `render_records_push_token`, so
+      `scripts/secrets_mgmt/tests/test_cluster_vars_tree.py::test_the_committed_cluster_files_pass_check`
+      fails with "the cluster file holds render_records_push_token, and no cluster render
+      references it". The operator runs `uv run python scripts/secrets_mgmt/cluster_vars.py
+      write` on the PR branch and commits the regenerated `ansible/vars/cluster-vars.*` files.
+      The token stays in `secrets.yml`, because the `render_records` setup role still reads it
+      until R4 deletes the role.
 28. **The bootstrap drill PR** (about 190 lines). It lands before the flux PR, because the
     flux PR removes the only path that installs Flux on a rebuilt cluster. D1's flux role
     applies `cluster/flux/` from its own task. Once `flux` is `owner: flux`, the Ansible k8s

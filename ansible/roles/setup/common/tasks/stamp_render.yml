@@ -16,10 +16,10 @@
 # own path from the repo root, so a role stamps its own templates and the check needs to know
 # about none of them.
 #
-# PER-HOST BY CONSTRUCTION. A fragment exists only where its role ran. optimize_pi renders
-# pi-sd-health.sh and pi-recovery-health.sh on daniel-pi, which runs no manifest-prune-check, so
-# those simply produce no fragment here rather than being stamped as covered by a host that never
-# renders them. That is why this is not a glob over the whole tree.
+# PER-HOST BY CONSTRUCTION. A fragment exists only where its role ran. The homelab-daniel-pi
+# package ships pi-sd-health.sh and pi-recovery-health.sh to daniel-pi, which runs no
+# manifest-prune-check, so those produce no fragment here rather than being stamped as covered
+# by a host that never renders them. That is why this is not a glob over the whole tree.
 #
 # Callers pass:
 #   stamp_render_name       a filename-safe group id, unique across roles (e.g. k3s-backup-health)

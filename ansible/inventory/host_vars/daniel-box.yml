@@ -125,6 +125,12 @@ containers_list:
   - name: cluster-base
     platform: k8s
     owner: flux
+  # MetalLB's vendored manifest and the address pool (H1.3). Flux applies the tag through
+  # `promote` and every Ansible path skips it. It renders prune: false, and it is untiered, so
+  # `NEVER_SHED` keeps it out of the lost-node shed set.
+  - name: metallb
+    platform: k8s
+    owner: flux
   # The IngressRoute, Middleware and TLSOption CRDs, alone in their tag so it can render
   # prune: false and its directory never substitutes (#5666). traefik's tier keeps it out of
   # the shed set.

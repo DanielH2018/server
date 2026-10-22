@@ -16,6 +16,8 @@ and reads each route the walk ends on. Each label set carries one expected outco
   the start: each `HostReconcileFailed`, and each `HostUpdateStale` once
   `observability_expected_hosts` lists a host and `host-checks.yaml` carries its rule (H3.9c).
   Each node's `WiredLinkDown` warning pages Discord from the start too (#5124).
+  M5's four log rules and four ruler-watching alerts page from its PR 4b. Its
+  `LokiHomelabDown` stays `blackhole` until M6's batch A3 deletes it.
   M6's `HealthGateDrill` (`DRILL`) is critical and carries `drill="true"`, so it must reach
   the blackhole ahead of both critical routes.
 
@@ -47,6 +49,12 @@ INGRESS_RULES = (
 HOST_RULES = ROLES / "k8s" / "observability" / "files" / "rules" / "host-checks.yaml"
 DEPLOY_PIPELINE_RULES = (
     ROLES / "k8s" / "observability" / "files" / "rules" / "deploy-pipeline.yaml"
+)
+LOKI_LOG_RULES = (
+    ROLES / "k8s" / "loki-homelab" / "files" / "rules" / "homelab-logs.yaml"
+)
+LOKI_HEALTH_RULES = (
+    ROLES / "k8s" / "observability" / "files" / "rules" / "loki-homelab.yaml"
 )
 # A per-target ingress alert takes `service` from its probe target, so a probed service
 # stands in for it.
@@ -99,6 +107,26 @@ def host_sets(shadow: bool) -> dict[str, dict[str, str]]:
     }
 
 
+def loki_sets(shadow: bool) -> dict[str, dict[str, str]]:
+    """The labels each M5 rule reaches Alertmanager with, keyed by alert name.
+
+    The log rules live in loki-homelab's `homelab-logs.yaml` and the ruler-watching alerts in
+    observability's `loki-homelab.yaml`. Every rule carries a literal `service`, so the rule's
+    own labels are the whole set, and a rule that gains or drops `shadow`, or changes
+    `severity`, moves to another route and fails its expected outcome.
+
+    Args:
+        shadow: Whether to return the rules that carry `shadow`, or those that do not.
+    """
+    sets = {}
+    for path in (LOKI_LOG_RULES, LOKI_HEALTH_RULES):
+        for group in yaml_fast.safe_load(path.read_text())["groups"]:
+            for rule in group["rules"]:
+                if ("shadow" in rule["labels"]) == shadow:
+                    sets[rule["alert"]] = {"alertname": rule["alert"], **rule["labels"]}
+    return sets
+
+
 # Each label set and the receivers Alertmanager sends it to.
 PAGING = {
     "warning": (
@@ -141,12 +169,20 @@ PAGING = {
         )
         for name, labels in host_sets(shadow=False).items()
     },
+    **{
+        name: (
+            labels,
+            ["discord", "email"] if labels["severity"] == "critical" else ["discord"],
+        )
+        for name, labels in loki_sets(shadow=False).items()
+    },
 }
 DEPLOY_HOLD, _ = PAGING["deploy-hold-active"]
 # The shadow sets, as M4's ingress-probes rules and M3's host-checks rules ship them.
 SHADOW = {
     "blackbox-exporter-down": ingress_set("BlackboxExporterDown"),
     **host_sets(shadow=True),
+    **loki_sets(shadow=True),
 }
 WATCHDOG = {"alertname": "Watchdog", "severity": "info", "service": "observability"}
 
@@ -276,6 +312,22 @@ def test_host_sets_names_every_host_check_rule():
         "HostReconcileFailed/daniel-server",
         "HostReconcileFailed/daniel-pi",
     }
+
+
+def test_loki_sets_name_every_m5_rule():
+    """Non-vacuity for `loki_sets`: the eight M5 alerts that page from PR 4b, and the one
+    that stays shadow until M6's batch A3."""
+    assert set(loki_sets(shadow=False)) == {
+        "LokiHostLogsSilent",
+        "LokiPodLogsSilent",
+        "LokiPiLogsSilent",
+        "KumaNotificationDropped",
+        "LokiHomelabMetricsMissing",
+        "LokiRulerEvaluationFailing",
+        "LokiRulerNotEvaluating",
+        "LokiRulerNotificationsFailing",
+    }
+    assert set(loki_sets(shadow=True)) == {"LokiHomelabDown"}
 
 
 def test_a_paging_route_without_the_mute_is_flagged():

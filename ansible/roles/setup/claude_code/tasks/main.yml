@@ -136,7 +136,7 @@
     mode: "0644"
   become: true
   when: claude_code_fleet_caps_enabled
-  notify: Reload systemd
+  notify: Reload systemd for claude_code
 
 # The way out: removing the drop-in drops the shared ceiling, and the unit's own Slice= line
 # disappears with the same variable, which puts claude-rc.service back in system.slice on its
@@ -148,7 +148,7 @@
     state: absent
   become: true
   when: not claude_code_fleet_caps_enabled
-  notify: Reload systemd
+  notify: Reload systemd for claude_code
 
 - name: Install the Remote Control host units
   tags: [claude_code]
@@ -162,7 +162,7 @@
     - claude-rc-restart.timer
   become: true
   notify:
-    - Reload systemd
+    - Reload systemd for claude_code
     - Restart claude-rc
 
 - name: Ensure the Remote Control config directory exists
@@ -253,7 +253,7 @@
     - claude-cgroup-metrics.timer
   become: true
   notify:
-    - Reload systemd
+    - Reload systemd for claude_code
     - Restart claude-cgroup-metrics timer
 
 - name: Enable and start the cgroup metrics timer
@@ -283,7 +283,7 @@
     - claude-memory-sync.timer
   become: true
   when: claude_code_memory_sync_enabled
-  notify: Reload systemd
+  notify: Reload systemd for claude_code
 
 # Shares claude-rc's webhook file in /etc/claude-rc; rewriting it here changes nothing.
 - name: Install the memory store copy failure alert
@@ -340,7 +340,7 @@
     - claude-memory-sync-alert.service
   become: true
   when: not claude_code_memory_sync_enabled
-  notify: Reload systemd
+  notify: Reload systemd for claude_code
 
 # ── The agent users ─────────────────────────────────────────────────────────────────────
 # Unix users for Claude sessions with no sudo, no group membership and no read on

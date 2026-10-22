@@ -10,6 +10,8 @@ Run: uv run pytest scripts/validate/tests/test_validate_shell_templates.py
 
 import shutil
 
+from lib import yaml_fast
+from lib.repo_paths import HOST_VARS
 from validate import shell_templates as v
 from validate.validate_lib import shell_lint as sl
 
@@ -203,6 +205,21 @@ def test_component_defaults_and_host_reach_the_render_context():
     assert ctx["optimize_pi_recovery_restart_enabled"] is True
     # wg-easy runs only on daniel-pi, so its containers_list proves the host layer is the Pi's.
     assert any(c["name"] == "wg-easy" for c in ctx["containers_list"])
+
+
+def test_hostvars_carries_every_hosts_inventory_address():
+    # A `hostvars` stub here once replaced render_context's whole map with daniel-server alone,
+    # so the etcd drill's fence rendered `STUB` where daniel-box's and daniel-pi's addresses go.
+    path = (
+        v.ROLES / "setup" / "hypervisor" / "templates" / "etcd-restore-drill-vm.sh.j2"
+    )
+    text = sl.render_template(path, v.template_context(path))
+    box, pi = (
+        yaml_fast.safe_load((HOST_VARS / f"{h}.yml").read_text())["server_ip"]
+        for h in ("daniel-box", "daniel-pi")
+    )
+    assert f"https://{box}:6443/version" in text
+    assert f"http://{pi}:51821" in text
 
 
 def test_a_component_no_package_lists_has_no_host():

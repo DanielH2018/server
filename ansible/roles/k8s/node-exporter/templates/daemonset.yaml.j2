@@ -44,6 +44,8 @@ spec:
             # series, not the per-pod cardinality this exclusion exists to cut off.
             - --collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc|var/lib/kubelet/pods)($|/)
             - --collector.textfile.directory=/textfile
+            # The iscsi-sessions sidecar's directory, a second instance of the repeatable flag.
+            - --collector.textfile.directory=/iscsi-textfile
           ports:
             - containerPort: 9100
           # Host access here is READ-ONLY and comes from the four hostPath mounts below, not
@@ -133,6 +135,9 @@ spec:
             - name: node-exporter-textfile
               mountPath: /textfile
               readOnly: true
+            - name: node-exporter-iscsi-textfile
+              mountPath: /iscsi-textfile
+              readOnly: true
           # 1 core, not 200m. This exporter renders ~320 metric families per request and was
           # throttled on 42.4% of CFS periods (daniel-box) / 31.7% (daniel-server), measured
           # 2026-08-29. On its own that ratio is close to an artifact — absolute throttled
@@ -145,6 +150,29 @@ spec:
           # Raising the ceiling shrinks it; the probe path is the actual cause and is
           # unchanged here.
 {{ container_resources(cpu_limit='1', mem_limit='128Mi', cpu_request='20m', mem_request='32Mi') }}
+        # Writes iscsi-sessions.prom, the node's iSCSI session states, every 60s (#5826). A
+        # sidecar rather than a host timer because this DaemonSet already reaches both nodes and
+        # mounts /sys, and Flux applies it; a timer in setup/k3s would be a hand apply that
+        # misses the agent node. The script is inlined, not mounted from a ConfigMap, so a change
+        # to it changes the pod template and rolls the DaemonSet. It reuses the exporter's
+        # image for that image's busybox shell. No probes: pod Ready is the AND of its
+        # containers, and a readiness probe here would let this check pull the exporter out of
+        # the Kustomization's wait. A wedged loop surfaces as IscsiSessionsNotReporting.
+        - name: iscsi-sessions
+          image: {{ node_exporter_k8s_image }}
+          command:
+            - /bin/sh
+            - -c
+            - |
+              {{ lookup('file', playbook_dir + '/roles/k8s/node-exporter/files/iscsi-sessions.sh') | indent(14) }}
+{{ hardened_security_context(read_only=true, non_root=true, run_as_user=65534) }}
+          volumeMounts:
+            - name: node-exporter-sys
+              mountPath: /host/sys
+              readOnly: true
+            - name: node-exporter-iscsi-textfile
+              mountPath: /iscsi-textfile
+{{ container_resources(cpu_limit='100m', mem_limit='16Mi', cpu_request='5m', mem_request='8Mi') }}
       volumes:
         - name: node-exporter-proc
           hostPath:
@@ -161,3 +189,8 @@ spec:
           hostPath:
             path: /var/lib/node-exporter-textfile
             type: DirectoryOrCreate
+        # The iscsi-sessions sidecar writes here and the exporter reads it. An emptyDir, not the
+        # hostPath above, so the sidecar needs no write access to the host.
+        - name: node-exporter-iscsi-textfile
+          emptyDir:
+            sizeLimit: 1Mi

@@ -390,6 +390,14 @@ Instead it reads the cluster every 30 seconds:
   headroom (#5512, #5566, #5546, #5652).
   `ansible/tests/setup/test_lander_deadlines_cover_the_soak.py` renders the published bundle
   and fails once a newly published tag outgrows that headroom (#5427).
+  Inside the no-promotion window around the weekly reboot, `decide` defers every promotion (D5.2b2),
+  so a landing that merges as the window opens waits up to 22200 seconds before any
+  promotion starts. The first poll inside the window moves the cap by the window's remaining
+  length, up to the unit's `LAND_WINDOW_GRACE`. Both lander units set the window's full
+  length, and every bound above `LAND_DEADLINE` covers it: claude-land's `TimeoutStartSec` of
+  15h, and the 860min the Renovate lander unit sets, with `land_renovate_pr.py`'s `LAND_TIMEOUT_S`. The
+  Renovate lander needs it too: its unit runs on after the session ends, so a landing started
+  late on a Saturday can still be waiting on Sunday's window (#5457).
 
 Two holds coexist until slice D6 retires the deployer, and `probe.py landing` prints both on
 every run, each naming its source and the tags it holds:

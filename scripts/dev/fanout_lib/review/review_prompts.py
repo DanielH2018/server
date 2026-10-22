@@ -140,6 +140,12 @@ may argue a finding is wrong; report it again only if the argument does not hold
 new defect the fix introduces as well, including one that only shows against the rest of the
 change.
 
+A finding on `(red/green gate)` says a red test, written from the issue text before the fix,
+still fails. The reply may contest that test by citing a `file:line` that contradicts its
+premise. Open the cited line and judge the premise against the tree. Report the finding
+again, with its file, unless the citation shows the test is wrong and the change is right:
+an unanswered gate finding with no report from you lets the PR go on with that test failing.
+
 {_as_data("The earlier findings", asked)}
 
 {_as_data("The author's reply", reply)}
@@ -156,9 +162,13 @@ def fix_prompt(found: list[dict], pr: str, red: str = "") -> str:
         "A red test file may gain new test functions, fixtures, helpers and imports. What the "
         "red commit wrote in it, and anything there a red test calls or requests, may not "
         "change; a test that was already in the file and that no red test calls is yours to "
-        "update like any other. Where a finding says a red test is too weak, "
+        "update like any other, and so is a helper the issue names in backticks that was in the "
+        "file before the red commit. Where a finding says a red test is too weak, "
         "keep it and append a test that checks what the finding asks for. Where a finding says "
-        "a red test is wrong, answer it in one sentence instead.\n"
+        "a red test is wrong, or the green gate fails on a red test whose premise the tree "
+        "contradicts, contest it in one sentence of the form `<node> is wrong: <why>` that cites "
+        "the `file:line` showing the premise is false, and leave the test as it is. A fresh "
+        "reviewer judges the contest. Say `is wrong` of a red test only to contest it.\n"
         if red
         else ""
     )

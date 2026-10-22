@@ -147,7 +147,11 @@ def _argv_references(nodes: list[ast.AST]) -> set[str]:
     The string must be a bare path and nothing else. `session-health.py` carries the
     sentence "…the staleness gate (scripts/deploy_tools/deploy_lib/staleness.py, exit 4)…" in a
     string it prints, and reading that as an invocation would put a deploy gate behind a session hook.
+
+    A dict key is skipped too. It names a file as data, never as an argv element: the
+    deployer's `K8S_BUILD_CONTEXT_FILES` is keyed by `obs_api.py`'s path (#4840).
     """
+    keys = {key for node in nodes if isinstance(node, ast.Dict) for key in node.keys}
     docstrings = {
         node.body[0].value
         for node in nodes
@@ -165,6 +169,7 @@ def _argv_references(nodes: list[ast.AST]) -> set[str]:
             isinstance(node, ast.Constant)
             and isinstance(node.value, str)
             and node not in docstrings
+            and node not in keys
         ):
             match = ARGV_RE.fullmatch(node.value.strip())
             if match:

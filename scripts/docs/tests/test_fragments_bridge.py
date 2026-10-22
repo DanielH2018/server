@@ -127,9 +127,7 @@ def test_every_non_gate_check_is_in_exactly_one_gate_set_row():
     rows = fb.read_check_rows(fb.CHECK_TABLE.read_text())
     names = fb.read_gate_set_names(fb.GATES.read_text())
     body = fb.render_gate_sets(rows, names)
-    assert {"prometheus", "loki_reachable", "b2_reachable", "wan_reachable"} <= set(
-        names
-    )
+    assert {"prometheus", "b2_reachable", "wan_reachable"} <= set(names)
     for row in rows:
         if not row.get("is_gate"):
             assert body.count(f"`{row['name']}`") == 1, row["name"]

@@ -24,8 +24,8 @@ failure is benign in both directions: a link disappears, nothing breaks and noth
 anywhere wrong. Recorded because the link set reads deterministic and is not.
 
 WHY A BUILD HOOK AND NOT A SCRIPT IN THE PAGE. `assets/fqdn-links.js` runs in the browser
-because the domain it resolves is SOPS-sourced and nothing static can know it. A path -> URL
-map has no such problem: both halves are known at build time. Resolving here produces real
+because the name it resolves depends on whether the reader is on the LAN or the public name,
+which nothing static can know. A path -> URL map has no such problem: both halves are known at build time. Resolving here produces real
 anchors in the HTML, costs the reader no JavaScript, and lets a test check every emitted href
 against the tree.
 

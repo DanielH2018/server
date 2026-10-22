@@ -54,4 +54,4 @@
     - /etc/claude-fanout
   become: true
   when: not claude_code_fanout_alert_enabled
-  notify: Reload systemd
+  notify: Reload systemd for claude_code

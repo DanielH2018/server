@@ -50,7 +50,10 @@ render_records`, which the GitOps tick runs itself; it is not in `containers_lis
   `not k8s_dry_run | bool` — before that a dry run installed host scripts, crons and
   node-staged modules across about twenty roles, measured on 2026-09-25. Its own writes are the
   render records, its own worktree, and the throwaway render directories the dry run makes.
-- **Mode (explicit + reversible):** `render_records_enabled` in `group_vars/all.yml`. False
+- **Mode (explicit + reversible):** `render_records_state` in `defaults/main.yml` is pinned
+  `absent` until R4 deletes the role, whatever `render_records_enabled` says, and the role has
+  no Kuma tile. To re-arm it, restore the derivation from `render_records_enabled` and the
+  tile from git history. `render_records_enabled` in `group_vars/all.yml`, when false,
   runs the role's absent arm on `render_records_host`, which stops the timer and removes the
   units, the worktree and the role's directories; true and a re-run restores them. To move the
   producer, apply false on the old host before changing `render_records_host`: the playbook
