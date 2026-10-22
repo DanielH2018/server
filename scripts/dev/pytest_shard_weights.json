@@ -115,7 +115,6 @@
  "ansible/roles/k8s/monitor-bridge/tests/test_check_k8s_workload_replicas.py": 0.0,
  "ansible/roles/k8s/monitor-bridge/tests/test_check_k8s_zero_available.py": 0.0,
  "ansible/roles/k8s/monitor-bridge/tests/test_check_kubelet_readonly.py": 0.0,
- "ansible/roles/k8s/monitor-bridge/tests/test_check_kuma_notify_failures.py": 0.0,
  "ansible/roles/k8s/monitor-bridge/tests/test_check_loki.py": 0.0,
  "ansible/roles/k8s/monitor-bridge/tests/test_check_longhorn.py": 0.0,
  "ansible/roles/k8s/monitor-bridge/tests/test_check_notify.py": 0.0,

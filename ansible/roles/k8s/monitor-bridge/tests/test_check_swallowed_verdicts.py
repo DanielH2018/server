@@ -181,10 +181,10 @@ def test_the_logql_excludes_the_transient_retry_line_at_the_source():
     assert '{job="syslog"}' in checks.logs.SWALLOWED_VERDICTS_LOGQL
 
 
-def test_the_check_is_registered_and_loki_gated():
+def test_the_check_is_registered_and_startup_graced():
     names = {c.name for c in registry.build_checks()}
     assert "swallowed_verdicts" in names
-    assert "swallowed_verdicts" in gates.LOKI_DEPENDENT
+    assert "swallowed_verdicts" in gates.STARTUP_GRACE
 
 
 def test_a_tag_that_pages_its_own_lost_push_through_healthchecks_is_not_counted():
@@ -234,8 +234,8 @@ def _streams(syslog, pod):
 
 
 def test_a_fetch_error_fails_open_and_names_the_owner(cfg):
-    # The Loki gate probes /labels, which stays fast while a range query is what a busy Loki
-    # is slow at, so a raise here would page this tile for a slow Loki, not a lost verdict.
+    # A range query is what a busy Loki is slow at, so a raise here would page this tile
+    # for a slow Loki, not a lost verdict.
     def _raise(*a, **k):
         raise RuntimeError("loki-homelab: timed out")
 
@@ -243,7 +243,7 @@ def test_a_fetch_error_fails_open_and_names_the_owner(cfg):
         cfg, _src(_raise), uptime_s=_unread_clock
     )
     assert ok
-    assert "timed out" in msg and "Loki Reachable" in msg
+    assert "timed out" in msg and "ruler" in msg
 
 
 # pi-peer-backup's CronJob container, the one pusher that is a pod rather than a host cron

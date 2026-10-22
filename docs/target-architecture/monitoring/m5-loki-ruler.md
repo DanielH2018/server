@@ -10,6 +10,8 @@ PR 2b, the grant that admits the ruler to Alertmanager: [#4812](https://github.c
 
 PR 3, the log rules in shadow and the ruler-watching alerts: [#4821](https://github.com/DanielH2018/server/pull/4821). Its 7-day soak starts at its deploy, whose UTC time the PR records.
 
+Soak read, [#4824](https://github.com/DanielH2018/server/issues/4824): passed on 2026-10-21, over the operator's shortened window of 2026-10-13T04:15:51Z to 2026-10-18T08:15Z ([the read](https://github.com/DanielH2018/server/issues/4824#issuecomment-6326741916)). `LokiHostLogsSilent`, `LokiPiLogsSilent` and `LokiPodLogsSilent` each returned no silent sample. `KumaNotificationDropped` fired in one episode (2026-10-16 18:55 to 22:00) that matches 185 minutes of `Kuma Notification Delivery` DOWN. `LokiRulerEvaluationFailing` and `Loki Reachable` were both empty, and neither bridge tile was ever DOWN. The Sunday reboot opened no silent window. PR 4a is unblocked.
+
 Depends on: M1, and M2's PR 3 (the `weekly-reboot` mute) before the cutover. Two
 contracts.md rows also gate PRs here: the row *Open questions* 2 requests gates PR 2a, and
 the row *Open questions* 1 requests gates PR 4b. contracts.md's *Requests on C7* holds both
@@ -654,7 +656,7 @@ depends on which tags are flux-owned, and PR 4a states each case.
   `check_kuma_notify_failures` and `check_loki_reachable`. Delete their verdicts from
   `verdicts/logs.py`: `loki_ingestion_fresh`, `parse_notify_failure_line`,
   `parse_notify_reason_line` and `kuma_notify_failures`.
-- In the same commit, remove six keys from `templates/env-secret.yaml.j2` and their `Config`
+- In the same commit, remove six keys from `templates/config/env.yaml.j2` (the ConfigMap, where the tree renders them; none is a credential) and their `Config`
   fields and loads from `bridge/config_io.py`: `LOKI_STREAM`, `LOKI_DOCKER_STREAM`,
   `LOKI_PI_STREAM`, `LOKI_WINDOW`, `LOKI_FILETAIL_WINDOW` and `KUMA_NOTIFY_FAILURES_WINDOW_S`.
   These keys survive:
@@ -681,7 +683,7 @@ depends on which tags are flux-owned, and PR 4a states each case.
     - `test_check_loki.py:test_the_deployed_selector_roster_covers_known_overrides`: the
       known set becomes `LOG_ERROR_SELECTOR`.
     - `test_loki_stream_labels.py:test_the_consumer_census_finds_its_named_members`: drop
-      `"env-secret LOKI_STREAM"`, and keep `"env-secret LOG_ERROR_SELECTOR"` and the rule-file
+      `"env LOKI_STREAM"`, and keep `"env LOG_ERROR_SELECTOR"` and the rule-file
       member PR 3 added.
 
   Each roster keeps at least one member, so none can pass on an empty set.
@@ -791,6 +793,17 @@ depends on which tags are flux-owned, and PR 4a states each case.
   on CI before it merges, so that red holds PR 4a until the operator's commit lands.
 
   `monitor_bridge_swallowed_verdicts_push_token` stays, because its row stays until M6's C-7.
+
+  Two more files carry the three names, and the plan above did not list them. The agent's commit
+  regenerates the first. The operator's commit regenerates the second.
+    - `ansible/roles/k8s/manifests/files/standalone_secret_keys.json` lists each tag's
+      standalone keys. `uv run python scripts/renderer/standalone_map.py` drops the three
+      names once the rows have left `check_table.py`, and that is in the agent's commit.
+    - `ansible/vars/cluster-vars.sops.env` and `cluster-vars.source` hold the same three names,
+      because Flux substitutes them into the bridge's and uptime-kuma's Secrets. Only
+      `cluster_vars.py write` changes them (**operator-only**), and `cluster_vars.py check` in
+      CI refuses a file that still holds a key `secrets.yml` has lost. The operator runs `write`
+      after the `sops` removal, in the same commit.
   Because `ansible/vars/secrets.yml` changed, `land.sh` appends its rotation note
   (`land_lib/land_tags.py:_ROTATION_NOTE`). No role file names the three keys after this PR,
   so the note asks for no redeploy. The PR body quotes three reads, taken after the operator's
@@ -802,6 +815,9 @@ depends on which tags are flux-owned, and PR 4a states each case.
     - `git diff --stat origin/master -- ansible/vars/secrets.yml`. Plain `git diff` on that
       file prints plaintext.
 - Requires M2's PR 3, because PR 4b must follow inside the no-pager bound below.
+- **Deploy plane.** `monitor-bridge` and `uptime-kuma` are both `owner: flux` on `master`, so
+  `land.sh` deploys neither. The merge's `promote` run applies both, in the order of D4's
+  generated `dependsOn`, and the *Both are flux-owned* case below governs the order.
 - **Order.** The tiles must go before the pushes stop, or each tile goes DOWN 1200s after its
   last push (*Baseline*). That is a false page, not a second pager, because every rule is
   shadow. By convention 8, four cases:

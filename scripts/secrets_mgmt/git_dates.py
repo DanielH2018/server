@@ -123,6 +123,11 @@ RETIRED: frozenset[str] = frozenset(
         "remember_logs_push_token",
         # The Cluster Prometheus gate's Kuma push token.
         "monitor_bridge_cluster_prometheus_push_token",
+        # M5's PR 4a deleted the Loki Log Ingestion, Kuma Notification Delivery and Loki
+        # Reachable checks; the loki-homelab ruler's rules replace them.
+        "monitor_bridge_kuma_notify_failures_push_token",
+        "monitor_bridge_loki_push_token",
+        "monitor_bridge_loki_reachable_push_token",
         # The staging gate's restricted ssh identity. Its public halves stay in the hypervisor
         # role's files/staging-gate-retired/ so every host withdraws the authorization.
         "staging_gate_ssh_key",

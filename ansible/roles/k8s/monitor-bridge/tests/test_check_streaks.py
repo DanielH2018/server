@@ -144,7 +144,7 @@ def test_apply_startup_grace_streaks_are_per_name():
 
 
 def test_startup_grace_set_matches_real_checks():
-    # Guard (mirrors PROM_DEPENDENT/LOKI_DEPENDENT): every graced name is a real check.
+    # Guard (mirrors PROM_DEPENDENT): every graced name is a real check.
     names = {c.name for c in registry.build_checks()}
     assert gates.STARTUP_GRACE <= names
 
@@ -154,7 +154,6 @@ def test_startup_grace_disjoint_from_run_once_skip_sets():
     # can't also be force-skipped by a reachability gate — STARTUP_GRACE must be disjoint from
     # every run_once skip set (else the streak wouldn't advance while the dependency was down).
     assert gates.STARTUP_GRACE.isdisjoint(gates.PROM_DEPENDENT)
-    assert gates.STARTUP_GRACE.isdisjoint(gates.LOKI_DEPENDENT)
     assert gates.STARTUP_GRACE.isdisjoint(gates.B2_DEPENDENT)
     assert gates.STARTUP_GRACE.isdisjoint(gates.WAN_DEPENDENT)
     for deps in gates.EXPORTER_DEPENDENT.values():
@@ -170,10 +169,7 @@ def test_startup_grace_covers_every_ungated_reach_out_check():
     import inspect
 
     gated = (
-        set(gates.PROM_DEPENDENT)
-        | set(gates.LOKI_DEPENDENT)
-        | set(gates.B2_DEPENDENT)
-        | set(gates.WAN_DEPENDENT)
+        set(gates.PROM_DEPENDENT) | set(gates.B2_DEPENDENT) | set(gates.WAN_DEPENDENT)
     )
     for deps in gates.EXPORTER_DEPENDENT.values():
         gated |= set(deps)
@@ -193,17 +189,15 @@ def test_startup_grace_covers_every_ungated_reach_out_check():
 
 
 def _wire_run_once_grace(cfg, results):
-    """Drive run_once with Prometheus+Loki UP and one STARTUP_GRACE check whose eval returns
+    """Drive run_once with Prometheus UP and one STARTUP_GRACE check whose eval returns
     `results` in order across calls; capture the (ok, msg) pushed for it each cycle."""
     cfg = replace(cfg, GRACE_CYCLES=2)
     seq = iter(results)
     checks = [Check("n8n", "tok_n8n", lambda _cfg, _src: next(seq))]
     gate_config = Gates(
         prom_dependent=frozenset(),
-        loki_dependent=frozenset(),
         startup_grace=frozenset({"n8n"}),
         probe_prometheus=lambda _cfg, _src: (True, "prom ok"),
-        probe_loki=lambda _cfg, _src: (True, "loki ok"),
         probe_wan=lambda _cfg, _src: (True, "wan ok"),
     )
     # Each cycle builds its own fake, so the streak survives only through the ONE `State` they

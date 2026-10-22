@@ -1,4 +1,4 @@
-"""Log-pipeline checks for monitor-bridge — Loki ingestion, shipper drops, Loki reachability.
+"""Log-pipeline checks for monitor-bridge — shipper drops, swallowed verdicts, the workload log arm.
 
 Slice 3 of the check.py split. Reads config as `cfg.X` and every query through the `src`
 argument (`bridge.sources.Sources`), so a test hands in a fake; the verdicts it from-imports
@@ -15,51 +15,14 @@ from collections.abc import Callable
 from bridge.common import host_uptime_s
 from bridge.config import Config
 from bridge.sources import Sources
-from bridge.types import as_object
 from bridge.parsing import duration_seconds
 from verdicts.cluster import log_error_verdict
 from verdicts.logs import (
-    kuma_notify_failures,
-    loki_ingestion_fresh,
     otelcol_export_failures,
     shipper_dropped,
     swallowed_verdicts,
     tempo_poll_errors,
 )
-
-
-def check_loki_ingestion(cfg: Config, src: Sources) -> tuple[bool, str]:
-    """Checks that all three Loki ingestion arms (file-tail, container stream, Pi) are fresh.
-
-    Down if any arm is silent: the cluster file-tail union, the cluster pod streams, and the
-    Pi's container stream (uncounted by the other two, so a dead Pi Alloy would otherwise be
-    invisible). Returns (ok, msg).
-    """
-    # The pod streams dwarf the file-tail streams, so arm 1 must NOT include them (else a
-    # healthy pod stream masks a dead file-tail source) — hence the separate selector and the
-    # wider window (LOKI_FILETAIL_WINDOW). Arms 1 and 2 also exclude every daniel-pi stream,
-    # for the same masking reason (#3739). The selectors' reasoning is at bridge/config_io.py.
-    ok_all, msg_all = loki_ingestion_fresh(
-        src.loki_count(cfg.LOKI_STREAM, cfg.LOKI_FILETAIL_WINDOW),
-        cfg.LOKI_FILETAIL_WINDOW,
-    )
-    if not ok_all:
-        return False, "file-tail streams silent — " + msg_all
-    ok_docker, msg_docker = loki_ingestion_fresh(
-        src.loki_count(cfg.LOKI_DOCKER_STREAM, cfg.LOKI_WINDOW),
-        cfg.LOKI_WINDOW,
-    )
-    if not ok_docker:
-        return False, "container log stream silent — " + msg_docker
-    # Arm 3: the Pi ships its own logs and neither arm above counts them, so its Alloy
-    # dying is invisible while the cluster keeps talking.
-    ok_pi, msg_pi = loki_ingestion_fresh(
-        src.loki_count(cfg.LOKI_PI_STREAM, cfg.LOKI_FILETAIL_WINDOW),
-        cfg.LOKI_FILETAIL_WINDOW,
-    )
-    if not ok_pi:
-        return False, "daniel-pi log stream silent — " + msg_pi
-    return True, "%s (+ container stream, + pi)" % msg_all
 
 
 def check_shipper_dropped(
@@ -212,23 +175,6 @@ def with_tempo_poll_errors(
     return False, "%s | %s" % (tempo_msg, msg)
 
 
-def check_loki_reachable(cfg: Config, src: Sources) -> tuple[bool, str]:
-    """Is Loki itself reachable and answering queries? The gate for the LOKI_DEPENDENT checks.
-
-    Hits the labels endpoint, a fixed query independent of ingestion that returns
-    status=success whenever Loki is up. That separates "Loki is down" (one root cause, one page:
-    Loki Reachable) from "Loki is up but a shipper stopped shipping" (Loki Log Ingestion, which
-    still evaluates whenever Loki is reachable). A raise reaches `_evaluate`, which renders the
-    Loki Reachable monitor down.
-    """
-    envelope = as_object(
-        src.get_json(cfg.LOKI_URL + "/loki/api/v1/labels"), "loki response"
-    )
-    if envelope.get("status") != "success":
-        raise RuntimeError("loki labels status=%s" % envelope.get("status"))
-    return True, "Loki reachable"
-
-
 def check_workload_log_errors(cfg: Config, src: Sources) -> tuple[bool, str]:
     """Pages when a container logs a burst of fatal lines, however healthy its pod reads.
 
@@ -246,8 +192,7 @@ def with_log_errors(cfg: Config, src: Sources, ok: bool, msg: str) -> tuple[bool
     Kubernetes state, because by their measure it is. A burst of fatal log lines is the signal
     those arms cannot see.
 
-    FAILS OPEN on a Loki error, and is deliberately NOT in LOKI_DEPENDENT: membership there
-    suppresses the WHOLE check during a Loki outage, and the row's own gate is `startup_grace`.
+    FAILS OPEN on a Loki error, and the rows that call it are gated by `startup_grace` alone.
     Same reasoning as ha_heartbeat's ban arm.
     """
     if not cfg.LOG_ERROR_SELECTOR:
@@ -302,10 +247,10 @@ def check_swallowed_verdicts(
     heartbeat deadline, a day and an hour later for the daily drift producers. This reads the
     library's own final-failure line out of Loki and pages within one cycle.
 
-    FAILS OPEN on a fetch error, on top of being in LOKI_DEPENDENT. The gate probes
-    `/loki/api/v1/labels`, which answers fast while a range query is the thing a busy Loki
-    is slow at, so a raise here would page this tile for a slow Loki rather than a lost
-    verdict. The tile's heartbeat deadline is still the backstop for the cycle this skips.
+    FAILS OPEN on a fetch error, and its row's gate is `startup_grace`. A raise here would
+    page this tile for a slow Loki rather than a lost verdict, and the loki-homelab ruler's
+    `LokiHomelabMetricsMissing` pages a Loki fault. The tile's heartbeat deadline is still the
+    backstop for the cycle this skips.
     """
     # Never read back past the reboot (#2783). uptime-kuma has no endpoint for ~16 minutes of the
     # weekly restart, so every host cron whose slot falls in there loses a push for one known
@@ -332,7 +277,7 @@ def check_swallowed_verdicts(
     except Exception as e:
         return (
             True,
-            "swallowed-verdict scan unavailable (%s) — Loki Reachable owns a Loki fault"
+            "swallowed-verdict scan unavailable (%s) — a Loki fault is the ruler's page"
             % e,
         )
     # Its own try: a failure here costs the one pod pusher's coverage for a cycle, not the
@@ -352,50 +297,3 @@ def check_swallowed_verdicts(
         truncated=max(len(lines), len(pod_lines)) >= SWALLOWED_VERDICTS_LIMIT,
     )
     return ok, msg + pod_note
-
-
-# Kuma's own failed-send lines, from its container log (#1891, #1895). `{container="uptime-kuma"}`
-# is the label Alloy gives the pod's stdout/stderr on the cluster. Two lines per drop, both at
-# ERROR level: `Cannot send notification to <name>` and then the error itself, `ERROR: Error:
-# Request failed with status code 429 …` — so the second alternative is anchored on the ERROR
-# tag (with room for the colour reset between tag and message), which keeps Kuma's WARN-level
-# `Pending: Request failed with status code 500` monitor probes out of the fetch. Measured
-# 2026-09-17: 148 lines over 14 days, 74 drops and 74 reasons.
-KUMA_NOTIFY_FAILURES_LOGQL = (
-    '{container="uptime-kuma"} |~ "Cannot send notification|ERROR:.{0,8} Error: "'
-)
-# A long multi-tile outage resends every tile on its own beat count, so a burst of drops
-# clusters around a resend; 500 is far above any burst 76 tiles can produce in one window,
-# counting the reason line each drop brings with it.
-KUMA_NOTIFY_FAILURES_LIMIT = 500
-
-
-def check_kuma_notify_failures(cfg: Config, src: Sources) -> tuple[bool, str]:
-    """A notification Kuma tried to send and dropped — a Discord 429, a dead SMTP login (#1891).
-
-    Kuma logs `Cannot send notification to <name>` and does not retry, so the transition or
-    resend that line stands for reached nobody. check_discord GET-verifies that the webhook
-    exists and cannot see a dropped POST. This reads Kuma's own lines out of Loki — the drop
-    and the reason it logs right after it — and pages on the tile that notifies email as well
-    as Discord, so a dropped Discord send is not reported over the channel that dropped it.
-
-    FAILS OPEN on a fetch error, on top of being in LOKI_DEPENDENT, for the reason
-    check_swallowed_verdicts gives: the gate probes `/labels`, and a range query is what a
-    busy Loki is slow at.
-    """
-    window_s = cfg.KUMA_NOTIFY_FAILURES_WINDOW_S
-    try:
-        lines = src.loki_lines(
-            KUMA_NOTIFY_FAILURES_LOGQL, window_s, KUMA_NOTIFY_FAILURES_LIMIT
-        )
-    except Exception as e:
-        return (
-            True,
-            "dropped-notification scan unavailable (%s) — Loki Reachable owns a Loki fault"
-            % e,
-        )
-    return kuma_notify_failures(
-        lines,
-        "%dh" % (window_s // 3600) if window_s % 3600 == 0 else "%ds" % window_s,
-        truncated=len(lines) >= KUMA_NOTIFY_FAILURES_LIMIT,
-    )
