@@ -287,7 +287,7 @@ than `none`, a transaction-cap spiral outruns a merge, and `longhorn` is not Rea
 `longhorn-backup` Kustomization applies nothing. For those, every step below is
 **operator-only**:
 
-1. Annotate both BackupTargets, so kustomize-controller skips them:
+1. Annotate both BackupTargets, so `kustomize-controller` skips them:
    `sudo k3s kubectl -n longhorn-system annotate backuptargets.longhorn.io/default backuptargets.longhorn.io/r2 kustomize.toolkit.fluxcd.io/reconcile=disabled`.
 2. Patch each `backupTargetURL` blank:
    `sudo k3s kubectl -n longhorn-system patch backuptargets.longhorn.io/default --type merge -p '{"spec":{"backupTargetURL":""}}'`,
