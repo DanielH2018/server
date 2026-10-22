@@ -403,3 +403,19 @@ def test_the_job_reads_no_other_roles_file():
         for role in ROLE_PATH.findall(path.read_text())
         if role != TAG
     ] == []
+
+
+def test_the_rendered_config_trims_media_at_longhorns_25_percent_floor(flipped_tag):
+    """#5806: the loosest rung is 25% free, so janitorr acts before Longhorn stops scheduling."""
+    (secret,) = [
+        doc
+        for doc in _docs(flipped_tag.files)
+        if doc["kind"] == "Secret" and doc["metadata"]["name"] == "janitorr-config"
+    ]
+    deletion = yaml_fast.safe_load(secret["stringData"]["application.yml"])[
+        "application"
+    ]["media-deletion"]
+    assert deletion["movie-expiration"][25] == "180d"
+    assert deletion["season-expiration"][25] == "240d"
+    for rungs in (deletion["movie-expiration"], deletion["season-expiration"]):
+        assert max(rungs) == 25
