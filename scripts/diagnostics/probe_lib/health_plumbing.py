@@ -16,16 +16,21 @@ verdict cannot see what those tasks saw, so each check moves here, keyed by depl
     reported it.
 
 `health.py` folds these in after a passing rollout, on the path where the tag resolves to a k8s
-role. Each tag resolves that way only once its H1 role lands (H1.4 for `coredns`, H1.5a for
-`longhorn`); until then `run_health` takes the guess-the-name path and never calls this module.
+role. `coredns` resolves since H1.4; `longhorn` resolves once H1.5a (#5922) lands, and until
+then `run_health` takes the guess-the-name path for it and never calls this module.
+
+A Corefile edit rolls no CoreDNS pod (the `coredns` role passes `manifests_rollout: ''`), so
+the rollout verdict passes at once while the running pod still serves the previous Corefile.
+The resolution check therefore waits until `COREFILE_SETTLE_S` after the last write of the
+`Corefile` key before it digs, at most two minutes and only right after a change.
 
 A NotFound on any object read here is a FAILED check, not a skip: each object is plumbing the
 cluster cannot run without, and none of these messages carries a `NOT_APPLICABLE_MARKERS`
 substring. Any other failed kubectl read raises `core.Unreadable` through `read`.
 
 Transport, measured on daniel-box on 2026-10-22: each kubectl read took 0.07-0.10s and each
-dig through `kube-dns` 0.01-0.02s, over three runs. The checks add well under a second to a
-passing gate, so neither needs the cheap-signal-first shape `.claude/rules/python-layout.md`
+dig through `kube-dns` 0.01-0.02s, over three runs. Outside the settle wait the checks add
+well under a second to a passing gate, so neither needs the cheap-signal-first shape `.claude/rules/python-layout.md`
 asks of a slow source.
 """
 
@@ -61,6 +66,8 @@ DIG_NO_REPLY = 9
 # (up to ~60s) plus the `reload` plugin's 30s interval and 15s jitter. A Corefile-only change
 # rolls no pod, so the rollout verdict passes at once; a dig inside this window can still be
 # answered by the PREVIOUS Corefile, and read green for a forward the new one broke.
+# Budget: this wait plus the alert plane's 90s and 60s waits is ~271s, inside the 300s
+# `detach_notify.PROBE_TIMEOUT_S`; failing digs skip the alert plane.
 COREFILE_SETTLE_S = 120
 # After the settle wait, a name that gets no answer is asked again this often, 5s apart, as the
 # deleted host task did, so one dropped packet is not a red verdict.

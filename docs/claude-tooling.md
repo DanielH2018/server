@@ -236,7 +236,9 @@ For the `coredns` and `longhorn` tags, a passing rollout verdict also runs a plu
 before the alert plane (`scripts/diagnostics/probe_lib/health_plumbing.py`). The `coredns`
 check fails on an empty `NodeHosts` key in ConfigMap `kube-system/coredns`. It also fails when
 `kubernetes.default.svc.cluster.local` or `pi.hole` does not resolve through the `kube-dns`
-Service. The dig runs from this host, so the check exits 75 on a host that is not a node of
+Service. A `Corefile` edit rolls no pod, so the check first waits until 120s after the last
+write of the `Corefile` key, the time kubelet's sync and the `reload` plugin take to apply it.
+The dig runs from this host, so the check exits 75 on a host that is not a node of
 the cluster kubectl serves. The `longhorn` check fails when the live `longhorn` StorageClass's
 parameters differ from the class in ConfigMap `longhorn-system/longhorn-storageclass`. The fix
 for that is an **operator-only** delete of the class, which longhorn-manager recreates. Each
