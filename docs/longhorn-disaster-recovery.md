@@ -40,10 +40,15 @@ and step 3's cap caveat applies to B2 only — R2's free tier has no transaction
 own headroom is watched by monitor-bridge's **R2 Free Tier Headroom** monitor.
 
 A disarm does not turn the backup-health monitor red. The reader takes each target's arm
-state from its live `spec.backupTargetURL`, so a target blanked by the flag, or by hand, reads
-as disarmed. The verdict says `DISARMED: <target> (<n> volume(s) not checked)`, which names
-what the disarm suppresses. A failed read of the target list, or a list without `default` or
-`r2`, reads as a problem and never as a disarm.
+state from its live `spec.backupTargetURL`, so a target blanked by the flag reads as disarmed.
+The verdict says `DISARMED: <target> (<n> volume(s) not checked)`, which names what the disarm
+suppresses. A failed read of the target list, or a list without `default` or `r2`, reads as a
+problem and never as a disarm.
+
+Until H1.7b, a URL blanked by hand while the flag says armed reads the same way, where it used to
+read red. The next `k3s-bringup.yml` apply of the backup tag restores the URL. H1.7b adds the
+annotation check that reports a held break-glass as a problem, and no step in these runbooks
+blanks a target by hand.
 
 ## The off-site recovery kit
 

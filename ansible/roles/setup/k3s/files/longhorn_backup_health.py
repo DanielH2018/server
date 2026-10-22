@@ -25,8 +25,9 @@ stamp), LONGHORN_JOURNALCTL, LONGHORN_JOURNAL_TIMEOUT_S and LONGHORN_CRON_EVIDEN
 It takes no arm flag and no schedule from the shim. Each backup target's arm state comes from the
 cluster: a blank `spec.backupTargetURL` is a disarmed target (H1.7a). The daily and weekly run
 times, which size the first-run grace, come from the `spec.cron` of the live RecurringJobs. Both
-are one list call each, so a flag flipped in the repo reaches the monitor when Flux applies it,
-with no host apply in between.
+are one list call each, so the reader reports what the cluster holds, whichever tool wrote it:
+the `setup/k3s` tasks until H1.7b moves the targets and jobs, the `longhorn-backup` tag after.
+No baked copy of a flag or a schedule can disagree with it.
 Prints `up<TAB>msg` or `down<TAB>msg` and exits 0.
 """
 

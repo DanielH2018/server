@@ -74,9 +74,10 @@ The next consequence records how the gate works since 2026-10-22.
 **Backup health takes each target's arm state from its live URL, so a disarm no longer turns
 the monitor red.** The reader lists both BackupTargets and reads a blank
 `spec.backupTargetURL` as a disarmed target. It checks no volume on that target and names the
-target in the verdict's `DISARMED` note, with the count of volumes it did not check. A flag
-flipped in git reaches the monitor when Flux applies it, and no host apply lies between. A
-failed list call, or a list that lacks the `default` or the `r2` target, is a problem the
+target in the verdict's `DISARMED` note, with the count of volumes it did not check. The
+reader reports what the cluster holds, whichever tool wrote it: the `setup/k3s` tasks until
+H1.7b moves the targets, the `longhorn-backup` tag after. No baked copy of an arm flag can
+disagree with the cluster. A failed list call, or a list that lacks the `default` or the `r2` target, is a problem the
 reader reports. It is never read as a disarm, because a monitor that took an unreadable cluster
 for a disarm would suppress the whole backup plane behind a green light.
 

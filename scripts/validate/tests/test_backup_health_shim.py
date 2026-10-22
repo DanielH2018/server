@@ -45,10 +45,10 @@ _BAKED_BEFORE_H1_7A = (
 def test_backup_health_bakes_no_arm_or_schedule_input():
     """Flipping the arm flags or the schedule keys cannot change the rendered shim.
 
-    The reader takes those from the cluster (H1.7a). A shim that baked them would go stale when
-    Flux applied a flipped flag, which a host apply never follows. The first assert is the red
-    half: it fails if any of the four exports returns. The second is the render holding still
-    while every key moves.
+    The reader takes those from the cluster (H1.7a). A shim that baked them would disagree with
+    the cluster once the `longhorn-backup` tag owns the objects (H1.7b), because Flux applies a
+    flipped flag and no host apply follows. The first assert is the red half: it fails if any of
+    the four exports returns. The second is the render holding still while every key moves.
     """
     base = sl.render_template(BACKUP_HEALTH, v.template_context(BACKUP_HEALTH))
     for name in _BAKED_BEFORE_H1_7A:

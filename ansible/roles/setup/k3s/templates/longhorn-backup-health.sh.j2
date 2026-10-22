@@ -138,10 +138,10 @@ fi
 #
 # The arm state of each BackupTarget and the daily and weekly run times are not among them. The
 # reader reads the arm state off each target's live `spec.backupTargetURL` and the run times off
-# the live RecurringJobs' `spec.cron` (H1.7a). Flux applies a flipped arm flag or schedule to the
-# cluster with no host apply in between, so a value baked here would go stale the moment either
-# changed: a stale disarm leaves the monitor permanently red, and a stale arm leaves a new target
-# unchecked.
+# the live RecurringJobs' `spec.cron` (H1.7a). The `setup/k3s` tasks write both until H1.7b, and
+# the `longhorn-backup` tag after, which Flux applies with no host apply in between. A value
+# baked here would go stale the moment either changed: a stale disarm leaves the monitor
+# permanently red, and a stale arm leaves a new target unchecked.
 #
 # The three transport settings are exported here for the same reason as the thresholds below
 # them: the reader requires every LONGHORN_* var it reads, so a value only this shim knows

@@ -2,9 +2,10 @@
 """What the backup-health reader reads off the cluster's BackupTargets and RecurringJobs.
 
 The reader (longhorn_backup_health.py) used to take each target's arm state and each tier's run
-time from env vars the shim baked from role defaults. Flux applies a flipped arm flag or schedule
-with no host apply behind it, so a baked value went stale (H1 plan, H1.7a). The reader now lists
-both kinds and passes the `.items` here. Everything below is pure: it takes parsed JSON and
+time from env vars the shim baked from role defaults. From H1.7b the `longhorn-backup` tag
+owns the targets and jobs, and Flux applies a flipped arm flag or schedule with no host apply
+behind it, so a baked value would go stale. The reader now lists both kinds and reports what
+the cluster holds, whichever tool wrote it (H1 plan, H1.7a). It passes the `.items` here. Everything below is pure: it takes parsed JSON and
 returns data, so the decisions are unit-testable without a cluster, like the checks in
 longhorn_backup_health_logic.py.
 

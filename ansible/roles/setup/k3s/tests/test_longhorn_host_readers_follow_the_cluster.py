@@ -3,8 +3,9 @@
 Each test renders `longhorn-backup-health.sh.j2` once and runs the reader against a stubbed
 kubectl, changing only what the stub answers. The environment stays what the rendered shim
 exports, so the script is fixed while the cluster flips. That is the stale-cron case the old
-exported shape could not see: Flux applies a flipped arm flag without a host apply, and a baked
-value would then disagree with the cluster until someone ran `k3s-bringup.yml` by hand.
+exported shape could not see: from H1.7b Flux applies a flipped arm flag without a host apply,
+and a baked value would then disagree with the cluster until someone ran `k3s-bringup.yml` by
+hand. Before H1.7b the `setup/k3s` tasks write the objects, and the reader reports them.
 
 The stubs and the env builder are in `_longhorn_reader_stubs.py`, whose `_CLUSTER_OBJECTS_PY`
 documents the knobs. `scripts/validate/tests/test_backup_health_shim.py` holds the shim's side:
