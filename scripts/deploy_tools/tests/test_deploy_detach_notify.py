@@ -501,8 +501,6 @@ def test_probes_not_applicable_messages_do_carry_a_skip_marker():
 def test_the_role_declares_nothing_message_carries_a_skip_marker():
     """run_health builds this one inline rather than through a formatter, so it is asserted
     against the source text — the marker and the message must not drift apart."""
-    source = (
-        health.REPO / "scripts" / "diagnostics" / "probe_lib/health.py"
-    ).read_text()
+    source = notify_mod.Path(health.__file__).read_text()
     assert "the role declares no rollout-checkable workload" in source
     assert _matches_a_marker("x: the role declares no rollout-checkable workload (...)")

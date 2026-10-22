@@ -10,7 +10,9 @@ The import closure is read from the source, transitively, resolving each import 
 importing file's runtime would: against its own directory and the `scripts/` ancestors a
 module there inserts, and against every directory the file puts on `sys.path` itself. An
 insert of a `lib.repo_paths` constant (`ANSIBLE / "filter_plugins"`) is evaluated from that
-module. An import no root resolves is the stdlib or a third-party package, and needs no match.
+module. A module pytest runs (a test, a conftest, a helper under `tests/`) also resolves
+against every `pythonpath` root in `pyproject.toml`, which is how a bare `from _row_table
+import ...` in `ansible/tests/repo/` reaches `ansible/tests/` (#5921). An import no root resolves is the stdlib or a third-party package, and needs no match.
 """
 
 import ast
@@ -55,10 +57,32 @@ def _directory(node: ast.AST, path: Path) -> Path | None:
     return None
 
 
+# The roots pytest puts on `sys.path` for every module it collects or that a test imports.
+_PYTEST_ROOTS = [
+    REPO / root
+    for root in tomllib.loads((REPO / "pyproject.toml").read_text())["tool"]["pytest"][
+        "ini_options"
+    ]["pythonpath"]
+]
+
+
+def _runs_under_pytest(path: Path) -> bool:
+    """Whether `path` is a test, a conftest or a helper under a `tests/` directory."""
+    # A module outside the repo (a test's scratch file) is judged by its name alone.
+    rel = path.relative_to(REPO) if REPO in path.parents else Path(path.name)
+    return (
+        "tests" in rel.parts[:-1]
+        or rel.name.startswith("test_")
+        or rel.name == "conftest.py"
+    )
+
+
 def _roots(path: Path, tree: ast.AST) -> list[Path]:
     roots = [path.parent]
     while SCRIPTS in roots[-1].parents:
         roots.append(roots[-1].parent)
+    if _runs_under_pytest(path):
+        roots += _PYTEST_ROOTS
     for node in ast.walk(tree):
         match node:
             case ast.Call(
@@ -202,3 +226,16 @@ def test_an_excluded_module_is_flagged():
 def test_a_regex_matching_the_whole_closure_is_clean():
     entry = REPO / "scripts/validate/k8s_manifests.py"
     assert gaps({"files": r"\.py$"}, import_closure(entry)) == []
+
+
+def test_only_a_module_pytest_runs_resolves_a_bare_import_through_pythonpath(tmp_path):
+    # `filter_errors` resolves only through the `ansible/filter_plugins` pythonpath root. A
+    # script prek or cron runs gets no `pythonpath`, so the same import raises there and must
+    # not read as reaching the plugin; a test module's must.
+    plugin = (REPO / "ansible/filter_plugins/filter_errors.py").resolve()
+    script = tmp_path / "cron_job.py"
+    script.write_text("import filter_errors\n")
+    test = tmp_path / "test_job.py"
+    test.write_text("import filter_errors\n")
+    assert plugin not in imported_files(script)
+    assert plugin in imported_files(test)

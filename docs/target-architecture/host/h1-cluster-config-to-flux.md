@@ -836,7 +836,9 @@ moves a key runs `git grep -l <key>` for it and lists every reader it repoints i
       ConfigMap's class and fails on a difference. The baseline shows that the manager
       creates the class, but not that it replaces a class whose parameters differ. If the
       check goes red after a parameter change, the fix is an **operator-only** delete of the
-      class, which the manager recreates from the ConfigMap.
+      class, which the manager recreates from the ConfigMap. The check is built ahead of
+      H1.5a, in `scripts/diagnostics/probe_lib/health_plumbing.py` (#5923), and runs once
+      the `longhorn` tag resolves to a k8s role.
 - **`longhorn-reconcile`.** This CronJob runs hourly, with `concurrencyPolicy: Forbid`. It
   takes over the live-state tasks.
     - **What it runs.** A stdlib Python script, mounted from a ConfigMap, in a digest-pinned
@@ -959,7 +961,9 @@ refreshes the templates by hand, and the test below ties them to the version.
 - **The ConfigMap carries only `Corefile`.** `NodeHosts` stays the field k3s's node
   controller writes, and Flux never declares it. A test asserts that the rendered ConfigMap
   has exactly one data key. `probe.py health coredns` fails when the live `NodeHosts` is
-  empty.
+  empty. This check and the resolution check below are built ahead of H1.4, in
+  `scripts/diagnostics/probe_lib/health_plumbing.py` (#5924), and run once the `coredns` tag
+  resolves to a k8s role.
 - **`clusterIP`** renders as the live `10.43.0.10`, because the field is immutable.
 - **The image** becomes a pin, `coredns_image`. The test that pins it is
   `test_coredns_image_follows_bundled_manifest.py`, retargeted. It keeps an excerpt of the
