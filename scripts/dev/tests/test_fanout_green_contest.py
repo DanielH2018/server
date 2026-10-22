@@ -66,3 +66,7 @@ def test_a_red_test_contested_with_a_cited_fact_the_fresh_reviewer_upholds_lands
     held, run = _run(tmp_path / "rejected", [], CONTEST, rejected)
     assert held["result"].startswith("needs input: the PR fails the green gate")
     assert run.lands == []
+    # A contest that cites no line is not one, however quiet the review.
+    uncited, run = _run(tmp_path / "uncited", [], f"{RED_NODE} is wrong. {PR}", [])
+    assert uncited["result"].startswith("needs input: the PR fails the green gate")
+    assert run.lands == []
