@@ -67,13 +67,16 @@ write_once() {
     printf '# HELP homelab_iscsi_sessions_not_logged_in Sessions whose state is not LOGGED_IN.\n'
     printf '# TYPE homelab_iscsi_sessions_not_logged_in gauge\n'
     printf 'homelab_iscsi_sessions_not_logged_in %s\n' "$stale"
-    printf '# HELP homelab_check_success 1 when the check is up, 0 when it is down.\n'
+    # The homelab_check_* HELP lines must match disk-health.sh's byte for byte. node_exporter
+    # drops a family whose HELP differs from an earlier file's and sets
+    # node_textfile_scrape_error, so a mismatch loses these series on daniel-box.
+    printf "# HELP homelab_check_success 1 when the check's last verdict was up, 0 when down.\n"
     printf '# TYPE homelab_check_success gauge\n'
     printf 'homelab_check_success{check="%s"} %s\n' "$CHECK" "$([ "$stale" -eq 0 ] && echo 1 || echo 0)"
-    printf '# HELP homelab_check_last_run_timestamp_seconds Unix time the verdict was taken.\n'
+    printf "# HELP homelab_check_last_run_timestamp_seconds Unix time the check's last verdict was taken.\n"
     printf '# TYPE homelab_check_last_run_timestamp_seconds gauge\n'
     printf 'homelab_check_last_run_timestamp_seconds{check="%s"} %s\n' "$CHECK" "$now"
-    printf '# HELP homelab_check_deadline_seconds Longest legitimate gap between two writes.\n'
+    printf "# HELP homelab_check_deadline_seconds Longest legitimate gap between two of the check's writes.\n"
     printf '# TYPE homelab_check_deadline_seconds gauge\n'
     printf 'homelab_check_deadline_seconds{check="%s"} %s\n' "$CHECK" "$DEADLINE_S"
   } > "$tmp"

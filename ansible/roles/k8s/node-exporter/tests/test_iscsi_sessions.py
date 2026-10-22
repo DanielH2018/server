@@ -129,3 +129,52 @@ def test_the_daemonset_runs_the_script_and_the_exporter_reads_its_directory():
     ]
     [read] = [m for m in exporter["volumeMounts"] if m["name"] == written["name"]]
     assert f"--collector.textfile.directory={read['mountPath']}" in exporter["args"]
+
+
+# node_exporter drops a family whose HELP text differs from the one an earlier textfile gave
+# it, and sets node_textfile_scrape_error. Every check-file producer shares the
+# homelab_check_* families, so each must write the same HELP string for each of them.
+# The text ends at the quote, the `\n` escape or the line end that closes it, never at an
+# apostrophe, which disk-health.sh's text carries.
+HELP_LINE = re.compile(r'# HELP (homelab_check_\w+) ([^"\\\n]+)')
+PRODUCERS = frozenset(
+    {
+        "ansible/roles/k8s/node-exporter/files/iscsi-sessions.sh",
+        "ansible/roles/setup/k3s/templates/disk-health.sh.j2",
+    }
+)
+
+
+def help_conflicts(texts: dict[str, str]) -> list[str]:
+    """Each homelab_check_* family that two producers describe with different HELP text."""
+    seen: dict[str, dict[str, str]] = {}
+    for path, text in sorted(texts.items()):
+        for family, help_text in HELP_LINE.findall(text):
+            seen.setdefault(family, {}).setdefault(help_text, path)
+    return sorted(
+        f"{family}: {sorted(variants.values())}"
+        for family, variants in seen.items()
+        if len(variants) > 1
+    )
+
+
+def _producer_texts() -> dict[str, str]:
+    paths = run(
+        ["git", "grep", "-l", "# HELP homelab_check_", "--", ":!*tests/*", ":!*.md"]
+    )
+    root = SCRIPT.parents[5]
+    return {p: (root / p).read_text() for p in paths.stdout.split()}
+
+
+def test_every_check_file_producer_writes_the_same_help_text():
+    # fact: ansible/roles/k8s/node-exporter/CLAUDE.md#The textfile collector directory
+    texts = _producer_texts()
+    assert PRODUCERS <= texts.keys()
+    assert help_conflicts(texts) == []
+
+
+def test_a_producer_with_a_different_help_text_is_flagged():
+    texts = _producer_texts()
+    path = "ansible/roles/k8s/node-exporter/files/iscsi-sessions.sh"
+    texts[path] = texts[path].replace("last verdict was up", "verdict is up")
+    assert help_conflicts(texts) == [f"homelab_check_success: {sorted(PRODUCERS)}"]
