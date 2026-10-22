@@ -157,7 +157,9 @@ by an edit to its `tier` in the registry after that `sync`, and `sync` preserves
 ## `auto` — automated
 
 `rotate --commit` generates a new 32-char token, writes it via `sops set`, and records the
-date. Then redeploy whatever reads it, for example `./scripts/deploy.sh --tags monitor-bridge`.
+date. Then every reader must render again. `secret_rotation.py consumers <key>` prints the
+`deploy.sh` line for an Ansible-owned reader. A Flux-owned reader, such as monitor-bridge,
+takes the value once the commit lands, and `deploy.sh` exits 5 on its tag.
 Uptime Kuma honours the new push token on the next push — no Kuma
 UI step. Because only **coming-due** secrets rotate (due within `ROTATE_LEAD_DAYS` = 8 —
 one weekly cron interval, so a token rotates the Sunday *before* it goes overdue and the
@@ -231,8 +233,9 @@ not rotated again by the weekly cron. Examples:
   names `crowdsec-node-agent` in `manifests_extra_rollouts`, which makes it a restart target.
   That restart is what rotates them: `AGENT_PASSWORD` arrives through a `secretKeyRef`, and
   env resolves once at pod start, so only a new pod reads the new value. Expect the node agents
-  to fail their LAPI login for a few minutes in the middle of that landing. The node agents restart while the
-  engine pod is still rolling, so the machines are deleted and not yet re-added until the new
+  to fail their LAPI login from the delete until the new engine pod's `lapi-register` runs.
+  The delete comes before the landing, so that window spans CI, the merge and Flux's apply.
+  The node agents restart while the engine pod is still rolling, so the machines are deleted and not yet re-added until the new
   engine pod's `lapi-register` runs. The changed Secret is what rolls the engine pod. The
   agents converge without help: each agent's liveness probe converges it, restarting the container until registration
   lands. **Do NOT just `sops set`**: the plugin hot-reloads the new key
@@ -396,7 +399,8 @@ Mint a new value in the provider, then `sops set` + redeploy the consumer:
 - `mullvad_account`: Mullvad account panel. The value is all digits, so it has a Secret of its
   own, `qbittorrent-mullvad-account`, rendered from
   `ansible/roles/k8s/qbittorrent/templates/mullvad-account-secret.yaml.j2`. A rotation changes
-  that one small Secret, and `--tags qbittorrent` redeploys it.
+  that one small Secret. Flux owns qbittorrent, so it takes the new Secret once
+  `cluster_vars.py write` has updated the cluster file and the change lands.
 - `wireguard_peer_*`: Mullvad account panel / regenerate the WG key.
 - `homelab_builder_github_token`: GitHub → Settings → Developer settings → Fine-grained
   tokens, owner DanielH2018, *Public repositories (read-only)*, no permissions. The
@@ -411,7 +415,8 @@ Mint a new value in the provider, then `sops set` + redeploy the consumer:
   deploy-pipeline exporter in monitor-bridge (D2.6d in
   `docs/target-architecture/deploy/d2-first-leaf.md`) reads `DEPLOY_HOLD`, `PROD_DIGEST`
   and master's CI runs with it. It holds no write scope, so a leaked copy can neither clear a
-  hold nor move a tag. Redeploy with `--tags monitor-bridge`.
+  hold nor move a tag. Flux owns monitor-bridge, so run `cluster_vars.py write` and land the
+  change without `--tags`.
 
 ## `pinned` — DANGER, never `sops set` blindly
 

@@ -128,7 +128,7 @@ def route_secret_k8s_readers(
     refusal naming its tags (the fleet-coverage ceiling) defers them to `k8s_unapplied`.
 
     `config.k8s_autodeploy_denylist` does not subtract from the tags either (#5634). This is
-    the broad plane, and the `DECIDED: the broad plane ignores K8S_AUTODEPLOY_DENYLIST` on
+    the broad plane, and the marker "the broad plane ignores `K8S_AUTODEPLOY_DENYLIST`" on
     `deploy_narrow.denylisted_in` covers it: the denylist keeps a role out of the snapshot
     and the automatic rollback, and this plan has neither. It applies the reader forward-only,
     as `deploy.sh --tags <role>` would. The journal names each denied tag it applies.
