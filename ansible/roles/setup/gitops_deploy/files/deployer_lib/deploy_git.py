@@ -77,7 +77,8 @@ def jobs_verdict(check_runs: list[dict]) -> str:
     skipped job passes only when `prove` succeeded and every dependent skipped: each dependent
     skips only on `needs.prove.outputs.proven == 'true'` or a cancelled run, so a skip means
     `proven` was true, and a check-run cannot show that output itself. `prove` is skipped on a
-    run that is not a push, and a cancelled `prove` (a timeout) leaves every dependent to run.
+    run that is not a push. A cancelled `prove` (a timeout) runs every dependent whatever
+    `proven` says, so they must all pass.
     Fail-closed: any failure is `fail`, a missing or unfinished job is
     `pending`, and a skipped job without that proof is `pending`, so the gate job's own
     conclusion decides it.
