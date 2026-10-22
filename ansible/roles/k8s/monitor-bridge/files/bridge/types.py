@@ -82,11 +82,11 @@ class PushCheck:
       status_group: The status page group the tile is listed under, one of
         `uptime_kuma_k8s_status_page_groups`' names. uptime-kuma's sync ConfigMap pins the
         tile's id into that group's rule.
-      gate: The gate whose outage suppresses this check (`prometheus`, `loki_reachable`,
-        `b2_reachable`, `wan_reachable`), or `startup_grace` for a reach-out check held `up`
+      gate: The gate whose outage suppresses this check (`prometheus`, `b2_reachable`,
+        `wan_reachable`), or `startup_grace` for a reach-out check held `up`
         through its first down cycles. One value per row, because a check in two of these
         sets would be suppressed by one and held by the other.
-      is_gate: This row is one of the four reachability gates, which `check.run_once`
+      is_gate: This row is one of the three reachability gates, which `check.run_once`
         evaluates first; `registry.build_checks` leaves it out.
       critical: The tile carries `tag-severity: critical` and notifies email as well as
         Discord. Every tile that pages by email carries the severity tag, so one flag sets

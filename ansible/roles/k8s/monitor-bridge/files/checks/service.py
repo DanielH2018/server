@@ -348,9 +348,9 @@ def with_ha_ban(cfg: Config, src: Sources, ok: bool, msg: str) -> tuple[bool, st
     with_log_errors: a new Kuma monitor costs a new push token in
     SOPS, and a ban is an HA fault, which is what this monitor already reports.
 
-    # DECIDED: fails OPEN on a Loki error instead of adding ha_heartbeat to LOKI_DEPENDENT.
-    # Membership there suppresses the WHOLE check during a Loki outage, which would blind the
-    # real heartbeat — trading a live wedge-detector for a secondary arm is the wrong way round.
+    # DECIDED: fails OPEN on a Loki error rather than gating ha_heartbeat on Loki. A Loki gate
+    # would suppress the WHOLE check during a Loki outage, which would blind the real heartbeat
+    # — trading a live wedge-detector for a secondary arm is the wrong way round.
     # The ban arm also skips down_streak: down_streak exists to ride out a transient, and a ban is
     # a discrete event that either happened in the window or did not — a second cycle's confirmation
     # would add nothing. Note this arm reports the ban EVENT, not the ban STATE: it self-clears
