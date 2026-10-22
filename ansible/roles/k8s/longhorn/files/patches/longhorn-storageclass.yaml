@@ -9,8 +9,9 @@
 # of truth. It also keeps a raise of the replica count a settings change instead of StorageClass
 # surgery: parameters are immutable, so changing one means deleting and recreating the class.
 #
-# Everything else is verbatim from longhorn v1.12.1 deploy/longhorn.yaml. Keep it that way on a
-# version bump (docs/longhorn-upgrade.md, step 2), and do NOT paste numberOfReplicas back in:
+# Everything else is verbatim from longhorn v1.13.0 deploy/longhorn.yaml, re-synced 2026-10-22.
+# v1.13.0 changed no class parameter. Keep it verbatim on a version bump
+# (docs/longhorn-upgrade.md, step 2), and do NOT paste numberOfReplicas back in:
 # ansible/tests/longhorn/test_longhorn_storageclass.py fails if it reappears.
 #
 # DECIDED: this ConfigMap patch is the only home of the class text. The class file that used to

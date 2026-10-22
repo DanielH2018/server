@@ -12,12 +12,12 @@
 # version-to-version upgrade constraints and does not support arbitrary version skips. Tracked
 # for the signal, never automerged.
 # renovate: datasource=github-releases depName=longhorn/longhorn
-k3s_longhorn_version: v1.12.1  # noqa var-naming[no-role-prefix]
+k3s_longhorn_version: v1.13.0  # noqa var-naming[no-role-prefix]
 longhorn_vendored_manifests:
   - name: longhorn.yaml
     url: "https://raw.githubusercontent.com/longhorn/longhorn/{{ k3s_longhorn_version }}/deploy/longhorn.yaml"
-    fetched_url: "https://raw.githubusercontent.com/longhorn/longhorn/v1.12.1/deploy/longhorn.yaml"
-    sha256: "41648963af867ac1d0c85755fb53cf61cacd57c9bb22e1942e3fb0439eeb04fd"
+    fetched_url: "https://raw.githubusercontent.com/longhorn/longhorn/v1.13.0/deploy/longhorn.yaml"
+    sha256: "d0f99488e7b2789312d45b0127ce7388df71a971e6fca2085e88635303cc0a1f"
 
 # Memory REQUEST only (no limit) for longhorn-manager, applied by files/patches/longhorn-manager.yaml.
 # A kustomize patch is copied verbatim, so the patch holds the literal and
