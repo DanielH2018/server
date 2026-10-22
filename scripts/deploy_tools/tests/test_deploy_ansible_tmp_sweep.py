@@ -97,7 +97,8 @@ def _mkdir(path: Path) -> Path:
     return path
 
 
-def test_the_sweep_removes_the_stale_ones_and_logs_each(tmp_path, logger_calls):
+def test_the_sweep_removes_the_stale_ones_and_logs_each(tmp_path):
+    logged: list[list[str]] = []
     stale = [
         _age(_local(tmp_path, _dead_pid()), 2 * DAY),
         _age(_module(tmp_path, os.getpid()), 2 * DAY),
@@ -107,12 +108,15 @@ def test_the_sweep_removes_the_stale_ones_and_logs_each(tmp_path, logger_calls):
         _age(_local(tmp_path, os.getpid()), 2 * DAY),
     ]
 
-    assert ansible_tmp.sweep_stale([tmp_path], NOW) == 2
+    assert ansible_tmp.sweep_stale([tmp_path], NOW, logged.append) == 2
 
     assert not any(p.exists() for p in stale)
     assert sorted(p.name for p in tmp_path.iterdir()) == sorted(p.name for p in kept)
-    # The stub records `logger`'s arguments; the removed paths go on its stdin.
-    assert f"-t {ansible_tmp.SYSLOG_IDENT}" in logger_calls.read_text()
+    # One log call, one line per removed directory with its mtime, none for a kept one.
+    [lines] = logged
+    assert sorted(lines) == sorted(
+        f"removed {p} (mtime 2026-09-19T14:13:20Z)" for p in stale
+    )
 
 
 # The `uv` a `--check` run execs: the playbook answers at once. The wrapper's own

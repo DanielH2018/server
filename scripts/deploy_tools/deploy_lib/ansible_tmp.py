@@ -19,6 +19,7 @@ import shutil
 import subprocess
 import sys
 import time
+from collections.abc import Callable
 from pathlib import Path
 
 SYSLOG_IDENT = "deploy-ansible-tmp-sweep"
@@ -97,10 +98,15 @@ def is_stale(entry: Path, now: float) -> bool:
         return False
 
 
-def sweep_stale(dirs: list[Path] | None = None, now: float | None = None) -> int:
+def sweep_stale(
+    dirs: list[Path] | None = None,
+    now: float | None = None,
+    log: Callable[[list[str]], None] | None = None,
+) -> int:
     """Remove every stale ansible temp directory in `dirs`; returns how many it removed.
 
-    `dirs` defaults to `tmp_dirs()`, and `now` to the clock.
+    `dirs` defaults to `tmp_dirs()`, `now` to the clock, and `log` to one `logger` call
+    taking a line per removed directory.
 
     Never raises: a deploy must not fail over housekeeping.
     """
@@ -123,7 +129,7 @@ def sweep_stale(dirs: list[Path] | None = None, now: float | None = None) -> int
             if not entry.exists():
                 removed.append(f"removed {entry} (mtime {mtime})")
     if removed:
-        _log(removed)
+        (log or _log)(removed)
     return len(removed)
 
 
