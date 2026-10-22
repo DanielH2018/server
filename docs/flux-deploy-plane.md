@@ -369,7 +369,8 @@ gate the CronJob under Ansible, H2 restores the role and its tests from the comm
 the retirement, which `git log --diff-filter=D -1 --format=%H --
 ansible/roles/k8s/cronjob-gate/tasks/main.yml` names:
 
-- `ansible/roles/k8s/cronjob-gate/` and `ansible/tests/deploy/test_cronjob_gate_decision.py`;
+- `ansible/roles/k8s/cronjob-gate/` and its decision tests, `test_cronjob_gate_decision.py`
+  in `ansible/tests/deploy/`;
 - the `include_role` credit in `_batch_gated_names` (`ansible/tests/deploy/_autodeploy_batch.py`)
   and its cases in `test_k8s_autodeploy_cronjob_gate_credit.py`;
 - the role's entry in `_GATING_SHARED_ROLES` and in each shared-role list the guards report as
