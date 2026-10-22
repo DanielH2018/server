@@ -1,12 +1,12 @@
-"""The group-label filters and the R2 routing tasks render the live names (#3946).
+"""The group-label filters and the BackupTarget tasks render the live names (#3946).
 
 The label TASKS that took their labels from the `longhorn_groups` filters moved to the
-`longhorn-reconcile` role's `files/longhorn_reconcile.py` at H1.6, and their typed-out label
-cases moved with them (`ansible/roles/k8s/longhorn-reconcile/tests/`). What stays here is the
-filters those tasks and the RecurringJob template still call, the tasks that write the
-BackupTarget names, and the two R2 routing tasks until H1.7a deletes them. The expectations are
-typed out, not built from the module's constants: an expectation derived from the same constant
-as the render would follow a rename and pass.
+`longhorn-reconcile` role's `files/longhorn_reconcile.py` at H1.6, and the two R2 routing tasks
+followed at H1.7a. Their typed-out cases moved with them
+(`ansible/roles/k8s/longhorn-reconcile/tests/`). What stays here is the filters the reconcile
+ConfigMap and the RecurringJob template still call, and the tasks that write the BackupTarget
+names. The expectations are typed out, not built from the module's constants: an expectation
+derived from the same constant as the render would follow a rename and pass.
 """
 
 import re
@@ -32,16 +32,6 @@ ENV = make_ansible_env(undefined_cls=StrictUndefined)
 def _command_text(task: dict) -> str:
     command = task["ansible.builtin.command"]
     return command["cmd"] if "cmd" in command else " ".join(command["argv"])
-
-
-def _passes_when(task: dict, context: dict) -> bool:
-    conditions = task.get("when", [])
-    if isinstance(conditions, str):
-        conditions = [conditions]
-    return all(
-        ENV.from_string("{{ (%s) | bool }}" % c).render(context) == "True"
-        for c in conditions
-    )
 
 
 def test_a_weekly_volume_shards_on_the_shard_its_entry_declares():
@@ -117,39 +107,6 @@ def test_the_bare_names_are_the_live_ones():
     }
     with pytest.raises(ValueError, match="not a Longhorn backup name"):
         longhorn_backup_name("no-backup")
-
-
-def _backup_task(name: str) -> dict:
-    tasks = load_tasks(K3S_ROLE / "tasks" / "longhorn-backup.yml")
-    return next(t for t in tasks if t["name"] == name)
-
-
-@pytest.mark.parametrize(
-    ("name", "live", "patch"),
-    [
-        (
-            "Route the selected volumes to R2",
-            "pvc-0000 homelab/listed default",
-            '{"spec":{"backupTargetName":"r2"}}',
-        ),
-        (
-            "Return de-listed volumes to the default backup target",
-            "pvc-0000 homelab/unlisted r2",
-            '{"spec":{"backupTargetName":"default"}}',
-        ),
-    ],
-)
-def test_the_r2_routing_writes_the_live_target_names(name, live, patch):
-    """These tasks WRITE spec.backupTargetName, which the health cron and the drill read."""
-    task = _backup_task(name)
-    context = {"k3s_longhorn_r2_volumes": ["homelab/listed"]}
-    assert _passes_when(task, {**context, "item": live})
-    # Already where it belongs: the route skips itself, so a converged cluster changes nothing.
-    settled = (
-        "pvc-0000 homelab/listed r2" if "R2" in name else "pvc-0000 homelab/unlisted"
-    )
-    assert not _passes_when(task, {**context, "item": settled})
-    assert ENV.from_string(task["vars"][next(iter(task["vars"]))]).render() == patch
 
 
 def test_the_b2_target_tasks_name_the_live_target():

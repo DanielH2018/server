@@ -19,9 +19,10 @@ which one holds the volume it wants. Routing is per-volume, via `spec.backupTarg
 
 The R2 set (`k3s_longhorn_r2_volumes`) is `homelab/traefik-acme`,
 `homelab/authelia-config`, `homelab/home-assistant-config`, `homelab/zigbee2mqtt-data`.
-The k3s role derives it from the `backup_claims` of every `home-critical` entry (tier
-`home-edge` or `home-automation`) in
-`containers_list`, so a change to the set is an edit to those entries. The four volumes are
+The `longhorn-reconcile` role derives it from the `backup_claims` of every `home-critical`
+entry (tier `home-edge` or `home-automation`) in
+`containers_list`, so a change to the set is an edit to those entries. Its hourly CronJob
+sets each Volume's `spec.backupTargetName` from the set. The four volumes are
 the TLS material every route depends on, the SSO store behind every authenticated route,
 and the two home-automation stores that are slow to rebuild by hand. They are on **both**
 targets' worth of protection in the sense that matters: a B2 account-level failure (cap,
@@ -37,6 +38,17 @@ kubectl -n longhorn-system get volumes.longhorn.io \
 Arming is independent per target (`k3s_longhorn_backup_armed`, `k3s_longhorn_r2_armed`),
 and step 3's cap caveat applies to B2 only — R2's free tier has no transaction cap, and its
 own headroom is watched by monitor-bridge's **R2 Free Tier Headroom** monitor.
+
+A disarm does not turn the backup-health monitor red. The reader takes each target's arm
+state from its live `spec.backupTargetURL`, so a target blanked by the flag reads as disarmed.
+The verdict says `DISARMED: <target> (<n> volume(s) not checked)`, which names what the disarm
+suppresses. A failed read of the target list, or a list without `default` or `r2`, reads as a
+problem and never as a disarm.
+
+Until H1.7b, a URL blanked by hand while the flag says armed reads the same way, where it used to
+read red. The next `k3s-bringup.yml` apply of the backup tag restores the URL. H1.7b adds the
+annotation check that reports a held break-glass as a problem, and no step in these runbooks
+blanks a target by hand.
 
 ## The off-site recovery kit
 

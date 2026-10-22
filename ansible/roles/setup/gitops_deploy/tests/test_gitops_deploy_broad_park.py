@@ -323,11 +323,11 @@ def test_a_mixed_range_writes_one_receipt_naming_both_halves(
 def test_a_filter_plugin_a_bring_up_role_calls_records_that_role(
     gitops_deploy, tick, state
 ):
-    """#3874: `k3s` renders `tier_backup_claims`, and no `deploy.yml` run re-renders it.
+    """#3874: `k3s` renders `weekly_backup_group`, and no `deploy.yml` run re-renders it.
 
     The deploy plane still narrows to its own callers; the setup caller gets the ledger line.
     """
-    tick.paths = ["ansible/filter_plugins/service_tier.py"]
+    tick.paths = ["ansible/filter_plugins/longhorn_groups.py"]
     tick.narrow = (0, "sonarr")
     assert gitops_deploy.main(tick.tools, tick.config, state) == 0
     assert tick.merges == [ORIGIN]

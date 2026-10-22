@@ -1,6 +1,6 @@
 ---
-# The Longhorn backup plane: B2 and R2 targets, their credentials, per-volume
-# target routing, and the recurring backup job.
+# The Longhorn backup plane: B2 and R2 targets, their credentials, and the recurring backup
+# job. Each volume's `spec.backupTargetName` is the `longhorn-reconcile` CronJob's since H1.7a.
 
 - name: Set the Longhorn backup-store poll interval
   tags: [longhorn, longhorn_backup]
@@ -162,61 +162,6 @@
   register: k3s_longhorn_r2_target
   become: true
   changed_when: "'created' in k3s_longhorn_r2_target.stdout or 'configured' in k3s_longhorn_r2_target.stdout"
-
-- name: Read where each Longhorn volume currently sends its backups
-  tags: [longhorn_backup, longhorn_r2]
-  ansible.builtin.command:
-    argv:
-      - k3s
-      - kubectl
-      - -n
-      - longhorn-system
-      - get
-      - volumes.longhorn.io
-      - -o
-      - 'jsonpath={range .items[*]}{.metadata.name}{" "}{.status.kubernetesStatus.namespace}/{.status.kubernetesStatus.pvcName}{" "}{.spec.backupTargetName}{"\n"}{end}'
-  become: true
-  changed_when: false
-  register: k3s_longhorn_volume_targets
-  # A read of state that exists independently of this play, and the routing tasks below
-  # loop its `stdout_lines`. Without this `--check` skips it and they error on the
-  # attribute instead of skipping.
-  check_mode: false
-
-# Declarative in both directions, like the recurring-job group pairs above: this claims the
-# listed volumes, the next task releases anything no longer listed. Both skip themselves once
-# the volume already points where it should, so a converged cluster reports no change.
-- name: Route the selected volumes to R2
-  tags: [longhorn_backup, longhorn_r2]
-  ansible.builtin.command:
-    cmd: >-
-      k3s kubectl -n longhorn-system patch volumes.longhorn.io {{ item.split(' ')[0] }}
-      --type=merge -p {{ r2_route_patch | quote }}
-  vars:
-    r2_route_patch: >-
-      {"spec":{"backupTargetName":"{{ 'r2_target' | longhorn_backup_name }}"}}
-  loop: "{{ k3s_longhorn_volume_targets.stdout_lines }}"
-  when:
-    - item.split(' ')[1] in k3s_longhorn_r2_volumes
-    - item.split(' ')[2] | default('', true) != ('r2_target' | longhorn_backup_name)
-  become: true
-  changed_when: true
-
-- name: Return de-listed volumes to the default backup target
-  tags: [longhorn_backup, longhorn_r2]
-  ansible.builtin.command:
-    cmd: >-
-      k3s kubectl -n longhorn-system patch volumes.longhorn.io {{ item.split(' ')[0] }}
-      --type=merge -p {{ default_route_patch | quote }}
-  vars:
-    default_route_patch: >-
-      {"spec":{"backupTargetName":"{{ 'b2_target' | longhorn_backup_name }}"}}
-  loop: "{{ k3s_longhorn_volume_targets.stdout_lines }}"
-  when:
-    - item.split(' ')[2] | default('', true) == ('r2_target' | longhorn_backup_name)
-    - item.split(' ')[1] not in k3s_longhorn_r2_volumes
-  become: true
-  changed_when: true
 
 - name: Render the Longhorn recurring backup job
   tags: [longhorn_backup]

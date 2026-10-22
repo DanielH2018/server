@@ -29,7 +29,7 @@ from lib.service_tiers import resolved_tier_lists
 from _k8s_render import rendered_docs
 
 from _helpers import load_defaults
-from lib.repo_paths import K3S_ROLE, K8S_ROLES
+from lib.repo_paths import K8S_ROLES, LONGHORN_RECONCILE_ROLE
 
 LONGHORN_ROLE = K8S_ROLES / "longhorn"
 CLASS_PATCH = LONGHORN_ROLE / "files" / "patches" / "longhorn-storageclass.yaml"
@@ -242,7 +242,7 @@ def test_declared_pvcs_finds_every_known_claim():
 
 
 def test_backup_routing_lists_are_pairwise_disjoint():
-    defaults = resolved_tier_lists(load_defaults(K3S_ROLE))
+    defaults = resolved_tier_lists(load_defaults(LONGHORN_RECONCILE_ROLE))
     lists = {name: set(defaults.get(name) or []) for name in _ROUTING_LISTS}
     overlaps = []
     for i, left in enumerate(_ROUTING_LISTS):
@@ -257,7 +257,7 @@ def test_backup_routing_lists_are_pairwise_disjoint():
 
 
 def test_backup_routing_lists_have_no_duplicates():
-    defaults = resolved_tier_lists(load_defaults(K3S_ROLE))
+    defaults = resolved_tier_lists(load_defaults(LONGHORN_RECONCILE_ROLE))
     for name in _ROUTING_LISTS:
         entries = list(defaults.get(name) or [])
         dupes = sorted({e for e in entries if entries.count(e) > 1})
@@ -267,7 +267,7 @@ def test_backup_routing_lists_have_no_duplicates():
 def test_every_routed_volume_is_a_real_pvc():
     # A typo here does not fail anything at deploy — the label reconcile simply matches no
     # volume and moves on, leaving the PVC on whatever tier it was already in.
-    defaults = resolved_tier_lists(load_defaults(K3S_ROLE))
+    defaults = resolved_tier_lists(load_defaults(LONGHORN_RECONCILE_ROLE))
     declared = _declared_pvcs()
     assert len(declared) > 20, (
         f"only found {len(declared)} PVC names — the collector stopped matching"

@@ -16,113 +16,28 @@ Run: uv run pytest ansible/roles/k8s/longhorn-reconcile/tests/test_longhorn_reco
 import io
 import json
 import urllib.error
-from collections.abc import Mapping
 from email.message import Message
 
 import longhorn_reconcile as lr
 import pytest
-from longhorn_groups import backup_group_label, weekly_backup_group
-
-NS = "longhorn-system"
-VOLUMES = f"/apis/longhorn.io/v1beta2/namespaces/{NS}/volumes"
-DEPLOYMENTS = f"/apis/apps/v1/namespaces/{NS}/deployments"
-REQUEST = "192Mi"
-P = "recurring-job-group.longhorn.io/"
-
-TIERS = {
-    "r2": ["homelab/traefik-acme"],
-    "weekly": {"homelab/sonarr-config": 3, "homelab/radarr-config": 5},
-    "nobackup": ["homelab/crowdsec-db"],
-}
-
-
-def _volume(name: str, claim: str, *groups: str, extra: Mapping | None = None) -> dict:
-    namespace, pvc = claim.split("/")
-    labels = {f"{P}{group}": "enabled" for group in groups}
-    labels.update(extra or {})
-    return {
-        "metadata": {"name": name, "labels": labels},
-        "status": {"kubernetesStatus": {"namespace": namespace, "pvcName": pvc}},
-    }
-
-
-def _pvc(claim: str, storage_class: str) -> dict:
-    namespace, name = claim.split("/")
-    return {
-        "metadata": {"namespace": namespace, "name": name},
-        "spec": {"storageClassName": storage_class},
-    }
-
-
-def _deployment(name: str, memory: str | None) -> dict:
-    requests = {"memory": memory} if memory else {}
-    return {
-        "spec": {
-            "template": {
-                "spec": {
-                    "containers": [
-                        {
-                            "name": name,
-                            "image": "x",
-                            "resources": {"requests": requests},
-                        }
-                    ]
-                }
-            }
-        }
-    }
-
-
-class World(lr.Kube):
-    """A fixture API server: Volume CRs, PVCs and the four CSI Deployments."""
-
-    def __init__(self, volumes, pvcs, deployments=None):
-        super().__init__("https://api", "token")
-        self.volumes = {v["metadata"]["name"]: v for v in volumes}
-        self.pvcs = pvcs
-        self.deployments = (
-            {n: _deployment(n, REQUEST) for n in lr.CSI_DEPLOYMENTS}
-            if deployments is None
-            else deployments
-        )
-        self.calls: list[tuple[str, str, str | None]] = []
-        self.fail: dict[tuple[str, str], int] = {}
-
-    def call(self, method, path, body=None, content_type=lr.MERGE_PATCH):
-        self.calls.append((method, path, content_type if body is not None else None))
-        if (method, path) in self.fail:
-            return self.fail[(method, path)], {"message": "refused"}
-        if method == "GET" and path == VOLUMES:
-            return 200, {"items": list(self.volumes.values())}
-        if method == "GET" and path == "/api/v1/persistentvolumeclaims":
-            return 200, {"items": self.pvcs}
-        if path.startswith(DEPLOYMENTS + "/"):
-            name = path.rsplit("/", 1)[1]
-            if name not in self.deployments:
-                return 404, {"message": f"deployments {name} not found"}
-            if method == "PATCH":
-                assert content_type == lr.STRATEGIC_PATCH
-                assert body is not None
-                container = body["spec"]["template"]["spec"]["containers"][0]
-                held = self.deployments[name]["spec"]["template"]["spec"]["containers"][
-                    0
-                ]
-                held["resources"]["requests"].update(container["resources"]["requests"])
-            return 200, self.deployments[name]
-        if method == "PATCH" and path.startswith(VOLUMES + "/"):
-            assert content_type == lr.MERGE_PATCH
-            assert body is not None
-            labels = self.volumes[path.rsplit("/", 1)[1]]["metadata"]["labels"]
-            for key, value in body["metadata"]["labels"].items():
-                if value is None:
-                    labels.pop(key, None)
-                else:
-                    labels[key] = value
-            return 200, {}
-        raise AssertionError(f"unexpected call {method} {path}")
-
-    def writes(self) -> list[tuple[str, str, str | None]]:
-        return [call for call in self.calls if call[0] == "PATCH"]
+from _reconcile_world import (
+    DEPLOYMENTS,
+    NS,
+    P,
+    PVC_CLASS,
+    REQUEST,
+    TIERS,
+    VOLUMES,
+    World,
+    _deployment,
+    _pvc,
+    _volume,
+)
+from longhorn_groups import (
+    backup_group_label,
+    longhorn_backup_name,
+    weekly_backup_group,
+)
 
 
 @pytest.fixture
@@ -137,15 +52,7 @@ def env(tmp_path):
     }
 
 
-# (claim, class, labels before) -> labels after, the group labels only.
-PVC_CLASS = {
-    "homelab/crowdsec-db": "longhorn",
-    "homelab/sonarr-config": "longhorn",
-    "homelab/radarr-config": "longhorn",
-    "homelab/prometheus-data": "longhorn-nobackup",
-    "homelab/authelia-config": "longhorn",
-    "homelab/orphan": "longhorn",
-}
+# (claim, labels before) -> labels after, the group labels only.
 TRANSITIONS = [
     pytest.param(
         "homelab/crowdsec-db", ["default"], ["no-backup"], id="nobackup-leaves-daily"
@@ -242,17 +149,19 @@ def test_a_second_run_changes_nothing(env, capsys):
             _volume("pvc-2", "homelab/authelia-config", "no-backup"),
             _volume("pvc-3", "homelab/radarr-config", "weekly-backup"),
             _volume("pvc-4", "homelab/sonarr-config", "default"),
+            _volume("pvc-5", "homelab/traefik-acme", "default", target=""),
+            _volume("pvc-6", "homelab/authelia-config", "default", target="r2"),
         ],
         [_pvc(c, k) for c, k in PVC_CLASS.items()],
         {n: _deployment(n, None) for n in lr.CSI_DEPLOYMENTS},
     )
     assert lr.main([], env, world) == 0
-    # Four volumes move groups and four Deployments gain the request.
-    assert len(world.writes()) == 8
+    # Four volumes move groups, two change target and four Deployments gain the request.
+    assert len(world.writes()) == 10
     first = len(world.calls)
     assert lr.main([], env, world) == 0
     assert [c for c in world.calls[first:] if c[0] == "PATCH"] == []
-    assert "0 label change(s)" in capsys.readouterr().out
+    assert "0 volume change(s)" in capsys.readouterr().out
 
 
 def test_the_group_names_are_the_ones_setup_k3s_and_the_recurring_jobs_use():
@@ -271,6 +180,67 @@ def test_the_group_names_are_the_ones_setup_k3s_and_the_recurring_jobs_use():
             weekly_backup_group(shard)
         )
     assert len(lr.SHARDS) == 7
+
+
+# (claim, target before) -> target after. The r2 list holds `homelab/traefik-acme` only.
+# A blank target on an unlisted claim stays blank: the Ansible routing tasks never wrote it.
+TARGET_TRANSITIONS = [
+    pytest.param(
+        "homelab/traefik-acme", "default", "r2", id="listed-claim-moves-to-r2"
+    ),
+    pytest.param("homelab/traefik-acme", "", "r2", id="listed-claim-with-no-target"),
+    pytest.param("homelab/traefik-acme", "r2", "r2", id="listed-claim-already-on-r2"),
+    pytest.param(
+        "homelab/authelia-config", "r2", "default", id="delisted-claim-returns-to-b2"
+    ),
+    pytest.param(
+        "homelab/authelia-config", "default", "default", id="unlisted-claim-on-b2"
+    ),
+    pytest.param("homelab/authelia-config", "", "", id="blank-target-stays-blank"),
+    pytest.param(
+        "homelab/authelia-config", "other", "other", id="unknown-target-is-not-ours"
+    ),
+]
+
+
+@pytest.mark.parametrize(("claim", "before", "after"), TARGET_TRANSITIONS)
+def test_each_target_transition_writes_the_live_target_name(claim, before, after, env):
+    volume = _volume("pvc-1", claim, "default", target=before)
+    world = World([volume], [_pvc(c, k) for c, k in PVC_CLASS.items()])
+    assert lr.main([], env, world) == 0
+    assert world.volumes["pvc-1"]["spec"]["backupTargetName"] == after
+    assert len(world.writes()) == (0 if before == after else 1)
+
+
+def test_a_volume_that_changes_group_and_target_gets_one_patch_carrying_both(env):
+    """Labels and target are one merge patch, so a half-applied volume cannot exist."""
+    volume = _volume("pvc-1", "homelab/sonarr-config", "default", target="r2")
+    world = World([volume], [_pvc(c, k) for c, k in PVC_CLASS.items()])
+    assert lr.main([], env, world) == 0
+    (write,) = world.writes()
+    assert write[1] == f"{VOLUMES}/pvc-1"
+    assert world.volumes["pvc-1"]["spec"]["backupTargetName"] == "default"
+    assert f"{P}weekly-backup-d3" in world.volumes["pvc-1"]["metadata"]["labels"]
+
+
+def test_the_target_names_are_the_ones_setup_k3s_and_the_readers_use():
+    """The target contract, typed out and held equal to the filter the tasks and the health reader read."""
+    assert (lr.B2_TARGET, lr.R2_TARGET) == ("default", "r2")
+    assert lr.B2_TARGET == longhorn_backup_name("b2_target")
+    assert lr.R2_TARGET == longhorn_backup_name("r2_target")
+
+
+def test_report_only_names_a_target_change_and_writes_nothing(env, capsys):
+    world = World(
+        [_volume("pvc-1", "homelab/traefik-acme", "default", target="default")],
+        [_pvc(c, k) for c, k in PVC_CLASS.items()],
+    )
+    assert lr.main(["--report-only"], env, world) == 0
+    assert world.writes() == []
+    assert (
+        "would patch volume pvc-1 (homelab/traefik-acme): backupTargetName=r2"
+        in capsys.readouterr().out
+    )
 
 
 def test_a_failed_read_writes_nothing(env, capsys):
@@ -308,7 +278,7 @@ def test_report_only_prints_the_plan_and_writes_nothing(env, capsys):
         in out
     )
     assert "would patch deployment csi-attacher: memory request 64Mi -> 192Mi" in out
-    assert "1 label change(s) planned" in out
+    assert "1 volume change(s) planned" in out
 
 
 def test_a_converged_cluster_reports_nothing_to_change_in_report_only(env, capsys):
@@ -319,7 +289,7 @@ def test_a_converged_cluster_reports_nothing_to_change_in_report_only(env, capsy
     assert lr.main(["--report-only"], env, world) == 0
     out = capsys.readouterr().out
     assert "would patch" not in out
-    assert "0 label change(s) planned" in out
+    assert "0 volume change(s) planned" in out
 
 
 def test_a_csi_deployment_without_the_request_is_patched_with_a_strategic_merge(env):

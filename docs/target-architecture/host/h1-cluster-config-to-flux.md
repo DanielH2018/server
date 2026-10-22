@@ -795,7 +795,8 @@ mirrored pair, two keys with different names that a test holds equal:
       `status.available` and the condition message, so it replaces the up to four
       per-target calls. It derives the daily and weekly run times from the first two fields
       of each tier's RecurringJob `spec.cron`, read in one more list call. The worst case
-      falls from 17 kubectl calls to 15.
+      falls from 18 kubectl calls to 16. The planning-time figure of 17 to 15 predates check
+      11's pod-log read, which the shim's header counts.
     - A disarmed target stays named. The verdict's `DISARMED: <targets> (<n> volume(s) not
       checked)` note, from `build_verdict`, carries it, which is the naming ADR-0007 asks
       for.
@@ -812,7 +813,10 @@ mirrored pair, two keys with different names that a test holds equal:
       arm flag, through the owed apply, writes a blank URL.
     - The b2-budget cron drops `--retain`. `probe.py b2-budget` then reads `spec.retain` from
       the live weekly RecurringJobs, and a failed read exits non-zero rather than falling back
-      to the parser's default of 2. `--retain` stays for a hand run.
+      to the parser's default of 2. `--retain` stays for a hand run. The read happens after
+      the prune snapshot is written, so a failure costs the report and never the prices
+      `b2-deletions` needs. `format_backup_budget` accepts `retain` and does not read it in
+      its present form, so the live read changes the exit status and not the report.
     - The health grace stays derived from the schedule, now the one the cluster runs.
 - **Read only by host crons:** they stay in `setup/k3s/defaults/main.yml` until H2.
 
@@ -2760,7 +2764,9 @@ subject's tests.
     *Governs* names and changes how a disarm reads on the monitor. H1.7b adds the
     break-glass case. *Resolution:* each PR carries its amendment, and the operator approves
     each one in that PR's review (**operator-only**). If the operator prefers one superseding
-    ADR instead, it lands in H1.7a, and H1.7b amends it.
+    ADR instead, it lands in H1.7a, and H1.7b amends it. **Ruled 2026-10-22: two
+    amendments.** H1.7a carries its own amendment and the operator approves it in that PR's
+    review. H1.7b amends ADR-0007 again, and there is no superseding ADR.
 12. **A root-only suspend for bring-up.** Steps 4 to 11 of the bring-up order need the root
     `homelab` Kustomization suspended while the OCIRepository runs. D1's
     `flux_sync_suspend` suspends both. *Resolution:* no D1 variable. Step 4 runs D1's role
