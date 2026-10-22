@@ -22,6 +22,8 @@ Imported as ``from lib.render_guard import ...`` after the caller's own ``sys.pa
 bootstrap puts ``scripts/`` on the path (repo-root CLAUDE.md, *Directory Structure*).
 """
 
+import copy
+import functools
 import subprocess
 import sys
 from pathlib import Path
@@ -154,7 +156,17 @@ def load_yaml(path: Path) -> dict:
     """
     if not path.is_file():
         return {}
-    loaded = yaml_fast.safe_load(path.read_text())
+    # A copy, because callers build context dicts from the values and must not reach the
+    # cached one.
+    return copy.deepcopy(_parsed_mapping(path.read_text()))
+
+
+# Keyed on the text rather than the path, so an edit between two renders reaches the second
+# one even inside the same mtime tick. Reading the file costs little; parsing it is what a
+# render paid for again on every render_context call (#5592).
+@functools.lru_cache(maxsize=512)
+def _parsed_mapping(text: str) -> dict:
+    loaded = yaml_fast.safe_load(text)
     return loaded if isinstance(loaded, dict) else {}
 
 
