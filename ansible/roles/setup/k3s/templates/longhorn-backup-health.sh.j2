@@ -186,9 +186,8 @@ export LONGHORN_B2_DELETIONS_CRON_FIRED_STAMP="{{ k3s_cron_fired_stamp_dir }}/b2
 # output therefore means the reader ITSELF broke — report that rather than pushing nothing, which
 # would leave the monitor to time out with no explanation.
 #
-# Stdout and stderr are captured SEPARATELY (not `2>&1` into one pipe): this reader is the only
-# one of the three host health crons (configarr-health, telemetry-health are the others) that
-# spawns a subprocess of its own — it shells out to `logger` to write the full verdict before
+# Stdout and stderr are captured SEPARATELY (not `2>&1` into one pipe): this reader spawns a
+# subprocess of its own — it shells out to `logger` to write the full verdict before
 # printing the ranked one. `logger: socket /dev/log: ...`, or any uv/Python warning, landing on
 # stderr ahead of Python's own stdout flush used to become STATUS once `2>&1` merged the two
 # streams, silently turning an `up` into whatever garbage text preceded it — which Kuma reads as
