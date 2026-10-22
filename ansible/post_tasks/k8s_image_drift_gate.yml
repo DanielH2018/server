@@ -41,8 +41,8 @@
 # WHAT THIS GATE DELIBERATELY DOES NOT CATCH. All three are the lenient direction on purpose: a gate
 # that fails on a state nobody can act on gets bypassed, and then it protects nothing.
 #
-#   * An image with no running pod. Build-only images (pi-peer-backup, cronjob-gate) have no
-#     long-running workload, and a scaled-to-zero Deployment has no pod either. Both iterate to an
+#   * An image with no running pod. A build-only image (pi-peer-backup) has no long-running
+#     workload, and a scaled-to-zero Deployment has no pod either. Both iterate to an
 #     empty candidate list and pass.
 #   * A run with `--skip-tags deploy`. The accumulator task is tagged `deploy`, so it never fills,
 #     and the gate loops over nothing. That is correct — no build ran, so no image can be stale.
