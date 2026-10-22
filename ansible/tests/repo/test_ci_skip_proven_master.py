@@ -27,7 +27,10 @@ CI_WORKFLOW = REPO / ".github" / "workflows" / "ci.yml"
 GATE_NAME = "prek (lint + validate + tests + secrets)"
 # The draft arm skips every job on a draft PR (#5563); `test_ci_skips_draft_prs` below says why.
 DRAFT_ARM = "github.event.pull_request.draft != true"
-PROOF_CONDITION = f"!cancelled() && needs.prove.outputs.proven != 'true' && {DRAFT_ARM}"
+PROOF_CONDITION = (
+    "(!cancelled() || needs.prove.result == 'cancelled')"
+    f" && needs.prove.outputs.proven != 'true' && {DRAFT_ARM}"
+)
 DEPENDENTS = (
     "hooks",
     "pytest",
@@ -190,6 +193,10 @@ def test_the_gate_keeps_its_required_name_and_always_runs():
         # `proven` alone is not a proof when the job that wrote it did not succeed.
         ("failure", "true", _all("skipped"), False),
         ("cancelled", "", _all("cancelled"), False),
+        # A timed-out `prove` proved nothing, so the full sweep decides (#5783).
+        ("cancelled", "", _all("success"), True),
+        ("cancelled", "", _all("skipped"), False),
+        ("cancelled", "", _all("success", pytest="failure"), False),
     ],
 )
 def test_the_gate_passes_on_the_proven_path_and_nowhere_a_skip_is_unproven(

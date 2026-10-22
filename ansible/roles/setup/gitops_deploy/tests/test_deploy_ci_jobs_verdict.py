@@ -82,10 +82,18 @@ def test_a_skipped_job_without_proof_is_not_a_pass():
     assert jobs_verdict(_jobs("skipped")) == "pending"
 
 
-def test_a_failed_prove_job_is_red_and_a_cancelled_one_is_pending():
+def test_a_failed_prove_job_is_red():
     assert jobs_verdict([_run(CI_PROVE_JOB, conclusion="failure")] + _jobs()) == "fail"
-    cancelled = [_run(CI_PROVE_JOB, conclusion="cancelled")] + _jobs()
-    assert jobs_verdict(cancelled) == "pending"
+
+
+def test_a_timed_out_prove_job_lets_the_full_sweep_decide():
+    """A cancelled `prove` proved nothing, so every dependent runs and decides (#5783)."""
+    timed_out = _run(CI_PROVE_JOB, conclusion="cancelled")
+    assert ci_verdict([timed_out] + _jobs() + [_QUEUED_GATE], _REQUIRED) == "pass"
+    red = [timed_out] + _jobs(**{_JOB_NAMES[0]: "failure"})
+    assert jobs_verdict(red) == "fail"
+    # A skip is proof only beside a `prove` that succeeded.
+    assert jobs_verdict([timed_out] + _jobs("skipped")) == "pending"
 
 
 def test_a_concluded_gate_is_believed_over_the_jobs():

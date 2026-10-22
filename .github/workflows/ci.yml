@@ -104,11 +104,27 @@ jobs:
   # The `prek` gate stays green on the proven path because a `skipped` dependency counts as a
   # pass only when this job succeeded and said `proven=true`. The deployer's CI gate and
   # `await_ci.py` read the gate's check-run, and read `skipped` as a pass.
+  #
+  # A timed-out `prove` falls back to the full sweep (#5783). Each dependent runs when `prove`
+  # was cancelled, and the gate accepts a cancelled `prove` with `proven` unset, so every
+  # dependent must succeed. Before that, master run 39279035375 (2026-10-19) went red and parked
+  # the deployer for 21h: `prove` finished its last step 6s in, the runner then hung in teardown
+  # after "Cleaning up orphan processes", and the job timeout cancelled it at 5m23s. That
+  # cancellation skipped every dependent, and the gate failed on `prove=cancelled`.
+  #
+  # DECIDED: the dependents test `needs.prove.result == 'cancelled'` beside `!cancelled()`.
+  # Neither the job timeout nor a user's cancel is distinguishable from the other in an
+  # expression, so a run cancelled by hand while `prove` is running still starts the sweep. That
+  # costs free runner minutes on a public repo; the alternative is a red master on every hung
+  # runner. A cancel after `prove` concluded still stops the sweep, through `!cancelled()`.
+  #
+  # The timeout is sized from the 41 most recent master attempts on 2026-10-22: 40 took 6-10s,
+  # and the 41st is the hang above. A hang delays the sweep by the whole timeout, so it is short.
   prove:
     name: prove the pushed tree was tested
     if: github.event_name == 'push'
     runs-on: ubuntu-26.04
-    timeout-minutes: 5
+    timeout-minutes: 2
     permissions:
       contents: read
       pull-requests: read
@@ -177,7 +193,7 @@ jobs:
   # too. Don't read either as the steady state.
   hooks:
     needs: prove
-    if: ${{ !cancelled() && needs.prove.outputs.proven != 'true' && github.event.pull_request.draft != true }}
+    if: ${{ (!cancelled() || needs.prove.result == 'cancelled') && needs.prove.outputs.proven != 'true' && github.event.pull_request.draft != true }}
     name: hooks (lint + validate + secrets + docs)
     # A versioned runner label, not the `-latest` alias: the `language: system` hooks run whatever
     # shellcheck, Go and systemd-analyze the image preinstalls, and GitHub rolls the alias to a
@@ -424,7 +440,7 @@ jobs:
   # install` before linting — warm that is a 0.4s no-op, cold a ~40 MB download.
   ansible_lint:
     needs: prove
-    if: ${{ !cancelled() && needs.prove.outputs.proven != 'true' && github.event.pull_request.draft != true }}
+    if: ${{ (!cancelled() || needs.prove.result == 'cancelled') && needs.prove.outputs.proven != 'true' && github.event.pull_request.draft != true }}
     name: ansible-lint
     runs-on: ubuntu-26.04
     timeout-minutes: 20  # cap a wedged ansible-galaxy install so it can't burn to the 6h default
@@ -486,7 +502,7 @@ jobs:
   # checks in ~61s, and `land.sh` already waits on this job through the `prek` gate.
   pytest:
     needs: prove
-    if: ${{ !cancelled() && needs.prove.outputs.proven != 'true' && github.event.pull_request.draft != true }}
+    if: ${{ (!cancelled() || needs.prove.result == 'cancelled') && needs.prove.outputs.proven != 'true' && github.event.pull_request.draft != true }}
     name: pytest (shard ${{ matrix.shard }} of ${{ strategy.job-total }})
     runs-on: ubuntu-26.04
     timeout-minutes: 20
@@ -690,7 +706,7 @@ jobs:
   # change. A dispatch still runs it, as every job here does.
   deck_mod:
     needs: prove
-    if: ${{ !cancelled() && needs.prove.outputs.proven != 'true' && github.event.pull_request.draft != true }}
+    if: ${{ (!cancelled() || needs.prove.result == 'cancelled') && needs.prove.outputs.proven != 'true' && github.event.pull_request.draft != true }}
     name: deck mod (claude plugin validate + test)
     runs-on: ubuntu-26.04
     timeout-minutes: 10
@@ -743,7 +759,7 @@ jobs:
   # on the pinned binary as well as green.
   flux_roundtrip:
     needs: prove
-    if: ${{ !cancelled() && needs.prove.outputs.proven != 'true' && github.event.pull_request.draft != true }}
+    if: ${{ (!cancelled() || needs.prove.result == 'cancelled') && needs.prove.outputs.proven != 'true' && github.event.pull_request.draft != true }}
     name: flux round trip (placeholder render against stub render)
     runs-on: ubuntu-26.04
     timeout-minutes: 30
@@ -830,7 +846,7 @@ jobs:
   # because the `prek` gate requires `success` and a skipped job reports `skipped`.
   sops_manifest_type_proof:
     needs: prove
-    if: ${{ !cancelled() && needs.prove.outputs.proven != 'true' && github.event.pull_request.draft != true }}
+    if: ${{ (!cancelled() || needs.prove.result == 'cancelled') && needs.prove.outputs.proven != 'true' && github.event.pull_request.draft != true }}
     name: sops-manifest-type-proof (an all-digit stringData value stays a string)
     runs-on: ubuntu-26.04
     timeout-minutes: 20
@@ -1033,7 +1049,7 @@ jobs:
   # wrong digest or a 404 URL would reach master green.
   host_packages:
     needs: prove
-    if: ${{ !cancelled() && needs.prove.outputs.proven != 'true' && github.event.pull_request.draft != true }}
+    if: ${{ (!cancelled() || needs.prove.result == 'cancelled') && needs.prove.outputs.proven != 'true' && github.event.pull_request.draft != true }}
     runs-on: ubuntu-26.04
     # The image build fetches from snapshot.ubuntu.com, which answers 5xx often enough that
     # apt's retries can take minutes, and the cases boot three containers per leg.
@@ -1298,8 +1314,9 @@ jobs:
           echo "prove=$PROVE proven=${PROVEN:-} hooks=$HOOKS pytest=$PYTEST ansible-lint=$ANSIBLE_LINT" \
             "deck-mod=$DECK_MOD flux-roundtrip=$FLUX_ROUNDTRIP sops-type-proof=$SOPS_TYPE_PROOF" \
             "host-packages=$HOST_PACKAGES"
-          # `prove` runs on a push only, so it is `skipped` on every other event.
-          [ "$PROVE" = success ] || [ "$PROVE" = skipped ] || exit 1
+          # `prove` runs on a push only, so it is `skipped` on every other event. A `cancelled`
+          # `prove` timed out, proved nothing, and left every dependent to run in full (#5783).
+          [ "$PROVE" = success ] || [ "$PROVE" = skipped ] || [ "$PROVE" = cancelled ] || exit 1
           proven=false
           if [ "$PROVE" = success ] && [ "${PROVEN:-}" = true ]; then proven=true; fi
           ok() { [ "$1" = success ] || { [ "$proven" = true ] && [ "$1" = skipped ]; }; }
