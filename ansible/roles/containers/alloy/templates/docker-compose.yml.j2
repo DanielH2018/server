@@ -75,9 +75,9 @@ services:
       # container's log from the beginning on each recreate, which both duplicates lines in
       # Loki and spends the Pi's uplink re-sending them.
       - ./data:/data
-      # The two host health crons' verdict lines (pi_health source). Read-only, and the same
+      # The two host health timers' verdict lines (pi_health source). Read-only, and the same
       # path inside and out so the config's path needs no translation. No group_add: the
-      # crons write as uid 1000 and this container already runs as 1000:1000.
+      # timers' services write as uid 1000 and this container already runs as 1000:1000.
       - /var/log/pi-health:/var/log/pi-health:ro
     environment:
       # A soft ceiling on the Go runtime's TOTAL memory (heap, stacks, GC metadata, everything
