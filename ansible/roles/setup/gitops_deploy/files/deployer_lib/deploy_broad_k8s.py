@@ -29,7 +29,7 @@ from deployer_lib import deploy_k8s_owed
 from deployer_lib import deploy_locks
 from deployer_lib.deploy_changes import ChangeSet
 from deployer_lib.deploy_config import ERR, WARNING, Config, log
-from deployer_lib.deploy_narrow import BroadPlan
+from deployer_lib.deploy_narrow import BroadPlan, denylisted_in
 from deployer_lib.deploy_setup_roles import SECRET_READERS_REFUSED_EXIT
 from deployer_lib.deploy_state import DeployerState
 from deployer_lib.deploy_tick_types import TickPlan, TickTarget
@@ -126,6 +126,12 @@ def route_secret_k8s_readers(
 
     The tags it applies drop each one Flux owns, as `deploy_narrow._deploy_plane` does. A
     refusal naming its tags (the fleet-coverage ceiling) defers them to `k8s_unapplied`.
+
+    `config.k8s_autodeploy_denylist` does not subtract from the tags either (#5634). This is
+    the broad plane, and the `DECIDED: the broad plane ignores K8S_AUTODEPLOY_DENYLIST` on
+    `deploy_narrow.denylisted_in` covers it: the denylist keeps a role out of the snapshot
+    and the automatic rollback, and this plan has neither. It applies the reader forward-only,
+    as `deploy.sh --tags <role>` would. The journal names each denied tag it applies.
     """
     cs = plan.cs
     if not cs.secrets or cs.broad_deploy:
@@ -183,6 +189,13 @@ def route_secret_k8s_readers(
             f"secret-readers: secrets.yml moved a key {','.join(tags)} read — applying "
             f"{DEPLOY_PLAYBOOK} --tags {','.join(tags)}"
         )
+        denied = denylisted_in(tags, config.k8s_autodeploy_denylist)
+        if denied:
+            log(
+                f"secret-readers: {','.join(denied)} are denylisted for k8s auto-deploy and "
+                "are applied here regardless — this plan runs the plain playbook "
+                "forward-only, with no snapshot or rollback for the denylist to withhold"
+            )
         secret_plan = BroadPlan(DEPLOY_PLAYBOOK, tags, True)
     cs.broad = True
     return replace(plan, secret_plans=(secret_plan,))

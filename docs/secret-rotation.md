@@ -210,26 +210,28 @@ not rotated again by the weekly cron. Examples:
   on every pod start, and adds a machine only when it is absent (#5741). It passes no
   `--force` and has no update path, so a rotation that skips the deletes leaves every machine on
   the old password. A deleted machine comes back only when the engine pod next starts.
-  Rotation is therefore: `sops set` the new value → delete the old
-  registrations on the engine → redeploy `--tags crowdsec` on daniel-box → redeploy the
-  consumers (`--tags traefik`/`--tags authelia` on daniel-box for the sidecars). The delete is
-  required because re-registration never UPDATES an existing key. For the bouncer key that is
-  one command:
+  Flux owns the `crowdsec`, `traefik` and `authelia` roles, so `deploy.sh` exits 5 on each tag.
+  Rotation is therefore: `sops set` the new value → `cluster_vars.py write` and open the PR →
+  delete the old registrations on the engine → land the PR with `land.sh`, without `--tags`.
+  Flux applies all three roles, and the `checksum/restart` annotation the renderer stamps
+  rolls each pod that reads the key, the sidecars included (`docs/flux-deploy-plane.md`, *Restart
+  triggers*). The delete is required because re-registration never UPDATES an existing key.
+  For the bouncer key that is one command:
   `kubectl -n homelab exec deploy/crowdsec -c crowdsec -- cscli bouncers delete --ignore-missing k8straefik`.
   The hourly bouncer-prune cron usually deletes the base `k8straefik` row first, and then this
   command deletes nothing. The old key's `k8straefik@<pod IP>` rows cannot be deleted by name,
-  so they stay valid until the prune removes them, within two hours of the Traefik redeploy.
+  so they stay valid until the prune removes them, within two hours of the Traefik roll.
   The engine restart registers the new key either way, because the base name is missing. The
   bouncer-prune section of `ansible/roles/k8s/crowdsec/CLAUDE.md` has the mechanism.
   For the agent password it is one `cscli machines delete <name>` per machine, and there are
   five: `k8s-traefik-agent`, `k8s-authelia-agent`, `k8s-node-agent-daniel-box`,
   `k8s-node-agent-daniel-server` and `crowdsec-verify`. The two node agents come from
   `crowdsec_k8s_node_agent_machines` in the role's `defaults/main.yml`; a node joining the
-  cluster adds a name there. The `--tags crowdsec` redeploy restarts the node-agent DaemonSet,
-  because the role names `crowdsec-node-agent` in `manifests_extra_rollouts`. That restart is
-  what rotates them: `AGENT_PASSWORD` arrives through a `secretKeyRef`, and env resolves once at
-  pod start, so only a new pod reads the new value. Expect the node agents to fail their LAPI
-  login for a few minutes in the middle of that deploy. The node agents restart while the
+  cluster adds a name there. The landing restarts the node-agent DaemonSet, because the role
+  names `crowdsec-node-agent` in `manifests_extra_rollouts`, which makes it a restart target.
+  That restart is what rotates them: `AGENT_PASSWORD` arrives through a `secretKeyRef`, and
+  env resolves once at pod start, so only a new pod reads the new value. Expect the node agents
+  to fail their LAPI login for a few minutes in the middle of that landing. The node agents restart while the
   engine pod is still rolling, so the machines are deleted and not yet re-added until the new
   engine pod's `lapi-register` runs. The changed Secret is what rolls the engine pod. The
   agents converge without help: each agent's liveness probe converges it, restarting the container until registration
@@ -267,10 +269,11 @@ not rotated again by the weekly cron. Examples:
   `openssl genrsa 4096`, and store it with `sops set`. The value is multi-line, so it has a
   Secret of its own, `authelia-oidc-jwk`, rendered from
   `ansible/roles/k8s/authelia/templates/oidc-jwk-secret.yaml.j2`. A rotation changes that one
-  small Secret, and `--tags authelia` redeploys it. Authelia reads the key from the mounted
-  file through its `template` config filter, so the deploy must roll the pod, which the
-  central rollout-restart does because the rendered Secret changed. The key's `kid` changes
-  with it: each relying party re-fetches the JWKS, and tokens signed with the old key stop
+  small Secret. Flux owns authelia, so run `cluster_vars.py write` and land the PR as in step
+  4 of *Authelia user passwords* below, not with `--tags authelia`. Authelia reads the key from
+  the mounted file through its `template` config filter, so the landing must roll the pod. The
+  `checksum/restart` annotation the renderer stamps does, because it hashes the key's
+  `.source` digest. The key's `kid` changes with it: each relying party re-fetches the JWKS, and tokens signed with the old key stop
   verifying, so users sign in again. Rotate in an SSO window.
 - `authelia_secret` / `authelia_jwt`: rotating forces all users to re-login (not breaking).
 - `authelia_oidc_hmac_secret` / `*_password_hash`: re-issues OIDC — re-pair jellyfin (the
