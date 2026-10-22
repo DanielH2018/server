@@ -64,6 +64,8 @@ def wire_run_once(cfg, prom_result):
         gates=Gates(
             prom_dependent=frozenset({"disk"}),
             probe_prometheus=as_probe(prom_result),
+            # Loki reachable by default so run_once's Loki gate makes no real network call here.
+            probe_loki=lambda _cfg, _src: (True, "loki ok"),
             probe_wan=lambda _cfg, _src: (True, "wan ok"),
         ),
         sink=sink,
@@ -74,16 +76,21 @@ def wire_run_once(cfg, prom_result):
 def wire_run_once_reachability(
     cfg,
     names,
+    loki_result=(True, "loki ok"),
+    loki_dependent=(),
     wan_result=(True, "wan ok"),
     wan_dependent=(),
 ):
-    """Drive run_once with Prometheus UP and a stated WAN result; capture run+push.
+    """Drive run_once with Prometheus UP and a stated Loki and WAN result; capture run+push.
 
-    The WAN gate is a reach-out probe whose verdict suppresses a named set. It defaults to
-    reachable with an empty dependent set, so a caller states only what it is about.
+    The two gates share one driver because they are the same shape — a reach-out probe whose
+    verdict suppresses a named set — and a second near-identical driver would say nothing new. Each gate defaults to reachable with an empty
+    dependent set, so a caller states only the gate it is about.
 
     Args:
       names: The check names to register, each a body that records that it ran.
+      loki_result: What `probe_loki` reports, or an Exception for it to raise.
+      loki_dependent: The names the Loki gate suppresses.
       wan_result: What `probe_wan` reports, or an Exception for it to raise.
       wan_dependent: The names the WAN gate suppresses.
 
@@ -98,8 +105,10 @@ def wire_run_once_reachability(
         [Check(n, "tok_%s" % n, mk(ran, n)) for n in names],
         gates=Gates(
             prom_dependent=frozenset(),
+            loki_dependent=frozenset(loki_dependent),
             wan_dependent=frozenset(wan_dependent),
             probe_prometheus=lambda _cfg, _src: (True, "prom ok"),
+            probe_loki=as_probe(loki_result),
             probe_wan=as_probe(wan_result),
         ),
         sink=sink,

@@ -109,12 +109,13 @@ def test_run_once_with_only_filter_touches_no_gate(cfg):
     # gate probe, no metric check, no push for anything else.
     cfg = replace(cfg, CHECKS_ONLY=SUBSET_ONLY, CHECKS_SKIP=frozenset())
     evaluated = []
-    # Every body `_evaluate` can reach is a recorder: each registry entry and each of the three
+    # Every body `_evaluate` can reach is a recorder: each registry entry and each of the four
     # gate probes. That covers the whole registry, so a body outside the filter that ran
     # would be recorded, which stating a registry of only the subset could not show.
     checks = [replace(c, fn=mk(evaluated, c.name)) for c in registry.build_checks()]
     probes = Gates(
         probe_prometheus=mk(evaluated, "prometheus"),
+        probe_loki=mk(evaluated, "loki_reachable"),
         probe_b2=mk(evaluated, "b2_reachable"),
         probe_wan=mk(evaluated, "wan_reachable"),
     )
@@ -131,6 +132,7 @@ def _quiet_cycle(cfg, checks, capsys, **kwargs):
     ran = []
     probes = Gates(
         probe_prometheus=mk(ran, "prometheus"),
+        probe_loki=mk(ran, "loki_reachable"),
         probe_b2=mk(ran, "b2_reachable"),
         probe_wan=mk(ran, "wan_reachable"),
     )

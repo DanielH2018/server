@@ -175,7 +175,7 @@ def test_b2_reachable_reprobes_after_the_interval(cfg):
 
 
 def _wire_run_once_b2(cfg, b2_result, checks, b2_dependent):
-    """Drive run_once with Prometheus UP and a stated B2-reachability result."""
+    """Drive run_once with Prometheus+Loki UP and a stated B2-reachability result."""
     ran = []
     sink = FakeSink()
     check.run_once(
@@ -184,9 +184,11 @@ def _wire_run_once_b2(cfg, b2_result, checks, b2_dependent):
         [Check(n, "tok_%s" % n, mk(ran, n)) for n in checks],
         gates=Gates(
             prom_dependent=frozenset(),
+            loki_dependent=frozenset(),
             startup_grace=frozenset(),
             b2_dependent=frozenset(b2_dependent),
             probe_prometheus=lambda _cfg, _src: (True, "prom ok"),
+            probe_loki=lambda _cfg, _src: (True, "loki ok"),
             probe_wan=lambda _cfg, _src: (True, "wan ok"),
             probe_b2=lambda _cfg, _src: b2_result,
         ),

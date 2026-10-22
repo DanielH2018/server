@@ -29,7 +29,6 @@ HOST_INPUTS = (
     "ansible.cfg",
     "scripts/deploy_tools/render_targets.py",
     "scripts/secrets_mgmt/cluster_vars_check.py",
-    "scripts/secrets_mgmt/pending_retirement.py",
     # Also past the plan's list, imported at load through `ansible/filter_plugins/` and
     # `scripts/lib/`. A warm bytecode cache hid them, because the loader then opens only the
     # untracked `.pyc`; the audit runs with none.

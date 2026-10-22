@@ -1,7 +1,7 @@
 """daniel-pi's Alloy config must emit the labels the cluster's streams carry.
 
 `container`, `job`, `machine` and `stream` are the contract that lets one LogQL query span
-the estate: the loki-homelab rule `LokiPiLogsSilent` selects `{job="pi"}`, `probe.py alerts` reads
+the estate: monitor-bridge's `LOKI_PI_STREAM` selects `{job="pi"}`, `probe.py alerts` reads
 `{job="syslog"} |= "status=down"` and relies on `machine="daniel-pi"` to tell the Pi's health
 crons from the cluster hosts' syslog. The config is River, which no YAML render guard can
 parse, so this reads the RENDERED config as text — what the container receives, with

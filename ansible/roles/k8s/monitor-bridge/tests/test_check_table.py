@@ -23,7 +23,7 @@ from py_table import py_table
 from _bridge_env import bridge_env
 
 _TABLE = Path(__file__).resolve().parents[1] / "files" / "check_table.py"
-_GATES = frozenset({"prometheus", "b2_reachable", "wan_reachable"})
+_GATES = frozenset({"prometheus", "loki_reachable", "b2_reachable", "wan_reachable"})
 _GATE_VALUES = _GATES | {"startup_grace", None}
 
 
@@ -50,12 +50,13 @@ def test_the_registry_runs_every_row_but_the_gates_in_table_order():
     }
 
 
-def test_the_gate_rows_are_the_three_gates_with_the_probes_run_once_uses():
+def test_the_gate_rows_are_the_four_gates_with_the_probes_run_once_uses():
     rows = {row.name: row.fn for row in CHECKS if row.is_gate}
     assert set(rows) == _GATES == set(gates.GATE_DEPENDENTS)
     probes = gates.Gates()
     assert rows == {
         "prometheus": probes.probe_prometheus,
+        "loki_reachable": probes.probe_loki,
         "b2_reachable": probes.probe_b2,
         "wan_reachable": probes.probe_wan,
     }
@@ -93,7 +94,7 @@ def test_the_deploy_reads_every_field_but_fn_off_each_row():
         for f in dataclasses.fields(PushCheck)
         if f.default is not dataclasses.MISSING
     }
-    assert len(parsed) == len(CHECKS) >= 42
+    assert len(parsed) == len(CHECKS) >= 44
     for row, read in zip(CHECKS, parsed, strict=True):
         expected = dataclasses.asdict(row)
         del expected["fn"]
