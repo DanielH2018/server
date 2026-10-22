@@ -51,6 +51,18 @@ def test_the_unit_runs_the_command_as_the_operator_and_alerts_on_failure():
     assert "OnFailure=claude-fanout-server-lander-alert.service" in unit
 
 
+def test_the_command_runs_in_a_checkout_the_operator_owns_not_the_agents_clone():
+    # On daniel-box `claude_code_rc_workdir` is the agent's clone, which `ubuntu` cannot write
+    # and git refuses as "dubious ownership" (#5861).
+    unit = _render(
+        claude_code_rc_workdir="/var/lib/claude/server",
+        claude_code_operator_checkout="/home/ubuntu/server",
+    )
+    assert "/var/lib/claude/server" not in unit
+    assert re.search(r"^WorkingDirectory=/home/ubuntu/server$", unit, re.M)
+    assert "land-server --primary /home/ubuntu/server" in unit
+
+
 def test_land_sh_is_pinned_to_the_batches_branch_and_author():
     unit = _render()
     prefix = re.search(r"^Environment=LAND_REQUIRE_BRANCH_PREFIX=(.*)$", unit, re.M)
