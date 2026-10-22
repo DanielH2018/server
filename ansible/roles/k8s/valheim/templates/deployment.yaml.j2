@@ -123,20 +123,13 @@ spec:
             - name: TZ
               value: "{{ tz }}"
             # Installs BepInExPack beside the vanilla server and runs the server through it.
+            # Since the 1.4.0 wrapper the image creates BepInEx/plugins and patchers itself
+            # before syncing /config/bepinex into them. The old PRE_BEPINEX_CONFIG_HOOK
+            # (`mkdir -p "$plugins_path"`) named a variable 1.4.0 dropped, so it ran
+            # `mkdir -p ""` and aborted the install on every updater tick until 2026-10-22
+            # (#5769). Don't re-add it.
             - name: BEPINEX
               value: "{{ valheim_k8s_bepinex }}"
-            # One `mkdir`, and the mod set depends on it. The image syncs
-            # /config/bepinex/plugins into the install tree only when that tree already has a
-            # plugins directory — and BepInExPack's archive ships none, so on a fresh install
-            # the sync is skipped and the server comes up with no plugins at all. This hook is
-            # eval'd inside the function that does the sync, one line before it, with
-            # `plugins_path` in scope, so creating the directory here is what makes the
-            # documented drop-point mechanism work.
-            #
-            # `$plugins_path` is NOT expanded by kubelet — Kubernetes only substitutes the
-            # `$(VAR)` form — so the literal reaches the container's shell.
-            - name: PRE_BEPINEX_CONFIG_HOOK
-              value: 'mkdir -p "$plugins_path"'
             # The image zips worlds_local hourly and keeps three days of zips. Left at the
             # default /config/backups those land on the backed-up claim, and because a zip
             # shares no bytes with the last one, every weekly Longhorn backup re-uploaded the

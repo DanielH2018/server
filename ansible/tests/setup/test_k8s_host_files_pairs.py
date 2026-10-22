@@ -56,6 +56,17 @@ EXPECTED_PAIRS: frozenset[str] = frozenset(
         "pgid",
         "pi_peer_backup_src_dir",
         "puid",
+        "registry_k8s_gc_cron_hour",
+        "registry_k8s_gc_cron_minute",
+        "registry_k8s_gc_cron_weekday",
+        "registry_k8s_gc_deadline_s",
+        "registry_k8s_gc_lock_file",
+        "registry_k8s_gc_ttl_s",
+        "registry_k8s_ghcr_mirror_claim",
+        "registry_k8s_ghcr_mirror_keep_revisions",
+        "registry_k8s_image",
+        "registry_k8s_manage_gc",
+        "registry_k8s_netpol_probe_image",
     }
 )
 

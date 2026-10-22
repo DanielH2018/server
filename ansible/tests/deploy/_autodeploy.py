@@ -183,8 +183,8 @@ def _batch_templates(role: Path) -> list[tuple[str, str]]:
 
     A template can hold several `---`-separated YAML documents, and a batch-workload
     template holding two is not hypothetical:
-    `registry/templates/selftest-pull-job.yaml.j2` renders both `registry-selftest-pull`
-    and `registry-selftest-pull-agent` in one file. Splitting on the document separator and
+    registry's `selftest-pull-job.yaml.j2`, deleted in its flip, rendered both
+    `registry-selftest-pull` and `registry-selftest-pull-agent` in one file. Splitting on the document separator and
     matching `kind`/`name` within each document (rather than a single `findall` for `name:`
     over the whole file) keeps a Job's name paired with that Job, not with an unrelated
     container, volume, or a non-batch document sharing the file.

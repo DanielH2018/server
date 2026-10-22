@@ -11,6 +11,12 @@
 # It is also the only privileged component in the media stack, and deliberately so: it holds the
 # privilege in one small auditable DaemonSet instead of spreading it across long-running media
 # services. Consumers stay unprivileged and just request the resource.
+# Flux owns this role, so no Flux path runs the include below; it stays for a handback
+# (docs/flux-deploy-plane.md) and because the renderer reads the `manifests_*` vars from it. The
+# rollout wait and the `devic.es/dri` readback this file ran after it are gone with the flip. The
+# soak's verify is M2's `K8sExtendedResourceMissing` rule (`verify="true"`,
+# ansible/roles/k8s/observability/files/rules/k8s-workloads.yaml): it fires when no node reports
+# allocatable `devic.es/dri` above 0, which is the property the readback asserted.
 - name: Render and apply the DRI device plugin
   ansible.builtin.include_role:
     name: k8s/manifests
@@ -18,47 +24,3 @@
     # The DaemonSet lives in kube-system, so the armed apply and its prune run there.
     manifests_prune_namespace: kube-system
     manifests_rollout: ''
-
-- name: Wait for the device plugin to roll out
-  tags: [deploy]
-  ansible.builtin.command:
-    cmd: >-
-      k3s kubectl -n kube-system rollout status daemonset/dri-device-plugin --timeout=180s
-  become: true
-  changed_when: false
-
-- name: Read back the advertised device resource
-  tags: [deploy]
-  # `argv`, not `cmd`: the dot in `devic.es/dri` needs the jsonpath escape `devic\.es`, and
-  # `cmd`'s shlex split eats the backslash — kubectl then reads three separate keys and quietly
-  # returns empty, a false negative that looked exactly like a broken plugin. The list form
-  # hands the argument over verbatim. `wait` returns the moment the kubelet advertises the
-  # resource, and `-o` prints the count once it has; a 120s timeout bounds it.
-  ansible.builtin.command:
-    argv:
-      - k3s
-      - kubectl
-      - wait
-      - node/{{ inventory_hostname }}
-      - '--for=jsonpath={.status.allocatable.devic\.es/dri}'
-      - --timeout=120s
-      - -o
-      - 'jsonpath={.status.allocatable.devic\.es/dri}'
-  become: true
-  register: dri_plugin_allocatable
-  changed_when: false
-  # Runs under --check too: reads only. Skipped, stdout is empty and the assert below fails
-  # on a plugin that is fine.
-  check_mode: false
-
-- name: Fail if the node is not advertising the render device
-  tags: [deploy]
-  # A running DaemonSet is not the property that matters — the node advertising the resource is.
-  # Without this the plugin can be healthy while jellyfin/tdarr sit Pending forever, unschedulable
-  # for a resource nothing offers.
-  ansible.builtin.assert:
-    that: dri_plugin_allocatable.stdout | length > 0
-    fail_msg: >-
-      {{ inventory_hostname }} is not advertising devic.es/dri. Any workload requesting it will
-      stay Pending.
-    quiet: true

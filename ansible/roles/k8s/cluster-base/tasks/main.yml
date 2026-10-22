@@ -1,0 +1,14 @@
+---
+# No Flux path runs this file: the tag is flux-owned from its first commit. It stays so the role
+# has the shape every k8s role has, and the renderer reads the include's vars. The role renders
+# objects only and has no workload to roll.
+- name: Deploy the cluster base to the cluster
+  ansible.builtin.include_role:
+    name: k8s/manifests
+  vars:
+    manifests_rollout: ''
+    # readonly-rbac.yaml declares the token Secret, and its name does not say so. The token value
+    # is filled in by the cluster and nothing in the file is confidential, but the apply's
+    # verdict skips `secret/` lines and the `secret` trigger renders only this list
+    # (ansible/tests/deploy/test_manifests_apply_verdict.py), so the Secret has to be listed.
+    manifests_secret_files: ['readonly-rbac.yaml']

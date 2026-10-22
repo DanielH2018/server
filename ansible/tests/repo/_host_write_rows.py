@@ -114,12 +114,7 @@ def _flippable_task_files() -> list[str]:
     ]
 
 
-HOST_WRITE_ALLOW = {
-    _K8S + "registry/tasks/main.yml": (
-        "D5's GC retirement (Wave D's registry bullet), whose absent arms then move with "
-        "the rest"
-    ),
-}
+HOST_WRITE_ALLOW: dict[str, str] = {}
 
 
 def flipped_allow_entries(allow: dict[str, str], entries: dict[str, dict]) -> list[str]:
@@ -213,14 +208,12 @@ HOST_WRITES = Census(
             "    k3s kubectl get pod x -o name 2>/dev/null >/dev/null 2>&1\n",
         ),
     ),
-    # The writes the must_find member keeps until its D5 PR: registry's GC cron, its scripts
-    # and their absent arms. docs's, artifacts' and media-volume's directories and
-    # pi-peer-backup's two Pi writes moved to `k8s_host_files`, and traefik's flip rendered
-    # its RBAC staging into the bundle.
+    # Every task file of a role with a `containers_list` entry is a member, whether or not it
+    # writes. registry's GC moved to `k8s_host_files` and left no k8s role with a host write, so a
+    # count of writes would match nothing and ask for the row's deletion. The row stays as the
+    # guard that no k8s role grows one, and its red cases prove the offence still fires.
     min_matches=3,
-    # Only a D5 PR moves this member, so the row fails when it stops matching rather than when
-    # the selector drifts. The D5 PR that moves a member drops it here in the same commit.
+    # registry's task file held the last writes, so the row fails if the selector stops reaching it.
     must_find=frozenset({_K8S + "registry/tasks/main.yml"}),
     allow=HOST_WRITE_ALLOW,
-    count=lambda subject: len(host_writes(subject)),
 )

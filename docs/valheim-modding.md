@@ -24,11 +24,17 @@ mod bump alone, which moves neither, would otherwise keep running the old DLLs. 
 wipe-then-copy into a `homelab/` subdirectory: BepInEx scans recursively, and owning a
 subdirectory is what makes a dropped mod actually disappear instead of lingering on the PVC.
 
-**`PRE_BEPINEX_CONFIG_HOOK` is one `mkdir`, and the whole mod set depends on it.** The image
-syncs `/config/bepinex/plugins` into the install tree only when that tree already has a
-`plugins` directory, and BepInExPack's archive ships none — so on a fresh install the
-documented drop-point mechanism silently does nothing. The hook is eval'd inside that function
-one line before the sync, with `plugins_path` in scope.
+**The image creates the `plugins` directory itself, so the deployment sets no
+`PRE_BEPINEX_CONFIG_HOOK`.** Before the 1.4.0 wrapper, the image synced
+`/config/bepinex/plugins` only into an install tree that already had a `plugins` directory,
+and BepInExPack's archive ships none. A hook ran `mkdir -p "$plugins_path"` to make that sync
+happen. Since 1.4.0, `sync_bepinex_loadables` in the image's `common` creates `plugins` and
+`patchers` on both sides before it syncs them, and `plugins_path` no longer exists. The hook
+then ran `mkdir -p ""`, and the updater runs it under `set -e`, so it aborted the BepInEx install on every
+15-minute tick from 2026-10-04 until its removal on 2026-10-22 (#5769). The server kept
+loading mods only because the initContainer also writes the install tree directly. A hook the
+image `eval`s can reference only variables the pinned wrapper still defines, so re-read
+`common` at that tag before adding one.
 
 **Mod configs land on the backed-up claim.** The image symlinks the install's `BepInEx/config`
 to `/config/bepinex`, so per-mod `.cfg` files sit beside the world.

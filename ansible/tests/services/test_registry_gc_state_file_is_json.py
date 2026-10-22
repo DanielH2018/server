@@ -18,7 +18,9 @@ from pathlib import Path
 from _shell_render import rendered_shell_function
 from lib.proc_testing import run
 
-FINISH = rendered_shell_function("k8s", "registry", "registry-gc.sh.j2", "finish")
+FINISH = rendered_shell_function(
+    "setup", "k8s_host_files", "registry-gc.sh.j2", "finish"
+)
 
 
 def _finish(tmp_path: Path, status: str, msg: str) -> dict:

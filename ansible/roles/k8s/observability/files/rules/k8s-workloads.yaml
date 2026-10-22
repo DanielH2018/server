@@ -2,9 +2,9 @@
 # Jinja: prometheus-rules.yaml.j2 carries this file verbatim. The design is
 # docs/target-architecture/monitoring/m2-first-bridge-family.md, "The rules".
 #
-# EVERY ALERT HERE IS SHADOW. Each carries shadow="true", which Alertmanager routes to the
-# blackhole receiver. M2's PR 4a removed these arms from the bridge, so until PR 4b drops the
-# label the family pages from neither side. The family never pages from both.
+# EVERY ALERT HERE PAGES. M2's PR 4b dropped the shadow="true" label that routed them to the
+# blackhole receiver, after PR 4a removed these arms from the bridge. The family pages from
+# Alertmanager alone, never from both sides.
 #
 # THE JOIN SHAPE. A per-workload alert takes its C7 `service` label from workload-service's
 # recording rules. Each one is written as
@@ -47,7 +47,6 @@ groups:
         for: 15m
         labels:
           severity: warning
-          shadow: "true"
         annotations:
           summary: Deployment {{ $labels.namespace }}/{{ $labels.deployment }} has unavailable replicas.
           description: >-
@@ -81,7 +80,6 @@ groups:
         keep_firing_for: 5m
         labels:
           severity: warning
-          shadow: "true"
         annotations:
           summary: Deployment {{ $labels.namespace }}/{{ $labels.deployment }} has no available replica.
           description: >-
@@ -111,7 +109,6 @@ groups:
         for: 15m
         labels:
           severity: warning
-          shadow: "true"
         annotations:
           summary: The rollout of {{ $labels.namespace }}/{{ $labels.deployment }} has stalled.
           description: >-
@@ -155,7 +152,6 @@ groups:
           )
         labels:
           severity: warning
-          shadow: "true"
         annotations:
           summary: Container {{ $labels.container }} in {{ $labels.namespace }}/{{ $labels.pod }} is crash looping.
           description: >-
@@ -181,7 +177,6 @@ groups:
         for: 5m
         labels:
           severity: warning
-          shadow: "true"
         annotations:
           summary: DaemonSet {{ $labels.namespace }}/{{ $labels.daemonset }} has unavailable pods.
           description: >-
@@ -201,7 +196,6 @@ groups:
         labels:
           severity: warning
           service: observability
-          shadow: "true"
         annotations:
           summary: Prometheus holds fewer than 5 Deployments from kube-state-metrics.
           description: >-
@@ -220,7 +214,6 @@ groups:
         labels:
           severity: warning
           service: observability
-          shadow: "true"
         annotations:
           summary: Prometheus holds fewer than 11 DaemonSets from kube-state-metrics.
           description: >-
@@ -236,8 +229,8 @@ groups:
       # name dri-device-plugin advertises. The bridge reports INERT when no allocatable series
       # exists at all; K8sNodeAllocatableMissing pages that case instead.
       # verify="true" makes this dri-device-plugin's soak verify, D5's successor to the role's
-      # "Read back the advertised device resource" task. The soak skips a shadow rule, so the
-      # verify takes effect when M2's PR 4b drops `shadow` from this file.
+      # "Read back the advertised device resource" task. The soak skips a shadow rule, and this
+      # rule is not shadow, so the verify takes effect.
       - alert: K8sExtendedResourceMissing
         expr: |
           absent(kube_node_status_allocatable{resource="devic_es_dri"} > 0)
@@ -247,7 +240,6 @@ groups:
         labels:
           severity: warning
           service: dri-device-plugin
-          shadow: "true"
           verify: "true"
         annotations:
           summary: No node advertises the devic.es/dri GPU resource.
@@ -260,7 +252,6 @@ groups:
         labels:
           severity: warning
           service: observability
-          shadow: "true"
         annotations:
           summary: Prometheus holds no kube_node_status_allocatable series.
           description: >-
@@ -283,7 +274,6 @@ groups:
         labels:
           severity: warning
           service: observability
-          shadow: "true"
         annotations:
           summary: Prometheus holds no {{ $labels.family }} series.
           description: >-
@@ -328,7 +318,6 @@ groups:
         labels:
           severity: warning
           service: observability
-          shadow: "true"
         annotations:
           summary: A workload in {{ $labels.namespace }} has no deploy tag in workload-service.
           description: >-

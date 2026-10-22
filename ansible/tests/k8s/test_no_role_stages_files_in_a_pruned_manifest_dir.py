@@ -338,11 +338,7 @@ def test_the_pre_fix_registry_jobs_are_flagged(tmp_path):
 # Named rather than counted: an empty census would make the invariants below pass on nothing,
 # and which member went missing says more than a count moving.
 KNOWN_PRUNED_DIRS = frozenset({"n8n", "registry", "traefik", "authelia", "jellyfin"})
-KNOWN_STAGED_FILES = frozenset(
-    {
-        ("registry-jobs", "ghcr-mirror-gc-job.yaml"),
-    }
-)
+KNOWN_STAGED_FILES = frozenset({})
 
 
 def test_the_census_finds_the_known_pruned_directories():
@@ -437,11 +433,12 @@ def test_no_manifests_service_claims_a_reserved_sibling_name():
 # `ghcr-mirror-gc-job.yaml` move is more than cosmetic. One targeted pair rather than a wider
 # glob: manifest templates mention paths too, and reading them all would only add noise.
 
-GC_SCRIPT = K8S_ROLES / "registry" / "templates" / "registry-gc.sh.j2"
+HOST_FILES = K8S_ROLES.parent / "setup" / "k8s_host_files"
+GC_SCRIPT = HOST_FILES / "templates" / "registry-gc.sh.j2"
 # Rendered rather than read: MIRROR_JOB_MANIFEST's path could move into a role default, where a
 # source-text match on it would read `{{ ... }}` and pass on nothing (#3178).
-GC_SCRIPT_TEXT = rendered_shell_text("k8s", "registry", "registry-gc.sh.j2")
-REGISTRY_TASKS = K8S_ROLES / "registry" / "tasks" / "main.yml"
+GC_SCRIPT_TEXT = rendered_shell_text("setup", "k8s_host_files", "registry-gc.sh.j2")
+REGISTRY_TASKS = HOST_FILES / "tasks" / "registry.yml"
 
 _JOB_MANIFEST_RE = re.compile(r"^MIRROR_JOB_MANIFEST=(\S+)", re.MULTILINE)
 _GC_NAME = "/ghcr-mirror-gc-job.yaml"

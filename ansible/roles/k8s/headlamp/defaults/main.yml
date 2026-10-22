@@ -23,7 +23,7 @@ headlamp_k8s_netpol_probe_image: alpine:3.24@sha256:294b683cb724975bec92580e1e68
 # into `view` (flux-view-flux-system, pinned by ansible/tests/k8s/test_aggregated_clusterroles.py),
 # so any other group missing here degrades silently: the UI loads, that one resource list is empty,
 # and it reads as "the cluster has none of those". Mirrors k3s_readonly_crd_api_groups
-# (roles/setup/k3s/defaults) plus the two k3s-internal groups a cluster UI wants to show;
+# (roles/k8s/cluster-base/defaults) plus the two k3s-internal groups a cluster UI wants to show;
 # that var is a different role's default and is not in scope for the k8s deploy play.
 headlamp_k8s_crd_api_groups:
   - traefik.io

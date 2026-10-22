@@ -72,8 +72,8 @@ longer exists. `k8s/terraria` is the sibling this role copies.
   `initgroups()` for the hourly world backup, and without the capability every tick fails
   behind a healthy-looking log.
 - **No Kuma tile, deliberately** — Kuma's port monitor is TCP-only and Valheim is UDP, the
-  same reason wg-easy's tunnel has no tile. Pod death surfaces through k3s Workload Health
-  instead, and a port monitor added here would sit permanently red on a closed TCP port.
+  same reason wg-easy's tunnel has no tile. Pod death surfaces through the `k8s-workloads`
+  rules `K8sDeploymentZeroAvailable` and `K8sContainerCrashLooping` instead, and a port monitor added here would sit permanently red on a closed TCP port.
 - **First rollout is slow** — SteamCMD downloads ~1.8 G before anything binds, and
   `ansible/roles/k8s/valheim/defaults/main.yml:manifests_rollout_timeout` is the budget that
   Flux's `timeout` and `progressDeadlineSeconds` both read (#2409). It is a literal role
@@ -115,9 +115,8 @@ it; it is mutually exclusive with `VALHEIM_PLUS`, unused here.
   passes `-modifier portals casual`. A modifier applies at launch and is not written into the
   world, so changing that line and redeploying is the whole procedure, both ways.
 
-`docs/valheim-modding.md` has the two directories the initContainer writes, the
-`PRE_BEPINEX_CONFIG_HOOK` mkdir the mod set depends on, and the three log lines that look
-like success.
+`docs/valheim-modding.md` has the two directories the initContainer writes, why the
+deployment sets no `PRE_BEPINEX_CONFIG_HOOK`, and the three log lines that look like success.
 
 ## Editing
 - Manifests: `templates/*.yaml.j2` · Defaults: `defaults/main.yml`

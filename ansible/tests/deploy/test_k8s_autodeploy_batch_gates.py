@@ -30,21 +30,27 @@ from _autodeploy_batch import (
 )
 
 
-def test_batch_templates_sees_every_document_in_a_multi_job_template() -> None:
+def test_batch_templates_sees_every_document_in_a_multi_job_template(
+    widget_role,
+) -> None:
     """A template with two `---`-separated Jobs must yield both, not just the first.
 
-    registry/templates/selftest-pull-job.yaml.j2 is the live instance: it renders
-    registry-selftest-pull and registry-selftest-pull-agent in one file. A `_batch_templates`
-    that stops at the first `name:` in the file would see only the former — an ungated
-    second Job that no offender list would ever name, the same fail-open shape.
+    registry's selftest-pull-job.yaml.j2 was the live instance until its flip deleted it: it
+    rendered two Jobs in one file. A `_batch_templates` that stops at the first `name:` in the
+    file would see only the former — an ungated second Job that no offender list would ever
+    name, the same fail-open shape.
     """
-    role = _K8S_ROLES / "registry"
+    jobs = "".join(
+        f"---\napiVersion: batch/v1\nkind: Job\nmetadata:\n  name: {name}\n"
+        for name in ("widget-pull", "widget-pull-agent")
+    )
+    role = widget_role(templates={"pull-job.yaml.j2": jobs})
     found = {
         name
         for filename, name in _batch_templates(role)
-        if filename == "selftest-pull-job.yaml.j2"
+        if filename == "pull-job.yaml.j2"
     }
-    assert found == {"registry-selftest-pull", "registry-selftest-pull-agent"}
+    assert found == {"widget-pull", "widget-pull-agent"}
 
 
 def test_commented_out_wait_does_not_count_as_gated(widget_role) -> None:
@@ -90,7 +96,7 @@ def test_a_wait_in_a_trailing_shell_comment_does_not_count_as_gated(
 def test_single_wait_naming_two_jobs_credits_both(widget_role) -> None:
     """One `wait --for=condition=complete` naming two Jobs must credit both names.
 
-    Synthetic mirror of registry's real `wait ... job/registry-selftest-pull
+    Synthetic mirror of registry's former `wait ... job/registry-selftest-pull
     job/registry-selftest-pull-agent`, pinned independently so the guard's behavior on a
     multi-name wait doesn't depend on that role continuing to exist or stay denylisted.
     """

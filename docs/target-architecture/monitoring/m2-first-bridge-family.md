@@ -712,9 +712,11 @@ one-commit rule, and the bound is stated under PR 4a.
 - Gates: PR 4a's verification is recorded, PR 3's reload check and routing pytest have
   passed, and C7's amendments for Open questions 3 and 5 have landed in contracts.md, because
   this PR is the one that makes `service="k3s"` and `service="unmapped"` page.
-- **Deploy.** The default `land.sh` flow deploys `observability` alone, because
-  `scripts/deploy_tools/reach.py:role_for` maps a `.md` under a role to no role. Prometheus loads the rules within its 30s auto-reload, and only
-  the rules ConfigMap changes, so nothing rolls. Run `probe.py health observability`.
+- **Deploy.** `observability` is Flux-owned (`owner: flux`), so `land.sh` does not deploy it:
+  the rules ConfigMap ships when `promote` verifies the merged bundle. The role's `.md` edit
+  rolls no pod. Prometheus loads the rules within its 30s auto-reload, and only the rules
+  ConfigMap changes, so nothing rolls. Run `probe.py health observability` after `promote`
+  verifies.
 - Any deploy at master's tip from here on ships the narrowed bridge and live rules, so no
   interleaving pages twice.
 - Two-writer check: in this commit the Kubernetes arms page from Alertmanager only, and the

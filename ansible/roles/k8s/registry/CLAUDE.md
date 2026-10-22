@@ -8,17 +8,13 @@ registry round trip. See repo-root `CLAUDE.md` for shared conventions.
 
 ## At a glance
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates, tasks or containers_list entry, or the k3s role's Longhorn tier lists. -->
-- **Deploy tag:** `--tags "registry"`
+- **Applied by:** Flux, through `promote` (`owner: flux`); `deploy.sh` refuses
+  `--tags=registry` with exit 5
 - **Images:** `registry` (`registry_k8s_image`), `gcr.io/go-containerregistry/crane`
   (`registry_k8s_crane_image`), `alpine` (`registry_k8s_netpol_probe_image`)
 - **Route:** none (no `templates/ingressroute.yaml.j2`)
 - **Claims:** `registry-data` (no backup (StorageClass longhorn-nobackup)),
   `registry-ghcr-mirror` (no backup (StorageClass longhorn-nobackup))
-- **Auto-deploy:** denylisted (`k8s_autodeploy: false`) — dependency edges — image-supply path
-  for n8n/homelab-mcp/ical-proxy/nut/pi-peer-backup/code-server/terraria/valheim/karakeep; no
-  intra-tick ordering. ALSO Recreate + its own PVC (blob store) — two independent reasons.
-  COUPLING NOTE for a future promotion: a revert drops recently-pushed digests from the blob
-  store while nodes that already pulled them keep running until their next pull 404s
 <!-- /generated_from -->
 
 - **No `REGISTRY_AUTH`.** Network reachability to `k8s_registry_port` IS the access
@@ -54,9 +50,9 @@ registry round trip. See repo-root `CLAUDE.md` for shared conventions.
     `registries.yaml` mirror covers the whole host. Its store is therefore its own claim,
     `registry_k8s_ghcr_mirror_claim` (30Gi, `longhorn-nobackup`).
   - The TTL is zero, so only the weekly GC reclaims the store (#5541). A proxy refuses
-    manifest DELETE, so `ghcr-mirror-gc-job.yaml.j2`'s Job, `registry-gc-ghcr-mirror`, edits
+    manifest DELETE, so `ansible/roles/setup/k8s_host_files/templates/ghcr-mirror-gc-job.yaml.j2`'s Job, `registry-gc-ghcr-mirror`, edits
     the store offline. `registry-gc.sh` runs it with only `deploy/ghcr-mirror` scaled to zero.
-    Its `prune` initContainer runs `files/ghcr-mirror-prune.sh`, and its
+    Its `prune` initContainer runs `ansible/roles/setup/k8s_host_files/files/ghcr-mirror-prune.sh`, and its
     `gc` container then runs plain `garbage-collect`.
   - The prune's unit is a manifest revision, not a tag. A third-party ghcr.io image is pinned
     by digest, and the proxy caches a digest pull with no tag, so `--delete-untagged` on this
@@ -82,14 +78,13 @@ registry round trip. See repo-root `CLAUDE.md` for shared conventions.
   - **Nothing but `registry-gc.sh` writes the mirror's `spec.replicas`**, so the operator
     accepted it as the one exception to contract C4 on field ownership (#5732). The script
     stays a host cron after the flip.
-  - **The deploy never restores the mirror mid-GC** (#5736). The script holds an flock on
-    `registry_k8s_gc_lock_file` for its whole run, and the deploy's restore runs under the same
-    lock with `--nonblock`, so a held lock skips it. The Job-active read stays beside it for a
-    run killed after it applied its Job.
+  - **No deploy restores the mirror.** Until the flip, a deploy task restored a mirror a
+    stopped GC left at zero, under the script's flock (#5736). Flux owns the role now and
+    renders no `replicas:` for the mirror, so nothing but `registry-gc.sh` writes the count
+    and the deploy-time restore was deleted with the tasks.
   - **A run killed mid-phase is repaired by the next one.** The stamp
     `/var/lib/registry-gc/ghcr-mirror-down` exists from before the scale-down until the mirror
-    serves again, and a run that finds it restores the mirror first. The deploy restores a
-    stranded mirror only while Ansible owns registry, so observability's
+    serves again, and a run that finds it restores the mirror first. Observability's
     `GhcrMirrorScaledToZero` (`files/rules/registry.yaml` there) pages one left at zero for 2h.
 - **The push store is not collected** (D5, Wave D's registry bullet). Its GC scaled
   `deploy/registry`, whose `replicas: 1` Flux renders after the flip, so Flux would restore
@@ -103,25 +98,27 @@ registry round trip. See repo-root `CLAUDE.md` for shared conventions.
   static in `k8s/uptime-kuma`, deadline one hour past the weekly period) and the off-site
   healthchecks.io `registry-gc` dead-man. The token existed nowhere but the script until
   2026-09-18 (#1937), so before that only the dead-man saw a run.
-- **The four job manifests stage in `/etc/rancher/k3s/manifests/registry-jobs/`, not in this
+- **The job manifests stage in `/etc/rancher/k3s/manifests/registry-jobs/`, not in this
   role's own manifest directory** (#1669). `k8s/manifests` prunes every file in
   `manifests/registry/` outside the role's file list, which deleted them on every deploy.
   Their `-job.yaml` suffix keeps them out of the derived list. `ghcr-mirror-gc-job.yaml` is
-  the one that matters: `registry-gc.sh` reads it at cron time, so the prune left a window in
-  which GC failed on a missing manifest. Nothing sweeps `registry-jobs/`, so a host with
-  `registry_k8s_manage_gc: false` gets an explicit removal task outside the GC block. The
-  retired push store's `gc-job.yaml` has its absent arm in
-  `ansible/roles/setup/k8s_host_files/tasks/registry.yml`.
-- **`templates/verify-inert/` holds the Flux form of the self-tests and the netpol probe**,
-  and nothing renders it yet. The flip PR renames it to `templates/verify/` and deletes the
-  tasks with their three Job templates. `files/registry_verify.py` runs one check per Job:
+  the one that mattered: `registry-gc.sh` reads it at cron time, so the prune left a window in
+  which GC failed on a missing manifest. That manifest, the script, `/var/lib/registry-gc` and
+  the cron now install from `ansible/roles/setup/k8s_host_files/tasks/registry.yml`, because
+  a Flux-owned role runs no tasks. The same file holds the retired push store's `gc-job.yaml`
+  absent arm. `registry_k8s_manage_gc: false` skips that whole block and removes nothing.
+  The setup role keeps copies of the GC's variables in its `defaults/main.yml`, and
+  `ansible/tests/setup/test_k8s_host_files_pairs.py` holds them equal to this role's.
+- **Flux owns registry (D5, Wave D).** `promote` applies it, and no Ansible run reaches
+  `tasks/main.yml`, which keeps only the `k8s/manifests` include for the handback
+  (`docs/flux-deploy-plane.md`). The self-tests and the netpol probe are the `registry-verify`
+  Jobs in `templates/verify/`, which the renderer emits once the `registry` Kustomization
+  reads Ready. `files/registry_verify.py` runs one check per Job:
   - `push` writes a fixed image through the distribution API, then seeds the pull Jobs'
     image. It copies `flux_job_image`'s linux/amd64 image into the push store under a tag
     named for the pin's digest, reading Docker Hub only when the store lacks that tag.
   - `pull`, and `pull-agent` on a cluster with an agent node, run that copy from
     `k8s_registry_pull_host`, so the pod starting is the proof (ruling on #5680). On a first
     run they wait in ImagePullBackOff until the push has seeded it. The `DECIDED:` comment
-    in `templates/verify-inert/job.yaml.j2` has the deadline arithmetic.
+    in `templates/verify/job.yaml.j2` has the deadline arithmetic.
   - `isolation` proves both ports refuse `app: registry-verify`.
-- The deploy proves the push and pull loop with `crane` round trips
-  (`registry_k8s_probe_source`, `registry_k8s_probe_repo`) before trusting a rollout.
