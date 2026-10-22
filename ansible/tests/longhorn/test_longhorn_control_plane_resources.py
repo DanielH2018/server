@@ -143,8 +143,3 @@ def test_the_csi_setting_requests_the_defaults_value_for_the_four_sidecars_only(
         }
     }
     assert _csi_setting_value() == {name: request for name in CSI_SIDECARS}
-
-
-def test_each_csi_setting_entry_sets_a_request_and_no_limit():
-    for resources in _csi_setting_value().values():
-        _assert_request_only(resources)
