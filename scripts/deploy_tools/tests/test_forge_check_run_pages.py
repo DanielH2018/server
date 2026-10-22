@@ -23,13 +23,21 @@ def passing(name: str) -> dict:
     return {"name": name, "status": "completed", "conclusion": "success"}
 
 
-def two_page_check_runs(page_two: list[dict], total_count: int | None = None):
-    """A check-runs endpoint for T: 100 passing filler runs, then `page_two` on page 2.
+def two_page_check_runs(
+    page_two: list[dict],
+    total_count: int | None = None,
+    page_one_tail: tuple[dict, ...] = (),
+):
+    """A check-runs endpoint for T: a full page 1 of passing runs, then `page_two` on page 2.
 
-    `total_count` defaults to the runs the pages hold; a larger one models a short read. A
-    request with no `page` gets page 1, as GitHub answers it.
+    Page 1 is filler runs ending in `page_one_tail`, 100 in all. `total_count` defaults to the
+    runs the pages hold; a larger one models a short read. A request with no `page` gets
+    page 1, as GitHub answers it.
     """
-    page_one = [passing(f"filler-{i:03d}") for i in range(100)]
+    fillers = 100 - len(page_one_tail)
+    page_one = [passing(f"filler-{i:03d}") for i in range(fillers)] + list(
+        page_one_tail
+    )
     count = len(page_one) + len(page_two) if total_count is None else total_count
 
     def transport(method, url, headers):
@@ -52,6 +60,23 @@ def test_a_failing_run_on_the_second_page_fails_the_ci_verdict():
     failing = {"name": FAILING, "status": "completed", "conclusion": "failure"}
     runs = forge.GitHub(two_page_check_runs([failing]), None).check_runs(T)
     assert ci_verdict(runs, frozenset({FAILING})) == "fail"
+
+
+@pytest.mark.parametrize(
+    ("rerun", "verdict"),
+    [
+        ({"status": "completed", "conclusion": "failure"}, "fail"),
+        ({"status": "in_progress", "conclusion": None}, "pending"),
+    ],
+    ids=["failing", "pending"],
+)
+def test_a_rerun_on_the_second_page_overrides_a_pass_on_the_first(rerun, verdict):
+    # The required name passes on page 1, so a page-1-only read is a false green.
+    transport = two_page_check_runs(
+        [{"name": FAILING, **rerun}], page_one_tail=(passing(FAILING),)
+    )
+    runs = forge.GitHub(transport, None).check_runs(T)
+    assert ci_verdict(runs, frozenset({FAILING})) == verdict
 
 
 def test_a_read_short_of_total_count_is_refused():
