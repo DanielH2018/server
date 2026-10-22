@@ -1,0 +1,55 @@
+---
+# Longhorn holds every PVC. The app manifest is an in-tree copy, files/upstream/longhorn.yaml,
+# byte for byte what the item's `url` serves. No render may fetch a URL (D5, C1), so the renderer
+# attaches the copy to this tag's bundle verbatim, and `sha256` still describes what Flux applies.
+# scripts/dev/vendor_manifest.py owns the item's shape and the refresh:
+#   uv run python scripts/dev/vendor_manifest.py longhorn
+# Merging a bump of the version is the upgrade (H1 Open question 6): land it through land.sh,
+# which runs the longhorn-upgrade gates, one minor per PR. Run the refresh in the same PR and read
+# docs/longhorn-upgrade.md.
+#
+# Longhorn holds every PVC, and a careless bump is worse than a stale one: Longhorn has
+# version-to-version upgrade constraints and does not support arbitrary version skips. Tracked
+# for the signal, never automerged.
+# renovate: datasource=github-releases depName=longhorn/longhorn
+k3s_longhorn_version: v1.12.1  # noqa var-naming[no-role-prefix]
+longhorn_vendored_manifests:
+  - name: longhorn.yaml
+    url: "https://raw.githubusercontent.com/longhorn/longhorn/{{ k3s_longhorn_version }}/deploy/longhorn.yaml"
+    fetched_url: "https://raw.githubusercontent.com/longhorn/longhorn/v1.12.1/deploy/longhorn.yaml"
+    sha256: "41648963af867ac1d0c85755fb53cf61cacd57c9bb22e1942e3fb0439eeb04fd"
+
+# Memory REQUEST only (no limit) for longhorn-manager, applied by files/patches/longhorn-manager.yaml.
+# A kustomize patch is copied verbatim, so the patch holds the literal and
+# ansible/tests/longhorn/test_longhorn_control_plane_resources.py holds the two equal.
+# Upstream's deploy/longhorn.yaml ships longhorn-manager with an empty `resources: {}`, which gives
+# BestEffort QoS and oom_score_adj 1000 — the worst possible score, so the kernel eats the storage
+# control plane first under any memory pressure. Measured at the OOM kill: longhorn-manager held
+# 137 MB anon-rss, while instance-manager (already Burstable) survived untouched. A REQUEST alone
+# moves the pod to Burstable and drops oom_score_adj without adding a new kill path — a LIMIT set
+# too low would trade "killed by badness" for "killed by cgroup cap". Headroom is roughly double
+# the measured RSS: enough to absorb ordinary growth without inflating node allocatable so far
+# that real pressure elsewhere goes unschedulable. The csi-* sidecars' request,
+# k3s_longhorn_csi_sidecar_memory_request, stays in setup/k3s until H1.6.
+k3s_longhorn_manager_memory_request: 256Mi  # noqa var-naming[no-role-prefix]
+
+# The longest the tag's Kustomization waits for longhorn-manager to roll. The DaemonSet rolls with
+# maxUnavailable 100%, so both pods are replaced at once and the wait is one pod's start time, not
+# two. The literal is `manifests_rollout_timeout` because the renderer reads a role's Flux
+# timeout from that key.
+# Measured 2026-10-22: 36s from deleting both manager pods to both replacements Ready (30s of it
+# termination grace), doubled and rounded up to a minute. Cited in #5922.
+manifests_rollout_timeout: 2m  # noqa var-naming[no-role-prefix]
+
+# DECIDED: never pruned. Under prune: true, a render that dropped the manager DaemonSet or a CRD
+# would make Flux delete it, and deleting a Longhorn CRD deletes every Volume, Engine and Replica
+# CR of its kind: every PVC detaches at once. With prune: false a render that drops an object
+# leaves it serving. The cost is that an object removed here, or retired by a later upstream
+# release, stays live until the operator deletes it (**operator-only**). Full analysis: the H1
+# plan's *Plumbing tags are never pruned*.
+flux_prune: false  # noqa var-naming[no-role-prefix]
+
+# Auto-deploy stance. Flux applies the tag, so this gates no apply; the reason records why a bad
+# merge here is not a routine bump.
+k8s_autodeploy: false  # noqa var-naming[no-role-prefix]
+k8s_autodeploy_reason: "platform — Longhorn holds every PVC; a bad apply or a version skip detaches or corrupts the volumes under every stateful service, and host probes stay green through that outage"  # noqa var-naming[no-role-prefix]
