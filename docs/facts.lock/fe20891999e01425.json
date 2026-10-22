@@ -1,0 +1,12 @@
+{
+  "checksum": "54d5ee7c05f4928b19af737351c15ae745d991305557f2e6d4d175f6a7136d97",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "ansible/roles/k8s/longhorn-reconcile/CLAUDE.md#Traps",
+  "row": {
+    "atoms": {
+      "ansible/filter_plugins/longhorn_groups.py": "4e17c7fc4cf75545c9434289d1189858065710a72adb7f61f80d52a8bab1fca6"
+    },
+    "python": "3.14",
+    "verified_sha": "79cecc80f"
+  }
+}

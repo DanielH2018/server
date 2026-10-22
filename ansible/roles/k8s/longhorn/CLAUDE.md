@@ -80,10 +80,12 @@ host probes stay green.
   holds the set equal to the untiered roles that set `flux_prune: false`.
 
 ## The Longhorn window, H1.5a until H1.7b
-`setup/k3s` still holds the tasks that write Longhorn's backup targets and RecurringJobs, patch
-the CSI sidecar requests and reconcile the volume labels, and they fail on a cluster where Flux has not yet created `longhorn-system`.
-Bring-up step 1 therefore skips the `longhorn` and `longhorn_backup` tags, and step 7a applies
-them once the `longhorn` Kustomization reads `Ready`. The host tasks `setup/k3s` keeps for
+`setup/k3s` still holds the tasks that write Longhorn's backup targets, the backup-store poll
+interval and the RecurringJobs, and they fail on a cluster where Flux has not yet created
+`longhorn-system`. The CSI sidecar requests and the volume-label reconcile left `setup/k3s` at
+H1.6: they are the `longhorn-reconcile` role's CronJob. Bring-up step 1 therefore skips the
+`longhorn` and `longhorn_backup` tags, and step 7a applies them once the `longhorn`
+Kustomization reads `Ready`. The host tasks `setup/k3s` keeps for
 Longhorn (`open-iscsi`, `nfs-common` and the multipathd blacklist) carry the tag
 `longhorn_host` alone, so step 1 still runs them. `docs/longhorn-disaster-recovery.md`, *Order
 from H1.2*, has the steps.

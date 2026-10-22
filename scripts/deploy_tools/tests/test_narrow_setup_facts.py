@@ -246,8 +246,10 @@ def test_the_derivation_follows_a_fact_in_the_real_k3s_role():
     assert index.facts["tasks/longhorn-backup.yml"] == frozenset(
         {"k3s_longhorn_b2_region"}
     )
+    # `longhorn` is the poll-interval task H1.6 moved into the same file: a file's tags are the
+    # union over its tasks, so that task's tag joins every reader of the file.
     assert index.key_readers("k3s_longhorn_b2_region") == frozenset(
-        {"longhorn_backup", "longhorn_r2"}
+        {"longhorn", "longhorn_backup", "longhorn_r2"}
     )
 
 

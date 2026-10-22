@@ -1,0 +1,13 @@
+{
+  "checksum": "326eb6cbc57e45ba4e47fb20c64b7e5d9e09a047ad7a10b662cae8fbe5a200a3",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "ansible/roles/k8s/longhorn-reconcile/CLAUDE.md#What it writes, and how often (the autonomous-role contract)",
+  "row": {
+    "atoms": {
+      "ansible/tests/k8s/test_rbac_against_rest_script.py::test_the_longhorn_reconcile_role_grants_every_call_its_script_makes": "25e9394a1a80ffba8e0b4bc7fbc997a495ab747bff688b29e47e485fdadafea1",
+      "ansible/tests/longhorn/test_daily_group_membership_is_the_r2_list.py": "16f66507efe2f9065180727d36f93922095ad199cc398dc5c4dab09acbb199c1"
+    },
+    "python": "3.14",
+    "verified_sha": "79cecc80f"
+  }
+}

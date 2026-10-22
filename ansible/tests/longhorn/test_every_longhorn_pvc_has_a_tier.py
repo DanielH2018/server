@@ -2,8 +2,8 @@
 """Guards that every `storageClassName: longhorn` PVC is routed to a backup tier.
 
 A `longhorn`-class PVC in none of the three routing lists in
-`ansible/roles/setup/k3s/defaults/main.yml` is labelled by `longhorn.yml:436-439` into
-recurring group `default` — daily backups to B2, retain 14 — against the weekly-only policy in
+`ansible/roles/setup/k3s/defaults/main.yml` is labelled by the `longhorn-reconcile` role's
+`files/longhorn_reconcile.py` into recurring group `default` — daily backups to B2, retain 14 — against the weekly-only policy in
 `docs/longhorn-backup-tiering.md:27-31`. This guard asserts that every bound `longhorn`-class
 PVC appears in one of the three lists;
 `test_longhorn_storageclass.py::test_every_routed_volume_is_a_real_pvc` only checks the
@@ -111,7 +111,7 @@ def test_every_longhorn_pvc_has_a_tier():
     assert not uncovered, (
         "these PVCs are on storageClassName: longhorn but appear in none of "
         f"{_ROUTING_LISTS} — an unrouted longhorn-class volume defaults to daily backups "
-        "on B2 at retain 14 (ansible/roles/setup/k3s/tasks/longhorn.yml:436-439), against "
+        "on B2 at retain 14 (the longhorn-reconcile role's files/longhorn_reconcile.py), against "
         f"the weekly-only policy in docs/longhorn-backup-tiering.md: {sorted(uncovered)}"
     )
 

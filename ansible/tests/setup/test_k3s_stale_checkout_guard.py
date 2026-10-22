@@ -264,18 +264,35 @@ def r2(tmp_path_factory) -> dict[str, Outcome]:
 
 def test_an_inventory_holding_no_mapped_id_passes(whole_file):
     _passed(whole_file["unmapped"])
-    assert whole_file["unmapped"].calls == 4, (
+    assert whole_file["unmapped"].calls == 3, (
         "every instance reads the inventory under a whole-file run"
     )
 
 
 def test_a_row_whose_task_name_is_a_template_names_it_as_written(tmp_path):
-    # The weekly-shard rows keep `{{ shard }}` literal with `{% raw %}`; a run that rendered
-    # it again would fail on an undefined `shard` instead of naming the task.
+    # A row keeps `{{ shard }}` literal with `{% raw %}`; a run that rendered it again would fail
+    # on an undefined `shard` instead of naming the task. H1.6 deleted the last real row of this
+    # shape (the weekly-shard tasks), so the guard here is a fixture with the same instance form.
+    guard = [
+        {
+            "name": "Guard a writer whose task name is a template",
+            "ansible.builtin.import_tasks": "stale-checkout-check.yml",
+            "tags": ["longhorn"],
+            "vars": {
+                "k3s_stale_checkout_rows": [
+                    {
+                        "task": "Move volumes whose weekday changed out of shard d{% raw %}{{ shard }}{% endraw %}",
+                        "ids": [RECONCILE],
+                    }
+                ]
+            },
+        }
+    ]
     outcome = _run_one(
         tmp_path,
         Case(["inventory"], {"longhorn-reconcile": [RECONCILE]}),
         args=("--tags", "longhorn"),
+        guard=guard,
     )
     _failed_naming(
         outcome, "Move volumes whose weekday changed out of shard d{{ shard }}"
@@ -288,7 +305,7 @@ def test_a_checkout_whose_coredns_writers_are_gone_passes_while_flux_owns_coredn
     # H1.4 deleted the CoreDNS writers and their instance, so no row names the Deployment. A
     # row that named it again would fail here once Flux's inventory lists it.
     _passed(whole_file["coredns-owned"])
-    assert whole_file["coredns-owned"].calls == 4, (
+    assert whole_file["coredns-owned"].calls == 3, (
         "every instance read and matched nothing"
     )
 

@@ -316,6 +316,7 @@ extra-paths = [
   "ansible/roles/k8s/gpu-exporter/files",
   "ansible/roles/k8s/uptime-kuma/files",
   "ansible/roles/k8s/karakeep/files",
+  "ansible/roles/k8s/longhorn-reconcile/files",
   "scripts",
   "scripts/backup",
   "scripts/deploy_tools",

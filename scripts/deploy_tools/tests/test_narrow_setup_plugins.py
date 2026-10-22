@@ -106,7 +106,9 @@ def test_an_inventory_value_calling_the_filter_is_flagged(calls_plugin):
 @pytest.mark.parametrize(
     ("role", "plugin", "tags"),
     [
-        ("k3s", "service_tier.py", {"longhorn_backup", "longhorn_r2"}),
+        # `longhorn` is the poll-interval task H1.6 moved into longhorn-backup.yml: a file's tags
+        # are the union over its tasks, so that task's tag joins every reader of the file.
+        ("k3s", "service_tier.py", {"longhorn", "longhorn_backup", "longhorn_r2"}),
         ("gitops_deploy", "k8s_autodeploy.py", {"gitops-deploy-service"}),
     ],
 )

@@ -73,12 +73,12 @@ def test_the_host_tasks_carry_longhorn_host_and_neither_skipped_tag():
     assert problems(*_real()) == []
 
 
-def test_main_imports_the_host_file_ahead_of_longhorn_yml():
+def test_main_imports_the_host_file_ahead_of_longhorn_backup_yml():
     main = _real()[1]
     imports = [
         t[key] for t in main for key in _IMPORTS if key in t and isinstance(t[key], str)
     ]
-    assert imports.index(HOST_FILE) < imports.index("longhorn.yml")
+    assert imports.index(HOST_FILE) < imports.index("longhorn-backup.yml")
 
 
 def test_a_task_tagged_longhorn_is_flagged():
