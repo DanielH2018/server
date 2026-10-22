@@ -1,4 +1,4 @@
-"""grafana_dashboards.py and asset_pins.py print nothing on stdout when they exit non-zero.
+"""grafana_dashboard_uids.py and asset_pins.py print nothing on stdout when they exit non-zero.
 
 Most tests run a script as a subprocess against a scratch tree holding a copy of `scripts/lib`
 and the script. Both scripts read their repo from their own location, so the copy runs
@@ -53,14 +53,14 @@ def _lines_beyond_fail_lines(err: str) -> list[str]:
     ]
 
 
-# ── grafana_dashboards.py ───────────────────────────────────────────────────────────────────
+# ── grafana_dashboard_uids.py ───────────────────────────────────────────────────────────────
 
 
 @pytest.fixture(scope="module")
 def grafana_failure(tmp_path_factory) -> subprocess.CompletedProcess[str]:
     """One run over a tree holding one board whose panel names an unprovisioned uid."""
     root = tmp_path_factory.mktemp("grafana")
-    script = _copy_script(root, "grafana_dashboards.py")
+    script = _copy_script(root, "grafana_dashboard_uids.py")
     role = root / "ansible/roles/k8s/observability"
     (role / "templates").mkdir(parents=True)
     (role / "templates/grafana.yaml.j2").write_text(

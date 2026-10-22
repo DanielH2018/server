@@ -198,10 +198,10 @@ files = "^(ansible/roles/k8s/home-assistant/(templates/config|files)/.*|scripts/
 [[repos.hooks]]
 id = "validate-grafana-dashboards"
 name = "Validate Grafana dashboard datasource uids"
-entry = "uv run --frozen python scripts/validate/grafana_dashboards.py"
+entry = "uv run --frozen python scripts/validate/grafana_dashboard_uids.py"
 language = "system"
 pass_filenames = false
-files = "^(ansible/roles/k8s/observability/files/dashboards/.*\\.json|ansible/roles/k8s/observability/templates/grafana\\.yaml\\.j2|scripts/validate/grafana_dashboards\\.py|scripts/lib/(cli_help|exit_codes|repo_paths)\\.py)$"
+files = "^(ansible/roles/k8s/observability/files/dashboards/.*\\.json|ansible/roles/k8s/observability/templates/grafana\\.yaml\\.j2|scripts/validate/grafana_dashboard_uids\\.py|scripts/lib/(cli_help|exit_codes|repo_paths)\\.py)$"
 
 # Check the alert plane's inputs with the tools that load them. promtool checks the rendered
 # prometheus.yml, every rule file and every rule test; amtool checks the Alertmanager config;

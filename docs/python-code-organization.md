@@ -98,7 +98,8 @@ the operator's approval for a module added beside a directory of the same name, 
 It also needs approval for a module at the top of one `sys.path` root that `land.py` inserts
 when it shadows a directory or module at the top of another. It reads those roots from
 `land.py`'s own inserts, not from `pythonpath`: the refusal protects what `land.py` imports,
-and `pythonpath` applies only under pytest. Across the `pythonpath` roots, the
+and `pythonpath` applies only under pytest. Across the `pythonpath` roots, every role's `files/`
+and every `scripts/<dir>` holding a `tests/`, the
 `no-two-import-roots-share-a-module-basename` row of `ansible/tests/repo/test_census_rows_python.py`
 catches two roots that hold the same module name. No test catches a module that shadows a
 directory in another root.

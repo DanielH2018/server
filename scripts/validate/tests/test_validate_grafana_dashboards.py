@@ -16,7 +16,7 @@ import sys
 from pathlib import Path
 
 from lib import proc_testing
-from validate import grafana_dashboards as vgd
+from validate import grafana_dashboard_uids as vgd
 
 
 # ── duplicate dashboard uids ───────────────────────────────────────────────────────────────────
@@ -166,7 +166,7 @@ def test_main_prints_each_error_as_a_fail_line_on_stderr(tmp_path):
     (role / "files/dashboards/board.json").write_text(json.dumps(board))
 
     run = proc_testing.run(
-        [sys.executable, str(tmp_path / "scripts/validate/grafana_dashboards.py")]
+        [sys.executable, str(tmp_path / "scripts/validate/grafana_dashboard_uids.py")]
     )
     assert run.returncode == 1, run.stdout + run.stderr
     path = "ansible/roles/k8s/observability/files/dashboards/board.json"

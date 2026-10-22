@@ -17,12 +17,9 @@ The classes rot in OPPOSITE directions, which is why each gets its own assertion
 Run: uv run pytest scripts/validate/tests/test_skip_roles_classes_hold.py
 """
 
-import sys
 from pathlib import Path
 
 import pytest
-
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 # Imported from the module that DEFINES them, not from validate.k8s_manifests, which only
 # re-exports them. A guard that reads a re-export passes just as happily when the

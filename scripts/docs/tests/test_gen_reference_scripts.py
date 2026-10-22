@@ -303,7 +303,7 @@ def test_the_live_tree_classifies_the_names_we_already_know(live_verdicts):
         "shell_templates.py": "gate",
         "unit_templates.py": "gate",
         "validate_ha_config.py": "gate",
-        "grafana_dashboards.py": "gate",
+        "grafana_dashboard_uids.py": "gate",
         "deploy_tags.py": "gate",
         "deploy_cli.py": "gate",
         "staleness.py": "gate",
@@ -411,7 +411,8 @@ def test_no_two_scripts_share_a_basename():
     invariant, and this is where it is enforced. Sibling, different invariant, keep apart:
     the `no-two-import-roots-share-a-module-basename` row of
     `ansible/tests/repo/test_census_rows_python.py` forbids one NAME at two
-    `pythonpath` roots — sys.path shadowing, so every root but top level only.
+    import roots (`pythonpath`, role `files/`, test-inserted `scripts/<dir>`) — sys.path
+    shadowing, so every root but top level only.
     """
     clashes = _basename_clashes(sc.candidates(g.SCRIPTS))
     assert not clashes, (

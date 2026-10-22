@@ -186,18 +186,20 @@ def pythonpath_roots() -> list[str]:
 
 @cache
 def _import_roots() -> frozenset[str]:
-    """The `pythonpath` roots plus every role's `files/` directory.
+    """The `pythonpath` roots, every role's `files/`, and every `scripts/<dir>` with tests.
 
-    A role test reaches its own `files/` through a `sys.path.insert` at collection time, and
-    every such insert lands in the one session a full run shares, so a role's `files/` is an
-    import root as much as a `pythonpath` entry is.
+    A role test reaches its own `files/` through a `sys.path.insert` at collection time, and a
+    test under a `scripts/<dir>` off `pythonpath` may insert `<dir>` itself
+    (`.claude/rules/python-layout.md`). Every such insert lands in the one session a run
+    shares, so each is an import root as much as a `pythonpath` entry is (#5956).
     """
     roles = {
         rel.rsplit("/", 1)[0]
         for rel in tracked("ansible/roles/*/files/*.py")
         if len(parts := rel.split("/")) == 6 and parts[4] == "files"
     }
-    return frozenset(pythonpath_roots()) | roles
+    tested = {rel.split("/tests/")[0] for rel in tracked("scripts/*/tests/*.py")}
+    return frozenset(pythonpath_roots()) | roles | tested
 
 
 def _top_level_modules() -> list[str]:
@@ -367,19 +369,24 @@ ROWS = (
             "There are no `__init__.py` files, so every `*.py` directly in an import root is a "
             "bare top-level module, and two roots holding one name resolve `import <name>` by "
             "`sys.path` order rather than by construction. Two roles' `files/app.py` failed six "
-            "tests only in a full run (#2608). Rename one. "
+            "tests only in a full run (#2608), and a validator in `scripts/validate` hid a filter "
+            "plugin from `pytest scripts` (#5956). Rename one. "
             "`scripts/docs/tests/test_gen_reference_scripts.py` holds a different invariant, "
             "basenames at ANY depth under `scripts/`, for the reference page."
         ),
         files=_top_level_modules,
         offence=_shadowing_offence,
         # The live index decides, so the red subject is a second home for a real module.
-        red=(Subject("scripts/lib/registry.py", ""),),
+        red=(
+            Subject("scripts/lib/registry.py", ""),
+            Subject("ansible/filter_plugins/k8s_manifests.py", ""),
+        ),
         green=(Subject("scripts/lib/no_other_root_holds_this_name.py", ""),),
         min_matches=100,
         # One per root shape: a filter plugin, a cross-role host module, a deployer module,
         # a monitor-bridge module reached bare inside its image, a k8s role's `files/`
-        # reached only through a role test's insert, and two `scripts/` modules.
+        # reached only through a role test's insert, two `scripts/` modules, and one from each
+        # `scripts/<dir>` a test inserts itself.
         must_find=frozenset(
             {
                 "ansible/filter_plugins/toposort.py",
@@ -389,6 +396,8 @@ ROWS = (
                 "ansible/roles/k8s/homelab-mcp/files/safe_reads.py",
                 "scripts/lib/cli_registry.py",
                 "scripts/lib/repo_paths.py",
+                "scripts/validate/k8s_manifests.py",
+                "scripts/diagnostics/probe.py",
             }
         ),
         allow={
