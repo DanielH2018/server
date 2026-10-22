@@ -2,7 +2,7 @@
 """Every VIP-backed workload must be pinned to the node that announces the VIP.
 
 WHY THIS IS A TEST AND NOT A COMMENT. MetalLB's L2Advertisement announces from
-daniel-box alone (roles/setup/k3s/templates/metallb-pool.yaml.j2 documents why that is
+daniel-box alone (roles/k8s/metallb/templates/metallb-pool.yaml.j2 documents why that is
 permanent). With `externalTrafficPolicy: Local`, the announcing node forwards a packet
 only to a backend on *itself* — so a VIP-backed pod scheduled onto daniel-server makes
 its own service black-hole every packet.
@@ -14,8 +14,8 @@ survives only while the scheduler happens to place it correctly.
 A comment cannot catch the next one. This can: add a `type: LoadBalancer` service with
 ETP Local and no pin, and the suite fails.
 
-Both halves are read off RENDERS — the L2Advertisement through `_setup_render`, the Services and
-workloads through `_k8s_render` — once at inventory values and once with `k8s_primary_node` set
+Both halves are read off RENDERS through `_k8s_render` — the L2Advertisement of the `metallb`
+role, and the Services and workloads — once at inventory values and once with `k8s_primary_node` set
 to a sentinel. The second render is what proves the two halves move as one unit: a pin that
 names the node some other way agrees with the announcement today and stops agreeing the day
 the variable changes, and only a render at a value the inventory does not hold shows that.
@@ -25,11 +25,7 @@ Run: uv run pytest ansible/tests/k8s/test_vip_pins.py
 
 from lib import yaml_fast
 
-from _k8s_render import render_texts, rendered_docs
-from lib.ansible_jinja_env import template_env
-from lib.render_guard import render_or_error
-from _setup_render import role_context, rendered_setup_text
-from lib.repo_paths import K3S_ROLE
+from _k8s_render import render_texts, rendered_docs, rendered_k8s_text
 
 # The variable the announcement and every workload pin read.
 PRIMARY_NODE_VAR = "k8s_primary_node"
@@ -67,17 +63,19 @@ def _announcing_nodes(metallb_pool_text: str) -> set[str]:
 
 
 def _sentinel_metallb_pool() -> str:
-    """metallb-pool.yaml.j2 alone, in setup/k3s's context with the sentinel laid on top."""
-    text, err = render_or_error(
-        template_env(K3S_ROLE / "templates"),
-        "metallb-pool.yaml.j2",
-        role_context(K3S_ROLE, {PRIMARY_NODE_VAR: SENTINEL_NODE}),
-    )
-    assert text is not None, f"setup/k3s/metallb-pool.yaml.j2 failed to render: {err}"
-    return text
+    """metallb-pool.yaml.j2 alone, rendered with the sentinel laid over every role's context."""
+    texts = [
+        text
+        for role, tpl, text in render_texts({PRIMARY_NODE_VAR: SENTINEL_NODE})
+        if (role, tpl) == ("metallb", "metallb-pool.yaml.j2")
+    ]
+    assert texts, "the sentinel render holds no metallb/metallb-pool.yaml.j2"
+    return "\n".join(texts)
 
 
-ANNOUNCING_NODES = _announcing_nodes(rendered_setup_text("k3s", "metallb-pool.yaml.j2"))
+ANNOUNCING_NODES = _announcing_nodes(
+    rendered_k8s_text("metallb", "metallb-pool.yaml.j2")
+)
 
 
 def test_announcement_and_the_primary_node_variable_agree():

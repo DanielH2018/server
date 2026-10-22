@@ -1,0 +1,47 @@
+---
+# MetalLB serves every LoadBalancer VIP (Traefik's edge, Pi-hole's DNS). The app manifest is an
+# in-tree copy, files/upstream/metallb-native.yaml, byte for byte what the item's `url` serves.
+# No render may fetch a URL (D5, C1), so the renderer attaches the copy to this tag's bundle
+# verbatim, and `sha256` still describes what Flux applies. scripts/dev/vendor_manifest.py owns
+# the item's shape and the refresh:
+#   uv run python scripts/dev/vendor_manifest.py metallb
+# Merging a bump of the version is the upgrade (H1 Open question 6): land it through land.sh,
+# which runs the metallb-upgrade gates. Run the refresh in the same PR.
+#
+# extractVersion is load-bearing: metallb/metallb publishes the app (`v0.16.0`) and the Helm
+# chart (`metallb-chart-0.16.1`) into one releases feed, and the chart runs a minor ahead of
+# the app. Anchoring on a leading `v` reads app releases only.
+# renovate: datasource=github-releases depName=metallb/metallb extractVersion=^v(?<version>.+)$
+k3s_metallb_version: v0.16.0  # noqa var-naming[no-role-prefix]
+metallb_vendored_manifests:
+  - name: metallb-native.yaml
+    url: "https://raw.githubusercontent.com/metallb/metallb/{{ k3s_metallb_version }}/config/manifests/metallb-native.yaml"
+    fetched_url: "https://raw.githubusercontent.com/metallb/metallb/v0.16.0/config/manifests/metallb-native.yaml"
+    sha256: "b0b9be2802f10aa32d45308b4457d06cde0c70544712c8d0cf5511657ffd2b69"
+
+# LoadBalancer addresses. Must sit OUTSIDE the router's DHCP scope, or MetalLB will hand
+# out addresses the router also leases.
+#
+# The ingress VIP is carved out into its own autoAssign: false pool (see
+# templates/metallb-pool.yaml.j2) so it can only be claimed by the Service that names it
+# in a metallb.io/loadBalancerIPs annotation. Ingress is the one address that appears in
+# DNS and, eventually, in the router's port-forward — it must not move because some other
+# Service happened to ask for a LoadBalancer first.
+#
+# k3s_metallb_ingress_vip itself lives in group_vars/all.yml, not here: Pi-hole on
+# daniel-server points the *-k8s hostnames at it, so it is consumed on a host that never
+# runs this role. This key is the pool's definition site (H1.3).
+k3s_metallb_pool: 10.0.0.241-10.0.0.250  # noqa var-naming[no-role-prefix]
+
+# DECIDED: never pruned. Under prune: true, a render that dropped the speaker, the controller or
+# a CRD would make Flux delete it, and deleting a CRD deletes every IPAddressPool and
+# L2Advertisement of its kind: every VIP, the edge and DNS, goes down at once. With prune: false
+# a render that drops an object leaves it serving. The cost is that an object removed here stays
+# live until the operator deletes it (**operator-only**). Full analysis: the H1 plan's
+# *Plumbing tags are never pruned*.
+flux_prune: false  # noqa var-naming[no-role-prefix]
+
+# Auto-deploy stance. Flux applies the tag, so this gates no apply; the reason records why a bad
+# merge here is not a routine bump.
+k8s_autodeploy: false  # noqa var-naming[no-role-prefix]
+k8s_autodeploy_reason: "platform — MetalLB announces every LoadBalancer VIP; a bad apply or a CRD downgrade takes the edge and DNS offline together, and host probes stay green through that outage"  # noqa var-naming[no-role-prefix]

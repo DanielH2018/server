@@ -12,8 +12,6 @@
 # runs ahead of the guard. ansible/tests/setup/test_k3s_stale_checkout_map.py holds the order.
 - name: Refuse a stale checkout that would write a Flux-owned object
   ansible.builtin.import_tasks: stale-checkout-guard.yml
-- name: Install MetalLB and the PriorityClasses
-  ansible.builtin.import_tasks: cluster-addons.yml
 - name: Install Longhorn and reconcile its recurring-job groups
   ansible.builtin.import_tasks: longhorn.yml
 - name: Configure the Longhorn backup targets and job

@@ -33,7 +33,6 @@ TASKS = K3S_ROLE / "tasks"
 GUARD = TASKS / "stale-checkout-guard.yml"
 
 # Inventory ids the role's real rows name, at the role's defaults.
-SPEAKER = "metallb-system_speaker_apps_DaemonSet"
 COREDNS = "kube-system_coredns_apps_Deployment"
 RECONCILE = "longhorn-system_longhorn-reconcile_batch_CronJob"
 UNMAPPED = "homelab_jellyfin_apps_Deployment"
@@ -259,18 +258,9 @@ def coredns(tmp_path_factory) -> dict[str, Outcome]:
     )
 
 
-def test_a_checkout_holding_install_metallb_fails_while_flux_owns_the_speaker(tmp_path):
-    outcome = _run_one(
-        tmp_path,
-        Case(["inventory"], {"metallb": [SPEAKER]}),
-        args=("--tags", "metallb"),
-    )
-    _failed_naming(outcome, "Install MetalLB", SPEAKER, "Kustomization metallb")
-
-
 def test_an_inventory_holding_no_mapped_id_passes(whole_file):
     _passed(whole_file["unmapped"])
-    assert whole_file["unmapped"].calls == 6, (
+    assert whole_file["unmapped"].calls == 5, (
         "every instance reads the inventory under a whole-file run"
     )
 
@@ -377,13 +367,14 @@ def test_tags_coredns_runs_the_coredns_instance(coredns):
     assert coredns["owned"].calls == 1, "only the coredns instance is selected"
 
 
-def test_skip_tags_kubeconfig_still_runs_the_metallb_instance(tmp_path):
+def test_skip_tags_kubeconfig_still_runs_the_coredns_instance(tmp_path):
     # fact: ansible/roles/setup/k3s/CLAUDE.md#Notable
     # Bring-up step 1. One guard tagged with the union of the writers' tags would be skipped
-    # here while the metallb writers still ran.
+    # here while the coredns writers still ran. H1.3 moved the check here from the metallb
+    # instance, which went with its writers.
     outcome = _run_one(
         tmp_path,
-        Case(["inventory"], {"metallb": [SPEAKER]}),
+        Case(["inventory"], {"coredns": [COREDNS]}),
         args=("--skip-tags", "kubeconfig"),
     )
-    _failed_naming(outcome, "Install MetalLB", SPEAKER)
+    _failed_naming(outcome, "Run the CoreDNS image k3s bundles", COREDNS)

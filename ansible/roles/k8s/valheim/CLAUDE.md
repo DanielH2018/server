@@ -21,7 +21,7 @@ longer exists. `k8s/terraria` is the sibling this role copies.
   promote workflow's `images` job, and holds only the plugin DLLs.
 - **Host:** daniel-box, by a hard `nodeSelector` — a member of the **VIP unit** with traefik,
   pihole, mosquitto and terraria. The pin and the MetalLB L2Advertisement nodeSelector move
-  together or not at all (`roles/setup/k3s/templates/metallb-pool.yaml.j2`).
+  together or not at all (`roles/k8s/metallb/templates/metallb-pool.yaml.j2`).
 - **Ports:** UDP 2456 (game) and 2457 (Steam query) via a LoadBalancer Service,
   `externalTrafficPolicy: Local`, pinned to the node IP rather than a MetalLB VIP — the
   router forward has to target a DHCP/ARP-known device.

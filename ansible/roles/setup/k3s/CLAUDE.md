@@ -1,7 +1,7 @@
 # `setup/k3s` — the cluster's host plane: k3s itself, Longhorn, and the backup crons
 
 The role that turns a host into a k3s node and declares the cluster's own plumbing: the server
-install, the agent join, MetalLB, Longhorn with its backup targets, the read-only kubeconfig,
+install, the agent join, Longhorn with its backup targets, the read-only kubeconfig,
 CoreDNS, and the host crons that watch and exercise backups. `daniel-box` is
 the server and `daniel-server` an agent (`tasks/agent.yml`).
 
@@ -122,4 +122,4 @@ authority of those four actuators is written here so a later edit cannot quietly
   there. A host-only tag such as `node-address` selects no instance, so it never reads the API.
   An H1 PR that deletes a writer task deletes its row in the same commit. ENFORCED:
   `ansible/tests/setup/test_k3s_stale_checkout_map.py::test_the_real_map_is_honest`,
-  `ansible/tests/setup/test_k3s_stale_checkout_guard.py::test_skip_tags_kubeconfig_still_runs_the_metallb_instance`.
+  `ansible/tests/setup/test_k3s_stale_checkout_guard.py::test_skip_tags_kubeconfig_still_runs_the_coredns_instance`.
