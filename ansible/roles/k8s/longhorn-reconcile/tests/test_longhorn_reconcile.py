@@ -1,7 +1,7 @@
 """The longhorn-reconcile script against a fixture API server (H1 plan, H1.6).
 
-`World` answers the script's reads from dicts, applies its merge and strategic patches the way
-the API server does, and records every call. The label cases are a transition table with the
+`World` answers the script's reads from dicts, applies its merge patches the way the API server
+does, and records every call. The label cases are a transition table with the
 label strings typed out here, as `setup/k3s`'s `test_every_label_task_renders_the_live_labels`
 did for the tasks this script replaces: an expectation built from the script's own constants
 would follow a rename and pass, and a one-byte change in a live label drops the volume out of
@@ -21,15 +21,12 @@ from email.message import Message
 import longhorn_reconcile as lr
 import pytest
 from _reconcile_world import (
-    DEPLOYMENTS,
     NS,
     P,
     PVC_CLASS,
-    REQUEST,
     TIERS,
     VOLUMES,
     World,
-    _deployment,
     _pvc,
     _volume,
 )
@@ -46,9 +43,7 @@ def env(tmp_path):
     tiers.write_text(json.dumps(TIERS))
     return {
         "RECONCILE_NAMESPACE": NS,
-        "RECONCILE_CSI_MEMORY_REQUEST": REQUEST,
         "RECONCILE_TIERS_FILE": str(tiers),
-        "RECONCILE_CSI_WAIT_SECONDS": "0",
     }
 
 
@@ -153,11 +148,10 @@ def test_a_second_run_changes_nothing(env, capsys):
             _volume("pvc-6", "homelab/authelia-config", "default", target="r2"),
         ],
         [_pvc(c, k) for c, k in PVC_CLASS.items()],
-        {n: _deployment(n, None) for n in lr.CSI_DEPLOYMENTS},
     )
     assert lr.main([], env, world) == 0
-    # Four volumes move groups, two change target and four Deployments gain the request.
-    assert len(world.writes()) == 10
+    # Four volumes move groups and two change target.
+    assert len(world.writes()) == 6
     first = len(world.calls)
     assert lr.main([], env, world) == 0
     assert [c for c in world.calls[first:] if c[0] == "PATCH"] == []
@@ -268,7 +262,6 @@ def test_report_only_prints_the_plan_and_writes_nothing(env, capsys):
     world = World(
         [_volume("pvc-1", "homelab/crowdsec-db", "default")],
         [_pvc(c, k) for c, k in PVC_CLASS.items()],
-        {n: _deployment(n, "64Mi") for n in lr.CSI_DEPLOYMENTS},
     )
     assert lr.main(["--report-only"], env, world) == 0
     assert world.writes() == []
@@ -277,7 +270,6 @@ def test_report_only_prints_the_plan_and_writes_nothing(env, capsys):
         "would patch volume pvc-1 (homelab/crowdsec-db): default- no-backup=enabled"
         in out
     )
-    assert "would patch deployment csi-attacher: memory request 64Mi -> 192Mi" in out
     assert "1 volume change(s) planned" in out
 
 
@@ -292,80 +284,20 @@ def test_a_converged_cluster_reports_nothing_to_change_in_report_only(env, capsy
     assert "0 volume change(s) planned" in out
 
 
-def test_a_csi_deployment_without_the_request_is_patched_with_a_strategic_merge(env):
-    world = World([], [], {n: _deployment(n, None) for n in lr.CSI_DEPLOYMENTS})
+def test_a_run_reads_and_writes_no_deployment(env, capsys):
+    # fact: ansible/roles/k8s/longhorn-reconcile/CLAUDE.md#Traps
+    """The CSI sidecars' request is the `longhorn` role's Setting, and the manager owns it (#5958).
+
+    A second writer here made longhorn-manager clear the request on its next tick and each CSI
+    Deployment roll twice an hour, so the run keeps off every Deployment.
+    """
+    world = World(
+        [_volume("pvc-1", "homelab/crowdsec-db", "default")],
+        [_pvc(c, k) for c, k in PVC_CLASS.items()],
+    )
     assert lr.main([], env, world) == 0
-    patches = [c for c in world.calls if c[0] == "PATCH"]
-    assert [p[1] for p in patches] == [f"{DEPLOYMENTS}/{n}" for n in lr.CSI_DEPLOYMENTS]
-    assert {p[2] for p in patches} == {"application/strategic-merge-patch+json"}
-
-
-def test_the_sidecar_patch_names_its_container_so_the_image_survives():
-    assert lr.sidecar_patch("csi-attacher", "192Mi") == {
-        "spec": {
-            "template": {
-                "spec": {
-                    "containers": [
-                        {
-                            "name": "csi-attacher",
-                            "resources": {"requests": {"memory": "192Mi"}},
-                        }
-                    ]
-                }
-            }
-        }
-    }
-
-
-def test_a_csi_deployment_that_never_appears_fails_the_run_after_the_wait(env, capsys):
-    deployments = {n: _deployment(n, REQUEST) for n in lr.CSI_DEPLOYMENTS[:3]}
-    world = World([], [], deployments)
-    sleeps = []
-    ticks = iter(range(0, 1000, 10))
-    lines, problems = lr.reconcile_sidecars(
-        world,
-        NS,
-        REQUEST,
-        report_only=False,
-        wait_seconds=30,
-        sleep=sleeps.append,
-        clock=lambda: float(next(ticks)),
-    )
-    assert problems == ["deployment csi-snapshotter does not exist"]
-    assert sleeps and set(sleeps) == {lr.CSI_PAUSE_SECONDS}
-    assert len(lines) == 3
-
-
-def test_a_csi_deployment_that_appears_during_the_wait_is_patched(monkeypatch):
-    world = World([], [], {})
-    appear = {"left": 2}
-    real = world.call
-
-    def call(method, path, body=None, content_type=lr.MERGE_PATCH):
-        if method == "GET" and path.endswith("/csi-attacher") and appear["left"] == 0:
-            world.deployments.update(
-                {n: _deployment(n, None) for n in lr.CSI_DEPLOYMENTS}
-            )
-        if method == "GET" and path.endswith("/csi-attacher"):
-            appear["left"] -= 1
-        return real(method, path, body, content_type)
-
-    monkeypatch.setattr(world, "call", call)
-    lines, problems = lr.reconcile_sidecars(
-        world, NS, REQUEST, report_only=False, wait_seconds=60, sleep=lambda s: None
-    )
-    assert problems == []
-    assert len(lines) == 4 and all(line.startswith("patched") for line in lines)
-
-
-def test_report_only_does_not_wait_for_an_absent_deployment():
-    world = World([], [], {})
-    slept = []
-    lines, problems = lr.reconcile_sidecars(
-        world, NS, REQUEST, report_only=True, wait_seconds=600, sleep=slept.append
-    )
-    assert slept == []
-    assert len(problems) == 4 and lines == []
+    assert [c for c in world.calls if "/deployments" in c[1]] == []
+    assert "deployment" not in capsys.readouterr().out
 
 
 def _tiers(tmp_path, doc):
@@ -416,7 +348,7 @@ def test_a_patch_carries_the_content_type_it_was_given():
         return _Response(b"{}")
 
     kube = lr.Kube("https://api", "token", opener=record)
-    kube.call("PATCH", "/x", {"a": 1}, lr.STRATEGIC_PATCH)
+    kube.call("PATCH", "/x", {"a": 1}, "application/strategic-merge-patch+json")
     kube.call("PATCH", "/y", {"a": 1})
     kube.call("GET", "/z")
     assert [r.get_header("Content-type") for r in sent] == [

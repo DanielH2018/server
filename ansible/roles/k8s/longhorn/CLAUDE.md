@@ -38,7 +38,7 @@ host probes stay green.
       holds the class equal to upstream's minus that one parameter, so a release that adds a
       parameter fails until the patch carries it.
 - **Three templates hold the objects `setup/k3s` used to write** (H1.5b).
-    - `templates/settings.yaml.j2` renders the seven `Setting` objects, each from one
+    - `templates/settings.yaml.j2` renders the eight `Setting` objects, each from one
       `k3s_longhorn_*` key in `defaults/main.yml`. Flux owns each Setting's `value`. longhorn-manager keeps its own
       annotation and status on the object, and the render declares neither, so Flux never takes
       them.
@@ -52,6 +52,15 @@ host probes stay green.
   `{"v1":"...","v2":"..."}` in the compact form the manager stores, so the render equals the
   live value.
   `ansible/tests/longhorn/test_snapshot_data_integrity_patch_is_a_json_map.py::test_a_bare_string_value_is_flagged`
+  holds the shape.
+- **The CSI sidecars' memory request is a Setting, not a patch** (#5958).
+  `system-managed-csi-components-resource-limits` carries
+  `ansible/roles/k8s/longhorn/defaults/main.yml:k3s_longhorn_csi_sidecar_memory_request` for
+  `csi-attacher`, `csi-provisioner`, `csi-resizer` and `csi-snapshotter`. longhorn-manager
+  treats the Setting as the only source of those four containers' `resources` and clears
+  anything else hourly, so a second writer makes each Deployment roll on every tick. The value
+  names those four components with a `requests` block alone.
+  `ansible/tests/longhorn/test_longhorn_control_plane_resources.py::test_the_csi_setting_requests_the_defaults_value_for_the_four_sidecars_only`
   holds the shape.
 - **The engine-upgrade limit stays above 0.** Upstream ships `0`, which leaves engines on the old
   image after an upgrade, and this repo sets `3`.
@@ -82,8 +91,9 @@ host probes stay green.
 ## The Longhorn window, H1.5a until H1.7b
 `setup/k3s` still holds the tasks that write Longhorn's backup targets, the backup-store poll
 interval and the RecurringJobs, and they fail on a cluster where Flux has not yet created
-`longhorn-system`. The CSI sidecar requests and the volume-label reconcile left `setup/k3s` at
-H1.6: they are the `longhorn-reconcile` role's CronJob. Bring-up step 1 therefore skips the
+`longhorn-system`. The volume-label reconcile left `setup/k3s` at H1.6 and is the
+`longhorn-reconcile` role's CronJob. The CSI sidecar requests left with it, and since #5958 they
+are this role's `system-managed-csi-components-resource-limits` Setting. Bring-up step 1 therefore skips the
 `longhorn` and `longhorn_backup` tags, and step 7a applies them once the `longhorn`
 Kustomization reads `Ready`. The host tasks `setup/k3s` keeps for
 Longhorn (`open-iscsi`, `nfs-common` and the multipathd blacklist) carry the tag

@@ -29,11 +29,26 @@ longhorn_vendored_manifests:
 # moves the pod to Burstable and drops oom_score_adj without adding a new kill path — a LIMIT set
 # too low would trade "killed by badness" for "killed by cgroup cap". Headroom is roughly double
 # the measured RSS: enough to absorb ordinary growth without inflating node allocatable so far
-# that real pressure elsewhere goes unschedulable. The csi-* sidecars' request,
-# k3s_longhorn_csi_sidecar_memory_request, is the `longhorn-reconcile` role's (H1.6).
+# that real pressure elsewhere goes unschedulable.
 k3s_longhorn_manager_memory_request: 256Mi  # noqa var-naming[no-role-prefix]
 
-# The seven Longhorn Settings this role renders (templates/settings.yaml.j2), each under the name
+# Memory REQUEST only (no limit) for the four csi-* sidecar Deployments (csi-attacher,
+# csi-provisioner, csi-resizer, csi-snapshotter), applied through the
+# `system-managed-csi-components-resource-limits` Setting (templates/settings.yaml.j2).
+# longhorn-driver-deployer creates the Deployments at runtime with `resources: {}`, which gives
+# BestEffort QoS and oom_score_adj 1000, the same exposure as the manager above. Measured at the
+# OOM kill: a csi-* sidecar held 97 MB anon-rss. The request is roughly double that, for the same
+# reasons as the manager's.
+#
+# DECIDED: the Setting is the one writer. longhorn-manager's SettingController treats the Setting
+# as the source of truth for these four containers' `resources` and clears any field it does not
+# name, hourly. Until #5958 the `longhorn-reconcile` CronJob patched the request onto the
+# Deployments, the manager cleared it, and each Deployment rolled about twice an hour. The driver
+# deployer also reads the Setting when it creates a Deployment, so a recreated one starts with
+# the request.
+k3s_longhorn_csi_sidecar_memory_request: 192Mi  # noqa var-naming[no-role-prefix]
+
+# The Longhorn Settings this role renders (templates/settings.yaml.j2), each under the name
 # it had in setup/k3s's defaults. Flux applies them, so a change here is a change to the live
 # Setting once the tag promotes. Longhorn-manager creates each with its upstream default and
 # keeps its own annotation and status on the object.

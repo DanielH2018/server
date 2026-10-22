@@ -4,8 +4,8 @@
 Longhorn reads a volume's backup schedule off its own Volume CR labels
 (`recurring-job-group.longhorn.io/<group>`), and a PVC's StorageClass decides the group only at
 provision time. A volume that must LEAVE the daily set after it is bound cannot be moved by
-editing either, so this job reconciles the label. It replaces the label, weekly-shard,
-legacy-label and CSI-request tasks that `setup/k3s` ran from `tasks/longhorn.yml` and
+editing either, so this job reconciles the label. It replaces the label, weekly-shard and
+legacy-label tasks that `setup/k3s` ran from `tasks/longhorn.yml` and
 `tasks/longhorn-weekly-shard.yml` (H1 plan, H1.6). From H1.7a it also holds each volume's
 `spec.backupTargetName`, which the two routing tasks of `tasks/longhorn-backup.yml` held.
 
@@ -37,14 +37,13 @@ backup target:
 The run writes ONE merge patch per changed volume: the net of the steps, labels and target
 together. A converged cluster writes nothing.
 
-It then holds the memory REQUEST of the four `csi-*` Deployments that longhorn-driver-deployer
-creates at runtime (`csi-attacher`, `csi-provisioner`, `csi-resizer`, `csi-snapshotter`). Upstream
-ships them with `resources: {}`, which makes them BestEffort. A Deployment that already holds the
-request is not patched, so a rollout happens only when the driver deployer has recreated one.
+It does not touch the CSI sidecar Deployments. Their memory request is the `longhorn` role's
+`system-managed-csi-components-resource-limits` Setting, which longhorn-manager enforces and
+which clears any request another writer sets (#5958).
 
 Inputs: `/config/tiers.json` (the ConfigMap's `{"r2": [...], "weekly": {claim: shard}, "nobackup":
-[...]}`, claims as `namespace/pvcName`) and the environment: `RECONCILE_NAMESPACE`,
-`RECONCILE_CSI_MEMORY_REQUEST`, and optionally `RECONCILE_TIERS_FILE` and `RECONCILE_CSI_WAIT_SECONDS`.
+[...]}`, claims as `namespace/pvcName`) and the environment: `RECONCILE_NAMESPACE`, and
+optionally `RECONCILE_TIERS_FILE`.
 
 It talks to the API server with the pod's ServiceAccount token, and the API server's CA reaches
 `urlopen` through `SSL_CERT_FILE`, which the CronJob sets. Every connection goes through
@@ -54,9 +53,8 @@ It talks to the API server with the pod's ServiceAccount token, and the API serv
 to check a change against a live cluster: run it with a read-only credential and expect no
 `would patch` line on a converged cluster.
 
-Exit 0 when every volume and every Deployment holds its desired state. Exit 1 when a read fails
-(before any write), a claim is on two tier lists, or a write fails or a CSI Deployment is still
-absent when the wait ends. `-h` and `--help` print this text.
+Exit 0 when every volume holds its desired state. Exit 1 when a read fails (before any write), a
+claim is on two tier lists, or a write fails. `-h` and `--help` print this text.
 
 Usage:
 
@@ -67,7 +65,6 @@ import argparse
 import json
 import os
 import sys
-import time
 import urllib.error
 from collections.abc import Callable, Mapping
 from pathlib import Path
@@ -95,15 +92,7 @@ ENABLED = "enabled"
 B2_TARGET = "default"
 R2_TARGET = "r2"
 
-CSI_DEPLOYMENTS = ("csi-attacher", "csi-provisioner", "csi-resizer", "csi-snapshotter")
-# The pause between two reads of a Deployment that is not there yet, in seconds.
-CSI_PAUSE_SECONDS = 10
-# How long a run waits for a CSI Deployment that does not exist yet. The Ansible task retried
-# 12 times at 10 seconds, after a rollout wait on the driver deployer that this run no longer has.
-CSI_WAIT_SECONDS = 120
-
 MERGE_PATCH = "application/merge-patch+json"
-STRATEGIC_PATCH = "application/strategic-merge-patch+json"
 
 
 class Failed(Exception):
@@ -144,8 +133,7 @@ class Kube:
         """`method` on `path`; the HTTP status and the parsed body, an error status included.
 
         A body goes as a patch of `content_type`. The API server answers a PATCH sent as plain
-        `application/json` with 415. A Deployment's `containers` list needs the strategic type,
-        because a JSON merge patch replaces the whole array.
+        `application/json` with 415.
         """
         headers = {
             "Authorization": f"Bearer {self.token}",
@@ -372,115 +360,14 @@ def reconcile_labels(
     return lines
 
 
-def sidecar_patch(name: str, request: str) -> dict:
-    """The strategic merge patch that sets `name`'s memory request, naming its one container."""
-    return {
-        "spec": {
-            "template": {
-                "spec": {
-                    "containers": [
-                        {"name": name, "resources": {"requests": {"memory": request}}}
-                    ]
-                }
-            }
-        }
-    }
+def run(kube: Kube, env: Mapping[str, str], report_only: bool) -> list[str]:
+    """The whole reconcile. Returns the report lines.
 
-
-def held_request(deployment: dict, name: str) -> str:
-    """The memory request of `deployment`'s container called `name`, or an empty string."""
-    containers = (
-        ((deployment.get("spec") or {}).get("template") or {}).get("spec") or {}
-    ).get("containers") or []
-    for container in containers:
-        if container.get("name") == name:
-            return str(
-                ((container.get("resources") or {}).get("requests") or {}).get(
-                    "memory", ""
-                )
-            )
-    return ""
-
-
-def reconcile_sidecars(
-    kube: Kube,
-    namespace: str,
-    request: str,
-    report_only: bool,
-    wait_seconds: float = CSI_WAIT_SECONDS,
-    sleep: Callable[[float], None] = time.sleep,
-    clock: Callable[[], float] = time.monotonic,
-) -> tuple[list[str], list[str]]:
-    """Hold the memory request of each CSI Deployment. Returns (report lines, problems).
-
-    DECIDED: a Deployment that does not exist yet is waited for, up to `wait_seconds`, and then
-    reported as a problem, so the run exits 1. longhorn-driver-deployer creates the four
-    asynchronously after the manager is Ready, so on a first apply they can lag the CronJob's
-    first run by seconds. The Ansible task retried 12 times at 10 seconds for the same reason.
-    Skipping silently would let a cluster that never grows its CSI Deployments read as converged.
-    A report-only run never waits.
+    Raises:
+        Failed: A read or a write failed, or the tier input is unusable.
     """
-    lines, problems = [], []
-    deadline = clock() + wait_seconds
-    base = f"/apis/apps/v1/namespaces/{namespace}/deployments"
-    for name in CSI_DEPLOYMENTS:
-        while True:
-            status, body = kube.call("GET", f"{base}/{name}")
-            if status != 404 or report_only or clock() >= deadline:
-                break
-            sleep(CSI_PAUSE_SECONDS)
-        if status == 404:
-            problems.append(f"deployment {name} does not exist")
-            continue
-        try:
-            _ok(status, body, f"deployment {name}")
-        except Failed as err:
-            problems.append(str(err))
-            continue
-        have = held_request(body, name)
-        if have == request:
-            lines.append(f"deployment {name} already requests {request}")
-            continue
-        if report_only:
-            lines.append(
-                f"would patch deployment {name}: memory request {have or 'unset'} -> {request}"
-            )
-            continue
-        status, answer = kube.call(
-            "PATCH", f"{base}/{name}", sidecar_patch(name, request), STRATEGIC_PATCH
-        )
-        try:
-            _ok(status, answer, f"patching deployment {name}")
-        except Failed as err:
-            problems.append(str(err))
-            continue
-        lines.append(
-            f"patched deployment {name}: memory request {have or 'unset'} -> {request}"
-        )
-    return lines, problems
-
-
-def run(
-    kube: Kube,
-    env: Mapping[str, str],
-    report_only: bool,
-    sleep: Callable[[float], None] = time.sleep,
-    clock: Callable[[], float] = time.monotonic,
-) -> tuple[list[str], list[str]]:
-    """The whole reconcile. Returns (report lines, problems); a problem makes the run exit 1."""
     tiers = load_tiers(env.get("RECONCILE_TIERS_FILE", TIERS_FILE))
-    namespace = env["RECONCILE_NAMESPACE"]
-    lines = reconcile_labels(kube, namespace, tiers, report_only)
-    sidecar_lines, problems = reconcile_sidecars(
-        kube,
-        namespace,
-        env["RECONCILE_CSI_MEMORY_REQUEST"],
-        report_only,
-        wait_seconds=float(env.get("RECONCILE_CSI_WAIT_SECONDS", CSI_WAIT_SECONDS)),
-        sleep=sleep,
-        clock=clock,
-    )
-    return lines + sidecar_lines, problems
+    return reconcile_labels(kube, env["RECONCILE_NAMESPACE"], tiers, report_only)
 
 
 def main(
@@ -498,17 +385,13 @@ def main(
     if kube is None:
         kube = Kube(API, Path(TOKEN_FILE).read_text().strip())
     try:
-        lines, problems = run(
-            kube, os.environ if env is None else env, args.report_only
-        )
+        lines = run(kube, os.environ if env is None else env, args.report_only)
     except Failed as err:
         print(f"longhorn-reconcile: {err}", file=sys.stderr)
         return 1
     for line in lines:
         print(f"longhorn-reconcile: {line}")
-    for problem in problems:
-        print(f"longhorn-reconcile: PROBLEM: {problem}", file=sys.stderr)
-    return 1 if problems else 0
+    return 0
 
 
 if __name__ == "__main__":
