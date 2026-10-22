@@ -7,6 +7,8 @@
   - `health_vendored.py` — the workloads a role's vendored upstream files declare
   - `health_alerts.py`  — the alert plane: firing alerts and ingress probes (C7)
   - `health_plumbing.py` — the CoreDNS and Longhorn StorageClass checks keyed by tag (H1)
+  - `health_backup_targets.py` — the `longhorn-backup` verdict: the BackupTargets (H1.7b)
+  - `health_render.py` — the render context the workload resolution and alert plane share
 
 What stays here is the part that needs all of them: resolving a deploy tag to the workloads the
 role's rendered manifests declare, fetching each one, and rolling the per-workload verdicts up
@@ -55,6 +57,7 @@ from diagnostics.probe_lib import core
 from diagnostics.probe_lib.core import PI_HOST
 from diagnostics.probe_lib import health_alerts, health_checkout, health_plumbing
 from diagnostics.probe_lib import health_backup_targets
+from diagnostics.probe_lib.health_render import render_context as _render_context
 from diagnostics.probe_lib.health_cronjob import format_cronjob_health, latest_owned_job
 from diagnostics.probe_lib.health_docker import (
     declared_on_pi,
@@ -85,26 +88,6 @@ from lib.kubectl import (
     served_cluster,
 )
 from lib.repo_paths import K8S_ROLES
-
-_RENDER_CONTEXT = None
-
-
-def _render_context():
-    """(validator module, containers_list entries), built once per process.
-
-    The import is deferred because it pulls in ansible-core, PyYAML and jsonschema,
-    and twelve of probe.py's thirteen subcommands never need any of it. Measured on daniel-box:
-    0.41s to import, ~5 ms to build one role's context (2026-10-09), 0.02s median to render
-    one role and 0.22s for the slowest (home-assistant) — against the 300s `PROBE_TIMEOUT_S`
-    the notifier allows.
-    """
-    global _RENDER_CONTEXT
-    if _RENDER_CONTEXT is None:
-        # The module's own bootstrap put `scripts/` on sys.path, the root pytest imports from.
-        from validate import k8s_manifests as validator
-
-        _RENDER_CONTEXT = (validator, validator.k8s_entries())
-    return _RENDER_CONTEXT
 
 
 def _role_kind_targets(role, default_namespace, kinds, roles_dir=K8S_ROLES):
@@ -538,9 +521,7 @@ def run_health(
 
     if not targets and container == health_backup_targets.BACKUP_ROLE:
         # No workload; the gate is the targets' availability (H1.7b).
-        return health_backup_targets.report(
-            cluster, tools, prom, _read, _with_alert_plane
-        )
+        return health_backup_targets.report(read, prom, _with_alert_plane)
 
     if not targets:
         # No Deployment/DaemonSet/StatefulSet — the CronJob-only path, the read-only analog

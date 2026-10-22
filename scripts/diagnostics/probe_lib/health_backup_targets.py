@@ -81,19 +81,20 @@ def target_verdicts(items: list[dict]) -> tuple[list[str], list[str], list[str]]
     return sorted(available), sorted(disarmed), problems
 
 
-def report(cluster, tools, prom, read, with_alert_plane) -> int:
+def report(read, prom, with_alert_plane) -> int:
     """The gate for the `longhorn-backup` tag: read the targets, print the verdict, return its code.
 
-    `read` and `with_alert_plane` are `health._read` and `health._with_alert_plane`, handed in
-    because this module sits below `health.py` and may not import it.
+    `read` is `health._read` bound to the gate's cluster and kubectl boundary, and
+    `with_alert_plane` is `health._with_alert_plane`. Both are handed in because this module
+    sits below `health.py` and may not import it.
     """
     try:
-        doc = read(cluster, list(TARGET_ARGS), tools)
+        doc = read(list(TARGET_ARGS))
     except core.Unreadable as exc:
         print(f"{BACKUP_ROLE}: {exc}", file=_sys.stderr)
         return PROBE_UNREADABLE
     text, code = format_backup_target_health((doc or {}).get("items") or [])
-    text, code = with_alert_plane(BACKUP_ROLE, text, code, None, prom)
+    text, code = with_alert_plane(BACKUP_ROLE, text, code, None, prom, read)
     print(text)
     return code
 
