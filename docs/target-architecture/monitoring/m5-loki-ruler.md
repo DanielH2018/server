@@ -16,7 +16,7 @@ PR 4a, the Kuma side goes (PR 5 is its own PR, by the operator's ruling of 2026-
 
 PR 5, the token retirement, a draft until 4a's `monitor-bridge` deploy plus 7 days: [#5856](https://github.com/DanielH2018/server/pull/5856).
 
-PR 4b, the rules page: PR_4B_URL.
+PR 4b, the rules page: [#5853](https://github.com/DanielH2018/server/pull/5853).
 
 Depends on: M1, and M2's PR 3 (the `weekly-reboot` mute) before the cutover. Two
 contracts.md rows also gate PRs here: the row *Open questions* 2 requests gates PR 2a, and
