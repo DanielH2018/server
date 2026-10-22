@@ -420,6 +420,16 @@ proves nothing. The producer renders hourly and master merges
 more often than that, so until #4881 the reader refused nearly every record. On 2026-10-13 one
 comment-only edit to `release_stamp.yml` kept 30 services reading stale for ten hours.
 
+A mismatch at R keeps the service stale, but the path reason can name a hit that moved no
+bytes (#5903). homelab-mcp read `changed since applied: .../release_stamp.yml`, a comment-only
+edit, while a build-context file no path rule read had moved its image tag. So when no hit
+could have moved the bytes, the reader reports the drift as unexplained instead. A hit could
+not have moved them when its whole change since the applied commit is comment-only:
+Ansible-read YAML whose content lines are equal, or a template whose edit is Jinja comments
+only. A hit under a shared role the digest does not cover always counts. The claim also needs
+the applied commit to be R or an ancestor of it, because a render older than the apply
+mismatches for a range no hit names.
+
 A digest also says nothing about secret manifests: a rendered line added to uptime-kuma's
 `static-monitors.yaml.j2`, a secret manifest, left its digest unchanged. So a
 verdict needs `secret_manifests` empty on both records, which held for 25 of 58 on that date
