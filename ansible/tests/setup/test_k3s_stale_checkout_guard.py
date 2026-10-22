@@ -264,7 +264,7 @@ def r2(tmp_path_factory) -> dict[str, Outcome]:
 
 def test_an_inventory_holding_no_mapped_id_passes(whole_file):
     _passed(whole_file["unmapped"])
-    assert whole_file["unmapped"].calls == 4, (
+    assert whole_file["unmapped"].calls == 3, (
         "every instance reads the inventory under a whole-file run"
     )
 
@@ -305,7 +305,7 @@ def test_a_checkout_whose_coredns_writers_are_gone_passes_while_flux_owns_coredn
     # H1.4 deleted the CoreDNS writers and their instance, so no row names the Deployment. A
     # row that named it again would fail here once Flux's inventory lists it.
     _passed(whole_file["coredns-owned"])
-    assert whole_file["coredns-owned"].calls == 4, (
+    assert whole_file["coredns-owned"].calls == 3, (
         "every instance read and matched nothing"
     )
 

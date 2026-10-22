@@ -80,6 +80,8 @@
  "ansible/roles/k8s/jellyfin/tests/test_jellyfin_verify.py": 0.73,
  "ansible/roles/k8s/karakeep/tests/test_archive_pruner.py": 0.01,
  "ansible/roles/k8s/karakeep/tests/test_time_tagger_wiring.py": 0.0,
+ "ansible/roles/k8s/longhorn-reconcile/tests/test_longhorn_reconcile.py": 0.0,
+ "ansible/roles/k8s/longhorn-reconcile/tests/test_longhorn_reconcile_render.py": 0.09,
  "ansible/roles/k8s/manifests/tests/test_flux_job_connect.py": 1.0,
  "ansible/roles/k8s/manifests/tests/test_flux_snapshot.py": 0.19,
  "ansible/roles/k8s/manifests/tests/test_flux_soak.py": 0.02,
