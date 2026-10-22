@@ -65,6 +65,8 @@ PACKAGE_VERSIONS_URL = "https://api.github.com/users/DanielH2018/packages/contai
 # a truncation, because `prune` reads a digest missing from the listing as deleted.
 VERSIONS_PER_PAGE = 100
 VERSION_PAGES_MAX = 300
+# A commit's statuses, 100 to a page: one page hid 13 of 113 and hung verify (#5974).
+STATUS_PAGE_SIZE, STATUS_PAGES_MAX = 100, 20
 # Seconds between two deletes. GitHub's REST best practices ask for at least one second between
 # mutating requests, and a burst trips the secondary rate limit as a 403 that reads like a
 # permission error.
@@ -365,33 +367,20 @@ class GitHub:
     def statuses(self, sha: str, since: datetime | None = None) -> dict[str, str]:
         """The newest commit status per context on commit `sha`, as `{context: state}`.
 
-        Reads GitHub's combined status, which keeps the newest status of each context. A
+        Reads GitHub's combined status, which keeps the newest status of each context, page
+        after page: one page holds 100 contexts, and a commit can carry more (#5974). A
         state is `pending`, `success`, `failure` or `error`. A context with no status is
         absent from the map, which the caller must never read as success. With `since`, a
         status whose `updated_at` precedes it, or is unreadable, is absent too.
 
         Raises:
-            ForgeError: any status but 200, a body without a `statuses` list, or no answer.
+            ForgeError: any status but 200 on any page, a body without a `statuses` list,
+                more than STATUS_PAGES_MAX pages, or no answer.
         """
-        url = (
-            f"https://api.github.com/repos/{self.repository}/commits/{sha}/status"
-            "?per_page=100"
-        )
-        response = self._transport("GET", url, self._rest_headers())
-        if response.status != 200:
-            raise ForgeError(
-                f"statuses for {sha}: HTTP {response.status}{_api_message(response)}"
-            )
-        body = _json(response, f"statuses for {sha}")
-        found = body.get("statuses") if isinstance(body, dict) else None
-        if not isinstance(found, list):
-            raise ForgeError(f"statuses for {sha}: the body has no statuses list")
         return {
             entry["context"]: entry["state"]
-            for entry in found
-            if isinstance(entry, dict)
-            and isinstance(entry.get("context"), str)
-            and isinstance(entry.get("state"), str)
+            for entry in self._combined_statuses(sha)
+            if isinstance(entry.get("state"), str)
             and (since is None or _updated(entry) >= since)
         }
 
@@ -405,23 +394,36 @@ class GitHub:
         Raises:
             ForgeError: as `statuses` does.
         """
-        url = (
-            f"https://api.github.com/repos/{self.repository}/commits/{sha}/status"
-            "?per_page=100"
-        )
-        response = self._transport("GET", url, self._rest_headers())
-        if response.status != 200:
-            raise ForgeError(
-                f"statuses for {sha}: HTTP {response.status}{_api_message(response)}"
-            )
-        body = _json(response, f"statuses for {sha}")
-        found = body.get("statuses") if isinstance(body, dict) else None
-        if not isinstance(found, list):
-            raise ForgeError(f"statuses for {sha}: the body has no statuses list")
-        for entry in found:
-            if isinstance(entry, dict) and entry.get("context") == context:
+        for entry in self._combined_statuses(sha):
+            if entry["context"] == context:
                 return str(entry.get("state")), _updated(entry)
         return None
+
+    def _combined_statuses(self, sha: str) -> list[dict]:
+        """Each context's newest status on `sha`, from every page up to the first short one."""
+        seen: dict[str, dict] = {}
+        for page in range(1, STATUS_PAGES_MAX + 1):
+            url = (
+                f"https://api.github.com/repos/{self.repository}/commits/{sha}/status"
+                f"?per_page={STATUS_PAGE_SIZE}&page={page}"
+            )
+            response = self._transport("GET", url, self._rest_headers())
+            if response.status != 200:
+                raise ForgeError(
+                    f"statuses for {sha}: HTTP {response.status}"
+                    f"{_api_message(response)} (page {page})"
+                )
+            body = _json(response, f"statuses for {sha}")
+            found = body.get("statuses") if isinstance(body, dict) else None
+            if not isinstance(found, list):
+                raise ForgeError(f"statuses for {sha}: the body has no statuses list")
+            for entry in found:
+                k = entry.get("context") if isinstance(entry, dict) else None
+                if isinstance(k, str) and _updated(entry) >= _updated(seen.get(k, {})):
+                    seen[k] = entry
+            if len(found) < STATUS_PAGE_SIZE:
+                return list(seen.values())
+        raise ForgeError(f"statuses for {sha}: more than {STATUS_PAGES_MAX} pages")
 
     def commit_pulls(self, sha: str) -> list[dict]:
         """The pull requests GitHub associates with commit `sha`, up to a page of 100.
