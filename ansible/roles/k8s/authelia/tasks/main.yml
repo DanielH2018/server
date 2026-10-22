@@ -1,97 +1,12 @@
 ---
-# Each user's argon2 digest is a SOPS value (`authelia_password_argon2` and its two siblings),
-# which templates/config-secret.yaml.j2 reads directly. A rotation mints the digest by hand and
-# stores it beside the plaintext; docs/secret-rotation.md has the procedure.
-- name: Fail if the claude-ui credentials are missing
-  tags: [config]
-  # The role default is an empty stand-in, so a cluster that manages this user and does NOT
-  # hold the SOPS value resolves it to '' rather than failing on an undefined name. Without
-  # this assert the `seed-claude-totp` init container in templates/deployment.yaml.j2 registers
-  # an empty TOTP secret, behind a green recap. After D5's flip for authelia this task stops
-  # running, and `cluster_vars.py write` refusing an empty substituted value is its successor.
-  ansible.builtin.assert:
-    that:
-      - authelia_claude_totp_secret | default('') | length > 0
-    fail_msg: >-
-      authelia_k8s_manage_claude_user is on, but authelia_claude_totp_secret is empty. Add it to
-      ansible/vars/secrets.yml, or set authelia_k8s_manage_claude_user to false for this cluster.
-    quiet: true
-  no_log: true
-  when: authelia_k8s_manage_claude_user | bool
-
-- name: Fail if a stored Authelia digest is malformed
-  tags: [config]
-  # Every digest a managed user's `password:` line renders must be the PHC form of the hashing
-  # block in templates/config-secret.yaml.j2: argon2id, m=65536, t=3, p=4, a 16-byte salt (22
-  # base64 characters) and a 32-byte key (43). That refuses an empty value, a `Digest: ` prefix,
-  # surrounding whitespace, a pasted plaintext and a digest minted with other parameters, before
-  # the apply, so a bad value stops the play instead of breaking Authelia's load under
-  # `Recreate`. Two users sharing one digest share one password, so that fails too. `\Z`, not
-  # `$`, ends the pattern: Python's `$` also matches before a trailing newline.
-  # DECIDED: guarded on `homelab_secret_stubs` alone, never on `k8s_dry_run`. A stubbed shadow
-  # run feeds this `stub-` strings, which are not PHC-shaped. An ordinary dry run reads the
-  # stored digests and is meant to check them.
-  # docs/target-architecture/render/r3-remove-live-reads.md, Design, has the reasoning;
-  # ansible/tests/services/test_authelia_digest_assert.py holds the guard.
-  vars:
-    authelia_k8s_digest_pattern: '^[$]argon2id[$]v=19[$]m=65536,t=3,p=4[$][A-Za-z0-9+/]{22}[$][A-Za-z0-9+/]{43}\Z'
-    authelia_k8s_managed_digests: >-
-      {{ [authelia_password_argon2 | default('')]
-         + ([authelia_claude_password_argon2 | default('')]
-            if authelia_k8s_manage_claude_user | bool else [])
-         + ([authelia_agent_password_argon2 | default('')]
-            if authelia_k8s_manage_agent_user | bool else []) }}
-  ansible.builtin.assert:
-    that:
-      - authelia_k8s_managed_digests | reject('match', authelia_k8s_digest_pattern) | list | length == 0
-      - authelia_k8s_managed_digests | unique | list | length == authelia_k8s_managed_digests | length
-    fail_msg: >-
-      A stored Authelia digest (authelia_password_argon2, authelia_claude_password_argon2 or
-      authelia_agent_password_argon2) is not an argon2id digest with the hashing block's
-      parameters, or two managed users share one. Mint it again with the procedure in
-      docs/secret-rotation.md.
-    quiet: true
-  when: not (homelab_secret_stubs | default(false) | bool)
-  no_log: true
-
-# With OIDC on, Authelia's `template` config filter runs Go templating over the whole
-# configuration.yml at start, and the one action it should find is the `jwks[].key` expression
-# that reads the signing key's mount. Every test renders stub values, so none sees a real one.
-# A real value holding `{{` would open a second action, and Authelia would refuse to start,
-# taking SSO down under Recreate. These two tasks count the actions in the real render and
-# stop the deploy before the apply, so the old config stays live. The count is the only fact
-# set, and the assert prints that number and no value. With the lever off the config holds no
-# expression and the filter is off, so a `{{` in a value is plain text and neither task runs.
-# `[{][{]` matches the pair without writing it, which Ansible would read as a template.
-# After D5's flip for authelia, no deploy task reads the rendered config; D3's refusal of `{{`
-# in any value is the successor (docs/target-architecture/render/r2-secret-placeholders.md,
-# PR 7).
-- name: Count the template actions in Authelia's rendered configuration
-  tags: [config]
-  vars:
-    authelia_k8s_rendered_config_secret: >-
-      {{ lookup('ansible.builtin.template',
-                playbook_dir + '/roles/k8s/authelia/templates/config-secret.yaml.j2') }}
-  ansible.builtin.set_fact:
-    authelia_k8s_config_action_count: >-
-      {{ (authelia_k8s_rendered_config_secret | from_yaml).stringData['configuration.yml']
-         | regex_findall('[{][{]') | length }}
-  no_log: true
-  when: authelia_k8s_manage_oidc | bool
-
-- name: Fail unless the jwks key expression is the configuration's only template action
-  tags: [config]
-  ansible.builtin.assert:
-    that:
-      - authelia_k8s_config_action_count | int == 1
-    fail_msg: >-
-      Authelia's rendered configuration.yml holds {{ authelia_k8s_config_action_count }}
-      template actions where only the jwks key expression should be one. A secret value
-      holding a double opening brace would stop Authelia starting under its template config
-      filter. Find the value with sops and store one without it.
-    quiet: true
-  when: authelia_k8s_manage_oidc | bool
-
+# Flux applies authelia through `promote` (`owner: flux`), and no Flux path runs this file. It
+# stays for the handback (docs/flux-deploy-plane.md). The checks it held before the flip moved
+# to `cluster_vars.py write`, which refuses each of these before a value reaches the cluster:
+# - "Fail if the claude-ui credentials are missing": an empty `authelia_claude_totp_secret`;
+# - "Fail if a stored Authelia digest is malformed": a malformed or shared value in the three
+#   `_argon2` keys;
+# - the two template-action tasks: a `{{` in any value, which Authelia's `template` config
+#   filter would read as a second action and refuse to start on.
 # The claim is `k8s_claims` in defaults/main.yml; k8s/manifests renders and applies it.
 - name: Deploy Authelia to the cluster
   ansible.builtin.include_role:

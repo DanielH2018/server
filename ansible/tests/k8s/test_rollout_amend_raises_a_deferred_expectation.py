@@ -1,7 +1,7 @@
 """`k8s/manifests` tasks/rollout_amend.yml raises an expectation the stamp could not decide.
 
 release_stamp.yml runs before the owning role's private apply, so for a workload whose own
-manifest that later apply carries — pihole's instance 2, a deferred manifest — it
+manifest that later apply carries — a deferred manifest, as pihole's instance 2 was — it
 cannot decide `restart`. The entry declares `rolled_by_role: true`, the record says
 `restart: false`, and this file is what the owner calls afterwards.
 
@@ -13,8 +13,8 @@ Two properties, each with the input it must accept and the input it must reject:
   * the amend can lower an expectation to nothing and never invent one. A record that is missing
     or unreadable leaves `restart: false`, which is no expectation rather than a false one.
 
-The declaration side — that pihole names both instances and marks the deferred one — is in
-ansible/tests/k8s/test_self_rollouts_follow_the_apply.py.
+pihole's flip to Flux deleted the role that called this task for `pihole-2`. The entries below
+keep its names as sample data, and observability is the caller that remains.
 
 Run: uv run pytest ansible/tests/k8s/test_rollout_amend_raises_a_deferred_expectation.py
 """
@@ -22,8 +22,7 @@ Run: uv run pytest ansible/tests/k8s/test_rollout_amend_raises_a_deferred_expect
 import base64
 import json
 
-from _helpers import ANSIBLE, load_tasks, render_expr, task_named, walk_tasks
-from _release_expectation import PIHOLE
+from _helpers import ANSIBLE, load_tasks, render_expr, task_named
 
 AMEND = load_tasks(ANSIBLE / "roles/k8s/manifests/tasks/rollout_amend.yml")
 
@@ -50,7 +49,7 @@ _RECORDED = [
 
 
 def test_a_restart_the_owning_role_issued_raises_the_recorded_expectation():
-    """The accept half. roll_one.yml restarted pihole-2, so a `restartedAt` newer than the
+    """The accept half. the owning role restarted pihole-2, so a `restartedAt` newer than the
     record's `applied_at` exists and `probe.py health` must require it."""
     amended = _amended(_RECORDED, restart=True)
     assert amended["pihole-2"]["restart"] is True
@@ -63,7 +62,7 @@ def test_a_restart_the_owning_role_issued_raises_the_recorded_expectation():
 
 
 def test_a_roll_the_owning_apply_did_leaves_the_expectation_alone():
-    """The reject half, and the one that matters most. When apply_instance_2.yml rolled pihole-2
+    """The reject half, and the one that matters most. When the owning role's apply rolled pihole-2
     by changing its pod template, no `restartedAt` was stamped — so raising the expectation would
     fail a roll that did happen. The
     amend must leave `restart: false` on that run."""
@@ -92,36 +91,3 @@ def test_an_unreadable_record_amends_nothing():
         "{{ " + write["when"] + " }}", manifests_amend_rollouts=_RECORDED
     )
     assert not render_expr("{{ " + write["when"] + " }}", manifests_amend_rollouts=[])
-
-
-def test_the_amend_is_driven_by_whether_the_restart_task_ran():
-    """The value pihole passes is the restart task's own register, not a re-derivation of the
-    gate. A `when:` clause copied into roll_one.yml's amend would drift from the gate on the
-    restart task, and the record would then claim a `restartedAt` nothing stamped."""
-    restart = task_named(
-        load_tasks(PIHOLE / "tasks/roll_one.yml"), "Restart Pi-hole instance"
-    )
-    assert restart["register"] == "pihole_k8s_restarted"
-    amend = task_named(
-        load_tasks(PIHOLE / "tasks/roll_one.yml"), "Record that pihole-2"
-    )
-    assert amend["ansible.builtin.include_role"]["tasks_from"] == "rollout_amend.yml"
-    assert (
-        amend["vars"]["manifests_amend_restart"]
-        == "{{ pihole_k8s_restarted is changed }}"
-    )
-    assert amend["vars"]["manifests_amend_workload"] == "pihole-2"
-    assert str(amend["when"]) == "pihole_instance == 'pihole-2'"
-
-
-def test_the_amend_runs_after_the_wait_that_proves_the_roll_finished():
-    """Ahead of the `rollout status` wait the record would claim a roll still in flight, and a
-    failure in that wait would leave the claim behind. The whole point of the field is that a
-    later `probe.py health` can trust it."""
-    names = [
-        str(t.get("name", ""))
-        for t in walk_tasks(load_tasks(PIHOLE / "tasks/roll_one.yml"))
-    ]
-    wait = next(i for i, n in enumerate(names) if n.startswith("Wait for serving"))
-    amend = next(i for i, n in enumerate(names) if n.startswith("Record that pihole-2"))
-    assert wait < amend, names

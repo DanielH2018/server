@@ -1,0 +1,125 @@
+{#
+  jellyfin's verify Job and the ConfigMap that carries its script.
+
+  The renderer emits `templates/verify/*.yaml.j2` into `jellyfin-verify` (`verify_files`), which
+  Flux applies once the `jellyfin` Kustomization reads Ready. The manifests role takes only
+  top-level `templates/*.yaml.j2`, so no Ansible path renders it.
+
+  Both names end in a digest, as the Job census requires (D5, *Rules for every Job Flux
+  applies*): the ConfigMap's in `configmap_digest8` of its data, the Job's in
+  `job_spec_digest8` of its spec. Each is computed here from the same JSON those functions
+  hash, so the spec is written once as YAML text, parsed for the hash and emitted verbatim.
+  The renderer passes `flux_job_image` to every `templates/verify/` file (`render_tag`).
+
+  The spec embeds a digest of jellyfin's rendered Deployment, as tdarr's verify Job does and
+  for its reason: every revision that rolls jellyfin renames the Job, so Flux runs it again,
+  as Ansible runs `verify.yml` on every deploy.
+  ansible/roles/k8s/jellyfin/tests/test_jellyfin_verify.py runs the census over this render.
+#}
+{% set script_name = 'jellyfin_verify.py' %}
+{% set script_dir = '/verify' %}
+{% set data = {script_name: lookup('file', playbook_dir + '/roles/k8s/jellyfin/files/' + script_name, rstrip=False)} %}
+{% set configmap_name = 'jellyfin-verify-' + ({'data': data, 'binaryData': {}} | to_json(sort_keys=True, separators=(',', ':')) | hash('sha256'))[:8] %}
+{% set deployment_digest8 = (lookup('template', 'deployment.yaml.j2') | hash('sha256'))[:8] %}
+{% set spec_text %}
+# A flaky check fails rather than passing on a retry.
+backoffLimit: 0
+# Below the 600s `manifests_rollout_timeout_default` every `<tag>-verify` Kustomization takes,
+# with room for the media volume to attach, so the Job fails with its own message first.
+activeDeadlineSeconds: 300
+template:
+  metadata:
+    labels:
+      app: jellyfin-verify
+  spec:
+    serviceAccountName: jellyfin-verify
+    # The Job reads no API, so its pod holds no token.
+    automountServiceAccountToken: false
+    restartPolicy: Never
+    enableServiceLinks: false
+    # jellyfin's PUID and PGID, the uid jellyfin's own process reads the library as, and the
+    # render-node group jellyfin's Deployment adds. The Ansible task this replaces probed as
+    # root, which would pass a render node or a library jellyfin itself cannot open.
+    securityContext:
+      runAsNonRoot: true
+      runAsUser: {{ puid }}
+      runAsGroup: {{ pgid }}
+      supplementalGroups:
+        - {{ render_gid }}
+      seccompProfile:
+        type: RuntimeDefault
+    containers:
+      - name: verify
+        image: {{ flux_job_image }}
+        command:
+          - python3
+          - {{ script_dir }}/{{ script_name }}
+        env:
+          - name: VERIFY_DEVICE
+            value: /dev/dri/renderD128
+          - name: VERIFY_DATA
+            value: /data
+          # Renames the Job whenever jellyfin's Deployment changes; see the note above.
+          - name: JELLYFIN_DEPLOYMENT_DIGEST8
+            value: "{{ deployment_digest8 }}"
+          - name: PYTHONDONTWRITEBYTECODE
+            value: "1"
+        # The device request is what puts the render node in this pod, as it does in
+        # jellyfin's. `dri_device_plugin_count` shares the one node among four pods: jellyfin,
+        # tdarr and the two verify Jobs.
+        resources:
+          requests:
+            cpu: 10m
+            memory: 32Mi
+            {{ jellyfin_k8s_dri_resource }}: "1"
+          limits:
+            memory: 64Mi
+            {{ jellyfin_k8s_dri_resource }}: "1"
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+              - ALL
+        volumeMounts:
+          - name: script
+            mountPath: {{ script_dir }}
+            readOnly: true
+          # jellyfin's own two mounts of the library: the `media` subPath at /data, and again
+          # at /data/media. The depth is what the library check proves.
+          - name: media
+            mountPath: /data
+            subPath: media
+            readOnly: true
+          - name: media
+            mountPath: /data/media
+            subPath: media
+            readOnly: true
+    volumes:
+      - name: script
+        configMap:
+          name: {{ configmap_name }}
+      - name: media
+        persistentVolumeClaim:
+          claimName: {{ jellyfin_k8s_media_claim }}
+          readOnly: true
+{% endset %}
+{% set spec = spec_text | from_yaml %}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ configmap_name }}
+  namespace: {{ k8s_namespace }}
+data:
+  {{ script_name }}: {{ data[script_name] | to_json }}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: jellyfin-verify-{{ (spec | to_json(sort_keys=True, separators=(',', ':')) | hash('sha256'))[:8] }}
+  namespace: {{ k8s_namespace }}
+  annotations:
+    homelab/job-kind: verify
+spec:
+{{ spec_text | indent(2, true) }}

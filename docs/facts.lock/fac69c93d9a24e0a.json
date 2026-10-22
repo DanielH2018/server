@@ -1,19 +1,18 @@
 {
-  "checksum": "49fad2dfbc1d90294413411fb35afc121f0bb85f7257b69e956dbc3a4a9e2695",
+  "checksum": "e0a7ecbfa49a26b73f59dd4888ba918875143c1805b42c562d05199894625e17",
   "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
   "key": "ansible/roles/k8s/observability/CLAUDE.md#One config change, one restart",
   "row": {
     "atoms": {
-      "ansible/roles/k8s/manifests/tasks/rollout_amend.yml": "36939afbf8bea72b16e587fe56fbbf2cfd9e3c911b1ef1a0db99263f52a134cf",
-      "ansible/roles/k8s/observability/defaults/main.yml:DECIDED: no rolled_by_role": "529b7a58a0ac743930e4333f9b023077fb3c61f2b08b0086b57bc773db8c8f01",
+      "ansible/roles/k8s/observability/defaults/main.yml:DECIDED: no rolled_by_role": "0f5cb6ec8bff39dc9c9ce3557d2175822fb74d109116129d04f8d1d30c3c894e",
       "ansible/roles/k8s/observability/defaults/main.yml:observability_stabilise_workloads": "7eb37ae37887203f1204e137d6c60c5a00b8ad681d3b59cec5acd8c3bfcb438f",
       "ansible/roles/k8s/observability/templates/prometheus.yaml.j2:DECIDED: rules reload in place": "5abbd531d56afb299173219d3007a490b4934626948fb2dba68f660f225d7eda",
       "ansible/templates/checksum-annotation.yml.j2": "a4437adb5cdb813552c464e339f5feb58deb96c0f949caa0382bdfd9c85a7e48",
       "ansible/tests/services/test_observability_config_rolls_one_workload.py": "caf82d57dcb82f857e7a920e93608c6a5aab3cb3e90daa7509c267d741d37406",
       "scripts/renderer/renderer_lib/restart.py:RELOADED_IN_PLACE": "03350e230052152bd7c0f6588994217c79a11aa7dc11df9bb21042b39ac57ecb",
-      "scripts/renderer/tests/test_renderer_self_rollout_restart.py::test_a_board_or_rule_edit_after_the_flip_moves_no_restart_value": "8b0e99a64281fbbe8a02949948895956974a80dfb2a351db657213364b45858b"
+      "scripts/renderer/tests/test_renderer_self_rollout_restart.py::test_a_board_or_rule_edit_after_the_flip_moves_no_restart_value": "2591a20ab3f7e5001134459c83e38bcbb009ff01e42dc35a3c023a8773e0f597"
     },
     "python": "3.14",
-    "verified_sha": "a6c8f93c7"
+    "verified_sha": "ff5cc95cb"
   }
 }

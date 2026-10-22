@@ -24,10 +24,8 @@ incident.
 
 The derived half recognises three shapes of "inspects a pod", all of them via `kubectl`:
 
-  1. `get pod -l app=<workload>`     — jellyfin, janitorr
-  2. `get pod -l <anylabel>=<value>` — pihole, which selects an instance by the pod-only
-                                       `instance` label because both its Deployments share
-                                       `app: pihole` in an immutable selector
+  1. `get pod -l app=<workload>`     — no live member since jellyfin and janitorr flipped
+  2. `get pod -l <anylabel>=<value>` — no live member since pihole flipped
   3. `exec`/`logs <target>`          — crowdsec (`exec deploy/crowdsec`) and observability
                                        (`exec deploy/grafana`), plus every `exec {{ reg.stdout }}`
                                        whose register is traced back to the lookup that filled it
@@ -172,41 +170,19 @@ def test_the_gate_is_tagged_with_what_it_protects() -> None:
 # derivation and the hand-written set agree on, so the two halves are checked against each
 # other on every run.
 _KNOWN_SELF_POD_ROLES = {
-    "observability",
     "crowdsec",
-    "janitorr",
-    "jellyfin",
-    "pihole",
 }
 
-# 27 resolved self-pod inspections across those roles, since crowdsec's three registration
-# execs became an initContainer (#5741). A floor far below the real count cannot tell "one role changed shape" from "the matcher broke and half the
-# corpus stopped being read".
-_MIN_SELF_POD_INSPECTIONS = 24
-
+# 8 resolved self-pod inspections across those roles, since observability's flip deleted its
+# tasks, janitorr's and jellyfin's verify tasks went at their flip, and pihole's flip deleted
+# its roll and gravity tasks (27 before them; crowdsec's three registration execs had already
+# become an initContainer, #5741). The floor is the measured count: a lower floor cannot tell
+# "one role changed shape" from "the matcher broke and half the corpus stopped being read".
+_MIN_SELF_POD_INSPECTIONS = 8
 # Pod inspections whose target is a Jinja expression this file cannot resolve, each excused
 # with the reason. An entry here is NOT "assume it is fine" — it is a claim that the ordering
 # is carried by something else in the same role, written down where the next reader meets it.
-_UNRESOLVED_TARGETS = {
-    # `pihole_pod_by_instance[item]` is a runtime map from instance name to pod name, built from
-    # the register of "Find the pod backing each Pi-hole instance". That lookup IS resolved and
-    # IS gated, and it precedes both of these, so the ordering these two need is already proven.
-    (
-        "pihole",
-        "Reconcile the declared adlists and regex denies into gravity.db",
-    ): "execs a pod name resolved at runtime; ordering carried by the gated lookup above it",
-    (
-        "pihole",
-        "Rebuild gravity after a blocklist change",
-    ): "execs a pod name resolved at runtime; ordering carried by the gated lookup above it",
-    # This read IS the gate: it refuses to restart one instance while the other is
-    # terminating. Requiring a rollout to have been proved before it would invert the ordering —
-    # the whole point is that it runs before anything rolls.
-    (
-        "pihole",
-        "Refuse the restart while the sibling is terminating {{ pihole_instance }}",
-    ): "reads the sibling's pods to decide whether a roll may start; it precedes every roll",
-}
+_UNRESOLVED_TARGETS: dict[tuple[str, str], str] = {}
 
 
 def _self_pod_roles() -> dict[str, list[tuple[int, _Task, set[str]]]]:
@@ -339,10 +315,6 @@ def test_no_role_gates_with_a_readiness_wait_on_its_own_pods() -> None:
 # dri-device-plugin below it) could not tell a considered budget from a typo without going and
 # looking, and for dri-device-plugin looking does not answer it.
 _GATE_BUDGETS = {
-    "observability": (
-        300,
-        "default; one looped gate covering all six telemetry workloads",
-    ),
     "cloudflare-ddns": (300, "default"),
     "flux": (300, "default; one looped gate covering the three Flux controllers"),
     "crowdsec": (300, "default"),
@@ -352,9 +324,6 @@ _GATE_BUDGETS = {
         "no first-boot work does roll out well inside 180s, so this is plausible rather than "
         "verified; it is recorded as undocumented, not endorsed. Raise it if it ever times out",
     ),
-    "janitorr": (300, "default"),
-    "jellyfin": (300, "default"),
-    "pihole": (300, "default"),
     "registry": (300, "default"),
     "arr-notification": (
         660,

@@ -1,11 +1,9 @@
-"""janitorr's inert Flux verify Job: each check fails its broken case, and the Job sees what janitorr does.
+"""janitorr's Flux verify Job: each check fails its broken case, and the Job sees what janitorr does.
 
 The script tests run `verify_janitorr.main` against a config file, a stand-in for the three
-apps, and a media tree under `tmp_path`. The render tests copy the role, move
-`templates/verify-inert/` to `templates/verify/` as the flip PR will, and render the copy, so
-the Job is checked as Flux will receive it while the tree's own render still emits no
-`janitorr-verify`. The plan is docs/target-architecture/deploy/d5-bulk-move.md, *A verify
-conversion lands as inert code*.
+apps, and a media tree under `tmp_path`. The render tests render a copy of the role, so a test
+can edit the copy and leave the tree alone. The plan is
+docs/target-architecture/deploy/d5-bulk-move.md.
 
 Run: uv run pytest ansible/roles/k8s/janitorr/tests/test_verify_janitorr.py
 """
@@ -194,7 +192,6 @@ def _render_tree_copy(tmp_path, stubs, edit=None) -> cluster.RenderedTag:
     (tree / "roles" / "setup").symlink_to(ANSIBLE / "roles" / "setup")
     (tree / "vars").mkdir()
     shutil.copy(ANSIBLE / "vars" / "cluster-vars.source", tree / "vars")
-    (role / "templates" / "verify-inert").rename(role / "templates" / "verify")
     if edit:
         edit(role)
     copied = {**stubs, "playbook_dir": str(tree)}
@@ -245,8 +242,9 @@ def _claim(pod: dict, volume: str) -> str:
     return source["persistentVolumeClaim"]["claimName"]
 
 
-def test_the_tree_renders_no_janitorr_verify_while_ansible_owns_it(stubs):
-    assert cluster.render_tag(TAG, stubs).verify == {}
+def test_the_tree_renders_janitorr_verify(stubs, flipped_tag):
+    """The flip moved the Job to `templates/verify/`, so the tree's own render emits it."""
+    assert cluster.render_tag(TAG, stubs).verify == flipped_tag.verify != {}
 
 
 def test_the_flipped_job_passes_every_job_census_row(flipped):
@@ -391,13 +389,13 @@ def test_every_input_the_pod_names_is_one_the_roll_digest_reads(flipped_tag):
     ]
     named = {sources[ref] for ref in pod_references(deployment["spec"]["template"])}
     assert named == {"config-secret.yaml.j2"}
-    text = (K8S_ROLES / TAG / "templates" / "verify-inert" / "job.yaml.j2").read_text()
+    text = (K8S_ROLES / TAG / "templates" / "verify" / "job.yaml.j2").read_text()
     assert {name for name in named if f"/templates/{name}'" not in text} == set()
 
 
 def test_the_job_reads_no_other_roles_file():
     """The helper and the image come from `render_tag`, never a lookup into another role."""
-    staged = sorted((K8S_ROLES / TAG / "templates" / "verify-inert").glob("*.j2"))
+    staged = sorted((K8S_ROLES / TAG / "templates" / "verify").glob("*.j2"))
     assert [p.name for p in staged] == ["job.yaml.j2", "rbac.yaml.j2"]
     assert [
         (path.name, role)

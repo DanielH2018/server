@@ -1,10 +1,8 @@
 """observability's verify Job: prove the live OTLP receiver's hostPort is pinned to loopback.
 
-`templates/verify-inert/` holds the Job, and nothing renders it while Ansible owns
-observability. observability's flip PR moves it to `templates/verify/`, and the renderer then
-emits it into `observability-verify` (target slice D5, *A verify conversion lands as inert
-code*). It replaces the role's "Read back the OTLP listener's bind address" and "Fail if the
-OTLP receiver is not pinned to loopback" tasks.
+`templates/verify/` holds the Job, and the renderer emits it into `observability-verify`
+(target slice D5). It replaces the role's former "Read back the OTLP listener's bind address"
+and "Fail if the OTLP receiver is not pinned to loopback" tasks.
 
 The collector receives prompts and responses verbatim, and Claude Code on the host reaches it
 through a hostPort. A hostPort with no `hostIP` binds every node address, which publishes the

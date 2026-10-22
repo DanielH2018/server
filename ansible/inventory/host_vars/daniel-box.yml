@@ -95,6 +95,10 @@ containers_list:
   # is the one first-run ordering failure we accept, because the credential constraint wins.
   - name: crowdsec
     platform: k8s
+    # Flux applies crowdsec through `promote` and runs its ban-and-lift check as the
+    # `crowdsec-verify` Job (D5, crowdsec's own window). The handback is two PRs,
+    # `owner: released` then removing `owner`: docs/flux-deploy-plane.md.
+    owner: flux
     # Decisions expire and re-derive from logs; Metabase dashboards are provisioned.
     no_backup_claims: [crowdsec-db]
     # daniel-server's agent and its traefik bouncer authenticate here with machine/bouncer
@@ -143,6 +147,10 @@ containers_list:
     backup_claims: [traefik-acme]
   - name: authelia
     platform: k8s
+    # Flux applies authelia through `promote`, and every Ansible path skips it (D5, authelia's
+    # own window). The handback is two PRs, `owner: released` then removing `owner`:
+    # docs/flux-deploy-plane.md.
+    owner: flux
     # This portal's name is the OIDC issuer Jellyfin's SSO plugin points at.
     hostname: "auth"
     kuma: {id: auth, name: k3s Authelia Portal}
@@ -189,6 +197,11 @@ containers_list:
   # browser and the dashboard's (read-only) cluster identity.
   - name: headlamp
     platform: k8s
+    # Flux applies headlamp through `promote`, and `headlamp-verify` runs the isolation probe the
+    # deleted tasks ran. Its observability RBAC is `headlamp-deferred`, which waits on observability
+    # (D5, Wave D). The handback is two PRs, `owner: released` then removing `owner`:
+    # docs/flux-deploy-plane.md.
+    owner: flux
     hostname: "headlamp"
     kuma: {name: k3s Headlamp}
     port: 4466
@@ -276,7 +289,7 @@ containers_list:
       - bazarr          # app DB, bare name — see the policy's header
       - prowlarr        # Application Sync writes indexers in — see the policy's header
       - sonarr-verify   # templates/verify/ Jobs — see the policy's header
-      - janitorr-verify # janitorr's templates/verify-inert/ Job, staged for its flip — see the policy's header
+      - janitorr-verify # janitorr's templates/verify/ Job — see the policy's header
     # homepage's Sonarr widget dials the ClusterIP; this key adds homepage to the callers above.
     homepage_widget: true
   # Runs a WireGuard/Mullvad sidecar sharing the pod's netns, gating qbittorrent's start so
@@ -336,7 +349,7 @@ containers_list:
       - bazarr
       - prowlarr        # Application Sync writes indexers in — see the policy's header
       - radarr-verify   # templates/verify/ Job — see the policy's header
-      - janitorr-verify # janitorr's templates/verify-inert/ Job, staged for its flip — see the policy's header
+      - janitorr-verify # janitorr's templates/verify/ Job — see the policy's header
     # homepage's Radarr widget dials the ClusterIP; this key adds homepage to the callers above.
     homepage_widget: true
   # Brings a second workload with it — flaresolverr, which renders attacker-supplied
@@ -392,6 +405,10 @@ containers_list:
   # clients are TV and phone apps that cannot complete a web SSO flow.
   - name: jellyfin
     platform: k8s
+    # Flux applies jellyfin through `promote`, caps its snapshot space and checks the render node
+    # and the library in `jellyfin-verify` (D5, Wave D). The handback is two PRs, `owner:
+    # released` then removing `owner`: docs/flux-deploy-plane.md.
+    owner: flux
     weekly_backup_claims: {jellyfin-config: 1}  # Mon
     # dri-device-plugin advertises the `devic.es/dri` resource this pod requests.
     depends_on: [media-volume, dri-device-plugin]
@@ -433,10 +450,19 @@ containers_list:
   # by bare Service name, and its verify step reads a symlink from inside the jellyfin pod.
   - name: janitorr
     platform: k8s
+    # Flux applies janitorr through `promote` and checks its dry-run state, its reach and its
+    # leaving-soon links in `janitorr-verify` (D5, Wave D). The handback is two PRs, `owner:
+    # released` then removing `owner`: docs/flux-deploy-plane.md.
+    owner: flux
     depends_on: [media-volume, sonarr, radarr, jellyfin]
 
   - name: observability
     platform: k8s
+    # Flux applies observability through `promote`, restarts a workload whose Secret changed
+    # through the renderer's restart annotation, and reads the OTLP bind address back in
+    # `observability-verify` (D5, Wave D). The handback is two PRs, `owner: released` then
+    # removing `owner`: docs/flux-deploy-plane.md.
+    owner: flux
     # `hostname`/`port` describe Grafana — the only routed workload here. The OTEL
     # collector, Loki, Prometheus and Tempo are reached on the node's loopback via hostPort
     # so `otelq`, which hardcodes 127.0.0.1, can read them from the host. Content logging is
@@ -722,6 +748,10 @@ containers_list:
   # coordinator accepts one client, hence `strategy: Recreate` in the role.
   - name: zigbee2mqtt
     platform: k8s
+    # Flux applies zigbee2mqtt through `promote`, and substitutes its network key and MQTT
+    # credentials from homelab-cluster-vars (D5.10, own window). The handback is two PRs,
+    # `owner: released` then removing `owner`: docs/flux-deploy-plane.md.
+    owner: flux
     depends_on: [mosquitto]
     hostname: "zigbee2mqtt"
     kuma: {name: k3s Zigbee2MQTT}
@@ -737,6 +767,10 @@ containers_list:
   # the gate. Reaches mosquitto by Service name.
   - name: home-assistant
     platform: k8s
+    # Flux applies home-assistant through `promote`, and substitutes its Google project id and
+    # Google service-account Secret from homelab-cluster-vars (D5.11, own window). The handback
+    # is two PRs, `owner: released` then removing `owner`: docs/flux-deploy-plane.md.
+    owner: flux
     hostname: "home-assistant"
     kuma: {name: k3s Home Assistant}
     # Records HA's own listener rather than setting it: HA binds 8123 by default, and
@@ -760,6 +794,9 @@ containers_list:
   # the role defaults (pihole_k8s_adlists) and everything else in /etc/pihole regenerates.
   - name: pihole
     platform: k8s
+    # Flux applies pihole through `promote`, and every Ansible path skips it (D5.26). The
+    # handback is two PRs, `owner: released` then removing `owner`: docs/flux-deploy-plane.md.
+    owner: flux
     hostname: "pihole"
     # A hand-written tile in uptime-kuma's static-monitors.yaml.j2 covers it: pihole-k8s-dns, a DNS query against the VIP.
     kuma: false
@@ -836,6 +873,10 @@ containers_list:
   # inside the pod — see roles/k8s/wg-easy/defaults/main.yml.
   - name: wg-easy
     platform: k8s
+    # Flux applies wg-easy through `promote`, and every Ansible path skips it (D5.12, own window,
+    # operator on the LAN). The handback is two PRs, `owner: released` then removing `owner`:
+    # docs/flux-deploy-plane.md.
+    owner: flux
     weekly_backup_claims: {wg-easy-config: 4}  # Thu
     tier: platform
     hostname: "wg-easy"
@@ -847,6 +888,9 @@ containers_list:
 
   - name: uptime-kuma
     platform: k8s
+    # Flux applies uptime-kuma through `promote` (D5, Wave D). The handback is two PRs, `owner:
+    # released` then removing `owner`: docs/flux-deploy-plane.md.
+    owner: flux
     # Monitors + notifications regenerate from the git-rendered static-monitors Secret, and
     # autokuma's state rebuilds from the same Secret. DR caveat: the first-run admin is
     # recreated by hand and status HISTORY is not kept anywhere.
@@ -1074,6 +1118,10 @@ containers_list:
   # No depends_on: the plan states no order against observability.
   - name: blackbox-exporter
     platform: k8s
+    # Flux applies blackbox-exporter through `promote`, and every Ansible path skips it (D5, Wave
+    # A's last PR). The handback is two PRs, `owner: released` then removing `owner`:
+    # docs/flux-deploy-plane.md.
+    owner: flux
     port: 9115
   # Deploys LAST: every workload role must finish before this role fences the namespace
   # (docs/networkpolicy-slice-answers.md). K8S_APPLIES_LAST in filter_plugins/toposort.py gives

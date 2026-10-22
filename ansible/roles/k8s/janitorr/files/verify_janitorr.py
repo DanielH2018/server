@@ -1,22 +1,20 @@
 """janitorr's Flux verify Job: it is dry when it should be, reaches the apps, and its links resolve.
 
-`templates/verify-inert/job.yaml.j2` runs this, and nothing renders that directory while
-Ansible owns janitorr. janitorr's flip PR renames it to `templates/verify/`, and the renderer
-then emits the Job into `janitorr-verify` (target slice D5, *A verify conversion lands as inert
-code*). It replaces the three proofs of `tasks/verify.yml`, each of which ran through
-`kubectl exec`, with no `pods/exec` grant:
+`templates/verify/job.yaml.j2` runs this, and the renderer emits the Job into
+`janitorr-verify` (target slice D5). It replaced the three proofs of `tasks/verify.yml` at
+janitorr's flip, each of which ran through `kubectl exec`, with no `pods/exec` grant:
 
-- dry-run: `tasks/verify.yml` grepped `/config/application.yml` inside janitorr's pod. The Job
+- dry-run: the task grepped `/config/application.yml` inside janitorr's pod. The Job
   mounts the same key of the same `janitorr-config` Secret at the same path. The pod's subPath
   copy is frozen at its start, and the Job runs only after a revision that rolled the pod is
   Ready, so the two hold the same bytes. A dry-run line that is not `true` fails only when
   `JANITORR_EXPECT_DRY_RUN` is `true`, as before; a config with no dry-run line fails always.
-- reach: `tasks/verify.yml` opened a TCP connection to sonarr, radarr and jellyfin from inside
+- reach: the task opened a TCP connection to sonarr, radarr and jellyfin from inside
   janitorr's pod. The Job dials each over HTTP from its own pod, `app: janitorr-verify`, and any
   HTTP answer counts, as an accepted connection did. The Job census admits no `socket`, so the
   connection goes through `flux_job_connect`, which retries a refusal for 60 seconds while
   kube-router learns the new pod's address.
-- leaving-soon: `tasks/verify.yml` wrote a probe symlink from janitorr's pod and read it from
+- leaving-soon: the task wrote a probe symlink from janitorr's pod and read it from
   jellyfin's. The Job writes and reads it in one container whose media mounts are jellyfin's,
   read-write rather than read-only. janitorr's whole claim at `/data` and jellyfin's two
   `media` subPath mounts at `/data` and `/data/media` both put the library's `media/tv` at

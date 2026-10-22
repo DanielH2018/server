@@ -6,11 +6,8 @@ scratch, how to operate it day-to-day, and where to tune it. For implementation 
 the commits that shipped each feature; this guide arrived in `81232dca7`.
 
 Everything is Ansible-managed — **git is the source of truth; HA UI edits are overwritten on
-deploy.** Apply changes with:
-
-```bash
-uv run ansible-playbook ansible/deploy.yml --tags "home-assistant"
-```
+deploy.** Flux applies the role (`owner: flux`), so merge the change and `promote` applies it.
+`deploy.sh --tags "home-assistant"` refuses the tag with exit 5.
 
 ---
 

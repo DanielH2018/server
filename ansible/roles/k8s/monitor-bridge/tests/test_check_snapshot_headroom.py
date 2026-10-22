@@ -171,9 +171,10 @@ def _declared_caps() -> dict[str, int]:
 def _roles_that_cap_a_volume() -> dict[str, str]:
     """Role name -> the claim it caps, derived from the tree rather than from the declaration.
 
-    A role caps a volume by writing `spec.snapshotMaxSize` (roles/k8s/jellyfin/tasks/main.yml is
-    the only one). The census matches the FIELD NAME anywhere under a k8s role's tasks,
-    minus the roles that only READ it, rather than jellyfin's `kubectl patch` payload: a future
+    A role caps a volume by writing `spec.snapshotMaxSize` (the Job in
+    roles/k8s/jellyfin/templates/verify/cap.yaml.j2 is the only one). The census matches the
+    FIELD NAME anywhere under a k8s role's tasks or verify Jobs, minus the roles that only READ
+    it, rather than jellyfin's patch payload: a future
     role capping a volume through `kubernetes.core.k8s` or `--type=json` writes the same field
     with different syntax, and a payload-shaped pattern would miss it and pass. The claim comes
     from the role's own `<role>_k8s_claim` default, which is the variable the write resolves its
@@ -184,14 +185,18 @@ def _roles_that_cap_a_volume() -> dict[str, str]:
     # writing, because every entry narrows what this guard can see.
     READERS = {"volume-snapshot", "volume-revert"}
     census = {}
-    for tasks in sorted((ROLES / "k8s").glob("*/tasks/*.yml")):
-        if (
-            "snapshotMaxSize" not in tasks.read_text()
-            or tasks.parents[1].name in READERS
-        ):
+    writers = sorted(
+        [
+            *(ROLES / "k8s").glob("*/tasks/*.yml"),
+            *(ROLES / "k8s").glob("*/templates/verify/*.j2"),
+        ]
+    )
+    for source in writers:
+        role_dir = next(p for p in source.parents if p.parent.name == "k8s")
+        if "snapshotMaxSize" not in source.read_text() or role_dir.name in READERS:
             continue
-        role = tasks.parents[1].name
-        defaults = (tasks.parents[1] / "defaults" / "main.yml").read_text()
+        role = role_dir.name
+        defaults = (role_dir / "defaults" / "main.yml").read_text()
         claim = re.search(
             r"^%s_k8s_claim:\s*(\S+)" % re.escape(role.replace("-", "_")),
             defaults,

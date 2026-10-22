@@ -255,16 +255,18 @@ def test_cronjob_health_no_deploy_stamp_checks_the_latest_job_directly():
 
 
 def test_deploy_applied_at_reads_the_release_stamp(tmp_path, monkeypatch):
-    from diagnostics.probe_lib import releases
+    from diagnostics.probe_lib import releases, releases_retired
 
     monkeypatch.setattr(releases, "RELEASE_DIR", tmp_path)
-    # janitorr, an Ansible-owned CronJob role: a flux-owned one reads no release record.
-    (tmp_path / "janitorr.json").write_text('{"applied_at": "2026-08-16T09:00:00Z"}')
-    assert health._deploy_applied_at("janitorr") == "2026-08-16T09:00:00Z"
-
-
-def test_deploy_applied_at_is_none_when_unreadable(tmp_path, monkeypatch):
-    from diagnostics.probe_lib import releases
-
-    monkeypatch.setattr(releases, "RELEASE_DIR", tmp_path)
-    assert health._deploy_applied_at("janitorr") is None
+    # The owner map is fixed here, so the test does not follow which roles the tree hands to Flux.
+    monkeypatch.setattr(
+        releases_retired, "tree_owners", lambda host_vars=None: {"flux-svc": "flux"}
+    )
+    stamp = '{"applied_at": "2026-08-16T09:00:00Z"}'
+    (tmp_path / "ansible-svc.json").write_text(stamp)
+    (tmp_path / "flux-svc.json").write_text(stamp)
+    assert health._deploy_applied_at("ansible-svc") == "2026-08-16T09:00:00Z"
+    # A flux-owned service reads no record, though one is on disk.
+    assert health._deploy_applied_at("flux-svc") is None
+    # No record on disk reads as None too.
+    assert health._deploy_applied_at("never-deployed") is None

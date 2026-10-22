@@ -109,12 +109,18 @@ def test_the_repair_commands_route_each_plane_to_a_playbook_that_can_reach_it():
     deploy_cmd = [c for c in commands if "deploy.sh" in c]
     setup_cmd = [c for c in commands if "initial_setup.yml" in c]
 
-    assert len(deploy_cmd) == 1 and len(setup_cmd) == 1
-    assert "fake_remux" not in deploy_cmd[0], (
+    flux_cmd = [c for c in commands if "carries owner: flux" in c]
+
+    # Every deploy-plane consumer of this key is flux-owned, so no deploy.sh line remains: each
+    # owned tag is named on a Flux-path line of its own instead.
+    assert len(setup_cmd) == 1
+    assert not any("fake_remux" in c for c in deploy_cmd), (
         "deploy.sh exits 2 on a tag that is not in containers_list, having deployed NOTHING — "
         "putting a setup-plane role in this command is the silent half of the bug"
     )
     assert "--tags fake_remux" in setup_cmd[0]
+    assert any(c.startswith("sonarr carries owner: flux") for c in flux_cmd)
+    assert not any("sonarr" in c for c in deploy_cmd)
 
 
 @pytest.mark.parametrize("name", sops_names())

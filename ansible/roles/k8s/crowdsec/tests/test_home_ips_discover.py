@@ -170,6 +170,17 @@ def test_a_good_run_writes_both_values_and_clears_both_errors(capsys):
     assert out.endswith("IPv4 written; IPv6 written\n")
 
 
+def test_a_second_run_patches_the_same_values():
+    """The gate Job runs beside the schedule, so only `looked_up_at` may differ between runs."""
+    bodies = []
+    for _ in range(2):
+        kube = _Recorder()
+        assert _main(kube, b"98.42.7.9") == 0
+        [(_, _, body)] = kube.calls
+        bodies.append({k: v for k, v in body["data"].items() if k != "looked_up_at"})
+    assert bodies[0] == bodies[1] != {}
+
+
 def test_a_failed_ipv6_lookup_writes_its_error_and_leaves_the_stored_prefix():
     """A merge patch that omits `ipv6_prefix` leaves the stored /64 as it is (#1248)."""
     kube = _Recorder()

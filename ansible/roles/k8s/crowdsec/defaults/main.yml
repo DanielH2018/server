@@ -99,11 +99,21 @@ crowdsec_k8s_jobs_mem_request: 64Mi
 # allowlist from it (files/home_allowlist.py). The host cron's period, every 5 minutes.
 crowdsec_k8s_home_ips_period_minutes: 5
 crowdsec_k8s_home_ips_configmap: crowdsec-home-ips
-# Below the period, so a hung run ends before the next slot, and below k8s/cronjob-gate's
-# cronjob_gate_timeout, so a hung gate run fails the deploy with the gate's own message. A run
-# takes at most 150s: ipify and the ConfigMap patch at 10s each plus 60s of connect retries,
-# and the two WAN probes at 5s each with none.
+# Below the period, so a hung run ends before the next slot, and below the `crowdsec-verify`
+# Kustomization's timeout, which the renderer raises above the gate Job's deadline, so a hung
+# gate run fails on its own message. A run takes at most 150s: ipify and the ConfigMap patch at
+# 10s each plus 60s of connect retries, and the two WAN probes at 5s each with none.
 crowdsec_k8s_home_ips_deadline_seconds: 240
+# The CronJob's one-off run per role revision, `crowdsec-home-ips-deploy-gate-<spec digest8>` in
+# `crowdsec-verify`. It replaced the `k8s/cronjob-gate` include at crowdsec's flip. The run
+# patches the same ConfigMap a scheduled firing patches, from the same lookup, so a second run
+# writes the same values and the gate is a post-apply mutation. The Job keeps no ownerReference
+# to the CronJob, so `concurrencyPolicy: Forbid` no longer keeps a scheduled firing off a gate
+# run, and an overlap patches the ConfigMap twice with one lookup's values.
+flux_cronjob_gates:  # noqa var-naming[no-role-prefix]
+  crowdsec-home-ips:
+    kind: mutation
+    rerun_safe: ansible/roles/k8s/crowdsec/tests/test_home_ips_discover.py::test_a_second_run_patches_the_same_values
 # Three CronJob periods: the sidecar's home allowlist pushes down once the ConfigMap's lookup
 # time is older, so a dead discovery pages.
 crowdsec_k8s_home_ips_stale_after_seconds: "{{ crowdsec_k8s_home_ips_period_minutes * 60 * 3 }}"

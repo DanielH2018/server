@@ -9,21 +9,18 @@ algorithm and parameters back off each stored digest's own `$argon2id$` PHC pref
 the config block says and a deploy is green either way. Under the legacy flat spelling the two
 copies stand 1024x apart on `memory`; this guard keeps them agreeing.
 
-A third copy is the digest assert in `roles/k8s/authelia/tasks/main.yml`, "Fail if a stored
-Authelia digest is malformed". Its PHC pattern spells `m`, `t` and `p`, and its two base64 lengths encode the salt
-and key sizes, so a parameter change that misses it fails every deploy before the apply. The
-pattern is compared with the rendered block too.
-
-A fourth copy is `ARGON2_PARAMETERS` in `scripts/secrets_mgmt/cluster_vars.py`, from which
-`write` builds the same pattern to refuse a malformed digest once D5 moves authelia to Flux
-(slice D3, PR D3.2d). Its `memory`, `iterations` and `parallelism` are compared with the
-rendered block, and the pattern built from it is compared like the assert's.
+A third copy is `ARGON2_PARAMETERS` in `scripts/secrets_mgmt/cluster_vars.py`, from which
+`write` builds a PHC pattern to refuse a malformed digest (slice D3, PR D3.2d). The pattern
+spells `m`, `t` and `p`, and its two base64 lengths encode the salt and key sizes, so a
+parameter change that misses it makes `write` refuse every digest the hashing block mints. Its
+`memory`, `iterations` and `parallelism` are compared with the rendered block, and so is the
+pattern built from it.
 
 The flag-to-key mapping is NOT identity — `--salt-size` is `salt_length` and `--key-size` is
 `key_length` — which is itself the reason it is pinned here rather than left to a reader.
 
 Each rule is a predicate with a passing and a rejecting input, then applied to the real
-rendered manifest, the real task file and the real doc behind non-vacuity assertions.
+rendered manifest and the real doc behind non-vacuity assertions.
 
 Those non-vacuity assertions carry the legacy-spelling case itself, so do not simplify them away. A revert
 to the legacy flat spelling empties `password.argon2`, and the comparison would then hold two
@@ -34,12 +31,11 @@ the mapping lost.
 import re
 
 import pytest
-from _helpers import REPO, ROLES
+from _helpers import REPO
 from _k8s_render import rendered_docs
 from lib import yaml_fast
 from secrets_mgmt.cluster_vars import ARGON2_DIGEST, ARGON2_PARAMETERS
 
-TASKS = ROLES / "k8s/authelia/tasks/main.yml"
 ROTATION_DOC = REPO / "docs" / "secret-rotation.md"
 
 # The CLI flag each config key is spelled as. Pinned, because the mapping is not identity and
@@ -63,11 +59,7 @@ FLAG_TO_CONFIG_KEY = {
 # is its red proof, because the quoted case passes with or without this filter.
 IGNORED_FLAGS = frozenset({"--password"})
 
-# The digest assert, the third copy of the parameters. Named, so a rename fails here rather
-# than leaving its pattern unchecked.
-DIGEST_ASSERT_TASK = "Fail if a stored Authelia digest is malformed"
-
-# The PHC fields the digest assert's pattern spells, and the config key each one encodes.
+# The PHC fields the digest pattern spells, and the config key each one encodes.
 PHC_TO_CONFIG_KEY = {"m": "memory", "t": "iterations", "p": "parallelism"}
 
 # There is no `--variant` flag on either command, so there is nothing to compare it against.
@@ -129,7 +121,7 @@ def b64_length(n_bytes: int) -> int:
 
 
 def pattern_mismatches(config_argon2: dict, pattern: str) -> list[str]:
-    """Where the digest assert's PHC pattern and the config block disagree.
+    """Where a digest PHC pattern and the config block disagree.
 
     The pattern carries `$argon2id$v=19$m=<memory>,t=<iterations>,p=<parallelism>$` and then two
     `{n}` quantifiers, the salt's base64 length and the key's.
@@ -244,7 +236,7 @@ def test_a_changed_key_length_is_flagged_against_the_pattern():
     assert pattern_mismatches({**GOOD_CONFIG, "key_length": 64}, GOOD_PATTERN)
 
 
-# --- applied to the real rendered manifest and the real task file --------------------
+# --- applied to the real rendered manifest and the real doc --------------------
 
 
 @pytest.fixture(scope="module")
@@ -332,43 +324,6 @@ def test_a_mutated_real_command_is_flagged(rendered_argon2, hash_commands):
         "the comparison passed a command whose --memory is 1024x off, which is the exact "
         "#1621 defect — the guard is not reading one of the two sides"
     )
-
-
-@pytest.fixture(scope="module")
-def digest_pattern():
-    """The digest assert's PHC pattern, out of the real task file."""
-    tasks = yaml_fast.safe_load(TASKS.read_text()) or []
-    found = [
-        t for t in tasks if isinstance(t, dict) and t.get("name") == DIGEST_ASSERT_TASK
-    ]
-    assert len(found) == 1, (
-        f"expected one task named {DIGEST_ASSERT_TASK!r} in the authelia role, found "
-        f"{len(found)}, so its pattern is no longer checked against the config"
-    )
-    pattern = (found[0].get("vars") or {}).get("authelia_k8s_digest_pattern")
-    assert isinstance(pattern, str) and pattern, (
-        f"{DIGEST_ASSERT_TASK!r} carries no authelia_k8s_digest_pattern var to compare"
-    )
-    return pattern
-
-
-def test_the_digest_assert_agrees_with_the_rendered_config(
-    rendered_argon2, digest_pattern
-):
-    bad = pattern_mismatches(rendered_argon2, digest_pattern)
-    assert bad == [], (
-        f"the digest assert's pattern disagrees with the rendered config block: {bad}. Every "
-        f"deploy would then refuse the digests the hashing block mints"
-    )
-
-
-def test_a_mutated_real_pattern_is_flagged(rendered_argon2, digest_pattern):
-    """Red proof on the real pattern: the #1621 memory drift, in the third copy."""
-    mutated = digest_pattern.replace("m=65536", "m=64")
-    assert mutated != digest_pattern, (
-        "the digest assert's pattern carries no m=65536 to mutate"
-    )
-    assert pattern_mismatches(rendered_argon2, mutated)
 
 
 def test_the_cluster_vars_constant_agrees_with_the_rendered_config(rendered_argon2):

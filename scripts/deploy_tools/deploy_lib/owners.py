@@ -23,6 +23,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))  # scripts/
 from deploy_tools.deploy_lib.flags import Refused
 from deploy_tools.deploy_lib.messages import PROG, say_error
+from lib.ansible_inventory import K8S_HOST
 from lib.exit_codes import DEPLOY_FLUX_OWNED, FAILED
 from lib.git import git
 from lib.repo_paths import REPO
@@ -51,6 +52,31 @@ def flux_owned(repo_root: Path = REPO, at: str = "") -> dict[str, str]:
         path = Path(tmp) / rel.name
         path.write_text(text)
         return tag_owners(path)
+
+
+def run_target(args: Collection[str]) -> str:
+    """The host `-e target=<host>` names in a run's passthrough `args`, or "" without one.
+
+    Reads `-e target=X`, `-e=target=X`, `-etarget=X` and `--extra-vars` in both spellings; a
+    later `target=` wins, as Ansible's own merge does. A `-e` value that is JSON or `@file`
+    carries no plain `target=` token and reads as no target.
+    """
+    target = ""
+    items = list(args)
+    for i, arg in enumerate(items):
+        if arg in ("-e", "--extra-vars"):
+            value = items[i + 1] if i + 1 < len(items) else ""
+        elif arg.startswith("--extra-vars="):
+            value = arg.split("=", 1)[1]
+        elif arg.startswith("-e") and not arg.startswith("--"):
+            value = arg[2:].removeprefix("=")
+        else:
+            continue
+        for pair in value.split():
+            key, _, val = pair.partition("=")
+            if key == "target":
+                target = val
+    return target
 
 
 def owner_note(tag: str, owner: str) -> str:
@@ -94,11 +120,18 @@ def mark_owners(owners: Mapping[str, str]) -> None:
 def read_owners(plan) -> dict[str, str]:
     """`flux_owned` for `plan`'s checkout at its `--at` commit, read once per run.
 
-    `plan` is `deploy_lib.run.Plan`; the map is cached on its `owners` field. Raises what
-    `flux_owned` raises.
+    `plan` is `deploy_lib.run.Plan`; the map is cached on its `owners` field. Empty when
+    `-e target=` names a host other than the k8s host. Raises what `flux_owned` raises.
     """
     if plan.owners is None:
-        plan.owners = flux_owned(plan.repo_root, plan.at_sha)
+        # Flux applies the k8s host's workloads alone. A run aimed at another host, such as
+        # the Pi, deploys that host's own entry, so the k8s host's `owner` does not govern it
+        # even when both hosts list the same tag (`wg-easy`, #5815).
+        target = run_target(plan.args)
+        if target and target != K8S_HOST:
+            plan.owners = {}
+        else:
+            plan.owners = flux_owned(plan.repo_root, plan.at_sha)
     return plan.owners
 
 

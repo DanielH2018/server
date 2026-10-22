@@ -1,7 +1,7 @@
 """pihole's sibling guard: hold instance 1's Flux roll while pihole-2 has no ready DNS endpoint.
 
-The Flux form of `tasks/roll_one.yml`'s sibling check, inert until pihole's flip, in
-`templates/guard-inert/` (target slice D5, issue #5695). Under Flux the `pihole` Kustomization
+The Flux form of `roll_one.yml`'s sibling check, in `templates/precheck/` (target slice D5,
+issue #5695). Under Flux the `pihole` Kustomization
 rolls instance 1 whatever state instance 2 is in, and `pihole` cannot wait on `pihole-deferred`
 without a cycle. This Job sits in front of `pihole` instead: while it fails, Flux holds `pihole`,
 so instance 1 keeps serving at its old revision rather than rolling into a LAN-wide outage.

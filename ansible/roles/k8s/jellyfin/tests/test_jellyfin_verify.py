@@ -1,10 +1,8 @@
-"""jellyfin's two inert Jobs: the verify script fails each broken check, and both pass the census.
+"""jellyfin's two Jobs: the verify script fails each broken check, and both pass the census.
 
 The script tests run `jellyfin_verify.main` against a temporary device and library. The render
-tests copy the jellyfin role, move `templates/verify-inert/` to `templates/verify/` as the flip
-PR will, and render the copy, so both Jobs are checked as Flux will receive them while the
-tree's own render still emits no `jellyfin-verify`. The plan is
-docs/target-architecture/deploy/d5-bulk-move.md, *A verify conversion lands as inert code*.
+tests render a copy of the jellyfin role, so a test can edit the copy and leave the tree alone.
+The plan is docs/target-architecture/deploy/d5-bulk-move.md.
 The cap script's own tests are in test_jellyfin_snapshot_cap.py.
 
 Run: uv run pytest ansible/roles/k8s/jellyfin/tests/test_jellyfin_verify.py
@@ -100,10 +98,8 @@ def stubs(tmp_path_factory):
 
 
 def _flip(stubs, roles_dir, **overrides) -> dict[str, list[dict]]:
-    """The `jellyfin-verify` documents a copy of the role renders once its Jobs leave `verify-inert/`."""
+    """The `jellyfin-verify` documents a copy of the role renders."""
     shutil.copytree(K8S_ROLES / TAG, roles_dir / TAG)
-    templates = roles_dir / TAG / "templates"
-    (templates / "verify-inert").rename(templates / "verify")
     rendered = cluster.render_tag(TAG, {**stubs, **overrides}, roles=roles_dir)
     return {
         f"{TAG}-verify": [
@@ -130,8 +126,11 @@ def _job(flipped, prefix: str) -> dict:
     return job
 
 
-def test_the_tree_renders_no_jellyfin_verify_while_ansible_owns_jellyfin(stubs):
-    assert cluster.render_tag(TAG, stubs).verify == {}
+def test_the_tree_renders_jellyfin_verify(stubs, flipped):
+    """The flip moved both Jobs to `templates/verify/`, so the tree's own render emits them."""
+    rendered = cluster.render_tag(TAG, stubs).verify
+    assert f"{TAG}-verify" in flipped
+    assert {"job.yaml", "cap.yaml"} <= {name.removesuffix(".j2") for name in rendered}
 
 
 def test_the_flipped_jobs_pass_every_job_census_row(flipped):
@@ -222,13 +221,13 @@ def test_only_the_cap_account_holds_a_role(flipped):
     assert subjects == {"jellyfin-snapshot-cap"}
 
 
-def test_the_staged_jobs_read_no_other_roles_file():
+def test_the_jobs_read_no_other_roles_file():
     """The deployer redeploys a role when a file it `lookup()`s in another role changes.
 
     The Jobs take `flux_job_image` and `flux_job_connect` from the renderer, so neither a bump
     of that pin nor an edit to the helper redeploys jellyfin.
     """
-    staged = sorted((K8S_ROLES / TAG / "templates" / "verify-inert").glob("*.j2"))
+    staged = sorted((K8S_ROLES / TAG / "templates" / "verify").glob("*.j2"))
     assert [p.name for p in staged] == ["cap.yaml.j2", "job.yaml.j2", "rbac.yaml.j2"]
     assert [
         (path.name, role)

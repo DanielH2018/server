@@ -1,0 +1,13 @@
+{#
+  The verify Job's identity: `headlamp-verify`'s ServiceAccount, beside `job.yaml.j2`.
+
+  It is a ServiceAccount with no Role. The Job dials traefik and headlamp over the pod network
+  and execs into no pod, so it needs no Kubernetes grant, and its pod mounts no token.
+#}
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: headlamp-verify
+  namespace: {{ k8s_namespace }}
+automountServiceAccountToken: false

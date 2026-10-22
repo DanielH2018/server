@@ -77,6 +77,9 @@ groups:
             "service", "unmapped", "", ""
           )
         for: 10m
+        # The bridge's 300s cycle never saw a 2-minute good dip (2026-10-17, home-assistant), so it
+        # kept paging where a bare `for:` reset and dropped the alert. Five minutes mirrors the cycle.
+        keep_firing_for: 5m
         labels:
           severity: warning
           shadow: "true"

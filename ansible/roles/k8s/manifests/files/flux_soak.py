@@ -12,7 +12,8 @@ notification-controller posts as `flux/soak`. In order, it:
    this script verifies none. An unverified, unread or malformed file widens the scope to the
    fleet;
 3. waits until every Kustomization in the set reads Ready with `lastAppliedOriginRevision`
-   naming R (D5 Open question 19), and fails naming each one still pending at the deadline;
+   naming R (D5 Open question 19), and fails naming each one still pending at the deadline.
+   Each poll re-runs step 1's check, so the Job exits 1 once `homelab` stops holding R;
 4. waits W past the latest first Ready among the pods R created, then fails on a restart after
    a pod's first Ready, on a pod it cannot map or order, and on a critical or `verify="true"`
    alert activated after T0.
@@ -262,6 +263,16 @@ def await_ready(
             raise SoakError(
                 f"Kustomizations not Ready at R by the deadline: {', '.join(left)}"
             )
+        # A reset moves `homelab` off R, and the Kustomizations then apply another revision,
+        # so none of them would ever name R. kustomize-controller holds the next promotion's
+        # health check behind this Job (#5704), so the Job ends itself rather than wait out
+        # its deadline.
+        sources = {
+            s["metadata"]["name"]: s for s in reads.api(OCIREPOSITORIES)["items"]
+        }
+        if SOURCE not in sources:
+            raise SoakError(f"OCIRepository {SOURCE} does not exist")
+        anchor(sources[SOURCE], inputs.revision)
         reads.sleep(POLL_SECONDS)
 
 

@@ -15,7 +15,7 @@ workload this apply CREATED is not expected to restart, matching the restart tas
 guard.
 
 The two roles that opt out of the shared restart and roll their own workloads through
-private tasks (observability's loop and pihole's roll_one.yml) are pinned in
+private task (observability's loop) is pinned in
 `test_self_rollouts_follow_the_apply.py`, over the same harness (`_release_expectation.py`).
 
 WHAT THE HARNESS CANNOT REACH. ansible-core 2.21's `default` filter recognises only its own
@@ -371,12 +371,12 @@ def test_roles_that_roll_nothing_still_exist_in_the_tree():
     """Non-vacuity for the case above: the shape it protects is live, by name.
 
     cloudflare-ddns's `manifests_rollout: ''` is protected by the record's silence (no
-    entry, no expectation). observability and pihole ALSO restart their own workloads through
-    private `rollout restart` tasks, and declare them as `manifests_self_rollouts` so the
-    record holds the expectation for them -- the tests below this one."""
+    entry, no expectation). observability ALSO restarts its own workloads through a private
+    `rollout restart` task, and declares them as `manifests_self_rollouts` so the record holds
+    the expectation for them -- the tests below this one."""
     opted_out = {
         p.parent.parent.name
         for p in (ANSIBLE / "roles/k8s").glob("*/tasks/main.yml")
         if re.search(r"manifests_rollout:\s*(''|\"\")", p.read_text())
     }
-    assert {"cloudflare-ddns", "pihole", "observability"} <= opted_out, opted_out
+    assert {"cloudflare-ddns", "observability"} <= opted_out, opted_out

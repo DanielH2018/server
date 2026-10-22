@@ -898,8 +898,8 @@ checks each gate suppresses.
   **`SNAPSHOT_CAPS` declares the caps**, `<pvc>=<bytes>`, because nothing exports the field:
   Longhorn's exporter publishes snapshot sizes and no cap, this pod runs with
   `automountServiceAccountToken: false`, and the Longhorn HTTP API answers only from the
-  node-local manager. Ansible is the only writer of a cap. `roles/k8s/jellyfin/tasks/main.yml`
-  patches the only one (jellyfin-config, 16 GiB = 2 x the PVC size, the smallest Longhorn
+  node-local manager. Flux is the only writer of a cap. The `jellyfin-snapshot-cap` Job in
+  `roles/k8s/jellyfin/templates/verify/cap.yaml.j2` patches the only one (jellyfin-config, 16 GiB = 2 x the PVC size, the smallest Longhorn
   accepts), and `tests/test_check_snapshot_headroom.py` derives the capped set from the tree, so a
   second capped volume missing from the declaration fails CI. `"0"` is Longhorn's UNCAPPED value
   and the fleet default, so the check drops it instead of reading a cap of zero, which would

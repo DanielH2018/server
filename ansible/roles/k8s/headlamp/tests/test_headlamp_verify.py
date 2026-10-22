@@ -2,9 +2,8 @@
 
 The script tests run `headlamp_verify.main` against local ports: an HTTP server stands in for a
 port that answers, and a port nothing listens on stands in for one the fence refuses. The render
-tests copy the headlamp role, move `templates/verify-inert/` to `templates/verify/` as the flip
-PR will, and render the copy through `render_tag`, so the Job is checked as Flux will receive it
-in `headlamp-verify` while the tree's own render still emits none. The plan is
+tests render the tree through `render_tag`, so the Job is checked as Flux receives it in
+`headlamp-verify`, and render a copy with the policy edited for the rename test. The plan is
 docs/target-architecture/deploy/d5-bulk-move.md, *A verify conversion lands as inert code*.
 
 Run: uv run pytest ansible/roles/k8s/headlamp/tests/test_headlamp_verify.py
@@ -122,10 +121,9 @@ def stubs(tmp_path_factory):
 
 
 def _flipped_copy(roles: Path, stubs, edit_policy=False) -> cluster.RenderedTag:
-    """Render a copy of the role with its Job moved to `templates/verify/`, as the flip PR will."""
+    """Render a copy of the role, with the policy edited when asked."""
     shutil.copytree(K8S_ROLES / TAG, roles / TAG)
     templates = roles / TAG / "templates"
-    (templates / "verify-inert").rename(templates / "verify")
     if edit_policy:
         policy = templates / "networkpolicy.yaml.j2"
         policy.write_text(policy.read_text() + "# a policy-only edit\n")
@@ -171,9 +169,9 @@ def _policy(docs: list[dict], name: str) -> dict:
     return policy
 
 
-def test_the_tree_renders_no_verify_job_while_ansible_owns_headlamp(stubs):
-    """Inert: the Ansible probe tasks still own the check until the flip moves the directory."""
-    assert cluster.render_tag(TAG, stubs).verify == {}
+def test_the_tree_renders_headlamp_verify(stubs):
+    """The renderer emits the Job that replaced the Ansible isolation probe."""
+    assert cluster.render_tag(TAG, stubs).verify != {}
 
 
 def test_the_flipped_job_passes_every_job_census_row(flipped):
@@ -331,7 +329,7 @@ def test_the_verify_job_reads_no_other_roles_file():
     The deployer redeploys a role when a file it `lookup()`s in another role changes, and its
     scan reads `verify/` too. tdarr's test has the red case for this scan.
     """
-    staged = sorted((K8S_ROLES / TAG / "templates" / "verify-inert").glob("*.j2"))
+    staged = sorted((K8S_ROLES / TAG / "templates" / "verify").glob("*.j2"))
     assert [p.name for p in staged] == ["job.yaml.j2", "rbac.yaml.j2"]
     assert [
         (path.name, role)

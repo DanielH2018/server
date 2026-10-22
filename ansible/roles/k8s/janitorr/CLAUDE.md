@@ -5,13 +5,12 @@ See repo-root `CLAUDE.md` for shared conventions.
 
 ## At a glance
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates, tasks or containers_list entry, or the k3s role's Longhorn tier lists. -->
-- **Deploy tag:** `--tags "janitorr"`
+- **Applied by:** Flux, through `promote` (`owner: flux`); `deploy.sh` refuses
+  `--tags=janitorr` with exit 5
 - **Images:** `ghcr.io/schaka/janitorr` (`janitorr_k8s_image`), `python`
   (`janitorr_k8s_health_image`), `alpine/k8s` (`janitorr_k8s_health_kubectl_image`)
 - **Route:** none (no `templates/ingressroute.yaml.j2`)
 - **Claim:** `media-data` (not Longhorn (media-local))
-- **Auto-deploy:** denylisted (`k8s_autodeploy: false`) — probe-less — no readinessProbe on the
-  Deployment; also the only role that deletes real media, so a wedge is not merely inert
 <!-- /generated_from -->
 
 - **Digest-pinned to a `jvm-stable` build** (pulled 2026-06-28). `jvm-stable` is a floating non-semver
@@ -37,8 +36,9 @@ See repo-root `CLAUDE.md` for shared conventions.
   `ansible/roles/k8s/manifests/files/standalone_secret_keys.json`. The reader's code ships in
   the `janitorr-health` ConfigMap, beside `host_lib.py` and `kuma_push.py` from `setup/common`,
   and no secret goes in it (`ansible/tests/k8s/test_no_secret_in_a_moved_jobs_configmap.py`).
-- **The health pod carries `app: janitorr-health`, never `app: janitorr`.** The reader and
-  `tasks/verify.yml` both take the first Running pod labelled `app=janitorr`. uptime-kuma's
+- **The health pod carries `app: janitorr-health`, never `app: janitorr`.** The reader
+  takes the first Running pod labelled `app=janitorr`, and a verify Job pod under that label
+  could be the pod it reads. uptime-kuma's
   `netpol_from` admits `janitorr-health`.
 
 ## Notable
@@ -78,9 +78,9 @@ See repo-root `CLAUDE.md` for shared conventions.
   A finish time well after boot is a real fault — read the container log.
 - **DECIDED: the self-healing restart is accepted, and this role adds no wait-for-deps init
   container** (#2421). Three reasons, and the third is why it is recorded rather than tried.
-  (1) `tasks/verify.yml` already proves `sonarr:8989`, `radarr:7878` and `jellyfin:8096`
-  accept TCP from inside the NEW pod on every deploy, which is the same assertion a gate
-  would make, made where an operator is watching. (2) An unbounded wait trades a bounded
+  (1) `janitorr-verify` already proves `sonarr:8989`, `radarr:7878` and `jellyfin:8096`
+  answer from a pod fenced and mounted like the new one on every revision that rolls janitorr,
+  which is the same assertion a gate would make, made where the revision's soak acts on it. (2) An unbounded wait trades a bounded
   post-boot crash loop for an indefinite `Init` stall, with no restart count and no
   CrashLoopBackOff to notice — see the docstring of
   `ansible/tests/services/test_karakeep_backend_policies.py`, which is where that pattern
@@ -92,17 +92,19 @@ See repo-root `CLAUDE.md` for shared conventions.
   toposorts from it); it does not gate pod start after a node reboot, when no Ansible run is
   involved at all.
 
-## The Flux verify Job waits in `templates/verify-inert/`
+## The Flux verify Job
 
-Nothing renders that directory while Ansible owns janitorr. The flip PR renames it to
-`templates/verify/`, and the renderer then emits `janitorr-verify`, which replaces
-`tasks/verify.yml` with no `pods/exec` grant. `files/verify_janitorr.py` reads the mounted
-`application.yml`, dials sonarr, radarr and jellyfin over HTTP, and writes, reads and removes
-the leaving-soon probe link through jellyfin's mount layout; its docstring maps each proof.
-Its pod is `app: janitorr-verify`, which sonarr's and radarr's `netpol_from` list ahead of the
-flip (#5709). Those peers landed in a PR of their own, because the cross-plane gate refuses them
-beside a janitorr change. `tests/test_verify_janitorr.py` renders the renamed directory through the Job census,
-checks that both fences admit the Job's pod, and holds the Job's mounts to janitorr's and jellyfin's.
+`templates/verify/` holds `janitorr-verify`, which replaced `tasks/verify.yml` at janitorr's
+flip with no `pods/exec` grant. `files/verify_janitorr.py` reads the mounted `application.yml`,
+dials sonarr, radarr and jellyfin over HTTP, and writes, reads and removes the leaving-soon
+probe link through jellyfin's mount layout; its docstring maps each proof. Its pod is
+`app: janitorr-verify`, which sonarr's and radarr's `netpol_from` list (#5709).
+`tests/test_verify_janitorr.py` renders the Job through the Job census, checks that both
+fences admit the Job's pod, and holds the Job's mounts to janitorr's and jellyfin's.
+
+`tasks/main.yml` keeps the `janitorr_dry_run` fact, because the renderer evaluates it from
+there (`scripts/renderer/renderer_lib/task_inputs.py`), and the `k8s/manifests` include the
+renderer reads `manifests_*` vars from.
 
 ## Editing
 - Rules: `templates/config/application.yml.j2` (rendered into the k8s Secret by `roles/k8s/janitorr`)

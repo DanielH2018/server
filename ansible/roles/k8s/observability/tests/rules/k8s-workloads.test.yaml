@@ -87,6 +87,76 @@ tests:
               summary: The rollout of homelab/sonarr has stalled.
               description: sonarr has had fewer updated replicas than it wants for 15 minutes.
 
+  # A 2-minute good dip inside a long outage, the shape home-assistant showed on 2026-10-17
+  # (11 bad minutes, 2 good, 10 bad; the dip is spec_replicas == 0, which falsifies the
+  # expression). The bridge's 300s cycle never saw the dip, so the alert must stay firing
+  # across it, which `keep_firing_for: 5m` does and a bare `for: 10m` does not.
+  - interval: 1m
+    input_series:
+      - series: 'kube_deployment_status_replicas_available{job="kube-state-metrics", instance="kube-state-metrics:8080", namespace="homelab", deployment="home-assistant"}'
+        values: '0x22'
+      - series: 'kube_deployment_spec_replicas{job="kube-state-metrics", instance="kube-state-metrics:8080", namespace="homelab", deployment="home-assistant"}'
+        values: '1x10 0x1 1x9'
+      - series: 'homelab:deployment_service:info{namespace="homelab", deployment="home-assistant", service="home-assistant"}'
+        values: '1x22'
+    alert_rule_test:
+      - alertname: K8sDeploymentZeroAvailable
+        eval_time: 10m
+        exp_alerts:
+          - exp_labels:
+              job: kube-state-metrics
+              instance: kube-state-metrics:8080
+              namespace: homelab
+              deployment: home-assistant
+              service: home-assistant
+              severity: warning
+              shadow: "true"
+            exp_annotations:
+              summary: Deployment homelab/home-assistant has no available replica.
+              description: home-assistant wants replicas and has had none available for 10 minutes.
+      - alertname: K8sDeploymentZeroAvailable
+        eval_time: 12m
+        exp_alerts:
+          - exp_labels:
+              job: kube-state-metrics
+              instance: kube-state-metrics:8080
+              namespace: homelab
+              deployment: home-assistant
+              service: home-assistant
+              severity: warning
+              shadow: "true"
+            exp_annotations:
+              summary: Deployment homelab/home-assistant has no available replica.
+              description: home-assistant wants replicas and has had none available for 10 minutes.
+      - alertname: K8sDeploymentZeroAvailable
+        eval_time: 14m
+        exp_alerts:
+          - exp_labels:
+              job: kube-state-metrics
+              instance: kube-state-metrics:8080
+              namespace: homelab
+              deployment: home-assistant
+              service: home-assistant
+              severity: warning
+              shadow: "true"
+            exp_annotations:
+              summary: Deployment homelab/home-assistant has no available replica.
+              description: home-assistant wants replicas and has had none available for 10 minutes.
+      - alertname: K8sDeploymentZeroAvailable
+        eval_time: 22m
+        exp_alerts:
+          - exp_labels:
+              job: kube-state-metrics
+              instance: kube-state-metrics:8080
+              namespace: homelab
+              deployment: home-assistant
+              service: home-assistant
+              severity: warning
+              shadow: "true"
+            exp_annotations:
+              summary: Deployment homelab/home-assistant has no available replica.
+              description: home-assistant wants replicas and has had none available for 10 minutes.
+
   # A mapping rule that yields nothing: no homelab:deployment_service:info series exists. The
   # replica alert still fires, with service="unmapped", and WorkloadServiceUnmapped fires through
   # its second clause with service="observability".

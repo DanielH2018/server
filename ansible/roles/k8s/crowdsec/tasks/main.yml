@@ -1,4 +1,10 @@
 ---
+# Flux owns crowdsec (D5, its own window), so no Ansible run reaches this file. Every task
+# below has a Flux successor: the `crowdsec-home-ips` gate run is a `flux_cronjob_gates` entry
+# in defaults/main.yml, and the ban-and-lift gate is the `crowdsec-verify` Job in
+# templates/verify/. A follow-up PR deletes the wait, the gate include, `verify.yml` and the
+# tests that read them, because the deletions alone pass the 200 lines D5 allows a flip PR.
+#
 # The agent machines and the two operator allowlists are registered by the lapi-register
 # initContainer (templates/deployment.yaml.j2) before the LAPI serves, not by a task here. The
 # absent arms for the host crons H2 retired are in setup/k8s_host_files/tasks/crowdsec.yml.
