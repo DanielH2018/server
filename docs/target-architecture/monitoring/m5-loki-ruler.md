@@ -727,7 +727,7 @@ depends on which tags are flux-owned, and PR 4a states each case.
       `Gates.gate_dependents`.
     - `check.py:run_once`: the Loki gate call and its `loki_dependent` skip branch.
     - The docstring of `bridge/types.py:PushCheck` and the comments in `check_table.py`,
-      `bridge/config.py`, `checks/service.py` and `networkpolicy-loki.yaml.j2`.
+      `bridge/config.py` and `checks/service.py`. The `networkpolicy-loki.yaml.j2` comment waits for a PR that changes no Flux-owned role, because `cross_plane_order.py` refuses an Ansible-owned netpol-baseline change beside its four Flux-owned dependencies.
     - The tests: the `loki_reachable` member of `test_check_table.py:_GATES` and its probe
       map entry, `probe_loki=` and `loki_dependent=` in the gate tests and
       `tests/_check_gate_helpers.py`, and `loki_reachable` in
