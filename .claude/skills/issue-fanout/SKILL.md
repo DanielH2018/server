@@ -62,7 +62,8 @@ two identical fixes.
 
 **An issue that cites the fan-out tooling goes in no batch.** `next` marks it
 `[solo-only: cites fan-out tooling]` (`solo_only` under `--json`) when its body names any
-`fanout*.py` or a file under `fanout_lib/`, and `launch` refuses a batch holding one before it
+`fanout*.py` or a file under `fanout_lib/`, or its title or body uses the pipeline's own
+vocabulary (`red gate`, `green gate`, `red lock`, `red phase`, `fan-out review`; #5880), and `launch` refuses a batch holding one before it
 touches a host. A batch that edits that code runs under its own edited reviewer, red gate and
 Stop hook, and those batches caused the most rework in 68 review records (#3959). Work it in a
 session of its own: claim it and fix it as usual. The gate covers this repo's register only:
@@ -212,11 +213,16 @@ those miss, from the issue text alone. `scripts/dev/fanout_lib/review/red_gate.p
 test fails on the unchanged code. A batch that runs no red phase records why, as
 `red_skipped`. The implementer gets that commit and may not edit it, what its tests call, or a
 fixture they reach, even through a builtin such as `tmp_path`, but may append tests to its files and update a test that was already there and that no red test
-reaches. It may also change a literal constant that only such older code reads, and delete a
-`conftest.py` fixture that no red test requests (`fanout_lib/review/red_lock.py` says what is
-locked). A refused red commit is
+reaches. It may also change a literal constant that only such older code reads, append a
+constant built from other constants, change a plain helper the issue names in backticks, and
+delete a `conftest.py` fixture that no red test requests (`fanout_lib/review/red_lock.py` says
+what is locked). A refused red commit is
 dropped and the batch runs as usual. A PR that still fails the green gate after the fix round
-is not landed. Once it passes, each hunk of the fix is reverted on its own under the red tests,
+is not landed, and its `needs input:` line says whether the reviewers faulted the fix. The
+exception is a red test whose premise is false: the fix round may write `<node> is wrong:` with
+a cited `file:line`, and a contest the fresh delta reviewer upholds goes on to CI. A red CI run
+there holds the PR for a hand to correct the test, with no resume
+(`fanout_lib/review/green_contest.py`). Once it passes, each hunk of the fix is reverted on its own under the red tests,
 and the record names the hunks no red test noticed (`scripts/dev/fanout_lib/review/hunk_check.py`).
 To see whether the red phase earns its cost, run `uv run python
 scripts/dev/fanout.py stats --dir <state dir> ...`, once per user whose records count. The PR comment and the local record carry both gates' results.

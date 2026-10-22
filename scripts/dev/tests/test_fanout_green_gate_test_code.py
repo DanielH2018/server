@@ -281,3 +281,37 @@ def test_a_patch_registry_may_change_only_the_red_modules_lines(tmp_path, head, 
     commit(repo, "fix", **{"mod.py": FIXED, REGISTRY: head})
     refusal = f"{REGISTRY} {reason}, a line that names no file the red commits added"
     assert green_gate(run, repo, red, gate) == (STANDS_ON + refusal if reason else "")
+
+
+# #5197: the code under test was `_restarts_privately`, a helper already in the red file, and
+# the fix restricted it so that a comment saying "rollout restart" no longer counts.
+SUBJECT_BASE = (
+    "def _flagged(command):\n    return 'rollout restart' in command\n\n\n"
+    "def test_a_restart_command_is_flagged():\n"
+    "    assert _flagged('kubectl rollout restart deploy/x')\n"
+)
+SUBJECT_RED = SUBJECT_BASE + (
+    "\n\ndef test_a_comment_is_not_flagged():\n"
+    "    assert not _flagged('# no rollout restart here')\n"
+)
+
+
+def test_a_fix_to_the_helper_the_issue_names_as_its_subject_passes_the_green_gate(
+    tmp_path,
+):
+    """The gate carries the names the issue gives as its subject, as `Gate.subjects`.
+
+    Set through `setattr` because the field does not exist yet.
+    """
+    path = "tests/test_subject.py"
+    repo, red, gate = _gated(tmp_path, {path: SUBJECT_BASE}, {path: SUBJECT_RED})
+    restricted = SUBJECT_RED.replace(
+        "return 'rollout restart' in command",
+        "return command.startswith('kubectl') and 'rollout restart' in command",
+    )
+    commit(repo, "fix", **{path: restricted})
+    field = "subjects"
+    setattr(gate, field, {"_flagged"})
+    assert green_gate(run, repo, red, gate) == ""
+    setattr(gate, field, set())
+    assert green_gate(run, repo, red, gate).startswith(STANDS_ON)

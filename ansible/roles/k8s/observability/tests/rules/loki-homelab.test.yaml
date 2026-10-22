@@ -89,7 +89,6 @@ tests:
               rule_group: /loki/rules-scratch/fake/homelab-logs.yaml;homelab-logs
               severity: warning
               service: loki-homelab
-              shadow: "true"
             exp_annotations:
               summary: The homelab Loki ruler keeps failing to evaluate its log rules.
               description: >-
@@ -150,7 +149,6 @@ tests:
               rule_group: /loki/rules-scratch/fake/homelab-logs.yaml;homelab-logs
               severity: warning
               service: loki-homelab
-              shadow: "true"
             exp_annotations:
               summary: The homelab Loki ruler has not evaluated its log rules in 10 minutes.
               description: >-
@@ -179,7 +177,6 @@ tests:
               rule_group: /loki/rules-scratch/fake/homelab-logs.yaml;homelab-logs
               severity: warning
               service: loki-homelab
-              shadow: "true"
             exp_annotations:
               summary: The homelab Loki ruler has not evaluated its log rules in 10 minutes.
               description: >-

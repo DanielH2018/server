@@ -22,7 +22,10 @@ exists. It counts a suppression that names no rule, in either the `ty:` or the `
 spelling, and one naming a rule in `ABSENCE_RULES`, the rules a fix resolves by adding a name.
 `red_prompt` says how to reach a missing name without one.
 
-What a fix may change in a red test file is `red_lock`'s.
+WHAT THE ISSUE NAMES (#5400). `issue_subjects` reads the identifiers an issue spells in
+backticks, such as `_restarts_privately` in #5197, which the green gate lets a fix change when
+one is a helper the red file already held. What a fix may change in a red test file is
+`red_lock`'s.
 """
 
 import io
@@ -31,6 +34,8 @@ import tokenize
 from collections import Counter
 
 _FAILED = re.compile(r"^FAILED (\S+) - (.*)$", re.M)
+# A backticked identifier, `name` or `name()`, as an issue names the code under test.
+_SUBJECT = re.compile(r"`([A-Za-z_]\w*)(?:\(\))?`")
 # A test that fails because the code under test is missing, before any assertion runs.
 ABSENCE = ("ImportError", "ModuleNotFoundError", "AttributeError", "NameError")
 # A test that fails on what the code does.
@@ -68,6 +73,11 @@ ABSENCE_RULES = frozenset(
         "possibly-unresolved-reference",
     }
 )
+
+
+def issue_subjects(issues: str) -> set[str]:
+    """Every identifier the issue text spells in backticks, as `red_lock` takes `subjects`."""
+    return set(_SUBJECT.findall(issues))
 
 
 def stale_suppressions(base_src: str, red_src: str) -> list[str]:

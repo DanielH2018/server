@@ -261,7 +261,6 @@ _K3S_NARROWER_TAGS = (
     "coredns",
     "node-dns",
     "backup-health",
-    "metallb",
 )
 
 # The gates that decide whether `--tags k3s` actually takes the control plane down. Each is a
@@ -281,7 +280,7 @@ _K3S_GATED_TASKS = (
 
 _MAXIMAL_ROLE_TAGS: dict[str, str] = {
     "k3s": (
-        "that tag is the WHOLE role. It reapplies MetalLB, Longhorn, the backup targets, the "
+        "that tag is the WHOLE role. It reapplies Longhorn, the backup targets, the "
         f"crons, CoreDNS and the node config, and arms {_K3S_GATED_TASKS}. Narrower tags, "
         "one per task file: "
         + ", ".join(f"`{t}`" for t in _K3S_NARROWER_TAGS)

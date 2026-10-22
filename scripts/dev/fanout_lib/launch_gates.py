@@ -25,7 +25,7 @@ from fanout_lib.manifest import Batch, live_batches
 from fanout_lib.placement import HostReading
 from fanout_lib.status import BatchStatus, parse_status
 from findings_lib.issue_model import cited_paths
-from findings_lib.solo_only import fanout_tooling_paths
+from findings_lib.solo_only import solo_only_reasons
 from findings_lib.tracked_paths import resolve_fragments
 from lib.ansible_inventory import GITOPS_HOST
 from lib.cli_help import error, warn
@@ -291,7 +291,7 @@ def refuse_solo_only(
     for batch, numbers in batches.items():
         for number in numbers:
             issue = issues.get(number)
-            cited = fanout_tooling_paths(issue.body, repo) if issue else []
+            cited = solo_only_reasons(issue.title, issue.body, repo) if issue else []
             if not cited:
                 continue
             refused = True

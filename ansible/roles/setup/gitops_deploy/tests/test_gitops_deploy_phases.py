@@ -274,6 +274,7 @@ def test_plan_tick_routes_a_new_shared_file_with_the_tables_its_own_range_adds(
     if origin_copy:
         tick.files = {
             f"{ORIGIN}:{installed_tables.CROSS_ROLE_FILE}": (
+                "K8S_BUILD_CONTEXT_FILES = {}\n"
                 "K8S_ROLES_IMPORTING_SETUP_FILES = {}\n"
                 "SETUP_FILES_ROUTED_TO_OWNER = {}\n"
                 f"SETUP_FILES_SHIPPED_BY_OTHER_ROLES = {{{new_file!r}: frozenset({{'claude_code'}})}}\n"
@@ -297,6 +298,7 @@ def test_tables_in_runs_nothing_the_copy_calls(installed_tables, tmp_path):
     """land.sh reads the merge commit's copy before master CI passes, so it must not run it."""
     marker = tmp_path / "ran"
     source = (
+        "K8S_BUILD_CONTEXT_FILES = {}\n"
         "K8S_ROLES_IMPORTING_SETUP_FILES = {}\n"
         "SETUP_FILES_ROUTED_TO_OWNER = {}\n"
         f"SETUP_FILES_SHIPPED_BY_OTHER_ROLES = {{open({str(marker)!r}, 'w').name: 1}}\n"

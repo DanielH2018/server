@@ -391,7 +391,7 @@ EDGE_PROPERTIES = (
             "silent: the Service gets an address from the auto-assign pool instead of the pinned "
             "one, and the deploy is green. The row reads the rendered Services (#3209), so a "
             "comment naming the old prefix is not credited as an annotation. "
-            "test_k8s_manifests_metallb.py ties the k3s_metallb_version pin to v0.15 or later."
+            "test_k8s_manifests_metallb.py ties the metallb role's k3s_metallb_version pin to v0.15 or later."
         ),
         select=_metallb_annotations,
         offence=_metallb_prefix_offence,
