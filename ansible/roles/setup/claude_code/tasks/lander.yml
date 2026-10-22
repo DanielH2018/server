@@ -66,7 +66,7 @@
         mode: "0644"
       become: true
       when: claude_code_agent_user_enabled and claude_code_lander_enabled
-      notify: Reload systemd
+      notify: Reload systemd for claude_code
 
     - name: Let the agent user start a landing and nothing else (polkit)
       tags: [claude_code]
@@ -94,4 +94,4 @@
         - /etc/claude-land
       become: true
       when: not (claude_code_agent_user_enabled and claude_code_lander_enabled)
-      notify: Reload systemd
+      notify: Reload systemd for claude_code

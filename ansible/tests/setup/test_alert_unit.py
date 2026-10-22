@@ -440,9 +440,23 @@ def test_the_claude_rc_alert_pages_once_per_quiet_period() -> None:
 def test_every_notified_handler_exists_in_the_calling_role() -> None:
     # A notify naming no handler fails the play only when the task changes, which is the
     # deploy that edits the alert, not the one that adds the caller.
+    # The notify is an expression over `role_name`, the importing role, so this evaluates the
+    # task file's own expression per caller rather than restating the name pattern (#5483).
+    env = make_ansible_env(undefined_cls=jinja2.StrictUndefined)
+    expressions = {
+        str(task["notify"]).strip().removeprefix("{{").removesuffix("}}")
+        for task in leaf_tasks(load_tasks(TASKS))
+    }
+    assert len(expressions) == 1, f"the alert tasks notify differently: {expressions}"
+    (expression,) = expressions
     for name, (role, variables) in _wired_alerts_by_role().items():
         handlers = {h["name"] for h in load_tasks(role / "handlers" / "main.yml")}
-        for handler in ["Reload systemd", *variables.get("alert_unit_notify", [])]:
+        notified = env.compile_expression(expression)(role_name=role.name, **variables)
+        assert isinstance(notified, list), f"{name}: the notify rendered {notified!r}"
+        assert f"Reload systemd for {role.name}" in notified, (
+            f"{name}: the alert does not reload through {role.name}'s own handler"
+        )
+        for handler in notified:
             assert handler in handlers, (
                 f"{name}: {role.name} defines no handler {handler!r}"
             )

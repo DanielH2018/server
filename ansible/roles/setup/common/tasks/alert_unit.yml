@@ -17,8 +17,10 @@
 # NO TAGS IN THIS FILE, matching kuma_check_timer.yml. `when:` on the caller's import_tasks
 # applies to every task here, because the import is static.
 #
-# Both tasks notify `Reload systemd`, which every caller's handlers must define, plus whatever
-# `alert_unit_notify` names.
+# Both tasks notify `Reload systemd for <caller's role name>`, which every caller's handlers
+# must define, plus whatever `alert_unit_notify` names. `role_name` under this static import is
+# the importing role. The name carries the role because Ansible resolves a duplicate handler
+# name to the last one loaded into the play, and that role may be skipped on this host (#5483).
 #
 # Callers pass:
 #   alert_unit_name         unit prefix: renders /etc/systemd/system/<name>-alert.service
@@ -31,7 +33,7 @@
 #   alert_unit_env_dir      the existing directory the webhook file goes in (the service's /etc
 #                           directory); the caller creates it
 #   alert_unit_notify       optional list of the caller's own handler names to notify beside
-#                           `Reload systemd`, such as a role whose every task kicks a run-once
+#                           the reload handler, such as a role whose every task kicks a run-once
 #                           handler; defaults to none
 #   alert_unit_quiet_minutes optional: after a delivered page, skip the alert for this many
 #                           minutes, for a parent whose Restart= loop fires OnFailure= on every
@@ -57,7 +59,7 @@
   # no_log also hides an undefined-variable failure: check gitops_deploy_discord_webhook is in
   # scope if this task fails opaquely.
   no_log: true
-  notify: "{{ ['Reload systemd'] + (alert_unit_notify | default([])) }}"
+  notify: "{{ ['Reload systemd for ' ~ role_name] + (alert_unit_notify | default([])) }}"
 
 # The unit reads the webhook through EnvironmentFile and contains no secret, so 0644 is the
 # honest mode. A 0600 unit would not protect an embedded value: systemd serves unit content over
@@ -70,4 +72,4 @@
     group: root
     mode: "0644"
   become: true
-  notify: "{{ ['Reload systemd'] + (alert_unit_notify | default([])) }}"
+  notify: "{{ ['Reload systemd for ' ~ role_name] + (alert_unit_notify | default([])) }}"
