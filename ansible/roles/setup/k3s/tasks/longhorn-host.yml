@@ -3,15 +3,14 @@
 # NFS client packages, and multipathd's blacklist for Longhorn's devices. Longhorn's own install is
 # the `longhorn` Kustomization's (H1.5a); this file is the host half it leaves behind.
 #
-# TAGGED `longhorn_host` ONLY, never `longhorn` or `longhorn_backup`. Bring-up step 1 skips both of
-# those tags from H1.5a until H1.7b (docs/longhorn-disaster-recovery.md, *Order from H1.2*, and
-# the H1 plan's *The Longhorn window*), because the tasks they select read `longhorn-system`
-# objects before Flux has created them. A `--skip-tags` exclusion matches any tag a task carries,
-# so a host task that also carried `longhorn` would be skipped with them and a rebuilt node
-# would never get open-iscsi. ansible/tests/setup/test_k3s_longhorn_host_tasks.py holds this.
+# TAGGED `longhorn_host` ONLY, never `longhorn` or `longhorn_backup`. From H1.5a until H1.7b,
+# bring-up step 1 skipped both of those tags (the H1 plan's *The Longhorn window*), because the
+# tasks they selected read `longhorn-system` objects before Flux had created them. No task carries
+# either tag now, and the test keeps it so: a `--skip-tags` exclusion matches any tag a task
+# carries, so a host task that regained `longhorn` would again name an object Flux owns.
+# ansible/tests/setup/test_k3s_longhorn_host_tasks.py holds this.
 #
-# main.yml imports this file ahead of longhorn-backup.yml. The agent flow keeps its own copies of
-# the three tasks in agent.yml.
+# The agent flow keeps its own copies of the three tasks in agent.yml.
 
 - name: Install Longhorn prerequisites
   tags: [longhorn_host]

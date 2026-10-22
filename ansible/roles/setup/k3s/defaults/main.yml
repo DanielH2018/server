@@ -954,7 +954,7 @@ k3s_agent_node_ips: []
 # doing prod's work and every repo-side check still reads green.
 #
 # DECIDED: `when:` on the existing `import_tasks`, not a switch to `include_tasks`. An import
-# is static, so each task keeps its own tags and `--tags longhorn-backup` still selects; a
+# is static, so each task keeps its own tags and `--tags backup-health` still selects; a
 # dynamic include would hide those tags from selection and break the tag-based deploys.
 
 # The host heartbeat crons: Kuma push URLs, Healthchecks.io ping keys, the backup-plane and

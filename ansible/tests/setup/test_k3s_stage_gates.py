@@ -27,7 +27,7 @@ from lib.repo_paths import K3S_DEFAULTS, K3S_ROLE
 MAIN = K3S_ROLE / "tasks" / "main.yml"
 DEFAULTS = K3S_DEFAULTS
 
-# `k3s_manage_backup_targets | bool` -> k3s_manage_backup_targets. Anchored at the start so a
+# `k3s_manage_health_crons | bool` -> k3s_manage_health_crons. Anchored at the start so a
 # compound condition yields nothing and trips the "must be a bare flag" assertion below
 # rather than being silently half-checked.
 BARE_FLAG = re.compile(r"^(\w+)(\s*\|\s*bool)?$")

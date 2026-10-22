@@ -75,8 +75,9 @@ INVENTORY = ANSIBLE / "inventory"
 HOSTS_INI = INVENTORY / "hosts.ini"
 ALL_VARS = INVENTORY / "group_vars" / "all.yml"
 HOST_VARS = INVENTORY / "host_vars"
-# The k3s role's defaults: the Longhorn backup schedule and arm flags, the etcd snapshot
-# retention and the schema version the manifest validator pins all live here.
+# The k3s role's defaults: the host crons' schedules and thresholds, the etcd snapshot
+# retention and the schema version the manifest validator pins all live here. The Longhorn
+# backup schedule and arm flags are `LONGHORN_BACKUP_ROLE`'s.
 K3S_ROLE = ROLES / "setup" / "k3s"
 # The three Longhorn tier lists, `k3s_longhorn_{r2,weekly,nobackup}_volumes`, live in this
 # role's defaults since H1.7a. Python readers resolve them through `lib.service_tiers`.

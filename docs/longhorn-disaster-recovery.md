@@ -200,8 +200,7 @@ the per-volume map and each exclusion's rationale:
 
    **The backup targets from H1.7b.** The `longhorn-backup` tag is Flux-owned, so no play
    creates the credentials, the targets or the RecurringJobs. The Kustomization applies them at
-   (f), once `longhorn` reads `Ready`, and the arm flags are git. The Longhorn window of H1.5a
-   to H1.7b, which skipped two tags in (a) and ran a step (f2) to apply them, is closed.
+   (f), once `longhorn` reads `Ready`, and the arm flags are git. No step applies them by hand.
 
    Before H1.2 there is no step (b): k3s bring-up applies the PriorityClasses and the identity
    itself. Steps 3 and 4 below sit between (f) and (g). D5's flux PR replaces this block with a

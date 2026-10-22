@@ -3,7 +3,9 @@
 ``k3s_longhorn_r2_volumes`` is a Jinja expression over ``containers_list`` (#3389), and so are
 ``k3s_longhorn_weekly_volumes`` and ``k3s_longhorn_nobackup_volumes`` (#4207). The three live
 in the ``longhorn-reconcile`` role's defaults (``repo_paths.LONGHORN_RECONCILE_ROLE``) since
-H1.7a. A raw YAML read of those defaults returns the expressions rather than the volumes. Every
+H1.7a. The schedule, retain and arm keys are the ``longhorn-backup`` role's since H1.7b
+(``repo_paths.LONGHORN_BACKUP_ROLE``). A raw YAML read of those defaults returns the expressions
+rather than the volumes. Every
 Python reader of the tier lists resolves them here, through the same filters
 ``ansible/filter_plugins/service_tier.py`` and ``longhorn_groups.py`` the playbook runs. ``shed_set`` is the lost-node
 shed set ``probe.py shed-set`` prints, from the same module.
