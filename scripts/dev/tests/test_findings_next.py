@@ -7,7 +7,7 @@ from datetime import date
 from _findings_fakes import Fakes, build_tools, facts, make_issue, operator_comment
 
 from dev.findings import main
-from dev.findings_lib.solo_only import fanout_tooling_paths
+from dev.findings_lib.solo_only import solo_only_reasons, fanout_tooling_paths
 from dev.findings_lib.issue_model import (
     claim_comment,
     deferred,
@@ -120,6 +120,23 @@ def test_fanout_tooling_paths_finds_bare_and_pathed_citations_only():
         "fanout_place.py",
         "scripts/dev/fanout_lib/review/review.py",
     ]
+
+
+def test_fanout_vocabulary_5400_green_gate_title_is_flagged():
+    """#5400 named the green gate and the red lock in prose and no path (#5880)."""
+    title = (
+        "The green gate still strands a correct fix on a false-premise red test, "
+        "a red-file helper under test, or a derived constant"
+    )
+    assert solo_only_reasons(title, "The lock refuses the fix.") == ["green gate"]
+    assert solo_only_reasons("t", "A Red-Lock refusal ends the batch.") == ["red lock"]
+
+
+def test_fanout_vocabulary_absent_review_wording_is_clean():
+    title = "Review the red test helper and the gate image tag"
+    body = "A code review found the green tests and a lock file; nothing about the pipeline."
+    assert solo_only_reasons(title, body) == []
+    assert solo_only_reasons("green gate", "red lock", "DanielH2018/dotfiles") == []
 
 
 def test_pickable_orders_high_severity_first():
@@ -245,6 +262,16 @@ def test_next_json_offers_a_fanout_tooling_issue_marked_solo_only(capsys):
     assert main(["next", "--json"], tools) == 0
     rows = json.loads(capsys.readouterr().out)
     assert {r["number"]: r["solo_only"] for r in rows} == {1150: True, 1151: False}
+
+
+def test_next_json_marks_an_issue_whose_title_names_the_green_gate_solo_only(capsys):
+    prose = make_issue(5400, title="The green gate strands a correct fix")
+    tools, _ = build_tools(
+        Fakes(issues=[prose, make_issue(1151)], worktree_facts=facts())
+    )
+    assert main(["next", "--json"], tools) == 0
+    rows = json.loads(capsys.readouterr().out)
+    assert {r["number"]: r["solo_only"] for r in rows} == {5400: True, 1151: False}
 
 
 def test_next_json_does_not_mark_another_repos_issue_solo_only(capsys):

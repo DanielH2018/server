@@ -1,7 +1,9 @@
 """Which issues are solo-only: they cite the fan-out tooling, so no fan-out batch takes them.
 
 `findings.py next` marks such an issue and `fanout.py place launch` refuses a batch holding
-one (#3959). Kept out of `issue_model.py`, which sits at its module-length cap.
+one (#3959). An issue cites the tooling by naming one of its files or by using the review
+pipeline's own vocabulary (#5880). Kept out of `issue_model.py`, which sits at its
+module-length cap.
 """
 
 # Reach the sibling package directories: a directly-invoked script gets only its own
@@ -24,6 +26,19 @@ _FANOUT_TOOLING_RE = re.compile(
     r"(?<![\w-])(?:[\w.-]+/)*(?:fanout[\w-]*\.py|fanout_lib/(?:[\w.-]+/)*[\w.-]+\.\w+)(?![\w/])"
 )
 
+# DECIDED: the pipeline's own vocabulary, not a diff-based gate in `launch`. #5400 described
+# the green gate and the red lock in prose and named no file, so the path match above never
+# saw it (#5880). A diff check needs the batch's worktree, which exists only after `launch`
+# has claimed the issues and started the run, so it fires after the agent has spent its
+# budget. This match reads the issue text, before any claim, in both `next` and `launch`.
+# Whole phrases only: a bare "review" or "gate" appears in half the register. A miss costs
+# one batch that ends `needs input:`, so the phrase list stays short.
+_FANOUT_VOCABULARY_RE = re.compile(
+    r"(?<![\w-])(?:red[\s-]+(?:gate|lock|phase)|green[\s-]+(?:gate|lock)"
+    r"|fan[\s-]?out[\s-]+review)s?(?![\w-])",
+    re.IGNORECASE,
+)
+
 
 def fanout_tooling_paths(body: str, repo: str | None = None) -> list[str]:
     """The fan-out tooling files an issue body cites, sorted; empty for ordinary work.
@@ -44,3 +59,24 @@ def fanout_tooling_paths(body: str, repo: str | None = None) -> list[str]:
         return []
     text = _TRAILER_RE.sub("", (body or "").replace("\r\n", "\n"))
     return sorted({m.group(0) for m in _FANOUT_TOOLING_RE.finditer(text)})
+
+
+def solo_only_reasons(title: str, body: str, repo: str | None = None) -> list[str]:
+    """What makes an issue solo-only, or an empty list for ordinary work.
+
+    The list holds the tooling files the body cites, then the pipeline vocabulary the title
+    or body uses (lowercased, one spelling per phrase).
+
+    Args:
+        title: the issue title, which names the red lock or green gate when the body is prose.
+        body: the issue body.
+        repo: the register the issue is in, as for `fanout_tooling_paths`.
+    """
+    if repo not in (None, PR_REPO):
+        return []
+    text = _TRAILER_RE.sub("", (body or "").replace("\r\n", "\n"))
+    phrases = {
+        re.sub(r"[\s-]+", " ", m.group(0).lower())
+        for m in _FANOUT_VOCABULARY_RE.finditer(f"{title or ''}\n{text}")
+    }
+    return [*fanout_tooling_paths(body, repo), *sorted(phrases)]
