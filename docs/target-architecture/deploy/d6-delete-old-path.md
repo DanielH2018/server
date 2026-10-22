@@ -2,8 +2,9 @@
 
 Status: PLANNED
 
-Re-sliced on 2026-10-17 at the operator's request: 17 steps became 12 PRs. *Steps, as PRs*
-maps each old step label to the PR that absorbs it.
+Re-sliced on 2026-10-17 at the operator's request: 17 steps became 12 PRs, and #5425 later
+dropped D6.10, so 11 carry code. *Steps, as PRs* maps each old step label to the PR that
+absorbs it.
 
 Depends on: [D5](d5-bulk-move.md). One PR waits on less: D6.11
 needs only D5.1a2 and D5's flux PR. D6.10 was dropped by #5425 (*Steps, as PRs*).
@@ -1411,7 +1412,8 @@ Each deletion PR removes one coherent subject and states the census rows it remo
 
 **The re-slice.** On 2026-10-17 the operator asked to finish the migration in days, and
 approved merging D6's steps into fewer, larger PRs that agents write in parallel ahead of
-D5's end. The 17 steps, D6.0 to D6.8b, became 12 PRs, D6.10 to D6.21.
+D5's end. The 17 steps, D6.0 to D6.8b, became 12 PRs, D6.10 to D6.21. #5425 later
+dropped D6.10, so 11 of them carry code.
 
 - **Names.** The PRs are numbered from D6.10, so no PR name equals an old step label. The
   rest of this plan, other slices' plans, contracts.md's register and two code comments cite
