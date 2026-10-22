@@ -22,7 +22,7 @@
     - gitops-deploy.timer
   become: true
   notify:
-    - Reload systemd
+    - Reload systemd for gitops_deploy
     - Run gitops-deploy once
 
 - name: Install the gitops-deploy failure alert

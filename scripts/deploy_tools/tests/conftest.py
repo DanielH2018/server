@@ -69,6 +69,21 @@ def _no_syslog(tmp_path_factory, monkeypatch):
     return stub_logger_on_path(tmp_path_factory, monkeypatch)
 
 
+@pytest.fixture(autouse=True)
+def _own_ansible_tmp(tmp_path_factory, monkeypatch):
+    """Point ansible's local and remote temp directories at a directory of this test's own.
+
+    A deploy.sh run that passes its gates sweeps both for stale directories
+    (`deploy_lib/ansible_tmp.py`), and by default both are `~/.ansible/tmp`, which every
+    session and deploy on the host shares. A test must not delete from it. Autouse for the
+    reason `_no_syslog` gives: the subprocess runs inherit `os.environ`.
+    """
+    path = tmp_path_factory.mktemp("ansible-tmp")
+    monkeypatch.setenv("ANSIBLE_LOCAL_TEMP", str(path))
+    monkeypatch.setenv("ANSIBLE_REMOTE_TEMP", str(path))
+    return path
+
+
 @pytest.fixture
 def logger_calls(_no_syslog) -> Path:
     """The file the stubbed `logger` appends to, one line per call."""

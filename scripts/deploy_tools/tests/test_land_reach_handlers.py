@@ -11,9 +11,9 @@ handlers it defines, and narrows only when EVERY handler has a notifying task --
 half below, because one handler resolved by name says nothing about the next.
 
 The deployer's handlers are NOT narrowed: `gitops_deploy/handlers/main.yml` defines
-`Reload systemd` as well as `Run gitops-deploy once`, and `tasks/teardown.yml` notifies
-`Reload systemd` under `when: not has_gitops`, so the handler really does run on daniel-server
-and daniel-pi. `test_the_deployer_handlers_still_reach_every_host` holds that answer.
+`Reload systemd for gitops_deploy` as well as `Run gitops-deploy once`, and
+`tasks/teardown.yml` notifies the reload under `when: not has_gitops`, so the handler really
+does run on daniel-server and daniel-pi. `test_the_deployer_handlers_still_reach_every_host` holds that answer.
 
 Run: uv run pytest scripts/deploy_tools/tests/test_land_reach_handlers.py
 """
@@ -61,8 +61,8 @@ def test_the_docker_teardown_handler_skips_the_only_docker_host():
 
 
 def test_the_deployer_handlers_still_reach_every_host():
-    """Not every dispatcher narrows, and this one must not. `Reload systemd` is notified
-    from both halves of `gitops_deploy`, so the file's reach is the union."""
+    """Not every dispatcher narrows, and this one must not. `Reload systemd for gitops_deploy` is
+    notified from both halves of `gitops_deploy`, so the file's reach is the union."""
     assert land_reach.setup_file_hosts(
         "gitops_deploy", "ansible/roles/setup/gitops_deploy/handlers/main.yml"
     ) == frozenset(land_reach._HOSTS)

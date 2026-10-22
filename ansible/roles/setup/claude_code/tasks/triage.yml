@@ -138,7 +138,7 @@
         mode: "0644"
       become: true
       when: claude_code_agent_user_enabled and claude_code_triage_enabled
-      notify: Reload systemd
+      notify: Reload systemd for claude_code
 
     - name: Let the agent user start a triage run and its page, and nothing else (polkit)
       tags: [claude_code]
@@ -179,7 +179,7 @@
         - claude-triage-poll.timer
       become: true
       when: claude_code_agent_user_enabled and claude_code_triage_enabled
-      notify: Reload systemd
+      notify: Reload systemd for claude_code
 
     - name: Enable and start the triage poller's timer
       tags: [claude_code]
@@ -221,4 +221,4 @@
         - /opt/claude-triage
       become: true
       when: not (claude_code_agent_user_enabled and claude_code_triage_enabled)
-      notify: Reload systemd
+      notify: Reload systemd for claude_code
