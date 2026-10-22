@@ -24,12 +24,6 @@
   tags: [longhorn]
   vars:
     k3s_stale_checkout_rows:
-      - task: Install Longhorn
-        ids:
-          - longhorn-system_longhorn-manager_apps_DaemonSet
-          - longhorn-system_longhorn-driver-deployer_apps_Deployment
-      - task: Give longhorn-manager a memory request so it leaves BestEffort
-        ids: [longhorn-system_longhorn-manager_apps_DaemonSet]
       - task: Apply the Longhorn metrics NetworkPolicy
         ids:
           - longhorn-system_longhorn-manager-allow-metrics-scrape_networking.k8s.io_NetworkPolicy
@@ -47,14 +41,6 @@
         ids: [longhorn-system_concurrent-automatic-engine-upgrade-per-node-limit_longhorn.io_Setting]
       - task: Set what Longhorn does with a down node's pods
         ids: [longhorn-system_node-down-pod-deletion-policy_longhorn.io_Setting]
-      - task: Keep the StorageClass ConfigMap in step with the rendered class
-        ids: [longhorn-system_longhorn-storageclass__ConfigMap]
-      # longhorn-manager writes the `longhorn` class from the ConfigMap Flux owns, so the
-      # ConfigMap is the object that marks these two as stale.
-      - task: Delete the StorageClass while its parameters differ from the rendered class
-        ids: [longhorn-system_longhorn-storageclass__ConfigMap]
-      - task: Apply the Longhorn StorageClass
-        ids: [longhorn-system_longhorn-storageclass__ConfigMap]
       - task: Apply the no-backup Longhorn StorageClass
         ids: [_longhorn-nobackup_storage.k8s.io_StorageClass]
       # Volume CRs are runtime objects; the longhorn-reconcile CronJob takes the label

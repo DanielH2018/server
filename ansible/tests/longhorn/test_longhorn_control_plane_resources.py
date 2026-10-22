@@ -3,9 +3,9 @@
 
 Upstream's deploy/longhorn.yaml ships every one of these at `resources: {}` — BestEffort QoS,
 oom_score_adj 1000 — so the kernel eats the storage control plane first under any memory
-pressure. The role's own `k3s kubectl apply -f https://.../longhorn.yaml` re-pulls that empty
-block on every run (there's no local copy of the upstream manifest to edit), so the fix has to
-be a patch task the role runs AFTER the apply, not a template change.
+pressure. The manager's fix is the `longhorn` role's kustomize patch (H1.5a), which Flux applies
+with the object it patches. The csi-* sidecars are not in the upstream file: longhorn-driver-
+deployer creates them at runtime, so their fix stays a patch task in setup/k3s until H1.6.
 
 Only a request, never a limit: a limit set too low turns "killed by OOM badness" into "killed
 by cgroup cap" — a different failure mode this design rejects. `test_a_patch_carrying_a_
@@ -21,10 +21,16 @@ import pytest
 from lib import yaml_fast
 
 from _helpers import load_tasks
-from lib.repo_paths import K3S_DEFAULTS, K3S_ROLE
+from lib.repo_paths import K3S_DEFAULTS, K3S_ROLE, K8S_ROLES
 
 LONGHORN_TASKS = K3S_ROLE / "tasks" / "longhorn.yml"
 K3S_DEFAULT_VALUES = yaml_fast.safe_load(K3S_DEFAULTS.read_text())
+LONGHORN_ROLE = K8S_ROLES / "longhorn"
+LONGHORN_DEFAULT_VALUES = yaml_fast.safe_load(
+    (LONGHORN_ROLE / "defaults" / "main.yml").read_text()
+)
+MANAGER_PATCH = LONGHORN_ROLE / "files" / "patches" / "longhorn-manager.yaml"
+UPSTREAM = LONGHORN_ROLE / "files" / "upstream" / "longhorn.yaml"
 
 CSI_SIDECARS = ("csi-attacher", "csi-provisioner", "csi-resizer", "csi-snapshotter")
 
@@ -67,14 +73,6 @@ def test_csi_sidecar_patch_tolerates_the_deployments_not_existing_yet():
     assert task.get("retries", 0) > 1
 
 
-def test_manager_patch_runs_after_longhorn_is_installed():
-    # longhorn-manager IS in the static manifest (a DaemonSet), so this one only has to follow
-    # the apply — no driver-deployer race to ride out.
-    assert _index_of("Install Longhorn") < _index_of(
-        "Give longhorn-manager a memory request so it leaves BestEffort"
-    )
-
-
 def _render_patch(template, **subs):
     """The `vars.*_patch` Jinja string with its variable(s) substituted, then JSON-parsed.
 
@@ -106,28 +104,42 @@ def _assert_request_only(resources):
     )
 
 
+def _manager_patch() -> dict:
+    return yaml_fast.safe_load(MANAGER_PATCH.read_text())
+
+
+def test_manager_patch_targets_the_daemonset_the_upstream_file_declares():
+    # Kustomize refuses a build whose patch matches nothing, so a refresh that renames the
+    # DaemonSet fails here before it fails the render.
+    patch = _manager_patch()
+    declared = {
+        (d["kind"], d["metadata"]["name"], d["metadata"].get("namespace"))
+        for d in yaml_fast.safe_load_all(UPSTREAM.read_text())
+        if isinstance(d, dict)
+    }
+    assert (
+        patch["kind"],
+        patch["metadata"]["name"],
+        patch["metadata"]["namespace"],
+    ) in declared
+
+
 def test_manager_patch_sets_a_request_and_no_limit():
-    task = _task_named("Give longhorn-manager a memory request so it leaves BestEffort")
-    patch = _render_patch(
-        task["vars"]["manager_patch"],
-        k3s_longhorn_manager_memory_request=str(
-            K3S_DEFAULT_VALUES["k3s_longhorn_manager_memory_request"]
-        ),
-    )
-    resources = _container_resources(patch)
+    resources = _container_resources(_manager_patch())
     _assert_request_only(resources)
+
+
+def test_manager_patch_holds_the_value_of_the_defaults_key():
+    # A kustomize patch is copied verbatim and cannot read a variable, so the key in the
+    # role's defaults is only as true as this test makes it.
+    resources = _container_resources(_manager_patch())
     assert resources["requests"]["memory"] == str(
-        K3S_DEFAULT_VALUES["k3s_longhorn_manager_memory_request"]
+        LONGHORN_DEFAULT_VALUES["k3s_longhorn_manager_memory_request"]
     )
 
 
 def test_manager_patch_names_the_longhorn_manager_container():
-    task = _task_named("Give longhorn-manager a memory request so it leaves BestEffort")
-    patch = _render_patch(
-        task["vars"]["manager_patch"],
-        k3s_longhorn_manager_memory_request="256Mi",
-    )
-    containers = patch["spec"]["template"]["spec"]["containers"]
+    containers = _manager_patch()["spec"]["template"]["spec"]["containers"]
     assert containers[0]["name"] == "longhorn-manager"
 
 

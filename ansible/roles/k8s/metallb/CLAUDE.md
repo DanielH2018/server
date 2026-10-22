@@ -37,6 +37,11 @@ probes stay green.
   it in `defaults/main.yml`). A render that drops a CRD would make Flux delete every pool and
   advertisement of its kind. The cost: an object removed from the render stays live until the
   operator deletes it (**operator-only**).
+- **The tag is forward-only** (`flux_forward_only: true` in `defaults/main.yml`). When a
+  revision that changes it fails, `promote` writes `DEPLOY_HOLD` and leaves `prod` where it
+  is, because a reset would re-apply an older vendored file over upgraded CRDs.
+  `ansible/tests/k8s/test_forward_only_tags.py` holds the flagged roles equal to the H1
+  plan's list.
 - **`NEVER_SHED` names the tag** in `ansible/filter_plugins/service_tier.py`. The role is
   untiered, and the lost-node break-glass must not scale the announcer down.
   `ansible/tests/k8s/test_shed_set_is_derived_from_tier.py::test_never_shed_matches_the_untiered_roles_that_never_prune`
