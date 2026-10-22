@@ -175,7 +175,7 @@
     mode: "0644"
   become: true
   notify:
-    - Reload systemd
+    - Reload systemd for homelab_builder
     - Restart homelab-apt-repo
 
 - name: Flush handlers so the unit is loaded before it is enabled

@@ -173,7 +173,7 @@ from dev.findings_lib.plans import (
 )
 from dev.findings_lib.boundaries import REGISTER_CHECKOUTS, FindingsTools, aimed
 from dev.findings_lib.red_green import RED_GREEN_LABEL, red_green_eligible
-from dev.findings_lib.solo_only import fanout_tooling_paths
+from dev.findings_lib.solo_only import solo_only_reasons
 from dev.findings_lib.verify import verification_report
 
 
@@ -478,9 +478,9 @@ def cmd_next(args: argparse.Namespace, tools: FindingsTools) -> int:
     today = today_utc()
     rows = pickable(issues, live_claims=live, pr_refs=open_pr_refs(tools), today=today)
     rows = rows[: args.limit]
-    bodies = {i["number"]: i.get("body") or "" for i in issues}
+    text_of = {i["number"]: (i["title"], i.get("body") or "") for i in issues}
     for r in rows:
-        r["solo_only"] = bool(fanout_tooling_paths(bodies[r["number"]], tools.repo))
+        r["solo_only"] = bool(solo_only_reasons(*text_of[r["number"]], tools.repo))
         # The holder the text render names as `[stale claim by ...]`, null when unclaimed:
         # an orchestrator reading `--json` told a free issue from one `claim` reaps (#3927).
         r["stale_claim_by"] = stale.get(r["number"])
