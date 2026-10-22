@@ -114,12 +114,17 @@ jobs:
           flux push artifact oci://127.0.0.1:5001/drill:drill --path="$RUNNER_TEMP/drill/bundle" \
             --source=bootstrap-drill --revision="drill@sha1:$GITHUB_SHA" --insecure-registry
 
-      # 3. The Flux components. cluster/flux/secret.yaml holds `${...}` placeholders that only
-      # the `flux` tag's Kustomization fills, so the drill applies components.yaml alone. Whether
-      # the procedure says the same is an open ruling (see the PR body).
+      # 3. The Flux components. Step 3 applies components.yaml alone: cluster/flux/secret.yaml
+      # holds `${...}` placeholders, and its Secret arrives through the `flux` tag's own
+      # Kustomization, with substitution, once cluster-vars is up.
+      # The pods carry priorityClassName homelab-critical, which H1's steps 1 to 3 install on a
+      # real cluster (the k3s role's priorityclass.yaml.j2). Without it the ReplicaSet cannot
+      # create a pod, so the drill creates the class first.
       - name: "Step 3: apply the Flux components"
         run: |
           set -euo pipefail
+          printf '%s\n' 'apiVersion: scheduling.k8s.io/v1' 'kind: PriorityClass' \
+            'metadata:' '  name: homelab-critical' 'value: 100000' | kubectl apply -f -
           $APPLY -f "$RUNNER_TEMP/out/cluster/flux/components.yaml"
           for d in source-controller kustomize-controller notification-controller; do
             kubectl -n flux-system rollout status "deployment/$d" --timeout=180s
@@ -228,6 +233,7 @@ jobs:
       - name: Dump the Flux objects and controller logs
         if: failure()
         run: |
+          kubectl -n flux-system get deployment,replicaset,pod,event || true
           kubectl -n flux-system get ocirepository,kustomization -o yaml || true
           kubectl -n flux-system logs deployment/source-controller --tail=100 || true
           kubectl -n flux-system logs deployment/kustomize-controller --tail=200 || true

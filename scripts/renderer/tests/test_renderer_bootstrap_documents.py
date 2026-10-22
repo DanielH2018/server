@@ -1,11 +1,11 @@
 """The documents the bootstrap procedure applies by hand (D5 step 28, R4 PR 7b).
 
 Scope of "applied by hand": the OCIRepository and the root from `cluster/flux-deferred/` (steps 5
-and 9) and every `flux/<tag>.yaml` Kustomization (step 6). Step 3's `cluster/flux/` is NOT
-covered: its `secret.yaml` holds `${...}` substitution placeholders that only the `flux` tag's
-Kustomization fills, and `components.yaml` quotes `${var:=default}` in a CRD description. The
-drill applies `components.yaml` alone; which of the two the procedure states is an open
-ruling (see the PR body).
+and 9) and every `flux/<tag>.yaml` Kustomization (step 6). Step 3 applies `components.yaml`
+alone, and the test does not scan it: `components.yaml` quotes `${var:=default}` in a CRD
+description. `cluster/flux/secret.yaml` is not applied by hand either. It holds `${...}`
+placeholders and arrives through the `flux` tag's own Kustomization, with substitution, once
+cluster-vars is up (operator ruling, 2026-10-22).
 
 Run: uv run pytest scripts/renderer/tests/test_renderer_bootstrap_documents.py
 """
