@@ -1266,9 +1266,9 @@ old pod keeps serving through the pull and the rollout pays only the container s
 - **Kubelet image garbage collection can still remove the image** between the pull and the
   rollout if the node passes its disk high-water mark, which the rollout budget also covers.
 
-Every flux-owned role with a `Recreate` Deployment on a large image sets it, code-server,
-n8n, tdarr, home-assistant, valheim, jellyfin, uptime-kuma and `crowdsec` among them (#5525,
-#5546, #5855). The bundle holds a `<tag>-prepull` Kustomization for each, and
+Every flux-owned role with a `Recreate` Deployment on a large image sets it. Nine roles set it:
+code-server, n8n, tdarr, home-assistant, valheim, jellyfin, karakeep, uptime-kuma and `crowdsec`
+(#5525, #5546, #5855, #5858). The bundle holds a `<tag>-prepull` Kustomization for each, and
 `scripts/deploy_tools/bundle_census.py:prepull_tags` reads the full list from the tree. Docker
 Hub served a 420 MB layer at 23.5-53.8 MB/s on 2026-10-22, about 100 times GHCR's rate, so a
 Docker Hub role's budget is minutes where a GHCR role's is most of an hour (#5867).

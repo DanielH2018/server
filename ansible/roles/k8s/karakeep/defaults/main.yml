@@ -25,6 +25,22 @@ karakeep_k8s_chrome_image: ghcr.io/karakeep-app/karakeep-chrome:release@sha256:c
 # scripts/lib/k8s_roles.py); as an include var it would render Flux's 600s default (#5464).
 manifests_rollout_timeout: 1200s  # noqa var-naming[no-role-prefix]
 karakeep_k8s_rollout_timeout: "{{ manifests_rollout_timeout }}"
+# The budget of the karakeep-prepull Kustomization, whose Job pulls all four Deployments'
+# images onto their node before the karakeep Kustomization applies
+# (scripts/renderer/renderer_lib/prepull.py). `karakeep` and `karakeep-meilisearch` are
+# `Recreate`, so without it the old pod stops before the new pod's pull starts. On 2026-10-19
+# (#5778) a digest bump left karakeep down for 20 minutes: the pull ran 16.5 minutes and then
+# failed on a corrupt layer, with the old pod already gone.
+# MEASURED 2026-10-22 from GHCR's amd64 manifests: the app image is 511,337,699 bytes and the
+# chrome image 449,327,469, about 960 MB when one release moves both. The pulls measured at
+# 0.25 MB/s (#5778, one 40 MB layer in 2m40s) and 0.53 MB/s (#4564, the chrome digest in
+# 14m13s), and GHCR has served this homelab as slowly as 0.145 MB/s (n8n's defaults). The
+# kubelet pulls one image after the other, so both at 0.25 MB/s take about 3840s. 4500s
+# covers that down to 0.213 MB/s, and the app image alone down to 0.114 MB/s. The Job has no
+# deadline, so a slower pull costs that revision its verdict, the Job keeps pulling, and Flux
+# applies karakeep on a later retry. Only Flux reads it: the renderer adds the Kustomization
+# for a published tag alone, so an Ansible deploy ignores it.
+flux_prepull_timeout: 4500s  # noqa var-naming[no-role-prefix]
 karakeep_k8s_meili_image: getmeili/meilisearch:v1.54.3@sha256:e68913ab7d6f5b159529e472cfd362ce3c741fafd3c127961b2142abbe41b3c9
 # Built in-cluster. The base-image pin (uv `python3.14-bookworm-slim` digest) lives in
 # `templates/Dockerfile.j2`'s `FROM` line, where Renovate's dockerfile manager reads it. All five
