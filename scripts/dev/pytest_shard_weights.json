@@ -53,7 +53,7 @@
  "ansible/roles/k8s/crowdsec/tests/test_crowdsec_verify.py": 1.54,
  "ansible/roles/k8s/crowdsec/tests/test_home_allowlist.py": 0.0,
  "ansible/roles/k8s/crowdsec/tests/test_home_ips_discover.py": 0.0,
- "ansible/roles/k8s/crowdsec/tests/test_jobs_image.py": 22.0,
+ "ansible/roles/k8s/crowdsec/tests/test_jobs_image.py": 22.8,
  "ansible/roles/k8s/crowdsec/tests/test_remote_allowlist.py": 0.0,
  "ansible/roles/k8s/game-stats/tests/test_stats.py": 0.03,
  "ansible/roles/k8s/game-stats/tests/test_stats_lib.py": 1.0,
