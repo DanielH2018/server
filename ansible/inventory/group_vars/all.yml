@@ -732,14 +732,16 @@ ops_cron_host: daniel-box
 # the host the release records name, because the staleness reader refuses a render record
 # whose `host` differs, and the host whose primary checkout the GitOps deployer fetches.
 render_records_host: daniel-box
-# The way out: false runs the role's absent arm on render_records_host, which stops the timer
-# and removes the units, the worktree and the role's directories. To move the producer, apply
-# false on the old host first, then change render_records_host.
+# The role's defaults pin the producer absent whatever this says (`render_records_state` in
+# roles/setup/render_records/defaults/main.yml, D5's disarm PR), so true here arms nothing: since
+# D5 step 29 every k8s service is flux-owned and the producer would have no service to render.
+# R4 deletes the role. False still runs the role's absent arm on render_records_host, which
+# stops the timer and removes the units, the worktree and the role's directories. To move the
+# producer, apply false on the old host first, then change render_records_host.
 #
-# Arming presupposes that every host write in a role this renders is guarded on
-# `not k8s_dry_run | bool`; without that guard an hourly dry run would install that tree's host
-# scripts, crons and node-staged modules ahead of their landing. The uptime-kuma tile is gated
-# on this too, so setting it false leaves no tile red.
+# Re-arming, by restoring the derivation from this key, presupposes that every host write in a
+# role this renders is guarded on `not k8s_dry_run | bool`; without that guard an hourly dry run
+# would install that tree's host scripts, crons and node-staged modules ahead of their landing.
 render_records_enabled: true
 # The producer runs hourly at this minute. Here rather than in the role's defaults because the
 # uptime-kuma role derives the monitor's interval from the same cadence below.

@@ -15,8 +15,8 @@ probes stay green.
 
 - **Flux applies it, not Ansible** (H1.3). Its `containers_list` entry carries `owner: flux`
   from its first commit. `tasks/main.yml` holds the include of `k8s/manifests` and no Flux path
-  runs it. A rebuilt cluster gets it from the `metallb` Kustomization at step (f) of
-  `docs/longhorn-disaster-recovery.md`'s *Order from H1.2*.
+  runs it. A rebuilt cluster gets it from the `metallb` Kustomization at step 6 of
+  `docs/flux-deploy-plane.md`'s *Bootstrapping Flux on a rebuilt cluster*.
 - **The workloads are `files/upstream/metallb-native.yaml`**, upstream's file byte for byte,
   pinned by `k3s_metallb_version` and the `metallb_vendored_manifests` item in
   `defaults/main.yml`. `scripts/dev/vendor_manifest.py` checks the pin and refreshes the copy.

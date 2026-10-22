@@ -1,5 +1,5 @@
 {
-  "checksum": "312d4634b2efb17cb7a0f5dcd3449cb116deddbe25ec4be9b6f7ffde4701fb31",
+  "checksum": "2990355072a77d8e2395db3d1feaccbcb8eecd2eea383a19febba23c1dc7e0ed",
   "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
   "key": "ansible/roles/k8s/longhorn/CLAUDE.md#At a glance",
   "row": {
@@ -12,11 +12,11 @@
       "ansible/tests/longhorn/test_longhorn_control_plane_resources.py::test_the_csi_setting_requests_the_defaults_value_for_the_four_sidecars_only": "3005b64a3e0cc13a167ec1d07f266cc0b4ca47163b591d691886b119f95790b5",
       "ansible/tests/longhorn/test_longhorn_storageclass.py::test_the_class_differs_from_upstreams_only_by_the_replica_count": "c1ef4ca44c0ae18b8cf7fabb57d2a2db844daf2a092ee0502f5462063d49bbb7",
       "ansible/tests/longhorn/test_snapshot_data_integrity_patch_is_a_json_map.py::test_a_bare_string_value_is_flagged": "83657efa109ab7934589801227e5efccd0da4d8bd87bf352031cc04592ac5200",
-      "docs/longhorn-disaster-recovery.md": "4c9a4a63c6856b47fb7c612953def99d6b299477412a04fc9369539f36398ef3",
+      "docs/flux-deploy-plane.md": "807c3deb44c3178e7a6f9fc0bc398a3b748b95c468b14ce9b1b890c8684535d9",
       "docs/longhorn-upgrade.md": "04188a542f54902dfb346f19c33a5a9d6de82e0d3e627033ee56d1262c150b05",
       "scripts/dev/vendor_manifest.py": "f0c0c9df684a1ed3d858ec17f02c8e7c279dbb7595180eb00d70a50e42a9d7ef"
     },
     "python": "3.14",
-    "verified_sha": "cfa5f7ab3"
+    "verified_sha": "8783d3ca3"
   }
 }
