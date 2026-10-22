@@ -2,7 +2,7 @@
 # Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
 # Route-only role (see tasks/main.yml): it renders no Deployment of its own, only a
 # selector-less Service, its EndpointSlice and the IngressRoute onto deploy-ui.service on
-# daniel-box. `manifests_rollout: ''` already tells the shared role there is nothing to wait
+# daniel-box. There is no workload to wait
 # on. But the page behind this route starts deploys and clears the deployer's hold, so a bad
 # route change (auth accidentally dropped, the EndpointSlice pointed elsewhere) hands that to
 # whoever reaches it — the deploy plane itself, with no workload here to roll back.

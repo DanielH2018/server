@@ -7,23 +7,26 @@ radarr_k8s_image: lscr.io/linuxserver/radarr:6.4.4.10685-ls321@sha256:ea6822c956
 # database + root-folder paths before the gate observes a fault, then fail the rollback
 # redeploy against data it can no longer read. The linuxserver -lsNN scheme hides a breaking
 # bump as a routine patch bump.
-# k8s/manifests takes a pre-apply Longhorn snapshot of the claim below and reverts it if the
-# deploy fails, so a bad swap reverts to the snapshot instead of leaving the library database
-# and root-folder paths unreadable by the old image.
+# Flux's radarr-snapshot Job snapshots the claim below before each revision applies. A failed
+# revision that changes radarr writes the stateful hold without a reset, and the operator
+# reverts the claim through docs/volume-snapshot-drills.md, so a bad swap can be
+# reverted instead of leaving the library database and root-folder paths unreadable by the old
+# image.
 k8s_autodeploy: true  # noqa var-naming[no-role-prefix]
-k8s_autodeploy_reason: "migrating state — Recreate + RWO PVC, now protected by the pre-apply Longhorn snapshot and revert; -lsNN versioning still hides a breaking bump. WEIGHED: radarr also mounts media-data (shared RWX, not reverted); a revert rewinds import/rename history while the files stay where they were left, so it desyncs into duplicate-import attempts or a missed-file state, recoverable by a library rescan"  # noqa var-naming[no-role-prefix]
-# The pre-apply Longhorn snapshot k8s/manifests takes via k8s/volume-snapshot.
-# Declared regardless of k8s_autodeploy — protects a manual deploy too, and the revert it
-# enables is what this role's auto-deploy depends on.
+k8s_autodeploy_reason: "migrating state — Recreate + RWO PVC, protected by the radarr-snapshot Job before each revision and an operator revert to it after a failed one; -lsNN versioning still hides a breaking bump. WEIGHED: radarr also mounts media-data (shared RWX, not reverted); a revert rewinds import/rename history while the files stay where they were left, so it desyncs into duplicate-import attempts or a missed-file state, recoverable by a library rescan"  # noqa var-naming[no-role-prefix]
+# The claim snapshotted before each revision applies. Under Flux the renderer turns this
+# list into the radarr-snapshot Kustomization, whose Job snapshots it before radarr applies
+# (D5.2a). After a handback, k8s/manifests takes the same snapshot through k8s/volume-snapshot.
+# The snapshot is the recovery point this role's auto-deploy depends on.
 k8s_autodeploy_snapshot_pvcs: [radarr-config]  # noqa var-naming[no-role-prefix]
 # Claims this role MOUNTS but does not revert — the WEIGHED clause in the reason above, stated
 # where a test can read it. media-data is rendered by k8s/media-volume, so no guard that reads
 # what this role creates can see the coupling.
 k8s_autodeploy_unreverted_claims: [media-data]  # noqa var-naming[no-role-prefix]
 
-# The rollout budget, declared once. Read as Flux's health-check `timeout`, and by BOTH
-# k8s/manifests' rollout wait and `progressDeadlineSeconds` in
-# templates/deployment.yaml.j2, so the two cannot drift. A first boot installing DOCKER_MODS
+# The rollout budget, declared once. Read as Flux's health-check `timeout` and by
+# `progressDeadlineSeconds` in templates/deployment.yaml.j2, so the two cannot drift. After a
+# handback, k8s/manifests' rollout wait reads it too. A first boot installing DOCKER_MODS
 # takes up to 10 minutes; the 300s k8s/manifests default times out against the startupProbe
 # that allows it.
 # The deadline has to move with the budget: at the 600s Kubernetes default, `rollout status`
