@@ -1077,6 +1077,7 @@
  "scripts/dev/tests/test_smoke_extract.py": 0.0,
  "scripts/dev/tests/test_split_module.py": 0.0,
  "scripts/dev/tests/test_takeover_census.py": 0.0,
+ "scripts/dev/tests/test_takeover_census_declares_nothing.py": 0.0,
  "scripts/dev/tests/test_tested_tree.py": 0.0,
  "scripts/dev/tests/test_vendor_manifest.py": 0.0,
  "scripts/diagnostics/tests/test_grafana_panel_report.py": 0.0,
