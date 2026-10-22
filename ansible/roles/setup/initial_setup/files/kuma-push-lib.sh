@@ -255,8 +255,10 @@ boot_grace_active() {
 # probe must report a fault rather than suppress one. Same direction as `boot_grace_active`
 # failing open on an unreadable /proc/uptime.
 #
-# `--max-time 5` and NO `--retry`: the probe only ever runs on a path that has already failed, so
-# its whole cost is added to a run that is about to end, and the crowdsec cron's worst-case run
+# `--max-time 5` and NO `--retry`: the probe almost always runs on a path that has already failed,
+# so its cost is added to a run that is about to end. release-staleness-check is the exception: it
+# also probes before its fetch (#5308), which costs one request on a healthy link and at most 10s
+# on a dead one, against a `*/30` period. The crowdsec cron's worst-case run
 # budget is asserted against its `*/5` period
 # (`ansible/tests/services/test_crowdsec_allowlist_push_retry.py::test_a_whole_run_still_fits_the_cron_period`).
 # 5s is also ~50x the 0.074-0.122s both endpoints measured from daniel-server on 2026-09-27.
