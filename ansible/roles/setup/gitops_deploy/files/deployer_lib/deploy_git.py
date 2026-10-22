@@ -77,8 +77,8 @@ def jobs_verdict(check_runs: list[dict]) -> str:
     skipped job passes only when `prove` succeeded and every dependent skipped: each dependent
     skips only on `needs.prove.outputs.proven == 'true'` or a cancelled run, so a skip means
     `proven` was true, and a check-run cannot show that output itself. `prove` is skipped on a
-    run that is not a push. A cancelled `prove` (a timeout) runs every dependent whatever
-    `proven` says, so they must all pass.
+    run that is not a push. A cancelled or failed `prove` (a runner fault) runs every dependent
+    whatever `proven` says, so they must all pass.
     Fail-closed: any failure is `fail`, a missing or unfinished job is
     `pending`, and a skipped job without that proof is `pending`, so the gate job's own
     conclusion decides it.
@@ -87,10 +87,13 @@ def jobs_verdict(check_runs: list[dict]) -> str:
     for run in check_runs:
         name = run.get("name")
         if name == CI_PROVE_JOB or name in CI_GATE_NEEDS_JOBS:
-            # A cancelled `prove` timed out, and every dependent ran in full (#5783).
-            cancelled = name == CI_PROVE_JOB and run.get("conclusion") == "cancelled"
+            # A cancelled or failed `prove` broke on the runner, and every dependent ran (#5783).
+            unproven = name == CI_PROVE_JOB and run.get("conclusion") in (
+                "cancelled",
+                "failure",
+            )
             states.setdefault(name, set()).add(
-                "cancelled" if cancelled else _run_state(run)
+                "unproven" if unproven else _run_state(run)
             )
     if any("fail" in s for s in states.values()):
         return "fail"

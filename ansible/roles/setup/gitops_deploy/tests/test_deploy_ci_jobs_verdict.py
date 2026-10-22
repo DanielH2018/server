@@ -82,8 +82,12 @@ def test_a_skipped_job_without_proof_is_not_a_pass():
     assert jobs_verdict(_jobs("skipped")) == "pending"
 
 
-def test_a_failed_prove_job_is_red():
-    assert jobs_verdict([_run(CI_PROVE_JOB, conclusion="failure")] + _jobs()) == "fail"
+def test_a_failed_prove_job_lets_the_full_sweep_decide():
+    """`tested_tree.py` exits 0 on every answer, so a failed `prove` is a runner fault (#5783)."""
+    failed = _run(CI_PROVE_JOB, conclusion="failure")
+    assert jobs_verdict([failed] + _jobs()) == "pass"
+    assert jobs_verdict([failed] + _jobs(**{_JOB_NAMES[0]: "failure"})) == "fail"
+    assert jobs_verdict([failed] + _jobs("skipped")) == "pending"
 
 
 def test_a_timed_out_prove_job_lets_the_full_sweep_decide():

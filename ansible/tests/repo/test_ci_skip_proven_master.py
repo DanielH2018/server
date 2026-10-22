@@ -28,7 +28,7 @@ GATE_NAME = "prek (lint + validate + tests + secrets)"
 # The draft arm skips every job on a draft PR (#5563); `test_ci_skips_draft_prs` below says why.
 DRAFT_ARM = "github.event.pull_request.draft != true"
 PROOF_CONDITION = (
-    "(needs.prove.result == 'cancelled'"
+    "(needs.prove.result == 'cancelled' || needs.prove.result == 'failure'"
     " || (!cancelled() && needs.prove.outputs.proven != 'true'))"
     f" && {DRAFT_ARM}"
 )
@@ -129,6 +129,9 @@ def _dependent_runs(condition: str, prove: str, proven: str, cancelled: bool) ->
         ("cancelled", "true", False, True),
         ("cancelled", "true", True, True),
         ("cancelled", "", True, True),
+        # A failed `prove` broke on the runner, so it falls back the same way.
+        ("failure", "true", False, True),
+        ("failure", "", True, True),
         # The proven path skips, and a cancel after `prove` concluded stops the sweep.
         ("success", "true", False, False),
         ("success", "false", False, True),
@@ -236,6 +239,9 @@ def test_the_gate_keeps_its_required_name_and_always_runs():
         ("cancelled", "true", _all("success"), True),
         ("cancelled", "true", _all("skipped"), False),
         ("cancelled", "", _all("success", pytest="failure"), False),
+        ("failure", "", _all("success"), True),
+        ("failure", "true", _all("success"), True),
+        ("failure", "", _all("success", pytest="failure"), False),
     ],
 )
 def test_the_gate_passes_on_the_proven_path_and_nowhere_a_skip_is_unproven(
