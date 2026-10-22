@@ -873,6 +873,10 @@ containers_list:
   # inside the pod — see roles/k8s/wg-easy/defaults/main.yml.
   - name: wg-easy
     platform: k8s
+    # Flux applies wg-easy through `promote`, and every Ansible path skips it (D5.12, own window,
+    # operator on the LAN). The handback is two PRs, `owner: released` then removing `owner`:
+    # docs/flux-deploy-plane.md.
+    owner: flux
     weekly_backup_claims: {wg-easy-config: 4}  # Thu
     tier: platform
     hostname: "wg-easy"
