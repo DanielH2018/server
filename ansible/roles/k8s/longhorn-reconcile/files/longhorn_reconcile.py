@@ -187,8 +187,10 @@ def load_tiers(path: str | Path) -> dict:
             raise Failed(f"tier file: {claim} declares shard {shard!r}, not 0-6")
     both = sorted(set(weekly) & set(nobackup))
     if both:
-        # A claim on both lists has no single desired group. The Ansible tasks gave it both
-        # labels, which nothing intended, so the run stops before it writes anything.
+        # DECIDED: refuse, where the Ansible tasks did not. A claim on both lists has no single
+        # desired group; the tasks gave such a volume both labels, which nothing intended, and
+        # picking one here would hide a wrong `containers_list` entry. The run stops before it
+        # writes anything, so the next hourly run retries once the entry is fixed.
         raise Failed(f"claim(s) on both the weekly and the no-backup list: {both}")
     return {"r2": r2, "weekly": weekly, "nobackup": set(nobackup)}
 

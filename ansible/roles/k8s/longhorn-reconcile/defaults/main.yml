@@ -1,6 +1,12 @@
 ---
-# Auto-deploy stance. Flux applies the tag, so this gates no apply; the reason records why a
-# Renovate bump of the python image below is a routine one.
+# Auto-deploy stance. Flux applies the tag, so this gates no apply; the stance decides whether
+# Renovate automerges a bump of the python image below.
+# DECIDED: `true`, as configarr's CronJob does. The image carries a stdlib script and no
+# state, and every bump runs the reconcile once as a gate Job in `longhorn-reconcile-verify`,
+# which fails the revision on a read or a write that errors. The role writes Volume labels, but
+# a bump changes the interpreter and not the script, and a wrong label is one merge patch to
+# undo. The alternative, `false`, would need a manual rule in renovate.json for the shared
+# python digest, as the denied roles carry. Contradict this with a measured interpreter break.
 k8s_autodeploy: true  # noqa var-naming[no-role-prefix]
 k8s_autodeploy_reason: "CronJob gated on every revision by a gate Job in longhorn-reconcile-verify, which proves the new image RUNS the reconcile and fails the revision on a read or a write that errors; the gate Job has no ownerReference, so concurrencyPolicy Forbid cannot keep a scheduled run off it, but a patch to a label or a request already set is a no-op, so running the same plan twice is harmless"  # noqa var-naming[no-role-prefix]
 
