@@ -1,13 +1,13 @@
 {
-  "checksum": "ec2efd720c3394268974e09437abc195ea03e0046d13e256164938481466f882",
+  "checksum": "511dce245621779943cadbcd3509089b553b1589efbd7791fd35800c6be87308",
   "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
-  "key": "ansible/roles/k8s/flux/CLAUDE.md#flux — the Flux controllers, installed and owning nothing (k3s, daniel-box)",
+  "key": "ansible/roles/k8s/flux/CLAUDE.md#flux — the Flux controllers and the objects they follow (k3s, daniel-box)",
   "row": {
     "atoms": {
       "docs/flux-deploy-plane.md": "807c3deb44c3178e7a6f9fc0bc398a3b748b95c468b14ce9b1b890c8684535d9",
       "docs/target-architecture/deploy/d1-flux-installed.md": "0f95112144bce8fbd630d3f8c9128117034d37840d9071635d89a53cb781cf45"
     },
     "python": "3.14",
-    "verified_sha": "fe293668f"
+    "verified_sha": "a780c8517"
   }
 }

@@ -1,0 +1,13 @@
+{
+  "checksum": "a53511145e7490936c8920dd0767836a37e8ecb60d95eccabe9fece6f6e5c74d",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "ansible/roles/k8s/flux/CLAUDE.md#The suspend lever is gone",
+  "row": {
+    "atoms": {
+      "docs/flux-deploy-plane.md": "807c3deb44c3178e7a6f9fc0bc398a3b748b95c468b14ce9b1b890c8684535d9",
+      "scripts/renderer/renderer_lib/suspension.py": "ba4d537ff526683c37bb4b963226951ef2651685cb451010412aa4c2389c1518"
+    },
+    "python": "3.14",
+    "verified_sha": "a780c8517"
+  }
+}

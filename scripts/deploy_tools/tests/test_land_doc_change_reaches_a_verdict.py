@@ -38,7 +38,7 @@ def test_a_role_document_is_clean():
     assert land_tags.self_applied([_DOC]) is False
 
 
-def test_a_role_task_file_is_flagged():
+def test_a_role_task_file_is_flagged(flux_handed_back):
     """The reject half: the same role's tasks/ is code, deployed through one smoke caller.
 
     One caller, not every caller: a `tasks/`-only change to `manifests` renders no different
@@ -46,7 +46,8 @@ def test_a_role_task_file_is_flagged():
     """
     assert land_tags.role_for(_TASKS) == "manifests"
     assert land_tags.shared_roles([_TASKS]) == ["manifests"]
-    assert len(land_tags.shared_caller_tags([_TASKS])["manifests"]) == 1
+    reached = land_tags.shared_caller_tags([_TASKS], host_vars=flux_handed_back)
+    assert len(reached["manifests"]) == 1
 
 
 def test_a_document_beside_a_real_change_does_not_excuse_it():

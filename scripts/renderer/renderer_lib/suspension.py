@@ -6,6 +6,10 @@ only when it is true, and `bundle.bundle_files` fails a render whose bundle hold
 any document, a role template's included. The flux role's `sync.yaml.j2` follows the same rule.
 `suspends_tag` reads the rendered flag back for `digests.json`'s `suspended` field (D5.1a2).
 The plan is docs/target-architecture/deploy/d5-bulk-move.md, *The stop lever (D5.1b)*.
+
+The flux role's `flux_sync_suspend` is refused outright from D5 step 29 on
+(`sync_suspend_refusal`). Flux applies its own sync objects from then, so a suspend rendered
+there would stop the OCIRepository that would have to fetch the commit clearing it.
 """
 
 import sys as _sys
@@ -18,6 +22,9 @@ from collections.abc import Mapping
 import yaml
 
 from lib import yaml_fast
+
+# The flux role's old lever over its sync objects, refused when true (D5 step 29).
+SYNC_SUSPEND_KEY = "flux_sync_suspend"
 
 # Every Flux kind's API group ends in this. A Job's or CronJob's `spec.suspend` is another
 # field and stays free to read `false`.
@@ -81,3 +88,21 @@ def refuse_suspend_false(files: Mapping[str, str]) -> None:
             + ". Write spec.suspend only when it is true: kustomize-controller applies with "
             "forced ownership, so a rendered false undoes an operator's hand suspend"
         )
+
+
+def sync_suspend_refusal(tag: str, value: bool) -> str | None:
+    """Why `tag`'s render is refused when its resolved `flux_sync_suspend` is true, else None.
+
+    Args:
+        tag: The deploy tag being rendered.
+        value: The key's value in the tag's resolved context, read through Ansible's `bool`,
+            so a host_vars or extra-vars `true` is refused as a defaults one is.
+    """
+    if not value:
+        return None
+    return (
+        f"{tag}: {SYNC_SUSPEND_KEY} is true, which the renderer refuses from D5 step 29 on. "
+        "Flux applies its own sync objects, so it would suspend its own source and could "
+        "never fetch the commit that clears the key. To stop everything, suspend the "
+        "OCIRepository homelab by hand (docs/flux-deploy-plane.md, *Recovering Flux by hand*)"
+    )

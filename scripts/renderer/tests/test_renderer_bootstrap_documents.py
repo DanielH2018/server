@@ -1,4 +1,4 @@
-"""The documents the bootstrap procedure applies by hand (D5 step 28, R4 PR 7b).
+"""The documents the bootstrap procedure applies by hand (D5 steps 28 and 29, R4 PR 7b).
 
 Scope of "applied by hand": the OCIRepository and the root from `cluster/flux-deferred/` (steps 5
 and 9) and every `flux/<tag>.yaml` Kustomization (step 6). Step 3 applies `components.yaml`
@@ -7,8 +7,15 @@ description. `cluster/flux/secret.yaml` is not applied by hand either. It holds 
 placeholders and arrives through the `flux` tag's own Kustomization, with substitution, once
 cluster-vars is up (operator ruling, 2026-10-22).
 
+From D5 step 29 the flux role is flux-owned, so its render also writes `flux/flux.yaml`: the
+Kustomization `flux` at `prune: false` and `flux-deferred` at `prune: true`. The sync objects
+`flux-deferred` applies keep D1's source, so a change to it fails here rather than cutting
+Flux off from its artifact.
+
 Run: uv run pytest scripts/renderer/tests/test_renderer_bootstrap_documents.py
 """
+
+import copy
 
 import pytest
 
@@ -31,7 +38,7 @@ def _sync(out):
 
 @pytest.fixture(scope="module")
 def flux_render(tmp_path_factory):
-    """`homelab-render cluster --role flux` at the head, where `flux` is Ansible-owned."""
+    """`homelab-render cluster --role flux` at the head, where `flux` is flux-owned."""
     out = tmp_path_factory.mktemp("flux") / "out"
     assert homelab_render.cluster(out, ["flux"], None) == RENDER_OK
     return out
@@ -47,7 +54,7 @@ def published_render(tmp_path_factory):
     return out, plumbing
 
 
-def test_the_ansible_owned_flux_role_still_renders_the_sync_directory(flux_render):
+def test_the_flux_role_renders_the_sync_directory(flux_render):
     assert drill.sync_problems(_sync(flux_render)) == []
 
 
@@ -88,7 +95,74 @@ def test_no_plumbing_closure_reaches_flux_deferred_or_the_root(published_render)
         "traefik-crds",
         "cluster-vars",
     }
-    # Every rendered Kustomization, a superset of the plumbing tags. At this head `plumbing` is
-    # empty (no plumbing tag is flux-owned yet), so the superset is what the test judges.
+    # Every rendered Kustomization, a superset of the plumbing tags that are flux-owned.
     assert drill.closure_problems(depends, set(depends)) == []
     assert plumbing <= set(depends)
+
+
+def test_flux_renders_prune_false_and_flux_deferred_prune_true(flux_render):
+    """Flux's own CRDs are never pruned, and `flux-deferred`'s prune deletes `verify-drill`."""
+    docs = _docs(flux_render / "flux" / "flux.yaml")
+    assert [(d["metadata"]["name"], d["spec"]["prune"]) for d in docs] == [
+        ("flux", False),
+        ("flux-deferred", True),
+    ]
+
+
+# D1's values, written out rather than read from the role's defaults or from `forge.py`, so a
+# change to either fails here instead of moving the pin with it.
+SOURCE_URL = "oci://ghcr.io/danielh2018/homelab-manifests"
+VERIFY = {
+    "provider": "cosign",
+    "matchOIDCIdentity": [
+        {
+            "issuer": r"^https://token\.actions\.githubusercontent\.com$",
+            "subject": (
+                r"^https://github\.com/DanielH2018/server/\.github/workflows/"
+                r"promote\.yml@refs/heads/master$"
+            ),
+        }
+    ],
+}
+PINNED = {"homelab": {"tag": "prod"}, "last-good": {"tag": "last-good"}}
+
+
+def sync_pin_problems(docs: list[dict]) -> list[str]:
+    """Each way the sync OCIRepositories differ from D1's URL, `ref` and `verify` block."""
+    repos = {
+        d["metadata"]["name"]: d["spec"] for d in docs if d["kind"] == "OCIRepository"
+    }
+    problems = [f"no OCIRepository {name}" for name in sorted(set(PINNED) - set(repos))]
+    for name, ref in sorted(PINNED.items()):
+        spec = repos.get(name)
+        if spec is None:
+            continue
+        for field, want in (("url", SOURCE_URL), ("ref", ref), ("verify", VERIFY)):
+            if spec.get(field) != want:
+                problems.append(f"{name}.{field} is {spec.get(field)!r}, not {want!r}")
+    return problems
+
+
+def test_sync_pin_problems_is_clean_on_the_render(flux_render):
+    assert sync_pin_problems(_sync(flux_render)) == []
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("url", "oci://ghcr.io/someone-else/homelab-manifests"),
+        ("ref", {"tag": "latest"}),
+        ("verify", None),
+    ],
+    ids=["url", "ref", "verify"],
+)
+def test_sync_pin_problems_is_flagged_on_a_moved_source(flux_render, field, value):
+    docs = copy.deepcopy(_sync(flux_render))
+    repo = next(
+        d
+        for d in docs
+        if d["metadata"]["name"] == "homelab" and d["kind"] == "OCIRepository"
+    )
+    repo["spec"][field] = value
+    [problem] = sync_pin_problems(docs)
+    assert problem.startswith(f"homelab.{field} is ")
