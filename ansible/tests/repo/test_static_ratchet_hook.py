@@ -16,6 +16,7 @@ import shlex
 import tomllib
 
 import pytest
+import xdist_width
 from _helpers import REPO
 
 HOOK_ID = "static-ratchet-tests"
@@ -237,3 +238,49 @@ def test_the_lander_gate_matches_every_k8s_input_its_render_reads(path):
 def test_the_lander_gate_skips_a_k8s_role_doc():
     lander = next(h for h in _ratchet_hooks() if h["id"] == f"{HOOK_ID}-lander")
     assert not re.search(lander["files"], "ansible/roles/k8s/bento-pdf/CLAUDE.md")
+
+
+# The session ceiling `PYTEST_XDIST_AUTO_NUM_WORKERS` sets for every Claude session.
+SESSION_CEILING = 4
+
+# Ratchet hooks that run several modules and must spread them across workers. #5919 pins its
+# own two, `static-ratchet-tests` and `static-ratchet-tests-census`.
+SPREAD_HOOKS = ["static-ratchet-tests-python"]
+
+
+def _width(hook: dict) -> int:
+    """The xdist workers a hook's entry starts: its own `-n`, else what `-n auto` sizes."""
+    tokens = shlex.split(hook["entry"])
+    pinned = [after for flag, after in itertools.pairwise(tokens) if flag == "-n"]
+    pinned += [
+        token[2:] for token in tokens if token.startswith("-n") and token[2:].isdigit()
+    ]
+    if pinned and pinned[-1] != "auto":
+        return int(pinned[-1])
+    return xdist_width.workers_for(len(_modules(hook)), SESSION_CEILING)
+
+
+@pytest.mark.parametrize("hook_id", SPREAD_HOOKS)
+def test_a_multi_module_hook_runs_on_more_than_one_worker(hook_id):
+    """xdist_width gives `-n auto` one worker per 15 modules, which serialised five (#5917)."""
+    hook = next(h for h in _ratchet_hooks() if h["id"] == hook_id)
+    assert len(_modules(hook)) > 1, (
+        f"{hook_id} runs one module; drop it from SPREAD_HOOKS"
+    )
+    assert _width(hook) > 1, (
+        f"{hook_id} runs {len(_modules(hook))} modules on {_width(hook)} xdist worker; "
+        "pin an explicit `-n` in its prek.toml entry"
+    )
+
+
+@pytest.mark.parametrize(
+    ("entry", "width"),
+    [
+        ("pytest -q -p no:cacheprovider a.py b.py c.py", 1),
+        ("pytest -q -n auto a.py b.py", 1),
+        ("pytest -q -n 4 a.py b.py", 4),
+        ("pytest -q -n0 a.py b.py", 0),
+    ],
+)
+def test_width_reads_the_entry_s_own_n_before_falling_back_to_auto(entry, width):
+    assert _width({"entry": entry}) == width
