@@ -113,8 +113,8 @@ def main(
 
     Always exits 0. A reader that raises pushes a DOWN naming the exception, which is what
     the host script's wrapper did for a reader that crashed: an absent push would leave the
-    tile to time out with no explanation. k8s/cronjob-gate counts a started container as a
-    run whatever it exits, so the exit code carries no verdict either way.
+    tile to time out with no explanation. Its gate Job in `configarr-verify` therefore proves
+    only that the reader starts and runs, never what it judged.
 
     Args:
         kubectl: the kubectl transport; a test passes a recorder.
