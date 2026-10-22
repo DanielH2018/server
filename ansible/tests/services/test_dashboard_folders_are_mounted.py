@@ -5,7 +5,7 @@
 Deployment mounts each by EXPLICIT per-folder volume name (see the comment above that variable in
 `defaults/main.yml`). A board dropped into `files/dashboards/<folder>/` whose folder is not on that
 list is therefore never baked and never mounted: the deploy is green, Grafana is Ready, and the
-board simply does not exist. Nothing else catches it — `scripts/validate/grafana_dashboards.py`
+board simply does not exist. Nothing else catches it — `scripts/validate/grafana_dashboard_uids.py`
 walks the files on disk and never reads the folder list, so it passes on exactly this input.
 
 Paired, per the repo's red-proof rule: one tree the rule must accept, one it must reject.
