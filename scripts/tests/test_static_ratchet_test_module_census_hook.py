@@ -138,3 +138,24 @@ def test_the_cost_comment_quotes_a_daniel_server_run_under_15s_near_load_3():
         "no daniel-server figure in the static-ratchet-tests cost comment is under 15s at "
         f"load average near 3: {figures}"
     )
+
+
+# Modules the census reaches through pytest's `pythonpath`, which `import_closure` does not
+# resolve: both census modules import `_row_table`, which imports `lib.proc_testing` and
+# `_helpers`, which imports `lib.yaml_fast`.
+_PYTHONPATH_CLOSURE = (
+    "ansible/tests/_row_table.py",
+    "ansible/tests/_helpers.py",
+    "scripts/lib/proc_testing.py",
+    "scripts/lib/yaml_fast.py",
+)
+
+
+def test_the_sibling_runs_when_a_module_reached_through_pythonpath_changes():
+    found = _sibling()
+    assert found is not None, "no `static-ratchet-tests-*` hook runs the census modules"
+    hook_id, hook = found
+    missed = [rel for rel in _PYTHONPATH_CLOSURE if not _runs(hook, rel)]
+    assert not missed, (
+        f"{hook_id} skips a commit touching the census's imports: {missed}"
+    )

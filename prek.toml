@@ -729,9 +729,12 @@ files = "^(renovate\\.json|ansible/inventory/.*|ansible/roles/[^/]+/[^/]+/(defau
 
 # The two census tables over the test modules (#5599). Both read only `pytest_only_modules()`
 # -- every `test_*.py`, every `conftest.py` and everything under a `tests/` directory -- and
-# their own import closure, of which `scripts/lib/repo_paths.py` is the one module outside a
-# `tests/` directory. So a commit touching only non-test `.py` skips both. In `static-ratchet-tests`
-# the render-and-path table was the slowest module, and `--dist loadscope` let it bound the
+# their own import closure. Through pytest's `pythonpath` they import ansible/tests/_row_table.py,
+# which imports scripts/lib/proc_testing.py and, through _helpers.py, scripts/lib/yaml_fast.py.
+# Those two and scripts/lib/repo_paths.py are the closure's only modules outside a `tests/`
+# directory, so a commit touching any other non-test `.py` skips both. In
+# `static-ratchet-tests` the render-and-path table was the slowest module, and `--dist
+# loadscope` let it bound the
 # whole run. `-n 2` puts the two modules on separate workers, where `-n auto` gives them one
 # (ansible/tests/xdist_width.py). On daniel-server at load average 3.2-4.1 on 2026-10-22, the
 # hook took 12.0-14.4s, bounded by test_census_rows_test_renders.py at about 11.5s alone.
@@ -741,7 +744,7 @@ name = "Census rows over the test modules (git and subprocess rules, render and 
 entry = "uv run --frozen pytest -q -n 2 -p no:cacheprovider scripts/tests/test_census_rows_test_modules.py scripts/tests/test_census_rows_test_renders.py"
 language = "system"
 pass_filenames = false
-files = "((^|/)tests/.*\\.py|(^|/)(conftest|test_[^/]*)\\.py|^scripts/lib/repo_paths\\.py|^(pyproject\\.toml|uv\\.lock))$"
+files = "((^|/)tests/.*\\.py|(^|/)(conftest|test_[^/]*)\\.py|^scripts/lib/(proc_testing|repo_paths|yaml_fast)\\.py|^(pyproject\\.toml|uv\\.lock))$"
 
 
 # The `hooks` key of .claude/settings.json is rendered from the `# gen-hooks:` block each file
