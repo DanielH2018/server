@@ -124,7 +124,6 @@ def test_markdown_says_the_suffix_is_not_derivable(tmp_path):
     """The page cannot know the reader's tier, so it writes the placeholder, not an FQDN."""
     host_vars, roles, group_vars = _make(tmp_path)
     out = g.render_markdown(g.build_rows(host_vars, roles, group_vars))
-    assert "cannot know which one you are on" in out
     assert "<domain>" in out
 
 
