@@ -1,8 +1,8 @@
 # longhorn-ui — the door in front of the upstream Longhorn UI
 
-Route-only role. Longhorn itself (namespace, Deployments, Services) is installed by
-`roles/setup/k3s` from the upstream manifest — this role adds only the IngressRoute and the
-middlewares it references, nothing else.
+Route-only role. Longhorn itself (namespace, Deployments, Services) is the `longhorn` role's
+vendored upstream manifest (H1.5a), which Flux applies — this role adds only the IngressRoute
+and the middlewares it references, nothing else.
 
 ## At a glance
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates, tasks or containers_list entry, or the k3s role's Longhorn tier lists. -->

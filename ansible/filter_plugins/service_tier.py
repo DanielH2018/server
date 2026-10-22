@@ -53,7 +53,7 @@ TIER_GROUPS = {"home-critical": ("home-edge", "home-automation")}
 # adds its entry, and `ansible/tests/k8s/test_shed_set_is_derived_from_tier.py` holds the set
 # equal to the untiered `flux_prune: false` roles, so a plumbing tag cannot land without it.
 # The full reasoning is the H1 plan's *Six Flux-born tags*.
-NEVER_SHED = frozenset({"cluster-base", "coredns", "metallb"})
+NEVER_SHED = frozenset({"cluster-base", "coredns", "longhorn", "metallb"})
 
 
 def _known():
