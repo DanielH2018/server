@@ -532,7 +532,7 @@ jobs:
     # not `main`: tracking the branch would turn this job red on an unrelated dotfiles commit.
     # The `git-refs` custom manager in renovate.json proposes each bump as its own PR.
     env:
-      DOTFILES_SHA: aa34a4e2dbd0b23b307da789356426ca14c66e00
+      DOTFILES_SHA: 1bf2d2bad4123f14865584fd4461d63359724bc6
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
