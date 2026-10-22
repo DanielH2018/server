@@ -8,6 +8,7 @@ Run: uv run pytest scripts/diagnostics/tests/test_probe_health_plumbing.py
 """
 
 import subprocess
+import time
 
 import pytest
 
@@ -67,25 +68,57 @@ def _box():
     return "daniel-box"
 
 
-def _coredns_objects(nodehosts=_NODEHOSTS):
+# The instant the fake clock reads, and the age of the Corefile write in each case below.
+_NOW = 1_800_000_000.0
+
+
+def _written(ago_s, key="f:Corefile"):
+    """A managedFields entry that wrote `key` `ago_s` seconds before `_NOW`."""
+    stamp = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(_NOW - ago_s))
+    return {
+        "manager": "kustomize-controller",
+        "time": stamp,
+        "fieldsV1": {"f:data": {key: {}}},
+    }
+
+
+def _coredns_objects(nodehosts=_NODEHOSTS, managed=()):
     return {
         ("nodes", "-o"): _PROD_NODES,
         ("configmap", "coredns"): {
-            "data": {"Corefile": ".:53 {}", "NodeHosts": nodehosts}
+            "metadata": {"managedFields": list(managed)},
+            "data": {"Corefile": ".:53 {}", "NodeHosts": nodehosts},
         },
         ("service", "kube-dns"): _KUBE_DNS,
     }
 
 
 class _Answers:
-    """A resolver that answers from {name: [answer]}, [] for anything else."""
+    """A resolver that answers from {name: [answer]}, [] for anything else.
+
+    `events` records each question and each `sleep`, in order, so a test can assert that the
+    wait came before the dig. A name mapped to a list of lists answers them in turn.
+    """
 
     def __init__(self, **by_name):
-        self.by_name, self.asked = by_name, []
+        self.by_name, self.asked, self.events = by_name, [], []
 
     def __call__(self, server, name):
         self.asked.append((server, name))
-        return self.by_name.get(name, [])
+        self.events.append(("dig", name))
+        answer = self.by_name.get(name, [])
+        if answer and isinstance(answer[0], list):
+            return answer.pop(0)
+        return answer
+
+    def sleep(self, seconds):
+        self.events.append(("sleep", round(seconds)))
+
+
+def _coredns(objects, resolve, hostname=None):
+    return health_plumbing.coredns(
+        _Reader(objects), resolve, hostname or _box, lambda: _NOW, resolve.sleep
+    )
 
 
 _RESOLVING = {
@@ -108,24 +141,20 @@ def test_the_check_table_names_coredns_and_longhorn():
 
 
 def test_coredns_nodehosts_is_clean():
-    failures, notes = health_plumbing.coredns(
-        _Reader(_coredns_objects()), _Answers(**_RESOLVING), _box
-    )
+    failures, notes = _coredns(_coredns_objects(), _Answers(**_RESOLVING))
     assert failures == []
     assert "NodeHosts lists 2 hosts" in notes
 
 
 def test_coredns_nodehosts_is_flagged():
-    failures, _ = health_plumbing.coredns(
-        _Reader(_coredns_objects(nodehosts="\n")), _Answers(**_RESOLVING), _box
-    )
+    failures, _ = _coredns(_coredns_objects(nodehosts="\n"), _Answers(**_RESOLVING))
     assert len(failures) == 1
     assert "empty NodeHosts" in failures[0]
 
 
 def test_coredns_resolution_is_clean():
     resolve = _Answers(**_RESOLVING)
-    failures, _ = health_plumbing.coredns(_Reader(_coredns_objects()), resolve, _box)
+    failures, _ = _coredns(_coredns_objects(), resolve)
     assert failures == []
     assert resolve.asked == [
         ("10.43.0.10", health_plumbing.CLUSTER_NAME),
@@ -136,18 +165,56 @@ def test_coredns_resolution_is_clean():
 def test_coredns_resolution_is_flagged():
     """A Corefile that loads but no longer forwards to Pi-hole answers the cluster name only."""
     resolve = _Answers(**{health_plumbing.CLUSTER_NAME: ["10.43.0.1"]})
-    failures, _ = health_plumbing.coredns(_Reader(_coredns_objects()), resolve, _box)
+    failures, _ = _coredns(_coredns_objects(), resolve)
     assert failures == [
         f"{health_plumbing.UPSTREAM_NAME} did not resolve through kube-dns 10.43.0.10 "
         "— the Corefile loads but does not answer it"
     ]
+    assert resolve.events[1:] == [
+        ("dig", health_plumbing.UPSTREAM_NAME),
+        ("sleep", 5),
+        ("dig", health_plumbing.UPSTREAM_NAME),
+        ("sleep", 5),
+        ("dig", health_plumbing.UPSTREAM_NAME),
+    ]
+
+
+def test_a_dropped_answer_is_retried_and_clean():
+    resolve = _Answers(
+        **{**_RESOLVING, health_plumbing.UPSTREAM_NAME: [[], ["10.42.0.136"]]}
+    )
+    failures, _ = _coredns(_coredns_objects(), resolve)
+    assert failures == []
+
+
+def test_a_settled_corefile_is_dug_at_once_and_is_clean():
+    resolve = _Answers(**_RESOLVING)
+    _coredns(_coredns_objects(managed=[_written(600)]), resolve)
+    assert [e for e in resolve.events if e[0] == "sleep"] == []
+
+
+def test_a_fresh_corefile_is_waited_out_before_the_first_dig():
+    """Written 10s ago: a dig now could be answered by the previous Corefile (#5929 review)."""
+    resolve = _Answers(**_RESOLVING)
+    failures, notes = _coredns(
+        _coredns_objects(managed=[_written(600), _written(10)]), resolve
+    )
+    assert resolve.events[0] == ("sleep", health_plumbing.COREFILE_SETTLE_S - 10)
+    assert failures == []
+    assert "waited 110s for the Corefile written 10s ago to reach CoreDNS" in notes
+
+
+def test_a_nodehosts_only_write_is_not_waited_for():
+    resolve = _Answers(**_RESOLVING)
+    _coredns(_coredns_objects(managed=[_written(10, key="f:NodeHosts")]), resolve)
+    assert [e for e in resolve.events if e[0] == "sleep"] == []
 
 
 def test_coredns_without_the_kube_dns_service_is_flagged():
     objects = _coredns_objects()
     del objects[("service", "kube-dns")]
     resolve = _Answers(**_RESOLVING)
-    failures, _ = health_plumbing.coredns(_Reader(objects), resolve, _box)
+    failures, _ = _coredns(objects, resolve)
     assert "Service kube-system/kube-dns is MISSING" in failures[0]
     assert resolve.asked == []
 
@@ -163,7 +230,7 @@ def test_a_host_outside_the_served_cluster_is_flagged(host):
     """daniel-stage would dig another cluster's CoreDNS, and a laptop cannot route a ClusterIP."""
     resolve = _Answers(**_RESOLVING)
     with pytest.raises(core.Unreadable, match=f"this host \\({host}\\)"):
-        health_plumbing.coredns(_Reader(_coredns_objects()), resolve, lambda: host)
+        _coredns(_coredns_objects(), resolve, lambda: host)
     assert resolve.asked == []
 
 

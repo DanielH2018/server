@@ -33,6 +33,8 @@ import shutil
 import socket
 import subprocess
 import sys as _sys
+import time
+from datetime import datetime
 from pathlib import Path as _Path
 
 import yaml
@@ -54,6 +56,16 @@ DIG_FLAGS = ("+short", "+time=2", "+tries=2")
 DIG_TIMEOUT_S = 15
 # dig's exit code for "no reply from the server", which is CoreDNS failing, not dig.
 DIG_NO_REPLY = 9
+
+# How long a Corefile write takes to reach the running CoreDNS: kubelet's ConfigMap volume sync
+# (up to ~60s) plus the `reload` plugin's 30s interval and 15s jitter. A Corefile-only change
+# rolls no pod, so the rollout verdict passes at once; a dig inside this window can still be
+# answered by the PREVIOUS Corefile, and read green for a forward the new one broke.
+COREFILE_SETTLE_S = 120
+# After the settle wait, a name that gets no answer is asked again this often, 5s apart, as the
+# deleted host task did, so one dropped packet is not a red verdict.
+DIG_ATTEMPTS = 3
+DIG_RETRY_S = 5
 
 STORAGECLASS = "longhorn"
 STORAGECLASS_CM = ("longhorn-system", "longhorn-storageclass", "storageclass.yaml")
@@ -111,15 +123,57 @@ def require_a_node_of_the_served_cluster(read, hostname=socket.gethostname):
         )
 
 
-def coredns(read, resolve=dig, hostname=socket.gethostname):
+def corefile_written_at(cm):
+    """When a manager last wrote the ConfigMap's `Corefile` key, as epoch seconds, or None.
+
+    Read from `managedFields`, which needs `--show-managed-fields` on the read. Entries that
+    touch only `NodeHosts` (k3s's node controller) are ignored: they change no Corefile.
+    """
+    stamps = [
+        datetime.fromisoformat(m["time"].replace("Z", "+00:00")).timestamp()
+        for m in ((cm or {}).get("metadata") or {}).get("managedFields") or []
+        if isinstance(m, dict)
+        and m.get("time")
+        and "f:Corefile" in ((m.get("fieldsV1") or {}).get("f:data") or {})
+    ]
+    return max(stamps, default=None)
+
+
+def _resolve_with_retries(resolve, ip, name, sleep):
+    for attempt in range(DIG_ATTEMPTS):
+        answer = resolve(ip, name)
+        if answer or attempt == DIG_ATTEMPTS - 1:
+            return answer
+        sleep(DIG_RETRY_S)
+    return []
+
+
+def coredns(
+    read, resolve=dig, hostname=socket.gethostname, clock=time.time, sleep=time.sleep
+):
     """(failures, notes) for CoreDNS: a non-empty `NodeHosts`, and both names resolving.
+
+    A Corefile written less than `COREFILE_SETTLE_S` ago is waited out before the first dig,
+    so the answer comes from the Corefile the ConfigMap holds. `clock` and `sleep` are
+    injectable so a test waits for nothing.
 
     Raises:
         core.Unreadable: a kubectl read failed, or `require_a_node_of_the_served_cluster`
             refused the dig.
     """
     failures, notes = [], []
-    cm = read(["get", "configmap", "coredns", "-n", "kube-system", "-o", "json"])
+    cm = read(
+        [
+            "get",
+            "configmap",
+            "coredns",
+            "-n",
+            "kube-system",
+            "-o",
+            "json",
+            "--show-managed-fields",
+        ]
+    )
     hosts = ((cm or {}).get("data") or {}).get("NodeHosts") or ""
     if cm is None:
         failures.append("ConfigMap kube-system/coredns is MISSING")
@@ -140,8 +194,16 @@ def coredns(read, resolve=dig, hostname=socket.gethostname):
         )
         return failures, notes
     require_a_node_of_the_served_cluster(read, hostname)
+    written = corefile_written_at(cm)
+    wait = 0 if written is None else written + COREFILE_SETTLE_S - clock()
+    if wait > 0:
+        notes.append(
+            f"waited {wait:.0f}s for the Corefile written {clock() - written:.0f}s ago "
+            "to reach CoreDNS"
+        )
+        sleep(wait)
     for name in (CLUSTER_NAME, UPSTREAM_NAME):
-        answer = resolve(ip, name)
+        answer = _resolve_with_retries(resolve, ip, name, sleep)
         if answer:
             notes.append(f"{name} resolves through kube-dns {ip}: {', '.join(answer)}")
         else:
