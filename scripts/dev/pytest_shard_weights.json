@@ -148,6 +148,7 @@
  "ansible/roles/k8s/n8n/tests/test_n8n_verify.py": 8.48,
  "ansible/roles/k8s/netpol-baseline/tests/test_netpol_baseline_flux_gates.py": 1.74,
  "ansible/roles/k8s/netpol-baseline/tests/test_netpol_baseline_verify.py": 1.19,
+ "ansible/roles/k8s/node-exporter/tests/test_iscsi_sessions.py": 2.14,
  "ansible/roles/k8s/observability/tests/test_observability_verify.py": 1.81,
  "ansible/roles/k8s/pihole/tests/test_pihole_gravity.py": 1.88,
  "ansible/roles/k8s/pihole/tests/test_pihole_precheck.py": 0.28,

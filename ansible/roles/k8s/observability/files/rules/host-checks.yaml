@@ -88,6 +88,77 @@ groups:
             a file in /var/lib/node-exporter-textfile is malformed or unreadable, and every
             series in it is gone. Read node_textfile_mtime_seconds for the files it still sees,
             and the node-exporter pod's log.
+      # A replaced Longhorn instance-manager leaves the iSCSI sessions it served in the kernel,
+      # FREE with a failed connection, and the next attach of such a volume on that node loops
+      # (#5826). The node-exporter DaemonSet's `iscsi-sessions` sidecar writes one
+      # homelab_iscsi_session_info series per session. A session is FAILED for up to iscsid's
+      # replacement_timeout while it reconnects, so 15m keeps a recovering session quiet. One
+      # rule per k3s node, so `service` stays a literal. Both NotReporting rules mirror
+      # DiskHealthNotReporting's two arms. Their 300s literals equal DEADLINE_S in
+      # node-exporter's files/iscsi-sessions.sh, and
+      # ansible/roles/k8s/node-exporter/tests/test_iscsi_sessions.py pins them to it.
+      - alert: IscsiSessionStale
+        expr: homelab_iscsi_session_info{state!="LOGGED_IN",origin="daniel-box"} == 1
+        for: 15m
+        labels:
+          severity: warning
+          service: daniel-box
+        annotations:
+          summary: daniel-box holds an iSCSI session that is not logged in.
+          description: >-
+            {{ $labels.session }} on daniel-box has read {{ $labels.state }} for 15 minutes,
+            for target {{ $labels.target }}. The next attach of that volume on daniel-box fails
+            its frontend init on `iscsiadm --logout` (error 32), and Longhorn deletes the pod
+            every ~30s. Clean it up with docs/longhorn-disaster-recovery.md, "A stale iSCSI
+            session blocks an attach".
+      - alert: IscsiSessionStale
+        expr: homelab_iscsi_session_info{state!="LOGGED_IN",origin="daniel-server"} == 1
+        for: 15m
+        labels:
+          severity: warning
+          service: daniel-server
+        annotations:
+          summary: daniel-server holds an iSCSI session that is not logged in.
+          description: >-
+            {{ $labels.session }} on daniel-server has read {{ $labels.state }} for 15 minutes,
+            for target {{ $labels.target }}. The next attach of that volume on daniel-server fails
+            its frontend init on `iscsiadm --logout` (error 32), and Longhorn deletes the pod
+            every ~30s. Clean it up with docs/longhorn-disaster-recovery.md, "A stale iSCSI
+            session blocks an attach".
+      - alert: IscsiSessionsNotReporting
+        expr: |
+          (
+              time() - homelab_check_last_run_timestamp_seconds{check="iscsi-sessions",origin="daniel-box"} > 300
+            or
+              absent_over_time(homelab_check_last_run_timestamp_seconds{check="iscsi-sessions",origin="daniel-box"}[300s])
+          )
+          unless on (origin) (up{job="node"} == 0)
+        labels:
+          severity: warning
+          service: daniel-box
+        annotations:
+          summary: daniel-box's iSCSI session check has stopped reporting.
+          description: >-
+            No iscsi-sessions verdict newer than 300s reached Prometheus from daniel-box's
+            textfile collector, so nothing is watching the node's iSCSI sessions. Read the
+            log of the node-exporter pod's `iscsi-sessions` container on daniel-box.
+      - alert: IscsiSessionsNotReporting
+        expr: |
+          (
+              time() - homelab_check_last_run_timestamp_seconds{check="iscsi-sessions",origin="daniel-server"} > 300
+            or
+              absent_over_time(homelab_check_last_run_timestamp_seconds{check="iscsi-sessions",origin="daniel-server"}[300s])
+          )
+          unless on (origin) (up{job="node"} == 0)
+        labels:
+          severity: warning
+          service: daniel-server
+        annotations:
+          summary: daniel-server's iSCSI session check has stopped reporting.
+          description: >-
+            No iscsi-sessions verdict newer than 300s reached Prometheus from daniel-server's
+            textfile collector, so nothing is watching the node's iSCSI sessions. Read the
+            log of the node-exporter pod's `iscsi-sessions` container on daniel-server.
       # One rule per k3s node whose host_vars set k3s_node_static_link, reading that link. Each
       # such node falls back to WiFi when the link drops (docs/k3s-node-plane-crons-and-incidents.md),
       # so it stays Ready on a slower link and nothing else reports it. The carrier arm catches
