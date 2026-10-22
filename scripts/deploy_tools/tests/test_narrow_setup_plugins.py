@@ -108,7 +108,9 @@ def test_an_inventory_value_calling_the_filter_is_flagged(calls_plugin):
     [
         # `longhorn_groups.py` is `k3s`'s remaining plugin since H1.7a: the tier filters moved to
         # `longhorn-reconcile`, so `service_tier.py` is no longer a `k3s` caller. The tags are the
-        # readers of `longhorn_backup_name`, which the guard-map instances and the drill name.
+        # readers of `longhorn_backup_name`. H1.7b deleted the guard-map instances and the tasks
+        # that carried `longhorn`, `longhorn_backup` and `longhorn_r2`, so the host crons' tags
+        # are what remain.
         (
             "k3s",
             "longhorn_groups.py",
@@ -117,9 +119,6 @@ def test_an_inventory_value_calling_the_filter_is_flagged(calls_plugin):
                 "disk-health",
                 "etcd-snapshot",
                 "live-drift",
-                "longhorn",
-                "longhorn_backup",
-                "longhorn_r2",
                 "manifest-prune",
                 "release-staleness",
             },
