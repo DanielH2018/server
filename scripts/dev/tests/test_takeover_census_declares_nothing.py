@@ -180,10 +180,14 @@ def test_a_declares_nothing_object_no_cleaned_manager_owns_exits_zero(tmp_path, 
 def test_a_cleaned_manager_owning_an_undeclared_field_exits_non_zero_after_the_census(
     tmp_path, capsys
 ):
-    """The failing exit still follows a full census: the Deployment after it is printed."""
+    """The failing exit still follows a full census: the Deployment after it is printed.
+
+    `kubectl` owns the cert data, a field the flip deletes; last-applied alone would not fail
+    the exit (#5933).
+    """
     secret = webhook_secret(
         entry("kubectl-client-side-apply", "Update", LAST_APPLIED),
-        entry("metallb-controller", "Update", CERT_DATA),
+        entry("kubectl", "Update", CERT_DATA),
     )
     code, out = run_main(tmp_path, capsys, secret)
     assert f"{DEPLOYMENT}: rolls" in out.splitlines(), out
@@ -215,3 +219,43 @@ def test_a_path_a_foreign_manager_co_owns_is_not_deleted_and_does_not_fail(
     code, out = run_main(tmp_path, capsys, secret, declared=EVERYTHING)
     assert code == 0, out
     assert not CERT_PATHS & {line.strip() for line in block(out, SECRET)}, out
+
+
+def metadata_only_namespace(*entries):
+    """A vendored Namespace with metadata only, applied once by client-side `kubectl apply`."""
+    return {
+        "apiVersion": "v1",
+        "kind": "Namespace",
+        "metadata": {
+            "name": "longhorn-system",
+            "annotations": {"kubectl.kubernetes.io/last-applied-configuration": "{}"},
+            "managedFields": list(entries),
+        },
+    }
+
+
+def test_a_metadata_only_namespace_whose_only_cleaned_field_is_last_applied_exits_zero(
+    tmp_path, capsys
+):
+    """Verify-by (#5933): the expected last-applied entry alone does not fail the census."""
+    namespace = metadata_only_namespace(
+        entry("kubectl-client-side-apply", "Update", LAST_APPLIED)
+    )
+    code, out = run_main(tmp_path, capsys, namespace, declared=EVERYTHING)
+    assert any(
+        line.startswith("Namespace longhorn-system") for line in out.splitlines()
+    )
+    assert code == 0, out
+
+
+def test_the_metallb_secret_whose_only_cleaned_field_is_last_applied_exits_zero(
+    tmp_path, capsys
+):
+    """The motivating MetalLB Secret: last-applied is cleaned, the cert data is foreign-owned."""
+    secret = webhook_secret(
+        entry("kubectl-client-side-apply", "Update", LAST_APPLIED),
+        entry("metallb-controller", "Update", CERT_DATA),
+    )
+    code, out = run_main(tmp_path, capsys, secret, declared=EVERYTHING)
+    assert any(line.startswith(SECRET) for line in out.splitlines()), out
+    assert code == 0, out
