@@ -234,30 +234,40 @@ def test_no_annotated_member_reads_none_and_an_unread_one_reads_unknown():
     assert any(e.startswith("reconcile_disabled: TimeoutError") for e in snap["errors"])
 
 
-def test_the_live_read_covers_the_three_coredns_objects_and_fails_on_a_missing_one():
+def test_the_live_read_covers_the_coredns_objects_and_both_backup_targets():
     import json
     import subprocess
 
     calls = []
-    state = {"missing": False}
+    state = {"missing": None}
 
     def fake(cluster, *args, **kwargs):
         calls.append(args)
-        if "service/kube-dns" in args and state["missing"]:
+        if state["missing"] and state["missing"] in args:
             return subprocess.CompletedProcess(args, 1, "", "NotFound")
-        items = [_member("Deployment", "coredns", DISABLED)]
+        if "longhorn-system" in args:
+            target = _member("BackupTarget", "default", DISABLED)
+            target["metadata"]["namespace"] = "longhorn-system"
+            items = [target, _member("BackupTarget", "r2", None)]
+        else:
+            items = [_member("Deployment", "coredns", DISABLED)]
         return subprocess.CompletedProcess(args, 0, json.dumps({"items": items}), "")
 
-    state["missing"] = False
     assert promote_state._reconcile_disabled(fake) == [
-        {"kind": "Deployment", "namespace": "kube-system", "name": "coredns"}
+        {"kind": "Deployment", "namespace": "kube-system", "name": "coredns"},
+        {"kind": "BackupTarget", "namespace": "longhorn-system", "name": "default"},
     ]
     assert calls[0][1:4] == (
         "deployment/coredns",
         "configmap/coredns",
         "service/kube-dns",
     )
+    assert calls[1][1:3] == (
+        "backuptargets.longhorn.io/default",
+        "backuptargets.longhorn.io/r2",
+    )
     # RED: a named member that cannot be read must not read as "no annotation".
-    state["missing"] = True
-    with pytest.raises(RuntimeError, match="NotFound"):
-        promote_state._reconcile_disabled(fake)
+    for member in ("service/kube-dns", "backuptargets.longhorn.io/r2"):
+        state["missing"] = member
+        with pytest.raises(RuntimeError, match="NotFound"):
+            promote_state._reconcile_disabled(fake)
