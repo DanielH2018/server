@@ -210,11 +210,7 @@ def test_the_real_k3s_role_still_maps_readonly_rbac_to_kubeconfig():
 
 
 def test_the_real_k3s_roles_untagged_task_files_are_named_as_such():
-    """`main.yml`, the files imported under another file's tags, and the empty guard carry no tags.
-
-    `stale-checkout-check.yml` takes its tags from each import in `stale-checkout-guard.yml`.
-    That guard is an empty task list since H1.7b deleted the last writer it covered, so it
-    holds no task to carry a tag.
+    """`main.yml` and the files imported under another file's tags carry no tags.
 
     Named rather than counted: a file that gained its own tags is a real change to what
     `--tags` selects, and the derivation's refusals depend on which files are untagged.
@@ -224,8 +220,6 @@ def test_the_real_k3s_roles_untagged_task_files_are_named_as_such():
     assert untagged == {
         "tasks/main.yml",
         "tasks/unit-logging.yml",
-        "tasks/stale-checkout-check.yml",
-        "tasks/stale-checkout-guard.yml",
     }
 
 

@@ -98,6 +98,6 @@ Flux owns: this role owns the Settings and classes, the CSI sidecar requests amo
 (#5958), `longhorn-reconcile` the labels, and `longhorn-backup` the credentials, the backup
 targets and the RecurringJobs. A fourth `longhorn_host` task removes the manifests that retired
 tasks staged under /etc/rancher/k3s, these and the CoreDNS, MetalLB, cluster-base and traefik
-ones, so no file remains for a hand `kubectl apply -f` to write a Flux-owned object from. The stale-checkout guard holds no Longhorn row, and the first
-bring-up run skips only `kubeconfig`. `docs/flux-deploy-plane.md`, *Bootstrapping Flux on a
+ones, so no file remains for a hand `kubectl apply -f` to write a Flux-owned object from.
+The first bring-up run skips only `kubeconfig`. `docs/flux-deploy-plane.md`, *Bootstrapping Flux on a
 rebuilt cluster*, has the steps.

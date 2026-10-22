@@ -1377,6 +1377,11 @@ moves the Pi's entries from the first key to the second. The removal of the Pi's
   the guard-map rows of the writer tasks it deletes (H1.1h). The rows live in
   `tasks/stale-checkout-guard.yml`. A PR whose deletion leaves a guard instance with no row
   deletes that instance too.
+    - **After H1.7b.** H1.7b deleted the last row and left the guard as an empty list. #5957
+      then retired the guard: both task files, the `main.yml` import, their defaults and their
+      two test modules. The write-verb census refuses a new `setup/k3s` writer on its own,
+      because its allow map names only `storage_smoke.yml` and `agent_verify.yml`. The H1.1h
+      text below describes the guard as it was built.
 - **An added entry reaches readers of the list until D6.12.** H1.2, H1.3, H1.4, H1.5a,
   H1.6 and H1.7b each add one entry to `containers_list` in
   `ansible/inventory/host_vars/daniel-box.yml`, and the tick applies that file as a
