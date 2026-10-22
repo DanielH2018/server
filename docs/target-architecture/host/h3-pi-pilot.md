@@ -802,8 +802,10 @@ Each run does these steps:
       `ci_verdict` says an empty set disarms the gate and returns `pass`, and
       `scripts/deploy_tools/await_ci.py:DisarmedGateError` refuses that case for the same
       reason. The builder refuses it before it grades anything.
-    - It caches each final verdict, green or red, per SHA, and polls GitHub only for commits
-      still pending. Step 1 guarantees a token, so the walk never runs anonymously.
+    - It caches each green verdict per SHA, and polls GitHub again for a commit still pending
+      or red. A red verdict is never cached, because `gh run rerun --failed` can turn the
+      same SHA green, and the deployer's gate reads it afresh (#5786). Step 1
+      guarantees a token, so the walk never runs anonymously.
     - A pending or red tip over a green parent builds the parent. When no commit in the walk
       is green, it exits 0 and walks again next tick. That exit stays 0, because a pending
       tip is normal. The unbuilt-since metric reports a walk that stays empty.
@@ -1960,7 +1962,7 @@ follow-up and H3.8b each publish a new Pi version before H3.9b arms the timer.
       past its limit, `HostUpdateStale` fires for daniel-pi.
 - *Builder.*
     - A missing token makes no request and exits 1.
-    - A cached final verdict makes no second request.
+    - A cached green verdict makes no second request, and a red one is asked again.
     - A tip that does not descend from the last built commit is refused. It exits non-zero
       on the first run that meets that tip, and 0 on a repeat. It writes
       `homelab_builder.prom`, whose unbuilt-since value is then non-zero, with `reason`
