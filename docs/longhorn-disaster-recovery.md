@@ -349,6 +349,9 @@ a live stale session when this section was written. `<sid>` is the number in the
     sudo iscsiadm -m node -T <iqn> -o delete
     ```
 
+    The logout can fail with the same error 32 the engine hit. Run the `-o delete` anyway,
+    then go on to step 4.
+
 4. Check that `/sys/class/iscsi_session/session<sid>` is gone. The alert clears within a
    minute or two, after the sidecar writes again and Prometheus scrapes the file.
 
