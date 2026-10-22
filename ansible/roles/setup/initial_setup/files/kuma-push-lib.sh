@@ -48,11 +48,10 @@
 # CLAUDE.md). So this classifies on the HTTP status curl reports via `-w`, not on `-f`'s collapse
 # of it: retry a `curl_rc != 0` or any HTTP code except 2xx/401/403, stop only on 401 or 403. A
 # no-router 404 and a bad-token 404 are the same code, so a genuinely bad token burns the retry
-# budget before its log line appears, which the sibling cron
-# `ansible/roles/k8s/crowdsec/templates/crowdsec-update-home-allowlist.sh.j2` already accepts
-# and records for the same reason. They are NOT the same response, and the final log line says
-# which (#1803): Kuma's push route answers `{"ok":false,"msg":"Monitor not found or not
-# active."}` as `application/json`, while Traefik's no-router 404 is Go's `404 page not found`
+# budget before its log line appears, which the Python twin
+# `ansible/roles/setup/common/files/kuma_push.py` accepts for the same reason. They are NOT the
+# same response, and the final log line says which (#1803): Kuma's push route answers
+# `{"ok":false,"msg":"Monitor not found or not active."}` as `application/json`, while Traefik's no-router 404 is Go's `404 page not found`
 # as `text/plain` (both measured 2026-09-17 against the live VIP). The content type travels
 # out through `-w` beside the code, and a JSON answer adds `by=kuma` to the failure line. That
 # field is what separates Kuma answering from an edge with no route: when Kuma answers, the edge
@@ -83,10 +82,10 @@
 # measured the longest observed endpoint-less window at 31s (12:29:43-12:30:14 on 2026-09-03),
 # longer than a single 30s backoff, so a lone retry can still land inside the outage. Three
 # attempts at a fixed 30s backoff put the second retry at t=60s, ~2x that window — the same
-# margin the crowdsec sibling sized its own retry to. At a 10s --max-time each and two 30s
-# backoffs between them, the worst case is 90s — well under the tightest affected cron period
-# (the CrowdSec home-allowlist updater, */5 = 300s) — so a genuinely-down Kuma still cannot make
-# a cron overlap its next run.
+# margin `kuma_push.py` keeps. At a 10s --max-time each and two 30s backoffs between them, the
+# worst case is 90s, well under the tightest affected cron period. That is claude_code's
+# sync-artifacts.sh at */5 = 300s, so a genuinely-down Kuma still cannot make a cron overlap its
+# next run.
 #
 # Considered and rejected: raising `max_retries` on the monitors instead. That turns a Kuma
 # rollout into a red tile — noise for a cause that is not a real outage — where a delivered
@@ -240,7 +239,7 @@ boot_grace_active() {
 # monitor-bridge's `wan_reachable` gate (`ansible/roles/k8s/monitor-bridge/files/checks/wan.py`),
 # for the crons that run on the host and push their own tiles — outside the bridge's loop, where
 # that gate structurally cannot reach them. On 2026-09-18 one WAN outage lit four host tiles
-# beside the WAN tile: crowdsec-home-allowlist for 3.8h, github-ruleset-drift,
+# beside the WAN tile: crowdsec-home-allowlist (then a host cron) for 3.8h, github-ruleset-drift,
 # release-staleness-check for 3h and docs-refresh (#2793).
 #
 # BY HOSTNAME, against two independent providers, for the two reasons the Python gate's docstring
@@ -258,9 +257,7 @@ boot_grace_active() {
 # `--max-time 5` and NO `--retry`: the probe almost always runs on a path that has already failed,
 # so its cost is added to a run that is about to end. release-staleness-check is the exception: it
 # also probes before its fetch (#5308), which costs one request on a healthy link and at most 10s
-# on a dead one, against a `*/30` period. The crowdsec cron's worst-case run
-# budget is asserted against its `*/5` period
-# (`ansible/tests/services/test_crowdsec_allowlist_push_retry.py::test_a_whole_run_still_fits_the_cron_period`).
+# on a dead one, against a `*/30` period.
 # 5s is also ~50x the 0.074-0.122s both endpoints measured from daniel-server on 2026-09-27.
 # `-f` so a provider answering 5xx counts as that provider failing, matching the Python gate.
 wan_reachable() {
