@@ -16,6 +16,8 @@ PR 4a, the Kuma side goes (PR 5 is its own PR, by the operator's ruling of 2026-
 
 PR 5, the token retirement, a draft until 4a's `monitor-bridge` deploy plus 7 days: [#5856](https://github.com/DanielH2018/server/pull/5856).
 
+PR 4b, the rules page: [#5853](https://github.com/DanielH2018/server/pull/5853).
+
 Depends on: M1, and M2's PR 3 (the `weekly-reboot` mute) before the cutover. Two
 contracts.md rows also gate PRs here: the row *Open questions* 2 requests gates PR 2a, and
 the row *Open questions* 1 requests gates PR 4b. contracts.md's *Requests on C7* holds both
@@ -795,8 +797,10 @@ depends on which tags are flux-owned, and PR 4a states each case.
   `LokiRulerNotificationsFailing`. Two of them page from PR 1 and PR 3. M2's PR 3 adds the
   pytest, and this PR is the first M5 PR that requires it.
 - Requires PR 4a's recorded reads, M2's PR 3, and the C7 row *Open questions* 1 requests.
-- Deploys `loki-homelab` and `observability`, in either order, through `land.sh` or the
-  `promote` run. The Kuma side is already gone, so ownership and order do not matter here.
+- Deploys `loki-homelab` and `observability`, in either order. Both are `owner: flux` on
+  `master`, so the merge's `promote` run applies them and `land.sh` deploys neither. The Kuma
+  side is already gone, so order does not matter here. A rules edit rolls the `Recreate` Loki
+  pod once (`ansible/roles/k8s/loki-homelab/CLAUDE.md`, *Ruler*).
 - Two-writer check: from this commit, the two ported checks and a Loki query fault page from
   Alertmanager only.
 
@@ -892,6 +896,65 @@ its tokens. The sops removal and `cluster_vars.py write` are operator-only.
       token PR lands first.
     - `git diff --stat origin/master -- ansible/vars/secrets.yml`. Plain `git diff` on that
       file prints plaintext.
+||||||| parent of 10ac6bb1e (Page on the loki-homelab log rules and the ruler-watching alerts)
+- Requires M2's PR 3, because PR 4b must follow inside the no-pager bound below.
+- **Deploy plane.** `monitor-bridge` and `uptime-kuma` are both `owner: flux` on `master`, so
+  `land.sh` deploys neither. The merge's `promote` run applies both, in the order of D4's
+  generated `dependsOn`, and the *Both are flux-owned* case below governs the order.
+- **Order.** The tiles must go before the pushes stop, or each tile goes DOWN 1200s after its
+  last push (*Baseline*). That is a false page, not a second pager, because every rule is
+  shadow. By convention 8, four cases:
+    - **Both tags deploy through Ansible.** `land.sh` deploys `uptime-kuma`, then
+      `monitor-bridge`. The toposort puts `uptime-kuma` first (M6's *The cutover order*).
+    - **`uptime-kuma` is flux-owned.** The merge's `promote` run deletes the tiles, then
+      `land.sh` deploys `monitor-bridge`. The order is the same. Meanwhile the old bridge pushes
+      into three deleted tokens, and no check reads those refusals (*Baseline*).
+    - **`monitor-bridge` is flux-owned and `uptime-kuma` is not.** The `promote` run stops the
+      three pushes at merge. Run `land.sh` at once, so that `uptime-kuma` deploys inside
+      1200s. A later deploy sends one false DOWN page per tile.
+    - **Both are flux-owned.** The `promote` run applies them in the order of D4's generated
+      `dependsOn`. If that order puts `monitor-bridge` first, the 1200s bound of the case
+      above applies.
+- Record that `monitor_status{monitor_name=~"Loki Log Ingestion|Loki Reachable|Kuma Notification Delivery"}`
+  returns nothing and that `probe.py health monitor-bridge` passes. Record the time the new
+  `monitor-bridge` started, from its deploy or its `promote` run.
+- **The no-pager bound.** PR 4b is open and green, stacked on this PR, before this PR merges.
+  It lands as soon as the reads above pass. If PR 4b has not deployed within two hours of this
+  PR's `monitor-bridge` start, revert this PR. The rules are still shadow, so the revert
+  restores Kuma as the only pager. Two hours is M2's PR 4a bound, which M6's cutovers also
+  use. Master holds this PR as one squash commit, so the revert restores the three keys'
+  ciphertext and their registry rows together. If a later commit edited `secrets.yml`, the
+  revert conflicts there, and the revert waits for the operator's `sops` step in *Rollback*.
+- Two-writer check: from this commit until PR 4b deploys, the two ported checks and a Loki
+  query fault page from neither side. That is the safe direction of convention 5. A Loki
+  outage pages from Kuma's `Cluster Scrape Targets` tile only. `swallowed_verdicts` pages from
+  Kuma only.
+
+### PR 4b — The rules page (about 25 lines)
+
+- Drop `shadow: "true"` from `homelab-logs.yaml`, `LokiRulerNotEvaluating` and
+  `LokiRulerEvaluationFailing`. `LokiHomelabDown` keeps it until M6's A3 Cutover-b deletes
+  the rule.
+- Add to M2's routing pytest, which asserts that every route reached carries `weekly-reboot`,
+  the label sets of the eight M5 alerts that page from this PR: the four log alerts,
+  `LokiHomelabMetricsMissing`, `LokiRulerEvaluationFailing`, `LokiRulerNotEvaluating` and
+  `LokiRulerNotificationsFailing`. Two of them page from PR 1 and PR 3. M2's PR 3 adds the
+  pytest, and this PR is the first M5 PR that requires it.
+- Requires PR 4a's recorded reads, M2's PR 3, and the C7 row *Open questions* 1 requests.
+- Deploys `loki-homelab` and `observability`, in either order. Both are `owner: flux` on
+  `master`, so the merge's `promote` run applies them and `land.sh` deploys neither. The Kuma
+  side is already gone, so order does not matter here. A rules edit rolls the `Recreate` Loki
+  pod once (`ansible/roles/k8s/loki-homelab/CLAUDE.md`, *Ruler*).
+- Two-writer check: from this commit, the two ported checks and a Loki query fault page from
+  Alertmanager only.
+
+### PR 5 — Folded into PR 4a
+
+PR 5 has no PR of its own. Its four-part token retirement is in PR 4a, because
+`test_secret_consumer_census.py` fails on a key whose last row has left `check_table.py`
+(PR 4a's *Retire the three push tokens* bullet). The four parts span PR 4a's two commits, the
+agent's and the operator's, and master holds them as one squash commit. The number stays so that other slices'
+citations of M5's PR 5 still resolve.
 
 ## Verification
 

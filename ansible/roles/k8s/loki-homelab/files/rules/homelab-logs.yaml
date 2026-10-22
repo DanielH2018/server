@@ -13,9 +13,8 @@
 # file is never rendered. No annotation templates a log line's text, so no line content
 # reaches Discord or email.
 #
-# SHADOW UNTIL M5's PR 4b. monitor-bridge's Loki Log Ingestion and Kuma Notification Delivery
-# tiles page these conditions until M5's PR 4a deletes them, and M1 convention 5 allows one
-# pager, so each alert routes to the blackhole receiver.
+# Each alert pages through Alertmanager. monitor-bridge's Loki Log Ingestion and Kuma
+# Notification Delivery tiles are gone (M5's PR 4a), so M1 convention 5's one pager is this file.
 groups:
   - name: homelab-logs
     interval: 5m
@@ -28,7 +27,6 @@ groups:
         labels:
           severity: warning
           service: loki-homelab
-          shadow: "true"
         annotations:
           summary: The cluster hosts' syslog and authlog have shipped nothing to loki-homelab in 3 hours.
           description: >-
@@ -42,7 +40,6 @@ groups:
         labels:
           severity: warning
           service: loki-homelab
-          shadow: "true"
         annotations:
           summary: No pod log has reached loki-homelab in 30 minutes.
           description: >-
@@ -54,22 +51,20 @@ groups:
         labels:
           severity: warning
           service: daniel-pi
-          shadow: "true"
         annotations:
           summary: daniel-pi's containers have shipped nothing to loki-homelab in 3 hours.
           description: >-
             No container log line from daniel-pi reached loki-homelab in 3 hours. Read the
             alloy container on daniel-pi with `probe.py pi containers`.
       # Kuma logs one "Cannot send notification to <name>" line per dropped notification. Its
-      # reason lines carry no drop, so the filter keeps only the drop half of
-      # monitor-bridge's KUMA_NOTIFY_FAILURES_LOGQL. `sum` makes one alert of the streams
+      # reason lines carry no drop, so the filter keeps only the drop half of the pattern
+      # the deleted bridge check read. `sum` makes one alert of the streams
       # the window holds, which a pod restart inside 3h would otherwise split.
       - alert: KumaNotificationDropped
         expr: sum(count_over_time({container="uptime-kuma"} |= "Cannot send notification" [3h])) > 0
         labels:
           severity: critical
           service: uptime-kuma
-          shadow: "true"
         annotations:
           summary: Uptime Kuma dropped a notification in the last 3 hours.
           description: >-
