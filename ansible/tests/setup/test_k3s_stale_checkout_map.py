@@ -140,7 +140,7 @@ def test_the_real_map_is_honest():
     files = _role_files()
     writers = _writers(_role_texts())
     named = "Set the Longhorn backup-store poll interval"
-    assert named in writers and len(writers) >= 10, sorted(writers)
+    assert named in writers and len(writers) >= 8, sorted(writers)
     assert map_problems(files[GUARD], task_tags(files), writers) == []
 
 

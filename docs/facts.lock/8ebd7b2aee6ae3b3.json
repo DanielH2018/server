@@ -1,5 +1,5 @@
 {
-  "checksum": "ec1bd13005c2b24db649a9d570dbe0c45cb2a3d33ef60454e69d530cb87fe3d9",
+  "checksum": "cb50b7b04fa265b8be4000ede428898b2bef8279b08fd7a02345a6786d40950b",
   "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
   "key": "ansible/roles/setup/k3s/CLAUDE.md#Notable",
   "row": {
@@ -8,11 +8,11 @@
       "ansible/roles/setup/k3s/tests/test_live_drift_check.py::test_a_handed_back_flux_object_is_compared": "29baa8c8e8db354582087203540333c8012acc63bbc2d72e862af172a8b3f76c",
       "ansible/roles/setup/k3s/tests/test_manifest_prune_check_flux_skip.py::test_a_labelled_object_whose_kustomization_is_gone_is_flagged": "abc50dd24685838384ee47b3e402e66947f00ca03befd3738c5169a58d889f82",
       "ansible/tests/setup/test_k3s_stale_checkout_guard.py::test_skip_tags_kubeconfig_still_runs_the_r2_instance": "1ba577c19736ee3a416e14ea67443c8d9570c7d4bd89215924894dcf45b13b36",
-      "ansible/tests/setup/test_k3s_stale_checkout_map.py::test_the_real_map_is_honest": "3028469d707c3551e0b862d4d8c0d86a1c7949d662f6888cf6e161ce52a732a4",
+      "ansible/tests/setup/test_k3s_stale_checkout_map.py::test_the_real_map_is_honest": "ad3ee60f096c403d6f4b40aa4e588b84deda380f08eb1c114a37433188df5cb3",
       "ansible/tests/setup/test_k3s_unit_logging.py": "db4fe34a98da1e3bd07598ad1f372e3b647f7840bd7320b55d17a82a68413f96",
       "docs/k3s-node-plane-crons-and-incidents.md": "47634daf3e04f54df032bcc8938c13bcccfea73558e99d58546e331f90ece53d"
     },
     "python": "3.14",
-    "verified_sha": "f3e8b1ae8"
+    "verified_sha": "3aa3149c1"
   }
 }
