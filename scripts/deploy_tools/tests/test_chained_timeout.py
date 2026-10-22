@@ -239,13 +239,13 @@ def test_the_floor_matches_the_flux_roles_sync_template():
 
 
 def _cap_comment() -> list[str]:
-    """The comment block directly above `VERIFY_CAP_S =` in the tracked chained_timeout.py."""
+    """The `VERIFY_CAP_S =` line in the tracked chained_timeout.py and the comment above it."""
     (path,) = git_stdout(
         "ls-files", "--", "scripts/deploy_tools/chained_timeout.py", cwd=REPO
     ).split()
     lines = (REPO / path).read_text(encoding="utf-8").splitlines()
     (at,) = [i for i, line in enumerate(lines) if line.startswith("VERIFY_CAP_S =")]
-    block = []
+    block = [lines[at]]
     for line in reversed(lines[:at]):
         if not line.startswith("#"):
             break
