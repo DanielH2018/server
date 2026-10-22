@@ -85,6 +85,8 @@ VENDORED = [
     ("kustomize.toolkit.fluxcd.io", "kustomization", "v1"),
     ("notification.toolkit.fluxcd.io", "provider", "v1beta3"),
     ("notification.toolkit.fluxcd.io", "alert", "v1beta3"),
+    ("metallb.io", "ipaddresspool", "v1beta1"),
+    ("metallb.io", "l2advertisement", "v1beta1"),
 ]
 
 # Authelia publishes a JSON Schema per MINOR release of its own configuration file, and it sets
