@@ -62,7 +62,8 @@ two identical fixes.
 
 **An issue that cites the fan-out tooling goes in no batch.** `next` marks it
 `[solo-only: cites fan-out tooling]` (`solo_only` under `--json`) when its body names any
-`fanout*.py` or a file under `fanout_lib/`, and `launch` refuses a batch holding one before it
+`fanout*.py` or a file under `fanout_lib/`, or its title or body uses the pipeline's own
+vocabulary (`red gate`, `green gate`, `red lock`, `red phase`, `fan-out review`; #5880), and `launch` refuses a batch holding one before it
 touches a host. A batch that edits that code runs under its own edited reviewer, red gate and
 Stop hook, and those batches caused the most rework in 68 review records (#3959). Work it in a
 session of its own: claim it and fix it as usual. The gate covers this repo's register only:
