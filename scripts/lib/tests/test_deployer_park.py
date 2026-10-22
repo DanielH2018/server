@@ -9,6 +9,8 @@ Run: uv run pytest scripts/lib/tests/test_deployer_park.py
 
 import json
 
+import pytest
+
 from lib.deployer_park import (
     BEHIND_PARK_SECONDS,
     k8s_deferred_lines,
@@ -247,3 +249,48 @@ def test_a_whole_role_k3s_line_names_the_agent_join_before_the_clear(tmp_path):
         "ansible/k3s-bringup.yml -e join_agent=daniel-server --tags k3s_agent",
         "clear-owed manual_plane k3s",
     )
+
+
+_JOIN = "ansible/k3s-bringup.yml -e join_agent=daniel-server --tags k3s_agent"
+
+# A narrowed k3s row splits: `k3s_agent` goes on the join command, the rest on the server
+# command, and a row of `k3s_agent` alone prints no server command at all (#5628). The clear
+# names the whole row either way.
+_SPLIT_ROWS = [
+    pytest.param(
+        ["k3s_agent"],
+        (_JOIN, "clear-owed manual_plane k3s --applied k3s_agent"),
+        "k3s-bringup.yml --tags",
+        id="agent-only",
+    ),
+    pytest.param(
+        ["k3s_agent", "k3s_server"],
+        (
+            "ansible/k3s-bringup.yml --tags k3s_server",
+            _JOIN,
+            "clear-owed manual_plane k3s --applied k3s_agent,k3s_server",
+        ),
+        "--tags k3s_agent,",
+        id="both-halves",
+    ),
+]
+
+
+@pytest.mark.parametrize(("tags", "parts", "absent"), _SPLIT_ROWS)
+def test_a_narrowed_k3s_line_puts_its_agent_tag_on_the_join(
+    tmp_path, tags, parts, absent
+):
+    line = {
+        "class": "manual_plane",
+        "subject": "k3s",
+        "origin": "f" * 40,
+        "at": 500,
+        "playbook": "ansible/k3s-bringup.yml",
+        "tags": tags,
+        "agent_hosts": ["daniel-server"],
+    }
+    (tmp_path / MARKERS["owed"]).write_text(json.dumps(line) + "\n")
+    (line_text,) = manual_plane_lines(read_manual_plane_marker(str(tmp_path)), 4000)
+    _in_order(line_text, *parts)
+    assert absent not in line_text, line_text
+    assert "``" not in line_text, line_text

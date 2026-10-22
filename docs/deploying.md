@@ -37,6 +37,14 @@ Not a bare `ansible-playbook`. The wrapper does four things the bare form does n
 The bare forms still work and are what the wrapper runs. Use them only when you deliberately
 want none of the above.
 
+Once its gates pass, the wrapper also clears the temp directories that dead Ansible runs left
+under `~/.ansible/tmp`. A controller killed mid-task leaves an `ansible-tmp-*` directory. Any
+exit that skips Python's `atexit` handlers leaves an `ansible-local-*` directory. The wrapper
+removes the first kind after a day. It removes the second kind after a day only when the
+directory is empty and its process is gone. `journalctl -t deploy-ansible-tmp-sweep` lists
+each removal, so a run that keeps leaking stays visible after the sweep
+(`scripts/deploy_tools/deploy_lib/ansible_tmp.py`).
+
 ### Who holds the tree lock
 
 This is the one list of the jobs that take `/var/lock/server-git-tree.lock`. Other docs link

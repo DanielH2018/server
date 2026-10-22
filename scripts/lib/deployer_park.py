@@ -79,6 +79,7 @@ from gitops_markers import (
     by_hand,
     maximal_apply_warning,
     owed_clear_cmd,
+    server_tags,
     target_arg,
 )
 from gitops_ledger import (
@@ -206,12 +207,12 @@ class ManualPlaneRemedy:
     Attributes:
         role: the setup role.
         age: how long ago the deployer recorded it, worded by `_age_phrase`.
-        apply: the command that applies the role, or "" for a role no printed playbook
-            applies.
+        apply: the server-play command that applies the role, or "" for a role no printed
+            playbook applies or a row only `agents` applies (#5628).
         by_hand: what to do instead of `apply` for such a role, else "".
         warning: what `apply` arms beyond the change, or "".
         agents: the join-play commands that apply the role's agent half after `apply`, from
-            `agent_join_cmds`, or () for a role or a narrowed row with no agent half (#5627).
+            `agent_join_cmds`, or () for a role or a row with no agent half (#5627).
         clear: the `clear-owed` command to run once the role is applied.
     """
 
@@ -242,11 +243,12 @@ def manual_plane_remedies(owed, now) -> list[ManualPlaneRemedy]:
     entries, narrow = manual_plane_entries(owed)
     for e in entries:
         selected = narrow.get(e.role) or {e.role}
+        server = server_tags(e.role, selected)
         hand = by_hand(e.playbook) or ""
         apply = (
             ""
-            if hand
-            else f"{PLAYBOOK_CMD} {e.playbook} --tags {','.join(sorted(selected))}"
+            if hand or not server
+            else f"{PLAYBOOK_CMD} {e.playbook} --tags {','.join(sorted(server))}"
             f"{target_arg(e.host)}"
         )
         remedies.append(
@@ -255,10 +257,10 @@ def manual_plane_remedies(owed, now) -> list[ManualPlaneRemedy]:
                 age=_age_phrase(now - e.at),
                 apply=apply,
                 by_hand=hand,
-                warning=maximal_apply_warning(e.role, selected) if apply else "",
+                warning=maximal_apply_warning(e.role, server) if apply else "",
                 agents=tuple(
                     agent_join_cmds(e.role, e.playbook, selected, e.agent_hosts)
-                    if apply
+                    if not hand
                     else ()
                 ),
                 clear=owed_clear_cmd(OWED_MANUAL_PLANE, e.role, selected),
@@ -287,11 +289,16 @@ def manual_plane_lines(owed, now):
     """
     lines = []
     for r in manual_plane_remedies(owed, now):
-        how = r.by_hand or (
-            f"apply `{r.apply}` by hand"
-            + (f" (WARNING: {r.warning})" if r.warning else "")
-            + "".join(f" and `{a}`" for a in r.agents)
-        )
+        if r.by_hand:
+            how = r.by_hand
+        elif r.apply:
+            how = (
+                f"apply `{r.apply}` by hand"
+                + (f" (WARNING: {r.warning})" if r.warning else "")
+                + "".join(f" and `{a}`" for a in r.agents)
+            )
+        else:
+            how = "apply " + " and ".join(f"`{a}`" for a in r.agents) + " by hand"
         lines.append(
             f"  ✗ the GitOps deployer merged a change to the `{r.role}` setup role "
             f"{r.age} ago and cannot apply it itself — {how}, then `{r.clear}`"

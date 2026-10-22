@@ -349,14 +349,28 @@ def maximal_apply_warning(role: str, tags) -> str:
 # `MAXIMAL_ROLE_WARNING`, for the same reason: the banner and monitor-bridge print the join
 # from a `manual_plane` row and cannot import the deployer's routing (#5627).
 #
-# DECIDED: the agent command goes beside the WHOLE-ROLE tag only, never beside a narrowed one.
-# `narrow_setup.py` refuses any path that reaches `tasks/agent.yml`, because no static import
-# from the role's `tasks/main.yml` reaches that file, and a refusal is what leaves the role's
-# row empty. A narrowed row therefore never touches the agent: `tasks/server.yml` alone
-# narrows to `k3s_server`. The cost is that an agent-only change prints the server command
-# too, which applies more than it needs and never less. Pinned by
-# test_deploy_remediation_agent.py::test_a_change_reaching_agent_yml_refuses_to_narrow.
+# DECIDED: a row's agent-join tag goes on the join command and never on the server one (#5628).
+# `narrow_setup.py` resolves the join play's `include_role ... tasks_from: agent`, so a change
+# reaching `tasks/agent.yml` narrows to `k3s_agent`, and `templates/registries.yaml.j2`, which
+# both halves render, to `k3s_agent,k3s_server`. `--tags k3s_agent` on the server play selects
+# nothing and exits 0, so every printer splits the row through `server_tags` and
+# `agent_join_cmds`: an agent-only row prints the join alone. The whole-role tag still gets
+# both commands, because a refusal says nothing about which half the change reached. Pinned by
+# test_deploy_remediation_agent.py::test_an_agent_only_change_narrows_to_the_join_alone.
 AGENT_JOIN_TAGS: dict[str, str] = {"k3s": "k3s_agent"}
+
+
+def server_tags(role: str, tags) -> frozenset[str]:
+    """The tags the server-play command for `role` prints, or empty when it prints none.
+
+    Args:
+        role: the role, under the `--tags` value that selects it.
+        tags: the role's row, or `{role}` for the whole-role tag.
+
+    The row minus `AGENT_JOIN_TAGS[role]`, which `agent_join_cmds` prints instead. Empty means
+    the row reaches only the agent half, and the printer names no server command at all.
+    """
+    return frozenset(tags) - {AGENT_JOIN_TAGS.get(role)}
 
 
 def agent_join_cmds(role: str, playbook: str, tags, agent_hosts) -> list[str]:
@@ -369,13 +383,16 @@ def agent_join_cmds(role: str, playbook: str, tags, agent_hosts) -> list[str]:
         agent_hosts: the hosts the join plays apply the agent half to, from the routing or
             from a `manual_plane` line's `agent_hosts` key.
 
-    Only a whole-role tag gets them, for the reason the `DECIDED:` marker above gives. A role
-    with no known agent host, such as one an older deployer recorded, gets a visible
+    The whole-role tag gets them, and so does a row holding `AGENT_JOIN_TAGS[role]`, for the
+    reason the `DECIDED:` marker above gives. A role with no known agent host, such as one an older deployer recorded, gets a visible
     placeholder rather than a guessed host. No `target_arg`: `-e target=` selects a host's
     vars and still runs on the operator's machine, while the join play opens its own SSH
     connection to the host `join_agent` names.
     """
-    if role not in AGENT_JOIN_TAGS or frozenset(tags) != frozenset({role}):
+    tags = frozenset(tags)
+    if role not in AGENT_JOIN_TAGS or (
+        tags != {role} and AGENT_JOIN_TAGS[role] not in tags
+    ):
         return []
     return [
         f"{PLAYBOOK_CMD} {playbook} -e join_agent={host} --tags {AGENT_JOIN_TAGS[role]}"

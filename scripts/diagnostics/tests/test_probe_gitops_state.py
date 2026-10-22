@@ -9,6 +9,8 @@ import os
 import sys
 from types import SimpleNamespace
 
+import pytest
+
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from diagnostics.probe_lib import gitops_view as view
@@ -188,3 +190,51 @@ def test_a_whole_role_k3s_row_names_the_agent_join_before_the_clear(tmp_path):
         f"missing {[p for p, i in zip(parts, at, strict=True) if i < 0]} in {out}"
     )
     assert at == sorted(at), f"{parts} out of order in {out}"
+
+
+_JOIN = "ansible/k3s-bringup.yml -e join_agent=daniel-server --tags k3s_agent"
+
+# A narrowed k3s row splits: `k3s_agent` goes on the join command, the rest on the server
+# command, and a row of `k3s_agent` alone prints no server command at all (#5628). The clear
+# names the whole row either way.
+_SPLIT_ROWS = [
+    pytest.param(
+        ["k3s_agent"],
+        (_JOIN, "clear-owed manual_plane k3s --applied k3s_agent"),
+        "k3s-bringup.yml --tags",
+        id="agent-only",
+    ),
+    pytest.param(
+        ["k3s_agent", "k3s_server"],
+        (
+            "ansible/k3s-bringup.yml --tags k3s_server",
+            _JOIN,
+            "clear-owed manual_plane k3s --applied k3s_agent,k3s_server",
+        ),
+        "--tags k3s_agent,",
+        id="both-halves",
+    ),
+]
+
+
+@pytest.mark.parametrize(("tags", "parts", "absent"), _SPLIT_ROWS)
+def test_a_narrowed_k3s_row_puts_its_agent_tag_on_the_join(
+    tmp_path, tags, parts, absent
+):
+    _state(
+        tmp_path,
+        owed=_owed(
+            "manual_plane",
+            "k3s",
+            playbook="ansible/k3s-bringup.yml",
+            tags=tags,
+            agent_hosts=["daniel-server"],
+        ),
+    )
+    out = view.format_text(view.collect(tmp_path, NOW))
+    at = [out.find(p) for p in parts]
+    assert -1 not in at, (
+        f"missing {[p for p, i in zip(parts, at, strict=True) if i < 0]} in {out}"
+    )
+    assert at == sorted(at), f"{parts} out of order in {out}"
+    assert absent not in out, out

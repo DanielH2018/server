@@ -37,7 +37,6 @@ runner, an operator typing ``./scripts/deploy.sh``) the two are the same checkou
 import contextlib
 import io
 import os
-import shutil
 import sys
 import traceback
 from collections.abc import Callable
@@ -47,6 +46,7 @@ from pathlib import Path
 # Reach the sibling package directories: a directly-invoked script gets only its own
 # directory on sys.path, and pyproject's `pythonpath` is a pytest setting.
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))  # scripts/
+from deploy_tools.deploy_lib.ansible_tmp import drop_ansible_local_tmp, sweep_stale
 from deploy_tools.deploy_lib.flags import NothingToDeploy, Refused, check_passthrough
 from deploy_tools.deploy_lib.owners import (
     mark_owners,
@@ -267,18 +267,6 @@ def exec_argv(argv: list[str]) -> None:
     sys.stdout.flush()
     sys.stderr.flush()
     os.execvp(argv[0], argv)
-
-
-def drop_ansible_local_tmp() -> None:
-    """Remove the local temp directory ansible-core made for this process, if it made one.
-
-    Read from `sys.modules` rather than imported: importing the constants is what creates the
-    directory, so a run that never loaded ansible must not load it here.
-    """
-    constants = sys.modules.get("ansible.constants")
-    path = getattr(constants, "DEFAULT_LOCAL_TMP", None)
-    if isinstance(path, str):
-        shutil.rmtree(path, ignore_errors=True)
 
 
 @dataclass(frozen=True)
@@ -582,6 +570,8 @@ def _gated_run(argv: list[str], tools: Tools) -> int:
         refuse_flux_owned(plan)
     except Refused as refused:
         return refused.code
+    if removed := sweep_stale():
+        say(f"deploy.sh: removed {removed} stale ansible temp directories (#5000)")
     target = exec_target(plan)
     if target is None:
         return tools.locked_run(plan)
