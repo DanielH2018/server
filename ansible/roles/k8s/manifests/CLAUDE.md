@@ -30,6 +30,9 @@ include; a passed list wins whole.
 Optional and empty by default: `manifests_extra_rollouts` (`{name, image?, restart_on?}` per
 extra Deployment to wait on and roll), `manifests_self_rollouts` (`{name, kind, image?, namespace?,
 rolled_by_role?}`, for a role restarting its own workloads afterwards),
+`manifests_outside_secrets` (`{name, keys}` per Secret another role renders that this role's
+pods read; no task reads it, and the renderer hashes each key's digest into the
+restart checksum annotation),
 `manifests_rollout_timeout` (default `manifests_rollout_timeout_default`, `600s`), `k8s_autodeploy_snapshot_pvcs` (declared in the
 caller's own `defaults/main.yml`, snapshotted before the apply), `k8s_claims` (below), and the
 deferred pair below.

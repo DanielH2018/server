@@ -116,6 +116,9 @@ server-side `kubectl diff` as kustomize-controller. Only gpu-exporter's DaemonSe
 `checksum/restart`. Soak Job `soak-cc85dbec` judged the three tags and `flux/soak` read `success`.
 The operator kept pihole-exporter with an exemption: a `pihole_password` rotation does not roll it
 under Flux, and the operator rolls it by hand ([#5416](https://github.com/DanielH2018/server/issues/5416)).
+The fix for #5416 removed the exemption: the exporter declares `pihole-env` under
+`manifests_outside_secrets`, and the renderer hashes `pihole_password`'s digest into its
+`checksum/restart`.
 PR D5.6: [#5420](https://github.com/DanielH2018/server/pull/5420). It moved littlelink,
 longhorn-ui and deploy-ui to Flux at `88a31914c`. The operator's diff showed no change for any of
 the three, and `deploy.sh --tags <tag>` exited 5 for each after the merge. Soak Job
