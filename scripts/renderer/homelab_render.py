@@ -465,9 +465,8 @@ def _shared_cluster(
     """Write the shared kinds, a root listing them and `digests.json`, and no tag.
 
     The publish job calls it when no tag is flux-owned, because `cluster` without `--role`
-    renders every tag. `render` renders no tag, so it renders no template unless it was
-    given `--all-images`. Then it writes every image context and `tags.json`, which the
-    `images` job refuses to run without (#5593).
+    renders every tag. Under `--all-images` it also writes every image context and
+    `tags.json`, which the `images` job refuses to run without (#5593).
     """
     try:
         built = render([], secret_keys()).images
@@ -537,8 +536,7 @@ def main(argv: list[str] | None = None) -> int:
         "--all-images",
         action="store_true",
         help="write every image context and tags.json, not only those the named tags' "
-        "roles build: the publish job's render, whose images job builds all ten. "
-        "--shared-only takes it too",
+        "roles build: the publish job's render, whose images job builds all ten",
     )
     render.add_argument(
         "--revision",
