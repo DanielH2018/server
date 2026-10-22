@@ -205,6 +205,13 @@ stage `kuma_push.py`. `K8S_ROLES_IMPORTING_SETUP_FILES` puts each in `ChangeSet.
 it stages changes. The deployer applies a k8s role only for an image-pin bump, so each one defer-and-alerts
 and records a `k8s_unapplied` line. The same test holds that table to the k8s roles' tasks.
 
+A k8s role's image can embed a file from outside every role, as homelab-mcp's embeds
+`scripts/diagnostics/probe_lib/obs_api.py`. An edit to it moves the image's content tag, so
+`K8S_BUILD_CONTEXT_FILES` puts the embedding role in `ChangeSet.k8s` the same way (#4840).
+`probe.py releases` reads the same table, so it names the file as the cause of that role's
+drift. The same test holds it to each role's `image_builder_context_files` and
+`image_builder_context` keys.
+
 The third class is the bring-up playbooks, which run by hand by construction. The deployer's own
 role, `roles/setup/gitops_deploy/`, is not one of them: it applies itself as `initial_setup.yml
 --tags gitops_deploy`. The role's handler is `state: started`, which Ansible skips for an
