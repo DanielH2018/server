@@ -32,7 +32,8 @@ Subcommands:
                              monitor_status metric Prometheus already scrapes — no Kuma
                              API credential needed — then the firing ingress-probe alerts
     loki-labels              Loki label names [--loki homelab|observability]
-    loki-query '<logql>'     Loki range query [--limit N] [--since 6h] [--step 5m] [--json]
+    loki-query '<logql>'     Loki range query [--limit N] [--since 6h] [--until 1h]
+                             [--step 5m] [--timeout 60] [--json]
                              [--loki homelab|observability]
                              Two Lokis: `homelab` (the default; pod, syslog and
                              monitor-bridge logs) and `observability` (Claude Code OTEL —

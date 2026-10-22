@@ -68,7 +68,7 @@ def check_longhorn_volumes(cfg: Config, src: Sources) -> tuple[bool, str]:
 
     `k3s_longhorn_replica_count` is 2, so a volume reading `degraded` is down to a single copy —
     still serving, one more failure from data loss — and `faulted` means no healthy replica is
-    left at all. Nothing else in CHECKS covers this: k8s_workloads watches the pod, not the
+    left at all. Nothing else in CHECKS covers this: the k8s-workloads rules watch the pod, not the
     volume under it, and the backup-plane cron watches Backup objects rather than live replica
     state. Until this arm landed (2026-08-17) replica loss was silent.
 
@@ -123,7 +123,7 @@ def check_pvc_fullness(cfg: Config, src: Sources) -> tuple[bool, str]:
     fixed capacity, so a 2 Gi claim can reach 100% while both hosts report hundreds of GB free:
     the app starts failing writes and every existing monitor stays green.
 
-    Reads the CLUSTER Prometheus like check_k8s_workloads, so it belongs to CLUSTER_DEPENDENT
+    Reads the CLUSTER Prometheus like check_restarts, so it belongs to CLUSTER_DEPENDENT
     rather than PROM_DEPENDENT — the gate has to be the one watching this check's own source.
 
     `max by (namespace, persistentvolumeclaim)` — not `sum` or `avg` — because daniel-box's

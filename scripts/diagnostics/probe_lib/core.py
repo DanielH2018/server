@@ -234,8 +234,12 @@ def parse_duration_seconds(text):
     return int(m.group(1)) * _DURATION_UNITS[m.group(2)]
 
 
-def since_window_ns(since):
-    """`--since` -> the (start_ns, end_ns) pair Loki's query_range takes, (None, None) if unset.
+def since_window_ns(since, until=None):
+    """`--since`/`--until` -> the (start_ns, end_ns) pair Loki's query_range takes.
+
+    Both are parsed as durations before now: `--since 8d --until 3d` is the window from 8 days
+    ago to 3 days ago. (None, None) when neither is set. `--until` alone leaves the start to
+    Loki, which reads an hour back from the end.
 
     ONE helper because two call sites need the same window and diverged when they each had
     their own copy: `plan()` builds the argv that `--dry-run`/`--json` run, while `run_query()`
@@ -244,11 +248,18 @@ def since_window_ns(since):
     honoured `--since` — a 3d query returned a 60-minute slice and printed `no logs` for
     anything older. Keep both paths on this function rather than reintroducing the copy.
     """
-    if not since:
+    if not since and not until:
         return None, None
-    return trailing_window_ns(
-        parse_duration_seconds(since), datetime.now(_CHICAGO).timestamp()
-    )
+    now = datetime.now(_CHICAGO).timestamp()
+    end_s = now - (parse_duration_seconds(until) if until else 0)
+    if not since:
+        return None, int(end_s * 1e9)
+    start_s = now - parse_duration_seconds(since)
+    if start_s >= end_s:
+        raise UsageError(
+            f"--since {since} must reach further back than --until {until}"
+        )
+    return int(start_s * 1e9), int(end_s * 1e9)
 
 
 def scrutiny_url(base):
@@ -317,14 +328,14 @@ class UsageError(SystemExit):
         return self.message
 
 
-def fetch(url, resolve=None):
+def fetch(url, resolve=None, timeout=DEFAULT_TIMEOUT):
     """Run the read-only curl GET and return its body.
 
     Raises:
         Unreadable: curl exited non-zero.
     """
     out = subprocess.run(
-        curl_argv(url, resolve=resolve), capture_output=True, text=True
+        curl_argv(url, timeout=timeout, resolve=resolve), capture_output=True, text=True
     )
     if out.returncode != 0:
         raise Unreadable(f"curl {url} failed: {out.stderr.strip()}")
@@ -397,14 +408,15 @@ def fetch_parsed(url, resolve=None):
     return parse_json(url, fetch(url, resolve=resolve))
 
 
-def fetch_json(url, resolve=None):
+def fetch_json(url, resolve=None, timeout=None):
     """fetch(url) parsed as JSON.
 
     Returns (data, None) on success, or (None, PROBE_UNREADABLE) after printing the raw body
     to stderr — the JSONDecodeError guard a plain `core.fetch()` call needs before its response
     can be trusted as JSON. A body that is not JSON is a source the probe could not read.
     """
-    body = fetch(url, resolve=resolve)
+    # `timeout` is forwarded only when set, so `fetch` keeps its own default.
+    body = fetch(url, resolve=resolve, **({"timeout": timeout} if timeout else {}))
     try:
         return json.loads(body), None
     except json.JSONDecodeError:

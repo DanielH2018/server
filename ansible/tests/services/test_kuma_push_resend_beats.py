@@ -38,7 +38,7 @@ def test_no_push_monitor_can_resend_faster_than_four_hours():
         for entity in _entities().values()
         if entity["type"] == "push"
     }
-    assert {"k3s Workload Health", "Cloudflare DDNS Proxied"} <= windows.keys()
+    assert {"Workload Log Errors", "Cloudflare DDNS Proxied"} <= windows.keys()
     assert len(windows) >= 40, f"push tile census went thin: {len(windows)}"
     name, narrowest = min(windows.items(), key=lambda kv: kv[1])
     fastest_beats_per_hour = 3600 / push_period + 3600 / narrowest

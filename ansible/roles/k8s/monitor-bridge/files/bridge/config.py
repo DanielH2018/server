@@ -17,9 +17,7 @@ access survives: `config_host` (disks, SMART, temperatures, the UPS, the Pi), `c
 Prometheus, the coverage floors, Longhorn, PVCs) and `config_io` (B2, R2, Loki, the webhooks).
 Each declares a frozen dataclass and a builder taking `load_config`'s parsers as arguments, so
 a leaf never imports this facade. What stays HERE is the loop and endpoint fields every domain
-needs, the check filter, and the two reads a repo test greps for by text:
-`ansible/tests/services/test_dri_resource_name_agrees.py` matches
-`_env("K8S_EXTENDED_RESOURCES", ...)` in THIS file, and `PVC_EXCLUDE` is rendered in
+needs, the check filter, and the read a repo test greps for by text: `PVC_EXCLUDE` is rendered in
 `templates/config/env.yaml.j2` beside it.
 
 BUILDING THIS MUST NOT RAISE. A ValueError on one malformed number used to kill the pod during
@@ -81,7 +79,6 @@ class Config(HostConfig, ServiceConfig, ClusterConfig, IoConfig):
     PROM_URL: str
     KUMA_URL: str
     LOKI_URL: str
-    K8S_EXTENDED_RESOURCES: tuple[str, ...]
     PVC_EXCLUDE: tuple[str, ...]
     CHECKS_ONLY: frozenset[str]
     CHECKS_SKIP: frozenset[str]
@@ -200,23 +197,6 @@ def load_config(env: Mapping[str, str], problems: list[str] | None = None) -> Co
         PROM_URL=PROM_URL,
         KUMA_URL=_env("KUMA_URL").rstrip("/"),
         LOKI_URL=_env("LOKI_URL").rstrip("/"),
-        # Extended resources that must stay ADVERTISED by at least one node. The DaemonSet arm
-        # above watches whether the plugin's POD is running; this watches whether the thing the
-        # pod exists to provide is still there. dri-device-plugin has no probe — and a container
-        # with no readinessProbe is Ready the instant it starts — so a plugin that wedges
-        # internally (gRPC registration hangs, a stuck goroutine) keeps a Running, Ready, fully-
-        # available DaemonSet while kubelet quietly deregisters the resource. Nothing restarts
-        # it, and the only other evidence is jellyfin and tdarr turning unschedulable, which
-        # does not surface until they next reschedule.
-        #
-        # Comma-separated, so a second device plugin needs no code change. The literal `_env`
-        # read is what ansible/tests/services/test_dri_resource_name_agrees.py greps for; keep
-        # its text if this line moves.
-        K8S_EXTENDED_RESOURCES=tuple(
-            r.strip()
-            for r in _env("K8S_EXTENDED_RESOURCES", "devic.es/dri").split(",")
-            if r.strip()
-        ),
         # Claims this arm must NOT scan, comma-separated bare claim names. media-data is a
         # `local` PV at /srv/media on daniel-box (k8s/media-volume/templates/pv.yaml.j2), i.e.
         # the `/` filesystem check_disk already watches — including it would page twice for one
