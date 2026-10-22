@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/decisions.py
-generated_at: 2026-10-22 20:47 UTC
-generated_sha: 5314f493b
+generated_at: 2026-10-22 22:18 UTC
+generated_sha: ed9e53cf0
 ---
 
 !!! warning "Generated file — do not edit"
@@ -12,7 +12,7 @@ generated_sha: 5314f493b
 
 # Decisions
 
-873 `DECIDED:` marker(s) found across the tree. A marker is a settled trade-off recorded as a comment at the line it governs, per CLAUDE.md's "Review & Memory Hygiene" section — written so a reviewer trips over the reasoning before re-opening a decision that already has one. A reviewer brief greps the literal marker text before flagging something as new; this page exists so a human can browse the same set instead of guessing a phrase to grep.
+874 `DECIDED:` marker(s) found across the tree. A marker is a settled trade-off recorded as a comment at the line it governs, per CLAUDE.md's "Review & Memory Hygiene" section — written so a reviewer trips over the reasoning before re-opening a decision that already has one. A reviewer brief greps the literal marker text before flagging something as new; this page exists so a human can browse the same set instead of guessing a phrase to grep.
 
 !!! warning "Possible duplicates"
     Two markers below have a near-identical first sentence once case and whitespace are normalised — usually the same trade-off decided twice, or a marker copied and never specialised. Worth a look, not a verdict.
@@ -186,7 +186,7 @@ generated_sha: 5314f493b
     * `docs/archive/post-merge-automation.md:268` and `docs/gitops-pipeline.md:1610`
     * `docs/archive/post-merge-automation.md:268` and `scripts/diagnostics/probe_lib/health_kubectl.py:12`
     * `docs/archive/post-merge-automation.md:268` and `scripts/diagnostics/tests/test_probe_health.py:323`
-    * `docs/break-glass.md:189` and `scripts/deploy_tools/shared_role_reach.py:22`
+    * `docs/break-glass.md:179` and `scripts/deploy_tools/shared_role_reach.py:22`
     * `docs/gitops-pipeline.md:635` and `docs/gitops-pipeline.md:1610`
     * `docs/gitops-pipeline.md:635` and `scripts/diagnostics/probe_lib/health_kubectl.py:12`
     * `docs/gitops-pipeline.md:635` and `scripts/diagnostics/tests/test_probe_health.py:323`
@@ -243,7 +243,7 @@ generated_sha: 5314f493b
 | `system-cluster-critical`, a system class, not a homelab tier. and every tier and Flux's own controllers resolve names through this pod, so it outranks every homelab class. The entry is untiered on purpose, because `tier: platform` would derive `homelab-critical` and lower it. ansible/tests/k8s/test_pod_template_hygiene.py lists it in `_SYSTEM_TIER` with this reason. | `ansible/roles/k8s/coredns/templates/deployment.yaml.j2:45` | 2026-10-22 |
 | ` marker in `templates/home-ips-configmap.yaml.j2`), so no apply owns a field | `ansible/roles/k8s/crowdsec/CLAUDE.md:111` | 2026-10-19 |
 | rendered with no `data` keys, so each field has one writer. | `ansible/roles/k8s/crowdsec/templates/home-ips-configmap.yaml.j2:5` | 2026-10-19 |
-| the vendored Deployments meet each fleet guard by a render-time patch, never by an | `ansible/roles/k8s/flux/CLAUDE.md:54` | 2026-10-12 |
+| the vendored Deployments meet each fleet guard by a render-time patch, never by an | `ansible/roles/k8s/flux/CLAUDE.md:57` | 2026-10-12 |
 | this builder stays here rather than routing through `scripts/diagnostics/probe_lib/obs_api.py`, the shared Prometheus/Loki client #2860 minted (#3096, evaluated 2026-10-01). Three reasons, in order of weight. | `ansible/roles/k8s/game-stats/files/stats_lib.py:65` | 2026-10-01 |
 | every Deployment of a home-critical`. | `ansible/roles/k8s/home-assistant/CLAUDE.md:56` | 2026-10-04 |
 | the whole | `ansible/roles/k8s/home-assistant/docs/platform.md:211` | 2026-09-28 |
@@ -864,10 +864,11 @@ generated_sha: 5314f493b
 | x", | `scripts/lib/tests/test_facts_notice.py:389` | 2026-10-12 |
 | count an unreadable process only when another non-root uid runs it inside `user-<this uid>.slice` (#3994); every wider rule refuses every removal on daniel-box. The rule and its reasoning live in `claude_worktree._foreign_in_my_slice`, the one copy this repo and the dotfiles worktree hooks share (dotfiles#822). | `scripts/lib/worktrees.py:274` | 2026-10-10 |
 | the socket fails closed once it accepts, and an absent socket or a connect refused for permission falls back to the #3994 slice rule. The helper reads every uid's cwd and environ, so a gap in its answer is a process that could hold this tree, and a refused removal is retried next week. Neither fallback can fail closed the same way: without root, claude-rc.service and the claude user's own sessions are always unreadable, so that rule would refuse every removal on a host where the hand apply has not run, and in every session older than its user's group grant. The fallback says so on stderr, which the cron journals. | `scripts/lib/worktrees.py:342` | 2026-10-10 |
-| `CONTENT_DIGEST` carries `own`, not `footprint`, which covers the annotation's | `scripts/renderer/renderer_lib/bundle.py:379` | 2026-10-17 |
-| deferred, a documented cycle: soak.py builds on this module's writers, and SHARED_KINDS makes every bundle_files caller render soak (test_scripts_import_direction). | `scripts/renderer/renderer_lib/bundle.py:543` | 2026-10-17 |
-| `-verify` renders whatever owns the tag, as `-deferred` does. tag gets the Kustomization that applies it, and the shadow diff reports the directory of an Ansible-owned tag as C1-only, so a role adds `templates/verify/` in the PR that hands its tag to Flux (D5's *How a role declares a verify Job*). `-precheck` follows the same rule. | `scripts/renderer/renderer_lib/cluster.py:405` | 2026-10-17 |
-| attached last, after the restart stamp, the prune label and the SOPS copies, | `scripts/renderer/renderer_lib/cluster.py:475` | 2026-10-16 |
+| `flux_prune` reaches `<tag>` alone, and `<tag>-deferred` keeps `prune: true`, while `timeout` reaches both. H1's text is "prune: false on that Kustomization, and prune: true everywhere else", and the operator ruled it so on 2026-10-22 for D5 step 29: `flux-deferred`'s prune is what deletes `verify-drill` once the drill is off. The consequence: a plumbing role that adds deferred files later gets prunable deferred objects, so a deferred object that must never be pruned belongs in the role's own directory. | `scripts/renderer/renderer_lib/bundle.py:345` | 2026-10-22 |
+| `CONTENT_DIGEST` carries `own`, not `footprint`, which covers the annotation's | `scripts/renderer/renderer_lib/bundle.py:387` | 2026-10-17 |
+| deferred, a documented cycle: soak.py builds on this module's writers, and SHARED_KINDS makes every bundle_files caller render soak (test_scripts_import_direction). | `scripts/renderer/renderer_lib/bundle.py:551` | 2026-10-17 |
+| `-verify` renders whatever owns the tag, as `-deferred` does. tag gets the Kustomization that applies it, and the shadow diff reports the directory of an Ansible-owned tag as C1-only, so a role adds `templates/verify/` in the PR that hands its tag to Flux (D5's *How a role declares a verify Job*). `-precheck` follows the same rule. | `scripts/renderer/renderer_lib/cluster.py:409` | 2026-10-17 |
+| attached last, after the restart stamp, the prune label and the SOPS copies, | `scripts/renderer/renderer_lib/cluster.py:479` | 2026-10-16 |
 | a pass over the rendered text, not a role variable. | `scripts/renderer/renderer_lib/images.py:225` | 2026-10-17 |
 | an applies-last tag waits on no other tag's `-snapshot` or `-verify`. D4 left the choice to D5.1a1. A verify Job probes through netpol-baseline's fences, so netpol-baseline waiting on another tag's `-verify` would run that Job before the fences it dials are applied. A snapshot gates only its own tag. | `scripts/renderer/renderer_lib/ordering.py:385` | 2026-10-16 |
 | the tag itself is not subtracted, as `-deferred` subtracts it. precheck in a namespace its own tag creates then forms the cycle `<tag>-precheck -> <tag>`, and `bundle_files` refuses the render, where dropping the edge would leave the Job failing on a fresh cluster with no namespace. | `scripts/renderer/renderer_lib/ordering.py:413` | 2026-10-19 |
@@ -943,7 +944,7 @@ generated_sha: 5314f493b
 | ` block has to be redone: | `docs/archive/self-hosted-runner-spike.md:190` | 2026-09-22 |
 | ` marker above the retirement tasks in `roles/setup/gitops_deploy/tasks/install.yml`. | `docs/archive/staging-phase-c.md:529` | 2026-09-24 |
 | ` marker sits at the line; `ansible/tests/services/test_smtp_wiring.py` holds the | `docs/authelia-sessions-and-crowdsec-init.md:135` | 2026-09-29 |
-| ` comment on | `docs/break-glass.md:189` | 2026-10-04 |
+| ` comment on | `docs/break-glass.md:179` | 2026-10-04 |
 | no | `docs/crowdsec-waf-record.md:32` | 2026-09-29 |
 | ` marker on that tolerance in | `docs/crowdsec-waf-record.md:163` | 2026-10-10 |
 | ` marker above `_BROAD_MANUAL_PREFIXES` in | `docs/gitops-pipeline.md:219` | 2026-10-10 |
