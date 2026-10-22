@@ -18,6 +18,12 @@ reading behind each rule below.
 
 - **Both claims are in the no-backup tier** — monitors and notifications regenerate from the
   rendered static-monitors Secret; status history is kept nowhere.
+- **The `uptime-kuma-prepull` Kustomization pulls both images before the `Recreate`**, so the old
+  pod serves through the pull (`flux_prepull_timeout` in `defaults/main.yml`, #5867). The Job
+  copies the pod's *preferred* affinity for daniel-server, so it usually lands where the pod
+  does. A pod the scheduler sends to daniel-box after the Job ran pays the cold pull, up to
+  about 250 s, most of it autokuma's 32 MB from GHCR. Pinning the pod with a required affinity would close that gap at the
+  cost of failover, an operator choice this role has not made.
 
 ## Traps
 
@@ -67,7 +73,7 @@ same convention in plain text. Both read `heartbeatJSON.msg`, `monitorJSON.descr
 - **A monitor names a tag by the entity's AutoKuma id** — `tag-severity`, the filename minus
   `.json` — never the display name. Removing one takes two deploys: references first.
 - **`webhookAdditionalHeaders` carries `Content-Type: application/json`**, the id stays `discord`,
-  and the name stays `Homelab Alerts`, which monitor-bridge reads out of Kuma's failure line.
+  and the name stays `Homelab Alerts`, which Kuma prints in its failure line. The loki-homelab rule `KumaNotificationDropped` filters on that line's text and names no notification.
 
 ## The status page's groups are synced by a CronJob, not by AutoKuma
 

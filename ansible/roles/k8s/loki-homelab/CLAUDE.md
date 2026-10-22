@@ -17,8 +17,9 @@ separate from the `observability` Loki (decision KL1, `docs/archive/.../slice-7-
 - **A separate `ingressroute-push` router** is daniel-pi's push-only door.
 - **Persists:** `loki-homelab-data` (`longhorn-nobackup`, 5Gi) — logs, `744h` retention; treated
   as bulky and reconstructible in spirit, so the retention window is the real bound, not backup.
-- **The monitors that read from here:** the Alert History reconstruction and every
-  LogQL-backed monitor-bridge check. A broken apply blinds them without paging.
+- **The monitors that read from here:** the Alert History reconstruction, the ruler's own
+  rules and monitor-bridge's remaining LogQL checks. A broken apply blinds the first and the
+  last without paging.
 - **Flux applies it, not Ansible** (D5.8, Wave A'). Its `containers_list` entry carries
   `owner: flux`, so `deploy.sh`, the play and the GitOps deployer all skip it, and a merged
   change reaches the cluster when `promote` publishes and verifies the next bundle. Its

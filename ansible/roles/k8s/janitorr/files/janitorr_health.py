@@ -32,6 +32,7 @@ Environment (all optional):
 from __future__ import annotations
 
 import os
+import socket
 import sys
 import time
 from collections.abc import Callable
@@ -46,11 +47,20 @@ WINDOW_S = float(os.environ.get("JANITORR_WINDOW_H", "12")) * 3600
 GRACE_S = float(os.environ.get("JANITORR_STARTUP_GRACE_S", "600"))
 KUBECTL = os.environ.get("JANITORR_KUBECTL", "k3s kubectl")
 TIMEOUT = int(os.environ.get("JANITORR_KUBECTL_TIMEOUT_S", "30"))
-# The pod log is the evidence, in the `<tag>: <message>` shape the host script's `logger -t`
-# lines had (the H2 plan's *Evidence goes to stdout*).
+# The pod log is the evidence, in the `<ts> <host> <tag>: <message>` shape rsyslog gave the host
+# script's `logger -t` lines (the H2 plan's *Evidence goes to stdout*). monitor-bridge's
+# Swallowed Push Verdicts check parses exactly two tokens before the tag, so a bare
+# `<tag>: <message>` line would match its LogQL and never count (#5569).
 TAG = "janitorr-health"
 
+
 KUBECTL_RUNNER = host_lib.kubectl_runner(KUBECTL, NAMESPACE, TIMEOUT)
+
+
+def emit(line: str) -> None:
+    """Prints one line in the syslog shape, the pod name as host, flushed past the pipe buffer."""
+    stamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    print("%s %s %s: %s" % (stamp, socket.gethostname(), TAG, line), flush=True)
 
 
 def uptime_seconds(started_at: str, now: float) -> float:
@@ -138,9 +148,9 @@ def main(
     if not base or not token:
         print("%s\t%s" % (status, msg))
         return 0
-    print("%s: status=%s %s" % (TAG, status, msg))
-    if push(status, msg, base, token, log=lambda line: print("%s: %s" % (TAG, line))):
-        print("%s: pushed" % TAG)
+    emit("status=%s %s" % (status, msg))
+    if push(status, msg, base, token, log=emit):
+        emit("pushed")
     return 0
 
 

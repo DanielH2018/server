@@ -2,19 +2,21 @@
 
 This role renders no manifest and starts no workload. It declares one *arr app's Discord
 "Connect" notification over the app's own API, so the notification is repo state rather than
-UI state. sonarr and radarr include it at the end of their own `tasks/main.yml` with
-`arr_notification_app`; every other var has a default here. Since their Flux flip (D5.20) no
-Ansible path runs those includes, which stay for a handback. Under Flux the declaration runs as
-a seed Job in each app's `templates/verify/` (*The Job form*, below), which reads this role's
-script and defaults.
+UI state. Under Flux the declaration runs as a seed Job in sonarr's and radarr's
+`templates/verify/` (*The Job form*, below), which reads this role's script and defaults by
+`lookup()`. Those lookups are the role's only callers: sonarr and radarr included it from their
+`tasks/main.yml` with `arr_notification_app` until #5561, which dropped the includes because
+no Ansible path ran them after the Flux flip (D5.20). `tasks/` stays until R4 deletes it, and a
+handback of either app re-adds that app's include.
 
 **Why it exists.** A Connect notification is a row in `sonarr.db` / `radarr.db` on the app's
 config PVC. No manifest reproduces it, so a Longhorn revert past its creation, or anyone
 recreating the claim, drops it silently — and the alert that goes missing is the health alert
 that would have reported the problem.
 
-**No standalone deploy tag.** Callers reach it via `include_role: name: k8s/arr-notification`,
-never `--tags arr-notification` — it is not a `containers_list` entry, so a promoted image bump
+**No standalone deploy tag.** Callers reach it through a lookup or an
+`include_role: name: k8s/arr-notification`, never through `--tags arr-notification`. It is
+not a `containers_list` entry, so a promoted image bump
 here would match no play and deploy nothing while reporting success. `k8s_autodeploy: false`
 for the same reason; the reason string is in `defaults/main.yml`.
 

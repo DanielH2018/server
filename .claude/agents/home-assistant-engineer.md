@@ -122,8 +122,9 @@ move detail into topic files. Don't duplicate the role `CLAUDE.md` — record on
    or override tripwire fires, declare the writer in `sanctioned_writers.yml` /
    `expected_override_writers.yml` deliberately — don't silence it by widening the list on reflex.
 5. **Validate** (`validate_ha_config.py` + `pytest` if you touched a macro).
-6. **Deploy** via `ha-edit-automation` step 5 — `./scripts/deploy.sh --tags home-assistant` **on daniel-box**
-   (a rollout, ~60-120s), gated on `kubectl -n homelab rollout status deploy/home-assistant`.
+6. **Deploy** via `ha-edit-automation` step 5 — HA is Flux-owned, so land the PR with
+   `./scripts/deploy_tools/land.sh --pr <n> --arm-merge --await-merge --detach`, then
+   `cc-wait land <n>` (the merge and `promote` are the rollout, ~60-120s), gated on `kubectl -n homelab rollout status deploy/home-assistant`.
    `rollout status`, not `kubectl wait --for=condition=Available` — single-replica Deployments
    satisfy Available on the *old* pod and it returns instantly. `probe.py health` reads the
    Docker daemon and no longer knows about HA.

@@ -13,6 +13,7 @@ from pathlib import Path
 
 from py_table import py_table
 
+from secrets_mgmt.pending_retirement import PENDING_RETIREMENT
 from secrets_mgmt.consumers import (
     CROSS_HOST_PUSH_TOKENS,
     FLUX_PATH,
@@ -74,10 +75,11 @@ def test_consumer_tags_autofix_bridge_token():
     )
 
 
-def test_consumer_tags_registry_gc_token():
-    # Same shape as autofix-bridge above: k8s/registry renders the pusher, the tile is static
-    # in uptime-kuma, and both deploy from daniel-box in one run.
-    assert consumer_tags("registry_gc_push_token") == ("registry", "uptime-kuma")
+def test_consumer_tags_registry_gc_token_is_manual():
+    # setup/k8s_host_files renders the GC cron's script since registry's D5 conversion, and a
+    # setup role has no deploy tag, so the unattended rotation must skip it rather than redeploy
+    # `registry`, which no longer renders the token, and leave the cron pushing the old value.
+    assert consumer_tags("registry_gc_push_token") == ()
 
 
 def test_consumer_tags_artifacts_sync_token_is_manual():
@@ -96,7 +98,7 @@ def test_every_auto_tier_token_resolves_a_consumer_or_is_known_manual():
     # Derived from the module's own CROSS_HOST_PUSH_TOKENS (single source — the fifth
     # cross-host token, daniel_box_disk, is when the hand-list here moved there): each entry
     # documents its pusher/label host pair beside the name.
-    known_manual = CROSS_HOST_PUSH_TOKENS
+    known_manual = CROSS_HOST_PUSH_TOKENS | PENDING_RETIREMENT
     reg = load_registry()
     auto = [n for n, m in reg["entries"].items() if m.get("tier") == "auto"]
     assert auto  # sanity: the registry has auto-tier tokens

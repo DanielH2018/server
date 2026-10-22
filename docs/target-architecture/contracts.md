@@ -30,7 +30,7 @@ merged.
 | D3 | Secrets through Flux | D2, R2. D3.0 to D3.3 need only D2.1 to D2.6c, which include D2.6b's empty `SHARED_KINDS` and census |
 | D4 | Ordering (`dependsOn`, deferred applies) | D2. D4.0 needs nothing. D4.9 also D1.6b and M1 |
 | D5 | Bulk move | D3, D4, R3, M1, M2. traefik's flip and the flux PR also H1.1a, and the flux PR also H1.7b. Wave D also H2.1, and the H2 family PR of each role H2 moves. littlelink's flux PR also M6's B-1e. monitor-bridge's flip also M6's A6-7a, live; the observability and netpol-baseline flips also M6's C-1, live. D5 never flips uptime-kuma, which leaves at M6's C-2b |
-| D6 | Delete the old deploy path; ADR superseding 0010 | D5. D6.10 needs only D1.6. D6.11 needs only D5.1a2 and D5's flux PR |
+| D6 | Delete the old deploy path; ADR superseding 0010 | D5. D6.11 needs only D5.1a2 and D5's flux PR; #5425 dropped D6.10 |
 | M1 | Alertmanager and its watcher | — |
 | M2 | One bridge family to rules | M1 |
 | M3 | One host timer to the textfile collector | M1. The cutover also M2's PR 3 |
@@ -89,7 +89,8 @@ every entry is flux-owned then waits for C-2b, through the uptime-kuma edge.
     and R1's determinism module. Those two keep reading it after R4's PR 9 deletes the
     comparison (R2, R4). Before R2 lands, `cluster` without `--secret-stubs` exits 2.
   - `homelab-render cluster --out DIR --shared-only`, from D3.3a. It writes the shared kinds
-    and the root, and no tag, for a publish with no flux-owned tag.
+    and the root, and no tag, for a publish with no flux-owned tag. With `--all-images` it
+    also writes every image context (#5593).
   - `homelab-render host --host NAME --out DIR`
   - `homelab-render package --name PKG --out DIR`, for the shared packages of C5 (H3).
 - **Only placeholder mode publishes.** The publish job runs `cluster` without

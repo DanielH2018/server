@@ -88,7 +88,7 @@ spec:
             # Never expire. The default 168h would drop nut's image a week after its last
             # rebuild, which is the cold pull during a WAN outage this mirror exists for.
             # distribution's proxyregistry.go reads a zero TTL as "never expire". The weekly
-            # GC's offline prune (files/ghcr-mirror-prune.sh) is what bounds the store instead.
+            # GC's offline prune (setup/k8s_host_files/files/ghcr-mirror-prune.sh) is what bounds the store instead.
             - name: REGISTRY_PROXY_TTL
               value: "0s"
           # Its own claim, not registry-data. Every ghcr.io image in the cluster pulls through
@@ -124,7 +124,7 @@ spec:
 # daniel-server's across the overlay to the pinned ClusterIP. That file has the SNAT evidence
 # for both addresses. No pod-network rule admits it: a pod has no reason to pull through it, and
 # one that could would be able to fill the claim with arbitrary public images.
-# netpol-probe-job.yaml.j2 checks a pod is refused on this port on every deploy.
+# The `isolation` check in templates/verify/ checks a pod is refused on this port on every roll.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:

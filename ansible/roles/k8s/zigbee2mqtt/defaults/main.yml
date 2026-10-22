@@ -3,17 +3,19 @@ zigbee2mqtt_k8s_image: ghcr.io/koenkk/zigbee2mqtt:2.14.2@sha256:addbfb08fcef2e44
 
 # Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
 # DENIED — state coupling, not missing recovery. Deploy mechanics alone would allow it:
-# Recreate + RWO PVC, protected by the pre-apply Longhorn snapshot and revert.
+# Recreate + RWO PVC, protected by the zigbee2mqtt-snapshot Job and an operator revert.
 # The volume's state is coupled to something the snapshot cannot capture: the
 # SLZB-06M coordinator's own NVRAM keeps the network key and frame counters. A revert puts
 # database.db/devices.yaml/coordinator_backup.json back to the snapshot while the coordinator
 # keeps counting from where it actually got to, so paired devices can go silent and recovery
-# is re-pairing each one by hand. The snapshot and revert machinery work fine here — they are
+# is re-pairing each one by hand. The snapshot Job and the revert runbook work fine here — they are
 # not why this is denied.
 k8s_autodeploy: false  # noqa var-naming[no-role-prefix]
-k8s_autodeploy_reason: "state coupled outside the volume — the SLZB-06M coordinator's NVRAM holds the network key and frame counters, so reverting zigbee2mqtt-data to a snapshot desynchronises it from the coordinator and can silence paired devices; the pre-apply snapshot and revert work fine and are not the blocker"  # noqa var-naming[no-role-prefix]
-# The pre-apply Longhorn snapshot k8s/manifests takes via k8s/volume-snapshot.
-# Declared regardless of k8s_autodeploy — protects a manual deploy too.
+k8s_autodeploy_reason: "state coupled outside the volume — the SLZB-06M coordinator's NVRAM holds the network key and frame counters, so reverting zigbee2mqtt-data to a snapshot desynchronises it from the coordinator and can silence paired devices; the snapshot Job and the operator revert work fine and are not the blocker"  # noqa var-naming[no-role-prefix]
+# The claim snapshotted before each revision applies. Under Flux the renderer turns this
+# list into the zigbee2mqtt-snapshot Kustomization, whose Job snapshots it before zigbee2mqtt applies
+# (D5.2a). After a handback, k8s/manifests takes the same snapshot through k8s/volume-snapshot.
+# Declared regardless of k8s_autodeploy.
 k8s_autodeploy_snapshot_pvcs: [zigbee2mqtt-data]  # noqa var-naming[no-role-prefix]
 
 # The config-install initContainer needs alpine (`install`). Same init image peanut and

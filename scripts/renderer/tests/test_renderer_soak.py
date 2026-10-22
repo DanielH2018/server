@@ -145,12 +145,11 @@ def test_the_shipped_rules_give_mosquitto_its_metric_verify():
     assert soak.longest_for().get("mosquitto") == 300
 
 
-def test_dri_device_plugins_verify_waits_only_on_m2_dropping_shadow(tmp_path):
-    """K8sExtendedResourceMissing carries `verify`, and `shadow` alone keeps the soak off it.
+def test_the_soak_verifies_dri_device_plugin_through_its_unshadowed_rule(tmp_path):
+    """K8sExtendedResourceMissing carries `verify` and no `shadow`, so the census counts its 5m.
 
-    M2's PR 4b drops `shadow` from k8s-workloads. With the label stripped, the census counts
-    dri-device-plugin at the rule's 5m; with it, the census skips the rule, as the soak's
-    alert filter does.
+    The census skips a shadow rule, as the soak's alert filter does, so restoring the label on
+    a copy of the rules takes dri-device-plugin out again.
     """
     shipped = soak.RULES / "k8s-workloads.yaml"
     groups = yaml_fast.safe_load(shipped.read_text())["groups"]
@@ -161,10 +160,11 @@ def test_dri_device_plugins_verify_waits_only_on_m2_dropping_shadow(tmp_path):
         if r.get("alert") == "K8sExtendedResourceMissing"
     )
     assert rule["labels"].get("verify") == "true"
-    assert "dri-device-plugin" not in soak.longest_for()
-    del rule["labels"]["shadow"]
+    assert "shadow" not in rule["labels"]
+    assert soak.longest_for()["dri-device-plugin"] == 300
+    rule["labels"]["shadow"] = "true"
     (tmp_path / "k8s-workloads.yaml").write_text(yaml.safe_dump({"groups": groups}))
-    assert soak.longest_for(tmp_path).get("dri-device-plugin") == 300
+    assert "dri-device-plugin" not in soak.longest_for(tmp_path)
 
 
 def test_the_map_names_each_tags_namespaces_its_deferred_ones_included():

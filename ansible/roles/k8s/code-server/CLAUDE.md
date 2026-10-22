@@ -8,7 +8,7 @@ it is built from (`templates/Dockerfile.j2` + `files/extensions.sh`); the invent
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates, tasks or containers_list entry, or the k3s role's Longhorn tier lists. -->
 - **Applied by:** Flux, through `promote` (`owner: flux`); `deploy.sh` refuses
   `--tags=code-server` with exit 5
-- **Image:** `<k8s_registry_pull_host>/code-server` (`code_server_k8s_image`)
+- **Image:** `ghcr.io/danielh2018/code-server` (`code_server_k8s_image`)
 - **Route:** `code-server.<domain>` · `code-server.local.<domain>`, Authelia two_factor
 - **Claims:** `code-server-config` (no backup (listed in k3s_longhorn_nobackup_volumes)),
   `code-server-workspace` (weekly -> B2 (default target))
@@ -47,12 +47,11 @@ it is built from (`templates/Dockerfile.j2` + `files/extensions.sh`); the invent
   Deployment keeps the default rollout budget and the editor is down only for the container
   start.
 - **Where the tasks went.** `tasks/main.yml` holds two includes, `k8s/image-builder` and
-  `k8s/manifests`, and no Flux path runs either. They stay for the handback. The glance reads
-  the defaults, so it still shows `<k8s_registry_pull_host>/code-server`; the renderer rewrites
-  both refs to the GHCR one with `imagePullPolicy: IfNotPresent`
-  (`scripts/renderer/renderer_lib/images.py:ghcr_refs`). The snapshot Job replaces
-  k8s/volume-snapshot's pre-apply snapshot, and the Kustomization's `wait` replaces the rollout
-  wait.
+  `k8s/manifests`, and no Flux path runs either. They stay for the handback. The defaults name
+  `<k8s_registry_pull_host>/code-server`; the renderer rewrites both refs to the GHCR one with
+  `imagePullPolicy: IfNotPresent` (`scripts/renderer/renderer_lib/images.py:ghcr_refs`). The
+  snapshot Job replaces k8s/volume-snapshot's pre-apply snapshot, and the Kustomization's
+  `wait` replaces the rollout wait.
 - **Ported WITHOUT docker plumbing** (operator decision 2026-08-10): no DOCKER_HOST, so the
   in-IDE docker CLI and devcontainers are gone; docker-proxy-codeserver and the `codeserver`
   net dissolved with the Docker copy (`has_code_server: false` in daniel-server host_vars).

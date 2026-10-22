@@ -13,7 +13,9 @@ from pathlib import Path
 from _helpers import ANSIBLE
 from lib.proc_testing import run
 
-SCRIPT = ANSIBLE / "roles" / "k8s" / "registry" / "files" / "ghcr-mirror-prune.sh"
+SCRIPT = (
+    ANSIBLE / "roles" / "setup" / "k8s_host_files" / "files" / "ghcr-mirror-prune.sh"
+)
 REPO = "danielh2018/nut"
 
 

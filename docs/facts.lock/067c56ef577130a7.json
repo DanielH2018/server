@@ -1,14 +1,14 @@
 {
-  "checksum": "5a6a272dbbae054cf276ebe697e4e1ae1d20cbcf0e959cdb252ebebd1b5a41d6",
+  "checksum": "7399a8d9c31aa0f3fd06d4afb49b6c4bf55903ffc6892d5b29aa1d1608e44c38",
   "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
   "key": "ansible/roles/k8s/netpol-baseline/CLAUDE.md#Notable",
   "row": {
     "atoms": {
       "ansible/filter_plugins/toposort.py": "54ea3ab5c1565b0d78cabe4f2e42f05bd074af5073bafedeb12e1ea92cf287d2",
-      "ansible/tasks/k8s_batch.yml": "7c7e9a9074cf270857d2810f2d53b7c8ec24d15ff6e73e07209464ed17acf4ac",
-      "ansible/tests/k8s/test_netpol_baseline_labels.py": "881c8d283b0ce20a19091425be8d2622bd4ff2657087905a00c14f4a78c0a393"
+      "ansible/tests/k8s/test_netpol_baseline_labels.py": "881c8d283b0ce20a19091425be8d2622bd4ff2657087905a00c14f4a78c0a393",
+      "docs/flux-deploy-plane.md": "807c3deb44c3178e7a6f9fc0bc398a3b748b95c468b14ce9b1b890c8684535d9"
     },
     "python": "3.14",
-    "verified_sha": "faca27374"
+    "verified_sha": "48ae33648"
   }
 }

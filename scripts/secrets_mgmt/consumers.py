@@ -20,6 +20,7 @@ from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))  # scripts/
 
+from secrets_mgmt.pending_retirement import PENDING_RETIREMENT
 from secrets_mgmt.rotation_tools import REPO
 from lib.ansible_inventory import K8S_HOST, host_vars_file
 from lib.k8s_roles import tag_owners
@@ -60,6 +61,11 @@ CROSS_HOST_PUSH_TOKENS = frozenset(
         # matches nothing; the pusher is applied by `initial_setup.yml --tags claude_code`.
         # Until H2.7 the k8s/artifacts role rendered it and this routed to that tag.
         "artifacts_sync_push_token",
+        # daniel-box cron (setup/k8s_host_files, since registry's D5 conversion) + k8s/uptime-kuma
+        # static tile. k8s_host_files has no `containers_list` entry, so `deploy.yml --tags
+        # registry` matches nothing; the script is applied by `initial_setup.yml --tags
+        # k8s_host_files`. Until that PR the k8s/registry role rendered it.
+        "registry_gc_push_token",
         # daniel-box cron (setup/initial_setup) + k8s/uptime-kuma static tile. Both halves embed
         # the token and must move together; initial_setup has no deploy tag, so a `--deploy
         # --tags uptime-kuma` would rotate the tile and leave the cron pushing the old value —
@@ -178,7 +184,9 @@ def consumer_tags(name: str) -> tuple[str, ...]:
     """
     # Both of these precede the prefix rule below: every token they name also carries the
     # `monitor_bridge_` prefix, so the prefix rule would otherwise claim them first.
-    if name in CROSS_HOST_PUSH_TOKENS:
+    if name in CROSS_HOST_PUSH_TOKENS or name in PENDING_RETIREMENT:
+        # PENDING_RETIREMENT: the check is deleted and nothing renders the token, so a rotation
+        # has no role to redeploy .
         return ()
     elif name == "kuma_status_page_sync_push_token":
         # The one token whose pusher and tile are the SAME role: the status-page-sync CronJob
@@ -200,12 +208,6 @@ def consumer_tags(name: str) -> tuple[str, ...]:
         # arr_autoblock_* for Kuma history continuity; the consumer is the autofix-bridge
         # deploy tag.)
         pusher = "autofix-bridge"
-    elif name == "registry_gc_push_token":
-        # The k8s/registry role renders the weekly GC cron's script on daniel-box and the tile
-        # is a static entity in k8s/uptime-kuma: two deploy-plane tags, one host, one playbook
-        # run. Unrouted, the fall-through below drops an auto-tier token out of
-        # unattended rotation while the audit still reports it registered.
-        pusher = "registry"
     elif name == "crowdsec_remote_allowlist_push_token":
         # The crowdsec role renders the crowdsec-jobs Secret its sidecar pushes with, and the
         # tile is a static entity in k8s/uptime-kuma.

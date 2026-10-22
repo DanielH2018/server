@@ -10,7 +10,13 @@ Type=oneshot
 # become. The batches' PRs are this account's, and the review records are read from this
 # account's state directory on daniel-server over ssh.
 User={{ sys_user }}
-WorkingDirectory={{ claude_code_rc_workdir }}
+# DECIDED: the operator's checkout, not `claude_code_rc_workdir`. On daniel-box that variable is
+# the agent's clone, which `claude` owns with mode 0750 and no group write. As `ubuntu`, git
+# refuses it ("dubious ownership", #5861), and a scoped `safe.directory` would only move the
+# failure to the `git fetch` and `git worktree add` this command runs in its primary, which
+# need write access `ubuntu` lacks there. Widening that clone would also let the agent's tree
+# feed code to a process that runs as `ubuntu`. The operator's checkout is `ubuntu`'s own.
+WorkingDirectory={{ claude_code_operator_checkout }}
 Environment=HOME=/home/{{ sys_user }}
 Environment=PATH=/home/{{ sys_user }}/.local/bin:/usr/local/bin:/usr/bin:/bin
 Environment=PYTHONDONTWRITEBYTECODE=1
@@ -29,4 +35,4 @@ SyslogLevel=notice
 KillMode=process
 # Room for two checkouts, each a `git worktree add` and a first `uv run` sync, and two starts.
 TimeoutStartSec=30min
-ExecStart=/usr/local/bin/uv run --no-python-downloads python scripts/dev/fanout.py land-server --primary {{ claude_code_rc_workdir }}
+ExecStart=/usr/local/bin/uv run --no-python-downloads python scripts/dev/fanout.py land-server --primary {{ claude_code_operator_checkout }}

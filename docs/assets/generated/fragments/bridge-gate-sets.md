@@ -2,8 +2,7 @@
 | Set | Held by | Members | Checks |
 |---|---|---|---|
 | `PROM_DEPENDENT` | Prometheus Reachable gate, which suppresses them | 22 | `disk`, `cert`, `memory`, `restarts`, `oom`, `cpu`, `targets`, `traefik5xx`, `traefik_latency`, `traefik_404`, `traefik_421`, `host_packages`, `etcd_db_size`, `host_temp`, `ups`, `pi_pressure`, `shipper_dropped`, `cluster_targets`, `longhorn_volumes`, `pvc_fullness`, `snapshot_headroom`, `kubelet_plugin_readonly` |
-| `LOKI_DEPENDENT` | Loki Reachable gate, which suppresses them | 3 | `loki_ingestion`, `swallowed_verdicts`, `kuma_notify_failures` |
 | `B2_DEPENDENT` | B2 Reachable gate, which suppresses them | 1 | `b2_storage` |
 | `WAN_DEPENDENT` | WAN Reachable gate, which suppresses them | 4 | `discord`, `r2_usage`, `cloudflare_ips_drift`, `healthchecks_drift` |
-| `STARTUP_GRACE` | startup grace, which holds them `up` through their first down cycles | 6 | `n8n`, `bazarr`, `prowlarr_indexers`, `scrutiny`, `speedtest`, `workload_log_errors` |
+| `STARTUP_GRACE` | startup grace, which holds them `up` through their first down cycles | 7 | `n8n`, `bazarr`, `prowlarr_indexers`, `scrutiny`, `speedtest`, `swallowed_verdicts`, `workload_log_errors` |
 | ungated | nothing | 5 | `arr_queue`, `gitops_alive`, `gitops_status`, `etcd_restore_drill`, `ha_heartbeat` |

@@ -6,8 +6,8 @@
 # `replicas:`, so a run killed between the two leaves it at 0/0. That passes rollout status,
 # K8sDeploymentZeroAvailable (which wants spec replicas above zero) and the registry deploy's
 # netpol probe, and containerd falls back to ghcr.io until a WAN outage finds the mirror gone.
-# The registry deploy restores it while Ansible owns registry, and the next GC run restores it
-# from its stamp, which can be a week away. The 2h hold is well past the GC's longest hold of
+# The next GC run restores it from its stamp, which can be a week away. registry's deploy
+# restored it too while Ansible owned registry; Flux owns it now and renders no `replicas:`. The 2h hold is well past the GC's longest hold of
 # the mirror: registry_k8s_gc_deadline_s (1200s) plus the scale-down and scale-up waits.
 groups:
   - name: registry
@@ -34,4 +34,4 @@ groups:
             containerd pulls ghcr.io images straight from GHCR and a WAN outage leaves no source
             to pull them from. Check `journalctl -t registry-gc` on daniel-box and that no
             registry-gc.sh is running, then `kubectl -n homelab scale deploy/ghcr-mirror
-            --replicas=1` or a registry deploy.
+            --replicas=1`.
