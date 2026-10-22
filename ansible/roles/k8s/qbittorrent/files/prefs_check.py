@@ -12,9 +12,10 @@ earn a push token. Applying a changed DESIRED value stays a human decision, made
 
 The exit status follows apply_prefs.py's contract. Drift (EXIT_DRIFT, 3) is a result, not a
 failure, so it exits 0 as a match does. An unreachable WebUI, a rejected login, a missing
-credential or any other exit leaves the Job Failed, which k8s/cronjob-gate reports without
-failing the deploy. Every outcome still prints its tagged line, as the host script's `2>&1`
-captured every outcome, so a rejected login or a read timeout is never an untagged traceback.
+credential or any other exit leaves the Job Failed. A failed run of the gate Job Flux copies
+from this CronJob fails the `qbittorrent-verify` Kustomization, which holds the revision.
+Every outcome still prints its tagged line, as the host script's `2>&1` captured every outcome,
+so a rejected login or a read timeout is never an untagged traceback.
 
 Environment:
     QBT_CREDENTIALS  the WebUI username, a newline, then the password (the

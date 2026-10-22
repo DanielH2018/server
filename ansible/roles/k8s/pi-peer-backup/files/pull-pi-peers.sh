@@ -42,14 +42,15 @@ DEST=/data/peers
 install -m 0700 -d "$HOME/.ssh"
 install -m 0400 /ssh/id "$HOME/.ssh/id"
 
-# k8s/cronjob-gate (ansible/roles/k8s/cronjob-gate) runs a one-off gate Job named
-# pi-peer-backup-deploy-gate on every deploy of this role, to prove a bumped image still runs.
+# Flux runs a one-off gate Job named pi-peer-backup-deploy-gate-<spec digest8> in
+# pi-peer-backup-verify once per role revision, to prove a bumped image still runs. The renderer
+# copies it from this CronJob (scripts/renderer/renderer_lib/cronjob_gate.py).
 # That run is not the scheduled backup, and it must not report as one: pushing here would make
 # the Kuma monitor mean "something ran" instead of "the nightly backup ran", masking a missed
 # 23:00 firing for the rest of its 2.5-day window, and a failing gate run would page the
 # operator from a deploy-time probe rather than from the backup itself. The pod's hostname is
-# `<job-name>-<random>` (kubectl create job --from=cronjob copies the pod spec verbatim, so
-# there is no other way for the script to tell the two runs apart).
+# `<job-name>-<random>` (the gate Job carries the CronJob's pod template verbatim, so there is
+# no other way for the script to tell the two runs apart).
 GATE_RUN=0
 [[ "${HOSTNAME:-}" == pi-peer-backup-deploy-gate-* ]] && GATE_RUN=1
 

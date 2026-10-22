@@ -24,8 +24,8 @@ See repo-root `CLAUDE.md` for shared conventions.
   every 10 minutes. `files/janitorr_health.py` reads the running pod's container start time
   and, past a 10-minute startup grace, counts `Unexpected error occurred in scheduled task`
   lines in its log, through its own ServiceAccount (`templates/health-rbac.yaml.j2`). It pushes
-  the "Janitorr Errors" Kuma monitor. Not gated by `k8s/cronjob-gate`: `k8s_autodeploy` is
-  false here, so no batch gate is required.
+  the "Janitorr Errors" Kuma monitor. No gate Job runs it: the role's defaults
+  declare no `flux_cronjob_gates`, so `janitorr-verify` holds no copy of this CronJob.
 - **The health reader was a daniel-box host cron until H2.5c.** The absent arms for the cron,
   `/opt/janitorr-health`, `/usr/local/bin/janitorr-health.sh` and the `janitorr` drift fragment
   live in `ansible/roles/setup/k8s_host_files/tasks/janitorr.yml`, which the setup plane
