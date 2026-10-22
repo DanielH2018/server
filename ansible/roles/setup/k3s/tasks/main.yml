@@ -14,8 +14,8 @@
   ansible.builtin.import_tasks: stale-checkout-guard.yml
 # The host half of Longhorn, tagged `longhorn_host` alone so bring-up step 1 can skip `longhorn`
 # and `longhorn_backup` and still run it. Directly ahead of longhorn-backup.yml; the `longhorn`
-# Flux tag installs Longhorn itself (H1.5a), and the `longhorn-reconcile` tag holds the volume
-# labels and the CSI sidecar requests (H1.6).
+# Flux tag installs Longhorn itself (H1.5a) and its Settings, the CSI sidecar requests among
+# them (#5958), and the `longhorn-reconcile` tag holds the volume labels (H1.6).
 - name: Install the packages Longhorn needs on the node
   ansible.builtin.import_tasks: longhorn-host.yml
 - name: Configure the Longhorn backup targets and job

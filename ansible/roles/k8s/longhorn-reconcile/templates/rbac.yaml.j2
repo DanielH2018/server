@@ -6,14 +6,13 @@
     list volumes.longhorn.io            the one read of every Volume CR, in longhorn-system
     patch volumes.longhorn.io           one merge patch of a volume's group labels and its
                                         `spec.backupTargetName`
-    get, patch deployments/csi-*        read a sidecar's request, strategic-merge-patch it
     list persistentvolumeclaims         cluster-wide: which claims are `longhorn`-class
 
   The script never GETs a single Volume, so `get` on volumes is absent. The H1 plan listed it
-  because kubectl's `label` and `patch` read the object first. Deployments take `resourceNames`
-  for the four sidecars, which the driver deployer names exactly; `resourceNames` cannot
-  narrow `list`, so the volume and PVC grants are by resource alone. The PVC grant is a
-  ClusterRole because the claims sit in every namespace.
+  because kubectl's `label` and `patch` read the object first. `resourceNames` cannot narrow
+  `list`, so the volume and PVC grants are by resource alone. The PVC grant is a ClusterRole
+  because the claims sit in every namespace. No grant reaches the CSI Deployments: their memory
+  request is the `longhorn` role's Setting (#5958).
 #}
 ---
 apiVersion: v1
@@ -31,10 +30,6 @@ rules:
   - apiGroups: [longhorn.io]
     resources: [volumes]
     verbs: [list, patch]
-  - apiGroups: [apps]
-    resources: [deployments]
-    resourceNames: [csi-attacher, csi-provisioner, csi-resizer, csi-snapshotter]
-    verbs: [get, patch]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding

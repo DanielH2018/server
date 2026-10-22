@@ -196,8 +196,8 @@ def test_the_home_ips_role_without_patch_is_flagged(monkeypatch) -> None:
 def _reconcile_calls(monkeypatch, tmp_path) -> list[tuple[str, str]]:
     """H1.6: the longhorn-reconcile CronJob's calls on a run that has every write to make.
 
-    One volume sits in a group it must leave and the four CSI Deployments lack the request, so
-    the run lists both collections, patches the volume, and reads and patches each sidecar.
+    One volume sits in a group it must leave, so the run lists both collections and patches the
+    volume. Since #5958 it makes no Deployment call: the CSI request is a Longhorn Setting.
     """
     monkeypatch.syspath_prepend(str(K8S_ROLES / "longhorn-reconcile" / "files"))
     script = importlib.import_module("longhorn_reconcile")
@@ -211,7 +211,6 @@ def _reconcile_calls(monkeypatch, tmp_path) -> list[tuple[str, str]]:
             "kubernetesStatus": {"namespace": "homelab", "pvcName": "crowdsec-db"}
         },
     }
-    bare = {"spec": {"template": {"spec": {"containers": []}}}}
 
     class Recorder(script.Kube):
         def __init__(self):
@@ -223,7 +222,7 @@ def _reconcile_calls(monkeypatch, tmp_path) -> list[tuple[str, str]]:
                 return 200, {"items": [volume]}
             if path == "/api/v1/persistentvolumeclaims":
                 return 200, {"items": []}
-            return 200, bare
+            return 200, {}
 
     tiers = tmp_path / "tiers.json"
     tiers.write_text(
@@ -231,11 +230,10 @@ def _reconcile_calls(monkeypatch, tmp_path) -> list[tuple[str, str]]:
     )
     env = {
         "RECONCILE_NAMESPACE": "longhorn-system",
-        "RECONCILE_CSI_MEMORY_REQUEST": "192Mi",
         "RECONCILE_TIERS_FILE": str(tiers),
     }
     assert script.main([], env, Recorder()) == 0
-    assert [m for m, _ in calls].count("PATCH") == 5
+    assert [m for m, _ in calls].count("PATCH") == 1
     return calls
 
 
@@ -258,16 +256,6 @@ def test_the_longhorn_reconcile_role_grants_every_call_its_script_makes(
         ("longhorn-system", "longhorn.io", "volumes", "list", None),
         ("longhorn-system", "longhorn.io", "volumes", "patch", "pvc-1"),
         (None, "", "persistentvolumeclaims", "list", None),
-        *{
-            ("longhorn-system", "apps", "deployments", verb, name)
-            for name in (
-                "csi-attacher",
-                "csi-provisioner",
-                "csi-resizer",
-                "csi-snapshotter",
-            )
-            for verb in ("get", "patch")
-        },
     }
     granted = grants(_reconcile_rbac(), "longhorn-system", "longhorn-reconcile")
     assert missing(needs, granted) == []

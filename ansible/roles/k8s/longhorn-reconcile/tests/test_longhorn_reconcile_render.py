@@ -1,9 +1,8 @@
 """What the longhorn-reconcile role renders, held to what the script and the old tasks did.
 
 The script's behaviour is in test_longhorn_reconcile.py. These cases read the render: the
-ConfigMap's tier lists against the keys `setup/k3s` still derives, the CSI request the CronJob
-passes against the role's defaults, and the sidecar patch against the rule the manager's patch
-meets (a memory request and no limit).
+ConfigMap's tier lists against the keys `setup/k3s` still derives, and the CronJob and its grants
+against the CSI sidecars, which the `longhorn` role's Setting owns (#5958).
 
 Run: uv run pytest ansible/roles/k8s/longhorn-reconcile/tests/test_longhorn_reconcile_render.py
 """
@@ -11,7 +10,6 @@ Run: uv run pytest ansible/roles/k8s/longhorn-reconcile/tests/test_longhorn_reco
 import json
 
 import longhorn_reconcile as lr
-import pytest
 from _helpers import load_defaults
 from _k8s_render import render_role_template
 from lib import yaml_fast
@@ -88,12 +86,11 @@ def _env() -> dict[str, str]:
     return {e["name"]: e["value"] for e in container["env"]}
 
 
-def test_the_cronjob_passes_the_csi_request_of_the_role_defaults():
-    assert (
-        _env()["RECONCILE_CSI_MEMORY_REQUEST"]
-        == DEFAULTS["k3s_longhorn_csi_sidecar_memory_request"]
-    )
-    assert _env()["RECONCILE_NAMESPACE"] == "longhorn-system"
+def test_the_cronjob_passes_the_namespace_and_no_csi_request():
+    env = _env()
+    assert env["RECONCILE_NAMESPACE"] == "longhorn-system"
+    assert [name for name in env if "CSI" in name] == []
+    assert "k3s_longhorn_csi_sidecar_memory_request" not in DEFAULTS
 
 
 def test_the_cronjob_runs_hourly_and_never_overlaps_itself():
@@ -105,31 +102,14 @@ def test_the_cronjob_runs_hourly_and_never_overlaps_itself():
     assert pod["securityContext"]["runAsNonRoot"] is True
 
 
-@pytest.mark.parametrize("sidecar", lr.CSI_DEPLOYMENTS)
-def test_the_sidecar_patch_sets_a_request_and_no_limit(sidecar):
-    patch = lr.sidecar_patch(
-        sidecar, DEFAULTS["k3s_longhorn_csi_sidecar_memory_request"]
-    )
-    (container,) = patch["spec"]["template"]["spec"]["containers"]
-    assert container["name"] == sidecar
-    assert container["resources"]["requests"]["memory"] == "192Mi"
-    # A limit set too low turns an OOM-by-badness kill into an OOM-by-cgroup-cap kill (#1243).
-    assert "limits" not in container["resources"]
-
-
-def test_the_script_names_the_four_sidecars_the_driver_deployer_creates():
-    assert set(lr.CSI_DEPLOYMENTS) == {
-        "csi-attacher",
-        "csi-provisioner",
-        "csi-resizer",
-        "csi-snapshotter",
-    }
-    # The Role names the same four, so the script cannot patch a Deployment the grant omits.
+def test_the_role_grants_nothing_on_deployments():
+    # fact: ansible/roles/k8s/longhorn-reconcile/CLAUDE.md#Traps
+    # A grant the script no longer needs is a write path to the CSI Deployments that
+    # longhorn-manager undoes on its next tick, the flip-flop #5958 removed.
     rules = [
         r for d in _docs("rbac.yaml.j2") if d["kind"] == "Role" for r in d["rules"]
     ]
-    (deployments,) = [r for r in rules if r["resources"] == ["deployments"]]
-    assert set(deployments["resourceNames"]) == set(lr.CSI_DEPLOYMENTS)
+    assert {r["resources"][0] for r in rules} == {"volumes"}
 
 
 def test_the_role_is_a_cronjob_only_role_that_the_gate_names():

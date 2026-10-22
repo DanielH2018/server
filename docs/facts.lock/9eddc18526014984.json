@@ -1,13 +1,15 @@
 {
-  "checksum": "8c112e2c146d54639fc73221abde3eabb848835bd0c3174d69e3fd2edc887a08",
+  "checksum": "312d4634b2efb17cb7a0f5dcd3449cb116deddbe25ec4be9b6f7ffde4701fb31",
   "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
   "key": "ansible/roles/k8s/longhorn/CLAUDE.md#At a glance",
   "row": {
     "atoms": {
       "ansible/filter_plugins/service_tier.py": "4f5e784e468e22de5c3736acba1c47934e1d5e2794af865159bdaeeff9171f1e",
+      "ansible/roles/k8s/longhorn/defaults/main.yml:k3s_longhorn_csi_sidecar_memory_request": "79a5efd73f044c2e2a70ccbaa24e663ec5a9ad69119a84866f115416fe608950",
       "ansible/tests/k8s/test_shed_set_is_derived_from_tier.py::test_never_shed_matches_the_untiered_roles_that_never_prune": "b5aa7a0b15e57ef1aaaef7b8e886e31e7c8813709d26cf6ee0eca3d0c0c20d0e",
       "ansible/tests/longhorn/test_engine_upgrade_limit_is_positive.py::test_a_zero_limit_is_flagged": "727bbb54f3f97b794da86048d36a72350c2a77b8ca76db533dbecc29be77b726",
       "ansible/tests/longhorn/test_longhorn_control_plane_resources.py::test_manager_patch_holds_the_value_of_the_defaults_key": "6698ba708d72f37c6f8094ad0ac5c9e64ebf4ce7144d96bd2171e71c002c49e3",
+      "ansible/tests/longhorn/test_longhorn_control_plane_resources.py::test_the_csi_setting_requests_the_defaults_value_for_the_four_sidecars_only": "3005b64a3e0cc13a167ec1d07f266cc0b4ca47163b591d691886b119f95790b5",
       "ansible/tests/longhorn/test_longhorn_storageclass.py::test_the_class_differs_from_upstreams_only_by_the_replica_count": "c1ef4ca44c0ae18b8cf7fabb57d2a2db844daf2a092ee0502f5462063d49bbb7",
       "ansible/tests/longhorn/test_snapshot_data_integrity_patch_is_a_json_map.py::test_a_bare_string_value_is_flagged": "83657efa109ab7934589801227e5efccd0da4d8bd87bf352031cc04592ac5200",
       "docs/longhorn-disaster-recovery.md": "4c9a4a63c6856b47fb7c612953def99d6b299477412a04fc9369539f36398ef3",
@@ -15,6 +17,6 @@
       "scripts/dev/vendor_manifest.py": "f0c0c9df684a1ed3d858ec17f02c8e7c279dbb7595180eb00d70a50e42a9d7ef"
     },
     "python": "3.14",
-    "verified_sha": "a4220e790"
+    "verified_sha": "cfa5f7ab3"
   }
 }

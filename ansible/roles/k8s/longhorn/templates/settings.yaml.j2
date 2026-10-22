@@ -1,4 +1,4 @@
-# The seven Longhorn Settings this repo pins, one object each. A Setting is a namespaced value
+# The eight Longhorn Settings this repo pins, one object each. A Setting is a namespaced value
 # longhorn-manager reads, and the manager creates every one with its upstream default, so Flux
 # server-side applies `value` over a live object. The manager keeps its own annotation and status
 # on each one, and this render declares neither, so Flux never takes them.
@@ -9,8 +9,20 @@
 # the first `to_json` renders the map in the compact form the manager stores, and the second
 # quotes it as a YAML string. A bare value would store the wrong thing, and Longhorn would
 # ignore it. ENFORCED by
-# ansible/tests/longhorn/test_snapshot_data_integrity_patch_is_a_json_map.py. Every other value
-# is a quoted string, because the Setting schema types `value` as a string.
+# ansible/tests/longhorn/test_snapshot_data_integrity_patch_is_a_json_map.py.
+#
+# `system-managed-csi-components-resource-limits` is a JSON object serialised as a string too:
+# component name -> Kubernetes ResourceRequirements (longhorn-manager v1.12.1,
+# types/setting.go:ComponentResourceLimits). It names the four CSI sidecar Deployments and no
+# other component, because the manager clears the resources of every component the object
+# names and rolls it to match; naming `longhorn-csi-plugin` would roll the plugin DaemonSet.
+# Each entry carries `requests` alone. The manager compares the parsed entry with the live
+# container's `resources` field by field, so an empty `limits: {}` here would never equal the
+# absent `limits` the API server returns, and the manager would rewrite the Deployments on every
+# tick. ENFORCED by
+# ansible/tests/longhorn/test_longhorn_control_plane_resources.py.
+#
+# Every other value is a quoted string, because the Setting schema types `value` as a string.
 #
 # The reason for each value is the comment above its key in this role's defaults/main.yml.
 apiVersion: longhorn.io/v1beta2
@@ -61,3 +73,11 @@ metadata:
   name: node-down-pod-deletion-policy
   namespace: longhorn-system
 value: "{{ k3s_longhorn_node_down_pod_deletion_policy }}"
+---
+apiVersion: longhorn.io/v1beta2
+kind: Setting
+metadata:
+  name: system-managed-csi-components-resource-limits
+  namespace: longhorn-system
+{% set csi_request = {"requests": {"memory": k3s_longhorn_csi_sidecar_memory_request | string}} %}
+value: {{ {"csi-attacher": csi_request, "csi-provisioner": csi_request, "csi-resizer": csi_request, "csi-snapshotter": csi_request} | to_json(separators=(',', ':')) | to_json }}

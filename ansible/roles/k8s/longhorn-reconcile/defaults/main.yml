@@ -8,7 +8,7 @@
 # undo. The alternative, `false`, would need a manual rule in renovate.json for the shared
 # python digest, as the denied roles carry. Contradict this with a measured interpreter break.
 k8s_autodeploy: true  # noqa var-naming[no-role-prefix]
-k8s_autodeploy_reason: "CronJob gated on every revision by a gate Job in longhorn-reconcile-verify, which proves the new image RUNS the reconcile and fails the revision on a read or a write that errors; the gate Job has no ownerReference, so concurrencyPolicy Forbid cannot keep a scheduled run off it, but a patch to a label or a request already set is a no-op, so running the same plan twice is harmless"  # noqa var-naming[no-role-prefix]
+k8s_autodeploy_reason: "CronJob gated on every revision by a gate Job in longhorn-reconcile-verify, which proves the new image RUNS the reconcile and fails the revision on a read or a write that errors; the gate Job has no ownerReference, so concurrencyPolicy Forbid cannot keep a scheduled run off it, but a patch to a label or a target already set is a no-op, so running the same plan twice is harmless"  # noqa var-naming[no-role-prefix]
 
 # The python image the CronJob runs, the same digest as the other stdlib-only k8s jobs
 # (crowdsec_k8s_jobs_image, configarr_k8s_health_image). It needs no kubectl: the script calls the
@@ -18,14 +18,12 @@ longhorn_reconcile_k8s_image: python:3.14-alpine@sha256:f6a589d43c42b9e7f7dc67a1
 # DECIDED: hourly, at minute 17. The Ansible tasks this job replaces ran once per `k3s-bringup.yml`
 # apply, with no clock, so there was no host cron to copy; the H1 plan fixes "hourly"
 # (*Longhorn objects that are not static*). Hourly bounds how long a PVC recreated from the
-# `longhorn` class sits in the daily group after a deploy that put it on another tier, and how
-# long a recreated CSI Deployment sits BestEffort. Minute 17 keeps the run clear of the :00 and
+# `longhorn` class sits in the daily group after a deploy that put it on another tier. Minute 17 keeps the run clear of the :00 and
 # :30 marks that Longhorn's own cluster-wide jobs and the */10 health readers share. The job
 # writes nothing on a converged cluster, so the schedule costs two list calls an hour.
 longhorn_reconcile_k8s_schedule: "17 * * * *"
 
-# A run that reads two lists, patches a few labels and waits up to 120 s for a CSI Deployment
-# that does not exist yet ends well inside this. It sits below the `longhorn-reconcile-verify`
+# A run that reads two lists and patches a few volumes ends well inside this. It sits below the `longhorn-reconcile-verify`
 # Kustomization's 600 s timeout, so a hung gate run fails on its own message.
 longhorn_reconcile_k8s_deadline_seconds: 300
 
@@ -40,25 +38,6 @@ longhorn_reconcile_k8s_cpu_limit: 200m
 longhorn_reconcile_k8s_mem_limit: 128Mi
 longhorn_reconcile_k8s_cpu_request: 10m
 longhorn_reconcile_k8s_mem_request: 32Mi
-
-# How long a run waits for a CSI Deployment that longhorn-driver-deployer has not created yet,
-# in seconds. The Ansible task retried 12 times at 10 seconds (the same 120) after a rollout wait
-# on the driver deployer that this job does not have. A Deployment still absent when the wait
-# ends fails the run. `reconcile_sidecars` in files/longhorn_reconcile.py records the choice.
-longhorn_reconcile_k8s_csi_wait_seconds: 120
-
-# Memory REQUEST only (no limit) for the csi-* sidecar Deployments. longhorn-manager's request,
-# k3s_longhorn_manager_memory_request, is the `longhorn` role's (H1.5a).
-# Upstream's deploy/longhorn.yaml ships longhorn-manager with an empty `resources: {}`, and
-# longhorn-driver-deployer creates the csi-* Deployments the same way, which gives BestEffort QoS
-# and oom_score_adj 1000 — the worst possible score, so the kernel eats the storage control plane
-# first under any memory pressure. Measured at the OOM kill: a csi-* sidecar held 97 MB anon-rss,
-# while instance-manager (already Burstable) survived untouched. A REQUEST alone moves the pod to
-# Burstable and drops oom_score_adj without adding a new kill path — a LIMIT set too low would
-# trade "killed by badness" for "killed by cgroup cap". Headroom is roughly double the measured
-# RSS: enough to absorb ordinary growth without inflating node allocatable so far that real
-# pressure elsewhere goes unschedulable.
-k3s_longhorn_csi_sidecar_memory_request: 192Mi  # noqa var-naming[no-role-prefix]
 
 # The three tier lists, moved here from `setup/k3s`'s defaults in H1.7a under the names they had.
 # This role's ConfigMap renders them into `tiers.json`, and the job applies them to the cluster:
@@ -112,8 +91,8 @@ k3s_longhorn_weekly_volumes: "{{ containers_list | longhorn_weekly_claims(k8s_na
 k3s_longhorn_nobackup_volumes: "{{ containers_list | longhorn_nobackup_claims(k8s_namespace) }}"  # noqa var-naming[no-role-prefix]
 
 # The CronJob's one-off run per role revision, `longhorn-reconcile-deploy-gate-<spec digest8>` in
-# `longhorn-reconcile-verify`. It is a post-apply mutation: the run holds the tier labels and the
-# CSI requests the revision declares, and a second run finds them held and writes nothing, which
+# `longhorn-reconcile-verify`. It is a post-apply mutation: the run holds the tier labels and
+# backup targets the revision declares, and a second run finds them held and writes nothing, which
 # the named test proves. The Job keeps no ownerReference to the CronJob, so `concurrencyPolicy:
 # Forbid` does not keep a scheduled firing off a gate run. An overlap computes the same plan
 # from the same lists, and a patch to a label already set is a no-op.

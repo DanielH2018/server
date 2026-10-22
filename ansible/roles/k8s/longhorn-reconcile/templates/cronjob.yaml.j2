@@ -1,14 +1,13 @@
 {% from 'container-resources.yml.j2' import job_container_resources with context %}
 {% from 'security-context.yml.j2' import job_hardened_security_context with context %}
 {#
-  The Longhorn reconcile job, hourly: hold each Volume CR in the recurring-job group its tier
-  names, and hold the memory request of the four CSI sidecar Deployments. It replaced the
-  `setup/k3s` tasks in `tasks/longhorn.yml` and `tasks/longhorn-weekly-shard.yml` at H1.6. The
-  script's docstring is the design, and this role's CLAUDE.md has the write contract.
+  The Longhorn reconcile job, hourly: hold each Volume CR in the recurring-job group and backup
+  target its tier names. It replaced the `setup/k3s` tasks in `tasks/longhorn.yml` and
+  `tasks/longhorn-weekly-shard.yml` at H1.6. The script's docstring is the design, and this
+  role's CLAUDE.md has the write contract.
 
-  It WRITES to the cluster: a merge patch of group labels on a Volume CR that must move, and a
-  strategic merge patch of one container's memory request on a CSI Deployment that lost it. A
-  converged cluster gets no write. Its ServiceAccount (rbac.yaml.j2) holds those verbs and no
+  It WRITES to the cluster: a merge patch of group labels and backup target on a Volume CR that
+  must move. A converged cluster gets no write. Its ServiceAccount (rbac.yaml.j2) holds those verbs and no
   others, so this pod mounts its token.
 
   `concurrencyPolicy: Forbid` keeps two scheduled runs off each other. The gate Job that Flux
@@ -69,10 +68,6 @@ spec:
               env:
                 - name: RECONCILE_NAMESPACE
                   value: "{{ k8s_longhorn_namespace }}"
-                - name: RECONCILE_CSI_MEMORY_REQUEST
-                  value: "{{ k3s_longhorn_csi_sidecar_memory_request }}"
-                - name: RECONCILE_CSI_WAIT_SECONDS
-                  value: "{{ longhorn_reconcile_k8s_csi_wait_seconds }}"
                 - name: RECONCILE_TIERS_FILE
                   value: /config/tiers.json
                 # The API server's CA, which the automounted token volume carries.

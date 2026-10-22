@@ -1,10 +1,16 @@
 # longhorn-reconcile — the hourly job that holds each volume in its backup tier
 
 A CronJob in `longhorn-system` that labels Longhorn Volume CRs with the recurring-job group
-their tier names, sets each Volume's backup target, and holds the memory request of the four
-CSI sidecar Deployments. It replaced the label, weekly-shard, legacy-label and CSI-request
-tasks that `setup/k3s` ran from `tasks/longhorn.yml` and `tasks/longhorn-weekly-shard.yml`
-(H1.6), and the two target-routing tasks of `tasks/longhorn-backup.yml` (H1.7a).
+their tier names and sets each Volume's backup target. It replaced the label, weekly-shard and
+legacy-label tasks that `setup/k3s` ran from `tasks/longhorn.yml` and
+`tasks/longhorn-weekly-shard.yml` (H1.6), and the two target-routing tasks of
+`tasks/longhorn-backup.yml` (H1.7a).
+
+It does not touch the CSI sidecar Deployments. From H1.6 until #5958 it patched their memory
+request, and longhorn-manager cleared it on its own hourly tick, so each of the four
+Deployments rolled about twice an hour. The request is the `longhorn` role's
+`system-managed-csi-components-resource-limits` Setting, which the manager enforces. Do not
+add a Deployment write back here.
 
 ## At a glance
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates, tasks or containers_list entry, or the k3s role's Longhorn tier lists. -->
@@ -53,9 +59,6 @@ authority is written here to keep a later edit from widening it.
       `recurring-job-group.longhorn.io/{default, no-backup, weekly-backup, weekly-backup-d0..d6}`
       and `spec.backupTargetName`. One patch per volume that must move, labels and target
       together.
-    - A strategic merge patch of one container's `resources.requests.memory` on each of
-      `csi-attacher`, `csi-provisioner`, `csi-resizer` and `csi-snapshotter`, when the request
-      differs from `k3s_longhorn_csi_sidecar_memory_request`. Each patch is a rollout.
 - **A converged cluster gets no write.** The run reads the Volume list and the PVC list, plans,
   and patches only what differs. `tests/test_longhorn_reconcile.py::test_a_second_run_changes_nothing`
   proves it, and the gate Job's `homelab/rerun-safe` names that test.
@@ -72,14 +75,13 @@ authority is written here to keep a later edit from widening it.
   prints `would patch ...` lines with no write. Run it with a read-only credential before a
   change to the script or to a tier list; on a converged cluster it prints no `would patch`
   line.
-- **RBAC is the verbs the script calls, and the target arm adds none.** `list` and `patch` on `volumes.longhorn.io`, `get` and
-  `patch` on the four named Deployments, and a ClusterRole with `list` on
-  `persistentvolumeclaims`. `get` on volumes is absent because the script lists once and never
+- **RBAC is the verbs the script calls, and the target arm adds none.** `list` and `patch` on
+  `volumes.longhorn.io`, and a ClusterRole with `list` on `persistentvolumeclaims`. No grant
+  reaches a Deployment. `get` on volumes is absent because the script lists once and never
   reads a single volume. ENFORCED:
   `ansible/tests/k8s/test_rbac_against_rest_script.py::test_the_longhorn_reconcile_role_grants_every_call_its_script_makes`.
 - **A failed read writes nothing.** Both lists are read before the first patch. A refused patch
-  or a CSI Deployment still absent after the wait fails the run (exit 1); the next hourly run
-  retries.
+  fails the run (exit 1); the next hourly run retries.
 - **A claim on both the weekly and the no-backup list stops the run before any write.** The
   Ansible tasks gave such a volume both labels, which nothing intended.
 - **A volume in no group stays in none.** Every step moves a volume out of a group it carries.
@@ -95,14 +97,11 @@ authority is written here to keep a later edit from widening it.
 
 ## Traps
 
-- **A CSI Deployment that is absent is waited for, then fails the run.** longhorn-driver-deployer
-  creates the four after the manager is Ready, so on a first apply they can lag the gate Job by
-  seconds. `RECONCILE_CSI_WAIT_SECONDS` (`longhorn_reconcile_k8s_csi_wait_seconds`) is the wait.
-  The `DECIDED:` marker in `reconcile_sidecars` records the choice.
-- **The sidecar patch must be a strategic merge.** A JSON merge patch replaces the whole
-  `containers` array and strips the image and args. `Kube.call` takes the content type, and
-  `tests/test_longhorn_reconcile.py::test_a_csi_deployment_without_the_request_is_patched_with_a_strategic_merge`
-  holds it.
+- **A second writer to the CSI sidecars' `resources` restarts the flip-flop.** longhorn-manager
+  sets those four containers' `resources` to exactly what the Setting names and clears the
+  rest. `tests/test_longhorn_reconcile.py::test_a_run_reads_and_writes_no_deployment` and
+  `tests/test_longhorn_reconcile_render.py::test_the_role_grants_nothing_on_deployments` keep
+  this job off them.
 - **A reverted H1.6 orphans the CronJob.** `deletionPolicy: Orphan` leaves it running, and it
   writes the same labels the restored `setup/k3s` tasks write. The revert PR names the
   **operator-only** delete.

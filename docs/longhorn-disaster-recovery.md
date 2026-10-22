@@ -176,10 +176,11 @@ the per-volume map and each exclusion's rationale:
       credentials, both backup targets and the RecurringJob. The Longhorn Settings, the
       `longhorn-nobackup` class and the metrics NetworkPolicy are not in this list: the
       `longhorn` Kustomization applies them at (f), so the replica count is in place before the
-      smoke test binds its volume. The CSI sidecar memory requests and the recurring-job label
-      reconcile are not in it either. From H1.6 they are the `longhorn-reconcile` CronJob's,
-      which the root applies once (g) resumes it, and its gate Job runs the reconcile once at
-      that apply. Run (f2)
+      smoke test binds its volume. The CSI sidecar memory requests are one of those Settings
+      (#5958): longhorn-driver-deployer reads it when it creates the four Deployments, so they
+      start with the request. The recurring-job label reconcile is not in the list either. From
+      H1.6 it is the `longhorn-reconcile` CronJob's, which the root applies once (g) resumes
+      it, and its gate Job runs the reconcile once at that apply. Run (f2)
       from a checkout at the commit `prod` names, which (f) read. Each H1 PR deletes a task's
       guard-map row in the commit that hands the task's objects to Flux, so a checkout older
       than `prod` fails the stale-checkout guard, and a newer one would skip the objects it
