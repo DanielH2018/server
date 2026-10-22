@@ -6,6 +6,12 @@ waiting on stdin or a network, one died resolving a kubeconfig at import, and `d
 its staleness gate first and answered with exit 4 and a `git rebase` remedy. A static check for
 `add_argument` passes on all five.
 
+WHAT COUNTS AS AN ANSWER. Exit 0 with output is not enough: a script that ignores `--help` and
+runs its whole check exits 0 with output too, and `validate_ha_config.py --help` passed that way
+while it printed `Home Assistant config OK` (#5579). The answer must carry the first line of the
+entry point's docstring, which `lib.cli_help.answer_help` prints, or a `usage:` line, which
+argparse prints. A shell script's docstring is its leading comment block.
+
 WHAT COUNTS AS AN ENTRY POINT. `lib.script_classify.classify` reads the tree for how each
 script is reached, and everything it does not call a library is one. A Python module with no
 `if __name__ == "__main__"` guard cannot be run at all, and the classifier calls every one
