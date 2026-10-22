@@ -6,19 +6,19 @@ tighter or looser allow-list than the baseline. Deploys no workload of its own.
 
 ## At a glance
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates, tasks or containers_list entry, or the k3s role's Longhorn tier lists. -->
-- **Deploy tag:** `--tags "netpol-baseline"`
-- **Image:** `alpine` (`netpol_baseline_k8s_probe_image`)
+- **Applied by:** Flux, through `promote` (`owner: flux`); `deploy.sh` refuses
+  `--tags=netpol-baseline` with exit 5
 - **Route:** none (no `templates/ingressroute.yaml.j2`)
 - **Claims:** none (no PVC)
-- **Auto-deploy:** eligible (`k8s_autodeploy: true`)
 <!-- /generated_from -->
 
-- **Renders nothing runnable** — NetworkPolicy objects plus one probe Job
-  (`netpol-probe-job.yaml.j2`) that verifies the policies actually fence what they claim to.
-  Its legs and its readiness gate both read the target table `netpol_baseline_probe_targets`
-  in `defaults/main.yml`. Add a target as a row there, never as a second Job (#3813).
-- **Auto-deploy-eligible because** an image-only diff touches only the pinned probe image; the policies re-apply unchanged and the role hard-fails
-  if the live exempt set has drifted from `netpol_baseline_exempt_workloads`.
+- **Renders nothing runnable** — NetworkPolicy objects plus one verify Job
+  (`templates/verify/job.yaml.j2`, rendered as `netpol-baseline-verify`) that verifies the
+  policies actually fence what they claim to. Its legs and its readiness gate both read the
+  target table `netpol_baseline_probe_targets` in `defaults/main.yml`. Add a target as a row
+  there, never as a second Job (#3813).
+- **Pins no image.** The Job runs the image the renderer passes every verify Job
+  (`flux_job_image`), so an image bump cannot change this role.
 - **`netpol_baseline_scope: namespace`** — the baseline selects every pod in the namespace
   EXCEPT one carrying `netpol-baseline-exempt` (a workload with its own, tighter policy). Set
   to `label` to scope to opt-in pods only; `netpol_baseline_enforced: false` disables
@@ -35,46 +35,50 @@ tighter or looser allow-list than the baseline. Deploys no workload of its own.
 - **The observability policies are deferred** (#3591). The role's prune is armed, and the
   armed apply's `-n homelab` refuses a document in another namespace (#3575). So
   `networkpolicy-observability`, `-prometheus`, `-loki` and `-alertmanager` render into
-  `netpol-baseline-observability/`, and `tasks/main.yml` applies that directory itself, before
-  the probes. The prune never selects them, and a `--dry-run` never shows them to the API
-  server. So a new template rendering outside `k8s_namespace` must join that list, and
-  `ansible/tests/deploy/test_manifests_prune.py` fails when one is missing.
+  `netpol-baseline-observability/`, which the renderer emits as `netpol-baseline-deferred`.
+  A new template rendering outside `k8s_namespace` must join `manifests_deferred_files` in
+  `tasks/main.yml`, and `ansible/tests/deploy/test_manifests_prune.py` fails when one is
+  missing.
 
 ## Notable
-- **Both boolean levers coerce oddly.** They go through `| bool` on both the template `if`
-  and the probe tasks' `when:`, so a typo like `fasle` is silently `False` on both sides: the
-  allow-all body renders, the verifying probe skips, and the deploy reports green while
-  nothing is fenced. `tasks/main.yml` asserts both are literally `true`/`false` before it
-  reads the cluster or applies anything. Under Flux no task runs, so
-  `tests/test_netpol_baseline_flux_gates.py` applies the same predicate to the render context.
+- **Both boolean levers coerce oddly.** They go through `| bool` in the templates, so a typo
+  like `fasle` is silently `False`: the allow-all body renders and the deploy reports green
+  while nothing is fenced. A scope typo falls through to the label selector. The role's tasks
+  asserted the values before they applied anything. Flux runs no task, so `LEVER_ASSERTS` in
+  `tests/test_netpol_baseline_flux_gates.py` holds the same predicates and applies them to the
+  render context, which CI runs before a typo can merge (#5685).
 - **The exempt-workload list is read as an exact set, live** — a name absent from the cluster
   is a widening about to happen; a cluster workload missing from the list is fenced by
-  nothing. The two disagreed for ~16 hours during slice 4.5;
-  `ansible/tests/k8s/test_netpol_baseline_labels.py` pins the set against templates now.
+  nothing. The two disagreed for ~16 hours during slice 4.5. The `exempt` check of the verify
+  Job's `gate` initContainer lists the `netpol-baseline-exempt` pods in each
+  namespace-scoped baseline's namespace. It runs after the apply, so drift fails the Job and
+  the revision's soak acts on it, where the Ansible task refused the apply.
+  `ansible/tests/k8s/test_netpol_baseline_labels.py` pins the set against templates.
 - **`netpol_baseline_node_cidrs` are `/32` host addresses on purpose** — a `/16` here would
   silently cancel the whole policy.
-- **The role drains before it reads or applies.** Its first task includes `k8s/manifests`
-  with `tasks_from: drain.yml`, the drain configarr runs before its reconcile.
-  `ansible/tasks/k8s_batch.yml` drains rollouts only at the end of a batch, so a workload
-  earlier in this role's batch can still be rolling when the role runs. The drain waits for
-  those rollouts first. That keeps the exempt-set reads, the policy applies and the probe off
-  a shared end-of-batch drain, whatever batch the role lands in. It cannot wait for a role
-  deployed after this one, so the role applies last: `K8S_APPLIES_LAST` in
-  `ansible/filter_plugins/toposort.py` gives it an edge onto every other k8s entry, whatever
-  its position in `containers_list`. In a run of
-  `--tags netpol-baseline` alone the queue is empty and the drain does nothing.
-- **`templates/verify-inert/` is the probe's Flux form, and nothing renders it yet.** Neither
-  the manifests role nor the renderer's `verify_files` reads that directory. The flip PR
-  renames it to `templates/verify/`, which makes the renderer emit `netpol-baseline-verify`,
-  and deletes the probe tasks and `netpol-probe-job.yaml.j2`. The Job runs
+- **Flux orders the role last.** `K8S_APPLIES_LAST` in `ansible/filter_plugins/toposort.py`
+  gives the role an edge onto every other k8s entry. The renderer's ordering turns that into
+  a dependency of `netpol-baseline` on every other flux-owned tag and on every other tag's
+  `-deferred` Kustomization. `netpol-baseline-deferred` depends on `netpol-baseline`, and
+  `netpol-baseline-verify` on `netpol-baseline-deferred`. The Ansible tasks drained queued
+  rollouts first, and Flux's `wait` and that ordering replace the drain. An edge onto an
+  Ansible-owned role is dropped, which is why this role flips after every other.
+- **A failed workload change leaves these policies unapplied.** The role depends on every
+  other tag, so a revision whose workload change fails its `wait` never reaches
+  `netpol-baseline` or its verify Job. The flip PR repeats D4's drill on this edge.
+- **Flux applies it, not Ansible** (D5, Wave D's last flip). The `containers_list` entry
+  carries `owner: flux`, so `deploy.sh`, the play and the GitOps deployer skip it, and a
+  merged change reaches the cluster when `promote` publishes and verifies the next bundle. To
+  give it back to Ansible, follow the two-PR handback in `docs/flux-deploy-plane.md`; a plain
+  revert of the flag leaves two writers on the objects. `tasks/main.yml` holds one task, the
+  include of `k8s/manifests` with the deferred file list, which the renderer reads.
+- **`templates/verify/` is the probe's Flux form.** The Job runs
   `files/netpol_baseline_verify.py` twice. Its `gate` initContainer reads the targets'
-  EndpointSlices through the API server, and its main container dials the probe's legs
-  through `flux_job_connect`. Both read the same `netpol_baseline_probe_active` table. The
-  `gate` also runs the exempt-set check, which is the successor of the two live exempt-set
-  tasks. It runs after the apply, so drift fails the Job rather than blocking the apply.
-  `job.yaml.j2` carries the caller census and the `DECIDED:` notes on the digest and the
-  initContainer. `tests/test_netpol_baseline_verify.py` renders the renamed copy and runs the
-  Job census over it.
+  EndpointSlices through the API server and runs the `exempt` check, and its main container
+  dials the probe's legs through `flux_job_connect`. Both read the same
+  `netpol_baseline_probe_active` table. `job.yaml.j2` carries the caller census and the
+  `DECIDED:` notes on the digest and the initContainer.
+  `tests/test_netpol_baseline_verify.py` runs the Job census over its render.
 
 ## Where a per-workload policy lives
 
