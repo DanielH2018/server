@@ -460,3 +460,32 @@ def test_health_still_fails_a_flux_gate_job_that_predates_the_deploy():
     text, code = _reconcile_health(jobs, "2026-08-16T09:00:00Z")
     assert code == 1, text
     assert GATE in text
+
+
+def test_latest_owned_job_ignores_a_gate_named_job_no_verify_kustomization_applied():
+    """The label check on its own: each decoy has the exact gate name and is newer than GATE."""
+    unlabelled = _flux_gate_job(
+        "longhorn-reconcile-deploy-gate-deadbeef",
+        "2026-08-16T11:50:00Z",
+        "longhorn-reconcile",
+        None,
+    )
+    by_main = _flux_gate_job(
+        "longhorn-reconcile-deploy-gate-0badc0de",
+        "2026-08-16T11:55:00Z",
+        "longhorn-reconcile",
+        "longhorn-reconcile",
+    )
+    jobs = {"items": [_reconcile_gate(), unlabelled, by_main]}
+    latest = health_cronjob.latest_owned_job(jobs, "longhorn-reconcile")
+    assert latest["metadata"]["name"] == GATE
+
+
+def test_health_passes_a_new_flux_role_with_the_deploy_time_production_reads():
+    """`probe.py health` reads no release record for a Flux-owned entry, so it passes None."""
+    deploy_applied_at = health._deploy_applied_at("longhorn-reconcile")
+    assert deploy_applied_at is None
+    jobs = {"items": [_reconcile_gate("2026-08-16T11:31:00Z")]}
+    text, code = _reconcile_health(jobs, deploy_applied_at)
+    assert code == 0, text
+    assert GATE in text
