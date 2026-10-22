@@ -7,6 +7,7 @@ does not carry.
 Run: uv run pytest scripts/lib/tests/test_render_context.py
 """
 
+import os
 from pathlib import Path
 
 import pytest
@@ -215,3 +216,35 @@ def test_a_withheld_name_and_a_value_reading_it_are_dropped(tree):
         withhold=frozenset({"token"}),
     )
     assert ("token" in ctx, "header" in ctx, ctx["kept"]) == (False, False, "k")
+
+
+def test_an_edit_between_two_renders_reaches_the_second(tree):
+    # load_yaml caches each parsed file (#5592); a fixture tree edited between renders must
+    # still render with its new values, on every file layer. Each edit keeps the file's size
+    # and its mtime is put back, so a cache keyed on (path, mtime, size) fails here too.
+    names = ("from_defaults", "from_group", "from_host")
+    template, inv = tree(
+        {"from_defaults": "d1"},
+        group={"from_group": "g1"},
+        hosts={"box": {"from_host": "h1"}},
+        plane="k8s",
+    )
+    ctx = rc.render_context(template, inventory=inv)
+    assert [ctx[name] for name in names] == ["d1", "g1", "h1"]
+    files = (
+        template.parents[1] / "defaults" / "main.yml",
+        inv.all_vars,
+        inv.host_vars / "box.yml",
+    )
+    stats = {path: path.stat() for path in files}
+    tree(
+        {"from_defaults": "d2"},
+        group={"from_group": "g2"},
+        hosts={"box": {"from_host": "h2"}},
+        plane="k8s",
+    )
+    for path, stat in stats.items():
+        assert path.stat().st_size == stat.st_size
+        os.utime(path, ns=(stat.st_atime_ns, stat.st_mtime_ns))
+    ctx = rc.render_context(template, inventory=inv)
+    assert [ctx[name] for name in names] == ["d2", "g2", "h2"]

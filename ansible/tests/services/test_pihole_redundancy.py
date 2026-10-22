@@ -17,7 +17,7 @@ ansible/roles/k8s/pihole/tests/test_pihole_gravity.py checks, and the sibling gu
     against the resolver they just replaced. The play reports failed=0. Sequencing the restarts
     cannot help, so the apply is sequenced too;
   * split across nodes: every VIP is announced from daniel-box only (marked PERMANENT in
-    setup/k3s metallb-pool.yaml.j2), and with externalTrafficPolicy: Local a pod on the other
+    k8s/metallb metallb-pool.yaml.j2), and with externalTrafficPolicy: Local a pod on the other
     node receives nothing, so half the capacity would silently serve no traffic.
 """
 

@@ -106,6 +106,19 @@ fences admit the Job's pod, and holds the Job's mounts to janitorr's and jellyfi
 there (`scripts/renderer/renderer_lib/task_inputs.py`), and the `k8s/manifests` include the
 renderer reads `manifests_*` vars from.
 
+## Retention rungs
+
+`media-deletion` keys each expiration on free disk: a rung applies while free space is below
+its key. The rungs are 5, 10, 15, 20 and 25, and the 25 rung (movies 180d, seasons 240d) is the
+loosest.
+
+DECIDED: the loosest rung is 25 because `/srv/media` shares daniel-box's root LV with
+`/var/lib/longhorn`, and Longhorn stops scheduling on a disk below 25% available
+(`storage-minimal-available-percentage: 25`). A 20 rung would not act until the LV is 80% used,
+past that line. The LV cannot grow, because the VG has no free extents. Operator ruling
+2026-10-22, #5806. The `DiskHealthFailed` threshold of 75% used is Longhorn's floor too and
+stays. Media tagged `janitorr-keep` is exempt from every rung.
+
 ## Editing
 - Rules: `templates/config/application.yml.j2` (rendered into the k8s Secret by `roles/k8s/janitorr`)
 - Verify the health reader: `kubectl -n homelab logs job/<the newest janitorr-health Job>`. Its

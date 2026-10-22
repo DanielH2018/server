@@ -52,11 +52,6 @@ class IoConfig:
     HEALTHCHECKS_API_KEY: str = field(repr=False)
     HEALTHCHECKS_EXPECTED: tuple[dict, ...]
     HEALTHCHECKS_PROBE_INTERVAL_S: float
-    LOKI_STREAM: str
-    LOKI_DOCKER_STREAM: str
-    LOKI_PI_STREAM: str
-    LOKI_WINDOW: str
-    LOKI_FILETAIL_WINDOW: str
     LOG_ERROR_SELECTOR: str
     LOG_ERROR_PATTERN: str
     LOG_ERROR_WINDOW: str
@@ -75,7 +70,6 @@ class IoConfig:
     SWALLOWED_VERDICTS_WINDOW_S: int
     BOOT_SETTLE_S: int
     SHIPPER_BACKLOG_GRACE_S: int
-    KUMA_NOTIFY_FAILURES_WINDOW_S: int
     DISCORD_WEBHOOK_URL: str = field(repr=False)
     DISCORD_CROWDSEC_WEBHOOK_URL: str = field(repr=False)
     DISCORD_GITOPS_WEBHOOK_URL: str = field(repr=False)
@@ -259,42 +253,6 @@ def io_config(
         HEALTHCHECKS_API_KEY=_env_file("HEALTHCHECKS_API_KEY"),
         HEALTHCHECKS_EXPECTED=_expected_checks(_env("HEALTHCHECKS_EXPECTED")),
         HEALTHCHECKS_PROBE_INTERVAL_S=_num("HEALTHCHECKS_PROBE_INTERVAL_S"),
-        # Loki log-ingestion freshness: Loki's Kuma /ready probe stays green even when Alloy
-        # stops SHIPPING (a relabel regression, positions-file corruption, a stale /var/log
-        # mount) — a silently-dead log pipeline that quietly blinds the log dashboards and any
-        # future log forensics. Three arms, down if ANY is silent. Every selector is rendered in
-        # config/env.yaml.j2 from the `loki_streams` label owner in group_vars/all.yml.
-        #   arm 1 (cluster file-tail union): count the cluster hosts' authlog+syslog streams over
-        #   a TOLERANT window (LOKI_FILETAIL_WINDOW) and go down at zero — an Alloy file-source
-        #   regression, a stale /var/log mount, or host rsyslog dying silences both at once
-        #   (exactly what /ready can't see), while syslog's routine volume keeps the union alive
-        #   on a quiet night so no single low-volume file going quiet trips it. The window is
-        #   wider than arm 2's because file-tail volume is low and dips overnight (a lone
-        #   `{job="syslog"}` over 10m false-paged 2026-06-23 — this debloated host routinely
-        #   idles >15m between syslog writes).
-        #   The selector EXCLUDES `machine="daniel-pi"`. daniel-pi's Alloy ships its two health
-        #   crons' verdict lines under the same `job="syslog"` (roles/containers/alloy, the
-        #   pi_health source) so `probe.py alerts` can reconstruct a Pi episode. Those lines
-        #   arrive from a HOST OUTSIDE the cluster, so without the exclusion a total cluster
-        #   file-tail outage would never reach zero — the Pi would hold the alert open on behalf
-        #   of streams it knows nothing about. Loki's `!=` also matches a stream with no
-        #   `machine` label at all. Until #3739 the deployed selector lacked this filter.
-        #   arm 2 (cluster pod streams): count `job="k8s"`, the label the cluster Alloy
-        #   DaemonSet puts on every pod's stdout. A pod-source break silences every container
-        #   log while the file-tail streams keep flowing; a tight window (LOKI_WINDOW) catches a
-        #   total Alloy death fast. Not `{container=~".+"}`: the Pi's container streams carry
-        #   `container` too, and ~1900 Pi lines per 30m kept that selector non-zero through any
-        #   cluster outage (#3739).
-        #   arm 3 (the Pi): both arms above count CLUSTER streams only, so the Pi's Alloy could
-        #   die with every cluster stream flowing and both arms green (2026-08-25 review M-11).
-        #   `job="pi"` is its container stream. The window is the tolerant one, for a stronger
-        #   reason than arm 1's: the Pi is a Zero 2 W running five LAN-only containers, so its
-        #   log volume is genuinely low and bursty.
-        LOKI_STREAM=_env("LOKI_STREAM"),
-        LOKI_DOCKER_STREAM=_env("LOKI_DOCKER_STREAM"),
-        LOKI_PI_STREAM=_env("LOKI_PI_STREAM"),
-        LOKI_WINDOW=_env("LOKI_WINDOW"),
-        LOKI_FILETAIL_WINDOW=_env("LOKI_FILETAIL_WINDOW"),
         # ── log-pattern arm: a workload that is Ready and still failing ──────────────────
         #
         # Every other check here reads a metric or an API. None of them can see a service that
@@ -456,11 +414,6 @@ def io_config(
         # window, so a real throughput fault during a reboot morning still pages. Dropping the
         # whole verdict for 6h weekly would be six hours of blindness on partial log loss.
         SHIPPER_BACKLOG_GRACE_S=_int("SHIPPER_BACKLOG_GRACE_S"),
-        # How far back check_kuma_notify_failures reads Kuma's `Cannot send notification`
-        # lines (#1891). The same 3h as the swallowed-verdict window: a drop stays paged past
-        # Loki ingest lag and past the resend that likely follows it, and the tile clears on
-        # its own once the window passes — there is nothing an operator clears by hand.
-        KUMA_NOTIFY_FAILURES_WINDOW_S=_int("KUMA_NOTIFY_FAILURES_WINDOW_S"),
         # Discord delivery: Kuma fires every alert by POSTing to its Discord webhook
         # (monitor_discord_webhook_url). A rotated/revoked/deleted webhook leaves every monitor
         # green-in-UI while Discord goes silent — the one link in the alert chain no other

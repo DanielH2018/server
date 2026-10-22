@@ -229,10 +229,10 @@ LITERALS = [
     "NEW = ('a', -1, 2 * 3)",
     "NEW = frozenset({'a', 'b'})",
     "NEW = {'k': [1, 2], 'j': set()}",
+    "NEW = LIMIT",
 ]
 NOT_LITERALS = [
     "NEW: int = 1",
-    "NEW = LIMIT",
     "NEW = pytest.mark",
     "NEW = ('a',)[0]",
     "NEW = sorted({'a'})",

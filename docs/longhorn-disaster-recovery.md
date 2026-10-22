@@ -154,6 +154,10 @@ the per-volume map and each exclusion's rationale:
       Once every status on `prod`'s commit reads `success`, clear the hold with
       `gh variable set DEPLOY_HOLD --body none -R DanielH2018/server`.
 
+   **MetalLB from H1.3.** The `metallb` tag is Flux-owned, so (a) no longer installs MetalLB or
+   its address pool. The Kustomization `metallb` installs both at (f), once the plumbing tags
+   apply, and no VIP is announced before then.
+
    Before H1.2 there is no step (b): k3s bring-up applies the PriorityClasses and the identity
    itself. Steps 3 and 4 below sit between (f) and (g). D5's flux PR replaces this block with a
    pointer to its own bootstrap section.

@@ -17,12 +17,6 @@ k3s_version: v1.37.1+k3s1
 #   uv run python scripts/validate/asset_pins.py --refresh k3s-io/k3s
 k3s_install_script_url: "https://raw.githubusercontent.com/k3s-io/k3s/{{ k3s_version }}/install.sh"
 k3s_install_script_sha256: ed01f89fd977bf20ac1516bbebf8370bf3ddbaa55dac8aba610956a4c78cc00b
-# MetalLB serves every LoadBalancer VIP (Traefik's edge, Pi-hole's DNS). extractVersion is
-# load-bearing: metallb/metallb publishes the app (`v0.16.0`) and the Helm chart
-# (`metallb-chart-0.16.1`) into one releases feed, and the chart runs a minor ahead of the
-# app. Anchoring on a leading `v` reads app releases only.
-# renovate: datasource=github-releases depName=metallb/metallb extractVersion=^v(?<version>.+)$
-k3s_metallb_version: v0.16.0
 # Longhorn holds every PVC, and a careless bump is worse than a stale one: see the version-skip
 # warning at the top of this file. Tracked for the signal, never automerged.
 # renovate: datasource=github-releases depName=longhorn/longhorn
@@ -281,20 +275,6 @@ k3s_audit_log_maxsize: 100     # MiB before rotating
 #
 # REMOVING THIS NEEDS A MANUAL INSTALLER RE-RUN. The install task above detects an argument
 # that was ADDED but not one that was removed; see its comment.
-
-# LoadBalancer addresses. Must sit OUTSIDE the router's DHCP scope, or MetalLB will hand
-# out addresses the router also leases.
-#
-# The ingress VIP is carved out into its own autoAssign: false pool (see
-# templates/metallb-pool.yaml.j2) so it can only be claimed by the Service that names it
-# in a metallb.io/loadBalancerIPs annotation. Ingress is the one address that appears in
-# DNS and, eventually, in the router's port-forward — it must not move because some other
-# Service happened to ask for a LoadBalancer first.
-#
-# k3s_metallb_ingress_vip itself lives in group_vars/all.yml, not here: Pi-hole on
-# daniel-server points the *-k8s hostnames at it, so it is consumed on a host that never
-# runs this role.
-k3s_metallb_pool: 10.0.0.241-10.0.0.250
 
 # Two replicas, one per node, which is what makes replication, and therefore failover, exist.
 # More replicas than nodes would leave every volume permanently "degraded" — upstream's
