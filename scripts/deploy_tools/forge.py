@@ -3,7 +3,7 @@
 `promote.py` decides which published master commit the cluster's `prod` tag moves to. Every
 fact it reads from outside the checkout comes through this module:
 
-- `Registry` speaks the OCI distribution API to ghcr.io: the token request, the manifest
+- `Registry`, in `forge_registry.py` and re-exported here, speaks the OCI distribution API to ghcr.io: the token request, the manifest
   fetch and the manifest `HEAD`, and a bundle's files read out of its layer, for `decide`'s
   pulls and `land-wait`. It lists no tags, so a run's request count does not grow with the
   number of published versions.
@@ -26,12 +26,7 @@ The plan is `docs/target-architecture/deploy/d1-flux-installed.md`, *Decisions*,
 *Every GitHub and GHCR call goes through one forge adapter*.
 """
 
-import base64
-import gzip
-import io
-import re
 import subprocess
-import tarfile
 import time
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
@@ -40,23 +35,26 @@ from datetime import datetime
 from forge_transport import (
     TIMEOUT_S,
     ForgeError,
-    Response,
+    Response as Response,
     Transport,
     _api_message,
-    _error_codes,
     _json,
     _updated,
     urllib_post as urllib_post,
     urllib_transport,
 )
 from forge_transport import DISCORD_MAX as DISCORD_MAX, Discord as Discord
+from forge_registry import (
+    ARTIFACT,
+    MANIFEST_ACCEPT as MANIFEST_ACCEPT,
+    REGISTRY,
+    Registry as Registry,
+)
 
 
 REPOSITORY = "DanielH2018/server"
 # The repository variable that holds promotion: `none`, or why it is held (contract C2).
 HOLD_VARIABLE = "DEPLOY_HOLD"
-REGISTRY = "ghcr.io"
-ARTIFACT = "danielh2018/homelab-manifests"
 
 # The artifact as the Packages API names it: a container package owned by the user account,
 # not by the repository, so its path starts at /users.
@@ -67,6 +65,8 @@ VERSIONS_PER_PAGE = 100
 VERSION_PAGES_MAX = 300
 # A commit's statuses, 100 to a page: one page hid 13 of 113 and hung verify (#5974).
 STATUS_PAGE_SIZE, STATUS_PAGES_MAX = 100, 20
+# A commit's check-runs, 100 to a page, the same shape as its statuses (#5977).
+CHECK_RUN_PAGE_SIZE, CHECK_RUN_PAGES_MAX = 100, 20
 # Seconds between two deletes. GitHub's REST best practices ask for at least one second between
 # mutating requests, and a burst trips the secondary rate limit as a 403 that reads like a
 # permission error.
@@ -79,199 +79,6 @@ SIGNER_ISSUER = "https://token.actions.githubusercontent.com"
 
 # cosign verify fetches the signature, then reaches Sigstore's transparency log.
 COSIGN_TIMEOUT_S = 120
-
-# The manifest types `flux push artifact` writes, plus the index and Docker types, so a HEAD
-# answers with the digest of whatever the tag names rather than a 404 for an unlisted type.
-MANIFEST_ACCEPT = ", ".join(
-    (
-        "application/vnd.oci.image.manifest.v1+json",
-        "application/vnd.oci.image.index.v1+json",
-        "application/vnd.docker.distribution.manifest.v2+json",
-    )
-)
-
-_DIGEST = re.compile(r"sha256:[0-9a-f]{64}")
-
-
-class Registry:
-    """A read-only client for one repository on ghcr.io.
-
-    It makes one token request per instance, on the first read, and caches the bearer token.
-    """
-
-    def __init__(
-        self,
-        transport: Transport,
-        github_token: str | None,
-        repository: str = ARTIFACT,
-    ) -> None:
-        """Holds the transport and the credential the token request presents.
-
-        Args:
-            transport: sends each request.
-            github_token: the workflow's `GITHUB_TOKEN`, presented to GHCR's token endpoint.
-                None or empty asks for an anonymous pull token, which a public package grants.
-            repository: the `owner/name` of the package, lower-case as GHCR names it.
-        """
-        self._transport = transport
-        self._github_token = github_token
-        self.repository = repository
-        self._bearer: str | None = None
-
-    def _token(self) -> str:
-        if self._bearer is not None:
-            return self._bearer
-        url = (
-            f"https://{REGISTRY}/token?scope=repository:{self.repository}:pull"
-            f"&service={REGISTRY}"
-        )
-        headers = {}
-        if self._github_token:
-            basic = base64.b64encode(f"token:{self._github_token}".encode()).decode()
-            headers["Authorization"] = f"Basic {basic}"
-        response = self._transport("GET", url, headers)
-        if response.status != 200:
-            raise ForgeError(f"GHCR token request: HTTP {response.status}")
-        token = _json(response, "GHCR token request")
-        if not isinstance(token, dict) or not isinstance(token.get("token"), str):
-            raise ForgeError("GHCR token request: the body has no token")
-        self._bearer = token["token"]
-        return self._bearer
-
-    def _request(
-        self, method: str, url: str, headers: Mapping[str, str] | None = None
-    ) -> Response:
-        """One registry request with the bearer token, asking for a new token once on a 401.
-
-        GHCR's pull token expires after a few minutes, and `promote.py land-wait` holds one
-        Registry for its whole wait, so a 401 means "ask again" before it means "refused".
-        """
-        response = self._transport(
-            method, url, {**(headers or {}), "Authorization": f"Bearer {self._token()}"}
-        )
-        if response.status == 401:
-            self._bearer = None
-            response = self._transport(
-                method,
-                url,
-                {**(headers or {}), "Authorization": f"Bearer {self._token()}"},
-            )
-        return response
-
-    def _manifest_request(self, method: str, reference: str) -> Response:
-        url = f"https://{REGISTRY}/v2/{self.repository}/manifests/{reference}"
-        return self._request(method, url, {"Accept": MANIFEST_ACCEPT})
-
-    def manifest(self, reference: str) -> dict | None:
-        """The manifest `reference` names, parsed, or None when the registry has no such tag.
-
-        HTTP 404, or any response carrying the registry error code `MANIFEST_UNKNOWN`, is
-        absent.
-
-        Raises:
-            ForgeError: any other status, a body that is not a JSON object, or no answer.
-        """
-        found = self._manifest(reference)
-        return None if found is None else found[0]
-
-    def tagged(self, reference: str) -> tuple[dict, str] | None:
-        """The manifest `reference` names and its digest, from one GET, or None when absent.
-
-        The digest is the response's `Docker-Content-Digest`, so reading a tag's commit and
-        its digest costs one request rather than a GET and a HEAD.
-
-        Raises:
-            ForgeError: as `manifest`, or a 200 without a well-formed digest header.
-        """
-        found = self._manifest(reference)
-        if found is None:
-            return None
-        manifest, response = found
-        digest = response.headers.get("docker-content-digest", "")
-        if not _DIGEST.fullmatch(digest):
-            raise ForgeError(
-                f"manifest {reference}: no sha256 Docker-Content-Digest header"
-            )
-        return manifest, digest
-
-    def _manifest(self, reference: str) -> tuple[dict, Response] | None:
-        response = self._manifest_request("GET", reference)
-        if response.status == 200:
-            manifest = _json(response, f"manifest {reference}")
-            if not isinstance(manifest, dict):
-                raise ForgeError(f"manifest {reference}: the body is not a JSON object")
-            return manifest, response
-        if response.status == 404 or "MANIFEST_UNKNOWN" in _error_codes(response):
-            return None
-        raise ForgeError(f"manifest {reference}: HTTP {response.status}")
-
-    def digest(self, reference: str) -> str | None:
-        """The digest of the manifest `reference` names, from one `HEAD`, or None on a 404.
-
-        Raises:
-            ForgeError: any other status, a 200 without a well-formed `Docker-Content-Digest`
-                header, or no answer.
-        """
-        response = self._manifest_request("HEAD", reference)
-        if response.status == 404:
-            return None
-        if response.status != 200:
-            raise ForgeError(f"HEAD {reference}: HTTP {response.status}")
-        digest = response.headers.get("docker-content-digest", "")
-        if not _DIGEST.fullmatch(digest):
-            raise ForgeError(
-                f"HEAD {reference}: no sha256 Docker-Content-Digest header"
-            )
-        return digest
-
-    def blob(self, digest: str) -> bytes:
-        """The bytes of the blob `digest` names.
-
-        GHCR answers with a redirect to its content host, which `urllib` follows.
-
-        Raises:
-            ForgeError: any status but 200, or no answer. A listed layer that is absent is
-                an error, because its manifest names it.
-        """
-        url = f"https://{REGISTRY}/v2/{self.repository}/blobs/{digest}"
-        response = self._request("GET", url)
-        if response.status != 200:
-            raise ForgeError(f"blob {digest}: HTTP {response.status}")
-        return response.body
-
-    def bundle(self, reference: str) -> dict[str, bytes] | None:
-        """Every regular file in the bundle `reference` names, by its path from the bundle root.
-
-        `flux push artifact` writes one layer, a gzipped tarball of the bundle directory, so
-        the files are read out of that layer. `reference` is a tag or a `sha256:` digest.
-
-        Returns:
-            The files, or None when the registry has no such tag or digest.
-
-        Raises:
-            ForgeError: the manifest has no single layer, or the layer is not a gzipped
-                tarball. Each read of the registry raises as `manifest` and `blob` do.
-        """
-        manifest = self.manifest(reference)
-        if manifest is None:
-            return None
-        layers = manifest.get("layers")
-        layer = layers[0] if isinstance(layers, list) and len(layers) == 1 else None
-        digest = layer.get("digest") if isinstance(layer, dict) else None
-        if not isinstance(digest, str) or not _DIGEST.fullmatch(digest):
-            raise ForgeError(f"manifest {reference}: not one layer with a digest")
-        files: dict[str, bytes] = {}
-        try:
-            with tarfile.open(
-                fileobj=io.BytesIO(self.blob(digest)), mode="r:gz"
-            ) as tar:
-                for member in tar.getmembers():
-                    handle = tar.extractfile(member) if member.isfile() else None
-                    if handle is not None:
-                        files[member.name.removeprefix("./")] = handle.read()
-        except (tarfile.TarError, gzip.BadGzipFile, EOFError, OSError) as err:
-            raise ForgeError(f"bundle {reference}: {err}") from err
-        return files
 
 
 class GitHub:
@@ -327,23 +134,49 @@ class GitHub:
         )
 
     def check_runs(self, sha: str) -> list[dict]:
-        """Every check-run GitHub holds for commit `sha`, up to the API's page of 100.
+        """Every check-run GitHub holds for commit `sha`, page after page.
+
+        One page holds 100 runs, and a commit can carry more, so a single read would hide a
+        failing or pending run on page 2 (#5977). The endpoint reports `total_count`, so a read
+        that collects fewer runs than that is refused rather than returned as complete. A
+        re-run can appear twice across pages; the caller reduces runs by name.
 
         Raises:
-            ForgeError: any status but 200, a body without a `check_runs` list, or no answer.
+            ForgeError: any status but 200 on any page, a body without a `check_runs` list or
+                an integer `total_count`, fewer runs than `total_count`, more than
+                CHECK_RUN_PAGES_MAX pages, or no answer.
         """
-        url = (
-            f"https://api.github.com/repos/{self.repository}/commits/{sha}/check-runs"
-            "?per_page=100"
-        )
-        response = self._transport("GET", url, self._rest_headers())
-        if response.status != 200:
-            raise ForgeError(f"check-runs for {sha}: HTTP {response.status}")
-        body = _json(response, f"check-runs for {sha}")
-        runs = body.get("check_runs") if isinstance(body, dict) else None
-        if not isinstance(runs, list):
-            raise ForgeError(f"check-runs for {sha}: the body has no check_runs list")
-        return runs
+        runs: list[dict] = []
+        for page in range(1, CHECK_RUN_PAGES_MAX + 1):
+            url = (
+                f"https://api.github.com/repos/{self.repository}/commits/{sha}/check-runs"
+                f"?per_page={CHECK_RUN_PAGE_SIZE}&page={page}"
+            )
+            response = self._transport("GET", url, self._rest_headers())
+            if response.status != 200:
+                raise ForgeError(
+                    f"check-runs for {sha}: HTTP {response.status}"
+                    f"{_api_message(response)} (page {page})"
+                )
+            body = _json(response, f"check-runs for {sha}")
+            found = body.get("check_runs") if isinstance(body, dict) else None
+            total = body.get("total_count") if isinstance(body, dict) else None
+            if not isinstance(found, list):
+                raise ForgeError(
+                    f"check-runs for {sha}: the body has no check_runs list"
+                )
+            if not isinstance(total, int) or isinstance(total, bool):
+                raise ForgeError(f"check-runs for {sha}: the body has no total_count")
+            runs.extend(found)
+            if len(found) < CHECK_RUN_PAGE_SIZE or len(runs) >= total:
+                # A run created between two page reads can push the count past total_count;
+                # only a shortfall means a page went missing.
+                if len(runs) < total:
+                    raise ForgeError(
+                        f"check-runs for {sha}: read {len(runs)} of {total} runs"
+                    )
+                return runs
+        raise ForgeError(f"check-runs for {sha}: more than {CHECK_RUN_PAGES_MAX} pages")
 
     def runs(self, workflow: str, status: str) -> list[dict]:
         """The newest 100 runs of `workflow`, a file name such as `promote.yml`, with `status`.

@@ -124,8 +124,11 @@ class FakeTransport:
             return self._registry(method, parts.path)
         match = re.fullmatch(r"/repos/[^/]+/[^/]+/commits/(\w+)/check-runs", parts.path)
         if parts.netloc == "api.github.com" and match:
+            # One page holds every run a fake commit carries; `total_count` is what the reader
+            # checks its read against, as GitHub's endpoint reports it.
             runs = self.check_runs.get(match.group(1), [])
-            return forge.Response(200, body=json.dumps({"check_runs": runs}).encode())
+            body = {"total_count": len(runs), "check_runs": runs}
+            return forge.Response(200, body=json.dumps(body).encode())
         match = re.fullmatch(r"/repos/[^/]+/[^/]+/commits/(\w+)/pulls", parts.path)
         if (
             parts.netloc == "api.github.com"

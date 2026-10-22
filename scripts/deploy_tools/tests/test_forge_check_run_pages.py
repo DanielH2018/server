@@ -84,3 +84,12 @@ def test_a_read_short_of_total_count_is_refused():
     transport = two_page_check_runs([], total_count=150)
     with pytest.raises(forge.ForgeError):
         forge.GitHub(transport, None).check_runs(T)
+
+
+def test_a_run_created_between_page_reads_is_not_a_short_read():
+    # Page 1 reported 101 runs; a re-run started before page 2 was read, which holds two.
+    pending = {"name": FAILING, "status": "queued", "conclusion": None}
+    transport = two_page_check_runs([passing("late"), pending], total_count=101)
+    runs = forge.GitHub(transport, None).check_runs(T)
+    assert len(runs) == 102
+    assert pending in runs
