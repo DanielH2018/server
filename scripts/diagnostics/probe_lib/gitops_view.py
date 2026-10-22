@@ -57,6 +57,7 @@ from gitops_markers import (
     HOLD_CLEAR_CMD,
     MARKERS,
     PLAYBOOK_CMD,
+    agent_join_cmds,
     by_hand,
     STATE_DIR,
     k8s_deferred_deploy_cmd,
@@ -101,12 +102,19 @@ def _owed_rows(owed: str | None, now: float) -> dict[str, list[dict]]:
             or f"{PLAYBOOK_CMD} {e.playbook} --tags {','.join(sorted(selected))}{target_arg(e.host)}"
         )
         warning = maximal_apply_warning(e.role, selected)
+        agents = (
+            []
+            if by_hand(e.playbook)
+            else agent_join_cmds(e.role, e.playbook, selected, e.agent_hosts)
+        )
         rows[OWED_MANUAL_PLANE].append(
             {
                 "subject": e.role,
                 "origin": e.origin,
                 "age_s": int(now - e.at),
-                "do": apply + (f" (WARNING: {warning})" if warning else ""),
+                "do": apply
+                + (f" (WARNING: {warning})" if warning else "")
+                + "".join(f" and {a}" for a in agents),
                 "clear": owed_clear_cmd(OWED_MANUAL_PLANE, e.role, selected),
             }
         )

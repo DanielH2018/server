@@ -860,6 +860,7 @@
  "scripts/deploy_tools/tests/test_deploy_snapshot_dir_has_no_comma.py": 0.18,
  "scripts/deploy_tools/tests/test_deploy_snapshot_failure_names_its_cause.py": 0.12,
  "scripts/deploy_tools/tests/test_deploy_staleness.py": 0.74,
+ "scripts/deploy_tools/tests/test_deploy_staleness_isolation.py": 0.04,
  "scripts/deploy_tools/tests/test_deploy_staleness_precedes_changed_derivation.py": 0.41,
  "scripts/deploy_tools/tests/test_deploy_staleness_precedes_tag_validation.py": 0.29,
  "scripts/deploy_tools/tests/test_deploy_stamps_are_utc.py": 0.0,

@@ -14,6 +14,8 @@ import pytest
 
 from deployer_lib import deploy_io
 from deployer_lib import deploy_setup_roles
+from lib import yaml_fast
+from lib.repo_paths import ALL_VARS
 
 SHA = "c0ffee12" * 5
 
@@ -238,3 +240,24 @@ def test_the_marker_key_is_the_role_name_for_every_pending_role():
     assert roles >= {"k3s", "common", "optimize_pi"}, roles
     for role in roles:
         assert deploy_changes.setup_role_tag(role) == role, role
+
+
+def test_a_recorded_k3s_line_carries_the_agent_hosts_its_readers_print(
+    gitops_deploy, tick, state
+):
+    """#5627: the banner and monitor-bridge cannot import the routing, so the line names them.
+
+    `--tags k3s` on daniel-box never reaches an agent node (#5606). Each ledger reader prints
+    the agent join from the line's `agent_hosts`, as it prints the target from `host`. The
+    tick records the line, so the hosts come from the routing it installed.
+    """
+    tick.paths = ["ansible/roles/setup/k3s/tasks/longhorn-backup.yml"]
+    assert gitops_deploy.main(tick.tools, tick.config, state) == 0
+    owed = pathlib.Path(state.path("owed")).read_text().splitlines()
+    (line,) = [
+        obj for obj in map(json.loads, owed) if obj.get("class") == "manual_plane"
+    ]
+    assert line["subject"] == "k3s"
+    agents = yaml_fast.safe_load(ALL_VARS.read_text())["k3s_agent_hosts"]
+    assert agents, "k3s_agent_hosts lists no host, so no agent half could be checked"
+    assert line.get("agent_hosts") == agents

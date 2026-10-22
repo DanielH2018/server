@@ -75,6 +75,7 @@ from gitops_markers import (
     k8s_deferred_deploy_cmd,
     k8s_unapplied_remedy,
     parse_contention,
+    agent_join_cmds,
     by_hand,
     maximal_apply_warning,
     owed_clear_cmd,
@@ -209,6 +210,8 @@ class ManualPlaneRemedy:
             applies.
         by_hand: what to do instead of `apply` for such a role, else "".
         warning: what `apply` arms beyond the change, or "".
+        agents: the join-play commands that apply the role's agent half after `apply`, from
+            `agent_join_cmds`, or () for a role or a narrowed row with no agent half (#5627).
         clear: the `clear-owed` command to run once the role is applied.
     """
 
@@ -217,6 +220,7 @@ class ManualPlaneRemedy:
     apply: str
     by_hand: str
     warning: str
+    agents: tuple[str, ...]
     clear: str
 
 
@@ -252,6 +256,11 @@ def manual_plane_remedies(owed, now) -> list[ManualPlaneRemedy]:
                 apply=apply,
                 by_hand=hand,
                 warning=maximal_apply_warning(e.role, selected) if apply else "",
+                agents=tuple(
+                    agent_join_cmds(e.role, e.playbook, selected, e.agent_hosts)
+                    if apply
+                    else ()
+                ),
                 clear=owed_clear_cmd(OWED_MANUAL_PLANE, e.role, selected),
             )
         )
@@ -281,6 +290,7 @@ def manual_plane_lines(owed, now):
         how = r.by_hand or (
             f"apply `{r.apply}` by hand"
             + (f" (WARNING: {r.warning})" if r.warning else "")
+            + "".join(f" and `{a}`" for a in r.agents)
         )
         lines.append(
             f"  ✗ the GitOps deployer merged a change to the `{r.role}` setup role "

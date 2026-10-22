@@ -163,3 +163,28 @@ def test_the_manual_plane_apply_names_the_pinned_playbook_command(tmp_path):
         "do:   uv run ansible-playbook ansible/initial_setup.yml --tags optimize_pi"
         " -e target=daniel-pi" in out
     ), out
+
+
+def test_a_whole_role_k3s_row_names_the_agent_join_before_the_clear(tmp_path):
+    """#5627: `--tags k3s` on daniel-box never reaches an agent node (#5606)."""
+    _state(
+        tmp_path,
+        owed=_owed(
+            "manual_plane",
+            "k3s",
+            playbook="ansible/k3s-bringup.yml",
+            tags=[],
+            agent_hosts=["daniel-server"],
+        ),
+    )
+    out = view.format_text(view.collect(tmp_path, NOW))
+    parts = (
+        "ansible/k3s-bringup.yml --tags k3s",
+        "ansible/k3s-bringup.yml -e join_agent=daniel-server --tags k3s_agent",
+        "clear-owed manual_plane k3s",
+    )
+    at = [out.find(p) for p in parts]
+    assert -1 not in at, (
+        f"missing {[p for p, i in zip(parts, at, strict=True) if i < 0]} in {out}"
+    )
+    assert at == sorted(at), f"{parts} out of order in {out}"
