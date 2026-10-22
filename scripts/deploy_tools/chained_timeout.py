@@ -99,6 +99,7 @@ def promote_timeout(
     changed: Iterable[str] | None = None,
     concurrent: int = CONCURRENT,
     requeue_s: int = REQUEUE_DEPENDENCY_S,
+    cap_s: int = VERIFY_CAP_S,
 ) -> int:
     """How long `verify` waits, in seconds: the chained timeout (D4.3), capped at VERIFY_CAP_S.
 
@@ -129,6 +130,8 @@ def promote_timeout(
             Kustomization in `docs` as changed.
         concurrent: kustomize-controller's `--concurrent`.
         requeue_s: kustomize-controller's `--requeue-dependency`, in seconds.
+        cap_s: the ceiling, VERIFY_CAP_S. A caller that measures the chain the cap hides
+            passes a larger one.
 
     Raises:
         ValueError: a duration this module cannot read, a `dependsOn` naming a Kustomization
@@ -181,4 +184,4 @@ def promote_timeout(
     queueing = queueing_s(waiting, concurrent)
     soak = timeouts.get(SOAK, 0) if SOAK in changed else 0
     total = max(chain + queueing, soak, ROOT_TIMEOUT_S) + OCI_INTERVAL_S + max(retries)
-    return min(total, VERIFY_CAP_S)
+    return min(total, cap_s)

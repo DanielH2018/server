@@ -278,3 +278,32 @@ def test_the_published_bundles_chain_fits_the_cap_or_a_decided_marker_keeps_the_
         f"the published bundle's chained timeout is clamped at VERIFY_CAP_S={timeout}s, "
         "and no `# DECIDED:` marker above VERIFY_CAP_S records why the clamp stands"
     )
+
+
+def test_the_decided_clamp_records_a_chain_no_shorter_than_the_published_one(tmp_path):
+    """The `# DECIDED:` at VERIFY_CAP_S records the all-changed chain it accepts (#5868).
+
+    The clamp hides the chain from every capped reading, so this lifts the cap and holds the
+    measured chain to the figure the marker records. A chain that grows past it turns this
+    red, and the PR that grows it re-decides the clamp with the new figure in the marker.
+    """
+    (recorded,) = [
+        int(found)
+        for line in _cap_comment()
+        for found in re.findall(r"#5868: (\d+)s", line)
+    ]
+    assert recorded > ct.VERIFY_CAP_S, (
+        "the marker records a chain the cap does not clamp"
+    )
+    out = tmp_path / "out"
+    assert homelab_render.cluster(out, published_tags(), None) == RENDER_OK
+    files = {
+        str(p.relative_to(out)): p.read_bytes() for p in out.rglob("*") if p.is_file()
+    }
+    bundle = vp.flux_kustomizations(files)
+    names = {d["metadata"]["name"] for d in bundle} - {vp.SOAK}
+    chain = ct.promote_timeout(bundle, names, cap_s=10**9)
+    assert chain <= recorded, (
+        f"the published bundle's all-changed chain is {chain}s, past the {recorded}s the "
+        "`# DECIDED:` at VERIFY_CAP_S accepted; re-decide the clamp and record the new figure"
+    )
