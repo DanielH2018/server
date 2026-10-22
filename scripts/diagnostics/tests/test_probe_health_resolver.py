@@ -25,6 +25,7 @@ from diagnostics.probe_lib import health, health_kubectl
 # check, which the notifier skips — so a role arriving here by accident is a gate that stopped
 # running.
 _ROLES_WITH_NO_WORKLOAD = {
+    "cluster-base": "PriorityClasses, the read-only identity and an inert ConfigMap; no workload",
     "configarr": "a CronJob and its Secret; the sync runs to completion, nothing stays up",
     "deploy-ui": "a selector-less Service, its EndpointSlice and an IngressRoute onto deploy-ui.service on daniel-box",
     "longhorn-ui": "an IngressRoute, Middleware and TLSOption onto longhorn-system's own UI",

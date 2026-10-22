@@ -271,7 +271,7 @@
 # runs fan-out batches that stop at the PR, so it reads no cluster state (2026-10-10).
 - name: Give the agent user the operator's read-only kubeconfig
   tags: [claude_code]
-  # The homelab-readonly ServiceAccount the k3s role writes for {{ sys_user }}: get, list and
+  # The homelab-readonly ServiceAccount the cluster-base role renders for {{ sys_user }}: get, list and
   # watch, with Secrets and pods/exec refused. Never /etc/rancher/k3s/k3s.yaml, which is
   # cluster-admin. Copied, as uv is, so a token the k3s role re-mints reaches the agent on the
   # next apply of this role.

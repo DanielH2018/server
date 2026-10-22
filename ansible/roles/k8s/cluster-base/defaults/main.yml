@@ -1,0 +1,49 @@
+---
+# The cluster identity and the workload-tier PriorityClasses, handed to Flux (H1.2). Two
+# objects here are needed before Flux can run: Flux's own controllers name `homelab-critical`,
+# and `setup/k3s`'s kubeconfig.yml reads the read-only token Secret. So a rebuilt cluster
+# applies this tag by hand before it installs Flux (docs/longhorn-disaster-recovery.md,
+# *Procedure (fresh host, total loss)*, step 2).
+
+# The read-only ServiceAccount, mirrored from setup/k3s. The host files there (the kubeconfig and
+# the audit policy) read k3s_readonly_sa_name and k3s_readonly_sa_namespace, and this role's
+# template reads these two, because a k8s role's defaults are invisible to a setup role and the
+# reverse. ansible/tests/k8s/test_cluster_base_mirrors_the_k3s_identity.py holds each pair equal,
+# so a rename changes both sides in one PR.
+cluster_base_readonly_sa_name: homelab-readonly
+cluster_base_readonly_sa_namespace: kube-system
+
+# CRD API groups the read-only role can read. The built-in `view` ClusterRole covers no CRD
+# group except Flux's six: the vendored ClusterRole `flux-view-flux-system` aggregates read on
+# them into `view`, and ansible/tests/k8s/test_aggregated_clusterroles.py lists and pins that
+# grant. Any other group left off this list means `kubectl get` on that resource falls back to
+# sudo. Add a group when a new operator's CRDs need inspecting. headlamp_k8s_crd_api_groups
+# mirrors this list.
+k3s_readonly_crd_api_groups:  # noqa var-naming[no-role-prefix]
+  - traefik.io
+  - metallb.io
+  - longhorn.io
+  # k3s's own CRDs. `scripts/deploy_tools/runbook_gates.py etcd-restore` gate 3 reads
+  # ETCDSnapshotFile to check that the snapshot an operator is about to restore exists and
+  # reports `status.readyToUse`, the one cluster-side answer to that question. The template
+  # grants `resources: ["*"]` per group, so this also grants read on `Addon`, the group's only
+  # other resource. Both are safe to read: ETCDSnapshotFile's `spec.s3` records the bucket,
+  # endpoint, folder and region but no keys (those stay in the root-only etcd S3 env file under
+  # /etc/rancher/k3s), and an Addon records a manifest's path and checksum.
+  - k3s.cattle.io
+
+# The inert ConfigMap that proves the `kustomize.toolkit.fluxcd.io/reconcile=disabled`
+# annotation (templates/skip-probe-configmap.yaml.j2).
+cluster_base_skip_probe_name: cluster-base-skip-probe
+
+# DECIDED: never pruned. Deleting a PriorityClass or the read-only identity from the render
+# would make Flux delete it, and the API server then refuses every pod that names the class and
+# every kubectl call that runs as the identity. With prune: false a render that drops an object
+# leaves it serving. The cost is that an object removed here stays live until the operator
+# deletes it (**operator-only**). Full analysis: the H1 plan's *Plumbing tags are never pruned*.
+flux_prune: false  # noqa var-naming[no-role-prefix]
+
+# Auto-deploy stance. Flux applies the tag, so this gates no apply; the reason records why a bad
+# merge here is not a routine image bump.
+k8s_autodeploy: false  # noqa var-naming[no-role-prefix]
+k8s_autodeploy_reason: "platform — the PriorityClasses every pod names and the read-only identity every diagnostic runs as; a bad apply stops pod admission or locks out kubectl, and host probes stay green through both"  # noqa var-naming[no-role-prefix]

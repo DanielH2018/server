@@ -21,9 +21,9 @@ or a macro still parses out as the API server would receive it.
 import pytest
 from lib import yaml_fast
 
-from _setup_render import rendered_setup_text
+from _k8s_render import rendered_k8s_text
 
-TEMPLATE = "setup/k3s/priorityclass.yaml.j2"
+TEMPLATE = "k8s/cluster-base/priorityclass.yaml.j2"
 
 # Fields the API server omits from a PriorityClass when they hold their zero value. Each is
 # safe to state and expensive to state. Extend this as others are found — the point is the
@@ -35,7 +35,7 @@ def _documents():
     docs = [
         d
         for d in yaml_fast.safe_load_all(
-            rendered_setup_text("k3s", "priorityclass.yaml.j2")
+            rendered_k8s_text("cluster-base", "priorityclass.yaml.j2")
         )
         if d
     ]

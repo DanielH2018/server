@@ -1,0 +1,15 @@
+# An inert ConfigMap that proves the break-glass annotation (H1.2). Nothing reads it.
+#
+# The H1 break-glass procedures rely on `kustomize.toolkit.fluxcd.io/reconcile=disabled` making
+# kustomize-controller skip an object while the operator edits it by hand (docs/break-glass.md,
+# the shed scenario; the CoreDNS and BackupTarget procedures). The operator annotates this
+# object in the cluster, edits `data.value`, and reads the value surviving the next two
+# reconciles. Removing the annotation then shows Flux restoring `data.value` to what this file
+# declares.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ cluster_base_skip_probe_name }}
+  namespace: {{ cluster_base_readonly_sa_namespace }}
+data:
+  value: declared-in-git

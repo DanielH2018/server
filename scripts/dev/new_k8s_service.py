@@ -65,7 +65,7 @@ from toposort import K8S_APPLIES_LAST
 AUTH_TIERS = ("one_factor", "two_factor")
 STRATEGIES = ("RollingUpdate", "Recreate")
 
-# The tiers `ansible/roles/setup/k3s/templates/priorityclass.yaml.j2` declares. Named here so a
+# The tiers `ansible/roles/k8s/cluster-base/templates/priorityclass.yaml.j2` declares. Named here so a
 # typo fails at the command line rather than at admission, hours later.
 PRIORITY_CLASSES = (
     "homelab-critical",

@@ -17,7 +17,7 @@ The two other pod-template fields every template sets, `automountServiceAccountT
 `enableServiceLinks`, are the `sa-less-pods-refuse-the-default-token` and
 `pods-disable-service-link-env-vars` rows of `_workload_property_rows.py`. This one keeps its
 own file for two reasons. It reads the four tier names from a second render, the setup
-plane's `priorityclass.yaml.j2`. Its exemption is also value-specific: dri-device-plugin may
+`cluster-base` role's `priorityclass.yaml.j2`. Its exemption is also value-specific: dri-device-plugin may
 name `system-node-critical` and nothing else, where a table row's `allow` would exempt any
 offence on that key.
 
@@ -31,13 +31,12 @@ them, `image-builder/templates/build-job.yaml.j2`, is a Job and out of scope her
 import pytest
 from lib import yaml_fast
 
-from _k8s_render import pod_spec, rendered_docs
-from _setup_render import rendered_setup_text
+from _k8s_render import pod_spec, rendered_docs, rendered_k8s_text
 
 _LONG_RUNNING = {"Deployment", "DaemonSet", "StatefulSet"}
 
-# The setup-plane template that defines the four tiers, read as it renders.
-_PRIORITYCLASS_TEMPLATE = ("k3s", "priorityclass.yaml.j2")
+# The cluster-base template that defines the four tiers, read as it renders.
+_PRIORITYCLASS_TEMPLATE = ("cluster-base", "priorityclass.yaml.j2")
 
 # Long-running pod templates allowed to name a class OUTSIDE the four homelab tiers, with the
 # reason. A new entry here is the decision the guard exists to force.
@@ -71,11 +70,11 @@ def _homelab_tiers() -> frozenset[str]:
     """The four class names, read from the manifest that defines them rather than restated."""
     names = frozenset(
         d["metadata"]["name"]
-        for d in yaml_fast.safe_load_all(rendered_setup_text(*_PRIORITYCLASS_TEMPLATE))
+        for d in yaml_fast.safe_load_all(rendered_k8s_text(*_PRIORITYCLASS_TEMPLATE))
         if d
     )
     assert len(names) == 4, (
-        f"expected 4 PriorityClasses in setup/{'/'.join(_PRIORITYCLASS_TEMPLATE)}: {names}"
+        f"expected 4 PriorityClasses in k8s/{'/'.join(_PRIORITYCLASS_TEMPLATE)}: {names}"
     )
     return names
 
