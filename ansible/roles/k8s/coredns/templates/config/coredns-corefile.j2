@@ -1,6 +1,6 @@
-# Ansible-managed (setup/k3s, tasks/coredns.yml). Do not edit in the cluster — k3s no longer
-# reconciles this ConfigMap (manifests/coredns.yaml.skip), so a hand-edit here survives and
-# then drifts from the repo silently.
+# Flux-managed (k8s/coredns, templates/config/coredns-corefile.j2). Do not edit in the cluster:
+# Flux reverts a hand-edit at its next reconcile. k3s no longer reconciles this ConfigMap
+# (manifests/coredns.yaml.skip), so Flux is its only writer.
 #
 # k3s's bundled Corefile ends in `forward . /etc/resolv.conf`, which inherits whichever
 # resolvers the node CoreDNS happens to land on, under forward's DEFAULT `random` policy.
@@ -37,10 +37,10 @@
     # reaching a cluster Service through kube-proxy is unaffected by the LoadBalancer's
     # externalTrafficPolicy: Local, which blackholes VIP traffic the MetalLB announcer would
     # otherwise have to forward to another node.
-    forward . {{ k3s_coredns_upstreams | join(' ') }} {
+    forward . {{ coredns_upstreams | join(' ') }} {
       policy sequential
-      health_check {{ k3s_coredns_health_check }}
-      max_fails {{ k3s_coredns_max_fails }}
+      health_check {{ coredns_health_check }}
+      max_fails {{ coredns_max_fails }}
     }
 }
 import /etc/coredns/custom/*.server

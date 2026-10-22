@@ -1,0 +1,20 @@
+{#
+  The Corefile key of kube-system/coredns, and nothing else. k3s's node controller writes
+  `NodeHosts` into this ConfigMap and keeps writing it, so Flux never declares the key. Under
+  server-side apply a key the render omits stays with its writer. Declaring `NodeHosts` here
+  would fight the controller, and applying a ConfigMap with an empty one would blank the node
+  names no pod could then resolve until the next node event.
+  ansible/roles/k8s/coredns/tests/test_coredns_render.py holds the one-key rule.
+
+  Keep comments at column 0 and above the document: an indented comment between two keys would
+  land inside the block scalar.
+#}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: coredns
+  namespace: kube-system
+data:
+  Corefile: |
+{{ lookup('template', playbook_dir + '/roles/k8s/coredns/templates/config/coredns-corefile.j2') | indent(4, true) }}

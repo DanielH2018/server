@@ -12,7 +12,7 @@ it is silent. Swap the order and every lookup goes to Cloudflare while the confi
 Pi-hole and the deploy still reads green. Drop the fallback and the host has no DNS at all
 until the cluster is up — a cold-start deadlock. Add
 `rotate` and roughly half the queries bypass Pi-hole, which is the same coin flip the
-cluster's CoreDNS already had to be fixed for (`policy sequential` in coredns-corefile.j2).
+cluster's CoreDNS already had to be fixed for (`policy sequential` in the coredns role's coredns-corefile.j2).
 None of the three produces an error, a failed task, or a red monitor.
 
 TWO HOSTS, TWO FIRST HOPS. daniel-pi resolves straight from resolv.conf, so its ordered list

@@ -145,9 +145,7 @@ def test_two_task_files_deriving_facts_from_each_other_terminate(tree):
 
 # `setup/k3s` is the role the whole narrowing exists for, and these are the facts it derives.
 # A frozenset rather than a count, so a rename or a move fails by name.
-K3S_FACTS = frozenset(
-    {"k3s_coredns_bundled_image", "k3s_coredns_corefile", "k3s_longhorn_b2_region"}
-)
+K3S_FACTS = frozenset({"k3s_longhorn_b2_region"})
 
 
 def _facts_of(role_dir) -> dict[str, set[str]]:
@@ -184,7 +182,6 @@ ROLES_WITHOUT_AN_ENTRY_POINT = frozenset({"common"})
 MEASURED_SETTERS = frozenset(
     {
         "initial_setup:tasks/host-basics.yml",
-        "k3s:tasks/coredns.yml",
         "k3s:tasks/longhorn-backup.yml",
         "optimize_pi:tasks/main.yml",
         "sops_setup:tasks/main.yml",

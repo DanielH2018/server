@@ -86,19 +86,3 @@ def test_the_gate_defaults_to_running_the_import(target, expr):
         f"defaults off stops doing prod's work and every repo-side check stays green. "
         f"Default it true and turn it off in the staging host's host_vars."
     )
-
-
-def test_the_coredns_probe_name_defaults_to_a_real_name():
-    """The CoreDNS probe is gated by emptiness rather than a boolean, so check it too.
-
-    `tasks/coredns.yml` skips its behaviour probe when `k3s_coredns_probe_name` is empty.
-    That is the same hazard in a different shape: an empty default would drop the only check
-    that the Corefile patch actually took effect.
-    """
-    defaults = load_yaml(DEFAULTS)
-    name = defaults.get("k3s_coredns_probe_name")
-    assert name, (
-        f"k3s_coredns_probe_name is {name!r} in {DEFAULTS}. Empty skips the probe that "
-        f"proves cluster DNS forwards where the Corefile says — the one check in "
-        f"tasks/coredns.yml that reads behaviour rather than the ConfigMap it just wrote."
-    )

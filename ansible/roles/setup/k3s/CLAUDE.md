@@ -2,8 +2,9 @@
 
 The role that turns a host into a k3s node and declares the cluster's own plumbing: the server
 install, the agent join, Longhorn with its backup targets, the read-only kubeconfig,
-CoreDNS, and the host crons that watch and exercise backups. `daniel-box` is
-the server and `daniel-server` an agent (`tasks/agent.yml`).
+the marker that releases k3s's CoreDNS addon, and the host crons that watch and exercise
+backups. `daniel-box` is the server and `daniel-server` an agent (`tasks/agent.yml`). The
+CoreDNS objects belong to the k8s `coredns` role, and Flux applies them.
 
 `ansible/k3s-bringup.yml` applies it, and that is one of the `_BROAD_MANUAL_PREFIXES` playbooks
 the GitOps deployer never runs itself, so every change here is a hand apply. The drill's bounds,
@@ -122,4 +123,4 @@ authority of those four actuators is written here so a later edit cannot quietly
   there. A host-only tag such as `node-address` selects no instance, so it never reads the API.
   An H1 PR that deletes a writer task deletes its row in the same commit. ENFORCED:
   `ansible/tests/setup/test_k3s_stale_checkout_map.py::test_the_real_map_is_honest`,
-  `ansible/tests/setup/test_k3s_stale_checkout_guard.py::test_skip_tags_kubeconfig_still_runs_the_coredns_instance`.
+  `ansible/tests/setup/test_k3s_stale_checkout_guard.py::test_skip_tags_kubeconfig_still_runs_the_r2_instance`.

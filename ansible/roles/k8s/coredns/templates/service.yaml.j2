@@ -1,0 +1,32 @@
+---
+# k3s's kube-dns Service with its `%{...}%` placeholders written as the values k3s substitutes
+# on this cluster. `clusterIP` is immutable, so it is the address the cluster already holds.
+apiVersion: v1
+kind: Service
+metadata:
+  name: kube-dns
+  namespace: kube-system
+  annotations:
+    prometheus.io/port: "9153"
+    prometheus.io/scrape: "true"
+  labels:
+    k8s-app: kube-dns
+    kubernetes.io/cluster-service: "true"
+    kubernetes.io/name: "CoreDNS"
+spec:
+  selector:
+    k8s-app: kube-dns
+  clusterIP: {{ coredns_cluster_ip }}
+  clusterIPs:
+    - {{ coredns_cluster_ip }}
+  ports:
+    - name: dns
+      port: 53
+      protocol: UDP
+    - name: dns-tcp
+      port: 53
+      protocol: TCP
+    - name: metrics
+      port: 9153
+      protocol: TCP
+  ipFamilyPolicy: SingleStack

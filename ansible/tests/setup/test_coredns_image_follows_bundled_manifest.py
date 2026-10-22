@@ -1,76 +1,99 @@
-"""Guard: the cluster CoreDNS image is reconciled from the manifest k3s stages.
+"""Guard: the CoreDNS image the cluster runs is the one k3s bundles at `k3s_version` (H1.4).
 
 WHY. The `coredns.yaml.skip` marker stops k3s applying its bundled CoreDNS addon, image
 included, so the Deployment ran 1.14.4 through two k3s bumps that bundled 1.14.6 and 1.14.7
-(#3257). `tasks/coredns.yml` closes that by reading the image out of the staged
-`manifests/coredns.yaml`, which k3s rewrites on every start, and setting the Deployment to it.
+(#3257). Flux now applies the `coredns` role, and `coredns_image` in its defaults is the only
+thing that moves the image. Nothing reads the staged `manifests/coredns.yaml` on the host any
+more, so this test ties the pin to the manifest by an excerpt of the manifest's image line,
+labelled with the k3s version it came from.
 
-WHY IT NEEDS A GUARD. The extraction is a regex inside a Jinja expression. A regex that stops
-matching k3s's manifest yields an empty string, and a reordered task file can probe DNS before
-the rollout it waits for. Both render, lint and deploy green.
+H6's version bump moves `k3s_version`, the excerpt and its label, the pin and any template
+change together. This test fails on the first two of those when they disagree.
+
+Run: uv run pytest ansible/tests/setup/test_coredns_image_follows_bundled_manifest.py
 """
 
-import base64
+import re
 
-from ansible.template import Templar, trust_as_template
+from _k8s_render import render_role_template
+from lib import yaml_fast
+from lib.repo_paths import K3S_DEFAULTS, K8S_ROLES
 
-from _helpers import leaf_tasks, load_tasks
-from lib.repo_paths import K3S_ROLE
+_COREDNS_DEFAULTS = K8S_ROLES / "coredns" / "defaults" / "main.yml"
 
-_TASKS = K3S_ROLE / "tasks/coredns.yml"
-
-# The image block of k3s v1.37.1+k3s1's manifests/coredns.yaml as k3s stages it, with
-# `%{SYSTEM_DEFAULT_REGISTRY}%` already substituted to the empty string.
-_STAGED_EXCERPT = """\
+# The k3s version the excerpt below was read from, and the image block of that version's
+# manifests/coredns.yaml before k3s substitutes `%{SYSTEM_DEFAULT_REGISTRY}%`.
+_EXCERPT_K3S_VERSION = "v1.37.1+k3s1"
+_EXCERPT = """\
       containers:
       - name: coredns
-        image: "rancher/mirrored-coredns-coredns:1.14.7"
+        image: "%{SYSTEM_DEFAULT_REGISTRY}%rancher/mirrored-coredns-coredns:1.14.7"
         imagePullPolicy: IfNotPresent
 """
 
+_IMAGE_LINE = re.compile(r'image:\s*"?([^"\s]*coredns[^"\s]*)"?')
 
-def _task(name: str) -> dict:
-    matches = [t for t in leaf_tasks(load_tasks(_TASKS)) if t.get("name") == name]
-    assert len(matches) == 1, (
-        f"{_TASKS} has {len(matches)} tasks named {name!r}, want 1"
+
+def _bundled_image(excerpt: str) -> str:
+    """The image k3s stages for `excerpt`: its `image:` value with the registry placeholder empty."""
+    found = _IMAGE_LINE.search(excerpt)
+    assert found, "the excerpt holds no CoreDNS image line"
+    return found.group(1).replace("%{SYSTEM_DEFAULT_REGISTRY}%", "")
+
+
+def problems(
+    k3s_version: str, label: str, excerpt: str, pin: str, rendered_image: str
+) -> list[str]:
+    """Why the pin is not the bundled image, or an empty list."""
+    out = []
+    if label != k3s_version:
+        out.append(
+            f"the excerpt is labelled {label} but k3s_version is {k3s_version}: port the new "
+            "manifest's image line into the excerpt, then move the pin"
+        )
+    if pin != _bundled_image(excerpt):
+        out.append(
+            f"coredns_image is {pin} but the excerpt's image is {_bundled_image(excerpt)}"
+        )
+    if rendered_image != pin:
+        out.append(f"the rendered Deployment runs {rendered_image}, not {pin}")
+    return out
+
+
+def _live_inputs() -> tuple[str, str, str]:
+    k3s_version = yaml_fast.safe_load(K3S_DEFAULTS.read_text())["k3s_version"]
+    pin = yaml_fast.safe_load(_COREDNS_DEFAULTS.read_text())["coredns_image"]
+    deployment = yaml_fast.safe_load(
+        render_role_template("coredns", "deployment.yaml.j2")
     )
-    return matches[0]
+    containers = deployment["spec"]["template"]["spec"]["containers"]
+    return k3s_version, pin, containers[0]["image"]
 
 
-def _extract(manifest: str) -> str:
-    """Renders the role's own extraction expression through Ansible's templar, as the deploy does.
-
-    Not a bare Jinja environment: plain Jinja unescapes `\\\\` inside a string literal and
-    Ansible's templar does not, so a doubled-backslash regex passed here while every real
-    `k3s-bringup.yml --tags coredns` run failed on it.
-    """
-    expr = _task("Extract the bundled CoreDNS image")["ansible.builtin.set_fact"][
-        "k3s_coredns_bundled_image"
-    ]
-    content = base64.b64encode(manifest.encode()).decode()
-    templar = Templar(
-        loader=None, variables={"k3s_coredns_bundled_manifest": {"content": content}}
+def test_the_pin_and_the_rendered_deployment_follow_the_bundled_manifest():
+    k3s_version, pin, rendered_image = _live_inputs()
+    assert (
+        problems(k3s_version, _EXCERPT_K3S_VERSION, _EXCERPT, pin, rendered_image) == []
     )
-    return str(templar.template(trust_as_template(expr))).strip()
 
 
-def test_the_bundled_image_is_read_from_a_staged_manifest():
-    assert _extract(_STAGED_EXCERPT) == "rancher/mirrored-coredns-coredns:1.14.7"
-    # The RED case: no image line yields empty, which the assert task after it refuses.
-    assert _extract("kind: Deployment\n") == ""
+def test_a_label_behind_k3s_version_is_flagged():
+    # The RED case for a k3s bump that moved `k3s_version` and left the excerpt behind.
+    got = problems("v1.38.0+k3s1", _EXCERPT_K3S_VERSION, _EXCERPT, "x:1", "x:1")
+    assert any("labelled" in p for p in got)
 
 
-def test_the_image_is_set_only_on_drift_and_the_rollout_precedes_the_probe():
-    names = [t.get("name") for t in leaf_tasks(load_tasks(_TASKS))]
-    order = [
-        "Read the CoreDNS manifest k3s staged for its own version",
-        "Refuse a staged manifest that names no CoreDNS image",
-        "Read the live CoreDNS image",
-        "Run the CoreDNS image k3s bundles",
-        "Wait for the CoreDNS rollout",
-        "Verify cluster DNS resolves through the configured upstream",
-    ]
-    assert [n for n in names if n in order] == order
-    patch = _task("Run the CoreDNS image k3s bundles")
-    assert "k3s_coredns_live_image.stdout" in str(patch["when"])
-    assert "k3s_coredns_bundled_image" in str(patch["when"])
+def test_a_pin_that_differs_from_the_excerpt_is_flagged():
+    image = _bundled_image(_EXCERPT)
+    got = problems("v", "v", _EXCERPT, "rancher/mirrored-coredns-coredns:1.14.4", image)
+    assert any("coredns_image is" in p for p in got)
+
+
+def test_a_rendered_image_that_differs_from_the_pin_is_flagged():
+    image = _bundled_image(_EXCERPT)
+    got = problems("v", "v", _EXCERPT, image, "rancher/other:1")
+    assert any("rendered Deployment" in p for p in got)
+
+
+def test_the_registry_placeholder_is_stripped_as_k3s_stages_it():
+    assert _bundled_image(_EXCERPT) == "rancher/mirrored-coredns-coredns:1.14.7"

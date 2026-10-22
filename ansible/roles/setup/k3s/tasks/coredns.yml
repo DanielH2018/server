@@ -1,31 +1,47 @@
 ---
-# Cluster DNS: make Pi-hole the primary resolver for every workload, with the pinned
-# upstreams as a real fallback.
+# The host half of cluster DNS: release k3s's bundled CoreDNS addon to Flux (H1.4).
+#
+# Flux's `coredns` tag owns the Deployment, Service, RBAC and the Corefile key of the ConfigMap
+# (ansible/roles/k8s/coredns/). This file keeps the two tasks that act on the host and cannot
+# move into the cluster.
 #
 # k3s ships CoreDNS as an Addon, so the `coredns` ConfigMap carries
 # `objectset.rio.cattle.io/owner-gvk: k3s.cattle.io/v1, Kind=Addon` and the deploy controller
 # reverts any live edit. Two mechanisms release it and only one is non-destructive:
 # `--disable coredns` takes the controller's delete path and removes the objects (cluster DNS
 # is down until something replaces them), while a `.skip` marker makes the controller
-# `continue` past the file and touch nothing — "Skipped files are just ignored",
-# pkg/deploy/controller.go. The marker is what this uses, so the Deployment, Service and RBAC
-# stay exactly as k3s left them and only the Corefile becomes ours.
+# `continue` past the file and touch nothing: "Skipped files are just ignored",
+# pkg/deploy/controller.go. The marker is what this uses, so the objects stay exactly as k3s
+# left them until Flux takes them over.
 #
-# The marker also freezes the Deployment's image, which ran 1.14.4 through two k3s bumps that
-# bundled 1.14.6 and 1.14.7 (#3257). So the image is reconciled below from the manifest k3s
-# stages for the binary it is running. k3s rewrites `manifests/coredns.yaml` on every start
-# whether or not the marker exists: deploy.Stage skips only `--disable`d assets, and the
-# `.skip` marker is consulted by the deploy controller alone. That makes the staged file the
-# bundled CoreDNS for the INSTALLED k3s, with no second pin to keep in step with k3s_version.
+# The marker also freezes the addon's image and its Corefile. The `coredns` role pins the image
+# and renders the Corefile, so a k3s bump that revises either reaches the cluster only when
+# someone ports it into that role. The k3s upgrade runbook (docs/k3s-upgrade.md) says how.
+
+# ORDER IS LOAD-BEARING: the read comes before the marker. On a new cluster Flux resolves GHCR
+# through cluster DNS, so CoreDNS must exist before Flux runs, and the marker must appear only
+# after k3s has first created it. A marker written before k3s's first apply would leave no
+# CoreDNS at all, and Flux could not fetch the bundle that would create one. The read waits for
+# the Deployment, and fails the play when it never appears.
 #
-# The cost, accepted deliberately: the rest of the bundled addon (a revised Corefile, the
-# Deployment's resources and probes, the RBAC) is ignored while the marker exists, and nothing
-# reports that. Re-read k3s's coredns.yaml whenever k3s_version moves.
+# `check_mode: false` because it reads one object and writes nothing, and the retry loop would
+# otherwise burn every try on a skip result under `--check`.
+- name: Wait for k3s to create its CoreDNS Deployment
+  tags: [coredns]
+  ansible.builtin.command:
+    cmd: k3s kubectl -n kube-system get deployment coredns
+  register: k3s_coredns_deployment
+  become: true
+  check_mode: false
+  changed_when: false
+  retries: "{{ k3s_coredns_read_retries | int }}"
+  delay: "{{ k3s_coredns_read_delay | int }}"
+  until: k3s_coredns_deployment.rc == 0
 
 - name: Stop k3s reconciling its bundled CoreDNS addon
   tags: [coredns]
   ansible.builtin.file:
-    path: /var/lib/rancher/k3s/server/manifests/coredns.yaml.skip
+    path: "{{ k3s_coredns_skip_marker }}"
     state: touch
     mode: "0644"
     owner: root
@@ -34,170 +50,3 @@
     access_time: preserve
     modification_time: preserve
   become: true
-
-# Ordering is load-bearing: the marker must exist before the patch, or the deploy controller
-# reverts the Corefile between these two tasks and the change reads as mysteriously inert.
-- name: Render the desired Corefile
-  tags: [coredns]
-  ansible.builtin.set_fact:
-    k3s_coredns_corefile: "{{ lookup('template', 'coredns-corefile.j2') }}"
-
-# Read before write, so the patch's changed status compares CONTENT rather than parsing
-# kubectl's output. `patched (no change)` is a message string that has moved between kubectl
-# releases, and a task keyed on it reports changed forever the day it moves again.
-- name: Read the live Corefile
-  tags: [coredns]
-  # `check_mode: false` because "Point cluster DNS at Pi-hole first" below compares this
-  # register's `stdout` in its `when`. Check mode skips `command` and the skip result carries
-  # no `stdout`, so under `--check` that conditional errors before the probe further down is
-  # ever reached — the tag fails for a reason that says nothing about the tree. This reads a
-  # ConfigMap and writes nothing, so running it for real keeps the dry run's promise.
-  ansible.builtin.command:
-    cmd: k3s kubectl -n kube-system get configmap coredns -o jsonpath={.data.Corefile}
-  register: k3s_coredns_live
-  become: true
-  check_mode: false
-  changed_when: false
-
-- name: Stage the CoreDNS Corefile patch
-  tags: [coredns]
-  ansible.builtin.copy:
-    # A merge patch touches only the keys it names. Applying a ConfigMap that held just the
-    # Corefile would instead strip `NodeHosts`, which k3s's node controller rewrites only on
-    # the next node event — a window in which no pod can resolve a node by name.
-    content: "{{ {'data': {'Corefile': k3s_coredns_corefile}} | to_nice_json }}"
-    dest: /etc/rancher/k3s/coredns-corefile-patch.json
-    mode: "0644"
-    owner: root
-    group: root
-  become: true
-
-- name: Point cluster DNS at Pi-hole first
-  tags: [coredns]
-  ansible.builtin.command:
-    cmd: >-
-      k3s kubectl -n kube-system patch configmap coredns --type merge
-      --patch-file /etc/rancher/k3s/coredns-corefile-patch.json
-  become: true
-  changed_when: true
-  when: k3s_coredns_live.stdout | trim != k3s_coredns_corefile | trim
-
-- name: Confirm NodeHosts survived the patch
-  tags: [coredns]
-  ansible.builtin.command:
-    cmd: k3s kubectl -n kube-system get configmap coredns -o jsonpath={.data.NodeHosts}
-  register: k3s_coredns_nodehosts
-  become: true
-  changed_when: false
-  failed_when: k3s_coredns_nodehosts.stdout | trim | length == 0
-
-- name: Read the CoreDNS manifest k3s staged for its own version
-  tags: [coredns]
-  ansible.builtin.slurp:
-    path: /var/lib/rancher/k3s/server/manifests/coredns.yaml
-  register: k3s_coredns_bundled_manifest
-  become: true
-
-- name: Extract the bundled CoreDNS image
-  tags: [coredns]
-  ansible.builtin.set_fact:
-    # The staged copy has `%{SYSTEM_DEFAULT_REGISTRY}%` already substituted, so this is the
-    # exact reference k3s itself would have applied.
-    # Single backslashes: a folded scalar passes them through verbatim, and Ansible's templar
-    # does not unescape `\\` in a Jinja string literal, so `\\s` matched a literal backslash and
-    # regex_search crashed on the no-match with a backref.
-    k3s_coredns_bundled_image: >-
-      {{ k3s_coredns_bundled_manifest.content | b64decode
-         | regex_search('image:\s*"?([^"\s]*coredns[^"\s]*)"?', '\1') | default([''], true) | first }}
-
-- name: Refuse a staged manifest that names no CoreDNS image
-  tags: [coredns]
-  ansible.builtin.assert:
-    that: k3s_coredns_bundled_image | length > 0
-    fail_msg: >-
-      /var/lib/rancher/k3s/server/manifests/coredns.yaml carries no `image:` line naming
-      coredns, so the bundled image cannot be read. k3s changed the manifest's shape; fix the
-      regex in this task rather than skipping it.
-    quiet: true
-
-- name: Read the live CoreDNS image
-  tags: [coredns]
-  # `check_mode: false` for the same reason as the Corefile read above: the patch's `when`
-  # reads this register's `stdout`, which a check-mode skip does not set.
-  # argv, not cmd: the jsonpath filter's quotes would not survive the module's shlex split.
-  ansible.builtin.command:
-    argv:
-      - k3s
-      - kubectl
-      - -n
-      - kube-system
-      - get
-      - deployment
-      - coredns
-      - -o
-      - jsonpath={.spec.template.spec.containers[?(@.name=="coredns")].image}
-  register: k3s_coredns_live_image
-  become: true
-  check_mode: false
-  changed_when: false
-
-# A bump rolls the single replica under k3s's own strategy (maxSurge 25%, maxUnavailable 1),
-# which lets the old pod go before the new one is Ready: expect a cluster-DNS gap of a few
-# seconds. Rewriting the strategy to avoid it would take over more of the add-on than the image.
-- name: Run the CoreDNS image k3s bundles
-  tags: [coredns]
-  ansible.builtin.command:
-    cmd: >-
-      k3s kubectl -n kube-system set image deployment/coredns
-      coredns={{ k3s_coredns_bundled_image }}
-  become: true
-  changed_when: true
-  when: k3s_coredns_live_image.stdout | trim != k3s_coredns_bundled_image
-
-# The resolver probe's retries are sized for `reload`, not for an image pull plus a rollout,
-# so wait for the rollout before probing. Keyed on the patch's own condition rather than its
-# changed status, which ansible-lint's no-handler rule refuses.
-- name: Wait for the CoreDNS rollout
-  tags: [coredns]
-  ansible.builtin.command:
-    cmd: k3s kubectl -n kube-system rollout status deployment/coredns --timeout=180s
-  become: true
-  changed_when: false
-  when: k3s_coredns_live_image.stdout | trim != k3s_coredns_bundled_image
-
-- name: Check whether dig is available for the resolver probe
-  tags: [coredns]
-  ansible.builtin.stat:
-    path: /usr/bin/dig
-  register: k3s_coredns_dig
-
-# Proves the forward by BEHAVIOUR rather than by reading back the ConfigMap this play just
-# wrote. The probe name must be one only the configured upstream answers, and NXDOMAIN
-# everywhere else, or an answer proves nothing about which resolver produced it;
-# `k3s_coredns_probe_name` defaults to `pi.hole`, which FTL answers itself. It is a better
-# probe than a blocked ad domain,
-# which would stop discriminating the day a blocklist drops it. The retries cover CoreDNS's
-# `reload` (up to ~30s) — no restart is issued, because bouncing the only DNS replica costs
-# more than waiting for it. The query is host-sourced against the cluster DNS Service
-# address, so it exercises the same CoreDNS a pod reaches without needing a throwaway pod.
-- name: Verify cluster DNS resolves through the configured upstream
-  tags: [coredns]
-  ansible.builtin.command:
-    cmd: dig +short +time=2 +tries=1 @{{ k3s_cluster_dns_ip }} {{ k3s_coredns_probe_name }}
-  register: k3s_coredns_probe
-  changed_when: false
-  # `until` owns the verdict. Without this, a dig that exits non-zero (no route, timeout)
-  # fails the task on its first attempt instead of being retried — and the task still fails
-  # if the condition is never satisfied, which is the outcome worth reporting.
-  failed_when: false
-  retries: "{{ k3s_coredns_probe_retries | int }}"
-  delay: 5
-  until: k3s_coredns_probe.stdout | trim | length > 0
-  when:
-    # Skipped under `--check`, not opted out of it. The patch above that points cluster DNS
-    # at Pi-hole is itself skipped, so a dry run would poll for an upstream nothing has been
-    # told to forward to — burning every retry on state the run deliberately did not create.
-    # A probe is unprovable in check mode by construction.
-    - not ansible_check_mode
-    - k3s_coredns_dig.stat.exists
-    - k3s_coredns_probe_name | length > 0

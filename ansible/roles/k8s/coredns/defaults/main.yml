@@ -1,0 +1,63 @@
+---
+# Cluster DNS, handed to Flux (H1.4). The templates are derived from k3s's own
+# manifests/coredns.yaml at k3s_version, with each `%{...}%` placeholder written as the value k3s
+# substitutes on this cluster. Nothing here is vendored, because that file is not YAML until k3s
+# substitutes it. A k3s bump refreshes the templates by hand, and
+# ansible/tests/setup/test_coredns_image_follows_bundled_manifest.py ties them to the version.
+
+# The CoreDNS image k3s v1.37.1+k3s1 bundles, with `%{SYSTEM_DEFAULT_REGISTRY}%` replaced by the
+# empty string as k3s stages it. The k3s addon stopped reconciling it when the `.skip` marker
+# went in, so this pin is the only thing that moves the image: a k3s bump changes k3s_version,
+# the test's excerpt, this pin and any template change in one PR (H6).
+#
+# Renovate must not bump it alone: the k8s image manager matches every `_image:` key in a k8s
+# role's defaults, and renovate.json disables this one. The image is whatever k3s bundles.
+coredns_image: rancher/mirrored-coredns-coredns:1.14.7
+
+# The kube-dns Service address. `clusterIP` is immutable, so the render writes the address the
+# cluster already holds. It is also the address node-level probes dial, and it must sit inside
+# k3s_service_cidr (ansible/tests/staging/test_staging_egress_fence.py holds that).
+coredns_cluster_ip: 10.43.0.10
+
+# What CoreDNS forwards to, in order. This is deliberately NOT the node's resolv.conf that
+# k3s's bundled Corefile uses: that inherits whichever resolvers CoreDNS's node happens to
+# carry, and forward's default `random` policy then treats them as peers rather than as a
+# primary and a fallback, so Pi-hole would answer roughly half of all cluster queries and the
+# other half would silently lose ad-blocking and the local.daniel-hunter.com records.
+#
+# First entry is the pihole-dns Service's CLUSTER IP, not the LAN VIP. kube-proxy routes it
+# to either Pi-hole pod regardless of the LoadBalancer's externalTrafficPolicy: Local, which
+# is what blackholes VIP traffic the MetalLB announcer would have to forward to another node.
+#
+# This does NOT weaken the cold-boot invariant of the node's own resolvers. That one governs
+# the NODE, which must resolve before the cluster exists; CoreDNS is a cluster workload that
+# cannot run before the cluster does, so its depending on an in-cluster Service costs nothing.
+coredns_upstreams:
+  - "{{ dns_k8s_cluster_ip }}"
+  - 1.1.1.1
+  - 1.0.0.1
+
+# `policy sequential` alone would make every query wait out a dead Pi-hole. health_check
+# probes the upstream on this interval and max_fails marks it down, so only the queries
+# inside one interval pay the penalty, the same intent as daniel-server's resolv.conf
+# `timeout:2 attempts:1`.
+coredns_health_check: 5s
+coredns_max_fails: 2
+
+# DECIDED: never pruned. Under prune: true, a render that dropped the Deployment, the Service or
+# the RBAC would make Flux delete it, and cluster DNS stops until something replaces it. Flux's
+# own controllers resolve GHCR through this DNS, so Flux could not fetch the bundle that
+# restores it. With prune: false a render that drops an object leaves it serving. The cost is
+# that an object removed here stays live until the operator deletes it (**operator-only**).
+# Full analysis: the H1 plan's *Plumbing tags are never pruned*.
+flux_prune: false  # noqa var-naming[no-role-prefix]
+
+# DECIDED: forward-only. A failed revision holds rather than resets `prod`, because a reset
+# would re-fetch an older bundle through the DNS that just failed. Full analysis: the H1 plan's
+# *Forward-only tags and the promote rule*.
+flux_forward_only: true  # noqa var-naming[no-role-prefix]
+
+# Auto-deploy stance. Flux applies the tag, so this gates no apply; the reason records why a bad
+# merge here is not a routine bump.
+k8s_autodeploy: false  # noqa var-naming[no-role-prefix]
+k8s_autodeploy_reason: "platform — cluster DNS for every pod and for Flux's own controllers; a bad Corefile or a pod that fails to start stops name resolution, and Flux resolves GHCR through the DNS it owns"  # noqa var-naming[no-role-prefix]

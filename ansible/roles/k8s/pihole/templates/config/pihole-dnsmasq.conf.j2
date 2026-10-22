@@ -9,7 +9,7 @@
    Removing it was proposed and is WRONG, because two paths depend on it:
 
      1. CoreDNS forwards `policy sequential` with health_check/max_fails 2 (see
-        roles/setup/k3s/templates/coredns-corefile.j2), Pi-hole first and the public resolvers
+        roles/k8s/coredns/templates/config/coredns-corefile.j2), Pi-hole first and the public resolvers
         after. During a Pi-hole outage — the exact case that failover exists for — in-cluster
         `.local.` lookups reach 1.1.1.1 and still land on the right VIP BECAUSE of the public
         record. Drop it and that degradation becomes NXDOMAIN.

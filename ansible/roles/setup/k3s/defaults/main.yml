@@ -1056,36 +1056,22 @@ k3s_node_static_link: ""
 k3s_node_wifi_link: ""
 
 # ── Cluster DNS (tasks/coredns.yml) ─────────────────────────────────────────────────────
-# What CoreDNS forwards to, in order. This is deliberately NOT the node's resolv.conf that
-# k3s's bundled Corefile uses: that inherits whichever resolvers CoreDNS's node happens to
-# carry, and forward's default `random` policy then treats them as peers rather than as a
-# primary and a fallback — so Pi-hole would answer roughly half of all cluster queries and the
-# other half would silently lose ad-blocking and the local.daniel-hunter.com records.
+# The upstreams, the health check, the image pin and the Service address moved to the k8s
+# `coredns` role with the Corefile (H1.4). What stays is the host half: the marker's path and
+# the bounded read that comes before it.
 #
-# First entry is the pihole-dns Service's CLUSTER IP, not the LAN VIP. kube-proxy routes it
-# to either Pi-hole pod regardless of the LoadBalancer's externalTrafficPolicy: Local, which
-# is what blackholes VIP traffic the MetalLB announcer would have to forward to another node.
-#
-# This does NOT weaken the cold-boot invariant above. That one governs the NODE's resolvers,
-# which must work before the cluster exists; CoreDNS is a cluster workload that cannot run
-# before the cluster does, so its depending on an in-cluster Service costs nothing.
-k3s_coredns_upstreams:
-  - "{{ dns_k8s_cluster_ip }}"
-  - 1.1.1.1
-  - 1.0.0.1
+# The `.skip` marker that releases k3s's CoreDNS addon. It is a defaults key so the stub test
+# can point it at a temporary directory.
+k3s_coredns_skip_marker: /var/lib/rancher/k3s/server/manifests/coredns.yaml.skip
 
-# `policy sequential` alone would make every query wait out a dead Pi-hole. health_check
-# probes the upstream on this interval and max_fails marks it down, so only the queries
-# inside one interval pay the penalty — the same intent as daniel-server's resolv.conf
-# `timeout:2 attempts:1`.
-k3s_coredns_health_check: 5s
-k3s_coredns_max_fails: 2
+# Tries of the bounded read of Deployment `coredns`, 10 seconds apart: 30 covers k3s's first
+# apply of the bundled addon on a new cluster, with margin. When the Deployment never appears
+# the play fails before it writes the marker.
+k3s_coredns_read_retries: 30
+k3s_coredns_read_delay: 10
 
-# The cluster DNS Service address, from kube-system/cluster-dns. Used only by the post-patch
-# resolver probe, which queries CoreDNS directly rather than through the node's resolver.
-k3s_cluster_dns_ip: 10.43.0.10
-
-# CoreDNS's `reload` plugin re-reads the Corefile within ~30s; 8 tries at 5s covers it.
+# node.yml's resolver probe retries this many times at 5s. It was sized for CoreDNS's `reload`
+# plugin, which re-reads the Corefile within ~30s, and node.yml reuses the count.
 k3s_coredns_probe_retries: 8
 
 # ── Agent join ─────────────────────────────────────────────────────────────
@@ -1245,11 +1231,6 @@ k3s_manage_backup_targets: true
 # restore-drill checks. Off anywhere that must not push into prod's monitoring, which would
 # make a staging failure page a real operator.
 k3s_manage_health_crons: true
-
-# The name the post-patch CoreDNS probe resolves to prove the forward works by behaviour.
-# It must be a name only the configured upstream answers, and NXDOMAIN everywhere else —
-# `pi.hole` is answered by FTL itself. Set empty to skip the probe where no such name exists.
-k3s_coredns_probe_name: pi.hole
 
 # Storage smoke check (tasks/storage_smoke.yml) — opt-in, never part of a bringup. See that
 # file for why prod does not run it.

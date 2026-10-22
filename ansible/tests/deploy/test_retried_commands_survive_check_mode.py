@@ -50,7 +50,6 @@ from _check_mode import (
 )
 from _helpers import ALL_VARS, ROLES
 from _role_census import task_files
-from lib.repo_paths import K3S_ROLE
 
 
 # The retried tasks the census must still find, so a rename or a move cannot empty it and
@@ -61,23 +60,14 @@ KNOWN_RETRIED_COMMAND_TASKS = frozenset(
         # opted out with `check_mode: false` — reads of pre-existing state
         "Read the read-only ServiceAccount token",
         "Read the secrets-encryption status",
+        # The bounded read of Deployment `coredns` that precedes the `.skip` marker (H1.4).
+        "Wait for k3s to create its CoreDNS Deployment",
         # skipped with `when: not ansible_check_mode` — waits and mutations
         "Wait for the re-encryption to finish",
         "Wait for the PVC to reach Bound",
-        "Verify cluster DNS resolves through the configured upstream",
         # skipped by an ancestor guard the per-task read cannot see
         "Probe the VIP from the banned Pi — expect 403",
     }
-)
-
-
-# A fix that carries no `retries`/`until`, so the census above cannot see it.
-# `Point cluster DNS at Pi-hole first` compares this register's `stdout` in its `when:`, and
-# under `--check` that conditional errors before the retried probe further down coredns.yml is
-# ever reached — the tag fails whatever the retried task carries. Pinned by name here so a
-# revert reopens the tag loudly instead of silently.
-NON_RETRIED_READS_THAT_MUST_OPT_OUT = (
-    (K3S_ROLE / "tasks" / "coredns.yml", "Read the live Corefile"),
 )
 
 
@@ -151,29 +141,6 @@ def test_the_census_still_finds_the_tasks_it_knows_about():
         f"the role tree no longer has a retried command task named {sorted(missing)} — it "
         "was renamed, moved or removed; update KNOWN_RETRIED_COMMAND_TASKS in the same "
         "commit, or this file checks a shrinking set and passes"
-    )
-
-
-@pytest.mark.parametrize(("path", "name"), NON_RETRIED_READS_THAT_MUST_OPT_OUT)
-def test_a_read_a_later_conditional_depends_on_still_opts_out_of_check_mode(path, name):
-    matches = [
-        task
-        for task, _ in walk_with_inherited_when(yaml_fast.safe_load(path.read_text()))
-        if task.get("name") == name
-    ]
-    assert len(matches) == 1, (
-        f"{path.relative_to(ROLES)} no longer has exactly one task named {name!r} — it was "
-        "renamed or removed, and this assertion would otherwise check nothing"
-    )
-    # Routed through the same predicate the retried census uses, by lending the task the
-    # `retries` it does not have. The consequence is identical — check mode skips `command`
-    # either way — and reusing the predicate means this pin inherits the branch coverage
-    # below rather than adding a second rule that only anyone ever sees pass.
-    why = check_mode_retry_problem({**matches[0], "retries": 1})
-    assert why is None, (
-        f"{path.relative_to(ROLES)} :: {name} — {why}. A later task reads this register in "
-        "its `when:`, so under `--check` that conditional errors on the skip result before "
-        "any retried task in the file is reached"
     )
 
 

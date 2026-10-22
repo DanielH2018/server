@@ -19,16 +19,6 @@
 # row naming a missing task, on an instance whose tags differ from its rows' tasks, and on a
 # flagged writer with no row.
 
-- name: Guard the CoreDNS writers against a stale checkout
-  ansible.builtin.import_tasks: stale-checkout-check.yml
-  tags: [coredns]
-  vars:
-    k3s_stale_checkout_rows:
-      - task: Point cluster DNS at Pi-hole first
-        ids: [kube-system_coredns__ConfigMap]
-      - task: Run the CoreDNS image k3s bundles
-        ids: [kube-system_coredns_apps_Deployment]
-
 - name: Guard the Longhorn writers against a stale checkout
   ansible.builtin.import_tasks: stale-checkout-check.yml
   tags: [longhorn]
