@@ -1,9 +1,7 @@
 {#
-  The gravity reconcile as a post-apply mutation Job, INERT until pihole's flip. Nothing renders
-  `templates/verify-inert/`; the flip PR renames it to `templates/verify/`, and the renderer
-  then emits this file into `pihole-verify`. That Kustomization depends on `pihole-deferred`
-  with `wait: true`, so the Job starts once both instances are Ready, as the Ansible tasks run
-  after `roll_one.yml` (D5, *Post-apply mutation Jobs share `<tag>-verify`*).
+  The gravity reconcile as a post-apply mutation Job. The renderer emits this file into
+  `pihole-verify`. That Kustomization depends on `pihole-deferred` with `wait: true`, so the Job
+  starts once both instances are Ready, as the Ansible tasks ran after `roll_one.yml` (D5, *Post-apply mutation Jobs share `<tag>-verify`*).
 
   It runs `files/pihole_gravity.py` against each FTL's REST API, so it needs neither
   `pods/exec` (D5 Open question 14) nor any RBAC: the API is reached through the two web

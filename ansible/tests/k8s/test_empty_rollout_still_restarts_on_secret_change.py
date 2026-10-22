@@ -122,9 +122,9 @@ def _includes_the_render(tasks: Path) -> bool:
 def _restarts_privately(role_dir: Path) -> bool:
     """Does the role run its own `rollout restart`, anywhere in its task files?
 
-    One role legitimately does: pihole rolls its two instances one at a time from an included
-    `roll_one.yml`. Searching the whole `tasks/` tree rather than `main.yml` is the point —
-    pihole's restart lives in the include, so a main.yml-only check would call it broken.
+    A role that runs its own `rollout restart` is exempt. No live role does since pihole's
+    flip; the check still covers one that returns. Searching the whole `tasks/` tree rather
+    than `main.yml` covers a restart that lives in an included file.
 
     Only a task's `command`/`shell` counts. A comment, a task name or a debug message saying
     "rollout restart" restarts nothing, and authelia's header comment exempted it this way
@@ -402,7 +402,7 @@ def test_a_second_workload_mounting_the_secret_as_a_volume_is_clean(tmp_path):
 
 
 def test_a_role_restarting_its_workloads_privately_is_clean(tmp_path):
-    """pihole rolls its own workloads; the exemption must keep working."""
+    """A role restarting its workloads privately is clean; the exemption must keep working."""
     role = _write_role(
         tmp_path,
         "widget",
@@ -437,16 +437,6 @@ def test_a_role_naming_rollout_restart_outside_a_command_is_still_flagged(tmp_pa
         templates={"daemonset.yaml.j2": _DAEMONSET.format(name="widget")},
     )
     assert uncovered_env_secret_workloads(role) == [("widget", "widget-agent")]
-
-
-def test_the_roles_that_restart_privately_still_read_as_exempt():
-    """The named members of the exemption: both live private restarts are found in a command.
-
-    pihole runs its restart from an included `roll_one.yml`, so a command parse that missed
-    that shape would flag it.
-    """
-    exempt = {role for role in ("pihole",) if _restarts_privately(K8S_ROLES / role)}
-    assert exempt == {"pihole"}, exempt
 
 
 def test_the_extra_rollouts_restart_is_not_gated_on_manifests_rollout():

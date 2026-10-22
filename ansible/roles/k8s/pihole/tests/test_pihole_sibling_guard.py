@@ -2,12 +2,10 @@
 
 The script tests run `pihole_sibling_guard.main` against `Slices`, a fixture API server that
 answers each EndpointSlice list from a queue per Service, so a test can script pihole-2 coming
-back mid-wait. The render tests copy the role and move `templates/guard-inert/` into
-`templates/verify/`, the one role-owned directory the renderer reads, so the guard is checked
-as the renderer emits it. That placement is only the render vehicle: under Flux the guard
-runs before `pihole`, from `templates/precheck/`, which test_pihole_precheck.py renders
-(#5719). Its RBAC is tested
-against the script's calls in ansible/tests/k8s/test_rbac_against_rest_script.py.
+back mid-wait. The render tests render a copy of the role, so an edit reaches the guard as the
+renderer emits it. The guard runs before `pihole`, from `templates/precheck/`, whose ordering
+test_pihole_precheck.py checks (#5719). Its RBAC is tested against the script's calls in
+ansible/tests/k8s/test_rbac_against_rest_script.py.
 
 Run: uv run pytest ansible/roles/k8s/pihole/tests/test_pihole_sibling_guard.py
 """
@@ -24,7 +22,6 @@ from lib.repo_paths import ANSIBLE
 from renderer import shadow_diff
 from renderer.renderer_lib import cluster
 from renderer.renderer_lib.context import load_stubs
-from renderer.tests._job_census import ROWS, problems
 
 TAG = "pihole"
 NAMESPACE = "homelab"
@@ -192,7 +189,7 @@ def stubs(tmp_path_factory):
 
 
 def _render_copy(tmp_path, stubs, edit=None) -> cluster.RenderedTag:
-    """The render of a role copy whose verify directory holds both Job forms.
+    """The render of a copy of the role.
 
     `edit(role)` changes the copied role first.
     """
@@ -201,9 +198,6 @@ def _render_copy(tmp_path, stubs, edit=None) -> cluster.RenderedTag:
     shutil.copytree(K8S_ROLES / TAG, role)
     (tree / "vars").mkdir()
     shutil.copy(ANSIBLE / "vars" / "cluster-vars.source", tree / "vars")
-    (role / "templates" / "verify-inert").rename(role / "templates" / "verify")
-    for path in (role / "templates" / "guard-inert").iterdir():
-        path.rename(role / "templates" / "verify" / f"guard-{path.name}")
     if edit:
         edit(role)
     copied = {**stubs, "playbook_dir": str(tree)}
@@ -217,14 +211,14 @@ def guard_tag(stubs, tmp_path_factory) -> cluster.RenderedTag:
 
 @pytest.fixture(scope="module")
 def guard_render(guard_tag) -> dict[str, str]:
-    return guard_tag.verify
+    return guard_tag.precheck
 
 
 def _guard_docs(files: dict[str, str]) -> list[dict]:
     return [
         doc
         for name, text in sorted(files.items())
-        if name.startswith("guard-")
+        if name != cluster.KUSTOMIZATION
         for doc in yaml_fast.safe_load_all(text)
         if doc
     ]
@@ -244,21 +238,8 @@ def _env(job: dict) -> dict[str, str]:
     return {env["name"]: env.get("value") for env in container["env"]}
 
 
-def test_the_tree_renders_no_guard_while_ansible_owns_pihole(stubs):
-    rendered = cluster.render_tag(TAG, stubs).directories()
-    assert [
-        f"{directory}/{name}"
-        for directory, files in rendered.items()
-        for name, text in files.items()
-        if "pihole-sibling-guard" in text
-    ] == []
-
-
-def test_the_guard_passes_every_job_census_row_but_kind(guard_render):
-    """`kind` is out: the guard is a `precheck` Job, which `<tag>-verify` does not admit.
-
-    test_pihole_precheck.py checks every row, `kind` included, in `pihole-precheck` (#5719).
-    """
+def test_the_guard_ships_its_identity_and_a_job_that_never_retries(guard_render):
+    """test_pihole_precheck.py checks the Job census rows in `pihole-precheck` (#5719)."""
     docs = _guard_docs(guard_render)
     assert sorted(doc["kind"] for doc in docs) == [
         "ConfigMap",
@@ -267,8 +248,6 @@ def test_the_guard_passes_every_job_census_row_but_kind(guard_render):
         "RoleBinding",
         "ServiceAccount",
     ]
-    rows = {name: row for name, row in ROWS.items() if name != "kind"}
-    assert problems({f"{TAG}-verify": docs}, rows) == []
     (job,) = [doc for doc in docs if doc["kind"] == "Job"]
     assert job["spec"]["backoffLimit"] == 0
 
@@ -327,13 +306,15 @@ def test_the_guard_renames_exactly_when_instance_1_rolls(
 ):
     """An instance-2-only fix keeps the name, so a down pihole-2 cannot hold its own fix."""
     edit, renames = EDITS[case]
-    before = _jobs(guard_tag.verify)
-    after = _jobs(_render_copy(tmp_path, stubs, edit).verify)
+    after = _render_copy(tmp_path, stubs, edit)
     # The edit reached the render: the gravity Job reads every roll input of both instances.
     if case != "yaml-comment":
-        assert after["pihole-gravity"] != before["pihole-gravity"]
+        assert (
+            _jobs(after.verify)["pihole-gravity"]
+            != _jobs(guard_tag.verify)["pihole-gravity"]
+        )
     renamed = (
-        after["pihole-sibling-guard"]["metadata"]["name"]
-        != before["pihole-sibling-guard"]["metadata"]["name"]
+        _jobs(after.precheck)["pihole-sibling-guard"]["metadata"]["name"]
+        != _jobs(guard_tag.precheck)["pihole-sibling-guard"]["metadata"]["name"]
     )
     assert renamed is renames

@@ -1,9 +1,9 @@
 """crowdsec's verify Job: ban daniel-pi at LAPI, read the edge's 403s off-cluster, lift the ban.
 
-Inert until crowdsec's flip, in `templates/verify-inert/` (target slice D5, *crowdsec's verify
+Flux runs it from `templates/verify/` as `crowdsec-verify` (target slice D5, *crowdsec's verify
 from outside the cluster*, and its Open question 9, confirmed by the operator on 2026-10-18).
-It replaces the gate in `tasks/verify.yml`, "Ban daniel-pi and prove the edge enforces it",
-without the `pods/exec` grant that gate's `cscli` calls would need as a Job. Each hop moves:
+It replaces the Ansible gate "Ban daniel-pi and prove the edge enforces it", without the
+`pods/exec` grant that gate's `cscli` calls would need as a Job. Each hop moves:
 
 - **The ban** goes to LAPI's HTTP API as a machine: `POST /v1/watchers/login`, then `POST
   /v1/alerts` carrying one `ban` decision, the request `cscli decisions add` sends. Reading

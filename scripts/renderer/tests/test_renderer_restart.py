@@ -328,6 +328,11 @@ OUTSIDE_ROLE_EXEMPT: dict[tuple[str, str, str], str] = {
         "the pihole role restarts only its two FTL pods. A stale password shows as "
         'up{job="pihole"} == 0 (ansible/roles/k8s/pihole-exporter/CLAUDE.md).'
     ),
+    ("crowdsec", "ConfigMap", "kube-root-ca.crt"): (
+        "D5. The crowdsec-jobs sidecar's projected token volume reads the cluster CA from the "
+        "ConfigMap the API server publishes in every namespace. No role renders it, and its "
+        "ca.crt changes only when the cluster CA is rotated, which is a rebuild."
+    ),
 }
 
 

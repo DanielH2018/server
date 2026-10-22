@@ -60,7 +60,13 @@ pihole_k8s_unbound_mem_limit: 256Mi
 pihole_k8s_unbound_cpu_request: 50m
 pihole_k8s_unbound_mem_request: 32Mi
 
-# Desired blocklist state, reconciled into gravity.db by tasks/main.yml (idempotent
+# Break-glass for the sibling guard (#5740). `false` leaves the guard Job and its ConfigMap out of
+# the render, so `pihole-precheck` holds only the guard's RBAC and `pihole` is no longer held by
+# a failing guard. Set it in a PR to push a revision past a guard that holds a fix to a down
+# pihole-2, then restore `true` in a second PR. CLAUDE.md has the procedure.
+pihole_k8s_sibling_guard: true
+
+# Desired blocklist state, reconciled into gravity.db by templates/verify/gravity.yaml.j2 (idempotent
 # INSERT/UPDATE, then a gravity rebuild only when something changed). DECLARED rather than
 # volume-seeded: the retired k8s/volume-claim seed verified against a quiescent source, and
 # pihole-FTL.db moves on every DNS query, so a coexistence seed could never pass verification.

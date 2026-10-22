@@ -1,6 +1,6 @@
 {#
-  The identity of pihole's sibling guard, INERT until pihole's flip, as `guard.yaml.j2` beside
-  it is.
+  The identity of pihole's sibling guard, `guard.yaml.j2` beside it. It renders even when
+  `pihole_k8s_sibling_guard` is false, so the break-glass restore changes nothing but the Job.
 
   The guard lists EndpointSlices by label, so it needs `list`; `get` is the read the operator's
   ruling on #5695 names with it. RBAC cannot narrow a `list` by label, so the Role covers every

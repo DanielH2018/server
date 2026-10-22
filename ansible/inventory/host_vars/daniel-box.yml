@@ -95,6 +95,10 @@ containers_list:
   # is the one first-run ordering failure we accept, because the credential constraint wins.
   - name: crowdsec
     platform: k8s
+    # Flux applies crowdsec through `promote` and runs its ban-and-lift check as the
+    # `crowdsec-verify` Job (D5, crowdsec's own window). The handback is two PRs,
+    # `owner: released` then removing `owner`: docs/flux-deploy-plane.md.
+    owner: flux
     # Decisions expire and re-derive from logs; Metabase dashboards are provisioned.
     no_backup_claims: [crowdsec-db]
     # daniel-server's agent and its traefik bouncer authenticate here with machine/bouncer
@@ -143,6 +147,10 @@ containers_list:
     backup_claims: [traefik-acme]
   - name: authelia
     platform: k8s
+    # Flux applies authelia through `promote`, and every Ansible path skips it (D5, authelia's
+    # own window). The handback is two PRs, `owner: released` then removing `owner`:
+    # docs/flux-deploy-plane.md.
+    owner: flux
     # This portal's name is the OIDC issuer Jellyfin's SSO plugin points at.
     hostname: "auth"
     kuma: {id: auth, name: k3s Authelia Portal}
@@ -189,6 +197,11 @@ containers_list:
   # browser and the dashboard's (read-only) cluster identity.
   - name: headlamp
     platform: k8s
+    # Flux applies headlamp through `promote`, and `headlamp-verify` runs the isolation probe the
+    # deleted tasks ran. Its observability RBAC is `headlamp-deferred`, which waits on observability
+    # (D5, Wave D). The handback is two PRs, `owner: released` then removing `owner`:
+    # docs/flux-deploy-plane.md.
+    owner: flux
     hostname: "headlamp"
     kuma: {name: k3s Headlamp}
     port: 4466
@@ -735,6 +748,10 @@ containers_list:
   # coordinator accepts one client, hence `strategy: Recreate` in the role.
   - name: zigbee2mqtt
     platform: k8s
+    # Flux applies zigbee2mqtt through `promote`, and substitutes its network key and MQTT
+    # credentials from homelab-cluster-vars (D5.10, own window). The handback is two PRs,
+    # `owner: released` then removing `owner`: docs/flux-deploy-plane.md.
+    owner: flux
     depends_on: [mosquitto]
     hostname: "zigbee2mqtt"
     kuma: {name: k3s Zigbee2MQTT}
@@ -750,6 +767,10 @@ containers_list:
   # the gate. Reaches mosquitto by Service name.
   - name: home-assistant
     platform: k8s
+    # Flux applies home-assistant through `promote`, and substitutes its Google project id and
+    # Google service-account Secret from homelab-cluster-vars (D5.11, own window). The handback
+    # is two PRs, `owner: released` then removing `owner`: docs/flux-deploy-plane.md.
+    owner: flux
     hostname: "home-assistant"
     kuma: {name: k3s Home Assistant}
     # Records HA's own listener rather than setting it: HA binds 8123 by default, and
@@ -773,6 +794,9 @@ containers_list:
   # the role defaults (pihole_k8s_adlists) and everything else in /etc/pihole regenerates.
   - name: pihole
     platform: k8s
+    # Flux applies pihole through `promote`, and every Ansible path skips it (D5.26). The
+    # handback is two PRs, `owner: released` then removing `owner`: docs/flux-deploy-plane.md.
+    owner: flux
     hostname: "pihole"
     # A hand-written tile in uptime-kuma's static-monitors.yaml.j2 covers it: pihole-k8s-dns, a DNS query against the VIP.
     kuma: false
@@ -849,6 +873,10 @@ containers_list:
   # inside the pod — see roles/k8s/wg-easy/defaults/main.yml.
   - name: wg-easy
     platform: k8s
+    # Flux applies wg-easy through `promote`, and every Ansible path skips it (D5.12, own window,
+    # operator on the LAN). The handback is two PRs, `owner: released` then removing `owner`:
+    # docs/flux-deploy-plane.md.
+    owner: flux
     weekly_backup_claims: {wg-easy-config: 4}  # Thu
     tier: platform
     hostname: "wg-easy"

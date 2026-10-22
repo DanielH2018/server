@@ -6,12 +6,12 @@ LinuxServer.io Home Assistant. See repo-root `CLAUDE.md` for shared conventions,
 
 ## At a glance
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates, tasks or containers_list entry, or the k3s role's Longhorn tier lists. -->
-- **Deploy tag:** `--tags "home-assistant"`
+- **Applied by:** Flux, through `promote` (`owner: flux`); `deploy.sh` refuses
+  `--tags=home-assistant` with exit 5
 - **Images:** `lscr.io/linuxserver/homeassistant` (`home_assistant_k8s_image`), `alpine`
   (`home_assistant_k8s_init_image`)
 - **Route:** `home-assistant.<domain>` · `home-assistant.local.<domain>`, no Authelia
 - **Claim:** `home-assistant-config` (daily -> R2)
-- **Auto-deploy:** eligible (`k8s_autodeploy: true`)
 <!-- /generated_from -->
 
 - **Pinned + Renovate-managed**, NOT `:latest`. HA is stateful with monthly,
@@ -20,7 +20,32 @@ LinuxServer.io Home Assistant. See repo-root `CLAUDE.md` for shared conventions,
   `/linuxserver/` regex.
 - **This role is both the workload and the config-authoring home** — validate-ha-config, the
   macro tests, `sanctioned_writers.yml` and the skills all anchor here, and its ConfigMap
-  ships `files/` into the cluster. Edit HA config HERE, and deploy from daniel-box.
+  ships `files/` into the cluster. Edit HA config HERE, then merge; `promote` applies it.
+- **Flux applies it, not Ansible** (D5.11, an own-window flip). Its `containers_list` entry
+  carries `owner: flux`, so `deploy.sh`, the play and the GitOps deployer all skip it, and a
+  merged change reaches the cluster when `promote` publishes and verifies the next bundle. To
+  give it back to Ansible, follow the two-PR handback in `docs/flux-deploy-plane.md`; a plain
+  revert of the flag leaves two writers on the objects. The Deployment is `Recreate`, so a
+  change that rolls it takes HA down for the length of the pod restart. Issue #4188 records a
+  28-minute outage on the 2026.10.0 bump, cause undetermined, so read the pod events on the
+  next `.0` bump before they expire.
+- **The `home-assistant-snapshot` Job snapshots `home-assistant-config` before each revision
+  applies** (D5.2a). The home-assistant Kustomization depends on `home-assistant-snapshot`, so
+  a revision applies only after the snapshot is ready; `docs/flux-deploy-plane.md` lists the
+  Job's checks. A failed revision that changes home-assistant writes the stateful hold, and
+  `promote` does not reset `prod`, because the failed image may already have migrated the
+  config volume. Nothing reverts the claim on its own: the operator follows the revert
+  runbook in `docs/volume-snapshot-drills.md`. A revert invalidates a companion-app token minted
+  after the snapshot, which forces that device to re-authenticate. `k8s_autodeploy: true` still
+  lets Renovate automerge the image bump.
+- **The Google project id in `secrets.yaml` and the Google service-account Secret substitute from
+  `homelab-cluster-vars`.** Their values are `${<key>}` placeholders in the published
+  render, and Flux substitutes the values from the `homelab-cluster-vars` Secret. A rotation
+  reaches the cluster only through `cluster_vars.py write`.
+- **Where the task went.** `tasks/main.yml` holds one task, the include of `k8s/manifests`
+  with `manifests_rollout: home-assistant`, and no Flux path runs it. It stays for the
+  handback. Its pre-apply snapshot through `k8s/volume-snapshot` became the
+  `home-assistant-snapshot` Job, and the Kustomization's `wait` replaces the rollout wait.
 - **Port 8123, no Authelia**, so the companion app works unchanged. MQTT goes via the
   in-cluster `mosquitto` Service, NUT via the in-cluster `nut` Service (admitted by
   `ansible/roles/k8s/netpol-baseline/templates/networkpolicy-nut.yaml.j2`).
@@ -89,8 +114,9 @@ because a role doc is loaded on every task in this directory whether it is neede
 - The Google service account JSON has a Secret of its own,
   `templates/google-sa-secret.yaml.j2`, which `configuration.yaml` reads through `!include`.
   `docs/platform.md` has the wiring.
-- Deploy (from daniel-box): `./scripts/deploy.sh --tags "home-assistant"`
-  — or `/ha-edit-automation` step 5, which adds the health + loaded-config gates
+- Deploy: merge the PR, and `promote` applies it. `deploy.sh --tags "home-assistant"` refuses
+  the tag with exit 5. After the apply, run the health + loaded-config gates of
+  `/ha-edit-automation` (`probe.py ha verify-automations`).
 
 ## Traps
 - **The entity-reference check is blind to a DISAPPEARANCE.** It resolves against a snapshot

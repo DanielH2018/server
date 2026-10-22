@@ -15,6 +15,7 @@ from pathlib import Path
 
 import pytest
 
+from _cross_plane_inventory import hand_back_authelia
 from deploy_tools.object_loss import PRUNE_KEY, prune_disabled
 from deploy_tools.render_targets import render_targets
 from validate import cross_plane_order as gate
@@ -182,7 +183,7 @@ SHELL_EDIT = (
 def head_tree(tmp_path_factory) -> Path:
     tree = tmp_path_factory.mktemp("head")
     gate.extract("HEAD", tree, ("ansible", "scripts"))
-    return tree
+    return hand_back_authelia(tree)
 
 
 @pytest.fixture(scope="module")

@@ -8,6 +8,8 @@ first leaves the whole backup/drift plane with no episode history anywhere.
 
 import json
 
+import pytest
+
 from diagnostics.probe_lib import alerts
 from diagnostics.probe_lib import cli_parser
 from diagnostics.probe_lib import metrics
@@ -50,12 +52,21 @@ def test_rows_from_loki_handles_empty_and_missing_keys():
 # url `fetch` is actually called with.
 
 
+class _Seen(list):
+    """The fetched urls, with the extra keyword arguments of each call beside them."""
+
+    def __init__(self):
+        super().__init__()
+        self.kwargs = []
+
+
 def _capture_fetch(monkeypatch, body='{"data":{"result":[]}}'):
     """Patch out the network and return the list that collects each fetched url."""
-    seen = []
+    seen = _Seen()
 
-    def fake_fetch(url, resolve=None):
+    def fake_fetch(url, resolve=None, **kwargs):
         seen.append(url)
+        seen.kwargs.append(kwargs)
         return body
 
     monkeypatch.setattr(core, "fetch", fake_fetch)
@@ -76,6 +87,34 @@ def test_run_query_sends_the_since_window_to_loki(monkeypatch):
     # window silently clamped to an hour both satisfy a presence check.
     span_s = (int(params["end"][0]) - int(params["start"][0])) / 1e9
     assert abs(span_s - 3 * 86400) < 2
+
+
+def test_run_query_sends_the_until_window_to_loki(monkeypatch):
+    # --until moves the END back from now; the span is --since minus --until, and the end sits
+    # --until before the clock, not at it.
+    seen = _capture_fetch(monkeypatch)
+    ns = cli_parser._build_parser().parse_args(
+        ["loki-query", "up", "--since", "8d", "--until", "3d"]
+    )
+    assert metrics.run_query(ns) == 0
+    params = _query_params(seen[0])
+    start, end = int(params["start"][0]), int(params["end"][0])
+    assert abs((end - start) / 1e9 - 5 * 86400) < 2
+    assert abs(core.since_window_ns("3d")[0] - end) < 2e9
+
+
+def test_since_not_further_back_than_until_is_a_usage_error():
+    with pytest.raises(core.UsageError):
+        core.since_window_ns("1d", "2d")
+
+
+def test_run_query_sends_timeout_only_when_asked(monkeypatch):
+    # The formatted path must hand --timeout down to fetch; unset leaves fetch its default.
+    seen = _capture_fetch(monkeypatch)
+    p = cli_parser._build_parser()
+    metrics.run_query(p.parse_args(["loki-query", "up", "--timeout", "120"]))
+    metrics.run_query(p.parse_args(["loki-query", "up"]))
+    assert seen.kwargs == [{"timeout": 120}, {}]
 
 
 def test_run_query_sends_the_step_to_loki(monkeypatch):

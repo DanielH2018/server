@@ -5,22 +5,44 @@ See repo-root `CLAUDE.md` for shared conventions.
 
 ## At a glance
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates, tasks or containers_list entry, or the k3s role's Longhorn tier lists. -->
-- **Deploy tag:** `--tags "zigbee2mqtt"`
+- **Applied by:** Flux, through `promote` (`owner: flux`); `deploy.sh` refuses
+  `--tags=zigbee2mqtt` with exit 5
 - **Images:** `ghcr.io/koenkk/zigbee2mqtt` (`zigbee2mqtt_k8s_image`), `alpine`
   (`zigbee2mqtt_k8s_init_image`)
 - **Route:** `zigbee2mqtt.<domain>` · `zigbee2mqtt.local.<domain>`, Authelia one_factor
 - **Claim:** `zigbee2mqtt-data` (daily -> R2)
-- **Auto-deploy:** denylisted (`k8s_autodeploy: false`) — state coupled outside the volume —
-  the SLZB-06M coordinator's NVRAM holds the network key and frame counters, so reverting
-  zigbee2mqtt-data to a snapshot desynchronises it from the coordinator and can silence paired
-  devices; the pre-apply snapshot and revert work fine and are not the blocker
 <!-- /generated_from -->
 
 - **Host: daniel-box (k8s), since 2026-08-09 — slice 5, B2.** The Docker role this config came
   from is gone; this role's Secret renders `templates/config/configuration.yaml.j2`. Edit Z2M
-  config HERE, deploy with `--tags zigbee2mqtt` from daniel-box.
+  config HERE, then merge; `promote` applies it.
 - **Port:** 8080 · reaches the coordinator at `tcp://{{ slzb_ip }}:6638`, broker at the
   in-cluster `mosquitto` Service name
+- **Flux applies it, not Ansible** (D5.10, an own-window flip). Its `containers_list` entry
+  carries `owner: flux`, so `deploy.sh`, the play and the GitOps deployer all skip it, and a
+  merged change reaches the cluster when `promote` publishes and verifies the next bundle. To
+  give it back to Ansible, follow the two-PR handback in `docs/flux-deploy-plane.md`; a plain
+  revert of the flag leaves two writers on the objects. mosquitto is Flux-owned too, so the
+  Kustomization depends on it. The Deployment is `Recreate` and the SLZB-06M coordinator
+  accepts one client, so a change that rolls the pod drops every Zigbee device from MQTT until
+  the new pod connects.
+- **The `zigbee2mqtt-snapshot` Job snapshots `zigbee2mqtt-data` before each revision applies**
+  (D5.2a). The zigbee2mqtt Kustomization depends on `zigbee2mqtt-snapshot`, so a revision
+  applies only after the snapshot is ready; `docs/flux-deploy-plane.md` lists the Job's checks.
+  A failed revision that changes zigbee2mqtt writes the stateful hold, and `promote` does not
+  reset `prod`. A volume revert is not the default answer to that hold here: the coordinator's
+  NVRAM holds the network key and frame counters, so a reverted volume can silence paired
+  devices, which is why `k8s_autodeploy` is false. Weigh a forward fix before the revert runbook in
+  `docs/volume-snapshot-drills.md`. `k8s_autodeploy: false` still stops Renovate automerging
+  the image bump.
+- **The network key and MQTT credentials substitute from `homelab-cluster-vars`.**
+  `zigbee_network_key`, `mqtt_username` and `mqtt_password` are `${<key>}` placeholders in the
+  published render. Flux substitutes the values from the `homelab-cluster-vars` Secret. A
+  rotation reaches the cluster only through `cluster_vars.py write`.
+- **Where the task went.** `tasks/main.yml` holds one task, the include of `k8s/manifests`,
+  and no Flux path runs it. It stays for the handback. Its pre-apply snapshot through
+  `k8s/volume-snapshot` became the `zigbee2mqtt-snapshot` Job, and the Kustomization's `wait`
+  replaces the rollout wait.
 
 ## Notable
 - **Network coordinator, not USB.** The SLZB-06M is reached as `serial.port: tcp://<ip>:6638`,
