@@ -742,10 +742,12 @@ depends on which tags are flux-owned, and PR 4a states each case.
   lands a week after the cutover that frees it, because a revert of this PR needs the tokens
   and a retired key cannot come back by revert. So this PR leaves `monitor_bridge_loki_push_token`,
   `monitor_bridge_kuma_notify_failures_push_token` and `monitor_bridge_loki_reachable_push_token`
-  in `secrets.yml`, `secret_rotation.yml` and the cluster files exactly as on `master`. The
+  in `secrets.yml`, `secret_rotation.yml` and the cluster files exactly as on `master`. The derived
+  `standalone_secret_keys.json` is the exception: `standalone_map.py` regenerates it from the
+  templates and drops the three names once their rows go, so it moves in this PR. The
   censuses that would fail on a key with no row take one allowance, `PENDING_RETIREMENT` in
   `scripts/secrets_mgmt/pending_retirement.py`: `consumer_tags` returns nothing for a name in it,
-  `cluster_vars_check.names_problems` does not demand a cluster render for it, and
+  `names_problems` does not demand a cluster render for it, and
   `test_every_auto_tier_token_resolves_a_consumer_or_is_known_manual` counts it as known manual.
   A test holds the set to names `secrets.yml` still holds. PR 5 retires the keys and deletes the
   set. `monitor_bridge_swallowed_verdicts_push_token` stays, because its row stays until M6's C-7.
@@ -806,8 +808,7 @@ its tokens. The sops removal and `cluster_vars.py write` are operator-only.
 
 - Remove the three keys from `ansible/vars/secrets.yml` with `sops` (**operator-only**), delete
   their rows from `ansible/secret_rotation.yml` by hand, add the names to
-  `scripts/secrets_mgmt/git_dates.py:RETIRED`, regenerate `standalone_secret_keys.json` with
-  `scripts/renderer/standalone_map.py`, run `cluster_vars.py write` (**operator-only**) so the
+  `scripts/secrets_mgmt/git_dates.py:RETIRED`, run `cluster_vars.py write` (**operator-only**) so the
   cluster files lose the names, and delete `PENDING_RETIREMENT` with the test that holds it.
 - The recipe, as PR 4a first stated it when it carried the retirement, follows. Read "this PR"
   as PR 5 and "the agent's commit" as the commit that adds the `RETIRED` names.
