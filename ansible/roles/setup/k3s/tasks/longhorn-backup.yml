@@ -15,10 +15,11 @@
   #
   # Moved here from tasks/longhorn.yml at H1.6, and first in the file because it ran ahead of
   # this file's tasks there. It keeps both tags so that `k3s-bringup.yml --tags longhorn`, which
-  # the runbooks name, still applies it. Placing it before "Derive the B2 region" also keeps it
-  # out of the readers of that fact (test_narrow_setup_facts.py). It stays until H1.7b moves the
-  # `default` BackupTarget to the `longhorn-backup` role, where `pollInterval` is a field of
-  # the template.
+  # the runbooks name, still applies it. The narrowing derivation takes a file's tags as the
+  # union over its tasks, so this tag also joins the derived set for every key or filter this
+  # file reads (test_narrow_setup_facts.py, test_narrow_setup_plugins.py). It stays until H1.7b
+  # moves the `default` BackupTarget to the `longhorn-backup` role, where `pollInterval` is a
+  # field of the template.
   ansible.builtin.command:
     cmd: >-
       k3s kubectl -n longhorn-system patch backuptargets.longhorn.io
