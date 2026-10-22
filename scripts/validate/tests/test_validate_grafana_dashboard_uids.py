@@ -6,7 +6,7 @@ database writes for the whole provider, so ONE duplicated pair freezes every das
 estate at its last-written version while the pod stays 1/1 Running and its health probe stays
 green.
 
-Run: uv run pytest scripts/validate/tests/test_validate_grafana_dashboards.py
+Run: uv run pytest scripts/validate/tests/test_validate_grafana_dashboard_uids.py
 """
 
 import json
