@@ -643,6 +643,7 @@
  "ansible/tests/services/test_pihole_redundancy.py": 0.0,
  "ansible/tests/services/test_qbittorrent_mullvad_account_secret.py": 0.0,
  "ansible/tests/services/test_qbittorrent_sidecar_resets_the_netns.py": 0.0,
+ "ansible/tests/services/test_recreate_docker_hub_roles_prepull.py": 1.45,
  "ansible/tests/services/test_registry_gc_ghcr_mirror.py": 0.03,
  "ansible/tests/services/test_registry_gc_state_file_is_json.py": 0.01,
  "ansible/tests/services/test_scrutiny_influxdb_policy.py": 0.0,
