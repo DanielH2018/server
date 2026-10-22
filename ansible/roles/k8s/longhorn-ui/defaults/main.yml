@@ -2,8 +2,8 @@
 # Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
 # Route-only role (see tasks/main.yml): it renders no Deployment of its own, only the
 # IngressRoute + middlewares for the Longhorn UI that ships with the upstream manifest
-# roles/setup/k3s applies. `manifests_rollout: ''` already tells the shared role there is
-# nothing to wait on. But the UI it fronts is the storage control plane — it deletes volumes,
+# roles/setup/k3s applies. There is no workload of ours
+# to wait on. But the UI it fronts is the storage control plane — it deletes volumes,
 # replicas and B2 backups, and the only gate on it is the authelia middleware this role
 # renders — so a bad route change (auth accidentally dropped, wrong Service targeted) is a
 # platform-class exposure risk even though nothing here is a workload to roll back.
