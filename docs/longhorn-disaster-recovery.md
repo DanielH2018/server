@@ -291,6 +291,70 @@ uv run ansible-playbook ansible/seed_volume_backup.yml -i ansible/inventory/host
   -e seed_claim=<pvc-name> -e seed_allow_existing=true
 ```
 
+## A stale iSCSI session blocks an attach
+
+**The symptom (#5826).** A pod loops in `ContainerCreating`, and Longhorn deletes it about
+every 30 s through `auto-delete-pod-when-volume-detached-unexpectedly`. The pod churn hides the
+cause. The instance-manager on the attaching node logs the decisive line:
+
+```text
+Failed to init frontend ... failed to logout target ... iscsiadm: initiator reported error (32 - target likely not connected)
+```
+
+**The cause.** A replaced instance-manager leaves the iSCSI sessions it served in the node's
+kernel. Each one stays in state `FREE` with a `failed` connection. The next time its volume
+attaches on that node, the engine's frontend init tries to log the old session out, gets
+error 32, and exits. On 2026-10-21 the instance-manager that daniel-server replaced at
+2026-10-18T17:48:11Z had left sessions 2 and 14 behind. They blocked Alertmanager's and
+Grafana's volumes when Flux took over observability (#5816).
+
+**How it surfaces.** The node-exporter DaemonSet's `iscsi-sessions` sidecar writes one
+`homelab_iscsi_session_info` series per session on each k3s node, read from
+`/sys/class/iscsi_session/*/state`. `IscsiSessionStale` fires for a session that has not been
+`LOGGED_IN` for 15 minutes, and its labels name the node, the session and the target. A
+stale session alerts before anything tries to attach its volume. The rule is in
+`ansible/roles/k8s/observability/files/rules/host-checks.yaml`.
+
+**The cleanup.** The operator runs these steps over SSH on the node the alert names. They
+need root. The sequence uses the standard open-iscsi commands, and it was not yet run against
+a live stale session when this section was written. `<sid>` is the number in the alert's
+`session` label (`session2` gives `2`), and `<iqn>` is its `target` label.
+
+1. Confirm that the session's volume is not attached on this node. The volume name is the
+   part of `<iqn>` after `io.longhorn:`. A volume that is detached, or attached to the other
+   node, is safe to clean up:
+
+    ```bash
+    kubectl -n longhorn-system get volumes.longhorn.io <pvc-…> \
+      -o jsonpath='{.status.state} {.status.currentNodeID}{"\n"}'
+    ```
+
+    If the volume is attached on this node, scale its workload to 0 and wait for `detached`
+    first.
+
+2. List the SCSI disks behind the session, then delete each one so that no block device
+   still points at the dead session:
+
+    ```bash
+    sudo iscsiadm -m session -r <sid> -P 3 | grep 'Attached scsi disk'
+    echo 1 | sudo tee /sys/block/<sdX>/device/delete
+    ```
+
+3. Log out of this one session, then delete the target's node record so that `iscsid` never
+   logs back in to it. `-r <sid>` limits the logout to this session, where a logout by
+   target would also end a live session to the same target:
+
+    ```bash
+    sudo iscsiadm -m session -r <sid> -u
+    sudo iscsiadm -m node -T <iqn> -o delete
+    ```
+
+4. Check that `/sys/class/iscsi_session/session<sid>` is gone. The alert clears within a
+   minute or two, after the sidecar writes again and Prometheus scrapes the file.
+
+If the session survives these steps, drain the node and reboot it. A reboot clears every
+kernel session.
+
 ## Assurance gap (known, narrowing)
 
 Backups are verified to *complete* (the backup-plane heartbeat) and to *restore*, one volume

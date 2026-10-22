@@ -55,6 +55,35 @@ tests:
       - eval_time: 26m
         alertname: WiredLinkDown
         exp_alerts: []
+      - eval_time: 26m
+        alertname: IscsiSessionStale
+        exp_alerts: []
+      - eval_time: 26m
+        alertname: IscsiSessionsNotReporting
+        exp_alerts:
+          - exp_labels:
+              check: iscsi-sessions
+              origin: daniel-box
+              severity: warning
+              service: daniel-box
+            exp_annotations:
+              summary: daniel-box's iSCSI session check has stopped reporting.
+              description: >-
+                No iscsi-sessions verdict newer than 300s reached Prometheus from daniel-box's
+                textfile collector, so nothing is watching the node's iSCSI sessions. Read the
+                log of the node-exporter pod's `iscsi-sessions` container on daniel-box.
+          - exp_labels:
+              check: iscsi-sessions
+              origin: daniel-server
+              severity: warning
+              service: daniel-server
+            exp_annotations:
+              summary: daniel-server's iSCSI session check has stopped reporting.
+              description: >-
+                No iscsi-sessions verdict newer than 300s reached Prometheus from
+                daniel-server's textfile collector, so nothing is watching the node's iSCSI
+                sessions. Read the log of the node-exporter pod's `iscsi-sessions` container
+                on daniel-server.
 
   # The verdict turns red from minute 3 while the file stays fresh. DiskHealthFailed fires in
   # shadow at once, and DiskHealthNotReporting stays quiet.
@@ -527,4 +556,101 @@ tests:
     alert_rule_test:
       - eval_time: 65m
         alertname: FanoutSlotsIdleWithFreeWork
+        exp_alerts: []
+
+  # A FREE session on daniel-server, beside a logged-in one on daniel-box. IscsiSessionStale
+  # fires for the FREE one after its 15m `for:` and never for the logged-in one. Both nodes'
+  # check files stay fresh, so IscsiSessionsNotReporting stays quiet.
+  - interval: 1m
+    input_series:
+      - series: 'homelab_iscsi_session_info{connection_state="failed", instance="daniel-server", job="node", origin="daniel-server", session="session2", state="FREE", target="iqn.2019-10.io.longhorn:pvc-1"}'
+        values: '1x20'
+      - series: 'homelab_iscsi_session_info{connection_state="up", instance="daniel-box", job="node", origin="daniel-box", session="session3", state="LOGGED_IN", target="iqn.2019-10.io.longhorn:pvc-2"}'
+        values: '1x20'
+      - series: 'homelab_check_last_run_timestamp_seconds{check="iscsi-sessions", instance="daniel-server", job="node", origin="daniel-server"}'
+        values: '0+60x20'
+      - series: 'homelab_check_last_run_timestamp_seconds{check="iscsi-sessions", instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '0+60x20'
+      - series: 'up{instance="daniel-server", job="node", origin="daniel-server"}'
+        values: '1x20'
+      - series: 'up{instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '1x20'
+    alert_rule_test:
+      - eval_time: 14m
+        alertname: IscsiSessionStale
+        exp_alerts: []
+      - eval_time: 16m
+        alertname: IscsiSessionStale
+        exp_alerts:
+          - exp_labels:
+              connection_state: failed
+              instance: daniel-server
+              job: node
+              origin: daniel-server
+              session: session2
+              state: FREE
+              target: iqn.2019-10.io.longhorn:pvc-1
+              severity: warning
+              service: daniel-server
+            exp_annotations:
+              summary: daniel-server holds an iSCSI session that is not logged in.
+              description: >-
+                session2 on daniel-server has read FREE for 15 minutes, for target
+                iqn.2019-10.io.longhorn:pvc-1. The next attach of that volume on daniel-server
+                fails its frontend init on `iscsiadm --logout` (error 32), and Longhorn deletes
+                the pod every ~30s. Clean it up with docs/longhorn-disaster-recovery.md, "A
+                stale iSCSI session blocks an attach".
+      - eval_time: 16m
+        alertname: IscsiSessionsNotReporting
+        exp_alerts: []
+
+  # daniel-box's check file stopped being refreshed at 0 while its exporter stays up, and
+  # daniel-server's stays fresh. The stale-file arm fires once the timestamp is more than 300s old, between minutes 5 and 6.
+  # The absent_over_time arm is the zero-series case's.
+  - interval: 1m
+    input_series:
+      - series: 'homelab_check_last_run_timestamp_seconds{check="iscsi-sessions", instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '0x10'
+      - series: 'up{instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '1x10'
+      - series: 'homelab_check_last_run_timestamp_seconds{check="iscsi-sessions", instance="daniel-server", job="node", origin="daniel-server"}'
+        values: '0+60x10'
+      - series: 'up{instance="daniel-server", job="node", origin="daniel-server"}'
+        values: '1x10'
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: IscsiSessionsNotReporting
+        exp_alerts: []
+      - eval_time: 6m
+        alertname: IscsiSessionsNotReporting
+        exp_alerts:
+          - exp_labels:
+              check: iscsi-sessions
+              instance: daniel-box
+              job: node
+              origin: daniel-box
+              severity: warning
+              service: daniel-box
+            exp_annotations:
+              summary: daniel-box's iSCSI session check has stopped reporting.
+              description: >-
+                No iscsi-sessions verdict newer than 300s reached Prometheus from daniel-box's
+                textfile collector, so nothing is watching the node's iSCSI sessions. Read the
+                log of the node-exporter pod's `iscsi-sessions` container on daniel-box.
+
+  # The same frozen file behind a dead exporter: the `unless` clause leaves it to the bridge's
+  # `targets` check. The group above is its control.
+  - interval: 1m
+    input_series:
+      - series: 'homelab_check_last_run_timestamp_seconds{check="iscsi-sessions", instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '0x10'
+      - series: 'up{instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '0x10'
+      - series: 'homelab_check_last_run_timestamp_seconds{check="iscsi-sessions", instance="daniel-server", job="node", origin="daniel-server"}'
+        values: '0+60x10'
+      - series: 'up{instance="daniel-server", job="node", origin="daniel-server"}'
+        values: '1x10'
+    alert_rule_test:
+      - eval_time: 6m
+        alertname: IscsiSessionsNotReporting
         exp_alerts: []

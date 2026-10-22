@@ -50,7 +50,9 @@ The `node-exporter-textfile` hostPath, `/var/lib/node-exporter-textfile` on each
 mounted at `/textfile` and read by `--collector.textfile.directory`. A host producer drops a
 `*.prom` file there, and Prometheus scrapes it with no change to this role.
 
-- **One live producer: `claude_cgroup.prom`.** The `setup/claude_code` role installs
+- **Two producers.** One is a host timer writing into the hostPath, and the other is a
+  sidecar of this DaemonSet writing into its own directory.
+- **The host producer: `claude_cgroup.prom`.** The `setup/claude_code` role installs
   `ansible/roles/setup/claude_code/files/claude-cgroup-metrics.sh` and
   `claude-cgroup-metrics.timer`, which runs it as root every 30s on both nodes (every host
   with `has_claude_code: true`). The script writes a `mktemp` file in the same directory,
@@ -66,6 +68,18 @@ mounted at `/textfile` and read by `--collector.textfile.directory`. A host prod
   template, which expects `claude-rc` only on a host that runs the RC unit. A writer that
   stops on one node therefore pages from Kuma while the other node still reports, and so
   does a file that is missing or malformed on one host.
+- **The sidecar producer: `iscsi-sessions.prom` (#5826).** The `iscsi-sessions` container
+  runs `ansible/roles/k8s/node-exporter/files/iscsi-sessions.sh`, which the template inlines
+  so that a script change rolls the DaemonSet. Every 60 s it reads
+  `/sys/class/iscsi_session/*` and writes one `homelab_iscsi_session_info` series per
+  session into the `node-exporter-iscsi-textfile` emptyDir. The exporter reads that
+  directory through a second `--collector.textfile.directory`, a repeatable flag. A sidecar
+  reaches both nodes on the next `promote`, where a timer in `setup/k3s` would be a hand
+  apply that misses the agent node. observability's `IscsiSessionStale` pages on a session
+  that is not `LOGGED_IN` for 15 minutes, and `IscsiSessionsNotReporting` pages on a file
+  older than the script's `DEADLINE_S`.
+  `ansible/roles/k8s/node-exporter/tests/test_iscsi_sessions.py::test_both_not_reporting_rules_carry_the_scripts_deadline`
+  pins the rule literals to it. `docs/longhorn-disaster-recovery.md` has the cleanup.
 - **M3's producer metric contract governs every file here**
   (`docs/target-architecture/monitoring/m3-textfile-timer.md`, *The producer metric
   contract*). A *check file* carries a verdict and follows the whole contract. A *gauge set*,
