@@ -8,13 +8,6 @@
   # reads it for Flux's `timeout` and k8s/manifests reads it for the rollout wait. An include
   # var of that name would override the default and loop through `sonarr_k8s_rollout_timeout`.
 
-# The Discord Connect notification is a row in sonarr.db, not a manifest — live state a
-# Longhorn revert or a recreated claim drops silently. roles/k8s/arr-notification declares it.
-# Under Flux the seed Job in templates/verify/notification.yaml.j2 runs the same script; this
-# include is the Ansible path a handback restores.
-- name: Declare sonarr's Discord notification
-  tags: [deploy]
-  ansible.builtin.include_role:
-    name: k8s/arr-notification
-  vars:
-    arr_notification_app: sonarr
+# The Discord Connect notification runs as the seed Job in templates/verify/notification.yaml.j2.
+# The arr-notification include that declared it went in #5561, so a handback re-adds it
+# (`arr_notification_app: sonarr`) as well as reverting the D5.20 flip.

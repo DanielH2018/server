@@ -8,6 +8,8 @@ PR 2, disk-health's verdict written to the textfile collector: [#4871](https://g
 
 PR 3, the host-checks rules in shadow beside Kuma's disk tile: [#4937](https://github.com/DanielH2018/server/pull/4937) (issue #4936).
 
+Soak read, [#4940](https://github.com/DanielH2018/server/issues/4940): day 7 passed on 2026-10-21, over 2026-10-13T20:55:58Z to 2026-10-20T20:55:58Z ([the read](https://github.com/DanielH2018/server/issues/4940#issuecomment-6326523797)). Query 1 returned 3 minutes, all at the edge of one episode (2026-10-18 19:10 to 19:30, the root filesystem at 76%) that `DiskHealthFailed` covered. Query 2 returned no minutes, and `TextfileCollectorError` never fired. PR 4 is unblocked. The disk crossed 75% inside the soak, so it exercised the positive case that the plan expected to leave untested.
+
 Soak note, 2026-10-17: D5.7 ([#5423](https://github.com/DanielH2018/server/pull/5423)) moved node-exporter to Flux at 17:47:09Z, and the takeover rolled its DaemonSet once. The pods restarted at 17:47:10Z on daniel-server and 17:47:22Z on daniel-box. `DiskHealthNotReporting` is built to ride through such a roll (`unless on (origin) (up{job="node"} == 0)`). Under M1's convention 6, any episode at that time is explained, not a reset.
 
 Depends on: M1, and M2's PR 3 (the `weekly-reboot` mute) before the cutover
@@ -431,7 +433,9 @@ because the slice index does not order D5 after M3. Each order below holds under
   `swallowed_verdicts` pages on the rejected pushes. The widened deadline means the gap between
   those two steps cannot page Kuma, however long the merge, the CI wait, the deploy or a Flux
   `promote` run take.
-- Deploys `uptime-kuma`. AutoKuma applies the change within its 60s sync.
+- Deploys `uptime-kuma`. `uptime-kuma` is `owner: flux`, so `land.sh` skips the tag and the
+  merge's `promote` run applies the change (M1 convention 8, C4). AutoKuma applies it within
+  its 60s sync after `promote` publishes the bundle.
 - Two-writer check: no paging changes for a verdict. Kuma still pages it.
 
 ### PR 5 — Cut over (about 20 lines added, about 45 removed, plus test edits)

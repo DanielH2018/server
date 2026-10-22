@@ -114,9 +114,8 @@ it; it is mutually exclusive with `VALHEIM_PLUS`, unused here.
   passes `-modifier portals casual`. A modifier applies at launch and is not written into the
   world, so changing that line and redeploying is the whole procedure, both ways.
 
-`docs/valheim-modding.md` has the two directories the initContainer writes, the
-`PRE_BEPINEX_CONFIG_HOOK` mkdir the mod set depends on, and the three log lines that look
-like success.
+`docs/valheim-modding.md` has the two directories the initContainer writes, why the
+deployment sets no `PRE_BEPINEX_CONFIG_HOOK`, and the three log lines that look like success.
 
 ## Editing
 - Manifests: `templates/*.yaml.j2` · Defaults: `defaults/main.yml`
