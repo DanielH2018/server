@@ -354,8 +354,18 @@ def test_an_initial_setup_defaults_change_reaches_its_readers():
         "homelab_builder",
         "renovate_agent",
     }
-    assert setup_roles_for(path) == {"initial_setup", "claude_code"}
-    assert setup_tags_for([path]) == {"initial_setup", "claude_code"}
+    assert setup_roles_for(path) == {
+        "initial_setup",
+        "claude_code",
+        "homelab_builder",
+        "renovate_agent",
+    }
+    assert setup_tags_for([path]) == {
+        "initial_setup",
+        "claude_code",
+        "homelab_builder",
+        "renovate_agent",
+    }
     tasks = "ansible/roles/setup/initial_setup/tasks/crons.yml"
     assert setup_roles_for(tasks) == {"initial_setup"}
 
