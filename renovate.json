@@ -632,6 +632,7 @@
         "ansible/roles/k8s/karakeep/defaults/main.yml",
         "ansible/roles/k8s/livesync/defaults/main.yml",
         "ansible/roles/k8s/loki-homelab/defaults/main.yml",
+        "ansible/roles/k8s/longhorn/defaults/main.yml",
         "ansible/roles/k8s/longhorn-api/defaults/main.yml",
         "ansible/roles/k8s/longhorn-ui/defaults/main.yml",
         "ansible/roles/k8s/metallb/defaults/main.yml",
@@ -920,12 +921,13 @@
       "matchPackageNames": [
         "longhorn/longhorn"
       ],
-      "groupName": "Longhorn (manual — merging is the upgrade: land it through land.sh, which runs the longhorn-upgrade gates; one minor per PR)",
+      "groupName": "Longhorn (manual — merging is the upgrade: land it through land.sh, which runs the longhorn-upgrade gates; one minor per PR; k8s_autodeploy: false)",
       "rebaseWhen": "conflicted",
       "schedule": [
         "before 6am on monday"
       ],
       "updateNotScheduled": false,
+      "groupSingleUpdates": true,
       "automerge": false
     },
     {
