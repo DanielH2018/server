@@ -1,12 +1,13 @@
 {
-  "checksum": "44419d46b56bd6dd8c66563fe31117c9f937c80157f4e9c9efa9dd4d9220f31c",
+  "checksum": "660515bc6bc64a8d5443fdb556d82d908b11e8373a415956eb4410c786162575",
   "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
   "key": "ansible/roles/k8s/pihole-exporter/CLAUDE.md#It holds no credential of its own",
   "row": {
     "atoms": {
-      "scripts/renderer/tests/test_renderer_restart.py": "000c673a7543c44f34fdfc4321e1a98103201207c3be4a71bb0a9fc364cd7760"
+      "scripts/renderer/renderer_lib/restart.py:outside_secrets": "a570102cd73de636426432a2f42ffe083a29d37bd995c65b1e969e4d7512aeb5",
+      "scripts/renderer/tests/test_renderer_restart.py::test_every_outside_secret_declares_the_keys_its_owning_role_renders": "9537d6275782f1b839a3f3a9e7e16418f62d7b66cdf038aa79479a1b1bd92df9"
     },
     "python": "3.14",
-    "verified_sha": "b7cf2224c"
+    "verified_sha": "156dd253d"
   }
 }
