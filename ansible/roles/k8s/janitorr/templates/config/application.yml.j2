@@ -31,16 +31,26 @@ application:
 
   media-deletion:
     enabled: true
+    # Each key is a free-disk percentage: a rung applies while free space is below that many
+    # percent, and its value is the age past which media is deleted.
+    # DECIDED: the loosest rung is 25, not 20 (#5806, operator ruling 2026-10-22). /srv/media
+    # shares daniel-box's root LV with /var/lib/longhorn, and Longhorn stops scheduling on a
+    # disk below 25% available (`storage-minimal-available-percentage: 25`). A 20% rung does
+    # nothing until the LV is 80% used, which is past Longhorn's line, and the LV cannot grow
+    # (the VG has no free extents). The 25 rung makes janitorr start trimming at 75% used.
+    # Contradict this with new evidence about the Longhorn setting or the LV layout.
     movie-expiration:
       5: 15d # 15 days
       10: 30d # 1 month - if a movie's files on your system are older than this, they will be deleted
       15: 30d # 2 months
       20: 90d # 3 months
+      25: 180d # 6 months - the Longhorn floor, see DECIDED above
     season-expiration:
       5: 15d # 15 days
       10: 20d # 20 days - if a season's files on your system are older than this, they will be deleted
       15: 60d # 2 months
       20: 120d # 4 months
+      25: 240d # 8 months - the Longhorn floor, see DECIDED above
 
   # DISABLED (2026-07-15 review M2): both features shipped enabled with janitorr's upstream DEMO tag
   # placeholders — "5 - demo" / "10 - demo" (spaces) and janitorr_daily (underscore) — which all
