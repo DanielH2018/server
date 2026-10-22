@@ -86,6 +86,16 @@ seed_empty_set() {
 }
 
 REPO_DIR=/home/{{ sys_user }}/server
+# The link is probed BEFORE the fetch as well as after a failed one (#5308). A fetch started inside
+# an outage can hang until the link is back, so a probe run only after it fails sees a healthy link
+# and reports the outage as a staleness fault. On 2026-10-16 the 19:00 run's fetch hung ~2 minutes,
+# failed as the link returned, and the tile read DOWN until 19:30 with no service stale. A fetch
+# that fails while EITHER probe saw the link down is a skip. A healthy run pays one request.
+LINK_DOWN_AT_START=""
+if command -v wan_reachable >/dev/null 2>&1 \
+  && ! wan_reachable release-staleness-check {{ wan_probe_urls | join(' ') }}; then
+  LINK_DOWN_AT_START=1
+fi
 if ! FETCH_ERR="$(git -C "$REPO_DIR" fetch --quiet origin master 2>&1)"; then
   # The fetch reaches github.com, so one WAN outage would otherwise light this tile beside the WAN
   # tile — it did on 2026-09-18, for 3h ("git fetch origin master failed"). reachout_verdict probes
@@ -93,12 +103,16 @@ if ! FETCH_ERR="$(git -C "$REPO_DIR" fetch --quiet origin master 2>&1)"; then
   # still pushes down. See kuma-push-lib.sh for why the probe classifies and not the error text.
   STATUS=down
   REACHOUT_NOTE=""
+  if [[ -n "$LINK_DOWN_AT_START" ]]; then
+    STATUS=up
+    REACHOUT_NOTE="skipped: WAN unreachable when the fetch started — "
+  fi
   # The library is deployed by initial_setup, while this cron is rendered by its own role, so a
   # narrowed apply can put the new script on a host whose /usr/local/lib copy predates
   # reachout_verdict. Without this the read below aborts on an unbound variable under `set -u` and
   # NO push happens at all — the tile reads stale-green to its heartbeat deadline, which is worse
   # than the page this change exists to stop. Same guard docs-refresh.sh.j2 carries.
-  if command -v reachout_verdict >/dev/null 2>&1; then
+  if [[ -z "$LINK_DOWN_AT_START" ]] && command -v reachout_verdict >/dev/null 2>&1; then
     reachout_verdict release-staleness-check {{ wan_probe_urls | join(' ') }}
     STATUS="$REACHOUT_STATUS"
   fi

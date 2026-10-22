@@ -1,13 +1,9 @@
 {#
-  netpol-baseline's verify Job and the ConfigMap that carries its script, INERT until
-  netpol-baseline's flip.
+  netpol-baseline's verify Job and the ConfigMap that carries its script.
 
-  This directory is `verify-inert/`, which neither reader globs: the manifests role takes only
-  top-level `templates/*.yaml.j2`, and `verify_files` takes only `templates/verify/*.yaml.j2`.
-  netpol-baseline's flip PR moves the directory to `templates/verify/`, and the renderer then
-  emits it into `netpol-baseline-verify`, which depends on `netpol-baseline-deferred` (D5,
-  *A verify conversion lands as inert code*; D5 Open question 11). The same PR deletes the
-  probe tasks in `tasks/main.yml` and `netpol-probe-job.yaml.j2`, which this Job replaces.
+  The renderer emits this directory (`verify_files` takes `templates/verify/*.yaml.j2`) into
+  `netpol-baseline-verify`, which depends on `netpol-baseline-deferred` (D5 Open question 11).
+  The Job replaces the probe tasks and `netpol-probe-job.yaml.j2` the role ran under Ansible.
 
   Both names end in a digest, as the Job census requires (D5, *Rules for every Job Flux
   applies*): the ConfigMap's in `configmap_digest8` of its data, the Job's in
@@ -33,8 +29,8 @@
   certificate, could not run in the same container. The census admits no `ssl` import that
   would give each request its own context.
 
-  The exempt-set check is the Flux form of the two "Fail if the live exempt set is not exactly
-  ..." tasks in `tasks/main.yml` (#5685). `exempt_sets` holds one row per namespace whose scope
+  The exempt-set check is the successor of the two "Fail if the live exempt set is not exactly
+  ..." tasks the role's `tasks/main.yml` ran before its flip (#5685). `exempt_sets` holds one row per namespace whose scope
   lever is `namespace`, because those tasks run only under namespace scope. Under Flux the
   check runs after the apply, so drift fails this Job and the revision's soak acts on it,
   where the task refused the apply. The levers have no form here, because a post-apply Job
