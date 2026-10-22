@@ -166,9 +166,10 @@ jobs:
       # With no published tag the step passes --shared-only, because `cluster` without `--role`
       # renders every tag. The bundle then holds the shared kinds and a root listing them, so
       # the first decryption of the cluster file gets a revision of its own (D3.3a).
-      # A --role render writes only the named tags' image contexts, so the tag branch passes
-      # --all-images: the `images` job builds and pushes all ten from out/images/ (#5374).
-      # ansible/tests/repo/test_promote_workflow_bundle.py fails a no-tag branch without it.
+      # A --role render writes only the named tags' image contexts, and --shared-only writes
+      # none, so both branches pass --all-images: the `images` job builds and pushes all ten
+      # from out/images/ and refuses a render without tags.json (#5374, #5593).
+      # ansible/tests/repo/test_promote_workflow_bundle.py fails either branch without it.
       - name: Build the bundle
         id: build
         run: |
@@ -176,7 +177,7 @@ jobs:
           # A command substitution, so set -e stops the step when the read fails.
           listed="$(uv run python scripts/deploy_tools/promote.py published-tags)"
           if [ -z "$listed" ]; then
-            uv run python scripts/renderer/homelab_render.py cluster --out out --shared-only
+            uv run python scripts/renderer/homelab_render.py cluster --out out --shared-only --all-images
           else
             roles=()
             while read -r tag; do roles+=(--role "$tag"); done <<< "$listed"

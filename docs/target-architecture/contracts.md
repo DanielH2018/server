@@ -89,7 +89,8 @@ every entry is flux-owned then waits for C-2b, through the uptime-kuma edge.
     and R1's determinism module. Those two keep reading it after R4's PR 9 deletes the
     comparison (R2, R4). Before R2 lands, `cluster` without `--secret-stubs` exits 2.
   - `homelab-render cluster --out DIR --shared-only`, from D3.3a. It writes the shared kinds
-    and the root, and no tag, for a publish with no flux-owned tag.
+    and the root, and no tag, for a publish with no flux-owned tag. With `--all-images` it
+    also writes every image context (#5593).
   - `homelab-render host --host NAME --out DIR`
   - `homelab-render package --name PKG --out DIR`, for the shared packages of C5 (H3).
 - **Only placeholder mode publishes.** The publish job runs `cluster` without
