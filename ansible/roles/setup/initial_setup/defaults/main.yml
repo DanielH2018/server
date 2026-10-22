@@ -22,9 +22,9 @@
 # URL leaves the digest unpaired — the finish an unattended renovate_agent run could not do
 # without a raw `curl` (#2301).
 # renovate: datasource=github-releases depName=astral-sh/uv
-initial_setup_uv_version: "0.13.0"
+initial_setup_uv_version: "0.13.4"
 initial_setup_uv_installer_url: "https://astral.sh/uv/{{ initial_setup_uv_version }}/install.sh"
-initial_setup_uv_installer_sha256: 283cbef4bdaca819bd896b0dacb8a085c4c05dbc880642aa5001d97bc4db74ba
+initial_setup_uv_installer_sha256: 1f5390d273b0158bd5eaa3527ae049f3667baa881abb1e7c883dd637d84432f9
 
 # When the daily Docker image prune runs, in the host's clock (UTC on every host). A variable
 # rather than a literal in `tasks/crons.yml` so that the healthchecks.io deadman-cadences fragment
