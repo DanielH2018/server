@@ -398,9 +398,9 @@ def test_a_mismatch_behind_the_ref_no_hit_explains_is_flagged_as_unexplained(
     tmp_path, at_r
 ):
     """#5903: a comment-only release_stamp.yml edit was named as homelab-mcp's drift."""
-    assert _behind_stale(tmp_path, at_r, [], digest="cafef00d", edit=_comment_only) == {
-        "littlelink": rr._UNEXPLAINED_REASON
-    }
+    stale = _behind_stale(tmp_path, at_r, [], digest="cafef00d", edit=_comment_only)
+    assert stale["littlelink"].startswith(rr.DIGEST_REASON_PREFIX)
+    assert "no change since the apply explains it" in stale["littlelink"]
 
 
 @pytest.mark.parametrize(
