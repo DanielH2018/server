@@ -377,7 +377,7 @@ def discharge_k8s_unapplied(
 # releases` has taken the same gap since #3046. A line that never discharged until a full
 # deploy was the defect (#2643), so the gap is accepted. Every other shared role acts outside
 # the digest: `image-builder`'s `build-job.yaml.j2` is outside it, `arr-notification`
-# writes an app's database over its API, and `cronjob-gate`, `longhorn-api`,
+# writes an app's database over its API, and `longhorn-api`,
 # `volume-snapshot` and `volume-revert` render nothing at all. Those, like an own role that
 # is not provable, take a render only for a range `scripts/deploy_tools/digest_covers.py`
 # says moved nothing outside the digest (#4781): a comment edit, never a changed task.

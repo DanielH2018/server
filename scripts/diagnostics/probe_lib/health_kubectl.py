@@ -82,8 +82,7 @@ def k8s_jobs_args(namespace):
 def k8s_job_pods_args(job_name, namespace):
     """The kubectl arguments for one Job's pods, as JSON.
 
-    `batch.kubernetes.io/job-name`, not the deprecated bare `job-name` — the same choice
-    `roles/k8s/cronjob-gate/tasks/main.yml` documents and makes, for the same reason: if the
+    `batch.kubernetes.io/job-name`, not the deprecated bare `job-name`: if the
     legacy label is ever dropped, the other selector silently matches nothing.
     """
     return [

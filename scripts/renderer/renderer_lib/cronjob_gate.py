@@ -19,7 +19,7 @@ The Job carries no ownerReference to the CronJob, whose UID is unknown at render
 `concurrencyPolicy: Forbid` no longer keeps a scheduled firing off a gate run. That cost and
 the stricter gate (any non-zero exit fails the Kustomization) are each flip PR's to state.
 `bundle.flux_files` raises the `<tag>-verify` timeout above the gate's `activeDeadlineSeconds`,
-as `cronjob_gate_timeout` sits above it today, so a hung run fails on its own deadline.
+so a hung run fails on its own deadline.
 """
 
 import sys as _sys

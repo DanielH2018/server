@@ -26,7 +26,7 @@ slice drills that against a real volume.
 
 `test_the_listing_jsonpath_parses` is the one seam test: it runs the role's own argv against
 the live API server, so the synthetic listings the selection tests inject enter where the real
-ones do. `test_cronjob_gate_decision.py` records the sibling case where synthetic payloads
+ones do. The retired `test_cronjob_gate_decision.py` recorded the sibling case where synthetic payloads
 injected downstream of a broken command left a whole branch dead while every test passed.
 
 The drill-proven order and the shape of each Longhorn call are pinned in
@@ -93,11 +93,6 @@ def test_the_seam_test_skips_a_missing_cluster_and_fails_a_bad_jsonpath() -> Non
 
 # Every test that probes the live API, as (directory under ansible/tests, module, test).
 _LIVE_SEAM_TESTS = (
-    (
-        "deploy",
-        "test_cronjob_gate_decision",
-        "test_the_jsonpath_parses_against_the_live_api",
-    ),
     ("longhorn", "test_longhorn_api", "test_the_resolve_returns_a_pod_ip_on_this_node"),
     ("longhorn", "test_volume_revert", "test_the_listing_jsonpath_parses"),
     ("longhorn", "test_volume_snapshot", "test_the_listing_jsonpath_parses"),

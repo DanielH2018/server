@@ -1000,7 +1000,7 @@ those tags (a failed bump on a broad tick writes one) and leaves any other broad
       (`releases_retired.py`), because a retired role's record outlives the role and the commit
       that deleted it would read as drift no deploy tag can clear.
     - The entry-less roles holding only `tasks/` and `defaults/` (`volume-snapshot`,
-      `volume-revert`, `cronjob-gate`, `longhorn-api`) are OUT of the shared set. They change how a
+      `volume-revert`, `longhorn-api`) are OUT of the shared set. They change how a
       deploy runs, never what it applies, so no stamp goes stale. Sweeping them in would mark every
       service stale for a change that renders no manifest.
     - The deploy plane is in the census too. For each changed path under `ansible/inventory/` or

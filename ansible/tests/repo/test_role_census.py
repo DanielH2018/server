@@ -54,7 +54,7 @@ def test_a_nested_task_file_is_credited_to_its_role(tmp_path):
 def test_the_default_census_finds_the_real_k8s_roles():
     """Non-vacuity against the real tree, and the default argument every guard relies on."""
     names = {p.name for p in role_dirs()}
-    assert {"manifests", "image-builder", "cronjob-gate"} <= names
+    assert {"manifests", "image-builder", "volume-snapshot"} <= names
 
 
 def test_the_census_finds_the_real_setup_and_pi_roles():

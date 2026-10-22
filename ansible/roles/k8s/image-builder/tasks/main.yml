@@ -286,7 +286,7 @@
 # the task blocked ~17 minutes. `backoffLimit: 0` in
 # build-job.yaml.j2 is what makes that gap so wide: a failed build settles in seconds.
 #
-# The poll is the same shape k8s/cronjob-gate uses for the same reason, down to the jsonpath —
+# The poll is the shape the retired k8s/cronjob-gate used for the same reason (#5716) —
 # an `until:` naming both condition types, retried until `image_builder_timeout` is spent, which
 # is what keeps the overall deadline the operator configured.
 #

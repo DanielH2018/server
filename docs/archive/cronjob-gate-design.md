@@ -1,5 +1,11 @@
 # k8s/cronjob-gate — why the gate is shaped as it is
 
+**HISTORY — the role was retired on 2026-10-22 (#5716).** No role included it once configarr,
+qbittorrent and crowdsec moved to Flux. Every CronJob gate is now a `flux_cronjob_gates`
+entry, and `scripts/renderer/renderer_lib/cronjob_gate.py` writes it as a Job in
+`<tag>-verify`. The paths this page cites under `ansible/roles/k8s/cronjob-gate/` are in git
+history. `docs/flux-deploy-plane.md` says how to restore the role for a handback.
+
 The role's caller contract is `ansible/roles/k8s/cronjob-gate/CLAUDE.md`: what a caller's
 CronJob must guarantee, and what a green gate does and does not prove. This page is the
 working-out behind that contract — the decisions a session changing the role has to not

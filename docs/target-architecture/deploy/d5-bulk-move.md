@@ -3937,7 +3937,7 @@ includes valheim's initContainer.
 - pihole's flip: the role `CLAUDE.md`'s notes on `roll_one.yml` say the annotation and
   `pihole-deferred` replace it.
 - pi-peer-backup's flip and configarr's flip: each role's `CLAUDE.md` says the gate Job's new
-  name, and `ansible/roles/k8s/cronjob-gate/CLAUDE.md` says which callers remain.
+  name. The `k8s/cronjob-gate` role was retired in #5716, once no caller remained.
 - sonarr's and radarr's flips: `ansible/roles/k8s/arr-notification/CLAUDE.md` says the seed
   runs as a post-apply Job, and why the ClusterIP rule no longer applies.
 - registry's GC retirement: `ansible/roles/k8s/registry/CLAUDE.md`'s GC notes, the uptime-kuma

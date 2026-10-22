@@ -284,7 +284,7 @@
   register: volume_snapshot_apply_attached
   changed_when: "'created' in volume_snapshot_apply_attached.stdout"
 
-# Skipped rather than run under a no-mutation guard, for cronjob-gate's reason: the snapshot
+# Skipped rather than run under a no-mutation guard: the snapshot
 # this waits on is created by the task above, which the same guard skips. Reading a PREVIOUS
 # deploy's snapshot and calling it this run's recovery point would be a lie, and an unguarded
 # poll would burn the whole timeout on every dry run and then fail.

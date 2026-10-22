@@ -1,4 +1,4 @@
-"""Crediting a batch workload as gated: which `wait` and which cronjob-gate delegation count.
+"""Crediting a batch workload as gated: which `wait` and which `flux_cronjob_gates` entry count.
 
 A Job or CronJob is never gated through `manifests_rollout`, so a role that renders one must
 carry its own completion gate. These are the shapes that must and must not be credited as that
@@ -8,9 +8,8 @@ not run is the fail-open direction.
 Synthetic roles rather than live ones on purpose: a case pinned to a real role stops being a
 regression test the day that role is retired. The `widget_role` fixture builds them.
 
-This file holds the `wait`-shaped credit and the two tree-wide assertions. The
-`cronjob-gate` delegation cases are `test_k8s_autodeploy_cronjob_gate_credit.py`; what counts
-as a completion gate and a failure escalation is `test_k8s_autodeploy_completion_gates.py`.
+This file holds the `wait`-shaped credit, the `flux_cronjob_gates` credit and the two
+tree-wide assertions; what counts as a completion gate and a failure escalation is `test_k8s_autodeploy_completion_gates.py`.
 """
 
 import pytest
@@ -148,9 +147,8 @@ def test_a_jinja_job_name_in_a_wait_is_refused_outright(widget_role) -> None:
 def test_argv_form_wait_is_credited(widget_role) -> None:
     """An `argv:` list form of the wait command must be credited, same as `cmd:`.
 
-    `k8s/cronjob-gate` itself uses `argv:` for its own container-state read, so `argv:` is an
-    established spelling in this codebase, and a guard that cannot read it would false-offend
-    the next role that follows the precedent.
+    `argv:` is a spelling Ansible accepts, and a guard that cannot read it would false-offend
+    the next role that writes its wait that way.
     """
     role = widget_role(
         "- name: Wait for widget-job\n"
@@ -371,9 +369,8 @@ def test_auto_deployable_roles_gate_every_batch_workload_they_render() -> None:
     assert not offenders, (
         "Auto-deployable role(s) rendering an ungated batch workload. For a Job, add a "
         "`wait --for=condition=complete job/<name>` after the apply. For a CronJob nothing "
-        "runs at deploy time and no such wait can be written — include k8s/cronjob-gate with "
-        "`cronjob_gate_name: <the CronJob's metadata.name>` instead, after checking that "
-        "CronJob against the two properties in roles/k8s/cronjob-gate/CLAUDE.md. Or set "
+        "runs at deploy time and no such wait can be written — hand the role to Flux and name "
+        "the CronJob in `flux_cronjob_gates` (docs/flux-deploy-plane.md). Or set "
         "k8s_autodeploy: false with a k8s_autodeploy_reason:\n  "
         + "\n  ".join(offenders)
     )
@@ -386,16 +383,14 @@ def test_gating_shared_roles_actually_wait() -> None:
     finishes; it does not by itself prove a failed Job fails the deploy. image-builder's own
     wait is `... || wait --for=condition=failed` with no `failed_when` on that task, so it
     exits 0 on a failed build by design — what actually fails the play is a separate
-    `ansible.builtin.fail` task a few steps later. cronjob-gate is the same shape: its poll
-    carries `failed_when: false` and reports nothing itself, and the escalation is the
-    `ansible.builtin.fail` after it. So this checks for a gate AND an
+    `ansible.builtin.fail` task a few steps later. So this checks for a gate AND an
     `ansible.builtin.fail` somewhere in the role's tasks, not that the two are wired together
     end to end.
 
     `failed_when` is deliberately NOT accepted as the second half: `failed_when: false` and
     `failed_when: rc != 0` are opposite meanings sharing a prefix, and a substring test
     cannot tell them apart — accepting either would let a failure *suppressor* satisfy a
-    check written to prove failure escalates. Both roles here in fact carry
+    check written to prove failure escalates. image-builder in fact carries
     `failed_when: false` on the very task that observes the outcome, so accepting it would
     have made this half of the check pass on its own inverse.
 
@@ -442,7 +437,7 @@ def test_an_ansible_owned_role_gets_no_credit_for_the_flux_opt_in(widget_role) -
 
 
 def test_pi_peer_backup_is_gated_by_its_flux_gate_alone() -> None:
-    """The named member: its tasks hold no k8s/cronjob-gate include since its flip (#5652)."""
+    """The named member: its CronJob is credited through `flux_cronjob_gates` (#5652)."""
     role = _K8S_ROLES / "pi-peer-backup"
     assert flux_gated_names(role) == {"pi-peer-backup"}
     assert _batch_gated_names(role) == {"pi-peer-backup"}

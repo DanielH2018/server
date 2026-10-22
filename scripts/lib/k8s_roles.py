@@ -91,8 +91,6 @@ def role_dirs(roles_dir: Path = K8S_ROLES, exclude: Collection[str] = ()) -> lis
 # containers_list entry because they are not services, so the platform check below would always
 # fail for them.
 #
-# cronjob-gate creates a one-off Job from the CALLER's CronJob with `kubectl
-# create job --from=cronjob/<name>`, so the pod spec it runs is the caller's rendered manifest.
 # volume-snapshot applies one Longhorn Snapshot CR per claim, built inline and piped to `kubectl
 # apply -f -` — per-deploy state rather than part of a service's manifest set, and
 # `ansible/tests/longhorn/test_volume_snapshot.py` is what checks its shape instead.
@@ -105,9 +103,8 @@ def role_dirs(roles_dir: Path = K8S_ROLES, exclude: Collection[str] = ()) -> lis
 # stale exemption rather than left as a name nobody can justify.
 NO_MANIFEST_ROLES = {
     "manifests",
-    "cronjob-gate",
     "volume-snapshot",
-    "longhorn-api",  # resolves a fact only, same as cronjob-gate/volume-snapshot
+    "longhorn-api",  # resolves a fact only, same as volume-snapshot
     "volume-revert",  # reverts a volume through kubectl and the Longhorn API
     # declares sonarr's/radarr's Discord Connect notification over the app's own API — a row in
     # the app's database, which no manifest can express

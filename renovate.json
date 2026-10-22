@@ -624,7 +624,6 @@
         "ansible/roles/k8s/cluster-base/defaults/main.yml",
         "ansible/roles/k8s/coredns/defaults/main.yml",
         "ansible/roles/k8s/code-server/defaults/main.yml",
-        "ansible/roles/k8s/cronjob-gate/defaults/main.yml",
         "ansible/roles/k8s/crowdsec/defaults/main.yml",
         "ansible/roles/k8s/deploy-ui/defaults/main.yml",
         "ansible/roles/k8s/dri-device-plugin/defaults/main.yml",

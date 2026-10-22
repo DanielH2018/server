@@ -206,8 +206,8 @@ def role_cronjob_targets(role, default_namespace, roles_dir=K8S_ROLES):
 
     Consulted by run_health only as a fallback, when role_workload_targets found nothing —
     a role that deploys both a Deployment and a CronJob is gated on the Deployment, the same
-    way manifests_rollout gates it, not on this. Only two roles are CronJob-only today
-    (configarr, pi-peer-backup), both already including `k8s/cronjob-gate` at deploy time;
+    way manifests_rollout gates it, not on this. Only two roles are CronJob-only
+    (configarr, pi-peer-backup), both gated by a Job in `<tag>-verify` at each revision;
     this is the read-only, after-the-fact check for the same claim `probe.py health` already
     makes for a Deployment. Two censuses pin that pair from opposite sides, and both assert
     equality rather than a lower bound so a third role cannot join unnoticed:
@@ -537,7 +537,7 @@ def run_health(
 
     if not targets:
         # No Deployment/DaemonSet/StatefulSet — the CronJob-only path, the read-only analog
-        # of manifests_rollout for a role that instead includes k8s/cronjob-gate. A role
+        # of manifests_rollout for a role whose CronJob a `flux_cronjob_gates` entry gates. A role
         # deploying both is gated on its rollout above, not here: role_cronjob_targets is
         # only ever consulted when role_workload_targets found nothing to gate on.
         try:

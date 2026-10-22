@@ -150,7 +150,7 @@ again (*Steps, as PRs*, *The edge to D6, narrowed*).
       janitorr's `tasks/main.yml` maps from `janitorr_k8s_dry_run`.
     - Five live-read facts, which R3 and D5 remove.
 - **Seven utility roles** are reached only through `include_role`: `manifests`,
-  `image-builder` (ten include sites), `cronjob-gate` (configarr and pi-peer-backup),
+  `image-builder` (ten include sites), `cronjob-gate` (configarr and pi-peer-backup; retired in #5716),
   `arr-notification`, `volume-snapshot`, `volume-revert` and `longhorn-api`. `volume-revert`
   has one caller, the `include_role` in `ansible/roles/k8s/manifests/tasks/main.yml`, and it
   includes `k8s/longhorn-api` itself. The deployer and `ansible/tests/longhorn/` also name
@@ -901,7 +901,7 @@ root is withheld, not suspended*).
 ```diff
 - ansible/roles/k8s/*/tasks/                      (86 files, less the runbook allowlist)
 - ansible/roles/k8s/manifests/                     (whole role, once no default is a renderer input)
-- ansible/roles/k8s/{image-builder,cronjob-gate,arr-notification,volume-snapshot}/tasks/
+- ansible/roles/k8s/{image-builder,arr-notification,volume-snapshot}/tasks/
   ansible/roles/k8s/{image-builder,arr-notification}/   (templates, files, defaults stay)
   ansible/roles/k8s/{volume-revert,longhorn-api}/tasks/   (runbook allowlist, until H7)
   ansible/roles/k8s/*/defaults/main.yml            (+ render metadata from include vars)
@@ -1417,8 +1417,8 @@ deployer route of its paths, measured with `services_from_changed_paths` at its 
     - Delete the play, the batch and retire task files, the two post_tasks, and every
       `tasks/` directory under `ansible/roles/k8s/` outside the runbook allowlist. Delete
       the manifests role whole: PR 7c moved every default the renderer read from it.
-    - Delete only the `tasks/` of `image-builder`, `cronjob-gate`, `arr-notification` and
-      `volume-snapshot`. A utility role goes whole only when a grep of `scripts/renderer/`
+    - Delete only the `tasks/` of `image-builder`, `arr-notification` and
+      `volume-snapshot`. `cronjob-gate` went whole in #5716, once it had no caller. A utility role goes whole only when a grep of `scripts/renderer/`
       and `scripts/lib/` for the role's directory, and for each of its template, file and
       default names, prints nothing, and the description quotes that grep. At the baseline
       `image-builder` keeps `templates/context-configmap.yaml.j2` (D5.4) and

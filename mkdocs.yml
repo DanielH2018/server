@@ -215,7 +215,6 @@ nav:
           - monitor-bridge check record: monitor-bridge-checks.md
           - uptime-kuma and AutoKuma record: uptime-kuma-autokuma-record.md
           - observability record: observability-dashboards.md
-          - cronjob-gate design record: cronjob-gate-design.md
           - autofix-bridge actuators: autofix-bridge-actuators.md
       - Access and host security:
           - WireGuard private access: wireguard-private-homelab-access.md

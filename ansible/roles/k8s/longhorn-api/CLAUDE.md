@@ -20,7 +20,7 @@ undefined. `k8s/volume-revert` is the only caller.
   too; the trim cron spells it in jq. During a Longhorn upgrade the manager restarts, so a revert
   then fails at the resolve, before it touches any claim.
 - **`k8s_autodeploy: false`** — deploys no workload, renders no manifest, pins no image; declared
-  rather than auto-deploy-eligible for the same reason `cronjob-gate` and `volume-snapshot` are.
+  rather than auto-deploy-eligible for the same reason `volume-snapshot` is.
 
 ## Notable
 - `ignore_errors` on the include does **not** make a missing manager non-fatal — it suppresses

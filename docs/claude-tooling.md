@@ -250,8 +250,9 @@ A role with no Deployment/DaemonSet/StatefulSet but a CronJob (configarr and pi-
 (`scripts/diagnostics/probe_lib/health_cronjob.py`'s `format_cronjob_health`): the Job must have
 succeeded, be newer than the deploy that just ran (read from the `release_stamp.yml` record),
 and carry no restarted container. `homelab-readonly`, the identity `probe.py` runs as, cannot
-create a Job (the `view` ClusterRole it is bound to refuses it), so this only ever reads the Job `k8s/cronjob-gate` already
-created at deploy time, never triggers one. When no Job has landed since the deploy, it falls
+create a Job (the `view` ClusterRole it is bound to refuses it), so this only ever reads a Job that already exists, never triggers one.
+It reads only Jobs the CronJob owns. The gate Job Flux runs in `<tag>-verify` names no owner,
+so a scheduled firing is what it usually reads. When no Job has landed since the deploy, it falls
 back to the CronJob's own daily/weekly schedule: the previous run must have succeeded and not be
 more than twice its interval old. Any other schedule shape fails closed rather than guess an
 interval. A role with neither a workload nor a CronJob (media-volume, netpol-baseline) still

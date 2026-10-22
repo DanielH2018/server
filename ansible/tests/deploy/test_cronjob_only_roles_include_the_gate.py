@@ -1,13 +1,12 @@
-"""Every CronJob-only k8s role must include `k8s/cronjob-gate`, named for its own CronJob.
+"""Every CronJob-only k8s role must gate each of its CronJobs at each revision.
 
-`probe.py health <tag>` gates a CronJob-only role by reading its most recent Job
-(`scripts/diagnostics/probe_lib/health_cronjob.py`'s `format_cronjob_health`) -- and that Job only
-exists to read because `k8s/cronjob-gate` created one at deploy time. A CronJob-only role that
-skipped that include would have nothing for the read-only gate to find: `role_cronjob_targets`
-still reports it gated (the manifests declare a CronJob), `format_cronjob_health` prints "no
-evidence it has ever run", and the notifier correctly fails it -- but only after a deploy
-nobody meant to leave unverified. This test catches the missing include before that deploy,
-the same way `test_k8s_autodeploy_batch_gates.py` catches a missing wait for a plain Job.
+A CronJob has no rollout, so nothing runs its new spec until the next scheduled firing. A
+flux-owned role names each CronJob in `flux_cronjob_gates`, and the renderer copies it into a
+gate Job in `<tag>-verify` that Flux runs once per role revision. A CronJob-only role without
+that entry ships an image nobody has run. This test catches the missing entry before the
+revision lands, the same way `test_k8s_autodeploy_batch_gates.py` catches a missing wait for a
+plain Job. The `k8s/cronjob-gate` role that gated an Ansible-owned role was retired (#5716);
+`docs/flux-deploy-plane.md` says what a handback restores.
 
 Run: uv run pytest ansible/tests/deploy/test_cronjob_only_roles_include_the_gate.py
 """
@@ -60,17 +59,15 @@ def test_census_matches_the_known_cronjob_only_roles():
 
 
 def test_every_cronjob_only_role_is_gated_at_deploy_time():
-    """Each CronJob-only role's tasks/main.yml must include k8s/cronjob-gate, named for every
-    CronJob its own manifests declare -- the deploy-time proof `format_cronjob_health`'s
-    read-only check is verifying after the fact. A flux-owned role runs no task, so it names
-    each CronJob in `flux_cronjob_gates` instead, and Flux runs the gate Job in `<tag>-verify`
-    (`_autodeploy_batch.flux_gated_names`)."""
+    """Each CronJob-only role names every CronJob its own manifests declare in
+    `flux_cronjob_gates`, and Flux runs the gate Job in `<tag>-verify`
+    (`_autodeploy_batch.flux_gated_names`). A role-local `job/<name>` wait also counts."""
     for role, targets in _cronjob_only_census().items():
         gated = _batch_gated_names(_K8S_ROLES / role)
         declared = {name for _, name in targets}
         missing = declared - gated
         assert not missing, (
-            f"{role} declares CronJob(s) {sorted(missing)} with no matching "
-            "k8s/cronjob-gate include (cronjob_gate_name) or job/<name> wait in tasks/main.yml, "
-            "or, for a flux-owned role, no flux_cronjob_gates entry"
+            f"{role} declares CronJob(s) {sorted(missing)} with no flux_cronjob_gates entry "
+            "(a flux-owned role) and no job/<name> wait in tasks/main.yml; an Ansible-owned "
+            "role needs the handback steps in docs/flux-deploy-plane.md"
         )

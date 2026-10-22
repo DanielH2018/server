@@ -123,7 +123,6 @@ SHIMMED_BINARIES = (
 # They run with the real PATH: a stub would leave them green while checking nothing.
 _LIVE_API_TESTS = frozenset(
     {
-        "ansible/tests/deploy/test_cronjob_gate_decision.py::test_the_jsonpath_parses_against_the_live_api",
         "ansible/tests/longhorn/test_longhorn_api.py::test_the_resolve_returns_a_pod_ip_on_this_node",
         "ansible/tests/longhorn/test_volume_revert.py::test_the_listing_jsonpath_parses",
         "ansible/tests/longhorn/test_volume_snapshot.py::test_the_listing_fields_exist_on_a_real_snapshot",

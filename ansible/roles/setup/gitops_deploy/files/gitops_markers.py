@@ -213,7 +213,6 @@ def k8s_deferred_deploy_cmd(services) -> str:
 SHARED_K8S_ROLES = frozenset(
     {
         "arr-notification",
-        "cronjob-gate",
         "image-builder",
         "longhorn-api",
         "manifests",
