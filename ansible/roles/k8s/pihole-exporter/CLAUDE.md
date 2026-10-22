@@ -66,20 +66,19 @@ renders — the same value FTL itself uses. One copy of that password in the clu
 to rotate it. That cross-role read is why the `containers_list` entry declares
 `depends_on: [pihole]`: the Secret has to exist before this pod starts.
 
-**Rotating `pihole_password` needs this pod rolled by hand.** A Secret change alone does not
-roll a Deployment, and the pihole role's restart tasks sequence its own two FTL pods and
-nothing else — so after a rotation this exporter keeps presenting the old password. That is
-visible rather than silent, since `up{job="pihole"}` drops to 0 once the old value stops
-authenticating, but nothing rolls the pod for you.
+**A `pihole_password` rotation rolls this pod through Flux.** A Secret change alone does not
+roll a Deployment, and the restart checksum the renderer stamps hashes only the Secrets a tag
+renders itself. `pihole-env` is the pihole role's, so the include in `tasks/main.yml` declares
+it under `manifests_outside_secrets` with its one key, `pihole_password`. The renderer hashes
+that key's `cluster-vars.source` digest into this Deployment's restart checksum annotation
+(`scripts/renderer/renderer_lib/restart.py:outside_secrets`). The rotation commit moves the
+digest, and Flux rolls the pod when it applies that revision (#5416).
 
-Flux does not roll it either. The restart checksum the renderer stamps hashes only the Secrets a
-tag renders itself, and `pihole-env` is the pihole role's. The flip therefore needed an entry
-in `OUTSIDE_ROLE_EXEMPT` in `scripts/renderer/tests/test_renderer_restart.py`, which records
-this trade. `deploy.sh --tags pihole-exporter` exits 5 since D5.5, so no agent path rolls the
-pod. The operator rolls it with the admin kubeconfig (**operator-only**):
-`sudo k3s kubectl -n homelab rollout restart deployment/pihole-exporter`. That leaves a
-`kubectl-rollout` field manager on `restartedAt`, which Flux's next apply of the tag strips,
-so the pod rolls once more then.
+The declaration also makes `secret_rotation.py consumers pihole_password` list this role,
+because the census greps role files for the key name. A stale password still shows as
+`up{job="pihole"}` at 0.
+`scripts/renderer/tests/test_renderer_restart.py::test_every_outside_secret_declares_the_keys_its_owning_role_renders`
+holds the declared keys equal to the placeholders the pihole role's `pihole-env` renders.
 
 ## Two things that bite
 
