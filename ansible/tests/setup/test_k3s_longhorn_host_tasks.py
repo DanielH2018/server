@@ -6,10 +6,13 @@ that also carried `longhorn` or `longhorn_backup` would have been skipped with t
 node would never have got `open-iscsi`. H1.7b closed that window: no task carries either tag, and
 step 1 skips only `kubeconfig`.
 
-`tasks/longhorn-host.yml` still holds three named tasks that carry `longhorn_host` and neither
-retired tag, counting the tags their import in `main.yml` adds. A task that regained one of those
-tags would again name an object that Flux owns. The plan is
+`tasks/longhorn-host.yml` holds four named tasks that carry `longhorn_host` and neither retired
+tag, counting the tags their import in `main.yml` adds. A task that regained one of those tags
+would again name an object that Flux owns. The plan is
 docs/target-architecture/host/h1-cluster-config-to-flux.md, *The Longhorn window, H1.5a until H1.7b*.
+
+The fourth task removes the six manifests that the server tasks retired by H1.5a, H1.5b and
+H1.7b staged under /etc/rancher/k3s and left behind (#5942).
 
 Run: uv run pytest ansible/tests/setup/test_k3s_longhorn_host_tasks.py
 """
@@ -20,11 +23,25 @@ from lib.repo_paths import K3S_ROLE
 TASKS = K3S_ROLE / "tasks"
 HOST_FILE = "longhorn-host.yml"
 RETIRED_TAGS = frozenset({"longhorn", "longhorn_backup"})
-# The three tasks the plan moves; the test must find each by name.
+RETIRE_TASK = "Remove the Longhorn manifests staged before Flux owned their objects"
+# The three tasks the plan moves, plus the retirement; the test must find each by name.
 MEMBERS = (
     "Install Longhorn prerequisites",
     "Blacklist Longhorn devices from multipathd",
     "Restart multipathd after a blacklist change",
+    RETIRE_TASK,
+)
+# Every file a retired server task staged, as listed on daniel-box on 2026-10-22 (#5942).
+STAGED = frozenset(
+    "/etc/rancher/k3s/" + name
+    for name in (
+        "longhorn-backuptarget-r2.yaml",
+        "longhorn-recurringjob.yaml",
+        "longhorn-metrics-networkpolicy.yaml",
+        "longhorn-storageclass.yaml",
+        "longhorn-storageclass-nobackup.yaml",
+        "longhorn-storageclass-configmap-patch.json",
+    )
 )
 _IMPORTS = ("import_tasks", "ansible.builtin.import_tasks")
 
@@ -96,3 +113,18 @@ def test_a_missing_member_and_a_missing_import_are_flagged():
     assert problems(host, [t for t in main if not _import_of([t], HOST_FILE)]) == [
         f"main.yml does not import {HOST_FILE}"
     ]
+
+
+def _removed_paths(task: dict) -> frozenset[str]:
+    module = task.get("ansible.builtin.file") or {}
+    if module.get("state") != "absent":
+        return frozenset()
+    path = module.get("path", "")
+    return frozenset(path.replace("{{ item }}", item) for item in task.get("loop", []))
+
+
+def test_the_retire_task_removes_every_staged_manifest():
+    host, _ = _real()
+    task = next(t for t in host if t.get("name") == RETIRE_TASK)
+    assert _removed_paths(task) == STAGED
+    assert task.get("become") is True

@@ -93,6 +93,8 @@ The host tasks `setup/k3s` keeps for Longhorn (`open-iscsi`, `nfs-common` and th
 blacklist) carry the tag `longhorn_host` alone. No `setup/k3s` task writes a Longhorn object that
 Flux owns: this role owns the Settings and classes, the CSI sidecar requests among them
 (#5958), `longhorn-reconcile` the labels, and `longhorn-backup` the credentials, the backup
-targets and the RecurringJobs. The stale-checkout guard holds no Longhorn row, and bring-up
+targets and the RecurringJobs. A fourth `longhorn_host` task removes the manifests the retired
+server tasks staged under /etc/rancher/k3s, so no file remains for a hand `kubectl apply -f`
+to write a Flux-owned object from. The stale-checkout guard holds no Longhorn row, and bring-up
 step 1 skips only `kubeconfig`. `docs/longhorn-disaster-recovery.md`, *Order from H1.2*, has
 the steps.

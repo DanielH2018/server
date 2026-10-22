@@ -10,7 +10,9 @@
 # carries, so a host task that regained `longhorn` would again name an object Flux owns.
 # ansible/tests/setup/test_k3s_longhorn_host_tasks.py holds this.
 #
-# The agent flow keeps its own copies of the three tasks in agent.yml.
+# The agent flow keeps its own copies of the first three tasks in agent.yml. The fourth, which
+# removes the manifests the retired server tasks staged, has no agent copy: only the server
+# ever staged them.
 
 - name: Install Longhorn prerequisites
   tags: [longhorn_host]
@@ -53,3 +55,21 @@
     state: restarted
   become: true
   when: k3s_multipath_conf is changed
+
+- name: Remove the Longhorn manifests staged before Flux owned their objects
+  tags: [longhorn_host]
+  # H1.5a, H1.5b and H1.7b each deleted the task that staged one of these files and applied it
+  # with `kubectl apply -f`, and left the file on the server. Flux owns every object they
+  # declare, so a hand `kubectl apply -f` of one would be a second writer. The R2 target's file
+  # also holds the real bucket name, mode 0644 (#5942).
+  ansible.builtin.file:
+    path: "/etc/rancher/k3s/{{ item }}"
+    state: absent
+  loop:
+    - longhorn-backuptarget-r2.yaml
+    - longhorn-recurringjob.yaml
+    - longhorn-metrics-networkpolicy.yaml
+    - longhorn-storageclass.yaml
+    - longhorn-storageclass-nobackup.yaml
+    - longhorn-storageclass-configmap-patch.json
+  become: true
