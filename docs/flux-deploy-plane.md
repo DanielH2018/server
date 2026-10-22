@@ -333,8 +333,8 @@ object is the case (#5902). The census prints such an object as `declares nothin
 manager that owns a live field. It marks a cleaned manager and lists the paths the flip deletes,
 then goes on to the next object. It exits 1 after the full census when a cleaned manager owns
 one of those fields. It also exits 1 when the two inputs share no object, or when no shared
-dry-run object has the Apply entry, which means the dry run did not run as
-`kustomize-controller`. Both inputs can hold Secret data, so delete the two files after the run.
+dry-run object has the Apply entry. Either the dry run did not run as `kustomize-controller`,
+or every object in it declares nothing, and the census cannot tell the two apart. Both inputs can hold Secret data, so delete the two files after the run.
 
 ## Handing a service back
 
