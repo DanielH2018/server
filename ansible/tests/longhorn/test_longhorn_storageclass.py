@@ -15,9 +15,10 @@ setting. On a one-node cluster that means every volume asks for 3 replicas it ca
 never schedule and sits permanently Degraded — the exact "real fault buried in
 expected noise" k3s_longhorn_replica_count exists to prevent.
 
-The role replaces upstream's class with files/longhorn-storageclass.yaml, which omits
-the parameter so the setting governs. The risk is re-syncing that file from a
-newer upstream and pasting the parameter back in, which is what these tests catch.
+The `longhorn` role replaces upstream's class with a kustomize patch of the ConfigMap
+(files/patches/longhorn-storageclass.yaml, H1.5a), whose class omits the parameter so the
+setting governs. The risk is re-syncing that patch from a newer upstream and pasting the
+parameter back in, which is what these tests catch.
 
 Run: uv run pytest ansible/tests/longhorn/test_longhorn_storageclass.py
 """
@@ -28,9 +29,49 @@ from lib.service_tiers import resolved_tier_lists
 from _k8s_render import rendered_docs
 
 from _helpers import imported_tasks, load_defaults
-from lib.repo_paths import K3S_DEFAULTS, K3S_FILES, K3S_ROLE
+from lib.repo_paths import K3S_DEFAULTS, K3S_ROLE, K8S_ROLES
 
-STORAGECLASS = K3S_FILES / "longhorn-storageclass.yaml"
+LONGHORN_ROLE = K8S_ROLES / "longhorn"
+CLASS_PATCH = LONGHORN_ROLE / "files" / "patches" / "longhorn-storageclass.yaml"
+UPSTREAM = LONGHORN_ROLE / "files" / "upstream" / "longhorn.yaml"
+CLASS_KEY = "storageclass.yaml"
+
+
+def _class_in(configmap: dict) -> dict:
+    """The StorageClass a `longhorn-storageclass` ConfigMap carries under its one key."""
+    return yaml_fast.safe_load(configmap["data"][CLASS_KEY])
+
+
+def _patched_configmap() -> dict:
+    return yaml_fast.safe_load(CLASS_PATCH.read_text())
+
+
+def _upstream_configmap() -> dict:
+    for doc in yaml_fast.safe_load_all(UPSTREAM.read_text()):
+        if (
+            isinstance(doc, dict)
+            and doc["kind"] == "ConfigMap"
+            and doc["metadata"]["name"] == "longhorn-storageclass"
+        ):
+            return doc
+    raise AssertionError("longhorn.yaml declares no ConfigMap longhorn-storageclass")
+
+
+def _drift_from_upstream(upstream: dict, ours: dict) -> list[str]:
+    """Each top-level key where `ours` differs from `upstream` beyond `numberOfReplicas`."""
+    expected = {
+        **upstream,
+        "parameters": {
+            k: v
+            for k, v in upstream.get("parameters", {}).items()
+            if k != "numberOfReplicas"
+        },
+    }
+    return [
+        key
+        for key in sorted(set(expected) | set(ours))
+        if expected.get(key) != ours.get(key)
+    ]
 
 
 def _tasks():
@@ -56,9 +97,9 @@ def _index_of(commands: list[str], matches) -> int:
 
 def test_storageclass_does_not_pin_a_replica_count():
     """The whole point of shipping our own class — see the module docstring."""
-    sc = yaml_fast.safe_load(STORAGECLASS.read_text())
+    sc = _class_in(_patched_configmap())
     assert "numberOfReplicas" not in sc.get("parameters", {}), (
-        "longhorn-storageclass.yaml must not set numberOfReplicas. A StorageClass "
+        "files/patches/longhorn-storageclass.yaml must not set numberOfReplicas. A StorageClass "
         "parameter overrides the default-replica-count setting the role patches, so "
         "pinning it here silently ignores k3s_longhorn_replica_count."
     )
@@ -73,9 +114,9 @@ def test_storageclass_does_not_pin_a_backup_block_size():
     StorageClass parameters are immutable AND a volume's block size is immutable: correcting a
     wrong value would mean recreating the class and then every volume provisioned through it.
     """
-    sc = yaml_fast.safe_load(STORAGECLASS.read_text())
+    sc = _class_in(_patched_configmap())
     assert "backupBlockSize" not in sc.get("parameters", {}), (
-        "longhorn-storageclass.yaml must not set backupBlockSize. A StorageClass parameter "
+        "files/patches/longhorn-storageclass.yaml must not set backupBlockSize. A StorageClass parameter "
         "overrides the default-backup-block-size setting the role patches, so pinning it "
         "here silently ignores k3s_longhorn_backup_block_size."
     )
@@ -104,7 +145,7 @@ def test_backup_block_size_is_a_value_longhorn_accepts():
 
 def test_storageclass_stays_the_cluster_default():
     """Dropping this annotation breaks every PVC that omits storageClassName."""
-    sc = yaml_fast.safe_load(STORAGECLASS.read_text())
+    sc = _class_in(_patched_configmap())
     assert sc["metadata"]["name"] == "longhorn"
     assert sc["provisioner"] == "driver.longhorn.io"
     annotations = sc["metadata"].get("annotations", {})
@@ -124,24 +165,39 @@ def test_role_still_patches_the_default_replica_count_setting():
     )
 
 
-def test_storageclass_is_applied_after_upstream_longhorn():
-    """Ordering is load-bearing: upstream's apply re-pins the ConfigMap every run."""
-    commands = _commands(_tasks())
-    install = _index_of(commands, lambda c: "deploy/longhorn.yaml" in c)
-    apply_class = _index_of(
-        commands, lambda c: "apply -f" in c and "longhorn-storageclass.yaml" in c
+def test_the_patch_targets_the_configmap_the_upstream_file_declares():
+    # Kustomize refuses a build whose patch matches nothing, so a refresh that renames the
+    # ConfigMap fails here before it fails the render. A patch has no order to get wrong, which
+    # the deleted apply-after-install test used to guard.
+    patch, upstream = _patched_configmap(), _upstream_configmap()
+    assert patch["kind"] == "ConfigMap"
+    assert patch["metadata"]["name"] == upstream["metadata"]["name"]
+    assert patch["metadata"]["namespace"] == upstream["metadata"]["namespace"]
+    assert set(patch["data"]) == {CLASS_KEY}
+
+
+def test_the_class_differs_from_upstreams_only_by_the_replica_count():
+    # Step 2 of the per-hop procedure (docs/longhorn-upgrade.md): a release that adds a
+    # parameter fails here until the patch carries it.
+    drift = _drift_from_upstream(
+        _class_in(_upstream_configmap()), _class_in(_patched_configmap())
     )
-    patch_configmap = _index_of(
-        commands, lambda c: "patch configmap longhorn-storageclass" in c
+    assert drift == [], (
+        f"the patched class differs from the vendored upstream class in {drift}. Re-sync "
+        "files/patches/longhorn-storageclass.yaml from longhorn.yaml, minus numberOfReplicas"
     )
-    assert install < apply_class, (
-        "The StorageClass must be applied AFTER `kubectl apply -f longhorn.yaml`, "
-        "which recreates upstream's class and ConfigMap."
-    )
-    assert install < patch_configmap, (
-        "The ConfigMap patch must run AFTER `kubectl apply -f longhorn.yaml`, which "
-        're-applies upstream\'s numberOfReplicas: "3" into it on every run.'
-    )
+
+
+def test_a_class_that_drops_a_parameter_or_keeps_the_replica_count_is_flagged():
+    upstream = _class_in(_upstream_configmap())
+    ours = _class_in(_patched_configmap())
+    assert "numberOfReplicas" in upstream["parameters"]
+    assert _drift_from_upstream(upstream, ours) == []
+    dropped = {**ours, "parameters": {**ours["parameters"]}}
+    del dropped["parameters"]["backupTargetName"]
+    assert _drift_from_upstream(upstream, dropped) == ["parameters"]
+    pinned = {**ours, "parameters": {**ours["parameters"], "numberOfReplicas": "3"}}
+    assert _drift_from_upstream(upstream, pinned) == ["parameters"]
 
 
 # ── backup routing lists ────────────────────────────────────────────────────────────────────
