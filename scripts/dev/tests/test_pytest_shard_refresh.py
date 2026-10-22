@@ -59,3 +59,63 @@ def test_successive_cron_runs_visit_every_slice():
     start = 1_791_900_000  # An arbitrary second in October 2026.
     visited = [pytest_shard.slice_at(start + run * 43_200, 8) for run in range(8)]
     assert sorted(visited) == list(range(8))
+
+
+PINNED = FILES[0]
+PINS = {PINNED: 16.0}
+
+
+def _free(files=None):
+    """A local measurement, where the pinned module's legs skip and every file costs 0s."""
+    return {}
+
+
+@pytest.fixture
+def pinned_table(tmp_path):
+    table = tmp_path / "weights.json"
+    table.write_text(json.dumps({f: 16.0 if f == PINNED else 0.0 for f in FILES}))
+    return table
+
+
+@pytest.mark.parametrize(
+    "record",
+    [
+        pytest.param(pytest_shard.record_weights, id="record"),
+        pytest.param(
+            lambda table, **kw: pytest_shard.record_named_weights(
+                [PINNED], table, **kw
+            ),
+            id="record-files",
+        ),
+    ],
+)
+def test_a_record_keeps_a_ci_only_pin_its_local_run_measures_as_free(
+    pinned_table, record
+):
+    record(pinned_table, files=FILES, measure=_free, pins=PINS)
+    assert json.loads(pinned_table.read_text())[PINNED] == 16.0
+
+
+def test_a_refresh_neither_measures_nor_moves_a_ci_only_pin(pinned_table):
+    asked = []
+    for index in range(2):
+        moved = pytest_shard.refresh_drifted_weights(
+            index,
+            2,
+            pinned_table,
+            files=FILES,
+            measure=lambda f: asked.extend(f) or {},
+            pins=PINS,
+        )
+        assert PINNED not in moved
+    assert PINNED not in asked
+    assert json.loads(pinned_table.read_text())[PINNED] == 16.0
+
+
+def test_every_ci_only_pin_names_a_module_the_shards_run():
+    pins = pytest_shard.CI_ONLY_WEIGHTS
+    assert "ansible/roles/k8s/crowdsec/tests/test_jobs_image.py" in pins
+    assert sorted(set(pins) - set(pytest_shard.census())) == []
+    # CI reads only the table, so a pin the table does not carry has no effect there.
+    table = pytest_shard.load_weights()
+    assert {p: table.get(p) for p in pins} == pins
