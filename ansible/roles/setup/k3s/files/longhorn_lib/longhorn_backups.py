@@ -48,6 +48,10 @@ NO_BACKUP_GROUP = "no-backup"
 WEEKLY_LEGACY_GROUP = "weekly-backup"
 WEEKLY_SHARDS = 7
 
+# The daily RecurringJob, which selects the `default` group. The weekly jobs are named for their
+# group (`weekly_shard_group`).
+DAILY_JOB = "daily-backup"
+
 # The BackupTarget names. Longhorn ships a target called `default`, and
 # `tasks/longhorn-backup.yml` points it at B2, so a reader that means "B2" says B2_TARGET rather
 # than the word `default`.

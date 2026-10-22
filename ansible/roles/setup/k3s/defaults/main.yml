@@ -541,34 +541,9 @@ k3s_longhorn_r2_backup_prefix: longhorn
 # only cost is UI staleness between nightlies. Raise deliberately.
 k3s_longhorn_r2_poll_interval: 0
 
-# The volumes whose restore path must not be rate-limited: the TLS material the whole edge
-# depends on, the SSO store behind every authenticated route, and the two home-automation
-# stores that are slow and error-prone to rebuild by hand. Small, config-shaped, and exactly
-# the set worth putting on a target with free egress. Names are namespace/pvcName, matching
-# the keys of k3s_longhorn_weekly_volumes below.
-#
-# Derived, not listed: every `backup_claims` volume of every `home-critical` containers_list
-# entry (tier `home-edge` or `home-automation`; filter_plugins/service_tier.py, #3389). To
-# change the set, edit the entry. Python
-# readers resolve it through scripts/lib/service_tiers.py, because a raw YAML read returns
-# this expression. No `default([])` on containers_list: an empty result does not route
-# nothing, it makes "Return de-listed volumes to the default backup target" move all four
-# back to B2, so an undefined list must fail the play instead.
-k3s_longhorn_r2_volumes: "{{ containers_list | tier_backup_claims('home-critical', k8s_namespace) }}"
-
-# The weekly B2 tier, as `{namespace/pvcName: shard}`. A volume's backup weekday is its shard
-# (0=Sunday), so no weekday stacks two heavy volumes under B2's daily transaction cap.
-#
-# Derived, not listed: every `weekly_backup_claims` entry of every containers_list entry, each
-# naming its own shard (filter_plugins/longhorn_groups.py, #4207). To change the set, edit the
-# entry. The shard used to be the volume's index mod 7 in a hand list here, so removing one
-# volume moved every volume below it to another weekday; a declared shard moves only itself.
-# The `longhorn-reconcile` CronJob swaps each volume's recurring-job group label, so a PVC
-# recreated from the `longhorn` StorageClass reverts to daily until its next hourly run: drift in
-# the over-backed-up direction, caught by the next run.
-# No `default({})` on containers_list, for the R2 expression's reason: an empty result returns
-# every weekly volume to the daily B2 group, so an undefined list must fail the play instead.
-k3s_longhorn_weekly_volumes: "{{ containers_list | longhorn_weekly_claims(k8s_namespace) }}"
+# The R2 (daily) and weekly volume lists, `k3s_longhorn_r2_volumes` and
+# `k3s_longhorn_weekly_volumes`, live in the `longhorn-reconcile` role's defaults since H1.7a.
+# That job is their only reader that applies them to the cluster.
 
 # Backup-plane heartbeat (templates/longhorn-backup-health.sh.j2). Pushes to a static Kuma
 # monitor rather than being polled, because monitor-bridge runs on daniel-server and cannot
@@ -789,23 +764,8 @@ k3s_etcd_s3_cron_minute: "45"
 k3s_etcd_restore_drill_armed: true
 k3s_etcd_restore_drill_cron: "20 10 * * 1"
 
-# Bound volumes forced OUT of the backup set, as `namespace/pvcName` — an override for volumes
-# whose StorageClass says `longhorn` (back me up) but which should not be. Needed as a separate
-# lever because storageClassName is immutable: a volume that must leave the backup set after it is
-# bound cannot be moved by editing the class.
-#
-# Exclude only what regenerates. An excluded volume keeps a single frozen restore point that is
-# never pruned and never refreshed, so excluding a volume to buy quiet under a live B2 cap
-# leaves it with stale recovery. Under a cap the answer is a staggered weekly group, not a
-# permanent exclusion. `Backup.status.size` is the backup's LOGICAL volume size, not blocks
-# uploaded (traefik-acme reports 35 -> 48 MB across daily backups of a 25 MB volume), and B2
-# publishes no cap-headroom endpoint, so **B2 Reachable** is the readout for a cap that fires.
-#
-# Derived, not listed: every `no_backup_claims` entry of every containers_list entry, where
-# each claim carries the reason it is excluded (filter_plugins/longhorn_groups.py, #4207). An
-# empty result would return every listed volume to the daily B2 group, so there is no default
-# on containers_list here either.
-k3s_longhorn_nobackup_volumes: "{{ containers_list | longhorn_nobackup_claims(k8s_namespace) }}"
+# The no-backup volume list, `k3s_longhorn_nobackup_volumes`, lives in the `longhorn-reconcile`
+# role's defaults since H1.7a, with the other two tier lists.
 
 # The nameserver lines this node's /etc/resolv.conf carries, IN ORDER. First entry wins on
 # every query; the rest are fallbacks. See templates/resolv.conf.j2 for why the order alone

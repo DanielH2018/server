@@ -33,16 +33,28 @@ def _configmap() -> dict:
     return doc
 
 
-def test_the_configmap_tiers_equal_the_three_lists_setup_k3s_derives():
-    """Until H1.7a moves the keys, both forms must render the same lists (the plan's claim)."""
+def test_the_configmap_tiers_are_the_three_lists_of_the_role_defaults():
+    """The ConfigMap renders the role's three keys, and Python readers derive the same lists."""
     tiers = json.loads(_configmap()["data"]["tiers.json"])
-    keys = resolved_tier_lists(load_defaults(K3S_ROLE))
+    keys = resolved_tier_lists(DEFAULTS)
     assert tiers["r2"] == keys["k3s_longhorn_r2_volumes"]
     assert tiers["weekly"] == keys["k3s_longhorn_weekly_volumes"]
     assert tiers["nobackup"] == keys["k3s_longhorn_nobackup_volumes"]
     # Non-vacuity: each list has members, so an equality of two empty lists cannot pass.
     assert tiers["r2"] and tiers["weekly"] and tiers["nobackup"]
     assert "homelab/traefik-acme" in tiers["r2"]
+
+
+def test_setup_k3s_no_longer_defines_the_tier_lists():
+    """One home per key: a copy left in `setup/k3s` would drift from the ConfigMap's."""
+    host_plane = load_defaults(K3S_ROLE)
+    for key in (
+        "k3s_longhorn_r2_volumes",
+        "k3s_longhorn_weekly_volumes",
+        "k3s_longhorn_nobackup_volumes",
+    ):
+        assert key in DEFAULTS
+        assert key not in host_plane
 
 
 def test_the_rendered_tiers_pass_the_scripts_own_validation(tmp_path):

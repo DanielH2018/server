@@ -1,9 +1,10 @@
 # longhorn-reconcile — the hourly job that holds each volume in its backup tier
 
 A CronJob in `longhorn-system` that labels Longhorn Volume CRs with the recurring-job group
-their tier names, and holds the memory request of the four CSI sidecar Deployments. It
-replaced the label, weekly-shard, legacy-label and CSI-request tasks that `setup/k3s` ran from
-`tasks/longhorn.yml` and `tasks/longhorn-weekly-shard.yml` (H1.6).
+their tier names, sets each Volume's backup target, and holds the memory request of the four
+CSI sidecar Deployments. It replaced the label, weekly-shard, legacy-label and CSI-request
+tasks that `setup/k3s` ran from `tasks/longhorn.yml` and `tasks/longhorn-weekly-shard.yml`
+(H1.6), and the two target-routing tasks of `tasks/longhorn-backup.yml` (H1.7a).
 
 ## At a glance
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates, tasks or containers_list entry, or the k3s role's Longhorn tier lists. -->
@@ -25,12 +26,18 @@ replaced the label, weekly-shard, legacy-label and CSI-request tasks that `setup
 - **Three templates.** `templates/cronjob.yaml.j2` is the job, `templates/configmap.yaml.j2`
   carries the script, `flux_job_connect.py` and `tiers.json`, and `templates/rbac.yaml.j2` is
   the ServiceAccount and its grants.
-- **`tiers.json` is computed from `containers_list`** by `tier_backup_claims`,
-  `longhorn_weekly_claims` and `longhorn_nobackup_claims`. The three keys of the same names
-  stay in `setup/k3s`'s defaults until H1.7a, which moves them here and points the ConfigMap at
-  them. `tests/test_longhorn_reconcile_render.py::test_the_configmap_tiers_equal_the_three_lists_setup_k3s_derives`
-  holds both forms equal. The script reads `r2` and does not act on it until H1.7a adds the
-  `backupTargetName` arm.
+- **`tiers.json` is the role's three tier lists.** `ansible/roles/k8s/longhorn-reconcile/defaults/main.yml`
+  derives `k3s_longhorn_r2_volumes`, `k3s_longhorn_weekly_volumes` and
+  `k3s_longhorn_nobackup_volumes` from `containers_list` with `tier_backup_claims`,
+  `longhorn_weekly_claims` and `longhorn_nobackup_claims` (H1.7a moved them here from
+  `setup/k3s`, under the same names). The ConfigMap renders the three keys, and the docs
+  generators, the catalogue and the tier tests resolve the same expressions through
+  `scripts/lib/service_tiers.py:resolved_tier_lists`.
+  `tests/test_longhorn_reconcile_render.py::test_the_configmap_tiers_are_the_three_lists_of_the_role_defaults`
+  holds the two forms equal, and
+  `tests/test_longhorn_reconcile_render.py::test_setup_k3s_no_longer_defines_the_tier_lists`
+  holds the keys to one home. The script reads `r2` for each Volume's `spec.backupTargetName`
+  and `weekly` and `nobackup` for the group labels.
 - **Claims are `namespace/pvcName`.** The script reads the PVC a Volume CR serves from
   `status.kubernetesStatus`. A volume that serves none reads as `/`, is on no list, and is
   left alone unless it carries the retired flat `weekly-backup` label.
@@ -42,20 +49,30 @@ gate Job in `longhorn-reconcile-verify`. It changes state with no human in the l
 authority is written here to keep a later edit from widening it.
 
 - **Writes, and nothing else.**
-    - A JSON merge patch of `metadata.labels` on a `volumes.longhorn.io` object, touching only
-      the keys `recurring-job-group.longhorn.io/{default, no-backup, weekly-backup,
-      weekly-backup-d0..d6}`. One patch per volume that must move.
+    - A JSON merge patch on a `volumes.longhorn.io` object. It touches only the label keys
+      `recurring-job-group.longhorn.io/{default, no-backup, weekly-backup, weekly-backup-d0..d6}`
+      and `spec.backupTargetName`. One patch per volume that must move, labels and target
+      together.
     - A strategic merge patch of one container's `resources.requests.memory` on each of
       `csi-attacher`, `csi-provisioner`, `csi-resizer` and `csi-snapshotter`, when the request
       differs from `k3s_longhorn_csi_sidecar_memory_request`. Each patch is a rollout.
 - **A converged cluster gets no write.** The run reads the Volume list and the PVC list, plans,
   and patches only what differs. `tests/test_longhorn_reconcile.py::test_a_second_run_changes_nothing`
   proves it, and the gate Job's `homelab/rerun-safe` names that test.
+- **The target arm moves two cases and nothing else.** A volume whose claim is on the `r2`
+  list and whose target is not `r2` moves to `r2`. A volume on `r2` whose claim is on no list
+  returns to `default`, the B2 target. Any other volume keeps its target, a blank one included:
+  the Ansible tasks this arm replaced moved only those two cases, and normalising blank to
+  `default` would patch every volume on the first run.
+  `tests/test_longhorn_reconcile.py::test_each_target_transition_writes_the_live_target_name`
+  holds the table, and
+  `tests/test_longhorn_reconcile.py::test_the_target_names_are_the_ones_setup_k3s_and_the_readers_use`
+  holds the names to `longhorn_lib/longhorn_backups.py`.
 - **Report-only first.** `longhorn_reconcile.py --report-only` makes the same two reads and
   prints `would patch ...` lines with no write. Run it with a read-only credential before a
   change to the script or to a tier list; on a converged cluster it prints no `would patch`
   line.
-- **RBAC is the verbs the script calls.** `list` and `patch` on `volumes.longhorn.io`, `get` and
+- **RBAC is the verbs the script calls, and the target arm adds none.** `list` and `patch` on `volumes.longhorn.io`, `get` and
   `patch` on the four named Deployments, and a ClusterRole with `list` on
   `persistentvolumeclaims`. `get` on volumes is absent because the script lists once and never
   reads a single volume. ENFORCED:

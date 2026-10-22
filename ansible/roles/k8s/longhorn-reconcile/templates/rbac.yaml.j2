@@ -4,7 +4,8 @@
   recording client and holds these rules to the calls it records.
 
     list volumes.longhorn.io            the one read of every Volume CR, in longhorn-system
-    patch volumes.longhorn.io           a group-label merge patch on a volume that must move
+    patch volumes.longhorn.io           one merge patch of a volume's group labels and its
+                                        `spec.backupTargetName`
     get, patch deployments/csi-*        read a sidecar's request, strategic-merge-patch it
     list persistentvolumeclaims         cluster-wide: which claims are `longhorn`-class
 

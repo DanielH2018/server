@@ -142,11 +142,11 @@ def test_reader_exits_nonzero_naming_a_missing_env_var(tmp_path):
 
 
 def test_reader_treats_a_clean_bool_env_normally(tmp_path):
-    """The clean half of the pair below: a recognized "False" must still disarm normally."""
+    """The clean half of the pair below: a recognized "False" is read as False."""
     env = _reader_env(
         tmp_path,
         LONGHORN_BACKUP_KUBECTL="/bin/false",
-        LONGHORN_R2_ARMED="False",
+        LONGHORN_TRIM_CRON_EXPECTED="False",
     )
     proc = subprocess.run(
         reader_argv(),
@@ -159,17 +159,16 @@ def test_reader_treats_a_clean_bool_env_normally(tmp_path):
 
 
 def test_reader_exits_nonzero_on_an_unrecognized_bool_env(tmp_path):
-    """An armed flag must REFUSE an unrecognized value, not fold it into False.
+    """An expected-cron flag must REFUSE an unrecognized value, not fold it into False.
 
-    `_require_bool_env` backs LONGHORN_BACKUP_ARMED and LONGHORN_R2_ARMED, and False there means
-    DISARMED — a target's volumes get suppressed from every check rather than watched. A typo'd
-    or truncated export must fail loudly the way a missing var does, not fold silently into
-    "disarmed".
+    `_require_bool_env` backs the two LONGHORN_*_CRON_EXPECTED flags, and False there means a
+    missing cron goes unreported. A typo'd or truncated export must fail loudly the way a
+    missing var does, not fold silently into "not expected".
     """
     env = _reader_env(
         tmp_path,
         LONGHORN_BACKUP_KUBECTL="/bin/false",
-        LONGHORN_R2_ARMED="maybe",
+        LONGHORN_TRIM_CRON_EXPECTED="maybe",
     )
     proc = subprocess.run(
         reader_argv(),
@@ -179,7 +178,7 @@ def test_reader_exits_nonzero_on_an_unrecognized_bool_env(tmp_path):
         timeout=30,
     )
     assert proc.returncode != 0
-    assert "LONGHORN_R2_ARMED" in proc.stderr
+    assert "LONGHORN_TRIM_CRON_EXPECTED" in proc.stderr
     assert "maybe" in proc.stderr
 
 
@@ -294,6 +293,8 @@ def test_reader_argv_hands_now_to_main(tmp_path):
 @pytest.mark.parametrize(
     ("branch", "named"),
     [
+        ("targets", "backup target list fetch failed (rc=124)"),
+        ("jobs", "recurring job list fetch failed (rc=124)"),
         ("backups", "backup list fetch failed (rc=124)"),
         ("tier-default", "daily tier volumes fetch failed (rc=124)"),
         ("r2", "r2 volume set fetch failed (rc=124)"),
@@ -322,6 +323,8 @@ def test_a_timed_out_fetch_is_flagged_by_name(tmp_path, logger_calls, branch, na
 @pytest.mark.parametrize(
     ("branch", "named"),
     [
+        ("targets", "backup target list fetch returned an unparseable body"),
+        ("jobs", "recurring job list fetch returned an unparseable body"),
         ("backups", "backup list fetch returned an unparseable body"),
         ("failed-jobs", "failed-jobs fetch returned an unparseable body"),
         (

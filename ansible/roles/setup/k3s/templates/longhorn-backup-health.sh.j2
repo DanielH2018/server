@@ -49,6 +49,9 @@
 # longhorn_backup_health.py): a shim that drops one on the way to matching an older reader, or a
 # reader that starts expecting a var an older shim never exported, exits nonzero and reports
 # "reader failed" naming the variable, rather than silently substituting a stale constant.
+# H1.7a is one such step: this shim no longer exports the four arm and schedule vars, so an
+# older reader under it exits nonzero naming LONGHORN_BACKUP_ARMED. A newer reader under an older
+# shim ignores the four extra exports, which is the correct direction: it never reads them.
 #
 # That is the loud direction. The reverse — an OLDER reader running under a NEWER shim, from
 # before `_require_env()` existed — is quiet: an old reader consumes only the LONGHORN_* vars it
@@ -57,15 +60,15 @@
 # actual (newer) setting. Nothing here catches that case; it is a property of which commit is on
 # the host, not something this script can detect from the outside.
 #
-# The reader issues up to 18 kubectl calls (2 armed targets x up to 2 calls, +1 backup list that
-# checks 2 to 5 share, +9 per-tier, +1 r2-set, +1 failed-jobs, +1 restore-drill stamp ConfigMap
-# for checks 7 and 8, +1 RecurringJob pod-log read for check 11), each with a 30s timeout, plus
-# check 9's two journalctl reads at 10s each — a 560s worst case against this script's 600s cron
-# period. Left as-is: `k3s kubectl` calls against the
-# local API server return in well under a second in practice (the pod-log read took 0.1s on
-# 2026-10-09), and 30s is a timeout for a wedged cluster, not an expected duration. The margin is
-# 40s, so one more kubectl call fits before one needs a shorter deadline or a longer cron
-# period.
+# The reader issues up to 16 kubectl calls (+1 BackupTarget list that carries each target's arm
+# state, URL, availability and reason, +1 RecurringJob list that carries the run times, +1 backup
+# list that checks 2 to 5 share, +9 per-tier, +1 r2-set, +1 failed-jobs, +1 restore-drill stamp
+# ConfigMap for checks 7 and 8, +1 RecurringJob pod-log read for check 11), each with a 30s
+# timeout, plus check 9's two journalctl reads at 10s each — a 500s worst case against this
+# script's 600s cron period. Left as-is: `k3s kubectl` calls against the local API server return
+# in well under a second in practice (the pod-log read took 0.1s on 2026-10-09), and 30s is a
+# timeout for a wedged cluster, not an expected duration. The margin is 100s, so three more
+# kubectl calls fit before one needs a shorter deadline or a longer cron period.
 set -uo pipefail
 
 for arg in "$@"; do
@@ -131,11 +134,15 @@ if boot_grace_active {{ k3s_health_cron_boot_grace_s }} longhorn-backup-health; 
 fi
 
 # Every Jinja-templated role default the reader needs, exported as env vars — the reader is a
-# plain host script and takes no other input. `| bool` on the armed flags matches
-# longhorn-backup.yml's `when:` rather than an unfiltered render: `-e k3s_longhorn_backup_armed=false`
-# passes the STRING "false", which is truthy in Jinja, and an unfiltered render would put `default`
-# back into the armed set on an ad-hoc disarm — reverting the 2026-08-17 fix silently, in exactly
-# the incident-response case it is most likely to be used.
+# plain host script and takes no other input.
+#
+# The arm state of each BackupTarget and the daily and weekly run times are not among them. The
+# reader reads the arm state off each target's live `spec.backupTargetURL` and the run times off
+# the live RecurringJobs' `spec.cron` (H1.7a). The `setup/k3s` tasks write both until H1.7b, and
+# the `longhorn-backup` tag after, which Flux applies with no host apply in between. A value
+# baked here would go stale the moment either changed: a stale disarm leaves the monitor
+# permanently red, and a stale arm leaves a new target unchecked.
+#
 # The three transport settings are exported here for the same reason as the thresholds below
 # them: the reader requires every LONGHORN_* var it reads, so a value only this shim knows
 # cannot sit in the reader as a hardcoded default that a wrong export would silently shadow.
@@ -147,14 +154,10 @@ fi
 export LONGHORN_BACKUP_NAMESPACE="{{ k8s_longhorn_namespace }}"
 export LONGHORN_BACKUP_KUBECTL="/usr/local/bin/k3s kubectl"
 export LONGHORN_BACKUP_KUBECTL_TIMEOUT_S="30"
-export LONGHORN_BACKUP_ARMED="{{ k3s_longhorn_backup_armed | bool }}"
-export LONGHORN_R2_ARMED="{{ k3s_longhorn_r2_armed | bool }}"
 export LONGHORN_BACKUP_MAX_AGE_HOURS="{{ k3s_longhorn_backup_max_age_hours }}"
 export LONGHORN_WEEKLY_BACKUP_MAX_AGE_HOURS="{{ k3s_longhorn_weekly_backup_max_age_hours }}"
 export LONGHORN_BACKUP_ERROR_MAX_AGE_HOURS="{{ k3s_longhorn_backup_error_max_age_hours }}"
 export LONGHORN_DAILY_BACKUP_BUDGET="{{ k3s_longhorn_daily_backup_budget }}"
-export LONGHORN_BACKUP_CRON="{{ k3s_longhorn_backup_cron }}"
-export LONGHORN_WEEKLY_BACKUP_MINUTE_HOUR="{{ k3s_longhorn_weekly_backup_minute_hour }}"
 export LONGHORN_RESTORE_DRILL_STAMP_DIR="{{ k3s_longhorn_restore_drill_stamp_dir }}"
 export LONGHORN_RESTORE_DRILL_NAMESPACE="{{ k3s_longhorn_restore_drill_namespace }}"
 export LONGHORN_RESTORE_DRILL_MAX_AGE_DAYS="{{ k3s_longhorn_restore_drill_max_age_days }}"

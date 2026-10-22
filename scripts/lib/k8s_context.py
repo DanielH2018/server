@@ -13,6 +13,7 @@ from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 
+import functools
 import re
 
 from jinja2 import StrictUndefined, Undefined
@@ -28,6 +29,37 @@ from lib.render_guard import (
 __all__ = [
     "resolve_vars",
 ]
+
+# The repo filters a role's DEFAULTS call, which `resolve_vars` must evaluate. The three Longhorn
+# tier lists are the only members: `longhorn-reconcile`'s defaults derive them from
+# `containers_list` (H1.7a).
+#
+# DECIDED: lazy, not registered with `register_ansible_filters` at the top of this module. The
+# heavy tier imports ansible-core, and this module stays light for `probe.py monitors` (the
+# `DECIDED:` marker in `resolve_vars` below gives the measurement). A wrapper here costs nothing
+# until a default calls the filter, and then the call builds the heavy filter table once.
+_DEFAULTS_PLUGIN_FILTERS = (
+    "tier_backup_claims",
+    "longhorn_weekly_claims",
+    "longhorn_nobackup_claims",
+)
+
+
+@functools.cache
+def _heavy_filters() -> dict:
+    """The filter table `register_ansible_filters` builds, imported on first use."""
+    from jinja2 import Environment
+
+    from lib.ansible_jinja_env import register_ansible_filters
+
+    return register_ansible_filters(Environment()).filters
+
+
+def _lazy_plugin_filter(name: str):
+    def call(*args, **kwargs):
+        return _heavy_filters()[name](*args, **kwargs)
+
+    return call
 
 
 # A value that is nothing but one `{{ expr }}` — no surrounding text, no second expression.
@@ -74,6 +106,8 @@ def resolve_vars(
     # `test_ansible_bool_agrees_with_ansible_core_to_bool` pins the copy to the real filter,
     # so the two paths agree by test rather than by identity (#2074).
     env.filters["bool"] = ansible_bool
+    for name in _DEFAULTS_PLUGIN_FILTERS:
+        env.filters[name] = _lazy_plugin_filter(name)
 
     def expand(node, ctx):
         """Recursively render every `{{ ... }}` string in `node`, not just a top-level one.

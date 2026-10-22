@@ -148,6 +148,7 @@
   loop:
     - longhorn_lib/longhorn_backup_health_logic.py
     - longhorn_lib/longhorn_backups.py
+    - longhorn_lib/longhorn_cluster_state.py
     - longhorn_lib/longhorn_cron_evidence_logic.py
     - longhorn_lib/longhorn_restore_drill_stamps.py
     - longhorn_lib/longhorn_skipped_volumes_logic.py
@@ -210,6 +211,8 @@
         src: ansible/roles/setup/k3s/files/longhorn_lib/longhorn_backup_health_logic.py
       - live: /opt/longhorn-backup-health/longhorn_lib/longhorn_backups.py
         src: ansible/roles/setup/k3s/files/longhorn_lib/longhorn_backups.py
+      - live: /opt/longhorn-backup-health/longhorn_lib/longhorn_cluster_state.py
+        src: ansible/roles/setup/k3s/files/longhorn_lib/longhorn_cluster_state.py
       - live: /opt/longhorn-backup-health/longhorn_lib/longhorn_cron_evidence_logic.py
         src: ansible/roles/setup/k3s/files/longhorn_lib/longhorn_cron_evidence_logic.py
       - live: /opt/longhorn-backup-health/longhorn_lib/longhorn_restore_drill_stamps.py
@@ -327,7 +330,7 @@
       cd /home/{{ sys_user }}/server &&
       PATH=/usr/local/bin:/usr/bin:/bin KUBECONFIG=/home/{{ sys_user }}/.kube/config
       /home/{{ sys_user }}/.local/bin/uv run --quiet python
-      scripts/diagnostics/probe.py b2-budget --retain {{ k3s_longhorn_weekly_backup_retain }}
+      scripts/diagnostics/probe.py b2-budget
       2>&1 | logger -t b2-budget
     cron_file: b2-budget-listing
   become: true

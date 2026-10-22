@@ -2,7 +2,7 @@
 
 A plugin reaches a setup role through the vars key whose value calls one of its filters, so
 the answer is that key's readers (#3878). Until then the whole role applied: `--tags k3s`
-for a `service_tier.py` edit that reaches only `k3s_longhorn_r2_volumes`.
+for a `service_tier.py` edit that reaches only one key.
 
 Run: uv run pytest scripts/deploy_tools/tests/test_narrow_setup_plugins.py
 """
@@ -106,9 +106,24 @@ def test_an_inventory_value_calling_the_filter_is_flagged(calls_plugin):
 @pytest.mark.parametrize(
     ("role", "plugin", "tags"),
     [
-        # `longhorn` is the poll-interval task H1.6 moved into longhorn-backup.yml: a file's tags
-        # are the union over its tasks, so that task's tag joins every reader of the file.
-        ("k3s", "service_tier.py", {"longhorn", "longhorn_backup", "longhorn_r2"}),
+        # `longhorn_groups.py` is `k3s`'s remaining plugin since H1.7a: the tier filters moved to
+        # `longhorn-reconcile`, so `service_tier.py` is no longer a `k3s` caller. The tags are the
+        # readers of `longhorn_backup_name`, which the guard-map instances and the drill name.
+        (
+            "k3s",
+            "longhorn_groups.py",
+            {
+                "backup-health",
+                "disk-health",
+                "etcd-snapshot",
+                "live-drift",
+                "longhorn",
+                "longhorn_backup",
+                "longhorn_r2",
+                "manifest-prune",
+                "release-staleness",
+            },
+        ),
         ("gitops_deploy", "k8s_autodeploy.py", {"gitops-deploy-service"}),
     ],
 )

@@ -102,8 +102,9 @@ def check_target_availability(targets: dict[str, dict]) -> list[tuple[int, str]]
     """Whether each armed backup target reports available.
 
     `targets` is {name: {"raw": <status.available string, incl. any error text>, "reason":
-    <status.conditions[0].message, truncated, empty on read failure>}}, built by the I/O layer
-    in BACKUP_TARGETS order (armed targets only — a disarmed target is never queried).
+    <status.conditions[0].message, truncated, empty when the target has none>}}, built by the
+    I/O layer in BACKUP_TARGETS order from one BackupTarget list (armed targets only — a
+    disarmed target, one whose live URL is blank, is left out and named in the verdict).
     """
     problems = []
     for name, info in targets.items():
