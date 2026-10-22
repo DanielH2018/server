@@ -6,6 +6,7 @@
   - `health_docker.py`  — the Pi's Docker containers and the ClusterIP lookups
   - `health_vendored.py` — the workloads a role's vendored upstream files declare
   - `health_alerts.py`  — the alert plane: firing alerts and ingress probes (C7)
+  - `health_plumbing.py` — the CoreDNS and Longhorn StorageClass checks keyed by tag (H1)
 
 What stays here is the part that needs all of them: resolving a deploy tag to the workloads the
 role's rendered manifests declare, fetching each one, and rolling the per-workload verdicts up
@@ -34,6 +35,7 @@ deploy failed would let `land.sh` print `VERDICT: settled` for a deploy whose he
 ran.
 """
 
+import functools
 import json
 import subprocess
 from datetime import datetime, timezone
@@ -51,7 +53,7 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 # globals with a `from core import ...` would take a snapshot the patch never reaches.
 from diagnostics.probe_lib import core
 from diagnostics.probe_lib.core import PI_HOST
-from diagnostics.probe_lib import health_alerts, health_checkout
+from diagnostics.probe_lib import health_alerts, health_checkout, health_plumbing
 from diagnostics.probe_lib.health_cronjob import format_cronjob_health, latest_owned_job
 from diagnostics.probe_lib.health_docker import (
     declared_on_pi,
@@ -81,7 +83,7 @@ from lib.kubectl import (
     kubectl,
     served_cluster,
 )
-from lib.repo_paths import K8S_ROLES, REPO
+from lib.repo_paths import K8S_ROLES
 
 _RENDER_CONTEXT = None
 
@@ -97,13 +99,7 @@ def _render_context():
     """
     global _RENDER_CONTEXT
     if _RENDER_CONTEXT is None:
-        import sys as _sys
-
-        # A directly-invoked script gets only its own directory on sys.path, and pyproject's
-        # `pythonpath` is a pytest setting — so the cron and the notifier need this insert.
-        # `scripts/` rather than `scripts/validate/`: the package-qualified name is the same
-        # one pytest imports, so there is one module object however it is reached.
-        _sys.path.insert(0, str(REPO / "scripts"))
+        # The module's own bootstrap put `scripts/` on sys.path, the root pytest imports from.
         from validate import k8s_manifests as validator
 
         _RENDER_CONTEXT = (validator, validator.k8s_entries())
@@ -354,13 +350,16 @@ def _deploy_applied_at(service):
     return (_release_record(service) or {}).get("applied_at")
 
 
-def _with_alert_plane(role, text, code, ready_at, prom):
-    """(text, exit code) with the alert plane folded in after a passing rollout verdict.
+def _with_alert_plane(role, text, code, ready_at, prom, read):
+    """(text, exit code) with the tag's plumbing check, then the alert plane, folded in.
 
     A failed rollout returns unchanged, without the alert plane's waits. A failing alert plane
     puts its own head line first: the notifier reads only the first line, and the no-workload
     line carries a `NOT_APPLICABLE_MARKERS` substring that would report the failure `skipped`.
+    `read` is `_read` bound to the gate's cluster, for `health_plumbing.with_checks`.
     """
+    if not code:
+        text, code = health_plumbing.with_checks(role, text, read)
     if code:
         return text, code
     from diagnostics.probe_lib.releases_retired import tree_owners
@@ -512,6 +511,7 @@ def run_health(
         return PROBE_UNREADABLE
 
     ns = core.k8s_namespace()
+    read = functools.partial(_read, cluster, tools=tools)
     try:
         targets = role_workload_targets(container, ns, roles_dir)
     except Exception as exc:
@@ -561,7 +561,7 @@ def run_health(
                 for namespace, name in cronjob_targets
             ]
             text, code = format_role_cronjob_health(container, checked, now)
-            text, code = _with_alert_plane(container, text, code, None, prom)
+            text, code = _with_alert_plane(container, text, code, None, prom, read)
             print(text)
             return code
         # Genuinely nothing to gate — a Job-only role (media-volume, netpol-baseline) whose
@@ -581,6 +581,7 @@ def run_health(
             0,
             None,
             prom,
+            read,
         )
         print(text)
         return code
@@ -594,6 +595,6 @@ def run_health(
         container, checked, now, release_expected_restarts(_release_record(container))
     )
     ready_at = health_alerts.pods_ready_at([c[4] for c in checked])
-    text, code = _with_alert_plane(container, text, code, ready_at, prom)
+    text, code = _with_alert_plane(container, text, code, ready_at, prom, read)
     print(text)
     return code
