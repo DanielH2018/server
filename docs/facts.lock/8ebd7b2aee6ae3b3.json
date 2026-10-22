@@ -1,5 +1,5 @@
 {
-  "checksum": "f330576ee620110adef2afdf0d7e4078a7ecc6b44b333ee6b41163adaa37847d",
+  "checksum": "ec1bd13005c2b24db649a9d570dbe0c45cb2a3d33ef60454e69d530cb87fe3d9",
   "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
   "key": "ansible/roles/setup/k3s/CLAUDE.md#Notable",
   "row": {
@@ -13,6 +13,6 @@
       "docs/k3s-node-plane-crons-and-incidents.md": "47634daf3e04f54df032bcc8938c13bcccfea73558e99d58546e331f90ece53d"
     },
     "python": "3.14",
-    "verified_sha": "0ba813d87"
+    "verified_sha": "f3e8b1ae8"
   }
 }

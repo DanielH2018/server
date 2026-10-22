@@ -2,13 +2,10 @@
   The reconcile job's inputs: the desired tier of every claim, the script, and the one module
   that opens its connections.
 
-  tiers.json is computed from `containers_list` by the three tier filters, the same ones that
-  compute `k3s_longhorn_r2_volumes`, `k3s_longhorn_weekly_volumes` and
-  `k3s_longhorn_nobackup_volumes` in setup/k3s's defaults. Those keys stay there until H1.7a, so
-  this template calls the filters directly rather than reading the keys. H1.7a moves the keys
-  into this role's defaults and points this file at them. The filters and their input are the
-  same, so both forms render the same lists. `r2` is rendered now and read by the script from
-  H1.7a, which adds the `backupTargetName` arm.
+  tiers.json is the three tier lists, `k3s_longhorn_r2_volumes`, `k3s_longhorn_weekly_volumes`
+  and `k3s_longhorn_nobackup_volumes`, which this role's defaults derive from
+  `containers_list`. The script reads `r2` for the Volume's `spec.backupTargetName`, and
+  `weekly` and `nobackup` for the recurring-job group labels.
 
   A change to `containers_list` that moves a claim between tiers changes this file, and so this
   tag's digest. The tag is not forward-only, so a failed revision resets rather than holds.
@@ -22,7 +19,7 @@ metadata:
   name: longhorn-reconcile
   namespace: {{ k8s_longhorn_namespace }}
 data:
-  tiers.json: {{ {'r2': containers_list | tier_backup_claims('home-critical', k8s_namespace), 'weekly': containers_list | longhorn_weekly_claims(k8s_namespace), 'nobackup': containers_list | longhorn_nobackup_claims(k8s_namespace)} | to_json(sort_keys=True) | to_json }}
+  tiers.json: {{ {'r2': k3s_longhorn_r2_volumes, 'weekly': k3s_longhorn_weekly_volumes, 'nobackup': k3s_longhorn_nobackup_volumes} | to_json(sort_keys=True) | to_json }}
   longhorn_reconcile.py: |
 {{ lookup('file', playbook_dir + '/roles/k8s/longhorn-reconcile/files/longhorn_reconcile.py') | indent(4, true) }}
   flux_job_connect.py: |

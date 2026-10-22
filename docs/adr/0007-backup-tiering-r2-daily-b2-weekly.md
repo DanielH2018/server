@@ -13,6 +13,11 @@ governs: []
 Accepted. Reached over five Backblaze B2 transaction-cap events between 2026-08-12 and
 2026-08-16, and current behaviour since both targets were re-armed on 2026-08-17.
 
+Amended on 2026-10-22 (H1 plan, H1.7a). The tier lists moved to the `longhorn-reconcile`
+role's defaults, and backup health takes each target's arm state from its live URL. The
+decision is unchanged. *Consequences* gains the monitor's new behaviour, and *Governs* names
+the new home of the lists.
+
 ## Context
 
 Backblaze B2 charges per API transaction, and the account has caps. The homelab hit them
@@ -64,6 +69,16 @@ Blanking the target is what stops it, not waiting.
 
 **Disarming a target makes its monitor permanently red**, so the monitor has to be gated too
 — and what was suppressed has to be named, or a real failure hides behind a deliberate one.
+The next consequence records how the gate works since 2026-10-22.
+
+**Backup health takes each target's arm state from its live URL, so a disarm no longer turns
+the monitor red.** The reader lists both BackupTargets and reads a blank
+`spec.backupTargetURL` as a disarmed target. It checks no volume on that target and names the
+target in the verdict's `DISARMED` note, with the count of volumes it did not check. A flag
+flipped in git reaches the monitor when Flux applies it, and no host apply lies between. A
+failed list call, or a list that lacks the `default` or the `r2` target, is a problem the
+reader reports. It is never read as a disarm, because a monitor that took an unreadable cluster
+for a disarm would suppress the whole backup plane behind a green light.
 
 **A volume that moves tiers waits a shard week for coverage**, and a seed backup does not
 count: the rotation check matches the tier's RecurringJob label, which a seed never carries.
@@ -74,5 +89,7 @@ backupstore," which is indistinguishable from a missing backup until the caps ar
 
 ## Governs
 
-No single line. The tier lists live in `ansible/roles/setup/k3s/defaults/main.yml`, so
-`governs:` is empty.
+No single line. The tier lists, `k3s_longhorn_r2_volumes`, `k3s_longhorn_weekly_volumes` and
+`k3s_longhorn_nobackup_volumes`, live in the defaults of the `longhorn-reconcile` role
+(`ansible/roles/k8s/longhorn-reconcile/defaults/main.yml`). That role's CronJob applies them to
+the cluster, so `governs:` is empty.

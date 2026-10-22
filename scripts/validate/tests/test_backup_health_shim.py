@@ -12,7 +12,6 @@ Run: uv run pytest scripts/validate/tests/test_backup_health_shim.py
 import re
 import shutil
 
-import pytest
 from validate import shell_templates as v
 from validate.validate_lib import shell_lint as sl
 from lib.proc_testing import fake_bin, run, write_exec
@@ -23,66 +22,50 @@ BACKUP_HEALTH_READER = K3S_FILES / "longhorn_backup_health.py"
 KUMA_PUSH_LIB = v.ROLES / "setup" / "initial_setup" / "files" / "kuma-push-lib.sh"
 
 
-@pytest.mark.parametrize(
-    ("b2_armed", "r2_armed", "expect_backup_armed", "expect_r2_armed"),
-    [
-        (True, True, "True", "True"),
-        (True, False, "True", "False"),
-        (False, True, "False", "True"),
-        (False, False, "False", "False"),
-    ],
-)
-def test_backup_health_renders_clean_for_every_arm_state(
-    tmp_path,
-    b2_armed: bool,
-    r2_armed: bool,
-    expect_backup_armed: str,
-    expect_r2_armed: str,
-):
-    """Both branches of the armed gates must render to valid shell.
-
-    main() renders with group_vars only, so the ROLE default `k3s_longhorn_backup_armed: false`
-    is never applied there and its branch would go unexercised — the dead-path shape that let two
-    commands stay broken behind passing tests after the k3s cutover. Since the shim only exports
-    LONGHORN_BACKUP_ARMED/LONGHORN_R2_ARMED for the Python reader to interpret (BACKUP_TARGETS
-    itself is derived cluster-side), the disarmed branch that matters is the exported string the
-    reader parses — a wrong render there disarms silently instead of at `set -u`.
-    """
+def test_backup_health_renders_clean_shell(tmp_path):
+    """The rendered shim passes `bash -n` and shellcheck."""
     shellcheck_bin = shutil.which("shellcheck")
     assert shellcheck_bin, "shellcheck must be on PATH (dev dependency shellcheck-py)"
 
-    ctx = v.template_context(
-        BACKUP_HEALTH,
-        overrides={
-            "k3s_longhorn_backup_armed": b2_armed,
-            "k3s_longhorn_r2_armed": r2_armed,
-        },
-    )
-    rendered = sl.render_template(BACKUP_HEALTH, ctx)
-
+    rendered = sl.render_template(BACKUP_HEALTH, v.template_context(BACKUP_HEALTH))
     out = tmp_path / "longhorn-backup-health.sh"
     out.write_text(rendered)
     assert sl.bash_syntax_check(out) is None
     assert sl.shellcheck_check(out, shellcheck_bin) is None
 
-    assert f'export LONGHORN_BACKUP_ARMED="{expect_backup_armed}"' in rendered
-    assert f'export LONGHORN_R2_ARMED="{expect_r2_armed}"' in rendered
+
+_BAKED_BEFORE_H1_7A = (
+    "LONGHORN_BACKUP_ARMED",
+    "LONGHORN_R2_ARMED",
+    "LONGHORN_BACKUP_CRON",
+    "LONGHORN_WEEKLY_BACKUP_MINUTE_HOUR",
+)
 
 
-def test_backup_health_arm_gates_treat_the_string_false_as_disarmed():
-    # Ansible's `-e k3s_longhorn_backup_armed=false` passes the STRING "false", which is truthy in
-    # Jinja. Without `| bool` an extra-vars disarm would render LONGHORN_BACKUP_ARMED="true" and
-    # silently restore the permanently-red monitor this gate exists to prevent.
-    ctx = v.template_context(
+def test_backup_health_bakes_no_arm_or_schedule_input():
+    """Flipping the arm flags or the schedule keys cannot change the rendered shim.
+
+    The reader takes those from the cluster (H1.7a). A shim that baked them would go stale when
+    Flux applied a flipped flag, which a host apply never follows. The first assert is the red
+    half: it fails if any of the four exports returns. The second is the render holding still
+    while every key moves.
+    """
+    base = sl.render_template(BACKUP_HEALTH, v.template_context(BACKUP_HEALTH))
+    for name in _BAKED_BEFORE_H1_7A:
+        assert f"export {name}=" not in base, name
+    flipped = sl.render_template(
         BACKUP_HEALTH,
-        overrides={
-            "k3s_longhorn_backup_armed": "false",
-            "k3s_longhorn_r2_armed": "false",
-        },
+        v.template_context(
+            BACKUP_HEALTH,
+            overrides={
+                "k3s_longhorn_backup_armed": False,
+                "k3s_longhorn_r2_armed": False,
+                "k3s_longhorn_backup_cron": "5 1 * * *",
+                "k3s_longhorn_weekly_backup_minute_hour": "5 1",
+            },
+        ),
     )
-    rendered = sl.render_template(BACKUP_HEALTH, ctx)
-    assert 'export LONGHORN_BACKUP_ARMED="False"' in rendered
-    assert 'export LONGHORN_R2_ARMED="False"' in rendered
+    assert flipped == base
 
 
 def test_backup_health_logs_unconditionally_even_when_the_reader_itself_breaks():

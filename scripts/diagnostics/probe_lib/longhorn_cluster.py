@@ -75,6 +75,49 @@ def volume_owned_backup_counts(cluster=DEFAULT_CLUSTER, _run=None):
     return owners
 
 
+def weekly_retain(cluster=DEFAULT_CLUSTER, _run=None):
+    """The `spec.retain` of the live weekly RecurringJobs, as the largest of their seven values.
+
+    One list call, in place of the `--retain` the b2-budget cron used to bake from
+    `k3s_longhorn_weekly_backup_retain` (H1.7a). The seven weekday jobs share the one key, so
+    their retains agree once an apply has finished; the largest is the answer while a rollout is
+    half done, because it flags the fewest backups as unpruned.
+
+    Raises:
+        Unreadable: the list call failed, or it held no weekly shard job with an integer
+            `spec.retain`. There is no fallback to a default: a retain the cluster did not give
+            is a guess, and the caller reads the value to say which backups no job will prune.
+    """
+    run = _run or (lambda *args: kubectl(cluster, *args))
+    out = run("-n", "longhorn-system", "get", "recurringjobs.longhorn.io", "-o", "json")
+    if out.returncode != 0:
+        raise Unreadable("kubectl failed: " + out.stderr.strip()[:300])
+    try:
+        items = json.loads(out.stdout).get("items", [])
+    except json.JSONDecodeError, AttributeError:
+        raise Unreadable("recurringjobs.longhorn.io list is not JSON") from None
+    retains = [
+        (item.get("spec") or {}).get("retain")
+        for item in items
+        if ((item.get("metadata") or {}).get("name") or "").startswith(
+            longhorn_backups.WEEKLY_SHARD_PREFIX
+        )
+    ]
+    retains = [r for r in retains if isinstance(r, int) and not isinstance(r, bool)]
+    if not retains:
+        raise Unreadable("no weekly RecurringJob with an integer spec.retain")
+    return max(retains)
+
+
+def resolve_retain(retain, cluster=DEFAULT_CLUSTER, _run=None):
+    """`retain` as the caller gave it, or the live weekly retain when it gave none.
+
+    Raises:
+        Unreadable: `retain` is None and `weekly_retain` could not read the cluster.
+    """
+    return retain if retain is not None else weekly_retain(cluster, _run)
+
+
 def pvc_names(cluster=DEFAULT_CLUSTER, _run=None):
     """{longhorn volume: PVC name}, so the report reads in service terms."""
     run = _run or (lambda *args: kubectl(cluster, *args))

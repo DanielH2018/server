@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
-"""The `longhorn-reconcile` CronJob: hold each Longhorn volume in the recurring-job group its tier names.
+"""The `longhorn-reconcile` CronJob: hold each Longhorn volume in the recurring-job group and backup target its tier names.
 
 Longhorn reads a volume's backup schedule off its own Volume CR labels
 (`recurring-job-group.longhorn.io/<group>`), and a PVC's StorageClass decides the group only at
 provision time. A volume that must LEAVE the daily set after it is bound cannot be moved by
 editing either, so this job reconciles the label. It replaces the label, weekly-shard,
 legacy-label and CSI-request tasks that `setup/k3s` ran from `tasks/longhorn.yml` and
-`tasks/longhorn-weekly-shard.yml` (H1 plan, H1.6).
+`tasks/longhorn-weekly-shard.yml` (H1 plan, H1.6). From H1.7a it also holds each volume's
+`spec.backupTargetName`, which the two routing tasks of `tasks/longhorn-backup.yml` held.
 
 What one run does, in this order, for each volume:
 
@@ -25,8 +26,16 @@ What one run does, in this order, for each volume:
 5. A volume in a weekly shard group whose claim is off the weekly list returns to `default`.
    One whose claim declares another shard moves to that shard.
 
-The steps run against each volume's own labels, in that order, and the run writes ONE merge
-patch per changed volume: the net of the steps. A converged cluster writes nothing.
+The steps run against each volume's own labels, in that order. Then one more step sets the
+backup target:
+
+6. A volume whose claim is on the `r2` list and whose `spec.backupTargetName` is not `r2` moves
+   to `r2`. A volume on `r2` whose claim is on no `r2` list returns to `default`, the B2 target.
+   A volume whose target is blank, or any other name, and whose claim is not listed is left
+   alone, as the Ansible routing tasks left it.
+
+The run writes ONE merge patch per changed volume: the net of the steps, labels and target
+together. A converged cluster writes nothing.
 
 It then holds the memory REQUEST of the four `csi-*` Deployments that longhorn-driver-deployer
 creates at runtime (`csi-attacher`, `csi-provisioner`, `csi-resizer`, `csi-snapshotter`). Upstream
@@ -36,7 +45,6 @@ request is not patched, so a rollout happens only when the driver deployer has r
 Inputs: `/config/tiers.json` (the ConfigMap's `{"r2": [...], "weekly": {claim: shard}, "nobackup":
 [...]}`, claims as `namespace/pvcName`) and the environment: `RECONCILE_NAMESPACE`,
 `RECONCILE_CSI_MEMORY_REQUEST`, and optionally `RECONCILE_TIERS_FILE` and `RECONCILE_CSI_WAIT_SECONDS`.
-The `r2` list is read and validated but not acted on until H1.7a adds the `backupTargetName` arm.
 
 It talks to the API server with the pod's ServiceAccount token, and the API server's CA reaches
 `urlopen` through `SSL_CERT_FILE`, which the CronJob sets. Every connection goes through
@@ -80,6 +88,12 @@ NO_BACKUP = "no-backup"
 LEGACY_WEEKLY = "weekly-backup"
 SHARDS = range(7)
 ENABLED = "enabled"
+
+# The BackupTarget names a Volume CR's `spec.backupTargetName` takes: `default` is the B2 target
+# and `r2` the Cloudflare one. They are a contract with the cluster, held equal to
+# `setup/k3s`'s `longhorn_lib/longhorn_backups.py` by tests/test_longhorn_reconcile.py.
+B2_TARGET = "default"
+R2_TARGET = "r2"
 
 CSI_DEPLOYMENTS = ("csi-attacher", "csi-provisioner", "csi-resizer", "csi-snapshotter")
 # The pause between two reads of a Deployment that is not there yet, in seconds.
@@ -192,7 +206,7 @@ def load_tiers(path: str | Path) -> dict:
         # picking one here would hide a wrong `containers_list` entry. The run stops before it
         # writes anything, so the next hourly run retries once the entry is fixed.
         raise Failed(f"claim(s) on both the weekly and the no-backup list: {both}")
-    return {"r2": r2, "weekly": weekly, "nobackup": set(nobackup)}
+    return {"r2": set(r2), "weekly": weekly, "nobackup": set(nobackup)}
 
 
 def claim_of(volume: dict) -> str:
@@ -248,6 +262,24 @@ def desired_labels(
     return state
 
 
+def target_of(volume: dict) -> str:
+    """The `spec.backupTargetName` a Volume CR holds, or an empty string when it names none."""
+    return str((volume.get("spec") or {}).get("backupTargetName") or "")
+
+
+def desired_target(current: str, claim: str, r2: set[str]) -> str | None:
+    """The target to patch a volume to, or None when it is already where its claim belongs.
+
+    A claim on the `r2` list goes to `r2`. A volume on `r2` whose claim is on no list returns
+    to `default`. Any other volume keeps what it has, a blank target included: the Ansible
+    routing tasks moved only these two cases, and sweeping a blank target onto `default` would
+    patch every volume the first run meets.
+    """
+    if claim in r2:
+        return None if current == R2_TARGET else R2_TARGET
+    return B2_TARGET if current == R2_TARGET else None
+
+
 def group_keys() -> set[str]:
     """Every group label key this job writes or removes."""
     groups = [DEFAULT, NO_BACKUP, LEGACY_WEEKLY, *(shard_group(s) for s in SHARDS)]
@@ -255,10 +287,11 @@ def group_keys() -> set[str]:
 
 
 def plan(volumes: list[dict], class_claims: set[str], tiers: Mapping) -> list[dict]:
-    """One merge patch per volume whose group labels must change, in volume-name order.
+    """One merge patch per volume whose group labels or backup target must change, by name.
 
-    Each entry is `{"name", "claim", "labels"}`, where `labels` maps a group label key to its
-    new value, or to None to remove it.
+    Each entry is `{"name", "claim", "labels", "target"}`. `labels` maps a group label key to
+    its new value, or to None to remove it, and is empty when only the target moves. `target`
+    is the new `spec.backupTargetName`, or None when the volume keeps its own.
     """
     keys = group_keys()
     out = []
@@ -270,19 +303,27 @@ def plan(volumes: list[dict], class_claims: set[str], tiers: Mapping) -> list[di
         for key in sorted(keys):
             if after.get(key) != before.get(key):
                 delta[key] = after.get(key)
-        if delta:
+        target = desired_target(target_of(volume), claim, tiers["r2"])
+        if delta or target:
             out.append(
-                {"name": volume["metadata"]["name"], "claim": claim, "labels": delta}
+                {
+                    "name": volume["metadata"]["name"],
+                    "claim": claim,
+                    "labels": delta,
+                    "target": target,
+                }
             )
     return out
 
 
 def describe(change: dict) -> str:
-    """One report line for a planned label patch."""
+    """One report line for a planned volume patch."""
     parts = [
         f"{key.removeprefix(LABEL_PREFIX)}{'-' if value is None else '=' + value}"
         for key, value in change["labels"].items()
     ]
+    if change["target"]:
+        parts.append(f"backupTargetName={change['target']}")
     return f"volume {change['name']} ({change['claim']}): {' '.join(parts)}"
 
 
@@ -298,7 +339,7 @@ def class_claims_of(pvcs: list[dict]) -> set[str]:
 def reconcile_labels(
     kube: Kube, namespace: str, tiers: Mapping, report_only: bool
 ) -> list[str]:
-    """Plan the label changes from two list reads, then write them. One report line per change.
+    """Plan the volume changes from two list reads, then write them. One report line per change.
 
     Both reads happen before the first write, so a failed read changes nothing.
     """
@@ -314,14 +355,18 @@ def reconcile_labels(
     lines = []
     for change in changes:
         if not report_only:
-            body = {"metadata": {"labels": change["labels"]}}
+            body: dict = {}
+            if change["labels"]:
+                body["metadata"] = {"labels": change["labels"]}
+            if change["target"]:
+                body["spec"] = {"backupTargetName": change["target"]}
             status, answer = kube.call(
                 "PATCH", f"{volumes_path}/{change['name']}", body, MERGE_PATCH
             )
             _ok(status, answer, f"patching volume {change['name']}")
         lines.append(("would patch " if report_only else "patched ") + describe(change))
     lines.append(
-        f"{len(volumes)} volume(s) read, {len(changes)} label change(s)"
+        f"{len(volumes)} volume(s) read, {len(changes)} volume change(s)"
         f"{' planned' if report_only else ''}"
     )
     return lines

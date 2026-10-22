@@ -152,7 +152,6 @@ SETUP_ROLES_CALLING_FILTER_PLUGINS: dict[str, frozenset[str]] = {
     ),
     "ansible/filter_plugins/k8s_autodeploy.py": frozenset({"gitops_deploy"}),
     "ansible/filter_plugins/longhorn_groups.py": frozenset({"k3s"}),
-    "ansible/filter_plugins/service_tier.py": frozenset({"k3s"}),
     # Registers no filter; `longhorn_groups` and `service_tier` wrap theirs in it (#4527).
     "ansible/filter_plugins/filter_errors.py": frozenset({"k3s"}),
 }

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""The first-run grace pair: whether LONGHORN_BACKUP_CRON parses decides a new volume's fate.
+"""The first-run grace pair: whether the daily RecurringJob's cron parses decides a new volume's fate.
 
 `test_longhorn_backup_health.py` keeps the pure decision arms. These two are
 the `_is_clean`/`_is_flagged` pair for one behaviour and stay together: a well-formed cron graces
@@ -25,7 +25,7 @@ from _longhorn_reader_stubs import (
 
 
 def test_malformed_cron_pages_the_new_volume_instead_of_gracing_it(tmp_path):
-    """FLAGGED half: a malformed LONGHORN_BACKUP_CRON must not raise IndexError before main() runs.
+    """FLAGGED half: a malformed daily cron must not raise IndexError before main() runs.
 
     A bad value must take down only the daily tier's first-run grace, not all eight checks at
     once. A malformed value degrades to `first_run_after(..., None, ...)`, which
@@ -43,9 +43,9 @@ def test_malformed_cron_pages_the_new_volume_instead_of_gracing_it(tmp_path):
     env = _reader_env(
         tmp_path,
         LONGHORN_BACKUP_KUBECTL=str(stub),
-        LONGHORN_R2_ARMED="False",
         LONGHORN_RESTORE_DRILL_STAMP_DIR=str(drill_dir),
-        LONGHORN_BACKUP_CRON="30",  # malformed: one field, no hour
+        STUB_R2_URL="",  # R2 disarmed in the cluster
+        STUB_DAILY_CRON="30",  # malformed: one field, no hour
     )
 
     proc = subprocess.run(
@@ -73,9 +73,9 @@ def test_well_formed_cron_graces_the_new_volume(tmp_path):
     env = _reader_env(
         tmp_path,
         LONGHORN_BACKUP_KUBECTL=str(stub),
-        LONGHORN_R2_ARMED="False",
         LONGHORN_RESTORE_DRILL_STAMP_DIR=str(drill_dir),
-        LONGHORN_BACKUP_CRON="30 3 * * *",
+        STUB_R2_URL="",  # R2 disarmed in the cluster
+        STUB_DAILY_CRON="30 3 * * *",
     )
 
     proc = subprocess.run(

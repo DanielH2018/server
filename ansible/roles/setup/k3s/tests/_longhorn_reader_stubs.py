@@ -62,6 +62,64 @@ def reader_argv(now: float | None = None) -> list[str]:
     return [sys.executable, "-P", "-c", _MAIN_WITH_NOW, str(READER), repr(now)]
 
 
+# The BackupTarget and RecurringJob lists the stub kubectls answer, from env knobs so one test
+# flips the cluster while the reader and its env stay fixed. Both stubs paste this in. Knobs:
+#   STUB_DEFAULT_URL / STUB_R2_URL    the target's `spec.backupTargetURL`; "" is a disarm
+#   STUB_DEFAULT_AVAILABLE / STUB_R2_AVAILABLE   "true" (default) or "false"
+#   STUB_DROP_TARGET                  a target name left out of the list
+#   STUB_FAIL_TARGET_LIST             set to make the BackupTarget list exit 124 (a timeout)
+#   STUB_DEFAULT_ANNOTATION           set to put the break-glass annotation on `default`
+#   STUB_DAILY_CRON                   the daily RecurringJob's `spec.cron`
+#   STUB_WEEKLY_MINUTE_HOUR           the two fields each weekly job's cron starts with
+# The URLs are placeholders: nothing here names a real bucket.
+_CLUSTER_OBJECTS_PY = r"""
+import json
+import os
+
+
+def _target(name, default_url):
+    url = os.environ.get("STUB_%s_URL" % name.upper(), default_url)
+    available = os.environ.get("STUB_%s_AVAILABLE" % name.upper(), "true") == "true"
+    status = {"available": available}
+    if not available:
+        status["conditions"] = [{"message": "STUB_UNAVAILABLE_REASON " + name}]
+    annotations = {}
+    if name == "default" and os.environ.get("STUB_DEFAULT_ANNOTATION"):
+        annotations["kustomize.toolkit.fluxcd.io/reconcile"] = "disabled"
+    return {
+        "metadata": {"name": name, "annotations": annotations},
+        "spec": {"backupTargetURL": url},
+        "status": status,
+    }
+
+
+def _targets_body():
+    if os.environ.get("STUB_FAIL_TARGET_LIST"):
+        sys.stderr.write("STUB_FETCH_FAILED targets\n")
+        sys.exit(124)
+    items = [
+        _target("default", "s3://stub-bucket@stub-region/longhorn"),
+        _target("r2", "s3://stub-r2-bucket@auto/longhorn"),
+    ]
+    drop = os.environ.get("STUB_DROP_TARGET")
+    return json.dumps({"items": [i for i in items if i["metadata"]["name"] != drop]})
+
+
+def _jobs_body():
+    daily = os.environ.get("STUB_DAILY_CRON", "30 3 * * *")
+    weekly = os.environ.get("STUB_WEEKLY_MINUTE_HOUR", "30 4")
+    items = [{"metadata": {"name": "daily-backup"}, "spec": {"cron": daily, "retain": 14}}]
+    for day in range(7):
+        items.append(
+            {
+                "metadata": {"name": "weekly-backup-d%d" % day},
+                "spec": {"cron": "%s * * %d" % (weekly, day), "retain": 2},
+            }
+        )
+    return json.dumps({"items": items})
+"""
+
+
 def _reader_env(tmp_path, **overrides) -> dict:
     """Every LONGHORN_* env var the reader requires, with permissive defaults a test can override.
 
@@ -78,14 +136,10 @@ def _reader_env(tmp_path, **overrides) -> dict:
         {
             "LONGHORN_BACKUP_NAMESPACE": "longhorn-system",
             "LONGHORN_BACKUP_KUBECTL_TIMEOUT_S": "30",
-            "LONGHORN_BACKUP_ARMED": "True",
-            "LONGHORN_R2_ARMED": "True",
             "LONGHORN_BACKUP_MAX_AGE_HOURS": "30",
             "LONGHORN_WEEKLY_BACKUP_MAX_AGE_HOURS": "198",
             "LONGHORN_BACKUP_ERROR_MAX_AGE_HOURS": "24",
             "LONGHORN_DAILY_BACKUP_BUDGET": "16",
-            "LONGHORN_BACKUP_CRON": "30 3 * * *",
-            "LONGHORN_WEEKLY_BACKUP_MINUTE_HOUR": "30 4",
             "LONGHORN_RESTORE_DRILL_MAX_AGE_DAYS": "3",
             "LONGHORN_RESTORE_DRILL_COVERAGE_SLACK_DAYS": "5",
             "LONGHORN_RESTORE_DRILL_NAMESPACE": DRILL_NAMESPACE,
@@ -184,6 +238,7 @@ def _green_path_stub_kubectl(tmp_path, snapshot_ts: str) -> Path:
         r"""#!/usr/bin/env python3
 import os
 import sys
+__CLUSTER_OBJECTS__
 
 SNAPSHOT_TS = "__SNAPSHOT_TS__"
 BACKUP_LIST = __BACKUP_LIST__
@@ -198,8 +253,10 @@ if "-n" in args:
 if args == __DRILL_CM_ARGS__ and ns == "__DRILL_NAMESPACE__":
     # Absent by default: `--ignore-not-found` prints nothing, the live state until H2.3c.
     branch, body = "drill-stamps", os.environ.get("STUB_DRILL_CM", "")
-elif args[:2] == ["get", "backuptarget"]:
-    branch, body = "target-" + args[2], "true"
+elif args == ["get", "backuptargets.longhorn.io", "-o", "json"]:
+    branch, body = "targets", _targets_body()
+elif args == ["get", "recurringjobs.longhorn.io", "-o", "json"]:
+    branch, body = "jobs", _jobs_body()
 elif args == ["get", "backups.longhorn.io", "-o", "json"]:
     branch, body = "backups", BACKUP_LIST
 elif args[:2] == ["get", "jobs.batch"] and args[-1] == "json":
@@ -230,7 +287,8 @@ if branch == os.environ.get("STUB_NULL_BRANCH"):
     body = "null"
 
 sys.stdout.write(body)
-""".replace("__SNAPSHOT_TS__", snapshot_ts)
+""".replace("__CLUSTER_OBJECTS__", _CLUSTER_OBJECTS_PY)
+        .replace("__SNAPSHOT_TS__", snapshot_ts)
         .replace("__DRILL_CM_ARGS__", repr(DRILL_CM_ARGS))
         .replace("__DRILL_NAMESPACE__", DRILL_NAMESPACE)
         .replace(
@@ -281,6 +339,7 @@ def _grace_pair_stub_kubectl(tmp_path, created_ts: str, old_backup_ts: str) -> P
     backup_list = _backup_list_body(("pvc-old", old_backup_ts, "daily-backup"))
     script = f"""#!/usr/bin/env python3
 import sys
+__CLUSTER_OBJECTS__
 
 args = sys.argv[1:]
 ns = None
@@ -297,8 +356,10 @@ def emit(text, rc=0):
 
 if args == {DRILL_CM_ARGS!r} and ns == {DRILL_NAMESPACE!r}:
     emit("")
-elif args[:3] == ["get", "backuptarget", "default"]:
-    emit("true")
+elif args == ["get", "backuptargets.longhorn.io", "-o", "json"]:
+    emit(_targets_body())
+elif args == ["get", "recurringjobs.longhorn.io", "-o", "json"]:
+    emit(_jobs_body())
 elif args == ["get", "backups.longhorn.io", "-o", "json"]:
     emit({backup_list!r})
 elif args[:2] == ["get", "jobs.batch"] and args[-1] == "json":
@@ -319,5 +380,5 @@ elif args[:2] == ["get", "volumes.longhorn.io"]:
 else:
     sys.stderr.write("UNEXPECTED ARGS: %r\\n" % (args,))
     sys.exit(1)
-"""
+""".replace("__CLUSTER_OBJECTS__", _CLUSTER_OBJECTS_PY)
     return write_exec(stub, script)
