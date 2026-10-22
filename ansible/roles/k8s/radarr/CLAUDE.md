@@ -43,11 +43,13 @@ when both paths share one mount.
 - **`media-data` is neither snapshotted nor reverted** (`k8s_autodeploy_unreverted_claims`). A
   revert can desync import/rename history from files left in place, recoverable by a library
   rescan.
-- **Where the tasks went.** `tasks/main.yml` holds two includes, `k8s/manifests` and
-  `k8s/arr-notification`, and no Flux path runs them. They stay for the handback. The
-  pre-apply snapshot through `k8s/volume-snapshot` became the `radarr-snapshot` Job, and the
-  Kustomization's `wait` replaces the rollout wait. arr-notification's seed Job in
-  `radarr-verify` runs the same script as the include (*Notable*).
+- **Where the tasks went.** `tasks/main.yml` holds one include, `k8s/manifests`, and no Flux
+  path runs it. It stays for the handback. The pre-apply snapshot through `k8s/volume-snapshot`
+  became the `radarr-snapshot` Job, and the Kustomization's `wait` replaces the rollout wait.
+  arr-notification's seed Job in `radarr-verify` declares the Discord notification
+  (*Notable*). Its `k8s/arr-notification` include went in #5561, so a handback re-adds it as
+  well as reverting the flip. The seed Job's `lookup()`s are what make radarr a caller of
+  arr-notification in `scripts/lib/k8s_role_callers.py:role_callers`.
 
 ## Notable
 - **The rollout waits 660s, above the shared default.** A first boot installing DOCKER_MODS takes up to 10
