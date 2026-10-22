@@ -26,7 +26,7 @@ registry_k8s_size: 10Gi
 # Its own claim, because every ghcr.io image in the cluster pulls through it: 27 distinct
 # images on 2026-10-18, tdarr's and valheim's among them. Its TTL is zero so nut's image
 # survives a long gap between rebuilds, which leaves the weekly GC's offline prune
-# (files/ghcr-mirror-prune.sh, #5541) as the only thing that reclaims it. Losing it costs
+# (setup/k8s_host_files/files/ghcr-mirror-prune.sh, #5541) as the only thing that reclaims it. Losing it costs
 # re-pulls from ghcr.io, not data, hence longhorn-nobackup.
 registry_k8s_ghcr_mirror_claim: registry-ghcr-mirror
 registry_k8s_ghcr_mirror_size: 30Gi

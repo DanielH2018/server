@@ -2,7 +2,7 @@
 
 This role holds the host writes that D5 moves out of the k8s roles before each role flips to
 Flux: docs's site directory, pi-peer-backup's two Pi writes, traefik's absent arm, registry's
-GC absent arms, the absent arms H2 leaves in crowdsec, configarr, janitorr and qbittorrent,
+ghcr-mirror GC, the absent arms H2 leaves in crowdsec, configarr, janitorr and qbittorrent,
 artifacts' three directory tasks (the star list directory among them), media-volume's media
 directories, observability's retired dashboard staging trees, uptime-kuma's stale
 autokuma-claims staging directory and crowdsec's edge probe timer on daniel-pi. A Flux-owned
@@ -23,6 +23,8 @@ The redirect is what a shell with non-blocking stdio needs.
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's tasks, timer templates, defaults or playbook entry, or a schedule var in group_vars/all.yml. -->
 - **Applied by:** `initial_setup.yml --tags "k8s_host_files"` when `inventory_hostname ==
   'daniel-box'`
+- **Crons (1):**
+  - `Registry garbage collection` — `20 4 * * 0`
 - **Timer:** `crowdsec-edge-probe.timer` (`OnBootSec=1min`, `OnUnitActiveSec=1min`)
 <!-- /generated_from -->
 
@@ -48,7 +50,8 @@ the absent arms for the prefs drift check's retired host cron and script. traefi
 its script. uptime-kuma's PR wrote `tasks/uptime-kuma.yml`, the absent arm that removes
 the directory k8s/volume-claim staged autokuma-data's claim under. registry's push-store GC
 retirement wrote `tasks/registry.yml`, the absent arm for the `gc-job.yaml` manifest nothing
-reads any more. crowdsec's first conversion
+reads any more. registry's conversion PR added the ghcr-mirror GC's host side to it: the Job
+manifest, `registry-gc.sh`, `/var/lib/registry-gc` and the `registry-gc` cron. crowdsec's first conversion
 PR wrote `tasks/crowdsec.yml`, which installs the edge probe's script, service and timer on
 daniel-pi for crowdsec's off-cluster verify. It is the role's first timer and its first
 templates. crowdsec's second conversion PR (#5742) added the absent arms for the four crons
@@ -69,13 +72,17 @@ because `initial_setup.yml` has no dry-run mode.
   k8s role's own name. A change then edits both, and each half routes to its own plane. A
   shared key in `group_vars/all.yml` routes to the deploy plane only, which never runs
   `initial_setup.yml`.
-- **A copy sits in its task's `vars:`, never in this role's defaults.** A task file with
+- **A copy sits in its task's `vars:`, not in this role's defaults, unless a template reads it.** A task file with
   several tasks wraps them in one `block:` and puts the copies in the block's `vars:`, as
   `tasks/artifacts.yml` does. Role defaults are play-wide in `initial_setup.yml`, so a
   defaults copy of a key another setup role names becomes a cross-role read, which
   `ansible/tests/setup/test_setup_cross_role_reads.py` refuses without a row in the deployer's
   cross-role table (#5472). A copy of `sys_user` or another `group_vars` key would make
   this role's defaults read by nearly every setup role. Task vars reach only the task.
+  The exception is a key that only this role's templates and rows name. The strict render test
+  and the shell-template gate resolve a template's names from role defaults, and Renovate
+  reaches a setup role's defaults, so registry's image pins and GC settings sit in
+  `defaults/main.yml`. No other setup role names a `registry_k8s_*` key.
 
 Two tests in `ansible/tests/setup/` hold those rules:
 
@@ -102,6 +109,9 @@ pi-peer-backup's two rows and crowdsec's four to `delegate_to: daniel-pi`. Each
 conversion PR adds its rows there. A row that moves back to its k8s role fails the host-write
 census in `ansible/tests/repo/_host_write_rows.py`, whose `allow` entry the move dropped.
 
+`ansible/roles/setup/k8s_host_files/tests/test_ghcr_mirror_prune.py` runs the Job's prune
+script against a store tree built in `tmp_path`.
+
 ## Autonomous-role contract (it will install a timer and remove crons with no human in the loop)
 
 The GitOps tick applies the role as `initial_setup.yml --tags k8s_host_files` on every merge
@@ -111,9 +121,16 @@ timer on daniel-pi.
 
 - **Scope / exclusions:** host files, directories and units that a k8s role's Ansible apply
   owned before its flip, plus the absent arms that remove a retired role's crons. **Never** a
-  Kubernetes object, never a `kubectl` write, and never a row outside the D5 list above. A
-  daniel-pi write happens only through `delegate_to: daniel-pi`.
+  Kubernetes object, never a `kubectl` write from a task, and never a row outside the D5 list
+  above. One cron is the exception: `registry-gc.sh` runs weekly as root, scales
+  `deploy/ghcr-mirror` and applies the Job manifest this role stages. The task installs the
+  script and the cron and runs neither. The operator accepted that script as the one writer of
+  the mirror's `spec.replicas` (#5732). A daniel-pi write happens only through
+  `delegate_to: daniel-pi`.
 - **Mode (explicit + reversible):** each row carries the arm variable its source role used.
+  `registry_k8s_manage_gc: false` skips the whole registry GC block, as it did in the registry
+  role. It only skips: a host that already has the cron keeps it, so disarming a host means
+  removing `/etc/cron.d/registry-gc` by hand (operator-only).
   Removing a row is a revert of its conversion PR, which puts the task back in the k8s role.
   Reverting D5.1h removes the playbook entry and parks the tick once more.
 - **Authoritative sources:** the repo at the commit being applied, through this role's own
@@ -128,5 +145,9 @@ timer on daniel-pi.
   'loki_process_custom_crowdsec_edge_probe_total'`. To stop the probe, revert
   `tasks/crowdsec.yml`, then disable `crowdsec-edge-probe.timer` on the Pi by hand
   (operator-only). The file then stops growing and stays bounded.
+- **Registry GC evidence:** the weekly `registry-gc` run (Sunday 04:20) writes a `Registry GC`
+  Kuma push and a `registry-gc` healthchecks.io ping, and the `registry-gc` journal
+  (`journalctl -t registry-gc`) shows the mirror phase. A conversion apply leaves the cron
+  file and the script's hash unchanged.
 - **Next-run review:** before moving a new row in, run `--list-tasks` with
   `--tags k8s_host_files` and read the recap of the last apply.

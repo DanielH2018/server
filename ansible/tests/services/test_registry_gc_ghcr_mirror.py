@@ -27,7 +27,7 @@ from lib.proc_testing import fake_bin, path_with, run
 from lib.repo_paths import REPO
 
 KEEP_SET = rendered_shell_function(
-    "k8s", "registry", "registry-gc.sh.j2", "write_mirror_keep_set"
+    "setup", "k8s_host_files", "registry-gc.sh.j2", "write_mirror_keep_set"
 )
 LIVE = "sha256:" + "a" * 64
 PINNED = "sha256:" + "b" * 64
@@ -95,25 +95,31 @@ def test_a_cluster_with_no_digest_writes_no_keep_set(tmp_path):
 
 
 RESTORE = rendered_shell_function(
-    "k8s", "registry", "registry-gc.sh.j2", "restore_mirror_store"
+    "setup", "k8s_host_files", "registry-gc.sh.j2", "restore_mirror_store"
 )
-START = rendered_shell_function("k8s", "registry", "registry-gc.sh.j2", "start_deploy")
-STOP = rendered_shell_function("k8s", "registry", "registry-gc.sh.j2", "stop_deploy")
+START = rendered_shell_function(
+    "setup", "k8s_host_files", "registry-gc.sh.j2", "start_deploy"
+)
+STOP = rendered_shell_function(
+    "setup", "k8s_host_files", "registry-gc.sh.j2", "stop_deploy"
+)
 JOURNAL = rendered_shell_function(
-    "k8s", "registry", "registry-gc.sh.j2", "journal_mirror_prune"
+    "setup", "k8s_host_files", "registry-gc.sh.j2", "journal_mirror_prune"
 )
 REPORT = rendered_shell_function(
-    "k8s", "registry", "registry-gc.sh.j2", "report_mirror_job"
+    "setup", "k8s_host_files", "registry-gc.sh.j2", "report_mirror_job"
 )
 COLLECT_MIRROR = rendered_shell_function(
-    "k8s", "registry", "registry-gc.sh.j2", "collect_mirror_store"
+    "setup", "k8s_host_files", "registry-gc.sh.j2", "collect_mirror_store"
 )
-TAKE_LOCK = rendered_shell_function("k8s", "registry", "registry-gc.sh.j2", "take_lock")
+TAKE_LOCK = rendered_shell_function(
+    "setup", "k8s_host_files", "registry-gc.sh.j2", "take_lock"
+)
 # The script's top-level sequence, everything after take_lock's definition, as cron runs it.
-_SCRIPT = rendered_shell_text("k8s", "registry", "registry-gc.sh.j2")
+_SCRIPT = rendered_shell_text("setup", "k8s_host_files", "registry-gc.sh.j2")
 MAIN = _SCRIPT[_SCRIPT.index("\n}\n", _SCRIPT.index("take_lock() {")) + 3 :]
 STRANDED = rendered_shell_function(
-    "k8s", "registry", "registry-gc.sh.j2", "restore_stranded_mirror"
+    "setup", "k8s_host_files", "registry-gc.sh.j2", "restore_stranded_mirror"
 )
 PRUNED_LINE = f"pruned danielh2018/nut@{LIVE} tags=none"
 
@@ -314,7 +320,7 @@ def test_the_script_and_the_deploy_take_the_same_lock():
     defaults = yaml_fast.safe_load(
         (REPO / "ansible/roles/k8s/registry/defaults/main.yml").read_text()
     )
-    script = rendered_shell_text("k8s", "registry", "registry-gc.sh.j2")
+    script = rendered_shell_text("setup", "k8s_host_files", "registry-gc.sh.j2")
     (task,) = [t for t in load_tasks(TASKS) if t.get("name") == RESTORE_TASK]
 
     assert f"LOCK_FILE={defaults['registry_k8s_gc_lock_file']}\n" in script

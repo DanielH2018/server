@@ -1,12 +1,12 @@
 """Cluster checks for monitor-bridge.
 
 Covers the cAdvisor trio (restarts, OOM, CPU throttle), the Prometheus gates, scrape
-targets, Traefik 5xx and latency, and k3s workload health.
+targets, and Traefik 5xx and latency. The Kubernetes workload arms are the k8s-workloads rules.
 
 Slice 6 of the check.py split. Reads config as `cfg.X`, every query through the `src` argument
-(`bridge.sources.Sources`), its streak counters as `src.state` (`bridge.streaks.State`) and the Loki arm as
-`checks.logs.with_log_errors`, so a test hands in a fake `src` and patches those modules; the verdicts
-it from-imports from verdicts.cluster are patched on THIS module, where they are bound.
+(`bridge.sources.Sources`) and its streak counters as `src.state` (`bridge.streaks.State`), so a
+test hands in a fake `src`; the verdicts it from-imports from verdicts.cluster are patched on THIS
+module, where they are bound.
 Rule and enforcement: bridge/config.py's header.
 """
 
@@ -16,15 +16,9 @@ from bridge.config import Config
 from bridge.sources import Sources
 import bridge.net
 import bridge.streaks
-import checks.cluster_rollout
-import checks.cluster_zero
-import checks.logs
 from verdicts.cluster import (
     traefik_latency_verdict,
     cadvisor_coverage_shortfall,
-    extended_resource_verdict,
-    k8s_workloads_verdict,
-    ksm_resource_label,
     targets_verdict,
 )
 
@@ -374,90 +368,14 @@ def check_traefik_404_flood(cfg: Config, src: Sources) -> tuple[bool, str]:
     )
 
 
-def check_k8s_workloads(cfg: Config, src: Sources) -> tuple[bool, str]:
-    """Deployment readiness for every workload in the k3s cluster.
-
-    In PROM_DEPENDENT: the `prometheus` gate watches the one Prometheus this reads, so an
-    unreachable Prometheus suppresses this check rather than paging it as a workload fault.
-    The check's own series-count floor covers the other half — Prometheus answering while
-    kube-state-metrics goes unscraped — which no reachability gate can see.
-
-    Six queries feed five arms here, all through `src`, so a test that wants one arm states
-    that arm's answer in a `FakeSources` rather than patching a module.
-    """
-    total = src.prom_scalar("count(kube_deployment_status_replicas_unavailable)")
-    offenders = src.prom_vector("kube_deployment_status_replicas_unavailable > 0")
-    # The second clause is the recency gate (K8S_RESTART_RECENT_WINDOW): it keeps a recovered
-    # pod from holding the tile red for the rest of the 1h evidence window. `and` is a vector
-    # match on the full label set, so it filters the first clause's series rather than
-    # replacing them — the offender labels reaching the verdict are unchanged.
-    restart_offenders = src.prom_vector(
-        "increase(kube_pod_container_status_restarts_total[%s]) > %d"
-        " and increase(kube_pod_container_status_restarts_total[%s]) > 0"
-        % (cfg.K8S_RESTART_WINDOW, cfg.K8S_RESTART_MAX, cfg.K8S_RESTART_RECENT_WINDOW),
-    )
-    ds_total = src.prom_scalar("count(kube_daemonset_status_number_unavailable)")
-    ds_offenders = src.prom_vector("kube_daemonset_status_number_unavailable > 0")
-    stalled_offenders, stall_note = checks.cluster_rollout.held_stalled_offenders(
-        cfg,
-        src.state.down_streaks,
-        checks.cluster_rollout.stalled_rollout_offenders(cfg, src),
-    )
-    zero_offenders, zero_note = checks.cluster_zero.held_zero_available_offenders(
-        cfg,
-        src.state.down_streaks,
-        checks.cluster_zero.zero_available_offenders(cfg, src),
-    )
-    offenders, replica_note = checks.cluster_rollout.held_replica_offenders(
-        cfg, src.state.down_streaks, offenders
-    )
-    ok, msg = k8s_workloads_verdict(
-        total,
-        offenders,
-        cfg.K8S_MIN_WORKLOADS,
-        restart_offenders,
-        ds_total,
-        ds_offenders,
-        cfg.K8S_MIN_DAEMONSETS,
-        stalled_offenders,
-        zero_offenders,
-    )
-    # Folded into this monitor rather than given its own: a new Kuma monitor needs a new push
-    # token in SOPS, and this arm answers the same question the DaemonSet arm does — is the
-    # cluster still able to run the workloads that depend on it.
-    advertised = {}
-    for resource in cfg.K8S_EXTENDED_RESOURCES:
-        advertised[resource] = len(
-            src.prom_vector(
-                'kube_node_status_allocatable{resource="%s"} > 0'
-                % ksm_resource_label(resource),
-            )
-        )
-    res_ok, res_msg = extended_resource_verdict(
-        cfg.K8S_EXTENDED_RESOURCES,
-        advertised,
-        src.prom_scalar("count(kube_node_status_allocatable)"),
-    )
-    notes = [n for n in (zero_note, replica_note, stall_note) if n]
-    tail = ", %s" % ", ".join(notes) if notes else ""
-    if not res_ok:
-        # The resource fault wins the message: an unschedulable-by-design cluster is more urgent
-        # than whatever the workload arm has to say, and the workload arm's own text is preserved
-        # after it rather than dropped.
-        return checks.logs.with_log_errors(
-            cfg, src, False, "%s | %s%s" % (res_msg, msg, tail)
-        )
-    return checks.logs.with_log_errors(cfg, src, ok, "%s, %s%s" % (msg, res_msg, tail))
-
-
 def check_cluster_targets(cfg: Config, src: Sources) -> tuple[bool, str]:
     """Scrape targets of the CLUSTER's own Prometheus (the other half of Scrape Targets).
 
     B5 pinned check_targets_down to origin="daniel-server" so it kept meaning exactly what it
     always meant. The cost of that, unpaid until now, is that the cluster's own five targets were
-    watched by nothing: the Prometheus gate probes only reachability, and k8s_workloads reads
-    deployment replicas rather than scrape health. kube-state-metrics failing is covered by
-    accident (its series vanish and the workload check fails closed on the floor), but
+    watched by nothing: the Prometheus gate probes only reachability, and the k8s-workloads rules
+    read deployment replicas rather than scrape health. kube-state-metrics failing is covered by
+    K8sStateSeriesMissing, but
     otel-collector and otel-collector-internal going down was silent — and those two carry the
     only copy of Claude Code's session/token/cost telemetry.
 

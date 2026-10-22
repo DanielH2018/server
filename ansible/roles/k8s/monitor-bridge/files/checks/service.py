@@ -85,7 +85,7 @@ def check_arr_queue(cfg: Config, src: Sources, now=None) -> tuple[bool, str]:
     grace. The *arrs are different in one respect that matters: they are Deployments this same
     bridge watches rolling, so their API refuses connections every time k3s replaces the pod —
     three of this monitor's DOWN episodes over the 30 days to 2026-09-11 were a fetch error
-    co-timed with a `k8s_workloads ... radarr(1)` episode, which is a rollout being reported
+    co-timed with a k3s Workload Health `radarr(1)` episode, which is a rollout being reported
     twice. `ARR_FETCH_CONSECUTIVE` holds `up` through that and pages on a *arr that stays
     unreachable. Do not restore the bubbling convention here without also removing that knob.
 
@@ -345,7 +345,7 @@ def with_ha_ban(cfg: Config, src: Sources, ok: bool, msg: str) -> tuple[bool, st
     """Fold the ip_ban arm into a heartbeat verdict, ban winning the message.
 
     Folded into this monitor rather than given its own for the reason recorded at
-    check_k8s_workloads' extended-resource arm: a new Kuma monitor costs a new push token in
+    with_log_errors: a new Kuma monitor costs a new push token in
     SOPS, and a ban is an HA fault, which is what this monitor already reports.
 
     # DECIDED: fails OPEN on a Loki error instead of adding ha_heartbeat to LOKI_DEPENDENT.

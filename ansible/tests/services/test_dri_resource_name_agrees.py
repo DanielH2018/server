@@ -1,27 +1,20 @@
 #!/usr/bin/env python3
-"""The GPU extended-resource name is written out in four places that must agree.
+"""The GPU extended-resource name is written out in three places that must agree.
 
-`devic.es/dri` is what the dri-device-plugin DaemonSet advertises, what jellyfin and tdarr
-request in their pod specs, and what monitor-bridge watches for deregistration. observability's
-`K8sExtendedResourceMissing` rule watches it too, in the sanitised form kube-state-metrics gives
-the `resource` label, `devic_es_dri`. Those are independent string literals in four roles that
-happen to match.
-
-A single Ansible variable cannot cover all three: monitor-bridge's is a Python default inside a
-container image, reachable only through `K8S_EXTENDED_RESOURCES`, which the env-secret does not
-currently render. So the coupling gets a test instead of a var.
+`devic.es/dri` is what the dri-device-plugin DaemonSet advertises and what jellyfin and tdarr
+request in their pod specs. observability's `K8sExtendedResourceMissing` rule watches it too, in
+the sanitised form kube-state-metrics gives the `resource` label, `devic_es_dri`. Those are
+independent string literals in three roles that happen to match, so the coupling gets a test
+instead of a variable.
 
 What goes wrong without it is quiet in both directions. Rename the plugin's resource and the
 consumers' pods stay Pending with an unschedulable message naming a resource nobody grep'd for.
-Rename it in a consumer only, and monitor-bridge keeps watching the old name — which its own
-extended-resource arm reads as "advertised by no node", the fail-closed page recorded in that
-role's CLAUDE.md as a false alarm.
+Rename it in the rule only, and the rule pages "advertised by no node" on a healthy cluster.
 
 The plugin's and the consumers' names are read from the rendered manifests, not from a role's
 defaults or a template's text. A pod spec that stopped using its `*_dri_resource` variable, or a
 plugin whose `--device` config changed while a comment still said `devic.es/dri`, would both pass
-a source scan. monitor-bridge's name stays a source read, because config.py is not a template, and so does the
-rule's, because the rule file is carried verbatim.
+a source scan. The rule's name stays a source read, because the rule file is carried verbatim.
 
 Run: uv run pytest ansible/tests/services/test_dri_resource_name_agrees.py
 """
@@ -42,7 +35,6 @@ _PLUGIN_ROLE = "dri-device-plugin"
 # allocatable list `devic.es/dri` (kubectl get nodes, 2026-10-01), which is how this was read.
 _PLUGIN_DEFAULT_DOMAIN = "devic.es"
 
-_BRIDGE_CHECK = K8S_ROLES / "monitor-bridge" / "files" / "bridge/config.py"
 _RULES = K8S_ROLES / "observability" / "files" / "rules" / "k8s-workloads.yaml"
 _RULE = "K8sExtendedResourceMissing"
 
@@ -108,34 +100,6 @@ def test_every_consumer_requests_the_same_resource_name():
         f"the GPU consumers disagree on the extended-resource name: {names}. A consumer "
         f"requesting a name no node advertises sits Pending, and the scheduler message is the "
         f"only place the mismatch appears."
-    )
-
-
-def _bridge_watched() -> str:
-    """K8S_EXTENDED_RESOURCES's default, read from monitor-bridge's config.py source.
-
-    config.py is Python shipped as a file, not a template, so the default has no rendered form.
-    The env-secret does not set the variable, so this default is the value the pod runs with.
-    """
-    watched = re.search(
-        r'_env\(\s*"K8S_EXTENDED_RESOURCES"\s*,\s*"([^"]+)"', _BRIDGE_CHECK.read_text()
-    )
-    assert watched, (
-        f"could not find the K8S_EXTENDED_RESOURCES default in {_BRIDGE_CHECK}; if it moved, "
-        f"point this test at the new home rather than deleting it."
-    )
-    return watched.group(1)
-
-
-def test_the_bridge_watches_the_name_the_consumers_request():
-    """monitor-bridge's default must track the consumers, or its extended-resource arm watches a
-    resource nobody advertises and pages fail-closed — indistinguishable from a real wedge."""
-    watched = _bridge_watched()
-    consumer_name = _consumer_name()
-    assert consumer_name in [r.strip() for r in watched.split(",")], (
-        f"monitor-bridge watches {watched!r}, which does not include the "
-        f"{consumer_name!r} the GPU workloads request. Its arm would report that resource as "
-        f"advertised by no node on a perfectly healthy cluster."
     )
 
 
