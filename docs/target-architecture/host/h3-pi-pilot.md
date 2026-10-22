@@ -1962,7 +1962,10 @@ follow-up and H3.8b each publish a new Pi version before H3.9b arms the timer.
       past its limit, `HostUpdateStale` fires for daniel-pi.
 - *Builder.*
     - A missing token makes no request and exits 1.
-    - A cached green verdict makes no second request, and a red one is asked again.
+    - A cached green verdict makes no second request.
+    - A red verdict is asked again, so a re-run that turns it green is built, and a `fail`
+      an older run left in `ci-cache.json` blocks nothing
+      (`ansible/roles/setup/homelab_builder/tests/test_host_package_builder_ci_cache.py`).
     - A tip that does not descend from the last built commit is refused. It exits non-zero
       on the first run that meets that tip, and 0 on a repeat. It writes
       `homelab_builder.prom`, whose unbuilt-since value is then non-zero, with `reason`
