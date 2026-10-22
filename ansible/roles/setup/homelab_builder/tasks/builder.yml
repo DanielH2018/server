@@ -180,7 +180,7 @@
     - homelab-builder.timer
     - homelab-repo-sign.service
   become: true
-  notify: Reload systemd
+  notify: Reload systemd for homelab_builder
 
 - name: Install the builder's failure alert
   tags: [homelab-builder-install]

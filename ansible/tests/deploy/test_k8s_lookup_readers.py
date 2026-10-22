@@ -48,6 +48,19 @@ def test_a_reader_is_found_in_a_fixture_tree(tmp_path):
     )
 
 
+def test_a_lookup_with_keyword_arguments_is_a_reader(tmp_path):
+    """A keyword argument after the path still names the file, so its change reaches the reader."""
+    reader = tmp_path / "ansible" / "roles" / "k8s" / "reader" / "templates"
+    reader.mkdir(parents=True)
+    (reader / "x.yaml.j2").write_text(
+        "data: {{ lookup('file', playbook_dir + '/roles/k8s/flux/defaults/main.yml',"
+        " rstrip=False) }}\n"
+    )
+    assert k8s_lookup_readers(
+        ["ansible/roles/k8s/flux/defaults/main.yml"], tmp_path
+    ) == {"reader"}
+
+
 def test_a_check_table_change_lands_with_the_tile_role():
     tags, source = land_tags.derive([CHECK_TABLE], changed_files=1)
     assert source == "pr"

@@ -53,7 +53,7 @@
     - homelab-repo-sign-alert.service
     - homelab-apt-repo.service
   become: true
-  notify: Reload systemd
+  notify: Reload systemd for homelab_builder
 
 - name: Remove the repository's ufw rules
   tags: [homelab-builder-teardown]

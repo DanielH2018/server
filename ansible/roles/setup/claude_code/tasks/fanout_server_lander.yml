@@ -17,7 +17,7 @@
     - claude-fanout-server-lander.timer
   become: true
   when: claude_code_fanout_server_lander_enabled
-  notify: Reload systemd
+  notify: Reload systemd for claude_code
 
 - name: Install the server-batch lander failure alert
   tags: [claude_code]
@@ -74,7 +74,7 @@
     - claude-fanout-server-lander-alert.service
   become: true
   when: not claude_code_fanout_server_lander_enabled
-  notify: Reload systemd
+  notify: Reload systemd for claude_code
 
 # Each pass writes this gauge (#5671); a disarmed lander must not leave its last reading
 # standing as if it were current.

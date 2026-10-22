@@ -61,6 +61,17 @@ def test_a_template_lookup_into_another_role_is_an_edge(tmp_path):
     assert role_callers(tmp_path) == {"helper": {"reader"}}
 
 
+def test_a_lookup_with_keyword_arguments_is_an_edge(tmp_path):
+    """A keyword argument after the path, such as `rstrip=False`, does not hide the edge."""
+    tasks = tmp_path / "ansible" / "roles" / "k8s" / "reader" / "tasks"
+    tasks.mkdir(parents=True)
+    (tasks / "main.yml").write_text(
+        "x: \"{{ lookup('template', playbook_dir ~ '/roles/k8s/helper/templates/a.j2',"
+        ' rstrip=False) }}"\n'
+    )
+    assert role_callers(tmp_path) == {"helper": {"reader"}}
+
+
 def test_a_role_nothing_includes_or_looks_up_is_not_a_callee(callers):
     """The reject half: a walk matching any `k8s/` string would call sonarr a helper.
 
