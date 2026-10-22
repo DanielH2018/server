@@ -137,6 +137,13 @@ def _answers_help(stdout, path):
     )
 
 
+def _comment_markers_left(stdout, path):
+    """The lines of a shell entry point's `--help` answer that still open with `#`."""
+    if path.suffix != ".sh":
+        return []
+    return [line for line in stdout.splitlines() if line.startswith("#")]
+
+
 def test_the_census_still_finds_the_entry_points_it_is_measured_against():
     missing = MUST_FIND - set(ENTRY_POINTS)
     assert not missing, f"the entry-point census lost {sorted(missing)}"
@@ -175,6 +182,11 @@ def test_the_entry_point_answers_help_with_exit_zero(name):
         f"{name} --help exited 0, but its stdout carries neither its docstring's first line "
         "nor a `usage:` line, so it ran its job instead of answering (#5579). Put "
         f"`lib.cli_help.answer_help` ahead of that work.\nstdout: {r.stdout[-400:]}"
+    )
+    marked = _comment_markers_left(r.stdout, path)
+    assert not marked, (
+        f"{name} --help prints its header with the `#` markers still on: {marked[:3]}. "
+        "Strip them in the awk, as `scripts/validate/vale.sh` does."
     )
 
 
@@ -273,6 +285,11 @@ def test_a_shell_entry_point_answers_with_its_header_comment(tmp_path):
     assert _doc_first_line(script) == "Check the fakes."
     assert _answers_help("Check the fakes.\n\nMore.\n", script)
     assert not _answers_help("4 template(s) checked, 0 failure(s).\n", script)
+    assert _comment_markers_left("Check the fakes.\n\nMore.\n", script) == []
+    assert _comment_markers_left("#\n# Check the fakes.\n", script) == [
+        "#",
+        "# Check the fakes.",
+    ]
 
 
 def test_answer_help_prints_the_doc_and_exits_zero(capsys):
