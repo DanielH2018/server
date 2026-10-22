@@ -25,6 +25,11 @@ status at R, not on either job. The soak's
 added one's `timeout` once Graham's bound is the smaller (`chained_timeout.queueing_s`), so the
 PR that hands the next tags to Flux is the one this turns red.
 
+Inside the weekly reboot's no-promotion window `decide` defers every promotion, so a landing that
+merges as the window opens waits the whole window before any promotion starts (#5457). The cap
+moves by what the window has left, up to the unit's LAND_WINDOW_GRACE, so each lander's grace
+must cover the window, and every bound above LAND_DEADLINE must cover the grace too.
+
 Run: uv run pytest ansible/tests/setup/test_lander_deadlines_cover_the_soak.py
 """
 
@@ -36,8 +41,9 @@ import pytest
 from _setup_render import render_setup_text
 from deploy_tools.bundle_census import published_tags
 from deploy_tools.land_lib import handoff, options, promotion
+from deploy_tools.chained_timeout import VERIFY_CAP_S
 from deploy_tools.land_lib.landing import Landing
-from deploy_tools.promote_lib import wait
+from deploy_tools.promote_lib import reboot_window, wait
 from lib import yaml_fast
 from lib.exit_codes import RENDER_OK
 from lib.repo_paths import REPO
@@ -65,7 +71,8 @@ PIPELINE = ("render", "images", "publish")
 FULL_REBUILD_S = 394
 # Every value that has to move with LAND_DEADLINE, named in the failure.
 CASCADE = (
-    "Raise LAND_DEADLINE in both lander units, then what sits above it: claude-land's "
+    "Raise LAND_DEADLINE or LAND_WINDOW_GRACE in both lander units, then what sits above "
+    "both: claude-land's "
     "TimeoutStartSec and land_lib/handoff.py:START_TIMEOUT_S; renovate-agent-land's "
     "TimeoutStartSec, land_renovate_pr.py:LAND_TIMEOUT_S, and renovate_agent's "
     "bash_timeout_ms, run_timeout_s and unit_timeout"
@@ -110,13 +117,25 @@ def uncounted(pipeline: tuple[str, ...]) -> set[str]:
     return path - set(pipeline)
 
 
-def deadline(lander: str) -> int:
+def unit_env(lander: str, name: str) -> int:
+    """The unit's `Environment=<name>=<seconds>`, or 0 when it sets none."""
     role, template = LANDERS[lander]
     text = render_setup_text(role, template)
-    (value,) = re.findall(
-        rf"^Environment={options.DEADLINE_ENV}=(\d+)$", text, re.MULTILINE
-    )
-    return int(value)
+    found = re.findall(rf"^Environment={name}=(\d+)$", text, re.MULTILINE)
+    assert len(found) <= 1, found
+    return int(found[0]) if found else 0
+
+
+def deadline(lander: str) -> int:
+    value = unit_env(lander, options.DEADLINE_ENV)
+    assert value
+    return value
+
+
+def window_s() -> int:
+    """The longest the reboot window holds a promotion: land-wait's window, at VERIFY_CAP_S."""
+    schedule = reboot_window.read_schedule(REPO)
+    return VERIFY_CAP_S + schedule.recovery_min * 60
 
 
 def shortfall(land_deadline: int, soak: dict) -> float:
@@ -196,3 +215,28 @@ def test_the_pipeline_counts_every_job_publish_waits_on():
 def test_a_pipeline_without_images_leaves_it_out():
     """The red half: the sum before D5.14, `render` and `publish` alone, misses `images`."""
     assert uncounted(("render", "publish")) == {"images"}
+
+
+def grace_shortfall(grace: int) -> int:
+    """How far a LAND_WINDOW_GRACE falls short of the reboot window; <= 0 covers it."""
+    return window_s() - grace
+
+
+@pytest.mark.parametrize("lander", LANDERS)
+def test_each_landers_grace_covers_the_whole_reboot_window(lander):
+    """A landing that merges as the window opens waits it out rather than giving up (#5457).
+
+    Both landers need it. The renovate session's run_timeout_s does not bound a landing: the
+    lander unit runs on after the session ends, so a Saturday landing reaches Sunday's window.
+    """
+    grace = unit_env(lander, options.WINDOW_GRACE_ENV)
+    assert grace_shortfall(grace) <= 0, (
+        f"{lander}'s {options.WINDOW_GRACE_ENV}={grace} is shorter than the reboot "
+        f"window's {window_s()}s, so a Sunday merge reads gave-up while its promotion is "
+        f"only deferred. Raise it, then what sits above it. {CASCADE}"
+    )
+
+
+def test_a_lander_without_a_grace_falls_short_of_the_window():
+    """The red half: both units before #5457 set no grace, which unit_env reads as 0."""
+    assert grace_shortfall(0) > 0

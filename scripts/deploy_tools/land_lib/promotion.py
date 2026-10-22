@@ -246,7 +246,7 @@ def wait_on_promotion(ln: Landing) -> None:
     tags = ",".join([*ln.owned_tags, *forced])
     say(f"waiting until a promotion covers {sha[:12]} ({tags})")
     result = ln.tools.flux.land_wait(
-        sha, published(ln), ln.opts.primary, also, wait_cap(ln)
+        sha, published(ln), ln.opts.primary, also, wait_cap(ln), ln.opts.window_grace
     )
     if result.widened:
         say(f"land-wait waited on every Kustomization: {result.widened}")
