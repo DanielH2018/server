@@ -38,22 +38,52 @@ from diagnostics.probe_lib.health_rollout import seconds_since
 # and `k8s/cronjob-gate` runs under Ansible's escalated connection instead).
 
 
-def latest_owned_job(jobs_doc, cronjob_name):
-    """The most recently created Job owned by `cronjob_name`, or None if it has none.
+# A Flux-owned role's gate Job (#5953). Its `<role>-verify` Kustomization applies it, so it has
+# no `ownerReferences`: `scripts/renderer/renderer_lib/cronjob_gate.py:gate_name` names it
+# `<cronjob>-deploy-gate-<spec digest8>`, and Flux labels it with the Kustomization's name.
+# The exact name pins the CronJob, so a CronJob whose name extends this one's never matches.
+# The label pins the applier: an ownerless Job a person made with that name proves nothing.
+FLUX_OWNER_LABEL = "kustomize.toolkit.fluxcd.io/name"
+_GATE_INFIX = "-deploy-gate-"
+_DIGEST8 = re.compile(r"^[0-9a-f]{8}$")
 
-    `kubectl create job --from=cronjob/<name>` sets a controller `ownerReferences` entry
-    pointing at the CronJob, the same as a scheduled firing does — verified live, see
-    `roles/k8s/cronjob-gate/CLAUDE.md` ("Why a CronJob needs this at all"). So this covers
-    both ways a Job can exist for a CronJob: the schedule firing it itself, and
-    `k8s/cronjob-gate` triggering an out-of-band run at deploy time.
+
+def _is_owned_by(job, cronjob_name):
+    """True when a controller `ownerReferences` entry on `job` names `cronjob_name`."""
+    return any(
+        ref.get("kind") == "CronJob"
+        and ref.get("name") == cronjob_name
+        and ref.get("controller")
+        for ref in (job.get("metadata") or {}).get("ownerReferences") or []
+    )
+
+
+def _is_flux_gate_job(job, cronjob_name):
+    """True when `job` is the gate Job a `-verify` Kustomization applied for `cronjob_name`."""
+    meta = job.get("metadata") or {}
+    prefix = f"{cronjob_name}{_GATE_INFIX}"
+    name = meta.get("name") or ""
+    if not name.startswith(prefix) or not _DIGEST8.match(name[len(prefix) :]):
+        return False
+    applier = (meta.get("labels") or {}).get(FLUX_OWNER_LABEL) or ""
+    return applier.endswith("-verify")
+
+
+def latest_owned_job(jobs_doc, cronjob_name):
+    """The most recently created Job run for `cronjob_name`, or None if it has none.
+
+    Three ways a Job can exist for a CronJob, and this covers all three:
+      - the schedule firing it;
+      - `k8s/cronjob-gate` running `kubectl create job --from=cronjob/<name>` at deploy time,
+        which sets the same controller `ownerReferences` entry a firing does (verified live,
+        see `roles/k8s/cronjob-gate/CLAUDE.md`, "Why a CronJob needs this at all");
+      - a Flux-owned role's `<role>-verify` Kustomization applying its gate Job, which carries
+        no `ownerReferences` (`_is_flux_gate_job`).
     """
     owned = [
         job
         for job in (jobs_doc or {}).get("items") or []
-        for ref in (job.get("metadata") or {}).get("ownerReferences") or []
-        if ref.get("kind") == "CronJob"
-        and ref.get("name") == cronjob_name
-        and ref.get("controller")
+        if _is_owned_by(job, cronjob_name) or _is_flux_gate_job(job, cronjob_name)
     ]
     if not owned:
         return None
@@ -81,8 +111,9 @@ def _job_outcome(job):
     return "running"
 
 
-# `M H * * *` (daily) and `M H * * D` (weekly) are the only two schedule shapes any CronJob in
-# this cluster uses: configarr, pi-peer-backup and all seven Longhorn backup jobs. This is
+# `M H * * *` (daily) and `M H * * D` (weekly) are the schedule shapes this sizes: configarr,
+# pi-peer-backup and all seven Longhorn backup jobs. longhorn-reconcile runs hourly
+# (`17 * * * *`), so it passes only on a gate Job newer than its deploy. This is
 # deliberately not a general cron parser: a schedule outside these two shapes returns None and
 # the caller fails closed rather than guess what "normal interval" means for it.
 _DAILY_SCHEDULE = re.compile(r"^\s*\d+\s+\d+\s+\*\s+\*\s+\*\s*$")
@@ -113,7 +144,8 @@ def format_cronjob_health(name, cronjob, latest_job, pods, deploy_applied_at, no
     The CronJob analog of format_k8s_health: a Deployment role is gated on `rollout status`
     plus a restart check, and a CronJob has no rollout, so this reads the CronJob's most
     recent owned Job instead — the same Job `k8s/cronjob-gate` creates at deploy time
-    (`roles/k8s/cronjob-gate/CLAUDE.md`), or the next scheduled firing if that hasn't landed.
+    (`roles/k8s/cronjob-gate/CLAUDE.md`) or a Flux role's `-verify` Kustomization applies, or
+    the next scheduled firing if that hasn't landed.
 
     Two paths, chosen by comparing `latest_job`'s creation time against `deploy_applied_at`
     (`release_stamp.yml`'s `applied_at` for this service, or None when unreadable):
