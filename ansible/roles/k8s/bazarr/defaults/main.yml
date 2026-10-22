@@ -7,15 +7,17 @@ bazarr_k8s_image: lscr.io/linuxserver/bazarr:v1.6.2-ls367@sha256:c1673816321156b
 # k8s_claims below (hardcoded ReadWriteOnce), so a bad image swap can migrate the database
 # holding subtitle-path state before the gate observes a fault. Same class as sonarr/radarr;
 # the linuxserver -lsNN scheme hides a breaking bump as a routine patch bump.
-# k8s/manifests takes a pre-apply Longhorn snapshot of the claim below and reverts it if the
-# deploy fails, so the migrating-state risk is covered. -lsNN still hides a breaking bump as a
-# patch bump, but a bad swap reverts to the snapshot instead of stranding a live deploy
-# against migrated data.
+# Flux's bazarr-snapshot Job snapshots the claim below before each revision applies. A failed
+# revision that changes bazarr writes the stateful hold without a reset, and the operator
+# reverts the claim through docs/volume-snapshot-drills.md, so a bad swap can be
+# reverted to the snapshot instead of leaving the old image against migrated data. -lsNN still
+# hides a breaking bump as a patch bump.
 k8s_autodeploy: true  # noqa var-naming[no-role-prefix]
-k8s_autodeploy_reason: "migrating state — Recreate + RWO PVC, now protected by the pre-apply Longhorn snapshot and revert; -lsNN versioning still hides a breaking bump as a patch bump. WEIGHED: bazarr also mounts media-data (shared RWX, not reverted); a revert forgets subtitle files it already wrote there, largely self-healing since bazarr checks existence before re-downloading"  # noqa var-naming[no-role-prefix]
-# The pre-apply Longhorn snapshot k8s/manifests takes via k8s/volume-snapshot. Declared
-# regardless of k8s_autodeploy — protects a manual deploy too, and the revert is what this
-# role's auto-deploy depends on.
+k8s_autodeploy_reason: "migrating state — Recreate + RWO PVC, protected by the bazarr-snapshot Job before each revision and an operator revert to it after a failed one; -lsNN versioning still hides a breaking bump as a patch bump. WEIGHED: bazarr also mounts media-data (shared RWX, not reverted); a revert forgets subtitle files it already wrote there, largely self-healing since bazarr checks existence before re-downloading"  # noqa var-naming[no-role-prefix]
+# The claim snapshotted before each revision applies. Under Flux the renderer turns this
+# list into the bazarr-snapshot Kustomization, whose Job snapshots it before bazarr applies
+# (D5.2a). After a handback, k8s/manifests takes the same snapshot through k8s/volume-snapshot.
+# The snapshot is the recovery point this role's auto-deploy depends on.
 k8s_autodeploy_snapshot_pvcs: [bazarr-config]  # noqa var-naming[no-role-prefix]
 # Claims this role MOUNTS but does not revert — the WEIGHED clause in the reason above, stated
 # where a test can read it. media-data is rendered by k8s/media-volume, so no guard that reads
