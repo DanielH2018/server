@@ -77,7 +77,7 @@ def test_a_defined_variable_is_clean(tmp_path, ctx, known):
     tpl.parent.mkdir(parents=True)
     tpl.write_text(
         'secret: "{{ longhorn_b2_key_id }}"\n'  # SOPS registry
-        'runtime: "{{ k3s_coredns_corefile }}"\n'  # set_fact in a setup-plane task
+        'runtime: "{{ sops_setup_key_file }}"\n'  # set_fact in a setup-plane task
         'inventory: "{{ domain }}"\n'  # group_vars/all.yml
         'magic: "{{ inventory_hostname }}"\n'  # Ansible-supplied
         'required: "{{ ups_secondary_push_token | mandatory }}"\n'  # the Ansible filter
@@ -137,7 +137,7 @@ def test_runtime_vars_reads_both_set_fact_spellings():
     by returning a set narrower than the tree, which only a named member catches.
     """
     names = v.runtime_vars()
-    assert "k3s_coredns_corefile" in names  # ansible.builtin.set_fact
+    assert "sops_setup_key_file" in names  # ansible.builtin.set_fact
     assert (
         "common_resolver_nameservers" in names
     )  # ansible.builtin.set_fact, another role

@@ -8,8 +8,8 @@ never fail in, because the printed `--tags` value then leaves the work merged an
 while the operator clears the `manual_plane` marker over it.
 
 `test_the_fact_edge_widens_no_real_setup_role_today` is the census #2384 asked for, and
-`K3S_FACTS` names `setup/k3s`'s two facts beside it — so the day one of them moves to a
-differently tagged file the tree says so rather than the narrowing widening quietly.
+`K3S_FACTS` names `setup/k3s`'s facts beside it, none since H1.7b, so the day one returns the
+tree says so rather than the narrowing widening quietly.
 
 Run: uv run pytest scripts/deploy_tools/tests/test_narrow_setup_facts.py
 """
@@ -99,7 +99,7 @@ def test_changing_the_setter_task_file_names_the_consumers_tag(tree):
 
 
 def test_a_fact_only_a_template_reads_names_that_templates_readers(tree):
-    """The live shape: a fact such as `k3s_coredns_corefile` is set in a task and read elsewhere.
+    """The shape the B2 region had until H1.7b: a fact set in a task and read in a template.
 
     The fact's consumer is `beta.conf.j2`, which `beta.yml` renders, so the walk has to cross
     the template edge to reach a tag rather than stopping at the task files.
