@@ -24,6 +24,7 @@ from secrets_mgmt.cluster_vars_check import (
     is_sops_metadata,
     mac_proxy_problems,
 )
+from secrets_mgmt.pending_retirement import PENDING_RETIREMENT
 
 
 def _no_base(_path):
@@ -175,6 +176,24 @@ def test_a_written_dropped_key_moves_both_mac_lines_and_a_hand_edit_moves_neithe
     written = tree.cluster_file.read_text()
     assert "beta_two=" not in written
     assert mac_proxy_problems("f", written, base, dotenv=True) == []
+
+
+def test_a_write_keeps_a_pending_retirement_key_and_drops_an_ordinary_one(tmp_path):
+    """#5960: `check` exempts `PENDING_RETIREMENT` from "no render references it", so `write`
+    must not unset such a key either, while an unreferenced ordinary key still goes.
+    """
+    pending = sorted(PENDING_RETIREMENT)[0]
+    values = {**VALUES, pending: "fixturependingw5fixturependingw5"}
+    sops_tree = make_sops_tree(tmp_path, values)
+    tree = sops_tree.tree
+    held = replace(EXPECTED, keys=EXPECTED.keys | {pending})
+    assert write(tree, held, run=sops_tree.run) == 0
+    assert pending in dotenv_pairs(sops_tree.decrypt(tree.cluster_file))
+    unreferenced = replace(EXPECTED, keys=EXPECTED.keys - {"beta_two"})
+    assert write(tree, unreferenced, run=sops_tree.run) == 0
+    after = dotenv_pairs(sops_tree.decrypt(tree.cluster_file))
+    assert "beta_two" not in after
+    assert after.get(pending) == "fixturependingw5fixturependingw5"
 
 
 def test_check_through_git_flags_a_hand_edit_and_names_write(sops_tree, capfd):
