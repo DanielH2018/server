@@ -9,16 +9,18 @@ qbittorrent_k8s_wireguard_image: lscr.io/linuxserver/wireguard:latest@sha256:6bc
 qbittorrent_k8s_verify_egress_url: https://api.ipify.org
 
 # Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
-# DENIED for state coupling, not missing recovery. The snapshot and revert machinery work
+# DENIED for state coupling, not missing recovery. The snapshot Job and the revert runbook work
 # fine here; the problem is that the config volume's state is coupled to something a snapshot
 # cannot capture — the data volume (media-data, torrents/ subpath) its bookkeeping references.
 # A revert rewinds in-flight torrent bookkeeping while the data volume does not move, so the
 # two disagree about what is on disk. The WireGuard kill-switch surviving a container restart
 # is a separate live trap that a revert does not clear either; see this role's CLAUDE.md.
 k8s_autodeploy: false  # noqa var-naming[no-role-prefix]
-k8s_autodeploy_reason: "state coupled outside the volume — reverting qbittorrent-config to a snapshot rewinds in-flight torrent bookkeeping while the media-data volume it references does not move; the pre-apply snapshot and revert work fine and are not the blocker"  # noqa var-naming[no-role-prefix]
-# The pre-apply Longhorn snapshot k8s/manifests takes via k8s/volume-snapshot. Declared
-# regardless of k8s_autodeploy — it protects a manual deploy too.
+k8s_autodeploy_reason: "state coupled outside the volume — reverting qbittorrent-config to a snapshot rewinds in-flight torrent bookkeeping while the media-data volume it references does not move; the snapshot Job and the operator revert work fine and are not the blocker"  # noqa var-naming[no-role-prefix]
+# The claim snapshotted before each revision applies. Under Flux the renderer turns this
+# list into the qbittorrent-snapshot Kustomization, whose Job snapshots it before qbittorrent applies
+# (D5.2a). After a handback, k8s/manifests takes the same snapshot through k8s/volume-snapshot.
+# Declared regardless of k8s_autodeploy.
 k8s_autodeploy_snapshot_pvcs: [qbittorrent-config]  # noqa var-naming[no-role-prefix]
 
 # The gate Job Flux runs in `qbittorrent-verify`, copied from the drift check's jobTemplate

@@ -9,7 +9,7 @@ longer exists. `k8s/terraria` is the sibling this role copies.
 - **Applied by:** Flux, through `promote` (`owner: flux`); `deploy.sh` refuses `--tags=valheim`
   with exit 5
 - **Images:** `ghcr.io/community-valheim-tools/valheim-server` (`valheim_k8s_image`),
-  `<k8s_registry_pull_host>/valheim` (`valheim_k8s_mods_image`)
+  `ghcr.io/danielh2018/valheim` (`valheim_k8s_mods_image`)
 - **Route:** none (no `templates/ingressroute.yaml.j2`)
 - **Claims:** `valheim-config` (weekly -> B2 (default target)), `valheim-server` (no backup
   (StorageClass longhorn-nobackup))
@@ -54,12 +54,11 @@ longer exists. `k8s/terraria` is the sibling this role copies.
   Deployment, so a changed value rolls the pod.
 - **Where the tasks went.** `tasks/main.yml` holds two includes, `k8s/image-builder` and
   `k8s/manifests`, and no Flux path runs either. They stay for the handback. The mods build
-  became the `images` job (D5.4), which pushes `ghcr.io/danielh2018/valheim:<content tag>`.
-  The glance reads the defaults, so it still shows `<k8s_registry_pull_host>/valheim`; the
-  renderer rewrites the `mods` initContainer's ref to the GHCR one with
-  `imagePullPolicy: IfNotPresent` (`scripts/renderer/renderer_lib/images.py:ghcr_refs`). The
-  server image is third-party and keeps its own ref. The Kustomization's `wait` replaces the
-  rollout wait.
+  became the `images` job (D5.4), which pushes `ghcr.io/danielh2018/valheim:<content tag>`. The
+  defaults name `<k8s_registry_pull_host>/valheim`; the renderer rewrites the `mods`
+  initContainer's ref to the GHCR one with `imagePullPolicy: IfNotPresent`
+  (`scripts/renderer/renderer_lib/images.py:ghcr_refs`). The server image is third-party and
+  keeps its own ref. The Kustomization's `wait` replaces the rollout wait.
 
 ## Notable
 - **The join password lives in SOPS as `valheim_server_pass`.** The value it replaced was
@@ -115,9 +114,8 @@ it; it is mutually exclusive with `VALHEIM_PLUS`, unused here.
   passes `-modifier portals casual`. A modifier applies at launch and is not written into the
   world, so changing that line and redeploying is the whole procedure, both ways.
 
-`docs/valheim-modding.md` has the two directories the initContainer writes, the
-`PRE_BEPINEX_CONFIG_HOOK` mkdir the mod set depends on, and the three log lines that look
-like success.
+`docs/valheim-modding.md` has the two directories the initContainer writes, why the
+deployment sets no `PRE_BEPINEX_CONFIG_HOOK`, and the three log lines that look like success.
 
 ## Editing
 - Manifests: `templates/*.yaml.j2` · Defaults: `defaults/main.yml`

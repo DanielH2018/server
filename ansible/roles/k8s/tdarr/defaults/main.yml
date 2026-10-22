@@ -38,9 +38,9 @@ tdarr_k8s_rollout_timeout: "{{ manifests_rollout_timeout }}"
 flux_prepull_timeout: 3000s  # noqa var-naming[no-role-prefix]
 
 # Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
-# k8s/manifests takes a pre-apply Longhorn snapshot of both config claims below and reverts
-# them on a failed deploy, and that machinery works here. Auto-deploy stays off for two
-# compounding reasons:
+# Flux's tdarr-snapshot Job snapshots both config claims below before each revision applies,
+# and the operator can revert them after a failed one; that machinery works here. Auto-deploy
+# stays off for two compounding reasons:
 #   1. tdarr also mounts `media-data` (tdarr_k8s_media_claim below) — a shared RWX volume that
 #      is NOT in k8s_autodeploy_snapshot_pvcs and is never reverted — and rewrites library files
 #      on it IN PLACE, replacing the original with the transcode. Reverting the job/library DB
@@ -50,13 +50,16 @@ flux_prepull_timeout: 3000s  # noqa var-naming[no-role-prefix]
 #      its siblings (zigbee2mqtt, livesync, qbittorrent) have for the same "state coupled
 #      outside the volume" reason.
 #   2. It declares two claims (tdarr-configs, tdarr-server) and volume-revert reverts per claim,
-#      so a failed deploy can leave the pair at different points in time.
-# k8s_autodeploy_snapshot_pvcs stays declared below: it still protects a manual deploy.
+#      so a revert can leave the pair at different points in time.
+# k8s_autodeploy_snapshot_pvcs stays declared below: the snapshot Job still runs on every
+# revision.
 k8s_autodeploy: false  # noqa var-naming[no-role-prefix]
 k8s_autodeploy_reason: "state coupled outside the volume — rewrites media-data (shared RWX, not reverted) in place, an irreversible transcode the snapshot/revert can't undo; ALSO non-atomic two-claim revert (tdarr-configs, tdarr-server)"  # noqa var-naming[no-role-prefix]
-# The pre-apply Longhorn snapshot k8s/manifests takes via k8s/volume-snapshot.
+# The claims snapshotted before each revision applies. Under Flux the renderer turns this
+# list into the tdarr-snapshot Kustomization, whose Job snapshots them before tdarr applies
+# (D5.2a). After a handback, k8s/manifests takes the same snapshot through k8s/volume-snapshot.
 # Two claims, two seeds — same pairing as tdarr_k8s_server_claim/tdarr_k8s_configs_claim below.
-# Declared regardless of k8s_autodeploy — protects a manual deploy.
+# Declared regardless of k8s_autodeploy.
 k8s_autodeploy_snapshot_pvcs: [tdarr-configs, tdarr-server]  # noqa var-naming[no-role-prefix]
 
 # ── two config claims, not one ──────────────────────────────────────────────────────────────

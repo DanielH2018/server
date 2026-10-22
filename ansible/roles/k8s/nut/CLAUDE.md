@@ -8,17 +8,17 @@ the pin is physical and never unwinds.
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates, tasks or containers_list entry, or the k3s role's Longhorn tier lists. -->
 - **Applied by:** Flux, through `promote` (`owner: flux`); `deploy.sh` refuses `--tags=nut`
   with exit 5
-- **Image:** `<k8s_registry_pull_host>/nut` (`nut_k8s_image`)
+- **Image:** `ghcr.io/danielh2018/nut` (`nut_k8s_image`)
 - **Route:** none (no `templates/ingressroute.yaml.j2`)
 - **Claims:** none (no PVC)
 <!-- /generated_from -->
 
-- **Flux's render pulls `ghcr.io/danielh2018/nut:<content tag>`**, with
-  `imagePullPolicy: IfNotPresent` (D5.4b). The *Image* line above prints the Ansible default,
-  which names the in-cluster registry. The image is built from `templates/Dockerfile.j2`
-  (debian:bookworm-slim + nut). Config is **not** baked in, because the image is public on
-  GHCR and `upsd.users` carries passwords. It mounts from the `nut-config` Secret, and the
-  entrypoint stages it to `/etc/nut`.
+- **Flux's render pulls `ghcr.io/danielh2018/nut:<content tag>`**, with `imagePullPolicy:
+  IfNotPresent` (D5.4b), and the *Image* line above names that repository. The role's defaults
+  still name the in-cluster registry, for the handback. The image is built from
+  `templates/Dockerfile.j2` (debian:bookworm-slim + nut). Config is **not** baked in, because
+  the image is public on GHCR and `upsd.users` carries passwords. It mounts from the
+  `nut-config` Secret, and the entrypoint stages it to `/etc/nut`.
 - **Pull path:** daniel-server's containerd asks the in-cluster registry's ghcr.io pull-through
   mirror on port 5002 first, through the agent-side `registries.yaml` entry, and then ghcr.io
   itself. Under `IfNotPresent`, a restart on daniel-server uses the image the last rollout

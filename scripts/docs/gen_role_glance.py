@@ -25,7 +25,8 @@ roles:
 
 - a k8s service role (`roles/k8s/<name>/`, every `platform: k8s` entry of the cluster host's
   `containers_list`): the deploy tag (`entry_tags`, the same precedence `deploy.yml` uses),
-  the image REPOSITORIES and the vars that pin them, the route and its auth tier (the same
+  the image REPOSITORIES and the vars that pin them (for an `owner: flux` entry, a built
+  image's GHCR repository, the one Flux's render pulls), the route and its auth tier (the same
   derivation `docs/reference/services.md` prints, so the two cannot disagree), every PVC
   claim by name with its Longhorn backup tier beside it (the catalogue's `backup_tier`
   column, per claim — `catalog_backup.claim_tiers` is the one derivation both print, so a
@@ -76,7 +77,9 @@ only at injection time is absent from most sessions. It would also be absent on 
 an editor, on the MkDocs site and in a PR diff, where a reviewer sees a route or claim move.
 
 STATIC PARSING ONLY, like every generator here: role defaults, tasks and playbooks through
-`yaml.safe_load`, templates through regexes, nothing imported from the deployer. Jinja in a
+`yaml.safe_load`, templates through regexes, nothing imported from the deployer. The one
+renderer module it reads, `renderer_lib/task_inputs.py`, parses the `k8s/image-builder`
+includes from the tasks YAML and evaluates nothing. Jinja in a
 schedule, a `when:` or a timer key is printed as written — an unresolved `{{ var }}` is the
 honest rendering, the same rule `docs/reference/crons.md` follows.
 
@@ -125,6 +128,7 @@ from lib.estate import Estate, role_defaults
 from lib.k8s_roles import tag_owners
 from lib.render_guard import ALL_VARS, entry_tags
 from lib.repo_paths import ANSIBLE, REPO
+from renderer.renderer_lib.task_inputs import image_builder_sites
 
 SELF = "scripts/docs/gen_role_glance.py"
 HEADING = "## At a glance"
@@ -149,6 +153,10 @@ BEGIN_SETUP = begin_marker(
 )
 BEGIN_PI = begin_marker("compose template, tasks or containers_list entry")
 END = "<!-- /generated_from -->"
+# Where promote's `images` job pushes each built image. `renderer_lib/images.py` holds the same
+# prefix, and importing it would pull the whole renderer into this hook's `files` closure, so
+# it is repeated here and `test_gen_role_glance.py` holds the two equal.
+GHCR = "ghcr.io/danielh2018"
 WIDTH = 95
 
 
@@ -184,6 +192,32 @@ def image_vars(
     return found
 
 
+def built_image_names(k8s_roles: Path = K8S_ROLES) -> frozenset[str]:
+    """Every image a role in `k8s_roles` builds, by its `image_builder_name`."""
+    return frozenset(
+        str(site.vars["image_builder_name"])
+        for role in k8s_roles.iterdir()
+        if role.is_dir()
+        for site in image_builder_sites(role)
+        if "image_builder_name" in site.vars
+    )
+
+
+def pulled_repository(ref: str, *, owner: str | None, built: frozenset[str]) -> str:
+    """The repository a render of the role pulls `ref` from.
+
+    `ghcr_refs` moves a flux-owned tag's built-image refs to GHCR in the render, and leaves
+    the role's defaults on the in-cluster registry for the handback (D5.4b). So the defaults
+    name the wrong repository for exactly those refs, and this one swap mirrors the render's.
+    Every other image of a flux-owned role keeps its own host, as it does in the render.
+    """
+    repo = image_repository(ref)
+    host, _, name = repo.partition("/")
+    if owner == "flux" and host == "<k8s_registry_pull_host>" and name in built:
+        return f"{GHCR}/{name}"
+    return repo
+
+
 def glance_lines(
     entry: dict[str, Any],
     role_dir: Path,
@@ -195,13 +229,15 @@ def glance_lines(
     claim_classes: dict[str, str | None] | None = None,
     tiers: LonghornTiers | None = None,
     owner: str | None = None,
+    built: frozenset[str] | None = None,
 ) -> list[str]:
     """The block's bullet lines for one deployed k8s role, unwrapped.
 
     `claim_classes` is `claim_index(k8s_roles)` and `tiers` the Longhorn tier lists, both
     built once by the caller that renders every role; built here for a single-role call,
     whose tier lists derive the R2 set from the repo's `containers_list`. `owner` is the
-    entry's `owner` as `entry_owner` reads it, None for an Ansible-owned entry.
+    entry's `owner` as `entry_owner` reads it, None for an Ansible-owned entry. `built` is
+    `built_image_names(k8s_roles)`, built here when the caller passes none.
     """
     name = entry["name"]
     defaults = role_defaults(role_dir)
@@ -214,7 +250,12 @@ def glance_lines(
     images = image_vars(name, defaults, group_vars)
     if images:
         label = "Image" if len(images) == 1 else "Images"
-        pins = ", ".join(f"`{image_repository(ref)}` (`{var}`)" for var, ref in images)
+        if built is None:
+            built = built_image_names(k8s_roles)
+        pins = ", ".join(
+            f"`{pulled_repository(ref, owner=owner, built=built)}` (`{var}`)"
+            for var, ref in images
+        )
         lines.append(f"- **{label}:** {pins}")
 
     route = k8s_route(entry, k8s_roles, all_vars)
@@ -395,6 +436,7 @@ def stale_k8s_docs(
     owners = tag_owners(
         inventory.host_vars / f"{inventory.plane_hosts.get('k8s', K8S_HOST)}.yml"
     )
+    built = built_image_names(k8s_roles)
     stale: list[str] = []
     for entry in entries.values():
         name = entry["name"]
@@ -410,6 +452,7 @@ def stale_k8s_docs(
                 claim_classes=claim_classes,
                 tiers=tiers,
                 owner=entry_owner(entry, owners),
+                built=built,
             )
         )
         if _refresh(role_dir / "CLAUDE.md", block, write=write):

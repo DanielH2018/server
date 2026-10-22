@@ -9,7 +9,7 @@ replaced the retired Kopia scope for the Pi.
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates, tasks or containers_list entry, or the k3s role's Longhorn tier lists. -->
 - **Applied by:** Flux, through `promote` (`owner: flux`); `deploy.sh` refuses
   `--tags=pi-peer-backup` with exit 5
-- **Image:** `<k8s_registry_pull_host>/pi-peer-backup` (`pi_peer_backup_k8s_image`)
+- **Image:** `ghcr.io/danielh2018/pi-peer-backup` (`pi_peer_backup_k8s_image`)
 - **Route:** none (no `templates/ingressroute.yaml.j2`)
 - **Claim:** `pi-peer-backup-data` (weekly -> B2 (default target))
 <!-- /generated_from -->
@@ -22,9 +22,9 @@ replaced the retired Kopia scope for the Pi.
   private key arrives as the SOPS manifest `pi-peer-backup.ssh-key-secret.sops.yaml`.
 - **Shape:** CronJob 23:00 (America/Chicago), built image (alpine + rsync/ssh/curl + the
   script), any node. The promote workflow's `images` job builds the image and pushes
-  `ghcr.io/danielh2018/pi-peer-backup` under its content tag. The glance reads the defaults, so
-  it still shows `<k8s_registry_pull_host>`; the renderer rewrites the ref to GHCR with
-  `imagePullPolicy: IfNotPresent`. The image is 8.9 MB, so a cold pull is short.
+  `ghcr.io/danielh2018/pi-peer-backup` under its content tag. The defaults name
+  `<k8s_registry_pull_host>`; the renderer rewrites the ref to GHCR with `imagePullPolicy:
+  IfNotPresent`. The image is 8.9 MB, so a cold pull is short.
 - **The Pi half is in the setup plane.** The forced-command wrapper and the authorized public
   key are installed on daniel-pi by `setup/k8s_host_files`
   (`ansible/roles/setup/k8s_host_files/tasks/pi-peer-backup.yml`), which the GitOps tick

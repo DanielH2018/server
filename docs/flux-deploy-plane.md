@@ -1266,8 +1266,10 @@ old pod keeps serving through the pull and the rollout pays only the container s
 - **Kubelet image garbage collection can still remove the image** between the pull and the
   rollout if the node passes its disk high-water mark, which the rollout budget also covers.
 
-code-server and n8n set it, and both are flux-owned, so the bundle holds `code-server-prepull`
-and `n8n-prepull`.
+code-server, n8n, tdarr, uptime-kuma and `crowdsec` set it, and all five are flux-owned, so the
+bundle holds a `<tag>-prepull` Kustomization for each. Docker Hub served a 420 MB layer at
+23.5-53.8 MB/s on 2026-10-22, about 100 times GHCR's rate, so a Docker Hub role's budget is
+minutes where a GHCR role's is most of an hour (#5867).
 
 ### The snapshot Job
 

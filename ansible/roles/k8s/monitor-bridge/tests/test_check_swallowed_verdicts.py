@@ -181,10 +181,10 @@ def test_the_logql_excludes_the_transient_retry_line_at_the_source():
     assert '{job="syslog"}' in checks.logs.SWALLOWED_VERDICTS_LOGQL
 
 
-def test_the_check_is_registered_and_loki_gated():
+def test_the_check_is_registered_and_startup_graced():
     names = {c.name for c in registry.build_checks()}
     assert "swallowed_verdicts" in names
-    assert "swallowed_verdicts" in gates.LOKI_DEPENDENT
+    assert "swallowed_verdicts" in gates.STARTUP_GRACE
 
 
 def test_a_tag_that_pages_its_own_lost_push_through_healthchecks_is_not_counted():
@@ -234,8 +234,8 @@ def _streams(syslog, pod):
 
 
 def test_a_fetch_error_fails_open_and_names_the_owner(cfg):
-    # The Loki gate probes /labels, which stays fast while a range query is what a busy Loki
-    # is slow at, so a raise here would page this tile for a slow Loki, not a lost verdict.
+    # A range query is what a busy Loki is slow at, so a raise here would page this tile
+    # for a slow Loki, not a lost verdict.
     def _raise(*a, **k):
         raise RuntimeError("loki-homelab: timed out")
 
@@ -243,7 +243,7 @@ def test_a_fetch_error_fails_open_and_names_the_owner(cfg):
         cfg, _src(_raise), uptime_s=_unread_clock
     )
     assert ok
-    assert "timed out" in msg and "Loki Reachable" in msg
+    assert "timed out" in msg and "ruler" in msg
 
 
 # pi-peer-backup's CronJob container, the one pusher that is a pod rather than a host cron
@@ -270,16 +270,33 @@ _CROWDSEC_DEPLOYMENT = (
     / "deployment.yaml.j2"
 )
 
+# configarr's and janitorr's health readers, host crons until H2.5b and H2.5c (#5569).
+_HEALTH_CRONJOBS = {
+    name: Path(__file__).resolve().parents[2]
+    / role
+    / "templates"
+    / "health-cronjob.yaml.j2"
+    for role, name in (
+        ("configarr", "configarr-health"),
+        ("janitorr", "janitorr-health"),
+    )
+}
 
-def test_the_pod_logql_names_both_pod_pushers_containers():
+
+def test_the_pod_logql_names_every_pod_pushers_container():
     # The container name is the only thing tying the second selector to that CronJob, so it is
     # read from the template rather than trusted: a rename there would leave the selector
     # matching nothing and the check permanently green for this pusher.
     names = re.findall(r"^\s+- name: (\S+)\n\s+image:", _CRONJOB.read_text(), re.M)
     assert names == ["pi-peer-backup"], names
     assert "- name: crowdsec-jobs\n" in _CROWDSEC_DEPLOYMENT.read_text()
+    for name, template in _HEALTH_CRONJOBS.items():
+        # `containers:` comes after `initContainers:`, so the last named container is the
+        # reader itself rather than its kubectl copier.
+        names = re.findall(r"^\s+- name: (\S+)\n\s+image:", template.read_text(), re.M)
+        assert names == ["kubectl", name], (template, names)
     assert (
-        '{container=~"pi-peer-backup|crowdsec-jobs"}'
+        '{container=~"pi-peer-backup|crowdsec-jobs|configarr-health|janitorr-health"}'
         in checks.logs.SWALLOWED_VERDICTS_POD_LOGQL
     )
     assert '!= "push failed transiently"' in checks.logs.SWALLOWED_VERDICTS_POD_LOGQL
