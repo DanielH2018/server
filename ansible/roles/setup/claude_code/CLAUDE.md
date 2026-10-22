@@ -203,6 +203,9 @@ batch runs as `ubuntu` on `worktree-fanout-<batch>`.
   lands. Neither does a PR touching the landing path's code (`scripts/deploy_tools/`, `scripts/lib/`), the
   fan-out tooling, the deployer, `ansible/vars/`, `.github/`, `.claude/` or this role. Each landing runs from its own `origin/master` worktree under
   `~/.local/state/fanout-server-lander/checkouts/`, never from the primary checkout.
+- **Primary:** the unit's working directory and `--primary` are `claude_code_operator_checkout`,
+  which `ubuntu` owns. They are never `claude_code_rc_workdir`, the agent's clone on daniel-box:
+  git refuses that clone as dubious ownership, and `ubuntu` cannot write to it (#5861).
 - **Mode:** `claude_code_fanout_server_lander_enabled`, true only in daniel-box's host_vars.
   Setting it to false and applying the role stops the timer and removes the units, and every
   server batch stops at its PR again. `fanout.py land-server --dry-run` judges and logs without
