@@ -20,7 +20,6 @@ from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))  # scripts/
 
-from secrets_mgmt.pending_retirement import PENDING_RETIREMENT
 from secrets_mgmt.rotation_tools import REPO
 from lib.ansible_inventory import K8S_HOST, host_vars_file
 from lib.k8s_roles import tag_owners
@@ -184,9 +183,7 @@ def consumer_tags(name: str) -> tuple[str, ...]:
     """
     # Both of these precede the prefix rule below: every token they name also carries the
     # `monitor_bridge_` prefix, so the prefix rule would otherwise claim them first.
-    if name in CROSS_HOST_PUSH_TOKENS or name in PENDING_RETIREMENT:
-        # PENDING_RETIREMENT: the check is deleted and nothing renders the token, so a rotation
-        # has no role to redeploy .
+    if name in CROSS_HOST_PUSH_TOKENS:
         return ()
     elif name == "kuma_status_page_sync_push_token":
         # The one token whose pusher and tile are the SAME role: the status-page-sync CronJob
