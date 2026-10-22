@@ -325,10 +325,16 @@ probe looks each path up in the placeholder render. The census reads the dry run
 render declares. The dry-run body is no use for this, because the dry run skips the cleanup and
 its body still holds every live field. The census prints `removed`, `kept` and `rolls` per
 object, lists `last-applied-configuration` under `removed` as the expected entry, and imports
-the cleanup list, the flattening and the server-default rule from `probe_lib/takeover.py`. It
-exits 1 when the two inputs share no object, or when a dry-run object has no
-`kustomize-controller` Apply entry. Both inputs can hold Secret data, so delete the two files
-after the run.
+the cleanup list, the flattening and the server-default rule from `probe_lib/takeover.py`.
+
+A dry-run object with no `kustomize-controller` Apply entry declares nothing. Upstream MetalLB
+ships its `metallb-webhook-cert` Secret with metadata only, for its controller to fill, and that
+object is the case (#5902). The census prints such an object as `declares nothing`, with each
+manager that owns a live field. It marks a cleaned manager and lists the paths the flip deletes,
+then goes on to the next object. It exits 1 after the full census when a cleaned manager owns
+one of those fields. It also exits 1 when the two inputs share no object, or when no shared
+dry-run object has the Apply entry. Either the dry run did not run as `kustomize-controller`,
+or every object in it declares nothing, and the census cannot tell the two apart. Both inputs can hold Secret data, so delete the two files after the run.
 
 ## Handing a service back
 
