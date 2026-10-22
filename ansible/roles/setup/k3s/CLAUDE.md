@@ -20,11 +20,14 @@ deployer prints this warning beside the command it suggests, from
 **`--tags k3s` never reaches an agent node.** `tasks/agent.yml` runs only from the opt-in join
 plays, so a change it reads, such as `templates/registries.yaml.j2`, also needs
 `uv run ansible-playbook ansible/k3s-bringup.yml -e join_agent=daniel-server --tags k3s_agent`
-before the role's `manual_plane` line is cleared. The deployer prints that command beside the
-whole-role tag for each host in `k3s_agent_hosts` (`ansible/inventory/group_vars/all.yml`), from
-`ansible/roles/setup/gitops_deploy/files/gitops_markers.py:agent_join_cmds`. It records the hosts
-on the line as `agent_hosts`, so the SessionStart banner, `probe.py gitops` and monitor-bridge
-print the same command from the row.
+before the role's `manual_plane` line is cleared. The deployer prints that command for each
+host in `k3s_agent_hosts` (`ansible/inventory/group_vars/all.yml`), from
+`ansible/roles/setup/gitops_deploy/files/gitops_markers.py:agent_join_cmds`. It prints it beside
+the whole-role tag, and for any narrowed row holding `k3s_agent`. `narrow_setup.py` reads the
+join play's `include_role`, so `tasks/agent.yml` alone narrows to `k3s_agent` and prints the join
+with no server command. `templates/registries.yaml.j2` narrows to `k3s_server` plus the join.
+The deployer records the hosts on the line as `agent_hosts`, so the SessionStart banner,
+`probe.py gitops` and monitor-bridge print the same commands from the row.
 
 ## At a glance
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's tasks, timer templates, defaults or playbook entry, or a schedule var in group_vars/all.yml. -->

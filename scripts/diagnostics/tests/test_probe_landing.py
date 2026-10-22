@@ -339,6 +339,28 @@ def test_a_whole_role_k3s_apply_prints_the_agent_join_before_the_clear():
     assert server < agent < clear
 
 
+def test_an_agent_only_k3s_row_prints_the_join_and_no_server_command():
+    """#5628: a row of `k3s_agent` alone needs the join play, never the server play."""
+    lines = _owed_text(
+        {
+            "subject": "k3s",
+            "playbook": "ansible/k3s-bringup.yml",
+            "tags": ["k3s_agent"],
+            "agent_hosts": ["daniel-server"],
+        }
+    ).splitlines()
+    agent = lines.index(
+        "    uv run ansible-playbook ansible/k3s-bringup.yml"
+        " -e join_agent=daniel-server --tags k3s_agent"
+    )
+    clear = next(
+        i for i, line in enumerate(lines) if "clear-owed manual_plane k3s" in line
+    )
+    assert agent < clear
+    assert "  ." not in lines
+    assert not any("k3s-bringup.yml --tags" in line for line in lines), lines
+
+
 def test_a_role_no_playbook_applies_prints_no_playbook_command():
     text = _owed_text({"subject": "common", "playbook": "none"})
     assert "Apply the role by hand." in text

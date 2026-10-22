@@ -485,6 +485,10 @@ def owed_lines(row: dict) -> list[str]:
         if row["agents"]:
             lines.append("  Then join each agent node:")
             lines += [f"    {a}" for a in row["agents"]]
+    elif row["agents"]:
+        # A row reaching only the agent half: the server play would select nothing (#5628).
+        lines.append("  Join each agent node by hand:")
+        lines += [f"    {a}" for a in row["agents"]]
     else:
         lines.append(f"  {row['by_hand'][:1].upper()}{row['by_hand'][1:]}.")
     lines += ["  Then clear its ledger line:", f"    {row['clear']}"]
