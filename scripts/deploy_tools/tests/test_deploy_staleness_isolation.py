@@ -15,6 +15,9 @@ Run: uv run pytest scripts/deploy_tools/tests/test_deploy_staleness_isolation.py
 import ast
 import subprocess
 
+import pytest
+
+from lib.git_testing import commit, init_repo
 from lib.repo_paths import REPO
 
 STALENESS_TESTS = "scripts/deploy_tools/tests/test_deploy_staleness.py"
@@ -73,3 +76,40 @@ def test_every_staleness_main_call_names_its_own_state_dir():
         "while the deployer is parked; pass --state-dir with a tmp_path:\n  "
         + "\n  ".join(offenders)
     )
+
+
+def _synthetic_tree(tmp_path, monkeypatch, *, omit_in: str | None) -> None:
+    """Point the census at a repo whose staleness tests are CALL_FLOOR functions.
+
+    Each function makes one `main([...])` call naming `--state-dir`, except `omit_in`'s.
+    """
+    names = ["test_a_sha_that_is_itself_behind_still_refuses"] + [
+        f"test_case_{i}" for i in range(CALL_FLOOR - 1)
+    ]
+    source = "".join(
+        f"def {name}(clone, state):\n"
+        + (
+            '    main(["--repo", clone, "--no-fetch"])\n'
+            if name == omit_in
+            else '    main(["--repo", clone, "--no-fetch", "--state-dir", state])\n'
+        )
+        for name in names
+    )
+    repo = init_repo(tmp_path / "repo")
+    commit(repo, "staleness tests", **{STALENESS_TESTS: source})
+    monkeypatch.setitem(globals(), "REPO", repo)
+
+
+def test_the_census_flags_a_call_that_omits_the_state_dir(tmp_path, monkeypatch):
+    """The rejecting half: one call without `--state-dir` is named, and only that one."""
+    _synthetic_tree(tmp_path, monkeypatch, omit_in="test_case_3")
+    with pytest.raises(AssertionError) as caught:
+        test_every_staleness_main_call_names_its_own_state_dir()
+    assert "test_case_3 (line" in str(caught.value)
+    assert "test_case_4" not in str(caught.value)
+
+
+def test_the_census_passes_a_tree_where_every_call_names_one(tmp_path, monkeypatch):
+    """The accepting half, over the same synthetic tree with no call left out."""
+    _synthetic_tree(tmp_path, monkeypatch, omit_in=None)
+    test_every_staleness_main_call_names_its_own_state_dir()
