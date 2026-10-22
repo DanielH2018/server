@@ -493,6 +493,6 @@ _MOVED = (
 )
 
 if __name__ == "__main__":
-    answer_help(_MOVED)
+    answer_help(f"{__doc__.strip().splitlines()[0]}\n\n{_MOVED}")
     print(_MOVED, file=sys.stderr)
     sys.exit(USAGE_ERROR)
