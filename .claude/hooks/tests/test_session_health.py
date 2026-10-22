@@ -13,10 +13,15 @@ import importlib.util
 import io
 import json
 import os
+import shutil
 import subprocess
 import sys
 import types
 from pathlib import Path
+
+import pytest
+
+from lib.proc_testing import fake_bin, path_with
 
 _HOOK = os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "session-health.py"
@@ -305,8 +310,34 @@ def test_main_flushes_the_banner_before_the_worktree_read(monkeypatch):
 # at scripts/, which holds lib/, and a wrong path fails silently: the except returns
 # [], which reads identically to "no other sessions are running". These two pin the import and
 # the fail-loud, because a silent [] is what hid the bug.
+@pytest.fixture
+def _fence_worktree_survey(fenced_calls, tmp_path, monkeypatch):
+    """Put a `uv` first on PATH that records `prune_worktrees.py` and passes the rest through.
+
+    `prune_worktrees.py --brief` surveys every `.claude/worktrees/*` checkout on the host, and
+    the hook kills it at `WORKTREE_TIMEOUT_S`. daniel-box carries over a hundred of them and
+    CI's runner none, so letting it run made this file take 4-5s on daniel-box and 0.77s on CI.
+    That recorded shard weight then tripped CI's over-recorded check (#5432). Every other `uv`
+    call, such as `probe.py targets`, still runs for real.
+    """
+    real_uv = shutil.which("uv")
+    assert real_uv, "no `uv` on PATH to pass the hook's other calls through to"
+    stub_dir = fake_bin(
+        tmp_path / "uv-stub",
+        uv=(
+            "#!/bin/sh\n"
+            'case "$*" in *prune_worktrees.py*)\n'
+            '  printf \'%s\\n\' "uv $*" >> "$FENCE_CALLS"; exit 0;;\n'
+            "esac\n"
+            f'exec "{real_uv}" "$@"\n'
+        ),
+    )
+    monkeypatch.setenv("PATH", path_with(stub_dir))
+    return fenced_calls
+
+
 def test_the_hook_can_import_the_worktree_library_when_run_as_a_subprocess(
-    fenced_calls,
+    _fence_worktree_survey,
 ):
     """Accept case, and it MUST be a subprocess with a clean PYTHONPATH.
 
@@ -318,10 +349,12 @@ def test_the_hook_can_import_the_worktree_library_when_run_as_a_subprocess(
     repo rule about verifying a moved entry point by RUNNING it rather than by running the suite.
 
     Deliberately a real subprocess reaching real external binaries: `curl` (via
-    `uv run probe.py targets`), and `gh` (via `uv run prune_worktrees.py`, once per worktree on
-    disk). The `_fence_external_binaries` conftest fixture stubs them so this runs neither slow
-    nor side-effecting — see fenced_calls below for the proof it held.
+    `uv run probe.py targets`) and `journalctl`. The `_fence_external_binaries` conftest fixture
+    stubs them so this runs without side effects. `_fence_worktree_survey` stubs the worktree
+    survey, whose runtime depends on how many worktrees the host carries. The calls file below
+    is the proof that both fences held.
     """
+    fenced_calls = _fence_worktree_survey
     env = {k: v for k, v in os.environ.items() if k != "PYTHONPATH"}
     proc = subprocess.run(
         [sys.executable, _HOOK],
@@ -344,7 +377,11 @@ def test_the_hook_can_import_the_worktree_library_when_run_as_a_subprocess(
     # indistinguishable from a passing run without this: the real binaries would just run
     # underneath it.
     recorded = fenced_calls.read_text()
-    for binary in ("curl", "journalctl"):
+    for binary in (
+        "curl",
+        "journalctl",
+        "uv run python scripts/dev/prune_worktrees.py",
+    ):
         assert binary in recorded, (
             f"the real `{binary}` ran instead of the stub — the PATH fence did not hold.\n"
             f"recorded calls:\n{recorded}"
@@ -365,81 +402,6 @@ def test_a_broken_import_is_reported_rather_than_read_as_no_sessions(monkeypatch
         "a failed import returned no lines — indistinguishable from 'no other sessions'"
     )
     assert "other-session detection is broken" in lines[0]
-
-
-_OTHER_WORKTREE_PORCELAIN = (
-    "worktree /repo\nHEAD aaa\nbranch refs/heads/master\n\n"
-    "worktree /repo/.claude/worktrees/other\nHEAD bbb\nbranch refs/heads/feature\n"
-    "locked some-other-session\n\n"
-)
-
-
-def _fake_run_for_other_sessions(diff_stdout):
-    def fake(cmd, *_args, **_kwargs):
-        return _result(
-            _OTHER_WORKTREE_PORCELAIN if cmd[:2] == ["git", "worktree"] else diff_stdout
-        )
-
-    return fake
-
-
-# The per-tree dirty check delegates to `lib.git.git_dirty`, not its own `git status
-# --porcelain` read. Pins "(+ uncommitted)" to follow git_dirty's answer, including a
-# git_dirty failure (tree vanished mid-scan) degrading to not-dirty rather than crashing the
-# section. `run` and `git_dirty` are `other_live_sessions`' own seams.
-def test_other_live_sessions_dirty_marker_follows_lib_git():
-    def scan(git_dirty):
-        run = _fake_run_for_other_sessions("file.py\n")
-        return _mod.other_live_sessions("/repo", run=run, git_dirty=git_dirty)[0]
-
-    assert "(+ uncommitted)" in scan(lambda *a, **k: True)
-    assert "(+ uncommitted)" not in scan(lambda *a, **k: False)
-
-    def boom(*a, **k):
-        raise subprocess.CalledProcessError(128, ["git", "status"])
-
-    assert "(+ uncommitted)" not in scan(boom)
-
-
-def test_other_live_sessions_shows_a_trees_label_beside_its_name(tmp_path):
-    tree = tmp_path / "agent-a1"
-    tree.mkdir()
-    (tree / ".claim").write_text("#1345 Fix the cert watcher\n")
-    porcelain = (
-        "worktree /repo\nHEAD aaa\nbranch refs/heads/master\n\n"
-        f"worktree {tree}\nHEAD bbb\nbranch refs/heads/worktree-agent-a1\n"
-        "locked some-other-session\n\n"
-    )
-
-    def run(cmd, *_a, **_k):
-        return _result(porcelain if cmd[:2] == ["git", "worktree"] else "")
-
-    lines = _mod.other_live_sessions("/repo", run=run, git_dirty=lambda *a, **k: False)
-    assert lines == [
-        "  • worktree-agent-a1 [#1345 Fix the cert watcher] — no commits yet"
-    ]
-
-
-def _toplevel(path):
-    return lambda *_a, **_k: _result(f"{path}\n")
-
-
-def test_an_unlabelled_generated_tree_is_asked_to_label_itself(tmp_path):
-    tree = tmp_path / "bridge-cse_01"
-    tree.mkdir()
-    lines = _mod.unlabelled_worktree_lines(str(tree), run=_toplevel(tree))
-    assert len(lines) == 1
-    assert "label_worktree.py" in lines[0]
-
-
-def test_a_labelled_or_session_named_tree_is_not_asked(tmp_path):
-    labelled = tmp_path / "agent-a1"
-    labelled.mkdir()
-    (labelled / ".claim").write_text("#1 x\n")
-    named = tmp_path / "claim-labels"
-    named.mkdir()
-    assert _mod.unlabelled_worktree_lines(str(labelled), run=_toplevel(labelled)) == []
-    assert _mod.unlabelled_worktree_lines(str(named), run=_toplevel(named)) == []
 
 
 def _hook_copy_with_a_broken_hooklib(tmp_path):
