@@ -453,7 +453,7 @@ def test_an_armed_role_renders_nothing_outside_the_prune_namespace() -> None:
         offenders += [
             (role, name, *found) for found in _foreign_namespaces(text, armed[role])
         ]
-    assert set(DEFERRED_FILES) | {"dri-device-plugin"} <= checked
+    assert (set(DEFERRED_FILES) - _OWNED) | {"dri-device-plugin"} <= checked
     assert not offenders, (
         f"armed roles render documents outside their prune namespace: {offenders}. The armed "
         "apply passes `-n <manifests_prune_namespace>`, so kubectl refuses the whole directory. "

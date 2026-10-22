@@ -1,13 +1,12 @@
 {#
-  `roll_one.yml`'s sibling check as a pre-apply Job, INERT until pihole's flip (#5695). Nothing
-  renders `templates/guard-inert/`.
+  The sibling check `roll_one.yml` made before it restarted a Pi-hole, as a pre-apply Job (#5695).
 
   The operator's ruling on #5695 puts this Job in `pihole`'s dependsOn chain, the way a
   `<tag>-snapshot` Job sits in front of its tag: while it fails, Flux holds `pihole`, and
-  instance 1 keeps serving at its old revision. The flip PR moves this directory to
-  `templates/precheck/`, the role-owned kind that renders into `pihole-precheck`, which
-  `pihole` depends on (#5719). `templates/verify/` would be the wrong place: it renders into
-  `<tag>-verify`, which runs after `pihole-deferred` and so guards nothing. The guard runs in
+  instance 1 keeps serving at its old revision. This directory is the role-owned kind that
+  renders into `pihole-precheck`, which `pihole` depends on (#5719). `templates/verify/` would
+  be the wrong place: it renders into `<tag>-verify`, which runs after `pihole-deferred` and so
+  guards nothing. The guard runs in
   `homelab`, which no tag creates: `deploy.yml`'s pre-task applies it, and `homelab-namespace`
   owns it once that kind joins `SHARED_KINDS`. So the kind needs no namespace edge.
 
@@ -22,7 +21,15 @@
   instance 1's sibling check before `apply_instance_2.yml` runs. The cost is a down pihole-2
   that a later revision rolling instance 1 would fix: that revision cannot reach pihole-2 while
   the guard fails, and deleting the failed Job does not help, because Flux recreates it under
-  the same name. No break-glass exists under Flux yet; #5740 asks the flip for one.
+  the same name.
+
+  DECIDED: the break-glass is a role default, `pihole_k8s_sibling_guard` (#5740). Set to `false`
+  in a PR, it renders no ConfigMap and no Job here, and Flux prunes the failed Job. The RBAC
+  beside this file still renders, so the restore revision changes nothing but the Job. The
+  restore sets the default back to `true` in a second PR, after pihole-2 is Ready; the Job
+  then runs again and passes. A default rather than an `-e` because Flux takes no `-e`. The
+  cost is that two PRs bracket the bypass, which is the point: the guard is never off by
+  accident, and the git history records when it was.
   `backoffLimit: 0` keeps a failed check failed, and the 300s wait inside the Job covers a
   pihole-2 restart that is already under way. Instance 1 keeps serving through the hold.
 
@@ -32,8 +39,8 @@
   that template reads. So the guard runs on every revision that rolls instance 1, and a guard
   that kept its name would satisfy `dependsOn` with the previous revision's pass. A revision
   that changes only `deployment-2.yaml.j2` keeps the name, so a fix to a down pihole-2 is not
-  held by the pihole-2 it fixes; `tasks/main.yml` skips instance 1's sibling check for that
-  change too. The two rendered manifests are hashed parsed, so a YAML-comment edit, which
+  held by the pihole-2 it fixes, as `roll_one.yml` skipped instance 1's sibling check for that
+  change. The two rendered manifests are hashed parsed, so a YAML-comment edit, which
   rolls nothing, renames nothing. This is not the gravity Job's digest, which also reads
   instance 2's Deployment because the reconcile must follow either roll.
 
@@ -124,6 +131,7 @@ template:
           name: {{ configmap_name }}
 {% endset %}
 {% set spec = spec_text | from_yaml %}
+{% if pihole_k8s_sibling_guard | bool %}
 ---
 apiVersion: v1
 kind: ConfigMap
@@ -145,3 +153,4 @@ metadata:
     homelab/job-kind: precheck
 spec:
 {{ spec_text | indent(2, true) }}
+{% endif %}

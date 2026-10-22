@@ -111,6 +111,26 @@ def test_the_live_qbittorrent_kustomization_renders_decryption(tmp_path):
     assert "decryption" not in docs["qbittorrent-verify"]["spec"]
 
 
+def test_the_live_authelia_kustomization_renders_decryption(tmp_path):
+    """The named member D5's authelia flip requires: its Kustomization decrypts its entry.
+
+    Rendered with the live inventory's ownership, so the tag publishes a Kustomization only
+    once authelia carries `owner: flux`. `bundle.py` adds `decryption` to it because the role
+    lists `render_sops_manifests`, and the OIDC signing key reaches the cluster through it.
+    """
+    out = tmp_path / "out"
+    assert homelab_render.cluster(out, ["authelia"], None) == 0
+    entry, _key = ENTRIES["authelia"]
+    sops_copy = f"authelia.{entry.removesuffix('.yaml')}.sops.yaml"
+    assert (out / "cluster" / "authelia" / sops_copy).is_file()
+    flux = out / "flux" / "authelia.yaml"
+    docs = {d["metadata"]["name"]: d for d in yaml_fast.safe_load_all(flux.read_text())}
+    assert docs["authelia"]["spec"]["decryption"] == {
+        "provider": "sops",
+        "secretRef": {"name": "sops-age"},
+    }
+
+
 def test_an_entry_of_one_secret_of_a_sops_manifest_key_is_clean():
     assert GA in SOPS_MANIFEST_KEYS
     assert _check({"a-secret.yaml": _secret(GA)}) == []

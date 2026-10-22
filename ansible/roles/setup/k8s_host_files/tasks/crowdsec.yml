@@ -5,7 +5,7 @@
 # The evidence half of crowdsec's off-cluster verify (D5, *crowdsec's verify from outside the
 # cluster*): a timer on daniel-pi probes the edge VIP every minute and appends the HTTP status
 # to a file the Pi's Alloy counts by status. The `crowdsec-verify` Job that bans the Pi and
-# reads the count is inert until crowdsec's flip (roles/k8s/crowdsec/templates/verify-inert/).
+# reads the count is `templates/verify/` in crowdsec's role (D5, crowdsec's own window).
 # The playbook entry is gated to daniel-box, so every task runs on the Pi through
 # `delegate_to`, as pi-peer-backup's block does.
 - name: Install crowdsec's edge probe timer on daniel-pi

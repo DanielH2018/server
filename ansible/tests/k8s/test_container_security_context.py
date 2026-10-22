@@ -289,7 +289,6 @@ _UNMEASURED_SHORT_LIVED = {
     # The LAPI startup gate: a `nc` retry loop from the crowdsec image, whose default user is root — the same
     # image whose node-agent is allowlisted above under _HOST_OR_NETWORK_ROOT.
     ("crowdsec", "wait-for-lapi"),
-    ("headlamp", "probe"),
     ("homepage", "seed-config"),
     ("livesync", "seed-config"),
     ("n8n", "wait-for-broker"),

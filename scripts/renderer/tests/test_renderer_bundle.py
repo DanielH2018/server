@@ -222,10 +222,8 @@ def test_a_role_render_of_a_tag_flux_does_not_own_writes_no_bundle_is_clean(tmp_
     out = tmp_path / "out"
     assert homelab_render.cluster(out, ["pihole"], None, flux_owned=set) == RENDER_OK
     assert sorted(p.name for p in out.iterdir()) == ["cluster"]
-    assert sorted(p.name for p in (out / "cluster").iterdir()) == [
-        "pihole",
-        "pihole-deferred",
-    ]
+    names = ["pihole", "pihole-deferred", "pihole-precheck", "pihole-verify"]
+    assert sorted(p.name for p in (out / "cluster").iterdir()) == names
 
 
 def test_a_flux_owned_tag_that_defers_files_publishes_both_kustomizations(
@@ -241,7 +239,8 @@ def test_a_flux_owned_tag_that_defers_files_publishes_both_kustomizations(
     )
     assert code == RENDER_OK
     docs = yaml_fast.safe_load_all((out / "flux" / "pihole.yaml").read_text())
-    assert [d["metadata"]["name"] for d in docs] == ["pihole", "pihole-deferred"]
+    names = ["pihole", "pihole-deferred", "pihole-precheck", "pihole-verify"]
+    assert [d["metadata"]["name"] for d in docs] == names
 
 
 BASE = {

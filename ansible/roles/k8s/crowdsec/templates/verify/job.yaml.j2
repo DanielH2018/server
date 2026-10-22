@@ -1,14 +1,12 @@
 {#
-  crowdsec's verify Job and the ConfigMap that carries its script, INERT until crowdsec's flip.
+  crowdsec's verify Job and the ConfigMap that carries its script.
 
-  This directory is `verify-inert/`, which neither reader globs: the manifests role takes only
-  top-level `templates/*.yaml.j2`, and `verify_files` takes only `templates/verify/*.yaml.j2`.
-  crowdsec's flip PR moves the directory to `templates/verify/`, and the renderer then emits it
-  into `crowdsec-verify` (D5, *A verify conversion lands as inert code*). The renderer passes
+  This directory is `verify/`, which the renderer emits into `crowdsec-verify` once the
+  `crowdsec` Kustomization reads Ready (D5, *`<tag>-verify`*). The renderer passes
   `flux_job_image` and `flux_job_connect`, the helper's text, to every `templates/verify/` file
   (`render_tag`).
 
-  The Job runs `files/crowdsec_verify.py`, the successor of `tasks/verify.yml`'s gate, with no
+  The Job runs `files/crowdsec_verify.py`, the successor of the ban-and-lift gate, with no
   `pods/exec` grant: it bans daniel-pi through LAPI's machine API, reads the edge's answers to
   the Pi's probe from Prometheus, and lifts the ban in every exit path. The script's docstring
   says how each hop moved, and why the bouncer-pull hop has no Job form. Both names end in a
@@ -19,13 +17,13 @@
   `crowdsec-jobs` ConfigMap, the `crowdsec-config`, `crowdsec-env` and `crowdsec-jobs` Secret
   templates with every file `crowdsec-config` embeds, and the `cluster-vars.source` digest of
   each key those Secrets read. So every change that rolls the pod renames the Job, and Flux runs
-  it again, as Ansible runs `verify.yml` on every deploy. The node-agent DaemonSet is a restart
+  it again, as Ansible ran the gate on every deploy. The node-agent DaemonSet is a restart
   target too, but the Job tests the LAPI and the edge, not the agents, so its inputs stay out.
   `tests/test_crowdsec_verify.py` fails if a ConfigMap or Secret the pod names drops out.
 
   The `lapi-register` initContainer on the crowdsec pod registers the `crowdsec-verify`
-  machine this Job logs in as. The flip PR states the hop-2 trade: the gate's `last_pull`
-  wait has no Job form, so a missing 403 no longer says which of its two causes happened.
+  machine this Job logs in as. The gate's `last_pull` wait (hop 2) has no Job form, so a
+  missing 403 no longer says which of its two causes happened.
 
   The caller census (D5, *A fence admits every Job that dials through it*). The pod is
   `app: crowdsec-verify` in `k8s_namespace`. It execs into nothing and dials:

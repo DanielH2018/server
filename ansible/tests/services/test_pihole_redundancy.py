@@ -1,6 +1,9 @@
 """LAN DNS survives a Pi-hole deploy only while four properties hold.
 
-Each of them fails green — the deploy succeeds and DNS goes down anyway:
+Each of them fails green — the deploy succeeds and DNS goes down anyway. Under Flux the order
+of the two rolls is Kustomization order (`pihole-deferred` depends on `pihole`), which
+ansible/roles/k8s/pihole/tests/test_pihole_gravity.py checks, and the sibling guard holds
+`pihole` while pihole-2 serves nothing (test_pihole_precheck.py):
 
   * one instance instead of two: the Service has a single backend and its Recreate gap is
     a LAN-wide DNS outage;
@@ -19,17 +22,12 @@ Each of them fails green — the deploy succeeds and DNS goes down anyway:
 """
 
 from lib.k8s_roles import resolved_manifest_files
-from lib import yaml_fast
 
 from _k8s_render import rendered_docs
 from _helpers import REPO as _REPO
 from _helpers import load_tasks, render_expr, task_named
-from _helpers import walk_tasks as _flatten_tasks
 
 
-_TASKS = _REPO / "ansible/roles/k8s/pihole/tasks/main.yml"
-_ROLL_ONE = _REPO / "ansible/roles/k8s/pihole/tasks/roll_one.yml"
-_APPLY_INSTANCE_2 = _REPO / "ansible/roles/k8s/pihole/tasks/apply_instance_2.yml"
 _MANIFESTS_TASKS = _REPO / "ansible/roles/k8s/manifests/tasks"
 
 INSTANCES = {"pihole", "pihole-2"}
@@ -98,12 +96,12 @@ def test_both_instances_pin_to_the_announcing_node():
 
 
 def test_pod_template_carries_a_per_instance_label():
-    """The pod-only `instance` label is what lets a task address one instance's pod.
+    """The pod-only `instance` label is what lets a Service address one instance's pod.
 
     `kubectl exec deploy/<name>` resolves through spec.selector, which is `app: pihole` on both
     Deployments and can't carry a per-instance value (selector is immutable). The `instance` label
-    is what lets tasks/main.yml and roll_one.yml address a specific instance's pod instead of
-    whichever one the shared selector happens to pick.
+    is what lets a Service or a probe address a specific instance's pod instead of whichever one
+    the shared selector happens to pick.
     """
     for name, dep in _pihole_deployments().items():
         assert dep["spec"]["template"]["metadata"]["labels"].get("instance") == name, (
@@ -137,114 +135,6 @@ def test_only_the_web_service_is_pinned_to_one_instance():
     assert "instance" not in services["pihole-dns"]["spec"]["selector"], (
         "the DNS Service must stay selecting both instances — pinning it defeats the "
         "redundancy this plan exists to add"
-    )
-
-
-def _roll_one_tasks() -> list[dict]:
-    return list(_flatten_tasks(yaml_fast.safe_load(_ROLL_ONE.read_text())))
-
-
-def test_the_shared_role_does_not_restart_pihole():
-    """`manifests_rollout: ''` is what stops both instances restarting together."""
-    for task in load_tasks(_TASKS):
-        if task.get("ansible.builtin.include_role", {}).get("name") == "k8s/manifests":
-            vars_ = task.get("vars", {})
-            assert vars_.get("manifests_rollout") == "", (
-                "pihole must set manifests_rollout: '' — otherwise the shared role restarts "
-                "both instances back to back and defers waiting to the end-of-batch drain"
-            )
-            assert not vars_.get("manifests_extra_rollouts"), (
-                "extra rollouts restart in a batch too; use the sequenced roll_one.yml instead"
-            )
-            return
-    raise AssertionError("pihole no longer includes k8s/manifests")
-
-
-def test_the_rollout_is_sequenced_per_instance():
-    included = [
-        task
-        for task in load_tasks(_TASKS)
-        if str(task.get("ansible.builtin.include_tasks", "")).endswith("roll_one.yml")
-    ]
-    assert included, "no per-instance roll_one.yml include — restarts are not sequenced"
-    looped = included[0].get("loop")
-    assert looped is not None, "the roll_one.yml include has no loop"
-    assert set(looped) == INSTANCES, (
-        f"roll_one.yml must cover both instances, got {looped}"
-    )
-
-
-def test_roll_one_restarts_then_waits_for_the_same_instance():
-    """Deleting the `rollout status` wait from roll_one.yml — the one line that makes the
-    restarts sequential rather than concurrent — must fail this test even though every other
-    guard in this file still passes."""
-    tasks = _roll_one_tasks()
-
-    def _cmd(task: dict) -> str:
-        return str(task.get("ansible.builtin.command", {}).get("cmd", ""))
-
-    restart_idx = next(
-        (i for i, t in enumerate(tasks) if "rollout restart" in _cmd(t)), None
-    )
-    status_idx = next(
-        (i for i, t in enumerate(tasks) if "rollout status" in _cmd(t)), None
-    )
-    assert restart_idx is not None, "roll_one.yml is missing the rollout restart"
-    assert status_idx is not None, "roll_one.yml is missing the rollout status wait"
-    assert restart_idx < status_idx, "the wait must come after the restart"
-    for idx in (restart_idx, status_idx):
-        assert "pihole_instance" in _cmd(tasks[idx]), (
-            "the restart and wait must target pihole_instance, not a hardcoded name"
-        )
-
-
-def test_roll_one_checks_sibling_readiness_before_restarting():
-    """Restarting an instance with no ready sibling is a LAN-wide DNS outage (both
-    Deployments use Recreate on a single-writer volume). Matching on `pihole_sibling_instance`
-    specifically (not just any `instance=`) rules out a spurious pass where the check names
-    the very instance about to be restarted instead of its sibling — that would check nothing.
-    Requiring it to precede the restart also rules out a check that runs too late to matter."""
-    tasks = _roll_one_tasks()
-
-    def _cmd(task: dict) -> str:
-        return str(task.get("ansible.builtin.command", {}).get("cmd", ""))
-
-    ready_idx = next(
-        (
-            i
-            for i, t in enumerate(tasks)
-            if "pihole_sibling_instance" in _cmd(t) and "condition=Ready" in _cmd(t)
-        ),
-        None,
-    )
-    # The wait is only a gate while its timeout still fails the play: `command` fails on
-    # rc != 0 unless something swallows it, and an unbounded wait never returns rc != 0.
-    if ready_idx is not None:
-        assert "--timeout=" in _cmd(tasks[ready_idx]) and not tasks[ready_idx].get(
-            "ignore_errors"
-        ), "the sibling-readiness wait must time out loudly, or it gates nothing"
-    restart_idx = next(
-        (i for i, t in enumerate(tasks) if "rollout restart" in _cmd(t)), None
-    )
-    assert ready_idx is not None, (
-        "roll_one.yml must verify pihole_sibling_instance is ready before restarting — "
-        "otherwise the first deploy (or a week-stale sibling) is a full DNS outage"
-    )
-    assert restart_idx is not None, "roll_one.yml is missing the rollout restart"
-    assert ready_idx < restart_idx, (
-        "the sibling-readiness check must run before the restart, not after — checking "
-        "afterwards can no longer prevent the outage it exists to catch"
-    )
-
-
-def test_roll_one_skips_an_instance_this_run_just_created():
-    assert any(
-        "created" in str(t.get("when", ""))
-        and "manifests_apply" in str(t.get("when", ""))
-        for t in yaml_fast.safe_load(_ROLL_ONE.read_text())
-    ), (
-        "roll_one.yml must skip the restart+wait for a Deployment this run just created — "
-        "restarting it races the initial rollout"
     )
 
 
@@ -285,99 +175,6 @@ def test_the_shared_apply_carries_instance_one_only():
     assert "deployment-2.yaml" not in files, (
         "instance 2 must not be staged in the directory the shared role applies — "
         "`kubectl apply -f <dir>/` would roll both instances in one request again"
-    )
-
-
-def test_instance_two_is_staged_outside_the_pruned_directory():
-    """Its own directory, not a subdirectory of the one the shared prune owns.
-
-    The shared role deletes every file in `<root>/pihole/` that `manifests_files` does not name
-    and applies that directory in one request, so staging instance 2 there would reproduce the
-    simultaneous-apply outage plus a permanently `changed` prune item. The render is the shared
-    role's, through `manifests_deferred_files`, so this reads the directory the shared role derives from pihole's
-    `manifests_deferred_dir_name` rather than a fact pihole sets itself — and the apply has to
-    read the same fact, or it would apply a directory the deploy never writes.
-    """
-    declared = next(
-        task["vars"]
-        for task in load_tasks(_TASKS)
-        if task.get("ansible.builtin.include_role", {}).get("name") == "k8s/manifests"
-    )
-    assert declared["manifests_deferred_files"] == ["deployment-2.yaml"], declared
-    dir_name = declared["manifests_deferred_dir_name"]
-
-    select = task_named(
-        load_tasks(_MANIFESTS_TASKS / "main.yml"),
-        "Select the deferred render directory",
-    )
-    staged = render_expr(
-        select["ansible.builtin.set_fact"]["manifests_deferred_dir"],
-        k8s_dry_run=False,
-        manifests_dest_dir=f"{MANIFEST_ROOT}/pihole",
-        manifests_deferred_dir_name=dir_name,
-    ).strip()
-    assert staged.startswith(MANIFEST_ROOT + "/"), staged
-    assert staged != f"{MANIFEST_ROOT}/pihole", staged
-    assert not staged.startswith(f"{MANIFEST_ROOT}/pihole/"), staged
-
-    apply_cmd = str(
-        task_named(load_tasks(_APPLY_INSTANCE_2), "Apply pihole-2's Deployment")[
-            "ansible.builtin.command"
-        ]["cmd"]
-    )
-    assert "manifests_deferred_dir" in apply_cmd, apply_cmd
-
-
-def test_the_deferred_render_is_what_triggers_instance_twos_apply():
-    """A change to `deployment-2.yaml.j2` alone moves none of the shared role's three restart
-    facts — it renders into another directory, so `manifests_render` never sees it. Without the
-    fourth trigger the apply that carries instance 2 would simply not run, and the deploy would
-    report success having shipped nothing."""
-    when = str(task_named(load_tasks(_TASKS), "Roll the Pi-hole instances")["when"])
-    assert "manifests_deferred_render" in when, when
-    assert "pihole_k8s_instance_2_render" not in when, (
-        "the role no longer renders instance 2 itself; reading its own stale register would "
-        "leave a deployment-2.yaml.j2 change undeployed"
-    )
-
-
-def test_a_deferred_only_change_rolls_instance_two_alone():
-    """A `deployment-2.yaml.j2` change moves instance 2's manifests only, so the fourth trigger
-    must fire the `pihole-2` iteration and skip `pihole`. The include's `when` is
-    evaluated per loop item, so this renders every clause once per instance."""
-    task = task_named(load_tasks(_TASKS), "Roll the Pi-hole instances")
-    unchanged = {"changed": False}
-    context = {
-        "k8s_no_mutate": False,
-        "manifests_render": unchanged,
-        "manifests_apply": unchanged,
-        "manifests_secret_render": unchanged,
-        "manifests_image_changed": False,
-        "manifests_deferred_render": {"changed": True},
-    }
-
-    def fires(instance: str, **overrides) -> bool:
-        ctx = {**context, **overrides, "pihole_instance": instance}
-        return all(
-            render_expr("{{ " + clause + " }}", **ctx) for clause in task["when"]
-        )
-
-    assert task["loop_control"]["loop_var"] == "pihole_instance"
-    assert fires("pihole-2"), "a deferred-only change must still roll instance 2"
-    assert not fires("pihole"), "a deferred-only change must not restart instance 1"
-    # Control: a change the shared apply carries still rolls both.
-    changed = {
-        "manifests_render": {"changed": True},
-        "manifests_apply": {"changed": True},
-    }
-    assert fires("pihole", **changed)
-    assert fires("pihole-2", **changed)
-    # Reject: moved bytes with an unchanged shared apply is a comment-only edit.
-    assert not fires("pihole", manifests_render={"changed": True})
-    assert not fires(
-        "pihole-2",
-        manifests_render={"changed": True},
-        manifests_deferred_render={"changed": False},
     )
 
 
@@ -423,51 +220,3 @@ def test_instance_twos_bytes_reach_the_release_digest():
         manifests_release_deferred_stat={"results": []},
         manifests_deferred_dir_name="",
     ) == {"deployment.yaml": "cafe"}
-
-
-def _roll_one_index(fragment: str) -> int:
-    for i, task in enumerate(_roll_one_tasks()):
-        if fragment in str(task.get("name", "")):
-            return i
-    raise AssertionError(f"no task in roll_one.yml named like {fragment!r}")
-
-
-def test_instance_two_is_applied_only_after_its_sibling_is_verified_serving():
-    """The apply that rolls instance 2 sits between the sibling checks and the rollout wait.
-
-    Ahead of the checks it reproduces the simultaneous-apply outage — instance 2's pod template changing
-    while instance 1 may not be serving. After the wait it would roll instance 2 with nothing
-    left to block on, so the play would report success before the second resolver came back.
-    The `when` matters as much as the position: without it the include fires on the `pihole`
-    iteration too and applies instance 2 first, before instance 1 has rolled at all."""
-    apply_idx = _roll_one_index("Apply the second Pi-hole instance's Deployment")
-    assert _roll_one_index("Verify the sibling instance is ready") < apply_idx
-    assert _roll_one_index("is terminating") < apply_idx
-    assert apply_idx < _roll_one_index("Wait for serving Pi-hole instance")
-
-    task = _roll_one_tasks()[apply_idx]
-    assert str(task["ansible.builtin.include_tasks"]).endswith("apply_instance_2.yml")
-    assert str(task["when"]) == "pihole_instance == 'pihole-2'", task["when"]
-
-
-def test_the_sibling_check_refuses_a_terminating_pod():
-    """A terminating pod keeps phase `Running` and condition `Ready` for its whole grace period,
-    so a readiness wait can pass against a `pihole-2` pod that is already going away, and the play
-    would restart `pihole` into a full DNS outage.
-
-    The accept/reject pair is over the real `failed_when`: an empty read (no pod carries a
-    `deletionTimestamp`) must pass, and any timestamp at all must fail. A check that only ran the
-    kubectl read without judging its output would satisfy the position assertion above and nothing
-    else."""
-    task = _roll_one_tasks()[_roll_one_index("is terminating")]
-    cmd = str(task["ansible.builtin.command"]["cmd"])
-    assert "pihole_sibling_instance" in cmd, cmd
-    assert "deletionTimestamp" in cmd, cmd
-
-    when = "{{ " + str(task["failed_when"]) + " }}"
-    assert not render_expr(when, pihole_sibling_terminating={"stdout": ""}), (
-        "a sibling with no terminating pod must pass"
-    )
-    assert render_expr(
-        when, pihole_sibling_terminating={"stdout": "2026-09-28T17:35:59Z"}
-    ), "a terminating sibling must fail the play, not be restarted around"

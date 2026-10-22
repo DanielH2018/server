@@ -1,12 +1,10 @@
 """pihole's gravity reconcile as a Flux mutation Job: the declared blocklists, applied through the API.
 
-`templates/verify-inert/gravity.yaml.j2` runs this script, and nothing renders that file while
-Ansible owns pihole. pihole's flip PR renames the directory to `templates/verify/`, and the
-renderer then emits the Job into `pihole-verify`, which starts only after `pihole-deferred` is
-Ready (target slice D5, *A verify conversion lands as inert code*).
+`templates/verify/gravity.yaml.j2` runs this script. The renderer emits the Job into
+`pihole-verify`, which starts only after `pihole-deferred` is Ready (target slice D5).
 
-It does what `tasks/main.yml`'s "Reconcile the declared adlists and regex denies into
-gravity.db" and "Rebuild gravity after a blocklist change" do, without an exec into either pod.
+It does what the Ansible tasks "Reconcile the declared adlists and regex denies into
+gravity.db" and "Rebuild gravity after a blocklist change" did, without an exec into either pod.
 Each FTL serves Pi-hole v6's REST API on its web port, and each instance has its own Service
 (`pihole` and `pihole-2-web`), so the Job reaches each FTL by name:
 
