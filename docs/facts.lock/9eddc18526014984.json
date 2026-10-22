@@ -1,11 +1,11 @@
 {
-  "checksum": "a6124885b94151d6acf276fb66514e7c7ed734e97cd6e878762858119198a919",
+  "checksum": "f5ccc033fc1479683c9bfb3455274c96b611579f370a12561dfc20a283d0161a",
   "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
   "key": "ansible/roles/k8s/longhorn/CLAUDE.md#At a glance",
   "row": {
     "atoms": {
       "ansible/filter_plugins/service_tier.py": "4f5e784e468e22de5c3736acba1c47934e1d5e2794af865159bdaeeff9171f1e",
-      "ansible/tests/k8s/test_shed_set_is_derived_from_tier.py::test_never_shed_matches_the_untiered_roles_that_never_prune": "13148fe54de7a6a57aed316c454c36f48684c32f36cb512c70a53049cd7b6b75",
+      "ansible/tests/k8s/test_shed_set_is_derived_from_tier.py::test_never_shed_matches_the_untiered_roles_that_never_prune": "b5aa7a0b15e57ef1aaaef7b8e886e31e7c8813709d26cf6ee0eca3d0c0c20d0e",
       "ansible/tests/longhorn/test_longhorn_control_plane_resources.py::test_manager_patch_holds_the_value_of_the_defaults_key": "6698ba708d72f37c6f8094ad0ac5c9e64ebf4ce7144d96bd2171e71c002c49e3",
       "ansible/tests/longhorn/test_longhorn_storageclass.py::test_the_class_differs_from_upstreams_only_by_the_replica_count": "c1ef4ca44c0ae18b8cf7fabb57d2a2db844daf2a092ee0502f5462063d49bbb7",
       "docs/longhorn-disaster-recovery.md": "4c9a4a63c6856b47fb7c612953def99d6b299477412a04fc9369539f36398ef3",
@@ -13,6 +13,6 @@
       "scripts/dev/vendor_manifest.py": "f0c0c9df684a1ed3d858ec17f02c8e7c279dbb7595180eb00d70a50e42a9d7ef"
     },
     "python": "3.14",
-    "verified_sha": "14cf76620"
+    "verified_sha": "3b513a37e"
   }
 }
