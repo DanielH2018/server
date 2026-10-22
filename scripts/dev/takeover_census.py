@@ -140,29 +140,36 @@ def owners(live):
     return out
 
 
-def declares_nothing(obj_key, live):
+def declares_nothing(obj_key, live, dryrun):
     """The report lines for an object the render declares nothing of, and whether it fails.
 
-    Every live field is undeclared, so any field a cleaned manager owns fails the census.
+    It reads `removed` from `compare` with nothing declared, so a path another manager co-owns
+    and a presumed server default are not counted as deleted, exactly as for any other object.
+    Any path left in `removed` fails the census.
     """
+    removed, _, defaulted = compare(live, dryrun)
     by_manager = owners(live)
     lines = [f"{label(obj_key)}: declares nothing"]
     lines.append(f"  live field owners ({len(by_manager)}):")
-    failed = False
     for manager in sorted(by_manager, key=str):
         cleaned, paths = by_manager[manager]
         if not cleaned:
             lines.append(f"    {manager}  ({len(paths)} field(s))")
             continue
-        failed = failed or bool(paths)
+        deletes = sorted((p for p in removed if manager in removed[p]), key=format_path)
         lines.append(
-            f"    {manager}  (cleaned: the flip deletes {len(paths)} field(s))"
+            f"    {manager}  (cleaned: the flip deletes {len(deletes)} field(s))"
         )
         lines += [
             f"      {format_path(p)}{'  (expected)' if p == LAST_APPLIED_PATH else ''}"
-            for p in sorted(paths, key=format_path)
+            for p in deletes
         ]
-    return lines, failed
+    if defaulted:
+        lines.append(
+            f"  presumed server defaults, inferred and not measured ({len(defaulted)}):"
+        )
+        lines += [f"    {format_path(p)}" for p in sorted(defaulted, key=format_path)]
+    return lines, bool(removed)
 
 
 def compare(live, dryrun):
@@ -238,7 +245,9 @@ def report(live_objs, dryrun_objs):
     rolling, empty, failed = [], [], False
     for obj_key in shared:
         if declared_paths(dry_by_key[obj_key]) is None:
-            block, owned = declares_nothing(obj_key, live_by_key[obj_key])
+            block, owned = declares_nothing(
+                obj_key, live_by_key[obj_key], dry_by_key[obj_key]
+            )
             lines += block
             empty.append(label(obj_key))
             failed = failed or owned

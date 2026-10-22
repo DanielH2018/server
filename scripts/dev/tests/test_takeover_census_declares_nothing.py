@@ -188,3 +188,30 @@ def test_a_cleaned_manager_owning_an_undeclared_field_exits_non_zero_after_the_c
     code, out = run_main(tmp_path, capsys, secret)
     assert f"{DEPLOYMENT}: rolls" in out.splitlines(), out
     assert code != 0
+
+
+EVERYTHING = {"f:spec": {**REPLICAS["f:spec"], **RESTART["f:spec"]}}
+CERT_PATHS = {"data.ca.crt", "data.tls.crt", "data.tls.key"}
+
+
+def test_a_cleaned_manager_owning_data_fields_exits_non_zero_and_lists_them(
+    tmp_path, capsys
+):
+    """`kubectl` owns the cert data: the flip deletes all three, and the exit says so."""
+    secret = webhook_secret(entry("kubectl", "Update", CERT_DATA))
+    code, out = run_main(tmp_path, capsys, secret, declared=EVERYTHING)
+    assert code != 0, out
+    assert CERT_PATHS <= {line.strip() for line in block(out, SECRET)}, out
+
+
+def test_a_path_a_foreign_manager_co_owns_is_not_deleted_and_does_not_fail(
+    tmp_path, capsys
+):
+    """`metallb-controller` also owns the data, so the flip keeps it, as `compare` rules."""
+    secret = webhook_secret(
+        entry("kubectl", "Update", CERT_DATA),
+        entry("metallb-controller", "Update", CERT_DATA),
+    )
+    code, out = run_main(tmp_path, capsys, secret, declared=EVERYTHING)
+    assert code == 0, out
+    assert not CERT_PATHS & {line.strip() for line in block(out, SECRET)}, out
