@@ -58,8 +58,16 @@ x265 re-encode instead, which made Jellyfin buffer and seek slowly.
   `configarr-verify` and holds the revision, where `k8s/cronjob-gate` reported it and let the
   deploy continue. The copy carries no ownerReference to the CronJob, so `concurrencyPolicy:
   Forbid` no longer keeps a scheduled 04:30 firing off a gate run; the sync converges, so an
-  overlap writes nothing twice. Both gates also start together, so the health gate can read
-  the previous run rather than the fresh one (#5617).
+  overlap writes nothing twice.
+- **Both gates start together, and that is accepted, not ordered.** Flux applies the two gate
+  Jobs in one `configarr-verify` Kustomization, so the health gate can finish first and push
+  the previous run's verdict. That push repeats what the last `*/10` run already pushed, so
+  Kuma makes no transition. The next scheduled run reports the fresh sync within 10 minutes,
+  the same wait the nightly 04:30 sync has. A failed sync also fails `configarr-verify`, so
+  the tile is not the only signal. The health gate stays because it is the only deploy-time
+  proof of the reader's images and ServiceAccount, which Renovate bumps. The reasoning is at
+  `ansible/roles/k8s/configarr/defaults/main.yml:DECIDED: the two gates run unordered`
+  (#5617).
 - **The push URL, token included, lives in its own Secret, `configarr-health`**
   (`templates/health-secret.yaml.j2`), and reaches the pod as `KUMA_PUSH_URL` through
   `secretKeyRef`. It is a whole URL rather than a bare token so that it stays out of
