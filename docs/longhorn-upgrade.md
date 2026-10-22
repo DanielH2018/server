@@ -84,8 +84,9 @@ merges it outside `land.sh`, runs `land.sh --regate <pr>` for it, then clears th
 3. **Merge through `land.sh`.** The merge is the apply, in place of `k3s-bringup.yml --tags longhorn`.
    On daniel-box, run the command the `land-after-merge` skill gives for this PR. `land.sh` runs
    the gates above, posts `homelab/upgrade-gates`, merges, and follows the merge until `promote`
-   has applied it. The `longhorn` Kustomization waits for the manager DaemonSet, within the
-   `manifests_rollout_timeout` in the role's defaults. Then wait for the driver deployer, which
+   has applied it. The `longhorn` Kustomization renders `wait: true`, so Flux waits for every
+   object it applies, the manager DaemonSet and the driver deployer among them, within the
+   `manifests_rollout_timeout` in the role's defaults. Then confirm the driver deployer, which
    the old play waited on:
    ```bash
    kubectl -n longhorn-system rollout status deploy/longhorn-driver-deployer --timeout=600s
@@ -115,8 +116,8 @@ merges it outside `land.sh`, runs `land.sh --regate <pr>` for it, then clears th
 
 ## Lessons from the ladder
 
-The ladder from v1.7.2 to v1.12.1 is walked, and `k3s_longhorn_version` records where it
-stands. Four lessons carry to the next hop:
+The ladder from v1.7.2 to v1.12.1 is walked, and v1.12.1 to v1.13.0 is the first hop taken
+through Flux (H1.8b). `k3s_longhorn_version` records where it stands. Four lessons carry to the next hop:
 
 - **StorageClass parameters are immutable.** Kubernetes forbids updating `parameters` on an
   existing StorageClass, so an apply of the class itself fails when a release adds one (v1.8
@@ -134,7 +135,9 @@ stands. Four lessons carry to the next hop:
   each target's `status.available`.
 - **Read the release notes for image and Kubernetes floors.** v1.10 fully qualified image
   refs, so every node re-pulls and shows a transient `ImagePullBackOff`. v1.11 requires
-  Kubernetes ≥ v1.34.
+  Kubernetes ≥ v1.34, and v1.13 keeps that floor for its CSI external-provisioner v6.3.0.
+  v1.13 also adds the `longhorn-global-manager` Deployment, three replicas with a preferred
+  (not required) anti-affinity, so all three schedule on a two-node cluster.
 
 ### Expected-red node conditions
 
