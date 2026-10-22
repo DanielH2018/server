@@ -915,8 +915,10 @@ The bundle holds:
 - `digests.json`, described below.
 
 A published tag that defers files also gets the Kustomization `<tag>-deferred`, the second
-document of `flux/<tag>.yaml`. It applies `./cluster/<tag>-deferred` with the tag's fields
-and depends on `<tag>`. The publish census admits that second document only for a tag that
+document of `flux/<tag>.yaml`. It applies `./cluster/<tag>-deferred` with the tag's `timeout`
+and depends on `<tag>`. It always renders `prune: true`, because `flux_prune: false` reaches
+`<tag>` alone (operator ruling, 2026-10-22, D5 step 29). A deferred object that must never
+be pruned therefore belongs in the role's own directory. The publish census admits that second document only for a tag that
 defers files (*The publish census*, the per-file rule).
 
 D5's per-tag kinds, `<tag>-snapshot`, `<tag>-prepull` and `<tag>-verify`, follow in the same

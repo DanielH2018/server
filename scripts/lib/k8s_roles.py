@@ -478,10 +478,15 @@ def role_fields(
       wait reads the same defaults key, though an include var of that name overrides it there;
     - `flux_suspend: true` renders `suspend: true` (C3 *Suspension*, D5.1b).
 
-    `prune` and `timeout` go on the Kustomizations that apply the role's own manifests, `<tag>`
-    and `<tag>-deferred`, so a plumbing role's deferred objects are never pruned either. The
-    renderer's `-snapshot` kind keeps the defaults, and `-verify` rises above its Jobs'
-    deadlines (`ordering.verify_timeout`). `suspend` goes on every kind,
+    `prune` goes on `<tag>` alone, and `<tag>-deferred` keeps `prune: true`, as H1 states it:
+    "prune: false on that Kustomization, and prune: true everywhere else". The operator ruled
+    so on 2026-10-22 for D5 step 29, where `flux-deferred`'s prune deletes the `verify-drill`
+    OCIRepository once the drill is off. A plumbing role that adds deferred files later
+    therefore gets deferred objects that Flux prunes. `bundle.flux_files` makes the split, and
+    its `DECIDED:` marker carries the reasoning. `timeout` goes on both `<tag>` and
+    `<tag>-deferred`, the Kustomizations that apply the role's own manifests. The renderer's
+    `-snapshot` kind keeps the defaults, and `-verify` rises above its Jobs' deadlines
+    (`ordering.verify_timeout`). `suspend` goes on every kind,
     because a suspended role runs none of its Jobs either. A value must be a literal, a bool
     for `flux_prune` and `flux_suspend` and a Go duration for the timeout. A Jinja expression
     is a problem rather than a guess, as `snapshot_claims` treats a non-literal list, and its

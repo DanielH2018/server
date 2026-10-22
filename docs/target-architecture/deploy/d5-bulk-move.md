@@ -3192,8 +3192,10 @@ sizes its batch of roles against that projection.
     - The prune of `flux-deferred` succeeds D1's task that deletes
       `ocirepository/verify-drill` while `flux_verify_drill` is false, as R4's PR 1 maps that
       row. `flux_prune: false` therefore renders `prune: false` on the `flux` Kustomization
-      only, and `flux-deferred` keeps `prune: true`, by H1's rule for a role's prune field. A
-      renderer test asserts both fields, and the PR body quotes the `prune` field of the
+      only, and `flux-deferred` keeps `prune: true`, by H1's rule for a role's prune field.
+      H1.1a had given a role's `flux_prune` to `<tag>-deferred` too, and the operator ruled
+      on 2026-10-22, option (a), that it reaches `<tag>` alone while `timeout` stays on both.
+      A renderer test asserts both fields, and the PR body quotes the `prune` field of the
       rendered `flux/flux-deferred.yaml`. If it reads `false`, the row has no successor and a
       `verify-drill` object outlives its drill, so the PR does not merge.
     - The renderer refuses `flux_sync_suspend: true` from here on. Flux would apply the
