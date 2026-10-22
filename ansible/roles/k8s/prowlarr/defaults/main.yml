@@ -4,7 +4,7 @@ prowlarr_k8s_image: lscr.io/linuxserver/prowlarr:2.6.5.5623-ls163@sha256:f9151e5
 # Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
 # Migrating state — strategy is Recreate and the config volume (indexer definitions + API keys)
 # comes from k8s_claims below (hardcoded ReadWriteOnce). This role renders TWO
-# Deployments (prowlarr + flaresolverr) and gates both correctly via manifests_extra_rollouts,
+# Deployments (prowlarr + flaresolverr) and Flux gates both through the Kustomization's wait,
 # so gatedness is not the issue; the PVC/Recreate shape is. The linuxserver -lsNN scheme also
 # hides a breaking bump as a routine patch bump.
 # Flux's prowlarr-snapshot Job snapshots the claim below before each revision applies. A failed
