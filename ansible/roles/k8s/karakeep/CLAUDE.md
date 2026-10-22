@@ -10,8 +10,7 @@ loop to auto-tag bookmarks.
   `--tags=karakeep` with exit 5
 - **Images:** `ghcr.io/karakeep-app/karakeep` (`karakeep_k8s_image`),
   `ghcr.io/karakeep-app/karakeep-chrome` (`karakeep_k8s_chrome_image`), `getmeili/meilisearch`
-  (`karakeep_k8s_meili_image`), `<k8s_registry_pull_host>/karakeep`
-  (`karakeep_k8s_tagger_image`)
+  (`karakeep_k8s_meili_image`), `ghcr.io/danielh2018/karakeep` (`karakeep_k8s_tagger_image`)
 - **Route:** `karakeep.<domain>` · `karakeep.local.<domain>`, Authelia one_factor
 - **Claims:** `karakeep-meili` (no backup (StorageClass longhorn-nobackup)), `karakeep-data`
   (weekly -> B2 (default target))
@@ -23,9 +22,11 @@ loop to auto-tag bookmarks.
   to Ansible, follow the two-PR handback in `docs/flux-deploy-plane.md`; a plain revert of the
   flag leaves two writers on the objects. `k8s_autodeploy: false` still stops Renovate's
   automerge of a pin bump.
-- **Three Kustomizations.** `karakeep-snapshot` snapshots `karakeep-data` before `karakeep`
-  applies, so the stateful hold (D5.2b1) covers every revision that moves it. `karakeep`
-  waits up to its 1200s `manifests_rollout_timeout`. `karakeep-verify` then runs the archive
+- **Four Kustomizations.** `karakeep-snapshot` snapshots `karakeep-data` before `karakeep`
+  applies, so the stateful hold (D5.2b1) covers every revision that moves it.
+  `karakeep-prepull` pulls all four Deployments' images onto their node beside it, and
+  `karakeep` depends on both (#5778). `karakeep` waits up to its 1200s
+  `manifests_rollout_timeout`. `karakeep-verify` then runs the archive
   pruner's gate (below). `tasks/main.yml` keeps the image-builder and manifests includes for
   a handback, and no Flux path runs them.
 - **The Authelia bypass:** `/api/v1/`, `/api/trpc/` and `/api/assets`, deliberately public (Bearer-token auth; the
@@ -43,6 +44,15 @@ loop to auto-tag bookmarks.
   (as `OPENAI_API_KEY`), `karakeep_python_api_key` (the tagger's).
 
 ## Notable
+- **The images are pulled before the old pod stops** (#5778). `karakeep` and
+  `karakeep-meilisearch` are `Recreate`. On 2026-10-19 a digest bump of the 511 MB app image
+  pulled from GHCR for 16.5 minutes, failed on a corrupt layer, and karakeep was down from the
+  apply until promote's `settle` held the revision. `flux_prepull_timeout: 4500s` adds the
+  `karakeep-prepull` Kustomization, whose one Job runs every image the four Deployments pull:
+  the app, `karakeep-chrome`, meilisearch and the tagger. The Job copies the pods' *preferred*
+  affinity for daniel-server, so a pod the scheduler sends elsewhere still pays a cold pull
+  inside the 1200s rollout budget. `defaults/main.yml` has the measurements, and
+  `ansible/tests/services/test_karakeep_prepulls_its_images.py` holds the render.
 - **The two backend NetworkPolicies ship in THIS role, not in netpol-baseline** (#1620).
   `deployment.yaml.j2`'s `wait-for-deps` initContainer retries `karakeep-chrome:9222` and
   `karakeep-meilisearch:7700` in an unbounded loop, and the baseline admits neither path, so a
@@ -68,26 +78,26 @@ loop to auto-tag bookmarks.
   The renderer honours the empty list, so chrome gets no restart checksum.
   `ansible/tests/services/test_karakeep_chrome_rollout.py` pins both.
 - **The time-tagger's image is built in-cluster**, from `templates/Dockerfile.j2`, since #2672
-  — one `chown` layer over the pinned `ghcr.io/astral-sh/uv` digest, plus `UV_CACHE_DIR=/uv-cache`.
-  It exists only so the tagger can run as uid 1000. Two paths blocked that from the manifest
-  side, and neither was reachable with a securityContext: `uv pip install --system` writes the
-  image's own site-packages on every container start, and the uv cache was mounted at
-  `/root/.cache/uv`, behind Debian's 0700 `/root`. The relocation is why the mount path and
-  `UV_CACHE_DIR` have to move together. The base digest moved out of `defaults/main.yml` into
-  that `FROM` line, where Renovate's dockerfile manager reads it. A merged bump moves the
-  content tag, and promote's `images` job builds `ghcr.io/danielh2018/karakeep` and rolls the
-  pods that run it. `renovate.json`'s denylist-marker rule lists the file because this role
-  is `k8s_autodeploy: false`. The glance still shows `<k8s_registry_pull_host>`, because it
-  reads the defaults; the renderer rewrites the ref to GHCR with `imagePullPolicy:
-  IfNotPresent`. The image is 91.3 MB in six layers. On 2026-10-18 its largest layer
-  (28.2 MB) pulled from GHCR at 0.32-0.34 MB/s, so a cold pull takes about 270-290s, inside
-  the 1200s budget. `karakeep` is `Recreate`, so the pod is down for that pull whenever the
-  content tag moves, and no pre-pull covers it.
+  — one `chown` layer over the pinned `ghcr.io/astral-sh/uv` digest, plus
+  `UV_CACHE_DIR=/uv-cache`. It exists only so the tagger can run as uid 1000. Two paths blocked
+  that from the manifest side, and neither was reachable with a securityContext: `uv pip
+  install --system` writes the image's own site-packages on every container start, and the uv
+  cache was mounted at `/root/.cache/uv`, behind Debian's 0700 `/root`. The relocation is why
+  the mount path and `UV_CACHE_DIR` have to move together. The base digest moved out of
+  `defaults/main.yml` into that `FROM` line, where Renovate's dockerfile manager reads it. A
+  merged bump moves the content tag, and promote's `images` job builds
+  `ghcr.io/danielh2018/karakeep` and rolls the pods that run it. `renovate.json`'s
+  denylist-marker rule lists the file because this role is `k8s_autodeploy: false`. The
+  defaults name `<k8s_registry_pull_host>`; the renderer rewrites the ref to GHCR with
+  `imagePullPolicy: IfNotPresent`, and the glance prints the GHCR repository. The image is 91.3
+  MB in six layers. On 2026-10-18 its largest layer (28.2 MB) pulled from GHCR at 0.32-0.34
+  MB/s, so a cold pull takes about 270-290s, inside the 1200s budget. `karakeep-prepull` pulls
+  it before `karakeep` applies, so the `Recreate` pod is not down for that pull.
   The image is named `karakeep`, not `karakeep-time-tagger`: `k8s/manifests` keys
   `k8s_rebuilt_images` on `manifests_service`. The pod the rebuild has to roll is the tagger's,
-  which `manifests_extra_rollouts` already covers.
-  The main pod's `wait-for-deps` initContainer runs this image too — it is the role's only image
-  with a `python3` and no s6 init — so both init containers assert uid 1000 as well.
+  which `manifests_extra_rollouts` already covers. The main pod's `wait-for-deps` initContainer
+  runs this image too — it is the role's only image with a `python3` and no s6 init — so both
+  init containers assert uid 1000 as well.
 - `files/karakeep-time-tagger.py` is vendored (not fetched at render time) because CI renders
   every template on a machine that has never deployed; `test_karakeep_time_tagger_script.py`
   pins it to the commit URL and sha256 the retired Docker role verified.

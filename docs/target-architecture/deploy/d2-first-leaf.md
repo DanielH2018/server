@@ -1725,6 +1725,8 @@ later slices size against:
   D2 hands that emitter to D6, because D6.12 deletes the deployer that could host it, and it
   should land before D5 moves the bulk. Until it lands, `land-wait`'s line covers only the
   landings that `land.sh` makes.
+  D5.3b3's soak line closed the gap instead. The soak Job prints a deploy line for every
+  passing promotion, so #5425 dropped D6's emitter (D6 *Grafana's deploy markers after D6*).
 - **A placeholder render could mislead a reviewer** (failure class 2). A green `check-bundle`
   shows that each placeholder has a declared source, not that the cluster holds its value.
   Mitigation: Exit 1 compares the live route's hash before and after the flip, and the

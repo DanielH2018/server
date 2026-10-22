@@ -88,7 +88,6 @@ SOURCE_FALLBACK_REASONS = {
         "the role has no `containers_list` entry or is caller-rendered, so no render reaches "
         "any of its templates"
     ),
-    "shell": "a `*.sh.j2` renders to a script, not to a manifest, and `_render_texts` skips it",
     "build": "a `Dockerfile*` feeds an image build; `rendered_build_texts` renders those",
     "nested": (
         "a template below `templates/`, which `_render_texts` globs exactly one level deep"
@@ -99,7 +98,6 @@ SOURCE_FALLBACK_REASONS = {
 # breaks fails as a missing member rather than passing over an empty set.
 SOURCE_FALLBACK_MEMBERS = {
     "image-builder/templates/build-job.yaml.j2": "unrendered-role",
-    "registry/templates/registry-gc.sh.j2": "shell",
     "code-server/templates/Dockerfile.j2": "build",
     "homepage/templates/config/services.yaml.j2": "nested",
 }
@@ -120,8 +118,6 @@ def _fallback_category(role: Path, path: Path) -> str | None:
         return "unrendered-role"
     if path.name in rendered:
         return None
-    if path.name.endswith(".sh.j2"):
-        return "shell"
     if path.name.startswith("Dockerfile"):
         return "build"
     if path.parent != role / "templates":

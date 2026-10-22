@@ -27,7 +27,11 @@ CI_WORKFLOW = REPO / ".github" / "workflows" / "ci.yml"
 GATE_NAME = "prek (lint + validate + tests + secrets)"
 # The draft arm skips every job on a draft PR (#5563); `test_ci_skips_draft_prs` below says why.
 DRAFT_ARM = "github.event.pull_request.draft != true"
-PROOF_CONDITION = f"!cancelled() && needs.prove.outputs.proven != 'true' && {DRAFT_ARM}"
+PROOF_CONDITION = (
+    "(needs.prove.result == 'cancelled' || needs.prove.result == 'failure'"
+    " || (!cancelled() && needs.prove.outputs.proven != 'true'))"
+    f" && {DRAFT_ARM}"
+)
 DEPENDENTS = (
     "hooks",
     "pytest",
@@ -101,6 +105,46 @@ def test_every_repeated_job_waits_for_the_proof_and_skips_on_it():
         _normal(jobs["renovate-config"]["if"])
         == f"github.event_name != 'push' && {DRAFT_ARM}"
     )
+
+
+def _dependent_runs(condition: str, prove: str, proven: str, cancelled: bool) -> bool:
+    """Evaluate a dependent's `if:` as GitHub would, for one `prove` outcome on a push."""
+    python = (
+        condition.replace(f" && {DRAFT_ARM}", "")
+        .replace("needs.prove.result", repr(prove))
+        .replace("needs.prove.outputs.proven", repr(proven))
+        .replace("!cancelled()", str(not cancelled))
+        .replace("&&", " and ")
+        .replace("||", " or ")
+    )
+    # The input is ci.yml's own condition, with every name substituted by a literal.
+    return eval(python)
+
+
+@pytest.mark.parametrize(
+    ("prove", "proven", "cancelled", "runs"),
+    [
+        # A timed-out `prove` runs the sweep, even when it had set `proven=true` (#5783), and
+        # whether or not GitHub reads the dependent as cancelled.
+        ("cancelled", "true", False, True),
+        ("cancelled", "true", True, True),
+        ("cancelled", "", True, True),
+        # A failed `prove` broke on the runner, so it falls back the same way.
+        ("failure", "true", False, True),
+        ("failure", "", True, True),
+        # The proven path skips, and a cancel after `prove` concluded stops the sweep.
+        ("success", "true", False, False),
+        ("success", "false", False, True),
+        ("success", "false", True, False),
+        ("skipped", "", False, True),
+    ],
+)
+def test_a_dependent_runs_when_prove_timed_out_and_skips_on_the_proof(
+    prove, proven, cancelled, runs
+):
+    for job in DEPENDENTS:
+        condition = _normal(_jobs()[job]["if"])
+        assert _dependent_runs(condition, prove, proven, cancelled) is runs, job
 
 
 def test_ci_skips_draft_prs_and_runs_when_one_is_marked_ready():
@@ -190,6 +234,14 @@ def test_the_gate_keeps_its_required_name_and_always_runs():
         # `proven` alone is not a proof when the job that wrote it did not succeed.
         ("failure", "true", _all("skipped"), False),
         ("cancelled", "", _all("cancelled"), False),
+        # A timed-out `prove` proved nothing, so the full sweep decides (#5783).
+        ("cancelled", "", _all("success"), True),
+        ("cancelled", "true", _all("success"), True),
+        ("cancelled", "true", _all("skipped"), False),
+        ("cancelled", "", _all("success", pytest="failure"), False),
+        ("failure", "", _all("success"), True),
+        ("failure", "true", _all("success"), True),
+        ("failure", "", _all("success", pytest="failure"), False),
     ],
 )
 def test_the_gate_passes_on_the_proven_path_and_nowhere_a_skip_is_unproven(

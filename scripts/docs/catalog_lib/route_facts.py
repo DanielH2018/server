@@ -7,8 +7,8 @@ Deriving that twice means the two pages can disagree about the same service, whi
 than either being wrong on its own -- a reader has no way to tell which one to believe.
 
 THE DOMAIN IS NOT RESOLVED HERE, ON PURPOSE. `ingressroute.yml.j2` builds the hostname as
-"{{ hostname }}.local.{{ domain }}", and `domain` is SOPS-sourced with no static default, so
-a generator that parses the tree statically cannot know it. Rather than print a label and
+"{{ hostname }}.local.{{ domain }}", and a statically generated page cannot know whether its
+reader is on the LAN name or the public one. Rather than print a label and
 leave the reader to assemble a URL by hand, `fqdn()` emits a span the docs site resolves in
 the browser: docs/assets/fqdn-links.js reads the domain off the URL the reader is already on
 and rewrites the span into a link. That also picks the right TIER -- a reader on the LAN name

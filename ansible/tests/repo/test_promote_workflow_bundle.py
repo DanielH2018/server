@@ -1,9 +1,10 @@
 """The `promote` workflow's render job builds the bundle the renderer would, and censuses it.
 
-With no published tag the build step calls `cluster --shared-only`, because `cluster`
-without `--role` renders every tag. That bundle holds the shared kinds and a root listing them
-(D3.3a). The census and gates step, `promote.py check-bundle`, must run after the build and
-before gitleaks. So must the step that runs `cluster_vars.py check --ciphertext-only` on the
+With no published tag the build step calls `cluster --shared-only --all-images`, because
+`cluster` without `--role` renders every tag. That bundle holds the shared kinds, a root listing
+them (D3.3a) and every image context, which the `images` job refuses to run without (#5593).
+The census and gates step, `promote.py check-bundle`, must run after the build and before
+gitleaks. So must the step that runs `cluster_vars.py check --ciphertext-only` on the
 bundle's SOPS copies, the guard that stands in for the scan `.gitleaks.toml` skips there. All
 three run before the step that hands `out/` to `publish`, the job that pushes. The
 build passes no `--secret-stubs`, which is what selects placeholder mode (C1). The promote
@@ -22,7 +23,9 @@ from lib import yaml_fast
 
 WORKFLOW = REPO / ".github" / "workflows" / "promote.yml"
 CENSUS = "promote.py check-bundle out"
-SHARED_ONLY = "homelab_render.py cluster --out out --shared-only"
+# The no-tag branch passes --all-images too: the `images` job refuses a render without
+# tags.json, and `publish` needs that job (#5593).
+SHARED_ONLY = "homelab_render.py cluster --out out --shared-only --all-images"
 # The tag branch's render: a `--role` render writes only the named tags' image contexts, and
 # the `images` job builds all ten from it (#5374).
 ALL_IMAGES = 'homelab_render.py cluster --out out --all-images "${roles[@]}"'
@@ -175,7 +178,9 @@ def _shared_only_in_the_tag_branch(wf):
         wf, 'out --all-images "${roles[@]}"', 'out --shared-only "${roles[@]}"'
     )
     _build_script(
-        wf, "cluster --out out --shared-only\n", "cluster --out out --role x\n"
+        wf,
+        "cluster --out out --shared-only --all-images\n",
+        "cluster --out out --role x\n",
     )
 
 
@@ -186,7 +191,9 @@ def _shared_only_line_outside_the_no_tag_branch(where):
 
     def mutate(wf):
         _build_script(
-            wf, "cluster --out out --shared-only\n", "cluster --out out --role x\n"
+            wf,
+            "cluster --out out --shared-only --all-images\n",
+            "cluster --out out --role x\n",
         )
         if where == "else":
             _build_script(
@@ -239,6 +246,10 @@ RED = {
     ),
     "a no-tag branch that renders no shared kind": (
         lambda wf: _build_script(wf, " --shared-only", ""),
+        "the build step's no-tag branch does not run",
+    ),
+    "a no-tag branch that writes no image context": (
+        lambda wf: _build_script(wf, " --shared-only --all-images", " --shared-only"),
         "the build step's no-tag branch does not run",
     ),
     "--shared-only only in the branch that publishes tags": (

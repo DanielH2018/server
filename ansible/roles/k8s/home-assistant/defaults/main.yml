@@ -2,20 +2,34 @@
 # DOCKER_MODS rides along (HACS).
 home_assistant_k8s_image: lscr.io/linuxserver/homeassistant:2026.10.2-ls257@sha256:38ca271323058a45cefa5829d58a15761df669f598862ae084d41e0a11d211d2
 
+# The budget of the home-assistant-prepull Kustomization, whose Job pulls this role's images onto
+# its node before the home-assistant Kustomization applies
+# (scripts/renderer/renderer_lib/prepull.py). The Deployment is `Recreate`, so without it the old
+# pod stops before the new pod's pull starts, and HA is down for the whole pull. With it, the old
+# pod keeps serving while the image arrives. MEASURED 2026-10-22 (#5855): the pinned amd64 image
+# is 720.85 MB compressed, and GHCR, which serves lscr.io, has served this homelab at 0.145-0.53
+# MB/s. 4500s, code-server's budget, covers a full re-pull down to 0.16 MB/s. The Job has no
+# deadline, so a pull slower still costs that revision its verdict, the Job keeps pulling, and
+# Flux applies home-assistant on a later retry. Only Flux reads it: the renderer adds the
+# Kustomization for a published tag alone, so an Ansible deploy ignores it.
+flux_prepull_timeout: 4500s  # noqa var-naming[no-role-prefix]
+
 # Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
 # Migrating state — the sharpest case in the fleet: strategy is Recreate and the config volume
 # is a ReadWriteOnce `k8s_claims` entry below, so a bad image swap can migrate
 # the volume before the gate observes a fault and then fail the rollback redeploy against data
 # it can no longer read. The linuxserver -lsNN scheme makes a breaking bump read as a MINOR
 # (2026.6.3 -> 2026.7.0), so semver-based auto-merge policy would not even flag it as risky.
-# k8s/manifests takes a pre-apply Longhorn snapshot of
-# the claim below and reverts it if the deploy fails, so a bad swap reverts to the snapshot
-# instead of leaving the .storage device/entity registries unreadable by the old image.
+# Flux's home-assistant-snapshot Job snapshots the claim below before each revision applies. A failed
+# revision that changes home-assistant writes the stateful hold without a reset, and the operator
+# reverts the claim through docs/volume-snapshot-drills.md, so a bad swap can be
+# reverted instead of leaving the .storage device/entity registries unreadable by the old image.
 k8s_autodeploy: true  # noqa var-naming[no-role-prefix]
-k8s_autodeploy_reason: "migrating state — Recreate + RWO PVC, now protected by the pre-apply Longhorn snapshot and revert; -lsNN versioning still hides a breaking bump as a MINOR. WEIGHED: a companion-app long-lived token minted after the snapshot is invalidated by a revert, forcing that device to re-auth"  # noqa var-naming[no-role-prefix]
-# The pre-apply Longhorn snapshot k8s/manifests takes via k8s/volume-snapshot.
-# Declared regardless of k8s_autodeploy: protects a manual deploy the same way it would an
-# auto-deploy, and the revert is what this role's auto-deploy depends on.
+k8s_autodeploy_reason: "migrating state — Recreate + RWO PVC, protected by the home-assistant-snapshot Job before each revision and an operator revert to it after a failed one; -lsNN versioning still hides a breaking bump as a MINOR. WEIGHED: a companion-app long-lived token minted after the snapshot is invalidated by a revert, forcing that device to re-auth"  # noqa var-naming[no-role-prefix]
+# The claim snapshotted before each revision applies. Under Flux the renderer turns this
+# list into the home-assistant-snapshot Kustomization, whose Job snapshots it before home-assistant applies
+# (D5.2a). After a handback, k8s/manifests takes the same snapshot through k8s/volume-snapshot.
+# The snapshot is the recovery point this role's auto-deploy depends on.
 k8s_autodeploy_snapshot_pvcs: [home-assistant-config]  # noqa var-naming[no-role-prefix]
 
 # The manifests whose Secret holds a multi-line key, which no Flux placeholder can carry. A

@@ -351,7 +351,7 @@
   # suspect and is UNVERIFIED. Do not "fix" the changed_when — it faithfully reports what
   # kubectl printed, and muting it would hide a real reconcile loop rather than close it.
   #
-  # The PriorityClass churn root-caused in templates/priorityclass.yaml.j2 is a different
+  # The PriorityClass churn root-caused in roles/k8s/cluster-base/templates/priorityclass.yaml.j2 is a different
   # mechanism, so do not assume this is it.
   ansible.builtin.command:
     cmd: k3s kubectl apply -f /etc/rancher/k3s/longhorn-storageclass.yaml

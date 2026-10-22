@@ -11,7 +11,7 @@
 # Thin on purpose. Everything that decides up-or-down is in longhorn_backup_health.py + its pure
 # core (longhorn_backup_health_logic.py), which are plain files with unit tests; this exists only
 # because the Kuma push token has to be templated in, and a secret-carrying file should hold as
-# little logic as possible. Same shape as configarr-health.sh and telemetry-health.sh.
+# little logic as possible. Same shape as fake-remux-health.sh and telemetry-health.sh.
 #
 # Until this existed at all, the cluster's backup path had no monitor: `grep -ic longhorn` over
 # monitor-bridge's check.py returned 0. On 2026-08-02 the Longhorn backup target went unavailable
@@ -186,9 +186,8 @@ export LONGHORN_B2_DELETIONS_CRON_FIRED_STAMP="{{ k3s_cron_fired_stamp_dir }}/b2
 # output therefore means the reader ITSELF broke — report that rather than pushing nothing, which
 # would leave the monitor to time out with no explanation.
 #
-# Stdout and stderr are captured SEPARATELY (not `2>&1` into one pipe): this reader is the only
-# one of the three host health crons (configarr-health, telemetry-health are the others) that
-# spawns a subprocess of its own — it shells out to `logger` to write the full verdict before
+# Stdout and stderr are captured SEPARATELY (not `2>&1` into one pipe): this reader spawns a
+# subprocess of its own — it shells out to `logger` to write the full verdict before
 # printing the ranked one. `logger: socket /dev/log: ...`, or any uv/Python warning, landing on
 # stderr ahead of Python's own stdout flush used to become STATUS once `2>&1` merged the two
 # streams, silently turning an `up` into whatever garbage text preceded it — which Kuma reads as
@@ -290,8 +289,8 @@ if [[ -n "$HC_PING_KEY" ]]; then
   #
   # No body: the status IS the signal, and MSG belongs to the other check.
   #
-  # `${KUMA_PUSH_OK:-1}` — matching pi-sd-health.sh.j2 and pi-recovery-health.sh.j2, the other two
-  # callers that read this var — not a bare `$KUMA_PUSH_OK`: under `set -u`, `(( KUMA_PUSH_OK ))`
+  # `${KUMA_PUSH_OK:-1}` — matching the pi-heartbeats component's pi-sd-health.sh.j2 and
+  # pi-recovery-health.sh.j2, the other two callers that read this var — not a bare `$KUMA_PUSH_OK`: under `set -u`, `(( KUMA_PUSH_OK ))`
   # expands the variable before evaluating the arithmetic, so an older kuma-push-lib.sh that
   # never sets it makes the reference fatal, killing this script before the hc-ping call above
   # even ran and silencing the off-site deadman rather than reddening it.

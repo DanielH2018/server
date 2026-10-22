@@ -16,7 +16,7 @@
 # uninstall; that changed nothing for this script.)
 #
 # Thin on purpose — the verdict logic is in state_push.py, a plain file with unit tests and a 3.12
-# floor check. Same shape as configarr-health.sh and janitorr-health.sh.
+# floor check. Same shape as longhorn-backup-health.sh and telemetry-health.sh.
 #
 # This file carries NO secret. It lands 0755 root:root (the cron runs as {{ sys_user }} and reaches
 # it only through the world-execute bit), so an inlined token was readable by every local account

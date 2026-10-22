@@ -13,7 +13,7 @@ import ast
 import re
 
 from _helpers import REPO
-from _host_write_rows import _K8S, _flippable_task_files, _host_write_tasks
+from _host_write_rows import _flippable_task_files, _host_write_tasks
 from _row_table import Census, Subject, tracked
 
 _HOST_FILES_ROLE = "ansible/roles/setup/k8s_host_files/"
@@ -243,9 +243,9 @@ HOST_SCRIPT_WRITES = Census(
     # move most of them to setup roles, so the floor and the member are the one only D5 moves.
     # pi-peer-backup's forced-command wrapper, the other, moved to `k8s_host_files` at its flip.
     min_matches=1,
-    must_find=frozenset({_K8S + "registry/templates/registry-gc.sh.j2"}),
+    must_find=frozenset({_HOST_FILES_ROLE + "templates/registry-gc.sh.j2"}),
     allow={
-        _K8S + "registry/templates/registry-gc.sh.j2": (
+        _HOST_FILES_ROLE + "templates/registry-gc.sh.j2": (
             "The script scales only deploy/ghcr-mirror, since D5 retired the push store's GC "
             "phase. ghcr-mirror.yaml.j2 renders no `replicas:`, so neither the Ansible apply "
             "nor Flux's server-side apply owns `spec.replicas`, the one field the script "

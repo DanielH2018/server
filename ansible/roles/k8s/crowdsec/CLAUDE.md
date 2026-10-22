@@ -26,6 +26,10 @@ dashboard and the dashboard findings.
   that needs its credential.
 - **`use_authelia: false`** — bouncers authenticate with their own API keys, and `crowdsec-db`
   is on the no-backup tier because decisions expire and re-derive from logs.
+- **The `crowdsec-prepull` Kustomization pulls the engine pod's three images before the
+  `Recreate`**, so the LAPI serves through a 510 MB Docker Hub pull (`flux_prepull_timeout` in
+  `defaults/main.yml`, #5867). The pod's `nodeSelector` pins it to `k8s_primary_node`, and the
+  Job copies that pin, so the images land on the node the pod runs on.
 
 ## The two operator allowlists, and how to unban yourself
 

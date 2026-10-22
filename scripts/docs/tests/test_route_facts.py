@@ -114,7 +114,7 @@ def test_linkify_leaves_ordinary_prose_alone(tmp_path):
 
 def test_linkify_does_not_match_a_bare_domain_placeholder(tmp_path):
     """`<domain>` with no host in front of it is prose, not an FQDN."""
-    assert rf.linkify_fqdns("`domain` is SOPS-sourced") == "`domain` is SOPS-sourced"
+    assert rf.linkify_fqdns("`domain` is plain text") == "`domain` is plain text"
 
 
 def test_a_comment_quoting_the_opt_out_is_not_the_opt_out(tmp_path):

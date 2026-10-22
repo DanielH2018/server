@@ -26,7 +26,8 @@ import yaml
 from lib import yaml_fast
 from lib.ansible_inventory import K8S_HOST_VARS
 from lib.jinja_comments import strip_jinja_comments
-from lib.repo_paths import FILTER_PLUGINS, K8S_ROLES, REPO, SHARED_TPL
+from lib.k8s_role_callers import role_callers
+from lib.repo_paths import FILTER_PLUGINS, K8S_ROLES, SHARED_TPL
 
 __all__ = [
     "CALLER_RENDERED_ROLES",
@@ -231,72 +232,6 @@ def tag_owners(host_vars: Path = K8S_HOST_VARS) -> dict[str, str]:
             )
         owners.update(dict.fromkeys(entry_tags(entry), owner))
     return owners
-
-
-# How one k8s role reaches another's tasks: `include_role`/`import_role` naming it as
-# `k8s/<role>`. Whoever deploys the caller runs the callee's tasks.
-#
-# An `import_tasks` of a sibling role's file by path
-# (`{{ role_path }}/../<role>/tasks/<file>.yml`) is the same edge spelled without a role name,
-# and the walk does not cover it: no role reaches a sibling by path.
-_ROLE_KEYS = (
-    "ansible.builtin.include_role",
-    "include_role",
-    "ansible.builtin.import_role",
-    "import_role",
-)
-_ROLE_NAME = re.compile(r"^k8s/([^/\s]+)$")
-
-
-def _callees(node) -> set[str]:
-    """Every k8s role the tasks under `node` reach. Walks blocks, which nest tasks."""
-    found: set[str] = set()
-    if isinstance(node, list):
-        for item in node:
-            found |= _callees(item)
-        return found
-    if not isinstance(node, dict):
-        return found
-    for key in _ROLE_KEYS:
-        value = node.get(key)
-        name = value.get("name") if isinstance(value, dict) else value
-        if isinstance(name, str) and (m := _ROLE_NAME.match(name.strip())):
-            found.add(m.group(1))
-    for value in node.values():
-        if isinstance(value, list | dict):
-            found |= _callees(value)
-    return found
-
-
-def role_callers(repo: Path | str | None = None) -> dict[str, set[str]]:
-    """For each k8s role reached from another role's tasks, the roles that reach it.
-
-    The deploy-coverage question a helper role poses: it has no `containers_list` entry and so
-    no deploy tag of its own, but `deploy.yml` runs it under every caller's tag. A change to it
-    is therefore applied by deploying its callers — which is what
-    `scripts/deploy_tools/land_lib/land_tags.py` asks this to decide, so that landing a helper-role
-    change alongside all of its callers stops reading as `needs-manual-apply`.
-
-    Only ``roles/k8s`` is walked. The Pi's Compose roles include `containers/common`, not a k8s
-    role, and no k8s role is reachable from them.
-
-    ``repo`` names the checkout to walk, for a caller that reads a tree other than the one
-    this module was imported from (``narrow_broad.narrow(cwd=...)``). Omitted, it walks
-    ``lib.repo_paths.K8S_ROLES``, which is this file's own checkout.
-    """
-    roles_dir = K8S_ROLES if repo is None else Path(repo) / K8S_ROLES.relative_to(REPO)
-    callers: dict[str, set[str]] = {}
-    for tasks_dir in sorted(roles_dir.glob("*/tasks")):
-        caller = tasks_dir.parent.name
-        for task_file in sorted(tasks_dir.glob("*.yml")):
-            try:
-                tasks = yaml_fast.safe_load(task_file.read_text())
-            except yaml.YAMLError:
-                continue
-            for callee in _callees(tasks):
-                if callee != caller:
-                    callers.setdefault(callee, set()).add(caller)
-    return callers
 
 
 # Manifest basenames `k8s/manifests` renders from a shared template under `ansible/templates/`

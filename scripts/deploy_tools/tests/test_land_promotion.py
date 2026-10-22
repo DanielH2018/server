@@ -488,4 +488,11 @@ def test_a_landing_deadline_caps_the_promotion_wait(land_run, monkeypatch):
 
 def test_without_a_landing_deadline_the_promotion_wait_is_uncapped(land_run):
     _, _, _, calls, _ = land_run([], _fakes())
-    assert [c[1][4] for c in calls if c[0] == "land_wait"] == [None]
+    assert [c[1][4:] for c in calls if c[0] == "land_wait"] == [(None, 0)]
+
+
+def test_a_landers_window_grace_reaches_the_promotion_wait(land_run, monkeypatch):
+    """`LAND_WINDOW_GRACE` is what the reboot window may add to the cap (#5457); unset is 0."""
+    monkeypatch.setenv("LAND_WINDOW_GRACE", "22200")
+    _, _, _, calls, _ = land_run([], _fakes())
+    assert [c[1][5] for c in calls if c[0] == "land_wait"] == [22200]

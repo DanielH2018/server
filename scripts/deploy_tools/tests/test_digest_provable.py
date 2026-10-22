@@ -85,14 +85,14 @@ def test_anything_acting_outside_the_digest_is_not_provable(tmp_path, tasks, ext
     assert not digest_provable.digest_provable(_role(tmp_path, tasks, extra))
 
 
-def test_the_real_tree_names_a_provable_role_and_refuses_a_volume_claim_one():
+def test_the_real_tree_names_a_provable_role_and_refuses_an_image_builder_one():
     """The derivation finds its subject by walking tasks, so it must find a known member.
 
-    homepage renders manifests and nothing else; sonarr includes `k8s/volume-claim`, whose PVC
-    staging the digest never stats.
+    homepage renders manifests and nothing else; n8n includes `k8s/image-builder`, whose
+    image build the digest never covers.
     """
     assert digest_provable.digest_provable(REPO_K8S / "homepage")
-    assert not digest_provable.digest_provable(REPO_K8S / "sonarr")
+    assert not digest_provable.digest_provable(REPO_K8S / "n8n")
 
 
 def test_the_deployers_argv_is_one_main_accepts(capsys):

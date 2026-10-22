@@ -12,8 +12,8 @@ State, all under `STATE_DIR` (`/var/lib/homelab-builder`):
   * `src/`, a bare clone of the repository, fetched every run;
   * `state.json`: the last built commit, the end of the last successful fetch, the last
     failure (its reason and the tip it met), and the package directories last staged;
-  * `ci-cache.json`: each FINAL verdict (`pass` or `fail`) per SHA. A pending one is never
-    cached, so it is asked again next run;
+  * `ci-cache.json`: each `pass` verdict per SHA. A `fail` or a pending one is never cached,
+    so it is asked again next run: a CI re-run can turn a red SHA green (#5786);
   * `published/<package dir>/`: the render of each package as it was last staged;
   * `staged/`: `chosen` plus the `.deb` files for the signer;
   * `homelab_builder.prom`, which the unit's `ExecStopPost=-+` line copies into the
@@ -232,7 +232,11 @@ class Builder:
     def main(self) -> int:
         self.config = parse_env_file(str(self.config_path))
         self.state = self._load("state.json")
-        self.cache = self._load("ci-cache.json")
+        # A `fail` written before #5786 would block a SHA a re-run turned green, so only a
+        # `pass` survives the load.
+        self.cache = {
+            sha: v for sha, v in self._load("ci-cache.json").items() if v == "pass"
+        }
         # 1. No token, no request: anonymous reads share one quota with the tick's gate. The
         # stub `run` keeps `gh auth token` out of it; the token comes from config.env alone.
         token = github_token(self.config, lambda *a, **k: _NO_GH)
@@ -329,8 +333,8 @@ class Builder:
         return None
 
     def verdict(self, sha: str, contexts: frozenset[str]) -> str:
-        if sha in self.cache:
-            return self.cache[sha]
+        if self.cache.get(sha) == "pass":
+            return "pass"
         self.requests += 1
         try:
             payload = github_get(
@@ -362,7 +366,12 @@ class Builder:
             log(f"ci: {sha[:12]} unreadable, read as pending: {exc}")
             return "pending"
         result = ci_verdict(runs, contexts)
-        if result != "pending":
+        # DECIDED: only `pass` is cached. GitHub's check-runs API returns the latest run per
+        # name, so `gh run rerun --failed` turns a red SHA green, and a cached `fail` would
+        # never see it while the deployer's gate, which caches nothing, deploys the SHA
+        # (#5786). Re-reading a fail costs one request per red commit in a walk that
+        # CI_ANCESTOR_WALK_MAX bounds.
+        if result == "pass":
             self.cache[sha] = result
         return result
 

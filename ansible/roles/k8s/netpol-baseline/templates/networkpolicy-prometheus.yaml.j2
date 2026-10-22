@@ -15,9 +15,8 @@
 # decide whether a promotion is healthy. Its name moves with each revision's SHA, so the peer
 # selects the stable pod label `app: soak` instead of `job-name`. A fifth runs in
 # {{ k8s_namespace }}: crowdsec's verify Job, `app: crowdsec-verify`
-# (roles/k8s/crowdsec/templates/verify-inert/job.yaml.j2), which reads the edge's answers to
-# daniel-pi's probe from here. Its peer lands before crowdsec's Flux flip, so the Job is admitted
-# the first time it runs. prometheus itself is ALSO read on host loopback
+# (roles/k8s/crowdsec/templates/verify/job.yaml.j2), which reads the edge's answers to
+# daniel-pi's probe from here. prometheus itself is ALSO read on host loopback
 # by `otelq` (a workstation host process — see observability/CLAUDE.md), covered the same way as
 # tempo/otel-collector below, not by this file. Headlamp's Prometheus plugin is a sixth
 # in-cluster reader that this file also does NOT admit, on purpose: it queries through the API

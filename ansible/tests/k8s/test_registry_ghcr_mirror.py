@@ -31,8 +31,14 @@ ROLE = "registry"
 CTX = _role_context(ROLE, domain="example.com")
 
 
+HOST_FILES = K8S.parent / "setup" / "k8s_host_files"
+
+
 def _docs(template: str) -> list[dict]:
-    rendered = _render(K8S / ROLE / "templates" / template, **CTX)
+    # The GC Job renders from the setup role since the conversion, with registry's context:
+    # test_k8s_host_files_pairs.py holds its copies of the registry keys equal to the originals.
+    base = HOST_FILES if template == "ghcr-mirror-gc-job.yaml.j2" else K8S / ROLE
+    rendered = _render(base / "templates" / template, **CTX)
     return [d for d in yaml_fast.safe_load_all(rendered) if d]
 
 
@@ -147,7 +153,9 @@ def test_only_the_mirror_store_has_a_gc_job():
     """The push store's GC is retired (D5, Wave D's registry bullet): under Flux its scale-down
     of deploy/registry would be a second writer on a field Flux renders."""
     templates = sorted(
-        p.name for p in (K8S / ROLE / "templates").glob("*gc-job.yaml.j2")
+        p.name
+        for base in (K8S / ROLE, HOST_FILES)
+        for p in (base / "templates").glob("*gc-job.yaml.j2")
     )
     assert templates == ["ghcr-mirror-gc-job.yaml.j2"]
     assert set(_gc_jobs()) == {"registry-gc-ghcr-mirror"}
@@ -192,7 +200,7 @@ def test_the_mirror_prune_reads_an_optional_keep_set_and_the_script_verbatim():
         and d["metadata"]["name"]
         == volumes["ghcr-mirror-prune-script"]["configMap"]["name"]
     ]
-    source = (K8S / ROLE / "files" / "ghcr-mirror-prune.sh").read_text()
+    source = (HOST_FILES / "files" / "ghcr-mirror-prune.sh").read_text()
     assert script["data"]["ghcr-mirror-prune.sh"] == source
 
 
@@ -235,28 +243,10 @@ def test_registry_gc_applies_the_mirror_manifest_the_deploy_stages():
     """The mirror's Job is its own file, which the cron reads at GC time (#1669)."""
     (read,) = re.findall(
         r"^MIRROR_JOB_MANIFEST=(\S+)$",
-        rendered_shell_text("k8s", "registry", "registry-gc.sh.j2"),
+        rendered_shell_text("setup", "k8s_host_files", "registry-gc.sh.j2"),
         re.MULTILINE,
     )
-    tasks = (K8S / ROLE / "tasks" / "main.yml").read_text()
+    tasks = (HOST_FILES / "tasks" / "registry.yml").read_text()
     assert f"dest: {read}\n" in tasks, (
         f"no task stages {read}, the file the cron applies"
     )
-
-
-def test_a_deploy_restores_a_mirror_a_stopped_gc_left_at_zero():
-    """With no rendered `replicas:`, an apply never undoes a GC that died after its scale-down.
-
-    The deploy scales the mirror back only from zero and only while no mirror GC Job runs, and
-    does it before the rollout wait, which would otherwise pass on 0/0.
-    """
-    tasks = yaml_fast.safe_load((K8S / ROLE / "tasks" / "main.yml").read_text())
-    names = [t["name"] for t in tasks]
-    (restore,) = [t for t in tasks if "scale deploy/ghcr-mirror" in str(t)]
-    cmd = restore["ansible.builtin.command"]["cmd"]
-    assert "--current-replicas=0" in cmd and "--replicas=1" in cmd, cmd
-    when = " ".join(restore["when"])
-    assert "registry_mirror_replicas.stdout | trim == '0'" in when, when
-    assert "registry_mirror_gc_active.stdout" in when, when
-    wait = names.index("Wait for the ghcr-mirror rollout before probing its policy")
-    assert names.index(restore["name"]) < wait, names

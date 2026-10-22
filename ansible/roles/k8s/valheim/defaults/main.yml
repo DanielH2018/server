@@ -33,6 +33,17 @@ valheim_k8s_image: ghcr.io/community-valheim-tools/valheim-server:1.4.1@sha256:f
 manifests_rollout_timeout: 1800s  # noqa var-naming[no-role-prefix]
 valheim_k8s_rollout_timeout: "{{ manifests_rollout_timeout }}"
 
+# The budget of the valheim-prepull Kustomization, whose Job pulls the server image and the mods
+# image onto daniel-box before the valheim Kustomization applies
+# (scripts/renderer/renderer_lib/prepull.py). The Deployment is `Recreate`, so without it the
+# server is down for the whole pull. MEASURED 2026-10-22 (#5855): the pinned amd64 server image
+# is 369.78 MB compressed from GHCR, which has served this homelab at 0.145-0.53 MB/s; the mods
+# image is alpine plus two plugin DLLs. 2700s covers the full re-pull down to 0.137 MB/s. The Job
+# has no deadline, so a pull slower still costs that revision its verdict, the Job keeps pulling,
+# and Flux applies valheim on a later retry. Only Flux reads it: the renderer adds the
+# Kustomization for a published tag alone, so an Ansible deploy ignores it.
+flux_prepull_timeout: 2700s  # noqa var-naming[no-role-prefix]
+
 # ── BepInEx and the mod set ─────────────────────────────────────────────────────────────
 # BEPINEX=true makes the image install BepInExPack Valheim beside the vanilla server in
 # /opt/valheim/bepinex and run the server through it. Mutually exclusive with VALHEIM_PLUS,

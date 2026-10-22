@@ -22,7 +22,10 @@ A target's value is one SHA-256 over:
 - the `.source` digest of every secret key those ConfigMaps and Secrets reference as
   `${key}`, because the placeholder text does not move when the key rotates;
 - for a Secret shipped as a SOPS manifest, the `.source` digest of its key, never its
-  ciphertext.
+  ciphertext;
+- for a Secret another role renders, the `.source` digest of each key the tag's
+  `manifests_outside_secrets` entry for it lists (`outside_secrets`, #5416). pihole-exporter
+  reads `pihole_password` from the pihole role's `pihole-env` this way.
 
 A ConfigMap whose name matches `RELOADED_IN_PLACE` is never an input: its reader re-reads
 the mount by itself, so an edit to it rolls nothing, as it rolled nothing under Ansible.
@@ -67,6 +70,7 @@ RESTART_ANNOTATION = "checksum/restart"
 WORKLOAD_KINDS = frozenset({"Deployment", "DaemonSet", "StatefulSet"})
 TARGET_KEYS = ("manifests_rollout", "manifests_extra_rollouts")
 SELF_KEY = "manifests_self_rollouts"
+OUTSIDE_KEY = "manifests_outside_secrets"
 # `manifests_restart_triggers_default` in the manifests role's defaults: the signals an entry
 # restarts on when it names no `restart_on`. Only `config` and `secret` move with the render;
 # `image` is a rebuilt image behind a mutable tag, which Flux sees in the render already.
@@ -150,6 +154,32 @@ def self_rollouts(tag: str, context: Mapping, roles: Path = K8S_ROLES) -> list[s
         except jinja2.TemplateError as exc:
             raise RenderError(f"{tag}: {SELF_KEY} does not resolve: {exc}") from exc
     return [str(e["name"]) for e in _entries(tag, SELF_KEY, {SELF_KEY: value})]
+
+
+def outside_secrets(tag: str, roles: Path = K8S_ROLES) -> dict[str, frozenset[str]]:
+    """Each Secret another role renders that `tag`'s pods read, mapped to the keys it holds.
+
+    The map is `tag`'s `manifests_outside_secrets`, `{name, keys}` per Secret, where `keys`
+    are `ansible/vars/secrets.yml` key names. It is empty for a tag with no tasks directory,
+    such as a test's fixture tag.
+
+    Raises:
+        RenderError: An entry has no name, or its `keys` is not a non-empty list of names.
+    """
+    if not (roles / tag / "tasks").is_dir():
+        return {}
+    values = {OUTSIDE_KEY: include_vars(roles / tag).get(OUTSIDE_KEY)}
+    found = {}
+    for entry in _entries(tag, OUTSIDE_KEY, values):
+        keys = entry.get("keys")
+        if (
+            not keys
+            or not isinstance(keys, list)
+            or not all(isinstance(k, str) for k in keys)
+        ):
+            raise RenderError(f"{tag}: {OUTSIDE_KEY} {entry['name']} lists no keys")
+        found[str(entry["name"])] = frozenset(keys)
+    return found
 
 
 def _entries(tag: str, key: str, values: Mapping) -> list[dict]:
@@ -272,6 +302,7 @@ def restart_values(
     keys: Iterable[str],
     source: Mapping[str, str],
     sops: Mapping[str, str | None] | None = None,
+    outside: Mapping[str, Iterable[str]] | None = None,
 ) -> dict[str, str]:
     """Each target workload of `tag` that names a ConfigMap or Secret, mapped to its value.
 
@@ -283,11 +314,13 @@ def restart_values(
         keys: The key names of `ansible/vars/secrets.yml`.
         source: Each key in `ansible/vars/cluster-vars.source` mapped to its digest.
         sops: The tag's `render_sops_manifests` entries mapped to their sentinel renders.
+        outside: Each Secret another role renders mapped to its keys, as `outside_secrets`
+            returns them.
 
     Raises:
-        RenderError: A target names no rendered workload, or a ConfigMap or Secret it names
+        RenderError: A target names no rendered workload, a ConfigMap or Secret it names
             references a key that `.source` does not record, so a rotation of it would roll
-            nothing.
+            nothing, or an `outside` Secret is one no target reads.
     """
     keys = frozenset(keys)
     texts = [text for files in directories.values() for text in files.values()]
@@ -301,6 +334,8 @@ def restart_values(
         for obj in docs
         if (template := pod_template(obj)) is not None
     }
+    outside = outside or {}
+    unread = set(outside)
     values = {}
     for name in sorted(targets):
         if name not in workloads:
@@ -325,6 +360,10 @@ def restart_values(
             elif kind == "Secret" and ref in shipped:
                 inputs.append(f"{kind}/{ref}\0sops-manifest")
                 held = shipped[ref]
+            elif kind == "Secret" and ref in outside:
+                inputs.append(f"{kind}/{ref}\0outside-role")
+                held = set(outside[ref])
+                unread.discard(ref)
             for key in sorted(held):
                 if key not in source:
                     raise RenderError(
@@ -334,6 +373,10 @@ def restart_values(
                 inputs.append(f"{key}\0{source[key]}")
         if inputs:
             values[name] = hashlib.sha256("\n".join(inputs).encode()).hexdigest()
+    if unread:
+        raise RenderError(
+            f"{tag}: {OUTSIDE_KEY} names {sorted(unread)}, which no restart target reads"
+        )
     return values
 
 

@@ -18,12 +18,15 @@ function would override an exported stub.
 """
 
 import os
+import shutil
 import subprocess
 from collections.abc import Callable
 from dataclasses import dataclass
 from lib.proc_testing import run as launch
 from pathlib import Path
 
+import leakguard
+import pytest
 from lib import yaml_fast
 
 from _helpers import ROLES, load_defaults
@@ -237,3 +240,83 @@ def test_the_cron_runs_the_script_this_suite_renders():
     assert jobs["Sync peer Claude artifacts"] == "/usr/local/bin/sync-artifacts.sh", (
         jobs
     )
+
+
+# The pull handed to the real rsync, locally: `-e` and its transport argument are dropped and
+# the `<ssh_target>:` prefix is stripped, so every other flag reaches rsync as rendered.
+# leakguard shims `rsync` on PATH, so the stub calls the binary by the path the test resolved
+# from the PATH leakguard saved. A copy between two tmp_path trees reaches no host.
+LOCAL_RSYNC_STUB = (
+    'local a skip= args=(); for a in "$@"; do '
+    'if [ -n "$skip" ]; then skip=; continue; fi; '
+    'if [ "$a" = -e ]; then skip=1; continue; fi; '
+    'args+=("${a#"$SYNC_ARTIFACTS_SSH":}"); done; "$SYNC_ARTIFACTS_REAL_RSYNC" "${args[@]}"'
+)
+
+
+def _peer_directory_task_mode() -> str:
+    tasks = yaml_fast.safe_load(
+        (ROLES / "setup" / "k8s_host_files" / "tasks" / "artifacts.yml").read_text()
+    )
+    (task,) = [
+        t
+        for t in tasks[0]["block"]
+        if t["name"] == "Ensure a peer directory exists for every synced host"
+    ]
+    return task["ansible.builtin.file"]["mode"]
+
+
+def test_a_sync_leaves_the_peer_directory_at_the_k8s_host_files_mode(tmp_path):
+    """k8s_host_files' task and this sync both own the peer directory, so they agree on its mode.
+
+    With the trailing slash, `rsync -a` copies the peer root's own mode onto the destination.
+    The peer's 0755 then flipped back and forth against the task's 0750 on every sync and
+    every apply (#5524).
+    """
+    real_rsync = shutil.which("rsync", path=str(leakguard._state["real_path"]))
+    if real_rsync is None:
+        pytest.skip("rsync is not installed")
+    source = tmp_path / "source"
+    (source / "sub").mkdir(parents=True)
+    (source / "sub" / "plan.html").write_text("<p>plan</p>\n")
+    # The peer's own 755, set past the umask. A directory mode, not an exec-bit fixture.
+    for directory in (source, source / "sub"):
+        os.chmod(directory, 0o755)
+    peer_dir = tmp_path / "peer"
+    (peer_dir / PEER).mkdir(parents=True)
+    (peer_dir / PEER).chmod(0o750)
+    script = tmp_path / "sync-artifacts.sh"
+    script.write_text(
+        render_shell_script(
+            *TEMPLATE,
+            overrides={
+                "claude_code_artifacts_peer_dir": str(peer_dir),
+                "claude_code_artifacts_stars_file": str(tmp_path / "stars.txt"),
+                "claude_code_artifacts_peer_sources": [
+                    {
+                        **DEFAULTS["claude_code_artifacts_peer_sources"][0],
+                        "path": str(source),
+                    }
+                ],
+            },
+        )
+    )
+    kuma_lib = tmp_path / "kuma-push-lib.sh"
+    kuma_lib.write_text("kuma_push() { :; }\n")
+    proc = launch(
+        ["bash", str(script)],
+        env={
+            "PATH": os.environ["PATH"],
+            "SYNC_ARTIFACTS_STATE_DIR": str(tmp_path),
+            "SYNC_ARTIFACTS_KUMA_LIB": str(kuma_lib),
+            "SYNC_ARTIFACTS_SSH": PEER_SSH,
+            "SYNC_ARTIFACTS_REAL_RSYNC": real_rsync,
+            "BASH_FUNC_rsync%%": f"() {{ {LOCAL_RSYNC_STUB}; }}",
+            "BASH_FUNC_logger%%": "() { :; }",
+        },
+    )
+    assert proc.returncode == 0, proc
+    # Non-vacuity: the pull really ran, so the mode below is the one rsync left.
+    assert (peer_dir / PEER / "sub" / "plan.html").read_text() == "<p>plan</p>\n"
+    mode = _peer_directory_task_mode()
+    assert oct((peer_dir / PEER).stat().st_mode & 0o777) == oct(int(mode, 8)), mode

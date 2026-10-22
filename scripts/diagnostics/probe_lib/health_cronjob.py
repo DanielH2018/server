@@ -23,7 +23,7 @@ from diagnostics.probe_lib.health_rollout import seconds_since
 
 # RBAC decides which of two paths this gate can take: trigger a fresh run itself, the way
 # `k8s/cronjob-gate` does at deploy time, or fall back to reading the most recent existing run.
-# probe.py runs as `homelab-readonly` (see `roles/setup/k3s/templates/readonly-rbac.yaml.j2`),
+# probe.py runs as `homelab-readonly` (see `roles/k8s/cluster-base/templates/readonly-rbac.yaml.j2`),
 # bound to the built-in `view` ClusterRole plus one additive ClusterRole, neither granting any
 # write verb. Verified live, running as that identity:
 #   k3s kubectl auth can-i create jobs -n homelab   -> no

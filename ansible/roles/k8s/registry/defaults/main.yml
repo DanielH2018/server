@@ -26,7 +26,7 @@ registry_k8s_size: 10Gi
 # Its own claim, because every ghcr.io image in the cluster pulls through it: 27 distinct
 # images on 2026-10-18, tdarr's and valheim's among them. Its TTL is zero so nut's image
 # survives a long gap between rebuilds, which leaves the weekly GC's offline prune
-# (files/ghcr-mirror-prune.sh, #5541) as the only thing that reclaims it. Losing it costs
+# (setup/k8s_host_files/files/ghcr-mirror-prune.sh, #5541) as the only thing that reclaims it. Losing it costs
 # re-pulls from ghcr.io, not data, hence longhorn-nobackup.
 registry_k8s_ghcr_mirror_claim: registry-ghcr-mirror
 registry_k8s_ghcr_mirror_size: 30Gi
@@ -83,7 +83,7 @@ registry_k8s_gc_ttl_s: 604800
 # every host, so the deploy can take it where registry_k8s_manage_gc is false.
 registry_k8s_gc_lock_file: /run/lock/registry-gc.lock
 
-# The proof-of-loop pair (see tasks/main.yml). crane rather than docker or skopeo: it is a
+# The proof-of-loop pair (see templates/verify/job.yaml.j2). crane rather than docker or skopeo: it is a
 # static binary in a distroless image, needs no daemon, and copies between registries directly
 # without a local store to fill the node's disk.
 registry_k8s_crane_image: gcr.io/go-containerregistry/crane:v0.22.1@sha256:1f968817b95790bed063f71175aa6b8ff879fa17064020415f3e18bb6e6a36e1

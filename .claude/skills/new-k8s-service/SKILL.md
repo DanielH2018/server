@@ -69,7 +69,7 @@ DaemonSet calls `pod_shell` only. Both required arguments are decisions, and the
 docstring says what each one costs: `strategy` is `Recreate` (a downtime gap every deploy,
 allowlisted with its reason in `ansible/tests/k8s/test_deploy_strategy.py`) or
 `RollingUpdate`; `priority_class` is one of the tiers in
-`roles/setup/k3s/templates/priorityclass.yaml.j2`. The pod-level `securityContext` goes
+`roles/k8s/cluster-base/templates/priorityclass.yaml.j2`. The pod-level `securityContext` goes
 through the macro's `run_as_user`/`fs_group`/`non_root` arguments — a pod that needs sysctls
 or supplementalGroups writes the whole block itself and passes none of them. ENFORCED by
 `ansible/tests/k8s/test_workload_shell_uses_the_macros.py`, which refuses an owned field

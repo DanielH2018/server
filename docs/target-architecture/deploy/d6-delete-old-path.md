@@ -2,11 +2,12 @@
 
 Status: PLANNED
 
-Re-sliced on 2026-10-17 at the operator's request: 17 steps became 12 PRs. *Steps, as PRs*
-maps each old step label to the PR that absorbs it.
+Re-sliced on 2026-10-17 at the operator's request: 17 steps became 12 PRs, and #5425 later
+dropped D6.10, so 11 carry code. *Steps, as PRs* maps each old step label to the PR that
+absorbs it.
 
-Depends on: [D5](d5-bulk-move.md). Two PRs wait on less. D6.10 needs only D1.6, and D6.11
-needs only D5.1a2 and D5's flux PR (*Steps, as PRs*).
+Depends on: [D5](d5-bulk-move.md). One PR waits on less: D6.11
+needs only D5.1a2 and D5's flux PR. D6.10 was dropped by #5425 (*Steps, as PRs*).
 
 Unblocks: R4
 
@@ -789,11 +790,12 @@ two host-plane pages (Baseline). So D6.1 first moves those calls into `deploy_ha
 ### Grafana's deploy markers after D6
 
 **After D6, two sources mark a cluster deploy.** `promote.py land-wait` writes a line for
-every landing, and from D6.1b a query draws a marker from kustomize-controller's own log
-line for every apply. At the baseline the dashboards draw a marker only for a
+every landing, and the soak Job writes one for every promotion that passes its soak (D5
+*The deploy annotation (D5.3b3)*). At the baseline the dashboards draw a marker only for a
 `deploy-annotation` line in host syslog (Baseline). D6 deletes one emitter that no k8s role
 reaches any more, and keeps the one that replaced it. D6 owns the `deploy-annotation`
-stream from D6.1 on, as D2 *Risks* hands it over, and D6.1b closes the gap below.
+stream from D6.1 on, as D2 *Risks* hands it over. D5.3b3's soak line already closes the gap
+below, so D6 adds no annotation query (#5425).
 
 - **The Ansible emitters stop role by role, at each flip, not at D6.1.** C4 makes the
   deployer's k8s arms and `deploy.sh` skip a flux-owned entry. D2's Baseline records that
@@ -811,34 +813,45 @@ stream from D6.1 on, as D2 *Risks* hands it over, and D6.1b closes the gap below
   tag, so `deploy_lib/playbook.py:annotate` fires only for a Pi deploy. After H5, no
   `deploy.sh -e target=daniel-pi` runs, and H7.19b deletes `playbook.py`. `land-wait` is
   then the stream's one emitter.
-- **The gap D2 records closes with a query, not an emitter.** A promotion that no
+- **The soak's line closes the gap D2 records, and D6 adds no query.** A promotion that no
   `land-wait` follows draws no `deploy-annotation` line. An automerged bump, a merge made
   outside `land.sh`, and a promotion after the operator clears `DEPLOY_HOLD` with no re-run
   are three such promotions (D2 *Risks*). The `event=landing` line does not close the gap,
   because it marks the merge rather than the apply and only the Landings board reads it
-  (Baseline). D6.1b adds a second annotation query beside
-  `observability_deploy_annotation_expr`, and `ansible/filter_plugins/grafana_dashboards.py`
-  adds both to every dashboard.
-    - **The source is kustomize-controller's own log.** loki-homelab's Alloy DaemonSet ships
-      every pod's logs, `flux-system`'s included. The query matches the line that
-      kustomize-controller writes for an apply that changed objects, which names the
-      Kustomization and its revision. It takes its `job` label from `loki_streams`, as
-      every selector does.
-    - **One marker per apply, not per reconcile.** kustomize-controller reconciles each
-      Kustomization on its interval and logs each run. The query matches only the line
-      that reports a changed object, so a reconcile that changed nothing draws no marker.
-    - **The exact line is upstream's.** D6.1b measures it on production with `probe.py
-      loki-query` before it writes the matcher. It pins one captured apply line and one
-      captured no-change line as the test's fixtures.
+  (Baseline). The soak Job does close it: it runs in `flux-system` once per promoted
+  revision, whether or not `land.sh` made the merge.
+    - **The soak's query is the second query, and the only one beside the syslog one.**
+      D5.3b3 added `observability_flux_deploy_annotation_expr`, which reads
+      `{job="k8s", namespace="flux-system", container="soak"} |= "event=deploy" | logfmt`.
+      `ansible/filter_plugins/grafana_dashboards.py` injects it as "Flux deploys", with
+      refId `FluxDeployAnno`, beside `observability_deploy_annotation_expr`. D6 neither
+      replaces it nor adds a third query beside it.
+    - **One marker per passing promotion, not per apply.** `flux_soak.py:main` prints the
+      line when the verdict holds no failure. A revision that changes no service passes at
+      once, so it also draws a marker. A soak that fails or errors prints none, although
+      Flux has applied the revision. The `flux/soak` commit status, the soak's alert and
+      `promote`'s hold and reset record that failure, but no dashboard marks it. D6 accepts
+      that limit. [#5881](https://github.com/DanielH2018/server/issues/5881) asks the
+      operator whether the soak should also print a `result=failed` line. That line would
+      reverse D5.3b3's success-only choice, so the limit stands until the operator accepts
+      #5881.
     - **A landing draws both markers.** `land-wait`'s line names the PR's changed set, and
-      the controller query draws one marker per Kustomization the promotion changed.
-      `land-wait`'s line stays, because only it names the PR.
-    - **No write credential.** The query reads Loki, as the existing one does, so it needs
-      no Grafana API call and no standing write credential.
-    - **Fallback: `gotk_resource_info`'s `revision` label.** C6 states that every promotion
-      adds one series per Kustomization through that label. If no kustomize-controller
-      line tells an apply from a no-change reconcile, D6.1b draws the marker from each
-      series' first sample through the Prometheus data source instead.
+      the soak's line names the revision. `land-wait`'s line stays, because only it names
+      the PR.
+    - **No write credential.** The soak's query reads Loki, as the syslog query does, so it
+      needs no Grafana API call and no standing write credential.
+- **Rejected: a third query over kustomize-controller's log (old D6.1b).** Old D6.1b
+  planned a query that matched kustomize-controller's line for an apply that changed
+  objects, one marker per changed Kustomization, with `gotk_resource_info`'s `revision`
+  label as the fallback. It was planned before D5.3b3, to close the gap above. With the
+  soak's line in place, it would add per-Kustomization markers that duplicate the soak's
+  marker on every promotion, which is several markers for one landing. The one case it
+  alone would mark is a failed soak. That failure already pages, and it holds and resets
+  `prod`, so D6 accepts the missing marker rather than add a matcher over an upstream log
+  format that D6 never measured. The rejection does not depend on #5881. If the operator
+  accepts #5881, the soak's own stream marks a failure as well, and if the operator
+  refuses it, the limit stays accepted. Replacing the soak's query with it was rejected for the same reason, and
+  because the soak's line names the revision it judged.
 - **Rejected: an emitter in `promote` itself.** `promote` runs on a GitHub-hosted runner,
   so a `logger` call there writes to the runner's syslog, which no Alloy ships (Baseline).
   A POST to Grafana's HTTP API instead would need the standing write credential that the
@@ -846,10 +859,12 @@ stream from D6.1 on, as D2 *Risks* hands it over, and D6.1b closes the gap below
   refutes the same option in its own review log.
 - **D6.1 rewrites two texts that name the deleted emitter.** The comment above
   `observability_deploy_annotation_expr` names `deployer_lib/deploy_io.py` and "the
-  emit_deploy_annotation comments". The rewrite names `deploy.sh`'s emitter, for the Pi,
-  and `promote.py land-wait`, for the cluster. The change is a comment, so the
-  observability render does not move. `test_deploy_annotations.py`'s docstring draws the
-  chain from `deploy.sh / gitops_deploy.py`, and its rewrite names the same two emitters.
+  emit_deploy_annotation comments". The rewrite names three sources: `deploy.sh`'s
+  emitter for the Pi, `promote.py land-wait` for a landing, and the soak Job for every
+  passing promotion, read by `observability_flux_deploy_annotation_expr`. The change is a
+  comment, so the observability render does not move. `test_deploy_annotations.py`'s
+  docstring draws the chain from `deploy.sh / gitops_deploy.py`, and its rewrite names the
+  same three sources.
   `test_deploy_annotations.py:test_both_deploy_paths_annotate` and
   `test_the_query_matches_what_the_deployers_actually_log` drop `deploy_io.py` and keep
   `deploy.sh` and `land-wait`, which D2.3 adds to both.
@@ -959,7 +974,7 @@ daniel-box to `setup_drift_check_hosts` before D6.5 disarms manifest-prune-check
 - `setup-drift-check.sh` reads the same `setup-drift-lib.sh` against the same stamp
   directories. The box keeps one detector throughout.
 - **By D6, setup drift is a textfile check, not a Kuma tile.** D6 opens only after M6's
-  C-2b deletes Kuma (M6 *When D5 flips a role M6 edits*). M6's B2 has by then made
+  C-2b deletes Kuma (contracts.md, D6's row). M6's B2 has by then made
   `setup-drift-check.sh` write `setup-drift-check.prom` on each armed host, and given it
   M3's two rules, `<Check>Failed` and `<Check>NotReporting`. Each rule names one `origin`.
   B2 ran while daniel-server was the only armed host, so its rules name daniel-server
@@ -1375,9 +1390,8 @@ than writing a second.
                                                     source form (D6.7c)
   docs/break-glass.md                               item 8; + the GitHub-unreachable
                                                     scenario (D6.7c)
-  ansible/roles/k8s/observability/defaults/main.yml + the kustomize-controller marker
-                                                    query (D6.1b)
-  ansible/filter_plugins/grafana_dashboards.py      adds both queries (D6.1b)
+  ansible/roles/k8s/observability/defaults/main.yml the annotation comment names three
+                                                    sources (D6.1); no new query (#5425)
 + docs/adr/<next free>-the-cluster-deploys-from-a-ci-rendered-artifact-through-flux.md
   docs/adr/0010-pull-based-gitops-over-argo-and-flux.md   status: Superseded by ADR-NNNN
 ```
@@ -1403,7 +1417,8 @@ Each deletion PR removes one coherent subject and states the census rows it remo
 
 **The re-slice.** On 2026-10-17 the operator asked to finish the migration in days, and
 approved merging D6's steps into fewer, larger PRs that agents write in parallel ahead of
-D5's end. The 17 steps, D6.0 to D6.8b, became 12 PRs, D6.10 to D6.21.
+D5's end. The 17 steps, D6.0 to D6.8b, became 12 PRs, D6.10 to D6.21. #5425 later
+dropped D6.10, so 11 of them carry code.
 
 - **Names.** The PRs are numbered from D6.10, so no PR name equals an old step label. The
   rest of this plan, other slices' plans, contracts.md's register and two code comments cite
@@ -1420,9 +1435,9 @@ D5's end. The 17 steps, D6.0 to D6.8b, became 12 PRs, D6.10 to D6.21.
 
 | PR | Old steps | Written ahead? | Waits on |
 |---|---|---|---|
-| D6.10 | D6.1b | Not yet: [#5425](https://github.com/DanielH2018/server/issues/5425) re-scopes it first | D1.6, merged |
+| D6.10 | D6.1b | Dropped by [#5425](https://github.com/DanielH2018/server/issues/5425): no PR | none |
 | D6.11 | D6.7a, D6.7c | Yes | D5.1a2, merged; D5's flux PR; the operator's break-glass key pair |
-| D6.12 | D6.0, D6.1 | Yes, except the annotation comment and test, which follow #5425. Rebased and re-measured at D5's end | D5, *live*; M2 Open question 1's label amendment |
+| D6.12 | D6.0, D6.1 | Yes. Rebased and re-measured at D5's end | D5, *live*; M2 Open question 1's label amendment |
 | D6.13 | D6.2a, D6.2b | Yes | D6.12, *live* |
 | D6.14 | D6.6 | Yes | D6.12, *live* |
 | D6.15 | D6.3 | Yes | D6.12 |
@@ -1433,23 +1448,23 @@ D5's end. The 17 steps, D6.0 to D6.8b, became 12 PRs, D6.10 to D6.21.
 | D6.20 | D6.7 | Yes, except the handback count | D6.11, D6.15 and D6.19; C3's kept-set line; the operator's decision |
 | D6.21 | D6.8a, D6.8b | A draft | every other D6 PR; G5, if it has started; the operator's ADR approval |
 
-The PRs merge in this order. D6.10 and D6.11 merge whenever their own edges allow. After
+The PRs merge in this order. D6.10 has no PR, and D6.11 merges whenever its own edges allow. After
 D6.12, three chains run side by side: D6.13 and D6.14, D6.16 to D6.18, and D6.15 to D6.20.
 
-1. **D6.10 — Deploy markers from kustomize-controller's log** (old D6.1b, about 80 lines).
-    - **Why alone.** It needs nothing from D5 or from another D6 PR, so it lands as soon as
-      it is written. No other step edits the dashboards' annotation queries.
-    - **Written ahead: not yet.** D5.3b3 added `observability_flux_deploy_annotation_expr`,
-      a second annotation query that reads the soak's line, after old D6.1b was planned.
-      [#5425](https://github.com/DanielH2018/server/issues/5425) asks whether the controller
-      query is a third query or replaces the soak's. That is a design question, so the
-      re-slice leaves it to #5425. Once #5425 is answered, an agent writes the PR and merges
-      it at once.
-    - **Waits on:** D1.6, which has merged. The slice edge to D5 narrows to that.
-    - **Checks.** No operator gate. Before merge, the PR body quotes one apply line and one
-      no-change line read with `probe.py loki-query`, and the marker pair with its red half.
-    - **Rollback:** *Rollback*'s D6.1b bullet.
-    - **Exit criterion:** none of the six. It closes the marker gap that D2 *Risks* records.
+1. **D6.10 — Dropped: no third deploy-marker query** (old D6.1b, no PR).
+    - **Why dropped.** D5.3b3 added `observability_flux_deploy_annotation_expr`, the
+      second annotation query, which reads the soak Job's line for every passing
+      promotion. That line closes the gap old D6.1b was planned for, before D5.3b3 existed.
+      [#5425](https://github.com/DanielH2018/server/issues/5425) settled that D6 adds no
+      kustomize-controller query: neither a third one nor a replacement for the soak's.
+      *Grafana's deploy markers after D6* records the reasons.
+    - **What is left.** A failed soak draws no marker, a limit D6 accepts. Whether the soak
+      should mark a failure as well is
+      [#5881](https://github.com/DanielH2018/server/issues/5881), for the operator to rule
+      on outside D6. D6.12
+      rewrites the annotation comment and test docstring to name the soak's query.
+    - **Exit criterion:** none of the six. The marker gap that D2 *Risks* records closed
+      with D5.3b3.
 2. **D6.11 — The deletion drill, with break-glass promotion** (old D6.7a and D6.7c, about
    420 lines).
     - **Why together.** D6.7c adds its two cases to the job that D6.7a creates. One
@@ -1491,17 +1506,16 @@ D6.12, three chains run side by side: D6.13 and D6.14, D6.16 to D6.18, and D6.15
     - **Written ahead: yes.** The deployer's k8s arms, D2's drops, D3.4's interim rule and
       D2.3's `land-wait` are all in the tree. The writer rebases at D5's end and re-measures
       each count.
-    - **One part follows #5425.** Old D6.1 rewrites the comment above
-      `observability_deploy_annotation_expr` and the docstring of `test_deploy_annotations.py`
-      so that they name two emitters. D5.3b3's soak query already sits beside that key. D6.10
-      may also merge first, and old D6.1b planned only for the other order. So at rebase,
-      D6.12 keeps every source those texts name, D6.10's and the soak's included, and drops
+    - **The annotation texts name three sources (#5425).** Old D6.1 rewrites the comment
+      above `observability_deploy_annotation_expr` and the docstring of
+      `test_deploy_annotations.py`. D5.3b3's soak query already sits beside that key, and
+      D6.10 adds no query. So D6.12 names `deploy.sh`, `land-wait` and the soak, and drops
       only `deploy_io.py`.
     - **Waits on:** D5, *live*. Old D6.0's checks read it: the deploy-tag label amendment
       (M2 Open question 1), a footprint in `prod`'s `digests.json` for every deploy tag and
       every `SHARED_KINDS` member, a clean `probe.py gitops-state`, and `render_records`
-      disarmed by D5's disarm PR. Through D5's uptime-kuma edge, this PR also waits on M6's
-      C-2b.
+      disarmed by D5's disarm PR. Through D6's index edge to M6's C-2b, this PR also
+      waits on C-2b.
     - **Operator gates:** a hold or a ledger line that a precondition or the post-tick check
       finds is cleared with `gitops_state.py clear-hold` or `clear-owed`
       (**operator-only**). On a crash or a partial apply, the operator re-applies the
@@ -1911,21 +1925,12 @@ The steps merged in this order.
       the check finds either, or a `hold_sha`, the operator applies what it names, or runs
       `gitops_state.py clear-hold <sha>` or `gitops_state.py clear-owed <class> <subject>`
       (**operator-only**). D6.2a does not open until the check is clean.
-3. **D6.1b — Deploy markers from kustomize-controller's log** (about 80 lines). It needs
-   nothing from D6 and can merge any time after D1.6 (*Grafana's deploy markers after D6*).
-    - **Measure first.** From daniel-box, read kustomize-controller's lines for a recent
-      promotion with `probe.py loki-query` over loki-homelab. The PR body quotes one line
-      for an apply that changed objects and one for a reconcile that changed nothing.
-    - Add the second annotation query beside `observability_deploy_annotation_expr`, with
-      its `job` label from `loki_streams`, and have
-      `ansible/filter_plugins/grafana_dashboards.py` add both queries.
-    - Add a clean and flagged pair to `ansible/tests/deploy/test_deploy_annotations.py`
-      over the two captured lines. The apply line matches once, and the no-change line
-      matches nothing. The red half is the matcher without its changed-object clause,
-      which matches the no-change line.
-    - Rewrite the comment above `observability_deploy_annotation_expr` to name three
-      sources: `deploy.sh` for the Pi, `land-wait` for a landing, and kustomize-controller
-      for every apply. If D6.1 has merged, this replaces its two-emitter wording.
+3. **D6.1b — Dropped by [#5425](https://github.com/DanielH2018/server/issues/5425): no
+   query.** D6.1b adds no annotation query. `observability_flux_deploy_annotation_expr`,
+   which D5.3b3 added, is the second query, and it stays the only one beside
+   `observability_deploy_annotation_expr`. D6.1b neither adds a third query nor replaces
+   the soak's (*Grafana's deploy markers after D6*). D6.1's rewrite of the comment above
+   `observability_deploy_annotation_expr` names the soak as the third source.
 4. **D6.2a — The denylist's deployer readers** (about 300 lines removed, about 120 moved,
    and about 60 changed in renovate_agent).
     - Move `is_leftover_dir` and the denylist derivation into `scripts/lib/k8s_roles.py`, and
@@ -2106,8 +2111,8 @@ The steps merged in this order.
    (Baseline).
     - **The Kuma side is M6's, not D6's (#4609).** M6's B1 converts the three checks to
       textfile checks and retires their tiles, their push tokens and every consumer of the
-      tokens. M6's C-2b then deletes Kuma. D6 opens only after C-2b, because uptime-kuma
-      never becomes flux-owned (M6 *When D5 flips a role M6 edits*). So D6.5 removes no
+      tokens. M6's C-2b then deletes Kuma. D6 opens only after C-2b, on D6's index edge to
+      it (contracts.md, D6's row). So D6.5 removes no
       tile, no token and no cluster-file placeholder. Before merge, the PR body quotes
       `git grep -n -E 'manifest_prune_push_token|release_staleness_push_token|live_drift_push_token'`
       at its base, expected to print nothing. A hit means B1 left a consumer. The session
@@ -2436,9 +2441,6 @@ uv run python scripts/diagnostics/probe.py metric 'homelab_check_success{check="
 # D6.1, before merge: the four landing tests. The red half of the first three runs on the
 # tree before the PR.
 uv run pytest scripts/deploy_tools/tests
-# D6.1b, before merge: one captured apply line and one no-change line from kustomize-controller,
-# through probe.py loki-query (its --help gives the selector flags), then the marker pair.
-uv run pytest ansible/tests/deploy/test_deploy_annotations.py
 # D6.2a, in the primary checkout after its tick: the lander's source prints the list.
 uv run python scripts/dev/k8s_autodeploy_counts.py --denylist   # non-empty, comma-separated
 # D6.2a, after the next agent run that reaches a Renovate PR: each verdict written since
@@ -2492,9 +2494,6 @@ gh run view <databaseId> --log | grep -E 'case=(as-rendered|red-half|inventory-p
 - **The four landing tests (D6.1).** The red half of the first three is the tree before
   D6.1, where each landing waits on a `deploy.yml` receipt and never reaches `land-wait`.
   The fourth's red half is a `land-wait` that empties its list on a failed read.
-- **The controller marker (D6.1b).** Its clean half is the captured no-change line, which
-  draws no marker. Its red half is the matcher without the changed-object clause, which
-  matches that line.
 - **The break-glass case (D6.7c).** Its red half, `case=break-glass-red`, signs with a key
   the cluster does not hold, and the job fails unless source-controller refuses it.
 - **The object-loss check without its exemption (D6.7b).** Its red half is a dropped
@@ -2559,8 +2558,6 @@ The deletions have red proofs of their own:
       `self_applied_playbooks`' `deploy.yml` term with the tick's `deploy.yml` apply,
       and the path-derived k8s tags, so the landing and the tick agree again. D6.1 writes no
       state on the host, so nothing else needs undoing.
-- **D6.1b.** A revert removes the controller query. Markers then come from `land-wait`
-  alone, as before.
 - **D6.7c.** A revert removes the two drill cases, the public-key Secret, the source form
   and the scenario. While the cluster follows the in-cluster registry, revert nothing until
   the way back has completed.
@@ -2779,11 +2776,8 @@ Each risk names the failure class from `docs/failure-classes.md` where one fits.
       `ansible/tests/deploy/test_deploy_annotations.py`, with its docstring;
     - the comment above
       `ansible/roles/k8s/observability/defaults/main.yml:observability_deploy_annotation_expr`,
-      which names the two emitters that remain (*Grafana's deploy markers after D6*);
+      which names the three sources that remain (*Grafana's deploy markers after D6*);
     - the regenerated monitor-bridge copy of `gitops_markers.py`.
-- **D6.1b:** the marker pair in `ansible/tests/deploy/test_deploy_annotations.py`,
-  `ansible/filter_plugins/grafana_dashboards.py` and its test, and the comment above
-  `observability_deploy_annotation_expr`.
 - **D6.2a:**
     - the deployer-denylist tests, and the `denylist_rendered` row of
       `test_deployer_state.py`;
@@ -2869,7 +2863,7 @@ Each risk names the failure class from `docs/failure-classes.md` where one fits.
   Also removed: one hold (`hold_sha` for k8s), the k8s owed ledger, the handback, the
   two-step retirement, the handback exemption of D2.6c's object-loss check, and the
   deployer's `deploy-annotation` emitter. That leaves `deploy.sh`'s emitter for the Pi,
-  D2.3's `land-wait` for a landing and D6.1b's query for every apply.
+  D2.3's `land-wait` for a landing and D5.3b3's soak line for every passing promotion.
 - **Added:** about 80 lines in D6.1 for `land.sh`'s k8s list, tests included. Every
   landing reaches `land-wait`, whose changed set replaces the path-derived k8s tags. It
   replaces about 900 lines of tag derivation that D6.3 and D6.4 delete. The footprint
@@ -2894,8 +2888,6 @@ Each risk names the failure class from `docs/failure-classes.md` where one fits.
       workflow, or on a dispatch, and costs one kind cluster per such run;
     - daniel-box's setup-drift timer and its arm in B2's two rules, which replace a reader
       D6 deletes;
-    - D6.1b's marker query over kustomize-controller's log, about 80 lines with its
-      fixtures, and no emitter;
     - D6.7c's break-glass promotion, about 190 lines: a runbook scenario, a public-key
       Secret and a second source form in the flux role, and two drill cases. It adds one
       operator-held key pair and keeps the in-cluster registry in service;
@@ -3754,8 +3746,9 @@ Folded from the 2026-10-12 pillar review; not adversarially reviewed. The pre-st
   `flux-deletion-drill`. Open question 3 keeps the in-cluster registry. Open question 16
   holds the plain-HTTP verification question.
 - **F-02 / O3 (deploy annotations).** *Grafana's deploy markers after D6* replaces the
-  lasting limit with D6.1b's query over kustomize-controller's log in loki-homelab, with
-  `gotk_resource_info`'s `revision` label as the fallback.
+  lasting limit with D5.3b3's soak line, read by
+  `observability_flux_deploy_annotation_expr` in loki-homelab. #5425 dropped the
+  kustomize-controller query that old D6.1b planned.
 - **F-16 / P8 / O4 (the superseding ADR).** *The ADR* lists every GitHub dependency with
   its fallback, names k3s and Flux as fixed premises with their exit cost, and records no
   tracing by decision.
