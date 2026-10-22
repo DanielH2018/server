@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/decisions.py
-generated_at: 2026-10-22 20:27 UTC
-generated_sha: bd8f2b1f2
+generated_at: 2026-10-22 20:47 UTC
+generated_sha: 5314f493b
 ---
 
 !!! warning "Generated file — do not edit"
@@ -12,7 +12,7 @@ generated_sha: bd8f2b1f2
 
 # Decisions
 
-874 `DECIDED:` marker(s) found across the tree. A marker is a settled trade-off recorded as a comment at the line it governs, per CLAUDE.md's "Review & Memory Hygiene" section — written so a reviewer trips over the reasoning before re-opening a decision that already has one. A reviewer brief greps the literal marker text before flagging something as new; this page exists so a human can browse the same set instead of guessing a phrase to grep.
+873 `DECIDED:` marker(s) found across the tree. A marker is a settled trade-off recorded as a comment at the line it governs, per CLAUDE.md's "Review & Memory Hygiene" section — written so a reviewer trips over the reasoning before re-opening a decision that already has one. A reviewer brief greps the literal marker text before flagging something as new; this page exists so a human can browse the same set instead of guessing a phrase to grep.
 
 !!! warning "Possible duplicates"
     Two markers below have a near-identical first sentence once case and whitespace are normalised — usually the same trade-off decided twice, or a marker copied and never specialised. Worth a look, not a verdict.
@@ -52,15 +52,15 @@ generated_sha: bd8f2b1f2
     * `ansible/roles/k8s/artifacts/CLAUDE.md:94` and `scripts/diagnostics/tests/test_probe_could_not_read_exits.py:4`
     * `ansible/roles/k8s/artifacts/CLAUDE.md:94` and `scripts/lib/b2.py:21`
     * `ansible/roles/k8s/authelia/tasks/main.yml:15` and `ansible/roles/k8s/nut/tasks/main.yml:22`
-    * `ansible/roles/k8s/cluster-base/CLAUDE.md:20` and `ansible/roles/k8s/longhorn/CLAUDE.md:67`
+    * `ansible/roles/k8s/cluster-base/CLAUDE.md:20` and `ansible/roles/k8s/longhorn/CLAUDE.md:76`
     * `ansible/roles/k8s/cluster-base/CLAUDE.md:20` and `ansible/roles/k8s/metallb/CLAUDE.md:36`
     * `ansible/roles/k8s/cluster-base/defaults/main.yml:39` and `ansible/roles/k8s/coredns/defaults/main.yml:47`
-    * `ansible/roles/k8s/cluster-base/defaults/main.yml:39` and `ansible/roles/k8s/longhorn/defaults/main.yml:142`
+    * `ansible/roles/k8s/cluster-base/defaults/main.yml:39` and `ansible/roles/k8s/longhorn/defaults/main.yml:157`
     * `ansible/roles/k8s/cluster-base/defaults/main.yml:39` and `ansible/roles/k8s/longhorn-backup/defaults/main.yml:17`
     * `ansible/roles/k8s/cluster-base/defaults/main.yml:39` and `ansible/roles/k8s/metallb/defaults/main.yml:36`
     * `ansible/roles/k8s/cluster-base/defaults/main.yml:39` and `ansible/roles/k8s/traefik-crds/defaults/main.yml:17`
     * `ansible/roles/k8s/coredns/CLAUDE.md:42` and `ansible/roles/k8s/longhorn-backup/CLAUDE.md:25`
-    * `ansible/roles/k8s/coredns/defaults/main.yml:47` and `ansible/roles/k8s/longhorn/defaults/main.yml:142`
+    * `ansible/roles/k8s/coredns/defaults/main.yml:47` and `ansible/roles/k8s/longhorn/defaults/main.yml:157`
     * `ansible/roles/k8s/coredns/defaults/main.yml:47` and `ansible/roles/k8s/longhorn-backup/defaults/main.yml:17`
     * `ansible/roles/k8s/coredns/defaults/main.yml:47` and `ansible/roles/k8s/metallb/defaults/main.yml:36`
     * `ansible/roles/k8s/coredns/defaults/main.yml:47` and `ansible/roles/k8s/traefik-crds/defaults/main.yml:17`
@@ -71,10 +71,10 @@ generated_sha: bd8f2b1f2
     * `ansible/roles/k8s/homelab-mcp/files/safe_reads.py:248` and `scripts/diagnostics/probe_lib/ha.py:280`
     * `ansible/roles/k8s/homepage/templates/config/services.yaml.j2:57` and `ansible/roles/k8s/homepage/templates/config/services.yaml.j2:109`
     * `ansible/roles/k8s/jellyfin/templates/deployment.yaml.j2:851` and `ansible/roles/k8s/tdarr/templates/deployment.yaml.j2:140`
-    * `ansible/roles/k8s/longhorn/CLAUDE.md:67` and `ansible/roles/k8s/metallb/CLAUDE.md:36`
-    * `ansible/roles/k8s/longhorn/defaults/main.yml:142` and `ansible/roles/k8s/longhorn-backup/defaults/main.yml:17`
-    * `ansible/roles/k8s/longhorn/defaults/main.yml:142` and `ansible/roles/k8s/metallb/defaults/main.yml:36`
-    * `ansible/roles/k8s/longhorn/defaults/main.yml:142` and `ansible/roles/k8s/traefik-crds/defaults/main.yml:17`
+    * `ansible/roles/k8s/longhorn/CLAUDE.md:76` and `ansible/roles/k8s/metallb/CLAUDE.md:36`
+    * `ansible/roles/k8s/longhorn/defaults/main.yml:157` and `ansible/roles/k8s/longhorn-backup/defaults/main.yml:17`
+    * `ansible/roles/k8s/longhorn/defaults/main.yml:157` and `ansible/roles/k8s/metallb/defaults/main.yml:36`
+    * `ansible/roles/k8s/longhorn/defaults/main.yml:157` and `ansible/roles/k8s/traefik-crds/defaults/main.yml:17`
     * `ansible/roles/k8s/longhorn-backup/defaults/main.yml:17` and `ansible/roles/k8s/metallb/defaults/main.yml:36`
     * `ansible/roles/k8s/longhorn-backup/defaults/main.yml:17` and `ansible/roles/k8s/traefik-crds/defaults/main.yml:17`
     * `ansible/roles/k8s/media-volume/CLAUDE.md:47` and `ansible/roles/k8s/qbittorrent/CLAUDE.md:137`
@@ -186,7 +186,7 @@ generated_sha: bd8f2b1f2
     * `docs/archive/post-merge-automation.md:268` and `docs/gitops-pipeline.md:1610`
     * `docs/archive/post-merge-automation.md:268` and `scripts/diagnostics/probe_lib/health_kubectl.py:12`
     * `docs/archive/post-merge-automation.md:268` and `scripts/diagnostics/tests/test_probe_health.py:323`
-    * `docs/break-glass.md:188` and `scripts/deploy_tools/shared_role_reach.py:22`
+    * `docs/break-glass.md:189` and `scripts/deploy_tools/shared_role_reach.py:22`
     * `docs/gitops-pipeline.md:635` and `docs/gitops-pipeline.md:1610`
     * `docs/gitops-pipeline.md:635` and `scripts/diagnostics/probe_lib/health_kubectl.py:12`
     * `docs/gitops-pipeline.md:635` and `scripts/diagnostics/tests/test_probe_health.py:323`
@@ -286,15 +286,14 @@ generated_sha: bd8f2b1f2
 | forward-only. a revision before a disarm would re-arm B2 and restart the transaction-cap spiral. The hold clears only by hand: `gh variable set DEPLOY_HOLD --body none -R DanielH2018/server`. Full analysis: the H1 plan's *Forward-only tags and the promote rule*. | `ansible/roles/k8s/longhorn-backup/defaults/main.yml:11` | 2026-10-22 |
 | never pruned. delete it, and a lingering RecurringJob keeps running with its own `retain`. With prune: false a render that drops an object leaves it live. The cost is that an object removed here stays live until the operator deletes it (**operator-only**). Full analysis: the H1 plan's *Plumbing tags are never pruned*. | `ansible/roles/k8s/longhorn-backup/defaults/main.yml:17` | 2026-10-22 |
 | groups: [default], and no recurringJobSelector on the StorageClass; Longhorn already | `ansible/roles/k8s/longhorn-backup/templates/longhorn-recurringjob.yaml.j2:4` | 2026-09-30 |
-| ` marker in `reconcile_sidecars` records the choice. | `ansible/roles/k8s/longhorn-reconcile/CLAUDE.md:101` | 2026-10-22 |
 | `true`, as configarr's CronJob does. state, and every bump runs the reconcile once as a gate Job in `longhorn-reconcile-verify`, which fails the revision on a read or a write that errors. The role writes Volume labels, but a bump changes the interpreter and not the script, and a wrong label is one merge patch to undo. The alternative, `false`, would need a manual rule in renovate.json for the shared python digest, as the denied roles carry. Contradict this with a measured interpreter break. | `ansible/roles/k8s/longhorn-reconcile/defaults/main.yml:4` | 2026-10-22 |
-| hourly, at minute 17. apply, with no clock, so there was no host cron to copy; the H1 plan fixes "hourly" (*Longhorn objects that are not static*). Hourly bounds how long a PVC recreated from the `longhorn` class sits in the daily group after a deploy that put it on another tier, and how long a recreated CSI Deployment sits BestEffort. Minute 17 keeps the run clear of the :00 and :30 marks that Longhorn's own cluster-wide jobs and the */10 health readers share. The job writes nothing on a converged cluster, so the schedule costs two list calls an hour. | `ansible/roles/k8s/longhorn-reconcile/defaults/main.yml:18` | 2026-10-22 |
-| refuse, where the Ansible tasks did not. desired group; the tasks gave such a volume both labels, which nothing intended, and picking one here would hide a wrong `containers_list` entry. The run stops before it writes anything, so the next hourly run retries once the entry is fixed. | `ansible/roles/k8s/longhorn-reconcile/files/longhorn_reconcile.py:204` | 2026-10-22 |
-| a Deployment that does not exist yet is waited for, up to `wait_seconds`, and then | `ansible/roles/k8s/longhorn-reconcile/files/longhorn_reconcile.py:416` | 2026-10-22 |
-| ` marker beside it | `ansible/roles/k8s/longhorn/CLAUDE.md:67` | 2026-10-22 |
-| keep `enabled`. 2026-09-11 on a fire forced by overriding the schedule key below, 73 snapshots across 44 volumes (50 GB of replica data per node): the run took 6m21s and read ~24 GB per node at 40-57 MB/s. The hashing CPU is instance-manager's own, 0.21 → 0.37-0.50 cores over the window; node-level CPU is not attributable, because daniel-box swings 1.6-2.4 cores across any 7-minute window. instance-manager's working set did not move (1.44 GB before, during and after), MemAvailable never dropped below 17.5 GB, and no Longhorn pod restarted — the memory pressure #1243 warns about did not appear. Six minutes every seventh day at 00:00 UTC is acceptable. The numbers and the queries that produced them are on #1364. | `ansible/roles/k8s/longhorn/defaults/main.yml:60` | 2026-10-22 |
-| `do-nothing` — keep the stateful failover a human step on this two-node cluster. There is no fencing and no third node, so Longhorn cannot tell a dead daniel-server from one cut off from daniel-box: an automatic delete on a partition would run a second copy of the workload against the other replica. The survivor also lacks the memory for the lost node's whole load until the shed set is scaled to zero (docs/break-glass.md, *daniel-server is dead*), and that step is manual too. Stateless pods still reschedule on their own. Revisit when a third node or a fencing mechanism exists. | `ansible/roles/k8s/longhorn/defaults/main.yml:125` | 2026-10-22 |
-| never pruned. would make Flux delete it, and deleting a Longhorn CRD deletes every Volume, Engine and Replica CR of its kind: every PVC detaches at once. With prune: false a render that drops an object leaves it serving. The cost is that an object removed here, or retired by a later upstream release, stays live until the operator deletes it (**operator-only**). Full analysis: the H1 plan's *Plumbing tags are never pruned*. | `ansible/roles/k8s/longhorn/defaults/main.yml:142` | 2026-10-22 |
+| hourly, at minute 17. apply, with no clock, so there was no host cron to copy; the H1 plan fixes "hourly" (*Longhorn objects that are not static*). Hourly bounds how long a PVC recreated from the `longhorn` class sits in the daily group after a deploy that put it on another tier. Minute 17 keeps the run clear of the :00 and :30 marks that Longhorn's own cluster-wide jobs and the */10 health readers share. The job writes nothing on a converged cluster, so the schedule costs two list calls an hour. | `ansible/roles/k8s/longhorn-reconcile/defaults/main.yml:18` | 2026-10-22 |
+| refuse, where the Ansible tasks did not. desired group; the tasks gave such a volume both labels, which nothing intended, and picking one here would hide a wrong `containers_list` entry. The run stops before it writes anything, so the next hourly run retries once the entry is fixed. | `ansible/roles/k8s/longhorn-reconcile/files/longhorn_reconcile.py:192` | 2026-10-22 |
+| ` marker beside it | `ansible/roles/k8s/longhorn/CLAUDE.md:76` | 2026-10-22 |
+| the Setting is the one writer. as the source of truth for these four containers' `resources` and clears any field it does not name, hourly. Until #5958 the `longhorn-reconcile` CronJob patched the request onto the Deployments, the manager cleared it, and each Deployment rolled about twice an hour. The driver deployer also reads the Setting when it creates a Deployment, so a recreated one starts with the request. | `ansible/roles/k8s/longhorn/defaults/main.yml:43` | 2026-10-22 |
+| keep `enabled`. 2026-09-11 on a fire forced by overriding the schedule key below, 73 snapshots across 44 volumes (50 GB of replica data per node): the run took 6m21s and read ~24 GB per node at 40-57 MB/s. The hashing CPU is instance-manager's own, 0.21 → 0.37-0.50 cores over the window; node-level CPU is not attributable, because daniel-box swings 1.6-2.4 cores across any 7-minute window. instance-manager's working set did not move (1.44 GB before, during and after), MemAvailable never dropped below 17.5 GB, and no Longhorn pod restarted — the memory pressure #1243 warns about did not appear. Six minutes every seventh day at 00:00 UTC is acceptable. The numbers and the queries that produced them are on #1364. | `ansible/roles/k8s/longhorn/defaults/main.yml:75` | 2026-10-22 |
+| `do-nothing` — keep the stateful failover a human step on this two-node cluster. There is no fencing and no third node, so Longhorn cannot tell a dead daniel-server from one cut off from daniel-box: an automatic delete on a partition would run a second copy of the workload against the other replica. The survivor also lacks the memory for the lost node's whole load until the shed set is scaled to zero (docs/break-glass.md, *daniel-server is dead*), and that step is manual too. Stateless pods still reschedule on their own. Revisit when a third node or a fencing mechanism exists. | `ansible/roles/k8s/longhorn/defaults/main.yml:140` | 2026-10-22 |
+| never pruned. would make Flux delete it, and deleting a Longhorn CRD deletes every Volume, Engine and Replica CR of its kind: every PVC detaches at once. With prune: false a render that drops an object leaves it serving. The cost is that an object removed here, or retired by a later upstream release, stays live until the operator deletes it (**operator-only**). Full analysis: the H1 plan's *Plumbing tags are never pruned*. | `ansible/roles/k8s/longhorn/defaults/main.yml:157` | 2026-10-22 |
 | this ConfigMap patch is the only home of the class text. sit in setup/k3s (files/longhorn-storageclass.yaml) is deleted with the tasks that applied it, so a stale checkout has nothing left to write the class from. | `ansible/roles/k8s/longhorn/files/patches/longhorn-storageclass.yaml:16` | 2026-10-22 |
 | armed by default, and a role opts out with `manifests_prune: false` at its include. The operator flipped the default on 2026-10-09 (#3662), after #3388 had armed every caller by hand on 2026-10-04. A role arming the prune renders through ansible/templates/role-labelled.yaml.j2, which stamps `homelab/role: <service>` onto every document, so no template needs a hand edit. An orphan whose staged file was deleted before its role was armed never receives the label and needs one kubectl delete by hand. The prune cannot see such an orphan, so arming a role that still has one is safe, and manifest-prune-check.sh keeps flagging it. Two roles opt out, each by an operator decision recorded as a DECIDED marker at its include: authelia (its redis lever drops three manifests whose live objects must survive the drop) and nut (arming restarts the UPS monitor). ansible/tests/deploy/test_manifests_prune.py:_UNARMED_ROLES holds that rule. A deferred render (pihole's instance 2, headlamp's observability RBAC, netpol-baseline's observability policies) never goes through the labelling wrapper, so the caller's prune cannot select it. | `ansible/roles/k8s/manifests/defaults/main.yml:49` | 2026-10-09 |
 | this gate FAILS OPEN, as `claim.yml`'s marker on the same gate explains. is Longhorn's uncapped value and the fleet default, an absent field reads empty, and a read that fails or matches nothing reads as no cap. A gate in front of every snapshot role, guarding a hazard nobody can reach today, must never turn a bad read into a fleet-wide deploy stop. | `ansible/roles/k8s/manifests/files/flux_snapshot.py:204` | 2026-10-16 |
@@ -730,7 +729,7 @@ generated_sha: bd8f2b1f2
 | ` comment to | `scripts/deploy_tools/shared_role_reach.py:22` | 2026-09-25 |
 | per KEY, not per role and not per subdirectory. | `scripts/deploy_tools/shared_role_reach.py:26` | 2026-09-25 |
 | a comment and nothing else.\n" + TASKS) | `scripts/deploy_tools/tests/test_land_tags_cli.py:50` | 2026-10-14 |
-| these two drive `narrow_setup.main` with the argv `deploy_narrow.narrow_setup_argv` builds, and that function is the capability — there is no earlier signature to separate the defect from (#2363). The defect they name is a flag mismatch across the subprocess boundary, and they catch it: spelling `--role-tag` as `--role-tags` in the builder fails both with argparse's `unrecognized arguments`, measured 2026-09-24. | `scripts/deploy_tools/tests/test_narrow_setup.py:469` | 2026-09-24 |
+| these two drive `narrow_setup.main` with the argv `deploy_narrow.narrow_setup_argv` builds, and that function is the capability — there is no earlier signature to separate the defect from (#2363). The defect they name is a flag mismatch across the subprocess boundary, and they catch it: spelling `--role-tag` as `--role-tags` in the builder fails both with argparse's `unrecognized arguments`, measured 2026-09-24. | `scripts/deploy_tools/tests/test_narrow_setup.py:472` | 2026-09-24 |
 | `role_tags`' `playbook` argument IS the capability under test, so no input separates this rule from the signature (#2363). `foreign_tags` needs the playbook to know which other roles are in scope; a `role_tags` without it cannot refuse a shared tag at all. Today's behaviour is what the pair below holds, and it does: making `role_tags` intersect against an empty set instead of `foreign_tags(...)` fails `test_a_tag_another_role_in_the_playbook_declares_is_flagged` with DID NOT RAISE and leaves its accepting half green, measured 2026-09-24. | `scripts/deploy_tools/tests/test_narrow_setup_edges.py:356` | 2026-09-24 |
 | this drives the real tree through the argv the deployer builds. replace the subprocess, so only this sees a flag the CLI does not take. arr-notification's two callers, sonarr and radarr, are both flux-owned since D5.20, so the role is `owned_only`; a broken caller walk would find no tag and leave it out of `owned_only` too. | `scripts/deploy_tools/tests/test_shared_role_callers.py:13` | 2026-09-26 |
 | ` comment and was sent to deploy.yml (#2581).""" | `scripts/deploy_tools/tests/test_shared_role_reach.py:108` | 2026-09-25 |
@@ -944,7 +943,7 @@ generated_sha: bd8f2b1f2
 | ` block has to be redone: | `docs/archive/self-hosted-runner-spike.md:190` | 2026-09-22 |
 | ` marker above the retirement tasks in `roles/setup/gitops_deploy/tasks/install.yml`. | `docs/archive/staging-phase-c.md:529` | 2026-09-24 |
 | ` marker sits at the line; `ansible/tests/services/test_smtp_wiring.py` holds the | `docs/authelia-sessions-and-crowdsec-init.md:135` | 2026-09-29 |
-| ` comment on | `docs/break-glass.md:188` | 2026-10-04 |
+| ` comment on | `docs/break-glass.md:189` | 2026-10-04 |
 | no | `docs/crowdsec-waf-record.md:32` | 2026-09-29 |
 | ` marker on that tolerance in | `docs/crowdsec-waf-record.md:163` | 2026-10-10 |
 | ` marker above `_BROAD_MANUAL_PREFIXES` in | `docs/gitops-pipeline.md:219` | 2026-10-10 |
