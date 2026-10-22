@@ -13,11 +13,12 @@ from lib.repo_paths import ROLES
 from vendor_manifest import check_tree, main, roles_in
 
 # (role, file) pairs the census must find in the real tree. traefik-crds vendored the first;
-# H1.3 added metallb's `metallb-native.yaml`, and H1.5a adds longhorn's.
+# H1.3 added metallb's `metallb-native.yaml`, and H1.5a added longhorn's.
 KNOWN_VENDORED: frozenset[tuple[str, str]] = frozenset(
     {
         ("traefik-crds", "kubernetes-crd-definition-v1.yml"),
         ("metallb", "metallb-native.yaml"),
+        ("longhorn", "longhorn.yaml"),
     }
 )
 

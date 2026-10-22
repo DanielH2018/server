@@ -501,8 +501,8 @@ fire in practice:
 - a derived tag the remediation's playbook cannot reach. The role must sit in that playbook's
   `roles:`, and the task file must be statically imported from `tasks/main.yml`, or included
   from a file that is with an `apply.tags` value the `include_tasks` task itself carries. Such
-  an include narrows to the shared tags: `longhorn-weekly-shard.yml`, included in a loop from
-  `longhorn.yml`, narrows to `longhorn` (#4384). An include without `apply.tags`, with disjoint
+  an include narrows to the shared tags: `setup/k3s`'s weekly shard file, included in a loop,
+  narrowed to `longhorn` until H1.6 deleted it (#4384). An include without `apply.tags`, with disjoint
   tags, or with `never` on the include or on a task inside the file still refuses. `tasks/storage_smoke.yml` belongs to `k3s-storage-smoke.yml`, so
   `k3s-bringup.yml --tags storage_smoke` selects only `always` tasks;
 - a template cycle that reaches no task file, or a template that is not UTF-8 text.

@@ -17,10 +17,7 @@ k3s_version: v1.37.1+k3s1
 #   uv run python scripts/validate/asset_pins.py --refresh k3s-io/k3s
 k3s_install_script_url: "https://raw.githubusercontent.com/k3s-io/k3s/{{ k3s_version }}/install.sh"
 k3s_install_script_sha256: ed01f89fd977bf20ac1516bbebf8370bf3ddbaa55dac8aba610956a4c78cc00b
-# Longhorn holds every PVC, and a careless bump is worse than a stale one: see the version-skip
-# warning at the top of this file. Tracked for the signal, never automerged.
-# renovate: datasource=github-releases depName=longhorn/longhorn
-k3s_longhorn_version: v1.12.1
+# The Longhorn pin, k3s_longhorn_version, is the `longhorn` role's (roles/k8s/longhorn/defaults/main.yml).
 
 # Where k3s's own stdout/stderr goes on both node types (tasks/unit-logging.yml). journald
 # stores nothing below notice on these hosts and every k3s line is info, so without this the
@@ -276,48 +273,6 @@ k3s_audit_log_maxsize: 100     # MiB before rotating
 # REMOVING THIS NEEDS A MANUAL INSTALLER RE-RUN. The install task above detects an argument
 # that was ADDED but not one that was removed; see its comment.
 
-# Two replicas, one per node, which is what makes replication, and therefore failover, exist.
-# More replicas than nodes would leave every volume permanently "degraded" — upstream's
-# StorageClass ships 3.
-#
-# This reaches volumes through the `default-replica-count` setting alone, which only applies
-# to StorageClasses that do not pin a count themselves. That is why the role replaces
-# upstream's class with files/longhorn-storageclass.yaml, which deliberately omits
-# numberOfReplicas — so changing this stays a settings patch.
-k3s_longhorn_replica_count: 2
-
-# How hard Longhorn checks a snapshot disk file against its recorded checksum. Upstream's
-# default is `fast-check`, which re-hashes only when the file is unhashed or its mtime moved —
-# and upstream states plainly that "filesystem-unaware corruption cannot be detected" in that
-# mode (longhorn-manager v1.12.1, types/setting.go). Bit rot does not move mtime, so the exact
-# failure this setting exists to catch goes uncovered in that mode.
-#
-# `enabled` hashes every snapshot disk file on the snapshot-data-integrity-cronjob schedule
-# (`0 0 */7 * *` here — the 1st, 8th, 15th, 22nd and 29th). That is CPU and disk-read work on a
-# two-node cluster whose storage control plane was OOM-killed once under memory pressure
-# (#1243), so the cost was measured before this was kept. DECIDED: keep `enabled`. MEASURED
-# 2026-09-11 on a fire forced with the `-e` override below, 73 snapshots across 44 volumes
-# (50 GB of replica data per node): the run took 6m21s and read ~24 GB per node at 40-57 MB/s.
-# The hashing CPU is instance-manager's own, 0.21 → 0.37-0.50 cores over the window; node-level
-# CPU is not attributable, because daniel-box swings 1.6-2.4 cores across any 7-minute window.
-# instance-manager's working set did not move (1.44 GB before, during and after), MemAvailable
-# never dropped below 17.5 GB, and no Longhorn pod restarted — the memory pressure #1243 warns
-# about did not appear. Six minutes every seventh day at 00:00 UTC is acceptable. The numbers
-# and the queries that produced them are on #1364.
-k3s_longhorn_snapshot_data_integrity: enabled
-
-# When the integrity check above runs. Upstream's default, restated here so the schedule is a
-# variable rather than a value only the cluster knows: `0 0 */7 * *` is a DAY-OF-MONTH step on
-# the manager's clock (UTC), so it fires at 00:00 on the 1st, 8th, 15th, 22nd and 29th, not
-# "every seven days". To fire a check early, override it at apply time with a one-shot daily
-# minute, then re-apply without the override to restore it:
-#   uv run ansible-playbook ansible/k3s-bringup.yml --tags longhorn \
-#     -e k3s_longhorn_snapshot_data_integrity_cronjob='55 12 * * *'
-# Never use a repeating `*/N` for it: a full-hash schedule stranded by a dead session risks the
-# memory pressure that OOM-kills the storage control plane.
-# Same DataEngineSpecific JSON-map shape as the mode above.
-k3s_longhorn_snapshot_data_integrity_cronjob: "0 0 */7 * *"
-
 # Whether joined agent nodes participate in Longhorn replica scheduling, so daniel-server holds
 # the second replica of every volume. The join window keeps it off: agent_verify patches
 # allowScheduling:false and asserts zero replicas landed.
@@ -344,47 +299,6 @@ k3s_agent_longhorn_scheduling: true
 # itself burns transactions and eats into the next day's allowance.
 k3s_longhorn_backupstore_poll_interval: 0
 
-# Back up detached volumes too. pi-peer-backup-data is mounted only for the minutes its
-# nightly pull CronJob runs, so at the 03:30 daily-backup tick it is detached — and with
-# this off, Longhorn silently skips it, leaving the WireGuard peer copy with no off-site
-# backup. "true" attaches such a volume in maintenance mode for the
-# backup and detaches it after; the attach is brief and it is the only detached
-# default-group volume, so the global scope costs nothing.
-k3s_longhorn_backup_detached_volumes: "true"
-
-# Block size, in MiB, for volumes created from here on. Every B2 cost Longhorn incurs is priced
-# PER BLOCK: pruning a backup issues ~1.28 Class C LISTs per stored block (it walks the volume's
-# whole block tree), backing up issues one Class B HeadObject per changed block, and restoring
-# issues one Class B GET per block. Block size is the only lever that moves all three at once.
-#
-# Upstream's default is 2. At that size the store held 3,472 blocks, so a
-# full-cluster restore would need ~3,472 Class B against a 2,500/day free-tier cap — 139%, which
-# means a total-loss recovery CANNOT complete in a day. At 16 that is ~434 blocks, about a sixth
-# of one day's allowance, and disaster recovery stops being rationed by transactions.
-#
-# NEW VOLUMES ONLY, and this is the trap: the field is immutable per volume, so every PVC created
-# while this reads 2 is locked at 2 until it is destroyed and recreated. Flipping it costs nothing
-# and changes nothing that already exists — the saving accrues only as volumes are replaced.
-#
-# Longhorn accepts 2 or 16 and nothing between. Governed by the SETTING rather than the
-# StorageClass on purpose: a StorageClass parameter beats the setting and its parameters are
-# immutable, which is the trap `numberOfReplicas` springs (see
-# files/longhorn-storageclass.yaml and ansible/tests/longhorn/test_longhorn_storageclass.py).
-k3s_longhorn_backup_block_size: 16
-
-# Memory REQUEST only (no limit) for longhorn-manager and the csi-* sidecar Deployments.
-# Upstream's deploy/longhorn.yaml ships every one of them with an empty `resources: {}`, which
-# gives BestEffort QoS and oom_score_adj 1000 — the worst possible score, so the kernel eats the
-# storage control plane first under any memory pressure. Measured at the OOM kill:
-# longhorn-manager held 137 MB anon-rss and a csi-* sidecar 97 MB, while instance-manager
-# (already Burstable) survived untouched. A REQUEST alone moves the pod to Burstable and drops
-# oom_score_adj without adding a new kill path — a LIMIT set too low would trade "killed by
-# badness" for "killed by cgroup cap". Headroom is roughly double the measured
-# RSS on both: enough to absorb ordinary growth without inflating node allocatable so far that
-# real pressure elsewhere goes unschedulable.
-k3s_longhorn_manager_memory_request: 256Mi
-k3s_longhorn_csi_sidecar_memory_request: 192Mi
-
 # Restore drill — proves the backups come BACK, which nothing else here checks. The heartbeat
 # watches Longhorn's own objects, and none of them can tell you whether the bytes in B2 restore.
 #
@@ -395,7 +309,8 @@ k3s_longhorn_csi_sidecar_memory_request: 192Mi
 # script (`sudo /usr/local/bin/longhorn-restore-drill.sh <pvc>`, or RESTORE_DRILL_PIN=<pvc>),
 # which overrides this value for that run only.
 #
-# Rotation is affordable because of the block size (k3s_longhorn_backup_block_size): the whole B2
+# Rotation is affordable because of the block size (`k3s_longhorn_backup_block_size`, in the `longhorn`
+# role's defaults): the whole B2
 # candidate set is ~250 blocks, so one night's drill costs 4-85 Class B (a GET per block) against
 # the 2,500/day cap, and a 25-day cycle costs less than a single day's measured baseline of
 # 253-363.
@@ -500,30 +415,6 @@ k3s_longhorn_restore_drill_coverage_slack_days: 5
 # period the check disables that arm rather than page on normal silence. The same 26h is the
 # grace for a freshly installed cron, so there is no second tunable to keep in step.
 k3s_longhorn_cron_evidence_window_hours: 26
-
-# How many volume engines Longhorn upgrades per node once the manager moves to a new version.
-# Upstream ships 0, which means engines NEVER follow the manager — after a version bump every
-# volume keeps running the old engine image until someone walks the UI. Across the v1.7.2 ->
-# v1.12.1 ladder (docs/longhorn-upgrade.md) that lag would compound over five hops, and a
-# manager more than one engine version ahead is outside what upstream tests. 3 upgrades the
-# healthy volumes a few at a time rather than all at once; Longhorn skips any volume that
-# is degraded, so this cannot stampede a rebuild.
-k3s_longhorn_concurrent_engine_upgrade: 3
-
-# What Longhorn does with a pod whose node goes down while the pod holds an RWO volume.
-# `do-nothing` is upstream's default: the pod stays Terminating, so its volume stays attached
-# to the dead node, until an operator force-deletes it. The rejected values
-# (`delete-statefulset-pod`, `delete-deployment-pod`,
-# `delete-both-statefulset-and-deployment-pod`) have Longhorn force-delete the pod and move the
-# volume to the survivor unattended.
-# DECIDED: `do-nothing` — keep the stateful failover a human step on this two-node cluster.
-# There is no fencing and no third node, so Longhorn cannot tell a dead daniel-server from one
-# cut off from daniel-box: an automatic delete on a partition would run a second copy of the
-# workload against the other replica. The survivor also lacks the memory for the lost node's
-# whole load until the shed set is scaled to zero (docs/break-glass.md, *daniel-server is
-# dead*), and that step is manual too. Stateless pods still reschedule on their own. Revisit
-# when a third node or a fencing mechanism exists.
-k3s_longhorn_node_down_pod_deletion_policy: do-nothing
 
 # Read-only cluster access for {{ sys_user }}. The admin kubeconfig k3s writes is root:root
 # 0640, so every `kubectl` otherwise goes through sudo — which is passworded on this host and
@@ -672,9 +563,9 @@ k3s_longhorn_r2_volumes: "{{ containers_list | tier_backup_claims('home-critical
 # naming its own shard (filter_plugins/longhorn_groups.py, #4207). To change the set, edit the
 # entry. The shard used to be the volume's index mod 7 in a hand list here, so removing one
 # volume moved every volume below it to another weekday; a declared shard moves only itself.
-# The reconcile in tasks/longhorn.yml swaps each volume's recurring-job group label, so a PVC
-# recreated from the `longhorn` StorageClass reverts to daily until the next deploy: drift in
-# the over-backed-up direction, caught by the reconcile rerun.
+# The `longhorn-reconcile` CronJob swaps each volume's recurring-job group label, so a PVC
+# recreated from the `longhorn` StorageClass reverts to daily until its next hourly run: drift in
+# the over-backed-up direction, caught by the next run.
 # No `default({})` on containers_list, for the R2 expression's reason: an empty result returns
 # every weekly volume to the daily B2 group, so an undefined list must fail the play instead.
 k3s_longhorn_weekly_volumes: "{{ containers_list | longhorn_weekly_claims(k8s_namespace) }}"

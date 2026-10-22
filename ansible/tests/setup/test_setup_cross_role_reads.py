@@ -248,7 +248,9 @@ def test_the_defaults_rows_equal_the_trees_cross_role_reads():
     }
     assert {path: roles for path, roles in kept.items() if roles} == recorded
     assert recorded.get("ansible/roles/setup/initial_setup/defaults/main.yml") == {
-        "claude_code"
+        "claude_code",
+        "homelab_builder",
+        "renovate_agent",
     }
 
 

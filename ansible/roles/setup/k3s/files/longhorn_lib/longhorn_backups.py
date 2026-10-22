@@ -8,8 +8,8 @@ four times a run. `from_items` is that parsing done once, over the one `-o json`
 reader already handles; the field names and the `Completed` filter live here.
 
 WHY THE NAMES LIVE HERE TOO (#3737). The RecurringJob group labels and the BackupTarget names
-are a contract with the cluster: `tasks/longhorn.yml` labels each volume with a group, and the
-readers select on it. Renaming a live group label drops its volumes out of their RecurringJob
+are a contract with the cluster: the `longhorn-reconcile` role's `files/longhorn_reconcile.py`
+labels each volume with a group, and the readers select on it. Renaming a live group label drops its volumes out of their RecurringJob
 with nothing failing, so the Python readers take each name from here rather than retyping it.
 The Ansible tasks, the restore drill and `seed_volume_backup.yml` take them from here too,
 through `ansible/filter_plugins/longhorn_groups.py` (#3946). The static StorageClass file cannot

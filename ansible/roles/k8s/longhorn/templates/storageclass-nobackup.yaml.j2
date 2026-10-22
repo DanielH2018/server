@@ -27,10 +27,16 @@
 # Mirrors the default class in every other respect, and for the same reason: numberOfReplicas
 # is deliberately ABSENT so `default-replica-count` stays the single source of truth. Do not
 # paste it back in when re-syncing from upstream.
+#
+# `force: enabled` makes Flux delete and recreate the class when an immutable field changes, which
+# is what the Ansible task that applied this file did for `longhorn`. A StorageClass's parameters
+# are immutable, and a bound PVC keeps the class's name, not its parameters, so a recreate is safe.
 kind: StorageClass
 apiVersion: storage.k8s.io/v1
 metadata:
   name: longhorn-nobackup
+  annotations:
+    kustomize.toolkit.fluxcd.io/force: enabled
 provisioner: driver.longhorn.io
 allowVolumeExpansion: true
 reclaimPolicy: "Delete"

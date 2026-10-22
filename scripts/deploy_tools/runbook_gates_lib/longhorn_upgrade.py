@@ -21,9 +21,10 @@ The gates, in the order the runbook gives them:
   3. Every volume is accounted for: attached or detached, and healthy (an idle volume reports
      `unknown`). A volume mid-attach, `degraded` or `faulted` before the hop cannot be told
      apart from upgrade damage after it.
-  4. The engines run on one image. `concurrent-automatic-engine-upgrade-per-node-limit` is 0,
-     so engines do not follow the manager; a previous hop's image still holding references
-     means engine lag that compounds across hops. Every engine image must be `deployed`.
+  4. The engines run on one image. `concurrent-automatic-engine-upgrade-per-node-limit` is 3
+     here (upstream ships 0), so engines follow the manager on their own; a previous hop's image
+     still holding references means engine lag that compounds across hops. Every engine image
+     must be `deployed`.
 
 Every cluster read goes through `lib.kubectl` with the cluster named `prod`. While the drill
 writes only the host directory, the stamp exists only on daniel-box, the host that runs the

@@ -222,7 +222,6 @@ def test_the_real_k3s_roles_untagged_task_files_are_named_as_such():
     assert untagged == {
         "tasks/main.yml",
         "tasks/unit-logging.yml",
-        "tasks/longhorn-weekly-shard.yml",
         "tasks/stale-checkout-check.yml",
     }
 

@@ -161,9 +161,11 @@ then removes that directory and the service's release and render records. A run 
 nothing reports `ok`.
 
 Deleting the claim deletes its Longhorn volume, because the `longhorn` StorageClass reclaims
-with `Delete`. Land the entry before the next `k3s-bringup.yml --tags longhorn` apply: that
-apply returns a volume in no routing list to the `default` group, and a volume outside
-`k3s_longhorn_r2_volumes` then backs up daily to B2.
+with `Delete`. Land the entry before the next hourly run of the `longhorn-reconcile` CronJob
+and the gate Job that runs with each revision of its role: either returns a `longhorn`-class
+volume in no routing list to the `default` group, and a volume outside
+`k3s_longhorn_r2_volumes` then backs up daily to B2. `k3s-bringup.yml --tags longhorn` no
+longer does this: since H1.6 it applies only the backup-store poll interval.
 
 The teardown does not delete the volume's existing Longhorn backups. Once the volume is gone,
 no RecurringJob selects it, so no `retain` ever prunes them. To finish the retirement, read

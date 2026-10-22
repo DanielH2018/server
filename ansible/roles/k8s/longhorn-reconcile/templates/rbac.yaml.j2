@@ -1,0 +1,72 @@
+{#
+  The reconcile job's identity. Its rules are the calls files/longhorn_reconcile.py makes and
+  nothing else; ansible/tests/k8s/test_rbac_against_rest_script.py runs the script with a
+  recording client and holds these rules to the calls it records.
+
+    list volumes.longhorn.io            the one read of every Volume CR, in longhorn-system
+    patch volumes.longhorn.io           a group-label merge patch on a volume that must move
+    get, patch deployments/csi-*        read a sidecar's request, strategic-merge-patch it
+    list persistentvolumeclaims         cluster-wide: which claims are `longhorn`-class
+
+  The script never GETs a single Volume, so `get` on volumes is absent. The H1 plan listed it
+  because kubectl's `label` and `patch` read the object first. Deployments take `resourceNames`
+  for the four sidecars, which the driver deployer names exactly; `resourceNames` cannot
+  narrow `list`, so the volume and PVC grants are by resource alone. The PVC grant is a
+  ClusterRole because the claims sit in every namespace.
+#}
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: longhorn-reconcile
+  namespace: {{ k8s_longhorn_namespace }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: longhorn-reconcile
+  namespace: {{ k8s_longhorn_namespace }}
+rules:
+  - apiGroups: [longhorn.io]
+    resources: [volumes]
+    verbs: [list, patch]
+  - apiGroups: [apps]
+    resources: [deployments]
+    resourceNames: [csi-attacher, csi-provisioner, csi-resizer, csi-snapshotter]
+    verbs: [get, patch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: longhorn-reconcile
+  namespace: {{ k8s_longhorn_namespace }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: longhorn-reconcile
+subjects:
+  - kind: ServiceAccount
+    name: longhorn-reconcile
+    namespace: {{ k8s_longhorn_namespace }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: longhorn-reconcile
+rules:
+  - apiGroups: [""]
+    resources: [persistentvolumeclaims]
+    verbs: [list]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: longhorn-reconcile
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: longhorn-reconcile
+subjects:
+  - kind: ServiceAccount
+    name: longhorn-reconcile
+    namespace: {{ k8s_longhorn_namespace }}

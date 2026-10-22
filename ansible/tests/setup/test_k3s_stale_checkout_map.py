@@ -139,17 +139,32 @@ def test_the_real_map_is_honest():
     # fact: ansible/roles/setup/k3s/CLAUDE.md#Notable
     files = _role_files()
     writers = _writers(_role_texts())
-    assert "Install Longhorn" in writers and len(writers) >= 30, sorted(writers)
+    named = "Set the Longhorn backup-store poll interval"
+    assert named in writers and len(writers) >= 10, sorted(writers)
     assert map_problems(files[GUARD], task_tags(files), writers) == []
 
 
-def test_a_weekly_shard_writer_takes_its_include_apply_tags():
-    # The named member of the tag computation: longhorn.yml includes the shard file in a loop
-    # with `apply: {tags: [longhorn]}`, and its own tasks carry no tags.
-    tags = task_tags(_role_files())
-    assert tags["Move volumes whose weekday changed out of shard d{{ shard }}"] == {
-        frozenset({"longhorn"})
+def test_an_included_writer_takes_its_include_apply_tags():
+    # The named member of the tag computation: an include in a loop with `apply: {tags: [x]}`,
+    # whose own tasks carry no tags. H1.6 deleted the last real file of this shape (the weekly
+    # shard include), so the member is a fixture tree.
+    files = {
+        "main.yml": [
+            {
+                "name": "Reconcile each shard",
+                "ansible.builtin.include_tasks": {
+                    "file": "shard.yml",
+                    "apply": {"tags": ["longhorn"]},
+                },
+                "loop": [0, 1],
+                "tags": ["longhorn"],
+            }
+        ],
+        "shard.yml": [
+            {"name": "Move a volume out of a shard", "ansible.builtin.command": "x"}
+        ],
     }
+    assert task_tags(files)["Move a volume out of a shard"] == {frozenset({"longhorn"})}
 
 
 _FIXTURE_TAGS: TagsByTask = {
@@ -239,7 +254,7 @@ def test_the_real_guard_import_sits_directly_after_server_yml():
 
 def test_a_guard_moved_to_the_top_of_main_yml_is_flagged():
     # A whole-role run with the API down would fail the read before server.yml reinstalls k3s.
-    main = _main(GUARD, "server.yml", "longhorn.yml")
+    main = _main(GUARD, "server.yml", "longhorn-host.yml")
     assert placement_problems(main, _SERVER)
 
 

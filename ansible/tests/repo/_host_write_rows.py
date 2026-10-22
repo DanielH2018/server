@@ -43,9 +43,11 @@ _DESTINED = frozenset(
     }
 )
 _COMMANDS = frozenset({"command", "shell"})
-# The one host directory a k8s role may write: the manifests role's render, which Flux's
-# bundle replaces once the role flips.
-_MANIFESTS = "/etc/rancher/k3s/manifests/"
+# DECIDED: no destination is exempt, `/etc/rancher/k3s/manifests/` included. The manifests
+# render is the one host write Flux's bundle replaces, and it runs in `roles/k8s/manifests/`,
+# which a member reaches by `include_role` and which is not a member itself, so no member file
+# holds it. A prefix exemption let any other write under that directory through, such as
+# uptime-kuma's `state: absent` on its autokuma-claims staging directory (#5723).
 # A command that writes a file: one of the six writing tools as a word, or an output redirect
 # other than to /dev/null or onto another descriptor (`2>&1`, `>&2`).
 _WRITES_A_FILE = re.compile(
@@ -89,9 +91,7 @@ def _host_write_tasks(subject: Subject) -> list[tuple[dict, str, object]]:
             if module in _ALWAYS:
                 found.append((task, module, args))
             elif module in _DESTINED:
-                dest = _destination(args)
-                if not (isinstance(dest, str) and dest.startswith(_MANIFESTS)):
-                    found.append((task, module, args))
+                found.append((task, module, args))
             elif module in _COMMANDS:
                 if _WRITES_A_FILE.search(_EXEC_TAIL.sub("", _command_text(args))):
                     found.append((task, module, args))
@@ -138,8 +138,9 @@ HOST_WRITES = Census(
         "in a k8s role stops at the flip and nothing removes what it wrote. A cron keeps "
         "running beside the flux-owned workload; an absent arm never runs. Move the write to "
         "`roles/setup/k8s_host_files/` (D5's conversion PR) or render it, then drop the "
-        f"role's allow entry. Only {_MANIFESTS} is exempt, and only for the manifests render. "
-        "`state: absent` and `state: directory` are host writes too."
+        "role's allow entry. No destination is exempt: the manifests render runs in "
+        "`roles/k8s/manifests/`, so a member's own write under /etc/rancher/k3s/manifests/ is "
+        "an offence. `state: absent` and `state: directory` are host writes too."
     ),
     files=_flippable_task_files,
     offence=host_writes,
@@ -182,13 +183,23 @@ HOST_WRITES = Census(
             "    k3s kubectl -n x exec pod -- true\n"
             "    install -m 0755 /tmp/a /usr/local/bin/a\n",
         ),
-    ),
-    green=(
+        # A write under the manifests directory that is not the manifests role's render: the
+        # staging-directory removal uptime-kuma carried until #5712 (#5723).
+        Subject(
+            _K8S + "newsvc/tasks/main.yml",
+            "- name: Remove the staging directory\n  ansible.builtin.file:\n"
+            "    path: /etc/rancher/k3s/manifests/other-claims\n    state: absent\n"
+            "  become: true\n",
+        ),
+        # A member that renders into the manifests directory itself, bypassing
+        # `roles/k8s/manifests/`, writes a host the same way.
         Subject(
             _K8S + "newsvc/tasks/main.yml",
             "- name: Render the manifest\n  ansible.builtin.template:\n"
             "    src: x.yaml.j2\n    dest: /etc/rancher/k3s/manifests/newsvc/x.yaml\n",
         ),
+    ),
+    green=(
         # A `delegate_to` alone is no offence: release_digest.yml's reads pass.
         Subject(
             _K8S + "newsvc/tasks/main.yml",

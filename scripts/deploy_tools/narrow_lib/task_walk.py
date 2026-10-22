@@ -80,8 +80,8 @@ def _dynamic_includes(
 
     An `include_tasks` runs only when its own tags match, and the included tasks then run on
     their own tags plus the include's `apply: {tags: ...}`. So a tag both carry selects the
-    include AND every task it pulls in. `longhorn-weekly-shard.yml` is that shape, included in
-    a loop from `longhorn.yml` under `[longhorn]` with `apply: {tags: [longhorn]}` (#4384).
+    include AND every task it pulls in. `setup/k3s`'s weekly-shard file was that shape until
+    H1.6, included in a loop under `[longhorn]` with `apply: {tags: [longhorn]}` (#4384).
     `import_tasks` takes no loop, so making it static was not an option.
 
     The second element is a refusal reason instead of a tag set when no tag provably does
@@ -188,7 +188,7 @@ def file_tags(text: str) -> frozenset[str] | None:
     """The tags that select every task in one task file, or None when one is untagged.
 
     None is a refusal, and it is the common case for a file nobody tagged: `main.yml`'s
-    imports, `unit-logging.yml`, `longhorn-weekly-shard.yml`. Those inherit their tags from
+    imports, `unit-logging.yml`, `stale-checkout-check.yml`. Those inherit their tags from
     the import site, so a hit in one says nothing about which tag applies it.
     """
     try:

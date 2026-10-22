@@ -1,10 +1,11 @@
 # `setup/k3s` — the cluster's host plane: k3s itself, Longhorn, and the backup crons
 
 The role that turns a host into a k3s node and declares the cluster's own plumbing: the server
-install, the agent join, Longhorn with its backup targets, the read-only kubeconfig,
-the marker that releases k3s's CoreDNS addon, and the host crons that watch and exercise
-backups. `daniel-box` is the server and `daniel-server` an agent (`tasks/agent.yml`). The
-CoreDNS objects belong to the k8s `coredns` role, and Flux applies them.
+install, the agent join, Longhorn's backup targets and the packages it needs on
+the node, the read-only kubeconfig, the marker that releases k3s's CoreDNS addon, and the host
+crons that watch and exercise backups. `daniel-box` is the server and `daniel-server` an agent
+(`tasks/agent.yml`). The CoreDNS objects belong to the k8s `coredns` role and the Longhorn
+install to the k8s `longhorn` role, and Flux applies both.
 
 `ansible/k3s-bringup.yml` applies it, and that is one of the `_BROAD_MANUAL_PREFIXES` playbooks
 the GitOps deployer never runs itself, so every change here is a hand apply. The drill's bounds,
@@ -63,8 +64,10 @@ docs/ page — `docs/longhorn-backup-tiering.md`, `docs/longhorn-disaster-recove
 ## Autonomous-role contract (the crons that change state with no human in the loop)
 
 `tasks/health-crons.yml` installs a dozen crons; most read the cluster and push a Kuma tile.
-Three change state, and so do the Longhorn RecurringJobs `tasks/longhorn.yml` applies. The
-authority of those four actuators is written here so a later edit cannot quietly widen it.
+Three change state, and so do the Longhorn RecurringJobs `tasks/longhorn-backup.yml` applies. The
+authority of those four actuators is written here so a later edit cannot quietly widen it. The
+fifth state-changing actuator, the volume-label and CSI-request reconcile, left this role at
+H1.6: its contract is the `longhorn-reconcile` role's `CLAUDE.md`.
 
 - **Scope, per actuator.** The **trim** (`longhorn-trim-volumes.sh`, daily) discards blocks ext4
   already freed and reaches no live data. The **restore drill** (`longhorn-restore-drill.sh`,
@@ -73,7 +76,7 @@ authority of those four actuators is written here so a later edit cannot quietly
   (`etcd-snapshot-offbox.sh`, daily) uploads the snapshot and never the cluster token. The
   **RecurringJobs** delete old backups through their `retain` counts, and their `default` group
   covers every volume with no job of its own, so opting OUT is the explicit act — the `no-backup`
-  group, assigned by `files/longhorn-storageclass-nobackup.yaml`.
+  group, assigned by the `longhorn` role's `templates/storageclass-nobackup.yaml.j2`.
 - **The drill's three bounds** — an operator pin, an empty-restore waiver with a size ceiling and
   one retry per failure — are derived on the docs page, each held by a test. ENFORCED:
   `ansible/tests/longhorn/test_longhorn_restore_drill_operator_pin.py::test_argv_pin_drills_that_volume_not_the_rotations_pick`,

@@ -25,7 +25,9 @@ _DEFAULT_NS = "homelab"
 # scripts/diagnostics/tests/, pins the matching set from the health-gate side). Equality rather
 # than a lower bound: a THIRD role gaining a CronJob without a gate include must fail this test
 # with a clear reason, not pass it silently because the assertion below only checked >= 2.
-_KNOWN_CRONJOB_ONLY_ROLES = frozenset({"configarr", "pi-peer-backup"})
+_KNOWN_CRONJOB_ONLY_ROLES = frozenset(
+    {"configarr", "longhorn-reconcile", "pi-peer-backup"}
+)
 
 
 @cache

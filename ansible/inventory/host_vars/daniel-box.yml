@@ -138,6 +138,20 @@ containers_list:
   - name: coredns
     platform: k8s
     owner: flux
+  # Longhorn's vendored manifest, the manager memory patch and the `longhorn` class (H1.5a). Flux
+  # applies the tag through `promote` and every Ansible path skips it. It renders prune: false,
+  # and it is untiered, so `NEVER_SHED` keeps it out of the lost-node shed set.
+  - name: longhorn
+    platform: k8s
+    owner: flux
+  # The hourly CronJob that holds each Volume CR in its tier's recurring-job group and the CSI
+  # sidecars' memory request (H1.6). Its objects sit in `longhorn-system`, which `longhorn`'s
+  # vendored file creates, so it depends on that tag. It is untiered and prunes by default, so
+  # the lost-node shed set names it on its "nothing to scale" line and `NEVER_SHED` omits it.
+  - name: longhorn-reconcile
+    platform: k8s
+    owner: flux
+    depends_on: [longhorn]
   # The IngressRoute, Middleware and TLSOption CRDs, alone in their tag so it can render
   # prune: false and its directory never substitutes (#5666). traefik's tier keeps it out of
   # the shed set.
