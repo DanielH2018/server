@@ -238,7 +238,8 @@ M6 edits, in the order of its wave table, and from each flip on, C4 has `land.sh
 and `deploy.sh` skip the role. For an `owner: flux` role the merge is the apply. Flux
 reconciles the commit, and a PR's live read waits until the role's Kustomization reports that
 commit (C6), not for a `land.sh` `VERDICT:` line. C-1a waits for D5's registry PR, a Wave D
-conversion PR. Every role Phase C edits was flux-owned by the end of Wave D (2026-10-22).
+conversion PR. Every k8s role that C-1 and C-2 edit was flux-owned by the end of Wave D
+(2026-10-22).
 
 Most M6 PRs change one pager side, so the owner decides only who applies them. Three steps
 need one role's apply to land before another's. While a role was Ansible-owned, the toposort
@@ -254,7 +255,7 @@ stays Ansible-owned until its step has deployed, by an index sub-edge (Open ques
 The other two steps are C-1's, and the roles they order are flux-owned before C-1. The
 operator ruled on 2026-10-21 that D5 flips uptime-kuma with janitorr and jellyfin (#5820),
 because holding it for C-1 put D5's last three PRs behind Phase C (#5821). observability
-flipped in #5816, before C-1, and netpol-baseline flipped last in Wave D. Phase C therefore
+flipped in #5816, before C-1, and netpol-baseline flipped last in Wave D (#5833). Phase C therefore
 orders these steps inside Flux:
 
 - **netpol-baseline's half needs no split.** C-1's `netpol-baseline` change removes the
@@ -281,8 +282,8 @@ orders these steps inside Flux:
       render moves. It is also weaker than the split. A Ready `observability` Kustomization
       shows that the apply finished, not that Prometheus reloaded its rules, and the split
       reads the reload itself.
-- **uptime-kuma retires by D2's two PRs.** C-1b is the first: it empties the render, and Flux
-  prunes every object the render drops. C-2b is the second: it removes the entry and the
+- **uptime-kuma retires by D2's two PRs.** C-1b is the first: it empties the render down to
+  the two claims, and Flux prunes every object the render drops. C-2b is the second: it removes the entry and the
   role once the prune has reached the cluster. Two other forms were rejected:
     - The Ansible tombstone this plan used before #5821. The tombstone ConfigMap existed only
       to satisfy the `k8s/manifests` prune guard, which never runs for a flux-owned tag. A
@@ -1338,22 +1339,24 @@ here. C-1 waits for the operator's acceptance.
 
    C-1b is the first of D2's two retirement PRs (`docs/flux-deploy-plane.md`, *Retiring a
    flux-owned service*). Its scope:
-    - Delete the seven templates. The render of the `uptime-kuma` tag then holds only a
-      `kustomization.yaml` with `resources: []`, and Flux prunes every object the render
-      drops. No tombstone is needed: the `k8s/manifests` prune guard that required one runs
-      only in an Ansible deploy, and every Ansible path skips a flux-owned tag.
+    - Delete the seven templates. The render of the `uptime-kuma` tag then holds only the
+      two claims, and Flux prunes every other object the render drops. No tombstone is
+      needed: the `k8s/manifests` prune guard that required one runs only in an Ansible
+      deploy, and every Ansible path skips a flux-owned tag.
     - Delete the task "Read the AutoKuma declarations back as data" and the comments above
       it. Its `lookup('template', ...)` reads `static-monitors.yaml.j2`, and the renderer
       evaluates it (`scripts/renderer/renderer_lib/task_inputs.py`). The two asserts on
-      `kuma_declarations` left with D5's flip (#5712).
+      `kuma_declarations` left in uptime-kuma's conversion PR (#5712), before D5's flip.
     - Delete `tests/test_declaration_index_flux_form.py`, which reads the static-monitors
       Secret the render no longer emits, and every other test under the role's `tests/` that
       renders a deleted template. A test that reads only `files/` stays until C-2b.
     - Edit the include. Drop `manifests_secret_files`, which names the two deleted Secret
       templates. Set `manifests_rollout: ''`, because the renderer refuses a restart target
-      that names no workload in the render, and `manifests_rollout` defaults to the tag. Drop
-      `k8s_claims`. The two claims carry `kustomize.toolkit.fluxcd.io/prune: disabled`, so
-      Flux leaves them, and arm 3 passes them without a line.
+      that names no workload in the render, and `manifests_rollout` defaults to the tag.
+      `k8s_claims` stays until C-2b, so the claims stay declared beside the entry's
+      `no_backup_claims`, which `longhorn_groups.py` reads for the no-backup tier. D2's form
+      drops the claims in its first PR. Here they stay, because each carries
+      `kustomize.toolkit.fluxcd.io/prune: disabled` and Flux would leave them either way.
     - Drop `port`, `hostname`, `use_authelia`, `auth_tier` and `netpol_from` from the entry.
       The shared default Service and IngressRoute stop rendering, so the entry needs no
       `manifests_exclude_files`. D2's form leaves the entry alone only because a field edit
@@ -1366,6 +1369,13 @@ here. C-1 waits for the operator's acceptance.
         - `blackbox-exporter` drops `uptime-kuma.local.<domain>` from the `hostAliases` the
           `ingress_host_aliases()` macro renders. The entry's `kuma: false` gives it no
           probe, so the order does not matter.
+        - `pihole` drops the `address=/uptime-kuma.local.<domain>/` line from its dnsmasq
+          ConfigMap. Nothing resolves that name once the route is pruned, so the order does
+          not matter. The ConfigMap change restarts pihole, as any `hostname` change does.
+        - The pushers that read `entry_port('uptime-kuma')`, cloudflare-ddns among them,
+          stopped in Phase A. A render at `fdae34795` with the entry edit applied still
+          fails on autofix-bridge's `entry_port` call, so the C-1b PR quotes its own render
+          to show that no reader is left.
     - `netpol_from` goes in the same commit because `networkpolicy-callers.yaml.j2` renders
       `entry.port` for every entry with callers. Its seven callers are gone by then: Phase A
       stopped the five pushers, and this PR prunes the two CronJobs. The `# KUMA_URL`
@@ -1390,6 +1400,7 @@ here. C-1 waits for the operator's acceptance.
       render drops without a line, and its failure line names the exact line to add. The
       `uptime-kuma` tag drops its Deployment, Service, two IngressRoutes, ConfigMaps,
       CronJobs and two Secrets, and `netpol-baseline` drops the `uptime-kuma` callers policy.
+      The claims stay rendered, so they need no line.
       Take the list from the arm's output, not from this paragraph.
     - **The cluster file.** The render no longer references Kuma's credentials or the last
       push token, so `cluster_vars.py check` reports each key the cluster file still holds.
@@ -1416,7 +1427,8 @@ here. C-1 waits for the operator's acceptance.
     - After the promotion, the read-only
       `kubectl get svc,ingressroute,cm,cronjob,deploy -n homelab -l homelab/role=uptime-kuma`
       returns nothing. The agent's ServiceAccount cannot read Secrets, so the operator
-      confirms that the two Secrets are gone in the delete after C-2b. The two claims stay.
+      confirms that the two Secrets are gone in the delete after C-2b. The two claims stay
+      bound and detached.
 2. **C-2, the grants and the entry**, in two PRs:
 2. **C-2, the grants and the entry**, in two PRs:
     - **C-2a.** Delete `uptime-kuma` from the four bespoke policies and from ical-proxy's
@@ -1426,8 +1438,8 @@ here. C-1 waits for the operator's acceptance.
       is that `promote` has moved `prod` to a commit that holds C-1b and that C-1b's
       `kubectl get` returns nothing. Delete the role directory and its `containers_list`
       entry. The next bundle omits `flux/uptime-kuma.yaml`, and the root Kustomization prunes
-      the `uptime-kuma` Kustomization. `deletionPolicy: Orphan` leaves nothing behind,
-      because C-1b's prune already removed the objects. The name never joins
+      the `uptime-kuma` Kustomization. `deletionPolicy: Orphan` leaves only the two claims
+      behind, because C-1b's prune already removed every other object. The name never joins
       `k8s_retired_services`, which arm 4 refuses for a flux-owned entry. Removing an entry
       moves every reader that iterates the list (*Baseline*, *Narrowing*), so record the
       narrowing's answer in the PR and follow *Steps* if it refuses.
@@ -1753,7 +1765,7 @@ this applies to, with what the rules predict:
 | B-6b | Alertmanager IngressRoute | ~40 | `observability` |
 | B-7 | docs, skills, agents, evals, the ADR draft (C-0) | ~200 | none |
 | C-1a | `KumaDown` with its inhibit, the scrape job and its credential, `check_kuma_scrape`; the operator's `cluster_vars.py write` if the check asks; after B-2, B-4 and D5's registry PR (a quoted `git grep -n registry_gc_push_token` over `ansible/roles/k8s/uptime-kuma/` returns nothing); the two post-promotion reads that `KumaDown` and the scrape are gone | ~60 removed | the promotion (`observability`) |
-| C-1b | empty the uptime-kuma render: the seven templates, the declaration task and the tests that render them, the include's secret list, rollout and claims; the Authelia bypass; the entry's routed fields and the probe row; the probe-row named-member case; `Removes-Object:` lines; the operator's `cluster_vars.py write`; a quoted `homelab-render cluster --role uptime-kuma netpol-baseline`; after C-1a's reads | ~3,050 removed, ~40 added | the promotion (`authelia`, `blackbox-exporter`, `uptime-kuma`, then `netpol-baseline`) |
+| C-1b | empty the uptime-kuma render down to its claims: the seven templates, the declaration task and the tests that render them, the include's secret list and rollout; the Authelia bypass; the entry's routed fields and the probe row; the probe-row named-member case; `Removes-Object:` lines; the operator's `cluster_vars.py write`; a quoted `homelab-render cluster --role uptime-kuma netpol-baseline`; after C-1a's reads | ~3,050 removed, ~40 added | the promotion (`authelia`, `blackbox-exporter`, `pihole`, `uptime-kuma`, then `netpol-baseline`) |
 | C-2a | the bespoke grants | ~55 removed | the edited roles, then `netpol-baseline` |
 | C-2b | the role directory, the entry and `k8s_host_files/tasks/uptime-kuma.yml`, after C-1b's prune reads `NotFound`; then the **operator-only** delete of the claims and any Secret left | ~100 removed | the promotion |
 | C-3a | `kuma-push-lib.sh` (an absent task on every host), `kuma_push.py`, the re-export, the `install_host_lib.yml` loop and an absent task for the `/opt` copies, the eight stamp pairs, the cross-role table rows; after B7's autofix-bridge Cutover-2 and after C-2b | ~500 removed | the tick (initial_setup, gitops_deploy, renovate_agent, renovate_notify, fake_remux on daniel-box); `land.sh` for `configarr` and `janitorr` only while H2 has not removed their `install_host_lib.yml` import (*When D5 flips a role M6 edits*); by hand on daniel-server and the Pi; `k3s --tags "backup-health,live-drift"` by hand |
@@ -1983,7 +1995,7 @@ M4's rules.
       Kuma serves again. A revert of C-1b restores the probe row with the entry's `port` in one
       commit, so the probe Job renders again, and it restores the cluster-file keys only
       after the operator's `cluster_vars.py write`. Its Deployment re-attaches the two claims,
-      which carry `prune: disabled`. A revert of C-1a restores `KumaDown` with the scrape job.
+      which C-1b kept. A revert of C-1a restores `KumaDown` with the scrape job.
     - After C-5, restoring Kuma means new tokens: a rebuild, not a revert. C-1 therefore waits
       until Phase A has run a week with no Kuma page.
     - Reverting C-3a restores both libraries, the loop entry and the stamp pairs. Each
@@ -2389,7 +2401,7 @@ timers or entry regenerates its glance block with `scripts/docs/gen_role_glance.
     declaration index is populated" and "Check every push token is in the format AutoKuma
     accepts" by title, and R4's PR 4 moves them into `renderer_lib`
     (`docs/target-architecture/render/r4-delete-k8s-ansible-path.md`). A0 changes the first
-    one's expression and keeps its title. Resolution: D5's uptime-kuma flip (#5712) deleted
+    one's expression and keeps its title. Resolution: uptime-kuma's conversion PR (#5712) deleted
     both asserts before C-1, and C-1b deletes the declaration lookup. R4's test drops the two
     names. R4 waits on D6, and D6 waits on C-2b (Open question 1).
 12. **Contract gap, the slice index: the drill against D5.** The live drill needs an
@@ -3033,15 +3045,15 @@ Folded from the 2026-10-12 pillar review; not adversarially reviewed. The pre-st
 
 The operator ruled on 2026-10-21 that D5 flips uptime-kuma with janitorr and jellyfin (#5820),
 overriding this plan's "uptime-kuma never flips". observability had flipped in #5816 and
-netpol-baseline flipped last in Wave D, both before C-1. Not adversarially reviewed.
+netpol-baseline flipped last in Wave D (#5833), both before C-1. Not adversarially reviewed.
 
 - *When D5 flips a role M6 edits* keeps only the monitor-bridge edge. It records that
   netpol-baseline's `dependsOn: uptime-kuma` orders C-1's netpol-baseline half, and that
   observability and uptime-kuma share no edge. It rejects a `depends_on` edge and a
   handback.
 - C-1 splits into C-1a (`KumaDown` and the scrape job) and C-1b (the empty render), with two
-  live reads between them. C-1b is D2's first retirement PR, with no tombstone, and C-2b is
-  its second. Both name the operator's `cluster_vars.py write`.
+  live reads between them. C-1b is D2's first retirement PR, with no tombstone and with its
+  claims kept, and C-2b is its second. Both name the operator's `cluster_vars.py write`.
 - D6's wait on C-2b becomes an index edge instead of a consequence of uptime-kuma staying
   Ansible-owned.
 - Updated: exit criterion 1, *Order*, Phase C, *The tree*, *Steps*, *Rollback*, *Risks*,
