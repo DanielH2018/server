@@ -79,8 +79,12 @@ SETUP_FILES_SHIPPED_BY_OTHER_ROLES: dict[str, frozenset[str]] = {
     # moved the socket away from every agent. A change to that key applies the whole
     # claude_code tag: its reader, `tasks/agent_access.yml`, runs only inside the agent
     # include, whose tasks all carry that one tag. A change to keys claude_code never reads
-    # drops claude_code from the tick's run (#4361).
-    "ansible/roles/setup/initial_setup/defaults/main.yml": frozenset({"claude_code"}),
+    # drops claude_code from the tick's run (#4361). claude_code, renovate_agent and
+    # homelab_builder each copy the uv binary `initial_setup_uv_version` pins, and name that key
+    # where they check the copy, so a uv bump re-applies all three after initial_setup (#5945).
+    "ansible/roles/setup/initial_setup/defaults/main.yml": frozenset(
+        {"claude_code", "homelab_builder", "renovate_agent"}
+    ),
     # initial_setup's worktree-holder crons read the agent list, the agent user, its primary
     # profile and the operator checkout from claude_code's defaults (#4357).
     "ansible/roles/setup/claude_code/defaults/main.yml": frozenset({"initial_setup"}),

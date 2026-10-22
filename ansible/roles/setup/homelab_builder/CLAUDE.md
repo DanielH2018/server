@@ -79,6 +79,11 @@ After the clear, a change under this role's directory lands through the setup-pl
   `renovate.json`'s nfpm manager moves the role's pin and CI's in one PR, and
   `ansible/roles/setup/homelab_builder/tests/test_builder_units.py::test_the_nfpm_pin_is_ci_s`
   holds them equal.
+- The uv copy follows the `initial_setup_uv_version` pin in
+  `ansible/roles/setup/initial_setup/defaults/main.yml`.
+  A bump of that pin re-applies this role after `initial_setup`, because the copy's version
+  check names the key. The check refuses to copy an operator uv that differs from the pin, so
+  a skipped `tooling` apply fails the run rather than shipping the old binary (#5945).
 - The pinned `host_python_version` under `/var/lib/homelab-builder/python`, installed by `uv
   python install` under `runuser`, as `common/tasks/agent_user.yml` installs an agent's.
 - `homelab-builder.service`, sandboxed as the plan's *Sandboxing* lists, and
