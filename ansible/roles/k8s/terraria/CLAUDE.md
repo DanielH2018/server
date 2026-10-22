@@ -8,7 +8,7 @@ irreplaceable data kopia still uniquely protected; the Docker role is in git his
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates, tasks or containers_list entry, or the k3s role's Longhorn tier lists. -->
 - **Applied by:** Flux, through `promote` (`owner: flux`); `deploy.sh` refuses
   `--tags=terraria` with exit 5
-- **Image:** `<k8s_registry_pull_host>/terraria` (`terraria_k8s_image`)
+- **Image:** `ghcr.io/danielh2018/terraria` (`terraria_k8s_image`)
 - **Route:** none (no `templates/ingressroute.yaml.j2`)
 - **Claim:** `terraria-config` (weekly -> B2 (default target))
 <!-- /generated_from -->
@@ -44,8 +44,8 @@ irreplaceable data kopia still uniquely protected; the Docker role is in git his
 - **Where the tasks went.** `tasks/main.yml` holds two includes, `k8s/image-builder` and
   `k8s/manifests`, and no Flux path runs either. They stay for the handback. The build became
   the `images` job (D5.4), which pushes `ghcr.io/danielh2018/terraria:<content tag>`. The
-  glance reads the defaults, so it still shows `<k8s_registry_pull_host>/terraria`; the
-  renderer rewrites that ref to the GHCR one with `imagePullPolicy: IfNotPresent`
+  defaults name `<k8s_registry_pull_host>/terraria`; the renderer rewrites that ref to the GHCR
+  one with `imagePullPolicy: IfNotPresent`
   (`scripts/renderer/renderer_lib/images.py:ghcr_refs`). The Kustomization's `wait` replaces
   the rollout wait.
 - **Host:** daniel-box · **Port:** public 7777 via `Service type: LoadBalancer`,

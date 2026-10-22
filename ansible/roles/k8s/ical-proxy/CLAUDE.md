@@ -7,15 +7,16 @@ calendar widget. See repo-root `CLAUDE.md` for shared conventions.
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates, tasks or containers_list entry, or the k3s role's Longhorn tier lists. -->
 - **Applied by:** Flux, through `promote` (`owner: flux`); `deploy.sh` refuses
   `--tags=ical-proxy` with exit 5
-- **Image:** `<k8s_registry_pull_host>/ical-proxy` (`ical_proxy_k8s_image`)
+- **Image:** `ghcr.io/danielh2018/ical-proxy` (`ical_proxy_k8s_image`)
 - **Route:** `ical-proxy.local.<domain>` (LAN only), no Authelia
 - **Claims:** none (no PVC)
 <!-- /generated_from -->
 
 - **Flux's render pulls `ghcr.io/danielh2018/ical-proxy:<content tag>`**, with
-  `imagePullPolicy: IfNotPresent` (D5.4b). The *Image* line above prints the Ansible default,
-  which names the in-cluster registry. The image is built from `templates/Dockerfile.j2`, with
-  the Flask app in `files/ical_proxy.py`, shipped into the image as `app.py`.
+  `imagePullPolicy: IfNotPresent` (D5.4b), and the *Image* line above names that repository.
+  The role's defaults still name the in-cluster registry, for the handback. The image is built
+  from `templates/Dockerfile.j2`, with the Flask app in `files/ical_proxy.py`, shipped into the
+  image as `app.py`.
 - **Host:** daniel-box (k8s), since 2026-08-10 — slice-7 Phase C
 - **The route guards by ClientIP** so only Homepage reads the unauthenticated private feeds
 - **Flux applies it, not Ansible** (D5.14, the first Wave C PR). Its `containers_list` entry
