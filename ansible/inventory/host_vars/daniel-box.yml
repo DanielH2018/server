@@ -251,6 +251,10 @@ containers_list:
   # nothing routes to it.
   - name: dri-device-plugin
     platform: k8s
+    # Flux applies dri-device-plugin through `promote` (D5, Wave D); its soak verify is the
+    # `K8sExtendedResourceMissing` alert. The handback is two PRs, `owner: released` then
+    # removing `owner`: docs/flux-deploy-plane.md.
+    owner: flux
   # The shared /data volume the nine media workloads mount. Storage, not a service.
   # Must precede every media workload — a pod that mounts an undeclared claim stays
   # Pending, and WaitForFirstConsumer makes that look like a scheduling problem rather
@@ -716,6 +720,11 @@ containers_list:
   # the LAN.
   - name: registry
     platform: k8s
+    # Flux applies registry through `promote`, and the `registry-verify` Jobs replace the
+    # self-tests and the netpol probe (D5, Wave D). `registry-gc.sh` stays a host cron and the
+    # one writer of ghcr-mirror's replicas (#5732). The handback is two PRs, `owner: released`
+    # then removing `owner`: docs/flux-deploy-plane.md.
+    owner: flux
     tier: platform
   # two_factor even on the LAN: arbitrary workflow execution on a stolen
   # password alone. /webhook/ below is unaffected — that route carries no forward-auth at all,
@@ -1145,6 +1154,11 @@ containers_list:
   # waits only for roles deployed BEFORE this one, which is why it applies last.
   - name: netpol-baseline
     platform: k8s
+    # Flux applies netpol-baseline through `promote` and checks the policies in
+    # `netpol-baseline-verify`, which depends on `netpol-baseline-deferred` (D5, Wave D's last
+    # flip). The handback is two PRs, `owner: released` then removing `owner`:
+    # docs/flux-deploy-plane.md.
+    owner: flux
 # False until this host's first manual initial_setup.yml + deploy.yml run finishes green
 # (README §4): the gitops_deploy handler shells a full deploy at the end of
 # initial_setup.yml and fails the play with it, so one bad service would take down the
