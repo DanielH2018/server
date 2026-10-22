@@ -12,6 +12,8 @@ PR 3, the log rules in shadow and the ruler-watching alerts: [#4821](https://git
 
 Soak read, [#4824](https://github.com/DanielH2018/server/issues/4824): passed on 2026-10-21, over the operator's shortened window of 2026-10-13T04:15:51Z to 2026-10-18T08:15Z ([the read](https://github.com/DanielH2018/server/issues/4824#issuecomment-6326741916)). `LokiHostLogsSilent`, `LokiPiLogsSilent` and `LokiPodLogsSilent` each returned no silent sample. `KumaNotificationDropped` fired in one episode (2026-10-16 18:55 to 22:00) that matches 185 minutes of `Kuma Notification Delivery` DOWN. `LokiRulerEvaluationFailing` and `Loki Reachable` were both empty, and neither bridge tile was ever DOWN. The Sunday reboot opened no silent window. PR 4a is unblocked.
 
+PR 4a, the Kuma side goes (PR 5 folded in): [#5852](https://github.com/DanielH2018/server/pull/5852).
+
 Depends on: M1, and M2's PR 3 (the `weekly-reboot` mute) before the cutover. Two
 contracts.md rows also gate PRs here: the row *Open questions* 2 requests gates PR 2a, and
 the row *Open questions* 1 requests gates PR 4b. contracts.md's *Requests on C7* holds both
