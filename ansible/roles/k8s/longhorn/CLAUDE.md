@@ -16,8 +16,8 @@ host probes stay green.
 - **Flux applies it, not Ansible** (H1.5a). Its `containers_list` entry carries `owner: flux`
   from its first commit. `tasks/main.yml` holds the include of `k8s/manifests` and no Flux path
   runs it. A rebuilt cluster gets it from the `longhorn` Kustomization at step 7 of
-  `docs/longhorn-disaster-recovery.md`'s *Order from H1.2*, and the settings and backup targets
-  that `setup/k3s` still writes come after it (*The Longhorn window*, below).
+  `docs/longhorn-disaster-recovery.md`'s *Order from H1.2*, and the backup targets that
+  `setup/k3s` still writes come after it (*The Longhorn window*, below).
 - **The workloads are `files/upstream/longhorn.yaml`**, upstream's file byte for byte, pinned by
   `k3s_longhorn_version` and the `longhorn_vendored_manifests` item in `defaults/main.yml`.
   `scripts/dev/vendor_manifest.py` checks the pin and refreshes the copy. The refresh command
@@ -37,6 +37,30 @@ host probes stay green.
       setting. `ansible/tests/longhorn/test_longhorn_storageclass.py::test_the_class_differs_from_upstreams_only_by_the_replica_count`
       holds the class equal to upstream's minus that one parameter, so a release that adds a
       parameter fails until the patch carries it.
+- **Three templates hold the objects `setup/k3s` used to write** (H1.5b).
+    - `templates/settings.yaml.j2` renders the seven `Setting` objects, each from one
+      `k3s_longhorn_*` key in `defaults/main.yml`. Flux owns each Setting's `value`. longhorn-manager keeps its own
+      annotation and status on the object, and the render declares neither, so Flux never takes
+      them.
+    - `templates/storageclass-nobackup.yaml.j2` renders the `longhorn-nobackup` class with
+      `kustomize.toolkit.fluxcd.io/force: enabled`, so Flux deletes and recreates the class when
+      an immutable parameter changes.
+    - `templates/networkpolicy-metrics.yaml.j2` renders the policy that admits Prometheus to
+      the manager's metrics port.
+- **A DataEngineSpecific Setting's value is a JSON map serialised as a string.**
+  `default-replica-count` and both `snapshot-data-integrity` Settings render
+  `{"v1":"...","v2":"..."}` in the compact form the manager stores, so the render equals the
+  live value.
+  `ansible/tests/longhorn/test_snapshot_data_integrity_patch_is_a_json_map.py::test_a_bare_string_value_is_flagged`
+  holds the shape.
+- **The engine-upgrade limit stays above 0.** Upstream ships `0`, which leaves engines on the old
+  image after an upgrade, and this repo sets `3`.
+  `ansible/tests/longhorn/test_engine_upgrade_limit_is_positive.py::test_a_zero_limit_is_flagged`
+  fails a render that sets `0`, and `docs/longhorn-upgrade.md` step 4 relies on it.
+- **A change to a Setting is a change to the live value once the tag promotes.** A hand patch is
+  reverted at the next reconcile. To fire the integrity check early, land a one-shot schedule
+  and then its revert (the comment on `k3s_longhorn_snapshot_data_integrity_cronjob` has the
+  reason).
 - **The file declares no `caBundle`, no webhook configuration and no Secret.** Under
   server-side apply a field the render does not declare stays with the controller that writes
   it, so the role needs no patch for a runtime-written field.
@@ -56,8 +80,8 @@ host probes stay green.
   holds the set equal to the untiered roles that set `flux_prune: false`.
 
 ## The Longhorn window, H1.5a until H1.7b
-`setup/k3s` still holds the tasks that write Longhorn's Settings, its backup targets and its
-RecurringJobs, and they fail on a cluster where Flux has not yet created `longhorn-system`.
+`setup/k3s` still holds the tasks that write Longhorn's backup targets and RecurringJobs, patch
+the CSI sidecar requests and reconcile the volume labels, and they fail on a cluster where Flux has not yet created `longhorn-system`.
 Bring-up step 1 therefore skips the `longhorn` and `longhorn_backup` tags, and step 7a applies
 them once the `longhorn` Kustomization reads `Ready`. The host tasks `setup/k3s` keeps for
 Longhorn (`open-iscsi`, `nfs-common` and the multipathd blacklist) carry the tag

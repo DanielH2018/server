@@ -1,7 +1,7 @@
 # `setup/k3s` — the cluster's host plane: k3s itself, Longhorn, and the backup crons
 
 The role that turns a host into a k3s node and declares the cluster's own plumbing: the server
-install, the agent join, Longhorn's settings and backup targets and the packages it needs on
+install, the agent join, Longhorn's backup targets and the packages it needs on
 the node, the read-only kubeconfig, the marker that releases k3s's CoreDNS addon, and the host
 crons that watch and exercise backups. `daniel-box` is the server and `daniel-server` an agent
 (`tasks/agent.yml`). The CoreDNS objects belong to the k8s `coredns` role and the Longhorn
@@ -74,7 +74,7 @@ authority of those four actuators is written here so a later edit cannot quietly
   (`etcd-snapshot-offbox.sh`, daily) uploads the snapshot and never the cluster token. The
   **RecurringJobs** delete old backups through their `retain` counts, and their `default` group
   covers every volume with no job of its own, so opting OUT is the explicit act — the `no-backup`
-  group, assigned by `files/longhorn-storageclass-nobackup.yaml`.
+  group, assigned by the `longhorn` role's `templates/storageclass-nobackup.yaml.j2`.
 - **The drill's three bounds** — an operator pin, an empty-restore waiver with a size ceiling and
   one retry per failure — are derived on the docs page, each held by a test. ENFORCED:
   `ansible/tests/longhorn/test_longhorn_restore_drill_operator_pin.py::test_argv_pin_drills_that_volume_not_the_rotations_pick`,

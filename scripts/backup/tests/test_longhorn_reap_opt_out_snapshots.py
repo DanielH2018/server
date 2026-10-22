@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """The snapshot reaper against a recurring-job group that has no RecurringJob by design.
 
-The `no-backup` group is an opt-out: `ansible/roles/setup/k3s/files/longhorn-storageclass-nobackup.yaml`
+The `no-backup` group is an opt-out: `ansible/roles/k8s/longhorn/templates/storageclass-nobackup.yaml.j2`
 selects it so Longhorn's default-group job stops claiming the volume, and no RecurringJob ever
 claims it. Before #3236 `snapshot_owner_map` resolved it to `""` — the same value a renamed
 RecurringJob leaves — so the unresolved-owner ABORT refused every run on the live cluster, where

@@ -17,7 +17,7 @@
 # installs Longhorn itself (H1.5a).
 - name: Install the packages Longhorn needs on the node
   ansible.builtin.import_tasks: longhorn-host.yml
-- name: Apply Longhorn's settings and reconcile its recurring-job groups
+- name: Wait for the Longhorn driver and reconcile its recurring-job groups
   ansible.builtin.import_tasks: longhorn.yml
 - name: Configure the Longhorn backup targets and job
   ansible.builtin.import_tasks: longhorn-backup.yml

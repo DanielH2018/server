@@ -31,7 +31,6 @@ import re
 import pytest
 from lib import yaml_fast
 from _helpers import ANSIBLE
-from lib.repo_paths import K3S_DEFAULTS
 from _k8s_render import rendered_docs
 
 K8S_ROLES = ANSIBLE / "roles" / "k8s"
@@ -49,8 +48,11 @@ KNOWN_SIZED_ROLES = frozenset(
 )
 
 
+LONGHORN_DEFAULTS = K8S_ROLES / "longhorn" / "defaults" / "main.yml"
+
+
 def block_size_bytes() -> int:
-    mib = yaml_fast.safe_load(K3S_DEFAULTS.read_text())[
+    mib = yaml_fast.safe_load(LONGHORN_DEFAULTS.read_text())[
         "k3s_longhorn_backup_block_size"
     ]
     return int(mib) * UNITS["Mi"]
