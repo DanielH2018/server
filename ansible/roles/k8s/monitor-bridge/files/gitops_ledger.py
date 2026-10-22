@@ -328,6 +328,21 @@ def _manual_plane_tags(obj: dict) -> frozenset[str]:
     return frozenset(w for w in words if w is not None)
 
 
+def _agent_hosts(obj: dict) -> tuple[str, ...]:
+    """The `agent_hosts` key of a `manual_plane` line, or () when it is missing or torn.
+
+    A torn key reads as no known host, which `agent_join_cmds` prints as a placeholder
+    rather than as no agent command at all.
+    """
+    hosts = obj.get("agent_hosts")
+    if not isinstance(hosts, list):
+        return ()
+    words = [_token(h) for h in hosts]
+    if any(w is None for w in words):
+        return ()
+    return tuple(w for w in words if w is not None)
+
+
 def manual_plane_entries(
     owed: str | None,
 ) -> tuple[list[ManualPlaneEntry], dict[str, frozenset[str]]]:
@@ -349,7 +364,11 @@ def manual_plane_entries(
             continue
         playbook = _token(obj.get("playbook")) or NO_PLAYBOOK
         host = _token(obj.get("host"))
-        entries.append(ManualPlaneEntry(entry.origin, playbook, role, entry.at, host))
+        entries.append(
+            ManualPlaneEntry(
+                entry.origin, playbook, role, entry.at, host, _agent_hosts(obj)
+            )
+        )
         tags[role] = _manual_plane_tags(obj)
     return sorted(entries, key=lambda e: e.at), tags
 
@@ -364,7 +383,16 @@ def put_manual_plane(
     second line for the same role, readable or torn, is dropped: the first stands for it, and
     two would page twice for one change.
     """
-    own = ("class", "subject", "origin", "at", "playbook", "tags", "host")
+    own = (
+        "class",
+        "subject",
+        "origin",
+        "at",
+        "playbook",
+        "tags",
+        "host",
+        "agent_hosts",
+    )
     lines, placed = [], False
     for line in (owed or "").splitlines():
         if owed_line_key(line) != (OWED_MANUAL_PLANE, entry.role):
@@ -391,6 +419,7 @@ def _manual_plane_line(entry: ManualPlaneEntry, tags: frozenset[str], extra) -> 
         playbook=entry.playbook,
         tags=sorted(tags),
         **({"host": entry.host} if entry.host else {}),
+        **({"agent_hosts": list(entry.agent_hosts)} if entry.agent_hosts else {}),
     )
 
 

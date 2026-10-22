@@ -213,3 +213,37 @@ def test_the_playbook_prefix_is_defined_only_in_gitops_markers():
         "ansible/roles/setup/gitops_deploy/files/gitops_markers.py",
         "ansible/roles/k8s/monitor-bridge/files/gitops_markers.py",
     }
+
+
+def _in_order(text: str, *parts: str) -> None:
+    """Each of `parts` appears in `text`, first occurrences in the order given."""
+    at = [text.find(p) for p in parts]
+    assert -1 not in at, (
+        f"missing {[p for p, i in zip(parts, at, strict=True) if i < 0]} in {text}"
+    )
+    assert at == sorted(at), f"{parts} out of order in {text}"
+
+
+def test_a_whole_role_k3s_line_names_the_agent_join_before_the_clear(tmp_path):
+    """#5627: `--tags k3s` on daniel-box never reaches an agent node (#5606).
+
+    The deployer carries the agent hosts on the line, as it carries `host`, because this
+    banner cannot import the routing that names them.
+    """
+    line = {
+        "class": "manual_plane",
+        "subject": "k3s",
+        "origin": "f" * 40,
+        "at": 500,
+        "playbook": "ansible/k3s-bringup.yml",
+        "tags": [],
+        "agent_hosts": ["daniel-server"],
+    }
+    (tmp_path / MARKERS["owed"]).write_text(json.dumps(line) + "\n")
+    (line_text,) = manual_plane_lines(read_manual_plane_marker(str(tmp_path)), 4000)
+    _in_order(
+        line_text,
+        "ansible/k3s-bringup.yml --tags k3s",
+        "ansible/k3s-bringup.yml -e join_agent=daniel-server --tags k3s_agent",
+        "clear-owed manual_plane k3s",
+    )
