@@ -15,9 +15,13 @@ from renderer.renderer_lib.bundle import bundle_files as render_bundle
 from test_verify_promotion import CHANGED, PROD, T, Clock, digests, ks, ok, reads
 
 import chained_timeout as ct
+from deploy_tools.bundle_census import published_tags
 from deploy_tools.promote_lib import verify_promotion as vp
 from lib import yaml_fast
+from lib.exit_codes import RENDER_OK
+from lib.git import git_stdout
 from lib.repo_paths import REPO
+from renderer import homelab_render
 
 SYNC = REPO / "ansible/roles/k8s/flux/templates/sync.yaml.j2"
 
@@ -232,3 +236,74 @@ def test_the_floor_matches_the_flux_roles_sync_template():
     )
     assert ct.seconds(root["timeout"]) == ct.ROOT_TIMEOUT_S
     assert ct.seconds(root["retryInterval"]) == ct.ROOT_RETRY_S
+
+
+def _cap_comment() -> list[str]:
+    """The `VERIFY_CAP_S =` line in the tracked chained_timeout.py and the comment above it."""
+    (path,) = git_stdout(
+        "ls-files", "--", "scripts/deploy_tools/chained_timeout.py", cwd=REPO
+    ).split()
+    lines = (REPO / path).read_text(encoding="utf-8").splitlines()
+    (at,) = [i for i, line in enumerate(lines) if line.startswith("VERIFY_CAP_S =")]
+    block = [lines[at]]
+    for line in reversed(lines[:at]):
+        if not line.startswith("#"):
+            break
+        block.append(line)
+    return block
+
+
+def test_the_published_bundles_chain_fits_the_cap_or_a_decided_marker_keeps_the_clamp(
+    tmp_path,
+):
+    """Every published tag changed but `soak` (#5868).
+
+    Past the cap, the soak's rendered `timeout` is pinned at VERIFY_CAP_S plus W and the
+    margins, so an all-changed promotion can outlast the soak's wait. Either the chain fits,
+    or a `# DECIDED:` marker at VERIFY_CAP_S records why the clamp stands. `promote_timeout`
+    returns the smaller of the chain and the cap, so a result below the cap is the chain
+    itself, and one at the cap is a clamp.
+    """
+    out = tmp_path / "out"
+    assert homelab_render.cluster(out, published_tags(), None) == RENDER_OK
+    files = {
+        str(p.relative_to(out)): p.read_bytes() for p in out.rglob("*") if p.is_file()
+    }
+    bundle = vp.flux_kustomizations(files)
+    names = {d["metadata"]["name"] for d in bundle} - {vp.SOAK}
+    assert {"bento-pdf", "code-server", "karakeep"} <= names, sorted(names)
+    timeout = ct.promote_timeout(bundle, names)
+    decided = [line for line in _cap_comment() if "# DECIDED:" in line]
+    assert timeout < ct.VERIFY_CAP_S or decided, (
+        f"the published bundle's chained timeout is clamped at VERIFY_CAP_S={timeout}s, "
+        "and no `# DECIDED:` marker above VERIFY_CAP_S records why the clamp stands"
+    )
+
+
+def test_the_decided_clamp_records_a_chain_no_shorter_than_the_published_one(tmp_path):
+    """The `# DECIDED:` at VERIFY_CAP_S records the all-changed chain it accepts (#5868).
+
+    The clamp hides the chain from every capped reading, so this lifts the cap and holds the
+    measured chain to the figure the marker records. A chain that grows past it turns this
+    red, and the PR that grows it re-decides the clamp with the new figure in the marker.
+    """
+    (recorded,) = [
+        int(found)
+        for line in _cap_comment()
+        for found in re.findall(r"#5868: (\d+)s", line)
+    ]
+    assert recorded > ct.VERIFY_CAP_S, (
+        "the marker records a chain the cap does not clamp"
+    )
+    out = tmp_path / "out"
+    assert homelab_render.cluster(out, published_tags(), None) == RENDER_OK
+    files = {
+        str(p.relative_to(out)): p.read_bytes() for p in out.rglob("*") if p.is_file()
+    }
+    bundle = vp.flux_kustomizations(files)
+    names = {d["metadata"]["name"] for d in bundle} - {vp.SOAK}
+    chain = ct.promote_timeout(bundle, names, cap_s=10**9)
+    assert chain <= recorded, (
+        f"the published bundle's all-changed chain is {chain}s, past the {recorded}s the "
+        "`# DECIDED:` at VERIFY_CAP_S accepted; re-decide the clamp and record the new figure"
+    )
