@@ -269,33 +269,45 @@ def _pinned_width(entry: str) -> int | None:
     return None
 
 
+def _left_to_auto(hooks: list[dict]) -> list[str]:
+    """The ids of multi-module hooks whose width `-n auto` sizes at one worker."""
+    return [
+        h["id"]
+        for h in hooks
+        if len(_modules(h)) > 1
+        and _pinned_width(h["entry"]) is None
+        and xdist_width.workers_for(len(_modules(h)), SESSION_CEILING) <= 1
+    ]
+
+
 def test_no_multi_module_pytest_hook_leaves_its_width_to_auto():
     """xdist_width gives `-n auto` one worker per 15 modules, which serialised five (#5917).
 
     An explicit `-n`, `-n0` included, is a measured choice; the defect is the silent fallback.
     """
-    hooks = [h for h in _pytest_hooks() if len(_modules(h)) > 1]
+    hooks = _pytest_hooks()
     assert "static-ratchet-tests-python" in {h["id"] for h in hooks}
-    serial = [
-        f"{h['id']}: {len(_modules(h))} modules"
-        for h in hooks
-        if _pinned_width(h["entry"]) is None
-        and xdist_width.workers_for(len(_modules(h)), SESSION_CEILING) <= 1
-        and h["id"] not in UNPINNED
-    ]
+    serial = [i for i in _left_to_auto(hooks) if i not in UNPINNED]
     assert not serial, (
         f"`-n auto` runs these on one worker; pin an explicit `-n`: {serial}"
     )
 
 
+def test_every_unpinned_exemption_still_applies():
+    """Once the named PR pins its hook, this fails so the exemption row goes with it."""
+    stale = sorted(set(UNPINNED) - set(_left_to_auto(_pytest_hooks())))
+    assert not stale, f"these hooks are pinned now; delete their UNPINNED rows: {stale}"
+
+
 @pytest.mark.parametrize(
-    ("entry", "width"),
+    ("entry", "flagged"),
     [
-        ("pytest -q -p no:cacheprovider a.py b.py", None),
-        ("pytest -q -n auto a.py b.py", None),
-        ("pytest -q -n 4 a.py b.py", 4),
-        ("pytest -q -n0 a.py b.py", 0),
+        ("uv run pytest -q -p no:cacheprovider a.py b.py c.py", True),
+        ("uv run pytest -q -n auto a.py b.py", True),
+        ("uv run pytest -q -n 4 a.py b.py", False),
+        ("uv run pytest -q -n0 a.py b.py", False),
+        ("uv run pytest -q a.py", False),
     ],
 )
-def test_pinned_width_reads_the_entry_s_own_n(entry, width):
-    assert _pinned_width(entry) == width
+def test_the_guard_flags_only_an_unpinned_multi_module_entry(entry, flagged):
+    assert _left_to_auto([{"id": "h", "entry": entry}]) == (["h"] if flagged else [])
