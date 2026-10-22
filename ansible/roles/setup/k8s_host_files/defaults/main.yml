@@ -4,7 +4,9 @@
 # mirror restore read them too. test_k8s_host_files_pairs.py holds each copy equal to
 # roles/k8s/registry/defaults/main.yml. They live here rather than in a task's vars because the
 # strict render test and the shell-template gate resolve a template's names from role defaults,
-# and because Renovate reaches a setup role's defaults, so an image bump edits both copies.
+# and because Renovate reaches a setup role's defaults. An image bump edits both copies in one PR
+# only because renovate.json lists this file in every rule that matches the registry role's
+# defaults; scripts/tests/test_renovate_host_file_copies.py holds the two resolving alike.
 # No other setup role names these keys, so the play-wide scope reads nothing across roles
 # (test_setup_cross_role_reads.py).
 registry_k8s_manage_gc: true  # noqa var-naming[no-role-prefix]

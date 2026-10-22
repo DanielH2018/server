@@ -1,10 +1,11 @@
 # `setup/k3s` — the cluster's host plane: k3s itself, Longhorn, and the backup crons
 
 The role that turns a host into a k3s node and declares the cluster's own plumbing: the server
-install, the agent join, Longhorn with its backup targets, the read-only kubeconfig,
-the marker that releases k3s's CoreDNS addon, and the host crons that watch and exercise
-backups. `daniel-box` is the server and `daniel-server` an agent (`tasks/agent.yml`). The
-CoreDNS objects belong to the k8s `coredns` role, and Flux applies them.
+install, the agent join, Longhorn's settings and backup targets and the packages it needs on
+the node, the read-only kubeconfig, the marker that releases k3s's CoreDNS addon, and the host
+crons that watch and exercise backups. `daniel-box` is the server and `daniel-server` an agent
+(`tasks/agent.yml`). The CoreDNS objects belong to the k8s `coredns` role and the Longhorn
+install to the k8s `longhorn` role, and Flux applies both.
 
 `ansible/k3s-bringup.yml` applies it, and that is one of the `_BROAD_MANUAL_PREFIXES` playbooks
 the GitOps deployer never runs itself, so every change here is a hand apply. The drill's bounds,

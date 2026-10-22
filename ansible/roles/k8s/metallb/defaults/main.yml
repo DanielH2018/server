@@ -41,6 +41,12 @@ k3s_metallb_pool: 10.0.0.241-10.0.0.250  # noqa var-naming[no-role-prefix]
 # *Plumbing tags are never pruned*.
 flux_prune: false  # noqa var-naming[no-role-prefix]
 
+# Forward-only (the H1 plan's *Forward-only tags and the promote rule*). MetalLB's CRDs carry a
+# conversion webhook, so a promote that fails on a revision changing this tag holds without
+# resetting `prod`: a reset would re-apply an older vendored file over upgraded CRDs.
+# scripts/deploy_tools/promote_lib/forward_only.py reads the flag from a top-level line.
+flux_forward_only: true  # noqa var-naming[no-role-prefix]
+
 # Auto-deploy stance. Flux applies the tag, so this gates no apply; the reason records why a bad
 # merge here is not a routine bump.
 k8s_autodeploy: false  # noqa var-naming[no-role-prefix]

@@ -153,6 +153,11 @@ daniel-server keeps its own SOPS key, so decryption still works without the reco
    bring-up installs no MetalLB: the `metallb` Kustomization does, once Flux applies the plumbing tags.
    Since H1.4 the `coredns` Kustomization owns the CoreDNS objects, and the bring-up keeps only
    the marker that releases k3s's bundled add-on.
+   From H1.5a until H1.7b the first run also skips `longhorn` and `longhorn_backup`
+   (`--skip-tags kubeconfig,longhorn,longhorn_backup`), because the `longhorn` Kustomization
+   installs Longhorn. Once it reads `Ready`, the operator runs
+   `k3s-bringup.yml --tags longhorn,longhorn_backup` with both arm variables set (that
+   document's step (f2)).
 2. Decide whether cluster **objects** (Deployments, Secrets, PVC bindings) are also lost —
    if so, restore etcd first per `docs/k3s-etcd-restore.md` (needs item 2, the cluster
    token, if this is a genuinely new host rather than the same disk).
