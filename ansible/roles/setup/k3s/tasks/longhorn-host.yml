@@ -10,9 +10,10 @@
 # carries, so a host task that regained `longhorn` would again name an object Flux owns.
 # ansible/tests/setup/test_k3s_longhorn_host_tasks.py holds this.
 #
-# The agent flow keeps its own copies of the first three tasks in agent.yml. The fourth, which
-# removes the manifests the retired server tasks staged, has no agent copy: only the server
-# ever staged them.
+# The agent flow keeps its own copies of the first three tasks in agent.yml. The fourth removes
+# the manifests that retired tasks staged on the server, Longhorn's and five others', so it has
+# no agent copy: no agent ever staged them. It sits here because `longhorn_host` is the narrow
+# tag a hand apply of this role already runs, and it touches nothing in the cluster.
 
 - name: Install Longhorn prerequisites
   tags: [longhorn_host]
@@ -56,12 +57,14 @@
   become: true
   when: k3s_multipath_conf is changed
 
-- name: Remove the Longhorn manifests staged before Flux owned their objects
+- name: Remove the manifests staged before Flux owned their objects
   tags: [longhorn_host]
-  # H1.5a, H1.5b and H1.7b each deleted the task that staged one of these files and applied it
-  # with `kubectl apply -f`, and left the file on the server. Flux owns every object they
-  # declare, so a hand `kubectl apply -f` of one would be a second writer. The R2 target's file
-  # also holds the real bucket name, mode 0644 (#5942).
+  # Each H1 and D5 slice that handed a staged object to Flux deleted the task that staged the
+  # file and applied it with `kubectl apply -f`, and left the file on the server: Longhorn's
+  # (H1.5a, H1.5b, H1.7b), CoreDNS's patch, MetalLB's pool, cluster-base's PriorityClasses and
+  # read-only identity, and traefik's RBAC (staged by the k8s traefik role). Flux owns every
+  # object they declare, so a hand `kubectl apply -f` of one would be a second writer. The R2
+  # target's file also holds the real bucket name, mode 0644 (#5942).
   ansible.builtin.file:
     path: "/etc/rancher/k3s/{{ item }}"
     state: absent
@@ -72,4 +75,9 @@
     - longhorn-storageclass.yaml
     - longhorn-storageclass-nobackup.yaml
     - longhorn-storageclass-configmap-patch.json
+    - coredns-corefile-patch.json
+    - metallb-pool.yaml
+    - priorityclass.yaml
+    - readonly-rbac.yaml
+    - traefik-clusterrole.yaml
   become: true

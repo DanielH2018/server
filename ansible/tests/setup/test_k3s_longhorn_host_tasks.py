@@ -11,8 +11,9 @@ tag, counting the tags their import in `main.yml` adds. A task that regained one
 would again name an object that Flux owns. The plan is
 docs/target-architecture/host/h1-cluster-config-to-flux.md, *The Longhorn window, H1.5a until H1.7b*.
 
-The fourth task removes the six manifests that the server tasks retired by H1.5a, H1.5b and
-H1.7b staged under /etc/rancher/k3s and left behind (#5942).
+The fourth task removes the manifests that tasks retired by the H1 and D5 slices staged under
+/etc/rancher/k3s and left behind: Longhorn's six, and the CoreDNS, MetalLB, cluster-base and
+traefik files (#5942).
 
 Run: uv run pytest ansible/tests/setup/test_k3s_longhorn_host_tasks.py
 """
@@ -23,7 +24,7 @@ from lib.repo_paths import K3S_ROLE
 TASKS = K3S_ROLE / "tasks"
 HOST_FILE = "longhorn-host.yml"
 RETIRED_TAGS = frozenset({"longhorn", "longhorn_backup"})
-RETIRE_TASK = "Remove the Longhorn manifests staged before Flux owned their objects"
+RETIRE_TASK = "Remove the manifests staged before Flux owned their objects"
 # The three tasks the plan moves, plus the retirement; the test must find each by name.
 MEMBERS = (
     "Install Longhorn prerequisites",
@@ -31,7 +32,7 @@ MEMBERS = (
     "Restart multipathd after a blacklist change",
     RETIRE_TASK,
 )
-# Every file a retired server task staged, as listed on daniel-box on 2026-10-22 (#5942).
+# Every file a retired task staged, as listed on daniel-box on 2026-10-22 (#5942).
 STAGED = frozenset(
     "/etc/rancher/k3s/" + name
     for name in (
@@ -41,6 +42,11 @@ STAGED = frozenset(
         "longhorn-storageclass.yaml",
         "longhorn-storageclass-nobackup.yaml",
         "longhorn-storageclass-configmap-patch.json",
+        "coredns-corefile-patch.json",
+        "metallb-pool.yaml",
+        "priorityclass.yaml",
+        "readonly-rbac.yaml",
+        "traefik-clusterrole.yaml",
     )
 )
 _IMPORTS = ("import_tasks", "ansible.builtin.import_tasks")
