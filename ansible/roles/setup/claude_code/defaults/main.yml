@@ -369,10 +369,9 @@ claude_code_agent_signing_key: "{{ claude_code_agent_user_home }}/.ssh/git_signi
 # the Authelia account the authelia role creates (`authelia_k8s_agent_user`), mirrored here
 # because the two roles cannot read each other's defaults; a test holds the two equal. The
 # password is `authelia_agent_password` in SOPS, which the apply decrypts as {{ sys_user }}.
-# The file also carries `domain`: ui_mcp.sh and ui_login.py read it from SOPS for the operator,
-# and the agent has no age key to do that. The agent can already read the domain, because its
-# read-only kubeconfig covers the traefik.io IngressRoutes that name it, so the file widens
-# nothing. scripts/diagnostics/probe_lib/core.py:AGENT_CREDENTIALS_PATH reads this path.
+# The file also carries `domain`, because ui_login.py refuses a login file that lacks it. The
+# operator, who has no such file, reads the domain from group_vars/all.yml. The domain is not a
+# secret, so the file widens nothing. scripts/diagnostics/probe_lib/core.py:AGENT_CREDENTIALS_PATH reads this path.
 claude_code_homelab_ui_username: claude-agent
 claude_code_homelab_ui_credentials: "{{ claude_code_agent_user_home }}/.config/homelab-ui/credentials.json"
 

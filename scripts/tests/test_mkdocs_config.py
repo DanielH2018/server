@@ -149,8 +149,8 @@ def test_the_untracked_plans_directory_is_excluded():
 def test_an_external_nav_entry_uses_the_sentinel_host():
     """A real domain typed into the nav would work on one tier and break on the other.
 
-    `domain` is SOPS-sourced, so a static nav cannot name it. Every off-site entry
-    carries `<service>.local.invalid` and is resolved in the browser instead.
+    A static nav cannot know which name the reader is on, the LAN one or the public one.
+    Every off-site entry carries `<service>.local.invalid` and is resolved in the browser.
     """
     external = [p for p in _nav_paths(_load_config()["nav"]) if _is_external(p)]
     baked = [
