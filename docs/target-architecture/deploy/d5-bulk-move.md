@@ -116,6 +116,9 @@ server-side `kubectl diff` as kustomize-controller. Only gpu-exporter's DaemonSe
 `checksum/restart`. Soak Job `soak-cc85dbec` judged the three tags and `flux/soak` read `success`.
 The operator kept pihole-exporter with an exemption: a `pihole_password` rotation does not roll it
 under Flux, and the operator rolls it by hand ([#5416](https://github.com/DanielH2018/server/issues/5416)).
+The fix for #5416 removed the exemption: the exporter declares `pihole-env` under
+`manifests_outside_secrets`, and the renderer hashes `pihole_password`'s digest into its
+`checksum/restart`.
 PR D5.6: [#5420](https://github.com/DanielH2018/server/pull/5420). It moved littlelink,
 longhorn-ui and deploy-ui to Flux at `88a31914c`. The operator's diff showed no change for any of
 the three, and `deploy.sh --tags <tag>` exited 5 for each after the merge. Soak Job
@@ -474,7 +477,7 @@ own-window roles' (*Waves and windows*).
       key on daniel-pi", both `delegate_to: daniel-pi`.
     - qbittorrent: the prefs-check script and its cron.
     - registry: the job manifest directory and the GC cron. The cron's script,
-      `ansible/roles/k8s/registry/templates/registry-gc.sh.j2`, runs `kubectl scale
+      `ansible/roles/setup/k8s_host_files/templates/registry-gc.sh.j2`, runs `kubectl scale
       deploy/registry --replicas=0` for the GC ("STOP-THE-WORLD, NOT OPTIONAL") and scales
       back in `scale_up_and_report`. The rendered Deployment sets `replicas: 1`. The GC is
       monitored by the Kuma `Registry GC` tile, the healthchecks.io `registry-gc` check in
@@ -2823,6 +2826,12 @@ sizes its batch of roles against that projection.
       runs under the lock `registry-gc.sh` holds for its whole run (#5736). After the flip,
       the script restores a mirror its stamp shows it left at zero, and observability's
       `GhcrMirrorScaledToZero` pages one left there for 2h.
+      The `k8s_host_files` conversion PR moved the GC's host side (the script,
+      `/var/lib/registry-gc`, the `registry-gc` cron and `ghcr-mirror-gc-job.yaml`) into
+      `tasks/registry.yml` and dropped registry's host-write `allow` entry, so the flip PR has
+      no host row left to move. The setup plane applies it. Its live check is the cron file and
+      the script's hash unchanged on daniel-box, and the next Sunday `registry-gc` journal
+      showing the mirror phase.
     - traefik: the CRDs come from a URL in the role's `tasks/main.yml`, which no render may
       fetch under C1, so they get an in-tree copy pinned by `traefik_k8s_crd_version`. The
       cluster RBAC carries `kustomize.toolkit.fluxcd.io/prune: disabled` before the move, so

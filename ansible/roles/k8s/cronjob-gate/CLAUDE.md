@@ -55,7 +55,7 @@ real workload run on every deploy — not a probe, not a dry run, the actual job
    * **Protected:** a gate run in flight suppresses the next scheduled firing. Verified live
      2026-08-21 — `longhorn-system/postmig-d6b`, a `cronjob.kubernetes.io/instantiate: manual`
      Job, carries `ownerReferences[0].kind: CronJob` with `controller: true`, which is what puts
-     it in the CronJob's `.status.active` for `Forbid` to key on.
+     it in the CronJob's list of active Jobs for `Forbid` to key on.
    * **Unprotected:** a gate run created *into* a scheduled run that is already going. Nothing
      refuses that, so property 2 below is what makes it safe, not `Forbid`.
 

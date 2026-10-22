@@ -33,6 +33,7 @@ from pathlib import Path as _Path
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 
 from pathlib import Path
+from typing import Any, cast
 
 from jinja2 import Environment
 
@@ -49,6 +50,7 @@ __all__ = [
     "BOOLEANS_FALSE",
     "BOOLEANS_TRUE",
     "ansible_bool",
+    "file_lookup",
     "make_ansible_env",
     "register_ansible_filters",
     "render_template",
@@ -254,13 +256,31 @@ def make_ansible_env(dirs=(), undefined_cls=StubUndefined) -> Environment:
     return register_ansible_filters(make_env(dirs, undefined_cls=undefined_cls))
 
 
+def file_lookup(kind: str, path: str, **_kwargs) -> str:
+    """Ansible's ``lookup('file', path)``, the one lookup a setup-plane template calls.
+
+    ``k8s_host_files``' GC Job template inlines its prune script this way. ``k8s_yaml.make_lookup``
+    covers the k8s guards' wider set, and replaces this global in the k8s render.
+
+    Raises:
+        ValueError: ``kind`` is not ``file``, since a stand-in for another plugin would render
+            something a deploy does not.
+    """
+    if kind != "file":
+        raise ValueError(f"lookup({kind!r}) has no stand-in in the setup-plane render")
+    return Path(path).read_text().rstrip()
+
+
 def template_env(template_dir: Path, undefined_cls=StubUndefined) -> Environment:
     """The environment for one template directory plus the shared ``ansible/templates/``.
 
     Every guard loads that pair — a role's own templates and the shared macros they import —
     so the pair lives here rather than in each guard's call.
     """
-    return make_ansible_env([template_dir, SHARED_TPL], undefined_cls=undefined_cls)
+    env = make_ansible_env([template_dir, SHARED_TPL], undefined_cls=undefined_cls)
+    # jinja2 leaves `Environment.globals` unannotated, so its inferred type rejects a callable.
+    cast(dict[str, Any], env.globals)["lookup"] = file_lookup
+    return env
 
 
 def render_template(path: Path, ctx: dict) -> str:

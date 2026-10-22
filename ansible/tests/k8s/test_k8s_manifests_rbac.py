@@ -12,25 +12,37 @@ from lib import yaml_fast
 from _k8s_render import rendered_docs
 from _manifest_guards import (
     ALL_VARS_VALUES,
-    K3S_DEFAULT_VALUES,
     K8S,
     _k8s_entries,
     _render,
     _role_context,
 )
-from lib.repo_paths import K3S_ROLE
+from lib.repo_paths import K8S_ROLES
 
 
 READ_VERBS = {"get", "list", "watch"}
 
+# The identity's objects are the cluster-base role's since H1.2, so its defaults (the mirrored
+# `cluster_base_readonly_sa_*` pair and the CRD groups) are the values the template renders with.
+CLUSTER_BASE_ROLE = K8S_ROLES / "cluster-base"
+CLUSTER_BASE_DEFAULTS = yaml_fast.safe_load(
+    (CLUSTER_BASE_ROLE / "defaults" / "main.yml").read_text()
+)
+
 
 def _readonly_rbac_docs() -> list[dict]:
     rendered = _render(
-        K3S_ROLE / "templates" / "readonly-rbac.yaml.j2",
+        CLUSTER_BASE_ROLE / "templates" / "readonly-rbac.yaml.j2",
         sys_user=ALL_VARS_VALUES["sys_user"],
-        k3s_readonly_sa_name=K3S_DEFAULT_VALUES["k3s_readonly_sa_name"],
-        k3s_readonly_sa_namespace=K3S_DEFAULT_VALUES["k3s_readonly_sa_namespace"],
-        k3s_readonly_crd_api_groups=K3S_DEFAULT_VALUES["k3s_readonly_crd_api_groups"],
+        cluster_base_readonly_sa_name=CLUSTER_BASE_DEFAULTS[
+            "cluster_base_readonly_sa_name"
+        ],
+        cluster_base_readonly_sa_namespace=CLUSTER_BASE_DEFAULTS[
+            "cluster_base_readonly_sa_namespace"
+        ],
+        k3s_readonly_crd_api_groups=CLUSTER_BASE_DEFAULTS[
+            "k3s_readonly_crd_api_groups"
+        ],
     )
     return [d for d in yaml_fast.safe_load_all(rendered) if d]
 
@@ -98,7 +110,7 @@ def test_the_read_only_check_rejects_a_widened_role():
 def test_readonly_bindings_never_reference_a_writing_clusterrole():
     """The additive ClusterRole is audited by the tests above; a roleRef pointing somewhere
     else routes around all of them. Only `view` and this role's own name are permitted."""
-    allowed = {"view", K3S_DEFAULT_VALUES["k3s_readonly_sa_name"]}
+    allowed = {"view", CLUSTER_BASE_DEFAULTS["cluster_base_readonly_sa_name"]}
     bindings = [d for d in _readonly_rbac_docs() if d["kind"] == "ClusterRoleBinding"]
     assert bindings, "no ClusterRoleBinding rendered"
     for binding in bindings:
@@ -344,7 +356,7 @@ def test_readonly_role_covers_the_crd_groups_this_homelab_deploys():
     into it (`test_aggregated_clusterroles.py` pins them). Any other group missing from the
     list degrades silently: the kubeconfig still works, that one `kubectl get` says
     Forbidden, and the caller falls back to sudo."""
-    groups = set(K3S_DEFAULT_VALUES["k3s_readonly_crd_api_groups"])
+    groups = set(CLUSTER_BASE_DEFAULTS["k3s_readonly_crd_api_groups"])
     # The group every rendered IngressRoute and Middleware is actually applied under, read off
     # the parsed apiVersion rather than off the macro's text, where `traefik.io` also appears
     # in comments and annotation keys.

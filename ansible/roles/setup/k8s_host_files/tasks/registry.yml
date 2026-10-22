@@ -1,12 +1,67 @@
 ---
-# Written by D5's push-store GC retirement for registry (Wave D's registry bullet). H7.18c turns
-# it into a legacy entry and deletes it.
+# Moved from roles/k8s/registry by D5's k8s_host_files conversion PR for registry, while Ansible
+# still owns registry. The ghcr-mirror's GC stays a host script after the flip (operator ruling on
+# #5680 and #5732): nothing but registry-gc.sh writes the mirror's `spec.replicas`. A Flux-owned
+# role runs no tasks, so the script, its state directory, its cron and the Job manifest it applies
+# at cron time install here. H7.18c turns the push store's absent arm into a legacy entry.
 #
-# registry-gc.sh read this manifest at cron time to collect the push store, and nothing reads it
-# since that phase was retired. k8s/manifests never sweeps `registry-jobs/`, so this absent arm
-# removes the file a host still holds. It has nothing left to remove after its first apply.
+# Removing the push store's `gc-job.yaml` came first (D5's push-store GC retirement); nothing
+# reads that manifest since.
 - name: Remove the retired push store's garbage-collection job manifest
   ansible.builtin.file:
     path: /etc/rancher/k3s/manifests/registry-jobs/gc-job.yaml
     state: absent
   become: true
+
+# `registry_k8s_manage_gc: false` skips the whole unit. Skip-only, as it was in the registry
+# role: turning it off on a host that already has the cron installs nothing and removes nothing.
+- name: Manage the registry garbage collection
+  when: registry_k8s_manage_gc | bool
+  become: true
+  block:
+    # registry-gc.sh reads this manifest at cron time. The registry role creates the same
+    # directory for its self-test Jobs, with the same owner and mode, until it flips.
+    - name: Create the registry job manifest directory
+      ansible.builtin.file:
+        path: /etc/rancher/k3s/manifests/registry-jobs
+        state: directory
+        mode: "0700"
+        owner: root
+        group: root
+
+    - name: Render the ghcr-mirror garbage-collection job
+      ansible.builtin.template:
+        src: ghcr-mirror-gc-job.yaml.j2
+        dest: /etc/rancher/k3s/manifests/registry-jobs/ghcr-mirror-gc-job.yaml
+        mode: "0644"
+        owner: root
+        group: root
+
+    # Root-owned and root-run: it uses the root kubeconfig because it must scale the ghcr-mirror
+    # Deployment. 0700 so the credential path it implies isn't readable by other local accounts.
+    - name: Deploy the registry garbage-collection script
+      ansible.builtin.template:
+        src: registry-gc.sh.j2
+        dest: /usr/local/bin/registry-gc.sh
+        mode: "0700"
+        owner: root
+        group: root
+      no_log: true  # renders the Kuma push token
+
+    - name: Create the registry garbage-collection state directory
+      ansible.builtin.file:
+        path: /var/lib/registry-gc
+        state: directory
+        mode: "0755"
+        owner: root
+        group: root
+
+    - name: Schedule the registry garbage collection
+      ansible.builtin.cron:
+        name: "Registry garbage collection"
+        weekday: "{{ registry_k8s_gc_cron_weekday }}"
+        minute: "{{ registry_k8s_gc_cron_minute }}"
+        hour: "{{ registry_k8s_gc_cron_hour }}"
+        user: root
+        job: "/usr/local/bin/registry-gc.sh"
+        cron_file: registry-gc

@@ -9,8 +9,8 @@
 # an alert does when a mapping rule yields nothing.
 #
 # The kube-state-metrics series carry the labels v2.20 gives them (job, instance, uid), so a
-# join that ignores one of them fails here as it would live. Every alert asserts `shadow`,
-# which M2's PR 4b drops.
+# join that ignores one of them fails here as it would live. No alert carries `shadow`: M2's
+# PR 4b dropped it, so every case asserts the labels of a live rule.
 rule_files:
   - ../../files/rules/k8s-workloads.yaml
 evaluation_interval: 1m
@@ -50,7 +50,6 @@ tests:
               deployment: valheim
               service: valheim
               severity: warning
-              shadow: "true"
             exp_annotations:
               summary: Deployment homelab/valheim has unavailable replicas.
               description: "valheim has had 1 unavailable replicas for 15 minutes. The hold is per Deployment, where the bridge's streak counted any workload."
@@ -67,7 +66,6 @@ tests:
               deployment: jellyfin
               service: jellyfin
               severity: warning
-              shadow: "true"
             exp_annotations:
               summary: Deployment homelab/jellyfin has no available replica.
               description: jellyfin wants replicas and has had none available for 10 minutes.
@@ -82,7 +80,6 @@ tests:
               deployment: sonarr
               service: sonarr
               severity: warning
-              shadow: "true"
             exp_annotations:
               summary: The rollout of homelab/sonarr has stalled.
               description: sonarr has had fewer updated replicas than it wants for 15 minutes.
@@ -110,7 +107,6 @@ tests:
               deployment: home-assistant
               service: home-assistant
               severity: warning
-              shadow: "true"
             exp_annotations:
               summary: Deployment homelab/home-assistant has no available replica.
               description: home-assistant wants replicas and has had none available for 10 minutes.
@@ -124,7 +120,6 @@ tests:
               deployment: home-assistant
               service: home-assistant
               severity: warning
-              shadow: "true"
             exp_annotations:
               summary: Deployment homelab/home-assistant has no available replica.
               description: home-assistant wants replicas and has had none available for 10 minutes.
@@ -138,7 +133,6 @@ tests:
               deployment: home-assistant
               service: home-assistant
               severity: warning
-              shadow: "true"
             exp_annotations:
               summary: Deployment homelab/home-assistant has no available replica.
               description: home-assistant wants replicas and has had none available for 10 minutes.
@@ -152,7 +146,6 @@ tests:
               deployment: home-assistant
               service: home-assistant
               severity: warning
-              shadow: "true"
             exp_annotations:
               summary: Deployment homelab/home-assistant has no available replica.
               description: home-assistant wants replicas and has had none available for 10 minutes.
@@ -175,7 +168,6 @@ tests:
               deployment: valheim
               service: unmapped
               severity: warning
-              shadow: "true"
             exp_annotations:
               summary: Deployment homelab/valheim has unavailable replicas.
               description: "valheim has had 1 unavailable replicas for 15 minutes. The hold is per Deployment, where the bridge's streak counted any workload."
@@ -189,7 +181,6 @@ tests:
               deployment: valheim
               service: observability
               severity: warning
-              shadow: "true"
             exp_annotations:
               summary: A workload in homelab has no deploy tag in workload-service.
               description: "Deployment valheim has had no deploy tag for 30 minutes, so its alerts carry service=\"unmapped\". Add it to the override table in workload-service.yaml, or label it."
@@ -228,7 +219,6 @@ tests:
               container: zigbee2mqtt
               service: zigbee2mqtt
               severity: warning
-              shadow: "true"
             exp_annotations:
               summary: Container zigbee2mqtt in homelab/zigbee2mqtt-6d9f7c-x2k4p is crash looping.
               description: zigbee2mqtt restarted more than 3 times in the last hour, at least once in the last 30 minutes. Readiness can pass between restarts, so the replica alerts may stay quiet.
@@ -241,7 +231,6 @@ tests:
               container: backup
               service: unmapped
               severity: warning
-              shadow: "true"
             exp_annotations:
               summary: Container backup in homelab/backup-29341-q8z7m is crash looping.
               description: backup restarted more than 3 times in the last hour, at least once in the last 30 minutes. Readiness can pass between restarts, so the replica alerts may stay quiet.
@@ -272,7 +261,6 @@ tests:
               daemonset: node-exporter
               service: node-exporter
               severity: warning
-              shadow: "true"
             exp_annotations:
               summary: DaemonSet homelab/node-exporter has unavailable pods.
               description: node-exporter has had 1 unavailable pods for 5 minutes. The bridge paged this on one 300s sample, and the hold keeps that span.
@@ -298,7 +286,6 @@ tests:
               deployment: stray
               service: observability
               severity: warning
-              shadow: "true"
             exp_annotations:
               summary: A workload in homelab has no deploy tag in workload-service.
               description: "Deployment stray has had no deploy tag for 30 minutes, so its alerts carry service=\"unmapped\". Add it to the override table in workload-service.yaml, or label it."
@@ -331,7 +318,6 @@ tests:
               daemonset: node-exporter
               service: observability
               severity: warning
-              shadow: "true"
             exp_annotations:
               summary: A workload in homelab has no deploy tag in workload-service.
               description: DaemonSet node-exporter has had no deploy tag for 30 minutes, so its alerts carry service="unmapped". Add it to the override table in workload-service.yaml, or label it.
@@ -340,7 +326,6 @@ tests:
               pod: valheim-7c9d-k2m4q
               service: observability
               severity: warning
-              shadow: "true"
             exp_annotations:
               summary: A workload in homelab has no deploy tag in workload-service.
               description: Pod valheim-7c9d-k2m4q has had no deploy tag for 30 minutes, so its alerts carry service="unmapped". Add it to the override table in workload-service.yaml, or label it.
@@ -361,7 +346,6 @@ tests:
           - exp_labels:
               service: dri-device-plugin
               severity: warning
-              shadow: "true"
               verify: "true"
             exp_annotations:
               summary: No node advertises the devic.es/dri GPU resource.
@@ -440,7 +424,6 @@ tests:
           - exp_labels:
               service: observability
               severity: warning
-              shadow: "true"
             exp_annotations:
               summary: Prometheus holds fewer than 5 Deployments from kube-state-metrics.
               description: The Deployment alerts in k8s-workloads read too little to be trusted. 5 is a fixed sanity floor, held 5 minutes where the bridge paged one sample. Check that kube-state-metrics is up and collects deployments.
@@ -450,7 +433,6 @@ tests:
           - exp_labels:
               service: observability
               severity: warning
-              shadow: "true"
             exp_annotations:
               summary: Prometheus holds fewer than 11 DaemonSets from kube-state-metrics.
               description: "11 is the estate's DaemonSet count, fixed in the rule, so a DaemonSet has gone or kube-state-metrics stopped collecting daemonsets. Held 5 minutes where the bridge paged one sample."
@@ -510,7 +492,7 @@ tests:
       - alertname: K8sDeploymentSeriesMissing
         eval_time: 6m
         exp_alerts:
-          - exp_labels: {service: observability, severity: warning, shadow: "true"}
+          - exp_labels: {service: observability, severity: warning}
             exp_annotations:
               summary: Prometheus holds fewer than 5 Deployments from kube-state-metrics.
               description: The Deployment alerts in k8s-workloads read too little to be trusted. 5 is a fixed sanity floor, held 5 minutes where the bridge paged one sample. Check that kube-state-metrics is up and collects deployments.
@@ -522,7 +504,7 @@ tests:
       - alertname: K8sDaemonSetSeriesMissing
         eval_time: 6m
         exp_alerts:
-          - exp_labels: {service: observability, severity: warning, shadow: "true"}
+          - exp_labels: {service: observability, severity: warning}
             exp_annotations:
               summary: Prometheus holds fewer than 11 DaemonSets from kube-state-metrics.
               description: "11 is the estate's DaemonSet count, fixed in the rule, so a DaemonSet has gone or kube-state-metrics stopped collecting daemonsets. Held 5 minutes where the bridge paged one sample."
@@ -535,7 +517,7 @@ tests:
       - alertname: K8sNodeAllocatableMissing
         eval_time: 6m
         exp_alerts:
-          - exp_labels: {service: observability, severity: warning, shadow: "true"}
+          - exp_labels: {service: observability, severity: warning}
             exp_annotations:
               summary: Prometheus holds no kube_node_status_allocatable series.
               description: kube-state-metrics is not collecting nodes, so K8sExtendedResourceMissing cannot see the GPU resource. The bridge read this as INERT; this rule pages it.
@@ -549,7 +531,7 @@ tests:
       - alertname: K8sStateSeriesMissing
         eval_time: 6m
         exp_alerts:
-          - exp_labels: {family: kube_deployment_spec_replicas, service: observability, severity: warning, shadow: "true"}
+          - exp_labels: {family: kube_deployment_spec_replicas, service: observability, severity: warning}
             exp_annotations:
               summary: Prometheus holds no kube_deployment_spec_replicas series.
               description: "An alert or mapping in k8s-workloads that reads kube_deployment_spec_replicas evaluates to nothing. Check kube-state-metrics' --resources and its scrape job's metric_relabel_configs."
@@ -560,7 +542,7 @@ tests:
       - alertname: K8sStateSeriesMissing
         eval_time: 6m
         exp_alerts:
-          - exp_labels: {family: kube_deployment_status_replicas_available, service: observability, severity: warning, shadow: "true"}
+          - exp_labels: {family: kube_deployment_status_replicas_available, service: observability, severity: warning}
             exp_annotations:
               summary: Prometheus holds no kube_deployment_status_replicas_available series.
               description: "An alert or mapping in k8s-workloads that reads kube_deployment_status_replicas_available evaluates to nothing. Check kube-state-metrics' --resources and its scrape job's metric_relabel_configs."
@@ -571,7 +553,7 @@ tests:
       - alertname: K8sStateSeriesMissing
         eval_time: 6m
         exp_alerts:
-          - exp_labels: {family: kube_deployment_status_replicas_updated, service: observability, severity: warning, shadow: "true"}
+          - exp_labels: {family: kube_deployment_status_replicas_updated, service: observability, severity: warning}
             exp_annotations:
               summary: Prometheus holds no kube_deployment_status_replicas_updated series.
               description: "An alert or mapping in k8s-workloads that reads kube_deployment_status_replicas_updated evaluates to nothing. Check kube-state-metrics' --resources and its scrape job's metric_relabel_configs."
@@ -582,7 +564,7 @@ tests:
       - alertname: K8sStateSeriesMissing
         eval_time: 6m
         exp_alerts:
-          - exp_labels: {family: kube_pod_container_status_restarts_total, service: observability, severity: warning, shadow: "true"}
+          - exp_labels: {family: kube_pod_container_status_restarts_total, service: observability, severity: warning}
             exp_annotations:
               summary: Prometheus holds no kube_pod_container_status_restarts_total series.
               description: "An alert or mapping in k8s-workloads that reads kube_pod_container_status_restarts_total evaluates to nothing. Check kube-state-metrics' --resources and its scrape job's metric_relabel_configs."
@@ -593,7 +575,7 @@ tests:
       - alertname: K8sStateSeriesMissing
         eval_time: 6m
         exp_alerts:
-          - exp_labels: {family: kube_pod_owner, service: observability, severity: warning, shadow: "true"}
+          - exp_labels: {family: kube_pod_owner, service: observability, severity: warning}
             exp_annotations:
               summary: Prometheus holds no kube_pod_owner series.
               description: "An alert or mapping in k8s-workloads that reads kube_pod_owner evaluates to nothing. Check kube-state-metrics' --resources and its scrape job's metric_relabel_configs."
@@ -604,7 +586,7 @@ tests:
       - alertname: K8sStateSeriesMissing
         eval_time: 6m
         exp_alerts:
-          - exp_labels: {family: kube_replicaset_owner, service: observability, severity: warning, shadow: "true"}
+          - exp_labels: {family: kube_replicaset_owner, service: observability, severity: warning}
             exp_annotations:
               summary: Prometheus holds no kube_replicaset_owner series.
               description: "An alert or mapping in k8s-workloads that reads kube_replicaset_owner evaluates to nothing. Check kube-state-metrics' --resources and its scrape job's metric_relabel_configs."
@@ -615,7 +597,7 @@ tests:
       - alertname: K8sStateSeriesMissing
         eval_time: 6m
         exp_alerts:
-          - exp_labels: {family: kube_deployment_labels, service: observability, severity: warning, shadow: "true"}
+          - exp_labels: {family: kube_deployment_labels, service: observability, severity: warning}
             exp_annotations:
               summary: Prometheus holds no kube_deployment_labels series.
               description: "An alert or mapping in k8s-workloads that reads kube_deployment_labels evaluates to nothing. Check kube-state-metrics' --resources and its scrape job's metric_relabel_configs."
@@ -626,7 +608,7 @@ tests:
       - alertname: K8sStateSeriesMissing
         eval_time: 6m
         exp_alerts:
-          - exp_labels: {family: kube_daemonset_labels, service: observability, severity: warning, shadow: "true"}
+          - exp_labels: {family: kube_daemonset_labels, service: observability, severity: warning}
             exp_annotations:
               summary: Prometheus holds no kube_daemonset_labels series.
               description: "An alert or mapping in k8s-workloads that reads kube_daemonset_labels evaluates to nothing. Check kube-state-metrics' --resources and its scrape job's metric_relabel_configs."
@@ -642,56 +624,56 @@ tests:
       - alertname: K8sDeploymentSeriesMissing
         eval_time: 6m
         exp_alerts:
-          - exp_labels: {service: observability, severity: warning, shadow: "true"}
+          - exp_labels: {service: observability, severity: warning}
             exp_annotations:
               summary: Prometheus holds fewer than 5 Deployments from kube-state-metrics.
               description: The Deployment alerts in k8s-workloads read too little to be trusted. 5 is a fixed sanity floor, held 5 minutes where the bridge paged one sample. Check that kube-state-metrics is up and collects deployments.
       - alertname: K8sDaemonSetSeriesMissing
         eval_time: 6m
         exp_alerts:
-          - exp_labels: {service: observability, severity: warning, shadow: "true"}
+          - exp_labels: {service: observability, severity: warning}
             exp_annotations:
               summary: Prometheus holds fewer than 11 DaemonSets from kube-state-metrics.
               description: "11 is the estate's DaemonSet count, fixed in the rule, so a DaemonSet has gone or kube-state-metrics stopped collecting daemonsets. Held 5 minutes where the bridge paged one sample."
       - alertname: K8sNodeAllocatableMissing
         eval_time: 6m
         exp_alerts:
-          - exp_labels: {service: observability, severity: warning, shadow: "true"}
+          - exp_labels: {service: observability, severity: warning}
             exp_annotations:
               summary: Prometheus holds no kube_node_status_allocatable series.
               description: kube-state-metrics is not collecting nodes, so K8sExtendedResourceMissing cannot see the GPU resource. The bridge read this as INERT; this rule pages it.
       - alertname: K8sStateSeriesMissing
         eval_time: 6m
         exp_alerts:
-          - exp_labels: {family: kube_deployment_spec_replicas, service: observability, severity: warning, shadow: "true"}
+          - exp_labels: {family: kube_deployment_spec_replicas, service: observability, severity: warning}
             exp_annotations:
               summary: Prometheus holds no kube_deployment_spec_replicas series.
               description: "An alert or mapping in k8s-workloads that reads kube_deployment_spec_replicas evaluates to nothing. Check kube-state-metrics' --resources and its scrape job's metric_relabel_configs."
-          - exp_labels: {family: kube_deployment_status_replicas_available, service: observability, severity: warning, shadow: "true"}
+          - exp_labels: {family: kube_deployment_status_replicas_available, service: observability, severity: warning}
             exp_annotations:
               summary: Prometheus holds no kube_deployment_status_replicas_available series.
               description: "An alert or mapping in k8s-workloads that reads kube_deployment_status_replicas_available evaluates to nothing. Check kube-state-metrics' --resources and its scrape job's metric_relabel_configs."
-          - exp_labels: {family: kube_deployment_status_replicas_updated, service: observability, severity: warning, shadow: "true"}
+          - exp_labels: {family: kube_deployment_status_replicas_updated, service: observability, severity: warning}
             exp_annotations:
               summary: Prometheus holds no kube_deployment_status_replicas_updated series.
               description: "An alert or mapping in k8s-workloads that reads kube_deployment_status_replicas_updated evaluates to nothing. Check kube-state-metrics' --resources and its scrape job's metric_relabel_configs."
-          - exp_labels: {family: kube_pod_container_status_restarts_total, service: observability, severity: warning, shadow: "true"}
+          - exp_labels: {family: kube_pod_container_status_restarts_total, service: observability, severity: warning}
             exp_annotations:
               summary: Prometheus holds no kube_pod_container_status_restarts_total series.
               description: "An alert or mapping in k8s-workloads that reads kube_pod_container_status_restarts_total evaluates to nothing. Check kube-state-metrics' --resources and its scrape job's metric_relabel_configs."
-          - exp_labels: {family: kube_pod_owner, service: observability, severity: warning, shadow: "true"}
+          - exp_labels: {family: kube_pod_owner, service: observability, severity: warning}
             exp_annotations:
               summary: Prometheus holds no kube_pod_owner series.
               description: "An alert or mapping in k8s-workloads that reads kube_pod_owner evaluates to nothing. Check kube-state-metrics' --resources and its scrape job's metric_relabel_configs."
-          - exp_labels: {family: kube_replicaset_owner, service: observability, severity: warning, shadow: "true"}
+          - exp_labels: {family: kube_replicaset_owner, service: observability, severity: warning}
             exp_annotations:
               summary: Prometheus holds no kube_replicaset_owner series.
               description: "An alert or mapping in k8s-workloads that reads kube_replicaset_owner evaluates to nothing. Check kube-state-metrics' --resources and its scrape job's metric_relabel_configs."
-          - exp_labels: {family: kube_deployment_labels, service: observability, severity: warning, shadow: "true"}
+          - exp_labels: {family: kube_deployment_labels, service: observability, severity: warning}
             exp_annotations:
               summary: Prometheus holds no kube_deployment_labels series.
               description: "An alert or mapping in k8s-workloads that reads kube_deployment_labels evaluates to nothing. Check kube-state-metrics' --resources and its scrape job's metric_relabel_configs."
-          - exp_labels: {family: kube_daemonset_labels, service: observability, severity: warning, shadow: "true"}
+          - exp_labels: {family: kube_daemonset_labels, service: observability, severity: warning}
             exp_annotations:
               summary: Prometheus holds no kube_daemonset_labels series.
               description: "An alert or mapping in k8s-workloads that reads kube_daemonset_labels evaluates to nothing. Check kube-state-metrics' --resources and its scrape job's metric_relabel_configs."

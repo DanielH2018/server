@@ -35,7 +35,12 @@ ROLE = SETUP_ROLES / "k8s_host_files"
 
 # The templates the live role ships.
 EXPECTED_TEMPLATES: frozenset[str] = frozenset(
-    {"crowdsec-edge-probe.service.j2", "crowdsec-edge-probe.timer.j2"}
+    {
+        "crowdsec-edge-probe.service.j2",
+        "crowdsec-edge-probe.timer.j2",
+        "ghcr-mirror-gc-job.yaml.j2",
+        "registry-gc.sh.j2",
+    }
 )
 
 # A name only a k8s role's defaults define, which a moved template could still read.

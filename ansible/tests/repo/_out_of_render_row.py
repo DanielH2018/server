@@ -39,7 +39,6 @@ def _role_task_files() -> list[str]:
 
 
 _K8S = "ansible/roles/k8s/"
-_PROBE = "D5: the probe Job becomes a Job in `<tag>-verify`"
 _VERIFY = "D5: the verify task's exec or pod check is converted or granted"
 
 # Each writing task file, with the slice whose document moves what it writes. Two owners where
@@ -56,12 +55,6 @@ ALLOW = {
     ),
     _K8S + "image-builder/tasks/main.yml": (
         "D5.4: CI builds and pushes each image by its content tag"
-    ),
-    _K8S + "netpol-baseline/tasks/main.yml": (
-        "D4 makes the deferred apply `netpol-baseline-deferred`; " + _PROBE
-    ),
-    _K8S + "registry/tasks/main.yml": (
-        "D5: the self-test and netpol probe Jobs become `registry-verify`"
     ),
     _K8S + "volume-revert/tasks/claim.yml": (
         "H7.16b: a task-free command replaces the revert runbook"
@@ -101,12 +94,12 @@ OUT_OF_RENDER = Census(
     # flip deleted its dashboard apply and its restart tasks; 30 once the flip of janitorr and
     # jellyfin deleted their verify and cap tasks; 27 once headlamp's flip deleted its
     # observability RBAC apply and its isolation probe; 21 once pihole's flip deleted its
-    # roll, apply and gravity tasks.
-    min_matches=21,
+    # roll, apply and gravity tasks; 15 once registry's flip deleted its self-test and netpol
+    # probe tasks; 12 once netpol-baseline's flip deleted its probe and apply tasks.
+    min_matches=12,
     must_find=frozenset(
         {
             _K8S + "cronjob-gate/tasks/main.yml",
-            _K8S + "registry/tasks/main.yml",
         }
     ),
     allow=ALLOW,

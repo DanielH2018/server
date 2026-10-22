@@ -34,7 +34,6 @@ GUARD = TASKS / "stale-checkout-guard.yml"
 
 # Inventory ids the role's real rows name, at the role's defaults.
 SPEAKER = "metallb-system_speaker_apps_DaemonSet"
-READONLY_SA = "kube-system_homelab-readonly__ServiceAccount"
 COREDNS = "kube-system_coredns_apps_Deployment"
 RECONCILE = "longhorn-system_longhorn-reconcile_batch_CronJob"
 UNMAPPED = "homelab_jellyfin_apps_Deployment"
@@ -229,7 +228,7 @@ pytestmark = pytest.mark.skipif(
 )
 
 
-# Two shared runs, one host per case: the whole-file run, and the `--tags kubeconfig` run of
+# Two shared runs, one host per case: the whole-file run, and the `--tags coredns` run of
 # the real guard. Every other case needs its own selection or its own guard, so runs alone.
 @pytest.fixture(scope="module")
 def whole_file(tmp_path_factory) -> dict[str, Outcome]:
@@ -243,10 +242,10 @@ def whole_file(tmp_path_factory) -> dict[str, Outcome]:
 
 
 @pytest.fixture(scope="module")
-def kubeconfig(tmp_path_factory) -> dict[str, Outcome]:
-    owned = {"cluster-base": [READONLY_SA]}
+def coredns(tmp_path_factory) -> dict[str, Outcome]:
+    owned = {"coredns": [COREDNS]}
     return _run(
-        tmp_path_factory.mktemp("kubeconfig"),
+        tmp_path_factory.mktemp("coredns"),
         {
             "owned": Case(["inventory"], owned),
             "no-flux": Case(["no-flux"]),
@@ -256,7 +255,7 @@ def kubeconfig(tmp_path_factory) -> dict[str, Outcome]:
             ),
             "refusals-then-owned": Case(["refuse", "refuse", "inventory"], owned),
         },
-        args=("--tags", "kubeconfig"),
+        args=("--tags", "coredns"),
     )
 
 
@@ -271,7 +270,7 @@ def test_a_checkout_holding_install_metallb_fails_while_flux_owns_the_speaker(tm
 
 def test_an_inventory_holding_no_mapped_id_passes(whole_file):
     _passed(whole_file["unmapped"])
-    assert whole_file["unmapped"].calls == 8, (
+    assert whole_file["unmapped"].calls == 6, (
         "every instance reads the inventory under a whole-file run"
     )
 
@@ -325,27 +324,9 @@ def test_a_checkout_whose_coredns_writers_are_gone_passes_while_flux_owns_coredn
     )
 
 
-def test_the_read_only_identity_fails_only_while_its_writer_is_in_the_checkout(
-    tmp_path, kubeconfig
-):
-    host_half_only = _run_one(
-        tmp_path,
-        Case(["inventory"], {"cluster-base": [READONLY_SA]}),
-        args=("--tags", "kubeconfig"),
-        guard=_without("Apply the read-only cluster identity"),
-    )
-    _passed(host_half_only)
-    assert host_half_only.calls == 1, (
-        "the kubeconfig instance read the inventory and matched nothing"
-    )
-    _failed_naming(
-        kubeconfig["owned"], "Apply the read-only cluster identity", READONLY_SA
-    )
-
-
-def test_an_api_without_flux_passes_on_the_first_try(kubeconfig):
-    _passed(kubeconfig["no-flux"])
-    assert kubeconfig["no-flux"].calls == 1
+def test_an_api_without_flux_passes_on_the_first_try(coredns):
+    _passed(coredns["no-flux"])
+    assert coredns["no-flux"].calls == 1
 
 
 def test_a_host_without_k3s_passes_without_reading(whole_file):
@@ -353,46 +334,47 @@ def test_a_host_without_k3s_passes_without_reading(whole_file):
     assert whole_file["no-k3s"].calls == 0
 
 
-def test_an_api_that_never_answers_fails_after_the_bounded_retry(kubeconfig):
-    outcome = kubeconfig["never-answers"]
+def test_an_api_that_never_answers_fails_after_the_bounded_retry(coredns):
+    outcome = coredns["never-answers"]
     _failed_naming(outcome, "the k3s API is unreachable", "was refused")
     assert outcome.calls == 4, "`retries: 3` is the first try plus three retries"
 
 
-def test_two_refusals_then_a_clean_inventory_pass(kubeconfig):
-    _passed(kubeconfig["refusals-then-clean"])
-    assert kubeconfig["refusals-then-clean"].calls == 3
+def test_two_refusals_then_a_clean_inventory_pass(coredns):
+    _passed(coredns["refusals-then-clean"])
+    assert coredns["refusals-then-clean"].calls == 3
 
 
-def test_two_refusals_then_a_mapped_id_fail_and_name_the_task(kubeconfig):
-    _failed_naming(
-        kubeconfig["refusals-then-owned"], "Apply the read-only cluster identity"
-    )
+def test_two_refusals_then_a_mapped_id_fail_and_name_the_task(coredns):
+    _failed_naming(coredns["refusals-then-owned"], "Run the CoreDNS image k3s bundles")
 
 
 def test_a_check_run_still_reads_and_fails(tmp_path):
     outcome = _run_one(
         tmp_path,
-        Case(["inventory"], {"cluster-base": [READONLY_SA]}),
-        args=("--tags", "kubeconfig", "--check"),
+        Case(["inventory"], {"coredns": [COREDNS]}),
+        args=("--tags", "coredns", "--check"),
     )
-    _failed_naming(outcome, "Apply the read-only cluster identity")
+    _failed_naming(outcome, "Run the CoreDNS image k3s bundles")
     assert outcome.calls == 1
 
 
 # ── Selection: ansible-core's own --tags and --skip-tags decide which instances run ──
 
 
-def test_a_host_only_tag_reaches_no_instance_with_the_api_down(tmp_path):
+@pytest.mark.parametrize("tag", ["node-address", "kubeconfig"])
+def test_a_host_only_tag_reaches_no_instance_with_the_api_down(tmp_path, tag):
     # A guard that regains `always`, or a union tag set naming node-address, reads here.
-    outcome = _run_one(tmp_path, Case(["refuse"]), args=("--tags", "node-address"))
+    # `kubeconfig` joined the host-only tags in H1.2, when the identity went to Flux and only
+    # the kubeconfig's host half stayed.
+    outcome = _run_one(tmp_path, Case(["refuse"]), args=("--tags", tag))
     _passed(outcome)
     assert outcome.calls == 0
 
 
-def test_tags_kubeconfig_runs_the_kubeconfig_instance(kubeconfig):
-    _failed_naming(kubeconfig["owned"], "Apply the read-only cluster identity")
-    assert kubeconfig["owned"].calls == 1, "only the kubeconfig instance is selected"
+def test_tags_coredns_runs_the_coredns_instance(coredns):
+    _failed_naming(coredns["owned"], "Run the CoreDNS image k3s bundles", COREDNS)
+    assert coredns["owned"].calls == 1, "only the coredns instance is selected"
 
 
 def test_skip_tags_kubeconfig_still_runs_the_metallb_instance(tmp_path):
