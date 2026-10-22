@@ -28,7 +28,9 @@ LinuxServer.io Home Assistant. See repo-root `CLAUDE.md` for shared conventions,
   revert of the flag leaves two writers on the objects. The Deployment is `Recreate`, so a
   change that rolls it takes HA down for the length of the pod restart. Issue #4188 records a
   28-minute outage on the 2026.10.0 bump, cause undetermined, so read the pod events on the
-  next `.0` bump before they expire.
+  next `.0` bump before they expire. The `home-assistant-prepull` Kustomization pulls the
+  720 MB image onto the node before that restart, so the old pod serves through the pull
+  (`flux_prepull_timeout` in `defaults/main.yml`, #5855).
 - **The `home-assistant-snapshot` Job snapshots `home-assistant-config` before each revision
   applies** (D5.2a). The home-assistant Kustomization depends on `home-assistant-snapshot`, so
   a revision applies only after the snapshot is ready; `docs/flux-deploy-plane.md` lists the

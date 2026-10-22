@@ -1,7 +1,7 @@
 # `setup/k3s` — the cluster's host plane: k3s itself, Longhorn, and the backup crons
 
 The role that turns a host into a k3s node and declares the cluster's own plumbing: the server
-install, the agent join, MetalLB, Longhorn with its backup targets, the read-only kubeconfig,
+install, the agent join, Longhorn with its backup targets, the read-only kubeconfig,
 CoreDNS, and the host crons that watch and exercise backups. `daniel-box` is
 the server and `daniel-server` an agent (`tasks/agent.yml`).
 
@@ -22,7 +22,9 @@ plays, so a change it reads, such as `templates/registries.yaml.j2`, also needs
 `uv run ansible-playbook ansible/k3s-bringup.yml -e join_agent=daniel-server --tags k3s_agent`
 before the role's `manual_plane` line is cleared. The deployer prints that command beside the
 whole-role tag for each host in `k3s_agent_hosts` (`ansible/inventory/group_vars/all.yml`), from
-`ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_remediation.py:_agent_commands`.
+`ansible/roles/setup/gitops_deploy/files/gitops_markers.py:agent_join_cmds`. It records the hosts
+on the line as `agent_hosts`, so the SessionStart banner, `probe.py gitops` and monitor-bridge
+print the same command from the row.
 
 ## At a glance
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's tasks, timer templates, defaults or playbook entry, or a schedule var in group_vars/all.yml. -->
@@ -120,4 +122,4 @@ authority of those four actuators is written here so a later edit cannot quietly
   there. A host-only tag such as `node-address` selects no instance, so it never reads the API.
   An H1 PR that deletes a writer task deletes its row in the same commit. ENFORCED:
   `ansible/tests/setup/test_k3s_stale_checkout_map.py::test_the_real_map_is_honest`,
-  `ansible/tests/setup/test_k3s_stale_checkout_guard.py::test_skip_tags_kubeconfig_still_runs_the_metallb_instance`.
+  `ansible/tests/setup/test_k3s_stale_checkout_guard.py::test_skip_tags_kubeconfig_still_runs_the_coredns_instance`.

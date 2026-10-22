@@ -73,7 +73,7 @@ import json
 import subprocess
 import time
 from collections.abc import Callable
-from dataclasses import asdict
+from dataclasses import asdict, replace
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -112,7 +112,9 @@ from fanout_lib.review.red_gate import (
     red_section,
     labelled_skip_reason,
 )
+from fanout_lib.review.green_contest import contested, settle
 from fanout_lib.review.hardened_runs import ResetFailed
+from fanout_lib.review.red_tests import issue_subjects
 from fanout_lib.review.worktree_reset import reset_worktree
 from fanout_lib.review.base_check import BaseCheck, unproven_tests
 from fanout_lib.review.git_state import GitState, changed, snapshot
@@ -419,6 +421,8 @@ class Pipeline:
         self.record.red_tests = len(gate.nodes)
         self.record.red_by_absence = len(gate.absent)
         self.record.red_gate = "passed" if gate.passed else gate.reason
+        # A copy, since a scripted gate may hand every batch the same `Gate`.
+        gate = replace(gate, subjects=issue_subjects(issues))
         return (red, gate) if gate.passed else None
 
     def _refuse_git_changes(self, held: GitState) -> None:
@@ -553,7 +557,10 @@ class Pipeline:
             )
             last = fix if PR_URL.search(fix.text) else impl
             after = self.record.head = self._git("rev-parse", "HEAD")
-            if after == head:
+            # A contest of a correct fix commits nothing, and still needs its fresh reader.
+            if after == head and not contested(
+                green, fix.text, red[1] if red else None
+            ):
                 self.record.remaining = list(self.record.actionable)
             else:
                 delta = self._claude(
@@ -580,8 +587,11 @@ class Pipeline:
                     self.record.remaining = [
                         f for f in self.record.remaining if f.get("file") != GREEN_FILE
                     ]
+                else:
+                    green = settle(self.record, green, fix.text, red[1])
 
-        if red is not None and not green:
+        # Reverting hunks under red tests that fail anyway, after a contest, measures nothing.
+        if red is not None and not green and not self.record.green_contest:
             self._detection(red)
         # Whatever the review found, since a PR left a draft gets no CI.
         ready = ready_gate(self)

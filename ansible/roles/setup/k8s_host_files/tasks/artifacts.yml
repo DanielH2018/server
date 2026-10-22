@@ -28,6 +28,8 @@
         group: "{{ sys_user }}"
         mode: "0750"
 
+    # The peer sync's `--chmod=D0750` (claude_code's sync-artifacts.sh.j2) owns this mode too,
+    # so a change here changes it there (#5524).
     - name: Ensure a peer directory exists for every synced host
       ansible.builtin.file:
         path: "{{ artifacts_peer_dir }}/{{ item.name }}"

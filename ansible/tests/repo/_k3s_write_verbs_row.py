@@ -27,10 +27,6 @@ K3S_WRITE_ALLOW = {
         "stays: the opt-in smoke test creates and deletes a throwaway PVC, which no Flux tag "
         "declares"
     ),
-    _TASKS + "cluster-addons.yml": (
-        "H1.3 hands MetalLB to `metallb` and deletes its writers; H1.2 already handed the "
-        "PriorityClasses to `cluster-base`"
-    ),
     _TASKS + "coredns.yml": (
         "H1.4 hands the Corefile key and the Deployment to `coredns`; the file keeps the read "
         "and the marker task"

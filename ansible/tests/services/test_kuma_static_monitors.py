@@ -177,9 +177,6 @@ EMAIL_TIER = {
     # the same second, and Discord's per-webhook bucket drops some of them. SMTP is a different
     # bucket, so this one all-clear lands.
     "Homelab Edge (all-clear)",
-    # On the tier for the transport as well: it pages when Kuma dropped a Discord send, and a
-    # page for that carried only by the Discord webhook is the failure it reports.
-    "Kuma Notification Delivery",
     # The transport reason above at its strongest: no Discord webhook can deliver at all.
     "WAN Reachable",
     # One tile per host, and both mail for the reason the template's own comment gives: a

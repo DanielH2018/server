@@ -1,5 +1,7 @@
 """What a fix may change in a red test file, and what it may delete from a conftest.
 
+A patch registry is `red_registry`'s (#4875).
+
 WHAT A FIX MAY CHANGE (#4214, #4517). `forbidden_change` says what the fix changed in a red
 test file that it may not. The green gate used to refuse any change to a red file. In #4213 the
 fix round appended the test a reviewer had asked for, changed no red node, and the batch ended
@@ -50,6 +52,22 @@ rule lets through: the callers of a parameter the fix dropped (#4338), and a pre
 the red tests contradicted, whose restore left CI red (#4470). The reviewer and CI check such a
 test, as they check every test outside a red file.
 
+DECIDED: a constant may be built from another constant (#5229). There the fix appended
+`RENDERER_WITH_DOCS_AND_TESTS = RENDERER_ONLY + [...]`, which the lock refused as not data.
+Reading a name runs no code, so `_literal` admits a plain name, but what the name holds can: an
+imported object's `__add__` is the fix's code, run at import. So a constant the fix adds or
+changes may read only a name a constant above it binds and nothing rebinds in between
+(`_reads_problems`). Admitting any name was rejected for that reason, and an attribute or a
+subscript can run code itself.
+
+DECIDED: a helper the issue names as its subject is the fix's to change (#5197). There the
+issue was about `_restarts_privately`, a helper in the red file that a red node calls.
+`forbidden_change` takes `subjects`, the names the issue spells in backticks
+(`red_tests.issue_subjects`), and frees one that binds a plain function: in the file before the
+red commits and unchanged by them, undecorated, not a red node and not a hook. What the freed
+helper names stays locked, so a second helper needs naming too. Freeing every function the
+issue's prose mentions was rejected, as it names tests and fixtures as often as the code under
+test. A red node is never freed, so #4183's weakened test is still refused.
 DECIDED: a constant that only an older function's body names is the fix's to change (#4542). In
 #4372 the red test called the guard's `scheduled_reapers`, which reads the module's `REAPERS`,
 and the fix had to change `REAPERS`. No rule on the diff tells that from tampering with data an
@@ -64,18 +82,7 @@ that is in no red node's fixture closure, a helper or constant nothing kept name
 import only deleted statements used. In #4359 the red test demanded the deletion of a fixture
 nothing requested.
 
-A PATCH REGISTRY (#4875). `forbidden_registry_change` lets a fix change a file in
-`REGISTRIES` that the red commits touched only in the lines whose first field names a file the
-red commits added. The monkeypatch ratchet needs a `<path> <count>` line for every test module
-that patches, so a fix that appends a patching test to a red file must raise that file's count.
-In #5397 the red commits added `scripts/dev/tests/test_cross_plane_replay_renderer_only.py 8`
-and the fix raised it to 9, which the gate refused as an edit to a red data file. Every other
-line, comments and blank lines included, must stay, so a fix cannot add, raise or delete
-another module's entry. Lines compare as a multiset, because the ratchet in CI checks the order.
-Dropping a red file's own line passes here too; the ratchet refuses it while the file patches.
-
-WHAT IT DOES NOT SEE. A red test that reads a registry itself, whose input a changed line of a
-red file can move. Code that runs at import time inside an allowed statement: a decorator
+WHAT IT DOES NOT SEE. Code that runs at import time inside an allowed statement: a decorator
 argument, a default value, an annotation, or an import of a new module with side effects. A
 fixture a conftest requests by a name built at runtime. The green gate still runs every red
 node, and CI runs the whole suite on the pushed head.
@@ -106,8 +113,6 @@ PYTEST_NAMES = frozenset(
 )
 # The builtins a constant may call. A fix may not rebind one in a red file.
 LITERAL_CALLS = frozenset({"frozenset", "set", "tuple", "list", "dict"})
-# Ratchet files of `<path> <count>` lines, where a red test module may need registering.
-REGISTRIES = frozenset({"ansible/tests/repo/monkeypatch_allowlist.txt"})
 _CONTAINERS = (ast.Tuple, ast.List, ast.Set, ast.Dict)
 # What each conftest fixture requests by the name a test requests it by, and what every
 # autouse one requests, which every test requests in turn.
@@ -124,12 +129,14 @@ class _Lock:
             name in a red node's fixture closure.
         direct: the names the red tests read themselves, not through an older function.
         free: the names the red version's unlocked constants bind.
+        freed: the names of the helpers `subjects` freed from the lock.
     """
 
     stmts: list[ast.stmt]
     names: set[str]
     direct: set[str]
     free: set[str]
+    freed: set[str]
 
 
 def forbidden_change(
@@ -139,6 +146,7 @@ def forbidden_change(
     red_names: Iterable[str] = (),
     conftests: Iterable[str] = (),
     closure: Iterable[str] = (),
+    subjects: Iterable[str] = (),
 ) -> str:
     """Why `head_src` changes what a red test stands on, or "" when it does not.
 
@@ -150,6 +158,7 @@ def forbidden_change(
         red_names: the top-level names the file's red nodes are collected from.
         conftests: the source of every `conftest.py` pytest loads for the file.
         closure: every fixture name pytest resolves for the file's red nodes.
+        subjects: the names the issue gives as the code under test.
     """
     try:
         head = ast.parse(head_src)
@@ -158,6 +167,7 @@ def forbidden_change(
     lock = _locked(
         base_src, red_src, set(red_names), _fixtures(conftests), set(closure)
     )
+    lock = _free(lock, set(subjects), set(red_names), base_src)
     kept = lock.stmts
     matched = 0
     added = []
@@ -168,11 +178,12 @@ def forbidden_change(
             added.append(stmt)
     if matched < len(kept):
         return f"changes or removes `{_label(kept[matched])}`"
-    used = lock.names | LITERAL_CALLS
+    used = (lock.names - lock.freed) | LITERAL_CALLS
     hoisted = _hoistable(kept)
+    reads = _reads_problems(_body(head))
     for stmt in added:
         problem = (
-            _constant_problem(stmt, used, lock)
+            _constant_problem(stmt, used, lock) or reads.get(id(stmt), "")
             if _constant(stmt)
             else _addition_problem(stmt, used, hoisted)
         )
@@ -195,12 +206,13 @@ def _locked(
     except SyntaxError:
         before = Counter()
     # What the red commits wrote, and what the file held that a fix could not append.
-    fixed = set()
+    fixed, nondata = set(), _reads_problems(red)
     for stmt in red:
         dump = ast.dump(stmt)
         if before[dump]:
             before[dump] -= 1
-            if _constant(stmt) or not _addition_problem(stmt, set()):
+            data = _constant(stmt) and id(stmt) not in nondata
+            if data or not _addition_problem(stmt, set()):
                 continue
         fixed.add(id(stmt))
     names, direct = red_names | closure, set(red_names)
@@ -219,15 +231,16 @@ def _locked(
         if grown == (names, direct):
             locked = {id(s) for s in stmts}
             free = [_binds(s) for s in red if _constant(s) and id(s) not in locked]
-            return _Lock(stmts, names, direct, set().union(*free))
+            return _Lock(stmts, names, direct, set().union(*free), set())
         names, direct = grown
 
 
 def _constant(stmt: ast.stmt) -> bool:
     """Whether `stmt` binds plain names to literal data, so evaluating it runs no code.
 
-    The value may hold constants, containers, operators and calls of `LITERAL_CALLS` on
-    those, and no name, attribute or subscript. A dunder or a name in `PYTEST_NAMES` is
+    The value may hold constants, plain names, containers, operators and calls of
+    `LITERAL_CALLS` on those, and no attribute or subscript. Which names a constant the fix
+    writes may read is `_reads_problems`'s to decide. A dunder or a name in `PYTEST_NAMES` is
     never a constant's, since pytest reads it.
     """
     return (
@@ -250,7 +263,7 @@ def _literal(node: ast.expr) -> bool:
             and not node.keywords
             and all(_literal(arg) for arg in node.args)
         )
-    kinds = (ast.Constant, *_CONTAINERS, ast.UnaryOp, ast.BinOp)
+    kinds = (ast.Constant, ast.Name, *_CONTAINERS, ast.UnaryOp, ast.BinOp)
     children = [c for c in ast.iter_child_nodes(node) if isinstance(c, ast.expr)]
     return isinstance(node, kinds) and all(_literal(c) for c in children)
 
@@ -261,6 +274,57 @@ def _constant_problem(stmt: ast.stmt, used: set[str], lock: _Lock) -> str:
         if name in lock.direct or (name in used and name not in lock.free):
             return f"rebinds `{name}`"
     return ""
+
+
+def _reads_problems(body: list[ast.stmt]) -> dict[int, str]:
+    """Why each constant in `body` reads a name no constant above it binds, by `id`."""
+    data: set[str] = set()
+    problems = {}
+    for stmt in body:
+        if not (isinstance(stmt, ast.Assign) and _constant(stmt)):
+            data -= _binds(stmt) | _stored(stmt)
+            continue
+        nodes = list(ast.walk(stmt.value))
+        called = {id(n.func) for n in nodes if isinstance(n, ast.Call)}
+        names = {n.id for n in nodes if isinstance(n, ast.Name) and id(n) not in called}
+        names -= data
+        if names:
+            problems[id(stmt)] = (
+                f"reads `{min(names)}`, which no constant above it binds"
+            )
+        data |= _binds(stmt)
+    return problems
+
+
+def _stored(stmt: ast.stmt) -> set[str]:
+    """The names a module-level statement other than a function stores, a class's included."""
+    if isinstance(stmt, _FUNCTIONS):
+        return set()
+    stored = {
+        n.id
+        for n in ast.walk(stmt)
+        if isinstance(n, ast.Name) and isinstance(n.ctx, ast.Store)
+    }
+    return stored | ({stmt.name} if isinstance(stmt, ast.ClassDef) else set())
+
+
+def _free(lock: _Lock, subjects: set[str], red_names: set[str], base_src: str) -> _Lock:
+    """`lock` less the plain helpers in `subjects` that the file held before the red commits."""
+    try:
+        before = {ast.dump(s) for s in _body(ast.parse(base_src))}
+    except SyntaxError:
+        before = set()
+    freed = [
+        s
+        for s in lock.stmts
+        if isinstance(s, _FUNCTIONS)
+        and s.name in subjects - red_names
+        and not s.decorator_list
+        and ast.dump(s) in before
+        and not _addition_problem(s, set())
+    ]
+    stmts = [s for s in lock.stmts if all(s is not f for f in freed)]
+    return _Lock(stmts, lock.names, lock.direct, lock.free, {s.name for s in freed})
 
 
 def _fixtures(sources: Iterable[str]) -> _Fixtures:
@@ -334,8 +398,9 @@ def forbidden_conftest_change(
     named = set().union(*(_named(ast.parse(src).body) for src in red_files))
     named |= set(closure)
     requested = named | _requested(named, _fixtures(conftests))
-    kept, gone = [], []
-    for stmt in _body(ast.parse(red_src)):
+    kept, gone, red = [], [], _body(ast.parse(red_src))
+    nondata = _reads_problems(red)
+    for stmt in red:
         if len(kept) < len(head) and ast.dump(stmt) == ast.dump(head[len(kept)]):
             kept.append(stmt)
         else:
@@ -344,7 +409,9 @@ def forbidden_conftest_change(
         return f"adds or changes `{_label(head[len(kept)])}`"
     for stmt in gone:
         others = _named([s for s in gone if s is not stmt])
-        problem = _deletion_problem(stmt, _named(kept) | requested, others)
+        problem = nondata.get(id(stmt)) or _deletion_problem(
+            stmt, _named(kept) | requested, others
+        )
         if problem:
             return f"deletes `{_label(stmt)}`, which {problem}"
     return ""
@@ -529,26 +596,4 @@ def _decorator_problem(decorator: ast.expr) -> str:
             return (
                 "is a fixture with `name=`, which can override one a red test requests"
             )
-    return ""
-
-
-def forbidden_registry_change(red_src: str, head_src: str, added: Iterable[str]) -> str:
-    """Why `head_src` changes a line naming no file the red commits added, or "".
-
-    Args:
-        red_src: the registry as the red commits left it.
-        head_src: the same file at the implementer's HEAD.
-        added: the files the red commits created.
-    """
-    red, head, ours = (
-        Counter(red_src.splitlines()),
-        Counter(head_src.splitlines()),
-        set(added),
-    )
-    for verb, lines in (("drops", red - head), ("adds", head - red)):
-        for line in sorted(lines):
-            if not set(line.split()[:1]) & ours:
-                return (
-                    f"{verb} `{line}`, a line that names no file the red commits added"
-                )
     return ""

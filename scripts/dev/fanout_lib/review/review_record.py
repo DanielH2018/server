@@ -15,6 +15,7 @@ from pathlib import Path as _Path
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
 from fanout_lib.brief import ISSUES_HEADING
+from fanout_lib.review.green_contest import judgment
 from fanout_lib.review.review_prompts import is_held
 from fanout_lib.status import BLOCKER, NO_PR
 
@@ -78,6 +79,9 @@ class Record:
     green_gate: str = ""
     # The first green gate run's `red_gate.green_cause`: `passed`, `unmet`, `flaky` or `lock`.
     green_first: str = ""
+    # The implementer's contest of a red test (`green_contest`, #5400): "" when there was
+    # none, else `upheld: ` or `rejected: ` and the contested nodes.
+    green_contest: str = ""
     # The PR's new test nodes outside the red phase, those of them that pass with its code
     # changes taken out (`base_check`), and why the check could not run, if it could not.
     base_tests: int = 0
@@ -195,12 +199,21 @@ def held_for_findings(record: Record, state_dir: _Path) -> dict | None:
 
 
 def held_for_green(record: Record, reason: str) -> dict:
+    """The hold on a PR that fails the green gate, saying whether the reviewers faulted the fix.
+
+    Without that, a correct fix held by a wrong red test reads like a wrong fix (#5400).
+    """
+    verdict, _, nodes = record.green_contest.partition(": ")
+    rejected = nodes.split(", ") if verdict == "rejected" else []
+    # `remaining` is the delta review's verdict, and stays empty when no fix round ran.
+    left = record.remaining if "fix" in record.durations else record.actionable
+    why = judgment(reason, left, record.review_error, rejected)
     return {
         "type": "result",
         "is_error": False,
         "result": (
-            f"needs input: the PR fails the green gate, so it was not landed: {reason}."
-            f"\n{record.pr}"
+            f"needs input: the PR fails the green gate, so it was not landed: {reason}. "
+            f"{why}\n{record.pr}"
         ),
     }
 
@@ -230,6 +243,12 @@ def comment_body(record: Record) -> str:
         lines.append(f"Red gate refused the test author's commit: {record.red_gate}.")
     if record.green_gate:
         lines.append(f"Green gate: {record.green_gate}.")
+    if record.green_contest.startswith("upheld: "):
+        lines.append(
+            "Green gate contested: a fresh reviewer upheld the implementer's cited contest "
+            f"of {record.green_contest.removeprefix('upheld: ')}, so the PR went on with "
+            "those red tests failing."
+        )
     if record.ci_gate:
         lines.append(f"CI gate: {record.ci_gate}.")
     if record.red_hunks:

@@ -29,8 +29,8 @@ merged.
 | D2 | One stateless leaf end to end on production | D1, R1, and R2's PRs 1 and 2 (placeholder mode and the five rules). D2.6d also M1. D2.7 also D4.0, M1, and PR 2b of R2's *Publish `domain`* item (C3) |
 | D3 | Secrets through Flux | D2, R2. D3.0 to D3.3 need only D2.1 to D2.6c, which include D2.6b's empty `SHARED_KINDS` and census |
 | D4 | Ordering (`dependsOn`, deferred applies) | D2. D4.0 needs nothing. D4.9 also D1.6b and M1 |
-| D5 | Bulk move | D3, D4, R3, M1, M2. traefik's flip and the flux PR also H1.1a, and the flux PR also H1.7b. Wave D also H2.1, and the H2 family PR of each role H2 moves. littlelink's flux PR also M6's B-1e. monitor-bridge's flip also M6's A6-7a, live; the observability and netpol-baseline flips also M6's C-1, live. D5 never flips uptime-kuma, which leaves at M6's C-2b |
-| D6 | Delete the old deploy path; ADR superseding 0010 | D5. D6.11 needs only D5.1a2 and D5's flux PR; #5425 dropped D6.10 |
+| D5 | Bulk move | D3, D4, R3, M1, M2. traefik's flip and the flux PR also H1.1a, and the flux PR also H1.7b. Wave D also H2.1, and the H2 family PR of each role H2 moves. littlelink's flux PR also M6's B-1e. monitor-bridge's flip also M6's A6-7a, live. No flip waits on M6's C-1: the operator ruled on 2026-10-21 that uptime-kuma flips with janitorr and jellyfin, and M6's Phase C works on flux-owned roles (#5821) |
+| D6 | Delete the old deploy path; ADR superseding 0010 | D5, and M6's C-2b, live. D6.11 needs only D5.1a2 and D5's flux PR; #5425 dropped D6.10 |
 | M1 | Alertmanager and its watcher | — |
 | M2 | One bridge family to rules | M1 |
 | M3 | One host timer to the textfile collector | M1. The cutover also M2's PR 3 |
@@ -38,7 +38,7 @@ merged.
 | M5 | loki-homelab ruler | M1. The cutover also M2's PR 3 |
 | M6a | Retire Kuma, Phase A: drain the producers | M2, M3, M4, M5. A7's shadow PR also M5's ruler, live; A7's Cutover-a also M2's PR 4a, live |
 | M6b | Retire Kuma, Phase B: switch the readers | M6a's A6. B-1, B-1d and B-1e need only M1 and C7's health-gate selector |
-| M6c | Retire Kuma, Phase C: delete Kuma | M6a, M6b. C-1 also D5's registry PR; C-4b also D6 |
+| M6c | Retire Kuma, Phase C: delete Kuma | M6a, M6b. C-1a also D5's registry PR; C-4b also D6 |
 | H1 | Hand the cluster content to Flux | D2, D4. H1.7b also D3; H1.9 also R4 |
 | H2 | Shrink the host plane (crons → CronJobs) | —. H2.2a also H1.5a and H1.6; H2.3b also H1.5a; H2.3c also H2.3b, live; H2.8a also H1.7b and H6.4b |
 | H3 | Pi pilot: builder, updater, versioning | R1. H3.5d, the host-rules PR, also M1, and H3.9b waits on it |
@@ -66,12 +66,18 @@ M6's C-4b waits on D6, and B-1e does not wait on C-4b. The edge does put M6's B-
 path to its exit when M6 finishes later. If M6 moves the drill to a tag the soak may own,
 which needs a drill exclusion in C7 that no slice has requested, the edge goes.
 
-D5's other edges to M6 keep a role Ansible-owned until an M6 step that needs `land.sh`'s
-order has deployed (M6 *When D5 flips a role M6 edits*). They add no cycle either. A6-7a
-waits on Phase A batches and on M2 to M5, and none of those waits on D5. C-1 waits on D5's
-registry PR, which precedes the held flips and waits on none of them. C-4b waits on D6, and
-D6 waits on D5's tail, but nothing from C-1 to C-7 waits on C-4b. D6's precondition that
-every entry is flux-owned then waits for C-2b, through the uptime-kuma edge.
+D5's other edge to M6 keeps monitor-bridge Ansible-owned until A6-7a, an M6 step that needs
+`land.sh`'s order, has deployed (M6 *When D5 flips a role M6 edits*). It adds no cycle either.
+A6-7a waits on Phase A batches and on M2 to M5, and none of those waits on D5. M6's C-1a
+waits on D5's registry PR, which waits on no M6 step.
+
+The roles M6's Phase C orders, observability, netpol-baseline and uptime-kuma, flip before C-1
+(#5821). The operator ruled on 2026-10-21 that holding uptime-kuma for C-1 put D5's last three
+PRs behind Phase C. Flux orders C-1's steps instead: netpol-baseline's `dependsOn` reaches
+uptime-kuma, and C-1 splits into C-1a and C-1b because observability and uptime-kuma share no
+edge. D6's wait on C-2b was a consequence of uptime-kuma never flipping, and D6's row now
+states it. It adds no cycle: C-2b waits on M6a, M6b and C-1, and none of those waits on D6.
+C-4b waits on D6, but nothing from C-1 to C-7 waits on C-4b.
 
 ## C1. Renderer
 
@@ -89,7 +95,8 @@ every entry is flux-owned then waits for C-2b, through the uptime-kuma edge.
     and R1's determinism module. Those two keep reading it after R4's PR 9 deletes the
     comparison (R2, R4). Before R2 lands, `cluster` without `--secret-stubs` exits 2.
   - `homelab-render cluster --out DIR --shared-only`, from D3.3a. It writes the shared kinds
-    and the root, and no tag, for a publish with no flux-owned tag.
+    and the root, and no tag, for a publish with no flux-owned tag. With `--all-images` it
+    also writes every image context (#5593).
   - `homelab-render host --host NAME --out DIR`
   - `homelab-render package --name PKG --out DIR`, for the shared packages of C5 (H3).
 - **Only placeholder mode publishes.** The publish job runs `cluster` without
@@ -1213,6 +1220,11 @@ Applied to this page:
   each live, and states that D5 never flips uptime-kuma. A paragraph below the table states
   why the new D5 edges add no cycle. The request leaves *Requests on the slice index*. It
   named no gate.
+  **Amended on 2026-10-22 (#5821).** The operator's 2026-10-21 ruling flipped uptime-kuma,
+  and observability and netpol-baseline flipped before C-1. D5's row drops the C-1 edges and
+  the uptime-kuma exclusion. D6's row gains M6's C-2b, live, which the uptime-kuma edge used
+  to imply. M6c's registry edge moves to C-1a, the half of C-1 that holds the
+  `monitor_status` gate. The paragraph below the table restates the no-cycle argument.
 - **H2's per-PR edges** (H2 Open question 1). H2's row reads H2.2a on H1.5a and H1.6, H2.3b
   on H1.5a, H2.3c on H2.3b live, and H2.8a on H1.7b and H6.4b. Every other H2 PR waits on
   nothing outside H2. The row drops H1.8 and the H2.3b → D3 edge, and the paragraph below

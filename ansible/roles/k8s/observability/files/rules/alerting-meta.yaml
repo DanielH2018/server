@@ -47,7 +47,8 @@ groups:
             At least one rule in {{ $labels.rule_group }} failed an evaluation in the last 10
             minutes, so its output is missing or stale. The Prometheus log names the rule and
             the error.
-      # Kuma's counterpart is the Kuma Notification Delivery tile. Critical, so it routes to
+      # The loki-homelab rule KumaNotificationDropped covers a send Kuma drops. This one
+      # covers a send Alertmanager drops. Critical, so it routes to
       # Discord and email both, and a dropped Discord send still reaches the operator.
       - alert: AlertmanagerNotificationsFailing
         expr: >-

@@ -200,3 +200,29 @@ def test_the_manual_plane_apply_names_the_pinned_playbook_command(cfg):
         "apply `uv run ansible-playbook ansible/initial_setup.yml --tags optimize_pi"
         " -e target=daniel-pi` by hand" in msg
     )
+
+
+def test_a_whole_role_k3s_page_names_the_agent_join_before_the_clear(cfg):
+    """#5627: `--tags k3s` on daniel-box never reaches an agent node (#5606).
+
+    The pod cannot import the deployer's routing, so the agent hosts come off the line.
+    """
+    owed = _owed(
+        subject="k3s",
+        at=1000,
+        playbook="ansible/k3s-bringup.yml",
+        tags=[],
+        agent_hosts=["daniel-server"],
+    )
+    ok, msg = checks.gitops.gitops_status(cfg, None, now=_LATE, owed=owed)
+    assert not ok
+    parts = (
+        "ansible/k3s-bringup.yml --tags k3s",
+        "ansible/k3s-bringup.yml -e join_agent=daniel-server --tags k3s_agent",
+        "clear-owed manual_plane k3s",
+    )
+    at = [msg.find(p) for p in parts]
+    assert -1 not in at, (
+        f"missing {[p for p, i in zip(parts, at, strict=True) if i < 0]} in {msg}"
+    )
+    assert at == sorted(at), f"{parts} out of order in {msg}"

@@ -30,6 +30,11 @@ The k8s roles importing a setup file are a second table, `K8S_ROLES_IMPORTING_SE
 (#3320). Their import spelling climbs one more level (`{{ role_path }}/../../setup/<owner>/`),
 and the deployer defer-and-alerts them rather than re-applying them.
 
+A file outside `ansible/roles/k8s/` that a k8s role's image embeds is a third table,
+`K8S_BUILD_CONTEXT_FILES` (#4840). The scan reads each `image_builder_context_files` and
+`image_builder_context` key in a k8s role's tasks, resolves `{{ playbook_dir }}` to `ansible`,
+and keeps a source outside the role itself.
+
 The setup roles calling a filter plugin's filters, `SETUP_ROLES_CALLING_FILTER_PLUGINS`, and
 the setup roles reading another's `defaults/` variable have their own census in
 `test_setup_cross_role_reads.py`.
@@ -38,12 +43,16 @@ Run: uv run pytest ansible/tests/setup/test_setup_cross_role_files.py
 """
 
 import fnmatch
+import posixpath
 import re
 
 from _helpers import ROLES
 from _role_census import role_dirs, role_task_files
 
+from lib import yaml_fast
+
 from deployer_lib.deploy_cross_role import (
+    K8S_BUILD_CONTEXT_FILES,
     K8S_ROLES_IMPORTING_SETUP_FILES,
     SETUP_FILES_ROUTED_TO_OWNER,
     SETUP_FILES_SHIPPED_BY_OTHER_ROLES,
@@ -98,6 +107,44 @@ KNOWN_K8S_EDGES = {
         "uptime-kuma",
     },
 }
+
+KNOWN_BUILD_CONTEXT_EDGES = {
+    "scripts/diagnostics/probe_lib/obs_api.py": {"homelab-mcp"},
+}
+_CONTEXT_VARS = ("image_builder_context", "image_builder_context_files")
+
+
+def _context_sources(node):
+    """Every key of an `image_builder_context*` mapping anywhere inside parsed task YAML."""
+    if isinstance(node, dict):
+        for key, value in node.items():
+            if key in _CONTEXT_VARS and isinstance(value, dict):
+                yield from value
+            else:
+                yield from _context_sources(value)
+    elif isinstance(node, list):
+        for item in node:
+            yield from _context_sources(item)
+
+
+def build_context_files(task_docs: dict[str, object]) -> dict[str, frozenset[str]]:
+    """Each repo path a k8s role's image build context names outside that role, mapped to the roles."""
+    edges: dict[str, set[str]] = {}
+    for role, doc in task_docs.items():
+        for src in _context_sources(doc):
+            path = posixpath.normpath(src.replace("{{ playbook_dir }}", "ansible"))
+            if not path.startswith(f"ansible/roles/k8s/{role}/"):
+                edges.setdefault(path, set()).add(role)
+    return {path: frozenset(roles) for path, roles in edges.items()}
+
+
+def _k8s_task_docs() -> dict[str, object]:
+    return {
+        role_dir.name: [
+            yaml_fast.safe_load(p.read_text()) for p in role_task_files(role_dir)
+        ]
+        for role_dir in role_dirs(ROLES / "k8s")
+    }
 
 
 def cross_role_files(
@@ -229,6 +276,34 @@ def test_the_k8s_importers_table_equals_the_tree():
     assert found == K8S_ROLES_IMPORTING_SETUP_FILES
     for path, roles in KNOWN_K8S_EDGES.items():
         assert found.get(path) == roles, path
+
+
+def test_the_build_context_table_equals_the_tree():
+    found = build_context_files(_k8s_task_docs())
+    assert found == K8S_BUILD_CONTEXT_FILES
+    for path, roles in KNOWN_BUILD_CONTEXT_EDGES.items():
+        assert found.get(path) == roles, path
+
+
+def test_a_build_context_file_outside_the_role_is_flagged():
+    task = [
+        {
+            "include_role": {"name": "k8s/image-builder"},
+            "vars": {
+                "image_builder_context_files": {
+                    "{{ playbook_dir }}/roles/k8s/svc/files/app.py": "app.py",
+                    "{{ playbook_dir }}/../scripts/lib/shared.py": "shared.py",
+                },
+                "image_builder_context": {
+                    "{{ playbook_dir }}/roles/k8s/other/templates/x.j2": "x",
+                },
+            },
+        }
+    ]
+    assert build_context_files({"svc": task}) == {
+        "scripts/lib/shared.py": frozenset({"svc"}),
+        "ansible/roles/k8s/other/templates/x.j2": frozenset({"svc"}),
+    }
 
 
 def test_a_role_shipping_another_roles_file_is_flagged():

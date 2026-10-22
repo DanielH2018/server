@@ -1,15 +1,20 @@
 {
-  "checksum": "81708c3b5ad7cf0ad02cdcdabb7e32db39aae924350e262ad8d1c6b6994eb969",
+  "checksum": "7e971a9a63031b84e1d50cc49b4780b4f62c6188ebcfdc0ff6309b569b6d376e",
   "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
   "key": "ansible/roles/k8s/node-exporter/CLAUDE.md#The textfile collector directory",
   "row": {
     "atoms": {
       "ansible/roles/k8s/monitor-bridge/files/checks/host.py:with_claude_cgroups": "f3ba292bb40bfc8f46077dad15d5b20ba3827a69bb07e7eaea5e6a08ac329f85",
       "ansible/roles/k8s/monitor-bridge/files/verdicts/host_cgroups.py:claude_cgroup_verdict": "e22900991caa21a4834475d9e1e54e165166875be9d603ba5d9c2f3baa90e104",
+      "ansible/roles/k8s/node-exporter/files/iscsi-sessions.sh": "07afc0a9bfad5b42e7afe7f5509b07d2c602f6795b4bf177f2d8b48b6106e5f5",
+      "ansible/roles/k8s/node-exporter/tests/test_iscsi_sessions.py::test_both_not_reporting_rules_carry_the_scripts_deadline": "bafc29e454750235e90a61a9a8adc26be0ad2552529bad57b3339a84d4e7452d",
+      "ansible/roles/k8s/node-exporter/tests/test_iscsi_sessions.py::test_every_check_file_producer_writes_the_same_help_text": "63ceef04c7dd6d1832a8a29be9b528df4aef72b52a7ac8578a4b56eca4ae139f",
       "ansible/roles/setup/claude_code/files/claude-cgroup-metrics.sh": "adf67bf461ffe963f724f451b7592ce67863d9d8972e42a7d16f3fd54aab45b5",
+      "ansible/roles/setup/k3s/templates/disk-health.sh.j2": "6fb1ba35020be293857abc0fdab059db0cb0879bf79983944a98cac1c7e3e99f",
+      "docs/longhorn-disaster-recovery.md": "4c9a4a63c6856b47fb7c612953def99d6b299477412a04fc9369539f36398ef3",
       "docs/target-architecture/monitoring/m3-textfile-timer.md": "402f3a50127fa4d5c5e118f35c17cfbe9c7b73a5d58fb938703fcd801959e2ab"
     },
     "python": "3.14",
-    "verified_sha": "c9943f04e"
+    "verified_sha": "3bfd1c0f6"
   }
 }

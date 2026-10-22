@@ -317,6 +317,28 @@ def test_a_whole_role_apply_prints_its_warning_above_the_command():
     assert lines[command - 2].startswith("  WARNING: ")
 
 
+def test_a_whole_role_k3s_apply_prints_the_agent_join_before_the_clear():
+    """#5627: `--tags k3s` on daniel-box never reaches an agent node (#5606)."""
+    lines = _owed_text(
+        {
+            "subject": "k3s",
+            "playbook": "ansible/k3s-bringup.yml",
+            "agent_hosts": ["daniel-server"],
+        }
+    ).splitlines()
+    server = lines.index(
+        "    uv run ansible-playbook ansible/k3s-bringup.yml --tags k3s"
+    )
+    agent = lines.index(
+        "    uv run ansible-playbook ansible/k3s-bringup.yml"
+        " -e join_agent=daniel-server --tags k3s_agent"
+    )
+    clear = next(
+        i for i, line in enumerate(lines) if "clear-owed manual_plane k3s" in line
+    )
+    assert server < agent < clear
+
+
 def test_a_role_no_playbook_applies_prints_no_playbook_command():
     text = _owed_text({"subject": "common", "playbook": "none"})
     assert "Apply the role by hand." in text

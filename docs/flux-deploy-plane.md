@@ -853,11 +853,13 @@ marking is the first PR of handing a service back (*Handing a service back*).
 The build step passes each published tag to the renderer with `--role` and no
 `--secret-stubs`. No `--secret-stubs` is what selects placeholder mode, the only mode that
 publishes (`docs/homelab-render.md`, *Placeholder mode*). With no published tag the step runs
-`homelab_render.py cluster --out out --shared-only` instead, because `cluster` without
-`--role` renders every tag. That bundle holds the shared kinds and a root listing them, and no
-tag, so the first decryption of the cluster file gets a revision of its own.
+`homelab_render.py cluster --out out --shared-only --all-images` instead, because `cluster`
+without `--role` renders every tag. That bundle holds the shared kinds and a root listing them,
+and no tag, so the first decryption of the cluster file gets a revision of its own. Both
+branches pass `--all-images`, because the `images` job refuses a render without
+`images/tags.json` and `publish` needs that job (#5593).
 `ansible/tests/repo/test_promote_workflow_bundle.py` fails a no-tag branch without
-`--shared-only`.
+`--shared-only` or `--all-images`.
 
 After the census, the step `ciphertext` runs `cluster_vars.py check --ciphertext-only` on
 every `*.sops.*` file under `out/cluster/`, and fails when it finds none. `.gitleaks.toml`
@@ -1264,10 +1266,12 @@ old pod keeps serving through the pull and the rollout pays only the container s
 - **Kubelet image garbage collection can still remove the image** between the pull and the
   rollout if the node passes its disk high-water mark, which the rollout budget also covers.
 
-code-server, n8n, tdarr, uptime-kuma and `crowdsec` set it, and all five are flux-owned, so the
-bundle holds a `<tag>-prepull` Kustomization for each. Docker Hub served a 420 MB layer at
-23.5-53.8 MB/s on 2026-10-22, about 100 times GHCR's rate, so a Docker Hub role's budget is
-minutes where a GHCR role's is most of an hour (#5867).
+Every flux-owned role with a `Recreate` Deployment on a large image sets it. Nine roles set it:
+code-server, n8n, tdarr, home-assistant, valheim, jellyfin, karakeep, uptime-kuma and `crowdsec`
+(#5525, #5546, #5855, #5858). The bundle holds a `<tag>-prepull` Kustomization for each, and
+`scripts/deploy_tools/bundle_census.py:prepull_tags` reads the full list from the tree. Docker
+Hub served a 420 MB layer at 23.5-53.8 MB/s on 2026-10-22, about 100 times GHCR's rate, so a
+Docker Hub role's budget is minutes where a GHCR role's is most of an hour (#5867).
 
 ### The snapshot Job
 

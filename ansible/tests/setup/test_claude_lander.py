@@ -416,11 +416,16 @@ def test_the_agents_claude_md_names_the_approval_list_the_lander_reads() -> None
 
 
 def test_land_sh_ends_its_landing_before_systemd_kills_the_unit() -> None:
-    """The flock wait comes out of TimeoutStartSec before land.sh starts its own clock (#5199)."""
+    """The flock wait comes out of TimeoutStartSec before land.sh starts its own clock (#5199).
+
+    The reboot window can move the promotion wait's cap past LAND_DEADLINE by up to
+    LAND_WINDOW_GRACE (#5457), so the unit's limit covers both.
+    """
     rendered = unit()
     (timeout,) = directive(rendered, "TimeoutStartSec")
     hours = re.fullmatch(r"(\d+)h", timeout)
     assert hours, f"expected a span in hours, got {timeout!r}"
     (flock_wait,) = re.findall(r"flock -w (\d+) ", directive(rendered, "ExecStart")[0])
     deadline = int(environment(rendered)[options.DEADLINE_ENV])
-    assert 0 < deadline <= int(hours.group(1)) * 3600 - int(flock_wait)
+    grace = int(environment(rendered)[options.WINDOW_GRACE_ENV])
+    assert 0 < deadline + grace <= int(hours.group(1)) * 3600 - int(flock_wait)

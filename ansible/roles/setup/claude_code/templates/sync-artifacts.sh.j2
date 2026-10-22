@@ -50,12 +50,16 @@ report=""
 # {{ peer.ssh_target }}: rsync's transport needs no forwarding, and a forward whose local port is
 # already held fails the whole ssh with "bind [127.0.0.1]:<port>: Address already in use"
 # rather than just declining the tunnel (#2467).
+# --chmod=D0750 sets every directory's mode here instead of copying the peer's. With the
+# trailing slash, -a would put the peer root's mode on the top directory every run, and
+# k8s_host_files' "Ensure a peer directory exists" task sets it back to 0750 on every apply.
+# Keep the two modes equal (#5524).
 {% if peer.stars_path | default('') %}
 # The star list goes back over the same transport, after the pull, and a failed push counts
 # toward the same streak: until it lands, {{ peer.name }}'s prune can delete an artifact starred
 # here. No list yet means nothing was ever starred, and there is nothing to push.
 {% endif %}
-if rsync -a --delete --timeout=60 \
+if rsync -a --delete --chmod=D0750 --timeout=60 \
     -e 'ssh -o BatchMode=yes -o ConnectTimeout=10 -o ClearAllForwardings=yes' \
     "{{ peer.ssh_target }}:{{ peer.path }}/" "{{ claude_code_artifacts_peer_dir }}/{{ peer.name }}/"{% if peer.stars_path | default('') %} \
   && { [ ! -f "{{ claude_code_artifacts_stars_file }}" ] || rsync -a --timeout=60 \

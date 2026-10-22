@@ -6,10 +6,10 @@ route". This answers "what does the edge do to a request before it arrives": whe
 route is reachable from the internet or only the LAN, and which Traefik middlewares sit in
 front of it.
 
-THE DOMAIN SUFFIX IS NOT DERIVABLE. `ingressroute.yml.j2` builds the hostname as
-"{{ hostname }}.local.{{ domain }}", and `domain` is SOPS-sourced with no static default.
-So this prints the hostname LABEL and says so, rather than constructing an FQDN it cannot
-verify — the same constraint scripts/docs/service_catalog.py records in its FIELD NOTES.
+THE DOMAIN SUFFIX IS NOT BAKED IN. `ingressroute.yml.j2` builds the hostname as
+"{{ hostname }}.local.{{ domain }}", and every route answers on the LAN name and most on the
+public one too. A baked FQDN would pick one tier for every reader, so this prints the hostname
+LABEL and says so — the same choice scripts/docs/service_catalog.py records in its FIELD NOTES.
 
 STATIC PARSING ONLY: yaml.safe_load over the inventory, plain regex over template text.
 
@@ -106,8 +106,8 @@ def render_markdown(rows: list[dict[str, str]]) -> str:
     parts.append(f"{len(rows)} routed k8s service(s).\n")
     parts.append(
         '!!! note "The domain is filled in by your browser"\n'
-        "    `domain` is SOPS-sourced with no static default, and these pages are rendered "
-        "by static parsing, so the generator writes `<domain>` rather than guessing. On the "
+        "    A route answers on the LAN name, the public name or both, and a static page "
+        "cannot know which one you are on, so the generator writes `<domain>`. On the "
         "docs site the routes below become links, built from the domain of the URL you are "
         "reading this on — so you get LAN links on the LAN name and public links on the "
         "public one.\n"

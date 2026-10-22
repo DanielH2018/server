@@ -34,8 +34,9 @@ SyslogLevel=notice
 # Room for the 30-minute lock wait plus one landing: land.sh waits up to 45 minutes for the
 # merge and 15 for master CI, then ticks, deploys and checks health. A landing systemd kills
 # leaves its verdict file reading PENDING, or no file if the kill came during the lock wait,
-# so the session also reads this unit's Result.
-TimeoutStartSec=9h
+# so the session also reads this unit's Result. 15h since LAND_WINDOW_GRACE below can add
+# the reboot window's 22200s to LAND_DEADLINE's 28800, with the 1800s flock wait on top (#5457).
+TimeoutStartSec=15h
 # Fits inside what TimeoutStartSec leaves after the flock wait below, so land.sh ends a long
 # promotion wait `deferred` before systemd kills it with no verdict (#5199). It must also leave
 # land-wait room for `verify`'s wait on the rendered soak plus promote's `render`, `images`
@@ -45,6 +46,12 @@ TimeoutStartSec=9h
 # the soak (#5512), 25200 once D5.20's verify Kustomizations joined it as well, and 28800
 # once karakeep, pi-peer-backup and media-volume joined it with their snapshot and verify kinds.
 Environment=LAND_DEADLINE=28800
+# A landing that merges into the weekly reboot's no-promotion window waits out the deferral
+# rather than giving up on a promotion nothing has failed: the first poll inside the window
+# adds its remaining length to the cap, up to this. It is the window's full length,
+# VERIFY_CAP_S plus weekly_reboot_mute_recovery_minutes, and
+# ansible/tests/setup/test_lander_deadlines_cover_the_soak.py derives it from the schedule (#5457).
+Environment=LAND_WINDOW_GRACE=22200
 # One of the agent's landings at a time, so a second waits for the first's deploy rather than
 # racing it for the same tick. Interactive sessions and renovate-agent's lander do not take
 # this lock; deploy.sh's own locks order the deploys themselves.

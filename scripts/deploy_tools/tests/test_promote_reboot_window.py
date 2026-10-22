@@ -14,7 +14,7 @@ from pathlib import Path
 
 import pytest
 import yaml
-from _land_wait_fakes import P, Sim, at
+from _land_wait_fakes import M, P, Sim, at
 from _promote_fakes import NOW, REBOOT_YAML, World, bundle_files
 from lib import yaml_fast
 from lib.repo_paths import REPO
@@ -261,3 +261,27 @@ def test_land_waits_live_window_is_the_widest_any_t_has():
         reboot_window.remaining(schedule, VERIFY_CAP_S, opened - timedelta(minutes=1))
         is None
     )
+
+
+@pytest.mark.parametrize(
+    "grace, waited",
+    [(7200, 1800 + 3600), (1200, 1800 + 1200), (0, 1800)],
+    ids=["room-for-the-window", "room-for-part-of-it", "no-room"],
+)
+def test_the_window_moves_the_landers_cap_by_its_remaining_length(grace, waited):
+    """A capped wait that meets the window waits it out, up to the grace its unit leaves (#5457).
+
+    With no grace the cap ends the wait at 1800s, inside the window, which is the `gave-up`
+    the issue reported for a Sunday merge whose promotion was only deferred.
+    """
+    left = 3600
+    countdown = [
+        (left - n * promote_wait.POLL_S, END)
+        for n in range(left // promote_wait.POLL_S)
+    ]
+    sim = Sim(polls=[at(P)], reboot_window=[*countdown, None])
+    result = promote_wait.land_wait(
+        sim.reads(), M, [], cap_s=1800, window_grace_s=grace
+    )
+    assert (result.verdict, result.cause) == ("gave-up", "promote-timeout")
+    assert sim.sleeps * promote_wait.POLL_S == waited

@@ -237,6 +237,7 @@ def manual_plane_rows(owed: str | None, now: float) -> list[dict]:
             "apply": r.apply,
             "by_hand": r.by_hand,
             "warning": r.warning,
+            "agents": list(r.agents),
             "clear": r.clear,
         }
         for r, line in zip(remedies, lines, strict=True)
@@ -481,6 +482,9 @@ def owed_lines(row: dict) -> list[str]:
         if row["warning"]:
             lines.append(f"  WARNING: {row['warning']}")
         lines += ["  Apply it by hand:", f"    {row['apply']}"]
+        if row["agents"]:
+            lines.append("  Then join each agent node:")
+            lines += [f"    {a}" for a in row["agents"]]
     else:
         lines.append(f"  {row['by_hand'][:1].upper()}{row['by_hand'][1:]}.")
     lines += ["  Then clear its ledger line:", f"    {row['clear']}"]

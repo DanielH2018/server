@@ -73,18 +73,13 @@ from validate.validate_lib.shell_lint import (
 COMPONENTS = REPO / "hosts" / "components"
 
 # Shell-specific overrides: values a lint pass needs to be shell-plausible rather than the bare
-# "STUB" literal StubUndefined fills in elsewhere. A bare "STUB" would actually be fine for a
-# plain string interpolation, but these two are structurally different:
-#  - the push token is a SOPS secret with no plaintext fallback in group_vars/all.yml (unlike
-#    cloudflare_ips/sys_user, which ARE plaintext and come through BASE_CONTEXT/all_vars
-#    unchanged) — any token-shaped string is fine, it is just interpolated into a URL path.
-#  - `hostvars` is Ansible's own magic var (host facts keyed by inventory hostname), not something
-#    vanilla Jinja provides. Only hostvars['daniel-server'].server_ip is stubbed — Jinja's `.attr`
-#    lookup falls back to `dict.__getitem__` when the attribute doesn't exist, so a plain nested
-#    dict renders identically to the real Ansible object.
+# "STUB" literal StubUndefined fills in elsewhere. The push token is a SOPS secret with no
+# plaintext fallback in group_vars/all.yml (unlike cloudflare_ips/sys_user, which ARE plaintext
+# and come through BASE_CONTEXT/all_vars unchanged). Any token-shaped string is fine, because it
+# is just interpolated into a URL path. `hostvars` needs no stub: `render_context` builds it
+# from each host's literal `server_ip`, and a stub here would replace that whole map.
 SHELL_STUB_OVERRIDES = {
     "secret_rotation_push_token": "stub-secret-rotation-token",
-    "hostvars": {"daniel-server": {"server_ip": "10.0.0.1"}},
 }
 
 
