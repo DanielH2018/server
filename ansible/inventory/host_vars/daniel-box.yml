@@ -131,6 +131,13 @@ containers_list:
   - name: metallb
     platform: k8s
     owner: flux
+  # Cluster DNS: the CoreDNS Deployment, Service, RBAC and the Corefile key of its ConfigMap
+  # (H1.4). Flux applies the tag through `promote` and every Ansible path skips it. It renders
+  # prune: false, and it is untiered because its pod keeps `system-cluster-critical`, so
+  # `NEVER_SHED` keeps it out of the lost-node shed set.
+  - name: coredns
+    platform: k8s
+    owner: flux
   # The IngressRoute, Middleware and TLSOption CRDs, alone in their tag so it can render
   # prune: false and its directory never substitutes (#5666). traefik's tier keeps it out of
   # the shed set.

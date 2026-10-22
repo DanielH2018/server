@@ -19,10 +19,11 @@ its loop (`rejectattr('skipped', 'defined')`).
 A PRODUCER NEEDS NO `when:` TO BE CONDITIONAL. Check mode skips `ansible.builtin.command` and
 its siblings whatever their `when:` says, so an UNGUARDED command that registers is a skip
 result on every `--check` run — the same dict with no `stdout`, reached by a different route.
-`_producers` covers it through `_check_mode_producers`. `setup/k3s/tasks/coredns.yml` is the
-anchor: `Read the live Corefile` carries no `when:`, and `Point cluster DNS at Pi-hole first`
-compares `k3s_coredns_live.stdout` in its own `when:`. Under `--check` that conditional errors
-before the play reaches anything else in the file, unless the read carries `check_mode: false`.
+`_producers` covers it through `_check_mode_producers`. The anchor is a pair of tasks from the
+retired `setup/k3s/tasks/coredns.yml` (H1.4), written inline below: `Read the live Corefile`
+carries no `when:`, and `Point cluster DNS at Pi-hole first` compares `k3s_coredns_live.stdout`
+in its own `when:`. Under `--check` that conditional errors before the play reaches anything
+else in the file, unless the read carries `check_mode: false`.
 
 A consumer of a check-mode producer is clean when a `--check` run never reaches it — its own
 `when:`, an enclosing `block:`, or the `when:` on the task that imports its file. All three
@@ -61,16 +62,31 @@ from _check_mode import unguarded_deref
 from _helpers import ROLES as _ROLES
 from _role_census import task_files
 from _skip_result_rule import _offenders
-from lib.repo_paths import K3S_ROLE
 
+# The two tasks of the retired coredns.yml that the anchor needs, as they read at 70591c307
+# with the #2305 fix in place. H1.4 deleted them from the real file, and the anchor pins the
+# rule's behaviour, which needs no real file.
+_COREDNS_PAIR = """\
+- name: Read the live Corefile
+  ansible.builtin.command:
+    cmd: k3s kubectl -n kube-system get configmap coredns -o jsonpath={.data.Corefile}
+  register: k3s_coredns_live
+  become: true
+  check_mode: false
+  changed_when: false
 
-_COREDNS = K3S_ROLE / "tasks" / "coredns.yml"
+- name: Point cluster DNS at Pi-hole first
+  ansible.builtin.command:
+    cmd: k3s kubectl -n kube-system patch configmap coredns --type merge
+  become: true
+  changed_when: true
+  when: k3s_coredns_live.stdout | trim != k3s_coredns_corefile | trim
+"""
 
 # Files the census must walk. Each holds a consumer the check-mode producer rule flags, so a
 # glob that stops reaching them would turn the per-file test green over files it never read.
 _KNOWN_TASK_FILES = frozenset(
     {
-        "setup/k3s/tasks/coredns.yml",
         # Each of these holds a consumer flagged through the `stdout_lines`/`stderr_lines`/`delta`
         # entries in SKIP_MISSING or through a when-gated producer under the check-mode rule.
         "k8s/headlamp/tasks/main.yml",
@@ -101,23 +117,17 @@ def test_the_census_walks_the_files_it_was_written_for() -> None:
 
 
 def test_the_widened_rule_would_have_caught_the_coredns_read(tmp_path: Path) -> None:
-    """Anchor: coredns.yml with its `check_mode: false` taken back off.
+    """Anchor: the retired coredns.yml pair with its `check_mode: false` taken back off.
 
     `Read the live Corefile` carries no `when:`, so the older rule reads it as an
     unconditional producer. Check mode skips `command` regardless, and `Point cluster DNS at
     Pi-hole first` compares `k3s_coredns_live.stdout` in its own `when:`, which errors under
     `--check`.
     """
-    tasks = yaml_fast.safe_load(_COREDNS.read_text())
+    tasks = yaml_fast.safe_load(_COREDNS_PAIR)
     reads = [t for t in tasks if t.get("name") == "Read the live Corefile"]
-    assert len(reads) == 1, (
-        "setup/k3s/tasks/coredns.yml no longer has exactly one task named 'Read the live "
-        "Corefile' — it was renamed or removed, and this anchor would check nothing"
-    )
-    assert reads[0].pop("check_mode", None) is False, (
-        "'Read the live Corefile' no longer carries `check_mode: false`. The #2305 fix was "
-        "reverted and the `coredns` tag fails under `--check` again"
-    )
+    assert len(reads) == 1
+    assert reads[0].pop("check_mode", None) is False
     reverted = tmp_path / "tasks"
     reverted.mkdir()
     (reverted / "coredns.yml").write_text(yaml.safe_dump(tasks))
@@ -138,9 +148,12 @@ def test_the_widened_rule_would_have_caught_the_coredns_read(tmp_path: Path) -> 
     )
 
 
-def test_the_live_coredns_read_is_clean() -> None:
-    """The accepting half: with `check_mode: false` in place, the file reports nothing."""
-    assert _offenders(_COREDNS) == []
+def test_the_live_coredns_read_is_clean(tmp_path: Path) -> None:
+    """The accepting half: with `check_mode: false` in place, the pair reports nothing."""
+    fixed = tmp_path / "tasks"
+    fixed.mkdir()
+    (fixed / "coredns.yml").write_text(_COREDNS_PAIR)
+    assert _offenders(fixed / "coredns.yml") == []
 
 
 def test_the_check_finds_the_observability_shape(tmp_path: Path) -> None:

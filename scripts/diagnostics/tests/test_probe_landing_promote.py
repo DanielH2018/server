@@ -13,10 +13,12 @@ import pytest
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from diagnostics.probe_lib import landing_blockers as landing
+from diagnostics.probe_lib import promote_state
 from diagnostics.probe_lib.promote_state import (
     PromoteReads,
     artifact_of,
     hold_lines,
+    reconcile_disabled_objects,
     suspended_objects,
 )
 from test_probe_landing import CLEAR, GREEN, fake_deploy_ui, fake_run
@@ -36,13 +38,19 @@ def _read(value):
 
 
 def _snap(
-    deployer=CLEAR, deploy_hold="none", prod=PROD, last_good=PROD, suspended=None
+    deployer=CLEAR,
+    deploy_hold="none",
+    prod=PROD,
+    last_good=PROD,
+    suspended=None,
+    reconcile_disabled=None,
 ) -> dict:
     reads = PromoteReads(
         _read(deploy_hold),
         _read(prod),
         _read(last_good),
         None if suspended is None else _read(suspended),
+        None if reconcile_disabled is None else _read(reconcile_disabled),
     )
     return landing.collect(
         lambda: None, fake_deploy_ui(deployer), fake_run(GREEN), promote=reads
@@ -135,6 +143,7 @@ def test_collect_without_the_promotion_reads_reads_none_of_them():
         "prod": None,
         "last_good": None,
         "suspended": None,
+        "reconcile_disabled": None,
     }
 
 
@@ -189,3 +198,66 @@ def test_no_suspended_object_reads_none_and_an_unread_one_reads_unknown():
     snap = _snap(suspended=_broken)
     assert hold_lines(snap)[3] == "suspended (Flux): unknown"
     assert any(e.startswith("suspended: TimeoutError") for e in snap["errors"])
+
+
+def _member(kind: str, name: str, annotations: dict | None) -> dict:
+    """A named member as `kubectl get -o json` returns it."""
+    return {
+        "kind": kind,
+        "metadata": {
+            "name": name,
+            "namespace": "kube-system",
+            **({} if annotations is None else {"annotations": annotations}),
+        },
+    }
+
+
+DISABLED = {"kustomize.toolkit.fluxcd.io/reconcile": "disabled"}
+
+
+def test_an_annotated_coredns_member_is_named_and_an_unannotated_one_is_not():
+    items = [
+        _member("Deployment", "coredns", DISABLED),
+        _member("ConfigMap", "coredns", {"other": "disabled"}),
+        _member("Service", "kube-dns", None),
+    ]
+    line = hold_lines(_snap(reconcile_disabled=reconcile_disabled_objects(items)))[4]
+    assert line == "reconcile-disabled (Flux skips): Deployment/coredns in kube-system"
+
+
+def test_no_annotated_member_reads_none_and_an_unread_one_reads_unknown():
+    assert hold_lines(_snap(reconcile_disabled=[]))[4] == (
+        "reconcile-disabled (Flux skips): none"
+    )
+    snap = _snap(reconcile_disabled=_broken)
+    assert hold_lines(snap)[4] == "reconcile-disabled (Flux skips): unknown"
+    assert any(e.startswith("reconcile_disabled: TimeoutError") for e in snap["errors"])
+
+
+def test_the_live_read_covers_the_three_coredns_objects_and_fails_on_a_missing_one():
+    import json
+    import subprocess
+
+    calls = []
+    state = {"missing": False}
+
+    def fake(cluster, *args, **kwargs):
+        calls.append(args)
+        if "service/kube-dns" in args and state["missing"]:
+            return subprocess.CompletedProcess(args, 1, "", "NotFound")
+        items = [_member("Deployment", "coredns", DISABLED)]
+        return subprocess.CompletedProcess(args, 0, json.dumps({"items": items}), "")
+
+    state["missing"] = False
+    assert promote_state._reconcile_disabled(fake) == [
+        {"kind": "Deployment", "namespace": "kube-system", "name": "coredns"}
+    ]
+    assert calls[0][1:4] == (
+        "deployment/coredns",
+        "configmap/coredns",
+        "service/kube-dns",
+    )
+    # RED: a named member that cannot be read must not read as "no annotation".
+    state["missing"] = True
+    with pytest.raises(RuntimeError, match="NotFound"):
+        promote_state._reconcile_disabled(fake)

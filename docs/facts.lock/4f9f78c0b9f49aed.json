@@ -1,0 +1,16 @@
+{
+  "checksum": "5ea298ca172d003d1bd37a89b7780ad4721662c161a776d18aedc0fdbabddb82",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "ansible/roles/k8s/coredns/CLAUDE.md#At a glance",
+  "row": {
+    "atoms": {
+      "ansible/filter_plugins/service_tier.py": "4f5e784e468e22de5c3736acba1c47934e1d5e2794af865159bdaeeff9171f1e",
+      "ansible/tests/k8s/test_pod_template_hygiene.py": "5cea822090049c3c83319cfb4e9fdb2a0d18b27318e2984683825c8386e86107",
+      "ansible/tests/setup/test_coredns_image_follows_bundled_manifest.py": "f67989886be9d0cf22ce5df63f4aa3db761afae02ba3719b0c326dcbab47e33b",
+      "ansible/tests/staging/test_staging_egress_fence.py": "3b6eb2b9b164e04ba8522eb78d6fb3a8b94548ea9710c7a378fa8bb5a90bb5e0",
+      "docs/k3s-upgrade.md": "abe7da0cc701ec42641e56ba4f9e147f93f8f312875fdd283097746b434cde59"
+    },
+    "python": "3.14",
+    "verified_sha": "14cf76620"
+  }
+}

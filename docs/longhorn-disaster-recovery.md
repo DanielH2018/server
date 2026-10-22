@@ -158,6 +158,12 @@ the per-volume map and each exclusion's rationale:
    its address pool. The Kustomization `metallb` installs both at (f), once the plumbing tags
    apply, and no VIP is announced before then.
 
+   **CoreDNS from H1.4.** (a) still lets k3s create its bundled CoreDNS. The play then reads
+   Deployment `coredns` until it exists, and writes the `.skip` marker only after that read. The
+   Kustomization `coredns` takes the Deployment, the Service, the RBAC and the `Corefile` key
+   over at (f). Flux resolves GHCR through that DNS, so a CoreDNS that k3s has not yet created
+   would leave Flux unable to fetch the bundle.
+
    Before H1.2 there is no step (b): k3s bring-up applies the PriorityClasses and the identity
    itself. Steps 3 and 4 below sit between (f) and (g). D5's flux PR replaces this block with a
    pointer to its own bootstrap section.

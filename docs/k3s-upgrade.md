@@ -113,20 +113,51 @@ dig +short @10.0.0.243 <a-known-name>        # Pi-hole answering on its MetalLB 
 
 ### Move CoreDNS to the image the new k3s bundles
 
-`k3s_server` does not move the CoreDNS image. The role's `coredns.yaml.skip` marker stops k3s
-applying its bundled CoreDNS add-on, so the Deployment keeps the image it had before the upgrade
-(#3257). The `coredns` tag reads the image from the manifest the new k3s staged at startup, and
-sets the Deployment to it:
+`k3s_server` does not move the CoreDNS image. The `coredns.yaml.skip` marker stops k3s applying
+its bundled CoreDNS add-on, so the Deployment keeps the image it had before the upgrade (#3257).
+Flux applies the k8s `coredns` role, and the role's `coredns_image` pin is the only thing that
+moves the image. No task on the host reads the staged manifest any more. A k3s bump therefore
+carries the CoreDNS port in the same PR as the `k3s_version` move:
+
+1. Read k3s's manifest at the new tag, and diff it against the old tag. The tag's `+` is
+   `%2B` in the URL:
+   `gh api -H 'Accept: application/vnd.github.raw' 'repos/k3s-io/k3s/contents/manifests/coredns.yaml?ref=<tag>'`.
+2. Port each change into `ansible/roles/k8s/coredns/`. The image goes into `coredns_image`,
+   and the `Corefile` into `templates/config/coredns-corefile.j2`. Everything else goes into the
+   Deployment, Service and RBAC templates, with each `%{...}%` placeholder written as the value
+   k3s substitutes on this cluster.
+3. Move the excerpt and its label in
+   `ansible/tests/setup/test_coredns_image_follows_bundled_manifest.py` to the new tag. The test
+   fails until the label equals `k3s_version` and the pin equals the excerpt's image.
+4. Read the image the new pod runs for a uid change. The Deployment pins
+   `runAsUser: 65532` beside `runAsNonRoot`, so an image whose `USER` moved refuses to start.
+5. Merge through `land.sh`, which is the apply. A pod-template change rolls the single replica
+   and leaves a cluster-DNS gap, so land it in a window.
 
 ```bash
-uv run ansible-playbook ansible/k3s-bringup.yml --tags coredns
 kubectl -n kube-system get deploy coredns -o jsonpath='{.spec.template.spec.containers[0].image}'
+uv run python scripts/diagnostics/probe.py health coredns
 ```
 
-The second command prints the image from `manifests/coredns.yaml` at the new `k3s_version`. The
-rest of the bundled add-on stays frozen, so diff that file between the old and new tags too. A
-change outside the `image:` line needs a hand port into `tasks/coredns.yml` or
-`templates/coredns-corefile.j2`.
+#### Break-glass: a bad CoreDNS revision (**operator-only**)
+
+Flux resolves GHCR through the cluster DNS it owns, so a revision that breaks CoreDNS can block
+its own fix. The `coredns` tag is forward-only, so a failed revision holds and `prod` does not
+reset into a fetch that needs the DNS that just failed.
+
+1. Annotate the CoreDNS objects in the cluster, so `kustomize-controller` skips them:
+   `sudo k3s kubectl -n kube-system annotate deployment/coredns configmap/coredns service/kube-dns kustomize.toolkit.fluxcd.io/reconcile=disabled`.
+2. Render the `coredns` tag at the `last-good` SHA, from a checkout of that SHA, with
+   `uv run python scripts/renderer/homelab_render.py cluster --out <out> --role coredns`.
+   Then apply it:
+   `sudo k3s kubectl apply -k <out>/cluster/coredns`.
+   `probe.py landing` prints `last-good`.
+3. Fix forward through a PR. Wait until the `coredns` Kustomization's
+   `status.lastAppliedOriginRevision` names the fix or a descendant of it, then remove the
+   annotation from each object with
+   `sudo k3s kubectl -n kube-system annotate deployment/coredns configmap/coredns service/kube-dns kustomize.toolkit.fluxcd.io/reconcile-`.
+
+Until step 3, `probe.py landing` lists each object that still carries the annotation.
 
 ## Upgrade the agent node
 

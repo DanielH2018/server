@@ -151,6 +151,8 @@ daniel-server keeps its own SOPS key, so decryption still works without the reco
    tag, the operator applies `cluster-base` by hand, and the root `homelab` Kustomization stays
    suspended until the volumes are restored (that document's *Order from H1.2*). Since H1.3 the
    bring-up installs no MetalLB: the `metallb` Kustomization does, once Flux applies the plumbing tags.
+   Since H1.4 the `coredns` Kustomization owns the CoreDNS objects, and the bring-up keeps only
+   the marker that releases k3s's bundled add-on.
 2. Decide whether cluster **objects** (Deployments, Secrets, PVC bindings) are also lost —
    if so, restore etcd first per `docs/k3s-etcd-restore.md` (needs item 2, the cluster
    token, if this is a genuinely new host rather than the same disk).

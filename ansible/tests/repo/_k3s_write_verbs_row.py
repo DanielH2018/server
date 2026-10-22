@@ -27,10 +27,6 @@ K3S_WRITE_ALLOW = {
         "stays: the opt-in smoke test creates and deletes a throwaway PVC, which no Flux tag "
         "declares"
     ),
-    _TASKS + "coredns.yml": (
-        "H1.4 hands the Corefile key and the Deployment to `coredns`; the file keeps the read "
-        "and the marker task"
-    ),
     _TASKS + "longhorn.yml": (
         "H1.5a deletes the install, the manager patch and the StorageClass tasks, H1.5b the "
         "Settings, `longhorn-nobackup` and the NetworkPolicy, and H1.6 the label and CSI tasks "

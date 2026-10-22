@@ -60,7 +60,7 @@
 
     - name: Wait for the PVC to reach Bound
       # `until` owns the verdict, so a read that exits non-zero is retried rather than failing
-      # the task on its first attempt — the same shape as the CoreDNS probe in coredns.yml.
+      # the task on its first attempt.
       # The task still fails if Bound is never reached, which is the outcome worth reporting:
       # Pending here means the driver is running and cannot provision, the one state a pod
       # count cannot distinguish from healthy.

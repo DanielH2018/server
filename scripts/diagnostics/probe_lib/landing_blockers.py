@@ -342,6 +342,7 @@ def collect(
             "prod": None,
             "last_good": None,
             "suspended": None,
+            "reconcile_disabled": None,
         },
         "errors": [],
     }
@@ -453,6 +454,13 @@ def collect(
                 snap["promote"]["suspended"] = read_objects()
 
             attempt("suspended", read_suspended)
+        read_annotated = promote.reconcile_disabled
+        if read_annotated is not None:
+
+            def read_reconcile_disabled():
+                snap["promote"]["reconcile_disabled"] = read_annotated()
+
+            attempt("reconcile_disabled", read_reconcile_disabled)
     attempt("hold", read_hold)
     attempt("ci", read_ci)
     attempt("runs", read_runs)

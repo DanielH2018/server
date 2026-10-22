@@ -45,6 +45,10 @@ _SYSTEM_TIER = {
     # it must outrank every workload that consumes `devic.es/dri` — the template says so at
     # the line. `system-node-critical` is the class k8s reserves for exactly that shape.
     ("dri-device-plugin", "daemonset.yaml.j2"): "system-node-critical",
+    # CoreDNS outranks every homelab tier as k3s ships it, and every tier and Flux's own
+    # controllers resolve names through it (H1.4). A homelab tier would lower its class, and
+    # `tier: platform` would derive `homelab-critical`. The entry stays untiered for that reason.
+    ("coredns", "deployment.yaml.j2"): "system-cluster-critical",
 }
 
 # Non-vacuity. The census renders 70 long-running pod templates. A floor far below the live

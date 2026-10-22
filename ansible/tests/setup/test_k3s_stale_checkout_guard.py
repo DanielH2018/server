@@ -26,14 +26,15 @@ from lib.git_testing import scrubbed_env
 from lib.proc_testing import fake_bin
 
 from _helpers import ANSIBLE
-from lib import yaml_fast
 from lib.repo_paths import K3S_DEFAULTS, K3S_ROLE
 
 TASKS = K3S_ROLE / "tasks"
 GUARD = TASKS / "stale-checkout-guard.yml"
 
-# Inventory ids the role's real rows name, at the role's defaults.
+# Inventory ids the role's real rows name, at the role's defaults. COREDNS is the id no row
+# names any more: H1.4 deleted the CoreDNS writers with their instance.
 COREDNS = "kube-system_coredns_apps_Deployment"
+R2_TARGET = "longhorn-system_r2_longhorn.io_BackupTarget"
 RECONCILE = "longhorn-system_longhorn-reconcile_batch_CronJob"
 UNMAPPED = "homelab_jellyfin_apps_Deployment"
 
@@ -227,7 +228,7 @@ pytestmark = pytest.mark.skipif(
 )
 
 
-# Two shared runs, one host per case: the whole-file run, and the `--tags coredns` run of
+# Two shared runs, one host per case: the whole-file run, and the `--tags longhorn_r2` run of
 # the real guard. Every other case needs its own selection or its own guard, so runs alone.
 @pytest.fixture(scope="module")
 def whole_file(tmp_path_factory) -> dict[str, Outcome]:
@@ -236,15 +237,18 @@ def whole_file(tmp_path_factory) -> dict[str, Outcome]:
         {
             "unmapped": Case(["inventory"], {"jellyfin": [UNMAPPED]}),
             "no-k3s": Case(["refuse"], binary=False),
+            # A checkout whose coredns.yml holds only the read and the marker task: no row
+            # names CoreDNS, so Flux owning it fails nothing.
+            "coredns-owned": Case(["inventory"], {"coredns": [COREDNS]}),
         },
     )
 
 
 @pytest.fixture(scope="module")
-def coredns(tmp_path_factory) -> dict[str, Outcome]:
-    owned = {"coredns": [COREDNS]}
+def r2(tmp_path_factory) -> dict[str, Outcome]:
+    owned = {"longhorn-backup": [R2_TARGET]}
     return _run(
-        tmp_path_factory.mktemp("coredns"),
+        tmp_path_factory.mktemp("r2"),
         {
             "owned": Case(["inventory"], owned),
             "no-flux": Case(["no-flux"]),
@@ -254,13 +258,13 @@ def coredns(tmp_path_factory) -> dict[str, Outcome]:
             ),
             "refusals-then-owned": Case(["refuse", "refuse", "inventory"], owned),
         },
-        args=("--tags", "coredns"),
+        args=("--tags", "longhorn_r2"),
     )
 
 
 def test_an_inventory_holding_no_mapped_id_passes(whole_file):
     _passed(whole_file["unmapped"])
-    assert whole_file["unmapped"].calls == 5, (
+    assert whole_file["unmapped"].calls == 4, (
         "every instance reads the inventory under a whole-file run"
     )
 
@@ -278,45 +282,20 @@ def test_a_row_whose_task_name_is_a_template_names_it_as_written(tmp_path):
     )
 
 
-def _without(*tasks: str) -> list:
-    """The real guard with the rows for `tasks` deleted.
-
-    An instance left with no row keeps a stand-in row naming an id no inventory here holds, so
-    a selection still runs its read and its match. Without it the instance would vanish, and
-    a pass would prove only that nothing ran.
-    """
-    guard = []
-    for instance in yaml_fast.safe_load(GUARD.read_text()):
-        rows = [
-            r
-            for r in instance["vars"]["k3s_stale_checkout_rows"]
-            if r["task"] not in tasks
-        ] or [{"task": "A writer this checkout still holds", "ids": [UNMAPPED]}]
-        guard.append({**instance, "vars": {"k3s_stale_checkout_rows": rows}})
-    return guard
-
-
 def test_a_checkout_whose_coredns_writers_are_gone_passes_while_flux_owns_coredns(
-    tmp_path,
+    whole_file,
 ):
-    guard = _without(
-        "Point cluster DNS at Pi-hole first", "Run the CoreDNS image k3s bundles"
-    )
-    outcome = _run_one(
-        tmp_path,
-        Case(["inventory"], {"coredns": [COREDNS]}),
-        args=("--tags", "coredns"),
-        guard=guard,
-    )
-    _passed(outcome)
-    assert outcome.calls == 1, (
-        "the coredns instance read the inventory and matched nothing"
+    # H1.4 deleted the CoreDNS writers and their instance, so no row names the Deployment. A
+    # row that named it again would fail here once Flux's inventory lists it.
+    _passed(whole_file["coredns-owned"])
+    assert whole_file["coredns-owned"].calls == 4, (
+        "every instance read and matched nothing"
     )
 
 
-def test_an_api_without_flux_passes_on_the_first_try(coredns):
-    _passed(coredns["no-flux"])
-    assert coredns["no-flux"].calls == 1
+def test_an_api_without_flux_passes_on_the_first_try(r2):
+    _passed(r2["no-flux"])
+    assert r2["no-flux"].calls == 1
 
 
 def test_a_host_without_k3s_passes_without_reading(whole_file):
@@ -324,28 +303,28 @@ def test_a_host_without_k3s_passes_without_reading(whole_file):
     assert whole_file["no-k3s"].calls == 0
 
 
-def test_an_api_that_never_answers_fails_after_the_bounded_retry(coredns):
-    outcome = coredns["never-answers"]
+def test_an_api_that_never_answers_fails_after_the_bounded_retry(r2):
+    outcome = r2["never-answers"]
     _failed_naming(outcome, "the k3s API is unreachable", "was refused")
     assert outcome.calls == 4, "`retries: 3` is the first try plus three retries"
 
 
-def test_two_refusals_then_a_clean_inventory_pass(coredns):
-    _passed(coredns["refusals-then-clean"])
-    assert coredns["refusals-then-clean"].calls == 3
+def test_two_refusals_then_a_clean_inventory_pass(r2):
+    _passed(r2["refusals-then-clean"])
+    assert r2["refusals-then-clean"].calls == 3
 
 
-def test_two_refusals_then_a_mapped_id_fail_and_name_the_task(coredns):
-    _failed_naming(coredns["refusals-then-owned"], "Run the CoreDNS image k3s bundles")
+def test_two_refusals_then_a_mapped_id_fail_and_name_the_task(r2):
+    _failed_naming(r2["refusals-then-owned"], "Apply the R2 backup target")
 
 
 def test_a_check_run_still_reads_and_fails(tmp_path):
     outcome = _run_one(
         tmp_path,
-        Case(["inventory"], {"coredns": [COREDNS]}),
-        args=("--tags", "coredns", "--check"),
+        Case(["inventory"], {"longhorn-backup": [R2_TARGET]}),
+        args=("--tags", "longhorn_r2", "--check"),
     )
-    _failed_naming(outcome, "Run the CoreDNS image k3s bundles")
+    _failed_naming(outcome, "Apply the R2 backup target")
     assert outcome.calls == 1
 
 
@@ -362,19 +341,19 @@ def test_a_host_only_tag_reaches_no_instance_with_the_api_down(tmp_path, tag):
     assert outcome.calls == 0
 
 
-def test_tags_coredns_runs_the_coredns_instance(coredns):
-    _failed_naming(coredns["owned"], "Run the CoreDNS image k3s bundles", COREDNS)
-    assert coredns["owned"].calls == 1, "only the coredns instance is selected"
+def test_tags_longhorn_r2_runs_the_r2_instance(r2):
+    _failed_naming(r2["owned"], "Apply the R2 backup target", R2_TARGET)
+    assert r2["owned"].calls == 1, "only the r2 instance is selected"
 
 
-def test_skip_tags_kubeconfig_still_runs_the_coredns_instance(tmp_path):
+def test_skip_tags_kubeconfig_still_runs_the_r2_instance(tmp_path):
     # fact: ansible/roles/setup/k3s/CLAUDE.md#Notable
     # Bring-up step 1. One guard tagged with the union of the writers' tags would be skipped
-    # here while the coredns writers still ran. H1.3 moved the check here from the metallb
+    # here while the r2 writers still ran. H1.4 moved the check here from the coredns
     # instance, which went with its writers.
     outcome = _run_one(
         tmp_path,
-        Case(["inventory"], {"coredns": [COREDNS]}),
+        Case(["inventory"], {"longhorn-backup": [R2_TARGET]}),
         args=("--skip-tags", "kubeconfig"),
     )
-    _failed_naming(outcome, "Run the CoreDNS image k3s bundles", COREDNS)
+    _failed_naming(outcome, "Apply the R2 backup target", R2_TARGET)

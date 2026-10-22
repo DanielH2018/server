@@ -173,17 +173,17 @@
 
 # THE GATE. `systemctl start` returning is not evidence that DNS works — CoreDNS exits
 # non-zero on a bad Corefile, but a forward list pointing somewhere unreachable starts
-# cleanly and answers nothing. Prove it by behaviour, the same way tasks/coredns.yml proves
-# the cluster forward, and prove it BEFORE resolv.conf depends on it.
+# cleanly and answers nothing. Prove it by behaviour, and prove it BEFORE resolv.conf depends on
+# it.
 - name: Prove the host forwarder answers before pointing the node at it
   tags: [node-dns]
   ansible.builtin.command:
     cmd: dig +short +time=2 +tries=1 @127.0.0.1 {{ k3s_host_dns_probe_name }}
   changed_when: false
   register: k3s_host_coredns_probe
-  # Same shape as the cluster probe in tasks/coredns.yml: `until` owns the verdict, so a dig
-  # that exits non-zero is retried rather than failing on its first attempt — and the task
-  # still fails when the condition is never met, which is the outcome worth reporting.
+  # `until` owns the verdict, so a dig that exits non-zero is retried rather than failing on
+  # its first attempt — and the task still fails when the condition is never met, which is the
+  # outcome worth reporting.
   failed_when: false
   until: k3s_host_coredns_probe.stdout | trim | length > 0
   retries: "{{ k3s_coredns_probe_retries | int }}"

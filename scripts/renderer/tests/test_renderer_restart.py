@@ -352,6 +352,11 @@ OUTSIDE_ROLE_EXEMPT: dict[tuple[str, str, str], str] = {
         "ConfigMap the API server publishes in every namespace. No role renders it, and its "
         "ca.crt changes only when the cluster CA is rotated, which is a rebuild."
     ),
+    ("coredns", "ConfigMap", "coredns-custom"): (
+        "H1.4. An optional volume, k3s's documented seam for `*.override` and `*.server` "
+        "Corefile imports. No role renders it and none exists live (measured 2026-10-22). The "
+        "`reload` plugin re-reads imported files, so a change to it needs no pod roll."
+    ),
 }
 
 

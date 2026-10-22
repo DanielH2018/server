@@ -26,5 +26,5 @@
   ansible.builtin.import_tasks: node.yml
 - name: Pin the node's LAN address
   ansible.builtin.import_tasks: static-address.yml
-- name: Point cluster DNS at Pi-hole
+- name: Release k3s's bundled CoreDNS addon to Flux
   ansible.builtin.import_tasks: coredns.yml
