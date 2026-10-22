@@ -11,7 +11,7 @@
 # Thin on purpose. Everything that decides up-or-down is in longhorn_backup_health.py + its pure
 # core (longhorn_backup_health_logic.py), which are plain files with unit tests; this exists only
 # because the Kuma push token has to be templated in, and a secret-carrying file should hold as
-# little logic as possible. Same shape as configarr-health.sh and telemetry-health.sh.
+# little logic as possible. Same shape as fake-remux-health.sh and telemetry-health.sh.
 #
 # Until this existed at all, the cluster's backup path had no monitor: `grep -ic longhorn` over
 # monitor-bridge's check.py returned 0. On 2026-08-02 the Longhorn backup target went unavailable
