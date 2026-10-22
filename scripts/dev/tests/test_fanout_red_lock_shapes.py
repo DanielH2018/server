@@ -11,7 +11,7 @@ import importlib
 
 import pytest
 
-from fanout_lib.review.red_lock import forbidden_change
+from fanout_lib.review.red_lock import forbidden_change, forbidden_conftest_change
 
 # #5229: the red commits added `RENDERER_ONLY` and a test that reads it, and the fix appended
 # a second constant built from it for its own test.
@@ -112,3 +112,25 @@ def test_an_appended_constant_reading_a_name_no_constant_binds_is_flagged(
     """An imported object's `__add__` would run the fix's code at import (#5229)."""
     problem = _renderer_change(f"{RENDERER_RED}\n\n{appended}\n")
     assert problem.endswith(f"reads `{name}`, which no constant above it binds")
+
+
+# An older helper the red test calls reads `SEPS`, whose value reads an import.
+SEP_BASE = (
+    BASE + "\n\nfrom os import sep\n\nSEPS = [sep]\n\n\ndef _seps():\n    return SEPS\n"
+)
+SEP_RED = SEP_BASE + "\n\ndef test_seps():\n    assert _seps()\n"
+
+
+def test_an_older_constant_reading_an_import_stays_locked():
+    """Its shape is a constant's, but reading `sep` is not data, so a fix may not rewrite it."""
+    edited = SEP_RED.replace("SEPS = [sep]", "SEPS = []")
+    problem = forbidden_change(SEP_BASE, SEP_RED, edited, {"test_seps"})
+    assert problem.startswith("changes or removes `assign at line")
+
+
+def test_deleting_a_conftest_constant_that_reads_an_import_is_flagged():
+    conftest = "from os import sep\n\nSEPS = [sep]\n"
+    problem = forbidden_conftest_change(conftest, "from os import sep\n", [RED], [])
+    assert problem == (
+        "deletes `assign at line 3`, which reads `sep`, which no constant above it binds"
+    )

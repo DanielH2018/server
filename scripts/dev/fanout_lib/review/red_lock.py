@@ -1,5 +1,7 @@
 """What a fix may change in a red test file, and what it may delete from a conftest.
 
+A patch registry is `red_registry`'s (#4875).
+
 WHAT A FIX MAY CHANGE (#4214, #4517). `forbidden_change` says what the fix changed in a red
 test file that it may not. The green gate used to refuse any change to a red file. In #4213 the
 fix round appended the test a reviewer had asked for, changed no red node, and the batch ended
@@ -80,10 +82,7 @@ that is in no red node's fixture closure, a helper or constant nothing kept name
 import only deleted statements used. In #4359 the red test demanded the deletion of a fixture
 nothing requested.
 
-A PATCH REGISTRY (#4875) is `red_registry`'s.
-
-WHAT IT DOES NOT SEE. A red test that reads a registry itself, whose input a changed line of a
-red file can move. Code that runs at import time inside an allowed statement: a decorator
+WHAT IT DOES NOT SEE. Code that runs at import time inside an allowed statement: a decorator
 argument, a default value, an annotation, or an import of a new module with side effects. A
 fixture a conftest requests by a name built at runtime. The green gate still runs every red
 node, and CI runs the whole suite on the pushed head.
@@ -207,12 +206,13 @@ def _locked(
     except SyntaxError:
         before = Counter()
     # What the red commits wrote, and what the file held that a fix could not append.
-    fixed = set()
+    fixed, nondata = set(), _reads_problems(red)
     for stmt in red:
         dump = ast.dump(stmt)
         if before[dump]:
             before[dump] -= 1
-            if _constant(stmt) or not _addition_problem(stmt, set()):
+            data = _constant(stmt) and id(stmt) not in nondata
+            if data or not _addition_problem(stmt, set()):
                 continue
         fixed.add(id(stmt))
     names, direct = red_names | closure, set(red_names)
@@ -277,11 +277,7 @@ def _constant_problem(stmt: ast.stmt, used: set[str], lock: _Lock) -> str:
 
 
 def _reads_problems(body: list[ast.stmt]) -> dict[int, str]:
-    """Why each constant in `body` that reads a name no constant above it binds is not data.
-
-    Keyed by `id` of the statement. A later import, function or store of the name ends its
-    being a constant's, since reading it would then run the fix's code.
-    """
+    """Why each constant in `body` reads a name no constant above it binds, by `id`."""
     data: set[str] = set()
     problems = {}
     for stmt in body:
@@ -402,8 +398,9 @@ def forbidden_conftest_change(
     named = set().union(*(_named(ast.parse(src).body) for src in red_files))
     named |= set(closure)
     requested = named | _requested(named, _fixtures(conftests))
-    kept, gone = [], []
-    for stmt in _body(ast.parse(red_src)):
+    kept, gone, red = [], [], _body(ast.parse(red_src))
+    nondata = _reads_problems(red)
+    for stmt in red:
         if len(kept) < len(head) and ast.dump(stmt) == ast.dump(head[len(kept)]):
             kept.append(stmt)
         else:
@@ -412,7 +409,9 @@ def forbidden_conftest_change(
         return f"adds or changes `{_label(head[len(kept)])}`"
     for stmt in gone:
         others = _named([s for s in gone if s is not stmt])
-        problem = _deletion_problem(stmt, _named(kept) | requested, others)
+        problem = nondata.get(id(stmt)) or _deletion_problem(
+            stmt, _named(kept) | requested, others
+        )
         if problem:
             return f"deletes `{_label(stmt)}`, which {problem}"
     return ""

@@ -10,6 +10,9 @@ line, comments and blank lines included, must stay, so a fix cannot add, raise o
 another module's entry. Lines compare as a multiset, because the ratchet in CI checks the order.
 Dropping a red file's own line passes here too; the ratchet refuses it while the file patches.
 
+It does not see a red test that reads a registry itself, whose input a changed line of a red
+file can move.
+
 Split from `red_lock`, which says what a fix may change in a red test file and a conftest.
 """
 
