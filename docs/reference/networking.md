@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/networking.py
-generated_at: 2026-10-04 18:25 UTC
-generated_sha: 64ee055fc
+generated_at: 2026-10-22 06:17 UTC
+generated_sha: d749af07a
 ---
 
 !!! warning "Generated file — do not edit"
@@ -15,7 +15,7 @@ generated_sha: 64ee055fc
 35 routed k8s service(s).
 
 !!! note "The domain is filled in by your browser"
-    `domain` is SOPS-sourced with no static default, and these pages are rendered by static parsing, so the generator writes `<domain>` rather than guessing. On the docs site the routes below become links, built from the domain of the URL you are reading this on — so you get LAN links on the LAN name and public links on the public one.
+    A route answers on the LAN name, the public name or both, and a static page cannot know which one you are on, so the generator writes `<domain>`. On the docs site the routes below become links, built from the domain of the URL you are reading this on — so you get LAN links on the LAN name and public links on the public one.
 
 
 6 route(s) are LAN-only, and the rest answer on both names. The absent Host rule is what keeps a LAN-only route off the internet, not DNS — the Cloudflare wildcard resolves any name.
