@@ -2,7 +2,7 @@
 
 `build_checks(env)` is the whole module. Which checks exist, in what order and with which body
 is `check_table.CHECKS`; this turns each row without `is_gate` into a `Check` carrying the token
-read from `env`. The three gate rows are `gates.py`'s, which evaluates them before any check.
+read from `env`. The four gate rows are `gates.py`'s, which evaluates them before any check.
 
 It takes the environment as a PARAMETER rather than reading `os.environ` at import, which is
 what lets `main(argv, env={...})` decide which monitor a result is pushed to.

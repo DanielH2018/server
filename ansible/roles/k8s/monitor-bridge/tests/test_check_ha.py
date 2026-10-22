@@ -126,7 +126,7 @@ def test_ha_ban_no_events_is_ok():
 
 def test_ha_ban_none_series_is_ok():
     # None and 0 are the same healthy answer: HA logs nothing when it bans nobody, so an empty
-    # vector is what a healthy cluster looks like — unlike a ruler's absent_over_time, where silence
+    # vector is what a healthy cluster looks like — unlike loki_ingestion_fresh, where silence
     # IS the fault.
     ok, _ = checks.service.ha_ban_verdict(None, "1h")
     assert ok
@@ -156,8 +156,8 @@ def test_ha_ban_skips_the_deploy_grace(cfg, state):
 
 
 def test_ha_ban_arm_fails_open_when_loki_errors(cfg):
-    # A Loki outage must not page the HA monitor. ha_heartbeat is deliberately not
-    # gated on Loki (a gate would suppress the whole check and blind the real heartbeat), so the
+    # A Loki outage must not page the HA monitor. ha_heartbeat is deliberately NOT in
+    # LOKI_DEPENDENT (that would suppress the whole check and blind the real heartbeat), so the
     # arm swallows the error and keeps the heartbeat's verdict.
 
     def boom(*_a, **_k):

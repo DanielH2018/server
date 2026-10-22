@@ -59,7 +59,7 @@ def run_once(
 ) -> None:
     """Runs one full check cycle: the reachability gates, then every enabled check.
 
-    Evaluates the Prometheus, B2 and WAN gates first, so a single
+    Evaluates the Prometheus, Loki, B2 and WAN gates first, so a single
     outage in one of them suppresses its dependent checks (pushed `up` with a skip
     message) instead of paging each of them separately. Every enabled check in `checks` is
     then evaluated (unless suppressed by a gate or an exporter outage) and its result is
@@ -78,7 +78,7 @@ def run_once(
         which is what the pod runs with, so it must be threaded to EVERY check_enabled call
         below — a filter validated in main() and not passed here would print an enabled count
         it does not honour.
-      gates: Which checks each gate suppresses, and the three gate bodies. REQUIRED, so a
+      gates: Which checks each gate suppresses, and the four gate bodies. REQUIRED, so a
         caller states the gate configuration it means: cli.main() builds the one production
         `Gates()` and passes it every cycle.
       sink: Where every gate's and every check's verdict is pushed. REQUIRED rather than
@@ -127,7 +127,19 @@ def run_once(
         except Exception as e:
             bridge.common.log("WARN: exporter-health probe failed:", e)
 
-    # B2-reachability gate (peer of the Prometheus gate): B2 caps TRANSACTIONS separately from storage
+    # Loki-reachability gate (peer of the Prometheus gate): probe Loki once so a single Loki outage
+    # is one page (Loki Reachable), not a storm across every Loki-querying check (loki_dependent).
+    loki_ok, _loki_msg = gate_lib._gate(
+        cfg,
+        src,
+        "loki_reachable",
+        gates.probe_loki,
+        sink,
+        dry_run,
+        only,
+    )
+
+    # B2-reachability gate (peer of the two above): B2 caps TRANSACTIONS separately from storage
     # bytes, and the kopia-era state-file checks this used to gate all reported their last
     # successful cron run rather than current B2 health — the 2026-08-02 transaction-cap incident.
     # Those checks are gone (backup moved to Longhorn), but b2_reachable stays: Longhorn still
@@ -164,6 +176,9 @@ def run_once(
             continue
         if not prom_ok and name in gates.prom_dependent:
             ok, msg = True, "skipped — Prometheus unreachable (see Prometheus monitor)"
+            log_skip(name, msg)
+        elif not loki_ok and name in gates.loki_dependent:
+            ok, msg = True, "skipped — Loki unreachable (see Loki Reachable monitor)"
             log_skip(name, msg)
         elif not b2_ok and name in gates.b2_dependent:
             ok, msg = True, "skipped — B2 unreachable (see B2 Reachable monitor)"

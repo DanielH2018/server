@@ -350,7 +350,7 @@ def ha_heartbeat_fresh(
 def ha_ban_verdict(banned_count: float | None, window: str) -> tuple[bool, str]:
     """Decide the ip_ban arm from the "Banned IP" line count over `window` (None = no series).
 
-    None and 0 are the SAME healthy answer here, unlike a ruler's absent_over_time,
+    None and 0 are the SAME healthy answer here, unlike verdicts.logs.loki_ingestion_fresh,
     where a silent stream is itself the fault: HA logs nothing when it bans nobody, so an empty
     vector is what a healthy cluster looks like.
     """

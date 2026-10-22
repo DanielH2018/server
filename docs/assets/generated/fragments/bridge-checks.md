@@ -27,8 +27,10 @@
 | Pi Pressure | `pi_pressure` | `prometheus` |  | Raspberry Pi |  |
 | Home Assistant Automations | `ha_heartbeat` | none |  | Services |  |
 | k3s Speedtest | `speedtest` | `startup_grace` |  | Services |  |
+| Loki Log Ingestion | `loki_ingestion` | `loki_reachable` |  | Observability |  |
 | Log Shipper Dropped Entries | `shipper_dropped` | `prometheus` |  | Observability |  |
-| Swallowed Push Verdicts | `swallowed_verdicts` | `startup_grace` |  | Observability |  |
+| Swallowed Push Verdicts | `swallowed_verdicts` | `loki_reachable` |  | Observability |  |
+| Kuma Notification Delivery | `kuma_notify_failures` | `loki_reachable` | yes | Observability |  |
 | Discord Delivery | `discord` | `wan_reachable` | yes | Observability |  |
 | R2 Free Tier Headroom | `r2_usage` | `wan_reachable` | yes | Backups & Storage | `longhorn-backup-tiering` |
 | Cloudflare IP Drift | `cloudflare_ips_drift` | `wan_reachable` |  | Hosts & Power |  |
@@ -41,5 +43,6 @@
 | Longhorn Snapshot Headroom | `snapshot_headroom` | `prometheus` | yes | Backups & Storage | `longhorn-disaster-recovery` |
 | Kubelet CSI Mount Read-Only | `kubelet_plugin_readonly` | `prometheus` | yes | Backups & Storage | `longhorn-disaster-recovery` |
 | Prometheus Reachable | `prometheus` | is a gate |  | Observability |  |
+| Loki Reachable | `loki_reachable` | is a gate |  | Observability |  |
 | B2 Reachable | `b2_reachable` | is a gate | yes | Backups & Storage | `longhorn-backup-tiering` |
 | WAN Reachable | `wan_reachable` | is a gate | yes | Observability |  |

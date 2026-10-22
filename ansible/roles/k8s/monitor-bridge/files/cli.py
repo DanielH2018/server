@@ -125,7 +125,7 @@ def main(
     # DECIDED: `env` reaches `load_config` and `registry.build_checks`, and nothing else.
     # Slice 17b moved the registry out of `check.py` precisely so `main(env={...})` can decide
     # which monitor a result is pushed to, which it could not while the KUMA_PUSH_* tokens were
-    # read at import into a module-level list. The THREE reachability-gate tokens are the
+    # read at import into a module-level list. The FOUR reachability-gate tokens are the
     # remaining exception: `gates._gate` still reads them from `os.environ` at push time, so
     # `env` does not redirect a gate's push. Each is `bridge.types.push_env(<gate name>)`, derived
     # rather than stored, so there is no module global left to remove — moving them would be a

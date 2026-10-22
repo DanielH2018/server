@@ -31,12 +31,9 @@ The 3.5-day qbittorrent outage (#1838, 2026-09-13 to 09-16) measured what it was
 bridge push at 300s plus one per 1200s heartbeat window — and resetting past 360, so Discord got
 the down transition and then one resend a day. One of those resends was lost outright: Kuma logged
 `Cannot send notification to Homelab Alerts … HTTP 429 Too Many Requests` at 2026-09-15 14:50, and
-it does not retry a failed send. Since #1891 monitor-bridge read that line out of Loki — and
-since #1895 the ERROR-level reason line Kuma writes right after it, so the tile named the status —
-and paged the **Kuma Notification Delivery** tile, which notified email as well as Discord. The
-`loki-homelab` rule `KumaNotificationDropped` replaces that tile. M5's PR 4a deletes the tile, and
-PR 4b makes the rule page through Alertmanager's `critical` receiver, which sends to email as well
-as Discord. A
+it does not retry a failed send. Since #1891 monitor-bridge reads that line out of Loki — and
+since #1895 the ERROR-level reason line Kuma writes right after it, so the tile names the status —
+and pages the **Kuma Notification Delivery** tile, which notifies email as well as Discord. A
 faster resend raises the POST volume a long multi-tile outage sends Discord, so the drop it makes
 likelier is reported rather than lost.
 
@@ -205,8 +202,8 @@ Four things the arrangement depends on:
 - **`webhookAdditionalHeaders` carries `Content-Type: application/json`.** axios posts a string body
   as `application/x-www-form-urlencoded`, and Discord rejects that with a 400.
 - **The AutoKuma id stays `discord`** so no monitor's `notification_name_list` moves, and the name
-  stays `Homelab Alerts`, which Kuma prints in its `Cannot send notification to <name>` line.
-  The `KumaNotificationDropped` rule filters on that text and names no notification.
+  stays `Homelab Alerts` because monitor-bridge's Kuma Notification Delivery check reads it out of
+  Kuma's `Cannot send notification to <name>` line.
 - **A Liquid error drops every alert at once.** A parse error throws inside `send()`, Kuma logs
   `Cannot send notification` and does not retry. The Test button on its own proves nothing: it
   renders with `heartbeatJSON` null, and Liquid renders a missing key as empty text.
@@ -388,4 +385,4 @@ The move followed a shadow soak in which the probes caught every outage the tile
 - `ansible/roles/k8s/uptime-kuma/CLAUDE.md` — the rules, the guards that hold them, and the
   procedure for adding a monitor.
 - [monitor-bridge checks](monitor-bridge-checks.md) — the producer side of most push tiles,
-  including Swallowed Push Verdicts.
+  including Swallowed Push Verdicts and Kuma Notification Delivery.

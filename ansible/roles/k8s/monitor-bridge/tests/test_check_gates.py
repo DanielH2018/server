@@ -1,6 +1,6 @@
 """The run-loop gates: what suppresses a check rather than what the check decides.
 
-A monitor that cannot reach Prometheus, B2 or the WAN must report "cannot tell", never "down" —
+A monitor that cannot reach Prometheus, Loki or B2 must report "cannot tell", never "down" —
 otherwise one unreachable dependency fires every monitor that reads it at once.
 
 These are the tests that drive `run_once()` end to end with fake sources and sink, so they are
@@ -17,11 +17,26 @@ import pytest
 import bridge.parsing
 import check
 import checks.cluster
-from _check_gate_helpers import wire_run_once
+import checks.logs
+from _check_gate_helpers import wire_run_once, wire_run_once_reachability
 from _fake_sources import FakeSink, FakeSources
 from bridge.streaks import State
 from bridge.types import Check
 from gates import Gates
+
+
+def test_loki_reachable_ok(cfg):
+    src = FakeSources(get_json=lambda url: {"status": "success", "data": ["job"]})
+    ok, msg = checks.logs.check_loki_reachable(cfg, src)
+    assert ok
+    assert "reachable" in msg.lower()
+    assert src.queries("get_json") == [cfg.LOKI_URL + "/loki/api/v1/labels"]
+
+
+def test_loki_reachable_non_success_raises(cfg):
+    src = FakeSources(get_json=lambda url: {"status": "error"})
+    with pytest.raises(RuntimeError):
+        checks.logs.check_loki_reachable(cfg, src)
 
 
 # ── Prometheus reachability gate + alert-storm suppression (L1) ──────────────
@@ -69,10 +84,52 @@ def test_run_once_runs_all_when_prometheus_up(cfg):
     assert "skipped" not in by_tok["tok_disk"][1].lower()
 
 
+# ── Loki reachability gate (peer of the Prometheus gate) ─────────────────────
+
+
+def test_run_once_suppresses_loki_dependent_when_loki_down(cfg):
+    ran, pushes = wire_run_once_reachability(
+        cfg,
+        ["recyclarr", "janitorr", "backup"],
+        loki_result=(False, "loki unreachable"),
+        loki_dependent={"recyclarr", "janitorr"},
+    )
+    # Loki-dependent checks suppressed (never run, pushed up w/ a skip msg); non-loki still runs
+    assert not ({"recyclarr", "janitorr"} & set(ran))
+    assert "backup" in ran
+    by_tok = {t: (ok, m) for t, ok, m in pushes}
+    assert by_tok["tok_recyclarr"][0] is True
+    assert "loki" in by_tok["tok_recyclarr"][1].lower()
+    # the Loki Reachable monitor itself pushed down with its message
+    assert any(ok is False and "loki unreachable" in m for _, ok, m in pushes)
+
+
+def test_run_once_unreachable_loki_exception_suppresses(cfg):
+    # the Loki probe raising (the real outage path) -> _evaluate down -> suppression
+    ran, _ = wire_run_once_reachability(
+        cfg,
+        ["recyclarr", "backup"],
+        loki_result=RuntimeError("connection refused"),
+        loki_dependent={"recyclarr"},
+    )
+    assert "recyclarr" not in ran
+    assert "backup" in ran
+
+
+def test_run_once_runs_loki_dependent_when_loki_up(cfg):
+    ran, _ = wire_run_once_reachability(
+        cfg,
+        ["recyclarr", "janitorr"],
+        loki_result=(True, "Loki reachable"),
+        loki_dependent={"recyclarr", "janitorr"},
+    )
+    assert "recyclarr" in ran and "janitorr" in ran
+
+
 def test_run_once_reads_every_gates_field(cfg):
     """The seam must not be inert: a value passed on `Gates` has to reach the loop.
 
-    Eight fields, and a field `run_once` never reads is a knob a test can turn with no effect —
+    Ten fields, and a field `run_once` never reads is a knob a test can turn with no effect —
     a stated configuration and a green assertion agreeing about nothing. Two cycles, because the
     exporter probe runs only when the Prometheus gate is UP, so one cycle cannot exercise both
     `prom_dependent` and `exporter_dependent`. Every field is set to a sentinel no production
@@ -81,6 +138,7 @@ def test_run_once_reads_every_gates_field(cfg):
     names = [
         "prom_dep",
         "exp_dep",
+        "loki_dep",
         "b2_dep",
         "wan_dep",
         "graced",
@@ -102,10 +160,12 @@ def test_run_once_reads_every_gates_field(cfg):
             gates=Gates(
                 prom_dependent=frozenset({"prom_dep"}),
                 exporter_dependent={"sentinel_job": frozenset({"exp_dep"})},
+                loki_dependent=frozenset({"loki_dep"}),
                 b2_dependent=frozenset({"b2_dep"}),
                 wan_dependent=frozenset({"wan_dep"}),
                 startup_grace=frozenset({"graced"}),
                 probe_prometheus=lambda _cfg, _src: prom_result,
+                probe_loki=lambda _cfg, _src: (False, "loki down"),
                 probe_wan=lambda _cfg, _src: (False, "wan down"),
                 probe_b2=lambda _cfg, _src: (False, "b2 down"),
             ),
@@ -117,12 +177,12 @@ def test_run_once_reads_every_gates_field(cfg):
         return seen, pushed
 
     # Cycle 1 — Prometheus UP with the sentinel exporter job down. exporter_dependent,
-    # b2_dependent, wan_dependent, startup_grace and the probes
+    # loki_dependent, b2_dependent, wan_dependent, startup_grace and three of the four probes
     # all decide here.
     state = State()
     seen, pushed = cycle((True, "prom up"), [({"job": "sentinel_job"}, 0.0)], state)
     assert seen == ["prom_dep", "graced"]
-    for name in ("exp_dep", "b2_dep", "wan_dep"):
+    for name in ("exp_dep", "loki_dep", "b2_dep", "wan_dep"):
         assert pushed["tok_%s" % name][0] is True, name
         assert "skipped" in pushed["tok_%s" % name][1], name
     # startup_grace: `graced` went down but was held `up`, and the streak landed in the `State`
@@ -172,7 +232,7 @@ def test_run_once_hands_its_sources_to_every_gate_and_check(cfg):
 
     A body that looked its sources up anywhere else would answer from the live transport while
     the test believed it had stated the answer, and a push that bypassed the sink would reach
-    the real Kuma. Three gate heartbeats and one check make four pushes.
+    the real Kuma. Four gate heartbeats and one check make five pushes.
     """
     src = FakeSources(prom_vector=lambda q: [])
     received = []
@@ -186,13 +246,15 @@ def test_run_once_hands_its_sources_to_every_gate_and_check(cfg):
         cfg,
         src,
         [Check("disk", "tok_disk", body)],
-        gates=Gates(probe_prometheus=body, probe_b2=body, probe_wan=body),
+        gates=Gates(
+            probe_prometheus=body, probe_loki=body, probe_b2=body, probe_wan=body
+        ),
         sink=sink,
     )
-    assert len(received) == 4
+    assert len(received) == 5
     assert all(got is src for got in received)
     assert src.queries("prom_vector") == ["up"]
-    assert len(sink.pushes) == 4
+    assert len(sink.pushes) == 5
     assert sink.pushes[-1] == ("tok_disk", True, "ok")
 
 

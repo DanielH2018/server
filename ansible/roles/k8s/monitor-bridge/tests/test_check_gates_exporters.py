@@ -186,6 +186,7 @@ def _wire_run_once_prom_up(cfg, up_vector, checks, prom_dependent):
         gates=Gates(
             prom_dependent=frozenset(prom_dependent),
             probe_prometheus=lambda _cfg, _src: (True, "prom ok"),
+            probe_loki=lambda _cfg, _src: (True, "loki ok"),
             probe_wan=lambda _cfg, _src: (True, "wan ok"),
         ),
         sink=sink,
@@ -322,6 +323,7 @@ def test_run_once_up_probe_failure_does_not_suppress(cfg):
         gates=Gates(
             prom_dependent=frozenset({"disk"}),
             probe_prometheus=lambda _cfg, _src: (True, "prom ok"),
+            probe_loki=lambda _cfg, _src: (True, "loki ok"),
             probe_wan=lambda _cfg, _src: (True, "wan ok"),
         ),
         sink=sink,
@@ -390,6 +392,7 @@ def _run_host_packages_with_node_up(cfg, node_up):
         gates=Gates(
             prom_dependent=frozenset({"host_packages"}),
             probe_prometheus=lambda _cfg, _src: (True, "prom ok"),
+            probe_loki=lambda _cfg, _src: (True, "loki ok"),
             probe_wan=lambda _cfg, _src: (True, "wan ok"),
         ),
         sink=sink,
