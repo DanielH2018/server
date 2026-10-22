@@ -362,6 +362,25 @@ a merge made outside `land.sh` bypasses it, and the `NotFound` in H2's body is t
 check. The Flux labels and `kustomize-controller`'s `managedFields` entry stay on the objects.
 No skip reads them alone, so they need no removal.
 
+**A role with a CronJob loses its deploy-time gate in H2.** A `flux_cronjob_gates` entry
+credits only a flux-owned role, because only the renderer writes its gate Job. Ansible's
+counterpart was the `k8s/cronjob-gate` role, retired in #5716 when no role included it. To
+gate the CronJob under Ansible, H2 restores the role and its tests from the commit before
+the retirement, which `git log --diff-filter=D -1 --format=%H --
+ansible/roles/k8s/cronjob-gate/tasks/main.yml` names:
+
+- `ansible/roles/k8s/cronjob-gate/` and its decision tests, `test_cronjob_gate_decision.py`
+  in `ansible/tests/deploy/`;
+- the `include_role` credit in `_batch_gated_names` (`ansible/tests/deploy/_autodeploy_batch.py`)
+  and its cases in `test_k8s_autodeploy_cronjob_gate_credit.py`;
+- the role's entry in `_GATING_SHARED_ROLES` and in each shared-role list the guards report as
+  missing.
+
+H2 then adds an `include_role: k8s/cronjob-gate` task with `cronjob_gate_name` for each CronJob.
+Without it, `test_every_cronjob_only_role_is_gated_at_deploy_time` fails for a CronJob-only role,
+and an auto-deployed role fails the batch guard. The other way out is `k8s_autodeploy: false`
+with a reason, which leaves the CronJob ungated until its next scheduled firing.
+
 ## Reading Flux objects
 
 The read-only identity that plain `kubectl` uses reads every Flux kind. The vendored

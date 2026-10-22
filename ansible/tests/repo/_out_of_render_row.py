@@ -44,9 +44,6 @@ _VERIFY = "D5: the verify task's exec or pod check is converted or granted"
 # Each writing task file, with the slice whose document moves what it writes. Two owners where
 # the file's tasks split between slices.
 ALLOW = {
-    _K8S + "cronjob-gate/tasks/main.yml": (
-        "D5: the gate Job becomes a Job in `<tag>-verify` copied from the jobTemplate"
-    ),
     _K8S + "crowdsec/tasks/verify.yml": (
         "D5: the ban-and-lift check becomes the `crowdsec-verify` Job"
     ),
@@ -95,11 +92,12 @@ OUT_OF_RENDER = Census(
     # jellyfin deleted their verify and cap tasks; 27 once headlamp's flip deleted its
     # observability RBAC apply and its isolation probe; 21 once pihole's flip deleted its
     # roll, apply and gravity tasks; 15 once registry's flip deleted its self-test and netpol
-    # probe tasks; 12 once netpol-baseline's flip deleted its probe and apply tasks.
-    min_matches=12,
+    # probe tasks; 12 once netpol-baseline's flip deleted its probe and apply tasks; 10 once
+    # the cronjob-gate role, with its delete and create tasks, was retired (#5716).
+    min_matches=10,
     must_find=frozenset(
         {
-            _K8S + "cronjob-gate/tasks/main.yml",
+            _K8S + "image-builder/tasks/main.yml",
         }
     ),
     allow=ALLOW,

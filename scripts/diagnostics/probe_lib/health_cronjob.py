@@ -21,8 +21,8 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
 from diagnostics.probe_lib.health_rollout import seconds_since
 
-# RBAC decides which of two paths this gate can take: trigger a fresh run itself, the way
-# `k8s/cronjob-gate` does at deploy time, or fall back to reading the most recent existing run.
+# RBAC decides which of two paths this gate can take: trigger a fresh run itself, the way the
+# retired `k8s/cronjob-gate` role did at deploy time, or fall back to reading the most recent existing run.
 # probe.py runs as `homelab-readonly` (see `roles/k8s/cluster-base/templates/readonly-rbac.yaml.j2`),
 # bound to the built-in `view` ClusterRole plus one additive ClusterRole, neither granting any
 # write verb. Verified live, running as that identity:
@@ -33,9 +33,9 @@ from diagnostics.probe_lib.health_rollout import seconds_since
 #   k3s kubectl auth can-i list cronjobs -n homelab -> yes
 # So the READ-ONLY FALLBACK IS THE ONLY PATH LIVE HERE: this module never creates a Job, only
 # reads the CronJob and its existing Jobs. That is the whole reason `format_cronjob_health`
-# has a schedule-fallback branch at all — the trigger-a-run half `k8s/cronjob-gate` uses is not
-# available to this identity, ever, by design (the readonly SA is a read path, deliberately,
-# and `k8s/cronjob-gate` runs under Ansible's escalated connection instead).
+# has a schedule-fallback branch at all — the trigger-a-run half is not
+# available to this identity, ever, by design (the readonly SA is a read path, deliberately).
+# The gate run itself is a Job Flux applies in `<tag>-verify`.
 
 
 # A Flux-owned role's gate Job (#5953). Its `<role>-verify` Kustomization applies it, so it has
@@ -74,9 +74,8 @@ def latest_owned_job(jobs_doc, cronjob_name):
 
     Three ways a Job can exist for a CronJob, and this covers all three:
       - the schedule firing it;
-      - `k8s/cronjob-gate` running `kubectl create job --from=cronjob/<name>` at deploy time,
-        which sets the same controller `ownerReferences` entry a firing does (verified live,
-        see `roles/k8s/cronjob-gate/CLAUDE.md`, "Why a CronJob needs this at all");
+      - a run triggered by hand from the CronJob's template, which sets the same controller
+        `ownerReferences` entry a firing does (verified live 2026-08-21);
       - a Flux-owned role's `<role>-verify` Kustomization applying its gate Job, which carries
         no `ownerReferences` (`_is_flux_gate_job`).
     """
@@ -123,7 +122,7 @@ _WEEKLY_SCHEDULE = re.compile(r"^\s*\d+\s+\d+\s+\*\s+\*\s+[0-6]\s*$")
 # schedule-fallback path (below) calls it overdue rather than merely "hasn't fired again yet".
 # 2x rather than 1x: a run that fires a few minutes late every so often is normal cluster jitter,
 # not a stalled CronJob, and this path is only reached when release_stamp.yml also says the
-# deploy-time k8s/cronjob-gate run either never happened or predates what it should be proving.
+# latest owned run predates the deploy it should be proving.
 CRONJOB_STALE_MULTIPLIER = 2
 
 
@@ -143,15 +142,14 @@ def format_cronjob_health(name, cronjob, latest_job, pods, deploy_applied_at, no
 
     The CronJob analog of format_k8s_health: a Deployment role is gated on `rollout status`
     plus a restart check, and a CronJob has no rollout, so this reads the CronJob's most
-    recent owned Job instead — the same Job `k8s/cronjob-gate` creates at deploy time
-    (`roles/k8s/cronjob-gate/CLAUDE.md`) or a Flux role's `-verify` Kustomization applies, or
-    the next scheduled firing if that hasn't landed.
+    recent Job run for it instead: the gate Job a Flux role's `-verify` Kustomization applies,
+    or the next scheduled firing if that hasn't landed.
 
     Two paths, chosen by comparing `latest_job`'s creation time against `deploy_applied_at`
     (`release_stamp.yml`'s `applied_at` for this service, or None when unreadable):
 
-      - `latest_job` is newer than the deploy (the normal case: `k8s/cronjob-gate` runs one at
-        every real deploy) — gated directly on IT: it must have succeeded, and no container in
+      - `latest_job` is newer than the deploy (a scheduled firing or a hand-created run since the
+        deploy) — gated directly on IT: it must have succeeded, and no container in
         its pod may have restarted.
       - `latest_job` predates the deploy, or `deploy_applied_at` is unreadable — the gate this
         role's own deploy should have run either did not run or has not been read yet. Falls
@@ -160,9 +158,9 @@ def format_cronjob_health(name, cronjob, latest_job, pods, deploy_applied_at, no
         cannot size an interval for (anything but plain daily/weekly) fails closed rather than
         guess.
 
-    Unlike `k8s/cronjob-gate` itself, this does not distinguish "the image never started" from
-    "the application failed" — cronjob-gate is lenient on the latter because it runs on every
-    deploy, including ones where the failure is a known-transient dependency; this is a general
+    This does not distinguish "the image never started" from "the application failed". The
+    retired `k8s/cronjob-gate` role was lenient on the latter because it ran on every deploy,
+    including ones where the failure is a known-transient dependency; this is a general
     health read with no such context, so it is a plain pass/fail, the same as
     `format_k8s_health`.
     """

@@ -211,8 +211,8 @@ def expand_shared_tags(
 # DECIDED: every caller counts, including one whose deploy writes no release record (#3057).
 # Until #3057 the deployer's caller set kept only tags whose deploy also ran `manifests`,
 # because a caller with no record could never discharge a line and would keep it forever. No
-# declared entry has that shape — `cronjob-gate`, `volume-snapshot` and `volume-revert`, the
-# three roles that never include `k8s/manifests`, are all shared — so the filter dropped
+# declared entry has that shape — `volume-snapshot` and `volume-revert`, the
+# two roles that never include `k8s/manifests`, are both shared — so the filter dropped
 # nothing and cost a second walk. Should one appear, its shared roles' lines stay until a hand
 # clears them, which names the gap rather than discharging past a caller nothing proved.
 # `grep -rL k8s/manifests ansible/roles/k8s/*/tasks/main.yml` against the declared entries

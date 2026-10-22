@@ -74,8 +74,8 @@ def test_latest_owned_job_ignores_a_different_cronjobs_job():
 
 def test_latest_owned_job_ignores_a_non_controller_owner_reference():
     """A Job merely referencing the CronJob without `controller: true` is not one it created --
-    `kubectl create job --from=cronjob` always sets `controller: true` (verified live, see
-    roles/k8s/cronjob-gate/CLAUDE.md)."""
+    `kubectl create job --from=cronjob` always sets `controller: true` (verified live
+    2026-08-21)."""
     jobs = {
         "items": [
             {
@@ -197,8 +197,8 @@ def test_cronjob_health_restart_in_the_jobs_pod_fails():
 
 def test_cronjob_health_stale_but_within_schedule_passes():
     """No run since the deploy, but the previous run succeeded recently against a daily
-    schedule -- the fallback this gate takes when the deploy-time k8s/cronjob-gate run hasn't
-    landed yet, or hasn't been read yet."""
+    schedule -- the fallback this gate takes when no owned run has landed since the deploy,
+    or none has been read yet."""
     job = _job_doc("configarr-29123450", "2026-08-16T04:30:00Z", succeeded=1)
     text, code = health_cronjob.format_cronjob_health(
         "homelab/configarr",

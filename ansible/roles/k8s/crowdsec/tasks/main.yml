@@ -2,8 +2,8 @@
 # Flux owns crowdsec (D5, its own window), so no Ansible run reaches this file. Every task
 # below has a Flux successor: the `crowdsec-home-ips` gate run is a `flux_cronjob_gates` entry
 # in defaults/main.yml, and the ban-and-lift gate is the `crowdsec-verify` Job in
-# templates/verify/. A follow-up PR deletes the wait, the gate include, `verify.yml` and the
-# tests that read them, because the deletions alone pass the 200 lines D5 allows a flip PR.
+# templates/verify/. The gate include went with the k8s/cronjob-gate role (#5716). A follow-up
+# PR deletes the wait, `verify.yml` and the tests that read them, because the deletions alone pass the 200 lines D5 allows a flip PR.
 #
 # The agent machines and the two operator allowlists are registered by the lapi-register
 # initContainer (templates/deployment.yaml.j2) before the LAPI serves, not by a task here. The
@@ -39,9 +39,8 @@
   # deliberately does NOT wait — it queues the rollout for k8s/manifests/tasks/drain.yml at the end of the
   # batch (see that role's header for the 1386s-to-max() rationale). Most roles tolerate that,
   # because nothing else in them touches the workload they just rolled. This role does: the
-  # crowdsec-home-ips gate run below writes the ConfigMap the NEW pod's sidecar reads, and the
   # b1-gate in verify.yml `exec`s into deploy/crowdsec to reach the LAPI. The batch drain runs
-  # long after both. ansible/tests/deploy/test_inline_rollout_gates.py pins both halves.
+  # long after it. ansible/tests/deploy/test_inline_rollout_gates.py pins both halves.
   #
   # Without this gate a manifest change makes the b1-gate exec into the pod it just restarted.
   #
@@ -54,16 +53,6 @@
       k3s kubectl -n {{ k8s_namespace }} rollout status deploy/crowdsec --timeout=300s
   become: true
   changed_when: false
-
-# After the rollout wait, so the run's lookup lands in the ConfigMap the sidecar of the new pod
-# reads. An extra run looks the same addresses up and writes them again. The CronJob is on the
-# host network and needs no fence, so the gate run's patch meets no NetworkPolicy.
-- name: Gate the crowdsec-home-ips deploy on a one-off run
-  tags: [deploy]
-  ansible.builtin.include_role:
-    name: k8s/cronjob-gate
-  vars:
-    cronjob_gate_name: crowdsec-home-ips
 
 - name: Enforcement gate (opt-in via --tags b1-gate)
   # NOT UNDER --check. The gate proves enforcement by mutating real state — it bans a real

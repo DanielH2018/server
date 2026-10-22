@@ -438,5 +438,5 @@ because the one call site that exists already keeps this role from starting unde
 
 This role is reached as a dependency rather than named on the command line, so a tag-keyed
 refusal could never have covered it — which is why it guards itself. `volume-claim`,
-`image-builder`, `cronjob-gate` and `volume-revert` are all in the same position. The `k8s_dry_run_unsupported`
+`image-builder` and `volume-revert` are all in the same position. The `k8s_dry_run_unsupported`
 list that once held the alternative was deleted empty in #2876.

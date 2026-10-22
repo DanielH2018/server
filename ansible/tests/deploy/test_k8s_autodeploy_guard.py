@@ -31,18 +31,15 @@ gate:
 
       - a role-local `wait --for=condition=complete job/<name>`, for a Job the role applies
         itself. Every name the wait lists is credited;
-      - an `include_role: k8s/cronjob-gate` with `cronjob_gate_name: <cronjob>`, for a CronJob.
-        A CronJob runs on its schedule, so nothing executes at deploy time and no `job/<name>`
-        wait can be written for it at all; the shared role creates a one-off Job from the
-        CronJob and blocks on it. The CronJob named there is credited, because that is the
-        `metadata.name` the caller's own template renders.
+      - a `flux_cronjob_gates` entry, for a CronJob of a flux-owned role. A CronJob runs on
+        its schedule, so nothing executes at deploy time and no `job/<name>` wait can be
+        written for it at all; the renderer copies the CronJob into a gate Job in
+        `<tag>-verify` and Flux blocks on it.
 
     Delegation to `k8s/image-builder` is the third shape and is NOT credited: the Job lives in
     image-builder's templates, not the caller's, so a role that only delegates renders zero
     batch templates and passes this guard vacuously on an empty loop. That is a known limit,
-    not a hole a delegation marker was ever able to close. `k8s/cronjob-gate` differs precisely
-    because the caller does render the workload — the CronJob is the caller's, only the gating
-    Job is the shared role's.
+    not a hole a delegation marker was ever able to close.
 
 All four are fine for a hand-deployed role — an operator is watching. None is fine for an
 auto-deployed one, so a role's own k8s_autodeploy declaration must cover them. Asserting it

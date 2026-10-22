@@ -7,7 +7,7 @@ start until the complete-wait has burned the full `image_builder_timeout`, so a 
 reaches BackoffLimitExceeded in seconds still blocks the deploy for the whole timeout.
 
 The role uses an `until:` poll naming both condition types instead, the shape
-k8s/cronjob-gate already uses. These tests evaluate that `until` through Ansible's own templar against the
+the retired k8s/cronjob-gate used. These tests evaluate that `until` through Ansible's own templar against the
 stdout each Job state produces, rather than asserting its text — a reworded expression that
 still stops on `Failed` must pass, and a rewritten one that does not must fail.
 

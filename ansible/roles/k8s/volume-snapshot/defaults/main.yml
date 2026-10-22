@@ -30,7 +30,7 @@ volume_snapshot_poll_interval: 2
 # This role deploys no workload of its own: it is a pre-apply step other roles include, it
 # renders no manifest for `rollout status` to gate, and it pins no `_image:` var for Renovate
 # to bump. Declared rather than added to the filter plugin's SHARED_ROLES, because it carries a
-# defaults/main.yml — the same choice cronjob-gate and image-builder make for the same reason.
+# defaults/main.yml — the same choice image-builder makes for the same reason.
 k8s_autodeploy: false  # noqa var-naming[no-role-prefix]
 k8s_autodeploy_reason: "deploys no workload of its own — a pre-apply snapshot step other roles include; it renders no manifest and pins no image for Renovate to bump"  # noqa var-naming[no-role-prefix]
 

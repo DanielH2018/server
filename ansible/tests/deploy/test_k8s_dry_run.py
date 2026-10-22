@@ -230,11 +230,10 @@ def _unguarded_mutations(role: Path) -> list[str]:
 
     The guard has to sit ON the mutating task (or on the guarded include that pulled its whole
     file in), not merely somewhere in the role. A raw-text search of the file
-    (`_GUARD_FACT.search(task_file.read_text())`) would match cronjob-gate's COMMENTS alone:
-    deleting `when: not (k8s_no_mutate | bool)` from its `kubectl create job` would leave this
-    file green while `./scripts/deploy.sh --tags configarr --dry-run` fires a real gate run and
-    reconciles the live *arr stack. configarr relies on that guard instead of being refused
-    outright, so this is the check that reliance rests on.
+    (`_GUARD_FACT.search(task_file.read_text())`) would match a role's COMMENTS alone:
+    deleting `when: not (k8s_no_mutate | bool)` from one mutating task would leave this file
+    green while a `--dry-run` fires that write for real. A role relies on that guard instead of
+    being refused outright, so this is the check that reliance rests on.
 
     Fail-closed in two directions. A trailing comment is stripped from the guard search, so a
     `# k8s_no_mutate` in prose credits nothing. And the rule is per-task: a role that guarded a
@@ -289,7 +288,7 @@ def test_every_role_that_mutates_outside_manifests_guards_itself() -> None:
     # Non-vacuity: the census must keep finding the roles this rule exists for.
     assert {r.name for r in scanned} >= {
         "image-builder",
-        "cronjob-gate",
+        "volume-snapshot",
     }, "the role census stopped finding the roles that mutate outside manifests"
     unguarded = sorted(
         role.name

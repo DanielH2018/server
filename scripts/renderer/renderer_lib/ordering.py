@@ -73,8 +73,7 @@ TAG_KIND_SUFFIXES = (
 PREPULL_TIMEOUT = "flux_prepull_timeout"
 _DURATION = re.compile(r"(?:(\d+)h)?(?:(\d+)m)?(?:(\d+)s)?")
 # How far a `<tag>-verify` or `<tag>-precheck` timeout sits above its Jobs' longest `activeDeadlineSeconds`, so a
-# hung Job fails on its own deadline before Flux reports a bare timeout. `cronjob_gate_timeout`
-# sits the same 60 seconds above pi-peer-backup's 600-second deadline.
+# hung Job fails on its own deadline before Flux reports a bare timeout.
 VERIFY_DEADLINE_MARGIN_S = 60
 # A role's verify and post-apply mutation Jobs, with whatever they need beside them, are its
 # `templates/verify/*.yaml.j2`. They render into `cluster/<tag>-verify/` (D5.1a1, D5.1a3).

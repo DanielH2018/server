@@ -26,9 +26,8 @@ def test_a_poll_naming_only_complete_is_not_a_completion_gate(widget_role) -> No
 
     A poll that waits only for `Complete` is `kubectl wait --for=condition=complete` wearing
     a different shape: with `backoffLimit: 0` a failed run settles in seconds and the poll
-    then burns its whole retry budget before reporting anything. Accepting it would let
-    cronjob-gate's poll be halved while `_GATING_SHARED_ROLES` stayed green — and
-    `_batch_gated_names` credits every caller of that role.
+    then burns its whole retry budget before reporting anything. Accepting it would let a
+    gating role's poll be halved while `_GATING_SHARED_ROLES` stayed green.
     """
     assert _has_completion_gate(widget_role(_POLL_BOTH_CONDITIONS))
     assert not _has_completion_gate(
@@ -133,8 +132,8 @@ def test_a_dead_wait_is_not_a_completion_gate(widget_role) -> None:
 def test_failure_escalation_needs_a_fail_task_that_runs(widget_role) -> None:
     """A `"ansible.builtin.fail" in text` check credits a comment and a dead task.
 
-    This is the only thing standing behind `_batch_gated_names` crediting every
-    `k8s/cronjob-gate` caller, so a fail-open here reaches every promoted caller.
+    A fail-open here lets a gating role's completion gate report a failed run and still
+    pass the deploy.
     """
     live = widget_role(
         "- name: Fail on a bad image\n  ansible.builtin.fail:\n    msg: bad image\n",
