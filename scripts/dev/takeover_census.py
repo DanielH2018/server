@@ -43,7 +43,8 @@ Secret data.
 
 Exit codes: 0 the census printed; 1 an input is unreadable, the two inputs share no object, no
 shared dry-run object carries a `kustomize-controller` Apply entry, or a cleaned manager owns a
-live field of a declares-nothing object (printed after the full census); 64 a usage error. An empty match
+live field of a declares-nothing object other than the expected `last-applied-configuration`
+(printed after the full census); 64 a usage error. An empty match
 proves nothing, so it never passes.
 """
 
@@ -145,7 +146,8 @@ def declares_nothing(obj_key, live, dryrun):
 
     It reads `removed` from `compare` with nothing declared, so a path another manager co-owns
     and a presumed server default are not counted as deleted, exactly as for any other object.
-    Any path left in `removed` fails the census.
+    Any path left in `removed` fails the census except `last-applied-configuration`, the
+    expected entry every client-side-applied object carries (#5933).
     """
     removed, _, defaulted = compare(live, dryrun)
     by_manager = owners(live)
@@ -169,7 +171,7 @@ def declares_nothing(obj_key, live, dryrun):
             f"  presumed server defaults, inferred and not measured ({len(defaulted)}):"
         )
         lines += [f"    {format_path(p)}" for p in sorted(defaulted, key=format_path)]
-    return lines, bool(removed)
+    return lines, any(p != LAST_APPLIED_PATH for p in removed)
 
 
 def compare(live, dryrun):
@@ -211,7 +213,8 @@ def census(live_objs, dryrun_objs):
 def report(live_objs, dryrun_objs):
     """`(text, failed)`: the census text, and whether it fails.
 
-    It fails when a cleaned manager owns a field of an object that declares nothing.
+    It fails when a cleaned manager owns a field of an object that declares nothing, other
+    than the expected last-applied annotation.
 
     Raises:
         CensusError: the lists share no object, or no shared dry-run object carries a
