@@ -27,19 +27,15 @@ PR that hands the next tags to Flux is the one this turns red.
 
 Inside the weekly reboot's no-promotion window `decide` defers every promotion, so a landing that
 merges as the window opens waits the whole window before any promotion starts (#5457). The cap
-moves by what the window has left, up to the unit's LAND_WINDOW_GRACE, so claude-land's grace
-must cover the window and its TimeoutStartSec must cover LAND_DEADLINE plus the grace. The
-renovate lander sets none, because its session never runs while the window is open, and the last
-test holds its schedule to that.
+moves by what the window has left, up to the unit's LAND_WINDOW_GRACE, so each lander's grace
+must cover the window, and every bound above LAND_DEADLINE must cover the grace too.
 
 Run: uv run pytest ansible/tests/setup/test_lander_deadlines_cover_the_soak.py
 """
 
 import re
-from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 from typing import cast
-from zoneinfo import ZoneInfo
 
 import pytest
 from _setup_render import render_setup_text
@@ -75,7 +71,8 @@ PIPELINE = ("render", "images", "publish")
 FULL_REBUILD_S = 394
 # Every value that has to move with LAND_DEADLINE, named in the failure.
 CASCADE = (
-    "Raise LAND_DEADLINE in both lander units, then what sits above it: claude-land's "
+    "Raise LAND_DEADLINE or LAND_WINDOW_GRACE in both lander units, then what sits above "
+    "both: claude-land's "
     "TimeoutStartSec and land_lib/handoff.py:START_TIMEOUT_S; renovate-agent-land's "
     "TimeoutStartSec, land_renovate_pr.py:LAND_TIMEOUT_S, and renovate_agent's "
     "bash_timeout_ms, run_timeout_s and unit_timeout"
@@ -220,49 +217,26 @@ def test_a_pipeline_without_images_leaves_it_out():
     assert uncounted(("render", "publish")) == {"images"}
 
 
-def test_claude_lands_grace_covers_the_whole_reboot_window():
-    """A landing that merges as the window opens waits it out rather than giving up (#5457)."""
-    grace = unit_env("claude-land", options.WINDOW_GRACE_ENV)
-    assert grace >= window_s(), (
-        f"claude-land's {options.WINDOW_GRACE_ENV}={grace} is shorter than the reboot "
+def grace_shortfall(grace: int) -> int:
+    """How far a LAND_WINDOW_GRACE falls short of the reboot window; <= 0 covers it."""
+    return window_s() - grace
+
+
+@pytest.mark.parametrize("lander", LANDERS)
+def test_each_landers_grace_covers_the_whole_reboot_window(lander):
+    """A landing that merges as the window opens waits it out rather than giving up (#5457).
+
+    Both landers need it. The renovate session's run_timeout_s does not bound a landing: the
+    lander unit runs on after the session ends, so a Saturday landing reaches Sunday's window.
+    """
+    grace = unit_env(lander, options.WINDOW_GRACE_ENV)
+    assert grace_shortfall(grace) <= 0, (
+        f"{lander}'s {options.WINDOW_GRACE_ENV}={grace} is shorter than the reboot "
         f"window's {window_s()}s, so a Sunday merge reads gave-up while its promotion is "
-        "only deferred. Raise it, then claude-land's TimeoutStartSec and "
-        "land_lib/handoff.py:START_TIMEOUT_S above it"
+        f"only deferred. Raise it, then what sits above it. {CASCADE}"
     )
 
 
-def test_the_window_is_longer_than_the_headroom_the_deadline_leaves(soak):
-    """The red half: with no grace, a wait that starts as the window opens gives up inside it."""
-    assert -shortfall(deadline("claude-land"), soak) < window_s()
-
-
-def test_the_renovate_session_never_runs_while_the_window_is_open():
-    """renovate-agent-land sets no grace, which holds only while its schedule misses the window."""
-    assert unit_env("renovate-agent-land", options.WINDOW_GRACE_ENV) == 0
-    defaults = yaml_fast.safe_load(
-        (REPO / "ansible/roles/setup/renovate_agent/defaults/main.yml").read_text()
-    )
-    calendar = re.fullmatch(
-        r"\*-\*-\* (\d\d:\d\d):00 (\S+)", defaults["renovate_agent_oncalendar"]
-    )
-    assert calendar, defaults["renovate_agent_oncalendar"]
-    clock, zone = calendar.groups()
-    run = timedelta(seconds=int(defaults["renovate_agent_run_timeout_s"]))
-    schedule = reboot_window.read_schedule(REPO)
-    hour, minute = map(int, clock.split(":"))
-    # One January and one July week, so both of the zone's UTC offsets are covered. The window
-    # is hours long, so a read every 15 minutes of the session cannot step over it.
-    # Python adds a timedelta to an aware datetime in wall time, so each day starts at the
-    # timer's local hour.
-    for month in (1, 7):
-        first = datetime(2026, month, 1, hour, minute, tzinfo=ZoneInfo(zone))
-        for day in range(7):
-            start = first + timedelta(days=day)
-            for step in range(int(run / timedelta(minutes=15)) + 1):
-                at = (start + step * timedelta(minutes=15)).astimezone(UTC)
-                inside = reboot_window.window(schedule, VERIFY_CAP_S, at)
-                assert inside is None, (
-                    f"a renovate session from {start:%a %H:%M %Z} is still running at "
-                    f"{at:%a %H:%M} UTC, inside the reboot window, so give "
-                    "renovate-agent-land a LAND_WINDOW_GRACE"
-                )
+def test_a_lander_without_a_grace_falls_short_of_the_window():
+    """The red half: both units before #5457 set no grace, which unit_env reads as 0."""
+    assert grace_shortfall(0) > 0

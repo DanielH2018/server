@@ -393,11 +393,11 @@ Instead it reads the cluster every 30 seconds:
   Inside the no-promotion window around the weekly reboot, `decide` defers every promotion (D5.2b2),
   so a landing that merges as the window opens waits up to 22200 seconds before any
   promotion starts. The first poll inside the window moves the cap by the window's remaining
-  length, up to the unit's `LAND_WINDOW_GRACE`. `claude-land@.service` sets the window's full
-  length, and its `TimeoutStartSec` of 15h covers `LAND_DEADLINE` plus that grace plus the
-  flock wait. `renovate-agent-land@.service` sets none, because its session starts at 06:00
-  America/Chicago and ends before the next window opens; the same test fails if the timer
-  moves into the window (#5457).
+  length, up to the unit's `LAND_WINDOW_GRACE`. Both lander units set the window's full
+  length, and every bound above `LAND_DEADLINE` covers it: claude-land's `TimeoutStartSec` of
+  15h, and the 860min the Renovate lander unit sets, with `land_renovate_pr.py`'s `LAND_TIMEOUT_S`. The
+  Renovate lander needs it too: its unit runs on after the session ends, so a landing started
+  late on a Saturday can still be waiting on Sunday's window (#5457).
 
 Two holds coexist until slice D6 retires the deployer, and `probe.py landing` prints both on
 every run, each naming its source and the tags it holds:
