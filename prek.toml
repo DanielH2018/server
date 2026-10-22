@@ -646,7 +646,8 @@ files = "(\\.py$|(^|/)CLAUDE\\.md$|^docs/facts\\.lock/|^scripts/dev/pytest_shard
 # `-shell` 1.3s, `-renovate` 3.9s, against 27.6s for the hook above in the same run. The
 # gates keep a typical commit near budget: a `.py` commit outside scripts/lib/,
 # deploy_tools/ and renderer/, outside ansible/tests/_*.py and outside the k8s roles runs
-# `-python` and `-owners` alone, about 5.5s.
+# `-python` and `-owners` alone, about 5.5s on 2026-10-17. Those `-python` figures predate
+# xdist_width (below); on 2026-10-22 at load average 3.6-3.9, `-python` took 5.9-6.3s.
 #
 # `-n0` on the one-module hooks: pyproject.toml's `-n auto` spent longer bringing up xdist
 # workers than they take, and each worker repeats the module-scoped render (checksum 3.5s

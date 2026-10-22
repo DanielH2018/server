@@ -243,44 +243,59 @@ def test_the_lander_gate_skips_a_k8s_role_doc():
 # The session ceiling `PYTEST_XDIST_AUTO_NUM_WORKERS` sets for every Claude session.
 SESSION_CEILING = 4
 
-# Ratchet hooks that run several modules and must spread them across workers. #5919 pins its
-# own two, `static-ratchet-tests` and `static-ratchet-tests-census`.
-SPREAD_HOOKS = ["static-ratchet-tests-python"]
+# A multi-module pytest hook that still takes `-n auto`, with the PR that pins it. #5919 pins
+# `static-ratchet-tests` at `-n 4`; delete its row once that lands.
+UNPINNED = {"static-ratchet-tests": "#5919"}
 
 
-def _width(hook: dict) -> int:
-    """The xdist workers a hook's entry starts: its own `-n`, else what `-n auto` sizes."""
-    tokens = shlex.split(hook["entry"])
-    pinned = [after for flag, after in itertools.pairwise(tokens) if flag == "-n"]
-    pinned += [
-        token[2:] for token in tokens if token.startswith("-n") and token[2:].isdigit()
+def _pytest_hooks() -> list[dict]:
+    """Every prek hook whose entry runs pytest."""
+    config = tomllib.loads((REPO / "prek.toml").read_text())
+    return [
+        hook
+        for repo in config["repos"]
+        for hook in repo.get("hooks", [])
+        if "pytest" in shlex.split(hook.get("entry", ""))
     ]
+
+
+def _pinned_width(entry: str) -> int | None:
+    """The `-n` an entry passes itself, or None when it leaves the width to `-n auto`."""
+    tokens = shlex.split(entry)
+    pinned = [after for flag, after in itertools.pairwise(tokens) if flag == "-n"]
+    pinned += [t[2:] for t in tokens if t.startswith("-n") and t[2:].isdigit()]
     if pinned and pinned[-1] != "auto":
         return int(pinned[-1])
-    return xdist_width.workers_for(len(_modules(hook)), SESSION_CEILING)
+    return None
 
 
-@pytest.mark.parametrize("hook_id", SPREAD_HOOKS)
-def test_a_multi_module_hook_runs_on_more_than_one_worker(hook_id):
-    """xdist_width gives `-n auto` one worker per 15 modules, which serialised five (#5917)."""
-    hook = next(h for h in _ratchet_hooks() if h["id"] == hook_id)
-    assert len(_modules(hook)) > 1, (
-        f"{hook_id} runs one module; drop it from SPREAD_HOOKS"
-    )
-    assert _width(hook) > 1, (
-        f"{hook_id} runs {len(_modules(hook))} modules on {_width(hook)} xdist worker; "
-        "pin an explicit `-n` in its prek.toml entry"
+def test_no_multi_module_pytest_hook_leaves_its_width_to_auto():
+    """xdist_width gives `-n auto` one worker per 15 modules, which serialised five (#5917).
+
+    An explicit `-n`, `-n0` included, is a measured choice; the defect is the silent fallback.
+    """
+    hooks = [h for h in _pytest_hooks() if len(_modules(h)) > 1]
+    assert "static-ratchet-tests-python" in {h["id"] for h in hooks}
+    serial = [
+        f"{h['id']}: {len(_modules(h))} modules"
+        for h in hooks
+        if _pinned_width(h["entry"]) is None
+        and xdist_width.workers_for(len(_modules(h)), SESSION_CEILING) <= 1
+        and h["id"] not in UNPINNED
+    ]
+    assert not serial, (
+        f"`-n auto` runs these on one worker; pin an explicit `-n`: {serial}"
     )
 
 
 @pytest.mark.parametrize(
     ("entry", "width"),
     [
-        ("pytest -q -p no:cacheprovider a.py b.py c.py", 1),
-        ("pytest -q -n auto a.py b.py", 1),
+        ("pytest -q -p no:cacheprovider a.py b.py", None),
+        ("pytest -q -n auto a.py b.py", None),
         ("pytest -q -n 4 a.py b.py", 4),
         ("pytest -q -n0 a.py b.py", 0),
     ],
 )
-def test_width_reads_the_entry_s_own_n_before_falling_back_to_auto(entry, width):
-    assert _width({"entry": entry}) == width
+def test_pinned_width_reads_the_entry_s_own_n(entry, width):
+    assert _pinned_width(entry) == width
