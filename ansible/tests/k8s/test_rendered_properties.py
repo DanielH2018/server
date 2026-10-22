@@ -306,8 +306,8 @@ PROPERTIES = (
             # A pod template with no restartPolicy is refused by the API for a Job, but the
             # predicate must not read the gap as Never either.
             more_red=(("pi-peer-backup", {}),),
-            # 14 Jobs and CronJobs render. Close enough to notice a contraction.
-            min_matches=12,
+            # 10 Jobs and CronJobs render (measured by an impossible floor). The floor is the count.
+            min_matches=10,
             must_find=frozenset(
                 {"CronJob/pi-peer-backup", "CronJob/crowdsec-home-ips"}
             ),

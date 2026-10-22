@@ -247,13 +247,13 @@ def _rollout_timeout_s(role: str) -> int:
     return manifests_rollout_timeout_s(_K8S_ROLES_DIR / role)
 
 
-# The roles whose in-role waits this derivation must find. registry waits for its self-test and
-# netpol probe Jobs, and netpol-baseline for its probe Job, before the batch drain runs and on
-# top of it. prowlarr's 300s flaresolverr probe was the first member until its flip deleted the
-# probe (#5594). Named rather than counted: the reader
+# The roles whose in-role waits this derivation must find. netpol-baseline waits for its probe
+# Job before the batch drain runs and on top of it. prowlarr's 300s flaresolverr probe was the
+# first member until its flip deleted the probe (#5594), and registry's 540s of self-test and
+# netpol probe waits went with its flip. Named rather than counted: the reader
 # finds its subject by pattern, so a rename or a moved task would otherwise leave the sum
 # quietly smaller and every assertion here still green.
-_IN_ROLE_WAIT_CENSUS = {"registry": 540, "netpol-baseline": 310}
+_IN_ROLE_WAIT_CENSUS = {"netpol-baseline": 310}
 
 
 def test_the_in_role_wait_census_is_non_vacuous():

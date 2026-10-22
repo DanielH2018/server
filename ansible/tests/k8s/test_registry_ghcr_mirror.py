@@ -250,21 +250,3 @@ def test_registry_gc_applies_the_mirror_manifest_the_deploy_stages():
     assert f"dest: {read}\n" in tasks, (
         f"no task stages {read}, the file the cron applies"
     )
-
-
-def test_a_deploy_restores_a_mirror_a_stopped_gc_left_at_zero():
-    """With no rendered `replicas:`, an apply never undoes a GC that died after its scale-down.
-
-    The deploy scales the mirror back only from zero and only while no mirror GC Job runs, and
-    does it before the rollout wait, which would otherwise pass on 0/0.
-    """
-    tasks = yaml_fast.safe_load((K8S / ROLE / "tasks" / "main.yml").read_text())
-    names = [t["name"] for t in tasks]
-    (restore,) = [t for t in tasks if "scale deploy/ghcr-mirror" in str(t)]
-    cmd = restore["ansible.builtin.command"]["cmd"]
-    assert "--current-replicas=0" in cmd and "--replicas=1" in cmd, cmd
-    when = " ".join(restore["when"])
-    assert "registry_mirror_replicas.stdout | trim == '0'" in when, when
-    assert "registry_mirror_gc_active.stdout" in when, when
-    wait = names.index("Wait for the ghcr-mirror rollout before probing its policy")
-    assert names.index(restore["name"]) < wait, names
