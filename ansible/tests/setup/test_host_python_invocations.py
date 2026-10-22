@@ -383,7 +383,7 @@ def test_a_script_run_through_uv_is_clean():
 # of shell grammar stays one shape short. A path (`/usr/bin/python3`) and a package or flag
 # name (`python3-venv`, `--python 3.14.6`) do not match.
 _BARE_PYTHON3 = re.compile(r"(?<![\w./@-])python3(?:\.\d+)?(?![\w./:@-])")
-_REGISTRY_GC = _REPO / "ansible/roles/k8s/registry/templates/registry-gc.sh.j2"
+_REGISTRY_GC = _REPO / "ansible/roles/setup/k8s_host_files/templates/registry-gc.sh.j2"
 _K8S = ROLES / "k8s"
 
 

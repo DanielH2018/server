@@ -1,9 +1,10 @@
 {
-  "checksum": "dc0a51d28e66b1cea8cb3821934aa70876ec66a7c868e05f32e13fccb3299cad",
+  "checksum": "4c9fad3659dada0ee5e99ebb931546cce9ae90053bf08bc6c79a80d615354cb7",
   "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
   "key": "ansible/roles/setup/k8s_host_files/CLAUDE.md#What it holds",
   "row": {
     "atoms": {
+      "ansible/roles/setup/k8s_host_files/tests/test_ghcr_mirror_prune.py": "f61715d7fcb7512e5ce690ea85f524125d49caf04ff73d85732078d65ce55a0e",
       "ansible/tests/repo/_host_write_rows.py": "e123f86e94ff2e880238260b007255adad5190a526da48d4f5f29cad399a5da1",
       "ansible/tests/setup/": "21eda762d0dab9f35d1267af17e00d045dad949bb9a35de641b6248a9993296f",
       "ansible/tests/setup/test_k8s_host_files_pairs.py": "d206ec0dc4cd0a817a9aef3f3a3edef2b10c565cf997ce16cc4bfbd4db3bafec",
@@ -12,6 +13,6 @@
       "ansible/tests/setup/test_setup_cross_role_reads.py": "c2f854a253fff368c00a3b1d673287739e63bf312f1a677522395ea9566fe25b"
     },
     "python": "3.14",
-    "verified_sha": "69b7772f1"
+    "verified_sha": "839918e40"
   }
 }

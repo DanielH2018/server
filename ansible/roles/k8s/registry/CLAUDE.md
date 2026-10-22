@@ -54,9 +54,9 @@ registry round trip. See repo-root `CLAUDE.md` for shared conventions.
     `registries.yaml` mirror covers the whole host. Its store is therefore its own claim,
     `registry_k8s_ghcr_mirror_claim` (30Gi, `longhorn-nobackup`).
   - The TTL is zero, so only the weekly GC reclaims the store (#5541). A proxy refuses
-    manifest DELETE, so `ghcr-mirror-gc-job.yaml.j2`'s Job, `registry-gc-ghcr-mirror`, edits
+    manifest DELETE, so `ansible/roles/setup/k8s_host_files/templates/ghcr-mirror-gc-job.yaml.j2`'s Job, `registry-gc-ghcr-mirror`, edits
     the store offline. `registry-gc.sh` runs it with only `deploy/ghcr-mirror` scaled to zero.
-    Its `prune` initContainer runs `files/ghcr-mirror-prune.sh`, and its
+    Its `prune` initContainer runs `ansible/roles/setup/k8s_host_files/files/ghcr-mirror-prune.sh`, and its
     `gc` container then runs plain `garbage-collect`.
   - The prune's unit is a manifest revision, not a tag. A third-party ghcr.io image is pinned
     by digest, and the proxy caches a digest pull with no tag, so `--delete-untagged` on this
@@ -103,15 +103,17 @@ registry round trip. See repo-root `CLAUDE.md` for shared conventions.
   static in `k8s/uptime-kuma`, deadline one hour past the weekly period) and the off-site
   healthchecks.io `registry-gc` dead-man. The token existed nowhere but the script until
   2026-09-18 (#1937), so before that only the dead-man saw a run.
-- **The four job manifests stage in `/etc/rancher/k3s/manifests/registry-jobs/`, not in this
+- **The job manifests stage in `/etc/rancher/k3s/manifests/registry-jobs/`, not in this
   role's own manifest directory** (#1669). `k8s/manifests` prunes every file in
   `manifests/registry/` outside the role's file list, which deleted them on every deploy.
   Their `-job.yaml` suffix keeps them out of the derived list. `ghcr-mirror-gc-job.yaml` is
-  the one that matters: `registry-gc.sh` reads it at cron time, so the prune left a window in
-  which GC failed on a missing manifest. Nothing sweeps `registry-jobs/`, so a host with
-  `registry_k8s_manage_gc: false` gets an explicit removal task outside the GC block. The
-  retired push store's `gc-job.yaml` has its absent arm in
-  `ansible/roles/setup/k8s_host_files/tasks/registry.yml`.
+  the one that mattered: `registry-gc.sh` reads it at cron time, so the prune left a window in
+  which GC failed on a missing manifest. That manifest, the script, `/var/lib/registry-gc` and
+  the cron now install from `ansible/roles/setup/k8s_host_files/tasks/registry.yml`, because
+  a Flux-owned role runs no tasks. The same file holds the retired push store's `gc-job.yaml`
+  absent arm. `registry_k8s_manage_gc: false` skips that whole block and removes nothing.
+  The setup role keeps copies of the GC's variables in its `defaults/main.yml`, and
+  `ansible/tests/setup/test_k8s_host_files_pairs.py` holds them equal to this role's.
 - **`templates/verify-inert/` holds the Flux form of the self-tests and the netpol probe**,
   and nothing renders it yet. The flip PR renames it to `templates/verify/` and deletes the
   tasks with their three Job templates. `files/registry_verify.py` runs one check per Job:
