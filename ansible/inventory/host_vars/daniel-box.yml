@@ -251,6 +251,10 @@ containers_list:
   # nothing routes to it.
   - name: dri-device-plugin
     platform: k8s
+    # Flux applies dri-device-plugin through `promote` (D5, Wave D); its soak verify is the
+    # `K8sExtendedResourceMissing` alert. The handback is two PRs, `owner: released` then
+    # removing `owner`: docs/flux-deploy-plane.md.
+    owner: flux
   # The shared /data volume the nine media workloads mount. Storage, not a service.
   # Must precede every media workload — a pod that mounts an undeclared claim stays
   # Pending, and WaitForFirstConsumer makes that look like a scheduling problem rather
