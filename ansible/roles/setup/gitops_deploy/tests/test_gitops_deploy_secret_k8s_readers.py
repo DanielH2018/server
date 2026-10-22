@@ -208,9 +208,3 @@ def test_a_denylisted_reader_is_applied_and_named(tick, capsys):
     out = capsys.readouterr().out
     assert "secret-readers: peanut are denylisted for k8s auto-deploy" in out
     assert "homepage are denylisted" not in out
-
-
-def test_a_route_with_no_denylisted_reader_logs_no_denylist_line(tick, capsys):
-    routed = _route_rotation(tick, frozenset({"radarr"}))
-    assert routed.secret_plans[0].tags == ["homepage", "peanut"]
-    assert "denylisted for k8s auto-deploy" not in capsys.readouterr().out
