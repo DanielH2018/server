@@ -1,12 +1,11 @@
-"""registry's inert verify Jobs: the push proves a round trip, the isolation leg fails on any answer.
+"""registry's verify Jobs: the push proves a round trip, the isolation leg fails on any answer.
 
 The script tests run `registry_verify.main` against local ports: a small in-memory registry
 stands in for the push store, an HTTP server stands in for a port that answers, and a port
 nothing listens on stands in for one the fence refuses. The render tests copy the registry
-role, move `templates/verify-inert/` to `templates/verify/` as the flip PR will, and render
-the copy, so the Jobs are checked as Flux will receive them while the tree's own render still
-emits no `registry-verify`. The plan is docs/target-architecture/deploy/d5-bulk-move.md,
-*A verify conversion lands as inert code*.
+role and render the copy, so the Jobs are checked as Flux receives them and a policy-only
+edit can be made without touching the tree. The plan is
+docs/target-architecture/deploy/d5-bulk-move.md.
 
 Run: uv run pytest ansible/roles/k8s/registry/tests/test_registry_verify.py
 """
@@ -150,7 +149,6 @@ def stubs(tmp_path_factory):
 def _flipped_render(stubs, roles, edit_policy=False) -> cluster.RenderedTag:
     shutil.copytree(K8S_ROLES / TAG, roles / TAG)
     templates = roles / TAG / "templates"
-    (templates / "verify-inert").rename(templates / "verify")
     if edit_policy:
         policy = templates / "networkpolicy.yaml.j2"
         policy.write_text(policy.read_text() + "# a policy-only edit\n")
@@ -208,8 +206,12 @@ def policy(flipped_tag) -> dict:
     return policy
 
 
-def test_the_tree_renders_no_registry_verify_while_ansible_owns_it(stubs):
-    assert cluster.render_tag(TAG, stubs).verify == {}
+def test_the_tree_renders_registry_verify_now_that_flux_owns_it(stubs):
+    assert sorted(cluster.render_tag(TAG, stubs).verify) == [
+        "job.yaml",
+        "kustomization.yaml",
+        "rbac.yaml",
+    ]
 
 
 def test_the_flipped_jobs_pass_every_job_census_row(flipped):
@@ -380,6 +382,17 @@ def test_each_pull_job_runs_the_seeded_copy_from_the_push_store_on_its_node(
     assert _label(_job(flipped, check)) == "registry-verify"
 
 
+def test_a_single_node_cluster_renders_no_agent_pull_job(stubs, tmp_path):
+    """A Job pinned to a node that does not exist stays Pending until its deadline fails it."""
+    docs = _docs(_flipped_render({**stubs, "k3s_agent_node_ips": []}, tmp_path).verify)
+    assert _job(docs, "pull")
+    assert [
+        doc["metadata"]["name"]
+        for doc in docs
+        if doc["kind"] == "Job" and "pull-agent" in doc["metadata"]["name"]
+    ] == []
+
+
 def test_the_pull_deadline_outlasts_the_push_plus_kubelets_pull_backoff(flipped):
     """kubelet's sixth pull attempt lands about 310s in, after a push of up to its deadline."""
     push = _job(flipped, "push")["spec"]["activeDeadlineSeconds"]
@@ -400,7 +413,7 @@ def test_a_policy_only_change_renames_both_jobs(stubs, tmp_path):
 
 def test_the_staged_jobs_read_no_other_roles_file():
     """The deployer redeploys a role when a file it `lookup()`s in another role changes."""
-    staged = sorted((K8S_ROLES / TAG / "templates" / "verify-inert").glob("*.j2"))
+    staged = sorted((K8S_ROLES / TAG / "templates" / "verify").glob("*.j2"))
     assert [p.name for p in staged] == ["job.yaml.j2", "rbac.yaml.j2"]
     assert [
         (path.name, role)

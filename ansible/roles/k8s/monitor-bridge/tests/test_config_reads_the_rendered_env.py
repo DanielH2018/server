@@ -37,7 +37,7 @@ def test_no_rendered_key_carries_a_second_default_in_python():
     reads = _reads()
     # Named members, so a parser rename that empties `_reads()` fails here, not silently.
     assert ("config_service.py", "TRAEFIK_421_RPS", False) in reads
-    assert ("config.py", "K8S_EXTENDED_RESOURCES", True) in reads
+    assert ("config_service.py", "HA_BAN_WINDOW", True) in reads
     doubled = sorted(
         (m, k) for m, k, has_default in reads if has_default and k in rendered
     )

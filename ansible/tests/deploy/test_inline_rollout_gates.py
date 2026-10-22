@@ -5,12 +5,10 @@ whole batch at the end. Almost
 every role tolerates that, because nothing in them touches the workload they just rolled. The
 ones that do read the OUTGOING pod, and every assertion they make describes it.
 
-Two roles show the failure, a deploy running against the pod it just restarted:
-
-  * crowdsec: some registrations land, then the pod goes down mid-loop, and `no_log` censors
-    the body into a bare "non-zero return code".
-  * registry: the push self-test gets `connection refused` on its first pod and passes on its
-    retry, spending the whole of `backoffLimit: 1` to stay green.
+The failure is a deploy running against the pod it just restarted. crowdsec shows it: some
+registrations land, then the pod goes down mid-loop, and `no_log` censors the body into a bare
+"non-zero return code". registry showed a second form, where the push self-test got
+`connection refused` on its first pod and passed on its retry; its flip deleted those tasks.
 
 `rollout status`, never `wait --for=condition=Available` — every Deployment here is
 single-replica, so the OLD pod satisfies Available and the wait returns instantly against a
@@ -55,9 +53,9 @@ WHAT IT DOES NOT COVER, deliberately:
     media-volume, ...). They have no rollout of their own to gate on, and every
     pod they touch belongs to someone else.
   * `logs job/<name>` and other Job targets. A Job has no rollout for `rollout status` to gate.
-  * Reaching a workload over its Service instead of `kubectl` — registry dials `deploy/registry`
-    from three self-test Jobs, which no command text here can see. That is why registry stays
-    in the hand-written `_MUST_GATE` and cannot be derived.
+  * Reaching a workload over its Service instead of `kubectl`, which no command text here can
+    see. That is why a role written this way stays in the hand-written `_MUST_GATE` and cannot
+    be derived.
   * `when:` conditions. A gate that is skipped at runtime still counts as a gate here. pihole's
     is conditional on the manifests having changed, which is also the only run that rolls it.
 
@@ -88,7 +86,6 @@ from _inline_rollout_targets import (
 # role -> the workload its own tasks talk to after the manifests include.
 _MUST_GATE = {
     "crowdsec": "crowdsec",
-    "registry": "registry",
 }
 
 
@@ -311,20 +308,12 @@ def test_no_role_gates_with_a_readiness_wait_on_its_own_pods() -> None:
 #
 # The table holds the reason the values differ. Everything else about these gates is pinned
 # above — that one exists, that it precedes the pod inspection, that it is `rollout status` and
-# not a readiness wait. A reader meeting an outlier (arr-notification above the 300s default,
-# dri-device-plugin below it) could not tell a considered budget from a typo without going and
-# looking, and for dri-device-plugin looking does not answer it.
+# not a readiness wait. A reader meeting an outlier (arr-notification above the 300s default)
+# could not tell a considered budget from a typo without going and looking.
 _GATE_BUDGETS = {
     "cloudflare-ddns": (300, "default"),
     "flux": (300, "default; one looped gate covering the three Flux controllers"),
     "crowdsec": (300, "default"),
-    "dri-device-plugin": (
-        180,
-        "BELOW the default, and the call site does not say why. A single-node DaemonSet with "
-        "no first-boot work does roll out well inside 180s, so this is plausible rather than "
-        "verified; it is recorded as undocumented, not endorsed. Raise it if it ever times out",
-    ),
-    "registry": (300, "default"),
     "arr-notification": (
         660,
         "`arr_notification_rollout_timeout`, matching sonarr's budget because the seed it "

@@ -22,13 +22,22 @@ def test_no_flux_owned_role_keeps_a_host_write_allow_entry():
 
 
 def test_a_flip_that_keeps_its_allow_entry_is_flagged_without_a_write():
-    """The flip moved registry's writes but left the entry: the entry alone is refused."""
+    """The flip moved registry's writes but left the entry: the entry alone is refused.
+
+    The live map holds no entry since registry's host writes moved to `k8s_host_files`, so the
+    refusal runs over a fixture map.
+    """
     entries = k8s_entries()
+    kept = {REGISTRY: "kept past the flip"}
+    entries["registry"] = {
+        key: value for key, value in entries["registry"].items() if key != "owner"
+    }
+    assert flipped_allow_entries(kept, entries) == []
     entries["registry"] = {**entries["registry"], "owner": "flux"}
-    assert flipped_allow_entries(HOST_WRITE_ALLOW, entries) == [REGISTRY]
+    assert flipped_allow_entries(kept, entries) == [REGISTRY]
 
 
 def test_the_registry_gc_red_case_is_the_scale_line_the_script_keeps():
     """A red case proves only as much as its likeness to the call it stands for."""
-    script = rendered_shell_text("k8s", "registry", "registry-gc.sh.j2")
+    script = rendered_shell_text("setup", "k8s_host_files", "registry-gc.sh.j2")
     assert REGISTRY_GC_SCALE in script

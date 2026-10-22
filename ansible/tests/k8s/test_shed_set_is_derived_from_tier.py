@@ -3,7 +3,8 @@
 `shed_entries` in `filter_plugins/service_tier.py` derives it and `probe.py shed-set` prints
 it. Scaling these to zero is meant to leave the tiered services untouched, which holds only
 while no tiered entry depends on a shed one. `NEVER_SHED` keeps the untiered cluster plumbing
-out of it, and it must equal the untiered roles that set `flux_prune: false` (H1.1d).
+out of it, and it must equal the untiered roles that set `flux_prune: false` (H1.1d). `cluster-base`
+is the first member (H1.2).
 
 Run: uv run pytest ansible/tests/k8s/test_shed_set_is_derived_from_tier.py
 """
@@ -124,7 +125,10 @@ def test_a_tiered_unpruned_role_outside_never_shed_is_clean(tmp_path):
 
 
 def test_never_shed_matches_the_untiered_roles_that_never_prune():
-    """The real tree. Both sides are empty until H1.2 adds `cluster-base` to each."""
+    """The real tree. `cluster-base` is the named member both sets must hold (H1.2)."""
     entries = list(k8s_entries().values())
     assert sum(not e.get("tier") for e in entries) >= 20
     assert _never_shed_drift(entries, K8S_ROLES, NEVER_SHED) == ([], [])
+    assert "cluster-base" in NEVER_SHED
+    assert "cluster-base" in k8s_entries()
+    assert "cluster-base" not in shed_set()

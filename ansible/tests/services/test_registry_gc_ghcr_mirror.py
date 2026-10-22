@@ -12,22 +12,19 @@ function that logs each call and answers from canned output.
     ruling on #5680), whose own GC is retired.
   * the stamp `ghcr-mirror-down` exists from before the scale-down until the mirror serves
     again, and a run that finds it restores the mirror first.
-  * the deploy's restore takes the lock the script holds, and backs off while it is held
-    (#5736).
+  * the run holds the lock from before its scale-down until after its restore (#5736). The
+    deploy-time restore that took the same lock was deleted with registry's Ansible tasks.
 """
 
 import os
 import shlex
 from pathlib import Path
 
-from _helpers import load_tasks
 from _shell_render import rendered_shell_function, rendered_shell_text
-from lib import yaml_fast
-from lib.proc_testing import fake_bin, path_with, run
-from lib.repo_paths import REPO
+from lib.proc_testing import run
 
 KEEP_SET = rendered_shell_function(
-    "k8s", "registry", "registry-gc.sh.j2", "write_mirror_keep_set"
+    "setup", "k8s_host_files", "registry-gc.sh.j2", "write_mirror_keep_set"
 )
 LIVE = "sha256:" + "a" * 64
 PINNED = "sha256:" + "b" * 64
@@ -95,25 +92,31 @@ def test_a_cluster_with_no_digest_writes_no_keep_set(tmp_path):
 
 
 RESTORE = rendered_shell_function(
-    "k8s", "registry", "registry-gc.sh.j2", "restore_mirror_store"
+    "setup", "k8s_host_files", "registry-gc.sh.j2", "restore_mirror_store"
 )
-START = rendered_shell_function("k8s", "registry", "registry-gc.sh.j2", "start_deploy")
-STOP = rendered_shell_function("k8s", "registry", "registry-gc.sh.j2", "stop_deploy")
+START = rendered_shell_function(
+    "setup", "k8s_host_files", "registry-gc.sh.j2", "start_deploy"
+)
+STOP = rendered_shell_function(
+    "setup", "k8s_host_files", "registry-gc.sh.j2", "stop_deploy"
+)
 JOURNAL = rendered_shell_function(
-    "k8s", "registry", "registry-gc.sh.j2", "journal_mirror_prune"
+    "setup", "k8s_host_files", "registry-gc.sh.j2", "journal_mirror_prune"
 )
 REPORT = rendered_shell_function(
-    "k8s", "registry", "registry-gc.sh.j2", "report_mirror_job"
+    "setup", "k8s_host_files", "registry-gc.sh.j2", "report_mirror_job"
 )
 COLLECT_MIRROR = rendered_shell_function(
-    "k8s", "registry", "registry-gc.sh.j2", "collect_mirror_store"
+    "setup", "k8s_host_files", "registry-gc.sh.j2", "collect_mirror_store"
 )
-TAKE_LOCK = rendered_shell_function("k8s", "registry", "registry-gc.sh.j2", "take_lock")
+TAKE_LOCK = rendered_shell_function(
+    "setup", "k8s_host_files", "registry-gc.sh.j2", "take_lock"
+)
 # The script's top-level sequence, everything after take_lock's definition, as cron runs it.
-_SCRIPT = rendered_shell_text("k8s", "registry", "registry-gc.sh.j2")
+_SCRIPT = rendered_shell_text("setup", "k8s_host_files", "registry-gc.sh.j2")
 MAIN = _SCRIPT[_SCRIPT.index("\n}\n", _SCRIPT.index("take_lock() {")) + 3 :]
 STRANDED = rendered_shell_function(
-    "k8s", "registry", "registry-gc.sh.j2", "restore_stranded_mirror"
+    "setup", "k8s_host_files", "registry-gc.sh.j2", "restore_stranded_mirror"
 )
 PRUNED_LINE = f"pruned danielh2018/nut@{LIVE} tags=none"
 
@@ -270,58 +273,6 @@ def test_a_run_that_finds_the_stamp_restores_the_mirror_first(tmp_path):
 
 def test_a_run_with_no_stamp_restores_nothing(tmp_path):
     assert _phase(tmp_path, "restore_stranded_mirror") == []
-
-
-TASKS = REPO / "ansible/roles/k8s/registry/tasks/main.yml"
-RESTORE_TASK = "Restore a ghcr-mirror replica a stopped GC left at zero"
-
-
-def _deploy_restore(tmp_path: Path, lock: Path, held: bool) -> tuple[int, list[str]]:
-    """Run the deploy's restore command as the task renders it; return its rc and calls."""
-    (task,) = [t for t in load_tasks(TASKS) if t.get("name") == RESTORE_TASK]
-    cmd = task["ansible.builtin.command"]["cmd"]
-    cmd = cmd.replace("{{ registry_k8s_gc_lock_file }}", str(lock))
-    cmd = cmd.replace("{{ k8s_namespace }}", "homelab")
-    assert "{{" not in cmd, cmd
-    calls = tmp_path / "calls"
-    bin_dir = fake_bin(
-        tmp_path / "bin", k3s=f'echo "$*" >> {shlex.quote(str(calls))}\n'
-    )
-    hold = f"exec 9>{shlex.quote(str(lock))}; flock 9; " if held else ""
-    env = {**os.environ, "PATH": path_with(bin_dir)}
-    done = run(["bash", "-c", hold + cmd], env=env, check=False)
-    return done.returncode, calls.read_text().splitlines() if calls.exists() else []
-
-
-def test_the_deploy_restore_backs_off_while_a_gc_run_holds_the_lock(tmp_path):
-    """#5736: the GC holds the lock before its scale-down, so the deploy cannot undo it."""
-    rc, calls = _deploy_restore(tmp_path, tmp_path / "registry-gc.lock", held=True)
-
-    assert rc == 75
-    assert calls == []
-
-
-def test_the_deploy_restore_scales_the_mirror_when_no_gc_runs(tmp_path):
-    rc, calls = _deploy_restore(tmp_path, tmp_path / "registry-gc.lock", held=False)
-
-    assert rc == 0
-    assert calls == [
-        "kubectl -n homelab scale deploy/ghcr-mirror --current-replicas=0 --replicas=1"
-    ]
-
-
-def test_the_script_and_the_deploy_take_the_same_lock():
-    defaults = yaml_fast.safe_load(
-        (REPO / "ansible/roles/k8s/registry/defaults/main.yml").read_text()
-    )
-    script = rendered_shell_text("k8s", "registry", "registry-gc.sh.j2")
-    (task,) = [t for t in load_tasks(TASKS) if t.get("name") == RESTORE_TASK]
-
-    assert f"LOCK_FILE={defaults['registry_k8s_gc_lock_file']}\n" in script
-    assert (
-        "flock --nonblock --conflict-exit-code 75 {{ registry_k8s_gc_lock_file }}"
-        in (task["ansible.builtin.command"]["cmd"])
-    )
 
 
 def _report(tmp_path: Path, note: str) -> tuple[int, str]:

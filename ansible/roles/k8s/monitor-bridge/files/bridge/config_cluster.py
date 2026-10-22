@@ -30,11 +30,6 @@ class ClusterConfig:
     CLUSTER_TARGETS_CONSECUTIVE: int
     CADVISOR_PODS_MIN: int
     CADVISOR_CONSECUTIVE: int
-    K8S_MIN_WORKLOADS: int
-    K8S_MIN_DAEMONSETS: int
-    K8S_WORKLOADS_CONSECUTIVE: int
-    K8S_ROLLOUT_STALL_CONSECUTIVE: int
-    K8S_ZERO_AVAILABLE_CONSECUTIVE: int
     LONGHORN_CONSECUTIVE: int
     PVC_MAX_PCT: float
     PVC_MIN_CLAIMS: int
@@ -43,9 +38,6 @@ class ClusterConfig:
     SNAPSHOT_CAPS: str
     SNAPSHOT_CAP_WARN_RATIO: float
     SNAPSHOT_CAP_CONSECUTIVE: int
-    K8S_RESTART_WINDOW: str
-    K8S_RESTART_MAX: int
-    K8S_RESTART_RECENT_WINDOW: str
     ETCD_DB_QUOTA_BYTES: int
     ETCD_DB_MAX_PCT: float
 
@@ -137,61 +129,6 @@ def cluster_config(
         # takes a node's cAdvisor away briefly, and three monitors going down together on one
         # transient is the alert storm the gates elsewhere in this file exist to prevent.
         CADVISOR_CONSECUTIVE=_int("CADVISOR_CONSECUTIVE", "2"),
-        # The floor below which the deployment series is treated as missing rather than healthy.
-        # THE FAILURE THIS EXISTS TO PREVENT: an absent series makes `unavailable > 0` return an
-        # empty vector, which reads exactly like "nothing is unavailable" — green, silent, and
-        # wrong, the same shape as the B2 transaction cap (2026-08-02) and the gitops-behind
-        # defer (2026-08-07). So the check COUNTS the series first and fails closed when the
-        # count is short, instead of inferring health from an empty result. The floor also
-        # covers a partially-loaded kube-state-metrics: its ClusterRole is deliberately scoped,
-        # so dropping `apps` from it would take every deployment series away while the pod stays
-        # up and Ready.
-        K8S_MIN_WORKLOADS=_int("K8S_MIN_WORKLOADS"),
-        # Same fail-closed reasoning as K8S_MIN_WORKLOADS, for the DaemonSet series
-        # (kube_daemonset_status_number_unavailable) instead of the Deployment one — a
-        # DaemonSet's absent/unschedulable pod has no Deployment-arm equivalent, so it was
-        # invisible until this arm existed. The eleven DaemonSet series on 2026-10-10
-        # (`probe.py metric 'count(kube_daemonset_status_number_unavailable)'`): alloy,
-        # crowdsec-node-agent, dri-device-plugin, engine-image-*, gpu-exporter,
-        # longhorn-csi-plugin, longhorn-manager, node-exporter, otel-collector,
-        # scrutiny-collector, speaker. Bump this floor (and the comment) when a DaemonSet is
-        # added or retired — same discipline as K8S_MIN_WORKLOADS.
-        K8S_MIN_DAEMONSETS=_int("K8S_MIN_DAEMONSETS"),
-        # Consecutive down cycles before check_k8s_workloads' UNAVAILABLE-REPLICA arm pages —
-        # that arm alone, not the check. A Deployment rolling has one unavailable replica by
-        # definition, so an ungated arm turns every ordinary rollout into a DOWN episode: of the
-        # 48 this monitor opened in the 30 days to 2026-09-11, the ones the bridge's own log
-        # attributes to replicas are all single-cycle and all name one workload
-        # (uptime-kuma(1), valheim(1), radarr(1), jellyfin(1), speedtest(1), karakeep-chrome(1)).
-        # 3 cycles = 15 min at INTERVAL=300, the same value CLUSTER_TARGETS_CONSECUTIVE /
-        # LONGHORN_CONSECUTIVE / PVC_CLAIMS_CONSECUTIVE carry: longer than any rollout, shorter
-        # than a workload that cannot come back. The crash-loop, DaemonSet, floor and log arms
-        # get no grace and still page on cycle one.
-        K8S_WORKLOADS_CONSECUTIVE=_int("K8S_WORKLOADS_CONSECUTIVE"),
-        # Consecutive cycles a Deployment may sit with fewer UPDATED replicas than it wants
-        # before check_k8s_workloads' stalled-rollout arm pages (#1783). The arm above reads
-        # `unavailable`, which counts replicas the Deployment HAS; this one reads `updated`,
-        # which counts replicas carrying the current spec. A new ReplicaSet that never gets a
-        # pod while the old one keeps serving moves the second and not the first, so every
-        # other arm reads green while the cluster runs the previous spec.
-        # 3 cycles = 15 min at INTERVAL=300, chosen against the series rather than by feel:
-        # over the 16.9 days Prometheus retained on 2026-09-11, `updated < spec` occurred for
-        # 1-2 five-minute samples at a time (ordinary rollouts) and NEVER for three consecutive
-        # ones. It is also longer than the 300s the playbook's own `rollout status` waits, so a
-        # rollout the playbook is still waiting on cannot reach it.
-        K8S_ROLLOUT_STALL_CONSECUTIVE=_int("K8S_ROLLOUT_STALL_CONSECUTIVE", "3"),
-        # Consecutive cycles a Deployment may sit with ZERO available replicas (spec > 0) before
-        # check_k8s_workloads' zero-available arm pages (#1802). K8S_WORKLOADS_CONSECUTIVE holds
-        # a Deployment that is down as long as one that is rolling; this arm reads the same
-        # Deployments through `available == 0` and holds them less. 2 cycles = 10 min at
-        # INTERVAL=300, chosen against 16 days of the series on 2026-09-17: every episode of two
-        # or more 5-minute samples at zero was a crash loop the restart arm had already paged on
-        # its first cycle (authelia 09-10, jellyfin/valheim 09-09, zigbee2mqtt 09-12), a cold
-        # start after a node event lasting 20 minutes (jellyfin 09-02, traefik 09-03 — the
-        # existing arm paged those at 15), or the 2026-09-05 outage. A single 2-sample cold
-        # start (sonarr 09-01) is the measured cost of 2 over 3. At 1 the arm pages every
-        # Recreate swap of a slow-starting workload, which the census counts in the dozens.
-        K8S_ZERO_AVAILABLE_CONSECUTIVE=_int("K8S_ZERO_AVAILABLE_CONSECUTIVE"),
         # Hysteresis for check_longhorn_volumes. A node drain and the Sunday 07:30 reboot both
         # degrade every volume on the departing node BY DESIGN, so a single breaching cycle must
         # not page — 3 cycles at the bridge cadence is longer than either takes to settle. Same
@@ -244,31 +181,6 @@ def cluster_config(
         # prune and Longhorn purging what it removed. Same shape and cadence as
         # LONGHORN_CONSECUTIVE above.
         SNAPSHOT_CAP_CONSECUTIVE=_int("SNAPSHOT_CAP_CONSECUTIVE"),
-        # Crash-loop arm of the workload check: pods whose restart counter climbed more than
-        # K8S_RESTART_MAX inside K8S_RESTART_WINDOW page even while readiness flaps green
-        # (CrashLoopBackOff passes probes briefly each backoff cycle — the 2026-08-13 homepage
-        # incident: 31 restarts overnight, tile and replica check mostly green throughout).
-        # 3-in-1h ≈ steady-state backoff cadence; a legitimate deploy rollout restarts once.
-        K8S_RESTART_WINDOW=_env("K8S_RESTART_WINDOW", "1h"),
-        K8S_RESTART_MAX=_int("K8S_RESTART_MAX", "3"),
-        # Recency gate on the same arm: `increase(...[1h])` is a pure lookback, so a pod that
-        # crash-looped and then RECOVERED keeps the monitor DOWN until the restarts age out of
-        # the 1h window — up to an hour of red on a healthy pod (2026-08-23 zigbee2mqtt:
-        # recovered 09:47, arm still firing on `restarts in window: 9`). Requiring a restart
-        # inside the last K8S_RESTART_RECENT_WINDOW as well clears the tile ~30m after the pod
-        # steadies while leaving the 1h evidence base untouched — an ongoing loop always has a
-        # recent restart.
-        #
-        # DECIDED: 30m, and the floor is the worst inter-restart SPACING, not the
-        # CrashLoopBackOff 5-min backoff cap. The 2026-08-13 homepage incident above spread 31
-        # restarts over a night, ~15-19 min apart; a window inside that spacing goes UP in the
-        # gaps and flaps — and `k3s Workload Health` is `max_retries: 0`
-        # (uptime-kuma static-monitors.yaml.j2:293), so every flap is an immediate DOWN plus a
-        # notification. That is the crowdsec-appsec failure recorded at
-        # static-monitors.yaml.j2:283-289 (24 transitions in 3h). 30m clears two spacings and
-        # six bridge cycles. The spacing could not be re-measured — cluster Prometheus retains
-        # 7d and the incident is older — so this is the conservative floor.
-        K8S_RESTART_RECENT_WINDOW=_env("K8S_RESTART_RECENT_WINDOW", "30m"),
         # etcd's backend quota, and how full check_etcd_db_size lets the DB get before it
         # pages. 2 GiB is etcd's OWN default and it is what is in force: `k3s_server_args`
         # (setup/k3s defaults) carries no `--etcd-arg=quota-backend-bytes`. Add one there and

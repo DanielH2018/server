@@ -20,10 +20,10 @@
 # indistinguishable from a broken one": the stack has run 47h with nothing wrong and nothing
 # flowing, so a throughput query reads the same for a quiet host as for a dead door.
 #
-# What DID fold into monitor-bridge, and is deliberately not here any more: the four Deployments
-# plus the DaemonSet readiness arm, already read cluster-wide by `check_k8s_workloads`, and the
-# `otelcol_exporter_send_failed_*` arm, now `checks/logs.py:with_export_failures` on the Log
-# Shipper Dropped Entries tile. Nothing here reads Prometheus or the cluster any more, which is
+# What is deliberately not here any more: the four Deployments plus the DaemonSet readiness arm,
+# which the `k8s-workloads` rules in observability now page (`K8sDeploymentZeroAvailable` and
+# its siblings), and the `otelcol_exporter_send_failed_*` arm, which folded into monitor-bridge
+# as `checks/logs.py:with_export_failures` on the Log Shipper Dropped Entries tile. Nothing here reads Prometheus or the cluster any more, which is
 # why the kubeconfig and the ClusterIP resolution are gone with them.
 #
 # Push, not poll: this is a host cron that reports its own verdict. Same curl as
