@@ -1,0 +1,12 @@
+---
+# No Flux path runs this file: the tag is flux-owned from its first commit. It stays so the role
+# has the shape every k8s role has, and the renderer reads the include's vars. Its only content is
+# files/upstream/ and files/patches/, which the renderer attaches to the bundle, so the include
+# renders no template of its own. The manager DaemonSet is the Kustomization's wait; `manifests_
+# rollout_timeout` in defaults/main.yml is its budget.
+- name: Deploy Longhorn to the cluster
+  ansible.builtin.include_role:
+    name: k8s/manifests
+  vars:
+    manifests_files: []
+    manifests_rollout: ''

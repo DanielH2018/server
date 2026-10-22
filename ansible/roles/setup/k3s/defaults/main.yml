@@ -17,10 +17,7 @@ k3s_version: v1.37.1+k3s1
 #   uv run python scripts/validate/asset_pins.py --refresh k3s-io/k3s
 k3s_install_script_url: "https://raw.githubusercontent.com/k3s-io/k3s/{{ k3s_version }}/install.sh"
 k3s_install_script_sha256: ed01f89fd977bf20ac1516bbebf8370bf3ddbaa55dac8aba610956a4c78cc00b
-# Longhorn holds every PVC, and a careless bump is worse than a stale one: see the version-skip
-# warning at the top of this file. Tracked for the signal, never automerged.
-# renovate: datasource=github-releases depName=longhorn/longhorn
-k3s_longhorn_version: v1.12.1
+# The Longhorn pin, k3s_longhorn_version, is the `longhorn` role's (roles/k8s/longhorn/defaults/main.yml).
 
 # Where k3s's own stdout/stderr goes on both node types (tasks/unit-logging.yml). journald
 # stores nothing below notice on these hosts and every k3s line is info, so without this the
@@ -282,8 +279,8 @@ k3s_audit_log_maxsize: 100     # MiB before rotating
 #
 # This reaches volumes through the `default-replica-count` setting alone, which only applies
 # to StorageClasses that do not pin a count themselves. That is why the role replaces
-# upstream's class with files/longhorn-storageclass.yaml, which deliberately omits
-# numberOfReplicas — so changing this stays a settings patch.
+# upstream's class with the `longhorn` role's files/patches/longhorn-storageclass.yaml, which
+# deliberately omits numberOfReplicas — so changing this stays a settings patch.
 k3s_longhorn_replica_count: 2
 
 # How hard Longhorn checks a snapshot disk file against its recorded checksum. Upstream's
@@ -369,20 +366,21 @@ k3s_longhorn_backup_detached_volumes: "true"
 # Longhorn accepts 2 or 16 and nothing between. Governed by the SETTING rather than the
 # StorageClass on purpose: a StorageClass parameter beats the setting and its parameters are
 # immutable, which is the trap `numberOfReplicas` springs (see
-# files/longhorn-storageclass.yaml and ansible/tests/longhorn/test_longhorn_storageclass.py).
+# the `longhorn` role's files/patches/longhorn-storageclass.yaml and
+# ansible/tests/longhorn/test_longhorn_storageclass.py).
 k3s_longhorn_backup_block_size: 16
 
-# Memory REQUEST only (no limit) for longhorn-manager and the csi-* sidecar Deployments.
-# Upstream's deploy/longhorn.yaml ships every one of them with an empty `resources: {}`, which
-# gives BestEffort QoS and oom_score_adj 1000 — the worst possible score, so the kernel eats the
-# storage control plane first under any memory pressure. Measured at the OOM kill:
-# longhorn-manager held 137 MB anon-rss and a csi-* sidecar 97 MB, while instance-manager
-# (already Burstable) survived untouched. A REQUEST alone moves the pod to Burstable and drops
-# oom_score_adj without adding a new kill path — a LIMIT set too low would trade "killed by
-# badness" for "killed by cgroup cap". Headroom is roughly double the measured
-# RSS on both: enough to absorb ordinary growth without inflating node allocatable so far that
-# real pressure elsewhere goes unschedulable.
-k3s_longhorn_manager_memory_request: 256Mi
+# Memory REQUEST only (no limit) for the csi-* sidecar Deployments. longhorn-manager's request,
+# k3s_longhorn_manager_memory_request, is the `longhorn` role's (H1.5a).
+# Upstream's deploy/longhorn.yaml ships longhorn-manager with an empty `resources: {}`, and
+# longhorn-driver-deployer creates the csi-* Deployments the same way, which gives BestEffort QoS
+# and oom_score_adj 1000 — the worst possible score, so the kernel eats the storage control plane
+# first under any memory pressure. Measured at the OOM kill: a csi-* sidecar held 97 MB anon-rss,
+# while instance-manager (already Burstable) survived untouched. A REQUEST alone moves the pod to
+# Burstable and drops oom_score_adj without adding a new kill path — a LIMIT set too low would
+# trade "killed by badness" for "killed by cgroup cap". Headroom is roughly double the measured
+# RSS: enough to absorb ordinary growth without inflating node allocatable so far that real
+# pressure elsewhere goes unschedulable.
 k3s_longhorn_csi_sidecar_memory_request: 192Mi
 
 # Restore drill — proves the backups come BACK, which nothing else here checks. The heartbeat
