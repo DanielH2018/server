@@ -635,18 +635,8 @@ sudo k3s kubectl apply --server-side --field-manager=kustomize-controller -k <ou
 uv run ansible-playbook ansible/k3s-bringup.yml --tags kubeconfig
 ```
 
-**Until D5's namespace PR lands**, the `homelab` Namespace and its LimitRange come only from
-the Ansible k8s play's `pre_tasks`. So run the deploy once first. Every k8s service is
-flux-owned, so its batches visit none. Then check that both objects exist:
-
-```bash
-./scripts/deploy.sh
-kubectl get namespace homelab
-kubectl -n homelab get limitrange
-```
-
-The namespace PR deletes this step, because the Kustomization `homelab-namespace` then
-creates both objects.
+The `homelab` Namespace and its LimitRange come from the shared kind `homelab-namespace`, which
+step 6 applies. The Ansible k8s play creates neither object.
 
 1. Confirm that `prod`'s `longhorn-backup` render arms both backup targets, from a checkout of
    `prod`'s commit (step 2 reads it):
@@ -733,8 +723,8 @@ creates both objects.
 
 6. Apply the child Kustomizations the restores need: the `flux/<tag>.yaml` of each plumbing
    tag (`cluster-base`, `metallb`, `coredns`, `longhorn` and `longhorn-backup`) and of every
-   Kustomization in their `dependsOn` closure, `flux/cluster-vars.yaml`, and, once D5's
-   namespace PR adds it, `flux/homelab-namespace.yaml`. The closure never holds
+   Kustomization in their `dependsOn` closure, `flux/cluster-vars.yaml` and
+   `flux/homelab-namespace.yaml`. The closure never holds
    `flux-deferred` or the root, because `flux-deferred` applies the root.
    `scripts/renderer/tests/test_renderer_bootstrap_documents.py` fails a plumbing tag whose
    closure reaches either.
@@ -789,6 +779,9 @@ without a conflict.
 `ansible/tests/repo/test_flux_bootstrap_section.py` fails this section when the root's apply
 comes before the restore step, when a hand apply lacks `--field-manager=kustomize-controller`,
 and when step 2 names `reset_to_last_good` without its condition and the recorded exception.
+It also runs R4's PR 7b `awk` program over this file and fails unless the program exits 0 with
+empty output. The program refuses an Ansible deploy, a hand suspend of the root and the
+`flux_sync_suspend` key set to `true`.
 
 ### Why the root is withheld, not suspended
 
