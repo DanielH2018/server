@@ -1105,6 +1105,7 @@
  "scripts/diagnostics/tests/test_probe_health_cluster.py": 0.04,
  "scripts/diagnostics/tests/test_probe_health_cronjobs.py": 0.0,
  "scripts/diagnostics/tests/test_probe_health_flux_reference.py": 0.0,
+ "scripts/diagnostics/tests/test_probe_health_plumbing.py": 0.0,
  "scripts/diagnostics/tests/test_probe_health_resolver.py": 7.65,
  "scripts/diagnostics/tests/test_probe_health_rolled.py": 0.0,
  "scripts/diagnostics/tests/test_probe_health_surge.py": 0.0,
