@@ -25,6 +25,7 @@ from secrets_mgmt.git_dates import (
     revived_departures,
     undeclared_departures,
 )
+from secrets_mgmt.pending_retirement import PENDING_RETIREMENT
 from secrets_mgmt.rotation_tools import RotationTools
 
 
@@ -66,3 +67,14 @@ def test_no_listed_departure_is_back_in_the_store(current):
     assert not revived, "listed as gone but present in secrets.yml: %s" % sorted(
         revived
     )
+
+
+def test_a_pending_retirement_is_still_in_the_store_and_not_yet_retired(current):
+    """The allowance ends with the keys: a name that left `secrets.yml` must leave the set too.
+
+    Named members, so an emptied set cannot pass. A name in both tables would say a key is
+    pending and gone at once.
+    """
+    assert "monitor_bridge_loki_push_token" in PENDING_RETIREMENT
+    assert PENDING_RETIREMENT <= current, sorted(PENDING_RETIREMENT - current)
+    assert not PENDING_RETIREMENT & RETIRED
