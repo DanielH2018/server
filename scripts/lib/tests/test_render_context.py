@@ -215,3 +215,25 @@ def test_a_withheld_name_and_a_value_reading_it_are_dropped(tree):
         withhold=frozenset({"token"}),
     )
     assert ("token" in ctx, "header" in ctx, ctx["kept"]) == (False, False, "k")
+
+
+def test_an_edit_between_two_renders_reaches_the_second(tree):
+    # load_yaml caches each parsed file (#5592); a fixture tree edited between renders must
+    # still render with its new values, on every file layer.
+    names = ("from_defaults", "from_group", "from_host")
+    template, inv = tree(
+        {"from_defaults": "d1"},
+        group={"from_group": "g1"},
+        hosts={"box": {"from_host": "h1"}},
+        plane="k8s",
+    )
+    ctx = rc.render_context(template, inventory=inv)
+    assert [ctx[name] for name in names] == ["d1", "g1", "h1"]
+    tree(
+        {"from_defaults": "d2"},
+        group={"from_group": "g2"},
+        hosts={"box": {"from_host": "h2"}},
+        plane="k8s",
+    )
+    ctx = rc.render_context(template, inventory=inv)
+    assert [ctx[name] for name in names] == ["d2", "g2", "h2"]
