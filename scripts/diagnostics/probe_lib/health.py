@@ -538,7 +538,9 @@ def run_health(
 
     if not targets and container == health_backup_targets.BACKUP_ROLE:
         # No workload; the gate is the targets' availability (H1.7b).
-        return health_backup_targets.run(cluster, tools, prom, _read, _with_alert_plane)
+        return health_backup_targets.report(
+            cluster, tools, prom, _read, _with_alert_plane
+        )
 
     if not targets:
         # No Deployment/DaemonSet/StatefulSet — the CronJob-only path, the read-only analog

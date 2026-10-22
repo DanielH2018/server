@@ -826,6 +826,11 @@ one of the six Flux-born roles may appear in a task or template file under
 `k3s_longhorn_backup_cron`, which it must find in `longhorn-backup`'s defaults. Every PR that
 moves a key runs `git grep -l <key>` for it and lists every reader it repoints in its body.
 
+The row exempts two keys by name, `k8s_autodeploy` and `k8s_autodeploy_reason`. Every k8s role
+defines them as a convention, and the release-staleness check and the Renovate prompt read the
+convention across all roles, not the value of one Flux-born role. A flip of either changes a
+stance and no host-visible state. H1.7b found this when the row first ran over the real tree.
+
 ### Longhorn objects that are not static
 
 - **Settings.** Each of the seven settings tasks becomes one `longhorn.io/v1beta2` `Setting`
@@ -901,6 +906,11 @@ moves a key runs `git grep -l <key>` for it and lists every reader it repoints i
       `_is_clean` and `_is_flagged` pair, and its named member, the `default` BackupTarget
       in the `longhorn-backup` render, all land in H1.7b's change to `secret_checks.py`.
       H1.7b waits on D3, which waits on R2, so the file exists by then (*Open questions* 5).
+    - **The named member also holds for a blank URL.** A disarm PR renders
+      `backupTargetURL: ""`, so no placeholder is left to find, and a member that required one
+      would fail the render of the PR that applies the incident lever. The member passes when the
+      URL is blank, and fails a non-blank URL that names no `${longhorn_b2_bucket}`. The
+      `# DECIDED:` marker beside the member in `secret_checks.py` records the choice.
 - **Two endpoint values can now disagree.** The regex existed so that the region could not
   drift from `longhorn_b2_endpoint`. After H1.7b, nothing ties the two together. A wrong
   region makes the target unreachable, which the availability check below reports within
@@ -1865,6 +1875,10 @@ gates on it. Each estimate counts hand-written lines, tests included.
       extra skips, and say that step 7 creates the targets through `longhorn-backup`.
     - The backup-health reader reports a target that carries the reconcile-disabled
       annotation. `probe.py landing` adds both BackupTargets to its annotation listing.
+      The listing (`RECONCILE_MEMBERS` in `scripts/diagnostics/probe_lib/promote_state.py`) is
+      H1.4's, so a stack whose base predates H1.4 adds the two members after its rebase onto
+      master. Until then, `probe.py landing` does not name an annotated BackupTarget, and the
+      backup-health monitor and `probe.py health longhorn-backup` still report it.
     - **Operator-only:** amend ADR-0007 again. Its new consequence gains the break-glass
       case: a target held by the annotation reads red until step 4 removes it.
     - Move the RecurringJob actuator's contract.
