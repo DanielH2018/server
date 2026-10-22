@@ -690,11 +690,13 @@ creates both objects.
 
     Once the hold is settled, read `prod`'s commit without the cluster, from the
     `org.opencontainers.image.revision` key of `prod`'s manifest in GHCR (C2). Render at that
-    commit, in placeholder mode, with `flux_verify_drill` false:
+    commit, in placeholder mode, with `flux_verify_drill` false. Name every published tag with
+    `--role`, as `promote`'s *Build the bundle* step does: a render without `--role` writes
+    `cluster/` alone, and steps 6 and 9 need its `flux/` files.
 
     ```bash
     git worktree add --detach <dir> <prod SHA>
-    cd <dir> && uv run python scripts/renderer/homelab_render.py cluster --out <out>
+    cd <dir> && uv run python scripts/deploy_tools/promote.py published-tags | sed 's/^/--role /' | xargs uv run python scripts/renderer/homelab_render.py cluster --out <out>
     ```
 
     - **Offline branch.** When GitHub or GHCR cannot be reached, steps 1 and 2 cannot run.
