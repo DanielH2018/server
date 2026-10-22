@@ -339,6 +339,47 @@ def maximal_apply_warning(role: str, tags) -> str:
     return ""
 
 
+# Setup roles whose playbook applies a second half to other hosts through an opt-in play,
+# and the tag that selects it. `k3s-bringup.yml` runs `tasks/agent.yml` only from the join
+# plays, which match no host without `-e join_agent=<host>`, so `--tags k3s` on daniel-box
+# leaves every agent node unapplied (#5606). The data lives here, beside
+# `MAXIMAL_ROLE_WARNING`, for the same reason: the banner and monitor-bridge print the join
+# from a `manual_plane` row and cannot import the deployer's routing (#5627).
+#
+# DECIDED: the agent command goes beside the WHOLE-ROLE tag only, never beside a narrowed one.
+# `narrow_setup.py` refuses any path that reaches `tasks/agent.yml`, because no static import
+# from the role's `tasks/main.yml` reaches that file, and a refusal is what leaves the role's
+# row empty. A narrowed row therefore never touches the agent: `tasks/server.yml` alone
+# narrows to `k3s_server`. The cost is that an agent-only change prints the server command
+# too, which applies more than it needs and never less. Pinned by
+# test_deploy_remediation_agent.py::test_a_change_reaching_agent_yml_refuses_to_narrow.
+AGENT_JOIN_TAGS: dict[str, str] = {"k3s": "k3s_agent"}
+
+
+def agent_join_cmds(role: str, playbook: str, tags, agent_hosts) -> list[str]:
+    """The join-play commands that apply `role`'s agent half, or [] when it has none.
+
+    Args:
+        role: the role, under the `--tags` value that selects it.
+        playbook: the playbook the server-half command names.
+        tags: the tags that command prints, as an iterable of strings.
+        agent_hosts: the hosts the join plays apply the agent half to, from the routing or
+            from a `manual_plane` line's `agent_hosts` key.
+
+    Only a whole-role tag gets them, for the reason the `DECIDED:` marker above gives. A role
+    with no known agent host, such as one an older deployer recorded, gets a visible
+    placeholder rather than a guessed host. No `target_arg`: `-e target=` selects a host's
+    vars and still runs on the operator's machine, while the join play opens its own SSH
+    connection to the host `join_agent` names.
+    """
+    if role not in AGENT_JOIN_TAGS or frozenset(tags) != frozenset({role}):
+        return []
+    return [
+        f"{PLAYBOOK_CMD} {playbook} -e join_agent={host} --tags {AGENT_JOIN_TAGS[role]}"
+        for host in (tuple(agent_hosts) or ("<agent host>",))
+    ]
+
+
 # How long a contention streak may run before monitor-bridge pages on it and the SessionStart
 # banner names it: the deployer's longest apply budget, `gitops_deploy_broad_timeout_s` =
 # 1800 s, so a holder past it has outlived every legitimate deploy. The bridge's own default
@@ -362,6 +403,9 @@ class ManualPlaneEntry(NamedTuple):
             already listed.
         host: the one host the playbook gates the role onto, for a role the tick's host
             does not run, else None. Every printed apply command appends `target_arg(host)`.
+        agent_hosts: the hosts the playbook's join plays apply the role's agent half to, from
+            the routing when the deployer recorded the line (#5627). Empty for every role
+            `AGENT_JOIN_TAGS` does not name. Every printer passes it to `agent_join_cmds`.
     """
 
     origin: str
@@ -369,6 +413,7 @@ class ManualPlaneEntry(NamedTuple):
     role: str
     at: float
     host: str | None = None
+    agent_hosts: tuple[str, ...] = ()
 
 
 class K8sDeferredEntry(NamedTuple):

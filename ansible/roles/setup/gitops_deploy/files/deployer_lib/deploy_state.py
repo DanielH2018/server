@@ -349,17 +349,14 @@ class DeployerState:
     # ── the setup roles this deployer cannot apply itself ─────────────────────────────────
     #
     # The `owed` ledger's `manual_plane` class (#3392), one line per role carrying its
-    # `playbook` and `tags` keys.
+    # `playbook`, `tags`, `host` and `agent_hosts` keys.
 
     def _manual_plane(self) -> tuple[list[ManualPlaneEntry], dict[str, frozenset[str]]]:
         """Every pending role and its tags."""
         return manual_plane_entries(self.read("owed"))
 
     def manual_plane_pending(self) -> list[ManualPlaneEntry]:
-        """Every pending role, oldest first; a garbled line is skipped, never lost.
-
-        The ledger's writers carry such a line through untouched.
-        """
+        """Every pending role, oldest first; the writers carry a garbled line through."""
         return self._manual_plane()[0]
 
     def _put_manual_plane_tags(self, role: str, tags: frozenset[str]) -> None:
@@ -369,33 +366,35 @@ class DeployerState:
             self.write("owed", put_manual_plane(self.read("owed"), entry, tags))
 
     def record_manual_plane(
-        self, origin: str, playbook: str, role: str, now: float, host: str | None = None
+        self,
+        origin: str,
+        playbook: str,
+        role: str,
+        now: float,
+        host: str | None = None,
+        agent_hosts: tuple[str, ...] = (),
     ) -> bool:
         """Record that `role` changed in `origin`'s range and no tick can apply it.
 
         Args:
-            origin: the origin SHA the tick fast-forwarded to.
-            playbook: the playbook that applies the role, or `NO_PLAYBOOK`.
-            role: the role, under the `--tags` value that selects it.
+            origin, playbook, role, host, agent_hosts: the line's fields, as
+                `ManualPlaneEntry` names them. `origin` is the SHA the tick fast-forwarded to.
             now: a first-seen stamp, in `time.time()` terms.
-            host: the host an apply must target, as `ManualPlaneEntry.host` says.
 
-        Returns:
-            True when a line was appended, False when this role was already pending.
+        Returns True when a line was appended, False when this role was already pending.
 
         A new line names the whole role until `record_manual_plane_tags` narrows it, so a
         reader between the two calls prints the blunt answer rather than a narrow one.
 
         The stamp is NOT refreshed for a role already listed. It measures how long the role
-        has waited for a hand-applied run, and a later commit touching the same role is not
-        that run — it is more of the same waiting. Refreshing on one would restart the clock
-        every tick a push landed, and monitor-bridge could never page. (This is the opposite
-        of `behind_marker`, which re-stamps on every fast-forward, because progress is
-        exactly what a tick that moves the tree HAS made.)
+        has waited for a hand-applied run, and a later commit touching the role is more of
+        the same waiting. Refreshing would restart the clock on every push, and
+        monitor-bridge could never page. `behind_marker` is the opposite: it re-stamps on
+        every fast-forward, because a tick that moves the tree has made progress.
         """
         if any(e.role == role for e in self.manual_plane_pending()):
             return False
-        entry = ManualPlaneEntry(origin, playbook, role, now, host)
+        entry = ManualPlaneEntry(origin, playbook, role, now, host, tuple(agent_hosts))
         self.write("owed", put_manual_plane(self.read("owed"), entry, frozenset()))
         return True
 
