@@ -60,8 +60,16 @@ class _Reader:
         return self.objects.get((args[1], args[2]))
 
 
+_PROD_NODES = {"items": [{"metadata": {"name": "daniel-box"}}]}
+
+
+def _box():
+    return "daniel-box"
+
+
 def _coredns_objects(nodehosts=_NODEHOSTS):
     return {
+        ("nodes", "-o"): _PROD_NODES,
         ("configmap", "coredns"): {
             "data": {"Corefile": ".:53 {}", "NodeHosts": nodehosts}
         },
@@ -101,7 +109,7 @@ def test_the_check_table_names_coredns_and_longhorn():
 
 def test_coredns_nodehosts_is_clean():
     failures, notes = health_plumbing.coredns(
-        _Reader(_coredns_objects()), _Answers(**_RESOLVING)
+        _Reader(_coredns_objects()), _Answers(**_RESOLVING), _box
     )
     assert failures == []
     assert "NodeHosts lists 2 hosts" in notes
@@ -109,7 +117,7 @@ def test_coredns_nodehosts_is_clean():
 
 def test_coredns_nodehosts_is_flagged():
     failures, _ = health_plumbing.coredns(
-        _Reader(_coredns_objects(nodehosts="\n")), _Answers(**_RESOLVING)
+        _Reader(_coredns_objects(nodehosts="\n")), _Answers(**_RESOLVING), _box
     )
     assert len(failures) == 1
     assert "empty NodeHosts" in failures[0]
@@ -117,7 +125,7 @@ def test_coredns_nodehosts_is_flagged():
 
 def test_coredns_resolution_is_clean():
     resolve = _Answers(**_RESOLVING)
-    failures, _ = health_plumbing.coredns(_Reader(_coredns_objects()), resolve)
+    failures, _ = health_plumbing.coredns(_Reader(_coredns_objects()), resolve, _box)
     assert failures == []
     assert resolve.asked == [
         ("10.43.0.10", health_plumbing.CLUSTER_NAME),
@@ -128,7 +136,7 @@ def test_coredns_resolution_is_clean():
 def test_coredns_resolution_is_flagged():
     """A Corefile that loads but no longer forwards to Pi-hole answers the cluster name only."""
     resolve = _Answers(**{health_plumbing.CLUSTER_NAME: ["10.43.0.1"]})
-    failures, _ = health_plumbing.coredns(_Reader(_coredns_objects()), resolve)
+    failures, _ = health_plumbing.coredns(_Reader(_coredns_objects()), resolve, _box)
     assert failures == [
         f"{health_plumbing.UPSTREAM_NAME} did not resolve through kube-dns 10.43.0.10 "
         "— the Corefile loads but does not answer it"
@@ -139,8 +147,23 @@ def test_coredns_without_the_kube_dns_service_is_flagged():
     objects = _coredns_objects()
     del objects[("service", "kube-dns")]
     resolve = _Answers(**_RESOLVING)
-    failures, _ = health_plumbing.coredns(_Reader(objects), resolve)
+    failures, _ = health_plumbing.coredns(_Reader(objects), resolve, _box)
     assert "Service kube-system/kube-dns is MISSING" in failures[0]
+    assert resolve.asked == []
+
+
+def test_a_node_of_the_served_cluster_is_clean():
+    health_plumbing.require_a_node_of_the_served_cluster(
+        _Reader(_coredns_objects()), _box
+    )
+
+
+@pytest.mark.parametrize("host", ["daniel-stage", "laptop"])
+def test_a_host_outside_the_served_cluster_is_flagged(host):
+    """daniel-stage would dig another cluster's CoreDNS, and a laptop cannot route a ClusterIP."""
+    resolve = _Answers(**_RESOLVING)
+    with pytest.raises(core.Unreadable, match=f"this host \\({host}\\)"):
+        health_plumbing.coredns(_Reader(_coredns_objects()), resolve, lambda: host)
     assert resolve.asked == []
 
 

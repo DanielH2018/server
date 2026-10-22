@@ -232,6 +232,16 @@ the target is not loaded yet: the route was added since `observability` last dep
 Prometheus read that fails exits 75, never a pass. The Pi's
 `--docker` path does not read the alert plane.
 
+For the `coredns` and `longhorn` tags, a passing rollout verdict also runs a plumbing check
+before the alert plane (`scripts/diagnostics/probe_lib/health_plumbing.py`). The `coredns`
+check fails on an empty `NodeHosts` key in ConfigMap `kube-system/coredns`. It also fails when
+`kubernetes.default.svc.cluster.local` or `pi.hole` does not resolve through the `kube-dns`
+Service. The dig runs from this host, so the check exits 75 on a host that is not a node of
+the cluster kubectl serves. The `longhorn` check fails when the live `longhorn` StorageClass's
+parameters differ from the class in ConfigMap `longhorn-system/longhorn-storageclass`. The fix
+for that is an **operator-only** delete of the class, which longhorn-manager recreates. Each
+check runs only once its tag resolves to a k8s role.
+
 `--docker` inspects the Pi's container over ssh instead.
 
 A role with no Deployment/DaemonSet/StatefulSet but a CronJob (configarr and pi-peer-backup) is gated the same way on its most recent Job instead

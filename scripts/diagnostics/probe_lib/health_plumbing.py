@@ -30,6 +30,7 @@ asks of a slow source.
 """
 
 import shutil
+import socket
 import subprocess
 import sys as _sys
 from pathlib import Path as _Path
@@ -40,6 +41,7 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
 from diagnostics.probe_lib import core
 from lib import yaml_fast
+from lib.kubectl import cluster_for_host, cluster_of, node_names
 
 # Answered by CoreDNS's own `kubernetes` plugin, so it proves the cluster zone loads.
 CLUSTER_NAME = "kubernetes.default.svc.cluster.local"
@@ -88,8 +90,34 @@ def dig(server, name, run=subprocess.run, which=shutil.which):
     ]
 
 
-def coredns(read, resolve=dig):
-    """(failures, notes) for CoreDNS: a non-empty `NodeHosts`, and both names resolving."""
+def require_a_node_of_the_served_cluster(read, hostname=socket.gethostname):
+    """Refuse to dig unless this host is a node of the cluster kubectl serves.
+
+    The kubectl reads carry `lib.kubectl`'s cluster refusal, but dig does not: it reaches
+    whichever CoreDNS this host's kube-proxy routes the ClusterIP to, and nothing at all from
+    a host outside the cluster. Without this, a green answer could be about another cluster,
+    and a red one about a host that cannot route a ClusterIP.
+
+    Raises:
+        core.Unreadable: this host's cluster is unknown or differs from the served one.
+    """
+    served = cluster_of(node_names(read(["get", "nodes", "-o", "json"])))
+    here = cluster_for_host(hostname())
+    if here is None or here != served:
+        raise core.Unreadable(
+            f"this host ({hostname()}) is a node of {here or 'no known cluster'}, and kubectl "
+            f"serves {served or 'an unknown cluster'}; a dig through kube-dns from here would "
+            "not read that cluster's CoreDNS. Run probe.py on a node of the gated cluster"
+        )
+
+
+def coredns(read, resolve=dig, hostname=socket.gethostname):
+    """(failures, notes) for CoreDNS: a non-empty `NodeHosts`, and both names resolving.
+
+    Raises:
+        core.Unreadable: a kubectl read failed, or `require_a_node_of_the_served_cluster`
+            refused the dig.
+    """
     failures, notes = [], []
     cm = read(["get", "configmap", "coredns", "-n", "kube-system", "-o", "json"])
     hosts = ((cm or {}).get("data") or {}).get("NodeHosts") or ""
@@ -111,6 +139,7 @@ def coredns(read, resolve=dig):
             "to resolve through"
         )
         return failures, notes
+    require_a_node_of_the_served_cluster(read, hostname)
     for name in (CLUSTER_NAME, UPSTREAM_NAME):
         answer = resolve(ip, name)
         if answer:

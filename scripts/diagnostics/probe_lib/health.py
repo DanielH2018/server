@@ -13,8 +13,8 @@ role's rendered manifests declare, fetching each one, and rolling the per-worklo
 into the line `deploy_lib/detach_notify.py` reads.
 
 The gate exits 0 only when the workload is fully rolled out AND nothing restarted recently,
-and then only when the alert plane agrees (`_with_alert_plane`). Both rollout halves are
-load-bearing, and the reasoning for each sits with the function it governs. A
+and then only when the tag's plumbing check and the alert plane agree (`_with_alert_plane`).
+Both rollout halves are load-bearing, and each one's reasoning sits with its function. A
 role with no Deployment/DaemonSet/StatefulSet but a CronJob (configarr, pi-peer-backup) is
 gated the same way on its most recent Job instead — see health_cronjob.format_cronjob_health.
 
