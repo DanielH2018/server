@@ -42,6 +42,16 @@ CONCURRENT = 5
 # which names no Kustomization. Capping here makes `verify` print `failed` first, naming the
 # names (d4-ordering.md, *The cap*). The three workflow limits are sized from this figure
 # (ansible/tests/repo/test_promote_workflow_verify.py).
+# DECIDED: the clamp stands although the published bundle's all-changed chain is past it
+# (#5868: 32016s with 111 Kustomizations, against 19800s; it was 31920s until Longhorn v1.13.0
+# raised the `longhorn` timeout from 2m to 10m, #5972). `verify`'s own wait is the same
+# `promote_timeout`, so it stops at this cap too. Lifting only the soak's rendered wait would
+# let the soak outlast a `verify` that has already written `failed=<names>`, and would pass no
+# promotion. The soak's wait cannot shrink to the chain of what changed either: the render
+# cannot know R's changed set (renderer_lib/soak.py). A narrow revision stays well under the
+# cap. A revision that changes every tag at once, such as a renderer change, can fail at the
+# cap, and the hold names the Kustomizations that had not settled. The remedy is a `verify`
+# that re-enters rather than holding one runner, which is d4-ordering.md's Open question 14.
 VERIFY_CAP_S = 330 * 60
 
 _DURATION = re.compile(r"(?:(\d+)h)?(?:(\d+)m)?(?:(\d+)s)?")
@@ -90,6 +100,7 @@ def promote_timeout(
     changed: Iterable[str] | None = None,
     concurrent: int = CONCURRENT,
     requeue_s: int = REQUEUE_DEPENDENCY_S,
+    cap_s: int = VERIFY_CAP_S,
 ) -> int:
     """How long `verify` waits, in seconds: the chained timeout (D4.3), capped at VERIFY_CAP_S.
 
@@ -120,6 +131,8 @@ def promote_timeout(
             Kustomization in `docs` as changed.
         concurrent: kustomize-controller's `--concurrent`.
         requeue_s: kustomize-controller's `--requeue-dependency`, in seconds.
+        cap_s: the ceiling, VERIFY_CAP_S. A caller that measures the chain the cap hides
+            passes a larger one.
 
     Raises:
         ValueError: a duration this module cannot read, a `dependsOn` naming a Kustomization
@@ -172,4 +185,4 @@ def promote_timeout(
     queueing = queueing_s(waiting, concurrent)
     soak = timeouts.get(SOAK, 0) if SOAK in changed else 0
     total = max(chain + queueing, soak, ROOT_TIMEOUT_S) + OCI_INTERVAL_S + max(retries)
-    return min(total, VERIFY_CAP_S)
+    return min(total, cap_s)

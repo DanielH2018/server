@@ -81,8 +81,11 @@ host probes stay green.
   are immutable, and the Ansible task that deleted the class when its parameters differed is
   gone. If the manager does not replace a class whose ConfigMap changed, the fix is an
   **operator-only** delete of the class, which the manager recreates from the ConfigMap.
-- **`manifests_rollout_timeout` is `2m`, measured 2026-10-22** (`defaults/main.yml`, #5922). The
-  DaemonSet rolls with `maxUnavailable: 100%`, so both manager pods are replaced at once.
+- **`manifests_rollout_timeout` is `10m`** (`defaults/main.yml`). The DaemonSet rolls with
+  `maxUnavailable: 100%`, so both manager pods are replaced at once, and a cached restart
+  measured 36s on 2026-10-22 (#5922). A version bump also cold-pulls the image on every node,
+  and the Kustomization's `wait: true` waits for the driver deployer and both Deployments too.
+  A timeout on this forward-only tag writes `DEPLOY_HOLD`, so the value carries that headroom.
 - **`NEVER_SHED` names the tag** in `ansible/filter_plugins/service_tier.py`. The role is
   untiered, and the lost-node break-glass must not scale the storage control plane down.
   `ansible/tests/k8s/test_shed_set_is_derived_from_tier.py::test_never_shed_matches_the_untiered_roles_that_never_prune`
@@ -93,6 +96,8 @@ The host tasks `setup/k3s` keeps for Longhorn (`open-iscsi`, `nfs-common` and th
 blacklist) carry the tag `longhorn_host` alone. No `setup/k3s` task writes a Longhorn object that
 Flux owns: this role owns the Settings and classes, the CSI sidecar requests among them
 (#5958), `longhorn-reconcile` the labels, and `longhorn-backup` the credentials, the backup
-targets and the RecurringJobs. The stale-checkout guard holds no Longhorn row, and bring-up
+targets and the RecurringJobs. A fourth `longhorn_host` task removes the manifests that retired
+tasks staged under /etc/rancher/k3s, these and the CoreDNS, MetalLB, cluster-base and traefik
+ones, so no file remains for a hand `kubectl apply -f` to write a Flux-owned object from. The stale-checkout guard holds no Longhorn row, and bring-up
 step 1 skips only `kubeconfig`. `docs/longhorn-disaster-recovery.md`, *Order from H1.2*, has
 the steps.

@@ -62,7 +62,8 @@ janitorr_k8s_health_kubectl_image: alpine/k8s:1.37.1@sha256:712dc5385d1c1a3f83b7
 
 # Above the reader's worst case: two 30 s kubectl calls (JANITORR_KUBECTL_TIMEOUT_S) plus
 # kuma_push's three 10 s attempts and its two 30 s waits, 150 s, plus the cold pull of both
-# images. No k8s/cronjob-gate runs this CronJob, so no gate timeout bounds it from above.
+# images. No flux_cronjob_gates entry copies this CronJob into a gate Job, so no gate timeout
+# bounds it from above.
 janitorr_k8s_health_deadline_seconds: 420
 
 janitorr_k8s_health_cpu_limit: "200m"
