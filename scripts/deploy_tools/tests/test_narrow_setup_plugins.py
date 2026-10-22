@@ -114,7 +114,6 @@ def test_an_inventory_value_calling_the_filter_is_flagged(calls_plugin):
             "longhorn_groups.py",
             {
                 "backup-health",
-                "coredns",
                 "disk-health",
                 "etcd-snapshot",
                 "live-drift",
