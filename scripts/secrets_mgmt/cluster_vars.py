@@ -13,7 +13,8 @@ Two modes:
            cluster files into memory, refuses a value Flux cannot carry or that a role's
            deploy-time assert would refuse (`successor_refusals`), then changes only
            what moved: `sops set` for a changed key, `sops unset` for a dropped one, a fresh
-           encrypt for a manifest whose plaintext changed. A no-change run leaves every file
+           encrypt for a manifest whose plaintext changed. A `PENDING_RETIREMENT` key the
+           cluster file holds is kept, not dropped, as `check` exempts it. A no-change run leaves every file
            byte-identical. It prints key names, never a value. A refusal adds and changes no
            file, and so does a failed encrypt: every encrypt runs into memory before the first
            write.
@@ -72,6 +73,7 @@ from secrets_mgmt.cluster_vars_check import (
     is_dotenv,
     source_text,
 )
+from secrets_mgmt.pending_retirement import PENDING_RETIREMENT
 from secrets_mgmt.sops_io import sops_set
 
 Run = Callable[..., subprocess.CompletedProcess]
@@ -355,14 +357,14 @@ def write(tree: Tree, expected: Expected, run: Run = subprocess.run) -> int:
         print("cluster_vars write: refused, and nothing was written:", file=sys.stderr)
         print("\n".join(f"  {line}" for line in refusals), file=sys.stderr)
         return FAILED
-    desired = {key: str(values[key]) for key in sorted(expected.keys)}
     try:
-        written = _encrypt_all(tree, desired, manifests, run)
         current = (
             decrypt(tree, tree.cluster_file, run)
             if tree.cluster_file.is_file()
             else None
         )
+        desired = _desired(values, expected, current)
+        written = _encrypt_all(tree, desired, manifests, run)
         changed = _update_dotenv(tree, desired, current, run)
     except SopsFailed as exc:
         print(f"cluster_vars write: {exc}. No file was changed.", file=sys.stderr)
@@ -386,6 +388,17 @@ def write(tree: Tree, expected: Expected, run: Run = subprocess.run) -> int:
     report += [f"removed {', '.join(p.name for p in stale)}"] if stale else []
     print(f"cluster_vars write: {'; '.join(report) or 'no change'}")
     return OK
+
+
+def _desired(values: dict, expected: Expected, current: dict | None) -> dict[str, str]:
+    """The dotenv's keys and values: the render's keys, plus each held pending retirement.
+
+    `check` exempts a `PENDING_RETIREMENT` key from "no cluster render references it", so a
+    write keeps one the cluster file still holds rather than unsetting it (#5960). It stays
+    only while `secrets.yml` holds it too, which is where its value comes from.
+    """
+    held = set(current or ()) & PENDING_RETIREMENT & set(values)
+    return {key: str(values[key]) for key in sorted(expected.keys | held)}
 
 
 def _encrypt_all(
