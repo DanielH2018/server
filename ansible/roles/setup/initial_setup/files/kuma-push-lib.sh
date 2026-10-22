@@ -51,8 +51,9 @@
 # budget before its log line appears, which the Python twin
 # `ansible/roles/setup/common/files/kuma_push.py` accepts for the same reason. They are NOT the
 # same response, and the final log line says which (#1803): Kuma's push route answers
-# `{"ok":false,"msg":"Monitor not found or not active."}` as `application/json`, while Traefik's no-router 404 is Go's `404 page not found`
-# as `text/plain` (both measured 2026-09-17 against the live VIP). The content type travels
+# `{"ok":false,"msg":"Monitor not found or not active."}` as `application/json`, while
+# Traefik's no-router 404 is Go's `404 page not found` as `text/plain` (both measured
+# 2026-09-17 against the live VIP). The content type travels
 # out through `-w` beside the code, and a JSON answer adds `by=kuma` to the failure line. That
 # field is what separates Kuma answering from an edge with no route: when Kuma answers, the edge
 # and Kuma are both fine and the verdict is lost with no tile to go red at its deadline.
