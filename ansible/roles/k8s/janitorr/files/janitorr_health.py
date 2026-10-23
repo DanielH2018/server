@@ -26,11 +26,14 @@ Environment (all optional):
     JANITORR_STARTUP_GRACE_S     seconds after a pod start before errors count (default 600)
     JANITORR_KUBECTL             kubectl command line (default "k3s kubectl")
     JANITORR_KUBECTL_TIMEOUT_S   seconds allowed per kubectl call (default 30)
+    JANITORR_VERDICT_CONFIGMAP   ConfigMap the verdict is also written to, as annotations that
+                                 kube-state-metrics exports (default empty: no export)
     KUMA_PUSH_URL                the Janitorr Errors push monitor's URL, `<base>/api/push/<token>`
 """
 
 from __future__ import annotations
 
+import json
 import os
 import socket
 import sys
@@ -47,6 +50,9 @@ WINDOW_S = float(os.environ.get("JANITORR_WINDOW_H", "12")) * 3600
 GRACE_S = float(os.environ.get("JANITORR_STARTUP_GRACE_S", "600"))
 KUBECTL = os.environ.get("JANITORR_KUBECTL", "k3s kubectl")
 TIMEOUT = int(os.environ.get("JANITORR_KUBECTL_TIMEOUT_S", "30"))
+# M6 B6b: the verdict leaves the pod a second way, as annotations on this ConfigMap, which
+# kube-state-metrics exports to Prometheus beside the Kuma push. Empty exports nothing.
+VERDICT_CONFIGMAP = os.environ.get("JANITORR_VERDICT_CONFIGMAP", "")
 # The pod log is the evidence, in the `<ts> <host> <tag>: <message>` shape rsyslog gave the host
 # script's `logger -t` lines (the H2 plan's *Evidence goes to stdout*). monitor-bridge's
 # Swallowed Push Verdicts check parses exactly two tokens before the tag, so a bare
@@ -69,6 +75,45 @@ def uptime_seconds(started_at: str, now: float) -> float:
         tzinfo=timezone.utc
     )
     return now - started.timestamp()
+
+
+def export_verdict(
+    kubectl: Callable[..., tuple[int, str]], status: str, msg: str, now: float
+) -> bool:
+    """Writes the verdict and the run time to the verdict ConfigMap's annotations.
+
+    kube-state-metrics exports `homelab/check-verdict` as a label of
+    `kube_configmap_annotations`, which the shadow rule `JanitorrErrorsFound` reads. The time
+    and the message are for a human reading the object. The rule measures freshness from the
+    CronJob's last successful run instead, because an annotation is a label and cannot be
+    compared with the clock.
+
+    Returns:
+        True when the API server accepted the patch.
+    """
+    stamp = datetime.fromtimestamp(now, timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    patch = {
+        "metadata": {
+            "annotations": {
+                "homelab/check-verdict": status,
+                "homelab/check-last-run": stamp,
+                "homelab/check-message": msg[:200],
+            }
+        }
+    }
+    rc, out = kubectl(
+        "patch",
+        "configmap",
+        VERDICT_CONFIGMAP,
+        "--type=merge",
+        "--patch=" + json.dumps(patch),
+    )
+    if rc != 0:
+        emit(
+            "export failed: cannot patch %s: %s"
+            % (VERDICT_CONFIGMAP, out.strip()[:200])
+        )
+    return rc == 0
 
 
 def verdict(kubectl: Callable[..., tuple[int, str]], now: float) -> tuple[bool, str]:
@@ -127,9 +172,14 @@ def main(
 ) -> int:
     """Pushes the verdict to Kuma, or prints it as `up\\tmsg` / `down\\tmsg` with no token.
 
-    Always exits 0. A reader that raises pushes a DOWN naming the exception, which is what
-    the host script's wrapper did for a reader that crashed: an absent push would leave the
-    tile to time out with no explanation.
+    Exits 0 whatever the verdict. A reader that raises pushes a DOWN naming the exception,
+    which is what the host script's wrapper did for a reader that crashed: an absent push would
+    leave the tile to time out with no explanation.
+
+    The one exit 1 is a failed export to the verdict ConfigMap, after the push has run. A
+    reader that cannot write its verdict leaves the shadow rules reading the previous one, and
+    the failed Job stops the CronJob's last successful time, which `JanitorrHealthNotReporting`
+    reads.
 
     Args:
         kubectl: the kubectl transport; a test passes a recorder.
@@ -141,17 +191,22 @@ def main(
     except Exception as e:  # any crash is reported as the verdict
         ok, msg = False, "janitorr health reader failed: %s: %s" % (type(e).__name__, e)
     status = "up" if ok else "down"
+    # The export runs beside the push until M6's Cutover-2 drops the push.
+    exported = (
+        export_verdict(kubectl, status, msg, now()) if VERDICT_CONFIGMAP else True
+    )
+    exit_code = 0 if exported else 1
     # One URL rather than a base and a token, so the Secret's value is not a whole-scalar
     # placeholder: one would join k8s/manifests' standalone guard map, and a change to that
     # map fans a landing's narrowed apply out to every role that includes k8s/manifests.
     base, _, token = os.environ.get("KUMA_PUSH_URL", "").partition("/api/push/")
     if not base or not token:
         print("%s\t%s" % (status, msg))
-        return 0
+        return exit_code
     emit("status=%s %s" % (status, msg))
     if push(status, msg, base, token, log=emit):
         emit("pushed")
-    return 0
+    return exit_code
 
 
 if __name__ == "__main__":

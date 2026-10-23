@@ -119,6 +119,13 @@ containers_list:
     metrics:
       - job: crowdsec
         port: 6060
+      # The crowdsec-jobs sidecar's check exporter (files/jobs_metrics.py), which serves the
+      # three Kuma-pushed jobs' verdicts as homelab_check_* gauges beside the push (M6 B6b). The
+      # process binds whatever JOBS_METRICS_PORT holds, and deployment.yaml.j2 hands it this
+      # number, so unlike the engine's image-fixed 6060 this port moves the listener too.
+      - job: crowdsec-jobs
+        port: 9182
+        interval: 1m
   # The workload-tier PriorityClasses and the read-only cluster identity (H1.2). Flux applies the
   # tag through `promote` and every Ansible path skips it. It renders prune: false, and it is
   # untiered, so `NEVER_SHED` keeps it out of the lost-node shed set.

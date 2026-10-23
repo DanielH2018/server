@@ -15,6 +15,10 @@ Four jobs run, each on its old host cron's UTC schedule:
     crowdsec-home-allowlist    home_allowlist.py    every 5 minutes, pushes CrowdSec Home Allowlist
                                                     one minute after the crowdsec-home-ips CronJob
 
+Each job that pushes to Kuma also exports its verdict as gauges on `/metrics`, on the port in
+`JOBS_METRICS_PORT` (`jobs_metrics.py`). The export runs beside the push, which M6 removes
+later. The bouncer prune exports nothing, as it pushes nothing.
+
 Each run is a child `python3` process, so a job that crashes or hangs cannot stop this one. A
 run that outlives its timeout is killed and reported as down. A job still running when its next
 slot comes is skipped for that slot, as `concurrencyPolicy: Forbid` would skip it. This process
@@ -52,6 +56,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Protocol
 
+import jobs_metrics
 import kuma_push
 
 JOBS_DIR = Path(__file__).resolve().parent
@@ -126,6 +131,16 @@ JOBS = (
     ),
 )
 
+# The verdicts of the jobs that push to Kuma, served on /metrics by the `__main__` block. A job's
+# timestamp may age DEADLINE_PERIODS periods before the rule that reads it calls the job stale.
+EXPOSITION = jobs_metrics.Exposition(
+    {
+        job.tag: job.period * 60 * jobs_metrics.DEADLINE_PERIODS
+        for job in JOBS
+        if job.push_env
+    }
+)
+
 
 def emit(
     line: str,
@@ -163,8 +178,12 @@ def run_job(
     push: Callable[..., bool] = kuma_push.kuma_push,
     env: Mapping[str, str] | None = None,
     out: Callable[[str], None] = emit,
+    export: Callable[[str, bool, float], None] | None = None,
 ) -> int:
-    """Runs `job` once, prints its verdict and pushes it.
+    """Runs `job` once, prints its verdict, records it for `/metrics` and pushes it.
+
+    `export` is `Exposition.record`'s signature. Only a job with a Kuma monitor exports, and
+    only the scheduler passes it: a `--run` is a second process that serves nothing.
 
     Returns:
         The run's exit code, 1 for a run killed at its timeout.
@@ -191,6 +210,8 @@ def run_job(
         for line in output.splitlines()[:-1]:
             out(f"{job.tag}: {line}")
     out(f"{job.tag}: status={status} {summary}")
+    if job.push_env and export is not None:
+        export(job.tag, returncode == 0, time.time())
     if job.push_env:
         base, _, token = environ.get(job.push_env, "").partition("/api/push/")
         push(status, summary, base, token, log=lambda line: out(f"{job.tag}: {line}"))
@@ -198,7 +219,13 @@ def run_job(
 
 
 def start_thread(job: Job) -> threading.Thread:
-    thread = threading.Thread(target=run_job, args=(job,), name=job.tag, daemon=True)
+    thread = threading.Thread(
+        target=run_job,
+        args=(job,),
+        kwargs={"export": EXPOSITION.record},
+        name=job.tag,
+        daemon=True,
+    )
     thread.start()
     return thread
 
@@ -262,4 +289,6 @@ if __name__ == "__main__":
     # PID 1 in a container ignores a signal it installs no handler for, so without this the
     # kubelet waits out the grace period on every engine restart before it kills the pod.
     signal.signal(signal.SIGTERM, lambda *_: sys.exit(0))
+    if os.environ.get("JOBS_METRICS_PORT"):
+        EXPOSITION.serve(int(os.environ["JOBS_METRICS_PORT"]))
     sys.exit(main())
