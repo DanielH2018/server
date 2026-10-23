@@ -1,0 +1,147 @@
+# The log and telemetry pipeline's loss, ported from monitor-bridge's shipper_dropped check
+# (Kuma's "Log Shipper Dropped Entries" tile). Plain YAML, never Jinja: prometheus-rules.yaml.j2
+# carries this file verbatim. The design is
+# docs/target-architecture/monitoring/m6-retire-kuma.md, batch A3.
+#
+# SHADOW UNTIL M6's BATCH A3 CUTS OVER. The tile pages today, and M1 convention 5 allows one
+# pager, so every rule here routes to the blackhole receiver until Cutover-b drops `shadow`.
+#
+# The check had four arms and two boot graces. Each arm is a rule below. The graces read
+# `node_boot_time_seconds` of daniel-box, the node the bridge's own uptime came from:
+#
+# - BOOT_SETTLE_S (1200s). The weekly reboot makes Alloy's pushes fail while Loki is down, and
+#   the bridge never read back past the end of that settle window (#3490). A rule cannot
+#   shorten its range, so it holds for the settle window PLUS the 1h range, after which the
+#   reboot's own drops have left the range. A real drop in that 80 minutes pages when the hold
+#   ends, where the bridge paged at once. DECIDED: the later page is the price of expressing
+#   the grace in PromQL, and the 7-day soak shows whether it matters.
+# - SHIPPER_BACKLOG_GRACE_S (21600s). After a reboot Alloy ships a backlog for hours and Loki
+#   discards the late part as `too_far_behind` (#2783). That one reason is held for 6h, and
+#   every other reason pages through it.
+#
+# The bridge compares the larger of the client and server totals against one threshold, and
+# names the top server reason. A rule cannot take a max of two metrics' totals into one alert
+# without losing the reason, so the two sides are separate rules, and the server side counts
+# per reason. A reboot morning with two reasons each under 3000 and a sum over it pages the
+# tile and not the rule; the soak reads that episode if it happens.
+#
+# ansible/tests/services/test_scrape_target_rule_jobs.py pins every number below to the
+# bridge's env.yaml.j2.
+groups:
+  - name: log-pipeline
+    rules:
+      # Client side: entries Alloy (cluster) or Alloy on the Pi gave up on, over every drop
+      # reason. 3000 is SHIPPER_DROPPED_MAX: ordinary churn tops out near 1020 an hour and the
+      # smallest genuine burst measured was 6261 an hour.
+      - alert: LogShipperDroppingEntries
+        expr: >-
+          sum(increase(loki_write_dropped_entries_total[1h])) > 3000
+          unless on() (time() - node_boot_time_seconds{origin="daniel-box"} < 4800)
+        for: 5m
+        labels:
+          severity: warning
+          service: loki-homelab
+          shadow: "true"
+        annotations:
+          summary: The log shippers dropped over 3000 entries in the last hour.
+          description: >-
+            Alloy gave up on more than 3000 log entries in an hour, so those lines never reached
+            Loki. Read loki_write_dropped_entries_total by reason and instance, then the Alloy
+            pod's log. A burst right after a shipper restart is a re-tail and not loss.
+      # Server side: entries the homelab Loki discarded, which a shipper never attributes to
+      # itself. A `too_far_behind` count is held for SHIPPER_BACKLOG_GRACE_S after a reboot.
+      - alert: LokiDiscardingEntries
+        expr: >-
+          (
+            sum by (reason) (increase(loki_discarded_samples_total{job="loki-homelab", reason!="too_far_behind"}[1h])) > 3000
+            or (
+              sum by (reason) (increase(loki_discarded_samples_total{job="loki-homelab", reason="too_far_behind"}[1h])) > 3000
+              unless on() (time() - node_boot_time_seconds{origin="daniel-box"} < 21600)
+            )
+          )
+          unless on() (time() - node_boot_time_seconds{origin="daniel-box"} < 4800)
+        for: 5m
+        labels:
+          severity: warning
+          service: loki-homelab
+          shadow: "true"
+        annotations:
+          summary: The homelab Loki discarded over 3000 entries in the last hour.
+          description: >-
+            Loki discarded more than 3000 entries in an hour for the reason {{ $labels.reason }}.
+            too_far_behind means entries arrived outside Loki's accept window, a clock or
+            backfill problem. rate_limited, stream_limited and line_too_long are throughput or
+            limit problems. Read loki_discarded_samples_total by reason.
+      # The same, for the telemetry Loki that the OTel collector exports to.
+      - alert: LokiDiscardingEntries
+        expr: >-
+          (
+            sum by (reason) (increase(loki_discarded_samples_total{job="loki-internal", reason!="too_far_behind"}[1h])) > 3000
+            or (
+              sum by (reason) (increase(loki_discarded_samples_total{job="loki-internal", reason="too_far_behind"}[1h])) > 3000
+              unless on() (time() - node_boot_time_seconds{origin="daniel-box"} < 21600)
+            )
+          )
+          unless on() (time() - node_boot_time_seconds{origin="daniel-box"} < 4800)
+        for: 5m
+        labels:
+          severity: warning
+          service: observability
+          shadow: "true"
+        annotations:
+          summary: The telemetry Loki discarded over 3000 entries in the last hour.
+          description: >-
+            The telemetry Loki discarded more than 3000 entries in an hour for the reason
+            {{ $labels.reason }}, so Claude Code's logs are being lost. Read
+            loki_discarded_samples_total by reason.
+      # The collector's export arm. Any failed export is loss, so the threshold is 0, over
+      # OTELCOL_SEND_FAILED_WINDOW (15m). The `up` conjunct gives the expression a metric name
+      # for scripts/validate/alert_conventions.py, which a bare `__name__` selector lacks, and
+      # reads as "the collector is scraped", the only case a send failure can be measured in.
+      # The `__name__` regex stays, so a send-failed family a new signal adds is covered.
+      - alert: OtelCollectorExportFailing
+        expr: >-
+          sum(increase({__name__=~"otelcol_exporter_send_failed_.*"}[15m])) > 0
+          and on() (up{job="otel-collector-internal"} == 1)
+        for: 5m
+        labels:
+          severity: warning
+          service: observability
+          shadow: "true"
+        annotations:
+          summary: The OTel collector failed to export telemetry.
+          description: >-
+            The collector gave up on exporting telemetry in the last 15 minutes, so the data
+            reaches neither Loki, Prometheus nor Tempo and no other counter records the loss.
+            Read otelcol_exporter_send_failed_* by exporter, then the collector pod's log.
+      # Tempo's blocklist poll arm. A failed poll leaves the blocklist empty after a restart,
+      # so every stored trace is unsearchable while the pod stays Ready (#4626).
+      - alert: TempoBlocklistPollFailing
+        expr: sum(increase(tempodb_blocklist_tenant_index_errors_total[15m])) > 0
+        for: 5m
+        labels:
+          severity: warning
+          service: observability
+          shadow: "true"
+        annotations:
+          summary: Tempo's blocklist poll failed.
+          description: >-
+            Tempo's blocklist poll failed in the last 15 minutes, so stored traces are
+            unsearchable and retention deletes nothing. Read the Tempo pod's log for the poll
+            error, and restart the pod once the object store answers.
+      # This family's zero-series alert. A renamed counter or a dropped Alloy scrape job leaves
+      # the client rule above evaluating to nothing. The counter exists on the cluster Alloy
+      # from its first scrape, so its absence is a fault.
+      - alert: LogShipperMetricsMissing
+        expr: absent(loki_write_dropped_entries_total{job="alloy"})
+        for: 10m
+        labels:
+          severity: warning
+          service: loki-homelab
+          shadow: "true"
+        annotations:
+          summary: Prometheus has lost the log shipper's dropped-entries counter.
+          description: >-
+            No loki_write_dropped_entries_total series exists for the alloy job, so the job is
+            gone from prometheus.yml or Alloy renamed the counter. LogShipperDroppingEntries
+            cannot fire until the series is back.

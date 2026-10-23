@@ -132,6 +132,15 @@ It also carries `FanoutSlotsIdleWithFreeWork`, in shadow until #5658 is ruled: f
 for an hour with no fan-out batch live on either node, read from the server lander's
 `findings_issues` gauge and the per-batch cgroup series.
 
+**`ScrapeTargetDown` is one rule per owning role, and a new scrape job needs a line in one.**
+`files/rules/scrape-targets.yaml` gives each rule a literal `service`, because a static scrape
+job has no other source for it. The last rule catches a job that none of the others names, with
+`service="unmapped"`. `ansible/tests/services/test_scrape_target_rule_jobs.py` fails until every
+rendered job is in exactly one named rule. These rules and `files/rules/log-pipeline.yaml` carry
+`shadow` until M6's batch A3 cuts Kuma's scrape and log-shipper tiles over.
+`files/rules/kuma-cutover.yaml` is temporary: its `CheckWithoutPager` pages a tile that is gone
+while its rule is still shadow, and the last M6 Phase A cutover deletes it.
+
 **The `blackbox-ingress` job probes every ingress tile through blackbox-exporter.** It is
 hand-written in `prometheus.yaml.j2` and renders one target per tile the
 `kuma_ingress_monitors` filter yields. Kuma's own ingress tiles came from that filter until

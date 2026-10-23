@@ -26,6 +26,18 @@ tests:
             exp_annotations:
               summary: Kuma's k3s CPU Throttling tile is gone and no alert rule pages in its place.
               description: "M6's cutover removed the k3s CPU Throttling tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
+          - exp_labels: {monitor_name: Scrape Targets, service: uptime-kuma, severity: critical}
+            exp_annotations:
+              summary: Kuma's Scrape Targets tile is gone and no alert rule pages in its place.
+              description: "M6's cutover removed the Scrape Targets tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
+          - exp_labels: {monitor_name: Cluster Scrape Targets, service: uptime-kuma, severity: critical}
+            exp_annotations:
+              summary: Kuma's Cluster Scrape Targets tile is gone and no alert rule pages in its place.
+              description: "M6's cutover removed the Cluster Scrape Targets tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
+          - exp_labels: {monitor_name: Log Shipper Dropped Entries, service: uptime-kuma, severity: critical}
+            exp_annotations:
+              summary: Kuma's Log Shipper Dropped Entries tile is gone and no alert rule pages in its place.
+              description: "M6's cutover removed the Log Shipper Dropped Entries tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
   # Every tile present: no term fires.
   - interval: 1m
     input_series:
@@ -36,6 +48,12 @@ tests:
       - series: 'monitor_status{monitor_name="k3s Container OOM", monitor_type="push"}'
         values: '1x140'
       - series: 'monitor_status{monitor_name="k3s CPU Throttling", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Scrape Targets", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Cluster Scrape Targets", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Log Shipper Dropped Entries", monitor_type="push"}'
         values: '1x140'
     alert_rule_test:
       - alertname: CheckWithoutPager
@@ -52,6 +70,12 @@ tests:
       - series: 'monitor_status{monitor_name="k3s Container OOM", monitor_type="push"}'
         values: '1x10 _x130'
       - series: 'monitor_status{monitor_name="k3s CPU Throttling", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Scrape Targets", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Cluster Scrape Targets", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Log Shipper Dropped Entries", monitor_type="push"}'
         values: '1x140'
     alert_rule_test:
       - alertname: CheckWithoutPager

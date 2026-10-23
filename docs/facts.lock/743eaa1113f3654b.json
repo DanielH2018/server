@@ -1,5 +1,5 @@
 {
-  "checksum": "cb48ee9cc2d340c9cba848fe11f6aaa9287c7fe0c023714fe9689e21c7352999",
+  "checksum": "aee8889500f02a16ea56b324ea1e53e12abc95f430ae8ed15249bf206cc3609e",
   "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
   "key": "ansible/roles/k8s/observability/CLAUDE.md#Alert plane",
   "row": {
@@ -11,11 +11,12 @@
       "ansible/tests/services/test_alertmanager_routing.py::test_every_route_a_paging_alert_reaches_is_muted": "38dd2c6b5053f1a6b54ff76b6a01e4996f6573a520223734a9b429fa2b49a639",
       "ansible/tests/services/test_blackbox_ingress_targets.py": "59f2afa32a9ef2b017253f431f7cfd19f3c0f495f99f57de38eb5000a2192d69",
       "ansible/tests/services/test_host_plane_rule_literals.py": "1dae79ebb97dfd357a5761d93902bd78e6e3c51d5f83e2a2e4673f8941077c72",
+      "ansible/tests/services/test_scrape_target_rule_jobs.py": "f6bdfb94920365ebc6be80b7869ef864e27ce88defb54076f12f6fd09b9f3a90",
       "docs/host-packages.md": "86b9cf9178023719fe89a9954ed609bf0e9f6512bb5382279d0c80e35d11ac86",
       "docs/target-architecture/monitoring/m1-alertmanager.md": "8ce5bbad833af2f17f1389dc2f42dc8f0e352dab2c320e646ffb8f319c2e7a98",
       "docs/target-architecture/monitoring/m4-blackbox-ingress.md": "9801543adbf865bc66804029c04e6b8ac75e1cd61d09159c979806f4f389df38"
     },
     "python": "3.14",
-    "verified_sha": "4d29bc7e5"
+    "verified_sha": "242255504"
   }
 }
