@@ -578,6 +578,16 @@ tests:
         values: '1x160'
       - series: 'monitor_status{monitor_name="Workload Log Errors", monitor_type="push"}'
         values: '1x160'
+      - series: 'monitor_status{monitor_name="CrowdSec Remote Allowlist", monitor_type="push"}'
+        values: '1x160'
+      - series: 'monitor_status{monitor_name="CrowdSec AppSec", monitor_type="push"}'
+        values: '1x160'
+      - series: 'monitor_status{monitor_name="CrowdSec Home Allowlist", monitor_type="push"}'
+        values: '1x160'
+      - series: 'monitor_status{monitor_name="Configarr Sync", monitor_type="push"}'
+        values: '1x160'
+      - series: 'monitor_status{monitor_name="Janitorr Errors", monitor_type="push"}'
+        values: '1x160'
     alert_rule_test:
       - alertname: CheckWithoutPager
         eval_time: 25h
@@ -685,6 +695,16 @@ tests:
       - series: 'monitor_status{monitor_name="Pi Pressure", monitor_type="push"}'
         values: '1x1500'
       - series: 'monitor_status{monitor_name="Workload Log Errors", monitor_type="push"}'
+        values: '1x1500'
+      - series: 'monitor_status{monitor_name="CrowdSec Remote Allowlist", monitor_type="push"}'
+        values: '1x1500'
+      - series: 'monitor_status{monitor_name="CrowdSec AppSec", monitor_type="push"}'
+        values: '1x1500'
+      - series: 'monitor_status{monitor_name="CrowdSec Home Allowlist", monitor_type="push"}'
+        values: '1x1500'
+      - series: 'monitor_status{monitor_name="Configarr Sync", monitor_type="push"}'
+        values: '1x1500'
+      - series: 'monitor_status{monitor_name="Janitorr Errors", monitor_type="push"}'
         values: '1x1500'
     alert_rule_test:
       - alertname: CheckWithoutPager
