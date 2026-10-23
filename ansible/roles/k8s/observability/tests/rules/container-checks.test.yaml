@@ -1,0 +1,311 @@
+# promtool unit tests for files/rules/container-checks.yaml. Run with
+# `scripts/validate/alert_tools.sh promtool test rules <this file>`; the validate-alert-rules
+# hook runs it on every commit that touches the rules.
+#
+# THE MAPPING IS AN INPUT HERE, NOT A RULE, for the reason k8s-workloads.test.yaml gives: this
+# file loads container-checks.yaml alone and writes homelab:pod_service:info as input. Every
+# case asserts shadow="true", because Cutover-b of M6's batch A2 has not dropped it.
+rule_files:
+  - ../../files/rules/container-checks.yaml
+evaluation_interval: 1m
+tests:
+  # ContainerRestartLoop. loopy changes its start time 4 times (>3) and fires; steady changes it
+  # 3 times and stays silent at the threshold; stray has no mapping row and fires as
+  # service="unmapped" rather than vanishing.
+  - interval: 1m
+    input_series:
+      - series: 'container_start_time_seconds{namespace="homelab", pod="loopy-abc", container="app"}'
+        values: '1 2 3 4 5 5x20'
+      - series: 'homelab:pod_service:info{namespace="homelab", pod="loopy-abc", service="loopy"}'
+        values: '1x25'
+      - series: 'container_start_time_seconds{namespace="homelab", pod="steady-abc", container="app"}'
+        values: '1 2 3 4 4x20'
+      - series: 'homelab:pod_service:info{namespace="homelab", pod="steady-abc", service="steady"}'
+        values: '1x25'
+      - series: 'container_start_time_seconds{namespace="homelab", pod="stray-abc", container="app"}'
+        values: '1 2 3 4 5 5x20'
+    alert_rule_test:
+      - alertname: ContainerRestartLoop
+        eval_time: 8m
+        exp_alerts:
+          - exp_labels:
+              namespace: homelab
+              pod: loopy-abc
+              service: loopy
+              severity: warning
+              shadow: "true"
+            exp_annotations:
+              summary: Pod homelab/loopy-abc restarted a container more than 3 times in 15 minutes.
+              description: "loopy-abc had 4 container starts in the last 15 minutes. Read `kubectl -n homelab describe pod loopy-abc` for the last state."
+          - exp_labels:
+              namespace: homelab
+              pod: stray-abc
+              service: unmapped
+              severity: warning
+              shadow: "true"
+            exp_annotations:
+              summary: Pod homelab/stray-abc restarted a container more than 3 times in 15 minutes.
+              description: "stray-abc had 4 container starts in the last 15 minutes. Read `kubectl -n homelab describe pod stray-abc` for the last state."
+      # Once the starts leave the 15m window the loop clears.
+      - alertname: ContainerRestartLoop
+        eval_time: 24m
+        exp_alerts: []
+  # ContainerOOMKilled. One kill at minute 5 fires, and clears an hour after it, as the tile did.
+  - interval: 1m
+    input_series:
+      - series: 'container_oom_events_total{namespace="homelab", pod="hungry-abc", container="app"}'
+        values: '0x5 1x140'
+      - series: 'homelab:pod_service:info{namespace="homelab", pod="hungry-abc", service="hungry"}'
+        values: '1x145'
+    alert_rule_test:
+      - alertname: ContainerOOMKilled
+        eval_time: 30m
+        exp_alerts:
+          - exp_labels:
+              namespace: homelab
+              pod: hungry-abc
+              service: hungry
+              severity: warning
+              shadow: "true"
+            exp_annotations:
+              summary: A container in homelab/hungry-abc was OOM-killed in the last hour.
+              description: "hungry-abc had an OOM kill within the last hour. Raise the container's memory limit in its role, or find the leak."
+      - alertname: ContainerOOMKilled
+        eval_time: 130m
+        exp_alerts: []
+  # ContainerCPUThrottled. pinned loses 50% of its periods and 0.1 core, and fires after 15m.
+  # tiny throttles 50% of its periods but loses 0.0017 core, under the 0.05 floor. nolimit has
+  # 0 periods, so its ratio is NaN and no comparison matches.
+  - interval: 1m
+    input_series:
+      - series: 'container_cpu_cfs_periods_total{namespace="homelab", pod="pinned-abc", container="app"}'
+        values: '0+100x40'
+      - series: 'container_cpu_cfs_throttled_periods_total{namespace="homelab", pod="pinned-abc", container="app"}'
+        values: '0+50x40'
+      - series: 'container_cpu_cfs_throttled_seconds_total{namespace="homelab", pod="pinned-abc", container="app"}'
+        values: '0+6x40'
+      - series: 'homelab:pod_service:info{namespace="homelab", pod="pinned-abc", service="pinned"}'
+        values: '1x40'
+      - series: 'container_cpu_cfs_periods_total{namespace="homelab", pod="tiny-abc", container="app"}'
+        values: '0+100x40'
+      - series: 'container_cpu_cfs_throttled_periods_total{namespace="homelab", pod="tiny-abc", container="app"}'
+        values: '0+50x40'
+      - series: 'container_cpu_cfs_throttled_seconds_total{namespace="homelab", pod="tiny-abc", container="app"}'
+        values: '0+0.1x40'
+      - series: 'homelab:pod_service:info{namespace="homelab", pod="tiny-abc", service="tiny"}'
+        values: '1x40'
+      - series: 'container_cpu_cfs_periods_total{namespace="homelab", pod="nolimit-abc", container="app"}'
+        values: '0x40'
+      - series: 'container_cpu_cfs_throttled_periods_total{namespace="homelab", pod="nolimit-abc", container="app"}'
+        values: '0x40'
+      - series: 'container_cpu_cfs_throttled_seconds_total{namespace="homelab", pod="nolimit-abc", container="app"}'
+        values: '0x40'
+      - series: 'homelab:pod_service:info{namespace="homelab", pod="nolimit-abc", service="nolimit"}'
+        values: '1x40'
+    alert_rule_test:
+      - alertname: ContainerCPUThrottled
+        eval_time: 14m
+        exp_alerts: []
+      - alertname: ContainerCPUThrottled
+        eval_time: 30m
+        exp_alerts:
+          - exp_labels:
+              namespace: homelab
+              pod: pinned-abc
+              service: pinned
+              severity: warning
+              shadow: "true"
+            exp_annotations:
+              summary: Pod homelab/pinned-abc is pinned at its CPU limit.
+              description: "pinned-abc had 50% of its CFS periods throttled over 15 minutes, for 15 minutes running. Raise the limit in its role or accept it; short bursts never reach this alert."
+  # CAdvisorCoverageShortfall, zero-series case: no cAdvisor series at all. All three arms fire,
+  # each with its `arm` label, because `or vector(0)` turns an empty count into 0 < 20.
+  - interval: 1m
+    input_series: []
+    alert_rule_test:
+      - alertname: CAdvisorCoverageShortfall
+        eval_time: 9m
+        exp_alerts: []
+      - alertname: CAdvisorCoverageShortfall
+        eval_time: 11m
+        exp_alerts:
+          - exp_labels: {arm: restarts, service: observability, severity: warning, shadow: "true"}
+            exp_annotations:
+              summary: cAdvisor covers 0 pods for the restarts check, under the floor of 20.
+              description: "The restarts check reads a per-pod cAdvisor vector, and this one holds 0 pods where the live estate holds about 70 to 100. Empty is the healthy answer for an offender filter, so a thin vector means the kubernetes-cadvisor job or a selector is broken, and the restart, OOM and CPU rules read green while it lasts. Read the kubernetes-cadvisor targets on Prometheus."
+          - exp_labels: {arm: oom, service: observability, severity: warning, shadow: "true"}
+            exp_annotations:
+              summary: cAdvisor covers 0 pods for the oom check, under the floor of 20.
+              description: "The oom check reads a per-pod cAdvisor vector, and this one holds 0 pods where the live estate holds about 70 to 100. Empty is the healthy answer for an offender filter, so a thin vector means the kubernetes-cadvisor job or a selector is broken, and the restart, OOM and CPU rules read green while it lasts. Read the kubernetes-cadvisor targets on Prometheus."
+          - exp_labels: {arm: cpu, service: observability, severity: warning, shadow: "true"}
+            exp_annotations:
+              summary: cAdvisor covers 0 pods for the cpu check, under the floor of 20.
+              description: "The cpu check reads a per-pod cAdvisor vector, and this one holds 0 pods where the live estate holds about 70 to 100. Empty is the healthy answer for an offender filter, so a thin vector means the kubernetes-cadvisor job or a selector is broken, and the restart, OOM and CPU rules read green while it lasts. Read the kubernetes-cadvisor targets on Prometheus."
+  # CAdvisorCoverageShortfall, the boundary: 20 pods for the restart and OOM vectors is the
+  # floor and stays silent, 19 pods for the CPU vector is under it and fires alone.
+  - interval: 1m
+    input_series:
+      - series: 'container_start_time_seconds{namespace="homelab", pod="census-00", container="app"}'
+        values: '1x30'
+      - series: 'container_oom_events_total{namespace="homelab", pod="census-00", container="app"}'
+        values: '0x30'
+      - series: 'container_start_time_seconds{namespace="homelab", pod="census-01", container="app"}'
+        values: '1x30'
+      - series: 'container_oom_events_total{namespace="homelab", pod="census-01", container="app"}'
+        values: '0x30'
+      - series: 'container_start_time_seconds{namespace="homelab", pod="census-02", container="app"}'
+        values: '1x30'
+      - series: 'container_oom_events_total{namespace="homelab", pod="census-02", container="app"}'
+        values: '0x30'
+      - series: 'container_start_time_seconds{namespace="homelab", pod="census-03", container="app"}'
+        values: '1x30'
+      - series: 'container_oom_events_total{namespace="homelab", pod="census-03", container="app"}'
+        values: '0x30'
+      - series: 'container_start_time_seconds{namespace="homelab", pod="census-04", container="app"}'
+        values: '1x30'
+      - series: 'container_oom_events_total{namespace="homelab", pod="census-04", container="app"}'
+        values: '0x30'
+      - series: 'container_start_time_seconds{namespace="homelab", pod="census-05", container="app"}'
+        values: '1x30'
+      - series: 'container_oom_events_total{namespace="homelab", pod="census-05", container="app"}'
+        values: '0x30'
+      - series: 'container_start_time_seconds{namespace="homelab", pod="census-06", container="app"}'
+        values: '1x30'
+      - series: 'container_oom_events_total{namespace="homelab", pod="census-06", container="app"}'
+        values: '0x30'
+      - series: 'container_start_time_seconds{namespace="homelab", pod="census-07", container="app"}'
+        values: '1x30'
+      - series: 'container_oom_events_total{namespace="homelab", pod="census-07", container="app"}'
+        values: '0x30'
+      - series: 'container_start_time_seconds{namespace="homelab", pod="census-08", container="app"}'
+        values: '1x30'
+      - series: 'container_oom_events_total{namespace="homelab", pod="census-08", container="app"}'
+        values: '0x30'
+      - series: 'container_start_time_seconds{namespace="homelab", pod="census-09", container="app"}'
+        values: '1x30'
+      - series: 'container_oom_events_total{namespace="homelab", pod="census-09", container="app"}'
+        values: '0x30'
+      - series: 'container_start_time_seconds{namespace="homelab", pod="census-10", container="app"}'
+        values: '1x30'
+      - series: 'container_oom_events_total{namespace="homelab", pod="census-10", container="app"}'
+        values: '0x30'
+      - series: 'container_start_time_seconds{namespace="homelab", pod="census-11", container="app"}'
+        values: '1x30'
+      - series: 'container_oom_events_total{namespace="homelab", pod="census-11", container="app"}'
+        values: '0x30'
+      - series: 'container_start_time_seconds{namespace="homelab", pod="census-12", container="app"}'
+        values: '1x30'
+      - series: 'container_oom_events_total{namespace="homelab", pod="census-12", container="app"}'
+        values: '0x30'
+      - series: 'container_start_time_seconds{namespace="homelab", pod="census-13", container="app"}'
+        values: '1x30'
+      - series: 'container_oom_events_total{namespace="homelab", pod="census-13", container="app"}'
+        values: '0x30'
+      - series: 'container_start_time_seconds{namespace="homelab", pod="census-14", container="app"}'
+        values: '1x30'
+      - series: 'container_oom_events_total{namespace="homelab", pod="census-14", container="app"}'
+        values: '0x30'
+      - series: 'container_start_time_seconds{namespace="homelab", pod="census-15", container="app"}'
+        values: '1x30'
+      - series: 'container_oom_events_total{namespace="homelab", pod="census-15", container="app"}'
+        values: '0x30'
+      - series: 'container_start_time_seconds{namespace="homelab", pod="census-16", container="app"}'
+        values: '1x30'
+      - series: 'container_oom_events_total{namespace="homelab", pod="census-16", container="app"}'
+        values: '0x30'
+      - series: 'container_start_time_seconds{namespace="homelab", pod="census-17", container="app"}'
+        values: '1x30'
+      - series: 'container_oom_events_total{namespace="homelab", pod="census-17", container="app"}'
+        values: '0x30'
+      - series: 'container_start_time_seconds{namespace="homelab", pod="census-18", container="app"}'
+        values: '1x30'
+      - series: 'container_oom_events_total{namespace="homelab", pod="census-18", container="app"}'
+        values: '0x30'
+      - series: 'container_start_time_seconds{namespace="homelab", pod="census-19", container="app"}'
+        values: '1x30'
+      - series: 'container_oom_events_total{namespace="homelab", pod="census-19", container="app"}'
+        values: '0x30'
+      - series: 'container_cpu_cfs_periods_total{namespace="homelab", pod="census-00", container="app"}'
+        values: '0+100x30'
+      - series: 'container_cpu_cfs_throttled_periods_total{namespace="homelab", pod="census-00", container="app"}'
+        values: '0x30'
+      - series: 'container_cpu_cfs_periods_total{namespace="homelab", pod="census-01", container="app"}'
+        values: '0+100x30'
+      - series: 'container_cpu_cfs_throttled_periods_total{namespace="homelab", pod="census-01", container="app"}'
+        values: '0x30'
+      - series: 'container_cpu_cfs_periods_total{namespace="homelab", pod="census-02", container="app"}'
+        values: '0+100x30'
+      - series: 'container_cpu_cfs_throttled_periods_total{namespace="homelab", pod="census-02", container="app"}'
+        values: '0x30'
+      - series: 'container_cpu_cfs_periods_total{namespace="homelab", pod="census-03", container="app"}'
+        values: '0+100x30'
+      - series: 'container_cpu_cfs_throttled_periods_total{namespace="homelab", pod="census-03", container="app"}'
+        values: '0x30'
+      - series: 'container_cpu_cfs_periods_total{namespace="homelab", pod="census-04", container="app"}'
+        values: '0+100x30'
+      - series: 'container_cpu_cfs_throttled_periods_total{namespace="homelab", pod="census-04", container="app"}'
+        values: '0x30'
+      - series: 'container_cpu_cfs_periods_total{namespace="homelab", pod="census-05", container="app"}'
+        values: '0+100x30'
+      - series: 'container_cpu_cfs_throttled_periods_total{namespace="homelab", pod="census-05", container="app"}'
+        values: '0x30'
+      - series: 'container_cpu_cfs_periods_total{namespace="homelab", pod="census-06", container="app"}'
+        values: '0+100x30'
+      - series: 'container_cpu_cfs_throttled_periods_total{namespace="homelab", pod="census-06", container="app"}'
+        values: '0x30'
+      - series: 'container_cpu_cfs_periods_total{namespace="homelab", pod="census-07", container="app"}'
+        values: '0+100x30'
+      - series: 'container_cpu_cfs_throttled_periods_total{namespace="homelab", pod="census-07", container="app"}'
+        values: '0x30'
+      - series: 'container_cpu_cfs_periods_total{namespace="homelab", pod="census-08", container="app"}'
+        values: '0+100x30'
+      - series: 'container_cpu_cfs_throttled_periods_total{namespace="homelab", pod="census-08", container="app"}'
+        values: '0x30'
+      - series: 'container_cpu_cfs_periods_total{namespace="homelab", pod="census-09", container="app"}'
+        values: '0+100x30'
+      - series: 'container_cpu_cfs_throttled_periods_total{namespace="homelab", pod="census-09", container="app"}'
+        values: '0x30'
+      - series: 'container_cpu_cfs_periods_total{namespace="homelab", pod="census-10", container="app"}'
+        values: '0+100x30'
+      - series: 'container_cpu_cfs_throttled_periods_total{namespace="homelab", pod="census-10", container="app"}'
+        values: '0x30'
+      - series: 'container_cpu_cfs_periods_total{namespace="homelab", pod="census-11", container="app"}'
+        values: '0+100x30'
+      - series: 'container_cpu_cfs_throttled_periods_total{namespace="homelab", pod="census-11", container="app"}'
+        values: '0x30'
+      - series: 'container_cpu_cfs_periods_total{namespace="homelab", pod="census-12", container="app"}'
+        values: '0+100x30'
+      - series: 'container_cpu_cfs_throttled_periods_total{namespace="homelab", pod="census-12", container="app"}'
+        values: '0x30'
+      - series: 'container_cpu_cfs_periods_total{namespace="homelab", pod="census-13", container="app"}'
+        values: '0+100x30'
+      - series: 'container_cpu_cfs_throttled_periods_total{namespace="homelab", pod="census-13", container="app"}'
+        values: '0x30'
+      - series: 'container_cpu_cfs_periods_total{namespace="homelab", pod="census-14", container="app"}'
+        values: '0+100x30'
+      - series: 'container_cpu_cfs_throttled_periods_total{namespace="homelab", pod="census-14", container="app"}'
+        values: '0x30'
+      - series: 'container_cpu_cfs_periods_total{namespace="homelab", pod="census-15", container="app"}'
+        values: '0+100x30'
+      - series: 'container_cpu_cfs_throttled_periods_total{namespace="homelab", pod="census-15", container="app"}'
+        values: '0x30'
+      - series: 'container_cpu_cfs_periods_total{namespace="homelab", pod="census-16", container="app"}'
+        values: '0+100x30'
+      - series: 'container_cpu_cfs_throttled_periods_total{namespace="homelab", pod="census-16", container="app"}'
+        values: '0x30'
+      - series: 'container_cpu_cfs_periods_total{namespace="homelab", pod="census-17", container="app"}'
+        values: '0+100x30'
+      - series: 'container_cpu_cfs_throttled_periods_total{namespace="homelab", pod="census-17", container="app"}'
+        values: '0x30'
+      - series: 'container_cpu_cfs_periods_total{namespace="homelab", pod="census-18", container="app"}'
+        values: '0+100x30'
+      - series: 'container_cpu_cfs_throttled_periods_total{namespace="homelab", pod="census-18", container="app"}'
+        values: '0x30'
+    alert_rule_test:
+      - alertname: CAdvisorCoverageShortfall
+        eval_time: 11m
+        exp_alerts:
+          - exp_labels: {arm: cpu, service: observability, severity: warning, shadow: "true"}
+            exp_annotations:
+              summary: cAdvisor covers 19 pods for the cpu check, under the floor of 20.
+              description: "The cpu check reads a per-pod cAdvisor vector, and this one holds 19 pods where the live estate holds about 70 to 100. Empty is the healthy answer for an offender filter, so a thin vector means the kubernetes-cadvisor job or a selector is broken, and the restart, OOM and CPU rules read green while it lasts. Read the kubernetes-cadvisor targets on Prometheus."

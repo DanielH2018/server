@@ -127,8 +127,40 @@ def loki_sets(shadow: bool) -> dict[str, dict[str, str]]:
     return sets
 
 
+CONTAINER_RULES = (
+    ROLES / "k8s" / "observability" / "files" / "rules" / "container-checks.yaml"
+)
+
+
+def container_sets() -> dict[str, dict[str, str]]:
+    """The labels each M6 batch A2 rule reaches Alertmanager with, keyed by alert name.
+
+    A per-pod rule takes `service` from the workload join, so `homepage` stands in for it, and
+    the census rule's literal `service` wins. A2's Cutover-b drops `shadow`, which moves a set
+    to `PAGING`, and the expected outcome here fails until it does.
+    """
+    [group] = yaml_fast.safe_load(CONTAINER_RULES.read_text())["groups"]
+    return {
+        rule["alert"]: {
+            "alertname": rule["alert"],
+            "service": INGRESS_STAND_IN_SERVICE,
+            **rule["labels"],
+        }
+        for rule in group["rules"]
+    }
+
+
 # Each label set and the receivers Alertmanager sends it to.
 PAGING = {
+    # M6's no-pager-window guard pages from the start, critical to both channels.
+    "check-without-pager": (
+        {
+            "alertname": "CheckWithoutPager",
+            "severity": "critical",
+            "service": "uptime-kuma",
+        },
+        ["discord", "email"],
+    ),
     "warning": (
         {
             "alertname": "K8sDeploymentReplicasUnavailable",
@@ -183,6 +215,7 @@ SHADOW = {
     "blackbox-exporter-down": ingress_set("BlackboxExporterDown"),
     **host_sets(shadow=True),
     **loki_sets(shadow=True),
+    **container_sets(),
 }
 WATCHDOG = {"alertname": "Watchdog", "severity": "info", "service": "observability"}
 
@@ -328,6 +361,18 @@ def test_loki_sets_name_every_m5_rule():
         "LokiRulerNotificationsFailing",
     }
     assert set(loki_sets(shadow=True)) == {"LokiHomelabDown"}
+
+
+def test_container_sets_name_every_a2_rule_and_all_are_shadow():
+    """Non-vacuity for `container_sets`: A2's four rules, each shadow until its Cutover-b."""
+    sets = container_sets()
+    assert set(sets) == {
+        "ContainerRestartLoop",
+        "ContainerOOMKilled",
+        "ContainerCPUThrottled",
+        "CAdvisorCoverageShortfall",
+    }
+    assert all(labels["shadow"] == "true" for labels in sets.values())
 
 
 def test_a_paging_route_without_the_mute_is_flagged():
