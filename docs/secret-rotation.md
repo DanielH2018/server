@@ -238,9 +238,14 @@ not rotated again by the weekly cron. Examples:
   The node agents restart while the engine pod is still rolling, so the machines are deleted and not yet re-added until the new
   engine pod's `lapi-register` runs. The changed Secret is what rolls the engine pod. The
   agents converge without help: each agent's liveness probe converges it, restarting the container until registration
-  lands. **Do NOT just `sops set`**: the plugin hot-reloads the new key
-  while the LAPI still holds the old hash, and it fails OPEN — a silent WAF bypass. The
-  traefik deploy now fails loudly on a rejected key (its probe task), which is the guard.
+  lands. **Do NOT skip the bouncer delete.** Without it the LAPI keeps the old key's hash, and
+  the rolled Traefik pod presents a key the LAPI rejects. A fresh pod has an empty decision
+  cache, so it bans nobody until `updateMaxFailure` runs out, about 6 minutes. Then it
+  refuses every request with a 403 (`ansible/roles/k8s/traefik/templates/dynamic.yaml.j2`).
+  No automated check guards this; the delete step and the reads below are the guard.
+  Traefik's startupProbe passes on a rejected key, because its 3-minute window closes before
+  the bouncer gives up. The `crowdsec-verify` Job depends on the `crowdsec` Kustomization
+  alone, so it can finish against the old Traefik pod, which still holds a valid key.
   Verify after: `kubectl -n homelab exec deploy/crowdsec -c crowdsec -- cscli bouncers list`
   (fresh `last_pull`) and a `kubectl -n homelab logs deploy/traefik` free of LAPI 403s.
   (`crowdsec_bouncer_api_key` — the retired local LAPI's legacy key — and
