@@ -18,6 +18,18 @@ metadata:
   namespace: {{ flux_namespace }}
 spec:
   interval: 1m
+{% if flux_break_glass | bool %}
+  # The break-glass form (D6.11): the in-cluster registry, which serves plain HTTP, and the
+  # operator's key in place of the keyless identity. docs/break-glass.md has the runbook.
+  url: {{ flux_break_glass_url }}
+  insecure: true
+  ref:
+    tag: {{ flux_break_glass_tag }}
+  verify:
+    provider: cosign
+    secretRef:
+      name: {{ flux_break_glass_secret }}
+{% else %}
   url: {{ flux_artifact_url }}
   ref:
     tag: {{ flux_artifact_tag }}
@@ -28,6 +40,7 @@ spec:
     matchOIDCIdentity:
       - issuer: '{{ flux_signer_issuer }}'
         subject: '{{ flux_signer_subject }}'
+{% endif %}
 ---
 # The base the soak Job diffs R's changed set against (D5.3b2): `settle` moves the `last-good`
 # tag to each verified commit. No Kustomization reads it. The same `verify` block as `homelab`,

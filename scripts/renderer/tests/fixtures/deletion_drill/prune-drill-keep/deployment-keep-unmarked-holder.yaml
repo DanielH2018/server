@@ -1,0 +1,27 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: keep-unmarked-holder
+  namespace: prune-drill-keep
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: keep-unmarked-holder
+  template:
+    metadata:
+      labels:
+        app: keep-unmarked-holder
+    spec:
+      terminationGracePeriodSeconds: 1
+      containers:
+        - name: holder
+          image: "@DRILL_IMAGE@"
+          command: [sleep, "3600"]
+          volumeMounts:
+            - name: data
+              mountPath: /data
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: keep-unmarked

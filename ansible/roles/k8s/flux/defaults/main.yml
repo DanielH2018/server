@@ -90,6 +90,22 @@ flux_artifact_tag: prod
 flux_signer_subject: '^https://github\.com/DanielH2018/server/\.github/workflows/promote\.yml@refs/heads/master$'
 flux_signer_issuer: '^https://token\.actions\.githubusercontent\.com$'
 
+# Break-glass promotion (D6.11; docs/break-glass.md, *GitHub, GHCR or Sigstore is unreachable*).
+# False renders the OCIRepository `homelab` against GHCR with the keyless identity above. True
+# renders its break-glass form: the in-cluster registry, over plain HTTP, verified against the
+# public key below. The operator flips it in an emergency commit and reverts it on the way back.
+flux_break_glass: false
+flux_break_glass_url: "oci://{{ k8s_registry_push_host }}/homelab-manifests"
+flux_break_glass_tag: break-glass
+# The Secret in `flux-system` that holds the public half alone. The private half sits in the
+# break-glass kit and never enters the repo, CI or a host.
+flux_break_glass_secret: flux-break-glass-key
+flux_break_glass_public_key: |
+  -----BEGIN PUBLIC KEY-----
+  MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAETtflCTeC8+z7IyMVDsUnrqeCgNcS
+  iyWO5ALzv7WNgSdFHRSX+oscTgeIBHYzfEeS60TbahTNhf7OzX+pGYXowA==
+  -----END PUBLIC KEY-----
+
 # The repository notification-controller posts commit statuses to.
 flux_github_repository_url: https://github.com/DanielH2018/server
 

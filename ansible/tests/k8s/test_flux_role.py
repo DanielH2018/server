@@ -409,7 +409,11 @@ def test_no_controller_reads_the_notification_secrets_through_its_pod_spec():
     expects no roll. That holds only while no controller pod reads these Secrets, because
     notification-controller reads them through the API on each event."""
     secrets = _rendered_secret_names()
-    assert secrets == {"flux-github-status", "flux-discord"}, secrets
+    assert secrets == {
+        "flux-github-status",
+        "flux-discord",
+        "flux-break-glass-key",
+    }, secrets
     refs = pod_secret_refs(_flux_docs())
     assert set(refs) == CONTROLLERS, refs
     assert not any(names & secrets for names in refs.values()), refs

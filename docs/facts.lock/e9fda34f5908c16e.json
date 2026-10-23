@@ -1,0 +1,13 @@
+{
+  "checksum": "f71485918017a551c0d360c44a1b3ef3634dd535d767b55daccaccef1950368c",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "ansible/roles/k8s/flux/CLAUDE.md#The break-glass source form",
+  "row": {
+    "atoms": {
+      "ansible/tests/k8s/test_flux_sync.py": "49ddf8430a81103091f4b93eaf5aa695809b3a5057f44a04fa96d6143dc25a52",
+      "docs/break-glass.md": "2823d12d9954147d9b7ad124362e31f2b81927d3aa6c036577400846c35a627c"
+    },
+    "python": "3.14",
+    "verified_sha": "c3d768d3f"
+  }
+}
