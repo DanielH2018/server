@@ -140,6 +140,7 @@ HELP_LINE = re.compile(r'# HELP (homelab_check_\w+) ([^"\\\n]+)')
 PRODUCERS = frozenset(
     {
         "ansible/roles/k8s/node-exporter/files/iscsi-sessions.sh",
+        "ansible/roles/setup/initial_setup/files/homelab-check-lib.sh",
         "ansible/roles/setup/k3s/templates/disk-health.sh.j2",
     }
 )
@@ -177,4 +178,7 @@ def test_a_producer_with_a_different_help_text_is_flagged():
     texts = _producer_texts()
     path = "ansible/roles/k8s/node-exporter/files/iscsi-sessions.sh"
     texts[path] = texts[path].replace("last verdict was up", "verdict is up")
-    assert help_conflicts(texts) == [f"homelab_check_success: {sorted(PRODUCERS)}"]
+    # The first producer, in path order, to carry each text names its variant: the iSCSI
+    # script's edited one and the shared library's, which disk-health.sh's text matches.
+    lib = "ansible/roles/setup/initial_setup/files/homelab-check-lib.sh"
+    assert help_conflicts(texts) == [f"homelab_check_success: {sorted([path, lib])}"]

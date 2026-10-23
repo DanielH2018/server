@@ -381,7 +381,7 @@ loki_route_witness_hosts:
   - daniel-server
 
 # The endpoints the host crons probe to tell "this house's link is gone" from "the source I asked
-# refused me". Read by `wan_reachable` in kuma-push-lib.sh, which is the host-side
+# refused me". Read by `wan_reachable` in homelab-check-lib.sh, which is the host-side
 # peer of monitor-bridge's `wan_reachable` gate — that gate runs in the bridge's loop and cannot
 # reach a cron pushing its own tile from the host.
 #
@@ -399,7 +399,7 @@ wan_probe_urls:
   - https://www.google.com/generate_204
 
 # Seconds after boot in which the witness skips its run. Shorter than its hourly cron, so at most
-# one slot is ever skipped — the constraint kuma-push-lib.sh's boot_grace_active documents. After
+# one slot is ever skipped — the constraint homelab-check-lib.sh's boot_grace_active documents. After
 # a restart the last pod reached Ready 5m18s after boot, so a witness firing inside this window
 # would report the route down while Traefik was still starting.
 loki_route_witness_boot_grace_s: 600
