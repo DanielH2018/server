@@ -141,6 +141,16 @@ rendered job is in exactly one named rule. These rules and `files/rules/log-pipe
 `files/rules/kuma-cutover.yaml` is temporary: its `CheckWithoutPager` pages a tile that is gone
 while its rule is still shadow, and the last M6 Phase A cutover deletes it.
 
+**`files/rules/hosts.yaml` holds the host rules, one copy per host.** Its disk, memory,
+temperature, UPS and Pi pressure rules replace monitor-bridge's `disk`, `memory`, `host_temp`,
+`ups` and `pi_pressure` checks and carry `shadow` until M6's batch A1 cuts them over (the Pi's
+until B8). A rule's `service` is a literal, so a host gets its own copy, and a fourth host needs
+rules added. Every rule keeps `job` and `instance`, because the inhibit that replaces
+`EXPORTER_DEPENDENT` matches `ScrapeTargetDown` on them. A missing-data arm starts from
+`up == 1`, so it fires only while the scrape succeeds and the series is absent. A dead exporter
+pages once, through `ScrapeTargetDown`. The two coverage-floor rules count hosts, so they carry
+neither label, and a dead exporter also pages through them.
+
 **The `blackbox-ingress` job probes every ingress tile through blackbox-exporter.** It is
 hand-written in `prometheus.yaml.j2` and renders one target per tile the
 `kuma_ingress_monitors` filter yields. Kuma's own ingress tiles came from that filter until

@@ -68,6 +68,7 @@ CUTOVER_RULES = (
 BRIDGE_RULES = (
     ROLES / "k8s" / "observability" / "files" / "rules" / "bridge-exporter.yaml"
 )
+HOSTS_RULES = ROLES / "k8s" / "observability" / "files" / "rules" / "hosts.yaml"
 # A per-target ingress alert takes `service` from its probe target, so a probed service
 # stands in for it.
 INGRESS_STAND_IN_SERVICE = "homepage"
@@ -252,6 +253,7 @@ SHADOW = {
     **literal_sets(SCRAPE_RULES, shadow=True),
     **literal_sets(LOG_PIPELINE_RULES, shadow=True),
     **literal_sets(BRIDGE_RULES, shadow=True),
+    **literal_sets(HOSTS_RULES, shadow=True),
 }
 WATCHDOG = {"alertname": "Watchdog", "severity": "info", "service": "observability"}
 
@@ -421,6 +423,21 @@ def test_every_a3_rule_is_shadow_except_the_cutover_guard():
         "CheckWithoutPager/uptime-kuma"
     }
     assert "ScrapeTargetDown/observability" in SHADOW
+
+
+def test_every_a1_rule_is_shadow_and_names_each_host_check():
+    """Non-vacuity for the A1 sets: the hosts rules all route to the blackhole until their
+    cutovers, and the sets hold the bridge's four host checks and the Pi's pressure arms."""
+    assert literal_sets(HOSTS_RULES, shadow=False) == {}
+    names = {key.split("/")[0] for key in literal_sets(HOSTS_RULES, shadow=True)}
+    assert names >= {
+        "HostDiskFull",
+        "HostMemoryHigh",
+        "HostTemperatureHot",
+        "UPSOnBattery",
+        "PiLoadHigh",
+    }
+    assert "HostDiskFull/daniel-box" in SHADOW
 
 
 def test_a_paging_route_without_the_mute_is_flagged():
