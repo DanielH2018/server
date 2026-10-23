@@ -60,3 +60,8 @@ def test_a_module_without_the_header_is_flagged():
     config = _config()
     del config["modules"]["http_sso_302"]["http"]["headers"]
     assert modules_without_accept(config) == ["http_sso_302"]
+
+
+def test_http_2xx_prefers_ipv4_because_the_cluster_has_no_ipv6_route():
+    module = http_modules(_config())["http_2xx"]["http"]
+    assert module["preferred_ip_protocol"] == "ip4"
