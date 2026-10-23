@@ -402,8 +402,8 @@ def test_host_sets_names_every_host_check_rule():
 
 
 def test_loki_sets_name_every_m5_rule():
-    """Non-vacuity for `loki_sets`: the eight M5 alerts that page from PR 4b, and the one
-    that stays shadow until M6's batch A3."""
+    """Non-vacuity for `loki_sets`: the eight M5 alerts that page from PR 4b, the one
+    that stays shadow until M6's batch A3, and A7's shadow WorkloadLogErrors."""
     assert set(loki_sets(shadow=False)) == {
         "LokiHostLogsSilent",
         "LokiPodLogsSilent",
@@ -414,7 +414,7 @@ def test_loki_sets_name_every_m5_rule():
         "LokiRulerNotEvaluating",
         "LokiRulerNotificationsFailing",
     }
-    assert set(loki_sets(shadow=True)) == {"LokiHomelabDown"}
+    assert set(loki_sets(shadow=True)) == {"LokiHomelabDown", "WorkloadLogErrors"}
 
 
 def test_container_sets_name_every_a2_rule_and_all_are_shadow():
