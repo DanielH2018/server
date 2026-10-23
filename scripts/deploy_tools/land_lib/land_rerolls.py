@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Whether a later deploy re-rolled a landing's workloads under its health gate (#3812).
 
-land.sh's deploy releases the service lock before step 6 gates the workloads, so a second
+land.sh's deploy releases the service lock before step 7 gates the workloads, so a second
 deploy of the same service -- another landing, or the tick -- can roll the pods under the
 gate's one sample. A `Recreate` workload then reads `0/1 ready` mid-roll and a healthy change
 fails the gate. `health_verdict.health` asks `later_deploys` after a failed gate and gates

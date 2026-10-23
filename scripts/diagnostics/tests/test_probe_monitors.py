@@ -85,7 +85,7 @@ def test_declared_monitor_count_reads_the_real_template():
     # template, so a template that moved or a parse that returns nothing shows up here as a
     # missing count rather than as a coverage line that is silent forever.
     declared = monitors.declared_monitor_count()
-    assert declared is not None and declared >= 77, declared
+    assert declared is not None and declared >= 76, declared
 
 
 def _alerts(*firing):

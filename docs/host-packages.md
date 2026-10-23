@@ -116,7 +116,7 @@ names what to read first.
 Each limit exceeds the longest gap between two of the host's updater fires plus the updater's
 `TimeoutStartSec`, so one failed fetch never pages.
 `scripts/renderer/tests/test_renderer_host_update_limits.py` fails a limit the host's rendered
-schedule outgrows. The map is empty until H3.9c adds daniel-pi.
+schedule outgrows. The map lists daniel-pi (job `node-pi`, 11400 seconds), added by H3.9c.
 
 ## Clearing a host's hold
 

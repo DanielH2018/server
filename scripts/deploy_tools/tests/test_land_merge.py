@@ -302,6 +302,26 @@ def test_the_merge_budget_ends_the_wait_with_its_own_verdict(landing):
     assert (exc.value.rc, exc.value.verdict) == (75, "merge-timeout")
 
 
+@pytest.mark.parametrize("ci_rc, names_the_rerun", [(75, True), (2, False)])
+def test_the_merge_budget_names_a_head_ci_never_decided(
+    landing, ci_rc, names_the_rerun
+):
+    """A cancelled or draft-skipped run on the head waits out the budget (#5931). The message
+    is the only difference from a disarmed gate's timeout, so it is asserted."""
+    ln, _ = landing(
+        Fakes(
+            gh_views={"state,mergeable,headRefOid": _wait(["OPEN MERGEABLE dead"])},
+            await_ci=[(ci_rc, "dead1234: no verdict after 0s")],
+        ),
+        merge_timeout=1,
+        merge_poll=1,
+    )
+    with pytest.raises(Outcome) as exc:
+        merge.await_merge(ln)
+    assert exc.value.verdict == "merge-timeout"
+    assert ("gh run rerun" in exc.value.error) is names_the_rerun
+
+
 def test_a_merged_pr_leaves_the_wait(landing, capsys):
     ln, _ = landing(
         Fakes(gh_views={"state,mergeable,headRefOid": _wait(["MERGED MERGEABLE dead"])})

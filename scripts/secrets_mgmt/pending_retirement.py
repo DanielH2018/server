@@ -16,5 +16,8 @@ PENDING_RETIREMENT: frozenset[str] = frozenset(
         "monitor_bridge_kuma_notify_failures_push_token",
         "monitor_bridge_loki_push_token",
         "monitor_bridge_loki_reachable_push_token",
+        # M3's PR 5 deleted the `daniel-box Disk` tile and the script's push. Its PR 6 retires
+        # the key a week later and deletes this entry in the same commit.
+        "daniel_box_disk_push_token",
     }
 )

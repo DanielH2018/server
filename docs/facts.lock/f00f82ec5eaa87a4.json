@@ -1,5 +1,5 @@
 {
-  "checksum": "ebdff23e519fd55b7d966d6cfd0c0fa3cdb5596dbaeca65fed85b6c1536d2970",
+  "checksum": "c833a98a20d831c55fc7bf8c72055bbb700aa4194851040e2afd7f0f2162b3f7",
   "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
   "key": "CLAUDE.md#After a PR Merges — Pull, Deploy, Verify",
   "row": {
@@ -7,6 +7,6 @@
       "ansible/roles/setup/gitops_deploy/CLAUDE.md": "d2df352b2ba7cd1c6d1d34a9b4f8f47c402433fe0db078c57630234c5dd70b4e"
     },
     "python": "3.14",
-    "verified_sha": "fd34ae8eb"
+    "verified_sha": "fb4b27861"
   }
 }

@@ -120,7 +120,7 @@ def test_task_missing_the_env_tag_is_flagged():
         "ansible.builtin.import_tasks": "release_bin.yml",
         "vars": {
             "release_bin_templates": [
-                "ansible/roles/setup/k3s/templates/disk-health.sh.j2",
+                "ansible/roles/setup/k3s/templates/longhorn-backup-health.sh.j2",
             ],
         },
     }
@@ -139,7 +139,7 @@ def test_task_carrying_a_tag_the_env_task_has_is_clean():
         "ansible.builtin.import_tasks": "release_bin.yml",
         "vars": {
             "release_bin_templates": [
-                "ansible/roles/setup/k3s/templates/disk-health.sh.j2",
+                "ansible/roles/setup/k3s/templates/longhorn-backup-health.sh.j2",
             ],
         },
     }

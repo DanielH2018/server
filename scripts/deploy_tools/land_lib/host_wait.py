@@ -1,7 +1,7 @@
-"""The landing's wait on the hosts a merge reaches (H3, *Steps*, H3.9a). Nothing calls it yet.
+"""The landing's wait on the hosts a merge reaches (H3, *Steps*, H3.9a and H3.9b).
 
-H3.9b wires it into `pipeline.py` and arms the Pi's timer. Until then no landing runs any of
-this, so no landing changes. The plan is docs/target-architecture/host/h3-pi-pilot.md; the
+`pipeline.py:_step_ci` calls `host_targets` after master CI, and `_step_hosts` calls
+`wait_for_hosts` after the deploy phase. The plan is docs/target-architecture/host/h3-pi-pilot.md; the
 contract is C6's *Hosts* bullet in docs/target-architecture/contracts.md.
 
 `host_targets` names the hosts whose package the merge changes. It renders every host package
@@ -23,7 +23,7 @@ skips.
 A target's deadline is the second updater fire after the merge plus 10 minutes, read from the
 first parent's rendered schedule. The first fire can precede the builder's publish.
 
-Typical usage example (H3.9b's, after master CI is green on the merge commit):
+Typical usage example (`pipeline.py`'s, after master CI is green on the merge commit):
 
     targets = host_targets(ln.opts.primary, merge_sha)
     if targets:

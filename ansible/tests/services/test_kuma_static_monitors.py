@@ -155,7 +155,6 @@ EMAIL_TIER = {
     "k3s Longhorn Backup",
     "Longhorn Volume Redundancy",
     "k3s PVC Fullness",
-    "daniel-box Disk",
     "Daniel Pi SD Health",
     "Off-box etcd Snapshot",
     "etcd Restore Drill (full)",

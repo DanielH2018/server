@@ -440,27 +440,7 @@ def test_a_missing_deferred_status_keeps_waiting_and_a_failure_holds():
     assert held == vp.Verdict("failed", ("bento-pdf-deferred",))
 
 
-# -- the handoff and the CLI -----------------------------------------------------------------
-
-
-def test_the_handoff_carries_digests_and_flux_files_and_nothing_else(tmp_path):
-    vp.write_handoff(tmp_path, {**PROD, "cluster/bento-pdf/x.yaml": b"x"}, CHANGED)
-    prod, target = vp.read_handoff(tmp_path)
-    assert prod == PROD and target == CHANGED
-
-
-def test_the_handoff_carries_the_record_beside_the_bundles(tmp_path):
-    vp.write_handoff(tmp_path, PROD, CHANGED, {"longhorn": "failure"})
-    assert vp.read_handoff(tmp_path) == (PROD, CHANGED)
-    assert vp.read_recorded(tmp_path) == {"longhorn": "failure"}
-    (tmp_path / vp.RECORDED_FILE).unlink()
-    assert vp.read_recorded(tmp_path) == {}, "no record excuses nothing"
-
-
-def test_a_first_run_hands_on_no_prod(tmp_path):
-    vp.write_handoff(tmp_path, None, CHANGED)
-    assert vp.read_handoff(tmp_path) == (None, CHANGED)
-    assert vp.expected_set(CHANGED, None).widened
+# -- the CLI ---------------------------------------------------------------------------------
 
 
 def test_verify_without_a_handoff_exits_1_with_no_verdict(tmp_path, capsys):

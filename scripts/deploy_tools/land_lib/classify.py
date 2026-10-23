@@ -19,6 +19,7 @@ from deploy_tools.land_lib.land_tags import (
 )
 from lib.exit_codes import LAND_BAD_ARGS
 from lib.repo_paths import GITOPS_DEPLOY_FILES
+from renderer.renderer_lib.host_inputs import HOST_INPUTS
 
 _sys.path.insert(0, str(GITOPS_DEPLOY_FILES))
 from deployer_lib import deploy_cross_role
@@ -50,6 +51,7 @@ def resolve(ln: Landing) -> None:
     if not sha:
         ln.die(f"PR #{ln.opts.pr} has no merge commit — is it merged?", 1)
     ln.merge_sha = sha
+    ln.ledger.merged_at = ln.tools.wall_clock()
     ln.ledger.merge_sha = sha
     say(f"merge commit {sha}")
     ln.fetch_branch()
@@ -369,8 +371,24 @@ def narrow_plane(ln: Landing, awaited: bool = True) -> None:
         return
 
 
+def reaches_host_inputs(ln: Landing) -> bool:
+    """Whether a changed path falls under a member of `HOST_INPUTS`: the PR MAY reach a host.
+
+    It runs no renderer. Resolve reads the merge commit before master CI, and
+    `deploy_cross_role.tables_in` records, in `DECIDED parse the copy rather than exec it`, why
+    nothing at that point may run the merge commit's code. `host_wait.host_targets` renders
+    after CI and says which hosts differ.
+
+    A file list `gh` truncated (`needs_diff`) cannot rule a host input out, so it counts as a
+    candidate and the render after CI decides.
+    """
+    return ln.needs_diff or any(
+        path.startswith(HOST_INPUTS) for path in ln.classification.pr_paths
+    )
+
+
 def shortcut_if_nothing(ln: Landing) -> None:
-    """A PR reaching no tag, no plane and nothing self-applied has nothing to wait for.
+    """A PR reaching no tag, no plane, no host candidate and nothing self-applied has nothing to wait for.
 
     A PR changing a cluster file reaches none of them and still waits on a promotion
     (`land_tags.changes_cluster_vars`).
@@ -381,6 +399,7 @@ def shortcut_if_nothing(ln: Landing) -> None:
         or ln.plane
         or cl.self_applied
         or ln.needs_diff
+        or ln.host_candidate
         or changes_cluster_vars(cl.pr_paths)
     ):
         ln.finish(

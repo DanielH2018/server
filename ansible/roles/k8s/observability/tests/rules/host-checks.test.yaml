@@ -11,8 +11,9 @@
 # matchers' `check` and `origin`. HostUpdateStale's two arms differ the same way.
 #
 # fixtures/host-update-stale.yaml holds the HostUpdateStale rule for a one-host map,
-# fixture-host at 11400s, because host-checks.yaml carries none while
-# observability_expected_hosts is empty.
+# fixture-host at 11400s, which gives the rule's shape cases that name no shipped host.
+# host-checks.yaml carries daniel-pi's rule (job node-pi, 11400s) since H3.9c, and the cases
+# after the fixture's own exercise it.
 rule_files:
   - ../../files/rules/host-checks.yaml
   - fixtures/host-update-stale.yaml
@@ -32,7 +33,6 @@ tests:
               origin: daniel-box
               severity: critical
               service: daniel-box
-              shadow: "true"
             exp_annotations:
               summary: daniel-box's root disk check has stopped reporting.
               description: >-
@@ -85,8 +85,8 @@ tests:
                 sessions. Read the log of the node-exporter pod's `iscsi-sessions` container
                 on daniel-server.
 
-  # The verdict turns red from minute 3 while the file stays fresh. DiskHealthFailed fires in
-  # shadow at once, and DiskHealthNotReporting stays quiet.
+  # The verdict turns red from minute 3 while the file stays fresh. DiskHealthFailed fires at once,
+  # and DiskHealthNotReporting stays quiet.
   - interval: 1m
     input_series:
       - series: 'homelab_check_success{check="disk-health", instance="daniel-box", job="node", origin="daniel-box"}'
@@ -109,7 +109,6 @@ tests:
               origin: daniel-box
               severity: critical
               service: daniel-box
-              shadow: "true"
             exp_annotations:
               summary: daniel-box's root disk check is red.
               description: >-
@@ -143,7 +142,6 @@ tests:
               origin: daniel-box
               severity: critical
               service: daniel-box
-              shadow: "true"
             exp_annotations:
               summary: daniel-box's root disk check has stopped reporting.
               description: >-
@@ -174,7 +172,6 @@ tests:
               origin: daniel-box
               severity: critical
               service: daniel-box
-              shadow: "true"
             exp_annotations:
               summary: daniel-box's root disk check has stopped reporting.
               description: >-
@@ -429,6 +426,86 @@ tests:
   - interval: 1m
     input_series:
       - series: 'up{instance="fixture-host", job="node-fixture", origin="fixture-host"}'
+        values: '0x10'
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: HostUpdateStale
+        exp_alerts: []
+
+  # daniel-pi's last success stays at 0 while node-pi answers (`up` at 1). HostUpdateStale is
+  # quiet at 189 minutes (11340s) and fires at 191 (11460s) for daniel-pi alone: the
+  # fixture host has no series here.
+  - interval: 1m
+    input_series:
+      - series: 'homelab_host_update_success_timestamp_seconds{instance="daniel-pi", job="node-pi", origin="daniel-pi"}'
+        values: '0x200'
+      - series: 'up{instance="daniel-pi", job="node-pi", origin="daniel-pi"}'
+        values: '1x200'
+    alert_rule_test:
+      - eval_time: 189m
+        alertname: HostUpdateStale
+        exp_alerts: []
+      - eval_time: 191m
+        alertname: HostUpdateStale
+        exp_alerts:
+          - exp_labels:
+              instance: daniel-pi
+              job: node-pi
+              origin: daniel-pi
+              severity: critical
+              service: daniel-pi
+            exp_annotations:
+              summary: daniel-pi has had no successful homelab update for 11400s.
+              description: >-
+                No homelab-updater run on daniel-pi has succeeded in 11400s, or its exporter is
+                up and serves no success timestamp. A failed fetch, a stopped
+                homelab-apt-repo.service, a firewall rule, a keyring mismatch and a stopped
+                timer each leave it stale. Read `systemctl status homelab-updater.timer` and
+                `journalctl -u homelab-updater` on daniel-pi, and docs/host-packages.md,
+                "Host-plane pages".
+
+  # A success timestamp that follows the clock keeps daniel-pi's rule quiet. This is the
+  # control for the group above.
+  - interval: 1m
+    input_series:
+      - series: 'homelab_host_update_success_timestamp_seconds{instance="daniel-pi", job="node-pi", origin="daniel-pi"}'
+        values: '0+60x200'
+      - series: 'up{instance="daniel-pi", job="node-pi", origin="daniel-pi"}'
+        values: '1x200'
+    alert_rule_test:
+      - eval_time: 191m
+        alertname: HostUpdateStale
+        exp_alerts: []
+
+  # node-pi answers and serves no success timestamp: the absent arm fires for daniel-pi.
+  - interval: 1m
+    input_series:
+      - series: 'up{instance="daniel-pi", job="node-pi", origin="daniel-pi"}'
+        values: '1x10'
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: HostUpdateStale
+        exp_alerts:
+          - exp_labels:
+              job: node-pi
+              origin: daniel-pi
+              severity: critical
+              service: daniel-pi
+            exp_annotations:
+              summary: daniel-pi has had no successful homelab update for 11400s.
+              description: >-
+                No homelab-updater run on daniel-pi has succeeded in 11400s, or its exporter is
+                up and serves no success timestamp. A failed fetch, a stopped
+                homelab-apt-repo.service, a firewall rule, a keyring mismatch and a stopped
+                timer each leave it stale. Read `systemctl status homelab-updater.timer` and
+                `journalctl -u homelab-updater` on daniel-pi, and docs/host-packages.md,
+                "Host-plane pages".
+
+  # node-pi fails its scrape (`up` at 0, a 30s-timeout miss on the Zero 2 W), so the success
+  # timestamp reads as absent. The rule stays quiet: a failed scrape is not a stale host.
+  - interval: 1m
+    input_series:
+      - series: 'up{instance="daniel-pi", job="node-pi", origin="daniel-pi"}'
         values: '0x10'
     alert_rule_test:
       - eval_time: 5m

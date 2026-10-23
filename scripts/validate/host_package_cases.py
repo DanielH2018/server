@@ -22,7 +22,7 @@ packages from a repository signed with a throwaway key with `python3 -m http.ser
   * remove the host package, and the next run reinstalls it;
   * cold-install the head version on a fresh container;
   * install the real Pi package by hand on a fresh container, then change its drop-in on
-    homelab-updater.timer, and the timer, which has no enable link, stays inactive;
+    homelab-updater.timer, and the timer, which has an enable link (H3.9b), stays active;
   * install the real Pi package by hand on a fresh container, then upgrade to one rendered with
     optimize_pi_recovery_restart_enabled false, and homelab-pi-recovery.timer, which was
     active, is stopped with no reboot (H3.8b's recovery disarm).
@@ -481,7 +481,7 @@ class Cases:
             c.ok("systemctl start homelab-reconcile.service")
             self.expect_reconciled(c, "updater-head", "pi-head")
             state = c.active(timer)
-            expect(state == "inactive", f"{timer} is {state} after the install")
+            expect(state == "active", f"{timer} is {state} after the install")
             self.serving("updater-head", "pi-head", "pi-dropin")
             status = c.run_updater()
             expect(status == 0, f"the updater exited {status}")
@@ -490,7 +490,7 @@ class Cases:
                 DROPIN_CHANGED in c.read(DROPIN), "the changed drop-in is not installed"
             )
             state = c.active(timer)
-            expect(state == "inactive", f"{timer} is {state} after its drop-in changed")
+            expect(state == "active", f"{timer} is {state} after its drop-in changed")
 
         try:
             self.case(

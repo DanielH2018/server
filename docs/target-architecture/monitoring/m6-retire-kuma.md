@@ -666,6 +666,8 @@ secrets. The arithmetic: 83 at the baseline, less M5's 3, M3's 1 and D5's
     - **Until contracts.md applies Open question 12's corrections, the index governs.** Its M6
       row puts all of M6 behind M2 to M5, and its register row for the split puts Phase B
       behind A6 with no B-1 exception. So B-1 to B-1e wait for M2 to M5 and for A6.
+      The operator's 2026-10-23 ruling narrows that wait to M2 to M5's functional PRs, and
+      contracts.md records it under the slice index.
     - Its D5 row holds only "the PR that flips the last Ansible-owned stateless leaf", not
       littlelink's. If littlelink has flipped by then, B-1d's PR names the stateless leaf D5
       still holds back, and quotes its entry carrying no `owner: flux`.
