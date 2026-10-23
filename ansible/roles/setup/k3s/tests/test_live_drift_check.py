@@ -428,3 +428,41 @@ def test_info_would_not_survive_this_cap():
     # true of every level. Reverting push() to LOG_INFO makes the up-path test fail, and this
     # is what says so. If this ever passes, the cap moved and that guard stopped testing.
     assert syslog.LOG_INFO > _journald_store_cap()
+
+
+# ── the textfile verdict (M6 batch B1) ───────────────────────────────────────────────────
+
+
+def _series(directory: pathlib.Path) -> dict[str, str]:
+    lines = (directory / "live-drift-check.prom").read_text().splitlines()
+    return dict(line.rsplit(" ", 1) for line in lines if not line.startswith("#"))
+
+
+def test_a_verdict_writes_the_three_series_readable_by_the_collector(
+    tmp_path, monkeypatch
+):
+    monkeypatch.setenv("DEADLINE_S", "90000")
+    monkeypatch.setenv("TEXTFILE_DIR", str(tmp_path))
+    ldc.record_textfile(2, 1760000000)
+    assert _series(tmp_path) == {
+        'homelab_check_success{check="live-drift-check"}': "0",
+        'homelab_check_last_run_timestamp_seconds{check="live-drift-check"}': "1760000000",
+        'homelab_check_deadline_seconds{check="live-drift-check"}': "90000",
+    }
+    assert (tmp_path / "live-drift-check.prom").stat().st_mode & 0o777 == 0o644
+    assert [p.name for p in tmp_path.iterdir()] == ["live-drift-check.prom"]
+    ldc.record_textfile(0, 1760000600)
+    assert _series(tmp_path)['homelab_check_success{check="live-drift-check"}'] == "1"
+
+
+def test_an_unset_deadline_or_an_unwritable_directory_writes_nothing_and_does_not_raise(
+    tmp_path, monkeypatch, capsys
+):
+    monkeypatch.setenv("TEXTFILE_DIR", str(tmp_path))
+    monkeypatch.delenv("DEADLINE_S", raising=False)
+    ldc.record_textfile(0, 1760000000)
+    assert list(tmp_path.iterdir()) == []
+    monkeypatch.setenv("DEADLINE_S", "90000")
+    monkeypatch.setenv("TEXTFILE_DIR", str(tmp_path / "missing"))
+    ldc.record_textfile(0, 1760000000)
+    assert "textfile write to" in capsys.readouterr().err

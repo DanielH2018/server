@@ -122,6 +122,190 @@ groups:
             textfile collector, so nothing is watching the OTLP door. Read the `Claude Code
             telemetry health` cron and `journalctl -t claude-otel-health`, then
             /var/lib/node-exporter-textfile/claude-otel-health.prom on the host.
+      # M6 BATCH B1, SHADOW UNTIL ITS CUTOVER-1B. The five k3s crons write the textfile beside
+      # their Kuma push, and Kuma's tiles page the same verdicts until Cutover-1a deletes
+      # them. Each check has the DiskHealth pair: `Failed` reads the verdict, and
+      # `NotReporting` reads the file's age. The deadline literal in a NotReporting rule
+      # equals the DEADLINE_S its producer renders, and
+      # ansible/tests/services/test_b1_rule_literals.py pins the two together. A daily check
+      # gets a day plus an hour (k3s_daily_check_deadline_s), the interval of its Kuma tile.
+      # The `unless` clause leaves a dead exporter to the bridge's `targets` check.
+      - alert: LonghornBackupHealthFailed
+        expr: homelab_check_success{check="longhorn-backup-health",origin="daniel-box"} == 0
+        labels:
+          severity: critical
+          service: daniel-box
+          shadow: "true"
+        annotations:
+          summary: daniel-box's Longhorn backup check is red.
+          description: >-
+            longhorn_backup_health.py on daniel-box reported a failing backup-plane check: an
+            unavailable backup target, a stale or errored backup, a failed job, or a restore drill
+            that is overdue. `journalctl -t longhorn-backup-health` names the check. Read
+            docs/longhorn-disaster-recovery.md after it.
+      - alert: LonghornBackupHealthNotReporting
+        expr: |
+          (
+              time() - homelab_check_last_run_timestamp_seconds{check="longhorn-backup-health",origin="daniel-box"} > 1500
+            or
+              absent_over_time(homelab_check_last_run_timestamp_seconds{check="longhorn-backup-health",origin="daniel-box"}[1500s])
+          )
+          unless on (origin) (up{job="node"} == 0)
+        labels:
+          severity: critical
+          service: daniel-box
+          shadow: "true"
+        annotations:
+          summary: daniel-box's longhorn-backup-health check has stopped reporting.
+          description: >-
+            No longhorn-backup-health verdict newer than 1500s reached Prometheus from daniel-box's
+            textfile collector, so nothing is watching the Longhorn backup plane. Read the `Longhorn
+            backup health` cron and the `longhorn-backup-health` syslog tag, then
+            /var/lib/node-exporter-textfile/longhorn-backup-health.prom on the host.
+      - alert: EtcdSnapshotOffboxFailed
+        expr: homelab_check_success{check="etcd-snapshot-offbox",origin="daniel-box"} == 0
+        labels:
+          severity: critical
+          service: daniel-box
+          shadow: "true"
+        annotations:
+          summary: daniel-box's off-box etcd snapshot check is red.
+          description: >-
+            etcd-snapshot-offbox.sh on daniel-box could not take or upload the etcd snapshot, or the
+            cluster token changed since the off-box copy was stamped. `journalctl -t
+            etcd-snapshot-offbox` names which. Read docs/k3s-etcd-restore.md after it.
+      - alert: EtcdSnapshotOffboxNotReporting
+        expr: |
+          (
+              time() - homelab_check_last_run_timestamp_seconds{check="etcd-snapshot-offbox",origin="daniel-box"} > 90000
+            or
+              absent_over_time(homelab_check_last_run_timestamp_seconds{check="etcd-snapshot-offbox",origin="daniel-box"}[90000s])
+          )
+          unless on (origin) (up{job="node"} == 0)
+        labels:
+          severity: critical
+          service: daniel-box
+          shadow: "true"
+        annotations:
+          summary: daniel-box's etcd-snapshot-offbox check has stopped reporting.
+          description: >-
+            No etcd-snapshot-offbox verdict newer than 90000s reached Prometheus from daniel-box's
+            textfile collector, so nothing is watching the off-box etcd snapshot. Read the `Off-box
+            etcd snapshot` cron and the `etcd-snapshot-offbox` syslog tag, then
+            /var/lib/node-exporter-textfile/etcd-snapshot-offbox.prom on the host.
+      - alert: ManifestPruneCheckFailed
+        expr: homelab_check_success{check="manifest-prune-check",origin="daniel-box"} == 0
+        labels:
+          severity: warning
+          service: daniel-box
+          shadow: "true"
+        annotations:
+          summary: daniel-box has deployed-artifact drift.
+          description: >-
+            manifest-prune-check.sh on daniel-box found a live cluster object that no staged
+            manifest declares, a deployed setup file that differs from the repo, or a rendered
+            script that is older than its template. `journalctl -t manifest-prune-check` names the
+            arm and the object.
+      - alert: ManifestPruneCheckNotReporting
+        expr: |
+          (
+              time() - homelab_check_last_run_timestamp_seconds{check="manifest-prune-check",origin="daniel-box"} > 90000
+            or
+              absent_over_time(homelab_check_last_run_timestamp_seconds{check="manifest-prune-check",origin="daniel-box"}[90000s])
+          )
+          unless on (origin) (up{job="node"} == 0)
+        labels:
+          severity: warning
+          service: daniel-box
+          shadow: "true"
+        annotations:
+          summary: daniel-box's manifest-prune-check check has stopped reporting.
+          description: >-
+            No manifest-prune-check verdict newer than 90000s reached Prometheus from daniel-box's
+            textfile collector, so nothing is watching deployed-artifact drift. Read the
+            `kuma-check-manifest-prune` timer and the `manifest-prune-check` syslog tag, then
+            /var/lib/node-exporter-textfile/manifest-prune-check.prom on the host.
+      - alert: ReleaseStalenessCheckFailed
+        expr: homelab_check_success{check="release-staleness-check",origin="daniel-box"} == 0
+        labels:
+          severity: warning
+          service: daniel-box
+          shadow: "true"
+        annotations:
+          summary: A k8s service runs an older release than origin/master.
+          description: >-
+            release-staleness-check.sh on daniel-box found a service whose role paths changed on
+            origin/master after its last applied commit. `uv run python scripts/diagnostics/probe.py
+            releases --stale-only` prints each reason, and `./scripts/deploy.sh --tags <svc>`
+            redeploys the service.
+      - alert: ReleaseStalenessCheckNotReporting
+        expr: |
+          (
+              time() - homelab_check_last_run_timestamp_seconds{check="release-staleness-check",origin="daniel-box"} > 3900
+            or
+              absent_over_time(homelab_check_last_run_timestamp_seconds{check="release-staleness-check",origin="daniel-box"}[3900s])
+          )
+          unless on (origin) (up{job="node"} == 0)
+        labels:
+          severity: warning
+          service: daniel-box
+          shadow: "true"
+        annotations:
+          summary: daniel-box's release-staleness-check check has stopped reporting.
+          description: >-
+            No release-staleness-check verdict newer than 3900s reached Prometheus from daniel-box's
+            textfile collector, so nothing is watching release staleness. Read the `Release
+            staleness drift check` cron and the `release-staleness-check` syslog tag, then
+            /var/lib/node-exporter-textfile/release-staleness-check.prom on the host.
+      - alert: LiveDriftCheckFailed
+        expr: homelab_check_success{check="live-drift-check",origin="daniel-box"} == 0
+        labels:
+          severity: warning
+          service: daniel-box
+          shadow: "true"
+        annotations:
+          summary: A live cluster object differs from its last-applied manifest.
+          description: >-
+            live_drift_check.py on daniel-box found an object that was patched, edited or scaled by
+            hand after Ansible applied it, or could not read the cluster. `journalctl -t
+            live-drift-check` names the object. Redeploy the owning role.
+      - alert: LiveDriftCheckNotReporting
+        expr: |
+          (
+              time() - homelab_check_last_run_timestamp_seconds{check="live-drift-check",origin="daniel-box"} > 90000
+            or
+              absent_over_time(homelab_check_last_run_timestamp_seconds{check="live-drift-check",origin="daniel-box"}[90000s])
+          )
+          unless on (origin) (up{job="node"} == 0)
+        labels:
+          severity: warning
+          service: daniel-box
+          shadow: "true"
+        annotations:
+          summary: daniel-box's live-drift-check check has stopped reporting.
+          description: >-
+            No live-drift-check verdict newer than 90000s reached Prometheus from daniel-box's
+            textfile collector, so nothing is watching live-object drift. Read the
+            `kuma-check-live-drift` timer and the `live-drift-check` syslog tag, then
+            /var/lib/node-exporter-textfile/live-drift-check.prom on the host.
+      # M6 BATCH B1, SHADOW UNTIL ITS CUTOVER-1B, which also adds the inhibit on
+      # ScrapeTargetDown{job="uptime-kuma"}. Prometheus scrapes Kuma's Service directly, so
+      # Authelia is not in this path. A 200 from /metrics is weaker than the
+      # `uptime-kuma-alive` ping it replaces, which proved Kuma accepted a push.
+      - alert: KumaDown
+        expr: up{job="uptime-kuma"} == 0 or absent(up{job="uptime-kuma"})
+        for: 5m
+        labels:
+          severity: critical
+          service: uptime-kuma
+          shadow: "true"
+        annotations:
+          summary: Uptime Kuma has stopped serving /metrics.
+          description: >-
+            Prometheus's scrape of the uptime-kuma Service failed for 5 minutes, or the job has no
+            `up` series at all. Kuma still pages every check that has not moved to an alert rule, so
+            a dead Kuma leaves those checks silent. Read `kubectl -n uptime-kuma get pods` and the
+            pod's log.
       # SHADOW UNTIL M6's BATCH A1. A malformed claude_cgroup.prom already pages through
       # check_mem's cgroup arm, and a malformed disk-health.prom through DiskHealthNotReporting,
       # so a paging collector alert would page twice for one cause. Until A1 its value is the

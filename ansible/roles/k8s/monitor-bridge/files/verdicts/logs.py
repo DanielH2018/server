@@ -216,16 +216,26 @@ HC_ROUTED_TAGS = frozenset(
     {"longhorn-backup-health", "pi-sd-health", "pi-recovery-health"}
 )
 
-
-# Producers whose Kuma tile M6 is retiring. From a batch's Cutover-1a the tile is gone, so the
-# producer's push is refused until its Cutover-2 drops it, and a refused push is not a fault.
-# `swallowed_verdicts` leaves these tags out of the `rejected` set only: a lost `status=down`
-# push still counts, and a `status=` line still counts as a landed sibling. Each B1 to B7 shadow
-# PR adds its producers' tags, as `parse_push_line` reads them, and C-7 deletes the set. Pinned
-# against the tree by tests/test_check_swallowed_verdicts.py: a tag must be one a rendered
-# producer logs under. See docs/target-architecture/monitoring/m6-retire-kuma.md, *The cutover
-# order*.
-KUMA_RETIRING_TAGS = frozenset({"sync-artifacts", "claude-otel-health"})
+# The producers whose Kuma tile M6 is deleting (docs/target-architecture/monitoring/m6-retire-kuma.md,
+# "The cutover order"). From a batch's Cutover-1a until its Cutover-2, the producer still pushes
+# into a token whose tile is gone, and kuma_push logs that refused push as a `rejected` line. A
+# tag listed here is left out of the `rejected` set ONLY: a lost `status=down` push still counts,
+# and its `status=` lines still count as landed siblings. Each batch's shadow PR adds its tags, a
+# week before its Cutover-1a, so the exclusion is deployed before any tile goes. A tag is the one
+# `parse_push_line` reads: a shell script's `logger -t` name, or a Python producer's syslog
+# identifier. The set goes with `swallowed_verdicts` in C-7. One tag per line, so a batch's
+# additions merge without touching another's.
+KUMA_RETIRING_TAGS = frozenset(
+    {
+        "claude-otel-health",
+        "etcd-snapshot-offbox",
+        "live-drift-check",
+        "longhorn-backup-health",
+        "manifest-prune-check",
+        "release-staleness-check",
+        "sync-artifacts",
+    }
+)
 
 
 def swallowed_verdicts(
@@ -269,6 +279,9 @@ def swallowed_verdicts(
 
     A tag in HC_ROUTED_TAGS is not counted either: its own script already pages a lost push
     through healthchecks.io.
+
+    A REJECTED push from a tag in KUMA_RETIRING_TAGS is not counted either: its tile is being
+    deleted, so the token matches no tile by design. Its lost DOWN pushes still count.
     """
     latest: dict[str, tuple[int, str, str, str, str]] = {}
     for ts, line in lines:

@@ -194,6 +194,378 @@ tests:
         alertname: DiskHealthNotReporting
         exp_alerts: []
 
+  # M6 batch B1. The zero-series case: no input at all, so no k3s cron has written a verdict
+  # inside its deadline, and no Kuma `up` series exists. Each NotReporting rule fires through
+  # absent_over_time, once the longest deadline (90000s) has passed, and KumaDown fires on its
+  # absent() arm. The Failed rules read a series and stay quiet.
+  - interval: 10m
+    input_series: []
+    alert_rule_test:
+      - eval_time: 26h
+        alertname: LonghornBackupHealthNotReporting
+        exp_alerts:
+          - exp_labels:
+              check: longhorn-backup-health
+              origin: daniel-box
+              severity: critical
+              service: daniel-box
+              shadow: "true"
+            exp_annotations:
+              summary: daniel-box's longhorn-backup-health check has stopped reporting.
+              description: >-
+                No longhorn-backup-health verdict newer than 1500s reached Prometheus from
+                daniel-box's textfile collector, so nothing is watching the Longhorn backup plane.
+                Read the `Longhorn backup health` cron and the `longhorn-backup-health` syslog tag,
+                then /var/lib/node-exporter-textfile/longhorn-backup-health.prom on the host.
+      - eval_time: 26h
+        alertname: LonghornBackupHealthFailed
+        exp_alerts: []
+      - eval_time: 26h
+        alertname: EtcdSnapshotOffboxNotReporting
+        exp_alerts:
+          - exp_labels:
+              check: etcd-snapshot-offbox
+              origin: daniel-box
+              severity: critical
+              service: daniel-box
+              shadow: "true"
+            exp_annotations:
+              summary: daniel-box's etcd-snapshot-offbox check has stopped reporting.
+              description: >-
+                No etcd-snapshot-offbox verdict newer than 90000s reached Prometheus from
+                daniel-box's textfile collector, so nothing is watching the off-box etcd snapshot.
+                Read the `Off-box etcd snapshot` cron and the `etcd-snapshot-offbox` syslog tag,
+                then /var/lib/node-exporter-textfile/etcd-snapshot-offbox.prom on the host.
+      - eval_time: 26h
+        alertname: EtcdSnapshotOffboxFailed
+        exp_alerts: []
+      - eval_time: 26h
+        alertname: ManifestPruneCheckNotReporting
+        exp_alerts:
+          - exp_labels:
+              check: manifest-prune-check
+              origin: daniel-box
+              severity: warning
+              service: daniel-box
+              shadow: "true"
+            exp_annotations:
+              summary: daniel-box's manifest-prune-check check has stopped reporting.
+              description: >-
+                No manifest-prune-check verdict newer than 90000s reached Prometheus from
+                daniel-box's textfile collector, so nothing is watching deployed-artifact drift.
+                Read the `kuma-check-manifest-prune` timer and the `manifest-prune-check` syslog
+                tag, then /var/lib/node-exporter-textfile/manifest-prune-check.prom on the host.
+      - eval_time: 26h
+        alertname: ManifestPruneCheckFailed
+        exp_alerts: []
+      - eval_time: 26h
+        alertname: ReleaseStalenessCheckNotReporting
+        exp_alerts:
+          - exp_labels:
+              check: release-staleness-check
+              origin: daniel-box
+              severity: warning
+              service: daniel-box
+              shadow: "true"
+            exp_annotations:
+              summary: daniel-box's release-staleness-check check has stopped reporting.
+              description: >-
+                No release-staleness-check verdict newer than 3900s reached Prometheus from
+                daniel-box's textfile collector, so nothing is watching release staleness. Read the
+                `Release staleness drift check` cron and the `release-staleness-check` syslog tag,
+                then /var/lib/node-exporter-textfile/release-staleness-check.prom on the host.
+      - eval_time: 26h
+        alertname: ReleaseStalenessCheckFailed
+        exp_alerts: []
+      - eval_time: 26h
+        alertname: LiveDriftCheckNotReporting
+        exp_alerts:
+          - exp_labels:
+              check: live-drift-check
+              origin: daniel-box
+              severity: warning
+              service: daniel-box
+              shadow: "true"
+            exp_annotations:
+              summary: daniel-box's live-drift-check check has stopped reporting.
+              description: >-
+                No live-drift-check verdict newer than 90000s reached Prometheus from daniel-box's
+                textfile collector, so nothing is watching live-object drift. Read the
+                `kuma-check-live-drift` timer and the `live-drift-check` syslog tag, then
+                /var/lib/node-exporter-textfile/live-drift-check.prom on the host.
+      - eval_time: 26h
+        alertname: LiveDriftCheckFailed
+        exp_alerts: []
+      - eval_time: 26h
+        alertname: KumaDown
+        exp_alerts:
+          - exp_labels:
+              job: uptime-kuma
+              severity: critical
+              service: uptime-kuma
+              shadow: "true"
+            exp_annotations:
+              summary: Uptime Kuma has stopped serving /metrics.
+              description: >-
+                Prometheus's scrape of the uptime-kuma Service failed for 5 minutes, or the job has
+                no `up` series at all. Kuma still pages every check that has not moved to an alert
+                rule, so a dead Kuma leaves those checks silent. Read `kubectl -n uptime-kuma get
+                pods` and the pod's log.
+
+  # M6 batch B1. Every check turns red from minute 3 while its file stays fresh. Each Failed
+  # rule fires at once and no NotReporting rule does.
+  - interval: 1m
+    input_series:
+      - series: 'homelab_check_success{check="longhorn-backup-health", instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '1x2 0x5'
+      - series: 'homelab_check_last_run_timestamp_seconds{check="longhorn-backup-health", instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '0+60x7'
+      - series: 'homelab_check_success{check="etcd-snapshot-offbox", instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '1x2 0x5'
+      - series: 'homelab_check_last_run_timestamp_seconds{check="etcd-snapshot-offbox", instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '0+60x7'
+      - series: 'homelab_check_success{check="manifest-prune-check", instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '1x2 0x5'
+      - series: 'homelab_check_last_run_timestamp_seconds{check="manifest-prune-check", instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '0+60x7'
+      - series: 'homelab_check_success{check="release-staleness-check", instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '1x2 0x5'
+      - series: 'homelab_check_last_run_timestamp_seconds{check="release-staleness-check", instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '0+60x7'
+      - series: 'homelab_check_success{check="live-drift-check", instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '1x2 0x5'
+      - series: 'homelab_check_last_run_timestamp_seconds{check="live-drift-check", instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '0+60x7'
+      - series: 'up{instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '1x7'
+    alert_rule_test:
+      - eval_time: 2m
+        alertname: LonghornBackupHealthFailed
+        exp_alerts: []
+      - eval_time: 4m
+        alertname: LonghornBackupHealthFailed
+        exp_alerts:
+          - exp_labels:
+              check: longhorn-backup-health
+              instance: daniel-box
+              job: node
+              origin: daniel-box
+              severity: critical
+              service: daniel-box
+              shadow: "true"
+            exp_annotations:
+              summary: daniel-box's Longhorn backup check is red.
+              description: >-
+                longhorn_backup_health.py on daniel-box reported a failing backup-plane check: an
+                unavailable backup target, a stale or errored backup, a failed job, or a restore
+                drill that is overdue. `journalctl -t longhorn-backup-health` names the check. Read
+                docs/longhorn-disaster-recovery.md after it.
+      - eval_time: 4m
+        alertname: LonghornBackupHealthNotReporting
+        exp_alerts: []
+      - eval_time: 2m
+        alertname: EtcdSnapshotOffboxFailed
+        exp_alerts: []
+      - eval_time: 4m
+        alertname: EtcdSnapshotOffboxFailed
+        exp_alerts:
+          - exp_labels:
+              check: etcd-snapshot-offbox
+              instance: daniel-box
+              job: node
+              origin: daniel-box
+              severity: critical
+              service: daniel-box
+              shadow: "true"
+            exp_annotations:
+              summary: daniel-box's off-box etcd snapshot check is red.
+              description: >-
+                etcd-snapshot-offbox.sh on daniel-box could not take or upload the etcd snapshot, or
+                the cluster token changed since the off-box copy was stamped. `journalctl -t
+                etcd-snapshot-offbox` names which. Read docs/k3s-etcd-restore.md after it.
+      - eval_time: 4m
+        alertname: EtcdSnapshotOffboxNotReporting
+        exp_alerts: []
+      - eval_time: 2m
+        alertname: ManifestPruneCheckFailed
+        exp_alerts: []
+      - eval_time: 4m
+        alertname: ManifestPruneCheckFailed
+        exp_alerts:
+          - exp_labels:
+              check: manifest-prune-check
+              instance: daniel-box
+              job: node
+              origin: daniel-box
+              severity: warning
+              service: daniel-box
+              shadow: "true"
+            exp_annotations:
+              summary: daniel-box has deployed-artifact drift.
+              description: >-
+                manifest-prune-check.sh on daniel-box found a live cluster object that no staged
+                manifest declares, a deployed setup file that differs from the repo, or a rendered
+                script that is older than its template. `journalctl -t manifest-prune-check` names
+                the arm and the object.
+      - eval_time: 4m
+        alertname: ManifestPruneCheckNotReporting
+        exp_alerts: []
+      - eval_time: 2m
+        alertname: ReleaseStalenessCheckFailed
+        exp_alerts: []
+      - eval_time: 4m
+        alertname: ReleaseStalenessCheckFailed
+        exp_alerts:
+          - exp_labels:
+              check: release-staleness-check
+              instance: daniel-box
+              job: node
+              origin: daniel-box
+              severity: warning
+              service: daniel-box
+              shadow: "true"
+            exp_annotations:
+              summary: A k8s service runs an older release than origin/master.
+              description: >-
+                release-staleness-check.sh on daniel-box found a service whose role paths changed on
+                origin/master after its last applied commit. `uv run python
+                scripts/diagnostics/probe.py releases --stale-only` prints each reason, and
+                `./scripts/deploy.sh --tags <svc>` redeploys the service.
+      - eval_time: 4m
+        alertname: ReleaseStalenessCheckNotReporting
+        exp_alerts: []
+      - eval_time: 2m
+        alertname: LiveDriftCheckFailed
+        exp_alerts: []
+      - eval_time: 4m
+        alertname: LiveDriftCheckFailed
+        exp_alerts:
+          - exp_labels:
+              check: live-drift-check
+              instance: daniel-box
+              job: node
+              origin: daniel-box
+              severity: warning
+              service: daniel-box
+              shadow: "true"
+            exp_annotations:
+              summary: A live cluster object differs from its last-applied manifest.
+              description: >-
+                live_drift_check.py on daniel-box found an object that was patched, edited or scaled
+                by hand after Ansible applied it, or could not read the cluster. `journalctl -t
+                live-drift-check` names the object. Redeploy the owning role.
+      - eval_time: 4m
+        alertname: LiveDriftCheckNotReporting
+        exp_alerts: []
+
+  # M6 batch B1. The files stop being refreshed: node_exporter keeps serving the timestamp
+  # written at 0. The first arm fires once the timestamp is more than the deadline old, so
+  # longhorn-backup-health (1500s) fires between minutes 25 and 26 and
+  # release-staleness-check (3900s) between minutes 65 and 66. The two quiet checks use the
+  # same labels, so a rule that read another check's deadline would show here.
+  - interval: 1m
+    input_series:
+      - series: 'homelab_check_last_run_timestamp_seconds{check="longhorn-backup-health", instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '0x70'
+      - series: 'homelab_check_last_run_timestamp_seconds{check="release-staleness-check", instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '0x70'
+      - series: 'up{instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '1x70'
+    alert_rule_test:
+      - eval_time: 24m
+        alertname: LonghornBackupHealthNotReporting
+        exp_alerts: []
+      - eval_time: 26m
+        alertname: LonghornBackupHealthNotReporting
+        exp_alerts:
+          - exp_labels:
+              check: longhorn-backup-health
+              instance: daniel-box
+              job: node
+              origin: daniel-box
+              severity: critical
+              service: daniel-box
+              shadow: "true"
+            exp_annotations:
+              summary: daniel-box's longhorn-backup-health check has stopped reporting.
+              description: >-
+                No longhorn-backup-health verdict newer than 1500s reached Prometheus from
+                daniel-box's textfile collector, so nothing is watching the Longhorn backup plane.
+                Read the `Longhorn backup health` cron and the `longhorn-backup-health` syslog tag,
+                then /var/lib/node-exporter-textfile/longhorn-backup-health.prom on the host.
+      - eval_time: 64m
+        alertname: ReleaseStalenessCheckNotReporting
+        exp_alerts: []
+      - eval_time: 66m
+        alertname: ReleaseStalenessCheckNotReporting
+        exp_alerts:
+          - exp_labels:
+              check: release-staleness-check
+              instance: daniel-box
+              job: node
+              origin: daniel-box
+              severity: warning
+              service: daniel-box
+              shadow: "true"
+            exp_annotations:
+              summary: daniel-box's release-staleness-check check has stopped reporting.
+              description: >-
+                No release-staleness-check verdict newer than 3900s reached Prometheus from
+                daniel-box's textfile collector, so nothing is watching release staleness. Read the
+                `Release staleness drift check` cron and the `release-staleness-check` syslog tag,
+                then /var/lib/node-exporter-textfile/release-staleness-check.prom on the host.
+
+  # M6 batch B1. The exporter is down from minute 0 and every file is gone, so the bridge's
+  # `targets` check pages the dead exporter and the `unless` clause keeps all five
+  # NotReporting rules quiet past the point the zero-series case fires them.
+  - interval: 10m
+    input_series:
+      - series: 'up{instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '0x160'
+    alert_rule_test:
+      - eval_time: 26h
+        alertname: LonghornBackupHealthNotReporting
+        exp_alerts: []
+      - eval_time: 26h
+        alertname: EtcdSnapshotOffboxNotReporting
+        exp_alerts: []
+      - eval_time: 26h
+        alertname: ManifestPruneCheckNotReporting
+        exp_alerts: []
+      - eval_time: 26h
+        alertname: ReleaseStalenessCheckNotReporting
+        exp_alerts: []
+      - eval_time: 26h
+        alertname: LiveDriftCheckNotReporting
+        exp_alerts: []
+
+  # M6 batch B1. KumaDown's up arm: the scrape fails from minute 2, and the rule fires after
+  # its 5 minutes. While Kuma is up it stays quiet.
+  - interval: 1m
+    input_series:
+      - series: 'up{instance="uptime-kuma:3001", job="uptime-kuma"}'
+        values: '1x2 0x10'
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: KumaDown
+        exp_alerts: []
+      - eval_time: 9m
+        alertname: KumaDown
+        exp_alerts:
+          - exp_labels:
+              instance: uptime-kuma:3001
+              job: uptime-kuma
+              severity: critical
+              service: uptime-kuma
+              shadow: "true"
+            exp_annotations:
+              summary: Uptime Kuma has stopped serving /metrics.
+              description: >-
+                Prometheus's scrape of the uptime-kuma Service failed for 5 minutes, or the job has
+                no `up` series at all. Kuma still pages every check that has not moved to an alert
+                rule, so a dead Kuma leaves those checks silent. Read `kubectl -n uptime-kuma get
+                pods` and the pod's log.
+
   # A short gap: one, then two failed scrapes mark the series stale between fresh timestamps,
   # as a node-exporter roll does. A bare absent() would fire at each stale minute; the
   # absent_over_time arm still sees the earlier samples and stays quiet.

@@ -42,6 +42,8 @@ def _run(tmp_path, deployments, kustomizations=("bento-pdf",)):
         f'logger() {{ printf "%s{SEP}" "$*" >> "{calls}"; }}\n'
         "boot_grace_active() { return 1; }\n"
     )
+    check_lib = tmp_path / "homelab-check-lib.sh"
+    check_lib.write_text("write_check_textfile() { :; }\n")
     drift_lib = tmp_path / "setup-drift-lib.sh"
     drift_lib.write_text(
         'setup_drift_scan() { DRIFTED=""; STALE=""; DEPLOYED_NOTE=""; MANIFEST_NOTE=""; }\n'
@@ -71,6 +73,7 @@ def _run(tmp_path, deployments, kustomizations=("bento-pdf",)):
     replacements = {
         "[[ $EUID -ne 0 ]]": "[[ 0 -ne 0 ]]",
         "/usr/local/lib/kuma-push-lib.sh": str(kuma_lib),
+        "/usr/local/lib/homelab-check-lib.sh": str(check_lib),
         "/usr/local/lib/setup-drift-lib.sh": str(drift_lib),
         "/etc/rancher/k3s/kuma-push.env": str(push_env),
         "/etc/rancher/k3s/manifests": str(manifests),

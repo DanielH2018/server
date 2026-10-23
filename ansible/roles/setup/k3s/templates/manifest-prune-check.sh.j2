@@ -76,6 +76,11 @@ source /usr/local/lib/kuma-push-lib.sh || {
   logger -t manifest-prune-check "kuma-push-lib.sh missing — run initial_setup on this host"
   exit 1
 }
+# shellcheck source=/dev/null
+source /usr/local/lib/homelab-check-lib.sh || {
+  logger -t manifest-prune-check "homelab-check-lib.sh missing — run initial_setup on this host"
+  exit 1
+}
 # Arms 2 and 3 below live in this library, shared with setup-drift-check.sh — the reader
 # daniel-server got on 2026-08-29, because this script is installed only on k3s server hosts and
 # that host renders the whole UPS shutdown chain (review M-10). Two copies of a drift check are
@@ -110,6 +115,12 @@ if [[ $EUID -ne 0 ]]; then
   exit 64
 fi
 
+# The longest legitimate gap between two textfile writes: a day plus an hour, the interval that
+# the check's Kuma tile carries. `k3s_daily_check_deadline_s` names it in defaults/main.yml, and
+# ansible/tests/services/test_b1_rule_literals.py pins the rule's literal to this value.
+DEADLINE_S={{ k3s_daily_check_deadline_s }}
+TEXTFILE_DIR=${TEXTFILE_DIR:-/var/lib/node-exporter-textfile}
+
 KUMA_HOST="uptime-kuma.local.{{ domain }}"
 # Pinned to the cluster ingress VIP: Kuma serves from the k8s edge, and the Docker
 # edge's bridge route for this name was removed in the slice-7 bridge teardown.
@@ -143,6 +154,13 @@ fi
 if [[ ! -d "$MANIFEST_ROOT" ]]; then
   STATUS=down
   MSG="${MANIFEST_ROOT} missing — no staged manifests to compare against"
+  # The textfile, before the push: the verdict must not wait on Kuma. The producer metric contract is
+  # docs/target-architecture/monitoring/m3-textfile-timer.md, and homelab-check-lib.sh writes the
+  # file atomically. A failed write logs and the run goes on to its push.
+  SUCCESS=0
+  [[ "$STATUS" == "up" ]] && SUCCESS=1
+  write_check_textfile manifest-prune-check "$SUCCESS" "$(date +%s)" "$DEADLINE_S" \
+    || logger -t manifest-prune-check "textfile write to ${TEXTFILE_DIR} failed (status=${STATUS})"
   kuma_push "$STATUS" "$MSG" "$PUSH_URL" "$KUMA_HOST" "$KUMA_RESOLVE_IP" manifest-prune-check
   exit 1
 fi
@@ -362,6 +380,14 @@ fi
 # Short version: the `|| logger` below only fires when the curl fails, so a successfully-pushed
 # DOWN leaves no durable record and `probe.py alerts` can never reconstruct this monitor.
 logger -t manifest-prune-check "status=${STATUS} ${MSG}"
+
+# The textfile, before the push: the verdict must not wait on Kuma. The producer metric contract is
+# docs/target-architecture/monitoring/m3-textfile-timer.md, and homelab-check-lib.sh writes the
+# file atomically. A failed write logs and the run goes on to its push.
+SUCCESS=0
+[[ "$STATUS" == "up" ]] && SUCCESS=1
+write_check_textfile manifest-prune-check "$SUCCESS" "$(date +%s)" "$DEADLINE_S" \
+  || logger -t manifest-prune-check "textfile write to ${TEXTFILE_DIR} failed (status=${STATUS})"
 
 kuma_push "$STATUS" "$MSG" "$PUSH_URL" "$KUMA_HOST" "$KUMA_RESOLVE_IP" manifest-prune-check
 

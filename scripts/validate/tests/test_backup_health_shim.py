@@ -167,6 +167,11 @@ def _run_rendered_shim(
     script = script.replace(
         "source /usr/local/lib/kuma-push-lib.sh ||", f"source {KUMA_PUSH_LIB} ||"
     )
+    # The shared check library is stubbed to a no-op textfile write: the real file is absent on a
+    # CI runner, and its textfile cases are in ansible/tests/setup/test_k3s_cron_textfiles.py.
+    check_lib = tmp_path / "homelab-check-lib.sh"
+    check_lib.write_text("write_check_textfile() { :; }\n")
+    script = script.replace("/usr/local/lib/homelab-check-lib.sh", str(check_lib))
     script = script.replace("/etc/rancher/k3s/kuma-push.env", str(push_token_env))
     script = script.replace("/etc/healthchecks/ping.env", str(hc_ping_env))
     reader_invocation = re.search(

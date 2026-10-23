@@ -141,6 +141,7 @@ PRODUCERS = frozenset(
     {
         "ansible/roles/k8s/node-exporter/files/iscsi-sessions.sh",
         "ansible/roles/setup/initial_setup/files/homelab-check-lib.sh",
+        "ansible/roles/setup/k3s/files/live_drift_check.py",
         "ansible/roles/setup/k3s/templates/disk-health.sh.j2",
     }
 )
