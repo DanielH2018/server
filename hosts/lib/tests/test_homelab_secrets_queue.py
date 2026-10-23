@@ -11,7 +11,6 @@ import fcntl
 import json
 import shutil
 import threading
-import time
 
 import pytest
 from _secrets_host import Host
@@ -174,39 +173,36 @@ def test_a_host_with_no_outputs_still_gets_the_baseline_files(host):
     assert queue(host) == []
 
 
-def hold_lock(host, seconds):
+def hold_lock(host):
     """Hold pending.lock from another open file description, as reconcile would."""
     host.path(LOCK).parent.mkdir(parents=True, exist_ok=True)
     handle = open(host.path(LOCK), "a")
     fcntl.flock(handle, fcntl.LOCK_EX)
-
-    def release():
-        time.sleep(seconds)
-        handle.close()
-
-    thread = threading.Thread(target=release)
-    thread.start()
-    return thread
+    return handle
 
 
 def test_the_script_waits_for_the_lock_and_then_writes(host):
     two_outputs(host, nut_pw="pw1", tok="t1")
-    thread = hold_lock(host, 0.3)
+    handle = hold_lock(host)
+    timer = threading.Timer(0.3, handle.close)
+    timer.start()
 
     assert host.run() == 0
-    thread.join()
+    timer.join()
 
     assert len(queue(host)) == 3
 
 
 def test_a_lock_held_past_the_timeout_fails_the_run_and_writes_no_state(host):
-    # The reject half of the pair above: the lock never frees inside the script's wait.
+    # The reject half of the pair above: the holder keeps the lock until the run has returned.
     two_outputs(host, nut_pw="pw1", tok="t1")
     host.module.LOCK_TIMEOUT_SECONDS = 0.2
-    thread = hold_lock(host, 1)
+    handle = hold_lock(host)
 
-    assert host.run() == 1
-    thread.join()
+    try:
+        assert host.run() == 1
+    finally:
+        handle.close()
 
     assert not host.path(PENDING).exists()
     assert not host.path(DIGESTS).exists()
