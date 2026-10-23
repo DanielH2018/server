@@ -1,0 +1,186 @@
+# promtool unit tests for files/rules/bridge-exporter.yaml. Run with
+# `scripts/validate/alert_tools.sh promtool test rules <this file>`; the validate-alert-rules
+# hook runs it on every commit that touches the rules.
+#
+# Each firing case also asserts the evaluation one minute short of the 10m hold, so a shortened
+# `for:` fails here. The series carry the labels the live scrape gives them: job
+# `monitor-bridge`, instance monitor-bridge.homelab.svc:9181, and a `check` label per row. A
+# timestamp series written `0+60x40` equals the evaluation time in seconds, so the row is
+# fresh. The exporter's deadline is 900s, three 300s cycles.
+rule_files:
+  - ../../files/rules/bridge-exporter.yaml
+evaluation_interval: 1m
+tests:
+  # The zero-series case: no input at all, so the scrape job is missing from prometheus.yml.
+  # MonitorBridgeDown fires through its absent() arm. BridgeCheckStale stays quiet, because a
+  # dead exporter has neither of its series.
+  - interval: 1m
+    input_series: []
+    alert_rule_test:
+      - eval_time: 9m
+        alertname: MonitorBridgeDown
+        exp_alerts: []
+      - eval_time: 10m
+        alertname: MonitorBridgeDown
+        exp_alerts:
+          - exp_labels:
+              job: monitor-bridge
+              severity: critical
+              service: monitor-bridge
+              shadow: "true"
+            exp_annotations: &down
+              summary: Prometheus cannot scrape monitor-bridge's check exporter.
+              description: >-
+                up{job="monitor-bridge"} has been 0 or missing for 10 minutes, so either the
+                monitor-bridge pod is down or the monitor-bridge scrape job is gone from
+                prometheus.yml. Read the pod's events and log in the homelab namespace.
+      - eval_time: 30m
+        alertname: BridgeCheckStale
+        exp_alerts: []
+
+  # A failed scrape that lasts: up is 0 from the start. The labelled series fires after the hold.
+  - interval: 1m
+    input_series:
+      - series: up{job="monitor-bridge",instance="monitor-bridge.homelab.svc:9181"}
+        values: "0x30"
+    alert_rule_test:
+      - eval_time: 9m
+        alertname: MonitorBridgeDown
+        exp_alerts: []
+      - eval_time: 10m
+        alertname: MonitorBridgeDown
+        exp_alerts:
+          - exp_labels:
+              job: monitor-bridge
+              instance: monitor-bridge.homelab.svc:9181
+              severity: critical
+              service: monitor-bridge
+              shadow: "true"
+            exp_annotations: *down
+
+  # One missed scrape, as at a monitor-bridge restart, must not fire: the hold absorbs it.
+  - interval: 1m
+    input_series:
+      - series: up{job="monitor-bridge",instance="monitor-bridge.homelab.svc:9181"}
+        values: "1x5 0 1x30"
+    alert_rule_test:
+      - eval_time: 6m
+        alertname: MonitorBridgeDown
+        exp_alerts: []
+      - eval_time: 20m
+        alertname: MonitorBridgeDown
+        exp_alerts: []
+
+  # A hung loop behind a live HTTP thread: up stays 1 and both rows keep their gauges, but row
+  # "a" stops being recorded, so its timestamp stays at 0 while row "b" keeps refreshing. Row "a"
+  # passes its 900s deadline after 15m, and the alert fires after the 10m hold, at 26m.
+  - interval: 1m
+    input_series:
+      - series: up{job="monitor-bridge",instance="monitor-bridge.homelab.svc:9181"}
+        values: "1x40"
+      - series: homelab_check_rows{job="monitor-bridge",instance="monitor-bridge.homelab.svc:9181"}
+        values: "2x40"
+      - series: homelab_check_success{job="monitor-bridge",instance="monitor-bridge.homelab.svc:9181",check="a"}
+        values: "1x40"
+      - series: homelab_check_success{job="monitor-bridge",instance="monitor-bridge.homelab.svc:9181",check="b"}
+        values: "1x40"
+      - series: homelab_check_deadline_seconds{job="monitor-bridge",instance="monitor-bridge.homelab.svc:9181",check="a"}
+        values: "900x40"
+      - series: homelab_check_deadline_seconds{job="monitor-bridge",instance="monitor-bridge.homelab.svc:9181",check="b"}
+        values: "900x40"
+      - series: homelab_check_last_run_timestamp_seconds{job="monitor-bridge",instance="monitor-bridge.homelab.svc:9181",check="a"}
+        values: "0x40"
+      - series: homelab_check_last_run_timestamp_seconds{job="monitor-bridge",instance="monitor-bridge.homelab.svc:9181",check="b"}
+        values: "0+60x40"
+    alert_rule_test:
+      - eval_time: 25m
+        alertname: BridgeCheckStale
+        exp_alerts: []
+      - eval_time: 26m
+        alertname: BridgeCheckStale
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              service: monitor-bridge
+              shadow: "true"
+            exp_annotations: &stale
+              summary: monitor-bridge's run loop has stopped recording some check verdicts.
+              description: >-
+                For 10 minutes either a row's homelab_check_last_run_timestamp_seconds has
+                aged past its homelab_check_deadline_seconds, or fewer rows export
+                homelab_check_success than homelab_check_rows counts. The scrape works, so the
+                run loop is hung or skipping rows. Read the monitor-bridge pod's log in the
+                homelab namespace.
+      - eval_time: 30m
+        alertname: MonitorBridgeDown
+        exp_alerts: []
+
+  # The missing-row case, which replaces the Kuma push-silence tile for failure-classes row 3.
+  # Three rows are expected and only two export a verdict, with every timestamp fresh. The
+  # count arm fires after the hold.
+  - interval: 1m
+    input_series:
+      - series: homelab_check_rows{job="monitor-bridge",instance="monitor-bridge.homelab.svc:9181"}
+        values: "3x30"
+      - series: homelab_check_success{job="monitor-bridge",instance="monitor-bridge.homelab.svc:9181",check="a"}
+        values: "1x30"
+      - series: homelab_check_success{job="monitor-bridge",instance="monitor-bridge.homelab.svc:9181",check="b"}
+        values: "1x30"
+      - series: homelab_check_deadline_seconds{job="monitor-bridge",instance="monitor-bridge.homelab.svc:9181",check="a"}
+        values: "900x30"
+      - series: homelab_check_deadline_seconds{job="monitor-bridge",instance="monitor-bridge.homelab.svc:9181",check="b"}
+        values: "900x30"
+      - series: homelab_check_last_run_timestamp_seconds{job="monitor-bridge",instance="monitor-bridge.homelab.svc:9181",check="a"}
+        values: "0+60x30"
+      - series: homelab_check_last_run_timestamp_seconds{job="monitor-bridge",instance="monitor-bridge.homelab.svc:9181",check="b"}
+        values: "0+60x30"
+    alert_rule_test:
+      - eval_time: 9m
+        alertname: BridgeCheckStale
+        exp_alerts: []
+      - eval_time: 10m
+        alertname: BridgeCheckStale
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              service: monitor-bridge
+              shadow: "true"
+            exp_annotations: *stale
+
+  # A restart's first cycle: the exporter already reports 3 rows, but row "c" has no verdict for
+  # its first 6m. The count arm is pending for 6m, under the hold, so nothing fires, and the
+  # alert is quiet again once "c" arrives.
+  - interval: 1m
+    input_series:
+      - series: up{job="monitor-bridge",instance="monitor-bridge.homelab.svc:9181"}
+        values: "0 1x30"
+      - series: homelab_check_rows{job="monitor-bridge",instance="monitor-bridge.homelab.svc:9181"}
+        values: "3x30"
+      - series: homelab_check_success{job="monitor-bridge",instance="monitor-bridge.homelab.svc:9181",check="a"}
+        values: "1x30"
+      - series: homelab_check_success{job="monitor-bridge",instance="monitor-bridge.homelab.svc:9181",check="b"}
+        values: "1x30"
+      - series: homelab_check_success{job="monitor-bridge",instance="monitor-bridge.homelab.svc:9181",check="c"}
+        values: "_x6 1x24"
+      - series: homelab_check_deadline_seconds{job="monitor-bridge",instance="monitor-bridge.homelab.svc:9181",check="a"}
+        values: "900x30"
+      - series: homelab_check_deadline_seconds{job="monitor-bridge",instance="monitor-bridge.homelab.svc:9181",check="b"}
+        values: "900x30"
+      - series: homelab_check_deadline_seconds{job="monitor-bridge",instance="monitor-bridge.homelab.svc:9181",check="c"}
+        values: "_x6 900x24"
+      - series: homelab_check_last_run_timestamp_seconds{job="monitor-bridge",instance="monitor-bridge.homelab.svc:9181",check="a"}
+        values: "0+60x30"
+      - series: homelab_check_last_run_timestamp_seconds{job="monitor-bridge",instance="monitor-bridge.homelab.svc:9181",check="b"}
+        values: "0+60x30"
+      - series: homelab_check_last_run_timestamp_seconds{job="monitor-bridge",instance="monitor-bridge.homelab.svc:9181",check="c"}
+        values: "_x6 360+60x24"
+    alert_rule_test:
+      - eval_time: 9m
+        alertname: BridgeCheckStale
+        exp_alerts: []
+      - eval_time: 20m
+        alertname: BridgeCheckStale
+        exp_alerts: []
+      - eval_time: 20m
+        alertname: MonitorBridgeDown
+        exp_alerts: []

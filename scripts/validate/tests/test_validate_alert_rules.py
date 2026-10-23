@@ -259,6 +259,7 @@ def test_the_tree_rules_meet_every_convention_is_clean():
         "deploy-pipeline",
         "gate-jobs",
         "registry",
+        "bridge-exporter",
     ]
     assert keys == {
         "alerting-meta.yaml",
@@ -272,6 +273,7 @@ def test_the_tree_rules_meet_every_convention_is_clean():
         "deploy-pipeline.yaml",
         "gate-jobs.yaml",
         "registry.yaml",
+        "bridge-exporter.yaml",
     }
     doc = yaml_fast.safe_load(
         (alert_rules.RULES_DIR / "alerting-meta.yaml").read_text()
