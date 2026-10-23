@@ -50,8 +50,16 @@ for arg in "$@"; do
   esac
 done
 
+{# H4.3b3: the packaged branch. Only the component's render context sets
+   nut_host_watchdog_packaged, so every host the role applies to renders the Ansible-era
+   branch. The branch differs in exactly three lines: the push library's path, the token's
+   source and the upsmon.conf path. #}
 # shellcheck source=/dev/null
+{% if nut_host_watchdog_packaged | bool %}
+source /usr/lib/homelab/kuma-push-lib.sh || {
+{% else %}
 source /usr/local/lib/kuma-push-lib.sh || {
+{% endif %}
   logger -t ups-secondary-health "kuma-push-lib.sh missing — run initial_setup on this host"
   exit 1
 }
@@ -79,10 +87,18 @@ KUMA_RESOLVE_IP="{{ k3s_metallb_ingress_vip }}"
 # role's file does not exist.
 UPS_SECONDARY_PUSH_TOKEN=""
 # shellcheck source=/dev/null
+{% if nut_host_watchdog_packaged | bool %}
+[[ -r "${CREDENTIALS_DIRECTORY:-/nonexistent}/kuma_push_token" ]] && UPS_SECONDARY_PUSH_TOKEN="$(< "${CREDENTIALS_DIRECTORY}/kuma_push_token")"
+{% else %}
 [[ -r /etc/nut/kuma-push.env ]] && . /etc/nut/kuma-push.env
+{% endif %}
 PUSH_URL="https://${KUMA_HOST}/api/push/${UPS_SECONDARY_PUSH_TOKEN}"
 
+{% if nut_host_watchdog_packaged | bool %}
+UPSMON_CONF=/var/lib/homelab-secrets/etc/nut/upsmon.conf
+{% else %}
 UPSMON_CONF=/etc/nut/upsmon.conf
+{% endif %}
 
 # Field 2 only: `MONITOR <ups>@<host> <powervalue> <user> <password> <mode>`.
 ENDPOINT="$(awk '$1 == "MONITOR" { print $2; exit }' "$UPSMON_CONF" 2>/dev/null)"

@@ -235,6 +235,16 @@ SENTINELS = {
     "ups_secondary_daniel_server_push_token": "ups-secondary-server-sentinel",
 }
 
+
+def test_the_packaged_token_key_names_each_hosts_own_tile_token():
+    """The packaged watchdog unit loads this key (H4.3b3); the wrong host's key reads another tile."""
+    from lib.render_context import render_context
+
+    for host, (_, token) in TILES.items():
+        ctx = render_context(ROLE, host, overrides={"inventory_hostname": host})
+        assert ctx["nut_host_watchdog_token_key"] == token, host
+
+
 # A MONITOR line in the shape host-upsmon.conf.j2 renders. The fifth field is a fake stand-in
 # for the credential that sits there in the real file; it exists only to be searched for in the
 # extractor's output.
