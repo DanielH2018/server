@@ -194,6 +194,60 @@ def test_an_unknown_argument_is_a_usage_error(host):
     assert [call[0] for call in host.calls()] == ["hostname"]
 
 
+# A homelab package beyond the two (H3.11, homelab-tools).
+
+
+def test_an_installed_shared_package_with_a_newer_one_published_is_named(host):
+    host.with_tools(installed=V1, published=V2)
+
+    result = host.run()
+
+    assert result.returncode == 0, result.stderr
+    assert [call[-3:] for call in host.installs()] == [
+        ["homelab-updater", "homelab-daniel-pi", "homelab-tools"]
+    ]
+    assert host.state["installed"]["homelab-tools"] == ["ii ", V2]
+
+
+def test_an_installed_shared_package_with_nothing_newer_is_not_named(host):
+    host.with_tools(installed=V1, published=V1)
+
+    result = host.run()
+
+    assert result.returncode == 0, result.stderr
+    assert host.installs() == []
+
+
+def test_an_installed_homelab_package_the_list_does_not_name_is_left_alone(host):
+    host.with_tools(installed=V1)
+    del host.state["repo"]["homelab-tools"]
+
+    result = host.run()
+
+    assert result.returncode == 0, result.stderr
+    assert host.installs() == []
+
+
+def test_a_newer_shared_package_alone_triggers_the_install(host):
+    # The two named packages are current, so only the shared one's candidate asks for step 5.
+    host.with_tools(installed=V1, published=V2)
+    host.reconciled_at(V1)
+
+    host.run()
+
+    assert len(host.installs()) == 1
+
+
+def test_a_half_installed_shared_package_is_reinstalled(host):
+    host.with_tools()
+    host.state["installed"]["homelab-tools"] = ["iU ", V1]
+
+    host.run()
+
+    assert [call[-1] for call in host.installs()] == ["homelab-tools"]
+    assert "--reinstall" in host.installs()[0]
+
+
 # A package that is not "ii ".
 
 

@@ -71,7 +71,8 @@ After the clear, a change under this role's directory lands through the setup-pl
   Every task that renders the token carries `no_log: true`. The world execute bit lets the
   signer, which is not in the group, stat the operator's `hold` and read `archive-key.fpr`
   without listing the directory.
-- `/opt/homelab-builder/`, root-owned: the script `files/host_package_builder.py`, `host_lib.py`,
+- `/opt/homelab-builder/`, root-owned: the script `files/host_package_builder.py`, its sibling
+  `files/homelab_tool_fetch.py` (the `homelab-tools` step below), `host_lib.py`,
   `publish-textfile`, a copy of the operator's pinned uv, and nfpm at the version
   `homelab_builder_nfpm_version` pins in `ansible/roles/setup/homelab_builder/defaults/main.yml`.
   The directory sits outside the builder's `ReadWritePaths`, so a builder run cannot rewrite
@@ -117,12 +118,31 @@ script cites ADR-0021:
 Every run past the fetch writes `homelab_builder.prom`, and the unit's `ExecStopPost=-+` line
 copies it into the textfile directory. The `reason` label of
 `homelab_builder_unbuilt_since_timestamp_seconds` is one of `ok`, `hold`, `ancestry`,
-`keyring`, `ci`, `no-green`, `token` and `build`. `token` is a missing token, or a 401 or
+`keyring`, `ci`, `no-green`, `token`, `build` and `tools`. `token` is a missing token, or a 401 or
 403 from the check-runs read, which the anonymous fetch cannot see. `build` is a render or
-nfpm failure at the chosen commit, a value the plan's list does not name. A worktree cleanup
+nfpm failure at the chosen commit, a value the plan's list does not name. `tools` is a
+`homelab-tools` pin that could not be fetched or whose sha256 differs from the pin (below). A worktree cleanup
 that fails after a refusal is logged, and the run keeps the refusal's reason. A failing run exits 1 once per reason and tip,
 then 0 on a repeat, so `OnFailure=` pages once for each condition. A failed fetch exits 0 and
 writes nothing: the fetch timestamp then ages, which H3.5c's fetch-age arm pages on.
+
+## The `homelab-tools` step (H3.11)
+
+The render of `hosts/packages/homelab-tools/` holds pins and no binaries: one tree per
+architecture, each with an `nfpm.yaml` and a `tools.json`. For each such tree the builder
+copies it into `work/`, downloads every pinned file into `tools-cache/<sha256>`, checks the
+digest, places each binary under the copy's `root/usr/lib/homelab/bin/`, and runs nfpm there.
+A tool that ships as a `.tar.gz` names the file to install, and only that member is read.
+The builder fetches and verifies every pin of every changed tree before the first nfpm run,
+and before it empties `staged/`, so a digest mismatch builds and stages nothing and writes
+`reason="tools"`. A cached file is hashed again on every use. After a build, the cache keeps
+only the digests the render pins. `out/` and `published/` never hold the binaries, so
+publish-on-change compares the pins.
+
+The code is `ansible/roles/setup/homelab_builder/files/homelab_tool_fetch.py:install_tools`.
+CI's `host_packages` job calls the same function through `host_packages.py fetch-tools`.
+`ansible/roles/setup/homelab_builder/tests/test_host_package_builder_tools.py::test_a_binary_whose_digest_differs_from_its_pin_builds_nothing_and_reads_tools`
+holds the refusal.
 
 ## The signer and the publish (H3.5b)
 
@@ -134,7 +154,9 @@ start waits for a signer still running and never rewrites `staged/` under it.
 - **The refusal rule.** The signer reads every `staged/` entry without following a symlink,
   and checks all of them before it copies anything. It accepts `chosen`, holding a 12-hex SHA,
   and `.deb` files whose `Package` starts with `homelab-` and whose `Version` ends in `+g` and
-  that SHA, in the builder's `0.<count>+g<sha>` form exactly. Anything else is a refusal: the signer copies the set into
+  that SHA, in the builder's `0.<count>+g<sha>` form exactly. One package may appear once per
+  architecture (`homelab-tools` stages an `amd64` and an `arm64` build), and twice for one
+  architecture is a refusal. Anything else is a refusal: the signer copies the set into
   `/var/lib/homelab-signer/refused/<UTC time>/`, empties `staged/`, publishes nothing and exits
   1. It names each pool file from the package's control fields, never from the builder's file
   name. A copy, never a rename, because `staged/` and the signer's directory are separate

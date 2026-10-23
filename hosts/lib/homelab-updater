@@ -1,6 +1,7 @@
 #!/bin/sh
-# homelab-updater: install the newest homelab-updater and homelab-<host>, run reconcile, and
-# report the verdict reconcile recorded. The design is H3's *The updater* and *Host-plane
+# homelab-updater: install the newest homelab-updater, homelab-<host> and every other installed
+# homelab-* package (homelab-tools, from H3.11), run reconcile, and report the verdict reconcile
+# recorded. The design is H3's *The updater* and *Host-plane
 # holds and stop levers* (docs/target-architecture/host/h3-pi-pilot.md); the step numbers
 # below are that section's.
 #
@@ -49,14 +50,20 @@ RETRY="apt-get install -y --no-install-recommends -o DPkg::Lock::Timeout=0"
 say() { echo "homelab-updater: $*" >&2; }
 
 # Set <PKG>_STATUS (dpkg's three-letter abbreviation, "" when dpkg knows no such package) and
-# <PKG>_VERSION for both packages.
+# <PKG>_VERSION for the updater and the host package. Set EXTRAS to the names of every other
+# homelab-* package dpkg knows, which steps 4 and 5 cover too. A shared package such as
+# homelab-tools is pulled in by a Depends, and an unversioned Depends that is already satisfied
+# never upgrades it, so only this list keeps it current. The pattern also matches the two
+# named packages, so sort -u drops the repeats.
 read_installed() {
     installed=$(dpkg-query -W -f '${Package} ${db:Status-Abbrev}${Version}\n' \
-        "$UPDATER" "$HOST_PKG" 2>/dev/null)
+        "$UPDATER" "$HOST_PKG" 'homelab-*' 2>/dev/null | sort -u)
     UPDATER_STATUS=$(status_of "$UPDATER")
     UPDATER_VERSION=$(version_of "$UPDATER")
     HOST_STATUS=$(status_of "$HOST_PKG")
     HOST_VERSION=$(version_of "$HOST_PKG")
+    EXTRAS=$(printf '%s\n' "$installed" |
+        awk -v a="$UPDATER" -v b="$HOST_PKG" '$1 != a && $1 != b && $1 ~ /^homelab-/ { print $1 }')
 }
 status_of() { printf '%s\n' "$installed" | awk -v p="$1" '$1 == p { print substr($0, length(p) + 2, 3) }'; }
 version_of() { printf '%s\n' "$installed" | awk -v p="$1" '$1 == p { print substr($0, length(p) + 5) }'; }
@@ -162,7 +169,8 @@ verdict() {
 }
 
 # Step 4's candidate: the highest Version: of each package in the homelab Packages list step 3
-# fetched. Sets CANDIDATE_UPDATER and CANDIDATE_HOST. Loads no apt cache.
+# fetched. Sets CANDIDATE_UPDATER and CANDIDATE_HOST, and leaves every homelab-* stanza in
+# `stanzas` for `highest`. Loads no apt cache.
 read_candidates() {
     # shellcheck disable=SC2016,SC2086 # $(FILENAME) is apt's field; HOMELAB_APT is a list.
     lists=$(apt-get indextargets $HOMELAB_APT --format '$(FILENAME)' 'Created-By: Packages') ||
@@ -171,9 +179,9 @@ read_candidates() {
     for list in $lists; do
         [ -e "$list" ] || continue
         stanzas="$stanzas
-$(apt-helper cat-file "$list" | awk -v a="$UPDATER" -v b="$HOST_PKG" '
+$(apt-helper cat-file "$list" | awk '
             /^Package: / { p = $2 }
-            /^Version: / { if (p == a || p == b) print p, $2 }
+            /^Version: / { if (p ~ /^homelab-/) print p, $2 }
             /^$/ { p = "" }')"
     done
     CANDIDATE_UPDATER=$(highest "$UPDATER")
@@ -194,6 +202,27 @@ newer() {
     [ "$(state_of "$1")" = absent ] || dpkg --compare-versions "$3" gt "$2"
 }
 
+# Step 4 for the packages beyond the updater and the host package. Appends to `broken` each
+# one half-installed, and sets STALE to each whose candidate is newer than its installed
+# version. A package the Packages list does not name has no candidate and is left alone: only
+# the updater and the host package must have one.
+read_extras() {
+    STALE=""
+    for extra in $EXTRAS; do
+        case $(state_of "$(status_of "$extra")") in
+            absent) continue ;;
+            broken)
+                broken="$broken $extra"
+                continue
+                ;;
+        esac
+        candidate=$(highest "$extra")
+        if [ -n "$candidate" ] && dpkg --compare-versions "$candidate" gt "$(version_of "$extra")"; then
+            STALE="$STALE $extra"
+        fi
+    done
+}
+
 # Steps 5 and 6. A Depends on an Ubuntu package can need fresher Ubuntu lists than step 3
 # fetched, so an install that fails to resolve or fetch a dependency earns one full apt-get
 # update and one retry. Any other failure, such as a lock wait that timed out or a failed
@@ -204,7 +233,8 @@ newer() {
 # beside reconcile's 30 minutes (test_updater_package.py sums every wait in this file), and
 # the apt timers that take the lock run only in the hour this retry skips.
 install_newest() {
-    if out=$($INSTALL "$UPDATER" "$HOST_PKG" 2>&1); then
+    # shellcheck disable=SC2086 # STALE is a list of package names.
+    if out=$($INSTALL "$UPDATER" "$HOST_PKG" $STALE 2>&1); then
         return 0
     fi
     printf '%s\n' "$out" >&2
@@ -229,7 +259,8 @@ install_newest() {
     fi
     printf '%s\n' "$today" >"$FULL_UPDATE_STAMP"
     apt-get update || return 1
-    $RETRY "$UPDATER" "$HOST_PKG"
+    # shellcheck disable=SC2086 # STALE is a list of package names.
+    $RETRY "$UPDATER" "$HOST_PKG" $STALE
 }
 
 # Steps 3 to 8. Exits.
@@ -251,11 +282,12 @@ update() {
     broken=""
     [ "$(state_of "$UPDATER_STATUS")" = broken ] && broken="$broken $UPDATER"
     [ "$(state_of "$HOST_STATUS")" = broken ] && broken="$broken $HOST_PKG"
+    read_extras
     if [ -n "$broken" ]; then
         # shellcheck disable=SC2086 # broken is a list of package names.
         $INSTALL --reinstall $broken || exit 1
     elif newer "$UPDATER_STATUS" "$UPDATER_VERSION" "$CANDIDATE_UPDATER" ||
-        newer "$HOST_STATUS" "$HOST_VERSION" "$CANDIDATE_HOST"; then
+        newer "$HOST_STATUS" "$HOST_VERSION" "$CANDIDATE_HOST" || [ -n "$STALE" ]; then
         install_newest || exit 1
     else
         read_record

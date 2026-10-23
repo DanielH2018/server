@@ -64,13 +64,12 @@ from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
+import json
 import re
-from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
 from typing import cast
 
 import jinja2
-import yaml
 
 from lib import yaml_fast
 from lib.estate import REPO_INVENTORY, Inventory
@@ -85,9 +84,21 @@ from renderer.renderer_lib.host_sources import (
     confined,
     file_mode,
 )
+from renderer.renderer_lib.host_package import (
+    MAINTAINER_SCRIPTS,
+    VERSION_FIELD as VERSION_FIELD,
+    UNIT_SUFFIXES as UNIT_SUFFIXES,
+    Package,
+)
+from renderer.renderer_lib.host_tools import (
+    ARCHES,
+    PINS_FILE,
+    parse_tools,
+    tool_path,
+)
 from renderer.renderer_lib.host_manifest import (
-    DROPIN,
-    UNIT_DIR,
+    DROPIN as DROPIN,
+    UNIT_DIR as UNIT_DIR,
     UPDATER,
     add_enable_links,
     add_manifest,
@@ -111,108 +122,17 @@ PACKAGE_KEYS = frozenset(
         "files",
         "legacy",
         "maintainer_scripts",
+        "tools",
         "units",
     }
 )
 COMPONENT_KEYS = frozenset({"defaults", "enable", "files", "legacy", "units"})
-# The builder exports the version (H3, *Package rules*). Kept out of the render, so a render
-# changes only when the package's content does, and nfpm expands it at build time.
-VERSION_FIELD = "${HOMELAB_VERSION}"
 
 # A host, package or component name becomes a directory under `hosts/`, so it is one plain
 # path piece: no `/`, no `..`, no leading dot or dash.
 _PLAIN_NAME = re.compile(r"[a-z0-9][a-z0-9-]*")
 
 _UNDEFINED = re.compile(r"'([^']+)' is undefined")
-
-# Each maintainer script a spec may list, and the nfpm `scripts:` key that installs it. `preinst`
-# refuses a hostname mismatch, so only a host package may list it.
-MAINTAINER_SCRIPTS = {
-    "preinst": "preinstall",
-    "postinst": "postinstall",
-    "prerm": "preremove",
-}
-UNIT_SUFFIXES = (".service", ".timer", ".socket", ".path")
-
-
-@dataclass
-class Package:
-    """One rendered package: its name, its C1 directory, and every file it installs.
-
-    Attributes:
-        name: The Debian package name.
-        directory: `hosts/<host>` or `packages/<pkg>`, relative to `--out`.
-        files: Each installed path mapped to its bytes and its octal mode.
-        links: Each installed symlink's path mapped to its target, relative to its directory.
-        depends: The `Depends` entries, in the order the spec lists them.
-        description: The package description.
-        scripts: Each maintainer script's name, such as `postinst`, mapped to its bytes.
-        policies: Each unit given a restart policy, mapped to `manual` or `windowed`.
-        legacy: The legacy entries reconcile retires, each with its values rendered.
-    """
-
-    name: str
-    directory: str
-    files: dict[str, tuple[bytes, int]] = field(default_factory=dict)
-    links: dict[str, str] = field(default_factory=dict)
-    depends: list[str] = field(default_factory=list)
-    description: str = ""
-    scripts: dict[str, bytes] = field(default_factory=dict)
-    policies: dict[str, str] = field(default_factory=dict)
-    legacy: list[dict[str, str]] = field(default_factory=list)
-
-    def units(self) -> list[str]:
-        """The unit files the package installs under `/usr/lib/systemd/system/`, by name.
-
-        A drop-in and an enable link sit one directory deeper, so neither is listed.
-        """
-        return sorted(
-            PurePosixPath(dst).name
-            for dst in self.files
-            if PurePosixPath(dst).parent == UNIT_DIR and dst.endswith(UNIT_SUFFIXES)
-        )
-
-    def dropin_targets(self) -> list[str]:
-        """The units, of any package, that this package installs a homelab drop-in for."""
-        return sorted(
-            path.parent.name.removesuffix(".d")
-            for path in map(PurePosixPath, self.files)
-            if path.parent.parent == UNIT_DIR and path.name == DROPIN
-        )
-
-    def enable_links(self) -> list[str]:
-        """The units whose enable link, under `<target>.wants/`, the package installs."""
-        return sorted({PurePosixPath(dst).name for dst in self.links})
-
-    def nfpm_spec(self) -> str:
-        """The `nfpm.yaml` the builder runs `nfpm package` on, from the package directory."""
-        contents = {
-            dst: {"src": f"root{dst}", "dst": dst, "file_info": {"mode": mode}}
-            for dst, (_, mode) in self.files.items()
-        }
-        # nfpm reads a symlink entry's `src` as the link's target.
-        contents |= {
-            dst: {"src": target, "dst": dst, "type": "symlink"}
-            for dst, target in self.links.items()
-        }
-        spec = {
-            "name": self.name,
-            "arch": "all",
-            "platform": "linux",
-            "version": VERSION_FIELD,
-            # nfpm's default, `semver`, would build `0.<count>+g<sha>` as `0.<count>.0+g<sha>`.
-            "version_schema": "none",
-            "maintainer": "homelab",
-            "description": self.description or self.name,
-            "depends": self.depends,
-            "contents": [contents[dst] for dst in sorted(contents)],
-        }
-        if self.scripts:
-            spec["scripts"] = {
-                MAINTAINER_SCRIPTS[name]: f"scripts/{name}"
-                for name in sorted(self.scripts)
-            }
-        return yaml.safe_dump(spec, sort_keys=False)
 
 
 def secret_names(secrets: Path = SECRETS) -> frozenset[str]:
@@ -259,6 +179,9 @@ def render_package(
     spec = hosts_root / "packages" / _plain_name(name, "package") / "package.yml"
     package = Package(name=name, directory=f"packages/{name}")
     _render(package, spec, None, hosts_root, inventory, secret_names(secrets))
+    for dst in package.files:
+        if any(dst == tool_path(tool) for tool in package.tools):
+            raise RenderRefused(f"{name}: two files install {dst}")
     # Reconcile reads only the host package's manifest, so a shared one's would be dropped.
     if package.legacy:
         raise RenderRefused(
@@ -284,27 +207,45 @@ def write_packages(packages: list[Package], out: Path) -> list[Path]:
             )
     written = []
     for package in packages:
-        base = out / package.directory
-        for dst, (content, mode) in sorted(package.files.items()):
-            path = base / "root" / dst.lstrip("/")
-            path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_bytes(content)
-            path.chmod(mode)
-            written.append(path)
-        for dst, target in sorted(package.links.items()):
-            path = base / "root" / dst.lstrip("/")
-            path.parent.mkdir(parents=True, exist_ok=True)
-            # A host package's link may point at the updater's unit, absent from this root.
-            path.symlink_to(target)
-            written.append(path)
-        for name, content in sorted(package.scripts.items()):
-            path = base / "scripts" / name
-            path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_bytes(content)
-            path.chmod(0o755)
-            written.append(path)
-        (base / "nfpm.yaml").write_text(package.nfpm_spec())
-        written.append(base / "nfpm.yaml")
+        # A package with tools renders once per architecture, so nfpm runs once for each.
+        trees = (
+            [(out / package.directory / arch, arch) for arch in ARCHES]
+            if package.tools
+            else [(out / package.directory, "all")]
+        )
+        for base, arch in trees:
+            written += _write_tree(package, base, arch)
+    return written
+
+
+def _write_tree(package: Package, base: Path, arch: str) -> list[Path]:
+    """Write one package tree, `root/`, `scripts/`, `nfpm.yaml` and any tool pins, at `base`."""
+    written = []
+    base.mkdir(parents=True, exist_ok=True)
+    for dst, (content, mode) in sorted(package.files.items()):
+        path = base / "root" / dst.lstrip("/")
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(content)
+        path.chmod(mode)
+        written.append(path)
+    for dst, target in sorted(package.links.items()):
+        path = base / "root" / dst.lstrip("/")
+        path.parent.mkdir(parents=True, exist_ok=True)
+        # A host package's link may point at the updater's unit, absent from this root.
+        path.symlink_to(target)
+        written.append(path)
+    for name, content in sorted(package.scripts.items()):
+        path = base / "scripts" / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(content)
+        path.chmod(0o755)
+        written.append(path)
+    (base / "nfpm.yaml").write_text(package.nfpm_spec(arch))
+    written.append(base / "nfpm.yaml")
+    if package.tools:
+        pins = {tool: arches[arch].as_json() for tool, arches in package.tools.items()}
+        (base / PINS_FILE).write_text(json.dumps(pins, indent=2, sort_keys=True) + "\n")
+        written.append(base / PINS_FILE)
     return written
 
 
@@ -323,6 +264,12 @@ def _render(
     spec = _load(spec_path, PACKAGE_KEYS)
     package.description = str(spec.get("description", ""))
     package.depends.extend(str(entry) for entry in spec.get("depends") or [])
+    if "tools" in spec:
+        if host is not None:
+            raise RenderRefused(
+                f"{spec_path}: a host package lists no tools; a shared package does"
+            )
+        package.tools = parse_tools(spec["tools"], str(spec_path))
     lib = hosts_root / "lib"
     _render_unit(package, spec_path.parent, spec, host, inventory, withheld, lib)
     for name in spec.get("components") or []:

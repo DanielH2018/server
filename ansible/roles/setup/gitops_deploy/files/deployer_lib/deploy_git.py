@@ -61,6 +61,7 @@ CI_GATE_NEEDS_JOBS = frozenset(
         "sops-manifest-type-proof (an all-digit stringData value stays a string)",
         "host_packages (24.04, 3.12)",
         "host_packages (26.04, 3.14)",
+        "host_tools_arm64",
     }
 )
 

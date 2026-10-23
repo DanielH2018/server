@@ -167,6 +167,17 @@
     },
     {
       "customType": "regex",
+      "description": "The upstream binaries the `homelab-tools` host package ships (target slice H3, PR H3.11): sops and chezmoi, each pinned by version and by the sha256 of the file its URL serves, once per architecture. This manager follows the nfpm manager's shape: ONE matchString spans the `# renovate:` annotation, the `version:` line and the `sha256:` line of one architecture's block, so currentValue and currentDigest come from one match, and the github-release-attachments datasource computes the new digest from the same asset of the new release. Each tool therefore has two matches, one per architecture, and the `{{depName}}` group puts both in one PR. The `url:` line holds `{version}` and `{bare}` placeholders the renderer expands, so a bump moves only the version and the digest. The builder downloads each file and refuses one whose digest differs from its pin (reason `tools`), and CI's `host_packages` job fetches and checks the same pins on every run, so a wrong digest or a 404 URL cannot reach master green. ENFORCED by scripts/renderer/tests/test_renderer_host_tools.py.",
+      "managerFilePatterns": [
+        "/(^|/)hosts/packages/homelab-tools/package\\.yml$/"
+      ],
+      "matchStrings": [
+        "#[ \\t]*renovate:[ \\t]*datasource=github-release-attachments[ \\t]+depName=(?<depName>[A-Za-z0-9._-]+/[A-Za-z0-9._-]+)[ \\t]*\\n[ \\t]+version:[ \\t]*(?<currentValue>v\\d+\\.\\d+\\.\\d+)[ \\t]*\\n[ \\t]+sha256:[ \\t]*(?<currentDigest>[a-f0-9]{64})"
+      ],
+      "datasourceTemplate": "github-release-attachments"
+    },
+    {
+      "customType": "regex",
       "description": "The kind binary CI's `sops_manifest_type_proof` job creates its throwaway cluster with (target slice D3, PR D3.3d, issue #5173). It is pinned by version and by the sha256 of `kind-linux-amd64`, and this manager moves both in one PR, in the nfpm manager's shape: ONE matchString spans the `# renovate:` annotation, the `KIND_VERSION` line and the `KIND_SHA256` line of the step's env, so currentValue and currentDigest come from one match. The github-release-attachments datasource computes the new digest from the release's `kind-linux-amd64.sha256sum`. The node image the cluster boots is the manager below, and the `kind` packageRule puts both in one PR, because each kind release lists the node images it built. ENFORCED by scripts/tests/test_renovate_kind_pins.py.",
       "managerFilePatterns": [
         "/(^|/)\\.github/workflows/ci\\.yml$/"
@@ -490,7 +501,8 @@
         ".github/actions/**",
         ".vale.ini",
         "ansible/roles/setup/initial_setup/tasks/host-basics.yml",
-        "ansible/roles/setup/homelab_builder/defaults/main.yml"
+        "ansible/roles/setup/homelab_builder/defaults/main.yml",
+        "hosts/packages/homelab-tools/package.yml"
       ],
       "groupName": "{{depName}}"
     },

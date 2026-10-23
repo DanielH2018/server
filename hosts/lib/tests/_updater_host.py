@@ -53,7 +53,7 @@ class Host:
         self.last_success = self.state_dir / "last_success"
         self.record = self.root / "var/lib/homelab-reconcile/applied.json"
         self.prom = self.textfile / "homelab_host.prom"
-        self.state = {
+        self.state: dict = {
             "host": "daniel-pi",
             "installed": {
                 "homelab-updater": ["ii ", V1],
@@ -130,6 +130,11 @@ class Host:
             name, _, rest = line.partition("{")
             series[name] = "{" + rest
         return series
+
+    def with_tools(self, installed: str = V1, published: str = V1) -> None:
+        """Install homelab-tools at `installed`, and publish `published` beside the rest."""
+        self.state["installed"]["homelab-tools"] = ["ii ", installed]
+        self.state["repo"]["homelab-tools"] = [published]
 
     def publish(self, version: str) -> None:
         self.state["repo"] = {
