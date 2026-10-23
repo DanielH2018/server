@@ -260,6 +260,8 @@ def test_the_tree_rules_meet_every_convention_is_clean():
         "gate-jobs",
         "registry",
         "bridge-exporter",
+        "container-checks",
+        "kuma-cutover",
     ]
     assert keys == {
         "alerting-meta.yaml",
@@ -274,6 +276,8 @@ def test_the_tree_rules_meet_every_convention_is_clean():
         "gate-jobs.yaml",
         "registry.yaml",
         "bridge-exporter.yaml",
+        "container-checks.yaml",
+        "kuma-cutover.yaml",
     }
     doc = yaml_fast.safe_load(
         (alert_rules.RULES_DIR / "alerting-meta.yaml").read_text()
