@@ -914,6 +914,7 @@ containers_list:
     # daniel-server-guarded route still works.
     netpol_from:
       - uptime-kuma  # the "iCal Proxy k8s" monitor, which probes /calendar1.ics
+      - blackbox-exporter  # the `blackbox-extra` probe of /calendar1.ics that replaces it (M6 batch B8)
     # homepage's Calendar tile reads three feeds over the ClusterIP; this key adds homepage
     # to the callers above.
     homepage_widget: true

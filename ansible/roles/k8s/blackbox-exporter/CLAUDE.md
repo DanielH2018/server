@@ -18,10 +18,11 @@ conventions.
 
 ## Notable
 
-- **Both modules send `Accept: */*`.** Authelia answers an SSO-gated name with 302 only to a
+- **Every http module sends `Accept: */*`.** Authelia answers an SSO-gated name with 302 only to a
   request whose Accept header admits it, and with 401 to one that carries none. blackbox sends
   no Accept unless the module sets one. Without the header, `http_sso_302` reads all 23 SSO
-  targets as down while Kuma reads them up. ENFORCED:
+  targets as down while Kuma reads them up. The same holds for M6 batch B8's `http_401` and
+  keyword modules. ENFORCED:
   `ansible/tests/services/test_blackbox_exporter_modules.py`.
 - **Names resolve exactly as Kuma's do.** The pod's `hostAliases` come from the shared
   `ingress_host_aliases()` macro in `ansible/templates/ingress-host-aliases.yml.j2`, which
@@ -47,10 +48,13 @@ conventions.
   Renovate therefore does not automerge an image bump, and the PR is reviewed and merged by
   hand. `promote` applies it after the merge.
 - **`netpol-baseline: enforced`, with no route.** Its only caller is the `prometheus` pod,
-  which the baseline admits. The probes are egress, which the baseline does not fence.
+  which the baseline admits. The probes are egress, which the baseline does not fence. The
+  targets of the `blackbox-extra` job (M6 batch B8) are ingress to the probed pods, so
+  mosquitto's and nut's policies and ical-proxy's `netpol_from` admit `blackbox-exporter`.
 
 ## Editing
-- Modules: `files/blackbox.yml`, carried verbatim by `templates/configmap.yaml.j2`, so an
+- Modules: `files/blackbox.yml`, carried by `templates/configmap.yaml.j2` with the domain placeholder
+  in the `dns_a_homepage` query name replaced by the LAN domain, so an
   edit rolls the pod through the shared rollout gate. Check one with
   `blackbox_exporter --config.check --config.file=files/blackbox.yml`.
 - Manifests: `templates/`. The Service renders from `ansible/templates/service-default.yaml.j2`, off the containers_list entry. No IngressRoute: callers reach it in-cluster by Service name.

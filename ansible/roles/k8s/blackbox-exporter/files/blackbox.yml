@@ -27,3 +27,54 @@ modules:
         Accept: "*/*"
       follow_redirects: false
       valid_status_codes: [302]
+  # M6's batch B8: the probes that replace Kuma's hand-written tiles
+  # (docs/target-architecture/monitoring/m6-retire-kuma.md, "B0, B5, B7 and B8").
+  #
+  # Kuma's `port` tile: a TCP connect and nothing else. Also the Pi's published-port probes.
+  tcp_connect:
+    prober: tcp
+    tcp:
+      preferred_ip_protocol: ip4
+  # Kuma's `dns` tile for Pi-hole: an A query for a local record, sent to the VIP the target
+  # names. NOERROR with at least one answer passes, so an empty answer or an NXDOMAIN fails.
+  # The domain in the query name is a placeholder that templates/configmap.yaml.j2 replaces
+  # with the LAN domain, because this file is otherwise carried into the cluster unchanged and
+  # holds no inventory value.
+  dns_a_homepage:
+    prober: dns
+    dns:
+      query_name: homepage.local.__DOMAIN__
+      query_type: A
+      transport_protocol: udp
+      preferred_ip_protocol: ip4
+      validate_answer_rrs:
+        fail_if_not_matches_regexp: [".+"]
+  # Kuma's LiveSync tile: CouchDB's `require_valid_user` answers an unauthenticated request
+  # with 401, and that is the end-to-end signal. Any redirect or other status is a failure.
+  http_401:
+    prober: http
+    http:
+      method: GET
+      headers:
+        Accept: "*/*"
+      follow_redirects: false
+      valid_status_codes: [401]
+  # Kuma's two `keyword` tiles. Each matches a substring of the body, as Kuma does, so the
+  # match is case-sensitive: the edge self-check answers `OK` and homelab-mcp's /health
+  # answers `ok`. A status code alone reads green through a total-404 edge.
+  http_body_OK:
+    prober: http
+    http:
+      method: GET
+      headers:
+        Accept: "*/*"
+      follow_redirects: false
+      fail_if_body_not_matches_regexp: ["OK"]
+  http_body_ok:
+    prober: http
+    http:
+      method: GET
+      headers:
+        Accept: "*/*"
+      follow_redirects: false
+      fail_if_body_not_matches_regexp: ["ok"]

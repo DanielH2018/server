@@ -102,6 +102,66 @@ tests:
             exp_annotations:
               summary: Kuma's k3s Telemetry OTLP Door tile is gone and no alert rule pages in its place.
               description: "M6's cutover removed the k3s Telemetry OTLP Door tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
+          - exp_labels: {monitor_name: Daniel Pi Host, service: uptime-kuma, severity: critical}
+            exp_annotations:
+              summary: Kuma's Daniel Pi Host tile is gone and no alert rule pages in its place.
+              description: "M6's cutover removed the Daniel Pi Host tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
+          - exp_labels: {monitor_name: Daniel Pi WG Easy, service: uptime-kuma, severity: critical}
+            exp_annotations:
+              summary: Kuma's Daniel Pi WG Easy tile is gone and no alert rule pages in its place.
+              description: "M6's cutover removed the Daniel Pi WG Easy tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
+          - exp_labels: {monitor_name: Email-to-RSS (Worker), service: uptime-kuma, severity: critical}
+            exp_annotations:
+              summary: Kuma's Email-to-RSS (Worker) tile is gone and no alert rule pages in its place.
+              description: "M6's cutover removed the Email-to-RSS (Worker) tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
+          - exp_labels: {monitor_name: iCal Proxy k8s, service: uptime-kuma, severity: critical}
+            exp_annotations:
+              summary: Kuma's iCal Proxy k8s tile is gone and no alert rule pages in its place.
+              description: "M6's cutover removed the iCal Proxy k8s tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
+          - exp_labels: {monitor_name: k3s LiveSync, service: uptime-kuma, severity: critical}
+            exp_annotations:
+              summary: Kuma's k3s LiveSync tile is gone and no alert rule pages in its place.
+              description: "M6's cutover removed the k3s LiveSync tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
+          - exp_labels: {monitor_name: k3s Scrutiny, service: uptime-kuma, severity: critical}
+            exp_annotations:
+              summary: Kuma's k3s Scrutiny tile is gone and no alert rule pages in its place.
+              description: "M6's cutover removed the k3s Scrutiny tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
+          - exp_labels: {monitor_name: Loki, service: uptime-kuma, severity: critical}
+            exp_annotations:
+              summary: Kuma's Loki tile is gone and no alert rule pages in its place.
+              description: "M6's cutover removed the Loki tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
+          - exp_labels: {monitor_name: k3s homelab-mcp (edge gate), service: uptime-kuma, severity: critical}
+            exp_annotations:
+              summary: Kuma's k3s homelab-mcp (edge gate) tile is gone and no alert rule pages in its place.
+              description: "M6's cutover removed the k3s homelab-mcp (edge gate) tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
+          - exp_labels: {monitor_name: Homelab Edge (all-clear), service: uptime-kuma, severity: critical}
+            exp_annotations:
+              summary: Kuma's Homelab Edge (all-clear) tile is gone and no alert rule pages in its place.
+              description: "M6's cutover removed the Homelab Edge (all-clear) tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
+          - exp_labels: {monitor_name: Pi-hole k8s DNS, service: uptime-kuma, severity: critical}
+            exp_annotations:
+              summary: Kuma's Pi-hole k8s DNS tile is gone and no alert rule pages in its place.
+              description: "M6's cutover removed the Pi-hole k8s DNS tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
+          - exp_labels: {monitor_name: k3s Mosquitto (VIP), service: uptime-kuma, severity: critical}
+            exp_annotations:
+              summary: Kuma's k3s Mosquitto (VIP) tile is gone and no alert rule pages in its place.
+              description: "M6's cutover removed the k3s Mosquitto (VIP) tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
+          - exp_labels: {monitor_name: k3s Jellyfin (VIP), service: uptime-kuma, severity: critical}
+            exp_annotations:
+              summary: Kuma's k3s Jellyfin (VIP) tile is gone and no alert rule pages in its place.
+              description: "M6's cutover removed the k3s Jellyfin (VIP) tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
+          - exp_labels: {monitor_name: SLZB-06M Coordinator, service: uptime-kuma, severity: critical}
+            exp_annotations:
+              summary: Kuma's SLZB-06M Coordinator tile is gone and no alert rule pages in its place.
+              description: "M6's cutover removed the SLZB-06M Coordinator tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
+          - exp_labels: {monitor_name: k3s nut (upsd), service: uptime-kuma, severity: critical}
+            exp_annotations:
+              summary: Kuma's k3s nut (upsd) tile is gone and no alert rule pages in its place.
+              description: "M6's cutover removed the k3s nut (upsd) tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
+          - exp_labels: {monitor_name: Pi Pressure, service: uptime-kuma, severity: critical}
+            exp_annotations:
+              summary: Kuma's Pi Pressure tile is gone and no alert rule pages in its place.
+              description: "M6's cutover removed the Pi Pressure tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
   # Every tile present: no term fires.
   - interval: 1m
     input_series:
@@ -150,6 +210,36 @@ tests:
       - series: 'monitor_status{monitor_name="Artifacts Peer Sync", monitor_type="push"}'
         values: '1x140'
       - series: 'monitor_status{monitor_name="k3s Telemetry OTLP Door", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Daniel Pi Host", monitor_type="http"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Daniel Pi WG Easy", monitor_type="http"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Email-to-RSS (Worker)", monitor_type="http"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="iCal Proxy k8s", monitor_type="http"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="k3s LiveSync", monitor_type="http"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="k3s Scrutiny", monitor_type="http"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Loki", monitor_type="http"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="k3s homelab-mcp (edge gate)", monitor_type="http"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Homelab Edge (all-clear)", monitor_type="http"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Pi-hole k8s DNS", monitor_type="http"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="k3s Mosquitto (VIP)", monitor_type="http"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="k3s Jellyfin (VIP)", monitor_type="http"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="SLZB-06M Coordinator", monitor_type="http"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="k3s nut (upsd)", monitor_type="http"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Pi Pressure", monitor_type="http"}'
         values: '1x140'
     alert_rule_test:
       - alertname: CheckWithoutPager
@@ -204,6 +294,36 @@ tests:
       - series: 'monitor_status{monitor_name="Artifacts Peer Sync", monitor_type="push"}'
         values: '1x140'
       - series: 'monitor_status{monitor_name="k3s Telemetry OTLP Door", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Daniel Pi Host", monitor_type="http"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Daniel Pi WG Easy", monitor_type="http"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Email-to-RSS (Worker)", monitor_type="http"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="iCal Proxy k8s", monitor_type="http"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="k3s LiveSync", monitor_type="http"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="k3s Scrutiny", monitor_type="http"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Loki", monitor_type="http"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="k3s homelab-mcp (edge gate)", monitor_type="http"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Homelab Edge (all-clear)", monitor_type="http"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Pi-hole k8s DNS", monitor_type="http"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="k3s Mosquitto (VIP)", monitor_type="http"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="k3s Jellyfin (VIP)", monitor_type="http"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="SLZB-06M Coordinator", monitor_type="http"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="k3s nut (upsd)", monitor_type="http"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Pi Pressure", monitor_type="http"}'
         values: '1x140'
     alert_rule_test:
       - alertname: CheckWithoutPager

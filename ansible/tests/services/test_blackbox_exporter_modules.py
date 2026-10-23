@@ -19,8 +19,10 @@ from lib import yaml_fast
 
 CONFIG = ROLES / "k8s" / "blackbox-exporter" / "files" / "blackbox.yml"
 
-# The modules the ingress probe job names; M6's non-ingress modules join the file later.
-REQUIRED_MODULES = frozenset({"http_2xx", "http_sso_302"})
+# The http modules the probe jobs name: the ingress pair, and batch B8's LiveSync and keyword modules.
+REQUIRED_MODULES = frozenset(
+    {"http_2xx", "http_sso_302", "http_401", "http_body_OK", "http_body_ok"}
+)
 
 
 def http_modules(config: dict) -> dict[str, dict]:

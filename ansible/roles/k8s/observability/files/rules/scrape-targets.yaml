@@ -19,7 +19,7 @@
 # DECIDED: service is the deploy tag of the role that deploys the target (Open question 2 of
 # the M6 plan), with `k3s` for the control plane's own endpoints, `daniel-pi` for the Pi's
 # host-level exporters and `exportarr` for the *arr sidecars, whose pods belong to three
-# roles at once. blackbox-ingress carries service="blackbox-exporter" by this rule's literal,
+# roles at once. The three blackbox jobs carry service="blackbox-exporter" by this rule's literal,
 # which overrides the per-probe `service` its targets set, because a failed scrape of that job
 # means the exporter is unreachable and says nothing about the probed service.
 groups:
@@ -306,7 +306,7 @@ groups:
             gone stale. Read the exporter pod's events and log, or the host's unit for a static
             target.
       - alert: ScrapeTargetDown
-        expr: up{job="blackbox-ingress"} == 0
+        expr: up{job=~"blackbox-ingress|blackbox-extra|blackbox-pi-ports"} == 0
         for: 10m
         labels:
           severity: warning
@@ -320,7 +320,7 @@ groups:
             gone stale. Read the exporter pod's events and log, or the host's unit for a static
             target.
       - alert: ScrapeTargetDown
-        expr: up{job!~"prometheus|otel-collector|otel-collector-internal|kube-state-metrics|loki-internal|tempo-internal|alertmanager|loki-homelab|alloy|alloy-pi|node-pi|dockerd-pi|containerd-pi|node|gpu|deploy-pipeline|monitor-bridge|flux|crowdsec|crowdsec-node-agents|crowdsec-traefik-agent|crowdsec-authelia-agent|traefik-k8s|speedtest|pihole|uptime-kuma|home-assistant|nut|valheim-stats|terraria-stats|longhorn|coredns-host|exportarr|kubernetes-cadvisor|kubernetes-kubelet|kubernetes-kubelet-resource|kubernetes-apiserver|etcd|blackbox-ingress"} == 0
+        expr: up{job!~"prometheus|otel-collector|otel-collector-internal|kube-state-metrics|loki-internal|tempo-internal|alertmanager|loki-homelab|alloy|alloy-pi|node-pi|dockerd-pi|containerd-pi|node|gpu|deploy-pipeline|monitor-bridge|flux|crowdsec|crowdsec-node-agents|crowdsec-traefik-agent|crowdsec-authelia-agent|traefik-k8s|speedtest|pihole|uptime-kuma|home-assistant|nut|valheim-stats|terraria-stats|longhorn|coredns-host|exportarr|kubernetes-cadvisor|kubernetes-kubelet|kubernetes-kubelet-resource|kubernetes-apiserver|etcd|blackbox-ingress|blackbox-extra|blackbox-pi-ports"} == 0
         for: 10m
         labels:
           severity: warning
