@@ -164,6 +164,7 @@
   loop:
     - { src: host_package_builder.py, dest: host_package_builder.py }
     - { src: homelab_repo_sign.py, dest: homelab_repo_sign.py }
+    - { src: homelab_tool_fetch.py, dest: homelab_tool_fetch.py }
     - { src: publish-textfile.sh, dest: publish-textfile }
   loop_control:
     label: "{{ item.dest }}"
@@ -186,6 +187,8 @@
         src: ansible/roles/setup/homelab_builder/files/host_package_builder.py
       - live: /opt/homelab-builder/homelab_repo_sign.py
         src: ansible/roles/setup/homelab_builder/files/homelab_repo_sign.py
+      - live: /opt/homelab-builder/homelab_tool_fetch.py
+        src: ansible/roles/setup/homelab_builder/files/homelab_tool_fetch.py
       - live: /opt/homelab-builder/publish-textfile
         src: ansible/roles/setup/homelab_builder/files/publish-textfile.sh
       - live: /opt/homelab-builder/host_lib.py

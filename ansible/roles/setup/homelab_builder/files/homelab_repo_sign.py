@@ -351,9 +351,12 @@ class Signer:
                 raise Refusal(f"{package} {version!r} is not 0.<count>+g{chosen}")
             if fields["Architecture"] not in ("all", *ARCHITECTURES):
                 raise Refusal(f"{package} is built for {fields['Architecture']}")
-            if package in seen:
-                raise Refusal(f"{package} is staged twice")
-            seen.add(package)
+            # One build per package and architecture: `homelab-tools` stages an amd64 and an
+            # arm64 build (H3.11), and the pool name below carries the architecture.
+            key = (package, fields["Architecture"])
+            if key in seen:
+                raise Refusal(f"{package} is staged twice for {key[1]}")
+            seen.add(key)
         # 2. The pool name comes from the control fields, never the builder's file name.
         pool = self.public_dir(self.repo / "pool" / COMPONENT)
         written = []

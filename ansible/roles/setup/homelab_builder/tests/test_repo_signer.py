@@ -82,16 +82,18 @@ class Lab:
             now=lambda: self.clock,
         )
 
-    def deb(self, package: str, version: str, name: str | None = None) -> Path:
+    def deb(
+        self, package: str, version: str, name: str | None = None, arch: str = "all"
+    ) -> Path:
         """Build a minimal `.deb` with dpkg-deb and stage it under `name`."""
         self.builds += 1
         tree = self.root / "build" / str(self.builds)
         (tree / "DEBIAN").mkdir(parents=True)
         (tree / "DEBIAN" / "control").write_text(
-            f"Package: {package}\nVersion: {version}\nArchitecture: all\n"
+            f"Package: {package}\nVersion: {version}\nArchitecture: {arch}\n"
             "Maintainer: t <t@example.invalid>\nDescription: fixture\n"
         )
-        target = self.staged / (name or f"{package}_{version}_all.deb")
+        target = self.staged / (name or f"{package}_{version}_{arch}.deb")
         # --nocheck: dpkg-deb otherwise refuses a control directory outside 0755..0775,
         # which the session umask decides.
         run(
@@ -202,6 +204,12 @@ def test_every_published_file_is_world_readable(lab):
             lambda lab: lab.deb("homelab-daniel-pi", f"0.4+g{OTHER}"), id="another-sha"
         ),
         pytest.param(
+            lambda lab: lab.deb(
+                "homelab-daniel-pi", f"0.5+g{CHOSEN}", name="again.deb"
+            ),
+            id="same-package-and-architecture-twice",
+        ),
+        pytest.param(
             lambda lab: (lab.staged / "notes.txt").write_text("x"), id="stray-file"
         ),
         pytest.param(
@@ -237,6 +245,24 @@ def test_a_staged_set_the_rule_refuses_publishes_nothing(lab, stage):
     assert os.listdir(lab.staged) == []
     [refused] = (lab.signer_dir / "refused").iterdir()
     assert "chosen" in os.listdir(refused)
+
+
+def test_one_package_staged_for_two_architectures_is_published_for_each(lab):
+    # homelab-tools (H3.11): the same package and version, one build per architecture.
+    (lab.staged / "chosen").write_text(CHOSEN + "\n")
+    for arch in ("amd64", "arm64"):
+        lab.deb("homelab-tools", version(5, CHOSEN), arch=arch)
+    assert lab.signer().main() == 0
+    for arch in ("amd64", "arm64"):
+        index = (lab.suite / "main" / f"binary-{arch}" / "Packages").read_text()
+        assert f"Filename: pool/main/homelab-tools_0.5+g{CHOSEN}_{arch}.deb" in index
+        other = "arm64" if arch == "amd64" else "amd64"
+        assert f"_{other}.deb" not in index
+    # One series per package, or the textfile collector rejects the whole file.
+    assert lab.prom() == [
+        f'homelab_repo_published_info{{package="homelab-tools",sha="{CHOSEN}",'
+        f'version="0.5+g{CHOSEN}"}} 1'
+    ]
 
 
 def test_a_symlinked_entry_is_recorded_without_its_target(lab):

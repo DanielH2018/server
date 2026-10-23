@@ -1,5 +1,5 @@
 {
-  "checksum": "0815be5ae009d74ed481460fb9c47d809c13380ee911090b24abe8de317bbac2",
+  "checksum": "a6f02578b84e60b3f18dadefdc01783102fea1fab1aff87e0ed42d3e9da45480",
   "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
   "key": "ansible/roles/setup/homelab_builder/CLAUDE.md#The signer and the publish (H3.5b)",
   "row": {
@@ -8,6 +8,6 @@
       "docs/host-packages.md": "86b9cf9178023719fe89a9954ed609bf0e9f6512bb5382279d0c80e35d11ac86"
     },
     "python": "3.14",
-    "verified_sha": "2a6c96329"
+    "verified_sha": "efd7fda5a"
   }
 }

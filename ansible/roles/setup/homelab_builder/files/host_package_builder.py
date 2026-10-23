@@ -43,6 +43,8 @@ from pathlib import Path
 from typing import Any
 
 from host_lib import atomic_write, github_get, github_token, parse_env_file
+import homelab_tool_fetch as tools
+from homelab_tool_fetch import Failure
 
 CONFIG = "/etc/homelab-builder/config.env"
 FINGERPRINT = "/etc/homelab-builder/archive-key.fpr"
@@ -53,13 +55,12 @@ PROM = "homelab_builder.prom"
 # Where the keyring sits in homelab-updater's render, relative to the render's --out.
 KEYRING = "packages/homelab-updater/root/usr/share/keyrings/homelab-archive-keyring.gpg"
 
-# The `reason` label of the unbuilt-since series (*Shared names*, Metrics), less the two values
-# later PRs add: `tools` (H3.11) and `canary` (H3.12). ADR-0021 removed `trust` from the plan.
-# `build` is this PR's: a render or an nfpm run that failed at the chosen commit, which the
-# plan's list does not name. `token` is a missing token, or one the check-runs read refused
-# (#5089).
+# The `reason` label of the unbuilt-since series (*Shared names*, Metrics), less `canary` (H3.12).
+# `build` is a render or an nfpm run that failed at the chosen commit, `token` a missing token or
+# one the check-runs read refused (#5089), and `tools` a `homelab-tools` pin that failed to
+# download or whose digest differs from the pin (H3.11). ADR-0021 removed `trust`.
 REASONS = frozenset(
-    {"ok", "hold", "ancestry", "keyring", "ci", "no-green", "token", "build"}
+    {"ok", "hold", "ancestry", "keyring", "ci", "no-green", "token", "build", "tools"}
 )
 
 # deploy_git.py's two conclusion sets, which `ci_verdict` below grades by. A test holds the
@@ -199,14 +200,6 @@ def token_refused(exc: urllib.error.HTTPError) -> bool:
     headers = exc.headers or {}
     limited = headers.get("X-RateLimit-Remaining") == "0" or "Retry-After" in headers
     return exc.code == 403 and not limited
-
-
-class Failure(Exception):
-    """A run that ends with a reason, before it builds."""
-
-    def __init__(self, reason: str, message: str):
-        super().__init__(message)
-        self.reason = reason
 
 
 @dataclass
@@ -500,6 +493,8 @@ class Builder:
             log(f"{chosen[:12]} changes no package")
             return
         debs.mkdir(parents=True)
+        # Every pin is verified before the first nfpm run: a mismatch builds nothing.
+        tools.fetch_all([out / p for p in changed], self.state_dir, out, self.opener)
         for package in changed:
             self.package(out / package, debs, ver)
         for entry in self.staged.iterdir():
@@ -518,10 +513,17 @@ class Builder:
 
     def package(self, directory: Path, target: Path, ver: str) -> None:
         """Build the rendered package in `directory` into `target` at version `ver`."""
+        build = (
+            directory  # a tree with tools.json builds from a copy holding the binaries
+        )
+        if (directory / tools.PINS_FILE).is_file():
+            build = tools.scratch_tree(
+                directory, self.work, self.state_dir, self.opener
+            )
         proc = self.run(
             [self.nfpm, "package", "--config", "nfpm.yaml", "--packager", "deb"]
             + ["--target", f"{target}/"],
-            cwd=directory,
+            cwd=build,
             env={**os.environ, "HOMELAB_VERSION": ver},
             check=False,
         )

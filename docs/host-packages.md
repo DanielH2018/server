@@ -433,3 +433,21 @@ uv run ansible-playbook ansible/initial_setup.yml --tags homelab_builder
 401 or 403. Replace `homelab_builder_github_token` with the `add-secret` skill and re-apply the
 role. `build` is a render or an `nfpm` run that failed at the chosen commit. Its journal line
 names the package, and the fix lands on master.
+
+### `reason="tools"`: a `homelab-tools` pin did not verify
+
+The builder could not fetch a binary that `hosts/packages/homelab-tools/package.yml` pins, or the
+download's sha256 differs from the pin. It builds and stages nothing at that commit, and the
+journal line names the URL and both digests. Read the line, then check the pin against the
+release's checksum file:
+
+```bash
+journalctl -u homelab-builder -n 20 --no-pager | grep 'tools:'
+```
+
+A digest that differs from a freshly published release means the pin is wrong or the upstream
+asset changed. Fix the pin on master: Renovate's manager moves a version and its digest together,
+so a hand edit that moved only one is the usual cause. A fetch error alone (a 404 or a timeout)
+clears on the next run once the URL answers. The builder keeps a verified download under
+`/var/lib/homelab-builder/tools-cache/<sha256>` and checks it again on every use, so deleting
+that directory only costs a download.

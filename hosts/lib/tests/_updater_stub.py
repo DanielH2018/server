@@ -7,7 +7,8 @@ writes back what an install or a reconcile changed, and appends its argv to
 
 state.json keys:
     host: what `hostname` prints.
-    installed: package -> [three-letter dpkg status, version].
+    installed: package -> [three-letter dpkg status, version]. `dpkg-query` matches its
+        arguments as shell patterns, so `homelab-*` lists every installed homelab package.
     repo: package -> versions the homelab repository publishes, or null for a fetch that
         writes no Packages list.
     update_exit, full_update_exit: the restricted and the full `apt-get update`'s exits.
@@ -21,6 +22,7 @@ state.json keys:
 `dpkg --compare-versions` runs the real dpkg, so the version order is Debian's.
 """
 
+import fnmatch
 import json
 import os
 import subprocess
@@ -53,13 +55,15 @@ def date(state: dict, args: list[str]) -> int:
 
 
 def dpkg_query(state: dict, args: list[str]) -> int:
+    """Print each installed package a name or a shell pattern matches, once per match."""
     code = 0
-    for package in args[3:]:
-        if package in state["installed"]:
+    for pattern in args[3:]:
+        matches = fnmatch.filter(sorted(state["installed"]), pattern)
+        for package in matches:
             status, version = state["installed"][package]
             print(f"{package} {status}{version}")
-        else:
-            print(f"dpkg-query: no packages found matching {package}", file=sys.stderr)
+        if not matches:
+            print(f"dpkg-query: no packages found matching {pattern}", file=sys.stderr)
             code = 1
     return code
 

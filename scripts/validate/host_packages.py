@@ -20,6 +20,11 @@ pinned nfpm, and `lint` checks what it rendered and what it built:
 a render shows in the diff. A tree with no `hosts/` directory predates H3.1 and renders no
 package.
 
+`fetch-tools` downloads, verifies and places the binaries each rendered `homelab-tools` tree
+pins, so the job's nfpm step can build it. It runs the builder's own `install_tools`, the code
+daniel-box builds the package with, so a pin whose digest or URL is wrong fails here before it
+reaches master (H3.11). A digest that differs from its pin fails the command.
+
 `job-changed` says whether one job of a workflow parses differently at a commit than in the
 working tree. The job's own steps invoke the container cases, so a PR that edits them runs the
 cases (#5004). The comparison is of the parsed YAML, so an edit to a comment alone does not
@@ -34,6 +39,7 @@ so a renderer change can alter the fixture and no real render. Such a PR runs th
 Usage:
     uv run python scripts/validate/host_packages.py render --tree . --out /tmp/head
     uv run python scripts/validate/host_packages.py diff /tmp/base /tmp/head --summary FILE
+    uv run python scripts/validate/host_packages.py fetch-tools /tmp/head --cache /tmp/tools
     uv run python scripts/validate/host_packages.py lint /tmp/head /tmp/debs
     uv run python scripts/validate/host_packages.py job-changed BASE_SHA \
         --workflow .github/workflows/ci.yml --job host_packages
@@ -52,6 +58,7 @@ from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 
+import importlib
 import re
 import subprocess
 import sys
@@ -61,6 +68,10 @@ from pathlib import Path
 from lib import yaml_fast
 from lib.cli_help import ArgumentParser
 from lib.git import git
+from lib.repo_paths import REPO
+
+# The module the builder fetches tools with (stdlib only), which CI runs the same way.
+_TOOL_FETCH_DIR = REPO / "ansible" / "roles" / "setup" / "homelab_builder" / "files"
 
 _UNIT = r"homelab-[a-z0-9-]+\.(?:service|timer|socket|path)"
 _HOST = r"[a-z0-9][a-z0-9-]*"
@@ -129,6 +140,26 @@ def lint_deb(deb: Path) -> list[str]:
                 )
             else:
                 problems.extend(lint_script(member.name, text))
+    return problems
+
+
+def fetch_tools(render: Path, cache: Path, opener=None) -> list[str]:
+    """Fetch, verify and place the binaries of every `tools.json` tree under `render`.
+
+    Returns one `[FAIL]` line per tree whose pins did not verify. `opener` replaces `urlopen`.
+    A render with no such tree has nothing to fetch, which is how a merge base from before
+    H3.11 reads.
+    """
+    if str(_TOOL_FETCH_DIR) not in sys.path:
+        sys.path.insert(0, str(_TOOL_FETCH_DIR))
+    builder = importlib.import_module("homelab_tool_fetch")
+    trees = sorted(pins.parent for pins in render.rglob(builder.PINS_FILE))
+    problems = []
+    for tree in trees:
+        try:
+            builder.install_tools(tree, cache, opener)
+        except builder.Failure as exc:
+            problems.append(f"[FAIL] {tree}: {exc}")
     return problems
 
 
@@ -339,6 +370,11 @@ def main(argv: list[str] | None = None) -> int:
         "lint", help="lint every nfpm.yaml and .deb under PATH"
     )
     lint_cmd.add_argument("paths", nargs="+", type=Path, metavar="PATH")
+    fetch_cmd = commands.add_parser(
+        "fetch-tools", help="fetch and verify the binaries homelab-tools pins"
+    )
+    fetch_cmd.add_argument("render", type=Path, metavar="RENDER")
+    fetch_cmd.add_argument("--cache", type=Path, required=True, metavar="DIR")
     job_cmd = commands.add_parser(
         "job-changed", help="whether a workflow job differs from its form at BASE"
     )
@@ -367,6 +403,11 @@ def main(argv: list[str] | None = None) -> int:
                 summary.write(report + "\n")
         print(f"changed={'true' if lines else 'false'}")
         return 0
+    if args.command == "fetch-tools":
+        problems = fetch_tools(args.render.resolve(), args.cache.resolve())
+        for problem in problems:
+            print(problem, file=sys.stderr)
+        return 1 if problems else 0
     if args.command == "job-changed":
         changed = job_changed(args.base, args.workflow, args.job)
         print("true" if changed else "false")

@@ -89,8 +89,11 @@ HEARTBEAT_CRONS = frozenset(
         "Pi container-recovery heartbeat",
     }
 )
-# The package-side members: the shared package, and the Pi's host package from PR H3.6.
-NAMED_PACKAGES = frozenset({"homelab-updater", "homelab-daniel-pi"})
+# The package-side members: the shared packages, and the Pi's host package from PR H3.6.
+NAMED_PACKAGES = frozenset({"homelab-updater", "homelab-daniel-pi", "homelab-tools"})
+# The paths homelab-tools installs (H3.11). They are not files in its render, so the census
+# reads them through `Package.installed_paths`, and a role writing one meets the join.
+TOOL_PATHS = frozenset({"/usr/lib/homelab/bin/sops", "/usr/lib/homelab/bin/chezmoi"})
 
 _ONE_VARIABLE = re.compile(r"^\{\{\s*([A-Za-z_][\w.]*)\s*\}\}$")
 
@@ -208,7 +211,7 @@ def package_writes(
         if (hosts_root / host / "package.yml").is_file():
             packages.append(host_mode.render_host(host, hosts_root=hosts_root))
         for package in packages:
-            for dst in package.files:
+            for dst in package.installed_paths():
                 by_host[host][("path", dst)].add(package.name)
             for entry in package.legacy:
                 by_host[host][legacy_key(entry)].add(f"{package.name} (legacy)")
@@ -250,6 +253,12 @@ def test_the_package_side_finds_the_retired_heartbeat_crons():
     _, packages = _tree()
     names = {key[2] for key in packages["daniel-pi"] if key[0] == "cron"}
     assert HEARTBEAT_CRONS <= names
+
+
+def test_the_package_side_finds_the_tools_homelab_tools_installs():
+    _, packages = _tree()
+    shipped = {key[1] for key in packages["daniel-pi"] if key[0] == "path"}
+    assert TOOL_PATHS <= shipped
 
 
 def test_the_package_side_finds_its_named_packages():
@@ -302,6 +311,32 @@ def test_a_role_still_writing_a_packaged_path_is_flagged(tmp_path):
     assert found == [
         f"daniel-pi: path {SD_HEALTH} is written by ['optimize_pi'] "
         "and shipped by ['homelab-daniel-pi']"
+    ]
+
+
+def test_a_role_writing_a_path_homelab_tools_installs_is_flagged(tmp_path):
+    # The tools are pins in the render, not files, so a census over `package.files` alone
+    # would miss this write.
+    task = (
+        "- name: Install sops by hand\n"
+        "  ansible.builtin.get_url:\n"
+        "    url: https://example.invalid/sops\n"
+        "    dest: /usr/lib/homelab/bin/sops\n"
+    )
+    ansible, _ = _fixture(tmp_path, task)
+    tools = tmp_path / "hosts" / "packages" / "homelab-tools"
+    tools.mkdir(parents=True)
+    pin = (
+        "{version: v1.0.0, sha256: '%s', url: 'https://example.invalid/{version}'}"
+        % ("a" * 64)
+    )
+    (tools / "package.yml").write_text(
+        f"tools:\n  sops: {{amd64: {pin}, arm64: {pin}}}\n"
+    )
+    packages = package_writes(tmp_path / "hosts", ("daniel-pi",))
+    assert collisions(ansible, packages) == [
+        "daniel-pi: path /usr/lib/homelab/bin/sops is written by ['optimize_pi'] "
+        "and shipped by ['homelab-tools']"
     ]
 
 

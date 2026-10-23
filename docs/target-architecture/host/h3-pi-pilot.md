@@ -84,7 +84,12 @@ PR H3.10a, arm the canary: [#6033](https://github.com/DanielH2018/server/pull/60
 `homelab-pi-canary.timer` and the timer's enable link in the Pi package. The operator check passed:
 `systemctl is-active homelab-pi-canary.timer` printed `active` and the `timers.target.wants`
 count was 1.
-PR H3.10b, drop the canary: the PR that carries this line. It removes both units and the link.
+PR H3.10b, drop the canary: [#6039](https://github.com/DanielH2018/server/pull/6039). It merged at
+`14c43910d`. It removes both units and the link. The operator check passed: the canary timer read
+`LoadState=not-found` and `ActiveState=inactive`, and the `timers.target.wants` count was 0.
+PR H3.11, `homelab-tools`: the PR that carries this line. It adds the package with `sops` and
+`chezmoi` pinned for `amd64` and `arm64`, and the Pi package `Depends` on it. The builder fetches
+and checks each pin, and the `host_tools_arm64` CI job installs the `arm64` build.
 
 Depends on: R1
 Unblocks: H4, H5
@@ -1092,6 +1097,14 @@ adds it, and the Pi is its `arm64` pilot.
 - `hosts/packages/homelab-tools/package.yml` lists each tool with its version and, for each
   architecture, its upstream URL and its sha256. A Renovate manager bumps each pin, as the
   nfpm pin's manager does (H3.3a).
+- The render carries the pins and never the bytes. It writes one tree per architecture,
+  `packages/homelab-tools/<arch>/`, each with a literal `arch:` in its `nfpm.yaml` and a
+  `tools.json` of that architecture's pins. Each architecture block of `package.yml` carries
+  its own `version` and `# renovate:` annotation, because the Renovate manager moves one
+  version and one digest per match; the renderer refuses a tool whose versions differ by
+  architecture. A pin's `url` holds `{version}` and `{bare}` placeholders, so a bump moves only
+  the version and the digest. A tool upstream ships as a `.tar.gz` names the file to install
+  with `member`.
 - Each binary installs at `/usr/lib/homelab/bin/<tool>`, never on `PATH`. `sops` is
   `/usr/lib/homelab/bin/sops`, the absolute path H4's `homelab-secrets` calls, and
   `chezmoi` is `/usr/lib/homelab/bin/chezmoi`. A test of the rendered package holds
