@@ -127,6 +127,19 @@ kustomize-controller runs above its 64Mi request while it applies an empty root.
 has room, and the 1Gi limit is about fourteen times the peak, so D1 leaves the request alone. D5 sets
 the requests from its own measurement once Flux applies services.
 
+**Memory, under full load (D5 exit 7, step 31).** On 2026-10-23 the operator deleted the
+kustomize-controller pod, and its replacement reconciled about 115 Kustomizations from cold. A
+promote in the same hour applied a new bundle revision to every Kustomization. Over that hour
+`probe.py metric` read a peak working set of 174002176 B, about 166 MiB. The steady working set
+is 145 to 155 MiB. The pod it replaced read a 24-hour peak of 176783360 B. D1's 63Mi to 70.1Mi
+figure above was an empty root, so it understates the load by more than half.
+
+Exit 7 requires the peak to stay at or under the request, and 64Mi fails that by 2.3 times.
+`flux_controller_resources` (`ansible/roles/k8s/flux/defaults/main.yml:flux_controller_resources`)
+therefore raises kustomize-controller's request to 192Mi, which covers the peak with about 15
+percent headroom. The limit stays at 1Gi. source-controller and notification-controller keep
+64Mi, because this step measured only kustomize-controller.
+
 ## What Flux follows
 
 `templates/sync.yaml.j2` renders the OCIRepository `homelab` on `prod`, the OCIRepository

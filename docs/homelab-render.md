@@ -715,17 +715,20 @@ key before the load, so neither assert fires.
   file from the same tree.
 
 A census in `ansible/tests/k8s/test_secret_key_task_census.py` covers the tasks that would
-act on a stub under an allowed run. It reads every k8s role task whose body names a secret
+act on a stub under an allowed run. It reads every task of a k8s role whose body names a secret
 key, or a variable derived from one. A derived variable is a role default or inventory var
 built from a secret key, or a `set_fact` key or `register:` name whose task in any k8s role
 names one. Each such task must be skipped under a stubbed dry run, use a
 side-effect-free module, or carry a per-task exemption with a reason. An `assert` or a `fail`
 can refuse a stub value, so the census credits only the `homelab_secret_stubs` guard on it.
-sonarr's API reads, and its two asserts on the reads' registers, pass on that guard.
+sonarr's API reads, and its two asserts on the reads' registers, passed on that guard until
+sonarr's Flux flip deleted them. The census no longer runs over the real tree (#5886): every task
+it selected sat in a flux-owned role or in arr-notification's `tasks/`, which nothing includes.
+Its fixture pairs stay, for a role handed back to Ansible with such a task.
 
-The same module names uptime-kuma's push-token format check in `STUB_REFUSING`, which must
-carry the `homelab_secret_stubs` guard itself. The list predates the census's assert rule and
-backs it up.
+The same module checks that a task which fails on a stub value, as uptime-kuma's push-token
+format check did, carries the `homelab_secret_stubs` guard itself. That check predates the
+census's assert rule and backs it up; it too runs only on fixtures since the flips.
 
 From this change on, the preamble names the stub filters, so the deployer cannot narrow an
 edit to `ansible/filter_plugins/secret_stubs.py` to a service. Each such edit defers every

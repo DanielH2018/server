@@ -3,7 +3,7 @@
 `test_secret_key_task_census.py` selects a task whose body names a secret key or a fact derived
 from one in the same role. A value also travels through a `register:` and through a play-scoped
 fact that one role sets and another reads. These check that the census selects both, so an
-assert on such a value needs no entry in `STUB_REFUSING` to be held to the sentinel guard.
+assert on such a value is held to the sentinel guard without being named as stub-refusing.
 """
 
 from pathlib import Path

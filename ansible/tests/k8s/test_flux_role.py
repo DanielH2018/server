@@ -320,6 +320,56 @@ def test_a_flag_for_a_deployment_the_install_lacks_is_refused():
         )
 
 
+def _manager_resources(docs: list[dict], deployment: str) -> dict:
+    doc = next(
+        d
+        for d in docs
+        if d["kind"] == "Deployment" and d["metadata"]["name"] == deployment
+    )
+    return doc["spec"]["template"]["spec"]["containers"][0]["resources"]
+
+
+def test_kustomize_controller_requests_its_measured_peak_and_keeps_the_limit():
+    docs = _flux_docs()
+    kustomize = _manager_resources(docs, "kustomize-controller")
+    assert kustomize["requests"]["memory"] == "192Mi"
+    assert kustomize["limits"]["memory"] == "1Gi"
+    for other in ("source-controller", "notification-controller"):
+        assert _manager_resources(docs, other)["requests"]["memory"] == "64Mi"
+
+
+def test_a_controller_resources_patch_replaces_only_the_keys_it_names():
+    install = _DEPLOYMENT.replace(
+        "image: x",
+        "image: x\n        resources: {limits: {memory: 1Gi}, requests: {memory: 64Mi, cpu: 50m}}",
+    )
+    out = FilterModule().filters()["flux_components"](
+        install,
+        {},
+        "c",
+        {"cache": "cache"},
+        {},
+        {"source-controller": {"requests": {"memory": "192Mi"}}},
+    )
+    docs = list(yaml_fast.safe_load_all(out))
+    assert _manager_resources(docs, "source-controller") == {
+        "limits": {"memory": "1Gi"},
+        "requests": {"memory": "192Mi", "cpu": "50m"},
+    }
+
+
+def test_resources_for_a_deployment_the_install_lacks_are_refused():
+    with pytest.raises(AnsibleFilterError, match="kustomize-controller"):
+        FilterModule().filters()["flux_components"](
+            _DEPLOYMENT,
+            {},
+            "c",
+            {"cache": "cache"},
+            {},
+            {"kustomize-controller": {"requests": {"memory": "192Mi"}}},
+        )
+
+
 # --- This PR's Secrets roll no controller -------------------------------------------------
 
 
