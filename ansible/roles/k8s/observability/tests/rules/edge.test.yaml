@@ -1,0 +1,273 @@
+# promtool unit tests for files/rules/edge.yaml. Run with
+# `scripts/validate/alert_tools.sh promtool test rules <this file>`; the validate-alert-rules
+# hook runs it on every commit that touches the rules.
+#
+# Every series carries the labels the traefik-k8s job gives it: `job` and `instance`. The
+# per-backend rules copy Traefik's `service` label to `backend` and set `service: traefik`
+# themselves, so every exp_alerts entry for them lists both.
+rule_files:
+  - ../../files/rules/edge.yaml
+evaluation_interval: 1m
+tests:
+  # The zero-series case: no input at all, so the traefik-k8s job is missing from the config.
+  # EdgeMetricsMissing fires through its first arm once its 10m hold has passed.
+  - interval: 1m
+    input_series: []
+    alert_rule_test:
+      - eval_time: 9m
+        alertname: EdgeMetricsMissing
+        exp_alerts: []
+      - eval_time: 11m
+        alertname: EdgeMetricsMissing
+        exp_alerts:
+          - exp_labels:
+              job: traefik-k8s
+              severity: warning
+              service: traefik
+              shadow: "true"
+            exp_annotations:
+              summary: Prometheus has lost Traefik's scrape job or its edge series.
+              description: >-
+                Either no up{job="traefik-k8s"} series exists, so the job is gone from
+                prometheus.yml, or the scrape works and the certificate or entrypoint counters
+                are missing. The edge rules cannot fire until the series are back.
+
+  # The scrape works and both counters are gone. EdgeMetricsMissing fires through its second arm.
+  - interval: 1m
+    input_series:
+      - series: 'up{job="traefik-k8s", instance="traefik-metrics:8080"}'
+        values: '1x15'
+    alert_rule_test:
+      - eval_time: 11m
+        alertname: EdgeMetricsMissing
+        exp_alerts:
+          - exp_labels:
+              job: traefik-k8s
+              severity: warning
+              service: traefik
+              shadow: "true"
+            exp_annotations:
+              summary: Prometheus has lost Traefik's scrape job or its edge series.
+              description: >-
+                Either no up{job="traefik-k8s"} series exists, so the job is gone from
+                prometheus.yml, or the scrape works and the certificate or entrypoint counters
+                are missing. The edge rules cannot fire until the series are back.
+
+  # A failed scrape: up reads 0 and the counters are stale. The scrape-target rule pages that,
+  # so EdgeMetricsMissing stays quiet.
+  - interval: 1m
+    input_series:
+      - series: 'up{job="traefik-k8s", instance="traefik-metrics:8080"}'
+        values: '0x30'
+    alert_rule_test:
+      - eval_time: 30m
+        alertname: EdgeMetricsMissing
+        exp_alerts: []
+
+  # A certificate 10 days from expiry fires CertExpiringSoon after its 10m hold. A second
+  # certificate 40 days out is not named. Time starts at 0, so not_after is a duration.
+  - interval: 1m
+    input_series:
+      - series: 'up{job="traefik-k8s", instance="traefik-metrics:8080"}'
+        values: '1x30'
+      - series: 'traefik_entrypoint_requests_total{job="traefik-k8s", instance="traefik-metrics:8080", code="200", entrypoint="websecure"}'
+        values: '0+60x30'
+      - series: 'traefik_tls_certs_not_after{job="traefik-k8s", instance="traefik-metrics:8080", cn="soon.example.com", sans="soon.example.com", serial="1"}'
+        values: '864000x30'
+      - series: 'traefik_tls_certs_not_after{job="traefik-k8s", instance="traefik-metrics:8080", cn="later.example.com", sans="later.example.com", serial="2"}'
+        values: '3456000x30'
+    alert_rule_test:
+      - eval_time: 9m
+        alertname: CertExpiringSoon
+        exp_alerts: []
+      - eval_time: 11m
+        alertname: CertExpiringSoon
+        exp_alerts:
+          - exp_labels:
+              job: traefik-k8s
+              instance: traefik-metrics:8080
+              cn: soon.example.com
+              sans: soon.example.com
+              serial: "1"
+              severity: critical
+              service: traefik
+              shadow: "true"
+            exp_annotations:
+              summary: The certificate soon.example.com expires within 14 days.
+              description: >-
+                Traefik serves a certificate for soon.example.com that expires in 9.992 days.
+                Read Traefik's ACME log for a failed renewal, and `probe.py cert <host>` for the
+                chain it serves.
+      - eval_time: 11m
+        alertname: EdgeMetricsMissing
+        exp_alerts: []
+
+  # Traefik backend 5xx. checkout answers half its requests with a 5xx at 1 rps and fires after
+  # the 5m hold. quiet-api has 100% errors at 0.017 rps, under the 0.05 rps floor. healthy-api
+  # has 1.7% errors at 1 rps, under the 5% share.
+  - interval: 1m
+    input_series:
+      - series: 'traefik_service_requests_total{job="traefik-k8s", instance="traefik-metrics:8080", service="homelab-checkout-80@kubernetescrd", code="200"}'
+        values: '0+30x30'
+      - series: 'traefik_service_requests_total{job="traefik-k8s", instance="traefik-metrics:8080", service="homelab-checkout-80@kubernetescrd", code="502"}'
+        values: '0+30x30'
+      - series: 'traefik_service_requests_total{job="traefik-k8s", instance="traefik-metrics:8080", service="homelab-quiet-api-80@kubernetescrd", code="500"}'
+        values: '0+1x30'
+      - series: 'traefik_service_requests_total{job="traefik-k8s", instance="traefik-metrics:8080", service="homelab-healthy-api-80@kubernetescrd", code="200"}'
+        values: '0+59x30'
+      - series: 'traefik_service_requests_total{job="traefik-k8s", instance="traefik-metrics:8080", service="homelab-healthy-api-80@kubernetescrd", code="500"}'
+        values: '0+1x30'
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: TraefikBackend5xx
+        exp_alerts: []
+      - eval_time: 12m
+        alertname: TraefikBackend5xx
+        exp_alerts:
+          - exp_labels:
+              backend: homelab-checkout-80@kubernetescrd
+              severity: warning
+              service: traefik
+              shadow: "true"
+            exp_annotations:
+              summary: Traefik backend homelab-checkout-80@kubernetescrd answers over 5% of requests with a 5xx.
+              description: >-
+                50% of the requests Traefik sent to homelab-checkout-80@kubernetescrd in the
+                last 5 minutes got a 5xx. Loki `{container="traefik"}` has the status codes,
+                and the backend's own log has the cause.
+
+  # Traefik latency. slow-app sends half its requests past the 5.0s bucket at 1 rps. A service
+  # in TRAEFIK_STREAM_SERVICES with the same series is exempt. few-app is 10% slow, but only
+  # 2 slow requests land in the window, under the 3-request floor.
+  - interval: 1m
+    input_series:
+      - series: 'traefik_service_request_duration_seconds_count{job="traefik-k8s", instance="traefik-metrics:8080", service="homelab-slow-app-80@kubernetescrd"}'
+        values: '0+60x30'
+      - series: 'traefik_service_request_duration_seconds_bucket{job="traefik-k8s", instance="traefik-metrics:8080", service="homelab-slow-app-80@kubernetescrd", le="5.0"}'
+        values: '0+30x30'
+      - series: 'traefik_service_request_duration_seconds_count{job="traefik-k8s", instance="traefik-metrics:8080", service="homelab-headlamp-80@kubernetescrd"}'
+        values: '0+60x30'
+      - series: 'traefik_service_request_duration_seconds_bucket{job="traefik-k8s", instance="traefik-metrics:8080", service="homelab-headlamp-80@kubernetescrd", le="5.0"}'
+        values: '0+30x30'
+      - series: 'traefik_service_request_duration_seconds_count{job="traefik-k8s", instance="traefik-metrics:8080", service="homelab-few-app-80@kubernetescrd"}'
+        values: '0+4x30'
+      - series: 'traefik_service_request_duration_seconds_bucket{job="traefik-k8s", instance="traefik-metrics:8080", service="homelab-few-app-80@kubernetescrd", le="5.0"}'
+        values: '0+3.6x30'
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: TraefikBackendSlow
+        exp_alerts: []
+      - eval_time: 12m
+        alertname: TraefikBackendSlow
+        exp_alerts:
+          - exp_labels:
+              backend: homelab-slow-app-80@kubernetescrd
+              severity: warning
+              service: traefik
+              shadow: "true"
+            exp_annotations:
+              summary: Over 5% of Traefik backend homelab-slow-app-80@kubernetescrd's requests take longer than 5s.
+              description: >-
+                50% of the requests to homelab-slow-app-80@kubernetescrd in the last 5 minutes
+                finished after the 5.0s histogram bucket. The backend is slow, not the edge.
+                Its own log and its resource use are the next reads.
+      - eval_time: 12m
+        alertname: TraefikLatencyBucketMissing
+        exp_alerts: []
+
+  # A backend with a request count and no 5.0s bucket series: TraefikLatencyBucketMissing fires
+  # after its 10m hold.
+  - interval: 1m
+    input_series:
+      - series: 'traefik_service_request_duration_seconds_count{job="traefik-k8s", instance="traefik-metrics:8080", service="homelab-odd-app-80@kubernetescrd"}'
+        values: '0+60x30'
+      - series: 'traefik_service_request_duration_seconds_bucket{job="traefik-k8s", instance="traefik-metrics:8080", service="homelab-odd-app-80@kubernetescrd", le="1.2"}'
+        values: '0+60x30'
+    alert_rule_test:
+      - eval_time: 9m
+        alertname: TraefikLatencyBucketMissing
+        exp_alerts: []
+      - eval_time: 14m
+        alertname: TraefikLatencyBucketMissing
+        exp_alerts:
+          - exp_labels:
+              backend: homelab-odd-app-80@kubernetescrd
+              severity: warning
+              service: traefik
+              shadow: "true"
+            exp_annotations:
+              summary: Traefik emits no 5.0s latency bucket for homelab-odd-app-80@kubernetescrd.
+              description: >-
+                homelab-odd-app-80@kubernetescrd serves requests but has no
+                traefik_service_request_duration_seconds_bucket series with le="5.0", so
+                TraefikBackendSlow cannot see it. Check the histogram buckets in Traefik's
+                metrics configuration.
+
+  # A total-404 edge: 95% of 1.05 rps is 404, and the per-service series are gone. The flood
+  # alert fires after its 5m hold.
+  - interval: 1m
+    input_series:
+      - series: 'traefik_entrypoint_requests_total{job="traefik-k8s", instance="traefik-metrics:8080", code="404", entrypoint="websecure"}'
+        values: '0+60x30'
+      - series: 'traefik_entrypoint_requests_total{job="traefik-k8s", instance="traefik-metrics:8080", code="200", entrypoint="websecure"}'
+        values: '0+3x30'
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: TraefikEntrypoint404Flood
+        exp_alerts: []
+      - eval_time: 12m
+        alertname: TraefikEntrypoint404Flood
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              service: traefik
+              shadow: "true"
+            exp_annotations:
+              summary: Over 90% of the requests Traefik receives get a 404.
+              description: >-
+                95.24% of the entrypoint traffic in the last 5 minutes was 404, the shape of an
+                edge that lost its routers (#1322). Read Traefik's startup log for a router or
+                plugin error.
+
+  # Ordinary browsing 404s (4%) and an idle edge that returns only 404s (0.017 rps, under the
+  # floor) do not fire.
+  - interval: 1m
+    input_series:
+      - series: 'traefik_entrypoint_requests_total{job="traefik-k8s", instance="traefik-metrics:8080", code="404", entrypoint="websecure"}'
+        values: '0+2x30'
+      - series: 'traefik_entrypoint_requests_total{job="traefik-k8s", instance="traefik-metrics:8080", code="200", entrypoint="websecure"}'
+        values: '0+58x30'
+      - series: 'traefik_entrypoint_requests_total{job="traefik-k8s", instance="traefik-metrics:8080", code="404", entrypoint="web"}'
+        values: '0x30'
+    alert_rule_test:
+      - eval_time: 20m
+        alertname: TraefikEntrypoint404Flood
+        exp_alerts: []
+
+  # A router answering 421 at 0.05 rps fires after its 10m hold. A second router at 0.01 rps,
+  # under the 0.02 rps threshold, does not.
+  - interval: 1m
+    input_series:
+      - series: 'traefik_router_requests_total{job="traefik-k8s", instance="traefik-metrics:8080", code="421", router="homelab-authelia-secure@kubernetescrd", service="homelab-authelia-9091@kubernetescrd"}'
+        values: '0+3x40'
+      - series: 'traefik_router_requests_total{job="traefik-k8s", instance="traefik-metrics:8080", code="421", router="homelab-quiet-secure@kubernetescrd", service="homelab-quiet-80@kubernetescrd"}'
+        values: '0+0.6x40'
+    alert_rule_test:
+      - eval_time: 8m
+        alertname: TraefikRouter421
+        exp_alerts: []
+      - eval_time: 20m
+        alertname: TraefikRouter421
+        exp_alerts:
+          - exp_labels:
+              router: homelab-authelia-secure@kubernetescrd
+              severity: warning
+              service: traefik
+              shadow: "true"
+            exp_annotations:
+              summary: Traefik router homelab-authelia-secure@kubernetescrd keeps answering 421.
+              description: >-
+                homelab-authelia-secure@kubernetescrd answered 421 at 0.05 requests per second
+                for 10 minutes. A client is wedged on a connection SNICheck pinned wrong.
+                Restart the client that calls this router so it redials; a Traefik config
+                change does not help.

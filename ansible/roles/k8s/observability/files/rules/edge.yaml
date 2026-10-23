@@ -1,0 +1,183 @@
+# The Traefik edge, read from the `traefik-k8s` scrape job: the certificates it serves and the
+# request counters monitor-bridge's cert, traefik5xx, traefik_latency, traefik_404 and
+# traefik_421 rows read today. Plain YAML, never Jinja: prometheus-rules.yaml.j2 carries this
+# file verbatim. The design is docs/target-architecture/monitoring/m6-retire-kuma.md, batch A4.
+#
+# SHADOW UNTIL M6's BATCH A4 CUTOVER-B. Each rule runs beside the Kuma tile of the bridge row it
+# ports, so each carries `shadow: "true"` and pages nobody. Cutover-b drops the label.
+#
+# The scrape job sets no `service`, and Traefik's own `service` label names a backend, so every
+# rule sets `service: traefik` as a literal. A rule that groups by Traefik's backend copies it to
+# `backend` first with label_replace, because the literal replaces the series label of the same
+# name. Each threshold mirrors a monitor-bridge env value or default, and
+# ansible/tests/services/test_edge_rule_literals.py pins it (M1 convention 1).
+#
+# The volume floor (TRAEFIK_MIN_RPS, 0.05) is an `and` clause in each ratio rule: a single error
+# on a near-idle route is not a 100% error ratio.
+groups:
+  - name: edge
+    rules:
+      # monitor-bridge's `cert` row. The series carry `cn`, `sans` and `serial`, so the alert
+      # names every breaching certificate. 14 days is CERT_MIN_DAYS.
+      - alert: CertExpiringSoon
+        expr: (traefik_tls_certs_not_after{job="traefik-k8s"} - time()) / 86400 < 14
+        for: 10m
+        labels:
+          severity: critical
+          service: traefik
+          shadow: "true"
+        annotations:
+          summary: The certificate {{ $labels.cn }} expires within 14 days.
+          description: >-
+            Traefik serves a certificate for {{ $labels.cn }} that expires in
+            {{ $value | humanize }} days. Read Traefik's ACME log for a failed renewal, and
+            `probe.py cert <host>` for the chain it serves.
+      # `traefik5xx`: a backend's 5xx share over 5 minutes above 5% (TRAEFIK_5XX_PCT), behind the
+      # volume floor.
+      - alert: TraefikBackend5xx
+        expr: >-
+          label_replace(
+            (
+              sum by (service) (rate(traefik_service_requests_total{job="traefik-k8s", code=~"5.."}[5m]))
+              / sum by (service) (rate(traefik_service_requests_total{job="traefik-k8s"}[5m]))
+              > 0.05
+            )
+            and
+            (sum by (service) (rate(traefik_service_requests_total{job="traefik-k8s"}[5m])) >= 0.05),
+            "backend", "$1", "service", "(.+)")
+        for: 5m
+        labels:
+          severity: warning
+          service: traefik
+          shadow: "true"
+        annotations:
+          summary: Traefik backend {{ $labels.backend }} answers over 5% of requests with a 5xx.
+          description: >-
+            {{ $value | humanizePercentage }} of the requests Traefik sent to
+            {{ $labels.backend }} in the last 5 minutes got a 5xx. Loki
+            `{container="traefik"}` has the status codes, and the backend's own log has the
+            cause.
+      # `traefik_latency`: over 5% of a backend's requests slower than the 5.0s bucket
+      # (TRAEFIK_SLOW_BUCKET, TRAEFIK_SLOW_PCT), with at least 3 of them in the window
+      # (TRAEFIK_SLOW_MIN_REQUESTS; the slow rate times the 300s window is the count), behind the
+      # volume floor. The services in TRAEFIK_STREAM_SERVICES hold connections open, and the
+      # histogram times a request to the end of its connection, so the regex excludes them from
+      # every selector.
+      - alert: TraefikBackendSlow
+        expr: >-
+          label_replace(
+            (
+              (
+                sum by (service) (rate(traefik_service_request_duration_seconds_count{job="traefik-k8s", service!~"homelab-(headlamp|home-assistant|uptime-kuma)-.*"}[5m]))
+                - sum by (service) (rate(traefik_service_request_duration_seconds_bucket{job="traefik-k8s", le="5.0", service!~"homelab-(headlamp|home-assistant|uptime-kuma)-.*"}[5m]))
+              )
+              / sum by (service) (rate(traefik_service_request_duration_seconds_count{job="traefik-k8s", service!~"homelab-(headlamp|home-assistant|uptime-kuma)-.*"}[5m]))
+              > 0.05
+            )
+            and
+            (
+              (
+                sum by (service) (rate(traefik_service_request_duration_seconds_count{job="traefik-k8s", service!~"homelab-(headlamp|home-assistant|uptime-kuma)-.*"}[5m]))
+                - sum by (service) (rate(traefik_service_request_duration_seconds_bucket{job="traefik-k8s", le="5.0", service!~"homelab-(headlamp|home-assistant|uptime-kuma)-.*"}[5m]))
+              ) * 300 >= 3
+            )
+            and
+            (sum by (service) (rate(traefik_service_request_duration_seconds_count{job="traefik-k8s", service!~"homelab-(headlamp|home-assistant|uptime-kuma)-.*"}[5m])) >= 0.05),
+            "backend", "$1", "service", "(.+)")
+        for: 5m
+        labels:
+          severity: warning
+          service: traefik
+          shadow: "true"
+        annotations:
+          summary: Over 5% of Traefik backend {{ $labels.backend }}'s requests take longer than 5s.
+          description: >-
+            {{ $value | humanizePercentage }} of the requests to {{ $labels.backend }} in the
+            last 5 minutes finished after the 5.0s histogram bucket. The backend is slow, not
+            the edge. Its own log and its resource use are the next reads.
+      # The bridge's "no 5.0s bucket" branch: a backend with traffic and no `le="5.0"` series
+      # means Traefik's buckets changed, and the rule above reads that as quiet.
+      - alert: TraefikLatencyBucketMissing
+        expr: >-
+          label_replace(
+            sum by (service) (rate(traefik_service_request_duration_seconds_count{job="traefik-k8s", service!~"homelab-(headlamp|home-assistant|uptime-kuma)-.*"}[5m])) >= 0.05
+            unless
+            sum by (service) (rate(traefik_service_request_duration_seconds_bucket{job="traefik-k8s", le="5.0", service!~"homelab-(headlamp|home-assistant|uptime-kuma)-.*"}[5m])),
+            "backend", "$1", "service", "(.+)")
+        for: 10m
+        labels:
+          severity: warning
+          service: traefik
+          shadow: "true"
+        annotations:
+          summary: Traefik emits no 5.0s latency bucket for {{ $labels.backend }}.
+          description: >-
+            {{ $labels.backend }} serves requests but has no
+            traefik_service_request_duration_seconds_bucket series with le="5.0", so
+            TraefikBackendSlow cannot see it. Check the histogram buckets in Traefik's metrics
+            configuration.
+      # `traefik_404`: over 90% (TRAEFIK_404_PCT) of ENTRYPOINT traffic is 404. The entrypoint
+      # counter survives a total-404 edge, which erases the per-service series (#1322).
+      - alert: TraefikEntrypoint404Flood
+        expr: >-
+          sum(rate(traefik_entrypoint_requests_total{job="traefik-k8s", code="404"}[5m]))
+          / sum(rate(traefik_entrypoint_requests_total{job="traefik-k8s"}[5m]))
+          > 0.9
+          and on ()
+          sum(rate(traefik_entrypoint_requests_total{job="traefik-k8s"}[5m])) >= 0.05
+        for: 5m
+        labels:
+          severity: warning
+          service: traefik
+          shadow: "true"
+        annotations:
+          summary: Over 90% of the requests Traefik receives get a 404.
+          description: >-
+            {{ $value | humanizePercentage }} of the entrypoint traffic in the last 5 minutes
+            was 404, the shape of an edge that lost its routers (#1322). Read Traefik's startup
+            log for a router or plugin error.
+      # `traefik_421`: a router answers 421 above 0.02 rps (TRAEFIK_421_RPS) for three bridge
+      # cycles (TRAEFIK_421_CONSECUTIVE, 5 minutes apart, so 10 minutes between the first and
+      # the third). A long-lived client connected while Traefik reconciled its routes and SNICheck
+      # pinned the wrong TLS options on that connection (#2747, #2749).
+      - alert: TraefikRouter421
+        expr: sum by (router) (rate(traefik_router_requests_total{job="traefik-k8s", code="421"}[5m])) > 0.02
+        for: 10m
+        labels:
+          severity: warning
+          service: traefik
+          shadow: "true"
+        annotations:
+          summary: Traefik router {{ $labels.router }} keeps answering 421.
+          description: >-
+            {{ $labels.router }} answered 421 at {{ printf "%.2f" $value }} requests per second
+            for 10 minutes. A client is wedged on a connection SNICheck pinned wrong. Restart the
+            client that calls this router so it redials; a Traefik config change does not help.
+      # This family's zero-series alert. A dropped `traefik-k8s` job, or a Traefik that scrapes
+      # but exports no certificate or entrypoint series, leaves every rule above evaluating to
+      # nothing. The bridge's cert row reads an empty vector as "cert metric unavailable" and
+      # pages. The second arm requires up == 1, so a failed scrape stays the scrape-target
+      # rule's page (M1 convention 5).
+      - alert: EdgeMetricsMissing
+        expr: >-
+          absent(up{job="traefik-k8s"})
+          or
+          (
+            (
+              absent(traefik_tls_certs_not_after{job="traefik-k8s"})
+              or
+              absent(traefik_entrypoint_requests_total{job="traefik-k8s"})
+            )
+            and on () (up{job="traefik-k8s"} == 1)
+          )
+        for: 10m
+        labels:
+          severity: warning
+          service: traefik
+          shadow: "true"
+        annotations:
+          summary: Prometheus has lost Traefik's scrape job or its edge series.
+          description: >-
+            Either no up{job="traefik-k8s"} series exists, so the job is gone from
+            prometheus.yml, or the scrape works and the certificate or entrypoint counters are
+            missing. The edge rules cannot fire until the series are back.

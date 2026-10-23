@@ -38,6 +38,26 @@ tests:
             exp_annotations:
               summary: Kuma's Log Shipper Dropped Entries tile is gone and no alert rule pages in its place.
               description: "M6's cutover removed the Log Shipper Dropped Entries tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
+          - exp_labels: {monitor_name: TLS Cert Expiry, service: uptime-kuma, severity: critical}
+            exp_annotations:
+              summary: Kuma's TLS Cert Expiry tile is gone and no alert rule pages in its place.
+              description: "M6's cutover removed the TLS Cert Expiry tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
+          - exp_labels: {monitor_name: Traefik 5xx, service: uptime-kuma, severity: critical}
+            exp_annotations:
+              summary: Kuma's Traefik 5xx tile is gone and no alert rule pages in its place.
+              description: "M6's cutover removed the Traefik 5xx tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
+          - exp_labels: {monitor_name: Traefik Latency, service: uptime-kuma, severity: critical}
+            exp_annotations:
+              summary: Kuma's Traefik Latency tile is gone and no alert rule pages in its place.
+              description: "M6's cutover removed the Traefik Latency tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
+          - exp_labels: {monitor_name: Traefik 404 Flood, service: uptime-kuma, severity: critical}
+            exp_annotations:
+              summary: Kuma's Traefik 404 Flood tile is gone and no alert rule pages in its place.
+              description: "M6's cutover removed the Traefik 404 Flood tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
+          - exp_labels: {monitor_name: Traefik 421, service: uptime-kuma, severity: critical}
+            exp_annotations:
+              summary: Kuma's Traefik 421 tile is gone and no alert rule pages in its place.
+              description: "M6's cutover removed the Traefik 421 tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
   # Every tile present: no term fires.
   - interval: 1m
     input_series:
@@ -54,6 +74,16 @@ tests:
       - series: 'monitor_status{monitor_name="Cluster Scrape Targets", monitor_type="push"}'
         values: '1x140'
       - series: 'monitor_status{monitor_name="Log Shipper Dropped Entries", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="TLS Cert Expiry", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Traefik 5xx", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Traefik Latency", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Traefik 404 Flood", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Traefik 421", monitor_type="push"}'
         values: '1x140'
     alert_rule_test:
       - alertname: CheckWithoutPager
@@ -76,6 +106,16 @@ tests:
       - series: 'monitor_status{monitor_name="Cluster Scrape Targets", monitor_type="push"}'
         values: '1x140'
       - series: 'monitor_status{monitor_name="Log Shipper Dropped Entries", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="TLS Cert Expiry", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Traefik 5xx", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Traefik Latency", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Traefik 404 Flood", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Traefik 421", monitor_type="push"}'
         values: '1x140'
     alert_rule_test:
       - alertname: CheckWithoutPager
