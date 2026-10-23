@@ -14,6 +14,7 @@ from deployer_lib.deploy_git import (
     CI_GATE_NAME,
     CI_GATE_NEEDS_JOBS,
     CI_PROVE_JOB,
+    cancellation_suspects,
     ci_verdict,
     jobs_verdict,
 )
@@ -132,3 +133,63 @@ def test_the_ready_run_decides_a_head_the_draft_run_also_reported_on():
     assert ci_verdict(_draft_run() + ready + [_QUEUED_GATE], _REQUIRED) == "pass"
     red = ready + [_run(CI_GATE_NAME, conclusion="failure")]
     assert ci_verdict(_draft_run() + red, _REQUIRED) == "fail"
+
+
+def _in_suite(suite, runs):
+    return [{**r, "check_suite": {"id": suite}} for r in runs]
+
+
+def _suites(*cancelled):
+    """A `read_suites` reader: the ids in `cancelled` concluded `cancelled`, suites 1-2 else."""
+    return lambda: [
+        {"id": i, "conclusion": "cancelled" if i in cancelled else "failure"}
+        for i in (1, 2)
+    ]
+
+
+def _cancelled_run(suite=1, **per_job):
+    """PR #5922's run 39791122833, attempt 1 (#5931): cancelled mid-sweep, so the `always()`
+    gate ran and failed on the cancelled needs. The shards were cancelled; the short jobs had
+    already passed."""
+    jobs = _jobs(**{n: "cancelled" for n in _JOB_NAMES if "shard" in n or "hooks" in n})
+    jobs = [{**j, **per_job.get(j["name"], {})} for j in jobs]
+    return _in_suite(
+        suite,
+        [_run(CI_PROVE_JOB, conclusion="skipped")]
+        + jobs
+        + [_run(CI_GATE_NAME, conclusion="failure")],
+    )
+
+
+def test_a_gate_failed_by_its_own_runs_cancellation_is_no_verdict():
+    """773746a2 read `pr-ci-red` with its cancelled run and the draft run beside it."""
+    runs = _cancelled_run() + _in_suite(2, _draft_run())
+    assert cancellation_suspects(runs) == {1}
+    assert ci_verdict(runs, _REQUIRED, _suites(1)) == "pending"
+
+
+def test_a_cancelled_need_in_a_run_that_was_not_cancelled_stays_red():
+    """A job past its `timeout-minutes` also reads `cancelled`; its suite does not (#5931)."""
+    assert ci_verdict(_cancelled_run(), _REQUIRED, _suites()) == "fail"
+    assert ci_verdict(_cancelled_run(), _REQUIRED) == "fail"
+
+
+def test_a_real_failure_beside_cancelled_siblings_stays_red():
+    """Fail-fast: one shard fails and the matrix cancels the others. A green second run on the
+    same head must not outvote it, which only the no-failed-need clause prevents."""
+    shard = next(n for n in _JOB_NAMES if "shard" in n)
+    fail_fast = _cancelled_run(**{shard: {"conclusion": "failure"}})
+    green = _in_suite(2, _push_run() + [_run(CI_GATE_NAME)])
+    assert cancellation_suspects(fail_fast + green) == set()
+    assert ci_verdict(fail_fast + green, _REQUIRED, _suites(1)) == "fail"
+
+
+def test_a_later_run_on_the_same_head_decides_after_a_cancelled_one():
+    ready = _in_suite(2, [_run(CI_PROVE_JOB, conclusion="skipped")] + _jobs())
+    runs = _cancelled_run() + ready + _in_suite(2, [_run(CI_GATE_NAME)])
+    assert ci_verdict(runs, _REQUIRED, _suites(1)) == "pass"
+
+
+def test_a_cancelled_run_does_not_excuse_a_failed_gate_in_another_run():
+    red = _in_suite(2, _push_run() + [_run(CI_GATE_NAME, conclusion="failure")])
+    assert ci_verdict(_cancelled_run() + red, _REQUIRED, _suites(1, 2)) == "fail"

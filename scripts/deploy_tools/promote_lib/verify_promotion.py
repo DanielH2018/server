@@ -31,9 +31,8 @@ whose record is `success`, `error` or absent. `verify` makes no read of `prod`'s
 the record is what the cluster showed before T, not after.
 
 WHERE THE BUNDLES COME FROM. `decide` pulls both before `prod` moves and writes them under
-`--bundle-dir` (`write_handoff`), with the record of `prod`'s statuses, so a registry error
-promotes nothing. `verify` reads them back (`read_handoff`, `read_recorded`) and makes no
-registry call.
+`--bundle-dir`, with the record of `prod`'s statuses, so a registry error promotes nothing.
+`verify` reads them back and makes no registry call (`verify_handoff.py`).
 
 ONLY STATUSES FROM THIS PROMOTION COUNT. T may carry statuses from an earlier promotion of
 the same commit, such as the `failure` that held it before an operator cleared the hold and
@@ -42,10 +41,15 @@ job moved `prod`, less MOVED_AT_SKEW_S, so an older status reads as no status at
 
 THE VERDICT. Every expected status `success` is `good`. Any expected `failure` or `error` is
 `failed`, naming those. At the timeout it is `failed`, naming every expected name that is not
-`success`. A missing status, or a `pending` one, keeps the wait going and never reads as
-success. A status read that fails is retried at the next poll. The timeout is derived from T's
+`success`. In a Longhorn hop another name's failure is provisional (THE STORAGE ROLLOUT). A
+missing status, or a `pending` one, keeps the wait going and never reads as success. A status
+read that fails is retried at the next poll. The timeout is derived from T's
 bundle and its changed set (`chained_timeout.promote_timeout`), and capped at
 `chained_timeout.VERIFY_CAP_S`.
+
+THE STORAGE ROLLOUT. While `longhorn` is expected, a failure of any other name is provisional
+until `flux/longhorn` has read `success` for a grace, or `longhorn` overruns its own timeout
+(`storage_rollout.py`, #5997).
 
 THE OTHER TWO HALVES `decide` calls:
   - `wait_settled`, the wait on a verification in flight (the DECIDED marker below);
@@ -84,14 +88,14 @@ from artifact_retention import HELD_TAG, LAST_GOOD_TAG, PROD_TAG
 from changed_set import ROOT, changed_set, footprints, suspended_tags
 from chained_timeout import promote_timeout
 from deploy_tools.kustomizations import kustomization_graph
+from deploy_tools.promote_lib import storage_rollout
+from deploy_tools.promote_lib.verify_handoff import read_handoff, read_recorded
+
+# Re-exported, as `verify.write_handoff`, for `promote.py`'s `hand_off`.
+from deploy_tools.promote_lib.verify_handoff import write_handoff as write_handoff
 from renderer.renderer_lib.ordering import split_kind
 
 DIGESTS_FILE = "digests.json"
-# The statuses `decide` recorded on `prod`'s commit, at the handoff's root beside `prod/` and
-# `target/`, so `read_handoff` never reads it as a bundle file.
-RECORDED_FILE = "prod-statuses.json"
-# The files `verify` reads from each bundle. Nothing else is handed on.
-_HANDOFF_FILE = re.compile(r"digests\.json|flux/[a-z0-9][a-z0-9.-]*\.yaml")
 KUSTOMIZATION_API = "kustomize.toolkit.fluxcd.io/v1"
 STATUS_PREFIX = "flux/"
 FAILED_STATES = frozenset({"failure", "error"})
@@ -134,69 +138,6 @@ SOAK = "soak"
 
 
 # -- the bundles -----------------------------------------------------------------------------
-
-
-def write_handoff(
-    directory: Path,
-    prod: dict[str, bytes] | None,
-    target: dict[str, bytes],
-    recorded: dict[str, str] | None = None,
-) -> None:
-    """Write the files `verify` reads from `prod`'s bundle and T's under `directory`.
-
-    `prod` is None on the first run, which has no `prod`, and leaves `directory/prod` absent.
-    `recorded` is what `prior_statuses` read on `prod`'s commit, written as RECORDED_FILE.
-
-    Raises:
-        OSError: a write failed.
-    """
-    for side, files in (("prod", prod), ("target", target)):
-        for name, raw in (files or {}).items():
-            if _HANDOFF_FILE.fullmatch(name):
-                path = directory / side / name
-                path.parent.mkdir(parents=True, exist_ok=True)
-                path.write_bytes(raw)
-    (directory / "target").mkdir(parents=True, exist_ok=True)
-    (directory / RECORDED_FILE).write_text(
-        json.dumps(recorded or {}, sort_keys=True) + "\n", encoding="utf-8"
-    )
-
-
-def read_recorded(directory: Path) -> dict[str, str]:
-    """The statuses `decide` recorded on `prod`'s commit, by name.
-
-    A missing or unreadable file is no record, so every dependent stays expected: the safe
-    direction.
-    """
-    try:
-        found = json.loads((directory / RECORDED_FILE).read_text(encoding="utf-8"))
-    except OSError, ValueError:
-        return {}
-    if not isinstance(found, dict):
-        return {}
-    return {k: v for k, v in found.items() if isinstance(k, str) and isinstance(v, str)}
-
-
-def read_handoff(
-    directory: Path,
-) -> tuple[dict[str, bytes] | None, dict[str, bytes]]:
-    """`prod`'s files, or None when `decide` had no `prod`, and T's files.
-
-    Raises:
-        ValueError: `directory/target` does not exist, so `decide` wrote no handoff.
-    """
-
-    def files(side: Path) -> dict[str, bytes]:
-        return {
-            path.relative_to(side).as_posix(): path.read_bytes()
-            for path in side.rglob("*")
-            if path.is_file()
-        }
-
-    if not (directory / "target").is_dir():
-        raise ValueError(f"{directory} holds no target/ that decide wrote")
-    prod = directory / "prod"
-    return (files(prod) if prod.is_dir() else None), files(directory / "target")
 
 
 def bundle_digests(files: dict[str, bytes] | None) -> object | None:
@@ -253,12 +194,16 @@ class Expected:
             `failure`.
         widened: why every name counts as changed, or "" when the digests decided.
         timeout_s: how long to wait.
+        storage_grace_s: `storage_rollout.grace_s`, 0 when `longhorn` is not expected.
+        storage_rollout_s: `storage_rollout.rollout_s`, 0 when `longhorn` is not expected.
     """
 
     names: frozenset[str]
     dependents: frozenset[str]
     widened: str
     timeout_s: int
+    storage_grace_s: int = 0
+    storage_rollout_s: int = 0
 
 
 def expected_set(target: dict[str, bytes], prod: dict[str, bytes] | None) -> Expected:
@@ -276,11 +221,14 @@ def expected_set(target: dict[str, bytes], prod: dict[str, bytes] | None) -> Exp
     depends_on, suspended = bundle_graph(target, docs)
     old = bundle_digests(prod) if prod is not None else None
     found = changed_set(bundle_digests(target), old, depends_on, suspended)
+    grace = storage_rollout.grace_s(docs, found.names)
     return Expected(
         names=found.names | {ROOT},
         dependents=found.names - found.direct,
         widened=found.widened,
         timeout_s=promote_timeout(docs, found.names),
+        storage_grace_s=grace,
+        storage_rollout_s=storage_rollout.rollout_s(docs, grace),
     )
 
 
@@ -399,6 +347,9 @@ def verify(
     started = reads.clock()
     states: dict[str, str] = {}
     last = ""
+    window = storage_rollout.Window(
+        names, expected.storage_grace_s, expected.storage_rollout_s
+    )
     while True:
         try:
             states = reads.statuses(target, since)
@@ -408,8 +359,10 @@ def verify(
         except forge.ForgeError as err:
             line = f"the statuses could not be read: {err}"
         failed = [n for n in names if states.get(STATUS_PREFIX + n) in FAILED_STATES]
-        if failed:
+        if failed and not window.provisional(failed, states, reads.clock()):
             return Verdict("failed", tuple(failed), tuple(sorted(excused)))
+        if failed:
+            line += window.note()
         if all(states.get(STATUS_PREFIX + n) == "success" for n in names):
             return Verdict("good", excused=tuple(sorted(excused)))
         if line != last:

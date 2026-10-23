@@ -120,7 +120,7 @@ def _github_pages(path: str, key: str) -> list[dict]:
     )
 
 
-def verdict_for(sha: str, fetch=fetch_check_runs, required=None) -> str:
+def verdict_for(sha: str, fetch=fetch_check_runs, required=None, suites=None) -> str:
     """`pass` / `pending` / `fail` for one SHA. An unreachable API reads as pending."""
     required = required_contexts() if required is None else required
     if not required:
@@ -131,7 +131,7 @@ def verdict_for(sha: str, fetch=fetch_check_runs, required=None) -> str:
         runs = fetch(sha)
     except urllib.error.URLError, TimeoutError, ValueError, OSError:
         return "pending"
-    return ci_verdict(runs, required)
+    return ci_verdict(runs, required, lambda: (suites or fetch_check_suites)(sha))
 
 
 def _fetch_tip() -> str:
@@ -349,7 +349,7 @@ def green_after(
             verdict = "pending"
         else:
             verdict = verdict_for(
-                candidate, fetch=lambda _s, _r=runs: _r, required=required
+                candidate, lambda _s, _r=runs: _r, required, fetch_suites
             )
         if verdict == "pass":
             return candidate, ""
@@ -458,7 +458,7 @@ def wait(
         # `runs` is bound as a default rather than closed over: verdict_for calls this
         # synchronously within the iteration, so late binding is harmless today, but a
         # future caller that deferred the call would silently read the next poll's runs.
-        verdict = verdict_for(target, fetch=lambda _s, _runs=runs: _runs)
+        verdict = verdict_for(target, lambda _s, _runs=runs: _runs, None, fetch_suites)
         if verdict == "pass":
             return 0, f"{target[:8]}: CI green"
         if verdict == "fail":
