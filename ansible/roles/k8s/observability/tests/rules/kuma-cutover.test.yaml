@@ -376,6 +376,60 @@ tests:
             exp_annotations:
               summary: Kuma's k3s Container OOM tile is gone and no alert rule pages in its place.
               description: "M6's cutover removed the k3s Container OOM tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
+  # A daily tile's series is absent for 25h, as after a Kuma restart until its next push. The
+  # 48h10m range keeps its term quiet, where a 2h range would have fired at minute 130.
+  - interval: 10m
+    input_series:
+      - series: 'up{job="uptime-kuma", instance="uptime-kuma:3001"}'
+        values: '1x160'
+      - series: 'monitor_status{monitor_name="<tile>", monitor_type="push"}'
+        values: '1x160'
+      - series: 'monitor_status{monitor_name="k3s Container Restarts", monitor_type="push"}'
+        values: '1x160'
+      - series: 'monitor_status{monitor_name="k3s Container OOM", monitor_type="push"}'
+        values: '1x160'
+      - series: 'monitor_status{monitor_name="k3s CPU Throttling", monitor_type="push"}'
+        values: '1x160'
+      - series: 'monitor_status{monitor_name="Scrape Targets", monitor_type="push"}'
+        values: '1x160'
+      - series: 'monitor_status{monitor_name="Cluster Scrape Targets", monitor_type="push"}'
+        values: '1x160'
+      - series: 'monitor_status{monitor_name="Log Shipper Dropped Entries", monitor_type="push"}'
+        values: '1x160'
+      - series: 'monitor_status{monitor_name="TLS Cert Expiry", monitor_type="push"}'
+        values: '1x160'
+      - series: 'monitor_status{monitor_name="Traefik 5xx", monitor_type="push"}'
+        values: '1x160'
+      - series: 'monitor_status{monitor_name="Traefik Latency", monitor_type="push"}'
+        values: '1x160'
+      - series: 'monitor_status{monitor_name="Traefik 404 Flood", monitor_type="push"}'
+        values: '1x160'
+      - series: 'monitor_status{monitor_name="Traefik 421", monitor_type="push"}'
+        values: '1x160'
+      - series: 'monitor_status{monitor_name="k3s Longhorn Backup", monitor_type="push"}'
+        values: '1x160'
+      - series: 'monitor_status{monitor_name="Off-box etcd Snapshot", monitor_type="push"}'
+        values: '1x160'
+      - series: 'monitor_status{monitor_name="Manifest Prune Drift", monitor_type="push"}'
+        values: '1x6 _x154'
+      - series: 'monitor_status{monitor_name="Release Staleness Drift", monitor_type="push"}'
+        values: '1x160'
+      - series: 'monitor_status{monitor_name="Live Object Drift", monitor_type="push"}'
+        values: '1x160'
+      - series: 'monitor_status{monitor_name="Longhorn Volume Redundancy", monitor_type="push"}'
+        values: '1x160'
+      - series: 'monitor_status{monitor_name="k3s PVC Fullness", monitor_type="push"}'
+        values: '1x160'
+      - series: 'monitor_status{monitor_name="Longhorn Snapshot Headroom", monitor_type="push"}'
+        values: '1x160'
+      - series: 'monitor_status{monitor_name="Kubelet CSI Mount Read-Only", monitor_type="push"}'
+        values: '1x160'
+      - series: 'monitor_status{monitor_name="etcd DB Size", monitor_type="push"}'
+        values: '1x160'
+    alert_rule_test:
+      - alertname: CheckWithoutPager
+        eval_time: 25h
+        exp_alerts: []
   # A Kuma outage (up == 0) fires no term; KumaDown's own pager covers it.
   - interval: 1m
     input_series:

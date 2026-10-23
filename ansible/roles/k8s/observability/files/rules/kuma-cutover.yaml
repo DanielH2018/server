@@ -18,6 +18,10 @@
 # A Kuma outage fires no term, because Kuma's own liveness pager covers it. `absent_over_time`
 # carries the tile's name as a label, so the page names the tile. `service: uptime-kuma` is the
 # role whose tiles it counts, so C7's gate on `observability` does not read it.
+# DECIDED: each term's range is max(2h, 2 x the tile's push interval + 10m). Kuma restarts
+# (19 in 7 days) drop a push tile's monitor_status series until its next push, so a 2h range
+# on a tile that pushes less often than hourly would page while the tile is healthy. A daily
+# tile therefore uses [48h10m]. Add a term with its own interval's range, never a bare 2h.
 groups:
   - name: kuma-cutover
     rules:
@@ -48,13 +52,13 @@ groups:
             or
               absent_over_time(monitor_status{monitor_name="k3s Longhorn Backup"}[2h])
             or
-              absent_over_time(monitor_status{monitor_name="Off-box etcd Snapshot"}[2h])
+              absent_over_time(monitor_status{monitor_name="Off-box etcd Snapshot"}[48h10m])
             or
-              absent_over_time(monitor_status{monitor_name="Manifest Prune Drift"}[2h])
+              absent_over_time(monitor_status{monitor_name="Manifest Prune Drift"}[48h10m])
             or
               absent_over_time(monitor_status{monitor_name="Release Staleness Drift"}[2h])
             or
-              absent_over_time(monitor_status{monitor_name="Live Object Drift"}[2h])
+              absent_over_time(monitor_status{monitor_name="Live Object Drift"}[48h10m])
             or
               absent_over_time(monitor_status{monitor_name="Longhorn Volume Redundancy"}[2h])
             or
