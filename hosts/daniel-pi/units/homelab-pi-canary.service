@@ -1,8 +1,0 @@
-# Shipped by homelab-daniel-pi for the H3.10 drop proof. It does nothing: the proof is that the
-# timer which fires it runs, then stops when a later package version drops it.
-[Unit]
-Description=Canary for the Pi package's drop proof
-
-[Service]
-Type=oneshot
-ExecStart=/usr/bin/true
