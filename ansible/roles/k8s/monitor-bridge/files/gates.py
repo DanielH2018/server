@@ -17,8 +17,10 @@ holds a verdict back rather than reporting it), which is why the membership set 
 is here and the mechanism is there.
 """
 
+import time
 from collections.abc import Mapping
 from dataclasses import dataclass, field
+from typing import TYPE_CHECKING
 
 import bridge.common
 from bridge.common import _env
@@ -29,6 +31,10 @@ from check_table import CHECKS
 from checks.b2 import check_b2_reachable
 from checks.cluster import check_prometheus
 from checks.wan import check_wan_reachable
+
+if TYPE_CHECKING:
+    # Annotation only: this module stays a leaf and never imports the exporter's module.
+    from verdict_export import CheckExposition
 
 
 def _members(gate: str) -> frozenset[str]:
@@ -295,6 +301,7 @@ def _gate(
     sink: Sink,
     dry_run: bool,
     only: frozenset[str],
+    export: "CheckExposition | None" = None,
 ) -> CheckResult:
     """Evaluate one reachability gate: verdict, log line, heartbeat push.
 
@@ -312,6 +319,7 @@ def _gate(
       sink: Where the gate's heartbeat is pushed.
       dry_run: Evaluate and log, but push nothing to Kuma.
       only: The enable-exactly-this-set filter.
+      export: Where the gate's verdict is also recorded for Prometheus. None records nothing.
     """
     if not check_enabled(name, only, cfg.CHECKS_SKIP):
         return CheckResult(True, "disabled by check filter")
@@ -320,6 +328,8 @@ def _gate(
     # narrowed or dry run (#4448).
     if not ok or only or dry_run:
         bridge.common.log("OK  " if ok else "DOWN", name, "-", msg)
+    if export is not None:
+        export.record(name, ok, time.time())
     if not dry_run:
         sink.push(_env(push_env(name), ""), ok, msg)
     return CheckResult(ok, msg)

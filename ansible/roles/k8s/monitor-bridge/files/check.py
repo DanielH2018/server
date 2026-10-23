@@ -29,6 +29,9 @@ This module is a library, not the entry point. Running `check.py` directly print
 to `cli.py` on stderr and exits 2. `-h` and `--help` print this text and exit 0.
 """
 
+import time
+from typing import TYPE_CHECKING
+
 import bridge.common
 import bridge.streaks
 
@@ -40,6 +43,10 @@ from bridge.config import Config
 from bridge.sources import Sink, Sources
 from bridge.types import Check
 from gates import Gates
+
+if TYPE_CHECKING:
+    # Annotation only: the exporter module is wired in by cli.py.
+    from verdict_export import CheckExposition
 
 # Checks whose `up` line is logged every cycle, because something reads it as data. The
 # Longhorn Storage dashboard's four B2 panels regex the used/cap/pct/versions figures out of
@@ -56,6 +63,7 @@ def run_once(
     sink: Sink,
     dry_run: bool = False,
     only: frozenset[str] | None = None,
+    export: "CheckExposition | None" = None,
 ) -> None:
     """Runs one full check cycle: the reachability gates, then every enabled check.
 
@@ -84,6 +92,10 @@ def run_once(
       sink: Where every gate's and every check's verdict is pushed. REQUIRED rather than
         defaulted to a live `Sink(cfg)`, so a test that forgets it fails instead of pushing to
         the real Kuma. cli.main() builds the one production `Sink` per process.
+      export: Where each enabled row's verdict is also recorded for Prometheus. A row skipped
+        by a gate records 0 and its body is not called. Any other row records `_evaluate`'s
+        verdict, taken before `startup_grace` holds it `up`. None records nothing, which is
+        every caller but the looping pod.
     """
     only = cfg.CHECKS_ONLY if only is None else only
     skip = cfg.CHECKS_SKIP
@@ -93,7 +105,7 @@ def run_once(
     # heartbeat alive) so only the Prometheus monitor pages; a real per-metric problem still alerts
     # whenever Prometheus is up.
     prom_ok, _prom_msg = gate_lib._gate(
-        cfg, src, "prometheus", gates.probe_prometheus, sink, dry_run, only
+        cfg, src, "prometheus", gates.probe_prometheus, sink, dry_run, only, export
     )
 
     # Exporter-reachability gate (one level below the Prometheus gate): when Prometheus is up, probe
@@ -135,7 +147,7 @@ def run_once(
     # budget it is watching), but the cached verdict is pushed every cycle so this monitor's own
     # heartbeat stays alive.
     b2_ok, _b2_msg = gate_lib._gate(
-        cfg, src, "b2_reachable", gates.probe_b2, sink, dry_run, only
+        cfg, src, "b2_reachable", gates.probe_b2, sink, dry_run, only, export
     )
 
     # WAN-reachability gate (peer of the two above): an internet outage had no gate at all,
@@ -143,7 +155,7 @@ def run_once(
     # 2026-09-18 (#2784). Two independent providers probed by hostname, down only when NEITHER
     # answers, so a single provider's outage does not silence a dependent reading the other.
     wan_ok, _wan_msg = gate_lib._gate(
-        cfg, src, "wan_reachable", gates.probe_wan, sink, dry_run, only
+        cfg, src, "wan_reachable", gates.probe_wan, sink, dry_run, only, export
     )
 
     # A routine verdict is logged only on a narrowed or dry run, where someone reads the
@@ -162,6 +174,8 @@ def run_once(
         name, token, fn = entry.name, entry.token, entry.fn
         if not gate_lib.check_enabled(name, only, skip):
             continue
+        # The verdict the exporter records: 0 for a row a gate skips, else the body's own.
+        exported = False
         if not prom_ok and name in gates.prom_dependent:
             ok, msg = True, "skipped — Prometheus unreachable (see Prometheus monitor)"
             log_skip(name, msg)
@@ -176,12 +190,15 @@ def run_once(
             log_skip(name, msg)
         else:
             ok, msg = gate_lib._evaluate(cfg, src, name, fn)
+            exported = ok
             if name in gates.startup_grace:
                 ok, msg = bridge.streaks.apply_startup_grace(
                     name, ok, msg, cfg.GRACE_CYCLES, src.state.grace_streaks
                 )
             if log_all or not ok or "streak" in msg or name in LOGGED_WHEN_UP:
                 bridge.common.log("OK  " if ok else "DOWN", name, "-", msg)
+        if export is not None:
+            export.record(name, exported, time.time())
         if msg.startswith("skipped"):
             counts["skipped"] += 1
         else:
