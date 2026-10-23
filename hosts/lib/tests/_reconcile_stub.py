@@ -13,6 +13,10 @@ state.json keys:
     fail: "<verb> <unit>" strings, each a systemctl call that exits 1.
     owned: paths `dpkg -S` reports a package owns.
     crontabs: user -> crontab text. A user missing here has no crontab.
+    effects: "<verb> <unit>" -> {"write": {absolute path: text}, "queue": [unit, ...]}, what a
+        successful call of that verb leaves on disk under HOMELAB_ROOT: the files it writes and
+        the units it adds to /run/homelab-secrets/pending.json.
+    A unit's "limit": true makes `start` and `restart` fail until `reset-failed` clears it.
 """
 
 import fcntl
@@ -114,14 +118,34 @@ def systemctl(state: dict, args: list[str]) -> int:
         if known["load"] != "loaded":
             print(f"Unit {unit} is {known['load']}.", file=sys.stderr)
             return 1
+        if known.get("limit"):
+            print(f"{unit}: start request repeated too quickly", file=sys.stderr)
+            return 1
         known["active"] = "active"
-    elif verb == "try-restart" or verb == "reset-failed":
+        _effects(state, f"{verb} {unit}")
+    elif verb == "reset-failed":
+        known.pop("limit", None)
+    elif verb == "try-restart":
         pass
     elif verb == "disable":
         known["enabled"] = "disabled"
     else:
         raise SystemExit(f"stub systemctl: unexpected {args}")
     return 0
+
+
+def _effects(state: dict, call: str) -> None:
+    root = Path(os.environ["HOMELAB_ROOT"])
+    effect = state.get("effects", {}).get(call, {})
+    for path, text in effect.get("write", {}).items():
+        target = root / path.lstrip("/")
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(text)
+    if effect.get("queue"):
+        pending = root / "run/homelab-secrets/pending.json"
+        pending.parent.mkdir(parents=True, exist_ok=True)
+        queue = json.loads(pending.read_text()) if pending.exists() else []
+        pending.write_text(json.dumps(sorted(set(queue) | set(effect["queue"]))))
 
 
 def _show(units: dict, args: list[str]) -> int:

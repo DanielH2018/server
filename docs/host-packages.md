@@ -36,6 +36,35 @@ it was last staged. The signer's state is `/var/lib/homelab-signer/state.json`, 
 set lands in `/var/lib/homelab-signer/refused/<UTC time>/`. Both services log to the journal:
 `journalctl -u homelab-builder -u homelab-repo-sign`.
 
+## The restart contract
+
+`homelab-reconcile` is the only process that starts or restarts a unit outside the boot path,
+unless the manifest marks the unit `windowed`. `homelab-secrets` calls no `systemctl`, and
+systemd's own `Restart=` policy and an operator's hand command stay outside the rule. The
+design is [the H4 plan](target-architecture/host/h4-secrets-unit.md), *The restart contract*.
+
+- **Hand path.** `systemctl start homelab-reconcile` runs one reconcile now. A person who
+  restarts `homelab-secrets` by hand restarts no dependent: that run queues the dependents of
+  every changed output in `/run/homelab-secrets/pending.json`, and the next reconcile run
+  restarts them.
+- **`windowed` units.** Reconcile neither starts nor restarts a unit the manifest marks
+  `windowed` (`k3s.service` and `k3s-agent.service`, once H6 marks them). Its queue entry is
+  dropped. The two processes that restart such a unit do not exist yet; H6.3b adds them and their mutual
+  exclusion to this page.
+- **The restart set.** Before step 2, reconcile builds one set from the units whose file or
+  drop-in changed and the units in `pending.json`. A unit enters it only when it is enabled or
+  active. Step 2 starts every other enabled unit that is not active. Step 3 restarts the set.
+  Each unit gets at most one call per run, preceded by `systemctl reset-failed`, and no call
+  uses `--no-block`.
+- **A unit that cannot start yet.** A unit whose rendered outputs do not exist, or whose call
+  fails, is added to `pending.json` and keeps its old hash in `applied.json`. The run exits 1,
+  so the host holds. The next run tries it again.
+- **A package that ships `secrets-unit`.** The manifest then carries `secrets_inputs_sha256`.
+  When it differs from `applied.json`, or `homelab-secrets.service` is not active, reconcile runs
+  a blocking `systemctl restart homelab-secrets.service` before step 2. Legacy entries retire only
+  once that unit is active and every credential and output in `secrets.json` exists. A package
+  without the field makes no call that names `homelab-secrets`, as the Pi's does until H4.5.
+
 ## Clearing a deployer hold that a failed `homelab_builder` or `gitops_deploy` apply wrote
 
 The GitOps tick applies `homelab_builder` on daniel-box through the setup plane. From PR H3.5a
