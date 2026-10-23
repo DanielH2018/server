@@ -46,6 +46,7 @@ from deploy_tools.setup_lib.setup_gates import (  # noqa: F401  (`_eval_when` an
     HOSTS as _HOSTS,
     _eval_when,
     _host_vars,
+    role_end_hosts,
 )
 import setup_routing
 from deploy_tools.setup_lib.setup_role_chains import (
@@ -115,6 +116,9 @@ def setup_role_hosts(
     reaches every host the playbook is EVER run on, and the tick converging on daniel-box says
     nothing about the other two.
 
+    A role whose first task is `meta: end_role` under a `when:` is not run on the hosts where
+    that guard passes (`setup_gates.role_end_hosts`), whatever its playbook gate says.
+
     A role with no playbook gate is read from its own tasks instead of assumed to reach
     every host. `deploy_ui` wraps its whole `tasks/main.yml` in one `block:` under `when:
     has_gitops`, so the play visits all three hosts and every task skips on two of them; a
@@ -133,13 +137,17 @@ def setup_role_hosts(
     roles = _initial_setup_roles(playbook)
     if role not in roles:
         return frozenset()
+    # The role's leading `meta: end_role` guard ends it on a host before any task runs there.
+    hosts = frozenset(_HOSTS) - role_end_hosts(
+        roles_dir / role, _HOSTS, all_vars, host_vars_dir
+    )
     when = roles[role]
     if when is None:
         chains = task_chains(roles_dir / role, lambda task, task_file: True)
         if not chains:
-            return frozenset(_HOSTS)
-        return _hosts_passing(chains, _HOSTS, all_vars, host_vars_dir)
-    return frozenset(h for h in _HOSTS if _eval_when(when, h, all_vars, host_vars_dir))
+            return hosts
+        return _hosts_passing(chains, hosts, all_vars, host_vars_dir)
+    return frozenset(h for h in hosts if _eval_when(when, h, all_vars, host_vars_dir))
 
 
 def _hosts_passing(
