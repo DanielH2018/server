@@ -117,7 +117,7 @@ def pi_dropin_variant(head: Path, out: Path) -> Path:
         ValueError: the head render's drop-in does not fire at DROPIN_MINUTE.
     """
     directory = out / "hosts" / HOST
-    shutil.copytree(head / "hosts" / HOST, directory)
+    shutil.copytree(head / "hosts" / HOST, directory, symlinks=True)
     dropin = directory / f"root{DROPIN}"
     text = dropin.read_text()
     if DROPIN_MINUTE not in text:
