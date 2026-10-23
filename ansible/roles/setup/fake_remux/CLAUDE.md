@@ -65,7 +65,10 @@ schedule, the lock, and the contract below.
   the next run of any of the three crons, so within 15 minutes of the network returning (#3905). `fake-remux-health.sh` (every `fake_remux_health_cron_minute`)
   pushes three Kuma tiles from the scripts' state files, with max-ages derived from each
   cron's own cadence (`fake_remux_*_max_age_hours` — a grace shorter than the gap flaps, one
-  much longer clears the DOWN it exists to make sticky).
+  much longer clears the DOWN it exists to make sticky). The same script writes one textfile
+  verdict per state file (`fake-remux-scan`, `fake-remux-replace`, `mkv-attachment-repair`) to
+  node_exporter's textfile directory before the pushes (M6 batch B4), with a deadline of two
+  health periods plus 300 s rendered from `fake_remux_health_cron_minute`.
 - **Next-run review:** before widening scope (a looser detection threshold, a higher cap,
   a second library root), read `outcomes.jsonl` and the Discord log for what the previous
   runs actually replaced and what they got wrong.

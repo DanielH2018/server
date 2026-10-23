@@ -1,0 +1,313 @@
+# The B4 host checks of M6 (docs/target-architecture/monitoring/m6-retire-kuma.md, batch B4): the
+# two UPS secondary watchdogs, the three fake-remux heartbeats, the monthly etcd restore drill
+# with its egress-fence leg, and the renovate notifier and agent. Each producer writes a
+# `homelab_check_*` textfile to the `node` scrape job, so these rules read the metric contract of
+# docs/target-architecture/monitoring/m3-textfile-timer.md. Plain YAML, never Jinja:
+# prometheus-rules.yaml.j2 carries this file verbatim.
+#
+# SHADOW UNTIL M6's BATCH B4 CUTOVER-1B. Each rule runs beside the Kuma tile of the same check, so
+# each carries `shadow: "true"` and pages nobody. Severity is the tile's: `critical` for both UPS
+# secondaries and the full drill, which email as well as notify Discord, and `warning` for the
+# rest. `service` is the host as a literal, because a node is not a workload (M3's open
+# question 3). Each pair is `<Check>Failed` and `<Check>NotReporting`, the shape M3 fixed:
+# NotReporting reads the timestamp against the deadline, falls back to absent_over_time over the
+# same deadline, and leaves a dead exporter to the `targets` check.
+#
+# THE CHECK LABEL IS NOT ALWAYS THE SYSLOG TAG. M3 names a check file after its producer's tag,
+# which assumes one verdict per tag. fake-remux-health pushes three tiles under one tag and the
+# etcd drill orchestrator pushes two, so each verdict has its own check name: fake-remux-scan,
+# fake-remux-replace, mkv-attachment-repair, etcd-restore-drill-vm and
+# etcd-restore-drill-egress-fence.
+#
+# THE RENOVATE PAIR HAS NO Failed RULE. Both units run their textfile line as an ExecStartPost,
+# which systemd runs only after a clean ExecStart, so the file only ever says success 1. A crash
+# writes nothing, which is how the Kuma tile reads it too: a missed beat. OnFailure pages the
+# crash at once, and NotReporting is the rule that replaces the tile.
+#
+# Each deadline is the DEADLINE_S its producer renders, and both literals of a NotReporting rule
+# are pinned to it by ansible/tests/setup/test_b4_rule_literals.py (M1 convention 1). The two
+# 10-minute producers render 2 x period + 300 = 1500, M3's rule. The drills render the cadence
+# plus slack that their Kuma tiles carry, 3024000 (35 days). The renovate units render their
+# tiles' own intervals, 129600 and 100800.
+#
+# The drills' NotReporting rules fire from the deploy until the first run after it writes its
+# file (1 November 11:20 UTC), because a monthly producer cannot write earlier. That is harmless
+# while the rules are shadow. The weekly reboot (about 07:35 to 07:50) leaves every writer's gap
+# inside its deadline.
+groups:
+  - name: other-setup-checks
+    rules:
+      # Kuma tile "UPS Secondary (daniel-box)".
+      - alert: UpsSecondaryFailed
+        expr: homelab_check_success{check="ups-secondary-health",origin="daniel-box"} == 0
+        labels:
+          severity: critical
+          service: daniel-box
+          shadow: "true"
+        annotations:
+          summary: daniel-box's UPS secondary watchdog reported a failure.
+          description: >-
+            ups-secondary-health.sh on daniel-box ended with status=down: upsmon.conf is
+            unreadable or has no MONITOR line, nut-monitor is not active, or upsc cannot reach
+            upsd. Until it is fixed, daniel-box would not power off on FSD. Run `systemctl
+            is-active nut-monitor` and `upsc <endpoint> ups.status` on the host; the
+            `ups-secondary-health` syslog tag holds the message.
+      - alert: UpsSecondaryNotReporting
+        expr: |
+          (
+              time() - homelab_check_last_run_timestamp_seconds{check="ups-secondary-health",origin="daniel-box"} > 1500
+            or
+              absent_over_time(homelab_check_last_run_timestamp_seconds{check="ups-secondary-health",origin="daniel-box"}[1500s])
+          )
+          unless on (origin) (up{job="node"} == 0)
+        labels:
+          severity: critical
+          service: daniel-box
+          shadow: "true"
+        annotations:
+          summary: daniel-box's UPS secondary watchdog has stopped reporting.
+          description: >-
+            No ups-secondary-health verdict newer than 1500s reached Prometheus from daniel-box's
+            textfile collector, so nothing confirms the secondary upsmon can still hear upsd. Read
+            the `UPS secondary watchdog` cron and the `ups-secondary-health` syslog tag, then
+            /var/lib/node-exporter-textfile/ups-secondary-health.prom on the host.
+      # Kuma tile "UPS Secondary (daniel-server)".
+      - alert: UpsSecondaryFailed
+        expr: homelab_check_success{check="ups-secondary-health",origin="daniel-server"} == 0
+        labels:
+          severity: critical
+          service: daniel-server
+          shadow: "true"
+        annotations:
+          summary: daniel-server's UPS secondary watchdog reported a failure.
+          description: >-
+            ups-secondary-health.sh on daniel-server ended with status=down: upsmon.conf is
+            unreadable or has no MONITOR line, nut-monitor is not active, or upsc cannot reach
+            upsd. Until it is fixed, daniel-server would not power off on FSD. Run `systemctl
+            is-active nut-monitor` and `upsc <endpoint> ups.status` on the host; the
+            `ups-secondary-health` syslog tag holds the message.
+      - alert: UpsSecondaryNotReporting
+        expr: |
+          (
+              time() - homelab_check_last_run_timestamp_seconds{check="ups-secondary-health",origin="daniel-server"} > 1500
+            or
+              absent_over_time(homelab_check_last_run_timestamp_seconds{check="ups-secondary-health",origin="daniel-server"}[1500s])
+          )
+          unless on (origin) (up{job="node"} == 0)
+        labels:
+          severity: critical
+          service: daniel-server
+          shadow: "true"
+        annotations:
+          summary: daniel-server's UPS secondary watchdog has stopped reporting.
+          description: >-
+            No ups-secondary-health verdict newer than 1500s reached Prometheus from
+            daniel-server's textfile collector, so nothing confirms the secondary upsmon can
+            still hear upsd. Read the `UPS secondary watchdog` cron and the
+            `ups-secondary-health` syslog tag, then
+            /var/lib/node-exporter-textfile/ups-secondary-health.prom on the host.
+      # Kuma tile "Fake Remux Scan".
+      - alert: FakeRemuxScanFailed
+        expr: homelab_check_success{check="fake-remux-scan",origin="daniel-box"} == 0
+        labels:
+          severity: warning
+          service: daniel-box
+          shadow: "true"
+        annotations:
+          summary: The fake-remux scan on daniel-box reported a failure.
+          description: >-
+            fake-remux-health.sh read the daily scan's state file and found a failure or a run
+            older than 26 hours. Read the `fake-remux scan` cron and state.json in
+            /var/lib/autofix-fake-remux. The `fake-remux-health` syslog tag holds the message.
+      - alert: FakeRemuxScanNotReporting
+        expr: |
+          (
+              time() - homelab_check_last_run_timestamp_seconds{check="fake-remux-scan",origin="daniel-box"} > 1500
+            or
+              absent_over_time(homelab_check_last_run_timestamp_seconds{check="fake-remux-scan",origin="daniel-box"}[1500s])
+          )
+          unless on (origin) (up{job="node"} == 0)
+        labels:
+          severity: warning
+          service: daniel-box
+          shadow: "true"
+        annotations:
+          summary: The fake-remux heartbeat on daniel-box has stopped reporting the scan.
+          description: >-
+            No fake-remux-scan verdict newer than 1500s reached Prometheus from daniel-box's
+            textfile collector, so nothing confirms the scan's state file is being read. Read the
+            `fake-remux health` cron and the `fake-remux-health` syslog tag, then
+            /var/lib/node-exporter-textfile/fake-remux-scan.prom on the host.
+      # Kuma tile "Fake Remux Replace".
+      - alert: FakeRemuxReplaceFailed
+        expr: homelab_check_success{check="fake-remux-replace",origin="daniel-box"} == 0
+        labels:
+          severity: warning
+          service: daniel-box
+          shadow: "true"
+        annotations:
+          summary: The fake-remux reconciler on daniel-box reported a failure.
+          description: >-
+            fake-remux-health.sh read the reconciler's state file and found a failure or a run
+            older than 1.2 hours. Read the `fake-remux reconcile` cron and replace_state.json in
+            /var/lib/autofix-fake-remux. The `fake-remux-health` syslog tag holds the message.
+      - alert: FakeRemuxReplaceNotReporting
+        expr: |
+          (
+              time() - homelab_check_last_run_timestamp_seconds{check="fake-remux-replace",origin="daniel-box"} > 1500
+            or
+              absent_over_time(homelab_check_last_run_timestamp_seconds{check="fake-remux-replace",origin="daniel-box"}[1500s])
+          )
+          unless on (origin) (up{job="node"} == 0)
+        labels:
+          severity: warning
+          service: daniel-box
+          shadow: "true"
+        annotations:
+          summary: The fake-remux heartbeat on daniel-box has stopped reporting the reconciler.
+          description: >-
+            No fake-remux-replace verdict newer than 1500s reached Prometheus from daniel-box's
+            textfile collector, so nothing confirms the reconciler's state file is being read.
+            Read the `fake-remux health` cron and the `fake-remux-health` syslog tag, then
+            /var/lib/node-exporter-textfile/fake-remux-replace.prom on the host.
+      # Kuma tile "MKV Attachment Repair".
+      - alert: MkvAttachmentRepairFailed
+        expr: homelab_check_success{check="mkv-attachment-repair",origin="daniel-box"} == 0
+        labels:
+          severity: warning
+          service: daniel-box
+          shadow: "true"
+        annotations:
+          summary: The mkv attachment repair on daniel-box reported a failure.
+          description: >-
+            fake-remux-health.sh read the repair sweep's state file and found a failure or a run
+            older than 1.2 hours. Read the `mkv attachment repair` cron and
+            mkv_attachment_state.json in /var/lib/autofix-fake-remux. The `fake-remux-health`
+            syslog tag holds the message.
+      - alert: MkvAttachmentRepairNotReporting
+        expr: |
+          (
+              time() - homelab_check_last_run_timestamp_seconds{check="mkv-attachment-repair",origin="daniel-box"} > 1500
+            or
+              absent_over_time(homelab_check_last_run_timestamp_seconds{check="mkv-attachment-repair",origin="daniel-box"}[1500s])
+          )
+          unless on (origin) (up{job="node"} == 0)
+        labels:
+          severity: warning
+          service: daniel-box
+          shadow: "true"
+        annotations:
+          summary: The fake-remux heartbeat on daniel-box has stopped reporting the mkv repair.
+          description: >-
+            No mkv-attachment-repair verdict newer than 1500s reached Prometheus from daniel-box's
+            textfile collector, so nothing confirms the repair sweep's state file is being read.
+            Read the `fake-remux health` cron and the `fake-remux-health` syslog tag, then
+            /var/lib/node-exporter-textfile/mkv-attachment-repair.prom on the host.
+      # Kuma tile "etcd Restore Drill (full)".
+      - alert: EtcdRestoreDrillFailed
+        expr: homelab_check_success{check="etcd-restore-drill-vm",origin="daniel-server"} == 0
+        labels:
+          severity: critical
+          service: daniel-server
+          shadow: "true"
+        annotations:
+          summary: The monthly etcd restore drill on daniel-server failed.
+          description: >-
+            etcd-restore-drill-vm on daniel-server ended with status=down: a preflight failed,
+            the egress fence leaked, or the restore in the throwaway guest did not pass. Read the
+            newest run directory under /var/log/etcd-restore-drill; the `etcd-restore-drill-vm`
+            syslog tag holds the message.
+      - alert: EtcdRestoreDrillNotReporting
+        expr: |
+          (
+              time() - homelab_check_last_run_timestamp_seconds{check="etcd-restore-drill-vm",origin="daniel-server"} > 3024000
+            or
+              absent_over_time(homelab_check_last_run_timestamp_seconds{check="etcd-restore-drill-vm",origin="daniel-server"}[3024000s])
+          )
+          unless on (origin) (up{job="node"} == 0)
+        labels:
+          severity: critical
+          service: daniel-server
+          shadow: "true"
+        annotations:
+          summary: The monthly etcd restore drill on daniel-server has stopped reporting.
+          description: >-
+            No etcd-restore-drill-vm verdict newer than 3024000s (35 days) reached Prometheus
+            from daniel-server's textfile collector, so no drill has run since the last
+            1st-of-month cron slot plus four days of slack. Read the `Full etcd restore drill in
+            a throwaway guest` cron on daniel-server, cron.log under /var/log/etcd-restore-drill,
+            then /var/lib/node-exporter-textfile/etcd-restore-drill-vm.prom on the host.
+      # Kuma tile "etcd Restore Drill (egress fence)".
+      - alert: EtcdRestoreDrillEgressFenceFailed
+        expr: homelab_check_success{check="etcd-restore-drill-egress-fence",origin="daniel-server"} == 0
+        labels:
+          severity: warning
+          service: daniel-server
+          shadow: "true"
+        annotations:
+          summary: The etcd drill's egress fence leg on daniel-server reported a failure.
+          description: >-
+            The fence leg of etcd-restore-drill-vm dialled every fenced range from inside the
+            throwaway guest and either found a leak or could not measure a range, so the fence is
+            unproven there. Read egress-fence.log in the newest run directory under
+            /var/log/etcd-restore-drill.
+      - alert: EtcdRestoreDrillEgressFenceNotReporting
+        expr: |
+          (
+              time() - homelab_check_last_run_timestamp_seconds{check="etcd-restore-drill-egress-fence",origin="daniel-server"} > 3024000
+            or
+              absent_over_time(homelab_check_last_run_timestamp_seconds{check="etcd-restore-drill-egress-fence",origin="daniel-server"}[3024000s])
+          )
+          unless on (origin) (up{job="node"} == 0)
+        labels:
+          severity: warning
+          service: daniel-server
+          shadow: "true"
+        annotations:
+          summary: The etcd drill's egress fence leg on daniel-server has stopped reporting.
+          description: >-
+            No etcd-restore-drill-egress-fence verdict newer than 3024000s (35 days) reached
+            Prometheus from daniel-server's textfile collector. A run that dies before the fence
+            leg executes writes nothing here, so the fence went unmeasured this month. Read the
+            newest run directory under /var/log/etcd-restore-drill, then
+            /var/lib/node-exporter-textfile/etcd-restore-drill-egress-fence.prom on the host.
+      # Kuma tile "Renovate Notifier — Alive". No Failed rule: see the header.
+      - alert: RenovateNotifyNotReporting
+        expr: |
+          (
+              time() - homelab_check_last_run_timestamp_seconds{check="renovate-notify",origin="daniel-box"} > 129600
+            or
+              absent_over_time(homelab_check_last_run_timestamp_seconds{check="renovate-notify",origin="daniel-box"}[129600s])
+          )
+          unless on (origin) (up{job="node"} == 0)
+        labels:
+          severity: warning
+          service: daniel-box
+          shadow: "true"
+        annotations:
+          summary: The renovate notifier on daniel-box has not completed a run in 36 hours.
+          description: >-
+            No renovate-notify verdict newer than 129600s reached Prometheus from daniel-box's
+            textfile collector: the daily 13:00 timer did not fire or the run failed, and
+            OnFailure will also have posted to Discord. It says nothing about Renovate itself.
+            Read `systemctl status renovate-notify.timer` and `journalctl -u renovate-notify`.
+      # Kuma tile "Renovate Agent — Alive". No Failed rule: see the header.
+      - alert: RenovateAgentNotReporting
+        expr: |
+          (
+              time() - homelab_check_last_run_timestamp_seconds{check="renovate-agent",origin="daniel-box"} > 100800
+            or
+              absent_over_time(homelab_check_last_run_timestamp_seconds{check="renovate-agent",origin="daniel-box"}[100800s])
+          )
+          unless on (origin) (up{job="node"} == 0)
+        labels:
+          severity: warning
+          service: daniel-box
+          shadow: "true"
+        annotations:
+          summary: The renovate agent on daniel-box has not completed a clean run in 28 hours.
+          description: >-
+            No renovate-agent verdict newer than 100800s reached Prometheus from daniel-box's
+            textfile collector: the daily 06:00 timer did not fire, the run crashed, or a
+            worktree-blocked tick skipped it. Read `systemctl status renovate-agent.timer` and
+            `journalctl -u renovate-agent`.

@@ -62,6 +62,11 @@ only what runs on the host. Repo-root `CLAUDE.md` has the conventions.
 an `## Autonomous-role contract`. The actor that does change state is `upsmon` itself, a
 systemd service and not a cron, and `k8s/nut/CLAUDE.md` documents what it does on FSD.
 
+Each run also writes `ups-secondary-health.prom` to node_exporter's textfile directory before the
+push (M6 batch B4). Prometheus reads it as `homelab_check_*{check="ups-secondary-health"}`, and the
+shadow rules in `observability/files/rules/other-setup-checks.yaml` compare it with the tile. A
+host without the push token still writes the verdict.
+
 ## Verify
 - `probe.py monitors` names `UPS Secondary (<host>)` per armed host; a `down` there carries
   the script's own diagnosis (`nut-monitor is inactive`, `upsd unreachable at …`).
