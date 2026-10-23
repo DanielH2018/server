@@ -131,3 +131,35 @@ groups:
             its homelab_check_deadline_seconds, or fewer rows export homelab_check_success than
             homelab_check_rows counts. The scrape works, so the run loop is hung or skipping
             rows. Read the monitor-bridge pod's log in the homelab namespace.
+      # THE B2 FAMILY (A6-4): the gate row and the one row behind it. Neither rule has a `for:`,
+      # for the reasons the design gives (m6-retire-kuma.md, "Gates and grace"), and
+      # `B2Unreachable` sources the inhibit in alertmanager-secret.yaml.j2 for `requires: b2`.
+      # The gate row reports a cap denial as down, so a cap breach pages once, and the
+      # dependent's body is not called while the gate reads down, which keeps a billed listing
+      # off every 300s cycle. B2 is the WAN gate's peer, not behind it, so a WAN outage lights
+      # both. A row with no series stays quiet here: BridgeCheckStale owns a missing row.
+      # Both rules are SHADOW UNTIL A6-7b, while Kuma's tiles page.
+      - alert: B2Unreachable
+        expr: homelab_check_success{job="monitor-bridge", check="b2_reachable"} == 0
+        labels:
+          severity: critical
+          service: monitor-bridge
+          shadow: "true"
+        annotations:
+          summary: Backblaze B2 refuses monitor-bridge's key, or the transaction cap is exceeded.
+          description: >-
+            monitor-bridge authenticates against B2 at most every 30 minutes. A cap denial looks
+            the same as data loss, so read the monitor-bridge log message before assuming either.
+            The runbook is longhorn-backup-tiering.
+      - alert: B2FreeTierHeadroomLow
+        expr: homelab_check_success{job="monitor-bridge", check="b2_storage"} == 0
+        labels:
+          severity: critical
+          service: monitor-bridge
+          requires: b2
+          shadow: "true"
+        annotations:
+          summary: B2 bucket usage is past the free-tier threshold.
+          description: >-
+            A drain is nearly free, but a prune pays per deleted backup, so read
+            longhorn-backup-tiering before deleting anything.
