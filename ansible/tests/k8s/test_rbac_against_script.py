@@ -232,8 +232,10 @@ _STAMPS = {
 
 def test_a_name_restricted_rule_is_flagged_for_another_name() -> None:
     needs = shell_needs("$KUBECTL -n homelab patch configmap other-cm -p '{}'\n")
+    # `kubectl patch` GETs the object before it sends the PATCH, so both verbs are needs.
     assert _gaps(needs, _role([_STAMPS])) == [
-        ("homelab", "", "configmaps", "patch", "other-cm")
+        ("homelab", "", "configmaps", "get", "other-cm"),
+        ("homelab", "", "configmaps", "patch", "other-cm"),
     ]
 
 
@@ -480,12 +482,16 @@ def test_the_health_roles_grant_the_verdict_export_patch(monkeypatch, role) -> N
 
     reader.export_verdict(record, f"{role}-health-verdict", "up", "ok", 0.0)
     needs = recorded_needs(argvs)
-    assert {need[:4] for need in needs} == {("homelab", "", "configmaps", "patch")}
+    # `kubectl patch` GETs the object before it sends the PATCH.
+    assert {need[:4] for need in needs} == {
+        ("homelab", "", "configmaps", "get"),
+        ("homelab", "", "configmaps", "patch"),
+    }
     docs = list(
         yaml_fast.safe_load_all(render_role_template(role, "health-rbac.yaml.j2"))
     )
     assert missing(needs, grants(docs, "homelab", f"{role}-health")) == []
-    # The red half: a Role without the rule is missing exactly that patch.
+    # The red half: a Role without the rule is missing the get and the patch.
     for doc in docs:
         if doc.get("kind") == "Role":
             doc["rules"] = [
