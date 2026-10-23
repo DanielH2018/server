@@ -239,13 +239,18 @@ not rotated again by the weekly cron. Examples:
   engine pod's `lapi-register` runs. The changed Secret is what rolls the engine pod. The
   agents converge without help: each agent's liveness probe converges it, restarting the container until registration
   lands. **Do NOT skip the bouncer delete.** Without it the LAPI keeps the old key's hash, and
-  the rolled Traefik pod presents a key the LAPI rejects. A fresh pod has an empty decision
-  cache, so it bans nobody until `updateMaxFailure` runs out, about 6 minutes. Then it
-  refuses every request with a 403 (`ansible/roles/k8s/traefik/templates/dynamic.yaml.j2`).
-  No automated check guards this; the delete step and the reads below are the guard.
-  Traefik's startupProbe passes on a rejected key, because its 3-minute window closes before
-  the bouncer gives up. The `crowdsec-verify` Job depends on the `crowdsec` Kustomization
-  alone, so it can finish against the old Traefik pod, which still holds a valid key.
+  the rolled Traefik pod presents a key the LAPI rejects. The edge then refuses every
+  request with a 403 from the first one. The bouncer sends its LAPI key to AppSec too,
+  because `ansible/roles/k8s/traefik/templates/dynamic.yaml.j2` sets no `crowdsecAppsecKey`.
+  AppSec checks that key against the LAPI and answers 401, and the bouncer turns any AppSec
+  answer other than 200 or 500 into a 403. The plugin's `bouncer.go` at
+  `traefik_k8s_bouncer_plugin_version` has this, and so does CrowdSec's AppSec
+  `config.go` at the `crowdsec_k8s_image` tag. Traefik's startupProbe is what catches it.
+  Its target router carries the `crowdsec` middleware, so the probe reads 403. Kubelet then
+  restarts the container, and the pod never turns Ready. Flux's `traefik` Kustomization
+  waits on that pod and goes red. That guard is an outage, not a prevention: the roll is
+  `Recreate`, so no old pod serves meanwhile. The delete step and the reads below prevent it.
+  The `crowdsec-verify` Job does not: it depends on the `crowdsec` Kustomization alone.
   Verify after: `kubectl -n homelab exec deploy/crowdsec -c crowdsec -- cscli bouncers list`
   (fresh `last_pull`) and a `kubectl -n homelab logs deploy/traefik` free of LAPI 403s.
   (`crowdsec_bouncer_api_key` — the retired local LAPI's legacy key — and
