@@ -28,7 +28,11 @@ _CI_NO_VERDICT_CONCLUSIONS = frozenset(
 # runner of its own: master run 39074978426 finished every real job at 22:39:45Z, and the gate then
 # sat queued past 22:51, so two landings gave up with `ci-timeout`. GitHub has no queue priority,
 # so creating the gate job earlier would not help. The gate job stays, for branch protection, and
-# a concluded gate is always believed. The rule lives in THIS module because it is the one module
+# a concluded gate is believed, with one exception (#5931): a gate that failed only because its own
+# run was cancelled. The gate is `if: always()`, so a cancelled run still runs it, and it fails on
+# the cancelled needs. PR #5922's run 39791122833 attempt 1 did that: its jobs were cancelled at
+# 13:57Z, gate check-run 119868712075 concluded `failure`, and `land.sh` ended `pr-ci-red` on a head
+# that no job had failed on. `_failed_by_cancellation` leaves that gate out. The rule lives in THIS module because it is the one module
 # both runtimes import: the deployer ships only its role's `files/`, so a rule under `scripts/`
 # would not exist on the host, while `scripts/deploy_tools/await_ci.py` already imports this file.
 # ENFORCED: `ansible/tests/repo/test_ci_jobs_verdict_matches_gate.py` holds the names below equal
@@ -153,6 +157,28 @@ def read_check_pages(fetch_page: Callable[[str], object], key: str) -> list[dict
     raise ValueError(f"{key}: more than {CHECK_PAGES_MAX} pages")
 
 
+def _failed_by_cancellation(gate: dict, check_runs: list[dict]) -> bool:
+    """True when `gate` failed only because its own run was cancelled (#5931).
+
+    The gate's run is its check-suite: a re-run attempt or a second event on the same head is a
+    different suite, and a failure there must not excuse this one. A run with no `check_suite`
+    field groups with every other such run. A need that failed outright keeps the gate red, which
+    is the fail-fast shape: one pytest shard fails and the matrix cancels its siblings.
+    """
+    if gate.get("status") != "completed" or gate.get("conclusion") != "failure":
+        return False
+    suite = (gate.get("check_suite") or {}).get("id")
+    needs = [
+        r
+        for r in check_runs
+        if r.get("name") in CI_GATE_NEEDS_JOBS
+        and (r.get("check_suite") or {}).get("id") == suite
+    ]
+    return any(r.get("conclusion") == "cancelled" for r in needs) and not any(
+        _run_state(r) == "fail" for r in needs
+    )
+
+
 def ci_verdict(check_runs: list[dict], required: frozenset[str] | set[str]) -> str:
     """Reduce GitHub's check-runs for ONE commit to `pass` / `pending` / `fail`.
 
@@ -169,7 +195,8 @@ def ci_verdict(check_runs: list[dict], required: frozenset[str] | set[str]) -> s
 
     The gate job's own name is the exception to "missing or still running is pending": while it
     has not concluded, `jobs_verdict` decides from the jobs it aggregates (#5507). A skipped gate
-    has not concluded either: only a draft PR's run skips it (#5563).
+    has not concluded either: only a draft PR's run skips it (#5563). Nor has a gate that failed
+    only because its own run was cancelled (#5931).
     """
     if not required:
         return "pass"
@@ -181,6 +208,8 @@ def ci_verdict(check_runs: list[dict], required: frozenset[str] | set[str]) -> s
         # The gate skips only on a draft PR (#5563), and a draft run tested nothing. Its gate is
         # left out, so a head whose only gate is a draft's reads as the jobs decide: pending.
         if name == CI_GATE_NAME and run.get("conclusion") == "skipped":
+            continue
+        if name == CI_GATE_NAME and _failed_by_cancellation(run, check_runs):
             continue
         if run.get("status") != "completed":
             state = "pending"

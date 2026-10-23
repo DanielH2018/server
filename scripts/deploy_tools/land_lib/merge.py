@@ -72,7 +72,7 @@ import sys as _sys
 from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
-from lib.exit_codes import CI_DISARMED, CI_GREEN, CI_RED
+from lib.exit_codes import CI_DISARMED, CI_GREEN, CI_PENDING, CI_RED
 from lib.json_types import JsonObject, as_list, as_object
 from lib import removes_object
 from deploy_tools.land_lib import gh_read, pin_gate, policy
@@ -493,6 +493,8 @@ def await_merge(ln: Landing) -> None:
     waited = 0
     conflicting = 0
     last_refusal = ""
+    # await_ci's last answer when it was `pending`, for the merge-timeout message; else empty.
+    ci_pending = ""
     # The head this landing updated the branch from; empty until it does.
     updated_from = ""
     # The head the handback refusal and the pin gate last passed, so a merge GitHub refuses
@@ -534,6 +536,7 @@ def await_merge(ln: Landing) -> None:
             continue
         if head:
             rc, line = t.await_ci(head, 0)
+            ci_pending = line if rc == CI_PENDING else ""
             if rc == CI_RED:
                 ln.die(
                     f"PR #{o.pr} cannot merge — its own CI is red ({line}); fix it, push, "
@@ -567,9 +570,17 @@ def await_merge(ln: Landing) -> None:
                         )
                         last_refusal = refusal
         if waited >= o.merge_timeout:
+            # A run cancelled on the head, or skipped because the PR was a draft, never
+            # supplies a verdict on its own (#5931).
+            why = (
+                f"its head has no CI verdict ({ci_pending}); if its run was cancelled or "
+                "skipped as a draft, none arrives on its own: re-run the cancelled run with "
+                "`gh run rerun <run-id>`, or mark the PR ready or push"
+                if ci_pending
+                else "look at its checks or the queue"
+            )
             ln.die(
-                f"PR #{o.pr} still {state} after {o.merge_timeout}s — not being merged; "
-                "look at its checks or the queue",
+                f"PR #{o.pr} still {state} after {o.merge_timeout}s — not being merged; {why}",
                 75,
                 Verdict.MERGE_TIMEOUT,
             )

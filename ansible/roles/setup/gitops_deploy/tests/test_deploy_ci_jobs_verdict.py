@@ -132,3 +132,49 @@ def test_the_ready_run_decides_a_head_the_draft_run_also_reported_on():
     assert ci_verdict(_draft_run() + ready + [_QUEUED_GATE], _REQUIRED) == "pass"
     red = ready + [_run(CI_GATE_NAME, conclusion="failure")]
     assert ci_verdict(_draft_run() + red, _REQUIRED) == "fail"
+
+
+def _in_suite(suite, runs):
+    return [{**r, "check_suite": {"id": suite}} for r in runs]
+
+
+def _cancelled_run(suite=1, **per_job):
+    """PR #5922's run 39791122833, attempt 1 (#5931): cancelled mid-sweep, so the `always()`
+    gate ran and failed on the cancelled needs. The shards were cancelled; the short jobs had
+    already passed."""
+    jobs = _jobs(**{n: "cancelled" for n in _JOB_NAMES if "shard" in n or "hooks" in n})
+    jobs = [{**j, **per_job.get(j["name"], {})} for j in jobs]
+    return _in_suite(
+        suite,
+        [_run(CI_PROVE_JOB, conclusion="skipped")]
+        + jobs
+        + [_run(CI_GATE_NAME, conclusion="failure")],
+    )
+
+
+def test_a_gate_failed_by_its_own_runs_cancellation_is_no_verdict():
+    """773746a2 read `pr-ci-red` with its cancelled run and the draft run beside it."""
+    runs = _cancelled_run() + _in_suite(2, _draft_run())
+    assert ci_verdict(runs, _REQUIRED) == "pending"
+
+
+def test_a_real_failure_beside_cancelled_siblings_stays_red():
+    """Fail-fast: one shard fails and the matrix cancels the others."""
+    shard = next(n for n in _JOB_NAMES if "shard" in n)
+    runs = _cancelled_run(**{shard: {"conclusion": "failure"}})
+    assert ci_verdict(runs, _REQUIRED) == "fail"
+
+
+def test_a_later_run_on_the_same_head_decides_after_a_cancelled_one():
+    ready = _in_suite(2, [_run(CI_PROVE_JOB, conclusion="skipped")] + _jobs())
+    assert (
+        ci_verdict(
+            _cancelled_run() + ready + _in_suite(2, [_run(CI_GATE_NAME)]), _REQUIRED
+        )
+        == "pass"
+    )
+
+
+def test_a_cancelled_run_does_not_excuse_a_failed_gate_in_another_run():
+    red = _in_suite(2, _push_run() + [_run(CI_GATE_NAME, conclusion="failure")])
+    assert ci_verdict(_cancelled_run() + red, _REQUIRED) == "fail"
