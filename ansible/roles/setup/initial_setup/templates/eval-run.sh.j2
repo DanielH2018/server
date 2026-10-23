@@ -96,6 +96,14 @@ KUMA_RESOLVE_IP="{{ k3s_metallb_ingress_vip }}"
 # shellcheck source=/dev/null
 source /usr/local/lib/kuma-push-lib.sh 2>/dev/null \
   || logger -t eval-run "kuma-push-lib.sh missing — run initial_setup on this host"
+# The shared check library, which the textfile write in on_exit needs. It aborts on a miss, unlike
+# the push library above: its copy task is `tags: [always]`, so a host without it has skipped
+# initial_setup (M6 batch B2).
+# shellcheck source=/dev/null
+source /usr/local/lib/homelab-check-lib.sh || {
+  logger -t eval-run "homelab-check-lib.sh missing — run initial_setup on this host"
+  exit 1
+}
 
 REPORT_DIR=""
 LOG=""
@@ -107,11 +115,20 @@ TREND_OUT=""
 # silent.
 PUSH_STATUS=down
 PUSH_MSG="eval-run exited without setting a status"
+# The longest legitimate gap between two textfile writes: the cron is weekly (Sunday 02:00,
+# 604800s) and the extra 6h is the margin Kuma's tile keeps (interval 626400), so a sweep that
+# merely runs long does not page. The disarmed no-key run writes too. The rule's literals are
+# pinned to this value by ansible/tests/services/test_initial_setup_check_rule_literals.py.
+DEADLINE_S=626400
 
 on_exit() {
   rm -rf "${REPORT_DIR:-}"
   rm -f "${LOG:-}" "${COMBINED:-}" "${TREND_OUT:-}"
   logger -t eval-run "status=${PUSH_STATUS} ${PUSH_MSG}"
+  # The textfile verdict, before the push: kuma_push retries for over 60s on a failed push, and
+  # the file must not wait on Kuma. Every exit path reaches this trap, so every run writes.
+  write_check_textfile eval-run "$([ "$PUSH_STATUS" = up ] && echo 1 || echo 0)" "$(date +%s)" "$DEADLINE_S" \
+    || logger -t eval-run "textfile write failed (status=${PUSH_STATUS})"
   [ -n "$EVAL_PUSH_TOKEN" ] || return 0
   command -v kuma_push >/dev/null 2>&1 || return 0
   kuma_push "$PUSH_STATUS" "$PUSH_MSG" "$PUSH_URL" "$KUMA_HOST" "$KUMA_RESOLVE_IP" eval-run
