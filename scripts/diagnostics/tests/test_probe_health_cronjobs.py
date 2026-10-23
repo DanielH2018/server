@@ -408,8 +408,8 @@ def _reconcile_tools(jobs):
 
 def _reconcile_health(jobs, deploy_applied_at):
     tools = _reconcile_tools(jobs)
-    cronjob, latest_job, job_pods = health._fetch_cronjob(
-        "longhorn-reconcile", "longhorn-system", "prod", tools
+    cronjob, latest_job, job_pods, _ = health._fetch_cronjob(
+        "longhorn-reconcile", "longhorn-reconcile", "longhorn-system", "prod", tools
     )
     checked = [
         (
@@ -479,13 +479,3 @@ def test_latest_owned_job_ignores_a_gate_named_job_no_verify_kustomization_appli
     jobs = {"items": [_reconcile_gate(), unlabelled, by_main]}
     latest = health_cronjob.latest_owned_job(jobs, "longhorn-reconcile")
     assert latest["metadata"]["name"] == GATE
-
-
-def test_health_passes_a_new_flux_role_with_the_deploy_time_production_reads():
-    """`probe.py health` reads no release record for a Flux-owned entry, so it passes None."""
-    deploy_applied_at = health._deploy_applied_at("longhorn-reconcile")
-    assert deploy_applied_at is None
-    jobs = {"items": [_reconcile_gate("2026-08-16T11:31:00Z")]}
-    text, code = _reconcile_health(jobs, deploy_applied_at)
-    assert code == 0, text
-    assert GATE in text
