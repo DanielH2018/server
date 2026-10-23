@@ -7,5 +7,9 @@ components: [reconcile, pi-heartbeats]
 maintainer_scripts: [preinst, postinst, prerm]
 files:
   - {src: units/homelab-updater.timer.conf, dst: /usr/lib/systemd/system/homelab-updater.timer.d/50-homelab.conf}
+  # The H3.10 drop proof's canary pair. H3.10b removes both units and the enable link below.
+  - {src: units/homelab-pi-canary.service, dst: /usr/lib/systemd/system/homelab-pi-canary.service}
+  - {src: units/homelab-pi-canary.timer, dst: /usr/lib/systemd/system/homelab-pi-canary.timer}
 enable:
   homelab-updater.timer: timers.target
+  homelab-pi-canary.timer: timers.target

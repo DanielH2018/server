@@ -364,6 +364,8 @@ ROWS = (
                 "homelab-pi-sd-health.timer",
                 "homelab-pi-gz-integrity.timer",
                 "homelab-pi-recovery.timer",
+                "homelab-pi-canary.service",
+                "homelab-pi-canary.timer",
             }
         ),
     ),
