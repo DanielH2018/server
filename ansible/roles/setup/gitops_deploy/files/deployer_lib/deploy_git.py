@@ -28,8 +28,15 @@ _CI_NO_VERDICT_CONCLUSIONS = frozenset(
 # runner of its own: master run 39074978426 finished every real job at 22:39:45Z, and the gate then
 # sat queued past 22:51, so two landings gave up with `ci-timeout`. GitHub has no queue priority,
 # so creating the gate job earlier would not help. The gate job stays, for branch protection, and
-# a concluded gate is always believed. The rule lives in THIS module because it is the one module
-# both runtimes import: the deployer ships only its role's `files/`, so a rule under `scripts/`
+# a concluded gate is believed, with one exception (#5931): a gate that failed only because its own
+# run was cancelled. The gate is `if: always()`, so a cancelled run still runs it, and it fails on
+# the cancelled needs. PR #5922's run 39791122833 attempt 1 did that: its jobs were cancelled at
+# 13:57Z, gate check-run 119868712075 concluded `failure`, and `land.sh` ended `pr-ci-red` on a head
+# that no job had failed on. `ci_verdict` leaves that gate out once its `read_suites` reader shows
+# the gate's check suite concluded `cancelled`. A cancelled need alone does not prove it: GitHub
+# reports a job past its `timeout-minutes` as `cancelled` too, on a run nobody cancelled. The
+# deployer's reader passes no `read_suites`, so its gate keeps such a gate red. The rule lives in
+# THIS module because it is the one module both runtimes import: the deployer ships only its role's `files/`, so a rule under `scripts/`
 # would not exist on the host, while `scripts/deploy_tools/await_ci.py` already imports this file.
 # ENFORCED: `ansible/tests/repo/test_ci_jobs_verdict_matches_gate.py` holds the names below equal
 # to the gate's `needs` in .github/workflows/ci.yml and runs the gate's own script against
@@ -153,7 +160,43 @@ def read_check_pages(fetch_page: Callable[[str], object], key: str) -> list[dict
     raise ValueError(f"{key}: more than {CHECK_PAGES_MAX} pages")
 
 
-def ci_verdict(check_runs: list[dict], required: frozenset[str] | set[str]) -> str:
+def cancellation_suspects(check_runs: list[dict]) -> set:
+    """The check-suite ids of the failed gates that a cancelled run may explain (#5931).
+
+    A suspect gate concluded `failure`, its own suite holds a cancelled need, and no need in
+    that suite failed outright. The last clause keeps fail-fast red: one pytest shard fails and
+    the matrix cancels its siblings. A suspect is not yet excused. A job past its
+    `timeout-minutes` also reads `cancelled`, so only the suite's own `cancelled` conclusion,
+    which the check-suites API carries and a check-run does not, confirms the run was cancelled.
+    `ci_verdict` reads it through its `read_suites` argument.
+    """
+    suspects = set()
+    for gate in check_runs:
+        if (
+            gate.get("name") != CI_GATE_NAME
+            or gate.get("status") != "completed"
+            or gate.get("conclusion") != "failure"
+        ):
+            continue
+        suite = (gate.get("check_suite") or {}).get("id")
+        needs = [
+            r
+            for r in check_runs
+            if r.get("name") in CI_GATE_NEEDS_JOBS
+            and (r.get("check_suite") or {}).get("id") == suite
+        ]
+        if any(r.get("conclusion") == "cancelled" for r in needs) and not any(
+            _run_state(r) == "fail" for r in needs
+        ):
+            suspects.add(suite)
+    return suspects
+
+
+def ci_verdict(
+    check_runs: list[dict],
+    required: frozenset[str] | set[str],
+    read_suites: Callable[[], list[dict]] | None = None,
+) -> str:
     """Reduce GitHub's check-runs for ONE commit to `pass` / `pending` / `fail`.
 
     `required` is the set of check-run NAMES that must be green — the same strings GitHub reports
@@ -169,10 +212,23 @@ def ci_verdict(check_runs: list[dict], required: frozenset[str] | set[str]) -> s
 
     The gate job's own name is the exception to "missing or still running is pending": while it
     has not concluded, `jobs_verdict` decides from the jobs it aggregates (#5507). A skipped gate
-    has not concluded either: only a draft PR's run skips it (#5563).
+    has not concluded either: only a draft PR's run skips it (#5563). Nor has a gate that failed
+    only because its own run was cancelled (#5931): a `cancellation_suspects` gate whose suite
+    `read_suites()` reports `cancelled`. It is called only when a suspect exists, so an ordinary
+    verdict costs no check-suites read, and a read that fails is `pending`. A caller that passes
+    no reader keeps such a gate red.
     """
     if not required:
         return "pass"
+    cancelled = set()
+    suspects = cancellation_suspects(check_runs) if read_suites else set()
+    if suspects and read_suites:
+        try:
+            suites = read_suites()
+        except OSError, ValueError:
+            return "pending"
+        cancelled = {s.get("id") for s in suites if s.get("conclusion") == "cancelled"}
+        cancelled &= suspects
     states: dict[str, set[str]] = {}
     for run in check_runs:
         name = run.get("name")
@@ -181,6 +237,11 @@ def ci_verdict(check_runs: list[dict], required: frozenset[str] | set[str]) -> s
         # The gate skips only on a draft PR (#5563), and a draft run tested nothing. Its gate is
         # left out, so a head whose only gate is a draft's reads as the jobs decide: pending.
         if name == CI_GATE_NAME and run.get("conclusion") == "skipped":
+            continue
+        if (
+            name == CI_GATE_NAME
+            and (run.get("check_suite") or {}).get("id") in cancelled
+        ):
             continue
         if run.get("status") != "completed":
             state = "pending"
