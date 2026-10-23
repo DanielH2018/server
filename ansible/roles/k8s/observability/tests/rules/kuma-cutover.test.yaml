@@ -58,6 +58,26 @@ tests:
             exp_annotations:
               summary: Kuma's Traefik 421 tile is gone and no alert rule pages in its place.
               description: "M6's cutover removed the Traefik 421 tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
+          - exp_labels: {monitor_name: k3s Longhorn Backup, service: uptime-kuma, severity: critical}
+            exp_annotations:
+              summary: Kuma's k3s Longhorn Backup tile is gone and no alert rule pages in its place.
+              description: "M6's cutover removed the k3s Longhorn Backup tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
+          - exp_labels: {monitor_name: Off-box etcd Snapshot, service: uptime-kuma, severity: critical}
+            exp_annotations:
+              summary: Kuma's Off-box etcd Snapshot tile is gone and no alert rule pages in its place.
+              description: "M6's cutover removed the Off-box etcd Snapshot tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
+          - exp_labels: {monitor_name: Manifest Prune Drift, service: uptime-kuma, severity: critical}
+            exp_annotations:
+              summary: Kuma's Manifest Prune Drift tile is gone and no alert rule pages in its place.
+              description: "M6's cutover removed the Manifest Prune Drift tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
+          - exp_labels: {monitor_name: Release Staleness Drift, service: uptime-kuma, severity: critical}
+            exp_annotations:
+              summary: Kuma's Release Staleness Drift tile is gone and no alert rule pages in its place.
+              description: "M6's cutover removed the Release Staleness Drift tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
+          - exp_labels: {monitor_name: Live Object Drift, service: uptime-kuma, severity: critical}
+            exp_annotations:
+              summary: Kuma's Live Object Drift tile is gone and no alert rule pages in its place.
+              description: "M6's cutover removed the Live Object Drift tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
           - exp_labels: {monitor_name: Longhorn Volume Redundancy, service: uptime-kuma, severity: critical}
             exp_annotations:
               summary: Kuma's Longhorn Volume Redundancy tile is gone and no alert rule pages in its place.
@@ -189,6 +209,16 @@ tests:
         values: '1x140'
       - series: 'monitor_status{monitor_name="Traefik 421", monitor_type="push"}'
         values: '1x140'
+      - series: 'monitor_status{monitor_name="k3s Longhorn Backup", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Off-box etcd Snapshot", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Manifest Prune Drift", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Release Staleness Drift", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Live Object Drift", monitor_type="push"}'
+        values: '1x140'
       - series: 'monitor_status{monitor_name="Longhorn Volume Redundancy", monitor_type="push"}'
         values: '1x140'
       - series: 'monitor_status{monitor_name="k3s PVC Fullness", monitor_type="push"}'
@@ -272,6 +302,16 @@ tests:
       - series: 'monitor_status{monitor_name="Traefik 404 Flood", monitor_type="push"}'
         values: '1x140'
       - series: 'monitor_status{monitor_name="Traefik 421", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="k3s Longhorn Backup", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Off-box etcd Snapshot", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Manifest Prune Drift", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Release Staleness Drift", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Live Object Drift", monitor_type="push"}'
         values: '1x140'
       - series: 'monitor_status{monitor_name="Longhorn Volume Redundancy", monitor_type="push"}'
         values: '1x140'

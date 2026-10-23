@@ -14,6 +14,7 @@ import gates
 import registry
 from _fake_sources import FakeSources
 from _shell_render import rendered_shell_texts
+from lib.repo_paths import K3S_FILES
 from verdicts.logs import (
     HC_ROUTED_TAGS,
     KUMA_RETIRING_TAGS,
@@ -63,6 +64,8 @@ _REJECTED_UP = _H + (
     "release-staleness-check: push failed (http=404 rc=0 by=kuma) (status=up: 0 service(s) "
     "stale)"
 )
+# The same refusal from a tag outside KUMA_RETIRING_TAGS, which `swallowed_verdicts` still counts.
+_REJECTED_UNLISTED = _REJECTED_UP.replace("release-staleness-check", "some-other-cron")
 
 
 def test_parse_reads_the_three_line_shapes_and_rejects_the_transient_one():
@@ -144,9 +147,9 @@ def test_a_push_kuma_rejected_is_flagged_whatever_its_status_and_company():
     # sibling in the window — both of the conditions that keep a plain swallowed push quiet —
     # and it still pages, because nothing else can: Kuma answered, so the edge tiles are green,
     # and a token with no monitor has no tile to reach a deadline.
-    ok, msg = swallowed_verdicts([(1, _REJECTED_UP)], "3h", truncated=False)
+    ok, msg = swallowed_verdicts([(1, _REJECTED_UNLISTED)], "3h", truncated=False)
     assert not ok
-    assert "Kuma rejected the push for release-staleness-check on daniel-box" in msg
+    assert "Kuma rejected the push for some-other-cron on daniel-box" in msg
     assert "http=404 rc=0 by=kuma, status=up" in msg
     # Kuma answers 404 for any exception, so the page points at Kuma's own reason rather than
     # asserting a token mismatch: a DB error matched the token on 2026-10-11 (#4481).
@@ -182,9 +185,11 @@ def test_kuma_retiring_tags_are_syslog_tags_a_rendered_producer_logs_under():
 def test_a_rejected_push_that_the_next_run_landed_is_clean():
     # REJECT (the pair): the newest line decides here as everywhere — the tokens were
     # re-aligned and the tag's next push landed.
-    later_run = _RUN_DOWN.replace("13:00:00", "13:30:00")
+    later_run = _RUN_DOWN.replace("13:00:00", "13:30:00").replace(
+        "release-staleness-check", "some-other-cron"
+    )
     ok, msg = swallowed_verdicts(
-        [(1, _REJECTED_UP), (2, later_run)], "3h", truncated=False
+        [(1, _REJECTED_UNLISTED), (2, later_run)], "3h", truncated=False
     )
     assert ok, msg
 
@@ -243,6 +248,46 @@ def test_hc_routed_tags_are_exactly_the_scripts_that_read_kuma_push_ok():
         if "KUMA_PUSH_OK" in text
     }
     assert readers == HC_ROUTED_TAGS, sorted(readers ^ HC_ROUTED_TAGS)
+
+
+def test_a_rejected_push_from_a_retiring_producer_is_clean_and_from_any_other_is_flagged():
+    # M6 batch B1: release-staleness-check's tile is being deleted, so its token matches no tile.
+    assert "release-staleness-check" in KUMA_RETIRING_TAGS
+    ok, msg = swallowed_verdicts([(1, _REJECTED_UP)], "3h", truncated=False)
+    assert ok, msg
+    ok, msg = swallowed_verdicts([(1, _REJECTED_UNLISTED)], "3h", truncated=False)
+    assert not ok
+    assert "some-other-cron" in msg
+
+
+def test_a_retiring_producer_still_pages_a_lost_down_push():
+    # The exclusion covers the `rejected` kind only: a swallowed DOWN beside a landed sibling
+    # is a verdict nobody saw, whether or not the tile is on its way out.
+    ok, msg = swallowed_verdicts(
+        [(1, _SWALLOWED_DOWN), (2, _SIBLING_RUN)], "3h", truncated=False
+    )
+    assert not ok
+    assert "release-staleness-check" in msg
+
+
+def _producer_tags():
+    """Every syslog tag a rendered host script, or a k3s Python producer, logs under."""
+    tags = set()
+    for _plane, _role, _name, text in rendered_shell_texts():
+        tags.update(re.findall(r"logger -t ([A-Za-z0-9_.-]+)", text))
+    for source in K3S_FILES.glob("*.py"):
+        tags.update(re.findall(r'ident="([A-Za-z0-9_.-]+)"', source.read_text()))
+    return tags
+
+
+def test_every_retiring_tag_is_one_a_rendered_producer_logs_under():
+    # A misspelt tag excludes nothing, so its producer's refused push pages. Derived from the
+    # renders, as the HC_ROUTED_TAGS test above is. The second assertion is the red proof.
+    producers = _producer_tags()
+    assert sorted(KUMA_RETIRING_TAGS - producers) == []
+    assert sorted((KUMA_RETIRING_TAGS | {"manifest-prune-chek"}) - producers) == [
+        "manifest-prune-chek"
+    ]
 
 
 def _src(fetch):
