@@ -96,14 +96,6 @@ KUMA_RESOLVE_IP="{{ k3s_metallb_ingress_vip }}"
 # shellcheck source=/dev/null
 source /usr/local/lib/kuma-push-lib.sh 2>/dev/null \
   || logger -t eval-run "kuma-push-lib.sh missing — run initial_setup on this host"
-# The shared check library, which the textfile write in on_exit needs. It aborts on a miss, unlike
-# the push library above: its copy task is `tags: [always]`, so a host without it has skipped
-# initial_setup (M6 batch B2).
-# shellcheck source=/dev/null
-source /usr/local/lib/homelab-check-lib.sh || {
-  logger -t eval-run "homelab-check-lib.sh missing — run initial_setup on this host"
-  exit 1
-}
 
 REPORT_DIR=""
 LOG=""
@@ -134,6 +126,17 @@ on_exit() {
   kuma_push "$PUSH_STATUS" "$PUSH_MSG" "$PUSH_URL" "$KUMA_HOST" "$KUMA_RESOLVE_IP" eval-run
 }
 trap on_exit EXIT
+
+# The shared check library, which the textfile write in on_exit needs. It sits below the trap so a
+# host that lacks it still reports `down` through the push, and unlike the push library above it
+# aborts on a miss: its copy task is `tags: [always]`, so a host without it has skipped
+# initial_setup (M6 batch B2). on_exit's write then fails with a log line, because the function is
+# undefined.
+# shellcheck source=/dev/null
+source /usr/local/lib/homelab-check-lib.sh || {
+  logger -t eval-run "homelab-check-lib.sh missing — run initial_setup on this host"
+  exit 1
+}
 
 alert() { logger -t eval-run "$1"; PUSH_MSG="$1"; }
 

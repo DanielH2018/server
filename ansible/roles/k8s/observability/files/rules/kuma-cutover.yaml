@@ -40,8 +40,6 @@ groups:
             or
               absent_over_time(monitor_status{monitor_name="Log Shipper Dropped Entries"}[2h])
             or
-              absent_over_time(monitor_status{monitor_name="Docs Refresh"}[2h])
-            or
               absent_over_time(monitor_status{monitor_name="Loki Read Route (daniel-box)"}[2h])
             or
               absent_over_time(monitor_status{monitor_name="Loki Read Route (daniel-server)"}[2h])

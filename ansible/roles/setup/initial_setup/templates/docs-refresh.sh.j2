@@ -116,14 +116,6 @@ KUMA_RESOLVE_IP="{{ k3s_metallb_ingress_vip }}"
 # shellcheck source=/dev/null
 source /usr/local/lib/kuma-push-lib.sh 2>/dev/null \
   || logger -t docs-refresh "kuma-push-lib.sh missing — run initial_setup on this host"
-# The shared check library, which the textfile write in on_exit needs. Unlike the push library
-# above it aborts on a miss: its copy task is `tags: [always]`, so a host without it has skipped
-# initial_setup, and the textfile verdict is what Prometheus reads (M6 batch B2).
-# shellcheck source=/dev/null
-source /usr/local/lib/homelab-check-lib.sh || {
-  logger -t docs-refresh "homelab-check-lib.sh missing — run initial_setup on this host"
-  exit 1
-}
 
 # DEFAULTS TO down. Every exit path that is genuinely fine says so explicitly; anything else --
 # a crash, a `set -u` abort, or a path added later that forgets to -- reports down. Failing
@@ -161,6 +153,17 @@ on_exit() {
   kuma_push "$PUSH_STATUS" "$PUSH_MSG" "$PUSH_URL" "$KUMA_HOST" "$KUMA_RESOLVE_IP" docs-refresh
 }
 trap on_exit EXIT
+
+# The shared check library, which the textfile write in on_exit needs. It sits below the trap so a
+# host that lacks it still reports `down` through the push, and unlike the push library above it
+# aborts on a miss: its copy task is `tags: [always]`, so a host without it has skipped
+# initial_setup (M6 batch B2). on_exit's write then fails with a log line, because the function is
+# undefined.
+# shellcheck source=/dev/null
+source /usr/local/lib/homelab-check-lib.sh || {
+  logger -t docs-refresh "homelab-check-lib.sh missing — run initial_setup on this host"
+  exit 1
+}
 
 # Records the message as well as logging it, so every existing call site feeds the push without
 # needing its own push call -- there are eleven exit paths and one of them is a bare crash.

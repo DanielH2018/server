@@ -38,10 +38,6 @@ tests:
             exp_annotations:
               summary: Kuma's Log Shipper Dropped Entries tile is gone and no alert rule pages in its place.
               description: "M6's cutover removed the Log Shipper Dropped Entries tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
-          - exp_labels: {monitor_name: Docs Refresh, service: uptime-kuma, severity: critical}
-            exp_annotations:
-              summary: Kuma's Docs Refresh tile is gone and no alert rule pages in its place.
-              description: "M6's cutover removed the Docs Refresh tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
           - exp_labels: {monitor_name: Loki Read Route (daniel-box), service: uptime-kuma, severity: critical}
             exp_annotations:
               summary: Kuma's Loki Read Route (daniel-box) tile is gone and no alert rule pages in its place.
@@ -215,8 +211,6 @@ tests:
         values: '1x140'
       - series: 'monitor_status{monitor_name="Log Shipper Dropped Entries", monitor_type="push"}'
         values: '1x140'
-      - series: 'monitor_status{monitor_name="Docs Refresh", monitor_type="push"}'
-        values: '1x140'
       - series: 'monitor_status{monitor_name="Loki Read Route (daniel-box)", monitor_type="push"}'
         values: '1x140'
       - series: 'monitor_status{monitor_name="Loki Read Route (daniel-server)", monitor_type="push"}'
@@ -316,8 +310,6 @@ tests:
       - series: 'monitor_status{monitor_name="Cluster Scrape Targets", monitor_type="push"}'
         values: '1x140'
       - series: 'monitor_status{monitor_name="Log Shipper Dropped Entries", monitor_type="push"}'
-        values: '1x140'
-      - series: 'monitor_status{monitor_name="Docs Refresh", monitor_type="push"}'
         values: '1x140'
       - series: 'monitor_status{monitor_name="Loki Read Route (daniel-box)", monitor_type="push"}'
         values: '1x140'
