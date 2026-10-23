@@ -144,29 +144,19 @@ otherwise; none of the values below are secrets themselves, only names and locat
 
 daniel-server keeps its own SOPS key, so decryption still works without the recovery key.
 
-1. Follow `docs/longhorn-disaster-recovery.md` → *Procedure (fresh host, total loss)*,
-   through *Cluster bring-up*: bring up a replacement daniel-box with `ansible/bootstrap.yml`, add its
-   pubkey to `ansible/.sops.yaml`, `sops updatekeys` from daniel-server, commit, pull. The
-   bring-up has hand steps since H1.2: the first `k3s-bringup.yml` run skips the `kubeconfig`
-   tag, the operator applies `cluster-base` by hand, and the root `homelab` Kustomization stays
-   suspended until the volumes are restored (that document's *Order from H1.2*). Since H1.3 the
-   bring-up installs no MetalLB: the `metallb` Kustomization does, once Flux applies the plumbing tags.
-   Since H1.4 the `coredns` Kustomization owns the CoreDNS objects, and the bring-up keeps only
-   the marker that releases k3s's bundled add-on.
-   From H1.5a the `longhorn` Kustomization installs Longhorn and its Settings, and from H1.7b the
-   `longhorn-backup` Kustomization creates the backup credentials, both backup targets and the
-   RecurringJobs, once `longhorn` reads `Ready`. No `k3s-bringup.yml` run applies them: the first
-   run selects no task that reads or writes a Longhorn object. The CSI sidecar requests are a
-   Setting the `longhorn` Kustomization applies. The label reconcile is the
-   `longhorn-reconcile` CronJob's, which the root applies once it resumes.
+1. Follow `docs/longhorn-disaster-recovery.md` → *Procedure (fresh host, total loss)*, step 1:
+   bring up a replacement daniel-box with `ansible/bootstrap.yml`, add its pubkey to
+   `ansible/.sops.yaml`, `sops updatekeys` from daniel-server, commit, pull.
 2. Decide whether cluster **objects** (Deployments, Secrets, PVC bindings) are also lost —
    if so, restore etcd first per `docs/k3s-etcd-restore.md` (needs item 2, the cluster
    token, if this is a genuinely new host rather than the same disk).
-3. Restore Longhorn volumes per `docs/longhorn-disaster-recovery.md` (*Wait for the backupstore sync*, then
-   *Restore volumes BEFORE any deploy*), **before** the deploy — deploying first provisions
-   empty PVCs under the same names.
-4. Deploy: `./scripts/deploy.sh`.
-5. Verify with `probe.py targets` / `probe.py health <svc>` per that doc's *Verify* step.
+3. Bring up the cluster and Flux by [Bootstrapping Flux on a rebuilt cluster](flux-deploy-plane.md#bootstrapping-flux-on-a-rebuilt-cluster) in `docs/flux-deploy-plane.md`.
+   That section owns the order: k3s bring-up, the Flux install, the plumbing tags, the
+   Longhorn restores of `docs/longhorn-disaster-recovery.md` (*Wait for the backupstore
+   sync*, then *Restore volumes BEFORE the root exists*), and the root Kustomization last. The
+   root provisions empty PVCs under the backed-up names, so it comes after the restores. No
+   Ansible path deploys a workload on the cluster.
+4. Verify with `probe.py targets` / `probe.py health <svc>` per that doc's *Verify* step.
 
 ### Scenario: daniel-server is dead, daniel-box survives
 

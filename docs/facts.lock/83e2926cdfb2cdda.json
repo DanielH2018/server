@@ -1,12 +1,12 @@
 {
-  "checksum": "69f1fc15b48e32dea73df8fbf5c4edf71a7fb28f7c2c543ea9e5ac081ed5d0a6",
+  "checksum": "d9b62b01cf56772b8be6cd398cc19fb84b1bc41e6d44035a9173ccbf7da9d851",
   "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
   "key": "ansible/roles/k8s/longhorn/CLAUDE.md#Host tasks and the backup plane",
   "row": {
     "atoms": {
-      "docs/longhorn-disaster-recovery.md": "4c9a4a63c6856b47fb7c612953def99d6b299477412a04fc9369539f36398ef3"
+      "docs/flux-deploy-plane.md": "807c3deb44c3178e7a6f9fc0bc398a3b748b95c468b14ce9b1b890c8684535d9"
     },
     "python": "3.14",
-    "verified_sha": "8ab0ff874"
+    "verified_sha": "8783d3ca3"
   }
 }

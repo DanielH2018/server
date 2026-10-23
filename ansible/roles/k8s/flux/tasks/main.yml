@@ -1,7 +1,9 @@
 ---
-# Flux's source-, kustomize- and notification-controller in flux-system. They follow the
-# `prod` artifact, whose root Kustomization applies nothing, so Ansible deploys every service,
-# this one included (docs/flux-deploy-plane.md).
+# Flux's source-, kustomize- and notification-controller in flux-system. The role is
+# flux-owned since D5 step 29, so no Ansible path runs this file: the `flux` Kustomization
+# applies the components and `flux-deferred` the sync objects (docs/flux-deploy-plane.md). The
+# renderer reads the include below for the role's vars. R4 maps each task here to its Flux
+# successor and deletes the rest.
 
 - name: Render and apply the Flux controllers
   ansible.builtin.include_role:

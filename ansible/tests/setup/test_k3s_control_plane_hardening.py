@@ -25,16 +25,16 @@ Each test here encodes a way one of them fails while every surface still reads g
 Run: uv run pytest ansible/tests/setup/test_k3s_control_plane_hardening.py
 """
 
-import re
-
 import jinja2
 from lib import yaml_fast
 from lib.ansible_jinja_env import make_ansible_env
-from _helpers import ALL_VARS, ANSIBLE
+from _helpers import ALL_VARS
 from _helpers import load_yaml, load_defaults
 from _k8s_render import render_role_template, rendered_k8s_text
 from _setup_render import rendered_setup_text, role_context
 from lib.repo_paths import K3S_ROLE
+from renderer.renderer_lib.bundle import homelab_namespace_files
+from renderer.renderer_lib.namespace import HOMELAB_NAMESPACE
 
 
 def _all_vars() -> dict:
@@ -384,24 +384,17 @@ def test_both_namespaces_carry_the_psa_labels():
         "The observability Namespace must render every k8s_psa_labels entry, or the two "
         f"namespaces diverge and only one of them reports violations. Missing: {missing}"
     )
-    deploy = (ANSIBLE / "deploy.yml").read_text()
-    assert "k8s_psa_labels" in deploy, (
-        "The workload Namespace built in deploy.yml must carry k8s_psa_labels. It is the "
-        "namespace holding 241 manifests, so leaving it unlabelled measures nothing."
+    # The workload Namespace's only writer is the shared kind homelab-namespace (D5 step 30).
+    workload = homelab_namespace_files("600s")[
+        f"cluster/{HOMELAB_NAMESPACE}/namespace.yaml"
+    ]
+    missing = sorted(
+        f"{key}: {value}"
+        for key, value in _all_vars()["k8s_psa_labels"].items()
+        if f"{key}: {value}" not in workload
     )
-    assert "create namespace" not in deploy, (
-        "`kubectl create namespace --dry-run=client` cannot carry labels. The namespace must "
-        "be applied from a manifest that owns them, or the next apply drops them again."
-    )
-
-
-def test_namespace_apply_reports_a_label_change_as_changed():
-    """`created`-only was correct for a label-free manifest and wrong for this one."""
-    deploy = (ANSIBLE / "deploy.yml").read_text()
-    assert not re.search(
-        r"changed_when:\s*\"'created' in deploy_k8s_ns_apply", deploy
-    ), (
-        "The namespace apply must not report changed only on `created`. A label change comes "
-        "back as `configured`, so that test reports ok for a namespace whose PSA labels just "
-        "moved — the change becomes invisible in the play output."
+    assert missing == [], (
+        "The homelab Namespace that homelab-namespace renders must carry every "
+        "k8s_psa_labels entry. It is the namespace holding 241 manifests, so leaving it "
+        f"unlabelled measures nothing. Missing: {missing}"
     )

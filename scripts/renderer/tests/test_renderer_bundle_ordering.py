@@ -184,8 +184,8 @@ def test_an_ordinary_tag_is_clean():
     "tag", ["soak", "homelab-namespace", "fixture-snapshot", "fixture-verify"]
 )
 def test_a_tag_taking_a_name_d5_reserves_is_flagged(tag):
-    """`homelab-namespace` is refused before it joins SHARED_KINDS, and `soak` after."""
-    assert "homelab-namespace" not in SHARED_KINDS and "soak" in SHARED_KINDS
+    """`soak` and `homelab-namespace` are refused as SHARED_KINDS members, and the suffixes alone."""
+    assert {"homelab-namespace", "soak"} <= SHARED_KINDS
     # The reserved-name text, because none of these is a render target and the
     # unknown-target refusal also names the tag.
     with pytest.raises(cluster_mod.RenderRefused) as refused:

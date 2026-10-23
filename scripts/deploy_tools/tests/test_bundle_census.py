@@ -79,9 +79,8 @@ def test_an_extra_file_in_flux_is_flagged(tmp_path):
 
 def test_a_root_list_that_omits_a_file_is_flagged(tmp_path):
     out = _bundle(tmp_path, ["bento-pdf", "sonarr"])
-    (out / FLUX_INDEX).write_text(
-        kustomization_text(["bento-pdf.yaml", "cluster-vars.yaml", "soak.yaml"])
-    )
+    listed = ["bento-pdf", "cluster-vars", "homelab-namespace", "soak"]
+    (out / FLUX_INDEX).write_text(kustomization_text([f"{n}.yaml" for n in listed]))
     found = bundle_census.census(out, ["bento-pdf", "sonarr"])
     assert found == [
         "flux/kustomization.yaml does not list sonarr.yaml, which flux/ holds"
@@ -103,7 +102,8 @@ def test_a_renderer_patched_to_drop_cluster_vars_yaml_is_flagged(tmp_path):
     agrees with what `flux/` holds, so only the allowlist can catch it."""
     out = _bundle(tmp_path, ["bento-pdf"])
     (out / "flux" / "cluster-vars.yaml").unlink()
-    (out / FLUX_INDEX).write_text(kustomization_text(["bento-pdf.yaml", "soak.yaml"]))
+    kept = ["bento-pdf.yaml", "homelab-namespace.yaml", "soak.yaml"]
+    (out / FLUX_INDEX).write_text(kustomization_text(kept))
     assert bundle_census.census(out, ["bento-pdf"]) == [
         "flux/cluster-vars.yaml is missing: cluster-vars is published and renders no file"
     ]
@@ -134,8 +134,9 @@ def test_digests_json_naming_another_set_is_flagged(tmp_path):
     (out / DIGESTS).write_text(digests_text(digests({}, [])))
     found = bundle_census.census(out, ["bento-pdf"])
     assert found == [
-        "digests.json names ['_unclassified', 'cluster-vars', 'soak'], not "
-        "['_unclassified', 'bento-pdf', 'cluster-vars', 'soak']"
+        "digests.json names ['_unclassified', 'cluster-vars', 'homelab-namespace', "
+        "'soak'], not ['_unclassified', 'bento-pdf', 'cluster-vars', "
+        "'homelab-namespace', 'soak']"
     ]
 
 
