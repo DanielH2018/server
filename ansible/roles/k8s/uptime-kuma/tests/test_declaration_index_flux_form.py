@@ -26,8 +26,14 @@ from renderer.renderer_lib import cluster
 from renderer.renderer_lib.context import load_stubs
 
 TAG = "uptime-kuma"
-# The `that:` of the assert the flip deleted from tasks/main.yml, kept as it ran.
-INDEX_ASSERT = "kuma_declarations | length > 50"
+# The `that:` of the assert the flip deleted from tasks/main.yml. M6's A0 swapped its numeric
+# floor (`length > 50`) for the entities that must outlive Phase A and M4 until C-1: Phase A
+# shrinks the index to five, so a count would refuse the first Kuma-side PR.
+REQUIRED = ["status-page-sync", "discord", "tag-severity", "tag-runbook"]
+INDEX_ASSERT = (
+    f"{REQUIRED!r} | select('in', kuma_declarations) | list | length == {len(REQUIRED)}"
+)
+SURVIVORS = [*REQUIRED, "email"]
 
 
 def index_passes(declarations: dict) -> bool:
@@ -58,9 +64,7 @@ def static_monitors(tmp_path_factory) -> dict[str, str]:
 
 def test_the_rendered_index_passes_the_assert(static_monitors):
     index = declaration_index(static_monitors)
-    # Named members: a notification, a tag and a token-gated push tile. A render that stopped
-    # opening the gate, or stopped emitting entities other than monitors, loses one of them.
-    assert {"discord", "tag-severity", "status-page-sync"} <= index.keys()
+    assert set(REQUIRED) <= index.keys()
     assert index_passes(index)
 
 
@@ -68,7 +72,15 @@ def test_an_empty_index_is_refused():
     assert not index_passes(declaration_index({}))
 
 
-def test_a_thin_index_is_refused(static_monitors):
-    """A render that kept a handful of entities is refused as an empty one is."""
-    thin = dict(sorted(static_monitors.items())[:5])
-    assert not index_passes(declaration_index(thin))
+def test_the_five_survivors_alone_are_accepted():
+    """The index Phase A and M4 leave must pass, which a count above 50 refused."""
+    assert index_passes(declaration_index({f"{n}.json": "{}" for n in SURVIVORS}))
+
+
+@pytest.mark.parametrize("missing", REQUIRED)
+def test_an_index_missing_a_required_member_is_refused(static_monitors, missing):
+    """Dropping any one named entity is refused, however many others remain."""
+    index = declaration_index(static_monitors)
+    del index[missing]
+    assert len(index) > 50
+    assert not index_passes(index)
