@@ -408,8 +408,8 @@ class Builder:
         # DECIDED: only `pass` is cached. GitHub's check-runs API returns the latest run per
         # name, so `gh run rerun --failed` turns a red SHA green, and a cached `fail` would
         # never see it while the deployer's gate, which caches nothing, deploys the SHA
-        # (#5786). Re-reading a fail costs one request per red commit in a walk that
-        # CI_ANCESTOR_WALK_MAX bounds.
+        # (#5786). Re-reading a fail costs one request per page of a red commit's runs, in a
+        # walk that CI_ANCESTOR_WALK_MAX bounds.
         if result == "pass":
             self.cache[sha] = result
         return result
