@@ -22,7 +22,6 @@ from _k8s_render import render_role_template
 from lib import yaml_fast
 
 RULES = K8S_ROLES / "observability" / "files" / "rules"
-BRIDGE_ENV = K8S_ROLES / "monitor-bridge" / "templates" / "config" / "env.yaml.j2"
 SELECTOR = re.compile(r'^up\{job(=~|=|!~)"([^"]+)"\}$')
 # The jobs this module must find in the rule table, so a regex that matched nothing fails.
 MUST_FIND = {
@@ -128,7 +127,11 @@ def test_a_catch_all_that_forgot_a_named_job_is_flagged():
 
 def bridge_env(key: str) -> str:
     """The value of `key` in the bridge's env template, unquoted."""
-    [value] = re.findall(rf'^{key}: "?([^"\n]+)"?$', BRIDGE_ENV.read_text(), re.M)
+    [value] = re.findall(
+        rf'^{key}: "?([^"\n]+)"?$',
+        render_role_template("monitor-bridge", "config/env.yaml.j2"),
+        re.M,
+    )
     return value
 
 
