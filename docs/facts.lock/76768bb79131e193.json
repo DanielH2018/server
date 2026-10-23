@@ -1,0 +1,12 @@
+{
+  "checksum": "837e3a0357ef52f81c76b4231b364cf2b9913aefa5f9a8924e7fcbec32e8d22d",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "ansible/roles/k8s/flux/CLAUDE.md#Rollouts",
+  "row": {
+    "atoms": {
+      "ansible/roles/k8s/flux/defaults/main.yml:flux_controller_resources": "46cc4c76ceaa12648c02c7b469530e735938e858d0a04d83c73f3b1c597ebcef"
+    },
+    "python": "3.14",
+    "verified_sha": "a8c288981"
+  }
+}

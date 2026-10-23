@@ -2,13 +2,14 @@
 
 A shadow render (target slice R1) runs `deploy.sh --dry-run` with a stub file, so every
 secret key holds a placeholder. A task that hands a secret to a live system would send that
-placeholder: sonarr's API reads drew a 401 that stopped the play. This census reads every task in `ansible/roles/k8s/*/tasks/*.yml` whose
-body names a secret key, or a variable derived from one, and requires one of four things of it:
+placeholder: sonarr's API reads drew a 401 that stopped the play. `census` reads every task in one
+k8s role's `tasks/*.yml` whose body names a secret key, or a variable derived from one, and requires
+one of four things of it:
 
 - a `k8s_dry_run`, `k8s_no_mutate` or `homelab_secret_stubs` guard on its `when:`, on an
   enclosing block's, or at the include that pulled its file in;
 - a side-effect-free module: `set_fact`, `debug` or an include;
-- an entry in `EXEMPT`, keyed by task, with a reason.
+- an exemption, keyed by task, with a reason.
 
 An `assert` or a `fail` is held to a stricter guard. It sends nothing, but it can refuse a stub
 value, so only the `homelab_secret_stubs` sentinel credits it: an ordinary dry run holds the real
@@ -29,9 +30,9 @@ or a comment is not credited.
 The exemptions are per task, which is why this is its own module: a `Census` row's `allow` map
 is keyed by file and would exempt every task in a role's `tasks/main.yml`.
 
-A second check covers the tasks a stub makes fail rather than act. `STUB_REFUSING` names each,
-and each must carry the `homelab_secret_stubs` guard itself. It predates the assert rule above,
-which selects every task it names, so it backs up a derivation that regresses.
+A second check covers the tasks a stub makes fail rather than act. `stub_refusers_without_the_guard`
+requires each task id it is given to carry the `homelab_secret_stubs` guard itself. It predates the
+assert rule above, which selects every such task, so it backs up a derivation that regresses.
 """
 
 import json
@@ -40,12 +41,9 @@ from collections.abc import Iterable, Mapping
 from pathlib import Path
 
 from lib import yaml_fast
-from lib.repo_paths import ALL_VARS, HOST_VARS
-from secret_stubs import homelab_stub_keys
 
-from _helpers import ANSIBLE
-from _k8s_guards import K8S_ROLES, _guard_covered_files
-from _role_census import role_dirs, role_task_files
+from _k8s_guards import _guard_covered_files
+from _role_census import role_task_files
 from _secret_derivation import (
     _STUB_GUARD,
     _body,
@@ -54,8 +52,6 @@ from _secret_derivation import (
     derived_variables,
     role_derived_facts,
 )
-
-SECRETS = ANSIBLE / "vars" / "secrets.yml"
 
 # The sentinel alone. A `not k8s_dry_run` guard would also skip a stub-refusing task on an
 # ordinary dry run, which holds the real values and is meant to check them.
@@ -81,29 +77,16 @@ _SIDE_EFFECT_FREE = {
     for module in (name, f"ansible.builtin.{name}")
 }
 
-# "<role>/<task file>::<task name>" -> why the task may act under a stub file. For an `assert` or
-# `fail`, why it passes on any stub value. A stub is `homelab_secret_stub`'s label, never empty.
-EXEMPT: dict[str, str] = {}
-
-# Must be selected, because it names a secret key, and must pass on its
-# guard. sonarr's root-folder read held this place until sonarr's Flux flip (D5.20) deleted it,
-# authelia's digest assert until authelia's (D5), and uptime-kuma's push-token assert until its.
-MUST_FIND_GUARDED = "arr-notification/main.yml::Declare the Discord notification in {{ arr_notification_app }}"
-# No role default or inventory variable derives from a secret key since `domain` was published,
-# so `derived_variables` has no real-tree member. Its fixture pair is
-# `test_a_task_naming_a_derived_variable_is_flagged`.
-
-
-def _var_files() -> list[Path]:
-    return [
-        *sorted(K8S_ROLES.glob("*/defaults/main.yml")),
-        *sorted(ALL_VARS.parent.glob("*.yml")),
-        *sorted(HOST_VARS.glob("*.yml")),
-    ]
+# The live census over the real tree is retired (#5886). It selected four tasks, and no Ansible
+# path runs any of them: pihole-exporter and uptime-kuma are flux-owned, and nothing includes
+# the other two, in a role whose `tasks/` R4 deletes, since #5561 dropped sonarr's and radarr's
+# includes of it. The live `STUB_REFUSING` list went with it, empty since uptime-kuma's flip. The
+# fixture pairs below keep `census`, `stale_exemptions` and `stub_refusers_without_the_guard`
+# provably able to go red, for a role handed back to Ansible with such a task.
 
 
 def census(
-    role: Path, names: re.Pattern[str], exempt: Mapping[str, str] = EXEMPT
+    role: Path, names: re.Pattern[str], exempt: Mapping[str, str] | None = None
 ) -> tuple[list[str], list[str]]:
     """Every task in `role` whose body names a secret value, and those not covered.
 
@@ -114,6 +97,7 @@ def census(
     Returns:
         The selected task ids, then the offending ones, each `<role>/<file>::<task name>`.
     """
+    exempt = exempt or {}
     facts = role_derived_facts(role, names)
     if facts:
         names = re.compile(f"{names.pattern}|{_word_pattern(facts).pattern}")
@@ -143,49 +127,9 @@ def census(
     return selected, offenders
 
 
-def _live_names() -> re.Pattern[str]:
-    keys = set(homelab_stub_keys(yaml_fast.safe_load(SECRETS.read_text())))
-    return _word_pattern(keys | derived_variables(keys, _var_files()))
-
-
-def _live_census(exempt: Mapping[str, str] = EXEMPT) -> tuple[list[str], list[str]]:
-    names = _live_names()
-    selected, offenders = [], []
-    for role in role_dirs():
-        s, o = census(role, names, exempt)
-        selected += s
-        offenders += o
-    return selected, offenders
-
-
-def test_every_task_that_names_a_secret_key_is_skipped_under_stubs() -> None:
-    selected, offenders = _live_census()
-    assert MUST_FIND_GUARDED in selected, (
-        f"the census no longer selects {MUST_FIND_GUARDED!r}, so it may be selecting nothing"
-    )
-    assert offenders == [], (
-        "these tasks name a secret key and would act on a stub under a shadow dry run. Guard "
-        "each on `not (homelab_secret_stubs | default(false) | bool)` (or `not k8s_no_mutate` "
-        f"if no dry run may run it), or exempt it in EXEMPT with a reason: {offenders}"
-    )
-
-
 def stale_exemptions(exempt: Mapping[str, str], offenders: list[str]) -> list[str]:
     """The exempted task ids that the census, run with no exemptions, does not flag."""
     return sorted(set(exempt) - set(offenders))
-
-
-def test_every_exemption_names_a_task_the_census_would_flag() -> None:
-    """A stale exemption would hide the removal of a guard the task later gains."""
-    _, offenders = _live_census(exempt={})
-    assert stale_exemptions(EXEMPT, offenders) == []
-
-
-# "<role>/<task file>::<task name>" of each task that FAILS on a stub value. sonarr's two asserts
-# on its API reads' registers left this list once the census followed a register (#4862), and
-# uptime-kuma's push-token assert left it when the flip deleted the assert. No live task refuses
-# a stub today, so the fixture tests below are the check's proof that it can go red.
-STUB_REFUSING: tuple[str, ...] = ()
 
 
 def stub_refusers_without_the_guard(roles: Path, task_ids: Iterable[str]) -> list[str]:
@@ -215,13 +159,6 @@ def stub_refusers_without_the_guard(roles: Path, task_ids: Iterable[str]) -> lis
         elif not (covered or all(guarded)):
             flagged.append(task_id)
     return flagged
-
-
-def test_every_stub_refusing_task_is_skipped_under_stubs() -> None:
-    assert stub_refusers_without_the_guard(K8S_ROLES, STUB_REFUSING) == [], (
-        "these tasks fail on a stub value, so a shadow dry run stops at them. Give each "
-        "`when: not (homelab_secret_stubs | default(false) | bool)`, never a k8s_dry_run guard"
-    )
 
 
 _PUSH_TOKEN_CHECK = "Check every push token is in the format AutoKuma accepts"

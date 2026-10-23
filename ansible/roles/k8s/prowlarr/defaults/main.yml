@@ -36,13 +36,11 @@ prowlarr_k8s_size: 2Gi
 # prowlarr's own 80 MB image in 3m40.96s, both uncached. The 300s default fails the deploy after
 # its apply while the old flaresolverr pod serves throughout. That pod starts 535s after it is
 # scheduled.
-# DECIDED: 780s, the most the rollback budget allowed while the netpol probe ran. A failed
-# auto-deploy's rollback run must fit the snapshot, the revert, this wait and the stabilisation
-# soak inside gitops_deploy_k8s_rollback_timeout_s (1620s). The probe's own 300s wait was a fourth
-# term until prowlarr's flip deleted the probe (#5594), so the other terms take 540s and leave
-# 300s unspent. test_k8s_rollback_budget_covers_the_worst_single_promoted_service enforces that
-# sum. 780s leaves 245s over the one measured pull. A cached image rolls in seconds, so the budget
-# costs time only on a real hang.
+# DECIDED: 780s, which leaves 245s over the one measured pull. A cached image rolls in seconds,
+# so the budget costs time only on a real hang. Flux applies prowlarr (`owner: flux`), and the
+# GitOps deployer never rolls a flux-owned tag back, so gitops_deploy_k8s_rollback_timeout_s does
+# not bound this wait. A handback to Ansible puts prowlarr back in the rollback derivation at
+# 1320s, inside that budget.
 # The literal is `manifests_rollout_timeout` because the renderer reads a role's Flux
 # Kustomization `timeout` only from a literal role default (`role_fields` in
 # scripts/lib/k8s_roles.py); as an include var it would render Flux's 600s default (#5464).
