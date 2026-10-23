@@ -15,7 +15,7 @@ import subprocess
 from collections.abc import Callable
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import NoReturn
+from typing import Any, NoReturn
 
 import sys as _sys
 from pathlib import Path as _Path
@@ -113,6 +113,8 @@ class Landing:
         # PR's range, by `classify.narrow_plane`; None until then, or when nothing narrowed.
         self.narrowed_plane: str | None = None
         self.needs_diff = False
+        self.host_candidate = False  # a path is under HOST_INPUTS
+        self.host_targets: list[Any] = []  # HostTargets; host_wait imports us
         # The tags in `resolved_tags` this PR PROVES are a k3s change, from two provenances:
         # `shared_caller_tags` reached them by walking the k8s role-caller graph, or
         # every changed path naming them sits under `ansible/roles/k8s/`.
