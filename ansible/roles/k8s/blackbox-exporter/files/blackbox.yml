@@ -9,6 +9,10 @@
 modules:
   # The ingress names without SSO. Kuma's default for those tiles: a 2xx, reached through
   # redirects. TLS is verified (no insecure_skip_verify).
+  # `preferred_ip_protocol: ip4` is for email-rss, the one target that is not pinned to an
+  # in-cluster address. Cloudflare answers it with AAAA records, blackbox prefers IPv6 by
+  # default, and the cluster has no IPv6 route, so the connect failed (probe_ip_protocol 6,
+  # probe_http_status_code 0) while Kuma's IPv4-only tile read up.
   http_2xx:
     prober: http
     http:
@@ -16,6 +20,7 @@ modules:
       headers:
         Accept: "*/*"
       follow_redirects: true
+      preferred_ip_protocol: ip4
   # The ingress names behind Authelia. Kuma accepts only 302 with max_redirects: 0. The 302
   # proves the edge and the middleware answer, not that the backend is up
   # (docs/failure-classes.md, authelia-302-does-not-prove-the-backend).
