@@ -11,6 +11,179 @@ rule_files:
   - ../../files/rules/bridge-exporter.yaml
 evaluation_interval: 1m
 tests:
+  # THE WAN FAMILY (A6-3). Every gauge is 0 from the first sample, so the gate and its four
+  # dependents all fire at once, with no `for:`. promtool does not run Alertmanager's inhibit
+  # rule, so all five reach exp_alerts; ansible/tests/services/test_bridge_wan_rules.py holds the
+  # inhibit against the rule labels. Each dependent carries `requires: wan`, the gate does not.
+  - interval: 1m
+    input_series:
+      - series: homelab_check_success{job="monitor-bridge",instance="monitor-bridge.homelab.svc:9181",check="wan_reachable"}
+        values: "0x5"
+      - series: homelab_check_success{job="monitor-bridge",instance="monitor-bridge.homelab.svc:9181",check="discord"}
+        values: "0x5"
+      - series: homelab_check_success{job="monitor-bridge",instance="monitor-bridge.homelab.svc:9181",check="r2_usage"}
+        values: "0x5"
+      - series: homelab_check_success{job="monitor-bridge",instance="monitor-bridge.homelab.svc:9181",check="cloudflare_ips_drift"}
+        values: "0x5"
+      - series: homelab_check_success{job="monitor-bridge",instance="monitor-bridge.homelab.svc:9181",check="healthchecks_drift"}
+        values: "0x5"
+    alert_rule_test:
+      - eval_time: 1m
+        alertname: WANUnreachable
+        exp_alerts:
+          - exp_labels:
+              job: monitor-bridge
+              instance: monitor-bridge.homelab.svc:9181
+              check: wan_reachable
+              severity: critical
+              service: monitor-bridge
+              shadow: "true"
+            exp_annotations:
+              summary: monitor-bridge cannot reach the public internet.
+              description: >-
+                Both WAN probe providers failed from monitor-bridge, so this house has no
+                working link or no DNS. The rows behind this gate (Discord delivery, R2
+                headroom, Cloudflare IP drift and Healthchecks.io console drift) are held by
+                the inhibit rule. Read the probe's failure messages in the monitor-bridge log
+                in the homelab namespace.
+      - eval_time: 1m
+        alertname: DiscordDeliveryFailing
+        exp_alerts:
+          - exp_labels:
+              job: monitor-bridge
+              instance: monitor-bridge.homelab.svc:9181
+              check: discord
+              severity: critical
+              service: monitor-bridge
+              requires: wan
+              shadow: "true"
+            exp_annotations:
+              summary: A Discord webhook no longer resolves, or the SMTP backstop login failed.
+              description: >-
+                One of the five Discord webhooks (Kuma, CrowdSec, gitops-deploy, *arr,
+                healthchecks) no longer resolves, or the Gmail SMTP backstop login failed.
+                Rotate the named webhook in SOPS and redeploy its consumer. The monitor-bridge
+                log names the failing webhook.
+      - eval_time: 1m
+        alertname: R2FreeTierHeadroomLow
+        exp_alerts:
+          - exp_labels:
+              job: monitor-bridge
+              instance: monitor-bridge.homelab.svc:9181
+              check: r2_usage
+              severity: critical
+              service: monitor-bridge
+              requires: wan
+              shadow: "true"
+            exp_annotations:
+              summary: R2 usage is past 80% of the free tier on at least one arm.
+              description: >-
+                Month-to-date R2 storage, Class A operations, Class B operations or incomplete
+                multipart uploads passed 80% of the free tier. Cloudflare offers no cap on R2,
+                so this is the only boundary. The runbook is longhorn-backup-tiering.
+      - eval_time: 1m
+        alertname: CloudflareIPRangesDrifted
+        exp_alerts:
+          - exp_labels:
+              job: monitor-bridge
+              instance: monitor-bridge.homelab.svc:9181
+              check: cloudflare_ips_drift
+              severity: warning
+              service: monitor-bridge
+              requires: wan
+              shadow: "true"
+            exp_annotations:
+              summary: Cloudflare's published IP ranges differ from cloudflare_ips, or the fetch failed.
+              description: >-
+                cloudflare_ips in group_vars/all.yml sets Traefik's trustedIPs and the netpol
+                allow-list. Update it and redeploy traefik, netpol-baseline and monitor-bridge.
+                A failed fetch is retried every cycle; a match is re-checked daily.
+      - eval_time: 1m
+        alertname: HealthchecksConsoleDrifted
+        exp_alerts:
+          - exp_labels:
+              job: monitor-bridge
+              instance: monitor-bridge.homelab.svc:9181
+              check: healthchecks_drift
+              severity: warning
+              service: monitor-bridge
+              requires: wan
+              shadow: "true"
+            exp_annotations:
+              summary: A Healthchecks.io dead-man check differs from the documented schedule.
+              description: >-
+                The monitor-bridge log names each slug and field that differs, or a check
+                missing from the console. Fix the console, or change
+                docs/healthchecks-io-deadman.md and monitor_bridge_healthchecks_expected
+                together and redeploy monitor-bridge.
+
+  # Every WAN-family row passes, so nothing fires. One dependent down with the gate up fires
+  # that dependent alone: a dependent's rule does not read the gate.
+  - interval: 1m
+    input_series:
+      - series: homelab_check_success{job="monitor-bridge",instance="monitor-bridge.homelab.svc:9181",check="wan_reachable"}
+        values: "1x5"
+      - series: homelab_check_success{job="monitor-bridge",instance="monitor-bridge.homelab.svc:9181",check="discord"}
+        values: "0x5"
+      - series: homelab_check_success{job="monitor-bridge",instance="monitor-bridge.homelab.svc:9181",check="r2_usage"}
+        values: "1x5"
+      - series: homelab_check_success{job="monitor-bridge",instance="monitor-bridge.homelab.svc:9181",check="cloudflare_ips_drift"}
+        values: "1x5"
+      - series: homelab_check_success{job="monitor-bridge",instance="monitor-bridge.homelab.svc:9181",check="healthchecks_drift"}
+        values: "1x5"
+    alert_rule_test:
+      - eval_time: 3m
+        alertname: WANUnreachable
+        exp_alerts: []
+      - eval_time: 3m
+        alertname: R2FreeTierHeadroomLow
+        exp_alerts: []
+      - eval_time: 3m
+        alertname: CloudflareIPRangesDrifted
+        exp_alerts: []
+      - eval_time: 3m
+        alertname: HealthchecksConsoleDrifted
+        exp_alerts: []
+      - eval_time: 3m
+        alertname: DiscordDeliveryFailing
+        exp_alerts:
+          - exp_labels:
+              job: monitor-bridge
+              instance: monitor-bridge.homelab.svc:9181
+              check: discord
+              severity: critical
+              service: monitor-bridge
+              requires: wan
+              shadow: "true"
+            exp_annotations:
+              summary: A Discord webhook no longer resolves, or the SMTP backstop login failed.
+              description: >-
+                One of the five Discord webhooks (Kuma, CrowdSec, gitops-deploy, *arr,
+                healthchecks) no longer resolves, or the Gmail SMTP backstop login failed.
+                Rotate the named webhook in SOPS and redeploy its consumer. The monitor-bridge
+                log names the failing webhook.
+
+  # The zero-series case for the WAN family: a missing row is BridgeCheckStale's page, so none
+  # of the five rules fires on an exporter with no `homelab_check_success` series.
+  - interval: 1m
+    input_series: []
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: WANUnreachable
+        exp_alerts: []
+      - eval_time: 5m
+        alertname: DiscordDeliveryFailing
+        exp_alerts: []
+      - eval_time: 5m
+        alertname: R2FreeTierHeadroomLow
+        exp_alerts: []
+      - eval_time: 5m
+        alertname: CloudflareIPRangesDrifted
+        exp_alerts: []
+      - eval_time: 5m
+        alertname: HealthchecksConsoleDrifted
+        exp_alerts: []
+
   # The zero-series case: no input at all, so the scrape job is missing from prometheus.yml.
   # MonitorBridgeDown fires through its absent() arm. BridgeCheckStale stays quiet, because a
   # dead exporter has neither of its series.
