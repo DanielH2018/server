@@ -1,0 +1,956 @@
+# promtool unit tests for files/rules/hosts.yaml. Run with
+# `scripts/validate/alert_tools.sh promtool test rules <this file>`; the validate-alert-rules
+# hook runs it on every commit that touches the rules.
+#
+# Every case asserts shadow="true", because no cutover of M6's batch A1 has dropped it. Each case
+# loads both x86 hosts, so a rule that fires for one host and not the other shows in the same
+# expected list. Annotation text is rendered from the rule's own template, so a case checks which
+# alerts fire and with which labels; the wording lives in the rule file.
+rule_files:
+  - ../../files/rules/hosts.yaml
+evaluation_interval: 1m
+tests:
+  # HostDiskFull. box / is 95% full and server /boot/efi 92%, so both fire with their own
+  # mountpoint and host service. Server / sits exactly at 90%, which is not over the limit.
+  # box /boot is half full. daniel-pi at 99% is the Pi disk rule's, so no rule here matches it.
+  - interval: 1m
+    input_series:
+      - series: 'node_filesystem_avail_bytes{mountpoint="/", device="sda1", fstype="ext4", instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '5x10'
+      - series: 'node_filesystem_size_bytes{mountpoint="/", device="sda1", fstype="ext4", instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '100x10'
+      - series: 'node_filesystem_avail_bytes{mountpoint="/boot", device="sda1", fstype="ext4", instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '50x10'
+      - series: 'node_filesystem_size_bytes{mountpoint="/boot", device="sda1", fstype="ext4", instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '100x10'
+      - series: 'node_filesystem_avail_bytes{mountpoint="/boot/efi", device="sda1", fstype="vfat", instance="daniel-server", job="node", origin="daniel-server"}'
+        values: '8x10'
+      - series: 'node_filesystem_size_bytes{mountpoint="/boot/efi", device="sda1", fstype="vfat", instance="daniel-server", job="node", origin="daniel-server"}'
+        values: '100x10'
+      - series: 'node_filesystem_avail_bytes{mountpoint="/", device="sda1", fstype="ext4", instance="daniel-server", job="node", origin="daniel-server"}'
+        values: '10x10'
+      - series: 'node_filesystem_size_bytes{mountpoint="/", device="sda1", fstype="ext4", instance="daniel-server", job="node", origin="daniel-server"}'
+        values: '100x10'
+      - series: 'node_filesystem_avail_bytes{mountpoint="/", device="sda1", fstype="ext4", instance="daniel-pi", job="node-pi", origin="daniel-pi"}'
+        values: '1x10'
+      - series: 'node_filesystem_size_bytes{mountpoint="/", device="sda1", fstype="ext4", instance="daniel-pi", job="node-pi", origin="daniel-pi"}'
+        values: '100x10'
+    alert_rule_test:
+      - alertname: HostDiskFull
+        eval_time: 5m
+        exp_alerts:
+          - exp_labels:
+              instance: daniel-box
+              job: node
+              mountpoint: /
+              origin: daniel-box
+              service: daniel-box
+              severity: critical
+              shadow: "true"
+            exp_annotations:
+              summary: "daniel-box / is 95% full."
+              description: "daniel-box has its / filesystem over 90% full. Longhorn stops scheduling replicas on a node at 75%. Read `df -h` on the host."
+          - exp_labels:
+              instance: daniel-server
+              job: node
+              mountpoint: /boot/efi
+              origin: daniel-server
+              service: daniel-server
+              severity: critical
+              shadow: "true"
+            exp_annotations:
+              summary: "daniel-server /boot/efi is 92% full."
+              description: "daniel-server has its /boot/efi filesystem over 90% full. Longhorn stops scheduling replicas on a node at 75%. Read `df -h` on the host."
+  # HostMemoryHigh. box is 95% used and fires; server at 85% does not.
+  - interval: 1m
+    input_series:
+      - series: 'node_memory_MemAvailable_bytes{instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '5x10'
+      - series: 'node_memory_MemTotal_bytes{instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '100x10'
+      - series: 'node_memory_MemAvailable_bytes{instance="daniel-server", job="node", origin="daniel-server"}'
+        values: '15x10'
+      - series: 'node_memory_MemTotal_bytes{instance="daniel-server", job="node", origin="daniel-server"}'
+        values: '100x10'
+    alert_rule_test:
+      - alertname: HostMemoryHigh
+        eval_time: 5m
+        exp_alerts:
+          - exp_labels:
+              instance: daniel-box
+              job: node
+              origin: daniel-box
+              service: daniel-box
+              severity: warning
+              shadow: "true"
+            exp_annotations:
+              summary: "daniel-box memory is 95% used."
+              description: "daniel-box has less than 10% of its memory available. Per-container OOM kills are ContainerOOMKilled's. Read `free -h` and the top memory cgroups on the host."
+  # HostMetricsMissing. box is scraped and publishes / and memory but not /boot, /boot/efi or
+  # the Processor cooling devices, so those three arms fire after 15m. server's exporter is
+  # dead (up 0) and publishes nothing: that is ScrapeTargetDown's, so no arm fires for it.
+  - interval: 1m
+    input_series:
+      - series: 'up{instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '1x30'
+      - series: 'node_filesystem_size_bytes{mountpoint="/", device="sda1", fstype="ext4", instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '100x30'
+      - series: 'node_memory_MemAvailable_bytes{instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '5x30'
+      - series: 'up{instance="daniel-server", job="node", origin="daniel-server"}'
+        values: '0x30'
+    alert_rule_test:
+      - alertname: HostMetricsMissing
+        eval_time: 14m
+        exp_alerts: []
+      - alertname: HostMetricsMissing
+        eval_time: 16m
+        exp_alerts:
+          - exp_labels:
+              arm: 'disk /boot'
+              instance: daniel-box
+              job: node
+              origin: daniel-box
+              service: daniel-box
+              severity: warning
+              shadow: "true"
+            exp_annotations:
+              summary: "daniel-box publishes no disk /boot series."
+              description: "daniel-box is scraped but its node-exporter publishes no series for the disk /boot check, so that check is not looking at the host. Read the matching collector on the host."
+          - exp_labels:
+              arm: 'disk /boot/efi'
+              instance: daniel-box
+              job: node
+              origin: daniel-box
+              service: daniel-box
+              severity: warning
+              shadow: "true"
+            exp_annotations:
+              summary: "daniel-box publishes no disk /boot/efi series."
+              description: "daniel-box is scraped but its node-exporter publishes no series for the disk /boot/efi check, so that check is not looking at the host. Read the matching collector on the host."
+          - exp_labels:
+              arm: thermal-throttle
+              instance: daniel-box
+              job: node
+              origin: daniel-box
+              service: daniel-box
+              severity: warning
+              shadow: "true"
+            exp_annotations:
+              summary: "daniel-box publishes no thermal-throttle series."
+              description: "daniel-box is scraped but its node-exporter publishes no series for the thermal-throttle check, so that check is not looking at the host. Read the matching collector on the host."
+  # ClaudeCgroupMemoryEvent. One oom_kill on box's fleet cgroup at minute 5 fires after 5m and
+  # clears when it leaves the 10m window. A `high` event is not watched, and server logs none.
+  - interval: 1m
+    input_series:
+      - series: 'claude_cgroup_memory_events_total{cgroup="fleet", event="oom_kill", instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '0x5 1x40'
+      - series: 'claude_cgroup_memory_events_total{cgroup="fleet", event="high", instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '0x5 9x40'
+      - series: 'claude_cgroup_memory_events_total{cgroup="fleet", event="oom_kill", instance="daniel-server", job="node", origin="daniel-server"}'
+        values: '0x45'
+    alert_rule_test:
+      - alertname: ClaudeCgroupMemoryEvent
+        eval_time: 7m
+        exp_alerts: []
+      - alertname: ClaudeCgroupMemoryEvent
+        eval_time: 12m
+        exp_alerts:
+          - exp_labels:
+              cgroup: fleet
+              event: oom_kill
+              instance: daniel-box
+              job: node
+              origin: daniel-box
+              service: daniel-box
+              severity: warning
+              shadow: "true"
+            exp_annotations:
+              summary: "A Claude Code cgroup on daniel-box logged a oom_kill memory event."
+              description: "daniel-box/fleet had 1 `oom_kill` memory events in the last 10 minutes. The kernel killed something in that cgroup or a hard cap was hit."
+      - alertname: ClaudeCgroupMemoryEvent
+        eval_time: 30m
+        exp_alerts: []
+  # ClaudeCgroupMemoryStalled. box's fleet cgroup stalls 20% of wall time (12e6 usec a minute
+  # is 200000 usec a second, 20%) and fires after 10m. claude-rc at 1% and server's fleet at 5%
+  # stay under the 10% limit.
+  - interval: 1m
+    input_series:
+      - series: 'claude_cgroup_memory_pressure_stalled_usec_total{cgroup="fleet", kind="full", instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '0+12000000x40'
+      - series: 'claude_cgroup_memory_pressure_stalled_usec_total{cgroup="claude-rc", kind="full", instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '0+600000x40'
+      - series: 'claude_cgroup_memory_pressure_stalled_usec_total{cgroup="fleet", kind="full", instance="daniel-server", job="node", origin="daniel-server"}'
+        values: '0+3000000x40'
+    alert_rule_test:
+      - alertname: ClaudeCgroupMemoryStalled
+        eval_time: 8m
+        exp_alerts: []
+      - alertname: ClaudeCgroupMemoryStalled
+        eval_time: 25m
+        exp_alerts:
+          - exp_labels:
+              cgroup: fleet
+              instance: daniel-box
+              job: node
+              origin: daniel-box
+              service: daniel-box
+              severity: warning
+              shadow: "true"
+            exp_annotations:
+              summary: "daniel-box/fleet is memory-stalled 20% of the time."
+              description: "The PSI `full` stall rate of daniel-box/fleet is over 10% of the last 5 minutes, for 10 minutes running. No task in the cgroup made progress, which is the 2026-09-05 shape (#1243) while it is still only a stall."
+  # ClaudeCgroupNotReporting. box is scraped and reports claude-rc but not fleet, so fleet
+  # fires after 10m. server reports its one expected cgroup, fleet, and stays silent.
+  - interval: 1m
+    input_series:
+      - series: 'up{instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '1x30'
+      - series: 'claude_cgroup_memory_pressure_stalled_usec_total{cgroup="claude-rc", kind="full", instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '1x30'
+      - series: 'up{instance="daniel-server", job="node", origin="daniel-server"}'
+        values: '1x30'
+      - series: 'claude_cgroup_memory_pressure_stalled_usec_total{cgroup="fleet", kind="full", instance="daniel-server", job="node", origin="daniel-server"}'
+        values: '1x30'
+    alert_rule_test:
+      - alertname: ClaudeCgroupNotReporting
+        eval_time: 9m
+        exp_alerts: []
+      - alertname: ClaudeCgroupNotReporting
+        eval_time: 12m
+        exp_alerts:
+          - exp_labels:
+              cgroup: fleet
+              instance: daniel-box
+              job: node
+              origin: daniel-box
+              service: daniel-box
+              severity: warning
+              shadow: "true"
+            exp_annotations:
+              summary: "daniel-box reports no fleet cgroup metrics."
+              description: "daniel-box is scraped but publishes no claude_cgroup_* series for fleet, so that cgroup is not being checked. Read /var/lib/node-exporter- textfile/claude_cgroup.prom and the claude-cgroup-metrics timer on the host."
+  # HostTemperatureHot. Each limit source in order, held for 1h before the alert fires:
+  # - box k10temp/Tctl declares nothing but is rated 100, so its limit is 90 and 91 fires.
+  # - box's thermal zone at 80 sits under the flat 85 fallback. box's NVMe at 99 is excluded.
+  # - server coretemp temp1 at 95 against max 100 (limit 90) fires, and temp2 at 89 does not.
+  # - server pci_ctrl declares the 65261.85 sentinel as max and crit 86.85, so the sentinel
+  #   is ignored and crit sets a 78.2 limit that 80 exceeds.
+  # - server acpi has no declaration: 86 fires against the raw 85, and 80 would have fired
+  #   against a ratioed fallback (76.5) but does not.
+  # - daniel-pi's thermal zone temp1 at 86 fires against the fallback and temp0 at 84 does not.
+  - interval: 1m
+    input_series:
+      - series: 'node_hwmon_temp_celsius{chip="pci0000:00_0000:00:18_3", sensor="temp1", instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '91x70'
+      - series: 'node_hwmon_temp_celsius{chip="thermal_thermal_zone0", sensor="temp0", instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '80x70'
+      - series: 'node_hwmon_temp_celsius{chip="nvme_nvme0", sensor="temp1", instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '99x70'
+      - series: 'node_hwmon_temp_max_celsius{chip="nvme_nvme0", sensor="temp1", instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '74.85x70'
+      - series: 'node_hwmon_temp_celsius{chip="platform_coretemp_0", sensor="temp1", instance="daniel-server", job="node", origin="daniel-server"}'
+        values: '95x70'
+      - series: 'node_hwmon_temp_max_celsius{chip="platform_coretemp_0", sensor="temp1", instance="daniel-server", job="node", origin="daniel-server"}'
+        values: '100x70'
+      - series: 'node_hwmon_temp_crit_celsius{chip="platform_coretemp_0", sensor="temp1", instance="daniel-server", job="node", origin="daniel-server"}'
+        values: '100x70'
+      - series: 'node_hwmon_temp_celsius{chip="platform_coretemp_0", sensor="temp2", instance="daniel-server", job="node", origin="daniel-server"}'
+        values: '89x70'
+      - series: 'node_hwmon_temp_max_celsius{chip="platform_coretemp_0", sensor="temp2", instance="daniel-server", job="node", origin="daniel-server"}'
+        values: '100x70'
+      - series: 'node_hwmon_temp_celsius{chip="pci_ctrl", sensor="temp1", instance="daniel-server", job="node", origin="daniel-server"}'
+        values: '80x70'
+      - series: 'node_hwmon_temp_max_celsius{chip="pci_ctrl", sensor="temp1", instance="daniel-server", job="node", origin="daniel-server"}'
+        values: '65261.85x70'
+      - series: 'node_hwmon_temp_crit_celsius{chip="pci_ctrl", sensor="temp1", instance="daniel-server", job="node", origin="daniel-server"}'
+        values: '86.85x70'
+      - series: 'node_hwmon_temp_celsius{chip="acpi", sensor="temp1", instance="daniel-server", job="node", origin="daniel-server"}'
+        values: '86x70'
+      - series: 'node_hwmon_temp_celsius{chip="acpi", sensor="temp2", instance="daniel-server", job="node", origin="daniel-server"}'
+        values: '80x70'
+      - series: 'node_hwmon_temp_celsius{chip="thermal_thermal_zone0", sensor="temp1", instance="daniel-pi", job="node-pi", origin="daniel-pi"}'
+        values: '86x70'
+      - series: 'node_hwmon_temp_celsius{chip="thermal_thermal_zone0", sensor="temp0", instance="daniel-pi", job="node-pi", origin="daniel-pi"}'
+        values: '84x70'
+    alert_rule_test:
+      - alertname: HostTemperatureHot
+        eval_time: 58m
+        exp_alerts: []
+      - alertname: HostTemperatureHot
+        eval_time: 62m
+        exp_alerts:
+          - exp_labels:
+              chip: 'pci0000:00_0000:00:18_3'
+              instance: daniel-box
+              job: node
+              origin: daniel-box
+              sensor: temp1
+              service: daniel-box
+              severity: warning
+              shadow: "true"
+            exp_annotations:
+              summary: "daniel-box pci0000:00_0000:00:18_3/temp1 is at 91.0C."
+              description: "daniel-box sensor pci0000:00_0000:00:18_3/temp1 has been at or over its limit for an hour. The limit is 90% of the sensor's declared max, else its declared crit, else its rated maximum, else a flat 85C. Read the sensor's chip on Infrastructure/hardware-thermal."
+          - exp_labels:
+              chip: platform_coretemp_0
+              instance: daniel-server
+              job: node
+              origin: daniel-server
+              sensor: temp1
+              service: daniel-server
+              severity: warning
+              shadow: "true"
+            exp_annotations:
+              summary: "daniel-server platform_coretemp_0/temp1 is at 95.0C."
+              description: "daniel-server sensor platform_coretemp_0/temp1 has been at or over its limit for an hour. The limit is 90% of the sensor's declared max, else its declared crit, else its rated maximum, else a flat 85C. Read the sensor's chip on Infrastructure/hardware-thermal."
+          - exp_labels:
+              chip: pci_ctrl
+              instance: daniel-server
+              job: node
+              origin: daniel-server
+              sensor: temp1
+              service: daniel-server
+              severity: warning
+              shadow: "true"
+            exp_annotations:
+              summary: "daniel-server pci_ctrl/temp1 is at 80.0C."
+              description: "daniel-server sensor pci_ctrl/temp1 has been at or over its limit for an hour. The limit is 90% of the sensor's declared max, else its declared crit, else its rated maximum, else a flat 85C. Read the sensor's chip on Infrastructure/hardware-thermal."
+          - exp_labels:
+              chip: acpi
+              instance: daniel-server
+              job: node
+              origin: daniel-server
+              sensor: temp1
+              service: daniel-server
+              severity: warning
+              shadow: "true"
+            exp_annotations:
+              summary: "daniel-server acpi/temp1 is at 86.0C."
+              description: "daniel-server sensor acpi/temp1 has been at or over its limit for an hour. The limit is 90% of the sensor's declared max, else its declared crit, else its rated maximum, else a flat 85C. Read the sensor's chip on Infrastructure/hardware-thermal."
+          - exp_labels:
+              chip: thermal_thermal_zone0
+              instance: daniel-pi
+              job: node-pi
+              origin: daniel-pi
+              sensor: temp1
+              service: daniel-pi
+              severity: warning
+              shadow: "true"
+            exp_annotations:
+              summary: "daniel-pi thermal_thermal_zone0/temp1 is at 86.0C."
+              description: "daniel-pi sensor thermal_thermal_zone0/temp1 has been at or over its limit for an hour. The limit is 90% of the sensor's declared max, else its declared crit, else its rated maximum, else a flat 85C. Read the sensor's chip on Infrastructure/hardware-thermal."
+  # HostTemperatureNotReporting. box is scraped and publishes only NVMe sensors, which the
+  # check excludes, and daniel-pi is scraped and publishes none: both fire after 25m. server
+  # publishes a coretemp sensor and stays silent.
+  - interval: 1m
+    input_series:
+      - series: 'up{instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '1x40'
+      - series: 'node_hwmon_temp_celsius{chip="nvme_nvme0", sensor="temp1", instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '50x40'
+      - series: 'up{instance="daniel-server", job="node", origin="daniel-server"}'
+        values: '1x40'
+      - series: 'node_hwmon_temp_celsius{chip="platform_coretemp_0", sensor="temp1", instance="daniel-server", job="node", origin="daniel-server"}'
+        values: '50x40'
+      - series: 'up{instance="daniel-pi", job="node-pi", origin="daniel-pi"}'
+        values: '1x40'
+    alert_rule_test:
+      - alertname: HostTemperatureNotReporting
+        eval_time: 24m
+        exp_alerts: []
+      - alertname: HostTemperatureNotReporting
+        eval_time: 27m
+        exp_alerts:
+          - exp_labels:
+              instance: daniel-box
+              job: node
+              origin: daniel-box
+              service: daniel-box
+              severity: warning
+              shadow: "true"
+            exp_annotations:
+              summary: "daniel-box publishes no hwmon temperature sensors."
+              description: "daniel-box is scraped but its node-exporter publishes no node_hwmon_temp_celsius series outside the NVMe drives, so nothing is checking its temperature. Read the hwmon collector on the host."
+          - exp_labels:
+              instance: daniel-pi
+              job: node-pi
+              origin: daniel-pi
+              service: daniel-pi
+              severity: warning
+              shadow: "true"
+            exp_annotations:
+              summary: "daniel-pi publishes no hwmon temperature sensors."
+              description: "daniel-pi is scraped but its node-exporter publishes no node_hwmon_temp_celsius series outside the NVMe drives, so nothing is checking its temperature. Read the hwmon collector on the host."
+  # CPUThermalThrottled. box has one Processor cooling device at state 2 beside one at 0, and
+  # fires once after 15m. server's non-Processor device at state 5 is not CPU throttling.
+  - interval: 1m
+    input_series:
+      - series: 'node_cooling_device_cur_state{name="0", type="Processor", instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '2x40'
+      - series: 'node_cooling_device_cur_state{name="1", type="Processor", instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '0x40'
+      - series: 'node_cooling_device_cur_state{name="0", type="Processor", instance="daniel-server", job="node", origin="daniel-server"}'
+        values: '0x40'
+      - series: 'node_cooling_device_cur_state{name="9", type="intel_powerclamp", instance="daniel-server", job="node", origin="daniel-server"}'
+        values: '5x40'
+    alert_rule_test:
+      - alertname: CPUThermalThrottled
+        eval_time: 14m
+        exp_alerts: []
+      - alertname: CPUThermalThrottled
+        eval_time: 17m
+        exp_alerts:
+          - exp_labels:
+              instance: daniel-box
+              job: node
+              origin: daniel-box
+              service: daniel-box
+              severity: warning
+              shadow: "true"
+            exp_annotations:
+              summary: "The kernel is thermally throttling daniel-box's CPU."
+              description: "A Processor cooling device on daniel-box has held a non-zero cur_state for 15 minutes, so the kernel is throttling the CPU for heat. CFS throttling is ContainerCPUThrottled's. Read the cooling devices under /sys/class/thermal."
+  # PiUndervoltage. The firmware alarm latches at minute 3 and the alert fires at once.
+  - interval: 1m
+    input_series:
+      - series: 'node_hwmon_in_lcrit_alarm_volts{chip="soc:firmware_raspberrypi_hwmon", sensor="in0", instance="daniel-pi", job="node-pi", origin="daniel-pi"}'
+        values: '0 0 0 1 1 1'
+    alert_rule_test:
+      - alertname: PiUndervoltage
+        eval_time: 2m
+        exp_alerts: []
+      - alertname: PiUndervoltage
+        eval_time: 5m
+        exp_alerts:
+          - exp_labels:
+              chip: 'soc:firmware_raspberrypi_hwmon'
+              instance: daniel-pi
+              job: node-pi
+              origin: daniel-pi
+              sensor: in0
+              service: daniel-pi
+              severity: warning
+              shadow: "true"
+            exp_annotations:
+              summary: "daniel-pi's firmware reports undervoltage."
+              description: "The Raspberry Pi firmware latched its low-critical voltage alarm: the 5V supply fell below its critical threshold, which corrupts SD cards and stalls USB devices. Check the power supply and cable. A clean reading later does not undo the damage."
+  # PiLoadHigh. Load 1.0 on two cores is 0.5 per core and silent; load 3.2 is 1.6 per core.
+  - interval: 1m
+    input_series:
+      - series: 'node_load5{instance="daniel-pi", job="node-pi", origin="daniel-pi"}'
+        values: '1.0x5 3.2x5'
+      - series: 'node_cpu_seconds_total{cpu="0", mode="idle", instance="daniel-pi", job="node-pi", origin="daniel-pi"}'
+        values: '0+60x10'
+      - series: 'node_cpu_seconds_total{cpu="1", mode="idle", instance="daniel-pi", job="node-pi", origin="daniel-pi"}'
+        values: '0+60x10'
+      - series: 'node_cpu_seconds_total{cpu="0", mode="user", instance="daniel-pi", job="node-pi", origin="daniel-pi"}'
+        values: '0+1x10'
+    alert_rule_test:
+      - alertname: PiLoadHigh
+        eval_time: 4m
+        exp_alerts: []
+      - alertname: PiLoadHigh
+        eval_time: 8m
+        exp_alerts:
+          - exp_labels:
+              instance: daniel-pi
+              job: node-pi
+              origin: daniel-pi
+              service: daniel-pi
+              severity: warning
+              shadow: "true"
+            exp_annotations:
+              summary: "daniel-pi's 5-minute load is 1.60 per core."
+              description: "daniel-pi has a 5-minute load average of 1.60 per core, over 1.5. Read `top` on the host for the process behind it."
+  # PiMemoryLow. 100 MiB available is silent; 40 MiB is under the 50 MiB floor.
+  - interval: 1m
+    input_series:
+      - series: 'node_memory_MemAvailable_bytes{instance="daniel-pi", job="node-pi", origin="daniel-pi"}'
+        values: '104857600x5 41943040x5'
+    alert_rule_test:
+      - alertname: PiMemoryLow
+        eval_time: 4m
+        exp_alerts: []
+      - alertname: PiMemoryLow
+        eval_time: 8m
+        exp_alerts:
+          - exp_labels:
+              instance: daniel-pi
+              job: node-pi
+              origin: daniel-pi
+              service: daniel-pi
+              severity: warning
+              shadow: "true"
+            exp_annotations:
+              summary: "daniel-pi has 40MiB of memory available."
+              description: "daniel-pi can reclaim under 50 MB of memory (PI_MEM_MIN_MB), and the 456 MB box thrashes when that runs out. Read `free -m` and `docker stats` on the host."
+  # PiDiskFull. The SD card's root device is 95% full and fires once, though it is mounted at
+  # / and /var/hdd.log. The vfat firmware partition at 40% is silent, and log2ram's tmpfs at
+  # 99% is excluded.
+  - interval: 1m
+    input_series:
+      - series: 'node_filesystem_avail_bytes{mountpoint="/", device="/dev/mmcblk0p2", fstype="ext4", instance="daniel-pi", job="node-pi", origin="daniel-pi"}'
+        values: '5x10'
+      - series: 'node_filesystem_size_bytes{mountpoint="/", device="/dev/mmcblk0p2", fstype="ext4", instance="daniel-pi", job="node-pi", origin="daniel-pi"}'
+        values: '100x10'
+      - series: 'node_filesystem_avail_bytes{mountpoint="/var/hdd.log", device="/dev/mmcblk0p2", fstype="ext4", instance="daniel-pi", job="node-pi", origin="daniel-pi"}'
+        values: '5x10'
+      - series: 'node_filesystem_size_bytes{mountpoint="/var/hdd.log", device="/dev/mmcblk0p2", fstype="ext4", instance="daniel-pi", job="node-pi", origin="daniel-pi"}'
+        values: '100x10'
+      - series: 'node_filesystem_avail_bytes{mountpoint="/boot/firmware", device="/dev/mmcblk0p1", fstype="vfat", instance="daniel-pi", job="node-pi", origin="daniel-pi"}'
+        values: '60x10'
+      - series: 'node_filesystem_size_bytes{mountpoint="/boot/firmware", device="/dev/mmcblk0p1", fstype="vfat", instance="daniel-pi", job="node-pi", origin="daniel-pi"}'
+        values: '100x10'
+      - series: 'node_filesystem_avail_bytes{mountpoint="/var/log", device="log2ram", fstype="tmpfs", instance="daniel-pi", job="node-pi", origin="daniel-pi"}'
+        values: '1x10'
+      - series: 'node_filesystem_size_bytes{mountpoint="/var/log", device="log2ram", fstype="tmpfs", instance="daniel-pi", job="node-pi", origin="daniel-pi"}'
+        values: '100x10'
+    alert_rule_test:
+      - alertname: PiDiskFull
+        eval_time: 5m
+        exp_alerts:
+          - exp_labels:
+              device: /dev/mmcblk0p2
+              instance: daniel-pi
+              job: node-pi
+              origin: daniel-pi
+              service: daniel-pi
+              severity: warning
+              shadow: "true"
+            exp_annotations:
+              summary: "daniel-pi's /dev/mmcblk0p2 is 95% full."
+              description: "The filesystem on /dev/mmcblk0p2 of daniel-pi is over 90% full (PI_DISK_MAX_PCT). A filling SD card is the slow Pi death. Read `df -h` on the host."
+  # PiFilesystemReadOnly. The root remounted read-only fires at once. A read-only
+  # /var/hdd.log is not one of the watched mounts, and /boot/firmware reads writable.
+  - interval: 1m
+    input_series:
+      - series: 'node_filesystem_readonly{mountpoint="/", device="/dev/mmcblk0p2", fstype="ext4", instance="daniel-pi", job="node-pi", origin="daniel-pi"}'
+        values: '1x10'
+      - series: 'node_filesystem_readonly{mountpoint="/var/hdd.log", device="/dev/mmcblk0p2", fstype="ext4", instance="daniel-pi", job="node-pi", origin="daniel-pi"}'
+        values: '1x10'
+      - series: 'node_filesystem_readonly{mountpoint="/boot/firmware", device="/dev/mmcblk0p1", fstype="vfat", instance="daniel-pi", job="node-pi", origin="daniel-pi"}'
+        values: '0x10'
+    alert_rule_test:
+      - alertname: PiFilesystemReadOnly
+        eval_time: 3m
+        exp_alerts:
+          - exp_labels:
+              device: /dev/mmcblk0p2
+              fstype: ext4
+              instance: daniel-pi
+              job: node-pi
+              mountpoint: /
+              origin: daniel-pi
+              service: daniel-pi
+              severity: warning
+              shadow: "true"
+            exp_annotations:
+              summary: "daniel-pi's / is mounted read-only."
+              description: "/ on daniel-pi is read-only, which is an SD card remounting itself after an I/O error. Every other arm stays green through it. A reboot does not come back from it."
+  # PiMetricsMissing. The Pi is scraped and publishes load only, so the memory, filesystem,
+  # read-only and undervoltage arms fire after 10m.
+  - interval: 1m
+    input_series:
+      - series: 'up{instance="daniel-pi", job="node-pi", origin="daniel-pi"}'
+        values: '1x30'
+      - series: 'node_load5{instance="daniel-pi", job="node-pi", origin="daniel-pi"}'
+        values: '1x30'
+    alert_rule_test:
+      - alertname: PiMetricsMissing
+        eval_time: 9m
+        exp_alerts: []
+      - alertname: PiMetricsMissing
+        eval_time: 12m
+        exp_alerts:
+          - exp_labels:
+              arm: memory
+              instance: daniel-pi
+              job: node-pi
+              origin: daniel-pi
+              service: daniel-pi
+              severity: warning
+              shadow: "true"
+            exp_annotations:
+              summary: "daniel-pi publishes no memory series."
+              description: "daniel-pi is scraped but its node-exporter publishes no series for the memory arm of the Pi checks, so nothing is watching it. Read the exporter on the host."
+          - exp_labels:
+              arm: filesystem
+              instance: daniel-pi
+              job: node-pi
+              origin: daniel-pi
+              service: daniel-pi
+              severity: warning
+              shadow: "true"
+            exp_annotations:
+              summary: "daniel-pi publishes no filesystem series."
+              description: "daniel-pi is scraped but its node-exporter publishes no series for the filesystem arm of the Pi checks, so nothing is watching it. Read the exporter on the host."
+          - exp_labels:
+              arm: read-only
+              instance: daniel-pi
+              job: node-pi
+              origin: daniel-pi
+              service: daniel-pi
+              severity: warning
+              shadow: "true"
+            exp_annotations:
+              summary: "daniel-pi publishes no read-only series."
+              description: "daniel-pi is scraped but its node-exporter publishes no series for the read-only arm of the Pi checks, so nothing is watching it. Read the exporter on the host."
+          - exp_labels:
+              arm: undervoltage
+              instance: daniel-pi
+              job: node-pi
+              origin: daniel-pi
+              service: daniel-pi
+              severity: warning
+              shadow: "true"
+            exp_annotations:
+              summary: "daniel-pi publishes no undervoltage series."
+              description: "daniel-pi is scraped but its node-exporter publishes no series for the undervoltage arm of the Pi checks, so nothing is watching it. Read the exporter on the host."
+  # HostCoverageShortfall and HostTemperatureCoverageShortfall, zero-series case: no series at
+  # all, so every arm counts 0 hosts and fires with `or vector(0)`.
+  - interval: 1m
+    input_series: []
+    alert_rule_test:
+      - alertname: HostCoverageShortfall
+        eval_time: 14m
+        exp_alerts: []
+      - alertname: HostCoverageShortfall
+        eval_time: 16m
+        exp_alerts:
+          - exp_labels:
+              arm: 'disk /'
+              service: observability
+              severity: warning
+              shadow: "true"
+            exp_annotations:
+              summary: "Only 0 hosts report series for the disk / check, under the floor of 2."
+              description: "The disk / check reads one series family from every node-exporter and needs two hosts answering, and 0 do. The rest are unmonitored, not idle. Read the node scrape targets on Prometheus."
+          - exp_labels:
+              arm: 'disk /boot'
+              service: observability
+              severity: warning
+              shadow: "true"
+            exp_annotations:
+              summary: "Only 0 hosts report series for the disk /boot check, under the floor of 2."
+              description: "The disk /boot check reads one series family from every node-exporter and needs two hosts answering, and 0 do. The rest are unmonitored, not idle. Read the node scrape targets on Prometheus."
+          - exp_labels:
+              arm: 'disk /boot/efi'
+              service: observability
+              severity: warning
+              shadow: "true"
+            exp_annotations:
+              summary: "Only 0 hosts report series for the disk /boot/efi check, under the floor of 2."
+              description: "The disk /boot/efi check reads one series family from every node-exporter and needs two hosts answering, and 0 do. The rest are unmonitored, not idle. Read the node scrape targets on Prometheus."
+          - exp_labels:
+              arm: memory
+              service: observability
+              severity: warning
+              shadow: "true"
+            exp_annotations:
+              summary: "Only 0 hosts report series for the memory check, under the floor of 2."
+              description: "The memory check reads one series family from every node-exporter and needs two hosts answering, and 0 do. The rest are unmonitored, not idle. Read the node scrape targets on Prometheus."
+          - exp_labels:
+              arm: thermal-throttle
+              service: observability
+              severity: warning
+              shadow: "true"
+            exp_annotations:
+              summary: "Only 0 hosts report series for the thermal-throttle check, under the floor of 2."
+              description: "The thermal-throttle check reads one series family from every node-exporter and needs two hosts answering, and 0 do. The rest are unmonitored, not idle. Read the node scrape targets on Prometheus."
+      - alertname: HostTemperatureCoverageShortfall
+        eval_time: 24m
+        exp_alerts: []
+      - alertname: HostTemperatureCoverageShortfall
+        eval_time: 26m
+        exp_alerts:
+          - exp_labels:
+              arm: temperature
+              service: observability
+              severity: warning
+              shadow: "true"
+            exp_annotations:
+              summary: "Only 0 hosts report temperature sensors, under the floor of 3."
+              description: "The host temperature check needs a non-NVMe hwmon sensor from each of the three hosts, and 0 answer. The rest are unmonitored, not cool. Read the node scrape targets on Prometheus."
+  # Both x86 hosts report every family, so HostCoverageShortfall stays silent at the floor of
+  # 2. daniel-pi's root disk is excluded from the count. Only two hosts report a temperature
+  # sensor, under the floor of 3, so HostTemperatureCoverageShortfall fires with 2.
+  - interval: 1m
+    input_series:
+      - series: 'node_filesystem_size_bytes{mountpoint="/", device="sda1", fstype="ext4", instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '100x40'
+      - series: 'node_filesystem_size_bytes{mountpoint="/boot", device="sda1", fstype="ext4", instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '100x40'
+      - series: 'node_filesystem_size_bytes{mountpoint="/boot/efi", device="sda1", fstype="ext4", instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '100x40'
+      - series: 'node_memory_MemAvailable_bytes{instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '5x40'
+      - series: 'node_cooling_device_cur_state{name="0", type="Processor", instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '0x40'
+      - series: 'node_filesystem_size_bytes{mountpoint="/", device="sda1", fstype="ext4", instance="daniel-server", job="node", origin="daniel-server"}'
+        values: '100x40'
+      - series: 'node_filesystem_size_bytes{mountpoint="/boot", device="sda1", fstype="ext4", instance="daniel-server", job="node", origin="daniel-server"}'
+        values: '100x40'
+      - series: 'node_filesystem_size_bytes{mountpoint="/boot/efi", device="sda1", fstype="ext4", instance="daniel-server", job="node", origin="daniel-server"}'
+        values: '100x40'
+      - series: 'node_memory_MemAvailable_bytes{instance="daniel-server", job="node", origin="daniel-server"}'
+        values: '5x40'
+      - series: 'node_cooling_device_cur_state{name="0", type="Processor", instance="daniel-server", job="node", origin="daniel-server"}'
+        values: '0x40'
+      - series: 'node_filesystem_size_bytes{mountpoint="/", device="sda1", fstype="ext4", instance="daniel-pi", job="node-pi", origin="daniel-pi"}'
+        values: '100x40'
+      - series: 'node_hwmon_temp_celsius{chip="pci0000:00_0000:00:18_3", sensor="temp1", instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '50x40'
+      - series: 'node_hwmon_temp_celsius{chip="platform_coretemp_0", sensor="temp1", instance="daniel-server", job="node", origin="daniel-server"}'
+        values: '50x40'
+    alert_rule_test:
+      - alertname: HostCoverageShortfall
+        eval_time: 20m
+        exp_alerts: []
+      - alertname: HostTemperatureCoverageShortfall
+        eval_time: 27m
+        exp_alerts:
+          - exp_labels:
+              arm: temperature
+              service: observability
+              severity: warning
+              shadow: "true"
+            exp_annotations:
+              summary: "Only 2 hosts report temperature sensors, under the floor of 3."
+              description: "The host temperature check needs a non-NVMe hwmon sensor from each of the three hosts, and 2 answer. The rest are unmonitored, not cool. Read the node scrape targets on Prometheus."
+  # Only box reports disk and memory: one host is under the floor of 2 for the three disk arms
+  # and memory, and fires with 1. The cooling device arm has box's one device and fires too.
+  - interval: 1m
+    input_series:
+      - series: 'node_filesystem_size_bytes{mountpoint="/", device="sda1", fstype="ext4", instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '100x40'
+      - series: 'node_filesystem_size_bytes{mountpoint="/boot", device="sda1", fstype="ext4", instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '100x40'
+      - series: 'node_filesystem_size_bytes{mountpoint="/boot/efi", device="sda1", fstype="ext4", instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '100x40'
+      - series: 'node_memory_MemAvailable_bytes{instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '5x40'
+      - series: 'node_cooling_device_cur_state{name="0", type="Processor", instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '0x40'
+    alert_rule_test:
+      - alertname: HostCoverageShortfall
+        eval_time: 16m
+        exp_alerts:
+          - exp_labels:
+              arm: 'disk /'
+              service: observability
+              severity: warning
+              shadow: "true"
+            exp_annotations:
+              summary: "Only 1 hosts report series for the disk / check, under the floor of 2."
+              description: "The disk / check reads one series family from every node-exporter and needs two hosts answering, and 1 do. The rest are unmonitored, not idle. Read the node scrape targets on Prometheus."
+          - exp_labels:
+              arm: 'disk /boot'
+              service: observability
+              severity: warning
+              shadow: "true"
+            exp_annotations:
+              summary: "Only 1 hosts report series for the disk /boot check, under the floor of 2."
+              description: "The disk /boot check reads one series family from every node-exporter and needs two hosts answering, and 1 do. The rest are unmonitored, not idle. Read the node scrape targets on Prometheus."
+          - exp_labels:
+              arm: 'disk /boot/efi'
+              service: observability
+              severity: warning
+              shadow: "true"
+            exp_annotations:
+              summary: "Only 1 hosts report series for the disk /boot/efi check, under the floor of 2."
+              description: "The disk /boot/efi check reads one series family from every node-exporter and needs two hosts answering, and 1 do. The rest are unmonitored, not idle. Read the node scrape targets on Prometheus."
+          - exp_labels:
+              arm: memory
+              service: observability
+              severity: warning
+              shadow: "true"
+            exp_annotations:
+              summary: "Only 1 hosts report series for the memory check, under the floor of 2."
+              description: "The memory check reads one series family from every node-exporter and needs two hosts answering, and 1 do. The rest are unmonitored, not idle. Read the node scrape targets on Prometheus."
+          - exp_labels:
+              arm: thermal-throttle
+              service: observability
+              severity: warning
+              shadow: "true"
+            exp_annotations:
+              summary: "Only 1 hosts report series for the thermal-throttle check, under the floor of 2."
+              description: "The thermal-throttle check reads one series family from every node-exporter and needs two hosts answering, and 1 do. The rest are unmonitored, not idle. Read the node scrape targets on Prometheus."
+  # UPSOnBattery. NUT asserts OB at minute 5; the alert fires once it has held for 10m.
+  - interval: 1m
+    input_series:
+      - series: 'network_ups_tools_ups_status{flag="OB", instance="nut-exporter.homelab.svc:9199", job="nut"}'
+        values: '0x5 1x40'
+    alert_rule_test:
+      - alertname: UPSOnBattery
+        eval_time: 14m
+        exp_alerts: []
+      - alertname: UPSOnBattery
+        eval_time: 17m
+        exp_alerts:
+          - exp_labels:
+              instance: 'nut-exporter.homelab.svc:9199'
+              job: nut
+              service: nut-exporter
+              severity: critical
+              shadow: "true"
+            exp_annotations:
+              summary: "The UPS is on battery."
+              description: "NUT reports ups.status OB for 10 minutes: mains power is gone and the UPS is carrying the load. Read the UPS on the NUT host."
+  # During an outage only UPSOnBattery speaks. Charge 30%, runtime 100s and the RB flag would
+  # each fire on their own, and `unless` holds all three while OB is 1.
+  - interval: 1m
+    input_series:
+      - series: 'network_ups_tools_ups_status{flag="OB", instance="nut-exporter.homelab.svc:9199", job="nut"}'
+        values: '1x30'
+      - series: 'network_ups_tools_ups_status{flag="RB", instance="nut-exporter.homelab.svc:9199", job="nut"}'
+        values: '1x30'
+      - series: 'network_ups_tools_battery_charge{instance="nut-exporter.homelab.svc:9199", job="nut"}'
+        values: '30x30'
+      - series: 'network_ups_tools_battery_runtime{instance="nut-exporter.homelab.svc:9199", job="nut"}'
+        values: '100x30'
+    alert_rule_test:
+      - alertname: UPSOnBattery
+        eval_time: 15m
+        exp_alerts:
+          - exp_labels:
+              instance: 'nut-exporter.homelab.svc:9199'
+              job: nut
+              service: nut-exporter
+              severity: critical
+              shadow: "true"
+            exp_annotations:
+              summary: "The UPS is on battery."
+              description: "NUT reports ups.status OB for 10 minutes: mains power is gone and the UPS is carrying the load. Read the UPS on the NUT host."
+      - alertname: UPSBatteryLow
+        eval_time: 15m
+        exp_alerts: []
+      - alertname: UPSRuntimeLow
+        eval_time: 15m
+        exp_alerts: []
+      - alertname: UPSReplaceBattery
+        eval_time: 15m
+        exp_alerts: []
+  # UPSBatteryLow, UPSRuntimeLow and UPSReplaceBattery on mains power. Charge 40% is under 50;
+  # runtime 120s is under 300; the RB flag is set. Each fires after 10m.
+  - interval: 1m
+    input_series:
+      - series: 'network_ups_tools_ups_status{flag="OB", instance="nut-exporter.homelab.svc:9199", job="nut"}'
+        values: '0x30'
+      - series: 'network_ups_tools_ups_status{flag="RB", instance="nut-exporter.homelab.svc:9199", job="nut"}'
+        values: '1x30'
+      - series: 'network_ups_tools_battery_charge{instance="nut-exporter.homelab.svc:9199", job="nut"}'
+        values: '40x30'
+      - series: 'network_ups_tools_battery_runtime{instance="nut-exporter.homelab.svc:9199", job="nut"}'
+        values: '120x30'
+    alert_rule_test:
+      - alertname: UPSBatteryLow
+        eval_time: 9m
+        exp_alerts: []
+      - alertname: UPSBatteryLow
+        eval_time: 12m
+        exp_alerts:
+          - exp_labels:
+              instance: 'nut-exporter.homelab.svc:9199'
+              job: nut
+              service: nut-exporter
+              severity: critical
+              shadow: "true"
+            exp_annotations:
+              summary: "The UPS battery is at 40%."
+              description: "The UPS battery charge is under 50% (UPS_CHARGE_MIN_PCT) while mains power is on, for 10 minutes. Read the UPS on the NUT host."
+      - alertname: UPSRuntimeLow
+        eval_time: 12m
+        exp_alerts:
+          - exp_labels:
+              instance: 'nut-exporter.homelab.svc:9199'
+              job: nut
+              service: nut-exporter
+              severity: critical
+              shadow: "true"
+            exp_annotations:
+              summary: "The UPS has 2m 0s of runtime."
+              description: "The UPS estimates under 5 minutes of runtime (UPS_RUNTIME_MIN_S) on a full charge, for 10 minutes. The battery has aged. Read the UPS on the NUT host."
+      - alertname: UPSReplaceBattery
+        eval_time: 12m
+        exp_alerts:
+          - exp_labels:
+              instance: 'nut-exporter.homelab.svc:9199'
+              job: nut
+              service: nut-exporter
+              severity: critical
+              shadow: "true"
+            exp_annotations:
+              summary: "The UPS asks for a battery replacement."
+              description: "NUT reports ups.status RB for 10 minutes: the UPS's own self-test says the battery needs replacing. This trips before charge or runtime read low."
+  # UPSBatteryLow at exactly 50% and UPSRuntimeLow at exactly 300s are not under the floor.
+  - interval: 1m
+    input_series:
+      - series: 'network_ups_tools_ups_status{flag="OB", instance="nut-exporter.homelab.svc:9199", job="nut"}'
+        values: '0x30'
+      - series: 'network_ups_tools_battery_charge{instance="nut-exporter.homelab.svc:9199", job="nut"}'
+        values: '50x30'
+      - series: 'network_ups_tools_battery_runtime{instance="nut-exporter.homelab.svc:9199", job="nut"}'
+        values: '300x30'
+    alert_rule_test:
+      - alertname: UPSBatteryLow
+        eval_time: 15m
+        exp_alerts: []
+      - alertname: UPSRuntimeLow
+        eval_time: 15m
+        exp_alerts: []
+  # UPSSensorAbsent. nut-exporter answers its scrape and publishes charge only, so the runtime,
+  # replace-battery and on-battery arms fire after 10m.
+  - interval: 1m
+    input_series:
+      - series: 'up{instance="nut-exporter.homelab.svc:9199", job="nut"}'
+        values: '1x30'
+      - series: 'network_ups_tools_battery_charge{instance="nut-exporter.homelab.svc:9199", job="nut"}'
+        values: '80x30'
+    alert_rule_test:
+      - alertname: UPSSensorAbsent
+        eval_time: 9m
+        exp_alerts: []
+      - alertname: UPSSensorAbsent
+        eval_time: 12m
+        exp_alerts:
+          - exp_labels:
+              arm: runtime
+              instance: 'nut-exporter.homelab.svc:9199'
+              job: nut
+              service: nut-exporter
+              severity: critical
+              shadow: "true"
+            exp_annotations:
+              summary: "The UPS runtime series is absent."
+              description: "The NUT exporter answers its scrape but publishes no runtime series for 10 minutes, so the UPS is unmonitored on that arm. A renamed or removed series is the usual cause. Read nut-exporter's /ups_metrics."
+          - exp_labels:
+              arm: replace-battery
+              instance: 'nut-exporter.homelab.svc:9199'
+              job: nut
+              service: nut-exporter
+              severity: critical
+              shadow: "true"
+            exp_annotations:
+              summary: "The UPS replace-battery series is absent."
+              description: "The NUT exporter answers its scrape but publishes no replace-battery series for 10 minutes, so the UPS is unmonitored on that arm. A renamed or removed series is the usual cause. Read nut-exporter's /ups_metrics."
+          - exp_labels:
+              arm: on-battery
+              instance: 'nut-exporter.homelab.svc:9199'
+              job: nut
+              service: nut-exporter
+              severity: critical
+              shadow: "true"
+            exp_annotations:
+              summary: "The UPS on-battery series is absent."
+              description: "The NUT exporter answers its scrape but publishes no on-battery series for 10 minutes, so the UPS is unmonitored on that arm. A renamed or removed series is the usual cause. Read nut-exporter's /ups_metrics."
+  # UPSSensorAbsent with the nut scrape down (up 0) publishes nothing and stays silent:
+  # ScrapeTargetDown owns a dead upsd or exporter.
+  - interval: 1m
+    input_series:
+      - series: 'up{instance="nut-exporter.homelab.svc:9199", job="nut"}'
+        values: '0x30'
+    alert_rule_test:
+      - alertname: UPSSensorAbsent
+        eval_time: 20m
+        exp_alerts: []

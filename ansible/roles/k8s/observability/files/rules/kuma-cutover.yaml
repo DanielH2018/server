@@ -55,6 +55,14 @@ groups:
               absent_over_time(monitor_status{monitor_name="Kubelet CSI Mount Read-Only"}[2h])
             or
               absent_over_time(monitor_status{monitor_name="etcd DB Size"}[2h])
+            or
+              absent_over_time(monitor_status{monitor_name="Root Disk"}[2h])
+            or
+              absent_over_time(monitor_status{monitor_name="Memory"}[2h])
+            or
+              absent_over_time(monitor_status{monitor_name="Host Temperature"}[2h])
+            or
+              absent_over_time(monitor_status{monitor_name="UPS Battery Health"}[2h])
           )
           unless on() (up{job="uptime-kuma"} == 0)
         labels:
