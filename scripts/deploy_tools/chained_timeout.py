@@ -97,6 +97,25 @@ def queueing_s(timeouts: list[int], concurrent: int) -> int:
     return min(rounds, graham)
 
 
+def largest_retry_s(docs: list[dict]) -> int:
+    """The largest `retryInterval` among `docs` and the root `homelab`, in seconds.
+
+    A Kustomization whose apply failed tries again after its own `retryInterval`, so this is
+    how long the slowest of them takes to retry. `promote_timeout` counts it once, and
+    `verify_promotion.expected_set` derives the storage grace from it.
+
+    Raises:
+        ValueError: a `retryInterval` this module cannot read.
+    """
+    retries = [ROOT_RETRY_S]
+    for doc in docs:
+        spec = doc.get("spec")
+        retry = spec.get("retryInterval") if isinstance(spec, dict) else None
+        if retry is not None:
+            retries.append(seconds(retry))
+    return max(retries)
+
+
 def promote_timeout(
     docs: list[dict],
     changed: Iterable[str] | None = None,
@@ -149,15 +168,12 @@ def promote_timeout(
         timeout = spec.get("timeout", spec.get("interval"))
         return 0 if timeout is None else seconds(timeout)
 
-    timeouts, retries = {}, [ROOT_RETRY_S]
-    for doc in docs:
-        spec = spec_of(doc)
-        timeouts[(doc.get("metadata") or {}).get("name")] = timeout_of(spec)
-        retry = spec.get("retryInterval")
-        if retry is not None:
-            retries.append(seconds(retry))
+    timeouts = {
+        (doc.get("metadata") or {}).get("name"): timeout_of(spec_of(doc))
+        for doc in docs
+    }
     depends_on, _ = kustomization_graph(docs)
-    changed = set(timeouts) if changed is None else set(changed) - {ROOT}
+    moved = set(timeouts) if changed is None else set(changed) - {ROOT}
     for name, deps in depends_on.items():
         missing = sorted(set(deps) - set(depends_on))
         if missing:
@@ -172,7 +188,7 @@ def promote_timeout(
         if name in seen:
             raise ValueError(f"the dependsOn edges form a cycle through {name}")
         if name not in longest:
-            own = timeouts.get(name, 0) if name in changed else 0
+            own = timeouts.get(name, 0) if name in moved else 0
             longest[name] = own + max(
                 (requeue_s + path_to(dep, (*seen, name)) for dep in depends_on[name]),
                 default=0,
@@ -180,11 +196,15 @@ def promote_timeout(
         return longest[name]
 
     chain = max(
-        (path_to(name, ()) for name in changed - {SOAK} if name in depends_on),
+        (path_to(name, ()) for name in moved - {SOAK} if name in depends_on),
         default=0,
     )
-    waiting = [timeouts[name] for name in changed - {SOAK} if name in timeouts]
+    waiting = [timeouts[name] for name in moved - {SOAK} if name in timeouts]
     queueing = queueing_s(waiting, concurrent)
-    soak = timeouts.get(SOAK, 0) if SOAK in changed else 0
-    total = max(chain + queueing, soak, ROOT_TIMEOUT_S) + OCI_INTERVAL_S + max(retries)
+    soak = timeouts.get(SOAK, 0) if SOAK in moved else 0
+    total = (
+        max(chain + queueing, soak, ROOT_TIMEOUT_S)
+        + OCI_INTERVAL_S
+        + largest_retry_s(docs)
+    )
     return min(total, cap_s)
