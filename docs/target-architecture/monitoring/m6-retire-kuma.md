@@ -571,13 +571,16 @@ depends on someone remembering to revert. Three rules bound the windows without 
   `files/rules/kuma-cutover.yaml`.
     - A rule that does not fire has no series, so PromQL cannot read its `shadow` label. The
       rule therefore lists the tiles itself. Each shadow PR adds one term per tile its batch
-      retires, `absent(monitor_status{monitor_name="<tile>"})`. Each shadow-dropping PR
+      retires, `absent_over_time(monitor_status{monitor_name="<tile>"}[2h])`. Each shadow-dropping PR
       (Cutover-b, Cutover-1b, A6-7b) removes its batch's terms. A term exists exactly while
-      its rule is `shadow`, and it reads 1 once the tile is gone.
+      its rule is `shadow`, and it reads 1 once the tile has been gone for 2h.
     - The expression joins the terms with `or`, then applies
-      `unless on() (up{job="uptime-kuma"} == 0)`, with `for: 2h`. A Kuma outage fires no
-      term, because Kuma's own liveness pager covers it. `absent()` carries the tile's name
-      as a label, so the page names the tile. A misspelt tile name fires two hours after its
+      `unless on() (up{job="uptime-kuma"} == 0)`, with no `for:`. The 2h hold is the range,
+      because the deploy soak waits out the longest `for:` of every critical rule that is not
+      shadow (`renderer_lib/soak.py:longest_for`), and a `for: 2h` would lengthen every
+      promotion's soak by 2h and fail `test_lander_deadlines_cover_the_soak.py`. A Kuma outage
+      fires no term, because Kuma's own liveness pager covers it. `absent_over_time()` carries
+      the tile's name as a label, so the page names the tile. A misspelt tile name fires two hours after its
       shadow PR deploys, so the soak catches it.
     - It is `critical`, with `service: uptime-kuma`, the role whose tiles it counts. It
       does not carry `service: observability`. Until B-1, C7's literal gate fails on any
