@@ -4,6 +4,11 @@
 # homelab-updater.service (docs/target-architecture/host/h3-pi-pilot.md, *Steps, as PRs*).
 description: daniel-pi's homelab host package
 components: [reconcile, pi-heartbeats]
+# H3.11: the Pi is the arm64 pilot of homelab-tools, which ships sops and chezmoi under
+# /usr/lib/homelab/bin. An unversioned Depends already satisfied never upgrades the dependency,
+# so homelab-updater's steps 4 and 5 cover every installed homelab-* package.
+depends:
+  - homelab-tools
 maintainer_scripts: [preinst, postinst, prerm]
 files:
   - {src: units/homelab-updater.timer.conf, dst: /usr/lib/systemd/system/homelab-updater.timer.d/50-homelab.conf}

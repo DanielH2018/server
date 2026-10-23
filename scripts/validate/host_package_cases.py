@@ -92,6 +92,8 @@ from validate.validate_lib.host_fixtures import (
     updater_variant,
 )
 
+TOOLS_BIN = "/usr/lib/homelab/bin"
+TOOLS = ("sops", "chezmoi")
 LOCK_HELD = "/run/test-lock.held"
 PKGCACHE = "/var/cache/apt/pkgcache.bin"
 RECONCILE_RECORD = "/var/lib/homelab-reconcile/applied.json"
@@ -136,6 +138,8 @@ class Cases:
         self.failed: list[str] = []
         self.debs: dict[str, Path] = {}
         self.versions: dict[str, str] = {}
+        # The head homelab-tools build the real Pi package Depends on (H3.11), if any.
+        self.tools: tuple[str, ...] = ()
         self._prepare(args.render.resolve(), args.debs.resolve())
 
     def _prepare(self, render: Path, debs: Path) -> None:
@@ -150,6 +154,9 @@ class Cases:
         # the real Pi package. The fixture's head build carries the same file name.
         (deb,) = (debs / "head").glob(f"{HOST_PKG}_*.deb")
         self._add("pi-head", deb, name=f"real-{deb.name}")
+        for deb in sorted((debs / "head").glob("homelab-tools_*_amd64.deb")):
+            self._add("tools-head", deb)
+            self.tools = ("tools-head",)
         base, head = self.versions["updater-base"], self.versions["updater-head"]
         if not newer(head, base):
             raise CaseFailed(
@@ -472,7 +479,7 @@ class Cases:
         def body() -> None:
             debs = " ".join(
                 f"/srv/debs/{self.debs[label].name}"
-                for label in ("updater-head", "pi-head")
+                for label in ("updater-head", "pi-head", *self.tools)
             )
             # apt-get, as bootstrap-host.sh installs on a host. dpkg -i leaves a package whose
             # Depends is not installed unconfigured, so H3.7's `Depends: tree` would fail here.
@@ -482,7 +489,9 @@ class Cases:
             self.expect_reconciled(c, "updater-head", "pi-head")
             state = c.active(timer)
             expect(state == "active", f"{timer} is {state} after the install")
-            self.serving("updater-head", "pi-head", "pi-dropin")
+            if self.tools:
+                self.expect_tools_run(c)
+            self.serving("updater-head", "pi-head", "pi-dropin", *self.tools)
             status = c.run_updater()
             expect(status == 0, f"the updater exited {status}")
             self.expect_installed(c, "updater-head", "pi-dropin")
@@ -499,6 +508,12 @@ class Cases:
         finally:
             c.remove()
 
+    def expect_tools_run(self, c: Container) -> None:
+        for tool in TOOLS:
+            c.ok(f"{TOOLS_BIN}/{tool} --version")
+            on_path = c.sh(f"command -v {tool}").returncode
+            expect(on_path != 0, f"{tool} is on PATH; it installs at {TOOLS_BIN} only")
+
     def disarm(self) -> None:
         """Install the real Pi package by hand, then upgrade to one whose recovery timer is disarmed.
 
@@ -512,14 +527,14 @@ class Cases:
         def body() -> None:
             debs = " ".join(
                 f"/srv/debs/{self.debs[label].name}"
-                for label in ("updater-head", "pi-head")
+                for label in ("updater-head", "pi-head", *self.tools)
             )
             c.ok(f"DEBIAN_FRONTEND=noninteractive apt-get install -y {debs}")
             c.ok("systemctl start homelab-reconcile.service")
             self.expect_reconciled(c, "updater-head", "pi-head")
             state = c.active(RECOVERY_TIMER)
             expect(state == "active", f"{RECOVERY_TIMER} is {state} while armed")
-            self.serving("updater-head", "pi-head", "pi-disarmed")
+            self.serving("updater-head", "pi-head", "pi-disarmed", *self.tools)
             status = c.run_updater()
             expect(status == 0, f"the updater exited {status}")
             self.expect_installed(c, "updater-head", "pi-disarmed")

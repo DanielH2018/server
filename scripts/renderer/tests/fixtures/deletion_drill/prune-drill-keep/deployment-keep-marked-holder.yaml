@@ -1,0 +1,27 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: keep-marked-holder
+  namespace: prune-drill-keep
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: keep-marked-holder
+  template:
+    metadata:
+      labels:
+        app: keep-marked-holder
+    spec:
+      terminationGracePeriodSeconds: 1
+      containers:
+        - name: holder
+          image: "@DRILL_IMAGE@"
+          command: [sleep, "3600"]
+          volumeMounts:
+            - name: data
+              mountPath: /data
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: keep-marked

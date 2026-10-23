@@ -89,6 +89,14 @@ otherwise; none of the values below are secrets themselves, only names and locat
    so beside it keep the `claude` issue register exported by `findings.py export`: every
    refuted and accepted ruling lives only on GitHub, and without it the next review re-files
    them.
+   The bundle is also the render source for break-glass promotion (*Scenario: GitHub, GHCR or
+   Sigstore is unreachable*), so a refresh covers that use too. Beside it the kit holds the
+   **break-glass private key**, a password-protected cosign key whose public half the flux role
+   commits (`flux_break_glass_public_key`). It is a second signing identity: it never enters
+   the repo, CI or a host, and its only use is the scenario below. The kit also holds the three
+   Flux controller images at `flux_version` (`ansible/roles/k8s/flux/defaults/main.yml`),
+   saved as image archives and refreshed with the bundle, for a rebuilt cluster that cannot
+   reach GHCR.
    Source: `docs/longhorn-disaster-recovery.md` ("The off-site recovery kit").
 
 9. **The host-package archive signing key.** The `homelab_builder` role generates it once on
@@ -360,6 +368,95 @@ For a second person without deep familiarity with the repo:
    kit above (items 1, 2, 3, 7, 8) is what lets a competent operator rebuild from scratch —
    hand it to them rather than improvising a partial fix.
 
+### Scenario: GitHub, GHCR or Sigstore is unreachable
+
+**Operator-only to run.** The normal deploy path needs GitHub, GHCR and Sigstore at once:
+`promote` runs on GitHub, the artifact lives on GHCR, and the OCIRepository verifies keyless
+against the `promote` identity. While any of the three is down, no local path writes the
+cluster, because `deploy.sh` skips every flux-owned entry. This runbook publishes one artifact
+to the in-cluster registry, signs it with the break-glass key, and points the OCIRepository at
+it. The kind drill `.github/workflows/flux-deletion-drill.yml` runs cases `break-glass` and
+`break-glass-red` against the flux role's own break-glass templates. It does not run the
+steps below on production.
+
+1. Clone item 8's repo bundle and commit the change to apply on top of it.
+1. Commit the break-glass source form: set `flux_break_glass: true` in
+   `ansible/roles/k8s/flux/defaults/main.yml`. The OCIRepository `homelab` then names the
+   in-cluster registry (`flux_break_glass_url`), reads it over plain HTTP, and verifies against
+   the Secret `flux-break-glass-key` instead of the keyless identity.
+1. Check that the commit to render equals or descends from the commit that the cluster's
+   OCIRepository status names in `org.opencontainers.image.revision`. Item 8's bundle is
+   refreshed only with the age-key backup, so it can predate `prod`. A render from an older
+   tree prunes every tag added since and reverts every change since. If the bundle fails the
+   check, render from a surviving host checkout that holds that commit.
+1. Render with `homelab-render cluster` in placeholder mode, as the `render` job in
+   `.github/workflows/promote.yml` does.
+1. Let source-controller reach the registry. The registry's NetworkPolicy admits only
+   image-builder Jobs, its own self-test Jobs and the node gateways, so apply this by hand
+   (the kind drill cannot test it, because kind enforces no NetworkPolicy):
+
+   ```yaml
+   apiVersion: networking.k8s.io/v1
+   kind: NetworkPolicy
+   metadata:
+     name: registry-break-glass-source
+     namespace: homelab
+   spec:
+     podSelector:
+       matchLabels:
+         app: registry
+     policyTypes: [Ingress]
+     ingress:
+       - from:
+           - namespaceSelector:
+               matchLabels:
+                 kubernetes.io/metadata.name: flux-system
+             podSelector:
+               matchLabels:
+                 app: source-controller
+         ports:
+           - protocol: TCP
+             port: 5000
+   ```
+
+1. On daniel-box, push the rendered bundle to the registry's loopback port with the pinned
+   `flux` CLI, then sign the digest it prints with the kit's private half. Sigstore is
+   unreachable by assumption, so the signature skips the transparency log:
+
+   ```bash
+   digest="$(flux push artifact oci://localhost:5000/homelab-manifests:break-glass \
+     --path=out --source=break-glass --revision="break-glass@sha1:$(git rev-parse HEAD)" \
+     --insecure-registry --output=json | jq -r .digest)"
+   cosign sign --key break-glass.key --tlog-upload=false --use-signing-config=false \
+     --allow-http-registry --yes "localhost:5000/homelab-manifests@$digest"
+   ```
+
+1. Apply the rendered OCIRepository `homelab` and the Secret `flux-break-glass-key` by hand.
+   The bundle it serves carries the same source, so whichever Kustomization applies the
+   OCIRepository keeps that source rather than reverting it.
+1. Confirm `kubectl -n flux-system get ocirepository homelab` reads Ready with
+   `SourceVerified=True`, and that every Kustomization reaches the new revision.
+
+**What fires meanwhile.** `ProdMovedOutsidePromote` fires, because `prod`'s live digest no
+longer matches `PROD_DIGEST`. That is expected. The break-glass path neither reads nor clears
+`DEPLOY_HOLD`, which needs GitHub.
+
+**A fresh or rebuilt cluster needs two more steps first.** It holds neither the in-cluster
+registry nor the Flux controllers. Apply the rendered `cluster/registry/` directory before the
+artifact push. Install the Flux controllers from the image archives that item 8's kit
+carries, not from GHCR. Neither step is drilled (Open question 17 of the D6 plan), so the
+drill covers a running cluster only.
+
+**The way back to GHCR.** Re-pointing at GHCR first applies `prod`, which predates the
+emergency change, and silently reverts it. So order the steps:
+
+1. Push the break-glass commits to master with `flux_break_glass` back at `false`.
+1. Wait until `promote` verifies a commit that contains them and moves `prod` there.
+1. Apply `prod`'s OCIRepository by hand, as the flux role renders it with the lever off.
+1. Confirm every Kustomization is Ready at `prod`'s origin revision and that
+   `ProdMovedOutsidePromote` has cleared.
+1. Delete the hand-applied NetworkPolicy `registry-break-glass-source`.
+
 ## Documented vs drilled
 
 Never read a runbook's existence as proof it has been exercised. This table states only
@@ -371,6 +468,7 @@ what each source records — not what "should" have happened.
 | Longhorn volume restore | **Yes, and ongoing.** First attempt 2026-08-15 failed on a B2 cap (not the data); retry 2026-08-16 passed (`traefik-acme`, ~21s, verified real data). Scheduled nightly since 2026-08-19, rotating one volume per night over the full backup set since 2026-08-20. | `docs/longhorn-disaster-recovery.md`: "Assurance gap (known, narrowing)" |
 | SOPS decrypt with the recovery age key alone (no host key) | **No record found.** No drill of this specific path is recorded anywhere in the repo. | absence of any citation — see *Annual drill* below |
 | GitOps bootstrap (`bootstrap.yml` → `sops updatekeys` → onboard) | **Yes, routinely** — the standard way every host (daniel-pi, whose key was removed on 2026-10-03, and daniel-box) was onboarded. Never specifically exercised as a *total-loss* recovery (starting from the recovery key rather than a host's own fresh key). | `ansible/roles/setup/sops_setup/CLAUDE.md`, `ansible/bootstrap.yml` header |
+| Break-glass promotion (*GitHub, GHCR or Sigstore is unreachable*) | **Partly.** `flux-deletion-drill` verifies a bundle signed with a throwaway key through the flux role's break-glass source form on a kind cluster, and refuses one signed with another key. Not drilled: the runbook on production, the registry NetworkPolicy step, and the fresh-cluster steps. | `.github/workflows/flux-deletion-drill.yml`, cases `break-glass` and `break-glass-red` |
 | Full total-loss sequence end to end (etcd + Longhorn + redeploy, in order, on hardware with nothing pre-existing) | **No.** Each piece above has partial or full drill coverage on its own; the sequence has not been run together. | inferred from the above — no doc claims otherwise |
 
 ## Annual drill (recommended — do not run this now)

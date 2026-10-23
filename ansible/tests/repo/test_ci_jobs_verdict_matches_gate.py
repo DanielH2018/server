@@ -99,7 +99,10 @@ def test_a_skipped_dependent_can_only_mean_the_tree_was_proven():
         if job_id == "prove":
             continue
         job = jobs[job_id]
-        assert job["needs"] == "prove", job_id
+        # `host_tools_arm64` also waits for `host_packages`; it skips only when that does.
+        needs = [job["needs"]] if isinstance(job["needs"], str) else job["needs"]
+        assert needs[0] == "prove", job_id
+        assert set(needs[1:]) <= set(_gate_job()["needs"]), job_id
         condition = (
             str(job["if"]).strip().removeprefix("${{").removesuffix("}}").strip()
         )

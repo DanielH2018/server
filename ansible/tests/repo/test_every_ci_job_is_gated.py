@@ -45,6 +45,7 @@ KNOWN_JOBS = frozenset(
         "flux_roundtrip",
         "sops_manifest_type_proof",
         "host_packages",
+        "host_tools_arm64",
         GATE_JOB,
         "renovate-config",
     }
@@ -63,6 +64,7 @@ GATE_READS = frozenset(
         "flux_roundtrip",
         "sops_manifest_type_proof",
         "host_packages",
+        "host_tools_arm64",
     }
 )
 

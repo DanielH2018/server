@@ -642,3 +642,8 @@ cicd
 # Renovate PR states (docs/renovate-notify-internals.md, the autoclosed arm)
 [Aa]utoclosed?
 [Uu]nmerged
+
+# Flux break-glass promotion (docs/break-glass.md)
+Sigstore
+OCIRepository
+keyless

@@ -1171,6 +1171,19 @@ jobs:
           fi
           echo "cases=$cases" >> "$GITHUB_OUTPUT"
 
+      # homelab-tools renders pins and no bytes (H3.11). The builder's own `install_tools`
+      # fetches each pinned file, checks its sha256 and places it under the tree's root/, so a
+      # wrong digest or a 404 URL fails here, and a Renovate bump of a pin reaches master only
+      # if its new digest verifies. The cache is keyed by digest, so the base and head trees
+      # share one download.
+      - name: Fetch the pinned homelab-tools binaries and check their sha256
+        if: >-
+          github.event_name == 'workflow_dispatch' || steps.render.outputs.changed == 'true'
+          || steps.render.outputs.cases == 'true'
+        run: |
+          uv run python scripts/validate/host_packages.py fetch-tools \
+            "$RUNNER_TEMP/render" --cache "$RUNNER_TEMP/tools-cache"
+
       # The version is H3's *Package rules* shape, `0.<first-parent count>+g<12 hex>`, taken
       # from each side's own commit, as the builder takes it from the commit it builds.
       - name: Build both renders with the pinned nfpm
@@ -1199,6 +1212,19 @@ jobs:
               dpkg-deb --field "$deb" Package Version Depends
               dpkg-deb --contents "$deb"
             done
+
+      # The `host_tools_arm64` job installs this build on a real arm64 runner. One matrix leg
+      # uploads it, because both legs build the same file.
+      - name: Hand the arm64 homelab-tools build to the arm64 job
+        if: >-
+          matrix.release == '24.04' && (github.event_name == 'workflow_dispatch'
+          || steps.render.outputs.changed == 'true' || steps.render.outputs.cases == 'true')
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: homelab-tools-arm64
+          path: ${{ runner.temp }}/debs/head/homelab-tools_*_arm64.deb
+          if-no-files-found: warn
+          retention-days: 1
 
       - name: Run the type-config and maintainer-script lints over both renders and builds
         if: >-
@@ -1272,6 +1298,57 @@ jobs:
             --python "$PYTHON" --render "$RUNNER_TEMP/render" --debs "$RUNNER_TEMP/debs" \
             --work "$RUNNER_TEMP/cases"
 
+  # Target slice H3.11, the `arm64` half of homelab-tools (docs/target-architecture/host/
+  # h3-pi-pilot.md, *`homelab-tools`* and *Open questions* 9). The `host_packages` job builds
+  # both architectures with the pinned nfpm and uploads the `arm64` .deb. This job installs it
+  # in the test image, built here for `arm64`, and runs each tool's `--version`, so a binary
+  # that does not execute on `arm64` fails before the Pi installs it.
+  #
+  # RUNNER LABEL: GitHub's hosted `arm64` Linux runner. If GitHub refuses the label for this
+  # repository, the job falls back to QEMU on `ubuntu-26.04`, and the PR that does so records the
+  # run time (Open question 9). A run that leaves this job queued is that refusal.
+  #
+  # When `host_packages` built no homelab-tools, because no render changed, there is no
+  # artifact and the job ends green with a notice.
+  host_tools_arm64:
+    needs: [prove, host_packages]
+    if: ${{ (needs.prove.result == 'cancelled' || needs.prove.result == 'failure' || (!cancelled() && needs.prove.outputs.proven != 'true')) && github.event.pull_request.draft != true }}
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false  # nothing here pushes or fetches
+
+      - name: Download the arm64 homelab-tools build
+        continue-on-error: true  # no artifact when host_packages built nothing
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: homelab-tools-arm64
+          path: ${{ runner.temp }}/debs
+
+      - name: Install the build in the test image and run each tool
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          debs=("$RUNNER_TEMP"/debs/homelab-tools_*_arm64.deb)
+          if [ "${#debs[@]}" -eq 0 ]; then
+            echo "::notice::host_packages built no homelab-tools, so there is nothing to install."
+            exit 0
+          fi
+          docker build --build-arg RELEASE=24.04 --build-context runner-ca=/etc/ssl/certs \
+            -t homelab-host-test:24.04 hosts/lib/tests/container
+          docker run --rm -v "$RUNNER_TEMP/debs:/debs:ro" homelab-host-test:24.04 sh -euc '
+            test "$(dpkg --print-architecture)" = arm64
+            DEBIAN_FRONTEND=noninteractive apt-get install -y /debs/homelab-tools_*_arm64.deb
+            dpkg-query -W homelab-tools:arm64
+            for tool in sops chezmoi; do
+              /usr/lib/homelab/bin/$tool --version
+              if command -v "$tool"; then echo "$tool is on PATH" >&2; exit 1; fi
+            done
+            test -z "$(dpkg --verify homelab-tools)"
+          '
+
   # The required status context. Branch protection, the deployer's CI_CONTEXTS, await_ci.py
   # and the ruleset-drift cron all name "prek (lint + validate + tests + secrets)", so that name
   # lives on this gate rather than on either half above. `if: always()` because a job with
@@ -1281,7 +1358,7 @@ jobs:
   prek:
     name: prek (lint + validate + tests + secrets)
     runs-on: ubuntu-26.04
-    needs: [prove, hooks, pytest, ansible_lint, deck_mod, flux_roundtrip, sops_manifest_type_proof, host_packages]
+    needs: [prove, hooks, pytest, ansible_lint, deck_mod, flux_roundtrip, sops_manifest_type_proof, host_packages, host_tools_arm64]
     # On a draft the gate skips with its dependents. A red gate there would pin the head red
     # for every reader that takes the worst check run per name (`deploy_git.ci_verdict`), even
     # after the ready run passes. The skipped gate is not a pass: GitHub refuses to merge a
@@ -1303,7 +1380,7 @@ jobs:
       # job succeeded with `proven=true`: that is the proven path, where the pushed tree is one a
       # green PR run swept. A skip on any other path is a failure, because a skipped job otherwise
       # reads as a pass to GitHub.
-      - name: Require all seven halves to have succeeded
+      - name: Require all eight halves to have succeeded
         env:
           PROVE: ${{ needs.prove.result }}
           PROVEN: ${{ needs.prove.outputs.proven }}
@@ -1314,10 +1391,11 @@ jobs:
           FLUX_ROUNDTRIP: ${{ needs.flux_roundtrip.result }}
           SOPS_TYPE_PROOF: ${{ needs.sops_manifest_type_proof.result }}
           HOST_PACKAGES: ${{ needs.host_packages.result }}
+          HOST_TOOLS_ARM64: ${{ needs.host_tools_arm64.result }}
         run: |
           echo "prove=$PROVE proven=${PROVEN:-} hooks=$HOOKS pytest=$PYTEST ansible-lint=$ANSIBLE_LINT" \
             "deck-mod=$DECK_MOD flux-roundtrip=$FLUX_ROUNDTRIP sops-type-proof=$SOPS_TYPE_PROOF" \
-            "host-packages=$HOST_PACKAGES"
+            "host-packages=$HOST_PACKAGES host-tools-arm64=$HOST_TOOLS_ARM64"
           # `prove` runs on a push only, so it is `skipped` on every other event. A `cancelled`
           # or `failure` `prove` broke on the runner, so whatever it said is unproven and every
           # dependent ran (#5783).
@@ -1326,7 +1404,8 @@ jobs:
           if [ "$PROVE" = success ] && [ "${PROVEN:-}" = true ]; then proven=true; fi
           ok() { [ "$1" = success ] || { [ "$proven" = true ] && [ "$1" = skipped ]; }; }
           ok "$HOOKS" && ok "$PYTEST" && ok "$ANSIBLE_LINT" && ok "$DECK_MOD" \
-            && ok "$FLUX_ROUNDTRIP" && ok "$SOPS_TYPE_PROOF" && ok "$HOST_PACKAGES"
+            && ok "$FLUX_ROUNDTRIP" && ok "$SOPS_TYPE_PROOF" && ok "$HOST_PACKAGES" \
+            && ok "$HOST_TOOLS_ARM64"
 
       # Records what this green run tested, for the push run's `prove` job (#5489). On a pull
       # request GITHUB_SHA is the merge commit of refs/pull/N/merge, and its tree is the tree

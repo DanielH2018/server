@@ -1,0 +1,41 @@
+# The shared package that ships pinned upstream binaries (H3, C5, *`homelab-tools`*). Each lands
+# at /usr/lib/homelab/bin/<tool>, never on PATH, so a caller names the absolute path:
+# homelab-secrets calls /usr/lib/homelab/bin/sops (H4).
+#
+# The builder downloads each file, checks its sha256 against the pin below, and builds the
+# package once per architecture. A digest that differs builds nothing and writes
+# reason="tools". scripts/renderer/renderer_lib/host_tools.py documents the keys.
+#
+# Each architecture block carries its own annotation, version and digest, because the Renovate
+# manager in renovate.json moves one version and one digest per match. The two blocks of a tool
+# pin one version, which the renderer enforces. Renovate bumps these pins apart from the
+# sops_setup and chezmoi_setup defaults, which install the same tools on a fresh host.
+#
+# DECIDED: chezmoi is pinned as its .tar.gz. Upstream publishes a bare binary for amd64 only,
+# and `member` names the file the builder installs from inside the archive.
+description: Pinned upstream binaries the homelab packages call by absolute path
+tools:
+  sops:
+    amd64:
+      # renovate: datasource=github-release-attachments depName=getsops/sops
+      version: v3.13.3
+      sha256: e5bec3346a873ae91d871550f3e698c1aad962aff462a080e40f25fde17fef6b
+      url: https://github.com/getsops/sops/releases/download/{version}/sops-{version}.linux.amd64
+    arm64:
+      # renovate: datasource=github-release-attachments depName=getsops/sops
+      version: v3.13.3
+      sha256: 53b0abacd38ef1b12a66d6c100956691b9cefce018d91f81e73ddf7438b94d77
+      url: https://github.com/getsops/sops/releases/download/{version}/sops-{version}.linux.arm64
+  chezmoi:
+    amd64:
+      # renovate: datasource=github-release-attachments depName=twpayne/chezmoi
+      version: v2.73.1
+      sha256: a3f958acb7d0e5d53fa43c2eec9bc8ae3b4fba8bcbfdce29a8881ca3ffc20a53
+      url: https://github.com/twpayne/chezmoi/releases/download/{version}/chezmoi_{bare}_linux_amd64.tar.gz
+      member: chezmoi
+    arm64:
+      # renovate: datasource=github-release-attachments depName=twpayne/chezmoi
+      version: v2.73.1
+      sha256: e60275b27f505ae2086bfb87b144eacf7377a89803120f6bd933d1852a93b0c6
+      url: https://github.com/twpayne/chezmoi/releases/download/{version}/chezmoi_{bare}_linux_arm64.tar.gz
+      member: chezmoi

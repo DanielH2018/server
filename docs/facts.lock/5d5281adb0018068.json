@@ -1,5 +1,5 @@
 {
-  "checksum": "5fdda53d5a699d5ff86a32b9f5ab73b41fb4eb0c8b7bfc9fe8ed2e59ab1c95c4",
+  "checksum": "0662a92f7342613e1c8653ffc02a6c08308c1c040ddb2e68e5aa392a5c62680d",
   "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
   "key": "ansible/roles/setup/homelab_builder/CLAUDE.md#What the builder half writes (H3.5a)",
   "row": {
@@ -10,6 +10,6 @@
       "ansible/roles/setup/initial_setup/defaults/main.yml": "038f8d5e922ec5d60ebb27f34361b20028bf520bf94c2c71d60e44eed56aa58e"
     },
     "python": "3.14",
-    "verified_sha": "015ecf39f"
+    "verified_sha": "efd7fda5a"
   }
 }
