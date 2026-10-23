@@ -1,5 +1,5 @@
 ---
-# The exporter's modules, carried verbatim from files/blackbox.yml.
+# The exporter's modules, carried from files/blackbox.yml with its domain placeholder replaced.
 #
 # Rendering it here puts it inside the manifests the shared rollout gate hashes, so an edit to
 # a module rolls the pod without this role needing its own `checksum/` pod annotation.
@@ -10,4 +10,4 @@ metadata:
   namespace: {{ k8s_namespace }}
 data:
   blackbox.yml: |
-{{ lookup('file', playbook_dir + '/roles/k8s/blackbox-exporter/files/blackbox.yml') | indent(4, true) }}
+{{ lookup('file', playbook_dir + '/roles/k8s/blackbox-exporter/files/blackbox.yml') | replace('__DOMAIN__', domain) | indent(4, true) }}

@@ -1,0 +1,93 @@
+# The probes that replace Kuma's hand-written non-push tiles and the Pi's port arm, read from
+# the `blackbox-extra` and `blackbox-pi-ports` scrape jobs. Plain YAML, never Jinja:
+# prometheus-rules.yaml.j2 carries this file verbatim. The design is
+# docs/target-architecture/monitoring/m6-retire-kuma.md, "B0, B5, B7 and B8".
+#
+# SHADOW UNTIL B8's CUTOVER-B. Kuma's 14 hand-written tiles and monitor-bridge's `pi_pressure`
+# row page the same failures today. M1 convention 5 allows one pager, so every rule below
+# except the zero-series rule carries shadow="true" and routes to the blackhole receiver.
+# The 14 tiles are the 12 that become a probe here, the Pi ping that becomes `PiHostDown`, and
+# Loki's /ready, which M5's LokiHomelabDown covers. B8's Cutover-a deletes the tiles and the
+# `pi_pressure` row, and Cutover-b drops `shadow`.
+#
+# The per-target rules carry no literal `service`. Each series takes it from the scrape target
+# that `prometheus.yaml.j2` renders per probe, and scripts/validate/alert_rules.py accepts that
+# only while every selector names one job and every target of it sets `service`. `page_tier` on
+# the target picks which of the two rules fires, so severity stays a literal.
+groups:
+  - name: extra-probes
+    rules:
+      # `for: 2m` at the job's 60s interval keeps the tiles' three-strikes timing (interval 60,
+      # maxretries 2). The critical tier is the edge all-clear, which Kuma tags critical, and the
+      # `service_alerting` tiles (mosquitto, pihole) while their entries are home-critical.
+      - alert: ExtraProbeFailedCritical
+        expr: probe_success{job="blackbox-extra", page_tier="critical"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          shadow: "true"
+        annotations:
+          summary: The probe of {{ $labels.service }} is failing.
+          description: >-
+            blackbox_exporter's {{ $labels.module }} probe of {{ $labels.instance }} has failed
+            for 2 minutes. This is the replacement for a Kuma tile tagged critical. Read
+            probe_http_status_code or probe_dns_lookup_time_seconds for this instance, then the
+            workload's own log.
+      # The same, for every other probe in the job.
+      - alert: ExtraProbeFailed
+        expr: probe_success{job="blackbox-extra", page_tier="warning"} == 0
+        for: 2m
+        labels:
+          severity: warning
+          shadow: "true"
+        annotations:
+          summary: The probe of {{ $labels.service }} is failing.
+          description: >-
+            blackbox_exporter's {{ $labels.module }} probe of {{ $labels.instance }} has failed
+            for 2 minutes. Read probe_http_status_code for this instance when the module is an
+            http one, then the workload's own log.
+      # The port arm of monitor-bridge's pi_pressure row, ported. The row held a down streak of
+      # PI_PORTS_CONSECUTIVE (2) cycles of INTERVAL (300s), so 10m is the same tolerance for a
+      # container that a deploy recreates. ansible/tests/services/test_extra_probe_targets.py
+      # pins the number to the bridge's default.
+      - alert: PiPortDead
+        expr: probe_success{job="blackbox-pi-ports"} == 0
+        for: 10m
+        labels:
+          severity: warning
+          shadow: "true"
+        annotations:
+          summary: The Pi's published port for {{ $labels.service }} is not listening.
+          description: >-
+            {{ $labels.instance }} refused a TCP connect for 10 minutes. A container that is up
+            with no port mapping after a Pi restart is detached and needs a RECREATE, not a
+            restart. `ssh daniel-pi docker ps` tells a stopped container from a detached one.
+      # The Pi ping tile, ported. `up{job="node-pi"}` is the scrape of the Pi's node_exporter, so
+      # it reads 0 when the host is down or its exporter is, and the exporter is a host unit.
+      - alert: PiHostDown
+        expr: up{job="node-pi"} == 0
+        for: 2m
+        labels:
+          severity: warning
+          service: daniel-pi
+          shadow: "true"
+        annotations:
+          summary: Prometheus cannot scrape daniel-pi's node_exporter at {{ $labels.instance }}.
+          description: >-
+            The node-pi scrape has failed for 2 minutes, so the Pi is off the network or its
+            node_exporter unit is down. Kuma's Daniel Pi Host ping tile read the first of those.
+            Ping the host, then read the unit with `ssh daniel-pi systemctl status node_exporter`.
+      # This family's zero-series alert. A job dropped from prometheus.yml leaves every rule
+      # above evaluating to nothing, and no Kuma tile watches the new jobs, so this pages
+      # without a shadow label.
+      - alert: ExtraProbesMissing
+        expr: absent(up{job="blackbox-extra"}) or absent(up{job="blackbox-pi-ports"})
+        for: 10m
+        labels:
+          severity: warning
+          service: observability
+        annotations:
+          summary: Prometheus has lost the {{ $labels.job }} scrape job.
+          description: >-
+            No up{job="{{ $labels.job }}"} series exists, so the job is gone from prometheus.yml
+            or renders no target. No probe in it can fire until the series is back.

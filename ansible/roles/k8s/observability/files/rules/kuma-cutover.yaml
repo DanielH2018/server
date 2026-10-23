@@ -67,6 +67,36 @@ groups:
               absent_over_time(monitor_status{monitor_name="Artifacts Peer Sync"}[2h])
             or
               absent_over_time(monitor_status{monitor_name="k3s Telemetry OTLP Door"}[2h])
+            or
+              absent_over_time(monitor_status{monitor_name="Daniel Pi Host"}[2h])
+            or
+              absent_over_time(monitor_status{monitor_name="Daniel Pi WG Easy"}[2h])
+            or
+              absent_over_time(monitor_status{monitor_name="Email-to-RSS (Worker)"}[2h])
+            or
+              absent_over_time(monitor_status{monitor_name="iCal Proxy k8s"}[2h])
+            or
+              absent_over_time(monitor_status{monitor_name="k3s LiveSync"}[2h])
+            or
+              absent_over_time(monitor_status{monitor_name="k3s Scrutiny"}[2h])
+            or
+              absent_over_time(monitor_status{monitor_name="Loki"}[2h])
+            or
+              absent_over_time(monitor_status{monitor_name="k3s homelab-mcp (edge gate)"}[2h])
+            or
+              absent_over_time(monitor_status{monitor_name="Homelab Edge (all-clear)"}[2h])
+            or
+              absent_over_time(monitor_status{monitor_name="Pi-hole k8s DNS"}[2h])
+            or
+              absent_over_time(monitor_status{monitor_name="k3s Mosquitto (VIP)"}[2h])
+            or
+              absent_over_time(monitor_status{monitor_name="k3s Jellyfin (VIP)"}[2h])
+            or
+              absent_over_time(monitor_status{monitor_name="SLZB-06M Coordinator"}[2h])
+            or
+              absent_over_time(monitor_status{monitor_name="k3s nut (upsd)"}[2h])
+            or
+              absent_over_time(monitor_status{monitor_name="Pi Pressure"}[2h])
           )
           unless on() (up{job="uptime-kuma"} == 0)
         labels:

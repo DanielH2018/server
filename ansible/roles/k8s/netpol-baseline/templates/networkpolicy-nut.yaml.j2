@@ -36,6 +36,8 @@ spec:
     # uptime-kuma runs the `k3s nut (upsd)` port monitor
     # (uptime-kuma/templates/static-monitors.yaml.j2:103), which dials
     # nut.{{ k8s_namespace }}.svc.cluster.local:3493. It shares daniel-server with nut today.
+    # blackbox-exporter dials the same address for the `blackbox-extra` probe that replaces
+    # that monitor (M6 batch B8), and needs the same podSelector for the same reason.
     #
     # BOTH need a podSelector, and no ipBlock substitutes for one: pod -> ClusterIP -> pod
     # traffic PRESERVES the caller's pod IP, same-node and cross-node alike. It is NOT
@@ -68,6 +70,9 @@ spec:
         - podSelector:
             matchLabels:
               app: uptime-kuma
+        - podSelector:
+            matchLabels:
+              app: blackbox-exporter
         - podSelector:
             matchLabels:
               app: nut-exporter

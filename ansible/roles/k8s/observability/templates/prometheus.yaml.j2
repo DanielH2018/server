@@ -308,6 +308,80 @@ data:
             target_label: instance
           - target_label: __address__
             replacement: 'blackbox-exporter.{{ k8s_namespace }}.svc:{{ containers_list | entry_port('blackbox-exporter') }}'
+      # M6 batch B8: the probes that replace Kuma's hand-written non-push tiles
+      # (docs/target-architecture/monitoring/m6-retire-kuma.md, "B0, B5, B7 and B8"). The Pi's
+      # ping tile has no target: `up{job="node-pi"}` carries it. Loki's /ready tile has none
+      # either, because M5's LokiHomelabDown covers it. Each target sets `service`, so the
+      # extra-probes rules take it from this job, and `page_tier` picks the severity, as in
+      # blackbox-ingress. The same relabel rewrite and the same no-`timeout` reasoning apply.
+      # The two Kuma tiles that carry `severity: critical` keep it: the edge all-clear and the
+      # two `service_alerting` tiles (mosquitto, pihole) that follow the home-critical tier.
+      - job_name: blackbox-extra
+        scrape_interval: 1m
+        metrics_path: /probe
+        static_configs:
+          - targets: ['http://{{ hostvars['daniel-pi'].server_ip }}:51821']
+            labels: {service: wg-easy, module: http_2xx, page_tier: warning}
+          - targets: ['https://email-rss.{{ domain }}/admin/login']
+            labels: {service: email-to-rss, module: http_2xx, page_tier: warning}
+          - targets: ['http://ical-proxy.{{ k8s_namespace }}.svc.cluster.local:5000/calendar1.ics']
+            labels: {service: ical-proxy, module: http_2xx, page_tier: warning}
+          - targets: ['https://livesync.local.{{ domain }}/']
+            labels: {service: livesync, module: http_401, page_tier: warning}
+          - targets: ['https://scrutiny.local.{{ domain }}/api/health']
+            labels: {service: scrutiny, module: http_2xx, page_tier: warning}
+          - targets: ['https://mcp.local.{{ domain }}/health']
+            labels: {service: homelab-mcp, module: http_body_ok, page_tier: warning}
+{% if traefik_k8s_manage_crowdsec | default(true) %}
+          - targets: ['https://edge-selfcheck.local.{{ domain }}/.well-known/traefik-edge-selfcheck']
+            labels: {service: traefik, module: http_body_OK, page_tier: critical}
+{% endif %}
+          - targets: ['{{ dns_k8s_vip }}:53']
+            labels: {service: pihole, module: dns_a_homepage, page_tier: {{ 'critical' if containers_list | in_service_tier('pihole', 'home-critical') else 'warning' }}}
+          - targets: ['{{ mqtt_k8s_vip }}:1883']
+            labels: {service: mosquitto, module: tcp_connect, page_tier: {{ 'critical' if containers_list | in_service_tier('mosquitto', 'home-critical') else 'warning' }}}
+          - targets: ['{{ jellyfin_k8s_lan_ip }}:8096']
+            labels: {service: jellyfin, module: tcp_connect, page_tier: warning}
+          - targets: ['{{ slzb_ip }}:6638']
+            labels: {service: zigbee2mqtt, module: tcp_connect, page_tier: warning}
+          - targets: ['nut.{{ k8s_namespace }}.svc.cluster.local:3493']
+            labels: {service: nut, module: tcp_connect, page_tier: warning}
+        relabel_configs:
+          - source_labels: [__address__]
+            target_label: __param_target
+          - source_labels: [module]
+            target_label: __param_module
+          - source_labels: [__param_target]
+            target_label: instance
+          - target_label: __address__
+            replacement: 'blackbox-exporter.{{ k8s_namespace }}.svc:{{ containers_list | entry_port('blackbox-exporter') }}'
+      # One tcp_connect target per container the Pi publishes a port for, from the same
+      # `published_ports` selection as monitor-bridge's PI_PUBLISHED_PORTS, so a container added
+      # to daniel-pi's containers_list gets a probe with no edit here. `service` is the container
+      # name. A container recreated by a deploy closes its port for a few seconds, which
+      # PiPortDead's `for:` rides out. A container that comes back attached to no Docker network
+      # stays closed until someone recreates it, and that is what this job exists to catch.
+      - job_name: blackbox-pi-ports
+        scrape_interval: 1m
+        # A contended Pi can take over the default 10s to accept a connect, which the exporter
+        # would then report as a closed port. The pi-scrape-jobs-outlast-the-default-timeout
+        # property holds every job that targets the Pi to a longer timeout.
+        scrape_timeout: 30s
+        metrics_path: /probe
+        static_configs:
+{% for published in hostvars['daniel-pi'].containers_list | published_ports %}
+          - targets: ['{{ hostvars['daniel-pi'].server_ip }}:{{ published.split(':')[1] }}']
+            labels: {service: {{ published.split(':')[0] }}, module: tcp_connect}
+{% endfor %}
+        relabel_configs:
+          - source_labels: [__address__]
+            target_label: __param_target
+          - source_labels: [module]
+            target_label: __param_module
+          - source_labels: [__param_target]
+            target_label: instance
+          - target_label: __address__
+            replacement: 'blackbox-exporter.{{ k8s_namespace }}.svc:{{ containers_list | entry_port('blackbox-exporter') }}'
       # GPU utilization on each node, through gpu-exporter (roles/k8s/gpu-exporter). The
       # dri-device-plugin advertises the render node as `devic.es/dri` and jellyfin and tdarr
       # both request it, but nothing turned the resulting load into a series — a slow transcode
