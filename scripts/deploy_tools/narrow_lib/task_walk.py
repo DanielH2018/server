@@ -188,7 +188,7 @@ def file_tags(text: str) -> frozenset[str] | None:
     """The tags that select every task in one task file, or None when one is untagged.
 
     None is a refusal, and it is the common case for a file nobody tagged: `main.yml`'s
-    imports, `unit-logging.yml`, `stale-checkout-check.yml`. Those inherit their tags from
+    imports, `unit-logging.yml`. Those inherit their tags from
     the import site, so a hit in one says nothing about which tag applies it.
     """
     try:

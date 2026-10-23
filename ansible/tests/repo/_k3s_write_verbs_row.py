@@ -7,8 +7,9 @@ writers per task file. Its `allow` map starts with every file that holds one, ea
 that removes its writers, and each H1 PR drops its entry in the same commit. At the end of H1
 only `storage_smoke.yml` and `agent_verify.yml` keep an entry.
 
-The predicate is `ansible/tests/_k3s_cluster_writes.py`, which
-`ansible/tests/setup/test_k3s_stale_checkout_map.py` shares. The row sits in its own module
+The row is what refuses a new cluster writer in `setup/k3s`: a writer in any other file fails
+it, with no guard to register with (#5957 retired the stale-checkout guard). The predicate is
+`ansible/tests/_k3s_cluster_writes.py`. The row sits in its own module
 because `test_census_rows_roles.py`, which imports it into `ROWS`, is at the cap for a test
 module.
 """
@@ -41,8 +42,7 @@ K3S_WRITE_VERBS = Census(
         "that wrote them, in the same commit. A writer left behind fights Flux on every hand "
         "apply. A writer in a file that has no allow entry is new: hand its objects to a Flux "
         "tag rather than writing them from this role, or give the file an entry that names the "
-        "PR removing it. Each writer outside storage_smoke.yml and agent_verify.yml also needs a "
-        "row in tasks/stale-checkout-guard.yml (test_k3s_stale_checkout_map.py)."
+        "PR removing it."
     ),
     files=lambda: tracked(_TASKS + "*.yml"),
     offence=cluster_writes,
