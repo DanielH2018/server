@@ -12,6 +12,7 @@ from _promote_fakes import bundle_files
 from test_verify_promotion import PRIOR, T, Clock, digests, ks, ok
 from test_verify_promotion_storage_rollout import timeline
 
+from deploy_tools.promote_lib import controller_rollout as cr
 from deploy_tools.promote_lib import verify_promotion as vp
 
 FLUX = {"flux": ks("flux"), "soak": ks("soak"), "sonarr": ks("sonarr")}
@@ -53,12 +54,19 @@ def test_regression_guard_without_flux_in_the_changed_set_the_same_failure_holds
     assert clock.sleeps == 0
 
 
-def test_a_flux_failure_no_success_follows_holds_at_the_timeout():
+def test_a_success_late_in_the_grace_still_reads_good():
+    expected = vp.expected_set(HOP, PROD)
+    clock = Clock()
+    reads = timeline(clock, [(0, REPLACED), (cr.GRACE_S - 60, RECOVERED)])
+    assert vp.verify(reads, T, PRIOR, expected) == vp.Verdict("good")
+
+
+def test_a_flux_failure_no_success_follows_holds_when_the_grace_ends():
     expected = vp.expected_set(HOP, PROD)
     clock = Clock()
     verdict = vp.verify(timeline(clock, [(0, REPLACED)]), T, PRIOR, expected)
     assert verdict == vp.Verdict("failed", ("flux", "soak"))
-    assert expected.timeout_s <= clock.now < expected.timeout_s + vp.POLL_S
+    assert cr.GRACE_S <= clock.now < cr.GRACE_S + vp.POLL_S < expected.timeout_s
 
 
 def test_regression_guard_another_names_failure_stays_final_in_a_flux_hop():

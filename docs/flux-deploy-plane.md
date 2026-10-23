@@ -984,10 +984,11 @@ notification-controller posts on T:
   `kustomize-controller`'s own Deployment replaces the pod that is reconciling. The old pod
   posts `failure` for `flux` and for `soak` as it goes, and the new pod posts `success` for
   `flux` about 12 seconds later and re-runs the soak. So while `flux` is in the set, a
-  `failure` or `error` on `flux` or `soak` keeps the wait going until a later status on the
-  same name. A failure that no `success` follows ends at `verify`'s own timeout, so a real
-  `flux` failure holds at that timeout, not at the first read. A failure on any other name
-  stays final.
+  `failure` or `error` on `flux` or `soak` is provisional for 15 minutes after the poll that
+  first read it: the rollout plus one 10-minute reconcile interval. A later `success` inside
+  that grace reads good. With none, the failure turns final and `verify` fails as it did
+  before, so a real `flux` failure holds 15 minutes later, not at `verify`'s timeout, which
+  can run to hours. A failure on any other name stays final.
   `scripts/deploy_tools/promote_lib/controller_rollout.py` holds the rule.
 
 `settle` applies the verdict:

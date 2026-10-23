@@ -8,15 +8,18 @@ soak. On 627fd395 (2026-10-23, promote run 39977616897) `verify` read the first 
 ended and held `failed=flux,soak`.
 
 So while STAGE_TAG is expected, a `failure` or `error` of STAGE_TAG or of a name in
-ALSO_REPLACED is provisional: `verify` keeps waiting for a later status on the same name.
-No separate bound applies. A failure that no `success` follows ends at `verify`'s own
-timeout, naming every name that is not `success`. The cost is that a real `flux` failure
-holds at that timeout rather than at the first read.
+ALSO_REPLACED is provisional for GRACE_S after the first poll that read it: `verify` keeps
+waiting for a later status on the same name. A `success` inside the grace ends the wait as
+good. With none, the failure turns final at the grace's end, and `verify` fails as it did
+before. Flux posts no timestamp that `verify` reads, so the poll that first reads a failure
+stands in for the time it was posted, which it trails by at most one poll.
 
-DECIDED: the names are fixed, not derived from the bundle. Notification-controller's status
-description carries only the event reason, so `verify` cannot tell the replaced pod's
-"health check failed" from a real one, and a name outside this set that fails during the hop
-stays final.
+DECIDED: the grace is a fixed 15 minutes, not `verify`'s timeout. That timeout runs to hours
+(`chained_timeout.VERIFY_CAP_S`), and a real `flux` failure would hold that long. 15 minutes
+is the controller's rollout plus one 10-minute reconcile interval for the soak to re-run.
+The names are fixed too. Notification-controller's status description carries only the event
+reason, so `verify` cannot tell the replaced pod's "health check failed" from a real one, and
+a name outside this set that fails during the hop stays final.
 
 Run: imported only. `uv run pytest scripts/deploy_tools/tests/test_verify_promotion_controller_rollout.py`
 """
@@ -30,19 +33,39 @@ STAGE_TAG = "flux"
 ALSO_REPLACED = frozenset({"soak"})
 
 
-def provisional(expected: Iterable[str], failed: Iterable[str]) -> frozenset[str]:
-    """The names in `failed` whose failure is provisional, because the controller may roll.
+GRACE_S = 15 * 60
 
-    Empty when STAGE_TAG is not among `expected`, which makes every failure final.
+
+class Window:
+    """One `verify` wait's view of the controller rollout: when each failure was first read.
+
+    Attributes:
+        first_read: the clock reading of the first poll that read each name's current failure.
     """
-    if STAGE_TAG not in set(expected):
-        return frozenset()
-    return frozenset(failed) & ({STAGE_TAG} | ALSO_REPLACED)
 
+    def __init__(self) -> None:
+        self.first_read: dict[str, float] = {}
 
-def note() -> str:
-    """The clause `verify` appends to its status line while only these failures stand."""
-    return (
-        "; provisional while kustomize-controller rolls, until a later success "
-        "or the timeout"
-    )
+    def provisional(
+        self, expected: Iterable[str], failed: Iterable[str], now: float
+    ) -> frozenset[str]:
+        """The names in `failed` whose failure is provisional at `now`, because the controller may roll.
+
+        Empty when STAGE_TAG is not among `expected`, which makes every failure final. A name
+        that left `failed` forgets its reading, so a later failure starts a new grace.
+        """
+        failed = frozenset(failed)
+        self.first_read = {n: t for n, t in self.first_read.items() if n in failed}
+        if STAGE_TAG not in set(expected):
+            return frozenset()
+        candidates = failed & ({STAGE_TAG} | ALSO_REPLACED)
+        for name in candidates:
+            self.first_read.setdefault(name, now)
+        return frozenset(n for n in candidates if now - self.first_read[n] < GRACE_S)
+
+    def note(self) -> str:
+        """The clause `verify` appends to its status line while only these failures stand."""
+        return (
+            f"; provisional while kustomize-controller rolls, for {GRACE_S}s after the "
+            "first read"
+        )

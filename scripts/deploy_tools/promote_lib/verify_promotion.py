@@ -52,7 +52,7 @@ until `flux/longhorn` has read `success` for a grace, or `longhorn` overruns its
 (`storage_rollout.py`, #5997).
 
 THE CONTROLLER ROLLOUT. While `flux` is expected, a failure of `flux` or `soak` is provisional:
-a later `success` on the same name ends it, and none ends it at the timeout
+a later `success` on the same name ends it, and none inside a fixed grace turns it final
 (`controller_rollout.py`, #6013).
 
 THE OTHER TWO HALVES `decide` calls:
@@ -351,6 +351,7 @@ def verify(
     started = reads.clock()
     states: dict[str, str] = {}
     last = ""
+    controller = controller_rollout.Window()
     window = storage_rollout.Window(
         names, expected.storage_grace_s, expected.storage_rollout_s
     )
@@ -363,12 +364,12 @@ def verify(
         except forge.ForgeError as err:
             line = f"the statuses could not be read: {err}"
         failed = [n for n in names if states.get(STATUS_PREFIX + n) in FAILED_STATES]
-        rolling = controller_rollout.provisional(names, failed)
+        rolling = controller.provisional(names, failed, reads.clock())
         final = [n for n in failed if n not in rolling]
         if final and not window.provisional(final, states, reads.clock()):
             return Verdict("failed", tuple(failed), tuple(sorted(excused)))
         if failed:
-            line += window.note() if final else controller_rollout.note()
+            line += window.note() if final else controller.note()
         if all(states.get(STATUS_PREFIX + n) == "success" for n in names):
             return Verdict("good", excused=tuple(sorted(excused)))
         if line != last:
