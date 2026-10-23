@@ -49,6 +49,25 @@ source /usr/local/lib/kuma-push-lib.sh || {
   exit 1
 }
 
+# The textfile library, sourced like the Kuma one: a host that misses it fails the cron loudly
+# instead of reporting green (M6 batch B6).
+# shellcheck source=/dev/null
+source /usr/local/lib/homelab-check-lib.sh || {
+  logger -t claude-otel-health "homelab-check-lib.sh missing — run initial_setup on this host"
+  exit 1
+}
+
+# The longest legitimate gap between two textfile writes: two cron periods plus 300s, for the
+# reasons sync-artifacts.sh gives. Rendered from the cron's own minute, read as `*/N`; any other
+# shape fails the render. ansible/tests/services/test_b6a_rule_literals.py pins the
+# NotReporting rule to it.
+{% set _every_n = claude_code_telemetry_health_minute | string | regex_replace('^[*]/([0-9]+)$', '\\1') %}
+{% if _every_n.isdigit() and '*/' ~ _every_n == claude_code_telemetry_health_minute | string %}
+DEADLINE_S={{ 2 * 60 * (_every_n | int) + 300 }}
+{% else %}
+{{ telemetry_health_cron_minute_not_every_n | mandatory('claude_code_telemetry_health_minute must be */N for telemetry-health.sh to derive DEADLINE_S, got ' ~ claude_code_telemetry_health_minute) }}
+{% endif %}
+
 KUMA_HOST="uptime-kuma.local.{{ domain }}"
 # Pinned to the cluster ingress VIP: Kuma serves from the k8s edge, and the Docker
 # edge's bridge route for this name was removed in the slice-7 bridge teardown.
@@ -62,5 +81,11 @@ else
   STATUS=down
   MSG="OTLP receiver unreachable on {{ claude_code_otlp_host_ip }}:{{ claude_code_otlp_port }}"
 fi
+
+SUCCESS=0
+[ "$STATUS" = up ] && SUCCESS=1
+# Taken at the verdict and written before the push, so a slow push cannot age it.
+write_check_textfile claude-otel-health "$SUCCESS" "$(date +%s)" "$DEADLINE_S" \
+  || logger -t claude-otel-health "textfile write failed (status=${STATUS})"
 
 kuma_push "$STATUS" "$MSG" "$PUSH_URL" "$KUMA_HOST" "$KUMA_RESOLVE_IP" claude-otel-health

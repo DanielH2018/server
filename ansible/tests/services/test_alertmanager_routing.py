@@ -375,6 +375,10 @@ def test_host_sets_names_every_host_check_rule():
         "TextfileCollectorError/daniel-box",
         "TextfileCollectorError/daniel-server",
         "FanoutSlotsIdleWithFreeWork/daniel-box",
+        "ArtifactsSyncFailed/daniel-box",
+        "ArtifactsSyncNotReporting/daniel-box",
+        "OtlpDoorClosed/daniel-box",
+        "OtlpDoorNotReporting/daniel-box",
     }
     assert set(host_sets(shadow=False)) >= {
         "DiskHealthFailed/daniel-box",

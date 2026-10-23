@@ -217,6 +217,17 @@ HC_ROUTED_TAGS = frozenset(
 )
 
 
+# Producers whose Kuma tile M6 is retiring. From a batch's Cutover-1a the tile is gone, so the
+# producer's push is refused until its Cutover-2 drops it, and a refused push is not a fault.
+# `swallowed_verdicts` leaves these tags out of the `rejected` set only: a lost `status=down`
+# push still counts, and a `status=` line still counts as a landed sibling. Each B1 to B7 shadow
+# PR adds its producers' tags, as `parse_push_line` reads them, and C-7 deletes the set. Pinned
+# against the tree by tests/test_check_swallowed_verdicts.py: a tag must be one a rendered
+# producer logs under. See docs/target-architecture/monitoring/m6-retire-kuma.md, *The cutover
+# order*.
+KUMA_RETIRING_TAGS = frozenset({"sync-artifacts", "claude-otel-health"})
+
+
 def swallowed_verdicts(
     lines: list[tuple[int, str]], window: str, truncated: bool
 ) -> tuple[bool, str]:
@@ -271,7 +282,9 @@ def swallowed_verdicts(
     rejected = {
         t: v
         for t, v in latest.items()
-        if v[2] == "rejected" and t not in HC_ROUTED_TAGS
+        if v[2] == "rejected"
+        and t not in HC_ROUTED_TAGS
+        and t not in KUMA_RETIRING_TAGS
     }
     if rejected:
         named = "; ".join(
