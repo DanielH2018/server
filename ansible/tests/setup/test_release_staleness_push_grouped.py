@@ -22,6 +22,10 @@ from _shell_render import render_shell_script, rendered_shell_text
 REACHOUT_STUB = 'reachout_verdict() { REACHOUT_STATUS=down; REACHOUT_NOTE=""; }\n'
 
 TEMPLATE = ("setup", "k3s", "release-staleness-check.sh.j2")
+# The shared check library is sourced after the push library and redefines its three helpers, so
+# the case stubs it too: the real file would probe the WAN. The textfile it writes is covered in
+# test_k3s_cron_textfiles.py.
+CHECK_LIB = "/usr/local/lib/homelab-check-lib.sh"
 
 GROUPED = (
     "3 services stale — host_vars/daniel-pi.yml [every service: node-exporter was removed "
@@ -44,6 +48,7 @@ def _run(tmp_path, probe_output, probe_rc, names=None, prev=None):
     body = render_shell_script(*TEMPLATE)
     for literal in (
         "/usr/local/lib/kuma-push-lib.sh",
+        CHECK_LIB,
         "/etc/rancher/k3s/kuma-push.env",
         "/home/ubuntu/.local/bin/uv",
         "--grace-minutes 60",
@@ -64,6 +69,8 @@ def _run(tmp_path, probe_output, probe_rc, names=None, prev=None):
         "}\n"
         "git() { :; }\nlogger() { :; }\n" + REACHOUT_STUB
     )
+    check_lib = tmp_path / "homelab-check-lib.sh"
+    check_lib.write_text("write_check_textfile() { :; }\n")
     env = tmp_path / "kuma-push.env"
     env.write_text("RELEASE_STALENESS_PUSH_TOKEN=stubtoken\n")
     names_src = tmp_path / "names"
@@ -82,6 +89,7 @@ def _run(tmp_path, probe_output, probe_rc, names=None, prev=None):
     script = write_exec(
         tmp_path / "release-staleness-check.sh",
         body.replace("/usr/local/lib/kuma-push-lib.sh", str(lib))
+        .replace(CHECK_LIB, str(check_lib))
         .replace("/etc/rancher/k3s/kuma-push.env", str(env))
         .replace("/home/ubuntu/.local/bin/uv", str(uv))
         .replace("/home/ubuntu/server", str(tmp_path))

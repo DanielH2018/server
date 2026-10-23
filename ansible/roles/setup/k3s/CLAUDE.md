@@ -127,3 +127,10 @@ Longhorn RecurringJobs left at H1.7b, and their contract is the `longhorn-backup
   The stale-checkout guard that H1 ran beside it was retired in #5957 once H1.7b had removed its
   last row. A checkout older than H1.7b still carries its own guard, so this tree's empty copy
   protected nothing. To revive it, take it from #5316 in git history.
+- **The five heartbeat checks also write a textfile verdict (M6 batch B1).** Longhorn backup
+  health, the off-box etcd snapshot, the manifest-prune and release-staleness checks, and the
+  live-drift check each write the three homelab_check_* series to node_exporter's textfile
+  directory before their Kuma push. Shadow rules in observability's host-checks.yaml read the
+  files until B1's cutover. The deadline of a */N cron derives from its minute variable, and the
+  three daily checks share k3s_daily_check_deadline_s. A change to a schedule moves its deadline,
+  and the rule's literal follows it (the pin is ansible/tests/services/test_b1_rule_literals.py).
