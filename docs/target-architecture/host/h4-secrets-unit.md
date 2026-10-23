@@ -1,6 +1,6 @@
 # H4 — Secrets unit; NUT on daniel-server first
 
-Status: PLANNED
+Status: IN PROGRESS
 Depends on: H3
 Unblocks: H5, H6
 
