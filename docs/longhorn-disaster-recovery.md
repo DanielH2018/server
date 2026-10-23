@@ -119,92 +119,19 @@ the per-volume map and each exclusion's rationale:
    uv, run `ansible/bootstrap.yml` on the new host, add its age pubkey to
    `ansible/.sops.yaml`, `sops updatekeys` from a host that can decrypt (or use the
    off-box recovery key if no host survives), commit, pull.
-2. **Cluster bring-up**: `uv run ansible-playbook ansible/k3s-bringup.yml`. From H1.7b the
-   `longhorn-backup` Kustomization creates both backup targets and their credential Secrets
-   (`longhorn-b2`, `longhorn-r2`, substituted from `homelab-cluster-vars`), and the arm flags
-   `k3s_longhorn_backup_armed` and `k3s_longhorn_r2_armed` are git, in that role's defaults.
-   Both must be `true` in the render at `prod`: the four volumes in the table above restore
-   from the R2 target, so a B2-only bring-up leaves them with nothing to restore from. Both
-   default to `true`. If `prod` disarms one, as a B2 cap incident can leave it, the arm PR
-   merges and promotes first (step (f) below).
-   **Order from H1.2.** `cluster-base` (the PriorityClasses and the read-only identity) is
-   Flux-owned, and two of its objects are needed before Flux can run. Flux's controllers name
-   `homelab-critical`, and `setup/k3s`'s `kubeconfig.yml` reads the token Secret. So step 2
-   runs in the order below on a new cluster, and the root `homelab` Kustomization stays
-   suspended until the volumes are restored (step 4). Once the root runs, every Flux-owned
-   stateful tag provisions fresh empty PVCs under the backed-up names. Steps (a), (c) and (g)
-   run playbooks or patches that need `become`, so the operator runs them.
-
-    - (a) `uv run ansible-playbook ansible/k3s-bringup.yml --skip-tags kubeconfig`. It installs
-      k3s, and k3s creates its bundled CoreDNS. The play skips the token wait, which would fail
-      here. The packages Longhorn needs on the node still install, because they carry the tag
-      `longhorn_host` alone. The play selects no task that reads or writes a Longhorn object,
-      because the `longhorn`, `longhorn-reconcile` and `longhorn-backup` Kustomizations own them
-      all.
-    - (b) **Operator-only.** Render `cluster-base` and apply it under `kustomize-controller`'s own
-      field manager, so Flux's first apply finds its own fields:
-      `uv run python scripts/renderer/homelab_render.py cluster --out <out> --role cluster-base`,
-      then
-      `sudo k3s kubectl apply --server-side --field-manager=kustomize-controller -k <out>/cluster/cluster-base`.
-      The directory substitutes nothing, so the placeholder-mode render applies as it stands.
-    - (c) `uv run ansible-playbook ansible/k3s-bringup.yml --tags kubeconfig`. The token Secret
-      exists, so the bounded wait passes.
-    - (d) Run the `flux` role with `flux_sync_suspend: true`, which renders `suspend: true` on
-      the `OCIRepository` `homelab` and on the root Kustomization. Its pods admit, because (b)
-      created `homelab-critical`. Then, **operator-only**, resume the `OCIRepository` alone so the
-      children have a source:
-      `sudo k3s kubectl -n flux-system patch ocirepository homelab --type merge --field-manager=homelab-operator -p '{"spec":{"suspend":false}}'`.
-      Do not run the `flux` role again before (g): a run with the role's defaults resumes the
-      root before the restores.
-    - (e) **Operator-only.** Create `flux-system/sops-age` from the password manager (item 10
-      of the recovery kit in `docs/break-glass.md`).
-    - (f) **Operator-only.** Hold promotions and fix the revision. Wait until no run of the
-      `promote` workflow is queued or in progress. Read `prod`'s commit from the
-      `org.opencontainers.image.revision` key of `prod`'s manifest in GHCR. When `DEPLOY_HOLD`
-      reads `none`, set `gh variable set DEPLOY_HOLD --body dr-restore -R DanielH2018/server`.
-      A merge during the restores would otherwise promote, time out in `verify` with the root
-      suspended, and reset `prod` to `last-good`. Then render the plumbing tags at that commit
-      and apply their `flux/<tag>.yaml`, and `flux/cluster-vars.yaml`, which `longhorn-backup`
-      substitutes from, with
-      `sudo k3s kubectl apply --server-side --field-manager=kustomize-controller -f <file>`.
-      That is the root's own field manager, so the root adopts them. Wait until each reads
-      `Ready`. The `longhorn-backup` Kustomization waits on `longhorn` and creates both backup
-      targets and their credential Secrets, so step 3's sync finds them with no further step.
-      **Operator-only, before that apply:** confirm that the render of `longhorn-backup` at
-      `prod`'s commit arms both targets, with
-      `grep -E '^k3s_longhorn_(backup|r2)_armed:' ansible/roles/k8s/longhorn-backup/defaults/main.yml`
-      from a checkout of that commit. If it disarms one, the arm PR merges and promotes first.
-      A promotion needs `DEPLOY_HOLD` to read `none`, so clear a stray hold with the command in
-      (g) before the arm PR merges. The arm PR's verify cannot pass while the root is suspended,
-      so the revision holds and leaves `prod` on the arm commit, because `longhorn-backup` is
-      forward-only. That hold stays until (g).
-    - (g) After the restores of step 4, **operator-only**, resume the root with the same patch
-      form:
-      `sudo k3s kubectl -n flux-system patch kustomization homelab --type merge --field-manager=homelab-operator -p '{"spec":{"suspend":false}}'`.
-      Once every status on `prod`'s commit reads `success`, clear the hold with
-      `gh variable set DEPLOY_HOLD --body none -R DanielH2018/server`.
-
-   **MetalLB from H1.3.** The `metallb` tag is Flux-owned, so (a) no longer installs MetalLB or
-   its address pool. The Kustomization `metallb` installs both at (f), once the plumbing tags
-   apply, and no VIP is announced before then.
-
-   **CoreDNS from H1.4.** (a) still lets k3s create its bundled CoreDNS. The play then reads
-   Deployment `coredns` until it exists, and writes the `.skip` marker only after that read. The
-   Kustomization `coredns` takes the Deployment, the Service, the RBAC and the `Corefile` key
-   over at (f). Flux resolves GHCR through that DNS, so a CoreDNS that k3s has not yet created
-   would leave Flux unable to fetch the bundle.
-
-   **Longhorn from H1.5a.** The `longhorn` tag is Flux-owned, so (a) no longer installs
-   Longhorn. The Kustomization `longhorn` installs it at (f), with the manager memory request
-   and the `longhorn` StorageClass built in. Before H1.5a, (a) installs Longhorn.
-
-   **The backup targets from H1.7b.** The `longhorn-backup` tag is Flux-owned, so no play
-   creates the credentials, the targets or the RecurringJobs. The Kustomization applies them at
-   (f), once `longhorn` reads `Ready`, and the arm flags are git. No step applies them by hand.
-
-   Before H1.2 there is no step (b): k3s bring-up applies the PriorityClasses and the identity
-   itself. Steps 3 and 4 below sit between (f) and (g). D5's flux PR replaces this block with a
-   pointer to its own bootstrap section.
+2. **Cluster bring-up and Flux**: follow [Bootstrapping Flux on a rebuilt cluster](flux-deploy-plane.md#bootstrapping-flux-on-a-rebuilt-cluster) in
+   `docs/flux-deploy-plane.md`. That section owns the bring-up and DR order: k3s bring-up,
+   the Flux install, the plumbing tags, steps 3 and 4 below as its steps 7 and 8, and the root
+   Kustomization last, which provisions every PVC. The Flux-owned plumbing tags install what
+   the bring-up used to: the Kustomization `metallb` installs MetalLB and its address pool,
+   `coredns` takes CoreDNS over from k3s's bundled add-on, `longhorn` installs Longhorn with
+   its Settings and the `longhorn` StorageClass, and `longhorn-backup` creates both backup
+   targets, their credential Secrets (`longhorn-b2`, `longhorn-r2`, substituted from
+   `homelab-cluster-vars`) and the RecurringJobs. The arm flags `k3s_longhorn_backup_armed`
+   and `k3s_longhorn_r2_armed` are tracked in `longhorn-backup`'s defaults. Both must be
+   `true` in the render at `prod`: the four volumes in the table above restore from the R2
+   target, so a B2-only bring-up leaves them with nothing to restore from. The bootstrap
+   section's step 1 checks them.
 3. **Wait for the backupstore sync** — `uv run python scripts/diagnostics/probe.py health longhorn-backup`
    reports both targets available (it skips a target disarmed on purpose and fails when no
    target is named `default`), or `kubectl -n longhorn-system get backuptarget` shows
@@ -225,7 +152,7 @@ the per-volume map and each exclusion's rationale:
    `k3s_longhorn_backup_armed: false` PR, or the BackupTarget break-glass in
    `docs/break-glass.md` when the PR cannot reach the cluster), and resume after the 00:00 UTC
    reset.
-4. **Restore volumes BEFORE any deploy** — deploying first would provision fresh
+4. **Restore volumes BEFORE the root exists** — the root Kustomization would provision fresh
    empty PVCs under the same names. Before the first restore, run the gates: both targets
    armed and available, a `BackupVolume` on each (the sync happened), and no backed-up PVC
    name already bound to an empty volume. They run as one script, in order, and the exit code
@@ -264,8 +191,9 @@ the per-volume map and each exclusion's rationale:
 
    Use **Create PV/PVC** only for a volume whose objects the snapshot lacks. No drill has run
    this etcd-first order; the steps above are inferred from what the snapshot holds.
-5. **Deploy**: `./scripts/deploy.sh`. Workloads bind the existing
-   PVCs; no-backup volumes provision empty and rebuild per the list above.
+5. **Apply the root**: return to step 9 of [Bootstrapping Flux on a rebuilt cluster](flux-deploy-plane.md#bootstrapping-flux-on-a-rebuilt-cluster). The root
+   applies every Kustomization at `prod`. Workloads bind the existing PVCs; no-backup volumes
+   provision empty and rebuild per the list above.
 6. **Verify**: `uv run python scripts/diagnostics/probe.py targets` and `health <svc>` for the
    restored tier; `probe.py ha verify-automations` for HA; monitor-bridge's board goes
    green as services come up. Restore the Kuma admin + check tiles last (its DB was

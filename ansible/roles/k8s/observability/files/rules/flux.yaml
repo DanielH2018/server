@@ -106,9 +106,10 @@ groups:
             the observability namespace for a Forbidden or a custom-resource-state config
             error, and compare the Flux CRD versions with
             observability_ksm_flux_resource_state.{{ end }}
-      # kube-state-metrics drops a label whose field is absent, and the flux role writes
-      # spec.suspend only while flux_sync_suspend is true, so suspension matches
-      # suspended="true". flux_sync_suspend and a hand suspend both count. The max by() keeps
+      # kube-state-metrics drops a label whose field is absent, and the renderer writes
+      # spec.suspend only when it is true (D5.1b), so suspension matches suspended="true". A
+      # role's flux_suspend and a hand suspend both count; the renderer refuses
+      # flux_sync_suspend: true (D5 step 29). The max by() keeps
       # the hold across a change of the other labels, and last_over_time across a gap in
       # kube-state-metrics' scrape, as in FluxNotReady. Without it, a 24h hold would fire only
       # after a whole day with no failed scrape and no roll of that pod. The `unless` drops a
@@ -135,8 +136,9 @@ groups:
           summary: A Flux Kustomization has been suspended for more than 24 hours.
           description: >-
             The Kustomization {{ $labels.name }} in {{ $labels.exported_namespace }} has been
-            suspended for 24 hours, so Flux applies nothing it owns. If flux_sync_suspend is
-            true, set it back and run the flux role; otherwise the suspend was made by hand.
+            suspended for 24 hours, so Flux applies nothing it owns. If its role sets
+            flux_suspend, land the PR that removes it; otherwise the suspend was made by hand,
+            and its resume is in docs/flux-deploy-plane.md.
       # Every kustomize-controller worker is busy and more work is waiting, so applies queue,
       # the fix for a failing one included. An unchanged Kustomization that is unhealthy holds a
       # worker for its whole `timeout` on every retry, and `verify`'s timeout leaves those out.

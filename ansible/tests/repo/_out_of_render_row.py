@@ -48,7 +48,8 @@ ALLOW = {
         "D5: the ban-and-lift check becomes the `crowdsec-verify` Job"
     ),
     _K8S + "flux/tasks/main.yml": (
-        "D5's flux PR: the sync objects come from the artifact, and the drill delete goes"
+        "R4: flux-owned since D5's flux PR, so no path runs it; flux-deferred applies the "
+        "sync objects and its prune deletes the drill, and R4 deletes the file"
     ),
     _K8S + "image-builder/tasks/main.yml": (
         "D5.4: CI builds and pushes each image by its content tag"

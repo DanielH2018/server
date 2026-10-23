@@ -4,8 +4,7 @@ Two gaps let uptime-kuma's push-token assert stop the first shadow-render dry ru
 census. The derivation read only role defaults and inventory vars, so a `set_fact` over
 `lookup('template', ...)` of a template that names a secret key derived nothing. And an `assert`
 was credited as side-effect free, which answers whether a task sends a secret but not whether it
-passes on a stub. `STUB_REFUSING` names the refusing tasks found so far; these tests build ones it
-does not name.
+passes on a stub. These tests build refusing tasks nobody named, which the census must select.
 
 Each synthetic role goes through `census(role, names)` with the secret key alone in `names`, so
 the role's own template-derived names have to be found where the role directory is in hand.

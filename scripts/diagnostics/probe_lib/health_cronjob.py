@@ -10,6 +10,7 @@ from rendered manifests, so "no CronJob in this namespace" must NOT read as a sk
 """
 
 import re
+from dataclasses import dataclass
 
 # `probe_lib` is a namespace package under `scripts/`, so reaching a sibling by package name
 # needs `scripts/` on sys.path — a module gets only its importer's path otherwise, and
@@ -46,6 +47,32 @@ from diagnostics.probe_lib.health_rollout import seconds_since
 FLUX_OWNER_LABEL = "kustomize.toolkit.fluxcd.io/name"
 _GATE_INFIX = "-deploy-gate-"
 _DIGEST8 = re.compile(r"^[0-9a-f]{8}$")
+
+
+# Which gate Job proves the revision Flux applies (#5955). A Flux-owned role has no release
+# record, so no `applied_at` to compare a Job's creation time against. The renderer stamps the
+# same digest twice instead: `scripts/renderer/renderer_lib/bundle.py:CONTENT_DIGEST` on
+# Kustomization `<tag>` carries the tag's `own` digest, and
+# `scripts/renderer/renderer_lib/cronjob_gate.py:ROLE_DIGEST8` on the gate Job's pod template
+# carries its first eight characters. Verified live 2026-10-23 for configarr,
+# longhorn-reconcile and pi-peer-backup.
+CONTENT_DIGEST = "homelab/content-digest"
+ROLE_DIGEST8 = "homelab/role-digest8"
+
+
+@dataclass(frozen=True)
+class FluxRevision:
+    """A Flux-owned role's reference for `format_cronjob_health`, in place of `applied_at`.
+
+    Attributes:
+        digest8: The first eight characters of Kustomization `<tag>`'s `CONTENT_DIGEST`, or
+            None when the Kustomization is missing or carries no such annotation.
+        gate: The name of the gate Job whose pod template carries `digest8`, or None when
+            no gate Job does.
+    """
+
+    digest8: str | None
+    gate: str | None
 
 
 def _is_owned_by(job, cronjob_name):
@@ -90,6 +117,45 @@ def latest_owned_job(jobs_doc, cronjob_name):
         owned,
         key=lambda job: (job.get("metadata") or {}).get("creationTimestamp") or "",
     )
+
+
+def flux_revision(kustomization, jobs_doc, cronjob_name):
+    """The `FluxRevision` of `cronjob_name` for a Flux-owned role.
+
+    Args:
+        kustomization: Kustomization `<tag>` from `flux-system`, or None when it is missing.
+        jobs_doc: Every Job in the CronJob's namespace, as `latest_owned_job` reads it.
+        cronjob_name: The CronJob whose gate Job to find.
+    """
+    annotations = ((kustomization or {}).get("metadata") or {}).get("annotations") or {}
+    digest8 = (annotations.get(CONTENT_DIGEST) or "")[:8] or None
+    if digest8 is None:
+        return FluxRevision(None, None)
+    for job in (jobs_doc or {}).get("items") or []:
+        template = (job.get("spec") or {}).get("template") or {}
+        stamped = ((template.get("metadata") or {}).get("annotations") or {}).get(
+            ROLE_DIGEST8
+        )
+        if stamped == digest8 and _is_flux_gate_job(job, cronjob_name):
+            return FluxRevision(digest8, job["metadata"]["name"])
+    return FluxRevision(digest8, None)
+
+
+def _flux_revision_failure(name, job_name, revision):
+    """The failure text when `revision` has no gate Job of its own, else None."""
+    if revision.digest8 is None:
+        return (
+            f"{name}: the role's Flux Kustomization is missing or carries no "
+            f"{CONTENT_DIGEST} annotation, so no gate Job can be matched to the revision "
+            "Flux applies — failing closed"
+        )
+    if revision.gate is None:
+        return (
+            f"{name}: no gate Job carries the revision Flux applies ({ROLE_DIGEST8} "
+            f"{revision.digest8}); the newest Job, {job_name}, ran an earlier revision or "
+            "its schedule — the `-verify` Kustomization has not run this revision's gate"
+        )
+    return None
 
 
 def _job_outcome(job):
@@ -145,8 +211,13 @@ def format_cronjob_health(name, cronjob, latest_job, pods, deploy_applied_at, no
     recent Job run for it instead: the gate Job a Flux role's `-verify` Kustomization applies,
     or the next scheduled firing if that hasn't landed.
 
-    Two paths, chosen by comparing `latest_job`'s creation time against `deploy_applied_at`
-    (`release_stamp.yml`'s `applied_at` for this service, or None when unreadable):
+    For a Flux-owned role `deploy_applied_at` is a `FluxRevision`. With no gate Job carrying
+    the revision Flux applies this fails, and otherwise `latest_job` is that gate or newer, so
+    it is gated directly as the first path below does.
+
+    For any other role, two paths, chosen by comparing `latest_job`'s creation time against
+    `deploy_applied_at` (`release_stamp.yml`'s `applied_at` for this service, or None when
+    unreadable):
 
       - `latest_job` is newer than the deploy (a scheduled firing or a hand-created run since the
         deploy) — gated directly on IT: it must have succeeded, and no container in
@@ -186,8 +257,16 @@ def format_cronjob_health(name, cronjob, latest_job, pods, deploy_applied_at, no
             1,
         )
 
-    deploy_age = seconds_since(deploy_applied_at, now)
-    fresh = deploy_age is None or job_age < deploy_age
+    if isinstance(deploy_applied_at, FluxRevision):
+        failure = _flux_revision_failure(name, job_name, deploy_applied_at)
+        if failure:
+            return failure, 1
+        # `latest_owned_job` takes the newest Job of a set that holds the revision's gate, so
+        # `latest_job` is that gate or a firing created after it.
+        fresh = True
+    else:
+        deploy_age = seconds_since(deploy_applied_at, now)
+        fresh = deploy_age is None or job_age < deploy_age
 
     outcome = _job_outcome(latest_job)
     if outcome == "running":

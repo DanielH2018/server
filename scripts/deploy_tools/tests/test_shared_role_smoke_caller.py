@@ -42,46 +42,58 @@ def _every_caller(role: str) -> set[str]:
     )
 
 
-def test_pr_3117_deploys_one_caller_rather_than_the_fleet():
+def test_pr_3117_deploys_one_caller_rather_than_the_fleet(flux_handed_back):
     """The issue's Verify-by, on the measured file list."""
     every = _every_caller("manifests")
     assert len(every) > 40, "the caller walk itself still reaches the fleet"
-    reached = land_tags.shared_caller_tags(_PR_3117_FILES)["manifests"]
+    reached = land_tags.shared_caller_tags(_PR_3117_FILES, host_vars=flux_handed_back)[
+        "manifests"
+    ]
     assert len(reached) == 1 and reached <= every
     # Still nothing owed to a hand: a non-empty caller set is what keeps the role out of the
     # note, and a narrowing to the empty set would have put it back in.
     assert land_tags.plane_note(_PR_3117_FILES) == ""
 
 
-def test_the_operator_line_knows_which_role_was_narrowed():
+def test_the_operator_line_knows_which_role_was_narrowed(flux_handed_back):
     """`classify` reads `smoke_narrowed_roles` so its line cannot claim the fleet.
 
     Not derivable from the tag count: `arr-notification` has two callers and is not narrowed,
     while a role with one caller would read as narrowed on a count alone.
     """
-    assert land_shared.narrowed_roles(_PR_3117_FILES) == frozenset({"manifests"})
-    assert land_shared.narrowed_roles([*_PR_3117_FILES, _TEMPLATE]) == frozenset()
+    hv = flux_handed_back
+    assert land_shared.narrowed_roles(_PR_3117_FILES, host_vars=hv) == frozenset(
+        {"manifests"}
+    )
+    assert (
+        land_shared.narrowed_roles([*_PR_3117_FILES, _TEMPLATE], host_vars=hv)
+        == frozenset()
+    )
     assert (
         land_shared.narrowed_roles(
-            ["ansible/roles/k8s/arr-notification/tasks/main.yml"]
+            ["ansible/roles/k8s/arr-notification/tasks/main.yml"], host_vars=hv
         )
         == frozenset()
     )
 
 
-def test_the_same_pick_twice_over_one_tree():
+def test_the_same_pick_twice_over_one_tree(flux_handed_back):
     """A landing that re-derives its tags must not deploy a second service."""
-    first = land_tags.shared_caller_tags(_PR_3117_FILES)["manifests"]
-    assert first == land_tags.shared_caller_tags(_PR_3117_FILES)["manifests"]
+    hv = flux_handed_back
+    first = land_tags.shared_caller_tags(_PR_3117_FILES, host_vars=hv)["manifests"]
+    assert len(first) == 1
+    assert (
+        first == land_tags.shared_caller_tags(_PR_3117_FILES, host_vars=hv)["manifests"]
+    )
 
 
-def test_a_template_beside_the_tasks_keeps_every_caller():
+def test_a_template_beside_the_tasks_keeps_every_caller(flux_handed_back):
     """The reject half by path: `templates/` is bytes a deploy applies to each caller."""
     files = [*_PR_3117_FILES, _TEMPLATE]
     assert land_shared.deploy_run_only("manifests", files) is False
-    assert land_tags.shared_caller_tags(files)["manifests"] == _every_caller(
+    assert land_tags.shared_caller_tags(files, host_vars=flux_handed_back)[
         "manifests"
-    )
+    ] == _every_caller("manifests")
 
 
 def test_a_per_caller_helper_keeps_every_caller():

@@ -67,6 +67,19 @@ def k8s_cronjob_args(name, namespace):
     return ["-n", namespace, "get", "cronjob", name, "-o", "json"]
 
 
+def k8s_kustomization_args(tag):
+    """The kubectl arguments that fetch Flux's Kustomization `<tag>` as JSON."""
+    return [
+        "-n",
+        "flux-system",
+        "get",
+        "kustomizations.kustomize.toolkit.fluxcd.io",
+        tag,
+        "-o",
+        "json",
+    ]
+
+
 def k8s_jobs_args(namespace):
     """The kubectl arguments for every Job in a namespace, as JSON.
 

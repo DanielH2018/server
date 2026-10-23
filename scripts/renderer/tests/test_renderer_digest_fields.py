@@ -109,5 +109,5 @@ def test_the_bundle_readme_is_the_one_unclassified_path_and_a_change_widens_the_
     graph = {name: [] for name in DIRECTORIES}
     assert changed_set(old, old, graph).names == frozenset()
     widened = changed_set(new, old, graph)
-    assert widened.names == {*DIRECTORIES, CLUSTER_VARS, "soak"}
+    assert widened.names == {*DIRECTORIES, CLUSTER_VARS, "homelab-namespace", "soak"}
     assert UNCLASSIFIED in widened.widened

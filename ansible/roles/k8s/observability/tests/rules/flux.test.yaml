@@ -311,8 +311,8 @@ tests:
   # The root Kustomization suspended. It fires at 24h and not at 23h59m, one evaluation short.
   # A failed kube-state-metrics scrape at 11h55m stale-marks the series for one 5m sample, and
   # the hold runs across it.
-  # The OCIRepository, suspended beside it by flux_sync_suspend, never fires: the rule reads
-  # Kustomizations only. The input interval stays inside the 5m lookback, so the series never
+  # The OCIRepository, suspended beside it by the operator's hand suspend, never fires: the
+  # rule reads Kustomizations only. The input interval stays inside the 5m lookback, so the series never
   # reads absent between samples.
   - interval: 5m
     input_series:
@@ -337,8 +337,9 @@ tests:
               summary: A Flux Kustomization has been suspended for more than 24 hours.
               description: >-
                 The Kustomization homelab in flux-system has been suspended for 24 hours, so
-                Flux applies nothing it owns. If flux_sync_suspend is true, set it back and run
-                the flux role; otherwise the suspend was made by hand.
+                Flux applies nothing it owns. If its role sets flux_suspend, land the PR that
+                removes it; otherwise the suspend was made by hand, and its resume is in
+                docs/flux-deploy-plane.md.
 
   # Resumed: suspended for 23h56m, then resumed, which drops the `suspended` label. The 10m
   # window still holds the suspended series at 24h, so only the `unless` on the resumed

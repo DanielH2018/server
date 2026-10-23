@@ -7,11 +7,6 @@
 
 - name: Install the k3s server
   ansible.builtin.import_tasks: server.yml
-# Directly after server.yml and before every other import (H1.1h): a whole-role run with the
-# API down reaches server.yml before any guard instance reads the API, and no stale writer
-# runs ahead of the guard. ansible/tests/setup/test_k3s_stale_checkout_map.py holds the order.
-- name: Refuse a stale checkout that would write a Flux-owned object
-  ansible.builtin.import_tasks: stale-checkout-guard.yml
 # The host half of Longhorn, tagged `longhorn_host` alone. The `longhorn` Flux tag installs Longhorn
 # itself (H1.5a) and its Settings, the CSI sidecar requests among them (#5958), the
 # `longhorn-reconcile` tag holds the volume labels (H1.6), and the `longhorn-backup` tag holds

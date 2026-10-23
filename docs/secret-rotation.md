@@ -238,9 +238,19 @@ not rotated again by the weekly cron. Examples:
   The node agents restart while the engine pod is still rolling, so the machines are deleted and not yet re-added until the new
   engine pod's `lapi-register` runs. The changed Secret is what rolls the engine pod. The
   agents converge without help: each agent's liveness probe converges it, restarting the container until registration
-  lands. **Do NOT just `sops set`**: the plugin hot-reloads the new key
-  while the LAPI still holds the old hash, and it fails OPEN — a silent WAF bypass. The
-  traefik deploy now fails loudly on a rejected key (its probe task), which is the guard.
+  lands. **Do NOT skip the bouncer delete.** Without it the LAPI keeps the old key's hash, and
+  the rolled Traefik pod presents a key the LAPI rejects. The edge then refuses every
+  request with a 403 from the first one. The bouncer sends its LAPI key to AppSec too,
+  because `ansible/roles/k8s/traefik/templates/dynamic.yaml.j2` sets no `crowdsecAppsecKey`.
+  AppSec checks that key against the LAPI and answers 401, and the bouncer turns any AppSec
+  answer other than 200 or 500 into a 403. The plugin's `bouncer.go` at
+  `traefik_k8s_bouncer_plugin_version` has this, and so does CrowdSec's AppSec
+  `config.go` at the `crowdsec_k8s_image` tag. Traefik's startupProbe is what catches it.
+  Its target router carries the `crowdsec` middleware, so the probe reads 403. Kubelet then
+  restarts the container, and the pod never turns Ready. Flux's `traefik` Kustomization
+  waits on that pod and goes red. That guard is an outage, not a prevention: the roll is
+  `Recreate`, so no old pod serves meanwhile. The delete step and the reads below prevent it.
+  The `crowdsec-verify` Job does not: it depends on the `crowdsec` Kustomization alone.
   Verify after: `kubectl -n homelab exec deploy/crowdsec -c crowdsec -- cscli bouncers list`
   (fresh `last_pull`) and a `kubectl -n homelab logs deploy/traefik` free of LAPI 403s.
   (`crowdsec_bouncer_api_key` — the retired local LAPI's legacy key — and

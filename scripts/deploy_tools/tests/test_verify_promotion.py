@@ -287,7 +287,7 @@ def test_the_first_bundle_carrying_cluster_vars_expects_its_status():
     }
     expected = vp.expected_set(target, prod)
     assert (expected.names, expected.widened) == (
-        {"homelab", "cluster-vars", "soak"},
+        {"homelab", "cluster-vars", "homelab-namespace", "soak"},
         "",
     )
 
