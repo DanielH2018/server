@@ -79,6 +79,9 @@ homelab-updater.timer` printed `active`.
 PR H3.9c, the Pi joins `HostUpdateStale`: the PR that carries this line. It adds daniel-pi
 (job `node-pi`, 11400 seconds) to `observability_expected_hosts` and its rule to
 `host-checks.yaml`.
+PR H3.10a, arm the canary: the PR that carries this line. It ships `homelab-pi-canary.service`,
+`homelab-pi-canary.timer` and the timer's enable link in the Pi package. H3.10b waits on the
+operator check in step 12.
 
 Depends on: R1
 Unblocks: H4, H5
