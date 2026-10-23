@@ -240,3 +240,92 @@ groups:
             Either HA is up with its automations not running, or HA banned an IP in the last
             hour. A ban of a cluster gateway locks out everything behind it, so read
             /config/ip_bans.yaml on a ban.
+      # THE STARTUP-GRACE FAMILY (A6-5): the six rows whose `gate` column reads `startup_grace`
+      # and whose rule lives here. `workload_log_errors` is the seventh such row, and A7's
+      # WorkloadLogErrors rule on loki-homelab replaces it, so no rule below selects it. Each
+      # rule is `for: 5m`, which is the grace: today `bridge.streaks.apply_startup_grace` holds a
+      # row `up` for GRACE_CYCLES - 1 = 1 cycle of 300s, and the exporter writes the gauge before
+      # that hold (m6-retire-kuma.md, "Gates and grace"). `for: 5m` therefore keeps today's
+      # timing and applies the grace once. `n8n` and `speedtest` keep their in-body streaks, on
+      # which the grace already stacks. No row here has a gate, so no rule carries `requires`
+      # and no inhibit rule reaches them. A row with no series stays quiet here:
+      # BridgeCheckStale owns a missing row.
+      # Every rule is SHADOW UNTIL A6-7b, while Kuma's tile for the row pages.
+      - alert: N8nWorkflowsFailing
+        expr: homelab_check_success{job="monitor-bridge", check="n8n"} == 0
+        for: 5m
+        labels:
+          severity: warning
+          service: n8n
+          shadow: "true"
+        annotations:
+          summary: An active n8n workflow failed repeatedly, or several workflows are failing.
+          description: >-
+            An active workflow failed 3 times in a row, or 2 or more workflows are each failing
+            repeatedly. The monitor-bridge log names the workflow; open its last execution in n8n.
+      - alert: BazarrHealthDegraded
+        expr: homelab_check_success{job="monitor-bridge", check="bazarr"} == 0
+        for: 5m
+        labels:
+          severity: warning
+          service: bazarr
+          shadow: "true"
+        annotations:
+          summary: Bazarr rejects its sonarr or radarr API key, or reports a health issue.
+          description: >-
+            Bazarr's own copy of the sonarr or radarr API key is rejected (an empty peer version
+            field), or Bazarr reports a health issue. Bazarr holds those keys in its UI, so a key
+            rotation misses it. The monitor-bridge log names which.
+      - alert: ProwlarrIndexersFailing
+        expr: homelab_check_success{job="monitor-bridge", check="prowlarr_indexers"} == 0
+        for: 5m
+        labels:
+          severity: warning
+          service: prowlarr
+          shadow: "true"
+        annotations:
+          summary: A Prowlarr indexer has been failing for a week or more.
+          description: >-
+            Prowlarr's own initialFailure puts an indexer at a week or more of failures. The Pirate
+            Bay and 1337x are ignored as chronic flappers, and short outages never page. The
+            monitor-bridge log names the indexer.
+      - alert: SmartHealthFailing
+        expr: homelab_check_success{job="monitor-bridge", check="scrutiny"} == 0
+        for: 5m
+        labels:
+          severity: critical
+          service: scrutiny
+          shadow: "true"
+        annotations:
+          summary: Scrutiny reports a failing drive, stale collector data or high NVMe wear.
+          description: >-
+            A drive's collector data is older than 26h, its SMART self-assessment or an attribute
+            threshold failed, or NVMe wear passed 80%. Scrutiny's own notifier is unconfigured,
+            so this is the only drive-failure page. The monitor-bridge log names the drive.
+      - alert: SpeedtestDegraded
+        expr: homelab_check_success{job="monitor-bridge", check="speedtest"} == 0
+        for: 5m
+        labels:
+          severity: warning
+          service: speedtest
+          shadow: "true"
+        annotations:
+          summary: The newest speedtest result is stale, incomplete or under 100 Mbps.
+          description: >-
+            The last speedtest-tracker run is older than 8 h, did not complete, or downloaded
+            under 100 Mbps. Open the speedtest UI and check its scheduler and last result.
+      # `swallowed_verdicts` reads loki-homelab, not Prometheus, and is not `critical`, so its
+      # rule is a warning. Its `service` stays `monitor-bridge`, the component that evaluates it
+      # until C-7 deletes the row. It names no `verify` label, so it gates no tag.
+      - alert: SwallowedPushVerdicts
+        expr: homelab_check_success{job="monitor-bridge", check="swallowed_verdicts"} == 0
+        for: 5m
+        labels:
+          severity: warning
+          service: monitor-bridge
+          shadow: "true"
+        annotations:
+          summary: A host cron pushed a down verdict and the push failed while a sibling's landed.
+          description: >-
+            The verdict was lost rather than the network. The monitor-bridge log names the cron;
+            run it by hand and read its logger lines.
