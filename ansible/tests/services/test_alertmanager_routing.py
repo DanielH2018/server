@@ -238,11 +238,6 @@ PAGING = {
         )
         for name, labels in loki_sets(shadow=False).items()
     },
-    # M6's CheckWithoutPager is critical and not shadow: it pages the tile's role.
-    **{
-        name: (labels, ["discord", "email"])
-        for name, labels in literal_sets(CUTOVER_RULES, shadow=False).items()
-    },
 }
 DEPLOY_HOLD, _ = PAGING["deploy-hold-active"]
 # The shadow sets, as M4's ingress-probes rules and M3's host-checks rules ship them.
@@ -420,6 +415,7 @@ def test_every_a3_rule_is_shadow_except_the_cutover_guard():
         assert literal_sets(path, shadow=True)
     assert set(literal_sets(CUTOVER_RULES, shadow=False)) == {
         "CheckWithoutPager/uptime-kuma"
+    }
     assert "ScrapeTargetDown/observability" in SHADOW
 
 
