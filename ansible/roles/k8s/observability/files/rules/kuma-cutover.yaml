@@ -40,6 +40,18 @@ groups:
             or
               absent_over_time(monitor_status{monitor_name="Log Shipper Dropped Entries"}[2h])
             or
+              absent_over_time(monitor_status{monitor_name="Docs Refresh"}[24h10m])
+            or
+              absent_over_time(monitor_status{monitor_name="Secret Rotation"}[48h10m])
+            or
+              absent_over_time(monitor_status{monitor_name="Setup Plane Drift (agent hosts)"}[48h10m])
+            or
+              absent_over_time(monitor_status{monitor_name="Homelab Evals"}[348h10m])
+            or
+              absent_over_time(monitor_status{monitor_name="Loki Read Route (daniel-box)"}[2h])
+            or
+              absent_over_time(monitor_status{monitor_name="Loki Read Route (daniel-server)"}[2h])
+            or
               absent_over_time(monitor_status{monitor_name="TLS Cert Expiry"}[2h])
             or
               absent_over_time(monitor_status{monitor_name="Traefik 5xx"}[2h])

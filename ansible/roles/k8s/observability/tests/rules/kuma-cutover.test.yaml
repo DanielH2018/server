@@ -38,6 +38,30 @@ tests:
             exp_annotations:
               summary: Kuma's Log Shipper Dropped Entries tile is gone and no alert rule pages in its place.
               description: "M6's cutover removed the Log Shipper Dropped Entries tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
+          - exp_labels: {monitor_name: Docs Refresh, service: uptime-kuma, severity: critical}
+            exp_annotations:
+              summary: Kuma's Docs Refresh tile is gone and no alert rule pages in its place.
+              description: "M6's cutover removed the Docs Refresh tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
+          - exp_labels: {monitor_name: Secret Rotation, service: uptime-kuma, severity: critical}
+            exp_annotations:
+              summary: Kuma's Secret Rotation tile is gone and no alert rule pages in its place.
+              description: "M6's cutover removed the Secret Rotation tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
+          - exp_labels: {monitor_name: Setup Plane Drift (agent hosts), service: uptime-kuma, severity: critical}
+            exp_annotations:
+              summary: Kuma's Setup Plane Drift (agent hosts) tile is gone and no alert rule pages in its place.
+              description: "M6's cutover removed the Setup Plane Drift (agent hosts) tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
+          - exp_labels: {monitor_name: Homelab Evals, service: uptime-kuma, severity: critical}
+            exp_annotations:
+              summary: Kuma's Homelab Evals tile is gone and no alert rule pages in its place.
+              description: "M6's cutover removed the Homelab Evals tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
+          - exp_labels: {monitor_name: Loki Read Route (daniel-box), service: uptime-kuma, severity: critical}
+            exp_annotations:
+              summary: Kuma's Loki Read Route (daniel-box) tile is gone and no alert rule pages in its place.
+              description: "M6's cutover removed the Loki Read Route (daniel-box) tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
+          - exp_labels: {monitor_name: Loki Read Route (daniel-server), service: uptime-kuma, severity: critical}
+            exp_annotations:
+              summary: Kuma's Loki Read Route (daniel-server) tile is gone and no alert rule pages in its place.
+              description: "M6's cutover removed the Loki Read Route (daniel-server) tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
           - exp_labels: {monitor_name: TLS Cert Expiry, service: uptime-kuma, severity: critical}
             exp_annotations:
               summary: Kuma's TLS Cert Expiry tile is gone and no alert rule pages in its place.
@@ -203,6 +227,18 @@ tests:
         values: '1x140'
       - series: 'monitor_status{monitor_name="Log Shipper Dropped Entries", monitor_type="push"}'
         values: '1x140'
+      - series: 'monitor_status{monitor_name="Docs Refresh", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Secret Rotation", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Setup Plane Drift (agent hosts)", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Homelab Evals", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Loki Read Route (daniel-box)", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Loki Read Route (daniel-server)", monitor_type="push"}'
+        values: '1x140'
       - series: 'monitor_status{monitor_name="TLS Cert Expiry", monitor_type="push"}'
         values: '1x140'
       - series: 'monitor_status{monitor_name="Traefik 5xx", monitor_type="push"}'
@@ -298,6 +334,18 @@ tests:
       - series: 'monitor_status{monitor_name="Cluster Scrape Targets", monitor_type="push"}'
         values: '1x140'
       - series: 'monitor_status{monitor_name="Log Shipper Dropped Entries", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Docs Refresh", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Secret Rotation", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Setup Plane Drift (agent hosts)", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Homelab Evals", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Loki Read Route (daniel-box)", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Loki Read Route (daniel-server)", monitor_type="push"}'
         values: '1x140'
       - series: 'monitor_status{monitor_name="TLS Cert Expiry", monitor_type="push"}'
         values: '1x140'
@@ -404,6 +452,18 @@ tests:
         values: '1x160'
       - series: 'monitor_status{monitor_name="Log Shipper Dropped Entries", monitor_type="push"}'
         values: '1x160'
+      - series: 'monitor_status{monitor_name="Docs Refresh", monitor_type="push"}'
+        values: '1x160'
+      - series: 'monitor_status{monitor_name="Secret Rotation", monitor_type="push"}'
+        values: '1x160'
+      - series: 'monitor_status{monitor_name="Setup Plane Drift (agent hosts)", monitor_type="push"}'
+        values: '1x160'
+      - series: 'monitor_status{monitor_name="Homelab Evals", monitor_type="push"}'
+        values: '1x160'
+      - series: 'monitor_status{monitor_name="Loki Read Route (daniel-box)", monitor_type="push"}'
+        values: '1x160'
+      - series: 'monitor_status{monitor_name="Loki Read Route (daniel-server)", monitor_type="push"}'
+        values: '1x160'
       - series: 'monitor_status{monitor_name="TLS Cert Expiry", monitor_type="push"}'
         values: '1x160'
       - series: 'monitor_status{monitor_name="Traefik 5xx", monitor_type="push"}'
@@ -482,6 +542,121 @@ tests:
       - alertname: CheckWithoutPager
         eval_time: 25h
         exp_alerts: []
+  # A long-cadence tile absent for less than its range stays quiet. Docs Refresh pushes every 12h,
+  # so its range is 2 x 12h + 10m: absent from minute 5, it is quiet at 24h and named after 24h10m.
+  - interval: 1m
+    input_series:
+      - series: 'up{job="uptime-kuma", instance="uptime-kuma:3001"}'
+        values: '1x1500'
+      - series: 'monitor_status{monitor_name="k3s Container Restarts", monitor_type="push"}'
+        values: '1x1500'
+      - series: 'monitor_status{monitor_name="k3s Container OOM", monitor_type="push"}'
+        values: '1x1500'
+      - series: 'monitor_status{monitor_name="k3s CPU Throttling", monitor_type="push"}'
+        values: '1x1500'
+      - series: 'monitor_status{monitor_name="Scrape Targets", monitor_type="push"}'
+        values: '1x1500'
+      - series: 'monitor_status{monitor_name="Cluster Scrape Targets", monitor_type="push"}'
+        values: '1x1500'
+      - series: 'monitor_status{monitor_name="Log Shipper Dropped Entries", monitor_type="push"}'
+        values: '1x1500'
+      - series: 'monitor_status{monitor_name="Docs Refresh", monitor_type="push"}'
+        values: '1x5 _x1500'
+      - series: 'monitor_status{monitor_name="Secret Rotation", monitor_type="push"}'
+        values: '1x1500'
+      - series: 'monitor_status{monitor_name="Setup Plane Drift (agent hosts)", monitor_type="push"}'
+        values: '1x1500'
+      - series: 'monitor_status{monitor_name="Homelab Evals", monitor_type="push"}'
+        values: '1x1500'
+      - series: 'monitor_status{monitor_name="Loki Read Route (daniel-box)", monitor_type="push"}'
+        values: '1x1500'
+      - series: 'monitor_status{monitor_name="Loki Read Route (daniel-server)", monitor_type="push"}'
+        values: '1x1500'
+      - series: 'monitor_status{monitor_name="TLS Cert Expiry", monitor_type="push"}'
+        values: '1x1500'
+      - series: 'monitor_status{monitor_name="Traefik 5xx", monitor_type="push"}'
+        values: '1x1500'
+      - series: 'monitor_status{monitor_name="Traefik Latency", monitor_type="push"}'
+        values: '1x1500'
+      - series: 'monitor_status{monitor_name="Traefik 404 Flood", monitor_type="push"}'
+        values: '1x1500'
+      - series: 'monitor_status{monitor_name="Traefik 421", monitor_type="push"}'
+        values: '1x1500'
+      - series: 'monitor_status{monitor_name="k3s Longhorn Backup", monitor_type="push"}'
+        values: '1x1500'
+      - series: 'monitor_status{monitor_name="Off-box etcd Snapshot", monitor_type="push"}'
+        values: '1x1500'
+      - series: 'monitor_status{monitor_name="Manifest Prune Drift", monitor_type="push"}'
+        values: '1x1500'
+      - series: 'monitor_status{monitor_name="Release Staleness Drift", monitor_type="push"}'
+        values: '1x1500'
+      - series: 'monitor_status{monitor_name="Live Object Drift", monitor_type="push"}'
+        values: '1x1500'
+      - series: 'monitor_status{monitor_name="Longhorn Volume Redundancy", monitor_type="push"}'
+        values: '1x1500'
+      - series: 'monitor_status{monitor_name="k3s PVC Fullness", monitor_type="push"}'
+        values: '1x1500'
+      - series: 'monitor_status{monitor_name="Longhorn Snapshot Headroom", monitor_type="push"}'
+        values: '1x1500'
+      - series: 'monitor_status{monitor_name="Kubelet CSI Mount Read-Only", monitor_type="push"}'
+        values: '1x1500'
+      - series: 'monitor_status{monitor_name="etcd DB Size", monitor_type="push"}'
+        values: '1x1500'
+      - series: 'monitor_status{monitor_name="Root Disk", monitor_type="push"}'
+        values: '1x1500'
+      - series: 'monitor_status{monitor_name="Memory", monitor_type="push"}'
+        values: '1x1500'
+      - series: 'monitor_status{monitor_name="Host Temperature", monitor_type="push"}'
+        values: '1x1500'
+      - series: 'monitor_status{monitor_name="UPS Battery Health", monitor_type="push"}'
+        values: '1x1500'
+      - series: 'monitor_status{monitor_name="Artifacts Peer Sync", monitor_type="push"}'
+        values: '1x1500'
+      - series: 'monitor_status{monitor_name="k3s Telemetry OTLP Door", monitor_type="push"}'
+        values: '1x1500'
+      - series: 'monitor_status{monitor_name="Daniel Pi Host", monitor_type="push"}'
+        values: '1x1500'
+      - series: 'monitor_status{monitor_name="Daniel Pi WG Easy", monitor_type="push"}'
+        values: '1x1500'
+      - series: 'monitor_status{monitor_name="Email-to-RSS (Worker)", monitor_type="push"}'
+        values: '1x1500'
+      - series: 'monitor_status{monitor_name="iCal Proxy k8s", monitor_type="push"}'
+        values: '1x1500'
+      - series: 'monitor_status{monitor_name="k3s LiveSync", monitor_type="push"}'
+        values: '1x1500'
+      - series: 'monitor_status{monitor_name="k3s Scrutiny", monitor_type="push"}'
+        values: '1x1500'
+      - series: 'monitor_status{monitor_name="Loki", monitor_type="push"}'
+        values: '1x1500'
+      - series: 'monitor_status{monitor_name="k3s homelab-mcp (edge gate)", monitor_type="push"}'
+        values: '1x1500'
+      - series: 'monitor_status{monitor_name="Homelab Edge (all-clear)", monitor_type="push"}'
+        values: '1x1500'
+      - series: 'monitor_status{monitor_name="Pi-hole k8s DNS", monitor_type="push"}'
+        values: '1x1500'
+      - series: 'monitor_status{monitor_name="k3s Mosquitto (VIP)", monitor_type="push"}'
+        values: '1x1500'
+      - series: 'monitor_status{monitor_name="k3s Jellyfin (VIP)", monitor_type="push"}'
+        values: '1x1500'
+      - series: 'monitor_status{monitor_name="SLZB-06M Coordinator", monitor_type="push"}'
+        values: '1x1500'
+      - series: 'monitor_status{monitor_name="k3s nut (upsd)", monitor_type="push"}'
+        values: '1x1500'
+      - series: 'monitor_status{monitor_name="Pi Pressure", monitor_type="push"}'
+        values: '1x1500'
+      - series: 'monitor_status{monitor_name="Workload Log Errors", monitor_type="push"}'
+        values: '1x1500'
+    alert_rule_test:
+      - alertname: CheckWithoutPager
+        eval_time: 24h
+        exp_alerts: []
+      - alertname: CheckWithoutPager
+        eval_time: 24h20m
+        exp_alerts:
+          - exp_labels: {monitor_name: Docs Refresh, service: uptime-kuma, severity: critical}
+            exp_annotations:
+              summary: Kuma's Docs Refresh tile is gone and no alert rule pages in its place.
+              description: "M6's cutover removed the Docs Refresh tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
   # A Kuma outage (up == 0) fires no term; KumaDown's own pager covers it.
   - interval: 1m
     input_series:

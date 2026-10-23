@@ -228,11 +228,18 @@ HC_ROUTED_TAGS = frozenset(
 KUMA_RETIRING_TAGS = frozenset(
     {
         "claude-otel-health",
+        # B2: initial_setup. secret_rotation.py's own push logs under a `warning:` prefix that
+        # parse_push_line does not match, so only the wrapper's tag is listed.
+        "docs-refresh",
         "etcd-snapshot-offbox",
+        "eval-run",
         "live-drift-check",
+        "loki-read-route-health",
         "longhorn-backup-health",
         "manifest-prune-check",
         "release-staleness-check",
+        "secret-rotation-audit",
+        "setup-drift-check",
         "sync-artifacts",
     }
 )

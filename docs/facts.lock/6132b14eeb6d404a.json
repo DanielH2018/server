@@ -1,0 +1,14 @@
+{
+  "checksum": "59f6a4f86812239a5d63bbd17a7dbebe22df233ed2973e684594c777b965f319",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "ansible/roles/setup/initial_setup/CLAUDE.md#Notable",
+  "row": {
+    "atoms": {
+      "ansible/roles/k8s/observability/files/rules/initial-setup-checks.yaml": "dfe4dc7ea91478e321367deee6fd90afee36493e56df41369a2c713514292201",
+      "ansible/roles/setup/initial_setup/files/homelab-check-lib.sh": "662474ecceda5707c63bc86091ada2b07576b94ef9e4473da20180bfa2381c22",
+      "ansible/tests/services/test_initial_setup_check_rule_literals.py": "4d47643950c220e8aac033c369022d791b12dc57da7116e9c39408146ca429e9"
+    },
+    "python": "3.14",
+    "verified_sha": "5fa9a6ae1"
+  }
+}

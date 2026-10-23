@@ -29,6 +29,11 @@ from lib.ansible_jinja_env import render_template
 from lib.proc_testing import fake_bin, run
 from validate.shell_templates import template_context
 
+_CHECK_LIB_PATH = "/usr/local/lib/homelab-check-lib.sh"
+_CHECK_LIB = (
+    ANSIBLE / "roles" / "setup" / "initial_setup" / "files" / "homelab-check-lib.sh"
+)
+
 CRONS = (ANSIBLE / "roles/setup/initial_setup/tasks/crons.yml").read_text()
 SCRIPT = rendered_shell_text("setup", "initial_setup", "eval-run.sh.j2")
 
@@ -150,19 +155,21 @@ def _run_script(tmp_path, env_file_text: str | None):
     if env_file_text is not None:
         env_file.write_text(env_file_text)
     script = tmp_path / "eval-run.sh"
-    script.write_text(
-        render_shell_script(
-            "setup",
-            "initial_setup",
-            "eval-run.sh.j2",
-            overrides={
-                "initial_setup_eval_run_env_file": str(env_file),
-                "anthropic_api_key": KEY_SENTINEL,
-                "homelab_eval_push_token": "",
-                "sys_user": "eval-run-test-no-such-user",
-            },
-        )
+    body = render_shell_script(
+        "setup",
+        "initial_setup",
+        "eval-run.sh.j2",
+        overrides={
+            "initial_setup_eval_run_env_file": str(env_file),
+            "anthropic_api_key": KEY_SENTINEL,
+            "homelab_eval_push_token": "",
+            "sys_user": "eval-run-test-no-such-user",
+        },
     )
+    # The script sources the check library from the host's install path, which CI lacks, so
+    # point it at the role's copy; the `write_check_textfile` its exit hook calls then exists.
+    assert _CHECK_LIB_PATH in body
+    script.write_text(body.replace(_CHECK_LIB_PATH, str(_CHECK_LIB)))
     return run(
         ["bash", str(script)],
         cwd=tmp_path,
