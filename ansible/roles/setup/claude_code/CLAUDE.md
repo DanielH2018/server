@@ -127,6 +127,14 @@ the sync behaves, and the heartbeat's template carries why it is a host cron at 
   (`scripts/secrets_mgmt/consumers.py`), because no deploy tag re-renders these scripts.
 - **No task here notifies `Restart claude-rc`**, so an apply that changes only these crons
   leaves every Remote Control session running.
+- **Each cron also writes a check file** to `/var/lib/node-exporter-textfile/`,
+  `sync-artifacts.prom` and `claude-otel-health.prom`, through `write_check_textfile` in
+  `homelab-check-lib.sh` (M6 batch B6). The `ArtifactsSync*` and `OtlpDoor*` rules in
+  observability's `host-checks.yaml` page them in shadow beside the Kuma tiles until their
+  cutover. Each script renders its deadline from its own cron minute, so that minute must stay
+  `*/N`, and `ansible/tests/services/test_b6a_rule_literals.py` pins the rules to it. The
+  directory task in `tasks/node_crons.yml` sets the same owner, group and mode as the k3s
+  role's disk-health task, so the crons do not wait on a hand apply of `k3s-bringup.yml`.
 
 ## Autonomous-role contract (`sync-artifacts`, a mirror of another host's tree)
 
@@ -138,8 +146,9 @@ the sync behaves, and the heartbeat's template carries why it is a host cron at 
   `claude_code_artifacts_peer_sources` (and its twin) stops that peer's sync.
 - **Abort valve:** a `flock` holds runs to one at a time, and ssh runs in `BatchMode` with a
   10-second connect timeout, so an unreachable peer fails the run rather than hanging it.
-- **Evidence:** `journalctl -t sync-artifacts`, and the `Artifacts Peer Sync` Kuma tile, which
-  goes DOWN at `claude_code_artifacts_sync_alert_after_failures` consecutive failures.
+- **Evidence:** `journalctl -t sync-artifacts`, the `Artifacts Peer Sync` Kuma tile, which
+  goes DOWN at `claude_code_artifacts_sync_alert_after_failures` consecutive failures, and
+  `sync-artifacts.prom`, which carries the same verdict for the shadow rules.
 
 ## Autonomous-role contract (`claude-memory-sync` overwrites a store on another host)
 

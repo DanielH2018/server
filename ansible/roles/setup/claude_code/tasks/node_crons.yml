@@ -9,6 +9,20 @@
 # on daniel-server every task here skips. daniel-server never held either cron, so the skip
 # leaves nothing behind there either.
 
+# Both crons write a check file here for node_exporter's textfile collector (M6 batch B6), as
+# sys_user. The k3s role's disk-health task sets the same owner, group and mode, so the two
+# agree and neither apply changes what the other set; this one keeps the crons from depending
+# on a hand apply of k3s-bringup.yml.
+- name: Let the artifacts-node crons write to the node_exporter textfile directory
+  tags: [claude_code]
+  ansible.builtin.file:
+    path: /var/lib/node-exporter-textfile
+    state: directory
+    owner: root
+    group: "{{ sys_user }}"
+    mode: "2775"
+  become: true
+
 # 0700 owned by sys_user: the script embeds a live Kuma push token, and the cron below runs as
 # sys_user, so root:root 0700 would lock out its own caller.
 - name: Install the peer artifact sync script

@@ -357,3 +357,94 @@ tests:
       - eval_time: 20m
         alertname: MonitorBridgeDown
         exp_alerts: []
+
+  # THE B2 FAMILY (A6-4). Both gauges are 0 from the first sample, so the gate and its dependent
+  # fire at once, with no `for:`. promtool does not run Alertmanager's inhibit rule, so both reach
+  # exp_alerts; monitor-bridge's tests/test_bridge_b2_rules.py holds the inhibit against the rule
+  # labels. The dependent carries `requires: b2`, the gate does not.
+  - interval: 1m
+    input_series:
+      - series: homelab_check_success{job="monitor-bridge",instance="monitor-bridge.homelab.svc:9181",check="b2_reachable"}
+        values: "0x5"
+      - series: homelab_check_success{job="monitor-bridge",instance="monitor-bridge.homelab.svc:9181",check="b2_storage"}
+        values: "0x5"
+    alert_rule_test:
+      - eval_time: 1m
+        alertname: B2Unreachable
+        exp_alerts:
+          - exp_labels:
+              job: monitor-bridge
+              instance: monitor-bridge.homelab.svc:9181
+              check: b2_reachable
+              severity: critical
+              service: monitor-bridge
+              shadow: "true"
+            exp_annotations:
+              summary: Backblaze B2 refuses monitor-bridge's key, or the transaction cap is exceeded.
+              description: >-
+                monitor-bridge authenticates against B2 at most every 30 minutes. A cap denial
+                looks the same as data loss, so read the monitor-bridge log message before
+                assuming either. The runbook is longhorn-backup-tiering.
+      - eval_time: 1m
+        alertname: B2FreeTierHeadroomLow
+        exp_alerts:
+          - exp_labels:
+              job: monitor-bridge
+              instance: monitor-bridge.homelab.svc:9181
+              check: b2_storage
+              severity: critical
+              service: monitor-bridge
+              requires: b2
+              shadow: "true"
+            exp_annotations:
+              summary: B2 bucket usage is past the free-tier threshold.
+              description: >-
+                A drain is nearly free, but a prune pays per deleted backup, so read
+                longhorn-backup-tiering before deleting anything.
+
+  # The dependent down with the gate up fires the dependent alone: its rule does not read the
+  # gate. Before its first 0 sample, nothing fires.
+  - interval: 1m
+    input_series:
+      - series: homelab_check_success{job="monitor-bridge",instance="monitor-bridge.homelab.svc:9181",check="b2_reachable"}
+        values: "1x5"
+      - series: homelab_check_success{job="monitor-bridge",instance="monitor-bridge.homelab.svc:9181",check="b2_storage"}
+        values: "1x2 0x3"
+    alert_rule_test:
+      - eval_time: 2m
+        alertname: B2Unreachable
+        exp_alerts: []
+      - eval_time: 2m
+        alertname: B2FreeTierHeadroomLow
+        exp_alerts: []
+      - eval_time: 5m
+        alertname: B2Unreachable
+        exp_alerts: []
+      - eval_time: 5m
+        alertname: B2FreeTierHeadroomLow
+        exp_alerts:
+          - exp_labels:
+              job: monitor-bridge
+              instance: monitor-bridge.homelab.svc:9181
+              check: b2_storage
+              severity: critical
+              service: monitor-bridge
+              requires: b2
+              shadow: "true"
+            exp_annotations:
+              summary: B2 bucket usage is past the free-tier threshold.
+              description: >-
+                A drain is nearly free, but a prune pays per deleted backup, so read
+                longhorn-backup-tiering before deleting anything.
+
+  # The zero-series case for the B2 family: a missing row is BridgeCheckStale's page, so neither
+  # rule fires on an exporter with no `homelab_check_success` series.
+  - interval: 1m
+    input_series: []
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: B2Unreachable
+        exp_alerts: []
+      - eval_time: 5m
+        alertname: B2FreeTierHeadroomLow
+        exp_alerts: []

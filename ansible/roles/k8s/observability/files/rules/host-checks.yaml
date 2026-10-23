@@ -52,6 +52,76 @@ groups:
             textfile collector, so nothing is watching the root disk. Read the `daniel-box disk
             health` cron and the `disk-health` syslog tag, then
             /var/lib/node-exporter-textfile/disk-health.prom on the host.
+      # SHADOW UNTIL M6's BATCH B6 CUTOVER-1b. The next four rules replace Kuma's `Artifacts Peer
+      # Sync` and `k3s Telemetry OTLP Door` tiles, so they carry shadow="true" while the tiles
+      # page (docs/target-architecture/monitoring/m6-retire-kuma.md, "The cutover order").
+      # Both producers are daniel-box crons that write a check file through
+      # homelab-check-lib.sh. Each NotReporting pair mirrors DiskHealthNotReporting, and its two
+      # literals equal the deadline the producer renders from its own cron minute:
+      # ansible/tests/services/test_b6a_rule_literals.py pins them. Both tiles notify Discord
+      # only, so the rules are `warning`.
+      - alert: ArtifactsSyncFailed
+        expr: homelab_check_success{check="sync-artifacts",origin="daniel-box"} == 0
+        labels:
+          severity: warning
+          service: daniel-box
+          shadow: "true"
+        annotations:
+          summary: The peer artifact sync on daniel-box is failing.
+          description: >-
+            sync-artifacts.sh has failed a peer for claude_code_artifacts_sync_alert_after_failures
+            consecutive runs, so that peer's artifacts are stale in the browser. Run `journalctl -t
+            sync-artifacts` on daniel-box for the peer and its streak, then ssh to the named peer.
+      - alert: ArtifactsSyncNotReporting
+        expr: |
+          (
+              time() - homelab_check_last_run_timestamp_seconds{check="sync-artifacts",origin="daniel-box"} > 900
+            or
+              absent_over_time(homelab_check_last_run_timestamp_seconds{check="sync-artifacts",origin="daniel-box"}[900s])
+          )
+          unless on (origin) (up{job="node"} == 0)
+        labels:
+          severity: warning
+          service: daniel-box
+          shadow: "true"
+        annotations:
+          summary: The peer artifact sync on daniel-box has stopped reporting.
+          description: >-
+            No sync-artifacts verdict newer than 900s reached Prometheus from daniel-box's
+            textfile collector, so the cron stopped, or its flock is held by a hung run. Read the
+            `Sync peer Claude artifacts` cron and `journalctl -t sync-artifacts`, then
+            /var/lib/node-exporter-textfile/sync-artifacts.prom on the host.
+      - alert: OtlpDoorClosed
+        expr: homelab_check_success{check="claude-otel-health",origin="daniel-box"} == 0
+        labels:
+          severity: warning
+          service: daniel-box
+          shadow: "true"
+        annotations:
+          summary: The telemetry OTLP receiver on daniel-box's loopback refuses connections.
+          description: >-
+            Claude Code cannot export telemetry even with every pod Ready, because the hostPort
+            DNAT is an iptables rule rather than a socket. Check the otel-collector DaemonSet pod
+            on daniel-box, then the portmap rule.
+      - alert: OtlpDoorNotReporting
+        expr: |
+          (
+              time() - homelab_check_last_run_timestamp_seconds{check="claude-otel-health",origin="daniel-box"} > 1500
+            or
+              absent_over_time(homelab_check_last_run_timestamp_seconds{check="claude-otel-health",origin="daniel-box"}[1500s])
+          )
+          unless on (origin) (up{job="node"} == 0)
+        labels:
+          severity: warning
+          service: daniel-box
+          shadow: "true"
+        annotations:
+          summary: The telemetry OTLP-door check on daniel-box has stopped reporting.
+          description: >-
+            No claude-otel-health verdict newer than 1500s reached Prometheus from daniel-box's
+            textfile collector, so nothing is watching the OTLP door. Read the `Claude Code
+            telemetry health` cron and `journalctl -t claude-otel-health`, then
+            /var/lib/node-exporter-textfile/claude-otel-health.prom on the host.
       # SHADOW UNTIL M6's BATCH A1. A malformed claude_cgroup.prom already pages through
       # check_mem's cgroup arm, and a malformed disk-health.prom through DiskHealthNotReporting,
       # so a paging collector alert would page twice for one cause. Until A1 its value is the

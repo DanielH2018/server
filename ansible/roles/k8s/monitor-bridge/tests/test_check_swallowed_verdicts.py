@@ -14,7 +14,12 @@ import gates
 import registry
 from _fake_sources import FakeSources
 from _shell_render import rendered_shell_texts
-from verdicts.logs import HC_ROUTED_TAGS, parse_push_line, swallowed_verdicts
+from verdicts.logs import (
+    HC_ROUTED_TAGS,
+    KUMA_RETIRING_TAGS,
+    parse_push_line,
+    swallowed_verdicts,
+)
 
 
 def _unread_clock():
@@ -147,6 +152,31 @@ def test_a_push_kuma_rejected_is_flagged_whatever_its_status_and_company():
     # asserting a token mismatch: a DB error matched the token on 2026-10-11 (#4481).
     assert "push rejected by kuma" in msg
     assert "no live monitor holds the token" not in msg
+
+
+def test_a_rejected_push_from_a_retiring_tag_is_clean_and_from_any_other_is_flagged():
+    # B6's shadow week: once Cutover-1a deletes a tile, its producer's push is refused until
+    # Cutover-2 drops it. The same refused line from an unlisted tag must still page.
+    for tag in ("sync-artifacts", "claude-otel-health"):
+        refused = _REJECTED_UP.replace("release-staleness-check", tag)
+        ok, msg = swallowed_verdicts([(1, refused)], "3h", truncated=False)
+        assert ok, msg
+    ok, _ = swallowed_verdicts([(1, _REJECTED_UP)], "3h", truncated=False)
+    assert not ok
+
+
+def test_a_lost_down_push_from_a_retiring_tag_still_pages_beside_a_landed_sibling():
+    lost = _SWALLOWED_DOWN.replace("release-staleness-check", "sync-artifacts")
+    ok, msg = swallowed_verdicts([(1, lost), (2, _SIBLING_RUN)], "3h", truncated=False)
+    assert not ok
+    assert "sync-artifacts" in msg
+
+
+def test_kuma_retiring_tags_are_syslog_tags_a_rendered_producer_logs_under():
+    # Derived from the render, so a misspelt tag fails here instead of excluding nothing.
+    texts = [text for _plane, _role, _name, text in rendered_shell_texts()]
+    for tag in KUMA_RETIRING_TAGS:
+        assert any(f"logger -t {tag} " in text for text in texts), tag
 
 
 def test_a_rejected_push_that_the_next_run_landed_is_clean():

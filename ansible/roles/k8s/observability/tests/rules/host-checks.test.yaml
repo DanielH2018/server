@@ -731,3 +731,151 @@ tests:
       - eval_time: 6m
         alertname: IscsiSessionsNotReporting
         exp_alerts: []
+  # B6's two daniel-box crons, in shadow beside their Kuma tiles. A failing verdict fires both
+  # Failed rules with shadow="true" and leaves both NotReporting rules quiet.
+  - interval: 1m
+    input_series:
+      - series: 'homelab_check_success{check="sync-artifacts", instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '0x30'
+      - series: 'homelab_check_last_run_timestamp_seconds{check="sync-artifacts", instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '0+60x30'
+      - series: 'homelab_check_success{check="claude-otel-health", instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '0x30'
+      - series: 'homelab_check_last_run_timestamp_seconds{check="claude-otel-health", instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '0+60x30'
+      - series: 'up{instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '1x30'
+    alert_rule_test:
+      - eval_time: 20m
+        alertname: ArtifactsSyncFailed
+        exp_alerts:
+          - exp_labels:
+              check: sync-artifacts
+              instance: daniel-box
+              job: node
+              origin: daniel-box
+              severity: warning
+              service: daniel-box
+              shadow: "true"
+            exp_annotations:
+              summary: The peer artifact sync on daniel-box is failing.
+              description: >-
+                sync-artifacts.sh has failed a peer for claude_code_artifacts_sync_alert_after_failures
+                consecutive runs, so that peer's artifacts are stale in the browser. Run `journalctl -t
+                sync-artifacts` on daniel-box for the peer and its streak, then ssh to the named peer.
+      - eval_time: 20m
+        alertname: OtlpDoorClosed
+        exp_alerts:
+          - exp_labels:
+              check: claude-otel-health
+              instance: daniel-box
+              job: node
+              origin: daniel-box
+              severity: warning
+              service: daniel-box
+              shadow: "true"
+            exp_annotations:
+              summary: The telemetry OTLP receiver on daniel-box's loopback refuses connections.
+              description: >-
+                Claude Code cannot export telemetry even with every pod Ready, because the hostPort
+                DNAT is an iptables rule rather than a socket. Check the otel-collector DaemonSet pod
+                on daniel-box, then the portmap rule.
+      - eval_time: 20m
+        alertname: ArtifactsSyncNotReporting
+        exp_alerts: []
+      - eval_time: 20m
+        alertname: OtlpDoorNotReporting
+        exp_alerts: []
+  # The two NotReporting rules differ by their own deadline. The files were last written at
+  # minute 0, so at 20m they are 1200s old: only the 900s sync rule fires. At 40m both do.
+  - interval: 1m
+    input_series:
+      - series: 'homelab_check_success{check="sync-artifacts", instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '1x40'
+      - series: 'homelab_check_last_run_timestamp_seconds{check="sync-artifacts", instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '0x40'
+      - series: 'homelab_check_success{check="claude-otel-health", instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '1x40'
+      - series: 'homelab_check_last_run_timestamp_seconds{check="claude-otel-health", instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '0x40'
+      - series: 'up{instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '1x40'
+    alert_rule_test:
+      - eval_time: 20m
+        alertname: ArtifactsSyncNotReporting
+        exp_alerts:
+          - exp_labels:
+              check: sync-artifacts
+              instance: daniel-box
+              job: node
+              origin: daniel-box
+              severity: warning
+              service: daniel-box
+              shadow: "true"
+            exp_annotations: &sync_not_reporting
+              summary: The peer artifact sync on daniel-box has stopped reporting.
+              description: >-
+                No sync-artifacts verdict newer than 900s reached Prometheus from daniel-box's
+                textfile collector, so the cron stopped, or its flock is held by a hung run. Read the
+                `Sync peer Claude artifacts` cron and `journalctl -t sync-artifacts`, then
+                /var/lib/node-exporter-textfile/sync-artifacts.prom on the host.
+      - eval_time: 20m
+        alertname: OtlpDoorNotReporting
+        exp_alerts: []
+      - eval_time: 40m
+        alertname: OtlpDoorNotReporting
+        exp_alerts:
+          - exp_labels:
+              check: claude-otel-health
+              instance: daniel-box
+              job: node
+              origin: daniel-box
+              severity: warning
+              service: daniel-box
+              shadow: "true"
+            exp_annotations: &otlp_not_reporting
+              summary: The telemetry OTLP-door check on daniel-box has stopped reporting.
+              description: >-
+                No claude-otel-health verdict newer than 1500s reached Prometheus from daniel-box's
+                textfile collector, so nothing is watching the OTLP door. Read the `Claude Code
+                telemetry health` cron and `journalctl -t claude-otel-health`, then
+                /var/lib/node-exporter-textfile/claude-otel-health.prom on the host.
+  # Zero-series case: no sample has ever arrived, so both rules fire through absent_over_time,
+  # carrying only the equality matchers' `check` and `origin`.
+  - interval: 1m
+    input_series:
+      - series: 'up{instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '1x30'
+    alert_rule_test:
+      - eval_time: 30m
+        alertname: ArtifactsSyncNotReporting
+        exp_alerts:
+          - exp_labels:
+              check: sync-artifacts
+              origin: daniel-box
+              severity: warning
+              service: daniel-box
+              shadow: "true"
+            exp_annotations: *sync_not_reporting
+      - eval_time: 30m
+        alertname: OtlpDoorNotReporting
+        exp_alerts:
+          - exp_labels:
+              check: claude-otel-health
+              origin: daniel-box
+              severity: warning
+              service: daniel-box
+              shadow: "true"
+            exp_annotations: *otlp_not_reporting
+  # A dead node exporter is the `targets` check's page, so both NotReporting rules stay quiet.
+  - interval: 1m
+    input_series:
+      - series: 'up{instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '0x30'
+    alert_rule_test:
+      - eval_time: 30m
+        alertname: ArtifactsSyncNotReporting
+        exp_alerts: []
+      - eval_time: 30m
+        alertname: OtlpDoorNotReporting
+        exp_alerts: []

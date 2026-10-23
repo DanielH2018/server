@@ -63,6 +63,10 @@ groups:
               absent_over_time(monitor_status{monitor_name="Host Temperature"}[2h])
             or
               absent_over_time(monitor_status{monitor_name="UPS Battery Health"}[2h])
+            or
+              absent_over_time(monitor_status{monitor_name="Artifacts Peer Sync"}[2h])
+            or
+              absent_over_time(monitor_status{monitor_name="k3s Telemetry OTLP Door"}[2h])
           )
           unless on() (up{job="uptime-kuma"} == 0)
         labels:
