@@ -36,7 +36,7 @@ tests:
               instance: monitor-bridge.homelab.svc:9181
               check: wan_reachable
               severity: critical
-              service: monitor-bridge
+              service: wan
               shadow: "true"
             exp_annotations:
               summary: monitor-bridge cannot reach the public internet.
@@ -54,7 +54,7 @@ tests:
               instance: monitor-bridge.homelab.svc:9181
               check: discord
               severity: critical
-              service: monitor-bridge
+              service: discord
               requires: wan
               shadow: "true"
             exp_annotations:
@@ -72,7 +72,7 @@ tests:
               instance: monitor-bridge.homelab.svc:9181
               check: r2_usage
               severity: critical
-              service: monitor-bridge
+              service: r2
               requires: wan
               shadow: "true"
             exp_annotations:
@@ -89,7 +89,7 @@ tests:
               instance: monitor-bridge.homelab.svc:9181
               check: cloudflare_ips_drift
               severity: warning
-              service: monitor-bridge
+              service: cloudflare
               requires: wan
               shadow: "true"
             exp_annotations:
@@ -106,7 +106,7 @@ tests:
               instance: monitor-bridge.homelab.svc:9181
               check: healthchecks_drift
               severity: warning
-              service: monitor-bridge
+              service: healthchecks
               requires: wan
               shadow: "true"
             exp_annotations:
@@ -152,7 +152,7 @@ tests:
               instance: monitor-bridge.homelab.svc:9181
               check: discord
               severity: critical
-              service: monitor-bridge
+              service: discord
               requires: wan
               shadow: "true"
             exp_annotations:
@@ -377,7 +377,7 @@ tests:
               instance: monitor-bridge.homelab.svc:9181
               check: b2_reachable
               severity: critical
-              service: monitor-bridge
+              service: b2
               shadow: "true"
             exp_annotations:
               summary: Backblaze B2 refuses monitor-bridge's key, or the transaction cap is exceeded.
@@ -393,7 +393,7 @@ tests:
               instance: monitor-bridge.homelab.svc:9181
               check: b2_storage
               severity: critical
-              service: monitor-bridge
+              service: b2
               requires: b2
               shadow: "true"
             exp_annotations:
@@ -428,7 +428,7 @@ tests:
               instance: monitor-bridge.homelab.svc:9181
               check: b2_storage
               severity: critical
-              service: monitor-bridge
+              service: b2
               requires: b2
               shadow: "true"
             exp_annotations:
