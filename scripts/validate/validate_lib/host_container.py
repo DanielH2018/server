@@ -26,6 +26,34 @@ LAST_SUCCESS = "/var/lib/homelab-updater/last_success"
 HOLD = "/var/lib/homelab-updater/hold"
 
 
+# apt fetches the signed InRelease first, and Release only when that is missing.
+RELEASE_GETS = tuple(
+    f'"GET /dists/homelab/{name} HTTP/' for name in ("InRelease", "Release")
+)
+
+
+def release_fetched(log: str) -> bool:
+    """Whether an http.server log holds a GET of the suite's InRelease or Release file."""
+    return any(get in line for line in log.splitlines() for get in RELEASE_GETS)
+
+
+def list_problems(names: list[str], box: str) -> list[str]:
+    """What is wrong with the names in `/var/lib/apt/lists/`.
+
+    A list named after `box`, daniel-box's address, means a fetch read the shipped
+    homelab.sources rather than the test's. No list for the test repository means the check
+    above looked at nothing.
+    """
+    problems = [
+        f"/var/lib/apt/lists/{name} is named after daniel-box's address {box}"
+        for name in names
+        if name.split("_", 1)[0].split(":", 1)[0] == box
+    ]
+    if not any(name.startswith(f"127.0.0.1:{PORT}_") for name in names):
+        problems.append(f"/var/lib/apt/lists/ holds no list for 127.0.0.1:{PORT}")
+    return problems
+
+
 class CaseFailed(Exception):
     """A case's assertion that did not hold; the message says what was found instead."""
 

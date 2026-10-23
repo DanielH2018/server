@@ -27,6 +27,9 @@ packages from a repository signed with a throwaway key with `python3 -m http.ser
     optimize_pi_recovery_restart_enabled false, and homelab-pi-recovery.timer, which was
     active, is stopped with no reboot (H3.8b's recovery disarm).
 
+A last case installs a fixture package that carries `secrets-unit` with a ciphertext encrypted to
+a throwaway age key, and runs `homelab-secrets` (H4.1c; `validate_lib/secrets_case.py`).
+
 Every case that reaches step 3 asserts that the server log holds its `GET` of
 `dists/homelab/InRelease` or `dists/homelab/Release`. Every case asserts that `/var/lib/apt/lists/` holds a list for the test
 repository and none named after daniel-box's address.
@@ -69,7 +72,10 @@ from validate.validate_lib.host_container import (
     CaseFailed,
     Container,
     expect,
+    list_problems,
+    release_fetched,
 )
+from validate.validate_lib import secrets_case
 from validate.validate_lib.host_fixtures import (
     DROPIN,
     DROPIN_CHANGED,
@@ -99,32 +105,6 @@ PKGCACHE = "/var/cache/apt/pkgcache.bin"
 RECONCILE_RECORD = "/var/lib/homelab-reconcile/applied.json"
 # systemd's MESSAGE_ID for "Starting <unit>...", logged once per start job.
 UNIT_STARTING = "7d4958e842da4a758f6c1cdc7b36dcc5"
-# apt fetches the signed InRelease first, and Release only when that is missing.
-RELEASE_GETS = tuple(
-    f'"GET /dists/homelab/{name} HTTP/' for name in ("InRelease", "Release")
-)
-
-
-def release_fetched(log: str) -> bool:
-    """Whether an http.server log holds a GET of the suite's InRelease or Release file."""
-    return any(get in line for line in log.splitlines() for get in RELEASE_GETS)
-
-
-def list_problems(names: list[str], box: str) -> list[str]:
-    """What is wrong with the names in `/var/lib/apt/lists/`.
-
-    A list named after `box`, daniel-box's address, means a fetch read the shipped
-    homelab.sources rather than the test's. No list for the test repository means the check
-    above looked at nothing.
-    """
-    problems = [
-        f"/var/lib/apt/lists/{name} is named after daniel-box's address {box}"
-        for name in names
-        if name.split("_", 1)[0].split(":", 1)[0] == box
-    ]
-    if not any(name.startswith(f"127.0.0.1:{PORT}_") for name in names):
-        problems.append(f"/var/lib/apt/lists/ holds no list for 127.0.0.1:{PORT}")
-    return problems
 
 
 class Cases:
@@ -587,6 +567,7 @@ def main(argv: list[str] | None = None) -> int:
     cases.cold_install()
     cases.by_hand()
     cases.disarm()
+    secrets_case.run(cases)
     if cases.failed:
         print(
             f"[FAIL] {len(cases.failed)} cases failed: {cases.failed}", file=sys.stderr

@@ -25,6 +25,11 @@ pins, so the job's nfpm step can build it. It runs the builder's own `install_to
 daniel-box builds the package with, so a pin whose digest or URL is wrong fails here before it
 reaches master (H3.11). A digest that differs from its pin fails the command.
 
+`scan-roots` and `placeholders` read the head render's named package roots (`package_roots.NAMED`).
+`scan-roots` runs `gitleaks dir` over each, `prove-scan` is that scan's red proof on the real
+binary, and `placeholders` fails on a `${key}` the root's SOPS file does not carry (H4.1c). The job
+runs them on every PR, ahead of its steps that stand down on an unchanged tree.
+
 `job-changed` says whether one job of a workflow parses differently at a commit than in the
 working tree. The job's own steps invoke the container cases, so a PR that edits them runs the
 cases (#5004). The comparison is of the parsed YAML, so an edit to a comment alone does not
@@ -41,6 +46,9 @@ Usage:
     uv run python scripts/validate/host_packages.py diff /tmp/base /tmp/head --summary FILE
     uv run python scripts/validate/host_packages.py fetch-tools /tmp/head --cache /tmp/tools
     uv run python scripts/validate/host_packages.py lint /tmp/head /tmp/debs
+    uv run python scripts/validate/host_packages.py prove-scan --gitleaks BIN --config FILE
+    uv run python scripts/validate/host_packages.py scan-roots /tmp/head --gitleaks BIN --config FILE
+    uv run python scripts/validate/host_packages.py placeholders /tmp/head
     uv run python scripts/validate/host_packages.py job-changed BASE_SHA \
         --workflow .github/workflows/ci.yml --job host_packages
     uv run python scripts/validate/host_packages.py fixture-changed /tmp/base-tree .
@@ -69,6 +77,7 @@ from lib import yaml_fast
 from lib.cli_help import ArgumentParser
 from lib.git import git
 from lib.repo_paths import REPO
+from validate.validate_lib import package_roots
 
 # The module the builder fetches tools with (stdlib only), which CI runs the same way.
 _TOOL_FETCH_DIR = REPO / "ansible" / "roles" / "setup" / "homelab_builder" / "files"
@@ -381,6 +390,19 @@ def main(argv: list[str] | None = None) -> int:
     job_cmd.add_argument("base", metavar="BASE")
     job_cmd.add_argument("--workflow", type=Path, required=True)
     job_cmd.add_argument("--job", required=True)
+    for command, text in (
+        ("scan-roots", "gitleaks over each named package root of RENDER"),
+        ("prove-scan", "gitleaks' red proof for the path allowlist"),
+    ):
+        scan_cmd = commands.add_parser(command, help=text)
+        if command == "scan-roots":
+            scan_cmd.add_argument("render", type=Path, metavar="RENDER")
+        scan_cmd.add_argument("--gitleaks", type=Path, required=True, metavar="BIN")
+        scan_cmd.add_argument("--config", type=Path, required=True, metavar="FILE")
+    placeholder_cmd = commands.add_parser(
+        "placeholders", help="placeholders of each named package root against its keys"
+    )
+    placeholder_cmd.add_argument("render", type=Path, metavar="RENDER")
     fixture_cmd = commands.add_parser(
         "fixture-changed",
         help="whether the cases' fixture renders differently in BASE_TREE and HEAD_TREE",
@@ -405,6 +427,16 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     if args.command == "fetch-tools":
         problems = fetch_tools(args.render.resolve(), args.cache.resolve())
+        for problem in problems:
+            print(problem, file=sys.stderr)
+        return 1 if problems else 0
+    if args.command in ("scan-roots", "prove-scan", "placeholders"):
+        if args.command == "scan-roots":
+            problems = package_roots.scan(args.render, args.gitleaks, args.config)
+        elif args.command == "prove-scan":
+            problems = package_roots.prove(args.gitleaks, args.config)
+        else:
+            problems = package_roots.check_placeholders(args.render.resolve())
         for problem in problems:
             print(problem, file=sys.stderr)
         return 1 if problems else 0

@@ -1119,8 +1119,11 @@ jobs:
           CASE_INPUTS: |
             hosts/lib/tests/container/
             scripts/validate/host_package_cases.py
+            scripts/validate/host_packages.py
             scripts/validate/validate_lib/host_container.py
             scripts/validate/validate_lib/host_fixtures.py
+            scripts/validate/validate_lib/package_roots.py
+            scripts/validate/validate_lib/secrets_case.py
         run: |
           set -euo pipefail
           if [ "$EVENT" = workflow_dispatch ]; then
@@ -1170,6 +1173,36 @@ jobs:
             fi
           fi
           echo "cases=$cases" >> "$GITHUB_OUTPUT"
+
+      # H4.1c. The two scans read the head render's package roots alone, so they sit here, after
+      # the render and ahead of every step that stands down when the tree is unchanged. Neither
+      # step has an `if:`: a PR that changes only .gitleaks.toml or the gitleaks pin renders no
+      # package differently, and it still runs them (test_host_package_scans_run_on_every_pr.py).
+      # The scan runs the gitleaks release that prek.toml pins, checked against the release's own
+      # checksums file, so the version has one home and Renovate's prek.toml manager moves it.
+      # `prove-scan` runs first: it shows the binary exempts a token at a package's ciphertext
+      # path and flags the same token anywhere else.
+      - name: Scan the named package roots for secrets
+        run: |
+          set -euo pipefail
+          version=$(sed -n '/repo = "https:\/\/github.com\/gitleaks\/gitleaks"/{n;s/^rev = "v\(.*\)"$/\1/p}' prek.toml)
+          [ -n "$version" ] || { echo "::error::prek.toml pins no gitleaks rev"; exit 1; }
+          mkdir -p "$RUNNER_TEMP/leaks"
+          cd "$RUNNER_TEMP/leaks"
+          base="https://github.com/gitleaks/gitleaks/releases/download/v$version"
+          curl --retry 3 -fsSLO "$base/gitleaks_${version}_linux_x64.tar.gz"
+          curl --retry 3 -fsSLo checksums.txt "$base/gitleaks_${version}_checksums.txt"
+          # --ignore-missing skips the other platforms' lines; a run that verifies no file fails.
+          sha256sum -c --ignore-missing --strict checksums.txt
+          tar -xzf "gitleaks_${version}_linux_x64.tar.gz" gitleaks
+          cd "$GITHUB_WORKSPACE"
+          uv run python scripts/validate/host_packages.py prove-scan \
+            --gitleaks "$RUNNER_TEMP/leaks/gitleaks" --config .gitleaks.toml
+          uv run python scripts/validate/host_packages.py scan-roots "$RUNNER_TEMP/render/head" \
+            --gitleaks "$RUNNER_TEMP/leaks/gitleaks" --config .gitleaks.toml
+
+      - name: Check the named package roots' placeholders against their SOPS keys
+        run: uv run python scripts/validate/host_packages.py placeholders "$RUNNER_TEMP/render/head"
 
       # homelab-tools renders pins and no bytes (H3.11). The builder's own `install_tools`
       # fetches each pinned file, checks its sha256 and places it under the tree's root/, so a

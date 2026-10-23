@@ -1,0 +1,3 @@
+# Stand-in for the host file the operator commits at H4.2. It renders the fixture where no
+# real ciphertext exists, and it carries no value: the case replaces it with a throwaway one.
+nut_monitor_password: ENC[AES256_GCM,data:stand-in,type:str]
