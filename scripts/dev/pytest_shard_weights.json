@@ -838,6 +838,7 @@
  "scripts/backup/tests/test_longhorn_reap_subcommands.py": 1.27,
  "scripts/backup/tests/test_longhorn_reap_trim_label.py": 0.0,
  "scripts/deploy_tools/tests/test_await_ci.py": 0.0,
+ "scripts/deploy_tools/tests/test_await_ci_pages.py": 0.0,
  "scripts/deploy_tools/tests/test_bootstrap_drill.py": 0.0,
  "scripts/deploy_tools/tests/test_bundle_census.py": 1.2,
  "scripts/deploy_tools/tests/test_bundle_gates.py": 0.0,
