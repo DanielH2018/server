@@ -120,13 +120,10 @@ Longhorn RecurringJobs left at H1.7b, and their contract is the `longhorn-backup
   is why each check also reads live state. ENFORCED:
   `ansible/roles/setup/k3s/tests/test_manifest_prune_check_flux_skip.py::test_a_labelled_object_whose_kustomization_is_gone_is_flagged`,
   `ansible/roles/setup/k3s/tests/test_live_drift_check.py::test_a_handed_back_flux_object_is_compared`.
-- **A stale checkout stops before it writes an object Flux owns.**
-  `ansible/roles/setup/k3s/tasks/stale-checkout-guard.yml` imports `tasks/stale-checkout-check.yml`
-  once per tag set that the role's cluster writers carry, directly after `server.yml`. Each
-  instance reads every Kustomization's inventory and fails when an id one of its rows names is
-  there. A host-only tag such as `node-address` selects no instance, so it never reads the API.
-  An H1 PR that deletes a writer task deletes its row in the same commit. Since H1.7b no task
-  here writes a Flux-owned object, so the file is an empty task list where a new writer
-  registers its instance, and the guard's behaviour tests run a fixture instance. ENFORCED:
-  `ansible/tests/setup/test_k3s_stale_checkout_map.py::test_the_real_map_is_honest`,
-  `ansible/tests/setup/test_k3s_stale_checkout_guard.py::test_skip_tags_kubeconfig_still_runs_a_fixture_writer_instance`.
+- **No task here writes an object Flux owns, and a new cluster writer is refused.** The
+  `k3s-role-cluster-writes-are-counted` census row fails on a task that writes the cluster from
+  any file outside `ansible/tests/repo/_k3s_write_verbs_row.py:K3S_WRITE_ALLOW`, which names
+  `storage_smoke.yml` and `agent_verify.yml` only. Hand the objects to a Flux tag instead.
+  The stale-checkout guard that H1 ran beside it was retired in #5957 once H1.7b had removed its
+  last row. A checkout older than H1.7b still carries its own guard, so this tree's empty copy
+  protected nothing. To revive it, take it from #5316 in git history.

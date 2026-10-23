@@ -410,15 +410,6 @@ k3s_readonly_sa_name: homelab-readonly
 k3s_readonly_sa_namespace: kube-system
 k3s_readonly_kubeconfig_server: https://127.0.0.1:6443
 
-# The stale-checkout guard (tasks/stale-checkout-guard.yml) reads the Flux inventory with this
-# binary, and passes when it does not exist: a fresh host under `--check`, or a narrowed apply
-# that skipped `k3s_server`. Its read makes 12 tries, 10 seconds apart, on any error other
-# than "no Kustomization resource type", then fails the play and names the API as unreachable.
-# 11 retries is 12 tries: ansible-core adds the first try to `retries`.
-k3s_stale_checkout_binary: /usr/local/bin/k3s
-k3s_stale_checkout_retries: 11
-k3s_stale_checkout_delay: 10
-
 # The R2 (daily) and weekly volume lists, `k3s_longhorn_r2_volumes` and
 # `k3s_longhorn_weekly_volumes`, live in the `longhorn-reconcile` role's defaults since H1.7a.
 # That job is their only reader that applies them to the cluster.
