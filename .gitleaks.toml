@@ -42,6 +42,7 @@ paths = [
   '''^ansible/vars/hosts/[^/]+\.sops\.yaml$''',
   '''^out/cluster/cluster-vars/cluster-vars\.sops\.env$''',
   '''^out/cluster/[^/]+/[^/]+\.sops\.yaml$''',
+  '''^usr/lib/homelab/secrets/[^/]+\.sops\.yaml$''',
 ]
 
 # ansible/vars/cluster-vars.source records one SHA-256 per cluster key, of that key's public

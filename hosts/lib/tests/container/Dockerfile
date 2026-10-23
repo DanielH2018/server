@@ -29,7 +29,8 @@ ENV container=docker
 # Dir::Cache::pkgcache, so the common-path case would compare a pkgcache.bin that never
 # exists. The Ubuntu lists stay, so `tree`, which the Depends case's fixture needs, resolves
 # with no fetch. Its deb is downloaded here too, because snapshot.ubuntu.com answers 5xx
-# often enough to fail a case that fetches from it.
+# often enough to fail a case that fetches from it. `age` generates the throwaway key the
+# secrets-unit case encrypts to (H4.1c).
 RUN --mount=type=bind,from=runner-ca,source=ca-certificates.crt,target=/run/runner-ca.crt \
     set -eu; \
     rm -f /etc/apt/apt.conf.d/docker-clean /etc/apt/sources.list; \
@@ -44,7 +45,7 @@ RUN --mount=type=bind,from=runner-ca,source=ca-certificates.crt,target=/run/runn
     echo 'Acquire::Retries "10";' > /etc/apt/apt.conf.d/80retries; \
     apt-get -o Acquire::https::CaInfo=/run/runner-ca.crt update; \
     apt-get -o Acquire::https::CaInfo=/run/runner-ca.crt install -y --no-install-recommends \
-        systemd systemd-sysv python3 ca-certificates; \
+        systemd systemd-sysv python3 ca-certificates age; \
     apt-get install -y --no-install-recommends --download-only tree
 
 # Units that would take dpkg's lock mid-case, or reach the runner's devices through
