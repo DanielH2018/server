@@ -56,6 +56,15 @@ LOKI_LOG_RULES = (
 LOKI_HEALTH_RULES = (
     ROLES / "k8s" / "observability" / "files" / "rules" / "loki-homelab.yaml"
 )
+SCRAPE_RULES = (
+    ROLES / "k8s" / "observability" / "files" / "rules" / "scrape-targets.yaml"
+)
+LOG_PIPELINE_RULES = (
+    ROLES / "k8s" / "observability" / "files" / "rules" / "log-pipeline.yaml"
+)
+CUTOVER_RULES = (
+    ROLES / "k8s" / "observability" / "files" / "rules" / "kuma-cutover.yaml"
+)
 # A per-target ingress alert takes `service` from its probe target, so a probed service
 # stands in for it.
 INGRESS_STAND_IN_SERVICE = "homepage"
@@ -97,6 +106,27 @@ def host_sets(shadow: bool) -> dict[str, dict[str, str]]:
         shadow: Whether to return the rules that carry `shadow`, or those that do not.
     """
     [group] = yaml_fast.safe_load(HOST_RULES.read_text())["groups"]
+    return {
+        f"{rule['alert']}/{rule['labels']['service']}": {
+            "alertname": rule["alert"],
+            **rule["labels"],
+        }
+        for rule in group["rules"]
+        if ("shadow" in rule["labels"]) == shadow
+    }
+
+
+def literal_sets(path, shadow: bool) -> dict[str, dict[str, str]]:
+    """The labels each rule of `path` reaches Alertmanager with, keyed `<alert>/<service>`.
+
+    M6's batch A3 files carry a literal `service` on every rule, and several rules share an
+    alert name, so the key adds the service.
+
+    Args:
+        path: The rule file.
+        shadow: Whether to return the rules that carry `shadow`, or those that do not.
+    """
+    [group] = yaml_fast.safe_load(path.read_text())["groups"]
     return {
         f"{rule['alert']}/{rule['labels']['service']}": {
             "alertname": rule["alert"],
@@ -216,6 +246,8 @@ SHADOW = {
     **host_sets(shadow=True),
     **loki_sets(shadow=True),
     **container_sets(),
+    **literal_sets(SCRAPE_RULES, shadow=True),
+    **literal_sets(LOG_PIPELINE_RULES, shadow=True),
 }
 WATCHDOG = {"alertname": "Watchdog", "severity": "info", "service": "observability"}
 
@@ -373,6 +405,18 @@ def test_container_sets_name_every_a2_rule_and_all_are_shadow():
         "CAdvisorCoverageShortfall",
     }
     assert all(labels["shadow"] == "true" for labels in sets.values())
+
+
+def test_every_a3_rule_is_shadow_except_the_cutover_guard():
+    """Non-vacuity for `literal_sets`: batch A3's scrape and log-pipeline rules all route to the
+    blackhole until Cutover-b, and `CheckWithoutPager` is the one that pages."""
+    for path in (SCRAPE_RULES, LOG_PIPELINE_RULES):
+        assert literal_sets(path, shadow=False) == {}
+        assert literal_sets(path, shadow=True)
+    assert set(literal_sets(CUTOVER_RULES, shadow=False)) == {
+        "CheckWithoutPager/uptime-kuma"
+    }
+    assert "ScrapeTargetDown/observability" in SHADOW
 
 
 def test_a_paging_route_without_the_mute_is_flagged():

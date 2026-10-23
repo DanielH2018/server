@@ -262,6 +262,8 @@ def test_the_tree_rules_meet_every_convention_is_clean():
         "bridge-exporter",
         "container-checks",
         "kuma-cutover",
+        "scrape-targets",
+        "log-pipeline",
     ]
     assert keys == {
         "alerting-meta.yaml",
@@ -278,6 +280,8 @@ def test_the_tree_rules_meet_every_convention_is_clean():
         "bridge-exporter.yaml",
         "container-checks.yaml",
         "kuma-cutover.yaml",
+        "scrape-targets.yaml",
+        "log-pipeline.yaml",
     }
     doc = yaml_fast.safe_load(
         (alert_rules.RULES_DIR / "alerting-meta.yaml").read_text()

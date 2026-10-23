@@ -306,6 +306,8 @@ observability_rule_groups:
   - bridge-exporter
   - container-checks
   - kuma-cutover
+  - scrape-targets
+  - log-pipeline
 
 # The hosts whose homelab-updater must report, each with the scrape job that reads its node
 # exporter and the age in seconds past which its last successful update pages. host-checks.yaml
