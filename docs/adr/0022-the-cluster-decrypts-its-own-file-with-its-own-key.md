@@ -17,7 +17,7 @@ limits it to files written for it.
 ## Status
 
 Accepted. The operator accepted it on 2026-10-15 in PR D3.1's review. The answer was "Yes" to "accept ADR-0022 and the cluster recipient?" The same answer accepted the second operator-only decision in that PR: adding the cluster recipient to the two cluster creation rules in `ansible/.sops.yaml`. Slice H4 extends this record with per-host files
-(design.md, *Amend ADR-0003*).
+(design.md, *Amend ADR-0003*); the *Amendment* section at the end of this record carries that extension.
 
 ## Context
 
@@ -87,7 +87,76 @@ cluster files from a host, which needs no value from the cluster.
 only when `sops` itself encrypts a file. It chooses recipients and options. It does not
 encrypt a file that an editor writes under `vars/`.
 
+## Amendment: each host decrypts its own file, with its own key (slice H4)
+
+### Amendment status
+
+Proposed on 2026-10-23 in PR H4.1d. **Approving it is an operator decision, and the approval
+gates the merge of that PR.** The sections above stay as accepted on 2026-10-15. This section
+extends them from the cluster to the hosts and changes nothing the cluster rules decide.
+
+### Amendment context
+
+Slice H4 ships a host's secret-bearing configuration inside the host's package, and a unit on
+the host, `homelab-secrets.service`, decrypts it at boot. The host needs a key. Multi-recipient
+SOPS is OR, so a key that decrypts `secrets.yml` decrypts every value in it, including the
+credentials of every other host.
+
+Three options existed:
+
+- **Give the host a recipient key for `secrets.yml`.** daniel-pi left that list on 2026-10-03,
+  and `docs/break-glass.md` records the removal. Adding it back would give a Raspberry Pi on an
+  SD card the whole store.
+- **Ship a byte copy of `secrets.yml` in each package.** The copy changes with every commit to
+  that file. The builder publishes a package whenever its rendered tree differs, so every
+  `/add-secret` PR and every rotation would publish a package for every host.
+- **Give each host its own file.** The host decrypts a file that holds only the keys its tree
+  names. An operator tool copies each value from `secrets.yml`, and CI checks the copy against
+  `secrets.yml`'s ciphertext. This is the option ADR-0022 already chose for the cluster.
+
+### Amendment decision
+
+A host that runs from a package has its own age key, `/etc/homelab/age.key`, and its own SOPS
+file, `ansible/vars/hosts/<host>.sops.yaml`. The package ships the file as
+`/usr/lib/homelab/secrets/<host>.sops.yaml`. The file holds only the keys that the host's
+rendered tree names, as credentials or as placeholders in a declared output.
+
+The host decrypts its own file and never `secrets.yml`. Each file is encrypted to three keys:
+the host's, daniel-box's and the off-box recovery key. `ansible/.sops.yaml` gets one creation
+rule per host file, ahead of the generic rule, because the generic rule's pattern also matches
+`ansible/vars/hosts/`. The generic rule and the two cluster rules do not change. The host key
+appears in no rule except its own file's.
+
+`secrets.yml` stays the only source of a value. `scripts/secrets_mgmt/host_secrets.py sync`
+copies the values and is operator-only, because it decrypts `secrets.yml`. `host_secrets.py
+check` runs in CI without a key. It compares, for each key, the commit that last changed the
+host file with the commit that last changed `secrets.yml`, and fails when the host file is
+older.
+
+### Amendment consequences
+
+**A value is stored once more per host that carries it.** A rotated value reaches a host only
+after the operator runs `sync` and the package ships. `check` fails the PR that rotates a key
+without the `sync`, and the unattended `rotate --commit` skips every key a host file carries,
+so a cron commit cannot leave a host file stale.
+
+**Losing a host's key exposes that host's file, not `secrets.yml`.** The rotation list for a
+lost or exposed host key is derived, not remembered: every value in every SOPS file whose
+creation rule lists that host's public key. `docs/break-glass.md` carries the procedure from
+PR H4.2.
+
+**The rule order is load-bearing here too.** A host rule moved below the generic rule stops
+applying, and `sync` then encrypts the file without the host's key, so the host cannot
+decrypt it.
+
+**`check` needs full git history.** A shallow clone dates every key at its one visible commit
+and would pass a stale copy, so `check` fails in one. The pytest job checks out with
+`fetch-depth: 0`.
+
+**Reversal costs one PR.** Stop shipping the file, delete it and its creation rule. Nothing
+else holds a copy that the cluster or the other hosts read.
+
 ## Governs
 
 No single line. `governs:` is empty; the decision is expressed by the creation rules in
-`ansible/.sops.yaml`.
+`ansible/.sops.yaml` and by `scripts/secrets_mgmt/host_secrets.py`.

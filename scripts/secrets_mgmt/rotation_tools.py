@@ -18,6 +18,7 @@ asserting what it hands the process.
 
 import contextlib
 import datetime as dt
+import glob
 import os
 import subprocess
 import urllib.parse
@@ -52,6 +53,8 @@ _sys.path.insert(0, str(HOST_LIB_FILES))
 import host_lib
 
 REGISTRY_FILE = os.path.join(REPO, "ansible", "secret_rotation.yml")
+# The per-host SOPS files (slice H4), one `<host>.sops.yaml` each.
+HOSTS_DIR = os.path.join(REPO, "ansible", "vars", "hosts")
 
 
 def run_git(*args: str) -> str:
@@ -74,6 +77,19 @@ def sops_names(path: str = SECRETS_FILE) -> list[str]:
     with open(path) as fh:
         data = yaml_fast.safe_load(fh) or {}
     return sorted(k for k in data if k != "sops")
+
+
+def host_file_keys(directory: str = HOSTS_DIR) -> frozenset[str]:
+    """Every key a per-host SOPS file carries, by name. Nothing is decrypted.
+
+    The unattended rotation skips these: `host_secrets.py sync`, which is operator-only,
+    must copy a rotated value into the host file in the same commit.
+    """
+    return frozenset(
+        key
+        for path in sorted(glob.glob(os.path.join(directory, "*.sops.yaml")))
+        for key in sops_names(path)
+    )
 
 
 def load_registry(path: str = REGISTRY_FILE) -> dict:
@@ -243,6 +259,7 @@ class RotationTools:
     load_registry: Callable[..., dict] = load_registry
     save_registry: Callable[..., None] = save_registry
     sops_names: Callable[..., list[str]] = sops_names
+    host_file_keys: Callable[[], frozenset[str]] = host_file_keys
     sops_decrypt: Callable[..., dict | None] = decrypted_values
     sops_set: Callable[[str, str], None] = sops_set
     kuma_push: Callable[[str, bool, str], None] = kuma_push
