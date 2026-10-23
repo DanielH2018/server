@@ -1,0 +1,75 @@
+# promtool unit tests for files/rules/kuma-cutover.yaml, the temporary CheckWithoutPager guard.
+# Run with `scripts/validate/alert_tools.sh promtool test rules <this file>`. The rule has no
+# `for:`, so its two hours are the term's [2h] window: a tile that stops reporting fires once
+# its last sample is more than two hours old.
+rule_files:
+  - ../../files/rules/kuma-cutover.yaml
+evaluation_interval: 1m
+tests:
+  # Zero-series case: no series at all, so every term fires and the page names each tile
+  # through the label absent_over_time carries.
+  - interval: 1m
+    input_series: []
+    alert_rule_test:
+      - alertname: CheckWithoutPager
+        eval_time: 5m
+        exp_alerts:
+          - exp_labels: {monitor_name: k3s Container Restarts, service: uptime-kuma, severity: critical}
+            exp_annotations:
+              summary: Kuma's k3s Container Restarts tile is gone and no alert rule pages in its place.
+              description: "M6's cutover removed the k3s Container Restarts tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
+          - exp_labels: {monitor_name: k3s Container OOM, service: uptime-kuma, severity: critical}
+            exp_annotations:
+              summary: Kuma's k3s Container OOM tile is gone and no alert rule pages in its place.
+              description: "M6's cutover removed the k3s Container OOM tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
+          - exp_labels: {monitor_name: k3s CPU Throttling, service: uptime-kuma, severity: critical}
+            exp_annotations:
+              summary: Kuma's k3s CPU Throttling tile is gone and no alert rule pages in its place.
+              description: "M6's cutover removed the k3s CPU Throttling tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
+  # Every tile present: no term fires.
+  - interval: 1m
+    input_series:
+      - series: 'up{job="uptime-kuma", instance="uptime-kuma:3001"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="k3s Container Restarts", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="k3s Container OOM", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="k3s CPU Throttling", monitor_type="push"}'
+        values: '1x140'
+    alert_rule_test:
+      - alertname: CheckWithoutPager
+        eval_time: 131m
+        exp_alerts: []
+  # One tile stops reporting at minute 9 (the batch's Cutover-a ran) while the others stay.
+  # Nothing fires inside the two hours, and only that tile is named after them.
+  - interval: 1m
+    input_series:
+      - series: 'up{job="uptime-kuma", instance="uptime-kuma:3001"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="k3s Container Restarts", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="k3s Container OOM", monitor_type="push"}'
+        values: '1x10 _x130'
+      - series: 'monitor_status{monitor_name="k3s CPU Throttling", monitor_type="push"}'
+        values: '1x140'
+    alert_rule_test:
+      - alertname: CheckWithoutPager
+        eval_time: 128m
+        exp_alerts: []
+      - alertname: CheckWithoutPager
+        eval_time: 131m
+        exp_alerts:
+          - exp_labels: {monitor_name: k3s Container OOM, service: uptime-kuma, severity: critical}
+            exp_annotations:
+              summary: Kuma's k3s Container OOM tile is gone and no alert rule pages in its place.
+              description: "M6's cutover removed the k3s Container OOM tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
+  # A Kuma outage (up == 0) fires no term; KumaDown's own pager covers it.
+  - interval: 1m
+    input_series:
+      - series: 'up{job="uptime-kuma", instance="uptime-kuma:3001"}'
+        values: '0x140'
+    alert_rule_test:
+      - alertname: CheckWithoutPager
+        eval_time: 131m
+        exp_alerts: []
