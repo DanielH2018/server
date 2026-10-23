@@ -32,7 +32,9 @@
 # step 8 deletes.
 #
 # Exit 0 = the drill passed. Non-zero = it did not, or this script could not get as far as running
-# it; the Kuma message and the syslog line say which.
+# it; the Kuma message and the syslog line say which. Each verdict that goes to Kuma is also written
+# to $TEXTFILE_DIR/<etcd-restore-drill-vm|etcd-restore-drill-egress-fence>.prom for node_exporter's
+# textfile collector, before its push (M6 batch B4; rules in other-setup-checks.yaml run in shadow).
 set -uo pipefail
 
 for arg in "$@"; do
@@ -44,6 +46,11 @@ done
 # shellcheck source=/dev/null
 source /usr/local/lib/kuma-push-lib.sh || {
   logger -t etcd-restore-drill-vm "kuma-push-lib.sh missing — run initial_setup on this host"
+  exit 1
+}
+# shellcheck source=/dev/null
+source /usr/local/lib/homelab-check-lib.sh || {
+  logger -t etcd-restore-drill-vm "homelab-check-lib.sh missing — run initial_setup on this host"
   exit 1
 }
 
@@ -89,6 +96,15 @@ FENCE_LONGHORN_URL="{{ hypervisor_etcd_drill_fence_longhorn_url }}"
 # does not claim a verdict it never took.
 FENCE_VERDICT=not-checked
 TAG=etcd-restore-drill-vm
+# The run writes two textfile verdicts, one per Kuma tile: the drill's own under the script's name
+# and the egress fence's under its own, because the syslog tag is shared and a check file takes
+# one verdict. DEADLINE_S is the longest legitimate gap between two writes, which is the monthly
+# cadence plus slack that the drill's Kuma tile already carries (etcd_drill_full_kuma_interval_s).
+# ansible/tests/setup/test_b4_rule_literals.py pins the rules' literals to this value.
+CHECK_DRILL=etcd-restore-drill-vm
+CHECK_FENCE=etcd-restore-drill-egress-fence
+DEADLINE_S={{ etcd_drill_full_kuma_interval_s }}
+TEXTFILE_DIR=${TEXTFILE_DIR:-/var/lib/node-exporter-textfile}
 
 KUMA_HOST="uptime-kuma.local.{{ domain }}"
 KUMA_RESOLVE_IP="{{ k3s_metallb_ingress_vip }}"
@@ -109,6 +125,15 @@ KNOWN_HOSTS=""
 
 log() { echo "[$(date -u +%H:%M:%S)] $*"; }
 
+# write_verdict CHECK STATUS: the textfile for one verdict, written before its push, which retries
+# for over a minute and must not age the file. A failed write logs and the run goes on.
+write_verdict() {
+  local check="$1" status="$2" success=0
+  [[ "$status" == "up" ]] && success=1
+  write_check_textfile "$check" "$success" "$(date +%s)" "$DEADLINE_S" \
+    || logger -t "$TAG" "textfile write to ${TEXTFILE_DIR} failed (${check} status=${status})"
+}
+
 push_kuma() {
   local status="$1" msg="$2" token="${3:-$PUSH_TOKEN}"
   [[ -z "$token" ]] && return 0
@@ -122,6 +147,7 @@ report() {
   local status="$1" msg="$2"
   logger -t "$TAG" "status=${status} run=${RUN_ID} ${msg}"
   log "status=${status} ${msg}"
+  write_verdict "$CHECK_DRILL" "$status"
   push_kuma "$status" "$msg"
 }
 
@@ -138,6 +164,7 @@ report_fence() {
   local status="$1" msg="$2"
   logger -t "$TAG" "fence=${status} run=${RUN_ID} ${msg}"
   log "fence=${status} ${msg}"
+  write_verdict "$CHECK_FENCE" "$status"
   push_kuma "$status" "$msg" "$FENCE_PUSH_TOKEN"
 }
 

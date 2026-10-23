@@ -235,11 +235,15 @@ KUMA_RETIRING_TAGS = frozenset(
         # B2: initial_setup. secret_rotation.py's own push logs under a `warning:` prefix that
         # parse_push_line does not match, so only the wrapper's tag is listed.
         "docs-refresh",
+        "etcd-restore-drill-vm",
         "etcd-snapshot-offbox",
         "eval-run",
         # B3: gitops_deploy's two timers.
         "github-interaction-limit",
         "github-ruleset-drift",
+        # B4: other setup roles. The renovate notifier and agent beat from a unit's curl, which
+        # logs no `push failed` line, so they list nothing. The drill's two tiles share the tag.
+        "fake-remux-health",
         "janitorr-health",
         "live-drift-check",
         "loki-read-route-health",
@@ -254,6 +258,7 @@ KUMA_RETIRING_TAGS = frozenset(
         "secret-rotation-audit",
         "setup-drift-check",
         "sync-artifacts",
+        "ups-secondary-health",
     }
 )
 

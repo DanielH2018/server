@@ -5,7 +5,9 @@
 # Takes no arguments. Root cron job "UPS secondary watchdog" (cron file ups-secondary-health) runs
 # it every nut_host_watchdog_interval_minutes minutes on daniel-server, only while
 # nut_host_watchdog_armed is true. It reads /etc/nut/upsmon.conf and the Kuma push token from
-# /etc/nut/kuma-push.env. Running it by hand needs root and pushes to the Kuma monitor.
+# /etc/nut/kuma-push.env. Running it by hand needs root and pushes to the Kuma monitor. Each run
+# also writes its verdict to $TEXTFILE_DIR/ups-secondary-health.prom for node_exporter's textfile
+# collector, before the push (M6 batch B4; rules in other-setup-checks.yaml run in shadow).
 #
 # Answers the one question nothing else in this estate asks: can THIS host's upsmon still
 # reach upsd, right now?
@@ -53,6 +55,18 @@ source /usr/local/lib/kuma-push-lib.sh || {
   logger -t ups-secondary-health "kuma-push-lib.sh missing — run initial_setup on this host"
   exit 1
 }
+# shellcheck source=/dev/null
+source /usr/local/lib/homelab-check-lib.sh || {
+  logger -t ups-secondary-health "homelab-check-lib.sh missing — run initial_setup on this host"
+  exit 1
+}
+
+# The longest legitimate gap between two textfile writes: two cron periods plus 300s, the rule
+# M3 fixed (docs/target-architecture/monitoring/m3-textfile-timer.md, "The deadline for
+# disk-health"). It renders from the same variable as the cron, and
+# ansible/tests/setup/test_b4_rule_literals.py pins the rules' literals to this value.
+DEADLINE_S={{ 2 * 60 * (nut_host_watchdog_interval_minutes | int) + 300 }}
+TEXTFILE_DIR=${TEXTFILE_DIR:-/var/lib/node-exporter-textfile}
 
 KUMA_HOST="uptime-kuma.local.{{ domain }}"
 # Pinned to the cluster ingress VIP, like every sibling: Kuma serves from the k8s edge and the
@@ -66,10 +80,6 @@ KUMA_RESOLVE_IP="{{ k3s_metallb_ingress_vip }}"
 UPS_SECONDARY_PUSH_TOKEN=""
 # shellcheck source=/dev/null
 [[ -r /etc/nut/kuma-push.env ]] && . /etc/nut/kuma-push.env
-if [[ -z "$UPS_SECONDARY_PUSH_TOKEN" ]]; then
-  logger -t ups-secondary-health "push token unreadable — skipping push (see /add-secret)"
-  exit 0
-fi
 PUSH_URL="https://${KUMA_HOST}/api/push/${UPS_SECONDARY_PUSH_TOKEN}"
 
 UPSMON_CONF=/etc/nut/upsmon.conf
@@ -120,4 +130,16 @@ fi
 # Loki (2026-08-29 review M-15, which was exactly that bug in live_drift_check.py).
 logger -p daemon.notice -t ups-secondary-health "status=${STATUS} ${MSG}"
 
+# The textfile carries the verdict before the push, which retries for over a minute and must not
+# age it. A failed write logs and the run goes on to its push. The token gates the push only: a
+# host without the token still reports its verdict to Prometheus.
+SUCCESS=0
+[[ "$STATUS" == "up" ]] && SUCCESS=1
+write_check_textfile ups-secondary-health "$SUCCESS" "$(date +%s)" "$DEADLINE_S" \
+  || logger -t ups-secondary-health "textfile write to ${TEXTFILE_DIR} failed (status=${STATUS})"
+
+if [[ -z "$UPS_SECONDARY_PUSH_TOKEN" ]]; then
+  logger -t ups-secondary-health "push token unreadable — skipping push (see /add-secret)"
+  exit 0
+fi
 kuma_push "$STATUS" "$MSG" "$PUSH_URL" "$KUMA_HOST" "$KUMA_RESOLVE_IP" ups-secondary-health

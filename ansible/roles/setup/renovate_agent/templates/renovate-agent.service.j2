@@ -57,6 +57,23 @@ PrivateTmp=yes
 ExecStart=/usr/bin/flock -n {{ renovate_agent_home }}/run.lock \
   {{ renovate_agent_home }}/.local/bin/uv run --no-project --no-python-downloads --python {{ host_python_version }} \
   /opt/renovate-agent/renovate_agent.py
+# The same run's verdict for node_exporter's textfile collector (M6 batch B4). It runs only when
+# ExecStart exited 0 and comes before the Kuma beat, so a failed beat cannot cost the file. A
+# crash or a blocked tree writes nothing: the Kuma tile reads that as silence, OnFailure pages it,
+# and the rules in other-setup-checks.yaml carry only a NotReporting arm for it.
+#
+# `+` runs this one line as root. This unit runs as renovate_agent_user, which has no write on
+# the textfile directory (root:{{ sys_user }}, 2775) and must not gain it: the session reads
+# third-party text, so giving it a group would widen the identity this role isolates. The line
+# writes one file and nothing else. `env -i PATH=/usr/bin:/bin` pins the command's environment,
+# because the unit's own `Environment=PATH` leads with the agent user's ~/.local/bin and `+` does
+# not drop `Environment=`: without the pin, `date` and `mktemp` would resolve there as root. It
+# is /bin/bash, not /bin/sh, since homelab-check-lib.sh is bash-shaped. Both write failures end in a logged line
+# and exit 0, so the unit never fails over its own telemetry. 100800 is the DEADLINE_S of the
+# "Renovate Agent — Alive" tile (28 h, see static-monitors.yaml.j2), and
+# ansible/tests/setup/test_b4_rule_literals.py pins the rule's literal and the tile's interval
+# to it. `%%s` is systemd's escape for the date format's `%s`.
+ExecStartPost=+/usr/bin/env -i PATH=/usr/bin:/bin /bin/bash -c 'source /usr/local/lib/homelab-check-lib.sh && write_check_textfile renovate-agent 1 "$(date +%%s)" 100800 || logger -t renovate-agent "textfile write failed (homelab-check-lib.sh missing or the textfile directory unwritable)"'
 {% if renovate_agent_kuma_push_token | default('') %}
 # The alive beat, sent only when ExecStart succeeded. The URL embeds the push token, so it is
 # read from the 0600 /etc/renovate-agent/config.env at run time and reaches curl on stdin as a

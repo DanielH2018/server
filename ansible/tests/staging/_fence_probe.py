@@ -26,6 +26,12 @@ ORCHESTRATOR = HYPERVISOR / "templates" / "etcd-restore-drill-vm.sh.j2"
 # substitutes it — and asserts on the literal first, the way _pi_health.py does, so a renamed
 # helper fails here instead of quietly disarming the run under test.
 KUMA_LIB = "/usr/local/lib/kuma-push-lib.sh"
+# The orchestrator also sources the check library (M6 batch B4) and writes a textfile verdict from
+# `report` and `report_fence`. A runner has no /usr/local/lib copy, and daniel-box does, so the
+# harness points the source at the role's copy and the textfile directory at tmp_path. Without
+# the second, a run on daniel-box would write the real collector directory.
+CHECK_LIB = "/usr/local/lib/homelab-check-lib.sh"
+ROLE_CHECK_LIB = ROLES / "setup" / "initial_setup" / "files" / "homelab-check-lib.sh"
 # The two lines the harness strips to make the orchestrator sourceable. Named so a rename fails
 # loudly rather than leaving the harness running `main` against a real libvirt.
 ENTRYPOINT = 'trap teardown EXIT\nmain "$@"'
@@ -209,7 +215,16 @@ def run_fence(
         f'kuma_push() {{ printf "%s %s %s\\n" "$1" "$3" "$2" >>"{pushes}"; }}\n'
     )
     orch = tmp_path / "etcd-restore-drill-vm"
-    orch.write_text(body.replace(KUMA_LIB, str(lib)).rstrip().rsplit(ENTRYPOINT, 1)[0])
+    assert CHECK_LIB in body, f"{ORCHESTRATOR.name} no longer sources {CHECK_LIB}"
+    textfile_dir = tmp_path / "textfile"
+    textfile_dir.mkdir()
+    sourceable = (
+        body.replace(KUMA_LIB, str(lib))
+        .replace(CHECK_LIB, str(ROLE_CHECK_LIB))
+        .rstrip()
+        .rsplit(ENTRYPOINT, 1)[0]
+    )
+    orch.write_text(f'export TEXTFILE_DIR="{textfile_dir}"\n{sourceable}')
 
     stubs = fake_bin(
         tmp_path / "bin",

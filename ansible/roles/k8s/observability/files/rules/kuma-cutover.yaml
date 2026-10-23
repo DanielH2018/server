@@ -23,6 +23,9 @@
 # on a tile that pushes less often than hourly would page while the tile is healthy. A daily
 # tile therefore uses [48h10m]. Add a term with its own interval's range, never a bare 2h.
 # A tile whose interval is 90000s (a daily timer plus an hour) uses [50h10m], as B3's two do.
+# B4's two etcd drill tiles have no term: a monthly push tile's range would be 70d10m, which
+# exceeds Prometheus's 30d retention. A Kuma restart drops the series until the next monthly
+# push, and after 30d no earlier sample remains to keep the term quiet, so it would page falsely.
 groups:
   - name: kuma-cutover
     rules:
@@ -52,6 +55,20 @@ groups:
               absent_over_time(monitor_status{monitor_name="Loki Read Route (daniel-box)"}[2h])
             or
               absent_over_time(monitor_status{monitor_name="Loki Read Route (daniel-server)"}[2h])
+            or
+              absent_over_time(monitor_status{monitor_name="UPS Secondary (daniel-box)"}[2h])
+            or
+              absent_over_time(monitor_status{monitor_name="UPS Secondary (daniel-server)"}[2h])
+            or
+              absent_over_time(monitor_status{monitor_name="Fake Remux Scan"}[2h])
+            or
+              absent_over_time(monitor_status{monitor_name="Fake Remux Replace"}[2h])
+            or
+              absent_over_time(monitor_status{monitor_name="MKV Attachment Repair"}[2h])
+            or
+              absent_over_time(monitor_status{monitor_name="Renovate Notifier — Alive"}[72h10m])
+            or
+              absent_over_time(monitor_status{monitor_name="Renovate Agent — Alive"}[56h10m])
             or
               absent_over_time(monitor_status{monitor_name="TLS Cert Expiry"}[2h])
             or

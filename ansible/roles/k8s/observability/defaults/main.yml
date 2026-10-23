@@ -303,6 +303,7 @@ observability_rule_groups:
   - initial-setup-checks
   - gitops-checks
   - pi-checks
+  - other-setup-checks
   - deploy-pipeline
   - gate-jobs
   - registry

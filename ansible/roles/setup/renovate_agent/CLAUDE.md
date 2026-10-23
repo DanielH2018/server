@@ -95,7 +95,9 @@ the caps or the schedule cannot quietly widen it.
 - **Required evidence:** a Discord digest whose headline is the before/after PR delta, plus the
   `Renovate Agent — Alive` push tile, beaten only on exit 0. `docs/renovate-agent-bounds-and-digest.md`
   has the full delta vocabulary, the crash path, and why a `permission denials:` line is the one
-  to act on.
+  to act on. A clean run also writes `renovate-agent.prom` to node_exporter's textfile
+  directory, from a root-run `ExecStartPost` that precedes the beat (M6 batch B4): the agent's
+  own user has no write there and must not gain it.
   A digest the host could not deliver waits in `<STATE_DIR>/discord-spool/` and goes out,
   marked as delayed, at the start of the next daily tick, a quiet skip included (#3905).
 - **Next-run review:** before raising a cap or widening the prompt, read the last week's

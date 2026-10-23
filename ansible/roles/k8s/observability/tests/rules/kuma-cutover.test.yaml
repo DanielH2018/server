@@ -62,6 +62,34 @@ tests:
             exp_annotations:
               summary: Kuma's Loki Read Route (daniel-server) tile is gone and no alert rule pages in its place.
               description: "M6's cutover removed the Loki Read Route (daniel-server) tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
+          - exp_labels: {monitor_name: UPS Secondary (daniel-box), service: uptime-kuma, severity: critical}
+            exp_annotations:
+              summary: Kuma's UPS Secondary (daniel-box) tile is gone and no alert rule pages in its place.
+              description: "M6's cutover removed the UPS Secondary (daniel-box) tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
+          - exp_labels: {monitor_name: UPS Secondary (daniel-server), service: uptime-kuma, severity: critical}
+            exp_annotations:
+              summary: Kuma's UPS Secondary (daniel-server) tile is gone and no alert rule pages in its place.
+              description: "M6's cutover removed the UPS Secondary (daniel-server) tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
+          - exp_labels: {monitor_name: Fake Remux Scan, service: uptime-kuma, severity: critical}
+            exp_annotations:
+              summary: Kuma's Fake Remux Scan tile is gone and no alert rule pages in its place.
+              description: "M6's cutover removed the Fake Remux Scan tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
+          - exp_labels: {monitor_name: Fake Remux Replace, service: uptime-kuma, severity: critical}
+            exp_annotations:
+              summary: Kuma's Fake Remux Replace tile is gone and no alert rule pages in its place.
+              description: "M6's cutover removed the Fake Remux Replace tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
+          - exp_labels: {monitor_name: MKV Attachment Repair, service: uptime-kuma, severity: critical}
+            exp_annotations:
+              summary: Kuma's MKV Attachment Repair tile is gone and no alert rule pages in its place.
+              description: "M6's cutover removed the MKV Attachment Repair tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
+          - exp_labels: {monitor_name: Renovate Notifier — Alive, service: uptime-kuma, severity: critical}
+            exp_annotations:
+              summary: Kuma's Renovate Notifier — Alive tile is gone and no alert rule pages in its place.
+              description: "M6's cutover removed the Renovate Notifier — Alive tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
+          - exp_labels: {monitor_name: Renovate Agent — Alive, service: uptime-kuma, severity: critical}
+            exp_annotations:
+              summary: Kuma's Renovate Agent — Alive tile is gone and no alert rule pages in its place.
+              description: "M6's cutover removed the Renovate Agent — Alive tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
           - exp_labels: {monitor_name: TLS Cert Expiry, service: uptime-kuma, severity: critical}
             exp_annotations:
               summary: Kuma's TLS Cert Expiry tile is gone and no alert rule pages in its place.
@@ -299,6 +327,20 @@ tests:
         values: '1x140'
       - series: 'monitor_status{monitor_name="Loki Read Route (daniel-server)", monitor_type="push"}'
         values: '1x140'
+      - series: 'monitor_status{monitor_name="UPS Secondary (daniel-box)", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="UPS Secondary (daniel-server)", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Fake Remux Scan", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Fake Remux Replace", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="MKV Attachment Repair", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Renovate Notifier — Alive", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Renovate Agent — Alive", monitor_type="push"}'
+        values: '1x140'
       - series: 'monitor_status{monitor_name="TLS Cert Expiry", monitor_type="push"}'
         values: '1x140'
       - series: 'monitor_status{monitor_name="Traefik 5xx", monitor_type="push"}'
@@ -436,6 +478,20 @@ tests:
       - series: 'monitor_status{monitor_name="Loki Read Route (daniel-box)", monitor_type="push"}'
         values: '1x140'
       - series: 'monitor_status{monitor_name="Loki Read Route (daniel-server)", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="UPS Secondary (daniel-box)", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="UPS Secondary (daniel-server)", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Fake Remux Scan", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Fake Remux Replace", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="MKV Attachment Repair", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Renovate Notifier — Alive", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Renovate Agent — Alive", monitor_type="push"}'
         values: '1x140'
       - series: 'monitor_status{monitor_name="TLS Cert Expiry", monitor_type="push"}'
         values: '1x140'
@@ -584,6 +640,20 @@ tests:
         values: '1x160'
       - series: 'monitor_status{monitor_name="Loki Read Route (daniel-server)", monitor_type="push"}'
         values: '1x160'
+      - series: 'monitor_status{monitor_name="UPS Secondary (daniel-box)", monitor_type="push"}'
+        values: '1x160'
+      - series: 'monitor_status{monitor_name="UPS Secondary (daniel-server)", monitor_type="push"}'
+        values: '1x160'
+      - series: 'monitor_status{monitor_name="Fake Remux Scan", monitor_type="push"}'
+        values: '1x160'
+      - series: 'monitor_status{monitor_name="Fake Remux Replace", monitor_type="push"}'
+        values: '1x160'
+      - series: 'monitor_status{monitor_name="MKV Attachment Repair", monitor_type="push"}'
+        values: '1x160'
+      - series: 'monitor_status{monitor_name="Renovate Notifier — Alive", monitor_type="push"}'
+        values: '1x160'
+      - series: 'monitor_status{monitor_name="Renovate Agent — Alive", monitor_type="push"}'
+        values: '1x160'
       - series: 'monitor_status{monitor_name="TLS Cert Expiry", monitor_type="push"}'
         values: '1x160'
       - series: 'monitor_status{monitor_name="Traefik 5xx", monitor_type="push"}'
@@ -694,6 +764,8 @@ tests:
         exp_alerts: []
   # A long-cadence tile absent for less than its range stays quiet. Docs Refresh pushes every 12h,
   # so its range is 2 x 12h + 10m: absent from minute 5, it is quiet at 24h and named after 24h10m.
+  # The two daily Renovate tiles are absent from minute 5 as well, and stay quiet at 24h and
+  # after: their ranges are 56h10m (agent) and 72h10m (notifier), where a 2h range would fire.
   - interval: 1m
     input_series:
       - series: 'up{job="uptime-kuma", instance="uptime-kuma:3001"}'
@@ -722,6 +794,20 @@ tests:
         values: '1x1500'
       - series: 'monitor_status{monitor_name="Loki Read Route (daniel-server)", monitor_type="push"}'
         values: '1x1500'
+      - series: 'monitor_status{monitor_name="UPS Secondary (daniel-box)", monitor_type="push"}'
+        values: '1x1500'
+      - series: 'monitor_status{monitor_name="UPS Secondary (daniel-server)", monitor_type="push"}'
+        values: '1x1500'
+      - series: 'monitor_status{monitor_name="Fake Remux Scan", monitor_type="push"}'
+        values: '1x1500'
+      - series: 'monitor_status{monitor_name="Fake Remux Replace", monitor_type="push"}'
+        values: '1x1500'
+      - series: 'monitor_status{monitor_name="MKV Attachment Repair", monitor_type="push"}'
+        values: '1x1500'
+      - series: 'monitor_status{monitor_name="Renovate Notifier — Alive", monitor_type="push"}'
+        values: '1x5 _x1500'
+      - series: 'monitor_status{monitor_name="Renovate Agent — Alive", monitor_type="push"}'
+        values: '1x5 _x1500'
       - series: 'monitor_status{monitor_name="TLS Cert Expiry", monitor_type="push"}'
         values: '1x1500'
       - series: 'monitor_status{monitor_name="Traefik 5xx", monitor_type="push"}'
@@ -867,6 +953,20 @@ tests:
       - series: 'monitor_status{monitor_name="Loki Read Route (daniel-box)", monitor_type="push"}'
         values: '1x3100'
       - series: 'monitor_status{monitor_name="Loki Read Route (daniel-server)", monitor_type="push"}'
+        values: '1x3100'
+      - series: 'monitor_status{monitor_name="UPS Secondary (daniel-box)", monitor_type="push"}'
+        values: '1x3100'
+      - series: 'monitor_status{monitor_name="UPS Secondary (daniel-server)", monitor_type="push"}'
+        values: '1x3100'
+      - series: 'monitor_status{monitor_name="Fake Remux Scan", monitor_type="push"}'
+        values: '1x3100'
+      - series: 'monitor_status{monitor_name="Fake Remux Replace", monitor_type="push"}'
+        values: '1x3100'
+      - series: 'monitor_status{monitor_name="MKV Attachment Repair", monitor_type="push"}'
+        values: '1x3100'
+      - series: 'monitor_status{monitor_name="Renovate Notifier — Alive", monitor_type="push"}'
+        values: '1x3100'
+      - series: 'monitor_status{monitor_name="Renovate Agent — Alive", monitor_type="push"}'
         values: '1x3100'
       - series: 'monitor_status{monitor_name="TLS Cert Expiry", monitor_type="push"}'
         values: '1x3100'
