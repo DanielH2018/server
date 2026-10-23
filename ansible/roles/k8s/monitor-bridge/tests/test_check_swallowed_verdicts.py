@@ -175,6 +175,57 @@ def test_a_lost_down_push_from_a_retiring_tag_still_pages_beside_a_landed_siblin
     assert "sync-artifacts" in msg
 
 
+# B6b's pod producers: the crowdsec-jobs sidecar's three pushing jobs and the two health
+# CronJobs. Their tags are read from the role files that log them, not from a rendered shell
+# script, because none of them is one.
+_B6B_TAGS = {
+    "crowdsec-remote-allowlist",
+    "crowdsec-appsec-verify",
+    "crowdsec-home-allowlist",
+    "configarr-health",
+    "janitorr-health",
+}
+_K8S = Path(__file__).resolve().parents[2]
+
+
+def _pod_producer_tags():
+    """Tags the B6b producers log under: `Job("<tag>", ... push_env=<set>)` and `TAG = "<tag>"`."""
+    jobs = (_K8S / "crowdsec" / "files" / "crowdsec_jobs.py").read_text()
+    tags = set(re.findall(r'Job\(\s*"([a-z-]+)",[^)]*?push_env="[A-Z_]+",?\s*\)', jobs))
+    for role, script in (
+        ("configarr", "configarr_health.py"),
+        ("janitorr", "janitorr_health.py"),
+    ):
+        text = (_K8S / role / "files" / script).read_text()
+        tags.update(re.findall(r'^TAG = "([a-z-]+)"', text, flags=re.M))
+    return tags
+
+
+def test_a_rejected_push_from_a_b6b_pod_producer_is_clean_and_from_any_other_is_flagged():
+    for tag in sorted(_B6B_TAGS):
+        refused = _REJECTED_UP.replace("release-staleness-check", tag)
+        ok, msg = swallowed_verdicts([(1, refused)], "3h", truncated=False)
+        assert ok, (tag, msg)
+    ok, _ = swallowed_verdicts([(1, _REJECTED_UP)], "3h", truncated=False)
+    assert not ok
+
+
+def test_a_lost_down_push_from_a_b6b_pod_producer_still_pages_beside_a_landed_sibling():
+    lost = _SWALLOWED_DOWN.replace("release-staleness-check", "configarr-health")
+    ok, msg = swallowed_verdicts([(1, lost), (2, _SIBLING_RUN)], "3h", truncated=False)
+    assert not ok
+    assert "configarr-health" in msg
+
+
+def test_the_b6b_tags_are_the_tags_the_pod_producers_log_under():
+    # Derived from the tree, so a misspelt tag excludes nothing. The second assertion is the
+    # red proof: a misspelt tag is absent from what the producers log.
+    producers = _pod_producer_tags()
+    assert producers == _B6B_TAGS
+    assert _B6B_TAGS <= KUMA_RETIRING_TAGS
+    assert "configarr-healht" not in producers
+
+
 def test_a_rejected_push_that_the_next_run_landed_is_clean():
     # REJECT (the pair): the newest line decides here as everywhere — the tokens were
     # re-aligned and the tag's next push landed.

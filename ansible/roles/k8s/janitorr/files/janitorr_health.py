@@ -78,7 +78,11 @@ def uptime_seconds(started_at: str, now: float) -> float:
 
 
 def export_verdict(
-    kubectl: Callable[..., tuple[int, str]], status: str, msg: str, now: float
+    kubectl: Callable[..., tuple[int, str]],
+    configmap: str,
+    status: str,
+    msg: str,
+    now: float,
 ) -> bool:
     """Writes the verdict and the run time to the verdict ConfigMap's annotations.
 
@@ -104,15 +108,12 @@ def export_verdict(
     rc, out = kubectl(
         "patch",
         "configmap",
-        VERDICT_CONFIGMAP,
+        configmap,
         "--type=merge",
         "--patch=" + json.dumps(patch),
     )
     if rc != 0:
-        emit(
-            "export failed: cannot patch %s: %s"
-            % (VERDICT_CONFIGMAP, out.strip()[:200])
-        )
+        emit("export failed: cannot patch %s: %s" % (configmap, out.strip()[:200]))
     return rc == 0
 
 
@@ -169,6 +170,7 @@ def main(
     kubectl: Callable[..., tuple[int, str]] = KUBECTL_RUNNER,
     push: Callable[..., bool] = host_lib.kuma_push,
     now: Callable[[], float] = time.time,
+    verdict_configmap: str = VERDICT_CONFIGMAP,
 ) -> int:
     """Pushes the verdict to Kuma, or prints it as `up\\tmsg` / `down\\tmsg` with no token.
 
@@ -184,6 +186,8 @@ def main(
     Args:
         kubectl: the kubectl transport; a test passes a recorder.
         push: `kuma_push`'s signature; a test passes a stub.
+        verdict_configmap: the ConfigMap the verdict is also written to, or empty for no
+            export.
         now: the clock the container's uptime is measured on.
     """
     try:
@@ -193,7 +197,9 @@ def main(
     status = "up" if ok else "down"
     # The export runs beside the push until M6's Cutover-2 drops the push.
     exported = (
-        export_verdict(kubectl, status, msg, now()) if VERDICT_CONFIGMAP else True
+        export_verdict(kubectl, verdict_configmap, status, msg, now())
+        if verdict_configmap
+        else True
     )
     exit_code = 0 if exported else 1
     # One URL rather than a base and a token, so the Secret's value is not a whole-scalar

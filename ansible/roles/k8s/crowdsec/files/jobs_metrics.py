@@ -8,11 +8,10 @@ names as monitor-bridge's check exporter (`verdict_export.py`), so one rule shap
 - `homelab_check_success{check="<tag>"}` is 1 when the job's latest run exited 0 and 0 when it
   did not. The series appears with the job's first run.
 - `homelab_check_last_run_timestamp_seconds{check="<tag>"}` is when that run ended. Before the
-  first run it is the time the exporter started, so a restart does not read as a job that has
-  not run for 56 years, and a job that never runs ages past its deadline all the same.
+  first run it is the time the exporter started. A restart therefore does not read as a stale
+  job, and a job that never runs still ages past its deadline.
 - `homelab_check_deadline_seconds{check="<tag>"}` is how old that timestamp may grow: three
   periods of the job.
-- `homelab_check_rows` is the number of jobs the exporter covers.
 
 The stdlib only, because the sidecar runs the repo's pinned python image with no packages.
 """
@@ -26,7 +25,6 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 # is a hung one, so the third is the first that is not noise.
 DEADLINE_PERIODS = 3
 
-ROWS = ("homelab_check_rows", "Jobs the crowdsec-jobs exporter covers.")
 SUCCESS = (
     "homelab_check_success",
     "1 when the job's latest run exited 0, 0 when it did not.",
@@ -66,11 +64,7 @@ class Exposition:
         with self._lock:
             success = dict(self._success)
             timestamp = dict(self._timestamp)
-        lines = [
-            "# HELP %s %s" % ROWS,
-            "# TYPE %s gauge" % ROWS[0],
-            "%s %d" % (ROWS[0], len(self._deadlines)),
-        ]
+        lines: list[str] = []
         for (metric, help_text), values in (
             (SUCCESS, success),
             (TIMESTAMP, timestamp),

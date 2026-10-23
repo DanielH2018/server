@@ -36,6 +36,11 @@ See repo-root `CLAUDE.md` for shared conventions.
   `ansible/roles/k8s/manifests/files/standalone_secret_keys.json`. The reader's code ships in
   the `janitorr-health` ConfigMap, beside `host_lib.py` and `kuma_push.py` from `setup/common`,
   and no secret goes in it (`ansible/tests/k8s/test_no_secret_in_a_moved_jobs_configmap.py`).
+- **The reader also exports its verdict** (M6 B6b). It patches `homelab/check-verdict`,
+  `homelab/check-last-run` and `homelab/check-message` onto the `janitorr-health-verdict`
+  ConfigMap, which the role renders with no annotations so the reader is their only writer.
+  kube-state-metrics exports the verdict, and the `pod-producers` shadow rules read it. A
+  failed export makes the reader exit 1.
 - **The health pod carries `app: janitorr-health`, never `app: janitorr`.** The reader
   takes the first Running pod labelled `app=janitorr`, and a verify Job pod under that label
   could be the pod it reads. uptime-kuma's

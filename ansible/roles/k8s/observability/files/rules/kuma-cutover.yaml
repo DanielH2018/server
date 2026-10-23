@@ -125,6 +125,16 @@ groups:
               absent_over_time(monitor_status{monitor_name="Pi Pressure"}[2h])
             or
               absent_over_time(monitor_status{monitor_name="Workload Log Errors"}[2h])
+            or
+              absent_over_time(monitor_status{monitor_name="CrowdSec Remote Allowlist"}[2h])
+            or
+              absent_over_time(monitor_status{monitor_name="CrowdSec AppSec"}[2h])
+            or
+              absent_over_time(monitor_status{monitor_name="CrowdSec Home Allowlist"}[2h])
+            or
+              absent_over_time(monitor_status{monitor_name="Configarr Sync"}[2h])
+            or
+              absent_over_time(monitor_status{monitor_name="Janitorr Errors"}[2h])
           )
           unless on() (up{job="uptime-kuma"} == 0)
         labels:

@@ -24,6 +24,7 @@ from scrape_jobs import FilterModule, entry_port, metrics_port, scrape_jobs
 # than reading as a smaller loop.
 _DERIVED = {
     "crowdsec",
+    "crowdsec-jobs",
     "traefik-k8s",
     "speedtest",
     "pihole",
