@@ -62,6 +62,8 @@ class Fakes:
     expected_error: BaseException | None = None
     write_rc: int = 0
     check_rc: int = 0
+    # The keys the per-host SOPS files carry. Empty is the live tree's answer until H4.2.
+    host_keys: frozenset[str] = frozenset()
 
 
 def build_tools(f: Fakes) -> tuple[RotationTools, list]:
@@ -137,6 +139,7 @@ def build_tools(f: Fakes) -> tuple[RotationTools, list]:
         load_registry=load_registry,
         save_registry=save_registry,
         sops_names=sops_names,
+        host_file_keys=lambda: f.host_keys,
         sops_decrypt=partial(decrypted_values, run=run),
         sops_set=partial(sops_set, run=run),
         kuma_push=kuma_push,

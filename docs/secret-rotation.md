@@ -133,6 +133,36 @@ outside `secrets.yml`, so `registry_drift` would report its row as stale. A lost
 needs no recovery: this procedure replaces it from any host that decrypts `secrets.yml`.
 `docs/break-glass.md` lists the key in its recovery kit.
 
+## Per-host SOPS files — the values a host decrypts itself
+
+A host that runs from a package does not hold a key for `secrets.yml` (ADR-0022). It decrypts
+its own file, `ansible/vars/hosts/<host>.sops.yaml`, with its own age key. The file holds a
+copy of each key that the host's rendered tree names. `secrets.yml` stays the only source of
+a value.
+
+**The copy rule: a commit that changes a key's value in `secrets.yml` also changes that key in
+every host file that carries it.** `scripts/secrets_mgmt/host_secrets.py check` enforces it in
+the pytest job, without a key. The check fails when the newest commit that changed a key in a
+host file does not equal or descend from the newest commit that changed it in `secrets.yml`. It
+also fails when the file's keys differ from the keys the host's tree names, when a value is not
+ciphertext, and in a shallow clone. Two commits on one day still order, because the check
+compares commits and not dates.
+
+To bring a host file in step, run `sync` (**operator-only**, because it decrypts
+`secrets.yml`):
+
+```bash
+cd /home/ubuntu/server && uv run python scripts/secrets_mgmt/host_secrets.py sync <host>
+```
+
+`sync` rewrites the whole file with the keys the host's tree names. Commit the file in the same
+PR as the change that needs it: a PR that adds a key to a host's tree, or one that rotates a
+key a host file carries. No cron calls `sync`.
+
+`uv run python scripts/secrets_mgmt/host_secrets.py check` lists what is out of step. A key
+that a host file carries is also skipped by the unattended `rotate --commit`, which prints
+`skip (manual: a host file carries it)`. Rotate such a key by hand, then run `sync`.
+
 ## Tiers
 
 <!-- Cadences and counts are generated from TIER_DAYS and the registry; edit those. -->
@@ -177,6 +207,8 @@ The `rotate --commit` weekly cron is autonomous and state-changing — its autho
 - **Required evidence:** the daily "Secret Rotation" Kuma monitor must return green after a rotation.
   An `auto`-tier secret still overdue after a cron window means the **cron broke** — investigate it,
   don't hand-rotate around it.
+- **Host-file keys:** the cron skips every key a per-host SOPS file carries, because the copy
+  needs an operator-only `sync` in the same commit (*Per-host SOPS files*, above).
 - **Abort/escalation:** the cron only ever *narrows* to coming-due `auto` secrets; anything it can't
   classify stays untouched and surfaces in `audit`, never a blind rotate.
 
@@ -186,6 +218,8 @@ General shape: rotate/regenerate the credential **in the app**, `sops set
 ansible/vars/secrets.yml '["<name>"]' '"<new>"'`, update the registry date (`sync` won't,
 since the value already existed — `secret_rotation.py record --key <name> --last-rotated
 <date>` sets it), then
+run `host_secrets.py sync <host>` (**operator-only**) for each host file that carries the key
+(*Per-host SOPS files*, above), then
 redeploy the app **and** every consumer (for example, Homepage, monitor-bridge, configarr). A
 date left behind is not fatal: `audit` and `rotate` both advance it to the commit that changed
 the ciphertext before deciding what is due, so an undated hand rotation of an `auto` token is

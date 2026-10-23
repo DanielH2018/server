@@ -22,11 +22,10 @@ Five subcommands:
            external coupling). Dry-run by default; --commit writes new values via
            `sops set` and records the new date. What is due is decided the way `audit`
            decides it — registry dates advanced to git's — on a copy of the registry,
-           so a hand-rotated token whose date nobody advanced is not rotated twice and
-           the dates written back are only those of the secrets this run rotated. The
-           unattended path picks up anything due within ROTATE_LEAD_DAYS so a token
-           rotates the weekly-cron run BEFORE it goes overdue (see the constant's
-           comment); coming-due-only-by-default means rotations stay staggered.
+           so a hand-rotated token is not rotated twice and only the secrets this run
+           rotates get a new date. The unattended path picks up anything due within
+           ROTATE_LEAD_DAYS so a token rotates BEFORE it goes overdue (see the constant's
+           comment), and it skips every key a per-host SOPS file carries.
   record — set one row's `last_rotated` to a date only the operator knows, and save. The
            carry-over after a SOPS rename (`git` cannot date a renamed key past its rename)
            and the date of an app-side rotation nothing in the tree performed. `sync` never
@@ -364,16 +363,21 @@ def cmd_rotate(args, tools: RotationTools) -> int:
     else:
         # Unattended path: auto-tier, coming due (unless --all), AND with a single-redeploy
         # consumer. Tokens with no consumer_tag (cross-host / self-referential) are reported
-        # but skipped.
+        # but skipped, as is a key a per-host SOPS file carries (its `sync` is operator-only).
         due_auto = unattended_due(res["all"], args.all)
+        held = tools.host_file_keys()
         # A record key classified `auto` by name (a `*_push_token` the app mints) would be
         # `sops set` here with no refusal, so the batch filters it the same way `--name` does.
         targets = [
-            r for r in due_auto if consumer_tags(r[0]) and not is_record(reg, r[0])
+            r
+            for r in due_auto
+            if consumer_tags(r[0]) and not is_record(reg, r[0]) and r[0] not in held
         ]
         for name, _t, _d, _dl in due_auto:
             if is_record(reg, name):
                 print("  skip (record: the app holds the source) %s" % name)
+            elif name in held:
+                print("  skip (manual: a host file carries it) %s" % name)
             elif not consumer_tags(name):
                 print("  skip (manual: cross-host consumer) %s" % name)
     if not targets:
@@ -405,11 +409,10 @@ def cmd_rotate(args, tools: RotationTools) -> int:
             # Each `sops set` writes secrets.yml on its own, so a failure partway leaves the
             # file holding NEW values for the names already done while their dates were only
             # updated in memory. Save the registry first: the two files then agree about what
-            # moved, whichever way the caller resolves it, and secret-rotate.sh reverts both
-            # together. Do NOT deploy — the tokens that landed are about to be reverted out of
-            # the tree, so deploying them would leave the cluster on values nothing records.
-            # A TimeoutExpired arrives here too: `sops_set` bounds its write, and a hang is
-            # the same half-state as a crash — earlier names are already in the store.
+            # moved, and secret-rotate.sh reverts both together. Do NOT deploy — the tokens
+            # that landed are about to be reverted, so deploying them would leave the cluster
+            # on values nothing records. A TimeoutExpired arrives here too: a hang is the
+            # same half-state as a crash.
             # `exc` is safe to print: the argv `sops_set` builds carries the secret's NAME and
             # never its value, which is what
             # `test_rotate_commit_sends_new_token_on_stdin_not_argv` pins. TimeoutExpired
@@ -432,9 +435,8 @@ def cmd_rotate(args, tools: RotationTools) -> int:
         return 0
 
     tools.save_registry(reg)
-    # Before the deploy, so a failure here leaves no rotated value live. The cron commits with
-    # --no-verify, which skips the `cluster-vars-ciphertext` hook, so the `check` this runs is
-    # that path's only guard on the cluster files.
+    # Before the deploy, so a failure leaves no rotated value live. The cron commits with
+    # --no-verify, so this `check` is that path's only guard on the cluster files.
     synced = sync_cluster_files(written, tools)
     if synced is None:
         error(
@@ -462,9 +464,8 @@ def cmd_rotate(args, tools: RotationTools) -> int:
         if left_out:
             print("  deployed nothing: no consumer is left for Ansible to deploy")
     else:
-        # deploy.sh deploys HEAD, not the working tree, so the rotated values reach no
-        # consumer until they are committed. A consumer Flux applies needs the commit too,
-        # so the commit half stays when every consumer was left out of the redeploy.
+        # deploy.sh deploys HEAD, not the working tree, so no consumer sees a rotated value
+        # until it is committed. A Flux consumer needs the commit too, so that half stays.
         redeploy = (
             ", then redeploy the consumer(s): `./scripts/deploy.sh --tags %s`"
             % ",".join(sorted(tags))

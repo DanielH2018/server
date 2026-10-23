@@ -18,6 +18,10 @@
 #     dotenv form's `sops_mac=` line; the `cluster-vars-ciphertext` pre-commit hook, which fails
 #     a plaintext value or a hand edit; and, from PR D3.2c, which commits the first such file,
 #     `cluster_vars.py check` in CI.
+#   - the per-host SOPS files ansible/vars/hosts/<host>.sops.yaml (target slice H4): the
+#     pytest job's `host_secrets.py check`, which fails a value that is not an `ENC[` string
+#     and a key that drifts from `secrets.yml`. It reads no key. `host_secrets.py sync` is the
+#     only writer.
 #   - the publish job's copies of both under out/cluster/, which PR D3.3a first publishes:
 #     `cluster_vars.py check --ciphertext-only` on exactly those files, which D3.3a adds to the
 #     publish job ahead of its gitleaks step. That step loads this file with
@@ -30,11 +34,12 @@
 useDefault = true
 
 [[allowlists]]
-description = "SOPS (AES256-GCM) ciphertext files: secrets.yml, the cluster file and manifests, and their publish copies"
+description = "SOPS (AES256-GCM) ciphertext files: secrets.yml, the cluster file and manifests, the per-host files, and their publish copies"
 paths = [
   '''^ansible/vars/secrets\.yml$''',
   '''^ansible/vars/cluster-vars\.sops\.env$''',
   '''^ansible/vars/cluster-manifests/[^/]+\.sops\.yaml$''',
+  '''^ansible/vars/hosts/[^/]+\.sops\.yaml$''',
   '''^out/cluster/cluster-vars/cluster-vars\.sops\.env$''',
   '''^out/cluster/[^/]+/[^/]+\.sops\.yaml$''',
 ]
