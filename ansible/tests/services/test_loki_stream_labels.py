@@ -215,6 +215,7 @@ def test_the_consumer_census_finds_its_named_members():
         "observability_deploy_annotation_expr",
         "observability_flux_deploy_annotation_expr",
         "homelab-logs.yaml LokiPodLogsSilent",
+        "homelab-logs.yaml WorkloadLogErrors",
     ):
         assert name in consumers, f"{name} is no longer found, so it is unchecked"
     boards = {name.split(" #")[0] for name in _dashboard_queries()}

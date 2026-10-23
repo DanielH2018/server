@@ -88,7 +88,8 @@ the diff through a PR that a detached landing merges (#3609).
   succeeded and reports DOWN. A red test suite still exits 1.
 - **Abort valves:** the shared git-tree lock, the dirty-tree gate, the
   unlanded-branch guard, and the commit-failure stamp under `/var/lib/homelab/docs-refresh.d`.
-- **Required evidence:** `status=<up|down> <msg>` in the log and a push to "Docs Refresh".
+- **Required evidence:** `status=<up|down> <msg>` in the log, a push to "Docs Refresh", and
+  `docs-refresh.prom` in the node_exporter textfile directory.
 - **Next-run review:** before adding a fourth staged path, check no prek hook matching it can
   fail on generator output. `docs/host-baseline-record.md`'s *The generated-docs refresh cron,
   in detail* has why, the `PUSH_STATUS` default and the `vale` exception.
@@ -102,8 +103,8 @@ into `evals/history.json`, then publishes it.
 - **Authoritative source:** the chezmoi eval engine's own grading, never a cached report.
 - **Abort valves:** the shared git-tree lock; the unlanded-branch guard; the empty-key gate
   above.
-- **Required evidence:** `status=<up|down> <msg>` in the log and, when armed, a push to "Homelab
-  Evals".
+- **Required evidence:** `status=<up|down> <msg>` in the log, `eval-run.prom` in the node_exporter
+  textfile directory and, when armed, a push to "Homelab Evals".
 - **Next-run review:** before widening scope, read the last few `evals-history/*` PRs this cron
   opened for what regressed or flaked. `docs/host-baseline-record.md`'s *The eval sweep, in
   detail* has the REGRESSED-case commit rule and why there is no non-hermetic fallback.
@@ -112,3 +113,12 @@ into `evals/history.json`, then publishes it.
 **Two host checks live here rather than in monitor-bridge**, both `kuma-check-*` timers that
 rerun on failure: the setup-plane drift reader (`setup_drift`) and the Loki read-route witness
 (`loki_route_witness`).
+
+**The five scripts of M6's batch B2 write a textfile beside their Kuma push.** They are
+docs-refresh, the eval sweep, the secret-rotation audit, the setup-drift check and the witness.
+Each calls `write_check_textfile` from `ansible/roles/setup/initial_setup/files/homelab-check-lib.sh`
+with a `DEADLINE_S` that equals its Kuma tile's interval, and the rules in
+`ansible/roles/k8s/observability/files/rules/initial-setup-checks.yaml` read the files in shadow.
+ENFORCED: `ansible/tests/services/test_initial_setup_check_rule_literals.py` pins each rule's
+deadline literals to the rendered `DEADLINE_S`. The witness gets its textfile directory from a
+task tagged `loki_route_witness`, which gives the deploy user write access on daniel-server.

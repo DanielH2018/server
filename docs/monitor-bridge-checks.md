@@ -755,7 +755,7 @@ checks each gate suppresses.
   **The row's gate is `startup_grace`**, not `prometheus`: it reads no Prometheus, and the arm
   fails open on a Loki error by itself (`with_log_errors`), so it names no reachability gate. The
   cost of the grace is one held cycle, so the row pages on its second consecutive bad cycle. A
-  burst stays in the 1h window far longer than that: the two bursts the `DECIDED: stays at 20`
+  burst stays in the 1h window far longer than that: the two bursts the `DECIDED: stays at 20` (now in `homelab-logs.yaml`)
   marker records held the tile red for 46 and 43 minutes.
   The row is temporary. M6's batch A7 ports the arm to a LogQL rule on `loki-homelab` and deletes
   the row, `check_workload_log_errors` and `with_log_errors`.)

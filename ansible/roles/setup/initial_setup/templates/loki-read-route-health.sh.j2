@@ -5,8 +5,10 @@
 # Takes no arguments. systemd timer kuma-check-loki-read-route.timer runs it as the deploy user at
 # minute 23 of every hour on each host in loki_route_witness_hosts, and again every 15 minutes
 # while the last run failed. It reads LOKI_ROUTE_WITNESS_PUSH_TOKEN from
-# /etc/homelab/loki-route-kuma-push.env and pushes to this host's own Kuma monitor. It exits 0
-# without pushing when the token is unset.
+# /etc/homelab/loki-route-kuma-push.env and pushes to this host's own Kuma monitor. Each run
+# writes its verdict to $TEXTFILE_DIR/loki-read-route-health.prom for node_exporter's textfile
+# collector first (default /var/lib/node-exporter-textfile; a test points it elsewhere). An unset
+# token skips the push and nothing else.
 #
 # WHAT THIS WATCHES (issue #1712). loki-homelab's IngressRoute has exactly one caller —
 # `probe.py loki-query` / `loki-labels`, running as a host process — and nothing watched it. It
@@ -42,6 +44,11 @@ source /usr/local/lib/kuma-push-lib.sh || {
   logger -t loki-read-route-health "kuma-push-lib.sh missing — run initial_setup on this host"
   exit 1
 }
+# shellcheck source=/dev/null
+source /usr/local/lib/homelab-check-lib.sh || {
+  logger -t loki-read-route-health "homelab-check-lib.sh missing — run initial_setup on this host"
+  exit 1
+}
 
 KUMA_HOST="uptime-kuma.local.{{ domain }}"
 # Pinned to the cluster ingress VIP like every sibling: Kuma serves from the k8s edge and the
@@ -57,8 +64,8 @@ LOKI_ROUTE_WITNESS_PUSH_TOKEN=""
 if [[ -z "$LOKI_ROUTE_WITNESS_PUSH_TOKEN" ]]; then
   # Names the ENV VAR, not the registry secret: the release-group secrets guard whole-word
   # matches registry names against raw template text and cannot tell a log line from a render.
-  logger -t loki-read-route-health "LOKI_ROUTE_WITNESS_PUSH_TOKEN not set — skipping push (see /add-secret)"
-  exit 0
+  # The run goes on: the textfile verdict is what Prometheus reads, and only the push needs the token.
+  logger -t loki-read-route-health "LOKI_ROUTE_WITNESS_PUSH_TOKEN not set — skipping the Kuma push (see /add-secret)"
 fi
 PUSH_URL="https://${KUMA_HOST}/api/push/${LOKI_ROUTE_WITNESS_PUSH_TOKEN}"
 
@@ -69,6 +76,12 @@ PUSH_URL="https://${KUMA_HOST}/api/push/${LOKI_ROUTE_WITNESS_PUSH_TOKEN}"
 if boot_grace_active {{ loki_route_witness_boot_grace_s }} loki-read-route-health; then
   exit 1
 fi
+
+# The longest legitimate gap between two textfile writes: the timer fires at minute 23 of every
+# hour (3600s), and a run skipped by the boot grace may take one slot, so 7200s, which is also
+# the interval Kuma's tile keeps.
+# ansible/tests/services/test_initial_setup_check_rule_literals.py pins the rules' literals to it.
+DEADLINE_S=7200
 
 REPO_DIR=/home/{{ sys_user }}/server
 # UV absolute-pathed: cron's PATH lacks ~/.local/bin. --frozen: never rewrite uv.lock on this
@@ -92,7 +105,13 @@ fi
 # reconstruct this monitor. NOTICE rather than INFO — journald caps MaxLevelStore=notice here.
 logger -p daemon.notice -t loki-read-route-health "status=${STATUS} ${MSG}"
 
-kuma_push "$STATUS" "$MSG" "$PUSH_URL" "$KUMA_HOST" "$KUMA_RESOLVE_IP" loki-read-route-health
+# The textfile verdict, before the push: kuma_push retries for over 60s on a failed push, and the
+# file must not wait on Kuma. A failed write logs and the run goes on to its push.
+write_check_textfile loki-read-route-health "$([[ "$STATUS" == up ]] && echo 1 || echo 0)" "$(date +%s)" "$DEADLINE_S" \
+  || logger -t loki-read-route-health "textfile write failed (status=${STATUS})"
+
+[[ -z "$LOKI_ROUTE_WITNESS_PUSH_TOKEN" ]] \
+  || kuma_push "$STATUS" "$MSG" "$PUSH_URL" "$KUMA_HOST" "$KUMA_RESOLVE_IP" loki-read-route-health
 
 # The exit code is the timer's contract (roles/setup/common/tasks/kuma_check_timer.yml): 1 after
 # a down push so Restart=on-failure reruns the check until the route answers, 0 after up. It

@@ -1,0 +1,225 @@
+# The B2 host checks of M6 (docs/target-architecture/monitoring/m6-retire-kuma.md, batch B2): the
+# generated-docs refresh, the eval sweep, the secret-rotation audit, the setup-plane drift check
+# and the two Loki read-route witnesses. Each producer writes a `homelab_check_*` textfile to the
+# `node` scrape job, so these rules read the metric contract of
+# docs/target-architecture/monitoring/m3-textfile-timer.md. Plain YAML, never Jinja:
+# prometheus-rules.yaml.j2 carries this file verbatim.
+#
+# SHADOW UNTIL M6's BATCH B2 CUTOVER-1B. Each rule runs beside the Kuma tile of the same check, so
+# each carries `shadow: "true"` and pages nobody. Severity is `warning` because every one of the
+# six tiles notifies Discord only. `service` is the host as a literal, because a node is not a
+# workload (M3's open question 3). Each pair is `<Check>Failed` and `<Check>NotReporting`, the
+# shape M3 fixed: NotReporting reads the timestamp against the deadline, falls back to
+# absent_over_time over the same deadline, and leaves a dead exporter to the `targets` check.
+#
+# Each deadline is the DEADLINE_S its producer renders, which equals the interval of the Kuma tile
+# it shadows. Both literals of a NotReporting rule are pinned to it by
+# ansible/tests/services/test_initial_setup_check_rule_literals.py (M1 convention 1).
+#
+# The weekly reboot (about 07:35 to 07:50) leaves every writer's gap inside its deadline: the
+# hourly witness writes at 07:23 and 08:23, and the daily and weekly checks run outside the
+# window. The eval sweep's 7-day deadline means its NotReporting rule fires until the first sweep
+# after the deploy writes its file, which is harmless while the rule is shadow.
+groups:
+  - name: initial-setup-checks
+    rules:
+      # Kuma tile "Docs Refresh".
+      - alert: DocsRefreshFailed
+        expr: homelab_check_success{check="docs-refresh",origin="daniel-box"} == 0
+        labels:
+          severity: warning
+          service: daniel-box
+          shadow: "true"
+        annotations:
+          summary: daniel-box's generated-docs refresh reported a failure.
+          description: >-
+            docs-refresh.sh on daniel-box ended with status=down: a generator, the shard-weight
+            measurement or the site build failed, a previous run is unlanded or left the tree
+            dirty, or the PR could not be published. The `docs-refresh` syslog tag holds the
+            run's message.
+      - alert: DocsRefreshNotReporting
+        expr: |
+          (
+              time() - homelab_check_last_run_timestamp_seconds{check="docs-refresh",origin="daniel-box"} > 46800
+            or
+              absent_over_time(homelab_check_last_run_timestamp_seconds{check="docs-refresh",origin="daniel-box"}[46800s])
+          )
+          unless on (origin) (up{job="node"} == 0)
+        labels:
+          severity: warning
+          service: daniel-box
+          shadow: "true"
+        annotations:
+          summary: daniel-box's generated-docs refresh has stopped reporting.
+          description: >-
+            No docs-refresh verdict newer than 46800s reached Prometheus from daniel-box's
+            textfile collector, so nothing confirms the generated docs are refreshing. Read the
+            `Refresh generated docs` cron and the `docs-refresh` syslog tag, then
+            /var/lib/node-exporter-textfile/docs-refresh.prom on the host.
+      # Kuma tile "Homelab Evals".
+      - alert: EvalSweepFailed
+        expr: homelab_check_success{check="eval-run",origin="daniel-box"} == 0
+        labels:
+          severity: warning
+          service: daniel-box
+          shadow: "true"
+        annotations:
+          summary: daniel-box's weekly eval sweep reported a failure.
+          description: >-
+            eval-run.sh on daniel-box ended with status=down: an eval case regressed, or an
+            earlier PR is unlanded for a reason that needs a human. A missing anthropic_api_key
+            skips the sweep and reads up. The `eval-run` syslog tag holds the run's message.
+      - alert: EvalSweepNotReporting
+        expr: |
+          (
+              time() - homelab_check_last_run_timestamp_seconds{check="eval-run",origin="daniel-box"} > 626400
+            or
+              absent_over_time(homelab_check_last_run_timestamp_seconds{check="eval-run",origin="daniel-box"}[626400s])
+          )
+          unless on (origin) (up{job="node"} == 0)
+        labels:
+          severity: warning
+          service: daniel-box
+          shadow: "true"
+        annotations:
+          summary: daniel-box's weekly eval sweep has stopped reporting.
+          description: >-
+            No eval-run verdict newer than 626400s reached Prometheus from daniel-box's textfile
+            collector, so nothing confirms the eval sweep is running. Read the `Homelab eval
+            sweep` cron and the `eval-run` syslog tag, then
+            /var/lib/node-exporter-textfile/eval-run.prom on the host.
+      # Kuma tile "Secret Rotation".
+      - alert: SecretRotationAuditFailed
+        expr: homelab_check_success{check="secret-rotation-audit",origin="daniel-box"} == 0
+        labels:
+          severity: warning
+          service: daniel-box
+          shadow: "true"
+        annotations:
+          summary: daniel-box's secret-rotation audit reported a failure.
+          description: >-
+            secret-rotation-audit.sh on daniel-box ended with a non-zero exit code: a secret is
+            past its rotation window, a secret in secrets.yml is missing from the registry, or a
+            prior weekly secret-rotate left the tree dirty or unpushed. Run `secret_rotation.py
+            audit` by hand to read which.
+      - alert: SecretRotationAuditNotReporting
+        expr: |
+          (
+              time() - homelab_check_last_run_timestamp_seconds{check="secret-rotation-audit",origin="daniel-box"} > 90000
+            or
+              absent_over_time(homelab_check_last_run_timestamp_seconds{check="secret-rotation-audit",origin="daniel-box"}[90000s])
+          )
+          unless on (origin) (up{job="node"} == 0)
+        labels:
+          severity: warning
+          service: daniel-box
+          shadow: "true"
+        annotations:
+          summary: daniel-box's secret-rotation audit has stopped reporting.
+          description: >-
+            No secret-rotation-audit verdict newer than 90000s reached Prometheus from
+            daniel-box's textfile collector, so nothing confirms secret rotation is being
+            audited. Read `systemctl status kuma-check-secret-rotation-audit` on daniel-box,
+            then /var/lib/node-exporter-textfile/secret-rotation-audit.prom on the host.
+      # Kuma tile "Setup Plane Drift (agent hosts)".
+      - alert: SetupDriftFailed
+        expr: homelab_check_success{check="setup-drift-check",origin="daniel-server"} == 0
+        labels:
+          severity: warning
+          service: daniel-server
+          shadow: "true"
+        annotations:
+          summary: daniel-server's setup plane has drifted from the repo.
+          description: >-
+            setup-drift-check.sh on daniel-server found a deployed file that differs from the
+            repo, a rendered script that is an old render, or a checkout it cannot trust. The
+            `setup-drift-check` syslog tag names the files. Re-run the initial_setup playbook
+            for the role they belong to on that host.
+      - alert: SetupDriftNotReporting
+        expr: |
+          (
+              time() - homelab_check_last_run_timestamp_seconds{check="setup-drift-check",origin="daniel-server"} > 90000
+            or
+              absent_over_time(homelab_check_last_run_timestamp_seconds{check="setup-drift-check",origin="daniel-server"}[90000s])
+          )
+          unless on (origin) (up{job="node"} == 0)
+        labels:
+          severity: warning
+          service: daniel-server
+          shadow: "true"
+        annotations:
+          summary: daniel-server's setup-drift check has stopped reporting.
+          description: >-
+            No setup-drift-check verdict newer than 90000s reached Prometheus from
+            daniel-server's textfile collector, so nothing confirms the setup plane is being
+            compared with the repo. Read `systemctl status kuma-check-setup-drift` on
+            daniel-server, then /var/lib/node-exporter-textfile/setup-drift-check.prom on the
+            host.
+      # Kuma tile "Loki Read Route (daniel-box)".
+      - alert: LokiReadRouteFailed
+        expr: homelab_check_success{check="loki-read-route-health",origin="daniel-box"} == 0
+        labels:
+          severity: warning
+          service: daniel-box
+          shadow: "true"
+        annotations:
+          summary: daniel-box cannot read Loki through the loki-homelab route.
+          description: >-
+            loki-read-route-health.sh on daniel-box ran `probe.py loki-labels` through the
+            loki-homelab IngressRoute and judged the answer down: the route returned 404 or an
+            error, usually because the ClientIP guard rejects this host's source address. Read
+            `systemctl status kuma-check-loki-read-route` on daniel-box and the traefik pod's
+            placement.
+      - alert: LokiReadRouteNotReporting
+        expr: |
+          (
+              time() - homelab_check_last_run_timestamp_seconds{check="loki-read-route-health",origin="daniel-box"} > 7200
+            or
+              absent_over_time(homelab_check_last_run_timestamp_seconds{check="loki-read-route-health",origin="daniel-box"}[7200s])
+          )
+          unless on (origin) (up{job="node"} == 0)
+        labels:
+          severity: warning
+          service: daniel-box
+          shadow: "true"
+        annotations:
+          summary: daniel-box's Loki read-route witness has stopped reporting.
+          description: >-
+            No loki-read-route-health verdict newer than 7200s reached Prometheus from
+            daniel-box's textfile collector, so nothing confirms the Loki read route is being
+            witnessed. Read `systemctl status kuma-check-loki-read-route` on daniel-box, then
+            /var/lib/node-exporter-textfile/loki-read-route-health.prom on the host.
+      # Kuma tile "Loki Read Route (daniel-server)".
+      - alert: LokiReadRouteFailed
+        expr: homelab_check_success{check="loki-read-route-health",origin="daniel-server"} == 0
+        labels:
+          severity: warning
+          service: daniel-server
+          shadow: "true"
+        annotations:
+          summary: daniel-server cannot read Loki through the loki-homelab route.
+          description: >-
+            loki-read-route-health.sh on daniel-server ran `probe.py loki-labels` through the
+            loki-homelab IngressRoute and judged the answer down: the route returned 404 or an
+            error, usually because the ClientIP guard rejects this host's source address. Read
+            `systemctl status kuma-check-loki-read-route` on daniel-server and the traefik pod's
+            placement.
+      - alert: LokiReadRouteNotReporting
+        expr: |
+          (
+              time() - homelab_check_last_run_timestamp_seconds{check="loki-read-route-health",origin="daniel-server"} > 7200
+            or
+              absent_over_time(homelab_check_last_run_timestamp_seconds{check="loki-read-route-health",origin="daniel-server"}[7200s])
+          )
+          unless on (origin) (up{job="node"} == 0)
+        labels:
+          severity: warning
+          service: daniel-server
+          shadow: "true"
+        annotations:
+          summary: daniel-server's Loki read-route witness has stopped reporting.
+          description: >-
+            No loki-read-route-health verdict newer than 7200s reached Prometheus from
+            daniel-server's textfile collector, so nothing confirms the Loki read route is being
+            witnessed. Read `systemctl status kuma-check-loki-read-route` on daniel-server, then
+            /var/lib/node-exporter-textfile/loki-read-route-health.prom on the host.
