@@ -114,16 +114,21 @@ def test_the_frequent_crons_call_the_guard():
         )
 
 
+# The scripts in FREQUENT_SCRIPTS that still feed a Kuma push tile. disk-health.sh.j2 left this
+# set when M3's PR 5 moved its verdict to the textfile and Prometheus.
+KUMA_PUSHING_SCRIPTS = ("longhorn-backup-health.sh.j2",)
+
+
 def test_a_guarded_cron_still_beats_its_kuma_tile():
     # The half that is easy to miss: these scripts feed a Kuma push tile as well as a
-    # healthchecks.io dead-man, and the two have different tolerances. `k3s Longhorn Backup` and
-    # `daniel-box Disk` run a 1200s window against a 600s cron, so they tolerate exactly ONE
-    # missed push — the one a silent skip would consume, leaving the margin to cron jitter.
+    # healthchecks.io dead-man, and the two have different tolerances. `k3s Longhorn Backup` runs
+    # a 1200s window against a 600s cron, so it tolerates exactly ONE missed push — the one a
+    # silent skip would consume, leaving the margin to cron jitter.
     #
     # So the guard pushes `up` with a skip message instead of exiting quietly. Asserted at the
     # call site rather than by rendering the tile, because what breaks this is someone moving the
     # guard back above PUSH_URL for tidiness.
-    for name in FREQUENT_SCRIPTS:
+    for name in KUMA_PUSHING_SCRIPTS:
         text = rendered_shell_text("setup", "k3s", name)
         guard = text.index(f"boot_grace_active {GRACE_S}")
         assert text.index('PUSH_URL="') < guard, (
@@ -132,6 +137,16 @@ def test_a_guarded_cron_still_beats_its_kuma_tile():
         assert 'kuma_push up "skipped — host still booting"' in text[guard:], (
             f"{name}: the boot guard skips the run without keeping the Kuma tile's heartbeat"
         )
+
+
+def test_the_disk_health_skip_path_pushes_nothing_and_exits_clean():
+    # disk-health has no Kuma tile since M3's PR 5, so its skip path has no heartbeat to keep.
+    # It must exit 0 without a push, and the script must not push anywhere else either.
+    text = rendered_shell_text("setup", "k3s", "disk-health.sh.j2")
+    guard = text.index(f"if boot_grace_active {GRACE_S}")
+    skip_block = text[guard : text.index("\nfi\n", guard)]
+    assert "exit 0" in skip_block
+    assert "kuma_push" not in text.replace("kuma-push-lib.sh", "")
 
 
 def test_a_skipped_run_pings_no_healthchecks_slug():

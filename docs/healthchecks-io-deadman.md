@@ -81,9 +81,10 @@ than a wider grace — see the boot-grace note under *Watching the spine itself*
 The job checks above all answer "did this job run and succeed." `uptime-kuma-alive`
 answers a different question: is the thing every alert terminates in still working.
 
-The gap it closes: `longhorn-backup-health` and `daniel-box-disk-health` ping hc-ping.com
-whether or not their Kuma push succeeded, which is right for a backup check and leaves Kuma
-itself uncovered. A dead Kuma pod, a wedged SQLite, or a NetworkPolicy that fences off :3001
+The gap it closes: `longhorn-backup-health` pings hc-ping.com whether or not its Kuma push
+succeeded, which is right for a backup check and leaves Kuma itself uncovered.
+`daniel-box-disk-health` pushes nothing to Kuma since M3's PR 5: it writes a textfile metric
+that Prometheus rules page, then pings hc-ping.com. A dead Kuma pod, a wedged SQLite, or a NetworkPolicy that fences off :3001
 silences every one of the ~82 tiles while every job check above keeps reporting green. Kuma
 remains the only pager for its tiles until M2 cuts a family over to Alertmanager, and until then
 Alertmanager pages only its own meta alerts. A *cluster* outage is caught, because these scripts

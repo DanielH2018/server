@@ -91,8 +91,10 @@ unrepeated until the cron existed.
 `Longhorn backup health`, `daniel-box disk health`, `Manifest prune drift check`, `Release
 staleness drift check`, `Live object drift check`, `B2 deletion accounting`, `B2 backup budget
 listing` and the `--list-only` etcd drill read the cluster or the bucket and write nothing to
-either. The heartbeats push a Kuma tile through `kuma-push-lib.sh`; the B2 accounting pair appends
-to the local ledger, which is bookkeeping, not state.
+either. The heartbeats push a Kuma tile through `kuma-push-lib.sh`, except `daniel-box disk
+health`: since M3's PR 5 its heartbeat is a textfile metric (`disk-health.prom`) that the
+`host-checks` rules page through Alertmanager, and it pushes no Kuma tile. The B2 accounting pair
+appends to the local ledger, which is bookkeeping, not state.
 
 `Manifest prune drift check` and `Live object drift check` are kuma-check timers rather than crons
 since 2026-09-19, importing `setup/common`'s `kuma_check_timer.yml`. Each script exits 1 after it

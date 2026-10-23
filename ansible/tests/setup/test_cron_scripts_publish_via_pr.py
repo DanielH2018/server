@@ -438,7 +438,6 @@ _EXPECTED_IN_CORPUS = {
     "ansible/roles/setup/fake_remux/templates/fake-remux-health.sh.j2",
     "ansible/roles/setup/initial_setup/templates/secret-rotate.sh.j2",
     "ansible/roles/setup/initial_setup/templates/secret-rotation-audit.sh.j2",
-    "ansible/roles/setup/k3s/templates/disk-health.sh.j2",
     "ansible/roles/setup/k3s/templates/etcd-snapshot-offbox.sh.j2",
     "ansible/roles/setup/k3s/templates/longhorn-backup-health.sh.j2",
     "ansible/roles/setup/k3s/templates/manifest-prune-check.sh.j2",
@@ -450,8 +449,9 @@ _EXPECTED_IN_CORPUS = {
 # The corpus also holds six templates that carry a push URL but invoke no curl of their own: the
 # authelia bypass regex, both cloudflare-ddns Deployments, both pi-peer-backup manifests, and
 # renovate-notify's config.env. They are counted rather than named, so the floor is what watches
-# them. 23 against a measured 24 leaves headroom for exactly one retirement — a slacker floor
-# would let a third of that unnamed tail vanish before anything went red.
+# them. 23 against a measured 37 (2026-10-23, after M3's PR 5 dropped disk-health.sh.j2) is the
+# floor M3 chose to keep — a slacker floor would let a third of that unnamed tail vanish before
+# anything went red.
 _MIN_CORPUS = 23
 
 
