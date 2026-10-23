@@ -58,6 +58,26 @@ tests:
             exp_annotations:
               summary: Kuma's Traefik 421 tile is gone and no alert rule pages in its place.
               description: "M6's cutover removed the Traefik 421 tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
+          - exp_labels: {monitor_name: Longhorn Volume Redundancy, service: uptime-kuma, severity: critical}
+            exp_annotations:
+              summary: Kuma's Longhorn Volume Redundancy tile is gone and no alert rule pages in its place.
+              description: "M6's cutover removed the Longhorn Volume Redundancy tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
+          - exp_labels: {monitor_name: k3s PVC Fullness, service: uptime-kuma, severity: critical}
+            exp_annotations:
+              summary: Kuma's k3s PVC Fullness tile is gone and no alert rule pages in its place.
+              description: "M6's cutover removed the k3s PVC Fullness tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
+          - exp_labels: {monitor_name: Longhorn Snapshot Headroom, service: uptime-kuma, severity: critical}
+            exp_annotations:
+              summary: Kuma's Longhorn Snapshot Headroom tile is gone and no alert rule pages in its place.
+              description: "M6's cutover removed the Longhorn Snapshot Headroom tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
+          - exp_labels: {monitor_name: Kubelet CSI Mount Read-Only, service: uptime-kuma, severity: critical}
+            exp_annotations:
+              summary: Kuma's Kubelet CSI Mount Read-Only tile is gone and no alert rule pages in its place.
+              description: "M6's cutover removed the Kubelet CSI Mount Read-Only tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
+          - exp_labels: {monitor_name: etcd DB Size, service: uptime-kuma, severity: critical}
+            exp_annotations:
+              summary: Kuma's etcd DB Size tile is gone and no alert rule pages in its place.
+              description: "M6's cutover removed the etcd DB Size tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
   # Every tile present: no term fires.
   - interval: 1m
     input_series:
@@ -84,6 +104,16 @@ tests:
       - series: 'monitor_status{monitor_name="Traefik 404 Flood", monitor_type="push"}'
         values: '1x140'
       - series: 'monitor_status{monitor_name="Traefik 421", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Longhorn Volume Redundancy", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="k3s PVC Fullness", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Longhorn Snapshot Headroom", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Kubelet CSI Mount Read-Only", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="etcd DB Size", monitor_type="push"}'
         values: '1x140'
     alert_rule_test:
       - alertname: CheckWithoutPager
@@ -116,6 +146,16 @@ tests:
       - series: 'monitor_status{monitor_name="Traefik 404 Flood", monitor_type="push"}'
         values: '1x140'
       - series: 'monitor_status{monitor_name="Traefik 421", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Longhorn Volume Redundancy", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="k3s PVC Fullness", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Longhorn Snapshot Headroom", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Kubelet CSI Mount Read-Only", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="etcd DB Size", monitor_type="push"}'
         values: '1x140'
     alert_rule_test:
       - alertname: CheckWithoutPager

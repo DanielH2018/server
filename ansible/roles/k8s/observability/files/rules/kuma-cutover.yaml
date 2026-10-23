@@ -45,6 +45,16 @@ groups:
               absent_over_time(monitor_status{monitor_name="Traefik 404 Flood"}[2h])
             or
               absent_over_time(monitor_status{monitor_name="Traefik 421"}[2h])
+            or
+              absent_over_time(monitor_status{monitor_name="Longhorn Volume Redundancy"}[2h])
+            or
+              absent_over_time(monitor_status{monitor_name="k3s PVC Fullness"}[2h])
+            or
+              absent_over_time(monitor_status{monitor_name="Longhorn Snapshot Headroom"}[2h])
+            or
+              absent_over_time(monitor_status{monitor_name="Kubelet CSI Mount Read-Only"}[2h])
+            or
+              absent_over_time(monitor_status{monitor_name="etcd DB Size"}[2h])
           )
           unless on() (up{job="uptime-kuma"} == 0)
         labels:
