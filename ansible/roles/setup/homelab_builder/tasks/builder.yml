@@ -153,7 +153,7 @@
     + (homelab_builder_python.stdout | default(''))
   become: true
 
-- name: Install the builder script, the signer script and publish-textfile
+- name: Install the builder script, its siblings, the signer script and publish-textfile
   tags: [homelab-builder-install]
   ansible.builtin.copy:
     src: "{{ item.src }}"
@@ -165,6 +165,8 @@
     - { src: host_package_builder.py, dest: host_package_builder.py }
     - { src: homelab_repo_sign.py, dest: homelab_repo_sign.py }
     - { src: homelab_tool_fetch.py, dest: homelab_tool_fetch.py }
+    - { src: builder_ci_grade.py, dest: builder_ci_grade.py }
+    - { src: builder_rollout_gate.py, dest: builder_rollout_gate.py }
     - { src: publish-textfile.sh, dest: publish-textfile }
   loop_control:
     label: "{{ item.dest }}"
@@ -189,6 +191,10 @@
         src: ansible/roles/setup/homelab_builder/files/homelab_repo_sign.py
       - live: /opt/homelab-builder/homelab_tool_fetch.py
         src: ansible/roles/setup/homelab_builder/files/homelab_tool_fetch.py
+      - live: /opt/homelab-builder/builder_ci_grade.py
+        src: ansible/roles/setup/homelab_builder/files/builder_ci_grade.py
+      - live: /opt/homelab-builder/builder_rollout_gate.py
+        src: ansible/roles/setup/homelab_builder/files/builder_rollout_gate.py
       - live: /opt/homelab-builder/publish-textfile
         src: ansible/roles/setup/homelab_builder/files/publish-textfile.sh
       - live: /opt/homelab-builder/host_lib.py

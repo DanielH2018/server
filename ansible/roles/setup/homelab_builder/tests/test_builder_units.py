@@ -182,6 +182,27 @@ def test_a_settings_render_from_another_list_is_flagged():
     assert ci_contexts_problem(_settings(gitops_deploy_ci_contexts=["other"]))
 
 
+def prom_urls_problem(settings: dict[str, str], cluster_ip: str) -> str | None:
+    """None when PROMETHEUS_URLS is loopback, then the ClusterIP, both on port 9090."""
+    want = f"http://127.0.0.1:9090 http://{cluster_ip}:9090"
+    got = settings.get("PROMETHEUS_URLS")
+    return None if got == want else f"PROMETHEUS_URLS={got!r}, want {want!r}"
+
+
+def test_the_settings_carry_loopback_then_the_pinned_prometheus_cluster_ip():
+    """Prometheus publishes loopback only on its own node; the ClusterIP reaches it anywhere."""
+    observability = yaml_fast.safe_load(
+        (SETUP_ROLES.parent / "k8s/observability/defaults/main.yml").read_text()
+    )
+    ip = observability["observability_prometheus_cluster_ip"]
+    assert prom_urls_problem(_settings(), ip) is None
+    assert DEFAULTS["homelab_builder_prom_urls"][1] == f"http://{ip}:9090"
+
+
+def test_a_settings_render_with_another_cluster_ip_is_flagged():
+    assert prom_urls_problem(_settings(), "10.43.0.1")
+
+
 def test_the_settings_write_hides_the_token():
     task = task_named(BUILDER_TASKS, "Write the builder's configuration")
     assert task["no_log"] is True
