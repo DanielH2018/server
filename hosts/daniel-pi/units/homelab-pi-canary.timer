@@ -1,0 +1,12 @@
+# Shipped by homelab-daniel-pi for the H3.10 drop proof (docs/target-architecture/host/h3-pi-pilot.md).
+# H3.10a ships the enable link, so reconcile starts the timer on the install. H3.10b removes the
+# timer, its service and the link, and reconcile stops the timer on that upgrade.
+[Unit]
+Description=Fire the Pi package's canary hourly
+
+[Timer]
+OnCalendar=hourly
+AccuracySec=1min
+
+[Install]
+WantedBy=timers.target
