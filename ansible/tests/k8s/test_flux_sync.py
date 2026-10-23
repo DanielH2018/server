@@ -188,3 +188,91 @@ def test_identity_admits_the_signer_promote_verifies():
 )
 def test_identity_admits_is_flagged_on_another_signer(subject):
     assert not identity_admits(_sync_docs(), subject, forge.SIGNER_ISSUER)
+
+
+# --- The break-glass source form (D6.11) --------------------------------------------------
+
+_PRODUCTION_HOMELAB = {
+    "interval": "1m",
+    "url": "oci://ghcr.io/danielh2018/homelab-manifests",
+    "ref": {"tag": "prod"},
+    "verify": {
+        "provider": "cosign",
+        "matchOIDCIdentity": [
+            {
+                "issuer": "^https://token\\.actions\\.githubusercontent\\.com$",
+                "subject": "^https://github\\.com/DanielH2018/server/\\.github/workflows/promote\\.yml@refs/heads/master$",
+            }
+        ],
+    },
+}
+
+
+def _homelab_source(**overrides) -> dict:
+    return next(
+        d["spec"]
+        for d in _sync_docs(**overrides)
+        if (d["kind"], d["metadata"]["name"]) == ("OCIRepository", "homelab")
+    )
+
+
+def test_the_production_render_is_the_ghcr_form_with_the_keyless_identity():
+    """The lever is off by default, and the render then carries no key and no plain HTTP."""
+    assert _homelab_source() == _PRODUCTION_HOMELAB
+
+
+def test_the_break_glass_lever_renders_the_registry_and_the_key_in_place_of_ghcr():
+    spec = _homelab_source(flux_break_glass=True)
+    assert spec["url"].startswith("oci://registry.")
+    assert spec["insecure"] is True
+    assert spec["ref"] == {"tag": "break-glass"}
+    assert spec["verify"] == {
+        "provider": "cosign",
+        "secretRef": {"name": "flux-break-glass-key"},
+    }
+
+
+def test_the_break_glass_lever_leaves_last_good_on_ghcr():
+    docs = _sync_docs(flux_break_glass=True)
+    last_good = next(d for d in docs if d["metadata"]["name"] == "last-good")
+    assert last_good["spec"]["url"] == _PRODUCTION_HOMELAB["url"]
+    assert "matchOIDCIdentity" in last_good["spec"]["verify"]
+
+
+def _break_glass_secret(**overrides) -> dict:
+    text = render_role_template("flux", "secret.yaml.j2", overrides)
+    return next(
+        d
+        for d in yaml_fast.safe_load_all(text)
+        if d and d["metadata"]["name"] == "flux-break-glass-key"
+    )
+
+
+def key_offences(secret: dict) -> list[str]:
+    """What is wrong with the break-glass Secret: it must hold one public key and nothing else."""
+    data = secret.get("stringData", {})
+    pem = data.get("cosign.pub", "")
+    offences = []
+    if set(data) != {"cosign.pub"}:
+        offences.append(f"keys {sorted(data)} are not exactly cosign.pub")
+    if "BEGIN PUBLIC KEY" not in pem:
+        offences.append("cosign.pub holds no public key")
+    if "PRIVATE" in pem or "ENCRYPTED" in pem:
+        offences.append("cosign.pub holds private key material")
+    return offences
+
+
+def test_key_offences_is_clean_on_the_committed_secret():
+    assert key_offences(_break_glass_secret()) == []
+
+
+@pytest.mark.parametrize(
+    "key",
+    [
+        "-----BEGIN ENCRYPTED SIGSTORE PRIVATE KEY-----\nAAAA\n-----END ENCRYPTED SIGSTORE PRIVATE KEY-----\n",
+        "not a key\n",
+    ],
+    ids=["private-half", "no-key"],
+)
+def test_key_offences_is_flagged_on_a_private_half_or_a_missing_key(key):
+    assert key_offences(_break_glass_secret(flux_break_glass_public_key=key))

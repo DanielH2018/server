@@ -45,7 +45,7 @@ so a regeneration diffs as the pipeline plus upstream's change.
   rule) and the header test fails until the file is regenerated. The same PR moves the
   `version:` of all three `fluxcd/flux2/action` steps in `.github/workflows/promote.yml`, of the
   two in `.github/workflows/ci.yml`'s `flux_roundtrip` and `sops_manifest_type_proof` jobs, the
-  one in `.github/workflows/bootstrap-drill.yml`, and the action's commit pin, so the CLI that pushes and tags the artifact and the CLI that proves
+  one in `.github/workflows/bootstrap-drill.yml`, the one in `.github/workflows/flux-deletion-drill.yml`, and the action's commit pin, so the CLI that pushes and tags the artifact and the CLI that proves
   the round trip move with the controllers. `sops_manifest_type_proof` also applies this file
   as it stands to a kind cluster, so a regeneration re-runs D3.3d's in-cluster proof on the
   new controller images. A `# renovate:` comment above each input is what Renovate reads, and
@@ -228,3 +228,15 @@ OCIRepository `homelab`. `FluxNotReady` stayed quiet for the same reason, and
   `cluster_vars.py write`, then commit. The `flux` Kustomization substitutes the value into
   the Secret once `promote` publishes the commit. notification-controller reads the Secret on
   each event, so no controller restarts.
+
+## The break-glass source form
+
+`flux_break_glass: true` renders the OCIRepository `homelab` against the in-cluster registry
+instead of GHCR. It reads the registry over plain HTTP and verifies against the Secret
+`flux-break-glass-key`, which holds the public half of the operator's break-glass cosign key and
+nothing else. The default is `false`, and `ansible/tests/k8s/test_flux_sync.py` pins the
+production render. Normal operation reads the Secret nowhere, because the production source
+verifies keyless against the `promote` identity. The runbook is in `docs/break-glass.md`
+(*GitHub, GHCR or Sigstore is unreachable*), and operator-only to run. `flux-deletion-drill`
+renders this role's templates with the lever on and a throwaway key, so a change to
+`templates/sync.yaml.j2` or `templates/secret.yaml.j2` runs the drill on its PR.
