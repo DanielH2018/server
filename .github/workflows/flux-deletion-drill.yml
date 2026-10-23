@@ -248,6 +248,7 @@ jobs:
           kubectl apply -f "$d/hand/bg-secret.yaml"
           kubectl apply -f "$d/hand/bg-ocirepository.yaml"
           BUDGET=60 judge break-glass
+          kubectl -n flux-system get ocirepository homelab -o jsonpath='{range .status.conditions[*]}{.type}={.status}: {.message}{"\n"}{end}'
 
       # The red half runs only after the green half passed, so a transport failure on both
       # cannot read as a refusal. It pushes to its own repository path, because cosign v3
@@ -269,6 +270,7 @@ jobs:
             --use-signing-config=false --allow-http-registry --yes "$PUSH/bg-red@$digest"
           kubectl apply -f "$d/hand/bg-red-ocirepository.yaml"
           BUDGET=40 judge break-glass-red
+          kubectl -n flux-system get ocirepository homelab -o jsonpath='{range .status.conditions[*]}{.type}={.status}: {.message}{"\n"}{end}'
 
       - name: Dump the Flux objects and controller logs
         if: failure() && (github.event_name == 'workflow_dispatch' || steps.scope.outputs.changed == 'true')
