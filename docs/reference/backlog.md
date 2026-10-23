@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/backlog.py
-generated_at: 2026-10-22 06:17 UTC
-generated_sha: d749af07a
+generated_at: 2026-10-23 06:17 UTC
+generated_sha: 1d8f84182
 ---
 
 !!! warning "Generated file — do not edit"
@@ -17,7 +17,6 @@ Findings Claude confirmed and did not fix in the session that found them, filed 
 | # | Severity | Kind | Domain | Finding | First seen | Re-observed | Claim | Verify-by |
 |---|---|---|---|---|---|---|---|---|
 | [#5126](https://github.com/DanielH2018/server/issues/5126) | high | gap | security | The DanielClaudeBot account reads as nonexistent on GitHub, so agent PRs are invisible and cannot land | 2026-10-15 | 0 | - | - |
-| [#5826](https://github.com/DanielH2018/server/issues/5826) | high | gap | backup-observability | A replaced Longhorn instance-manager leaves stale iSCSI sessions that block later attaches on that node | 2026-10-21 | 0 | - | - |
 | [#4188](https://github.com/DanielH2018/server/issues/4188) | medium | gap | container | Home Assistant was down 28 minutes when the tick deployed 2026.10.0, and its hold still stands | 2026-10-10 | 1 | - | ✓ |
 | [#4599](https://github.com/DanielH2018/server/issues/4599) | medium | improvement | security | The AIDE check cannot page on an unexplained file change | 2026-10-12 | 0 | - | ✓ |
 | [#4786](https://github.com/DanielH2018/server/issues/4786) | medium | addition | backup-observability | Target architecture M2: read the k8s-workloads shadow soak on days 3 and 7 before PR 4a | 2026-10-13 | 0 | - | ✓ |
@@ -26,25 +25,25 @@ Findings Claude confirmed and did not fix in the session that found them, filed 
 | [#4940](https://github.com/DanielH2018/server/issues/4940) | medium | addition | backup-observability | Target architecture M3: read the host-checks shadow soak on day 7 before PR 4 | 2026-10-13 | 0 | - | ✓ |
 | [#5206](https://github.com/DanielH2018/server/issues/5206) | medium | gap | - | Record the Pi updater's four measured memory peaks in pi-host-tuning-record.md | 2026-10-16 | 0 | - | ✓ |
 | [#5351](https://github.com/DanielH2018/server/issues/5351) | medium | gap | cicd | H3.8b manual apply pending on daniel-pi: start the updater, read back, clear manual_plane optimize_pi | 2026-10-16 | 0 | - | ✓ |
-| [#5400](https://github.com/DanielH2018/server/issues/5400) | medium | gap | cicd | The green gate still strands a correct fix on a false-premise red test, a red-file helper under test, or a derived constant | 2026-10-17 | 0 | - | ✓ |
 | [#5526](https://github.com/DanielH2018/server/issues/5526) | medium | improvement | cicd | CI demand exceeds the 20-job runner cap during fan-outs, and master push runs wait 6 minutes for a runner | 2026-10-18 | 0 | - | ✓ |
 | [#5530](https://github.com/DanielH2018/server/issues/5530) | medium | gap | backup-observability | dri-device-plugin is not found by the soak's verify census, as #5513's verify-by requires | 2026-10-18 | 0 | - | - |
 | [#5542](https://github.com/DanielH2018/server/issues/5542) | medium | gap | backup-observability | Monitor that the registry's ghcr.io mirror actually serves pulls | 2026-10-18 | 0 | - | ✓ |
 | [#5552](https://github.com/DanielH2018/server/issues/5552) | medium | gap | container | Let the pre-pull Job retry a failed Pod so an eviction cannot wedge code-server | 2026-10-18 | 0 | - | ✓ |
-| [#5627](https://github.com/DanielH2018/server/issues/5627) | medium | gap | cicd | The banner, probe.py gitops and monitor-bridge print the k3s server apply without the agent join | 2026-10-18 | 0 | - | ✓ |
 | [#5654](https://github.com/DanielH2018/server/issues/5654) | medium | gap | container | ghcr-mirror cannot finish a large uncached blob: ghcr.io resets its HTTP/2 stream at 50-100 MiB | 2026-10-18 | 2 | - | ✓ |
 | [#5655](https://github.com/DanielH2018/server/issues/5655) | medium | gap | security | Decide crowdsec's exec form per job so H2.4b and H2.4c can land | 2026-10-18 | 0 | - | ✓ |
 | [#5658](https://github.com/DanielH2018/server/issues/5658) | medium | improvement | cicd | Fan-out slots sit idle while issues wait 1151h in total for a batch to start | 2026-10-18 | 0 | - | - |
 | [#5659](https://github.com/DanielH2018/server/issues/5659) | medium | improvement | cicd | The server autolander holds lander-surface PRs overnight, about 10h each, for paths it never executes | 2026-10-18 | 0 | - | - |
-| [#5778](https://github.com/DanielH2018/server/issues/5778) | medium | gap | container | karakeep has no pre-pull, so a Recreate rollout is down for the whole image pull | 2026-10-19 | 0 | - | ✓ |
 | [#5781](https://github.com/DanielH2018/server/issues/5781) | medium | gap | container | karakeep v0.34.0 crashes at s6 init under drop ALL and needs a planned auth migration | 2026-10-19 | 0 | - | ✓ |
-| [#5784](https://github.com/DanielH2018/server/issues/5784) | medium | gap | cicd | Staleness test reads the live deployer state dir and fails while the deployer is parked | 2026-10-20 | 0 | - | - |
-| [#5786](https://github.com/DanielH2018/server/issues/5786) | medium | gap | cicd | Host-package builder caches a CI fail verdict forever, so a green re-run never unblocks it | 2026-10-20 | 0 | - | - |
-| [#5806](https://github.com/DanielH2018/server/issues/5806) | medium | gap | backup-observability | daniel-box root filesystem sits at 76%, keeping DiskHealthFailed firing | 2026-10-21 | 0 | - | - |
 | [#5849](https://github.com/DanielH2018/server/issues/5849) | medium | gap | backup-observability | Clean up the stale iSCSI sessions on daniel-server that IscsiSessionStale names | 2026-10-22 | 0 | - | ✓ |
-| [#5855](https://github.com/DanielH2018/server/issues/5855) | medium | gap | container | home-assistant, valheim and jellyfin have no pre-pull, so a Recreate rollout is down for the whole image pull | 2026-10-22 | 0 | - | ✓ |
 | [#5867](https://github.com/DanielH2018/server/issues/5867) | medium | gap | container | uptime-kuma, observability's Grafana and crowdsec have no pre-pull, so a Recreate rollout is down for a 320-600 MB Docker Hub pull | 2026-10-22 | 0 | - | ✓ |
 | [#5879](https://github.com/DanielH2018/server/issues/5879) | medium | gap | container | PR closes #5867 although observability's pre-pull, part of the issue's verify-by, is not delivered | 2026-10-22 | 0 | - | ✓ |
+| [#5933](https://github.com/DanielH2018/server/issues/5933) | medium | gap | cicd | takeover_census.py still exits 1 when a declares-nothing object's only cleaned field is last-applied | 2026-10-22 | 0 | worktree-d5-orchestrator-wave5 | ✓ |
+| [#5944](https://github.com/DanielH2018/server/issues/5944) | medium | improvement | cicd | Host uv pin takes the 7-day version soak when a pypi advisory names uv | 2026-10-22 | 0 | - | ✓ |
+| [#5955](https://github.com/DanielH2018/server/issues/5955) | medium | gap | - | probe.py health never checks that a Flux CronJob role's gate Job is newer than its deploy | 2026-10-22 | 0 | - | ✓ |
+| [#5969](https://github.com/DanielH2018/server/issues/5969) | medium | improvement | security | Longhorn CSI service account holds cluster-wide Secret get it does not need | 2026-10-22 | 0 | - | - |
+| [#5973](https://github.com/DanielH2018/server/issues/5973) | medium | gap | security | Apply the merged k3s longhorn_host task that removes the staged manifests on daniel-box | 2026-10-22 | 0 | - | ✓ |
+| [#5981](https://github.com/DanielH2018/server/issues/5981) | medium | gap | docs | secret-rotation names a traefik probe task that no Flux path runs as the bouncer-key guard | 2026-10-22 | 0 | - | ✓ |
+| [#5991](https://github.com/DanielH2018/server/issues/5991) | medium | gap | cicd | homelab_builder's CI gate reads one page of 100 check-runs | 2026-10-23 | 0 | - | ✓ |
 | [#2124](https://github.com/DanielH2018/server/issues/2124) | low | gap | security | CrowdSec agent drops Traefik access-log lines with UnmarshalJSON errors | 2026-09-19 | 0 | - | ✓ |
 | [#3778](https://github.com/DanielH2018/server/issues/3778) | low | improvement | cicd | Switch the CI setup action's callers to the self-repository uses syntax once actionlint accepts it | 2026-10-09 | 0 | - | ✓ |
 | [#3865](https://github.com/DanielH2018/server/issues/3865) | low | gap | cicd | Red/green batches: a process the red author starts outside the pipeline's process tree survives the reap | 2026-10-09 | 0 | - | ✓ |
@@ -56,27 +55,17 @@ Findings Claude confirmed and did not fix in the session that found them, filed 
 | [#4715](https://github.com/DanielH2018/server/issues/4715) | low | gap | docs | The backlog page shows #2584's retired accepted reason after G4 drops the role-doc size gate | 2026-10-12 | 0 | - | ✓ |
 | [#4750](https://github.com/DanielH2018/server/issues/4750) | low | improvement | backup-observability | Target architecture M1 Open question 9: read Prometheus retention over the week after PR 1 | 2026-10-12 | 0 | - | ✓ |
 | [#4756](https://github.com/DanielH2018/server/issues/4756) | low | improvement | backup-observability | M1's series budget counts head series, but the retention cap's bytes follow samples a second | 2026-10-12 | 0 | - | ✓ |
-| [#4840](https://github.com/DanielH2018/server/issues/4840) | low | gap | cicd | A build-context edit outside a k8s role writes no k8s_unapplied line, and the release census names the wrong cause | 2026-10-13 | 0 | - | ✓ |
-| [#5000](https://github.com/DanielH2018/server/issues/5000) | low | gap | cicd | Killed Ansible module runs leave ansible-tmp directories under ~/.ansible/tmp on daniel-box | 2026-10-14 | 0 | - | ✓ |
 | [#5065](https://github.com/DanielH2018/server/issues/5065) | low | gap | cicd | CodeQL alert #59 flags homelab_render's stub-key-name print as clear-text secret logging | 2026-10-15 | 0 | - | ✓ |
 | [#5209](https://github.com/DanielH2018/server/issues/5209) | low | gap | cicd | order_only still misses C, process and object-reference state the runner's tables and its C-module list leave out | 2026-10-16 | 0 | - | ✓ |
 | [#5333](https://github.com/DanielH2018/server/issues/5333) | low | gap | backup-observability | M6 Open question 9: confirm ALERTS_FOR_STATE resets across a Prometheus restart | 2026-10-16 | 0 | - | ✓ |
-| [#5432](https://github.com/DanielH2018/server/issues/5432) | low | gap | cicd | test_session_health.py runs 5x slower on daniel-box than CI, so its local shard weight trips the over-recorded check | 2026-10-17 | 0 | - | ✓ |
 | [#5449](https://github.com/DanielH2018/server/issues/5449) | low | improvement | cicd | autofix-bridge leaves its retired ConfigMap staging directory on daniel-box | 2026-10-17 | 0 | - | ✓ |
 | [#5456](https://github.com/DanielH2018/server/issues/5456) | low | improvement | container | Remove game-stats' retired node staging directories from daniel-box | 2026-10-17 | 0 | - | ✓ |
-| [#5457](https://github.com/DanielH2018/server/issues/5457) | low | gap | cicd | Lander LAND_DEADLINE gives up on a Sunday merge that the reboot window defers | 2026-10-17 | 0 | - | - |
-| [#5463](https://github.com/DanielH2018/server/issues/5463) | low | gap | cicd | The deployer's cross-role lookup scan misses a lookup with keyword arguments | 2026-10-17 | 0 | worktree-d5-orchestrator-wave5 | - |
-| [#5483](https://github.com/DanielH2018/server/issues/5483) | low | gap | cicd | Duplicate Reload systemd handler names leave claude_code's login cap unreloaded on daniel-server | 2026-10-17 | 0 | worktree-d5-orchestrator-wave5 | ✓ |
-| [#5520](https://github.com/DanielH2018/server/issues/5520) | low | improvement | cicd | The fan-out red lock refuses an appended parametrize table that no red test reads | 2026-10-17 | 0 | - | ✓ |
-| [#5579](https://github.com/DanielH2018/server/issues/5579) | low | gap | cicd | Entry points that run their whole job on --help still pass the --help test | 2026-10-18 | 0 | - | ✓ |
+| [#5520](https://github.com/DanielH2018/server/issues/5520) | low | improvement | cicd | The fan-out red lock refuses an appended parametrize table that no red test reads | 2026-10-17 | 1 | - | ✓ |
+| [#5579](https://github.com/DanielH2018/server/issues/5579) | low | gap | cicd | Entry points that run their whole job on --help still pass the --help test | 2026-10-18 | 0 | worktree-d5-orchestrator-wave5 | ✓ |
 | [#5588](https://github.com/DanielH2018/server/issues/5588) | low | gap | cicd | Re-measure the cancelled share of CI job-minutes after fan-out PRs open as drafts | 2026-10-18 | 0 | - | ✓ |
-| [#5592](https://github.com/DanielH2018/server/issues/5592) | low | improvement | cicd | The renderer parses the same group_vars, host_vars and defaults again for every render_context call | 2026-10-18 | 0 | - | ✓ |
-| [#5599](https://github.com/DanielH2018/server/issues/5599) | low | improvement | cicd | The static-ratchet-tests hook still runs 21-35s on a loaded daniel-server | 2026-10-18 | 0 | - | ✓ |
+| [#5599](https://github.com/DanielH2018/server/issues/5599) | low | improvement | cicd | The static-ratchet-tests hook still runs 21-35s on a loaded daniel-server | 2026-10-18 | 0 | worktree-d5-orchestrator-wave5 | ✓ |
 | [#5622](https://github.com/DanielH2018/server/issues/5622) | low | improvement | container | Delete prowlarr's leftover flaresolverr-netpol-probe Job and staging directory after its Flux flip | 2026-10-18 | 0 | - | ✓ |
-| [#5628](https://github.com/DanielH2018/server/issues/5628) | low | improvement | cicd | Narrow a k3s change reaching agent.yml to the agent join instead of the whole-role tag | 2026-10-18 | 0 | - | ✓ |
 | [#5629](https://github.com/DanielH2018/server/issues/5629) | low | gap | cicd | A conflicting fan-out PR starts no CI when marked ready, and the batch blames Actions | 2026-10-18 | 0 | - | ✓ |
-| [#5631](https://github.com/DanielH2018/server/issues/5631) | low | improvement | docs | Observability comments still describe Kuma's removed ingress tiles | 2026-10-18 | 0 | - | ✓ |
-| [#5634](https://github.com/DanielH2018/server/issues/5634) | low | gap | docs | secret-rotation runbook's authelia landing duplicates the tick's secret-reader apply | 2026-10-18 | 0 | - | ✓ |
 | [#5638](https://github.com/DanielH2018/server/issues/5638) | low | improvement | cicd | Five entry points answer --help from the host process's argv when main() runs in-process | 2026-10-18 | 0 | - | ✓ |
 | [#5657](https://github.com/DanielH2018/server/issues/5657) | low | gap | backup-observability | Kuma drops alert notifications with HTTP 429 during a mass monitor flip | 2026-10-18 | 0 | - | - |
 | [#5660](https://github.com/DanielH2018/server/issues/5660) | low | improvement | cicd | D5 own windows could end at the flip's flux/soak verdict instead of a fixed hour | 2026-10-18 | 0 | - | - |
@@ -84,12 +73,8 @@ Findings Claude confirmed and did not fix in the session that found them, filed 
 | [#5667](https://github.com/DanielH2018/server/issues/5667) | low | improvement | cicd | Resize the fan-out batch reservation and live cap from a week of per-batch anon memory | 2026-10-18 | 0 | - | - |
 | [#5682](https://github.com/DanielH2018/server/issues/5682) | low | addition | cicd | Stamp each operator wait's start and end per PR so the timeline can attribute the hours | 2026-10-18 | 0 | - | - |
 | [#5684](https://github.com/DanielH2018/server/issues/5684) | low | gap | cicd | Confirm the fan-out OTEL batch labels survive the agent user's settings env | 2026-10-18 | 0 | - | - |
-| [#5716](https://github.com/DanielH2018/server/issues/5716) | low | improvement | cicd | k8s/cronjob-gate has no callers left after configarr and qbittorrent moved to Flux | 2026-10-18 | 0 | - | ✓ |
 | [#5721](https://github.com/DanielH2018/server/issues/5721) | low | gap | cicd | probe.py takeover ignores a tag's vendored files, so a vendored-only tag checks nothing | 2026-10-18 | 0 | - | ✓ |
-| [#5723](https://github.com/DanielH2018/server/issues/5723) | low | gap | cicd | Host-write census exempts every write under the k8s manifests directory, not only the render | 2026-10-18 | 0 | - | ✓ |
-| [#5751](https://github.com/DanielH2018/server/issues/5751) | low | improvement | docs | kuma-push-lib.sh comments still cite crowdsec's retired home allowlist cron | 2026-10-19 | 0 | - | ✓ |
 | [#5752](https://github.com/DanielH2018/server/issues/5752) | low | gap | container | registry's push store grows by one python image per flux_job_image pin, with no GC to reclaim it | 2026-10-19 | 0 | - | ✓ |
-| [#5756](https://github.com/DanielH2018/server/issues/5756) | low | gap | cicd | pytest_shard re-measures crowdsec's docker-only image legs to 0s, so CI's durations check fails PRs | 2026-10-19 | 0 | - | ✓ |
 | [#5761](https://github.com/DanielH2018/server/issues/5761) | low | gap | network | The edge answered daniel-pi's probe 403 once during crowdsec's LAPI restart | 2026-10-19 | 1 | - | ✓ |
 | [#5763](https://github.com/DanielH2018/server/issues/5763) | low | improvement | docs | daniel-box.yml's crowdsec ordering comment names a post-deploy registration task that is now an initContainer | 2026-10-19 | 0 | - | ✓ |
 | [#5796](https://github.com/DanielH2018/server/issues/5796) | low | improvement | backup-observability | The Homelab Evals tile pages on one-trial eval noise as a regression | 2026-10-20 | 0 | - | - |
@@ -97,15 +82,27 @@ Findings Claude confirmed and did not fix in the session that found them, filed 
 | [#5819](https://github.com/DanielH2018/server/issues/5819) | low | improvement | cicd | Retire manifests' rolled_by_role and rollout_amend once no Ansible-owned role calls them | 2026-10-21 | 0 | - | - |
 | [#5823](https://github.com/DanielH2018/server/issues/5823) | low | improvement | docs | Rewrite appsec_verify.py's comment that names k3s Workload Health once M2 PR 4b lands | 2026-10-21 | 0 | - | ✓ |
 | [#5865](https://github.com/DanielH2018/server/issues/5865) | low | gap | docs | pihole-exporter CLAUDE.md still says pihole is Ansible-owned and its dependsOn edge is dropped | 2026-10-22 | 0 | - | ✓ |
-| [#5868](https://github.com/DanielH2018/server/issues/5868) | low | gap | cicd | The published bundle's chained timeout exceeds VERIFY_CAP_S, so the soak's wait is clamped below the chain it bounds | 2026-10-22 | 0 | - | ✓ |
 | [#5872](https://github.com/DanielH2018/server/issues/5872) | low | improvement | docs | Flux-owned roles' k8s_claims comments still say k8s/manifests applies the claims ahead of the snapshot | 2026-10-22 | 0 | - | ✓ |
 | [#5873](https://github.com/DanielH2018/server/issues/5873) | low | improvement | cicd | Rollback budget test and prowlarr's DECIDED cap still size a gitops_deploy rollback flux-owned roles never run | 2026-10-22 | 0 | - | ✓ |
 | [#5875](https://github.com/DanielH2018/server/issues/5875) | low | gap | container | observability's Grafana cannot get a Flux pre-pull: no Deployment names a node, and loki, tempo and kube-state-metrics carry no sh | 2026-10-22 | 0 | - | ✓ |
-| [#5880](https://github.com/DanielH2018/server/issues/5880) | low | gap | cicd | Solo-only marking misses an issue that describes the fan-out review pipeline without naming its files | 2026-10-22 | 0 | - | ✓ |
 | [#5881](https://github.com/DanielH2018/server/issues/5881) | low | gap | backup-observability | A failed soak draws no Grafana deploy marker, though Flux applied the revision | 2026-10-22 | 0 | - | ✓ |
 | [#5886](https://github.com/DanielH2018/server/issues/5886) | low | gap | cicd | Repoint the secret-key census's MUST_FIND_GUARDED off arr-notification's uncalled tasks before R4 deletes them | 2026-10-22 | 0 | - | ✓ |
 | [#5893](https://github.com/DanielH2018/server/issues/5893) | low | gap | cicd | Apply claude_code on daniel-server, owed by #5888's needs-manual-apply landing | 2026-10-22 | 0 | - | ✓ |
-| [#5894](https://github.com/DanielH2018/server/issues/5894) | low | gap | cicd | Apply setup/claude_code on daniel-server after #5889 and two other merges | 2026-10-22 | 0 | - | ✓ |
+| [#5900](https://github.com/DanielH2018/server/issues/5900) | low | improvement | cicd | The renderer parses each role's task files again on every image_builder_sites call | 2026-10-22 | 0 | - | ✓ |
+| [#5904](https://github.com/DanielH2018/server/issues/5904) | low | gap | cicd | Groups of five ansible-local temp directories still leak on daniel-box after #4893 | 2026-10-22 | 0 | - | ✓ |
+| [#5912](https://github.com/DanielH2018/server/issues/5912) | low | gap | cicd | An orchestrator worktree hours behind master runs post-deploy gates against stale role definitions | 2026-10-22 | 0 | - | ✓ |
+| [#5916](https://github.com/DanielH2018/server/issues/5916) | low | improvement | cicd | test_session_health_host_independent.py's 2x wall-clock test can go red on a loaded host | 2026-10-22 | 0 | - | ✓ |
+| [#5918](https://github.com/DanielH2018/server/issues/5918) | low | gap | cicd | Print the agent pin-play command when a k3s change reaches tasks/static-address.yml | 2026-10-22 | 0 | - | ✓ |
+| [#5928](https://github.com/DanielH2018/server/issues/5928) | low | improvement | docs | Point longhorn-upgrade.md's StorageClass comparison at probe.py health longhorn | 2026-10-22 | 0 | - | ✓ |
+| [#5930](https://github.com/DanielH2018/server/issues/5930) | low | gap | cicd | A setup/k3s coredns.yml change records no narrow tag, so the owed apply reads as the whole k3s role | 2026-10-22 | 0 | - | ✓ |
+| [#5931](https://github.com/DanielH2018/server/issues/5931) | low | gap | cicd | land.sh reads a cancelled PR CI run as red, contradicting the no-verdict rule | 2026-10-22 | 0 | - | ✓ |
+| [#5940](https://github.com/DanielH2018/server/issues/5940) | low | improvement | docs | Name the longhorn-reconcile defaults as the source of the Longhorn tier lists in generated provenance | 2026-10-22 | 0 | - | ✓ |
+| [#5950](https://github.com/DanielH2018/server/issues/5950) | low | gap | backup-observability | probe.py health never reads the Flux gate Job of a CronJob-only role | 2026-10-22 | 0 | - | ✓ |
+| [#5957](https://github.com/DanielH2018/server/issues/5957) | low | improvement | cicd | Retire or keep the empty stale-checkout guard after H1.7b removes its last writer | 2026-10-22 | 0 | worktree-d5-orchestrator-wave5 | ✓ |
+| [#5965](https://github.com/DanielH2018/server/issues/5965) | low | gap | cicd | Restore the three PENDING_RETIREMENT push tokens that the H1.7b cluster_vars write unset | 2026-10-22 | 1 | - | ✓ |
+| [#5967](https://github.com/DanielH2018/server/issues/5967) | low | improvement | cicd | xdist_width sizes -n auto by module count, so a few heavy modules run on one worker | 2026-10-22 | 0 | - | ✓ |
+| [#5968](https://github.com/DanielH2018/server/issues/5968) | low | gap | container | longhorn-global-manager runs BestEffort with no memory request | 2026-10-22 | 0 | - | - |
+| [#5989](https://github.com/DanielH2018/server/issues/5989) | low | improvement | cicd | Deleting a retired module's shard-weight row unscopes the weight gate for the whole PR | 2026-10-23 | 0 | - | ✓ |
 
 ## Settled findings — do not re-flag
 

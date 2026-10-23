@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/service_catalog.py
-generated_at: 2026-10-22 06:17 UTC
-generated_sha: d749af07a
+generated_at: 2026-10-23 06:17 UTC
+generated_sha: 1d8f84182
 ---
 
 !!! warning "Generated file — do not edit"
@@ -12,12 +12,12 @@ generated_sha: d749af07a
 
 # Services
 
-64 service(s) declared across 2 host(s).
+69 service(s) declared across 2 host(s).
 
 
 ## daniel-box
 
-60 service(s).
+65 service(s).
 
 | Service | Platform | Route | Auth | Backup tier | Auto-deploy |
 |---|---|---|---|---|---|
@@ -31,6 +31,7 @@ generated_sha: d749af07a
 | cluster-base | k8s | no route (infra role) | unknown (use_authelia not declared on this entry) | no PVC (stateless) | n/a: applied by Flux, through `promote` (`owner: flux`); `deploy.sh` refuses its tag with exit 5 |
 | code-server | k8s | <span class="fqdn" data-host="code-server">code-server.&lt;domain&gt;</span> · <span class="fqdn" data-host="code-server.local">code-server.local.&lt;domain&gt;</span> | Authelia two_factor | no backup (listed in k3s_longhorn_nobackup_volumes); weekly -> B2 (default target) | n/a: applied by Flux, through `promote` (`owner: flux`); `deploy.sh` refuses its tag with exit 5 |
 | configarr | k8s | no route (infra role) | unknown (use_authelia not declared on this entry) | no PVC (stateless) | n/a: applied by Flux, through `promote` (`owner: flux`); `deploy.sh` refuses its tag with exit 5 |
+| coredns | k8s | no route (infra role) | unknown (use_authelia not declared on this entry) | no PVC (stateless) | n/a: applied by Flux, through `promote` (`owner: flux`); `deploy.sh` refuses its tag with exit 5 |
 | crowdsec | k8s | <span class="fqdn" data-host="crowdsec-lapi.local">crowdsec-lapi.local.&lt;domain&gt;</span> (LAN only) | none (public/no-auth) | no backup (listed in k3s_longhorn_nobackup_volumes) | n/a: applied by Flux, through `promote` (`owner: flux`); `deploy.sh` refuses its tag with exit 5 |
 | deploy-ui | k8s | <span class="fqdn" data-host="deploy.local">deploy.local.&lt;domain&gt;</span> (LAN only) | Authelia two_factor | no PVC (stateless) | n/a: applied by Flux, through `promote` (`owner: flux`); `deploy.sh` refuses its tag with exit 5 |
 | docs | k8s | <span class="fqdn" data-host="docs">docs.&lt;domain&gt;</span> · <span class="fqdn" data-host="docs.local">docs.local.&lt;domain&gt;</span> | Authelia one_factor | no PVC (stateless) | n/a: applied by Flux, through `promote` (`owner: flux`); `deploy.sh` refuses its tag with exit 5 |
@@ -50,8 +51,12 @@ generated_sha: d749af07a
 | littlelink | k8s | <span class="fqdn" data-host="www">www.&lt;domain&gt;</span> · <span class="fqdn" data-host="www.local">www.local.&lt;domain&gt;</span> | none (public/no-auth) | no PVC (stateless) | n/a: applied by Flux, through `promote` (`owner: flux`); `deploy.sh` refuses its tag with exit 5 |
 | livesync | k8s | no route (infra role) | none (public/no-auth) | no backup (StorageClass longhorn-nobackup) | n/a: applied by Flux, through `promote` (`owner: flux`); `deploy.sh` refuses its tag with exit 5 |
 | loki-homelab | k8s | <span class="fqdn" data-host="loki-homelab.local">loki-homelab.local.&lt;domain&gt;</span> (LAN only) | none (public/no-auth) | no backup (StorageClass longhorn-nobackup) | n/a: applied by Flux, through `promote` (`owner: flux`); `deploy.sh` refuses its tag with exit 5 |
+| longhorn | k8s | no route (infra role) | unknown (use_authelia not declared on this entry) | no PVC (stateless) | n/a: applied by Flux, through `promote` (`owner: flux`); `deploy.sh` refuses its tag with exit 5 |
+| longhorn-backup | k8s | no route (infra role) | unknown (use_authelia not declared on this entry) | no PVC (stateless) | n/a: applied by Flux, through `promote` (`owner: flux`); `deploy.sh` refuses its tag with exit 5 |
+| longhorn-reconcile | k8s | no route (infra role) | unknown (use_authelia not declared on this entry) | no PVC (stateless) | n/a: applied by Flux, through `promote` (`owner: flux`); `deploy.sh` refuses its tag with exit 5 |
 | longhorn-ui | k8s | <span class="fqdn" data-host="longhorn.local">longhorn.local.&lt;domain&gt;</span> (LAN only) | Authelia two_factor | no PVC (stateless) | n/a: applied by Flux, through `promote` (`owner: flux`); `deploy.sh` refuses its tag with exit 5 |
 | media-volume | k8s | no route (infra role) | unknown (use_authelia not declared on this entry) | not Longhorn (media-local) | n/a: applied by Flux, through `promote` (`owner: flux`); `deploy.sh` refuses its tag with exit 5 |
+| metallb | k8s | no route (infra role) | unknown (use_authelia not declared on this entry) | no PVC (stateless) | n/a: applied by Flux, through `promote` (`owner: flux`); `deploy.sh` refuses its tag with exit 5 |
 | monitor-bridge | k8s | no route (infra role) | unknown (use_authelia not declared on this entry) | no PVC (stateless) | n/a: applied by Flux, through `promote` (`owner: flux`); `deploy.sh` refuses its tag with exit 5 |
 | mosquitto | k8s | no route (infra role) | unknown (use_authelia not declared on this entry) | no backup (StorageClass longhorn-nobackup) | n/a: applied by Flux, through `promote` (`owner: flux`); `deploy.sh` refuses its tag with exit 5 |
 | n8n | k8s | <span class="fqdn" data-host="n8n">n8n.&lt;domain&gt;</span> · <span class="fqdn" data-host="n8n.local">n8n.local.&lt;domain&gt;</span> | Authelia two_factor | weekly -> B2 (default target) | n/a: applied by Flux, through `promote` (`owner: flux`); `deploy.sh` refuses its tag with exit 5 |
@@ -95,4 +100,4 @@ generated_sha: d749af07a
 
 ## Underivable facts
 
-25 field(s) read `unknown`. A fact with no machine-readable source prints its reason rather than a guess — see the FIELD NOTES section of `scripts/docs/service_catalog.py` for which facts those are and why.
+30 field(s) read `unknown`. A fact with no machine-readable source prints its reason rather than a guess — see the FIELD NOTES section of `scripts/docs/service_catalog.py` for which facts those are and why.
