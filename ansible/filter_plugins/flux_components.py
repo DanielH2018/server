@@ -15,7 +15,9 @@ closes each one at render time, and sets the controller flags the role names:
   `volumes` and in every container's `volumeMounts`;
 - each flag in `controller_args` is set on its Deployment's first container, replacing any
   value upstream passes for the same flag. kustomize-controller's `--concurrent` is the one
-  the role sets (D5.1c).
+  the role sets (D5.1c);
+- each Deployment's entry in `controller_resources` is merged into its first container's
+  `resources`, so one controller's request moves without a hand edit to the vendored file.
 
 A merge patch cannot replace one item of a list either, which is why the flags are code too.
 A merge patch cannot rename a list item, which is why the rename is code rather than patch
@@ -82,6 +84,7 @@ def flux_components(
     priority_class: str,
     volume_suffixes: dict,
     controller_args: dict | None = None,
+    controller_resources: dict | None = None,
 ) -> str:
     """The vendored install `text`, re-serialised with every Deployment fitted to the guards.
 
@@ -93,6 +96,8 @@ def flux_components(
             `<deployment name>-`.
         controller_args: Deployment name to the `--name=value` flags set on its first
             container.
+        controller_resources: Deployment name to a `resources` merge patch for its first
+            container, such as `{requests: {memory: 192Mi}}`.
 
     Returns:
         The documents in their vendored order, with only the Deployments changed.
@@ -101,13 +106,27 @@ def flux_components(
         ValueError: The text holds no Deployment, or a Deployment mounts a volume that
             `volume_suffixes` does not name. An unnamed volume is a regeneration that added
             one, and rendering it unrenamed would trip the volume-name guard much later.
-            Or `controller_args` names a Deployment the install does not hold, so a flag
-            would silently go unset.
+            Or `controller_args` or `controller_resources` names a Deployment the install
+            does not hold, so a flag or a request would silently go unset.
     """
     # ansible-core hands templated values over as tagged builtin subclasses, which SafeDumper
     # refuses to represent. A JSON round trip leaves plain dicts, lists and strings.
-    pod_patch, priority_class, volume_suffixes, controller_args = json.loads(
-        json.dumps([pod_patch, priority_class, volume_suffixes, controller_args or {}])
+    (
+        pod_patch,
+        priority_class,
+        volume_suffixes,
+        controller_args,
+        controller_resources,
+    ) = json.loads(
+        json.dumps(
+            [
+                pod_patch,
+                priority_class,
+                volume_suffixes,
+                controller_args or {},
+                controller_resources or {},
+            ]
+        )
     )
     docs = [doc for doc in yaml.load_all(str(text), Loader=_Loader) if doc is not None]
     deployments = [doc for doc in docs if doc.get("kind") == "Deployment"]
@@ -116,11 +135,12 @@ def flux_components(
             "the vendored install holds no Deployment, so no controller would run"
         )
     if unknown := sorted(
-        set(controller_args) - {d["metadata"]["name"] for d in deployments}
+        (set(controller_args) | set(controller_resources))
+        - {d["metadata"]["name"] for d in deployments}
     ):
         raise ValueError(
-            f"controller args name {unknown}, which the vendored install holds no "
-            "Deployment for"
+            f"controller args or resources name {unknown}, which the vendored install "
+            "holds no Deployment for"
         )
     for deployment in deployments:
         name = deployment["metadata"]["name"]
@@ -144,6 +164,11 @@ def flux_components(
             ]
         if name in controller_args:
             _set_args(pod["containers"][0], controller_args[name])
+        if name in controller_resources:
+            _merge(
+                pod["containers"][0].setdefault("resources", {}),
+                controller_resources[name],
+            )
         for container in pod.get("initContainers", []) + pod["containers"]:
             if "volumeMounts" in container:
                 container["volumeMounts"] = [

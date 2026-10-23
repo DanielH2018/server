@@ -248,14 +248,20 @@ check runs only once its tag resolves to a k8s role.
 
 A role with no Deployment/DaemonSet/StatefulSet but a CronJob (configarr and pi-peer-backup) is gated the same way on its most recent Job instead
 (`scripts/diagnostics/probe_lib/health_cronjob.py`'s `format_cronjob_health`): the Job must have
-succeeded, be newer than the deploy that just ran (read from the `release_stamp.yml` record),
-and carry no restarted container. `homelab-readonly`, the identity `probe.py` runs as, cannot
+succeeded, be newer than the deploy that just ran, and carry no restarted container.
+`homelab-readonly`, the identity `probe.py` runs as, cannot
 create a Job (the `view` ClusterRole it is bound to refuses it), so this only ever reads a Job that already exists, never triggers one.
-It reads only Jobs the CronJob owns. The gate Job Flux runs in `<tag>-verify` names no owner,
-so a scheduled firing is what it usually reads. When no Job has landed since the deploy, it falls
-back to the CronJob's own daily/weekly schedule: the previous run must have succeeded and not be
-more than twice its interval old. Any other schedule shape fails closed rather than guess an
-interval. A role with neither a workload nor a CronJob (media-volume, netpol-baseline) still
+It reads the Jobs the CronJob owns and the gate Job Flux runs in `<tag>-verify`, which names no
+owner.
+
+What "the deploy" means depends on the role's owner. For an `owner: flux` role, the gate Job of
+the revision Flux applies is the one whose pod template's `homelab/role-digest8` equals the first
+eight characters of Kustomization `<tag>`'s `homelab/content-digest`. With no such gate Job the
+check fails, and otherwise it judges the newest Job, which is that gate or a later firing. For
+any other role the reference is the `release_stamp.yml` record's `applied_at`. When no Job has
+landed since then, the check falls back to the CronJob's own daily/weekly schedule: the
+previous run must have succeeded and not be more than twice its interval old. Any other
+schedule shape fails closed rather than guess an interval. A role with neither a workload nor a CronJob (media-volume, netpol-baseline) still
 reports "declares no rollout-checkable workload," which the deploy notifier skips.
 
 ### `landing [--json]`

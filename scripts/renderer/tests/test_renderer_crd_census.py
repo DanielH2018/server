@@ -4,10 +4,12 @@ Under `prune: true`, a render that dropped a CRD file makes Flux delete that CRD
 server then deletes every custom object of its kind. For traefik's CRDs that is every
 IngressRoute and Middleware, so the edge goes down. A tag that renders a CRD therefore sets
 H1.1a's `flux_prune: false` in its defaults, which `role_fields` reads and the bundle writes as
-`prune: false`. The census reads the same lever for every render target, Ansible-owned ones
-included, because a flip carries the render as it stands. `traefik-crds` is the named member
-the live render must find. This is D6.19's CRD guard landing early, without D6's exception for
-`flux`. The plan is docs/target-architecture/deploy/d5-bulk-move.md, step 26's traefik bullet.
+`prune: false`. The lever reaches `<tag>` alone, so a CRD in a `<tag>-deferred` directory is
+always under prune (`bundle.flux_files`, operator ruling of 2026-10-22). The census reads the
+same lever for every render target, Ansible-owned ones included, because a flip carries the
+render as it stands. `traefik-crds` and `flux` are the named members the live render must
+find. This is D6.19's CRD guard landing early, without D6's exception for `flux`. The plan is
+docs/target-architecture/deploy/d5-bulk-move.md, step 26's traefik bullet and step 29.
 
 Run: uv run pytest scripts/renderer/tests/test_renderer_crd_census.py
 """
@@ -15,6 +17,8 @@ Run: uv run pytest scripts/renderer/tests/test_renderer_crd_census.py
 import shutil
 from collections.abc import Mapping
 from pathlib import Path
+
+import pytest
 
 from deploy_tools.render_targets import render_targets
 from lib import yaml_fast
@@ -32,21 +36,21 @@ CRD = (
     "apiVersion: apiextensions.k8s.io/v1\nkind: CustomResourceDefinition\n"
     "metadata:\n  name: {name}\n"
 )
-MEMBER = "traefik-crds"
-# Each Ansible-owned tag that renders CRDs under prune until its own flip sets the lever,
-# mapped to the reason. Ansible never prunes, so the render's prune value is inert until then.
-# An entry stops applying the moment its tag is flux-owned, so its flip fails the census
-# without `flux_prune: false`, and the flip PR deletes the entry.
-UNTIL_FLIP: dict[str, str] = {
-    "flux": "Flux's own CRDs; the flux PR sets flux_prune: false (D5's last three PRs)",
+# Each named member with a CRD its render must hold, so the census cannot pass on nothing.
+MEMBERS = {
+    "traefik-crds": "ingressroutes.traefik.io",
+    "flux": "kustomizations.kustomize.toolkit.fluxcd.io",
 }
 
 
 def crds_by_tag(directories: Mapping[str, Mapping[str, str]]) -> dict[str, set[str]]:
-    """Each deploy tag mapped to the CRDs its directories render; a tag with none is left out."""
+    """Each Kustomization's directory mapped to the CRDs it renders; one with none is left out.
+
+    A per-tag kind's directory, such as `<tag>-deferred`, keeps its own name, because its
+    Kustomization takes no `prune` from the role (`pruned_crds`).
+    """
     found: dict[str, set[str]] = {}
     for directory, files in directories.items():
-        tag = split_kind(directory)[0]
         for name, text in files.items():
             if name == KUSTOMIZATION:
                 continue
@@ -55,18 +59,21 @@ def crds_by_tag(directories: Mapping[str, Mapping[str, str]]) -> dict[str, set[s
                     isinstance(doc, dict)
                     and doc.get("kind") == "CustomResourceDefinition"
                 ):
-                    found.setdefault(tag, set()).add(str(doc["metadata"]["name"]))
+                    found.setdefault(directory, set()).add(str(doc["metadata"]["name"]))
     return found
 
 
 def pruned_crds(
     crds: Mapping[str, set[str]], fields: Mapping[str, Mapping]
 ) -> dict[str, list[str]]:
-    """Each tag that renders a CRD and whose `fields` leave `prune` at its default of true."""
+    """Each directory that renders a CRD and whose Kustomization renders `prune: true`.
+
+    Only `<tag>` itself takes the role's `prune`; every per-tag kind's directory prunes.
+    """
     return {
-        tag: sorted(names)
-        for tag, names in sorted(crds.items())
-        if fields.get(tag, {}).get("prune", True)
+        name: sorted(names)
+        for name, names in sorted(crds.items())
+        if split_kind(name)[1] or fields.get(name, {}).get("prune", True)
     }
 
 
@@ -90,27 +97,35 @@ def test_a_crd_in_a_tag_that_prunes_is_flagged():
 
 
 def test_a_crd_in_a_tag_with_prune_false_is_clean():
-    crds = crds_by_tag(
-        {"one-deferred": {"crd.yaml": CRD.format(name="widgets.example.io")}}
-    )
-    assert crds == {"one": {"widgets.example.io"}}
+    crds = crds_by_tag({"one": {"crd.yaml": CRD.format(name="widgets.example.io")}})
     assert pruned_crds(crds, {"one": {"prune": False}}) == {}
 
 
-def test_traefik_crds_with_flux_prune_removed_is_flagged(tmp_path):
+def test_a_crd_in_a_deferred_directory_of_a_tag_with_prune_false_is_flagged():
+    """`flux_prune` reaches `<tag>` alone, so `<tag>-deferred` prunes whatever the role sets."""
+    crds = crds_by_tag(
+        {"one-deferred": {"crd.yaml": CRD.format(name="widgets.example.io")}}
+    )
+    assert pruned_crds(crds, {"one": {"prune": False}}) == {
+        "one-deferred": ["widgets.example.io"]
+    }
+
+
+@pytest.mark.parametrize("member", sorted(MEMBERS))
+def test_a_member_with_flux_prune_removed_is_flagged(tmp_path, member):
     # The red fixture: the member's real render, and its real defaults minus the lever.
-    directories = _render(tmp_path / "out", tmp_path, [MEMBER])
+    directories = _render(tmp_path / "out", tmp_path, [member])
     roles = tmp_path / "roles"
-    shutil.copytree(K8S_ROLES / MEMBER, roles / MEMBER)
-    defaults = roles / MEMBER / "defaults" / "main.yml"
+    shutil.copytree(K8S_ROLES / member, roles / member)
+    defaults = roles / member / "defaults" / "main.yml"
     text = defaults.read_text()
     assert "\nflux_prune: false" in text
     defaults.write_text(text.replace("\nflux_prune: false", "\n"))
-    fields, problems = role_fields([MEMBER], roles)
+    fields, problems = role_fields([member], roles)
     assert problems == []
-    [(tag, names)] = pruned_crds(crds_by_tag(directories), fields).items()
-    assert tag == MEMBER
-    assert any(name == "ingressroutes.traefik.io" for name in names)
+    [(name, names)] = pruned_crds(crds_by_tag(directories), fields).items()
+    assert name == member
+    assert MEMBERS[member] in names
 
 
 def test_no_render_target_renders_a_crd_under_prune(tmp_path):
@@ -119,16 +134,11 @@ def test_no_render_target_renders_a_crd_under_prune(tmp_path):
     targets = set(render_targets(K8S_HOST, HOST_VARS))
     assert targets <= {split_kind(d)[0] for d in directories}
     crds = crds_by_tag(directories)
-    # Non-vacuity: the named member renders traefik's kinds, and its lever is off.
-    assert {"ingressroutes.traefik.io", "middlewares.traefik.io"} <= crds.get(
-        MEMBER, set()
-    )
     fields, problems = role_fields(targets)
     assert problems == []
-    assert fields[MEMBER].get("prune") is False
-    flux_owned = flux_owned_tags()
-    exempt = {tag for tag in UNTIL_FLIP if tag not in flux_owned}
-    flagged = pruned_crds(crds, fields)
-    assert {t: n for t, n in flagged.items() if t not in exempt} == {}
-    # An entry whose tag renders no pruned CRD any more is stale.
-    assert sorted(set(UNTIL_FLIP) - set(flagged)) == []
+    # Non-vacuity: each named member renders its kinds, is flux-owned, and its lever is off.
+    assert set(MEMBERS) <= flux_owned_tags()
+    for member, crd in MEMBERS.items():
+        assert crd in crds.get(member, set()), member
+        assert fields[member].get("prune") is False, member
+    assert pruned_crds(crds, fields) == {}

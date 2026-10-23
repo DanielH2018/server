@@ -56,7 +56,7 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 from diagnostics.probe_lib import core
 from diagnostics.probe_lib.core import PI_HOST
 from diagnostics.probe_lib import health_alerts, health_checkout, health_plumbing
-from diagnostics.probe_lib import health_backup_targets
+from diagnostics.probe_lib import health_backup_targets, health_cronjob
 from diagnostics.probe_lib.health_render import render_context as _render_context
 from diagnostics.probe_lib.health_cronjob import format_cronjob_health, latest_owned_job
 from diagnostics.probe_lib.health_docker import (
@@ -70,6 +70,7 @@ from diagnostics.probe_lib.health_kubectl import (
     k8s_deploy_args,
     k8s_job_pods_args,
     k8s_jobs_args,
+    k8s_kustomization_args,
     k8s_pods_args,
     pod_selector,
 )
@@ -390,24 +391,35 @@ def release_expected_restarts(record):
     }
 
 
-def _fetch_cronjob(name, namespace, cluster, tools=DEFAULT_TOOLS):
-    """(CronJob doc or None, its latest owned Job or None, that Job's pods doc or None)."""
+def _fetch_cronjob(role, name, namespace, cluster, tools=DEFAULT_TOOLS):
+    """(CronJob or None, its latest owned Job or None, that Job's pods or None, reference).
+
+    The reference is the `health_cronjob.FluxRevision` of an `owner: flux` `role`, which has
+    no release record, and `role`'s release-record `applied_at` otherwise.
+    """
+    from diagnostics.probe_lib.releases_retired import tree_owners
+
     cronjob = _read(cluster, k8s_cronjob_args(name, namespace), tools)
-    latest_job = latest_owned_job(_read(cluster, k8s_jobs_args(namespace), tools), name)
+    jobs = _read(cluster, k8s_jobs_args(namespace), tools)
+    latest_job = latest_owned_job(jobs, name)
     pods = None
     if latest_job:
         job_name = (latest_job.get("metadata") or {}).get("name")
         pods = _read(cluster, k8s_job_pods_args(job_name, namespace), tools)
-    return cronjob, latest_job, pods
+    if tree_owners().get(role) != "flux":
+        return cronjob, latest_job, pods, _deploy_applied_at(role)
+    kustomization = _read(cluster, k8s_kustomization_args(role), tools)
+    revision = health_cronjob.flux_revision(kustomization, jobs, name)
+    return cronjob, latest_job, pods, revision
 
 
 def format_role_cronjob_health(role, checked, now):
     """(text, exit code) for a role whose manifests declare at least one CronJob.
 
     `checked` is [(namespace, name, cronjob doc or None, latest Job or None, pods doc or
-    None, deploy_applied_at)]. Mirrors format_role_health's shape and its NOT_APPLICABLE_
-    MARKERS constraint: a CronJob the manifests declare and the cluster lacks reads as a
-    failure here too, via format_cronjob_health's own "no CronJob in this namespace" message.
+    None, reference)], as `_fetch_cronjob` reads it. Mirrors format_role_health's shape and
+    its NOT_APPLICABLE_MARKERS constraint: a CronJob the manifests declare and the cluster
+    lacks reads as a failure here too, via format_cronjob_health's "no CronJob" message.
     """
     unhealthy, lines = [], []
     for namespace, name, cronjob, latest_job, pods, deploy_applied_at in checked:
@@ -538,13 +550,11 @@ def run_health(
             return 1
         if cronjob_targets:
             now = datetime.now(timezone.utc)
-            deploy_applied_at = _deploy_applied_at(container)
             checked = [
                 (
                     namespace,
                     name,
-                    *_fetch_cronjob(name, namespace, cluster, tools),
-                    deploy_applied_at,
+                    *_fetch_cronjob(container, name, namespace, cluster, tools),
                 )
                 for namespace, name in cronjob_targets
             ]

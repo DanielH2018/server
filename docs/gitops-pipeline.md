@@ -1551,10 +1551,12 @@ ceiling = claims x (volume_snapshot_timeout + 3 x volume_revert_state_timeout + 
 A role's own `tasks/` run before `k8s/manifests/tasks/drain.yml`, so anything they wait for adds
 to the drain instead of overlapping it. prowlarr waited 300 s for its flaresolverr isolation probe
 Job on top of a 780 s rollout, which made it the worst promoted service at 480 + 300 + 780 + 60
-= 1620 s, the value the budget keeps. prowlarr's flip deleted the probe (#5594), so it is still
-the worst, at 1320 s. An inline `rollout status` gate is not an in-role wait, because it waits for the same
+= 1620 s, the value the budget keeps. The derivation counts only Ansible-owned roles: a tag whose
+`containers_list` entry sets `owner` goes to `cs.flux`, and the deployer never rolls it back.
+Every promoted, claim-declaring role is flux-owned since the D5 flips, so nothing spends this
+budget until a role is handed back. prowlarr handed back would need 1320 s. An inline `rollout status` gate is not an in-role wait, because it waits for the same
 rollout the drain waits for.
-`ansible/roles/setup/gitops_deploy/tests/test_gitops_deploy_timeout_budgets.py::test_k8s_rollback_budget_covers_the_worst_single_promoted_service`
+`ansible/roles/setup/gitops_deploy/tests/test_gitops_deploy_k8s_rollback_budget.py::test_k8s_rollback_budget_covers_the_worst_single_promoted_service`
 computes the ceiling from role sources, so a rollout-timeout bump or a new promoted
 claim-declaring role fails it instead of silently under-sizing the budget.
 
@@ -1704,8 +1706,8 @@ whole ticks against the scripted `tick` fixture. Run
 
 The rollback redeploy also reverts each claimed volume to its pre-deploy snapshot
 (`k8s/volume-revert`), so `K8S_ROLLBACK_TIMEOUT_S` is sized for the worst SINGLE promoted,
-claim-declaring service. `test_k8s_rollback_budget_covers_the_worst_single_promoted_service` in
-`tests/test_gitops_deploy_timeout_budgets.py` computes it from role sources and fails when it is
+claim-declaring service that Ansible owns. `test_k8s_rollback_budget_covers_the_worst_single_promoted_service` in
+`tests/test_gitops_deploy_k8s_rollback_budget.py` computes it from role sources and fails when it is
 under-sized.
 
 - Two claim-declaring services in one batch stack additively, which

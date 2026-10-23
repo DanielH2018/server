@@ -7,8 +7,8 @@
   renders into `pihole-precheck`, which `pihole` depends on (#5719). `templates/verify/` would
   be the wrong place: it renders into `<tag>-verify`, which runs after `pihole-deferred` and so
   guards nothing. The guard runs in
-  `homelab`, which no tag creates: `deploy.yml`'s pre-task applies it, and `homelab-namespace`
-  owns it once that kind joins `SHARED_KINDS`. So the kind needs no namespace edge.
+  `homelab`, which no tag creates: the shared kind `homelab-namespace` does. `pihole-precheck`
+  copies `pihole`'s edges, the generated `homelab-namespace` edge among them (D5 step 30).
 
   It runs `files/pihole_sibling_guard.py`, which reads the EndpointSlices of `pihole` and
   `pihole-2-web`, the two web Services that each select one instance. It passes at once when

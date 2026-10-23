@@ -43,7 +43,7 @@ echo 'Error from server (NotFound): deployments.apps "coredns" not found' >&2
 exit 1
 """
 
-# The same `sudo` stand-in the stale-checkout guard test uses.
+# A `sudo` stand-in: it runs the command `become` hands it, as this user.
 _BECOME = (
     "#!/bin/sh\n"
     'last=""\n'

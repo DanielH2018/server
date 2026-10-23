@@ -9,12 +9,13 @@ A placeholder render with `--role` writes, for each tag it names:
   `render_sops_manifests`, whose SOPS manifests the renderer copies into `cluster/<tag>/`
   (C3 *Per-role fields*, D3.3c). A tag that renders a per-tag kind's directory, such as
   `<tag>-snapshot`, gets that Kustomization as a further document of the file, in
-  `TAG_KIND_SUFFIXES` order (D4.2, D5.1a1). `<tag>` and `<tag>-deferred` take `prune` and
-  `timeout` from the role's defaults where `role_fields` finds them (C3 *Per-role fields*).
+  `TAG_KIND_SUFFIXES` order (D4.2, D5.1a1). `<tag>` takes `prune` from the role's defaults,
+  and `<tag>` and `<tag>-deferred` take `timeout`, where `role_fields` finds them (C3
+  *Per-role fields*). `<tag>-deferred` always renders `prune: true`.
   A role that sets `flux_suspend: true` renders `suspend: true` on every one of its tag's
   Kustomizations (C3 *Suspension*, D5.1b);
-- `DIR/flux/<kind>.yaml` and `DIR/cluster/<kind>/` for each `SHARED_KINDS` member: `cluster-vars`
-  and `soak` (`soak.py`);
+- `DIR/flux/<kind>.yaml` and `DIR/cluster/<kind>/` for each `SHARED_KINDS` member: `cluster-vars`,
+  `soak` (`soak.py`) and `homelab-namespace` (`namespace.py`);
 - `DIR/flux/kustomization.yaml`, which lists every other file in `DIR/flux/`, so the root
   Kustomization `homelab` applies each of them;
 - `DIR/digests.json`, each published name's `own` and `footprint` digest, and each tag's
@@ -62,6 +63,7 @@ import yaml
 from lib.k8s_roles import role_fields, snapshot_claims
 from lib.repo_paths import K8S_ROLES
 from renderer.renderer_lib.bundle_readme import BUNDLE_README, README
+from renderer.renderer_lib.namespace import HOMELAB_NAMESPACE, namespace_documents
 from renderer.renderer_lib.suspension import refuse_suspend_false, suspends_tag
 from renderer.renderer_lib.ordering import (
     ANSIBLE_OWNED_DEPS,
@@ -120,10 +122,10 @@ SUBSTITUTE_OPT_OUT = "kustomize.toolkit.fluxcd.io/substitute"
 # D5.3b2 `soak` and D5's namespace PR `homelab-namespace`, each in the PR that renders it.
 # Membership is unconditional: a render that cannot copy the cluster file fails, so deleting
 # the file fails CI rather than narrowing the census.
-SHARED_KINDS: frozenset[str] = frozenset({CLUSTER_VARS, "soak"})
-# The shared kinds no PR renders yet, a closed literal set (D5.1a1). A member cannot join
-# `SHARED_KINDS` before its file exists, so this list keeps a deploy tag from taking its name
-# meanwhile. A name stays here after it joins.
+SHARED_KINDS: frozenset[str] = frozenset({CLUSTER_VARS, "soak", HOMELAB_NAMESPACE})
+# D5's shared kinds, reserved before any PR rendered them, a closed literal set (D5.1a1). A
+# member cannot join `SHARED_KINDS` before its file exists, so this list kept a deploy tag from
+# taking its name meanwhile. A name stays here after it joins, as both have.
 RESERVED_NAMES: frozenset[str] = frozenset({"soak", "homelab-namespace"})
 
 
@@ -147,6 +149,8 @@ FOOTPRINT_RULES: dict[str, Callable[[FootprintFacts], Iterable[str]]] = {
     CLUSTER_VARS: lambda facts: facts.substituting,
     # The soak judges the tags and changes none of them; C2 adds it to any set holding a tag.
     "soak": lambda facts: (),
+    # Its Namespace and LimitRange admit every tag's pods (D6, *What a footprint counts*).
+    HOMELAB_NAMESPACE: lambda facts: facts.tags,
 }
 
 
@@ -293,6 +297,22 @@ def cluster_vars_files(dotenv: str, timeout: str) -> dict[str, str]:
     }
 
 
+def homelab_namespace_files(timeout: str) -> dict[str, str]:
+    """The `homelab-namespace` kind's files by bundle path, around `namespace.py`'s manifests.
+
+    Its Kustomization takes a tag's fields, `timeout` among them, and no `postBuild`,
+    `decryption` or edge. `deletionPolicy: Orphan` keeps both objects if the kind leaves.
+    """
+    held = {
+        n: yaml.safe_dump(d, sort_keys=False) for n, d in namespace_documents().items()
+    }
+    held[KUSTOMIZATION] = kustomization_text(set(held))
+    files = {f"{CLUSTER_DIR}/{HOMELAB_NAMESPACE}/{n}": t for n, t in held.items()}
+    doc = tag_kustomization(HOMELAB_NAMESPACE, False, timeout)
+    files[f"{FLUX_DIR}/{HOMELAB_NAMESPACE}.yaml"] = yaml.safe_dump(doc, sort_keys=False)
+    return files
+
+
 def flux_files(
     substitutes: Mapping[str, bool],
     timeout: str,
@@ -314,9 +334,9 @@ def flux_files(
             the tags' files.
         decrypting: The published tags whose role lists `render_sops_manifests`.
         edges: Each Kustomization's generated edges; a name it does not map has none.
-        fields: Each tag's per-role fields: `prune` and `timeout` (`role_fields`) for `<tag>`
-            and `<tag>-deferred`, `prepull_timeout` for `<tag>-prepull`, `verify_timeout`
-            for `<tag>-verify` and `precheck_timeout` for `<tag>-precheck`
+        fields: Each tag's per-role fields: `prune` (`role_fields`) for `<tag>` alone,
+            `timeout` for `<tag>` and `<tag>-deferred`, `prepull_timeout` for `<tag>-prepull`,
+            `verify_timeout` for `<tag>-verify` and `precheck_timeout` for `<tag>-precheck`
             (`verify_timeout`), `suspend` for all.
         contents: Each tag's `own` digest, stamped on `<tag>` alone.
     """
@@ -341,7 +361,14 @@ def flux_files(
                 timeouts.get(name, timeout),
                 name in decrypting,
                 edges.get(name, NO_EDGES),
-                own.get("prune", True) if name in role_own else True,
+                # DECIDED: `flux_prune` reaches `<tag>` alone, and `<tag>-deferred` keeps
+                # `prune: true`, while `timeout` reaches both. H1's text is "prune: false on
+                # that Kustomization, and prune: true everywhere else", and the operator ruled
+                # it so on 2026-10-22 for D5 step 29: `flux-deferred`'s prune is what deletes
+                # `verify-drill` once the drill is off. The consequence: a plumbing role that
+                # adds deferred files later gets prunable deferred objects, so a deferred
+                # object that must never be pruned belongs in the role's own directory.
+                own.get("prune", True) if name == tag else True,
                 own.get("suspend", False),
                 (contents or {}).get(name) if name == tag else None,
             )
@@ -545,6 +572,7 @@ def bundle_files(
     from renderer.renderer_lib.soak import soak_pair
 
     shared = cluster_vars_files(cluster_vars, timeout)
+    shared |= homelab_namespace_files(timeout)
     flux = {p: t for p, t in shared.items() if p.startswith(f"{FLUX_DIR}/")}
     cluster = {
         f"{CLUSTER_DIR}/{name}/{file}": text

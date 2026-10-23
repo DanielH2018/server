@@ -210,3 +210,29 @@ def run(tree_lock: Path, journal):
         )
 
     return _run
+
+
+@pytest.fixture
+def flux_handed_back(tmp_path: Path) -> Path:
+    """A copy of `inventory/host_vars/` with flux's `owner` removed, for `smoke_caller` to read.
+
+    Since D5 step 29 every k8s render target carries `owner: flux`, so on the live inventory
+    `smoke_caller` finds no candidate and the narrowing keeps every caller, which `land.sh`
+    then leaves out. The narrowing stays until D6.4 deletes it, so the live-tree tests keep
+    their subject on this copy, passed as `host_vars`: the handback a revert of the flux PR
+    makes (D5, *Rollback*).
+    """
+    import shutil
+
+    from lib.repo_paths import HOST_VARS
+
+    host_vars = tmp_path / "host_vars"
+    shutil.copytree(HOST_VARS, host_vars)
+    box = host_vars / "daniel-box.yml"
+    entry = "  - name: flux\n    platform: k8s\n    tier: platform\n    owner: flux\n"
+    text = box.read_text()
+    assert text.count(entry) == 1, (
+        "flux's containers_list entry moved; update this fixture"
+    )
+    box.write_text(text.replace(entry, entry.replace("    owner: flux\n", "")))
+    return host_vars

@@ -1159,12 +1159,17 @@ containers_list:
     # homepage's Scrutiny widget dials the ClusterIP, because scrutiny's route is Authelia-gated.
     # This key adds homepage to the callers above and is its only grant.
     homepage_widget: true
-  # Flux's three controllers in flux-system, owning nothing until D2 of the target
-  # architecture (docs/flux-deploy-plane.md). No port and no hostname: nothing dials the
-  # controllers from outside their namespace but Prometheus, and the role fences that itself.
+  # Flux's three controllers in flux-system and the sync objects they follow
+  # (docs/flux-deploy-plane.md). Flux applies the tag through `promote`, so it reconciles
+  # itself, and every Ansible path skips it (D5 step 29). On a rebuilt cluster the operator
+  # installs it by hand: docs/flux-deploy-plane.md, *Bootstrapping Flux on a rebuilt cluster*.
+  # It renders prune: false, and its tier keeps it out of the lost-node shed set. No port and
+  # no hostname: nothing dials the controllers from outside their namespace but Prometheus,
+  # and the role fences that itself.
   - name: flux
     platform: k8s
     tier: platform
+    owner: flux
   # The ingress probes' exporter (docs/target-architecture/monitoring/m4-blackbox-ingress.md).
   # No depends_on: the plan states no order against observability.
   - name: blackbox-exporter

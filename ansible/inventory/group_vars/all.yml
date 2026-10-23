@@ -441,8 +441,9 @@ setup_drift_tree_max_days: 14
 #
 # PSA evaluates at pod CREATE and UPDATE only, so adding these evicts nothing.
 #
-# ROLLBACK: set to {} and redeploy. Unlike the k3s server flags this is a real rollback —
-# `kubectl apply` owns these labels, so removing them from the manifest removes them live.
+# ROLLBACK: set to {} and let the change promote. Unlike the k3s server flags this is a real
+# rollback — the renderer's homelab-namespace kind and the observability role own these labels,
+# so removing them from the render removes them live.
 k8s_psa_labels:
   pod-security.kubernetes.io/warn: baseline
   pod-security.kubernetes.io/audit: baseline
@@ -469,13 +470,12 @@ k8s_psa_labels:
 # LimitRange evaluates at pod CREATE only, so adding this evicts nothing.
 #
 # NOT WATCHED BY manifest-prune-check. `limitrange` is absent from its kind list, and adding
-# it would make the check red on day one: homelab's copy is applied inline from deploy.yml
-# beside the namespace, so it appears in no staged manifest dir and reads as an orphan.
+# it would make the check red on day one: homelab's copy is rendered by the shared kind
+# homelab-namespace, beside the namespace, so it appears in no staged manifest dir and reads as
+# an orphan.
 #
-# ROLLBACK: set to {} and redeploy. That stops it being APPLIED; it does not remove the live
-# object (the same trap as kubectl-apply-leaves-orphaned-objects). To remove it live:
-#   kubectl delete limitrange default-container-limits -n homelab
-#   kubectl delete limitrange default-container-limits -n observability
+# ROLLBACK: set to {} and let the change promote. Neither copy then renders, and the
+# homelab-namespace and observability Kustomizations, both `prune: true`, delete them live.
 #
 # DECIDED: 40x CPU / 32x memory default-to-request, two namespaces only; do not tighten it, and
 # do not extend it to longhorn-system (instance-manager already peaks near a 2Gi limit).
@@ -732,14 +732,16 @@ ops_cron_host: daniel-box
 # the host the release records name, because the staleness reader refuses a render record
 # whose `host` differs, and the host whose primary checkout the GitOps deployer fetches.
 render_records_host: daniel-box
-# The way out: false runs the role's absent arm on render_records_host, which stops the timer
-# and removes the units, the worktree and the role's directories. To move the producer, apply
-# false on the old host first, then change render_records_host.
+# The role's defaults pin the producer absent whatever this says (`render_records_state` in
+# roles/setup/render_records/defaults/main.yml, D5's disarm PR), so true here arms nothing: since
+# D5 step 29 every k8s service is flux-owned and the producer would have no service to render.
+# R4 deletes the role. False still runs the role's absent arm on render_records_host, which
+# stops the timer and removes the units, the worktree and the role's directories. To move the
+# producer, apply false on the old host first, then change render_records_host.
 #
-# Arming presupposes that every host write in a role this renders is guarded on
-# `not k8s_dry_run | bool`; without that guard an hourly dry run would install that tree's host
-# scripts, crons and node-staged modules ahead of their landing. The uptime-kuma tile is gated
-# on this too, so setting it false leaves no tile red.
+# Re-arming, by restoring the derivation from this key, presupposes that every host write in a
+# role this renders is guarded on `not k8s_dry_run | bool`; without that guard an hourly dry run
+# would install that tree's host scripts, crons and node-staged modules ahead of their landing.
 render_records_enabled: true
 # The producer runs hourly at this minute. Here rather than in the role's defaults because the
 # uptime-kuma role derives the monitor's interval from the same cadence below.

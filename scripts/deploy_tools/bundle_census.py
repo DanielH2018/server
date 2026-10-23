@@ -16,8 +16,8 @@ nothing and `prod` stays where it was. `report` runs the source, host and no-stu
   `templates/verify/`;
 - each published tag and each shared kind has its directory `cluster/<name>/`, and each
   per-tag kind its directory `cluster/<name><suffix>/`, each with a `kustomization.yaml`;
-- no published tag takes a reserved name (`reserved_tags`), so a tag named
-  `homelab-namespace` fails here even before that kind joins `SHARED_KINDS`;
+- no published tag takes a reserved name (`reserved_tags`), such as a shared kind's
+  `homelab-namespace`;
 - `digests.json` names each published tag and shared kind, plus `_unclassified`.
 
 Beside it, the per-tag object census (`member_census`, H1.1c) fails a published plumbing tag

@@ -2355,7 +2355,8 @@ How each was handled, with the evidence measured at `70591c307`:
 
 - Cross-slice note from H1: no change. H6 edits `server.yml` in place (its install guard, its
   file tasks and its args clause) but does not move, rename or replace it, and adds no cluster
-  writer to it, so H1.1h's guard placement and its test stay valid.
+  writer to it, so H1.1h's guard placement and its test stay valid. (#5957 later retired the
+  guard, once H1.7b had removed its last writer.)
 
 ### Pillar review fold (2026-10-12)
 
