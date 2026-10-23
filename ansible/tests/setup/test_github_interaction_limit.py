@@ -13,12 +13,18 @@ import subprocess
 
 import pytest
 from lib.proc_testing import fake_bin, path_with, write_exec
+from lib.repo_paths import REPO
 from _helpers import ANSIBLE, load_defaults
+from _ruleset_drift import textfile_series
 from _shell_render import render_shell_script
 
 ROLE = ANSIBLE / "roles" / "setup" / "gitops_deploy"
 TEMPLATE = ("setup", "gitops_deploy", "github-interaction-limit.sh.j2")
 REAL_LIB = "/usr/local/lib/kuma-push-lib.sh"
+CHECK_LIB = "/usr/local/lib/homelab-check-lib.sh"
+# The role's copy of the check library, so a runner that never ran initial_setup still sources it
+# and the textfile the script writes lands in TEXTFILE_DIR under tmp_path, never on the host.
+REAL_CHECK_LIB = REPO / "ansible/roles/setup/initial_setup/files/homelab-check-lib.sh"
 CRON_PATH_LINE = "export PATH=/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
 GITHUB_REPO = load_defaults(ROLE)["gitops_deploy_github_repo"]
 
@@ -54,6 +60,8 @@ def _run(
     lib = tmp_path / "kuma-push-lib.sh"
     lib.write_text(LIB_STUB)
     body = body.replace(REAL_LIB, str(lib))
+    assert CHECK_LIB in body, "the script no longer sources homelab-check-lib.sh"
+    body = body.replace(CHECK_LIB, str(REAL_CHECK_LIB))
 
     binstub = tmp_path / "bin"
     binstub.mkdir(parents=True, exist_ok=True)
@@ -94,10 +102,13 @@ def _run(
     )
 
     out = tmp_path / "push.out"
+    textfile_dir = tmp_path / "textfile"
+    textfile_dir.mkdir(exist_ok=True)
     env = {
         **os.environ,
         "PATH": path_with(binstub),
         "KUMA_PUSH_OUT": str(out),
+        "TEXTFILE_DIR": str(textfile_dir),
     }
     proc = subprocess.run(
         ["bash", str(script)], env=env, capture_output=True, text=True, timeout=60
@@ -116,6 +127,23 @@ def test_a_successful_put_reports_armed(tmp_path):
     assert status == "up"
     assert "re-armed" in msg
     assert "2027-03-06" in msg
+
+
+def test_a_re_arm_writes_an_up_textfile_with_the_tile_deadline(tmp_path):
+    """M6 batch B3: the verdict reaches the textfile collector beside the Kuma push."""
+    rc, status, _, _ = _run(tmp_path, curl_body=_limit_body("collaborators_only"))
+    series = textfile_series(tmp_path, "github-interaction-limit")
+    assert (rc, status) == (0, "up")
+    assert series["homelab_check_success"] == "1"
+    assert series["homelab_check_deadline_seconds"] == "90000"
+
+
+def test_a_missing_gh_login_writes_a_down_textfile(tmp_path):
+    """The failing half: no gh login means no re-arm, so success is 0."""
+    rc, status, _, _ = _run(tmp_path, logged_in=False)
+    assert (rc, status) == (1, "down")
+    series = textfile_series(tmp_path, "github-interaction-limit")
+    assert series["homelab_check_success"] == "0"
 
 
 def test_the_put_carries_the_declared_limit_and_expiry(tmp_path):

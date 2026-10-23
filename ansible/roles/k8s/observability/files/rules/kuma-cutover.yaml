@@ -22,6 +22,7 @@
 # (19 in 7 days) drop a push tile's monitor_status series until its next push, so a 2h range
 # on a tile that pushes less often than hourly would page while the tile is healthy. A daily
 # tile therefore uses [48h10m]. Add a term with its own interval's range, never a bare 2h.
+# A tile whose interval is 90000s (a daily timer plus an hour) uses [50h10m], as B3's two do.
 groups:
   - name: kuma-cutover
     rules:
@@ -151,6 +152,10 @@ groups:
               absent_over_time(monitor_status{monitor_name="k3s Speedtest"}[2h])
             or
               absent_over_time(monitor_status{monitor_name="Swallowed Push Verdicts"}[2h])
+            or
+              absent_over_time(monitor_status{monitor_name="GitHub Ruleset Drift"}[50h10m])
+            or
+              absent_over_time(monitor_status{monitor_name="GitHub Interaction Limit"}[50h10m])
           )
           unless on() (up{job="uptime-kuma"} == 0)
         labels:
