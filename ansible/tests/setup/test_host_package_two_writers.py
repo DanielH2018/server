@@ -27,14 +27,17 @@ The census joins two sides per host:
   `cron_file` as `/etc/cron.d/<name>`, a `unit` as `/etc/systemd/system/<unit>`, the file
   `homelab-reconcile:retire_unit` removes, and a `cron` as its `(user, name)`.
 
-A role reaches the hosts `land_reach.setup_role_hosts` names. A role that function cannot
-place, such as `common`, whose task files other roles import, reaches every host.
+A role reaches the hosts `land_reach.setup_role_hosts` names, less those its leading
+`meta: end_role` guard ends it on. A role that function cannot place, such as `common`,
+whose task files other roles import, reaches every host.
 
 Run: uv run pytest ansible/tests/setup/test_host_package_two_writers.py
 """
 
+import os
 import re
 from collections import defaultdict
+from collections.abc import Callable
 from functools import cache
 from pathlib import Path, PurePosixPath
 
@@ -167,18 +170,20 @@ def task_writes(task: dict, ctx: dict) -> set[Key]:
 
 
 def ansible_writes(
-    roles: list[tuple[Path, Path]], hosts: tuple[str, ...]
+    roles: list[tuple[Path, Path]],
+    hosts: tuple[str, ...],
+    reach_of: Callable[[str], frozenset[str]] = setup_role_hosts,
 ) -> dict[str, dict[Key, set[str]]]:
     """Per host, each write the setup roles make there, mapped to the task files making it."""
     by_host: dict[str, dict[Key, set[str]]] = defaultdict(lambda: defaultdict(set))
     for role, task_file in roles:
-        reach = setup_role_hosts(role.name) or frozenset(hosts)
+        reach = reach_of(role.name) or frozenset(hosts)
         tasks = list(walk_tasks(load_tasks(task_file)))
         for host in sorted(reach & set(hosts)):
             ctx = _role_context(role, host)
             for task in tasks:
                 for key in task_writes(task, ctx):
-                    by_host[host][key].add(str(task_file.relative_to(ANSIBLE.parent)))
+                    by_host[host][key].add(os.path.relpath(task_file, ANSIBLE.parent))
     return by_host
 
 
@@ -449,3 +454,40 @@ def test_a_cron_contributes_its_user_and_name_and_its_cron_file():
         ("cron", ctx["sys_user"], "Pi SD-card health heartbeat"),
         ("path", "/etc/cron.d/pi-health"),
     }
+
+
+END_ROLE = "- ansible.builtin.meta: end_role\n  when: inventory_hostname == ups_host\n"
+COPY = "- ansible.builtin.copy:\n    dest: /etc/demo.conf\n    content: x\n"
+
+
+@pytest.mark.parametrize(
+    ("tasks", "flagged"),
+    [
+        pytest.param(END_ROLE + COPY, [], id="leading-guard"),
+        pytest.param(COPY + END_ROLE, ["daniel-server"], id="guard-not-leading"),
+    ],
+)
+def test_a_role_that_ends_on_the_package_host_collides_with_nothing(
+    tmp_path, tasks, flagged
+):
+    roles = tmp_path / "roles"
+    (roles / "demo" / "tasks").mkdir(parents=True)
+    (task_file := roles / "demo" / "tasks" / "main.yml").write_text(tasks)
+    (playbook := tmp_path / "play.yml").write_text("- hosts: x\n  roles: [demo]\n")
+    (all_vars := tmp_path / "all.yml").write_text("ups_host: daniel-server\n")
+    (host_vars := tmp_path / "host_vars").mkdir()
+    server = tmp_path / "hosts" / "daniel-server"
+    (tmp_path / "hosts" / "packages").mkdir(parents=True)
+    server.mkdir()
+    (server / "demo.conf").write_text("x\n")
+    (server / "package.yml").write_text(
+        "files:\n  - {src: demo.conf, dst: /etc/demo.conf, mode: '0644'}\n"
+    )
+
+    def reach_of(name: str) -> frozenset[str]:
+        return setup_role_hosts(name, playbook, all_vars, host_vars, roles)
+
+    ansible = ansible_writes([(roles / "demo", task_file)], HOSTS, reach_of)
+    assert ("path", "/etc/demo.conf") in ansible["daniel-box"]
+    found = collisions(ansible, package_writes(tmp_path / "hosts", HOSTS))
+    assert [line.split(":")[0] for line in found] == flagged

@@ -470,7 +470,7 @@ name = "Role At a glance blocks match their sources"
 entry = "uv run --frozen python scripts/docs/gen_role_glance.py --fix"
 language = "system"
 pass_filenames = false
-files = "^(ansible/(roles|inventory|filter_plugins|templates)/.*|ansible/[^/]+\\.ya?ml|scripts/(docs|lib)/.*\\.py|scripts/renderer/renderer_lib/(task_inputs|environment)\\.py)$"
+files = "^(ansible/(roles|inventory|filter_plugins|templates)/.*|ansible/[^/]+\\.ya?ml|scripts/(docs|lib)/.*\\.py|scripts/renderer/renderer_lib/(task_inputs|environment)\\.py|scripts/deploy_tools/setup_lib/setup_gates\\.py)$"
 
 # Rewrites a stale docs fragment (docs/assets/generated/fragments/) in the commit that moves
 # one of its tunables, and fails like a formatter so the author stages the fragment and commits
