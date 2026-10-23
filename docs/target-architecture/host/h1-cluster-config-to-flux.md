@@ -55,6 +55,28 @@ kubeconfig`, which read `ok=18 changed=0 failed=0`: the guard read the live Flux
 refusal skipped. The operator then cleared the line
 ([readings](https://github.com/DanielH2018/server/pull/5316#issuecomment-6224451468)).
 
+**Status, 2026-10-23: H1.1a to H1.8 are done, which unblocks H2, and H1.9 waits on R4 and D6.**
+Both exit checks are met. The last PRs moved the cluster content to Flux in this order. H1.6
+is [#5937](https://github.com/DanielH2018/server/pull/5937), H1.7a is
+[#5941](https://github.com/DanielH2018/server/pull/5941) and H1.7b is
+[#5943](https://github.com/DanielH2018/server/pull/5943). H1.8a needed no PR, because
+`K3S_WRITE_ALLOW` already holds only `agent_verify.yml` and `storage_smoke.yml`, which is the
+census exit check 2 asks for. H1.8b is [#5972](https://github.com/DanielH2018/server/pull/5972),
+and Longhorn v1.13.0 went live through it on 2026-10-23.
+[#5979](https://github.com/DanielH2018/server/pull/5979) retired the stale-checkout guard.
+
+The orchestrator verified H1.8b's exit evidence on 2026-10-23:
+
+- The longhorn-manager rollout finished at 12:40:54Z.
+- The old engine image held 0 refs at 12:42:43Z, so every engine had upgraded.
+- 41 volumes were attached and healthy, and 4 were detached.
+- The StorageClass matched its 8 parameters, and `default-replica-count` read 2.
+- `probe.py health longhorn` and `probe.py health longhorn-backup` read ok.
+- `/var/lib/gitops-deploy/owed.jsonl` held no `manual_plane` line afterwards.
+
+H1.9 stays open, because it waits on R4 and D6. Neither exit check names it, and H2 never
+needs it. H1's status changes to DONE when H1.9 lands.
+
 Depends on: D2, D4; D3 for H1.7b only; R4 for H1.9 only
 Unblocks: H2, which needs H1.1a to H1.8 and never H1.9
 
