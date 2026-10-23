@@ -154,6 +154,14 @@ tests:
             exp_annotations:
               summary: Kuma's Daniel Pi WG Easy tile is gone and no alert rule pages in its place.
               description: "M6's cutover removed the Daniel Pi WG Easy tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
+          - exp_labels: {monitor_name: Daniel Pi SD Health, service: uptime-kuma, severity: critical}
+            exp_annotations:
+              summary: Kuma's Daniel Pi SD Health tile is gone and no alert rule pages in its place.
+              description: "M6's cutover removed the Daniel Pi SD Health tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
+          - exp_labels: {monitor_name: Daniel Pi Recovery, service: uptime-kuma, severity: critical}
+            exp_annotations:
+              summary: Kuma's Daniel Pi Recovery tile is gone and no alert rule pages in its place.
+              description: "M6's cutover removed the Daniel Pi Recovery tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
           - exp_labels: {monitor_name: Email-to-RSS (Worker), service: uptime-kuma, severity: critical}
             exp_annotations:
               summary: Kuma's Email-to-RSS (Worker) tile is gone and no alert rule pages in its place.
@@ -210,6 +218,50 @@ tests:
             exp_annotations:
               summary: Kuma's Workload Log Errors tile is gone and no alert rule pages in its place.
               description: "M6's cutover removed the Workload Log Errors tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
+          - exp_labels: {monitor_name: CrowdSec Remote Allowlist, service: uptime-kuma, severity: critical}
+            exp_annotations:
+              summary: Kuma's CrowdSec Remote Allowlist tile is gone and no alert rule pages in its place.
+              description: "M6's cutover removed the CrowdSec Remote Allowlist tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
+          - exp_labels: {monitor_name: CrowdSec AppSec, service: uptime-kuma, severity: critical}
+            exp_annotations:
+              summary: Kuma's CrowdSec AppSec tile is gone and no alert rule pages in its place.
+              description: "M6's cutover removed the CrowdSec AppSec tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
+          - exp_labels: {monitor_name: CrowdSec Home Allowlist, service: uptime-kuma, severity: critical}
+            exp_annotations:
+              summary: Kuma's CrowdSec Home Allowlist tile is gone and no alert rule pages in its place.
+              description: "M6's cutover removed the CrowdSec Home Allowlist tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
+          - exp_labels: {monitor_name: Configarr Sync, service: uptime-kuma, severity: critical}
+            exp_annotations:
+              summary: Kuma's Configarr Sync tile is gone and no alert rule pages in its place.
+              description: "M6's cutover removed the Configarr Sync tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
+          - exp_labels: {monitor_name: Janitorr Errors, service: uptime-kuma, severity: critical}
+            exp_annotations:
+              summary: Kuma's Janitorr Errors tile is gone and no alert rule pages in its place.
+              description: "M6's cutover removed the Janitorr Errors tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
+          - exp_labels: {monitor_name: n8n Prod Workflows, service: uptime-kuma, severity: critical}
+            exp_annotations:
+              summary: Kuma's n8n Prod Workflows tile is gone and no alert rule pages in its place.
+              description: "M6's cutover removed the n8n Prod Workflows tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
+          - exp_labels: {monitor_name: Bazarr Health, service: uptime-kuma, severity: critical}
+            exp_annotations:
+              summary: Kuma's Bazarr Health tile is gone and no alert rule pages in its place.
+              description: "M6's cutover removed the Bazarr Health tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
+          - exp_labels: {monitor_name: Prowlarr Indexers, service: uptime-kuma, severity: critical}
+            exp_annotations:
+              summary: Kuma's Prowlarr Indexers tile is gone and no alert rule pages in its place.
+              description: "M6's cutover removed the Prowlarr Indexers tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
+          - exp_labels: {monitor_name: SMART Data / Health, service: uptime-kuma, severity: critical}
+            exp_annotations:
+              summary: Kuma's SMART Data / Health tile is gone and no alert rule pages in its place.
+              description: "M6's cutover removed the SMART Data / Health tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
+          - exp_labels: {monitor_name: k3s Speedtest, service: uptime-kuma, severity: critical}
+            exp_annotations:
+              summary: Kuma's k3s Speedtest tile is gone and no alert rule pages in its place.
+              description: "M6's cutover removed the k3s Speedtest tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
+          - exp_labels: {monitor_name: Swallowed Push Verdicts, service: uptime-kuma, severity: critical}
+            exp_annotations:
+              summary: Kuma's Swallowed Push Verdicts tile is gone and no alert rule pages in its place.
+              description: "M6's cutover removed the Swallowed Push Verdicts tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
   # Every tile present: no term fires.
   - interval: 1m
     input_series:
@@ -285,6 +337,10 @@ tests:
         values: '1x140'
       - series: 'monitor_status{monitor_name="Daniel Pi WG Easy", monitor_type="http"}'
         values: '1x140'
+      - series: 'monitor_status{monitor_name="Daniel Pi SD Health", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Daniel Pi Recovery", monitor_type="push"}'
+        values: '1x140'
       - series: 'monitor_status{monitor_name="Email-to-RSS (Worker)", monitor_type="http"}'
         values: '1x140'
       - series: 'monitor_status{monitor_name="iCal Proxy k8s", monitor_type="http"}'
@@ -312,6 +368,28 @@ tests:
       - series: 'monitor_status{monitor_name="Pi Pressure", monitor_type="http"}'
         values: '1x140'
       - series: 'monitor_status{monitor_name="Workload Log Errors", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="CrowdSec Remote Allowlist", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="CrowdSec AppSec", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="CrowdSec Home Allowlist", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Configarr Sync", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Janitorr Errors", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="n8n Prod Workflows", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Bazarr Health", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Prowlarr Indexers", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="SMART Data / Health", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="k3s Speedtest", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Swallowed Push Verdicts", monitor_type="push"}'
         values: '1x140'
     alert_rule_test:
       - alertname: CheckWithoutPager
@@ -393,6 +471,10 @@ tests:
         values: '1x140'
       - series: 'monitor_status{monitor_name="Daniel Pi WG Easy", monitor_type="http"}'
         values: '1x140'
+      - series: 'monitor_status{monitor_name="Daniel Pi SD Health", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Daniel Pi Recovery", monitor_type="push"}'
+        values: '1x140'
       - series: 'monitor_status{monitor_name="Email-to-RSS (Worker)", monitor_type="http"}'
         values: '1x140'
       - series: 'monitor_status{monitor_name="iCal Proxy k8s", monitor_type="http"}'
@@ -420,6 +502,28 @@ tests:
       - series: 'monitor_status{monitor_name="Pi Pressure", monitor_type="http"}'
         values: '1x140'
       - series: 'monitor_status{monitor_name="Workload Log Errors", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="CrowdSec Remote Allowlist", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="CrowdSec AppSec", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="CrowdSec Home Allowlist", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Configarr Sync", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Janitorr Errors", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="n8n Prod Workflows", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Bazarr Health", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Prowlarr Indexers", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="SMART Data / Health", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="k3s Speedtest", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Swallowed Push Verdicts", monitor_type="push"}'
         values: '1x140'
     alert_rule_test:
       - alertname: CheckWithoutPager
@@ -510,6 +614,10 @@ tests:
         values: '1x160'
       - series: 'monitor_status{monitor_name="Daniel Pi WG Easy", monitor_type="push"}'
         values: '1x160'
+      - series: 'monitor_status{monitor_name="Daniel Pi SD Health", monitor_type="push"}'
+        values: '1x160'
+      - series: 'monitor_status{monitor_name="Daniel Pi Recovery", monitor_type="push"}'
+        values: '1x160'
       - series: 'monitor_status{monitor_name="Email-to-RSS (Worker)", monitor_type="push"}'
         values: '1x160'
       - series: 'monitor_status{monitor_name="iCal Proxy k8s", monitor_type="push"}'
@@ -537,6 +645,28 @@ tests:
       - series: 'monitor_status{monitor_name="Pi Pressure", monitor_type="push"}'
         values: '1x160'
       - series: 'monitor_status{monitor_name="Workload Log Errors", monitor_type="push"}'
+        values: '1x160'
+      - series: 'monitor_status{monitor_name="CrowdSec Remote Allowlist", monitor_type="push"}'
+        values: '1x160'
+      - series: 'monitor_status{monitor_name="CrowdSec AppSec", monitor_type="push"}'
+        values: '1x160'
+      - series: 'monitor_status{monitor_name="CrowdSec Home Allowlist", monitor_type="push"}'
+        values: '1x160'
+      - series: 'monitor_status{monitor_name="Configarr Sync", monitor_type="push"}'
+        values: '1x160'
+      - series: 'monitor_status{monitor_name="Janitorr Errors", monitor_type="push"}'
+        values: '1x160'
+      - series: 'monitor_status{monitor_name="n8n Prod Workflows", monitor_type="push"}'
+        values: '1x160'
+      - series: 'monitor_status{monitor_name="Bazarr Health", monitor_type="push"}'
+        values: '1x160'
+      - series: 'monitor_status{monitor_name="Prowlarr Indexers", monitor_type="push"}'
+        values: '1x160'
+      - series: 'monitor_status{monitor_name="SMART Data / Health", monitor_type="push"}'
+        values: '1x160'
+      - series: 'monitor_status{monitor_name="k3s Speedtest", monitor_type="push"}'
+        values: '1x160'
+      - series: 'monitor_status{monitor_name="Swallowed Push Verdicts", monitor_type="push"}'
         values: '1x160'
     alert_rule_test:
       - alertname: CheckWithoutPager
@@ -618,6 +748,10 @@ tests:
         values: '1x1500'
       - series: 'monitor_status{monitor_name="Daniel Pi WG Easy", monitor_type="push"}'
         values: '1x1500'
+      - series: 'monitor_status{monitor_name="Daniel Pi SD Health", monitor_type="push"}'
+        values: '1x1500'
+      - series: 'monitor_status{monitor_name="Daniel Pi Recovery", monitor_type="push"}'
+        values: '1x1500'
       - series: 'monitor_status{monitor_name="Email-to-RSS (Worker)", monitor_type="push"}'
         values: '1x1500'
       - series: 'monitor_status{monitor_name="iCal Proxy k8s", monitor_type="push"}'
@@ -645,6 +779,28 @@ tests:
       - series: 'monitor_status{monitor_name="Pi Pressure", monitor_type="push"}'
         values: '1x1500'
       - series: 'monitor_status{monitor_name="Workload Log Errors", monitor_type="push"}'
+        values: '1x1500'
+      - series: 'monitor_status{monitor_name="CrowdSec Remote Allowlist", monitor_type="push"}'
+        values: '1x1500'
+      - series: 'monitor_status{monitor_name="CrowdSec AppSec", monitor_type="push"}'
+        values: '1x1500'
+      - series: 'monitor_status{monitor_name="CrowdSec Home Allowlist", monitor_type="push"}'
+        values: '1x1500'
+      - series: 'monitor_status{monitor_name="Configarr Sync", monitor_type="push"}'
+        values: '1x1500'
+      - series: 'monitor_status{monitor_name="Janitorr Errors", monitor_type="push"}'
+        values: '1x1500'
+      - series: 'monitor_status{monitor_name="n8n Prod Workflows", monitor_type="push"}'
+        values: '1x1500'
+      - series: 'monitor_status{monitor_name="Bazarr Health", monitor_type="push"}'
+        values: '1x1500'
+      - series: 'monitor_status{monitor_name="Prowlarr Indexers", monitor_type="push"}'
+        values: '1x1500'
+      - series: 'monitor_status{monitor_name="SMART Data / Health", monitor_type="push"}'
+        values: '1x1500'
+      - series: 'monitor_status{monitor_name="k3s Speedtest", monitor_type="push"}'
+        values: '1x1500'
+      - series: 'monitor_status{monitor_name="Swallowed Push Verdicts", monitor_type="push"}'
         values: '1x1500'
     alert_rule_test:
       - alertname: CheckWithoutPager

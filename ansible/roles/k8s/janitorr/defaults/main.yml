@@ -54,6 +54,11 @@ janitorr_k8s_startup_grace_seconds: 600
 # CronJob trips the push watchdog. The host cron's UTC minute field, unchanged.
 janitorr_k8s_health_schedule: "*/10 * * * *"
 
+# The ConfigMap the health reader writes its verdict to as annotations, which kube-state-metrics
+# exports (M6 batch B6b). The shadow rule JanitorrHealthNotReporting holds the CronJob's last
+# successful run to three periods of the schedule above, 1800s.
+janitorr_k8s_health_verdict_configmap: janitorr-health-verdict
+
 # The health reader runs in the repo's pinned python image and gets kubectl from an init
 # container of alpine/k8s, which keeps the binary at /usr/bin/kubectl. The same two digests as
 # configarr's health reader (configarr_k8s_health_image), whose defaults record the evidence.

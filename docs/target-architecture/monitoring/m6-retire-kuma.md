@@ -186,8 +186,13 @@ push-token secret remains.
     - **Other setup roles:** two etcd drills (hypervisor), three fake_remux pushes, two UPS
       secondaries (nut_host), render_records, renovate_agent and renovate_notify.
     - **The Pi:** SD-card health and container recovery (optimize_pi).
-    - **daniel-box crons that k8s roles install:** three crowdsec scripts, artifacts sync,
-      configarr health, janitorr health and the telemetry health check (observability).
+    - **Two daniel-box crons, installed by `setup/claude_code`:** artifacts sync and the
+      telemetry health check (B6a).
+    - **Five pod producers that B6 first took for host crons (B6b):** the crowdsec-jobs
+      sidecar's three Kuma-pushed jobs (remote allowlist, AppSec verify, home allowlist) and the
+      `configarr-health` and `janitorr-health` CronJobs. H2 moved all five into pods before M6
+      started, so no textfile reaches them. The operator ruled on 2026-10-23 that a pod exports
+      through a metrics endpoint, not a hostPath textfile and not a Pushgateway.
     - **Not M6's: registry-gc.** D5's Wave D registry PR (`d5-bulk-move.md`, *registry*)
       retires the GC rather than moving it, and removes the `Registry GC` tile and
       `registry_gc_push_token`. D5 calls itself "the only owner of registry GC" (its Open
@@ -227,9 +232,10 @@ whose `when:` admits the tick's host.
     - Every daniel-server half (initial_setup's second Loki witness, nut_host's daniel-server
       secondary). No tick runs on daniel-server, and `land.sh`'s note on the hosts the tick
       does not reach names that run.
-- **`land.sh`, as k8s role deploys:** every k8s role, including the five that install the
-  B6 daniel-box crons and the pods (B7). The sixth cron-installing role, registry, is D5's
-  (*What M2 to M5 leave*).
+- **`land.sh`, as k8s role deploys, or Flux:** every k8s role, including B6b's three
+  (`crowdsec`, `configarr`, `janitorr`, each `owner: flux` by the end of Wave D, so the merge is
+  the apply) and the pods (B7). B6a's two crons are a setup role, `claude_code`, so the tick
+  applies them. The sixth cron-installing role, registry, is D5's (*What M2 to M5 leave*).
 
 ### When D5 flips a role M6 edits
 
@@ -617,8 +623,9 @@ dependency between them. The cutover windows run one after another (*No-pager wi
 | B2 initial_setup | docs-refresh, eval sweep, secret rotation, setup drift, the two Loki-route witnesses | M3 | the tick on daniel-box; a hand on daniel-server | daniel-server gets the textfile-directory task. The shadow PR adds six `CheckWithoutPager` terms. Each range is max(2h, 2 x the tile's push interval + 10m): `[2h]` for the two hourly Loki Read Route tiles, `[24h10m]` for Docs Refresh, `[48h10m]` for Secret Rotation and Setup Plane Drift (agent hosts), and `[348h10m]` for Homelab Evals. A push tile reports no `monitor_status` series after a Kuma restart until its next push, and Kuma restarted 19 times in the 7 days before this PR, so a `[2h]` range would page falsely for the slower tiles. | 6 |
 | B3 gitops_deploy | ruleset drift, interaction limit | M3 | the tick | — | 2 |
 | B4 other setup roles | two etcd drills, three fake_remux, two UPS secondaries, render_records, renovate_agent, renovate_notify | M3 | the tick on daniel-box; a hand on daniel-server for its UPS secondary | — | 10 |
-| B5 Pi | SD-card health, container recovery | M3 | a hand (`-e target=daniel-pi`, **operator-only**) | Enables the textfile collector on the Pi (see below). | 2 |
-| B6 k8s-role crons | crowdsec allowlists and AppSec check, artifacts sync, configarr health, janitorr health, telemetry health | M3 | `land.sh` (the five k8s roles) | They run on daniel-box's host, so M3's recipe applies as is. registry-gc is D5's (*Baseline*). | 7 |
+| B5 Pi | SD-card health, container recovery | M3 | the `homelab-daniel-pi` package: the builder publishes it and the Pi's `homelab-updater.timer` installs it (H3.8b moved both heartbeats there). No `-e target=daniel-pi` apply. | H3.6 already enabled the textfile collector on the Pi (see below). The shadow PR ships `homelab-check-lib.sh` in the package and adds two `CheckWithoutPager` terms, both `[2h]` (the tiles push every 5 minutes, so max(2h, 2 x 10m + 10m) is 2h). | 2 |
+| B6a host crons | artifacts sync, telemetry health (the two `setup/claude_code` crons) | M3 | the tick (`claude_code`) | They run on daniel-box's host, so M3's recipe applies as is. registry-gc is D5's (*Baseline*). | 2 |
+| B6b pod producers | crowdsec remote allowlist, AppSec verify and home allowlist (the `crowdsec-jobs` sidecar); `configarr-health` and `janitorr-health` (CronJobs) | Exporter for the sidecar, CronJob for the two (*B6b*) | Flux, through `promote` (`crowdsec`, `configarr`, `janitorr`, `observability`, `netpol-baseline`) | The operator ruled on 2026-10-23 that a pod exports through a metrics endpoint. The sidecar serves `homelab_check_*` on a new `crowdsec-jobs` scrape job. Each CronJob patches its verdict onto a ConfigMap it owns, which kube-state-metrics exports. | 5 |
 | B7 pods | autofix-bridge; cloudflare-ddns direct and proxied; pi-peer-backup | Exporter, CronJob, a Prometheus rule plus a LogQL rule | `land.sh` | See *B7*. | 4 |
 | B8 probes | the 14 hand-written monitors, plus one `tcp_connect` probe per Pi published port | M4 | `land.sh` | See *B8*. Cuts over the `pi_pressure` row. | 1 |
 
@@ -1123,7 +1130,7 @@ reach A6-7a, fail the bijection test and lose its only pager.
   B0's apply on its own host (*Order*). B0's test finds the copy task by its name and fails
   when it lacks `always`, and it fails when a rendered script sources the library without
   `|| exit 1`.
-- **B5, the Pi's textfile collector.** In `optimize_pi`, under the `node-exporter-host` tag:
+- **B5, the Pi's textfile collector. Already in place since H3.6;** the two steps below are the record of what that PR did, and B5 adds neither. `ansible/tests/setup/test_pi_node_exporter_host_unit.py` holds the flag and the directory. The producers are the package's `pi-sd-health` and `pi-recovery-health` scripts (H3.8b), which source a package copy of `homelab-check-lib.sh` (`host_sources.SHARED_FILES`). In `optimize_pi`, under the `node-exporter-host` tag:
     - replace `--no-collector.textfile` in `templates/node_exporter.service.j2` with
       `--collector.textfile.directory=/var/lib/node-exporter-textfile`;
     - add the directory task with M3's owner contract: owner root, group `{{ sys_user }}`,
@@ -1131,6 +1138,45 @@ reach A6-7a, fail the bijection test and lose its only pager.
 
   A test in `ansible/tests/setup/` asserts that the unit's flag and the directory task name the
   same path, and that the unit no longer carries `--no-collector.textfile`.
+- **B6b, the pod producers (operator ruling of 2026-10-23):**
+    - **The crowdsec-jobs sidecar** is long-running, so it is an exporter. `files/jobs_metrics.py`
+      serves `homelab_check_success`, `homelab_check_last_run_timestamp_seconds` and
+      `homelab_check_deadline_seconds`, labelled `check="<job tag>"`, for the three jobs that
+      push to Kuma. The bridge exporter uses the same names. A `crowdsec-jobs` item in the
+      `metrics` list of crowdsec's `containers_list` entry (port 9182) renders the scrape job,
+      the Service port and the sidecar's `JOBS_METRICS_PORT`, and netpol-baseline's Prometheus
+      grant on crowdsec gains the port. The timestamp starts at the exporter's start, so a
+      restart does not read as a stale job.
+    - **The two CronJobs** are short-lived, so each patches `homelab/check-verdict`,
+      `homelab/check-last-run` and `homelab/check-message` onto a ConfigMap its role renders
+      with no annotations (`configarr-health-verdict`, `janitorr-health-verdict`). The Role
+      grants `patch` on that one name. A reader whose export fails exits 1.
+    - **The smallest kube-state-metrics change is two collectors, `configmaps` and `cronjobs`,
+      and one allowlisted annotation.** `jobs` was already collected (#5675).
+      `--metric-annotations-allowlist=configmaps=[homelab/check-verdict]` exports the verdict
+      as the label `annotation_homelab_check_verdict`, and the Prometheus job drops every
+      other `kube_configmap_*` and `kube_cronjob_*` family and every ConfigMap series without
+      the annotation. `cronjobs` adds `kube_cronjob_status_last_successful_time`, the run clock,
+      because an annotation is a label and PromQL cannot compare it with the clock. The change
+      adds a ClusterRole `list`/`watch` on ConfigMaps, which cannot be narrowed by name. It
+      exports metadata only, and no Secret grant is added. This is the reconciliation of
+      contracts.md's C7 text, which names `cronjobs,jobs`: `jobs` was already there, and the
+      recipe needs `configmaps` too when a CronJob reports a verdict rather than only success.
+    - **Rejected: exit non-zero on a bad verdict**, so that `kube_job_status_failed` and
+      `last_successful_time` carry it with no ConfigMap. The readers deliberately exit 0 on a
+      bad verdict, and configarr's gate Job would then hold a revision on a failing sync.
+    - **Rejected: a Pushgateway** and **a hostPath textfile**, by the ruling. A hostPath would
+      also need the pods on daniel-box and a root-owned directory.
+    - **Rejected: annotating the CronJob or its Jobs.** A `patch` grant on CronJobs lets the
+      reader rewrite its own image, and Jobs have generated names that `resourceNames` cannot
+      list.
+    - **Shadow rules** are the `pod-producers` group (`files/rules/pod-producers.yaml`): a
+      failed rule per verdict, `CrowdSecJobStale`, `CrowdSecJobsExporterAbsent`, and a
+      `NotReporting` rule per CronJob at three periods of its schedule (1800s).
+    - **`KUMA_RETIRING_TAGS`** gains the five tags: `crowdsec-remote-allowlist`,
+      `crowdsec-appsec-verify`, `crowdsec-home-allowlist`, `configarr-health` and
+      `janitorr-health`.
+    - **The soak** is 7 days from the deploy, and the orchestrator records it.
 - **B7, the pods:**
     - **autofix-bridge** serves `homelab_check_*` on `/metrics` and gets `AutofixBridgeDown`
       and `AutofixBridgeStale`, the same pair as the monitor-bridge exporter, with the same
@@ -1644,14 +1690,15 @@ here. C-1 waits for the operator's acceptance.
  ansible/roles/k8s/observability/
 +  files/rules/hosts.yaml, containers.yaml, scrape.yaml, edge.yaml, storage.yaml   A1 to A5
 +  files/rules/bridge-exporter.yaml                    A6-2 to A6-6
-~  files/rules/host-checks.yaml                        B1 to B6, two rules per producer; KumaDown (B1, out at C-1a)
+~  files/rules/host-checks.yaml                        B1 to B6a, two rules per producer; KumaDown (B1, out at C-1a)
++  files/rules/pod-producers.yaml                      B6b
 +  files/rules/pods.yaml, extra-probes.yaml            B7, B8
 +  tests/rules/<each new group>.test.yaml
 +  templates/alertmanager-ingressroute.yaml.j2         B-6b
 ~  templates/prometheus.yaml.j2                        probe jobs in (B8); uptime-kuma job out (C-1a)
 ~  templates/scrape-credentials-secret.yaml.j2         kuma_api_key out (C-1a)
 ~  templates/alertmanager-secret.yaml.j2               inhibit_rules for WAN and B2 (A6)
-~  templates/kube-state-metrics.yaml.j2                cronjobs, jobs (B7)
+~  templates/kube-state-metrics.yaml.j2                configmaps, cronjobs (B6b; jobs was #5675); B7 reuses cronjobs
  ansible/roles/k8s/authelia/templates/config-secret.yaml.j2   alertmanager two_factor (B-6a); kuma bypass out (C-1b)
  ansible/roles/k8s/loki-homelab/files/rules/homelab-logs.yaml   WorkloadLogErrors (A7); cloudflare-ddns rule (B7); KumaNotificationDropped out (C-7)
  ansible/roles/k8s/netpol-baseline/defaults/main.yml   the uptime-kuma probe row out (C-1b)
@@ -1940,7 +1987,9 @@ M4's rules.
   non-zero on the same commit without the row deletion.
 - The census row: its red fixture, a file outside the allowlist that mentions Kuma.
 - B0's `write_check_textfile`: the M3 script test pattern, run against the shared library.
-- B5: the unit-flag-and-directory test, red on a unit that keeps `--no-collector.textfile`.
+- B5: the unit-flag-and-directory test, red on a unit that keeps `--no-collector.textfile`. It exists since H3.6
+  (`test_pi_node_exporter_host_unit.py`). B5's own test is `test_pi_heartbeat_textfiles.py`: each script writes its
+  textfile before the push, a restarted container reads success 0, and the rules' deadline literals equal `DEADLINE_S`.
 - The B-6a render test: `alertmanager.local.<domain>` resolves to `two_factor` at first
   match, and it fails if the rule sits behind the `*.local` wildcard.
 - C-3b: two test cases in which a host carries a `kuma-check-<name>` unit, one per arm.
@@ -2202,10 +2251,11 @@ timers or entry regenerates its glance block with `scripts/docs/gen_role_glance.
   leaves `HC_ROUTED_TAGS`, which keeps
   `test_hc_routed_tags_are_exactly_the_scripts_that_read_kuma_push_ok` green.
 - **B5 Cutover-2.** `pi-sd-health` and `pi-recovery-health` leave `HC_ROUTED_TAGS` for the same
-  test, and `monitor-bridge` applies by its owner, in either order against the Pi's hand
-  apply.
-- **B5.** The unit-flag-and-directory test in `ansible/tests/setup/`, and the `optimize_pi`
-  `CLAUDE.md` line about the health crons sourcing `kuma-push-lib.sh`.
+  test, and `monitor-bridge` applies by its owner, in either order against the Pi's package
+  install.
+- **B5.** Nothing beyond the shadow PR. The unit-flag-and-directory test and the `optimize_pi` `CLAUDE.md`
+  line the first draft named are obsolete: H3.6 wrote the test, and H3.8b moved the heartbeats and their
+  contract into `hosts/components/pi-heartbeats/component.yml`.
 - **B1 to B7, each shadow PR.** The batch's `KUMA_RETIRING_TAGS` entries and their cases in
   `ansible/roles/k8s/monitor-bridge/tests/test_check_swallowed_verdicts.py`.
 - **A6-1 and A6-2.** The exporter test for `homelab_check_rows`, the run-loop export test,

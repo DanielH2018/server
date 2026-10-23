@@ -228,15 +228,25 @@ HC_ROUTED_TAGS = frozenset(
 KUMA_RETIRING_TAGS = frozenset(
     {
         "claude-otel-health",
+        "configarr-health",
+        "crowdsec-appsec-verify",
+        "crowdsec-home-allowlist",
+        "crowdsec-remote-allowlist",
         # B2: initial_setup. secret_rotation.py's own push logs under a `warning:` prefix that
         # parse_push_line does not match, so only the wrapper's tag is listed.
         "docs-refresh",
         "etcd-snapshot-offbox",
         "eval-run",
+        "janitorr-health",
         "live-drift-check",
         "loki-read-route-health",
         "longhorn-backup-health",
         "manifest-prune-check",
+        # B5: the Pi package's two token heartbeats. They are also HC_ROUTED_TAGS while they
+        # read KUMA_PUSH_OK, and listing them here keeps their refused pushes quiet once
+        # Cutover-2 drops that routing.
+        "pi-recovery-health",
+        "pi-sd-health",
         "release-staleness-check",
         "secret-rotation-audit",
         "setup-drift-check",

@@ -200,6 +200,9 @@ spec:
         - name: crowdsec-jobs
           image: {{ crowdsec_k8s_jobs_image }}
           command: ["python3", "/jobs/crowdsec_jobs.py"]
+          ports:
+            - name: jobs-metrics
+              containerPort: {{ containers_list | metrics_port('crowdsec-jobs') }}
           env:
             # kubectl's discovery cache goes under $HOME.
             - name: HOME
@@ -213,6 +216,11 @@ spec:
               value: "1"
             - name: KUBECONFIG
               value: /jobs/kubeconfig
+            # The port the check exporter serves /metrics on (files/jobs_metrics.py): the
+            # `crowdsec-jobs` item on this role's containers_list entry, which also renders the
+            # scrape job and the Service port.
+            - name: JOBS_METRICS_PORT
+              value: "{{ containers_list | metrics_port('crowdsec-jobs') }}"
             - name: REMOTE_ALLOWLIST_PUSH_URL
               valueFrom:
                 secretKeyRef:

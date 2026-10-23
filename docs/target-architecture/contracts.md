@@ -647,7 +647,10 @@ C-4b waits on D6, but nothing from C-1 to C-7 waits on C-4b.
   producer metric contract*). A producer that is a CronJob, such as M6's B7 or one of H2's
   moved crons, takes the kube-state-metrics recipe instead. Its rules read
   `kube_cronjob_status_last_successful_time` and `kube_job_status_failed`, and the first PR
-  that uses the recipe adds `cronjobs,jobs` to kube-state-metrics' collectors (M6).
+  that uses the recipe adds `cronjobs` to kube-state-metrics' collectors (M6 B6b), because
+  `jobs` was already collected (#5675). A CronJob that reports a verdict, not only success,
+  patches it onto a ConfigMap it owns, and B6b also adds the `configmaps` collector with one
+  allowlisted annotation, `homelab/check-verdict`.
 - **Health gate.** `probe.py health <tag>` reads
   `ALERTS{alertstate="firing",service="<tag>"}` and `probe_success{service="<tag>"}`, with six
   departures from that literal selector (M6):

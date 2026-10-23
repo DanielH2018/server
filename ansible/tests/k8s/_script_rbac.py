@@ -22,7 +22,8 @@ a variable, such as the drill's `"$PVC_NS"`, resolves through the `namespaces` m
 passes, and an unresolved one raises: the caller states which namespace the variable holds.
 
 The implied verbs are the ones kubectl makes on the script's behalf. `exec` and `logs` on a
-Deployment or Job resolve it and list its pods. `apply` reads, then creates or patches. `delete`
+Deployment or Job resolve it and list its pods. `apply` reads, then creates or patches. `patch`,
+`label` and `annotate` read the object, then patch it. `delete`
 waits for the object to go with a `list` and a `watch`, and skips the wait silently, still
 exiting 0, when either is Forbidden. A verb or resource this module does not know raises, so a
 new script shape extends the tables here rather than passing unread.
@@ -233,7 +234,9 @@ def argv_needs(
                 # RBAC authorizes against `resourceNames` like a get.
                 found |= need(resource, "delete", "list", "watch", name=name)
             else:
-                found |= need(resource, "patch", name=name)
+                # `kubectl patch`, `label` and `annotate` GET the object first, then send the
+                # PATCH, so the role needs both verbs on it.
+                found |= need(resource, "get", "patch", name=name)
         return found
     raise KeyError(f"unknown kubectl verb {verb!r}; teach argv_needs what it calls")
 

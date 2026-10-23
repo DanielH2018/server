@@ -138,7 +138,7 @@ groups:
             gone stale. Read the exporter pod's events and log, or the host's unit for a static
             target.
       - alert: ScrapeTargetDown
-        expr: up{job=~"crowdsec|crowdsec-node-agents|crowdsec-traefik-agent|crowdsec-authelia-agent"} == 0
+        expr: up{job=~"crowdsec|crowdsec-jobs|crowdsec-node-agents|crowdsec-traefik-agent|crowdsec-authelia-agent"} == 0
         for: 10m
         labels:
           severity: warning
@@ -320,7 +320,7 @@ groups:
             gone stale. Read the exporter pod's events and log, or the host's unit for a static
             target.
       - alert: ScrapeTargetDown
-        expr: up{job!~"prometheus|otel-collector|otel-collector-internal|kube-state-metrics|loki-internal|tempo-internal|alertmanager|loki-homelab|alloy|alloy-pi|node-pi|dockerd-pi|containerd-pi|node|gpu|deploy-pipeline|monitor-bridge|flux|crowdsec|crowdsec-node-agents|crowdsec-traefik-agent|crowdsec-authelia-agent|traefik-k8s|speedtest|pihole|uptime-kuma|home-assistant|nut|valheim-stats|terraria-stats|longhorn|coredns-host|exportarr|kubernetes-cadvisor|kubernetes-kubelet|kubernetes-kubelet-resource|kubernetes-apiserver|etcd|blackbox-ingress|blackbox-extra|blackbox-pi-ports"} == 0
+        expr: up{job!~"prometheus|otel-collector|otel-collector-internal|kube-state-metrics|loki-internal|tempo-internal|alertmanager|loki-homelab|alloy|alloy-pi|node-pi|dockerd-pi|containerd-pi|node|gpu|deploy-pipeline|monitor-bridge|flux|crowdsec|crowdsec-jobs|crowdsec-node-agents|crowdsec-traefik-agent|crowdsec-authelia-agent|traefik-k8s|speedtest|pihole|uptime-kuma|home-assistant|nut|valheim-stats|terraria-stats|longhorn|coredns-host|exportarr|kubernetes-cadvisor|kubernetes-kubelet|kubernetes-kubelet-resource|kubernetes-apiserver|etcd|blackbox-ingress|blackbox-extra|blackbox-pi-ports"} == 0
         for: 10m
         labels:
           severity: warning

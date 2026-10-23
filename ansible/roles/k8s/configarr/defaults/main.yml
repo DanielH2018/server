@@ -53,6 +53,11 @@ configarr_k8s_max_age_hours: 26
 # turns a stale one red. The host cron's UTC minute field, unchanged.
 configarr_k8s_health_schedule: "*/10 * * * *"
 
+# The ConfigMap the health reader writes its verdict to as annotations, which kube-state-metrics
+# exports (M6 batch B6b). The shadow rule ConfigarrHealthNotReporting holds the CronJob's last
+# successful run to three periods of the schedule above, 1800s.
+configarr_k8s_health_verdict_configmap: configarr-health-verdict
+
 # The health reader runs in the repo's pinned python image and gets kubectl from an init
 # container of alpine/k8s, which keeps the binary at /usr/bin/kubectl (its upstream Dockerfile,
 # and the layer listing of this digest's linux/amd64 manifest, 2026-10-18). Its kubectl minor

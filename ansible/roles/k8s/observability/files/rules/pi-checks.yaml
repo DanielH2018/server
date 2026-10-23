@@ -1,0 +1,93 @@
+# The B5 Pi checks of M6 (docs/target-architecture/monitoring/m6-retire-kuma.md, batch B5): the
+# SD-card health heartbeat and the container-recovery heartbeat. Both ship in the homelab-daniel-pi
+# package (hosts/components/pi-heartbeats/) and write a `homelab_check_*` textfile to the
+# `node-pi` scrape job, so these rules read the metric contract of
+# docs/target-architecture/monitoring/m3-textfile-timer.md. Plain YAML, never Jinja:
+# prometheus-rules.yaml.j2 carries this file verbatim.
+#
+# SHADOW UNTIL M6's BATCH B5 CUTOVER-1B. Each rule runs beside the Kuma tile of the same check, so
+# each carries `shadow: "true"` and pages nobody. Severity follows the tile: "Daniel Pi SD Health"
+# carries tag-severity critical, "Daniel Pi Recovery" carries none and notifies Discord alone.
+# `service` is the host as a literal, because a node is not a workload (M3's open question 3).
+# Each pair is `<Check>Failed` and `<Check>NotReporting`, the shape M3 fixed: NotReporting reads
+# the timestamp against the deadline, falls back to absent_over_time over the same deadline, and
+# leaves a dead exporter to the `targets` check. The exporter guard names `job="node-pi"`, because
+# the Pi scrapes under that job rather than `node`.
+#
+# Each deadline is the DEADLINE_S its producer renders: 2 x the timers' 300s period + 300s, as M3
+# derives it. Both literals of a NotReporting rule are pinned to it by
+# ansible/tests/setup/test_pi_heartbeat_textfiles.py (M1 convention 1).
+#
+# `PiRecoveryFailed` fires on every cycle that restarted a container, not only on a failed
+# restart, because the producer pushes `down` for those on purpose (the `# DECIDED:` marker in
+# hosts/components/pi-heartbeats/templates/pi-recovery-health.sh.j2) and the textfile follows it.
+groups:
+  - name: pi-checks
+    rules:
+      # Kuma tile "Daniel Pi SD Health".
+      - alert: PiSdHealthFailed
+        expr: homelab_check_success{check="pi-sd-health",origin="daniel-pi"} == 0
+        labels:
+          severity: critical
+          service: daniel-pi
+          shadow: "true"
+        annotations:
+          summary: daniel-pi's SD-card health heartbeat reported a failure.
+          description: >-
+            pi-sd-health on daniel-pi ended with status=down: the root filesystem's ext4
+            errors_count is nonzero or unreadable, the rotated-log integrity verdict is bad or
+            stale, or /var/log is not log2ram's tmpfs. The `pi-sd-health` line in
+            /var/log/pi-health/health.log holds the message. Plan an fsck and a card replacement.
+      - alert: PiSdHealthNotReporting
+        expr: |
+          (
+              time() - homelab_check_last_run_timestamp_seconds{check="pi-sd-health",origin="daniel-pi"} > 900
+            or
+              absent_over_time(homelab_check_last_run_timestamp_seconds{check="pi-sd-health",origin="daniel-pi"}[900s])
+          )
+          unless on (origin) (up{job="node-pi"} == 0)
+        labels:
+          severity: critical
+          service: daniel-pi
+          shadow: "true"
+        annotations:
+          summary: daniel-pi's SD-card health heartbeat has stopped reporting.
+          description: >-
+            No pi-sd-health verdict newer than 900s reached Prometheus from daniel-pi's textfile
+            collector, so nothing confirms the SD card is being watched. Read
+            `systemctl status homelab-pi-sd-health.timer` on daniel-pi, then
+            /var/lib/node-exporter-textfile/pi-sd-health.prom.
+      # Kuma tile "Daniel Pi Recovery".
+      - alert: PiRecoveryFailed
+        expr: homelab_check_success{check="pi-recovery-health",origin="daniel-pi"} == 0
+        labels:
+          severity: warning
+          service: daniel-pi
+          shadow: "true"
+        annotations:
+          summary: daniel-pi's container-recovery heartbeat found a container not running.
+          description: >-
+            pi-recovery-health on daniel-pi ended with status=down: a watched container was not
+            running, whether or not its restart took. The `pi-recovery-health` line in
+            /var/log/pi-health/health.log names the container, why it died and any dockerd
+            fault.
+      - alert: PiRecoveryNotReporting
+        expr: |
+          (
+              time() - homelab_check_last_run_timestamp_seconds{check="pi-recovery-health",origin="daniel-pi"} > 900
+            or
+              absent_over_time(homelab_check_last_run_timestamp_seconds{check="pi-recovery-health",origin="daniel-pi"}[900s])
+          )
+          unless on (origin) (up{job="node-pi"} == 0)
+        labels:
+          severity: warning
+          service: daniel-pi
+          shadow: "true"
+        annotations:
+          summary: daniel-pi's container-recovery heartbeat has stopped reporting.
+          description: >-
+            No pi-recovery-health verdict newer than 900s reached Prometheus from daniel-pi's
+            textfile collector, so nothing confirms the Pi's containers are being watched. Read
+            `systemctl status homelab-pi-recovery.timer` on daniel-pi, then
+            /var/lib/node-exporter-textfile/pi-recovery-health.prom. A host that sets
+            optimize_pi_recovery_restart_enabled false drops the timer and fires this on purpose.

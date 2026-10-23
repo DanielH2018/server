@@ -82,6 +82,9 @@ spec:
                   value: "{{ configarr_k8s_max_age_hours }}"
                 - name: CONFIGARR_KUBECTL
                   value: /kubectl/kubectl
+                # The ConfigMap the verdict is also written to (health-verdict-configmap.yaml.j2).
+                - name: CONFIGARR_VERDICT_CONFIGMAP
+                  value: "{{ configarr_k8s_health_verdict_configmap }}"
                 # kubectl's discovery cache goes under $HOME, and the root filesystem is
                 # read-only.
                 - name: HOME

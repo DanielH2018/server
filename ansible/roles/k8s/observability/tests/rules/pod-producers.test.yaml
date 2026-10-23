@@ -1,0 +1,433 @@
+# promtool unit tests for files/rules/pod-producers.yaml. Run with
+# `scripts/validate/alert_tools.sh promtool test rules <this file>`; the validate-alert-rules
+# hook runs it on every commit that touches the rules.
+#
+# The sidecar's series carry the labels the live scrape gives them: job `crowdsec-jobs`, instance
+# crowdsec.homelab.svc:9182 and a `check` label per job, with the deadline each job exports (three
+# periods: 900s for the 5-minute jobs, 2700s for AppSec). A timestamp written `0+60x20` equals the
+# evaluation time in seconds, so the job is fresh. The CronJobs' series come from the
+# kube-state-metrics job, with the annotation as the label kube-state-metrics gives it. Each
+# firing case also asserts the evaluation just short of the `for:` hold, so a shortened hold
+# fails here.
+rule_files:
+  - ../../files/rules/pod-producers.yaml
+evaluation_interval: 1m
+tests:
+  - interval: 1m
+    input_series:
+      - series: homelab_check_success{job="crowdsec-jobs",instance="crowdsec.homelab.svc:9182",check="crowdsec-remote-allowlist"}
+        values: '0x20'
+      - series: homelab_check_last_run_timestamp_seconds{job="crowdsec-jobs",instance="crowdsec.homelab.svc:9182",check="crowdsec-remote-allowlist"}
+        values: 0+60x20
+      - series: homelab_check_deadline_seconds{job="crowdsec-jobs",instance="crowdsec.homelab.svc:9182",check="crowdsec-remote-allowlist"}
+        values: 900x200
+      - series: homelab_check_success{job="crowdsec-jobs",instance="crowdsec.homelab.svc:9182",check="crowdsec-appsec-verify"}
+        values: '0x20'
+      - series: homelab_check_last_run_timestamp_seconds{job="crowdsec-jobs",instance="crowdsec.homelab.svc:9182",check="crowdsec-appsec-verify"}
+        values: 0+60x20
+      - series: homelab_check_deadline_seconds{job="crowdsec-jobs",instance="crowdsec.homelab.svc:9182",check="crowdsec-appsec-verify"}
+        values: 2700x200
+      - series: homelab_check_success{job="crowdsec-jobs",instance="crowdsec.homelab.svc:9182",check="crowdsec-home-allowlist"}
+        values: '0x20'
+      - series: homelab_check_last_run_timestamp_seconds{job="crowdsec-jobs",instance="crowdsec.homelab.svc:9182",check="crowdsec-home-allowlist"}
+        values: 0+60x20
+      - series: homelab_check_deadline_seconds{job="crowdsec-jobs",instance="crowdsec.homelab.svc:9182",check="crowdsec-home-allowlist"}
+        values: 900x200
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: CrowdSecRemoteAllowlistFailed
+        exp_alerts:
+          - exp_labels:
+              job: crowdsec-jobs
+              instance: crowdsec.homelab.svc:9182
+              check: crowdsec-remote-allowlist
+              severity: warning
+              service: crowdsec
+              shadow: 'true'
+            exp_annotations:
+              summary: The crowdsec remote allowlist job failed its last run.
+              description: The crowdsec-jobs sidecar's remote allowlist run failed, so a new VPN exit
+                or phone address is not exempted from CrowdSec bans. The cause is kubectl or cscli failing,
+                no router carrying the authelia middleware, or the list at its cap. Read the crowdsec-remote-allowlist
+                lines in the crowdsec-jobs container log.
+      - eval_time: 5m
+        alertname: CrowdSecAppSecVerifyFailed
+        exp_alerts:
+          - exp_labels:
+              job: crowdsec-jobs
+              instance: crowdsec.homelab.svc:9182
+              check: crowdsec-appsec-verify
+              severity: critical
+              service: crowdsec
+              shadow: 'true'
+            exp_annotations:
+              summary: The crowdsec engine has no enabled AppSec configuration or rule.
+              description: The crowdsec-jobs sidecar's AppSec verify found no enabled appsec-config or
+                appsec-rule, so the inline WAF is not loaded and the edge is ban-list-only, because the
+                bouncer fails open. Run `cscli appsec-configs list` in the crowdsec pod, and read the
+                crowdsec-appsec-verify lines in the crowdsec-jobs container log.
+      - eval_time: 5m
+        alertname: CrowdSecHomeAllowlistFailed
+        exp_alerts:
+          - exp_labels:
+              job: crowdsec-jobs
+              instance: crowdsec.homelab.svc:9182
+              check: crowdsec-home-allowlist
+              severity: warning
+              service: crowdsec
+              shadow: 'true'
+            exp_annotations:
+              summary: The crowdsec home allowlist job failed its last run.
+              description: The crowdsec-jobs sidecar's home allowlist sync failed. A lookup or a cscli
+                call failed, or the crowdsec-home-ips ConfigMap has not been written for three periods
+                because the CronJob is not running. Read the crowdsec-home-allowlist lines in the crowdsec-jobs
+                container log, then the crowdsec-home-ips Job logs.
+      - eval_time: 10m
+        alertname: CrowdSecJobStale
+        exp_alerts: []
+  - interval: 1m
+    input_series:
+      - series: homelab_check_success{job="crowdsec-jobs",instance="crowdsec.homelab.svc:9182",check="crowdsec-remote-allowlist"}
+        values: 1x20
+      - series: homelab_check_last_run_timestamp_seconds{job="crowdsec-jobs",instance="crowdsec.homelab.svc:9182",check="crowdsec-remote-allowlist"}
+        values: 0+60x20
+      - series: homelab_check_deadline_seconds{job="crowdsec-jobs",instance="crowdsec.homelab.svc:9182",check="crowdsec-remote-allowlist"}
+        values: 900x200
+      - series: homelab_check_success{job="crowdsec-jobs",instance="crowdsec.homelab.svc:9182",check="crowdsec-appsec-verify"}
+        values: 1x20
+      - series: homelab_check_last_run_timestamp_seconds{job="crowdsec-jobs",instance="crowdsec.homelab.svc:9182",check="crowdsec-appsec-verify"}
+        values: 0+60x20
+      - series: homelab_check_deadline_seconds{job="crowdsec-jobs",instance="crowdsec.homelab.svc:9182",check="crowdsec-appsec-verify"}
+        values: 2700x200
+      - series: homelab_check_success{job="crowdsec-jobs",instance="crowdsec.homelab.svc:9182",check="crowdsec-home-allowlist"}
+        values: 1x20
+      - series: homelab_check_last_run_timestamp_seconds{job="crowdsec-jobs",instance="crowdsec.homelab.svc:9182",check="crowdsec-home-allowlist"}
+        values: 0+60x20
+      - series: homelab_check_deadline_seconds{job="crowdsec-jobs",instance="crowdsec.homelab.svc:9182",check="crowdsec-home-allowlist"}
+        values: 900x200
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: CrowdSecRemoteAllowlistFailed
+        exp_alerts: []
+      - eval_time: 10m
+        alertname: CrowdSecAppSecVerifyFailed
+        exp_alerts: []
+      - eval_time: 10m
+        alertname: CrowdSecHomeAllowlistFailed
+        exp_alerts: []
+      - eval_time: 10m
+        alertname: CrowdSecJobStale
+        exp_alerts: []
+  - interval: 1m
+    input_series:
+      - series: homelab_check_success{job="crowdsec-jobs",instance="crowdsec.homelab.svc:9182",check="crowdsec-remote-allowlist"}
+        values: 1x60
+      - series: homelab_check_last_run_timestamp_seconds{job="crowdsec-jobs",instance="crowdsec.homelab.svc:9182",check="crowdsec-remote-allowlist"}
+        values: '0x60'
+      - series: homelab_check_deadline_seconds{job="crowdsec-jobs",instance="crowdsec.homelab.svc:9182",check="crowdsec-remote-allowlist"}
+        values: 900x200
+      - series: homelab_check_success{job="crowdsec-jobs",instance="crowdsec.homelab.svc:9182",check="crowdsec-appsec-verify"}
+        values: 1x60
+      - series: homelab_check_last_run_timestamp_seconds{job="crowdsec-jobs",instance="crowdsec.homelab.svc:9182",check="crowdsec-appsec-verify"}
+        values: '0x60'
+      - series: homelab_check_deadline_seconds{job="crowdsec-jobs",instance="crowdsec.homelab.svc:9182",check="crowdsec-appsec-verify"}
+        values: 2700x200
+      - series: homelab_check_success{job="crowdsec-jobs",instance="crowdsec.homelab.svc:9182",check="crowdsec-home-allowlist"}
+        values: 1x60
+      - series: homelab_check_last_run_timestamp_seconds{job="crowdsec-jobs",instance="crowdsec.homelab.svc:9182",check="crowdsec-home-allowlist"}
+        values: '0x60'
+      - series: homelab_check_deadline_seconds{job="crowdsec-jobs",instance="crowdsec.homelab.svc:9182",check="crowdsec-home-allowlist"}
+        values: 900x200
+    alert_rule_test:
+      - eval_time: 19m
+        alertname: CrowdSecJobStale
+        exp_alerts: []
+      - eval_time: 22m
+        alertname: CrowdSecJobStale
+        exp_alerts:
+          - exp_labels:
+              job: crowdsec-jobs
+              instance: crowdsec.homelab.svc:9182
+              check: crowdsec-home-allowlist
+              severity: critical
+              service: crowdsec
+              shadow: 'true'
+            exp_annotations:
+              summary: The crowdsec-jobs sidecar has not finished a crowdsec-home-allowlist run in time.
+              description: The crowdsec-home-allowlist job has not ended a run within three of its periods,
+                so the sidecar's scheduler is hung or the job is skipped at every slot. Read the crowdsec-jobs
+                container log in the crowdsec pod.
+          - exp_labels:
+              job: crowdsec-jobs
+              instance: crowdsec.homelab.svc:9182
+              check: crowdsec-remote-allowlist
+              severity: critical
+              service: crowdsec
+              shadow: 'true'
+            exp_annotations:
+              summary: The crowdsec-jobs sidecar has not finished a crowdsec-remote-allowlist run in time.
+              description: The crowdsec-remote-allowlist job has not ended a run within three of its periods,
+                so the sidecar's scheduler is hung or the job is skipped at every slot. Read the crowdsec-jobs
+                container log in the crowdsec pod.
+      - eval_time: 49m
+        alertname: CrowdSecJobStale
+        exp_alerts:
+          - exp_labels:
+              job: crowdsec-jobs
+              instance: crowdsec.homelab.svc:9182
+              check: crowdsec-home-allowlist
+              severity: critical
+              service: crowdsec
+              shadow: 'true'
+            exp_annotations:
+              summary: The crowdsec-jobs sidecar has not finished a crowdsec-home-allowlist run in time.
+              description: The crowdsec-home-allowlist job has not ended a run within three of its periods,
+                so the sidecar's scheduler is hung or the job is skipped at every slot. Read the crowdsec-jobs
+                container log in the crowdsec pod.
+          - exp_labels:
+              job: crowdsec-jobs
+              instance: crowdsec.homelab.svc:9182
+              check: crowdsec-remote-allowlist
+              severity: critical
+              service: crowdsec
+              shadow: 'true'
+            exp_annotations:
+              summary: The crowdsec-jobs sidecar has not finished a crowdsec-remote-allowlist run in time.
+              description: The crowdsec-remote-allowlist job has not ended a run within three of its periods,
+                so the sidecar's scheduler is hung or the job is skipped at every slot. Read the crowdsec-jobs
+                container log in the crowdsec pod.
+      - eval_time: 51m
+        alertname: CrowdSecJobStale
+        exp_alerts:
+          - exp_labels:
+              job: crowdsec-jobs
+              instance: crowdsec.homelab.svc:9182
+              check: crowdsec-appsec-verify
+              severity: critical
+              service: crowdsec
+              shadow: 'true'
+            exp_annotations:
+              summary: The crowdsec-jobs sidecar has not finished a crowdsec-appsec-verify run in time.
+              description: The crowdsec-appsec-verify job has not ended a run within three of its periods,
+                so the sidecar's scheduler is hung or the job is skipped at every slot. Read the crowdsec-jobs
+                container log in the crowdsec pod.
+          - exp_labels:
+              job: crowdsec-jobs
+              instance: crowdsec.homelab.svc:9182
+              check: crowdsec-home-allowlist
+              severity: critical
+              service: crowdsec
+              shadow: 'true'
+            exp_annotations:
+              summary: The crowdsec-jobs sidecar has not finished a crowdsec-home-allowlist run in time.
+              description: The crowdsec-home-allowlist job has not ended a run within three of its periods,
+                so the sidecar's scheduler is hung or the job is skipped at every slot. Read the crowdsec-jobs
+                container log in the crowdsec pod.
+          - exp_labels:
+              job: crowdsec-jobs
+              instance: crowdsec.homelab.svc:9182
+              check: crowdsec-remote-allowlist
+              severity: critical
+              service: crowdsec
+              shadow: 'true'
+            exp_annotations:
+              summary: The crowdsec-jobs sidecar has not finished a crowdsec-remote-allowlist run in time.
+              description: The crowdsec-remote-allowlist job has not ended a run within three of its periods,
+                so the sidecar's scheduler is hung or the job is skipped at every slot. Read the crowdsec-jobs
+                container log in the crowdsec pod.
+  - interval: 1m
+    input_series: []
+    alert_rule_test:
+      - eval_time: 9m
+        alertname: CrowdSecJobsExporterAbsent
+        exp_alerts: []
+      - eval_time: 11m
+        alertname: CrowdSecJobsExporterAbsent
+        exp_alerts:
+          - exp_labels:
+              job: crowdsec-jobs
+              severity: critical
+              service: crowdsec
+              shadow: 'true'
+            exp_annotations:
+              summary: Prometheus has no crowdsec-jobs scrape job.
+              description: No up{job="crowdsec-jobs"} series has existed for 10 minutes, so the job is
+                gone from prometheus.yml and the three crowdsec sidecar verdicts are UNMONITORED, which
+                is not the same as healthy.
+      - eval_time: 11m
+        alertname: CrowdSecJobStale
+        exp_alerts: []
+  - interval: 1m
+    input_series:
+      - series: up{job="crowdsec-jobs",instance="crowdsec.homelab.svc:9182"}
+        values: '0x20'
+    alert_rule_test:
+      - eval_time: 15m
+        alertname: CrowdSecJobsExporterAbsent
+        exp_alerts: []
+  - interval: 1m
+    input_series:
+      - series: kube_configmap_annotations{job="kube-state-metrics",instance="kube-state-metrics:8080",namespace="homelab",configmap="configarr-health-verdict",annotation_homelab_check_verdict="down"}
+        values: 1x20
+      - series: kube_configmap_annotations{job="kube-state-metrics",instance="kube-state-metrics:8080",namespace="homelab",configmap="janitorr-health-verdict",annotation_homelab_check_verdict="down"}
+        values: 1x20
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: ConfigarrSyncFailed
+        exp_alerts:
+          - exp_labels:
+              job: kube-state-metrics
+              instance: kube-state-metrics:8080
+              namespace: homelab
+              configmap: configarr-health-verdict
+              annotation_homelab_check_verdict: down
+              severity: warning
+              service: configarr
+              shadow: 'true'
+            exp_annotations:
+              summary: configarr's last sync is stale, failed or logged an error.
+              description: 'The configarr-health reader judged the newest configarr Job down: older than
+                26 hours, exited non-zero, logged an error-level line, or its pod logs are gone. Read
+                the annotation `homelab/check-message` on the configarr-health-verdict ConfigMap, then
+                `kubectl -n homelab logs job/<newest configarr Job>`.'
+      - eval_time: 5m
+        alertname: JanitorrErrorsFound
+        exp_alerts:
+          - exp_labels:
+              job: kube-state-metrics
+              instance: kube-state-metrics:8080
+              namespace: homelab
+              configmap: janitorr-health-verdict
+              annotation_homelab_check_verdict: down
+              severity: warning
+              service: janitorr
+              shadow: 'true'
+            exp_annotations:
+              summary: janitorr logged a scheduled-task error in the last 12 hours.
+              description: The janitorr-health reader counted at least one "Unexpected error occurred
+                in scheduled task" line in the janitorr pod log over its window, or could not read the
+                pod. Read the annotation `homelab/check-message` on the janitorr-health-verdict ConfigMap,
+                then `kubectl -n homelab logs deploy/janitorr`.
+  - interval: 1m
+    input_series:
+      - series: kube_configmap_annotations{job="kube-state-metrics",instance="kube-state-metrics:8080",namespace="homelab",configmap="configarr-health-verdict",annotation_homelab_check_verdict="up"}
+        values: 1x20
+      - series: kube_configmap_annotations{job="kube-state-metrics",instance="kube-state-metrics:8080",namespace="homelab",configmap="janitorr-health-verdict",annotation_homelab_check_verdict="up"}
+        values: 1x20
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: ConfigarrSyncFailed
+        exp_alerts: []
+      - eval_time: 5m
+        alertname: JanitorrErrorsFound
+        exp_alerts: []
+  - interval: 1m
+    input_series: []
+    alert_rule_test:
+      - eval_time: 4m
+        alertname: ConfigarrHealthNotReporting
+        exp_alerts: []
+      - eval_time: 4m
+        alertname: JanitorrHealthNotReporting
+        exp_alerts: []
+      - eval_time: 6m
+        alertname: ConfigarrHealthNotReporting
+        exp_alerts:
+          - exp_labels:
+              namespace: homelab
+              cronjob: configarr-health
+              severity: warning
+              service: configarr
+              shadow: 'true'
+            exp_annotations:
+              summary: The configarr-health CronJob has not succeeded in 30 minutes.
+              description: The configarr-health CronJob has no successful run newer than three periods,
+                so nothing watches the configarr sync. Read `kubectl -n homelab get jobs` for its newest
+                Job and that Job's logs. An export failure ends the run with exit 1.
+      - eval_time: 6m
+        alertname: JanitorrHealthNotReporting
+        exp_alerts:
+          - exp_labels:
+              namespace: homelab
+              cronjob: janitorr-health
+              severity: warning
+              service: janitorr
+              shadow: 'true'
+            exp_annotations:
+              summary: The janitorr-health CronJob has not succeeded in 30 minutes.
+              description: The janitorr-health CronJob has no successful run newer than three periods,
+                so nothing watches janitorr's scheduled tasks. Read `kubectl -n homelab get jobs` for
+                its newest Job and that Job's logs. An export failure ends the run with exit 1.
+  - interval: 1m
+    input_series:
+      - series: kube_cronjob_status_last_successful_time{job="kube-state-metrics",instance="kube-state-metrics:8080",namespace="homelab",cronjob="configarr-health"}
+        values: '0x60'
+      - series: kube_cronjob_status_last_successful_time{job="kube-state-metrics",instance="kube-state-metrics:8080",namespace="homelab",cronjob="janitorr-health"}
+        values: '0x60'
+    alert_rule_test:
+      - eval_time: 35m
+        alertname: ConfigarrHealthNotReporting
+        exp_alerts: []
+      - eval_time: 35m
+        alertname: JanitorrHealthNotReporting
+        exp_alerts: []
+      - eval_time: 37m
+        alertname: ConfigarrHealthNotReporting
+        exp_alerts:
+          - exp_labels:
+              job: kube-state-metrics
+              instance: kube-state-metrics:8080
+              namespace: homelab
+              cronjob: configarr-health
+              severity: warning
+              service: configarr
+              shadow: 'true'
+            exp_annotations:
+              summary: The configarr-health CronJob has not succeeded in 30 minutes.
+              description: The configarr-health CronJob has no successful run newer than three periods,
+                so nothing watches the configarr sync. Read `kubectl -n homelab get jobs` for its newest
+                Job and that Job's logs. An export failure ends the run with exit 1.
+      - eval_time: 37m
+        alertname: JanitorrHealthNotReporting
+        exp_alerts:
+          - exp_labels:
+              job: kube-state-metrics
+              instance: kube-state-metrics:8080
+              namespace: homelab
+              cronjob: janitorr-health
+              severity: warning
+              service: janitorr
+              shadow: 'true'
+            exp_annotations:
+              summary: The janitorr-health CronJob has not succeeded in 30 minutes.
+              description: The janitorr-health CronJob has no successful run newer than three periods,
+                so nothing watches janitorr's scheduled tasks. Read `kubectl -n homelab get jobs` for
+                its newest Job and that Job's logs. An export failure ends the run with exit 1.
+  - interval: 1m
+    input_series:
+      - series: kube_cronjob_status_last_successful_time{job="kube-state-metrics",instance="kube-state-metrics:8080",namespace="homelab",cronjob="configarr-health"}
+        values: 0+60x60
+      - series: kube_cronjob_status_last_successful_time{job="kube-state-metrics",instance="kube-state-metrics:8080",namespace="homelab",cronjob="janitorr-health"}
+        values: 0+60x60
+    alert_rule_test:
+      - eval_time: 50m
+        alertname: ConfigarrHealthNotReporting
+        exp_alerts: []
+      - eval_time: 50m
+        alertname: JanitorrHealthNotReporting
+        exp_alerts: []
+  - interval: 1m
+    input_series:
+      - series: kube_cronjob_status_last_successful_time{job="kube-state-metrics",instance="kube-state-metrics:8080",namespace="homelab",cronjob="configarr-health"}
+        values: '0x60'
+      - series: kube_cronjob_status_last_successful_time{job="kube-state-metrics",instance="kube-state-metrics:8080",namespace="homelab",cronjob="janitorr-health"}
+        values: '0x60'
+      - series: up{job="kube-state-metrics",instance="kube-state-metrics:8080"}
+        values: '0x60'
+    alert_rule_test:
+      - eval_time: 50m
+        alertname: ConfigarrHealthNotReporting
+        exp_alerts: []
+      - eval_time: 50m
+        alertname: JanitorrHealthNotReporting
+        exp_alerts: []

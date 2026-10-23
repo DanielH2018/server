@@ -102,6 +102,12 @@ this goes QUIET.
 
 ## Alert plane
 
+kube-state-metrics collects ConfigMaps for one annotation, `homelab/check-verdict`, and CronJobs
+for their last successful time (M6 B6b). The two health CronJobs of configarr and janitorr
+write the annotation, and the `pod-producers` rule group reads it. The Prometheus job drops
+every other ConfigMap and CronJob family. The ClusterRole's ConfigMap `list` grant cannot be
+narrowed by name, and no collector exports ConfigMap `data`.
+
 Prometheus sends alerts to the role's Alertmanager and scrapes it as job `alertmanager`, which
 carries no `origin` label, so Kuma's Cluster Scrape Targets tile pages a failed scrape.
 Its config, credentials included, is the `alertmanager-config` Secret, and every Go template

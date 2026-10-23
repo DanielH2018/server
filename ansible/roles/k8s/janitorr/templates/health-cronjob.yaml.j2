@@ -80,6 +80,9 @@ spec:
                   value: "{{ janitorr_k8s_startup_grace_seconds }}"
                 - name: JANITORR_KUBECTL
                   value: /kubectl/kubectl
+                # The ConfigMap the verdict is also written to (health-verdict-configmap.yaml.j2).
+                - name: JANITORR_VERDICT_CONFIGMAP
+                  value: "{{ janitorr_k8s_health_verdict_configmap }}"
                 # kubectl's discovery cache goes under $HOME, and the root filesystem is
                 # read-only.
                 - name: HOME

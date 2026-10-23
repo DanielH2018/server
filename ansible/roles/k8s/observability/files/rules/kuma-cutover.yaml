@@ -98,6 +98,10 @@ groups:
             or
               absent_over_time(monitor_status{monitor_name="Daniel Pi WG Easy"}[2h])
             or
+              absent_over_time(monitor_status{monitor_name="Daniel Pi SD Health"}[2h])
+            or
+              absent_over_time(monitor_status{monitor_name="Daniel Pi Recovery"}[2h])
+            or
               absent_over_time(monitor_status{monitor_name="Email-to-RSS (Worker)"}[2h])
             or
               absent_over_time(monitor_status{monitor_name="iCal Proxy k8s"}[2h])
@@ -125,6 +129,28 @@ groups:
               absent_over_time(monitor_status{monitor_name="Pi Pressure"}[2h])
             or
               absent_over_time(monitor_status{monitor_name="Workload Log Errors"}[2h])
+            or
+              absent_over_time(monitor_status{monitor_name="CrowdSec Remote Allowlist"}[2h])
+            or
+              absent_over_time(monitor_status{monitor_name="CrowdSec AppSec"}[2h])
+            or
+              absent_over_time(monitor_status{monitor_name="CrowdSec Home Allowlist"}[2h])
+            or
+              absent_over_time(monitor_status{monitor_name="Configarr Sync"}[2h])
+            or
+              absent_over_time(monitor_status{monitor_name="Janitorr Errors"}[2h])
+            or
+              absent_over_time(monitor_status{monitor_name="n8n Prod Workflows"}[2h])
+            or
+              absent_over_time(monitor_status{monitor_name="Bazarr Health"}[2h])
+            or
+              absent_over_time(monitor_status{monitor_name="Prowlarr Indexers"}[2h])
+            or
+              absent_over_time(monitor_status{monitor_name="SMART Data / Health"}[2h])
+            or
+              absent_over_time(monitor_status{monitor_name="k3s Speedtest"}[2h])
+            or
+              absent_over_time(monitor_status{monitor_name="Swallowed Push Verdicts"}[2h])
           )
           unless on() (up{job="uptime-kuma"} == 0)
         labels:

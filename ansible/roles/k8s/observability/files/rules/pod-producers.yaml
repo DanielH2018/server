@@ -1,0 +1,178 @@
+# The five Kuma-pushing producers that run in pods: the crowdsec-jobs sidecar's three jobs, and the
+# configarr-health and janitorr-health CronJobs. Plain YAML, never Jinja: prometheus-rules.yaml.j2
+# carries this file verbatim. The design is docs/target-architecture/monitoring/m6-retire-kuma.md,
+# batch B6b, and the operator's ruling of 2026-10-23 that a pod exports its verdict through a
+# metrics endpoint rather than a textfile or a Pushgateway.
+#
+# SHADOW UNTIL B6b's CUTOVER-1b. Each rule runs beside the Kuma tile of the producer it ports, so
+# each carries `shadow: "true"` and pages nobody. Cutover-1b drops the label.
+#
+# TWO SOURCES.
+# - The sidecar serves `homelab_check_*` on the `crowdsec-jobs` scrape job, the series shape of
+#   monitor-bridge's check exporter (bridge-exporter.yaml). The job's tag is the `check` label.
+# - A CronJob patches its verdict onto a ConfigMap it owns, and kube-state-metrics exports the
+#   `homelab/check-verdict` annotation as the label `annotation_homelab_check_verdict` of
+#   `kube_configmap_annotations`. An annotation is a label, so a rule can match it but cannot
+#   compare it with the clock. Freshness comes from `kube_cronjob_status_last_successful_time`,
+#   which only moves when a run exits 0, and the reader exits 1 when its export fails.
+#
+# THE LITERALS. Each age limit is three periods of its producer's schedule (the sidecar exports
+# its own limit as `homelab_check_deadline_seconds`). ansible/tests/services/
+# test_pod_producer_rule_literals.py pins the two CronJob limits and the ConfigMap names to the
+# roles' defaults (M1 convention 1).
+#
+# NO `for:` ON A FAILED RULE. Kuma's tiles have max_retries 0, so one down push pages today, and a
+# run that fails is a verdict, not a sample. The stale and absent rules hold 5m or 10m, because a
+# restart or a rolled kube-state-metrics leaves a gap that is not a fault.
+groups:
+  - name: pod-producers
+    rules:
+      # THE SIDECAR'S THREE VERDICTS. Each job exits non-zero for its fault, and the sidecar
+      # records that exit as `homelab_check_success` 0. A missing series stays quiet here:
+      # CrowdSecJobStale owns a job that stopped running, and the exporter-absent rule owns a
+      # scrape job that is gone.
+      - alert: CrowdSecRemoteAllowlistFailed
+        expr: homelab_check_success{job="crowdsec-jobs", check="crowdsec-remote-allowlist"} == 0
+        labels:
+          severity: warning
+          service: crowdsec
+          shadow: "true"
+        annotations:
+          summary: The crowdsec remote allowlist job failed its last run.
+          description: >-
+            The crowdsec-jobs sidecar's remote allowlist run failed, so a new VPN exit or phone
+            address is not exempted from CrowdSec bans. The cause is kubectl or cscli failing, no
+            router carrying the authelia middleware, or the list at its cap. Read the
+            crowdsec-remote-allowlist lines in the crowdsec-jobs container log.
+      - alert: CrowdSecAppSecVerifyFailed
+        expr: homelab_check_success{job="crowdsec-jobs", check="crowdsec-appsec-verify"} == 0
+        labels:
+          severity: critical
+          service: crowdsec
+          shadow: "true"
+        annotations:
+          summary: The crowdsec engine has no enabled AppSec configuration or rule.
+          description: >-
+            The crowdsec-jobs sidecar's AppSec verify found no enabled appsec-config or
+            appsec-rule, so the inline WAF is not loaded and the edge is ban-list-only, because
+            the bouncer fails open. Run `cscli appsec-configs list` in the crowdsec pod, and read
+            the crowdsec-appsec-verify lines in the crowdsec-jobs container log.
+      - alert: CrowdSecHomeAllowlistFailed
+        expr: homelab_check_success{job="crowdsec-jobs", check="crowdsec-home-allowlist"} == 0
+        labels:
+          severity: warning
+          service: crowdsec
+          shadow: "true"
+        annotations:
+          summary: The crowdsec home allowlist job failed its last run.
+          description: >-
+            The crowdsec-jobs sidecar's home allowlist sync failed. A lookup or a cscli call
+            failed, or the crowdsec-home-ips ConfigMap has not been written for three periods
+            because the CronJob is not running. Read the crowdsec-home-allowlist lines in the
+            crowdsec-jobs container log, then the crowdsec-home-ips Job logs.
+      # A job whose last run ended longer ago than its own deadline: the scheduler hung, or the
+      # job is skipped every slot. The timestamp starts at the exporter's start, so a restart
+      # does not fire this, and a job that never runs does. The two sides carry the same labels,
+      # so the comparison matches one series to one. `for: 5m` rides out a rolled pod.
+      - alert: CrowdSecJobStale
+        expr: |
+          time() - homelab_check_last_run_timestamp_seconds{job="crowdsec-jobs"}
+          > homelab_check_deadline_seconds{job="crowdsec-jobs"}
+        for: 5m
+        labels:
+          severity: critical
+          service: crowdsec
+          shadow: "true"
+        annotations:
+          summary: The crowdsec-jobs sidecar has not finished a {{ $labels.check }} run in time.
+          description: >-
+            The {{ $labels.check }} job has not ended a run within three of its periods, so the
+            sidecar's scheduler is hung or the job is skipped at every slot. Read the
+            crowdsec-jobs container log in the crowdsec pod.
+      # The scrape job is gone from prometheus.yml. A failed scrape (up 0) is ScrapeTargetDown's
+      # page (M1 convention 5), so only the missing series fires here.
+      - alert: CrowdSecJobsExporterAbsent
+        expr: absent(up{job="crowdsec-jobs"})
+        for: 10m
+        labels:
+          severity: critical
+          service: crowdsec
+          shadow: "true"
+        annotations:
+          summary: Prometheus has no crowdsec-jobs scrape job.
+          description: >-
+            No up{job="crowdsec-jobs"} series has existed for 10 minutes, so the job is gone from
+            prometheus.yml and the three crowdsec sidecar verdicts are UNMONITORED, which is not
+            the same as healthy.
+      # THE TWO CRONJOBS' VERDICTS. The reader patches `homelab/check-verdict` to `up` or
+      # `down` each run. The series is absent until the first run, and stays at its last value
+      # after, which is why the NotReporting rules below measure the run clock.
+      - alert: ConfigarrSyncFailed
+        expr: >-
+          kube_configmap_annotations{namespace="homelab", configmap="configarr-health-verdict", annotation_homelab_check_verdict="down"} == 1
+        labels:
+          severity: warning
+          service: configarr
+          shadow: "true"
+        annotations:
+          summary: configarr's last sync is stale, failed or logged an error.
+          description: >-
+            The configarr-health reader judged the newest configarr Job down: older than 26
+            hours, exited non-zero, logged an error-level line, or its pod logs are gone. Read
+            the annotation `homelab/check-message` on the configarr-health-verdict ConfigMap,
+            then `kubectl -n homelab logs job/<newest configarr Job>`.
+      - alert: JanitorrErrorsFound
+        expr: >-
+          kube_configmap_annotations{namespace="homelab", configmap="janitorr-health-verdict", annotation_homelab_check_verdict="down"} == 1
+        labels:
+          severity: warning
+          service: janitorr
+          shadow: "true"
+        annotations:
+          summary: janitorr logged a scheduled-task error in the last 12 hours.
+          description: >-
+            The janitorr-health reader counted at least one "Unexpected error occurred in
+            scheduled task" line in the janitorr pod log over its window, or could not read the
+            pod. Read the annotation `homelab/check-message` on the janitorr-health-verdict
+            ConfigMap, then `kubectl -n homelab logs deploy/janitorr`.
+      # A reader that stopped running or stopped exiting 0 (it exits 1 when its export fails).
+      # 1800s is three periods of the `*/10` schedule. The second arm is a CronJob that never
+      # succeeded, or one gone. `unless` leaves a dead kube-state-metrics to ScrapeTargetDown.
+      - alert: ConfigarrHealthNotReporting
+        expr: |
+          (
+              time() - kube_cronjob_status_last_successful_time{namespace="homelab", cronjob="configarr-health"} > 1800
+            or
+              absent_over_time(kube_cronjob_status_last_successful_time{namespace="homelab", cronjob="configarr-health"}[30m])
+          )
+          unless on () (up{job="kube-state-metrics"} == 0)
+        for: 5m
+        labels:
+          severity: warning
+          service: configarr
+          shadow: "true"
+        annotations:
+          summary: The configarr-health CronJob has not succeeded in 30 minutes.
+          description: >-
+            The configarr-health CronJob has no successful run newer than three periods, so
+            nothing watches the configarr sync. Read `kubectl -n homelab get jobs` for its newest
+            Job and that Job's logs. An export failure ends the run with exit 1.
+      - alert: JanitorrHealthNotReporting
+        expr: |
+          (
+              time() - kube_cronjob_status_last_successful_time{namespace="homelab", cronjob="janitorr-health"} > 1800
+            or
+              absent_over_time(kube_cronjob_status_last_successful_time{namespace="homelab", cronjob="janitorr-health"}[30m])
+          )
+          unless on () (up{job="kube-state-metrics"} == 0)
+        for: 5m
+        labels:
+          severity: warning
+          service: janitorr
+          shadow: "true"
+        annotations:
+          summary: The janitorr-health CronJob has not succeeded in 30 minutes.
+          description: >-
+            The janitorr-health CronJob has no successful run newer than three periods, so
+            nothing watches janitorr's scheduled tasks. Read `kubectl -n homelab get jobs` for
+            its newest Job and that Job's logs. An export failure ends the run with exit 1.
