@@ -51,6 +51,15 @@ def dependents() -> list[str]:
     return [row.name for row in CHECKS if row.gate == GATE]
 
 
+def inhibits_of(config: dict) -> list[dict]:
+    """The inhibit rules that take the gate's alert as their source."""
+    return [
+        i
+        for i in config.get("inhibit_rules", [])
+        if f'alertname="{GATE_ALERT}"' in i.get("source_matchers", [])
+    ]
+
+
 def inhibit_problems(config: dict) -> list[str]:
     """Why the rendered Alertmanager config's WAN inhibit would not work, or [].
 
@@ -58,11 +67,7 @@ def inhibit_problems(config: dict) -> list[str]:
         config: The parsed `alertmanager.yml`.
     """
     rules = [r for rs in groups().values() for r in rs]
-    inhibits = [
-        i
-        for i in config.get("inhibit_rules", [])
-        if f'alertname="{GATE_ALERT}"' in i.get("source_matchers", [])
-    ]
+    inhibits = inhibits_of(config)
     if len(inhibits) != 1:
         return [f"{len(inhibits)} inhibit rules take {GATE_ALERT} as their source"]
     [inhibit] = inhibits
@@ -138,11 +143,13 @@ def test_the_rendered_inhibit_rule_reaches_exactly_the_dependents():
 
 def test_an_inhibit_target_that_misses_the_dependents_is_flagged():
     config = copy.deepcopy(rendered_config())
-    config["inhibit_rules"][0]["target_matchers"] = ['requires="wam"']
+    [inhibit] = inhibits_of(config)
+    inhibit["target_matchers"] = ['requires="wam"']
     assert inhibit_problems(config)
 
 
 def test_an_inhibit_whose_source_is_not_a_rule_is_flagged():
     config = copy.deepcopy(rendered_config())
-    config["inhibit_rules"][0]["source_matchers"] = ['alertname="WANUnreachables"']
+    [inhibit] = inhibits_of(config)
+    inhibit["source_matchers"] = ['alertname="WANUnreachables"']
     assert inhibit_problems(config)
