@@ -43,10 +43,11 @@ def timeline(clock: Clock, steps: list[tuple[float, dict[str, str]]]) -> vp.Stat
     return vp.StatusReads(statuses, clock.sleep, clock)
 
 
-def test_the_grace_is_two_of_the_bundles_largest_retry_interval_on_a_hop_only():
-    """`tag_kustomization` renders `retryInterval: 2m`, so the grace is 240s."""
-    assert vp.expected_set(HOP, PROD).storage_grace_s == 240
-    assert vp.expected_set(NO_HOP, PROD).storage_grace_s == 0
+def test_the_grace_and_the_rollout_bound_derive_from_the_bundle_on_a_hop_only():
+    """`retryInterval: 2m` gives a 240s grace, and `longhorn`'s `10m` timeout adds 600s."""
+    hop, no_hop = vp.expected_set(HOP, PROD), vp.expected_set(NO_HOP, PROD)
+    assert (hop.storage_grace_s, hop.storage_rollout_s) == (240, 840)
+    assert (no_hop.storage_grace_s, no_hop.storage_rollout_s) == (0, 0)
 
 
 def test_the_61c16826_timeline_reads_good():
@@ -67,7 +68,18 @@ def test_a_claim_that_never_recovers_holds_once_the_grace_runs_out():
     assert 30 + expected.storage_grace_s <= clock.now < expected.timeout_s
 
 
-def test_a_longhorn_failure_holds_at_the_first_read():
+def test_a_claim_failure_holds_when_longhorn_never_reads_success():
+    """A hung `longhorn` bounds the window at its own timeout, not at `verify`'s."""
+    expected = vp.expected_set(HOP, PROD)
+    clock = Clock()
+    pending = {**CLAIMS_FAILED, "flux/longhorn": "pending"}
+    verdict = vp.verify(timeline(clock, [(0, pending)]), T, PRIOR, expected)
+    assert verdict == vp.Verdict("failed", ("mosquitto", "pi-peer-backup"))
+    assert expected.storage_rollout_s <= clock.now < expected.timeout_s
+
+
+def test_regression_guard_a_longhorn_failure_stays_final_at_the_first_read():
+    """Passes on the code before #5997 too: it pins that `longhorn` never tolerates itself."""
     expected = vp.expected_set(HOP, PROD)
     clock = Clock()
     states = {**CLAIMS_FAILED, "flux/longhorn": "failure"}
@@ -76,8 +88,8 @@ def test_a_longhorn_failure_holds_at_the_first_read():
     assert clock.sleeps == 0
 
 
-def test_without_a_hop_a_claims_failure_holds_at_the_first_read():
-    """Regression guard: the tolerance is scoped to a revision that expects `longhorn`."""
+def test_regression_guard_without_a_hop_a_claims_failure_holds_at_the_first_read():
+    """Passes on the code before #5997 too: the tolerance needs a revision expecting `longhorn`."""
     expected = vp.expected_set(NO_HOP, PROD)
     clock = Clock()
     verdict = vp.verify(timeline(clock, [(0, CLAIMS_FAILED)]), T, PRIOR, expected)

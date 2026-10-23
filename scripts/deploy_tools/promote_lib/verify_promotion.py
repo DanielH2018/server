@@ -41,14 +41,15 @@ job moved `prod`, less MOVED_AT_SKEW_S, so an older status reads as no status at
 
 THE VERDICT. Every expected status `success` is `good`. Any expected `failure` or `error` is
 `failed`, naming those. At the timeout it is `failed`, naming every expected name that is not
-`success`. A claim's failure in a Longhorn hop is provisional (THE STORAGE ROLLOUT). A
+`success`. In a Longhorn hop another name's failure is provisional (THE STORAGE ROLLOUT). A
 missing status, or a `pending` one, keeps the wait going and never reads as success. A status
 read that fails is retried at the next poll. The timeout is derived from T's
 bundle and its changed set (`chained_timeout.promote_timeout`), and capped at
 `chained_timeout.VERIFY_CAP_S`.
 
-THE STORAGE ROLLOUT. While `longhorn` is expected, a claim's failure is provisional until
-`flux/longhorn` has read `success` for a grace (`storage_rollout.py`, #5997).
+THE STORAGE ROLLOUT. While `longhorn` is expected, a failure of any other name is provisional
+until `flux/longhorn` has read `success` for a grace, or `longhorn` overruns its own timeout
+(`storage_rollout.py`, #5997).
 
 THE OTHER TWO HALVES `decide` calls:
   - `wait_settled`, the wait on a verification in flight (the DECIDED marker below);
@@ -194,6 +195,7 @@ class Expected:
         widened: why every name counts as changed, or "" when the digests decided.
         timeout_s: how long to wait.
         storage_grace_s: `storage_rollout.grace_s`, 0 when `longhorn` is not expected.
+        storage_rollout_s: `storage_rollout.rollout_s`, 0 when `longhorn` is not expected.
     """
 
     names: frozenset[str]
@@ -201,6 +203,7 @@ class Expected:
     widened: str
     timeout_s: int
     storage_grace_s: int = 0
+    storage_rollout_s: int = 0
 
 
 def expected_set(target: dict[str, bytes], prod: dict[str, bytes] | None) -> Expected:
@@ -218,12 +221,14 @@ def expected_set(target: dict[str, bytes], prod: dict[str, bytes] | None) -> Exp
     depends_on, suspended = bundle_graph(target, docs)
     old = bundle_digests(prod) if prod is not None else None
     found = changed_set(bundle_digests(target), old, depends_on, suspended)
+    grace = storage_rollout.grace_s(docs, found.names)
     return Expected(
         names=found.names | {ROOT},
         dependents=found.names - found.direct,
         widened=found.widened,
         timeout_s=promote_timeout(docs, found.names),
-        storage_grace_s=storage_rollout.grace_s(docs, found.names),
+        storage_grace_s=grace,
+        storage_rollout_s=storage_rollout.rollout_s(docs, grace),
     )
 
 
@@ -342,7 +347,9 @@ def verify(
     started = reads.clock()
     states: dict[str, str] = {}
     last = ""
-    window = storage_rollout.Window(names, expected.storage_grace_s)
+    window = storage_rollout.Window(
+        names, expected.storage_grace_s, expected.storage_rollout_s
+    )
     while True:
         try:
             states = reads.statuses(target, since)
