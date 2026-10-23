@@ -448,3 +448,169 @@ tests:
       - eval_time: 5m
         alertname: B2FreeTierHeadroomLow
         exp_alerts: []
+
+  # THE UNGATED FAMILY (A6-6). The five rows have no gate, so every gauge is 0 from the first
+  # sample and all five rules fire at once, with no `for:` and no `requires` label.
+  - interval: 1m
+    input_series:
+      - series: homelab_check_success{job="monitor-bridge",instance="monitor-bridge.homelab.svc:9181",check="arr_queue"}
+        values: "0x5"
+      - series: homelab_check_success{job="monitor-bridge",instance="monitor-bridge.homelab.svc:9181",check="gitops_alive"}
+        values: "0x5"
+      - series: homelab_check_success{job="monitor-bridge",instance="monitor-bridge.homelab.svc:9181",check="gitops_status"}
+        values: "0x5"
+      - series: homelab_check_success{job="monitor-bridge",instance="monitor-bridge.homelab.svc:9181",check="etcd_restore_drill"}
+        values: "0x5"
+      - series: homelab_check_success{job="monitor-bridge",instance="monitor-bridge.homelab.svc:9181",check="ha_heartbeat"}
+        values: "0x5"
+    alert_rule_test:
+      - eval_time: 1m
+        alertname: ArrQueueNeedsReview
+        exp_alerts:
+          - exp_labels:
+              job: monitor-bridge
+              instance: monitor-bridge.homelab.svc:9181
+              check: arr_queue
+              severity: warning
+              service: arr
+              shadow: "true"
+            exp_annotations:
+              summary: A Sonarr or Radarr queue item needs review, or an arr API stayed unreachable.
+              description: >-
+                A queue item is in warning, importBlocked, or importPending with a status message,
+                which is the shape of the 2026-07-01 fake-episode .exe. An arr API that stays
+                unreachable past ARR_FETCH_CONSECUTIVE cycles pages the same way. The monitor-bridge
+                log in the homelab namespace names the release and the app.
+      - eval_time: 1m
+        alertname: GitOpsDeployerNotTicking
+        exp_alerts:
+          - exp_labels:
+              job: monitor-bridge
+              instance: monitor-bridge.homelab.svc:9181
+              check: gitops_alive
+              severity: warning
+              service: gitops-deploy
+              shadow: "true"
+            exp_annotations:
+              summary: The pull-based deployer on daniel-box has not ticked within GITOPS_MAX_AGE_MIN.
+              description: >-
+                The deployer's last_run marker is older than GITOPS_MAX_AGE_MIN, missing or
+                unparseable. Run systemctl status gitops-deploy.timer on daniel-box and read the
+                SessionStart banner's parked state.
+      - eval_time: 1m
+        alertname: GitOpsDeployerParked
+        exp_alerts:
+          - exp_labels:
+              job: monitor-bridge
+              instance: monitor-bridge.homelab.svc:9181
+              check: gitops_status
+              severity: warning
+              service: gitops-deploy
+              shadow: "true"
+            exp_annotations:
+              summary: The deployer is parked or owes an apply.
+              description: >-
+                One of these holds: a held SHA after a failed health gate, a diverged tree, a busy
+                service lock, a tree behind origin for 6h, a setup role only a hand can apply, or an
+                image bump a broad tick deferred for lack of budget. The monitor-bridge log names
+                which. gitops_state.py clears a marker once the cause is fixed.
+      - eval_time: 1m
+        alertname: EtcdRestoreDrillFailing
+        exp_alerts:
+          - exp_labels:
+              job: monitor-bridge
+              instance: monitor-bridge.homelab.svc:9181
+              check: etcd_restore_drill
+              severity: warning
+              service: etcd
+              shadow: "true"
+            exp_annotations:
+              summary: The weekly etcd restore drill has not passed within 8 days.
+              description: >-
+                No list-only drill has ever passed, the last-success-list-only stamp on daniel-box is
+                older than 8 days, or the pod cannot read the stamp. Run journalctl for
+                etcd-restore-drill on daniel-box and check the stamp's mode. The runbook is
+                k3s-etcd-restore.
+      - eval_time: 1m
+        alertname: HomeAssistantAutomationsStalled
+        exp_alerts:
+          - exp_labels:
+              job: monitor-bridge
+              instance: monitor-bridge.homelab.svc:9181
+              check: ha_heartbeat
+              severity: warning
+              service: home-assistant
+              shadow: "true"
+            exp_annotations:
+              summary: Home Assistant's scheduler heartbeat is stale, or HA banned an IP.
+              description: >-
+                Either HA is up with its automations not running, or HA banned an IP in the last
+                hour. A ban of a cluster gateway locks out everything behind it, so read
+                /config/ip_bans.yaml on a ban.
+
+  # One ungated row down with the others up fires that row's rule alone, on its first 0 sample.
+  - interval: 1m
+    input_series:
+      - series: homelab_check_success{job="monitor-bridge",instance="monitor-bridge.homelab.svc:9181",check="arr_queue"}
+        values: "1x5"
+      - series: homelab_check_success{job="monitor-bridge",instance="monitor-bridge.homelab.svc:9181",check="gitops_alive"}
+        values: "1x2 0x3"
+      - series: homelab_check_success{job="monitor-bridge",instance="monitor-bridge.homelab.svc:9181",check="gitops_status"}
+        values: "1x5"
+      - series: homelab_check_success{job="monitor-bridge",instance="monitor-bridge.homelab.svc:9181",check="etcd_restore_drill"}
+        values: "1x5"
+      - series: homelab_check_success{job="monitor-bridge",instance="monitor-bridge.homelab.svc:9181",check="ha_heartbeat"}
+        values: "1x5"
+    alert_rule_test:
+      - eval_time: 2m
+        alertname: GitOpsDeployerNotTicking
+        exp_alerts: []
+      - eval_time: 3m
+        alertname: GitOpsDeployerNotTicking
+        exp_alerts:
+          - exp_labels:
+              job: monitor-bridge
+              instance: monitor-bridge.homelab.svc:9181
+              check: gitops_alive
+              severity: warning
+              service: gitops-deploy
+              shadow: "true"
+            exp_annotations:
+              summary: The pull-based deployer on daniel-box has not ticked within GITOPS_MAX_AGE_MIN.
+              description: >-
+                The deployer's last_run marker is older than GITOPS_MAX_AGE_MIN, missing or
+                unparseable. Run systemctl status gitops-deploy.timer on daniel-box and read the
+                SessionStart banner's parked state.
+      - eval_time: 5m
+        alertname: ArrQueueNeedsReview
+        exp_alerts: []
+      - eval_time: 5m
+        alertname: GitOpsDeployerParked
+        exp_alerts: []
+      - eval_time: 5m
+        alertname: EtcdRestoreDrillFailing
+        exp_alerts: []
+      - eval_time: 5m
+        alertname: HomeAssistantAutomationsStalled
+        exp_alerts: []
+
+  # The zero-series case for the ungated family: a missing row is BridgeCheckStale's page, so
+  # no rule fires on an exporter with no `homelab_check_success` series.
+  - interval: 1m
+    input_series: []
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: ArrQueueNeedsReview
+        exp_alerts: []
+      - eval_time: 5m
+        alertname: GitOpsDeployerNotTicking
+        exp_alerts: []
+      - eval_time: 5m
+        alertname: GitOpsDeployerParked
+        exp_alerts: []
+      - eval_time: 5m
+        alertname: EtcdRestoreDrillFailing
+        exp_alerts: []
+      - eval_time: 5m
+        alertname: HomeAssistantAutomationsStalled
+        exp_alerts: []
