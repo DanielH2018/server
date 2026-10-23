@@ -21,8 +21,9 @@ HOST_INPUTS = (
     "uv.lock",
     # Host mode removes its key names (`host.secret_names`).
     "ansible/vars/secrets.yml",
-    # One of `host_sources.SHARED_FILES`, which H3.8b copies into the Pi's package.
+    # Two of `host_sources.SHARED_FILES`, which H3.8b and M6 B5 copy into the Pi's package.
     "ansible/roles/setup/initial_setup/files/kuma-push-lib.sh",
+    "ansible/roles/setup/initial_setup/files/homelab-check-lib.sh",
     # Past the plan's list, found by the audit test: ansible-core reads `ansible.cfg` from the
     # render's working directory, and `homelab_render.py` imports the other two at load, for
     # cluster mode.

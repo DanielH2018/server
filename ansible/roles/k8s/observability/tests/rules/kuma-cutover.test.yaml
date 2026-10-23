@@ -154,6 +154,14 @@ tests:
             exp_annotations:
               summary: Kuma's Daniel Pi WG Easy tile is gone and no alert rule pages in its place.
               description: "M6's cutover removed the Daniel Pi WG Easy tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
+          - exp_labels: {monitor_name: Daniel Pi SD Health, service: uptime-kuma, severity: critical}
+            exp_annotations:
+              summary: Kuma's Daniel Pi SD Health tile is gone and no alert rule pages in its place.
+              description: "M6's cutover removed the Daniel Pi SD Health tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
+          - exp_labels: {monitor_name: Daniel Pi Recovery, service: uptime-kuma, severity: critical}
+            exp_annotations:
+              summary: Kuma's Daniel Pi Recovery tile is gone and no alert rule pages in its place.
+              description: "M6's cutover removed the Daniel Pi Recovery tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
           - exp_labels: {monitor_name: Email-to-RSS (Worker), service: uptime-kuma, severity: critical}
             exp_annotations:
               summary: Kuma's Email-to-RSS (Worker) tile is gone and no alert rule pages in its place.
@@ -329,6 +337,10 @@ tests:
         values: '1x140'
       - series: 'monitor_status{monitor_name="Daniel Pi WG Easy", monitor_type="http"}'
         values: '1x140'
+      - series: 'monitor_status{monitor_name="Daniel Pi SD Health", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Daniel Pi Recovery", monitor_type="push"}'
+        values: '1x140'
       - series: 'monitor_status{monitor_name="Email-to-RSS (Worker)", monitor_type="http"}'
         values: '1x140'
       - series: 'monitor_status{monitor_name="iCal Proxy k8s", monitor_type="http"}'
@@ -458,6 +470,10 @@ tests:
       - series: 'monitor_status{monitor_name="Daniel Pi Host", monitor_type="http"}'
         values: '1x140'
       - series: 'monitor_status{monitor_name="Daniel Pi WG Easy", monitor_type="http"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Daniel Pi SD Health", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Daniel Pi Recovery", monitor_type="push"}'
         values: '1x140'
       - series: 'monitor_status{monitor_name="Email-to-RSS (Worker)", monitor_type="http"}'
         values: '1x140'
@@ -598,6 +614,10 @@ tests:
         values: '1x160'
       - series: 'monitor_status{monitor_name="Daniel Pi WG Easy", monitor_type="push"}'
         values: '1x160'
+      - series: 'monitor_status{monitor_name="Daniel Pi SD Health", monitor_type="push"}'
+        values: '1x160'
+      - series: 'monitor_status{monitor_name="Daniel Pi Recovery", monitor_type="push"}'
+        values: '1x160'
       - series: 'monitor_status{monitor_name="Email-to-RSS (Worker)", monitor_type="push"}'
         values: '1x160'
       - series: 'monitor_status{monitor_name="iCal Proxy k8s", monitor_type="push"}'
@@ -727,6 +747,10 @@ tests:
       - series: 'monitor_status{monitor_name="Daniel Pi Host", monitor_type="push"}'
         values: '1x1500'
       - series: 'monitor_status{monitor_name="Daniel Pi WG Easy", monitor_type="push"}'
+        values: '1x1500'
+      - series: 'monitor_status{monitor_name="Daniel Pi SD Health", monitor_type="push"}'
+        values: '1x1500'
+      - series: 'monitor_status{monitor_name="Daniel Pi Recovery", monitor_type="push"}'
         values: '1x1500'
       - series: 'monitor_status{monitor_name="Email-to-RSS (Worker)", monitor_type="push"}'
         values: '1x1500'

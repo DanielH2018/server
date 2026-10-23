@@ -242,6 +242,11 @@ KUMA_RETIRING_TAGS = frozenset(
         "loki-read-route-health",
         "longhorn-backup-health",
         "manifest-prune-check",
+        # B5: the Pi package's two token heartbeats. They are also HC_ROUTED_TAGS while they
+        # read KUMA_PUSH_OK, and listing them here keeps their refused pushes quiet once
+        # Cutover-2 drops that routing.
+        "pi-recovery-health",
+        "pi-sd-health",
         "release-staleness-check",
         "secret-rotation-audit",
         "setup-drift-check",

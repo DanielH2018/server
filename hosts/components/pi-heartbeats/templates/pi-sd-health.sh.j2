@@ -33,6 +33,11 @@ source /usr/lib/homelab/kuma-push-lib.sh || {
   logger -t pi-sd-health "kuma-push-lib.sh missing — reinstall homelab-daniel-pi"
   exit 1
 }
+# shellcheck source=/dev/null
+source /usr/lib/homelab/homelab-check-lib.sh || {
+  logger -t pi-sd-health "homelab-check-lib.sh missing — reinstall homelab-daniel-pi"
+  exit 1
+}
 
 COUNTER=/sys/fs/ext4/mmcblk0p2/errors_count
 KUMA_HOST="uptime-kuma.local.{{ domain }}"
@@ -91,6 +96,15 @@ if [ "$LOG_FSTYPE" != "tmpfs" ]; then
   STATUS=down
   MSG="${MSG}; /var/log is not log2ram's tmpfs (fstype '${LOG_FSTYPE:-none}'), so logs write to the SD card — check systemctl status log2ram"
 fi
+
+# The textfile verdict for Prometheus, before the push: kuma_push retries for over 60s on a failed
+# push, and the verdict should not wait behind it (M6 B5, docs/target-architecture/monitoring/
+# m6-retire-kuma.md). DEADLINE_S is 2 x the timer's 300s period + 300s, as M3 derives it; a
+# test pins the rule's literals to it. The directory is root:sys_user 2775, so this unit's user
+# can write it.
+DEADLINE_S=900
+write_check_textfile pi-sd-health "$([ "$STATUS" = up ] && echo 1 || echo 0)" "$(date +%s)" "$DEADLINE_S" \
+  || logger -t pi-sd-health "textfile write failed (status=${STATUS})"
 
 kuma_push "$STATUS" "$MSG" "$PUSH_URL" "$KUMA_HOST" "$KUMA_RESOLVE_IP" pi-sd-health
 
