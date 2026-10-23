@@ -261,6 +261,7 @@ def bundle_ordering(
         },
         flux_owned=frozenset(owned),
         suspended=frozenset(tag for tag, own in fields.items() if own.get("suspend")),
+        workload_namespace=str(group["k8s_namespace"]),
     )
 
 

@@ -14,8 +14,8 @@ A placeholder render with `--role` writes, for each tag it names:
   *Per-role fields*). `<tag>-deferred` always renders `prune: true`.
   A role that sets `flux_suspend: true` renders `suspend: true` on every one of its tag's
   Kustomizations (C3 *Suspension*, D5.1b);
-- `DIR/flux/<kind>.yaml` and `DIR/cluster/<kind>/` for each `SHARED_KINDS` member: `cluster-vars`
-  and `soak` (`soak.py`);
+- `DIR/flux/<kind>.yaml` and `DIR/cluster/<kind>/` for each `SHARED_KINDS` member: `cluster-vars`,
+  `soak` (`soak.py`) and `homelab-namespace` (`namespace.py`);
 - `DIR/flux/kustomization.yaml`, which lists every other file in `DIR/flux/`, so the root
   Kustomization `homelab` applies each of them;
 - `DIR/digests.json`, each published name's `own` and `footprint` digest, and each tag's
@@ -63,6 +63,7 @@ import yaml
 from lib.k8s_roles import role_fields, snapshot_claims
 from lib.repo_paths import K8S_ROLES
 from renderer.renderer_lib.bundle_readme import BUNDLE_README, README
+from renderer.renderer_lib.namespace import HOMELAB_NAMESPACE, namespace_documents
 from renderer.renderer_lib.suspension import refuse_suspend_false, suspends_tag
 from renderer.renderer_lib.ordering import (
     ANSIBLE_OWNED_DEPS,
@@ -121,10 +122,10 @@ SUBSTITUTE_OPT_OUT = "kustomize.toolkit.fluxcd.io/substitute"
 # D5.3b2 `soak` and D5's namespace PR `homelab-namespace`, each in the PR that renders it.
 # Membership is unconditional: a render that cannot copy the cluster file fails, so deleting
 # the file fails CI rather than narrowing the census.
-SHARED_KINDS: frozenset[str] = frozenset({CLUSTER_VARS, "soak"})
-# The shared kinds no PR renders yet, a closed literal set (D5.1a1). A member cannot join
-# `SHARED_KINDS` before its file exists, so this list keeps a deploy tag from taking its name
-# meanwhile. A name stays here after it joins.
+SHARED_KINDS: frozenset[str] = frozenset({CLUSTER_VARS, "soak", HOMELAB_NAMESPACE})
+# D5's shared kinds, reserved before any PR rendered them, a closed literal set (D5.1a1). A
+# member cannot join `SHARED_KINDS` before its file exists, so this list kept a deploy tag from
+# taking its name meanwhile. A name stays here after it joins, as both have.
 RESERVED_NAMES: frozenset[str] = frozenset({"soak", "homelab-namespace"})
 
 
@@ -148,6 +149,8 @@ FOOTPRINT_RULES: dict[str, Callable[[FootprintFacts], Iterable[str]]] = {
     CLUSTER_VARS: lambda facts: facts.substituting,
     # The soak judges the tags and changes none of them; C2 adds it to any set holding a tag.
     "soak": lambda facts: (),
+    # Its Namespace and LimitRange admit every tag's pods (D6, *What a footprint counts*).
+    HOMELAB_NAMESPACE: lambda facts: facts.tags,
 }
 
 
@@ -292,6 +295,22 @@ def cluster_vars_files(dotenv: str, timeout: str) -> dict[str, str]:
         f"{directory}/{CLUSTER_VARS_FILE}": dotenv,
         f"{directory}/{KUSTOMIZATION}": yaml.safe_dump(generator, sort_keys=False),
     }
+
+
+def homelab_namespace_files(timeout: str) -> dict[str, str]:
+    """The `homelab-namespace` kind's files by bundle path, around `namespace.py`'s manifests.
+
+    Its Kustomization takes a tag's fields, `timeout` among them, and no `postBuild`,
+    `decryption` or edge. `deletionPolicy: Orphan` keeps both objects if the kind leaves.
+    """
+    held = {
+        n: yaml.safe_dump(d, sort_keys=False) for n, d in namespace_documents().items()
+    }
+    held[KUSTOMIZATION] = kustomization_text(set(held))
+    files = {f"{CLUSTER_DIR}/{HOMELAB_NAMESPACE}/{n}": t for n, t in held.items()}
+    doc = tag_kustomization(HOMELAB_NAMESPACE, False, timeout)
+    files[f"{FLUX_DIR}/{HOMELAB_NAMESPACE}.yaml"] = yaml.safe_dump(doc, sort_keys=False)
+    return files
 
 
 def flux_files(
@@ -553,6 +572,7 @@ def bundle_files(
     from renderer.renderer_lib.soak import soak_pair
 
     shared = cluster_vars_files(cluster_vars, timeout)
+    shared |= homelab_namespace_files(timeout)
     flux = {p: t for p, t in shared.items() if p.startswith(f"{FLUX_DIR}/")}
     cluster = {
         f"{CLUSTER_DIR}/{name}/{file}": text

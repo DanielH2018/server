@@ -635,18 +635,8 @@ sudo k3s kubectl apply --server-side --field-manager=kustomize-controller -k <ou
 uv run ansible-playbook ansible/k3s-bringup.yml --tags kubeconfig
 ```
 
-**Until D5's namespace PR lands**, the `homelab` Namespace and its LimitRange come only from
-the Ansible k8s play's `pre_tasks`. So run the deploy once first. Every k8s service is
-flux-owned, so its batches visit none. Then check that both objects exist:
-
-```bash
-./scripts/deploy.sh
-kubectl get namespace homelab
-kubectl -n homelab get limitrange
-```
-
-The namespace PR deletes this step, because the Kustomization `homelab-namespace` then
-creates both objects.
+The `homelab` Namespace and its LimitRange come from the shared kind `homelab-namespace`, which
+step 6 applies. The Ansible k8s play creates neither object.
 
 1. Confirm that `prod`'s `longhorn-backup` render arms both backup targets, from a checkout of
    `prod`'s commit (step 2 reads it):
@@ -733,8 +723,8 @@ creates both objects.
 
 6. Apply the child Kustomizations the restores need: the `flux/<tag>.yaml` of each plumbing
    tag (`cluster-base`, `metallb`, `coredns`, `longhorn` and `longhorn-backup`) and of every
-   Kustomization in their `dependsOn` closure, `flux/cluster-vars.yaml`, and, once D5's
-   namespace PR adds it, `flux/homelab-namespace.yaml`. The closure never holds
+   Kustomization in their `dependsOn` closure, `flux/cluster-vars.yaml` and
+   `flux/homelab-namespace.yaml`. The closure never holds
    `flux-deferred` or the root, because `flux-deferred` applies the root.
    `scripts/renderer/tests/test_renderer_bootstrap_documents.py` fails a plumbing tag whose
    closure reaches either.
@@ -789,6 +779,9 @@ without a conflict.
 `ansible/tests/repo/test_flux_bootstrap_section.py` fails this section when the root's apply
 comes before the restore step, when a hand apply lacks `--field-manager=kustomize-controller`,
 and when step 2 names `reset_to_last_good` without its condition and the recorded exception.
+It also runs R4's PR 7b `awk` program over this file and fails unless the program exits 0 with
+empty output. The program refuses an Ansible deploy, a hand suspend of the root and the
+`flux_sync_suspend` key set to `true`.
 
 ### Why the root is withheld, not suspended
 
@@ -1240,10 +1233,11 @@ A wait shorter than a verification is safe and costs a promotion. `decide` gives
   `IN_FLIGHT_WAIT_S`;
 - a revision that changes every importer of `workload-shell.yml.j2` queues in rounds of up
   to each role's `timeout`, so it can reach the cap. The soak's own chain already does: on
-  2026-10-22 the published bundle's 114 Kustomizations, all counted as changed, chain to
-  32256s against the cap's 19800s. Longhorn v1.13.0 raised the `longhorn` timeout from 2m to
-  10m, which moved the chain from 31920s (#5972), and D5 step 29's `flux` and
-  `flux-deferred` moved it from 32016s. The soak's wait is therefore clamped at the
+  2026-10-23 the published bundle's 115 Kustomizations, all counted as changed, chain to
+  33006s against the cap's 19800s. Longhorn v1.13.0 raised the `longhorn` timeout from 2m to
+  10m, which moved the chain from 31920s (#5972), D5 step 29's `flux` and
+  `flux-deferred` moved it from 32016s, and D5 step 30's `homelab-namespace`, which every
+  tag rendering into `homelab` depends on, moved it from 32256s. The soak's wait is therefore clamped at the
   cap, as `verify`'s is, and the `# DECIDED:` at `chained_timeout.py:VERIFY_CAP_S` records
   why the clamp stands (#5868).
 
@@ -1359,6 +1353,10 @@ render publishes, and the publish job renders every published tag. The edges are
   `observability`, so `headlamp-deferred` and `netpol-baseline-deferred` wait on
   `observability` once it is flux-owned and annotate it until then.
 - **`cluster-vars`**, for a substituting directory, as above.
+- **`homelab-namespace`**, for a tag with a document in `k8s_namespace` in any of its
+  directories. `bundle_ordering` passes that name, and the tag's `-snapshot`, `-prepull` and
+  `-precheck` Kustomizations copy the edge with the tag's others. The shared kind is in every
+  bundle, so the edge never names a missing Kustomization.
 - **An edge to a suspended tag is dropped.** An edge to a Kustomization of a tag whose role
   sets `flux_suspend: true` is left out, and the annotation `homelab/suspended-deps` lists it. netpol-baseline's edges to every `<tag>-deferred` drop
   the same way, and so do the edges among the suspended tag's own Kustomizations. The PR that
@@ -1507,12 +1505,29 @@ census fails a bundle that lacks either. Each member needs a footprint rule in
 - `promote.py verify` expects `flux/cluster-vars` like a tag's status whenever the kind's
   footprint moves, its first promotion included.
 
+`homelab-namespace` is the only writer of the `homelab` Namespace and its LimitRange
+(`scripts/renderer/renderer_lib/namespace.py`, D5 step 30):
+
+- `cluster/homelab-namespace/` holds the Namespace `k8s_namespace`, labelled with
+  `k8s_psa_labels` and `kustomize.toolkit.fluxcd.io/prune: disabled`, and the LimitRange
+  `default-container-limits` from `k8s_default_limitrange` with `type: Container`. An empty
+  `k8s_default_limitrange` renders no LimitRange, and the kind's prune then deletes the live one.
+- `flux/homelab-namespace.yaml` sets a tag's fields and no edge. Its `deletionPolicy: Orphan`
+  keeps both objects if the kind leaves the bundle, as a revert of D5's namespace PR makes it.
+- `ansible/deploy.yml` applies neither object. Its two namespace `pre_tasks` went in the same
+  commit that added this kind, rather than staying behind a gate on role ownership, because one
+  service handed back would open that gate and give the objects a second writer.
+  `ansible/tests/deploy/test_k8s_play_applies_no_namespace.py` evaluates every `pre_tasks` entry
+  of the k8s play against an all-flux inventory and a handed-back one, and fails on a task that
+  would apply a Namespace or a LimitRange.
+- Its footprint rule counts its files for every flux-owned tag, because both objects admit
+  every tag's pods.
+
 Every `cluster` render refuses a deploy tag named `homelab`, the root's name, after a
 `SHARED_KINDS` member, or after a member of `RESERVED_NAMES`, the literal list beside it. It
 also refuses a tag ending in `-deferred`, `-snapshot`, `-prepull`, `-precheck` or `-verify`. `RESERVED_NAMES` holds
-`soak` and `homelab-namespace`, D5's shared kinds. `soak` is rendered and in `SHARED_KINDS`
-(*The soak Job*). `homelab-namespace` joins only in the PR that renders it, because the census
-fails a member with no file. The suffixes keep a tag's Kustomization from colliding with another tag's per-tag kind.
+`soak` and `homelab-namespace`, D5's shared kinds. Both are rendered and in `SHARED_KINDS`
+(*The soak Job*, and `homelab-namespace` below). The suffixes keep a tag's Kustomization from colliding with another tag's per-tag kind.
 The publish census refuses a published tag that takes any of these names as well.
 
 ### `digests.json`

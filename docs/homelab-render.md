@@ -917,12 +917,15 @@ The `diff` must print nothing, and both files must hold one line per directory.
 ## What the render does not cover
 
 Zero diff covers what the manifests role renders: each role's applied directory, its deferred
-directory and its claim files. Three channels stay outside it:
+directory and its claim files. Two channels stay outside it:
 
 - objects that role tasks apply, create, patch, run or write through `exec` themselves, such
   as `--from-file` ConfigMaps, probe and gate Jobs and `kubectl run` pods;
-- files that nine roles write to hosts, which belong to the host plane;
-- the `homelab` Namespace and its LimitRange, which `ansible/deploy.yml` builds inline.
+- files that nine roles write to hosts, which belong to the host plane.
+
+The `homelab` Namespace and its LimitRange are not a channel of their own. The shared kind
+`homelab-namespace` renders both into the bundle, and `ansible/deploy.yml` applies neither
+(D5 step 30).
 
 The first channel is a census. The `render-does-not-cover-role-writes` row of
 `ansible/tests/repo/test_census_rows_roles.py` reads every task file under

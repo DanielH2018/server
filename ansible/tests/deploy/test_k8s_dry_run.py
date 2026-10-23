@@ -41,7 +41,6 @@ from _k8s_guards import (
     _role_with_tasks,
     _task_chunks,
 )
-from _k8s_render import deploy_play
 
 _REPO = REPO
 _MANIFESTS = _REPO / "ansible/roles/k8s/manifests/tasks/main.yml"
@@ -190,13 +189,6 @@ def test_the_render_directory_fact_survives_every_tag_selection() -> None:
             f"{fragment!r} is tagged {tags}, not ['always']. Any narrower tag is dropped by one "
             "of --tags config / --tags deploy / --skip-tags deploy."
         )
-
-
-def test_namespace_apply_is_guarded() -> None:
-    task = _named(deploy_play()["pre_tasks"], "Apply the workload namespace")
-    assert _GUARD in _when(task), (
-        "the namespace apply writes to the cluster on a dry run"
-    )
 
 
 def _all_vars() -> dict:
