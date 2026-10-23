@@ -7,6 +7,8 @@ Every edge is generated, never hand-written, from an `Ordering` the caller reads
   other role is dropped, because it would name a Kustomization that does not exist, and the
   annotation `homelab/ansible-owned-deps` lists it for a reader;
 - a `K8S_APPLIES_LAST` tag also depends on every other tag's `<tag>-deferred`;
+- a tag with a document in `k8s_namespace`, in any of its directories, depends on the shared
+  kind `homelab-namespace`, which creates that Namespace and its LimitRange (D5 step 30);
 - `<tag>-deferred` depends on `<tag>`, and on the role that creates a namespace one of its
   documents names, by the same flux-owned rule;
 - `<tag>-snapshot` inherits `<tag>`'s edges (C3), and `<tag>` then depends on it, so the role
@@ -46,6 +48,7 @@ import yaml
 
 from lib import yaml_fast
 from lib.repo_paths import K8S_ROLES
+from renderer.renderer_lib.namespace import HOMELAB_NAMESPACE
 
 # The suffix of a tag's deferred apply: its directory under `cluster/` and its Kustomization.
 # A deploy tag may not end in it (`bundle.reserved_tags`).
@@ -132,6 +135,9 @@ class Ordering:
         suspended: The tags whose role sets `flux_suspend: true`, read over every flux-owned
             role so a `--role` subset drops the same edges. An edge to any of their
             Kustomizations is dropped and annotated (`drop_suspended`).
+        workload_namespace: `k8s_namespace`, whose Namespace the shared kind
+            `homelab-namespace` creates. A tag with a document in it depends on that kind.
+            None generates no such edge.
     """
 
     deps: Mapping[str, Iterable[str]] = field(default_factory=dict)
@@ -139,6 +145,7 @@ class Ordering:
     namespace_roles: Mapping[str, str] = field(default_factory=dict)
     flux_owned: frozenset[str] | None = None
     suspended: frozenset[str] = frozenset()
+    workload_namespace: str | None = None
 
 
 NO_EDGES = Edges()
@@ -387,6 +394,16 @@ def kustomization_edges(
             # fences, so netpol-baseline waiting on another tag's `-verify` would run that Job
             # before the fences it dials are applied. A snapshot gates only its own tag.
             kept |= {other + DEFERRED_SUFFIX for other in deferring if other != tag}
+        if ordering.workload_namespace and ordering.workload_namespace in {
+            ns
+            for name in (tag, *(tag + suffix for suffix in TAG_KIND_SUFFIXES))
+            if name in directories
+            for ns in _namespaces(directories[name])
+        }:
+            # Every bundle renders the shared kind, so the edge always names a Kustomization
+            # that exists. The `-snapshot`, `-prepull` and `-precheck` copies below inherit it,
+            # and the tag's other kinds wait on `<tag>`.
+            kept.add(HOMELAB_NAMESPACE)
         edges[tag] = Edges(frozenset(kept), frozenset(wanted - owned))
     for tag in deferring:
         name = tag + DEFERRED_SUFFIX
