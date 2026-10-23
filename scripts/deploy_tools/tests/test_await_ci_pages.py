@@ -16,8 +16,16 @@ REQUIRED = frozenset({"prek (lint + validate + tests + secrets)"})
 
 
 def _stub_two_pages(monkeypatch, key: str, page_two: list[dict], total=None):
-    """A full page 1 of filler entries under `key`, then `page_two`, by the URL's `page`."""
-    page_one = [{"name": f"filler-{i}"} for i in range(100)]
+    """A full page 1 under `key`, then `page_two`, by the URL's `page`.
+
+    Page 1 ends in a passing required run, so a one-page read of it is a false green.
+    """
+    required = {
+        "name": next(iter(REQUIRED)),
+        "status": "completed",
+        "conclusion": "success",
+    }
+    page_one = [{"name": f"filler-{i}"} for i in range(99)] + [required]
     count = 100 + len(page_two) if total is None else total
 
     class _Resp:

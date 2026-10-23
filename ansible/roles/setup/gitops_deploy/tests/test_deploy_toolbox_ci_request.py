@@ -167,10 +167,13 @@ def test_a_disarmed_gate_passes_without_asking_github(monkeypatch):
 def _stub_two_pages(
     monkeypatch, page_two: list[dict], total: int | None = None
 ) -> list:
-    """A full page 1 of passing runs, then `page_two`, answered by the URL's `page`."""
+    """A full page 1 of passing runs, then `page_two`, answered by the URL's `page`.
+
+    Page 1 passes both required contexts, so a one-page read of it is a false green.
+    """
     page_one = [
-        {"name": f"filler-{i}", "status": "completed", "conclusion": "success"}
-        for i in range(100)
+        {"name": name, "status": "completed", "conclusion": "success"}
+        for name in [f"filler-{i}" for i in range(98)] + sorted(CONTEXTS)
     ]
     count = 100 + len(page_two) if total is None else total
     urls: list = []
