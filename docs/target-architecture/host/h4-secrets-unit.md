@@ -5,7 +5,9 @@ Depends on: H3
 Unblocks: H5, H6
 
 PR H4.1a1, the secrets script: decrypt and render: [#6056](https://github.com/DanielH2018/server/pull/6056).
+PR H4.1a2, the secrets script: the restart queue: [#6059](https://github.com/DanielH2018/server/pull/6059).
 PR H4.1d, the per-host SOPS files' tool: [#6058](https://github.com/DanielH2018/server/pull/6058). It adds the ADR-0022 amendment, which the operator accepted on 2026-10-23. It also corrects this plan: `domain` left SOPS in #5087, so no host file carries it.
+PR H4.3b2, one reader for a role's leading `end_role` guard: [#6057](https://github.com/DanielH2018/server/pull/6057), merged 2026-10-23, `nothing-to-deploy`. It added `setup_gates.role_end_guard` and `role_end_hosts`, and the census, `land_reach.setup_role_hosts` and `glance_facts.setup_glance_lines` now read the guard. The live-tree outputs were byte-identical before and after.
 
 This slice adds `homelab-secrets.service`, which decrypts a per-host SOPS file on the host
 with the host's own age key. It proves the unit on the UPS shutdown chain of daniel-server,
