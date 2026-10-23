@@ -23,6 +23,6 @@ nut_host_watchdog_armed: true
 
 # One value drives both the cron cadence and the Kuma tile's interval below, so a schedule
 # change cannot leave the tile with a grace period derived from the old one. The tile gets 2x
-# the cadence, which is one missed run of slack — the same ratio daniel-box Disk uses (10 min
-# cron, 1200 s interval).
+# the cadence, which is one missed run of slack — the same ratio the k3s Longhorn Backup tile
+# uses (10 min cron, 1200 s interval).
 nut_host_watchdog_interval_minutes: 10

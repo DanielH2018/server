@@ -298,16 +298,16 @@ def test_every_deploy_pipeline_rule_has_an_expected_outcome():
 
 
 def test_host_sets_names_every_host_check_rule():
-    """Non-vacuity for `host_sets`: M3's four shadow rules, #5672's fan-out idle rule, and
-    H3's paging host-plane rules."""
+    """Non-vacuity for `host_sets`: M3's two shadow collector rules, #5672's fan-out idle rule,
+    and the paging host-plane rules, M3's two disk-health rules among them since its PR 5."""
     assert set(host_sets(shadow=True)) == {
-        "DiskHealthFailed/daniel-box",
-        "DiskHealthNotReporting/daniel-box",
         "TextfileCollectorError/daniel-box",
         "TextfileCollectorError/daniel-server",
         "FanoutSlotsIdleWithFreeWork/daniel-box",
     }
     assert set(host_sets(shadow=False)) >= {
+        "DiskHealthFailed/daniel-box",
+        "DiskHealthNotReporting/daniel-box",
         "HostReconcileFailed/daniel-box",
         "HostReconcileFailed/daniel-server",
         "HostReconcileFailed/daniel-pi",

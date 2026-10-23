@@ -10,14 +10,11 @@
 groups:
   - name: host-checks
     rules:
-      # SHADOW UNTIL M3's PR 5. Kuma's `daniel-box Disk` tile pages the same red verdict until
-      # PR 5 deletes the tile and drops this label in the same commit.
       - alert: DiskHealthFailed
         expr: homelab_check_success{check="disk-health",origin="daniel-box"} == 0
         labels:
           severity: critical
           service: daniel-box
-          shadow: "true"
         annotations:
           summary: daniel-box's root disk check is red.
           description: >-
@@ -48,7 +45,6 @@ groups:
         labels:
           severity: critical
           service: daniel-box
-          shadow: "true"
         annotations:
           summary: daniel-box's root disk check has stopped reporting.
           description: >-

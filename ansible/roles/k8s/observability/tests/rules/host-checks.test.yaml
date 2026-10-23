@@ -32,7 +32,6 @@ tests:
               origin: daniel-box
               severity: critical
               service: daniel-box
-              shadow: "true"
             exp_annotations:
               summary: daniel-box's root disk check has stopped reporting.
               description: >-
@@ -85,8 +84,8 @@ tests:
                 sessions. Read the log of the node-exporter pod's `iscsi-sessions` container
                 on daniel-server.
 
-  # The verdict turns red from minute 3 while the file stays fresh. DiskHealthFailed fires in
-  # shadow at once, and DiskHealthNotReporting stays quiet.
+  # The verdict turns red from minute 3 while the file stays fresh. DiskHealthFailed fires at once,
+  # and DiskHealthNotReporting stays quiet.
   - interval: 1m
     input_series:
       - series: 'homelab_check_success{check="disk-health", instance="daniel-box", job="node", origin="daniel-box"}'
@@ -109,7 +108,6 @@ tests:
               origin: daniel-box
               severity: critical
               service: daniel-box
-              shadow: "true"
             exp_annotations:
               summary: daniel-box's root disk check is red.
               description: >-
@@ -143,7 +141,6 @@ tests:
               origin: daniel-box
               severity: critical
               service: daniel-box
-              shadow: "true"
             exp_annotations:
               summary: daniel-box's root disk check has stopped reporting.
               description: >-
@@ -174,7 +171,6 @@ tests:
               origin: daniel-box
               severity: critical
               service: daniel-box
-              shadow: "true"
             exp_annotations:
               summary: daniel-box's root disk check has stopped reporting.
               description: >-
