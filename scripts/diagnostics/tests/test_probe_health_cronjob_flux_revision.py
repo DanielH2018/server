@@ -18,7 +18,6 @@ from diagnostics.probe_lib.health_kubectl import (
     k8s_cronjob_args,
     k8s_job_pods_args,
     k8s_jobs_args,
-    k8s_kustomization_args,
 )
 from lib import kubectl
 
@@ -26,6 +25,20 @@ CONTENT = "2ca4de5ca3037532ff2e1c787780516d6c6d5a4d0e8a4953d677c9ad1c171a2f"
 CURRENT = CONTENT[:8]
 EARLIER = "7fabd86c"
 NS = "longhorn-system"
+# The renderer's two stamps, `bundle.py:CONTENT_DIGEST` and `cronjob_gate.py:ROLE_DIGEST8`,
+# spelled out so a typo in the probe's own copies fails here.
+CONTENT_DIGEST = "homelab/content-digest"
+ROLE_DIGEST8 = "homelab/role-digest8"
+# The read `homelab-readonly` makes of Kustomization `longhorn-reconcile`.
+KUSTOMIZATION_ARGS = (
+    "-n",
+    "flux-system",
+    "get",
+    "kustomizations.kustomize.toolkit.fluxcd.io",
+    "longhorn-reconcile",
+    "-o",
+    "json",
+)
 
 
 def _gate(cronjob, digest8, created, name_digest, succeeded=1):
@@ -37,11 +50,7 @@ def _gate(cronjob, digest8, created, name_digest, succeeded=1):
             "creationTimestamp": created,
             "labels": {"kustomize.toolkit.fluxcd.io/name": f"{cronjob}-verify"},
         },
-        "spec": {
-            "template": {
-                "metadata": {"annotations": {health_cronjob.ROLE_DIGEST8: digest8}}
-            }
-        },
+        "spec": {"template": {"metadata": {"annotations": {ROLE_DIGEST8: digest8}}}},
         "status": {"succeeded": succeeded, "failed": 0},
     }
 
@@ -61,7 +70,7 @@ def _firing(cronjob, name, created):
 
 
 def _kustomization(content=CONTENT):
-    annotations = {} if content is None else {health_cronjob.CONTENT_DIGEST: content}
+    annotations = {} if content is None else {CONTENT_DIGEST: content}
     return {"metadata": {"name": "longhorn-reconcile", "annotations": annotations}}
 
 
@@ -80,7 +89,7 @@ def _tools(jobs, kustomization):
         tuple(k8s_jobs_args(NS)): {"items": jobs},
     }
     if kustomization is not None:
-        served[tuple(k8s_kustomization_args("longhorn-reconcile"))] = kustomization
+        served[KUSTOMIZATION_ARGS] = kustomization
     for job in jobs:
         served[tuple(k8s_job_pods_args(job["metadata"]["name"], NS))] = pods(
             ("longhorn-reconcile", 0, None)
