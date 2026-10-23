@@ -130,6 +130,7 @@ ALLOWED = {
         "tick",
         "deploy",
         "health_verdict",
+        "host_wait",
     },
 }
 

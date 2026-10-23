@@ -1,4 +1,4 @@
-"""Step 6: the health verdict, and the two halves a healthy deploy can still leave open.
+"""Step 7: the health verdict, and the two halves a healthy deploy can still leave open.
 
 The gate is the half `ansible-playbook` exiting 0 cannot speak to: readiness flips a
 Deployment to Available before a bad liveness probe starts killing it. It is asked with
@@ -140,9 +140,22 @@ def _regate_after_later_deploys(ln: Landing) -> GateResult | None:
     return result._replace(settled=not without)
 
 
+def applied_wording(ln: Landing) -> str:
+    """What the landing applied, for the verdict lines: services, hosts, or both.
+
+    A hosts-only landing, one with host targets and no service tag, never reads "services
+    deployed", whatever else the tick applied for it.
+    """
+    services = bool(promotion.gated_tags(ln) or ln.owned_tags)
+    if not ln.host_targets:
+        return "services deployed"
+    return "services deployed and hosts applied" if services else "hosts applied"
+
+
 def health(ln: Landing) -> NoReturn:
     """Gate every deployed tag, then settle, or name what is still open."""
     pr, sha, tags = ln.opts.pr, ln.merge_sha, ",".join(promotion.gated_tags(ln))
+    done = applied_wording(ln)
     result = gate_from_the_deployed_tree(ln)
     for line in result.lines:
         say(line)
@@ -180,7 +193,7 @@ def health(ln: Landing) -> NoReturn:
         ln.finish(
             Verdict.NEEDS_MANUAL_APPLY,
             1,
-            f"PR #{pr}, {sha} — services deployed, the plane above not"
+            f"PR #{pr}, {sha} — {done}, the plane above not"
             + (
                 ", nor the hosts beside it" if ln.classification.remaining_setup else ""
             ),
@@ -191,19 +204,19 @@ def health(ln: Landing) -> NoReturn:
         state = ln.tick_state()
         if state == TickState.UNKNOWN:
             print(
-                "  services deployed, but the deployer's state directory "
+                f"  {done}, but the deployer's state directory "
                 f"({ln.opts.deployer_state}) could not be read, so whether the tick "
                 "applied its own half is unknown"
             )
             ln.finish(
                 Verdict.NEEDS_MANUAL_APPLY,
                 1,
-                f"PR #{pr}, {sha}, tags: {tags} — services deployed, the tick's half unknown",
+                f"PR #{pr}, {sha}, tags: {tags} — {done}, the tick's half unknown",
             )
         if state == TickState.HELD:
             hold = ln.state("hold_sha")
             print(
-                f"  services deployed, but the deployer is holding {hold}: "
+                f"  {done}, but the deployer is holding {hold}: "
                 "its own apply failed — see the held planes in owed.jsonl"
             )
             print(f"  {hold_clear_hint(hold)}")
@@ -211,11 +224,11 @@ def health(ln: Landing) -> NoReturn:
             ln.finish(
                 Verdict.DEPLOY_FAILED,
                 1,
-                f"PR #{pr}, {sha} — services deployed, the tick's apply is held",
+                f"PR #{pr}, {sha} — {done}, the tick's apply is held",
             )
         if state == TickState.BEHIND:
             print(
-                "  services deployed, but the tick has not fast-forwarded to origin "
+                f"  {done}, but the tick has not fast-forwarded to origin "
                 f"(parked since: {ln.state('behind_since')})"
             )
             if ln.tick_watch_abandoned:
@@ -223,20 +236,20 @@ def health(ln: Landing) -> NoReturn:
                 ln.finish(
                     Verdict.DEFERRED,
                     75,
-                    f"PR #{pr}, {sha}, tags: {tags} — services deployed; this run stopped "
+                    f"PR #{pr}, {sha}, tags: {tags} — {done}; this run stopped "
                     "watching a tick still applying, so the tick's half is unsettled",
                 )
             ln.finish(
                 Verdict.DEFERRED,
                 75,
-                f"PR #{pr}, {sha}, tags: {tags} — services deployed, the tick's half not yet",
+                f"PR #{pr}, {sha}, tags: {tags} — {done}, the tick's half not yet",
             )
         # CONVERGED says the tick is not deferring this PR, which any session's `git merge
         # --ff-only` also produces — and once local == origin the tick returns `noop` forever,
         # so a plane it never applied is stranded while this reads `settled`.
         if not ln.tick_applied(sha):
             print(
-                "  services deployed, but the tick recorded no broad apply covering this PR "
+                f"  {done}, but the tick recorded no broad apply covering this PR "
                 f"({ln.receipt_summary(sha)})"
             )
             # The same hole `deploy.no_tag_outcome` carries, one arm over and for the same
@@ -248,7 +261,7 @@ def health(ln: Landing) -> NoReturn:
                 ln.finish(
                     Verdict.DEFERRED,
                     75,
-                    f"PR #{pr}, {sha}, tags: {tags} — services deployed; this run stopped "
+                    f"PR #{pr}, {sha}, tags: {tags} — {done}; this run stopped "
                     "watching a tick still applying, so whether it recorded an apply of "
                     "this PR is not yet known",
                 )
@@ -266,11 +279,16 @@ def health(ln: Landing) -> NoReturn:
         # was deployed and hands the rest to the note, rather than asserting a self-apply on
         # `local` that a repo-file-only role never had.
         note = remaining_hosts_note(ln.classification.remaining_setup).lstrip()
-        print(f"  services deployed, and {note}")
+        print(f"  {done}, and {note}")
         ln.finish(
             Verdict.NEEDS_MANUAL_APPLY,
             1,
             f"PR #{pr}, {sha}, tags: {tags} — self-applied on {local} only; "
             "other hosts still need it",
         )
-    ln.finish(Verdict.SETTLED, 0, f"PR #{pr}, {sha}, tags: {tags}")
+    hosts = ", ".join(t.host for t in ln.host_targets)
+    ln.finish(
+        Verdict.SETTLED,
+        0,
+        f"PR #{pr}, {sha}, tags: {tags}" + (f", hosts: {hosts}" if hosts else ""),
+    )

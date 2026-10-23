@@ -50,6 +50,8 @@ class Ledger:
     t_ci: float | None = None
     t_tick: float | None = None
     t_deploy: float | None = None
+    # Wall-clock seconds at resolve, which `host_wait` counts updater fires after.
+    merged_at: float = 0.0
     merge_sha: str = ""
     verdict: str = ""
     cause: str = ""

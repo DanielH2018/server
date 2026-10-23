@@ -143,6 +143,11 @@ list of conclusions it covers (ENFORCED:
 change* took effect, so exercise the thing you actually changed as well. `docs/landing.md` has
 the two incidents that made this a rule.
 
+**A PR that changes a host's package waits for that host.** After master CI, `land.sh` renders
+each host package at the merge commit and at its first parent. It then waits until the host
+applies the merge commit, and `scripts/deploy_tools/land_lib/host_wait.py:wait_for_hosts` ends
+the landing `deferred` for a host it cannot wait for. `docs/landing.md` says when.
+
 ### Working alongside other sessions
 
 **The tick pulls all of master, not just your commit.** Another session's merged work

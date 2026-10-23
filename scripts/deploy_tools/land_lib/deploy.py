@@ -32,6 +32,7 @@ from deploy_tools.land_lib.outcome import (
     Verdict,
     cause_for_deploy_exit,
     hold_clear_hint,
+    host_not_waited_note,
     remaining_hosts_note,
     say,
 )
@@ -78,13 +79,9 @@ def derive_from_diff(ln: Landing) -> None:
         narrowed = alt is not None
         r = alt or r
     if r.returncode == DEPLOY_BROAD:
-        # The tick is the apply for this range, so the deployer's own markers answer this
-        # landing and `no_tag_outcome` is where they are read.
-        #
-        # Gated on `self_applied or plane`, because `--since` bounds a range WIDER than this
-        # PR: another session's broad merge inside it can refuse the derivation for a PR that
-        # touched nothing broad itself, and `no_tag_outcome` would grade that as
-        # `nothing-to-deploy` over undeployed services.
+        # The tick is the apply, so `no_tag_outcome` reads the deployer's markers. Gated on
+        # `self_applied or plane`: `--since` bounds a range WIDER than this PR, and another
+        # session's broad merge can refuse a PR that touched nothing broad (`nothing-to-deploy`).
         if ln.classification.self_applied or ln.plane:
             say(
                 "no tag list scopes this diff; grading the landing from the deployer's own "
@@ -126,8 +123,7 @@ def record_k8s_only(ln: Landing) -> None:
 
     The `_narrowed` sub-branch does not come here at all. Its tags map broad paths to the
     services whose render they reach, which no path names, so the derivation would return
-    nothing for them; skipping it says that in one place rather than leaving the reader to
-    work out that an empty answer was the right one.
+    nothing for them.
     """
     rng = land_platform.diff_range(ln.opts.since)
     r = ln.git("diff", "--name-only", rng)
@@ -168,6 +164,8 @@ def no_tag_outcome(ln: Landing, scope: str = "no service tag") -> NoReturn:
         # not re-verdicted — `Landing.tick_half_open_lines` carries why.
         for line in ln.tick_half_open_lines():
             print(line)
+        if ln.host_targets:  # this arm ends the landing before the host wait
+            print(host_not_waited_note(ln.host_targets))
         ln.finish(
             Verdict.NEEDS_MANUAL_APPLY,
             1,
@@ -350,7 +348,7 @@ def _skip_tick_applied(ln: Landing, host: str, tags: list[str]) -> bool:
 
     Step 5 exists for what the tick DEFERRED. A deploy-plane PR whose tick applied the whole
     play at the merge commit deferred nothing, and the deploy this step would run is the
-    same render again -- paid for with a second wait on the tree lock. Step 6 still gates
+    same render again -- paid for with a second wait on the tree lock. Step 7 still gates
     the tags and still reads the deployer's markers; only the `deploy.sh` run is skipped.
     """
     if not ln.tick_already_deployed(ln.merge_sha, tags):
@@ -448,9 +446,9 @@ def deploy_phase(ln: Landing) -> None:
     deploy-plane path derives no tag, so such a tag is also read from the deployer's narrowing
     of the PR's range (`promotion.owned_by_narrowing`), and an inventory-only flip to
     `owner: flux` waits on promotion rather than settling on the tick alone. A PR changing a
-    cluster file derives no tag and waits on promotion too
-    (`promotion.waits_on_cluster_vars`). A plane it also carries, such as the rotation
-    note for `secrets.yml`, is reported by the health step after the wait.
+    cluster file derives no tag and waits on promotion too (`promotion.waits_on_cluster_vars`).
+    A plane it also carries, such as the rotation note for `secrets.yml`, is reported by the
+    health step after the wait.
     """
     t = ln.tools
     if ln.needs_diff:
@@ -459,6 +457,8 @@ def deploy_phase(ln: Landing) -> None:
     promotion.owned_by_narrowing(ln)
     cluster_vars = promotion.waits_on_cluster_vars(ln)
     if not ln.resolved_tags and not ln.owned_tags and not cluster_vars:
+        if ln.host_targets and not ln.plane:
+            return  # nothing for deploy.sh: the tick took the empty change set, then the host wait
         no_tag_outcome(ln)
     ln.ledger.tags_label = ",".join(
         ln.resolved_tags + list(ln.owned_tags) + promotion.forced_names(ln)

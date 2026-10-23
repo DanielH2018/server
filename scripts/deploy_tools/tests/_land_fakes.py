@@ -23,6 +23,7 @@ from typing import Any
 from deploy_tools.deploy_lib.detach_notify import GateResult
 from lib.exit_codes import DEPLOY_BROAD
 from deploy_tools.land_lib import landing as landing_mod
+from _land_host_fakes import host_fakes
 from deploy_tools.land_lib.options import Options
 from deploy_tools.land_lib.land_flux import FluxReads
 from deploy_tools.land_lib.pin_reads import PinReads
@@ -209,6 +210,10 @@ class Fakes:
     # `tools.kustomization_exists`: the Kustomizations kubectl finds in flux-system. An
     # exception is raised for every read.
     kustomizations: set[str] | Exception = field(default_factory=set)
+    # The host wait's answers (`_land_host_fakes.py`): the HostTargets for the merge commit, and
+    # the (verdict, rc, detail) `wait_for_hosts` ends with, None being every target settling.
+    host_targets: list[Any] = field(default_factory=list)
+    host_wait_outcome: tuple[str, int, str] | None = None
     # What `tools.land_wait` returns, one entry per call.
     land_wait: list[WaitResult] = field(
         default_factory=lambda: [
@@ -470,6 +475,7 @@ def build_tools(f: Fakes) -> tuple[Tools, list]:
         read_state=lambda root, name: f.state.get(name, ""),
         flux=FluxReads(owners_at, kustomization_exists, land_wait, pins),
         own_narrowing=own_narrowing,
+        **host_fakes(f, calls),
         paths_a_hand_must_apply=lambda paths, pr_range, primary, declared: [
             p for p in paths if p not in f.plane_paths_dropped
         ],

@@ -1,6 +1,6 @@
 """H3.9a's host wait: `host_targets`, the Prometheus transport, the settle rule and the deadline.
 
-Nothing calls `host_wait` yet. Every boundary is a field of `HostReads`, so no test renders in
+`test_land_host_wait_wiring.py` covers the pipeline's calls. Every boundary is a field of `HostReads`, so no test renders in
 a real snapshot or reaches a live Prometheus. The schedule tests read the Pi's real drop-in and
 the shared timer from `hosts/`.
 
@@ -183,12 +183,12 @@ def test_a_dangling_enable_link_written_to_disk_reads_as_armed(tmp_path):
 
 
 def test_the_real_pi_render_reads_its_drop_in_schedule():
-    # A real render through the CLI, from this checkout. `armed` is left alone: H3.9b ships
-    # the link.
+    # A real render through the CLI, from this checkout. Since H3.9b it ships the link too.
     tree = host_wait.render_host_tree(REPO, "daniel-pi")
     assert tree is not None
     target = host_wait._target("daniel-pi", tree, REPO)
     assert target.triggers == {"OnCalendar": ["*-*-* 01..03,06..22:05/15:00"]}
+    assert target.armed is True
 
 
 def test_the_git_fallback_finds_the_pi_at_head():
