@@ -959,6 +959,37 @@ notification-controller posts on T:
   `failed`. A missing or `pending` status keeps the wait going and never reads as success, so
   the timeout ends it as `failed`, naming each name that had no `success`. *The timeout
   follows the chain* below derives it.
+- **A Longhorn hop's failures are provisional** (#5997). The longhorn-manager pods serve
+  the admission webhook that every PersistentVolumeClaim's dry run calls, and the manager
+  DaemonSet replaces both pods at once. A Kustomization holding a claim that reconciles in
+  that window posts `failure`, then recovers on its next retry. So while `longhorn` is in
+  the set, a `failure` or `error` on any other name is provisional, not only on a claim
+  holder, because `crowdsec`'s failed claim also holds `traefik` and the routed tags behind
+  it. A provisional failure ends the wait in one of two ways:
+  - once `flux/longhorn` has read `success` for two of the bundle's largest
+    `retryInterval`, 4 minutes;
+  - while `flux/longhorn` has not read `success`, once `longhorn`'s own `timeout` plus
+    those 4 minutes have passed since `verify` first read the failure, 14 minutes. So a
+    `longhorn` that hangs or never posts holds then, not at `verify`'s timeout.
+  - A `flux/longhorn` failure stays final. The cost is that a real failure during a
+    Longhorn hop holds up to 14 minutes later than it would otherwise.
+    `scripts/deploy_tools/promote_lib/storage_rollout.py` holds the rule.
+  - Notification-controller's status description carries only the event reason, such as
+    `reconciliation failed`. So `verify` cannot match on the message the webhook returned.
+  - A `dependsOn` edge from every claim-holding tag to `longhorn` was the other remedy. It
+    pulls 95 dependents into a Longhorn hop's set through `crowdsec` and `traefik`. A
+    `longhorn` that stays not-Ready through a node outage would also hold every one of them
+    at `DependencyNotReady`, so it was rejected.
+- **A `kustomize-controller` rollout's failures are provisional** (#6013). A hop that changes
+  `kustomize-controller`'s own Deployment replaces the pod that is reconciling. The old pod
+  posts `failure` for `flux` and for `soak` as it goes, and the new pod posts `success` for
+  `flux` about 12 seconds later and re-runs the soak. So while `flux` is in the set, a
+  `failure` or `error` on `flux` or `soak` is provisional for 15 minutes after the poll that
+  first read it: the rollout plus one 10-minute reconcile interval. A later `success` inside
+  that grace reads good. With none, the failure turns final and `verify` fails as it did
+  before, so a real `flux` failure holds 15 minutes later, not at `verify`'s timeout, which
+  can run to hours. A failure on any other name stays final.
+  `scripts/deploy_tools/promote_lib/controller_rollout.py` holds the rule.
 
 `settle` applies the verdict:
 

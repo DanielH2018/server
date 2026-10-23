@@ -67,6 +67,16 @@ flux_controller_args:
   kustomize-controller:
     - "--concurrent={{ k8s_rollout_batch_width | int + 1 }}"
 
+# A `resources` merge patch the flux_components filter applies to a controller's first
+# container, replacing upstream's value for the keys it names. The limit stays upstream's 1Gi.
+# DECIDED: kustomize-controller requests 192Mi (2026-10-23, D5 step 31), sized to the exit-7
+# peak of 174002176 B (about 166 MiB) plus headroom. D1's 64Mi came from an empty root. The
+# long form is in this role's CLAUDE.md.
+flux_controller_resources:
+  kustomize-controller:
+    requests:
+      memory: 192Mi
+
 # The artifact the `promote` workflow publishes, and the tag it moves to the newest published
 # master commit. The OCIRepository `homelab` follows that tag with no pull secret, so the
 # package must stay public (docs/flux-deploy-plane.md).

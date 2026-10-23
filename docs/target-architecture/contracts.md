@@ -36,7 +36,7 @@ merged.
 | M3 | One host timer to the textfile collector | M1. The cutover also M2's PR 3 |
 | M4 | blackbox_exporter for the ingress probes | M1. PR 3 also M2's PR 3 |
 | M5 | loki-homelab ruler | M1. The cutover also M2's PR 3 |
-| M6a | Retire Kuma, Phase A: drain the producers | M2, M3, M4, M5. A7's shadow PR also M5's ruler, live; A7's Cutover-a also M2's PR 4a, live |
+| M6a | Retire Kuma, Phase A: drain the producers | M2, M3, M4, M5's functional PRs; their token-retirement PRs may trail (the note under the table). A7's shadow PR also M5's ruler, live; A7's Cutover-a also M2's PR 4a, live |
 | M6b | Retire Kuma, Phase B: switch the readers | M6a's A6. B-1, B-1d and B-1e need only M1 and C7's health-gate selector |
 | M6c | Retire Kuma, Phase C: delete Kuma | M6a, M6b. C-1a also D5's registry PR; C-4b also D6 |
 | H1 | Hand the cluster content to Flux | D2, D4. H1.7b also D3; H1.9 also R4 |
@@ -70,6 +70,12 @@ D5's other edge to M6 keeps monitor-bridge Ansible-owned until A6-7a, an M6 step
 `land.sh`'s order, has deployed (M6 *When D5 flips a role M6 edits*). It adds no cycle either.
 A6-7a waits on Phase A batches and on M2 to M5, and none of those waits on D5. M6's C-1a
 waits on D5's registry PR, which waits on no M6 step.
+
+M6a starts once the functional PRs of M2, M3, M4 and M5 have landed. The operator ruled this on
+2026-10-23. A push-token-retirement PR, such as M3's PR 6 and M5's PR 5 (#5856), may trail
+M6a's start, because retiring a token removes a secret that no M6 batch reads. M6 is the
+critical path to D6.12, D6.16, D6.17, R4 and H7, and M5's token PR is date-gated to about
+2026-10-29. The M6a row's other edges are unchanged.
 
 The roles M6's Phase C orders, observability, netpol-baseline and uptime-kuma, flip before C-1
 (#5821). The operator ruled on 2026-10-21 that holding uptime-kuma for C-1 put D5's last three
