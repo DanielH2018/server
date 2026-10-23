@@ -1066,7 +1066,15 @@ containers_list:
     # docs/flux-deploy-plane.md.
     owner: flux
     tier: platform
-  # Host metrics for BOTH nodes.
+    # The check exporter's listener (files/verdict_export.py), beside the deploy-pipeline
+    # exporter's on monitor_bridge_deploy_pipeline_port. The `metrics` item renders the
+    # `monitor-bridge` scrape job and config/env.yaml.j2 hands the same number to the process,
+    # so the two cannot drift apart. The process binds whatever CHECK_EXPORTER_PORT holds, so
+    # unlike an image-fixed port this one moves the listener too.
+    port: 9181
+    metrics:
+      - job: monitor-bridge
+        interval: 1m
   - name: node-exporter
     platform: k8s
     # Flux applies node-exporter through `promote`, and every Ansible path skips it (D5.7). The

@@ -1,6 +1,8 @@
 {% from 'service.yml.j2' import service with context %}
 ---
-# Scrape target only, for observability's deploy-pipeline job: the five homelab_deploy_* gauges
-# files/deploy_pipeline.py serves. Every check still pushes to Kuma, so nothing else reaches
-# this port.
-{{ service('monitor-bridge', monitor_bridge_deploy_pipeline_port, port_name='metrics') -}}
+# Scrape targets only. Port `metrics` is the deploy-pipeline exporter's five homelab_deploy_*
+# gauges (files/deploy_pipeline.py), which observability's deploy-pipeline job collects. Port
+# `checks` is the check exporter's per-row verdict gauges (files/verdict_export.py), which the
+# `monitor-bridge` job collects; its number is the entry's `metrics` item. Every check still
+# pushes to Kuma, so nothing else reaches either port.
+{{ service('monitor-bridge', monitor_bridge_deploy_pipeline_port, port_name='metrics', extra_ports=[{'name': 'checks', 'port': containers_list | metrics_port('monitor-bridge')}]) -}}

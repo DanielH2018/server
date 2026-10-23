@@ -1,0 +1,12 @@
+{
+  "checksum": "1eb44f46a8aa1d7bcb0442f6fab8a55ce400214b9149926b6381ff94a9f6716b",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "ansible/roles/k8s/monitor-bridge/CLAUDE.md#The check exporter",
+  "row": {
+    "atoms": {
+      "docs/target-architecture/monitoring/m6-retire-kuma.md": "521cc9bee40ee23c4f9947b444898dff18c9f2a4f644eeb75419cd9721d8a32c"
+    },
+    "python": "3.14",
+    "verified_sha": "ab1e0d59f"
+  }
+}
