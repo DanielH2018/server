@@ -407,6 +407,11 @@ def _reconcile_tools(jobs):
 
 
 def _reconcile_health(jobs, deploy_applied_at):
+    """The verdict against an `applied_at` reference, in place of the `FluxRevision` read.
+
+    These tests pin how the Flux gate Job is found and how an `applied_at` judges it.
+    `test_probe_health_cronjob_flux_revision.py` covers the reference a Flux role gets.
+    """
     tools = _reconcile_tools(jobs)
     cronjob, latest_job, job_pods, _ = health._fetch_cronjob(
         "longhorn-reconcile", "longhorn-reconcile", "longhorn-system", "prod", tools
@@ -447,8 +452,8 @@ def test_health_passes_for_a_new_flux_cronjob_role_before_its_first_firing():
 
 
 def test_health_still_fails_a_flux_gate_job_that_predates_the_deploy():
-    """The freshness comparison stays against the deploy time: a gate run from the previous
-    revision proves nothing about this one."""
+    """Against an `applied_at` reference, a gate run from the previous revision proves
+    nothing about this one."""
     jobs = {
         "items": [
             _scheduled_reconcile_job(

@@ -226,6 +226,30 @@ def test_health_fails_closed_when_the_kustomization_is_missing():
     assert "carries no homelab/content-digest annotation" in text
 
 
+def test_health_gates_configarr_on_its_own_gate_of_two_with_one_digest():
+    """The Verify-by of #5950: configarr's two CronJobs share the role digest."""
+    content = "fd6466a0dc5fd1d74b774343052e3ce65443ea61ecbfa295533ace060b39b472"
+    gates = [
+        _gate("configarr", content[:8], "2026-08-16T11:31:00Z", "a0bce752"),
+        _gate("configarr-health", content[:8], "2026-08-16T11:32:00Z", "72dde612"),
+    ]
+    kustomization = {"metadata": {"annotations": {CONTENT_DIGEST: content}}}
+    revision = health_cronjob.flux_revision(
+        kustomization, {"items": gates}, "configarr"
+    )
+    assert revision.gate == "configarr-deploy-gate-a0bce752"
+    text, code = health_cronjob.format_cronjob_health(
+        "homelab/configarr",
+        {"spec": {"schedule": "30 4 * * *"}},
+        gates[0],
+        pods(("configarr", 0, None)),
+        revision,
+        NOW,
+    )
+    assert code == 0, text
+    assert "configarr-deploy-gate-a0bce752 succeeded since the last deploy" in text
+
+
 def test_run_health_reads_the_revision_for_a_flux_owned_cronjob_role(capsys):
     """The production path: the inventory's `owner: flux` routes longhorn-reconcile here."""
     jobs = [_gate("longhorn-reconcile", EARLIER, "2026-08-16T08:00:00Z", "aaaaaaaa")]
