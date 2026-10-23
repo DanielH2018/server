@@ -1,0 +1,57 @@
+# The monitor-bridge check exporter's own rules. Plain YAML, never Jinja: prometheus-rules.yaml.j2
+# carries this file verbatim. The design is docs/target-architecture/monitoring/m6-retire-kuma.md,
+# "The bridge as an exporter" and "A6's PRs" (A6-2). The series come from the `monitor-bridge`
+# scrape job, port 9181, which monitor-bridge's files/verdict_export.py serves.
+#
+# Both rules are `for: 10m`, two INTERVALs of 300s. The pod has no readinessProbe, so a restart
+# reads `up == 0` for a scrape, and the first cycle after it has not yet set every row's gauge.
+# Without the hold, either rule would fire on every monitor-bridge deploy.
+groups:
+  - name: bridge-exporter
+    rules:
+      # SHADOW UNTIL A6-7b. Kuma's Cluster Scrape Targets tile pages a failed scrape of this job
+      # today, because the job carries no `origin` label (M1 convention 5 allows one pager). The
+      # absent() arm is what that tile cannot see: a scrape job removed from prometheus.yml.
+      - alert: MonitorBridgeDown
+        expr: up{job="monitor-bridge"} == 0 or absent(up{job="monitor-bridge"})
+        for: 10m
+        labels:
+          severity: critical
+          service: monitor-bridge
+          shadow: "true"
+        annotations:
+          summary: Prometheus cannot scrape monitor-bridge's check exporter.
+          description: >-
+            up{job="monitor-bridge"} has been 0 or missing for 10 minutes, so either the
+            monitor-bridge pod is down or the monitor-bridge scrape job is gone from
+            prometheus.yml. Read the pod's events and log in the homelab namespace.
+      # SHADOW UNTIL A6-7b, with the rule above. It is the class-3 guard of
+      # docs/failure-classes.md: a run loop that hangs behind a live HTTP thread keeps `up` at 1
+      # and serves stale gauges. It is one aggregate alert, so a hung loop pages once rather than
+      # once per row. The first arm finds any row whose timestamp is older than the row's own
+      # deadline. The second finds a row count below homelab_check_rows, which the exporter sets
+      # from the check table, so no literal here goes stale when a row is deleted. A dead
+      # exporter has neither series, and MonitorBridgeDown owns that case.
+      - alert: BridgeCheckStale
+        expr: |
+          count(
+            time() - homelab_check_last_run_timestamp_seconds{job="monitor-bridge"}
+            > homelab_check_deadline_seconds{job="monitor-bridge"}
+          )
+          or
+          (
+            count(homelab_check_success{job="monitor-bridge"})
+            < on() homelab_check_rows{job="monitor-bridge"}
+          )
+        for: 10m
+        labels:
+          severity: critical
+          service: monitor-bridge
+          shadow: "true"
+        annotations:
+          summary: monitor-bridge's run loop has stopped recording some check verdicts.
+          description: >-
+            For 10 minutes either a row's homelab_check_last_run_timestamp_seconds has aged past
+            its homelab_check_deadline_seconds, or fewer rows export homelab_check_success than
+            homelab_check_rows counts. The scrape works, so the run loop is hung or skipping
+            rows. Read the monitor-bridge pod's log in the homelab namespace.
