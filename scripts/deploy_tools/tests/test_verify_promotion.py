@@ -21,7 +21,6 @@ from renderer.renderer_lib.bundle import (
 )
 
 import forge
-from deploy_tools.promote_lib import handoff
 from deploy_tools.promote_lib import verify_promotion as vp
 
 T = "a" * 40
@@ -441,27 +440,7 @@ def test_a_missing_deferred_status_keeps_waiting_and_a_failure_holds():
     assert held == vp.Verdict("failed", ("bento-pdf-deferred",))
 
 
-# -- the handoff and the CLI -----------------------------------------------------------------
-
-
-def test_the_handoff_carries_digests_and_flux_files_and_nothing_else(tmp_path):
-    handoff.write_handoff(tmp_path, {**PROD, "cluster/bento-pdf/x.yaml": b"x"}, CHANGED)
-    prod, target = handoff.read_handoff(tmp_path)
-    assert prod == PROD and target == CHANGED
-
-
-def test_the_handoff_carries_the_record_beside_the_bundles(tmp_path):
-    handoff.write_handoff(tmp_path, PROD, CHANGED, {"longhorn": "failure"})
-    assert handoff.read_handoff(tmp_path) == (PROD, CHANGED)
-    assert handoff.read_recorded(tmp_path) == {"longhorn": "failure"}
-    (tmp_path / handoff.RECORDED_FILE).unlink()
-    assert handoff.read_recorded(tmp_path) == {}, "no record excuses nothing"
-
-
-def test_a_first_run_hands_on_no_prod(tmp_path):
-    handoff.write_handoff(tmp_path, None, CHANGED)
-    assert handoff.read_handoff(tmp_path) == (None, CHANGED)
-    assert vp.expected_set(CHANGED, None).widened
+# -- the CLI ---------------------------------------------------------------------------------
 
 
 def test_verify_without_a_handoff_exits_1_with_no_verdict(tmp_path, capsys):
@@ -491,7 +470,7 @@ def test_a_failed_verdict_exits_1_after_writing_the_outputs(tmp_path):
 def test_verify_without_a_zoned_move_time_is_a_usage_error(tmp_path, capsys):
     import argparse
 
-    handoff.write_handoff(tmp_path, PROD, PROD)
+    vp.write_handoff(tmp_path, PROD, PROD)
     args = argparse.Namespace(
         target=T, prior=PRIOR, bundle_dir=tmp_path, moved_at="2026-10-15 01:00"
     )

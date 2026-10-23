@@ -22,7 +22,7 @@ from lib.repo_paths import REPO
 import promote
 from chained_timeout import VERIFY_CAP_S
 from deploy_tools.promote_lib import reboot_window
-from deploy_tools.promote_lib import handoff as verify_handoff
+from deploy_tools.promote_lib import verify_handoff
 from deploy_tools.promote_lib import verify_promotion as vp
 from deploy_tools.promote_lib import wait as promote_wait
 from renderer.renderer_lib.bundle import tag_kustomization

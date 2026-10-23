@@ -32,7 +32,7 @@ the record is what the cluster showed before T, not after.
 
 WHERE THE BUNDLES COME FROM. `decide` pulls both before `prod` moves and writes them under
 `--bundle-dir`, with the record of `prod`'s statuses, so a registry error promotes nothing.
-`verify` reads them back and makes no registry call (`handoff.py`).
+`verify` reads them back and makes no registry call (`verify_handoff.py`).
 
 ONLY STATUSES FROM THIS PROMOTION COUNT. T may carry statuses from an earlier promotion of
 the same commit, such as the `failure` that held it before an operator cleared the hold and
@@ -88,10 +88,10 @@ from changed_set import ROOT, changed_set, footprints, suspended_tags
 from chained_timeout import promote_timeout
 from deploy_tools.kustomizations import kustomization_graph
 from deploy_tools.promote_lib import storage_rollout
-from deploy_tools.promote_lib.handoff import read_handoff, read_recorded
+from deploy_tools.promote_lib.verify_handoff import read_handoff, read_recorded
 
 # Re-exported, as `verify.write_handoff`, for `promote.py`'s `hand_off`.
-from deploy_tools.promote_lib.handoff import write_handoff as write_handoff
+from deploy_tools.promote_lib.verify_handoff import write_handoff as write_handoff
 from renderer.renderer_lib.ordering import split_kind
 
 DIGESTS_FILE = "digests.json"
