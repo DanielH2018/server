@@ -357,7 +357,7 @@
 # claude-cgroup-metrics writer is unaffected. The metric contract a file here follows is in
 # docs/target-architecture/monitoring/m3-textfile-timer.md (*The producer metric contract*).
 - name: Let the deploy-user health crons write to the node_exporter textfile directory
-  tags: [disk-health]
+  tags: [disk-health, backup-health, etcd-snapshot, manifest-prune, release-staleness, live-drift]
   ansible.builtin.file:
     path: /var/lib/node-exporter-textfile
     state: directory
@@ -539,6 +539,7 @@
     kuma_check_environment:
       - "KUBECONFIG=/home/{{ sys_user }}/.kube/config"
       - "BOOT_GRACE_S={{ k3s_health_cron_boot_grace_s }}"
+      - "DEADLINE_S={{ k3s_daily_check_deadline_s }}"
     kuma_check_on_calendar: "*-*-* {{ '%02d' | format(k3s_live_drift_cron_hour | int) }}:{{ '%02d' | format(k3s_live_drift_cron_minute | int) }}:00"
     kuma_check_restart_sec: 30min
     kuma_check_cron_name: "Live object drift check"

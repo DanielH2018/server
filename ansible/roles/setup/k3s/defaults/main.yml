@@ -555,6 +555,12 @@ k3s_live_drift_cron_minute: "45"
 k3s_manifest_prune_cron_hour: "5"
 k3s_manifest_prune_cron_minute: "15"
 
+# The longest legitimate gap between two textfile writes of a once-a-day check (manifest-prune,
+# live-drift and etcd-snapshot-offbox): a day plus an hour, which is the interval of each one's
+# Kuma tile. The textfile rules carry it as a literal, pinned to this value by
+# ansible/tests/services/test_b1_rule_literals.py. Move the three schedules and this together.
+k3s_daily_check_deadline_s: 90000
+
 # Release-staleness drift check (templates/release-staleness-check.sh.j2). This is
 # the durable signal for a k8s role change gitops_deploy.py's `cs.k8s` branch ff-merges and
 # defers-and-alerts: the Discord page fires once per SHA and clears the moment the tree
