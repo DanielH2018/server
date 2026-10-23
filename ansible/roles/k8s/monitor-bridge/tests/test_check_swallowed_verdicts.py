@@ -295,8 +295,8 @@ def test_hc_routed_tags_are_exactly_the_scripts_that_read_kuma_push_ok():
 
 
 def _producer_tags():
-    """Every syslog tag a rendered host script, or a k3s Python producer, logs under."""
-    tags = set()
+    """Every syslog tag a rendered host script, a k3s Python producer or a B6b pod producer logs under."""
+    tags = _pod_producer_tags()
     for _plane, _role, _name, text in rendered_shell_texts():
         tags.update(re.findall(r"logger -t ([A-Za-z0-9_.-]+)", text))
     for source in K3S_FILES.glob("*.py"):
