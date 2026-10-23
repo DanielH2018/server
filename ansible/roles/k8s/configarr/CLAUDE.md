@@ -75,6 +75,11 @@ x265 re-encode instead, which made Jellyfin buffer and seek slowly.
   narrowed apply out to every `k8s/manifests` caller. The reader's code ships in the
   `configarr-health` ConfigMap, beside `host_lib.py` and `kuma_push.py` from `setup/common`, and
   no secret goes in it (`ansible/tests/k8s/test_no_secret_in_a_moved_jobs_configmap.py`).
+- **The reader also exports its verdict** (M6 B6b). It patches `homelab/check-verdict`,
+  `homelab/check-last-run` and `homelab/check-message` onto the `configarr-health-verdict`
+  ConfigMap, which the role renders with no annotations so the reader is their only writer.
+  kube-state-metrics exports the verdict, and the `pod-producers` shadow rules read it. A
+  failed export makes the reader exit 1, which also fails its gate Job.
 - **The health pod carries `app: configarr-health`, never `app: configarr`.** The reader judges
   the Jobs labelled `app=configarr`, so that label would make it judge its own runs. uptime-kuma's
   `netpol_from` admits `configarr-health`.

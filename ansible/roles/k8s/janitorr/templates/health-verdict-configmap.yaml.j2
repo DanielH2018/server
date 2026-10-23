@@ -1,0 +1,21 @@
+{#
+  The janitorr-health CronJob's exported verdict: annotations on this object, patched by the reader
+  each run (files/janitorr_health.py:export_verdict), exported by kube-state-metrics as
+  kube_configmap_annotations and read by the shadow rules in observability's pod-producers
+  group (M6 batch B6b, docs/target-architecture/monitoring/m6-retire-kuma.md).
+
+  DECIDED: rendered with no annotations, so the annotations have one writer. The object must
+  exist before the first run, because RBAC cannot narrow `create` by name and the CronJob's Role
+  grants `patch` on this one name only. With no annotation in the render, Ansible's client-side
+  apply records none in its last-applied annotation, and a Flux server-side apply owns none, so
+  neither removes or reverts what the reader wrote. This is the field-ownership argument
+  crowdsec's home-ips ConfigMap rests on (crowdsec/templates/home-ips-configmap.yaml.j2).
+#}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ janitorr_k8s_health_verdict_configmap }}
+  namespace: {{ k8s_namespace }}
+  labels:
+    app: janitorr-health

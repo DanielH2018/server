@@ -30,6 +30,13 @@ rules:
   - apiGroups: [""]
     resources: [pods/log]
     verbs: [get]
+  # The verdict export (files/configarr_health.py:export_verdict): a merge patch of the
+  # annotations on the one ConfigMap this role renders for it. `patch` alone, because
+  # `kubectl patch` sends no GET, and the grant names the object so it reaches no other.
+  - apiGroups: [""]
+    resources: [configmaps]
+    verbs: [patch]
+    resourceNames: [{{ configarr_k8s_health_verdict_configmap }}]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding

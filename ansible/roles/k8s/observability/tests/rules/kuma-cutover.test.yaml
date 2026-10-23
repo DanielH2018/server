@@ -210,6 +210,26 @@ tests:
             exp_annotations:
               summary: Kuma's Workload Log Errors tile is gone and no alert rule pages in its place.
               description: "M6's cutover removed the Workload Log Errors tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
+          - exp_labels: {monitor_name: CrowdSec Remote Allowlist, service: uptime-kuma, severity: critical}
+            exp_annotations:
+              summary: Kuma's CrowdSec Remote Allowlist tile is gone and no alert rule pages in its place.
+              description: "M6's cutover removed the CrowdSec Remote Allowlist tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
+          - exp_labels: {monitor_name: CrowdSec AppSec, service: uptime-kuma, severity: critical}
+            exp_annotations:
+              summary: Kuma's CrowdSec AppSec tile is gone and no alert rule pages in its place.
+              description: "M6's cutover removed the CrowdSec AppSec tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
+          - exp_labels: {monitor_name: CrowdSec Home Allowlist, service: uptime-kuma, severity: critical}
+            exp_annotations:
+              summary: Kuma's CrowdSec Home Allowlist tile is gone and no alert rule pages in its place.
+              description: "M6's cutover removed the CrowdSec Home Allowlist tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
+          - exp_labels: {monitor_name: Configarr Sync, service: uptime-kuma, severity: critical}
+            exp_annotations:
+              summary: Kuma's Configarr Sync tile is gone and no alert rule pages in its place.
+              description: "M6's cutover removed the Configarr Sync tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
+          - exp_labels: {monitor_name: Janitorr Errors, service: uptime-kuma, severity: critical}
+            exp_annotations:
+              summary: Kuma's Janitorr Errors tile is gone and no alert rule pages in its place.
+              description: "M6's cutover removed the Janitorr Errors tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
   # Every tile present: no term fires.
   - interval: 1m
     input_series:
@@ -312,6 +332,16 @@ tests:
       - series: 'monitor_status{monitor_name="Pi Pressure", monitor_type="http"}'
         values: '1x140'
       - series: 'monitor_status{monitor_name="Workload Log Errors", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="CrowdSec Remote Allowlist", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="CrowdSec AppSec", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="CrowdSec Home Allowlist", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Configarr Sync", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Janitorr Errors", monitor_type="push"}'
         values: '1x140'
     alert_rule_test:
       - alertname: CheckWithoutPager
@@ -420,6 +450,16 @@ tests:
       - series: 'monitor_status{monitor_name="Pi Pressure", monitor_type="http"}'
         values: '1x140'
       - series: 'monitor_status{monitor_name="Workload Log Errors", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="CrowdSec Remote Allowlist", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="CrowdSec AppSec", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="CrowdSec Home Allowlist", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Configarr Sync", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Janitorr Errors", monitor_type="push"}'
         values: '1x140'
     alert_rule_test:
       - alertname: CheckWithoutPager
@@ -538,6 +578,16 @@ tests:
         values: '1x160'
       - series: 'monitor_status{monitor_name="Workload Log Errors", monitor_type="push"}'
         values: '1x160'
+      - series: 'monitor_status{monitor_name="CrowdSec Remote Allowlist", monitor_type="push"}'
+        values: '1x160'
+      - series: 'monitor_status{monitor_name="CrowdSec AppSec", monitor_type="push"}'
+        values: '1x160'
+      - series: 'monitor_status{monitor_name="CrowdSec Home Allowlist", monitor_type="push"}'
+        values: '1x160'
+      - series: 'monitor_status{monitor_name="Configarr Sync", monitor_type="push"}'
+        values: '1x160'
+      - series: 'monitor_status{monitor_name="Janitorr Errors", monitor_type="push"}'
+        values: '1x160'
     alert_rule_test:
       - alertname: CheckWithoutPager
         eval_time: 25h
@@ -645,6 +695,16 @@ tests:
       - series: 'monitor_status{monitor_name="Pi Pressure", monitor_type="push"}'
         values: '1x1500'
       - series: 'monitor_status{monitor_name="Workload Log Errors", monitor_type="push"}'
+        values: '1x1500'
+      - series: 'monitor_status{monitor_name="CrowdSec Remote Allowlist", monitor_type="push"}'
+        values: '1x1500'
+      - series: 'monitor_status{monitor_name="CrowdSec AppSec", monitor_type="push"}'
+        values: '1x1500'
+      - series: 'monitor_status{monitor_name="CrowdSec Home Allowlist", monitor_type="push"}'
+        values: '1x1500'
+      - series: 'monitor_status{monitor_name="Configarr Sync", monitor_type="push"}'
+        values: '1x1500'
+      - series: 'monitor_status{monitor_name="Janitorr Errors", monitor_type="push"}'
         values: '1x1500'
     alert_rule_test:
       - alertname: CheckWithoutPager

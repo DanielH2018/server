@@ -92,6 +92,13 @@ the sidecar over a `pods/exec` grant on 2026-10-18 (#5655).
 - **A sidecar crash takes the LAPI out of its Service** until the container restarts, because
   pod Ready needs every container. The scheduler never exits on a job's failure, and its memory
   limit is twice the measured peak (`ansible/roles/k8s/crowdsec/defaults/main.yml:crowdsec_k8s_jobs_mem_limit`).
+- **The sidecar also exports the three Kuma-pushed verdicts on `/metrics`** (M6 B6b, ruled on
+  2026-10-23). `jobs_metrics.py` serves `homelab_check_success`,
+  `homelab_check_last_run_timestamp_seconds` and `homelab_check_deadline_seconds` per job tag,
+  on the port of the `crowdsec-jobs` item in this role's `metrics` list. The export runs
+  beside the Kuma push until M6's Cutover-2. observability's `crowdsec-jobs` scrape job and
+  the `pod-producers` shadow rules read it, and netpol-baseline's Prometheus grant admits the
+  port.
 - **Run a job by hand** (operator-only, the read-only ServiceAccount is refused `pods/exec`):
   `sudo k3s kubectl -n homelab exec deploy/crowdsec -c crowdsec-jobs -- python3
   /jobs/crowdsec_jobs.py --run crowdsec-appsec-verify`. It pushes as a scheduled run does.

@@ -166,6 +166,22 @@ data:
           - source_labels: [__name__]
             action: drop
             regex: kube_job_(annotations|complete|created|failed|info|labels|owner|spec_active_deadline_seconds|spec_completions|spec_parallelism|status_ready|status_suspended)
+          # CronJobs are collected for kube_cronjob_status_last_successful_time alone, the run
+          # clock files/rules/pod-producers.yaml reads for the two health CronJobs (M6 B6b). The
+          # other twelve families have no reader.
+          - source_labels: [__name__]
+            action: drop
+            regex: kube_cronjob_(annotations|created|info|labels|metadata_resource_version|next_schedule_time|spec_failed_job_history_limit|spec_starting_deadline_seconds|spec_successful_job_history_limit|spec_suspend|status_active|status_last_schedule_time)
+          # ConfigMaps are collected for kube_configmap_annotations alone, and only the series
+          # that carry the homelab/check-verdict annotation: the allowlist emits one empty
+          # series per ConfigMap in the cluster otherwise. The other four families have no
+          # reader.
+          - source_labels: [__name__]
+            action: drop
+            regex: kube_configmap_(created|info|labels|metadata_resource_version)
+          - source_labels: [__name__, annotation_homelab_check_verdict]
+            action: drop
+            regex: kube_configmap_annotations;
       # The three Flux controllers' own metrics, on the `http-prom` container port (8080). No
       # Service exposes that port, so this job discovers the pods, and scrape_jobs.py leaves a
       # job needing pod discovery hand-written. The flux role's flux-allow-prometheus policy
