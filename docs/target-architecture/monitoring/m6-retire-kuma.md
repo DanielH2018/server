@@ -689,7 +689,9 @@ tip then stops a push whose tile is still live, and Kuma pages DOWN 1200s later.
 
 - A0 replaces the numeric floor with a named-member assertion: the index holds
   `status-page-sync`, `discord`, `tag-severity` and `tag-runbook`, the entities that must
-  survive until C-1. The task keeps its name, because R4's precondition test names it.
+  survive until C-1. D5's flip of uptime-kuma (#5712) deleted the task, so the assert's home
+  is the `INDEX_ASSERT` literal in
+  `ansible/roles/k8s/uptime-kuma/tests/test_declaration_index_flux_form.py`, which A0 edits.
 - Its test evaluates the role's own assert expression, the way
   `ansible/tests/services/test_kuma_push_token_format.py` evaluates the token-format assert.
   An empty index must be refused. An index holding only the five survivors must be
