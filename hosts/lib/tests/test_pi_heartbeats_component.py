@@ -118,6 +118,14 @@ def test_the_push_helper_is_a_byte_copy_of_initial_setups(package):
         assert f"source {LIB}/kuma-push-lib.sh" in _text(package, f"{LIB}/{script}")
 
 
+def test_the_check_library_is_a_byte_copy_of_initial_setups(package):
+    # M6 B5: the two token scripts write their textfile verdict through it.
+    source = REPO / host_mode.SHARED_FILES["homelab-check-lib.sh"]
+    assert package.files[f"{LIB}/homelab-check-lib.sh"] == (source.read_bytes(), 0o644)
+    for script in ("pi-sd-health", "pi-recovery-health"):
+        assert f"source {LIB}/homelab-check-lib.sh" in _text(package, f"{LIB}/{script}")
+
+
 def test_the_integrity_timer_primes_its_verdict_on_start(package):
     # The SD-health heartbeat reads a missing verdict as a down, so the sweep runs a minute
     # after its timer starts rather than first at 01:40.

@@ -5,7 +5,8 @@
 # under /etc/homelab/interim/; H4 replaces that source with /run/credstore/.
 #
 # - homelab-pi-sd-health, every 5 minutes: the root filesystem's ext4 errors_count, the
-#   rotated-log integrity verdict and the log2ram mount, pushed to "Daniel Pi SD Health".
+#   rotated-log integrity verdict and the log2ram mount, pushed to "Daniel Pi SD Health" and
+#   written to pi-sd-health.prom in node_exporter's textfile directory (M6 B5).
 # - homelab-pi-gz-integrity, daily at 01:40: `gzip -t` over every rotated log, written as the
 #   verdict the SD-health heartbeat reads. It pushes nothing itself.
 # - homelab-pi-recovery, every 5 minutes: the contract below.
@@ -30,8 +31,9 @@
 # - Authoritative sources: `docker ps` against the real socket, not docker-proxy, so it reports
 #   docker-proxy's own death too. `docker inspect` is read BEFORE the restart, which erases the
 #   exit code, the daemon's Error string and FinishedAt.
-# - Required evidence, every cycle: a Kuma push to "Daniel Pi Recovery" and a
-#   /var/log/pi-health/health.log line naming what died and whether the restart took.
+# - Required evidence, every cycle: a Kuma push to "Daniel Pi Recovery", a
+#   /var/log/pi-health/health.log line naming what died and whether the restart took, and
+#   pi-recovery-health.prom in node_exporter's textfile directory (M6 B5).
 # - It pushes `down` on a cycle it fixed, on purpose: an `up` after a successful restart would
 #   hide a container crashing every 5 minutes. The script's `# DECIDED:` marker has the
 #   declined re-proposal.
@@ -82,6 +84,9 @@ files:
   # A package-owned copy of initial_setup's helper, which stays the single source. The scripts
   # source this copy, so the package carries everything its units run.
   - {shared: kuma-push-lib.sh, dst: /usr/lib/homelab/kuma-push-lib.sh}
+  # The same arrangement for the textfile writer (M6 B5): the two token scripts call its
+  # write_check_textfile before their push, so Prometheus reads each cycle's verdict.
+  - {shared: homelab-check-lib.sh, dst: /usr/lib/homelab/homelab-check-lib.sh}
   # A plain file at the path optimize_pi wrote, so dpkg takes it over on unpack.
   - {src: templates/pi-health.logrotate.j2, dst: /etc/logrotate.d/pi-health}
   - {src: units/homelab-pi-sd-health.service.j2, dst: /usr/lib/systemd/system/homelab-pi-sd-health.service}

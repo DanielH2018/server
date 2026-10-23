@@ -301,6 +301,7 @@ observability_rule_groups:
   - ingress-probes
   - host-checks
   - initial-setup-checks
+  - pi-checks
   - deploy-pipeline
   - gate-jobs
   - registry

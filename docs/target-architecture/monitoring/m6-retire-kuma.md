@@ -623,7 +623,7 @@ dependency between them. The cutover windows run one after another (*No-pager wi
 | B2 initial_setup | docs-refresh, eval sweep, secret rotation, setup drift, the two Loki-route witnesses | M3 | the tick on daniel-box; a hand on daniel-server | daniel-server gets the textfile-directory task. The shadow PR adds six `CheckWithoutPager` terms. Each range is max(2h, 2 x the tile's push interval + 10m): `[2h]` for the two hourly Loki Read Route tiles, `[24h10m]` for Docs Refresh, `[48h10m]` for Secret Rotation and Setup Plane Drift (agent hosts), and `[348h10m]` for Homelab Evals. A push tile reports no `monitor_status` series after a Kuma restart until its next push, and Kuma restarted 19 times in the 7 days before this PR, so a `[2h]` range would page falsely for the slower tiles. | 6 |
 | B3 gitops_deploy | ruleset drift, interaction limit | M3 | the tick | — | 2 |
 | B4 other setup roles | two etcd drills, three fake_remux, two UPS secondaries, render_records, renovate_agent, renovate_notify | M3 | the tick on daniel-box; a hand on daniel-server for its UPS secondary | — | 10 |
-| B5 Pi | SD-card health, container recovery | M3 | a hand (`-e target=daniel-pi`, **operator-only**) | Enables the textfile collector on the Pi (see below). | 2 |
+| B5 Pi | SD-card health, container recovery | M3 | the `homelab-daniel-pi` package: the builder publishes it and the Pi's `homelab-updater.timer` installs it (H3.8b moved both heartbeats there). No `-e target=daniel-pi` apply. | H3.6 already enabled the textfile collector on the Pi (see below). The shadow PR ships `homelab-check-lib.sh` in the package and adds two `CheckWithoutPager` terms, both `[2h]` (the tiles push every 5 minutes, so max(2h, 2 x 10m + 10m) is 2h). | 2 |
 | B6a host crons | artifacts sync, telemetry health (the two `setup/claude_code` crons) | M3 | the tick (`claude_code`) | They run on daniel-box's host, so M3's recipe applies as is. registry-gc is D5's (*Baseline*). | 2 |
 | B6b pod producers | crowdsec remote allowlist, AppSec verify and home allowlist (the `crowdsec-jobs` sidecar); `configarr-health` and `janitorr-health` (CronJobs) | Exporter for the sidecar, CronJob for the two (*B6b*) | Flux, through `promote` (`crowdsec`, `configarr`, `janitorr`, `observability`, `netpol-baseline`) | The operator ruled on 2026-10-23 that a pod exports through a metrics endpoint. The sidecar serves `homelab_check_*` on a new `crowdsec-jobs` scrape job. Each CronJob patches its verdict onto a ConfigMap it owns, which kube-state-metrics exports. | 5 |
 | B7 pods | autofix-bridge; cloudflare-ddns direct and proxied; pi-peer-backup | Exporter, CronJob, a Prometheus rule plus a LogQL rule | `land.sh` | See *B7*. | 4 |
@@ -1130,7 +1130,7 @@ reach A6-7a, fail the bijection test and lose its only pager.
   B0's apply on its own host (*Order*). B0's test finds the copy task by its name and fails
   when it lacks `always`, and it fails when a rendered script sources the library without
   `|| exit 1`.
-- **B5, the Pi's textfile collector.** In `optimize_pi`, under the `node-exporter-host` tag:
+- **B5, the Pi's textfile collector. Already in place since H3.6;** the two steps below are the record of what that PR did, and B5 adds neither. `ansible/tests/setup/test_pi_node_exporter_host_unit.py` holds the flag and the directory. The producers are the package's `pi-sd-health` and `pi-recovery-health` scripts (H3.8b), which source a package copy of `homelab-check-lib.sh` (`host_sources.SHARED_FILES`). In `optimize_pi`, under the `node-exporter-host` tag:
     - replace `--no-collector.textfile` in `templates/node_exporter.service.j2` with
       `--collector.textfile.directory=/var/lib/node-exporter-textfile`;
     - add the directory task with M3's owner contract: owner root, group `{{ sys_user }}`,
@@ -1987,7 +1987,9 @@ M4's rules.
   non-zero on the same commit without the row deletion.
 - The census row: its red fixture, a file outside the allowlist that mentions Kuma.
 - B0's `write_check_textfile`: the M3 script test pattern, run against the shared library.
-- B5: the unit-flag-and-directory test, red on a unit that keeps `--no-collector.textfile`.
+- B5: the unit-flag-and-directory test, red on a unit that keeps `--no-collector.textfile`. It exists since H3.6
+  (`test_pi_node_exporter_host_unit.py`). B5's own test is `test_pi_heartbeat_textfiles.py`: each script writes its
+  textfile before the push, a restarted container reads success 0, and the rules' deadline literals equal `DEADLINE_S`.
 - The B-6a render test: `alertmanager.local.<domain>` resolves to `two_factor` at first
   match, and it fails if the rule sits behind the `*.local` wildcard.
 - C-3b: two test cases in which a host carries a `kuma-check-<name>` unit, one per arm.
@@ -2249,10 +2251,11 @@ timers or entry regenerates its glance block with `scripts/docs/gen_role_glance.
   leaves `HC_ROUTED_TAGS`, which keeps
   `test_hc_routed_tags_are_exactly_the_scripts_that_read_kuma_push_ok` green.
 - **B5 Cutover-2.** `pi-sd-health` and `pi-recovery-health` leave `HC_ROUTED_TAGS` for the same
-  test, and `monitor-bridge` applies by its owner, in either order against the Pi's hand
-  apply.
-- **B5.** The unit-flag-and-directory test in `ansible/tests/setup/`, and the `optimize_pi`
-  `CLAUDE.md` line about the health crons sourcing `kuma-push-lib.sh`.
+  test, and `monitor-bridge` applies by its owner, in either order against the Pi's package
+  install.
+- **B5.** Nothing beyond the shadow PR. The unit-flag-and-directory test and the `optimize_pi` `CLAUDE.md`
+  line the first draft named are obsolete: H3.6 wrote the test, and H3.8b moved the heartbeats and their
+  contract into `hosts/components/pi-heartbeats/component.yml`.
 - **B1 to B7, each shadow PR.** The batch's `KUMA_RETIRING_TAGS` entries and their cases in
   `ansible/roles/k8s/monitor-bridge/tests/test_check_swallowed_verdicts.py`.
 - **A6-1 and A6-2.** The exporter test for `homelab_check_rows`, the run-loop export test,

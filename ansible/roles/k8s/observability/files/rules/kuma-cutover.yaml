@@ -98,6 +98,10 @@ groups:
             or
               absent_over_time(monitor_status{monitor_name="Daniel Pi WG Easy"}[2h])
             or
+              absent_over_time(monitor_status{monitor_name="Daniel Pi SD Health"}[2h])
+            or
+              absent_over_time(monitor_status{monitor_name="Daniel Pi Recovery"}[2h])
+            or
               absent_over_time(monitor_status{monitor_name="Email-to-RSS (Worker)"}[2h])
             or
               absent_over_time(monitor_status{monitor_name="iCal Proxy k8s"}[2h])

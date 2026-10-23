@@ -18,7 +18,7 @@ The scripts are the `pi-heartbeats` host component's (H3.8b), and `COMPONENT_DEF
 
 from lib.proc_testing import fake_bin, path_with, write_exec
 from lib.proc_testing import run as launch
-from _helpers import HOST_VARS, load_yaml
+from _helpers import HOST_VARS, SETUP_ROLES, load_yaml
 from _shell_render import render_shell_script
 from validate.shell_templates import COMPONENTS
 
@@ -26,6 +26,11 @@ from validate.shell_templates import COMPONENTS
 COMPONENT = COMPONENTS / "pi-heartbeats"
 COMPONENT_DEFAULTS = load_yaml(COMPONENT / "component.yml")["defaults"]
 REAL_LIB = "/usr/lib/homelab/kuma-push-lib.sh"
+# The package's copy of initial_setup's check library, M6 B5. The scripts source the package
+# path; the test sources the role's file, so it needs neither the package nor a host that has
+# installed the library.
+REAL_CHECK_LIB = "/usr/lib/homelab/homelab-check-lib.sh"
+ROLE_CHECK_LIB = SETUP_ROLES / "initial_setup" / "files" / "homelab-check-lib.sh"
 REAL_LOG = "/var/log/pi-health/health.log"
 # The credential each token script reads, by script name, as its unit's LoadCredential= names it.
 CREDENTIALS = {
@@ -40,6 +45,8 @@ LIB_STUB = """\
 kuma_push() {
   KUMA_PUSH_OK="${STUB_PUSH_OK:-1}"
   printf '%s\\n%s\\n' "$1" "$2" > "$KUMA_PUSH_OUT"
+  # Whether the textfile verdict was already on disk when the push began (M6 B5 writes it first).
+  [ -f "$TEXTFILE_DIR/$6.prom" ] && : > "$KUMA_PUSH_OUT.textfile-first"
 }
 """
 
@@ -148,7 +155,11 @@ def render(name, tmp_path, jinja_vars=None):
         COMPONENTS.name, COMPONENT.name, f"{name}.sh.j2", overrides=overrides
     )
 
-    for literal, label in ((REAL_LIB, "push helper"), (REAL_LOG, "health log")):
+    for literal, label in (
+        (REAL_LIB, "push helper"),
+        (REAL_CHECK_LIB, "check library"),
+        (REAL_LOG, "health log"),
+    ):
         assert literal in body, (
             f"{name}.sh.j2 no longer references {literal} ({label}) -- this harness's "
             "substitution hook is gone, so it is not exercising the real script any more"
@@ -158,7 +169,11 @@ def render(name, tmp_path, jinja_vars=None):
     lib.write_text(LIB_STUB)
     log = tmp_path / "health.log"
 
-    body = body.replace(REAL_LIB, str(lib)).replace(REAL_LOG, str(log))
+    body = (
+        body.replace(REAL_LIB, str(lib))
+        .replace(REAL_CHECK_LIB, str(ROLE_CHECK_LIB))
+        .replace(REAL_LOG, str(log))
+    )
 
     return write_exec(tmp_path / f"{name}.sh", body), log
 
@@ -214,6 +229,8 @@ def run(
     out = tmp_path / "push"
     credentials = tmp_path / "credentials"
     credentials.mkdir()
+    textfiles = tmp_path / "textfile"
+    textfiles.mkdir(exist_ok=True)
     (credentials / CREDENTIALS[name]).write_text(f"stub-{name}-token")
 
     launch(
@@ -233,6 +250,7 @@ def run(
             "STUB_LOG_FSTYPE": log_fstype,
             "JOURNALCTL_CALLS": str(tmp_path / "journalctl.calls"),
             "KUMA_PUSH_OUT": str(out),
+            "TEXTFILE_DIR": str(textfiles),
             "CREDENTIALS_DIRECTORY": str(credentials),
         },
     )
@@ -240,6 +258,19 @@ def run(
     status, msg = out.read_text().splitlines()
     lines = log.read_text().splitlines() if log.exists() else []
     return status, msg, set(state.read_text().split()), lines
+
+
+def textfile(tmp_path, name) -> dict[str, float]:
+    """The homelab_check_* series a run wrote for `name`, by metric name; {} when it wrote none."""
+    path = tmp_path / "textfile" / f"{name}.prom"
+    if not path.exists():
+        return {}
+    series = {}
+    for line in path.read_text().splitlines():
+        if line.startswith("homelab_check_"):
+            metric, value = line.split(" ", 1)
+            series[metric.split("{", 1)[0]] = float(value)
+    return series
 
 
 def journalctl_calls(tmp_path) -> list[str]:
