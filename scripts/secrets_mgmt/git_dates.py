@@ -179,29 +179,36 @@ def rotation_evidence(name: str, newer_value: str, older: dict[str, str]) -> boo
     return True
 
 
-def ciphertext_at(rev: str, tools: RotationTools) -> dict[str, str]:
-    """name -> stored ciphertext at `rev`.
+def ciphertext_at(
+    rev: str, tools: RotationTools, path: str = SECRETS_GIT_PATH
+) -> dict[str, str]:
+    """name -> stored ciphertext of the SOPS file `path` at `rev`.
 
     Never decrypts: the `diff=sops` textconv driver rewrites diff output only, so `git show
     <rev>:<path>` streams the raw blob.
     """
-    data = yaml_fast.safe_load(tools.git("show", f"{rev}:{SECRETS_GIT_PATH}")) or {}
+    data = yaml_fast.safe_load(tools.git("show", f"{rev}:{path}")) or {}
     return {k: str(v) for k, v in data.items() if k != "sops"}
 
 
-def _revisions(tools: RotationTools) -> list[list[str]]:
-    """Every commit that touched the store, newest first, as [sha, "YYYY-MM-DD"]."""
+def _revisions(tools: RotationTools, path: str = SECRETS_GIT_PATH) -> list[list[str]]:
+    """Every commit that touched `path`, newest first, as [sha, "YYYY-MM-DD"]."""
     return [
         line.split(" ", 1)
         for line in tools.git(
-            "log", "--format=%H %ad", "--date=short", "--", SECRETS_GIT_PATH
+            "log", "--format=%H %ad", "--date=short", "--", path
         ).splitlines()
         if line
     ]
 
 
-def ciphertext_rotation_dates(tools: RotationTools) -> dict[str, dt.date]:
+def ciphertext_rotation_dates(
+    tools: RotationTools, path: str = SECRETS_GIT_PATH
+) -> dict[str, dt.date]:
     """name -> date of the newest commit that changed that secret's ciphertext.
+
+    `path` is the SOPS file to walk: `secrets.yml`, or a per-host file. Only the
+    `secrets.yml` walk keeps the whole-file re-encrypt guard (`_rotation_walk`).
 
     Compares the parsed value per key rather than the diff text. A commit that only
     reorders or regroups secrets.yml rewrites lines without changing any value, and a
@@ -214,18 +221,42 @@ def ciphertext_rotation_dates(tools: RotationTools) -> dict[str, dt.date]:
     is that case's guard, sitting beside `RENAMED_FROM` (its single-key analogue). 3e731bcec
     changed 165 of 166 tracked keys resolving exactly this kind of conflict.
     """
-    revs = _revisions(tools)
-    dates: dict[str, dt.date] = {}
+    walked = _rotation_walk(tools, path)
+    return {name: dt.date.fromisoformat(day) for name, (_sha, day) in walked.items()}
+
+
+def ciphertext_rotation_commits(
+    tools: RotationTools, path: str = SECRETS_GIT_PATH
+) -> dict[str, str]:
+    """name -> SHA of the newest commit that changed that secret's ciphertext in `path`.
+
+    The sibling of `ciphertext_rotation_dates` that `host_secrets.py check` orders with
+    `git merge-base --is-ancestor`, because a day cannot order two commits made on one day.
+    """
+    return {name: sha for name, (sha, _day) in _rotation_walk(tools, path).items()}
+
+
+def _rotation_walk(tools: RotationTools, path: str) -> dict[str, tuple[str, str]]:
+    """name -> (SHA, "YYYY-MM-DD") of the newest commit that changed the key in `path`."""
+    # DECIDED: the whole-file re-encrypt guard runs for `secrets.yml` only. Every
+    # `host_secrets.py sync` rewrites each value of a host file, and that commit is the event
+    # the host-file check looks for. With the guard, a host file of `_REENCRYPT_MIN_SHARED`
+    # keys or more would have its `sync` commits skipped and a correct copy would fail. Full
+    # analysis in docs/target-architecture/host/h4-secrets-unit.md, *Which ciphertext each
+    # host carries*.
+    guard = path == SECRETS_GIT_PATH
+    revs = _revisions(tools, path)
+    found: dict[str, tuple[str, str]] = {}
     if not revs:
-        return dates
-    tracked = set(ciphertext_at(revs[0][0], tools))
+        return found
+    tracked = set(ciphertext_at(revs[0][0], tools, path))
     newer: dict[str, str] = {}
-    newer_day = ""
+    newer_rev = newer_day = ""
     for rev, day in revs:
-        current = ciphertext_at(rev, tools)
-        reencrypt = _is_whole_file_reencrypt(newer, current)
+        current = ciphertext_at(rev, tools, path)
+        reencrypt = guard and _is_whole_file_reencrypt(newer, current)
         for name, value in newer.items():
-            if name in dates:
+            if name in found:
                 continue
             if reencrypt and name in current:
                 # Every shared key changed here because the whole file was re-encrypted,
@@ -234,15 +265,15 @@ def ciphertext_rotation_dates(tools: RotationTools) -> dict[str, dt.date]:
                 # still gets found on a later iteration.
                 continue
             if rotation_evidence(name, value, current):
-                dates[name] = dt.date.fromisoformat(newer_day)
-        if tracked <= set(dates):
+                found[name] = (newer_rev, newer_day)
+        if tracked <= set(found):
             break
-        newer, newer_day = current, day
+        newer, newer_rev, newer_day = current, rev, day
     # Whatever never changed existed unaltered back to the oldest revision, so that
     # revision is the best evidence of when its value was set.
     for name in newer:
-        dates.setdefault(name, dt.date.fromisoformat(newer_day))
-    return dates
+        found.setdefault(name, (newer_rev, newer_day))
+    return found
 
 
 def derived_rotation_dates(tools: RotationTools) -> dict[str, dt.date]:
