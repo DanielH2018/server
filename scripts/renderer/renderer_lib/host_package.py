@@ -49,6 +49,10 @@ class Package:
         legacy: The legacy entries reconcile retires, each with its values rendered.
         tools: Each pinned upstream binary, by name and then architecture (`host_tools.py`).
             A package with tools renders one tree per architecture.
+        secrets: Whether the package lists the `secrets-unit` component (`host_outputs.py`).
+        credentials: The secret keys `homelab-secrets` writes to `/run/credstore`.
+        outputs: Each secret-bearing output, in the shape `secrets.json` carries.
+        secrets_inputs_sha256: The hash reconcile compares, set only when `secrets-unit` is.
     """
 
     name: str
@@ -61,6 +65,10 @@ class Package:
     policies: dict[str, str] = field(default_factory=dict)
     legacy: list[dict[str, str]] = field(default_factory=list)
     tools: dict[str, dict[str, Pin]] = field(default_factory=dict)
+    secrets: bool = False
+    credentials: list[str] = field(default_factory=list)
+    outputs: list[dict] = field(default_factory=list)
+    secrets_inputs_sha256: str | None = None
 
     def installed_paths(self) -> list[str]:
         """Every path the package installs: its files and the path of each pinned tool."""
@@ -86,8 +94,18 @@ class Package:
         )
 
     def enable_links(self) -> list[str]:
-        """The units whose enable link, under `<target>.wants/`, the package installs."""
-        return sorted({PurePosixPath(dst).name for dst in self.links})
+        """The units whose enable link, under `<target>.wants/`, the package installs.
+
+        A secret-bearing output's symlink (`host_outputs.py`) is a link too, and no unit.
+        """
+        return sorted(
+            {
+                PurePosixPath(dst).name
+                for dst in self.links
+                if PurePosixPath(dst).parent.parent == UNIT_DIR
+                and PurePosixPath(dst).parent.name.endswith(".wants")
+            }
+        )
 
     def nfpm_spec(self, arch: str = "all") -> str:
         """The `nfpm.yaml` the builder runs `nfpm package` on, from the package directory.

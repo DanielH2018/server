@@ -42,16 +42,18 @@ ships as an nfpm `type: symlink` entry. A host package installs
 enable links the packages install. A shared package installs no manifest, and lists no legacy
 entry and no enable link.
 
+A component may list `depends:`, `Depends` entries its package gains.
 A package spec may also list `maintainer_scripts`, each rendered from
 `hosts/lib/maintainer-scripts/<name>.j2` into the package's `scripts/`, outside `root/`, and
 named in `nfpm.yaml`'s `scripts:` (H3, *Package rules*).
 
-Host mode renders no secret, because no substitution step follows it (H3, *Host mode renders
-no secret*). The context withholds every top-level key of `ansible/vars/secrets.yml`, and
-resolves under the strict undefined class, so an inventory value that reads a secret is
-dropped too. A template that reads either fails the render, and the error names the secret
-key. A `${` in a template is shell, and renders byte for byte: nothing here imports
-`placeholders.py`.
+Host mode renders no secret, except in two kinds of file (H4, *Secret-bearing files*): a
+spec's declared `outputs:` and its `compose: true` files render a secret reference as `${<key>}`
+with C1's escape, through `host_outputs.py`. Everywhere else no substitution step follows, so
+the context withholds every top-level key of `ansible/vars/secrets.yml`, and resolves under the
+strict undefined class, so an inventory value that reads a secret is dropped too. A template
+that reads either fails the render, and the error names the secret key. A `${` in such a
+template is shell, and renders byte for byte.
 
 Typical usage example:
 
@@ -84,12 +86,20 @@ from renderer.renderer_lib.host_sources import (
     confined,
     file_mode,
 )
+from renderer.renderer_lib.host_outputs import (
+    SECRETS_COMPONENT,
+    add_credentials,
+    add_output,
+    compose_file,
+    finish,
+)
 from renderer.renderer_lib.host_package import (
     MAINTAINER_SCRIPTS,
     VERSION_FIELD as VERSION_FIELD,
     UNIT_SUFFIXES as UNIT_SUFFIXES,
     Package,
 )
+from renderer.renderer_lib.placeholders import placeholder_vars
 from renderer.renderer_lib.host_tools import (
     ARCHES,
     PINS_FILE,
@@ -109,12 +119,15 @@ from renderer.renderer_lib.host_manifest import (
 
 HOSTS = REPO / "hosts"
 SECRETS = ANSIBLE / "vars" / "secrets.yml"
+# The per-host ciphertext a package that ships `secrets-unit` carries (H4, *Which ciphertext*).
+HOST_SOPS = ANSIBLE / "vars" / "hosts"
 
 # Every host package runs reconcile under /usr/bin/python3 (H3, *Package rules*).
 HOST_DEPENDS = ("python3 (>= 3.12)",)
 PACKAGE_KEYS = frozenset(
     {
         "components",
+        "credentials",
         "defaults",
         "depends",
         "description",
@@ -122,11 +135,23 @@ PACKAGE_KEYS = frozenset(
         "files",
         "legacy",
         "maintainer_scripts",
+        "outputs",
         "tools",
         "units",
     }
 )
-COMPONENT_KEYS = frozenset({"defaults", "enable", "files", "legacy", "units"})
+COMPONENT_KEYS = frozenset(
+    {
+        "credentials",
+        "defaults",
+        "depends",
+        "enable",
+        "files",
+        "legacy",
+        "outputs",
+        "units",
+    }
+)
 
 # A host, package or component name becomes a directory under `hosts/`, so it is one plain
 # path piece: no `/`, no `..`, no leading dot or dash.
@@ -145,6 +170,7 @@ def render_host(
     hosts_root: Path = HOSTS,
     inventory: Inventory = REPO_INVENTORY,
     secrets: Path = SECRETS,
+    sops_dir: Path = HOST_SOPS,
 ) -> Package:
     """`hosts/<host>/package.yml` rendered with `host`'s inventory layers.
 
@@ -157,6 +183,7 @@ def render_host(
     package.depends.extend(HOST_DEPENDS)
     withheld = secret_names(secrets)
     _render(package, spec, host, hosts_root, inventory, withheld)
+    finish(package, host, sops_dir)
     updater = None
     if (hosts_root / "packages" / UPDATER / "package.yml").is_file():
         updater = render_package(UPDATER, hosts_root, inventory, secrets)
@@ -179,6 +206,7 @@ def render_package(
     spec = hosts_root / "packages" / _plain_name(name, "package") / "package.yml"
     package = Package(name=name, directory=f"packages/{name}")
     _render(package, spec, None, hosts_root, inventory, secret_names(secrets))
+    finish(package, None, HOST_SOPS)
     for dst in package.files:
         if any(dst == tool_path(tool) for tool in package.tools):
             raise RenderRefused(f"{name}: two files install {dst}")
@@ -270,6 +298,7 @@ def _render(
                 f"{spec_path}: a host package lists no tools; a shared package does"
             )
         package.tools = parse_tools(spec["tools"], str(spec_path))
+    package.secrets = SECRETS_COMPONENT in (spec.get("components") or [])
     lib = hosts_root / "lib"
     _render_unit(package, spec_path.parent, spec, host, inventory, withheld, lib)
     for name in spec.get("components") or []:
@@ -278,6 +307,9 @@ def _render(
         if not component.is_file():
             raise RenderRefused(f"{spec_path} lists component {name!r}, which has none")
         unit = _load(component, COMPONENT_KEYS)
+        package.depends.extend(
+            str(dep) for dep in unit.get("depends") or [] if dep not in package.depends
+        )
         _render_unit(package, directory, unit, host, inventory, withheld, lib)
     _render_maintainer_scripts(
         package, spec.get("maintainer_scripts") or [], host, inventory, withheld, lib
@@ -356,9 +388,11 @@ def _render_unit(
     """
     files = spec.get("files") or []
     add_policies(package, directory, spec.get("units") or {})
+    add_credentials(package, directory, spec.get("credentials") or [], withheld)
     enable = spec.get("enable") or {}
     legacy = spec.get("legacy") or []
-    if not files and not legacy and not enable:
+    outputs = spec.get("outputs") or []
+    if not files and not legacy and not enable and not outputs:
         return
     ctx, reasons = host_context(host, spec.get("defaults") or {}, inventory, withheld)
     env = renderer_env(directory)
@@ -377,6 +411,21 @@ def _render_unit(
                 lambda text: _render_string(env, text, ctx, reasons, directory),
             )
         )
+
+    def secret_text(src: str, keys: frozenset[str]) -> str:
+        """`src` with the secrets in `keys` read as sentinels, for `host_outputs.py`."""
+        source = confined(directory, src)
+        if not src.endswith(".j2"):
+            return source.read_text()
+        secret_ctx, secret_reasons = host_context(
+            host, spec.get("defaults") or {}, inventory, withheld, keys
+        )
+        return _render_template(env, src, secret_ctx, secret_reasons, directory)
+
+    if not isinstance(outputs, list):
+        raise RenderRefused(f"{directory}: outputs {outputs!r} is not a list")
+    for entry in outputs:
+        add_output(package, directory, entry, withheld, secret_text)
     keys = lib.parent / "keys"
     for entry in files:
         sources = {"src", "lib", "key", "shared"} & set(entry)
@@ -397,6 +446,14 @@ def _render_unit(
         if dst in package.files:
             raise RenderRefused(f"{package.name}: two files install {dst}")
         mode = file_mode(entry.get("mode", "0644"), directory, dst)
+        if entry.get("compose") is True:
+            if "src" not in entry:
+                raise RenderRefused(f"{directory}: compose file {dst} needs a src")
+            package.files[dst] = (
+                compose_file(directory, str(entry["src"]), dst, withheld, secret_text),
+                mode,
+            )
+            continue
         if "lib" in entry:
             # A plain name has no `.j2` suffix, so a lib script is copied, never rendered.
             source = confined(lib, _plain_name(entry["lib"], "lib script"))
@@ -430,11 +487,15 @@ def host_context(
     defaults: dict,
     inventory: Inventory = REPO_INVENTORY,
     withheld: frozenset[str] = frozenset(),
+    placeholders: frozenset[str] = frozenset(),
 ) -> tuple[dict, dict[str, str]]:
     """The context a component renders with, and why each name it lacks is missing.
 
     The second value maps each withheld secret name, and each inventory value dropped
-    because it would not expand, to the reason a template reading it gets.
+    because it would not expand, to the reason a template reading it gets. A name in
+    `placeholders` is not withheld: it reads as its sentinel (`placeholders.sentinel`), which
+    a declared output or a compose file turns into `${<key>}`. The sentinel is an override, so
+    an inventory value that aliases the secret expands to it too.
     """
 
     def resolve(strict: bool) -> dict:
@@ -446,13 +507,18 @@ def host_context(
             base={},
             undefined_cls=StrictChainableUndefined,
             component_defaults=defaults,
-            withhold=withheld,
+            withhold=withheld - placeholders,
             # A play sets it before any variable expands, so a default may read it.
-            overrides={"inventory_hostname": host} if host else None,
+            overrides={
+                **placeholder_vars(placeholders),
+                **({"inventory_hostname": host} if host else {}),
+            }
+            or None,
         )
 
     reasons = {
-        name: "a secret key, and host mode renders no secret" for name in withheld
+        name: "a secret key, and host mode renders no secret"
+        for name in withheld - placeholders
     }
     try:
         ctx = resolve(strict=True)

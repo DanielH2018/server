@@ -8,7 +8,8 @@ A host package installs `/usr/lib/homelab/manifest.json` (H3, *Shared names*), i
 - `enable_links` lists each unit the host package links from a `<target>.wants/`
   directory;
 - `legacy` holds the host package's legacy entries, each value rendered;
-- `reconcilers` is empty until H4.
+- `reconcilers` is empty until H4;
+- `secrets_inputs_sha256` is present only for a package that ships the `secrets-unit` component.
 
 `units:`, `enable:` and `legacy:` in a `package.yml` or `component.yml` feed it. The version and SHA stay
 out of it, so a render changes only when the package's content does (H3, *Package rules*).
@@ -43,7 +44,7 @@ LEGACY_KINDS = (
     frozenset({"cron_file"}),
     frozenset({"unit"}),
 )
-_UNIT_NAME = re.compile(r"[A-Za-z0-9@_.:-]+\.(service|timer|socket|path)")
+UNIT_NAME = re.compile(r"[A-Za-z0-9@_.:-]+\.(service|timer|socket|path)")
 _TARGET_NAME = re.compile(r"[A-Za-z0-9@_.:-]+\.target")
 _CRON_FILE = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]*")
 
@@ -56,6 +57,7 @@ class Package(Protocol):
     links: dict[str, str]
     policies: dict[str, str]
     legacy: list[dict[str, str]]
+    secrets_inputs_sha256: str | None
 
     def units(self) -> list[str]: ...
 
@@ -81,7 +83,7 @@ def manifest(package: Package, updater: Package | None) -> dict:
             f"{package.name}: units {stray} have a policy, but no package installs them "
             "or drops in on them"
         )
-    unmanaged = sorted(unit for unit in managed if not _UNIT_NAME.fullmatch(unit))
+    unmanaged = sorted(unit for unit in managed if not UNIT_NAME.fullmatch(unit))
     if unmanaged:
         raise RenderRefused(
             f"{package.name}: drop-ins target {unmanaged}, which are not a service, "
@@ -94,7 +96,7 @@ def manifest(package: Package, updater: Package | None) -> dict:
             f"{package.name}: enable links name {unlisted}, which no package installs "
             "or drops in on"
         )
-    return {
+    result = {
         "units": {
             unit: {"policy": policies[unit]} if unit in policies else {}
             for unit in sorted(managed)
@@ -104,6 +106,11 @@ def manifest(package: Package, updater: Package | None) -> dict:
         # H4 adds the first reconciler kind; reconcile fails a run that lists an unknown one.
         "reconcilers": [],
     }
+    # Only a package that ships the `secrets-unit` component carries the field, so reconcile keys
+    # its secrets step on it (H4, *The restart contract*).
+    if package.secrets_inputs_sha256:
+        result["secrets_inputs_sha256"] = package.secrets_inputs_sha256
+    return result
 
 
 def add_manifest(package: Package, updater: Package | None) -> None:
@@ -126,7 +133,7 @@ def add_policies(package: Package, directory: Path, units: object) -> None:
         policy = spec.get("policy") if isinstance(spec, dict) else None
         if (
             not isinstance(unit, str)
-            or not _UNIT_NAME.fullmatch(unit)
+            or not UNIT_NAME.fullmatch(unit)
             or not isinstance(spec, dict)
             or set(spec) != {"policy"}
             or policy not in POLICIES
@@ -166,7 +173,7 @@ def add_enable_links(
             target, when = value["target"], value["when"]
         if not (
             isinstance(unit, str)
-            and _UNIT_NAME.fullmatch(unit)
+            and UNIT_NAME.fullmatch(unit)
             and isinstance(target, str)
             and _TARGET_NAME.fullmatch(target)
             and (when is None or isinstance(when, str))
@@ -226,4 +233,4 @@ def _valid_legacy(entry: dict[str, str]) -> bool:
         return all(value and "\n" not in value for value in entry.values())
     if "cron_file" in entry:
         return bool(_CRON_FILE.fullmatch(entry["cron_file"]))
-    return bool(_UNIT_NAME.fullmatch(entry["unit"]))
+    return bool(UNIT_NAME.fullmatch(entry["unit"]))

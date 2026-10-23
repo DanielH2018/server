@@ -259,6 +259,18 @@ class Sentinels:
                 raise RenderError(f"{name} does not parse after pass 3: {exc}") from exc
         return frozenset(found)
 
+    def resolve(self, text: str) -> str:
+        """Passes 2 and 3 on plain text: C1's escape, then each sentinel as `${key}`.
+
+        A `$` followed by `$`, by `{` or by a sentinel becomes `$$`. Host mode calls this on
+        a declared output and a compose file (H4, *Secret-bearing files*), which are no YAML
+        stream and have no Flux opt-out.
+        """
+        return self._sentinel.sub(
+            lambda m: "${" + self._key_of[m.group(0)] + "}",
+            self._escapable.sub("$$", text),
+        )
+
     def finish(self, text: str) -> str:
         """Passes 2 and 3 on one file of a directory that substitutes.
 
@@ -268,10 +280,7 @@ class Sentinels:
         return "".join(
             piece
             if DOCUMENT_SEPARATOR.fullmatch(piece) or substitution_disabled(piece)
-            else self._sentinel.sub(
-                lambda m: "${" + self._key_of[m.group(0)] + "}",
-                self._escapable.sub("$$", piece),
-            )
+            else self.resolve(piece)
             for piece in DOCUMENT_SEPARATOR.split(text)
         )
 
