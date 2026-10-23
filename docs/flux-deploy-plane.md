@@ -980,6 +980,15 @@ notification-controller posts on T:
     pulls 95 dependents into a Longhorn hop's set through `crowdsec` and `traefik`. A
     `longhorn` that stays not-Ready through a node outage would also hold every one of them
     at `DependencyNotReady`, so it was rejected.
+- **A `kustomize-controller` rollout's failures are provisional** (#6013). A hop that changes
+  `kustomize-controller`'s own Deployment replaces the pod that is reconciling. The old pod
+  posts `failure` for `flux` and for `soak` as it goes, and the new pod posts `success` for
+  `flux` about 12 seconds later and re-runs the soak. So while `flux` is in the set, a
+  `failure` or `error` on `flux` or `soak` keeps the wait going until a later status on the
+  same name. A failure that no `success` follows ends at `verify`'s own timeout, so a real
+  `flux` failure holds at that timeout, not at the first read. A failure on any other name
+  stays final.
+  `scripts/deploy_tools/promote_lib/controller_rollout.py` holds the rule.
 
 `settle` applies the verdict:
 

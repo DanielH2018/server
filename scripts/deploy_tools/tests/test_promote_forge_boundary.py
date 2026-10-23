@@ -40,7 +40,12 @@ PROMOTE_LIB_MEMBERS = frozenset(
 # are passed, so they have no forge call to route and need not import the adapter. The
 # forbidden imports still hold for them.
 CHECKOUT_ONLY = frozenset(
-    {"reboot_window.py", "storage_rollout.py", "verify_handoff.py"}
+    {
+        "controller_rollout.py",
+        "reboot_window.py",
+        "storage_rollout.py",
+        "verify_handoff.py",
+    }
 )
 # The modules that would let promote.py make a forge call without the adapter. `subprocess`
 # and `pty` are here because `gh` and `cosign` are forge calls too.

@@ -51,6 +51,10 @@ THE STORAGE ROLLOUT. While `longhorn` is expected, a failure of any other name i
 until `flux/longhorn` has read `success` for a grace, or `longhorn` overruns its own timeout
 (`storage_rollout.py`, #5997).
 
+THE CONTROLLER ROLLOUT. While `flux` is expected, a failure of `flux` or `soak` is provisional:
+a later `success` on the same name ends it, and none ends it at the timeout
+(`controller_rollout.py`, #6013).
+
 THE OTHER TWO HALVES `decide` calls:
   - `wait_settled`, the wait on a verification in flight (the DECIDED marker below);
   - `revertible` and `footprints_match`, the revert rule, which `promote.REVERT_RULE` keeps off.
@@ -88,7 +92,7 @@ from artifact_retention import HELD_TAG, LAST_GOOD_TAG, PROD_TAG
 from changed_set import ROOT, changed_set, footprints, suspended_tags
 from chained_timeout import promote_timeout
 from deploy_tools.kustomizations import kustomization_graph
-from deploy_tools.promote_lib import storage_rollout
+from deploy_tools.promote_lib import controller_rollout, storage_rollout
 from deploy_tools.promote_lib.verify_handoff import read_handoff, read_recorded
 
 # Re-exported, as `verify.write_handoff`, for `promote.py`'s `hand_off`.
@@ -359,10 +363,12 @@ def verify(
         except forge.ForgeError as err:
             line = f"the statuses could not be read: {err}"
         failed = [n for n in names if states.get(STATUS_PREFIX + n) in FAILED_STATES]
-        if failed and not window.provisional(failed, states, reads.clock()):
+        rolling = controller_rollout.provisional(names, failed)
+        final = [n for n in failed if n not in rolling]
+        if final and not window.provisional(final, states, reads.clock()):
             return Verdict("failed", tuple(failed), tuple(sorted(excused)))
         if failed:
-            line += window.note()
+            line += window.note() if final else controller_rollout.note()
         if all(states.get(STATUS_PREFIX + n) == "success" for n in names):
             return Verdict("good", excused=tuple(sorted(excused)))
         if line != last:
