@@ -97,7 +97,8 @@ class FakeGitHub:
     def __call__(self, request, timeout=None):
         sha = request.full_url.split("/commits/")[1].split("/")[0]
         self.asked.append(sha)
-        body = json.dumps({"check_runs": self.runs.get(sha, [])}).encode()
+        runs = self.runs.get(sha, [])
+        body = json.dumps({"total_count": len(runs), "check_runs": runs}).encode()
         return _Response(body)
 
 
