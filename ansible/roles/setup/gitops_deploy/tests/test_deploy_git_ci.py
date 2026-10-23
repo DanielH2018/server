@@ -14,7 +14,14 @@ import yaml
 
 from lib.repo_paths import REPO as _REPO_ROOT
 
-from deployer_lib.deploy_git import ci_verdict, ci_walk_candidates, next_action
+import pytest
+
+from deployer_lib.deploy_git import (
+    ci_verdict,
+    ci_walk_candidates,
+    next_action,
+    read_check_pages,
+)
 
 
 # ── CI gate ───────────────────────────────────────────────────────────────────────────────────
@@ -201,3 +208,37 @@ def test_the_walk_offers_nothing_when_the_knob_is_zero():
 def test_a_negative_knob_disarms_the_walk_rather_than_widening_it():
     """`rev_list[:-1]` is every commit but the OLDEST, which is the opposite of a bound."""
     assert ci_walk_candidates([_TIP, _ONE, _TWO], None, -1) == []
+
+
+# ── Check-run pages (#5977) ───────────────────────────────────────────────────────────────────
+
+
+def _pages(page_two: list[dict], total: int):
+    page_one = [{"name": f"filler-{i}"} for i in range(100)]
+
+    def fetch(query: str) -> dict:
+        runs = page_two if query.endswith("&page=2") else page_one
+        return {"total_count": total, "check_runs": runs}
+
+    return fetch
+
+
+def test_read_check_pages_reaches_a_run_on_the_second_page():
+    runs = read_check_pages(_pages([{"name": "late"}], total=101), "check_runs")
+    assert len(runs) == 101
+    assert {"name": "late"} in runs
+
+
+def test_read_check_pages_accepts_a_run_created_between_page_reads():
+    runs = read_check_pages(_pages([{"name": "a"}, {"name": "b"}], 101), "check_runs")
+    assert len(runs) == 102
+
+
+def test_read_check_pages_refuses_a_read_short_of_total_count():
+    with pytest.raises(ValueError, match="read 100 of 150"):
+        read_check_pages(_pages([], total=150), "check_runs")
+
+
+def test_read_check_pages_refuses_a_body_without_total_count():
+    with pytest.raises(ValueError, match="total_count"):
+        read_check_pages(lambda _query: {"check_runs": []}, "check_runs")

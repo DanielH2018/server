@@ -42,7 +42,7 @@ from lib.repo_paths import GITOPS_DEPLOY_FILES, HOST_LIB_FILES
 sys.path.insert(0, str(GITOPS_DEPLOY_FILES))
 sys.path.insert(0, str(HOST_LIB_FILES))
 
-from deployer_lib.deploy_git import ci_walk_candidates
+from deployer_lib.deploy_git import ci_walk_candidates, read_check_pages
 from deployer_lib.deploy_logic import _CI_NO_VERDICT_CONCLUSIONS, ci_verdict
 from host_lib import github_get, github_token
 
@@ -98,7 +98,7 @@ def fetch_check_runs(sha: str) -> list[dict]:
     those 60, so the second landing in an hour starved the tick's gate into deferring on a
     403. host_lib.github_token carries the numbers.
     """
-    return _github_get(f"commits/{sha}/check-runs?per_page=100").get("check_runs", [])
+    return _github_pages(f"commits/{sha}/check-runs", "check_runs")
 
 
 def fetch_check_suites(sha: str) -> list[dict]:
@@ -108,16 +108,15 @@ def fetch_check_suites(sha: str) -> list[dict]:
     registered a check-run. Fetched only when no required run exists, so it costs
     nothing on the ordinary path.
     """
-    return _github_get(f"commits/{sha}/check-suites?per_page=100").get(
-        "check_suites", []
-    )
+    return _github_pages(f"commits/{sha}/check-suites", "check_suites")
 
 
-def _github_get(path: str) -> dict:
-    return github_get(
-        f"repos/{CI_REPO}/{path}",
-        github_token(os.environ, subprocess.run),
-        user_agent="await-ci",
+def _github_pages(path: str, key: str) -> list[dict]:
+    """Every page of a listing, as the deployer's gate reads it (#5977); short reads raise."""
+    token = github_token(os.environ, subprocess.run)
+    url = f"repos/{CI_REPO}/{path}"
+    return read_check_pages(
+        lambda query: github_get(url + query, token, user_agent="await-ci"), key
     )
 
 

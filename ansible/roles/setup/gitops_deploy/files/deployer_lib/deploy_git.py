@@ -8,6 +8,8 @@ deploy_toolbox reads through host_lib.github_get; `is_diverged` and `behind_mark
 
 from __future__ import annotations
 
+from collections.abc import Callable
+
 # ── CI gate ───────────────────────────────────────────────────────────────────────────────────
 # A GitHub check-run conclusion that counts as "this commit is good". `skipped` and `neutral` are
 # passes on purpose: ci.yml's renovate-config job runs unconditionally but gates its real work on a
@@ -115,6 +117,40 @@ def jobs_verdict(check_runs: list[dict]) -> str:
     if prove == {"pass"} and skipped == len(CI_GATE_NEEDS_JOBS):
         return "pass"
     return "pending"
+
+
+# A commit's check-runs and check-suites, 100 to a page. One page hid the runs past the 100th, so
+# a failing re-run on page 2 read as a pass (#5977); promote's forge reader pages the same way.
+CHECK_PAGE_SIZE, CHECK_PAGES_MAX = 100, 20
+
+
+def read_check_pages(fetch_page: Callable[[str], object], key: str) -> list[dict]:
+    """Every entry of `key` across a check-runs or check-suites listing, page after page.
+
+    `fetch_page(query)` returns the parsed body of the listing's URL with `query` appended, a
+    `?per_page=...&page=...` string this walk builds. The walk stops on a short page or once it holds the body's `total_count`. A read short of
+    `total_count` is refused rather than returned as complete. A run created between two page
+    reads can push the count past `total_count`, so only a shortfall is refused.
+
+    Raises:
+        ValueError: a body without a `key` list or an integer `total_count`, a short read, or
+            more than CHECK_PAGES_MAX pages. Both callers read a ValueError as `pending`.
+    """
+    found: list[dict] = []
+    for page in range(1, CHECK_PAGES_MAX + 1):
+        body = fetch_page(f"?per_page={CHECK_PAGE_SIZE}&page={page}")
+        entries = body.get(key) if isinstance(body, dict) else None
+        total = body.get("total_count") if isinstance(body, dict) else None
+        if not isinstance(entries, list):
+            raise ValueError(f"{key} page {page}: the body has no {key} list")
+        if not isinstance(total, int) or isinstance(total, bool):
+            raise ValueError(f"{key} page {page}: the body has no total_count")
+        found.extend(entries)
+        if len(entries) < CHECK_PAGE_SIZE or len(found) >= total:
+            if len(found) < total:
+                raise ValueError(f"{key}: read {len(found)} of {total}")
+            return found
+    raise ValueError(f"{key}: more than {CHECK_PAGES_MAX} pages")
 
 
 def ci_verdict(check_runs: list[dict], required: frozenset[str] | set[str]) -> str:

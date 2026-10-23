@@ -74,16 +74,18 @@ def test_the_request_reads_the_check_runs_of_the_sha_it_was_asked_about(monkeypa
     captured = _stub_urlopen(
         monkeypatch,
         payload={
+            "total_count": 2,
             "check_runs": [
                 {"name": "lint", "status": "completed", "conclusion": "success"},
                 {"name": "test", "status": "completed", "conclusion": "success"},
-            ]
+            ],
         },
     )
     assert _verdict() == "pass"
     req, timeout = captured[0]
     assert req.full_url == (
-        f"https://api.github.com/repos/{REPO}/commits/{SHA}/check-runs?per_page=100"
+        f"https://api.github.com/repos/{REPO}/commits/{SHA}"
+        "/check-runs?per_page=100&page=1"
     )
     assert timeout == 15
     # urllib capitalises header keys on the way in, so these are not the literals above.
@@ -101,10 +103,11 @@ def test_a_failed_check_run_reaches_the_caller_as_fail(monkeypatch):
     _stub_urlopen(
         monkeypatch,
         payload={
+            "total_count": 2,
             "check_runs": [
                 {"name": "lint", "status": "completed", "conclusion": "failure"},
                 {"name": "test", "status": "completed", "conclusion": "success"},
-            ]
+            ],
         },
     )
     assert _verdict() == "fail"
@@ -159,3 +162,59 @@ def test_a_disarmed_gate_passes_without_asking_github(monkeypatch):
     captured = _stub_urlopen(monkeypatch, payload={"check_runs": []})
     assert _verdict(require_ci=False) == "pass"
     assert captured == []
+
+
+def _stub_two_pages(
+    monkeypatch, page_two: list[dict], total: int | None = None
+) -> list:
+    """A full page 1 of passing runs, then `page_two`, answered by the URL's `page`."""
+    page_one = [
+        {"name": f"filler-{i}", "status": "completed", "conclusion": "success"}
+        for i in range(100)
+    ]
+    count = 100 + len(page_two) if total is None else total
+    urls: list = []
+
+    class _Resp:
+        def __init__(self, runs):
+            self._body = json.dumps({"total_count": count, "check_runs": runs})
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return False
+
+        def read(self):
+            return self._body.encode()
+
+    def fake_urlopen(req, timeout=None):
+        urls.append(req.full_url)
+        return _Resp(page_two if req.full_url.endswith("&page=2") else page_one)
+
+    monkeypatch.setenv("GH_TOKEN", TOKEN)
+    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+    return urls
+
+
+def test_a_failing_run_on_the_second_page_fails_the_gate(monkeypatch):
+    """One page of 100 hid a run past the 100th, so a red commit read as green (#5977)."""
+    urls = _stub_two_pages(
+        monkeypatch,
+        [
+            {"name": "lint", "status": "completed", "conclusion": "failure"},
+            {"name": "test", "status": "completed", "conclusion": "success"},
+        ],
+    )
+    assert _verdict() == "fail"
+    assert [u.rsplit("=", 1)[1] for u in urls] == ["1", "2"]
+
+
+def test_a_read_short_of_total_count_defers(monkeypatch):
+    """Fewer runs than GitHub's `total_count` is a partial list, never a verdict."""
+    _stub_two_pages(
+        monkeypatch,
+        [{"name": "lint", "status": "completed", "conclusion": "success"}],
+        total=150,
+    )
+    assert _verdict() == "pending"
